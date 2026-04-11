@@ -1,0 +1,400 @@
+/**
+ * TGE — Terminal Graphics Engine
+ * Type declarations for the npm package.
+ */
+
+// ── Terminal ──
+
+export interface TerminalSize {
+  cols: number
+  rows: number
+  pixelWidth: number
+  pixelHeight: number
+  cellWidth: number
+  cellHeight: number
+}
+
+export interface Capabilities {
+  kittyGraphics: boolean
+  kittyKeyboard: boolean
+  trueColor: boolean
+  mouseTracking: boolean
+  unicode: boolean
+  tmux: boolean
+}
+
+export interface Terminal {
+  kind: string
+  caps: Capabilities
+  size: TerminalSize
+  write: (data: string | Uint8Array) => void
+  rawWrite: (data: string) => void
+  setTitle: (title: string) => void
+  writeClipboard: (text: string) => void
+  onData: (handler: (data: Uint8Array) => void) => () => void
+  onResize: (handler: () => void) => () => void
+  destroy: () => void
+}
+
+export function createTerminal(): Promise<Terminal>
+
+// ── Input types ──
+
+export interface Modifiers {
+  shift: boolean
+  alt: boolean
+  ctrl: boolean
+  meta: boolean
+}
+
+export interface KeyEvent {
+  type: "key"
+  key: string
+  char: string
+  mods: Modifiers
+}
+
+export type MouseAction = "press" | "release" | "move" | "scroll"
+
+export interface TgeMouseEvent {
+  type: "mouse"
+  action: MouseAction
+  button: number
+  x: number
+  y: number
+  mods: Modifiers
+}
+
+export interface FocusEvent {
+  type: "focus"
+  focused: boolean
+}
+
+export interface PasteEvent {
+  type: "paste"
+  text: string
+}
+
+export interface ResizeEvent {
+  type: "resize"
+}
+
+export type InputEvent = KeyEvent | TgeMouseEvent | FocusEvent | PasteEvent | ResizeEvent
+
+export declare const MouseButton: {
+  readonly LEFT: 0
+  readonly MIDDLE: 1
+  readonly RIGHT: 2
+  readonly RELEASE: 3
+  readonly SCROLL_UP: 64
+  readonly SCROLL_DOWN: 65
+}
+
+export function decodePasteBytes(bytes: Uint8Array | string): string
+
+// ── Mount ──
+
+export interface MountOptions {
+  selectableText?: boolean
+}
+
+export interface MountHandle {
+  suspend: () => void
+  resume: () => void
+  suspended: () => boolean
+  destroy: () => void
+}
+
+export function mount(component: () => any, terminal: Terminal, opts?: MountOptions): MountHandle
+
+// ── Focus ──
+
+export interface FocusHandle {
+  focused: () => boolean
+  focus: () => void
+}
+
+export function useFocus(opts?: { id?: string; onKeyDown?: (event: KeyEvent) => void }): FocusHandle
+export function setFocus(id: string): void
+export function focusedId(): string | null
+export function setFocusedId(id: string | null): void
+
+// ── Input hooks ──
+
+export interface KeyboardState {
+  onKeyDown: (handler: (event: KeyEvent) => void) => void
+}
+
+export interface MouseState {
+  onMouseEvent: (handler: (event: TgeMouseEvent) => void) => void
+}
+
+export function useKeyboard(handler: (event: KeyEvent) => void): void
+export function useMouse(handler: (event: TgeMouseEvent) => void): void
+export function useInput(handler: (event: InputEvent) => void): void
+export function onInput(handler: (event: InputEvent) => void): () => void
+
+// ── Selection ──
+
+export interface TextSelection {
+  startX: number
+  startY: number
+  endX: number
+  endY: number
+}
+
+export function getSelection(): TextSelection | null
+export function getSelectedText(): string
+export function setSelection(sel: TextSelection): void
+export function clearSelection(): void
+export function selectionSignal(): TextSelection | null
+
+// ── RGBA ──
+
+export class RGBA {
+  readonly r: number
+  readonly g: number
+  readonly b: number
+  readonly a: number
+  constructor(r: number, g: number, b: number, a?: number)
+  static fromInts(r: number, g: number, b: number, a?: number): RGBA
+  static fromHex(hex: string): RGBA
+  static fromValues(r: number, g: number, b: number, a?: number): RGBA
+  toU32(): number
+  valueOf(): number
+  toString(): string
+}
+
+// ── Dirty flag ──
+
+export function markDirty(): void
+
+// ── NodeHandle ──
+
+export interface NodeHandle {
+  readonly id: number
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
+
+export function createHandle(nodeId: number): NodeHandle
+
+// ── ScrollHandle ──
+
+export interface ScrollHandle {
+  readonly scrollX: number
+  readonly scrollY: number
+  readonly contentWidth: number
+  readonly contentHeight: number
+  readonly viewportWidth: number
+  readonly viewportHeight: number
+  scrollTo(y: number): void
+  scrollBy(dy: number): void
+  scrollIntoView(elementId: string): void
+}
+
+export function createScrollHandle(clayId: string): ScrollHandle
+export function resetScrollHandles(): void
+
+// ── Debug ──
+
+export interface DebugStats {
+  fps: number
+  frameTime: number
+  layoutTime: number
+  paintTime: number
+  nodeCount: number
+}
+
+export function toggleDebug(): void
+export function setDebug(enabled: boolean): void
+export function isDebugEnabled(): boolean
+export function debugFrameStart(): void
+export function debugUpdateStats(stats: Partial<DebugStats>): void
+export function debugState(): DebugStats
+export function debugStatsLine(): string
+
+// ── Plugins ──
+
+export interface TgePluginApi {
+  terminal: Terminal
+}
+
+export interface TgePlugin {
+  name: string
+  setup: (api: TgePluginApi) => void
+}
+
+export interface SlotComponent {
+  component: () => any
+  priority?: number
+}
+
+export interface SlotRegistry {
+  register: (slotName: string, component: SlotComponent) => void
+  get: (slotName: string) => SlotComponent[]
+}
+
+export function createSlotRegistry(): SlotRegistry
+export function createSlot(name: string): { Slot: () => any }
+
+// ── Extmarks ──
+
+export interface Extmark {
+  id: number
+  start: number
+  end: number
+  fg?: number
+  bg?: number
+  ghost?: boolean
+  data?: Record<string, unknown>
+  typeId?: number
+}
+
+export interface CreateExtmarkOptions {
+  start: number
+  end: number
+  fg?: number
+  bg?: number
+  ghost?: boolean
+  data?: Record<string, unknown>
+  typeId?: number
+}
+
+export class ExtmarkManager {
+  create(opts: CreateExtmarkOptions): Extmark
+  remove(id: number): void
+  clear(): void
+  getAll(): Extmark[]
+  getForLine(lineStart: number, lineEnd: number): Extmark[]
+  getAllForTypeId(typeId: number): Extmark[]
+  registerType(name: string): number
+}
+
+// ── Syntax highlighting ──
+
+export interface ThemeTokenStyle {
+  color?: string
+  bold?: boolean
+  italic?: boolean
+}
+
+export interface StyleDefinition {
+  [capture: string]: ThemeTokenStyle
+}
+
+export declare const ONE_DARK: StyleDefinition
+export declare const KANAGAWA: StyleDefinition
+
+export class SyntaxStyle {
+  static fromTheme(theme: StyleDefinition): SyntaxStyle
+  getDefaultColor(): number
+  getStyleId(name: string): number
+}
+
+export interface Token {
+  text: string
+  color: number
+}
+
+export interface SimpleHighlight {
+  start: number
+  end: number
+  capture: string
+}
+
+export interface FiletypeParserConfig {
+  language: string
+  wasmPath: string
+  queriesPath: string
+}
+
+export class TreeSitterClient {
+  highlightOnce(content: string, language: string): Promise<SimpleHighlight[]>
+}
+
+export function getTreeSitterClient(): TreeSitterClient
+export function addDefaultParsers(parsers: FiletypeParserConfig[]): void
+export function highlightsToTokens(content: string, highlights: SimpleHighlight[], style: SyntaxStyle): Token[][]
+
+// ── Text layout ──
+
+export interface FontDescriptor {
+  id: number
+  name: string
+  cellWidth: number
+  cellHeight: number
+}
+
+export function registerFont(desc: FontDescriptor, atlasData: Uint8Array, widths?: Float32Array): void
+export function getFont(id: number): FontDescriptor | undefined
+export function clearTextCache(): void
+
+// ── Terminal dimensions hook ──
+
+export function useTerminalDimensions(terminal: Terminal): {
+  width: () => number
+  height: () => number
+  cols: () => number
+  rows: () => number
+  cellWidth: () => number
+  cellHeight: () => number
+}
+
+// ── Clay constants ──
+
+export declare const SIZING: { readonly FIT: 0; readonly GROW: 1; readonly PERCENT: 2; readonly FIXED: 3 }
+export declare const DIRECTION: { readonly LEFT_TO_RIGHT: 0; readonly TOP_TO_BOTTOM: 1 }
+export declare const ALIGN_X: { readonly LEFT: 0; readonly RIGHT: 1; readonly CENTER: 2 }
+export declare const ALIGN_Y: { readonly TOP: 0; readonly BOTTOM: 1; readonly CENTER: 2 }
+export declare const ATTACH_TO: { readonly NONE: 0; readonly PARENT: 1; readonly ELEMENT: 2; readonly ROOT: 3 }
+export declare const ATTACH_POINT: {
+  readonly LEFT_TOP: 0; readonly LEFT_CENTER: 1; readonly LEFT_BOTTOM: 2
+  readonly CENTER_TOP: 3; readonly CENTER_CENTER: 4; readonly CENTER_BOTTOM: 5
+  readonly RIGHT_TOP: 6; readonly RIGHT_CENTER: 7; readonly RIGHT_BOTTOM: 8
+}
+export declare const POINTER_CAPTURE: { readonly CAPTURE: 0; readonly PASSTHROUGH: 1 }
+
+// ── Render loop (advanced) ──
+
+export interface RenderLoopOptions {
+  selectableText?: boolean
+}
+
+export interface RenderLoop {
+  root: any
+  start: () => void
+  destroy: () => void
+  suspend: () => void
+  resume: () => void
+  suspended: () => boolean
+  feedPointer: (x: number, y: number, pressed: boolean) => void
+  feedScroll: (dx: number, dy: number) => void
+}
+
+export function createRenderLoop(terminal: Terminal, opts?: RenderLoopOptions): RenderLoop
+
+// ── SolidJS re-exports ──
+
+export function createComponent<T>(comp: (props: T) => any, props: T): any
+export function createElement(tag: string): any
+export function createTextNode(text: string): any
+export function insertNode(parent: any, child: any, anchor?: any): void
+export function insert(parent: any, accessor: any, marker?: any): any
+export function spread(node: any, accessor: any): void
+export function setProp(node: any, name: string, value: any): void
+export function mergeProps(...sources: any[]): any
+export function effect(fn: () => void): void
+export function memo<T>(fn: () => T): () => T
+export function use(fn: any, element: any): void
+
+export declare const For: any
+export declare const Show: any
+export declare const Switch: any
+export declare const Match: any
+export declare const Index: any
+export declare const ErrorBoundary: any
+
+export { render as solidRender } from "solid-js/universal"

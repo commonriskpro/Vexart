@@ -171,7 +171,14 @@ console.log("🔌 Copying solid plugin...")
 cpSync(resolve(ROOT, "scripts/solid-plugin-dist.ts"), resolve(DIST, "solid-plugin.ts"))
 console.log(`  ✅ solid-plugin.ts (moduleName: "tge")`)
 
-// ── 7. Copy font atlas ──
+// ── 7. Copy type declarations ──
+console.log("📝 Copying type declarations...")
+cpSync(resolve(ROOT, "types/tge.d.ts"), resolve(DIST, "tge.d.ts"))
+cpSync(resolve(ROOT, "types/components.d.ts"), resolve(DIST, "components.d.ts"))
+cpSync(resolve(ROOT, "types/jsx-runtime.d.ts"), resolve(DIST, "jsx-runtime.d.ts"))
+console.log(`  ✅ tge.d.ts + components.d.ts + jsx-runtime.d.ts`)
+
+// ── 8. Copy font atlas ──
 console.log("🔤 Copying font atlas...")
 const atlasDir = resolve(ROOT, "zig/src")
 const distFontDir = resolve(DIST, "fonts")
@@ -191,15 +198,28 @@ const pkg = {
   description: "Pixel-native terminal rendering engine. Write JSX, get browser-quality UI in your terminal.",
   type: "module",
   main: "tge.js",
+  types: "tge.d.ts",
   exports: {
-    ".": "./tge.js",
-    "./components": "./components.js",
+    ".": {
+      types: "./tge.d.ts",
+      default: "./tge.js",
+    },
+    "./components": {
+      types: "./components.d.ts",
+      default: "./components.js",
+    },
+    "./jsx-runtime": {
+      types: "./jsx-runtime.d.ts",
+    },
     "./solid-plugin": "./solid-plugin.ts",
     "./tree-sitter/parser.worker.ts": "./tree-sitter/parser.worker.ts",
   },
   files: [
     "tge.js",
+    "tge.d.ts",
     "components.js",
+    "components.d.ts",
+    "jsx-runtime.d.ts",
     "solid-plugin.ts",
     "vendor/",
     "tree-sitter/",
