@@ -21,7 +21,14 @@ import { resolve } from "path"
 // ── FFI Setup ──
 
 function findLib(): string {
+  const ext = process.platform === "darwin" ? "dylib" : process.platform === "win32" ? "dll" : "so"
+  const name = process.platform === "win32" ? `clay.${ext}` : `libclay.${ext}`
+  const arch = process.arch === "arm64" ? "arm64" : "x64"
+  const target = `${arch}-${process.platform}`
   const candidates = [
+    // npm package: vendor/clay/{arch}-{platform}/
+    resolve(import.meta.dir, "vendor/clay", target, name),
+    // monorepo development
     resolve(import.meta.dir, "../../../vendor/libclay.dylib"),
     resolve(process.cwd(), "vendor/libclay.dylib"),
   ]

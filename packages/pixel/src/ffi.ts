@@ -17,7 +17,12 @@ const LIB_NAMES: Record<string, string> = {
 
 function findLib(): string {
   const name = LIB_NAMES[process.platform] ?? "libtge.so"
+  const arch = process.arch === "arm64" ? "arm64" : "x64"
+  const target = `${arch}-${process.platform}`
   const candidates = [
+    // npm package: vendor/tge/{arch}-{platform}/
+    resolve(import.meta.dir, "vendor/tge", target, name),
+    // monorepo development
     resolve(import.meta.dir, "../../../zig/zig-out/lib", name),
     resolve(process.cwd(), "zig/zig-out/lib", name),
   ]
