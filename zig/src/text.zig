@@ -37,22 +37,31 @@ pub fn drawGlyph(buf: *PixelBuffer, x: i32, y: i32, codepoint: u32, r: u8, g: u8
     }
 }
 
+/// Advance width in hundredths of a pixel (fixed-point).
+/// .SF NS Mono at 14px: 8.65px per char = 865 hundredths.
+/// This matches what @napi-rs/canvas measureText returns for
+/// the same font, ensuring Zig rendering aligns with Pretext layout.
+const advance_hundredths: u32 = 865;
+
 /// Draw a string of ASCII text at (x, y).
+/// Uses sub-pixel cursor advancement (fixed-point) to match
+/// canvas measureText widths exactly.
 /// Returns the total width in pixels.
 pub fn drawText(buf: *PixelBuffer, x: i32, y: i32, text_ptr: [*]const u8, text_len: u32, r: u8, g: u8, b: u8, a: u8) u32 {
-    var cx: i32 = x;
+    var acc: u32 = 0; // accumulated advance in hundredths
     var i: u32 = 0;
     while (i < text_len) : (i += 1) {
         const cp: u32 = text_ptr[i];
+        const cx: i32 = x + @as(i32, @intCast(acc / 100));
         drawGlyph(buf, cx, y, cp, r, g, b, a);
-        cx += @intCast(atlas.cell_width);
+        acc += advance_hundredths;
     }
-    return text_len * atlas.cell_width;
+    return (text_len * advance_hundredths + 50) / 100; // rounded total width
 }
 
 /// Measure the width of a text string in pixels (no rendering).
 pub fn measureText(text_len: u32) u32 {
-    return text_len * atlas.cell_width;
+    return (text_len * advance_hundredths + 50) / 100;
 }
 
 // ── Tests ──

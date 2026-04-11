@@ -1,16 +1,16 @@
 /**
- * Text wrap & multi-font demo — tests Pretext integration.
+ * Text wrap & rich text demo — Pretext integration showcase.
  *
  * Shows:
- * - Word wrapping within containers
- * - Multi-line text with automatic height
- * - Different container widths
- * - RichText with mixed Spans
+ * - Word wrapping within containers of different widths
+ * - Multi-line text with automatic height calculation
+ * - Inline rich text (Spans in a row)
+ * - Two-column layout with wrapping text
  *
  * Run: bun --conditions=browser run examples/text-wrap.tsx
  */
 
-import { mount, onInput, registerFont } from "@tge/renderer"
+import { mount, onInput } from "@tge/renderer"
 import { Box, Text, RichText, Span } from "@tge/components"
 import { surface, text as textTokens, accent, border, radius, spacing, shadow } from "@tge/tokens"
 import { createTerminal } from "@tge/terminal"
@@ -22,7 +22,7 @@ function App() {
   })
   onCleanup(unsub)
 
-  const longText = "TGE is a pixel-native terminal rendering engine. Write JSX and get browser-quality UI in your terminal with anti-aliased corners, drop shadows, gradients, and glow effects. This text should wrap automatically within its container, demonstrating the Pretext layout engine integration."
+  const longText = "TGE is a pixel-native terminal rendering engine. Write JSX and get browser-quality UI in your terminal with anti-aliased corners, drop shadows, gradients, and glow effects. This text wraps automatically within its container using Pretext layout."
 
   const features = "Features: word wrapping, multi-line layout, BiDi support, CJK line breaking, rich inline text with mixed fonts. Powered by @chenglou/pretext."
 
@@ -33,13 +33,13 @@ function App() {
       padding={spacing.xl}
       backgroundColor={surface.void}
       direction="column"
-      gap={spacing.lg}
+      gap={spacing.md}
     >
       <Text color={textTokens.primary}>Pretext Integration Demo — press Q to quit</Text>
 
       <Box direction="row" gap={spacing.lg}>
         {/* Wide card with word wrap */}
-        <Box direction="column" gap={spacing.sm}>
+        <Box direction="column" gap={spacing.xs}>
           <Text color={textTokens.muted}>Word wrap (400px):</Text>
           <Box
             width={400}
@@ -53,7 +53,7 @@ function App() {
         </Box>
 
         {/* Narrow card with word wrap */}
-        <Box direction="column" gap={spacing.sm}>
+        <Box direction="column" gap={spacing.xs}>
           <Text color={textTokens.muted}>Narrow (200px):</Text>
           <Box
             width={200}
@@ -67,11 +67,10 @@ function App() {
         </Box>
       </Box>
 
-      {/* Rich text demo */}
-      <Box direction="column" gap={spacing.sm}>
-        <Text color={textTokens.muted}>Rich inline text:</Text>
+      {/* Inline rich text — spans flow horizontally */}
+      <Box direction="column" gap={spacing.xs}>
+        <Text color={textTokens.muted}>Inline spans (row flow):</Text>
         <Box
-          width={500}
           padding={spacing.lg}
           backgroundColor={surface.card}
           cornerRadius={radius.lg}
@@ -87,12 +86,12 @@ function App() {
           </RichText>
           <RichText>
             <Span color={textTokens.muted}>Powered by: </Span>
-            <Span color={accent.anchor}>SolidJS</Span>
-            <Span color={textTokens.muted}> + </Span>
-            <Span color={accent.green}>Clay</Span>
-            <Span color={textTokens.muted}> + </Span>
-            <Span color={accent.purple}>Zig</Span>
-            <Span color={textTokens.muted}> + </Span>
+            <Span color={accent.anchor}>SolidJS </Span>
+            <Span color={textTokens.muted}>+ </Span>
+            <Span color={accent.green}>Clay </Span>
+            <Span color={textTokens.muted}>+ </Span>
+            <Span color={accent.purple}>Zig </Span>
+            <Span color={textTokens.muted}>+ </Span>
             <Span color={accent.drift}>Pretext</Span>
           </RichText>
         </Box>

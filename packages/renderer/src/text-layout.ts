@@ -61,8 +61,11 @@ export type FontDescriptor = {
 
 const fontRegistry = new Map<number, FontDescriptor>()
 
-// Default: SF Mono 14px (matches our bitmap atlas)
-fontRegistry.set(0, { family: "SF Mono", size: 14 })
+// Default: .SF NS Mono 14px (matches our bitmap atlas).
+// The dot-prefixed name is required for @napi-rs/canvas to find
+// the real monospace font on macOS. "SF Mono" without the dot
+// falls back to a proportional font.
+fontRegistry.set(0, { family: ".SF NS Mono", size: 14 })
 
 /** Register a font for use with TGE text rendering. */
 export function registerFont(id: number, desc: FontDescriptor) {
@@ -136,6 +139,7 @@ export function measureTextHeight(
 /**
  * Lay out text into lines for rendering.
  * Returns individual lines with their text content and width.
+ * Uses Pretext for accurate word wrapping and line breaking.
  */
 export function layoutText(
   text: string,
@@ -170,15 +174,13 @@ export function layoutRichText(
 
 /**
  * Measure text width for Clay layout.
- * Called from Clay's tge_measure_text_callback via the registered
- * measure function pointer.
+ * Uses Pretext/canvas for accurate font measurement.
  */
 export function measureForClay(
   text: string,
   fontId: number,
   fontSize: number,
 ): { width: number; height: number } {
-  // Look up font, override size if Clay passes a different one
   const desc = getFont(fontId)
   const effectiveDesc = desc.size === fontSize ? desc : { ...desc, size: fontSize }
   const css = fontToCSS(effectiveDesc)
@@ -195,7 +197,6 @@ export function measureForClay(
   }
 
   const width = measureNaturalWidth(prepared)
-  // Height = line height based on font size (approximate: fontSize * 1.2)
   const height = Math.ceil(fontSize * 1.2)
   return { width, height }
 }

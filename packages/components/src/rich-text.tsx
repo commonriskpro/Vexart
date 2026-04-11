@@ -1,22 +1,26 @@
 /**
- * RichText — mixed-font inline text component for TGE.
+ * RichText — inline text flow component for TGE.
  *
- * Uses Pretext's rich-inline layout to mix fonts, sizes, weights,
- * and colors within a single paragraph with proper word wrapping.
+ * Concatenates all child Span text into a single text element
+ * that flows inline and wraps naturally. Uses the first Span's
+ * color as the display color.
+ *
+ * For per-fragment coloring, use a row of <Text> elements instead.
+ * True rich inline rendering (mixed colors in one paragraph) is
+ * planned for a future release.
  *
  * Usage:
- *   <RichText maxWidth={400} lineHeight={20}>
- *     <Span color={text.primary}>Hello </Span>
- *     <Span color={accent.thread} fontWeight={700}>world</Span>
- *     <Span color={text.muted}> — from TGE</Span>
+ *   <RichText color={text.primary}>
+ *     <Span>Hello </Span>
+ *     <Span>world </Span>
+ *     <Span>from TGE</Span>
  *   </RichText>
  */
 
 import type { JSX } from "solid-js"
 
 // ── Span ──
-// A Span is a text fragment with its own styling.
-// It's a data-only component — RichText reads its props during render.
+// A Span holds text content. RichText concatenates all Spans.
 
 export type SpanProps = {
   color?: string | number
@@ -28,8 +32,8 @@ export type SpanProps = {
 }
 
 /**
- * Span — inline text fragment within a RichText.
- * Does NOT render independently — it's consumed by RichText.
+ * Span — inline text fragment. Rendered as a <text> node.
+ * Can be used inside RichText or standalone.
  */
 export function Span(props: SpanProps) {
   return (
@@ -48,27 +52,21 @@ export function Span(props: SpanProps) {
 // ── RichText ──
 
 export type RichTextProps = {
-  maxWidth?: number            // Max width for wrapping (default: container width)
-  lineHeight?: number          // Line height in pixels
-  children?: JSX.Element       // Span children
+  maxWidth?: number
+  lineHeight?: number
+  color?: string | number    // Primary color for the concatenated text
+  fontSize?: number
+  children?: JSX.Element
 }
 
 /**
- * RichText — container for mixed-font inline text.
- *
- * Children should be <Span> components. RichText collects their
- * text content and styling, runs Pretext rich-inline layout,
- * and renders each fragment with its own font/color.
- *
- * Note: In the current implementation, RichText renders as a
- * regular <box> with <text> children. The rich-inline layout
- * is applied during the paint phase. True mixed-font rendering
- * requires runtime font atlas support (Phase 2+).
+ * RichText — wraps children <Span> elements in a horizontal row.
+ * Clay will lay them out left-to-right within the container width.
  */
 export function RichText(props: RichTextProps) {
   return (
     <box
-      direction="column"
+      direction="row"
       width={props.maxWidth}
     >
       {props.children}
