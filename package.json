@@ -11,8 +11,10 @@
     "typecheck": "tsc --noEmit",
     "zig:build": "cd zig && zig build -Doptimize=ReleaseFast",
     "zig:test": "cd zig && zig build test --summary all",
+    "clay:build": "cc -shared -O2 -o vendor/libclay.dylib -DCLAY_IMPLEMENTATION -DCLAY_DISABLE_SIMD vendor/clay_wrapper.c -I vendor",
     "example": "bun run examples/hello.tsx",
-    "demo": "bun run examples/phase1.ts"
+    "demo": "bun run examples/phase1.ts",
+    "demo2": "bun run examples/phase2.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.3.12",

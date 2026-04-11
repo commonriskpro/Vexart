@@ -1,0 +1,81 @@
+/**
+ * SolidJS custom renderer for TGE.
+ *
+ * Implements the 10 methods required by solid-js/universal createRenderer.
+ * Translates JSX operations into TGENode tree manipulations.
+ *
+ * The reconciler doesn't do rendering itself — it just maintains the
+ * TGENode tree. The render loop walks this tree each frame.
+ */
+
+import { createRenderer } from "solid-js/universal"
+import {
+  type TGENode,
+  type TGEProps,
+  createNode,
+  createTextNode,
+  insertChild,
+  removeChild,
+  parseColor,
+} from "./node"
+
+export const {
+  render,
+  effect,
+  memo,
+  createComponent,
+  createElement,
+  createTextNode: solidCreateTextNode,
+  insertNode,
+  insert,
+  spread,
+  setProp,
+  mergeProps,
+  use,
+} = createRenderer<TGENode>({
+  createElement(type: string): TGENode {
+    const node = createNode(type === "text" ? "text" : "box")
+    return node
+  },
+
+  createTextNode(value: string): TGENode {
+    return createTextNode(String(value))
+  },
+
+  replaceText(node: TGENode, value: string) {
+    node.text = String(value)
+  },
+
+  setProperty(node: TGENode, name: string, value: unknown) {
+    (node.props as Record<string, unknown>)[name] = value
+  },
+
+  insertNode(parent: TGENode, node: TGENode, anchor?: TGENode) {
+    insertChild(parent, node, anchor)
+  },
+
+  isTextNode(node: TGENode): boolean {
+    return node.kind === "text"
+  },
+
+  removeNode(parent: TGENode, node: TGENode) {
+    removeChild(parent, node)
+  },
+
+  getParentNode(node: TGENode): TGENode | undefined {
+    return node.parent ?? undefined
+  },
+
+  getFirstChild(node: TGENode): TGENode | undefined {
+    return node.children[0]
+  },
+
+  getNextSibling(node: TGENode): TGENode | undefined {
+    if (!node.parent) return undefined
+    const idx = node.parent.children.indexOf(node)
+    return node.parent.children[idx + 1]
+  },
+})
+
+// Re-export SolidJS control flow
+export { For, Show, Switch, Match, Index, ErrorBoundary } from "solid-js"
