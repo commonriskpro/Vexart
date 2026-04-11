@@ -45,12 +45,19 @@ import {
   resetLayers,
   dirtyCount,
 } from "./layers"
+import { measureForClay, layoutText, getFont, fontToCSS } from "./text-layout"
 import { appendFileSync } from "fs"
 
 const LOG = "/tmp/tge-layers.log"
 function log(msg: string) {
   appendFileSync(LOG, msg + "\n")
 }
+
+// ── Text metadata ──
+// During walkTree, we record text props for each <Text> node.
+// During paint, we look up the metadata by text content to do multi-line layout.
+type TextMeta = { content: string; fontId: number; fontSize: number; lineHeight: number }
+const textMetaMap = new Map<string, TextMeta>()
 
 // ── Effect metadata ──
 // During walkTree, we record shadow/glow configs for nodes with backgroundColor.
@@ -181,8 +188,15 @@ export function createRenderLoop(term: Terminal): RenderLoop {
   /**
    * Walk TGENode tree and replay into Clay (immediate mode).
    * This is the FIRST pass — it only feeds Clay, no layer assignment.
+   *
+   * Text measurement: Before calling clay.text(), we pre-measure
+   * the text with Pretext and register the measurement so Clay's
+   * callback can read accurate width/height.
    */
   let scrollIdCounter = 0
+  let textMeasureIndex = 0
+
+  const textMetas: TextMeta[] = []
 
   function walkTree(node: TGENode) {
     if (node.kind === "text") {
@@ -191,6 +205,18 @@ export function createRenderLoop(term: Terminal): RenderLoop {
       const color = parseColor(node.props.color) || 0xe0e0e0ff
       const fontSize = node.props.fontSize ?? 16
       const fontId = node.props.fontId ?? 0
+      const lineHeight = node.props.lineHeight ?? Math.ceil(fontSize * 1.2)
+
+      // Pre-measure with Pretext for Clay
+      const measurement = measureForClay(content, fontId, fontSize)
+      clay.setTextMeasure(textMeasureIndex, measurement.width, measurement.height)
+      textMeasureIndex++
+
+      // Track metadata for multi-line paint
+      const meta: TextMeta = { content, fontId, fontSize, lineHeight }
+      textMetas.push(meta)
+      textMetaMap.set(content, meta)
+
       clay.text(content, color, fontId, fontSize)
       return
     }
@@ -573,6 +599,10 @@ export function createRenderLoop(term: Terminal): RenderLoop {
     // 1. Walk tree into Clay (first pass — feeds Clay, no counting)
     scrollSpeedCap = 0 // reset — will be set by walkTree if any node has scrollSpeed
     effectsQueue = [] // reset effects for this frame
+    textMeasureIndex = 0 // reset text measure counter
+    textMetas.length = 0 // clear text metadata
+    textMetaMap.clear()
+    clay.resetTextMeasures() // reset C-side counter
     clay.beginLayout()
     walkTree(root)
     const commands = clay.endLayout()
@@ -711,6 +741,10 @@ export function createRenderLoop(term: Terminal): RenderLoop {
     scrollIdCounter = 0
 
     effectsQueue = [] // reset effects for this frame
+    textMeasureIndex = 0
+    textMetas.length = 0
+    textMetaMap.clear()
+    clay.resetTextMeasures()
     clay.beginLayout()
     walkTree(root)
     const commands = clay.endLayout()
@@ -995,7 +1029,27 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
 
     case CMD.TEXT: {
       if (!cmd.text) break
-      paint.drawText(buf, x, y, cmd.text, r, g, b, a)
+      const meta = textMetaMap.get(cmd.text)
+      if (!meta) {
+        // Fallback: single-line paint (no metadata available)
+        paint.drawText(buf, x, y, cmd.text, r, g, b, a)
+        break
+      }
+
+      // Use Pretext to lay out text into lines within the bounding box
+      const maxTextWidth = Math.max(w, 1)
+      const result = layoutText(cmd.text, meta.fontId, maxTextWidth, meta.lineHeight)
+      if (result.lines.length <= 1) {
+        // Single line — paint directly (common fast path)
+        paint.drawText(buf, x, y, cmd.text, r, g, b, a)
+      } else {
+        // Multi-line — paint each line at its vertical offset
+        for (let li = 0; li < result.lines.length; li++) {
+          const line = result.lines[li]
+          const lineY = y + li * meta.lineHeight
+          paint.drawText(buf, x, lineY, line.text, r, g, b, a)
+        }
+      }
       break
     }
   }

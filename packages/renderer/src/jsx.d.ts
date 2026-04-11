@@ -26,6 +26,12 @@ type TextProps = {
   color?: string | number
   fontSize?: number
   fontId?: number
+  lineHeight?: number
+  wordBreak?: "normal" | "keep-all"
+  whiteSpace?: "normal" | "pre-wrap"
+  fontFamily?: string
+  fontWeight?: number
+  fontStyle?: "normal" | "italic"
   children?: Children
 }
 

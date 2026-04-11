@@ -65,6 +65,10 @@ export type { FocusHandle } from "./focus"
 // Re-export dirty flag for advanced use
 export { markDirty } from "./dirty"
 
+// Re-export text layout system
+export { registerFont, getFont, clearTextCache } from "./text-layout"
+export type { FontDescriptor } from "./text-layout"
+
 /**
  * Mount a SolidJS component tree onto the terminal.
  *

@@ -23,12 +23,35 @@
 static Clay_Context *ctx = NULL;
 static void *arena_memory = NULL;
 
-/* Text measurement callback — set from TS via wrapper */
-typedef struct {
-    float (*measure)(const char *text, int length, uint16_t fontId, uint16_t fontSize);
-} TGE_TextMeasure;
+/* ── Text measurement via pre-computed lookup table ──
+ *
+ * TS pre-measures each text string with Pretext before calling Clay,
+ * writing {width, height} pairs into a shared float buffer indexed by
+ * a sequential counter. The Clay callback reads from this table.
+ *
+ * Flow:
+ *   1. TS calls tge_clay_reset_text_measures() at frame start
+ *   2. For each <Text>, TS calls tge_clay_set_text_measure(index, w, h)
+ *   3. During walkTree, TS calls clay.text() which triggers Clay
+ *   4. Clay calls tge_measure_text_callback which reads the table
+ */
 
-static TGE_TextMeasure tge_text_measure = {0};
+#define MAX_TEXT_MEASURES 256
+
+static float text_measure_widths[MAX_TEXT_MEASURES];
+static float text_measure_heights[MAX_TEXT_MEASURES];
+static int text_measure_counter = 0;
+
+void tge_clay_reset_text_measures(void) {
+    text_measure_counter = 0;
+}
+
+void tge_clay_set_text_measure(int index, float width, float height) {
+    if (index >= 0 && index < MAX_TEXT_MEASURES) {
+        text_measure_widths[index] = width;
+        text_measure_heights[index] = height;
+    }
+}
 
 static Clay_Dimensions tge_measure_text_callback(
     Clay_StringSlice text,
@@ -36,16 +59,18 @@ static Clay_Dimensions tge_measure_text_callback(
     void *userData
 ) {
     (void)userData;
-    if (!tge_text_measure.measure) {
-        /* Pre-rendered font atlas: SF Mono at 14px.
-         * Cell: 9px wide, 17px tall. Matches zig/src/font_atlas.zig. */
+    int idx = text_measure_counter++;
+    if (idx >= 0 && idx < MAX_TEXT_MEASURES && text_measure_widths[idx] > 0) {
         return (Clay_Dimensions){
-            .width = text.length * 9.0f,
-            .height = 17.0f
+            .width = text_measure_widths[idx],
+            .height = text_measure_heights[idx],
         };
     }
-    float w = tge_text_measure.measure(text.chars, text.length, config->fontId, config->fontSize);
-    return (Clay_Dimensions){ .width = w, .height = 17.0f };
+    /* Fallback: monospace 9px per char, 17px height */
+    return (Clay_Dimensions){
+        .width = text.length * 9.0f,
+        .height = 17.0f
+    };
 }
 
 static void tge_error_handler(Clay_ErrorData error) {

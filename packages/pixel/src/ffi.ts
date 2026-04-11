@@ -48,6 +48,9 @@ const FFI_DEFS = {
   // Text (8 params — within ARM64 limit)
   tge_draw_text:    { args: [FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.i32, FFIType.i32, FFIType.ptr, FFIType.u32, FFIType.u32], returns: FFIType.void },
   tge_measure_text: { args: [FFIType.u32], returns: FFIType.u32 },
+  // Runtime font atlas
+  tge_load_font_atlas: { args: [FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.void },
+  tge_draw_text_font:  { args: [FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.i32, FFIType.i32, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u32], returns: FFIType.void },
 } as const
 
 let lib: ReturnType<typeof dlopen<typeof FFI_DEFS>> | null = null

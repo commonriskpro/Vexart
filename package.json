@@ -24,7 +24,8 @@
     "demo7": "bun --conditions=browser run examples/scroll.tsx",
     "demo8": "bun --conditions=browser run examples/components.tsx",
     "demo9": "bun --conditions=browser run examples/effects.tsx",
-    "demo10": "bun --conditions=browser run examples/input.tsx"
+    "demo10": "bun --conditions=browser run examples/input.tsx",
+    "demo11": "bun --conditions=browser run examples/text-wrap.tsx"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
@@ -39,5 +40,8 @@
   "engines": {
     "bun": ">=1.1.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@chenglou/pretext": "^0.0.5"
+  }
 }

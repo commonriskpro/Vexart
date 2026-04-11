@@ -169,6 +169,7 @@ export fn tge_radial_gradient(data: [*]u8, width: u32, height: u32, cx: u32, cy:
 }
 
 // Text — 8 params (within ARM64 limit)
+// Font 0 = built-in SF Mono atlas. Fonts 1+ = runtime-loaded.
 export fn tge_draw_text(data: [*]u8, width: u32, height: u32, x: i32, y: i32, text_ptr: [*]const u8, text_len: u32, color: u32) void {
     var buf = mkbuf(data, width, height);
     const c = unpack(color);
@@ -177,6 +178,109 @@ export fn tge_draw_text(data: [*]u8, width: u32, height: u32, x: i32, y: i32, te
 
 export fn tge_measure_text(text_len: u32) u32 {
     return text_mod.measureText(text_len);
+}
+
+// ── Runtime Font Atlas ──
+// Supports up to 16 dynamically loaded font atlases.
+// Each atlas covers ASCII 32-126 (95 glyphs) as grayscale alpha.
+
+const MAX_FONTS = 16;
+
+const RuntimeFont = struct {
+    data: ?[*]const u8, // grayscale alpha data (95 * cell_w * cell_h bytes)
+    cell_width: u32,
+    cell_height: u32,
+    data_len: u32,
+    active: bool,
+    widths: ?[*]const f32, // per-glyph advance widths (95 floats), null = monospace
+};
+
+var runtime_fonts: [MAX_FONTS]RuntimeFont = [_]RuntimeFont{.{
+    .data = null,
+    .cell_width = 0,
+    .cell_height = 0,
+    .data_len = 0,
+    .active = false,
+    .widths = null,
+}} ** MAX_FONTS;
+
+/// Load a font atlas at runtime. font_id 0 is reserved for built-in.
+/// atlas_data: grayscale alpha, 95 glyphs * cell_w * cell_h bytes.
+/// widths_ptr: per-glyph advance widths (95 floats), or null for monospace.
+export fn tge_load_font_atlas(font_id: u32, atlas_data: [*]const u8, data_len: u32, cell_w: u32, cell_h: u32, widths_ptr: ?[*]const f32) void {
+    if (font_id == 0 or font_id >= MAX_FONTS) return;
+    runtime_fonts[font_id] = .{
+        .data = atlas_data,
+        .cell_width = cell_w,
+        .cell_height = cell_h,
+        .data_len = data_len,
+        .active = true,
+        .widths = widths_ptr,
+    };
+}
+
+/// Draw text with a specific runtime font atlas.
+/// font_id 0 = built-in SF Mono. 1+ = runtime loaded.
+export fn tge_draw_text_font(data: [*]u8, width: u32, height: u32, x: i32, y: i32, text_ptr: [*]const u8, text_len: u32, color: u32, font_id: u32) void {
+    var buf = mkbuf(data, width, height);
+    const c = unpack(color);
+
+    if (font_id == 0 or font_id >= MAX_FONTS or !runtime_fonts[font_id].active) {
+        // Fall back to built-in atlas
+        _ = text_mod.drawText(&buf, x, y, text_ptr, text_len, c.r, c.g, c.b, c.a);
+        return;
+    }
+
+    const font = &runtime_fonts[font_id];
+    const atlas_data_ptr = font.data orelse return;
+    const cw = font.cell_width;
+    const ch = font.cell_height;
+    const first_cp: u32 = 32;
+    const last_cp: u32 = 126;
+
+    var cx: i32 = x;
+    var i: u32 = 0;
+    while (i < text_len) : (i += 1) {
+        const cp: u32 = text_ptr[i];
+        if (cp < first_cp or cp > last_cp) {
+            // Skip non-printable, advance by cell width
+            cx += @intCast(cw);
+            continue;
+        }
+
+        const idx = cp - first_cp;
+        const glyph_offset = idx * cw * ch;
+
+        // Render glyph from runtime atlas
+        for (0..ch) |row_idx| {
+            const py = cx + @as(i32, @intCast(row_idx));
+            _ = py;
+            const draw_y = @as(i32, @intCast(row_idx)) + (y);
+            if (draw_y < 0) continue;
+            if (draw_y >= @as(i32, @intCast(buf.height))) break;
+
+            for (0..cw) |col_idx| {
+                const draw_x = @as(i32, @intCast(col_idx)) + cx;
+                if (draw_x < 0) continue;
+                if (draw_x >= @as(i32, @intCast(buf.width))) break;
+
+                const coverage = atlas_data_ptr[glyph_offset + row_idx * cw + col_idx];
+                if (coverage == 0) continue;
+
+                const final_a: u32 = (@as(u32, coverage) * @as(u32, c.a) + 127) / 255;
+                blend(&buf, @intCast(draw_x), @intCast(draw_y), c.r, c.g, c.b, @intCast(final_a));
+            }
+        }
+
+        // Advance cursor
+        if (font.widths) |w| {
+            // Proportional font: use per-glyph width (rounded)
+            const glyph_w: f32 = w[idx];
+            cx += @intFromFloat(@round(glyph_w));
+        } else {
+            cx += @intCast(cw);
+        }
+    }
 }
 
 // ── Tests ──

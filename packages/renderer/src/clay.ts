@@ -51,6 +51,8 @@ const DEFS = {
   tge_clay_read_text:           { args: [FFIType.i32, FFIType.ptr, FFIType.i32], returns: FFIType.i32 },
   tge_clay_set_pointer:         { args: [FFIType.f32, FFIType.f32, FFIType.i32], returns: FFIType.void },
   tge_clay_update_scroll:       { args: [FFIType.f32, FFIType.f32, FFIType.f32], returns: FFIType.void },
+  tge_clay_reset_text_measures: { args: [], returns: FFIType.void },
+  tge_clay_set_text_measure:    { args: [FFIType.i32, FFIType.f32, FFIType.f32], returns: FFIType.void },
 } as const
 
 let lib: ReturnType<typeof dlopen<typeof DEFS>> | null = null
@@ -244,5 +246,15 @@ export const clay = {
   /** Update scroll containers. */
   updateScroll(dx: number, dy: number, dt: number) {
     getLib().symbols.tge_clay_update_scroll(dx, dy, dt)
+  },
+
+  /** Reset the text measurement counter (call before walkTree). */
+  resetTextMeasures() {
+    getLib().symbols.tge_clay_reset_text_measures()
+  },
+
+  /** Pre-register a text measurement for Clay's callback. */
+  setTextMeasure(index: number, width: number, height: number) {
+    getLib().symbols.tge_clay_set_text_measure(index, width, height)
   },
 }

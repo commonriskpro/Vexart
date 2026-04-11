@@ -86,6 +86,21 @@ export const paint = {
     loadLib().symbols.tge_draw_text(bufPtr(buf.data), buf.width, buf.height, x, y, encoded, encoded.length, packColor(r, g, b, a))
   },
 
+  /** Draw text with a specific font atlas (fontId 0 = built-in, 1+ = runtime). */
+  drawTextFont(buf: PixelBuffer, x: number, y: number, text: string, r: number, g: number, b: number, a: number, fontId: number) {
+    const encoded = new TextEncoder().encode(text)
+    if (fontId === 0) {
+      loadLib().symbols.tge_draw_text(bufPtr(buf.data), buf.width, buf.height, x, y, encoded, encoded.length, packColor(r, g, b, a))
+    } else {
+      loadLib().symbols.tge_draw_text_font(bufPtr(buf.data), buf.width, buf.height, x, y, encoded, encoded.length, packColor(r, g, b, a), fontId)
+    }
+  },
+
+  /** Load a runtime font atlas into Zig. */
+  loadFontAtlas(fontId: number, atlasData: Uint8Array, cellWidth: number, cellHeight: number, glyphWidths?: Float32Array) {
+    loadLib().symbols.tge_load_font_atlas(fontId, atlasData, atlasData.length, cellWidth, cellHeight, glyphWidths ?? null)
+  },
+
   /** Measure text width in pixels (without rendering). */
   measureText(text: string): number {
     return loadLib().symbols.tge_measure_text(text.length) as number
