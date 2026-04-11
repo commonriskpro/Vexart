@@ -231,7 +231,7 @@ void tge_clay_text(const char *text, int length, uint32_t color_rgba, uint16_t f
         },
         .fontId = font_id,
         .fontSize = font_size,
-        .wrapMode = CLAY_TEXT_WRAP_WORDS,
+        .wrapMode = CLAY_TEXT_WRAP_NONE,
     });
 }
 
