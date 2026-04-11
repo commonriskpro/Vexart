@@ -485,29 +485,43 @@ export function Textarea(props: TextareaProps) {
       direction="column"
     >
       {/* Render lines */}
-      {lines().slice(0, visibleLines()).map((line, rowIndex) => (
-        <box height={LINE_HEIGHT} width="100%">
-          <text
-            color={line.length === 0 && rowIndex === 0 && !checkFocus()
-              ? textTokens.muted
-              : textTokens.primary}
-            fontSize={14}
-          >
-            {line.length === 0 && rowIndex === 0 && !checkFocus()
-              ? (props.placeholder ?? "")
-              : line}
-          </text>
+      {lines().slice(0, visibleLines()).map((line, rowIndex) => {
+        const isCursorLine = checkFocus() && cursorPos().row === rowIndex
+        const col = cursorPos().col
 
-          {/* Cursor on this line */}
-          {checkFocus() && blink() && cursorPos().row === rowIndex ? (
-            <box
-              width={2}
-              height={LINE_HEIGHT}
-              backgroundColor={color()}
-            />
-          ) : null}
-        </box>
-      ))}
+        // Show placeholder only on first empty line when unfocused
+        const showPH = line.length === 0 && rowIndex === 0 && !checkFocus()
+
+        if (isCursorLine && !showPH) {
+          // Split line at cursor column to position the cursor box correctly
+          const before = line.slice(0, col)
+          const after = line.slice(col)
+          return (
+            <box height={LINE_HEIGHT} width="100%">
+              {before.length > 0 ? (
+                <text color={textTokens.primary} fontSize={14}>{before}</text>
+              ) : null}
+              {blink() ? (
+                <box width={2} height={LINE_HEIGHT} backgroundColor={color()} />
+              ) : null}
+              {after.length > 0 ? (
+                <text color={textTokens.primary} fontSize={14}>{after}</text>
+              ) : null}
+            </box>
+          )
+        }
+
+        return (
+          <box height={LINE_HEIGHT} width="100%">
+            <text
+              color={showPH ? textTokens.muted : textTokens.primary}
+              fontSize={14}
+            >
+              {showPH ? (props.placeholder ?? "") : line}
+            </text>
+          </box>
+        )
+      })}
     </box>
   )
 }
