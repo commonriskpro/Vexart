@@ -232,6 +232,7 @@ const pkg = {
     "web-tree-sitter": "^0.26.8",
     "marked": "^18.0.0",
     "@chenglou/pretext": "^0.0.5",
+    "@napi-rs/canvas": "^0.1.97",
   },
   engines: {
     bun: ">=1.1.0",
