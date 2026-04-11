@@ -138,8 +138,8 @@ export function measureTextHeight(
 
 /**
  * Lay out text into lines for rendering.
- * Returns individual lines with their text content and width.
- * Uses Pretext for accurate word wrapping and line breaking.
+ * Font 0: word-wrap using atlas metrics (8.65px/char).
+ * Other fonts: Pretext layout with canvas measurement.
  */
 export function layoutText(
   text: string,
@@ -148,8 +148,56 @@ export function layoutText(
   lineHeight: number,
   options?: PrepareOptions,
 ): { lines: LayoutLine[]; height: number; lineCount: number } {
+  if (fontId === 0) {
+    return layoutBuiltinFont(text, maxWidth, lineHeight)
+  }
   const prepared = prepareText(text, fontId, options)
   return layoutWithLines(prepared, maxWidth, lineHeight)
+}
+
+/** Word-wrap for built-in bitmap font using exact atlas advance width. */
+function layoutBuiltinFont(
+  text: string,
+  maxWidth: number,
+  lineHeight: number,
+): { lines: LayoutLine[]; height: number; lineCount: number } {
+  const charsPerLine = Math.max(1, Math.floor(maxWidth / BUILTIN_ADVANCE))
+  const words = text.split(" ")
+  const lines: LayoutLine[] = []
+  let current = ""
+
+  for (const word of words) {
+    const candidate = current ? current + " " + word : word
+    if (candidate.length > charsPerLine && current) {
+      lines.push({
+        text: current,
+        width: Math.ceil(current.length * BUILTIN_ADVANCE),
+        start: { segmentIndex: 0, graphemeIndex: 0 },
+        end: { segmentIndex: 0, graphemeIndex: 0 },
+      })
+      current = word
+    } else {
+      current = candidate
+    }
+  }
+  if (current) {
+    lines.push({
+      text: current,
+      width: Math.ceil(current.length * BUILTIN_ADVANCE),
+      start: { segmentIndex: 0, graphemeIndex: 0 },
+      end: { segmentIndex: 0, graphemeIndex: 0 },
+    })
+  }
+  if (lines.length === 0) {
+    lines.push({
+      text: "",
+      width: 0,
+      start: { segmentIndex: 0, graphemeIndex: 0 },
+      end: { segmentIndex: 0, graphemeIndex: 0 },
+    })
+  }
+
+  return { lines, lineCount: lines.length, height: lines.length * lineHeight }
 }
 
 /**
@@ -172,15 +220,33 @@ export function layoutRichText(
 // ── Clay integration ──
 // Pretext-based text measurement for Clay's callback.
 
+// ── Built-in atlas metrics ──
+// Font 0 = .SF NS Mono 14px bitmap atlas.
+// Zig advance: 8.65px per char (865 hundredths fixed-point).
+// Cell: 9px wide (glyph bounding box), 17px tall.
+// These MUST match zig/src/text.zig advance_hundredths and font_atlas.zig.
+const BUILTIN_ADVANCE = 8.65
+const BUILTIN_HEIGHT = 17
+
 /**
  * Measure text width for Clay layout.
- * Uses Pretext/canvas for accurate font measurement.
+ * Font 0: uses exact atlas metrics (8.65px/char) to match Zig renderer.
+ * Other fonts: uses Pretext/canvas for accurate measurement.
  */
 export function measureForClay(
   text: string,
   fontId: number,
   fontSize: number,
 ): { width: number; height: number } {
+  // Built-in atlas: use known metrics (JS string length = char count)
+  if (fontId === 0) {
+    return {
+      width: Math.ceil(text.length * BUILTIN_ADVANCE),
+      height: BUILTIN_HEIGHT,
+    }
+  }
+
+  // Runtime fonts: measure with Pretext/canvas
   const desc = getFont(fontId)
   const effectiveDesc = desc.size === fontSize ? desc : { ...desc, size: fontSize }
   const css = fontToCSS(effectiveDesc)

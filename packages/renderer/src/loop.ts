@@ -203,7 +203,7 @@ export function createRenderLoop(term: Terminal): RenderLoop {
       const content = node.text || collectText(node)
       if (!content) return
       const color = parseColor(node.props.color) || 0xe0e0e0ff
-      const fontSize = node.props.fontSize ?? 16
+      const fontSize = node.props.fontSize ?? 14
       const fontId = node.props.fontId ?? 0
       const lineHeight = node.props.lineHeight ?? Math.ceil(fontSize * 1.2)
 
