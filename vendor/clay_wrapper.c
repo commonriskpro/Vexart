@@ -74,15 +74,11 @@ static Clay_Dimensions tge_measure_text_callback(
     void *userData
 ) {
     (void)userData;
-    int idx = text_measure_counter++;
-    if (idx >= 0 && idx < MAX_TEXT_MEASURES && text_measure_widths[idx] > 0) {
-        return (Clay_Dimensions){
-            .width = text_measure_widths[idx],
-            .height = text_measure_heights[idx],
-        };
-    }
-    /* Fallback for font 0: count UTF-8 chars and use atlas advance.
-     * Clay calls this for substrings during word wrap — must be accurate. */
+    /* Always use atlas metrics — consistent for all calls.
+     * The pre-registered table is no longer needed because the
+     * fallback formula is IDENTICAL to what TS computes.
+     * This eliminates counter desync issues when Clay calls
+     * the callback multiple times during word wrap. */
     int chars = utf8_char_count(text.chars, text.length);
     float width = (float)(chars * BUILTIN_ADVANCE_HUNDREDTHS + 50) / 100.0f;
     return (Clay_Dimensions){
