@@ -1,16 +1,24 @@
 /**
  * @tge/output — Convert pixel buffers to terminal output.
  *
- * Multiple backends based on terminal capabilities:
- * - Kitty graphics protocol (pixel-perfect, direct)
- * - Kitty Unicode Placeholders (pixel-perfect, tmux-safe)
- * - Sixel (legacy terminals)
- * - Halfblock ▀▄ (universal fallback)
- * - Quadrant ▖▗▘▝ (better fallback)
+ * Three backends with automatic selection:
+ *   - Kitty graphics (pixel-perfect, direct terminal)
+ *   - Kitty Unicode placeholders (pixel-perfect, tmux-safe)
+ *   - Halfblock ▀▄ + quadrant (universal fallback)
  *
- * The composer selects the best backend, composites regions,
- * and handles dirty tracking (only re-transmit changed regions).
+ * Usage:
+ *   import { createComposer } from "@tge/output"
+ *
+ *   const composer = createComposer(terminal.write, terminal.caps)
+ *   // composer.backend → "kitty" | "placeholder" | "halfblock"
+ *   composer.render(pixelBuf, col, row, cols, rows, cellW, cellH)
+ *   composer.destroy()
  */
 
-// TODO: Phase 1 — port output backends from LightCode TGE
-export {};
+export { createComposer } from "./composer"
+export type { Composer, BackendKind } from "./composer"
+
+// Individual backends (for advanced use)
+export * as kitty from "./kitty"
+export * as placeholder from "./placeholder"
+export * as halfblock from "./halfblock"

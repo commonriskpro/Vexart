@@ -4,13 +4,33 @@
 ///! Called from TypeScript via bun:ffi.
 ///!
 ///! Modules:
-///!   buffer  — PixelBuffer operations (blend, set, clear, composite)
-///!   rect    — Rounded rectangle SDF (fill, stroke, shadow)
-///!   circle  — Ellipse SDF (filled, stroked)
-///!   line    — Segment-distance SDF, bezier flattening
-///!   shadow  — Box shadow with gaussian blur
-///!   grad    — Linear and radial gradients
+///!   buffer   — PixelBuffer operations (blend, set, clear)
+///!   rect     — Rounded rectangle SDF (fill, stroke)
+///!   circle   — Ellipse SDF (filled, stroked)
+///!   line     — Segment-distance SDF, bezier flattening
+///!   shadow   — Box blur for shadow effects
+///!   halo     — Radial glow with plateau+falloff
+///!   gradient — Linear and radial gradients
 const std = @import("std");
+
+// ── Sub-modules (imported for tests + internal use) ──
+
+const rect = @import("rect.zig");
+const circle = @import("circle.zig");
+const line_mod = @import("line.zig");
+const shadow = @import("shadow.zig");
+const halo_mod = @import("halo.zig");
+const gradient = @import("gradient.zig");
+
+// Force test discovery for all sub-modules
+comptime {
+    _ = rect;
+    _ = circle;
+    _ = line_mod;
+    _ = shadow;
+    _ = halo_mod;
+    _ = gradient;
+}
 
 // ── Pixel Buffer ──
 
@@ -36,29 +56,117 @@ pub fn blend(buf: *PixelBuffer, x: u32, y: u32, r: u8, g: u8, b: u8, a: u8) void
         d[i + 3] = 0xff;
         return;
     }
-    const da = d[i + 3];
-    const inv = 255 - a;
-    const oa: u16 = @as(u16, a) + (@as(u16, da) * inv + 127) / 255;
+    // src-over: out = src * srcA + dst * dstA * (1 - srcA) / outA
+    const sa: u32 = a;
+    const da: u32 = d[i + 3];
+    const inv = 255 - sa;
+    // Output alpha: oa = sa + da * (1-sa)/255
+    const oa = sa * 255 + da * inv;
     if (oa == 0) return;
-    d[i] = @intCast((@as(u16, r) * a + @as(u16, d[i]) * @as(u16, da) * inv / 255 + @as(u16, @intCast(oa)) / 2) / @as(u16, @intCast(oa)));
-    d[i + 1] = @intCast((@as(u16, g) * a + @as(u16, d[i + 1]) * @as(u16, da) * inv / 255 + @as(u16, @intCast(oa)) / 2) / @as(u16, @intCast(oa)));
-    d[i + 2] = @intCast((@as(u16, b) * a + @as(u16, d[i + 2]) * @as(u16, da) * inv / 255 + @as(u16, @intCast(oa)) / 2) / @as(u16, @intCast(oa)));
-    d[i + 3] = if (oa > 255) 255 else @intCast(oa);
+    const dr: u32 = d[i];
+    const dg: u32 = d[i + 1];
+    const db: u32 = d[i + 2];
+    // Premultiplied blend: outC = (srcC * sa * 255 + dstC * da * inv) / oa
+    d[i] = @intCast((@as(u32, r) * sa * 255 + dr * da * inv + oa / 2) / oa);
+    d[i + 1] = @intCast((@as(u32, g) * sa * 255 + dg * da * inv + oa / 2) / oa);
+    d[i + 2] = @intCast((@as(u32, b) * sa * 255 + db * da * inv + oa / 2) / oa);
+    const out_a = (oa + 127) / 255;
+    d[i + 3] = if (out_a > 255) 255 else @intCast(out_a);
 }
 
 // ── FFI Exports ──
+// All exports prefixed with tge_.
+// Colors packed as u32 RGBA (0xRRGGBBAA) to keep params ≤ 8.
+// bun:ffi has issues with >8 params on ARM64 (stack ABI mismatch).
 
-export fn tge_blend(data: [*]u8, width: u32, height: u32, x: u32, y: u32, r: u8, g: u8, b: u8, a: u8) void {
-    var buf = PixelBuffer{
-        .data = data,
-        .width = width,
-        .height = height,
-        .stride = width * 4,
+/// Unpack u32 RGBA into components.
+fn unpack(color: u32) struct { r: u8, g: u8, b: u8, a: u8 } {
+    return .{
+        .r = @intCast((color >> 24) & 0xff),
+        .g = @intCast((color >> 16) & 0xff),
+        .b = @intCast((color >> 8) & 0xff),
+        .a = @intCast(color & 0xff),
     };
-    blend(&buf, x, y, r, g, b, a);
 }
 
-// TODO: Phase 1 — add SDF rect, circle, line, shadow, gradient exports
+fn mkbuf(data: [*]u8, width: u32, height: u32) PixelBuffer {
+    return .{ .data = data, .width = width, .height = height, .stride = width * 4 };
+}
+
+// Rect
+export fn tge_fill_rect(data: [*]u8, width: u32, height: u32, x: i32, y: i32, w: u32, h: u32, color: u32) void {
+    var buf = mkbuf(data, width, height);
+    const c = unpack(color);
+    rect.fill(&buf, x, y, w, h, c.r, c.g, c.b, c.a);
+}
+
+export fn tge_rounded_rect(data: [*]u8, width: u32, height: u32, x: i32, y: i32, w: u32, h: u32, color: u32, radius: u32) void {
+    var buf = mkbuf(data, width, height);
+    const c = unpack(color);
+    rect.rounded(&buf, x, y, w, h, c.r, c.g, c.b, c.a, radius);
+}
+
+export fn tge_stroke_rect(data: [*]u8, width: u32, height: u32, x: i32, y: i32, w: u32, h: u32, color: u32, radius: u32, sw: u32) void {
+    var buf = mkbuf(data, width, height);
+    const c = unpack(color);
+    rect.stroke(&buf, x, y, w, h, c.r, c.g, c.b, c.a, radius, sw);
+}
+
+// Circle
+export fn tge_filled_circle(data: [*]u8, width: u32, height: u32, cx: i32, cy: i32, rx: u32, ry: u32, color: u32) void {
+    var buf = mkbuf(data, width, height);
+    const c = unpack(color);
+    circle.filled(&buf, cx, cy, rx, ry, c.r, c.g, c.b, c.a);
+}
+
+export fn tge_stroked_circle(data: [*]u8, width: u32, height: u32, cx: i32, cy: i32, rx: u32, ry: u32, color: u32, sw: u32) void {
+    var buf = mkbuf(data, width, height);
+    const c = unpack(color);
+    circle.stroked(&buf, cx, cy, rx, ry, c.r, c.g, c.b, c.a, sw);
+}
+
+// Line
+export fn tge_line(data: [*]u8, width: u32, height: u32, x0: i32, y0: i32, x1: i32, y1: i32, color: u32, lw: u32) void {
+    var buf = mkbuf(data, width, height);
+    const c = unpack(color);
+    line_mod.line(&buf, x0, y0, x1, y1, c.r, c.g, c.b, c.a, lw);
+}
+
+export fn tge_bezier(data: [*]u8, width: u32, height: u32, x0: i32, y0: i32, cx: i32, cy: i32, x1: i32, y1: i32, color: u32, lw: u32) void {
+    var buf = mkbuf(data, width, height);
+    const c = unpack(color);
+    line_mod.bezier(&buf, x0, y0, cx, cy, x1, y1, c.r, c.g, c.b, c.a, lw);
+}
+
+// Shadow
+export fn tge_blur(data: [*]u8, width: u32, height: u32, x: u32, y: u32, w: u32, h: u32, radius: u32, passes: u32) void {
+    var buf = mkbuf(data, width, height);
+    shadow.blur(&buf, x, y, w, h, radius, passes);
+}
+
+// Halo
+export fn tge_halo(data: [*]u8, width: u32, height: u32, cx: i32, cy: i32, rx: u32, ry: u32, color: u32, intensity_pct: u32) void {
+    var buf = mkbuf(data, width, height);
+    const c = unpack(color);
+    halo_mod.halo(&buf, cx, cy, rx, ry, c.r, c.g, c.b, c.a, intensity_pct);
+}
+
+// Gradient — two colors packed
+export fn tge_linear_gradient(data: [*]u8, width: u32, height: u32, x: u32, y: u32, w: u32, h: u32, color0: u32, color1: u32, angle_deg: u32) void {
+    var buf = mkbuf(data, width, height);
+    const c0 = unpack(color0);
+    const c1 = unpack(color1);
+    gradient.linear(&buf, x, y, w, h, c0.r, c0.g, c0.b, c0.a, c1.r, c1.g, c1.b, c1.a, angle_deg);
+}
+
+export fn tge_radial_gradient(data: [*]u8, width: u32, height: u32, cx: u32, cy: u32, radius: u32, color0: u32, color1: u32) void {
+    var buf = mkbuf(data, width, height);
+    const c0 = unpack(color0);
+    const c1 = unpack(color1);
+    gradient.radial(&buf, cx, cy, radius, c0.r, c0.g, c0.b, c0.a, c1.r, c1.g, c1.b, c1.a);
+}
+
+// ── Tests ──
 
 test "blend opaque onto empty" {
     var pixels = [_]u8{0} ** 16; // 2x2
