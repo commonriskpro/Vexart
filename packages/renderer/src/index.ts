@@ -124,9 +124,29 @@ export type {
 export { createTerminal }
 export type { Terminal, Capabilities, TerminalSize } from "@tge/terminal"
 
-// Re-export input types for consumers
+// Re-export input types and utilities for consumers
 export type { KeyEvent, InputEvent }
-export type { MouseEvent as TgeMouseEvent } from "@tge/input"
+export type { MouseEvent as TgeMouseEvent, PasteEvent, FocusEvent, MouseAction, Modifiers } from "@tge/input"
+
+// ── Mouse button constants ──
+
+export const MouseButton = {
+  LEFT: 0,
+  MIDDLE: 1,
+  RIGHT: 2,
+  RELEASE: 3,
+  SCROLL_UP: 64,
+  SCROLL_DOWN: 65,
+} as const
+
+/**
+ * Decode paste bytes to string — normalizes line endings.
+ * Compatible with opentui's decodePasteBytes.
+ */
+export function decodePasteBytes(bytes: Uint8Array | string): string {
+  if (typeof bytes === "string") return bytes
+  return new TextDecoder().decode(bytes)
+}
 
 // Re-export Clay layout constants for advanced use
 export { ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, SIZING, DIRECTION, ALIGN_X, ALIGN_Y } from "./clay"
