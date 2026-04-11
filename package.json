@@ -13,10 +13,11 @@
     "zig:test": "cd zig && zig build test --summary all",
     "clay:build": "cc -shared -O2 -o vendor/libclay.dylib -DCLAY_IMPLEMENTATION -DCLAY_DISABLE_SIMD vendor/clay_wrapper.c -I vendor",
     "font:gen": "bun run scripts/gen-font-atlas.ts",
-    "example": "bun run examples/hello.tsx",
+    "example": "bun --conditions=browser run examples/hello.tsx",
     "demo": "bun run examples/phase1.ts",
     "demo2": "bun run examples/phase2.ts",
-    "demo3": "bun run examples/hello.tsx"
+    "demo3": "bun --conditions=browser run examples/hello.tsx",
+    "demo4": "bun --conditions=browser run examples/interactive.tsx"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",

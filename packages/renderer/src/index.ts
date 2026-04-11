@@ -18,12 +18,15 @@
  *   }
  *
  *   const terminal = await createTerminal()
- *   mount(() => <App />, terminal)
+ *   const cleanup = mount(() => <App />, terminal)
  */
 
 import type { Terminal } from "@tge/terminal"
+import { createParser } from "@tge/input"
 import { createRenderLoop } from "./loop"
 import { render as solidRender } from "./reconciler"
+import { dispatchInput } from "./input"
+import { resetFocus } from "./focus"
 
 export type { RenderLoop } from "./loop"
 export { createRenderLoop } from "./loop"
@@ -51,11 +54,30 @@ export {
 // Named export for advanced use
 export { render as solidRender } from "./reconciler"
 
+// Re-export input hooks so apps import everything from @tge/renderer
+export { useKeyboard, useMouse, useInput, onInput } from "./input"
+export type { KeyboardState, MouseState } from "./input"
+
+// Re-export focus system
+export { useFocus, setFocus } from "./focus"
+export type { FocusHandle } from "./focus"
+
+// Re-export dirty flag for advanced use
+export { markDirty } from "./dirty"
+
 /**
  * Mount a SolidJS component tree onto the terminal.
  *
- * This is the main entry point for TGE apps.
- * Returns a cleanup function.
+ * This is the main entry point for TGE apps:
+ *   - Creates the render loop (Clay layout + Zig paint + output)
+ *   - Mounts SolidJS component tree
+ *   - Connects terminal stdin → input parser → event dispatch
+ *   - Starts the 30fps render loop with dirty-flag optimization
+ *
+ * The input parser feeds events into the global dispatch system.
+ * Components use useKeyboard()/useMouse() hooks to subscribe reactively.
+ *
+ * Returns a cleanup function that tears down everything.
  */
 export function mount(component: () => any, terminal: Terminal): () => void {
   const loop = createRenderLoop(terminal)
@@ -63,10 +85,19 @@ export function mount(component: () => any, terminal: Terminal): () => void {
   // SolidJS render mounts the component tree into the root TGENode
   const dispose = solidRender(component, loop.root)
 
-  // Start the render loop
-  loop.frame() // initial render
+  // Connect terminal stdin → input parser → dispatch
+  const parser = createParser((event) => {
+    dispatchInput(event)
+  })
+  const unsubData = terminal.onData((data) => parser.feed(data))
+
+  // Start the render loop (30fps, only repaints when dirty)
+  loop.start()
 
   return () => {
+    unsubData()
+    parser.destroy()
+    resetFocus()
     dispose()
     loop.destroy()
   }

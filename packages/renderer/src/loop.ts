@@ -26,6 +26,7 @@ import {
   parseAlignX,
   parseAlignY,
 } from "./node"
+import { isDirty, clearDirty, markDirty } from "./dirty"
 // Note: solidRender is used by index.ts, not here.
 // Phase 4: all rendering (including text) is pixel-based via Zig.
 
@@ -61,10 +62,6 @@ export function createRenderLoop(term: Terminal): RenderLoop {
   const composer = createComposer(term.write, term.rawWrite, term.caps)
 
   let timer: ReturnType<typeof setInterval> | null = null
-  let dirty = true
-
-  // Mark dirty when SolidJS updates
-  // (In a full implementation, SolidJS effects would set this)
 
   /** Collect all text content from a node's children recursively. */
   function collectText(node: TGENode): string {
@@ -153,7 +150,7 @@ export function createRenderLoop(term: Terminal): RenderLoop {
     composer.render(buf, 0, 0, cols, rows, cellW, cellH)
     term.endSync()
 
-    dirty = false
+    clearDirty()
   }
 
   /** Resize handler */
@@ -164,7 +161,7 @@ export function createRenderLoop(term: Terminal): RenderLoop {
     root.props.width = newW
     root.props.height = newH
     buf = create(newW, newH)
-    dirty = true
+    markDirty()
   })
 
   return {
@@ -173,7 +170,7 @@ export function createRenderLoop(term: Terminal): RenderLoop {
     start() {
       frame() // initial render
       timer = setInterval(() => {
-        if (dirty) frame()
+        if (isDirty()) frame()
       }, 33) // ~30fps
     },
 

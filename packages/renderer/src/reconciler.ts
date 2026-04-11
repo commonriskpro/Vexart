@@ -18,6 +18,7 @@ import {
   removeChild,
   parseColor,
 } from "./node"
+import { markDirty } from "./dirty"
 
 export const {
   render,
@@ -44,14 +45,17 @@ export const {
 
   replaceText(node: TGENode, value: string) {
     node.text = String(value)
+    markDirty()
   },
 
   setProperty(node: TGENode, name: string, value: unknown) {
     (node.props as Record<string, unknown>)[name] = value
+    markDirty()
   },
 
   insertNode(parent: TGENode, node: TGENode, anchor?: TGENode) {
     insertChild(parent, node, anchor)
+    markDirty()
   },
 
   isTextNode(node: TGENode): boolean {
@@ -60,6 +64,7 @@ export const {
 
   removeNode(parent: TGENode, node: TGENode) {
     removeChild(parent, node)
+    markDirty()
   },
 
   getParentNode(node: TGENode): TGENode | undefined {
