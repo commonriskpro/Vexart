@@ -21,8 +21,8 @@
  *   const cleanup = mount(() => <App />, terminal)
  */
 
-import type { Terminal } from "@tge/terminal"
-import { createParser } from "@tge/input"
+import { createTerminal, type Terminal } from "@tge/terminal"
+import { createParser, type KeyEvent, type MouseEvent as TgeMouseEvent, type InputEvent } from "@tge/input"
 import { createRenderLoop } from "./loop"
 import { render as solidRender } from "./reconciler"
 import { dispatchInput } from "./input"
@@ -119,6 +119,14 @@ export type {
   StyleDefinition,
   ThemeTokenStyle,
 } from "./tree-sitter"
+
+// Re-export terminal creation + types for consumers
+export { createTerminal }
+export type { Terminal, Capabilities, TerminalSize } from "@tge/terminal"
+
+// Re-export input types for consumers
+export type { KeyEvent, InputEvent }
+export type { MouseEvent as TgeMouseEvent } from "@tge/input"
 
 // Re-export Clay layout constants for advanced use
 export { ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, SIZING, DIRECTION, ALIGN_X, ALIGN_Y } from "./clay"
