@@ -14,6 +14,9 @@ type Children = JSX.Element | JSX.Element[] | string | number | boolean | null |
 
 type BoxProps = TGEProps & {
   layer?: boolean
+  scrollX?: boolean
+  scrollY?: boolean
+  scrollSpeed?: number
   children?: Children
 }
 

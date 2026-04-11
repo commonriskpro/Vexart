@@ -40,6 +40,12 @@ export type BoxProps = {
   // Only dirty layers retransmit — unchanged layers stay in GPU VRAM.
   layer?: boolean
 
+  // Scrolling — enables scroll clipping on this axis.
+  // Content that overflows is clipped and scrollable via mouse wheel.
+  scrollX?: boolean
+  scrollY?: boolean
+  scrollSpeed?: number  // Lines per scroll tick. Omit for natural speed.
+
   // Children
   children?: JSX.Element
 }
@@ -61,6 +67,9 @@ export function Box(props: BoxProps) {
       borderColor={props.borderColor}
       borderWidth={props.borderWidth}
       layer={props.layer}
+      scrollX={props.scrollX}
+      scrollY={props.scrollY}
+      scrollSpeed={props.scrollSpeed}
     >
       {props.children}
     </box>

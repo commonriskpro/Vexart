@@ -210,11 +210,31 @@ void tge_clay_text(const char *text, int length, uint32_t color_rgba, uint16_t f
     });
 }
 
-/* Element ID */
+/* Clip / Scroll container */
+void tge_clay_configure_clip(uint8_t horizontal, uint8_t vertical, float offset_x, float offset_y) {
+    pending_config.clip.horizontal = horizontal != 0;
+    pending_config.clip.vertical = vertical != 0;
+    pending_config.clip.childOffset = (Clay_Vector2){ offset_x, offset_y };
+}
+
+/* Get the internally tracked scroll offset for the currently open element.
+ * Returns x in out[0] and y in out[1]. */
+void tge_clay_get_scroll_offset(float *out) {
+    Clay_Vector2 offset = Clay_GetScrollOffset();
+    out[0] = offset.x;
+    out[1] = offset.y;
+}
+
+/* Element ID — opens a new element with the given string ID.
+ * REPLACES tge_clay_open_element when an ID is needed. */
 void tge_clay_set_id(const char *label, int length) {
+    /* Flush parent's config before opening a child (same as open_element) */
+    tge_clay_flush_config();
     Clay_String str = { .length = length, .chars = label };
     Clay_ElementId id = Clay__HashString(str, 0);
     Clay__OpenElementWithId(id);
+    memset(&pending_config, 0, sizeof(pending_config));
+    pending_configured = 0;
 }
 
 /* ── Render Command Readback ────────────────────────────── */
@@ -327,7 +347,8 @@ void tge_clay_set_pointer(float x, float y, int pressed) {
     Clay_SetPointerState((Clay_Vector2){x, y}, pressed != 0);
 }
 
-/* Update scroll containers */
+/* Update scroll containers.
+ * enableDragScrolling=false — we only support mouse wheel, not drag. */
 void tge_clay_update_scroll(float dx, float dy, float dt) {
-    Clay_UpdateScrollContainers(true, (Clay_Vector2){dx, dy}, dt);
+    Clay_UpdateScrollContainers(false, (Clay_Vector2){dx, dy}, dt);
 }

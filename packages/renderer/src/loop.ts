@@ -61,6 +61,10 @@ export type RenderLoop = {
   stop: () => void
   /** Force a single frame render */
   frame: () => void
+  /** Feed scroll delta from input events */
+  feedScroll: (dx: number, dy: number) => void
+  /** Feed mouse pointer position */
+  feedPointer: (x: number, y: number, down: boolean) => void
   /** Destroy everything */
   destroy: () => void
 }
@@ -104,6 +108,32 @@ export function createRenderLoop(term: Terminal): RenderLoop {
 
   let timer: ReturnType<typeof setInterval> | null = null
 
+  // ── Scroll + pointer state ──
+  // Accumulates scroll deltas from input events between frames.
+  let scrollDeltaX = 0
+  let scrollDeltaY = 0
+  let pointerX = pw / 2  // Default to center so scroll container is "hovered"
+  let pointerY = ph / 2
+  let pointerDown = false
+  let pointerDirty = true  // Feed at least once
+  let scrollSpeedCap = 0  // 0 = no cap (natural), >0 = lines per tick
+  let lastFrameTime = Date.now()
+
+  /** Feed a scroll event from the input system. Called by mount(). */
+  function feedScroll(dx: number, dy: number) {
+    scrollDeltaX += dx
+    scrollDeltaY += dy
+    markDirty() // scroll changes need a repaint
+  }
+
+  /** Feed mouse position from the input system. */
+  function feedPointer(x: number, y: number, down: boolean) {
+    pointerX = x
+    pointerY = y
+    pointerDown = down
+    pointerDirty = true
+  }
+
   // ── Layer cache ──
   // Maps slot key → Layer object. Layers persist across frames.
   const layerCache = new Map<string, Layer>()
@@ -137,6 +167,8 @@ export function createRenderLoop(term: Terminal): RenderLoop {
    * Walk TGENode tree and replay into Clay (immediate mode).
    * This is the FIRST pass — it only feeds Clay, no layer assignment.
    */
+  let scrollIdCounter = 0
+
   function walkTree(node: TGENode) {
     if (node.kind === "text") {
       const content = node.text || collectText(node)
@@ -148,7 +180,16 @@ export function createRenderLoop(term: Terminal): RenderLoop {
       return
     }
 
-    clay.openElement()
+    // Scroll containers need a stable Clay ID for scroll offset tracking
+    if (node.props.scrollX || node.props.scrollY) {
+      const sid = `tge-scroll-${scrollIdCounter++}`
+      clay.setId(sid)
+      if (node.props.scrollSpeed) {
+        scrollSpeedCap = node.props.scrollSpeed
+      }
+    } else {
+      clay.openElement()
+    }
 
     const dir = parseDirection(node.props.direction)
     const px = node.props.paddingX ?? node.props.padding ?? 0
@@ -170,6 +211,17 @@ export function createRenderLoop(term: Terminal): RenderLoop {
     if (node.props.borderColor !== undefined && node.props.borderWidth) {
       const borderColor = parseColor(node.props.borderColor)
       clay.configureBorder(borderColor, node.props.borderWidth)
+    }
+
+    // Scroll / clip container
+    if (node.props.scrollX || node.props.scrollY) {
+      const offset = clay.getScrollOffset()
+      clay.configureClip(
+        node.props.scrollX ?? false,
+        node.props.scrollY ?? false,
+        offset.x,
+        offset.y,
+      )
     }
 
     for (const child of node.children) {
@@ -336,12 +388,56 @@ export function createRenderLoop(term: Terminal): RenderLoop {
     // For layers without bounds, collect their commands via leftover
     const noBoundsLayers = layerBounds.filter(lb => lb.right <= lb.x)
 
+    // Track SCISSOR regions — commands between SCISSOR_START and SCISSOR_END
+    // are force-assigned to the layer containing the SCISSOR_START bbox.
+    // This handles scroll containers where content scrolls OUTSIDE the
+    // layer's anchor bounding box.
+    let scissorLayer: LayerBounds | null = null
+
     for (let i = 0; i < commands.length; i++) {
       const cmd = commands[i]
+
+      // SCISSOR_START: find which layer owns this scissor region
+      if (cmd.type === CMD.SCISSOR_START) {
+        const sx = Math.round(cmd.x)
+        const sy = Math.round(cmd.y)
+        // Find the layer whose bbox contains the scissor origin
+        for (const lb of sortedBounds) {
+          if (sx >= lb.x && sy >= lb.y && sx < lb.right && sy < lb.bottom) {
+            scissorLayer = lb
+            break
+          }
+        }
+        // The SCISSOR_START itself goes to that layer (or bg)
+        if (scissorLayer) {
+          scissorLayer.slot.cmdIndices.push(i)
+        } else {
+          bgSlot.cmdIndices.push(i)
+        }
+        continue
+      }
+
+      // SCISSOR_END: assign to scissor layer and clear
+      if (cmd.type === CMD.SCISSOR_END) {
+        if (scissorLayer) {
+          scissorLayer.slot.cmdIndices.push(i)
+          scissorLayer = null
+        } else {
+          bgSlot.cmdIndices.push(i)
+        }
+        continue
+      }
+
+      // If inside a SCISSOR region, force-assign to that layer
+      if (scissorLayer) {
+        scissorLayer.slot.cmdIndices.push(i)
+        continue
+      }
+
+      // Normal spatial assignment
       const cx = Math.round(cmd.x)
       const cy = Math.round(cmd.y)
 
-      // Find innermost layer containing this command
       let assigned = false
       for (const lb of sortedBounds) {
         if (cx >= lb.x && cy >= lb.y && cx < lb.right && cy < lb.bottom) {
@@ -352,8 +448,6 @@ export function createRenderLoop(term: Terminal): RenderLoop {
       }
 
       if (!assigned) {
-        // Check no-bounds layers — assign to the first one found based on
-        // z proximity (these are typically text-only layers)
         bgSlot.cmdIndices.push(i)
       }
     }
@@ -422,7 +516,30 @@ export function createRenderLoop(term: Terminal): RenderLoop {
 
   /** Paint a single frame with layer compositing. */
   function frameLayered() {
+    // 0. Feed pointer + scroll to Clay before layout.
+    // Clay_UpdateScrollContainers MUST be called every frame — it maintains
+    // internal scroll state including momentum/deceleration.
+    const now = Date.now()
+    const dt = Math.min((now - lastFrameTime) / 1000, 0.1) // cap at 100ms
+    lastFrameTime = now
+    clay.setPointer(pointerX, pointerY, pointerDown)
+
+    // Cap scroll delta if any scroll container has scrollSpeed set
+    let sdx = scrollDeltaX
+    let sdy = scrollDeltaY
+    if (scrollSpeedCap > 0 && (sdx !== 0 || sdy !== 0)) {
+      const cellH = term.size.cellHeight || 16
+      const maxDelta = scrollSpeedCap * cellH
+      sdx = Math.max(-maxDelta, Math.min(maxDelta, sdx))
+      sdy = Math.max(-maxDelta, Math.min(maxDelta, sdy))
+    }
+    clay.updateScroll(sdx, sdy, dt)
+    scrollDeltaX = 0
+    scrollDeltaY = 0
+    scrollIdCounter = 0
+
     // 1. Walk tree into Clay (first pass — feeds Clay, no counting)
+    scrollSpeedCap = 0 // reset — will be set by walkTree if any node has scrollSpeed
     clay.beginLayout()
     walkTree(root)
     const commands = clay.endLayout()
@@ -465,15 +582,36 @@ export function createRenderLoop(term: Terminal): RenderLoop {
 
       const layer = getOrCreateLayer(slot.key, slot.z)
 
-      // Compute bounding box from commands
+      // Compute bounding box from commands.
+      // If the layer has a SCISSOR_START, use the scissor rect as the
+      // bounding box — this IS the clip rect. Content outside it is
+      // automatically clipped by Zig's bounds checking against the buffer.
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+      let hasScissor = false
+
       for (const idx of slot.cmdIndices) {
         const cmd = commands[idx]
         if (!cmd) continue
-        minX = Math.min(minX, cmd.x)
-        minY = Math.min(minY, cmd.y)
-        maxX = Math.max(maxX, cmd.x + cmd.width)
-        maxY = Math.max(maxY, cmd.y + cmd.height)
+        if (cmd.type === CMD.SCISSOR_START) {
+          // Use scissor rect as the layer bounds
+          minX = cmd.x
+          minY = cmd.y
+          maxX = cmd.x + cmd.width
+          maxY = cmd.y + cmd.height
+          hasScissor = true
+          break // scissor defines the bounds, ignore everything else
+        }
+      }
+
+      if (!hasScissor) {
+        for (const idx of slot.cmdIndices) {
+          const cmd = commands[idx]
+          if (!cmd) continue
+          minX = Math.min(minX, cmd.x)
+          minY = Math.min(minY, cmd.y)
+          maxX = Math.max(maxX, cmd.x + cmd.width)
+          maxY = Math.max(maxY, cmd.y + cmd.height)
+        }
       }
 
       // Background layer at (0,0) fullscreen
@@ -490,7 +628,9 @@ export function createRenderLoop(term: Terminal): RenderLoop {
         const prev = layer.buf.data.slice()
         clearLayer(layer, 0x00000000)
 
-        for (const idx of slot.cmdIndices) {
+        // Sort command indices to preserve SCISSOR ordering
+        const sortedIndices = slot.cmdIndices.slice().sort((a, b) => a - b)
+        for (const idx of sortedIndices) {
           const cmd = commands[idx]
           if (!cmd) continue
           paintCommand(layer.buf, cmd, lx, ly)
@@ -526,6 +666,16 @@ export function createRenderLoop(term: Terminal): RenderLoop {
     log(`[frame] FALLBACK single-buffer`)
     if (!fallbackBuf) return
     clear(fallbackBuf, 0x04040aff)
+
+    // Feed pointer + scroll — must call every frame
+    const now = Date.now()
+    const dt = Math.min((now - lastFrameTime) / 1000, 0.1)
+    lastFrameTime = now
+    clay.setPointer(pointerX, pointerY, pointerDown)
+    clay.updateScroll(scrollDeltaX, scrollDeltaY, dt)
+    scrollDeltaX = 0
+    scrollDeltaY = 0
+    scrollIdCounter = 0
 
     clay.beginLayout()
     walkTree(root)
@@ -576,6 +726,8 @@ export function createRenderLoop(term: Terminal): RenderLoop {
 
   return {
     root,
+    feedScroll,
+    feedPointer,
 
     start() {
       frame() // initial render
@@ -616,11 +768,95 @@ function buffersEqual(a: Uint8Array, b: Uint8Array): boolean {
   return true
 }
 
+// ── Scissor clipping ──
+
+type ScissorRect = { x: number; y: number; w: number; h: number }
+
+/** Active scissor stack (screen coordinates). */
+const scissorStack: ScissorRect[] = []
+
+/** Push a scissor rect (from SCISSOR_START command). */
+function pushScissor(cmd: RenderCommand) {
+  scissorStack.push({
+    x: Math.round(cmd.x),
+    y: Math.round(cmd.y),
+    w: Math.round(cmd.width),
+    h: Math.round(cmd.height),
+  })
+}
+
+/** Pop the scissor stack (on SCISSOR_END). */
+function popScissor() {
+  scissorStack.pop()
+}
+
+/** Get the current active scissor rect, or null if none. */
+function activeScissor(): ScissorRect | null {
+  return scissorStack.length > 0 ? scissorStack[scissorStack.length - 1] : null
+}
+
+/**
+ * Check if a command is fully outside the active scissor rect.
+ * Returns true if the command should be skipped (fully clipped).
+ */
+function isClipped(cmd: RenderCommand): boolean {
+  const s = activeScissor()
+  if (!s) return false
+  const cx = Math.round(cmd.x)
+  const cy = Math.round(cmd.y)
+  const cw = Math.round(cmd.width)
+  const ch = Math.round(cmd.height)
+  // Fully outside?
+  return cx + cw <= s.x || cy + ch <= s.y || cx >= s.x + s.w || cy >= s.y + s.h
+}
+
+/**
+ * Clip a paint rect to the active scissor. Returns the clipped rect
+ * in LOCAL buffer coordinates (offset subtracted).
+ * Returns null if fully clipped.
+ */
+function clipToScissor(
+  x: number, y: number, w: number, h: number,
+  offsetX: number, offsetY: number,
+): { x: number; y: number; w: number; h: number } | null {
+  const s = activeScissor()
+  if (!s) return { x: x - offsetX, y: y - offsetY, w, h }
+
+  // Clamp to scissor bounds (screen coords)
+  const left = Math.max(x, s.x)
+  const top = Math.max(y, s.y)
+  const right = Math.min(x + w, s.x + s.w)
+  const bottom = Math.min(y + h, s.y + s.h)
+
+  if (left >= right || top >= bottom) return null
+
+  return {
+    x: left - offsetX,
+    y: top - offsetY,
+    w: right - left,
+    h: bottom - top,
+  }
+}
+
 /**
  * Paint a Clay RenderCommand into a pixel buffer.
  * offsetX/offsetY translate from absolute screen coords to local buffer coords.
+ * Respects active scissor rect for clipping.
  */
 function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, offsetY: number) {
+  // Handle scissor commands
+  if (cmd.type === CMD.SCISSOR_START) {
+    pushScissor(cmd)
+    return
+  }
+  if (cmd.type === CMD.SCISSOR_END) {
+    popScissor()
+    return
+  }
+
+  // Skip fully clipped commands
+  if (isClipped(cmd)) return
+
   const x = Math.round(cmd.x) - offsetX
   const y = Math.round(cmd.y) - offsetY
   const w = Math.round(cmd.width)
@@ -630,6 +866,9 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
   switch (cmd.type) {
     case CMD.RECTANGLE: {
       const radius = Math.round(cmd.cornerRadius)
+      // For scissored rects, we rely on Zig's bounds checking against
+      // the buffer dimensions. The layer buffer IS the clip rect —
+      // anything painted outside the buffer is automatically ignored.
       if (radius > 0) {
         paint.roundedRect(buf, x, y, w, h, r, g, b, a, radius)
       } else {
@@ -650,9 +889,5 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
       paint.drawText(buf, x, y, cmd.text, r, g, b, a)
       break
     }
-
-    case CMD.SCISSOR_START:
-    case CMD.SCISSOR_END:
-      break
   }
 }

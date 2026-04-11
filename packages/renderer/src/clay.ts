@@ -44,6 +44,8 @@ const DEFS = {
   tge_clay_configure_rectangle: { args: [FFIType.u32, FFIType.f32], returns: FFIType.void },
   tge_clay_configure_border:    { args: [FFIType.u32, FFIType.u16], returns: FFIType.void },
   tge_clay_text:                { args: [FFIType.ptr, FFIType.i32, FFIType.u32, FFIType.u16, FFIType.u16], returns: FFIType.void },
+  tge_clay_configure_clip:      { args: [FFIType.u8, FFIType.u8, FFIType.f32, FFIType.f32], returns: FFIType.void },
+  tge_clay_get_scroll_offset:   { args: [FFIType.ptr], returns: FFIType.void },
   tge_clay_set_id:              { args: [FFIType.ptr, FFIType.i32], returns: FFIType.void },
   tge_clay_read_commands:       { args: [FFIType.ptr, FFIType.i32], returns: FFIType.i32 },
   tge_clay_read_text:           { args: [FFIType.i32, FFIType.ptr, FFIType.i32], returns: FFIType.i32 },
@@ -90,6 +92,7 @@ const CMD_STRIDE = 14
 const MAX_COMMANDS = 2048
 const cmdBuffer = new Float32Array(MAX_COMMANDS * CMD_STRIDE)
 const textBuffer = new Uint8Array(4096)
+const scrollOffsetBuf = new Float32Array(2)
 
 // ── Sizing types ──
 
@@ -213,6 +216,24 @@ export const clay = {
   text(content: string, color: number, fontId = 0, fontSize = 16) {
     const encoded = new TextEncoder().encode(content)
     getLib().symbols.tge_clay_text(encoded, encoded.length, color, fontId, fontSize)
+  },
+
+  /** Open an element with a string ID (for scroll tracking, etc). Replaces openElement(). */
+  setId(label: string) {
+    const encoded = new TextEncoder().encode(label)
+    getLib().symbols.tge_clay_set_id(encoded, encoded.length)
+  },
+
+  /** Configure clip/scroll container for the current element. */
+  configureClip(horizontal: boolean, vertical: boolean, offsetX: number, offsetY: number) {
+    getLib().symbols.tge_clay_configure_clip(horizontal ? 1 : 0, vertical ? 1 : 0, offsetX, offsetY)
+  },
+
+  /** Get the internally tracked scroll offset for the currently open element. */
+  getScrollOffset(): { x: number; y: number } {
+    const buf = scrollOffsetBuf
+    getLib().symbols.tge_clay_get_scroll_offset(buf)
+    return { x: buf[0], y: buf[1] }
   },
 
   /** Set pointer position for hover detection. */

@@ -86,8 +86,21 @@ export function mount(component: () => any, terminal: Terminal): () => void {
   const dispose = solidRender(component, loop.root)
 
   // Connect terminal stdin → input parser → dispatch
+  // Feed mouse events into Clay for scroll tracking + pointer state
+  const cellW = terminal.size.cellWidth || 8
+  const cellH = terminal.size.cellHeight || 16
   const parser = createParser((event) => {
     dispatchInput(event)
+    if (event.type === "mouse") {
+      // Feed pointer position (convert cells to pixels)
+      loop.feedPointer(event.x * cellW, event.y * cellH, event.action === "press")
+      // Feed scroll delta — 1 line per tick for smooth scrolling
+      if (event.action === "scroll") {
+        // button 64 = scroll up, 65 = scroll down
+        const dy = event.button === 64 ? cellH : -cellH
+        loop.feedScroll(0, dy)
+      }
+    }
   })
   const unsubData = terminal.onData((data) => parser.feed(data))
 

@@ -36,6 +36,11 @@ export type TGEProps = {
   // Compositing
   layer?: boolean  // Opt-in: this node becomes its own compositing layer
 
+  // Scrolling / Clipping
+  scrollX?: boolean  // Enable horizontal scroll clipping
+  scrollY?: boolean  // Enable vertical scroll clipping
+  scrollSpeed?: number  // Lines per scroll tick (default: natural accumulation)
+
   // Text
   color?: string | number
   fontSize?: number
