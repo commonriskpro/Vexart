@@ -82,6 +82,22 @@ export { createScrollHandle, resetScrollHandles } from "./scroll"
 export type { TextSelection } from "./selection"
 export { getSelection, getSelectedText, setSelection, clearSelection, selectionSignal } from "./selection"
 
+// Re-export debug overlay
+export {
+  toggleDebug,
+  setDebug,
+  isDebugEnabled,
+  debugFrameStart,
+  debugUpdateStats,
+  debugState,
+  debugStatsLine,
+} from "./debug"
+export type { DebugStats } from "./debug"
+
+// Re-export plugin slot system
+export { createSlotRegistry, createSlot } from "./plugins"
+export type { SlotRegistry, SlotComponent, TgePlugin, TgePluginApi } from "./plugins"
+
 // Re-export extmarks system
 export { ExtmarkManager } from "./extmarks"
 export type { Extmark, CreateExtmarkOptions } from "./extmarks"
