@@ -17,6 +17,8 @@ type BoxProps = TGEProps & {
   scrollX?: boolean
   scrollY?: boolean
   scrollSpeed?: number
+  shadow?: { x: number; y: number; blur: number; color: number }
+  glow?: { radius: number; color: number; intensity?: number }
   children?: Children
 }
 

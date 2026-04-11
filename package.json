@@ -20,7 +20,10 @@
     "demo4": "bun --conditions=browser run examples/interactive.tsx",
     "demo5": "bun --conditions=browser run examples/layers.tsx",
     "demo6": "bun --conditions=browser run examples/dashboard.tsx",
-    "demo7": "bun --conditions=browser run examples/scroll.tsx"
+    "demo7": "bun --conditions=browser run examples/scroll.tsx",
+    "demo8": "bun --conditions=browser run examples/components.tsx",
+    "demo9": "bun --conditions=browser run examples/effects.tsx",
+    "demo10": "bun --conditions=browser run examples/input.tsx"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",

@@ -41,6 +41,19 @@ export type TGEProps = {
   scrollY?: boolean  // Enable vertical scroll clipping
   scrollSpeed?: number  // Lines per scroll tick (default: natural accumulation)
 
+  // Effects
+  shadow?: {           // Drop shadow — painted BEFORE the rect
+    x: number          // Horizontal offset (px)
+    y: number          // Vertical offset (px)
+    blur: number       // Blur radius (px)
+    color: number      // Shadow color (packed RGBA u32)
+  }
+  glow?: {             // Outer glow — painted BEFORE the rect
+    radius: number     // Glow spread radius (px)
+    color: number      // Glow color (packed RGBA u32)
+    intensity?: number // 0-100, default 80
+  }
+
   // Text
   color?: string | number
   fontSize?: number

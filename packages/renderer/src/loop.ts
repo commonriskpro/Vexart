@@ -20,7 +20,7 @@
 
 import type { Terminal } from "@tge/terminal"
 import type { PixelBuffer } from "@tge/pixel"
-import { create, clear, paint } from "@tge/pixel"
+import { create, clear, paint, over } from "@tge/pixel"
 import { createComposer, createLayerComposer } from "@tge/output"
 import { clay, CMD } from "./clay"
 import type { RenderCommand } from "./clay"
@@ -51,6 +51,21 @@ const LOG = "/tmp/tge-layers.log"
 function log(msg: string) {
   appendFileSync(LOG, msg + "\n")
 }
+
+// ── Effect metadata ──
+// During walkTree, we record shadow/glow configs for nodes with backgroundColor.
+// After Clay layout, we match RECT commands to these configs by color+radius
+// (emitted in tree-walk order) and apply effects in paintCommand.
+
+type EffectConfig = {
+  color: number        // packed bgColor to match against RECT command
+  cornerRadius: number // to disambiguate rects with same color
+  shadow?: { x: number; y: number; blur: number; color: number }
+  glow?: { radius: number; color: number; intensity: number }
+}
+
+/** Effects queue — populated during walkTree, consumed during paintCommand. */
+let effectsQueue: EffectConfig[] = []
 
 export type RenderLoop = {
   /** The root TGENode — SolidJS mounts here */
@@ -205,7 +220,24 @@ export function createRenderLoop(term: Terminal): RenderLoop {
 
     if (node.props.backgroundColor !== undefined) {
       const bgColor = parseColor(node.props.backgroundColor)
-      clay.configureRectangle(bgColor, node.props.cornerRadius ?? 0)
+      const cr = node.props.cornerRadius ?? 0
+      clay.configureRectangle(bgColor, cr)
+
+      // Record effects for this RECT — matched during paint
+      if (node.props.shadow || node.props.glow) {
+        const effect: EffectConfig = { color: bgColor, cornerRadius: cr }
+        if (node.props.shadow) {
+          effect.shadow = node.props.shadow
+        }
+        if (node.props.glow) {
+          effect.glow = {
+            radius: node.props.glow.radius,
+            color: node.props.glow.color,
+            intensity: node.props.glow.intensity ?? 80,
+          }
+        }
+        effectsQueue.push(effect)
+      }
     }
 
     if (node.props.borderColor !== undefined && node.props.borderWidth) {
@@ -540,6 +572,7 @@ export function createRenderLoop(term: Terminal): RenderLoop {
 
     // 1. Walk tree into Clay (first pass — feeds Clay, no counting)
     scrollSpeedCap = 0 // reset — will be set by walkTree if any node has scrollSpeed
+    effectsQueue = [] // reset effects for this frame
     clay.beginLayout()
     walkTree(root)
     const commands = clay.endLayout()
@@ -677,6 +710,7 @@ export function createRenderLoop(term: Terminal): RenderLoop {
     scrollDeltaY = 0
     scrollIdCounter = 0
 
+    effectsQueue = [] // reset effects for this frame
     clay.beginLayout()
     walkTree(root)
     const commands = clay.endLayout()
@@ -866,9 +900,84 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
   switch (cmd.type) {
     case CMD.RECTANGLE: {
       const radius = Math.round(cmd.cornerRadius)
-      // For scissored rects, we rely on Zig's bounds checking against
-      // the buffer dimensions. The layer buffer IS the clip rect —
-      // anything painted outside the buffer is automatically ignored.
+      const cmdColor = ((r << 24) | (g << 16) | (b << 8) | a) >>> 0
+
+      // Check for shadow/glow effects matching this RECT
+      const effectIdx = effectsQueue.findIndex(
+        (e) => e.color === cmdColor && e.cornerRadius === radius
+      )
+      if (effectIdx >= 0) {
+        const effect = effectsQueue[effectIdx]
+        effectsQueue.splice(effectIdx, 1) // consume — one match per node
+
+        // Effects use TEMPORARY BUFFERS to avoid destructive in-place blur.
+        // Without this, blur() would corrupt neighboring pixels (other cards,
+        // text, background). The temp buffer isolates the effect, then we
+        // composite it onto the main buffer with src-over alpha blending.
+
+        // Glow: rounded rect in glow color → blur → composite
+        if (effect.glow) {
+          const gl = effect.glow
+          const gr = (gl.color >>> 24) & 0xff
+          const gg = (gl.color >>> 16) & 0xff
+          const gb = (gl.color >>> 8) & 0xff
+          const ga = Math.round(((gl.color & 0xff) * gl.intensity) / 100)
+          const spread = gl.radius
+          const blurR = Math.ceil(spread * 0.6)
+          const margin = spread + blurR
+          // Temp buffer sized to contain the glow + blur margin
+          const tw = w + margin * 2
+          const th = h + margin * 2
+          if (tw > 0 && th > 0) {
+            const tmp = create(tw, th)
+            // Paint shape centered in temp buffer
+            const lx = margin
+            const ly = margin
+            if (radius > 0) {
+              paint.roundedRect(tmp, lx, ly, w, h, gr, gg, gb, ga, radius)
+            } else {
+              paint.fillRect(tmp, lx, ly, w, h, gr, gg, gb, ga)
+            }
+            // Blur the entire temp buffer — safe, no neighbors to corrupt
+            paint.blur(tmp, 0, 0, tw, th, blurR, 3)
+            // Composite onto main buffer
+            over(buf, tmp, x - margin, y - margin)
+          }
+        }
+
+        // Shadow: rounded rect at offset → blur → composite
+        if (effect.shadow) {
+          const s = effect.shadow
+          const sr = (s.color >>> 24) & 0xff
+          const sg = (s.color >>> 16) & 0xff
+          const sb = (s.color >>> 8) & 0xff
+          const sa = s.color & 0xff
+          const blurR = Math.ceil(s.blur)
+          const margin = blurR * 2
+          // Temp buffer: rect size + blur margin + offset
+          const tw = w + margin * 2 + Math.abs(s.x)
+          const th = h + margin * 2 + Math.abs(s.y)
+          if (tw > 0 && th > 0) {
+            const tmp = create(tw, th)
+            // Paint shadow shape in temp buffer (offset from center)
+            const lx = margin + Math.max(0, s.x)
+            const ly = margin + Math.max(0, s.y)
+            if (radius > 0) {
+              paint.roundedRect(tmp, lx, ly, w, h, sr, sg, sb, sa, radius)
+            } else {
+              paint.fillRect(tmp, lx, ly, w, h, sr, sg, sb, sa)
+            }
+            // Blur in isolated temp buffer
+            paint.blur(tmp, 0, 0, tw, th, blurR, 3)
+            // Composite onto main buffer
+            const dx = x - margin + Math.min(0, s.x)
+            const dy = y - margin + Math.min(0, s.y)
+            over(buf, tmp, dx, dy)
+          }
+        }
+      }
+
+      // Paint the actual rect ON TOP of shadow/glow
       if (radius > 0) {
         paint.roundedRect(buf, x, y, w, h, r, g, b, a, radius)
       } else {

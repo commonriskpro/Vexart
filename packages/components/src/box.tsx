@@ -10,8 +10,20 @@
  *   </Box>
  */
 
-import type { Shadow } from "@tge/tokens"
 import type { JSX } from "solid-js"
+
+export type ShadowConfig = {
+  x: number      // Horizontal offset (px)
+  y: number      // Vertical offset (px)
+  blur: number   // Blur radius (px)
+  color: number  // Shadow color (packed RGBA u32)
+}
+
+export type GlowConfig = {
+  radius: number     // Glow spread radius (px)
+  color: number      // Glow color (packed RGBA u32)
+  intensity?: number // 0-100, default 80
+}
 
 export type BoxProps = {
   // Layout
@@ -33,8 +45,11 @@ export type BoxProps = {
   borderColor?: string | number
   borderWidth?: number
 
-  // Shadow (future — paint-bridge will handle)
-  shadow?: Shadow
+  // Effects — applied in the pixel paint stage, outside Clay.
+  // Shadow: soft drop shadow beneath the box.
+  shadow?: ShadowConfig
+  // Glow: radial halo around the box.
+  glow?: GlowConfig
 
   // Compositing — promotes this Box to its own rendering layer.
   // Only dirty layers retransmit — unchanged layers stay in GPU VRAM.
@@ -66,6 +81,8 @@ export function Box(props: BoxProps) {
       cornerRadius={props.cornerRadius}
       borderColor={props.borderColor}
       borderWidth={props.borderWidth}
+      shadow={props.shadow}
+      glow={props.glow}
       layer={props.layer}
       scrollX={props.scrollX}
       scrollY={props.scrollY}
