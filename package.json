@@ -1,0 +1,25 @@
+{
+  "name": "tge",
+  "version": "0.0.1",
+  "description": "Pixel-native terminal rendering engine. Write JSX, get browser-quality UI in your terminal.",
+  "type": "module",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "zig:build": "cd zig && zig build -Doptimize=ReleaseFast",
+    "zig:test": "cd zig && zig build test --summary all",
+    "example": "bun run examples/hello.tsx"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "solid-js": "^1.9.0",
+    "babel-preset-solid": "^1.9.0"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "license": "MIT"
+}
