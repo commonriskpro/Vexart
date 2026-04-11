@@ -5,11 +5,11 @@
  * Content that overflows the container is clipped and can
  * be scrolled via mouse wheel or programmatically via ScrollHandle.
  *
- * Uses Clay's built-in scroll tracking + TGE's layer system:
- *   - The ScrollView is its own compositing layer (`layer` prop)
- *   - Clay handles scroll offset tracking internally
- *   - SCISSOR_START/END commands clip the paint
- *   - Zig bounds-checking clips pixels outside the buffer
+ * Features:
+ *   - Visual scrollbar track + thumb (auto-hides when content fits)
+ *   - Compositing layer for efficient repainting
+ *   - Clay-based scroll tracking + pixel-level clipping
+ *   - Programmatic scrollTo/scrollBy/scrollIntoView
  *
  * Usage:
  *   import { ScrollHandle } from "@tge/renderer"
@@ -20,18 +20,28 @@
  *     {longContent}
  *   </ScrollView>
  *
- *   // Programmatic scroll:
- *   scrollRef.scrollTo(0)             // scroll to top
- *   scrollRef.scrollBy(-100)          // scroll up 100px
- *   scrollRef.scrollY                 // current scroll offset
- *   scrollRef.scrollHeight            // total content height (alias for contentHeight)
- *   scrollRef.viewportHeight          // visible viewport height
+ *   scrollRef.scrollTo(0)
+ *   scrollRef.scrollBy(-100)
+ *   scrollRef.scrollY
+ *   scrollRef.contentHeight
+ *   scrollRef.viewportHeight
  */
 
 import type { JSX } from "solid-js"
 import { createScrollHandle, type ScrollHandle } from "@tge/renderer/scroll"
 
 let scrollViewCounter = 0
+
+// ── Scrollbar styling ──
+
+const SCROLLBAR = {
+  width: 6,
+  minThumbHeight: 16,
+  trackColor: 0x1a1a2eff,
+  thumbColor: 0x555577cc,
+  thumbRadius: 3,
+  padding: 2,
+} as const
 
 export type ScrollViewProps = {
   /** Ref callback — receives a ScrollHandle for programmatic control. */
@@ -48,6 +58,10 @@ export type ScrollViewProps = {
   // Lines per scroll tick. Omit for natural (momentum) scrolling.
   // Set to 1 for precise 1-line-per-tick scrolling.
   scrollSpeed?: number
+
+  // Scrollbar
+  /** Show scrollbar. Default: true (auto-hides when content fits). */
+  showScrollbar?: boolean
 
   // Visual
   backgroundColor?: string | number
@@ -68,39 +82,101 @@ export type ScrollViewProps = {
   children?: JSX.Element
 }
 
-export function ScrollView(props: ScrollViewProps) {
-  // Each ScrollView instance gets a stable Clay ID.
-  // This ID is used by the render loop's walkTree to register with Clay,
-  // and by ScrollHandle to read/write scroll state.
-  const clayId = `tge-scrollview-${scrollViewCounter++}`
-
-  // If ref callback provided, create and pass a ScrollHandle
-  if (props.ref) {
-    props.ref(createScrollHandle(clayId))
+/**
+ * Scrollbar — renders a vertical scrollbar track + thumb.
+ * Reads scroll state from the ScrollHandle every frame.
+ */
+function Scrollbar(props: { handle: ScrollHandle; height: number | string }) {
+  // Read scroll state (reactive — reads Clay data each access)
+  const ratio = () => {
+    const ch = props.handle.contentHeight
+    const vh = props.handle.viewportHeight
+    if (ch <= vh || ch === 0) return 1
+    return vh / ch
   }
+
+  const thumbHeight = () =>
+    Math.max(SCROLLBAR.minThumbHeight, Math.floor(ratio() * (typeof props.height === "number" ? props.height : 200)))
+
+  const thumbOffset = () => {
+    const ch = props.handle.contentHeight
+    const vh = props.handle.viewportHeight
+    if (ch <= vh) return 0
+    const scrollable = ch - vh
+    const scrollPos = -props.handle.scrollY // scrollY is negative
+    const trackHeight = (typeof props.height === "number" ? props.height : 200) - thumbHeight()
+    return Math.floor((scrollPos / scrollable) * trackHeight)
+  }
+
+  const shouldShow = () => ratio() < 1
+
+  if (!shouldShow()) return null
 
   return (
     <box
-      layer
-      width={props.width}
+      width={SCROLLBAR.width + SCROLLBAR.padding * 2}
       height={props.height}
-      backgroundColor={props.backgroundColor}
-      cornerRadius={props.cornerRadius}
-      borderColor={props.borderColor}
-      borderWidth={props.borderWidth}
-      scrollX={props.scrollX}
-      scrollY={props.scrollY}
-      scrollSpeed={props.scrollSpeed}
-      scrollId={clayId}
-      direction={props.direction ?? "column"}
-      padding={props.padding}
-      paddingX={props.paddingX}
-      paddingY={props.paddingY}
-      gap={props.gap}
-      alignX={props.alignX}
-      alignY={props.alignY}
+      direction="column"
+      paddingX={SCROLLBAR.padding}
     >
-      {props.children}
+      {/* Track */}
+      <box width={SCROLLBAR.width} height="100%" backgroundColor={SCROLLBAR.trackColor} cornerRadius={SCROLLBAR.thumbRadius}>
+        {/* Spacer above thumb */}
+        <box height={thumbOffset()} width={SCROLLBAR.width} />
+        {/* Thumb */}
+        <box
+          width={SCROLLBAR.width}
+          height={thumbHeight()}
+          backgroundColor={SCROLLBAR.thumbColor}
+          cornerRadius={SCROLLBAR.thumbRadius}
+        />
+      </box>
+    </box>
+  )
+}
+
+export function ScrollView(props: ScrollViewProps) {
+  const clayId = `tge-scrollview-${scrollViewCounter++}`
+  const showScrollbar = props.showScrollbar ?? true
+
+  // Create scroll handle
+  const handle = createScrollHandle(clayId)
+
+  // If ref callback provided, pass the ScrollHandle
+  if (props.ref) {
+    props.ref(handle)
+  }
+
+  return (
+    <box width={props.width} height={props.height} direction="row">
+      {/* Scrollable content area */}
+      <box
+        layer
+        width="grow"
+        height="100%"
+        backgroundColor={props.backgroundColor}
+        cornerRadius={props.cornerRadius}
+        borderColor={props.borderColor}
+        borderWidth={props.borderWidth}
+        scrollX={props.scrollX}
+        scrollY={props.scrollY}
+        scrollSpeed={props.scrollSpeed}
+        scrollId={clayId}
+        direction={props.direction ?? "column"}
+        padding={props.padding}
+        paddingX={props.paddingX}
+        paddingY={props.paddingY}
+        gap={props.gap}
+        alignX={props.alignX}
+        alignY={props.alignY}
+      >
+        {props.children}
+      </box>
+
+      {/* Vertical scrollbar */}
+      {showScrollbar && props.scrollY ? (
+        <Scrollbar handle={handle} height={props.height ?? 200} />
+      ) : null}
     </box>
   )
 }

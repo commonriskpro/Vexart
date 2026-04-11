@@ -36,8 +36,21 @@
  *   />
  */
 
-import { createSignal, onCleanup } from "solid-js"
-import { useFocus, onInput, markDirty } from "@tge/renderer"
+import { createSignal, createEffect, onCleanup } from "solid-js"
+import type { JSX } from "solid-js"
+import {
+  useFocus,
+  onInput,
+  markDirty,
+  setFocusedId,
+  ExtmarkManager,
+  type Extmark,
+  type SyntaxStyle,
+  type Token,
+  getTreeSitterClient,
+  highlightsToTokens,
+} from "@tge/renderer"
+import type { KeyEvent } from "@tge/input"
 import {
   surface,
   accent,
@@ -51,6 +64,95 @@ import {
 const CHAR_WIDTH = 9
 const LINE_HEIGHT = 17
 
+// ── KeyBinding system ──
+
+const KEY_BINDING_ACTION = {
+  CURSOR_LEFT: "cursor-left",
+  CURSOR_RIGHT: "cursor-right",
+  CURSOR_UP: "cursor-up",
+  CURSOR_DOWN: "cursor-down",
+  LINE_START: "line-start",
+  LINE_END: "line-end",
+  BUFFER_START: "buffer-start",
+  BUFFER_END: "buffer-end",
+  PAGE_UP: "page-up",
+  PAGE_DOWN: "page-down",
+  DELETE_BACK: "delete-back",
+  DELETE_FORWARD: "delete-forward",
+  SELECT_ALL: "select-all",
+  NEWLINE: "newline",
+  SUBMIT: "submit",
+} as const
+
+type KeyBindingAction = (typeof KEY_BINDING_ACTION)[keyof typeof KEY_BINDING_ACTION]
+
+export type KeyBinding = {
+  key: string
+  ctrl?: boolean
+  shift?: boolean
+  alt?: boolean
+  meta?: boolean
+  action: KeyBindingAction
+}
+
+const DEFAULT_KEY_BINDINGS: KeyBinding[] = [
+  { key: "left", action: KEY_BINDING_ACTION.CURSOR_LEFT },
+  { key: "right", action: KEY_BINDING_ACTION.CURSOR_RIGHT },
+  { key: "up", action: KEY_BINDING_ACTION.CURSOR_UP },
+  { key: "down", action: KEY_BINDING_ACTION.CURSOR_DOWN },
+  { key: "home", action: KEY_BINDING_ACTION.LINE_START },
+  { key: "end", action: KEY_BINDING_ACTION.LINE_END },
+  { key: "home", ctrl: true, action: KEY_BINDING_ACTION.BUFFER_START },
+  { key: "end", ctrl: true, action: KEY_BINDING_ACTION.BUFFER_END },
+  { key: "pageup", action: KEY_BINDING_ACTION.PAGE_UP },
+  { key: "pagedown", action: KEY_BINDING_ACTION.PAGE_DOWN },
+  { key: "backspace", action: KEY_BINDING_ACTION.DELETE_BACK },
+  { key: "delete", action: KEY_BINDING_ACTION.DELETE_FORWARD },
+  { key: "a", ctrl: true, action: KEY_BINDING_ACTION.SELECT_ALL },
+  { key: "enter", action: KEY_BINDING_ACTION.NEWLINE },
+  { key: "enter", ctrl: true, action: KEY_BINDING_ACTION.SUBMIT },
+]
+
+function matchesBinding(e: KeyEvent, b: KeyBinding): boolean {
+  if (e.key !== b.key) return false
+  if (b.ctrl && !e.mods.ctrl) return false
+  if (!b.ctrl && e.mods.ctrl && b.key !== "enter") return false
+  if (b.shift && !e.mods.shift) return false
+  if (b.alt && !e.mods.alt) return false
+  if (b.meta && !e.mods.meta) return false
+  return true
+}
+
+function mergeKeyBindings(defaults: KeyBinding[], overrides: KeyBinding[]): KeyBinding[] {
+  const merged = [...defaults]
+  for (const override of overrides) {
+    const idx = merged.findIndex((b) =>
+      b.key === override.key &&
+      !!b.ctrl === !!override.ctrl &&
+      !!b.shift === !!override.shift &&
+      !!b.alt === !!override.alt &&
+      !!b.meta === !!override.meta
+    )
+    if (idx >= 0) {
+      merged[idx] = override
+    } else {
+      merged.push(override)
+    }
+  }
+  return merged
+}
+
+// ── VisualCursor ──
+
+export type VisualCursor = {
+  /** Absolute offset from buffer start */
+  readonly offset: number
+  /** Row (0-indexed) */
+  readonly row: number
+  /** Column (0-indexed) */
+  readonly col: number
+}
+
 // ── TextareaHandle — imperative ref API ──
 
 export type TextareaHandle = {
@@ -62,6 +164,8 @@ export type TextareaHandle = {
   readonly cursorRow: number
   /** Cursor column (0-indexed) */
   readonly cursorCol: number
+  /** Visual cursor with offset, row, col */
+  readonly visualCursor: VisualCursor
   /** Replace all text */
   setText: (text: string) => void
   /** Insert text at current cursor position */
@@ -76,6 +180,14 @@ export type TextareaHandle = {
   gotoLineEnd: () => void
   /** Focus the textarea */
   focus: () => void
+  /** Remove focus from the textarea */
+  blur: () => void
+  /** Set cursor color at runtime */
+  set cursorColor(color: number)
+  /** Get cursor color */
+  get cursorColor(): number
+  /** Access the extmarks manager for this textarea */
+  readonly extmarks: ExtmarkManager
 }
 
 // ── Line buffer helpers ──
@@ -130,6 +242,17 @@ export type TextareaProps = {
   /** Called when the cursor moves. */
   onCursorChange?: (row: number, col: number) => void
 
+  /**
+   * Called on every key event BEFORE internal handling.
+   * Return nothing to let default handling proceed.
+   * The handler can call event-specific logic or preventDefault-style
+   * by consuming the event in onChange.
+   */
+  onKeyDown?: (event: KeyEvent) => void
+
+  /** Called on paste events. */
+  onPaste?: (text: string) => void
+
   /** Placeholder text shown when value is empty. */
   placeholder?: string
 
@@ -146,6 +269,15 @@ export type TextareaProps = {
 
   /** Focus ID override. */
   focusId?: string
+
+  /** Custom key bindings — merged with defaults. */
+  keyBindings?: KeyBinding[]
+
+  /** Syntax highlighting style. When set, enables per-token coloring. */
+  syntaxStyle?: SyntaxStyle
+
+  /** Language for syntax highlighting (e.g. "typescript"). Required with syntaxStyle. */
+  language?: string
 }
 
 // ── Component ──
@@ -155,15 +287,53 @@ export function Textarea(props: TextareaProps) {
   const [selStart, setSelStart] = createSignal(-1)
   const [selEnd, setSelEnd] = createSignal(-1)
   const [blink, setBlink] = createSignal(true)
+  const [cursorColorSignal, setCursorColorSignal] = createSignal(0)
+  const [syntaxTokens, setSyntaxTokens] = createSignal<Token[][]>([])
 
-  const color = () => props.color ?? accent.thread
+  const color = () => cursorColorSignal() || props.color || accent.thread
   const disabled = () => props.disabled ?? false
   const inputWidth = () => props.width ?? 400
   const inputHeight = () => props.height ?? 200
 
+  // Extmarks manager — one per textarea instance
+  const extmarkMgr = new ExtmarkManager()
+
+  // Merged key bindings
+  const bindings = () =>
+    props.keyBindings
+      ? mergeKeyBindings(DEFAULT_KEY_BINDINGS, props.keyBindings)
+      : DEFAULT_KEY_BINDINGS
+
   // Derived line state
   const lines = () => textToLines(props.value)
   const cursorPos = () => offsetToRowCol(lines(), cursor())
+
+  // ── Syntax highlighting ──
+
+  createEffect(() => {
+    const style = props.syntaxStyle
+    const lang = props.language
+    const content = props.value
+    if (!style || !lang) {
+      setSyntaxTokens([])
+      return
+    }
+
+    // Immediate fallback — default color
+    const fallback = content.split("\n").map((line) => [{ text: line, color: style.getDefaultColor() }])
+    setSyntaxTokens(fallback)
+
+    // Async highlight via tree-sitter worker
+    const client = getTreeSitterClient()
+    let cancelled = false
+    client.highlightOnce(content, lang).then((highlights) => {
+      if (cancelled) return
+      const result = highlightsToTokens(content, highlights, style)
+      setSyntaxTokens(result)
+      markDirty()
+    })
+    onCleanup(() => { cancelled = true })
+  })
 
   // Blink timer
   let blinkTimer: ReturnType<typeof setInterval> | null = null
@@ -208,7 +378,6 @@ export function Textarea(props: TextareaProps) {
 
   // ── Cursor movement ──
 
-  /** Desired column when navigating up/down (sticky column) */
   let stickyCol = -1
 
   function moveCursor(offset: number, keepSelection?: boolean) {
@@ -249,6 +418,75 @@ export function Textarea(props: TextareaProps) {
     markDirty()
   }
 
+  // ── Action dispatcher ──
+
+  function executeAction(action: KeyBindingAction, e: KeyEvent) {
+    const val = props.value
+    const pos = cursor()
+    const ls = lines()
+    const rc = cursorPos()
+
+    switch (action) {
+      case KEY_BINDING_ACTION.SUBMIT:
+        props.onSubmit?.(val)
+        return
+      case KEY_BINDING_ACTION.NEWLINE: {
+        let base = val
+        let insertAt = pos
+        if (hasSelection()) { base = deleteSelection(); insertAt = cursor() }
+        const next = base.slice(0, insertAt) + "\n" + base.slice(insertAt)
+        moveCursor(insertAt + 1)
+        props.onChange?.(next)
+        return
+      }
+      case KEY_BINDING_ACTION.SELECT_ALL:
+        selectAll()
+        return
+      case KEY_BINDING_ACTION.BUFFER_START:
+        moveCursor(0, e.mods.shift)
+        return
+      case KEY_BINDING_ACTION.BUFFER_END:
+        moveCursor(val.length, e.mods.shift)
+        return
+      case KEY_BINDING_ACTION.CURSOR_UP:
+        moveVertical(-1, e.mods.shift)
+        return
+      case KEY_BINDING_ACTION.CURSOR_DOWN:
+        moveVertical(1, e.mods.shift)
+        return
+      case KEY_BINDING_ACTION.PAGE_UP:
+        moveVertical(-10, e.mods.shift)
+        return
+      case KEY_BINDING_ACTION.PAGE_DOWN:
+        moveVertical(10, e.mods.shift)
+        return
+      case KEY_BINDING_ACTION.LINE_START:
+        moveCursor(rowColToOffset(ls, rc.row, 0), e.mods.shift)
+        return
+      case KEY_BINDING_ACTION.LINE_END:
+        moveCursor(rowColToOffset(ls, rc.row, ls[rc.row].length), e.mods.shift)
+        return
+      case KEY_BINDING_ACTION.CURSOR_LEFT:
+        if (!e.mods.shift && hasSelection()) { moveCursor(selRange()[0]) }
+        else if (pos > 0) { moveCursor(pos - 1, e.mods.shift) }
+        return
+      case KEY_BINDING_ACTION.CURSOR_RIGHT:
+        if (!e.mods.shift && hasSelection()) { moveCursor(selRange()[1]) }
+        else if (pos < val.length) { moveCursor(pos + 1, e.mods.shift) }
+        return
+      case KEY_BINDING_ACTION.DELETE_BACK:
+        if (hasSelection()) { props.onChange?.(deleteSelection()) }
+        else if (pos > 0) { setCursor(pos - 1); props.onChange?.(val.slice(0, pos - 1) + val.slice(pos)) }
+        clearSelection(); stickyCol = -1; markDirty()
+        return
+      case KEY_BINDING_ACTION.DELETE_FORWARD:
+        if (hasSelection()) { props.onChange?.(deleteSelection()) }
+        else if (pos < val.length) { props.onChange?.(val.slice(0, pos) + val.slice(pos + 1)) }
+        clearSelection(); stickyCol = -1; markDirty()
+        return
+    }
+  }
+
   // ── Input handling ──
 
   const focusHandle = useFocus({
@@ -257,124 +495,23 @@ export function Textarea(props: TextareaProps) {
       if (disabled()) return
       startBlink()
 
-      const val = props.value
-      const pos = cursor()
-      const ls = lines()
-      const rc = cursorPos()
+      // Call user's onKeyDown first
+      props.onKeyDown?.(e)
 
-      // Ctrl+Enter → submit
-      if (e.key === "enter" && e.mods.ctrl) {
-        props.onSubmit?.(val)
-        return
-      }
-
-      // Enter → insert newline
-      if (e.key === "enter") {
-        let base = val
-        let insertAt = pos
-        if (hasSelection()) {
-          base = deleteSelection()
-          insertAt = cursor()
+      // Match against key bindings
+      const activeBindings = bindings()
+      for (const binding of activeBindings) {
+        if (matchesBinding(e, binding)) {
+          executeAction(binding.action, e)
+          return
         }
-        const next = base.slice(0, insertAt) + "\n" + base.slice(insertAt)
-        moveCursor(insertAt + 1)
-        props.onChange?.(next)
-        return
-      }
-
-      // Ctrl+A → select all
-      if (e.key === "a" && e.mods.ctrl) {
-        selectAll()
-        return
-      }
-
-      // Ctrl+Home → start of buffer
-      if (e.key === "home" && e.mods.ctrl) {
-        moveCursor(0, e.mods.shift)
-        return
-      }
-      // Ctrl+End → end of buffer
-      if (e.key === "end" && e.mods.ctrl) {
-        moveCursor(val.length, e.mods.shift)
-        return
-      }
-
-      // Up/Down
-      if (e.key === "up") { moveVertical(-1, e.mods.shift); return }
-      if (e.key === "down") { moveVertical(1, e.mods.shift); return }
-
-      // PgUp/PgDown — move by ~10 lines
-      if (e.key === "pageup") { moveVertical(-10, e.mods.shift); return }
-      if (e.key === "pagedown") { moveVertical(10, e.mods.shift); return }
-
-      // Home → start of line
-      if (e.key === "home") {
-        const lineStart = rowColToOffset(ls, rc.row, 0)
-        moveCursor(lineStart, e.mods.shift)
-        return
-      }
-      // End → end of line
-      if (e.key === "end") {
-        const lineEnd = rowColToOffset(ls, rc.row, ls[rc.row].length)
-        moveCursor(lineEnd, e.mods.shift)
-        return
-      }
-
-      // Left/Right
-      if (e.key === "left") {
-        if (!e.mods.shift && hasSelection()) {
-          moveCursor(selRange()[0])
-        } else if (pos > 0) {
-          moveCursor(pos - 1, e.mods.shift)
-        }
-        return
-      }
-      if (e.key === "right") {
-        if (!e.mods.shift && hasSelection()) {
-          moveCursor(selRange()[1])
-        } else if (pos < val.length) {
-          moveCursor(pos + 1, e.mods.shift)
-        }
-        return
-      }
-
-      // Backspace
-      if (e.key === "backspace") {
-        if (hasSelection()) {
-          props.onChange?.(deleteSelection())
-        } else if (pos > 0) {
-          const next = val.slice(0, pos - 1) + val.slice(pos)
-          setCursor(pos - 1)
-          props.onChange?.(next)
-        }
-        clearSelection()
-        stickyCol = -1
-        markDirty()
-        return
-      }
-
-      // Delete
-      if (e.key === "delete") {
-        if (hasSelection()) {
-          props.onChange?.(deleteSelection())
-        } else if (pos < val.length) {
-          const next = val.slice(0, pos) + val.slice(pos + 1)
-          props.onChange?.(next)
-        }
-        clearSelection()
-        stickyCol = -1
-        markDirty()
-        return
       }
 
       // Printable character → insert
       if (e.char && e.char.length === 1 && !e.mods.ctrl && !e.mods.alt && !e.mods.meta) {
-        let base = val
-        let insertAt = pos
-        if (hasSelection()) {
-          base = deleteSelection()
-          insertAt = cursor()
-        }
+        let base = props.value
+        let insertAt = cursor()
+        if (hasSelection()) { base = deleteSelection(); insertAt = cursor() }
         const next = base.slice(0, insertAt) + e.char + base.slice(insertAt)
         moveCursor(insertAt + 1)
         props.onChange?.(next)
@@ -390,13 +527,11 @@ export function Textarea(props: TextareaProps) {
     if (disabled()) return
 
     startBlink()
+    props.onPaste?.(event.text)
+
     let base = props.value
     let insertAt = cursor()
-    if (hasSelection()) {
-      base = deleteSelection()
-      insertAt = cursor()
-    }
-    // Multi-line paste — DO NOT flatten newlines (unlike Input)
+    if (hasSelection()) { base = deleteSelection(); insertAt = cursor() }
     const text = event.text
     const next = base.slice(0, insertAt) + text + base.slice(insertAt)
     moveCursor(insertAt + text.length)
@@ -406,12 +541,17 @@ export function Textarea(props: TextareaProps) {
 
   // ── Ref handle ──
 
+  let _cursorColor = 0
+
   if (props.ref) {
     const handle: TextareaHandle = {
       get plainText() { return props.value },
       get cursorOffset() { return cursor() },
       get cursorRow() { return cursorPos().row },
       get cursorCol() { return cursorPos().col },
+      get visualCursor(): VisualCursor {
+        return { offset: cursor(), row: cursorPos().row, col: cursorPos().col }
+      },
 
       setText(text: string) {
         props.onChange?.(text)
@@ -420,10 +560,7 @@ export function Textarea(props: TextareaProps) {
       insertText(text: string) {
         let base = props.value
         let insertAt = cursor()
-        if (hasSelection()) {
-          base = deleteSelection()
-          insertAt = cursor()
-        }
+        if (hasSelection()) { base = deleteSelection(); insertAt = cursor() }
         const next = base.slice(0, insertAt) + text + base.slice(insertAt)
         moveCursor(insertAt + text.length)
         props.onChange?.(next)
@@ -446,6 +583,23 @@ export function Textarea(props: TextareaProps) {
       focus() {
         focusHandle.focus()
       },
+      blur() {
+        if (focusHandle.focused()) {
+          setFocusedId(null)
+          markDirty()
+        }
+      },
+      set cursorColor(c: number) {
+        _cursorColor = c
+        setCursorColorSignal(c)
+        markDirty()
+      },
+      get cursorColor(): number {
+        return _cursorColor || (props.color ?? accent.thread)
+      },
+      get extmarks(): ExtmarkManager {
+        return extmarkMgr
+      },
     }
     props.ref(handle)
   }
@@ -466,6 +620,131 @@ export function Textarea(props: TextareaProps) {
     return f
   }
 
+  // ── Line rendering with syntax + extmarks ──
+
+  function renderLine(line: string, rowIndex: number, lineStart: number): JSX.Element {
+    const isCursorLine = checkFocus() && cursorPos().row === rowIndex
+    const col = cursorPos().col
+    const showPH = line.length === 0 && rowIndex === 0 && !checkFocus()
+
+    // Get tokens for this line (syntax highlighting)
+    const lineTokens = syntaxTokens()[rowIndex]
+
+    // Get extmarks overlapping this line
+    const lineEnd = lineStart + line.length
+    const lineExtmarks = extmarkMgr.getForLine(lineStart, lineEnd)
+
+    // Determine token colors for each character
+    function getCharColor(charIdx: number): number {
+      // Extmarks take priority over syntax tokens
+      for (const em of lineExtmarks) {
+        const emStart = em.start - lineStart
+        const emEnd = em.end - lineStart
+        if (charIdx >= emStart && charIdx < emEnd) {
+          if (em.fg) return em.fg
+        }
+      }
+      // Fall back to syntax tokens
+      if (lineTokens) {
+        let pos = 0
+        for (const tok of lineTokens) {
+          const end = pos + tok.text.length
+          if (charIdx >= pos && charIdx < end) return tok.color
+          pos = end
+        }
+      }
+      return textTokens.primary
+    }
+
+    // Ghost text from extmarks
+    const ghostMarks = lineExtmarks.filter((em) => em.ghost && em.start - lineStart === col)
+    const ghostText = ghostMarks.length > 0
+      ? (ghostMarks[0].data?.text as string) ?? ""
+      : ""
+
+    if (showPH) {
+      return (
+        <box height={LINE_HEIGHT} width="100%">
+          <text color={textTokens.muted} fontSize={14}>
+            {props.placeholder ?? ""}
+          </text>
+        </box>
+      )
+    }
+
+    // Build colored segments — group consecutive chars with same color
+    type Segment = { text: string; color: number }
+    const segments: Segment[] = []
+    if (lineTokens && lineTokens.length > 0 && !lineExtmarks.length) {
+      // Fast path: use syntax tokens directly
+      for (const tok of lineTokens) {
+        segments.push({ text: tok.text, color: tok.color })
+      }
+    } else if (line.length > 0) {
+      let segStart = 0
+      let segColor = getCharColor(0)
+      for (let i = 1; i <= line.length; i++) {
+        const c = i < line.length ? getCharColor(i) : -1
+        if (c !== segColor) {
+          segments.push({ text: line.slice(segStart, i), color: segColor })
+          segStart = i
+          segColor = c
+        }
+      }
+    }
+
+    if (isCursorLine) {
+      // Split segments at cursor position to insert cursor box
+      const beforeSegments: Segment[] = []
+      const afterSegments: Segment[] = []
+      let charCount = 0
+
+      for (const seg of segments) {
+        const segEnd = charCount + seg.text.length
+        if (segEnd <= col) {
+          beforeSegments.push(seg)
+        } else if (charCount >= col) {
+          afterSegments.push(seg)
+        } else {
+          // Split this segment at cursor
+          const splitAt = col - charCount
+          beforeSegments.push({ text: seg.text.slice(0, splitAt), color: seg.color })
+          afterSegments.push({ text: seg.text.slice(splitAt), color: seg.color })
+        }
+        charCount = segEnd
+      }
+
+      return (
+        <box height={LINE_HEIGHT} width="100%">
+          {beforeSegments.map((seg) => (
+            <text color={seg.color} fontSize={14}>{seg.text}</text>
+          ))}
+          {blink() ? (
+            <box width={2} height={LINE_HEIGHT} backgroundColor={color()} />
+          ) : null}
+          {ghostText ? (
+            <text color={textTokens.muted} fontSize={14}>{ghostText}</text>
+          ) : null}
+          {afterSegments.map((seg) => (
+            <text color={seg.color} fontSize={14}>{seg.text}</text>
+          ))}
+        </box>
+      )
+    }
+
+    // Non-cursor line
+    return (
+      <box height={LINE_HEIGHT} width="100%">
+        {segments.length > 0
+          ? segments.map((seg) => (
+              <text color={seg.color} fontSize={14}>{seg.text}</text>
+            ))
+          : <text color={textTokens.primary} fontSize={14}>{line}</text>
+        }
+      </box>
+    )
+  }
+
   // ── Render ──
 
   const visibleLines = () => {
@@ -484,44 +763,16 @@ export function Textarea(props: TextareaProps) {
       padding={spacing.md}
       direction="column"
     >
-      {/* Render lines */}
-      {lines().slice(0, visibleLines()).map((line, rowIndex) => {
-        const isCursorLine = checkFocus() && cursorPos().row === rowIndex
-        const col = cursorPos().col
-
-        // Show placeholder only on first empty line when unfocused
-        const showPH = line.length === 0 && rowIndex === 0 && !checkFocus()
-
-        if (isCursorLine && !showPH) {
-          // Split line at cursor column to position the cursor box correctly
-          const before = line.slice(0, col)
-          const after = line.slice(col)
-          return (
-            <box height={LINE_HEIGHT} width="100%">
-              {before.length > 0 ? (
-                <text color={textTokens.primary} fontSize={14}>{before}</text>
-              ) : null}
-              {blink() ? (
-                <box width={2} height={LINE_HEIGHT} backgroundColor={color()} />
-              ) : null}
-              {after.length > 0 ? (
-                <text color={textTokens.primary} fontSize={14}>{after}</text>
-              ) : null}
-            </box>
-          )
+      {(() => {
+        const ls = lines()
+        let offset = 0
+        const result: JSX.Element[] = []
+        for (let i = 0; i < Math.min(ls.length, visibleLines()); i++) {
+          result.push(renderLine(ls[i], i, offset))
+          offset += ls[i].length + 1 // +1 for newline
         }
-
-        return (
-          <box height={LINE_HEIGHT} width="100%">
-            <text
-              color={showPH ? textTokens.muted : textTokens.primary}
-              fontSize={14}
-            >
-              {showPH ? (props.placeholder ?? "") : line}
-            </text>
-          </box>
-        )
-      })}
+        return result
+      })()}
     </box>
   )
 }

@@ -2,14 +2,18 @@
  * Markdown — renders markdown content as TGE components.
  *
  * Uses `marked` (Lexer) to tokenize markdown, then maps tokens
- * to TGE JSX elements:
+ * to TGE JSX elements with full inline styling:
  *   - Headings → <text> with larger font / bold color
- *   - Paragraphs → <text> with inline formatting
+ *   - Paragraphs → inline spans with bold/italic/code colors
  *   - Code blocks → <Code> with syntax highlighting
  *   - Lists → indented <text> with bullet/number prefix
  *   - Blockquotes → indented <box> with left border
  *   - Horizontal rules → <box> with border
- *   - Links → <text> with underline color
+ *   - Links → <text> with link color
+ *   - Bold → brighter text color
+ *   - Italic → accent color
+ *   - Code spans → surface background + monospace color
+ *   - Strikethrough → muted color
  *
  * Usage:
  *   const style = SyntaxStyle.fromTheme(ONE_DARK)
@@ -34,6 +38,17 @@ import {
 
 const LINE_HEIGHT = 17
 
+// ── Inline style colors ──
+
+const INLINE_STYLE = {
+  bold: 0xffffffff,         // White — stands out from primary gray
+  italic: 0xc0a0e0ff,       // Soft purple — distinct but readable
+  code: 0xe5c07bff,         // Yellow/amber — like syntax tokens
+  codeBg: 0x2c313aff,       // Dark bg for inline code
+  link: 0x61afefff,         // Blue — standard link color
+  del: 0x666666ff,          // Dim — struck through text
+} as const
+
 // ── Types ──
 
 export type MarkdownProps = {
@@ -47,12 +62,18 @@ export type MarkdownProps = {
   width?: number | string
 }
 
+// ── Inline span type ──
+
+type InlineSpan = {
+  text: string
+  color: number
+  bg?: number
+}
+
 // ── Inline text parsing ──
 
 /**
- * Flatten inline tokens to a plain string.
- * Handles bold, italic, code, links, etc.
- * For now returns plain text — per-span styling comes later with RichText.
+ * Flatten inline tokens to plain text (used for headings, lists).
  */
 function inlineToText(tokens: MarkedToken[] | undefined): string {
   if (!tokens) return ""
@@ -91,6 +112,67 @@ function inlineToText(tokens: MarkedToken[] | undefined): string {
   return result
 }
 
+/**
+ * Convert inline tokens to styled spans.
+ * Each span has its own color (and optional bg for code).
+ * Bold → bright white, Italic → purple, Code → yellow on dark bg,
+ * Links → blue, Strikethrough → dim gray.
+ */
+function inlineToSpans(tokens: MarkedToken[] | undefined, baseColor: number): InlineSpan[] {
+  if (!tokens) return []
+  const spans: InlineSpan[] = []
+  for (const tok of tokens) {
+    switch (tok.type) {
+      case "text":
+        spans.push({ text: tok.text, color: baseColor })
+        break
+      case "strong":
+        spans.push(...inlineToSpans(tok.tokens as MarkedToken[], INLINE_STYLE.bold))
+        break
+      case "em":
+        spans.push(...inlineToSpans(tok.tokens as MarkedToken[], INLINE_STYLE.italic))
+        break
+      case "codespan":
+        spans.push({ text: ` ${tok.text} `, color: INLINE_STYLE.code, bg: INLINE_STYLE.codeBg })
+        break
+      case "link":
+        spans.push(...inlineToSpans(tok.tokens as MarkedToken[], INLINE_STYLE.link))
+        break
+      case "br":
+        spans.push({ text: "\n", color: baseColor })
+        break
+      case "del":
+        spans.push(...inlineToSpans(tok.tokens as MarkedToken[], INLINE_STYLE.del))
+        break
+      case "escape":
+        spans.push({ text: tok.text, color: baseColor })
+        break
+      default:
+        if ("text" in tok) spans.push({ text: (tok as any).text, color: baseColor })
+        break
+    }
+  }
+  return spans
+}
+
+/**
+ * Render inline spans as JSX elements.
+ * Each span becomes a <text> with its own color.
+ * Code spans get a background box wrapper.
+ */
+function renderInlineSpans(spans: InlineSpan[]): JSX.Element {
+  return spans.map((span) => {
+    if (span.bg) {
+      return (
+        <box backgroundColor={span.bg} cornerRadius={3} paddingX={2}>
+          <text color={span.color} fontSize={14}>{span.text}</text>
+        </box>
+      )
+    }
+    return <text color={span.color} fontSize={14}>{span.text}</text>
+  }) as unknown as JSX.Element
+}
+
 /** Resolve language from info string (e.g., "typescript" from "```typescript") */
 function resolveLanguage(lang: string | undefined): string {
   if (!lang) return "plaintext"
@@ -123,21 +205,28 @@ function renderToken(
       const sizes = [20, 18, 16, 15, 14, 14]
       const fontSize = sizes[Math.min(token.depth - 1, 5)]
       const headingColor = accent.thread
+      const spans = inlineToSpans(token.tokens as MarkedToken[], headingColor)
       return (
-        <box width="100%" paddingY={4}>
-          <text color={headingColor} fontSize={fontSize}>
-            {inlineToText(token.tokens as MarkedToken[])}
-          </text>
+        <box width="100%" paddingY={4} direction="row">
+          {spans.map((span) => {
+            if (span.bg) {
+              return (
+                <box backgroundColor={span.bg} cornerRadius={3} paddingX={2}>
+                  <text color={span.color} fontSize={fontSize}>{span.text}</text>
+                </box>
+              )
+            }
+            return <text color={span.color} fontSize={fontSize}>{span.text}</text>
+          })}
         </box>
       )
     }
 
     case "paragraph": {
+      const spans = inlineToSpans(token.tokens as MarkedToken[], color)
       return (
-        <box width="100%">
-          <text color={color} fontSize={14}>
-            {inlineToText(token.tokens as MarkedToken[])}
-          </text>
+        <box width="100%" direction="row">
+          {renderInlineSpans(spans)}
         </box>
       )
     }
@@ -177,11 +266,11 @@ function renderToken(
         <box width="100%" direction="column" gap={2} paddingY={2}>
           {token.items.map((item: Tokens.ListItem, i: number) => {
             const prefix = token.ordered ? `${Number(token.start ?? 1) + i}. ` : "• "
-            const text = inlineToText(item.tokens as MarkedToken[])
+            const spans = inlineToSpans(item.tokens as MarkedToken[], color)
             return (
-              <box width="100%" paddingX={8}>
+              <box width="100%" paddingX={8} direction="row">
                 <text color={accent.anchor} fontSize={14}>{prefix}</text>
-                <text color={color} fontSize={14}>{text}</text>
+                {renderInlineSpans(spans)}
               </box>
             )
           })}
