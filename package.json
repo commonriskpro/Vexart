@@ -30,7 +30,8 @@
     "demo12": "bun --conditions=browser run examples/selectable.tsx",
     "demo13": "bun --conditions=browser run examples/scroll-programmatic.tsx",
     "demo14": "bun --conditions=browser run examples/textarea.tsx",
-    "demo15": "bun --conditions=browser run examples/syntax.tsx"
+    "demo15": "bun --conditions=browser run examples/syntax.tsx",
+    "demo16": "bun --conditions=browser run examples/markdown.tsx"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
@@ -48,6 +49,7 @@
   "license": "MIT",
   "dependencies": {
     "@chenglou/pretext": "^0.0.5",
+    "marked": "^18.0.0",
     "web-tree-sitter": "^0.26.8"
   }
 }

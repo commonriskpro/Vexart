@@ -82,6 +82,10 @@ export { createScrollHandle, resetScrollHandles } from "./scroll"
 export type { TextSelection } from "./selection"
 export { getSelection, getSelectedText, setSelection, clearSelection, selectionSignal } from "./selection"
 
+// Re-export extmarks system
+export { ExtmarkManager } from "./extmarks"
+export type { Extmark, CreateExtmarkOptions } from "./extmarks"
+
 // Re-export syntax highlighting system
 export {
   TreeSitterClient,
