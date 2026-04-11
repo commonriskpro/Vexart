@@ -165,6 +165,12 @@ export class RGBA {
   toString(): string
 }
 
+/**
+ * Color value type — accepts hex string, packed u32 number, or RGBA instance.
+ * RGBA.valueOf() returns number at runtime, but TypeScript needs the union.
+ */
+export type ColorValue = string | number | RGBA
+
 // ── Dirty flag ──
 
 export function markDirty(): void
@@ -190,6 +196,14 @@ export interface ScrollHandle {
   readonly contentHeight: number
   readonly viewportWidth: number
   readonly viewportHeight: number
+  /** Alias for scrollY (opentui compat) */
+  readonly y: number
+  /** Alias for viewportHeight (opentui compat) */
+  readonly height: number
+  /** Alias for contentHeight (opentui compat) */
+  readonly scrollHeight: number
+  /** Alias for -scrollY (opentui compat — positive value) */
+  readonly scrollTop: number
   scrollTo(y: number): void
   scrollBy(dy: number): void
   scrollIntoView(elementId: string): void

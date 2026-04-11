@@ -39,6 +39,14 @@ export type ScrollHandle = {
   readonly viewportWidth: number
   /** Visible viewport height */
   readonly viewportHeight: number
+  /** Alias for scrollY (opentui compat) */
+  readonly y: number
+  /** Alias for viewportHeight (opentui compat) */
+  readonly height: number
+  /** Alias for contentHeight (opentui compat) */
+  readonly scrollHeight: number
+  /** Alias for -scrollY as positive value (opentui compat) */
+  readonly scrollTop: number
   /** Scroll to an absolute Y position. Value should be <= 0 (Clay uses negative offsets). */
   scrollTo: (y: number) => void
   /** Scroll by a relative delta. Negative = scroll down, Positive = scroll up. */
@@ -80,6 +88,19 @@ export function createScrollHandle(clayId: string): ScrollHandle {
     },
     get viewportHeight() {
       return clay.getScrollContainerData(clayId).viewportHeight
+    },
+    // opentui-compat aliases
+    get y() {
+      return clay.getScrollContainerData(clayId).scrollY
+    },
+    get height() {
+      return clay.getScrollContainerData(clayId).viewportHeight
+    },
+    get scrollHeight() {
+      return clay.getScrollContainerData(clayId).contentHeight
+    },
+    get scrollTop() {
+      return -clay.getScrollContainerData(clayId).scrollY
     },
 
     scrollTo(y: number) {

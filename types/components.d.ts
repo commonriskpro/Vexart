@@ -9,6 +9,8 @@ import type {
   KeyEvent,
   SyntaxStyle,
   ExtmarkManager,
+  ColorValue,
+  RGBA,
 } from "./tge"
 
 // ── Box ──
