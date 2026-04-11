@@ -45,6 +45,9 @@ const FFI_DEFS = {
   // Gradient
   tge_linear_gradient: { args: [FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32], returns: FFIType.void },
   tge_radial_gradient: { args: [FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32], returns: FFIType.void },
+  // Text (8 params — within ARM64 limit)
+  tge_draw_text:    { args: [FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.i32, FFIType.i32, FFIType.ptr, FFIType.u32, FFIType.u32], returns: FFIType.void },
+  tge_measure_text: { args: [FFIType.u32], returns: FFIType.u32 },
 } as const
 
 let lib: ReturnType<typeof dlopen<typeof FFI_DEFS>> | null = null

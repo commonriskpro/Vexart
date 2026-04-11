@@ -79,4 +79,15 @@ export const paint = {
   radialGradient(buf: PixelBuffer, cx: number, cy: number, radius: number, r0: number, g0: number, b0: number, a0: number, r1: number, g1: number, b1: number, a1: number) {
     loadLib().symbols.tge_radial_gradient(bufPtr(buf.data), buf.width, buf.height, cx, cy, radius, packColor(r0, g0, b0, a0), packColor(r1, g1, b1, a1))
   },
+
+  /** Draw text at pixel coordinates using the embedded bitmap font. */
+  drawText(buf: PixelBuffer, x: number, y: number, text: string, r: number, g: number, b: number, a: number) {
+    const encoded = new TextEncoder().encode(text)
+    loadLib().symbols.tge_draw_text(bufPtr(buf.data), buf.width, buf.height, x, y, encoded, encoded.length, packColor(r, g, b, a))
+  },
+
+  /** Measure text width in pixels (without rendering). */
+  measureText(text: string): number {
+    return loadLib().symbols.tge_measure_text(text.length) as number
+  },
 }

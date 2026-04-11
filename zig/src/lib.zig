@@ -21,6 +21,7 @@ const line_mod = @import("line.zig");
 const shadow = @import("shadow.zig");
 const halo_mod = @import("halo.zig");
 const gradient = @import("gradient.zig");
+const text_mod = @import("text.zig");
 
 // Force test discovery for all sub-modules
 comptime {
@@ -30,6 +31,7 @@ comptime {
     _ = shadow;
     _ = halo_mod;
     _ = gradient;
+    _ = text_mod;
 }
 
 // ── Pixel Buffer ──
@@ -164,6 +166,19 @@ export fn tge_radial_gradient(data: [*]u8, width: u32, height: u32, cx: u32, cy:
     const c0 = unpack(color0);
     const c1 = unpack(color1);
     gradient.radial(&buf, cx, cy, radius, c0.r, c0.g, c0.b, c0.a, c1.r, c1.g, c1.b, c1.a);
+}
+
+// Text — 8 params (within ARM64 limit)
+export fn tge_draw_text(data: [*]u8, width: u32, height: u32, x: i32, y: i32, text_ptr: [*]const u8, text_len: u32, color: u32) void {
+    var buf = mkbuf(data, width, height);
+    const c = unpack(color);
+    // scale=2 for readable text (8x8 font → 16x16 effective)
+    _ = text_mod.drawText(&buf, x, y, text_ptr, text_len, c.r, c.g, c.b, c.a, 2);
+}
+
+export fn tge_measure_text(text_len: u32) u32 {
+    // scale=2 to match tge_draw_text
+    return text_mod.measureText(text_len, 2);
 }
 
 // ── Tests ──
