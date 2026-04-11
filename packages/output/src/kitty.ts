@@ -31,17 +31,19 @@ export function transmit(
   write: (data: string) => void,
   buf: PixelBuffer,
   id: number,
-  opts?: { action?: "t" | "T" | "p"; format?: 24 | 32 },
+  opts?: { action?: "t" | "T" | "p"; format?: 24 | 32; z?: number },
 ) {
   const action = opts?.action ?? "T"
   const format = opts?.format ?? 32
+  const z = opts?.z
   const data = format === 32 ? buf.data : stripAlpha(buf.data, buf.width * buf.height)
 
   const b64 = Buffer.from(data).toString("base64")
   const chunks = chunk(b64)
   if (chunks.length === 0) return
 
-  const meta = `a=${action},f=${format},i=${id},s=${buf.width},v=${buf.height},q=2`
+  let meta = `a=${action},f=${format},i=${id},s=${buf.width},v=${buf.height},q=2`
+  if (z !== undefined) meta += `,z=${z}`
 
   if (chunks.length === 1) {
     write(`\x1b_G${meta};${chunks[0]}\x1b\\`)
@@ -61,23 +63,32 @@ export function place(
   id: number,
   col: number,
   row: number,
+  opts?: { z?: number; placementId?: number },
 ) {
-  // Move cursor to position, then place
+  const z = opts?.z
+  const p = opts?.placementId
+  let params = `a=p,i=${id},C=1,q=2`
+  if (z !== undefined) params += `,z=${z}`
+  if (p !== undefined) params += `,p=${p}`
   write(`\x1b[${row + 1};${col + 1}H`)
-  write(`\x1b_Ga=p,i=${id},q=2;AAAA\x1b\\`)
+  write(`\x1b_G${params};AAAA\x1b\\`)
 }
 
-/** Transmit + place in one operation. Moves cursor, transmits at position. */
+/**
+ * Transmit + place in one operation. Moves cursor, transmits at position.
+ * With z-index support for layer compositing.
+ */
 export function transmitAt(
   write: (data: string) => void,
   buf: PixelBuffer,
   id: number,
   col: number,
   row: number,
+  opts?: { z?: number },
 ) {
   write(`\x1b7`) // save cursor
   write(`\x1b[${row + 1};${col + 1}H`) // move cursor
-  transmit(write, buf, id, { action: "T" })
+  transmit(write, buf, id, { action: "T", z: opts?.z })
   write(`\x1b8`) // restore cursor
 }
 

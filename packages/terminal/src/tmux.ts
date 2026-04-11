@@ -15,9 +15,19 @@
 
 import { detect, type TerminalKind } from "./detect"
 
-/** Detect if we're inside tmux. */
+/**
+ * Detect if we're inside tmux.
+ *
+ * Checks both TMUX env var AND TERM prefix. When Ghostty is launched
+ * from within tmux (e.g., `ghostty -e /bin/zsh`), the child process
+ * inherits TMUX from the parent — but TERM will be "xterm-ghostty"
+ * (set by Ghostty itself), not "screen-*" or "tmux-*" (set by tmux).
+ * Both must match to confirm we're actually inside a tmux session.
+ */
 export function inTmux(): boolean {
-  return !!process.env["TMUX"]
+  if (!process.env["TMUX"]) return false
+  const term = process.env["TERM"] ?? ""
+  return term.startsWith("screen") || term.startsWith("tmux")
 }
 
 /**

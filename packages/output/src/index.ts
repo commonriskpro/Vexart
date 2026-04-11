@@ -18,6 +18,10 @@
 export { createComposer } from "./composer"
 export type { Composer, BackendKind } from "./composer"
 
+// Layer compositor (multi-image, browser-style)
+export { createLayerComposer } from "./layer-composer"
+export type { LayerComposer } from "./layer-composer"
+
 // Individual backends (for advanced use)
 export * as kitty from "./kitty"
 export * as placeholder from "./placeholder"
