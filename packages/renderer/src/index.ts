@@ -82,6 +82,24 @@ export { createScrollHandle, resetScrollHandles } from "./scroll"
 export type { TextSelection } from "./selection"
 export { getSelection, getSelectedText, setSelection, clearSelection, selectionSignal } from "./selection"
 
+// Re-export syntax highlighting system
+export {
+  TreeSitterClient,
+  getTreeSitterClient,
+  addDefaultParsers,
+  SyntaxStyle,
+  ONE_DARK,
+  KANAGAWA,
+  highlightsToTokens,
+} from "./tree-sitter"
+export type {
+  Token,
+  SimpleHighlight,
+  FiletypeParserConfig,
+  StyleDefinition,
+  ThemeTokenStyle,
+} from "./tree-sitter"
+
 /**
  * Mount a SolidJS component tree onto the terminal.
  *
