@@ -53,6 +53,21 @@ void tge_clay_set_text_measure(int index, float width, float height) {
     }
 }
 
+/* Count Unicode codepoints in a UTF-8 byte sequence.
+ * Counts lead bytes only (bytes that don't start with 10xxxxxx). */
+static int utf8_char_count(const char *s, int byte_len) {
+    int count = 0;
+    for (int i = 0; i < byte_len; i++) {
+        /* Lead bytes: 0xxxxxxx or 11xxxxxx (not continuation 10xxxxxx) */
+        if ((s[i] & 0xC0) != 0x80) count++;
+    }
+    return count;
+}
+
+/* Built-in atlas advance: 8.65px per char (matches zig/src/text.zig).
+ * Stored as fixed-point: 865 hundredths. */
+#define BUILTIN_ADVANCE_HUNDREDTHS 865
+
 static Clay_Dimensions tge_measure_text_callback(
     Clay_StringSlice text,
     Clay_TextElementConfig *config,
@@ -66,9 +81,12 @@ static Clay_Dimensions tge_measure_text_callback(
             .height = text_measure_heights[idx],
         };
     }
-    /* Fallback: monospace 9px per char, 17px height */
+    /* Fallback for font 0: count UTF-8 chars and use atlas advance.
+     * Clay calls this for substrings during word wrap — must be accurate. */
+    int chars = utf8_char_count(text.chars, text.length);
+    float width = (float)(chars * BUILTIN_ADVANCE_HUNDREDTHS + 50) / 100.0f;
     return (Clay_Dimensions){
-        .width = text.length * 9.0f,
+        .width = width,
         .height = 17.0f
     };
 }
@@ -231,7 +249,7 @@ void tge_clay_text(const char *text, int length, uint32_t color_rgba, uint16_t f
         },
         .fontId = font_id,
         .fontSize = font_size,
-        .wrapMode = CLAY_TEXT_WRAP_NONE,
+        .wrapMode = CLAY_TEXT_WRAP_WORDS,
     });
 }
 
