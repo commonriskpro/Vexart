@@ -26,8 +26,31 @@ import {
   parseAlignX,
   parseAlignY,
 } from "./node"
-import { render as solidRender } from "./reconciler"
-import { packColor } from "./paint-bridge"
+// Note: solidRender is used by index.ts, not here.
+// paintCommand uses raw RGBA from cmd.color (no packing needed).
+
+export type TextEntry = {
+  text: string
+  col: number
+  row: number
+  /** Pixel position from Clay (for rect containment check) */
+  px: number
+  py: number
+  r: number
+  g: number
+  b: number
+}
+
+type PaintedRect = {
+  px: number
+  py: number
+  pw: number
+  ph: number
+  cr: number // corner radius
+  r: number
+  g: number
+  b: number
+}
 
 export type RenderLoop = {
   /** The root TGENode — SolidJS mounts here */
@@ -44,11 +67,16 @@ export type RenderLoop = {
 
 export function createRenderLoop(term: Terminal): RenderLoop {
   const root = createNode("root")
-  root.props = { width: "100%", height: "100%", direction: "column" }
 
   // Initialize Clay with pixel dimensions
   const pw = term.size.pixelWidth || term.size.cols * (term.size.cellWidth || 8)
   const ph = term.size.pixelHeight || term.size.rows * (term.size.cellHeight || 16)
+
+  // Root MUST use FIXED sizing with actual pixel dimensions.
+  // Clay_BeginLayout() creates an internal root container — our root is its child.
+  // Using PERCENT here would fail because Clay's internal root doesn't propagate
+  // size correctly to PERCENT children. Phase 2 demo uses FIXED and works.
+  root.props = { width: pw, height: ph, direction: "column" }
   clay.init(pw, ph)
 
   // Create pixel buffer and composer
@@ -61,14 +89,26 @@ export function createRenderLoop(term: Terminal): RenderLoop {
   // Mark dirty when SolidJS updates
   // (In a full implementation, SolidJS effects would set this)
 
+  /** Collect all text content from a node's children recursively. */
+  function collectText(node: TGENode): string {
+    if (node.text) return node.text
+    let result = ""
+    for (const child of node.children) {
+      result += collectText(child)
+    }
+    return result
+  }
+
   /** Walk TGENode tree and replay into Clay (immediate mode). */
   function walkTree(node: TGENode) {
     if (node.kind === "text") {
-      // Text is a leaf node
+      // Text element — collect text from self or children (text nodes created by SolidJS)
+      const content = node.text || collectText(node)
+      if (!content) return
       const color = parseColor(node.props.color) || 0xe0e0e0ff
       const fontSize = node.props.fontSize ?? 16
       const fontId = node.props.fontId ?? 0
-      clay.text(node.text, color, fontId, fontSize)
+      clay.text(content, color, fontId, fontSize)
       return
     }
 
@@ -119,19 +159,70 @@ export function createRenderLoop(term: Terminal): RenderLoop {
     walkTree(root)
     const commands = clay.endLayout()
 
-    // 3. Paint each render command
-    for (const cmd of commands) {
-      paintCommand(buf, cmd)
-    }
-
-    // 4. Output
-    const cols = term.size.cols
-    const rows = term.size.rows
+    // 3. Paint each render command, collect text entries and painted rects
+    const textEntries: TextEntry[] = []
+    const paintedRects: PaintedRect[] = []
     const cellW = term.size.cellWidth || 8
     const cellH = term.size.cellHeight || 16
 
+    for (const cmd of commands) {
+      paintCommand(buf, cmd, cellW, cellH, textEntries, paintedRects)
+    }
+
+    // 4. Output pixel buffer
+    const cols = term.size.cols
+    const rows = term.size.rows
+
     term.beginSync()
     composer.render(buf, 0, 0, cols, rows, cellW, cellH)
+
+    // 5. Overlay text on top of pixel image.
+    // For each text row: fill the ENTIRE row within its container rect
+    // with ANSI bg spaces (replacing all placeholders uniformly on that row),
+    // then write the text. This avoids the seam between text cells (ANSI bg)
+    // and non-text cells (placeholder image) on the same row.
+    // We only fill the TEXT ROW, not the full rect — this preserves corners,
+    // padding rows, and other elements rendered by the placeholder image.
+    const filledRows = new Set<string>() // "row:colStart:colEnd" dedup key
+
+    for (const t of textEntries) {
+      // Find bg from innermost non-fullscreen container rect
+      let bgR = 4, bgG = 4, bgB = 10
+      let rowColStart = t.col
+      let rowColEnd = t.col + t.text.length
+      for (const rc of paintedRects) {
+        if (t.px >= rc.px && t.py >= rc.py &&
+            t.px < rc.px + rc.pw && t.py < rc.py + rc.ph) {
+          bgR = rc.r; bgG = rc.g; bgB = rc.b
+          // Use container bounds for row fill (only if not fullscreen)
+          if (rc.pw < buf.width || rc.ph < buf.height) {
+            rowColStart = Math.ceil(rc.px / cellW)
+            rowColEnd = Math.floor((rc.px + rc.pw) / cellW)
+          }
+        }
+      }
+
+      // Fill entire row span within container with bg spaces
+      const key = `${t.row}:${rowColStart}:${rowColEnd}`
+      if (!filledRows.has(key)) {
+        filledRows.add(key)
+        const w = rowColEnd - rowColStart
+        if (w > 0) {
+          term.rawWrite(`\x1b[${t.row + 1};${rowColStart + 1}H`)
+          term.rawWrite(`\x1b[48;2;${bgR};${bgG};${bgB}m`)
+          term.rawWrite(" ".repeat(w))
+        }
+      }
+
+      // Write text at correct position
+      term.rawWrite(`\x1b[${t.row + 1};${t.col + 1}H`)
+      term.rawWrite(`\x1b[38;2;${t.r};${t.g};${t.b};48;2;${bgR};${bgG};${bgB}m`)
+      term.rawWrite(t.text)
+    }
+    if (textEntries.length > 0) {
+      term.rawWrite(`\x1b[0m`)
+    }
+
     term.endSync()
 
     dirty = false
@@ -142,6 +233,8 @@ export function createRenderLoop(term: Terminal): RenderLoop {
     const newW = term.size.pixelWidth || term.size.cols * (term.size.cellWidth || 8)
     const newH = term.size.pixelHeight || term.size.rows * (term.size.cellHeight || 16)
     clay.setDimensions(newW, newH)
+    root.props.width = newW
+    root.props.height = newH
     buf = create(newW, newH)
     dirty = true
   })
@@ -174,8 +267,8 @@ export function createRenderLoop(term: Terminal): RenderLoop {
   }
 }
 
-/** Paint a Clay RenderCommand into the pixel buffer. */
-function paintCommand(buf: PixelBuffer, cmd: RenderCommand) {
+/** Paint a Clay RenderCommand into the pixel buffer. Collects text entries and painted rects. */
+function paintCommand(buf: PixelBuffer, cmd: RenderCommand, cellW: number, cellH: number, textEntries: TextEntry[], paintedRects: PaintedRect[]) {
   const x = Math.round(cmd.x)
   const y = Math.round(cmd.y)
   const w = Math.round(cmd.width)
@@ -190,6 +283,10 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand) {
       } else {
         paint.fillRect(buf, x, y, w, h, r, g, b, a)
       }
+      // Track painted rects for text container lookup
+      if (a > 0) {
+        paintedRects.push({ px: x, py: y, pw: w, ph: h, cr: radius, r, g, b })
+      }
       break
     }
 
@@ -201,9 +298,10 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand) {
     }
 
     case CMD.TEXT: {
-      // For Phase 2, text is rendered as a simple colored rect placeholder
-      // Real text rendering comes in Phase 3
-      // For now, we skip text painting — Clay calculated the layout positions
+      if (!cmd.text) break
+      const col = Math.floor(x / cellW)
+      const row = Math.floor(y / cellH)
+      textEntries.push({ text: cmd.text, col, row, px: x, py: y, r, g, b })
       break
     }
 

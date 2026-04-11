@@ -23,14 +23,33 @@
 
 import type { Terminal } from "@tge/terminal"
 import { createRenderLoop } from "./loop"
-import { render as solidRender, createComponent } from "./reconciler"
+import { render as solidRender } from "./reconciler"
 
 export type { RenderLoop } from "./loop"
 export { createRenderLoop } from "./loop"
 
 // Re-export SolidJS control flow
 export { For, Show, Switch, Match, Index, ErrorBoundary } from "./reconciler"
-export { render as solidRender, createComponent, createElement, effect, memo } from "./reconciler"
+
+// Re-export all reconciler primitives that babel-preset-solid imports.
+// When generate: "universal" + moduleName: "@tge/renderer", babel emits:
+//   import { createElement, createTextNode, insertNode, insert, setProp, createComponent, ... } from "@tge/renderer"
+export {
+  createComponent,
+  createElement,
+  solidCreateTextNode as createTextNode,
+  insertNode,
+  insert,
+  spread,
+  setProp,
+  mergeProps,
+  effect,
+  memo,
+  use,
+} from "./reconciler"
+
+// Named export for advanced use
+export { render as solidRender } from "./reconciler"
 
 /**
  * Mount a SolidJS component tree onto the terminal.

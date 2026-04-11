@@ -1,0 +1,4 @@
+# Preload the SolidJS JSX plugin before any .tsx file runs.
+# This transforms JSX via babel-preset-solid with generate: "universal"
+# targeting @tge/renderer instead of the DOM.
+preload = ["./solid-plugin.ts"]

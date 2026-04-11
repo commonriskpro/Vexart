@@ -1,14 +1,15 @@
 /**
  * @tge/components — Built-in JSX components.
  *
- * The building blocks developers use:
+ * Typed wrapper components for TGE rendering:
  * - <Box> — container with flex layout, bg, border, shadow
- * - <Text> — text with color, bold, wrap
- * - <Scroll> — scroll container with acceleration
- * - <Input> — editable text input
- * - <Button> — clickable with hover/active states
- * - <Image> — inline image rendering
+ * - <Text> — text with color and font settings
+ *
+ * These are thin wrappers over the intrinsic <box> and <text> elements,
+ * providing typed props interfaces and sensible defaults.
  */
 
-// TODO: Phase 3 — implement built-in components
-export {};
+export { Box } from "./box"
+export { Text } from "./text"
+export type { BoxProps } from "./box"
+export type { TextProps } from "./text"
