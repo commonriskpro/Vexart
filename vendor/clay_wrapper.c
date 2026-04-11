@@ -37,15 +37,15 @@ static Clay_Dimensions tge_measure_text_callback(
 ) {
     (void)userData;
     if (!tge_text_measure.measure) {
-        /* Bitmap font 8x8 at 2x scale = 16px per glyph, 16px height.
-         * This matches the embedded VGA font in zig/src/font.zig. */
+        /* Pre-rendered font atlas: SF Mono at 14px.
+         * Cell: 9px wide, 17px tall. Matches zig/src/font_atlas.zig. */
         return (Clay_Dimensions){
-            .width = text.length * 16.0f,
-            .height = 16.0f
+            .width = text.length * 9.0f,
+            .height = 17.0f
         };
     }
     float w = tge_text_measure.measure(text.chars, text.length, config->fontId, config->fontSize);
-    return (Clay_Dimensions){ .width = w, .height = 16.0f };
+    return (Clay_Dimensions){ .width = w, .height = 17.0f };
 }
 
 static void tge_error_handler(Clay_ErrorData error) {

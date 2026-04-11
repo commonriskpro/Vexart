@@ -1,73 +1,67 @@
-/// Text rendering — rasterize bitmap font glyphs into a pixel buffer.
+/// Text rendering — rasterize glyphs from a pre-rendered grayscale atlas
+/// into a pixel buffer with proper alpha blending.
 ///
-/// Uses the embedded 8x8 VGA font (font.zig). Each glyph is blended
-/// onto the pixel buffer with the specified color and alpha.
-/// Supports optional 2x scaling for better readability on HiDPI.
+/// The atlas is generated from a TTF font (SF Mono) at build time.
+/// Each glyph is stored as grayscale alpha values (0-255), giving
+/// smooth antialiased text rendering — browser-quality in the terminal.
 const std = @import("std");
-const font = @import("font.zig");
+const atlas = @import("font_atlas.zig");
 
 const PixelBuffer = @import("lib.zig").PixelBuffer;
 const blend = @import("lib.zig").blend;
 
 /// Draw a single glyph at (x, y) with the given color.
-/// scale_x and scale_y control pixel doubling (1 = native, 2 = doubled).
-pub fn drawGlyph(buf: *PixelBuffer, x: i32, y: i32, codepoint: u32, r: u8, g: u8, b: u8, a: u8, scale: u32) void {
-    if (codepoint < font.first_cp or codepoint > font.last_cp) return;
-    const idx = codepoint - font.first_cp;
-    const glyph = font.data[idx];
-    const s = if (scale == 0) 1 else scale;
+/// The alpha from the atlas modulates the color's alpha for antialiasing.
+pub fn drawGlyph(buf: *PixelBuffer, x: i32, y: i32, codepoint: u32, r: u8, g: u8, b: u8, a: u8) void {
+    if (codepoint < atlas.first_cp or codepoint > atlas.last_cp) return;
+    const idx = codepoint - atlas.first_cp;
+    const glyph_offset = idx * atlas.cell_width * atlas.cell_height;
 
-    for (0..font.height) |row_idx| {
-        const row: u8 = glyph[row_idx];
-        for (0..font.width) |col_idx| {
-            // font8x8 uses LSB = leftmost pixel
-            const bit = (row >> @intCast(col_idx)) & 1;
-            if (bit == 0) continue;
+    for (0..atlas.cell_height) |row_idx| {
+        const py = y + @as(i32, @intCast(row_idx));
+        if (py < 0) continue;
+        if (py >= @as(i32, @intCast(buf.height))) break;
 
-            // Draw scaled pixel
-            const bx: i32 = x + @as(i32, @intCast(col_idx)) * @as(i32, @intCast(s));
-            const by: i32 = y + @as(i32, @intCast(row_idx)) * @as(i32, @intCast(s));
-            for (0..s) |sy| {
-                for (0..s) |sx| {
-                    const px = bx + @as(i32, @intCast(sx));
-                    const py = by + @as(i32, @intCast(sy));
-                    if (px < 0 or py < 0) continue;
-                    blend(buf, @intCast(px), @intCast(py), r, g, b, a);
-                }
-            }
+        for (0..atlas.cell_width) |col_idx| {
+            const px = x + @as(i32, @intCast(col_idx));
+            if (px < 0) continue;
+            if (px >= @as(i32, @intCast(buf.width))) break;
+
+            const coverage = atlas.data[glyph_offset + row_idx * atlas.cell_width + col_idx];
+            if (coverage == 0) continue;
+
+            // Modulate: final alpha = glyph coverage * text alpha / 255
+            const final_a: u32 = (@as(u32, coverage) * @as(u32, a) + 127) / 255;
+            blend(buf, @intCast(px), @intCast(py), r, g, b, @intCast(final_a));
         }
     }
 }
 
 /// Draw a string of ASCII text at (x, y).
-/// Returns the number of pixels advanced (total width drawn).
-pub fn drawText(buf: *PixelBuffer, x: i32, y: i32, text_ptr: [*]const u8, text_len: u32, r: u8, g: u8, b: u8, a: u8, scale: u32) u32 {
-    const s = if (scale == 0) 1 else scale;
-    const gw: i32 = @intCast(font.width * s);
+/// Returns the total width in pixels.
+pub fn drawText(buf: *PixelBuffer, x: i32, y: i32, text_ptr: [*]const u8, text_len: u32, r: u8, g: u8, b: u8, a: u8) u32 {
     var cx: i32 = x;
     var i: u32 = 0;
     while (i < text_len) : (i += 1) {
         const cp: u32 = text_ptr[i];
-        drawGlyph(buf, cx, y, cp, r, g, b, a, s);
-        cx += gw;
+        drawGlyph(buf, cx, y, cp, r, g, b, a);
+        cx += @intCast(atlas.cell_width);
     }
-    return text_len * font.width * s;
+    return text_len * atlas.cell_width;
 }
 
 /// Measure the width of a text string in pixels (no rendering).
-pub fn measureText(text_len: u32, scale: u32) u32 {
-    const s = if (scale == 0) 1 else scale;
-    return text_len * font.width * s;
+pub fn measureText(text_len: u32) u32 {
+    return text_len * atlas.cell_width;
 }
 
 // ── Tests ──
 
 test "drawGlyph A renders non-zero pixels" {
-    var pixels = [_]u8{0} ** (16 * 16 * 4); // 16x16 buffer
-    var buf = PixelBuffer{ .data = &pixels, .width = 16, .height = 16, .stride = 16 * 4 };
-    drawGlyph(&buf, 0, 0, 'A', 255, 255, 255, 255, 1);
+    var pixels = [_]u8{0} ** (64 * 64 * 4); // 64x64 buffer
+    var buf = PixelBuffer{ .data = &pixels, .width = 64, .height = 64, .stride = 64 * 4 };
+    drawGlyph(&buf, 0, 0, 'A', 255, 255, 255, 255);
 
-    // Count non-zero pixels
     var count: u32 = 0;
     var j: u32 = 0;
     while (j < pixels.len) : (j += 4) {
@@ -77,14 +71,13 @@ test "drawGlyph A renders non-zero pixels" {
 }
 
 test "measureText returns correct width" {
-    try std.testing.expectEqual(@as(u32, 40), measureText(5, 1)); // 5 chars * 8px
-    try std.testing.expectEqual(@as(u32, 80), measureText(5, 2)); // 5 chars * 8px * 2
+    try std.testing.expectEqual(atlas.cell_width * 5, measureText(5));
 }
 
 test "drawGlyph space renders no pixels" {
-    var pixels = [_]u8{0} ** (16 * 16 * 4);
-    var buf = PixelBuffer{ .data = &pixels, .width = 16, .height = 16, .stride = 16 * 4 };
-    drawGlyph(&buf, 0, 0, ' ', 255, 255, 255, 255, 1);
+    var pixels = [_]u8{0} ** (64 * 64 * 4);
+    var buf = PixelBuffer{ .data = &pixels, .width = 64, .height = 64, .stride = 64 * 4 };
+    drawGlyph(&buf, 0, 0, ' ', 255, 255, 255, 255);
 
     var count: u32 = 0;
     var j: u32 = 0;
