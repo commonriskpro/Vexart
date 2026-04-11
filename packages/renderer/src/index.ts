@@ -120,6 +120,105 @@ export type {
   ThemeTokenStyle,
 } from "./tree-sitter"
 
+// Re-export Clay layout constants for advanced use
+export { ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, SIZING, DIRECTION, ALIGN_X, ALIGN_Y } from "./clay"
+
+// ── RGBA utility class ──
+
+/**
+ * RGBA color helper — compatible API for code migrating from opentui.
+ * Internally converts to TGE's packed u32 format (0xRRGGBBAA).
+ */
+export class RGBA {
+  readonly r: number
+  readonly g: number
+  readonly b: number
+  readonly a: number
+
+  constructor(r: number, g: number, b: number, a = 1) {
+    this.r = Math.round(r * 255)
+    this.g = Math.round(g * 255)
+    this.b = Math.round(b * 255)
+    this.a = Math.round(a * 255)
+  }
+
+  /** Create from 0-255 int values. */
+  static fromInts(r: number, g: number, b: number, a = 255): RGBA {
+    const c = new RGBA(0, 0, 0, 0)
+    ;(c as any).r = r
+    ;(c as any).g = g
+    ;(c as any).b = b
+    ;(c as any).a = a
+    return c
+  }
+
+  /** Create from hex string ("#ff0000" or "#ff0000ff"). */
+  static fromHex(hex: string): RGBA {
+    const h = hex.startsWith("#") ? hex.slice(1) : hex
+    const r = parseInt(h.slice(0, 2), 16)
+    const g = parseInt(h.slice(2, 4), 16)
+    const b = parseInt(h.slice(4, 6), 16)
+    const a = h.length >= 8 ? parseInt(h.slice(6, 8), 16) : 255
+    return RGBA.fromInts(r, g, b, a)
+  }
+
+  /** Create from 0-1 float values. */
+  static fromValues(r: number, g: number, b: number, a = 1): RGBA {
+    return new RGBA(r, g, b, a)
+  }
+
+  /** Convert to TGE packed u32 (0xRRGGBBAA). */
+  toU32(): number {
+    return ((this.r << 24) | (this.g << 16) | (this.b << 8) | this.a) >>> 0
+  }
+
+  /** Shorthand — call as color value in JSX props. */
+  valueOf(): number {
+    return this.toU32()
+  }
+
+  toString(): string {
+    return `rgba(${this.r}, ${this.g}, ${this.b}, ${(this.a / 255).toFixed(2)})`
+  }
+}
+
+// ── useTerminalDimensions hook ──
+
+import { createSignal, onCleanup } from "solid-js"
+
+/**
+ * Reactive terminal dimensions hook.
+ * Returns pixel width/height and cell counts that update on resize.
+ */
+export function useTerminalDimensions(terminal: Terminal): {
+  width: () => number
+  height: () => number
+  cols: () => number
+  rows: () => number
+  cellWidth: () => number
+  cellHeight: () => number
+} {
+  const [width, setWidth] = createSignal(terminal.size.pixelWidth || terminal.size.cols * (terminal.size.cellWidth || 8))
+  const [height, setHeight] = createSignal(terminal.size.pixelHeight || terminal.size.rows * (terminal.size.cellHeight || 16))
+  const [cols, setCols] = createSignal(terminal.size.cols)
+  const [rows, setRows] = createSignal(terminal.size.rows)
+  const [cellW, setCellW] = createSignal(terminal.size.cellWidth || 8)
+  const [cellH, setCellH] = createSignal(terminal.size.cellHeight || 16)
+
+  const unsub = terminal.onResize(() => {
+    setWidth(terminal.size.pixelWidth || terminal.size.cols * (terminal.size.cellWidth || 8))
+    setHeight(terminal.size.pixelHeight || terminal.size.rows * (terminal.size.cellHeight || 16))
+    setCols(terminal.size.cols)
+    setRows(terminal.size.rows)
+    setCellW(terminal.size.cellWidth || 8)
+    setCellH(terminal.size.cellHeight || 16)
+  })
+
+  onCleanup(() => unsub())
+
+  return { width, height, cols, rows, cellWidth: cellW, cellHeight: cellH }
+}
+
 /**
  * Mount a SolidJS component tree onto the terminal.
  *

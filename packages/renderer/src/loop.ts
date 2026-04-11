@@ -22,7 +22,7 @@ import type { Terminal } from "@tge/terminal"
 import type { PixelBuffer } from "@tge/pixel"
 import { create, clear, paint, over } from "@tge/pixel"
 import { createComposer, createLayerComposer } from "@tge/output"
-import { clay, CMD } from "./clay"
+import { clay, CMD, ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE } from "./clay"
 import type { RenderCommand } from "./clay"
 import {
   type TGENode,
@@ -273,17 +273,62 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       clay.openElement()
     }
 
+    // Layout — use per-side padding if any side is set, otherwise symmetric
     const dir = parseDirection(node.props.direction)
-    const px = node.props.paddingX ?? node.props.padding ?? 0
-    const py = node.props.paddingY ?? node.props.padding ?? 0
     const gap = node.props.gap ?? 0
     const ax = parseAlignX(node.props.alignX)
     const ay = parseAlignY(node.props.alignY)
-    clay.configureLayout(dir, px, py, gap, ax, ay)
 
+    const hasPerSidePadding = node.props.paddingLeft !== undefined || node.props.paddingRight !== undefined ||
+                              node.props.paddingTop !== undefined || node.props.paddingBottom !== undefined
+    if (hasPerSidePadding) {
+      const basePx = node.props.paddingX ?? node.props.padding ?? 0
+      const basePy = node.props.paddingY ?? node.props.padding ?? 0
+      clay.configureLayoutFull(dir,
+        node.props.paddingLeft ?? basePx,
+        node.props.paddingRight ?? basePx,
+        node.props.paddingTop ?? basePy,
+        node.props.paddingBottom ?? basePy,
+        gap, ax, ay)
+    } else {
+      const px = node.props.paddingX ?? node.props.padding ?? 0
+      const py = node.props.paddingY ?? node.props.padding ?? 0
+      clay.configureLayout(dir, px, py, gap, ax, ay)
+    }
+
+    // Sizing — use min/max if any constraint is set
     const ws = parseSizing(node.props.width)
     const hs = parseSizing(node.props.height)
-    clay.configureSizing(ws.type, ws.value, hs.type, hs.value)
+    const hasMinMax = node.props.minWidth !== undefined || node.props.maxWidth !== undefined ||
+                      node.props.minHeight !== undefined || node.props.maxHeight !== undefined
+    if (hasMinMax) {
+      clay.configureSizingMinMax(
+        ws.type, ws.value, node.props.minWidth ?? 0, node.props.maxWidth ?? 100000,
+        hs.type, hs.value, node.props.minHeight ?? 0, node.props.maxHeight ?? 100000,
+      )
+    } else {
+      clay.configureSizing(ws.type, ws.value, hs.type, hs.value)
+    }
+
+    // Floating / absolute positioning
+    if (node.props.floating) {
+      const f = node.props.floating
+      const ox = node.props.floatOffset?.x ?? 0
+      const oy = node.props.floatOffset?.y ?? 0
+      const z = node.props.zIndex ?? 0
+      const ape = node.props.floatAttach?.element ?? ATTACH_POINT.LEFT_TOP
+      const app = node.props.floatAttach?.parent ?? ATTACH_POINT.LEFT_TOP
+      const pc = node.props.pointerPassthrough ? POINTER_CAPTURE.PASSTHROUGH : POINTER_CAPTURE.CAPTURE
+
+      if (f === "parent") {
+        clay.configureFloating(ATTACH_TO.PARENT, ox, oy, z, ape, app, pc, 0)
+      } else if (f === "root") {
+        clay.configureFloating(ATTACH_TO.ROOT, ox, oy, z, ape, app, pc, 0)
+      } else if (typeof f === "object" && f.attachTo) {
+        const pid = clay.hashString(f.attachTo)
+        clay.configureFloating(ATTACH_TO.ELEMENT, ox, oy, z, ape, app, pc, pid)
+      }
+    }
 
     if (node.props.backgroundColor !== undefined) {
       const bgColor = parseColor(node.props.backgroundColor)
@@ -308,7 +353,19 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       }
     }
 
-    if (node.props.borderColor !== undefined && node.props.borderWidth) {
+    // Borders — per-side or uniform
+    const hasPerSideBorder = node.props.borderLeft !== undefined || node.props.borderRight !== undefined ||
+                             node.props.borderTop !== undefined || node.props.borderBottom !== undefined ||
+                             node.props.borderBetweenChildren !== undefined
+    if (hasPerSideBorder && node.props.borderColor !== undefined) {
+      const borderColor = parseColor(node.props.borderColor)
+      clay.configureBorderSides(borderColor,
+        node.props.borderLeft ?? 0,
+        node.props.borderRight ?? 0,
+        node.props.borderTop ?? 0,
+        node.props.borderBottom ?? 0,
+        node.props.borderBetweenChildren ?? 0)
+    } else if (node.props.borderColor !== undefined && node.props.borderWidth) {
       const borderColor = parseColor(node.props.borderColor)
       clay.configureBorder(borderColor, node.props.borderWidth)
     }

@@ -47,9 +47,14 @@ const DEFS = {
   tge_clay_open_element:        { args: [], returns: FFIType.void },
   tge_clay_close_element:       { args: [], returns: FFIType.void },
   tge_clay_configure_layout:    { args: [FFIType.u8, FFIType.u16, FFIType.u16, FFIType.u16, FFIType.u8, FFIType.u8], returns: FFIType.void },
+  tge_clay_configure_layout_full: { args: [FFIType.u8, FFIType.u16, FFIType.u16, FFIType.u16, FFIType.u16, FFIType.u16, FFIType.u8, FFIType.u8], returns: FFIType.void },
   tge_clay_configure_sizing:    { args: [FFIType.u8, FFIType.f32, FFIType.u8, FFIType.f32], returns: FFIType.void },
+  tge_clay_configure_sizing_minmax: { args: [FFIType.u8, FFIType.f32, FFIType.f32, FFIType.f32, FFIType.u8, FFIType.f32, FFIType.f32, FFIType.f32], returns: FFIType.void },
   tge_clay_configure_rectangle: { args: [FFIType.u32, FFIType.f32], returns: FFIType.void },
   tge_clay_configure_border:    { args: [FFIType.u32, FFIType.u16], returns: FFIType.void },
+  tge_clay_configure_border_sides: { args: [FFIType.u32, FFIType.u16, FFIType.u16, FFIType.u16, FFIType.u16, FFIType.u16], returns: FFIType.void },
+  tge_clay_configure_floating:  { args: [FFIType.u8, FFIType.f32, FFIType.f32, FFIType.i16, FFIType.u8, FFIType.u8, FFIType.u8, FFIType.u32], returns: FFIType.void },
+  tge_clay_hash_string:         { args: [FFIType.ptr, FFIType.i32], returns: FFIType.u32 },
   tge_clay_text:                { args: [FFIType.ptr, FFIType.i32, FFIType.u32, FFIType.u16, FFIType.u16], returns: FFIType.void },
   tge_clay_configure_clip:      { args: [FFIType.u8, FFIType.u8, FFIType.f32, FFIType.f32], returns: FFIType.void },
   tge_clay_get_scroll_offset:   { args: [FFIType.ptr], returns: FFIType.void },
@@ -128,6 +133,32 @@ export const DIRECTION = {
 
 export const ALIGN_X = { LEFT: 0, RIGHT: 1, CENTER: 2 } as const
 export const ALIGN_Y = { TOP: 0, BOTTOM: 1, CENTER: 2 } as const
+
+// ── Floating attach modes ──
+
+export const ATTACH_TO = {
+  NONE: 0,
+  PARENT: 1,
+  ELEMENT: 2,
+  ROOT: 3,
+} as const
+
+export const ATTACH_POINT = {
+  LEFT_TOP: 0,
+  LEFT_CENTER: 1,
+  LEFT_BOTTOM: 2,
+  CENTER_TOP: 3,
+  CENTER_CENTER: 4,
+  CENTER_BOTTOM: 5,
+  RIGHT_TOP: 6,
+  RIGHT_CENTER: 7,
+  RIGHT_BOTTOM: 8,
+} as const
+
+export const POINTER_CAPTURE = {
+  CAPTURE: 0,
+  PASSTHROUGH: 1,
+} as const
 
 // ── Public API ──
 
@@ -221,9 +252,52 @@ export const clay = {
     getLib().symbols.tge_clay_configure_rectangle(color, radius)
   },
 
-  /** Configure border. Color is packed u32 RGBA. */
+  /** Configure border — uniform width on all sides. Color is packed u32 RGBA. */
   configureBorder(color: number, width: number) {
     getLib().symbols.tge_clay_configure_border(color, width)
+  },
+
+  /** Configure border — per-side widths. Color is packed u32 RGBA. */
+  configureBorderSides(color: number, left: number, right: number, top: number, bottom: number, betweenChildren = 0) {
+    getLib().symbols.tge_clay_configure_border_sides(color, left, right, top, bottom, betweenChildren)
+  },
+
+  /** Configure sizing with min/max constraints (for FIT and GROW modes). */
+  configureSizingMinMax(
+    widthType: number, widthValue: number, widthMin: number, widthMax: number,
+    heightType: number, heightValue: number, heightMin: number, heightMax: number,
+  ) {
+    getLib().symbols.tge_clay_configure_sizing_minmax(widthType, widthValue, widthMin, widthMax, heightType, heightValue, heightMin, heightMax)
+  },
+
+  /** Configure floating (position: absolute equivalent).
+   *  attachTo: ATTACH_TO.PARENT | ATTACH_TO.ROOT | ATTACH_TO.ELEMENT */
+  configureFloating(
+    attachTo: number,
+    offsetX = 0, offsetY = 0,
+    zIndex = 0,
+    attachPointElement = 0,
+    attachPointParent = 0,
+    pointerCapture = 0,
+    parentId = 0,
+  ) {
+    getLib().symbols.tge_clay_configure_floating(attachTo, offsetX, offsetY, zIndex, attachPointElement, attachPointParent, pointerCapture, parentId)
+  },
+
+  /** Hash a string to get a Clay element ID (for floating parentId). */
+  hashString(label: string): number {
+    const encoded = new TextEncoder().encode(label)
+    return getLib().symbols.tge_clay_hash_string(encoded, encoded.length) as number
+  },
+
+  /** Configure layout with per-side padding. */
+  configureLayoutFull(
+    direction = 0,
+    padLeft = 0, padRight = 0, padTop = 0, padBottom = 0,
+    childGap = 0,
+    alignX = 0, alignY = 0,
+  ) {
+    getLib().symbols.tge_clay_configure_layout_full(direction, padLeft, padRight, padTop, padBottom, childGap, alignX, alignY)
   },
 
   /** Add a text element (leaf node — opens and closes itself). */

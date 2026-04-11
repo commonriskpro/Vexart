@@ -184,7 +184,8 @@ void tge_clay_configure_layout(
     pending_config.layout.childAlignment = (Clay_ChildAlignment){ .x = align_x, .y = align_y };
 }
 
-/* Sizing: width + height with type */
+/* Sizing: width + height with type.
+ * For FIT/GROW, value is ignored (use configure_sizing_minmax for constraints). */
 void tge_clay_configure_sizing(
     uint8_t width_type,
     float width_value,
@@ -211,6 +212,32 @@ void tge_clay_configure_sizing(
     pending_config.layout.sizing.height = h;
 }
 
+/* Sizing with min/max constraints for FIT and GROW modes.
+ * Pass 0 for min to use default, pass a very large value (e.g. 100000) for no max. */
+void tge_clay_configure_sizing_minmax(
+    uint8_t width_type, float width_value, float width_min, float width_max,
+    uint8_t height_type, float height_value, float height_min, float height_max
+) {
+    Clay_SizingAxis w = {0};
+    Clay_SizingAxis h = {0};
+
+    switch (width_type) {
+        case 0: w.type = CLAY__SIZING_TYPE_FIT; w.size.minMax = (Clay_SizingMinMax){width_min, width_max}; break;
+        case 1: w.type = CLAY__SIZING_TYPE_GROW; w.size.minMax = (Clay_SizingMinMax){width_min, width_max}; break;
+        case 2: w.type = CLAY__SIZING_TYPE_PERCENT; w.size.percent = width_value; break;
+        case 3: w.type = CLAY__SIZING_TYPE_FIXED; w.size.minMax = (Clay_SizingMinMax){width_value, width_value}; break;
+    }
+    switch (height_type) {
+        case 0: h.type = CLAY__SIZING_TYPE_FIT; h.size.minMax = (Clay_SizingMinMax){height_min, height_max}; break;
+        case 1: h.type = CLAY__SIZING_TYPE_GROW; h.size.minMax = (Clay_SizingMinMax){height_min, height_max}; break;
+        case 2: h.type = CLAY__SIZING_TYPE_PERCENT; h.size.percent = height_value; break;
+        case 3: h.type = CLAY__SIZING_TYPE_FIXED; h.size.minMax = (Clay_SizingMinMax){height_value, height_value}; break;
+    }
+
+    pending_config.layout.sizing.width = w;
+    pending_config.layout.sizing.height = h;
+}
+
 /* Background color + corner radius */
 void tge_clay_configure_rectangle(uint32_t color_rgba, float radius) {
     pending_config.backgroundColor = (Clay_Color){
@@ -222,7 +249,7 @@ void tge_clay_configure_rectangle(uint32_t color_rgba, float radius) {
     pending_config.cornerRadius = (Clay_CornerRadius){ radius, radius, radius, radius };
 }
 
-/* Border */
+/* Border — uniform width on all sides */
 void tge_clay_configure_border(uint32_t color_rgba, uint16_t width_all) {
     pending_config.border.color = (Clay_Color){
         .r = (color_rgba >> 24) & 0xff,
@@ -231,6 +258,65 @@ void tge_clay_configure_border(uint32_t color_rgba, uint16_t width_all) {
         .a = color_rgba & 0xff,
     };
     pending_config.border.width = (Clay_BorderWidth){ width_all, width_all, width_all, width_all, width_all };
+}
+
+/* Border — per-side widths (left, right, top, bottom, betweenChildren) */
+void tge_clay_configure_border_sides(
+    uint32_t color_rgba,
+    uint16_t left, uint16_t right, uint16_t top, uint16_t bottom,
+    uint16_t between_children
+) {
+    pending_config.border.color = (Clay_Color){
+        .r = (color_rgba >> 24) & 0xff,
+        .g = (color_rgba >> 16) & 0xff,
+        .b = (color_rgba >> 8) & 0xff,
+        .a = color_rgba & 0xff,
+    };
+    pending_config.border.width = (Clay_BorderWidth){ left, right, top, bottom, between_children };
+}
+
+/* Floating — position: absolute/relative equivalent.
+ * attach_to: 0=none, 1=parent, 2=element_with_id, 3=root
+ * attach_point_element / attach_point_parent: 0-8 (3x3 grid, LT→RB)
+ * pointer_capture: 0=capture, 1=passthrough */
+void tge_clay_configure_floating(
+    uint8_t attach_to,
+    float offset_x, float offset_y,
+    int16_t z_index,
+    uint8_t attach_point_element,
+    uint8_t attach_point_parent,
+    uint8_t pointer_capture,
+    uint32_t parent_id
+) {
+    pending_config.floating.attachTo = (Clay_FloatingAttachToElement)attach_to;
+    pending_config.floating.offset = (Clay_Vector2){ offset_x, offset_y };
+    pending_config.floating.zIndex = z_index;
+    pending_config.floating.attachPoints = (Clay_FloatingAttachPoints){
+        .element = (Clay_FloatingAttachPointType)attach_point_element,
+        .parent = (Clay_FloatingAttachPointType)attach_point_parent,
+    };
+    pending_config.floating.pointerCaptureMode = (Clay_PointerCaptureMode)pointer_capture;
+    pending_config.floating.parentId = parent_id;
+}
+
+/* Get the hashed Clay ID for a string — used with floating parentId */
+uint32_t tge_clay_hash_string(const char *label, int length) {
+    Clay_String str = { .length = length, .chars = label };
+    Clay_ElementId id = Clay__HashString(str, 0);
+    return id.id;
+}
+
+/* Layout with per-side padding */
+void tge_clay_configure_layout_full(
+    uint8_t direction,
+    uint16_t pad_left, uint16_t pad_right, uint16_t pad_top, uint16_t pad_bottom,
+    uint16_t child_gap,
+    uint8_t align_x, uint8_t align_y
+) {
+    pending_config.layout.layoutDirection = direction;
+    pending_config.layout.padding = (Clay_Padding){ .left = pad_left, .right = pad_right, .top = pad_top, .bottom = pad_bottom };
+    pending_config.layout.childGap = child_gap;
+    pending_config.layout.childAlignment = (Clay_ChildAlignment){ .x = align_x, .y = align_y };
 }
 
 /* Text element — opens AND closes (leaf node) */

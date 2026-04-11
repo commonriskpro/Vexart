@@ -55,6 +55,8 @@ export type CodeProps = {
   padding?: number
   /** Show line numbers. Default: false */
   lineNumbers?: boolean
+  /** Streaming mode — debounces highlighting for rapid content updates (e.g. AI responses). */
+  streaming?: boolean
 }
 
 export function Code(props: CodeProps) {
@@ -68,28 +70,42 @@ export function Code(props: CodeProps) {
   const showLineNumbers = () => props.lineNumbers ?? false
 
   // Highlight content asynchronously via worker
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null
   createEffect(() => {
     const content = props.content
     const language = props.language
     const style = props.syntaxStyle
+    const isStreaming = props.streaming ?? false
 
     // Immediate fallback — show unhighlighted text
     const fallback = content.split("\n").map((line) => [{ text: line, color: style.getDefaultColor() }])
     setTokens(fallback)
     setReady(true)
 
-    // Async highlight
-    const client = getTreeSitterClient()
+    // Async highlight — debounced in streaming mode
     let cancelled = false
+    const doHighlight = () => {
+      const client = getTreeSitterClient()
+      client.highlightOnce(content, language).then((highlights) => {
+        if (cancelled) return
+        const result = highlightsToTokens(content, highlights, style)
+        setTokens(result)
+        markDirty()
+      })
+    }
 
-    client.highlightOnce(content, language).then((highlights) => {
-      if (cancelled) return
-      const result = highlightsToTokens(content, highlights, style)
-      setTokens(result)
-      markDirty()
+    if (isStreaming) {
+      // Debounce: only highlight when content stops changing for 150ms
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(doHighlight, 150)
+    } else {
+      doHighlight()
+    }
+
+    onCleanup(() => {
+      cancelled = true
+      if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null }
     })
-
-    onCleanup(() => { cancelled = true })
   })
 
   // Line number gutter width

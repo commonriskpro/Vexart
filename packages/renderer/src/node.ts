@@ -42,6 +42,32 @@ export type TGEProps = {
   scrollSpeed?: number  // Lines per scroll tick (default: natural accumulation)
   scrollId?: string  // Stable Clay ID for scroll container (set by ScrollView for programmatic control)
 
+  // Floating / Absolute positioning
+  floating?: "parent" | "root" | { attachTo: string }  // Enable floating: relative to parent, root, or named element
+  floatOffset?: { x: number; y: number }               // Pixel offset from attach point
+  zIndex?: number                                        // Z-order for floating elements
+  floatAttach?: { element?: number; parent?: number }    // Attach point (0-8, 3x3 grid)
+  pointerPassthrough?: boolean                           // Allow pointer events to pass through
+
+  // Sizing constraints
+  minWidth?: number
+  maxWidth?: number
+  minHeight?: number
+  maxHeight?: number
+
+  // Per-side padding
+  paddingLeft?: number
+  paddingRight?: number
+  paddingTop?: number
+  paddingBottom?: number
+
+  // Per-side borders
+  borderLeft?: number
+  borderRight?: number
+  borderTop?: number
+  borderBottom?: number
+  borderBetweenChildren?: number
+
   // Effects
   shadow?: {           // Drop shadow — painted BEFORE the rect
     x: number          // Horizontal offset (px)

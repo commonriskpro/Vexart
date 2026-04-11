@@ -60,6 +60,8 @@ export type MarkdownProps = {
   color?: number
   /** Width. Default: 100% */
   width?: number | string
+  /** Streaming mode — re-parses on every content change. When false, memoizes parsed tokens. */
+  streaming?: boolean
 }
 
 // ── Inline span type ──
@@ -242,6 +244,7 @@ function renderToken(
             width="100%"
             cornerRadius={6}
             padding={10}
+            streaming={props.streaming}
           />
         </box>
       )
