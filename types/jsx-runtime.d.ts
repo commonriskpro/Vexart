@@ -1,32 +1,15 @@
 /**
  * TGE JSX runtime type declarations.
  *
- * When tsconfig has jsxImportSource: "tge", TypeScript looks for
- * tge/jsx-runtime to resolve JSX types. This file re-exports
- * SolidJS's JSX namespace with TGE's intrinsic elements.
+ * When tsconfig has jsxImportSource: "tge", TypeScript resolves
+ * JSX types from tge/jsx-runtime. This file declares the JSX
+ * namespace with TGE's intrinsic elements (<box>, <text>).
  */
 
-export * from "solid-js/types/jsx"
-
-type Children = JSX.Element | JSX.Element[] | string | number | boolean | null | undefined
-
-type RefCallback = (handle: import("./tge").NodeHandle) => void
-
-interface ShadowConfig {
-  x: number
-  y: number
-  blur: number
-  color: number
-}
-
-interface GlowConfig {
-  radius: number
-  color: number
-  intensity?: number
-}
+type Children = any
 
 interface BoxProps {
-  ref?: RefCallback
+  ref?: (handle: any) => void
   direction?: "row" | "column"
   padding?: number
   paddingX?: number
@@ -63,13 +46,13 @@ interface BoxProps {
   zIndex?: number
   floatAttach?: { element?: number; parent?: number }
   pointerPassthrough?: boolean
-  shadow?: ShadowConfig
-  glow?: GlowConfig
+  shadow?: { x: number; y: number; blur: number; color: number }
+  glow?: { radius: number; color: number; intensity?: number }
   children?: Children
 }
 
 interface TextProps {
-  ref?: RefCallback
+  ref?: (handle: any) => void
   color?: string | number
   fontSize?: number
   fontId?: number
@@ -82,13 +65,15 @@ interface TextProps {
   children?: Children
 }
 
-declare module "solid-js" {
-  namespace JSX {
-    interface IntrinsicElements {
-      box: BoxProps
-      text: TextProps
-    }
+export namespace JSX {
+  type Element = any
+  interface ElementChildrenAttribute { children: {} }
+  interface IntrinsicElements {
+    box: BoxProps
+    text: TextProps
   }
 }
 
-export {}
+export function jsx(type: any, props: any): any
+export function jsxs(type: any, props: any): any
+export function jsxDEV(type: any, props: any): any
