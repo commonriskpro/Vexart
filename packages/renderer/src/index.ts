@@ -27,6 +27,7 @@ import { createRenderLoop } from "./loop"
 import { render as solidRender } from "./reconciler"
 import { dispatchInput } from "./input"
 import { resetFocus } from "./focus"
+import { resetSelection } from "./selection"
 
 export type { RenderLoop, RenderLoopOptions } from "./loop"
 export { createRenderLoop } from "./loop"
@@ -59,15 +60,27 @@ export { useKeyboard, useMouse, useInput, onInput } from "./input"
 export type { KeyboardState, MouseState } from "./input"
 
 // Re-export focus system
-export { useFocus, setFocus } from "./focus"
+export { useFocus, setFocus, focusedId } from "./focus"
 export type { FocusHandle } from "./focus"
 
 // Re-export dirty flag for advanced use
 export { markDirty } from "./dirty"
 
+// Re-export ref handle system
+export type { NodeHandle } from "./handle"
+export { createHandle } from "./handle"
+
 // Re-export text layout system
 export { registerFont, getFont, clearTextCache } from "./text-layout"
 export type { FontDescriptor } from "./text-layout"
+
+// Re-export scroll system
+export type { ScrollHandle } from "./scroll"
+export { createScrollHandle, resetScrollHandles } from "./scroll"
+
+// Re-export selection system
+export type { TextSelection } from "./selection"
+export { getSelection, getSelectedText, setSelection, clearSelection, selectionSignal } from "./selection"
 
 /**
  * Mount a SolidJS component tree onto the terminal.
@@ -88,7 +101,18 @@ export type MountOptions = {
   selectableText?: boolean
 }
 
-export function mount(component: () => any, terminal: Terminal, opts?: MountOptions): () => void {
+export type MountHandle = {
+  /** Suspend rendering — restore terminal for external process ($EDITOR). */
+  suspend: () => void
+  /** Resume rendering after suspend — re-enter TGE mode, full repaint. */
+  resume: () => void
+  /** Whether the renderer is currently suspended. */
+  suspended: () => boolean
+  /** Destroy everything — terminal, loop, SolidJS tree. */
+  destroy: () => void
+}
+
+export function mount(component: () => any, terminal: Terminal, opts?: MountOptions): MountHandle {
   const loop = createRenderLoop(terminal, { selectableText: opts?.selectableText })
 
   // SolidJS render mounts the component tree into the root TGENode
@@ -99,6 +123,7 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
   const cellW = terminal.size.cellWidth || 8
   const cellH = terminal.size.cellHeight || 16
   const parser = createParser((event) => {
+    if (loop.suspended()) return
     dispatchInput(event)
     if (event.type === "mouse") {
       // Feed pointer position (convert cells to pixels)
@@ -116,11 +141,17 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
   // Start the render loop (30fps, only repaints when dirty)
   loop.start()
 
-  return () => {
-    unsubData()
-    parser.destroy()
-    resetFocus()
-    dispose()
-    loop.destroy()
+  return {
+    suspend: () => loop.suspend(),
+    resume: () => loop.resume(),
+    suspended: () => loop.suspended(),
+    destroy: () => {
+      unsubData()
+      parser.destroy()
+      resetFocus()
+      resetSelection()
+      dispose()
+      loop.destroy()
+    },
   }
 }

@@ -220,3 +220,41 @@ describe("parseAlignY", () => {
     expect(parseAlignY(undefined)).toBe(ALIGN_Y.TOP)
   })
 })
+
+describe("node id and lifecycle", () => {
+  test("each node gets a unique id", () => {
+    const a = createNode("box")
+    const b = createNode("box")
+    const c = createNode("text")
+    expect(a.id).not.toBe(b.id)
+    expect(b.id).not.toBe(c.id)
+  })
+
+  test("node starts as not destroyed", () => {
+    const node = createNode("box")
+    expect(node.destroyed).toBe(false)
+  })
+
+  test("removeChild marks node as destroyed", () => {
+    const parent = createNode("box")
+    const child = createNode("box")
+    insertChild(parent, child)
+    expect(child.destroyed).toBe(false)
+    removeChild(parent, child)
+    expect(child.destroyed).toBe(true)
+  })
+
+  test("node has default layout rect", () => {
+    const node = createNode("box")
+    expect(node.layout).toEqual({ x: 0, y: 0, width: 0, height: 0 })
+  })
+
+  test("layout rect is mutable", () => {
+    const node = createNode("box")
+    node.layout.x = 10
+    node.layout.y = 20
+    node.layout.width = 100
+    node.layout.height = 50
+    expect(node.layout).toEqual({ x: 10, y: 20, width: 100, height: 50 })
+  })
+})

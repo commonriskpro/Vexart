@@ -25,7 +25,7 @@ type FocusEntry = {
 }
 
 const registry: FocusEntry[] = []
-const [focusedId, setFocusedId] = createSignal<string | null>(null)
+export const [focusedId, setFocusedId] = createSignal<string | null>(null)
 
 /** Register a focusable element. Returns unregister function. */
 function registerFocusable(entry: FocusEntry): () => void {

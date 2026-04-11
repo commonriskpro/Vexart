@@ -391,3 +391,62 @@ void tge_clay_set_pointer(float x, float y, int pressed) {
 void tge_clay_update_scroll(float dx, float dy, float dt) {
     Clay_UpdateScrollContainers(false, (Clay_Vector2){dx, dy}, dt);
 }
+
+/* ── Scroll container data readback ──
+ *
+ * Returns scroll position, viewport dimensions, and content dimensions
+ * for a scroll container identified by its string ID.
+ *
+ * out[0] = scrollPosition.x
+ * out[1] = scrollPosition.y
+ * out[2] = viewport width  (scrollContainerDimensions.width)
+ * out[3] = viewport height (scrollContainerDimensions.height)
+ * out[4] = content width   (contentDimensions.width)
+ * out[5] = content height  (contentDimensions.height)
+ * out[6] = found (1.0 or 0.0)
+ */
+void tge_clay_get_scroll_container_data(const char *label, int length, float *out) {
+    Clay_String str = { .length = length, .chars = label };
+    Clay_ElementId id = Clay__HashString(str, 0);
+    Clay_ScrollContainerData data = Clay_GetScrollContainerData(id);
+    if (data.found && data.scrollPosition) {
+        out[0] = data.scrollPosition->x;
+        out[1] = data.scrollPosition->y;
+        out[2] = data.scrollContainerDimensions.width;
+        out[3] = data.scrollContainerDimensions.height;
+        out[4] = data.contentDimensions.width;
+        out[5] = data.contentDimensions.height;
+        out[6] = 1.0f;
+    } else {
+        for (int i = 0; i < 7; i++) out[i] = 0.0f;
+    }
+}
+
+/* Set the scroll position of a scroll container by its string ID.
+ * This directly mutates Clay's internal scroll state. */
+void tge_clay_set_scroll_position(const char *label, int length, float x, float y) {
+    Clay_String str = { .length = length, .chars = label };
+    Clay_ElementId id = Clay__HashString(str, 0);
+    Clay_ScrollContainerData data = Clay_GetScrollContainerData(id);
+    if (data.found && data.scrollPosition) {
+        data.scrollPosition->x = x;
+        data.scrollPosition->y = y;
+    }
+}
+
+/* Get the bounding box of any element by its string ID.
+ * out[0] = x, out[1] = y, out[2] = width, out[3] = height, out[4] = found */
+void tge_clay_get_element_data(const char *label, int length, float *out) {
+    Clay_String str = { .length = length, .chars = label };
+    Clay_ElementId id = Clay__HashString(str, 0);
+    Clay_ElementData data = Clay_GetElementData(id);
+    if (data.found) {
+        out[0] = data.boundingBox.x;
+        out[1] = data.boundingBox.y;
+        out[2] = data.boundingBox.width;
+        out[3] = data.boundingBox.height;
+        out[4] = 1.0f;
+    } else {
+        for (int i = 0; i < 5; i++) out[i] = 0.0f;
+    }
+}

@@ -9,20 +9,26 @@
  */
 
 import type { TGEProps } from "./node"
+import type { NodeHandle } from "./handle"
 
 type Children = JSX.Element | JSX.Element[] | string | number | boolean | null | undefined
 
+type RefCallback = (handle: NodeHandle) => void
+
 type BoxProps = TGEProps & {
+  ref?: RefCallback
   layer?: boolean
   scrollX?: boolean
   scrollY?: boolean
   scrollSpeed?: number
+  scrollId?: string
   shadow?: { x: number; y: number; blur: number; color: number }
   glow?: { radius: number; color: number; intensity?: number }
   children?: Children
 }
 
 type TextProps = {
+  ref?: RefCallback
   color?: string | number
   fontSize?: number
   fontId?: number

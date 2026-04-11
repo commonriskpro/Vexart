@@ -348,7 +348,7 @@ async function main() {
   onInput((event) => {
     if (event.type === "key") {
       if (event.key === "q" || (event.key === "c" && event.mods.ctrl)) {
-        cleanup()
+        cleanup.destroy()
         term.destroy()
         process.exit(0)
       }

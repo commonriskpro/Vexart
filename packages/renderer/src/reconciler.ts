@@ -19,6 +19,7 @@ import {
   parseColor,
 } from "./node"
 import { markDirty } from "./dirty"
+import { createHandle } from "./handle"
 
 export const {
   render,
@@ -49,6 +50,11 @@ export const {
   },
 
   setProperty(node: TGENode, name: string, value: unknown) {
+    // ref callback — pass a NodeHandle to the user
+    if (name === "ref" && typeof value === "function") {
+      (value as (handle: ReturnType<typeof createHandle>) => void)(createHandle(node))
+      return
+    }
     (node.props as Record<string, unknown>)[name] = value
     markDirty()
   },

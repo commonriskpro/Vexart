@@ -92,7 +92,7 @@ async function main() {
   const parser = createParser((event) => {
     if (event.type === "key" && (event.key === "q" || (event.key === "c" && event.mods.ctrl))) {
       parser.destroy()
-      cleanup()
+      cleanup.destroy()
       term.destroy()
       process.exit(0)
     }

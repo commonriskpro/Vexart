@@ -40,6 +40,7 @@ export type TGEProps = {
   scrollX?: boolean  // Enable horizontal scroll clipping
   scrollY?: boolean  // Enable vertical scroll clipping
   scrollSpeed?: number  // Lines per scroll tick (default: natural accumulation)
+  scrollId?: string  // Stable Clay ID for scroll container (set by ScrollView for programmatic control)
 
   // Effects
   shadow?: {           // Drop shadow — painted BEFORE the rect
@@ -72,7 +73,23 @@ export type TGENode = {
   text: string          // for text nodes
   children: TGENode[]
   parent: TGENode | null
+  /** Stable unique identifier for this node */
+  id: number
+  /** Whether this node has been removed from the tree */
+  destroyed: boolean
+  /** Computed layout rect — written after Clay layout pass */
+  layout: LayoutRect
 }
+
+/** Computed layout geometry from Clay — written each frame after layout */
+export type LayoutRect = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+let nextNodeId = 1
 
 export function createNode(kind: TGENodeKind): TGENode {
   return {
@@ -81,6 +98,9 @@ export function createNode(kind: TGENodeKind): TGENode {
     text: "",
     children: [],
     parent: null,
+    id: nextNodeId++,
+    destroyed: false,
+    layout: { x: 0, y: 0, width: 0, height: 0 },
   }
 }
 
@@ -106,6 +126,7 @@ export function removeChild(parent: TGENode, child: TGENode) {
   const idx = parent.children.indexOf(child)
   if (idx >= 0) parent.children.splice(idx, 1)
   child.parent = null
+  child.destroyed = true
 }
 
 // ── Color parsing ──

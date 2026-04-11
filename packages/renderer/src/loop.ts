@@ -109,6 +109,12 @@ export type RenderLoop = {
   feedScroll: (dx: number, dy: number) => void
   /** Feed mouse pointer position */
   feedPointer: (x: number, y: number, down: boolean) => void
+  /** Suspend rendering — stop loop, restore terminal for external process ($EDITOR) */
+  suspend: () => void
+  /** Resume rendering — re-enter TGE mode, force full repaint */
+  resume: () => void
+  /** Whether the loop is currently suspended */
+  suspended: () => boolean
   /** Destroy everything */
   destroy: () => void
 }
@@ -153,6 +159,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   let fallbackBuf = !useLayerCompositing ? create(pw, ph) : null
 
   let timer: ReturnType<typeof setInterval> | null = null
+  let isSuspended = false
 
   // ── Scroll + pointer state ──
   // Accumulates scroll deltas from input events between frames.
@@ -222,6 +229,13 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
   const textMetas: TextMeta[] = []
 
+  /** Nodes that emit a RECT command, in walkTree order. Used to write layout back. */
+  const rectNodes: TGENode[] = []
+  /** Nodes that emit a TEXT command, in walkTree order. */
+  const textNodes: TGENode[] = []
+  /** ALL box nodes in walkTree order (open/close pairs = Clay element order). */
+  const boxNodes: TGENode[] = []
+
   function walkTree(node: TGENode) {
     if (node.kind === "text") {
       const content = node.text || collectText(node)
@@ -242,12 +256,15 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       textMetaMap.set(content, meta)
 
       clay.text(content, color, fontId, fontSize)
+      textNodes.push(node)
       return
     }
 
+    boxNodes.push(node)
+
     // Scroll containers need a stable Clay ID for scroll offset tracking
     if (node.props.scrollX || node.props.scrollY) {
-      const sid = `tge-scroll-${scrollIdCounter++}`
+      const sid = node.props.scrollId ?? `tge-scroll-${scrollIdCounter++}`
       clay.setId(sid)
       if (node.props.scrollSpeed) {
         scrollSpeedCap = node.props.scrollSpeed
@@ -272,6 +289,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       const bgColor = parseColor(node.props.backgroundColor)
       const cr = node.props.cornerRadius ?? 0
       clay.configureRectangle(bgColor, cr)
+      rectNodes.push(node)
 
       // Record effects for this RECT — matched during paint
       if (node.props.shadow || node.props.glow) {
@@ -594,6 +612,46 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     return result
   }
 
+  // ── Layout writeback ──
+
+  /**
+   * After Clay layout, write computed geometry back to TGENodes.
+   *
+   * RECT commands map 1:1 with rectNodes (same order as walkTree).
+   * TEXT commands map 1:1 with textNodes (same order as walkTree).
+   * Box nodes without backgroundColor also get layout from the
+   * first command that spatially contains them (approximation).
+   */
+  function writeLayoutBack(commands: RenderCommand[]) {
+    let rectIdx = 0
+    let textIdx = 0
+
+    for (const cmd of commands) {
+      if (cmd.type === CMD.RECTANGLE && rectIdx < rectNodes.length) {
+        const node = rectNodes[rectIdx]
+        node.layout.x = cmd.x
+        node.layout.y = cmd.y
+        node.layout.width = cmd.width
+        node.layout.height = cmd.height
+        rectIdx++
+      } else if (cmd.type === CMD.TEXT && textIdx < textNodes.length) {
+        const node = textNodes[textIdx]
+        node.layout.x = cmd.x
+        node.layout.y = cmd.y
+        node.layout.width = cmd.width
+        node.layout.height = cmd.height
+        textIdx++
+      }
+    }
+
+    // For box nodes that had backgroundColor, layout was already written via RECT.
+    // For box nodes WITHOUT backgroundColor, attempt to inherit from their first
+    // child's command position. This is an approximation — full accuracy would
+    // require Clay to expose per-element layout (which it doesn't via commands).
+    // NOTE: This is a best-effort. Nodes with no background and no children
+    // will have layout { 0, 0, 0, 0 } until a more precise approach is added.
+  }
+
   // ── Frame rendering ──
 
   /** Paint a single frame with layer compositing. */
@@ -628,9 +686,15 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     textMetas.length = 0 // clear text metadata
     textMetaMap.clear()
     clay.resetTextMeasures() // reset C-side counter
+    rectNodes.length = 0
+    textNodes.length = 0
+    boxNodes.length = 0
     clay.beginLayout()
     walkTree(root)
     const commands = clay.endLayout()
+
+    // Write layout geometry back to TGENodes for ref access
+    writeLayoutBack(commands)
 
     if (commands.length === 0) {
       clearDirty()
@@ -776,10 +840,15 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     textMeasureIndex = 0
     textMetas.length = 0
     textMetaMap.clear()
+    rectNodes.length = 0
+    textNodes.length = 0
+    boxNodes.length = 0
     clay.resetTextMeasures()
     clay.beginLayout()
     walkTree(root)
     const commands = clay.endLayout()
+
+    writeLayoutBack(commands)
 
     for (const cmd of commands) {
       paintCommand(fallbackBuf, cmd, 0, 0)
@@ -844,6 +913,37 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     },
 
     frame,
+
+    suspend() {
+      if (isSuspended) return
+      isSuspended = true
+      // Stop the render loop first
+      if (timer) {
+        clearInterval(timer)
+        timer = null
+      }
+      // Restore terminal (alt screen, cursor, mouse, etc.)
+      term.suspend()
+    },
+
+    resume() {
+      if (!isSuspended) return
+      isSuspended = false
+      // Re-enter TGE mode
+      term.resume()
+      // Force full repaint — all layers dirty, all buffers stale
+      markDirty()
+      markAllDirty()
+      // Restart the render loop
+      frame()
+      timer = setInterval(() => {
+        if (isDirty()) frame()
+      }, 33)
+    },
+
+    suspended() {
+      return isSuspended
+    },
 
     destroy() {
       if (timer) clearInterval(timer)

@@ -50,6 +50,14 @@ export type Terminal = {
   fgColor: [number, number, number] | null
   /** Whether terminal background is dark */
   isDark: boolean
+  /** Set the terminal window title via OSC 2 */
+  setTitle: (title: string) => void
+  /** Write text to system clipboard via OSC 52 */
+  writeClipboard: (text: string) => void
+  /** Suspend TGE mode — restore terminal for external process ($EDITOR). Call resume() to re-enter. */
+  suspend: () => void
+  /** Resume TGE mode after suspend — re-enter raw mode, alt screen, mouse, etc. */
+  resume: () => void
   /** Destroy the terminal — restore original state, remove handlers */
   destroy: () => void
 }
@@ -201,6 +209,19 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
     bgColor,
     fgColor,
     isDark,
+    setTitle: (title: string) => { rawWrite(`\x1b]2;${title}\x07`) },
+    writeClipboard: (text: string) => {
+      const encoded = Buffer.from(text, "utf-8").toString("base64")
+      rawWrite(`\x1b]52;c;${encoded}\x07`)
+    },
+    suspend: () => {
+      leave(stdin, rawWrite, caps, lifecycleState)
+    },
+    resume: () => {
+      // Re-enter TGE mode (enter() is safe to call — just re-sends escape sequences)
+      const newState = enter(stdin, rawWrite, caps)
+      lifecycleState.active = newState.active
+    },
     destroy: () => {
       unsubResize()
       removeExitHandlers()

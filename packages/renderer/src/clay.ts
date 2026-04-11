@@ -53,6 +53,9 @@ const DEFS = {
   tge_clay_update_scroll:       { args: [FFIType.f32, FFIType.f32, FFIType.f32], returns: FFIType.void },
   tge_clay_reset_text_measures: { args: [], returns: FFIType.void },
   tge_clay_set_text_measure:    { args: [FFIType.i32, FFIType.f32, FFIType.f32], returns: FFIType.void },
+  tge_clay_get_scroll_container_data: { args: [FFIType.ptr, FFIType.i32, FFIType.ptr], returns: FFIType.void },
+  tge_clay_set_scroll_position: { args: [FFIType.ptr, FFIType.i32, FFIType.f32, FFIType.f32], returns: FFIType.void },
+  tge_clay_get_element_data:    { args: [FFIType.ptr, FFIType.i32, FFIType.ptr], returns: FFIType.void },
 } as const
 
 let lib: ReturnType<typeof dlopen<typeof DEFS>> | null = null
@@ -95,6 +98,8 @@ const MAX_COMMANDS = 2048
 const cmdBuffer = new Float32Array(MAX_COMMANDS * CMD_STRIDE)
 const textBuffer = new Uint8Array(4096)
 const scrollOffsetBuf = new Float32Array(2)
+const scrollDataBuf = new Float32Array(7)
+const elementDataBuf = new Float32Array(5)
 
 // ── Sizing types ──
 
@@ -256,5 +261,47 @@ export const clay = {
   /** Pre-register a text measurement for Clay's callback. */
   setTextMeasure(index: number, width: number, height: number) {
     getLib().symbols.tge_clay_set_text_measure(index, width, height)
+  },
+
+  /**
+   * Get scroll container data by string ID.
+   * Returns scrollPosition, viewport dimensions, content dimensions.
+   */
+  getScrollContainerData(label: string): {
+    scrollX: number; scrollY: number
+    viewportWidth: number; viewportHeight: number
+    contentWidth: number; contentHeight: number
+    found: boolean
+  } {
+    const encoded = new TextEncoder().encode(label)
+    getLib().symbols.tge_clay_get_scroll_container_data(encoded, encoded.length, scrollDataBuf)
+    return {
+      scrollX: scrollDataBuf[0],
+      scrollY: scrollDataBuf[1],
+      viewportWidth: scrollDataBuf[2],
+      viewportHeight: scrollDataBuf[3],
+      contentWidth: scrollDataBuf[4],
+      contentHeight: scrollDataBuf[5],
+      found: scrollDataBuf[6] > 0.5,
+    }
+  },
+
+  /** Set scroll position of a scroll container by string ID. */
+  setScrollPosition(label: string, x: number, y: number) {
+    const encoded = new TextEncoder().encode(label)
+    getLib().symbols.tge_clay_set_scroll_position(encoded, encoded.length, x, y)
+  },
+
+  /** Get the bounding box of any element by string ID. */
+  getElementData(label: string): { x: number; y: number; width: number; height: number; found: boolean } {
+    const encoded = new TextEncoder().encode(label)
+    getLib().symbols.tge_clay_get_element_data(encoded, encoded.length, elementDataBuf)
+    return {
+      x: elementDataBuf[0],
+      y: elementDataBuf[1],
+      width: elementDataBuf[2],
+      height: elementDataBuf[3],
+      found: elementDataBuf[4] > 0.5,
+    }
   },
 }
