@@ -28,7 +28,7 @@ import { render as solidRender } from "./reconciler"
 import { dispatchInput } from "./input"
 import { resetFocus } from "./focus"
 
-export type { RenderLoop } from "./loop"
+export type { RenderLoop, RenderLoopOptions } from "./loop"
 export { createRenderLoop } from "./loop"
 
 // Re-export SolidJS control flow
@@ -83,8 +83,13 @@ export type { FontDescriptor } from "./text-layout"
  *
  * Returns a cleanup function that tears down everything.
  */
-export function mount(component: () => any, terminal: Terminal): () => void {
-  const loop = createRenderLoop(terminal)
+export type MountOptions = {
+  /** Render text as ANSI (selectable/copiable) instead of bitmap pixels. */
+  selectableText?: boolean
+}
+
+export function mount(component: () => any, terminal: Terminal, opts?: MountOptions): () => void {
+  const loop = createRenderLoop(terminal, { selectableText: opts?.selectableText })
 
   // SolidJS render mounts the component tree into the root TGENode
   const dispose = solidRender(component, loop.root)

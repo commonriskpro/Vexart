@@ -26,7 +26,8 @@
     "demo9": "bun --conditions=browser run examples/effects.tsx",
     "demo10": "bun --conditions=browser run examples/input.tsx",
     "demo11": "bun --conditions=browser run examples/text-wrap.tsx",
-    "ztest": "bun run examples/zindex-test.ts"
+    "ztest": "bun run examples/zindex-test.ts",
+    "demo12": "bun --conditions=browser run examples/selectable.tsx"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",

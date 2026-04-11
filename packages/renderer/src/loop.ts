@@ -59,6 +59,22 @@ function log(msg: string) {
 type TextMeta = { content: string; fontId: number; fontSize: number; lineHeight: number }
 const textMetaMap = new Map<string, TextMeta>()
 
+// ── Selectable text collection ──
+// In selectableText mode, CMD.TEXT is skipped during pixel paint.
+// Instead, text commands are collected here and emitted as ANSI after rendering.
+type AnsiTextCommand = {
+  text: string
+  x: number          // pixel x
+  y: number          // pixel y
+  r: number; g: number; b: number; a: number  // color components
+  lineHeight: number
+  maxWidth: number
+  fontId: number
+}
+let pendingAnsiTexts: AnsiTextCommand[] = []
+/** Module-level flag set by createRenderLoop when selectableText is active. */
+let selectableTextMode = false
+
 // ── Effect metadata ──
 // During walkTree, we record shadow/glow configs for nodes with backgroundColor.
 // After Clay layout, we match RECT commands to these configs by color+radius
@@ -73,6 +89,12 @@ type EffectConfig = {
 
 /** Effects queue — populated during walkTree, consumed during paintCommand. */
 let effectsQueue: EffectConfig[] = []
+
+export type RenderLoopOptions = {
+  /** When true, text is rendered as ANSI escape codes (selectable/copiable)
+   *  instead of bitmap pixels. Backgrounds render as images at z=-1. */
+  selectableText?: boolean
+}
 
 export type RenderLoop = {
   /** The root TGENode — SolidJS mounts here */
@@ -106,7 +128,9 @@ type LayerSlot = {
   cmdIndices: number[]
 }
 
-export function createRenderLoop(term: Terminal): RenderLoop {
+export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): RenderLoop {
+  const selectableText = opts?.selectableText ?? false
+  selectableTextMode = selectableText
   const root = createNode("root")
 
   // Initialize Clay with pixel dimensions
@@ -599,6 +623,7 @@ export function createRenderLoop(term: Terminal): RenderLoop {
     // 1. Walk tree into Clay (first pass — feeds Clay, no counting)
     scrollSpeedCap = 0 // reset — will be set by walkTree if any node has scrollSpeed
     effectsQueue = [] // reset effects for this frame
+    pendingAnsiTexts = [] // reset ANSI text collection
     textMeasureIndex = 0 // reset text measure counter
     textMetas.length = 0 // clear text metadata
     textMetaMap.clear()
@@ -701,8 +726,10 @@ export function createRenderLoop(term: Terminal): RenderLoop {
 
         const changed = layer.dirty || !buffersEqual(prev, layer.buf.data)
         if (changed) {
-          log(`  [${slot.key}] REPAINT ${lw}x${lh} at (${lx},${ly}) z=${layer.z} (${(lw * lh * 4 / 1024).toFixed(0)}KB) cmds=${slot.cmdIndices.length}`)
-          layerComposer!.renderLayer(layer.buf, imageIdForLayer(layer), lx, ly, layer.z, cellW, cellH)
+          // In selectableText mode, force ALL layers to z=-1 so they render UNDER ANSI text
+          const renderZ = selectableText ? -1 : layer.z
+          log(`  [${slot.key}] REPAINT ${lw}x${lh} at (${lx},${ly}) z=${renderZ} (${(lw * lh * 4 / 1024).toFixed(0)}KB) cmds=${slot.cmdIndices.length}`)
+          layerComposer!.renderLayer(layer.buf, imageIdForLayer(layer), lx, ly, renderZ, cellW, cellH)
           markLayerClean(layer)
         } else {
           log(`  [${slot.key}] SKIP (unchanged)`)
@@ -718,6 +745,11 @@ export function createRenderLoop(term: Terminal): RenderLoop {
         layerComposer!.removeLayer(imageIdForLayer(layer))
         layerCache.delete(key)
       }
+    }
+
+    // 5. Emit ANSI text in selectableText mode
+    if (selectableText && pendingAnsiTexts.length > 0) {
+      emitAnsiText(term, pendingAnsiTexts, cellW, cellH)
     }
 
     term.endSync()
@@ -907,6 +939,41 @@ function clipToScissor(
 }
 
 /**
+ * Emit collected text commands as ANSI escape codes.
+ * Converts pixel coordinates to terminal cell positions and writes
+ * colored text at those positions. Called in selectableText mode
+ * after all pixel layers have been rendered.
+ */
+function emitAnsiText(
+  term: Terminal,
+  texts: AnsiTextCommand[],
+  cellW: number,
+  cellH: number,
+) {
+  for (const t of texts) {
+    // Convert pixel coords to cell (1-indexed for ANSI)
+    const col = Math.floor(t.x / cellW) + 1
+    const row = Math.floor(t.y / cellH) + 1
+
+    // Word wrap using atlas metrics
+    const result = layoutText(t.text, t.fontId, t.maxWidth, t.lineHeight)
+
+    for (let li = 0; li < result.lines.length; li++) {
+      const line = result.lines[li]
+      const lineRow = row + li
+      // Move cursor to position
+      term.write(`\x1b[${lineRow};${col}H`)
+      // Set foreground color (24-bit true color)
+      term.write(`\x1b[38;2;${t.r};${t.g};${t.b}m`)
+      // Write the text
+      term.write(line.text)
+    }
+  }
+  // Reset color
+  term.write("\x1b[39m")
+}
+
+/**
  * Paint a Clay RenderCommand into a pixel buffer.
  * offsetX/offsetY translate from absolute screen coords to local buffer coords.
  * Respects active scissor rect for clipping.
@@ -1030,23 +1097,32 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
     case CMD.TEXT: {
       if (!cmd.text) break
       const meta = textMetaMap.get(cmd.text)
-      if (!meta) {
-        // Fallback: single-line paint (no metadata available)
-        paint.drawText(buf, x, y, cmd.text, r, g, b, a)
+      const fontId = meta?.fontId ?? 0
+      const lineHeight = meta?.lineHeight ?? 17
+
+      if (selectableTextMode) {
+        // Collect for ANSI rendering — use ABSOLUTE coordinates (add offset back)
+        pendingAnsiTexts.push({
+          text: cmd.text,
+          x: x + offsetX,
+          y: y + offsetY,
+          r, g, b, a,
+          lineHeight,
+          maxWidth: Math.max(w, 1),
+          fontId,
+        })
         break
       }
 
-      // Use Pretext to lay out text into lines within the bounding box
+      // Pixel paint mode — render bitmap text
       const maxTextWidth = Math.max(w, 1)
-      const result = layoutText(cmd.text, meta.fontId, maxTextWidth, meta.lineHeight)
+      const result = layoutText(cmd.text, fontId, maxTextWidth, lineHeight)
       if (result.lines.length <= 1) {
-        // Single line — paint directly (common fast path)
         paint.drawText(buf, x, y, cmd.text, r, g, b, a)
       } else {
-        // Multi-line — paint each line at its vertical offset
         for (let li = 0; li < result.lines.length; li++) {
           const line = result.lines[li]
-          const lineY = y + li * meta.lineHeight
+          const lineY = y + li * lineHeight
           paint.drawText(buf, x, lineY, line.text, r, g, b, a)
         }
       }
