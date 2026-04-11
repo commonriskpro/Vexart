@@ -36,6 +36,10 @@ export type BoxProps = {
   // Shadow (future — paint-bridge will handle)
   shadow?: Shadow
 
+  // Compositing — promotes this Box to its own rendering layer.
+  // Only dirty layers retransmit — unchanged layers stay in GPU VRAM.
+  layer?: boolean
+
   // Children
   children?: JSX.Element
 }
@@ -56,6 +60,7 @@ export function Box(props: BoxProps) {
       cornerRadius={props.cornerRadius}
       borderColor={props.borderColor}
       borderWidth={props.borderWidth}
+      layer={props.layer}
     >
       {props.children}
     </box>

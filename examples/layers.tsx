@@ -1,15 +1,15 @@
 /**
- * TGE Layer Compositing Demo — browser-style multi-image rendering.
+ * TGE Layer Compositing Demo — per-component layer granularity.
  *
- * Same interactive demo as Phase 5, but now each root child is its own
- * Kitty image (layer) with z-index compositing. Only dirty layers
- * are retransmitted — unchanged layers stay in terminal GPU VRAM.
+ * Each component with `layer` prop gets its own Kitty image with z-index.
+ * When the counter increments, ONLY the counter card (~12KB) retransmits.
+ * The color picker, title, hints, and background stay in terminal GPU VRAM.
  *
  * Features:
  *   - Counter: Enter/Space to increment (only counter layer repaints)
  *   - Color cycling: Arrow keys to change accent color
  *   - Focus system: Tab to cycle between counter and color picker
- *   - Layer stats shown in the hint text
+ *   - Per-card layers: each card is its own compositing layer
  *
  * Run: bun run examples/layers.tsx (requires Ghostty WITHOUT tmux)
  * Requires: bun zig:build && bun run clay:build
@@ -54,6 +54,7 @@ function Counter(props: { accentColor: () => number }) {
 
   return (
     <Box
+      layer
       backgroundColor={surface.card}
       cornerRadius={radius.xl}
       padding={spacing.xl}
@@ -96,6 +97,7 @@ function ColorPicker(props: {
 
   return (
     <Box
+      layer
       backgroundColor={surface.card}
       cornerRadius={radius.xl}
       padding={spacing.xl}
@@ -143,16 +145,18 @@ function App() {
       alignY="center"
       gap={spacing.lg}
     >
-      <Text color={textTokens.primary} fontSize={16}>
-        TGE Interactive Demo
-      </Text>
+      <Box layer>
+        <Text color={textTokens.primary} fontSize={16}>
+          TGE Per-Layer Granularity Demo
+        </Text>
+      </Box>
 
       <Box direction="row" gap={spacing.lg}>
         <Counter accentColor={accentColor} />
         <ColorPicker colorIndex={colorIndex} onColorChange={setColorIndex} />
       </Box>
 
-      <Box direction="column" gap={spacing.xs} alignX="center">
+      <Box layer direction="column" gap={spacing.xs} alignX="center">
         <Text color={textTokens.muted} fontSize={12}>
           Tab: cycle focus | Enter/Space: increment | Arrows: change color
         </Text>

@@ -33,6 +33,9 @@ export type TGEProps = {
   borderColor?: string | number
   borderWidth?: number
 
+  // Compositing
+  layer?: boolean  // Opt-in: this node becomes its own compositing layer
+
   // Text
   color?: string | number
   fontSize?: number

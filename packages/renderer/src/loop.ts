@@ -1,21 +1,27 @@
 /**
  * Render loop — connects SolidJS tree → Clay layout → Zig paint → output.
  *
- * Browser-style layer compositing:
+ * Browser-style layer compositing with recursive boundary detection:
  *   1. Walk TGENode tree and replay into Clay (immediate mode)
- *   2. Clay calculates layout → flat array of RenderCommands
- *   3. Group commands by layer (each root child = one layer)
- *   4. Only repaint dirty layers → per-layer pixel buffer
- *   5. Only retransmit dirty layers → per-layer Kitty image with z-index
- *   6. Clean layers: zero I/O (terminal keeps the old image in GPU VRAM)
+ *   2. Simultaneously build a command→layer assignment map
+ *   3. Clay calculates layout → flat array of RenderCommands
+ *   4. Group commands by layer using the assignment map
+ *   5. Only repaint dirty layers → per-layer pixel buffer
+ *   6. Only retransmit dirty layers → per-layer Kitty image with z-index
+ *   7. Clean layers: zero I/O (terminal keeps the old image in GPU VRAM)
+ *
+ * Layer boundary rules (evaluated recursively):
+ *   - `layer` prop: explicit opt-in, any Box becomes its own layer
+ *   - Background layer: everything above the first layer boundary
+ *
+ * This replaces the old "each layoutRoot child = one layer" approach
+ * with recursive layer detection at ANY depth in the tree.
  */
 
 import type { Terminal } from "@tge/terminal"
 import type { PixelBuffer } from "@tge/pixel"
 import { create, clear, paint } from "@tge/pixel"
-import type { Composer } from "@tge/output"
 import { createComposer, createLayerComposer } from "@tge/output"
-import type { LayerComposer } from "@tge/output"
 import { clay, CMD } from "./clay"
 import type { RenderCommand } from "./clay"
 import {
@@ -31,14 +37,12 @@ import { isDirty, clearDirty, markDirty } from "./dirty"
 import {
   type Layer,
   createLayer,
-  allLayers,
   markAllDirty,
   updateLayerGeometry,
   clearLayer,
   markLayerClean,
   imageIdForLayer,
   resetLayers,
-  layerCount,
   dirtyCount,
 } from "./layers"
 import { appendFileSync } from "fs"
@@ -59,6 +63,21 @@ export type RenderLoop = {
   frame: () => void
   /** Destroy everything */
   destroy: () => void
+}
+
+// ── Layer assignment map ──
+
+/**
+ * A "layer slot" discovered during tree walking.
+ * Each slot corresponds to a node with `layer` prop or the background.
+ */
+type LayerSlot = {
+  /** Stable key — stringified tree path so we can reuse Layer objects across frames. */
+  key: string
+  /** z-order: -1 for background, 0+ for content layers in tree order. */
+  z: number
+  /** Command indices assigned to this slot. */
+  cmdIndices: number[]
 }
 
 export function createRenderLoop(term: Terminal): RenderLoop {
@@ -85,51 +104,24 @@ export function createRenderLoop(term: Terminal): RenderLoop {
 
   let timer: ReturnType<typeof setInterval> | null = null
 
-  // ── Layer assignment ──
+  // ── Layer cache ──
+  // Maps slot key → Layer object. Layers persist across frames.
+  const layerCache = new Map<string, Layer>()
+  let nextZ = 0
 
-  /** Background layer (created once, reused). */
-  let bgLayer: Layer | null = null
-
-  /** Child layers (one per layoutRoot child, created once, reused). */
-  let childLayerCache: Layer[] = []
-
-  /**
-   * Find the "layout root" — the node whose children become layers.
-   *
-   * SolidJS render() wraps everything: insert(root, <App />) creates
-   * a single child (the App's outermost Box). The REAL visual children
-   * are one level deeper. We find the deepest single-child box chain
-   * and use its children as layers.
-   */
-  function findLayoutRoot(): TGENode {
-    let node = root
-    while (node.children.length === 1 && node.children[0].kind === "box") {
-      node = node.children[0]
+  /** Get or create a Layer for a given slot key and z-order. */
+  function getOrCreateLayer(key: string, z: number): Layer {
+    const existing = layerCache.get(key)
+    if (existing) {
+      existing.z = z
+      return existing
     }
-    return node
+    const layer = createLayer(z)
+    layerCache.set(key, layer)
+    return layer
   }
 
-  /**
-   * Ensure layers exist for bg + each child of layoutRoot.
-   * Creates layers on first call, reuses on subsequent calls.
-   */
-  function ensureLayers(layoutRoot: TGENode): { bg: Layer; children: Layer[] } {
-    // Background layer
-    if (!bgLayer) {
-      bgLayer = createLayer(-1)
-    }
-
-    // Child layers — one per layoutRoot child
-    const childCount = layoutRoot.children.length
-    while (childLayerCache.length < childCount) {
-      const z = childLayerCache.length
-      childLayerCache.push(createLayer(z))
-    }
-
-    return { bg: bgLayer, children: childLayerCache.slice(0, childCount) }
-  }
-
-  // ── Tree walking ──
+  // ── Tree walking with layer assignment ──
 
   /** Collect all text content from a node's children recursively. */
   function collectText(node: TGENode): string {
@@ -141,7 +133,10 @@ export function createRenderLoop(term: Terminal): RenderLoop {
     return result
   }
 
-  /** Walk TGENode tree and replay into Clay (immediate mode). */
+  /**
+   * Walk TGENode tree and replay into Clay (immediate mode).
+   * This is the FIRST pass — it only feeds Clay, no layer assignment.
+   */
   function walkTree(node: TGENode) {
     if (node.kind === "text") {
       const content = node.text || collectText(node)
@@ -184,38 +179,250 @@ export function createRenderLoop(term: Terminal): RenderLoop {
     clay.closeElement()
   }
 
-  // ── Command counting per subtree ──
+  // ── Layer assignment (spatial matching) ──
 
   /**
-   * Count how many Clay render commands a subtree will produce.
-   * This lets us split the flat command array into per-layer groups.
-   *
-   * Each box produces: 1 RECTANGLE (if has bg) + 1 BORDER (if has border)
-   * Each text produces: 1 TEXT
-   * Recursive for children.
+   * Find layer boundaries in the TGENode tree and record their paths.
+   * Returns an array of { path, z } for each node with `layer` prop.
    */
-  function countCommands(node: TGENode): number {
-    if (node.kind === "text") {
-      const content = node.text || collectText(node)
-      return content ? 1 : 0
+  function findLayerBoundaries(
+    node: TGENode,
+    path: string,
+    result: { path: string; z: number }[],
+  ) {
+    if (node.kind === "text") return
+
+    if (node.props.layer === true) {
+      result.push({ path, z: nextZ++ })
     }
 
-    let count = 0
-    if (node.props.backgroundColor !== undefined) count++
-    if (node.props.borderColor !== undefined && node.props.borderWidth) count++
+    for (let i = 0; i < node.children.length; i++) {
+      findLayerBoundaries(node.children[i], `${path}.${i}`, result)
+    }
+  }
 
-    for (const child of node.children) {
-      count += countCommands(child)
+  /**
+   * Assign commands to layers using spatial matching.
+   *
+   * Instead of trying to predict Clay's command emission order (which is
+   * fragile — Clay emits extra RECT commands for gaps, separators, etc.),
+   * we use the BOUNDING BOX of each layer's anchor RECTANGLE to claim
+   * all commands that fall within its bounds.
+   *
+   * Algorithm:
+   *   1. Find all layer boundary nodes (nodes with `layer` prop)
+   *   2. For each boundary, find its anchor RECTANGLE in the command array
+   *      (first RECT command at that node's position, matched by walking
+   *       the tree and finding bg-colored nodes)
+   *   3. All commands whose center falls within a layer's bounding box
+   *      belong to that layer
+   *   4. Commands not claimed by any content layer go to background
+   *
+   * Layers with higher z-index take priority (innermost/latest wins).
+   */
+  function assignLayersSpatial(
+    commands: RenderCommand[],
+    boundaries: { path: string; z: number }[],
+  ): { bgSlot: LayerSlot; contentSlots: LayerSlot[] } {
+    const bgSlot: LayerSlot = { key: "bg", z: -1, cmdIndices: [] }
+
+    if (boundaries.length === 0) {
+      // No layer boundaries — everything goes to bg
+      for (let i = 0; i < commands.length; i++) {
+        bgSlot.cmdIndices.push(i)
+      }
+      return { bgSlot, contentSlots: [] }
     }
 
-    return count
+    // For each layer boundary, find its bounding box from the command array.
+    // Walk the tree to find each boundary node and its backgroundColor RECT.
+    // We use the commands themselves — each layer boundary should have a
+    // RECTANGLE command with a unique position+size combination.
+    //
+    // Strategy: for each boundary, search the TGENode tree for the node,
+    // get its bg color, and find the matching RECT command. Then use that
+    // RECT's bounds to claim commands.
+
+    // Simpler approach: find RECT commands that could be layer anchors.
+    // A layer boundary node has `layer` prop and typically `backgroundColor`.
+    // Its RECT command has a specific x,y,w,h. We find it by walking the
+    // tree to that path and matching against the command array.
+
+    // Even simpler: for each content layer, ALL commands whose spatial
+    // extent is fully contained within that layer's anchor RECT belong to it.
+    // The anchor RECT is found by tree-path matching.
+
+    // SIMPLEST correct approach: collect all RECT commands that correspond
+    // to layer boundary nodes. Then assign all commands spatially.
+
+    // We need to find the bounding box for each layer. Walk the node tree
+    // to each boundary path, check if it has backgroundColor, find the
+    // corresponding RECT in the command array by matching.
+
+    // Actually the most robust approach: use ALL commands to find each
+    // layer's extent. Each layer boundary creates a slot. For each command,
+    // find the innermost (highest z) layer whose anchor bbox contains it.
+
+    // Step 1: Find anchor RECT for each boundary by scanning commands.
+    // Each boundary node with backgroundColor emits a RECT. We find it by
+    // looking at the node tree to get the expected color, then matching.
+    type LayerBounds = {
+      slot: LayerSlot
+      x: number
+      y: number
+      right: number
+      bottom: number
+    }
+
+    const layerBounds: LayerBounds[] = []
+
+    for (const b of boundaries) {
+      const node = resolveNodeByPath(root, b.path)
+      if (!node) continue
+
+      const slot: LayerSlot = { key: `layer:${b.path}`, z: b.z, cmdIndices: [] }
+
+      if (node.props.backgroundColor !== undefined) {
+        // Find the RECT command for this node's backgroundColor.
+        // We match by the packed color value.
+        const targetColor = parseColor(node.props.backgroundColor)
+        const [tr, tg, tb, ta] = [(targetColor >>> 24) & 0xff, (targetColor >>> 16) & 0xff, (targetColor >>> 8) & 0xff, targetColor & 0xff]
+
+        // Find matching RECT command (not already claimed by a higher-z layer)
+        for (let i = 0; i < commands.length; i++) {
+          const cmd = commands[i]
+          if (cmd.type !== CMD.RECTANGLE) continue
+          if (cmd.color[0] === tr && cmd.color[1] === tg && cmd.color[2] === tb && cmd.color[3] === ta) {
+            // Check this RECT isn't already the anchor for another layer
+            const alreadyClaimed = layerBounds.some(lb =>
+              lb.x === Math.round(cmd.x) && lb.y === Math.round(cmd.y) &&
+              lb.right === Math.round(cmd.x + cmd.width) && lb.bottom === Math.round(cmd.y + cmd.height)
+            )
+            if (!alreadyClaimed) {
+              layerBounds.push({
+                slot,
+                x: Math.round(cmd.x),
+                y: Math.round(cmd.y),
+                right: Math.round(cmd.x + cmd.width),
+                bottom: Math.round(cmd.y + cmd.height),
+              })
+              break
+            }
+          }
+        }
+      } else {
+        // Layer boundary without backgroundColor — use first child commands
+        // to determine bounds. For now, push with zero bounds and fill later.
+        layerBounds.push({ slot, x: 0, y: 0, right: 0, bottom: 0 })
+      }
+    }
+
+    // Step 2: For layers without bg (no anchor RECT), compute bounds from
+    // all commands that would spatially fall within them. We need a first
+    // pass to find their extent. Use commands not claimed by other layers.
+    // For now, these layers claim commands by their TEXT children's positions.
+
+    // Step 3: Assign each command to the innermost (highest z) layer
+    // whose bounding box contains the command's position.
+    // Commands not in any content layer go to bgSlot.
+    const contentSlots: LayerSlot[] = []
+    for (const lb of layerBounds) {
+      contentSlots.push(lb.slot)
+    }
+
+    // Sort layerBounds by z descending (highest z = innermost = check first)
+    const sortedBounds = [...layerBounds].filter(lb => lb.right > lb.x).sort((a, b) => b.slot.z - a.slot.z)
+
+    // For layers without bounds, collect their commands via leftover
+    const noBoundsLayers = layerBounds.filter(lb => lb.right <= lb.x)
+
+    for (let i = 0; i < commands.length; i++) {
+      const cmd = commands[i]
+      const cx = Math.round(cmd.x)
+      const cy = Math.round(cmd.y)
+
+      // Find innermost layer containing this command
+      let assigned = false
+      for (const lb of sortedBounds) {
+        if (cx >= lb.x && cy >= lb.y && cx < lb.right && cy < lb.bottom) {
+          lb.slot.cmdIndices.push(i)
+          assigned = true
+          break
+        }
+      }
+
+      if (!assigned) {
+        // Check no-bounds layers — assign to the first one found based on
+        // z proximity (these are typically text-only layers)
+        bgSlot.cmdIndices.push(i)
+      }
+    }
+
+    // Handle no-bounds layers: find their commands among bgSlot's commands
+    // by looking at commands that are near the layer's tree position.
+    // For text-only layers (no bg), we need to extract their TEXT commands
+    // from bgSlot and move them to the layer slot.
+    for (const lb of noBoundsLayers) {
+      const node = resolveNodeByPath(root, lb.slot.key.replace("layer:", ""))
+      if (!node) continue
+
+      // Collect expected text content from this subtree
+      const texts = collectAllTexts(node)
+      if (texts.length === 0) continue
+
+      // Find TEXT commands in bgSlot matching these texts
+      const toMove: number[] = []
+      for (const cmdIdx of bgSlot.cmdIndices) {
+        const cmd = commands[cmdIdx]
+        if (cmd.type === CMD.TEXT && cmd.text && texts.includes(cmd.text)) {
+          toMove.push(cmdIdx)
+        }
+      }
+
+      // Move from bgSlot to this layer
+      for (const idx of toMove) {
+        const pos = bgSlot.cmdIndices.indexOf(idx)
+        if (pos >= 0) bgSlot.cmdIndices.splice(pos, 1)
+        lb.slot.cmdIndices.push(idx)
+      }
+    }
+
+    return { bgSlot, contentSlots }
+  }
+
+  /** Resolve a TGENode by its tree path (e.g. "r.0.1.2"). */
+  function resolveNodeByPath(fromRoot: TGENode, path: string): TGENode | null {
+    const parts = path.split(".")
+    let node = fromRoot
+    // Skip "r" (root prefix)
+    for (let i = 1; i < parts.length; i++) {
+      const idx = parseInt(parts[i])
+      if (isNaN(idx) || idx >= node.children.length) return null
+      node = node.children[idx]
+    }
+    return node
+  }
+
+  /** Collect all text strings from a node's subtree. */
+  function collectAllTexts(node: TGENode): string[] {
+    const result: string[] = []
+    function walk(n: TGENode) {
+      if (n.kind === "text") {
+        const t = n.text || collectText(n)
+        if (t) result.push(t)
+        return
+      }
+      for (const child of n.children) walk(child)
+    }
+    walk(node)
+    return result
   }
 
   // ── Frame rendering ──
 
   /** Paint a single frame with layer compositing. */
   function frameLayered() {
-    // 1. Walk entire tree into Clay (single layout pass)
+    // 1. Walk tree into Clay (first pass — feeds Clay, no counting)
     clay.beginLayout()
     walkTree(root)
     const commands = clay.endLayout()
@@ -225,154 +432,88 @@ export function createRenderLoop(term: Terminal): RenderLoop {
       return
     }
 
-    // 2. Find layout root and ensure layers exist
-    const layoutRoot = findLayoutRoot()
-    const { bg, children: childLayers } = ensureLayers(layoutRoot)
+    // 2. Find layer boundaries and assign commands spatially
+    nextZ = 0
+    const boundaries: { path: string; z: number }[] = []
+    findLayerBoundaries(root, "r", boundaries)
+    const { bgSlot, contentSlots } = assignLayersSpatial(commands, boundaries)
 
-    // 3. Count prefix commands (wrapper boxes above layoutRoot)
-    let prefixCount = 0
-    let n: TGENode = root
-    while (n !== layoutRoot) {
-      if (n.props.backgroundColor !== undefined) prefixCount++
-      if (n.props.borderColor !== undefined && n.props.borderWidth) prefixCount++
-      if (n.children.length === 1) n = n.children[0]
-      else break
-    }
-    if (layoutRoot.props.backgroundColor !== undefined) prefixCount++
-    if (layoutRoot.props.borderColor !== undefined && layoutRoot.props.borderWidth) prefixCount++
-
-    // 4. Group commands into per-child layers using spatial analysis.
-    //
-    // Clay outputs commands in tree order, but may generate extra commands
-    // (border segments, separators) that our tree-based countCommands() misses.
-    // Instead of predicting counts from the tree, we use the ACTUAL command
-    // bounding boxes to detect group boundaries.
-    //
-    // The layoutRoot arranges children in a direction (column = vertical,
-    // row = horizontal). We split commands at gaps along that axis.
-    const dir = layoutRoot.props.direction === "row" ? "x" : "y"
-    const childCmds = commands.slice(prefixCount)
-
-    // Build per-child groups by finding spatial boundaries.
-    // Each child occupies a distinct range on the layout axis.
-    // We find the bounding range of each child from the tree,
-    // then assign commands that fall within each range.
-    const childGroups: { start: number; count: number }[] = []
-
-    if (childCmds.length > 0 && layoutRoot.children.length > 0) {
-      // Use the first command of each child subtree as anchor.
-      // Walk commands sequentially — Clay outputs them in tree order.
-      // Detect group boundaries where the primary axis position jumps
-      // beyond the current group's bounding box.
-
-      // Simple approach: walk commands, track bounding box on layout axis.
-      // When a command's position is clearly past the current group
-      // (and we haven't filled all groups yet), start a new group.
-
-      // First pass: find the bounding extents of each child group
-      // by using the tree node positions (from Clay layout).
-      // We need to run Clay layout first to get positions...
-      // But we already have the commands with positions!
-
-      // Strategy: assign ALL remaining commands (after prefix) as one
-      // group per child. Use the tree-based count as initial split,
-      // but if total doesn't match, put everything in one layer.
-      let remaining = childCmds.length
-      let idx = 0
-
-      for (let i = 0; i < layoutRoot.children.length; i++) {
-        if (i === layoutRoot.children.length - 1) {
-          // Last child gets everything remaining
-          childGroups.push({ start: prefixCount + idx, count: remaining })
-        } else {
-          const est = countCommands(layoutRoot.children[i])
-          const count = Math.min(est, remaining)
-          childGroups.push({ start: prefixCount + idx, count })
-          idx += count
-          remaining -= count
+    // If no explicit layers found, everything non-bg becomes one content layer
+    if (contentSlots.length === 0 && commands.length > bgSlot.cmdIndices.length) {
+      const fallbackSlot: LayerSlot = { key: "layer:fallback", z: 0, cmdIndices: [] }
+      for (let i = 0; i < commands.length; i++) {
+        if (!bgSlot.cmdIndices.includes(i)) {
+          fallbackSlot.cmdIndices.push(i)
         }
+      }
+      if (fallbackSlot.cmdIndices.length > 0) {
+        contentSlots.push(fallbackSlot)
       }
     }
 
+    const allSlots = [bgSlot, ...contentSlots]
     const cellW = term.size.cellWidth || 8
     const cellH = term.size.cellHeight || 16
-    let cmdIdx = 0
 
-    log(`[frame] cmds=${commands.length} layers=${childLayers.length + 1} dirty=${dirtyCount()} children=${layoutRoot.children.length} prefix=${prefixCount} groups=[${childGroups.map(g => g.count).join(',')}]`)
+    log(`[frame] cmds=${commands.length} layers=${allSlots.length} slots=[${allSlots.map(s => `${s.key}(${s.cmdIndices.length})`).join(',')}]`)
 
     term.beginSync()
 
-    // 5. Background layer (prefix commands)
-    if (prefixCount > 0) {
-      const bgW = Math.round(commands[0].width) || pw
-      const bgH = Math.round(commands[0].height) || ph
-      updateLayerGeometry(bg, 0, 0, bgW, bgH)
+    // 3. Render each layer slot
+    for (const slot of allSlots) {
+      if (slot.cmdIndices.length === 0) continue
 
-      if (bg.buf) {
-        // Paint into a temp buffer and compare
-        const prev = bg.buf.data.slice() // snapshot
-        clearLayer(bg, 0x00000000)
-        for (let j = 0; j < prefixCount; j++) {
-          paintCommand(bg.buf, commands[j], 0, 0)
-        }
-        const changed = bg.dirty || !buffersEqual(prev, bg.buf.data)
-        if (changed) {
-          log(`  [bg] REPAINT ${bgW}x${bgH} (${(bgW * bgH * 4 / 1024).toFixed(0)}KB)`)
-          layerComposer!.renderLayer(bg.buf, imageIdForLayer(bg), 0, 0, bg.z, cellW, cellH)
-          markLayerClean(bg)
-        } else {
-          log(`  [bg] SKIP (unchanged)`)
-        }
-      }
-      cmdIdx = prefixCount
-    }
+      const layer = getOrCreateLayer(slot.key, slot.z)
 
-    // 6. Child layers
-    for (let i = 0; i < childGroups.length; i++) {
-      const group = childGroups[i]
-      if (group.count === 0) continue
-
-      const layer = childLayers[i]
-      if (!layer) continue
-
-      // Bounding box of all commands in this group
+      // Compute bounding box from commands
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-      for (let j = 0; j < group.count; j++) {
-        const cmd = commands[group.start + j]
-        if (!cmd) break
+      for (const idx of slot.cmdIndices) {
+        const cmd = commands[idx]
+        if (!cmd) continue
         minX = Math.min(minX, cmd.x)
         minY = Math.min(minY, cmd.y)
         maxX = Math.max(maxX, cmd.x + cmd.width)
         maxY = Math.max(maxY, cmd.y + cmd.height)
       }
 
-      const lx = Math.floor(minX)
-      const ly = Math.floor(minY)
-      const lw = Math.ceil(maxX) - lx
-      const lh = Math.ceil(maxY) - ly
+      // Background layer at (0,0) fullscreen
+      const isBg = slot.z < 0
+      const lx = isBg ? 0 : Math.floor(minX)
+      const ly = isBg ? 0 : Math.floor(minY)
+      const lw = isBg ? (Math.round(commands[0].width) || pw) : (Math.ceil(maxX) - lx)
+      const lh = isBg ? (Math.round(commands[0].height) || ph) : (Math.ceil(maxY) - ly)
 
       updateLayerGeometry(layer, lx, ly, lw, lh)
 
       if (layer.buf) {
         // Paint into buffer and compare against previous frame
-        const prev = layer.buf.data.slice() // snapshot
+        const prev = layer.buf.data.slice()
         clearLayer(layer, 0x00000000)
 
-        for (let j = 0; j < group.count; j++) {
-          const cmd = commands[group.start + j]
-          if (!cmd) break
+        for (const idx of slot.cmdIndices) {
+          const cmd = commands[idx]
+          if (!cmd) continue
           paintCommand(layer.buf, cmd, lx, ly)
         }
 
         const changed = layer.dirty || !buffersEqual(prev, layer.buf.data)
         if (changed) {
-          log(`  [layer${i}] REPAINT ${lw}x${lh} at (${lx},${ly}) z=${layer.z} (${(lw * lh * 4 / 1024).toFixed(0)}KB) cmds=${group.count}`)
+          log(`  [${slot.key}] REPAINT ${lw}x${lh} at (${lx},${ly}) z=${layer.z} (${(lw * lh * 4 / 1024).toFixed(0)}KB) cmds=${slot.cmdIndices.length}`)
           layerComposer!.renderLayer(layer.buf, imageIdForLayer(layer), lx, ly, layer.z, cellW, cellH)
           markLayerClean(layer)
         } else {
-          log(`  [layer${i}] SKIP (unchanged)`)
+          log(`  [${slot.key}] SKIP (unchanged)`)
           markLayerClean(layer)
         }
+      }
+    }
+
+    // 4. Clean up orphan layers (layers from previous frame that no longer exist)
+    const activeKeys = new Set(allSlots.map(s => s.key))
+    for (const [key, layer] of layerCache) {
+      if (!activeKeys.has(key)) {
+        layerComposer!.removeLayer(imageIdForLayer(layer))
+        layerCache.delete(key)
       }
     }
 
@@ -423,11 +564,9 @@ export function createRenderLoop(term: Terminal): RenderLoop {
     root.props.height = newH
 
     if (useLayerCompositing) {
-      // Clear all layers and rebuild
       layerComposer!.clear()
       resetLayers()
-      bgLayer = null
-      childLayerCache = []
+      layerCache.clear()
     } else {
       fallbackBuf = create(newW, newH)
     }
@@ -460,8 +599,7 @@ export function createRenderLoop(term: Terminal): RenderLoop {
       if (layerComposer) layerComposer.destroy()
       if (fallbackComposer) fallbackComposer.destroy()
       resetLayers()
-      bgLayer = null
-      childLayerCache = []
+      layerCache.clear()
       clay.destroy()
     },
   }

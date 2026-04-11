@@ -13,6 +13,7 @@ import type { TGEProps } from "./node"
 type Children = JSX.Element | JSX.Element[] | string | number | boolean | null | undefined
 
 type BoxProps = TGEProps & {
+  layer?: boolean
   children?: Children
 }
 
