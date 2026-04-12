@@ -13,6 +13,9 @@ import { SIZING, DIRECTION, ALIGN_X, ALIGN_Y } from "./clay"
 
 export type TGENodeKind = "box" | "text" | "root"
 
+/** Interactive style props — usable in hoverStyle, activeStyle, focusStyle */
+type InteractiveStyleProps = Partial<Pick<TGEProps, "backgroundColor" | "borderColor" | "borderWidth" | "cornerRadius" | "borderRadius" | "shadow" | "boxShadow" | "glow" | "gradient" | "backdropBlur" | "opacity">>
+
 export type TGEProps = {
   // Layout
   direction?: "row" | "column"
@@ -40,8 +43,13 @@ export type TGEProps = {
   // Visual
   backgroundColor?: string | number  // "#ff0000" or 0xff0000ff
   cornerRadius?: number
+  /** CSS-friendly alias for cornerRadius (Decision 1) */
+  borderRadius?: number
+  cornerRadii?: { tl: number; tr: number; br: number; bl: number }  // Per-corner radius
   borderColor?: string | number
   borderWidth?: number
+  /** Opacity: 0.0 = fully transparent, 1.0 = fully opaque. Multiplies alpha of entire element. */
+  opacity?: number
 
   // Compositing
   layer?: boolean  // Opt-in: this node becomes its own compositing layer
@@ -84,12 +92,42 @@ export type TGEProps = {
     y: number          // Vertical offset (px)
     blur: number       // Blur radius (px)
     color: number      // Shadow color (packed RGBA u32)
-  }
+  } | Array<{          // Multiple shadows — painted in order
+    x: number
+    y: number
+    blur: number
+    color: number
+  }>
+  /** CSS-friendly alias for shadow (Decision 1) */
+  boxShadow?: TGEProps["shadow"]
   glow?: {             // Outer glow — painted BEFORE the rect
     radius: number     // Glow spread radius (px)
     color: number      // Glow color (packed RGBA u32)
     intensity?: number // 0-100, default 80
   }
+  gradient?: {         // Gradient fill — painted INSTEAD of solid backgroundColor
+    type: "linear"
+    from: number       // Start color (packed RGBA u32)
+    to: number         // End color (packed RGBA u32)
+    angle?: number     // Degrees: 0=left→right, 90=top→bottom (default 90)
+  } | {
+    type: "radial"
+    from: number       // Center color (packed RGBA u32)
+    to: number         // Edge color (packed RGBA u32)
+  }
+  backdropBlur?: number  // Blur radius for content behind this element (glassmorphism)
+
+  // Interactive states — merged over base props when active
+  hoverStyle?: InteractiveStyleProps
+  activeStyle?: InteractiveStyleProps
+  /** Focus state — applied when element has focus (Decision 7) */
+  focusStyle?: InteractiveStyleProps
+  /** Unified press handler — fires on mouse click + Enter/Space when focused (Decision 6) */
+  onPress?: () => void
+
+  // Convenience
+  /** CSS-style prop — merged with direct props (direct props win). Decision 3. */
+  style?: Partial<TGEProps>
 
   // Text
   color?: string | number
@@ -115,6 +153,10 @@ export type TGENode = {
   destroyed: boolean
   /** Computed layout rect — written after Clay layout pass */
   layout: LayoutRect
+  /** Interactive state — managed by render loop hit-testing */
+  _hovered: boolean
+  _active: boolean
+  _focused: boolean
 }
 
 /** Computed layout geometry from Clay — written each frame after layout */
@@ -137,7 +179,51 @@ export function createNode(kind: TGENodeKind): TGENode {
     id: nextNodeId++,
     destroyed: false,
     layout: { x: 0, y: 0, width: 0, height: 0 },
+    _hovered: false,
+    _active: false,
+    _focused: false,
   }
+}
+
+/**
+ * Resolve effective props:
+ *   1. Merge `style` prop under direct props (direct wins)
+ *   2. Resolve aliases: borderRadius→cornerRadius, boxShadow→shadow
+ *   3. Resolve padding shorthand: [Y,X] or [T,R,B,L]
+ *   4. Merge hoverStyle/activeStyle/focusStyle when active
+ */
+export function resolveProps(node: TGENode): TGEProps {
+  let base = node.props
+
+  // 1. Merge style prop (direct props override style)
+  if (base.style) {
+    base = { ...base.style, ...base }
+  }
+
+  // 2. Resolve aliases
+  if (base.borderRadius !== undefined && base.cornerRadius === undefined) {
+    base = { ...base, cornerRadius: base.borderRadius }
+  }
+  if (base.boxShadow !== undefined && base.shadow === undefined) {
+    base = { ...base, shadow: base.boxShadow }
+  }
+
+  // 3. Merge interactive states
+  const needsInteractive = node._hovered || node._active || node._focused
+  if (!needsInteractive) return base
+  if (!base.hoverStyle && !base.activeStyle && !base.focusStyle) return base
+
+  let resolved = base
+  if (node._hovered && base.hoverStyle) {
+    resolved = { ...resolved, ...base.hoverStyle }
+  }
+  if (node._focused && base.focusStyle) {
+    resolved = { ...resolved, ...base.focusStyle }
+  }
+  if (node._active && base.activeStyle) {
+    resolved = { ...resolved, ...base.activeStyle }
+  }
+  return resolved
 }
 
 export function createTextNode(text: string): TGENode {
@@ -198,8 +284,8 @@ export function parseSizing(value: number | string | undefined): SizingInfo {
 }
 
 export function parseDirection(value: string | undefined): number {
-  if (value === "column") return DIRECTION.TOP_TO_BOTTOM
-  return DIRECTION.LEFT_TO_RIGHT
+  if (value === "row") return DIRECTION.LEFT_TO_RIGHT
+  return DIRECTION.TOP_TO_BOTTOM
 }
 
 export function parseAlignX(value: string | undefined): number {

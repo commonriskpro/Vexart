@@ -23,6 +23,10 @@ export interface GlowConfig {
   radius: number; color: number; intensity?: number
 }
 
+export type GradientConfig =
+  | { type: "linear"; from: number; to: number; angle?: number }
+  | { type: "radial"; from: number; to: number }
+
 export interface BoxProps {
   direction?: "row" | "column"
   padding?: number
@@ -37,8 +41,13 @@ export interface BoxProps {
   cornerRadius?: number
   borderColor?: string | number
   borderWidth?: number
-  shadow?: ShadowConfig
+  shadow?: ShadowConfig | ShadowConfig[]
   glow?: GlowConfig
+  gradient?: GradientConfig
+  backdropBlur?: number
+  cornerRadii?: { tl: number; tr: number; br: number; bl: number }
+  hoverStyle?: Partial<Pick<BoxProps, "backgroundColor" | "borderColor" | "borderWidth" | "cornerRadius" | "shadow" | "glow" | "gradient" | "backdropBlur">>
+  activeStyle?: Partial<Pick<BoxProps, "backgroundColor" | "borderColor" | "borderWidth" | "cornerRadius" | "shadow" | "glow" | "gradient" | "backdropBlur">>
   children?: JSX.Element
 }
 

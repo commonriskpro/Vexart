@@ -119,6 +119,26 @@ await build({
   plugins: [solidPlugin],
 })
 
+// ── 2b. Bundle void (design system — pre-transform JSX with Babel) ──
+console.log("📦 Bundling void...")
+
+await build({
+  entryPoints: [resolve(ROOT, "packages/void/src/index.ts")],
+  bundle: true,
+  format: "esm",
+  platform: "node",
+  target: "esnext",
+  minify: true,
+  outfile: resolve(DIST, "void.js"),
+  external: [
+    "bun:ffi",
+    "solid-js",
+    "solid-js/universal",
+    "tge",
+  ],
+  plugins: [solidPlugin],
+})
+
 // ── 3. Copy native binaries ──
 console.log("🔧 Copying native binaries...")
 
@@ -176,7 +196,8 @@ console.log("📝 Copying type declarations...")
 cpSync(resolve(ROOT, "types/tge.d.ts"), resolve(DIST, "tge.d.ts"))
 cpSync(resolve(ROOT, "types/components.d.ts"), resolve(DIST, "components.d.ts"))
 cpSync(resolve(ROOT, "types/jsx-runtime.d.ts"), resolve(DIST, "jsx-runtime.d.ts"))
-console.log(`  ✅ tge.d.ts + components.d.ts + jsx-runtime.d.ts`)
+cpSync(resolve(ROOT, "types/void.d.ts"), resolve(DIST, "void.d.ts"))
+console.log(`  ✅ tge.d.ts + components.d.ts + jsx-runtime.d.ts + void.d.ts`)
 
 // ── 8. Copy font atlas ──
 console.log("🔤 Copying font atlas...")
@@ -208,6 +229,10 @@ const pkg = {
       types: "./components.d.ts",
       default: "./components.js",
     },
+    "./void": {
+      types: "./void.d.ts",
+      default: "./void.js",
+    },
     "./jsx-runtime": {
       types: "./jsx-runtime.d.ts",
     },
@@ -219,6 +244,8 @@ const pkg = {
     "tge.d.ts",
     "components.js",
     "components.d.ts",
+    "void.js",
+    "void.d.ts",
     "jsx-runtime.d.ts",
     "solid-plugin.ts",
     "vendor/",

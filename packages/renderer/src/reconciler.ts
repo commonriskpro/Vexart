@@ -55,6 +55,36 @@ export const {
       (value as (handle: ReturnType<typeof createHandle>) => void)(createHandle(node))
       return
     }
+
+    // Padding shorthand: [Y, X] or [T, R, B, L] → expand to per-side props
+    if (name === "padding" && Array.isArray(value)) {
+      const p = value as number[]
+      if (p.length === 2) {
+        // [Y, X]
+        node.props.paddingTop = p[0]; node.props.paddingBottom = p[0]
+        node.props.paddingLeft = p[1]; node.props.paddingRight = p[1]
+      } else if (p.length === 4) {
+        // [T, R, B, L]
+        node.props.paddingTop = p[0]; node.props.paddingRight = p[1]
+        node.props.paddingBottom = p[2]; node.props.paddingLeft = p[3]
+      }
+      markDirty()
+      return
+    }
+
+    // style prop — merge: direct props override style
+    if (name === "style" && typeof value === "object" && value !== null) {
+      const style = value as Record<string, unknown>
+      for (const key of Object.keys(style)) {
+        // Only set if NOT already set as a direct prop
+        if ((node.props as Record<string, unknown>)[key] === undefined) {
+          (node.props as Record<string, unknown>)[key] = style[key]
+        }
+      }
+      markDirty()
+      return
+    }
+
     (node.props as Record<string, unknown>)[name] = value
     markDirty()
   },

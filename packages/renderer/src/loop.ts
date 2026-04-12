@@ -20,7 +20,7 @@
 
 import type { Terminal } from "@tge/terminal"
 import type { PixelBuffer } from "@tge/pixel"
-import { create, clear, paint, over } from "@tge/pixel"
+import { create, clear, paint, over, sub } from "@tge/pixel"
 import { createComposer, createLayerComposer } from "@tge/output"
 import { clay, CMD, ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE } from "./clay"
 import type { RenderCommand } from "./clay"
@@ -32,8 +32,10 @@ import {
   parseDirection,
   parseAlignX,
   parseAlignY,
+  resolveProps,
 } from "./node"
 import { isDirty, clearDirty, markDirty } from "./dirty"
+import { hasActiveAnimations } from "./animation"
 import {
   type Layer,
   createLayer,
@@ -80,11 +82,17 @@ let selectableTextMode = false
 // After Clay layout, we match RECT commands to these configs by color+radius
 // (emitted in tree-walk order) and apply effects in paintCommand.
 
+type ShadowDef = { x: number; y: number; blur: number; color: number }
+
 type EffectConfig = {
   color: number        // packed bgColor to match against RECT command
   cornerRadius: number // to disambiguate rects with same color
-  shadow?: { x: number; y: number; blur: number; color: number }
+  shadow?: ShadowDef | ShadowDef[]
   glow?: { radius: number; color: number; intensity: number }
+  gradient?: { type: "linear"; from: number; to: number; angle: number }
+           | { type: "radial"; from: number; to: number }
+  backdropBlur?: number
+  cornerRadii?: { tl: number; tr: number; br: number; bl: number }
 }
 
 /** Effects queue — populated during walkTree, consumed during paintCommand. */
@@ -94,6 +102,28 @@ export type RenderLoopOptions = {
   /** When true, text is rendered as ANSI escape codes (selectable/copiable)
    *  instead of bitmap pixels. Backgrounds render as images at z=-1. */
   selectableText?: boolean
+  /** Experimental optimizations — these may change or be removed. */
+  experimental?: {
+    /**
+     * Partial updates: when a layer changes, find the bounding box of dirty
+     * pixels and transmit only that region (via Kitty animation frame a=f).
+     * Falls back to full retransmit if >50% of pixels changed.
+     * Default: false
+     */
+    partialUpdates?: boolean
+    /**
+     * Frame budget in ms. If a frame exceeds this budget during layer painting,
+     * remaining non-background layers are deferred to the next frame.
+     * Set to 0 to disable. Default: 0 (disabled)
+     */
+    frameBudgetMs?: number
+    /**
+     * Maximum FPS cap. Default: 60.
+     * Idle: always 30fps. During animations: scales up to this value.
+     * Set to 30 to force 30fps always (e.g., for SSH).
+     */
+    maxFps?: number
+  }
 }
 
 export type RenderLoop = {
@@ -136,6 +166,8 @@ type LayerSlot = {
 
 export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): RenderLoop {
   const selectableText = opts?.selectableText ?? false
+  const expPartialUpdates = opts?.experimental?.partialUpdates ?? false
+  const expFrameBudgetMs = opts?.experimental?.frameBudgetMs ?? 0
   selectableTextMode = selectableText
   const root = createNode("root")
 
@@ -143,13 +175,13 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   const pw = term.size.pixelWidth || term.size.cols * (term.size.cellWidth || 8)
   const ph = term.size.pixelHeight || term.size.rows * (term.size.cellHeight || 16)
 
-  root.props = { width: pw, height: ph, direction: "column" }
+  root.props = { width: pw, height: ph }
   clay.init(pw, ph)
 
   // Detect backend: use layer compositor for kitty direct, old compositor for others
   const useLayerCompositing = term.caps.kittyGraphics
   const layerComposer = useLayerCompositing
-    ? createLayerComposer(term.write, term.rawWrite)
+    ? createLayerComposer(term.write, term.rawWrite, term.caps.transmissionMode, true)
     : null
   const fallbackComposer = !useLayerCompositing
     ? createComposer(term.write, term.rawWrite, term.caps)
@@ -158,7 +190,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   // Fallback single-buffer for non-kitty backends
   let fallbackBuf = !useLayerCompositing ? create(pw, ph) : null
 
-  let timer: ReturnType<typeof setInterval> | null = null
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const maxFps = opts?.experimental?.maxFps ?? 60
+  const idleInterval = 33  // ~30fps
+  const activeInterval = Math.max(Math.round(1000 / maxFps), 8) // min 8ms ≈ 120fps cap
   let isSuspended = false
 
   // ── Scroll + pointer state ──
@@ -331,44 +366,64 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       }
     }
 
-    if (node.props.backgroundColor !== undefined) {
-      const bgColor = parseColor(node.props.backgroundColor)
-      const cr = node.props.cornerRadius ?? 0
+    // Resolve visual props — merges hoverStyle/activeStyle when the node is hovered/active
+    const vp = resolveProps(node)
+
+    // Gradient/backdropBlur need a RECT command from Clay even without explicit backgroundColor.
+    // We inject a transparent placeholder so Clay emits the RECT for effect matching.
+    const needsRect = vp.backgroundColor !== undefined || vp.gradient !== undefined || vp.backdropBlur !== undefined
+    if (needsRect) {
+      const bgColor = vp.backgroundColor !== undefined ? parseColor(vp.backgroundColor) : 0x00000001 // near-transparent placeholder
+      const cr = vp.cornerRadius ?? 0
       clay.configureRectangle(bgColor, cr)
       rectNodes.push(node)
 
       // Record effects for this RECT — matched during paint
-      if (node.props.shadow || node.props.glow) {
+      if (vp.shadow || vp.glow || vp.gradient || vp.backdropBlur || vp.cornerRadii) {
         const effect: EffectConfig = { color: bgColor, cornerRadius: cr }
-        if (node.props.shadow) {
-          effect.shadow = node.props.shadow
+        if (vp.shadow) {
+          effect.shadow = vp.shadow
         }
-        if (node.props.glow) {
+        if (vp.glow) {
           effect.glow = {
-            radius: node.props.glow.radius,
-            color: node.props.glow.color,
-            intensity: node.props.glow.intensity ?? 80,
+            radius: vp.glow.radius,
+            color: vp.glow.color,
+            intensity: vp.glow.intensity ?? 80,
           }
+        }
+        if (vp.gradient) {
+          const g = vp.gradient
+          if (g.type === "linear") {
+            effect.gradient = { type: "linear", from: g.from, to: g.to, angle: g.angle ?? 90 }
+          } else {
+            effect.gradient = { type: "radial", from: g.from, to: g.to }
+          }
+        }
+        if (vp.backdropBlur) {
+          effect.backdropBlur = vp.backdropBlur
+        }
+        if (vp.cornerRadii) {
+          effect.cornerRadii = vp.cornerRadii
         }
         effectsQueue.push(effect)
       }
     }
 
-    // Borders — per-side or uniform
-    const hasPerSideBorder = node.props.borderLeft !== undefined || node.props.borderRight !== undefined ||
-                             node.props.borderTop !== undefined || node.props.borderBottom !== undefined ||
-                             node.props.borderBetweenChildren !== undefined
-    if (hasPerSideBorder && node.props.borderColor !== undefined) {
-      const borderColor = parseColor(node.props.borderColor)
+    // Borders — per-side or uniform (uses resolved visual props)
+    const hasPerSideBorder = vp.borderLeft !== undefined || vp.borderRight !== undefined ||
+                             vp.borderTop !== undefined || vp.borderBottom !== undefined ||
+                             vp.borderBetweenChildren !== undefined
+    if (hasPerSideBorder && vp.borderColor !== undefined) {
+      const borderColor = parseColor(vp.borderColor)
       clay.configureBorderSides(borderColor,
-        node.props.borderLeft ?? 0,
-        node.props.borderRight ?? 0,
-        node.props.borderTop ?? 0,
-        node.props.borderBottom ?? 0,
-        node.props.borderBetweenChildren ?? 0)
-    } else if (node.props.borderColor !== undefined && node.props.borderWidth) {
-      const borderColor = parseColor(node.props.borderColor)
-      clay.configureBorder(borderColor, node.props.borderWidth)
+        vp.borderLeft ?? 0,
+        vp.borderRight ?? 0,
+        vp.borderTop ?? 0,
+        vp.borderBottom ?? 0,
+        vp.borderBetweenChildren ?? 0)
+    } else if (vp.borderColor !== undefined && vp.borderWidth) {
+      const borderColor = parseColor(vp.borderColor)
+      clay.configureBorder(borderColor, vp.borderWidth)
     }
 
     // Scroll / clip container
@@ -392,118 +447,196 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   // ── Layer assignment (spatial matching) ──
 
   /**
+   * A layer boundary discovered during tree walking.
+   * Records the node's path, z-order, and whether it's a scroll container.
+   */
+  type LayerBoundary = {
+    path: string
+    z: number
+    /** True if this node is a scroll container (scrollX/scrollY). */
+    isScroll: boolean
+    /** True if this node has an explicit backgroundColor. */
+    hasBg: boolean
+    /** True if the layer is INSIDE a scroll container ancestor. */
+    insideScroll: boolean
+  }
+
+  /**
    * Find layer boundaries in the TGENode tree and record their paths.
-   * Returns an array of { path, z } for each node with `layer` prop.
+   * Also tracks whether each boundary is a scroll container, which is
+   * critical for correct layer→command assignment when layers and scroll
+   * containers interact.
    */
   function findLayerBoundaries(
     node: TGENode,
     path: string,
-    result: { path: string; z: number }[],
+    result: LayerBoundary[],
+    insideScroll = false,
   ) {
     if (node.kind === "text") return
 
+    const isScroll = !!(node.props.scrollX || node.props.scrollY)
+
     if (node.props.layer === true) {
-      result.push({ path, z: nextZ++ })
+      result.push({
+        path,
+        z: nextZ++,
+        isScroll,
+        hasBg: node.props.backgroundColor !== undefined,
+        insideScroll,
+      })
     }
 
+    const childInsideScroll = insideScroll || isScroll
     for (let i = 0; i < node.children.length; i++) {
-      findLayerBoundaries(node.children[i], `${path}.${i}`, result)
+      findLayerBoundaries(node.children[i], `${path}.${i}`, result, childInsideScroll)
     }
   }
 
   /**
-   * Assign commands to layers using spatial matching.
+   * Assign commands to layers.
    *
-   * Instead of trying to predict Clay's command emission order (which is
-   * fragile — Clay emits extra RECT commands for gaps, separators, etc.),
-   * we use the BOUNDING BOX of each layer's anchor RECTANGLE to claim
-   * all commands that fall within its bounds.
+   * Uses a HYBRID strategy:
+   *   1. Scroll-container layers → matched by SCISSOR commands (order-based)
+   *   2. Static layers with bg → matched by RECT color (existing approach)
+   *   3. Static layers without bg → matched by child TEXT content
    *
-   * Algorithm:
-   *   1. Find all layer boundary nodes (nodes with `layer` prop)
-   *   2. For each boundary, find its anchor RECTANGLE in the command array
-   *      (first RECT command at that node's position, matched by walking
-   *       the tree and finding bg-colored nodes)
-   *   3. All commands whose center falls within a layer's bounding box
-   *      belong to that layer
-   *   4. Commands not claimed by any content layer go to background
+   * For scroll-container layers, the SCISSOR_START/END pair defines both
+   * the layer's bounding box AND its command membership. All commands
+   * between SCISSOR_START and SCISSOR_END belong to that layer.
    *
-   * Layers with higher z-index take priority (innermost/latest wins).
+   * The layer node's own RECT (if it has bg) is also claimed — it comes
+   * BEFORE the SCISSOR_START in Clay's command stream.
    */
   function assignLayersSpatial(
     commands: RenderCommand[],
-    boundaries: { path: string; z: number }[],
+    boundaries: LayerBoundary[],
   ): { bgSlot: LayerSlot; contentSlots: LayerSlot[] } {
     const bgSlot: LayerSlot = { key: "bg", z: -1, cmdIndices: [] }
 
     if (boundaries.length === 0) {
-      // No layer boundaries — everything goes to bg
       for (let i = 0; i < commands.length; i++) {
         bgSlot.cmdIndices.push(i)
       }
       return { bgSlot, contentSlots: [] }
     }
 
-    // For each layer boundary, find its bounding box from the command array.
-    // Walk the tree to find each boundary node and its backgroundColor RECT.
-    // We use the commands themselves — each layer boundary should have a
-    // RECTANGLE command with a unique position+size combination.
-    //
-    // Strategy: for each boundary, search the TGENode tree for the node,
-    // get its bg color, and find the matching RECT command. Then use that
-    // RECT's bounds to claim commands.
+    // ── Phase 1: Collect SCISSOR commands ──
+    // Each scroll container emits one SCISSOR_START + SCISSOR_END pair.
+    // Collected in SCISSOR_START order (which matches walkTree depth-first
+    // order) so we can map them to scroll container nodes by index.
+    type ScissorPair = {
+      startIdx: number
+      endIdx: number
+      x: number
+      y: number
+      w: number
+      h: number
+    }
 
-    // Simpler approach: find RECT commands that could be layer anchors.
-    // A layer boundary node has `layer` prop and typically `backgroundColor`.
-    // Its RECT command has a specific x,y,w,h. We find it by walking the
-    // tree to that path and matching against the command array.
+    // First, find all SCISSOR_START indices in order
+    const scissorStarts: number[] = []
+    for (let i = 0; i < commands.length; i++) {
+      if (commands[i].type === CMD.SCISSOR_START) {
+        scissorStarts.push(i)
+      }
+    }
 
-    // Even simpler: for each content layer, ALL commands whose spatial
-    // extent is fully contained within that layer's anchor RECT belong to it.
-    // The anchor RECT is found by tree-path matching.
+    // For each SCISSOR_START, find its matching SCISSOR_END.
+    // Handles nesting: count START/END depth to find the correct pair.
+    const scissorPairs: ScissorPair[] = []
+    for (const startIdx of scissorStarts) {
+      let depth = 0
+      let endIdx = -1
+      for (let i = startIdx; i < commands.length; i++) {
+        if (commands[i].type === CMD.SCISSOR_START) depth++
+        else if (commands[i].type === CMD.SCISSOR_END) {
+          depth--
+          if (depth === 0) { endIdx = i; break }
+        }
+      }
+      if (endIdx >= 0) {
+        const startCmd = commands[startIdx]
+        scissorPairs.push({
+          startIdx,
+          endIdx,
+          x: Math.round(startCmd.x),
+          y: Math.round(startCmd.y),
+          w: Math.round(startCmd.width),
+          h: Math.round(startCmd.height),
+        })
+      }
+    }
 
-    // SIMPLEST correct approach: collect all RECT commands that correspond
-    // to layer boundary nodes. Then assign all commands spatially.
-
-    // We need to find the bounding box for each layer. Walk the node tree
-    // to each boundary path, check if it has backgroundColor, find the
-    // corresponding RECT in the command array by matching.
-
-    // Actually the most robust approach: use ALL commands to find each
-    // layer's extent. Each layer boundary creates a slot. For each command,
-    // find the innermost (highest z) layer whose anchor bbox contains it.
-
-    // Step 1: Find anchor RECT for each boundary by scanning commands.
-    // Each boundary node with backgroundColor emits a RECT. We find it by
-    // looking at the node tree to get the expected color, then matching.
+    // ── Phase 2: Build layer slots with bounds ──
     type LayerBounds = {
       slot: LayerSlot
       x: number
       y: number
       right: number
       bottom: number
+      /** If this layer is a scroll container, its SCISSOR pair. */
+      scissor: ScissorPair | null
+      boundary: LayerBoundary
     }
 
     const layerBounds: LayerBounds[] = []
+
+    // Collect ALL scroll container nodes in walkTree order (to map scissors to layers)
+    const scrollNodes: { path: string; isLayer: boolean }[] = []
+    function findScrollNodes(node: TGENode, path: string) {
+      if (node.kind === "text") return
+      if (node.props.scrollX || node.props.scrollY) {
+        scrollNodes.push({ path, isLayer: node.props.layer === true })
+      }
+      for (let i = 0; i < node.children.length; i++) {
+        findScrollNodes(node.children[i], `${path}.${i}`)
+      }
+    }
+    findScrollNodes(root, "r")
+
+    // Map: scroll node path → scissor pair index
+    const scrollPathToScissor = new Map<string, number>()
+    for (let si = 0; si < scrollNodes.length && si < scissorPairs.length; si++) {
+      scrollPathToScissor.set(scrollNodes[si].path, si)
+    }
 
     for (const b of boundaries) {
       const node = resolveNodeByPath(root, b.path)
       if (!node) continue
 
       const slot: LayerSlot = { key: `layer:${b.path}`, z: b.z, cmdIndices: [] }
+      let scissor: ScissorPair | null = null
 
-      if (node.props.backgroundColor !== undefined) {
-        // Find the RECT command for this node's backgroundColor.
-        // We match by the packed color value.
+      // If this layer is a scroll container, find its SCISSOR pair
+      if (b.isScroll) {
+        const si = scrollPathToScissor.get(b.path)
+        if (si !== undefined && si < scissorPairs.length) {
+          scissor = scissorPairs[si]
+        }
+      }
+
+      if (scissor) {
+        // Scroll-container layer: use SCISSOR rect as bounds
+        layerBounds.push({
+          slot,
+          x: scissor.x,
+          y: scissor.y,
+          right: scissor.x + scissor.w,
+          bottom: scissor.y + scissor.h,
+          scissor,
+          boundary: b,
+        })
+      } else if (b.hasBg) {
+        // Static layer with bg: find anchor RECT by color match
         const targetColor = parseColor(node.props.backgroundColor)
         const [tr, tg, tb, ta] = [(targetColor >>> 24) & 0xff, (targetColor >>> 16) & 0xff, (targetColor >>> 8) & 0xff, targetColor & 0xff]
 
-        // Find matching RECT command (not already claimed by a higher-z layer)
+        let found = false
         for (let i = 0; i < commands.length; i++) {
           const cmd = commands[i]
           if (cmd.type !== CMD.RECTANGLE) continue
           if (cmd.color[0] === tr && cmd.color[1] === tg && cmd.color[2] === tb && cmd.color[3] === ta) {
-            // Check this RECT isn't already the anchor for another layer
             const alreadyClaimed = layerBounds.some(lb =>
               lb.x === Math.round(cmd.x) && lb.y === Math.round(cmd.y) &&
               lb.right === Math.round(cmd.x + cmd.width) && lb.bottom === Math.round(cmd.y + cmd.height)
@@ -515,84 +648,108 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
                 y: Math.round(cmd.y),
                 right: Math.round(cmd.x + cmd.width),
                 bottom: Math.round(cmd.y + cmd.height),
+                scissor: null,
+                boundary: b,
               })
+              found = true
               break
             }
           }
         }
+        if (!found) {
+          // Fallback: no matching RECT found, zero bounds
+          layerBounds.push({ slot, x: 0, y: 0, right: 0, bottom: 0, scissor: null, boundary: b })
+        }
       } else {
-        // Layer boundary without backgroundColor — use first child commands
-        // to determine bounds. For now, push with zero bounds and fill later.
-        layerBounds.push({ slot, x: 0, y: 0, right: 0, bottom: 0 })
+        // No bg, not scroll — zero bounds, will be handled by text matching
+        layerBounds.push({ slot, x: 0, y: 0, right: 0, bottom: 0, scissor: null, boundary: b })
       }
     }
 
-    // Step 2: For layers without bg (no anchor RECT), compute bounds from
-    // all commands that would spatially fall within them. We need a first
-    // pass to find their extent. Use commands not claimed by other layers.
-    // For now, these layers claim commands by their TEXT children's positions.
+    // ── Phase 3: Assign commands to layers ──
+    const contentSlots: LayerSlot[] = layerBounds.map(lb => lb.slot)
 
-    // Step 3: Assign each command to the innermost (highest z) layer
-    // whose bounding box contains the command's position.
-    // Commands not in any content layer go to bgSlot.
-    const contentSlots: LayerSlot[] = []
-    for (const lb of layerBounds) {
-      contentSlots.push(lb.slot)
-    }
-
-    // Sort layerBounds by z descending (highest z = innermost = check first)
-    const sortedBounds = [...layerBounds].filter(lb => lb.right > lb.x).sort((a, b) => b.slot.z - a.slot.z)
-
-    // For layers without bounds, collect their commands via leftover
-    const noBoundsLayers = layerBounds.filter(lb => lb.right <= lb.x)
-
-    // Track SCISSOR regions — commands between SCISSOR_START and SCISSOR_END
-    // are force-assigned to the layer containing the SCISSOR_START bbox.
-    // This handles scroll containers where content scrolls OUTSIDE the
-    // layer's anchor bounding box.
-    let scissorLayer: LayerBounds | null = null
-
-    for (let i = 0; i < commands.length; i++) {
-      const cmd = commands[i]
-
-      // SCISSOR_START: find which layer owns this scissor region
-      if (cmd.type === CMD.SCISSOR_START) {
-        const sx = Math.round(cmd.x)
-        const sy = Math.round(cmd.y)
-        // Find the layer whose bbox contains the scissor origin
-        for (const lb of sortedBounds) {
-          if (sx >= lb.x && sy >= lb.y && sx < lb.right && sy < lb.bottom) {
-            scissorLayer = lb
-            break
+    // Build a set of command indices claimed by scroll-container layers
+    // (SCISSOR_START → SCISSOR_END inclusive, plus the preceding RECT if any)
+    //
+    // Process layers from INNERMOST (highest z) to OUTERMOST (lowest z)
+    // so nested layers don't get their commands stolen by the parent.
+    const claimedByScissor = new Set<number>()
+    const scissorLayers = layerBounds.filter(lb => lb.scissor).sort((a, b) => b.slot.z - a.slot.z)
+    for (const lb of scissorLayers) {
+      if (!lb.scissor) continue
+      // Claim ALL commands between SCISSOR_START and SCISSOR_END (inclusive)
+      // that aren't already claimed by an inner (higher-z) layer
+      for (let i = lb.scissor.startIdx; i <= lb.scissor.endIdx; i++) {
+        if (claimedByScissor.has(i)) continue // already claimed by inner layer
+        claimedByScissor.add(i)
+        lb.slot.cmdIndices.push(i)
+      }
+      // Also claim the layer's own background RECT if it has one.
+      // It comes BEFORE the SCISSOR_START — find RECT just before startIdx
+      // with matching color.
+      if (lb.boundary.hasBg) {
+        const node = resolveNodeByPath(root, lb.boundary.path)
+        if (node) {
+          const targetColor = parseColor(node.props.backgroundColor)
+          const [tr, tg, tb, ta] = [(targetColor >>> 24) & 0xff, (targetColor >>> 16) & 0xff, (targetColor >>> 8) & 0xff, targetColor & 0xff]
+          // Scan backwards from SCISSOR_START to find the RECT
+          for (let i = lb.scissor.startIdx - 1; i >= 0; i--) {
+            const cmd = commands[i]
+            if (cmd.type === CMD.RECTANGLE &&
+                cmd.color[0] === tr && cmd.color[1] === tg && cmd.color[2] === tb && cmd.color[3] === ta) {
+              if (!claimedByScissor.has(i)) {
+                claimedByScissor.add(i)
+                lb.slot.cmdIndices.push(i)
+              }
+              break
+            }
+            // Don't look past another SCISSOR_END (that would be a different container)
+            if (cmd.type === CMD.SCISSOR_END) break
+          }
+          // Also claim the BORDER command if present — it comes AFTER SCISSOR_END
+          for (let i = lb.scissor.endIdx + 1; i < commands.length; i++) {
+            const cmd = commands[i]
+            if (cmd.type === CMD.BORDER) {
+              // Verify it's at the same position as the layer
+              const bx = Math.round(cmd.x)
+              const by = Math.round(cmd.y)
+              if (bx >= lb.x && by >= lb.y && bx + Math.round(cmd.width) <= lb.right + 1 && by + Math.round(cmd.height) <= lb.bottom + 1) {
+                if (!claimedByScissor.has(i)) {
+                  claimedByScissor.add(i)
+                  lb.slot.cmdIndices.push(i)
+                }
+              }
+              break
+            }
+            // Stop if we hit another element's commands
+            if (cmd.type === CMD.RECTANGLE || cmd.type === CMD.SCISSOR_START) break
           }
         }
-        // The SCISSOR_START itself goes to that layer (or bg)
-        if (scissorLayer) {
-          scissorLayer.slot.cmdIndices.push(i)
-        } else {
-          bgSlot.cmdIndices.push(i)
-        }
+      }
+    }
+
+    // Sort layerBounds by z descending for spatial assignment of remaining commands
+    const sortedBounds = [...layerBounds]
+      .filter(lb => lb.right > lb.x && !lb.scissor) // only non-scissor layers with bounds
+      .sort((a, b) => b.slot.z - a.slot.z)
+
+    const noBoundsLayers = layerBounds.filter(lb => lb.right <= lb.x && !lb.scissor)
+
+    // Assign remaining commands (not claimed by scissor layers)
+    // to static layers by spatial containment, or to bgSlot
+    for (let i = 0; i < commands.length; i++) {
+      if (claimedByScissor.has(i)) continue
+
+      const cmd = commands[i]
+
+      // SCISSOR commands not claimed by any layer go to bg
+      if (cmd.type === CMD.SCISSOR_START || cmd.type === CMD.SCISSOR_END) {
+        bgSlot.cmdIndices.push(i)
         continue
       }
 
-      // SCISSOR_END: assign to scissor layer and clear
-      if (cmd.type === CMD.SCISSOR_END) {
-        if (scissorLayer) {
-          scissorLayer.slot.cmdIndices.push(i)
-          scissorLayer = null
-        } else {
-          bgSlot.cmdIndices.push(i)
-        }
-        continue
-      }
-
-      // If inside a SCISSOR region, force-assign to that layer
-      if (scissorLayer) {
-        scissorLayer.slot.cmdIndices.push(i)
-        continue
-      }
-
-      // Normal spatial assignment
+      // Spatial assignment for remaining commands
       const cx = Math.round(cmd.x)
       const cy = Math.round(cmd.y)
 
@@ -610,19 +767,14 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       }
     }
 
-    // Handle no-bounds layers: find their commands among bgSlot's commands
-    // by looking at commands that are near the layer's tree position.
-    // For text-only layers (no bg), we need to extract their TEXT commands
-    // from bgSlot and move them to the layer slot.
+    // Handle no-bounds layers: extract TEXT commands from bgSlot by content match
     for (const lb of noBoundsLayers) {
       const node = resolveNodeByPath(root, lb.slot.key.replace("layer:", ""))
       if (!node) continue
 
-      // Collect expected text content from this subtree
       const texts = collectAllTexts(node)
       if (texts.length === 0) continue
 
-      // Find TEXT commands in bgSlot matching these texts
       const toMove: number[] = []
       for (const cmdIdx of bgSlot.cmdIndices) {
         const cmd = commands[cmdIdx]
@@ -631,7 +783,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         }
       }
 
-      // Move from bgSlot to this layer
       for (const idx of toMove) {
         const pos = bgSlot.cmdIndices.indexOf(idx)
         if (pos >= 0) bgSlot.cmdIndices.splice(pos, 1)
@@ -710,6 +861,36 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     // will have layout { 0, 0, 0, 0 } until a more precise approach is added.
   }
 
+  // ── Interactive state (hover/active) ──
+
+  /** Track nodes with hoverStyle/activeStyle for hit-testing */
+  function updateInteractiveStates() {
+    let changed = false
+    // Walk all rect nodes (they have layout) and check hover/active
+    for (const node of rectNodes) {
+      if (!node.props.hoverStyle && !node.props.activeStyle) continue
+
+      const l = node.layout
+      const isOver = pointerX >= l.x && pointerX < l.x + l.width &&
+                     pointerY >= l.y && pointerY < l.y + l.height
+      const isDown = isOver && pointerDown
+
+      if (node._hovered !== isOver) {
+        node._hovered = isOver
+        changed = true
+      }
+      if (node._active !== isDown) {
+        node._active = isDown
+        changed = true
+      }
+    }
+    // If any state changed, mark dirty to trigger repaint next frame
+    if (changed) {
+      markDirty()
+      markAllDirty()
+    }
+  }
+
   // ── Frame rendering ──
 
   /** Paint a single frame with layer compositing. */
@@ -753,15 +934,17 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
     // Write layout geometry back to TGENodes for ref access
     writeLayoutBack(commands)
+    // Update hover/active states based on pointer position
+    updateInteractiveStates()
 
     if (commands.length === 0) {
       clearDirty()
       return
     }
 
-    // 2. Find layer boundaries and assign commands spatially
+    // 2. Find layer boundaries and assign commands
     nextZ = 0
-    const boundaries: { path: string; z: number }[] = []
+    const boundaries: LayerBoundary[] = []
     findLayerBoundaries(root, "r", boundaries)
     const { bgSlot, contentSlots } = assignLayersSpatial(commands, boundaries)
 
@@ -787,33 +970,81 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     term.beginSync()
 
     // 3. Render each layer slot
+    const frameStart = expFrameBudgetMs > 0 ? performance.now() : 0
+    let frameBudgetExceeded = false
+
     for (const slot of allSlots) {
       if (slot.cmdIndices.length === 0) continue
+
+      // [Experimental] Frame budget — defer non-background layers if over budget
+      if (expFrameBudgetMs > 0 && !frameBudgetExceeded && slot.z >= 0) {
+        const elapsed = performance.now() - frameStart
+        if (elapsed > expFrameBudgetMs) {
+          log(`  [FRAME BUDGET] ${elapsed.toFixed(1)}ms > ${expFrameBudgetMs}ms — deferring remaining layers`)
+          frameBudgetExceeded = true
+        }
+      }
+      if (frameBudgetExceeded && slot.z >= 0) {
+        // Mark layer dirty so it gets picked up next frame
+        const deferLayer = layerCache.get(slot.key)
+        if (deferLayer) deferLayer.dirty = true
+        continue
+      }
 
       const layer = getOrCreateLayer(slot.key, slot.z)
 
       // Compute bounding box from commands.
-      // If the layer has a SCISSOR_START, use the scissor rect as the
-      // bounding box — this IS the clip rect. Content outside it is
-      // automatically clipped by Zig's bounds checking against the buffer.
+      // For scroll-container layers: use the SCISSOR rect as the PRIMARY
+      //   bounds, expanded by the layer's own RECT/BORDER (which may be
+      //   slightly larger due to border width). Child commands inside the
+      //   scissor are NOT included in bounds — they're clipped by the scissor
+      //   and may scroll far outside the viewport.
+      // For static layers: union of all command bounding boxes.
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
       let hasScissor = false
+      let scissorX = 0, scissorY = 0, scissorR = 0, scissorB = 0
 
       for (const idx of slot.cmdIndices) {
         const cmd = commands[idx]
         if (!cmd) continue
         if (cmd.type === CMD.SCISSOR_START) {
-          // Use scissor rect as the layer bounds
-          minX = cmd.x
-          minY = cmd.y
-          maxX = cmd.x + cmd.width
-          maxY = cmd.y + cmd.height
+          scissorX = cmd.x
+          scissorY = cmd.y
+          scissorR = cmd.x + cmd.width
+          scissorB = cmd.y + cmd.height
+          minX = scissorX
+          minY = scissorY
+          maxX = scissorR
+          maxY = scissorB
           hasScissor = true
-          break // scissor defines the bounds, ignore everything else
+          break
         }
       }
 
-      if (!hasScissor) {
+      if (hasScissor) {
+        // Expand bounds to include the layer's OWN bg RECT and BORDER,
+        // which are OUTSIDE the scissor scope (before SCISSOR_START or
+        // after SCISSOR_END). These overlap with the scissor rect position.
+        for (const idx of slot.cmdIndices) {
+          const cmd = commands[idx]
+          if (!cmd) continue
+          if (cmd.type !== CMD.RECTANGLE && cmd.type !== CMD.BORDER) continue
+          // Only include commands at approximately the same position as the
+          // scissor (the container's own rect/border), not child rects
+          const cx = Math.round(cmd.x)
+          const cy = Math.round(cmd.y)
+          const cr = Math.round(cmd.x + cmd.width)
+          const cb = Math.round(cmd.y + cmd.height)
+          const overlapX = Math.abs(cx - scissorX) < 4 || Math.abs(cr - scissorR) < 4
+          const overlapY = Math.abs(cy - scissorY) < 4 || Math.abs(cb - scissorB) < 4
+          if (overlapX && overlapY) {
+            minX = Math.min(minX, cx)
+            minY = Math.min(minY, cy)
+            maxX = Math.max(maxX, cr)
+            maxY = Math.max(maxY, cb)
+          }
+        }
+      } else {
         for (const idx of slot.cmdIndices) {
           const cmd = commands[idx]
           if (!cmd) continue
@@ -838,6 +1069,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         const prev = layer.buf.data.slice()
         clearLayer(layer, 0x00000000)
 
+        // Reset scissor stack before painting each layer to prevent leaks
+        scissorStack.length = 0
+
         // Sort command indices to preserve SCISSOR ordering
         const sortedIndices = slot.cmdIndices.slice().sort((a, b) => a - b)
         for (const idx of sortedIndices) {
@@ -848,10 +1082,31 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
         const changed = layer.dirty || !buffersEqual(prev, layer.buf.data)
         if (changed) {
-          // In selectableText mode, force ALL layers to z=-1 so they render UNDER ANSI text
           const renderZ = selectableText ? -1 : layer.z
-          log(`  [${slot.key}] REPAINT ${lw}x${lh} at (${lx},${ly}) z=${renderZ} (${(lw * lh * 4 / 1024).toFixed(0)}KB) cmds=${slot.cmdIndices.length}`)
-          layerComposer!.renderLayer(layer.buf, imageIdForLayer(layer), lx, ly, renderZ, cellW, cellH)
+          const imageId = imageIdForLayer(layer)
+
+          // [Experimental] Partial updates — try to patch only the dirty region
+          let usedPatch = false
+          if (expPartialUpdates && !layer.dirty && layer.buf) {
+            const region = findDirtyRegion(prev, layer.buf.data, layer.buf.width, layer.buf.height)
+            if (region) {
+              const totalPixels = layer.buf.width * layer.buf.height
+              const regionPixels = region.w * region.h
+              // Only use partial update if the dirty region is <50% of the layer
+              if (regionPixels < totalPixels * 0.5) {
+                const regionData = extractRegion(layer.buf.data, layer.buf.width, region.x, region.y, region.w, region.h)
+                usedPatch = layerComposer!.patchLayer(regionData, imageId, region.x, region.y, region.w, region.h)
+                if (usedPatch) {
+                  log(`  [${slot.key}] PATCH ${region.w}x${region.h} at (${region.x},${region.y}) (${(regionPixels * 4 / 1024).toFixed(0)}KB of ${(totalPixels * 4 / 1024).toFixed(0)}KB, ${region.dirtyPixels} dirty px)`)
+                }
+              }
+            }
+          }
+
+          if (!usedPatch) {
+            log(`  [${slot.key}] REPAINT ${lw}x${lh} at (${lx},${ly}) z=${renderZ} (${(lw * lh * 4 / 1024).toFixed(0)}KB) cmds=${slot.cmdIndices.length}`)
+            layerComposer!.renderLayer(layer.buf, imageId, lx, ly, renderZ, cellW, cellH)
+          }
           markLayerClean(layer)
         } else {
           log(`  [${slot.key}] SKIP (unchanged)`)
@@ -907,6 +1162,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     const commands = clay.endLayout()
 
     writeLayoutBack(commands)
+    updateInteractiveStates()
 
     for (const cmd of commands) {
       paintCommand(fallbackBuf, cmd, 0, 0)
@@ -958,14 +1214,19 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
     start() {
       frame() // initial render
-      timer = setInterval(() => {
-        if (isDirty()) frame()
-      }, 33) // ~30fps
+      const scheduleNext = () => {
+        const interval = hasActiveAnimations() ? activeInterval : idleInterval
+        timer = setTimeout(() => {
+          if (isDirty()) frame()
+          scheduleNext()
+        }, interval)
+      }
+      scheduleNext()
     },
 
     stop() {
       if (timer) {
-        clearInterval(timer)
+        clearTimeout(timer)
         timer = null
       }
     },
@@ -977,7 +1238,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       isSuspended = true
       // Stop the render loop first
       if (timer) {
-        clearInterval(timer)
+        clearTimeout(timer)
         timer = null
       }
       // Restore terminal (alt screen, cursor, mouse, etc.)
@@ -992,11 +1253,16 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       // Force full repaint — all layers dirty, all buffers stale
       markDirty()
       markAllDirty()
-      // Restart the render loop
+      // Restart the render loop with adaptive FPS
       frame()
-      timer = setInterval(() => {
-        if (isDirty()) frame()
-      }, 33)
+      const scheduleNext = () => {
+        const interval = hasActiveAnimations() ? activeInterval : idleInterval
+        timer = setTimeout(() => {
+          if (isDirty()) frame()
+          scheduleNext()
+        }, interval)
+      }
+      scheduleNext()
     },
 
     suspended() {
@@ -1004,7 +1270,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     },
 
     destroy() {
-      if (timer) clearInterval(timer)
+      if (timer) clearTimeout(timer)
       unsubResize()
       if (layerComposer) layerComposer.destroy()
       if (fallbackComposer) fallbackComposer.destroy()
@@ -1024,6 +1290,63 @@ function buffersEqual(a: Uint8Array, b: Uint8Array): boolean {
     }
   }
   return true
+}
+
+/**
+ * [Experimental] Find the bounding box of dirty pixels between two buffers.
+ * Returns null if buffers are identical, or {x, y, w, h, dirtyPixels} with the
+ * minimal axis-aligned bounding box containing all changed pixels.
+ */
+function findDirtyRegion(
+  prev: Uint8Array,
+  curr: Uint8Array,
+  width: number,
+  height: number,
+): { x: number; y: number; w: number; h: number; dirtyPixels: number } | null {
+  let minX = width, minY = height, maxX = -1, maxY = -1
+  let dirtyPixels = 0
+  const stride = width * 4
+
+  for (let y = 0; y < height; y++) {
+    const rowOff = y * stride
+    for (let x = 0; x < width; x++) {
+      const off = rowOff + x * 4
+      if (prev[off] !== curr[off] || prev[off + 1] !== curr[off + 1] ||
+          prev[off + 2] !== curr[off + 2] || prev[off + 3] !== curr[off + 3]) {
+        if (x < minX) minX = x
+        if (x > maxX) maxX = x
+        if (y < minY) minY = y
+        if (y > maxY) maxY = y
+        dirtyPixels++
+      }
+    }
+  }
+
+  if (maxX < 0) return null // identical
+  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1, dirtyPixels }
+}
+
+/**
+ * [Experimental] Extract a sub-region from a pixel buffer as a flat RGBA array.
+ * Used to prepare data for patchRegion().
+ */
+function extractRegion(
+  data: Uint8Array,
+  bufWidth: number,
+  rx: number,
+  ry: number,
+  rw: number,
+  rh: number,
+): Uint8Array {
+  const out = new Uint8Array(rw * rh * 4)
+  const srcStride = bufWidth * 4
+  const dstStride = rw * 4
+  for (let y = 0; y < rh; y++) {
+    const srcOff = (ry + y) * srcStride + rx * 4
+    const dstOff = y * dstStride
+    out.set(data.subarray(srcOff, srcOff + dstStride), dstOff)
+  }
+  return out
 }
 
 // ── Scissor clipping ──
@@ -1161,12 +1484,13 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
       const radius = Math.round(cmd.cornerRadius)
       const cmdColor = ((r << 24) | (g << 16) | (b << 8) | a) >>> 0
 
-      // Check for shadow/glow effects matching this RECT
+      // Check for shadow/glow/gradient effects matching this RECT
       const effectIdx = effectsQueue.findIndex(
         (e) => e.color === cmdColor && e.cornerRadius === radius
       )
+      let matchedEffect: EffectConfig | null = null
       if (effectIdx >= 0) {
-        const effect = effectsQueue[effectIdx]
+        matchedEffect = effectsQueue[effectIdx]
         effectsQueue.splice(effectIdx, 1) // consume — one match per node
 
         // Effects use TEMPORARY BUFFERS to avoid destructive in-place blur.
@@ -1175,8 +1499,8 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
         // composite it onto the main buffer with src-over alpha blending.
 
         // Glow: rounded rect in glow color → blur → composite
-        if (effect.glow) {
-          const gl = effect.glow
+        if (matchedEffect.glow) {
+          const gl = matchedEffect.glow
           const gr = (gl.color >>> 24) & 0xff
           const gg = (gl.color >>> 16) & 0xff
           const gb = (gl.color >>> 8) & 0xff
@@ -1204,40 +1528,179 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
           }
         }
 
-        // Shadow: rounded rect at offset → blur → composite
-        if (effect.shadow) {
-          const s = effect.shadow
-          const sr = (s.color >>> 24) & 0xff
-          const sg = (s.color >>> 16) & 0xff
-          const sb = (s.color >>> 8) & 0xff
-          const sa = s.color & 0xff
-          const blurR = Math.ceil(s.blur)
-          const margin = blurR * 2
-          // Temp buffer: rect size + blur margin + offset
-          const tw = w + margin * 2 + Math.abs(s.x)
-          const th = h + margin * 2 + Math.abs(s.y)
-          if (tw > 0 && th > 0) {
-            const tmp = create(tw, th)
-            // Paint shadow shape in temp buffer (offset from center)
-            const lx = margin + Math.max(0, s.x)
-            const ly = margin + Math.max(0, s.y)
-            if (radius > 0) {
-              paint.roundedRect(tmp, lx, ly, w, h, sr, sg, sb, sa, radius)
-            } else {
-              paint.fillRect(tmp, lx, ly, w, h, sr, sg, sb, sa)
+        // Shadow: rounded rect at offset → blur → composite (supports array)
+        if (matchedEffect.shadow) {
+          const shadows = Array.isArray(matchedEffect.shadow) ? matchedEffect.shadow : [matchedEffect.shadow]
+          for (const s of shadows) {
+            const sr = (s.color >>> 24) & 0xff
+            const sg = (s.color >>> 16) & 0xff
+            const sb = (s.color >>> 8) & 0xff
+            const sa = s.color & 0xff
+            const blurR = Math.ceil(s.blur)
+            const margin = blurR * 2
+            const tw = w + margin * 2 + Math.abs(s.x)
+            const th = h + margin * 2 + Math.abs(s.y)
+            if (tw > 0 && th > 0) {
+              const tmp = create(tw, th)
+              const lx = margin + Math.max(0, s.x)
+              const ly = margin + Math.max(0, s.y)
+              if (radius > 0) {
+                paint.roundedRect(tmp, lx, ly, w, h, sr, sg, sb, sa, radius)
+              } else {
+                paint.fillRect(tmp, lx, ly, w, h, sr, sg, sb, sa)
+              }
+              paint.blur(tmp, 0, 0, tw, th, blurR, 3)
+              const dx = x - margin + Math.min(0, s.x)
+              const dy = y - margin + Math.min(0, s.y)
+              over(buf, tmp, dx, dy)
             }
-            // Blur in isolated temp buffer
-            paint.blur(tmp, 0, 0, tw, th, blurR, 3)
-            // Composite onto main buffer
-            const dx = x - margin + Math.min(0, s.x)
-            const dy = y - margin + Math.min(0, s.y)
-            over(buf, tmp, dx, dy)
           }
         }
       }
 
-      // Paint the actual rect ON TOP of shadow/glow
-      if (radius > 0) {
+      // Backdrop blur — blur the content behind this element in-place
+      if (matchedEffect?.backdropBlur && matchedEffect.backdropBlur > 0) {
+        const blurR = Math.ceil(matchedEffect.backdropBlur)
+        const effRadius = matchedEffect.cornerRadius
+
+        // Save corner pixels BEFORE blur so we can restore them after.
+        // The blur operates on a rectangle but the element may be rounded —
+        // pixels outside the rounded rect must remain untouched.
+        let saved: Uint8Array | null = null
+        if (effRadius > 0) {
+          saved = sub(buf, x, y, w, h).data
+        }
+
+        // Blur directly in the main buffer at the element's region.
+        paint.blur(buf, x, y, w, h, blurR, 3)
+
+        // Restore pixels outside the rounded rect (corners)
+        if (effRadius > 0 && saved) {
+          const mask = create(w, h)
+          paint.roundedRect(mask, 0, 0, w, h, 255, 255, 255, 255, effRadius)
+          const md = mask.data
+          const d = buf.data
+          for (let ly = 0; ly < h; ly++) {
+            const bufRow = (y + ly) * buf.stride
+            const savRow = ly * w * 4
+            const mRow = ly * mask.stride
+            for (let lx = 0; lx < w; lx++) {
+              const mi = mRow + lx * 4 + 3
+              if (md[mi] === 0) {
+                // Outside rounded rect — restore original pixel
+                const bo = bufRow + (x + lx) * 4
+                const si = savRow + lx * 4
+                d[bo] = saved[si]; d[bo+1] = saved[si+1]; d[bo+2] = saved[si+2]; d[bo+3] = saved[si+3]
+              } else if (md[mi] < 255) {
+                // Anti-aliased edge — blend between original and blurred
+                const bo = bufRow + (x + lx) * 4
+                const si = savRow + lx * 4
+                const ma = md[mi] / 255
+                const ia = 1 - ma
+                d[bo]   = Math.round(d[bo]   * ma + saved[si]   * ia)
+                d[bo+1] = Math.round(d[bo+1] * ma + saved[si+1] * ia)
+                d[bo+2] = Math.round(d[bo+2] * ma + saved[si+2] * ia)
+                d[bo+3] = Math.round(d[bo+3] * ma + saved[si+3] * ia)
+              }
+            }
+          }
+        }
+
+        // Now paint backgroundColor / gradient on top of the blurred region
+        if (matchedEffect.gradient) {
+          const grad = matchedEffect.gradient
+          const tmp = create(w, h)
+          if (grad.type === "linear") {
+            paint.linearGradient(tmp, 0, 0, w, h,
+              (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
+              (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff,
+              grad.angle)
+          } else {
+            const cx = Math.round(w / 2)
+            const cy = Math.round(h / 2)
+            const gradRadius = Math.round(Math.max(w, h) / 2)
+            paint.radialGradient(tmp, cx, cy, gradRadius,
+              (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
+              (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff)
+          }
+          if (effRadius > 0) {
+            // Mask gradient to rounded rect
+            const mask = create(w, h)
+            paint.roundedRect(mask, 0, 0, w, h, 255, 255, 255, 255, effRadius)
+            const gd = tmp.data
+            const md = mask.data
+            for (let i = 3; i < w * h * 4; i += 4) {
+              if (md[i] === 0) { gd[i-3] = 0; gd[i-2] = 0; gd[i-1] = 0; gd[i] = 0 }
+              else if (md[i] < 255) { gd[i] = Math.round((gd[i] * md[i]) / 255) }
+            }
+          }
+          over(buf, tmp, x, y)
+        } else if (a > 1) {
+          // Paint solid backgroundColor on top of blur (skip if just placeholder)
+          if (effRadius > 0) {
+            paint.roundedRect(buf, x, y, w, h, r, g, b, a, effRadius)
+          } else {
+            paint.fillRect(buf, x, y, w, h, r, g, b, a)
+          }
+        }
+        // Skip the separate fill below — already handled
+        break
+      }
+
+      // Paint the actual rect ON TOP of shadow/glow (no backdrop blur path)
+      if (matchedEffect?.gradient) {
+        // Gradient fill: paint gradient, then mask to rounded rect shape
+        const grad = matchedEffect.gradient
+        if (radius > 0) {
+          // For rounded rects: paint gradient into temp buffer, then mask with SDF
+          const tmp = create(w, h)
+          if (grad.type === "linear") {
+            paint.linearGradient(tmp, 0, 0, w, h,
+              (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
+              (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff,
+              grad.angle)
+          } else {
+            const cx = Math.round(w / 2)
+            const cy = Math.round(h / 2)
+            const gradRadius = Math.round(Math.max(w, h) / 2)
+            paint.radialGradient(tmp, cx, cy, gradRadius,
+              (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
+              (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff)
+          }
+          // Mask: create a rounded rect alpha mask and multiply
+          const mask = create(w, h)
+          paint.roundedRect(mask, 0, 0, w, h, 255, 255, 255, 255, radius)
+          // Apply mask: zero out gradient pixels where mask alpha is 0
+          const gd = tmp.data
+          const md = mask.data
+          for (let i = 3; i < w * h * 4; i += 4) {
+            if (md[i] === 0) { gd[i - 3] = 0; gd[i - 2] = 0; gd[i - 1] = 0; gd[i] = 0 }
+            else if (md[i] < 255) {
+              // Anti-aliased edge — scale alpha
+              gd[i] = Math.round((gd[i] * md[i]) / 255)
+            }
+          }
+          over(buf, tmp, x, y)
+        } else {
+          // No radius: paint gradient directly
+          if (grad.type === "linear") {
+            paint.linearGradient(buf, x, y, w, h,
+              (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
+              (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff,
+              grad.angle)
+          } else {
+            const cx = x + Math.round(w / 2)
+            const cy = y + Math.round(h / 2)
+            const gradRadius = Math.round(Math.max(w, h) / 2)
+            paint.radialGradient(buf, cx, cy, gradRadius,
+              (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
+              (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff)
+          }
+        }
+      } else if (matchedEffect?.cornerRadii) {
+        const cr = matchedEffect.cornerRadii
+        paint.roundedRectCorners(buf, x, y, w, h, r, g, b, a, cr.tl, cr.tr, cr.br, cr.bl)
+      } else if (radius > 0) {
         paint.roundedRect(buf, x, y, w, h, r, g, b, a, radius)
       } else {
         paint.fillRect(buf, x, y, w, h, r, g, b, a)
@@ -1248,7 +1711,17 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
     case CMD.BORDER: {
       const radius = Math.round(cmd.cornerRadius)
       const bw = Math.round(cmd.extra1) || 1
-      paint.strokeRect(buf, x, y, w, h, r, g, b, a, radius, bw)
+      // Check if this border matches a per-corner radius effect
+      const cmdBorderColor = ((r << 24) | (g << 16) | (b << 8) | a) >>> 0
+      const borderEffectIdx = effectsQueue.findIndex(
+        (e) => e.cornerRadii && e.color !== undefined
+      )
+      if (borderEffectIdx >= 0 && effectsQueue[borderEffectIdx].cornerRadii) {
+        const cr = effectsQueue[borderEffectIdx].cornerRadii!
+        paint.strokeRectCorners(buf, x, y, w, h, r, g, b, a, cr.tl, cr.tr, cr.br, cr.bl, bw)
+      } else {
+        paint.strokeRect(buf, x, y, w, h, r, g, b, a, radius, bw)
+      }
       break
     }
 

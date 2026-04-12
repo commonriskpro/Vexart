@@ -204,6 +204,87 @@ fn blur_v(b_: *PixelBuffer, x0: u32, y0: u32, x1: u32, y1: u32, r: u32, tmp: []u
     }
 }
 
+// ── Inset shadow ──
+
+const rect = @import("rect.zig");
+
+/// Paint an inset shadow inside a rounded rectangle.
+///
+/// Algorithm:
+///   1. For each pixel INSIDE the rect (SDF < 0):
+///      compute distance from the NEAREST EDGE of the rect
+///   2. The closer to the edge, the more shadow.
+///      Shadow intensity = clamp(1.0 - |dist| / spread, 0, 1)
+///   3. Offset shifts which edges produce more shadow (simulating light direction).
+///
+/// This is a pure SDF approach — no blur pass needed, anti-aliased by default.
+pub fn inset(
+    b_: *PixelBuffer,
+    x: i32,
+    y: i32,
+    w: u32,
+    h: u32,
+    radius: u32,
+    ox: i32,
+    oy: i32,
+    spread: u32,
+    sr: u8,
+    sg: u8,
+    sb: u8,
+    sa: u8,
+) void {
+    if (sa == 0 or spread == 0 or w == 0 or h == 0) return;
+
+    const fw: f32 = @floatFromInt(w);
+    const fh: f32 = @floatFromInt(h);
+    const max_rad = @min(fw / 2.0, fh / 2.0);
+    const rad = @min(@as(f32, @floatFromInt(radius)), max_rad);
+    const fspread: f32 = @floatFromInt(spread);
+    const fox: f32 = @floatFromInt(ox);
+    const foy: f32 = @floatFromInt(oy);
+
+    const fx: f32 = @floatFromInt(x);
+    const fy: f32 = @floatFromInt(y);
+    const hw = fw / 2.0;
+    const hh = fh / 2.0;
+    const mx = fx + hw;
+    const my = fy + hh;
+
+    const clamp_u = rect.clamp_u_pub;
+
+    const x0 = clamp_u(x, 0, b_.width);
+    const y0 = clamp_u(y, 0, b_.height);
+    const x1 = clamp_u(x + @as(i32, @intCast(w)), 0, b_.width);
+    const y1 = clamp_u(y + @as(i32, @intCast(h)), 0, b_.height);
+
+    var py = y0;
+    while (py < y1) : (py += 1) {
+        var px = x0;
+        while (px < x1) : (px += 1) {
+            const fpx: f32 = @floatFromInt(px);
+            const fpy: f32 = @floatFromInt(py);
+
+            // SDF of the outer rect — negative = inside
+            const dist = rect.sdf_pub(fpx, fpy, mx, my, hw, hh, rad);
+            if (dist > 0.5) continue; // outside the rect
+
+            // Distance from the edge = -dist (positive inside).
+            // Offset shifts the "virtual edge" — as if the shadow source is shifted.
+            const edge_dist = -dist;
+            // Apply offset: reduce effective distance on the offset side
+            const offset_dist = edge_dist + fox * (fpx - mx) / hw + foy * (fpy - my) / hh;
+            const t = 1.0 - @min(@max(offset_dist / fspread, 0.0), 1.0);
+
+            if (t < 0.01) continue;
+
+            // Modulate alpha by t (closer to edge = more shadow)
+            const final_a: u32 = @intFromFloat(@round(@as(f32, @floatFromInt(sa)) * t));
+            if (final_a == 0) continue;
+            buf.blend(b_, px, py, sr, sg, sb, @intCast(@min(final_a, 255)));
+        }
+    }
+}
+
 // ── Tests ──
 
 test "blur smooths sharp edges" {
@@ -223,4 +304,22 @@ test "blur smooths sharp edges" {
     // And neighbors should have some alpha
     const neighbor = 5 * 40 + 6 * 4;
     try std.testing.expect(pixels[neighbor + 3] > 0);
+}
+
+test "inset shadow paints inside rect" {
+    var pixels = [_]u8{0} ** (20 * 20 * 4);
+    var pb = PixelBuffer{ .data = &pixels, .width = 20, .height = 20, .stride = 80 };
+    // Inset shadow: rect at (2,2) 16x16, radius 3, spread 6, black shadow
+    inset(&pb, 2, 2, 16, 16, 3, 0, 0, 6, 0, 0, 0, 200);
+
+    // Edge pixel (3,10) should have shadow (near border)
+    const edge = 10 * 80 + 3 * 4;
+    try std.testing.expect(pixels[edge + 3] > 50);
+
+    // Center pixel (10,10) should have less or no shadow
+    const center = 10 * 80 + 10 * 4;
+    try std.testing.expect(pixels[edge + 3] > pixels[center + 3]);
+
+    // Outside pixel (0,0) should be empty
+    try std.testing.expectEqual(@as(u8, 0), pixels[0 + 3]);
 }

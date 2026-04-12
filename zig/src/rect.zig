@@ -39,6 +39,9 @@ fn clamp_u(val: i32, lo: u32, hi: u32) u32 {
     return @intCast(val);
 }
 
+/// Public alias for cross-module use (shadow.zig needs this).
+pub const clamp_u_pub = clamp_u;
+
 /// Rounded rect SDF distance at point (px, py).
 /// Center (mx, my), half-extents (hw, hh), corner radius r.
 fn sdf(px: f32, py: f32, mx: f32, my: f32, hw: f32, hh: f32, r: f32) f32 {
@@ -47,6 +50,9 @@ fn sdf(px: f32, py: f32, mx: f32, my: f32, hw: f32, hh: f32, r: f32) f32 {
     const outside = sqrt(max_f(dx, 0) * max_f(dx, 0) + max_f(dy, 0) * max_f(dy, 0));
     return outside + min_f(max_f(dx, dy), 0) - r;
 }
+
+/// Public alias for cross-module use (shadow.zig needs this).
+pub const sdf_pub = sdf;
 
 /// Convert SDF distance to alpha coverage (0..255).
 fn coverage(dist: f32, base_alpha: u8) u8 {
@@ -172,6 +178,122 @@ pub fn stroke(b_: *PixelBuffer, x: i32, y: i32, w: u32, h: u32, r: u8, g: u8, b:
     }
 }
 
+// ── Per-corner radius ──
+
+/// SDF for a rounded rect with per-corner radii.
+/// Selects the corner radius based on the quadrant of (px, py) relative to center (mx, my).
+/// radii: [top-left, top-right, bottom-right, bottom-left]
+fn sdf_corners(px: f32, py: f32, mx: f32, my: f32, hw: f32, hh: f32, r_tl: f32, r_tr: f32, r_br: f32, r_bl: f32) f32 {
+    // Select corner radius by quadrant
+    const r = if (px < mx)
+        (if (py < my) r_tl else r_bl)
+    else
+        (if (py < my) r_tr else r_br);
+    const dx = abs_f(px - mx) - hw + r;
+    const dy = abs_f(py - my) - hh + r;
+    const outside = sqrt(max_f(dx, 0) * max_f(dx, 0) + max_f(dy, 0) * max_f(dy, 0));
+    return outside + min_f(max_f(dx, dy), 0) - r;
+}
+
+/// Fill a rounded rectangle with per-corner radii.
+/// radii packed as u32: top-left in bits 24-31, top-right 16-23, bottom-right 8-15, bottom-left 0-7.
+pub fn rounded_corners(b_: *PixelBuffer, x: i32, y: i32, w: u32, h: u32, r: u8, g: u8, b: u8, a: u8, radii: u32) void {
+    if (a == 0) return;
+
+    const r_tl: u32 = (radii >> 24) & 0xff;
+    const r_tr: u32 = (radii >> 16) & 0xff;
+    const r_br: u32 = (radii >> 8) & 0xff;
+    const r_bl: u32 = radii & 0xff;
+
+    // If all radii are 0, fast path
+    if (r_tl == 0 and r_tr == 0 and r_br == 0 and r_bl == 0) return fill(b_, x, y, w, h, r, g, b, a);
+    // If all same, use uniform path
+    if (r_tl == r_tr and r_tr == r_br and r_br == r_bl) return rounded(b_, x, y, w, h, r, g, b, a, r_tl);
+
+    const fw: f32 = @floatFromInt(w);
+    const fh: f32 = @floatFromInt(h);
+    const max_rad = min_f(fw / 2.0, fh / 2.0);
+
+    const ftl = min_f(@as(f32, @floatFromInt(r_tl)), max_rad);
+    const ftr = min_f(@as(f32, @floatFromInt(r_tr)), max_rad);
+    const fbr = min_f(@as(f32, @floatFromInt(r_br)), max_rad);
+    const fbl = min_f(@as(f32, @floatFromInt(r_bl)), max_rad);
+
+    const fx: f32 = @floatFromInt(x);
+    const fy: f32 = @floatFromInt(y);
+    const hw = fw / 2.0;
+    const hh = fh / 2.0;
+    const mx = fx + hw;
+    const my = fy + hh;
+
+    const x0 = clamp_u(x, 0, b_.width);
+    const y0 = clamp_u(y, 0, b_.height);
+    const x1 = clamp_u(x + @as(i32, @intCast(w)), 0, b_.width);
+    const y1 = clamp_u(y + @as(i32, @intCast(h)), 0, b_.height);
+
+    var py = y0;
+    while (py < y1) : (py += 1) {
+        var px = x0;
+        while (px < x1) : (px += 1) {
+            const fpx: f32 = @floatFromInt(px);
+            const fpy: f32 = @floatFromInt(py);
+            const dist = sdf_corners(fpx, fpy, mx, my, hw, hh, ftl, ftr, fbr, fbl);
+            const ca = coverage(dist, a);
+            if (ca == 0) continue;
+            blend(b_, px, py, r, g, b, ca);
+        }
+    }
+}
+
+/// Stroke a rounded rectangle with per-corner radii.
+pub fn stroke_corners(b_: *PixelBuffer, x: i32, y: i32, w: u32, h: u32, r: u8, g: u8, b: u8, a: u8, radii: u32, sw: u32) void {
+    if (a == 0 or sw == 0) return;
+
+    const r_tl: u32 = (radii >> 24) & 0xff;
+    const r_tr: u32 = (radii >> 16) & 0xff;
+    const r_br: u32 = (radii >> 8) & 0xff;
+    const r_bl: u32 = radii & 0xff;
+
+    if (r_tl == 0 and r_tr == 0 and r_br == 0 and r_bl == 0) return stroke(b_, x, y, w, h, r, g, b, a, 0, sw);
+    if (r_tl == r_tr and r_tr == r_br and r_br == r_bl) return stroke(b_, x, y, w, h, r, g, b, a, r_tl, sw);
+
+    const fw: f32 = @floatFromInt(w);
+    const fh: f32 = @floatFromInt(h);
+    const fsw: f32 = @floatFromInt(sw);
+    const max_rad = min_f(fw / 2.0, fh / 2.0);
+
+    const ftl = min_f(@as(f32, @floatFromInt(r_tl)), max_rad);
+    const ftr = min_f(@as(f32, @floatFromInt(r_tr)), max_rad);
+    const fbr = min_f(@as(f32, @floatFromInt(r_br)), max_rad);
+    const fbl = min_f(@as(f32, @floatFromInt(r_bl)), max_rad);
+
+    const fx: f32 = @floatFromInt(x);
+    const fy: f32 = @floatFromInt(y);
+    const hw = fw / 2.0;
+    const hh = fh / 2.0;
+    const mx = fx + hw;
+    const my = fy + hh;
+
+    const x0 = clamp_u(x, 0, b_.width);
+    const y0 = clamp_u(y, 0, b_.height);
+    const x1 = clamp_u(x + @as(i32, @intCast(w)), 0, b_.width);
+    const y1 = clamp_u(y + @as(i32, @intCast(h)), 0, b_.height);
+
+    var py = y0;
+    while (py < y1) : (py += 1) {
+        var px = x0;
+        while (px < x1) : (px += 1) {
+            const fpx: f32 = @floatFromInt(px);
+            const fpy: f32 = @floatFromInt(py);
+            const d = sdf_corners(fpx, fpy, mx, my, hw, hh, ftl, ftr, fbr, fbl);
+            const band = abs_f(d) - fsw / 2.0;
+            const ca = coverage(band, a);
+            if (ca == 0) continue;
+            blend(b_, px, py, r, g, b, ca);
+        }
+    }
+}
+
 // ── Tests ──
 
 test "fill opaque rect" {
@@ -210,4 +332,34 @@ test "stroke produces hollow rect" {
     // Edge (1,5) should have paint
     const edge = 5 * 48 + 1 * 4;
     try std.testing.expect(pixels[edge + 3] > 0);
+}
+
+test "per-corner radius fills correctly" {
+    var pixels = [_]u8{0} ** (20 * 20 * 4); // 20x20
+    var pb = PixelBuffer{ .data = &pixels, .width = 20, .height = 20, .stride = 80 };
+    // TL=5, TR=0, BR=0, BL=0 — only top-left is rounded
+    const radii: u32 = (5 << 24) | (0 << 16) | (0 << 8) | 0;
+    rounded_corners(&pb, 2, 2, 16, 16, 255, 0, 0, 255, radii);
+    // Center should be filled
+    const center = 10 * 80 + 10 * 4;
+    try std.testing.expectEqual(@as(u8, 255), pixels[center]);
+    try std.testing.expectEqual(@as(u8, 255), pixels[center + 3]);
+    // Bottom-right corner (17,17) should be filled (no radius)
+    const br = 17 * 80 + 17 * 4;
+    try std.testing.expectEqual(@as(u8, 255), pixels[br + 3]);
+}
+
+test "per-corner all-same delegates to uniform" {
+    var pixels1 = [_]u8{0} ** (12 * 12 * 4);
+    var pixels2 = [_]u8{0} ** (12 * 12 * 4);
+    var pb1 = PixelBuffer{ .data = &pixels1, .width = 12, .height = 12, .stride = 48 };
+    var pb2 = PixelBuffer{ .data = &pixels2, .width = 12, .height = 12, .stride = 48 };
+    // All corners = 3
+    const radii: u32 = (3 << 24) | (3 << 16) | (3 << 8) | 3;
+    rounded_corners(&pb1, 1, 1, 10, 10, 255, 0, 0, 255, radii);
+    rounded(&pb2, 1, 1, 10, 10, 255, 0, 0, 255, 3);
+    // Both should produce identical output
+    for (0..pixels1.len) |i| {
+        try std.testing.expectEqual(pixels1[i], pixels2[i]);
+    }
 }

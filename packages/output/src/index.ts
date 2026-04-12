@@ -22,6 +22,10 @@ export type { Composer, BackendKind } from "./composer"
 export { createLayerComposer } from "./layer-composer"
 export type { LayerComposer } from "./layer-composer"
 
+// Transmission mode probing (used by @tge/terminal during init)
+export { probeShm, probeFile, patchRegion } from "./kitty"
+export type { TransmissionMode } from "./kitty"
+
 // Individual backends (for advanced use)
 export * as kitty from "./kitty"
 export * as placeholder from "./placeholder"

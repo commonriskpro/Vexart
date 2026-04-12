@@ -35,6 +35,13 @@ export { createRenderLoop } from "./loop"
 // Re-export SolidJS control flow
 export { For, Show, Switch, Match, Index, ErrorBoundary } from "./reconciler"
 
+// Re-export SolidJS context API — needed for dependency injection, theming, etc.
+export { createContext, useContext } from "solid-js"
+
+// Animation primitives — transition + spring + easing
+export { createTransition, createSpring, easing, hasActiveAnimations } from "./animation"
+export type { TransitionConfig, SpringConfig, EasingFn } from "./animation"
+
 // Re-export all reconciler primitives that babel-preset-solid imports.
 // When generate: "universal" + moduleName: "@tge/renderer", babel emits:
 //   import { createElement, createTextNode, insertNode, insert, setProp, createComponent, ... } from "@tge/renderer"
@@ -264,6 +271,15 @@ export function useTerminalDimensions(terminal: Terminal): {
 export type MountOptions = {
   /** Render text as ANSI (selectable/copiable) instead of bitmap pixels. */
   selectableText?: boolean
+  /** Maximum FPS cap. Default: 60. Idle: 30fps, animations: up to maxFps. */
+  maxFps?: number
+  /** Experimental optimizations — these may change or be removed. */
+  experimental?: {
+    /** Partial updates: transmit only changed region of layers via Kitty a=f. Default: false */
+    partialUpdates?: boolean
+    /** Frame budget in ms. Defer non-bg layers if exceeded. 0 = disabled. Default: 0 */
+    frameBudgetMs?: number
+  }
 }
 
 export type MountHandle = {
@@ -278,7 +294,13 @@ export type MountHandle = {
 }
 
 export function mount(component: () => any, terminal: Terminal, opts?: MountOptions): MountHandle {
-  const loop = createRenderLoop(terminal, { selectableText: opts?.selectableText })
+  const loop = createRenderLoop(terminal, {
+    selectableText: opts?.selectableText,
+    experimental: {
+      ...opts?.experimental,
+      maxFps: opts?.maxFps,
+    },
+  })
 
   // SolidJS render mounts the component tree into the root TGENode
   const dispose = solidRender(component, loop.root)

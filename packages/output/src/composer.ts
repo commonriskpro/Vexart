@@ -110,7 +110,7 @@ export function createComposer(
     const opaque = compositeOnBlack(buf)
     rawWrite(`\x1b7`) // save cursor
     rawWrite(`\x1b[${row + 1};${col + 1}H`) // move cursor
-    kitty.transmit(gfxWrite, opaque, imageId, { action: "T" })
+    kitty.transmit(gfxWrite, opaque, imageId, { action: "T", mode: caps.transmissionMode, compress: true })
     rawWrite(`\x1b8`) // restore cursor
 
     if (wasActive) kitty.remove(gfxWrite, prevId)

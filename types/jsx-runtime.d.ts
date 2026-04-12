@@ -10,6 +10,8 @@ import type { RGBA, SyntaxStyle, ExtmarkManager, KeyEvent, ScrollHandle } from "
 
 type Children = any
 type ColorValue = string | number | RGBA
+type ShadowDef = { x: number; y: number; blur: number; color: number }
+type ShadowProp = ShadowDef | ShadowDef[]
 
 interface BoxProps {
   ref?: (handle: any) => void
@@ -76,8 +78,32 @@ interface BoxProps {
   floatAttach?: { element?: number; parent?: number }
   pointerPassthrough?: boolean
   // Effects
-  shadow?: { x: number; y: number; blur: number; color: number }
+  shadow?: ShadowProp
   glow?: { radius: number; color: number; intensity?: number }
+  gradient?: { type: "linear"; from: number; to: number; angle?: number } | { type: "radial"; from: number; to: number }
+  backdropBlur?: number
+  cornerRadii?: { tl: number; tr: number; br: number; bl: number }
+  // Interactive states — merged over base visual props when active
+  hoverStyle?: {
+    backgroundColor?: ColorValue
+    borderColor?: ColorValue
+    borderWidth?: number
+    cornerRadius?: number
+    shadow?: ShadowProp
+    glow?: { radius: number; color: number; intensity?: number }
+    gradient?: { type: "linear"; from: number; to: number; angle?: number } | { type: "radial"; from: number; to: number }
+    backdropBlur?: number
+  }
+  activeStyle?: {
+    backgroundColor?: ColorValue
+    borderColor?: ColorValue
+    borderWidth?: number
+    cornerRadius?: number
+    shadow?: ShadowProp
+    glow?: { radius: number; color: number; intensity?: number }
+    gradient?: { type: "linear"; from: number; to: number; angle?: number } | { type: "radial"; from: number; to: number }
+    backdropBlur?: number
+  }
   // Mouse events
   onMouseDown?: (evt: any) => void
   onMouseUp?: (evt: any) => void

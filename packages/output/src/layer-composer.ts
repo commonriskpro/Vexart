@@ -17,6 +17,7 @@
 
 import type { PixelBuffer } from "@tge/pixel"
 import * as kitty from "./kitty"
+import type { TransmissionMode } from "./kitty"
 
 export type LayerEntry = {
   id: number
@@ -43,6 +44,20 @@ export type LayerComposer = {
     cellH: number,
   ) => void
 
+  /**
+   * [Experimental] Patch a dirty region of an existing layer.
+   * Uses Kitty animation frame protocol (a=f) to update only the changed pixels.
+   * Returns false if the image hasn't been transmitted yet (caller should use renderLayer).
+   */
+  patchLayer: (
+    regionData: Uint8Array,
+    imageId: number,
+    rx: number,
+    ry: number,
+    rw: number,
+    rh: number,
+  ) => boolean
+
   /** Remove a layer's image from the terminal. */
   removeLayer: (imageId: number) => void
 
@@ -58,10 +73,13 @@ export type LayerComposer = {
  *
  * @param write — write function for Kitty graphics escapes
  * @param rawWrite — write function for ANSI cursor positioning
+ * @param mode — transmission mode: "shm" | "file" | "direct"
  */
 export function createLayerComposer(
   write: (data: string) => void,
   rawWrite: (data: string) => void,
+  mode: TransmissionMode = "direct",
+  compress = false,
 ): LayerComposer {
   /** Track which image IDs are active in the terminal. */
   const activeIds = new Set<number>()
@@ -127,12 +145,18 @@ export function createLayerComposer(
       if (z < 0) {
         // Background layer — pre-composite on black (nothing behind it)
         const opaque = compositeOnBlack(buf)
-        kitty.transmitAt(write, opaque, imageId, col, row, { z })
+        kitty.transmitAt(write, opaque, imageId, col, row, { z, mode, compress })
       } else {
         // Content layer — keep alpha for terminal compositing
-        kitty.transmitAt(write, buf, imageId, col, row, { z })
+        kitty.transmitAt(write, buf, imageId, col, row, { z, mode, compress })
       }
       activeIds.add(imageId)
+    },
+
+    patchLayer(regionData, imageId, rx, ry, rw, rh) {
+      if (!activeIds.has(imageId)) return false
+      kitty.patchRegion(write, imageId, regionData, rx, ry, rw, rh, { mode, compress })
+      return true
     },
 
     removeLayer(imageId) {

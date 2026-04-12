@@ -136,6 +136,22 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
     }
   }
 
+  // Step 3b: probe transmission mode (shm → file → direct)
+  // Only for local connections with kitty graphics support
+  if (!opts.skipProbe && caps.kittyGraphics && !caps.tmux && !isRemoteConnection()) {
+    const { probeShm, probeFile } = await import("@tge/output")
+    const shmOk = await probeShm(write, addDataHandler, removeDataHandler, opts.probeTimeout ?? 2000)
+    if (shmOk) {
+      caps.transmissionMode = "shm"
+    } else {
+      const fileOk = await probeFile(write, addDataHandler, removeDataHandler, opts.probeTimeout ?? 2000)
+      if (fileOk) {
+        caps.transmissionMode = "file"
+      }
+      // else stays "direct" (default)
+    }
+  }
+
   // Step 4: query colors
   let bgColor: [number, number, number] | null = null
   let fgColor: [number, number, number] | null = null
@@ -228,6 +244,16 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
       leave(stdin, rawWrite, caps, lifecycleState)
     },
   }
+}
+
+// ── Helpers ──
+
+/**
+ * Detect if we're running over a remote connection (SSH).
+ * Remote connections cannot use shm or file transmission.
+ */
+function isRemoteConnection(): boolean {
+  return !!(process.env["SSH_CLIENT"] || process.env["SSH_TTY"] || process.env["SSH_CONNECTION"])
 }
 
 // ── Re-exports ──

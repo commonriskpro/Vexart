@@ -22,6 +22,8 @@ const shadow = @import("shadow.zig");
 const halo_mod = @import("halo.zig");
 const gradient = @import("gradient.zig");
 const text_mod = @import("text.zig");
+const filters = @import("filters.zig");
+const blendmodes = @import("blendmodes.zig");
 
 // Force test discovery for all sub-modules
 comptime {
@@ -32,6 +34,8 @@ comptime {
     _ = halo_mod;
     _ = gradient;
     _ = text_mod;
+    _ = filters;
+    _ = blendmodes;
 }
 
 // ── Pixel Buffer ──
@@ -114,6 +118,19 @@ export fn tge_stroke_rect(data: [*]u8, width: u32, height: u32, x: i32, y: i32, 
     rect.stroke(&buf, x, y, w, h, c.r, c.g, c.b, c.a, radius, sw);
 }
 
+// Per-corner radius rect
+export fn tge_rounded_rect_corners(data: [*]u8, width: u32, height: u32, x: i32, y: i32, w: u32, h: u32, color: u32, radii: u32) void {
+    var buf = mkbuf(data, width, height);
+    const c = unpack(color);
+    rect.rounded_corners(&buf, x, y, w, h, c.r, c.g, c.b, c.a, radii);
+}
+
+export fn tge_stroke_rect_corners(data: [*]u8, width: u32, height: u32, x: i32, y: i32, w: u32, h: u32, color: u32, radii: u32, sw: u32) void {
+    var buf = mkbuf(data, width, height);
+    const c = unpack(color);
+    rect.stroke_corners(&buf, x, y, w, h, c.r, c.g, c.b, c.a, radii, sw);
+}
+
 // Circle
 export fn tge_filled_circle(data: [*]u8, width: u32, height: u32, cx: i32, cy: i32, rx: u32, ry: u32, color: u32) void {
     var buf = mkbuf(data, width, height);
@@ -146,6 +163,27 @@ export fn tge_blur(data: [*]u8, width: u32, height: u32, x: u32, y: u32, w: u32,
     shadow.blur(&buf, x, y, w, h, radius, passes);
 }
 
+// Inset shadow (SDF-based, no blur pass needed)
+// Uses packed params buffer to stay ≤8 FFI params:
+// params_ptr layout (28 bytes): [x:i32][y:i32][w:u32][h:u32][radius:u32][ox:i32][oy:i32][spread:u32]
+// All values little-endian as written by DataView on JS side.
+export fn tge_inset_shadow(data: [*]u8, width: u32, height: u32, color: u32, params_ptr: [*]const u8) void {
+    var b = mkbuf(data, width, height);
+    const c = unpack(color);
+
+    // Read params from packed buffer (little-endian)
+    const x: i32 = @bitCast([4]u8{ params_ptr[0], params_ptr[1], params_ptr[2], params_ptr[3] });
+    const y: i32 = @bitCast([4]u8{ params_ptr[4], params_ptr[5], params_ptr[6], params_ptr[7] });
+    const w: u32 = @bitCast([4]u8{ params_ptr[8], params_ptr[9], params_ptr[10], params_ptr[11] });
+    const h: u32 = @bitCast([4]u8{ params_ptr[12], params_ptr[13], params_ptr[14], params_ptr[15] });
+    const radius: u32 = @bitCast([4]u8{ params_ptr[16], params_ptr[17], params_ptr[18], params_ptr[19] });
+    const ox: i32 = @bitCast([4]u8{ params_ptr[20], params_ptr[21], params_ptr[22], params_ptr[23] });
+    const oy: i32 = @bitCast([4]u8{ params_ptr[24], params_ptr[25], params_ptr[26], params_ptr[27] });
+    const spread: u32 = @bitCast([4]u8{ params_ptr[28], params_ptr[29], params_ptr[30], params_ptr[31] });
+
+    shadow.inset(&b, x, y, w, h, radius, ox, oy, spread, c.r, c.g, c.b, c.a);
+}
+
 // Halo
 export fn tge_halo(data: [*]u8, width: u32, height: u32, cx: i32, cy: i32, rx: u32, ry: u32, color: u32, intensity_pct: u32) void {
     var buf = mkbuf(data, width, height);
@@ -166,6 +204,28 @@ export fn tge_radial_gradient(data: [*]u8, width: u32, height: u32, cx: u32, cy:
     const c0 = unpack(color0);
     const c1 = unpack(color1);
     gradient.radial(&buf, cx, cy, radius, c0.r, c0.g, c0.b, c0.a, c1.r, c1.g, c1.b, c1.a);
+}
+
+// Multi-stop gradients — stops passed as packed buffer via pointer (≤8 params)
+export fn tge_linear_gradient_multi(data: [*]u8, width: u32, height: u32, x: u32, y: u32, w: u32, h: u32, stops_ptr: [*]const u8, stop_count: u32, angle_deg: u32) void {
+    var buf = mkbuf(data, width, height);
+    gradient.linear_multi(&buf, x, y, w, h, stops_ptr, stop_count, angle_deg);
+}
+
+export fn tge_radial_gradient_multi(data: [*]u8, width: u32, height: u32, cx: u32, cy: u32, radius: u32, stops_ptr: [*]const u8, stop_count: u32) void {
+    var buf = mkbuf(data, width, height);
+    gradient.radial_multi(&buf, cx, cy, radius, stops_ptr, stop_count);
+}
+
+export fn tge_conic_gradient(data: [*]u8, width: u32, height: u32, cx: u32, cy: u32, w: u32, h: u32, stops_ptr: [*]const u8, stop_count: u32, start_angle: u32) void {
+    var buf = mkbuf(data, width, height);
+    gradient.conic(&buf, cx, cy, w, h, stops_ptr, stop_count, start_angle);
+}
+
+// Gradient border — stroke with gradient colors (packed params to stay ≤8)
+export fn tge_gradient_stroke(data: [*]u8, width: u32, height: u32, stops_ptr: [*]const u8, stop_count: u32, params_ptr: [*]const u8) void {
+    var buf = mkbuf(data, width, height);
+    gradient.gradient_stroke(&buf, stops_ptr, stop_count, params_ptr);
 }
 
 // Text — 8 params (within ARM64 limit)
@@ -281,6 +341,57 @@ export fn tge_draw_text_font(data: [*]u8, width: u32, height: u32, x: i32, y: i3
             cx += @intCast(cw);
         }
     }
+}
+
+// Backdrop filters — in-place region operations (≤8 params each)
+export fn tge_filter_brightness(data: [*]u8, width: u32, height: u32, x: u32, y: u32, w: u32, h: u32, factor_pct: u32) void {
+    var b = mkbuf(data, width, height);
+    filters.brightness(&b, x, y, w, h, factor_pct);
+}
+
+export fn tge_filter_contrast(data: [*]u8, width: u32, height: u32, x: u32, y: u32, w: u32, h: u32, factor_pct: u32) void {
+    var b = mkbuf(data, width, height);
+    filters.contrast(&b, x, y, w, h, factor_pct);
+}
+
+export fn tge_filter_saturate(data: [*]u8, width: u32, height: u32, x: u32, y: u32, w: u32, h: u32, factor_pct: u32) void {
+    var b = mkbuf(data, width, height);
+    filters.saturate(&b, x, y, w, h, factor_pct);
+}
+
+export fn tge_filter_grayscale(data: [*]u8, width: u32, height: u32, x: u32, y: u32, w: u32, h: u32, amount_pct: u32) void {
+    var b = mkbuf(data, width, height);
+    filters.grayscale(&b, x, y, w, h, amount_pct);
+}
+
+export fn tge_filter_invert(data: [*]u8, width: u32, height: u32, x: u32, y: u32, w: u32, h: u32, amount_pct: u32) void {
+    var b = mkbuf(data, width, height);
+    filters.invert(&b, x, y, w, h, amount_pct);
+}
+
+export fn tge_filter_sepia(data: [*]u8, width: u32, height: u32, x: u32, y: u32, w: u32, h: u32, amount_pct: u32) void {
+    var b = mkbuf(data, width, height);
+    filters.sepia(&b, x, y, w, h, amount_pct);
+}
+
+export fn tge_filter_hue_rotate(data: [*]u8, width: u32, height: u32, x: u32, y: u32, w: u32, h: u32, angle_deg: u32) void {
+    var b = mkbuf(data, width, height);
+    filters.hue_rotate(&b, x, y, w, h, angle_deg);
+}
+
+// Blend modes — blend solid color onto region with specified mode (≤8 params via packed)
+// params_ptr: [x:u32][y:u32][w:u32][h:u32] = 16 bytes
+export fn tge_blend_mode(data: [*]u8, width: u32, height: u32, color: u32, mode: u8, params_ptr: [*]const u8) void {
+    var b = mkbuf(data, width, height);
+    const c = unpack(color);
+
+    const x: u32 = @bitCast([4]u8{ params_ptr[0], params_ptr[1], params_ptr[2], params_ptr[3] });
+    const y: u32 = @bitCast([4]u8{ params_ptr[4], params_ptr[5], params_ptr[6], params_ptr[7] });
+    const w: u32 = @bitCast([4]u8{ params_ptr[8], params_ptr[9], params_ptr[10], params_ptr[11] });
+    const h: u32 = @bitCast([4]u8{ params_ptr[12], params_ptr[13], params_ptr[14], params_ptr[15] });
+
+    const blend_mode = std.meta.intToEnum(blendmodes.BlendMode, mode) catch return;
+    blendmodes.blend_rect(&b, x, y, w, h, c.r, c.g, c.b, c.a, blend_mode);
 }
 
 // ── Tests ──

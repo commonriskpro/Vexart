@@ -184,8 +184,8 @@ describe("parseDirection", () => {
     expect(parseDirection("column")).toBe(DIRECTION.TOP_TO_BOTTOM)
   })
 
-  test("undefined returns LEFT_TO_RIGHT", () => {
-    expect(parseDirection(undefined)).toBe(DIRECTION.LEFT_TO_RIGHT)
+  test("undefined returns TOP_TO_BOTTOM (column default)", () => {
+    expect(parseDirection(undefined)).toBe(DIRECTION.TOP_TO_BOTTOM)
   })
 
   test("'row' returns LEFT_TO_RIGHT", () => {
