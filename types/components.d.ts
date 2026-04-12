@@ -20,7 +20,7 @@ export interface ShadowConfig {
 }
 
 export interface GlowConfig {
-  radius: number; color: number; intensity?: number
+  radius: number; color: string | number; intensity?: number
 }
 
 export type GradientConfig =
@@ -367,3 +367,211 @@ export interface DiffProps {
 }
 
 export function Diff(props: DiffProps): JSX.Element
+
+// ── Dialog ──
+
+export interface DialogProps {
+  children?: JSX.Element
+}
+
+export interface DialogOverlayProps {
+  backgroundColor?: string | number
+  backdropBlur?: number
+  children?: JSX.Element
+}
+
+export interface DialogContentProps {
+  children?: JSX.Element
+  width?: number | string
+  maxWidth?: number
+  padding?: number
+  cornerRadius?: number
+  backgroundColor?: string | number
+}
+
+export interface DialogCloseProps {
+  children?: JSX.Element
+}
+
+export declare function Dialog(props: DialogProps): JSX.Element
+export declare namespace Dialog {
+  function Overlay(props: DialogOverlayProps): JSX.Element
+  function Content(props: DialogContentProps): JSX.Element
+  function Close(props: DialogCloseProps): JSX.Element
+}
+
+// ── Select ──
+
+export interface SelectOption {
+  value: string
+  label: string
+  disabled?: boolean
+}
+
+export interface SelectProps {
+  value?: string
+  onChange?: (value: string) => void
+  options?: SelectOption[]
+  placeholder?: string
+  disabled?: boolean
+  focusId?: string
+  color?: number
+  children?: JSX.Element
+}
+
+export interface SelectTriggerProps {
+  children?: JSX.Element
+}
+
+export interface SelectContentProps {
+  children?: JSX.Element
+}
+
+export interface SelectItemProps {
+  value: string
+  disabled?: boolean
+  children?: JSX.Element
+}
+
+export declare function Select(props: SelectProps): JSX.Element
+export declare namespace Select {
+  function Trigger(props: SelectTriggerProps): JSX.Element
+  function Content(props: SelectContentProps): JSX.Element
+  function Item(props: SelectItemProps): JSX.Element
+}
+
+// ── Switch ──
+
+export interface SwitchProps {
+  checked: boolean
+  onChange?: (checked: boolean) => void
+  label?: string
+  color?: number
+  disabled?: boolean
+  focusId?: string
+}
+
+export declare function Switch(props: SwitchProps): JSX.Element
+
+// ── RadioGroup ──
+
+export interface RadioOption {
+  value: string
+  label: string
+  disabled?: boolean
+}
+
+export interface RadioGroupProps {
+  value?: string
+  onChange?: (value: string) => void
+  options: RadioOption[]
+  color?: number
+  disabled?: boolean
+  focusId?: string
+  direction?: "column" | "row"
+}
+
+export declare function RadioGroup(props: RadioGroupProps): JSX.Element
+
+// ── Toast ──
+
+export type ToastVariant = "default" | "success" | "error" | "warning" | "info"
+export type ToastPosition = "top-right" | "top-left" | "bottom-right" | "bottom-left" | "top-center" | "bottom-center"
+
+export interface ToastData {
+  id: number
+  message: string
+  variant: ToastVariant
+  duration: number
+  description?: string
+}
+
+export type ToastInput = string | {
+  message: string
+  variant?: ToastVariant
+  duration?: number
+  description?: string
+}
+
+export interface ToasterOptions {
+  position?: ToastPosition
+  maxVisible?: number
+  defaultDuration?: number
+  gap?: number
+  renderToast?: (toast: ToastData, dismiss: () => void) => JSX.Element
+}
+
+export interface ToasterHandle {
+  toast: (input: ToastInput) => number
+  dismiss: (id: number) => void
+  dismissAll: () => void
+  Toaster: () => JSX.Element
+}
+
+export declare function createToaster(options?: ToasterOptions): ToasterHandle
+
+// ── Table ──
+
+export interface TableColumn {
+  key: string
+  header: string
+  width?: number | "grow"
+  align?: "left" | "center" | "right"
+}
+
+export interface TableProps {
+  columns: TableColumn[]
+  data: Record<string, any>[]
+  selectedRow?: number
+  onSelectedRowChange?: (index: number) => void
+  onRowSelect?: (index: number, row: Record<string, any>) => void
+  showHeader?: boolean
+  striped?: boolean
+  color?: number
+  disabled?: boolean
+  focusId?: string
+  renderCell?: (value: any, column: TableColumn, rowIndex: number) => JSX.Element
+}
+
+export declare function Table(props: TableProps): JSX.Element
+
+// ── Router ──
+
+export interface RouterProps {
+  initial?: string
+  children?: JSX.Element
+}
+
+export interface RouteComponentProps {
+  path: string
+  component: (props: { params?: Record<string, any> }) => JSX.Element
+}
+
+export declare function Router(props: RouterProps): JSX.Element
+export declare function Route(props: RouteComponentProps): JSX.Element
+
+export interface NavigationStackProps {
+  initial?: (props: { params?: Record<string, any>; goBack: () => void }) => JSX.Element
+  children?: JSX.Element
+}
+
+export declare function NavigationStack(props: NavigationStackProps): JSX.Element
+
+export declare function useRouterContext(): {
+  current: () => string
+  navigate: (path: string, params?: Record<string, any>) => void
+  goBack: () => boolean
+  params: () => Record<string, any> | undefined
+  history: () => Array<{ path: string; params?: Record<string, any> }>
+}
+
+export declare function useStack(): {
+  push: (component: (props: any) => JSX.Element, params?: Record<string, any>) => void
+  pop: () => boolean
+  goBack: () => boolean
+  replace: (component: (props: any) => JSX.Element, params?: Record<string, any>) => void
+  reset: (component: (props: any) => JSX.Element, params?: Record<string, any>) => void
+  depth: () => number
+  current: () => { key: string; component: (props: any) => JSX.Element; params?: Record<string, any> } | undefined
+  stack: () => Array<{ key: string; component: (props: any) => JSX.Element; params?: Record<string, any> }>
+}

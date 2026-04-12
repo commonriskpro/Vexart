@@ -36,6 +36,7 @@ import {
 } from "./node"
 import { isDirty, clearDirty, markDirty } from "./dirty"
 import { hasActiveAnimations } from "./animation"
+import { decodeImageForNode, scaleImage } from "./image"
 import {
   type Layer,
   createLayer,
@@ -97,6 +98,15 @@ type EffectConfig = {
 
 /** Effects queue — populated during walkTree, consumed during paintCommand. */
 let effectsQueue: EffectConfig[] = []
+
+/** Image queue — populated during walkTree for <img> nodes, consumed during paintCommand. */
+type ImagePaintConfig = {
+  color: number        // placeholder color to match against RECT command
+  cornerRadius: number
+  imageBuffer: { data: Uint8Array; width: number; height: number }
+  objectFit: "contain" | "cover" | "fill" | "none"
+}
+let imageQueue: ImagePaintConfig[] = []
 
 export type RenderLoopOptions = {
   /** When true, text is rendered as ANSI escape codes (selectable/copiable)
@@ -295,6 +305,44 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       return
     }
 
+    // ── <img> intrinsic — leaf node that paints decoded image pixels ──
+    if (node.kind === "img") {
+      // Trigger async decode if not started
+      if (node._imageState === "idle" && node.props.src) {
+        decodeImageForNode(node)
+      }
+
+      // Emit a Clay element for layout (sized to image or explicit size)
+      boxNodes.push(node)
+      clay.openElement()
+
+      // Sizing: use explicit width/height, or image intrinsic size, or fit
+      const imgBuf = node._imageBuffer
+      const explicitW = node.props.width
+      const explicitH = node.props.height
+      const ws = parseSizing(explicitW ?? (imgBuf ? imgBuf.width : "fit"))
+      const hs = parseSizing(explicitH ?? (imgBuf ? imgBuf.height : "fit"))
+      clay.configureSizing(ws.type, ws.value, hs.type, hs.value)
+
+      // Use a placeholder RECT so Clay emits a RECTANGLE command for painting
+      const placeholderColor = 0x00000001 // near-transparent
+      clay.configureRectangle(placeholderColor, node.props.cornerRadius ?? 0)
+      rectNodes.push(node)
+
+      // Queue image data for paintCommand
+      if (imgBuf) {
+        imageQueue.push({
+          color: placeholderColor,
+          cornerRadius: node.props.cornerRadius ?? 0,
+          imageBuffer: imgBuf,
+          objectFit: node.props.objectFit ?? "contain",
+        })
+      }
+
+      clay.closeElement()
+      return
+    }
+
     boxNodes.push(node)
 
     // Scroll containers need a stable Clay ID for scroll offset tracking
@@ -387,7 +435,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         if (vp.glow) {
           effect.glow = {
             radius: vp.glow.radius,
-            color: vp.glow.color,
+            color: parseColor(vp.glow.color),
             intensity: vp.glow.intensity ?? 80,
           }
         }
@@ -920,6 +968,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     // 1. Walk tree into Clay (first pass — feeds Clay, no counting)
     scrollSpeedCap = 0 // reset — will be set by walkTree if any node has scrollSpeed
     effectsQueue = [] // reset effects for this frame
+    imageQueue = [] // reset image paint queue for this frame
     pendingAnsiTexts = [] // reset ANSI text collection
     textMeasureIndex = 0 // reset text measure counter
     textMetas.length = 0 // clear text metadata
@@ -1150,6 +1199,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     scrollIdCounter = 0
 
     effectsQueue = [] // reset effects for this frame
+    imageQueue = [] // reset image paint queue for this frame
     textMeasureIndex = 0
     textMetas.length = 0
     textMetaMap.clear()
@@ -1483,6 +1533,81 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
     case CMD.RECTANGLE: {
       const radius = Math.round(cmd.cornerRadius)
       const cmdColor = ((r << 24) | (g << 16) | (b << 8) | a) >>> 0
+
+      // ── Check for <img> image data matching this RECT ──
+      const imgIdx = imageQueue.findIndex(
+        (im) => im.color === cmdColor && im.cornerRadius === radius
+      )
+      if (imgIdx >= 0) {
+        const imgConfig = imageQueue[imgIdx]
+        imageQueue.splice(imgIdx, 1) // consume
+
+        // Scale image to fit layout box
+        const scaled = scaleImage(imgConfig.imageBuffer, w, h, imgConfig.objectFit)
+
+        // Copy pixels: src-over composite the image onto the buffer
+        const sd = scaled.data
+        const sw = scaled.width
+        const sh = scaled.height
+        const bd = buf.data
+        const ox = x + scaled.offsetX
+        const oy = y + scaled.offsetY
+
+        for (let iy = 0; iy < sh; iy++) {
+          const by = oy + iy
+          if (by < 0 || by >= buf.height) continue
+          const bufRow = by * buf.stride
+          const srcRow = iy * sw * 4
+          for (let ix = 0; ix < sw; ix++) {
+            const bx = ox + ix
+            if (bx < 0 || bx >= buf.width) continue
+            const si = srcRow + ix * 4
+            const sa = sd[si + 3]
+            if (sa === 0) continue
+            const di = bufRow + bx * 4
+            if (sa === 255) {
+              // Fully opaque — direct copy
+              bd[di] = sd[si]
+              bd[di + 1] = sd[si + 1]
+              bd[di + 2] = sd[si + 2]
+              bd[di + 3] = 255
+            } else {
+              // Alpha blend (src-over)
+              const da = bd[di + 3]
+              const invSa = 255 - sa
+              bd[di]     = Math.round((sd[si]     * sa + bd[di]     * invSa) / 255)
+              bd[di + 1] = Math.round((sd[si + 1] * sa + bd[di + 1] * invSa) / 255)
+              bd[di + 2] = Math.round((sd[si + 2] * sa + bd[di + 2] * invSa) / 255)
+              bd[di + 3] = Math.min(255, sa + Math.round(da * invSa / 255))
+            }
+          }
+        }
+
+        // Apply cornerRadius mask if needed
+        if (radius > 0) {
+          const mask = create(w, h)
+          paint.roundedRect(mask, 0, 0, w, h, 255, 255, 255, 255, radius)
+          const md = mask.data
+          // Restore pixels outside the rounded rect
+          for (let my = 0; my < h; my++) {
+            const by = y + my
+            if (by < 0 || by >= buf.height) continue
+            const bufRow = by * buf.stride
+            const mRow = my * mask.stride
+            for (let mx = 0; mx < w; mx++) {
+              const bx = x + mx
+              if (bx < 0 || bx >= buf.width) continue
+              const mi = mRow + mx * 4 + 3  // mask alpha
+              if (mi < md.length && md[mi] === 0) {
+                // Outside rounded rect — clear to transparent
+                const di = bufRow + bx * 4
+                bd[di] = 0; bd[di + 1] = 0; bd[di + 2] = 0; bd[di + 3] = 0
+              }
+            }
+          }
+        }
+        break
+      }
 
       // Check for shadow/glow/gradient effects matching this RECT
       const effectIdx = effectsQueue.findIndex(

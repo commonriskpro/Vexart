@@ -19,43 +19,36 @@ import { createSignal } from "solid-js"
 import { mount, onInput } from "@tge/renderer"
 import { Box, Text, ScrollView } from "@tge/components"
 import { createTerminal } from "@tge/terminal"
-import {
-  surface,
-  accent,
-  text as textTokens,
-  border,
-  radius,
-  spacing,
-} from "@tge/tokens"
+import { colors, radius, space } from "@tge/void"
 
 // ── Generate sample items ──
 
 const items = Array.from({ length: 30 }, (_, i) => ({
   label: `Item ${i + 1}`,
-  color: [accent.thread, accent.anchor, accent.signal, accent.drift, accent.purple, accent.green][i % 6],
+  color: ["#4fc4d4", "#4eaed0", "#f59e0b", "#a8483e", "#a78bfa", "#22c55e"][i % 6],
 }))
 
 // ── Item row ──
 
-function ItemRow(props: { label: string; color: number; index: number }) {
+function ItemRow(props: { label: string; color: string; index: number }) {
   return (
     <Box
-      backgroundColor={props.index % 2 === 0 ? surface.card : surface.panel}
-      padding={spacing.md}
+      backgroundColor={props.index % 2 === 0 ? colors.card : colors.secondary}
+      padding={space[2]}
       direction="row"
-      gap={spacing.md}
+      gap={space[2]}
       alignY="center"
     >
       <Box
         width={8}
         height={8}
         backgroundColor={props.color}
-        cornerRadius={radius.pill}
+        cornerRadius={radius.full}
       />
-      <Text color={textTokens.primary} fontSize={14}>
+      <Text color={colors.foreground} fontSize={14}>
         {props.label}
       </Text>
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         {"Scroll to see more"}
       </Text>
     </Box>
@@ -77,14 +70,14 @@ function App() {
     <Box
       width="100%"
       height="100%"
-      backgroundColor={surface.void}
+      backgroundColor={colors.background}
       direction="column"
       alignX="center"
       alignY="center"
-      gap={spacing.lg}
+      gap={space[4]}
     >
       <Box layer>
-        <Text color={textTokens.primary} fontSize={16}>
+        <Text color={colors.foreground} fontSize={16}>
           TGE Scroll Demo — 30 items in a scroll container
         </Text>
       </Box>
@@ -94,9 +87,9 @@ function App() {
         height={300}
         scrollY
         scrollSpeed={precise() ? 1 : undefined}
-        backgroundColor={surface.panel}
+        backgroundColor={colors.secondary}
         cornerRadius={radius.xl}
-        borderColor={border.normal}
+        borderColor={colors.border}
         borderWidth={1}
         direction="column"
         gap={0}
@@ -106,11 +99,11 @@ function App() {
         ))}
       </ScrollView>
 
-      <Box layer direction="column" gap={spacing.xs} alignX="center">
-        <Text color={precise() ? accent.thread : textTokens.muted} fontSize={12}>
+      <Box layer direction="column" gap={space[0.5]} alignX="center">
+        <Text color={precise() ? "#4fc4d4" : colors.mutedForeground} fontSize={12}>
           {"Scroll: " + (precise() ? "Precise (1 line/tick)" : "Natural (momentum)")}
         </Text>
-        <Text color={textTokens.muted} fontSize={12}>
+        <Text color={colors.mutedForeground} fontSize={12}>
           Tab: toggle mode | Mouse wheel: scroll | q: quit
         </Text>
       </Box>

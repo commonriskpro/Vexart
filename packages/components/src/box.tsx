@@ -20,9 +20,9 @@ export type ShadowConfig = {
 }
 
 export type GlowConfig = {
-  radius: number     // Glow spread radius (px)
-  color: number      // Glow color (packed RGBA u32)
-  intensity?: number // 0-100, default 80
+  radius: number           // Glow spread radius (px)
+  color: string | number   // Glow color (hex string or packed RGBA u32)
+  intensity?: number       // 0-100, default 80
 }
 
 export type BoxProps = {
@@ -46,8 +46,8 @@ export type BoxProps = {
   borderWidth?: number
 
   // Effects — applied in the pixel paint stage, outside Clay.
-  // Shadow: soft drop shadow beneath the box.
-  shadow?: ShadowConfig
+  // Shadow: single or multiple drop shadows beneath the box.
+  shadow?: ShadowConfig | ShadowConfig[]
   // Glow: radial halo around the box.
   glow?: GlowConfig
 

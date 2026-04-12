@@ -19,29 +19,22 @@ import { createSignal } from "solid-js"
 import { mount, useFocus, onInput } from "@tge/renderer"
 import { Box, Text } from "@tge/components"
 import { createTerminal } from "@tge/terminal"
-import {
-  surface,
-  accent,
-  text as textTokens,
-  border,
-  radius,
-  spacing,
-} from "@tge/tokens"
+import { colors, radius, space } from "@tge/void"
 
 // ── Color options for the picker ──
 
-const colors = [
-  { name: "Thread", value: accent.thread },
-  { name: "Anchor", value: accent.anchor },
-  { name: "Signal", value: accent.signal },
-  { name: "Drift", value: accent.drift },
-  { name: "Purple", value: accent.purple },
-  { name: "Green", value: accent.green },
+const accentColors = [
+  { name: "Thread", value: "#4fc4d4" },
+  { name: "Anchor", value: "#4eaed0" },
+  { name: "Signal", value: "#f59e0b" },
+  { name: "Drift", value: "#a8483e" },
+  { name: "Purple", value: "#a78bfa" },
+  { name: "Green", value: "#22c55e" },
 ] as const
 
 // ── Counter component ──
 
-function Counter(props: { accentColor: () => number }) {
+function Counter(props: { accentColor: () => string }) {
   const [count, setCount] = createSignal(0)
 
   const { focused } = useFocus({
@@ -54,21 +47,21 @@ function Counter(props: { accentColor: () => number }) {
 
   return (
     <Box
-      backgroundColor={surface.card}
+      backgroundColor={colors.card}
       cornerRadius={radius.xl}
-      padding={spacing.xl}
+      padding={space[6]}
       direction="column"
-      gap={spacing.md}
-      borderColor={focused() ? props.accentColor() : border.subtle}
+      gap={space[2]}
+      borderColor={focused() ? props.accentColor() : colors.border}
       borderWidth={focused() ? 2 : 1}
     >
-      <Text color={textTokens.primary} fontSize={16}>
+      <Text color={colors.foreground} fontSize={16}>
         Counter
       </Text>
       <Text color={props.accentColor()} fontSize={16}>
         {String(count())}
       </Text>
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         {focused() ? "Enter/Space to increment" : "Tab to focus"}
       </Text>
     </Box>
@@ -83,7 +76,7 @@ function ColorPicker(props: {
 }) {
   const { focused } = useFocus({
     onKeyDown(e) {
-      const len = colors.length
+      const len = accentColors.length
       if (e.key === "right" || e.key === "down") {
         props.onColorChange((props.colorIndex() + 1) % len)
       } else if (e.key === "left" || e.key === "up") {
@@ -92,35 +85,35 @@ function ColorPicker(props: {
     },
   })
 
-  const currentColor = () => colors[props.colorIndex()]
+  const currentColor = () => accentColors[props.colorIndex()]
 
   return (
     <Box
-      backgroundColor={surface.card}
+      backgroundColor={colors.card}
       cornerRadius={radius.xl}
-      padding={spacing.xl}
+      padding={space[6]}
       direction="column"
-      gap={spacing.md}
-      borderColor={focused() ? currentColor().value : border.subtle}
+      gap={space[2]}
+      borderColor={focused() ? currentColor().value : colors.border}
       borderWidth={focused() ? 2 : 1}
     >
-      <Text color={textTokens.primary} fontSize={16}>
+      <Text color={colors.foreground} fontSize={16}>
         Accent Color
       </Text>
-      <Box direction="row" gap={spacing.sm} alignY="center">
-        {colors.map((c, i) => (
+      <Box direction="row" gap={space[1]} alignY="center">
+        {accentColors.map((c, i) => (
           <Box
             width={props.colorIndex() === i ? 16 : 10}
             height={props.colorIndex() === i ? 16 : 10}
             backgroundColor={c.value}
-            cornerRadius={radius.pill}
+            cornerRadius={radius.full}
           />
         ))}
       </Box>
       <Text color={currentColor().value} fontSize={14}>
         {currentColor().name}
       </Text>
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         {focused() ? "Arrows to change color" : "Tab to focus"}
       </Text>
     </Box>
@@ -131,32 +124,32 @@ function ColorPicker(props: {
 
 function App() {
   const [colorIndex, setColorIndex] = createSignal(0)
-  const accentColor = () => colors[colorIndex()].value
+  const accentColor = () => accentColors[colorIndex()].value
 
   return (
     <Box
       width="100%"
       height="100%"
-      backgroundColor={surface.void}
+      backgroundColor={colors.background}
       direction="column"
       alignX="center"
       alignY="center"
-      gap={spacing.lg}
+      gap={space[4]}
     >
-      <Text color={textTokens.primary} fontSize={16}>
+      <Text color={colors.foreground} fontSize={16}>
         TGE Interactive Demo
       </Text>
 
-      <Box direction="row" gap={spacing.lg}>
+      <Box direction="row" gap={space[4]}>
         <Counter accentColor={accentColor} />
         <ColorPicker colorIndex={colorIndex} onColorChange={setColorIndex} />
       </Box>
 
-      <Box direction="column" gap={spacing.xs} alignX="center">
-        <Text color={textTokens.muted} fontSize={12}>
+      <Box direction="column" gap={space[0.5]} alignX="center">
+        <Text color={colors.mutedForeground} fontSize={12}>
           Tab: cycle focus | Enter/Space: increment | Arrows: change color
         </Text>
-        <Text color={textTokens.muted} fontSize={12}>
+        <Text color={colors.mutedForeground} fontSize={12}>
           Press q or Ctrl+C to exit
         </Text>
       </Box>

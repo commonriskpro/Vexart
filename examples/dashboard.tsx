@@ -24,14 +24,7 @@ import { createSignal, onCleanup } from "solid-js"
 import { mount, useFocus, onInput } from "@tge/renderer"
 import { Box, Text } from "@tge/components"
 import { createTerminal } from "@tge/terminal"
-import {
-  surface,
-  accent,
-  text as textTokens,
-  border,
-  radius,
-  spacing,
-} from "@tge/tokens"
+import { colors, radius, space } from "@tge/void"
 
 // ── Clock widget — auto-ticking, no user input ──
 
@@ -44,18 +37,18 @@ function Clock() {
   return (
     <Box
       layer
-      backgroundColor={surface.card}
+      backgroundColor={colors.card}
       cornerRadius={radius.xl}
-      padding={spacing.xl}
+      padding={space[6]}
       direction="column"
-      gap={spacing.sm}
-      borderColor={border.subtle}
+      gap={space[1]}
+      borderColor={colors.border}
       borderWidth={1}
     >
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         Clock
       </Text>
-      <Text color={accent.thread} fontSize={16}>
+      <Text color={colors.primary} fontSize={16}>
         {time()}
       </Text>
     </Box>
@@ -86,21 +79,21 @@ function Counter() {
   return (
     <Box
       layer
-      backgroundColor={surface.card}
+      backgroundColor={colors.card}
       cornerRadius={radius.xl}
-      padding={spacing.xl}
+      padding={space[6]}
       direction="column"
-      gap={spacing.sm}
-      borderColor={focused() ? accent.anchor : border.subtle}
+      gap={space[1]}
+      borderColor={focused() ? "#4eaed0" : colors.border}
       borderWidth={focused() ? 2 : 1}
     >
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         Counter
       </Text>
-      <Text color={accent.anchor} fontSize={16}>
+      <Text color="#4eaed0" fontSize={16}>
         {String(count())}
       </Text>
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         {focused() ? "Enter to +1" : "Tab to focus"}
       </Text>
     </Box>
@@ -149,21 +142,21 @@ function Stopwatch() {
   return (
     <Box
       layer
-      backgroundColor={surface.card}
+      backgroundColor={colors.card}
       cornerRadius={radius.xl}
-      padding={spacing.xl}
+      padding={space[6]}
       direction="column"
-      gap={spacing.sm}
-      borderColor={focused() ? accent.signal : border.subtle}
+      gap={space[1]}
+      borderColor={focused() ? "#f59e0b" : colors.border}
       borderWidth={focused() ? 2 : 1}
     >
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         Stopwatch
       </Text>
-      <Text color={running() ? accent.green : accent.signal} fontSize={16}>
+      <Text color={running() ? "#22c55e" : "#f59e0b"} fontSize={16}>
         {display()}
       </Text>
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         {focused()
           ? (running() ? "Enter: stop | r: reset" : "Enter: start | r: reset")
           : "Tab to focus"}
@@ -175,12 +168,12 @@ function Stopwatch() {
 // ── Palette widget — cycle through colors ──
 
 const colorEntries = [
-  { name: "Thread", value: accent.thread },
-  { name: "Anchor", value: accent.anchor },
-  { name: "Signal", value: accent.signal },
-  { name: "Drift",  value: accent.drift },
-  { name: "Purple", value: accent.purple },
-  { name: "Green",  value: accent.green },
+  { name: "Thread", value: "#4fc4d4" },
+  { name: "Anchor", value: "#4eaed0" },
+  { name: "Signal", value: "#f59e0b" },
+  { name: "Drift",  value: "#a8483e" },
+  { name: "Purple", value: "#a78bfa" },
+  { name: "Green",  value: "#22c55e" },
 ] as const
 
 function Palette() {
@@ -201,31 +194,31 @@ function Palette() {
   return (
     <Box
       layer
-      backgroundColor={surface.card}
+      backgroundColor={colors.card}
       cornerRadius={radius.xl}
-      padding={spacing.xl}
+      padding={space[6]}
       direction="column"
-      gap={spacing.sm}
-      borderColor={focused() ? current().value : border.subtle}
+      gap={space[1]}
+      borderColor={focused() ? current().value : colors.border}
       borderWidth={focused() ? 2 : 1}
     >
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         Palette
       </Text>
-      <Box direction="row" gap={spacing.xs} alignY="center">
+      <Box direction="row" gap={space[0.5]} alignY="center">
         {colorEntries.map((c, i) => (
           <Box
             width={idx() === i ? 14 : 8}
             height={idx() === i ? 14 : 8}
             backgroundColor={c.value}
-            cornerRadius={radius.pill}
+            cornerRadius={radius.full}
           />
         ))}
       </Box>
       <Text color={current().value} fontSize={14}>
         {current().name}
       </Text>
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         {focused() ? "Arrows to pick" : "Tab to focus"}
       </Text>
     </Box>
@@ -243,21 +236,21 @@ function Stats() {
   return (
     <Box
       layer
-      backgroundColor={surface.card}
+      backgroundColor={colors.card}
       cornerRadius={radius.xl}
-      padding={spacing.xl}
+      padding={space[6]}
       direction="column"
-      gap={spacing.sm}
-      borderColor={border.subtle}
+      gap={space[1]}
+      borderColor={colors.border}
       borderWidth={1}
     >
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         Stats
       </Text>
-      <Text color={accent.purple} fontSize={14}>
+      <Text color="#a78bfa" fontSize={14}>
         {"Layers: 7 (bg+5+stats)"}
       </Text>
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         {"Uptime: " + String(frames()) + "s"}
       </Text>
     </Box>
@@ -271,34 +264,34 @@ function App() {
     <Box
       width="100%"
       height="100%"
-      backgroundColor={surface.void}
+      backgroundColor={colors.background}
       direction="column"
       alignX="center"
       alignY="center"
-      gap={spacing.lg}
+      gap={space[4]}
     >
       <Box layer>
-        <Text color={textTokens.primary} fontSize={16}>
+        <Text color={colors.foreground} fontSize={16}>
           TGE Dashboard — Per-Layer Granularity
         </Text>
       </Box>
 
-      <Box direction="row" gap={spacing.lg}>
+      <Box direction="row" gap={space[4]}>
         <Clock />
         <Counter />
         <Stopwatch />
       </Box>
 
-      <Box direction="row" gap={spacing.lg}>
+      <Box direction="row" gap={space[4]}>
         <Palette />
         <Stats />
       </Box>
 
-      <Box layer direction="column" gap={spacing.xs} alignX="center">
-        <Text color={textTokens.muted} fontSize={12}>
+      <Box layer direction="column" gap={space[0.5]} alignX="center">
+        <Text color={colors.mutedForeground} fontSize={12}>
           Tab: focus | Enter/Space: activate | Arrows: pick | r: reset | q: quit
         </Text>
-        <Text color={textTokens.muted} fontSize={12}>
+        <Text color={colors.mutedForeground} fontSize={12}>
           Each widget = own layer. Tail /tmp/tge-layers.log for proof.
         </Text>
       </Box>

@@ -116,7 +116,7 @@ Analysis of what's required to replace `@opentui/core` + `@opentui/solid` with V
 | SolidJS integration               | ✅ Ready      | Universal renderer with JSX                                  |
 | `<input>` single-line             | ✅ Ready      | Cursor, selection, paste support                             |
 | Scroll containers                 | ⚠️ Partial    | `ScrollView` exists but NO programmatic control              |
-| Design tokens / theming           | ✅ Ready      | `@tge/tokens` Void Black palette                             |
+| Design tokens / theming           | ✅ Ready      | `@tge/void` design tokens and Void Black palette             |
 | Kitty graphics protocol           | ✅ Ready      | Direct, placeholder, halfblock backends                      |
 | Terminal lifecycle                | ✅ Ready      | Raw mode, alt screen, mouse, Kitty keyboard                  |
 | Input parsing                     | ✅ Ready      | Keyboard, mouse SGR, focus, paste                            |

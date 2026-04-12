@@ -12,7 +12,7 @@
 
 import { mount, onInput } from "@tge/renderer"
 import { Box, Text, RichText, Span } from "@tge/components"
-import { surface, text as textTokens, accent, border, radius, spacing, shadow } from "@tge/tokens"
+import { colors, radius, space, shadows } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
 import { onCleanup } from "solid-js"
 
@@ -30,102 +30,102 @@ function App() {
     <Box
       width="100%"
       height="100%"
-      padding={spacing.xl}
-      backgroundColor={surface.void}
+      padding={space[6]}
+      backgroundColor={colors.background}
       direction="column"
-      gap={spacing.md}
+      gap={space[2]}
     >
-      <Text color={textTokens.primary}>Pretext Integration Demo — press Q to quit</Text>
+      <Text color={colors.foreground}>Pretext Integration Demo — press Q to quit</Text>
 
-      <Box direction="row" gap={spacing.lg}>
+      <Box direction="row" gap={space[4]}>
         {/* Wide card with word wrap */}
-        <Box direction="column" gap={spacing.xs}>
-          <Text color={textTokens.muted}>Word wrap (400px):</Text>
+        <Box direction="column" gap={space[0.5]}>
+          <Text color={colors.mutedForeground}>Word wrap (400px):</Text>
           <Box
             width={400}
-            padding={spacing.lg}
-            backgroundColor={surface.card}
+            padding={space[4]}
+            backgroundColor={colors.card}
             cornerRadius={radius.lg}
-            shadow={shadow.subtle}
+            shadow={shadows.sm}
           >
-            <Text color={textTokens.secondary}>{longText}</Text>
+            <Text color={colors.foreground}>{longText}</Text>
           </Box>
         </Box>
 
         {/* Narrow card with word wrap */}
-        <Box direction="column" gap={spacing.xs}>
-          <Text color={textTokens.muted}>Narrow (200px):</Text>
+        <Box direction="column" gap={space[0.5]}>
+          <Text color={colors.mutedForeground}>Narrow (200px):</Text>
           <Box
             width={200}
-            padding={spacing.md}
-            backgroundColor={surface.card}
+            padding={space[2]}
+            backgroundColor={colors.card}
             cornerRadius={radius.lg}
-            shadow={shadow.subtle}
+            shadow={shadows.sm}
           >
-            <Text color={accent.thread}>{features}</Text>
+            <Text color="#4fc4d4">{features}</Text>
           </Box>
         </Box>
       </Box>
 
       {/* Inline rich text — spans flow horizontally */}
-      <Box direction="column" gap={spacing.xs}>
-        <Text color={textTokens.muted}>Inline spans (row flow):</Text>
+      <Box direction="column" gap={space[0.5]}>
+        <Text color={colors.mutedForeground}>Inline spans (row flow):</Text>
         <Box
-          padding={spacing.lg}
-          backgroundColor={surface.card}
+          padding={space[4]}
+          backgroundColor={colors.card}
           cornerRadius={radius.lg}
-          shadow={shadow.elevated}
+          shadow={shadows.md}
           direction="column"
-          gap={spacing.sm}
+          gap={space[1]}
         >
           <RichText>
-            <Span color={textTokens.primary}>TGE </Span>
-            <Span color={accent.thread}>renders pixels </Span>
-            <Span color={textTokens.primary}>in your </Span>
-            <Span color={accent.signal}>terminal</Span>
+            <Span color={colors.foreground}>TGE </Span>
+            <Span color="#4fc4d4">renders pixels </Span>
+            <Span color={colors.foreground}>in your </Span>
+            <Span color="#f59e0b">terminal</Span>
           </RichText>
           <RichText>
-            <Span color={textTokens.muted}>Powered by: </Span>
-            <Span color={accent.anchor}>SolidJS </Span>
-            <Span color={textTokens.muted}>+ </Span>
-            <Span color={accent.green}>Clay </Span>
-            <Span color={textTokens.muted}>+ </Span>
-            <Span color={accent.purple}>Zig </Span>
-            <Span color={textTokens.muted}>+ </Span>
-            <Span color={accent.drift}>Pretext</Span>
+            <Span color={colors.mutedForeground}>Powered by: </Span>
+            <Span color="#4eaed0">SolidJS </Span>
+            <Span color={colors.mutedForeground}>+ </Span>
+            <Span color="#22c55e">Clay </Span>
+            <Span color={colors.mutedForeground}>+ </Span>
+            <Span color="#a78bfa">Zig </Span>
+            <Span color={colors.mutedForeground}>+ </Span>
+            <Span color="#a8483e">Pretext</Span>
           </RichText>
         </Box>
       </Box>
 
       {/* Two columns with wrapping text */}
-      <Box direction="row" gap={spacing.lg}>
+      <Box direction="row" gap={space[4]}>
         <Box
           width={300}
-          padding={spacing.md}
-          backgroundColor={surface.card}
+          padding={space[2]}
+          backgroundColor={colors.card}
           cornerRadius={radius.md}
-          borderColor={border.normal}
+          borderColor={colors.border}
           borderWidth={1}
           direction="column"
-          gap={spacing.sm}
+          gap={space[1]}
         >
-          <Text color={textTokens.primary}>Column A</Text>
-          <Text color={textTokens.secondary}>
+          <Text color={colors.foreground}>Column A</Text>
+          <Text color={colors.foreground}>
             Clay provides CSS-like flexbox layout with microsecond performance. Each text element is measured by Pretext and positioned by Clay.
           </Text>
         </Box>
         <Box
           width={300}
-          padding={spacing.md}
-          backgroundColor={surface.card}
+          padding={space[2]}
+          backgroundColor={colors.card}
           cornerRadius={radius.md}
-          borderColor={border.normal}
+          borderColor={colors.border}
           borderWidth={1}
           direction="column"
-          gap={spacing.sm}
+          gap={space[1]}
         >
-          <Text color={textTokens.primary}>Column B</Text>
-          <Text color={accent.signal}>
+          <Text color={colors.foreground}>Column B</Text>
+          <Text color="#f59e0b">
             Zig handles the pixel painting with SDF anti-aliased primitives. Every shape is rendered with sub-pixel precision.
           </Text>
         </Box>

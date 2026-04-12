@@ -212,7 +212,7 @@ The entire cycle from signal change to pixels on screen takes single-digit milli
        │                  │                │
        │                  │                └──→ bun:ffi
        │                  │
-       ├──→ @tge/tokens   ├──→ @tge/terminal ──→ process.stdin/stdout
+       ├──→ @tge/void     ├──→ @tge/terminal ──→ process.stdin/stdout
        │                  │
        │                  ├──→ @tge/input
        │                  │
@@ -231,7 +231,7 @@ Each lower package can be used without the packages above it:
 - **@tge/pixel + @tge/output**: paint and display, no layout
 - **@tge/pixel + @tge/output + @tge/terminal**: full imperative pipeline
 - **+ @tge/renderer**: add JSX and layout
-- **+ @tge/components + @tge/tokens**: full framework experience
+- **+ @tge/components + @tge/void**: full framework experience
 
 ---
 

@@ -71,7 +71,7 @@ Create a file called `my-app.tsx`:
 ```tsx
 import { mount } from "@tge/renderer"
 import { Box, Text } from "@tge/components"
-import { surface, text, radius } from "@tge/tokens"
+import { colors, radius } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
 
 function App() {
@@ -80,20 +80,20 @@ function App() {
       width="100%"
       height="100%"
       padding={24}
-      backgroundColor={surface.void}
+      backgroundColor={colors.background}
       direction="column"
       alignX="center"
       alignY="center"
     >
       <Box
         padding={20}
-        backgroundColor={surface.card}
+        backgroundColor={colors.card}
         cornerRadius={radius.xl}
         direction="column"
         gap={8}
       >
-        <Text color={text.primary}>Welcome to TGE</Text>
-        <Text color={text.muted}>Pixel-native terminal rendering</Text>
+        <Text color={colors.foreground}>Welcome to TGE</Text>
+        <Text color={colors.mutedForeground}>Pixel-native terminal rendering</Text>
       </Box>
     </Box>
   )
@@ -127,7 +127,7 @@ On every signal change, only step 2–4 re-run, and only for dirty regions.
 ```tsx
 import { mount } from "@tge/renderer"
 import { Box, Text, Button } from "@tge/components"
-import { surface, text, accent, radius } from "@tge/tokens"
+import { colors, radius } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
 import { createSignal } from "solid-js"
 
@@ -135,9 +135,9 @@ function App() {
   const [count, setCount] = createSignal(0)
 
   return (
-    <Box width="100%" height="100%" padding={24} backgroundColor={surface.void}>
-      <Box padding={16} backgroundColor={surface.card} cornerRadius={radius.lg} direction="column" gap={12}>
-        <Text color={text.primary}>Count: {count()}</Text>
+    <Box width="100%" height="100%" padding={24} backgroundColor={colors.background}>
+      <Box padding={16} backgroundColor={colors.card} cornerRadius={radius.lg} direction="column" gap={12}>
+        <Text color={colors.foreground}>Count: {count()}</Text>
         <Button onPress={() => setCount(c => c + 1)}>Increment</Button>
       </Box>
     </Box>
@@ -162,8 +162,8 @@ import { mount } from "@tge/renderer"
 // Components — pick what you need
 import { Box, Text, Button, Input, Checkbox, Tabs, List, ProgressBar, ScrollView } from "@tge/components"
 
-// Tokens — optional but recommended
-import { surface, accent, text, border, spacing, radius, shadow } from "@tge/tokens"
+// Design tokens — optional but recommended
+import { colors, space, radius, font, weight, shadows } from "@tge/void"
 
 // Hooks — for custom interactive components
 import { useKeyboard, useMouse, useFocus, onInput } from "@tge/renderer"

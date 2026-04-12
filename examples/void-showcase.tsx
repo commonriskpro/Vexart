@@ -114,13 +114,13 @@ function EngineFeatures() {
             const s2 = [
               { x: 0, y: 2, blur: 4, color: 0x00000040 },
               { x: 0, y: 8, blur: 24, color: 0x00000030 },
-            ] as const
+            ]
             return (
               <box
                 width={120} height={60}
                 backgroundColor={colors.card}
                 cornerRadius={radius.lg}
-                shadow={s2 as any}
+                shadow={s2}
                 alignX="center" alignY="center"
               >
                 <text color={colors.foreground} fontSize={font.xs}>2 shadows</text>
@@ -132,13 +132,13 @@ function EngineFeatures() {
               { x: 0, y: 1, blur: 2, color: 0x00000060 },
               { x: 0, y: 4, blur: 8, color: 0x00000040 },
               { x: 0, y: 16, blur: 32, color: 0x00000020 },
-            ] as const
+            ]
             return (
               <box
                 width={120} height={60}
                 backgroundColor={colors.card}
                 cornerRadius={radius.lg}
-                shadow={s3 as any}
+                shadow={s3}
                 alignX="center" alignY="center"
               >
                 <text color={colors.foreground} fontSize={font.xs}>3 shadows</text>

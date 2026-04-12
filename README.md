@@ -7,14 +7,14 @@ Anti-aliased corners. Drop shadows. Gradients. Glow effects. Interactive compone
 ```tsx
 import { mount } from "@tge/renderer"
 import { Box, Text, Button } from "@tge/components"
-import { surface, accent, text, radius, shadow } from "@tge/tokens"
+import { colors, radius, shadows } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
 
 function App() {
   return (
-    <Box padding={24} backgroundColor={surface.panel} direction="column" gap={16}>
-      <Box padding={16} backgroundColor={surface.card} cornerRadius={radius.lg} shadow={shadow.elevated}>
-        <Text color={text.primary}>Hello from TGE</Text>
+    <Box padding={24} backgroundColor={colors.background} direction="column" gap={16}>
+      <Box padding={16} backgroundColor={colors.card} cornerRadius={radius.lg} shadow={shadows.md}>
+        <Text color={colors.foreground}>Hello from TGE</Text>
       </Box>
       <Button onPress={() => process.exit(0)}>Quit</Button>
     </Box>
@@ -90,7 +90,7 @@ TGE is a monorepo with 7 packages. Each layer is independent and can be used sta
 | [`@tge/output`](docs/api-reference.md#tgeoutput) | Kitty/placeholder/halfblock backends | Foundation |
 | [`@tge/renderer`](docs/api-reference.md#tgerenderer) | SolidJS reconciler + Clay layout | Integration |
 | [`@tge/components`](docs/components.md) | Box, Text, Button, Input, etc. | UI |
-| [`@tge/tokens`](docs/tokens.md) | Design tokens and theming | UI |
+| [`@tge/void`](docs/void.md) | Design tokens, theming, and design system | UI |
 
 ### Low-Level (no JSX)
 

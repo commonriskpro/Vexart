@@ -1,76 +1,75 @@
 /**
- * Tabs — tab switcher for TGE.
- *
- * Focus-aware tab headers with Left/Right navigation.
- * Only the active panel's children are rendered.
+ * Tabs — truly headless tab switcher.
  *
  * CONTROLLED component — parent owns activeTab state.
+ * Focus-aware with Left/Right arrow navigation.
  *
- * Architecture:
- *   <Tabs> renders a row of tab headers + the active panel.
- *   Tab headers are Box elements with reactive styling.
- *   Children are passed as an array of { label, content } items.
+ * This is a BEHAVIOR-ONLY component. It provides:
+ *   - Focus management (useFocus)
+ *   - Keyboard navigation (Left/Right, wraps around)
+ *   - Active tab tracking
+ *   - Lazy content rendering
+ *
+ * ALL visual styling is the consumer's responsibility via render props.
+ * Use @tge/void VoidTabs for a styled version.
  *
  * Usage:
- *   const [tab, setTab] = createSignal(0)
  *   <Tabs
  *     activeTab={tab()}
  *     onTabChange={setTab}
  *     tabs={[
- *       { label: "Info",     content: () => <Text>Info panel</Text> },
- *       { label: "Settings", content: () => <Text>Settings panel</Text> },
+ *       { label: "Info", content: () => <text>Info panel</text> },
+ *       { label: "Settings", content: () => <text>Settings panel</text> },
  *     ]}
+ *     renderTab={(tab, ctx) => (
+ *       <box backgroundColor={ctx.active ? "#334" : "#111"} padding={8}>
+ *         <text color={ctx.active ? "#fff" : "#888"}>{tab.label}</text>
+ *       </box>
+ *     )}
  *   />
  */
 
 import type { JSX } from "solid-js"
 import { useFocus } from "@tge/renderer"
-import {
-  surface,
-  accent,
-  text as textTokens,
-  border,
-  radius,
-  spacing,
-} from "@tge/tokens"
+
+// ── Types ──
 
 export type TabItem = {
-  /** Tab header label. */
   label: string
-  /** Panel content — render function (lazy). */
   content: () => JSX.Element
 }
 
+export type TabRenderContext = {
+  active: boolean
+  focused: boolean
+  index: number
+}
+
 export type TabsProps = {
-  /** Currently active tab index. */
   activeTab: number
-
-  /** Called when the user switches tabs. */
   onTabChange?: (index: number) => void
-
-  /** Tab definitions. */
   tabs: TabItem[]
-
-  /** Accent color for the active tab. Default: accent.thread. */
-  color?: number
-
-  /** Focus ID override. */
   focusId?: string
+  /** Render each tab header. REQUIRED — no default visual. */
+  renderTab: (tab: TabItem, ctx: TabRenderContext) => JSX.Element
+  /** Render the tab header bar container. Default: horizontal box. */
+  renderTabBar?: (children: JSX.Element) => JSX.Element
+  /** Render the active panel container. Default: just the content. */
+  renderPanel?: (content: JSX.Element) => JSX.Element
+  /** Render the entire tabs container. Default: vertical box. */
+  renderContainer?: (tabBar: JSX.Element, panel: JSX.Element) => JSX.Element
 }
 
 export function Tabs(props: TabsProps) {
-  const color = () => props.color ?? accent.thread
   const count = () => props.tabs.length
 
   const { focused } = useFocus({
     id: props.focusId,
     onKeyDown(e) {
       if (e.key === "left") {
-        const prev = (props.activeTab - 1 + count()) % count()
-        props.onTabChange?.(prev)
+        props.onTabChange?.((props.activeTab - 1 + count()) % count())
       } else if (e.key === "right") {
-        const next = (props.activeTab + 1) % count()
-        props.onTabChange?.(next)
+        props.onTabChange?.((props.activeTab + 1) % count())
       }
     },
   })
@@ -80,49 +79,25 @@ export function Tabs(props: TabsProps) {
     return tab ? tab.content() : null
   }
 
-  return (
-    <box direction="column" gap={0}>
-      {/* Tab header row */}
-      <box
-        direction="row"
-        gap={0}
-        borderColor={focused() ? color() : border.subtle}
-        borderWidth={focused() ? 2 : 1}
-        cornerRadius={0}
-      >
-        {props.tabs.map((tab, i) => (
-          <box
-            backgroundColor={
-              props.activeTab === i ? surface.card : surface.panel
-            }
-            padding={spacing.md}
-            paddingX={spacing.lg}
-            borderColor={
-              props.activeTab === i ? color() : 0x00000000
-            }
-            borderWidth={props.activeTab === i ? 1 : 0}
-          >
-            <text
-              color={
-                props.activeTab === i ? color() : textTokens.muted
-              }
-              fontSize={14}
-            >
-              {tab.label}
-            </text>
-          </box>
-        ))}
-      </box>
+  const tabHeaders = () =>
+    props.tabs.map((tab, i) => {
+      const ctx: TabRenderContext = {
+        active: props.activeTab === i,
+        focused: focused(),
+        index: i,
+      }
+      return props.renderTab(tab, ctx)
+    })
 
-      {/* Active panel */}
-      <box
-        backgroundColor={surface.card}
-        padding={spacing.lg}
-        borderColor={border.subtle}
-        borderWidth={1}
-      >
-        {activeContent()}
-      </box>
-    </box>
-  )
+  const tabBar = props.renderTabBar
+    ? props.renderTabBar(<>{tabHeaders()}</>)
+    : <box direction="row">{tabHeaders()}</box>
+
+  const panel = props.renderPanel
+    ? props.renderPanel(<>{activeContent()}</>)
+    : <>{activeContent()}</>
+
+  return props.renderContainer
+    ? <>{props.renderContainer(tabBar, panel)}</>
+    : <box direction="column">{tabBar}{panel}</box>
 }

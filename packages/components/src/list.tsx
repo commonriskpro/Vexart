@@ -1,103 +1,84 @@
 /**
- * List — selectable list for TGE.
- *
- * Focus-aware with Up/Down arrow navigation.
- * Selected item is highlighted. Enter triggers onSelect.
+ * List — truly headless selectable list.
  *
  * CONTROLLED component — parent owns selectedIndex state.
+ * Focus-aware with Up/Down arrow navigation.
  *
- * For long lists, wrap in a ScrollView:
- *   <ScrollView height={200} scrollY>
- *     <List items={items} selectedIndex={idx()} ... />
- *   </ScrollView>
+ * This is a BEHAVIOR-ONLY component. It provides:
+ *   - Focus management (useFocus)
+ *   - Keyboard navigation (Up/Down/j/k/Enter)
+ *   - Selection tracking
+ *
+ * ALL visual styling is the consumer's responsibility via renderItem.
+ * Use @tge/void VoidList for a styled version.
  *
  * Usage:
- *   const [idx, setIdx] = createSignal(0)
  *   <List
  *     items={["Alpha", "Beta", "Gamma"]}
  *     selectedIndex={idx()}
  *     onSelectedChange={setIdx}
  *     onSelect={(i) => console.log("picked", items[i])}
+ *     renderItem={(item, ctx) => (
+ *       <box backgroundColor={ctx.selected ? "#334" : "#111"} padding={4}>
+ *         <text color={ctx.selected ? "#fff" : "#aaa"}>{item}</text>
+ *       </box>
+ *     )}
  *   />
  */
 
 import type { JSX } from "solid-js"
 import { useFocus } from "@tge/renderer"
-import {
-  surface,
-  accent,
-  text as textTokens,
-  border,
-  radius,
-  spacing,
-  alpha,
-} from "@tge/tokens"
+
+// ── Types ──
+
+export type ListItemContext = {
+  selected: boolean
+  focused: boolean
+  index: number
+}
 
 export type ListProps = {
-  /** Items to display. Each item is a string label. */
   items: string[]
-
-  /** Currently selected index. */
   selectedIndex: number
-
-  /** Called when arrow keys change the selection. */
   onSelectedChange?: (index: number) => void
-
-  /** Called when Enter is pressed on the selected item. */
   onSelect?: (index: number) => void
-
-  /** Accent color for the selected item. Default: accent.thread. */
-  color?: number
-
-  /** Focus ID override. */
+  disabled?: boolean
   focusId?: string
+  /** Render each item. REQUIRED — no default visual. */
+  renderItem: (item: string, ctx: ListItemContext) => JSX.Element
+  /** Render the list container. Default: vertical box. */
+  renderList?: (children: JSX.Element) => JSX.Element
 }
 
 export function List(props: ListProps) {
-  const color = () => props.color ?? accent.thread
   const count = () => props.items.length
+  const disabled = () => props.disabled ?? false
 
   const { focused } = useFocus({
     id: props.focusId,
     onKeyDown(e) {
+      if (disabled()) return
       if (e.key === "down" || e.key === "j") {
-        const next = Math.min(props.selectedIndex + 1, count() - 1)
-        props.onSelectedChange?.(next)
+        props.onSelectedChange?.(Math.min(props.selectedIndex + 1, count() - 1))
       } else if (e.key === "up" || e.key === "k") {
-        const prev = Math.max(props.selectedIndex - 1, 0)
-        props.onSelectedChange?.(prev)
+        props.onSelectedChange?.(Math.max(props.selectedIndex - 1, 0))
       } else if (e.key === "enter") {
         props.onSelect?.(props.selectedIndex)
       }
     },
   })
 
-  return (
-    <box
-      direction="column"
-      gap={0}
-      borderColor={focused() ? color() : border.subtle}
-      borderWidth={focused() ? 2 : 1}
-      cornerRadius={radius.md}
-    >
-      {props.items.map((item, i) => (
-        <box
-          backgroundColor={
-            props.selectedIndex === i ? alpha(color(), 0x44) : surface.card
-          }
-          padding={spacing.sm}
-          paddingX={spacing.md}
-        >
-          <text
-            color={
-              props.selectedIndex === i ? color() : textTokens.secondary
-            }
-            fontSize={14}
-          >
-            {props.selectedIndex === i ? `> ${item}` : `  ${item}`}
-          </text>
-        </box>
-      ))}
-    </box>
-  )
+  const children = () =>
+    props.items.map((item, i) => {
+      const ctx: ListItemContext = {
+        selected: props.selectedIndex === i,
+        focused: focused(),
+        index: i,
+      }
+      return props.renderItem(item, ctx)
+    })
+
+  return props.renderList
+    ? <>{props.renderList(<>{children()}</>)}</>
+    : <box direction="column">{children()}</box>
 }

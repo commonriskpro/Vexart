@@ -9,7 +9,7 @@
 
 import { mount, onInput } from "@tge/renderer"
 import { Box, Text } from "@tge/components"
-import { surface, text as textTokens, accent, border, radius, spacing, shadow } from "@tge/tokens"
+import { colors, radius, space, shadows } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
 import { onCleanup } from "solid-js"
 
@@ -23,61 +23,61 @@ function App() {
     <Box
       width="100%"
       height="100%"
-      padding={spacing.xl}
-      backgroundColor={surface.void}
+      padding={space[6]}
+      backgroundColor={colors.background}
       direction="column"
-      gap={spacing.md}
+      gap={space[2]}
     >
-      <Text color={textTokens.primary}>Selectable Text Demo — Shift+drag to copy — press Q to quit</Text>
+      <Text color={colors.foreground}>Selectable Text Demo — Shift+drag to copy — press Q to quit</Text>
 
-      <Box direction="row" gap={spacing.lg}>
+      <Box direction="row" gap={space[4]}>
         <Box
           width={400}
-          padding={spacing.lg}
-          backgroundColor={surface.card}
+          padding={space[4]}
+          backgroundColor={colors.card}
           cornerRadius={radius.lg}
-          shadow={shadow.elevated}
+          shadow={shadows.md}
           direction="column"
-          gap={spacing.sm}
+          gap={space[1]}
         >
-          <Text color={textTokens.primary}>About TGE</Text>
-          <Text color={textTokens.secondary}>
+          <Text color={colors.foreground}>About TGE</Text>
+          <Text color={colors.foreground}>
             TGE is a pixel-native terminal rendering engine. This text is rendered as real ANSI terminal text — you can select it with Shift+click and copy it to your clipboard.
           </Text>
-          <Text color={accent.thread}>
+          <Text color="#4fc4d4">
             The rounded corners, shadows, and backgrounds are pixel-perfect images rendered behind the text.
           </Text>
         </Box>
 
         <Box
           width={300}
-          padding={spacing.lg}
-          backgroundColor={surface.card}
+          padding={space[4]}
+          backgroundColor={colors.card}
           cornerRadius={radius.lg}
-          shadow={shadow.elevated}
+          shadow={shadows.md}
           direction="column"
-          gap={spacing.sm}
+          gap={space[1]}
         >
-          <Text color={textTokens.primary}>Features</Text>
-          <Text color={accent.green}>Selectable text</Text>
-          <Text color={accent.anchor}>Pixel backgrounds</Text>
-          <Text color={accent.signal}>Anti-aliased corners</Text>
-          <Text color={accent.purple}>Drop shadows</Text>
-          <Text color={accent.drift}>Glow effects</Text>
+          <Text color={colors.foreground}>Features</Text>
+          <Text color="#22c55e">Selectable text</Text>
+          <Text color="#4eaed0">Pixel backgrounds</Text>
+          <Text color="#f59e0b">Anti-aliased corners</Text>
+          <Text color="#a78bfa">Drop shadows</Text>
+          <Text color="#a8483e">Glow effects</Text>
         </Box>
       </Box>
 
       <Box
-        padding={spacing.lg}
-        backgroundColor={surface.card}
+        padding={space[4]}
+        backgroundColor={colors.card}
         cornerRadius={radius.lg}
-        borderColor={border.normal}
+        borderColor={colors.border}
         borderWidth={1}
         direction="column"
-        gap={spacing.sm}
+        gap={space[1]}
       >
-        <Text color={textTokens.primary}>How it works</Text>
-        <Text color={textTokens.muted}>
+        <Text color={colors.foreground}>How it works</Text>
+        <Text color={colors.mutedForeground}>
           Images are sent to the terminal with z-index=-1 (behind text). Text is rendered as standard ANSI escape codes on top. The terminal natively supports selecting ANSI text with Shift+mouse drag.
         </Text>
       </Box>

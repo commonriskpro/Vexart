@@ -58,7 +58,6 @@ await build({
     "@tge/input": resolve(ROOT, "packages/input/src/index.ts"),
     "@tge/pixel": resolve(ROOT, "packages/pixel/src/index.ts"),
     "@tge/output": resolve(ROOT, "packages/output/src/index.ts"),
-    "@tge/tokens": resolve(ROOT, "packages/tokens/src/index.ts"),
   },
   // Inject FFI path override — tell the bundle to look in vendor/ next to itself
   define: {
@@ -114,7 +113,6 @@ await build({
   alias: {
     "@tge/renderer": resolve(ROOT, "packages/renderer/src/index.ts"),
     "@tge/renderer/scroll": resolve(ROOT, "packages/renderer/src/scroll.ts"),
-    "@tge/tokens": resolve(ROOT, "packages/tokens/src/index.ts"),
   },
   plugins: [solidPlugin],
 })

@@ -1,63 +1,75 @@
 /**
- * ProgressBar — horizontal progress indicator for TGE.
+ * ProgressBar — truly headless progress indicator.
  *
- * Renders a track with a filled portion based on value/max.
  * Pure visual component — no focus or interaction.
+ * Calculates the fill ratio from value/max.
  *
- * Implementation: two nested boxes — outer (track) + inner (fill).
- * The fill width is calculated as a percentage of the track.
+ * This is a BEHAVIOR-ONLY component. It provides:
+ *   - Value clamping (0 to max)
+ *   - Ratio calculation
+ *   - Fill width computation
+ *
+ * ALL visual styling is the consumer's responsibility via renderBar.
+ * Use @tge/void VoidProgressBar for a styled version.
  *
  * Usage:
- *   <ProgressBar value={75} />
- *   <ProgressBar value={3} max={10} color={accent.green} />
- *   <ProgressBar value={downloaded()} max={total()} width={200} />
+ *   <ProgressBar
+ *     value={75}
+ *     max={100}
+ *     width={200}
+ *     renderBar={({ ratio, fillWidth, width, height }) => (
+ *       <box width={width} height={height} backgroundColor="#333" cornerRadius={6}>
+ *         <box width={fillWidth} height={height} backgroundColor="#22c55e" cornerRadius={6} />
+ *       </box>
+ *     )}
+ *   />
  */
 
 import type { JSX } from "solid-js"
-import { accent, surface, radius } from "@tge/tokens"
+
+// ── Types ──
+
+export type ProgressBarRenderContext = {
+  /** Value between 0 and 1. */
+  ratio: number
+  /** Computed fill width in px. */
+  fillWidth: number
+  /** Total bar width in px. */
+  width: number
+  /** Bar height in px. */
+  height: number
+  /** Raw value. */
+  value: number
+  /** Max value. */
+  max: number
+}
 
 export type ProgressBarProps = {
-  /** Current value. Clamped to [0, max]. */
   value: number
-
-  /** Maximum value. Default: 100. */
   max?: number
-
-  /** Fill color (u32 RGBA). Default: accent.thread. */
-  color?: number
-
-  /** Track color (u32 RGBA). Default: surface.context. */
-  trackColor?: number
-
-  /** Width of the bar in pixels. Default: 200. */
   width?: number
-
-  /** Height of the bar in pixels. Default: 12. */
   height?: number
+  /** Render function — receives computed values, returns visual. */
+  renderBar: (ctx: ProgressBarRenderContext) => JSX.Element
 }
 
 export function ProgressBar(props: ProgressBarProps) {
   const max = () => props.max ?? 100
-  const color = () => props.color ?? accent.thread
-  const trackColor = () => props.trackColor ?? surface.context
   const barWidth = () => props.width ?? 200
   const barHeight = () => props.height ?? 12
   const ratio = () => Math.max(0, Math.min(1, props.value / max()))
   const fillWidth = () => Math.round(barWidth() * ratio())
 
   return (
-    <box
-      width={barWidth()}
-      height={barHeight()}
-      backgroundColor={trackColor()}
-      cornerRadius={radius.md}
-    >
-      <box
-        width={fillWidth()}
-        height={barHeight()}
-        backgroundColor={color()}
-        cornerRadius={radius.md}
-      />
-    </box>
+    <>
+      {props.renderBar({
+        ratio: ratio(),
+        fillWidth: fillWidth(),
+        width: barWidth(),
+        height: barHeight(),
+        value: props.value,
+        max: max(),
+      })}
+    </>
   )
 }

@@ -51,15 +51,38 @@ import {
   highlightsToTokens,
 } from "@tge/renderer"
 import type { KeyEvent } from "@tge/input"
-import {
-  surface,
-  accent,
-  text as textTokens,
-  border,
-  radius,
-  spacing,
-  alpha,
-} from "@tge/tokens"
+
+// ── Theme type ──
+
+export type TextareaTheme = {
+  /** Accent color (cursor, focused border). */
+  accent: string | number
+  /** Primary text color. */
+  fg: string | number
+  /** Muted text color (placeholder, ghost text). */
+  muted: string | number
+  /** Background when enabled. */
+  bg: string | number
+  /** Background when disabled. */
+  disabledBg: string | number
+  /** Border color when unfocused. */
+  border: string | number
+  /** Corner radius. */
+  radius: number
+  /** Inner padding. */
+  padding: number
+}
+
+const TEXTAREA_DEFAULTS: TextareaTheme = {
+  accent: 0x56d4c8ff,
+  fg: 0xe0e0e0ff,
+  muted: 0x888888ff,
+  bg: 0x1e1e2eff,
+  disabledBg: 0x1a1a2eff,
+  border: 0xffffff26,
+  radius: 4,
+  padding: 8,
+}
 
 const CHAR_WIDTH = 9
 const LINE_HEIGHT = 17
@@ -183,9 +206,9 @@ export type TextareaHandle = {
   /** Remove focus from the textarea */
   blur: () => void
   /** Set cursor color at runtime */
-  set cursorColor(color: number)
+  set cursorColor(color: string | number)
   /** Get cursor color */
-  get cursorColor(): number
+  get cursorColor(): string | number
   /** Access the extmarks manager for this textarea */
   readonly extmarks: ExtmarkManager
 }
@@ -278,6 +301,9 @@ export type TextareaProps = {
 
   /** Language for syntax highlighting (e.g. "typescript"). Required with syntaxStyle. */
   language?: string
+
+  /** Visual theme — all styling comes from here. */
+  theme?: Partial<TextareaTheme>
 }
 
 // ── Component ──
@@ -287,10 +313,11 @@ export function Textarea(props: TextareaProps) {
   const [selStart, setSelStart] = createSignal(-1)
   const [selEnd, setSelEnd] = createSignal(-1)
   const [blink, setBlink] = createSignal(true)
-  const [cursorColorSignal, setCursorColorSignal] = createSignal(0)
+  const [cursorColorSignal, setCursorColorSignal] = createSignal<string | number>(0)
   const [syntaxTokens, setSyntaxTokens] = createSignal<Token[][]>([])
 
-  const color = () => cursorColorSignal() || props.color || accent.thread
+  const th = () => ({ ...TEXTAREA_DEFAULTS, ...props.theme })
+  const color = () => cursorColorSignal() || props.color || th().accent
   const disabled = () => props.disabled ?? false
   const inputWidth = () => props.width ?? 400
   const inputHeight = () => props.height ?? 200
@@ -541,7 +568,7 @@ export function Textarea(props: TextareaProps) {
 
   // ── Ref handle ──
 
-  let _cursorColor = 0
+  let _cursorColor: string | number = 0
 
   if (props.ref) {
     const handle: TextareaHandle = {
@@ -589,13 +616,13 @@ export function Textarea(props: TextareaProps) {
           markDirty()
         }
       },
-      set cursorColor(c: number) {
+      set cursorColor(c: string | number) {
         _cursorColor = c
         setCursorColorSignal(c)
         markDirty()
       },
-      get cursorColor(): number {
-        return _cursorColor || (props.color ?? accent.thread)
+      get cursorColor(): string | number {
+        return _cursorColor || (props.color ?? th().accent)
       },
       get extmarks(): ExtmarkManager {
         return extmarkMgr
@@ -635,7 +662,7 @@ export function Textarea(props: TextareaProps) {
     const lineExtmarks = extmarkMgr.getForLine(lineStart, lineEnd)
 
     // Determine token colors for each character
-    function getCharColor(charIdx: number): number {
+    function getCharColor(charIdx: number): string | number {
       // Extmarks take priority over syntax tokens
       for (const em of lineExtmarks) {
         const emStart = em.start - lineStart
@@ -653,7 +680,7 @@ export function Textarea(props: TextareaProps) {
           pos = end
         }
       }
-      return textTokens.primary
+      return th().fg
     }
 
     // Ghost text from extmarks
@@ -665,7 +692,7 @@ export function Textarea(props: TextareaProps) {
     if (showPH) {
       return (
         <box height={LINE_HEIGHT} width="100%">
-          <text color={textTokens.muted} fontSize={14}>
+          <text color={th().muted} fontSize={14}>
             {props.placeholder ?? ""}
           </text>
         </box>
@@ -673,7 +700,7 @@ export function Textarea(props: TextareaProps) {
     }
 
     // Build colored segments — group consecutive chars with same color
-    type Segment = { text: string; color: number }
+    type Segment = { text: string; color: string | number }
     const segments: Segment[] = []
     if (lineTokens && lineTokens.length > 0 && !lineExtmarks.length) {
       // Fast path: use syntax tokens directly
@@ -723,7 +750,7 @@ export function Textarea(props: TextareaProps) {
             <box width={2} height={LINE_HEIGHT} backgroundColor={color()} />
           ) : null}
           {ghostText ? (
-            <text color={textTokens.muted} fontSize={14}>{ghostText}</text>
+            <text color={th().muted} fontSize={14}>{ghostText}</text>
           ) : null}
           {afterSegments.map((seg) => (
             <text color={seg.color} fontSize={14}>{seg.text}</text>
@@ -739,7 +766,7 @@ export function Textarea(props: TextareaProps) {
           ? segments.map((seg) => (
               <text color={seg.color} fontSize={14}>{seg.text}</text>
             ))
-          : <text color={textTokens.primary} fontSize={14}>{line}</text>
+          : <text color={th().fg} fontSize={14}>{line}</text>
         }
       </box>
     )
@@ -748,7 +775,7 @@ export function Textarea(props: TextareaProps) {
   // ── Render ──
 
   const visibleLines = () => {
-    const h = inputHeight() - spacing.md * 2
+    const h = inputHeight() - th().padding * 2
     return Math.floor(h / LINE_HEIGHT)
   }
 
@@ -756,11 +783,11 @@ export function Textarea(props: TextareaProps) {
     <box
       width={inputWidth()}
       height={inputHeight()}
-      backgroundColor={disabled() ? surface.context : surface.card}
-      cornerRadius={radius.md}
-      borderColor={checkFocus() ? color() : border.normal}
+      backgroundColor={disabled() ? th().disabledBg : th().bg}
+      cornerRadius={th().radius}
+      borderColor={checkFocus() ? color() : th().border}
       borderWidth={checkFocus() ? 2 : 1}
-      padding={spacing.md}
+      padding={th().padding}
       direction="column"
     >
       {(() => {

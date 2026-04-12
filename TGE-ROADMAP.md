@@ -12,7 +12,7 @@
 | Input (keyboard, mouse, paste, focus) | Done | Complete |
 | Text editing (Input, Textarea, syntax) | Done | Advanced |
 | Layer compositing (dirty-flag, z-index) | Done | Fixed (layer+scroll desync resolved) |
-| Design tokens (@tge/tokens, @tge/void) | Done | Good |
+| Design tokens (@tge/void) | Done | Good |
 | Content rendering (Markdown, Code, Diff) | Done | Good |
 | Declarative interaction (hover/active styles) | Done | Good |
 

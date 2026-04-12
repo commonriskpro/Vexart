@@ -34,7 +34,7 @@ Classic counter with keyboard interaction:
 ```tsx
 import { mount } from "@tge/renderer"
 import { Box, Text, Button } from "@tge/components"
-import { surface, text, accent, radius, spacing } from "@tge/tokens"
+import { colors, radius, space } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
 import { createSignal } from "solid-js"
 
@@ -42,13 +42,13 @@ function App() {
   const [count, setCount] = createSignal(0)
 
   return (
-    <Box width="100%" height="100%" padding={spacing.xl} backgroundColor={surface.void}
-      direction="column" alignX="center" alignY="center" gap={spacing.lg}>
-      <Text color={text.primary}>Count: {count()}</Text>
-      <Box direction="row" gap={spacing.md}>
+    <Box width="100%" height="100%" padding={space[6]} backgroundColor={colors.background}
+      direction="column" alignX="center" alignY="center" gap={space[4]}>
+      <Text color={colors.foreground}>Count: {count()}</Text>
+      <Box direction="row" gap={space[2]}>
         <Button onPress={() => setCount(c => c - 1)} variant="outline">-1</Button>
         <Button onPress={() => setCount(c => c + 1)}>+1</Button>
-        <Button onPress={() => setCount(0)} variant="ghost" color={accent.signal}>Reset</Button>
+        <Button onPress={() => setCount(0)} variant="ghost" color={colors.accent}>Reset</Button>
       </Box>
     </Box>
   )
@@ -67,7 +67,7 @@ A contact form with validation:
 ```tsx
 import { mount, onInput } from "@tge/renderer"
 import { Box, Text, Input, Button } from "@tge/components"
-import { surface, text, accent, radius, spacing, shadow, border } from "@tge/tokens"
+import { colors, radius, space, shadows } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
 import { createSignal, onCleanup } from "solid-js"
 
@@ -90,39 +90,39 @@ function App() {
   onCleanup(unsub)
 
   return (
-    <Box width="100%" height="100%" padding={spacing.xl} backgroundColor={surface.void}
+    <Box width="100%" height="100%" padding={space[6]} backgroundColor={colors.background}
       alignX="center" alignY="center">
-      <Box padding={spacing.xl} backgroundColor={surface.card} cornerRadius={radius.xl}
-        shadow={shadow.floating} direction="column" gap={spacing.lg} width={400}>
+      <Box padding={space[6]} backgroundColor={colors.card} cornerRadius={radius.xl}
+        shadow={shadows.xl} direction="column" gap={space[4]} width={400}>
 
-        <Text color={text.primary}>Contact Form</Text>
+        <Text color={colors.foreground}>Contact Form</Text>
 
-        <Box direction="column" gap={spacing.sm}>
-          <Text color={text.muted}>Name</Text>
+        <Box direction="column" gap={space[1]}>
+          <Text color={colors.mutedForeground}>Name</Text>
           <Input value={name()} onChange={setName} placeholder="Your name..." />
         </Box>
 
-        <Box direction="column" gap={spacing.sm}>
-          <Text color={text.muted}>Email</Text>
+        <Box direction="column" gap={space[1]}>
+          <Text color={colors.mutedForeground}>Email</Text>
           <Input value={email()} onChange={setEmail} placeholder="email@example.com"
-            color={accent.anchor} />
+            color={colors.accent} />
         </Box>
 
-        <Box direction="column" gap={spacing.sm}>
-          <Text color={text.muted}>Message</Text>
+        <Box direction="column" gap={space[1]}>
+          <Text color={colors.mutedForeground}>Message</Text>
           <Input value={message()} onChange={setMessage} placeholder="Say something..."
-            width={360} color={accent.purple} />
+            width={360} color={colors.accent} />
         </Box>
 
-        <Box direction="row" gap={spacing.md}>
+        <Box direction="row" gap={space[2]}>
           <Button onPress={handleSubmit}>Submit</Button>
-          <Button variant="ghost" color={accent.drift}
+          <Button variant="ghost" color={colors.secondary}
             onPress={() => { setName(""); setEmail(""); setMessage("") }}>
             Clear
           </Button>
         </Box>
 
-        {submitted() && <Text color={accent.green}>Form submitted!</Text>}
+        {submitted() && <Text color={colors.primary}>Form submitted!</Text>}
       </Box>
     </Box>
   )
@@ -141,7 +141,7 @@ Multiple independent widgets, each on its own compositing layer:
 ```tsx
 import { mount } from "@tge/renderer"
 import { Box, Text } from "@tge/components"
-import { surface, text, accent, radius, spacing, shadow } from "@tge/tokens"
+import { colors, radius, space, shadows } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
 import { createSignal, onCleanup } from "solid-js"
 
@@ -151,9 +151,9 @@ function Clock() {
   onCleanup(() => clearInterval(timer))
 
   return (
-    <Box layer padding={spacing.lg} backgroundColor={surface.card}
-      cornerRadius={radius.lg} shadow={shadow.subtle}>
-      <Text color={text.primary}>{time().toLocaleTimeString()}</Text>
+    <Box layer padding={space[4]} backgroundColor={colors.card}
+      cornerRadius={radius.lg} shadow={shadows.sm}>
+      <Text color={colors.foreground}>{time().toLocaleTimeString()}</Text>
     </Box>
   )
 }
@@ -164,19 +164,19 @@ function Stats() {
   onCleanup(() => clearInterval(timer))
 
   return (
-    <Box layer padding={spacing.lg} backgroundColor={surface.card}
-      cornerRadius={radius.lg} shadow={shadow.subtle}>
-      <Text color={accent.green}>Frames: {frames()}</Text>
+    <Box layer padding={space[4]} backgroundColor={colors.card}
+      cornerRadius={radius.lg} shadow={shadows.sm}>
+      <Text color={colors.foreground}>Frames: {frames()}</Text>
     </Box>
   )
 }
 
 function App() {
   return (
-    <Box width="100%" height="100%" padding={spacing.xl} backgroundColor={surface.void}
-      direction="column" gap={spacing.lg}>
-      <Text color={text.primary}>Dashboard</Text>
-      <Box direction="row" gap={spacing.lg}>
+    <Box width="100%" height="100%" padding={space[6]} backgroundColor={colors.background}
+      direction="column" gap={space[4]}>
+      <Text color={colors.foreground}>Dashboard</Text>
+      <Box direction="row" gap={space[4]}>
         <Clock />
         <Stats />
       </Box>
@@ -197,7 +197,7 @@ mount(App, terminal)
 ```tsx
 import { mount } from "@tge/renderer"
 import { Box, Text, Tabs, Checkbox, List } from "@tge/components"
-import { surface, text, accent, radius, spacing, shadow } from "@tge/tokens"
+import { colors, radius, space, shadows } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
 import { createSignal } from "solid-js"
 
@@ -209,12 +209,12 @@ function App() {
   const [themeIdx, setThemeIdx] = createSignal(0)
 
   return (
-    <Box width="100%" height="100%" padding={spacing.xl} backgroundColor={surface.void}
+    <Box width="100%" height="100%" padding={space[6]} backgroundColor={colors.background}
       alignX="center" alignY="center">
-      <Box width={500} padding={spacing.xl} backgroundColor={surface.card}
-        cornerRadius={radius.xl} shadow={shadow.floating} direction="column" gap={spacing.lg}>
+      <Box width={500} padding={space[6]} backgroundColor={colors.card}
+        cornerRadius={radius.xl} shadow={shadows.xl} direction="column" gap={space[4]}>
 
-        <Text color={text.primary}>Settings</Text>
+        <Text color={colors.foreground}>Settings</Text>
 
         <Tabs
           activeTab={tab()}
@@ -223,24 +223,24 @@ function App() {
             {
               label: "General",
               content: () => (
-                <Box direction="column" gap={spacing.md} padding={spacing.md}>
+                <Box direction="column" gap={space[2]} padding={space[2]}>
                   <Checkbox checked={darkMode()} onChange={setDarkMode} label="Dark mode" />
                   <Checkbox checked={notifications()} onChange={setNotifications}
-                    label="Notifications" color={accent.anchor} />
+                    label="Notifications" color={colors.accent} />
                   <Checkbox checked={sound()} onChange={setSound}
-                    label="Sound effects" color={accent.signal} />
+                    label="Sound effects" color={colors.primary} />
                 </Box>
               )
             },
             {
               label: "Theme",
               content: () => (
-                <Box padding={spacing.md}>
+                <Box padding={space[2]}>
                   <List
                     items={["Void Black", "Midnight Blue", "Forest Green", "Dracula"]}
                     selectedIndex={themeIdx()}
                     onSelectedChange={setThemeIdx}
-                    color={accent.purple}
+                    color={colors.accent}
                   />
                 </Box>
               )
@@ -248,10 +248,10 @@ function App() {
             {
               label: "About",
               content: () => (
-                <Box direction="column" gap={spacing.sm} padding={spacing.md}>
-                  <Text color={text.primary}>TGE v0.0.1</Text>
-                  <Text color={text.muted}>Terminal Graphics Engine</Text>
-                  <Text color={text.muted}>MIT License</Text>
+                <Box direction="column" gap={space[1]} padding={space[2]}>
+                  <Text color={colors.foreground}>TGE v0.0.1</Text>
+                  <Text color={colors.mutedForeground}>Terminal Graphics Engine</Text>
+                  <Text color={colors.mutedForeground}>MIT License</Text>
                 </Box>
               )
             },
@@ -273,7 +273,7 @@ mount(App, terminal)
 ```tsx
 import { mount, onInput } from "@tge/renderer"
 import { Box, Text, ScrollView } from "@tge/components"
-import { surface, text, accent, radius, spacing } from "@tge/tokens"
+import { colors, radius, space } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
 import { createSignal, onCleanup } from "solid-js"
 import { For } from "@tge/renderer"
@@ -296,16 +296,16 @@ function App() {
   onCleanup(unsub)
 
   return (
-    <Box width="100%" height="100%" padding={spacing.lg} backgroundColor={surface.void}
-      direction="column" gap={spacing.md}>
-      <Text color={text.primary}>Log Viewer ({logs().length} entries) — press Q to quit</Text>
-      <ScrollView width="100%" height={400} scrollY backgroundColor={surface.panel}
-        cornerRadius={radius.lg} direction="column" padding={spacing.sm} gap={2}>
+    <Box width="100%" height="100%" padding={space[4]} backgroundColor={colors.background}
+      direction="column" gap={space[2]}>
+      <Text color={colors.foreground}>Log Viewer ({logs().length} entries) — press Q to quit</Text>
+      <ScrollView width="100%" height={400} scrollY backgroundColor={colors.card}
+        cornerRadius={radius.lg} direction="column" padding={space[1]} gap={2}>
         <For each={logs()}>
           {(line) => (
-            <Box padding={spacing.xs} paddingX={spacing.sm}>
-              <Text color={line.includes("ERROR") ? accent.drift :
-                           line.includes("WARN") ? accent.signal : text.muted}>
+            <Box padding={space[0.5]} paddingX={space[1]}>
+              <Text color={line.includes("ERROR") ? colors.destructive :
+                           line.includes("WARN") ? colors.accent : colors.mutedForeground}>
                 {line}
               </Text>
             </Box>
@@ -391,13 +391,13 @@ function App() {
   const [showDetails, setShowDetails] = createSignal(false)
 
   return (
-    <Box direction="column" gap={spacing.md}>
+    <Box direction="column" gap={space[2]}>
       <Button onPress={() => setShowDetails(s => !s)}>
         {showDetails() ? "Hide" : "Show"} Details
       </Button>
       <Show when={showDetails()}>
-        <Box padding={spacing.md} backgroundColor={surface.card} cornerRadius={radius.lg}>
-          <Text color={text.secondary}>Here are the details!</Text>
+        <Box padding={space[2]} backgroundColor={colors.card} cornerRadius={radius.lg}>
+          <Text color={colors.mutedForeground}>Here are the details!</Text>
         </Box>
       </Show>
     </Box>
@@ -418,7 +418,7 @@ function TodoList() {
   const [input, setInput] = createSignal("")
 
   return (
-    <Box direction="column" gap={spacing.md}>
+    <Box direction="column" gap={space[2]}>
       <Input value={input()} onChange={setInput}
         onSubmit={(val) => {
           setItems(prev => [...prev, val])
@@ -428,9 +428,9 @@ function TodoList() {
       />
       <For each={items()}>
         {(item, i) => (
-          <Box direction="row" gap={spacing.sm} padding={spacing.xs}>
-            <Text color={accent.thread}>{i() + 1}.</Text>
-            <Text color={text.secondary}>{item}</Text>
+          <Box direction="row" gap={space[1]} padding={space[0.5]}>
+            <Text color={colors.accent}>{i() + 1}.</Text>
+            <Text color={colors.mutedForeground}>{item}</Text>
           </Box>
         )}
       </For>

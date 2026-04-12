@@ -31,8 +31,8 @@ function KeyDisplay() {
 
   return (
     <Box direction="column" gap={4}>
-      <Text color={text.primary}>Last key: {kb.key()?.key ?? "none"}</Text>
-      <Text color={kb.pressed("escape") ? accent.drift : text.muted}>
+      <Text color={colors.foreground}>Last key: {kb.key()?.key ?? "none"}</Text>
+      <Text color={kb.pressed("escape") ? colors.destructive : colors.mutedForeground}>
         {kb.pressed("escape") ? "ESC pressed!" : "Press ESC"}
       </Text>
     </Box>
@@ -71,10 +71,10 @@ function MouseTracker() {
 
   return (
     <Box direction="column" gap={4}>
-      <Text color={text.primary}>
+      <Text color={colors.foreground}>
         Mouse: {ms.pos().x}, {ms.pos().y}
       </Text>
-      <Text color={text.muted}>
+      <Text color={colors.mutedForeground}>
         Button: {ms.mouse()?.button ?? "none"}
       </Text>
     </Box>
@@ -121,7 +121,7 @@ function useFocus(opts?: {
 ```tsx
 import { useFocus } from "@tge/renderer"
 import { Box, Text } from "@tge/components"
-import { border, text, accent } from "@tge/tokens"
+import { colors } from "@tge/void"
 
 function ColorPicker(props: { colors: number[]; selected: number; onChange: (i: number) => void }) {
   const { focused } = useFocus({
@@ -139,7 +139,7 @@ function ColorPicker(props: { colors: number[]; selected: number; onChange: (i: 
       direction="row"
       gap={4}
       padding={8}
-      borderColor={focused() ? border.focus : border.subtle}
+      borderColor={focused() ? colors.ring : colors.border}
       borderWidth={focused() ? 2 : 1}
       cornerRadius={4}
     >
@@ -179,7 +179,7 @@ function RawInputDisplay() {
   const input = useInput()
 
   return (
-    <Text color={text.muted}>
+    <Text color={colors.mutedForeground}>
       Last event: {input()?.type ?? "none"}
     </Text>
   )
@@ -299,8 +299,8 @@ function FocusableCard(props: { children: JSX.Element }) {
   return (
     <Box
       padding={12}
-      backgroundColor={focused() ? surface.floating : surface.card}
-      borderColor={focused() ? accent.thread : border.subtle}
+      backgroundColor={focused() ? colors.accent : colors.card}
+      borderColor={focused() ? colors.ring : colors.border}
       borderWidth={focused() ? 2 : 1}
       cornerRadius={8}
     >
@@ -340,6 +340,6 @@ function Clock() {
   const timer = setInterval(() => setTime(new Date()), 1000)
   onCleanup(() => clearInterval(timer))
 
-  return <Text color={text.primary}>{time().toLocaleTimeString()}</Text>
+  return <Text color={colors.foreground}>{time().toLocaleTimeString()}</Text>
 }
 ```

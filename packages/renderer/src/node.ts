@@ -11,7 +11,7 @@
 
 import { SIZING, DIRECTION, ALIGN_X, ALIGN_Y } from "./clay"
 
-export type TGENodeKind = "box" | "text" | "root"
+export type TGENodeKind = "box" | "text" | "img" | "root"
 
 /** Interactive style props — usable in hoverStyle, activeStyle, focusStyle */
 type InteractiveStyleProps = Partial<Pick<TGEProps, "backgroundColor" | "borderColor" | "borderWidth" | "cornerRadius" | "borderRadius" | "shadow" | "boxShadow" | "glow" | "gradient" | "backdropBlur" | "opacity">>
@@ -100,10 +100,10 @@ export type TGEProps = {
   }>
   /** CSS-friendly alias for shadow (Decision 1) */
   boxShadow?: TGEProps["shadow"]
-  glow?: {             // Outer glow — painted BEFORE the rect
-    radius: number     // Glow spread radius (px)
-    color: number      // Glow color (packed RGBA u32)
-    intensity?: number // 0-100, default 80
+  glow?: {                     // Outer glow — painted BEFORE the rect
+    radius: number             // Glow spread radius (px)
+    color: string | number     // Glow color (hex string or packed RGBA u32)
+    intensity?: number         // 0-100, default 80
   }
   gradient?: {         // Gradient fill — painted INSTEAD of solid backgroundColor
     type: "linear"
@@ -128,6 +128,12 @@ export type TGEProps = {
   // Convenience
   /** CSS-style prop — merged with direct props (direct props win). Decision 3. */
   style?: Partial<TGEProps>
+
+  // Image (<img> intrinsic)
+  /** Image source — file path or URL. Decoded async on first render. */
+  src?: string
+  /** How the image fits within its layout box. Default: "contain". */
+  objectFit?: "contain" | "cover" | "fill" | "none"
 
   // Text
   color?: string | number
@@ -157,6 +163,10 @@ export type TGENode = {
   _hovered: boolean
   _active: boolean
   _focused: boolean
+  /** Decoded image RGBA data — set by image decode pipeline, read by paintCommand */
+  _imageBuffer: { data: Uint8Array; width: number; height: number } | null
+  /** Image decode state — prevents re-triggering decode */
+  _imageState: "idle" | "loading" | "loaded" | "error"
 }
 
 /** Computed layout geometry from Clay — written each frame after layout */
@@ -182,6 +192,8 @@ export function createNode(kind: TGENodeKind): TGENode {
     _hovered: false,
     _active: false,
     _focused: false,
+    _imageBuffer: null,
+    _imageState: "idle",
   }
 }
 

@@ -21,15 +21,7 @@ import {
   Button,
 } from "@tge/components"
 import { createTerminal } from "@tge/terminal"
-import {
-  surface,
-  accent,
-  text as textTokens,
-  border,
-  radius,
-  spacing,
-  shadow,
-} from "@tge/tokens"
+import { colors, radius, space, shadows } from "@tge/void"
 
 function App() {
   const [name, setName] = createSignal("")
@@ -45,33 +37,33 @@ function App() {
     <Box
       width="100%"
       height="100%"
-      backgroundColor={surface.void}
+      backgroundColor={colors.background}
       direction="column"
       alignX="center"
       alignY="center"
-      gap={spacing.xl}
+      gap={space[6]}
     >
-      <Text color={textTokens.primary} fontSize={16}>
+      <Text color={colors.foreground} fontSize={16}>
         TGE Text Input Demo
       </Text>
 
       {/* Form */}
       <Box
-        backgroundColor={surface.card}
+        backgroundColor={colors.card}
         cornerRadius={radius.xl}
-        padding={spacing.xl}
+        padding={space[6]}
         direction="column"
-        gap={spacing.lg}
-        shadow={shadow.elevated}
+        gap={space[4]}
+        shadow={shadows.md}
         width={400}
       >
-        <Text color={textTokens.muted} fontSize={12}>
+        <Text color={colors.mutedForeground} fontSize={12}>
           Contact Form
         </Text>
 
         {/* Name field */}
-        <Box direction="column" gap={spacing.xs}>
-          <Text color={textTokens.secondary} fontSize={12}>
+        <Box direction="column" gap={space[0.5]}>
+          <Text color={colors.foreground} fontSize={12}>
             Name
           </Text>
           <Input
@@ -79,14 +71,27 @@ function App() {
             onChange={setName}
             onSubmit={handleSubmit}
             placeholder="John Doe"
-            color={accent.thread}
-            width={360}
+            renderInput={(ctx) => (
+              <Box
+                width={360}
+                height={24}
+                backgroundColor={colors.secondary}
+                cornerRadius={radius.md}
+                borderColor={ctx.focused ? "#4fc4d4" : colors.input}
+                borderWidth={1}
+                padding={space[1]}
+              >
+                <Text color={ctx.showPlaceholder ? colors.mutedForeground : colors.foreground} fontSize={14}>
+                  {ctx.displayText}
+                </Text>
+              </Box>
+            )}
           />
         </Box>
 
         {/* Email field */}
-        <Box direction="column" gap={spacing.xs}>
-          <Text color={textTokens.secondary} fontSize={12}>
+        <Box direction="column" gap={space[0.5]}>
+          <Text color={colors.foreground} fontSize={12}>
             Email
           </Text>
           <Input
@@ -94,14 +99,27 @@ function App() {
             onChange={setEmail}
             onSubmit={handleSubmit}
             placeholder="john@example.com"
-            color={accent.anchor}
-            width={360}
+            renderInput={(ctx) => (
+              <Box
+                width={360}
+                height={24}
+                backgroundColor={colors.secondary}
+                cornerRadius={radius.md}
+                borderColor={ctx.focused ? "#4eaed0" : colors.input}
+                borderWidth={1}
+                padding={space[1]}
+              >
+                <Text color={ctx.showPlaceholder ? colors.mutedForeground : colors.foreground} fontSize={14}>
+                  {ctx.displayText}
+                </Text>
+              </Box>
+            )}
           />
         </Box>
 
         {/* Message field */}
-        <Box direction="column" gap={spacing.xs}>
-          <Text color={textTokens.secondary} fontSize={12}>
+        <Box direction="column" gap={space[0.5]}>
+          <Text color={colors.foreground} fontSize={12}>
             Message
           </Text>
           <Input
@@ -109,55 +127,76 @@ function App() {
             onChange={setMessage}
             onSubmit={handleSubmit}
             placeholder="Your message here..."
-            color={accent.signal}
-            width={360}
+            renderInput={(ctx) => (
+              <Box
+                width={360}
+                height={24}
+                backgroundColor={colors.secondary}
+                cornerRadius={radius.md}
+                borderColor={ctx.focused ? "#f59e0b" : colors.input}
+                borderWidth={1}
+                padding={space[1]}
+              >
+                <Text color={ctx.showPlaceholder ? colors.mutedForeground : colors.foreground} fontSize={14}>
+                  {ctx.displayText}
+                </Text>
+              </Box>
+            )}
           />
         </Box>
 
         {/* Submit button */}
         <Button
           onPress={handleSubmit}
-          color={accent.green}
-        >
-          Submit
-        </Button>
+          renderButton={({ focused, pressed }) => (
+            <Box
+              backgroundColor={pressed ? "#16a34a" : "#22c55e"}
+              cornerRadius={radius.md}
+              padding={space[2]}
+            >
+              <Text color={colors.foreground} fontSize={14}>
+                Submit
+              </Text>
+            </Box>
+          )}
+        />
       </Box>
 
       {/* Live preview */}
       <Box
-        backgroundColor={surface.card}
+        backgroundColor={colors.card}
         cornerRadius={radius.lg}
-        padding={spacing.lg}
+        padding={space[4]}
         direction="column"
-        gap={spacing.sm}
+        gap={space[1]}
         width={400}
-        borderColor={border.subtle}
+        borderColor={colors.border}
         borderWidth={1}
       >
-        <Text color={textTokens.muted} fontSize={12}>
+        <Text color={colors.mutedForeground} fontSize={12}>
           Live Preview
         </Text>
-        <Text color={textTokens.secondary} fontSize={14}>
+        <Text color={colors.foreground} fontSize={14}>
           {"Name: " + (name() || "-")}
         </Text>
-        <Text color={textTokens.secondary} fontSize={14}>
+        <Text color={colors.foreground} fontSize={14}>
           {"Email: " + (email() || "-")}
         </Text>
-        <Text color={textTokens.secondary} fontSize={14}>
+        <Text color={colors.foreground} fontSize={14}>
           {"Message: " + (message() || "-")}
         </Text>
         {submitted() ? (
-          <Text color={accent.green} fontSize={14}>
+          <Text color="#22c55e" fontSize={14}>
             Submitted!
           </Text>
         ) : null}
       </Box>
 
-      <Box direction="column" gap={spacing.xs} alignX="center">
-        <Text color={textTokens.muted} fontSize={12}>
+      <Box direction="column" gap={space[0.5]} alignX="center">
+        <Text color={colors.mutedForeground} fontSize={12}>
           Tab: next field | Shift+Arrows: select | Ctrl+A: select all | Enter: submit
         </Text>
-        <Text color={textTokens.muted} fontSize={12}>
+        <Text color={colors.mutedForeground} fontSize={12}>
           Press q with no input focused, or Ctrl+C to exit
         </Text>
       </Box>

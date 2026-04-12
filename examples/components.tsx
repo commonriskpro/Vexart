@@ -27,14 +27,7 @@ import {
   List,
 } from "@tge/components"
 import { createTerminal } from "@tge/terminal"
-import {
-  surface,
-  accent,
-  text as textTokens,
-  border,
-  radius,
-  spacing,
-} from "@tge/tokens"
+import { colors, radius, space } from "@tge/void"
 
 // ── Button showcase ──
 
@@ -43,43 +36,78 @@ function ButtonSection() {
 
   return (
     <Box
-      backgroundColor={surface.card}
+      backgroundColor={colors.card}
       cornerRadius={radius.xl}
-      padding={spacing.lg}
+      padding={space[4]}
       direction="column"
-      gap={spacing.md}
-      borderColor={border.subtle}
+      gap={space[2]}
+      borderColor={colors.border}
       borderWidth={1}
     >
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         Buttons
       </Text>
-      <Box direction="row" gap={spacing.md} alignY="center">
+      <Box direction="row" gap={space[2]} alignY="center">
         <Button
           onPress={() => setClicks((c) => c + 1)}
-          color={accent.thread}
-        >
-          {"Solid (" + String(clicks()) + ")"}
-        </Button>
+          renderButton={({ focused, pressed }) => (
+            <Box
+              backgroundColor={pressed ? "#3a8a9a" : "#4fc4d4"}
+              cornerRadius={radius.md}
+              padding={space[2]}
+            >
+              <Text color={colors.foreground} fontSize={14}>
+                {"Solid (" + String(clicks()) + ")"}
+              </Text>
+            </Box>
+          )}
+        />
         <Button
-          variant="outline"
           onPress={() => setClicks((c) => c + 1)}
-          color={accent.anchor}
-        >
-          Outline
-        </Button>
+          renderButton={({ focused, pressed }) => (
+            <Box
+              backgroundColor={pressed ? "#3a6a8a" : colors.transparent}
+              cornerRadius={radius.md}
+              padding={space[2]}
+              borderColor="#4eaed0"
+              borderWidth={1}
+            >
+              <Text color="#4eaed0" fontSize={14}>
+                Outline
+              </Text>
+            </Box>
+          )}
+        />
         <Button
-          variant="ghost"
           onPress={() => setClicks((c) => c + 1)}
-          color={accent.signal}
-        >
-          Ghost
-        </Button>
-        <Button disabled>
-          Disabled
-        </Button>
+          renderButton={({ focused, pressed }) => (
+            <Box
+              backgroundColor={pressed ? colors.accent : colors.transparent}
+              cornerRadius={radius.md}
+              padding={space[2]}
+            >
+              <Text color="#f59e0b" fontSize={14}>
+                Ghost
+              </Text>
+            </Box>
+          )}
+        />
+        <Button
+          disabled
+          renderButton={({ disabled }) => (
+            <Box
+              backgroundColor={colors.muted}
+              cornerRadius={radius.md}
+              padding={space[2]}
+            >
+              <Text color={colors.mutedForeground} fontSize={14}>
+                Disabled
+              </Text>
+            </Box>
+          )}
+        />
       </Box>
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         {"Total clicks: " + String(clicks())}
       </Text>
     </Box>
@@ -98,42 +126,68 @@ function ProgressSection() {
 
   return (
     <Box
-      backgroundColor={surface.card}
+      backgroundColor={colors.card}
       cornerRadius={radius.xl}
-      padding={spacing.lg}
+      padding={space[4]}
       direction="column"
-      gap={spacing.md}
-      borderColor={border.subtle}
+      gap={space[2]}
+      borderColor={colors.border}
       borderWidth={1}
     >
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         Progress Bars
       </Text>
-      <Box direction="column" gap={spacing.sm}>
-        <Box direction="row" gap={spacing.md} alignY="center">
-          <Text color={textTokens.secondary} fontSize={12}>
+      <Box direction="column" gap={space[1]}>
+        <Box direction="row" gap={space[2]} alignY="center">
+          <Text color={colors.foreground} fontSize={12}>
             Thread
           </Text>
-          <ProgressBar value={value()} color={accent.thread} width={160} />
-          <Text color={textTokens.muted} fontSize={12}>
+          <ProgressBar
+            value={value()}
+            width={160}
+            renderBar={({ fillWidth, width, height }) => (
+              <Box width={width} height={height} backgroundColor={colors.muted} cornerRadius={radius.sm}>
+                <Box width={fillWidth} height={height} backgroundColor="#4fc4d4" cornerRadius={radius.sm} />
+              </Box>
+            )}
+          />
+          <Text color={colors.mutedForeground} fontSize={12}>
             {String(value()) + "%"}
           </Text>
         </Box>
-        <Box direction="row" gap={spacing.md} alignY="center">
-          <Text color={textTokens.secondary} fontSize={12}>
+        <Box direction="row" gap={space[2]} alignY="center">
+          <Text color={colors.foreground} fontSize={12}>
             Green
           </Text>
-          <ProgressBar value={75} color={accent.green} width={160} />
-          <Text color={textTokens.muted} fontSize={12}>
+          <ProgressBar
+            value={75}
+            width={160}
+            renderBar={({ fillWidth, width, height }) => (
+              <Box width={width} height={height} backgroundColor={colors.muted} cornerRadius={radius.sm}>
+                <Box width={fillWidth} height={height} backgroundColor="#22c55e" cornerRadius={radius.sm} />
+              </Box>
+            )}
+          />
+          <Text color={colors.mutedForeground} fontSize={12}>
             75%
           </Text>
         </Box>
-        <Box direction="row" gap={spacing.md} alignY="center">
-          <Text color={textTokens.secondary} fontSize={12}>
+        <Box direction="row" gap={space[2]} alignY="center">
+          <Text color={colors.foreground} fontSize={12}>
             Signal
           </Text>
-          <ProgressBar value={30} max={50} color={accent.signal} width={160} height={8} />
-          <Text color={textTokens.muted} fontSize={12}>
+          <ProgressBar
+            value={30}
+            max={50}
+            width={160}
+            height={8}
+            renderBar={({ fillWidth, width, height }) => (
+              <Box width={width} height={height} backgroundColor={colors.muted} cornerRadius={radius.sm}>
+                <Box width={fillWidth} height={height} backgroundColor="#f59e0b" cornerRadius={radius.sm} />
+              </Box>
+            )}
+          />
+          <Text color={colors.mutedForeground} fontSize={12}>
             30/50
           </Text>
         </Box>
@@ -151,35 +205,68 @@ function CheckboxSection() {
 
   return (
     <Box
-      backgroundColor={surface.card}
+      backgroundColor={colors.card}
       cornerRadius={radius.xl}
-      padding={spacing.lg}
+      padding={space[4]}
       direction="column"
-      gap={spacing.md}
-      borderColor={border.subtle}
+      gap={space[2]}
+      borderColor={colors.border}
       borderWidth={1}
     >
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         Checkboxes
       </Text>
-      <Box direction="column" gap={spacing.sm}>
+      <Box direction="column" gap={space[1]}>
         <Checkbox
           checked={dark()}
           onChange={setDark}
-          label="Dark mode"
-          color={accent.thread}
+          renderCheckbox={({ checked, focused }) => (
+            <Box direction="row" gap={space[2]} alignY="center">
+              <Box
+                width={16}
+                height={16}
+                backgroundColor={checked ? "#4fc4d4" : colors.muted}
+                cornerRadius={radius.sm}
+                borderColor={focused ? "#4fc4d4" : colors.border}
+                borderWidth={1}
+              />
+              <Text color={colors.foreground} fontSize={14}>Dark mode</Text>
+            </Box>
+          )}
         />
         <Checkbox
           checked={sound()}
           onChange={setSound}
-          label="Sound effects"
-          color={accent.anchor}
+          renderCheckbox={({ checked, focused }) => (
+            <Box direction="row" gap={space[2]} alignY="center">
+              <Box
+                width={16}
+                height={16}
+                backgroundColor={checked ? "#4eaed0" : colors.muted}
+                cornerRadius={radius.sm}
+                borderColor={focused ? "#4eaed0" : colors.border}
+                borderWidth={1}
+              />
+              <Text color={colors.foreground} fontSize={14}>Sound effects</Text>
+            </Box>
+          )}
         />
         <Checkbox
           checked={notif()}
           onChange={setNotif}
-          label="Notifications"
-          color={accent.green}
+          renderCheckbox={({ checked, focused }) => (
+            <Box direction="row" gap={space[2]} alignY="center">
+              <Box
+                width={16}
+                height={16}
+                backgroundColor={checked ? "#22c55e" : colors.muted}
+                cornerRadius={radius.sm}
+                borderColor={focused ? "#22c55e" : colors.border}
+                borderWidth={1}
+              />
+              <Text color={colors.foreground} fontSize={14}>Notifications</Text>
+            </Box>
+          )}
         />
       </Box>
     </Box>
@@ -193,31 +280,30 @@ function TabsSection() {
 
   return (
     <Box
-      backgroundColor={surface.card}
+      backgroundColor={colors.card}
       cornerRadius={radius.xl}
-      padding={spacing.lg}
+      padding={space[4]}
       direction="column"
-      gap={spacing.md}
-      borderColor={border.subtle}
+      gap={space[2]}
+      borderColor={colors.border}
       borderWidth={1}
       width={300}
     >
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         Tabs
       </Text>
       <Tabs
         activeTab={activeTab()}
         onTabChange={setActiveTab}
-        color={accent.thread}
         tabs={[
           {
             label: "General",
             content: () => (
-              <Box direction="column" gap={spacing.sm}>
-                <Text color={textTokens.primary} fontSize={14}>
+              <Box direction="column" gap={space[1]}>
+                <Text color={colors.foreground} fontSize={14}>
                   General Settings
                 </Text>
-                <Text color={textTokens.muted} fontSize={12}>
+                <Text color={colors.mutedForeground} fontSize={12}>
                   Configure basic options here.
                 </Text>
               </Box>
@@ -226,11 +312,11 @@ function TabsSection() {
           {
             label: "Display",
             content: () => (
-              <Box direction="column" gap={spacing.sm}>
-                <Text color={accent.anchor} fontSize={14}>
+              <Box direction="column" gap={space[1]}>
+                <Text color="#4eaed0" fontSize={14}>
                   Display Settings
                 </Text>
-                <Text color={textTokens.muted} fontSize={12}>
+                <Text color={colors.mutedForeground} fontSize={12}>
                   Colors, fonts, and layout.
                 </Text>
               </Box>
@@ -239,17 +325,28 @@ function TabsSection() {
           {
             label: "Keys",
             content: () => (
-              <Box direction="column" gap={spacing.sm}>
-                <Text color={accent.signal} fontSize={14}>
+              <Box direction="column" gap={space[1]}>
+                <Text color="#f59e0b" fontSize={14}>
                   Keybindings
                 </Text>
-                <Text color={textTokens.muted} fontSize={12}>
+                <Text color={colors.mutedForeground} fontSize={12}>
                   Customize keyboard shortcuts.
                 </Text>
               </Box>
             ),
           },
         ]}
+        renderTab={(tab, ctx) => (
+          <Box
+            backgroundColor={ctx.active ? colors.accent : colors.transparent}
+            cornerRadius={radius.md}
+            padding={space[2]}
+          >
+            <Text color={ctx.active ? colors.foreground : colors.mutedForeground} fontSize={14}>
+              {tab.label}
+            </Text>
+          </Box>
+        )}
       />
     </Box>
   )
@@ -271,16 +368,16 @@ function ListSection() {
 
   return (
     <Box
-      backgroundColor={surface.card}
+      backgroundColor={colors.card}
       cornerRadius={radius.xl}
-      padding={spacing.lg}
+      padding={space[4]}
       direction="column"
-      gap={spacing.md}
-      borderColor={border.subtle}
+      gap={space[2]}
+      borderColor={colors.border}
       borderWidth={1}
       width={250}
     >
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         List
       </Text>
       <List
@@ -288,9 +385,19 @@ function ListSection() {
         selectedIndex={idx()}
         onSelectedChange={setIdx}
         onSelect={(i) => setSelected(items[i])}
-        color={accent.purple}
+        renderItem={(item, ctx) => (
+          <Box
+            backgroundColor={ctx.selected ? "#a78bfa22" : colors.transparent}
+            padding={space[1]}
+            cornerRadius={radius.sm}
+          >
+            <Text color={ctx.selected ? "#a78bfa" : colors.mutedForeground} fontSize={14}>
+              {item}
+            </Text>
+          </Box>
+        )}
       />
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         {selected() ? "Selected: " + selected() : "Press Enter to select"}
       </Text>
     </Box>
@@ -304,34 +411,34 @@ function App() {
     <Box
       width="100%"
       height="100%"
-      backgroundColor={surface.void}
+      backgroundColor={colors.background}
       direction="column"
       alignX="center"
       alignY="center"
-      gap={spacing.lg}
+      gap={space[4]}
     >
-      <Text color={textTokens.primary} fontSize={16}>
+      <Text color={colors.foreground} fontSize={16}>
         TGE Component Showcase
       </Text>
 
       {/* Row 1: Buttons + Progress */}
-      <Box direction="row" gap={spacing.lg}>
+      <Box direction="row" gap={space[4]}>
         <ButtonSection />
         <ProgressSection />
       </Box>
 
       {/* Row 2: Checkboxes + Tabs + List */}
-      <Box direction="row" gap={spacing.lg}>
+      <Box direction="row" gap={space[4]}>
         <CheckboxSection />
         <TabsSection />
         <ListSection />
       </Box>
 
-      <Box direction="column" gap={spacing.xs} alignX="center">
-        <Text color={textTokens.muted} fontSize={12}>
+      <Box direction="column" gap={space[0.5]} alignX="center">
+        <Text color={colors.mutedForeground} fontSize={12}>
           Tab: cycle focus | Enter/Space: activate | Arrows: navigate
         </Text>
-        <Text color={textTokens.muted} fontSize={12}>
+        <Text color={colors.mutedForeground} fontSize={12}>
           Press q or Ctrl+C to exit
         </Text>
       </Box>

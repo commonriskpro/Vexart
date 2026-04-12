@@ -31,7 +31,7 @@ export function Card(props: CardProps) {
       borderColor={colors.border}
       paddingTop={sm ? space[4] : space[6]}
       paddingBottom={sm ? space[4] : space[6]}
-      shadow={shadows.md as any}
+      shadow={shadows.md}
     >
       {props.children}
     </box>

@@ -1,20 +1,22 @@
 /**
  * Diff — unified diff viewer for TGE.
  *
- * Renders a unified diff with per-line coloring:
- *   - Added lines: green background
- *   - Removed lines: red background
- *   - Context lines: default background
- *   - Optional syntax highlighting via tree-sitter
- *   - Optional line numbers
+ * Renders a unified diff with per-line coloring.
  *
- * Accepts standard unified diff format (output of `git diff`).
+ * Truly headless: all visual properties come from the `theme` prop.
+ * Use @tge/void VoidDiff for a styled version.
  *
  * Usage:
  *   <Diff
  *     diff={unifiedDiffString}
  *     syntaxStyle={style}
  *     filetype="typescript"
+ *     theme={{
+ *       fg: 0xe0e0e0ff, muted: 0x888888ff,
+ *       addedBg: 0x1a3a1aff, removedBg: 0x3a1a1aff,
+ *       addedSign: 0x4ec94eff, removedSign: 0xe05050ff,
+ *       bg: 0x1a1a2eff, radius: 4,
+ *     }}
  *   />
  */
 
@@ -27,19 +29,48 @@ import {
   type Token,
 } from "@tge/renderer"
 import { markDirty } from "@tge/renderer"
-import {
-  surface,
-  text as textTokens,
-  radius,
-  spacing,
-} from "@tge/tokens"
 
 const LINE_HEIGHT = 17
 const CHAR_WIDTH = 9
 
-// ── Diff colors ──
+// ── Theme ──
 
-const DIFF_COLORS = {
+export type DiffTheme = {
+  /** Default text color. */
+  fg: string | number
+  /** Muted text color (empty sign column). */
+  muted: string | number
+  /** Container background. */
+  bg: string | number
+  /** Container corner radius. */
+  radius: number
+  /** Added line background. */
+  addedBg: string | number
+  /** Removed line background. */
+  removedBg: string | number
+  /** Context line background. */
+  contextBg: string | number
+  /** Added sign (+) color. */
+  addedSign: string | number
+  /** Removed sign (-) color. */
+  removedSign: string | number
+  /** Line number foreground. */
+  lineNumberFg: string | number
+  /** Line number background. */
+  lineNumberBg: string | number
+  /** Hunk header background. */
+  headerBg: string | number
+  /** Hunk header foreground. */
+  headerFg: string | number
+  /** Horizontal padding for lines. */
+  linePadding: number
+}
+
+const DIFF_DEFAULTS: DiffTheme = {
+  fg: 0xe0e0e0ff,
+  muted: 0x888888ff,
+  bg: 0x1a1a2eff,
+  radius: 4,
   addedBg: 0x1a3a1aff,
   removedBg: 0x3a1a1aff,
   contextBg: 0x00000000,
@@ -49,35 +80,20 @@ const DIFF_COLORS = {
   lineNumberBg: 0x0d0d14ff,
   headerBg: 0x1a1a2eff,
   headerFg: 0x8888ccff,
-} as const
+  linePadding: 4,
+}
 
 // ── Types ──
 
 export type DiffProps = {
-  /** Unified diff string */
   diff: string
-  /** SyntaxStyle for syntax highlighting within diff lines */
   syntaxStyle?: SyntaxStyle
-  /** File type for syntax highlighting */
   filetype?: string
-  /** Show line numbers. Default: true */
   showLineNumbers?: boolean
-  /** Width in pixels. Default: 100% */
   width?: number | string
-  /** Added line background color */
-  addedBg?: number
-  /** Removed line background color */
-  removedBg?: number
-  /** Context line background color */
-  contextBg?: number
-  /** Added sign (+) color */
-  addedSignColor?: number
-  /** Removed sign (-) color */
-  removedSignColor?: number
-  /** Line number foreground */
-  lineNumberFg?: number
-  /** Streaming mode */
   streaming?: boolean
+  /** Visual theme — all styling comes from here. */
+  theme?: Partial<DiffTheme>
 }
 
 // ── Diff line types ──
@@ -108,30 +124,19 @@ function parseDiff(diff: string): DiffLine[] {
 
   for (const raw of rawLines) {
     if (raw.startsWith("@@")) {
-      // Hunk header: @@ -a,b +c,d @@
       const match = raw.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/)
-      if (match) {
-        oldLine = parseInt(match[1], 10)
-        newLine = parseInt(match[2], 10)
-      }
+      if (match) { oldLine = parseInt(match[1], 10); newLine = parseInt(match[2], 10) }
       result.push({ type: LINE_TYPE.HEADER, content: raw, oldLineNum: null, newLineNum: null })
     } else if (raw.startsWith("---") || raw.startsWith("+++") || raw.startsWith("diff ") || raw.startsWith("index ")) {
       result.push({ type: LINE_TYPE.HEADER, content: raw, oldLineNum: null, newLineNum: null })
     } else if (raw.startsWith("+")) {
-      result.push({ type: LINE_TYPE.ADDED, content: raw.slice(1), oldLineNum: null, newLineNum: newLine })
-      newLine++
+      result.push({ type: LINE_TYPE.ADDED, content: raw.slice(1), oldLineNum: null, newLineNum: newLine }); newLine++
     } else if (raw.startsWith("-")) {
-      result.push({ type: LINE_TYPE.REMOVED, content: raw.slice(1), oldLineNum: oldLine, newLineNum: null })
-      oldLine++
+      result.push({ type: LINE_TYPE.REMOVED, content: raw.slice(1), oldLineNum: oldLine, newLineNum: null }); oldLine++
     } else if (raw.startsWith(" ")) {
-      result.push({ type: LINE_TYPE.CONTEXT, content: raw.slice(1), oldLineNum: oldLine, newLineNum: newLine })
-      oldLine++
-      newLine++
+      result.push({ type: LINE_TYPE.CONTEXT, content: raw.slice(1), oldLineNum: oldLine, newLineNum: newLine }); oldLine++; newLine++
     } else if (raw === "") {
-      // Empty line in context
-      result.push({ type: LINE_TYPE.CONTEXT, content: "", oldLineNum: oldLine, newLineNum: newLine })
-      oldLine++
-      newLine++
+      result.push({ type: LINE_TYPE.CONTEXT, content: "", oldLineNum: oldLine, newLineNum: newLine }); oldLine++; newLine++
     }
   }
 
@@ -141,38 +146,33 @@ function parseDiff(diff: string): DiffLine[] {
 // ── Component ──
 
 export function Diff(props: DiffProps) {
+  const th = () => ({ ...DIFF_DEFAULTS, ...props.theme })
   const showLineNumbers = () => props.showLineNumbers ?? true
-  const addedBg = () => props.addedBg ?? DIFF_COLORS.addedBg
-  const removedBg = () => props.removedBg ?? DIFF_COLORS.removedBg
-  const contextBg = () => props.contextBg ?? DIFF_COLORS.contextBg
-  const addedSign = () => props.addedSignColor ?? DIFF_COLORS.addedSign
-  const removedSign = () => props.removedSignColor ?? DIFF_COLORS.removedSign
-  const lineNumFg = () => props.lineNumberFg ?? DIFF_COLORS.lineNumberFg
 
   const diffLines = () => parseDiff(props.diff)
 
-  // Line number gutter width
   const gutterWidth = () => {
     if (!showLineNumbers()) return 0
     const maxLine = diffLines().reduce((max, l) => Math.max(max, l.oldLineNum ?? 0, l.newLineNum ?? 0), 0)
     const digits = String(maxLine).length
-    // Two columns: old + new, each with `digits` chars + separator
     return (digits * 2 + 3) * CHAR_WIDTH
   }
 
-  function bgForType(type: LineType): number {
+  function bgForType(type: LineType): string | number {
+    const t = th()
     switch (type) {
-      case LINE_TYPE.ADDED: return addedBg()
-      case LINE_TYPE.REMOVED: return removedBg()
-      case LINE_TYPE.HEADER: return DIFF_COLORS.headerBg
-      default: return contextBg()
+      case LINE_TYPE.ADDED: return t.addedBg
+      case LINE_TYPE.REMOVED: return t.removedBg
+      case LINE_TYPE.HEADER: return t.headerBg
+      default: return t.contextBg
     }
   }
 
-  function signForType(type: LineType): { char: string; color: number } | null {
+  function signForType(type: LineType): { char: string; color: string | number } | null {
+    const t = th()
     switch (type) {
-      case LINE_TYPE.ADDED: return { char: "+", color: addedSign() }
-      case LINE_TYPE.REMOVED: return { char: "-", color: removedSign() }
+      case LINE_TYPE.ADDED: return { char: "+", color: t.addedSign }
+      case LINE_TYPE.REMOVED: return { char: "-", color: t.removedSign }
       default: return null
     }
   }
@@ -181,46 +181,42 @@ export function Diff(props: DiffProps) {
     <box
       width={props.width ?? "100%"}
       direction="column"
-      backgroundColor={surface.context}
-      cornerRadius={radius.md}
+      backgroundColor={th().bg}
+      cornerRadius={th().radius}
     >
       {diffLines().map((line) => {
+        const t = th()
         const bg = bgForType(line.type)
         const sign = signForType(line.type)
         const maxLineDigits = String(diffLines().reduce((m, l) => Math.max(m, l.oldLineNum ?? 0, l.newLineNum ?? 0), 0)).length
 
         if (line.type === LINE_TYPE.HEADER) {
           return (
-            <box height={LINE_HEIGHT} width="100%" backgroundColor={bg} paddingX={spacing.sm}>
-              <text color={DIFF_COLORS.headerFg} fontSize={14}>{line.content}</text>
+            <box height={LINE_HEIGHT} width="100%" backgroundColor={bg} paddingX={t.linePadding}>
+              <text color={t.headerFg} fontSize={14}>{line.content}</text>
             </box>
           )
         }
 
         return (
           <box height={LINE_HEIGHT} width="100%" backgroundColor={bg}>
-            {/* Line numbers */}
             {showLineNumbers() ? (
-              <box width={gutterWidth()} backgroundColor={DIFF_COLORS.lineNumberBg} paddingX={4}>
-                <text color={lineNumFg()} fontSize={14}>
+              <box width={gutterWidth()} backgroundColor={t.lineNumberBg} paddingX={4}>
+                <text color={t.lineNumberFg} fontSize={14}>
                   {(line.oldLineNum !== null ? String(line.oldLineNum).padStart(maxLineDigits) : " ".repeat(maxLineDigits)) +
                    " " +
                    (line.newLineNum !== null ? String(line.newLineNum).padStart(maxLineDigits) : " ".repeat(maxLineDigits))}
                 </text>
               </box>
             ) : null}
-
-            {/* Sign (+/-) */}
             <box width={CHAR_WIDTH * 2} alignX="center">
               {sign ? (
                 <text color={sign.color} fontSize={14}>{sign.char}</text>
               ) : (
-                <text color={textTokens.muted} fontSize={14}> </text>
+                <text color={t.muted} fontSize={14}> </text>
               )}
             </box>
-
-            {/* Content */}
-            <text color={textTokens.primary} fontSize={14}>{line.content}</text>
+            <text color={t.fg} fontSize={14}>{line.content}</text>
           </box>
         )
       })}

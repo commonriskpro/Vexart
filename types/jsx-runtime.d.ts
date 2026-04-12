@@ -11,6 +11,7 @@ import type { RGBA, SyntaxStyle, ExtmarkManager, KeyEvent, ScrollHandle } from "
 type Children = any
 type ColorValue = string | number | RGBA
 type ShadowDef = { x: number; y: number; blur: number; color: number }
+/** Shadow accepts a single shadow object or an array for multi-shadow. */
 type ShadowProp = ShadowDef | ShadowDef[]
 
 interface BoxProps {
@@ -79,7 +80,7 @@ interface BoxProps {
   pointerPassthrough?: boolean
   // Effects
   shadow?: ShadowProp
-  glow?: { radius: number; color: number; intensity?: number }
+  glow?: { radius: number; color: string | number; intensity?: number }
   gradient?: { type: "linear"; from: number; to: number; angle?: number } | { type: "radial"; from: number; to: number }
   backdropBlur?: number
   cornerRadii?: { tl: number; tr: number; br: number; bl: number }
@@ -90,7 +91,7 @@ interface BoxProps {
     borderWidth?: number
     cornerRadius?: number
     shadow?: ShadowProp
-    glow?: { radius: number; color: number; intensity?: number }
+    glow?: { radius: number; color: string | number; intensity?: number }
     gradient?: { type: "linear"; from: number; to: number; angle?: number } | { type: "radial"; from: number; to: number }
     backdropBlur?: number
   }
@@ -100,7 +101,7 @@ interface BoxProps {
     borderWidth?: number
     cornerRadius?: number
     shadow?: ShadowProp
-    glow?: { radius: number; color: number; intensity?: number }
+    glow?: { radius: number; color: string | number; intensity?: number }
     gradient?: { type: "linear"; from: number; to: number; angle?: number } | { type: "radial"; from: number; to: number }
     backdropBlur?: number
   }
@@ -311,6 +312,35 @@ interface LineNumberProps {
   children?: Children
 }
 
+interface ImgProps {
+  /** Image source — file path (absolute or relative to cwd). */
+  src: string
+  /** How the image fits within its layout box. Default: "contain". */
+  objectFit?: "contain" | "cover" | "fill" | "none"
+  /** Width — number (fixed px), "grow", "fit". If omitted, uses image intrinsic width. */
+  width?: number | string
+  /** Height — number (fixed px), "grow", "fit". If omitted, uses image intrinsic height. */
+  height?: number | string
+  /** Corner radius — rounds the image corners via SDF mask. */
+  cornerRadius?: number
+  /** Per-corner radius. */
+  cornerRadii?: { tl: number; tr: number; br: number; bl: number }
+  // Layout compat — img participates in flex layout like any box
+  minWidth?: number
+  maxWidth?: number
+  minHeight?: number
+  maxHeight?: number
+  flexGrow?: number
+  flexShrink?: number
+  // Floating
+  floating?: "parent" | "root" | { attachTo: string }
+  floatOffset?: { x: number; y: number }
+  zIndex?: number
+  // Compositing
+  layer?: boolean
+  opacity?: number
+}
+
 interface SpanProps {
   style?: {
     fg?: ColorValue
@@ -328,6 +358,7 @@ export namespace JSX {
   interface IntrinsicElements {
     box: BoxProps
     text: TextProps
+    img: ImgProps
     textarea: TextareaProps
     input: InputProps
     scrollbox: ScrollboxProps

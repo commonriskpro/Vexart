@@ -1,87 +1,83 @@
 /**
- * Input — text input field for TGE.
- *
- * Focus-aware with full keyboard editing:
- *   - Printable chars: insert at cursor
- *   - Backspace/Delete: remove char
- *   - Left/Right: move cursor
- *   - Home/End: jump to start/end
- *   - Shift+Left/Right/Home/End: select text
- *   - Ctrl+A: select all
- *   - Ctrl+V / bracketed paste: insert clipboard
- *   - Typing with active selection replaces it
+ * Input — truly headless single-line text input.
  *
  * CONTROLLED component — parent owns value state.
- * The input calls onChange with the new string value.
+ * Focus-aware with full keyboard editing.
  *
- * The cursor is rendered as a colored box at the character position.
- * Font is monospace (9px per char at 14px size) so cursor position
- * is calculated as cursorIndex * charWidth.
+ * This is a BEHAVIOR-ONLY component. It provides:
+ *   - Focus management (useFocus)
+ *   - Full keyboard editing (insert, delete, navigation, selection)
+ *   - Cursor position tracking
+ *   - Selection range tracking
+ *   - Paste handling (bracketed paste)
+ *   - Blink timer management
+ *
+ * ALL visual rendering is the consumer's responsibility via renderInput.
+ * Use @tge/void VoidInput for a styled version.
  *
  * Usage:
- *   const [name, setName] = createSignal("")
  *   <Input
  *     value={name()}
  *     onChange={setName}
  *     placeholder="Enter your name..."
+ *     renderInput={(ctx) => (
+ *       <box width={200} height={24} backgroundColor="#222" cornerRadius={4}
+ *         borderColor={ctx.focused ? "#4488cc" : "#666"} borderWidth={1} padding={4}>
+ *         <text color={ctx.showPlaceholder ? "#666" : "#fff"}>{ctx.displayText}</text>
+ *         {ctx.focused && ctx.blink ? (
+ *           <box width={2} height={17} backgroundColor="#4488cc" />
+ *         ) : null}
+ *       </box>
+ *     )}
  *   />
  */
 
 import { createSignal, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus, onInput } from "@tge/renderer"
-import {
-  surface,
-  accent,
-  text as textTokens,
-  border,
-  radius,
-  spacing,
-  alpha,
-} from "@tge/tokens"
 
-/** Char width at 14px font size (SF Mono atlas: 9px per glyph). */
-const CHAR_WIDTH = 9
-/** Line height matching the font atlas cell height. */
-const LINE_HEIGHT = 17
+// ── Types ──
 
-export type InputProps = {
+export type InputRenderContext = {
   /** Current text value. */
   value: string
+  /** Text to display (value or placeholder). */
+  displayText: string
+  /** Whether showing placeholder. */
+  showPlaceholder: boolean
+  /** Cursor position (character index). */
+  cursor: number
+  /** Whether the cursor blink is visible. */
+  blink: boolean
+  /** Whether the input is focused. */
+  focused: boolean
+  /** Whether the input is disabled. */
+  disabled: boolean
+  /** Selection range [start, end] or null. */
+  selection: [number, number] | null
+}
 
-  /** Called with the new value on every edit. */
+export type InputProps = {
+  value: string
   onChange?: (value: string) => void
-
-  /** Called when Enter is pressed. Use for form submission. */
   onSubmit?: (value: string) => void
-
-  /** Placeholder text shown when value is empty. */
   placeholder?: string
-
-  /** Width of the input in pixels. Default: 200. */
-  width?: number
-
-  /** Accent color for the focused border and cursor. Default: accent.thread. */
-  color?: number
-
-  /** Disabled state. */
   disabled?: boolean
-
-  /** Focus ID override. */
   focusId?: string
+  /** Render function — receives state, returns visual. */
+  renderInput: (ctx: InputRenderContext) => JSX.Element
 }
 
 export function Input(props: InputProps) {
   const [cursor, setCursor] = createSignal(props.value.length)
-  const [selStart, setSelStart] = createSignal(-1) // -1 = no selection
+  const [selStart, setSelStart] = createSignal(-1)
   const [selEnd, setSelEnd] = createSignal(-1)
   const [blink, setBlink] = createSignal(true)
 
-  const color = () => props.color ?? accent.thread
   const disabled = () => props.disabled ?? false
-  const inputWidth = () => props.width ?? 200
 
-  // Blink cursor every 530ms when focused
+  // ── Blink ──
+
   let blinkTimer: ReturnType<typeof setInterval> | null = null
 
   function startBlink() {
@@ -128,122 +124,71 @@ export function Input(props: InputProps) {
     setCursor(props.value.length)
   }
 
-  // ── Input handling ──
+  // ── Keyboard ──
 
   const { focused } = useFocus({
     id: props.focusId,
     onKeyDown(e) {
       if (disabled()) return
-
-      // Reset blink on any key
       startBlink()
 
       const val = props.value
       const pos = cursor()
 
-      // Enter → submit
-      if (e.key === "enter") {
-        props.onSubmit?.(val)
-        return
-      }
-
-      // Ctrl+A → select all
-      if (e.key === "a" && e.mods.ctrl) {
-        selectAll()
-        return
-      }
+      if (e.key === "enter") { props.onSubmit?.(val); return }
+      if (e.key === "a" && e.mods.ctrl) { selectAll(); return }
 
       // Shift+arrow selection
       if (e.mods.shift) {
         if (e.key === "left" && pos > 0) {
           if (!hasSelection()) setSelStart(pos)
-          setCursor(pos - 1)
-          setSelEnd(pos - 1)
-          return
+          setCursor(pos - 1); setSelEnd(pos - 1); return
         }
         if (e.key === "right" && pos < val.length) {
           if (!hasSelection()) setSelStart(pos)
-          setCursor(pos + 1)
-          setSelEnd(pos + 1)
-          return
+          setCursor(pos + 1); setSelEnd(pos + 1); return
         }
         if (e.key === "home") {
           if (!hasSelection()) setSelStart(pos)
-          setCursor(0)
-          setSelEnd(0)
-          return
+          setCursor(0); setSelEnd(0); return
         }
         if (e.key === "end") {
           if (!hasSelection()) setSelStart(pos)
-          setCursor(val.length)
-          setSelEnd(val.length)
-          return
+          setCursor(val.length); setSelEnd(val.length); return
         }
       }
 
-      // Navigation (clears selection)
+      // Navigation
       if (e.key === "left") {
-        if (hasSelection()) {
-          setCursor(selRange()[0])
-          clearSelection()
-        } else if (pos > 0) {
-          setCursor(pos - 1)
-        }
+        if (hasSelection()) { setCursor(selRange()[0]); clearSelection() }
+        else if (pos > 0) setCursor(pos - 1)
         return
       }
       if (e.key === "right") {
-        if (hasSelection()) {
-          setCursor(selRange()[1])
-          clearSelection()
-        } else if (pos < val.length) {
-          setCursor(pos + 1)
-        }
+        if (hasSelection()) { setCursor(selRange()[1]); clearSelection() }
+        else if (pos < val.length) setCursor(pos + 1)
         return
       }
-      if (e.key === "home") {
-        setCursor(0)
-        clearSelection()
-        return
-      }
-      if (e.key === "end") {
-        setCursor(val.length)
-        clearSelection()
-        return
-      }
-
-      // Backspace
-      if (e.key === "backspace") {
-        if (hasSelection()) {
-          props.onChange?.(deleteSelection())
-        } else if (pos > 0) {
-          const next = val.slice(0, pos - 1) + val.slice(pos)
-          setCursor(pos - 1)
-          props.onChange?.(next)
-        }
-        clearSelection()
-        return
-      }
+      if (e.key === "home") { setCursor(0); clearSelection(); return }
+      if (e.key === "end") { setCursor(val.length); clearSelection(); return }
 
       // Delete
+      if (e.key === "backspace") {
+        if (hasSelection()) { props.onChange?.(deleteSelection()) }
+        else if (pos > 0) { setCursor(pos - 1); props.onChange?.(val.slice(0, pos - 1) + val.slice(pos)) }
+        clearSelection(); return
+      }
       if (e.key === "delete") {
-        if (hasSelection()) {
-          props.onChange?.(deleteSelection())
-        } else if (pos < val.length) {
-          const next = val.slice(0, pos) + val.slice(pos + 1)
-          props.onChange?.(next)
-        }
-        clearSelection()
-        return
+        if (hasSelection()) { props.onChange?.(deleteSelection()) }
+        else if (pos < val.length) { props.onChange?.(val.slice(0, pos) + val.slice(pos + 1)) }
+        clearSelection(); return
       }
 
-      // Printable character → insert (or replace selection)
+      // Printable character
       if (e.char && e.char.length === 1 && !e.mods.ctrl && !e.mods.alt && !e.mods.meta) {
         let base = val
         let insertAt = pos
-        if (hasSelection()) {
-          base = deleteSelection()
-          insertAt = cursor() // deleteSelection updates cursor
-        }
+        if (hasSelection()) { base = deleteSelection(); insertAt = cursor() }
         const next = base.slice(0, insertAt) + e.char + base.slice(insertAt)
         setCursor(insertAt + 1)
         clearSelection()
@@ -253,20 +198,15 @@ export function Input(props: InputProps) {
     },
   })
 
-  // Handle paste events (from bracketed paste)
-  const unsubPaste = onInput((event) => {
-    if (event.type !== "paste") return
-    if (!focused()) return
-    if (disabled()) return
+  // ── Paste ──
 
+  const unsubPaste = onInput((event) => {
+    if (event.type !== "paste" || !focused() || disabled()) return
     startBlink()
     let base = props.value
     let insertAt = cursor()
-    if (hasSelection()) {
-      base = deleteSelection()
-      insertAt = cursor()
-    }
-    const text = event.text.replace(/\n/g, " ") // flatten newlines
+    if (hasSelection()) { base = deleteSelection(); insertAt = cursor() }
+    const text = event.text.replace(/\n/g, " ")
     const next = base.slice(0, insertAt) + text + base.slice(insertAt)
     setCursor(insertAt + text.length)
     clearSelection()
@@ -274,80 +214,34 @@ export function Input(props: InputProps) {
   })
   onCleanup(() => unsubPaste())
 
-  // Start/stop blink based on focus
-  // We check focus reactively by reading focused() in a derived signal
+  // ── Focus blink management ──
+
   const wasFocused = { current: false }
 
-  // ── Visual state ──
-
-  const showPlaceholder = () => props.value.length === 0 && !focused()
-  const displayText = () => {
-    if (showPlaceholder()) return props.placeholder ?? ""
-    return props.value
-  }
-
-  const cursorX = () => cursor() * CHAR_WIDTH
-
-  // Selection highlight — rendered as a colored box behind the text
-  const selectionBox = () => {
-    if (!hasSelection() || !focused()) return null
-    const [lo, hi] = selRange()
-    return {
-      x: lo * CHAR_WIDTH,
-      w: (hi - lo) * CHAR_WIDTH,
-    }
-  }
-
-  // Manage blink timer with focus
   const checkFocus = () => {
     const f = focused()
-    if (f && !wasFocused.current) {
-      startBlink()
-      // Move cursor to end when focusing
-      setCursor(props.value.length)
-    } else if (!f && wasFocused.current) {
-      stopBlink()
-      clearSelection()
-    }
+    if (f && !wasFocused.current) { startBlink(); setCursor(props.value.length) }
+    else if (!f && wasFocused.current) { stopBlink(); clearSelection() }
     wasFocused.current = f
     return f
   }
 
+  // ── Render context ──
+
+  const showPlaceholder = () => props.value.length === 0 && !focused()
+
   return (
-    <box
-      width={inputWidth()}
-      height={LINE_HEIGHT + spacing.md * 2}
-      backgroundColor={disabled() ? surface.context : surface.card}
-      cornerRadius={radius.md}
-      borderColor={checkFocus() ? color() : border.normal}
-      borderWidth={checkFocus() ? 2 : 1}
-      padding={spacing.md}
-    >
-      {/* Selection highlight */}
-      {selectionBox() ? (
-        <box
-          width={selectionBox()!.w}
-          height={LINE_HEIGHT}
-          backgroundColor={alpha(color(), 0x44)}
-        />
-      ) : null}
-
-      {/* Text content */}
-      <text
-        color={showPlaceholder() ? textTokens.muted : textTokens.primary}
-        fontSize={14}
-      >
-        {displayText()}
-      </text>
-
-      {/* Cursor — thin box (only when focused + blink on) */}
-      {checkFocus() && blink() ? (
-        <box
-          width={2}
-          height={LINE_HEIGHT}
-          backgroundColor={color()}
-        />
-      ) : null}
-    </box>
+    <>
+      {props.renderInput({
+        value: props.value,
+        displayText: showPlaceholder() ? (props.placeholder ?? "") : props.value,
+        showPlaceholder: showPlaceholder(),
+        cursor: cursor(),
+        blink: blink(),
+        focused: checkFocus(),
+        disabled: disabled(),
+        selection: hasSelection() ? selRange() : null,
+      })}
+    </>
   )
 }

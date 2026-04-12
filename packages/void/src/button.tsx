@@ -100,7 +100,7 @@ export function Button(props: ButtonProps) {
       cornerRadius={ss.cornerRadius}
       borderColor={vs.border}
       borderWidth={vs.borderWidth}
-      shadow={vs.shadow as any}
+      shadow={vs.shadow}
       hoverStyle={{ backgroundColor: vs.hoverBg }}
       activeStyle={{ backgroundColor: vs.activeBg }}
     >

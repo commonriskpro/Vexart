@@ -36,7 +36,8 @@ export const {
   use,
 } = createRenderer<TGENode>({
   createElement(type: string): TGENode {
-    const node = createNode(type === "text" ? "text" : "box")
+    const kind = type === "text" ? "text" : type === "img" ? "img" : "box"
+    const node = createNode(kind)
     return node
   },
 

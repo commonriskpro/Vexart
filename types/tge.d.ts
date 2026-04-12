@@ -364,6 +364,7 @@ export interface FontDescriptor {
 export function registerFont(desc: FontDescriptor, atlasData: Uint8Array, widths?: Float32Array): void
 export function getFont(id: number): FontDescriptor | undefined
 export function clearTextCache(): void
+export function clearImageCache(): void
 
 // ── Terminal dimensions hook ──
 
@@ -431,3 +432,48 @@ export declare const Index: any
 export declare const ErrorBoundary: any
 
 export { render as solidRender } from "solid-js/universal"
+
+// ── Router (Decision 10: Dual Router) ──
+
+export interface NavigationEntry {
+  path: string
+  params?: Record<string, any>
+}
+
+export interface RouteProps {
+  params?: Record<string, any>
+}
+
+export interface RouterContextValue {
+  current: () => string
+  navigate: (path: string, params?: Record<string, any>) => void
+  goBack: () => boolean
+  params: () => Record<string, any> | undefined
+  history: () => NavigationEntry[]
+}
+
+export interface ScreenProps {
+  params?: Record<string, any>
+  goBack: () => void
+}
+
+export interface ScreenEntry {
+  key: string
+  component: (props: ScreenProps) => any
+  params?: Record<string, any>
+}
+
+export interface NavigationStackHandle {
+  push: (component: (props: ScreenProps) => any, params?: Record<string, any>) => void
+  pop: () => boolean
+  goBack: () => boolean
+  replace: (component: (props: ScreenProps) => any, params?: Record<string, any>) => void
+  reset: (component: (props: ScreenProps) => any, params?: Record<string, any>) => void
+  depth: () => number
+  current: () => ScreenEntry | undefined
+  stack: () => ScreenEntry[]
+}
+
+export function createRouter(initialPath: string): RouterContextValue
+export function createNavigationStack(initial?: (props: ScreenProps) => any): NavigationStackHandle
+export function useRouter(): RouterContextValue

@@ -318,17 +318,7 @@ However, this is all used INTERNALLY for the pixel rendering pipeline. There is 
 
 Two token systems, operating at different levels:
 
-### @tge/tokens (low-level)
-- **palette**: 19 named colors (void, surface, raised, elevated, floating, borderWeak/Base/Strong/Focus, muted, text, bright, thread, anchor, signal, drift, purple, green, yellow, transparent)
-- **surface**: 5 semantic levels (void, panel, card, context, floating)
-- **accent**: 6 colors (thread, anchor, signal, drift, purple, green)
-- **text**: 3 levels (primary, secondary, muted)
-- **border**: 4 levels (subtle, normal, active, focus)
-- **spacing**: 6 values (xs=2, sm=4, md=8, lg=16, xl=24, xxl=32)
-- **radius**: 6 values (none=0, sm=2, md=4, lg=8, xl=12, pill=999)
-- **shadow**: 4 presets (none, subtle, elevated, floating)
-
-### @tge/void (design system level)
+### @tge/void (design tokens + design system)
 - **colors**: 20 semantic tokens matching shadcn convention (background, foreground, card, cardForeground, popover, primary, primaryForeground, secondary, muted, mutedForeground, accent, accentForeground, destructive, destructiveForeground, border, input, ring, transparent)
 - **radius**: sm=6, md=8, lg=10, xl=14, xxl=18, full=9999
 - **space**: Tailwind-like scale (0.5=2 through 10=40)
@@ -365,7 +355,7 @@ Two token systems, operating at different levels:
 - Tree-sitter integration for real-time syntax highlighting
 - Plugin slot system for extensibility
 - Declarative hoverStyle/activeStyle for mouse interaction
-- Two-tier token system (@tge/tokens + @tge/void)
+- Unified token system (@tge/void)
 - Markdown rendering with inline styling
 - Unified diff viewer
 - Selectable text mode for accessibility

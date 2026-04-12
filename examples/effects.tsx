@@ -15,66 +15,57 @@ import { createSignal } from "solid-js"
 import { mount, useFocus, onInput } from "@tge/renderer"
 import { Box, Text } from "@tge/components"
 import { createTerminal } from "@tge/terminal"
-import {
-  surface,
-  accent,
-  text as textTokens,
-  border,
-  radius,
-  spacing,
-  alpha,
-  shadow,
-} from "@tge/tokens"
+import { colors, radius, space, shadows } from "@tge/void"
 
 // ── Shadow showcase ──
 
 function ShadowSection() {
   return (
-    <Box direction="column" gap={spacing.lg}>
-      <Text color={textTokens.muted} fontSize={12}>
+    <Box direction="column" gap={space[4]}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         Drop Shadows
       </Text>
-      <Box direction="row" gap={spacing.xxl}>
+      <Box direction="row" gap={space[8]}>
         <Box
-          backgroundColor={surface.card}
+          backgroundColor={colors.card}
           cornerRadius={radius.xl}
-          padding={spacing.xl}
-          shadow={shadow.subtle}
+          padding={space[6]}
+          shadow={shadows.sm}
         >
-          <Text color={textTokens.secondary} fontSize={14}>
+          <Text color={colors.foreground} fontSize={14}>
             Subtle
           </Text>
         </Box>
 
         <Box
-          backgroundColor={surface.card}
+          backgroundColor={colors.card}
           cornerRadius={radius.xl}
-          padding={spacing.xl}
-          shadow={shadow.elevated}
+          padding={space[6]}
+          shadow={shadows.md}
         >
-          <Text color={textTokens.secondary} fontSize={14}>
+          <Text color={colors.foreground} fontSize={14}>
             Elevated
           </Text>
         </Box>
 
         <Box
-          backgroundColor={surface.card}
+          backgroundColor={colors.card}
           cornerRadius={radius.xl}
-          padding={spacing.xl}
-          shadow={shadow.floating}
+          padding={space[6]}
+          shadow={shadows.lg}
         >
-          <Text color={textTokens.secondary} fontSize={14}>
+          <Text color={colors.foreground} fontSize={14}>
             Floating
           </Text>
         </Box>
 
         <Box
-          backgroundColor={surface.card}
+          backgroundColor={colors.card}
           cornerRadius={radius.xl}
-          padding={spacing.xl}
-          shadow={{ x: 4, y: 4, blur: 8, color: alpha(accent.drift, 0x60) }}
+          padding={space[6]}
+          shadow={{ x: 4, y: 4, blur: 8, color: 0xa8483e60 }}
         >
-          <Text color={accent.drift} fontSize={14}>
+          <Text color="#a8483e" fontSize={14}>
             Colored
           </Text>
         </Box>
@@ -87,51 +78,51 @@ function ShadowSection() {
 
 function GlowSection() {
   return (
-    <Box direction="column" gap={spacing.lg}>
-      <Text color={textTokens.muted} fontSize={12}>
+    <Box direction="column" gap={space[4]}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         Glow Effects
       </Text>
-      <Box direction="row" gap={spacing.xxl}>
+      <Box direction="row" gap={space[8]}>
         <Box
-          backgroundColor={surface.card}
+          backgroundColor={colors.card}
           cornerRadius={radius.xl}
-          padding={spacing.xl}
-          glow={{ radius: 20, color: accent.thread, intensity: 60 }}
+          padding={space[6]}
+          glow={{ radius: 20, color: 0x4fc4d4ff, intensity: 60 }}
         >
-          <Text color={accent.thread} fontSize={14}>
+          <Text color="#4fc4d4" fontSize={14}>
             Thread
           </Text>
         </Box>
 
         <Box
-          backgroundColor={surface.card}
+          backgroundColor={colors.card}
           cornerRadius={radius.xl}
-          padding={spacing.xl}
-          glow={{ radius: 20, color: accent.anchor, intensity: 60 }}
+          padding={space[6]}
+          glow={{ radius: 20, color: 0x4eaed0ff, intensity: 60 }}
         >
-          <Text color={accent.anchor} fontSize={14}>
+          <Text color="#4eaed0" fontSize={14}>
             Anchor
           </Text>
         </Box>
 
         <Box
-          backgroundColor={surface.card}
+          backgroundColor={colors.card}
           cornerRadius={radius.xl}
-          padding={spacing.xl}
-          glow={{ radius: 20, color: accent.signal, intensity: 60 }}
+          padding={space[6]}
+          glow={{ radius: 20, color: 0xf59e0bff, intensity: 60 }}
         >
-          <Text color={accent.signal} fontSize={14}>
+          <Text color="#f59e0b" fontSize={14}>
             Signal
           </Text>
         </Box>
 
         <Box
-          backgroundColor={surface.card}
+          backgroundColor={colors.card}
           cornerRadius={radius.xl}
-          padding={spacing.xl}
-          glow={{ radius: 20, color: accent.green, intensity: 60 }}
+          padding={space[6]}
+          glow={{ radius: 20, color: "#22c55e", intensity: 60 }}
         >
-          <Text color={accent.green} fontSize={14}>
+          <Text color="#22c55e" fontSize={14}>
             Green
           </Text>
         </Box>
@@ -142,31 +133,31 @@ function GlowSection() {
 
 // ── Interactive: focus-driven glow ──
 
-function InteractiveCard(props: { label: string; color: number }) {
+function InteractiveCard(props: { label: string; color: string }) {
   const { focused } = useFocus({
     onKeyDown() {},
   })
 
   return (
     <Box
-      backgroundColor={surface.card}
+      backgroundColor={colors.card}
       cornerRadius={radius.xl}
-      padding={spacing.xl}
+      padding={space[6]}
       direction="column"
-      gap={spacing.sm}
-      borderColor={focused() ? props.color : border.subtle}
+      gap={space[1]}
+      borderColor={focused() ? props.color : colors.border}
       borderWidth={focused() ? 2 : 1}
       glow={
         focused()
           ? { radius: 24, color: props.color, intensity: 80 }
           : undefined
       }
-      shadow={focused() ? shadow.floating : shadow.subtle}
+      shadow={focused() ? shadows.lg : shadows.sm}
     >
       <Text color={props.color} fontSize={14}>
         {props.label}
       </Text>
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         {focused() ? "Focused — glow on!" : "Tab to focus"}
       </Text>
     </Box>
@@ -175,15 +166,15 @@ function InteractiveCard(props: { label: string; color: number }) {
 
 function InteractiveSection() {
   return (
-    <Box direction="column" gap={spacing.lg}>
-      <Text color={textTokens.muted} fontSize={12}>
+    <Box direction="column" gap={space[4]}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         Interactive — Tab to cycle focus (glow follows)
       </Text>
-      <Box direction="row" gap={spacing.xxl}>
-        <InteractiveCard label="Card A" color={accent.thread} />
-        <InteractiveCard label="Card B" color={accent.anchor} />
-        <InteractiveCard label="Card C" color={accent.purple} />
-        <InteractiveCard label="Card D" color={accent.green} />
+      <Box direction="row" gap={space[8]}>
+        <InteractiveCard label="Card A" color="#4fc4d4" />
+        <InteractiveCard label="Card B" color="#4eaed0" />
+        <InteractiveCard label="Card C" color="#a78bfa" />
+        <InteractiveCard label="Card D" color="#22c55e" />
       </Box>
     </Box>
   )
@@ -193,43 +184,43 @@ function InteractiveSection() {
 
 function CombinedSection() {
   return (
-    <Box direction="column" gap={spacing.lg}>
-      <Text color={textTokens.muted} fontSize={12}>
+    <Box direction="column" gap={space[4]}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         Combined Shadow + Glow
       </Text>
-      <Box direction="row" gap={spacing.xxl}>
+      <Box direction="row" gap={space[8]}>
         <Box
-          backgroundColor={surface.card}
+          backgroundColor={colors.card}
           cornerRadius={radius.xl}
-          padding={spacing.xl}
-          shadow={shadow.elevated}
-          glow={{ radius: 16, color: accent.thread, intensity: 50 }}
+          padding={space[6]}
+          shadow={shadows.md}
+          glow={{ radius: 16, color: "#4fc4d4", intensity: 50 }}
         >
-          <Text color={accent.thread} fontSize={14}>
+          <Text color="#4fc4d4" fontSize={14}>
             Shadow + Glow
           </Text>
         </Box>
 
         <Box
-          backgroundColor={surface.card}
+          backgroundColor={colors.card}
           cornerRadius={radius.xl}
-          padding={spacing.xl}
-          shadow={{ x: 0, y: 6, blur: 16, color: alpha(accent.anchor, 0x80) }}
-          glow={{ radius: 24, color: accent.anchor, intensity: 40 }}
+          padding={space[6]}
+          shadow={{ x: 0, y: 6, blur: 16, color: 0x4eaed080 }}
+          glow={{ radius: 24, color: "#4eaed0", intensity: 40 }}
         >
-          <Text color={accent.anchor} fontSize={14}>
+          <Text color="#4eaed0" fontSize={14}>
             Deep Blue
           </Text>
         </Box>
 
         <Box
-          backgroundColor={surface.card}
+          backgroundColor={colors.card}
           cornerRadius={radius.xl}
-          padding={spacing.xl}
-          shadow={{ x: 0, y: 4, blur: 12, color: alpha(accent.drift, 0x60) }}
-          glow={{ radius: 20, color: accent.drift, intensity: 50 }}
+          padding={space[6]}
+          shadow={{ x: 0, y: 4, blur: 12, color: 0xa8483e60 }}
+          glow={{ radius: 20, color: "#a8483e", intensity: 50 }}
         >
-          <Text color={accent.drift} fontSize={14}>
+          <Text color="#a8483e" fontSize={14}>
             Warm Drift
           </Text>
         </Box>
@@ -245,13 +236,13 @@ function App() {
     <Box
       width="100%"
       height="100%"
-      backgroundColor={surface.void}
+      backgroundColor={colors.background}
       direction="column"
       alignX="center"
       alignY="center"
-      gap={spacing.xxl}
+      gap={space[8]}
     >
-      <Text color={textTokens.primary} fontSize={16}>
+      <Text color={colors.foreground} fontSize={16}>
         TGE Effects — Shadow and Glow
       </Text>
 
@@ -260,8 +251,8 @@ function App() {
       <CombinedSection />
       <InteractiveSection />
 
-      <Box direction="column" gap={spacing.xs} alignX="center">
-        <Text color={textTokens.muted} fontSize={12}>
+      <Box direction="column" gap={space[0.5]} alignX="center">
+        <Text color={colors.mutedForeground} fontSize={12}>
           Tab: cycle focus | q: quit
         </Text>
       </Box>

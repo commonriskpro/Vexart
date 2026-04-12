@@ -13,34 +13,34 @@ import { mount } from "@tge/renderer"
 import { Box, Text } from "@tge/components"
 import { createTerminal } from "@tge/terminal"
 import { createParser } from "@tge/input"
-import { palette, surface, accent, text as textTokens, radius, spacing } from "@tge/tokens"
+import { colors, radius, space } from "@tge/void"
 
 function Card(props: { title: string; subtitle: string }) {
   return (
     <Box
-      backgroundColor={surface.card}
+      backgroundColor={colors.card}
       cornerRadius={radius.xl}
-      padding={spacing.xl}
+      padding={space[6]}
       direction="column"
-      gap={spacing.md}
+      gap={space[2]}
     >
-      <Text color={textTokens.primary} fontSize={16}>
+      <Text color={colors.foreground} fontSize={16}>
         {props.title}
       </Text>
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         {props.subtitle}
       </Text>
     </Box>
   )
 }
 
-function StatusDot(props: { color: number }) {
+function StatusDot(props: { color: string }) {
   return (
     <Box
       width={12}
       height={12}
       backgroundColor={props.color}
-      cornerRadius={radius.pill}
+      cornerRadius={radius.full}
     />
   )
 }
@@ -50,16 +50,16 @@ function App() {
     <Box
       width="100%"
       height="100%"
-      backgroundColor={surface.void}
+      backgroundColor={colors.background}
       direction="column"
       alignX="center"
       alignY="center"
-      gap={spacing.lg}
+      gap={space[4]}
     >
-      <Box direction="row" gap={spacing.sm}>
-        <StatusDot color={accent.green} />
-        <StatusDot color={accent.signal} />
-        <StatusDot color={accent.drift} />
+      <Box direction="row" gap={space[1]}>
+        <StatusDot color="#22c55e" />
+        <StatusDot color="#f59e0b" />
+        <StatusDot color="#a8483e" />
       </Box>
 
       <Card
@@ -69,15 +69,15 @@ function App() {
 
       <Box
         direction="row"
-        gap={spacing.sm}
-        padding={spacing.md}
+        gap={space[1]}
+        padding={space[2]}
       >
-        <Box width={32} height={8} backgroundColor={accent.thread} cornerRadius={radius.md} />
-        <Box width={32} height={8} backgroundColor={accent.anchor} cornerRadius={radius.md} />
-        <Box width={32} height={8} backgroundColor={accent.purple} cornerRadius={radius.md} />
+        <Box width={32} height={8} backgroundColor={colors.primary} cornerRadius={radius.md} />
+        <Box width={32} height={8} backgroundColor="#4eaed0" cornerRadius={radius.md} />
+        <Box width={32} height={8} backgroundColor="#a78bfa" cornerRadius={radius.md} />
       </Box>
 
-      <Text color={textTokens.muted} fontSize={12}>
+      <Text color={colors.mutedForeground} fontSize={12}>
         Press q to exit
       </Text>
     </Box>

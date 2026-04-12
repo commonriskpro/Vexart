@@ -1,7 +1,7 @@
 /**
- * Checkbox — truly headless toggleable checkbox.
+ * Switch — truly headless toggle switch.
  *
- * CONTROLLED component — the parent owns the checked state.
+ * CONTROLLED component — parent owns the checked state.
  * Focus-aware with Enter/Space toggle.
  *
  * This is a BEHAVIOR-ONLY component. It provides:
@@ -9,18 +9,19 @@
  *   - Keyboard toggle (Enter/Space)
  *   - Checked state tracking
  *
- * ALL visual styling is the consumer's responsibility via renderCheckbox.
- * Use @tge/void VoidCheckbox for a styled version.
+ * ALL visual styling is the consumer's responsibility via renderSwitch.
+ * Use @tge/void VoidSwitch for a styled version.
  *
  * Usage:
- *   <Checkbox
- *     checked={agreed()}
- *     onChange={setAgreed}
- *     renderCheckbox={({ checked, focused, disabled }) => (
+ *   <Switch
+ *     checked={enabled()}
+ *     onChange={setEnabled}
+ *     renderSwitch={({ checked, focused, disabled }) => (
  *       <box direction="row" gap={8} alignY="center">
- *         <box width={16} height={16} backgroundColor={checked ? "#22c55e" : "#333"}
- *           cornerRadius={3} borderColor={focused ? "#22c55e" : "#666"} borderWidth={1} />
- *         <text>I agree</text>
+ *         <box width={36} height={20} backgroundColor={checked ? "#22c55e" : "#333"} cornerRadius={10}>
+ *           <box width={14} height={14} backgroundColor="#fff" cornerRadius={7} />
+ *         </box>
+ *         <text>Dark mode</text>
  *       </box>
  *     )}
  *   />
@@ -31,14 +32,14 @@ import { useFocus } from "@tge/renderer"
 
 // ── Types ──
 
-export type CheckboxRenderContext = {
+export type SwitchRenderContext = {
   checked: boolean
   focused: boolean
   disabled: boolean
 }
 
-export type CheckboxProps = {
-  /** Whether the checkbox is checked. */
+export type SwitchProps = {
+  /** Whether the switch is on. */
   checked: boolean
   /** Called with the new value when toggled. */
   onChange?: (checked: boolean) => void
@@ -47,10 +48,10 @@ export type CheckboxProps = {
   /** Focus ID override. */
   focusId?: string
   /** Render function — receives state, returns visual. */
-  renderCheckbox: (ctx: CheckboxRenderContext) => JSX.Element
+  renderSwitch: (ctx: SwitchRenderContext) => JSX.Element
 }
 
-export function Checkbox(props: CheckboxProps) {
+export function Switch(props: SwitchProps) {
   const disabled = () => props.disabled ?? false
 
   const { focused } = useFocus({
@@ -65,7 +66,7 @@ export function Checkbox(props: CheckboxProps) {
 
   return (
     <>
-      {props.renderCheckbox({
+      {props.renderSwitch({
         checked: props.checked,
         focused: focused(),
         disabled: disabled(),

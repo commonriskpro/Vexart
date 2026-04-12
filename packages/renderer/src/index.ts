@@ -42,6 +42,18 @@ export { createContext, useContext } from "solid-js"
 export { createTransition, createSpring, easing, hasActiveAnimations } from "./animation"
 export type { TransitionConfig, SpringConfig, EasingFn } from "./animation"
 
+// Router — flat + stack navigation (Decision 10)
+export { createRouter, createNavigationStack, useRouter } from "./router"
+export type {
+  NavigationEntry,
+  RouteDefinition,
+  RouteProps,
+  RouterContextValue,
+  ScreenEntry,
+  ScreenProps,
+  NavigationStackHandle,
+} from "./router"
+
 // Re-export all reconciler primitives that babel-preset-solid imports.
 // When generate: "universal" + moduleName: "@tge/renderer", babel emits:
 //   import { createElement, createTextNode, insertNode, insert, setProp, createComponent, ... } from "@tge/renderer"
@@ -72,6 +84,9 @@ export type { FocusHandle } from "./focus"
 
 // Re-export dirty flag for advanced use
 export { markDirty } from "./dirty"
+
+// Re-export image utilities
+export { clearImageCache } from "./image"
 
 // Re-export ref handle system
 export type { NodeHandle } from "./handle"

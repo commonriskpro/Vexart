@@ -24,8 +24,7 @@ JSX (SolidJS createRenderer)
 | @tge/output     | Kitty, placeholder, sixel, halfblock backends     | ✅ Done   |
 | @tge/renderer   | SolidJS reconciler + Clay layout integration      | ✅ Done   |
 | @tge/components | Built-in JSX components (Box, Text, Scroll, etc.) | ✅ Done   |
-| @tge/tokens     | Design tokens, theming                            | ✅ Done   |
-| @tge/void       | shadcn-inspired design system (Button, Card, etc) | ✅ Done   |
+| @tge/void       | Design tokens, theming, shadcn-inspired components | ✅ Done   |
 
 ## Key Dependencies
 

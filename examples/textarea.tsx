@@ -67,26 +67,44 @@ function App() {
       {/* Action buttons */}
       <box direction="row" gap={10}>
         <Button
-          variant="outline"
           onPress={() => {
             textareaRef?.clear()
             setStatus("Cleared!")
           }}
-        >Clear</Button>
+          renderButton={(ctx) => (
+            <box padding={6} paddingX={12} cornerRadius={4}
+              backgroundColor={ctx.pressed ? "#333" : "#222"}
+              borderColor={ctx.focused ? "#4488cc" : "#555"} borderWidth={1}>
+              <text color="#ccc" fontSize={14}>Clear</text>
+            </box>
+          )}
+        />
         <Button
-          variant="outline"
           onPress={() => {
             textareaRef?.gotoBufferEnd()
             setStatus("Jumped to buffer end")
           }}
-        >Go to End</Button>
+          renderButton={(ctx) => (
+            <box padding={6} paddingX={12} cornerRadius={4}
+              backgroundColor={ctx.pressed ? "#333" : "#222"}
+              borderColor={ctx.focused ? "#4488cc" : "#555"} borderWidth={1}>
+              <text color="#ccc" fontSize={14}>Go to End</text>
+            </box>
+          )}
+        />
         <Button
-          variant="outline"
           onPress={() => {
             textareaRef?.insertText("\n--- inserted ---\n")
             setStatus("Text inserted!")
           }}
-        >Insert Text</Button>
+          renderButton={(ctx) => (
+            <box padding={6} paddingX={12} cornerRadius={4}
+              backgroundColor={ctx.pressed ? "#333" : "#222"}
+              borderColor={ctx.focused ? "#4488cc" : "#555"} borderWidth={1}>
+              <text color="#ccc" fontSize={14}>Insert Text</text>
+            </box>
+          )}
+        />
       </box>
 
       {/* Footer */}
