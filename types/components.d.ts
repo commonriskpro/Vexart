@@ -170,12 +170,14 @@ export function List(props: ListProps): JSX.Element
 // ── Input ──
 
 export interface InputProps {
-  value: string
+  ref?: (handle: any) => void
+  value?: string
   onChange?: (value: string) => void
+  onInput?: (value: string) => void
   onSubmit?: (value: string) => void
   placeholder?: string
   width?: number
-  color?: number
+  color?: ColorValue
   disabled?: boolean
   focusId?: string
 }
@@ -228,12 +230,17 @@ export interface TextareaProps {
   placeholder?: string
   width?: number
   height?: number
-  color?: number
+  color?: ColorValue
   disabled?: boolean
+  focused?: boolean
   focusId?: string
   keyBindings?: KeyBinding[]
   syntaxStyle?: SyntaxStyle
   language?: string
+  onContentChange?: (value: string) => void
+  onMouseDown?: (event: any) => void
+  minHeight?: number
+  maxHeight?: number
 }
 
 export function Textarea(props: TextareaProps): JSX.Element
@@ -273,15 +280,20 @@ export function Portal(props: PortalProps): JSX.Element
 
 export interface CodeProps {
   content: string
-  language: string
-  syntaxStyle: SyntaxStyle
+  language?: string
+  filetype?: string
+  syntaxStyle?: SyntaxStyle
   width?: number | string
   height?: number | string
-  backgroundColor?: string | number
+  backgroundColor?: ColorValue
+  color?: ColorValue
+  fg?: ColorValue
   cornerRadius?: number
   padding?: number
   lineNumbers?: boolean
   streaming?: boolean
+  conceal?: boolean
+  drawUnstyledText?: boolean
 }
 
 export function Code(props: CodeProps): JSX.Element
@@ -290,10 +302,13 @@ export function Code(props: CodeProps): JSX.Element
 
 export interface MarkdownProps {
   content: string
-  syntaxStyle: SyntaxStyle
-  color?: number
+  syntaxStyle?: SyntaxStyle
+  color?: ColorValue
+  fg?: ColorValue
+  backgroundColor?: ColorValue
   width?: number | string
   streaming?: boolean
+  conceal?: boolean
 }
 
 export function Markdown(props: MarkdownProps): JSX.Element
