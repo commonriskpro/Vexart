@@ -22,7 +22,7 @@ import type { Terminal } from "@tge/terminal"
 import type { PixelBuffer } from "@tge/pixel"
 import { create, clear, paint, over, sub, withOpacity } from "@tge/pixel"
 import { createComposer, createLayerComposer } from "@tge/output"
-import { clay, CMD, ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, SIZING } from "./clay"
+import { clay, CMD, ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, SIZING, DIRECTION } from "./clay"
 import type { RenderCommand } from "./clay"
 import {
   type TGENode,
@@ -289,7 +289,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   /** ALL box nodes in walkTree order (open/close pairs = Clay element order). */
   const boxNodes: TGENode[] = []
 
-  function walkTree(node: TGENode) {
+  function walkTree(node: TGENode, parentDir?: number) {
     if (node.kind === "text") {
       const content = node.text || collectText(node)
       if (!content) return
@@ -386,11 +386,21 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     }
 
     // Sizing — use pre-parsed values, fallback to parseSizing for flexGrow alias
+    // CSS align-items:stretch emulation — if parent is column and child has no
+    // explicit width, auto-stretch to fill parent width (and vice versa for row).
     const hasFlexGrowAlias = node.props.flexGrow !== undefined && node.props.width === undefined
+    const noExplicitWidth = node.props.width === undefined && !node._widthSizing && !hasFlexGrowAlias
+    const noExplicitHeight = node.props.height === undefined && !node._heightSizing
+    const stretchW = noExplicitWidth && parentDir === DIRECTION.TOP_TO_BOTTOM
+    const stretchH = noExplicitHeight && parentDir === DIRECTION.LEFT_TO_RIGHT
     const ws = hasFlexGrowAlias
       ? { type: SIZING.GROW, value: 0 }
-      : (node._widthSizing ?? parseSizing(node.props.width))
-    const hs = node._heightSizing ?? parseSizing(node.props.height)
+      : stretchW
+        ? { type: SIZING.GROW, value: 0 }
+        : (node._widthSizing ?? parseSizing(node.props.width))
+    const hs = stretchH
+      ? { type: SIZING.GROW, value: 0 }
+      : (node._heightSizing ?? parseSizing(node.props.height))
     const hasMinMax = node.props.minWidth !== undefined || node.props.maxWidth !== undefined ||
                       node.props.minHeight !== undefined || node.props.maxHeight !== undefined
     if (hasMinMax) {
@@ -502,7 +512,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     }
 
     for (const child of node.children) {
-      walkTree(child)
+      walkTree(child, dir)
     }
 
     clay.closeElement()

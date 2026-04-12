@@ -132,6 +132,7 @@ await build({
     "bun:ffi",
     "solid-js",
     "solid-js/universal",
+    "@napi-rs/canvas",
     "tge",
   ],
   plugins: [solidPlugin],

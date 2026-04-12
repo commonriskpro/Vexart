@@ -8,3 +8,6 @@ zig-out/
 dist/
 .DS_Store
 bun.lockb
+dist.bak/
+docs.md
+zig/libtge.a
