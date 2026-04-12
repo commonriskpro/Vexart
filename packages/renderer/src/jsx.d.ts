@@ -31,11 +31,7 @@ type BoxIntrinsicProps = TGEProps & {
   scrollId?: string
   shadow?: ShadowDef | ShadowDef[]
   glow?: { radius: number; color: ColorValue; intensity?: number }
-  // Interaction
-  focusable?: boolean
-  onPress?: () => void
-  onKeyDown?: (event: any) => void
-  // Mouse events
+  // Mouse events (focusable, onPress, onKeyDown inherited from TGEProps)
   onMouseDown?: (evt: any) => void
   onMouseUp?: (evt: any) => void
   onMouseOver?: () => void

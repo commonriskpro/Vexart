@@ -1,8 +1,8 @@
 /**
  * TGE Comprehensive Showcase — validates EVERY engine feature visually.
  *
- * Structure: Tabbed UI with 6 tabs, each validating a feature category.
- * Tab navigation: Left/Right arrows (or 1-6 keys).
+ * Structure: Tabbed UI with 7 tabs, each validating a feature category.
+ * Tab navigation: Left/Right arrows (or 1-7 keys).
  * Within each tab: scroll content with mouse wheel.
  *
  * Features validated:
@@ -12,8 +12,9 @@
  *   Tab 4 — Forms: createForm validation, Combobox, Slider
  *   Tab 5 — Data + Virtual: useQuery mock, VirtualList 1000 items
  *   Tab 6 — Void + Theming: Button variants, Card, Badge, Avatar, dark/light switch
+ *   Tab 7 — Event Bubbling: onPress bubbling, stopPropagation, component boundaries
  *
- * Run: bun run examples/showcase.tsx
+ * Run: bun run showcase
  */
 
 import { createSignal, onCleanup } from "solid-js"
@@ -982,6 +983,116 @@ function TabVoidTheme() {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TAB 7: Event Bubbling + stopPropagation
+// Validates: onPress bubbling up the tree, stopPropagation to prevent it
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function TabEventBubbling() {
+  const [log, setLog] = createSignal<string[]>([])
+  const addLog = (msg: string) => setLog((prev) => [...prev.slice(-8), msg])
+  const clearLog = () => setLog([])
+
+  return (
+    <box direction="column" gap={space[4]} padding={space[4]} width="grow">
+      {/* Demo 1: Bubbling without stopPropagation */}
+      <SectionBox title="BUBBLING (click inner — both handlers fire)">
+        <box direction="row" gap={space[3]}>
+          <box
+            focusable
+            onPress={() => addLog("Outer onPress fired")}
+            backgroundColor={colors.card}
+            cornerRadius={radius.lg}
+            padding={space[4]}
+            focusStyle={{ borderColor: "#4488cc", borderWidth: 2 }}
+          >
+            <box direction="column" gap={space[2]}>
+              <text color={colors.mutedForeground} fontSize={font.xs}>OUTER (has onPress)</text>
+              <box
+                focusable
+                onPress={() => addLog("Inner onPress fired")}
+                backgroundColor={colors.secondary}
+                cornerRadius={radius.md}
+                padding={space[3]}
+                hoverStyle={{ backgroundColor: "#3a3a4aff" }}
+                focusStyle={{ borderColor: "#22c55e", borderWidth: 2 }}
+              >
+                <text color={colors.foreground} fontSize={font.sm}>Click me (inner)</text>
+              </box>
+              <text color={colors.mutedForeground} fontSize={10}>Both "Inner" and "Outer" should fire</text>
+            </box>
+          </box>
+        </box>
+      </SectionBox>
+
+      {/* Demo 2: stopPropagation */}
+      <SectionBox title="STOP PROPAGATION (click inner — only inner fires)">
+        <box direction="row" gap={space[3]}>
+          <box
+            focusable
+            onPress={() => addLog("Outer onPress fired (SHOULD NOT HAPPEN)")}
+            backgroundColor={colors.card}
+            cornerRadius={radius.lg}
+            padding={space[4]}
+            focusStyle={{ borderColor: "#4488cc", borderWidth: 2 }}
+          >
+            <box direction="column" gap={space[2]}>
+              <text color={colors.mutedForeground} fontSize={font.xs}>OUTER (has onPress — should NOT fire)</text>
+              <box
+                focusable
+                onPress={(e) => {
+                  addLog("Inner onPress + stopPropagation()")
+                  e?.stopPropagation()
+                }}
+                backgroundColor={colors.secondary}
+                cornerRadius={radius.md}
+                padding={space[3]}
+                hoverStyle={{ backgroundColor: "#3a3a4aff" }}
+                focusStyle={{ borderColor: "#f59e0b", borderWidth: 2 }}
+              >
+                <text color={colors.foreground} fontSize={font.sm}>Click me (stops bubbling)</text>
+              </box>
+              <text color={colors.mutedForeground} fontSize={10}>Only "Inner" should fire, outer is blocked</text>
+            </box>
+          </box>
+        </box>
+      </SectionBox>
+
+      {/* Demo 3: Nested wrapper — Void Button inside focusable box */}
+      <SectionBox title="VOID BUTTON IN WRAPPER (bubbling through component boundary)">
+        <box direction="row" gap={space[3]}>
+          <box
+            focusable
+            onPress={() => addLog("Wrapper onPress fired (bubbled from Button)")}
+            cornerRadius={radius.md}
+            focusStyle={{ borderColor: "#4488cc", borderWidth: 2 }}
+          >
+            <Button>Click this Button</Button>
+          </box>
+          <text color={colors.mutedForeground} fontSize={font.xs}>Button has no onPress — event bubbles to wrapper</text>
+        </box>
+      </SectionBox>
+
+      {/* Event log */}
+      <SectionBox title="EVENT LOG">
+        <box direction="column" gap={space[1]}>
+          <box direction="row" gap={space[2]}>
+            <box focusable onPress={clearLog} backgroundColor={colors.secondary} cornerRadius={radius.md} padding={space[2]} paddingX={space[3]} hoverStyle={{ backgroundColor: "#3a3a4aff" }} focusStyle={{ borderColor: "#4488cc", borderWidth: 2 }}>
+              <text color={colors.foreground} fontSize={font.xs}>Clear log</text>
+            </box>
+          </box>
+          <For each={log()}>
+            {(entry) => <text color="#4fc4d4" fontSize={font.xs}>{entry}</text>}
+          </For>
+          <Show when={log().length === 0}>
+            <text color={colors.mutedForeground} fontSize={font.xs}>Click buttons above to see events</text>
+          </Show>
+        </box>
+      </SectionBox>
+    </box>
+  )
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // MAIN APP — Tab navigation shell
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -992,6 +1103,7 @@ const TABS = [
   { num: "4", name: "Forms",        key: "forms" },
   { num: "5", name: "Data",         key: "data" },
   { num: "6", name: "Void",         key: "void" },
+  { num: "7", name: "Events",       key: "events" },
 ]
 
 function App(props: { terminal: any }) {
@@ -1002,7 +1114,7 @@ function App(props: { terminal: any }) {
     id: "tab-nav",
     onKeyDown(e) {
       const num = parseInt(e.key)
-      if (num >= 1 && num <= 6) {
+      if (num >= 1 && num <= TABS.length) {
         setActiveTab(num - 1)
       }
     },
@@ -1017,7 +1129,7 @@ function App(props: { terminal: any }) {
         <text color={colors.foreground} fontSize={font.lg} fontWeight={weight.bold}>TGE Showcase</text>
         <box width="grow" />
         <text color={colors.mutedForeground} fontSize={font.xs}>
-          Keys: 1-6 switch tabs | Tab cycles focus | q quit
+          Keys: 1-7 switch tabs | Tab cycles focus | q quit
         </text>
       </box>
 
@@ -1067,6 +1179,7 @@ function App(props: { terminal: any }) {
         {activeTab() === 3 ? <TabForms /> : null}
         {activeTab() === 4 ? <TabDataVirtual /> : null}
         {activeTab() === 5 ? <TabVoidTheme /> : null}
+        {activeTab() === 6 ? <TabEventBubbling /> : null}
       </box>
     </box>
   )

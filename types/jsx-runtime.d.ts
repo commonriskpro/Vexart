@@ -128,7 +128,7 @@ interface BoxProps {
   }
   // Interaction
   focusable?: boolean
-  onPress?: () => void
+  onPress?: (event?: import("@tge/renderer").PressEvent) => void
   onKeyDown?: (event: any) => void
   // Mouse events
   onMouseDown?: (evt: any) => void

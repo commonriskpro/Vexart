@@ -13,6 +13,23 @@ import { SIZING, DIRECTION, ALIGN_X, ALIGN_Y } from "./clay"
 
 export type TGENodeKind = "box" | "text" | "img" | "root"
 
+/** Event passed to onPress handlers. Supports stopPropagation like DOM events. */
+export type PressEvent = {
+  /** Prevent the event from bubbling to parent nodes. */
+  stopPropagation: () => void
+  /** Whether stopPropagation() was called. */
+  readonly propagationStopped: boolean
+}
+
+/** Create a PressEvent instance. */
+export function createPressEvent(): PressEvent {
+  let stopped = false
+  return {
+    stopPropagation() { stopped = true },
+    get propagationStopped() { return stopped },
+  }
+}
+
 /** Interactive style props — usable in hoverStyle, activeStyle, focusStyle */
 export type InteractiveStyleProps = Partial<Pick<TGEProps, "backgroundColor" | "borderColor" | "borderWidth" | "cornerRadius" | "borderRadius" | "shadow" | "boxShadow" | "glow" | "gradient" | "backdropBlur" | "backdropBrightness" | "backdropContrast" | "backdropSaturate" | "backdropGrayscale" | "backdropInvert" | "backdropSepia" | "backdropHueRotate" | "opacity">>
 
@@ -137,7 +154,7 @@ export type TGEProps = {
   /** Focus state — applied when element has focus (Decision 7) */
   focusStyle?: InteractiveStyleProps
   /** Unified press handler — fires on mouse click + Enter/Space when focused (Decision 6) */
-  onPress?: () => void
+  onPress?: (event?: PressEvent) => void
   /** Make this element focusable via Tab navigation. Like HTML tabindex="0". */
   focusable?: boolean
   /** Keyboard event handler — fires when this element is focused and a key is pressed. */

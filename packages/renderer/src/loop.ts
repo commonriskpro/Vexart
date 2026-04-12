@@ -28,6 +28,7 @@ import {
   type TGENode,
   type SizingInfo,
   createNode,
+  createPressEvent,
   parseSizing,
   parseDirection,
   parseAlignX,
@@ -1005,20 +1006,24 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     }
 
     // onPress dispatch: detect click (was active, now released while still hovered)
-    // Bubbles up the tree like DOM events — if the clicked node doesn't have
-    // onPress/focusable, walk up to find the nearest ancestor that does.
+    // Bubbles up the tree like DOM events. Each node with onPress/focusable
+    // gets a chance to handle the event. Call event.stopPropagation() in an
+    // onPress handler to prevent further bubbling.
     if (prevActiveNode && !prevActiveNode._active && prevActiveNode._hovered) {
+      const event = createPressEvent()
       let target: TGENode | null = prevActiveNode
-      // Bubble: find nearest ancestor with focusable or onPress
-      while (target && !target.props.focusable && !target.props.onPress) {
-        target = target.parent
-      }
-      if (target) {
-        if (target.props.focusable) {
+
+      while (target && !event.propagationStopped) {
+        // Focus: first focusable ancestor wins (like browser)
+        if (target.props.focusable && !event.propagationStopped) {
           const fid = getNodeFocusId(target)
           if (fid) setFocusedId(fid)
         }
-        target.props.onPress?.()
+        // Dispatch onPress if present
+        if (target.props.onPress) {
+          target.props.onPress(event)
+        }
+        target = target.parent
       }
     }
     prevActiveNode = newActiveNode

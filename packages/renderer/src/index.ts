@@ -97,6 +97,9 @@ export type { QueryResult, QueryOptions, MutationResult, MutationOptions } from 
 export type { NodeHandle } from "./handle"
 export { createHandle } from "./handle"
 
+// Re-export press event (for stopPropagation in onPress handlers)
+export type { PressEvent } from "./node"
+
 // Re-export text layout system
 export { registerFont, getFont, clearTextCache } from "./text-layout"
 export type { FontDescriptor } from "./text-layout"

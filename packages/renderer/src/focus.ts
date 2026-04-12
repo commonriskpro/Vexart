@@ -23,14 +23,14 @@
 import { createSignal } from "solid-js"
 import { onInput } from "./input"
 import type { KeyEvent } from "@tge/input"
-import type { TGENode } from "./node"
+import type { TGENode, PressEvent } from "./node"
 
 // ── Focus registry ──
 
 export type FocusEntry = {
   id: string
   onKeyDown?: (event: KeyEvent) => void
-  onPress?: () => void
+  onPress?: (event?: PressEvent) => void
   /** Associated TGENode — set for node-level focusables (focusable prop). */
   node?: TGENode
 }
