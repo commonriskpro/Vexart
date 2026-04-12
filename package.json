@@ -33,7 +33,8 @@
     "demo13": "bun --conditions=browser run examples/scroll-programmatic.tsx",
     "demo14": "bun --conditions=browser run examples/textarea.tsx",
     "demo15": "bun --conditions=browser run examples/syntax.tsx",
-    "demo16": "bun --conditions=browser run examples/markdown.tsx"
+    "demo16": "bun --conditions=browser run examples/markdown.tsx",
+    "showcase": "bun --conditions=browser run examples/showcase.tsx"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",

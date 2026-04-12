@@ -2,6 +2,9 @@
  * Badge — shadcn-compatible badge with semantic variants.
  *
  * Variants: default, secondary, outline, destructive
+ *
+ * Theme reactivity: variant colors use getter functions so themeColors
+ * signals are read inside SolidJS effects (not captured eagerly).
  */
 
 import { radius, space, font, weight } from "./tokens"
@@ -14,37 +17,45 @@ export interface BadgeProps {
   children?: any
 }
 
+// ── Variant color getters (lazy — read themeColors inside effects) ──
+
+type VariantColors = {
+  bg: () => string
+  fg: () => string
+  border: () => string | number | undefined
+  borderWidth: number | undefined
+}
+
+const variantGetters: Record<BadgeVariant, VariantColors> = {
+  default: {
+    bg: () => themeColors.primary,
+    fg: () => themeColors.primaryForeground,
+    border: () => undefined,
+    borderWidth: undefined,
+  },
+  secondary: {
+    bg: () => themeColors.secondary,
+    fg: () => themeColors.secondaryForeground,
+    border: () => undefined,
+    borderWidth: undefined,
+  },
+  outline: {
+    bg: () => themeColors.transparent,
+    fg: () => themeColors.foreground,
+    border: () => "#ffffff38",
+    borderWidth: 1,
+  },
+  destructive: {
+    bg: () => themeColors.destructive,
+    fg: () => themeColors.destructiveForeground,
+    border: () => undefined,
+    borderWidth: undefined,
+  },
+}
+
 export function Badge(props: BadgeProps) {
   const v = props.variant ?? "default"
-
-  // Must be inside the function so themeColors getters evaluate reactively
-  const variantStyles: Record<BadgeVariant, {
-    bg: string
-    fg: string
-    border?: string | number
-    borderWidth?: number
-  }> = {
-    default: {
-      bg: themeColors.primary,
-      fg: themeColors.primaryForeground,
-    },
-    secondary: {
-      bg: themeColors.secondary,
-      fg: themeColors.secondaryForeground,
-    },
-    outline: {
-      bg: themeColors.transparent,
-      fg: themeColors.foreground,
-      border: "#ffffff38",       // white ~22% — visible on dark bg
-      borderWidth: 1,
-    },
-    destructive: {
-      bg: themeColors.destructive,
-      fg: themeColors.destructiveForeground,
-    },
-  }
-
-  const vs = variantStyles[v]
+  const vg = variantGetters[v]
 
   return (
     <box
@@ -55,13 +66,13 @@ export function Badge(props: BadgeProps) {
       height={22}
       paddingLeft={space[2.5]}
       paddingRight={space[2.5]}
-      backgroundColor={vs.bg}
+      backgroundColor={vg.bg()}
       cornerRadius={radius.full}
-      borderColor={vs.border}
-      borderWidth={vs.borderWidth}
+      borderColor={vg.border()}
+      borderWidth={vg.borderWidth}
     >
       <text
-        color={vs.fg}
+        color={vg.fg()}
         fontSize={font.xs}
         fontWeight={weight.medium}
       >

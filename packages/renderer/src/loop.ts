@@ -37,7 +37,7 @@ import {
 import { isDirty, clearDirty, markDirty } from "./dirty"
 import { hasActiveAnimations } from "./animation"
 import { decodeImageForNode, scaleImage } from "./image"
-import { focusedId, getNodeFocusId } from "./focus"
+import { focusedId, setFocusedId, getNodeFocusId } from "./focus"
 import {
   type Layer,
   createLayer,
@@ -1005,8 +1005,21 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     }
 
     // onPress dispatch: detect click (was active, now released while still hovered)
+    // Bubbles up the tree like DOM events — if the clicked node doesn't have
+    // onPress/focusable, walk up to find the nearest ancestor that does.
     if (prevActiveNode && !prevActiveNode._active && prevActiveNode._hovered) {
-      prevActiveNode.props.onPress?.()
+      let target: TGENode | null = prevActiveNode
+      // Bubble: find nearest ancestor with focusable or onPress
+      while (target && !target.props.focusable && !target.props.onPress) {
+        target = target.parent
+      }
+      if (target) {
+        if (target.props.focusable) {
+          const fid = getNodeFocusId(target)
+          if (fid) setFocusedId(fid)
+        }
+        target.props.onPress?.()
+      }
     }
     prevActiveNode = newActiveNode
 

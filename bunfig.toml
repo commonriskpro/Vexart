@@ -3,10 +3,11 @@
 # targeting @tge/renderer instead of the DOM.
 preload = ["./solid-plugin.ts"]
 
-# CRITICAL: Force SolidJS to use the browser/client runtime.
-# Without this, Bun resolves solid-js to the "node" export condition
-# which maps to dist/server.js — a SSR-only build with NO reactivity
-# (createEffect is a no-op, signals don't trigger updates).
-# TGE needs the full reactive runtime (dist/solid.js).
-[run]
-conditions = ["browser"]
+# CRITICAL: SolidJS needs --conditions=browser at the CLI level.
+# Bun's bunfig.toml [run] section does NOT support "conditions" — the key
+# is silently ignored. You MUST pass --conditions=browser on the command line.
+# Without it, Bun resolves solid-js to dist/server.js (SSR build with ZERO
+# reactivity — createEffect is a no-op, signals don't trigger updates).
+#
+# All package.json scripts that run .tsx files include this flag.
+# If running manually: bun --conditions=browser run examples/showcase.tsx

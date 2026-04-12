@@ -73,6 +73,20 @@ function resolveInteractiveStyle(style: any): any {
   return resolved
 }
 
+/**
+ * Recursively unregister all focusable nodes in a subtree.
+ * Uses early prune: skips leaf nodes that aren't focusable themselves,
+ * only recurses into children that are focusable or have their own children.
+ */
+function unregisterSubtree(node: TGENode) {
+  if (node.props.focusable) unregisterNodeFocusable(node)
+  for (const child of node.children) {
+    if (child.props.focusable || child.children.length > 0) {
+      unregisterSubtree(child)
+    }
+  }
+}
+
 export const {
   render,
   effect,
@@ -207,10 +221,10 @@ export const {
   },
 
   removeNode(parent: TGENode, node: TGENode) {
-    // Clean up focus registration if node was focusable
-    if (node.props.focusable) {
-      unregisterNodeFocusable(node)
-    }
+    // Recursively unregister all focusable nodes in the subtree.
+    // Without this, destroyed children remain as ghost entries in the
+    // focus ring and Tab key cycles through invisible elements.
+    unregisterSubtree(node)
     removeChild(parent, node)
     markDirty()
   },

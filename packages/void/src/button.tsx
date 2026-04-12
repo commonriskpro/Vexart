@@ -3,6 +3,9 @@
  *
  * Variants: default, secondary, outline, ghost, destructive
  * Sizes: xs, sm, default, lg
+ *
+ * Theme reactivity: themeColors getters MUST be read inside JSX props
+ * (not in intermediate objects) so SolidJS wraps them in tracked effects.
  */
 
 import { radius, space, font, weight, shadows } from "./tokens"
@@ -17,7 +20,7 @@ export interface ButtonProps {
   children?: any
 }
 
-// ── Size styles ──
+// ── Size styles (static — no theme dependency) ──
 
 const sizeStyles: Record<ButtonSize, {
   height: number
@@ -33,57 +36,73 @@ const sizeStyles: Record<ButtonSize, {
   lg: { height: 40, paddingX: space[6], paddingY: 0, fontSize: font.sm, gap: space[2], cornerRadius: radius.md },
 }
 
+// ── Variant color getters ──
+// Returns a function so the themeColors getter is evaluated lazily inside
+// JSX props (where SolidJS creates tracked effects), not eagerly in the
+// component body (which runs once and captures static values).
+
+type VariantColors = {
+  bg: () => string | number
+  fg: () => string | number
+  border: () => string | number | undefined
+  borderWidth: number | undefined
+  shadow: any
+  hoverBg: () => string | number
+  activeBg: () => string | number
+}
+
+const variantGetters: Record<ButtonVariant, VariantColors> = {
+  default: {
+    bg: () => themeColors.primary,
+    fg: () => themeColors.primaryForeground,
+    border: () => undefined,
+    borderWidth: undefined,
+    shadow: shadows.sm,
+    hoverBg: () => "#d4d4d4ff",
+    activeBg: () => "#bababaff",
+  },
+  secondary: {
+    bg: () => themeColors.secondary,
+    fg: () => themeColors.secondaryForeground,
+    border: () => undefined,
+    borderWidth: undefined,
+    shadow: undefined,
+    hoverBg: () => "#333333ff",
+    activeBg: () => "#3d3d3dff",
+  },
+  outline: {
+    bg: () => "#0a0a0aff",
+    fg: () => themeColors.foreground,
+    border: () => "#ffffff38",
+    borderWidth: 1,
+    shadow: undefined,
+    hoverBg: () => themeColors.accent,
+    activeBg: () => "#333333ff",
+  },
+  ghost: {
+    bg: () => themeColors.transparent,
+    fg: () => themeColors.mutedForeground,
+    border: () => undefined,
+    borderWidth: undefined,
+    shadow: undefined,
+    hoverBg: () => themeColors.accent,
+    activeBg: () => "#333333ff",
+  },
+  destructive: {
+    bg: () => themeColors.destructive,
+    fg: () => themeColors.destructiveForeground,
+    border: () => undefined,
+    borderWidth: undefined,
+    shadow: shadows.sm,
+    hoverBg: () => "#c72222ff",
+    activeBg: () => "#b01e1eff",
+  },
+}
+
 export function Button(props: ButtonProps) {
   const v = props.variant ?? "default"
   const s = props.size ?? "default"
-
-  // Must be inside the function so themeColors getters evaluate reactively
-  const variantStyles: Record<ButtonVariant, {
-    bg: string | number
-    fg: string | number
-    border?: string | number
-    borderWidth?: number
-    shadow?: any
-    hoverBg: string | number
-    activeBg: string | number
-  }> = {
-    default: {
-      bg: themeColors.primary,
-      fg: themeColors.primaryForeground,
-      shadow: shadows.sm,
-      hoverBg: "#d4d4d4ff",    // primary/90
-      activeBg: "#bababaff",
-    },
-    secondary: {
-      bg: themeColors.secondary,
-      fg: themeColors.secondaryForeground,
-      hoverBg: "#333333ff",    // secondary brighter
-      activeBg: "#3d3d3dff",
-    },
-    outline: {
-      bg: "#0a0a0aff",
-      fg: themeColors.foreground,
-      border: "#ffffff38",       // white ~22% — visible on dark bg
-      borderWidth: 1,
-      hoverBg: themeColors.accent,
-      activeBg: "#333333ff",
-    },
-    ghost: {
-      bg: themeColors.transparent,
-      fg: themeColors.mutedForeground,  // muted text so it's clearly "quiet"
-      hoverBg: themeColors.accent,
-      activeBg: "#333333ff",
-    },
-    destructive: {
-      bg: themeColors.destructive,
-      fg: themeColors.destructiveForeground,
-      shadow: shadows.sm,
-      hoverBg: "#c72222ff",    // destructive/90
-      activeBg: "#b01e1eff",
-    },
-  }
-
-  const vs = variantStyles[v]
+  const vg = variantGetters[v]
   const ss = sizeStyles[s]
 
   return (
@@ -97,16 +116,16 @@ export function Button(props: ButtonProps) {
       paddingRight={ss.paddingX}
       paddingTop={ss.paddingY}
       paddingBottom={ss.paddingY}
-      backgroundColor={vs.bg}
+      backgroundColor={vg.bg()}
       cornerRadius={ss.cornerRadius}
-      borderColor={vs.border}
-      borderWidth={vs.borderWidth}
-      shadow={vs.shadow}
-      hoverStyle={{ backgroundColor: vs.hoverBg }}
-      activeStyle={{ backgroundColor: vs.activeBg }}
+      borderColor={vg.border()}
+      borderWidth={vg.borderWidth}
+      shadow={vg.shadow}
+      hoverStyle={{ backgroundColor: vg.hoverBg() }}
+      activeStyle={{ backgroundColor: vg.activeBg() }}
     >
       <text
-        color={vs.fg}
+        color={vg.fg()}
         fontSize={ss.fontSize}
         fontWeight={weight.medium}
       >
