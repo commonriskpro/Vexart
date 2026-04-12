@@ -395,13 +395,26 @@ Animation primitives. See [Hooks & Signals](hooks.md#createtransition) for full 
 import { createTransition, createSpring } from "@tge/renderer"
 ```
 
-### `createTheme(tokens)`, `setTheme(theme)`, `ThemeProvider`
+### `PressEvent`
 
-Runtime theming. See the [void package](#tgevoid-design-system) section.
+Event object passed to `onPress` handlers. Supports event bubbling with `stopPropagation()`.
 
 ```typescript
-import { createTheme, setTheme, ThemeProvider } from "@tge/renderer"
+import type { PressEvent } from "@tge/renderer"
+
+type PressEvent = {
+  stopPropagation: () => void
+  readonly propagationStopped: boolean
+}
+
+// Usage in onPress
+<box onPress={(event) => {
+  event?.stopPropagation()  // prevent bubbling to parent
+  doAction()
+}} />
 ```
+
+`onPress` events bubble up the parent node chain like DOM click events. Call `stopPropagation()` to prevent the event from reaching ancestor handlers.
 
 ### `pushFocusScope(): () => void`
 

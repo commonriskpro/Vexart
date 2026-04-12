@@ -71,7 +71,8 @@ JSX (SolidJS createRenderer)
 - `cd zig && zig build test --summary all` — run Zig tests
 - `cd zig && zig build -Doptimize=ReleaseFast` — build Zig shared lib
 - `bun typecheck` — TypeScript type check
-- `bun run examples/hello.tsx` — run example
+- `bun --conditions=browser run examples/hello.tsx` — run example
+- `bun run showcase` — run comprehensive feature showcase (7 tabs)
 
 ## Visual Effects (Zig → JSX)
 
@@ -111,12 +112,38 @@ Declarative hover/active/focus styles — no manual signal boilerplate needed:
 />
 ```
 
-Props available in `hoverStyle`/`activeStyle`/`focusStyle`: `backgroundColor`, `borderColor`, `borderWidth`, `cornerRadius`, `shadow`, `glow`, `gradient`, `backdropBlur`, `opacity`.
+Props available in `hoverStyle`/`activeStyle`/`focusStyle`: `backgroundColor`, `borderColor`, `borderWidth`, `cornerRadius`, `borderRadius`, `shadow`, `boxShadow`, `glow`, `gradient`, `backdropBlur`, `backdropBrightness`, `backdropContrast`, `backdropSaturate`, `backdropGrayscale`, `backdropInvert`, `backdropSepia`, `backdropHueRotate`, `opacity`.
+
+### Event bubbling
+
+`onPress` events bubble up the parent node chain like DOM click events. If a child node doesn't have `onPress`, the event walks up to the nearest ancestor that does. Each handler receives a `PressEvent`:
+
+```tsx
+// Parent handles click even though child has no onPress
+<box focusable onPress={() => handleAction()}>
+  <Button>Click me</Button>  {/* Button has no onPress — event bubbles to parent */}
+</box>
+
+// Child stops propagation — parent never fires
+<box onPress={() => closePanel()}>
+  <box onPress={(e) => { e?.stopPropagation(); doAction() }}>
+    <text>Click me (parent won't fire)</text>
+  </box>
+</box>
+```
 
 ### Architecture note
 
 ```
 JSX prop → reconciler.ts setProperty (pre-parse color/sizing/glow ONCE) → loop.ts walkTree reads u32 (ns) → effectsQueue → paintCommand calls Zig FFI via shared packed buffer (μs)
+```
+
+```
+onPress event flow:
+  mouse click → updateInteractiveStates detects release-while-hovered
+    → create PressEvent → walk parent chain:
+      → each node: set focus if focusable → call onPress(event) if present
+      → stop if event.propagationStopped or reached root
 ```
 
 Effects are painted BEFORE the rect (shadow/glow) or INSTEAD of it (gradient). Backdrop blur reads the buffer region behind the element, blurs it in a temp buffer, then composites. All effects use isolated temp buffers to avoid corrupting neighboring pixels.
@@ -177,7 +204,7 @@ Effects are painted BEFORE the rect (shadow/glow) or INSTEAD of it (gradient). B
 | Prop | Type | Notes |
 | ---- | ---- | ----- |
 | `focusable` | `boolean` | Auto-register in focus system (like HTML tabindex="0") |
-| `onPress` | `() => void` | Fires on mouse click + Enter/Space when focused |
+| `onPress` | `(event?: PressEvent) => void` | Fires on mouse click + Enter/Space when focused. Events bubble up parent chain; call `event.stopPropagation()` to stop. |
 | `onKeyDown` | `(event: any) => void` | Keyboard events when focused |
 | `focusStyle` | partial visual props | Merged on focus |
 | `opacity` | `number` | 0.0-1.0, element-level opacity |
@@ -278,8 +305,8 @@ All FFI functions use ≤8 params (packed buffer pattern for ARM64 safety). Shar
 ### Animation
 - `createTransition`, `createSpring`, easing presets
 
-### Theme
-- `createTheme`, `setTheme`, `ThemeProvider`
+### Context
+- `createContext`, `useContext`
 
 ### Utilities
 - `markDirty`, `createHandle`, `createScrollHandle`, `resetScrollHandles`
@@ -294,7 +321,7 @@ All FFI functions use ≤8 params (packed buffer pattern for ARM64 safety). Shar
 - `useQuery`, `useMutation`
 
 ### Router
-- `createRouter`, `createNavigationStack`
+- `createRouter`, `createNavigationStack`, `useRouter`
 
 ### Selection
 - `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal`
@@ -308,6 +335,9 @@ All FFI functions use ≤8 params (packed buffer pattern for ARM64 safety). Shar
 ### Syntax highlighting
 - `ExtmarkManager`, `TreeSitterClient`, `getTreeSitterClient`, `addDefaultParsers`
 - `SyntaxStyle`, `ONE_DARK`, `KANAGAWA`, `highlightsToTokens`
+
+### Types
+- `PressEvent` — `{ stopPropagation: () => void; readonly propagationStopped: boolean }`
 
 ### Classes
 - `RGBA` — `.fromHex()`, `.fromInts()`, `.fromValues()`, `.toU32()`, `.valueOf()`, `.toString()`

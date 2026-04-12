@@ -7,7 +7,7 @@ This guide walks you through installing TGE, building the native libraries, and 
 | Tool | Version | Purpose |
 |------|---------|---------|
 | [Bun](https://bun.sh/) | >= 1.1.0 | Runtime, FFI, test runner |
-| [Zig](https://ziglang.org/) | >= 0.13 | Build the pixel paint engine |
+| [Zig](https://ziglang.org/) | >= 0.14 | Build the pixel paint engine |
 | A C compiler (`cc`) | Any | Build the Clay layout engine |
 | Terminal with Kitty graphics | — | Kitty, Ghostty, or WezTerm |
 

@@ -358,7 +358,7 @@ The `<box>` element is the universal building block. It handles layout, visual s
 | `borderTop` | `number` | — | Top border width. |
 | `borderBottom` | `number` | — | Bottom border width. |
 | `borderBetweenChildren` | `number` | — | Draws a border between each child element. Useful for lists and dividers. |
-| `visible` | `boolean` | `true` | Hide the element without removing it from layout. |
+| `opacity` | `number` | `1.0` | Element-level opacity. 0.0 = fully transparent, 1.0 = fully opaque. |
 
 ```tsx
 // Card with rounded corners and border
@@ -599,13 +599,8 @@ TGE provides declarative hover/active/focus styles. No manual signal boilerplate
 | Prop | Type | Description |
 |------|------|-------------|
 | `focusable` | `boolean` | Registers the element in the focus ring. Like HTML `tabindex="0"`. Tab cycles through focusable elements. |
-| `onPress` | `() => void` | Fires on mouse click AND on Enter/Space when the element is focused. |
+| `onPress` | `(event?: PressEvent) => void` | Fires on mouse click AND on Enter/Space when the element is focused. Events bubble up parent chain like DOM click events. Call `event.stopPropagation()` to prevent further bubbling. |
 | `onKeyDown` | `(event: KeyEvent) => void` | Keyboard events when the element is focused. |
-| `onMouseDown` | `(event: MouseEvent) => void` | Pointer press on the element. |
-| `onMouseUp` | `(event: MouseEvent) => void` | Pointer release on the element. |
-| `onMouseOver` | `() => void` | Pointer enters the element bounds. |
-| `onMouseOut` | `() => void` | Pointer leaves the element bounds. |
-| `onMouseMove` | `() => void` | Pointer moves within the element bounds. |
 
 ```tsx
 // Clickable card (keyboard + mouse)
@@ -954,7 +949,7 @@ type FocusHandle = {
 function useFocus(opts?: {
   id?: string                         // override auto-generated ID
   onKeyDown?: (event: KeyEvent) => void  // keyboard events when focused
-  onPress?: () => void                // fires on Enter/Space
+  onPress?: (event?: PressEvent) => void  // fires on Enter/Space
 }): FocusHandle
 ```
 
@@ -1458,7 +1453,7 @@ type ButtonRenderContext = {
 }
 
 type ButtonProps = {
-  onPress?: () => void
+  onPress?: (event?: PressEvent) => void
   disabled?: boolean
   focusId?: string
   renderButton: (ctx: ButtonRenderContext) => JSX.Element  // REQUIRED

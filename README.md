@@ -174,6 +174,7 @@ The `examples/` directory contains working demos for every feature:
 | Components | `bun run demo8` | Full component showcase |
 | Effects | `bun run demo9` | Shadows and glow |
 | Input | `bun run demo10` | Text input form |
+| Showcase | `bun run showcase` | Comprehensive feature showcase (7 tabs) |
 
 ## Terminal Support
 

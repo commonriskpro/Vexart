@@ -66,7 +66,25 @@ The primary layout container. Equivalent to a `<div>` — handles sizing, paddin
 />
 ```
 
-All three style objects accept: `backgroundColor`, `borderColor`, `borderWidth`, `cornerRadius`, `shadow`, `glow`, `gradient`, `backdropBlur`, `opacity`.
+All three style objects accept: `backgroundColor`, `borderColor`, `borderWidth`, `cornerRadius`, `borderRadius`, `shadow`, `boxShadow`, `glow`, `gradient`, `backdropBlur`, `backdropBrightness`, `backdropContrast`, `backdropSaturate`, `backdropGrayscale`, `backdropInvert`, `backdropSepia`, `backdropHueRotate`, `opacity`.
+
+### Event Bubbling
+
+`onPress` events bubble up the parent node chain like DOM click events. If the clicked node doesn't have `onPress`, the event walks up to the nearest ancestor that does. Each handler receives a `PressEvent`:
+
+```tsx
+// Parent handles click — Button has no onPress, event bubbles to parent box
+<box focusable onPress={() => handleAction()}>
+  <Button>Click me</Button>
+</box>
+
+// Child stops propagation — parent never fires
+<box onPress={() => closePanel()}>
+  <box onPress={(e) => { e?.stopPropagation(); doAction() }}>
+    <text>Click me (parent won't fire)</text>
+  </box>
+</box>
+```
 
 ---
 

@@ -790,19 +790,20 @@ function GlassmorphicCard() {
 
 ## Running the Built-In Demos
 
-TGE includes 10 working demos in the `examples/` directory:
+TGE includes working demos in the `examples/` directory:
 
 ```bash
-bun run demo       # Phase 1: imperative pixel painting
-bun run demo2      # Phase 2: Clay layout engine
-bun run demo3      # Phase 3: first JSX rendering
-bun run demo4      # Phase 4: interactive (focus, signals)
-bun run demo5      # Phase 5: layer compositing
+bun run demo       # Imperative pixel painting (no JSX)
+bun run demo2      # Clay layout engine (no JSX)
+bun run demo3      # First JSX rendering
+bun run demo4      # Interactive (focus, signals)
+bun run demo5      # Layer compositing
 bun run demo6      # Dashboard (5 independent layers)
 bun run demo7      # Scroll containers
 bun run demo8      # Component showcase (all components)
 bun run demo9      # Shadow & glow effects
 bun run demo10     # Text input form
+bun run showcase   # Comprehensive showcase (7 tabs — visual, backdrop, interactive, forms, data, void, events)
 ```
 
 Each demo is a standalone file you can use as a starting point for your own application.

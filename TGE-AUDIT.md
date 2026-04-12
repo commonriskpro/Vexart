@@ -1,4 +1,8 @@
-# TGE Comprehensive Audit Report
+# TGE Comprehensive Audit Report (ARCHIVED — Pre-Phase 3)
+
+> **⚠️ This document is a historical snapshot from before Phases 1-3 and the Backlog sprint were completed.**
+> All gaps identified below have been resolved. For current state, see AGENTS.md and the docs/ folder.
+> Kept for reference only — DO NOT use as source of truth.
 
 ## 1. ALL COMPONENTS
 

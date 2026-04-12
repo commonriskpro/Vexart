@@ -106,7 +106,7 @@ type FocusHandle = {
 function useFocus(opts?: {
   id?: string                                 // Unique focus ID
   onKeyDown?: (event: KeyEvent) => void       // Keyboard handler (only fires when focused)
-  onPress?: () => void                        // Fires on Enter/Space when focused
+  onPress?: (event?: PressEvent) => void       // Fires on Enter/Space when focused
 }): FocusHandle
 ```
 
@@ -335,7 +335,8 @@ Make any `<box>` focusable without `useFocus()`. Like HTML `<div tabindex="0">`.
 
 - `focusable` auto-registers the node in the focus system — no `useFocus()` needed.
 - `focusStyle` works like `hoverStyle`/`activeStyle` — partial props merged when focused.
-- `onPress` fires on mouse click (release while hovered) OR Enter/Space when focused.
+- `onPress` fires on mouse click (release while hovered) OR Enter/Space when focused. Events bubble up the parent node chain like DOM click events — if the clicked node doesn't have `onPress`, the event walks up to the nearest ancestor that does. Use `event.stopPropagation()` to prevent further bubbling.
+- Mouse click on a focusable node automatically sets focus (like browser behavior).
 - `useFocus()` still exists for advanced use (programmatic focus, custom focus IDs).
 
 ---
