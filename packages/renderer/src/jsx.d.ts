@@ -31,6 +31,30 @@ type BoxIntrinsicProps = TGEProps & {
   scrollId?: string
   shadow?: ShadowDef | ShadowDef[]
   glow?: { radius: number; color: ColorValue; intensity?: number }
+  // Interaction
+  focusable?: boolean
+  onPress?: () => void
+  onKeyDown?: (event: any) => void
+  focusStyle?: {
+    backgroundColor?: ColorValue
+    borderColor?: ColorValue
+    borderWidth?: number
+    cornerRadius?: number
+    shadow?: ShadowDef | ShadowDef[]
+    glow?: { radius: number; color: ColorValue; intensity?: number }
+    gradient?: { type: "linear"; from: number; to: number; angle?: number } | { type: "radial"; from: number; to: number }
+    backdropBlur?: number
+    opacity?: number
+  }
+  // Effects
+  opacity?: number
+  backdropBrightness?: number
+  backdropContrast?: number
+  backdropSaturate?: number
+  backdropGrayscale?: number
+  backdropInvert?: number
+  backdropSepia?: number
+  backdropHueRotate?: number
   children?: Children
 }
 

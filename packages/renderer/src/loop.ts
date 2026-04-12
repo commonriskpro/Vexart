@@ -20,7 +20,7 @@
 
 import type { Terminal } from "@tge/terminal"
 import type { PixelBuffer } from "@tge/pixel"
-import { create, clear, paint, over, sub } from "@tge/pixel"
+import { create, clear, paint, over, sub, withOpacity } from "@tge/pixel"
 import { createComposer, createLayerComposer } from "@tge/output"
 import { clay, CMD, ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, SIZING } from "./clay"
 import type { RenderCommand } from "./clay"
@@ -36,6 +36,7 @@ import {
 import { isDirty, clearDirty, markDirty } from "./dirty"
 import { hasActiveAnimations } from "./animation"
 import { decodeImageForNode, scaleImage } from "./image"
+import { focusedId, getNodeFocusId } from "./focus"
 import {
   type Layer,
   createLayer,
@@ -92,6 +93,14 @@ type EffectConfig = {
   gradient?: { type: "linear"; from: number; to: number; angle: number }
            | { type: "radial"; from: number; to: number }
   backdropBlur?: number
+  backdropBrightness?: number
+  backdropContrast?: number
+  backdropSaturate?: number
+  backdropGrayscale?: number
+  backdropInvert?: number
+  backdropSepia?: number
+  backdropHueRotate?: number
+  opacity?: number
   cornerRadii?: { tl: number; tr: number; br: number; bl: number }
 }
 
@@ -416,9 +425,13 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     // Resolve visual props — merges hoverStyle/activeStyle when the node is hovered/active
     const vp = resolveProps(node)
 
-    // Gradient/backdropBlur need a RECT command from Clay even without explicit backgroundColor.
+    // Gradient/backdrop effects need a RECT command from Clay even without explicit backgroundColor.
     // We inject a transparent placeholder so Clay emits the RECT for effect matching.
-    const needsRect = vp.backgroundColor !== undefined || vp.gradient !== undefined || vp.backdropBlur !== undefined
+    const hasBackdropFilter = vp.backdropBlur !== undefined || vp.backdropBrightness !== undefined ||
+      vp.backdropContrast !== undefined || vp.backdropSaturate !== undefined ||
+      vp.backdropGrayscale !== undefined || vp.backdropInvert !== undefined ||
+      vp.backdropSepia !== undefined || vp.backdropHueRotate !== undefined
+    const needsRect = vp.backgroundColor !== undefined || vp.gradient !== undefined || hasBackdropFilter || vp.opacity !== undefined
     if (needsRect) {
       const bgColor = vp.backgroundColor !== undefined ? (vp.backgroundColor as number) : 0x00000001 // near-transparent placeholder
       const cr = vp.cornerRadius ?? 0
@@ -426,7 +439,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       rectNodes.push(node)
 
       // Record effects for this RECT — matched during paint
-      if (vp.shadow || vp.glow || vp.gradient || vp.backdropBlur || vp.cornerRadii) {
+      if (vp.shadow || vp.glow || vp.gradient || hasBackdropFilter || vp.cornerRadii || vp.opacity !== undefined) {
         const effect: EffectConfig = { color: bgColor, cornerRadius: cr }
         if (vp.shadow) {
           effect.shadow = vp.shadow
@@ -446,12 +459,16 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
             effect.gradient = { type: "radial", from: g.from, to: g.to }
           }
         }
-        if (vp.backdropBlur) {
-          effect.backdropBlur = vp.backdropBlur
-        }
-        if (vp.cornerRadii) {
-          effect.cornerRadii = vp.cornerRadii
-        }
+        if (vp.backdropBlur) effect.backdropBlur = vp.backdropBlur
+        if (vp.backdropBrightness !== undefined) effect.backdropBrightness = vp.backdropBrightness
+        if (vp.backdropContrast !== undefined) effect.backdropContrast = vp.backdropContrast
+        if (vp.backdropSaturate !== undefined) effect.backdropSaturate = vp.backdropSaturate
+        if (vp.backdropGrayscale !== undefined) effect.backdropGrayscale = vp.backdropGrayscale
+        if (vp.backdropInvert !== undefined) effect.backdropInvert = vp.backdropInvert
+        if (vp.backdropSepia !== undefined) effect.backdropSepia = vp.backdropSepia
+        if (vp.backdropHueRotate !== undefined) effect.backdropHueRotate = vp.backdropHueRotate
+        if (vp.opacity !== undefined) effect.opacity = vp.opacity
+        if (vp.cornerRadii) effect.cornerRadii = vp.cornerRadii
         effectsQueue.push(effect)
       }
     }
@@ -908,14 +925,25 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     // will have layout { 0, 0, 0, 0 } until a more precise approach is added.
   }
 
-  // ── Interactive state (hover/active) ──
+  // ── Interactive state (hover/active/focus) ──
 
-  /** Track nodes with hoverStyle/activeStyle for hit-testing */
+  /** Track previous active state for onPress detection (mouseup over element). */
+  let prevActiveNode: TGENode | null = null
+
+  /** Track nodes with interactive styles for hit-testing + focus bridging */
   function updateInteractiveStates() {
     let changed = false
-    // Walk all rect nodes (they have layout) and check hover/active
+    const currentFocusId = focusedId()
+
+    // Walk all rect nodes (they have layout) and check hover/active/focus
+    let newActiveNode: TGENode | null = null
     for (const node of rectNodes) {
-      if (!node.props.hoverStyle && !node.props.activeStyle) continue
+      const hasInteractiveStyle = node.props.hoverStyle || node.props.activeStyle || node.props.focusStyle
+      const isFocusable = node.props.focusable
+      const hasOnPress = node.props.onPress
+
+      // Skip nodes that have no interactive behavior at all
+      if (!hasInteractiveStyle && !isFocusable && !hasOnPress) continue
 
       const l = node.layout
       const isOver = pointerX >= l.x && pointerX < l.x + l.width &&
@@ -930,7 +958,25 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         node._active = isDown
         changed = true
       }
+      if (isDown) newActiveNode = node
+
+      // Bridge focus system → node._focused
+      if (isFocusable) {
+        const nodeFocusId = getNodeFocusId(node)
+        const isFocused = nodeFocusId !== undefined && nodeFocusId === currentFocusId
+        if (node._focused !== isFocused) {
+          node._focused = isFocused
+          changed = true
+        }
+      }
     }
+
+    // onPress dispatch: detect click (was active, now released while still hovered)
+    if (prevActiveNode && !prevActiveNode._active && prevActiveNode._hovered) {
+      prevActiveNode.props.onPress?.()
+    }
+    prevActiveNode = newActiveNode
+
     // If any state changed, mark dirty to trigger repaint next frame
     if (changed) {
       markDirty()
@@ -1682,9 +1728,15 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
         }
       }
 
-      // Backdrop blur — blur the content behind this element in-place
-      if (matchedEffect?.backdropBlur && matchedEffect.backdropBlur > 0) {
-        const blurR = Math.ceil(matchedEffect.backdropBlur)
+      // Backdrop filters — blur + brightness/contrast/saturate/grayscale/invert/sepia/hue-rotate
+      const hasBackdrop = matchedEffect && (
+        matchedEffect.backdropBlur || matchedEffect.backdropBrightness !== undefined ||
+        matchedEffect.backdropContrast !== undefined || matchedEffect.backdropSaturate !== undefined ||
+        matchedEffect.backdropGrayscale !== undefined || matchedEffect.backdropInvert !== undefined ||
+        matchedEffect.backdropSepia !== undefined || matchedEffect.backdropHueRotate !== undefined
+      )
+      if (hasBackdrop && matchedEffect) {
+        const blurR = matchedEffect.backdropBlur ? Math.ceil(matchedEffect.backdropBlur) : 0
         const effRadius = matchedEffect.cornerRadius
 
         // Save corner pixels BEFORE blur so we can restore them after.
@@ -1696,7 +1748,16 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
         }
 
         // Blur directly in the main buffer at the element's region.
-        paint.blur(buf, x, y, w, h, blurR, 3)
+        if (blurR > 0) paint.blur(buf, x, y, w, h, blurR, 3)
+
+        // Apply backdrop filters in CSS spec order: brightness, contrast, saturate, grayscale, invert, sepia, hue-rotate
+        if (matchedEffect.backdropBrightness !== undefined) paint.filterBrightness(buf, x, y, w, h, matchedEffect.backdropBrightness)
+        if (matchedEffect.backdropContrast !== undefined) paint.filterContrast(buf, x, y, w, h, matchedEffect.backdropContrast)
+        if (matchedEffect.backdropSaturate !== undefined) paint.filterSaturate(buf, x, y, w, h, matchedEffect.backdropSaturate)
+        if (matchedEffect.backdropGrayscale !== undefined) paint.filterGrayscale(buf, x, y, w, h, matchedEffect.backdropGrayscale)
+        if (matchedEffect.backdropInvert !== undefined) paint.filterInvert(buf, x, y, w, h, matchedEffect.backdropInvert)
+        if (matchedEffect.backdropSepia !== undefined) paint.filterSepia(buf, x, y, w, h, matchedEffect.backdropSepia)
+        if (matchedEffect.backdropHueRotate !== undefined) paint.filterHueRotate(buf, x, y, w, h, matchedEffect.backdropHueRotate)
 
         // Restore pixels outside the rounded rect (corners)
         if (effRadius > 0 && saved) {
@@ -1771,7 +1832,14 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
         break
       }
 
-      // Paint the actual rect ON TOP of shadow/glow (no backdrop blur path)
+      // Paint the actual rect ON TOP of shadow/glow (no backdrop path)
+      // If opacity < 1, paint into temp buffer and composite with withOpacity.
+      const elemOpacity = matchedEffect?.opacity
+      const useOpacity = elemOpacity !== undefined && elemOpacity < 1
+      const target = useOpacity ? create(w, h) : buf
+      const tx = useOpacity ? 0 : x
+      const ty = useOpacity ? 0 : y
+
       if (matchedEffect?.gradient) {
         // Gradient fill: paint gradient, then mask to rounded rect shape
         const grad = matchedEffect.gradient
@@ -1804,30 +1872,35 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
               gd[i] = Math.round((gd[i] * md[i]) / 255)
             }
           }
-          over(buf, tmp, x, y)
+          over(target, tmp, tx, ty)
         } else {
           // No radius: paint gradient directly
           if (grad.type === "linear") {
-            paint.linearGradient(buf, x, y, w, h,
+            paint.linearGradient(target, tx, ty, w, h,
               (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
               (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff,
               grad.angle)
           } else {
-            const cx = x + Math.round(w / 2)
-            const cy = y + Math.round(h / 2)
+            const cx = tx + Math.round(w / 2)
+            const cy = ty + Math.round(h / 2)
             const gradRadius = Math.round(Math.max(w, h) / 2)
-            paint.radialGradient(buf, cx, cy, gradRadius,
+            paint.radialGradient(target, cx, cy, gradRadius,
               (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
               (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff)
           }
         }
       } else if (matchedEffect?.cornerRadii) {
         const cr = matchedEffect.cornerRadii
-        paint.roundedRectCorners(buf, x, y, w, h, r, g, b, a, cr.tl, cr.tr, cr.br, cr.bl)
+        paint.roundedRectCorners(target, tx, ty, w, h, r, g, b, a, cr.tl, cr.tr, cr.br, cr.bl)
       } else if (radius > 0) {
-        paint.roundedRect(buf, x, y, w, h, r, g, b, a, radius)
+        paint.roundedRect(target, tx, ty, w, h, r, g, b, a, radius)
       } else {
-        paint.fillRect(buf, x, y, w, h, r, g, b, a)
+        paint.fillRect(target, tx, ty, w, h, r, g, b, a)
+      }
+
+      // Composite with opacity if needed
+      if (useOpacity) {
+        withOpacity(buf, target, x, y, elemOpacity!)
       }
       break
     }

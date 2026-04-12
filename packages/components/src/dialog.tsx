@@ -4,9 +4,10 @@
  * Provides the structure and behavior without any styles:
  *   - Portal rendering (above all content)
  *   - Overlay backdrop (clickable to close)
+ *   - Focus trap: Tab/Shift+Tab cycles only within the dialog
+ *   - Escape key to close (via onClose callback)
+ *   - Focus restore: when closed, focus returns to previously focused element
  *   - Composable parts: Dialog, Dialog.Overlay, Dialog.Content, Dialog.Close
- *
- * Focus trap and Escape key should be wired by the consumer or the styled version.
  *
  * For the styled version, use @tge/void Dialog which applies Void design tokens.
  *
@@ -15,7 +16,7 @@
  *   import { Dialog } from "@tge/components"
  *
  *   <Show when={isOpen()}>
- *     <Dialog>
+ *     <Dialog onClose={() => setOpen(false)}>
  *       <Dialog.Overlay backgroundColor="#00000088" />
  *       <Dialog.Content>
  *         <text>Are you sure?</text>
@@ -24,6 +25,8 @@
  *   </Show>
  */
 
+import { onCleanup } from "solid-js"
+import { pushFocusScope, useFocus } from "@tge/renderer"
 import { Portal } from "./portal"
 
 // ── Types ──
@@ -31,6 +34,8 @@ import { Portal } from "./portal"
 export type DialogProps = {
   /** Dialog content. Should contain Dialog.Overlay and/or Dialog.Content. */
   children?: any
+  /** Called when the dialog should close (Escape key or overlay click). */
+  onClose?: () => void
 }
 
 export type DialogOverlayProps = {
@@ -38,6 +43,8 @@ export type DialogOverlayProps = {
   backgroundColor?: string | number
   /** Backdrop blur radius. */
   backdropBlur?: number
+  /** Called when the overlay is clicked. Default: calls Dialog's onClose. */
+  onClick?: () => void
   children?: any
 }
 
@@ -66,8 +73,25 @@ export type DialogCloseProps = {
 /**
  * Dialog root. Renders children inside a Portal (above all content).
  * Wrap with <Show when={open}> to control visibility.
+ *
+ * Automatically creates a focus scope (trap) and handles Escape to close.
  */
 export function Dialog(props: DialogProps) {
+  // Push a focus scope — Tab will only cycle within the dialog
+  const popScope = pushFocusScope()
+
+  // Register a focus entry to capture Escape key
+  useFocus({
+    onKeyDown(e) {
+      if (e.key === "escape") {
+        props.onClose?.()
+      }
+    },
+  })
+
+  // Cleanup: pop the scope when dialog unmounts, restoring previous focus
+  onCleanup(popScope)
+
   return (
     <Portal>
       <box width="100%" height="100%" alignX="center" alignY="center">

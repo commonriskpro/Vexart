@@ -14,7 +14,7 @@ import { SIZING, DIRECTION, ALIGN_X, ALIGN_Y } from "./clay"
 export type TGENodeKind = "box" | "text" | "img" | "root"
 
 /** Interactive style props — usable in hoverStyle, activeStyle, focusStyle */
-export type InteractiveStyleProps = Partial<Pick<TGEProps, "backgroundColor" | "borderColor" | "borderWidth" | "cornerRadius" | "borderRadius" | "shadow" | "boxShadow" | "glow" | "gradient" | "backdropBlur" | "opacity">>
+export type InteractiveStyleProps = Partial<Pick<TGEProps, "backgroundColor" | "borderColor" | "borderWidth" | "cornerRadius" | "borderRadius" | "shadow" | "boxShadow" | "glow" | "gradient" | "backdropBlur" | "backdropBrightness" | "backdropContrast" | "backdropSaturate" | "backdropGrayscale" | "backdropInvert" | "backdropSepia" | "backdropHueRotate" | "opacity">>
 
 export type TGEProps = {
   // Layout
@@ -116,6 +116,20 @@ export type TGEProps = {
     to: number         // Edge color (packed RGBA u32)
   }
   backdropBlur?: number  // Blur radius for content behind this element (glassmorphism)
+  /** Backdrop brightness filter. 0=black, 100=unchanged, 200=2x bright. */
+  backdropBrightness?: number
+  /** Backdrop contrast filter. 0=grey, 100=unchanged, 200=high contrast. */
+  backdropContrast?: number
+  /** Backdrop saturation filter. 0=grayscale, 100=unchanged, 200=hyper-saturated. */
+  backdropSaturate?: number
+  /** Backdrop grayscale filter. 0=unchanged, 100=full grayscale. */
+  backdropGrayscale?: number
+  /** Backdrop invert filter. 0=unchanged, 100=fully inverted. */
+  backdropInvert?: number
+  /** Backdrop sepia filter. 0=unchanged, 100=full sepia. */
+  backdropSepia?: number
+  /** Backdrop hue-rotate filter. 0-360 degrees, 0/360=unchanged. */
+  backdropHueRotate?: number
 
   // Interactive states — merged over base props when active
   hoverStyle?: InteractiveStyleProps
@@ -124,6 +138,10 @@ export type TGEProps = {
   focusStyle?: InteractiveStyleProps
   /** Unified press handler — fires on mouse click + Enter/Space when focused (Decision 6) */
   onPress?: () => void
+  /** Make this element focusable via Tab navigation. Like HTML tabindex="0". */
+  focusable?: boolean
+  /** Keyboard event handler — fires when this element is focused and a key is pressed. */
+  onKeyDown?: (event: any) => void
 
   // Convenience
   /** CSS-style prop — merged with direct props (direct props win). Decision 3. */

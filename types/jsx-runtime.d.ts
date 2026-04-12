@@ -83,6 +83,14 @@ interface BoxProps {
   glow?: { radius: number; color: string | number; intensity?: number }
   gradient?: { type: "linear"; from: number; to: number; angle?: number } | { type: "radial"; from: number; to: number }
   backdropBlur?: number
+  backdropBrightness?: number
+  backdropContrast?: number
+  backdropSaturate?: number
+  backdropGrayscale?: number
+  backdropInvert?: number
+  backdropSepia?: number
+  backdropHueRotate?: number
+  opacity?: number
   cornerRadii?: { tl: number; tr: number; br: number; bl: number }
   // Interactive states — merged over base visual props when active
   hoverStyle?: {
@@ -94,6 +102,7 @@ interface BoxProps {
     glow?: { radius: number; color: string | number; intensity?: number }
     gradient?: { type: "linear"; from: number; to: number; angle?: number } | { type: "radial"; from: number; to: number }
     backdropBlur?: number
+    opacity?: number
   }
   activeStyle?: {
     backgroundColor?: ColorValue
@@ -104,7 +113,23 @@ interface BoxProps {
     glow?: { radius: number; color: string | number; intensity?: number }
     gradient?: { type: "linear"; from: number; to: number; angle?: number } | { type: "radial"; from: number; to: number }
     backdropBlur?: number
+    opacity?: number
   }
+  focusStyle?: {
+    backgroundColor?: ColorValue
+    borderColor?: ColorValue
+    borderWidth?: number
+    cornerRadius?: number
+    shadow?: ShadowProp
+    glow?: { radius: number; color: string | number; intensity?: number }
+    gradient?: { type: "linear"; from: number; to: number; angle?: number } | { type: "radial"; from: number; to: number }
+    backdropBlur?: number
+    opacity?: number
+  }
+  // Interaction
+  focusable?: boolean
+  onPress?: () => void
+  onKeyDown?: (event: any) => void
   // Mouse events
   onMouseDown?: (evt: any) => void
   onMouseUp?: (evt: any) => void

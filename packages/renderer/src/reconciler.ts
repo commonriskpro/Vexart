@@ -22,6 +22,7 @@ import {
 } from "./node"
 import { markDirty } from "./dirty"
 import { createHandle } from "./handle"
+import { registerNodeFocusable, unregisterNodeFocusable, updateNodeFocusEntry } from "./focus"
 
 // ── Color props that need pre-parsing ──
 // These are resolved from string → u32 ONCE in setProperty,
@@ -172,6 +173,26 @@ export const {
       return
     }
 
+    // focusable prop — auto-register/unregister in focus system
+    if (name === "focusable") {
+      (node.props as Record<string, unknown>)[name] = value
+      if (value) {
+        registerNodeFocusable(node)
+      } else {
+        unregisterNodeFocusable(node)
+      }
+      markDirty()
+      return
+    }
+
+    // onKeyDown / onPress on a focusable node — update the focus entry
+    if (name === "onKeyDown" || name === "onPress") {
+      (node.props as Record<string, unknown>)[name] = value
+      updateNodeFocusEntry(node)
+      markDirty()
+      return
+    }
+
     (node.props as Record<string, unknown>)[name] = value
     markDirty()
   },
@@ -186,6 +207,10 @@ export const {
   },
 
   removeNode(parent: TGENode, node: TGENode) {
+    // Clean up focus registration if node was focusable
+    if (node.props.focusable) {
+      unregisterNodeFocusable(node)
+    }
     removeChild(parent, node)
     markDirty()
   },

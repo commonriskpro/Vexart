@@ -99,36 +99,48 @@ fn mkbuf(data: [*]u8, width: u32, height: u32) PixelBuffer {
     return .{ .data = data, .width = width, .height = height, .stride = width * 4 };
 }
 
-// Rect
+// ── Helper: read little-endian values from packed param buffer ──
+inline fn rd_i32(p: [*]const u8, off: usize) i32 {
+    return @bitCast([4]u8{ p[off], p[off + 1], p[off + 2], p[off + 3] });
+}
+inline fn rd_u32(p: [*]const u8, off: usize) u32 {
+    return @bitCast([4]u8{ p[off], p[off + 1], p[off + 2], p[off + 3] });
+}
+
+// Rect — fill_rect stays at 8 params (no migration needed)
 export fn tge_fill_rect(data: [*]u8, width: u32, height: u32, x: i32, y: i32, w: u32, h: u32, color: u32) void {
     var buf = mkbuf(data, width, height);
     const c = unpack(color);
     rect.fill(&buf, x, y, w, h, c.r, c.g, c.b, c.a);
 }
 
-export fn tge_rounded_rect(data: [*]u8, width: u32, height: u32, x: i32, y: i32, w: u32, h: u32, color: u32, radius: u32) void {
+// params_ptr layout (20 bytes): [x:i32][y:i32][w:u32][h:u32][radius:u32]
+export fn tge_rounded_rect(data: [*]u8, width: u32, height: u32, color: u32, p: [*]const u8) void {
     var buf = mkbuf(data, width, height);
     const c = unpack(color);
-    rect.rounded(&buf, x, y, w, h, c.r, c.g, c.b, c.a, radius);
+    rect.rounded(&buf, rd_i32(p, 0), rd_i32(p, 4), rd_u32(p, 8), rd_u32(p, 12), c.r, c.g, c.b, c.a, rd_u32(p, 16));
 }
 
-export fn tge_stroke_rect(data: [*]u8, width: u32, height: u32, x: i32, y: i32, w: u32, h: u32, color: u32, radius: u32, sw: u32) void {
+// params_ptr layout (24 bytes): [x:i32][y:i32][w:u32][h:u32][radius:u32][strokeWidth:u32]
+export fn tge_stroke_rect(data: [*]u8, width: u32, height: u32, color: u32, p: [*]const u8) void {
     var buf = mkbuf(data, width, height);
     const c = unpack(color);
-    rect.stroke(&buf, x, y, w, h, c.r, c.g, c.b, c.a, radius, sw);
+    rect.stroke(&buf, rd_i32(p, 0), rd_i32(p, 4), rd_u32(p, 8), rd_u32(p, 12), c.r, c.g, c.b, c.a, rd_u32(p, 16), rd_u32(p, 20));
 }
 
 // Per-corner radius rect
-export fn tge_rounded_rect_corners(data: [*]u8, width: u32, height: u32, x: i32, y: i32, w: u32, h: u32, color: u32, radii: u32) void {
+// params_ptr layout (20 bytes): [x:i32][y:i32][w:u32][h:u32][radii:u32]
+export fn tge_rounded_rect_corners(data: [*]u8, width: u32, height: u32, color: u32, p: [*]const u8) void {
     var buf = mkbuf(data, width, height);
     const c = unpack(color);
-    rect.rounded_corners(&buf, x, y, w, h, c.r, c.g, c.b, c.a, radii);
+    rect.rounded_corners(&buf, rd_i32(p, 0), rd_i32(p, 4), rd_u32(p, 8), rd_u32(p, 12), c.r, c.g, c.b, c.a, rd_u32(p, 16));
 }
 
-export fn tge_stroke_rect_corners(data: [*]u8, width: u32, height: u32, x: i32, y: i32, w: u32, h: u32, color: u32, radii: u32, sw: u32) void {
+// params_ptr layout (24 bytes): [x:i32][y:i32][w:u32][h:u32][radii:u32][strokeWidth:u32]
+export fn tge_stroke_rect_corners(data: [*]u8, width: u32, height: u32, color: u32, p: [*]const u8) void {
     var buf = mkbuf(data, width, height);
     const c = unpack(color);
-    rect.stroke_corners(&buf, x, y, w, h, c.r, c.g, c.b, c.a, radii, sw);
+    rect.stroke_corners(&buf, rd_i32(p, 0), rd_i32(p, 4), rd_u32(p, 8), rd_u32(p, 12), c.r, c.g, c.b, c.a, rd_u32(p, 16), rd_u32(p, 20));
 }
 
 // Circle
@@ -138,29 +150,33 @@ export fn tge_filled_circle(data: [*]u8, width: u32, height: u32, cx: i32, cy: i
     circle.filled(&buf, cx, cy, rx, ry, c.r, c.g, c.b, c.a);
 }
 
-export fn tge_stroked_circle(data: [*]u8, width: u32, height: u32, cx: i32, cy: i32, rx: u32, ry: u32, color: u32, sw: u32) void {
+// params_ptr layout (20 bytes): [cx:i32][cy:i32][rx:u32][ry:u32][strokeWidth:u32]
+export fn tge_stroked_circle(data: [*]u8, width: u32, height: u32, color: u32, p: [*]const u8) void {
     var buf = mkbuf(data, width, height);
     const c = unpack(color);
-    circle.stroked(&buf, cx, cy, rx, ry, c.r, c.g, c.b, c.a, sw);
+    circle.stroked(&buf, rd_i32(p, 0), rd_i32(p, 4), rd_u32(p, 8), rd_u32(p, 12), c.r, c.g, c.b, c.a, rd_u32(p, 16));
 }
 
 // Line
-export fn tge_line(data: [*]u8, width: u32, height: u32, x0: i32, y0: i32, x1: i32, y1: i32, color: u32, lw: u32) void {
+// params_ptr layout (20 bytes): [x0:i32][y0:i32][x1:i32][y1:i32][lineWidth:u32]
+export fn tge_line(data: [*]u8, width: u32, height: u32, color: u32, p: [*]const u8) void {
     var buf = mkbuf(data, width, height);
     const c = unpack(color);
-    line_mod.line(&buf, x0, y0, x1, y1, c.r, c.g, c.b, c.a, lw);
+    line_mod.line(&buf, rd_i32(p, 0), rd_i32(p, 4), rd_i32(p, 8), rd_i32(p, 12), c.r, c.g, c.b, c.a, rd_u32(p, 16));
 }
 
-export fn tge_bezier(data: [*]u8, width: u32, height: u32, x0: i32, y0: i32, cx: i32, cy: i32, x1: i32, y1: i32, color: u32, lw: u32) void {
+// params_ptr layout (28 bytes): [x0:i32][y0:i32][cx:i32][cy:i32][x1:i32][y1:i32][lineWidth:u32]
+export fn tge_bezier(data: [*]u8, width: u32, height: u32, color: u32, p: [*]const u8) void {
     var buf = mkbuf(data, width, height);
     const c = unpack(color);
-    line_mod.bezier(&buf, x0, y0, cx, cy, x1, y1, c.r, c.g, c.b, c.a, lw);
+    line_mod.bezier(&buf, rd_i32(p, 0), rd_i32(p, 4), rd_i32(p, 8), rd_i32(p, 12), rd_i32(p, 16), rd_i32(p, 20), c.r, c.g, c.b, c.a, rd_u32(p, 24));
 }
 
 // Shadow
-export fn tge_blur(data: [*]u8, width: u32, height: u32, x: u32, y: u32, w: u32, h: u32, radius: u32, passes: u32) void {
+// params_ptr layout (24 bytes): [x:u32][y:u32][w:u32][h:u32][radius:u32][passes:u32]
+export fn tge_blur(data: [*]u8, width: u32, height: u32, p: [*]const u8) void {
     var buf = mkbuf(data, width, height);
-    shadow.blur(&buf, x, y, w, h, radius, passes);
+    shadow.blur(&buf, rd_u32(p, 0), rd_u32(p, 4), rd_u32(p, 8), rd_u32(p, 12), rd_u32(p, 16), rd_u32(p, 20));
 }
 
 // Inset shadow (SDF-based, no blur pass needed)
@@ -185,18 +201,20 @@ export fn tge_inset_shadow(data: [*]u8, width: u32, height: u32, color: u32, par
 }
 
 // Halo
-export fn tge_halo(data: [*]u8, width: u32, height: u32, cx: i32, cy: i32, rx: u32, ry: u32, color: u32, intensity_pct: u32) void {
+// params_ptr layout (20 bytes): [cx:i32][cy:i32][rx:u32][ry:u32][intensity_pct:u32]
+export fn tge_halo(data: [*]u8, width: u32, height: u32, color: u32, p: [*]const u8) void {
     var buf = mkbuf(data, width, height);
     const c = unpack(color);
-    halo_mod.halo(&buf, cx, cy, rx, ry, c.r, c.g, c.b, c.a, intensity_pct);
+    halo_mod.halo(&buf, rd_i32(p, 0), rd_i32(p, 4), rd_u32(p, 8), rd_u32(p, 12), c.r, c.g, c.b, c.a, rd_u32(p, 16));
 }
 
 // Gradient — two colors packed
-export fn tge_linear_gradient(data: [*]u8, width: u32, height: u32, x: u32, y: u32, w: u32, h: u32, color0: u32, color1: u32, angle_deg: u32) void {
+// params_ptr layout (24 bytes): [x:u32][y:u32][w:u32][h:u32][color1:u32][angle_deg:u32]
+export fn tge_linear_gradient(data: [*]u8, width: u32, height: u32, color0: u32, p: [*]const u8) void {
     var buf = mkbuf(data, width, height);
     const c0 = unpack(color0);
-    const c1 = unpack(color1);
-    gradient.linear(&buf, x, y, w, h, c0.r, c0.g, c0.b, c0.a, c1.r, c1.g, c1.b, c1.a, angle_deg);
+    const c1 = unpack(rd_u32(p, 16));
+    gradient.linear(&buf, rd_u32(p, 0), rd_u32(p, 4), rd_u32(p, 8), rd_u32(p, 12), c0.r, c0.g, c0.b, c0.a, c1.r, c1.g, c1.b, c1.a, rd_u32(p, 20));
 }
 
 export fn tge_radial_gradient(data: [*]u8, width: u32, height: u32, cx: u32, cy: u32, radius: u32, color0: u32, color1: u32) void {
@@ -206,10 +224,11 @@ export fn tge_radial_gradient(data: [*]u8, width: u32, height: u32, cx: u32, cy:
     gradient.radial(&buf, cx, cy, radius, c0.r, c0.g, c0.b, c0.a, c1.r, c1.g, c1.b, c1.a);
 }
 
-// Multi-stop gradients — stops passed as packed buffer via pointer (≤8 params)
-export fn tge_linear_gradient_multi(data: [*]u8, width: u32, height: u32, x: u32, y: u32, w: u32, h: u32, stops_ptr: [*]const u8, stop_count: u32, angle_deg: u32) void {
+// Multi-stop gradients — stops + spatial params packed
+// params_ptr layout (20 bytes): [x:u32][y:u32][w:u32][h:u32][angle_deg:u32]
+export fn tge_linear_gradient_multi(data: [*]u8, width: u32, height: u32, stops_ptr: [*]const u8, stop_count: u32, p: [*]const u8) void {
     var buf = mkbuf(data, width, height);
-    gradient.linear_multi(&buf, x, y, w, h, stops_ptr, stop_count, angle_deg);
+    gradient.linear_multi(&buf, rd_u32(p, 0), rd_u32(p, 4), rd_u32(p, 8), rd_u32(p, 12), stops_ptr, stop_count, rd_u32(p, 16));
 }
 
 export fn tge_radial_gradient_multi(data: [*]u8, width: u32, height: u32, cx: u32, cy: u32, radius: u32, stops_ptr: [*]const u8, stop_count: u32) void {
@@ -217,9 +236,10 @@ export fn tge_radial_gradient_multi(data: [*]u8, width: u32, height: u32, cx: u3
     gradient.radial_multi(&buf, cx, cy, radius, stops_ptr, stop_count);
 }
 
-export fn tge_conic_gradient(data: [*]u8, width: u32, height: u32, cx: u32, cy: u32, w: u32, h: u32, stops_ptr: [*]const u8, stop_count: u32, start_angle: u32) void {
+// params_ptr layout (20 bytes): [cx:u32][cy:u32][w:u32][h:u32][start_angle:u32]
+export fn tge_conic_gradient(data: [*]u8, width: u32, height: u32, stops_ptr: [*]const u8, stop_count: u32, p: [*]const u8) void {
     var buf = mkbuf(data, width, height);
-    gradient.conic(&buf, cx, cy, w, h, stops_ptr, stop_count, start_angle);
+    gradient.conic(&buf, rd_u32(p, 0), rd_u32(p, 4), rd_u32(p, 8), rd_u32(p, 12), stops_ptr, stop_count, rd_u32(p, 16));
 }
 
 // Gradient border — stroke with gradient colors (packed params to stay ≤8)
@@ -281,7 +301,11 @@ export fn tge_load_font_atlas(font_id: u32, atlas_data: [*]const u8, data_len: u
 
 /// Draw text with a specific runtime font atlas.
 /// font_id 0 = built-in SF Mono. 1+ = runtime loaded.
-export fn tge_draw_text_font(data: [*]u8, width: u32, height: u32, x: i32, y: i32, text_ptr: [*]const u8, text_len: u32, color: u32, font_id: u32) void {
+/// params_ptr layout (12 bytes): [x:i32][y:i32][font_id:u32]
+export fn tge_draw_text_font(data: [*]u8, width: u32, height: u32, text_ptr: [*]const u8, text_len: u32, color: u32, p: [*]const u8) void {
+    const x = rd_i32(p, 0);
+    const y = rd_i32(p, 4);
+    const font_id = rd_u32(p, 8);
     var buf = mkbuf(data, width, height);
     const c = unpack(color);
 

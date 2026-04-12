@@ -53,7 +53,7 @@ export type VoidDialogFooterProps = {
 
 export function VoidDialog(props: VoidDialogProps) {
   return (
-    <Dialog>
+    <Dialog onClose={props.onClose}>
       <Dialog.Overlay
         backgroundColor="#000000aa"
         backdropBlur={8}

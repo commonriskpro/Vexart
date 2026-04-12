@@ -79,7 +79,7 @@ export { useKeyboard, useMouse, useInput, onInput } from "./input"
 export type { KeyboardState, MouseState } from "./input"
 
 // Re-export focus system
-export { useFocus, setFocus, focusedId, setFocusedId } from "./focus"
+export { useFocus, setFocus, focusedId, setFocusedId, pushFocusScope } from "./focus"
 export type { FocusHandle } from "./focus"
 
 // Re-export dirty flag for advanced use
