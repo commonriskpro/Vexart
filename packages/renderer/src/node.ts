@@ -216,8 +216,8 @@ export function createNode(kind: TGENodeKind): TGENode {
     _focused: false,
     _imageBuffer: null,
     _imageState: "idle",
-    _widthSizing: { type: SIZING.FIT, value: 0 },
-    _heightSizing: { type: SIZING.FIT, value: 0 },
+    _widthSizing: null,
+    _heightSizing: null,
   }
 }
 
@@ -303,8 +303,8 @@ export function parseColor(value: string | number | undefined): number {
 
 export type SizingInfo = { type: number; value: number }
 
-export function parseSizing(value: number | string | undefined): SizingInfo {
-  if (value === undefined) return { type: SIZING.FIT, value: 0 }
+export function parseSizing(value: number | string | undefined): SizingInfo | null {
+  if (value === undefined) return null
   if (typeof value === "number") return { type: SIZING.FIXED, value }
   if (value === "fit") return { type: SIZING.FIT, value: 0 }
   if (value === "grow") return { type: SIZING.GROW, value: 0 }

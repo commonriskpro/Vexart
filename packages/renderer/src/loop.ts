@@ -26,6 +26,7 @@ import { clay, CMD, ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, SIZING, DIRECTION 
 import type { RenderCommand } from "./clay"
 import {
   type TGENode,
+  type SizingInfo,
   createNode,
   parseSizing,
   parseDirection,
@@ -194,6 +195,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   const ph = term.size.pixelHeight || term.size.rows * (term.size.cellHeight || 16)
 
   root.props = { width: pw, height: ph }
+  root._widthSizing = parseSizing(pw)
+  root._heightSizing = parseSizing(ph)
   clay.init(pw, ph)
 
   // Detect backend: use layer compositor for kitty direct, old compositor for others
@@ -385,22 +388,23 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       clay.configureLayout(dir, px, py, gap, ax, ay)
     }
 
-    // Sizing — use pre-parsed values, fallback to parseSizing for flexGrow alias
+    // Sizing — use pre-parsed values, fallback to FIT.
     // CSS align-items:stretch emulation — if parent is column and child has no
     // explicit width, auto-stretch to fill parent width (and vice versa for row).
+    // null _widthSizing/_heightSizing = user never set it → candidate for stretch.
     const hasFlexGrowAlias = node.props.flexGrow !== undefined && node.props.width === undefined
-    const noExplicitWidth = node.props.width === undefined && !node._widthSizing && !hasFlexGrowAlias
-    const noExplicitHeight = node.props.height === undefined && !node._heightSizing
-    const stretchW = noExplicitWidth && parentDir === DIRECTION.TOP_TO_BOTTOM
-    const stretchH = noExplicitHeight && parentDir === DIRECTION.LEFT_TO_RIGHT
+    const stretchW = !node._widthSizing && !hasFlexGrowAlias && parentDir === DIRECTION.TOP_TO_BOTTOM
+    const stretchH = !node._heightSizing && parentDir === DIRECTION.LEFT_TO_RIGHT
+    const FIT_DEFAULT: SizingInfo = { type: SIZING.FIT, value: 0 }
+    const GROW_DEFAULT: SizingInfo = { type: SIZING.GROW, value: 0 }
     const ws = hasFlexGrowAlias
-      ? { type: SIZING.GROW, value: 0 }
+      ? GROW_DEFAULT
       : stretchW
-        ? { type: SIZING.GROW, value: 0 }
-        : (node._widthSizing ?? parseSizing(node.props.width))
+        ? GROW_DEFAULT
+        : (node._widthSizing ?? FIT_DEFAULT)
     const hs = stretchH
-      ? { type: SIZING.GROW, value: 0 }
-      : (node._heightSizing ?? parseSizing(node.props.height))
+      ? GROW_DEFAULT
+      : (node._heightSizing ?? FIT_DEFAULT)
     const hasMinMax = node.props.minWidth !== undefined || node.props.maxWidth !== undefined ||
                       node.props.minHeight !== undefined || node.props.maxHeight !== undefined
     if (hasMinMax) {
@@ -1300,6 +1304,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     clay.setDimensions(newW, newH)
     root.props.width = newW
     root.props.height = newH
+    root._widthSizing = parseSizing(newW)
+    root._heightSizing = parseSizing(newH)
 
     if (useLayerCompositing) {
       layerComposer!.clear()

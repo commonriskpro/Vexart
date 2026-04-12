@@ -147,35 +147,37 @@ describe("parseColor", () => {
 })
 
 describe("parseSizing", () => {
-  test("undefined returns FIT", () => {
-    const s = parseSizing(undefined)
-    expect(s.type).toBe(SIZING.FIT)
+  test("undefined returns null (no explicit sizing)", () => {
+    expect(parseSizing(undefined)).toBeNull()
   })
 
   test("number returns FIXED", () => {
     const s = parseSizing(200)
-    expect(s.type).toBe(SIZING.FIXED)
-    expect(s.value).toBe(200)
+    expect(s).not.toBeNull()
+    expect(s!.type).toBe(SIZING.FIXED)
+    expect(s!.value).toBe(200)
   })
 
   test("'fit' returns FIT", () => {
-    expect(parseSizing("fit").type).toBe(SIZING.FIT)
+    expect(parseSizing("fit")!.type).toBe(SIZING.FIT)
   })
 
   test("'grow' returns GROW", () => {
-    expect(parseSizing("grow").type).toBe(SIZING.GROW)
+    expect(parseSizing("grow")!.type).toBe(SIZING.GROW)
   })
 
   test("percentage returns PERCENT with decimal", () => {
     const s = parseSizing("50%")
-    expect(s.type).toBe(SIZING.PERCENT)
-    expect(s.value).toBeCloseTo(0.5)
+    expect(s).not.toBeNull()
+    expect(s!.type).toBe(SIZING.PERCENT)
+    expect(s!.value).toBeCloseTo(0.5)
   })
 
   test("100% returns 1.0", () => {
     const s = parseSizing("100%")
-    expect(s.type).toBe(SIZING.PERCENT)
-    expect(s.value).toBeCloseTo(1.0)
+    expect(s).not.toBeNull()
+    expect(s!.type).toBe(SIZING.PERCENT)
+    expect(s!.value).toBeCloseTo(1.0)
   })
 })
 

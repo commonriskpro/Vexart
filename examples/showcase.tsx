@@ -961,12 +961,12 @@ function TabVoidTheme() {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const TABS = [
-  { label: "1 Visual",     key: "visual" },
-  { label: "2 Backdrop",   key: "backdrop" },
-  { label: "3 Interactive", key: "interactive" },
-  { label: "4 Forms",      key: "forms" },
-  { label: "5 Data",       key: "data" },
-  { label: "6 Void",       key: "void" },
+  { num: "1", name: "Visual",       key: "visual" },
+  { num: "2", name: "Backdrop",     key: "backdrop" },
+  { num: "3", name: "Interactive",  key: "interactive" },
+  { num: "4", name: "Forms",        key: "forms" },
+  { num: "5", name: "Data",         key: "data" },
+  { num: "6", name: "Void",         key: "void" },
 ]
 
 function App(props: { terminal: any }) {
@@ -988,7 +988,7 @@ function App(props: { terminal: any }) {
   return (
     <box width={dims.width()} height={dims.height()} direction="column" backgroundColor={colors.background}>
       {/* Header bar */}
-      <box width={dims.width()} direction="row" padding={space[3]} paddingX={space[4]} gap={space[4]} alignY="center" backgroundColor={colors.card}>
+      <box direction="row" padding={space[3]} paddingX={space[4]} gap={space[4]} alignY="center" backgroundColor={colors.card}>
         <text color={colors.foreground} fontSize={font.lg} fontWeight={weight.bold}>TGE Showcase</text>
         <box width="grow" />
         <text color={colors.mutedForeground} fontSize={font.xs}>
@@ -997,30 +997,38 @@ function App(props: { terminal: any }) {
       </box>
 
       {/* Tab bar */}
-      <box width={dims.width()} direction="row" backgroundColor={colors.card}>
+      <box direction="row" backgroundColor={colors.card} borderBottom={1} borderColor={colors.border}>
         <For each={TABS}>
           {(tab, i) => (
             <box
+              direction="row" gap={4}
               paddingX={space[4]} paddingY={space[2]}
               backgroundColor={activeTab() === i() ? colors.background : "transparent"}
               borderBottom={activeTab() === i() ? 2 : 0}
               borderColor={activeTab() === i() ? "#4488cc" : "transparent"}
+              height="fit"
             >
               <text
                 color={activeTab() === i() ? "#4488cc" : colors.mutedForeground}
                 fontSize={font.sm}
                 fontWeight={activeTab() === i() ? weight.semibold : weight.normal}
               >
-                {tab.label}
+                {tab.num}
+              </text>
+              <text
+                color={activeTab() === i() ? "#4488cc" : colors.mutedForeground}
+                fontSize={font.sm}
+                fontWeight={activeTab() === i() ? weight.semibold : weight.normal}
+              >
+                {tab.name}
               </text>
             </box>
           )}
         </For>
-        <box width="grow" borderBottom={1} borderColor={colors.border} />
       </box>
 
       {/* Tab content — takes remaining height, scrollable */}
-      <box width={dims.width()} height="grow" direction="column" scrollY>
+      <box height="grow" direction="column" scrollY>
         {activeTab() === 0 ? <TabVisualEffects /> : null}
         {activeTab() === 1 ? <TabBackdropFilters /> : null}
         {activeTab() === 2 ? <TabInteractive /> : null}
