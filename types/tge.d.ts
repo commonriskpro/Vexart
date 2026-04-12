@@ -207,6 +207,8 @@ export interface ScrollHandle {
   scrollTo(y: number): void
   scrollBy(dy: number): void
   scrollIntoView(elementId: string): void
+  /** Get child node handles (opentui compat). Returns empty array — TGE children are in JSX tree. */
+  getChildren(): NodeHandle[]
 }
 
 export function createScrollHandle(clayId: string): ScrollHandle
@@ -236,9 +238,15 @@ export interface TgePluginApi {
   terminal: Terminal
 }
 
-export interface TgePlugin {
+export interface TgePlugin<Slots = any, Context = any> {
   name: string
-  setup: (api: TgePluginApi) => void
+  setup: (api: TgePluginApi & Context) => void
+  slots?: Partial<Slots>
+}
+
+export declare const SlotMode: {
+  readonly SINGLE_WINNER: "single_winner"
+  readonly ALL: "all"
 }
 
 export interface SlotComponent {
@@ -246,13 +254,13 @@ export interface SlotComponent {
   priority?: number
 }
 
-export interface SlotRegistry {
-  register: (slotName: string, component: SlotComponent) => void
-  get: (slotName: string) => SlotComponent[]
+export interface SlotRegistry<Slots = any> {
+  register: (slotName: keyof Slots | string, component: SlotComponent) => void
+  get: (slotName: keyof Slots | string) => SlotComponent[]
 }
 
-export function createSlotRegistry(): SlotRegistry
-export function createSlot(name: string): { Slot: () => any }
+export function createSlotRegistry<Slots = any, Context = any>(): SlotRegistry<Slots>
+export function createSlot(name: string, mode?: string): { Slot: (props?: any) => any }
 
 // ── Extmarks ──
 
@@ -291,19 +299,25 @@ export class ExtmarkManager {
 
 export interface ThemeTokenStyle {
   color?: string
+  foreground?: ColorValue
   bold?: boolean
   italic?: boolean
 }
 
-export interface StyleDefinition {
-  [capture: string]: ThemeTokenStyle
+export type StyleDefinitionEntry = ThemeTokenStyle | {
+  scope: string | string[]
+  style: { foreground?: ColorValue; bold?: boolean; italic?: boolean }
 }
+
+export type StyleDefinition = {
+  [capture: string]: ThemeTokenStyle
+} | StyleDefinitionEntry[]
 
 export declare const ONE_DARK: StyleDefinition
 export declare const KANAGAWA: StyleDefinition
 
 export class SyntaxStyle {
-  static fromTheme(theme: StyleDefinition): SyntaxStyle
+  static fromTheme(theme: StyleDefinition | StyleDefinitionEntry[]): SyntaxStyle
   getDefaultColor(): number
   getStyleId(name: string): number
 }
@@ -322,7 +336,12 @@ export interface SimpleHighlight {
 export interface FiletypeParserConfig {
   language: string
   wasmPath: string
-  queriesPath: string
+  queriesPath?: string
+  queries?: {
+    highlights?: string
+    locals?: string | string[]
+    injections?: string
+  }
 }
 
 export class TreeSitterClient {

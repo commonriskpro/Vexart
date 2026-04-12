@@ -13,9 +13,10 @@ type ColorValue = string | number | RGBA
 
 interface BoxProps {
   ref?: (handle: any) => void
+  // Identity
+  id?: string
   // Layout
   direction?: "row" | "column"
-  /** Alias for direction (opentui compat) */
   flexDirection?: "row" | "column"
   padding?: number
   paddingX?: number
@@ -27,9 +28,7 @@ interface BoxProps {
   gap?: number
   alignX?: "left" | "right" | "center" | "space-between"
   alignY?: "top" | "bottom" | "center" | "space-between"
-  /** Alias for alignX (opentui compat) */
   justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end"
-  /** Alias for alignY (opentui compat) */
   alignItems?: "top" | "bottom" | "center" | "space-between" | "flex-start" | "flex-end"
   // Sizing
   width?: number | string
@@ -38,10 +37,13 @@ interface BoxProps {
   maxWidth?: number
   minHeight?: number
   maxHeight?: number
-  /** Alias for width="grow" behavior (opentui compat). Accepts any value — presence enables grow. */
   flexGrow?: number
-  /** Alias for shrink behavior (opentui compat). Accepts any value. */
   flexShrink?: number
+  // Margins (opentui compat — implemented as wrapper padding in migration)
+  marginTop?: number
+  marginBottom?: number
+  marginLeft?: number
+  marginRight?: number
   // Visual
   backgroundColor?: ColorValue
   cornerRadius?: number
@@ -52,22 +54,41 @@ interface BoxProps {
   borderTop?: number
   borderBottom?: number
   borderBetweenChildren?: number
+  border?: string[]
+  customBorderChars?: Record<string, string>
   // Compositing
   layer?: boolean
+  visible?: boolean
   // Scroll
   scrollX?: boolean
   scrollY?: boolean
   scrollSpeed?: number
   scrollId?: string
-  // Floating
+  // Floating / absolute positioning
   floating?: "parent" | "root" | { attachTo: string }
   floatOffset?: { x: number; y: number }
+  position?: "absolute" | "relative"
   zIndex?: number
+  top?: number
+  left?: number
+  right?: number
+  bottom?: number
   floatAttach?: { element?: number; parent?: number }
   pointerPassthrough?: boolean
   // Effects
   shadow?: { x: number; y: number; blur: number; color: number }
   glow?: { radius: number; color: number; intensity?: number }
+  // Mouse events
+  onMouseDown?: (evt: any) => void
+  onMouseUp?: (evt: any) => void
+  onMouseOver?: () => void
+  onMouseOut?: () => void
+  onMouseMove?: () => void
+  // Misc opentui compat
+  title?: string
+  titleAlignment?: string
+  flexWrap?: string
+  renderBefore?: () => void
   // Content
   children?: Children
 }
@@ -75,18 +96,35 @@ interface BoxProps {
 interface TextProps {
   ref?: (handle: any) => void
   color?: ColorValue
-  /** Alias for color (opentui compat) */
   fg?: ColorValue
-  /** Background color */
   bg?: ColorValue
+  backgroundColor?: ColorValue
   fontSize?: number
   fontId?: number
   lineHeight?: number
   wordBreak?: "normal" | "keep-all"
   whiteSpace?: "normal" | "pre-wrap"
+  wrapMode?: "word" | "char" | "none"
   fontFamily?: string
   fontWeight?: number
   fontStyle?: "normal" | "italic"
+  // Layout props on text (opentui compat)
+  flexShrink?: number
+  flexGrow?: number
+  paddingLeft?: number
+  paddingRight?: number
+  paddingTop?: number
+  paddingBottom?: number
+  marginTop?: number
+  marginBottom?: number
+  marginLeft?: number
+  marginRight?: number
+  width?: number | string
+  // Mouse events
+  onMouseDown?: (evt: any) => void
+  onMouseUp?: (evt: any) => void
+  // Attributes (opentui compat — accepted but visual effect depends on font)
+  attributes?: number
   children?: Children
 }
 
@@ -99,15 +137,23 @@ interface TextareaProps {
   focusedTextColor?: ColorValue
   cursorColor?: ColorValue
   focusedBackgroundColor?: ColorValue
+  focused?: boolean
+  disabled?: boolean
+  focusId?: string
+  width?: number
+  height?: number
   minHeight?: number
   maxHeight?: number
+  color?: ColorValue
   syntaxStyle?: SyntaxStyle
+  language?: string
   keyBindings?: any[]
   onContentChange?: (value: string) => void
   onChange?: (value: string) => void
   onKeyDown?: (event: KeyEvent) => void
   onSubmit?: (value: string) => void
   onPaste?: (text: string) => void
+  onCursorChange?: (row: number, col: number) => void
   onMouseDown?: (event: any) => void
   children?: Children
 }
@@ -128,9 +174,24 @@ interface InputProps {
 interface ScrollboxProps {
   ref?: (handle: ScrollHandle) => void
   flexGrow?: number
+  flexShrink?: number
   maxHeight?: number
+  minHeight?: number
   height?: number | string
   width?: number | string
+  padding?: number
+  paddingX?: number
+  paddingY?: number
+  paddingLeft?: number
+  paddingRight?: number
+  paddingTop?: number
+  paddingBottom?: number
+  gap?: number
+  direction?: "row" | "column"
+  backgroundColor?: ColorValue
+  cornerRadius?: number
+  borderColor?: ColorValue
+  borderWidth?: number
   stickyScroll?: boolean
   stickyStart?: boolean
   scrollY?: boolean
@@ -170,6 +231,7 @@ interface MarkdownProps {
   fg?: ColorValue
   bg?: ColorValue
   color?: ColorValue
+  backgroundColor?: ColorValue
   width?: number | string
   children?: Children
 }
@@ -181,6 +243,7 @@ interface DiffProps {
   syntaxStyle?: SyntaxStyle
   showLineNumbers?: boolean
   width?: number | string
+  height?: number | string
   wrapMode?: string
   fg?: ColorValue
   addedBg?: ColorValue
@@ -190,8 +253,10 @@ interface DiffProps {
   removedSignColor?: ColorValue
   lineNumberFg?: ColorValue
   lineNumberBg?: ColorValue
+  lineNumberColor?: ColorValue
   addedLineNumberBg?: ColorValue
   removedLineNumberBg?: ColorValue
+  hunkHeaderColor?: ColorValue
   streaming?: boolean
   children?: Children
 }
