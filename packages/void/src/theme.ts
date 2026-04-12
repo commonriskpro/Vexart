@@ -1,25 +1,22 @@
 /**
  * ThemeProvider — runtime theming with SolidJS reactivity.
  *
- * Decision 9: Theme tokens are reactive objects with valueOf()/toString().
- * When the theme changes, only components reading those tokens re-render.
- *
  * Architecture:
- *   createTheme(overrides) → creates a theme definition (static data)
- *   ThemeProvider           → Context providing the active theme
- *   useTheme()             → access the current theme (reactive colors, etc.)
- *   setTheme()             → switch to a different theme at runtime
+ *   - Each color token is backed by a SolidJS signal
+ *   - `themeColors` is an object with getters that read those signals
+ *   - When components read `themeColors.background` inside JSX, SolidJS
+ *     subscribes to the signal — only those components re-render on theme change
+ *   - `setTheme()` updates all signals → subscribed components re-render
+ *
+ * The getter pattern is invisible to consumers:
+ *   <box backgroundColor={themeColors.background} />
+ *   // Looks like a string prop. SolidJS tracks it reactively.
  *
  * Usage:
  *   const dark = createTheme({ colors: { background: "#0a0a0a" } })
- *   const light = createTheme({ colors: { background: "#ffffff", foreground: "#171717" } })
+ *   const light = createTheme({ colors: { background: "#ffffff" } })
  *
- *   <ThemeProvider theme={dark}>
- *     <App />   // colors.background resolves to "#0a0a0a"
- *   </ThemeProvider>
- *
- *   // Switch at runtime:
- *   setTheme(light)  // → all tokens update reactively
+ *   setTheme(light)  // → all subscribed components update
  */
 
 import { createSignal, createContext, useContext } from "solid-js"
@@ -31,35 +28,6 @@ import { colors as defaultColors, radius, space, font, weight, shadows } from ".
 export type ColorTokens = { [K in keyof typeof defaultColors]: string }
 export type ThemeDefinition = {
   colors: Partial<ColorTokens>
-}
-
-// ── Reactive Color Token ──
-
-/**
- * A reactive color value. Looks like a string but is backed by a SolidJS signal.
- * - valueOf() returns the string value (for parseColor compatibility)
- * - toString() returns the hex string (for display/debugging)
- * - Reading it in a SolidJS computation subscribes to changes
- */
-class ReactiveColor {
-  private _get: () => string
-
-  constructor(getter: () => string) {
-    this._get = getter
-  }
-
-  valueOf(): string {
-    return this._get()
-  }
-
-  toString(): string {
-    return this._get()
-  }
-
-  // Allow direct use as string in template literals etc.
-  [Symbol.toPrimitive](): string {
-    return this._get()
-  }
 }
 
 // ── Theme Creation ──
@@ -107,45 +75,53 @@ export const lightTheme = createTheme({
 
 const [activeTheme, setActiveThemeSig] = createSignal<Required<ThemeDefinition>>(darkTheme)
 
-// Create a reactive signal for each color token
+// Create a signal for each color token
 const colorSignals: Record<string, [() => string, (v: string) => void]> = {}
-const reactiveColors: Record<string, ReactiveColor> = {}
 
-// Initialize signals for all default color tokens
 for (const key of Object.keys(defaultColors) as (keyof ColorTokens)[]) {
-  const [get, set] = createSignal(defaultColors[key])
-  colorSignals[key] = [get, set]
-  reactiveColors[key] = new ReactiveColor(get)
+  colorSignals[key] = createSignal(defaultColors[key])
 }
 
 /**
- * Reactive color tokens. Each property is a ReactiveColor that updates
- * when setTheme() is called. Use these instead of the static `colors` import
- * when you want runtime theming.
+ * Reactive color tokens via getters.
  *
- * ```tsx
- * import { themeColors } from "tge/void"
- * <box backgroundColor={themeColors.background} />
- * // When theme changes, this box automatically updates
- * ```
+ * Each property is a getter that reads a SolidJS signal.
+ * When used inside JSX, SolidJS tracks the dependency automatically:
+ *
+ *   <box backgroundColor={themeColors.background} />
+ *   // SolidJS subscribes to the background signal.
+ *   // When setTheme() changes it, only this box re-renders.
+ *
+ * The getter pattern is transparent — themeColors.background
+ * looks and behaves like a string. No valueOf(), no function calls.
  */
-export const themeColors = reactiveColors as unknown as ColorTokens
+export const themeColors: ColorTokens = Object.defineProperties(
+  {} as ColorTokens,
+  Object.fromEntries(
+    (Object.keys(defaultColors) as (keyof ColorTokens)[]).map((key) => [
+      key,
+      {
+        get() { return colorSignals[key][0]() },
+        enumerable: true,
+      },
+    ])
+  )
+)
 
 /**
  * Switch the active theme at runtime.
- * Updates all reactive color signals — only components reading those tokens re-render.
+ * Updates all reactive color signals — only subscribed components re-render.
  */
 export function setTheme(theme: Required<ThemeDefinition>) {
   setActiveThemeSig(theme)
   for (const key of Object.keys(defaultColors) as (keyof ColorTokens)[]) {
     const value = theme.colors[key] ?? defaultColors[key]
-    const [, set] = colorSignals[key]
-    set(value)
+    colorSignals[key][1](value)
   }
 }
 
 /**
- * Get the current active theme definition (non-reactive, for reading the config).
+ * Get the current active theme definition (non-reactive snapshot).
  */
 export function getTheme(): Required<ThemeDefinition> {
   return activeTheme()
@@ -170,7 +146,6 @@ export function ThemeProvider(props: {
   theme?: Required<ThemeDefinition>
   children?: any
 }) {
-  // Apply initial theme if provided
   if (props.theme) {
     setTheme(props.theme)
   }

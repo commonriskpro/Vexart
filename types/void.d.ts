@@ -201,26 +201,27 @@ export interface ThemeDefinition {
   ring?: string
 }
 
+/** Reactive color tokens — each property is a getter backed by a SolidJS signal. */
 export interface ColorTokens {
-  background: { valueOf(): number; toString(): string }
-  foreground: { valueOf(): number; toString(): string }
-  card: { valueOf(): number; toString(): string }
-  cardForeground: { valueOf(): number; toString(): string }
-  popover: { valueOf(): number; toString(): string }
-  popoverForeground: { valueOf(): number; toString(): string }
-  primary: { valueOf(): number; toString(): string }
-  primaryForeground: { valueOf(): number; toString(): string }
-  secondary: { valueOf(): number; toString(): string }
-  secondaryForeground: { valueOf(): number; toString(): string }
-  muted: { valueOf(): number; toString(): string }
-  mutedForeground: { valueOf(): number; toString(): string }
-  accent: { valueOf(): number; toString(): string }
-  accentForeground: { valueOf(): number; toString(): string }
-  destructive: { valueOf(): number; toString(): string }
-  destructiveForeground: { valueOf(): number; toString(): string }
-  border: { valueOf(): number; toString(): string }
-  input: { valueOf(): number; toString(): string }
-  ring: { valueOf(): number; toString(): string }
+  readonly background: string
+  readonly foreground: string
+  readonly card: string
+  readonly cardForeground: string
+  readonly popover: string
+  readonly popoverForeground: string
+  readonly primary: string
+  readonly primaryForeground: string
+  readonly secondary: string
+  readonly secondaryForeground: string
+  readonly muted: string
+  readonly mutedForeground: string
+  readonly accent: string
+  readonly accentForeground: string
+  readonly destructive: string
+  readonly destructiveForeground: string
+  readonly border: string
+  readonly input: string
+  readonly ring: string
 }
 
 export declare function createTheme(overrides: ThemeDefinition): Required<ThemeDefinition>

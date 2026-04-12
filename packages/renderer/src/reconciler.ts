@@ -12,7 +12,6 @@ import { createRenderer } from "solid-js/universal"
 import {
   type TGENode,
   type TGEProps,
-  type InteractiveStyleProps,
   type SizingInfo,
   createNode,
   createTextNode,
@@ -41,14 +40,9 @@ const STYLE_SUB_COLOR_PROPS = new Set([
   "borderColor",
 ])
 
-/** Resolve a value through valueOf() (for ReactiveColor) then parseColor. */
+/** Resolve a color value (string or number) to u32. Called once per prop change, not per frame. */
 function resolveColor(value: unknown): number {
   if (typeof value === "number") return value
-  if (typeof value === "object" && value !== null && typeof (value as any).valueOf === "function") {
-    const resolved = (value as any).valueOf()
-    if (typeof resolved === "number") return resolved
-    return parseColor(resolved)
-  }
   if (typeof value === "string") return parseColor(value)
   return 0
 }

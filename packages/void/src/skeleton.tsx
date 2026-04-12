@@ -4,7 +4,8 @@
  * Renders a muted rounded rectangle as a content placeholder.
  */
 
-import { colors, radius } from "./tokens"
+import { radius } from "./tokens"
+import { themeColors } from "./theme"
 
 export interface SkeletonProps {
   width?: number | string
@@ -18,7 +19,7 @@ export function Skeleton(props: SkeletonProps) {
       width={props.width ?? "grow"}
       height={props.height ?? 16}
       cornerRadius={props.cornerRadius ?? radius.md}
-      backgroundColor={0x2a2a2aff}
+      backgroundColor={themeColors.muted}
     />
   )
 }

@@ -5,7 +5,8 @@
  * Sizes: xs, sm, default, lg
  */
 
-import { colors, radius, space, font, weight, shadows } from "./tokens"
+import { radius, space, font, weight, shadows } from "./tokens"
+import { themeColors } from "./theme"
 
 type ButtonVariant = "default" | "secondary" | "outline" | "ghost" | "destructive"
 type ButtonSize = "xs" | "sm" | "default" | "lg"
@@ -14,53 +15,6 @@ export interface ButtonProps {
   variant?: ButtonVariant
   size?: ButtonSize
   children?: any
-}
-
-// ── Variant styles ──
-
-const variantStyles: Record<ButtonVariant, {
-  bg: string | number
-  fg: string | number
-  border?: string | number
-  borderWidth?: number
-  shadow?: any
-  hoverBg: string | number
-  activeBg: string | number
-}> = {
-  default: {
-    bg: colors.primary,
-    fg: colors.primaryForeground,
-    shadow: shadows.sm,
-    hoverBg: "#d4d4d4ff",    // primary/90
-    activeBg: "#bababaff",
-  },
-  secondary: {
-    bg: colors.secondary,
-    fg: colors.secondaryForeground,
-    hoverBg: "#333333ff",    // secondary brighter
-    activeBg: "#3d3d3dff",
-  },
-  outline: {
-    bg: "#0a0a0aff",
-    fg: colors.foreground,
-    border: "#ffffff38",       // white ~22% — visible on dark bg
-    borderWidth: 1,
-    hoverBg: colors.accent,
-    activeBg: "#333333ff",
-  },
-  ghost: {
-    bg: colors.transparent,
-    fg: colors.mutedForeground,  // muted text so it's clearly "quiet"
-    hoverBg: colors.accent,
-    activeBg: "#333333ff",
-  },
-  destructive: {
-    bg: colors.destructive,
-    fg: colors.destructiveForeground,
-    shadow: shadows.sm,
-    hoverBg: "#c72222ff",    // destructive/90
-    activeBg: "#b01e1eff",
-  },
 }
 
 // ── Size styles ──
@@ -82,6 +36,53 @@ const sizeStyles: Record<ButtonSize, {
 export function Button(props: ButtonProps) {
   const v = props.variant ?? "default"
   const s = props.size ?? "default"
+
+  // Must be inside the function so themeColors getters evaluate reactively
+  const variantStyles: Record<ButtonVariant, {
+    bg: string | number
+    fg: string | number
+    border?: string | number
+    borderWidth?: number
+    shadow?: any
+    hoverBg: string | number
+    activeBg: string | number
+  }> = {
+    default: {
+      bg: themeColors.primary,
+      fg: themeColors.primaryForeground,
+      shadow: shadows.sm,
+      hoverBg: "#d4d4d4ff",    // primary/90
+      activeBg: "#bababaff",
+    },
+    secondary: {
+      bg: themeColors.secondary,
+      fg: themeColors.secondaryForeground,
+      hoverBg: "#333333ff",    // secondary brighter
+      activeBg: "#3d3d3dff",
+    },
+    outline: {
+      bg: "#0a0a0aff",
+      fg: themeColors.foreground,
+      border: "#ffffff38",       // white ~22% — visible on dark bg
+      borderWidth: 1,
+      hoverBg: themeColors.accent,
+      activeBg: "#333333ff",
+    },
+    ghost: {
+      bg: themeColors.transparent,
+      fg: themeColors.mutedForeground,  // muted text so it's clearly "quiet"
+      hoverBg: themeColors.accent,
+      activeBg: "#333333ff",
+    },
+    destructive: {
+      bg: themeColors.destructive,
+      fg: themeColors.destructiveForeground,
+      shadow: shadows.sm,
+      hoverBg: "#c72222ff",    // destructive/90
+      activeBg: "#b01e1eff",
+    },
+  }
+
   const vs = variantStyles[v]
   const ss = sizeStyles[s]
 

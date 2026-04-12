@@ -4,7 +4,8 @@
  * Variants: default, secondary, outline, destructive
  */
 
-import { colors, radius, space, font, weight } from "./tokens"
+import { radius, space, font, weight } from "./tokens"
+import { themeColors } from "./theme"
 
 type BadgeVariant = "default" | "secondary" | "outline" | "destructive"
 
@@ -13,34 +14,36 @@ export interface BadgeProps {
   children?: any
 }
 
-const variantStyles: Record<BadgeVariant, {
-  bg: string
-  fg: string
-  border?: string | number
-  borderWidth?: number
-}> = {
-  default: {
-    bg: colors.primary,
-    fg: colors.primaryForeground,
-  },
-  secondary: {
-    bg: colors.secondary,
-    fg: colors.secondaryForeground,
-  },
-  outline: {
-    bg: colors.transparent,
-    fg: colors.foreground,
-    border: "#ffffff38",       // white ~22% — visible on dark bg
-    borderWidth: 1,
-  },
-  destructive: {
-    bg: colors.destructive,
-    fg: colors.destructiveForeground,
-  },
-}
-
 export function Badge(props: BadgeProps) {
   const v = props.variant ?? "default"
+
+  // Must be inside the function so themeColors getters evaluate reactively
+  const variantStyles: Record<BadgeVariant, {
+    bg: string
+    fg: string
+    border?: string | number
+    borderWidth?: number
+  }> = {
+    default: {
+      bg: themeColors.primary,
+      fg: themeColors.primaryForeground,
+    },
+    secondary: {
+      bg: themeColors.secondary,
+      fg: themeColors.secondaryForeground,
+    },
+    outline: {
+      bg: themeColors.transparent,
+      fg: themeColors.foreground,
+      border: "#ffffff38",       // white ~22% — visible on dark bg
+      borderWidth: 1,
+    },
+    destructive: {
+      bg: themeColors.destructive,
+      fg: themeColors.destructiveForeground,
+    },
+  }
+
   const vs = variantStyles[v]
 
   return (

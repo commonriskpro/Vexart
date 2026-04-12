@@ -10,7 +10,8 @@
  *   └── CardFooter
  */
 
-import { colors, radius, space, font, weight, shadows } from "./tokens"
+import { radius, space, font, weight, shadows } from "./tokens"
+import { themeColors } from "./theme"
 
 // ── Card ──
 
@@ -25,10 +26,10 @@ export function Card(props: CardProps) {
     <box
       direction="column"
       gap={sm ? space[4] : space[6]}
-      backgroundColor={colors.card}
+      backgroundColor={themeColors.card}
       cornerRadius={radius.xl}
       borderWidth={1}
-      borderColor={colors.border}
+      borderColor={themeColors.border}
       paddingTop={sm ? space[4] : space[6]}
       paddingBottom={sm ? space[4] : space[6]}
       shadow={shadows.md}
@@ -66,7 +67,7 @@ export interface CardTitleProps {
 export function CardTitle(props: CardTitleProps) {
   return (
     <text
-      color={colors.cardForeground}
+      color={themeColors.cardForeground}
       fontSize={font.base}
       fontWeight={weight.semibold}
       lineHeight={1}
@@ -85,7 +86,7 @@ export interface CardDescriptionProps {
 export function CardDescription(props: CardDescriptionProps) {
   return (
     <text
-      color={colors.mutedForeground}
+      color={themeColors.mutedForeground}
       fontSize={font.sm}
     >
       {props.children}

@@ -5,7 +5,8 @@
  * Shows a colored circle with the first character of the name.
  */
 
-import { colors, font, weight } from "./tokens"
+import { font, weight } from "./tokens"
+import { themeColors } from "./theme"
 
 type AvatarSize = "sm" | "default" | "lg"
 
@@ -25,7 +26,7 @@ export function Avatar(props: AvatarProps) {
   const s = props.size ?? "default"
   const ss = sizeMap[s]
   const initial = props.name.charAt(0).toUpperCase()
-  const bg = props.color ?? colors.muted
+  const bg = props.color ?? themeColors.muted
 
   return (
     <box
@@ -37,7 +38,7 @@ export function Avatar(props: AvatarProps) {
       alignY="center"
     >
       <text
-        color={colors.foreground}
+        color={themeColors.foreground}
         fontSize={ss.fontSize}
         fontWeight={weight.medium}
       >

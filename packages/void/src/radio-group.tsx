@@ -17,7 +17,8 @@
 
 import { RadioGroup } from "@tge/components"
 import type { RadioOption, RadioOptionContext } from "@tge/components"
-import { colors, radius, space, font, weight } from "./tokens"
+import { radius, space, font, weight } from "./tokens"
+import { themeColors } from "./theme"
 
 const INDICATOR_SIZE = 16
 const DOT_SIZE = 8
@@ -44,16 +45,16 @@ export function VoidRadioGroup(props: VoidRadioGroupProps) {
           <box
             width={INDICATOR_SIZE}
             height={INDICATOR_SIZE}
-            backgroundColor={colors.card}
+            backgroundColor={themeColors.card}
             cornerRadius={INDICATOR_SIZE / 2}
             borderColor={
               ctx.focused
-                ? colors.ring
+                ? themeColors.ring
                 : ctx.selected
-                  ? colors.primary
+                  ? themeColors.primary
                   : ctx.disabled
-                    ? colors.muted
-                    : colors.border
+                    ? themeColors.muted
+                    : themeColors.border
             }
             borderWidth={ctx.focused ? 2 : 1}
             alignX="center"
@@ -63,13 +64,13 @@ export function VoidRadioGroup(props: VoidRadioGroupProps) {
               <box
                 width={DOT_SIZE}
                 height={DOT_SIZE}
-                backgroundColor={ctx.disabled ? colors.mutedForeground : colors.primary}
+                backgroundColor={ctx.disabled ? themeColors.mutedForeground : themeColors.primary}
                 cornerRadius={DOT_SIZE / 2}
               />
             ) : null}
           </box>
           <text
-            color={ctx.disabled ? colors.mutedForeground : colors.foreground}
+            color={ctx.disabled ? themeColors.mutedForeground : themeColors.foreground}
             fontSize={font.sm}
           >
             {opt.label}

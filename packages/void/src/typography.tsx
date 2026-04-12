@@ -4,7 +4,8 @@
  * H1, H2, H3, H4, P, Lead, Large, Small, Muted
  */
 
-import { colors, font, weight } from "./tokens"
+import { font, weight } from "./tokens"
+import { themeColors } from "./theme"
 
 export interface TypographyProps {
   children?: any
@@ -14,7 +15,7 @@ export interface TypographyProps {
 export function H1(props: TypographyProps) {
   return (
     <text
-      color={props.color ?? colors.foreground}
+      color={props.color ?? themeColors.foreground}
       fontSize={font["4xl"]}
       fontWeight={weight.bold}
     >
@@ -26,7 +27,7 @@ export function H1(props: TypographyProps) {
 export function H2(props: TypographyProps) {
   return (
     <text
-      color={props.color ?? colors.foreground}
+      color={props.color ?? themeColors.foreground}
       fontSize={font["3xl"]}
       fontWeight={weight.semibold}
     >
@@ -38,7 +39,7 @@ export function H2(props: TypographyProps) {
 export function H3(props: TypographyProps) {
   return (
     <text
-      color={props.color ?? colors.foreground}
+      color={props.color ?? themeColors.foreground}
       fontSize={font.xl}
       fontWeight={weight.semibold}
     >
@@ -50,7 +51,7 @@ export function H3(props: TypographyProps) {
 export function H4(props: TypographyProps) {
   return (
     <text
-      color={props.color ?? colors.foreground}
+      color={props.color ?? themeColors.foreground}
       fontSize={font.lg}
       fontWeight={weight.semibold}
     >
@@ -62,7 +63,7 @@ export function H4(props: TypographyProps) {
 export function P(props: TypographyProps) {
   return (
     <text
-      color={props.color ?? colors.foreground}
+      color={props.color ?? themeColors.foreground}
       fontSize={font.base}
     >
       {props.children}
@@ -73,7 +74,7 @@ export function P(props: TypographyProps) {
 export function Lead(props: TypographyProps) {
   return (
     <text
-      color={props.color ?? colors.mutedForeground}
+      color={props.color ?? themeColors.mutedForeground}
       fontSize={font.xl}
     >
       {props.children}
@@ -84,7 +85,7 @@ export function Lead(props: TypographyProps) {
 export function Large(props: TypographyProps) {
   return (
     <text
-      color={props.color ?? colors.foreground}
+      color={props.color ?? themeColors.foreground}
       fontSize={font.lg}
       fontWeight={weight.semibold}
     >
@@ -96,7 +97,7 @@ export function Large(props: TypographyProps) {
 export function Small(props: TypographyProps) {
   return (
     <text
-      color={props.color ?? colors.foreground}
+      color={props.color ?? themeColors.foreground}
       fontSize={font.sm}
       fontWeight={weight.medium}
     >
@@ -108,7 +109,7 @@ export function Small(props: TypographyProps) {
 export function Muted(props: TypographyProps) {
   return (
     <text
-      color={props.color ?? colors.mutedForeground}
+      color={props.color ?? themeColors.mutedForeground}
       fontSize={font.sm}
     >
       {props.children}

@@ -10,7 +10,8 @@
 
 import { Switch } from "@tge/components"
 import type { SwitchRenderContext } from "@tge/components"
-import { colors, radius, space, font, weight } from "./tokens"
+import { radius, space, font, weight } from "./tokens"
+import { themeColors } from "./theme"
 
 const TRACK_WIDTH = 36
 const TRACK_HEIGHT = 20
@@ -35,10 +36,10 @@ export function VoidSwitch(props: VoidSwitchProps) {
       focusId={props.focusId}
       renderSwitch={(ctx: SwitchRenderContext) => {
         const trackColor = ctx.disabled
-          ? colors.muted
+          ? themeColors.muted
           : ctx.checked
-            ? colors.primary
-            : colors.secondary
+            ? themeColors.primary
+            : themeColors.secondary
 
         const thumbLeft = ctx.checked
           ? THUMB_OFFSET + THUMB_TRAVEL
@@ -51,13 +52,13 @@ export function VoidSwitch(props: VoidSwitchProps) {
               height={TRACK_HEIGHT}
               backgroundColor={trackColor}
               cornerRadius={TRACK_HEIGHT / 2}
-              borderColor={ctx.focused ? colors.ring : colors.border}
+              borderColor={ctx.focused ? themeColors.ring : themeColors.border}
               borderWidth={ctx.focused ? 2 : 1}
             >
               <box
                 width={THUMB_SIZE}
                 height={THUMB_SIZE}
-                backgroundColor={colors.foreground}
+                backgroundColor={themeColors.foreground}
                 cornerRadius={THUMB_SIZE / 2}
                 paddingLeft={thumbLeft}
                 paddingTop={THUMB_OFFSET}
@@ -65,7 +66,7 @@ export function VoidSwitch(props: VoidSwitchProps) {
             </box>
             {props.label ? (
               <text
-                color={ctx.disabled ? colors.mutedForeground : colors.foreground}
+                color={ctx.disabled ? themeColors.mutedForeground : themeColors.foreground}
                 fontSize={font.sm}
               >
                 {props.label}

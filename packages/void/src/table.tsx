@@ -19,7 +19,8 @@
 import { Table } from "@tge/components"
 import type { TableColumn, TableCellContext } from "@tge/components"
 import type { JSX } from "solid-js"
-import { colors, radius, space, font, weight, shadows } from "./tokens"
+import { radius, space, font, weight, shadows } from "./tokens"
+import { themeColors } from "./theme"
 
 export type VoidTableProps = {
   columns: TableColumn[]
@@ -48,7 +49,7 @@ export function VoidTable(props: VoidTableProps) {
       focusId={props.focusId}
       renderHeader={(col: TableColumn) => (
         <box padding={space[1]} paddingX={space[2]}>
-          <text color={colors.mutedForeground} fontSize={font.xs} fontWeight={weight.semibold}>
+          <text color={themeColors.mutedForeground} fontSize={font.xs} fontWeight={weight.semibold}>
             {col.header}
           </text>
         </box>
@@ -56,7 +57,7 @@ export function VoidTable(props: VoidTableProps) {
       renderCell={(value: any, col: TableColumn, rowIndex: number, ctx: TableCellContext) => (
         <box padding={space[1]} paddingX={space[2]}>
           <text
-            color={ctx.selected ? colors.primary : colors.foreground}
+            color={ctx.selected ? themeColors.primary : themeColors.foreground}
             fontSize={font.sm}
           >
             {value != null ? String(value) : ""}
@@ -66,12 +67,12 @@ export function VoidTable(props: VoidTableProps) {
       renderRow={(children: JSX.Element, rowIndex: number, ctx: TableCellContext) => {
         const isEven = rowIndex % 2 === 0
         const bg = ctx.selected
-          ? colors.accent
+          ? themeColors.accent
           : striped() && !isEven
-            ? colors.secondary
-            : colors.card
+            ? themeColors.secondary
+            : themeColors.card
         return (
-          <box direction="row" backgroundColor={bg} borderBottom={1} borderColor={colors.border}>
+          <box direction="row" backgroundColor={bg} borderBottom={1} borderColor={themeColors.border}>
             {children}
           </box>
         )
@@ -80,7 +81,7 @@ export function VoidTable(props: VoidTableProps) {
         <box
           direction="column"
           cornerRadius={radius.md}
-          borderColor={colors.border}
+          borderColor={themeColors.border}
           borderWidth={1}
         >
           {children}

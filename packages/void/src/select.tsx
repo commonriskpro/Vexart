@@ -18,7 +18,8 @@
 
 import { Select } from "@tge/components"
 import type { SelectOption, SelectTriggerContext, SelectOptionContext } from "@tge/components"
-import { colors, radius, space, font, weight, shadows } from "./tokens"
+import { radius, space, font, weight, shadows } from "./tokens"
+import { themeColors } from "./theme"
 
 export type VoidSelectProps = {
   value?: string
@@ -47,21 +48,21 @@ export function VoidSelect(props: VoidSelectProps) {
             alignY="center"
             padding={space[1]}
             paddingX={space[2]}
-            backgroundColor={ctx.disabled ? colors.muted : colors.card}
+            backgroundColor={ctx.disabled ? themeColors.muted : themeColors.card}
             cornerRadius={radius.md}
-            borderColor={ctx.focused ? colors.ring : ctx.disabled ? colors.muted : colors.input}
+            borderColor={ctx.focused ? themeColors.ring : ctx.disabled ? themeColors.muted : themeColors.input}
             borderWidth={ctx.focused ? 2 : 1}
             gap={space[1]}
           >
             <box width="grow">
               <text
-                color={ctx.disabled ? colors.mutedForeground : colors.foreground}
+                color={ctx.disabled ? themeColors.mutedForeground : themeColors.foreground}
                 fontSize={font.sm}
               >
                 {ctx.selectedLabel || ctx.placeholder}
               </text>
             </box>
-            <text color={colors.mutedForeground} fontSize={font.xs}>
+            <text color={themeColors.mutedForeground} fontSize={font.xs}>
               {ctx.open ? "▲" : "▼"}
             </text>
           </box>
@@ -69,13 +70,13 @@ export function VoidSelect(props: VoidSelectProps) {
         renderOption={(opt: SelectOption, ctx: SelectOptionContext) => (
           <box
             backgroundColor={
-              ctx.highlighted ? colors.accent : ctx.selected ? colors.secondary : colors.card
+              ctx.highlighted ? themeColors.accent : ctx.selected ? themeColors.secondary : themeColors.card
             }
             padding={space[1]}
             paddingX={space[2]}
           >
             <text
-              color={ctx.disabled ? colors.mutedForeground : ctx.selected ? colors.primary : colors.foreground}
+              color={ctx.disabled ? themeColors.mutedForeground : ctx.selected ? themeColors.primary : themeColors.foreground}
               fontSize={font.sm}
             >
               {opt.label}
@@ -85,9 +86,9 @@ export function VoidSelect(props: VoidSelectProps) {
         renderContent={(children) => (
           <box
             direction="column"
-            backgroundColor={colors.popover}
+            backgroundColor={themeColors.popover}
             cornerRadius={radius.md}
-            borderColor={colors.border}
+            borderColor={themeColors.border}
             borderWidth={1}
             paddingTop={space[0.5]}
             paddingBottom={space[0.5]}

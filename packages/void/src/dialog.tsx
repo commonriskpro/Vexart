@@ -22,7 +22,8 @@
  */
 
 import { Dialog } from "@tge/components"
-import { colors, radius, space, font, weight, shadows } from "./tokens"
+import { radius, space, font, weight, shadows } from "./tokens"
+import { themeColors } from "./theme"
 
 // ── Types ──
 
@@ -62,7 +63,7 @@ export function VoidDialog(props: VoidDialogProps) {
         maxWidth={props.maxWidth ?? 480}
         padding={space[6]}
         cornerRadius={radius.lg}
-        backgroundColor={colors.card}
+        backgroundColor={themeColors.card}
       >
         <box direction="column" gap={space[4]}>
           {props.children}
@@ -77,7 +78,7 @@ export function VoidDialog(props: VoidDialogProps) {
 function VoidDialogTitle(props: VoidDialogTitleProps) {
   return (
     <text
-      color={colors.cardForeground}
+      color={themeColors.cardForeground}
       fontSize={font.lg}
       fontWeight={weight.semibold}
     >
@@ -89,7 +90,7 @@ function VoidDialogTitle(props: VoidDialogTitleProps) {
 function VoidDialogDescription(props: VoidDialogDescriptionProps) {
   return (
     <text
-      color={colors.mutedForeground}
+      color={themeColors.mutedForeground}
       fontSize={font.sm}
     >
       {props.children}

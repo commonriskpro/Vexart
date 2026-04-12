@@ -14,20 +14,13 @@
 import { createToaster } from "@tge/components"
 import type { ToastData, ToastPosition, ToasterHandle } from "@tge/components"
 import type { JSX } from "solid-js"
-import { colors, radius, space, font, weight, shadows } from "./tokens"
+import { radius, space, font, weight, shadows } from "./tokens"
+import { themeColors } from "./theme"
 
 export type VoidToasterOptions = {
   position?: ToastPosition
   maxVisible?: number
   defaultDuration?: number
-}
-
-const variantStyles: Record<string, { accent: string; border: string }> = {
-  default: { accent: colors.foreground, border: colors.border },
-  success: { accent: "#22c55e", border: "#22c55e40" },
-  error:   { accent: colors.destructive, border: "#dc262640" },
-  warning: { accent: "#f59e0b", border: "#f59e0b40" },
-  info:    { accent: "#3b82f6", border: "#3b82f640" },
 }
 
 export function createVoidToaster(options: VoidToasterOptions = {}): ToasterHandle {
@@ -38,11 +31,19 @@ export function createVoidToaster(options: VoidToasterOptions = {}): ToasterHand
     gap: space[2],
     padding: space[4],
     renderToast(t: ToastData, dismiss: () => void): JSX.Element {
+      // Must be inside renderToast so themeColors getters evaluate reactively
+      const variantStyles: Record<string, { accent: string; border: string }> = {
+        default: { accent: themeColors.foreground, border: themeColors.border },
+        success: { accent: "#22c55e", border: "#22c55e40" },
+        error:   { accent: themeColors.destructive, border: "#dc262640" },
+        warning: { accent: "#f59e0b", border: "#f59e0b40" },
+        info:    { accent: "#3b82f6", border: "#3b82f640" },
+      }
       const vs = variantStyles[t.variant] ?? variantStyles.default
       return (
         <box
           direction="column"
-          backgroundColor={colors.card}
+          backgroundColor={themeColors.card}
           cornerRadius={radius.lg}
           borderColor={vs.border}
           borderWidth={1}
@@ -57,7 +58,7 @@ export function createVoidToaster(options: VoidToasterOptions = {}): ToasterHand
             {t.message}
           </text>
           {t.description ? (
-            <text color={colors.mutedForeground} fontSize={font.xs}>
+            <text color={themeColors.mutedForeground} fontSize={font.xs}>
               {t.description}
             </text>
           ) : null}

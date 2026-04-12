@@ -4,7 +4,7 @@
  * Orientation: horizontal (default), vertical
  */
 
-import { colors } from "./tokens"
+import { themeColors } from "./theme"
 
 export interface SeparatorProps {
   orientation?: "horizontal" | "vertical"
@@ -18,7 +18,7 @@ export function Separator(props: SeparatorProps) {
       <box
         width={1}
         height="grow"
-        backgroundColor={colors.border}
+        backgroundColor={themeColors.border}
       />
     )
   }
@@ -27,7 +27,7 @@ export function Separator(props: SeparatorProps) {
     <box
       width="grow"
       height={1}
-      backgroundColor={colors.border}
+      backgroundColor={themeColors.border}
     />
   )
 }
