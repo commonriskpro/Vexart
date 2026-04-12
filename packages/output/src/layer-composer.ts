@@ -133,7 +133,8 @@ export function createLayerComposer(
       const col = Math.floor(pixelX / cellW)
       const row = Math.floor(pixelY / cellH)
 
-      // Delete old image if it exists (re-transmit replaces but let's be explicit)
+      // Delete old image before re-transmit — Kitty requires explicit removal
+      // to update the visible placement reliably.
       if (activeIds.has(imageId)) {
         kitty.remove(write, imageId)
       }

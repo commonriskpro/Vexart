@@ -354,13 +354,18 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
     boxNodes.push(node)
 
-    // Scroll containers need a stable Clay ID for scroll offset tracking
+    // Assign Clay element ID for:
+    // 1. Scroll containers — for scroll offset tracking
+    // 2. Interactive nodes — for reliable layout readback (hit-testing)
+    const isInteractive = node.props.focusable || node.props.hoverStyle || node.props.activeStyle || node.props.focusStyle || node.props.onPress
     if (node.props.scrollX || node.props.scrollY) {
       const sid = node.props.scrollId ?? `tge-scroll-${scrollIdCounter++}`
       clay.setId(sid)
       if (node.props.scrollSpeed) {
         scrollSpeedCap = node.props.scrollSpeed
       }
+    } else if (isInteractive) {
+      clay.setId(`tge-node-${node.id}`)
     } else {
       clay.openElement()
     }
@@ -928,6 +933,20 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         node.layout.width = cmd.width
         node.layout.height = cmd.height
         textIdx++
+      }
+    }
+
+    // Write layout for interactive nodes via Clay element ID lookup.
+    // This is reliable regardless of RECT command ordering/clipping.
+    for (const node of boxNodes) {
+      const isInteractive = node.props.focusable || node.props.hoverStyle || node.props.activeStyle || node.props.focusStyle || node.props.onPress
+      if (!isInteractive) continue
+      const data = clay.getElementData(`tge-node-${node.id}`)
+      if (data.found) {
+        node.layout.x = data.x
+        node.layout.y = data.y
+        node.layout.width = data.width
+        node.layout.height = data.height
       }
     }
 

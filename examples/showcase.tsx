@@ -854,6 +854,8 @@ function TabDataVirtual() {
 
 function TabVoidTheme() {
   const [isDark, setIsDark] = createSignal(true)
+  const [clickedBtn, setClickedBtn] = createSignal("")
+  const [cardClicks, setCardClicks] = createSignal(0)
 
   const toggleTheme = () => {
     const next = !isDark()
@@ -874,26 +876,47 @@ function TabVoidTheme() {
       </SectionBox>
 
       {/* Button variants */}
-      <SectionBox title="BUTTON VARIANTS + SIZES">
+      <SectionBox title="BUTTON VARIANTS + SIZES (click any — shows last clicked)">
         <box direction="column" gap={space[2]}>
           <box direction="row" gap={space[2]}>
-            <Button>Default</Button>
-            <Button variant="secondary">Secondary</Button>
-            <Button variant="outline">Outline</Button>
-            <Button variant="ghost">Ghost</Button>
-            <Button variant="destructive">Destructive</Button>
+            <box focusable onPress={() => setClickedBtn("Default")} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }} cornerRadius={radius.md}>
+              <Button>Default</Button>
+            </box>
+            <box focusable onPress={() => setClickedBtn("Secondary")} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }} cornerRadius={radius.md}>
+              <Button variant="secondary">Secondary</Button>
+            </box>
+            <box focusable onPress={() => setClickedBtn("Outline")} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }} cornerRadius={radius.md}>
+              <Button variant="outline">Outline</Button>
+            </box>
+            <box focusable onPress={() => setClickedBtn("Ghost")} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }} cornerRadius={radius.md}>
+              <Button variant="ghost">Ghost</Button>
+            </box>
+            <box focusable onPress={() => setClickedBtn("Destructive")} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }} cornerRadius={radius.md}>
+              <Button variant="destructive">Destructive</Button>
+            </box>
           </box>
           <box direction="row" gap={space[2]} alignY="center">
-            <Button size="xs">XS</Button>
-            <Button size="sm">SM</Button>
-            <Button size="default">Default</Button>
-            <Button size="lg">LG</Button>
+            <box focusable onPress={() => setClickedBtn("XS")} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }} cornerRadius={radius.md}>
+              <Button size="xs">XS</Button>
+            </box>
+            <box focusable onPress={() => setClickedBtn("SM")} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }} cornerRadius={radius.md}>
+              <Button size="sm">SM</Button>
+            </box>
+            <box focusable onPress={() => setClickedBtn("Default")} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }} cornerRadius={radius.md}>
+              <Button size="default">Default</Button>
+            </box>
+            <box focusable onPress={() => setClickedBtn("LG")} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }} cornerRadius={radius.md}>
+              <Button size="lg">LG</Button>
+            </box>
           </box>
+          <Show when={clickedBtn()}>
+            <text color="#4fc4d4" fontSize={font.xs}>Last clicked: {clickedBtn()}</text>
+          </Show>
         </box>
       </SectionBox>
 
       {/* Card */}
-      <SectionBox title="CARD COMPOSITION">
+      <SectionBox title="CARD COMPOSITION (Action button is clickable)">
         <box direction="row" gap={space[3]}>
           <Card>
             <CardHeader>
@@ -904,7 +927,9 @@ function TabVoidTheme() {
               <P>Card body content. Theme-reactive colors.</P>
             </CardContent>
             <CardFooter>
-              <Button size="sm">Action</Button>
+              <box focusable onPress={() => setCardClicks(c => c + 1)} focusStyle={{ borderColor: "#4488cc", borderWidth: 2 }} cornerRadius={radius.md}>
+                <Button size="sm">Action ({cardClicks()})</Button>
+              </box>
             </CardFooter>
           </Card>
           <Card size="sm">
@@ -988,7 +1013,7 @@ function App(props: { terminal: any }) {
   return (
     <box width={dims.width()} height={dims.height()} direction="column" backgroundColor={colors.background}>
       {/* Header bar */}
-      <box direction="row" padding={space[3]} paddingX={space[4]} gap={space[4]} alignY="center" backgroundColor={colors.card}>
+      <box direction="row" height="fit" padding={space[3]} paddingX={space[4]} gap={space[4]} alignY="center" backgroundColor={colors.card}>
         <text color={colors.foreground} fontSize={font.lg} fontWeight={weight.bold}>TGE Showcase</text>
         <box width="grow" />
         <text color={colors.mutedForeground} fontSize={font.xs}>
@@ -996,34 +1021,41 @@ function App(props: { terminal: any }) {
         </text>
       </box>
 
-      {/* Tab bar */}
-      <box direction="row" backgroundColor={colors.card} borderBottom={1} borderColor={colors.border}>
+      {/* Tab bar — clickable + keyboard navigable */}
+      <box direction="row" height="fit" backgroundColor={colors.card} borderBottom={1} borderColor={colors.border}>
         <For each={TABS}>
-          {(tab, i) => (
-            <box
-              direction="row" gap={4}
-              paddingX={space[4]} paddingY={space[2]}
-              backgroundColor={activeTab() === i() ? colors.background : "transparent"}
-              borderBottom={activeTab() === i() ? 2 : 0}
-              borderColor={activeTab() === i() ? "#4488cc" : "transparent"}
-              height="fit"
-            >
-              <text
-                color={activeTab() === i() ? "#4488cc" : colors.mutedForeground}
-                fontSize={font.sm}
-                fontWeight={activeTab() === i() ? weight.semibold : weight.normal}
+          {(tab, i) => {
+            const active = () => activeTab() === i()
+            return (
+              <box
+                focusable
+                onPress={() => setActiveTab(i())}
+                direction="row" gap={4}
+                paddingX={space[4]} paddingY={space[2]}
+                backgroundColor={active() ? colors.background : "transparent"}
+                hoverStyle={{ backgroundColor: active() ? colors.background : colors.accent }}
+                focusStyle={{ borderColor: "#4488cc", borderWidth: 1 }}
+                borderBottom={active() ? 2 : 0}
+                borderColor={active() ? "#4488cc" : "transparent"}
+                height="fit"
               >
-                {tab.num}
-              </text>
-              <text
-                color={activeTab() === i() ? "#4488cc" : colors.mutedForeground}
-                fontSize={font.sm}
-                fontWeight={activeTab() === i() ? weight.semibold : weight.normal}
-              >
-                {tab.name}
-              </text>
-            </box>
-          )}
+                <text
+                  color={active() ? "#4488cc" : colors.mutedForeground}
+                  fontSize={font.sm}
+                  fontWeight={active() ? weight.semibold : weight.normal}
+                >
+                  {tab.num}
+                </text>
+                <text
+                  color={active() ? "#4488cc" : colors.mutedForeground}
+                  fontSize={font.sm}
+                  fontWeight={active() ? weight.semibold : weight.normal}
+                >
+                  {tab.name}
+                </text>
+              </box>
+            )
+          }}
         </For>
       </box>
 

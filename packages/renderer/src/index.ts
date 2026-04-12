@@ -26,6 +26,7 @@ import { createParser, type KeyEvent, type MouseEvent as TgeMouseEvent, type Inp
 import { createRenderLoop } from "./loop"
 import { render as solidRender } from "./reconciler"
 import { dispatchInput } from "./input"
+import { markDirty } from "./dirty"
 import { resetFocus } from "./focus"
 import { resetSelection } from "./selection"
 
@@ -331,6 +332,7 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
   const parser = createParser((event) => {
     if (loop.suspended()) return
     dispatchInput(event)
+    markDirty() // Any input event may change visual state → trigger repaint
     if (event.type === "mouse") {
       // Feed pointer position (convert cells to pixels)
       loop.feedPointer(event.x * cellW, event.y * cellH, event.action === "press")
