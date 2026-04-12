@@ -40,20 +40,23 @@ import type { Terminal } from "@tge/terminal"
 /** A renderable component factory */
 export type SlotComponent = () => JSX.Element
 
-/** Plugin API exposed to plugins during setup */
-export type TgePluginApi = {
+/** Plugin API exposed to plugins during setup.
+ *  Base API includes slots + terminal. Apps extend with custom context
+ *  (theme, app state, etc.) by passing a richer object to setup(). */
+export type TgePluginApi<Context = {}> = {
   /** Register/unregister components in named slots */
   slots: SlotRegistry
   /** Access to the terminal */
   terminal: Terminal
-}
+} & Context
 
-/** Plugin interface */
-export type TgePlugin = {
+/** Plugin interface.
+ *  @template Context — extra context the host app provides (theme, api, etc.) */
+export type TgePlugin<Context = {}> = {
   /** Plugin name (for debugging) */
   name: string
-  /** Setup function — called once during mount */
-  setup: (api: TgePluginApi) => void | (() => void)
+  /** Setup function — called once during mount. Return cleanup function if needed. */
+  setup: (api: TgePluginApi<Context>) => void | (() => void)
 }
 
 // ── Slot Registry ──

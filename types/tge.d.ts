@@ -234,14 +234,14 @@ export function debugStatsLine(): string
 
 // ── Plugins ──
 
-export interface TgePluginApi {
+export type TgePluginApi<Context = {}> = {
+  slots: SlotRegistry
   terminal: Terminal
-}
+} & Context
 
-export interface TgePlugin<Slots = any, Context = any> {
+export interface TgePlugin<Context = {}> {
   name: string
-  setup: (api: TgePluginApi & Context) => void
-  slots?: Partial<Slots>
+  setup: (api: TgePluginApi<Context>) => void | (() => void)
 }
 
 export declare const SlotMode: {
