@@ -284,6 +284,8 @@ typedef CLAY_PACKED_ENUM {
     CLAY_ALIGN_X_RIGHT,
     // Aligns child elements horizontally to the center of this element
     CLAY_ALIGN_X_CENTER,
+    // [TGE extension] Distributes extra space equally between children (CSS space-between)
+    CLAY_ALIGN_X_SPACE_BETWEEN,
 } Clay_LayoutAlignmentX;
 
 // Controls the alignment along the y axis (vertical) of child elements.
@@ -294,6 +296,8 @@ typedef CLAY_PACKED_ENUM {
     CLAY_ALIGN_Y_BOTTOM,
     // Aligns child elements vertically to the center of this element
     CLAY_ALIGN_Y_CENTER,
+    // [TGE extension] Distributes extra space equally between children (CSS space-between)
+    CLAY_ALIGN_Y_SPACE_BETWEEN,
 } Clay_LayoutAlignmentY;
 
 // Controls how the element takes up space inside its parent container.
@@ -3069,18 +3073,32 @@ void Clay__CalculateFinalLayout(float deltaTime, bool useStoredBoundingBoxes, bo
 
             // On-axis alignment
             Clay_Dimensions contentSizeCurrent = {};
+            /* [TGE extension] space-between extra gap, computed below */
+            float spaceBetweenGapExtra = 0;
+            int spaceBetweenAxis = -1; /* 0=x, 1=y */
+            int nonExitingChildren = 0;
             if (layoutConfig->layoutDirection == CLAY_LEFT_TO_RIGHT) {
                 for (int32_t i = 0; i < currentElement->children.length; ++i) {
                     Clay_LayoutElement *childElement = Clay_LayoutElementArray_Get(&context->layoutElements, currentElement->children.elements[i]);
                     if (childElement->exiting) continue;
+                    nonExitingChildren++;
                     contentSizeCurrent.width += childElement->dimensions.width;
                     contentSizeCurrent.height = CLAY__MAX(contentSizeCurrent.height, childElement->dimensions.height);
                 }
-                contentSizeCurrent.width += (float)(CLAY__MAX(currentElement->children.length - 1, 0) * layoutConfig->childGap);
+                contentSizeCurrent.width += (float)(CLAY__MAX(nonExitingChildren - 1, 0) * layoutConfig->childGap);
                 float extraSpace = currentElement->dimensions.width - (float)(layoutConfig->padding.left + layoutConfig->padding.right) - contentSizeCurrent.width;
                 switch (layoutConfig->childAlignment.x) {
                     case CLAY_ALIGN_X_LEFT: extraSpace = 0; break;
                     case CLAY_ALIGN_X_CENTER: extraSpace /= 2; break;
+                    case CLAY_ALIGN_X_SPACE_BETWEEN: {
+                        /* Distribute extra space as gap between children */
+                        if (nonExitingChildren > 1) {
+                            spaceBetweenGapExtra = CLAY__MAX(0, extraSpace) / (float)(nonExitingChildren - 1);
+                            spaceBetweenAxis = 0;
+                        }
+                        extraSpace = 0;
+                        break;
+                    }
                     default: break;
                 }
                 extraSpace = CLAY__MAX(0, extraSpace);
@@ -3089,14 +3107,23 @@ void Clay__CalculateFinalLayout(float deltaTime, bool useStoredBoundingBoxes, bo
                 for (int32_t i = 0; i < currentElement->children.length; ++i) {
                     Clay_LayoutElement *childElement = Clay_LayoutElementArray_Get(&context->layoutElements, currentElement->children.elements[i]);
                     if (childElement->exiting) continue;
+                    nonExitingChildren++;
                     contentSizeCurrent.width = CLAY__MAX(contentSizeCurrent.width, childElement->dimensions.width);
                     contentSizeCurrent.height += childElement->dimensions.height;
                 }
-                contentSizeCurrent.height += (float)(CLAY__MAX(currentElement->children.length - 1, 0) * layoutConfig->childGap);
+                contentSizeCurrent.height += (float)(CLAY__MAX(nonExitingChildren - 1, 0) * layoutConfig->childGap);
                 float extraSpace = currentElement->dimensions.height - (float)(layoutConfig->padding.top + layoutConfig->padding.bottom) - contentSizeCurrent.height;
                 switch (layoutConfig->childAlignment.y) {
                     case CLAY_ALIGN_Y_TOP: extraSpace = 0; break;
                     case CLAY_ALIGN_Y_CENTER: extraSpace /= 2; break;
+                    case CLAY_ALIGN_Y_SPACE_BETWEEN: {
+                        if (nonExitingChildren > 1) {
+                            spaceBetweenGapExtra = CLAY__MAX(0, extraSpace) / (float)(nonExitingChildren - 1);
+                            spaceBetweenAxis = 1;
+                        }
+                        extraSpace = 0;
+                        break;
+                    }
                     default: break;
                 }
                 extraSpace = CLAY__MAX(0, extraSpace);
@@ -3148,9 +3175,9 @@ void Clay__CalculateFinalLayout(float deltaTime, bool useStoredBoundingBoxes, bo
                 // Update parent offsets
                 if (!childElement->exiting) {
                     if (layoutConfig->layoutDirection == CLAY_LEFT_TO_RIGHT) {
-                        currentElementTreeNode->nextChildOffset.x += childElement->dimensions.width + (float)layoutConfig->childGap;
+                        currentElementTreeNode->nextChildOffset.x += childElement->dimensions.width + (float)layoutConfig->childGap + (spaceBetweenAxis == 0 ? spaceBetweenGapExtra : 0);
                     } else {
-                        currentElementTreeNode->nextChildOffset.y += childElement->dimensions.height + (float)layoutConfig->childGap;
+                        currentElementTreeNode->nextChildOffset.y += childElement->dimensions.height + (float)layoutConfig->childGap + (spaceBetweenAxis == 1 ? spaceBetweenGapExtra : 0);
                     }
                 }
             }

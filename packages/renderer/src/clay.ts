@@ -131,8 +131,8 @@ export const DIRECTION = {
 
 // ── Alignment ──
 
-export const ALIGN_X = { LEFT: 0, RIGHT: 1, CENTER: 2 } as const
-export const ALIGN_Y = { TOP: 0, BOTTOM: 1, CENTER: 2 } as const
+export const ALIGN_X = { LEFT: 0, RIGHT: 1, CENTER: 2, SPACE_BETWEEN: 3 } as const
+export const ALIGN_Y = { TOP: 0, BOTTOM: 1, CENTER: 2, SPACE_BETWEEN: 3 } as const
 
 // ── Floating attach modes ──
 

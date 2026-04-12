@@ -25,12 +25,12 @@ interface BoxProps {
   paddingTop?: number
   paddingBottom?: number
   gap?: number
-  alignX?: "left" | "right" | "center"
-  alignY?: "top" | "bottom" | "center"
+  alignX?: "left" | "right" | "center" | "space-between"
+  alignY?: "top" | "bottom" | "center" | "space-between"
   /** Alias for alignX (opentui compat) */
-  justifyContent?: "left" | "right" | "center"
+  justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end"
   /** Alias for alignY (opentui compat) */
-  alignItems?: "top" | "bottom" | "center"
+  alignItems?: "top" | "bottom" | "center" | "space-between" | "flex-start" | "flex-end"
   // Sizing
   width?: number | string
   height?: number | string

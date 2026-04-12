@@ -22,12 +22,12 @@ export type TGEProps = {
   paddingX?: number
   paddingY?: number
   gap?: number
-  alignX?: "left" | "right" | "center"
-  alignY?: "top" | "bottom" | "center"
+  alignX?: "left" | "right" | "center" | "space-between"
+  alignY?: "top" | "bottom" | "center" | "space-between"
   /** Alias for alignX (opentui compat) */
-  justifyContent?: "left" | "right" | "center"
+  justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end"
   /** Alias for alignY (opentui compat) */
-  alignItems?: "top" | "bottom" | "center"
+  alignItems?: "top" | "bottom" | "center" | "space-between" | "flex-start" | "flex-end"
 
   // Sizing
   width?: number | string    // number=fixed, "100%"=percent, "fit"=fit, "grow"=grow
@@ -199,13 +199,15 @@ export function parseDirection(value: string | undefined): number {
 }
 
 export function parseAlignX(value: string | undefined): number {
-  if (value === "right") return ALIGN_X.RIGHT
+  if (value === "right" || value === "flex-end") return ALIGN_X.RIGHT
   if (value === "center") return ALIGN_X.CENTER
-  return ALIGN_X.LEFT
+  if (value === "space-between") return ALIGN_X.SPACE_BETWEEN
+  return ALIGN_X.LEFT // "left", "flex-start", or default
 }
 
 export function parseAlignY(value: string | undefined): number {
-  if (value === "bottom") return ALIGN_Y.BOTTOM
+  if (value === "bottom" || value === "flex-end") return ALIGN_Y.BOTTOM
   if (value === "center") return ALIGN_Y.CENTER
-  return ALIGN_Y.TOP
+  if (value === "space-between") return ALIGN_Y.SPACE_BETWEEN
+  return ALIGN_Y.TOP // "top", "flex-start", or default
 }

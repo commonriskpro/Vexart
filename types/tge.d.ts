@@ -361,8 +361,8 @@ export function useTerminalDimensions(terminal: Terminal): {
 
 export declare const SIZING: { readonly FIT: 0; readonly GROW: 1; readonly PERCENT: 2; readonly FIXED: 3 }
 export declare const DIRECTION: { readonly LEFT_TO_RIGHT: 0; readonly TOP_TO_BOTTOM: 1 }
-export declare const ALIGN_X: { readonly LEFT: 0; readonly RIGHT: 1; readonly CENTER: 2 }
-export declare const ALIGN_Y: { readonly TOP: 0; readonly BOTTOM: 1; readonly CENTER: 2 }
+export declare const ALIGN_X: { readonly LEFT: 0; readonly RIGHT: 1; readonly CENTER: 2; readonly SPACE_BETWEEN: 3 }
+export declare const ALIGN_Y: { readonly TOP: 0; readonly BOTTOM: 1; readonly CENTER: 2; readonly SPACE_BETWEEN: 3 }
 export declare const ATTACH_TO: { readonly NONE: 0; readonly PARENT: 1; readonly ELEMENT: 2; readonly ROOT: 3 }
 export declare const ATTACH_POINT: {
   readonly LEFT_TOP: 0; readonly LEFT_CENTER: 1; readonly LEFT_BOTTOM: 2
