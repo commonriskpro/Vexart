@@ -85,7 +85,7 @@ export interface ScrollViewProps {
   minHeight?: number
   maxHeight?: number
   stickyScroll?: boolean
-  stickyStart?: boolean
+  stickyStart?: "top" | "bottom"
   viewportOptions?: { paddingRight?: number }
   verticalScrollbarOptions?: {
     paddingLeft?: number

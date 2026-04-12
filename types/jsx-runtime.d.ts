@@ -193,7 +193,7 @@ interface ScrollboxProps {
   borderColor?: ColorValue
   borderWidth?: number
   stickyScroll?: boolean
-  stickyStart?: boolean
+  stickyStart?: "top" | "bottom"
   scrollY?: boolean
   scrollX?: boolean
   scrollSpeed?: number
