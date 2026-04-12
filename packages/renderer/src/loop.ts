@@ -273,11 +273,11 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       clay.openElement()
     }
 
-    // Layout — use per-side padding if any side is set, otherwise symmetric
-    const dir = parseDirection(node.props.direction)
+    // Layout — resolve aliases, then use per-side padding if set
+    const dir = parseDirection(node.props.direction ?? node.props.flexDirection)
     const gap = node.props.gap ?? 0
-    const ax = parseAlignX(node.props.alignX)
-    const ay = parseAlignY(node.props.alignY)
+    const ax = parseAlignX(node.props.alignX ?? node.props.justifyContent)
+    const ay = parseAlignY(node.props.alignY ?? node.props.alignItems)
 
     const hasPerSidePadding = node.props.paddingLeft !== undefined || node.props.paddingRight !== undefined ||
                               node.props.paddingTop !== undefined || node.props.paddingBottom !== undefined
@@ -296,8 +296,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       clay.configureLayout(dir, px, py, gap, ax, ay)
     }
 
-    // Sizing — use min/max if any constraint is set
-    const ws = parseSizing(node.props.width)
+    // Sizing — resolve flexGrow alias, then use min/max if set
+    const effectiveWidth = node.props.flexGrow !== undefined && node.props.width === undefined ? "grow" : node.props.width
+    const ws = parseSizing(effectiveWidth)
     const hs = parseSizing(node.props.height)
     const hasMinMax = node.props.minWidth !== undefined || node.props.maxWidth !== undefined ||
                       node.props.minHeight !== undefined || node.props.maxHeight !== undefined

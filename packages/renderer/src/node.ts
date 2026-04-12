@@ -16,16 +16,26 @@ export type TGENodeKind = "box" | "text" | "root"
 export type TGEProps = {
   // Layout
   direction?: "row" | "column"
+  /** Alias for direction (opentui compat) */
+  flexDirection?: "row" | "column"
   padding?: number
   paddingX?: number
   paddingY?: number
   gap?: number
   alignX?: "left" | "right" | "center"
   alignY?: "top" | "bottom" | "center"
+  /** Alias for alignX (opentui compat) */
+  justifyContent?: "left" | "right" | "center"
+  /** Alias for alignY (opentui compat) */
+  alignItems?: "top" | "bottom" | "center"
 
   // Sizing
   width?: number | string    // number=fixed, "100%"=percent, "fit"=fit, "grow"=grow
   height?: number | string
+  /** When set, width behaves as "grow" (opentui compat) */
+  flexGrow?: number
+  /** Accepted for compat, Clay shrinks implicitly */
+  flexShrink?: number
 
   // Visual
   backgroundColor?: string | number  // "#ff0000" or 0xff0000ff
