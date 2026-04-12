@@ -239,6 +239,8 @@ interface MarkdownProps {
 interface LinkProps {
   href?: string
   color?: ColorValue
+  fg?: ColorValue
+  backgroundColor?: ColorValue
   children?: Children
 }
 
