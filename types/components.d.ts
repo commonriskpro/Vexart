@@ -231,6 +231,11 @@ export interface TextareaProps {
   width?: number
   height?: number
   color?: ColorValue
+  focusedBackgroundColor?: ColorValue
+  focusedTextColor?: ColorValue
+  placeholderColor?: ColorValue
+  cursorColor?: ColorValue
+  textColor?: ColorValue
   disabled?: boolean
   focused?: boolean
   focusId?: string
