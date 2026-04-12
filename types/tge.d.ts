@@ -260,7 +260,7 @@ export interface SlotRegistry<Slots = any> {
 }
 
 export function createSlotRegistry<Slots = any, Context = any>(): SlotRegistry<Slots>
-export function createSlot(name: string, mode?: string): { Slot: (props?: any) => any }
+export function createSlot(name: string, mode?: "single_winner" | "all" | string): { Slot: (props?: { mode?: "single_winner" | "all" | string; name?: string; [key: string]: any }) => any }
 
 // ── Extmarks ──
 

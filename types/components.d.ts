@@ -65,17 +65,31 @@ export interface ScrollViewProps {
   scrollY?: boolean
   scrollSpeed?: number
   showScrollbar?: boolean
-  backgroundColor?: string | number
+  backgroundColor?: ColorValue
   cornerRadius?: number
-  borderColor?: string | number
+  borderColor?: ColorValue
   borderWidth?: number
   direction?: "row" | "column"
   padding?: number
   paddingX?: number
   paddingY?: number
+  paddingLeft?: number
+  paddingRight?: number
+  paddingTop?: number
+  paddingBottom?: number
   gap?: number
   alignX?: "left" | "right" | "center"
   alignY?: "top" | "bottom" | "center"
+  flexGrow?: number
+  flexShrink?: number
+  minHeight?: number
+  maxHeight?: number
+  viewportOptions?: { paddingRight?: number }
+  verticalScrollbarOptions?: {
+    paddingLeft?: number
+    visible?: boolean
+    trackOptions?: { backgroundColor?: ColorValue; foregroundColor?: ColorValue }
+  }
   children?: JSX.Element
 }
 
@@ -302,12 +316,22 @@ export interface DiffProps {
   filetype?: string
   showLineNumbers?: boolean
   width?: number | string
-  addedBg?: number
-  removedBg?: number
-  contextBg?: number
-  addedSignColor?: number
-  removedSignColor?: number
-  lineNumberFg?: number
+  height?: number | string
+  view?: "unified" | "split"
+  wrapMode?: string
+  color?: ColorValue
+  fg?: ColorValue
+  addedBg?: ColorValue
+  removedBg?: ColorValue
+  contextBg?: ColorValue
+  addedSignColor?: ColorValue
+  removedSignColor?: ColorValue
+  lineNumberFg?: ColorValue
+  lineNumberColor?: ColorValue
+  lineNumberBg?: ColorValue
+  addedLineNumberBg?: ColorValue
+  removedLineNumberBg?: ColorValue
+  hunkHeaderColor?: ColorValue
   streaming?: boolean
 }
 

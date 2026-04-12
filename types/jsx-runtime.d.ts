@@ -236,6 +236,12 @@ interface MarkdownProps {
   children?: Children
 }
 
+interface LinkProps {
+  href?: string
+  color?: ColorValue
+  children?: Children
+}
+
 interface DiffProps {
   diff: string
   view?: "unified" | "split"
@@ -246,6 +252,7 @@ interface DiffProps {
   height?: number | string
   wrapMode?: string
   fg?: ColorValue
+  color?: ColorValue
   addedBg?: ColorValue
   removedBg?: ColorValue
   contextBg?: ColorValue
@@ -262,7 +269,7 @@ interface DiffProps {
 }
 
 interface SpinnerProps {
-  color?: ColorValue | (() => ColorValue)
+  color?: ColorValue | ((...args: any[]) => ColorValue)
   frames?: string[]
   interval?: number
   children?: Children
@@ -301,6 +308,7 @@ export namespace JSX {
     diff: DiffProps
     spinner: SpinnerProps
     line_number: LineNumberProps
+    link: LinkProps
     span: SpanProps
     b: TextProps
     i: TextProps
