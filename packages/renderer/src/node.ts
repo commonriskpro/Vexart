@@ -170,8 +170,12 @@ export function removeChild(parent: TGENode, child: TGENode) {
 export function parseColor(value: string | number | undefined): number {
   if (value === undefined) return 0
   if (typeof value === "number") return value
+  // RGBA object (or anything with valueOf) → extract number
+  if (typeof value === "object" && value !== null && typeof (value as any).valueOf === "function") {
+    return (value as any).valueOf()
+  }
   // "#rrggbb" or "#rrggbbaa"
-  const hex = value.startsWith("#") ? value.slice(1) : value
+  const hex = (value as string).startsWith("#") ? (value as string).slice(1) : (value as string)
   if (hex.length === 6) return (parseInt(hex, 16) << 8 | 0xff) >>> 0
   if (hex.length === 8) return parseInt(hex, 16) >>> 0
   return 0
