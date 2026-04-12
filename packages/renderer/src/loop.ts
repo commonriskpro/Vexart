@@ -1005,13 +1005,21 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     }
 
     // onPress dispatch: detect click (was active, now released while still hovered)
+    // Bubbles up the tree like DOM events — if the clicked node doesn't have
+    // onPress/focusable, walk up to find the nearest ancestor that does.
     if (prevActiveNode && !prevActiveNode._active && prevActiveNode._hovered) {
-      // Mouse click on a focusable node → set focus (like browser behavior)
-      if (prevActiveNode.props.focusable) {
-        const fid = getNodeFocusId(prevActiveNode)
-        if (fid) setFocusedId(fid)
+      let target: TGENode | null = prevActiveNode
+      // Bubble: find nearest ancestor with focusable or onPress
+      while (target && !target.props.focusable && !target.props.onPress) {
+        target = target.parent
       }
-      prevActiveNode.props.onPress?.()
+      if (target) {
+        if (target.props.focusable) {
+          const fid = getNodeFocusId(target)
+          if (fid) setFocusedId(fid)
+        }
+        target.props.onPress?.()
+      }
     }
     prevActiveNode = newActiveNode
 
