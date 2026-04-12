@@ -22,12 +22,11 @@ import type { Terminal } from "@tge/terminal"
 import type { PixelBuffer } from "@tge/pixel"
 import { create, clear, paint, over, sub } from "@tge/pixel"
 import { createComposer, createLayerComposer } from "@tge/output"
-import { clay, CMD, ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE } from "./clay"
+import { clay, CMD, ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, SIZING } from "./clay"
 import type { RenderCommand } from "./clay"
 import {
   type TGENode,
   createNode,
-  parseColor,
   parseSizing,
   parseDirection,
   parseAlignX,
@@ -285,7 +284,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     if (node.kind === "text") {
       const content = node.text || collectText(node)
       if (!content) return
-      const color = parseColor(node.props.color) || 0xe0e0e0ff
+      const color = (node.props.color as number) || 0xe0e0e0ff
       const fontSize = node.props.fontSize ?? 14
       const fontId = node.props.fontId ?? 0
       const lineHeight = node.props.lineHeight ?? Math.ceil(fontSize * 1.2)
@@ -316,12 +315,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       boxNodes.push(node)
       clay.openElement()
 
-      // Sizing: use explicit width/height, or image intrinsic size, or fit
+      // Sizing: use pre-parsed if explicit, else image intrinsic size, else fit
       const imgBuf = node._imageBuffer
-      const explicitW = node.props.width
-      const explicitH = node.props.height
-      const ws = parseSizing(explicitW ?? (imgBuf ? imgBuf.width : "fit"))
-      const hs = parseSizing(explicitH ?? (imgBuf ? imgBuf.height : "fit"))
+      const ws = node._widthSizing ?? (imgBuf ? { type: SIZING.FIXED, value: imgBuf.width } : { type: SIZING.FIT, value: 0 })
+      const hs = node._heightSizing ?? (imgBuf ? { type: SIZING.FIXED, value: imgBuf.height } : { type: SIZING.FIT, value: 0 })
       clay.configureSizing(ws.type, ws.value, hs.type, hs.value)
 
       // Use a placeholder RECT so Clay emits a RECTANGLE command for painting
@@ -379,10 +376,12 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       clay.configureLayout(dir, px, py, gap, ax, ay)
     }
 
-    // Sizing — resolve flexGrow alias, then use min/max if set
-    const effectiveWidth = node.props.flexGrow !== undefined && node.props.width === undefined ? "grow" : node.props.width
-    const ws = parseSizing(effectiveWidth)
-    const hs = parseSizing(node.props.height)
+    // Sizing — use pre-parsed values, fallback to parseSizing for flexGrow alias
+    const hasFlexGrowAlias = node.props.flexGrow !== undefined && node.props.width === undefined
+    const ws = hasFlexGrowAlias
+      ? { type: SIZING.GROW, value: 0 }
+      : (node._widthSizing ?? parseSizing(node.props.width))
+    const hs = node._heightSizing ?? parseSizing(node.props.height)
     const hasMinMax = node.props.minWidth !== undefined || node.props.maxWidth !== undefined ||
                       node.props.minHeight !== undefined || node.props.maxHeight !== undefined
     if (hasMinMax) {
@@ -421,7 +420,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     // We inject a transparent placeholder so Clay emits the RECT for effect matching.
     const needsRect = vp.backgroundColor !== undefined || vp.gradient !== undefined || vp.backdropBlur !== undefined
     if (needsRect) {
-      const bgColor = vp.backgroundColor !== undefined ? parseColor(vp.backgroundColor) : 0x00000001 // near-transparent placeholder
+      const bgColor = vp.backgroundColor !== undefined ? (vp.backgroundColor as number) : 0x00000001 // near-transparent placeholder
       const cr = vp.cornerRadius ?? 0
       clay.configureRectangle(bgColor, cr)
       rectNodes.push(node)
@@ -435,7 +434,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         if (vp.glow) {
           effect.glow = {
             radius: vp.glow.radius,
-            color: parseColor(vp.glow.color),
+            color: vp.glow.color as number,
             intensity: vp.glow.intensity ?? 80,
           }
         }
@@ -462,7 +461,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
                              vp.borderTop !== undefined || vp.borderBottom !== undefined ||
                              vp.borderBetweenChildren !== undefined
     if (hasPerSideBorder && vp.borderColor !== undefined) {
-      const borderColor = parseColor(vp.borderColor)
+      const borderColor = vp.borderColor as number
       clay.configureBorderSides(borderColor,
         vp.borderLeft ?? 0,
         vp.borderRight ?? 0,
@@ -470,7 +469,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         vp.borderBottom ?? 0,
         vp.borderBetweenChildren ?? 0)
     } else if (vp.borderColor !== undefined && vp.borderWidth) {
-      const borderColor = parseColor(vp.borderColor)
+      const borderColor = vp.borderColor as number
       clay.configureBorder(borderColor, vp.borderWidth)
     }
 
@@ -677,7 +676,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         })
       } else if (b.hasBg) {
         // Static layer with bg: find anchor RECT by color match
-        const targetColor = parseColor(node.props.backgroundColor)
+        const targetColor = (node.props.backgroundColor as number) || 0
         const [tr, tg, tb, ta] = [(targetColor >>> 24) & 0xff, (targetColor >>> 16) & 0xff, (targetColor >>> 8) & 0xff, targetColor & 0xff]
 
         let found = false
@@ -739,7 +738,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       if (lb.boundary.hasBg) {
         const node = resolveNodeByPath(root, lb.boundary.path)
         if (node) {
-          const targetColor = parseColor(node.props.backgroundColor)
+          const targetColor = (node.props.backgroundColor as number) || 0
           const [tr, tg, tb, ta] = [(targetColor >>> 24) & 0xff, (targetColor >>> 16) & 0xff, (targetColor >>> 8) & 0xff, targetColor & 0xff]
           // Scan backwards from SCISSOR_START to find the RECT
           for (let i = lb.scissor.startIdx - 1; i >= 0; i--) {

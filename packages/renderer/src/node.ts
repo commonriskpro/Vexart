@@ -14,7 +14,7 @@ import { SIZING, DIRECTION, ALIGN_X, ALIGN_Y } from "./clay"
 export type TGENodeKind = "box" | "text" | "img" | "root"
 
 /** Interactive style props — usable in hoverStyle, activeStyle, focusStyle */
-type InteractiveStyleProps = Partial<Pick<TGEProps, "backgroundColor" | "borderColor" | "borderWidth" | "cornerRadius" | "borderRadius" | "shadow" | "boxShadow" | "glow" | "gradient" | "backdropBlur" | "opacity">>
+export type InteractiveStyleProps = Partial<Pick<TGEProps, "backgroundColor" | "borderColor" | "borderWidth" | "cornerRadius" | "borderRadius" | "shadow" | "boxShadow" | "glow" | "gradient" | "backdropBlur" | "opacity">>
 
 export type TGEProps = {
   // Layout
@@ -167,6 +167,10 @@ export type TGENode = {
   _imageBuffer: { data: Uint8Array; width: number; height: number } | null
   /** Image decode state — prevents re-triggering decode */
   _imageState: "idle" | "loading" | "loaded" | "error"
+  /** Pre-parsed width sizing — resolved once in setProperty, read every frame */
+  _widthSizing: SizingInfo | null
+  /** Pre-parsed height sizing — resolved once in setProperty, read every frame */
+  _heightSizing: SizingInfo | null
 }
 
 /** Computed layout geometry from Clay — written each frame after layout */
@@ -194,6 +198,8 @@ export function createNode(kind: TGENodeKind): TGENode {
     _focused: false,
     _imageBuffer: null,
     _imageState: "idle",
+    _widthSizing: { type: SIZING.FIT, value: 0 },
+    _heightSizing: { type: SIZING.FIT, value: 0 },
   }
 }
 

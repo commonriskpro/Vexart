@@ -12,14 +12,71 @@ import { createRenderer } from "solid-js/universal"
 import {
   type TGENode,
   type TGEProps,
+  type InteractiveStyleProps,
+  type SizingInfo,
   createNode,
   createTextNode,
   insertChild,
   removeChild,
   parseColor,
+  parseSizing,
 } from "./node"
 import { markDirty } from "./dirty"
 import { createHandle } from "./handle"
+
+// ── Color props that need pre-parsing ──
+// These are resolved from string → u32 ONCE in setProperty,
+// not every frame in walkTree. Theme hot-swap works because
+// SolidJS re-fires setProperty when a reactive signal changes.
+
+const COLOR_PROPS = new Set([
+  "backgroundColor",
+  "borderColor",
+  "color",
+])
+
+// Sub-object color fields: glow.color, hoverStyle.backgroundColor, etc.
+const STYLE_SUB_COLOR_PROPS = new Set([
+  "backgroundColor",
+  "borderColor",
+])
+
+/** Resolve a value through valueOf() (for ReactiveColor) then parseColor. */
+function resolveColor(value: unknown): number {
+  if (typeof value === "number") return value
+  if (typeof value === "object" && value !== null && typeof (value as any).valueOf === "function") {
+    const resolved = (value as any).valueOf()
+    if (typeof resolved === "number") return resolved
+    return parseColor(resolved)
+  }
+  if (typeof value === "string") return parseColor(value)
+  return 0
+}
+
+/** Pre-parse color fields inside a glow object. */
+function resolveGlow(glow: any): any {
+  if (!glow || typeof glow !== "object") return glow
+  return {
+    radius: glow.radius,
+    color: resolveColor(glow.color),
+    intensity: glow.intensity,
+  }
+}
+
+/** Pre-parse color fields inside an interactive style object (hoverStyle/activeStyle/focusStyle). */
+function resolveInteractiveStyle(style: any): any {
+  if (!style || typeof style !== "object") return style
+  const resolved = { ...style }
+  for (const key of STYLE_SUB_COLOR_PROPS) {
+    if (key in resolved) {
+      resolved[key] = resolveColor(resolved[key])
+    }
+  }
+  if (resolved.glow) {
+    resolved.glow = resolveGlow(resolved.glow)
+  }
+  return resolved
+}
 
 export const {
   render,
@@ -82,6 +139,41 @@ export const {
           (node.props as Record<string, unknown>)[key] = style[key]
         }
       }
+      markDirty()
+      return
+    }
+
+    // ── Pre-parse colors: string → u32 once, not every frame ──
+    if (COLOR_PROPS.has(name)) {
+      (node.props as Record<string, unknown>)[name] = resolveColor(value)
+      markDirty()
+      return
+    }
+
+    // ── Pre-parse sizing: string → SizingInfo once, not every frame ──
+    if (name === "width") {
+      (node.props as Record<string, unknown>)[name] = value
+      node._widthSizing = parseSizing(value as number | string | undefined)
+      markDirty()
+      return
+    }
+    if (name === "height") {
+      (node.props as Record<string, unknown>)[name] = value
+      node._heightSizing = parseSizing(value as number | string | undefined)
+      markDirty()
+      return
+    }
+
+    // Pre-parse glow.color
+    if (name === "glow") {
+      (node.props as Record<string, unknown>)[name] = resolveGlow(value)
+      markDirty()
+      return
+    }
+
+    // Pre-parse interactive style color fields
+    if (name === "hoverStyle" || name === "activeStyle" || name === "focusStyle") {
+      (node.props as Record<string, unknown>)[name] = resolveInteractiveStyle(value)
       markDirty()
       return
     }
