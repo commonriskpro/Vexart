@@ -30,7 +30,7 @@ JSX (SolidJS createRenderer)
 
 - **Clay** (vendor/clay.h) — Layout engine. Single C header, renderer-agnostic, microsecond performance. Called via bun:ffi. Forked with space-between alignment extension.
 - **SolidJS** (solid-js/universal) — createRenderer for JSX reconciliation. 10 methods, no VDOM.
-- **Zig** (zig/) — Pixel painting shared library. 17 FFI exports. SDF primitives, blend, composite, gradients, blur.
+- **Zig** (zig/) — Pixel painting shared library. 30+ FFI exports. All ≤8 params (packed buffer ARM64 safe). SDF primitives, blend, composite, gradients, blur, backdrop filters.
 - **Bun** — Runtime. FFI for native libs, TypeScript execution.
 
 ## Build Order
@@ -85,27 +85,38 @@ All visual effects are implemented in Zig SDF primitives and exposed as JSX prop
 | Linear gradient | `gradient={{ type: "linear", from, to, angle? }}` | `gradient={{ type: "linear", from: 0x1a1a2eff, to: 0x0a0a0fff, angle: 90 }}` |
 | Radial gradient | `gradient={{ type: "radial", from, to }}` | `gradient={{ type: "radial", from: 0x56d4c8ff, to: 0x00000000 }}` |
 | Backdrop blur | `backdropBlur={radius}` | `backdropBlur={12}` — blurs content behind element |
+| Backdrop brightness | `backdropBrightness={150}` | `backdropBrightness={150}` — 0=black, 100=unchanged, 200=2x |
+| Backdrop contrast | `backdropContrast={120}` | `backdropContrast={120}` — 0=grey, 100=unchanged, 200=high |
+| Backdrop saturate | `backdropSaturate={0}` | `backdropSaturate={0}` — 0=grayscale, 100=unchanged |
+| Backdrop grayscale | `backdropGrayscale={100}` | `backdropGrayscale={100}` — 0=unchanged, 100=full grayscale |
+| Backdrop invert | `backdropInvert={100}` | `backdropInvert={100}` — 0=unchanged, 100=full invert |
+| Backdrop sepia | `backdropSepia={50}` | `backdropSepia={50}` — 0=unchanged, 100=full sepia |
+| Backdrop hue-rotate | `backdropHueRotate={180}` | `backdropHueRotate={180}` — 0-360 degrees |
+| Element opacity | `opacity={0.5}` | `opacity={0.5}` — 0.0-1.0, multiplies alpha of entire element |
 | Per-corner radius | `cornerRadii={{ tl, tr, br, bl }}` | `cornerRadii={{ tl: 20, tr: 20, br: 0, bl: 0 }}` |
 | Uniform radius | `cornerRadius={n}` | `cornerRadius={16}` |
 
 ### Interactive states
 
-Declarative hover/active styles — no manual signal boilerplate needed:
+Declarative hover/active/focus styles — no manual signal boilerplate needed:
 
 ```tsx
 <box
+  focusable
   backgroundColor={0x1e1e2eff}
   hoverStyle={{ backgroundColor: 0x2a2a3eff }}
   activeStyle={{ backgroundColor: 0x3a3a4eff }}
+  focusStyle={{ borderColor: 0x4488ccff, borderWidth: 2 }}
+  onPress={() => save()}
 />
 ```
 
-Props available in `hoverStyle`/`activeStyle`: `backgroundColor`, `borderColor`, `borderWidth`, `cornerRadius`, `shadow`, `glow`, `gradient`, `backdropBlur`.
+Props available in `hoverStyle`/`activeStyle`/`focusStyle`: `backgroundColor`, `borderColor`, `borderWidth`, `cornerRadius`, `shadow`, `glow`, `gradient`, `backdropBlur`, `opacity`.
 
 ### Architecture note
 
 ```
-JSX prop → loop.ts reads prop (ns) → effectsQueue → paintCommand calls Zig FFI (μs)
+JSX prop → reconciler.ts setProperty (pre-parse color/sizing/glow ONCE) → loop.ts walkTree reads u32 (ns) → effectsQueue → paintCommand calls Zig FFI via shared packed buffer (μs)
 ```
 
 Effects are painted BEFORE the rect (shadow/glow) or INSTEAD of it (gradient). Backdrop blur reads the buffer region behind the element, blurs it in a temp buffer, then composites. All effects use isolated temp buffers to avoid corrupting neighboring pixels.
@@ -162,6 +173,26 @@ Effects are painted BEFORE the rect (shadow/glow) or INSTEAD of it (gradient). B
 | `hoverStyle` | partial visual props | Merged on hover |
 | `activeStyle` | partial visual props | Merged on active |
 
+### Interaction
+| Prop | Type | Notes |
+| ---- | ---- | ----- |
+| `focusable` | `boolean` | Auto-register in focus system (like HTML tabindex="0") |
+| `onPress` | `() => void` | Fires on mouse click + Enter/Space when focused |
+| `onKeyDown` | `(event: any) => void` | Keyboard events when focused |
+| `focusStyle` | partial visual props | Merged on focus |
+| `opacity` | `number` | 0.0-1.0, element-level opacity |
+
+### Backdrop Filters
+| Prop | Type | Notes |
+| ---- | ---- | ----- |
+| `backdropBrightness` | `number` | 0=black, 100=unchanged, 200=2x bright |
+| `backdropContrast` | `number` | 0=grey, 100=unchanged, 200=high contrast |
+| `backdropSaturate` | `number` | 0=grayscale, 100=unchanged, 200=hyper |
+| `backdropGrayscale` | `number` | 0=unchanged, 100=full grayscale |
+| `backdropInvert` | `number` | 0=unchanged, 100=fully inverted |
+| `backdropSepia` | `number` | 0=unchanged, 100=full sepia |
+| `backdropHueRotate` | `number` | 0-360 degrees |
+
 ### Compositing & Scroll
 | Prop | Type | Notes |
 | ---- | ---- | ----- |
@@ -192,7 +223,7 @@ Effects are painted BEFORE the rect (shadow/glow) or INSTEAD of it (gradient). B
 | `fontWeight` | `number` | 400/500/600/700 |
 | `fontStyle` | `"normal" \| "italic"` | — |
 
-## Zig FFI exports (17 functions)
+## Zig FFI exports (30+ functions)
 
 | Function | Purpose |
 | -------- | ------- |
@@ -213,6 +244,21 @@ Effects are painted BEFORE the rect (shadow/glow) or INSTEAD of it (gradient). B
 | `tge_measure_text` | Measure text width |
 | `tge_load_font_atlas` | Load runtime font (id 1-15) |
 | `tge_draw_text_font` | Text with specific font atlas |
+| `tge_inset_shadow` | Inset shadow (SDF, packed params) |
+| `tge_filter_brightness` | Backdrop brightness filter |
+| `tge_filter_contrast` | Backdrop contrast filter |
+| `tge_filter_saturate` | Backdrop saturation filter |
+| `tge_filter_grayscale` | Backdrop grayscale filter |
+| `tge_filter_invert` | Backdrop color invert filter |
+| `tge_filter_sepia` | Backdrop sepia filter |
+| `tge_filter_hue_rotate` | Backdrop hue rotation filter |
+| `tge_blend_mode` | CSS blend modes (16 modes) |
+| `tge_linear_gradient_multi` | Multi-stop linear gradient |
+| `tge_radial_gradient_multi` | Multi-stop radial gradient |
+| `tge_conic_gradient` | Conic/angular gradient |
+| `tge_gradient_stroke` | Gradient border stroke |
+
+All FFI functions use ≤8 params (packed buffer pattern for ARM64 safety). Shared ArrayBuffer for zero allocations.
 
 ## @tge/renderer exports (54 values, 31 types)
 
@@ -229,10 +275,26 @@ Effects are painted BEFORE the rect (shadow/glow) or INSTEAD of it (gradient). B
 - `useKeyboard`, `useMouse`, `useInput`, `onInput`
 - `useFocus`, `setFocus`, `focusedId`, `setFocusedId`
 
+### Animation
+- `createTransition`, `createSpring`, easing presets
+
+### Theme
+- `createTheme`, `setTheme`, `ThemeProvider`
+
 ### Utilities
 - `markDirty`, `createHandle`, `createScrollHandle`, `resetScrollHandles`
 - `registerFont`, `getFont`, `clearTextCache`
 - `useTerminalDimensions`, `decodePasteBytes`
+- `clearImageCache`
+
+### Focus
+- `pushFocusScope`
+
+### Data
+- `useQuery`, `useMutation`
+
+### Router
+- `createRouter`, `createNavigationStack`
 
 ### Selection
 - `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal`
@@ -254,7 +316,7 @@ Effects are painted BEFORE the rect (shadow/glow) or INSTEAD of it (gradient). B
 ### Constants
 - `ATTACH_TO`, `ATTACH_POINT`, `POINTER_CAPTURE`, `SIZING`, `DIRECTION`, `ALIGN_X`, `ALIGN_Y`
 
-## @tge/components (17 components)
+## @tge/components (28 components)
 
 | Component | Props | Purpose |
 | --------- | ----- | ------- |
@@ -275,6 +337,20 @@ Effects are painted BEFORE the rect (shadow/glow) or INSTEAD of it (gradient). B
 | `Markdown` | MarkdownProps | Markdown renderer (inline styling) |
 | `WrapRow` | WrapRowProps | Flex-wrap workaround |
 | `Diff` | DiffProps | Unified diff viewer |
+| `Dialog` | DialogProps | Modal with focus trap + Escape |
+| `Select` | SelectProps | Dropdown select with keyboard nav |
+| `Switch` | SwitchProps | Toggle switch |
+| `RadioGroup` | RadioGroupProps | Radio option group |
+| `Table` | TableProps | Data table with row selection |
+| `Toast` | createToaster | Imperative toast notifications |
+| `Router` | RouterProps | Flat + stack navigation |
+| `Tooltip` | TooltipProps | Delayed tooltip on hover |
+| `Popover` | PopoverProps | Controlled popover panel |
+| `Combobox` | ComboboxProps | Autocomplete with filtering |
+| `Slider` | SliderProps | Numeric range input |
+| `VirtualList` | VirtualListProps | Virtualized list (fixed height) |
+
+Also: `createForm` factory for form validation.
 
 ## @tge/void — Design system (shadcn-compatible)
 
@@ -318,6 +394,9 @@ shadows.sm/md/lg/xl           // preset shadow configs
 | `Separator` | horizontal, vertical | — |
 | `Avatar` | — | sm, default, lg |
 | `Skeleton` | — | — |
+| `VoidDialog` | — | — |
+| `VoidSelect` | — | — |
+| `VoidSwitch` | — | — |
 
 ### Typography
 

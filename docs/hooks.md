@@ -100,11 +100,13 @@ Make a component focusable. Registers it in the global focus ring for Tab/Shift+
 type FocusHandle = {
   focused: () => boolean    // Whether this element is currently focused (signal)
   focus: () => void         // Programmatically focus this element
+  id: string                // The focus ID (auto-generated or custom)
 }
 
 function useFocus(opts?: {
   id?: string                                 // Unique focus ID
   onKeyDown?: (event: KeyEvent) => void       // Keyboard handler (only fires when focused)
+  onPress?: () => void                        // Fires on Enter/Space when focused
 }): FocusHandle
 ```
 
@@ -271,6 +273,231 @@ markDirty()  // Tell TGE to repaint
 
 - Normally you don't need this. SolidJS signal changes automatically trigger `markDirty()`.
 - Use it only when integrating with external state management or imperative APIs.
+
+---
+
+## pushFocusScope()
+
+Create a focus scope (trap) for modals and dialogs. Tab/Shift+Tab only cycles within the active scope.
+
+### Signature
+
+```typescript
+function pushFocusScope(): () => void
+```
+
+Returns a cleanup function that pops the scope and restores previous focus.
+
+### Usage
+
+```tsx
+import { pushFocusScope } from "@tge/renderer"
+import { onCleanup } from "solid-js"
+
+function Modal(props: { children: any }) {
+  const popScope = pushFocusScope()
+  onCleanup(popScope)
+  
+  return (
+    <box width="100%" height="100%" alignX="center" alignY="center">
+      {props.children}
+    </box>
+  )
+}
+```
+
+### Notes
+
+- Focus scopes stack — nested dialogs create nested scopes.
+- When popped, focus returns to the element that was focused before the scope was pushed.
+- The built-in `<Dialog>` component uses this automatically.
+
+---
+
+## Focusable `<box>`
+
+Make any `<box>` focusable without `useFocus()`. Like HTML `<div tabindex="0">`.
+
+### Props
+
+```tsx
+<box
+  focusable                           // Register in focus ring
+  focusStyle={{ borderColor: "#4488cc", borderWidth: 2 }}  // Visual on focus
+  onPress={() => save()}              // Mouse click + Enter/Space
+  onKeyDown={(e) => handleKey(e)}     // Keyboard when focused
+>
+  <text>Focusable content</text>
+</box>
+```
+
+### Notes
+
+- `focusable` auto-registers the node in the focus system — no `useFocus()` needed.
+- `focusStyle` works like `hoverStyle`/`activeStyle` — partial props merged when focused.
+- `onPress` fires on mouse click (release while hovered) OR Enter/Space when focused.
+- `useFocus()` still exists for advanced use (programmatic focus, custom focus IDs).
+
+---
+
+## useQuery(fetcher, options?)
+
+Data fetching hook with loading/error/data states.
+
+### Signature
+
+```typescript
+type QueryResult<T> = {
+  data: () => T | undefined
+  loading: () => boolean
+  error: () => Error | undefined
+  refetch: () => void
+  mutate: (data: T | ((prev: T | undefined) => T)) => void
+}
+
+type QueryOptions = {
+  enabled?: boolean          // Auto-fetch on mount. Default: true
+  refetchInterval?: number   // Auto-refetch interval (ms). 0 = disabled
+  retry?: number             // Retry count on error. Default: 0
+  retryDelay?: number        // Retry delay (ms). Default: 1000
+}
+
+function useQuery<T>(fetcher: () => Promise<T>, options?: QueryOptions): QueryResult<T>
+```
+
+### Usage
+
+```tsx
+import { useQuery } from "@tge/renderer"
+import { Show, For } from "@tge/renderer"
+
+function UserList() {
+  const users = useQuery(() => fetch("/api/users").then(r => r.json()))
+
+  return (
+    <box direction="column" gap={4}>
+      <Show when={users.loading()}>
+        <text color="#999">Loading...</text>
+      </Show>
+      <Show when={users.error()}>
+        <text color="#ff4444">{users.error()!.message}</text>
+      </Show>
+      <For each={users.data() ?? []}>
+        {(user) => <text color="#fff">{user.name}</text>}
+      </For>
+    </box>
+  )
+}
+```
+
+---
+
+## useMutation(mutator, options?)
+
+Mutation hook with optimistic updates and rollback.
+
+### Signature
+
+```typescript
+type MutationResult<T, V> = {
+  data: () => T | undefined
+  loading: () => boolean
+  error: () => Error | undefined
+  mutate: (variables: V) => Promise<T | undefined>
+  reset: () => void
+}
+
+type MutationOptions<T, V> = {
+  onMutate?: (variables: V) => T | undefined     // Optimistic update
+  onSuccess?: (data: T, variables: V) => void
+  onError?: (error: Error, variables: V, previousData: T | undefined) => void
+  onSettled?: (data: T | undefined, error: Error | undefined, variables: V) => void
+}
+
+function useMutation<T, V = void>(
+  mutator: (variables: V) => Promise<T>,
+  options?: MutationOptions<T, V>
+): MutationResult<T, V>
+```
+
+### Usage
+
+```tsx
+import { useMutation } from "@tge/renderer"
+
+function SaveButton() {
+  const save = useMutation(
+    (data: { name: string }) => fetch("/api/save", { method: "POST", body: JSON.stringify(data) }),
+    {
+      onSuccess: () => toast({ message: "Saved!" }),
+      onError: (err) => toast({ message: err.message, variant: "error" }),
+    }
+  )
+
+  return (
+    <box focusable onPress={() => save.mutate({ name: "Alice" })}>
+      <text>{save.loading() ? "Saving..." : "Save"}</text>
+    </box>
+  )
+}
+```
+
+---
+
+## createTransition(signal, options)
+
+Animate numeric signal changes with easing.
+
+### Signature
+
+```typescript
+function createTransition(
+  signal: () => number,
+  options?: { duration?: number; easing?: (t: number) => number }
+): () => number
+```
+
+### Usage
+
+```tsx
+import { createTransition } from "@tge/renderer"
+import { createSignal } from "solid-js"
+
+function ExpandingBox() {
+  const [expanded, setExpanded] = createSignal(false)
+  const width = createTransition(() => expanded() ? 300 : 100, { duration: 300 })
+
+  return (
+    <box focusable onPress={() => setExpanded(e => !e)}>
+      <box width={width()} height={50} backgroundColor="#4488cc" cornerRadius={8} />
+    </box>
+  )
+}
+```
+
+---
+
+## createSpring(signal, options)
+
+Physics-based spring animation.
+
+### Signature
+
+```typescript
+function createSpring(
+  signal: () => number,
+  options?: { stiffness?: number; damping?: number; mass?: number }
+): () => number
+```
+
+### Usage
+
+```tsx
+import { createSpring } from "@tge/renderer"
+
+const springY = createSpring(() => active() ? 0 : 100, { stiffness: 200, damping: 20 })
+<box floatOffset={{ x: 0, y: springY() }}>...</box>
+```
 
 ---
 

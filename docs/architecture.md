@@ -98,8 +98,11 @@ Each command type maps to a Zig FFI call:
 |---------|-------------|
 | RECTANGLE (no radius) | `tge_fill_rect` |
 | RECTANGLE (with radius) | `tge_rounded_rect` |
+| RECTANGLE (per-corner radius) | `tge_rounded_rect_corners` |
 | BORDER | `tge_stroke_rect` |
+| BORDER (per-corner) | `tge_stroke_rect_corners` |
 | TEXT | `tge_draw_text` |
+| TEXT (runtime font) | `tge_draw_text_font` |
 
 All paint functions use **SDF (Signed Distance Field)** anti-aliasing. The SDF is evaluated per-pixel:
 
@@ -113,17 +116,27 @@ This produces sub-pixel smooth edges — no jagged corners, no aliasing artifact
 
 ### Effects Pipeline
 
-Shadow and glow effects are NOT part of Clay's layout. They're handled in a side-map (`effectsQueue`) populated during tree walking:
+Effects are NOT part of Clay's layout. They're handled in a side-map (`effectsQueue`) populated during tree walking:
 
-1. During tree walk, if a node has `shadow` or `glow` props, record the effect with the node's layout bounds.
-2. Before painting the main commands, process the effects queue:
-   - Create a **temporary isolated PixelBuffer**
-   - Paint the shape (rounded rect) in the temp buffer
-   - Apply blur to the temp buffer
-   - Composite temp buffer onto main buffer using `src-over` alpha blending
-3. Then paint the main commands on top.
+1. During tree walk, if a node has `shadow`, `glow`, `gradient`, `backdropBlur`, backdrop filters, or `opacity` props, record the effect config.
+2. In `paintCommand()`, match effects to RECT commands by color + cornerRadius.
+3. Paint order:
+   a. **Glow** — rounded rect → blur → composite onto main buffer (isolated temp buffer)
+   b. **Shadow** — rounded rect at offset → blur → composite (supports array for multi-shadow)
+   c. **Backdrop filters** — applied IN-PLACE on main buffer in CSS spec order:
+      - `backdropBlur` → box blur (3-pass ≈ Gaussian)
+      - `backdropBrightness` → per-pixel brightness adjustment
+      - `backdropContrast` → per-pixel contrast adjustment
+      - `backdropSaturate` → per-pixel saturation
+      - `backdropGrayscale` → per-pixel grayscale conversion
+      - `backdropInvert` → per-pixel color inversion
+      - `backdropSepia` → per-pixel sepia tone
+      - `backdropHueRotate` → per-pixel hue rotation
+   d. **Corner restoration** — for rounded rects, save pixels before blur, restore outside SDF mask
+   e. **Background/gradient** — paint solid color or gradient fill
+   f. **Opacity** — if element has `opacity < 1`, paint into temp buffer, composite via `withOpacity()`
 
-**Why isolated buffers?** The blur function is destructive in-place — it modifies ALL pixels in the rectangular region, not just the ones you painted. Without isolation, blur would corrupt neighboring content.
+**Why isolated buffers?** Blur is destructive in-place. Without isolation, blur corrupts neighboring content.
 
 ---
 
@@ -192,16 +205,58 @@ This is critical for performance. In a dashboard with 5 widgets, updating one co
 ```
 Signal change (createSignal setter)
   → SolidJS fires effect
-    → setProp(node, key, newValue)
+    → setProp(node, key, newValue) — pre-parses color/sizing ONCE
       → markDirty()
-        → next frame tick (30fps):
+        → next frame tick (adaptive 30-60fps):
           → Clay beginLayout/endLayout
             → walk commands
-              → paint dirty regions
+              → paint dirty regions (effects, backdrop filters, opacity)
                 → output dirty layers
 ```
 
+Animation active → 60fps. Idle → 30fps. Transitions back after ~200ms cooldown.
+
 The entire cycle from signal change to pixels on screen takes single-digit milliseconds.
+
+### FFI ARM64 Safety
+
+ARM64 has 8 general-purpose registers (x0-x7) for function arguments. bun:ffi silently corrupts parameters beyond the 8th when they spill to the stack.
+
+**Solution:** All FFI functions that would exceed 8 params use a packed buffer pattern:
+- TypeScript packs spatial/extra params into a shared `ArrayBuffer(64)` via `DataView`
+- A single `Uint8Array` view is passed as one pointer argument
+- Zig unpacks via `@bitCast` (zero-cost reinterpret)
+
+**Performance:** The `ArrayBuffer` is allocated ONCE at module load. Zero allocations per FFI call. At 60fps with 100 nodes, this eliminates ~18,000 allocations/second.
+
+```
+TypeScript (pack):   _v.setInt32(0, x, true); _v.setInt32(4, y, true); ...
+FFI call:            tge_rounded_rect(bufPtr, width, height, color, _p)
+Zig (unpack):        const x = rd_i32(p, 0); const y = rd_i32(p, 4); ...
+```
+
+### Focus System Architecture
+
+TGE's focus system bridges the SolidJS reactive layer and the paint loop:
+
+```
+<box focusable>
+  → reconciler.setProperty("focusable", true)
+    → registerNodeFocusable(node) — creates FocusEntry in active scope
+      → Tab/Shift+Tab cycles through active scope entries
+        → focusedId() signal updates
+          → updateInteractiveStates() reads focusedId(), sets node._focused
+            → resolveProps() merges focusStyle when _focused=true
+              → paintCommand renders merged visual props
+```
+
+**Focus scopes** enable focus traps (e.g., Dialog):
+- `pushFocusScope()` creates a new scope — Tab only cycles within it
+- `popScope()` (returned by push) restores the previous scope and focus
+- Scopes stack — nested dialogs create nested traps
+
+**`useFocus()`** exists for component-level focus (custom onKeyDown handlers).
+**`<box focusable>`** exists for node-level focus (declarative, zero boilerplate).
 
 ---
 
@@ -251,6 +306,8 @@ The Zig build compiles:
 - `shadow.zig` — Box blur
 - `halo.zig` — Radial glow
 - `gradient.zig` — Linear/radial gradients
+- `filters.zig` — Backdrop filter operations (brightness, contrast, saturate, grayscale, invert, sepia, hue-rotate)
+- `blendmodes.zig` — CSS blend modes (16 modes: multiply, screen, overlay, etc.)
 - `text.zig` — Bitmap text renderer
 - `font_atlas.zig` — Generated SF Mono 14px glyph data
 

@@ -2,7 +2,7 @@
 
 **Pixel-native terminal rendering engine.** Write JSX, get browser-quality UI in your terminal.
 
-Anti-aliased corners. Drop shadows. Gradients. Glow effects. Interactive components with focus management. All rendered as real pixels — not ASCII boxes.
+Anti-aliased corners. Drop shadows. Gradients. Glow effects. Backdrop filters (blur, brightness, contrast, grayscale). Element opacity. Interactive focus management. Form validation. Data fetching hooks. Virtualized lists. All rendered as real pixels — not ASCII boxes.
 
 ```tsx
 import { mount } from "@tge/renderer"
@@ -43,17 +43,27 @@ TGE is **not** a cell-based TUI framework. It renders actual pixels using the Ki
 - **JSX components** — Write SolidJS JSX, TGE handles the rest
 - **Real layout engine** — Clay (C library) provides CSS-like flexbox layout in microseconds
 - **Design tokens** — Built-in dark theme with semantic color, spacing, radius, and shadow tokens
-- **Interactive components** — Button, Input, Checkbox, Tabs, List, ProgressBar, ScrollView
+- **28 headless components** — Button, Input, Select, Dialog, Combobox, Slider, VirtualList, and more
 - **Focus management** — Tab/Shift+Tab cycling, per-component keyboard handlers
 - **Reactive rendering** — SolidJS signals drive dirty-flag repaint (no VDOM diffing)
 - **Layer compositing** — Per-component Kitty images, only dirty layers retransmit
 - **Shadow & glow effects** — Drop shadows and glow as Box props, blur-composited in isolation
 - **Multiple output backends** — Kitty direct, Kitty placeholder (tmux), halfblock fallback
+- **Animations** — `createTransition` and `createSpring` with 12 easing presets and adaptive 30-60fps
+- **Runtime theming** — Hot-swappable themes via `ThemeProvider`, `createTheme`, `setTheme`
+- **Backdrop filters** — 7 CSS-spec filters: brightness, contrast, saturate, grayscale, invert, sepia, hue-rotate
+- **Element opacity** — Per-element opacity multiplier with isolated compositing
+- **Declarative focus** — `<box focusable>` with `focusStyle`, `onPress`, `onKeyDown`
+- **Focus trap** — Dialog-level focus scoping with `pushFocusScope`
+- **Form validation** — `createForm()` with sync/async validators, touched/dirty/submitting
+- **Data fetching** — `useQuery` (retry, refetch, interval) and `useMutation` (optimistic + rollback)
+- **List virtualization** — `VirtualList` renders only visible items with O(1) scroll
+- **ARM64-safe FFI** — All Zig calls use ≤8 params via shared packed buffer (zero allocations)
 
 ## Requirements
 
 - [Bun](https://bun.sh/) >= 1.1.0
-- [Zig](https://ziglang.org/) >= 0.13 (for building the paint engine)
+- [Zig](https://ziglang.org/) >= 0.14 (for building the paint engine)
 - A terminal with [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) support (Kitty, Ghostty, WezTerm)
 
 ## Quick Start
@@ -116,8 +126,11 @@ term.endSync(term.write)
 ### High-Level (JSX)
 
 ```tsx
-import { mount } from "@tge/renderer"
-import { Box, Text } from "@tge/components"
+import { mount, useKeyboard, useMouse, useFocus, onInput, pushFocusScope,
+         useQuery, useMutation, createTransition, createSpring } from "@tge/renderer"
+import { Box, Text, Button, Input, Checkbox, Tabs, List, ProgressBar, ScrollView,
+         Dialog, Select, Switch, RadioGroup, Table, Toast, Router,
+         Tooltip, Combobox, Slider, VirtualList, createForm } from "@tge/components"
 import { createTerminal } from "@tge/terminal"
 
 function App() {
@@ -143,6 +156,7 @@ mount(App, terminal)
 | [Design Tokens](docs/tokens.md) | Colors, spacing, radius, shadows |
 | [Architecture](docs/architecture.md) | Rendering pipeline, internals |
 | [Examples & Recipes](docs/examples.md) | Cookbook for common patterns |
+| [Creating Theme Packages](manual/creating-theme-packages.md) | Creating custom design systems/themes |
 
 ## Examples
 

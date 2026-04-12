@@ -441,6 +441,353 @@ function TodoList() {
 
 ---
 
+## Form Validation
+
+Using `createForm` for full form lifecycle management:
+
+```tsx
+import { mount, useQuery, useMutation } from "@tge/renderer"
+import { Box, Text, Input, Button, createForm } from "@tge/components"
+import { colors, radius, space, shadows } from "@tge/void"
+import { createTerminal } from "@tge/terminal"
+import { Show } from "@tge/renderer"
+
+function RegistrationForm() {
+  const form = createForm({
+    initialValues: { name: "", email: "", password: "" },
+    validate: {
+      name: (v) => v.length < 2 ? "Name must be at least 2 characters" : undefined,
+      email: (v) => !v.includes("@") ? "Invalid email address" : undefined,
+      password: (v) => v.length < 8 ? "Password must be at least 8 characters" : undefined,
+    },
+    onSubmit: async (values) => {
+      await new Promise(resolve => setTimeout(resolve, 1000)) // simulate API call
+      console.log("Registered:", values)
+    },
+  })
+
+  return (
+    <Box
+      width={380} padding={space[6]}
+      backgroundColor={colors.card} cornerRadius={radius.xl} shadow={shadows.lg}
+      direction="column" gap={space[4]}
+    >
+      <Text color={colors.foreground}>Create Account</Text>
+
+      {/* Name field */}
+      <Box direction="column" gap={space[1]}>
+        <Text color={colors.mutedForeground}>Name</Text>
+        <Input
+          value={form.values.name()}
+          onChange={(v) => form.setValue("name", v)}
+          placeholder="Your name..."
+        />
+        <Show when={form.touched.name() && form.errors.name()}>
+          <Text color={colors.destructive}>{form.errors.name()}</Text>
+        </Show>
+      </Box>
+
+      {/* Email field */}
+      <Box direction="column" gap={space[1]}>
+        <Text color={colors.mutedForeground}>Email</Text>
+        <Input
+          value={form.values.email()}
+          onChange={(v) => form.setValue("email", v)}
+          placeholder="email@example.com"
+        />
+        <Show when={form.touched.email() && form.errors.email()}>
+          <Text color={colors.destructive}>{form.errors.email()}</Text>
+        </Show>
+      </Box>
+
+      {/* Submit */}
+      <Box direction="row" gap={space[2]}>
+        <Button
+          onPress={form.submit}
+          disabled={form.submitting()}
+          renderButton={({ pressed, disabled }) => (
+            <box
+              backgroundColor={pressed ? "#333" : "#4488cc"}
+              cornerRadius={radius.md} padding={space[2]} paddingX={space[4]}
+              opacity={disabled ? 0.5 : 1}
+            >
+              <text color="#fff">{form.submitting() ? "Creating..." : "Create Account"}</text>
+            </box>
+          )}
+        />
+        <Button
+          onPress={form.reset}
+          renderButton={() => (
+            <box padding={space[2]} paddingX={space[4]}>
+              <text color={colors.mutedForeground}>Reset</text>
+            </box>
+          )}
+        />
+      </Box>
+    </Box>
+  )
+}
+
+const terminal = await createTerminal()
+mount(RegistrationForm, terminal)
+```
+
+---
+
+## Data Fetching
+
+`useQuery` for async data, `useMutation` for operations:
+
+```tsx
+import { mount, useQuery, useMutation } from "@tge/renderer"
+import { Box, Text, VirtualList } from "@tge/components"
+import { colors, space, radius } from "@tge/void"
+import { createTerminal } from "@tge/terminal"
+import { Show, For } from "@tge/renderer"
+
+type User = { id: number; name: string; email: string }
+
+function UserManager() {
+  const users = useQuery<User[]>(
+    () => fetch("https://jsonplaceholder.typicode.com/users").then(r => r.json()),
+    { retry: 2, retryDelay: 1000 }
+  )
+
+  const deleteUser = useMutation(
+    (id: number) => fetch(`/api/users/${id}`, { method: "DELETE" }),
+    {
+      onMutate: (id) => {
+        // Optimistic update
+        users.mutate(prev => prev?.filter(u => u.id !== id))
+        return undefined
+      },
+      onError: (err, id, prev) => {
+        // Rollback
+        if (prev) users.mutate(prev)
+      },
+    }
+  )
+
+  return (
+    <Box width="100%" height="100%" padding={space[4]} backgroundColor={colors.background} direction="column" gap={space[3]}>
+      <Show when={users.loading()}>
+        <Text color={colors.mutedForeground}>Loading users...</Text>
+      </Show>
+
+      <Show when={users.error()}>
+        <Text color={colors.destructive}>{users.error()!.message}</Text>
+        <box focusable onPress={users.refetch} padding={space[2]} backgroundColor={colors.card} cornerRadius={radius.md}>
+          <Text color={colors.foreground}>Retry</Text>
+        </box>
+      </Show>
+
+      <Show when={users.data()}>
+        <Text color={colors.foreground}>{users.data()!.length} users</Text>
+        <For each={users.data() ?? []}>
+          {(user) => (
+            <Box direction="row" gap={space[3]} padding={space[2]} backgroundColor={colors.card} cornerRadius={radius.md}>
+              <Text color={colors.foreground}>{user.name}</Text>
+              <Text color={colors.mutedForeground}>{user.email}</Text>
+              <box
+                focusable
+                onPress={() => deleteUser.mutate(user.id)}
+              >
+                <Text color={colors.destructive}>Delete</Text>
+              </box>
+            </Box>
+          )}
+        </For>
+      </Show>
+    </Box>
+  )
+}
+
+const terminal = await createTerminal()
+mount(UserManager, terminal)
+```
+
+---
+
+## Virtualized List
+
+Render 10,000 items with no performance hit:
+
+```tsx
+import { mount } from "@tge/renderer"
+import { Box, Text, VirtualList } from "@tge/components"
+import { colors, space, radius } from "@tge/void"
+import { createTerminal } from "@tge/terminal"
+import { createSignal } from "solid-js"
+
+// Generate 10,000 items
+const ITEMS = Array.from({ length: 10_000 }, (_, i) => ({
+  id: i,
+  name: `Item ${i + 1}`,
+  value: Math.floor(Math.random() * 1000),
+}))
+
+function BigList() {
+  const [selected, setSelected] = createSignal(-1)
+
+  return (
+    <Box
+      width="100%" height="100%"
+      padding={space[4]} backgroundColor={colors.background}
+      direction="column" gap={space[3]}
+    >
+      <Text color={colors.foreground}>
+        10,000 items — only visible rows render
+        {selected() >= 0 ? ` — selected: ${ITEMS[selected()].name}` : ""}
+      </Text>
+
+      <VirtualList
+        items={ITEMS}
+        itemHeight={28}        // fixed height — required
+        height={500}           // visible viewport
+        overscan={5}           // extra rows above/below
+        selectedIndex={selected()}
+        onSelect={setSelected}
+        renderItem={(item, index, ctx) => (
+          <box
+            height={28}
+            direction="row"
+            gap={space[3]}
+            paddingX={space[3]}
+            alignY="center"
+            backgroundColor={ctx.selected ? "#252535" : ctx.highlighted ? "#1e1e2e" : "transparent"}
+          >
+            <text color={colors.mutedForeground} fontSize={11}>{index + 1}</text>
+            <text color={ctx.selected ? colors.foreground : colors.mutedForeground}>{item.name}</text>
+            <text color={colors.accent}>{item.value}</text>
+          </box>
+        )}
+      />
+    </Box>
+  )
+}
+
+const terminal = await createTerminal()
+mount(BigList, terminal)
+```
+
+---
+
+## Animations
+
+Spring physics and eased transitions:
+
+```tsx
+import { mount, createTransition, createSpring } from "@tge/renderer"
+import { Box, Text } from "@tge/components"
+import { colors, radius } from "@tge/void"
+import { createTerminal } from "@tge/terminal"
+import { createSignal } from "solid-js"
+
+function AnimatedUI() {
+  const [expanded, setExpanded] = createSignal(false)
+  const [opacity, setOpacity] = createSignal(0)
+
+  // Ease-in-out width transition
+  const width = createTransition(() => expanded() ? 400 : 200, {
+    duration: 300,
+    easing: t => t < 0.5 ? 2*t*t : -1+(4-2*t)*t, // ease-in-out
+  })
+
+  // Spring-based opacity (overshoots slightly then settles)
+  const alpha = createSpring(opacity, { stiffness: 120, damping: 14 })
+
+  return (
+    <Box
+      width="100%" height="100%"
+      padding={24} backgroundColor={colors.background}
+      direction="column" alignX="center" alignY="center" gap={24}
+    >
+      {/* Width transition */}
+      <box
+        focusable
+        onPress={() => setExpanded(e => !e)}
+        width={width()}
+        height={60}
+        backgroundColor="#4488cc"
+        cornerRadius={radius.lg}
+        alignX="center"
+        alignY="center"
+      >
+        <text color="#fff">{expanded() ? "Click to collapse" : "Click to expand"}</text>
+      </box>
+
+      {/* Opacity spring */}
+      <box
+        focusable
+        onPress={() => setOpacity(o => o > 0 ? 0 : 1)}
+        padding={16}
+        backgroundColor={colors.card}
+        cornerRadius={radius.md}
+        opacity={alpha()}
+      >
+        <text color={colors.foreground}>Spring opacity ({Math.round(alpha() * 100)}%)</text>
+      </box>
+    </Box>
+  )
+}
+
+const terminal = await createTerminal()
+mount(AnimatedUI, terminal)
+```
+
+---
+
+## Glassmorphism with Backdrop Filters
+
+```tsx
+function GlassmorphicCard() {
+  return (
+    <Box
+      width="100%" height="100%"
+      backgroundColor="#0a0a1a"
+      gradient={{ type: "radial", from: 0x1a2a4aff, to: 0x0a0a1aff }}
+      alignX="center" alignY="center"
+    >
+      {/* Decorative circles behind the card */}
+      <box width={200} height={200} backgroundColor="#4488cc40" cornerRadius={100}
+        floating="root" floatOffset={{ x: -80, y: -60 }} zIndex={0} />
+      <box width={150} height={150} backgroundColor="#cc448840" cornerRadius={75}
+        floating="root" floatOffset={{ x: 120, y: 80 }} zIndex={0} />
+
+      {/* Glass card */}
+      <box
+        width={320} padding={24}
+        backdropBlur={16}
+        backdropBrightness={120}
+        backdropSaturate={150}
+        backgroundColor="#ffffff18"
+        cornerRadius={16}
+        borderColor="#ffffff30"
+        borderWidth={1}
+        shadow={{ x: 0, y: 8, blur: 32, color: 0x00000060 }}
+        direction="column" gap={12}
+        zIndex={1}
+      >
+        <text color="#fff" fontSize={18}>Glass Card</text>
+        <text color="#ffffff99" fontSize={13}>Backdrop blur + brightness + saturation</text>
+        <box
+          focusable
+          onPress={() => {}}
+          padding={10}
+          backgroundColor="#ffffff22"
+          cornerRadius={8}
+          hoverStyle={{ backgroundColor: "#ffffff33" }}
+        >
+          <text color="#fff" fontSize={13}>Action</text>
+        </box>
+      </box>
+    </Box>
+  )
+}
+```
+
+---
+
 ## Running the Built-In Demos
 
 TGE includes 10 working demos in the `examples/` directory:

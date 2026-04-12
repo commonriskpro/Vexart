@@ -1,530 +1,785 @@
 # Components
 
-TGE provides 9 built-in components. All interactive components follow a **controlled** pattern — the parent owns state via SolidJS signals.
+TGE provides 28 built-in components across two packages.
+
+- **`@tge/components`** — Truly headless. Behavior only, zero visual coupling. Use render props or theme props to provide all styling.
+- **`@tge/void`** — Styled design system. Built on top of the headless layer.
 
 ```typescript
-import { Box, Text, Button, Input, Checkbox, Tabs, List, ProgressBar, ScrollView } from "@tge/components"
+import { Box, Text, Button, Input, Checkbox, Tabs, List, ProgressBar, ScrollView,
+         Dialog, Select, Switch, RadioGroup, Table, createToaster, Router, Route, NavigationStack,
+         Tooltip, Popover, Combobox, Slider, VirtualList, createForm } from "@tge/components"
 ```
 
 ---
 
 ## Box
 
-The primary layout container. Equivalent to a `<div>` — handles sizing, padding, alignment, colors, borders, shadows, and glow.
-
-### Props
-
-```typescript
-type BoxProps = {
-  // Layout
-  direction?: "row" | "column"       // Default: "row"
-  padding?: number                    // All sides (pixels)
-  paddingX?: number                   // Horizontal padding
-  paddingY?: number                   // Vertical padding
-  gap?: number                        // Gap between children (pixels)
-  alignX?: "left" | "right" | "center"
-  alignY?: "top" | "bottom" | "center"
-
-  // Sizing
-  width?: number | string             // px or "100%"
-  height?: number | string            // px or "100%"
-
-  // Visual
-  backgroundColor?: string | number   // Hex string ("#1a1a26") or packed u32
-  cornerRadius?: number               // Border radius in pixels
-  borderColor?: string | number
-  borderWidth?: number
-
-  // Effects
-  shadow?: ShadowConfig               // Drop shadow
-  glow?: GlowConfig                   // Glow effect
-
-  // Compositing
-  layer?: boolean                     // Promote to own Kitty image layer
-
-  // Scrolling
-  scrollX?: boolean
-  scrollY?: boolean
-  scrollSpeed?: number                // Lines per scroll tick
-
-  children?: JSX.Element
-}
-```
-
-### Shadow Config
-
-```typescript
-type ShadowConfig = {
-  x: number       // Horizontal offset (pixels)
-  y: number       // Vertical offset (pixels)
-  blur: number    // Blur radius (pixels)
-  color: number   // Shadow color (packed RGBA u32)
-}
-```
-
-Shadows are rendered in an isolated temporary buffer, blurred, then composited — so they never corrupt neighboring pixels.
-
-### Glow Config
-
-```typescript
-type GlowConfig = {
-  radius: number       // Glow spread (pixels)
-  color: number        // Glow color (packed RGBA u32)
-  intensity?: number   // 0–100, default 80
-}
-```
-
-### Examples
+The primary layout container. Equivalent to a `<div>` — handles sizing, padding, alignment, colors, borders, shadows, glow, backdrop filters, and interactive states.
 
 ```tsx
-// Simple card
-<Box padding={16} backgroundColor={surface.card} cornerRadius={radius.lg}>
-  <Text color={text.primary}>Card content</Text>
-</Box>
-
-// Row layout with gap
-<Box direction="row" gap={8}>
-  <Box width={50} height={50} backgroundColor={accent.thread} />
-  <Box width={50} height={50} backgroundColor={accent.anchor} />
-  <Box width={50} height={50} backgroundColor={accent.signal} />
-</Box>
-
-// Centered content
-<Box width="100%" height="100%" alignX="center" alignY="center">
-  <Text>Centered!</Text>
-</Box>
-
-// With shadow
-<Box padding={16} backgroundColor={surface.card} cornerRadius={12} shadow={shadow.elevated}>
-  <Text>Elevated card</Text>
-</Box>
-
-// With glow
-<Box padding={16} backgroundColor={surface.card} cornerRadius={12}
-  glow={{ radius: 20, color: accent.thread, intensity: 60 }}>
-  <Text>Glowing card</Text>
-</Box>
-
-// With border
-<Box padding={16} backgroundColor={surface.card} cornerRadius={8}
-  borderColor={border.normal} borderWidth={1}>
-  <Text>Bordered card</Text>
-</Box>
-
-// Own compositing layer (only retransmits when dirty)
-<Box layer padding={16} backgroundColor={surface.card}>
-  <Text>{counter()}</Text>
-</Box>
+// Card with shadow and focus
+<box
+  padding={16}
+  backgroundColor="#1a1a2e"
+  cornerRadius={12}
+  shadow={{ x: 0, y: 4, blur: 12, color: 0x00000060 }}
+  focusable
+  focusStyle={{ borderColor: "#4488cc", borderWidth: 2 }}
+  onPress={() => select()}
+/>
 ```
+
+### Visual Props
+
+| Prop | Type | Notes |
+|------|------|-------|
+| `backgroundColor` | `string \| number` | `"#ff0000"` or `0xff0000ff` |
+| `cornerRadius` | `number` | Uniform radius (alias: `borderRadius`) |
+| `cornerRadii` | `{ tl, tr, br, bl }` | Per-corner radius |
+| `borderColor` | `string \| number` | — |
+| `borderWidth` | `number` | Uniform border |
+| `opacity` | `number` | 0.0-1.0, element-level opacity |
+| `shadow` | `object \| array` | Drop shadow(s) — color must be u32 |
+| `glow` | `{ radius, color, intensity? }` | Outer glow |
+| `gradient` | linear or radial config | Gradient fill |
+| `backdropBlur` | `number` | Glassmorphism blur |
+| `backdropBrightness` | `number` | 0=black, 100=unchanged, 200=2x |
+| `backdropContrast` | `number` | 0=grey, 100=unchanged, 200=high |
+| `backdropSaturate` | `number` | 0=grayscale, 100=unchanged |
+| `backdropGrayscale` | `number` | 0=unchanged, 100=full grayscale |
+| `backdropInvert` | `number` | 0=unchanged, 100=fully inverted |
+| `backdropSepia` | `number` | 0=unchanged, 100=full sepia |
+| `backdropHueRotate` | `number` | 0-360 degrees |
+
+### Interactive State Props
+
+```tsx
+<box
+  backgroundColor="#1e1e2e"
+  hoverStyle={{ backgroundColor: "#2a2a3e" }}
+  activeStyle={{ backgroundColor: "#3a3a4e" }}
+  focusStyle={{ borderColor: "#4488cc", borderWidth: 2 }}
+  focusable
+  onPress={() => save()}
+  onKeyDown={(e) => handleKey(e)}
+/>
+```
+
+All three style objects accept: `backgroundColor`, `borderColor`, `borderWidth`, `cornerRadius`, `shadow`, `glow`, `gradient`, `backdropBlur`, `opacity`.
 
 ---
 
 ## Text
 
-Renders text using the embedded bitmap font (SF Mono 14px).
-
-### Props
-
-```typescript
-type TextProps = {
-  color?: string | number     // Hex string or packed u32
-  fontSize?: number           // Font size (currently only 14px atlas available)
-  fontId?: number             // Font atlas ID
-  children?: JSX.Element      // Text content (string)
-}
-```
-
-### Examples
+Renders text using the embedded bitmap font.
 
 ```tsx
-<Text color={text.primary}>Primary text</Text>
-<Text color={text.muted}>Muted description</Text>
-<Text color={accent.thread}>Accent colored</Text>
-<Text color="#4fc4d4">Hex color</Text>
-
-// Dynamic text (reactive)
-<Text color={text.primary}>Count: {count()}</Text>
-```
-
-### Notes
-
-- Text is monospace (SF Mono). Each character is 9px wide, 17px tall at the default 14px size.
-- Text content comes from `children`. It must be a string or a reactive expression that resolves to a string.
-
----
-
-## Button
-
-Interactive push button with focus management and keyboard activation.
-
-### Props
-
-```typescript
-type ButtonVariant = "solid" | "outline" | "ghost"
-
-type ButtonProps = {
-  onPress?: () => void             // Callback on Enter/Space
-  variant?: ButtonVariant          // Default: "solid"
-  color?: number                   // Accent color (packed u32). Default: accent.thread
-  disabled?: boolean               // Grayed out, not focusable
-  focusId?: string                 // Custom focus ID
-  children?: JSX.Element           // Button label (string)
-}
-```
-
-### Variants
-
-| Variant | Appearance |
-|---------|-----------|
-| `solid` | Filled background with accent color |
-| `outline` | Transparent with accent-colored border |
-| `ghost` | Transparent, text-only, border on focus |
-
-### Interaction
-
-- **Tab / Shift+Tab** — Focus cycling
-- **Enter / Space** — Activates the button
-- Visual press feedback (100ms flash)
-
-### Examples
-
-```tsx
-<Button onPress={() => console.log("clicked!")}>Save</Button>
-<Button variant="outline" color={accent.signal}>Cancel</Button>
-<Button variant="ghost">Skip</Button>
-<Button disabled>Locked</Button>
-
-// Multiple buttons with Tab cycling
-<Box direction="row" gap={8}>
-  <Button onPress={handleSave}>Save</Button>
-  <Button variant="outline" onPress={handleCancel}>Cancel</Button>
-</Box>
+<text color="#e0e6f0">Primary text</text>
+<text color={themeColors.mutedForeground} fontSize={12}>Muted description</text>
+<text color="#fff">Count: {count()}</text>
 ```
 
 ---
 
-## Input
+## Button (headless)
 
-Text input field with full keyboard editing, cursor, selection, and paste support.
+Interactive push button. Render props pattern — zero visual output.
 
-### Props
-
-```typescript
-type InputProps = {
-  value: string                        // Current value (CONTROLLED)
-  onChange?: (value: string) => void    // Value change callback
-  onSubmit?: (value: string) => void   // Enter key callback
-  placeholder?: string                 // Placeholder text
-  width?: number                       // Width in pixels. Default: 200
-  color?: number                       // Accent color. Default: accent.thread
-  disabled?: boolean
-  focusId?: string
-}
+```tsx
+<Button
+  onPress={() => save()}
+  disabled={loading()}
+  renderButton={({ focused, pressed, disabled }) => (
+    <box
+      backgroundColor={pressed ? "#333" : focused ? "#252535" : "#1e1e2e"}
+      cornerRadius={6}
+      padding={8}
+      paddingX={16}
+      borderColor={focused ? "#4488cc" : "#333"}
+      borderWidth={focused ? 2 : 1}
+      opacity={disabled ? 0.5 : 1}
+    >
+      <text color="#fff">Save</text>
+    </box>
+  )}
+/>
 ```
 
-### Keyboard Shortcuts
+For a styled version, use `@tge/void`'s `Button`.
+
+---
+
+## Input (headless)
+
+Single-line text input with cursor, selection, and paste support.
+
+```tsx
+<Input
+  value={name()}
+  onChange={setName}
+  onSubmit={handleSubmit}
+  placeholder="Your name..."
+  renderInput={({ displayText, showPlaceholder, focused }) => (
+    <box
+      width={240}
+      padding={8}
+      borderColor={focused ? "#4488cc" : "#333"}
+      borderWidth={focused ? 2 : 1}
+      cornerRadius={6}
+    >
+      <text color={showPlaceholder ? "#666" : "#fff"}>{displayText}</text>
+    </box>
+  )}
+/>
+```
+
+### Keyboard shortcuts
 
 | Key | Action |
 |-----|--------|
-| Printable characters | Insert at cursor |
-| Backspace | Delete before cursor |
-| Delete | Delete after cursor |
+| Printable chars | Insert at cursor |
+| Backspace / Delete | Delete before/after cursor |
 | Left / Right | Move cursor |
-| Home / End | Jump to start / end |
-| Shift + Left/Right/Home/End | Select text |
+| Home / End | Jump to start/end |
+| Shift + Left/Right/Home/End | Select |
 | Ctrl+A | Select all |
-| Ctrl+V / Bracketed paste | Insert clipboard |
+| Ctrl+V / bracketed paste | Insert clipboard |
 | Enter | Calls `onSubmit` |
 
-### Examples
+---
+
+## Textarea (headless)
+
+Multi-line editor with 2D cursor, syntax highlighting, and configurable keybindings.
 
 ```tsx
-import { createSignal } from "solid-js"
-
-// Basic input
-const [name, setName] = createSignal("")
-<Input value={name()} onChange={setName} placeholder="Your name..." />
-
-// With submit handler
-const [email, setEmail] = createSignal("")
-<Input
-  value={email()}
-  onChange={setEmail}
-  onSubmit={(val) => console.log("Submitted:", val)}
-  placeholder="email@example.com"
-  width={300}
+<Textarea
+  value={content()}
+  onChange={setContent}
+  language="typescript"
+  theme={{ accent: "#4488cc", fg: "#e0e6f0", bg: "#1e1e2e" }}
 />
-
-// Multiple inputs (Tab cycles between them)
-<Box direction="column" gap={8}>
-  <Input value={first()} onChange={setFirst} placeholder="First name" />
-  <Input value={last()} onChange={setLast} placeholder="Last name" />
-  <Button onPress={handleSubmit}>Submit</Button>
-</Box>
 ```
 
 ---
 
-## Checkbox
+## Checkbox (headless)
 
-Toggleable checkbox with optional label.
-
-### Props
-
-```typescript
-type CheckboxProps = {
-  checked: boolean                     // Current state (CONTROLLED)
-  onChange?: (checked: boolean) => void // Toggle callback
-  label?: string                       // Label text next to checkbox
-  color?: number                       // Accent color. Default: accent.thread
-  disabled?: boolean
-  focusId?: string
-}
-```
-
-### Interaction
-
-- **Tab / Shift+Tab** — Focus cycling
-- **Enter / Space** — Toggle checked state
-
-### Examples
+Toggleable checkbox. Render prop pattern.
 
 ```tsx
-const [agreed, setAgreed] = createSignal(false)
-
-<Checkbox checked={agreed()} onChange={setAgreed} label="I agree to the terms" />
-
-// Multiple checkboxes
-<Box direction="column" gap={4}>
-  <Checkbox checked={opt1()} onChange={setOpt1} label="Option 1" color={accent.thread} />
-  <Checkbox checked={opt2()} onChange={setOpt2} label="Option 2" color={accent.green} />
-  <Checkbox checked={opt3()} onChange={setOpt3} label="Option 3" color={accent.signal} />
-</Box>
+<Checkbox
+  checked={agreed()}
+  onChange={setAgreed}
+  renderCheckbox={({ checked, focused, disabled }) => (
+    <box direction="row" gap={8} alignY="center">
+      <box
+        width={16} height={16}
+        backgroundColor={checked ? "#4488cc" : "transparent"}
+        borderColor={focused ? "#4488cc" : "#555"}
+        borderWidth={2}
+        cornerRadius={3}
+      />
+      <text color="#fff">I agree to the terms</text>
+    </box>
+  )}
+/>
 ```
 
 ---
 
-## Tabs
+## Switch (headless)
 
-Tab switcher with panel content. Only the active panel renders.
-
-### Props
-
-```typescript
-type TabItem = {
-  label: string                    // Tab header label
-  content: () => JSX.Element       // Panel content (lazy render function)
-}
-
-type TabsProps = {
-  activeTab: number                // Active tab index (CONTROLLED)
-  onTabChange?: (index: number) => void
-  tabs: TabItem[]                  // Tab definitions
-  color?: number                   // Accent color. Default: accent.thread
-  focusId?: string
-}
-```
-
-### Interaction
-
-- **Tab / Shift+Tab** — Focus the tab bar
-- **Left / Right** — Switch between tabs
-
-### Examples
+Toggle switch. Render prop pattern.
 
 ```tsx
-const [tab, setTab] = createSignal(0)
+<Switch
+  checked={dark()}
+  onChange={setDark}
+  renderSwitch={({ checked, focused }) => (
+    <box direction="row" gap={8} alignY="center">
+      <box
+        width={36} height={20}
+        backgroundColor={checked ? "#4488cc" : "#333"}
+        cornerRadius={10}
+        borderColor={focused ? "#6aacec" : "transparent"}
+        borderWidth={focused ? 2 : 0}
+      >
+        <box
+          width={14} height={14}
+          backgroundColor="#fff"
+          cornerRadius={7}
+          paddingLeft={checked ? 19 : 3}
+          paddingTop={3}
+        />
+      </box>
+      <text color="#fff">Dark mode</text>
+    </box>
+  )}
+/>
+```
 
+---
+
+## RadioGroup (headless)
+
+Radio option group. Render prop pattern.
+
+```tsx
+<RadioGroup
+  value={selected()}
+  onChange={setSelected}
+  options={[
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+    { value: "system", label: "System" },
+  ]}
+  renderOption={(option, { selected, focused }) => (
+    <box direction="row" gap={8} alignY="center" padding={4}>
+      <box
+        width={16} height={16}
+        borderColor={focused ? "#4488cc" : "#555"}
+        borderWidth={2}
+        cornerRadius={8}
+        backgroundColor={selected ? "#4488cc" : "transparent"}
+      />
+      <text color="#fff">{option.label}</text>
+    </box>
+  )}
+/>
+```
+
+---
+
+## Select (headless)
+
+Dropdown select with keyboard navigation.
+
+```tsx
+<Select
+  value={fruit()}
+  onChange={setFruit}
+  options={fruits}
+  placeholder="Pick a fruit…"
+  renderTrigger={(ctx) => (
+    <box padding={8} borderColor={ctx.focused ? "#4488cc" : "#333"} borderWidth={1} cornerRadius={6}>
+      <text color="#fff">{ctx.selectedLabel ?? ctx.placeholder}</text>
+    </box>
+  )}
+  renderOption={(opt, ctx) => (
+    <box
+      backgroundColor={ctx.highlighted ? "#333" : "transparent"}
+      padding={6}
+    >
+      <text color={ctx.selected ? "#4488cc" : "#fff"}>{opt.label}</text>
+    </box>
+  )}
+  renderContent={(children) => (
+    <box backgroundColor="#1a1a2e" cornerRadius={6} borderColor="#333" borderWidth={1}>
+      {children}
+    </box>
+  )}
+/>
+```
+
+### Keyboard
+
+| Key | Action |
+|-----|--------|
+| Enter / Space | Open / select highlighted |
+| Up / Down (or j/k) | Navigate options |
+| Escape | Close without selecting |
+
+---
+
+## Combobox (headless)
+
+Autocomplete input + filterable dropdown. Phase 3.
+
+```tsx
+<Combobox
+  value={value()}
+  onChange={setValue}
+  options={countries}
+  placeholder="Search countries…"
+  renderInput={(ctx) => (
+    <box padding={8} borderColor={ctx.focused ? "#4488cc" : "#333"} borderWidth={1} cornerRadius={6}>
+      <text color={ctx.inputValue ? "#fff" : "#666"}>
+        {ctx.inputValue || ctx.placeholder}
+      </text>
+    </box>
+  )}
+  renderOption={(opt, ctx) => (
+    <box backgroundColor={ctx.highlighted ? "#252535" : "transparent"} padding={6}>
+      <text color={ctx.selected ? "#4488cc" : "#fff"}>{opt.label}</text>
+    </box>
+  )}
+  renderContent={(children) => (
+    <box backgroundColor="#1a1a2e" cornerRadius={6} borderColor="#333" borderWidth={1} maxHeight={200} scrollY>
+      {children}
+    </box>
+  )}
+/>
+```
+
+Typing filters options. Enter selects. Escape closes and clears query.
+
+---
+
+## Slider (headless)
+
+Numeric range input. Phase 3.
+
+```tsx
+<Slider
+  value={volume()}
+  onChange={setVolume}
+  min={0} max={100} step={1}
+  renderSlider={({ value, percentage, focused }) => (
+    <box direction="column" gap={4}>
+      <box
+        width={200} height={8}
+        backgroundColor="#333"
+        cornerRadius={4}
+        borderColor={focused ? "#4488cc" : "transparent"}
+        borderWidth={focused ? 2 : 0}
+      >
+        <box
+          width={`${percentage}%`}
+          height={8}
+          backgroundColor="#4488cc"
+          cornerRadius={4}
+        />
+      </box>
+      <text color="#999" fontSize={12}>{value}%</text>
+    </box>
+  )}
+/>
+```
+
+### Keyboard
+
+| Key | Action |
+|-----|--------|
+| Right / Up (or l/k) | Increment by step |
+| Left / Down (or h/j) | Decrement by step |
+| Page Up / Page Down | Large step (10× step) |
+| Home / End | Min / Max |
+
+---
+
+## ProgressBar (headless)
+
+Horizontal fill indicator. No interaction.
+
+```tsx
+<ProgressBar
+  value={75}
+  max={100}
+  renderBar={({ ratio, fillWidth, width, height }) => (
+    <box width={width} height={height} backgroundColor="#222" cornerRadius={4}>
+      <box width={fillWidth} height={height} backgroundColor="#4488cc" cornerRadius={4} />
+    </box>
+  )}
+/>
+```
+
+---
+
+## Tabs (headless)
+
+Tab switcher. Only the active panel renders.
+
+```tsx
 <Tabs
   activeTab={tab()}
   onTabChange={setTab}
   tabs={[
-    { label: "Overview", content: () => <Text>Overview panel</Text> },
-    { label: "Details",  content: () => <Text>Details panel</Text> },
-    { label: "Settings", content: () => (
-      <Box direction="column" gap={4}>
-        <Checkbox checked={dark()} onChange={setDark} label="Dark mode" />
-        <Checkbox checked={sound()} onChange={setSound} label="Sound" />
-      </Box>
-    )},
+    { label: "General", content: () => <GeneralPanel /> },
+    { label: "Advanced", content: () => <AdvancedPanel /> },
   ]}
+  renderTab={(tab, ctx) => (
+    <box
+      padding={8}
+      borderBottom={ctx.active ? 2 : 0}
+      borderColor={ctx.active ? "#4488cc" : "transparent"}
+    >
+      <text color={ctx.active ? "#4488cc" : "#999"}>{tab.label}</text>
+    </box>
+  )}
 />
 ```
 
 ---
 
-## List
+## List (headless)
 
 Selectable list with keyboard navigation.
 
-### Props
-
-```typescript
-type ListProps = {
-  items: string[]                           // List items
-  selectedIndex: number                     // Currently selected (CONTROLLED)
-  onSelectedChange?: (index: number) => void // Selection change
-  onSelect?: (index: number) => void        // Enter key on item
-  color?: number                            // Accent color. Default: accent.thread
-  focusId?: string
-}
-```
-
-### Interaction
-
-- **Tab / Shift+Tab** — Focus the list
-- **Up / Down / j / k** — Navigate items
-- **Enter** — Select current item (calls `onSelect`)
-
-### Examples
-
 ```tsx
-const [idx, setIdx] = createSignal(0)
-const items = ["Dashboard", "Settings", "Profile", "Logout"]
-
 <List
-  items={items}
+  items={["Dashboard", "Settings", "Profile", "Logout"]}
   selectedIndex={idx()}
   onSelectedChange={setIdx}
   onSelect={(i) => navigate(items[i])}
+  renderItem={(item, ctx) => (
+    <box
+      backgroundColor={ctx.selected ? "#252535" : "transparent"}
+      padding={6}
+      paddingX={12}
+    >
+      <text color={ctx.selected ? "#fff" : "#999"}>{item}</text>
+    </box>
+  )}
 />
 ```
 
 ---
 
-## ProgressBar
+## Table (headless)
 
-Horizontal progress indicator. No focus/interaction — purely visual.
-
-### Props
-
-```typescript
-type ProgressBarProps = {
-  value: number             // Current value (clamped to [0, max])
-  max?: number              // Maximum value. Default: 100
-  color?: number            // Fill color. Default: accent.thread
-  trackColor?: number       // Track color. Default: surface.context
-  width?: number            // Width in pixels. Default: 200
-  height?: number           // Height in pixels. Default: 12
-}
-```
-
-### Examples
+Data table with row selection.
 
 ```tsx
-// Simple progress
-<ProgressBar value={75} />
+<Table
+  columns={[
+    { key: "name", header: "Name", width: 120 },
+    { key: "status", header: "Status", width: 80 },
+  ]}
+  rows={users()}
+  selectedIndex={selected()}
+  onSelect={setSelected}
+  renderCell={(value, col, rowIndex, ctx) => (
+    <box backgroundColor={ctx.selected ? "#252535" : "transparent"} padding={6}>
+      <text color={ctx.selected ? "#fff" : "#ccc"}>{String(value)}</text>
+    </box>
+  )}
+/>
+```
 
-// Custom max and color
-<ProgressBar value={3} max={10} color={accent.green} />
+---
 
-// Animated progress (reactive)
-const [progress, setProgress] = createSignal(0)
-setInterval(() => setProgress(p => Math.min(p + 1, 100)), 100)
-<ProgressBar value={progress()} width={300} />
+## VirtualList (headless)
 
-// Download indicator
-<Box direction="column" gap={4}>
-  <Text color={text.muted}>Downloading... {downloaded()}MB / {total()}MB</Text>
-  <ProgressBar value={downloaded()} max={total()} color={accent.anchor} width={250} />
-</Box>
+Virtualized list — only renders visible items. For lists with thousands of entries. Phase 3.
+
+```tsx
+<VirtualList
+  items={allUsers}          // Full array — all 10,000 items
+  itemHeight={32}           // Fixed height per item (required)
+  height={400}              // Visible viewport height
+  overscan={5}              // Extra items above/below viewport
+  renderItem={(item, index, ctx) => (
+    <box
+      height={32}
+      padding={6}
+      backgroundColor={ctx.highlighted ? "#252535" : "transparent"}
+    >
+      <text color="#fff">{item.name}</text>
+    </box>
+  )}
+  onSelect={(index) => setSelected(index)}
+/>
+```
+
+Only `itemHeight × overscan × 2` items are mounted at any time, regardless of list length.
+
+---
+
+## Dialog (headless)
+
+Modal dialog with focus trap, Escape to close, and focus restore on unmount.
+
+```tsx
+<Show when={isOpen()}>
+  <Dialog onClose={() => setOpen(false)}>
+    <Dialog.Overlay backgroundColor="#00000088" backdropBlur={8} />
+    <Dialog.Content
+      backgroundColor="#1a1a2e"
+      cornerRadius={12}
+      padding={24}
+      width={400}
+    >
+      <text color="#fff">Are you sure?</text>
+      <box direction="row" gap={8}>
+        <box focusable onPress={() => { confirm(); setOpen(false) }}>
+          <text color="#fff">Confirm</text>
+        </box>
+        <box focusable onPress={() => setOpen(false)}>
+          <text color="#999">Cancel</text>
+        </box>
+      </box>
+    </Dialog.Content>
+  </Dialog>
+</Show>
+```
+
+- Tab/Shift+Tab cycles ONLY within the dialog (focus trap via `pushFocusScope`)
+- Escape calls `onClose`
+- On close, focus returns to the previously focused element
+
+---
+
+## Tooltip (headless)
+
+Floating tooltip on hover. Phase 3.
+
+```tsx
+<Tooltip
+  content="Save your work"
+  showDelay={500}
+  renderTooltip={(content) => (
+    <box backgroundColor="#333" padding={6} cornerRadius={4}>
+      <text color="#fff" fontSize={12}>{content}</text>
+    </box>
+  )}
+>
+  <box focusable onPress={save}>
+    <text>Save</text>
+  </box>
+</Tooltip>
+```
+
+---
+
+## Popover (headless)
+
+Controlled floating panel. Phase 3.
+
+```tsx
+<Popover
+  open={open()}
+  onOpenChange={setOpen}
+  renderTrigger={(ctx) => (
+    <box focusable onPress={ctx.toggle}>
+      <text>Open menu</text>
+    </box>
+  )}
+  renderContent={() => (
+    <box backgroundColor="#1a1a2e" padding={12} cornerRadius={8} borderColor="#333" borderWidth={1}>
+      <text>Popover content</text>
+    </box>
+  )}
+/>
 ```
 
 ---
 
 ## ScrollView
 
-Scrollable container with SCISSOR clipping. Content that overflows is clipped and scrollable.
-
-### Props
-
-```typescript
-type ScrollViewProps = {
-  width?: number | string
-  height?: number | string
-  scrollX?: boolean                  // Enable horizontal scroll
-  scrollY?: boolean                  // Enable vertical scroll
-  scrollSpeed?: number               // Lines per scroll tick
-  backgroundColor?: string | number
-  cornerRadius?: number
-  borderColor?: string | number
-  borderWidth?: number
-  direction?: "row" | "column"
-  padding?: number
-  paddingX?: number
-  paddingY?: number
-  gap?: number
-  alignX?: "left" | "right" | "center"
-  alignY?: "top" | "bottom" | "center"
-  children?: JSX.Element
-}
-```
-
-### Notes
-
-- Automatically promoted to its own compositing layer
-- Uses Clay's built-in scroll offset tracking
-- Clipping is done via SCISSOR commands — content outside the viewport is not painted
-
-### Examples
+Scrollable container with scissor clipping.
 
 ```tsx
-// Vertical scroll
-<ScrollView width={400} height={300} scrollY direction="column" gap={4}>
+<ScrollView height={300} scrollY direction="column" gap={4}>
   <For each={items()}>
-    {(item) => (
-      <Box padding={8} backgroundColor={surface.card}>
-        <Text color={text.primary}>{item.name}</Text>
-      </Box>
-    )}
-  </For>
-</ScrollView>
-
-// Log viewer
-<ScrollView width="100%" height={200} scrollY backgroundColor={surface.panel}>
-  <For each={logs()}>
-    {(line) => <Text color={text.muted}>{line}</Text>}
+    {(item) => <text color="#fff">{item.name}</text>}
   </For>
 </ScrollView>
 ```
 
 ---
 
+## Toast (factory)
+
+Imperative notification system.
+
+```tsx
+const toaster = createToaster({
+  position: "bottom-right",
+  defaultDuration: 3000,
+  renderToast: (t, dismiss) => (
+    <box
+      backgroundColor="#1a1a2e"
+      cornerRadius={8}
+      padding={12}
+      minWidth={240}
+    >
+      <text color={t.variant === "error" ? "#ff4444" : "#fff"}>{t.message}</text>
+    </box>
+  ),
+})
+
+// Render the container (once, near root)
+<toaster.Toaster />
+
+// Fire toasts imperatively
+toaster.toast({ message: "Saved!", variant: "success" })
+toaster.toast({ message: "Failed to save", variant: "error" })
+```
+
+---
+
+## Router (flat + stack)
+
+### Flat Router (React Router style)
+
+```tsx
+<Router initialPath="home">
+  <Route path="home" component={Home} />
+  <Route path="settings" component={Settings} />
+  <Route path="profile" component={Profile} />
+</Router>
+
+// Navigate
+const ctx = useRouterContext()
+ctx.navigate("settings")
+ctx.goBack()
+```
+
+### Navigation Stack (React Navigation style)
+
+```tsx
+<NavigationStack initial={Home} />
+
+// Navigate
+const stack = useStack()
+stack.push(Settings, { section: "privacy" })
+stack.pop()
+```
+
+---
+
+## createForm
+
+Reactive form validation factory. Phase 3.
+
+```tsx
+const form = createForm({
+  initialValues: { name: "", email: "", age: 18 },
+  validate: {
+    name: (v) => v.length < 2 ? "Too short" : undefined,
+    email: (v) => !v.includes("@") ? "Invalid email" : undefined,
+    age: (v) => v < 18 ? "Must be 18+" : undefined,
+  },
+  validateAsync: {
+    email: async (v) => {
+      const taken = await checkEmailTaken(v)
+      return taken ? "Email already in use" : undefined
+    },
+  },
+  onSubmit: async (values) => {
+    await saveUser(values)
+    toaster.toast({ message: "Saved!", variant: "success" })
+  },
+})
+
+// JSX
+<box direction="column" gap={8}>
+  <Input
+    value={form.values.name()}
+    onChange={(v) => form.setValue("name", v)}
+    onBlur={() => form.setTouched("name")}
+    placeholder="Name"
+  />
+  <Show when={form.errors.name() && form.touched.name()}>
+    <text color="#ff4444">{form.errors.name()}</text>
+  </Show>
+
+  <box focusable onPress={form.submit} opacity={form.submitting() ? 0.5 : 1}>
+    <text>{form.submitting() ? "Saving..." : "Submit"}</text>
+  </box>
+</box>
+```
+
+### FormHandle API
+
+| Property/Method | Type | Description |
+|----------------|------|-------------|
+| `values.field` | `() => T` | Reactive field value |
+| `errors.field` | `() => string \| undefined` | Reactive error message |
+| `touched.field` | `() => boolean` | Whether field was blurred |
+| `dirty.field` | `() => boolean` | Whether value differs from initial |
+| `setValue(field, value)` | `void` | Update a field value |
+| `setTouched(field)` | `void` | Mark field as touched + run validation |
+| `setError(field, error)` | `void` | Set error manually |
+| `isValid()` | `boolean` | True if no fields have errors |
+| `submitting()` | `boolean` | True while onSubmit is running |
+| `submit()` | `void` | Validate all fields, then call onSubmit |
+| `reset()` | `void` | Reset to initialValues, clear errors/touched |
+| `getValues()` | `T` | Get plain object of current values |
+
+---
+
+## Code / Markdown / Diff / RichText
+
+Content components with theme prop pattern.
+
+```tsx
+<Code
+  content={codeString}
+  language="typescript"
+  theme={{ bg: "#1a1a2e", lineNumberFg: "#555", radius: 8, padding: 12 }}
+/>
+
+<Markdown
+  content={markdownString}
+  theme={{ fg: "#e0e6f0", heading: "#4fc4d4", codeBg: "#252535" }}
+/>
+
+<Diff
+  diff={diffString}
+  view="unified"
+  theme={{ addedBg: "#1a3a1a", removedBg: "#3a1a1a" }}
+/>
+```
+
+---
+
+## Portal
+
+Render children at the root level (above all other content).
+
+```tsx
+<Portal>
+  <box width="100%" height="100%" alignX="center" alignY="center">
+    <text>I render on top of everything</text>
+  </box>
+</Portal>
+```
+
+---
+
 ## Component Patterns
+
+### Headless Architecture
+
+All interactive components in `@tge/components` provide **behavior only**:
+
+| Pattern | Components | You provide |
+|---------|-----------|-------------|
+| Render props | Button, Checkbox, Switch, Input, List, Tabs, RadioGroup, Select, ProgressBar, Combobox, Slider, VirtualList, Table | `renderX(ctx) → JSX` |
+| Theme prop | Code, Markdown, Diff, Textarea | `theme: ThemeType` object |
+| Factory | Toast | `renderToast(toast, dismiss) → JSX` |
+| Compound | Dialog | Wrap `Dialog.Overlay`/`Dialog.Content`/`Dialog.Close` |
+
+### Focusable `<box>`
+
+Any `<box>` can be made focusable without using components:
+
+```tsx
+<box
+  focusable
+  backgroundColor="#1e1e2e"
+  focusStyle={{ borderColor: "#4488cc", borderWidth: 2 }}
+  hoverStyle={{ backgroundColor: "#252535" }}
+  activeStyle={{ backgroundColor: "#303050" }}
+  onPress={() => activate()}
+  onKeyDown={(e) => { if (e.key === "delete") remove() }}
+>
+  <text>Press me</text>
+</box>
+```
 
 ### Controlled Components
 
 All interactive components are **controlled** — the parent owns state:
 
 ```tsx
-// The parent creates the signal
 const [value, setValue] = createSignal("")
-
-// The component reads and writes through props
-<Input value={value()} onChange={setValue} />
+<Input value={value()} onChange={setValue} placeholder="..." />
 ```
 
-This matches the SolidJS reactive model. The component never holds internal state for values — it reads from `value` and calls `onChange` to request changes.
+### Focus Ring
 
-### Focus Management
-
-Interactive components use `useFocus()` internally. The focus ring cycles through components in registration order:
-
-```
-Tab → Button 1 → Input 1 → Checkbox 1 → Input 2 → Button 2 → (wrap to Button 1)
-Shift+Tab → reverse
-```
-
-The focused component receives keyboard events through its `onKeyDown` handler. Non-focused components ignore keyboard input.
-
-### Compositing Layers
-
-Add `layer` to any `<Box>` to promote it to its own Kitty image:
-
-```tsx
-<Box layer backgroundColor={surface.card}>
-  <Text>{liveCounter()}</Text>
-</Box>
-```
-
-When the counter updates, only this box's layer retransmits to the terminal. All other boxes remain in GPU VRAM. This is critical for performance when you have expensive static content and small dynamic regions.
+Tab/Shift+Tab cycles through focusable elements in registration order. Components register automatically when mounted and unregister on cleanup.

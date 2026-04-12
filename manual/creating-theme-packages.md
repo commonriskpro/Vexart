@@ -468,6 +468,11 @@ main()
 | `Textarea` | `Textarea`, `TextareaTheme` | `theme: Partial<TextareaTheme>` object |
 | `Toast` | `createToaster`, `ToastData` | `renderToast(toast, dismiss)` → JSX |
 | `Dialog` | `Dialog` (compound) | Wrap `Dialog.Overlay` / `Dialog.Content` / `Dialog.Close` with your styles |
+| `Tooltip` | `Tooltip`, `TooltipProps` | `renderTooltip(content)` → JSX |
+| `Popover` | `Popover`, `PopoverTriggerContext` | `renderTrigger(ctx)` + `renderContent()` → JSX |
+| `Combobox` | `Combobox`, `ComboboxInputContext`, `ComboboxOptionContext` | `renderInput(ctx)` + `renderOption(opt, ctx)` + `renderContent(children)` → JSX |
+| `Slider` | `Slider`, `SliderRenderContext` | `renderSlider(ctx)` → JSX |
+| `VirtualList` | `VirtualList`, `VirtualListItemContext` | `renderItem(item, index, ctx)` → JSX |
 | `Router` | `Router`, `Route`, `NavigationStack` | No visual — pure navigation logic |
 
 ## Rules
@@ -477,3 +482,5 @@ main()
 3. **Theme prop fields are all optional** — the headless component has sensible dark defaults. Override only what you need.
 4. **Render props receive immutable context** — read state, return JSX. Never mutate the context.
 5. **Use `<box>` and `<text>` intrinsics** — these are the only two visual building blocks (plus `<img>` for images). All TGE rendering goes through them.
+6. **For Phase 3 components** — Tooltip, Popover, Combobox, Slider, and VirtualList all follow the render prop pattern. Wrap them exactly like Button/Checkbox/Switch.
+7. **createForm is framework-level** — don't wrap it in your theme. It's consumed directly. Theme packages only need to style the individual Input, Button, etc. components that form consumers use.

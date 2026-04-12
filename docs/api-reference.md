@@ -379,6 +379,49 @@ Create the render loop manually for advanced use cases.
 
 Manually mark the render loop as dirty, triggering a repaint on the next frame.
 
+### `useQuery(fetcher, options?)` and `useMutation(mutator, options?)`
+
+Data fetching hooks. See [Hooks & Signals](hooks.md#usequery) for full API.
+
+```typescript
+import { useQuery, useMutation } from "@tge/renderer"
+```
+
+### `createTransition(signal, options?)` and `createSpring(signal, options?)`
+
+Animation primitives. See [Hooks & Signals](hooks.md#createtransition) for full API.
+
+```typescript
+import { createTransition, createSpring } from "@tge/renderer"
+```
+
+### `createTheme(tokens)`, `setTheme(theme)`, `ThemeProvider`
+
+Runtime theming. See the [void package](#tgevoid-design-system) section.
+
+```typescript
+import { createTheme, setTheme, ThemeProvider } from "@tge/renderer"
+```
+
+### `pushFocusScope(): () => void`
+
+Create a focus trap (used by Dialog internally). Returns a cleanup function.
+
+```typescript
+import { pushFocusScope } from "@tge/renderer"
+import { onCleanup } from "solid-js"
+
+function Modal() {
+  const pop = pushFocusScope()
+  onCleanup(pop)
+  return <>{/* only focusable elements here receive Tab */}</>
+}
+```
+
+### `useFocus(opts?)`, `setFocus(id)`, `focusedId()`, `setFocusedId(id)`
+
+Focus management. See [Hooks & Signals](hooks.md#usefocus) for full API.
+
 ### SolidJS Control Flow
 
 Re-exported from SolidJS for convenience:
@@ -410,22 +453,39 @@ insert, spread, setProp, mergeProps, effect, memo, use
 
 ## Zig FFI Exports (Low-Level)
 
-The Zig shared library (`libtge.dylib` / `libtge.so`) exposes these C-ABI functions. They're wrapped by `@tge/pixel`'s `paint` namespace — you don't need to call these directly unless building a custom renderer.
+The Zig shared library (`libtge.dylib` / `libtge.so`) exposes 30+ C-ABI functions. They're wrapped by `@tge/pixel`'s `paint` namespace — you don't need to call these directly unless building a custom renderer.
 
-All colors are packed as `u32` RGBA (`0xRRGGBBAA`) to keep parameter count ≤ 8 (ARM64 ABI constraint).
+**ARM64 ABI safety:** All functions use ≤8 parameters. Extra params are packed into a shared `ArrayBuffer` (zero allocations per call).
 
 | Export | Description |
 |--------|-------------|
-| `tge_fill_rect` | Solid rectangle fill |
+| `tge_fill_rect` | Solid rectangle fill (8 params — no packing needed) |
 | `tge_rounded_rect` | SDF anti-aliased rounded rectangle |
 | `tge_stroke_rect` | Stroked rounded rectangle |
+| `tge_rounded_rect_corners` | Per-corner radius fill |
+| `tge_stroke_rect_corners` | Per-corner radius stroke |
 | `tge_filled_circle` | Filled ellipse |
 | `tge_stroked_circle` | Stroked ellipse |
 | `tge_line` | Anti-aliased line segment |
 | `tge_bezier` | Quadratic Bezier curve |
-| `tge_blur` | Multi-pass box blur |
+| `tge_blur` | Multi-pass box blur (3-pass ≈ Gaussian) |
+| `tge_inset_shadow` | Inset shadow (SDF-based, packed params) |
 | `tge_halo` | Radial glow effect |
-| `tge_linear_gradient` | Linear gradient fill |
-| `tge_radial_gradient` | Radial gradient fill |
-| `tge_draw_text` | Bitmap text rendering |
+| `tge_linear_gradient` | Two-stop linear gradient fill |
+| `tge_radial_gradient` | Two-stop radial gradient fill |
+| `tge_linear_gradient_multi` | Multi-stop linear gradient (stops via pointer) |
+| `tge_radial_gradient_multi` | Multi-stop radial gradient |
+| `tge_conic_gradient` | Conic/angular gradient |
+| `tge_gradient_stroke` | Gradient border stroke |
+| `tge_filter_brightness` | Backdrop brightness filter |
+| `tge_filter_contrast` | Backdrop contrast filter |
+| `tge_filter_saturate` | Backdrop saturation filter |
+| `tge_filter_grayscale` | Backdrop grayscale filter |
+| `tge_filter_invert` | Backdrop color invert filter |
+| `tge_filter_sepia` | Backdrop sepia filter |
+| `tge_filter_hue_rotate` | Backdrop hue rotation filter |
+| `tge_blend_mode` | CSS blend modes (16 modes: multiply, screen, overlay…) |
+| `tge_draw_text` | Bitmap text rendering (built-in SF Mono atlas) |
 | `tge_measure_text` | Text width measurement |
+| `tge_load_font_atlas` | Load runtime font atlas (id 1-15) |
+| `tge_draw_text_font` | Text with specific runtime font |
