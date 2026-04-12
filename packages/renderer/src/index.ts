@@ -88,6 +88,10 @@ export { markDirty } from "./dirty"
 // Re-export image utilities
 export { clearImageCache } from "./image"
 
+// Data fetching hooks
+export { useQuery, useMutation } from "./data"
+export type { QueryResult, QueryOptions, MutationResult, MutationOptions } from "./data"
+
 // Re-export ref handle system
 export type { NodeHandle } from "./handle"
 export { createHandle } from "./handle"

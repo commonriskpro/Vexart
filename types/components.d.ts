@@ -575,3 +575,151 @@ export declare function useStack(): {
   current: () => { key: string; component: (props: any) => JSX.Element; params?: Record<string, any> } | undefined
   stack: () => Array<{ key: string; component: (props: any) => JSX.Element; params?: Record<string, any> }>
 }
+
+// ── Tooltip / Popover ──
+
+export interface TooltipProps {
+  content: string
+  renderTooltip: (content: string) => JSX.Element
+  children: JSX.Element
+  showDelay?: number
+  hideDelay?: number
+  disabled?: boolean
+  placement?: "top" | "bottom" | "left" | "right"
+  offset?: number
+}
+
+export interface PopoverTriggerContext {
+  open: boolean
+  toggle: () => void
+}
+
+export interface PopoverProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  renderTrigger: (ctx: PopoverTriggerContext) => JSX.Element
+  renderContent: () => JSX.Element
+  placement?: "top" | "bottom" | "left" | "right"
+  offset?: number
+}
+
+export declare function Tooltip(props: TooltipProps): JSX.Element
+export declare function Popover(props: PopoverProps): JSX.Element
+
+// ── Combobox ──
+
+export interface ComboboxOption {
+  value: string
+  label: string
+  disabled?: boolean
+}
+
+export interface ComboboxInputContext {
+  inputValue: string
+  placeholder: string
+  open: boolean
+  focused: boolean
+  disabled: boolean
+  selectedLabel: string | undefined
+}
+
+export interface ComboboxOptionContext {
+  highlighted: boolean
+  selected: boolean
+  disabled: boolean
+}
+
+export interface ComboboxProps {
+  value?: string
+  onChange?: (value: string) => void
+  options: ComboboxOption[]
+  placeholder?: string
+  disabled?: boolean
+  focusId?: string
+  filter?: (option: ComboboxOption, query: string) => boolean
+  renderInput: (ctx: ComboboxInputContext) => JSX.Element
+  renderOption: (option: ComboboxOption, ctx: ComboboxOptionContext) => JSX.Element
+  renderContent?: (children: JSX.Element) => JSX.Element
+  renderEmpty?: () => JSX.Element
+}
+
+export declare function Combobox(props: ComboboxProps): JSX.Element
+
+// ── Slider ──
+
+export interface SliderRenderContext {
+  value: number
+  min: number
+  max: number
+  percentage: number
+  focused: boolean
+  disabled: boolean
+}
+
+export interface SliderProps {
+  value: number
+  onChange: (value: number) => void
+  min?: number
+  max?: number
+  step?: number
+  largeStep?: number
+  disabled?: boolean
+  focusId?: string
+  renderSlider: (ctx: SliderRenderContext) => JSX.Element
+}
+
+export declare function Slider(props: SliderProps): JSX.Element
+
+// ── Form Validation ──
+
+export type FieldValidator<T> = (value: T, allValues: Record<string, any>) => string | undefined | null
+export type AsyncFieldValidator<T> = (value: T, allValues: Record<string, any>) => Promise<string | undefined | null>
+
+export interface FormOptions<T extends Record<string, any>> {
+  initialValues: T
+  validate?: { [K in keyof T]?: FieldValidator<T[K]> }
+  validateAsync?: { [K in keyof T]?: AsyncFieldValidator<T[K]> }
+  validateForm?: (values: T) => Record<string, string> | undefined | null
+  onSubmit: (values: T) => void | Promise<void>
+  validateOnChange?: boolean
+}
+
+export interface FormHandle<T extends Record<string, any>> {
+  values: { [K in keyof T]: () => T[K] }
+  errors: { [K in keyof T]: () => string | undefined }
+  touched: { [K in keyof T]: () => boolean }
+  dirty: { [K in keyof T]: () => boolean }
+  setValue: <K extends keyof T>(field: K, value: T[K]) => void
+  setError: <K extends keyof T>(field: K, error: string | undefined) => void
+  setTouched: <K extends keyof T>(field: K) => void
+  isValid: () => boolean
+  submitting: () => boolean
+  submit: () => void
+  reset: () => void
+  getValues: () => T
+}
+
+export declare function createForm<T extends Record<string, any>>(options: FormOptions<T>): FormHandle<T>
+
+// ── VirtualList ──
+
+export interface VirtualListItemContext {
+  selected: boolean
+  highlighted: boolean
+  index: number
+}
+
+export interface VirtualListProps<T> {
+  items: T[]
+  itemHeight: number
+  height: number
+  width?: number | string
+  overscan?: number
+  renderItem: (item: T, index: number, ctx: VirtualListItemContext) => JSX.Element
+  selectedIndex?: number
+  onSelect?: (index: number) => void
+  keyboard?: boolean
+  focusId?: string
+}
+
+export declare function VirtualList<T>(props: VirtualListProps<T>): JSX.Element

@@ -112,12 +112,14 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
 export interface FocusHandle {
   focused: () => boolean
   focus: () => void
+  id: string
 }
 
-export function useFocus(opts?: { id?: string; onKeyDown?: (event: KeyEvent) => void }): FocusHandle
+export function useFocus(opts?: { id?: string; onKeyDown?: (event: KeyEvent) => void; onPress?: () => void }): FocusHandle
 export function setFocus(id: string): void
 export function focusedId(): string | null
 export function setFocusedId(id: string | null): void
+export function pushFocusScope(): () => void
 
 // ── Input hooks ──
 
@@ -365,6 +367,41 @@ export function registerFont(desc: FontDescriptor, atlasData: Uint8Array, widths
 export function getFont(id: number): FontDescriptor | undefined
 export function clearTextCache(): void
 export function clearImageCache(): void
+
+// ── Data fetching hooks ──
+
+export interface QueryResult<T> {
+  data: () => T | undefined
+  loading: () => boolean
+  error: () => Error | undefined
+  refetch: () => void
+  mutate: (data: T | ((prev: T | undefined) => T)) => void
+}
+
+export interface QueryOptions {
+  enabled?: boolean
+  refetchInterval?: number
+  retry?: number
+  retryDelay?: number
+}
+
+export interface MutationResult<T, V> {
+  data: () => T | undefined
+  loading: () => boolean
+  error: () => Error | undefined
+  mutate: (variables: V) => Promise<T | undefined>
+  reset: () => void
+}
+
+export interface MutationOptions<T, V> {
+  onMutate?: (variables: V) => T | undefined
+  onSuccess?: (data: T, variables: V) => void
+  onError?: (error: Error, variables: V, previousData: T | undefined) => void
+  onSettled?: (data: T | undefined, error: Error | undefined, variables: V) => void
+}
+
+export function useQuery<T>(fetcher: () => Promise<T>, options?: QueryOptions): QueryResult<T>
+export function useMutation<T, V = void>(mutator: (variables: V) => Promise<T>, options?: MutationOptions<T, V>): MutationResult<T, V>
 
 // ── Terminal dimensions hook ──
 

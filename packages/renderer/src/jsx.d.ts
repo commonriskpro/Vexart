@@ -35,6 +35,12 @@ type BoxIntrinsicProps = TGEProps & {
   focusable?: boolean
   onPress?: () => void
   onKeyDown?: (event: any) => void
+  // Mouse events
+  onMouseDown?: (evt: any) => void
+  onMouseUp?: (evt: any) => void
+  onMouseOver?: () => void
+  onMouseOut?: () => void
+  onMouseMove?: () => void
   focusStyle?: {
     backgroundColor?: ColorValue
     borderColor?: ColorValue
