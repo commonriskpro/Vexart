@@ -2,3 +2,11 @@
 # This transforms JSX via babel-preset-solid with generate: "universal"
 # targeting @tge/renderer instead of the DOM.
 preload = ["./solid-plugin.ts"]
+
+# CRITICAL: Force SolidJS to use the browser/client runtime.
+# Without this, Bun resolves solid-js to the "node" export condition
+# which maps to dist/server.js — a SSR-only build with NO reactivity
+# (createEffect is a no-op, signals don't trigger updates).
+# TGE needs the full reactive runtime (dist/solid.js).
+[run]
+conditions = ["browser"]
