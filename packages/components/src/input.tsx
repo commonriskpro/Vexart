@@ -55,6 +55,11 @@ export type InputRenderContext = {
   disabled: boolean
   /** Selection range [start, end] or null. */
   selection: [number, number] | null
+  /** Spread on the root element — adds focusable + click-to-focus support. */
+  inputProps: {
+    focusable: true
+    onPress: () => void
+  }
 }
 
 export type InputProps = {
@@ -126,7 +131,7 @@ export function Input(props: InputProps) {
 
   // ── Keyboard ──
 
-  const { focused } = useFocus({
+  const { focused, focus } = useFocus({
     id: props.focusId,
     onKeyDown(e) {
       if (disabled()) return
@@ -232,7 +237,7 @@ export function Input(props: InputProps) {
 
   return (
     <>
-      {props.renderInput({
+      {() => props.renderInput({
         value: props.value,
         displayText: showPlaceholder() ? (props.placeholder ?? "") : props.value,
         showPlaceholder: showPlaceholder(),
@@ -241,6 +246,10 @@ export function Input(props: InputProps) {
         focused: checkFocus(),
         disabled: disabled(),
         selection: hasSelection() ? selRange() : null,
+        inputProps: {
+          focusable: true,
+          onPress: () => { if (!disabled()) focus() },
+        },
       })}
     </>
   )

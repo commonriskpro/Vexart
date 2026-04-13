@@ -76,6 +76,10 @@ export type { VoidTooltipProps } from "./tooltip"
 export { VoidPopover } from "./popover"
 export type { VoidPopoverProps } from "./popover"
 
+// ── DropdownMenu ──
+export { VoidDropdownMenu } from "./dropdown-menu"
+export type { VoidDropdownMenuProps, VoidDropdownMenuTriggerProps, VoidDropdownMenuContentProps, VoidDropdownMenuItemProps, VoidDropdownMenuLabelProps } from "./dropdown-menu"
+
 // ── Checkbox ──
 export { VoidCheckbox } from "./checkbox"
 export type { VoidCheckboxProps } from "./checkbox"

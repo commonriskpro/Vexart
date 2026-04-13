@@ -34,6 +34,7 @@ export function VoidInput(props: VoidInputProps) {
       focusId={props.focusId}
       renderInput={(ctx: InputRenderContext) => (
         <box
+          {...ctx.inputProps}
           direction="row"
           alignY="center"
           width={props.width ?? "grow"}

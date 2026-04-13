@@ -52,6 +52,7 @@ import {
   VoidInput,
   VoidTabs,
   VoidProgress,
+  VoidDropdownMenu,
   H2, H3, H4, P, Small, Muted,
   colors, themeColors, radius, space, font, weight, shadows, glows,
   darkTheme, lightTheme, setTheme,
@@ -921,28 +922,54 @@ function VoidComboboxDemo() {
 
 function VoidPopoverDemo() {
   const [open, setOpen] = createSignal(false)
+  const [menuOpen, setMenuOpen] = createSignal(false)
+  const [lastAction, setLastAction] = createSignal("")
 
   return (
-    <box direction="row" gap={space[3]} alignY="center">
-      <VoidPopover
-        open={open()}
-        onOpenChange={setOpen}
-        trigger={
-          <box focusable onPress={() => setOpen(!open())} backgroundColor={themeColors.card} cornerRadius={radius.md} padding={space[2]} paddingX={space[3]} hoverStyle={{ backgroundColor: themeColors.accent }} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }}>
-            <text color={themeColors.foreground} fontSize={font.sm}>{open() ? "Close" : "Open"} Popover</text>
+    <box direction="column" gap={space[4]}>
+      {/* VoidPopover — free-form content */}
+      <box direction="row" gap={space[3]} alignY="center">
+        <VoidPopover
+          open={open()}
+          onOpenChange={setOpen}
+          trigger={
+            <box focusable onPress={() => setOpen(!open())} backgroundColor={themeColors.card} cornerRadius={radius.md} padding={space[2]} paddingX={space[3]} hoverStyle={{ backgroundColor: themeColors.accent }} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }}>
+              <text color={themeColors.foreground} fontSize={font.sm}>{open() ? "Close" : "Open"} Popover</text>
+            </box>
+          }
+          width={200}
+        >
+          <box direction="column" gap={space[2]}>
+            <text color={themeColors.foreground} fontSize={font.sm} fontWeight={weight.medium}>Free-form content</text>
+            <Separator />
+            <text color={themeColors.mutedForeground} fontSize={font.xs}>Any JSX goes here</text>
           </box>
-        }
-        width={200}
-      >
-        <box direction="column" gap={space[2]}>
-          <text color={themeColors.foreground} fontSize={font.sm} fontWeight={weight.medium}>Settings</text>
-          <Separator />
-          <text color={themeColors.mutedForeground} fontSize={font.xs}>Option 1</text>
-          <text color={themeColors.mutedForeground} fontSize={font.xs}>Option 2</text>
-          <text color={themeColors.mutedForeground} fontSize={font.xs}>Option 3</text>
-        </box>
-      </VoidPopover>
-      <text color={themeColors.mutedForeground} fontSize={font.xs}>Popover is {open() ? "open" : "closed"}</text>
+        </VoidPopover>
+        <text color={themeColors.mutedForeground} fontSize={font.xs}>Popover is {open() ? "open" : "closed"}</text>
+      </box>
+
+      {/* VoidDropdownMenu — shadcn-compatible menu with clickable items */}
+      <box direction="row" gap={space[3]} alignY="center">
+        <VoidDropdownMenu open={menuOpen()} onOpenChange={setMenuOpen}>
+          <VoidDropdownMenu.Trigger>
+            <box focusable onPress={() => setMenuOpen(!menuOpen())} backgroundColor={themeColors.card} cornerRadius={radius.md} padding={space[2]} paddingX={space[3]} hoverStyle={{ backgroundColor: themeColors.accent }} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }}>
+              <text color={themeColors.foreground} fontSize={font.sm}>Open Menu ⌄</text>
+            </box>
+          </VoidDropdownMenu.Trigger>
+          <VoidDropdownMenu.Content width={180}>
+            <VoidDropdownMenu.Label>My Account</VoidDropdownMenu.Label>
+            <VoidDropdownMenu.Separator />
+            <VoidDropdownMenu.Item onSelect={() => setLastAction("Profile")}>Profile</VoidDropdownMenu.Item>
+            <VoidDropdownMenu.Item onSelect={() => setLastAction("Settings")}>Settings</VoidDropdownMenu.Item>
+            <VoidDropdownMenu.Item onSelect={() => setLastAction("Billing")}>Billing</VoidDropdownMenu.Item>
+            <VoidDropdownMenu.Separator />
+            <VoidDropdownMenu.Item variant="destructive" onSelect={() => setLastAction("Log out")}>Log out</VoidDropdownMenu.Item>
+          </VoidDropdownMenu.Content>
+        </VoidDropdownMenu>
+        <Show when={lastAction()}>
+          <text color="#4fc4d4" fontSize={font.xs}>Selected: {lastAction()}</text>
+        </Show>
+      </box>
     </box>
   )
 }
@@ -1168,8 +1195,8 @@ function TabVoidTheme() {
         </box>
       </SectionBox>
 
-      {/* Void Popover */}
-      <SectionBox title="VOID POPOVER (click trigger to open)">
+      {/* Void Popover + DropdownMenu */}
+      <SectionBox title="VOID POPOVER + DROPDOWN MENU (shadcn-compatible)">
         <VoidPopoverDemo />
       </SectionBox>
 
