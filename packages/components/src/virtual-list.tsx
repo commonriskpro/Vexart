@@ -1,15 +1,13 @@
 /**
  * VirtualList — virtualized list that only renders visible items.
  *
- * Architecture inspired by TanStack Virtual:
- *   1. Outer container: fixed height, Clay scroll clipping (scrollY)
- *   2. Inner structure: topPad spacer + visible items + bottomPad spacer
- *      (total = items.length * itemHeight — Clay sees the full height)
- *   3. Clay handles ALL scroll natively (mouse wheel, touch)
- *   4. We READ Clay's scroll offset to calculate which items to render
- *   5. A reactive tick signal forces SolidJS to re-evaluate on scroll
+ * Architecture: Clay handles all scroll. We render a fixed-height spacer
+ * for the full content, then only mount items near the viewport.
  *
- * Uses fixed item height for O(1) scroll calculations.
+ * The key insight: topPad must EXACTLY equal startIndex * itemHeight so
+ * that Clay's scroll position and our item positioning agree perfectly.
+ * Items are rendered at their true content position within the scroll
+ * container — Clay's scroll clipping does the rest.
  *
  * Usage:
  *   <VirtualList
@@ -49,7 +47,7 @@ export type VirtualListProps<T> = {
   height: number
   /** Width. Default: "grow". */
   width?: number | string
-  /** Extra items to render above/below viewport. Default: 3. */
+  /** Extra items to render above/below viewport. Default: 8. */
   overscan?: number
   /** Render each visible item. */
   renderItem: (item: T, index: number, ctx: VirtualListItemContext) => JSX.Element
@@ -64,9 +62,6 @@ export type VirtualListProps<T> = {
 }
 
 export function VirtualList<T>(props: VirtualListProps<T>) {
-  // Scroll tick — bumped on every scroll event to force SolidJS to
-  // re-evaluate derived getters that read scrollHandle.scrollTop.
-  // Clay owns the scroll position; we just read it.
   const [scrollTick, setScrollTick] = createSignal(0)
   const [highlightedIndex, setHighlightedIndex] = createSignal(props.selectedIndex ?? -1)
 
@@ -74,25 +69,22 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   const totalHeight = () => props.items.length * props.itemHeight
   const viewportItems = () => Math.ceil(props.height / props.itemHeight)
 
-  // Stable scroll container ID for Clay
   const scrollId = `vlist-${Math.random().toString(36).slice(2, 8)}`
   const scrollHandle = createScrollHandle(scrollId)
 
-  // Read Clay's scroll offset reactively. The scrollTick dependency
-  // forces re-evaluation when scroll events occur.
+  // Read Clay scroll reactively (scrollTick drives re-evaluation)
   const scrollPos = () => {
-    scrollTick() // subscribe — re-evaluates when tick bumps
+    scrollTick()
     return scrollHandle.scrollTop
   }
 
-  // Raw index from scroll position (no overscan — for topPad calculation)
+  // First visible item index (no overscan)
   const rawStartIndex = () => Math.floor(scrollPos() / props.itemHeight)
 
-  // Calculate visible range from scroll position (with overscan)
+  // Render range with overscan
   const startIndex = () => Math.max(0, rawStartIndex() - overscan())
   const endIndex = () => Math.min(props.items.length, rawStartIndex() + viewportItems() + overscan())
 
-  // Visible items slice
   const visibleItems = () => {
     const start = startIndex()
     const end = endIndex()
@@ -103,22 +95,17 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     return result
   }
 
-  // Scroll the highlight into view (programmatic — keyboard nav)
   function scrollToIndex(index: number) {
     const itemTop = index * props.itemHeight
     const itemBottom = itemTop + props.itemHeight
     const viewTop = scrollPos()
     const viewBottom = viewTop + props.height
-
-    if (itemTop < viewTop) {
-      scrollHandle.scrollTo(-itemTop)
-    } else if (itemBottom > viewBottom) {
-      scrollHandle.scrollTo(-(itemBottom - props.height))
-    }
+    if (itemTop < viewTop) scrollHandle.scrollTo(-itemTop)
+    else if (itemBottom > viewBottom) scrollHandle.scrollTo(-(itemBottom - props.height))
     setScrollTick(t => t + 1)
   }
 
-  // Keyboard navigation
+  // Keyboard
   const keyboard = props.keyboard ?? true
   if (keyboard) {
     useFocus({
@@ -171,18 +158,11 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     })
   }
 
-  // Post-scroll hook — runs AFTER clay.updateScroll() but BEFORE walkTree.
-  // At this point scrollHandle.scrollTop reflects the CURRENT frame's scroll,
-  // not the previous one. Zero latency, zero desync.
+  // Post-scroll sync
   const unsubPostScroll = onPostScroll(() => {
     setScrollTick(t => t + 1)
   })
   onCleanup(() => unsubPostScroll())
-
-  // Top spacer to offset content for items above viewport.
-  // Must use startIndex (with overscan) so overscan items above the viewport
-  // are positioned correctly and Clay clips them.
-  const topPad = () => startIndex() * props.itemHeight
 
   return (
     <box
@@ -191,21 +171,30 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
       scrollY
       scrollId={scrollId}
     >
-      {/* Top spacer — represents items above the viewport */}
-      <box height={topPad()} />
-      {/* Visible items */}
-      <For each={visibleItems()}>
-        {({ item, index }) => {
-          const ctx: VirtualListItemContext = {
-            selected: props.selectedIndex === index,
-            highlighted: highlightedIndex() === index,
-            index,
-          }
-          return props.renderItem(item, index, ctx)
-        }}
-      </For>
-      {/* Bottom spacer — represents items below the viewport */}
-      <box height={totalHeight() - (endIndex() * props.itemHeight)} />
+      {() => {
+        const items = visibleItems()
+        const start = startIndex()
+        const end = endIndex()
+        const topH = start * props.itemHeight
+        const bottomH = totalHeight() - end * props.itemHeight
+
+        return (
+          <>
+            {topH > 0 ? <box height={topH} /> : null}
+            <For each={items}>
+              {({ item, index }) => {
+                const ctx: VirtualListItemContext = {
+                  selected: props.selectedIndex === index,
+                  highlighted: highlightedIndex() === index,
+                  index,
+                }
+                return props.renderItem(item, index, ctx)
+              }}
+            </For>
+            {bottomH > 0 ? <box height={bottomH} /> : null}
+          </>
+        )
+      }}
     </box>
   )
 }
