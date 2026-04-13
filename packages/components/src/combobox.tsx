@@ -211,9 +211,14 @@ export function Combobox(props: ComboboxProps) {
         selected: props.value === opt.value,
         disabled: opt.disabled ?? false,
       }
-      // Wrap in clickable box — onPress selects this option
+      // Wrap in clickable box with hover — onPress selects, onMouseOver highlights
+      // backgroundColor placeholder needed for Clay to emit a RECT → enters rectNodes for hit-testing
       return (
-        <box onPress={() => { if (!opt.disabled) selectOption(opt.value) }}>
+        <box
+          backgroundColor={0x00000001}
+          onPress={() => { if (!opt.disabled) selectOption(opt.value) }}
+          onMouseOver={() => setHighlightedIndex(i)}
+        >
           {props.renderOption(opt, ctx)}
         </box>
       )
@@ -229,7 +234,7 @@ export function Combobox(props: ComboboxProps) {
   return (
     <box direction="column">
       {/* Click input to toggle dropdown */}
-      <box onPress={() => { if (!disabled()) setOpen(!open()) }}>
+      <box backgroundColor={0x00000001} onPress={() => { if (!disabled()) setOpen(!open()) }}>
         {props.renderInput(inputCtx())}
       </box>
       {content()}

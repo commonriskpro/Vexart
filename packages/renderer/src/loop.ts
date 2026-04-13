@@ -1003,7 +1003,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
   /** Track nodes with interactive styles for hit-testing + focus bridging.
    *  Also dispatches per-node mouse callbacks (onMouseDown/Up/Move/Over/Out). */
-  function updateInteractiveStates() {
+  /** Returns true if a click was dispatched (focus/onPress fired). */
+  function updateInteractiveStates(): boolean {
     let changed = false
     const currentFocusId = focusedId()
 
@@ -1107,6 +1108,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       // Bubbles up the tree like DOM events. Each node with onPress/focusable
       // gets a chance to handle the event. Call event.stopPropagation() in an
       // onPress handler to prevent further bubbling.
+      changed = true // Focus/press change — needs repaint
       const event = createPressEvent()
       let target: TGENode | null = clickTarget
 
@@ -1123,6 +1125,22 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         target = target.parent
       }
     }
+    // After click dispatch, focus may have changed — update _focused on all
+    // focusable nodes so the re-layout in the same frame sees the correct state.
+    if (clickTarget) {
+      const newFocusId = focusedId()
+      if (newFocusId !== currentFocusId) {
+        for (const node of rectNodes) {
+          if (!node.props.focusable) continue
+          const nodeFocusId = getNodeFocusId(node)
+          const isFocused = nodeFocusId !== undefined && nodeFocusId === newFocusId
+          if (node._focused !== isFocused) {
+            node._focused = isFocused
+          }
+        }
+      }
+    }
+
     prevActiveNode = newActiveNode
 
     // Auto-release pointer capture on button release
@@ -1137,6 +1155,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       markDirty()
       markAllDirty()
     }
+    return !!clickTarget
   }
 
   // ── Frame rendering ──
@@ -1185,12 +1204,34 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     boxNodes.length = 0
     clay.beginLayout()
     walkTree(root)
-    const commands = clay.endLayout()
+    let commands = clay.endLayout()
 
     // Write layout geometry back to TGENodes for ref access
     writeLayoutBack(commands)
     // Update hover/active states based on pointer position
-    updateInteractiveStates()
+    const hadClick = updateInteractiveStates()
+
+    // If a click was dispatched (focus change or onPress callback), re-layout
+    // so we paint the NEW state in the same frame. Without this, the visual
+    // update would be delayed until the next frame tick (~33ms).
+    // Only re-layout on clicks, NOT on hover changes (which happen every frame).
+    if (hadClick) {
+      scrollSpeedCap = 0
+      effectsQueue = []
+      imageQueue = []
+      pendingAnsiTexts = []
+      textMeasureIndex = 0
+      textMetas.length = 0
+      textMetaMap.clear()
+      clay.resetTextMeasures()
+      rectNodes.length = 0
+      textNodes.length = 0
+      boxNodes.length = 0
+      clay.beginLayout()
+      walkTree(root)
+      commands = clay.endLayout()
+      writeLayoutBack(commands)
+    }
 
     if (commands.length === 0) {
       clearDirty()
