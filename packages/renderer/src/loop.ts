@@ -1784,6 +1784,80 @@ function clipToScissor(
 }
 
 /**
+ * Paint a primitive with scissor clipping. For primitives that can't be
+ * trivially clipped (rounded rects, per-corner radius), this renders into
+ * a temp buffer at (0,0) and copies only the scissor-visible portion.
+ *
+ * @param dst - Destination buffer
+ * @param absX/absY - Absolute screen coordinates of the element
+ * @param localX/localY - Local coordinates in dst to paint at (absX - offsetX)
+ * @param w/h - Element dimensions
+ * @param directFn - Paints directly on dst at (localX, localY). Used when no clipping needed.
+ * @param tempFn - Paints on a temp buffer at (0, 0). Used when partially clipped.
+ */
+function paintWithScissorClip(
+  dst: PixelBuffer,
+  absX: number, absY: number,
+  localX: number, localY: number,
+  w: number, h: number,
+  directFn: () => void,
+  tempFn: (tmp: PixelBuffer) => void,
+) {
+  const s = activeScissor()
+  if (!s) { directFn(); return }
+
+  // Compute visible region
+  const left = Math.max(absX, s.x)
+  const top = Math.max(absY, s.y)
+  const right = Math.min(absX + w, s.x + s.w)
+  const bottom = Math.min(absY + h, s.y + s.h)
+  if (left >= right || top >= bottom) return // fully clipped
+
+  // Fully inside scissor — paint directly
+  if (absX >= s.x && absY >= s.y && absX + w <= s.x + s.w && absY + h <= s.y + s.h) {
+    directFn()
+    return
+  }
+
+  // Partially clipped — temp buffer + copy visible
+  const tmp = create(w, h)
+  tempFn(tmp)
+
+  const srcLeft = left - absX
+  const srcTop = top - absY
+  const dstLeft = localX + srcLeft
+  const dstTop = localY + srcTop
+  const copyW = right - left
+  const copyH = bottom - top
+
+  const sd = tmp.data
+  const dd = dst.data
+  for (let row = 0; row < copyH; row++) {
+    const sy = srcTop + row
+    const dy = dstTop + row
+    if (dy < 0 || dy >= dst.height) continue
+    for (let col = 0; col < copyW; col++) {
+      const sx = srcLeft + col
+      const dx = dstLeft + col
+      if (dx < 0 || dx >= dst.width) continue
+      const si = (sy * tmp.stride) + sx * 4
+      const sa = sd[si + 3]
+      if (sa === 0) continue
+      const di = (dy * dst.stride) + dx * 4
+      if (sa === 255) {
+        dd[di] = sd[si]; dd[di+1] = sd[si+1]; dd[di+2] = sd[si+2]; dd[di+3] = 255
+      } else {
+        const invSa = 255 - sa
+        dd[di]   = Math.round((sd[si]   * sa + dd[di]   * invSa) / 255)
+        dd[di+1] = Math.round((sd[si+1] * sa + dd[di+1] * invSa) / 255)
+        dd[di+2] = Math.round((sd[si+2] * sa + dd[di+2] * invSa) / 255)
+        dd[di+3] = Math.min(255, sa + Math.round(dd[di+3] * invSa / 255))
+      }
+    }
+  }
+}
+
+/**
  * Emit collected text commands as ANSI escape codes.
  * Converts pixel coordinates to terminal cell positions and writes
  * colored text at those positions. Called in selectableText mode
@@ -2160,9 +2234,13 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
         }
       } else if (matchedEffect?.cornerRadii) {
         const cr = matchedEffect.cornerRadii
-        paint.roundedRectCorners(target, tx, ty, w, h, r, g, b, a, cr.tl, cr.tr, cr.br, cr.bl)
+        paintWithScissorClip(target, x + offsetX, y + offsetY, tx, ty, w, h,
+          () => paint.roundedRectCorners(target, tx, ty, w, h, r, g, b, a, cr.tl, cr.tr, cr.br, cr.bl),
+          (tmp) => paint.roundedRectCorners(tmp, 0, 0, w, h, r, g, b, a, cr.tl, cr.tr, cr.br, cr.bl))
       } else if (radius > 0) {
-        paint.roundedRect(target, tx, ty, w, h, r, g, b, a, radius)
+        paintWithScissorClip(target, x + offsetX, y + offsetY, tx, ty, w, h,
+          () => paint.roundedRect(target, tx, ty, w, h, r, g, b, a, radius),
+          (tmp) => paint.roundedRect(tmp, 0, 0, w, h, r, g, b, a, radius))
       } else {
         // Clip to scissor for flat rects — prevents painting outside scroll containers
         const clipped = clipToScissor(x + offsetX, y + offsetY, w, h, offsetX, offsetY)
@@ -2189,9 +2267,13 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
       )
       if (borderEffectIdx >= 0 && effectsQueue[borderEffectIdx].cornerRadii) {
         const cr = effectsQueue[borderEffectIdx].cornerRadii!
-        paint.strokeRectCorners(buf, x, y, w, h, r, g, b, a, cr.tl, cr.tr, cr.br, cr.bl, bw)
+        paintWithScissorClip(buf, x + offsetX, y + offsetY, x, y, w, h,
+          () => paint.strokeRectCorners(buf, x, y, w, h, r, g, b, a, cr.tl, cr.tr, cr.br, cr.bl, bw),
+          (tmp) => paint.strokeRectCorners(tmp, 0, 0, w, h, r, g, b, a, cr.tl, cr.tr, cr.br, cr.bl, bw))
       } else {
-        paint.strokeRect(buf, x, y, w, h, r, g, b, a, radius, bw)
+        paintWithScissorClip(buf, x + offsetX, y + offsetY, x, y, w, h,
+          () => paint.strokeRect(buf, x, y, w, h, r, g, b, a, radius, bw),
+          (tmp) => paint.strokeRect(tmp, 0, 0, w, h, r, g, b, a, radius, bw))
       }
       break
     }
