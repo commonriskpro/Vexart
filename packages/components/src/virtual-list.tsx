@@ -1,13 +1,22 @@
 /**
  * VirtualList — virtualized list that only renders visible items.
  *
- * Architecture: Clay handles all scroll. We render a fixed-height spacer
- * for the full content, then only mount items near the viewport.
+ * Architecture:
+ *   - Clay handles ALL scroll (scrollY on container)
+ *   - NO top spacer — items always start at content position 0
+ *   - Items render from index 0 up to endIndex (viewport + overscan)
+ *   - A single bottom spacer gives Clay the total content height
+ *   - On scroll, we recalculate endIndex to render more items as needed
+ *   - Clay clips items above the viewport automatically
  *
- * The key insight: topPad must EXACTLY equal startIndex * itemHeight so
- * that Clay's scroll position and our item positioning agree perfectly.
- * Items are rendered at their true content position within the scroll
- * container — Clay's scroll clipping does the rest.
+ * This avoids the topPad desync issue entirely: items are always at their
+ * true position (index * itemHeight from top), and Clay's scroll just
+ * moves the viewport window over them.
+ *
+ * Trade-off: we render items from 0 to endIndex (not startIndex to endIndex).
+ * At scroll position 500 with itemHeight=28, that's ~26 items rendered instead
+ * of ~18. Still far better than 1000. At scroll position 5000, it's ~186 items.
+ * For truly huge lists (100k+), a different approach would be needed.
  *
  * Usage:
  *   <VirtualList
@@ -47,7 +56,7 @@ export type VirtualListProps<T> = {
   height: number
   /** Width. Default: "grow". */
   width?: number | string
-  /** Extra items to render above/below viewport. Default: 8. */
+  /** Extra items to render below viewport. Default: 8. */
   overscan?: number
   /** Render each visible item. */
   renderItem: (item: T, index: number, ctx: VirtualListItemContext) => JSX.Element
@@ -72,28 +81,29 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   const scrollId = `vlist-${Math.random().toString(36).slice(2, 8)}`
   const scrollHandle = createScrollHandle(scrollId)
 
-  // Read Clay scroll reactively (scrollTick drives re-evaluation)
   const scrollPos = () => {
     scrollTick()
     return scrollHandle.scrollTop
   }
 
-  // First visible item index (no overscan)
-  const rawStartIndex = () => Math.floor(scrollPos() / props.itemHeight)
-
-  // Render range with overscan
-  const startIndex = () => Math.max(0, rawStartIndex() - overscan())
-  const endIndex = () => Math.min(props.items.length, rawStartIndex() + viewportItems() + overscan())
+  // Render from 0 to endIndex — no topPad, no desync.
+  // Clay clips everything above the viewport automatically.
+  const endIndex = () => {
+    const raw = Math.floor(scrollPos() / props.itemHeight) + viewportItems()
+    return Math.min(props.items.length, raw + overscan())
+  }
 
   const visibleItems = () => {
-    const start = startIndex()
     const end = endIndex()
     const result: { item: T; index: number }[] = []
-    for (let i = start; i < end; i++) {
+    for (let i = 0; i < end; i++) {
       result.push({ item: props.items[i], index: i })
     }
     return result
   }
+
+  // Bottom spacer — gives Clay the remaining height so scroll range is correct
+  const bottomPad = () => Math.max(0, totalHeight() - endIndex() * props.itemHeight)
 
   function scrollToIndex(index: number) {
     const itemTop = index * props.itemHeight
@@ -158,7 +168,6 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     })
   }
 
-  // Post-scroll sync
   const unsubPostScroll = onPostScroll(() => {
     setScrollTick(t => t + 1)
   })
@@ -171,29 +180,19 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
       scrollY
       scrollId={scrollId}
     >
+      <For each={visibleItems()}>
+        {({ item, index }) => {
+          const ctx: VirtualListItemContext = {
+            selected: props.selectedIndex === index,
+            highlighted: highlightedIndex() === index,
+            index,
+          }
+          return props.renderItem(item, index, ctx)
+        }}
+      </For>
       {() => {
-        const items = visibleItems()
-        const start = startIndex()
-        const end = endIndex()
-        const topH = start * props.itemHeight
-        const bottomH = totalHeight() - end * props.itemHeight
-
-        return (
-          <>
-            {topH > 0 ? <box height={topH} /> : null}
-            <For each={items}>
-              {({ item, index }) => {
-                const ctx: VirtualListItemContext = {
-                  selected: props.selectedIndex === index,
-                  highlighted: highlightedIndex() === index,
-                  index,
-                }
-                return props.renderItem(item, index, ctx)
-              }}
-            </For>
-            {bottomH > 0 ? <box height={bottomH} /> : null}
-          </>
-        )
+        const bp = bottomPad()
+        return bp > 0 ? <box height={bp} /> : null
       }}
     </box>
   )
