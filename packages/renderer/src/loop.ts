@@ -966,7 +966,12 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       const hasMouseProps = node.props.onMouseDown || node.props.onMouseUp || node.props.onMouseMove || node.props.onMouseOver || node.props.onMouseOut
       const isInteractive = node.props.focusable || node.props.hoverStyle || node.props.activeStyle || node.props.focusStyle || node.props.onPress || hasMouseProps
       if (!isInteractive) continue
-      const data = clay.getElementData(`tge-node-${node.id}`)
+      // Scroll containers use scrollId as their Clay ID, not tge-node-${id}
+      const isScroll = node.props.scrollX || node.props.scrollY
+      const clayLabel = isScroll && node.props.scrollId
+        ? node.props.scrollId
+        : `tge-node-${node.id}`
+      const data = clay.getElementData(clayLabel)
       if (data.found) {
         node.layout.x = data.x
         node.layout.y = data.y
@@ -1026,6 +1031,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       if (!hasInteractiveStyle && !isFocusable && !hasOnPress && !hasMouseCb) continue
 
       const l = node.layout
+
       // If this node has pointer capture, it's "hovered" regardless of position.
       // Expand hit-area to at least one cell in each dimension — terminal mouse
       // resolution is per-cell, so elements smaller than a cell are hard to click.

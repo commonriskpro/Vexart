@@ -848,7 +848,6 @@ function TabDataVirtual() {
             onSelect={setSelected}
             renderItem={(item, index, ctx) => (
               <box
-                {...ctx.itemProps}
                 height={28}
                 direction="row" gap={space[3]}
                 paddingX={space[3]} alignY="center"

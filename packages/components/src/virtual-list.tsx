@@ -5,17 +5,12 @@
  *   - Clay handles ALL scroll (scrollY on container)
  *   - Renders items from index 0 to endIndex (visible + overscan)
  *   - bottomPad fills remaining height so Clay knows total content size
- *   - Clay clips items above the viewport via scissor — off-screen items
- *     exist in layout but are not painted (O(visible) paint cost)
- *   - postScroll hook syncs our signal with Clay's scroll position
- *
- * Why render from 0 instead of windowing with topPad?
- *   The topPad approach (startIndex * itemHeight spacer) causes hit-testing
- *   desync — mouse clicks select wrong items because Clay's bounding boxes
- *   for recycled For nodes don't match their visual position. Rendering
- *   from 0 means each item always occupies its true layout position.
- *   Clay layout of N fixed-height boxes is microseconds. Paint is O(visible)
- *   because the scissor clips off-screen rects and texts.
+ *   - Clay clips items above the viewport via scissor
+ *   - Mouse interaction (hover/click) is handled at the CONTAINER level
+ *     using nodeY + scrollOffset to compute which item is under the cursor.
+ *     Per-item callbacks don't work because: (1) off-screen items have layout
+ *     coords that overlap other screen areas, (2) SolidJS For thunk recreates
+ *     nodes each frame, losing interactive state.
  *
  * Usage:
  *   <VirtualList
@@ -24,7 +19,7 @@
  *     height={400}
  *     overscan={5}
  *     renderItem={(item, index, ctx) => (
- *       <box {...ctx.itemProps} height={24} padding={4} backgroundColor="#1a1a1a">
+ *       <box height={24} padding={4} backgroundColor="#1a1a1a">
  *         <text color="#fff">{item.name}</text>
  *       </box>
  *     )}
@@ -33,7 +28,7 @@
 
 import { createSignal, For, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import { useFocus, createScrollHandle, onPostScroll } from "@tge/renderer"
+import { useFocus, createScrollHandle, onPostScroll, markDirty, type NodeHandle } from "@tge/renderer"
 
 // ── Types ──
 
@@ -46,12 +41,6 @@ export type VirtualListItemContext = {
   hovered: boolean
   /** Absolute index in the full list. */
   index: number
-  /** Spread on the item element for click + hover interaction. */
-  itemProps: {
-    onPress: () => void
-    onMouseOver: () => void
-    onMouseOut: () => void
-  }
 }
 
 export type VirtualListProps<T> = {
@@ -88,6 +77,7 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
 
   const scrollId = `vlist-${Math.random().toString(36).slice(2, 8)}`
   const scrollHandle = createScrollHandle(scrollId)
+  let containerRef: NodeHandle | undefined
 
   // Read Clay scroll position reactively
   const scrollPos = () => {
@@ -96,22 +86,23 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   }
 
   // Render from index 0 up to endIndex.
-  // Items above viewport are clipped by Clay's scissor — they exist in
-  // layout but are never painted. This keeps hit-testing correct because
-  // each item always occupies its true layout position.
   const endIndex = () => {
     const raw = Math.floor(scrollPos() / props.itemHeight) + viewportItems()
     return Math.min(props.items.length, raw + overscan())
   }
 
-  // Slice of props.items from 0 to endIndex. We return the ORIGINAL item
-  // references (not wrapper objects) so SolidJS For can track identity
-  // across frames. Creating new wrapper objects would cause For to destroy
-  // and recreate nodes every frame, breaking click hit-testing.
   const visibleItems = () => props.items.slice(0, endIndex())
 
-  // Bottom spacer — gives Clay the total content height for scroll range
+  // Bottom spacer
   const bottomPad = () => Math.max(0, totalHeight() - endIndex() * props.itemHeight)
+
+  // Compute item index from absolute mouse Y
+  function indexFromAbsY(absY: number): number {
+    const containerY = containerRef?.layout.y ?? 0
+    const localY = absY - containerY + scrollPos()
+    const idx = Math.floor(localY / props.itemHeight)
+    return idx >= 0 && idx < props.items.length ? idx : -1
+  }
 
   function scrollToIndex(index: number) {
     const itemTop = index * props.itemHeight
@@ -182,31 +173,42 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
 
   return (
     <box
+      ref={(h: NodeHandle) => { containerRef = h }}
       height={props.height}
       width={props.width ?? "grow"}
       scrollY
       scrollId={scrollId}
+      backgroundColor={0x00000001}
+      onMouseMove={(e) => {
+        const idx = indexFromAbsY(e.y)
+        if (idx !== hoveredIndex()) {
+          setHoveredIndex(idx)
+          markDirty()
+        }
+      }}
+      onMouseOut={() => {
+        if (hoveredIndex() !== -1) {
+          setHoveredIndex(-1)
+          markDirty()
+        }
+      }}
+      onPress={() => {
+        const idx = hoveredIndex()
+        if (idx >= 0) {
+          setHighlightedIndex(idx)
+          props.onSelect?.(idx)
+        }
+      }}
     >
       <For each={visibleItems()}>
         {(item, idx) => {
           const index = idx()
-          // Return a thunk so SolidJS re-evaluates it when reactive
-          // dependencies (selectedIndex, highlightedIndex) change.
-          // Without this, ctx is created once and never updated.
           const render = () => {
             const ctx: VirtualListItemContext = {
               selected: props.selectedIndex === index,
               highlighted: highlightedIndex() === index,
               hovered: hoveredIndex() === index,
               index,
-              itemProps: {
-                onPress: () => {
-                  setHighlightedIndex(index)
-                  props.onSelect?.(index)
-                },
-                onMouseOver: () => setHoveredIndex(index),
-                onMouseOut: () => { if (hoveredIndex() === index) setHoveredIndex(-1) },
-              },
             }
             return props.renderItem(item, index, ctx)
           }
