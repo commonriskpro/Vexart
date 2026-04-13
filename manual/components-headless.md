@@ -365,7 +365,7 @@ import { Combobox } from "tge/components"
 
 **Keyboard:** Type to filter, Up/Down to navigate, Enter to select, Escape to close.
 
-**Mouse:** Click an option to select it. Click the input to toggle the dropdown.
+**Mouse:** Click the input to open/close dropdown and grab focus for typing. Hover over options to highlight them. Click an option to select it.
 
 ### 12. Slider
 
@@ -654,9 +654,9 @@ import { NavigationStack, useStack } from "tge/components"
 
 ### 22. VirtualList
 
-Virtualized list for large datasets. Only renders visible items.
+Virtualized list for large datasets. Only renders visible items. Supports keyboard navigation (Up/Down/j/k, PgUp/PgDown, Home/End, Enter to select) and mouse interaction (hover highlighting, click to select). Mouse events are handled at the container level using absolute coordinates — no per-item callbacks needed.
 
-**Render context:** `{ selected: boolean, highlighted: boolean, index: number }`
+**Render context:** `{ selected: boolean, highlighted: boolean, hovered: boolean, index: number }`
 
 ```tsx
 import { VirtualList } from "tge/components"
@@ -670,14 +670,16 @@ import { VirtualList } from "tge/components"
   onSelect={setSelectedIdx}
   renderItem={(user, index, ctx) => (
     <box height={24} padding={4}
-      backgroundColor={ctx.selected ? "#2a2a4e" : "transparent"}>
+      backgroundColor={ctx.selected ? "#2a2a4e" : ctx.hovered ? "#333" : "transparent"}>
       <text color={ctx.selected ? "#fff" : "#aaa"}>{user.name}</text>
     </box>
   )}
 />
 ```
 
-**Keyboard:** Up/Down to navigate, Enter to select.
+**Keyboard:** Up/Down/j/k to navigate, PgUp/PgDown for pages, Home/End to jump, Enter to select.
+
+**Mouse:** Hover to highlight items, click to select. The VirtualList handles mouse events at the container level — `onMouseMove` computes the hovered item index from absolute mouse position + scroll offset. No per-item interaction props needed.
 
 ### 23. Portal
 

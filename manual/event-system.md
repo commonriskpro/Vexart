@@ -497,6 +497,8 @@ Headless components from `tge/components` provide interaction props in their ren
 | Table | `ctx.rowProps` | `{ onPress }` | Click to select row |
 | Dialog.Overlay | `onClick` prop | wired to `onPress` | Click overlay to close |
 
+**Note:** VirtualList handles mouse interaction differently. Instead of per-item interaction props, it uses container-level `onMouseMove` to compute the hovered item from absolute coordinates + scroll offset. The render context provides `ctx.hovered` and `ctx.selected` booleans. Click and hover work automatically without spreading any props.
+
 ```tsx
 <Button
   onPress={() => save()}

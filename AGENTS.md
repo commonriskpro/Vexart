@@ -159,6 +159,7 @@ Headless components provide interaction props in their render context. Spread th
 | Tabs | `ctx.tabProps` | `{ onPress }` | Click to switch tab |
 | List | `ctx.itemProps` | `{ onPress }` | Click to select item |
 | Table | `ctx.rowProps` | `{ onPress }` | Click to select row |
+| VirtualList | N/A (container-level) | Container handles hover/click internally | Mouse hover + click selection |
 | Dialog.Overlay | `onClick` prop | wired to `onPress` | Click overlay to close |
 
 ```tsx
@@ -210,6 +211,32 @@ onMouse* event flow (low-level, per-node):
 ```
 
 Effects are painted BEFORE the rect (shadow/glow) or INSTEAD of it (gradient). Backdrop blur reads the buffer region behind the element, blurs it in a temp buffer, then composites. All effects use isolated temp buffers to avoid corrupting neighboring pixels.
+
+### Scissor clipping (scroll containers)
+
+All paint primitives respect the active scissor (scroll container bounds):
+- Flat rects: `clipToScissor()` clips coordinates before `fillRect`
+- Rounded rects / per-corner radius: `paintWithScissorClip()` renders to temp buffer, copies visible portion
+- Borders (stroke): `paintWithScissorClip()` same approach
+- Text: temp buffer + copy visible pixels with alpha blending
+- Backdrop blur/filters: clip region to scissor before applying
+- Shadows / glow: `overScissored()` clips composite region
+
+### Interactive nodes auto-RECT
+
+Any node with `onPress`, `focusable`, `hoverStyle`, `activeStyle`, `focusStyle`, or mouse callbacks automatically gets a near-transparent RECT placeholder (`0x00000001`). This ensures the node enters `rectNodes` for hit-testing without requiring explicit `backgroundColor`. Developers don't need to add `backgroundColor` for interactive elements to be clickable.
+
+### Border space reservation
+
+If `focusStyle`, `hoverStyle`, or `activeStyle` define `borderWidth`, the engine reserves that space in Clay with a transparent border when inactive. This prevents layout jitter when interactive styles activate — equivalent to CSS `outline` behavior.
+
+### Click re-layout (instant feedback)
+
+When a click is dispatched (onPress or focus change), the engine re-runs walkTree + endLayout in the same frame. This eliminates the ~33ms visual delay that would otherwise occur because layout was computed before the click callback mutated the tree.
+
+### Scroll container hit-testing
+
+Nodes fully outside their scroll container ancestor viewport are skipped during hit-testing. This prevents off-screen items from receiving false hover/click events at overlapping screen coordinates. The scroll container itself is NOT skipped.
 
 ## Layout defaults
 
@@ -451,7 +478,7 @@ All FFI functions use ≤8 params (packed buffer pattern for ARM64 safety). Shar
 | `Popover` | PopoverProps | Controlled popover panel |
 | `Combobox` | ComboboxProps | Autocomplete with filtering + click selection |
 | `Slider` | SliderProps | Numeric range input with click-to-position and drag |
-| `VirtualList` | VirtualListProps | Virtualized list (fixed height) |
+| `VirtualList` | VirtualListProps | Virtualized list (fixed height) with keyboard nav + mouse hover/click |
 
 Also: `createForm` factory for form validation.
 

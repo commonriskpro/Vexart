@@ -458,6 +458,36 @@ See [Event System](./event-system.md#interaction-props-headless-components) and 
 
 ---
 
+## Engine-Level Interactivity Guarantees
+
+TGE's engine provides several guarantees that make interactive components work correctly by default:
+
+### 1. Auto-RECT for interactive nodes
+
+Any element with `onPress`, `focusable`, `hoverStyle`, `activeStyle`, `focusStyle`, or mouse callbacks (`onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseOver`, `onMouseOut`) automatically gets a near-transparent background placeholder. This means:
+
+- You do NOT need to add `backgroundColor` for an element to be clickable
+- `<box onPress={() => action()}>` works without any background — just like a `<div>` in the browser
+- The placeholder is invisible (`alpha=1/255`) and doesn't affect visual appearance
+
+### 2. Border space reservation
+
+If `focusStyle`, `hoverStyle`, or `activeStyle` define `borderWidth`, the engine always reserves that border space in the layout — even when the style is inactive. The border is rendered with a transparent color when inactive, so it's invisible but the layout space is stable.
+
+This prevents the common issue where activating `focusStyle={{ borderWidth: 2 }}` adds 2px of border that shifts the layout. The space is always there — only the color changes.
+
+### 3. Instant click feedback
+
+When you click an element (via `onPress` or focus), the engine re-runs the layout in the same frame so the visual change appears immediately. Without this, changes from click callbacks would be delayed until the next frame (~33ms).
+
+### 4. Scroll container clipping
+
+Elements inside scroll containers are properly clipped at all levels:
+- **Painting:** All primitives (rects, rounded rects, borders, text, blur, shadows, glow) are clipped to the scroll container bounds
+- **Hit-testing:** Elements fully outside the scroll viewport are skipped during hover/click detection, preventing false interactions at overlapping screen coordinates
+
+---
+
 ## See Also
 
 - [Event System](./event-system.md) — onPress, PressEvent, event bubbling, interaction props, useDrag, useHover
