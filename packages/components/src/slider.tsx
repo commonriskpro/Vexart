@@ -3,11 +3,13 @@
  *
  * CONTROLLED component — parent owns the value.
  * Focus-aware with keyboard control (Left/Right/Home/End).
+ * Mouse-aware: click track to jump, drag to scrub.
  *
  * Provides:
  *   - Value tracking within [min, max]
  *   - Step increments
  *   - Keyboard navigation
+ *   - Mouse interaction (click + drag with pointer capture)
  *   - Focus management
  *   - Percentage calculation for visual rendering
  *
@@ -20,7 +22,7 @@
  *     onChange={setVolume}
  *     min={0} max={100} step={1}
  *     renderSlider={(ctx) => (
- *       <box width={200} height={8} backgroundColor="#333" cornerRadius={4}>
+ *       <box {...ctx.trackProps} width={200} height={8} backgroundColor="#333" cornerRadius={4}>
  *         <box
  *           width={`${ctx.percentage}%`}
  *           height={8}
@@ -33,9 +35,17 @@
  */
 
 import type { JSX } from "solid-js"
-import { useFocus } from "@tge/renderer"
+import { useFocus, setPointerCapture, type NodeMouseEvent, type NodeHandle } from "@tge/renderer"
 
 // ── Types ──
+
+export type SliderTrackProps = {
+  ref: (handle: NodeHandle) => void
+  onMouseDown: (evt: NodeMouseEvent) => void
+  onMouseMove: (evt: NodeMouseEvent) => void
+  onMouseUp: (evt: NodeMouseEvent) => void
+  focusable: true
+}
 
 export type SliderRenderContext = {
   /** Current value. */
@@ -50,6 +60,10 @@ export type SliderRenderContext = {
   focused: boolean
   /** Whether the slider is disabled. */
   disabled: boolean
+  /** Whether the user is currently dragging the slider. */
+  dragging: boolean
+  /** Spread these props on the track element for mouse interaction. */
+  trackProps: SliderTrackProps
 }
 
 export type SliderProps = {
@@ -84,6 +98,38 @@ export function Slider(props: SliderProps) {
   const snap = (v: number) => {
     const s = step()
     return Math.round(v / s) * s
+  }
+
+  // ── Mouse drag state ──
+  let trackNodeId = 0
+  let isDragging = false
+
+  /** Convert a mouse event's X position to a value within [min, max]. */
+  function valueFromMouse(evt: NodeMouseEvent): number {
+    const ratio = Math.max(0, Math.min(1, evt.nodeX / evt.width))
+    return clamp(snap(min() + ratio * (max() - min())))
+  }
+
+  function handleMouseDown(evt: NodeMouseEvent) {
+    if (disabled()) return
+    isDragging = true
+    props.onChange(valueFromMouse(evt))
+    // Capture pointer so drag continues even when cursor leaves the track
+    if (trackNodeId) setPointerCapture(trackNodeId)
+  }
+
+  function handleMouseMove(evt: NodeMouseEvent) {
+    if (!isDragging || disabled()) return
+    props.onChange(valueFromMouse(evt))
+  }
+
+  function handleMouseUp(_evt: NodeMouseEvent) {
+    isDragging = false
+  }
+
+  // ── Track ref ──
+  function handleRef(handle: NodeHandle) {
+    trackNodeId = handle.id
   }
 
   const { focused } = useFocus({
@@ -126,14 +172,24 @@ export function Slider(props: SliderProps) {
     return ((props.value - min()) / range) * 100
   }
 
-  const ctx = (): SliderRenderContext => ({
+  const trackProps: SliderTrackProps = {
+    ref: handleRef,
+    onMouseDown: handleMouseDown,
+    onMouseMove: handleMouseMove,
+    onMouseUp: handleMouseUp,
+    focusable: true,
+  }
+
+  // Return a dynamic expression — SolidJS re-evaluates this when any
+  // reactive dependency changes (props.value, focused(), etc.)
+  return <>{() => props.renderSlider({
     value: props.value,
     min: min(),
     max: max(),
     percentage: percentage(),
     focused: focused(),
     disabled: disabled(),
-  })
-
-  return <>{props.renderSlider(ctx())}</>
+    dragging: isDragging,
+    trackProps,
+  })}</>
 }

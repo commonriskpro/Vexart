@@ -27,6 +27,7 @@ import type { RenderCommand } from "./clay"
 import {
   type TGENode,
   type SizingInfo,
+  type NodeMouseEvent,
   createNode,
   createPressEvent,
   parseSizing,
@@ -159,6 +160,11 @@ export type RenderLoop = {
   feedScroll: (dx: number, dy: number) => void
   /** Feed mouse pointer position */
   feedPointer: (x: number, y: number, down: boolean) => void
+  /** Capture pointer — all mouse events go to this node until release.
+   *  Like Element.setPointerCapture() in the DOM. Auto-released on button up. */
+  setPointerCapture: (nodeId: number) => void
+  /** Release pointer capture for the given node. */
+  releasePointerCapture: (nodeId: number) => void
   /** Suspend rendering — stop loop, restore terminal for external process ($EDITOR) */
   suspend: () => void
   /** Resume rendering — re-enter TGE mode, force full repaint */
@@ -225,7 +231,13 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   let pointerX = pw / 2  // Default to center so scroll container is "hovered"
   let pointerY = ph / 2
   let pointerDown = false
-  let pointerDirty = true  // Feed at least once
+  let pointerDirty = true  // Feed at least once — also used to detect pointer movement for onMouseMove
+  let capturedNodeId = 0   // Pointer capture: 0 = none, >0 = node.id that captures all mouse events
+  // Edge queues: accumulate press/release transitions between frames.
+  // Without queuing, a press+release in the same onData chunk would be invisible
+  // to frame-based edge detection (both transitions overwrite pointerDown).
+  let pendingPress = false
+  let pendingRelease = false
   let scrollSpeedCap = 0  // 0 = no cap (natural), >0 = lines per tick
   let lastFrameTime = Date.now()
 
@@ -240,6 +252,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   function feedPointer(x: number, y: number, down: boolean) {
     pointerX = x
     pointerY = y
+    // Queue edge transitions so they survive until next frame
+    if (down && !pointerDown) pendingPress = true
+    if (!down && pointerDown) pendingRelease = true
     pointerDown = down
     pointerDirty = true
   }
@@ -964,30 +979,76 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   /** Track previous active state for onPress detection (mouseup over element). */
   let prevActiveNode: TGENode | null = null
 
-  /** Track nodes with interactive styles for hit-testing + focus bridging */
+  /** Build a NodeMouseEvent for the given node using current pointer state. */
+  function makeMouseEvent(node: TGENode): NodeMouseEvent {
+    const l = node.layout
+    return { x: pointerX, y: pointerY, nodeX: pointerX - l.x, nodeY: pointerY - l.y, width: l.width, height: l.height }
+  }
+
+  /** Track nodes with interactive styles for hit-testing + focus bridging.
+   *  Also dispatches per-node mouse callbacks (onMouseDown/Up/Move/Over/Out). */
   function updateInteractiveStates() {
     let changed = false
     const currentFocusId = focusedId()
 
+    // Edge detection for button press/release — consume queued edges.
+    // These are accumulated between frames by feedPointer() so that
+    // press+release in the same onData chunk doesn't get lost.
+    const justPressed = pendingPress
+    const justReleased = pendingRelease
+    pendingPress = false
+    pendingRelease = false
+
+    // Check if a node has pointer capture — if so, it receives all events
+    const captureNode = capturedNodeId !== 0 ? rectNodes.find(n => n.id === capturedNodeId) : null
+
     // Walk all rect nodes (they have layout) and check hover/active/focus
     let newActiveNode: TGENode | null = null
+    let pressedThisFrame: TGENode | null = null  // Node hit during justPressed (for fast-click detection)
     for (const node of rectNodes) {
       const hasInteractiveStyle = node.props.hoverStyle || node.props.activeStyle || node.props.focusStyle
       const isFocusable = node.props.focusable
       const hasOnPress = node.props.onPress
+      const hasMouseCb = node.props.onMouseDown || node.props.onMouseUp || node.props.onMouseMove || node.props.onMouseOver || node.props.onMouseOut
 
       // Skip nodes that have no interactive behavior at all
-      if (!hasInteractiveStyle && !isFocusable && !hasOnPress) continue
+      if (!hasInteractiveStyle && !isFocusable && !hasOnPress && !hasMouseCb) continue
 
       const l = node.layout
-      const isOver = pointerX >= l.x && pointerX < l.x + l.width &&
-                     pointerY >= l.y && pointerY < l.y + l.height
+      // If this node has pointer capture, it's "hovered" regardless of position.
+      // Expand hit-area to at least one cell in each dimension — terminal mouse
+      // resolution is per-cell, so elements smaller than a cell are hard to click.
+      // This is like mobile "minimum touch target" (44px) but for terminal cells.
+      const cw = term.size.cellWidth || 8
+      const ch = term.size.cellHeight || 16
+      const hitW = Math.max(l.width, cw)
+      const hitH = Math.max(l.height, ch)
+      // Center the expanded hit-area around the element's center
+      const hitX = l.x - (hitW - l.width) / 2
+      const hitY = l.y - (hitH - l.height) / 2
+      const isCaptured = captureNode === node
+      const isOver = isCaptured || (pointerX >= hitX && pointerX < hitX + hitW &&
+                     pointerY >= hitY && pointerY < hitY + hitH)
       const isDown = isOver && pointerDown
 
+      // Dispatch mouse enter/leave
       if (node._hovered !== isOver) {
+        if (isOver && node.props.onMouseOver) node.props.onMouseOver(makeMouseEvent(node))
+        if (!isOver && node.props.onMouseOut) node.props.onMouseOut(makeMouseEvent(node))
         node._hovered = isOver
         changed = true
       }
+
+      // Dispatch mousedown/mouseup on edges
+      if (isOver && justPressed) {
+        pressedThisFrame = node
+        if (node.props.onMouseDown) node.props.onMouseDown(makeMouseEvent(node))
+      }
+      if (isOver && justReleased && node.props.onMouseUp) node.props.onMouseUp(makeMouseEvent(node))
+
+      // Dispatch mousemove while hovered (only if pointer actually moved)
+      if (isOver && pointerDirty && node.props.onMouseMove) node.props.onMouseMove(makeMouseEvent(node))
+
       if (node._active !== isDown) {
         node._active = isDown
         changed = true
@@ -1005,13 +1066,22 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       }
     }
 
-    // onPress dispatch: detect click (was active, now released while still hovered)
-    // Bubbles up the tree like DOM events. Each node with onPress/focusable
-    // gets a chance to handle the event. Call event.stopPropagation() in an
-    // onPress handler to prevent further bubbling.
-    if (prevActiveNode && !prevActiveNode._active && prevActiveNode._hovered) {
+    // onPress dispatch: detect click. Two scenarios:
+    //   A) Normal: was active (prevActiveNode._active was true), now released while still hovered
+    //   B) Fast click: press+release in same chunk — justPressed AND justReleased both true,
+    //      newActiveNode is null (pointerDown=false), but we know a full click happened
+    const clickTarget = (prevActiveNode && !prevActiveNode._active && prevActiveNode._hovered)
+      ? prevActiveNode  // Scenario A: classic release-after-active
+      : (justPressed && justReleased)
+        ? pressedThisFrame  // Scenario B: press+release same chunk — use the node hit during press
+        : null
+
+    if (clickTarget) {
+      // Bubbles up the tree like DOM events. Each node with onPress/focusable
+      // gets a chance to handle the event. Call event.stopPropagation() in an
+      // onPress handler to prevent further bubbling.
       const event = createPressEvent()
-      let target: TGENode | null = prevActiveNode
+      let target: TGENode | null = clickTarget
 
       while (target && !event.propagationStopped) {
         // Focus: first focusable ancestor wins (like browser)
@@ -1027,6 +1097,13 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       }
     }
     prevActiveNode = newActiveNode
+
+    // Auto-release pointer capture on button release
+    if (justReleased && capturedNodeId !== 0) {
+      capturedNodeId = 0
+    }
+
+    pointerDirty = false
 
     // If any state changed, mark dirty to trigger repaint next frame
     if (changed) {
@@ -1359,6 +1436,14 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     root,
     feedScroll,
     feedPointer,
+
+    setPointerCapture(nodeId: number) {
+      capturedNodeId = nodeId
+    },
+
+    releasePointerCapture(nodeId: number) {
+      if (capturedNodeId === nodeId) capturedNodeId = 0
+    },
 
     start() {
       frame() // initial render

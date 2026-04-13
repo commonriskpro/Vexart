@@ -30,6 +30,22 @@ export function createPressEvent(): PressEvent {
   }
 }
 
+/** Mouse event passed to onMouseDown/Up/Move/Over/Out handlers. */
+export type NodeMouseEvent = {
+  /** Pointer X in absolute pixels (screen-space). */
+  x: number
+  /** Pointer Y in absolute pixels (screen-space). */
+  y: number
+  /** Pointer X relative to the node's layout origin. */
+  nodeX: number
+  /** Pointer Y relative to the node's layout origin. */
+  nodeY: number
+  /** Node layout width — useful for ratio calculations (e.g. slider). */
+  width: number
+  /** Node layout height. */
+  height: number
+}
+
 /** Interactive style props — usable in hoverStyle, activeStyle, focusStyle */
 export type InteractiveStyleProps = Partial<Pick<TGEProps, "backgroundColor" | "borderColor" | "borderWidth" | "cornerRadius" | "borderRadius" | "shadow" | "boxShadow" | "glow" | "gradient" | "backdropBlur" | "backdropBrightness" | "backdropContrast" | "backdropSaturate" | "backdropGrayscale" | "backdropInvert" | "backdropSepia" | "backdropHueRotate" | "opacity">>
 
@@ -159,6 +175,18 @@ export type TGEProps = {
   focusable?: boolean
   /** Keyboard event handler — fires when this element is focused and a key is pressed. */
   onKeyDown?: (event: any) => void
+
+  // Mouse event callbacks — dispatched by updateInteractiveStates in the render loop.
+  /** Fires when mouse button is pressed while over this node. */
+  onMouseDown?: (event: NodeMouseEvent) => void
+  /** Fires when mouse button is released while over this node. */
+  onMouseUp?: (event: NodeMouseEvent) => void
+  /** Fires when pointer moves over this node (every frame while hovered). */
+  onMouseMove?: (event: NodeMouseEvent) => void
+  /** Fires when pointer enters this node's bounds. */
+  onMouseOver?: (event: NodeMouseEvent) => void
+  /** Fires when pointer leaves this node's bounds. */
+  onMouseOut?: (event: NodeMouseEvent) => void
 
   // Convenience
   /** CSS-style prop — merged with direct props (direct props win). Decision 3. */

@@ -213,9 +213,15 @@ export function Select(props: SelectProps) {
           selected: props.value === opt.value,
           disabled: opt.disabled ?? false,
         }
-        return props.renderOption
+        const rendered = props.renderOption
           ? props.renderOption(opt, ctx)
           : <text>{opt.label}</text>
+        // Wrap in clickable box — onPress selects this option
+        return (
+          <box onPress={() => { if (!opt.disabled) selectValue(opt.value) }}>
+            {rendered}
+          </box>
+        )
       })
 
     const content = () => {
@@ -226,7 +232,10 @@ export function Select(props: SelectProps) {
 
     return (
       <box direction="column">
-        {props.renderTrigger(triggerCtx())}
+        {/* Click trigger to toggle dropdown */}
+        <box onPress={() => { if (!disabled()) setOpen(!open()) }}>
+          {props.renderTrigger(triggerCtx())}
+        </box>
         {content()}
       </box>
     )

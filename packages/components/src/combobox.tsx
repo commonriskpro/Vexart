@@ -211,7 +211,12 @@ export function Combobox(props: ComboboxProps) {
         selected: props.value === opt.value,
         disabled: opt.disabled ?? false,
       }
-      return props.renderOption(opt, ctx)
+      // Wrap in clickable box — onPress selects this option
+      return (
+        <box onPress={() => { if (!opt.disabled) selectOption(opt.value) }}>
+          {props.renderOption(opt, ctx)}
+        </box>
+      )
     })
   }
 
@@ -223,7 +228,10 @@ export function Combobox(props: ComboboxProps) {
 
   return (
     <box direction="column">
-      {props.renderInput(inputCtx())}
+      {/* Click input to toggle dropdown */}
+      <box onPress={() => { if (!disabled()) setOpen(!open()) }}>
+        {props.renderInput(inputCtx())}
+      </box>
       {content()}
     </box>
   )

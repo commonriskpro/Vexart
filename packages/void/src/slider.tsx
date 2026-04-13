@@ -39,8 +39,9 @@ export function VoidSlider(props: VoidSliderProps) {
       focusId={props.focusId}
       renderSlider={(ctx: SliderRenderContext) => (
         <box direction="row" gap={space[2]} alignY="center" width={props.width}>
-          {/* Track */}
+          {/* Track — spread trackProps for mouse click/drag interaction */}
           <box
+            {...ctx.trackProps}
             width="grow"
             height={6}
             backgroundColor={ctx.disabled ? themeColors.muted : themeColors.secondary}

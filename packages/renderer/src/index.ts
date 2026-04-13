@@ -29,6 +29,7 @@ import { dispatchInput } from "./input"
 import { markDirty } from "./dirty"
 import { resetFocus } from "./focus"
 import { resetSelection } from "./selection"
+import { bindLoop, unbindLoop } from "./pointer"
 
 export type { RenderLoop, RenderLoopOptions } from "./loop"
 export { createRenderLoop } from "./loop"
@@ -97,8 +98,11 @@ export type { QueryResult, QueryOptions, MutationResult, MutationOptions } from 
 export type { NodeHandle } from "./handle"
 export { createHandle } from "./handle"
 
-// Re-export press event (for stopPropagation in onPress handlers)
-export type { PressEvent } from "./node"
+// Re-export press event + mouse event types
+export type { PressEvent, NodeMouseEvent } from "./node"
+
+// Re-export pointer capture API
+export { setPointerCapture, releasePointerCapture } from "./pointer"
 
 // Re-export text layout system
 export { registerFont, getFont, clearTextCache } from "./text-layout"
@@ -328,17 +332,45 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
   // SolidJS render mounts the component tree into the root TGENode
   const dispose = solidRender(component, loop.root)
 
+  // Bind pointer capture API to this loop instance
+  bindLoop(loop)
+
   // Connect terminal stdin → input parser → dispatch
   // Feed mouse events into Clay for scroll tracking + pointer state
   const cellW = terminal.size.cellWidth || 8
   const cellH = terminal.size.cellHeight || 16
+  // Use fractional cell size for accurate mouse→pixel conversion.
+  // Math.floor(pixelHeight / rows) truncates — the error accumulates over rows.
+  // e.g. pixelHeight=1107 rows=82 → cellH=13 but real=13.5 → 20px error at row 40.
+  const pixW = terminal.size.pixelWidth || terminal.size.cols * cellW
+  const pixH = terminal.size.pixelHeight || terminal.size.rows * cellH
+  const cellWf = pixW / terminal.size.cols
+  const cellHf = pixH / terminal.size.rows
+
+  // Track button-down state across events. Terminal mouse protocol sends
+  // discrete press/release/move actions — we need persistent state so that
+  // "move while button held" (drag) keeps pointerDown=true.
+  let isButtonDown = false
+
   const parser = createParser((event) => {
     if (loop.suspended()) return
     dispatchInput(event)
     markDirty() // Any input event may change visual state → trigger repaint
     if (event.type === "mouse") {
-      // Feed pointer position (convert cells to pixels)
-      loop.feedPointer(event.x * cellW, event.y * cellH, event.action === "press")
+      if (event.action === "press") isButtonDown = true
+      else if (event.action === "release") isButtonDown = false
+      // move/scroll: isButtonDown stays as-is → drag works
+
+      // Feed pointer position (convert cells → pixels).
+      // Use FRACTIONAL cell size to avoid accumulated rounding error.
+      // Integer cellH = floor(pixelHeight/rows) truncates — e.g. real 13.5 → 13.
+      // Over 40 rows that's 40*0.5 = 20px of drift. Fractional fixes this.
+      // Y uses bottom of cell (+1 cell): the terminal cursor glyph points DOWN,
+      // so the visual "tip" where the user perceives they're clicking is at
+      // the bottom edge of the reported cell, not the center.
+      const px = event.x * cellWf + cellWf * 0.5
+      const py = (event.y + 1) * cellHf
+      loop.feedPointer(px, py, isButtonDown)
       // Feed scroll delta — 1 line per tick for smooth scrolling
       if (event.action === "scroll") {
         // button 64 = scroll up, 65 = scroll down
@@ -359,6 +391,7 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
     destroy: () => {
       unsubData()
       parser.destroy()
+      unbindLoop()
       resetFocus()
       resetSelection()
       dispose()

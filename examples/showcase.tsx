@@ -730,6 +730,7 @@ function TabForms() {
           renderSlider={(ctx) => (
             <box direction="column" gap={space[2]}>
               <box
+                {...ctx.trackProps}
                 width={300} height={12}
                 backgroundColor={themeColors.secondary}
                 cornerRadius={6}

@@ -11,7 +11,7 @@
 // which is resolved via jsxImportSource or direct reference.
 // This file ensures SolidJS's module augmentation picks up our elements.
 
-import type { TGEProps } from "./node"
+import type { TGEProps, NodeMouseEvent } from "./node"
 import type { NodeHandle } from "./handle"
 
 // Re-declare using the SAME types as jsx-runtime.d.ts to avoid intersection conflicts.
@@ -32,11 +32,11 @@ type BoxIntrinsicProps = TGEProps & {
   shadow?: ShadowDef | ShadowDef[]
   glow?: { radius: number; color: ColorValue; intensity?: number }
   // Mouse events (focusable, onPress, onKeyDown inherited from TGEProps)
-  onMouseDown?: (evt: any) => void
-  onMouseUp?: (evt: any) => void
-  onMouseOver?: () => void
-  onMouseOut?: () => void
-  onMouseMove?: () => void
+  onMouseDown?: (evt: NodeMouseEvent) => void
+  onMouseUp?: (evt: NodeMouseEvent) => void
+  onMouseOver?: (evt: NodeMouseEvent) => void
+  onMouseOut?: (evt: NodeMouseEvent) => void
+  onMouseMove?: (evt: NodeMouseEvent) => void
   focusStyle?: {
     backgroundColor?: ColorValue
     borderColor?: ColorValue
