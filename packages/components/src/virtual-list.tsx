@@ -178,7 +178,6 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
       width={props.width ?? "grow"}
       scrollY
       scrollId={scrollId}
-      backgroundColor={0x00000001}
       onMouseMove={(e) => {
         const idx = indexFromAbsY(e.y)
         if (idx !== hoveredIndex()) {

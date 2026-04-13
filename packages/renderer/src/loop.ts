@@ -468,13 +468,18 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     // Resolve visual props — merges hoverStyle/activeStyle when the node is hovered/active
     const vp = resolveProps(node)
 
-    // Gradient/backdrop effects need a RECT command from Clay even without explicit backgroundColor.
-    // We inject a transparent placeholder so Clay emits the RECT for effect matching.
+    // Inject a RECT command from Clay when needed for:
+    // 1. Visual effects (gradient, backdrop filter, opacity)
+    // 2. Interactive nodes (onPress, focusable, hoverStyle, mouse callbacks)
+    //    Without a RECT, the node doesn't enter rectNodes → no hit-testing → mouse events never fire.
+    //    This is the equivalent of the web where any element is clickable regardless of background.
     const hasBackdropFilter = vp.backdropBlur !== undefined || vp.backdropBrightness !== undefined ||
       vp.backdropContrast !== undefined || vp.backdropSaturate !== undefined ||
       vp.backdropGrayscale !== undefined || vp.backdropInvert !== undefined ||
       vp.backdropSepia !== undefined || vp.backdropHueRotate !== undefined
-    const needsRect = vp.backgroundColor !== undefined || vp.gradient !== undefined || hasBackdropFilter || vp.opacity !== undefined
+    const hasMouseCallbacks = vp.onMouseDown || vp.onMouseUp || vp.onMouseMove || vp.onMouseOver || vp.onMouseOut
+    const isInteractiveNode = vp.onPress || vp.focusable || vp.hoverStyle || vp.activeStyle || vp.focusStyle || hasMouseCallbacks
+    const needsRect = vp.backgroundColor !== undefined || vp.gradient !== undefined || hasBackdropFilter || vp.opacity !== undefined || isInteractiveNode
     if (needsRect) {
       const bgColor = vp.backgroundColor !== undefined ? (vp.backgroundColor as number) : 0x00000001 // near-transparent placeholder
       const cr = vp.cornerRadius ?? 0
@@ -517,6 +522,16 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     }
 
     // Borders — per-side or uniform (uses resolved visual props)
+    // If focusStyle/hoverStyle/activeStyle define a borderWidth, ALWAYS reserve
+    // that space in Clay (with transparent color when inactive). This prevents
+    // layout jitter when the interactive style activates — like CSS outline vs border.
+    const maxInteractiveBorder = Math.max(
+      (node.props.focusStyle as any)?.borderWidth ?? 0,
+      (node.props.hoverStyle as any)?.borderWidth ?? 0,
+      (node.props.activeStyle as any)?.borderWidth ?? 0,
+    )
+    const effectiveBorderWidth = Math.max(vp.borderWidth ?? 0, maxInteractiveBorder)
+
     const hasPerSideBorder = vp.borderLeft !== undefined || vp.borderRight !== undefined ||
                              vp.borderTop !== undefined || vp.borderBottom !== undefined ||
                              vp.borderBetweenChildren !== undefined
@@ -528,9 +543,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         vp.borderTop ?? 0,
         vp.borderBottom ?? 0,
         vp.borderBetweenChildren ?? 0)
-    } else if (vp.borderColor !== undefined && vp.borderWidth) {
-      const borderColor = vp.borderColor as number
-      clay.configureBorder(borderColor, vp.borderWidth)
+    } else if (effectiveBorderWidth > 0) {
+      // Use actual border color when active, transparent when reserving space
+      const borderColor = (vp.borderColor !== undefined ? vp.borderColor : 0x00000000) as number
+      clay.configureBorder(borderColor, effectiveBorderWidth)
     }
 
     // Scroll / clip container
@@ -1032,6 +1048,39 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       if (!hasInteractiveStyle && !isFocusable && !hasOnPress && !hasMouseCb) continue
 
       const l = node.layout
+
+      // Skip nodes that are COMPLETELY outside their scroll container viewport.
+      // Without this, off-screen items (clipped by scissor) have layout coords
+      // that overlap other screen areas, causing false hover/click detection.
+      // Only applies to children of scroll containers, NOT the scroll container itself.
+      if (!(node.props.scrollX || node.props.scrollY)) {
+        let scrollParent = node.parent
+        while (scrollParent) {
+          if (scrollParent.props.scrollX || scrollParent.props.scrollY) {
+            const sl = scrollParent.layout
+            if (sl.width > 0 && sl.height > 0) {
+              const fullyOutside = l.y + l.height <= sl.y || l.y >= sl.y + sl.height ||
+                                   l.x + l.width <= sl.x || l.x >= sl.x + sl.width
+              if (fullyOutside) {
+                // Clear hover state if it was previously set
+                if (node._hovered) { node._hovered = false; changed = true }
+                if (node._active) { node._active = false; changed = true }
+              }
+            }
+            break
+          }
+          scrollParent = scrollParent.parent
+        }
+        // If fully outside, skip hit-testing for this node
+        if (scrollParent) {
+          const sl = scrollParent.layout
+          if (sl.width > 0 && sl.height > 0) {
+            const fullyOutside = l.y + l.height <= sl.y || l.y >= sl.y + sl.height ||
+                                 l.x + l.width <= sl.x || l.x >= sl.x + sl.width
+            if (fullyOutside) continue
+          }
+        }
+      }
 
       // If this node has pointer capture, it's "hovered" regardless of position.
       // Expand hit-area to at least one cell in each dimension — terminal mouse
