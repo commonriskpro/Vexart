@@ -987,6 +987,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
   /** Track previous active state for onPress detection (mouseup over element). */
   let prevActiveNode: TGENode | null = null
+  /** True between press and release — survives node recycling. */
+  let pressOriginSet = false
 
   /** Build a NodeMouseEvent for the given node using current pointer state. */
   function makeMouseEvent(node: TGENode): NodeMouseEvent {
@@ -1051,6 +1053,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       // Dispatch mousedown/mouseup on edges
       if (isOver && justPressed) {
         pressedThisFrame = node
+        pressOriginSet = true
         if (node.props.onMouseDown) node.props.onMouseDown(makeMouseEvent(node))
       }
       if (isOver && justReleased && node.props.onMouseUp) node.props.onMouseUp(makeMouseEvent(node))
@@ -1075,15 +1078,24 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       }
     }
 
-    // onPress dispatch: detect click. Two scenarios:
+    // onPress dispatch: detect click.
+    // Scenarios:
     //   A) Normal: was active (prevActiveNode._active was true), now released while still hovered
-    //   B) Fast click: press+release in same chunk — justPressed AND justReleased both true,
-    //      newActiveNode is null (pointerDown=false), but we know a full click happened
-    const clickTarget = (prevActiveNode && !prevActiveNode._active && prevActiveNode._hovered)
-      ? prevActiveNode  // Scenario A: classic release-after-active
-      : (justPressed && justReleased)
-        ? pressedThisFrame  // Scenario B: press+release same chunk — use the node hit during press
-        : null
+    //   B) Fast click: press+release in same chunk — justPressed AND justReleased both true
+    //   C) Node recycled: SolidJS recreated nodes between press/release frames.
+    //      The pressed node is gone. Use pressOrigin position to find the currently
+    //      hovered node at release time.
+    let clickTarget: TGENode | null = null
+    if (prevActiveNode && !prevActiveNode._active && prevActiveNode._hovered) {
+      clickTarget = prevActiveNode // Scenario A: classic release
+    } else if (justPressed && justReleased) {
+      clickTarget = pressedThisFrame // Scenario B: fast click
+    } else if (justReleased && pressOriginSet) {
+      // Scenario C: find hovered node at release position
+      const hovered = rectNodes.find(n => n._hovered && (n.props.onPress || n.props.focusable))
+      if (hovered) clickTarget = hovered
+    }
+    if (justReleased) pressOriginSet = false
 
     if (clickTarget) {
       // Bubbles up the tree like DOM events. Each node with onPress/focusable
