@@ -146,6 +146,32 @@ Low-level mouse callbacks dispatched directly to the target node (no bubbling). 
 
 `NodeMouseEvent`: `{ x, y, nodeX, nodeY, width, height }` — `x/y` are absolute pixels, `nodeX/nodeY` are relative to the node's layout origin. `width/height` are the node's layout dimensions (useful for ratio calculations like slider position).
 
+### Interaction props (headless components)
+
+Headless components provide interaction props in their render context. Spread them on the root element for automatic mouse+keyboard support:
+
+| Component | Context Prop | Value | Purpose |
+| --------- | ------------ | ----- | ------- |
+| Button | `ctx.buttonProps` | `{ focusable, onPress }` | Click + Enter/Space |
+| Checkbox | `ctx.toggleProps` | `{ focusable, onPress }` | Click to toggle |
+| Switch | `ctx.toggleProps` | `{ focusable, onPress }` | Click to toggle |
+| RadioGroup | `ctx.optionProps` | `{ onPress }` | Click to select option |
+| Tabs | `ctx.tabProps` | `{ onPress }` | Click to switch tab |
+| List | `ctx.itemProps` | `{ onPress }` | Click to select item |
+| Table | `ctx.rowProps` | `{ onPress }` | Click to select row |
+| Dialog.Overlay | `onClick` prop | wired to `onPress` | Click overlay to close |
+
+```tsx
+<Button
+  onPress={() => save()}
+  renderButton={(ctx) => (
+    <box {...ctx.buttonProps} padding={8} cornerRadius={6}>
+      <text>Save</text>
+    </box>
+  )}
+/>
+```
+
 ### Pointer capture
 
 Like `Element.setPointerCapture()` in the DOM. When a node captures the pointer, ALL mouse events route to it regardless of cursor position — essential for drag interactions.
@@ -329,7 +355,7 @@ Effects are painted BEFORE the rect (shadow/glow) or INSTEAD of it (gradient). B
 
 All FFI functions use ≤8 params (packed buffer pattern for ARM64 safety). Shared ArrayBuffer for zero allocations.
 
-## @tge/renderer exports (57 values, 32 types)
+## @tge/renderer exports (61 values, 38 types)
 
 ### Core
 - `createRenderLoop`, `mount`, `createTerminal`
@@ -344,6 +370,7 @@ All FFI functions use ≤8 params (packed buffer pattern for ARM64 safety). Shar
 - `useKeyboard`, `useMouse`, `useInput`, `onInput`
 - `useFocus`, `setFocus`, `focusedId`, `setFocusedId`
 - `setPointerCapture`, `releasePointerCapture`
+- `useDrag`, `useHover`
 
 ### Animation
 - `createTransition`, `createSpring`, easing presets
@@ -382,6 +409,8 @@ All FFI functions use ≤8 params (packed buffer pattern for ARM64 safety). Shar
 ### Types
 - `PressEvent` — `{ stopPropagation: () => void; readonly propagationStopped: boolean }`
 - `NodeMouseEvent` — `{ x, y, nodeX, nodeY, width, height }`
+- `DragOptions`, `DragProps`, `DragState` — useDrag hook types
+- `HoverOptions`, `HoverProps`, `HoverState` — useHover hook types
 
 ### Classes
 - `RGBA` — `.fromHex()`, `.fromInts()`, `.fromValues()`, `.toU32()`, `.valueOf()`, `.toString()`
@@ -397,11 +426,11 @@ All FFI functions use ≤8 params (packed buffer pattern for ARM64 safety). Shar
 | `Box` | BoxProps | Layout container |
 | `Text` | TextProps | Text display |
 | `ScrollView` | ScrollViewProps | Scrollable container with visual scrollbar |
-| `Button` | ButtonProps | Interactive button |
+| `Button` | ButtonProps | Interactive button (ctx.buttonProps for mouse+keyboard) |
 | `ProgressBar` | ProgressBarProps | Progress indicator |
-| `Checkbox` | CheckboxProps | Toggle checkbox |
-| `Tabs` | TabsProps | Tab switcher |
-| `List` | ListProps | Scrollable list |
+| `Checkbox` | CheckboxProps | Toggle checkbox (ctx.toggleProps for mouse+keyboard) |
+| `Tabs` | TabsProps | Tab switcher (ctx.tabProps for click) |
+| `List` | ListProps | Scrollable list (ctx.itemProps for click) |
 | `Input` | InputProps | Single-line text input |
 | `Textarea` | TextareaProps | Multi-line editor (2D cursor, syntax, keybindings) |
 | `RichText` | RichTextProps | Multi-span text |
@@ -413,9 +442,9 @@ All FFI functions use ≤8 params (packed buffer pattern for ARM64 safety). Shar
 | `Diff` | DiffProps | Unified diff viewer |
 | `Dialog` | DialogProps | Modal with focus trap + Escape |
 | `Select` | SelectProps | Dropdown select with keyboard nav + click selection |
-| `Switch` | SwitchProps | Toggle switch |
-| `RadioGroup` | RadioGroupProps | Radio option group |
-| `Table` | TableProps | Data table with row selection |
+| `Switch` | SwitchProps | Toggle switch (ctx.toggleProps for mouse+keyboard) |
+| `RadioGroup` | RadioGroupProps | Radio option group (ctx.optionProps for click) |
+| `Table` | TableProps | Data table with row selection (ctx.rowProps for click) |
 | `Toast` | createToaster | Imperative toast notifications |
 | `Router` | RouterProps | Flat + stack navigation |
 | `Tooltip` | TooltipProps | Delayed tooltip on hover |

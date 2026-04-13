@@ -126,7 +126,9 @@ let scrollRef
 
 Headless interactive button with focus and Enter/Space activation.
 
-**Render context:** `{ focused: boolean, pressed: boolean, disabled: boolean }`
+**Render context:** `{ focused: boolean, pressed: boolean, disabled: boolean, buttonProps: { focusable, onPress } }`
+
+Spread `ctx.buttonProps` on the root element for automatic mouse click + keyboard support:
 
 ```tsx
 import { Button } from "tge/components"
@@ -207,7 +209,9 @@ const [code, setCode] = createSignal("")
 
 Headless toggleable checkbox. Controlled.
 
-**Render context:** `{ checked: boolean, focused: boolean, disabled: boolean }`
+**Render context:** `{ checked: boolean, focused: boolean, disabled: boolean, toggleProps: { focusable, onPress } }`
+
+Spread `ctx.toggleProps` on the root element for click-to-toggle support:
 
 ```tsx
 import { Checkbox } from "tge/components"
@@ -234,7 +238,9 @@ import { Checkbox } from "tge/components"
 
 Headless toggle switch. Controlled.
 
-**Render context:** `{ checked: boolean, focused: boolean, disabled: boolean }`
+**Render context:** `{ checked: boolean, focused: boolean, disabled: boolean, toggleProps: { focusable, onPress } }`
+
+Spread `ctx.toggleProps` on the root element for click-to-toggle support:
 
 ```tsx
 import { Switch } from "tge/components"
@@ -262,7 +268,9 @@ import { Switch } from "tge/components"
 
 Headless radio button group with arrow key navigation.
 
-**Render context:** `{ selected: boolean, focused: boolean, disabled: boolean, index: number }`
+**Render context:** `{ selected: boolean, focused: boolean, disabled: boolean, index: number, optionProps: { onPress } }`
+
+Spread `ctx.optionProps` on each option element for click-to-select support:
 
 ```tsx
 import { RadioGroup } from "tge/components"
@@ -407,7 +415,9 @@ import { Slider } from "tge/components"
 
 Headless tab switcher.
 
-**Render context:** `{ active: boolean, focused: boolean, index: number }`
+**Render context:** `{ active: boolean, focused: boolean, index: number, tabProps: { onPress } }`
+
+Spread `ctx.tabProps` on each tab element for click-to-switch support:
 
 ```tsx
 import { Tabs } from "tge/components"
@@ -433,7 +443,9 @@ import { Tabs } from "tge/components"
 
 Headless selectable list with Up/Down navigation.
 
-**Render context:** `{ selected: boolean, focused: boolean, index: number }`
+**Render context:** `{ selected: boolean, focused: boolean, index: number, itemProps: { onPress } }`
+
+Spread `ctx.itemProps` on each item element for click-to-select support:
 
 ```tsx
 import { List } from "tge/components"
@@ -457,7 +469,9 @@ import { List } from "tge/components"
 
 Headless data table with row selection.
 
-**Cell context:** `{ selected: boolean, focused: boolean, rowIndex: number }`
+**Cell context:** `{ selected: boolean, focused: boolean, rowIndex: number, rowProps: { onPress } }`
+
+Spread `ctx.rowProps` on each row element for click-to-select support:
 
 ```tsx
 import { Table } from "tge/components"
@@ -529,6 +543,12 @@ const [open, setOpen] = createSignal(false)
 ```
 
 **Keyboard:** Escape to close. Tab/Shift+Tab trapped within dialog.
+
+**Mouse:** `Dialog.Overlay` accepts an `onClick` prop that wires to `onPress` on the overlay box. Pass `onClick={props.onClose}` to enable click-outside-to-close:
+
+```tsx
+<Dialog.Overlay backgroundColor="#00000088" backdropBlur={4} onClick={() => setOpen(false)} />
+```
 
 ### 18. Tooltip
 

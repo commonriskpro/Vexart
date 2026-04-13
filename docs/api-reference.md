@@ -460,6 +460,76 @@ import { releasePointerCapture } from "@tge/renderer"
 releasePointerCapture(nodeId)  // Restore normal hit-testing
 ```
 
+### `useDrag(options): DragState`
+
+Encapsulates drag interactions — pointer capture, `isDragging` flag, and mouse event wiring. Spread `dragProps` on the drag target.
+
+```typescript
+import { useDrag } from "@tge/renderer"
+import type { DragOptions, DragProps, DragState } from "@tge/renderer"
+
+type DragOptions = {
+  onDragStart?: (event: NodeMouseEvent) => void
+  onDrag?: (event: NodeMouseEvent) => void
+  onDragEnd?: (event: NodeMouseEvent) => void
+  disabled?: () => boolean
+}
+
+type DragProps = {
+  onMouseDown: (event: NodeMouseEvent) => void
+  onMouseMove: (event: NodeMouseEvent) => void
+  onMouseUp: (event: NodeMouseEvent) => void
+}
+
+type DragState = {
+  dragging: () => boolean    // reactive signal — true while dragging
+  dragProps: DragProps        // spread on the target element
+}
+
+const { dragging, dragProps } = useDrag({
+  onDragStart: (e) => jumpToPosition(e),
+  onDrag: (e) => updatePosition(e),
+  onDragEnd: (e) => finalize(e),
+})
+
+<box {...dragProps} width={200} height={12} />
+```
+
+### `useHover(options): HoverState`
+
+Encapsulates hover detection with configurable enter/leave delays. Spread `hoverProps` on the target.
+
+```typescript
+import { useHover } from "@tge/renderer"
+import type { HoverOptions, HoverProps, HoverState } from "@tge/renderer"
+
+type HoverOptions = {
+  delay?: number          // ms before onEnter fires (default: 0)
+  leaveDelay?: number     // ms before onLeave fires (default: 0)
+  onEnter?: () => void
+  onLeave?: () => void
+}
+
+type HoverProps = {
+  onMouseOver: (event: NodeMouseEvent) => void
+  onMouseOut: (event: NodeMouseEvent) => void
+}
+
+type HoverState = {
+  hovered: () => boolean    // reactive signal
+  hoverProps: HoverProps    // spread on target element
+}
+
+const { hovered, hoverProps } = useHover({
+  delay: 500,
+  leaveDelay: 200,
+  onEnter: () => showTooltip(),
+  onLeave: () => hideTooltip(),
+})
+
+<box {...hoverProps}>Hover me</box>
+```
+
 ### `pushFocusScope(): () => void`
 
 Create a focus trap (used by Dialog internally). Returns a cleanup function.

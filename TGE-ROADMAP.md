@@ -41,6 +41,7 @@
 | Form validation (createForm) | ✅ Done | Sync + async validators |
 | Data fetching (useQuery, useMutation) | ✅ Done | Complete — retry, optimistic, rollback |
 | List virtualization (VirtualList) | ✅ Done | Fixed height, O(1) scroll |
+| Interaction props (headless components) | ✅ Done | buttonProps, toggleProps, tabProps, itemProps, rowProps, optionProps |
 | FFI ARM64 safety (all ≤8 params) | ✅ Done | Shared ArrayBuffer, zero allocs |
 
 ---
@@ -104,6 +105,8 @@ All components are BEHAVIOR-ONLY — zero visual styling. Render props for inter
 | `useQuery` | Data fetching (loading/error/data, refetch, retry, interval) | Phase 3 |
 | `useMutation` | Data mutation (optimistic + rollback) | Phase 3 |
 | `useFocus` | Focus management (reactive focused signal) | Phase 0 |
+| `useDrag` | Drag interaction (pointer capture + isDragging) | Backlog |
+| `useHover` | Hover detection (enter/leave with delays) | Backlog |
 | `useKeyboard` / `useMouse` / `useInput` | Input handling | Phase 0 |
 | `createTransition` / `createSpring` | Animations | Phase 1 |
 | `useTerminalDimensions` | Reactive terminal size | Phase 0 |

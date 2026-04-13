@@ -438,8 +438,9 @@ function DebugInput() {
 | Reactive display of mouse state | `useMouse()` |
 | Per-element keyboard handling | `onKeyDown` prop |
 | Click/Enter interaction | `onPress` prop |
-| Drag interactions | `onMouseDown` + `onMouseMove` + `onMouseUp` + pointer capture |
-| Hover enter/leave effects | `onMouseOver` / `onMouseOut` |
+| Drag interactions | `useDrag()` hook (or manual `onMouseDown` + `onMouseMove` + `onMouseUp` + pointer capture) |
+| Hover enter/leave with delays | `useHover()` hook (or manual `onMouseOver` / `onMouseOut`) |
+| Hover enter/leave (instant) | `onMouseOver` / `onMouseOut` |
 | Pointer lock during drag | `setPointerCapture(nodeId)` |
 | All events as a signal | `useInput()` |
 
@@ -478,6 +479,120 @@ Terminal stdin
 |------|--------|----------|----------|
 | High-level (onPress) | `onPress` | Yes — walks parent chain | Click actions, button presses |
 | Low-level (onMouse*) | `onMouseDown/Up/Move/Over/Out` | No — dispatched to target only | Drag, hover effects, slider scrub |
+
+---
+
+## Interaction Props (Headless Components)
+
+Headless components from `tge/components` provide interaction props in their render context. Instead of manually wiring `focusable` and `onPress` on every element, spread the provided props object on the root element:
+
+| Component | Context Prop | Value | Purpose |
+|-----------|-------------|-------|---------|
+| Button | `ctx.buttonProps` | `{ focusable, onPress }` | Click + Enter/Space |
+| Checkbox | `ctx.toggleProps` | `{ focusable, onPress }` | Click to toggle |
+| Switch | `ctx.toggleProps` | `{ focusable, onPress }` | Click to toggle |
+| RadioGroup | `ctx.optionProps` | `{ onPress }` | Click to select option |
+| Tabs | `ctx.tabProps` | `{ onPress }` | Click to switch tab |
+| List | `ctx.itemProps` | `{ onPress }` | Click to select item |
+| Table | `ctx.rowProps` | `{ onPress }` | Click to select row |
+| Dialog.Overlay | `onClick` prop | wired to `onPress` | Click overlay to close |
+
+```tsx
+<Button
+  onPress={() => save()}
+  renderButton={(ctx) => (
+    <box {...ctx.buttonProps} padding={8} cornerRadius={6}
+      backgroundColor={ctx.pressed ? "#444" : ctx.focused ? "#333" : "#222"}>
+      <text color="#fff">Save</text>
+    </box>
+  )}
+/>
+```
+
+The naming convention: props are named for what they go ON (`buttonProps`, `toggleProps`, `tabProps`, `itemProps`, `rowProps`, `optionProps`), not the component.
+
+---
+
+## useDrag Hook
+
+Encapsulates drag interactions — ref management, `setPointerCapture`, and an `isDragging` flag. Returns `dragProps` to spread on the drag target.
+
+```typescript
+import { useDrag } from "tge"
+
+const { dragging, dragProps } = useDrag({
+  onDragStart: (evt) => { /* jump to position */ },
+  onDrag: (evt) => { /* update during drag */ },
+  onDragEnd: (evt) => { /* finalize */ },
+  disabled: () => false,
+})
+
+// Spread dragProps on the drag target:
+<box {...dragProps} width={200} height={12} />
+```
+
+**DragOptions:**
+
+```typescript
+type DragOptions = {
+  onDragStart?: (event: NodeMouseEvent) => void
+  onDrag?: (event: NodeMouseEvent) => void
+  onDragEnd?: (event: NodeMouseEvent) => void
+  disabled?: () => boolean
+}
+```
+
+**DragState:**
+
+```typescript
+type DragState = {
+  dragging: () => boolean    // reactive signal — true while dragging
+  dragProps: DragProps        // spread on the target element
+}
+```
+
+The Slider component uses `useDrag` internally — its `trackProps` are built on top of it.
+
+---
+
+## useHover Hook
+
+Encapsulates hover detection with configurable enter/leave delays. Returns `hovered` signal and `hoverProps` to spread on the target.
+
+```typescript
+import { useHover } from "tge"
+
+const { hovered, hoverProps } = useHover({
+  delay: 500,       // ms before onEnter fires
+  leaveDelay: 200,  // ms before onLeave fires
+  onEnter: () => showTooltip(),
+  onLeave: () => hideTooltip(),
+})
+
+<box {...hoverProps}>Hover me</box>
+```
+
+**HoverOptions:**
+
+```typescript
+type HoverOptions = {
+  delay?: number          // ms before onEnter (default: 0)
+  leaveDelay?: number     // ms before onLeave (default: 0)
+  onEnter?: () => void
+  onLeave?: () => void
+}
+```
+
+**HoverState:**
+
+```typescript
+type HoverState = {
+  hovered: () => boolean    // reactive signal
+  hoverProps: HoverProps    // spread on target element
+}
+```
+
+The Tooltip component uses `useHover` internally for delayed show/hide.
 
 ---
 

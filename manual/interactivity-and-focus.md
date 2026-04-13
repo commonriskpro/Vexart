@@ -422,9 +422,45 @@ function DebugBar() {
 
 ---
 
+---
+
+## Interaction Props (Headless Components)
+
+Headless components provide interaction props in their render context as the standard way to wire mouse+keyboard support. Instead of manually adding `focusable` and `onPress` on every element, spread the provided props:
+
+```tsx
+// Before — manual wiring
+<Button
+  onPress={() => save()}
+  renderButton={(ctx) => (
+    <box focusable onPress={() => save()} padding={8}>
+      <text>Save</text>
+    </box>
+  )}
+/>
+
+// After — spread interaction props
+<Button
+  onPress={() => save()}
+  renderButton={(ctx) => (
+    <box {...ctx.buttonProps} padding={8}>
+      <text>Save</text>
+    </box>
+  )}
+/>
+```
+
+Components that provide interaction props: `Button` (`buttonProps`), `Checkbox` (`toggleProps`), `Switch` (`toggleProps`), `RadioGroup` (`optionProps`), `Tabs` (`tabProps`), `List` (`itemProps`), `Table` (`rowProps`). `Dialog.Overlay` accepts an `onClick` prop for click-to-close.
+
+The `useDrag` and `useHover` hooks follow the same pattern — they return `dragProps` and `hoverProps` to spread on target elements.
+
+See [Event System](./event-system.md#interaction-props-headless-components) and [Components (Headless)](./components-headless.md) for full details.
+
+---
+
 ## See Also
 
-- [Event System](./event-system.md) — onPress, PressEvent, event bubbling
+- [Event System](./event-system.md) — onPress, PressEvent, event bubbling, interaction props, useDrag, useHover
 - [Visual Effects](./visual-effects.md) — shadow, glow, gradient (used in interactive styles)
 - [Components (Headless)](./components-headless.md) — Button, Input, Dialog use focus internally
 - [Animations](./animations.md) — animate focus transitions

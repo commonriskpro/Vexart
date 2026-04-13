@@ -104,14 +104,14 @@ Renders text using the embedded bitmap font.
 
 ## Button (headless)
 
-Interactive push button. Render props pattern — zero visual output.
+Interactive push button. Render props pattern — zero visual output. The render context includes `buttonProps` — spread on the root element for automatic mouse click + Enter/Space support.
 
 ```tsx
 <Button
   onPress={() => save()}
   disabled={loading()}
-  renderButton={({ focused, pressed, disabled }) => (
-    <box
+  renderButton={({ focused, pressed, disabled, buttonProps }) => (
+    <box {...buttonProps}
       backgroundColor={pressed ? "#333" : focused ? "#252535" : "#1e1e2e"}
       cornerRadius={6}
       padding={8}
@@ -186,13 +186,13 @@ Multi-line editor with 2D cursor, syntax highlighting, and configurable keybindi
 
 ## Checkbox (headless)
 
-Toggleable checkbox. Render prop pattern.
+Toggleable checkbox. Render prop pattern. The render context includes `toggleProps` — spread on the root element for click-to-toggle support.
 
 ```tsx
 <Checkbox
   checked={agreed()}
   onChange={setAgreed}
-  renderCheckbox={({ checked, focused, disabled }) => (
+  renderCheckbox={({ checked, focused, disabled, toggleProps }) => (
     <box direction="row" gap={8} alignY="center">
       <box
         width={16} height={16}
@@ -211,13 +211,13 @@ Toggleable checkbox. Render prop pattern.
 
 ## Switch (headless)
 
-Toggle switch. Render prop pattern.
+Toggle switch. Render prop pattern. The render context includes `toggleProps` — spread on the root element for click-to-toggle support.
 
 ```tsx
 <Switch
   checked={dark()}
   onChange={setDark}
-  renderSwitch={({ checked, focused }) => (
+  renderSwitch={({ checked, focused, toggleProps }) => (
     <box direction="row" gap={8} alignY="center">
       <box
         width={36} height={20}
@@ -244,7 +244,7 @@ Toggle switch. Render prop pattern.
 
 ## RadioGroup (headless)
 
-Radio option group. Render prop pattern.
+Radio option group. Render prop pattern. Each option's render context includes `optionProps` — spread on each option element for click-to-select support.
 
 ```tsx
 <RadioGroup
@@ -255,7 +255,7 @@ Radio option group. Render prop pattern.
     { value: "dark", label: "Dark" },
     { value: "system", label: "System" },
   ]}
-  renderOption={(option, { selected, focused }) => (
+  renderOption={(option, { selected, focused, optionProps }) => (
     <box direction="row" gap={8} alignY="center" padding={4}>
       <box
         width={16} height={16}
@@ -431,7 +431,7 @@ Horizontal fill indicator. No interaction.
 
 ## Tabs (headless)
 
-Tab switcher. Only the active panel renders.
+Tab switcher. Only the active panel renders. Each tab's render context includes `tabProps` — spread on each tab element for click-to-switch support.
 
 ```tsx
 <Tabs
@@ -442,7 +442,7 @@ Tab switcher. Only the active panel renders.
     { label: "Advanced", content: () => <AdvancedPanel /> },
   ]}
   renderTab={(tab, ctx) => (
-    <box
+    <box {...ctx.tabProps}
       padding={8}
       borderBottom={ctx.active ? 2 : 0}
       borderColor={ctx.active ? "#4488cc" : "transparent"}
@@ -457,7 +457,7 @@ Tab switcher. Only the active panel renders.
 
 ## List (headless)
 
-Selectable list with keyboard navigation.
+Selectable list with keyboard navigation. Each item's render context includes `itemProps` — spread on each item element for click-to-select support.
 
 ```tsx
 <List
@@ -466,7 +466,7 @@ Selectable list with keyboard navigation.
   onSelectedChange={setIdx}
   onSelect={(i) => navigate(items[i])}
   renderItem={(item, ctx) => (
-    <box
+    <box {...ctx.itemProps}
       backgroundColor={ctx.selected ? "#252535" : "transparent"}
       padding={6}
       paddingX={12}
@@ -481,7 +481,7 @@ Selectable list with keyboard navigation.
 
 ## Table (headless)
 
-Data table with row selection.
+Data table with row selection. Each row's render context includes `rowProps` — spread on each row element for click-to-select support.
 
 ```tsx
 <Table
@@ -560,6 +560,7 @@ Modal dialog with focus trap, Escape to close, and focus restore on unmount.
 - Tab/Shift+Tab cycles ONLY within the dialog (focus trap via `pushFocusScope`)
 - Escape calls `onClose`
 - On close, focus returns to the previously focused element
+- `Dialog.Overlay` accepts an `onClick` prop that wires to `onPress` on the overlay box — pass `onClick={onClose}` to enable click-outside-to-close
 
 ---
 

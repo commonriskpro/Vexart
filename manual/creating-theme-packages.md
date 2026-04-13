@@ -99,16 +99,16 @@ Each headless component passes a typed context to your render function:
 
 | Component | Render prop | Context type | Fields |
 |-----------|------------|--------------|--------|
-| `Button` | `renderButton` | `ButtonRenderContext` | `focused`, `pressed`, `disabled` |
-| `Checkbox` | `renderCheckbox` | `CheckboxRenderContext` | `checked`, `focused`, `disabled` |
-| `Switch` | `renderSwitch` | `SwitchRenderContext` | `checked`, `focused`, `disabled` |
+| `Button` | `renderButton` | `ButtonRenderContext` | `focused`, `pressed`, `disabled`, `buttonProps` |
+| `Checkbox` | `renderCheckbox` | `CheckboxRenderContext` | `checked`, `focused`, `disabled`, `toggleProps` |
+| `Switch` | `renderSwitch` | `SwitchRenderContext` | `checked`, `focused`, `disabled`, `toggleProps` |
 | `Input` | `renderInput` | `InputRenderContext` | `value`, `displayText`, `showPlaceholder`, `cursor`, `blink`, `focused`, `disabled`, `selection` |
-| `List` | `renderItem` | `ListItemContext` | `selected`, `focused`, `index` |
-| `Tabs` | `renderTab` | `TabRenderContext` | `active`, `focused`, `index` |
-| `RadioGroup` | `renderOption` | `RadioOptionContext` | `selected`, `focused`, `disabled`, `index` |
+| `List` | `renderItem` | `ListItemContext` | `selected`, `focused`, `index`, `itemProps` |
+| `Tabs` | `renderTab` | `TabRenderContext` | `active`, `focused`, `index`, `tabProps` |
+| `RadioGroup` | `renderOption` | `RadioOptionContext` | `selected`, `focused`, `disabled`, `index`, `optionProps` |
 | `Select` | `renderTrigger` / `renderOption` | `SelectTriggerContext` / `SelectOptionContext` | trigger: `selectedLabel`, `placeholder`, `open`, `focused`, `disabled`; option: `highlighted`, `selected`, `disabled` |
 | `ProgressBar` | `renderBar` | `ProgressBarRenderContext` | `ratio`, `fillWidth`, `width`, `height`, `value`, `max` |
-| `Table` | `renderCell` / `renderHeader` / `renderRow` | `TableCellContext` | `selected`, `focused`, `rowIndex` |
+| `Table` | `renderCell` / `renderHeader` / `renderRow` | `TableCellContext` | `selected`, `focused`, `rowIndex`, `rowProps` |
 
 ### Example: NordButton
 

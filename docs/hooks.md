@@ -518,6 +518,117 @@ const springY = createSpring(() => active() ? 0 : 100, { stiffness: 200, damping
 
 ---
 
+## useDrag(options)
+
+Encapsulates drag interactions — pointer capture, `isDragging` flag, and mouse event wiring. Returns `dragProps` to spread on the drag target.
+
+### Signature
+
+```typescript
+import { useDrag } from "@tge/renderer"
+
+type DragOptions = {
+  onDragStart?: (event: NodeMouseEvent) => void
+  onDrag?: (event: NodeMouseEvent) => void
+  onDragEnd?: (event: NodeMouseEvent) => void
+  disabled?: () => boolean
+}
+
+type DragState = {
+  dragging: () => boolean    // reactive signal — true while dragging
+  dragProps: DragProps        // spread on the target element
+}
+
+function useDrag(options: DragOptions): DragState
+```
+
+### Usage
+
+```tsx
+import { useDrag } from "@tge/renderer"
+
+function DragTrack(props: { value: number; onChange: (v: number) => void }) {
+  const { dragging, dragProps } = useDrag({
+    onDragStart: (e) => props.onChange(Math.round((e.nodeX / e.width) * 100)),
+    onDrag: (e) => {
+      const ratio = Math.max(0, Math.min(1, e.nodeX / e.width))
+      props.onChange(Math.round(ratio * 100))
+    },
+  })
+
+  return (
+    <box {...dragProps} width={200} height={12} backgroundColor="#333" cornerRadius={6}>
+      <box width={`${props.value}%`} height={12}
+        backgroundColor={dragging() ? "#66aaff" : "#4488cc"} cornerRadius={6} />
+    </box>
+  )
+}
+```
+
+### Notes
+
+- `useDrag` handles `setPointerCapture`/`releasePointerCapture` internally.
+- The Slider component uses `useDrag` — its `trackProps` are built on top of it.
+- `dragProps` includes `onMouseDown`, `onMouseMove`, and `onMouseUp`.
+
+---
+
+## useHover(options)
+
+Encapsulates hover detection with configurable enter/leave delays. Returns `hovered` signal and `hoverProps` to spread on the target.
+
+### Signature
+
+```typescript
+import { useHover } from "@tge/renderer"
+
+type HoverOptions = {
+  delay?: number          // ms before onEnter fires (default: 0)
+  leaveDelay?: number     // ms before onLeave fires (default: 0)
+  onEnter?: () => void
+  onLeave?: () => void
+}
+
+type HoverState = {
+  hovered: () => boolean    // reactive signal
+  hoverProps: HoverProps    // spread on target element
+}
+
+function useHover(options?: HoverOptions): HoverState
+```
+
+### Usage
+
+```tsx
+import { useHover } from "@tge/renderer"
+
+function HoverCard(props: { children: any }) {
+  const { hovered, hoverProps } = useHover({
+    delay: 300,
+    leaveDelay: 100,
+    onEnter: () => console.log("entered"),
+    onLeave: () => console.log("left"),
+  })
+
+  return (
+    <box {...hoverProps}
+      backgroundColor={hovered() ? "#333" : "#222"}
+      padding={12} cornerRadius={8}
+    >
+      {props.children}
+    </box>
+  )
+}
+```
+
+### Notes
+
+- `hoverProps` includes `onMouseOver` and `onMouseOut`.
+- The Tooltip component uses `useHover` internally for delayed show/hide.
+- Delays are useful to prevent flicker when the pointer briefly leaves the element.
+
+---
+
 ## Patterns
 
 ### Quit Handler

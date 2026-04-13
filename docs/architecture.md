@@ -262,6 +262,8 @@ TGE's focus system bridges the SolidJS reactive layer and the paint loop:
 
 **Cleanup on removal**: `removeNode()` calls `unregisterSubtree()` to recursively unregister all focusable descendants. Without this, destroyed children remain as ghost entries in the focus ring.
 
+**Interaction props pattern**: Every headless component provides interaction props in its render context (like Radix UI's `asChild` pattern). Consumers spread these props on the root element for automatic mouse+keyboard support. For example, `Button` provides `ctx.buttonProps` = `{ focusable, onPress }`, `List` provides `ctx.itemProps` = `{ onPress }`. The `useDrag` and `useHover` hooks follow the same spread-props pattern for drag and hover interactions, encapsulating pointer capture and delayed timers respectively.
+
 ---
 
 ## Module Dependency Graph
