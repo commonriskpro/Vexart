@@ -165,6 +165,9 @@ export type RenderLoop = {
   setPointerCapture: (nodeId: number) => void
   /** Release pointer capture for the given node. */
   releasePointerCapture: (nodeId: number) => void
+  /** Register a callback to run after Clay processes scroll but before walkTree.
+   *  Returns unregister function. Used by VirtualList for zero-latency scroll sync. */
+  onPostScroll: (cb: () => void) => () => void
   /** Suspend rendering — stop loop, restore terminal for external process ($EDITOR) */
   suspend: () => void
   /** Resume rendering — re-enter TGE mode, force full repaint */
@@ -233,6 +236,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   let pointerDown = false
   let pointerDirty = true  // Feed at least once — also used to detect pointer movement for onMouseMove
   let capturedNodeId = 0   // Pointer capture: 0 = none, >0 = node.id that captures all mouse events
+
+  // Post-scroll callbacks — fire AFTER clay.updateScroll() but BEFORE walkTree.
+  // Used by VirtualList to read Clay's scroll offset with zero latency.
+  const postScrollCallbacks: (() => void)[] = []
   // Edge queues: accumulate press/release transitions between frames.
   // Without queuing, a press+release in the same onData chunk would be invisible
   // to frame-based edge detection (both transitions overwrite pointerDown).
@@ -1140,6 +1147,12 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     scrollDeltaY = 0
     scrollIdCounter = 0
 
+    // Fire post-scroll hooks — components read Clay's updated scroll position here.
+    // This runs AFTER Clay processes scroll but BEFORE walkTree evaluates JSX.
+    if (postScrollCallbacks.length > 0) {
+      for (const cb of postScrollCallbacks) cb()
+    }
+
     // 1. Walk tree into Clay (first pass — feeds Clay, no counting)
     scrollSpeedCap = 0 // reset — will be set by walkTree if any node has scrollSpeed
     effectsQueue = [] // reset effects for this frame
@@ -1445,6 +1458,14 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
     releasePointerCapture(nodeId: number) {
       if (capturedNodeId === nodeId) capturedNodeId = 0
+    },
+
+    onPostScroll(cb: () => void) {
+      postScrollCallbacks.push(cb)
+      return () => {
+        const idx = postScrollCallbacks.indexOf(cb)
+        if (idx >= 0) postScrollCallbacks.splice(idx, 1)
+      }
     },
 
     start() {

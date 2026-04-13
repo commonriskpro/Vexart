@@ -47,3 +47,11 @@ export function setPointerCapture(nodeId: number): void {
 export function releasePointerCapture(nodeId: number): void {
   activeLoop?.releasePointerCapture(nodeId)
 }
+
+/**
+ * Register a callback that runs after Clay processes scroll but before walkTree.
+ * Returns an unregister function. Used by VirtualList for zero-latency scroll sync.
+ */
+export function onPostScroll(cb: () => void): () => void {
+  return activeLoop?.onPostScroll(cb) ?? (() => {})
+}

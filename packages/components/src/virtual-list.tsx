@@ -27,7 +27,7 @@
 
 import { createSignal, For, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import { useFocus, onInput, createScrollHandle } from "@tge/renderer"
+import { useFocus, createScrollHandle, onPostScroll } from "@tge/renderer"
 
 // ── Types ──
 
@@ -174,16 +174,13 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     })
   }
 
-  // Listen for scroll events. Bump the tick so SolidJS re-evaluates
-  // scrollPos() → startIndex/endIndex → visibleItems on the next frame.
-  // Clay processes scroll in the render loop BEFORE walkTree, so by the
-  // time SolidJS evaluates our getters, scrollHandle.scrollTop is current.
-  const unsubScroll = onInput((event) => {
-    if (event.type === "mouse" && event.action === "scroll") {
-      setScrollTick(t => t + 1)
-    }
+  // Post-scroll hook — runs AFTER clay.updateScroll() but BEFORE walkTree.
+  // At this point scrollHandle.scrollTop reflects the CURRENT frame's scroll,
+  // not the previous one. Zero latency, zero desync.
+  const unsubPostScroll = onPostScroll(() => {
+    setScrollTick(t => t + 1)
   })
-  onCleanup(() => unsubScroll())
+  onCleanup(() => unsubPostScroll())
 
   // Top spacer to offset content for items above viewport
   const topPad = () => startIndex() * props.itemHeight

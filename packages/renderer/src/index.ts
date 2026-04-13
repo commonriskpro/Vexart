@@ -101,8 +101,8 @@ export { createHandle } from "./handle"
 // Re-export press event + mouse event types
 export type { PressEvent, NodeMouseEvent } from "./node"
 
-// Re-export pointer capture API
-export { setPointerCapture, releasePointerCapture } from "./pointer"
+// Re-export pointer capture + post-scroll API
+export { setPointerCapture, releasePointerCapture, onPostScroll } from "./pointer"
 
 // Re-export drag hook
 export { useDrag } from "./drag"
