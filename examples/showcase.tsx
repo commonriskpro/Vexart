@@ -1090,6 +1090,110 @@ function VoidProgressDemo() {
   )
 }
 
+function AnalyticsCardDemo() {
+  const [total, setTotal] = createSignal(2847)
+  const [prevTotal, setPrevTotal] = createSignal(2847)
+  const [sessions, setSessions] = createSignal(1243)
+  const [bounce, setBounce] = createSignal(34)
+  const [live, setLive] = createSignal(true)
+  const [tick, setTick] = createSignal(0)
+
+  // Simulate live data ticking every 2s
+  const timer = setInterval(() => {
+    if (!live()) return
+    setTick(t => t + 1)
+    setPrevTotal(total())
+    // Random delta +1 to +12 visitors
+    const delta = Math.floor(Math.random() * 12) + 1
+    setTotal(t => t + delta)
+    setSessions(s => s + Math.floor(Math.random() * 4))
+    setBounce(b => Math.max(20, Math.min(60, b + (Math.random() > 0.5 ? 1 : -1))))
+  }, 2000)
+  onCleanup(() => clearInterval(timer))
+
+  const growth = () => {
+    const diff = total() - prevTotal()
+    return diff >= 0 ? `+${diff}` : `${diff}`
+  }
+  const growthColor = () => total() >= prevTotal() ? "#22c55e" : "#dc2626"
+
+  const formatNum = (n: number) => n.toLocaleString("en-US")
+
+  return (
+    <box direction="column" gap={space[3]} width={420}>
+      <Card>
+        <CardHeader>
+          <box direction="row" alignY="center" width="grow">
+            <box width="grow" direction="column" gap={space[1]}>
+              <CardTitle>Analytics</CardTitle>
+              <CardDescription>Live · updates every 2s</CardDescription>
+            </box>
+            <CardAction>
+              <box
+                focusable
+                onPress={() => setLive(l => !l)}
+                hoverStyle={{ opacity: 0.8 }}
+              >
+                <Badge variant={live() ? "default" : "secondary"}>
+                  {live() ? "● Live" : "Paused"}
+                </Badge>
+              </box>
+            </CardAction>
+          </box>
+        </CardHeader>
+        <CardContent>
+          <box direction="column" gap={space[4]}>
+            {/* Main stats row */}
+            <box direction="row" gap={space[5]} alignY="center">
+              <box direction="column" gap={space[0.5]}>
+                <text color={themeColors.mutedForeground} fontSize={font.xs}>Total Visitors</text>
+                <text color={themeColors.foreground} fontSize={font["3xl"]} fontWeight={weight.bold}>
+                  {formatNum(total())}
+                </text>
+                <text color={growthColor()} fontSize={font.xs}>
+                  {growth()} since last update
+                </text>
+              </box>
+              <Separator orientation="vertical" />
+              <box direction="column" gap={space[0.5]}>
+                <text color={themeColors.mutedForeground} fontSize={font.xs}>Sessions</text>
+                <text color={themeColors.foreground} fontSize={font["2xl"]} fontWeight={weight.semibold}>
+                  {formatNum(sessions())}
+                </text>
+              </box>
+              <Separator orientation="vertical" />
+              <box direction="column" gap={space[0.5]}>
+                <text color={themeColors.mutedForeground} fontSize={font.xs}>Bounce Rate</text>
+                <text color={bounce() > 45 ? "#f59e0b" : themeColors.foreground} fontSize={font["2xl"]} fontWeight={weight.semibold}>
+                  {bounce()}%
+                </text>
+              </box>
+            </box>
+
+            {/* Progress bars */}
+            <box direction="column" gap={space[2]}>
+              <box direction="column" gap={space[1]}>
+                <box direction="row" alignY="center" width="grow">
+                  <box width="grow"><text color={themeColors.mutedForeground} fontSize={font.xs}>Visitor goal (5k)</text></box>
+                  <text color={themeColors.mutedForeground} fontSize={font.xs}>{Math.round(total() / 50)}%</text>
+                </box>
+                <VoidProgress value={total()} max={5000} />
+              </box>
+              <box direction="column" gap={space[1]}>
+                <box direction="row" alignY="center" width="grow">
+                  <box width="grow"><text color={themeColors.mutedForeground} fontSize={font.xs}>Session goal (2k)</text></box>
+                  <text color={themeColors.mutedForeground} fontSize={font.xs}>{Math.round(sessions() / 20)}%</text>
+                </box>
+                <VoidProgress value={sessions()} max={2000} />
+              </box>
+            </box>
+          </box>
+        </CardContent>
+      </Card>
+    </box>
+  )
+}
+
 function TabVoidTheme() {
   const [isDark, setIsDark] = createSignal(true)
   const [clickedBtn, setClickedBtn] = createSignal("")
@@ -1252,33 +1356,8 @@ function TabVoidTheme() {
       </SectionBox>
 
       {/* CardAction */}
-      <SectionBox title="CARD WITH CARDACTION — layout slot, Badge is top-right">
-        <Card>
-          <CardHeader>
-            <box direction="row" alignY="center" width="grow">
-              <box width="grow" direction="column" gap={space[1]}>
-                <CardTitle>Analytics</CardTitle>
-                <CardDescription>Last 30 days</CardDescription>
-              </box>
-              <CardAction>
-                <Badge variant="secondary">Live</Badge>
-              </CardAction>
-            </box>
-          </CardHeader>
-          <CardContent>
-            <box direction="row" gap={space[4]}>
-              <box direction="column" gap={space[1]}>
-                <text color={themeColors.mutedForeground} fontSize={font.xs}>Total</text>
-                <text color={themeColors.foreground} fontSize={font["2xl"]} fontWeight={weight.bold}>2,847</text>
-              </box>
-              <Separator orientation="vertical" />
-              <box direction="column" gap={space[1]}>
-                <text color={themeColors.mutedForeground} fontSize={font.xs}>Growth</text>
-                <text color="#22c55e" fontSize={font["2xl"]} fontWeight={weight.bold}>+12%</text>
-              </box>
-            </box>
-          </CardContent>
-        </Card>
+      <SectionBox title="ANALYTICS CARD (live — updates every 2s)">
+        <AnalyticsCardDemo />
       </SectionBox>
     </box>
   )
