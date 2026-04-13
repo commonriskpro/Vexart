@@ -70,7 +70,7 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   const [scrollTick, setScrollTick] = createSignal(0)
   const [highlightedIndex, setHighlightedIndex] = createSignal(props.selectedIndex ?? -1)
 
-  const overscan = () => props.overscan ?? 3
+  const overscan = () => props.overscan ?? 8
   const totalHeight = () => props.items.length * props.itemHeight
   const viewportItems = () => Math.ceil(props.height / props.itemHeight)
 
