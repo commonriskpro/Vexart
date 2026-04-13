@@ -416,6 +416,50 @@ type PressEvent = {
 
 `onPress` events bubble up the parent node chain like DOM click events. Call `stopPropagation()` to prevent the event from reaching ancestor handlers.
 
+### `NodeMouseEvent`
+
+Event object passed to per-node mouse callbacks (`onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseOver`, `onMouseOut`). These events do NOT bubble — they dispatch directly to the target node.
+
+```typescript
+import type { NodeMouseEvent } from "@tge/renderer"
+
+type NodeMouseEvent = {
+  x: number        // Absolute pixel X position
+  y: number        // Absolute pixel Y position
+  nodeX: number    // X relative to the node's layout origin
+  nodeY: number    // Y relative to the node's layout origin
+  width: number    // Node's layout width
+  height: number   // Node's layout height
+}
+
+// Usage in per-node mouse events
+<box
+  onMouseDown={(e: NodeMouseEvent) => startDrag(e)}
+  onMouseMove={(e: NodeMouseEvent) => updateDrag(e)}
+  onMouseUp={(e: NodeMouseEvent) => endDrag(e)}
+/>
+```
+
+### `setPointerCapture(nodeId: string): void`
+
+Lock all mouse events to a specific node, regardless of cursor position. Essential for drag interactions — the captured node receives `onMouseMove` and `onMouseUp` even when the pointer moves outside its bounds.
+
+```typescript
+import { setPointerCapture } from "@tge/renderer"
+
+setPointerCapture(nodeId)  // All mouse events route to this node
+```
+
+### `releasePointerCapture(nodeId: string): void`
+
+Unlock pointer capture. Automatically called on mouse button up, but can be called explicitly at any time.
+
+```typescript
+import { releasePointerCapture } from "@tge/renderer"
+
+releasePointerCapture(nodeId)  // Restore normal hit-testing
+```
+
 ### `pushFocusScope(): () => void`
 
 Create a focus trap (used by Dialog internally). Returns a cleanup function.

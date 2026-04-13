@@ -11,6 +11,7 @@
 | Phase 2 | Productive | ✅ COMPLETE | 15 headless components, `<img>`, Router, tokens refactor |
 | Phase 3 | Competitive | ✅ COMPLETE | Form validation, Combobox, Slider, data hooks, VirtualList, Tooltip/Popover |
 | Backlog | Phase 0/1 cleanup | ✅ COMPLETE | FFI packed buffer, backdrop filters, opacity, focusStyle, onPress, focus trap |
+| Backlog | Mouse interaction system | ✅ COMPLETE | Per-node mouse events, pointer capture, hit-area expansion, Slider/Select/Combobox mouse |
 
 ---
 
@@ -24,6 +25,9 @@
 | Backdrop filters (brightness/contrast/saturate/grayscale/invert/sepia/hue-rotate) | ✅ Done | Complete — CSS spec order |
 | Element opacity (withOpacity composite) | ✅ Done | Complete |
 | Input (keyboard, mouse, paste, focus) | ✅ Done | Complete |
+| Per-node mouse events (onMouseDown/Up/Move/Over/Out) | ✅ Done | Complete — NodeMouseEvent, no bubbling |
+| Pointer capture (setPointerCapture/releasePointerCapture) | ✅ Done | Complete — like DOM Element.setPointerCapture() |
+| Hit-area expansion (min one terminal cell) | ✅ Done | Complete — hit-testing only, no visual change |
 | Text editing (Input, Textarea, syntax) | ✅ Done | Advanced |
 | Layer compositing (dirty-flag, z-index) | ✅ Done | Fixed |
 | Design system (@tge/void, themeColors reactive) | ✅ Done | Hot-swapable themes |
@@ -208,19 +212,30 @@ padding={[16, 24]}        // shorthand: [Y, X] — like CSS shorthand but typed
 | `<table>` | `<Table>` | `tge/components` |
 | `<dialog>` | `<Dialog>` | `tge/components` |
 
-### Decision 6: Unified `onPress` for Interaction
+### Decision 6: Unified `onPress` + Per-Node Mouse Events
 
 **Rule:** A single `onPress` prop handles both mouse click and keyboard activation (Enter/Space).
-Low-level events (`onMouseDown`, `onMouseUp`, `onMouseOver`, `onMouseOut`) remain available.
+Per-node mouse events (`onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseOver`, `onMouseOut`) provide low-level mouse interaction. Each receives a `NodeMouseEvent` with `{ x, y, nodeX, nodeY, width, height }`.
 
 ```tsx
 // Simple — one prop, works everywhere:
 <box focusable onPress={() => save()}>
   <text>Save</text>
 </box>
+
+// Low-level — per-node mouse events for drag/hover:
+<box
+  onMouseDown={(e) => startDrag(e)}
+  onMouseMove={(e) => updateDrag(e)}
+  onMouseUp={(e) => endDrag(e)}
+/>
 ```
 
-**Implementation:** Mouse click detected via active→release-while-hovered pattern. Keyboard Enter/Space dispatched via focus system when element is focused.
+**Implementation:** Mouse click detected via active→release-while-hovered pattern. Keyboard Enter/Space dispatched via focus system when element is focused. `onPress` events bubble up the parent chain. `onMouse*` events do NOT bubble — they dispatch directly to the target node.
+
+**Pointer capture:** `setPointerCapture(nodeId)` locks all mouse events to a specific node (like DOM `Element.setPointerCapture()`). Essential for drag — the captured node receives `onMouseMove`/`onMouseUp` even when the pointer leaves its bounds. Auto-released on button up.
+
+**Hit-area expansion:** Interactive elements have a minimum hit-area of one terminal cell (`cellW x cellH`). This ensures small elements like slider tracks are clickable. Only affects hit-testing, NOT visual rendering.
 
 ### Decision 7: `focusStyle` Completes the Interaction Trio
 

@@ -70,7 +70,9 @@ All three style objects accept: `backgroundColor`, `borderColor`, `borderWidth`,
 
 ### Event Bubbling
 
-`onPress` events bubble up the parent node chain like DOM click events. If the clicked node doesn't have `onPress`, the event walks up to the nearest ancestor that does. Each handler receives a `PressEvent`:
+`onPress` events bubble up the parent node chain like DOM click events. If the clicked node doesn't have `onPress`, the event walks up to the nearest ancestor that does. Each handler receives a `PressEvent`.
+
+> **Note:** Per-node mouse events (`onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseOver`, `onMouseOut`) do NOT bubble. They dispatch directly to the target node only. Only `onPress` bubbles.
 
 ```tsx
 // Parent handles click — Button has no onPress, event bubbles to parent box
@@ -309,6 +311,8 @@ Dropdown select with keyboard navigation.
 | Up / Down (or j/k) | Navigate options |
 | Escape | Close without selecting |
 
+**Mouse:** Click trigger to open/close. Click an option to select it.
+
 ---
 
 ## Combobox (headless)
@@ -342,6 +346,8 @@ Autocomplete input + filterable dropdown. Phase 3.
 ```
 
 Typing filters options. Enter selects. Escape closes and clears query.
+
+**Mouse:** Click an option to select it. Click the input to toggle the dropdown.
 
 ---
 
@@ -382,8 +388,26 @@ Numeric range input. Phase 3.
 |-----|--------|
 | Right / Up (or l/k) | Increment by step |
 | Left / Down (or h/j) | Decrement by step |
-| Page Up / Page Down | Large step (10× step) |
+| Page Up / Page Down | Large step (10x step) |
 | Home / End | Min / Max |
+
+**Mouse:** Click the track to jump to that position. Drag to scrub continuously. The render context includes `trackProps` (spread onto the track element for mouse handling) and `dragging` (boolean, true while scrubbing).
+
+```tsx
+<Slider
+  value={volume()}
+  onChange={setVolume}
+  min={0} max={100} step={1}
+  renderSlider={(ctx) => (
+    <box direction="row" gap={8} alignY="center">
+      <box width={200} height={8} backgroundColor="#333" cornerRadius={4} {...ctx.trackProps}>
+        <box width={ctx.percentage * 2} height={8} backgroundColor="#4488cc" cornerRadius={4} />
+      </box>
+      <text color="#888" fontSize={12}>{ctx.value}%</text>
+    </box>
+  )}
+/>
+```
 
 ---
 

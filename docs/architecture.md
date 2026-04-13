@@ -258,7 +258,7 @@ TGE's focus system bridges the SolidJS reactive layer and the paint loop:
 **`useFocus()`** exists for component-level focus (custom onKeyDown handlers).
 **`<box focusable>`** exists for node-level focus (declarative, zero boilerplate).
 
-**Event bubbling**: `onPress` events bubble up the parent chain like DOM click events. When a node without `onPress` is clicked, the event walks up to the nearest ancestor with a handler. Each handler receives a `PressEvent` with `stopPropagation()`. Mouse clicks on focusable nodes automatically set focus (like browser behavior).
+**Event bubbling**: `onPress` events bubble up the parent chain like DOM click events. When a node without `onPress` is clicked, the event walks up to the nearest ancestor with a handler. Each handler receives a `PressEvent` with `stopPropagation()`. Mouse clicks on focusable nodes automatically set focus (like browser behavior). Per-node mouse events (`onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseOver`, `onMouseOut`) do NOT bubble — they dispatch directly to the target node via `NodeMouseEvent` (`{ x, y, nodeX, nodeY, width, height }`). Pointer capture (`setPointerCapture`/`releasePointerCapture`) routes all mouse events to a specific node regardless of cursor position, enabling drag interactions. Interactive elements have a minimum hit-area of one terminal cell (`cellW x cellH`) to ensure small elements are still clickable — this only affects hit-testing, not visual rendering.
 
 **Cleanup on removal**: `removeNode()` calls `unregisterSubtree()` to recursively unregister all focusable descendants. Without this, destroyed children remain as ghost entries in the focus ring.
 

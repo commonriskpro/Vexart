@@ -166,7 +166,7 @@ import { Box, Text, Button, Input, Checkbox, Tabs, List, ProgressBar, ScrollView
 import { colors, space, radius, font, weight, shadows } from "@tge/void"
 
 // Hooks — for custom interactive components
-import { useKeyboard, useMouse, useFocus, onInput } from "@tge/renderer"
+import { useKeyboard, useMouse, useFocus, onInput, setPointerCapture, releasePointerCapture } from "@tge/renderer"
 
 // SolidJS — for reactive state
 import { createSignal, createEffect, onCleanup } from "solid-js"

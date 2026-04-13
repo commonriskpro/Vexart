@@ -132,6 +132,35 @@ Props available in `hoverStyle`/`activeStyle`/`focusStyle`: `backgroundColor`, `
 </box>
 ```
 
+### Per-node mouse events
+
+Low-level mouse callbacks dispatched directly to the target node (no bubbling). Each receives a `NodeMouseEvent`:
+
+```tsx
+<box
+  onMouseDown={(e) => { startDrag(e); setPointerCapture(nodeId) }}
+  onMouseMove={(e) => updateDrag(e)}
+  onMouseUp={(e) => endDrag(e)}
+/>
+```
+
+`NodeMouseEvent`: `{ x, y, nodeX, nodeY, width, height }` — `x/y` are absolute pixels, `nodeX/nodeY` are relative to the node's layout origin. `width/height` are the node's layout dimensions (useful for ratio calculations like slider position).
+
+### Pointer capture
+
+Like `Element.setPointerCapture()` in the DOM. When a node captures the pointer, ALL mouse events route to it regardless of cursor position — essential for drag interactions.
+
+```typescript
+import { setPointerCapture, releasePointerCapture } from "@tge/renderer"
+
+setPointerCapture(nodeId)     // Lock — all mouse events go to this node
+releasePointerCapture(nodeId) // Unlock — auto-released on button up
+```
+
+### Hit-area expansion
+
+Interactive elements have a minimum hit-area of one terminal cell (`cellW × cellH`, typically 7×13px). This is like mobile's 44px minimum touch target — ensures small elements (e.g. 12px slider track) are clickable. Only affects hit-testing, NOT visual rendering.
+
 ### Architecture note
 
 ```
@@ -139,11 +168,19 @@ JSX prop → reconciler.ts setProperty (pre-parse color/sizing/glow ONCE) → lo
 ```
 
 ```
-onPress event flow:
+onPress event flow (high-level, bubbles):
   mouse click → updateInteractiveStates detects release-while-hovered
     → create PressEvent → walk parent chain:
       → each node: set focus if focusable → call onPress(event) if present
       → stop if event.propagationStopped or reached root
+
+onMouse* event flow (low-level, per-node):
+  mouse input → feedPointer (fractional cell→pixel, edge queuing)
+    → updateInteractiveStates hit-tests all interactive nodes:
+      → onMouseOver/onMouseOut on hover enter/leave
+      → onMouseDown/onMouseUp on button press/release edges
+      → onMouseMove while hovered (or captured)
+      → pointer capture overrides hit-test (captured node always receives events)
 ```
 
 Effects are painted BEFORE the rect (shadow/glow) or INSTEAD of it (gradient). Backdrop blur reads the buffer region behind the element, blurs it in a temp buffer, then composites. All effects use isolated temp buffers to avoid corrupting neighboring pixels.
@@ -154,7 +191,7 @@ Effects are painted BEFORE the rect (shadow/glow) or INSTEAD of it (gradient). B
 - Use `direction="row"` explicitly for horizontal layout
 - Responsive: terminal resize triggers automatic re-layout via `onResize` → Clay redimension
 
-## TGEProps — Complete reference (50 props)
+## TGEProps — Complete reference (55 props)
 
 ### Layout
 | Prop | Type | Default | Notes |
@@ -208,6 +245,11 @@ Effects are painted BEFORE the rect (shadow/glow) or INSTEAD of it (gradient). B
 | `onKeyDown` | `(event: any) => void` | Keyboard events when focused |
 | `focusStyle` | partial visual props | Merged on focus |
 | `opacity` | `number` | 0.0-1.0, element-level opacity |
+| `onMouseDown` | `(event: NodeMouseEvent) => void` | Per-node mouse button pressed |
+| `onMouseUp` | `(event: NodeMouseEvent) => void` | Per-node mouse button released |
+| `onMouseMove` | `(event: NodeMouseEvent) => void` | Per-node pointer move while hovered (or captured) |
+| `onMouseOver` | `(event: NodeMouseEvent) => void` | Pointer entered node bounds |
+| `onMouseOut` | `(event: NodeMouseEvent) => void` | Pointer left node bounds |
 
 ### Backdrop Filters
 | Prop | Type | Notes |
@@ -287,7 +329,7 @@ Effects are painted BEFORE the rect (shadow/glow) or INSTEAD of it (gradient). B
 
 All FFI functions use ≤8 params (packed buffer pattern for ARM64 safety). Shared ArrayBuffer for zero allocations.
 
-## @tge/renderer exports (54 values, 31 types)
+## @tge/renderer exports (57 values, 32 types)
 
 ### Core
 - `createRenderLoop`, `mount`, `createTerminal`
@@ -301,6 +343,7 @@ All FFI functions use ≤8 params (packed buffer pattern for ARM64 safety). Shar
 ### Input
 - `useKeyboard`, `useMouse`, `useInput`, `onInput`
 - `useFocus`, `setFocus`, `focusedId`, `setFocusedId`
+- `setPointerCapture`, `releasePointerCapture`
 
 ### Animation
 - `createTransition`, `createSpring`, easing presets
@@ -338,6 +381,7 @@ All FFI functions use ≤8 params (packed buffer pattern for ARM64 safety). Shar
 
 ### Types
 - `PressEvent` — `{ stopPropagation: () => void; readonly propagationStopped: boolean }`
+- `NodeMouseEvent` — `{ x, y, nodeX, nodeY, width, height }`
 
 ### Classes
 - `RGBA` — `.fromHex()`, `.fromInts()`, `.fromValues()`, `.toU32()`, `.valueOf()`, `.toString()`
@@ -368,7 +412,7 @@ All FFI functions use ≤8 params (packed buffer pattern for ARM64 safety). Shar
 | `WrapRow` | WrapRowProps | Flex-wrap workaround |
 | `Diff` | DiffProps | Unified diff viewer |
 | `Dialog` | DialogProps | Modal with focus trap + Escape |
-| `Select` | SelectProps | Dropdown select with keyboard nav |
+| `Select` | SelectProps | Dropdown select with keyboard nav + click selection |
 | `Switch` | SwitchProps | Toggle switch |
 | `RadioGroup` | RadioGroupProps | Radio option group |
 | `Table` | TableProps | Data table with row selection |
@@ -376,8 +420,8 @@ All FFI functions use ≤8 params (packed buffer pattern for ARM64 safety). Shar
 | `Router` | RouterProps | Flat + stack navigation |
 | `Tooltip` | TooltipProps | Delayed tooltip on hover |
 | `Popover` | PopoverProps | Controlled popover panel |
-| `Combobox` | ComboboxProps | Autocomplete with filtering |
-| `Slider` | SliderProps | Numeric range input |
+| `Combobox` | ComboboxProps | Autocomplete with filtering + click selection |
+| `Slider` | SliderProps | Numeric range input with click-to-position and drag |
 | `VirtualList` | VirtualListProps | Virtualized list (fixed height) |
 
 Also: `createForm` factory for form validation.

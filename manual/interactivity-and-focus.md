@@ -189,6 +189,8 @@ When you click a focusable element, it receives focus automatically. This mirror
 
 If you click a non-focusable element, the `onPress` event bubbles up to the nearest focusable parent (see [Event System](./event-system.md)).
 
+In addition to setting focus, per-node mouse events (`onMouseDown`, `onMouseUp`) also fire on the clicked element. These are independent of focus — they work on any `<box>`, not just focusable ones, and they do NOT bubble.
+
 ---
 
 ## `useFocus()` Hook vs `focusable` Prop
@@ -199,7 +201,7 @@ TGE provides two ways to make things focusable. Use the right one for the right 
 
 Use the `focusable` prop when:
 - You just need Tab cycling and visual focus styles
-- Your interaction is limited to `onPress` and `onKeyDown`
+- Your interaction is limited to `onPress`, `onKeyDown`, and per-node mouse events (`onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseOver`, `onMouseOut`)
 - You don't need programmatic focus control
 
 ```tsx

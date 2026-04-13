@@ -324,6 +324,8 @@ import { Select } from "tge/components"
 
 **Keyboard:** Tab to focus, Enter/Space to open, Up/Down to navigate, Enter to select, Escape to close.
 
+**Mouse:** Click trigger to open/close. Click an option to select it.
+
 ### 11. Combobox
 
 Headless autocomplete with text filtering.
@@ -355,11 +357,13 @@ import { Combobox } from "tge/components"
 
 **Keyboard:** Type to filter, Up/Down to navigate, Enter to select, Escape to close.
 
+**Mouse:** Click an option to select it. Click the input to toggle the dropdown.
+
 ### 12. Slider
 
 Headless numeric range input.
 
-**Render context:** `{ value, min, max, percentage, focused, disabled }`
+**Render context:** `{ value, min, max, percentage, focused, disabled, trackProps, dragging }`
 
 ```tsx
 import { Slider } from "tge/components"
@@ -380,6 +384,24 @@ import { Slider } from "tge/components"
 ```
 
 **Keyboard:** Left/Right by step, PgUp/PgDown by large step, Home/End to min/max.
+
+**Mouse:** Click the track to jump to that position. Drag to scrub continuously. The render context includes `trackProps` (spread onto the track element for mouse handling) and `dragging` (boolean, true while scrubbing).
+
+```tsx
+<Slider
+  value={volume()}
+  onChange={setVolume}
+  min={0} max={100} step={1}
+  renderSlider={(ctx) => (
+    <box direction="row" gap={8} alignY="center">
+      <box width={200} height={8} backgroundColor="#333" cornerRadius={4} {...ctx.trackProps}>
+        <box width={ctx.percentage * 2} height={8} backgroundColor="#4488cc" cornerRadius={4} />
+      </box>
+      <text color={ctx.dragging ? "#fff" : "#888"} fontSize={12}>{String(ctx.value)}%</text>
+    </box>
+  )}
+/>
+```
 
 ### 13. Tabs
 

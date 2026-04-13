@@ -471,7 +471,7 @@ main()
 | `Tooltip` | `Tooltip`, `TooltipProps` | `renderTooltip(content)` → JSX |
 | `Popover` | `Popover`, `PopoverTriggerContext` | `renderTrigger(ctx)` + `renderContent()` → JSX |
 | `Combobox` | `Combobox`, `ComboboxInputContext`, `ComboboxOptionContext` | `renderInput(ctx)` + `renderOption(opt, ctx)` + `renderContent(children)` → JSX |
-| `Slider` | `Slider`, `SliderRenderContext` | `renderSlider(ctx)` → JSX |
+| `Slider` | `Slider`, `SliderRenderContext` | `renderSlider(ctx)` → JSX. Context includes `trackProps` (spread on track for mouse) and `dragging` (boolean). |
 | `VirtualList` | `VirtualList`, `VirtualListItemContext` | `renderItem(item, index, ctx)` → JSX |
 | `Router` | `Router`, `Route`, `NavigationStack` | No visual — pure navigation logic |
 

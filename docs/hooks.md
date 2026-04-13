@@ -87,6 +87,7 @@ function MouseTracker() {
 - Mouse coordinates are in terminal cell units (col, row), not pixels.
 - The position signal updates on every mouse move, scroll, and click.
 - Mouse tracking is automatically enabled by `createTerminal()`.
+- **`useMouse()` vs per-node `onMouse*` events:** `useMouse()` is a global reactive signal that reports mouse position in terminal cell coordinates. Per-node mouse events (`onMouseDown`, `onMouseMove`, `onMouseUp`, `onMouseOver`, `onMouseOut`) are callbacks dispatched directly to the node under the pointer, with coordinates relative to the node's layout origin via `NodeMouseEvent` (`{ x, y, nodeX, nodeY, width, height }`). Use `useMouse()` for reactive UI updates. Use per-node events for element-specific interactions like drag and hover.
 
 ---
 
@@ -331,6 +332,20 @@ Make any `<box>` focusable without `useFocus()`. Like HTML `<div tabindex="0">`.
 </box>
 ```
 
+Per-node mouse events also work on any `<box>`:
+
+```tsx
+<box
+  width={200} height={100}
+  backgroundColor="#333"
+  onMouseDown={(e) => startDrag(e)}
+  onMouseMove={(e) => updatePosition(e)}
+  onMouseUp={(e) => endDrag(e)}
+>
+  <text color="#fff">Drag target</text>
+</box>
+```
+
 ### Notes
 
 - `focusable` auto-registers the node in the focus system — no `useFocus()` needed.
@@ -338,6 +353,7 @@ Make any `<box>` focusable without `useFocus()`. Like HTML `<div tabindex="0">`.
 - `onPress` fires on mouse click (release while hovered) OR Enter/Space when focused. Events bubble up the parent node chain like DOM click events — if the clicked node doesn't have `onPress`, the event walks up to the nearest ancestor that does. Use `event.stopPropagation()` to prevent further bubbling.
 - Mouse click on a focusable node automatically sets focus (like browser behavior).
 - `useFocus()` still exists for advanced use (programmatic focus, custom focus IDs).
+- Per-node mouse events (`onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseOver`, `onMouseOut`) work on any `<box>`, not just focusable ones. They do NOT bubble — they dispatch directly to the target node. Each receives a `NodeMouseEvent` with `{ x, y, nodeX, nodeY, width, height }`.
 
 ---
 

@@ -601,6 +601,13 @@ TGE provides declarative hover/active/focus styles. No manual signal boilerplate
 | `focusable` | `boolean` | Registers the element in the focus ring. Like HTML `tabindex="0"`. Tab cycles through focusable elements. |
 | `onPress` | `(event?: PressEvent) => void` | Fires on mouse click AND on Enter/Space when the element is focused. Events bubble up parent chain like DOM click events. Call `event.stopPropagation()` to prevent further bubbling. |
 | `onKeyDown` | `(event: KeyEvent) => void` | Keyboard events when the element is focused. |
+| `onMouseDown` | `(event: NodeMouseEvent) => void` | Per-node mouse button pressed. Does NOT bubble. Works on any `<box>`, not just focusable ones. |
+| `onMouseUp` | `(event: NodeMouseEvent) => void` | Per-node mouse button released. Does NOT bubble. |
+| `onMouseMove` | `(event: NodeMouseEvent) => void` | Per-node pointer move while hovered (or while pointer is captured). Does NOT bubble. |
+| `onMouseOver` | `(event: NodeMouseEvent) => void` | Pointer entered node bounds. Does NOT bubble. |
+| `onMouseOut` | `(event: NodeMouseEvent) => void` | Pointer left node bounds. Does NOT bubble. |
+
+`NodeMouseEvent`: `{ x, y, nodeX, nodeY, width, height }` — `x/y` are absolute pixels, `nodeX/nodeY` are relative to the node's layout origin. `width/height` are the node's layout dimensions (useful for ratio calculations like slider position).
 
 ```tsx
 // Clickable card (keyboard + mouse)
@@ -1045,6 +1052,8 @@ type MouseEvent = {
   mods: { shift: boolean; ctrl: boolean; alt: boolean; meta: boolean }
 }
 ```
+
+> **`useMouse()` vs per-node `onMouse*` events:** `useMouse()` is a global reactive signal that reports mouse position in terminal cell coordinates. Per-node mouse events (`onMouseDown`, `onMouseMove`, etc.) are callbacks dispatched directly to the node under the pointer, with coordinates relative to the node's layout origin (`nodeX`, `nodeY`). Use `useMouse()` for reactive UI updates based on cursor position. Use per-node `onMouse*` events for element-specific interactions like drag, hover detection, and click handling.
 
 ---
 
@@ -1806,6 +1815,8 @@ type SelectProps = {
 
 **Keyboard:** `Tab` to focus, `Enter`/`Space` to open, `Up`/`Down` to navigate, `Enter` to select, `Escape` to close.
 
+**Mouse:** Click trigger to open/close. Click an option to select it.
+
 ---
 
 #### 11. Combobox
@@ -1869,6 +1880,8 @@ type ComboboxProps = {
 
 **Keyboard:** Type to filter, `Up`/`Down` to navigate, `Enter` to select, `Escape` to close.
 
+**Mouse:** Click an option to select it. Click the input to toggle the dropdown.
+
 ---
 
 #### 12. Slider
@@ -1885,6 +1898,8 @@ type SliderRenderContext = {
   percentage: number      // 0-100
   focused: boolean
   disabled: boolean
+  trackProps: Record<string, any>   // Spread onto track element for mouse click+drag
+  dragging: boolean                 // True while mouse is scrubbing
 }
 
 type SliderProps = {
@@ -1917,6 +1932,24 @@ type SliderProps = {
 ```
 
 **Keyboard:** `Left`/`Right` by step, `PgUp`/`PgDown` by large step, `Home`/`End` to min/max.
+
+**Mouse:** Click the track to jump to that position. Drag to scrub continuously. The render context includes `trackProps` (spread onto the track element for mouse handling) and `dragging` (boolean, true while scrubbing).
+
+```tsx
+<Slider
+  value={volume()}
+  onChange={setVolume}
+  min={0} max={100} step={1}
+  renderSlider={(ctx) => (
+    <box direction="row" gap={8} alignY="center">
+      <box width={200} height={8} backgroundColor="#333" cornerRadius={4} {...ctx.trackProps}>
+        <box width={ctx.percentage * 2} height={8} backgroundColor="#4488cc" cornerRadius={4} />
+      </box>
+      <text color="#888" fontSize={12}>{ctx.value}%</text>
+    </box>
+  )}
+/>
+```
 
 ---
 
@@ -3237,6 +3270,8 @@ function AnimatedPanel() {
 | `focusedId` | Focus | Current focused ID (signal) |
 | `setFocusedId` | Focus | Set focused ID directly |
 | `pushFocusScope` | Focus | Create focus trap |
+| `setPointerCapture` | Input | Lock mouse events to a node (for drag) |
+| `releasePointerCapture` | Input | Unlock pointer capture |
 | `useKeyboard` | Input | Reactive keyboard signal |
 | `useMouse` | Input | Reactive mouse signal |
 | `useInput` | Input | All input events as signal |

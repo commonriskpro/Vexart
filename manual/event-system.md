@@ -39,6 +39,113 @@ The event parameter is optional — you can write `onPress={() => doSomething()}
 
 ---
 
+## Per-Node Mouse Events
+
+TGE provides low-level mouse event callbacks that dispatch directly to the target node. Unlike `onPress`, these do **NOT bubble** — they fire only on the specific node the pointer is interacting with.
+
+| Prop | Fires when | Notes |
+|------|-----------|-------|
+| `onMouseDown` | Mouse button pressed on node | Edge-triggered (fires once per press) |
+| `onMouseUp` | Mouse button released on node | Edge-triggered (fires once per release) |
+| `onMouseMove` | Pointer moves while over node | Continuous while hovered (or captured) |
+| `onMouseOver` | Pointer enters node bounds | Fires once on entry |
+| `onMouseOut` | Pointer leaves node bounds | Fires once on exit |
+
+### NodeMouseEvent type
+
+```typescript
+type NodeMouseEvent = {
+  x: number        // Absolute pixel X position
+  y: number        // Absolute pixel Y position
+  nodeX: number    // X relative to the node's layout origin
+  nodeY: number    // Y relative to the node's layout origin
+  width: number    // Node's layout width (useful for ratio calculations)
+  height: number   // Node's layout height
+}
+```
+
+### Example
+
+```tsx
+<box
+  width={200} height={100}
+  backgroundColor="#333"
+  cornerRadius={8}
+  onMouseDown={(e) => console.log(`pressed at ${e.nodeX}, ${e.nodeY}`)}
+  onMouseMove={(e) => console.log(`moving at ${e.nodeX}, ${e.nodeY}`)}
+  onMouseUp={(e) => console.log(`released at ${e.nodeX}, ${e.nodeY}`)}
+  onMouseOver={(e) => console.log("pointer entered")}
+  onMouseOut={(e) => console.log("pointer left")}
+>
+  <text color="#fff">Mouse events (no bubbling)</text>
+</box>
+```
+
+**Key difference from `onPress`:** `onPress` is high-level (bubbles up parent chain, fires on release-while-hovered). `onMouse*` events are low-level (per-node, no bubbling, fire on exact state transitions). Both work on any `<box>` — the element does NOT need to be `focusable`.
+
+---
+
+## Pointer Capture
+
+Like `Element.setPointerCapture()` in the DOM. When a node captures the pointer, ALL mouse events (`onMouseMove`, `onMouseUp`, etc.) route to it regardless of cursor position — essential for drag interactions.
+
+```typescript
+import { setPointerCapture, releasePointerCapture } from "tge"
+
+setPointerCapture(nodeId)     // Lock — all mouse events go to this node
+releasePointerCapture(nodeId) // Unlock — auto-released on button up
+```
+
+### Drag example
+
+```tsx
+import { setPointerCapture, releasePointerCapture } from "tge"
+import { createSignal } from "solid-js"
+
+function DraggableHandle(props: { nodeId: string }) {
+  const [dragging, setDragging] = createSignal(false)
+  const [offset, setOffset] = createSignal({ x: 0, y: 0 })
+
+  return (
+    <box
+      onMouseDown={(e) => {
+        setDragging(true)
+        setPointerCapture(props.nodeId)
+      }}
+      onMouseMove={(e) => {
+        if (dragging()) {
+          setOffset({ x: e.nodeX, y: e.nodeY })
+        }
+      }}
+      onMouseUp={(e) => {
+        setDragging(false)
+        releasePointerCapture(props.nodeId)
+      }}
+      backgroundColor={dragging() ? "#555" : "#333"}
+      cornerRadius={8}
+      padding={12}
+    >
+      <text color="#fff">Drag me</text>
+    </box>
+  )
+}
+```
+
+Pointer capture is auto-released on mouse button up, but you can also call `releasePointerCapture()` explicitly at any time.
+
+---
+
+## Hit-Area Expansion
+
+Interactive elements have a minimum hit-area of one terminal cell (`cellW x cellH`, typically 7x13 pixels). This ensures small elements (e.g., a 12px slider track or thin border) are still clickable.
+
+- Only affects hit-testing, NOT visual rendering
+- The element renders at its actual size — no visual change
+- Like mobile's 44px minimum touch target, but adapted for terminal cell size
+- Applies to all elements with `onPress`, `onMouseDown`, or other mouse handlers
+
+---
+
 ## Event Bubbling
 
 `onPress` events bubble up the parent chain, exactly like DOM click events. When an element is pressed, TGE walks up the tree from the pressed node to the root, calling `onPress` on each ancestor that has one.
@@ -331,6 +438,9 @@ function DebugInput() {
 | Reactive display of mouse state | `useMouse()` |
 | Per-element keyboard handling | `onKeyDown` prop |
 | Click/Enter interaction | `onPress` prop |
+| Drag interactions | `onMouseDown` + `onMouseMove` + `onMouseUp` + pointer capture |
+| Hover enter/leave effects | `onMouseOver` / `onMouseOut` |
+| Pointer lock during drag | `setPointerCapture(nodeId)` |
 | All events as a signal | `useInput()` |
 
 ---
@@ -350,11 +460,24 @@ Terminal stdin
             → Tab/Shift+Tab triggers focus cycling
             → Enter/Space creates PressEvent → onPress + bubble
           → Mouse system:
+            → feedPointer (fractional cell→pixel, edge queuing for fast clicks)
+              → updateInteractiveStates hit-tests all interactive nodes:
+                → onMouseOver/onMouseOut on hover enter/leave
+                → onMouseDown/onMouseUp on button press/release edges
+                → onMouseMove while hovered (or captured)
+                → Pointer capture overrides hit-test (captured node always receives events)
             → Hover detection → hoverStyle application
             → Click detection → activeStyle application
-            → Release-while-hovered → PressEvent → onPress + bubble
+            → Release-while-hovered → PressEvent → onPress + bubble (high-level)
             → Click on focusable → setFocus
 ```
+
+**Two event paths for mouse input:**
+
+| Path | Events | Bubbling | Use case |
+|------|--------|----------|----------|
+| High-level (onPress) | `onPress` | Yes — walks parent chain | Click actions, button presses |
+| Low-level (onMouse*) | `onMouseDown/Up/Move/Over/Out` | No — dispatched to target only | Drag, hover effects, slider scrub |
 
 ---
 
@@ -428,6 +551,47 @@ onInput((event) => {
 >
   <text color="#e0e0e0">Click or use arrows</text>
 </box>
+```
+
+### Drag with pointer capture
+
+```tsx
+import { setPointerCapture, releasePointerCapture } from "tge"
+import { createSignal } from "solid-js"
+
+function Slider(props: { value: number; onChange: (v: number) => void; nodeId: string }) {
+  const [dragging, setDragging] = createSignal(false)
+
+  return (
+    <box
+      width={200} height={12}
+      backgroundColor="#333"
+      cornerRadius={6}
+      onMouseDown={(e) => {
+        setDragging(true)
+        setPointerCapture(props.nodeId)
+        props.onChange(Math.round((e.nodeX / e.width) * 100))
+      }}
+      onMouseMove={(e) => {
+        if (dragging()) {
+          const ratio = Math.max(0, Math.min(1, e.nodeX / e.width))
+          props.onChange(Math.round(ratio * 100))
+        }
+      }}
+      onMouseUp={() => {
+        setDragging(false)
+        releasePointerCapture(props.nodeId)
+      }}
+    >
+      <box
+        width={`${props.value}%`}
+        height={12}
+        backgroundColor="#4488cc"
+        cornerRadius={6}
+      />
+    </box>
+  )
+}
 ```
 
 ---
