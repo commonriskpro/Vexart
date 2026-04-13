@@ -364,18 +364,26 @@ function TabBackdropFilters() {
       </SectionBox>
 
       {/* Opacity levels */}
-      <SectionBox title="ELEMENT OPACITY (0.2 / 0.5 / 0.8 / 1.0)">
-        <box direction="row" gap={space[3]}>
-          <box width={100} height={50} backgroundColor="#4488cc" cornerRadius={radius.md} opacity={0.2} alignX="center" alignY="center">
+      <SectionBox title="ELEMENT OPACITY (0.2 / 0.5 / 0.8 / 1.0) — over gradient background">
+        {/* Gradient background so opacity differences are clearly visible */}
+        <box
+          gradient={{ type: "linear", from: 0xff6b35ff, to: 0x00b4d8ff, angle: 0 }}
+          cornerRadius={radius.lg}
+          padding={space[4]}
+          direction="row"
+          gap={space[3]}
+          alignY="center"
+        >
+          <box width={100} height={50} backgroundColor="#1a1a2eff" cornerRadius={radius.md} opacity={0.2} alignX="center" alignY="center">
             <text color="#fff" fontSize={font.xs}>0.2</text>
           </box>
-          <box width={100} height={50} backgroundColor="#4488cc" cornerRadius={radius.md} opacity={0.5} alignX="center" alignY="center">
+          <box width={100} height={50} backgroundColor="#1a1a2eff" cornerRadius={radius.md} opacity={0.5} alignX="center" alignY="center">
             <text color="#fff" fontSize={font.xs}>0.5</text>
           </box>
-          <box width={100} height={50} backgroundColor="#4488cc" cornerRadius={radius.md} opacity={0.8} alignX="center" alignY="center">
+          <box width={100} height={50} backgroundColor="#1a1a2eff" cornerRadius={radius.md} opacity={0.8} alignX="center" alignY="center">
             <text color="#fff" fontSize={font.xs}>0.8</text>
           </box>
-          <box width={100} height={50} backgroundColor="#4488cc" cornerRadius={radius.md} opacity={1.0} alignX="center" alignY="center">
+          <box width={100} height={50} backgroundColor="#1a1a2eff" cornerRadius={radius.md} opacity={1.0} alignX="center" alignY="center">
             <text color="#fff" fontSize={font.xs}>1.0</text>
           </box>
         </box>
