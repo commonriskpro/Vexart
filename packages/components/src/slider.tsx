@@ -3,7 +3,7 @@
  *
  * CONTROLLED component — parent owns the value.
  * Focus-aware with keyboard control (Left/Right/Home/End).
- * Mouse-aware: click track to jump, drag to scrub.
+ * Mouse-aware: click track to jump, drag to scrub (via useDrag).
  *
  * Provides:
  *   - Value tracking within [min, max]
@@ -35,12 +35,12 @@
  */
 
 import type { JSX } from "solid-js"
-import { useFocus, setPointerCapture, type NodeMouseEvent, type NodeHandle } from "@tge/renderer"
+import { useFocus, useDrag, type NodeMouseEvent } from "@tge/renderer"
 
 // ── Types ──
 
 export type SliderTrackProps = {
-  ref: (handle: NodeHandle) => void
+  ref: (handle: any) => void
   onMouseDown: (evt: NodeMouseEvent) => void
   onMouseMove: (evt: NodeMouseEvent) => void
   onMouseUp: (evt: NodeMouseEvent) => void
@@ -100,37 +100,18 @@ export function Slider(props: SliderProps) {
     return Math.round(v / s) * s
   }
 
-  // ── Mouse drag state ──
-  let trackNodeId = 0
-  let isDragging = false
-
   /** Convert a mouse event's X position to a value within [min, max]. */
   function valueFromMouse(evt: NodeMouseEvent): number {
     const ratio = Math.max(0, Math.min(1, evt.nodeX / evt.width))
     return clamp(snap(min() + ratio * (max() - min())))
   }
 
-  function handleMouseDown(evt: NodeMouseEvent) {
-    if (disabled()) return
-    isDragging = true
-    props.onChange(valueFromMouse(evt))
-    // Capture pointer so drag continues even when cursor leaves the track
-    if (trackNodeId) setPointerCapture(trackNodeId)
-  }
-
-  function handleMouseMove(evt: NodeMouseEvent) {
-    if (!isDragging || disabled()) return
-    props.onChange(valueFromMouse(evt))
-  }
-
-  function handleMouseUp(_evt: NodeMouseEvent) {
-    isDragging = false
-  }
-
-  // ── Track ref ──
-  function handleRef(handle: NodeHandle) {
-    trackNodeId = handle.id
-  }
+  // ── Mouse drag via useDrag hook ──
+  const { dragging, dragProps } = useDrag({
+    onDragStart: (evt) => { props.onChange(valueFromMouse(evt)) },
+    onDrag: (evt) => { props.onChange(valueFromMouse(evt)) },
+    disabled,
+  })
 
   const { focused } = useFocus({
     id: props.focusId,
@@ -173,10 +154,7 @@ export function Slider(props: SliderProps) {
   }
 
   const trackProps: SliderTrackProps = {
-    ref: handleRef,
-    onMouseDown: handleMouseDown,
-    onMouseMove: handleMouseMove,
-    onMouseUp: handleMouseUp,
+    ...dragProps,
     focusable: true,
   }
 
@@ -189,7 +167,7 @@ export function Slider(props: SliderProps) {
     percentage: percentage(),
     focused: focused(),
     disabled: disabled(),
-    dragging: isDragging,
+    dragging: dragging(),
     trackProps,
   })}</>
 }

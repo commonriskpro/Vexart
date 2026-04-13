@@ -1,11 +1,12 @@
 /**
  * Button — truly headless interactive button.
  *
- * Focus-aware component with Enter/Space activation.
+ * Focus-aware component with Enter/Space and mouse click activation.
  *
  * This is a BEHAVIOR-ONLY component. It provides:
  *   - Focus management (useFocus)
  *   - Keyboard activation (Enter/Space)
+ *   - Mouse click activation (via buttonProps spread)
  *   - Pressed state tracking (100ms visual feedback)
  *
  * ALL visual styling is the consumer's responsibility via renderButton.
@@ -14,8 +15,8 @@
  * Usage:
  *   <Button
  *     onPress={() => save()}
- *     renderButton={({ focused, pressed, disabled }) => (
- *       <box backgroundColor={pressed ? "#333" : "#222"} padding={8} cornerRadius={6}>
+ *     renderButton={(ctx) => (
+ *       <box {...ctx.buttonProps} backgroundColor={ctx.pressed ? "#333" : "#222"} padding={8} cornerRadius={6}>
  *         <text color="#fff">Save</text>
  *       </box>
  *     )}
@@ -32,6 +33,11 @@ export type ButtonRenderContext = {
   focused: boolean
   pressed: boolean
   disabled: boolean
+  /** Spread on the root element for click + keyboard + focus handling. */
+  buttonProps: {
+    focusable: true
+    onPress: () => void
+  }
 }
 
 export type ButtonProps = {
@@ -61,12 +67,23 @@ export function Button(props: ButtonProps) {
     },
   })
 
+  function handlePress() {
+    if (disabled()) return
+    setPressed(true)
+    props.onPress?.()
+    setTimeout(() => setPressed(false), 100)
+  }
+
   return (
     <>
-      {props.renderButton({
+      {() => props.renderButton({
         focused: focused(),
         pressed: pressed(),
         disabled: disabled(),
+        buttonProps: {
+          focusable: true,
+          onPress: handlePress,
+        },
       })}
     </>
   )

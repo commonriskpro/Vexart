@@ -72,7 +72,7 @@ export function VoidTable(props: VoidTableProps) {
             ? themeColors.secondary
             : themeColors.card
         return (
-          <box direction="row" backgroundColor={bg} borderBottom={1} borderColor={themeColors.border}>
+          <box {...ctx.rowProps} direction="row" backgroundColor={bg} borderBottom={1} borderColor={themeColors.border}>
             {children}
           </box>
         )

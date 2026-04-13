@@ -106,6 +106,7 @@ export function Dialog(props: DialogProps) {
 /**
  * Semi-transparent backdrop behind the dialog content.
  * Headless = no default style. Pass backgroundColor/backdropBlur for visual effect.
+ * Click on overlay fires onClick (or Dialog's onClose if not specified).
  */
 function DialogOverlay(props: DialogOverlayProps) {
   return (
@@ -114,6 +115,7 @@ function DialogOverlay(props: DialogOverlayProps) {
       height="100%"
       backgroundColor={props.backgroundColor}
       backdropBlur={props.backdropBlur}
+      onPress={() => props.onClick?.()}
     >
       {props.children}
     </box>

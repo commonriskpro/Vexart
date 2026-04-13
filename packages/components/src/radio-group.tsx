@@ -53,6 +53,10 @@ export type RadioOptionContext = {
   disabled: boolean
   /** Index of this option. */
   index: number
+  /** Spread on the option element for click selection. */
+  optionProps: {
+    onPress: () => void
+  }
 }
 
 export type RadioGroupProps = {
@@ -116,11 +120,15 @@ export function RadioGroup(props: RadioGroupProps) {
 
   const children = () =>
     props.options.map((opt, i) => {
+      const isDisabled = disabled() || (opt.disabled ?? false)
       const ctx: RadioOptionContext = {
         selected: props.value === opt.value,
         focused: focused() && selectedIndex() === i,
-        disabled: disabled() || (opt.disabled ?? false),
+        disabled: isDisabled,
         index: i,
+        optionProps: {
+          onPress: () => { if (!isDisabled) props.onChange?.(opt.value) },
+        },
       }
       return props.renderOption(opt, ctx)
     })

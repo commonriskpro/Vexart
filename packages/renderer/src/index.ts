@@ -104,6 +104,14 @@ export type { PressEvent, NodeMouseEvent } from "./node"
 // Re-export pointer capture API
 export { setPointerCapture, releasePointerCapture } from "./pointer"
 
+// Re-export drag hook
+export { useDrag } from "./drag"
+export type { DragOptions, DragProps, DragState } from "./drag"
+
+// Re-export hover hook
+export { useHover } from "./hover"
+export type { HoverOptions, HoverProps, HoverState } from "./hover"
+
 // Re-export text layout system
 export { registerFont, getFont, clearTextCache } from "./text-layout"
 export type { FontDescriptor } from "./text-layout"

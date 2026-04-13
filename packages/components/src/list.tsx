@@ -35,6 +35,10 @@ export type ListItemContext = {
   selected: boolean
   focused: boolean
   index: number
+  /** Spread on the item element for click selection. */
+  itemProps: {
+    onPress: () => void
+  }
 }
 
 export type ListProps = {
@@ -74,6 +78,13 @@ export function List(props: ListProps) {
         selected: props.selectedIndex === i,
         focused: focused(),
         index: i,
+        itemProps: {
+          onPress: () => {
+            if (disabled()) return
+            props.onSelectedChange?.(i)
+            props.onSelect?.(i)
+          },
+        },
       }
       return props.renderItem(item, ctx)
     })

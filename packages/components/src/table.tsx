@@ -44,6 +44,10 @@ export type TableCellContext = {
   selected: boolean
   focused: boolean
   rowIndex: number
+  /** Spread on the row element for click selection. */
+  rowProps: {
+    onPress: () => void
+  }
 }
 
 export type TableProps = {
@@ -121,6 +125,13 @@ export function Table(props: TableProps) {
             selected: props.selectedRow === i,
             focused: focused(),
             rowIndex: i,
+            rowProps: {
+              onPress: () => {
+                if (disabled()) return
+                props.onSelectedRowChange?.(i)
+                props.onRowSelect?.(i, row)
+              },
+            },
           }
 
           const cells = (

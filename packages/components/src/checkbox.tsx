@@ -35,6 +35,11 @@ export type CheckboxRenderContext = {
   checked: boolean
   focused: boolean
   disabled: boolean
+  /** Spread on the root element for click toggle + keyboard + focus. */
+  toggleProps: {
+    focusable: true
+    onPress: () => void
+  }
 }
 
 export type CheckboxProps = {
@@ -63,12 +68,21 @@ export function Checkbox(props: CheckboxProps) {
     },
   })
 
+  function handleToggle() {
+    if (disabled()) return
+    props.onChange?.(!props.checked)
+  }
+
   return (
     <>
-      {props.renderCheckbox({
+      {() => props.renderCheckbox({
         checked: props.checked,
         focused: focused(),
         disabled: disabled(),
+        toggleProps: {
+          focusable: true,
+          onPress: handleToggle,
+        },
       })}
     </>
   )

@@ -43,6 +43,10 @@ export type TabRenderContext = {
   active: boolean
   focused: boolean
   index: number
+  /** Spread on the tab header element for click-to-switch. */
+  tabProps: {
+    onPress: () => void
+  }
 }
 
 export type TabsProps = {
@@ -85,6 +89,9 @@ export function Tabs(props: TabsProps) {
         active: props.activeTab === i,
         focused: focused(),
         index: i,
+        tabProps: {
+          onPress: () => props.onTabChange?.(i),
+        },
       }
       return props.renderTab(tab, ctx)
     })

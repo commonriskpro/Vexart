@@ -46,7 +46,7 @@ export function VoidSwitch(props: VoidSwitchProps) {
           : THUMB_OFFSET
 
         return (
-          <box direction="row" gap={space[2]} alignY="center">
+          <box {...ctx.toggleProps} direction="row" gap={space[2]} alignY="center">
             <box
               width={TRACK_WIDTH}
               height={TRACK_HEIGHT}

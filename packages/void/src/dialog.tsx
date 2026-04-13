@@ -57,6 +57,7 @@ export function VoidDialog(props: VoidDialogProps) {
       <Dialog.Overlay
         backgroundColor="#000000aa"
         backdropBlur={8}
+        onClick={props.onClose}
       />
       <Dialog.Content
         width={props.width ?? 320}
