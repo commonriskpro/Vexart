@@ -852,7 +852,7 @@ function TabDataVirtual() {
                 height={28}
                 direction="row" gap={space[3]}
                 paddingX={space[3]} alignY="center"
-                backgroundColor={ctx.selected ? "#1a2a3a" : ctx.highlighted ? themeColors.accent : themeColors.background}
+                backgroundColor={ctx.selected ? "#1a2a3a" : ctx.highlighted ? themeColors.accent : ctx.hovered ? themeColors.secondary : themeColors.background}
               >
                 <text color={themeColors.mutedForeground} fontSize={10}>{String(index + 1).padStart(4, " ")}</text>
                 <text color={ctx.selected ? "#4fc4d4" : themeColors.foreground} fontSize={font.xs}>{item.name}</text>

@@ -42,11 +42,15 @@ export type VirtualListItemContext = {
   selected: boolean
   /** Whether this item is highlighted via keyboard. */
   highlighted: boolean
+  /** Whether the mouse is hovering this item. */
+  hovered: boolean
   /** Absolute index in the full list. */
   index: number
-  /** Spread on the item element for click selection. */
+  /** Spread on the item element for click + hover interaction. */
   itemProps: {
     onPress: () => void
+    onMouseOver: () => void
+    onMouseOut: () => void
   }
 }
 
@@ -76,6 +80,7 @@ export type VirtualListProps<T> = {
 export function VirtualList<T>(props: VirtualListProps<T>) {
   const [scrollTick, setScrollTick] = createSignal(0)
   const [highlightedIndex, setHighlightedIndex] = createSignal(props.selectedIndex ?? -1)
+  const [hoveredIndex, setHoveredIndex] = createSignal(-1)
 
   const overscan = () => props.overscan ?? 5
   const totalHeight = () => props.items.length * props.itemHeight
@@ -192,12 +197,15 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
             const ctx: VirtualListItemContext = {
               selected: props.selectedIndex === index,
               highlighted: highlightedIndex() === index,
+              hovered: hoveredIndex() === index,
               index,
               itemProps: {
                 onPress: () => {
                   setHighlightedIndex(index)
                   props.onSelect?.(index)
                 },
+                onMouseOver: () => setHoveredIndex(index),
+                onMouseOut: () => { if (hoveredIndex() === index) setHoveredIndex(-1) },
               },
             }
             return props.renderItem(item, index, ctx)
