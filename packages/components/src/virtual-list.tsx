@@ -1,15 +1,15 @@
 /**
  * VirtualList — virtualized list that only renders visible items.
  *
- * For lists with thousands of items. Only items within the visible
- * viewport + overscan are rendered. Scroll position determines which
- * items to mount.
+ * Architecture inspired by TanStack Virtual:
+ *   1. Outer container: fixed height, Clay scroll clipping (scrollY)
+ *   2. Inner structure: topPad spacer + visible items + bottomPad spacer
+ *      (total = items.length * itemHeight — Clay sees the full height)
+ *   3. Clay handles ALL scroll natively (mouse wheel, touch)
+ *   4. We READ Clay's scroll offset to calculate which items to render
+ *   5. A reactive tick signal forces SolidJS to re-evaluate on scroll
  *
  * Uses fixed item height for O(1) scroll calculations.
- * The container uses Clay scroll clipping. Mouse scroll is intercepted
- * to update both Clay and internal scroll position synchronously.
- *
- * ALL visual styling is the consumer's responsibility.
  *
  * Usage:
  *   <VirtualList
@@ -27,7 +27,7 @@
 
 import { createSignal, For, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import { useFocus, onInput, createScrollHandle } from "@tge/renderer"
+import { useFocus, onInput, createScrollHandle, markDirty } from "@tge/renderer"
 
 // ── Types ──
 
@@ -64,7 +64,9 @@ export type VirtualListProps<T> = {
 }
 
 export function VirtualList<T>(props: VirtualListProps<T>) {
-  const [scrollTop, setScrollTop] = createSignal(0)
+  // Reactive scroll position — updated from Clay's scroll data.
+  // This is the SINGLE source of truth for which items to render.
+  const [scrollPos, setScrollPos] = createSignal(0)
   const [highlightedIndex, setHighlightedIndex] = createSignal(props.selectedIndex ?? -1)
 
   const overscan = () => props.overscan ?? 3
@@ -75,13 +77,20 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   const scrollId = `vlist-${Math.random().toString(36).slice(2, 8)}`
   const scrollHandle = createScrollHandle(scrollId)
 
-  // Calculate visible range from scrollTop
+  // Sync scroll position from Clay → our signal.
+  // Called on every scroll event (mouse or programmatic).
+  function syncFromClay() {
+    const pos = scrollHandle.scrollTop
+    setScrollPos(pos)
+  }
+
+  // Calculate visible range from scroll position
   const startIndex = () => {
-    const raw = Math.floor(scrollTop() / props.itemHeight)
+    const raw = Math.floor(scrollPos() / props.itemHeight)
     return Math.max(0, raw - overscan())
   }
   const endIndex = () => {
-    const raw = Math.floor(scrollTop() / props.itemHeight) + viewportItems()
+    const raw = Math.floor(scrollPos() / props.itemHeight) + viewportItems()
     return Math.min(props.items.length, raw + overscan())
   }
 
@@ -96,26 +105,19 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     return result
   }
 
-  // Scroll the highlight into view
-  const scrollToIndex = (index: number) => {
+  // Scroll the highlight into view (programmatic — keyboard nav)
+  function scrollToIndex(index: number) {
     const itemTop = index * props.itemHeight
     const itemBottom = itemTop + props.itemHeight
-    const viewTop = scrollTop()
+    const viewTop = scrollPos()
     const viewBottom = viewTop + props.height
 
     if (itemTop < viewTop) {
-      updateScroll(itemTop)
+      scrollHandle.scrollTo(-itemTop)
     } else if (itemBottom > viewBottom) {
-      updateScroll(itemBottom - props.height)
+      scrollHandle.scrollTo(-(itemBottom - props.height))
     }
-  }
-
-  // Set scroll position — updates both our signal and Clay's scroll offset
-  function updateScroll(newTop: number) {
-    const clamped = Math.max(0, Math.min(newTop, totalHeight() - props.height))
-    setScrollTop(clamped)
-    // Sync Clay's scroll position (Clay uses negative Y for scrolling down)
-    scrollHandle.scrollTo(-clamped)
+    syncFromClay()
   }
 
   // Keyboard navigation
@@ -150,7 +152,8 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
         }
         if (e.key === "home") {
           setHighlightedIndex(0)
-          updateScroll(0)
+          scrollHandle.scrollTo(0)
+          syncFromClay()
           return
         }
         if (e.key === "end") {
@@ -170,17 +173,13 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     })
   }
 
-  // Mouse scroll — intercept when hovered to sync VirtualList + Clay.
-  // Clay handles the visual scroll clipping. We intercept to also update
-  // our scrollTop signal so the virtual window recalculates.
-  let isHovered = false
-
+  // Listen for scroll events. Clay processes the scroll first (feedScroll
+  // in the render loop), then we read the new offset from Clay.
+  // setTimeout(0) ensures Clay has processed the scroll delta before we read.
   const unsubScroll = onInput((event) => {
-    if (event.type !== "mouse" || event.action !== "scroll") return
-    if (!isHovered) return
-    const lineH = props.itemHeight
-    const dy = event.button === 64 ? -lineH : lineH
-    updateScroll(scrollTop() + dy)
+    if (event.type === "mouse" && event.action === "scroll") {
+      setTimeout(syncFromClay, 0)
+    }
   })
   onCleanup(() => unsubScroll())
 
@@ -193,9 +192,6 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
       width={props.width ?? "grow"}
       scrollY
       scrollId={scrollId}
-      backgroundColor="#00000000"
-      onMouseOver={() => { isHovered = true }}
-      onMouseOut={() => { isHovered = false }}
     >
       {/* Top spacer — represents items above the viewport */}
       <box height={topPad()} />
