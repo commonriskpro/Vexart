@@ -130,3 +130,18 @@ export function CardFooter(props: CardFooterProps) {
     </box>
   )
 }
+
+// ── CardAction ──
+// Positioned top-right, for buttons or icon actions on the card header.
+
+export interface CardActionProps {
+  children?: any
+}
+
+export function CardAction(props: CardActionProps) {
+  return (
+    <box alignX="right" alignY="top">
+      {props.children}
+    </box>
+  )
+}

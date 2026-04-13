@@ -64,11 +64,13 @@ export const colors = {
 
   // Borders + separators — white with alpha for OLED
   border:               "#ffffff25",       // ~14.5% white
-  // Form control borders — slightly brighter
-  input:                "#ffffff26",       // ~15% white
+  // Form control borders — more visible than layout borders
+  input:                "#ffffff40",       // ~25% white — clearly visible on inputs
 
   // Focus rings
   ring:                 "#737373",
+  // Subtle ring for focus-visible glow effect (50% opacity equivalent)
+  ringSubtle:           "#73737380",
 
   // Transparent
   transparent:          "#00000000",
@@ -135,7 +137,10 @@ export const weight = {
 
 type Shadow = { x: number; y: number; blur: number; color: number }
 
-export const shadows: Record<"sm" | "md" | "lg" | "xl", Shadow[]> = {
+export const shadows: Record<"xs" | "sm" | "md" | "lg" | "xl", Shadow[]> = {
+  xs:  [
+    { x: 0, y: 1, blur: 2, color: hexToU32(alphaHex("#000000", 0.3)) },
+  ],
   sm:  [
     { x: 0, y: 1, blur: 3, color: hexToU32(alphaHex("#000000", 0.4)) },
     { x: 0, y: 1, blur: 2, color: hexToU32(alphaHex("#000000", 0.3)) },
@@ -154,6 +159,17 @@ export const shadows: Record<"sm" | "md" | "lg" | "xl", Shadow[]> = {
   ],
 }
 
+// ── Glow presets — for focus rings on interactive elements ──
+// Used as `glow` prop on focused boxes to simulate focus-visible:ring.
+
+type Glow = { radius: number; color: number; intensity?: number }
+
+export const glows: Record<"ring" | "destructive" | "success", Glow> = {
+  ring:        { radius: 6, color: hexToU32(alphaHex("#737373", 0.5)), intensity: 40 },
+  destructive: { radius: 6, color: hexToU32(alphaHex("#dc2626", 0.5)), intensity: 40 },
+  success:     { radius: 6, color: hexToU32(alphaHex("#22c55e", 0.5)), intensity: 40 },
+}
+
 // ── Composite theme export ──
 
 export const theme = {
@@ -163,6 +179,7 @@ export const theme = {
   font,
   weight,
   shadows,
+  glows,
 } as const
 
 export type VoidTheme = typeof theme

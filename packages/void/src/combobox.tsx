@@ -18,7 +18,7 @@
 
 import { Combobox } from "@tge/components"
 import type { ComboboxOption, ComboboxInputContext, ComboboxOptionContext } from "@tge/components"
-import { radius, space, font, weight, shadows } from "./tokens"
+import { radius, space, font, shadows, glows } from "./tokens"
 import { themeColors } from "./theme"
 
 export type VoidComboboxProps = {
@@ -47,52 +47,64 @@ export function VoidCombobox(props: VoidComboboxProps) {
           direction="row"
           alignY="center"
           width={props.width}
-          padding={space[1]}
-          paddingX={space[2]}
-          backgroundColor={ctx.disabled ? themeColors.muted : themeColors.card}
+          height={36}
+          paddingLeft={space[3]}
+          paddingRight={space[2]}
+          backgroundColor={ctx.disabled ? themeColors.muted : themeColors.transparent}
           cornerRadius={radius.md}
-          borderColor={ctx.focused ? themeColors.ring : ctx.disabled ? themeColors.muted : themeColors.input}
-          borderWidth={ctx.focused ? 2 : 1}
-          gap={space[1]}
+          borderColor={ctx.focused ? themeColors.ring : themeColors.input}
+          borderWidth={1}
+          gap={space[2]}
+          shadow={shadows.xs}
+          focusStyle={{
+            borderColor: themeColors.ring,
+            borderWidth: 1,
+            glow: glows.ring,
+          }}
         >
           <box width="grow">
             <text
               color={
                 ctx.disabled ? themeColors.mutedForeground
-                  : (ctx.inputValue && ctx.inputValue !== ctx.selectedLabel) ? themeColors.foreground
-                  : ctx.selectedLabel ? themeColors.foreground
+                  : ctx.inputValue ? themeColors.foreground
                   : themeColors.mutedForeground
               }
               fontSize={font.sm}
             >
-              {ctx.inputValue || ctx.placeholder}
+              {ctx.inputValue || ctx.placeholder || "Search…"}
             </text>
           </box>
           <text color={themeColors.mutedForeground} fontSize={font.xs}>
-            {ctx.open ? "▲" : "▼"}
+            {ctx.open ? "⌃" : "⌄"}
           </text>
         </box>
       )}
       renderOption={(opt: ComboboxOption, ctx: ComboboxOptionContext) => (
         <box
+          direction="row"
+          alignY="center"
+          gap={space[2]}
+          paddingTop={space[1.5]}
+          paddingBottom={space[1.5]}
+          paddingLeft={space[2]}
+          paddingRight={space[2]}
           backgroundColor={
-            ctx.highlighted ? themeColors.accent
-              : ctx.selected ? themeColors.secondary
-              : themeColors.popover
+            ctx.highlighted ? themeColors.accent : themeColors.transparent
           }
-          padding={space[1]}
-          paddingX={space[2]}
+          cornerRadius={radius.sm}
+          hoverStyle={{ backgroundColor: themeColors.accent }}
         >
-          <text
-            color={
-              ctx.disabled ? themeColors.mutedForeground
-                : ctx.selected ? themeColors.primary
-                : themeColors.foreground
-            }
-            fontSize={font.sm}
-          >
-            {opt.label}
-          </text>
+          <box width="grow">
+            <text
+              color={ctx.disabled ? themeColors.mutedForeground : themeColors.foreground}
+              fontSize={font.sm}
+            >
+              {opt.label}
+            </text>
+          </box>
+          {ctx.selected ? (
+            <text color={themeColors.foreground} fontSize={font.xs}>✓</text>
+          ) : null}
         </box>
       )}
       renderContent={(children) => (
@@ -102,10 +114,9 @@ export function VoidCombobox(props: VoidComboboxProps) {
           cornerRadius={radius.md}
           borderColor={themeColors.border}
           borderWidth={1}
-          paddingTop={space[0.5]}
-          paddingBottom={space[0.5]}
+          padding={space[0.5]}
           shadow={shadows.md}
-          maxHeight={200}
+          maxHeight={240}
           scrollY
         >
           {children}

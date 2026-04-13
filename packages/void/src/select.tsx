@@ -18,7 +18,7 @@
 
 import { Select } from "@tge/components"
 import type { SelectOption, SelectTriggerContext, SelectOptionContext } from "@tge/components"
-import { radius, space, font, weight, shadows } from "./tokens"
+import { radius, space, font, shadows, glows } from "./tokens"
 import { themeColors } from "./theme"
 
 export type VoidSelectProps = {
@@ -46,41 +46,68 @@ export function VoidSelect(props: VoidSelectProps) {
           <box
             direction="row"
             alignY="center"
-            padding={space[1]}
-            paddingX={space[2]}
-            backgroundColor={ctx.disabled ? themeColors.muted : themeColors.card}
+            height={36}
+            width={props.width}
+            paddingLeft={space[3]}
+            paddingRight={space[2]}
+            backgroundColor={ctx.disabled ? themeColors.muted : themeColors.transparent}
             cornerRadius={radius.md}
-            borderColor={ctx.focused ? themeColors.ring : ctx.disabled ? themeColors.muted : themeColors.input}
-            borderWidth={ctx.focused ? 2 : 1}
-            gap={space[1]}
+            borderColor={ctx.focused ? themeColors.ring : themeColors.input}
+            borderWidth={1}
+            gap={space[2]}
+            shadow={shadows.xs}
+            focusStyle={{
+              borderColor: themeColors.ring,
+              borderWidth: 1,
+              glow: glows.ring,
+            }}
+          >
+            <box width="grow">
+              <text
+                color={
+                  ctx.disabled ? themeColors.mutedForeground
+                    : ctx.selectedLabel ? themeColors.foreground
+                    : themeColors.mutedForeground
+                }
+                fontSize={font.sm}
+              >
+                {ctx.selectedLabel || ctx.placeholder || "Select…"}
+              </text>
+            </box>
+            {/* Chevron */}
+            <text color={themeColors.mutedForeground} fontSize={font.xs}>
+              {ctx.open ? "⌃" : "⌄"}
+            </text>
+          </box>
+        )}
+        renderOption={(opt: SelectOption, ctx: SelectOptionContext) => (
+          <box
+            direction="row"
+            alignY="center"
+            gap={space[2]}
+            paddingTop={space[1.5]}
+            paddingBottom={space[1.5]}
+            paddingLeft={space[2]}
+            paddingRight={space[2]}
+            backgroundColor={
+              ctx.highlighted ? themeColors.accent
+                : themeColors.transparent
+            }
+            cornerRadius={radius.sm}
+            hoverStyle={{ backgroundColor: themeColors.accent }}
           >
             <box width="grow">
               <text
                 color={ctx.disabled ? themeColors.mutedForeground : themeColors.foreground}
                 fontSize={font.sm}
               >
-                {ctx.selectedLabel || ctx.placeholder}
+                {opt.label}
               </text>
             </box>
-            <text color={themeColors.mutedForeground} fontSize={font.xs}>
-              {ctx.open ? "▲" : "▼"}
-            </text>
-          </box>
-        )}
-        renderOption={(opt: SelectOption, ctx: SelectOptionContext) => (
-          <box
-            backgroundColor={
-              ctx.highlighted ? themeColors.accent : ctx.selected ? themeColors.secondary : themeColors.card
-            }
-            padding={space[1]}
-            paddingX={space[2]}
-          >
-            <text
-              color={ctx.disabled ? themeColors.mutedForeground : ctx.selected ? themeColors.primary : themeColors.foreground}
-              fontSize={font.sm}
-            >
-              {opt.label}
-            </text>
+            {/* Check indicator */}
+            {ctx.selected ? (
+              <text color={themeColors.foreground} fontSize={font.xs}>✓</text>
+            ) : null}
           </box>
         )}
         renderContent={(children) => (
@@ -90,9 +117,10 @@ export function VoidSelect(props: VoidSelectProps) {
             cornerRadius={radius.md}
             borderColor={themeColors.border}
             borderWidth={1}
-            paddingTop={space[0.5]}
-            paddingBottom={space[0.5]}
+            padding={space[0.5]}
             shadow={shadows.md}
+            maxHeight={240}
+            scrollY
           >
             {children}
           </box>
