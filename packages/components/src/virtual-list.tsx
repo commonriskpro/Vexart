@@ -179,6 +179,7 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
       width={props.width ?? "grow"}
       scrollY
       scrollId={scrollId}
+
     >
       <For each={visibleItems()}>
         {({ item, index }) => {
