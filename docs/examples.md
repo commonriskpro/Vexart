@@ -610,7 +610,7 @@ mount(UserManager, terminal)
 
 ## Virtualized List
 
-Render 10,000 items with no performance hit:
+Render 10,000 items with no performance hit. Mouse hover highlights items, click to select:
 
 ```tsx
 import { mount } from "@tge/renderer"
@@ -654,7 +654,7 @@ function BigList() {
             gap={space[3]}
             paddingX={space[3]}
             alignY="center"
-            backgroundColor={ctx.selected ? "#252535" : ctx.highlighted ? "#1e1e2e" : "transparent"}
+            backgroundColor={ctx.selected ? "#252535" : ctx.highlighted ? "#1e1e2e" : ctx.hovered ? "#1a1a2a" : colors.background}
           >
             <text color={colors.mutedForeground} fontSize={11}>{index + 1}</text>
             <text color={ctx.selected ? colors.foreground : colors.mutedForeground}>{item.name}</text>
