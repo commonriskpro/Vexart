@@ -85,15 +85,12 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     return scrollHandle.scrollTop
   }
 
-  // Calculate visible range from scroll position
-  const startIndex = () => {
-    const raw = Math.floor(scrollPos() / props.itemHeight)
-    return Math.max(0, raw - overscan())
-  }
-  const endIndex = () => {
-    const raw = Math.floor(scrollPos() / props.itemHeight) + viewportItems()
-    return Math.min(props.items.length, raw + overscan())
-  }
+  // Raw index from scroll position (no overscan — for topPad calculation)
+  const rawStartIndex = () => Math.floor(scrollPos() / props.itemHeight)
+
+  // Calculate visible range from scroll position (with overscan)
+  const startIndex = () => Math.max(0, rawStartIndex() - overscan())
+  const endIndex = () => Math.min(props.items.length, rawStartIndex() + viewportItems() + overscan())
 
   // Visible items slice
   const visibleItems = () => {
@@ -182,7 +179,9 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   })
   onCleanup(() => unsubPostScroll())
 
-  // Top spacer to offset content for items above viewport
+  // Top spacer to offset content for items above viewport.
+  // Must use startIndex (with overscan) so overscan items above the viewport
+  // are positioned correctly and Clay clips them.
   const topPad = () => startIndex() * props.itemHeight
 
   return (
