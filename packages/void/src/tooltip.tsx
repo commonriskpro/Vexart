@@ -1,0 +1,59 @@
+/**
+ * Tooltip — styled tooltip using Void design tokens.
+ *
+ * Built on top of the headless @tge/components Tooltip.
+ * Shows a small text label on hover with configurable delay.
+ *
+ * Usage:
+ *   <VoidTooltip content="Save your work">
+ *     <Button>Save</Button>
+ *   </VoidTooltip>
+ */
+
+import { Tooltip } from "@tge/components"
+import { radius, space, font, shadows } from "./tokens"
+import { themeColors } from "./theme"
+import type { JSX } from "solid-js"
+
+export type VoidTooltipProps = {
+  content: string
+  children: JSX.Element
+  showDelay?: number
+  hideDelay?: number
+  disabled?: boolean
+  placement?: "top" | "bottom" | "left" | "right"
+  offset?: number
+}
+
+export function VoidTooltip(props: VoidTooltipProps) {
+  return (
+    <Tooltip
+      content={props.content}
+      showDelay={props.showDelay ?? 500}
+      hideDelay={props.hideDelay}
+      disabled={props.disabled}
+      placement={props.placement}
+      offset={props.offset}
+      renderTooltip={(content) => (
+        <box
+          backgroundColor={themeColors.popover}
+          cornerRadius={radius.md}
+          padding={space[1.5]}
+          paddingX={space[2]}
+          borderColor={themeColors.border}
+          borderWidth={1}
+          shadow={shadows.sm}
+        >
+          <text
+            color={themeColors.popoverForeground}
+            fontSize={font.xs}
+          >
+            {content}
+          </text>
+        </box>
+      )}
+    >
+      {props.children}
+    </Tooltip>
+  )
+}

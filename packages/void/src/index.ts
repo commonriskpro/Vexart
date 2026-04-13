@@ -59,3 +59,19 @@ export type { VoidToasterOptions } from "./toast"
 // ── Table ──
 export { VoidTable } from "./table"
 export type { VoidTableProps } from "./table"
+
+// ── Slider ──
+export { VoidSlider } from "./slider"
+export type { VoidSliderProps } from "./slider"
+
+// ── Combobox ──
+export { VoidCombobox } from "./combobox"
+export type { VoidComboboxProps } from "./combobox"
+
+// ── Tooltip ──
+export { VoidTooltip } from "./tooltip"
+export type { VoidTooltipProps } from "./tooltip"
+
+// ── Popover ──
+export { VoidPopover } from "./popover"
+export type { VoidPopoverProps } from "./popover"

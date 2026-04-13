@@ -44,6 +44,10 @@ import {
   Separator,
   Avatar,
   Skeleton,
+  VoidSlider,
+  VoidCombobox,
+  VoidTooltip,
+  VoidPopover,
   H2, H3, H4, P, Small, Muted,
   colors, themeColors, radius, space, font, weight, shadows,
   darkTheme, lightTheme, setTheme,
@@ -861,6 +865,83 @@ function TabDataVirtual() {
 // Validates: all void components, dark/light theme, themeColors reactivity
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+// ── Void Phase 3 demo helpers ──
+
+function VoidSliderDemo() {
+  const [volume, setVolume] = createSignal(65)
+  const [brightness, setBrightness] = createSignal(80)
+
+  return (
+    <box direction="column" gap={space[3]} width={300}>
+      <box direction="column" gap={space[1]}>
+        <text color={themeColors.foreground} fontSize={font.sm}>Volume</text>
+        <VoidSlider value={volume()} onChange={setVolume} min={0} max={100} />
+      </box>
+      <box direction="column" gap={space[1]}>
+        <text color={themeColors.foreground} fontSize={font.sm}>Brightness</text>
+        <VoidSlider value={brightness()} onChange={setBrightness} min={0} max={100} step={5} />
+      </box>
+    </box>
+  )
+}
+
+function VoidComboboxDemo() {
+  const [fruit, setFruit] = createSignal("")
+
+  const fruits = [
+    { value: "apple", label: "Apple" },
+    { value: "banana", label: "Banana" },
+    { value: "cherry", label: "Cherry" },
+    { value: "grape", label: "Grape" },
+    { value: "mango", label: "Mango" },
+    { value: "orange", label: "Orange" },
+    { value: "pear", label: "Pear" },
+    { value: "strawberry", label: "Strawberry" },
+  ]
+
+  return (
+    <box direction="column" gap={space[2]} width={250}>
+      <VoidCombobox
+        value={fruit()}
+        onChange={setFruit}
+        options={fruits}
+        placeholder="Search fruit..."
+      />
+      <Show when={fruit()}>
+        <text color="#4fc4d4" fontSize={font.xs}>Selected: {fruit()}</text>
+      </Show>
+    </box>
+  )
+}
+
+function VoidPopoverDemo() {
+  const [open, setOpen] = createSignal(false)
+
+  return (
+    <box direction="row" gap={space[3]} alignY="center">
+      <VoidPopover
+        open={open()}
+        onOpenChange={setOpen}
+        trigger={
+          <box focusable onPress={() => setOpen(!open())} backgroundColor={themeColors.card} cornerRadius={radius.md} padding={space[2]} paddingX={space[3]} hoverStyle={{ backgroundColor: themeColors.accent }} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }}>
+            <text color={themeColors.foreground} fontSize={font.sm}>{open() ? "Close" : "Open"} Popover</text>
+          </box>
+        }
+        width={200}
+      >
+        <box direction="column" gap={space[2]}>
+          <text color={themeColors.foreground} fontSize={font.sm} fontWeight={weight.medium}>Settings</text>
+          <Separator />
+          <text color={themeColors.mutedForeground} fontSize={font.xs}>Option 1</text>
+          <text color={themeColors.mutedForeground} fontSize={font.xs}>Option 2</text>
+          <text color={themeColors.mutedForeground} fontSize={font.xs}>Option 3</text>
+        </box>
+      </VoidPopover>
+      <text color={themeColors.mutedForeground} fontSize={font.xs}>Popover is {open() ? "open" : "closed"}</text>
+    </box>
+  )
+}
+
 function TabVoidTheme() {
   const [isDark, setIsDark] = createSignal(true)
   const [clickedBtn, setClickedBtn] = createSignal("")
@@ -985,6 +1066,37 @@ function TabVoidTheme() {
           <Small>Small — Caption (12px)</Small>
           <Muted>Muted — Helper text</Muted>
         </box>
+      </SectionBox>
+
+      {/* Void Slider */}
+      <SectionBox title="VOID SLIDER (keyboard: Left/Right/Home/End)">
+        <VoidSliderDemo />
+      </SectionBox>
+
+      {/* Void Combobox */}
+      <SectionBox title="VOID COMBOBOX (type to filter, Up/Down/Enter)">
+        <VoidComboboxDemo />
+      </SectionBox>
+
+      {/* Void Tooltip */}
+      <SectionBox title="VOID TOOLTIP (hover to show, 500ms delay)">
+        <box direction="row" gap={space[3]}>
+          <VoidTooltip content="Save your current work">
+            <box focusable backgroundColor={themeColors.card} cornerRadius={radius.md} padding={space[2]} paddingX={space[3]} hoverStyle={{ backgroundColor: themeColors.accent }} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }}>
+              <text color={themeColors.foreground} fontSize={font.sm}>Hover me (Save)</text>
+            </box>
+          </VoidTooltip>
+          <VoidTooltip content="Delete permanently — cannot be undone">
+            <box focusable backgroundColor={themeColors.card} cornerRadius={radius.md} padding={space[2]} paddingX={space[3]} hoverStyle={{ backgroundColor: themeColors.accent }} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }}>
+              <text color={themeColors.foreground} fontSize={font.sm}>Hover me (Delete)</text>
+            </box>
+          </VoidTooltip>
+        </box>
+      </SectionBox>
+
+      {/* Void Popover */}
+      <SectionBox title="VOID POPOVER (click trigger to open)">
+        <VoidPopoverDemo />
       </SectionBox>
     </box>
   )
