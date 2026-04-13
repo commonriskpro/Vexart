@@ -323,9 +323,17 @@ export fn tge_draw_text_font(data: [*]u8, width: u32, height: u32, text_ptr: [*]
     const last_cp: u32 = 126;
 
     var cx: i32 = x;
-    var i: u32 = 0;
-    while (i < text_len) : (i += 1) {
-        const cp: u32 = text_ptr[i];
+    var pos: u32 = 0;
+    while (pos < text_len) {
+        // Decode UTF-8 codepoint
+        const decoded = text_mod.decodeUtf8(text_ptr, text_len, pos) orelse {
+            pos += 1; // skip invalid byte
+            continue;
+        };
+        const cp = decoded.cp;
+        pos += decoded.size;
+
+        // Runtime fonts only cover ASCII 32-126
         if (cp < first_cp or cp > last_cp) {
             // Skip non-printable, advance by cell width
             cx += @intCast(cw);
@@ -337,9 +345,7 @@ export fn tge_draw_text_font(data: [*]u8, width: u32, height: u32, text_ptr: [*]
 
         // Render glyph from runtime atlas
         for (0..ch) |row_idx| {
-            const py = cx + @as(i32, @intCast(row_idx));
-            _ = py;
-            const draw_y = @as(i32, @intCast(row_idx)) + (y);
+            const draw_y = @as(i32, @intCast(row_idx)) + y;
             if (draw_y < 0) continue;
             if (draw_y >= @as(i32, @intCast(buf.height))) break;
 
