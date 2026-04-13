@@ -373,7 +373,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     // Assign Clay element ID for:
     // 1. Scroll containers — for scroll offset tracking
     // 2. Interactive nodes — for reliable layout readback (hit-testing)
-    const isInteractive = node.props.focusable || node.props.hoverStyle || node.props.activeStyle || node.props.focusStyle || node.props.onPress
+    const hasMouseProps = node.props.onMouseDown || node.props.onMouseUp || node.props.onMouseMove || node.props.onMouseOver || node.props.onMouseOut
+    const isInteractive = node.props.focusable || node.props.hoverStyle || node.props.activeStyle || node.props.focusStyle || node.props.onPress || hasMouseProps
     if (node.props.scrollX || node.props.scrollY) {
       const sid = node.props.scrollId ?? `tge-scroll-${scrollIdCounter++}`
       clay.setId(sid)
@@ -955,7 +956,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     // Write layout for interactive nodes via Clay element ID lookup.
     // This is reliable regardless of RECT command ordering/clipping.
     for (const node of boxNodes) {
-      const isInteractive = node.props.focusable || node.props.hoverStyle || node.props.activeStyle || node.props.focusStyle || node.props.onPress
+      const hasMouseProps = node.props.onMouseDown || node.props.onMouseUp || node.props.onMouseMove || node.props.onMouseOver || node.props.onMouseOut
+      const isInteractive = node.props.focusable || node.props.hoverStyle || node.props.activeStyle || node.props.focusStyle || node.props.onPress || hasMouseProps
       if (!isInteractive) continue
       const data = clay.getElementData(`tge-node-${node.id}`)
       if (data.found) {

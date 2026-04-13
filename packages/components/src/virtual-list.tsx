@@ -164,11 +164,13 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   let isHovered = false
 
   const unsubScroll = onInput((event) => {
-    if (event.type !== "mouse" || event.action !== "scroll") return
-    if (!isHovered) return
-    const lineH = props.itemHeight
-    const dy = event.button === 64 ? -lineH : lineH
-    setScrollTop(s => Math.max(0, Math.min(s + dy, totalHeight() - props.height)))
+    if (event.type !== "mouse") return
+    if (event.action === "scroll") {
+      if (!isHovered) return
+      const lineH = props.itemHeight
+      const dy = event.button === 64 ? -lineH : lineH
+      setScrollTop(s => Math.max(0, Math.min(s + dy, totalHeight() - props.height)))
+    }
   })
   onCleanup(() => unsubScroll())
 
