@@ -39,7 +39,7 @@ import {
 } from "@tge/components"
 import {
   Button,
-  Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter,
+  Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, CardAction,
   Badge,
   Separator,
   Avatar,
@@ -48,8 +48,12 @@ import {
   VoidCombobox,
   VoidTooltip,
   VoidPopover,
+  VoidCheckbox,
+  VoidInput,
+  VoidTabs,
+  VoidProgress,
   H2, H3, H4, P, Small, Muted,
-  colors, themeColors, radius, space, font, weight, shadows,
+  colors, themeColors, radius, space, font, weight, shadows, glows,
   darkTheme, lightTheme, setTheme,
 } from "@tge/void"
 
@@ -943,6 +947,91 @@ function VoidPopoverDemo() {
   )
 }
 
+function VoidCheckboxDemo() {
+  const [a, setA] = createSignal(true)
+  const [b, setB] = createSignal(false)
+  const [c, setC] = createSignal(false)
+  return (
+    <box direction="column" gap={space[2]}>
+      <VoidCheckbox checked={a()} onChange={setA} label="Read 2 books" />
+      <VoidCheckbox checked={b()} onChange={setB} label="Sports every day" />
+      <VoidCheckbox checked={c()} onChange={setC} label="Complete the course" />
+      <VoidCheckbox checked={false} disabled label="Disabled option" />
+    </box>
+  )
+}
+
+function VoidInputDemo() {
+  const [name, setName] = createSignal("")
+  const [email, setEmail] = createSignal("")
+  return (
+    <box direction="column" gap={space[3]} width={320}>
+      <box direction="column" gap={space[1]}>
+        <text color={themeColors.mutedForeground} fontSize={font.xs}>Name</text>
+        <VoidInput value={name()} onChange={setName} placeholder="Your name..." />
+      </box>
+      <box direction="column" gap={space[1]}>
+        <text color={themeColors.mutedForeground} fontSize={font.xs}>Email</text>
+        <VoidInput value={email()} onChange={setEmail} placeholder="you@example.com" />
+      </box>
+      <Show when={name() || email()}>
+        <text color={themeColors.mutedForeground} fontSize={font.xs}>
+          {name() ? `Name: ${name()}` : ""}{name() && email() ? " · " : ""}{email() ? `Email: ${email()}` : ""}
+        </text>
+      </Show>
+    </box>
+  )
+}
+
+function VoidTabsDemo() {
+  const [tab1, setTab1] = createSignal(0)
+  const [tab2, setTab2] = createSignal(0)
+  const tabItems = [
+    { label: "Overview",  content: () => <text color={themeColors.foreground} fontSize={font.sm}>Overview panel content — main metrics and summary.</text> },
+    { label: "Analytics", content: () => <text color={themeColors.foreground} fontSize={font.sm}>Analytics panel — charts, trends, and data.</text> },
+    { label: "Settings",  content: () => <text color={themeColors.foreground} fontSize={font.sm}>Settings panel — configuration options.</text> },
+  ]
+  return (
+    <box direction="column" gap={space[6]} width={400}>
+      <box direction="column" gap={space[2]}>
+        <text color={themeColors.mutedForeground} fontSize={font.xs}>default variant (pill)</text>
+        <VoidTabs activeTab={tab1()} onTabChange={setTab1} tabs={tabItems} />
+      </box>
+      <box direction="column" gap={space[2]}>
+        <text color={themeColors.mutedForeground} fontSize={font.xs}>line variant (underline)</text>
+        <VoidTabs activeTab={tab2()} onTabChange={setTab2} tabs={tabItems} variant="line" />
+      </box>
+    </box>
+  )
+}
+
+function VoidProgressDemo() {
+  const [progress, setProgress] = createSignal(43)
+  return (
+    <box direction="column" gap={space[3]} width={300}>
+      <box direction="column" gap={space[1]}>
+        <box direction="row" alignY="center" width="grow">
+          <box width="grow"><text color={themeColors.foreground} fontSize={font.sm}>Upload</text></box>
+          <text color={themeColors.mutedForeground} fontSize={font.xs}>{progress()}%</text>
+        </box>
+        <VoidProgress value={progress()} />
+      </box>
+      <box direction="column" gap={space[1]}>
+        <text color={themeColors.foreground} fontSize={font.sm}>Tasks completed</text>
+        <VoidProgress value={11} max={20} />
+      </box>
+      <box direction="row" gap={space[2]}>
+        <box focusable onPress={() => setProgress(p => Math.max(0, p - 10))}>
+          <Button size="xs" variant="outline">-10</Button>
+        </box>
+        <box focusable onPress={() => setProgress(p => Math.min(100, p + 10))}>
+          <Button size="xs">+10</Button>
+        </box>
+      </box>
+    </box>
+  )
+}
+
 function TabVoidTheme() {
   const [isDark, setIsDark] = createSignal(true)
   const [clickedBtn, setClickedBtn] = createSignal("")
@@ -967,38 +1056,22 @@ function TabVoidTheme() {
       </SectionBox>
 
       {/* Button variants */}
-      <SectionBox title="BUTTON VARIANTS + SIZES (click any — shows last clicked)">
+      <SectionBox title="BUTTON VARIANTS + SIZES (Button has native focusStyle + glow)">
         <box direction="column" gap={space[2]}>
           <box direction="row" gap={space[2]}>
-            <box focusable onPress={() => setClickedBtn("Default")} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }} cornerRadius={radius.md}>
-              <Button>Default</Button>
-            </box>
-            <box focusable onPress={() => setClickedBtn("Secondary")} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }} cornerRadius={radius.md}>
-              <Button variant="secondary">Secondary</Button>
-            </box>
-            <box focusable onPress={() => setClickedBtn("Outline")} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }} cornerRadius={radius.md}>
-              <Button variant="outline">Outline</Button>
-            </box>
-            <box focusable onPress={() => setClickedBtn("Ghost")} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }} cornerRadius={radius.md}>
-              <Button variant="ghost">Ghost</Button>
-            </box>
-            <box focusable onPress={() => setClickedBtn("Destructive")} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }} cornerRadius={radius.md}>
-              <Button variant="destructive">Destructive</Button>
-            </box>
+            <box focusable onPress={() => setClickedBtn("Default")}><Button>Default</Button></box>
+            <box focusable onPress={() => setClickedBtn("Secondary")}><Button variant="secondary">Secondary</Button></box>
+            <box focusable onPress={() => setClickedBtn("Outline")}><Button variant="outline">Outline</Button></box>
+            <box focusable onPress={() => setClickedBtn("Ghost")}><Button variant="ghost">Ghost</Button></box>
+            <box focusable onPress={() => setClickedBtn("Destructive")}><Button variant="destructive">Destructive</Button></box>
+            <box focusable onPress={() => setClickedBtn("Link")}><Button variant="link">Link</Button></box>
           </box>
           <box direction="row" gap={space[2]} alignY="center">
-            <box focusable onPress={() => setClickedBtn("XS")} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }} cornerRadius={radius.md}>
-              <Button size="xs">XS</Button>
-            </box>
-            <box focusable onPress={() => setClickedBtn("SM")} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }} cornerRadius={radius.md}>
-              <Button size="sm">SM</Button>
-            </box>
-            <box focusable onPress={() => setClickedBtn("Default")} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }} cornerRadius={radius.md}>
-              <Button size="default">Default</Button>
-            </box>
-            <box focusable onPress={() => setClickedBtn("LG")} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }} cornerRadius={radius.md}>
-              <Button size="lg">LG</Button>
-            </box>
+            <box focusable onPress={() => setClickedBtn("XS")}><Button size="xs">XS</Button></box>
+            <box focusable onPress={() => setClickedBtn("SM")}><Button size="sm">SM</Button></box>
+            <box focusable onPress={() => setClickedBtn("Default")}><Button>Default</Button></box>
+            <box focusable onPress={() => setClickedBtn("LG")}><Button size="lg">LG</Button></box>
+            <box focusable onPress={() => setClickedBtn("Disabled")}><Button disabled>Disabled</Button></box>
           </box>
           <Show when={clickedBtn()}>
             <text color="#4fc4d4" fontSize={font.xs}>Last clicked: {clickedBtn()}</text>
@@ -1098,6 +1171,56 @@ function TabVoidTheme() {
       {/* Void Popover */}
       <SectionBox title="VOID POPOVER (click trigger to open)">
         <VoidPopoverDemo />
+      </SectionBox>
+
+      {/* VoidCheckbox */}
+      <SectionBox title="VOID CHECKBOX (click or Space to toggle)">
+        <VoidCheckboxDemo />
+      </SectionBox>
+
+      {/* VoidInput */}
+      <SectionBox title="VOID INPUT (type to edit — focus ring + glow)">
+        <VoidInputDemo />
+      </SectionBox>
+
+      {/* VoidTabs */}
+      <SectionBox title="VOID TABS — default + line variants (click or Left/Right)">
+        <VoidTabsDemo />
+      </SectionBox>
+
+      {/* VoidProgress */}
+      <SectionBox title="VOID PROGRESS (animated fill)">
+        <VoidProgressDemo />
+      </SectionBox>
+
+      {/* CardAction */}
+      <SectionBox title="CARD WITH CARDACTION (top-right slot)">
+        <Card>
+          <CardHeader>
+            <box direction="row" alignY="center" width="grow">
+              <box width="grow" direction="column" gap={space[1]}>
+                <CardTitle>Analytics</CardTitle>
+                <CardDescription>Last 30 days</CardDescription>
+              </box>
+              <CardAction>
+                <Badge variant="secondary">Live</Badge>
+              </CardAction>
+            </box>
+          </CardHeader>
+          <CardContent>
+            <box direction="row" gap={space[4]}>
+              <box direction="column" gap={space[1]}>
+                <text color={themeColors.mutedForeground} fontSize={font.xs}>Total</text>
+                <text color={themeColors.foreground} fontSize={font["2xl"]} fontWeight={weight.bold}>2,847</text>
+              </box>
+              <Separator orientation="vertical" />
+              <box direction="column" gap={space[1]}>
+                <text color={themeColors.mutedForeground} fontSize={font.xs}>Growth</text>
+                <text color="#22c55e" fontSize={font["2xl"]} fontWeight={weight.bold}>+12%</text>
+              </box>
+            </box>
+          </CardContent>
+        </Card>
       </SectionBox>
     </box>
   )
