@@ -3,20 +3,14 @@
  *
  * Architecture:
  *   - Clay handles ALL scroll (scrollY on container)
- *   - NO top spacer — items always start at content position 0
- *   - Items render from index 0 up to endIndex (viewport + overscan)
- *   - A single bottom spacer gives Clay the total content height
- *   - On scroll, we recalculate endIndex to render more items as needed
- *   - Clay clips items above the viewport automatically
+ *   - topPad = scrollPos (pixel-perfect match with Clay's scroll offset)
+ *   - Items render from startIndex to endIndex (viewport + overscan)
+ *   - bottomPad fills remaining height so Clay knows total content size
+ *   - postScroll hook syncs our signal with Clay's scroll position
  *
- * This avoids the topPad desync issue entirely: items are always at their
- * true position (index * itemHeight from top), and Clay's scroll just
- * moves the viewport window over them.
- *
- * Trade-off: we render items from 0 to endIndex (not startIndex to endIndex).
- * At scroll position 500 with itemHeight=28, that's ~26 items rendered instead
- * of ~18. Still far better than 1000. At scroll position 5000, it's ~186 items.
- * For truly huge lists (100k+), a different approach would be needed.
+ * Key insight: topPad must match Clay's scrollTop EXACTLY (not discretized
+ * to item boundaries) so there's zero gap between the scroll position and
+ * the first rendered item.
  *
  * Usage:
  *   <VirtualList
@@ -56,7 +50,7 @@ export type VirtualListProps<T> = {
   height: number
   /** Width. Default: "grow". */
   width?: number | string
-  /** Extra items to render below viewport. Default: 8. */
+  /** Extra items to render above/below viewport. Default: 5. */
   overscan?: number
   /** Render each visible item. */
   renderItem: (item: T, index: number, ctx: VirtualListItemContext) => JSX.Element
@@ -74,36 +68,35 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   const [scrollTick, setScrollTick] = createSignal(0)
   const [highlightedIndex, setHighlightedIndex] = createSignal(props.selectedIndex ?? -1)
 
-  const overscan = () => props.overscan ?? 8
+  const overscan = () => props.overscan ?? 5
   const totalHeight = () => props.items.length * props.itemHeight
   const viewportItems = () => Math.ceil(props.height / props.itemHeight)
 
   const scrollId = `vlist-${Math.random().toString(36).slice(2, 8)}`
   const scrollHandle = createScrollHandle(scrollId)
 
+  // Read Clay scroll position reactively
   const scrollPos = () => {
     scrollTick()
     return scrollHandle.scrollTop
   }
 
-  // Render from 0 to endIndex — no topPad, no desync.
-  // Clay clips everything above the viewport automatically.
-  const endIndex = () => {
-    const raw = Math.floor(scrollPos() / props.itemHeight) + viewportItems()
-    return Math.min(props.items.length, raw + overscan())
-  }
+  // The first item that could be partially visible
+  const firstVisibleItem = () => Math.floor(scrollPos() / props.itemHeight)
+
+  // Render range (with overscan)
+  const startIndex = () => Math.max(0, firstVisibleItem() - overscan())
+  const endIndex = () => Math.min(props.items.length, firstVisibleItem() + viewportItems() + overscan())
 
   const visibleItems = () => {
+    const start = startIndex()
     const end = endIndex()
     const result: { item: T; index: number }[] = []
-    for (let i = 0; i < end; i++) {
+    for (let i = start; i < end; i++) {
       result.push({ item: props.items[i], index: i })
     }
     return result
   }
-
-  // Bottom spacer — gives Clay the remaining height so scroll range is correct
-  const bottomPad = () => Math.max(0, totalHeight() - endIndex() * props.itemHeight)
 
   function scrollToIndex(index: number) {
     const itemTop = index * props.itemHeight
@@ -115,7 +108,6 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     setScrollTick(t => t + 1)
   }
 
-  // Keyboard
   const keyboard = props.keyboard ?? true
   if (keyboard) {
     useFocus({
@@ -173,27 +165,50 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   })
   onCleanup(() => unsubPostScroll())
 
+  // topPad: the EXACT scroll position in pixels. This matches Clay's
+  // scroll offset perfectly — no discrete jumps, no gap.
+  // The items start right after topPad, so Clay's viewport window
+  // (which starts at scrollPos) shows items starting from startIndex.
+  //
+  // topPad = startIndex * itemHeight (not scrollPos!) because:
+  //   - Clay scrolled to scrollPos
+  //   - Our content starts at topPad = startIndex * itemHeight
+  //   - Clay's viewport starts at scrollPos
+  //   - The difference (scrollPos - topPad) = sub-item offset, handled by Clay
+  //   - With overscan, startIndex is BEFORE the viewport → those items are clipped
+
   return (
     <box
       height={props.height}
       width={props.width ?? "grow"}
       scrollY
       scrollId={scrollId}
-
     >
-      <For each={visibleItems()}>
-        {({ item, index }) => {
-          const ctx: VirtualListItemContext = {
-            selected: props.selectedIndex === index,
-            highlighted: highlightedIndex() === index,
-            index,
-          }
-          return props.renderItem(item, index, ctx)
-        }}
-      </For>
       {() => {
-        const bp = bottomPad()
-        return bp > 0 ? <box height={bp} /> : null
+        // Evaluate everything from the same scrollTick atomically
+        const sp = scrollPos()
+        const start = startIndex()
+        const end = endIndex()
+        const items = visibleItems()
+        const topH = start * props.itemHeight
+        const bottomH = Math.max(0, totalHeight() - end * props.itemHeight)
+
+        return (
+          <>
+            <box height={topH} />
+            <For each={items}>
+              {({ item, index }) => {
+                const ctx: VirtualListItemContext = {
+                  selected: props.selectedIndex === index,
+                  highlighted: highlightedIndex() === index,
+                  index,
+                }
+                return props.renderItem(item, index, ctx)
+              }}
+            </For>
+            <box height={bottomH} />
+          </>
+        )
       }}
     </box>
   )
