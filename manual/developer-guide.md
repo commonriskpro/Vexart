@@ -594,6 +594,8 @@ TGE provides declarative hover/active/focus styles. No manual signal boilerplate
 </box>
 ```
 
+**Border reservation:** `borderWidth` in `focusStyle`/`hoverStyle`/`activeStyle` auto-reserves space with a transparent border when inactive, preventing layout jitter on activation.
+
 ### Interaction Props
 
 | Prop | Type | Description |
@@ -634,6 +636,8 @@ TGE provides declarative hover/active/focus styles. No manual signal boilerplate
 </box>
 ```
 
+**Auto-RECT:** Interactive nodes don't need explicit `backgroundColor` to be clickable. The engine automatically injects a near-transparent placeholder for hit-testing.
+
 ### Scroll Props
 
 | Prop | Type | Default | Description |
@@ -663,6 +667,8 @@ handle.scrollTo(0)       // scroll to top
 handle.scrollBy(100)     // scroll down 100px
 handle.scrollIntoView("item-5")  // scroll element into view
 ```
+
+**Scissor clipping:** All paint primitives (rects, text, blur, shadows, glow) are clipped to the scroll container bounds. Hit-testing also respects scroll viewport — off-screen items don't receive false hover/click events.
 
 ### Floating / Absolute Positioning
 
@@ -2493,6 +2499,8 @@ type VirtualListProps<T> = {
 ```
 
 **Keyboard:** `Up`/`Down` to navigate, `Enter` to select.
+
+**Mouse:** Hover highlights items (`ctx.hovered`). Click to select. The container handles mouse events internally — no props to spread.
 
 ---
 

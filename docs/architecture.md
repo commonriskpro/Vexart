@@ -138,6 +138,20 @@ Effects are NOT part of Clay's layout. They're handled in a side-map (`effectsQu
 
 **Why isolated buffers?** Blur is destructive in-place. Without isolation, blur corrupts neighboring content.
 
+### Scissor Clipping
+
+All paint primitives respect the active scissor (scroll container bounds). Three strategies:
+
+| Strategy | Used for | How |
+|----------|----------|-----|
+| `clipToScissor()` | Flat rects | Clamp coordinates before `fillRect` |
+| `paintWithScissorClip()` | Rounded rects, per-corner radius, borders | Render to temp buffer, copy visible portion |
+| Temp buffer + alpha blend | Text | Render text to temp buffer, copy scissor-visible pixels |
+| Region clipping | Backdrop blur/filters | Clip the blur/filter region to scissor bounds before applying |
+| `overScissored()` | Shadows, glow | Clip the composite source to scissor before `over()` |
+
+Without scissor clipping, elements inside scroll containers would bleed outside their viewport — rounded rects, text, blur effects, and shadows would paint over sibling elements like tab bars.
+
 ---
 
 ## Step 4: Pixel Buffer → Terminal
@@ -259,6 +273,22 @@ TGE's focus system bridges the SolidJS reactive layer and the paint loop:
 **`<box focusable>`** exists for node-level focus (declarative, zero boilerplate).
 
 **Event bubbling**: `onPress` events bubble up the parent chain like DOM click events. When a node without `onPress` is clicked, the event walks up to the nearest ancestor with a handler. Each handler receives a `PressEvent` with `stopPropagation()`. Mouse clicks on focusable nodes automatically set focus (like browser behavior). Per-node mouse events (`onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseOver`, `onMouseOut`) do NOT bubble — they dispatch directly to the target node via `NodeMouseEvent` (`{ x, y, nodeX, nodeY, width, height }`). Pointer capture (`setPointerCapture`/`releasePointerCapture`) routes all mouse events to a specific node regardless of cursor position, enabling drag interactions. Interactive elements have a minimum hit-area of one terminal cell (`cellW x cellH`) to ensure small elements are still clickable — this only affects hit-testing, not visual rendering.
+
+### Auto-RECT for Interactive Nodes
+
+Any node with `onPress`, `focusable`, `hoverStyle`, `activeStyle`, `focusStyle`, or mouse callbacks automatically gets a near-transparent RECT placeholder (`0x00000001`). This ensures the node enters `rectNodes` for hit-testing without requiring explicit `backgroundColor`. In the browser, any `<div>` is clickable — TGE now matches this behavior.
+
+### Border Space Reservation
+
+If `focusStyle`, `hoverStyle`, or `activeStyle` define `borderWidth`, the engine reserves that space in Clay with a transparent border when inactive. This prevents layout jitter when interactive styles activate — equivalent to CSS `outline` behavior.
+
+### Click Re-Layout
+
+When a click is dispatched (`onPress` or focus change), the engine re-runs `walkTree` + `endLayout` in the same frame. This eliminates the ~33ms visual delay that would otherwise occur because layout was computed before the click callback mutated the tree.
+
+### Scroll Container Hit-Testing
+
+Nodes fully outside their scroll container ancestor viewport are skipped during hit-testing. This prevents off-screen items (with layout coordinates that may overlap other screen areas) from receiving false hover/click events. The scroll container itself is NOT skipped.
 
 **Cleanup on removal**: `removeNode()` calls `unregisterSubtree()` to recursively unregister all focusable descendants. Without this, destroyed children remain as ghost entries in the focus ring.
 

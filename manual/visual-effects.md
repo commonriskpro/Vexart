@@ -523,6 +523,19 @@ All corner rendering uses SDF anti-aliasing — subpixel smooth at any radius.
 
 ---
 
+## Effects in Scroll Containers
+
+All visual effects respect scissor clipping inside scroll containers. When an element with effects (shadows, glow, backdrop blur, gradients, rounded corners) is partially scrolled out of view, only the visible portion is painted.
+
+The engine uses three strategies:
+- **Coordinate clipping** for flat rects and backdrop blur regions — the coordinates are clamped to the scissor bounds before painting
+- **Temp buffer + copy** for rounded rects, per-corner radius, and borders — the primitive is rendered to a temporary buffer, then only the scissor-visible portion is copied to the main buffer with alpha blending
+- **Scissored composite** for shadows and glow — the composite source is clipped to the scissor bounds before the `over()` blend operation
+
+This means you can freely use any visual effect on elements inside `scrollY`/`scrollX` containers without worrying about bleeding outside the scroll area.
+
+---
+
 ## See Also
 
 - [Layout and Sizing](./layout-and-sizing.md) — positioning and dimensions

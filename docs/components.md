@@ -68,6 +68,10 @@ The primary layout container. Equivalent to a `<div>` — handles sizing, paddin
 
 All three style objects accept: `backgroundColor`, `borderColor`, `borderWidth`, `cornerRadius`, `borderRadius`, `shadow`, `boxShadow`, `glow`, `gradient`, `backdropBlur`, `backdropBrightness`, `backdropContrast`, `backdropSaturate`, `backdropGrayscale`, `backdropInvert`, `backdropSepia`, `backdropHueRotate`, `opacity`.
 
+**Auto-RECT:** Interactive nodes (`onPress`, `focusable`, `hoverStyle`, `activeStyle`, `focusStyle`, or mouse callbacks) automatically get a near-transparent background placeholder for hit-testing. You do NOT need `backgroundColor` for interactive elements to be clickable.
+
+**Border reservation:** If `focusStyle`, `hoverStyle`, or `activeStyle` define `borderWidth`, the engine reserves that space with a transparent border when inactive, preventing layout jitter.
+
 ### Event Bubbling
 
 `onPress` events bubble up the parent node chain like DOM click events. If the clicked node doesn't have `onPress`, the event walks up to the nearest ancestor that does. Each handler receives a `PressEvent`.
@@ -347,7 +351,7 @@ Autocomplete input + filterable dropdown. Phase 3.
 
 Typing filters options. Enter selects. Escape closes and clears query.
 
-**Mouse:** Click an option to select it. Click the input to toggle the dropdown.
+**Mouse:** Click the input to open/close dropdown and grab focus for typing. Hover options to highlight. Click an option to select.
 
 ---
 
@@ -506,6 +510,10 @@ Data table with row selection. Each row's render context includes `rowProps` —
 
 Virtualized list — only renders visible items. For lists with thousands of entries. Phase 3.
 
+The render context includes `selected` (boolean), `highlighted` (boolean, keyboard navigation), and `hovered` (boolean, mouse hover).
+
+**Mouse:** Hover highlights items (`ctx.hovered`). Click to select (`onSelect` fires). The container handles hover/click internally — no interaction props spread needed.
+
 ```tsx
 <VirtualList
   items={allUsers}          // Full array — all 10,000 items
@@ -516,7 +524,7 @@ Virtualized list — only renders visible items. For lists with thousands of ent
     <box
       height={32}
       padding={6}
-      backgroundColor={ctx.highlighted ? "#252535" : "transparent"}
+      backgroundColor={ctx.selected ? "#2a2a4e" : ctx.hovered ? "#333" : "transparent"}
     >
       <text color="#fff">{item.name}</text>
     </box>
