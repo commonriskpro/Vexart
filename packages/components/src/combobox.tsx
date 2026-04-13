@@ -125,7 +125,7 @@ export function Combobox(props: ComboboxProps) {
     setOpen(false)
   }
 
-  const { focused } = useFocus({
+  const { focused, focus } = useFocus({
     id: props.focusId,
     onKeyDown(e) {
       if (disabled()) return
@@ -231,8 +231,8 @@ export function Combobox(props: ComboboxProps) {
 
   return (
     <box direction="column">
-      {/* Click input to toggle dropdown */}
-      <box onPress={() => { if (!disabled()) setOpen(!open()) }}>
+      {/* Click input to toggle dropdown + grab focus for keyboard input */}
+      <box onPress={() => { if (!disabled()) { setOpen(!open()); focus() } }}>
         {props.renderInput(inputCtx())}
       </box>
       {content()}
