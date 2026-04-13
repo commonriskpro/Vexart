@@ -179,6 +179,7 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     <box
       height={props.height}
       width={props.width ?? "grow"}
+      backgroundColor="#00000000"
       onMouseOver={() => { isHovered = true }}
       onMouseOut={() => { isHovered = false }}
     >
