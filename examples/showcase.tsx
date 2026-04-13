@@ -841,7 +841,7 @@ function TabDataVirtual() {
           <VirtualList
             items={VIRTUAL_ITEMS}
             itemHeight={28}
-            height={250}
+            height={400}
             width={450}
             overscan={3}
             selectedIndex={selected()}
