@@ -81,22 +81,27 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     return scrollHandle.scrollTop
   }
 
-  // The first item that could be partially visible
-  const firstVisibleItem = () => Math.floor(scrollPos() / props.itemHeight)
-
-  // Render range (with overscan)
-  const startIndex = () => Math.max(0, firstVisibleItem() - overscan())
-  const endIndex = () => Math.min(props.items.length, firstVisibleItem() + viewportItems() + overscan())
+  // Render from index 0 up to endIndex — NO topPad spacer.
+  // Items are always at their true content position (index * itemHeight).
+  // Clay clips items above the viewport automatically.
+  //
+  // This avoids the topPad discrete-jump desync entirely.
+  const endIndex = () => {
+    const raw = Math.floor(scrollPos() / props.itemHeight) + viewportItems()
+    return Math.min(props.items.length, raw + overscan())
+  }
 
   const visibleItems = () => {
-    const start = startIndex()
     const end = endIndex()
     const result: { item: T; index: number }[] = []
-    for (let i = start; i < end; i++) {
+    for (let i = 0; i < end; i++) {
       result.push({ item: props.items[i], index: i })
     }
     return result
   }
+
+  // Bottom spacer — gives Clay the total content height for scroll range
+  const bottomPad = () => Math.max(0, totalHeight() - endIndex() * props.itemHeight)
 
   function scrollToIndex(index: number) {
     const itemTop = index * props.itemHeight
@@ -165,18 +170,6 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   })
   onCleanup(() => unsubPostScroll())
 
-  // topPad: the EXACT scroll position in pixels. This matches Clay's
-  // scroll offset perfectly — no discrete jumps, no gap.
-  // The items start right after topPad, so Clay's viewport window
-  // (which starts at scrollPos) shows items starting from startIndex.
-  //
-  // topPad = startIndex * itemHeight (not scrollPos!) because:
-  //   - Clay scrolled to scrollPos
-  //   - Our content starts at topPad = startIndex * itemHeight
-  //   - Clay's viewport starts at scrollPos
-  //   - The difference (scrollPos - topPad) = sub-item offset, handled by Clay
-  //   - With overscan, startIndex is BEFORE the viewport → those items are clipped
-
   return (
     <box
       height={props.height}
@@ -184,31 +177,19 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
       scrollY
       scrollId={scrollId}
     >
+      <For each={visibleItems()}>
+        {({ item, index }) => {
+          const ctx: VirtualListItemContext = {
+            selected: props.selectedIndex === index,
+            highlighted: highlightedIndex() === index,
+            index,
+          }
+          return props.renderItem(item, index, ctx)
+        }}
+      </For>
       {() => {
-        // Evaluate everything from the same scrollTick atomically
-        const sp = scrollPos()
-        const start = startIndex()
-        const end = endIndex()
-        const items = visibleItems()
-        const topH = start * props.itemHeight
-        const bottomH = Math.max(0, totalHeight() - end * props.itemHeight)
-
-        return (
-          <>
-            <box height={topH} />
-            <For each={items}>
-              {({ item, index }) => {
-                const ctx: VirtualListItemContext = {
-                  selected: props.selectedIndex === index,
-                  highlighted: highlightedIndex() === index,
-                  index,
-                }
-                return props.renderItem(item, index, ctx)
-              }}
-            </For>
-            <box height={bottomH} />
-          </>
-        )
+        const bp = bottomPad()
+        return bp > 0 ? <box height={bp} /> : null
       }}
     </box>
   )
