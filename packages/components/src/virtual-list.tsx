@@ -25,9 +25,9 @@
  *   />
  */
 
-import { createSignal, For } from "solid-js"
+import { createSignal, For, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import { useFocus } from "@tge/renderer"
+import { useFocus, onInput } from "@tge/renderer"
 
 // ── Types ──
 
@@ -106,10 +106,10 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     }
   }
 
-  // Keyboard navigation
+  // Keyboard navigation + mouse scroll
   const keyboard = props.keyboard ?? true
   if (keyboard) {
-    useFocus({
+    const { focused } = useFocus({
       id: props.focusId,
       onKeyDown(e) {
         if (e.key === "down" || e.key === "j") {
@@ -156,7 +156,21 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
         }
       },
     })
+
   }
+
+  // Mouse scroll — intercept scroll when hovered.
+  // Track hover state with a simple flag updated by onMouseOver/Out on the container.
+  let isHovered = false
+
+  const unsubScroll = onInput((event) => {
+    if (event.type !== "mouse" || event.action !== "scroll") return
+    if (!isHovered) return
+    const lineH = props.itemHeight
+    const dy = event.button === 64 ? -lineH : lineH
+    setScrollTop(s => Math.max(0, Math.min(s + dy, totalHeight() - props.height)))
+  })
+  onCleanup(() => unsubScroll())
 
   // Top spacer to offset content for items above viewport
   const topPad = () => startIndex() * props.itemHeight
@@ -165,7 +179,8 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     <box
       height={props.height}
       width={props.width ?? "grow"}
-      scrollY
+      onMouseOver={() => { isHovered = true }}
+      onMouseOut={() => { isHovered = false }}
     >
       {/* Top spacer — represents items above the viewport */}
       <box height={topPad()} />
