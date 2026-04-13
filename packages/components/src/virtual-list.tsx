@@ -27,7 +27,7 @@
 
 import { createSignal, For, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import { useFocus, onInput, createScrollHandle, markDirty } from "@tge/renderer"
+import { useFocus, onInput, createScrollHandle } from "@tge/renderer"
 
 // ── Types ──
 
@@ -64,9 +64,10 @@ export type VirtualListProps<T> = {
 }
 
 export function VirtualList<T>(props: VirtualListProps<T>) {
-  // Reactive scroll position — updated from Clay's scroll data.
-  // This is the SINGLE source of truth for which items to render.
-  const [scrollPos, setScrollPos] = createSignal(0)
+  // Scroll tick — bumped on every scroll event to force SolidJS to
+  // re-evaluate derived getters that read scrollHandle.scrollTop.
+  // Clay owns the scroll position; we just read it.
+  const [scrollTick, setScrollTick] = createSignal(0)
   const [highlightedIndex, setHighlightedIndex] = createSignal(props.selectedIndex ?? -1)
 
   const overscan = () => props.overscan ?? 3
@@ -77,11 +78,11 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   const scrollId = `vlist-${Math.random().toString(36).slice(2, 8)}`
   const scrollHandle = createScrollHandle(scrollId)
 
-  // Sync scroll position from Clay → our signal.
-  // Called on every scroll event (mouse or programmatic).
-  function syncFromClay() {
-    const pos = scrollHandle.scrollTop
-    setScrollPos(pos)
+  // Read Clay's scroll offset reactively. The scrollTick dependency
+  // forces re-evaluation when scroll events occur.
+  const scrollPos = () => {
+    scrollTick() // subscribe — re-evaluates when tick bumps
+    return scrollHandle.scrollTop
   }
 
   // Calculate visible range from scroll position
@@ -117,7 +118,7 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     } else if (itemBottom > viewBottom) {
       scrollHandle.scrollTo(-(itemBottom - props.height))
     }
-    syncFromClay()
+    setScrollTick(t => t + 1)
   }
 
   // Keyboard navigation
@@ -153,7 +154,7 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
         if (e.key === "home") {
           setHighlightedIndex(0)
           scrollHandle.scrollTo(0)
-          syncFromClay()
+          setScrollTick(t => t + 1)
           return
         }
         if (e.key === "end") {
@@ -173,12 +174,13 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     })
   }
 
-  // Listen for scroll events. Clay processes the scroll first (feedScroll
-  // in the render loop), then we read the new offset from Clay.
-  // setTimeout(0) ensures Clay has processed the scroll delta before we read.
+  // Listen for scroll events. Bump the tick so SolidJS re-evaluates
+  // scrollPos() → startIndex/endIndex → visibleItems on the next frame.
+  // Clay processes scroll in the render loop BEFORE walkTree, so by the
+  // time SolidJS evaluates our getters, scrollHandle.scrollTop is current.
   const unsubScroll = onInput((event) => {
     if (event.type === "mouse" && event.action === "scroll") {
-      setTimeout(syncFromClay, 0)
+      setScrollTick(t => t + 1)
     }
   })
   onCleanup(() => unsubScroll())
