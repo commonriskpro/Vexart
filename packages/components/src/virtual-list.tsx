@@ -2,15 +2,23 @@
  * VirtualList — virtualized list that only renders visible items.
  *
  * Architecture:
- *   - Clay handles ALL scroll (scrollY on container)
- *   - topPad = scrollPos (pixel-perfect match with Clay's scroll offset)
- *   - Items render from startIndex to endIndex (viewport + overscan)
+ *   - Clay handles scroll (scrollY on container) for input handling
+ *   - We render ALL items from index 0 to endIndex (no startIndex windowing)
  *   - bottomPad fills remaining height so Clay knows total content size
+ *   - Clay clips items above the viewport via scissor (they exist in layout
+ *     but are not painted)
+ *   - Items MUST have a backgroundColor (even if matches parent) so they
+ *     fill the scissor area without visible gaps
  *   - postScroll hook syncs our signal with Clay's scroll position
  *
- * Key insight: topPad must match Clay's scrollTop EXACTLY (not discretized
- * to item boundaries) so there's zero gap between the scroll position and
- * the first rendered item.
+ * Why render from 0? The topPad approach causes a sawtooth gap because
+ * SolidJS reconciler updates (For each) may not be synchronously flushed
+ * before walkTree reads the TGENode tree. Rendering from 0 avoids this
+ * entirely — Clay clips the off-screen items via scissor.
+ *
+ * Performance: Clay is O(n) for layout but all off-screen items are
+ * simple fixed-height boxes — layout is fast. Paint is O(visible) because
+ * scissor clips all off-screen rects and texts.
  *
  * Usage:
  *   <VirtualList
@@ -19,7 +27,7 @@
  *     height={400}
  *     overscan={5}
  *     renderItem={(item, index, ctx) => (
- *       <box height={24} padding={4} backgroundColor={ctx.selected ? "#333" : "transparent"}>
+ *       <box height={24} padding={4} backgroundColor="#1a1a1a">
  *         <text color="#fff">{item.name}</text>
  *       </box>
  *     )}
@@ -81,11 +89,9 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     return scrollHandle.scrollTop
   }
 
-  // Render from index 0 up to endIndex — NO topPad spacer.
-  // Items are always at their true content position (index * itemHeight).
-  // Clay clips items above the viewport automatically.
-  //
-  // This avoids the topPad discrete-jump desync entirely.
+  // Render from index 0 up to endIndex.
+  // Items above viewport are clipped by Clay's scissor — they exist in
+  // layout but are never painted. This avoids the topPad desync entirely.
   const endIndex = () => {
     const raw = Math.floor(scrollPos() / props.itemHeight) + viewportItems()
     return Math.min(props.items.length, raw + overscan())

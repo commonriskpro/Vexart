@@ -2056,7 +2056,12 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
       } else if (radius > 0) {
         paint.roundedRect(target, tx, ty, w, h, r, g, b, a, radius)
       } else {
-        paint.fillRect(target, tx, ty, w, h, r, g, b, a)
+        // Clip to scissor for flat rects — prevents painting outside scroll containers
+        const clipped = clipToScissor(x + offsetX, y + offsetY, w, h, offsetX, offsetY)
+        if (clipped) {
+          paint.fillRect(target, useOpacity ? clipped.x - x : clipped.x,
+            useOpacity ? clipped.y - y : clipped.y, clipped.w, clipped.h, r, g, b, a)
+        }
       }
 
       // Composite with opacity if needed
@@ -2104,15 +2109,81 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
       }
 
       // Pixel paint mode — render bitmap text
-      const maxTextWidth = Math.max(w, 1)
-      const result = layoutText(cmd.text, fontId, maxTextWidth, lineHeight)
-      if (result.lines.length <= 1) {
-        paint.drawText(buf, x, y, cmd.text, r, g, b, a)
+      // If scissor is active and text is partially outside, render into a temp
+      // buffer and copy only the visible portion. This prevents text from
+      // bleeding outside scroll containers.
+      const scissor = activeScissor()
+      const absX = x + offsetX
+      const absY = y + offsetY
+      const textH = h > 0 ? h : lineHeight
+      const partiallyClipped = scissor && (
+        absY < scissor.y || absY + textH > scissor.y + scissor.h ||
+        absX < scissor.x || absX + w > scissor.x + scissor.w
+      )
+
+      if (partiallyClipped && scissor) {
+        // Render text into temp buffer, then copy only the scissor-visible portion
+        const tw = Math.max(w, 1)
+        const th = textH
+        if (tw > 0 && th > 0) {
+          const tmp = create(tw, th)
+          const maxTextWidth = Math.max(w, 1)
+          const result = layoutText(cmd.text, fontId, maxTextWidth, lineHeight)
+          if (result.lines.length <= 1) {
+            paint.drawText(tmp, 0, 0, cmd.text, r, g, b, a)
+          } else {
+            for (let li = 0; li < result.lines.length; li++) {
+              const line = result.lines[li]
+              paint.drawText(tmp, 0, li * lineHeight, line.text, r, g, b, a)
+            }
+          }
+          // Copy only the visible portion
+          const srcLeft = Math.max(0, scissor.x - absX)
+          const srcTop = Math.max(0, scissor.y - absY)
+          const dstLeft = Math.max(absX, scissor.x) - offsetX
+          const dstTop = Math.max(absY, scissor.y) - offsetY
+          const copyW = Math.min(absX + tw, scissor.x + scissor.w) - Math.max(absX, scissor.x)
+          const copyH = Math.min(absY + th, scissor.y + scissor.h) - Math.max(absY, scissor.y)
+          if (copyW > 0 && copyH > 0) {
+            const sd = tmp.data
+            const dd = buf.data
+            for (let row = 0; row < copyH; row++) {
+              const sy = srcTop + row
+              const dy = dstTop + row
+              if (dy < 0 || dy >= buf.height) continue
+              for (let col = 0; col < copyW; col++) {
+                const sx = srcLeft + col
+                const dx = dstLeft + col
+                if (dx < 0 || dx >= buf.width) continue
+                const si = (sy * tmp.stride) + sx * 4
+                const sa = sd[si + 3]
+                if (sa === 0) continue
+                const di = (dy * buf.stride) + dx * 4
+                if (sa === 255) {
+                  dd[di] = sd[si]; dd[di+1] = sd[si+1]; dd[di+2] = sd[si+2]; dd[di+3] = 255
+                } else {
+                  const invSa = 255 - sa
+                  dd[di]   = Math.round((sd[si]   * sa + dd[di]   * invSa) / 255)
+                  dd[di+1] = Math.round((sd[si+1] * sa + dd[di+1] * invSa) / 255)
+                  dd[di+2] = Math.round((sd[si+2] * sa + dd[di+2] * invSa) / 255)
+                  dd[di+3] = Math.min(255, sa + Math.round(dd[di+3] * invSa / 255))
+                }
+              }
+            }
+          }
+        }
       } else {
-        for (let li = 0; li < result.lines.length; li++) {
-          const line = result.lines[li]
-          const lineY = y + li * lineHeight
-          paint.drawText(buf, x, lineY, line.text, r, g, b, a)
+        // No scissor or fully inside — paint directly
+        const maxTextWidth = Math.max(w, 1)
+        const result = layoutText(cmd.text, fontId, maxTextWidth, lineHeight)
+        if (result.lines.length <= 1) {
+          paint.drawText(buf, x, y, cmd.text, r, g, b, a)
+        } else {
+          for (let li = 0; li < result.lines.length; li++) {
+            const line = result.lines[li]
+            const lineY = y + li * lineHeight
+            paint.drawText(buf, x, lineY, line.text, r, g, b, a)
+          }
         }
       }
       break
