@@ -1784,6 +1784,39 @@ function clipToScissor(
 }
 
 /**
+ * Scissor-aware composite: like over() but clips to the active scissor.
+ * dx/dy are in LOCAL buffer coordinates. offsetX/offsetY convert to absolute.
+ */
+function overScissored(dst: PixelBuffer, src: PixelBuffer, dx: number, dy: number, offsetX: number, offsetY: number) {
+  const s = activeScissor()
+  if (!s) { over(dst, src, dx, dy); return }
+
+  // Compute the region of src that falls within the scissor (in dst coords)
+  const absX = dx + offsetX
+  const absY = dy + offsetY
+  const left = Math.max(absX, s.x)
+  const top = Math.max(absY, s.y)
+  const right = Math.min(absX + src.width, s.x + s.w)
+  const bottom = Math.min(absY + src.height, s.y + s.h)
+  if (left >= right || top >= bottom) return
+
+  // Create a clipped sub-buffer from src
+  const srcX = left - absX
+  const srcY = top - absY
+  const cw = right - left
+  const ch = bottom - top
+  const clipped = create(cw, ch)
+  const sd = src.data
+  const cd = clipped.data
+  for (let row = 0; row < ch; row++) {
+    const srcOff = (srcY + row) * src.stride + srcX * 4
+    const dstOff = row * clipped.stride
+    cd.set(sd.subarray(srcOff, srcOff + cw * 4), dstOff)
+  }
+  over(dst, clipped, left - offsetX, top - offsetY)
+}
+
+/**
  * Paint a primitive with scissor clipping. For primitives that can't be
  * trivially clipped (rounded rects, per-corner radius), this renders into
  * a temp buffer at (0,0) and copies only the scissor-visible portion.
@@ -2037,7 +2070,7 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
             // Blur the entire temp buffer — safe, no neighbors to corrupt
             paint.blur(tmp, 0, 0, tw, th, blurR, 3)
             // Composite onto main buffer
-            over(buf, tmp, x - margin, y - margin)
+            overScissored(buf, tmp, x - margin, y - margin, offsetX, offsetY)
           }
         }
 
@@ -2065,7 +2098,7 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
               paint.blur(tmp, 0, 0, tw, th, blurR, 3)
               const dx = x - margin + Math.min(0, s.x)
               const dy = y - margin + Math.min(0, s.y)
-              over(buf, tmp, dx, dy)
+              overScissored(buf, tmp, dx, dy, offsetX, offsetY)
             }
           }
         }
@@ -2082,46 +2115,64 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
         const blurR = matchedEffect.backdropBlur ? Math.ceil(matchedEffect.backdropBlur) : 0
         const effRadius = matchedEffect.cornerRadius
 
+        // Clip backdrop region to scissor — prevents blur/filters from affecting
+        // pixels outside the scroll container viewport.
+        let bx = x, by = y, bw = w, bh = h
+        const bs = activeScissor()
+        if (bs) {
+          const bl = Math.max(bx, bs.x - offsetX)
+          const bt = Math.max(by, bs.y - offsetY)
+          const br = Math.min(bx + bw, bs.x + bs.w - offsetX)
+          const bb = Math.min(by + bh, bs.y + bs.h - offsetY)
+          if (bl >= br || bt >= bb) break // fully clipped
+          bx = bl; by = bt; bw = br - bl; bh = bb - bt
+        }
+
         // Save corner pixels BEFORE blur so we can restore them after.
         // The blur operates on a rectangle but the element may be rounded —
         // pixels outside the rounded rect must remain untouched.
         let saved: Uint8Array | null = null
         if (effRadius > 0) {
-          saved = sub(buf, x, y, w, h).data
+          saved = sub(buf, bx, by, bw, bh).data
         }
 
-        // Blur directly in the main buffer at the element's region.
-        if (blurR > 0) paint.blur(buf, x, y, w, h, blurR, 3)
+        // Blur directly in the main buffer at the clipped region.
+        if (blurR > 0) paint.blur(buf, bx, by, bw, bh, blurR, 3)
 
-        // Apply backdrop filters in CSS spec order: brightness, contrast, saturate, grayscale, invert, sepia, hue-rotate
-        if (matchedEffect.backdropBrightness !== undefined) paint.filterBrightness(buf, x, y, w, h, matchedEffect.backdropBrightness)
-        if (matchedEffect.backdropContrast !== undefined) paint.filterContrast(buf, x, y, w, h, matchedEffect.backdropContrast)
-        if (matchedEffect.backdropSaturate !== undefined) paint.filterSaturate(buf, x, y, w, h, matchedEffect.backdropSaturate)
-        if (matchedEffect.backdropGrayscale !== undefined) paint.filterGrayscale(buf, x, y, w, h, matchedEffect.backdropGrayscale)
-        if (matchedEffect.backdropInvert !== undefined) paint.filterInvert(buf, x, y, w, h, matchedEffect.backdropInvert)
-        if (matchedEffect.backdropSepia !== undefined) paint.filterSepia(buf, x, y, w, h, matchedEffect.backdropSepia)
-        if (matchedEffect.backdropHueRotate !== undefined) paint.filterHueRotate(buf, x, y, w, h, matchedEffect.backdropHueRotate)
+        // Apply backdrop filters in CSS spec order
+        if (matchedEffect.backdropBrightness !== undefined) paint.filterBrightness(buf, bx, by, bw, bh, matchedEffect.backdropBrightness)
+        if (matchedEffect.backdropContrast !== undefined) paint.filterContrast(buf, bx, by, bw, bh, matchedEffect.backdropContrast)
+        if (matchedEffect.backdropSaturate !== undefined) paint.filterSaturate(buf, bx, by, bw, bh, matchedEffect.backdropSaturate)
+        if (matchedEffect.backdropGrayscale !== undefined) paint.filterGrayscale(buf, bx, by, bw, bh, matchedEffect.backdropGrayscale)
+        if (matchedEffect.backdropInvert !== undefined) paint.filterInvert(buf, bx, by, bw, bh, matchedEffect.backdropInvert)
+        if (matchedEffect.backdropSepia !== undefined) paint.filterSepia(buf, bx, by, bw, bh, matchedEffect.backdropSepia)
+        if (matchedEffect.backdropHueRotate !== undefined) paint.filterHueRotate(buf, bx, by, bw, bh, matchedEffect.backdropHueRotate)
 
         // Restore pixels outside the rounded rect (corners)
+        // Use the clipped region (bx, by, bw, bh) since that's what we saved/blurred.
+        // The mask is generated for the FULL element (w, h) but we only iterate the clipped portion,
+        // offsetting into the mask by (bx-x, by-y) to get the correct mask position.
         if (effRadius > 0 && saved) {
           const mask = create(w, h)
           paint.roundedRect(mask, 0, 0, w, h, 255, 255, 255, 255, effRadius)
           const md = mask.data
           const d = buf.data
-          for (let ly = 0; ly < h; ly++) {
-            const bufRow = (y + ly) * buf.stride
-            const savRow = ly * w * 4
-            const mRow = ly * mask.stride
-            for (let lx = 0; lx < w; lx++) {
-              const mi = mRow + lx * 4 + 3
+          const maskOffX = bx - x
+          const maskOffY = by - y
+          for (let ly = 0; ly < bh; ly++) {
+            const bufRow = (by + ly) * buf.stride
+            const savRow = ly * bw * 4
+            const mRow = (maskOffY + ly) * mask.stride
+            for (let lx = 0; lx < bw; lx++) {
+              const mi = mRow + (maskOffX + lx) * 4 + 3
               if (md[mi] === 0) {
                 // Outside rounded rect — restore original pixel
-                const bo = bufRow + (x + lx) * 4
+                const bo = bufRow + (bx + lx) * 4
                 const si = savRow + lx * 4
                 d[bo] = saved[si]; d[bo+1] = saved[si+1]; d[bo+2] = saved[si+2]; d[bo+3] = saved[si+3]
               } else if (md[mi] < 255) {
                 // Anti-aliased edge — blend between original and blurred
-                const bo = bufRow + (x + lx) * 4
+                const bo = bufRow + (bx + lx) * 4
                 const si = savRow + lx * 4
                 const ma = md[mi] / 255
                 const ia = 1 - ma
