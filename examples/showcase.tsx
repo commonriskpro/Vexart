@@ -1033,26 +1033,57 @@ function VoidTabsDemo() {
 }
 
 function VoidProgressDemo() {
-  const [progress, setProgress] = createSignal(43)
+  const [progress, setProgress] = createSignal(20)
+  const [tasks, setTasks] = createSignal(3)
+  const TOTAL_TASKS = 8
+
+  // Auto-advance upload progress every 800ms
+  let timer: ReturnType<typeof setInterval> | null = null
+  const startUpload = () => {
+    if (timer) return
+    timer = setInterval(() => {
+      setProgress(p => {
+        if (p >= 100) { clearInterval(timer!); timer = null; return 100 }
+        return p + 5
+      })
+    }, 200)
+  }
+  const resetUpload = () => {
+    if (timer) { clearInterval(timer); timer = null }
+    setProgress(20)
+  }
+
   return (
-    <box direction="column" gap={space[3]} width={300}>
+    <box direction="column" gap={space[4]} width={340}>
+      {/* Upload — auto-animates */}
       <box direction="column" gap={space[1]}>
         <box direction="row" alignY="center" width="grow">
           <box width="grow"><text color={themeColors.foreground} fontSize={font.sm}>Upload</text></box>
-          <text color={themeColors.mutedForeground} fontSize={font.xs}>{progress()}%</text>
+          <text color={progress() >= 100 ? "#22c55e" : themeColors.mutedForeground} fontSize={font.xs}>
+            {progress() >= 100 ? "Done!" : `${progress()}%`}
+          </text>
         </box>
         <VoidProgress value={progress()} />
-      </box>
-      <box direction="column" gap={space[1]}>
-        <text color={themeColors.foreground} fontSize={font.sm}>Tasks completed</text>
-        <VoidProgress value={11} max={20} />
-      </box>
-      <box direction="row" gap={space[2]}>
-        <box focusable onPress={() => setProgress(p => Math.max(0, p - 10))}>
-          <Button size="xs" variant="outline">-10</Button>
+        <box direction="row" gap={space[2]} paddingTop={space[1]}>
+          <box focusable onPress={startUpload}><Button size="xs">Simulate Upload</Button></box>
+          <box focusable onPress={resetUpload}><Button size="xs" variant="outline">Reset</Button></box>
         </box>
-        <box focusable onPress={() => setProgress(p => Math.min(100, p + 10))}>
-          <Button size="xs">+10</Button>
+      </box>
+
+      {/* Tasks — click to complete */}
+      <box direction="column" gap={space[1]}>
+        <box direction="row" alignY="center" width="grow">
+          <box width="grow"><text color={themeColors.foreground} fontSize={font.sm}>Tasks completed</text></box>
+          <text color={themeColors.mutedForeground} fontSize={font.xs}>{tasks()}/{TOTAL_TASKS}</text>
+        </box>
+        <VoidProgress value={tasks()} max={TOTAL_TASKS} />
+        <box direction="row" gap={space[2]} paddingTop={space[1]}>
+          <box focusable onPress={() => setTasks(t => Math.min(TOTAL_TASKS, t + 1))}>
+            <Button size="xs">Complete Task</Button>
+          </box>
+          <box focusable onPress={() => setTasks(0)}>
+            <Button size="xs" variant="outline">Reset</Button>
+          </box>
         </box>
       </box>
     </box>
@@ -1216,12 +1247,12 @@ function TabVoidTheme() {
       </SectionBox>
 
       {/* VoidProgress */}
-      <SectionBox title="VOID PROGRESS (animated fill)">
+      <SectionBox title="VOID PROGRESS (Simulate Upload auto-animates, Tasks are manual)">
         <VoidProgressDemo />
       </SectionBox>
 
       {/* CardAction */}
-      <SectionBox title="CARD WITH CARDACTION (top-right slot)">
+      <SectionBox title="CARD WITH CARDACTION — layout slot, Badge is top-right">
         <Card>
           <CardHeader>
             <box direction="row" alignY="center" width="grow">
