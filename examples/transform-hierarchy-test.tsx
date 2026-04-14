@@ -4,10 +4,11 @@
  * Run: bun --conditions=browser run examples/transform-hierarchy-test.tsx
  *
  * Tests:
- * 1. Parent with perspective → children inherit the tilt
- * 2. Parent rotated → child with own scale (composed transforms)
- * 3. Animated parent rotation → children follow
- * 4. Interactive children inside transformed parent (hit-testing with accumulated inverse)
+ * 1. Parent with perspective → children inherit the tilt (hit-testing)
+ * 2. Animated parent rotation → children follow
+ * 3. Parent rotate + child scale (composed transforms, hit-testing)
+ * 4. Deep nesting (3 levels) — parent rotate + child rotate + grandchild scale
+ * 5. 2-level hierarchy — parent rotate(30) + child rotate(15)
  */
 
 import { createSignal } from "solid-js"
@@ -151,28 +152,28 @@ function App() {
           </box>
         </box>
 
-        {/* ─── Test 4: Deep nesting ─── */}
+        {/* ─── Test 4: Deep nesting (3 levels, aggressive) ─── */}
         <box gap={8}>
           <text color={0xaaaaaaff} fontSize={12}>4. Deep nesting (3 levels)</text>
           <box
-            transform={{ perspective: 800, rotateX: -15 }}
+            transform={{ rotate: 20 }}
             backgroundColor={0x1a2e1aff}
             cornerRadius={12}
             padding={12}
             gap={8}
             width={200}
           >
-            <text color={0xffffffff} fontSize={12}>Level 1 (perspective)</text>
+            <text color={0xffffffff} fontSize={12}>Level 1 (rotate 20)</text>
             <box
-              transform={{ rotate: 5 }}
+              transform={{ rotate: 10 }}
               backgroundColor={0x2a4e2aff}
               cornerRadius={8}
               padding={10}
               gap={6}
             >
-              <text color={0xccffccff} fontSize={11}>Level 2 (rotated)</text>
+              <text color={0xccffccff} fontSize={11}>Level 2 (rotate 10)</text>
               <box
-                transform={{ scale: 0.9 }}
+                transform={{ scale: 1.15 }}
                 backgroundColor={0x3a6e3aff}
                 cornerRadius={6}
                 padding={8}
@@ -180,8 +181,32 @@ function App() {
                 onPress={() => handleClick("deep-child")}
                 hoverStyle={{ backgroundColor: 0x4a8e4aff }}
               >
-                <text color={0xffffffff} fontSize={10}>Level 3 (scaled) — click me</text>
+                <text color={0xffffffff} fontSize={10}>Level 3 (scale 1.15)</text>
               </box>
+            </box>
+          </box>
+        </box>
+
+        {/* ─── Test 5: Aggressive 2-level ─── */}
+        <box gap={8}>
+          <text color={0xaaaaaaff} fontSize={12}>5. 2-level (rotate 30)</text>
+          <box
+            transform={{ rotate: 30 }}
+            backgroundColor={0x1a2e1aff}
+            cornerRadius={12}
+            padding={12}
+            gap={8}
+            width={200}
+          >
+            <text color={0xffffffff} fontSize={12}>L1 (rotate 30)</text>
+            <box
+              transform={{ rotate: 15 }}
+              backgroundColor={0x2a4e2aff}
+              cornerRadius={8}
+              padding={10}
+              gap={6}
+            >
+              <text color={0xccffccff} fontSize={11}>L2 (rotate 15)</text>
             </box>
           </box>
         </box>
