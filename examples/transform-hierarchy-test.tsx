@@ -152,7 +152,7 @@ function App() {
           </box>
         </box>
 
-        {/* ─── Test 4: Deep nesting (3 levels, aggressive) ─── */}
+        {/* ─── Test 4: Deep nesting (3 levels) ─── */}
         <box gap={8}>
           <text color={0xaaaaaaff} fontSize={12}>4. Deep nesting (3 levels)</text>
           <box

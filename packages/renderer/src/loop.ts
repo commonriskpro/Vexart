@@ -38,7 +38,7 @@ import {
 } from "./node"
 import { isDirty, clearDirty, markDirty } from "./dirty"
 import { hasActiveAnimations } from "./animation"
-import { fromConfig, invert, multiply, translate, transformBounds, isIdentity } from "./matrix"
+import { fromConfig, identity, invert, multiply, translate, transformBounds, isIdentity } from "./matrix"
 import type { Matrix3 } from "./matrix"
 import { decodeImageForNode, scaleImage } from "./image"
 import { focusedId, setFocusedId, getNodeFocusId } from "./focus"
@@ -1100,76 +1100,78 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       }
     }
 
-    // Pass 2: Propagate transform hierarchy markers.
+    // Pass 2: Propagate transform hierarchy for hit-testing.
     //
-    // Strategy: SUBTREE TEMP BUFFER approach. Each transform ROOT node renders
-    // its entire subtree (including itself) into a temp buffer, then blits it
-    // with its transform matrix. Children do NOT get individual transforms —
-    // they paint normally into the root's temp buffer.
+    // Rendering uses SUBTREE TEMP BUFFER approach (post-pass in reverse depth
+    // order). Hit-testing needs the COMPOSED inverse of ALL transforms in the
+    // ancestor chain so that screen-space pointer coords map correctly to a
+    // node's local coordinate space.
     //
-    // What we track here:
-    // - _accTransform on the ROOT node = its local transform (used by paintCommand)
-    // - _accTransform on CHILDREN = same as root's (used only for hit-testing)
-    // - _accTransformInverse on children: rebased to child's coord space for hit-testing
+    // For a node N inside Parent(M2) inside Root(M1), the post-pass applies:
+    //   1. M2 centered on Parent (inner)
+    //   2. M1 centered on Root (outer)
     //
-    // For hit-testing, a child at offset (relX, relY) from the transform root
-    // needs: M_hit = T(-relX,-relY) × M_root × T(relX,relY)
-    // This maps screen-space pointer to the child's local coords within the
-    // transformed subtree.
-    for (const node of boxNodes) {
-      if (node._transform) {
-        // This node IS a transform root — accumulated = local
-        node._accTransform = node._transform
-        node._accTransformInverse = node._transformInverse
-      } else {
-        // Find nearest ancestor with a transform
-        let ancestor: TGENode | null = null
-        let pa = node.parent
-        while (pa) {
-          if (pa._transform) { ancestor = pa; break }
-          pa = pa.parent
-        }
+    // To invert for hit-testing, we compose the FORWARD matrices rebased to
+    // N's coord space (outer first), then invert once:
+    //   forward = rebase(M1, root→N) × rebase(M2, parent→N) [× rebase(M_own, 0,0)]
+    //   hit_inverse = forward^(-1)
+    //
+    // rebase(M, offset) = T(-offset) × M × T(offset)
+    // This shifts M's origin from its own center to N's local space.
 
-        if (ancestor) {
-          // Child of a transform root — mark for hit-testing
-          // Rebase ancestor's transform to child's coord space
-          const al = ancestor.layout
-          const nl = node.layout
-          const relX = nl.x - al.x
-          const relY = nl.y - al.y
-          node._accTransform = ancestor._accTransform // marker: "I'm in a transformed subtree"
-          node._accTransformInverse = invert(
-            multiply(multiply(translate(-relX, -relY), ancestor._accTransform!), translate(relX, relY))
-          )
-        } else {
-          node._accTransform = null
-          node._accTransformInverse = null
-        }
-      }
-    }
-
-    // Text nodes — only need hit-testing inverse
-    for (const node of textNodes) {
-      let ancestor: TGENode | null = null
+    function computeAccTransform(node: TGENode): void {
+      // Collect all ancestors with transforms, from outermost to innermost
+      const chain: TGENode[] = []
       let pa = node.parent
       while (pa) {
-        if (pa._transform) { ancestor = pa; break }
+        if (pa._transform) chain.push(pa)
         pa = pa.parent
       }
-      if (ancestor) {
-        const al = ancestor.layout
-        const nl = node.layout
-        const relX = nl.x - al.x
-        const relY = nl.y - al.y
-        node._accTransform = ancestor._accTransform
-        node._accTransformInverse = invert(
-          multiply(multiply(translate(-relX, -relY), ancestor._accTransform!), translate(relX, relY))
-        )
-      } else {
+      // chain is innermost-first; reverse to get outermost-first
+      chain.reverse()
+
+      const hasOwnTransform = !!node._transform
+      const hasAncestorTransform = chain.length > 0
+
+      if (!hasOwnTransform && !hasAncestorTransform) {
         node._accTransform = null
         node._accTransformInverse = null
+        return
       }
+
+      // For nodes with ONLY their own transform (no ancestors), keep the
+      // simple path: accumulated = local. This preserves the original
+      // behavior that's proven to work for leaf transforms.
+      if (hasOwnTransform && !hasAncestorTransform) {
+        node._accTransform = node._transform
+        node._accTransformInverse = node._transformInverse
+        return
+      }
+
+      const nl = node.layout
+
+      // Compose forward matrix in ABSOLUTE coordinates.
+      // Each _transform operates in its own local space (origin baked in via
+      // fromConfig). Lift each to absolute: T(anc) × M × T(-anc).
+      let absForward = identity()
+      for (const anc of chain) {
+        const al = anc.layout
+        absForward = multiply(absForward, multiply(multiply(translate(al.x, al.y), anc._transform!), translate(-al.x, -al.y)))
+      }
+      if (hasOwnTransform) {
+        absForward = multiply(absForward, multiply(multiply(translate(nl.x, nl.y), node._transform!), translate(-nl.x, -nl.y)))
+      }
+
+      // Rebase to node-local for the hit-test code which passes (pointer - layout):
+      //   forwardLocal = T(-nl) × absForward × T(nl)
+      // maps node-local → (screen - layout), so inv maps (pointer - layout) → node-local.
+      const forwardLocal = multiply(multiply(translate(-nl.x, -nl.y), absForward), translate(nl.x, nl.y))
+      node._accTransform = forwardLocal
+      node._accTransformInverse = invert(forwardLocal)
     }
+
+    for (const node of boxNodes) computeAccTransform(node)
+    for (const node of textNodes) computeAccTransform(node)
   }
 
   // ── Interactive state (hover/active/focus) ──
