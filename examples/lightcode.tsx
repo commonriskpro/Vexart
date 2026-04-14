@@ -308,7 +308,7 @@ function StatusDot(props: { color: number; size?: number }) {
 
 // ── Memory Panel ──
 
-function MemoryPanel() {
+function MemoryPanel(props: { mouseX: () => number; mouseY: () => number }) {
   const drag = useDraggablePanel(20, 50)
   const items = [
     { icon: "S", label: "compute_shader_pipeline", desc: "struct - v_engine.zig:102", iconBg: 0x2a1a0aff, iconColor: T.orange },
@@ -317,8 +317,13 @@ function MemoryPanel() {
     { icon: "C", label: "lightcode_core", desc: "module - core.zig:1", iconBg: 0x0a1a0aff, iconColor: T.green },
   ]
 
+  // Subtle perspective tilt — panel leans slightly right, reacts to mouse
+  const tiltY = () => 2 + (props.mouseX() - 500) * 0.002
+  const tiltX = () => -0.5 + (props.mouseY() - 400) * 0.001
+
   return (
     <box {...drag.dragProps} floating="root" floatOffset={{ x: drag.offsetX(), y: drag.offsetY() }} zIndex={10} width={270}
+      transform={{ perspective: 800, rotateY: tiltY(), rotateX: tiltX() }}
       backgroundColor={T.panelBg} backdropBlur={T.blur} cornerRadius={T.panelRadius}
       padding={space[4]} direction="column" gap={space[3]}
       borderColor={T.borderLight} borderWidth={1}
@@ -356,7 +361,7 @@ function MemoryPanel() {
 
 // ── Agents Panel ──
 
-function AgentsPanel() {
+function AgentsPanel(props: { mouseX: () => number; mouseY: () => number }) {
   const drag = useDraggablePanel(-20, -70)
   const agents = [
     { name: "coder-01", status: "Working...", statusColor: T.green, avatarBg: 0x0a200aff, avatarIcon: "C", task: "Refactoring compute_shader_pipeline", progress: 60, progressColor: T.orange },
@@ -364,9 +369,15 @@ function AgentsPanel() {
     { name: "doc-writer", status: "Idle", statusColor: T.blue, avatarBg: 0x0a1020ff, avatarIcon: "D", task: "Ready" },
   ]
 
+  // Mirrored tilt — panel leans left (opposite of Memory), reacts to mouse
+  const tiltY = () => -2 + (props.mouseX() - 500) * 0.002
+  const tiltX = () => 1 + (props.mouseY() - 400) * 0.001
+
   return (
     <box {...drag.dragProps} floating="root" floatOffset={{ x: drag.offsetX(), y: drag.offsetY() }} floatAttach={{ element: 7, parent: 7 }}
-      zIndex={10} width={280} backgroundColor={T.panelBg} backdropBlur={T.blur}
+      zIndex={10} width={280}
+      transform={{ perspective: 800, rotateY: tiltY(), rotateX: tiltX() }}
+      backgroundColor={T.panelBg} backdropBlur={T.blur}
       cornerRadius={T.panelRadius} padding={space[4]} direction="column" gap={space[3]}
       borderColor={T.borderLight} borderWidth={1}
       shadow={[
@@ -416,11 +427,18 @@ function AgentsPanel() {
 
 // ── Run Console ──
 
-function BuildConsole() {
+function BuildConsole(props: { mouseX: () => number; mouseY: () => number }) {
   const drag = useDraggablePanel(20, -70)
+
+  // Slight forward lean — like the Diff panel in the mock
+  const tiltY = () => -1.5 + (props.mouseX() - 500) * 0.002
+  const tiltX = () => -1 + (props.mouseY() - 400) * 0.001
+
   return (
     <box {...drag.dragProps} floating="root" floatOffset={{ x: drag.offsetX(), y: drag.offsetY() }} floatAttach={{ element: 6, parent: 6 }}
-      zIndex={10} width={320} backgroundColor={T.panelBg} backdropBlur={T.blur}
+      zIndex={10} width={320}
+      transform={{ perspective: 800, rotateY: tiltY(), rotateX: tiltX() }}
+      backgroundColor={T.panelBg} backdropBlur={T.blur}
       cornerRadius={T.panelRadius} padding={space[4]} direction="column" gap={space[3]}
       borderColor={T.borderLight} borderWidth={1}
       shadow={[
@@ -564,9 +582,9 @@ function App() {
       <NodeGraph mouseX={mouseX} mouseY={mouseY} />
       <TopBar />
       <Sidebar />
-      <MemoryPanel />
-      <AgentsPanel />
-      <BuildConsole />
+      <MemoryPanel mouseX={mouseX} mouseY={mouseY} />
+      <AgentsPanel mouseX={mouseX} mouseY={mouseY} />
+      <BuildConsole mouseX={mouseX} mouseY={mouseY} />
       <StatusBar />
     </box>
   )
