@@ -28,6 +28,7 @@
     "packages/*/src/**/*.ts",
     "packages/*/src/**/*.tsx",
     "examples/**/*.ts",
-    "examples/**/*.tsx"
+    "examples/**/*.tsx",
+    "types/**/*.d.ts"
   ]
 }

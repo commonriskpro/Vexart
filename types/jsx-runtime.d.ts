@@ -337,6 +337,30 @@ interface LineNumberProps {
   children?: Children
 }
 
+interface CanvasProps {
+  /** Imperative draw callback — called each frame with a CanvasContext. */
+  onDraw?: (ctx: import("@tge/renderer").CanvasContext) => void
+  /** Viewport transform for pan/zoom. */
+  viewport?: { x: number; y: number; zoom: number }
+  /** Width — number (fixed px), "grow", "fit", "100%". */
+  width?: number | string
+  /** Height — number (fixed px), "grow", "fit", "100%". */
+  height?: number | string
+  minWidth?: number
+  maxWidth?: number
+  minHeight?: number
+  maxHeight?: number
+  flexGrow?: number
+  layer?: boolean
+  // Mouse events
+  onMouseDown?: (evt: any) => void
+  onMouseUp?: (evt: any) => void
+  onMouseMove?: (evt: any) => void
+  onMouseOver?: (evt: any) => void
+  onMouseOut?: (evt: any) => void
+  ref?: (handle: any) => void
+}
+
 interface ImgProps {
   /** Image source — file path (absolute or relative to cwd). */
   src: string
@@ -383,6 +407,7 @@ export namespace JSX {
   interface IntrinsicElements {
     box: BoxProps
     text: TextProps
+    surface: CanvasProps
     img: ImgProps
     textarea: TextareaProps
     input: InputProps
@@ -402,3 +427,29 @@ export namespace JSX {
 export function jsx(type: any, props: any): any
 export function jsxs(type: any, props: any): any
 export function jsxDEV(type: any, props: any): any
+
+// ── SolidJS JSX augmentation ──
+// Adds TGE-specific intrinsic elements to SolidJS's JSX namespace.
+// This ensures <surface> works in any .tsx file without per-file declarations.
+declare module "solid-js" {
+  namespace JSX {
+    interface IntrinsicElements {
+      surface: {
+        onDraw?: (ctx: import("@tge/renderer").CanvasContext) => void
+        viewport?: { x: number; y: number; zoom: number }
+        width?: number | string
+        height?: number | string
+        minWidth?: number
+        maxWidth?: number
+        minHeight?: number
+        maxHeight?: number
+        flexGrow?: number
+        layer?: boolean
+        onMouseDown?: (evt: any) => void
+        onMouseUp?: (evt: any) => void
+        onMouseMove?: (evt: any) => void
+        ref?: (handle: any) => void
+      }
+    }
+  }
+}

@@ -107,6 +107,28 @@ export const paint = {
     loadLib().symbols.tge_stroke_rect_corners(bufPtr(buf.data), buf.width, buf.height, packColor(r, g, b, a), _p)
   },
 
+  /** Fill a regular polygon (3=triangle, 6=hexagon, etc). */
+  // packed: [cx:i32][cy:i32][radius:u32][sides_rotation:u32] = 16 bytes
+  // sides_rotation packs: (sides & 0xff) | ((rotation_deg & 0xffffff) << 8)
+  filledPolygon(buf: PixelBuffer, cx: number, cy: number, radius: number, sides: number, rotationDeg: number, r: number, g: number, b: number, a: number) {
+    _v.setInt32(0, cx, true)
+    _v.setInt32(4, cy, true)
+    _v.setUint32(8, radius, true)
+    _v.setUint32(12, ((sides & 0xff) | ((rotationDeg & 0xffffff) << 8)) >>> 0, true)
+    loadLib().symbols.tge_filled_polygon(bufPtr(buf.data), buf.width, buf.height, packColor(r, g, b, a), _p)
+  },
+
+  /** Stroke a regular polygon. */
+  // packed: [cx:i32][cy:i32][radius:u32][sides_rotation:u32][strokeWidth:u32] = 20 bytes
+  strokedPolygon(buf: PixelBuffer, cx: number, cy: number, radius: number, sides: number, rotationDeg: number, r: number, g: number, b: number, a: number, strokeWidth: number) {
+    _v.setInt32(0, cx, true)
+    _v.setInt32(4, cy, true)
+    _v.setUint32(8, radius, true)
+    _v.setUint32(12, ((sides & 0xff) | ((rotationDeg & 0xffffff) << 8)) >>> 0, true)
+    _v.setUint32(16, strokeWidth, true)
+    loadLib().symbols.tge_stroked_polygon(bufPtr(buf.data), buf.width, buf.height, packColor(r, g, b, a), _p)
+  },
+
   /** Fill an ellipse (circle when rx === ry). 8 params — no packing needed. */
   filledCircle(buf: PixelBuffer, cx: number, cy: number, rx: number, ry: number, r: number, g: number, b: number, a: number) {
     loadLib().symbols.tge_filled_circle(bufPtr(buf.data), buf.width, buf.height, cx, cy, rx, ry, packColor(r, g, b, a))
@@ -392,5 +414,47 @@ export const paint = {
         break
     }
     loadLib().symbols.tge_fill_rect(bufPtr(buf.data), buf.width, buf.height, x, y + dy, width, t, packColor(r, g, b, a))
+  },
+
+  /**
+   * Affine blit — composite src buffer onto dst with a 3×3 projective transform.
+   * The matrix should be the INVERSE transform (dst→src mapping).
+   * Uses bilinear interpolation for anti-aliased rotation/scale.
+   *
+   * @param dst       Destination pixel buffer
+   * @param src       Source pixel buffer (the element to transform)
+   * @param matrix    9 floats: inverse 3×3 matrix (row-major)
+   * @param dstX      Where to start writing in dst (X offset)
+   * @param dstY      Where to start writing in dst (Y offset)
+   * @param blitW     Output region width
+   * @param blitH     Output region height
+   */
+  affineBlit(
+    dst: PixelBuffer,
+    src: PixelBuffer,
+    matrix: Float64Array,
+    dstX: number,
+    dstY: number,
+    blitW: number,
+    blitH: number,
+  ) {
+    // Pack params: 9×f32 matrix + i32 dstX + i32 dstY + u32 blitW + u32 blitH + u32 srcH = 56 bytes
+    const ab = new ArrayBuffer(56)
+    const v = new DataView(ab)
+    // Matrix as f32 (Zig reads f32, not f64)
+    for (let i = 0; i < 9; i++) v.setFloat32(i * 4, matrix[i], true)
+    // Region
+    v.setInt32(36, dstX, true)
+    v.setInt32(40, dstY, true)
+    v.setUint32(44, blitW, true)
+    v.setUint32(48, blitH, true)
+    v.setUint32(52, src.height, true) // src_h packed here
+    const p = new Uint8Array(ab)
+
+    loadLib().symbols.tge_affine_blit(
+      bufPtr(dst.data), dst.width, dst.height,
+      bufPtr(src.data), src.width,
+      p
+    )
   },
 }

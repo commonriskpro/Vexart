@@ -24,6 +24,8 @@ const gradient = @import("gradient.zig");
 const text_mod = @import("text.zig");
 const filters = @import("filters.zig");
 const blendmodes = @import("blendmodes.zig");
+const polygon_mod = @import("polygon.zig");
+const affine_mod = @import("affine.zig");
 
 // Force test discovery for all sub-modules
 comptime {
@@ -36,6 +38,8 @@ comptime {
     _ = text_mod;
     _ = filters;
     _ = blendmodes;
+    _ = polygon_mod;
+    _ = affine_mod;
 }
 
 // ── Pixel Buffer ──
@@ -373,6 +377,29 @@ export fn tge_draw_text_font(data: [*]u8, width: u32, height: u32, text_ptr: [*]
     }
 }
 
+// Polygon — regular polygon fill/stroke
+// filled: (data, w, h, color, params_ptr) — 5 params
+// params_ptr layout (16 bytes): [cx:i32][cy:i32][radius:u32][sides_rotation:u32]
+// sides_rotation packs: (sides & 0xff) | ((rotation_deg & 0xffffff) << 8)
+export fn tge_filled_polygon(data: [*]u8, width: u32, height: u32, color: u32, p: [*]const u8) void {
+    var b = mkbuf(data, width, height);
+    const c = unpack(color);
+    const sr = rd_u32(p, 12);
+    const sides = sr & 0xff;
+    const rotation = (sr >> 8) & 0xffffff;
+    polygon_mod.filled(&b, rd_i32(p, 0), rd_i32(p, 4), rd_u32(p, 8), sides, rotation, c.r, c.g, c.b, c.a);
+}
+
+// params_ptr layout (20 bytes): [cx:i32][cy:i32][radius:u32][sides_rotation:u32][strokeWidth:u32]
+export fn tge_stroked_polygon(data: [*]u8, width: u32, height: u32, color: u32, p: [*]const u8) void {
+    var b = mkbuf(data, width, height);
+    const c = unpack(color);
+    const sr = rd_u32(p, 12);
+    const sides = sr & 0xff;
+    const rotation = (sr >> 8) & 0xffffff;
+    polygon_mod.stroked(&b, rd_i32(p, 0), rd_i32(p, 4), rd_u32(p, 8), sides, rotation, c.r, c.g, c.b, c.a, rd_u32(p, 16));
+}
+
 // Backdrop filters — in-place region operations (≤8 params each)
 export fn tge_filter_brightness(data: [*]u8, width: u32, height: u32, x: u32, y: u32, w: u32, h: u32, factor_pct: u32) void {
     var b = mkbuf(data, width, height);
@@ -422,6 +449,25 @@ export fn tge_blend_mode(data: [*]u8, width: u32, height: u32, color: u32, mode:
 
     const blend_mode = std.meta.intToEnum(blendmodes.BlendMode, mode) catch return;
     blendmodes.blend_rect(&b, x, y, w, h, c.r, c.g, c.b, c.a, blend_mode);
+}
+
+// Affine blit — projective buffer composite with bilinear interpolation
+// params_ptr layout (52 bytes): [matrix:9×f32][dstOx:i32][dstOy:i32][blitW:u32][blitH:u32]
+export fn tge_affine_blit(
+    dst_data: [*]u8,
+    dst_w: u32,
+    dst_h: u32,
+    src_data: [*]const u8,
+    src_w: u32,
+    params_ptr: [*]const u8,
+) void {
+    var dst = mkbuf(dst_data, dst_w, dst_h);
+    // src_h is packed into params to stay ≤8 FFI params
+    // Actually we can pass it as 6th param. Let's read it from after the main params.
+    // Wait — we have 6 params. That's fine for ARM64. But src_h is needed.
+    // Let's pack src_h into the params buffer at offset 52.
+    const src_h = @as(u32, @bitCast([4]u8{ params_ptr[52], params_ptr[53], params_ptr[54], params_ptr[55] }));
+    affine_mod.affine_blit(&dst, src_data, src_w, src_h, params_ptr);
 }
 
 // ── Tests ──

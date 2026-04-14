@@ -11,7 +11,7 @@
 
 import { SIZING, DIRECTION, ALIGN_X, ALIGN_Y } from "./clay"
 
-export type TGENodeKind = "box" | "text" | "img" | "root"
+export type TGENodeKind = "box" | "text" | "img" | "canvas" | "root"
 
 /** Event passed to onPress handlers. Supports stopPropagation like DOM events. */
 export type PressEvent = {
@@ -188,6 +188,24 @@ export type TGEProps = {
   /** Fires when pointer leaves this node's bounds. */
   onMouseOut?: (event: NodeMouseEvent) => void
 
+  // Transforms — 2D affine + pseudo-perspective
+  /** Transform configuration: translate, rotate, scale, skew, perspective. */
+  transform?: {
+    translateX?: number    // pixels
+    translateY?: number    // pixels
+    rotate?: number        // degrees
+    scale?: number         // uniform scale (1 = 100%)
+    scaleX?: number        // horizontal scale
+    scaleY?: number        // vertical scale
+    skewX?: number         // degrees
+    skewY?: number         // degrees
+    perspective?: number   // perspective distance (higher = subtler, 0 = off)
+    rotateX?: number       // tilt around X axis in degrees (vertical foreshortening)
+    rotateY?: number       // tilt around Y axis in degrees (horizontal foreshortening)
+  }
+  /** Transform origin point. Default: "center". */
+  transformOrigin?: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | { x: number; y: number }
+
   // Convenience
   /** CSS-style prop — merged with direct props (direct props win). Decision 3. */
   style?: Partial<TGEProps>
@@ -197,6 +215,12 @@ export type TGEProps = {
   src?: string
   /** How the image fits within its layout box. Default: "contain". */
   objectFit?: "contain" | "cover" | "fill" | "none"
+
+  // Canvas (<canvas> intrinsic)
+  /** Imperative draw callback — called each frame with a CanvasContext. */
+  onDraw?: (ctx: import("./canvas").CanvasContext) => void
+  /** Viewport transform for pan/zoom. { x, y, zoom }. */
+  viewport?: { x: number; y: number; zoom: number }
 
   // Text
   color?: string | number
@@ -234,6 +258,14 @@ export type TGENode = {
   _widthSizing: SizingInfo | null
   /** Pre-parsed height sizing — resolved once in setProperty, read every frame */
   _heightSizing: SizingInfo | null
+  /** Computed LOCAL transform matrix — set after layout if node has transform prop */
+  _transform: Float64Array | null
+  /** Inverse LOCAL transform matrix — for local-space calculations */
+  _transformInverse: Float64Array | null
+  /** Accumulated transform matrix — local × parent's accumulated (hierarchy) */
+  _accTransform: Float64Array | null
+  /** Inverse accumulated transform — for hit-testing (screen → local coords) */
+  _accTransformInverse: Float64Array | null
 }
 
 /** Computed layout geometry from Clay — written each frame after layout */
@@ -263,6 +295,10 @@ export function createNode(kind: TGENodeKind): TGENode {
     _imageState: "idle",
     _widthSizing: null,
     _heightSizing: null,
+    _transform: null,
+    _transformInverse: null,
+    _accTransform: null,
+    _accTransformInverse: null,
   }
 }
 

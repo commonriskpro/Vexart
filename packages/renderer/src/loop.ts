@@ -38,6 +38,8 @@ import {
 } from "./node"
 import { isDirty, clearDirty, markDirty } from "./dirty"
 import { hasActiveAnimations } from "./animation"
+import { fromConfig, invert, multiply, translate, transformBounds, isIdentity } from "./matrix"
+import type { Matrix3 } from "./matrix"
 import { decodeImageForNode, scaleImage } from "./image"
 import { focusedId, setFocusedId, getNodeFocusId } from "./focus"
 import {
@@ -52,6 +54,7 @@ import {
   dirtyCount,
 } from "./layers"
 import { measureForClay, layoutText, getFont, fontToCSS } from "./text-layout"
+import { CanvasContext, paintCanvasCommands } from "./canvas"
 import { appendFileSync } from "fs"
 
 const LOG = "/tmp/tge-layers.log"
@@ -105,6 +108,13 @@ type EffectConfig = {
   backdropHueRotate?: number
   opacity?: number
   cornerRadii?: { tl: number; tr: number; br: number; bl: number }
+  transform?: Float64Array       // 3×3 matrix (9 floats)
+  transformInverse?: Float64Array // inverse matrix for hit-testing
+  transformBounds?: { x: number; y: number; width: number; height: number } // AABB of transformed rect
+  /** Reference to the TGENode — used by paintCommand to read accumulated transform */
+  _node?: TGENode
+  /** When true, paintCommand skips individual affineBlit — subtree post-pass handles it */
+  _subtreeTransform?: boolean
 }
 
 /** Effects queue — populated during walkTree, consumed during paintCommand. */
@@ -118,6 +128,14 @@ type ImagePaintConfig = {
   objectFit: "contain" | "cover" | "fill" | "none"
 }
 let imageQueue: ImagePaintConfig[] = []
+
+/** Canvas queue — populated during walkTree for <canvas> nodes, consumed during paintCommand. */
+type CanvasPaintConfig = {
+  color: number        // placeholder color to match against RECT command
+  onDraw: (ctx: CanvasContext) => void
+  viewport?: { x: number; y: number; zoom: number }
+}
+let canvasQueue: CanvasPaintConfig[] = []
 
 export type RenderLoopOptions = {
   /** When true, text is rendered as ANSI escape codes (selectable/copiable)
@@ -315,7 +333,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   /** ALL box nodes in walkTree order (open/close pairs = Clay element order). */
   const boxNodes: TGENode[] = []
 
-  function walkTree(node: TGENode, parentDir?: number) {
+  function walkTree(node: TGENode, parentDir?: number, insideTransform?: boolean) {
     if (node.kind === "text") {
       const content = node.text || collectText(node)
       if (!content) return
@@ -368,6 +386,34 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
           cornerRadius: node.props.cornerRadius ?? 0,
           imageBuffer: imgBuf,
           objectFit: node.props.objectFit ?? "contain",
+        })
+      }
+
+      clay.closeElement()
+      return
+    }
+
+    // ── <canvas> intrinsic — imperative drawing surface ──
+    if (node.kind === "canvas") {
+      boxNodes.push(node)
+      clay.openElement()
+
+      // Sizing: use pre-parsed or default to grow
+      const ws = node._widthSizing ?? { type: SIZING.GROW, value: 0 }
+      const hs = node._heightSizing ?? { type: SIZING.GROW, value: 0 }
+      clay.configureSizing(ws.type, ws.value, hs.type, hs.value)
+
+      // Use a placeholder RECT so Clay emits a RECTANGLE command for painting
+      const placeholderColor = 0x00000002 // near-transparent, distinct from img placeholder
+      clay.configureRectangle(placeholderColor, 0)
+      rectNodes.push(node)
+
+      // Queue canvas config for paintCommand
+      if (node.props.onDraw) {
+        canvasQueue.push({
+          color: placeholderColor,
+          onDraw: node.props.onDraw,
+          viewport: node.props.viewport,
         })
       }
 
@@ -479,7 +525,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       vp.backdropSepia !== undefined || vp.backdropHueRotate !== undefined
     const hasMouseCallbacks = vp.onMouseDown || vp.onMouseUp || vp.onMouseMove || vp.onMouseOver || vp.onMouseOut
     const isInteractiveNode = vp.onPress || vp.focusable || vp.hoverStyle || vp.activeStyle || vp.focusStyle || hasMouseCallbacks
-    const needsRect = vp.backgroundColor !== undefined || vp.gradient !== undefined || hasBackdropFilter || vp.opacity !== undefined || isInteractiveNode
+    const hasTransform = vp.transform !== undefined
+    const needsRect = vp.backgroundColor !== undefined || vp.gradient !== undefined || hasBackdropFilter || vp.opacity !== undefined || isInteractiveNode || hasTransform
     if (needsRect) {
       const bgColor = vp.backgroundColor !== undefined ? (vp.backgroundColor as number) : 0x00000001 // near-transparent placeholder
       const cr = vp.cornerRadius ?? 0
@@ -487,8 +534,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       rectNodes.push(node)
 
       // Record effects for this RECT — matched during paint
-      if (vp.shadow || vp.glow || vp.gradient || hasBackdropFilter || vp.cornerRadii || vp.opacity !== undefined) {
-        const effect: EffectConfig = { color: bgColor, cornerRadius: cr }
+      if (vp.shadow || vp.glow || vp.gradient || hasBackdropFilter || vp.cornerRadii || vp.opacity !== undefined || hasTransform) {
+        const effect: EffectConfig = { color: bgColor, cornerRadius: cr, _node: node }
         if (vp.shadow) {
           effect.shadow = vp.shadow
         }
@@ -517,6 +564,19 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         if (vp.backdropHueRotate !== undefined) effect.backdropHueRotate = vp.backdropHueRotate
         if (vp.opacity !== undefined) effect.opacity = vp.opacity
         if (vp.cornerRadii) effect.cornerRadii = vp.cornerRadii
+        if (hasTransform && vp.transform) {
+          // Store the raw config; matrix is computed in paintCommand after we know dimensions.
+          effect.transform = new Float64Array(9) // placeholder, computed in paint
+          ;(effect as any)._transformConfig = vp.transform
+          ;(effect as any)._transformOrigin = vp.transformOrigin
+          // Use subtree transform approach when:
+          // 1. Node has children → paint subtree flat, affineBlit in post-pass
+          // 2. Node is inside another transform → post-pass of parent needs our
+          //    result in the buffer, so we must blit in post-pass not paintCommand
+          if (node.children.length > 0 || insideTransform) {
+            effect._subtreeTransform = true
+          }
+        }
         effectsQueue.push(effect)
       }
     }
@@ -560,8 +620,11 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       )
     }
 
+    // Propagate transform ancestry to children: if this node has a transform
+    // prop OR we're already inside a transform subtree, children inherit it.
+    const childInsideXform = insideTransform || hasTransform
     for (const child of node.children) {
-      walkTree(child, dir)
+      walkTree(child, dir, childInsideXform)
     }
 
     clay.closeElement()
@@ -1002,6 +1065,106 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     // require Clay to expose per-element layout (which it doesn't via commands).
     // NOTE: This is a best-effort. Nodes with no background and no children
     // will have layout { 0, 0, 0, 0 } until a more precise approach is added.
+
+    // ── Transform hierarchy ──
+    // Pass 1: Compute LOCAL transform matrices on rectNodes (nodes with RECT commands).
+    // This runs AFTER layout so we know w/h for transformOrigin.
+    for (const node of rectNodes) {
+      const vp = resolveProps(node)
+      if (vp.transform) {
+        const l = node.layout
+        const originProp = vp.transformOrigin
+        let ox = l.width / 2, oy = l.height / 2 // default: center
+        if (originProp === "top-left") { ox = 0; oy = 0 }
+        else if (originProp === "top-right") { ox = l.width; oy = 0 }
+        else if (originProp === "bottom-left") { ox = 0; oy = l.height }
+        else if (originProp === "bottom-right") { ox = l.width; oy = l.height }
+        else if (originProp && typeof originProp === "object") { ox = originProp.x * l.width; oy = originProp.y * l.height }
+
+        const matrix = fromConfig(vp.transform, ox, oy)
+        if (!isIdentity(matrix)) {
+          node._transform = matrix
+          node._transformInverse = invert(matrix)
+        } else {
+          node._transform = null
+          node._transformInverse = null
+        }
+      } else {
+        node._transform = null
+        node._transformInverse = null
+      }
+    }
+
+    // Pass 2: Propagate transform hierarchy markers.
+    //
+    // Strategy: SUBTREE TEMP BUFFER approach. Each transform ROOT node renders
+    // its entire subtree (including itself) into a temp buffer, then blits it
+    // with its transform matrix. Children do NOT get individual transforms —
+    // they paint normally into the root's temp buffer.
+    //
+    // What we track here:
+    // - _accTransform on the ROOT node = its local transform (used by paintCommand)
+    // - _accTransform on CHILDREN = same as root's (used only for hit-testing)
+    // - _accTransformInverse on children: rebased to child's coord space for hit-testing
+    //
+    // For hit-testing, a child at offset (relX, relY) from the transform root
+    // needs: M_hit = T(-relX,-relY) × M_root × T(relX,relY)
+    // This maps screen-space pointer to the child's local coords within the
+    // transformed subtree.
+    for (const node of boxNodes) {
+      if (node._transform) {
+        // This node IS a transform root — accumulated = local
+        node._accTransform = node._transform
+        node._accTransformInverse = node._transformInverse
+      } else {
+        // Find nearest ancestor with a transform
+        let ancestor: TGENode | null = null
+        let pa = node.parent
+        while (pa) {
+          if (pa._transform) { ancestor = pa; break }
+          pa = pa.parent
+        }
+
+        if (ancestor) {
+          // Child of a transform root — mark for hit-testing
+          // Rebase ancestor's transform to child's coord space
+          const al = ancestor.layout
+          const nl = node.layout
+          const relX = nl.x - al.x
+          const relY = nl.y - al.y
+          node._accTransform = ancestor._accTransform // marker: "I'm in a transformed subtree"
+          node._accTransformInverse = invert(
+            multiply(multiply(translate(-relX, -relY), ancestor._accTransform!), translate(relX, relY))
+          )
+        } else {
+          node._accTransform = null
+          node._accTransformInverse = null
+        }
+      }
+    }
+
+    // Text nodes — only need hit-testing inverse
+    for (const node of textNodes) {
+      let ancestor: TGENode | null = null
+      let pa = node.parent
+      while (pa) {
+        if (pa._transform) { ancestor = pa; break }
+        pa = pa.parent
+      }
+      if (ancestor) {
+        const al = ancestor.layout
+        const nl = node.layout
+        const relX = nl.x - al.x
+        const relY = nl.y - al.y
+        node._accTransform = ancestor._accTransform
+        node._accTransformInverse = invert(
+          multiply(multiply(translate(-relX, -relY), ancestor._accTransform!), translate(relX, relY))
+        )
+      } else {
+        node._accTransform = null
+        node._accTransformInverse = null
+      }
+    }
   }
 
   // ── Interactive state (hover/active/focus) ──
@@ -1088,14 +1251,43 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       // This is like mobile "minimum touch target" (44px) but for terminal cells.
       const cw = term.size.cellWidth || 8
       const ch = term.size.cellHeight || 16
-      const hitW = Math.max(l.width, cw)
-      const hitH = Math.max(l.height, ch)
-      // Center the expanded hit-area around the element's center
-      const hitX = l.x - (hitW - l.width) / 2
-      const hitY = l.y - (hitH - l.height) / 2
       const isCaptured = captureNode === node
-      const isOver = isCaptured || (pointerX >= hitX && pointerX < hitX + hitW &&
-                     pointerY >= hitY && pointerY < hitY + hitH)
+
+      // Hit-test: if the node has a transform (own or inherited from parent),
+      // use the ACCUMULATED inverse matrix to map pointer coords into the
+      // node's local coordinate space. This handles the full transform hierarchy.
+      const hitInverse = node._accTransformInverse ?? node._transformInverse
+      let isOver = false
+      if (isCaptured) {
+        isOver = true
+      } else if (hitInverse) {
+        // Transform pointer from screen space to node-local space
+        const inv = hitInverse
+        // Pointer relative to node's layout origin
+        const relX = pointerX - l.x
+        const relY = pointerY - l.y
+        // Apply inverse matrix
+        const w = inv[6] * relX + inv[7] * relY + inv[8]
+        if (Math.abs(w) > 1e-12) {
+          const localX = (inv[0] * relX + inv[1] * relY + inv[2]) / w
+          const localY = (inv[3] * relX + inv[4] * relY + inv[5]) / w
+          // Hit-test against local bounding box with min cell-size expansion
+          const hitW = Math.max(l.width, cw)
+          const hitH = Math.max(l.height, ch)
+          const hitX = -(hitW - l.width) / 2
+          const hitY = -(hitH - l.height) / 2
+          isOver = localX >= hitX && localX < hitX + hitW &&
+                   localY >= hitY && localY < hitY + hitH
+        }
+      } else {
+        // Standard axis-aligned hit-test (no transform)
+        const hitW = Math.max(l.width, cw)
+        const hitH = Math.max(l.height, ch)
+        const hitX = l.x - (hitW - l.width) / 2
+        const hitY = l.y - (hitH - l.height) / 2
+        isOver = pointerX >= hitX && pointerX < hitX + hitW &&
+                 pointerY >= hitY && pointerY < hitY + hitH
+      }
       const isDown = isOver && pointerDown
 
       // Dispatch mouse enter/leave
@@ -1243,6 +1435,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     scrollSpeedCap = 0 // reset — will be set by walkTree if any node has scrollSpeed
     effectsQueue = [] // reset effects for this frame
     imageQueue = [] // reset image paint queue for this frame
+    canvasQueue = [] // reset canvas paint queue for this frame
     pendingAnsiTexts = [] // reset ANSI text collection
     textMeasureIndex = 0 // reset text measure counter
     textMetas.length = 0 // clear text metadata
@@ -1268,6 +1461,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       scrollSpeedCap = 0
       effectsQueue = []
       imageQueue = []
+      canvasQueue = []
       pendingAnsiTexts = []
       textMeasureIndex = 0
       textMetas.length = 0
@@ -1425,6 +1619,100 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
           paintCommand(layer.buf, cmd, lx, ly)
         }
 
+        // ── Transform hierarchy post-pass ──
+        // For each subtree transform root, copy the flat-rendered subtree region
+        // from the layer buffer, clear it, and affineBlit it with the transform.
+        
+        // This ensures parent+children transform as a single block (CSS behavior).
+        //
+        // Process in REVERSE order (deepest nodes first) so nested transforms
+        // apply bottom-up: child scale → then parent rotate over everything.
+        // rectNodes is in walkTree order (depth-first), so reversing gives
+        // deepest-first processing.
+        for (let ri = rectNodes.length - 1; ri >= 0; ri--) {
+          const node = rectNodes[ri]
+          if (!node._transform) continue
+          const vp = resolveProps(node)
+          if (!vp.transform) continue
+          // Check if this node is a subtree transform (has children, or is nested
+          // inside another transform). Leaf nodes without a parent transform
+          // are handled in paintCommand and don't need the post-pass.
+          let isInsideTransform = false
+          let pa = node.parent
+          while (pa) {
+            if (pa._transform) { isInsideTransform = true; break }
+            pa = pa.parent
+          }
+          if (node.children.length === 0 && !isInsideTransform) continue
+
+          const nl = node.layout
+          const nw = Math.round(nl.width)
+          const nh = Math.round(nl.height)
+          if (nw <= 0 || nh <= 0) continue
+          
+
+          // Region in layer-buffer coordinates
+          const rx = Math.round(nl.x) - lx
+          const ry = Math.round(nl.y) - ly
+
+          // Copy the flat subtree pixels into a temp buffer
+          const tmp = create(nw, nh)
+          const src: PixelBuffer = layer.buf!
+          for (let row = 0; row < nh; row++) {
+            const sy = ry + row
+            if (sy < 0 || sy >= src.height) continue
+            const srcOff = sy * src.stride
+            const dstOff = row * tmp.stride
+            for (let col = 0; col < nw; col++) {
+              const sx = rx + col
+              if (sx < 0 || sx >= src.width) continue
+              const si = srcOff + sx * 4
+              const di = dstOff + col * 4
+              tmp.data[di] = src.data[si]
+              tmp.data[di + 1] = src.data[si + 1]
+              tmp.data[di + 2] = src.data[si + 2]
+              tmp.data[di + 3] = src.data[si + 3]
+            }
+          }
+
+          // Clear the region in the layer buffer
+          for (let row = 0; row < nh; row++) {
+            const sy = ry + row
+            if (sy < 0 || sy >= src.height) continue
+            const off: number = sy * src.stride
+            for (let col = 0; col < nw; col++) {
+              const sx = rx + col
+              if (sx < 0 || sx >= src.width) continue
+              const i = off + sx * 4
+              src.data[i] = 0
+              src.data[i + 1] = 0
+              src.data[i + 2] = 0
+              src.data[i + 3] = 0
+            }
+          }
+
+          // Compute the transform matrix
+          const originProp = vp.transformOrigin
+          let ox = nw / 2, oy = nh / 2
+          if (originProp === "top-left") { ox = 0; oy = 0 }
+          else if (originProp === "top-right") { ox = nw; oy = 0 }
+          else if (originProp === "bottom-left") { ox = 0; oy = nh }
+          else if (originProp === "bottom-right") { ox = nw; oy = nh }
+          else if (originProp && typeof originProp === "object") { ox = originProp.x * nw; oy = originProp.y * nh }
+          const matrix = fromConfig(vp.transform, ox, oy)
+
+          if (!isIdentity(matrix)) {
+            const bounds = transformBounds(matrix, nw, nh)
+            const inv = invert(matrix)
+            if (inv) {
+              paint.affineBlit(src, tmp, inv, rx + bounds.x, ry + bounds.y, bounds.width, bounds.height)
+            }
+          } else {
+            // Identity — just copy back
+            over(src, tmp, rx, ry)
+          }
+        }
+
         const changed = layer.dirty || !buffersEqual(prev, layer.buf.data)
         if (changed) {
           const renderZ = selectableText ? -1 : layer.z
@@ -1496,6 +1784,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
     effectsQueue = [] // reset effects for this frame
     imageQueue = [] // reset image paint queue for this frame
+    canvasQueue = [] // reset canvas paint queue for this frame
     textMeasureIndex = 0
     textMetas.length = 0
     textMetaMap.clear()
@@ -2030,6 +2319,25 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
         break
       }
 
+      // ── Check for <canvas> node matching this RECT ──
+      const canvasIdx = canvasQueue.findIndex(
+        (c) => c.color === cmdColor
+      )
+      if (canvasIdx >= 0) {
+        const canvasConfig = canvasQueue[canvasIdx]
+        canvasQueue.splice(canvasIdx, 1) // consume
+
+        // Create a temp buffer for the canvas (isolated from neighbors)
+        if (w > 0 && h > 0) {
+          const tmp = create(w, h)
+          const ctx = new CanvasContext(canvasConfig.viewport)
+          canvasConfig.onDraw(ctx)
+          paintCanvasCommands(tmp, ctx, w, h)
+          over(buf, tmp, x, y)
+        }
+        break
+      }
+
       // Check for shadow/glow/gradient effects matching this RECT
       const effectIdx = effectsQueue.findIndex(
         (e) => e.color === cmdColor && e.cornerRadius === radius
@@ -2227,12 +2535,21 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
       }
 
       // Paint the actual rect ON TOP of shadow/glow (no backdrop path)
-      // If opacity < 1, paint into temp buffer and composite with withOpacity.
+      // If opacity < 1 OR transform is set, paint into temp buffer.
+      // Transform uses affineBlit; opacity uses withOpacity; both can combine.
+      //
+      // Transform: per-node affineBlit for LEAF transforms only.
+      // Subtree transforms (_subtreeTransform=true) are handled by the post-pass —
+      // they paint flat here and get blitted as a whole subtree afterwards.
       const elemOpacity = matchedEffect?.opacity
       const useOpacity = elemOpacity !== undefined && elemOpacity < 1
-      const target = useOpacity ? create(w, h) : buf
-      const tx = useOpacity ? 0 : x
-      const ty = useOpacity ? 0 : y
+      const hasXform = matchedEffect?.transform !== undefined
+        && (matchedEffect as any)._transformConfig
+        && !matchedEffect._subtreeTransform  // skip: post-pass handles subtree
+      const useTemp = useOpacity || hasXform
+      const target = useTemp ? create(w, h) : buf
+      const tx = useTemp ? 0 : x
+      const ty = useTemp ? 0 : y
 
       if (matchedEffect?.gradient) {
         // Gradient fill: paint gradient, then mask to rounded rect shape
@@ -2301,9 +2618,57 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
         }
       }
 
-      // Composite with opacity if needed
-      if (useOpacity) {
-        withOpacity(buf, target, x, y, elemOpacity!)
+      // Composite temp buffer → destination (opacity and/or transform)
+      if (useTemp) {
+        if (hasXform) {
+          // Compute transform matrix from the node's local config
+          const cfg = (matchedEffect as any)._transformConfig as NonNullable<import("./node").TGEProps["transform"]>
+          const originProp = (matchedEffect as any)._transformOrigin
+          let ox = w / 2, oy = h / 2
+          if (originProp === "top-left") { ox = 0; oy = 0 }
+          else if (originProp === "top-right") { ox = w; oy = 0 }
+          else if (originProp === "bottom-left") { ox = 0; oy = h }
+          else if (originProp === "bottom-right") { ox = w; oy = h }
+          else if (originProp && typeof originProp === "object") { ox = originProp.x * w; oy = originProp.y * h }
+          const matrix = fromConfig(cfg, ox, oy)
+
+          if (!matrix || isIdentity(matrix)) {
+            // No actual transform — just composite normally
+            if (useOpacity) {
+              withOpacity(buf, target, x, y, elemOpacity!)
+            } else {
+              over(buf, target, x, y)
+            }
+          } else {
+            // Compute output bounds
+            const bounds = transformBounds(matrix, w, h)
+
+            // Apply opacity to temp buffer first if needed
+            let src = target
+            if (useOpacity) {
+              // Multiply alpha of every pixel by opacity
+              const data = src.data
+              const mul = Math.round((elemOpacity!) * 255)
+              for (let i = 3; i < data.length; i += 4) {
+                data[i] = (data[i] * mul) >> 8
+              }
+            }
+
+            // Compute inverse matrix for Zig blit (dst→src mapping)
+            const inv = invert(matrix)
+            if (inv) {
+              paint.affineBlit(
+                buf, src, inv,
+                x + bounds.x, y + bounds.y,
+                bounds.width, bounds.height
+              )
+            }
+          }
+        } else if (useOpacity) {
+          withOpacity(buf, target, x, y, elemOpacity!)
+        } else {
+          over(buf, target, x, y)
+        }
       }
       break
     }

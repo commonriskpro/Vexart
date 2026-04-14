@@ -101,6 +101,21 @@ export { createHandle } from "./handle"
 // Re-export press event + mouse event types
 export type { PressEvent, NodeMouseEvent } from "./node"
 
+// Re-export canvas API
+export { CanvasContext } from "./canvas"
+export type { Viewport, StrokeStyle, FillStyle, ShapeStyle } from "./canvas"
+
+// Re-export particle system
+export { createParticleSystem } from "./particles"
+export type { ParticleConfig, ParticleSystem } from "./particles"
+
+// Re-export transform matrix
+export {
+  identity, translate, rotate, scale, scaleXY, skew, perspective,
+  multiply, invert, transformPoint, transformBounds, fromConfig, isIdentity,
+} from "./matrix"
+export type { Matrix3 } from "./matrix"
+
 // Re-export pointer capture + post-scroll API
 export { setPointerCapture, releasePointerCapture, onPostScroll } from "./pointer"
 

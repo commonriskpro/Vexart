@@ -102,7 +102,7 @@ export const {
   use,
 } = createRenderer<TGENode>({
   createElement(type: string): TGENode {
-    const kind = type === "text" ? "text" : type === "img" ? "img" : "box"
+    const kind = type === "text" ? "text" : type === "img" ? "img" : type === "canvas" || type === "surface" ? "canvas" : "box"
     const node = createNode(kind)
     return node
   },

@@ -68,6 +68,9 @@ const FFI_DEFS = {
   tge_radial_gradient_multi:  { args: [P, U, U, U, U, U, P, U], returns: FFIType.void },
   tge_conic_gradient:         { args: [P, U, U, P, U, P], returns: FFIType.void },
   tge_gradient_stroke:        { args: [P, U, U, P, U, P], returns: FFIType.void },
+  // Polygon — (data, w, h, color, params_ptr)  — 5 params
+  tge_filled_polygon:         { args: [P, U, U, U, P], returns: FFIType.void },
+  tge_stroked_polygon:        { args: [P, U, U, U, P], returns: FFIType.void },
   // Backdrop filters — in-place region operations (all exactly 8 params)
   tge_filter_brightness:      { args: [P, U, U, U, U, U, U, U], returns: FFIType.void },
   tge_filter_contrast:        { args: [P, U, U, U, U, U, U, U], returns: FFIType.void },
@@ -78,6 +81,8 @@ const FFI_DEFS = {
   tge_filter_hue_rotate:      { args: [P, U, U, U, U, U, U, U], returns: FFIType.void },
   // Blend modes — (data, w, h, color, mode, params_ptr)  — 6 params
   tge_blend_mode:             { args: [P, U, U, U, FFIType.u8, P], returns: FFIType.void },
+  // Affine blit — (dst_data, dst_w, dst_h, src_data, src_w, params_ptr)  — 6 params
+  tge_affine_blit:              { args: [P, U, U, P, U, P], returns: FFIType.void },
   // Text — exactly 8 params (no packing needed)
   tge_draw_text:              { args: [P, U, U, FFIType.i32, FFIType.i32, P, U, U], returns: FFIType.void },
   tge_measure_text:           { args: [U], returns: U },

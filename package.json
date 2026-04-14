@@ -34,7 +34,8 @@
     "demo14": "bun --conditions=browser run examples/textarea.tsx",
     "demo15": "bun --conditions=browser run examples/syntax.tsx",
     "demo16": "bun --conditions=browser run examples/markdown.tsx",
-    "showcase": "bun --conditions=browser run examples/showcase.tsx"
+    "showcase": "bun --conditions=browser run examples/showcase.tsx",
+    "devtools": "bun run packages/devtools/src/server.ts"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
@@ -53,7 +54,10 @@
   "license": "MIT",
   "dependencies": {
     "@chenglou/pretext": "^0.0.5",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "marked": "^18.0.0",
-    "web-tree-sitter": "^0.26.8"
+    "sharp": "^0.34.5",
+    "web-tree-sitter": "^0.26.8",
+    "zod": "^4.3.6"
   }
 }
