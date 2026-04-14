@@ -1655,9 +1655,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
           const rx = Math.round(nl.x) - lx
           const ry = Math.round(nl.y) - ly
 
-          // Copy the flat subtree pixels into a temp buffer
-          const tmp = create(nw, nh)
+          // 1. Copy the flat subtree + save background for restoration
           const src: PixelBuffer = layer.buf!
+          const saved = create(nw, nh)
+          const tmp = create(nw, nh)
           for (let row = 0; row < nh; row++) {
             const sy = ry + row
             if (sy < 0 || sy >= src.height) continue
@@ -1668,30 +1669,13 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
               if (sx < 0 || sx >= src.width) continue
               const si = srcOff + sx * 4
               const di = dstOff + col * 4
-              tmp.data[di] = src.data[si]
-              tmp.data[di + 1] = src.data[si + 1]
-              tmp.data[di + 2] = src.data[si + 2]
-              tmp.data[di + 3] = src.data[si + 3]
+              const r0 = src.data[si], g0 = src.data[si+1], b0 = src.data[si+2], a0 = src.data[si+3]
+              tmp.data[di] = r0; tmp.data[di+1] = g0; tmp.data[di+2] = b0; tmp.data[di+3] = a0
+              saved.data[di] = r0; saved.data[di+1] = g0; saved.data[di+2] = b0; saved.data[di+3] = a0
             }
           }
 
-          // Clear the region in the layer buffer
-          for (let row = 0; row < nh; row++) {
-            const sy = ry + row
-            if (sy < 0 || sy >= src.height) continue
-            const off: number = sy * src.stride
-            for (let col = 0; col < nw; col++) {
-              const sx = rx + col
-              if (sx < 0 || sx >= src.width) continue
-              const i = off + sx * 4
-              src.data[i] = 0
-              src.data[i + 1] = 0
-              src.data[i + 2] = 0
-              src.data[i + 3] = 0
-            }
-          }
-
-          // Compute the transform matrix
+          // 2. Compute the transform matrix
           const originProp = vp.transformOrigin
           let ox = nw / 2, oy = nh / 2
           if (originProp === "top-left") { ox = 0; oy = 0 }
@@ -1705,11 +1689,49 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
             const bounds = transformBounds(matrix, nw, nh)
             const inv = invert(matrix)
             if (inv) {
+              // 3. Clear the original region
+              for (let row = 0; row < nh; row++) {
+                const sy = ry + row
+                if (sy < 0 || sy >= src.height) continue
+                const off: number = sy * src.stride
+                for (let col = 0; col < nw; col++) {
+                  const sx = rx + col
+                  if (sx < 0 || sx >= src.width) continue
+                  const i = off + sx * 4
+                  src.data[i] = 0; src.data[i+1] = 0; src.data[i+2] = 0; src.data[i+3] = 0
+                }
+              }
+
+              // 4. Restore background in areas OUTSIDE the blit bounds.
+              // The blit covers (rx+bounds.x .. +bounds.width, ry+bounds.y .. +bounds.height).
+              // Everything in the original region outside that needs its background back.
+              const blitL = rx + bounds.x
+              const blitT = ry + bounds.y
+              const blitR = blitL + bounds.width
+              const blitB = blitT + bounds.height
+              for (let row = 0; row < nh; row++) {
+                const sy = ry + row
+                if (sy < 0 || sy >= src.height) continue
+                const bufOff = sy * src.stride
+                const savOff = row * saved.stride
+                for (let col = 0; col < nw; col++) {
+                  const sx = rx + col
+                  if (sx < 0 || sx >= src.width) continue
+                  // Only restore if this pixel is OUTSIDE the blit output area
+                  if (sx < blitL || sx >= blitR || sy < blitT || sy >= blitB) {
+                    const bi = bufOff + sx * 4
+                    const si = savOff + col * 4
+                    src.data[bi] = saved.data[si]
+                    src.data[bi+1] = saved.data[si+1]
+                    src.data[bi+2] = saved.data[si+2]
+                    src.data[bi+3] = saved.data[si+3]
+                  }
+                }
+              }
+
+              // 5. AffineBlit the transformed subtree
               paint.affineBlit(src, tmp, inv, rx + bounds.x, ry + bounds.y, bounds.width, bounds.height)
             }
-          } else {
-            // Identity — just copy back
-            over(src, tmp, rx, ry)
           }
         }
 
