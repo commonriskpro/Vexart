@@ -27,8 +27,36 @@ type DecodedImage = {
   height: number
 }
 
+export type RawImage = DecodedImage
+
 const imageCache = new Map<string, DecodedImage>()
 const pendingDecodes = new Map<string, Promise<DecodedImage | null>>()
+const scaledImageCaches = new Set<Map<string, DecodedImage>>()
+
+export type ScaledImageCache = {
+  get: (src: RawImage, targetW: number, targetH: number, key: string) => RawImage
+  clear: () => void
+}
+
+export function createScaledImageCache(): ScaledImageCache {
+  const cache = new Map<string, DecodedImage>()
+  scaledImageCaches.add(cache)
+
+  return {
+    get(src, targetW, targetH, key) {
+      if (targetW === src.width && targetH === src.height) return src
+      const fullKey = `${key}:${src.width}x${src.height}->${targetW}x${targetH}`
+      const cached = cache.get(fullKey)
+      if (cached) return cached
+      const scaled = nearestNeighborScale(src, targetW, targetH)
+      cache.set(fullKey, scaled)
+      return scaled
+    },
+    clear() {
+      cache.clear()
+    },
+  }
+}
 
 /**
  * Trigger image decode for a node. Non-blocking — sets _imageBuffer when done.
@@ -245,4 +273,5 @@ function nearestNeighborScale(
 /** Clear the image cache (e.g., on hot reload). */
 export function clearImageCache() {
   imageCache.clear()
+  for (const cache of scaledImageCaches) cache.clear()
 }

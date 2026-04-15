@@ -1,0 +1,17 @@
+[package]
+name = "tge-wgpu-canvas-bridge"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+bytemuck = { version = "1.25", features = ["derive"] }
+pollster = "0.4"
+wgpu = "26"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3

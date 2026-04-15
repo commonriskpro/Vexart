@@ -3,7 +3,7 @@
  *
  * Supports three transmission modes, selected automatically:
  *   - t=s (shared memory) — POSIX shm_open, ~50 bytes TTY payload, ~0.01ms
- *   - t=t (temp file)     — write to /tmp, ~80 bytes TTY payload, ~1-2ms
+ *   - t=f (mapped file)   — persistent mmap file + offset, low TTY payload
  *   - t=d (direct base64) — chunked escape codes, ~640KB payload, ~5-10ms
  *
  * The mode is transparent to callers — all functions accept a TransmissionMode
@@ -15,11 +15,33 @@
 import type { PixelBuffer } from "@tge/pixel"
 import { deflateSync } from "node:zlib"
 
+type RawImageData = {
+  data: Uint8Array
+  width: number
+  height: number
+}
+
 const CHUNK_SIZE = 4096
+const DEBUG_KITTY_PROBE = process.env.TGE_DEBUG_KITTY === "1" || process.env.TGE_DEBUG_KITTY_SHM === "1"
+
+function probeDebug(message: string, extra?: unknown) {
+  if (!DEBUG_KITTY_PROBE) return
+  if (extra === undefined) {
+    console.error(`[tge/kitty-probe] ${message}`)
+    return
+  }
+  console.error(`[tge/kitty-probe] ${message}`, extra)
+}
 
 // ── Transmission Modes ──
 
 export type TransmissionMode = "shm" | "file" | "direct"
+
+const COMPRESS_MODE = {
+  AUTO: "auto",
+} as const
+
+export type CompressMode = boolean | (typeof COMPRESS_MODE)["AUTO"]
 
 /**
  * POSIX shared memory FFI bindings (lazy-loaded).
@@ -33,8 +55,20 @@ type ShmLib = {
   ftruncate: (fd: number, size: number) => number
   close: (fd: number) => number
   mmap: (addr: null, size: number, prot: number, flags: number, fd: number, offset: number) => number
+  msync: (addr: number, size: number, flags: number) => number
   munmap: (addr: number, size: number) => number
   memcpy: (dst: number, src: number, n: number) => number
+}
+
+type PersistentFileTransport = {
+  path: string
+  pathB64: string
+  fd: number
+  mapAddr: number
+  mappedSize: number
+  slotSize: number
+  slotCount: number
+  activeSlot: number
 }
 
 // POSIX constants
@@ -43,6 +77,15 @@ const O_RDWR = 0x2
 const PROT_READ = 1
 const PROT_WRITE = 2
 const MAP_SHARED = 1
+const FILE_SLOT_COUNT = 2
+const FILE_MIN_SLOT_SIZE = 32 * 1024 * 1024
+const MS_SYNC = 0x0010
+const DIRECT_COMPRESS_THRESHOLD = 16 * 1024
+
+let persistentFileTransport: PersistentFileTransport | null = null
+let persistentFileGeneration = 0
+let persistentFileCleanupInstalled = false
+const retiredPersistentFilePaths = new Set<string>()
 
 function loadShmLib(): ShmLib {
   if (shmLib) return shmLib
@@ -55,6 +98,7 @@ function loadShmLib(): ShmLib {
     ftruncate: { args: [FFIType.i32, FFIType.i64], returns: FFIType.i32 },
     close: { args: [FFIType.i32], returns: FFIType.i32 },
     mmap: { args: [FFIType.ptr, FFIType.u64, FFIType.i32, FFIType.i32, FFIType.i32, FFIType.i64], returns: FFIType.ptr },
+    msync: { args: [FFIType.ptr, FFIType.u64, FFIType.i32], returns: FFIType.i32 },
     munmap: { args: [FFIType.ptr, FFIType.u64], returns: FFIType.i32 },
     memcpy: { args: [FFIType.ptr, FFIType.ptr, FFIType.u64], returns: FFIType.ptr },
   })
@@ -68,6 +112,7 @@ function loadShmLib(): ShmLib {
     close: raw.close,
     mmap: (addr: null, size: number, prot: number, flags: number, fd: number, offset: number) =>
       Number(raw.mmap(null, size, prot, flags, fd, offset)),
+    msync: (addr: number, size: number, flags: number) => raw.msync(addr, size, flags),
     munmap: (addr: number, size: number) => raw.munmap(addr, size),
     memcpy: (dst: number, src: number, n: number) => Number(raw.memcpy(dst, src, n)),
   }
@@ -76,6 +121,118 @@ function loadShmLib(): ShmLib {
 
 /** Monotonic counter for unique shm/file names per process. */
 let shmCounter = 0
+
+function installPersistentFileCleanup() {
+  if (persistentFileCleanupInstalled) return
+  persistentFileCleanupInstalled = true
+  process.once("exit", () => {
+    destroyPersistentFileTransport(true)
+    cleanupRetiredPersistentFiles()
+  })
+}
+
+function cleanupRetiredPersistentFiles() {
+  const fs = require("fs")
+  for (const path of retiredPersistentFilePaths) {
+    try {
+      fs.unlinkSync(path)
+    } catch {}
+  }
+  retiredPersistentFilePaths.clear()
+}
+
+function destroyPersistentFileTransport(unlinkCurrent = true) {
+  if (!persistentFileTransport) return
+  const fs = require("fs")
+  const lib = loadShmLib()
+  const transport = persistentFileTransport
+  persistentFileTransport = null
+
+  if (transport.mapAddr !== 0 && transport.mapAddr !== -1) {
+    try {
+      lib.munmap(transport.mapAddr, transport.mappedSize)
+    } catch {}
+  }
+
+  try {
+    fs.closeSync(transport.fd)
+  } catch {}
+
+  if (unlinkCurrent) {
+    retiredPersistentFilePaths.add(transport.path)
+  }
+}
+
+function nextPowerOfTwo(value: number) {
+  let size = 1
+  while (size < value) size *= 2
+  return size
+}
+
+function ensurePersistentFileTransport(minPayloadSize: number): PersistentFileTransport {
+  installPersistentFileCleanup()
+
+  if (persistentFileTransport && minPayloadSize <= persistentFileTransport.slotSize) {
+    return persistentFileTransport
+  }
+
+  destroyPersistentFileTransport(true)
+
+  const fs = require("fs")
+  const os = require("os")
+  const path = require("path")
+  const lib = loadShmLib()
+
+  const slotSize = nextPowerOfTwo(Math.max(FILE_MIN_SLOT_SIZE, minPayloadSize))
+  const mappedSize = slotSize * FILE_SLOT_COUNT
+  const filePath = path.join(
+    os.tmpdir(),
+    `tty-graphics-protocol-tge-${process.pid}-${persistentFileGeneration++}.bin`,
+  )
+  const fd = fs.openSync(filePath, "w+", 0o600)
+  fs.ftruncateSync(fd, mappedSize)
+  const mapAddr = lib.mmap(null, mappedSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)
+
+  if (mapAddr === -1 || mapAddr === 0) {
+    try {
+      fs.closeSync(fd)
+    } catch {}
+    try {
+      fs.unlinkSync(filePath)
+    } catch {}
+    throw new Error(`Failed to mmap persistent Kitty file transport: ${filePath}`)
+  }
+
+  persistentFileTransport = {
+    path: filePath,
+    pathB64: Buffer.from(filePath).toString("base64"),
+    fd,
+    mapAddr,
+    mappedSize,
+    slotSize,
+    slotCount: FILE_SLOT_COUNT,
+    activeSlot: 0,
+  }
+
+  return persistentFileTransport
+}
+
+function writePersistentFilePayload(payload: Uint8Array) {
+  const transport = ensurePersistentFileTransport(payload.length)
+  const { ptr } = require("bun:ffi")
+  const nextSlot = (transport.activeSlot + 1) % transport.slotCount
+  const offset = nextSlot * transport.slotSize
+  const dst = transport.mapAddr + offset
+  const lib = loadShmLib()
+  lib.memcpy(dst, Number(ptr(payload)), payload.length)
+  lib.msync(dst, payload.length, MS_SYNC)
+  transport.activeSlot = nextSlot
+  return {
+    offset,
+    pathB64: transport.pathB64,
+    size: payload.length,
+  }
+}
 
 // ── Shared Memory Transmission (t=s) ──
 
@@ -105,7 +262,7 @@ function transmitShm(
   const size = payload.length
 
   // Create shared memory segment
-  const fd = lib.shm_open(nameBytes, O_CREAT | O_RDWR, 0o600)
+  const fd = lib.shm_open(nameBytes, O_CREAT | O_RDWR, 0o666)
   if (fd < 0) {
     // Fallback to direct if shm fails
     transmitDirect(write, buf, id, action, format, z, data, compress)
@@ -143,14 +300,14 @@ function transmitShm(
   write(`\x1b_G${meta};${nameB64}\x1b\\`)
 }
 
-// ── Temp File Transmission (t=t) ──
+// ── Persistent File Transmission (t=f) ──
 
 /**
- * Transmit pixel buffer via temporary file.
+ * Transmit pixel buffer via a persistent mmap-backed regular file.
  *
- * 1. Write pixel data to /tmp/tty-graphics-protocol-*
- * 2. Send ~80 byte escape code with file path to terminal
- * 3. Terminal reads file and deletes it (t=t means auto-delete)
+ * 1. Reuse a pre-allocated tmp file that stays open for the process lifetime
+ * 2. Copy payload into the inactive slot of the mmap region
+ * 3. Send file path + offset + size to Kitty via t=f,S,O
  *
  * The filename MUST contain "tty-graphics-protocol" per Kitty spec.
  */
@@ -164,29 +321,18 @@ function transmitFile(
   data: Uint8Array,
   compress: boolean,
 ) {
-  const os = require("os")
-  const path = require("path")
-  const fs = require("fs")
-
-  const tmpDir = os.tmpdir()
-  const fileName = `tty-graphics-protocol-${process.pid}-${shmCounter++}`
-  const filePath = path.join(tmpDir, fileName)
   const payload = compress ? deflateSync(data) : data
 
   try {
-    fs.writeFileSync(filePath, payload)
+    const filePayload = writePersistentFilePayload(payload)
+    let meta = `a=${action},f=${format},i=${id},s=${buf.width},v=${buf.height},t=f,S=${filePayload.size},O=${filePayload.offset},q=2`
+    if (compress) meta += `,o=z`
+    if (z !== undefined) meta += `,z=${z}`
+    write(`\x1b_G${meta};${filePayload.pathB64}\x1b\\`)
   } catch {
     // Fallback to direct if file write fails
     transmitDirect(write, buf, id, action, format, z, data, compress)
-    return
   }
-
-  // Send escape code with file path (base64 encoded)
-  const pathB64 = Buffer.from(filePath).toString("base64")
-  let meta = `a=${action},f=${format},i=${id},s=${buf.width},v=${buf.height},t=t,q=2`
-  if (compress) meta += `,o=z`
-  if (z !== undefined) meta += `,z=${z}`
-  write(`\x1b_G${meta};${pathB64}\x1b\\`)
 }
 
 // ── Direct Transmission (t=d) — existing chunked base64 ──
@@ -229,7 +375,7 @@ function transmitDirect(
  *
  * Routes to the optimal transmission path based on mode:
  *   - "shm":    POSIX shared memory (fastest, local only)
- *   - "file":   temp file (fast, local only)
+ *   - "file":   persistent mapped file (fast, local only)
  *   - "direct": base64 escape codes (universal, slowest)
  */
 export function transmit(
@@ -241,16 +387,16 @@ export function transmit(
     format?: 24 | 32
     z?: number
     mode?: TransmissionMode
-    /** Enable zlib compression (o=z). Reduces payload ~3-970x depending on content. */
-    compress?: boolean
+    /** Compression policy. auto compresses only when it is likely worth it. */
+    compress?: CompressMode
   },
 ) {
   const action = opts?.action ?? "T"
   const format = opts?.format ?? 32
   const z = opts?.z
   const mode = opts?.mode ?? "direct"
-  const compress = opts?.compress ?? false
   const data = format === 32 ? buf.data : stripAlpha(buf.data, buf.width * buf.height)
+  const compress = resolveCompression(mode, data.length, opts?.compress ?? COMPRESS_MODE.AUTO)
 
   switch (mode) {
     case "shm":
@@ -261,6 +407,40 @@ export function transmit(
       break
     case "direct":
       transmitDirect(write, buf, id, action, format, z, data, compress)
+      break
+  }
+}
+
+/** Transmit raw RGBA/RGB bytes without constructing a PixelBuffer wrapper upstream. */
+export function transmitRaw(
+  write: (data: string) => void,
+  image: RawImageData,
+  id: number,
+  opts?: {
+    action?: "t" | "T" | "p"
+    format?: 24 | 32
+    z?: number
+    mode?: TransmissionMode
+    compress?: CompressMode
+  },
+) {
+  const action = opts?.action ?? "T"
+  const format = opts?.format ?? 32
+  const z = opts?.z
+  const mode = opts?.mode ?? "direct"
+  const payload = format === 32 ? image.data : stripAlpha(image.data, image.width * image.height)
+  const compress = resolveCompression(mode, payload.length, opts?.compress ?? COMPRESS_MODE.AUTO)
+  const buf = { data: image.data, width: image.width, height: image.height, stride: image.width * 4 } satisfies PixelBuffer
+
+  switch (mode) {
+    case "shm":
+      transmitShm(write, buf, id, action, format, z, payload, compress)
+      break
+    case "file":
+      transmitFile(write, buf, id, action, format, z, payload, compress)
+      break
+    case "direct":
+      transmitDirect(write, buf, id, action, format, z, payload, compress)
       break
   }
 }
@@ -292,12 +472,27 @@ export function transmitAt(
   id: number,
   col: number,
   row: number,
-  opts?: { z?: number; mode?: TransmissionMode; compress?: boolean },
+  opts?: { z?: number; mode?: TransmissionMode; compress?: CompressMode },
 ) {
   write(`\x1b7`) // save cursor
   write(`\x1b[${row + 1};${col + 1}H`) // move cursor
   transmit(write, buf, id, { action: "T", z: opts?.z, mode: opts?.mode, compress: opts?.compress })
   write(`\x1b8`) // restore cursor
+}
+
+/** Transmit + place raw RGBA/RGB bytes without a PixelBuffer intermediary. */
+export function transmitRawAt(
+  write: (data: string) => void,
+  image: RawImageData,
+  id: number,
+  col: number,
+  row: number,
+  opts?: { z?: number; mode?: TransmissionMode; compress?: CompressMode; format?: 24 | 32 },
+) {
+  write(`\x1b7`)
+  write(`\x1b[${row + 1};${col + 1}H`)
+  transmitRaw(write, image, id, { action: "T", z: opts?.z, mode: opts?.mode, compress: opts?.compress, format: opts?.format })
+  write(`\x1b8`)
 }
 
 /**
@@ -320,10 +515,10 @@ export function patchRegion(
   ry: number,
   rw: number,
   rh: number,
-  opts?: { mode?: TransmissionMode; compress?: boolean },
+  opts?: { mode?: TransmissionMode; compress?: CompressMode },
 ) {
   const mode = opts?.mode ?? "direct"
-  const compress = opts?.compress ?? false
+  const compress = resolveCompression(mode, regionData.length, opts?.compress ?? COMPRESS_MODE.AUTO)
   const payload = compress ? deflateSync(regionData) : regionData
 
   // Build metadata: a=f (frame data), r=1 (edit frame 1 = root frame),
@@ -339,7 +534,7 @@ export function patchRegion(
       const nameBytes = Buffer.from(name + "\0")
       const size = payload.length
 
-      const fd = lib.shm_open(nameBytes, O_CREAT | O_RDWR, 0o600)
+      const fd = lib.shm_open(nameBytes, O_CREAT | O_RDWR, 0o666)
       if (fd < 0) {
         patchRegionDirect(write, meta, payload)
         return
@@ -359,18 +554,12 @@ export function patchRegion(
       break
     }
     case "file": {
-      const os = require("os")
-      const path = require("path")
-      const fs = require("fs")
-      const filePath = path.join(os.tmpdir(), `tty-graphics-protocol-${process.pid}-${shmCounter++}`)
       try {
-        fs.writeFileSync(filePath, payload)
+        const filePayload = writePersistentFilePayload(payload)
+        write(`\x1b_G${meta},t=f,S=${filePayload.size},O=${filePayload.offset};${filePayload.pathB64}\x1b\\`)
       } catch {
         patchRegionDirect(write, meta, payload)
-        return
       }
-      const pathB64 = Buffer.from(filePath).toString("base64")
-      write(`\x1b_G${meta},t=t;${pathB64}\x1b\\`)
       break
     }
     case "direct":
@@ -422,6 +611,8 @@ export function probeShm(
   return new Promise((resolve) => {
     let done = false
 
+    probeDebug("probeShm:start", { timeout })
+
     const cleanup = () => {
       if (done) return
       done = true
@@ -431,16 +622,20 @@ export function probeShm(
 
     const handler = (data: Buffer) => {
       const str = data.toString()
+      probeDebug("probeShm:reply", { raw: JSON.stringify(str) })
       if (str.includes("_Gi=32;OK")) {
+        probeDebug("probeShm:success")
         cleanup()
         resolve(true)
       } else if (str.includes("_Gi=32;")) {
+        probeDebug("probeShm:negative-reply")
         cleanup()
         resolve(false)
       }
     }
 
     const timer = setTimeout(() => {
+      probeDebug("probeShm:timeout")
       cleanup()
       resolve(false)
     }, timeout)
@@ -456,13 +651,19 @@ export function probeShm(
       const size = 4 // 1x1 RGBA
 
       const fd = lib.shm_open(nameBytes, O_CREAT | O_RDWR, 0o600)
-      if (fd < 0) { cleanup(); resolve(false); return }
+      probeDebug("probeShm:shm_open", { fd, name })
+      if (fd < 0) {
+        probeDebug("probeShm:shm_open-failed")
+        cleanup(); resolve(false); return
+      }
       lib.ftruncate(fd, size)
 
       const mapAddr = lib.mmap(null, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)
+      probeDebug("probeShm:mmap", { mapAddr, size })
       if (mapAddr === -1 || mapAddr === 0) {
         lib.close(fd)
         lib.shm_unlink(nameBytes)
+        probeDebug("probeShm:mmap-failed")
         cleanup()
         resolve(false)
         return
@@ -477,8 +678,10 @@ export function probeShm(
       // Send query — terminal will try to read from shm, respond OK or error
       // Terminal will shm_unlink after reading (per spec)
       const nameB64 = Buffer.from(name).toString("base64")
+      probeDebug("probeShm:query-sent", { name, nameB64 })
       write(`\x1b_Gi=32,s=1,v=1,a=q,t=s,f=32;${nameB64}\x1b\\`)
-    } catch {
+    } catch (error) {
+      probeDebug("probeShm:exception", error)
       cleanup()
       resolve(false)
     }
@@ -500,6 +703,8 @@ export function probeFile(
   return new Promise((resolve) => {
     let done = false
 
+    probeDebug("probeFile:start", { timeout })
+
     const cleanup = () => {
       if (done) return
       done = true
@@ -509,16 +714,20 @@ export function probeFile(
 
     const handler = (data: Buffer) => {
       const str = data.toString()
+      probeDebug("probeFile:reply", { raw: JSON.stringify(str) })
       if (str.includes("_Gi=33;OK")) {
+        probeDebug("probeFile:success")
         cleanup()
         resolve(true)
       } else if (str.includes("_Gi=33;")) {
+        probeDebug("probeFile:negative-reply")
         cleanup()
         resolve(false)
       }
     }
 
     const timer = setTimeout(() => {
+      probeDebug("probeFile:timeout")
       cleanup()
       resolve(false)
     }, timeout)
@@ -535,8 +744,10 @@ export function probeFile(
       fs.writeFileSync(filePath, pixel)
 
       const pathB64 = Buffer.from(filePath).toString("base64")
+      probeDebug("probeFile:query-sent", { filePath, pathB64 })
       write(`\x1b_Gi=33,s=1,v=1,a=q,t=t,f=32;${pathB64}\x1b\\`)
-    } catch {
+    } catch (error) {
+      probeDebug("probeFile:exception", error)
       cleanup()
       resolve(false)
     }
@@ -561,4 +772,10 @@ function chunk(str: string): string[] {
     result.push(str.slice(i, i + CHUNK_SIZE))
   }
   return result
+}
+
+function resolveCompression(mode: TransmissionMode, dataSize: number, compress: CompressMode) {
+  if (compress === true || compress === false) return compress
+  if (mode !== "direct") return false
+  return dataSize >= DIRECT_COMPRESS_THRESHOLD
 }

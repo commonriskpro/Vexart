@@ -26,6 +26,8 @@
 
 import type { PixelBuffer } from "@tge/pixel"
 import { create, clear } from "@tge/pixel"
+import type { DamageRect } from "./damage"
+import { unionRect } from "./damage"
 
 // ── Layer type ──
 
@@ -49,6 +51,8 @@ export type Layer = {
   prevY: number
   prevW: number
   prevH: number
+  /** Accumulated global damage rect for this layer. */
+  damageRect: DamageRect | null
 }
 
 // ── Layer registry ──
@@ -78,6 +82,7 @@ export function createLayer(z: number): Layer {
     prevY: -1,
     prevW: -1,
     prevH: -1,
+    damageRect: null,
   }
   layers.set(id, layer)
   return layer
@@ -121,8 +126,13 @@ export function anyLayerDirty(): boolean {
 export function updateLayerGeometry(layer: Layer, x: number, y: number, w: number, h: number) {
   if (w <= 0 || h <= 0) return
 
+  const hadPrev = layer.prevW > 0 && layer.prevH > 0
+  const prevRect = hadPrev
+    ? { x: layer.prevX, y: layer.prevY, width: layer.prevW, height: layer.prevH }
+    : null
   const moved = x !== layer.prevX || y !== layer.prevY
   const resized = w !== layer.prevW || h !== layer.prevH
+  const nextRect = { x, y, width: w, height: h }
 
   layer.x = x
   layer.y = y
@@ -132,10 +142,16 @@ export function updateLayerGeometry(layer: Layer, x: number, y: number, w: numbe
   if (resized || !layer.buf) {
     layer.buf = create(w, h)
     layer.dirty = true
+    layer.damageRect = nextRect
   }
 
   if (moved) {
     layer.dirty = true
+    layer.damageRect = prevRect ? unionRect(prevRect, nextRect) : nextRect
+  }
+
+  if (!moved && !resized && !layer.damageRect) {
+    layer.damageRect = null
   }
 }
 
@@ -151,6 +167,31 @@ export function markLayerClean(layer: Layer) {
   layer.prevY = layer.y
   layer.prevW = layer.width
   layer.prevH = layer.height
+  layer.damageRect = null
+}
+
+export function markLayerDamaged(layer: Layer, rect: DamageRect) {
+  layer.damageRect = layer.damageRect ? unionRect(layer.damageRect, rect) : rect
+  layer.dirty = true
+}
+
+export function getLayerRect(layer: Layer): DamageRect {
+  return {
+    x: layer.x,
+    y: layer.y,
+    width: layer.width,
+    height: layer.height,
+  }
+}
+
+export function getPreviousLayerRect(layer: Layer): DamageRect | null {
+  if (layer.prevW <= 0 || layer.prevH <= 0) return null
+  return {
+    x: layer.prevX,
+    y: layer.prevY,
+    width: layer.prevW,
+    height: layer.prevH,
+  }
 }
 
 /** Get the Kitty image ID for a layer. */

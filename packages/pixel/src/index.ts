@@ -10,12 +10,26 @@
  */
 
 import type { PixelBuffer } from "./buffer"
-import { loadLib, bufPtr, packColor } from "./ffi"
+import { loadLib, loadNebulaLib, loadStarfieldLib, loadBlitLib, bufPtr, packColor } from "./ffi"
+
+const textEncoder = new TextEncoder()
+const textCache = new Map<string, Uint8Array>()
+const TEXT_CACHE_LIMIT = 2048
+
+function encodeText(text: string) {
+  const cached = textCache.get(text)
+  if (cached) return cached
+  const encoded = textEncoder.encode(text)
+  if (textCache.size >= TEXT_CACHE_LIMIT) textCache.clear()
+  textCache.set(text, encoded)
+  return encoded
+}
 
 // ── Buffer management (TypeScript) ──
 
 export { create, resize, clear, clearRect, get, set, sub, rgba, pack, alpha } from "./buffer"
 export type { PixelBuffer } from "./buffer"
+export { hasNebulaSupport, hasStarfieldSupport, hasBlitSupport } from "./ffi"
 
 // ── Compositing (TypeScript) ──
 
@@ -284,7 +298,7 @@ export const paint = {
     // Draw shadow text at offset
     const sx = x + shadow.x
     const sy = y + shadow.y
-    const encoded = new TextEncoder().encode(text)
+    const encoded = encodeText(text)
     loadLib().symbols.tge_draw_text(bufPtr(buf.data), buf.width, buf.height, sx, sy, encoded, encoded.length, packColor(sc[0], sc[1], sc[2], sc[3]))
     // Blur the shadow region if requested
     if (shadow.blur && shadow.blur > 0) {
@@ -361,16 +375,74 @@ export const paint = {
     loadLib().symbols.tge_conic_gradient(bufPtr(buf.data), buf.width, buf.height, packed, stops.length, _p)
   },
 
+  /**
+   * Procedural nebula painter using domain-warped value noise.
+   * Best used as a baked texture: paint once into an offscreen buffer, then drawImage it.
+   */
+  // packed: [x:u32][y:u32][w:u32][h:u32][seed:u32][scale:u32][octaves:u32][gain:u32][lacunarity:u32][warp:u32][detail:u32][dust:u32] = 48 bytes
+  nebula(
+    buf: PixelBuffer,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    stops: { color: number; position: number }[],
+    options?: { seed?: number; scale?: number; octaves?: number; gain?: number; lacunarity?: number; warp?: number; detail?: number; dust?: number },
+  ) {
+    const nebula = loadNebulaLib()
+    if (!nebula) return
+    const packed = packStops(stops)
+    _v.setUint32(0, x, true)
+    _v.setUint32(4, y, true)
+    _v.setUint32(8, w, true)
+    _v.setUint32(12, h, true)
+    _v.setUint32(16, options?.seed ?? 1, true)
+    _v.setUint32(20, options?.scale ?? 160, true)
+    _v.setUint32(24, options?.octaves ?? 5, true)
+    _v.setUint32(28, options?.gain ?? 55, true)
+    _v.setUint32(32, options?.lacunarity ?? 210, true)
+    _v.setUint32(36, options?.warp ?? 52, true)
+    _v.setUint32(40, options?.detail ?? 72, true)
+    _v.setUint32(44, options?.dust ?? 46, true)
+    nebula.symbols.tge_nebula(bufPtr(buf.data), buf.width, buf.height, packed, stops.length, _p)
+  },
+
+  /** Procedural starfield with clustered and bright stars. Best baked once into a texture. */
+  // packed: [x:u32][y:u32][w:u32][h:u32][seed:u32][count:u32][clusterCount:u32][clusterStars:u32][warm:u32][neutral:u32][cool:u32] = 44 bytes
+  starfield(
+    buf: PixelBuffer,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    options?: { seed?: number; count?: number; clusterCount?: number; clusterStars?: number; warmColor?: number; neutralColor?: number; coolColor?: number },
+  ) {
+    const starfield = loadStarfieldLib()
+    if (!starfield) return
+    _v.setUint32(0, x, true)
+    _v.setUint32(4, y, true)
+    _v.setUint32(8, w, true)
+    _v.setUint32(12, h, true)
+    _v.setUint32(16, options?.seed ?? 1, true)
+    _v.setUint32(20, options?.count ?? 240, true)
+    _v.setUint32(24, options?.clusterCount ?? 5, true)
+    _v.setUint32(28, options?.clusterStars ?? 45, true)
+    _v.setUint32(32, options?.warmColor ?? 0xf3d7a1d0, true)
+    _v.setUint32(36, options?.neutralColor ?? 0xffffffd0, true)
+    _v.setUint32(40, options?.coolColor ?? 0xbfd8ffe0, true)
+    starfield.symbols.tge_starfield(bufPtr(buf.data), buf.width, buf.height, _p)
+  },
+
   /** Draw text at pixel coordinates using the embedded bitmap font. 8 params — no packing. */
   drawText(buf: PixelBuffer, x: number, y: number, text: string, r: number, g: number, b: number, a: number) {
-    const encoded = new TextEncoder().encode(text)
+    const encoded = encodeText(text)
     loadLib().symbols.tge_draw_text(bufPtr(buf.data), buf.width, buf.height, x, y, encoded, encoded.length, packColor(r, g, b, a))
   },
 
   /** Draw text with a specific font atlas (fontId 0 = built-in, 1+ = runtime). */
   // packed: [x:i32][y:i32][font_id:u32] = 12 bytes
   drawTextFont(buf: PixelBuffer, x: number, y: number, text: string, r: number, g: number, b: number, a: number, fontId: number) {
-    const encoded = new TextEncoder().encode(text)
+    const encoded = encodeText(text)
     if (fontId === 0) {
       loadLib().symbols.tge_draw_text(bufPtr(buf.data), buf.width, buf.height, x, y, encoded, encoded.length, packColor(r, g, b, a))
     } else {
@@ -456,5 +528,32 @@ export const paint = {
       bufPtr(src.data), src.width,
       p
     )
+  },
+
+  /** 1:1 RGBA blit with optional opacity. */
+  blitRGBA(
+    dst: PixelBuffer,
+    src: PixelBuffer,
+    dstX: number,
+    dstY: number,
+    opacity = 1,
+  ) {
+    const ab = new ArrayBuffer(16)
+    const v = new DataView(ab)
+    v.setUint32(0, src.height, true)
+    v.setInt32(4, dstX, true)
+    v.setInt32(8, dstY, true)
+    v.setUint32(12, Math.max(0, Math.min(255, Math.round(opacity * 255))), true)
+    const p = new Uint8Array(ab)
+
+    const blitLib = loadBlitLib()
+    if (!blitLib) return false
+
+    blitLib.symbols.tge_blit_rgba(
+      bufPtr(dst.data), dst.width, dst.height,
+      bufPtr(src.data), src.width,
+      p,
+    )
+    return true
   },
 }

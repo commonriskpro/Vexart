@@ -25,6 +25,8 @@
  */
 
 import { createSignal } from "solid-js"
+import type { NodeHandle } from "./handle"
+import type { TGENode } from "./node"
 
 // ── Debug state ──
 
@@ -37,8 +39,10 @@ export type DebugStats = {
   frameTimeMs: number
   /** Number of compositing layers */
   layerCount: number
-  /** Number of dirty layers this frame */
-  dirtyCount: number
+  /** Dirty layers before rendering this frame */
+  dirtyBeforeCount: number
+  /** Layers actually repainted this frame */
+  repaintedCount: number
   /** Total TGENode count in the tree */
   nodeCount: number
   /** Total render commands from Clay */
@@ -49,7 +53,8 @@ const [debugEnabled, setDebugEnabled] = createSignal(false)
 const [fps, setFps] = createSignal(0)
 const [frameTimeMs, setFrameTimeMs] = createSignal(0)
 const [layerCount, setLayerCount] = createSignal(0)
-const [dirtyCount, setDirtyCount] = createSignal(0)
+const [dirtyBeforeCount, setDirtyBeforeCount] = createSignal(0)
+const [repaintedCount, setRepaintedCount] = createSignal(0)
 const [nodeCount, setNodeCount] = createSignal(0)
 const [commandCount, setCommandCount] = createSignal(0)
 
@@ -96,13 +101,15 @@ export function debugFrameStart(): () => void {
 /** Update debug stats from the render loop. */
 export function debugUpdateStats(stats: {
   layerCount: number
-  dirtyCount: number
+  dirtyBeforeCount: number
+  repaintedCount: number
   nodeCount: number
   commandCount: number
 }) {
   if (!debugEnabled()) return
   setLayerCount(stats.layerCount)
-  setDirtyCount(stats.dirtyCount)
+  setDirtyBeforeCount(stats.dirtyBeforeCount)
+  setRepaintedCount(stats.repaintedCount)
   setNodeCount(stats.nodeCount)
   setCommandCount(stats.commandCount)
 }
@@ -113,7 +120,8 @@ export const debugState = {
   get fps() { return fps() },
   get frameTimeMs() { return frameTimeMs() },
   get layerCount() { return layerCount() },
-  get dirtyCount() { return dirtyCount() },
+  get dirtyBeforeCount() { return dirtyBeforeCount() },
+  get repaintedCount() { return repaintedCount() },
   get nodeCount() { return nodeCount() },
   get commandCount() { return commandCount() },
 }
@@ -124,5 +132,33 @@ export const debugState = {
  */
 export function debugStatsLine(): string {
   if (!debugEnabled()) return ""
-  return `${fps()} FPS | ${frameTimeMs()}ms | ${layerCount()} layers | ${dirtyCount()} dirty | ${nodeCount()} nodes | ${commandCount()} cmds`
+  return `${fps()} FPS | ${frameTimeMs()}ms | ${layerCount()} layers | ${dirtyBeforeCount()} dirty before | ${repaintedCount()} repainted | ${nodeCount()} nodes | ${commandCount()} cmds`
+}
+
+function describeNode(node: TGENode, depth: number): string {
+  const pad = "  ".repeat(depth)
+  if (node.kind === "text") {
+    const raw = node.text ?? ""
+    const text = raw.length === 0 ? "<empty>" : JSON.stringify(raw)
+    return `${pad}- text#${node.id} ${text}`
+  }
+
+  const tags: string[] = []
+  if (node.kind === "canvas") tags.push("canvas")
+  if (node.kind === "img") tags.push("img")
+  if (node.kind === "root") tags.push("root")
+  if (node.props.layer) tags.push("layer")
+  if (node.props.floating) tags.push(`floating=${typeof node.props.floating === "string" ? node.props.floating : "attach"}`)
+  if (node.props.width !== undefined) tags.push(`w=${String(node.props.width)}`)
+  if (node.props.height !== undefined) tags.push(`h=${String(node.props.height)}`)
+
+  const suffix = tags.length > 0 ? ` [${tags.join(", ")}]` : ""
+  const lines = [`${pad}- ${node.kind}#${node.id}${suffix}`]
+  for (const child of node.children) lines.push(describeNode(child, depth + 1))
+  return lines.join("\n")
+}
+
+export function debugDumpTree(target: NodeHandle | TGENode): string {
+  const node = "_node" in target ? target._node : target
+  return describeNode(node, 0)
 }

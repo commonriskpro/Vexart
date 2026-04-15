@@ -218,17 +218,26 @@ function App() {
 async function main() {
   const term = await createTerminal()
   const cleanup = mount(() => <App />, term)
+  const exitAfterMs = Number(process.env.TGE_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
+
+  const shutdown = () => {
+    parser.destroy()
+    cleanup.destroy()
+    term.destroy()
+    process.exit(0)
+  }
 
   const parser = createParser((event) => {
     if (event.type === "key" && (event.key === "q" || (event.key === "c" && event.mods.ctrl))) {
-      parser.destroy()
-      cleanup.destroy()
-      term.destroy()
-      process.exit(0)
+      shutdown()
     }
   })
 
   term.onData((data) => parser.feed(data))
+
+  if (Number.isFinite(exitAfterMs) && exitAfterMs > 0) {
+    setTimeout(shutdown, exitAfterMs)
+  }
 }
 
 main().catch((err) => {

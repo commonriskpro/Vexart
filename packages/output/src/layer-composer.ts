@@ -17,7 +17,7 @@
 
 import type { PixelBuffer } from "@tge/pixel"
 import * as kitty from "./kitty"
-import type { TransmissionMode } from "./kitty"
+import type { CompressMode, TransmissionMode } from "./kitty"
 
 export type LayerEntry = {
   id: number
@@ -36,6 +36,19 @@ export type LayerComposer = {
    */
   renderLayer: (
     buf: PixelBuffer,
+    imageId: number,
+    pixelX: number,
+    pixelY: number,
+    z: number,
+    cellW: number,
+    cellH: number,
+  ) => void
+
+  /** Render raw RGBA bytes directly, avoiding a PixelBuffer wrapper upstream. */
+  renderLayerRaw: (
+    data: Uint8Array,
+    width: number,
+    height: number,
     imageId: number,
     pixelX: number,
     pixelY: number,
@@ -79,7 +92,7 @@ export function createLayerComposer(
   write: (data: string) => void,
   rawWrite: (data: string) => void,
   mode: TransmissionMode = "direct",
-  compress = false,
+  compress: CompressMode = "auto",
 ): LayerComposer {
   /** Track which image IDs are active in the terminal. */
   const activeIds = new Set<number>()
@@ -150,6 +163,24 @@ export function createLayerComposer(
       } else {
         // Content layer — keep alpha for terminal compositing
         kitty.transmitAt(write, buf, imageId, col, row, { z, mode, compress })
+      }
+      activeIds.add(imageId)
+    },
+
+    renderLayerRaw(data, width, height, imageId, pixelX, pixelY, z, cellW, cellH) {
+      const col = Math.floor(pixelX / cellW)
+      const row = Math.floor(pixelY / cellH)
+
+      if (activeIds.has(imageId)) {
+        kitty.remove(write, imageId)
+      }
+
+      if (z < 0) {
+        // Raw path currently assumes the caller already prepared the final bytes.
+        // Keep behavior explicit: no extra alpha compositing here.
+        kitty.transmitRawAt(write, { data, width, height }, imageId, col, row, { z, mode, compress, format: 32 })
+      } else {
+        kitty.transmitRawAt(write, { data, width, height }, imageId, col, row, { z, mode, compress, format: 32 })
       }
       activeIds.add(imageId)
     },

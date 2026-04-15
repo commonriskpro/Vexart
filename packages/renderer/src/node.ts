@@ -99,6 +99,7 @@ export type TGEProps = {
   zIndex?: number                                        // Z-order for floating elements
   floatAttach?: { element?: number; parent?: number }    // Attach point (0-8, 3x3 grid)
   pointerPassthrough?: boolean                           // Allow pointer events to pass through
+  viewportClip?: boolean                                 // Default true for browser-like viewport clipping of floating layers
 
   // Sizing constraints
   minWidth?: number

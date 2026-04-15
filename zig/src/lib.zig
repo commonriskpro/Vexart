@@ -21,6 +21,8 @@ const line_mod = @import("line.zig");
 const shadow = @import("shadow.zig");
 const halo_mod = @import("halo.zig");
 const gradient = @import("gradient.zig");
+const nebula = @import("nebula.zig");
+const starfield = @import("starfield.zig");
 const text_mod = @import("text.zig");
 const filters = @import("filters.zig");
 const blendmodes = @import("blendmodes.zig");
@@ -35,6 +37,8 @@ comptime {
     _ = shadow;
     _ = halo_mod;
     _ = gradient;
+    _ = nebula;
+    _ = starfield;
     _ = text_mod;
     _ = filters;
     _ = blendmodes;
@@ -250,6 +254,20 @@ export fn tge_conic_gradient(data: [*]u8, width: u32, height: u32, stops_ptr: [*
 export fn tge_gradient_stroke(data: [*]u8, width: u32, height: u32, stops_ptr: [*]const u8, stop_count: u32, params_ptr: [*]const u8) void {
     var buf = mkbuf(data, width, height);
     gradient.gradient_stroke(&buf, stops_ptr, stop_count, params_ptr);
+}
+
+// Nebula — packed multi-stop procedural cloud field
+// params_ptr layout (48 bytes): [x:u32][y:u32][w:u32][h:u32][seed:u32][scale:u32][octaves:u32][gain_pct:u32][lacunarity_pct:u32][warp_pct:u32][detail_pct:u32][dust_pct:u32]
+export fn tge_nebula(data: [*]u8, width: u32, height: u32, stops_ptr: [*]const u8, stop_count: u32, params_ptr: [*]const u8) void {
+    var buf = mkbuf(data, width, height);
+    nebula.paint(&buf, rd_u32(params_ptr, 0), rd_u32(params_ptr, 4), rd_u32(params_ptr, 8), rd_u32(params_ptr, 12), stops_ptr, stop_count, rd_u32(params_ptr, 16), rd_u32(params_ptr, 20), rd_u32(params_ptr, 24), rd_u32(params_ptr, 28), rd_u32(params_ptr, 32), rd_u32(params_ptr, 36), rd_u32(params_ptr, 40), rd_u32(params_ptr, 44));
+}
+
+// Starfield — packed procedural stars + clusters
+// params_ptr layout (44 bytes): [x:u32][y:u32][w:u32][h:u32][seed:u32][count:u32][cluster_count:u32][cluster_stars:u32][warm:u32][neutral:u32][cool:u32]
+export fn tge_starfield(data: [*]u8, width: u32, height: u32, params_ptr: [*]const u8) void {
+    var buf = mkbuf(data, width, height);
+    starfield.paint(&buf, rd_u32(params_ptr, 0), rd_u32(params_ptr, 4), rd_u32(params_ptr, 8), rd_u32(params_ptr, 12), rd_u32(params_ptr, 16), rd_u32(params_ptr, 20), rd_u32(params_ptr, 24), rd_u32(params_ptr, 28), rd_u32(params_ptr, 32), rd_u32(params_ptr, 36), rd_u32(params_ptr, 40));
 }
 
 // Text — 8 params (within ARM64 limit)
@@ -470,6 +488,75 @@ export fn tge_affine_blit(
     affine_mod.affine_blit(&dst, src_data, src_w, src_h, params_ptr);
 }
 
+// 1:1 RGBA blit — params_ptr layout (16 bytes): [src_h:u32][dst_x:i32][dst_y:i32][opacity:u32]
+export fn tge_blit_rgba(
+    dst_data: [*]u8,
+    dst_w: u32,
+    dst_h: u32,
+    src_data: [*]const u8,
+    src_w: u32,
+    params_ptr: [*]const u8,
+) void {
+    var dst = mkbuf(dst_data, dst_w, dst_h);
+    const src_h = @as(u32, @bitCast([4]u8{ params_ptr[0], params_ptr[1], params_ptr[2], params_ptr[3] }));
+    const dst_x = @as(i32, @bitCast([4]u8{ params_ptr[4], params_ptr[5], params_ptr[6], params_ptr[7] }));
+    const dst_y = @as(i32, @bitCast([4]u8{ params_ptr[8], params_ptr[9], params_ptr[10], params_ptr[11] }));
+    const opacity = @as(u32, @bitCast([4]u8{ params_ptr[12], params_ptr[13], params_ptr[14], params_ptr[15] }));
+
+    if (src_w == 0 or src_h == 0 or opacity == 0) return;
+
+    const src_stride = src_w * 4;
+    const x0: i32 = @max(0, dst_x);
+    const y0: i32 = @max(0, dst_y);
+    const x1: i32 = @min(@as(i32, @intCast(dst.width)), dst_x + @as(i32, @intCast(src_w)));
+    const y1: i32 = @min(@as(i32, @intCast(dst.height)), dst_y + @as(i32, @intCast(src_h)));
+    if (x0 >= x1 or y0 >= y1) return;
+
+    if (opacity == 255 and x0 == dst_x and x1 == dst_x + @as(i32, @intCast(src_w))) {
+        var y: i32 = y0;
+        while (y < y1) : (y += 1) {
+            const src_row = @as(u32, @intCast(y - dst_y)) * src_stride;
+            const dst_row = @as(u32, @intCast(y)) * dst.stride + @as(u32, @intCast(dst_x)) * 4;
+            @memcpy(dst.data[dst_row .. dst_row + src_stride], src_data[src_row .. src_row + src_stride]);
+        }
+        return;
+    }
+
+    var y: i32 = y0;
+    while (y < y1) : (y += 1) {
+        const src_row = @as(u32, @intCast(y - dst_y)) * src_stride;
+        var x: i32 = x0;
+        while (x < x1) : (x += 1) {
+            const src_off = src_row + @as(u32, @intCast(x - dst_x)) * 4;
+            const sa_src: u32 = src_data[src_off + 3];
+            const sa = (sa_src * opacity + 127) / 255;
+            if (sa == 0) continue;
+
+            const dst_off = @as(u32, @intCast(y)) * dst.stride + @as(u32, @intCast(x)) * 4;
+            if (sa == 255) {
+                dst.data[dst_off] = src_data[src_off];
+                dst.data[dst_off + 1] = src_data[src_off + 1];
+                dst.data[dst_off + 2] = src_data[src_off + 2];
+                dst.data[dst_off + 3] = 255;
+                continue;
+            }
+
+            const da: u32 = dst.data[dst_off + 3];
+            const inv = 255 - sa;
+            const oa = sa * 255 + da * inv;
+            if (oa == 0) continue;
+            const dr: u32 = dst.data[dst_off];
+            const dg: u32 = dst.data[dst_off + 1];
+            const db: u32 = dst.data[dst_off + 2];
+            dst.data[dst_off] = @intCast((@as(u32, src_data[src_off]) * sa * 255 + dr * da * inv + oa / 2) / oa);
+            dst.data[dst_off + 1] = @intCast((@as(u32, src_data[src_off + 1]) * sa * 255 + dg * da * inv + oa / 2) / oa);
+            dst.data[dst_off + 2] = @intCast((@as(u32, src_data[src_off + 2]) * sa * 255 + db * da * inv + oa / 2) / oa);
+            const out_a = (oa + 127) / 255;
+            dst.data[dst_off + 3] = if (out_a > 255) 255 else @intCast(out_a);
+        }
+    }
+}
+
 // ── Tests ──
 
 test "blend opaque onto empty" {
@@ -480,4 +567,43 @@ test "blend opaque onto empty" {
     try std.testing.expectEqual(@as(u8, 0), pixels[1]); // G
     try std.testing.expectEqual(@as(u8, 0), pixels[2]); // B
     try std.testing.expectEqual(@as(u8, 255), pixels[3]); // A
+}
+
+test "tge_blit_rgba copies opaque rows" {
+    var dst_pixels = [_]u8{0} ** 64;
+    var src_pixels = [_]u8{0} ** 16;
+    src_pixels[0] = 10;
+    src_pixels[1] = 20;
+    src_pixels[2] = 30;
+    src_pixels[3] = 255;
+    src_pixels[4] = 40;
+    src_pixels[5] = 50;
+    src_pixels[6] = 60;
+    src_pixels[7] = 255;
+    src_pixels[8] = 70;
+    src_pixels[9] = 80;
+    src_pixels[10] = 90;
+    src_pixels[11] = 255;
+    src_pixels[12] = 100;
+    src_pixels[13] = 110;
+    src_pixels[14] = 120;
+    src_pixels[15] = 255;
+
+    const params = [16]u8{
+        2,   0, 0, 0,
+        1,   0, 0, 0,
+        1,   0, 0, 0,
+        255, 0, 0, 0,
+    };
+
+    tge_blit_rgba(&dst_pixels, 4, 4, &src_pixels, 2, &params);
+
+    try std.testing.expectEqual(@as(u8, 10), dst_pixels[(1 * 16) + 4]);
+    try std.testing.expectEqual(@as(u8, 20), dst_pixels[(1 * 16) + 5]);
+    try std.testing.expectEqual(@as(u8, 30), dst_pixels[(1 * 16) + 6]);
+    try std.testing.expectEqual(@as(u8, 255), dst_pixels[(1 * 16) + 7]);
+    try std.testing.expectEqual(@as(u8, 100), dst_pixels[(2 * 16) + 8]);
+    try std.testing.expectEqual(@as(u8, 110), dst_pixels[(2 * 16) + 9]);
+    try std.testing.expectEqual(@as(u8, 120), dst_pixels[(2 * 16) + 10]);
+    try std.testing.expectEqual(@as(u8, 255), dst_pixels[(2 * 16) + 11]);
 }

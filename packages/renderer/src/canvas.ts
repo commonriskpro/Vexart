@@ -18,6 +18,7 @@
 import type { PixelBuffer } from "@tge/pixel"
 import { paint } from "@tge/pixel"
 import { create, over } from "@tge/pixel"
+import { getCanvasPainterBackend } from "./canvas-backend"
 
 // ── Draw command types ──
 
@@ -97,6 +98,7 @@ type ImageCmd = {
   data: Uint8Array
   imgW: number; imgH: number
   opacity: number
+  opaque?: boolean
 }
 
 type RadialGradientCmd = {
@@ -115,7 +117,48 @@ type LinearGradientCmd = {
   angle: number
 }
 
-type DrawCmd = LineCmd | BezierCmd | CircleCmd | RectCmd | PolygonCmd | ArcCmd | TextCmd | GlowCmd | ImageCmd | RadialGradientCmd | LinearGradientCmd
+type NebulaCmd = {
+  kind: "nebula"
+  x: number; y: number
+  w: number; h: number
+  stops: { color: number; position: number }[]
+  seed: number
+  scale: number
+  octaves: number
+  gain: number
+  lacunarity: number
+  warp: number
+  detail: number
+  dust: number
+}
+
+type StarfieldCmd = {
+  kind: "starfield"
+  x: number; y: number
+  w: number; h: number
+  seed: number
+  count: number
+  clusterCount: number
+  clusterStars: number
+  warmColor: number
+  neutralColor: number
+  coolColor: number
+}
+
+type DrawCmd = LineCmd | BezierCmd | CircleCmd | RectCmd | PolygonCmd | ArcCmd | TextCmd | GlowCmd | ImageCmd | RadialGradientCmd | LinearGradientCmd | NebulaCmd | StarfieldCmd
+
+export type CanvasDrawCommand = DrawCmd
+
+export type CanvasRasterImage = {
+  data: Uint8Array
+  width: number
+  height: number
+}
+
+export type CanvasImageCache = {
+  get: (width: number, height: number, key: string, draw: (ctx: CanvasContext) => void) => CanvasRasterImage
+  clear: () => void
+}
 
 // ── Viewport ──
 
@@ -284,8 +327,8 @@ export class CanvasContext {
   }
 
   /** Draw a pre-decoded RGBA image buffer, scaled to fit (x,y,w,h). */
-  drawImage(x: number, y: number, w: number, h: number, data: Uint8Array, imgW: number, imgH: number, opacity = 1) {
-    this._commands.push({ kind: "image", x, y, w, h, data, imgW, imgH, opacity })
+  drawImage(x: number, y: number, w: number, h: number, data: Uint8Array, imgW: number, imgH: number, opacity = 1, opaque = false) {
+    this._commands.push({ kind: "image", x, y, w, h, data, imgW, imgH, opacity, opaque })
   }
 
   /** Fill a radial gradient (circle fade from center color to edge color). */
@@ -296,6 +339,74 @@ export class CanvasContext {
   /** Fill a linear gradient in a rectangular area. angle in degrees (0=left→right, 90=top→bottom). */
   linearGradient(x: number, y: number, w: number, h: number, from: number, to: number, angle = 0) {
     this._commands.push({ kind: "linearGradient", x, y, w, h, from, to, angle })
+  }
+
+  /** Paint a procedural nebula field. Prefer baking once into an offscreen buffer for performance-sensitive scenes. */
+  nebula(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    stops: { color: number; position: number }[],
+    options?: { seed?: number; scale?: number; octaves?: number; gain?: number; lacunarity?: number; warp?: number; detail?: number; dust?: number },
+  ) {
+    this._commands.push({
+      kind: "nebula",
+      x, y, w, h, stops,
+      seed: options?.seed ?? 1,
+      scale: options?.scale ?? 160,
+      octaves: options?.octaves ?? 5,
+      gain: options?.gain ?? 55,
+      lacunarity: options?.lacunarity ?? 210,
+      warp: options?.warp ?? 52,
+      detail: options?.detail ?? 72,
+      dust: options?.dust ?? 46,
+    })
+  }
+
+  /** Paint a procedural starfield. Prefer baking once into an offscreen buffer for static scenes. */
+  starfield(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    options?: { seed?: number; count?: number; clusterCount?: number; clusterStars?: number; warmColor?: number; neutralColor?: number; coolColor?: number },
+  ) {
+    this._commands.push({
+      kind: "starfield",
+      x, y, w, h,
+      seed: options?.seed ?? 1,
+      count: options?.count ?? 240,
+      clusterCount: options?.clusterCount ?? 5,
+      clusterStars: options?.clusterStars ?? 45,
+      warmColor: options?.warmColor ?? 0xf3d7a1d0,
+      neutralColor: options?.neutralColor ?? 0xffffffd0,
+      coolColor: options?.coolColor ?? 0xbfd8ffe0,
+    })
+  }
+}
+
+export function createCanvasImageCache(): CanvasImageCache {
+  const cache = new Map<string, CanvasRasterImage>()
+
+  return {
+    get(width, height, key, draw) {
+      const fullKey = `${key}:${width}x${height}`
+      const cached = cache.get(fullKey)
+      if (cached) return cached
+
+      const buf = create(width, height)
+      const ctx = new CanvasContext()
+      draw(ctx)
+      paintCanvasCommands(buf, ctx, width, height)
+
+      const image = { data: buf.data, width: buf.width, height: buf.height }
+      cache.set(fullKey, image)
+      return image
+    },
+    clear() {
+      cache.clear()
+    },
   }
 }
 
@@ -317,6 +428,21 @@ function unpack(c: number): [number, number, number, number] {
  * @param canvasH - Canvas height in pixels
  */
 export function paintCanvasCommands(
+  buf: PixelBuffer,
+  ctx: CanvasContext,
+  canvasW: number,
+  canvasH: number,
+) {
+  const backend = getCanvasPainterBackend()
+  if (backend) {
+    backend.paint(buf, ctx, canvasW, canvasH)
+    return
+  }
+
+  paintCanvasCommandsCPU(buf, ctx, canvasW, canvasH)
+}
+
+export function paintCanvasCommandsCPU(
   buf: PixelBuffer,
   ctx: CanvasContext,
   canvasW: number,
@@ -429,6 +555,21 @@ export function paintCanvasCommands(
         const sh = cmd.imgH
         const oa = Math.round(cmd.opacity * 255)
 
+        if (sw === dw && sh === dh) {
+          const srcBuf = { data: src, width: sw, height: sh, stride: sw * 4 }
+
+          if (cmd.opaque && oa === 255 && dx >= 0 && dy >= 0 && dx + dw <= buf.width && dy + dh <= buf.height) {
+            for (let py = 0; py < dh; py++) {
+              const srcRow = py * sw * 4
+              const dstRow = (dy + py) * buf.width * 4 + dx * 4
+              buf.data.set(src.subarray(srcRow, srcRow + sw * 4), dstRow)
+            }
+            break
+          }
+
+          if (paint.blitRGBA(buf, srcBuf, dx, dy, cmd.opacity)) break
+        }
+
         for (let py = 0; py < dh; py++) {
           const destY = dy + py
           if (destY < 0 || destY >= buf.height) continue
@@ -473,6 +614,33 @@ export function paintCanvasCommands(
         const [r0, g0, b0, a0] = unpack(cmd.from)
         const [r1, g1, b1, a1] = unpack(cmd.to)
         paint.linearGradient(buf, tx(cmd.x), ty(cmd.y), ts(cmd.w), ts(cmd.h), r0, g0, b0, a0, r1, g1, b1, a1, Math.round(cmd.angle))
+        break
+      }
+
+      case "nebula": {
+        paint.nebula(buf, tx(cmd.x), ty(cmd.y), ts(cmd.w), ts(cmd.h), cmd.stops, {
+          seed: cmd.seed,
+          scale: ts(cmd.scale),
+          octaves: cmd.octaves,
+          gain: cmd.gain,
+          lacunarity: cmd.lacunarity,
+          warp: cmd.warp,
+          detail: cmd.detail,
+          dust: cmd.dust,
+        })
+        break
+      }
+
+      case "starfield": {
+        paint.starfield(buf, tx(cmd.x), ty(cmd.y), ts(cmd.w), ts(cmd.h), {
+          seed: cmd.seed,
+          count: cmd.count,
+          clusterCount: cmd.clusterCount,
+          clusterStars: cmd.clusterStars,
+          warmColor: cmd.warmColor,
+          neutralColor: cmd.neutralColor,
+          coolColor: cmd.coolColor,
+        })
         break
       }
     }

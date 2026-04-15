@@ -91,9 +91,28 @@ export function fontToCSS(desc: FontDescriptor): string {
 
 const preparedCache = new Map<string, PreparedTextWithSegments>()
 const MAX_CACHE = 500
+const layoutCache = new Map<string, { lines: LayoutLine[]; height: number; lineCount: number }>()
+const MAX_LAYOUT_CACHE = 1000
 
 function cacheKey(text: string, font: string): string {
   return `${font}\0${text}`
+}
+
+function layoutCacheKey(text: string, fontId: number, maxWidth: number, lineHeight: number) {
+  return `${fontId}\0${maxWidth}\0${lineHeight}\0${text}`
+}
+
+function getCachedLayout(text: string, fontId: number, maxWidth: number, lineHeight: number) {
+  return layoutCache.get(layoutCacheKey(text, fontId, maxWidth, lineHeight))
+}
+
+function setCachedLayout(text: string, fontId: number, maxWidth: number, lineHeight: number, value: { lines: LayoutLine[]; height: number; lineCount: number }) {
+  if (layoutCache.size >= MAX_LAYOUT_CACHE) {
+    const first = layoutCache.keys().next().value
+    if (first) layoutCache.delete(first)
+  }
+  layoutCache.set(layoutCacheKey(text, fontId, maxWidth, lineHeight), value)
+  return value
 }
 
 /** Prepare text for layout (cached). */
@@ -148,11 +167,14 @@ export function layoutText(
   lineHeight: number,
   options?: PrepareOptions,
 ): { lines: LayoutLine[]; height: number; lineCount: number } {
+  const cached = getCachedLayout(text, fontId, maxWidth, lineHeight)
+  if (cached) return cached
+
   if (fontId === 0) {
-    return layoutBuiltinFont(text, maxWidth, lineHeight)
+    return setCachedLayout(text, fontId, maxWidth, lineHeight, layoutBuiltinFont(text, maxWidth, lineHeight))
   }
   const prepared = prepareText(text, fontId, options)
-  return layoutWithLines(prepared, maxWidth, lineHeight)
+  return setCachedLayout(text, fontId, maxWidth, lineHeight, layoutWithLines(prepared, maxWidth, lineHeight))
 }
 
 /** Word-wrap for built-in bitmap font using exact atlas advance width. */
@@ -270,6 +292,7 @@ export function measureForClay(
 /** Clear all prepared text caches. */
 export function clearTextCache() {
   preparedCache.clear()
+  layoutCache.clear()
   clearCache()
 }
 

@@ -88,7 +88,8 @@ export type { FocusHandle } from "./focus"
 export { markDirty } from "./dirty"
 
 // Re-export image utilities
-export { clearImageCache } from "./image"
+export { clearImageCache, createScaledImageCache } from "./image"
+export type { RawImage, ScaledImageCache } from "./image"
 
 // Data fetching hooks
 export { useQuery, useMutation } from "./data"
@@ -102,8 +103,20 @@ export { createHandle } from "./handle"
 export type { PressEvent, NodeMouseEvent } from "./node"
 
 // Re-export canvas API
-export { CanvasContext } from "./canvas"
+export { CanvasContext, createCanvasImageCache } from "./canvas"
 export type { Viewport, StrokeStyle, FillStyle, ShapeStyle } from "./canvas"
+export { setCanvasPainterBackend, getCanvasPainterBackend, getCanvasPainterBackendName } from "./canvas-backend"
+export type { CanvasPainterBackend } from "./canvas-backend"
+export { setRendererBackend, getRendererBackend, getRendererBackendName } from "./renderer-backend"
+export type { RendererBackend } from "./renderer-backend"
+export { createCpuRendererBackend } from "./cpu-renderer-backend"
+export { createGpuRendererBackend } from "./gpu-renderer-backend"
+export { chooseGpuLayerStrategy } from "./gpu-layer-strategy"
+export { createRenderGraphQueues, resetRenderGraphQueues, cloneRenderGraphQueues, buildRenderOp, buildRenderGraphFrame } from "./render-graph"
+export type { RenderGraphOp, RenderGraphFrame, RectangleRenderOp, BorderRenderOp, TextRenderOp, ImageRenderOp, CanvasRenderOp, EffectRenderOp, RawCommandRenderOp } from "./render-graph"
+export { probeWgpuCanvasBridge, loadWgpuCanvasBridge } from "./wgpu-canvas-bridge"
+export type { WgpuCanvasBridgeProbe } from "./wgpu-canvas-bridge"
+export { tryCreateWgpuCanvasPainterBackend } from "./wgpu-canvas-backend"
 
 // Re-export particle system
 export { createParticleSystem } from "./particles"
@@ -148,6 +161,7 @@ export {
   debugUpdateStats,
   debugState,
   debugStatsLine,
+  debugDumpTree,
 } from "./debug"
 export type { DebugStats } from "./debug"
 
@@ -311,7 +325,7 @@ export function useTerminalDimensions(terminal: Terminal): {
  *   - Creates the render loop (Clay layout + Zig paint + output)
  *   - Mounts SolidJS component tree
  *   - Connects terminal stdin → input parser → event dispatch
- *   - Starts the 30fps render loop with dirty-flag optimization
+ *   - Starts the adaptive render loop with dirty-flag optimization
  *
  * The input parser feeds events into the global dispatch system.
  * Components use useKeyboard()/useMouse() hooks to subscribe reactively.
@@ -321,14 +335,18 @@ export function useTerminalDimensions(terminal: Terminal): {
 export type MountOptions = {
   /** Render text as ANSI (selectable/copiable) instead of bitmap pixels. */
   selectableText?: boolean
-  /** Maximum FPS cap. Default: 60. Idle: 30fps, animations: up to maxFps. */
+  /** Maximum FPS cap. Default: 60. Idle: up to 60fps, animations: up to maxFps. */
   maxFps?: number
   /** Experimental optimizations — these may change or be removed. */
   experimental?: {
-    /** Partial updates: transmit only changed region of layers via Kitty a=f. Default: false */
+    /** Idle FPS cap override. Default: min(maxFps, 60). */
+    idleMaxFps?: number
+    /** Partial updates: transmit only changed region of layers via Kitty a=f. Default: enabled automatically for Kitty local file/shm transports. */
     partialUpdates?: boolean
     /** Frame budget in ms. Defer non-bg layers if exceeded. 0 = disabled. Default: 0 */
     frameBudgetMs?: number
+    /** Force layer retransmit even when pixels are unchanged. Benchmark/debug only. */
+    forceLayerRepaint?: boolean
   }
 }
 
@@ -378,7 +396,7 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
   const parser = createParser((event) => {
     if (loop.suspended()) return
     dispatchInput(event)
-    markDirty() // Any input event may change visual state → trigger repaint
+
     if (event.type === "mouse") {
       if (event.action === "press") isButtonDown = true
       else if (event.action === "release") isButtonDown = false
@@ -400,11 +418,20 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
         const dy = event.button === 64 ? cellH : -cellH
         loop.feedScroll(0, dy)
       }
+
+      const shouldRepaint = event.action === "press"
+        || event.action === "release"
+        || event.action === "scroll"
+        || (event.action === "move" && (isButtonDown || loop.needsPointerRepaint()))
+      if (shouldRepaint) markDirty()
+      return
     }
+
+    markDirty() // key/focus/paste can change visible state
   })
   const unsubData = terminal.onData((data) => parser.feed(data))
 
-  // Start the render loop (30fps, only repaints when dirty)
+  // Start the render loop (adaptive cadence, only repaints when dirty)
   loop.start()
 
   return {

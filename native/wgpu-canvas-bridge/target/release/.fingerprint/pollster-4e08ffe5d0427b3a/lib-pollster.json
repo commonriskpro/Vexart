@@ -1,0 +1,1 @@
+{"rustc":8112831350611156235,"features":"[]","declared_features":"[\"macro\", \"pollster-macro\"]","target":5384305960837894986,"profile":4701875279837757004,"path":12493465692303185012,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"release/.fingerprint/pollster-4e08ffe5d0427b3a/dep-lib-pollster","checksum":false}}],"rustflags":[],"config":8247474407144887393,"compile_kind":0}

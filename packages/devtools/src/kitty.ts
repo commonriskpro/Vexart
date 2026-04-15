@@ -37,6 +37,8 @@ export type KittyOSWindow = {
 
 // ── Socket discovery ──
 
+const PREFERRED_SOCKET = "/tmp/kitty-tge"
+
 /** Find the kitty remote control socket. Pattern: /tmp/kitty-{PID} */
 export async function findKittySocket(): Promise<string | null> {
   // 1. Check KITTY_LISTEN_ON env var
@@ -46,7 +48,10 @@ export async function findKittySocket(): Promise<string | null> {
     if (existsSync(path)) return path
   }
 
-  // 2. Scan /tmp for kitty-* sockets
+  // 2. Check preferred socket first
+  if (existsSync(PREFERRED_SOCKET)) return PREFERRED_SOCKET
+
+  // 3. Scan /tmp for kitty-* sockets
   const entries = await readdir("/tmp").catch(() => [])
   const sockets = entries
     .filter(e => e.startsWith("kitty"))
@@ -55,7 +60,7 @@ export async function findKittySocket(): Promise<string | null> {
 
   if (sockets.length === 1) return sockets[0]
 
-  // 3. Multiple sockets — pick the one whose PID is still alive
+  // 4. Multiple sockets — pick the one whose PID is still alive
   for (const sock of sockets) {
     const match = sock.match(/kitty-(\d+)$/)
     if (!match) continue
@@ -68,10 +73,94 @@ export async function findKittySocket(): Promise<string | null> {
     }
   }
 
-  // 4. If named /tmp/kitty (no PID suffix)
+  // 5. If named /tmp/kitty (no PID suffix)
   if (sockets.some(s => s === "/tmp/kitty")) return "/tmp/kitty"
 
   return sockets[0] ?? null
+}
+
+/** Find the kitty binary on this system */
+export function findKittyBin(): string | null {
+  const candidates = [
+    "/opt/homebrew/bin/kitty",
+    "/usr/local/bin/kitty",
+    "/Applications/kitty.app/Contents/MacOS/kitty",
+  ]
+  for (const bin of candidates) {
+    if (existsSync(bin)) return bin
+  }
+  // Fallback: try PATH
+  try {
+    const which = Bun.spawnSync(["which", "kitty"], { stdout: "pipe" })
+    if (which.exitCode === 0) return which.stdout.toString().trim()
+  } catch {}
+  return null
+}
+
+/**
+ * Auto-launch kitty with remote control enabled.
+ * Returns the socket path once kitty is ready.
+ */
+export async function launchKitty(): Promise<string> {
+  const bin = findKittyBin()
+  if (!bin) {
+    throw new Error(
+      "kitty not found. Install with:\n" +
+      "  brew install --cask kitty"
+    )
+  }
+
+  // Clean stale socket if present
+  if (existsSync(PREFERRED_SOCKET)) {
+    try { await $`rm -f ${PREFERRED_SOCKET}`.quiet() } catch {}
+  }
+
+  // Launch kitty in background with remote control
+  // --start-as= minimized would be nice but we need it visible for screenshots
+  const child = Bun.spawn([
+    bin,
+    "--override", "allow_remote_control=yes",
+    "--override", `listen_on=unix:${PREFERRED_SOCKET}`,
+    "--session", "none",  // Start with no windows/tabs
+  ], {
+    detached: true,
+    stderr: "ignore",
+    stdout: "ignore",
+  })
+  child.unref()
+
+  // Wait for socket to appear (up to 5s)
+  for (let i = 0; i < 50; i++) {
+    await Bun.sleep(100)
+    if (existsSync(PREFERRED_SOCKET)) return PREFERRED_SOCKET
+  }
+
+  throw new Error("kitty launched but socket did not appear within 5s")
+}
+
+/** Verify a cached socket is still connected to a live kitty process */
+export async function isSocketAlive(socket: string): Promise<boolean> {
+  if (!existsSync(socket)) return false
+
+  // If socket has a PID suffix (e.g. /tmp/kitty-12345), verify the process lives
+  const match = socket.match(/kitty-(\d+)$/)
+  if (match) {
+    try {
+      const pid = match[1]
+      const result = await Bun.spawn(["kill", "-0", pid], { stderr: "ignore", stdout: "ignore" })
+      return result.exitCode === 0
+    } catch {
+      return false
+    }
+  }
+
+  // Named socket — try a real command to confirm kitty responds
+  try {
+    await $`kitty @ --to unix:${socket} ls`.quiet()
+    return true
+  } catch {
+    return false
+  }
 }
 
 // ── Remote control commands ──

@@ -22,6 +22,8 @@ import { z } from "zod"
 import { readFileSync, existsSync } from "fs"
 import {
   findKittySocket,
+  launchKitty,
+  isSocketAlive,
   listWindows,
   launchTab,
   sendText,
@@ -51,20 +53,33 @@ const demos = new Map<string, RunningDemo>()
 let cachedSocket: string | null = null
 
 async function getSocket(): Promise<string> {
+  // Check cache
   if (cachedSocket) {
-    // Verify it still exists
-    if (existsSync(cachedSocket)) return cachedSocket
+    if (await isSocketAlive(cachedSocket)) return cachedSocket
     cachedSocket = null
   }
-  const socket = await findKittySocket()
-  if (!socket) {
+
+  // Try to find an existing kitty
+  let socket = await findKittySocket()
+  if (socket) {
+    cachedSocket = socket
+    return socket
+  }
+
+  // No kitty running — auto-launch one
+  console.error("No kitty socket found — auto-launching kitty...")
+  try {
+    socket = await launchKitty()
+    cachedSocket = socket
+    console.error(`kitty launched, socket: ${socket}`)
+    return socket
+  } catch (e: any) {
     throw new Error(
-      "No kitty socket found. Launch kitty with:\n" +
-      "  kitty --override allow_remote_control=yes --override 'listen_on=unix:/tmp/kitty'"
+      `Could not auto-launch kitty: ${e.message}\n` +
+      "Launch kitty manually with:\n" +
+      "  kitty --override allow_remote_control=yes --override 'listen_on=unix:/tmp/kitty-tge'"
     )
   }
-  cachedSocket = socket
-  return socket
 }
 
 // ── MCP Server ──
@@ -564,17 +579,20 @@ async function main() {
   console.error("TGE DevTools MCP server running on stdio")
   console.error(`Project root: ${process.env.TGE_PROJECT_ROOT || "/Users/dev/vexart"}`)
 
-  // Try to find socket at startup
+  // Ensure kitty is running at startup
   try {
-    const socket = await findKittySocket()
-    if (socket) {
-      console.error(`Kitty socket: ${socket}`)
-      cachedSocket = socket
+    const existing = await findKittySocket()
+    if (existing) {
+      console.error(`Kitty socket: ${existing}`)
+      cachedSocket = existing
     } else {
-      console.error("No kitty socket found — launch kitty with remote control enabled")
+      console.error("No kitty running — launching kitty...")
+      const socket = await launchKitty()
+      cachedSocket = socket
+      console.error(`Kitty launched, socket: ${socket}`)
     }
-  } catch {
-    console.error("Could not discover kitty socket at startup")
+  } catch (e: any) {
+    console.error(`Could not start kitty: ${e.message}`)
   }
 }
 

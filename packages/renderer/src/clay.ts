@@ -112,6 +112,18 @@ const textBuffer = new Uint8Array(4096)
 const scrollOffsetBuf = new Float32Array(2)
 const scrollDataBuf = new Float32Array(7)
 const elementDataBuf = new Float32Array(5)
+const stringEncoder = new TextEncoder()
+const stringCache = new Map<string, Uint8Array>()
+const STRING_CACHE_LIMIT = 2048
+
+function encodeString(value: string) {
+  const cached = stringCache.get(value)
+  if (cached) return cached
+  const encoded = stringEncoder.encode(value)
+  if (stringCache.size >= STRING_CACHE_LIMIT) stringCache.clear()
+  stringCache.set(value, encoded)
+  return encoded
+}
 
 // ── Sizing types ──
 
@@ -286,7 +298,7 @@ export const clay = {
 
   /** Hash a string to get a Clay element ID (for floating parentId). */
   hashString(label: string): number {
-    const encoded = new TextEncoder().encode(label)
+    const encoded = encodeString(label)
     return getLib().symbols.tge_clay_hash_string(encoded, encoded.length) as number
   },
 
@@ -302,13 +314,13 @@ export const clay = {
 
   /** Add a text element (leaf node — opens and closes itself). */
   text(content: string, color: number, fontId = 0, fontSize = 16) {
-    const encoded = new TextEncoder().encode(content)
+    const encoded = encodeString(content)
     getLib().symbols.tge_clay_text(encoded, encoded.length, color, fontId, fontSize)
   },
 
   /** Open an element with a string ID (for scroll tracking, etc). Replaces openElement(). */
   setId(label: string) {
-    const encoded = new TextEncoder().encode(label)
+    const encoded = encodeString(label)
     getLib().symbols.tge_clay_set_id(encoded, encoded.length)
   },
 
@@ -354,7 +366,7 @@ export const clay = {
     contentWidth: number; contentHeight: number
     found: boolean
   } {
-    const encoded = new TextEncoder().encode(label)
+    const encoded = encodeString(label)
     getLib().symbols.tge_clay_get_scroll_container_data(encoded, encoded.length, scrollDataBuf)
     return {
       scrollX: scrollDataBuf[0],
@@ -369,13 +381,13 @@ export const clay = {
 
   /** Set scroll position of a scroll container by string ID. */
   setScrollPosition(label: string, x: number, y: number) {
-    const encoded = new TextEncoder().encode(label)
+    const encoded = encodeString(label)
     getLib().symbols.tge_clay_set_scroll_position(encoded, encoded.length, x, y)
   },
 
   /** Get the bounding box of any element by string ID. */
   getElementData(label: string): { x: number; y: number; width: number; height: number; found: boolean } {
-    const encoded = new TextEncoder().encode(label)
+    const encoded = encodeString(label)
     getLib().symbols.tge_clay_get_element_data(encoded, encoded.length, elementDataBuf)
     return {
       x: elementDataBuf[0],

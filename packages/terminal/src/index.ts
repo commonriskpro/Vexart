@@ -21,6 +21,8 @@ import { inferCaps, probeKittyGraphics, queryColors, type Capabilities } from ".
 import { getSize, queryPixelSize, onResize, type TerminalSize, type ResizeHandler } from "./size"
 import { enter, leave, beginSync, endSync, installExitHandlers, type LifecycleState } from "./lifecycle"
 
+const DEBUG_KITTY_PROBE = process.env.TGE_DEBUG_KITTY === "1" || process.env.TGE_DEBUG_KITTY_SHM === "1"
+
 // ── Types ──
 
 export type Terminal = {
@@ -150,6 +152,15 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
       }
       // else stays "direct" (default)
     }
+  }
+
+  if (DEBUG_KITTY_PROBE) {
+    console.error("[tge/terminal] transmission mode decision", {
+      kittyGraphics: caps.kittyGraphics,
+      kittyPlaceholder: caps.kittyPlaceholder,
+      tmux: caps.tmux,
+      transmissionMode: caps.transmissionMode,
+    })
   }
 
   // Step 4: query colors

@@ -1,44 +1,101 @@
 /**
- * LightCode 2.5D Demo — Spatial workbench with node graph.
- *
- * Rewritten with SceneCanvas declarative scene graph.
+ * LightCode cinematic workspace demo.
  *
  * Run: bun --conditions=browser run examples/lightcode.tsx
  */
 
-import { createSignal, onCleanup, For } from "solid-js"
-import { mount, markDirty, useDrag } from "@tge/renderer"
+import { createSignal, For, type JSX } from "solid-js"
+import { mount, markDirty, useDrag, setDebug, debugState, debugDumpTree, createCanvasImageCache, getCanvasPainterBackendName, probeWgpuCanvasBridge, setCanvasPainterBackend, type NodeHandle } from "@tge/renderer"
 import { createTerminal } from "@tge/terminal"
 import { createParser } from "@tge/input"
+import { createSpaceBackground, type SpaceBackground, SceneCanvas, SceneNode, SceneEdge, SceneOverlay } from "@tge/components"
+import { tryCreateWgpuCanvasPainterBackend } from "../packages/renderer/src/wgpu-canvas-backend"
 import { radius, space } from "@tge/void"
-import { SceneCanvas, SceneNode, SceneEdge, SceneParticles, SceneOverlay } from "@tge/components"
 import type { CanvasContext, NodeMouseEvent } from "@tge/renderer"
+import { appendFileSync } from "node:fs"
 
-// ── Load nebula image at startup ──
+let spaceBg: SpaceBackground | null = null
+const graphBgCache = createCanvasImageCache()
+const DEBUG_LOG = "/tmp/lightcode-debug.log"
+const PERF_LOG = "/tmp/lightcode-perf.log"
+const LIGHTCODE_STAGE = Number(process.env.LIGHTCODE_STAGE ?? 5)
+const LIGHTCODE_SHOW_HUD = process.env.LIGHTCODE_SHOW_HUD === "1"
+const LIGHTCODE_FLOATING_CHROME = process.env.LIGHTCODE_FLOATING_CHROME !== "0"
+const LIGHTCODE_CHROME_LAYERED = process.env.LIGHTCODE_CHROME_LAYERED !== "0"
+const LIGHTCODE_LOG_FPS = process.env.LIGHTCODE_LOG_FPS === "1"
+const LIGHTCODE_FORCE_REPAINT = process.env.LIGHTCODE_FORCE_REPAINT === "1"
+const LIGHTCODE_FORCE_LAYER_REPAINT = process.env.LIGHTCODE_FORCE_LAYER_REPAINT === "1"
+const LIGHTCODE_DUMP_TREE = process.env.LIGHTCODE_DUMP_TREE === "1"
+const LIGHTCODE_LOG_CADENCE = process.env.TGE_DEBUG_CADENCE === "1"
+const LIGHTCODE_EXIT_AFTER_MS = Number(process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
+const LIGHTCODE_MAX_FPS = Number(process.env.LIGHTCODE_MAX_FPS ?? 60)
+const LIGHTCODE_IDLE_MAX_FPS = Number(process.env.LIGHTCODE_IDLE_MAX_FPS ?? 60)
+const LIGHTCODE_GRAPH_BG = process.env.LIGHTCODE_GRAPH_BG !== "0"
+const LIGHTCODE_GRAPH_NEBULA = process.env.LIGHTCODE_GRAPH_NEBULA !== "0"
+const LIGHTCODE_GRAPH_EDGES = process.env.LIGHTCODE_GRAPH_EDGES !== "0"
+const LIGHTCODE_GRAPH_EDGE_GLOW = process.env.LIGHTCODE_GRAPH_EDGE_GLOW !== "0"
+const LIGHTCODE_GRAPH_NODES = process.env.LIGHTCODE_GRAPH_NODES !== "0"
+const LIGHTCODE_GRAPH_NODE_GLOW = process.env.LIGHTCODE_GRAPH_NODE_GLOW !== "0"
+const LIGHTCODE_GRAPH_NODE_TEXT = process.env.LIGHTCODE_GRAPH_NODE_TEXT !== "0"
+const LIGHTCODE_GRAPH_NODE_STATUS = process.env.LIGHTCODE_GRAPH_NODE_STATUS !== "0"
+const LIGHTCODE_GRAPH_OVERLAY = process.env.LIGHTCODE_GRAPH_OVERLAY !== "0"
+const LIGHTCODE_SPACE_SHOW_NEBULA = process.env.LIGHTCODE_SPACE_SHOW_NEBULA !== "0"
+const LIGHTCODE_SPACE_SHOW_ATMOSPHERE = process.env.LIGHTCODE_SPACE_SHOW_ATMOSPHERE !== "0"
+const LIGHTCODE_SPACE_SHOW_STARS = process.env.LIGHTCODE_SPACE_SHOW_STARS !== "0"
+const LIGHTCODE_SPACE_SHOW_SPARKLES = process.env.LIGHTCODE_SPACE_SHOW_SPARKLES !== "0"
+const LIGHTCODE_SPACE_NEBULA_SCALE = Number(process.env.LIGHTCODE_SPACE_NEBULA_SCALE ?? "0.5")
+const LIGHTCODE_SPACE_STARS_SCALE = Number(process.env.LIGHTCODE_SPACE_STARS_SCALE ?? "0.75")
+const LIGHTCODE_CANVAS_BACKEND = process.env.LIGHTCODE_CANVAS_BACKEND ?? "cpu"
 
-let nebulaData: Uint8Array | null = null
-let nebulaW = 0
-let nebulaH = 0
-
-async function loadNebula() {
-  try {
-    const sharp = require("sharp")
-    const img = sharp("./examples/nebula.jpg")
-    const meta = await img.metadata()
-    const scale = 0.5
-    const w = Math.round((meta.width ?? 960) * scale)
-    const h = Math.round((meta.height ?? 911) * scale)
-    const { data } = await img.resize(w, h).raw().ensureAlpha().toBuffer({ resolveWithObject: true })
-    nebulaData = new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
-    nebulaW = w
-    nebulaH = h
-    markDirty()
-  } catch (e) {
-    console.error("[nebula] Failed to load:", e)
-  }
+function debug(msg: string) {
+  appendFileSync(DEBUG_LOG, msg + "\n")
 }
 
-// ── Draggable panel hook ──
+async function loadNebula() {
+  spaceBg = createSpaceBackground({
+    width: 1600,
+    height: 1000,
+    seed: 1337,
+    backgroundColor: T.bg,
+    nebula: {
+      renderScale: LIGHTCODE_SPACE_NEBULA_SCALE,
+      stops: [
+        { color: 0x04050700, position: 0 },
+        { color: 0x0f2436aa, position: 0.32 },
+        { color: 0x27495db0, position: 0.6 },
+        { color: 0x8d5e39a8, position: 0.82 },
+        { color: 0xf3bf6b7a, position: 1 },
+      ],
+      noise: {
+        scale: 176,
+        octaves: 5,
+        gain: 60,
+        lacunarity: 212,
+        warp: 54,
+        detail: 98,
+        dust: 68,
+      },
+    },
+    starfield: {
+      renderScale: LIGHTCODE_SPACE_STARS_SCALE,
+      count: 680,
+      clusterCount: 8,
+      clusterStars: 96,
+      warmColor: 0xf3d7a1dc,
+      coolColor: 0xc1d7ffe0,
+      neutralColor: 0xffffffd8,
+    },
+    sparkles: {
+      count: 4,
+      color: 0xfff2d8ff,
+    },
+    atmosphere: {
+      count: 5,
+      colors: [0x7db6ff16, 0xf3bf6b16, 0xffffff0a],
+    },
+  })
+  markDirty()
+}
 
 function useDraggablePanel(initialX: number, initialY: number) {
   const [offsetX, setOffsetX] = createSignal(initialX)
@@ -61,545 +118,784 @@ function useDraggablePanel(initialX: number, initialY: number) {
   return { offsetX, offsetY, dragProps }
 }
 
-// ── Design tokens ──
-
 const T = {
-  bg: 0x080812ff,
-  panelBg: 0x111122dd,
-  cardBg: 0x1a1a30ff,
-  surfaceBg: 0x0f0f20ff,
-  hoverBg: 0xffffff0a,
-  activeBg: 0x2a6fff22,
-  border: 0xffffff12,
-  borderLight: 0xffffff1a,
-  textPrimary: 0xeeeeeeff,
-  textSecondary: 0xa0a0b4ff,
-  textMuted: 0x666680ff,
-  textDim: 0x444460ff,
-  orange: 0xf0a050ff,
-  orangeGlow: 0xf0a05080,
-  cyan: 0x56d4c8ff,
-  cyanGlow: 0x56d4c860,
-  green: 0x22c55eff,
-  greenDim: 0x22c55e88,
-  blue: 0x3b82f6ff,
-  purple: 0xa78bfaff,
-  yellow: 0xf59e0bff,
-  red: 0xef4444ff,
-  blur: 16,
-  panelRadius: 14,
-  cardRadius: 10,
+  bg: 0x050507ff,
+  workspaceTint: 0x0d0d10e0,
+  panelBg: 0x121317ea,
+  panelDeep: 0x0a0a0dd8,
+  panelInner: 0x0f1014ee,
+  rowBg: 0xffffff05,
+  rowHover: 0xf3c26f12,
+  border: 0xffffff10,
+  borderSoft: 0xffffff08,
+  line: 0x4c433520,
+  warm: 0xf3bf6bff,
+  warmSoft: 0xf3bf6b66,
+  warmGlow: 0xf3bf6b30,
+  warmDim: 0xc19654ff,
+  textPrimary: 0xf3ede2ff,
+  textSecondary: 0xc6bcaeff,
+  textMuted: 0x918779ff,
+  textDim: 0x655d55ff,
+  blue: 0x90a8d0ff,
+  blueSoft: 0x90a8d055,
+  success: 0x9bd198ff,
+  successSoft: 0x9bd19840,
+  frame: 0xffffff12,
+  blur: 0,
+  panelRadius: 12,
+  innerRadius: 9,
 }
 
-// ── Node graph data ──
-
 type GraphNodeData = {
-  id: string; label: string; subtitle?: string
-  x: number; y: number; radius: number
-  fillColor: number; strokeColor: number; glowColor: number
-  sides: number; status: "active" | "idle" | "error"
+  id: string
+  label: string
+  subtitle?: string
+  x: number
+  y: number
+  radius: number
+  shape: "diamond" | "hexagon" | "octagon" | "square"
+  fill: number
+  stroke: number
+  glow: number
+  status: "active" | "idle"
 }
 
 const nodes: GraphNodeData[] = [
-  { id: "core", label: "Core", x: 500, y: 400, radius: 55, fillColor: 0x2a1a10ff, strokeColor: T.orange, glowColor: T.orangeGlow, sides: 4, status: "active" },
-  { id: "shaders", label: "Shaders", subtitle: "3 files", x: 280, y: 220, radius: 46, fillColor: 0x141430ff, strokeColor: T.cyan, glowColor: T.cyanGlow, sides: 6, status: "idle" },
-  { id: "memory", label: "Memory", subtitle: "12 items", x: 720, y: 260, radius: 48, fillColor: 0x141430ff, strokeColor: T.cyan, glowColor: T.cyanGlow, sides: 6, status: "idle" },
-  { id: "pipeline", label: "Pipeline", subtitle: "8 stages", x: 730, y: 540, radius: 46, fillColor: 0x141430ff, strokeColor: T.cyan, glowColor: T.cyanGlow, sides: 6, status: "idle" },
-  { id: "camera", label: "Camera", subtitle: "matrix", x: 260, y: 560, radius: 44, fillColor: 0x141430ff, strokeColor: T.cyan, glowColor: T.cyanGlow, sides: 6, status: "idle" },
-  { id: "tests", label: "Tests", subtitle: "24 passed", x: 520, y: 700, radius: 42, fillColor: 0x141430ff, strokeColor: T.green, glowColor: 0x22c55e50, sides: 6, status: "idle" },
-  { id: "renderer", label: "Renderer", x: 100, y: 400, radius: 42, fillColor: 0x141430ff, strokeColor: T.purple, glowColor: 0xa78bfa50, sides: 6, status: "idle" },
-  { id: "engine", label: "v_engine", x: 500, y: 170, radius: 40, fillColor: 0x1a1a38ff, strokeColor: T.yellow, glowColor: 0xf59e0b50, sides: 8, status: "idle" },
+  { id: "pipeline", label: "compute_shader_pipeline", subtitle: "Task / compile", x: 560, y: 430, radius: 44, shape: "diamond", fill: 0x4b2b09ff, stroke: T.warm, glow: 0xf3bf6b80, status: "active" },
+  { id: "lightengine", label: "LightEngine.zig", x: 640, y: 270, radius: 18, shape: "square", fill: 0x25262cff, stroke: 0xece7dd80, glow: 0xffffff10, status: "idle" },
+  { id: "vertex-top", label: "Vertex Buffer", x: 430, y: 315, radius: 22, shape: "hexagon", fill: 0x72717844, stroke: 0xd0c7ba90, glow: 0xffffff12, status: "idle" },
+  { id: "dispatch", label: "Dispatch Pointer", x: 430, y: 470, radius: 20, shape: "hexagon", fill: 0x4d4f5a44, stroke: 0xc5c8d690, glow: 0xffffff0d, status: "idle" },
+  { id: "vertex-left", label: "Vertex Buffer", x: 220, y: 565, radius: 24, shape: "hexagon", fill: 0x5b657a44, stroke: 0xc8d2e590, glow: 0x90a8d022, status: "idle" },
+  { id: "lighting", label: "Lightingne.sig", x: 155, y: 440, radius: 16, shape: "square", fill: 0x242730ff, stroke: 0xdce1eb80, glow: 0x90a8d020, status: "idle" },
+  { id: "camera", label: "Camera Norms", x: 520, y: 650, radius: 20, shape: "hexagon", fill: 0x4b474040, stroke: 0xcab69970, glow: 0xf3bf6b18, status: "idle" },
+  { id: "formats", label: "96 Formats", x: 680, y: 650, radius: 18, shape: "octagon", fill: 0x564b3a40, stroke: 0xd2b28770, glow: 0xf3bf6b18, status: "idle" },
+  { id: "router", label: "Router", x: 640, y: 765, radius: 14, shape: "hexagon", fill: 0x4e412f40, stroke: 0xc7a46d70, glow: 0xf3bf6b15, status: "idle" },
+  { id: "hub", label: "", x: 825, y: 255, radius: 16, shape: "hexagon", fill: 0x8f8f9748, stroke: 0xe8e4db90, glow: 0xffffff10, status: "idle" },
+  { id: "ghost-1", label: "", x: 835, y: 690, radius: 10, shape: "hexagon", fill: 0x8e96a53c, stroke: 0xe8ecf460, glow: 0x90a8d018, status: "idle" },
+  { id: "ghost-2", label: "", x: 560, y: 720, radius: 12, shape: "hexagon", fill: 0x8e96a53c, stroke: 0xe8ecf460, glow: 0x90a8d018, status: "idle" },
 ]
 
 const edges = [
-  { id: "e1", from: "core", to: "shaders", color: 0xf0a05040 },
-  { id: "e2", from: "core", to: "memory", color: 0xf0a05040 },
-  { id: "e3", from: "core", to: "pipeline", color: 0xf0a05035 },
-  { id: "e4", from: "core", to: "camera", color: 0xf0a05035 },
-  { id: "e5", from: "core", to: "tests", color: 0xf0a05028 },
-  { id: "e6", from: "shaders", to: "renderer", color: 0xa78bfa25 },
-  { id: "e7", from: "shaders", to: "engine", color: 0xf59e0b25 },
-  { id: "e8", from: "memory", to: "pipeline", color: 0x56d4c820 },
-  { id: "e9", from: "camera", to: "renderer", color: 0xa78bfa20 },
-  { id: "e10", from: "engine", to: "core", color: 0xf0a05038 },
+  { id: "e1", from: "pipeline", to: "lightengine", color: 0xf3bf6b88 },
+  { id: "e2", from: "pipeline", to: "vertex-top", color: 0xf3bf6b58 },
+  { id: "e3", from: "pipeline", to: "dispatch", color: 0xf3bf6b44 },
+  { id: "e4", from: "pipeline", to: "vertex-left", color: 0x90a8d044 },
+  { id: "e5", from: "pipeline", to: "camera", color: 0xf3bf6b44 },
+  { id: "e6", from: "pipeline", to: "formats", color: 0xf3bf6b36 },
+  { id: "e7", from: "pipeline", to: "router", color: 0xf3bf6b26 },
+  { id: "e8", from: "vertex-top", to: "lightengine", color: 0xece7dd44 },
+  { id: "e9", from: "dispatch", to: "lightengine", color: 0x90a8d040 },
+  { id: "e10", from: "lighting", to: "vertex-top", color: 0x90a8d03a },
+  { id: "e11", from: "lighting", to: "dispatch", color: 0x90a8d02e },
+  { id: "e12", from: "lighting", to: "vertex-left", color: 0x90a8d02e },
+  { id: "e13", from: "vertex-top", to: "camera", color: 0xece7dd24 },
+  { id: "e14", from: "dispatch", to: "camera", color: 0xece7dd22 },
+  { id: "e15", from: "lightengine", to: "hub", color: 0xece7dd44 },
+  { id: "e16", from: "hub", to: "pipeline", color: 0xf3bf6b56 },
+  { id: "e17", from: "hub", to: "dispatch", color: 0x90a8d022 },
+  { id: "e18", from: "formats", to: "ghost-1", color: 0x90a8d028 },
+  { id: "e19", from: "camera", to: "ghost-2", color: 0xece7dd20 },
+  { id: "e20", from: "router", to: "ghost-1", color: 0xece7dd28 },
 ]
 
-// ── Node Graph — declarative with SceneCanvas ──
-
-function NodeGraph(props: { mouseX: () => number; mouseY: () => number }) {
-  const [positions, setPositions] = createSignal(
-    Object.fromEntries(nodes.map(n => [n.id, { x: n.x, y: n.y }]))
-  )
-  const [selected, setSelected] = createSignal("core")
+function NodeGraph() {
+  const [positions, setPositions] = createSignal(Object.fromEntries(nodes.map((node) => [node.id, { x: node.x, y: node.y }])))
+  const [selected, setSelected] = createSignal("pipeline")
   const [viewport, setViewport] = createSignal({ x: 0, y: 0, zoom: 1 })
+  const frame = { x: 34, y: 78, w: 1760, h: 826 }
+  const bgSize = { w: 1860, h: 1160 }
+
+  function clamp(v: number, lo: number, hi: number) {
+    if (v < lo) return lo
+    if (v > hi) return hi
+    return v
+  }
 
   function getPos(id: string) {
     return () => positions()[id] ?? { x: 0, y: 0 }
   }
 
-  function shapeFromSides(sides: number): "diamond" | "hexagon" | "octagon" | number {
-    if (sides === 4) return "diamond"
-    if (sides === 6) return "hexagon"
-    if (sides === 8) return "octagon"
-    return sides
-  }
-
   return (
-    <SceneCanvas
-      viewport={viewport()}
-      onViewportChange={setViewport}
-      background={(ctx: CanvasContext) => {
-        // Nebula background with parallax
-        const parallaxFactor = 0.03
-        const px = Math.round(-(props.mouseX() - 500) * parallaxFactor)
-        const py = Math.round(-(props.mouseY() - 400) * parallaxFactor)
+      <SceneCanvas
+        interactive={false}
+        viewport={viewport()}
+        onViewportChange={(vp) => {
+          debug(`[viewport] x=${vp.x.toFixed(2)} y=${vp.y.toFixed(2)} zoom=${vp.zoom.toFixed(3)}`)
+          setViewport(vp)
+        }}
+        background={(ctx: CanvasContext) => {
+        const bgBaseX = frame.x - Math.round((bgSize.w - frame.w) * 0.5)
+        const bgBaseY = frame.y - Math.round((bgSize.h - frame.h) * 0.5)
 
-        if (nebulaData) {
-          ctx.drawImage(-40 + px, -40 + py, 1180, 980, nebulaData, nebulaW, nebulaH, 0.45)
-        } else {
-          ctx.rect(-200, -200, 1500, 1300, { fill: 0x050510ff })
+      if (LIGHTCODE_GRAPH_BG) {
+          const graphBg = graphBgCache.get(frame.w, frame.h, "lightcode-graph-bg-v1", (bg) => {
+            bg.rect(0, 0, frame.w, frame.h, { fill: 0x0a0a0d88, stroke: T.frame, strokeWidth: 1 })
+            bg.radialGradient(560 - frame.x, 430 - frame.y, 500, 0xf3bf6b16, 0x00000000)
+            bg.radialGradient(220 - frame.x, 230 - frame.y, 260, 0xffffff08, 0x00000000)
+            bg.glow(560 - frame.x, 430 - frame.y, 150, 150, 0xf3bf6b2c, 28)
+            bg.glow(1090 - frame.x, 760 - frame.y, 80, 80, 0xf3bf6b12, 16)
+          })
+          ctx.drawImage(frame.x, frame.y, frame.w, frame.h, graphBg.data, graphBg.width, graphBg.height, 1)
         }
 
-        // Vignette + nebula tint
-        ctx.radialGradient(500, 400, 600, 0x00000000, 0x050510c0)
-        ctx.radialGradient(500, 400, 300, 0x1a0a3020, 0x00000000)
-        ctx.glow(500, 400, 180, 180, 0x1a0a2020, 15)
+        if (LIGHTCODE_GRAPH_NEBULA && spaceBg) {
+          spaceBg.draw(ctx, {
+            x: bgBaseX,
+            y: bgBaseY,
+            w: bgSize.w,
+            h: bgSize.h,
+            nebulaOpacity: 0.34,
+            starsOpacity: 0.88,
+            sparklesOpacity: 0.38,
+            atmosphereOpacity: 1,
+            showNebula: LIGHTCODE_SPACE_SHOW_NEBULA,
+            showAtmosphere: LIGHTCODE_SPACE_SHOW_ATMOSPHERE,
+            showStars: LIGHTCODE_SPACE_SHOW_STARS,
+            showSparkles: LIGHTCODE_SPACE_SHOW_SPARKLES,
+          })
+        }
       }}
     >
-      {/* Stars */}
-      <SceneParticles
-        id="stars"
-        config={{
-          count: 250,
-          bounds: { x: -100, y: -100, w: 1200, h: 1000 },
-          radius: { min: 0.3, max: 2 },
-          speed: { min: 0.3, max: 3 },
-          color: 0xffffffff,
-          alpha: { min: 15, max: 120 },
-          lifetime: { min: 5, max: 12 },
-          twinkle: true, twinkleSpeed: 1,
-          glow: true, glowRadius: 2, glowIntensity: 20,
-          drift: { dx: 0.2, dy: -0.1 },
-        }}
-      />
-
-      {/* Lens flare accents */}
-      <SceneOverlay
-        id="flares"
-        draw={(ctx: CanvasContext) => {
-          for (const s of [
-            { x: 150, y: 100, r: 15, c: 0xffffff30 },
-            { x: 820, y: 80, r: 20, c: 0xffffff25 },
-            { x: 950, y: 600, r: 12, c: 0xffffff20 },
-          ]) {
-            ctx.glow(s.x, s.y, s.r, s.r * 0.3, s.c, 50)
-            ctx.glow(s.x, s.y, s.r * 0.3, s.r, s.c, 50)
-            ctx.circle(s.x, s.y, 2, { fill: 0xffffffc0 })
-          }
-        }}
-      />
-
-      {/* Edges */}
-      <For each={edges}>
-        {(e) => (
+      <For each={LIGHTCODE_GRAPH_EDGES ? edges : []}>
+        {(edge) => (
           <SceneEdge
-            id={e.id}
-            from={getPos(e.from)}
-            to={getPos(e.to)}
-            color={e.color}
-            glow
+            id={edge.id}
+            from={getPos(edge.from)}
+            to={getPos(edge.to)}
+            color={edge.color}
+            glow={LIGHTCODE_GRAPH_EDGE_GLOW}
           />
         )}
       </For>
 
-      {/* Nodes */}
-      <For each={nodes}>
-        {(n) => (
+      <For each={LIGHTCODE_GRAPH_NODES ? nodes : []}>
+        {(node) => (
           <SceneNode
-            id={n.id}
-            x={() => positions()[n.id]?.x ?? n.x}
-            y={() => positions()[n.id]?.y ?? n.y}
-            radius={n.radius}
-            shape={shapeFromSides(n.sides)}
-            fill={n.fillColor}
-            stroke={n.strokeColor}
-            glow={{ color: n.glowColor, radius: 25, intensity: 50 }}
-            selected={() => selected() === n.id}
-            label={n.label}
-            sublabel={n.subtitle}
-            statusDot={n.status === "active" ? { color: T.green, glow: true } : undefined}
-            onSelect={() => { setSelected(n.id); markDirty() }}
+            id={node.id}
+            x={() => positions()[node.id]?.x ?? node.x}
+            y={() => positions()[node.id]?.y ?? node.y}
+            radius={node.radius}
+            shape={node.shape}
+            fill={node.fill}
+            stroke={node.stroke}
+            glow={LIGHTCODE_GRAPH_NODE_GLOW ? { color: node.glow, radius: node.status === "active" ? 38 : 18, intensity: node.status === "active" ? 75 : 22 } : undefined}
+            selected={() => selected() === node.id}
+            label={LIGHTCODE_GRAPH_NODE_TEXT ? node.label : undefined}
+            sublabel={LIGHTCODE_GRAPH_NODE_TEXT ? node.subtitle : undefined}
+            statusDot={LIGHTCODE_GRAPH_NODE_STATUS && node.status === "active" ? { color: T.warm, glow: true } : undefined}
+            onSelect={() => {
+              setSelected(node.id)
+              markDirty()
+            }}
             onDrag={(x, y) => {
-              setPositions(prev => ({ ...prev, [n.id]: { x, y } }))
+              setPositions((prev) => ({ ...prev, [node.id]: { x, y } }))
               markDirty()
             }}
           />
         )}
       </For>
 
-      {/* Tooltip on selected node */}
-      <SceneOverlay
-        id="tooltip"
-        draw={(ctx: CanvasContext) => {
-          const sel = selected()
-          const pos = positions()[sel]
-          const node = nodes.find(n => n.id === sel)
-          if (!node || !pos) return
-          const tw = 200, th = 32
-          const tx = pos.x - tw / 2, ty = pos.y + node.radius + 15
-          ctx.rect(tx + 2, ty + 2, tw, th, { fill: 0x00000040, radius: 6 })
-          ctx.rect(tx, ty, tw, th, { fill: 0x1a1a30ee, radius: 6, stroke: 0xffffff15, strokeWidth: 1 })
-          ctx.text(tx + 10, ty + 4, `Task: ${node.label}`, T.textPrimary)
-          ctx.text(tx + 10, ty + 18, `Type: compute`, T.textMuted)
-        }}
-      />
+      {LIGHTCODE_GRAPH_OVERLAY ? (
+        <SceneOverlay
+          id="active-chip"
+          draw={(ctx: CanvasContext) => {
+            const pos = positions()[selected()]
+            if (!pos) return
+            const x = pos.x - 68
+            const y = pos.y + 72
+            ctx.rect(x + 4, y + 4, 226, 42, { fill: 0x00000050, radius: 8 })
+            ctx.rect(x, y, 226, 42, { fill: 0x2b2118ea, radius: 8, stroke: 0xf3bf6b30, strokeWidth: 1 })
+            ctx.text(x + 14, y + 7, "Task: compute_shader_pipeline", T.textPrimary)
+            ctx.text(x + 14, y + 22, "Type: compile", T.warmDim)
+          }}
+        />
+      ) : null}
     </SceneCanvas>
   )
 }
 
-// ── Panel helpers ──
+function Rule() {
+  return <box width="grow" height={1} backgroundColor={T.line} />
+}
 
-function PanelHeader(props: { title: string; actions?: string }) {
+function ChromeDot(props: { color: number }) {
+  return <box width={6} height={6} backgroundColor={props.color} cornerRadius={radius.full} />
+}
+
+function TinyChip(props: { label: string; active?: boolean; compact?: boolean }) {
   return (
-    <box direction="row" alignY="center" width="grow">
-      <box width="grow">
-        <text color={T.textPrimary} fontSize={14}>{props.title}</text>
+    <box
+      paddingX={props.compact ? space[1] : space[2]}
+      paddingY={props.compact ? 3 : 4}
+      backgroundColor={props.active ? 0xf3bf6b16 : 0xffffff04}
+      borderColor={props.active ? 0xf3bf6b32 : T.borderSoft}
+      borderWidth={1}
+      cornerRadius={radius.sm}
+    >
+      <text color={props.active ? T.textPrimary : T.textSecondary} fontSize={props.compact ? 9 : 10}>{props.label}</text>
+    </box>
+  )
+}
+
+function HeaderAction(props: { label: string }) {
+  return (
+    <box width={18} height={18} alignX="center" alignY="center" cornerRadius={radius.sm} hoverStyle={{ backgroundColor: 0xffffff06 }}>
+      <text color={T.textDim} fontSize={11}>{props.label}</text>
+    </box>
+  )
+}
+
+function PanelHeader(props: { title: string; subtitle?: string }) {
+  return (
+    <box direction="column" gap={3} width="grow">
+      <box direction="row" alignY="center" width="grow">
+        <box direction="row" gap={space[1]} alignY="center" width="grow">
+          <text color={T.textSecondary} fontSize={14}>≡</text>
+          <text color={T.textPrimary} fontSize={13}>{props.title}</text>
+        </box>
+        <box direction="row" gap={space[1]}>
+          <HeaderAction label="⌁" />
+          <HeaderAction label="◻" />
+          <HeaderAction label="×" />
+        </box>
       </box>
-      {props.actions ? <text color={T.textDim} fontSize={12}>{props.actions}</text> : null}
+      {props.subtitle ? <text color={T.textMuted} fontSize={10}>{props.subtitle}</text> : null}
+      <box
+        width="grow"
+        height={2}
+        gradient={{ type: "linear", from: 0x00000000, to: 0xf3bf6b2e, angle: 0 }}
+        opacity={0.8}
+      />
     </box>
   )
 }
 
-function SearchBar() {
+function ShaderPanel(props: {
+  title: string
+  subtitle?: string
+  width: number
+  initialX: number
+  initialY: number
+  attach?: { element: number; parent: number }
+  zIndex?: number
+  contentChrome?: boolean
+  flat?: boolean
+  children: JSX.Element
+}) {
+  const drag = useDraggablePanel(props.initialX, props.initialY)
+
   return (
-    <box backgroundColor={T.surfaceBg} cornerRadius={radius.md} padding={space[2]}
-      paddingX={space[3]} borderColor={T.border} borderWidth={1}>
-      <text color={T.textDim} fontSize={11}>Search memory...</text>
+    <box
+      {...drag.dragProps}
+      layer
+      floating="root"
+      floatOffset={{ x: drag.offsetX(), y: drag.offsetY() }}
+      floatAttach={props.attach}
+      zIndex={props.zIndex ?? 10}
+      width={props.width}
+      backgroundColor={props.flat ? 0x16171df6 : T.panelBg}
+      gradient={props.flat ? undefined : { type: "linear", from: 0x17181cf0, to: 0x0d0e12e2, angle: 90 }}
+      cornerRadius={T.panelRadius}
+      borderColor={props.flat ? 0xffffff12 : 0xffffff14}
+      borderWidth={1}
+      padding={space[3]}
+      direction="column"
+      gap={space[3]}
+      glow={props.flat ? undefined : { radius: 18, color: T.warmGlow, intensity: 12 }}
+      shadow={props.flat ? { x: 0, y: 8, blur: 14, color: 0x0000001c } : { x: 0, y: 12, blur: 18, color: 0x00000024 }}
+    >
+      <PanelHeader title={props.title} subtitle={props.subtitle} />
+      {props.contentChrome === false ? (
+        <box width="grow" direction="column" gap={space[3]}>
+          {props.children}
+        </box>
+      ) : (
+        <box
+          width="grow"
+          backgroundColor={T.panelInner}
+          gradient={{ type: "linear", from: 0x15161af0, to: 0x0c0d11ee, angle: 90 }}
+          borderColor={T.borderSoft}
+          borderWidth={1}
+          cornerRadius={T.innerRadius}
+          padding={space[3]}
+          direction="column"
+          gap={space[3]}
+        >
+          {props.children}
+        </box>
+      )}
     </box>
   )
 }
 
-function TabBar(props: { tabs: { label: string; count?: number; active?: boolean }[] }) {
+function WorkspaceHeader() {
+  if (!LIGHTCODE_FLOATING_CHROME) {
+    return (
+      <box width="100%" direction="row" gap={space[2]} paddingLeft={56} paddingTop={18}>
+        <box direction="row" gap={space[2]} paddingX={space[3]} paddingY={space[2]} backgroundColor={T.panelSubtle} borderColor={T.borderSoft} borderWidth={1} cornerRadius={radius.sm}>
+          <text color={T.textSecondary} fontSize={10}>Compute Shaders</text>
+          <text color={T.textMuted} fontSize={10}>v_engine.zig</text>
+        </box>
+        <box direction="row" gap={space[2]} paddingX={space[2]} paddingY={space[1]} backgroundColor={0xffffff05} borderColor={T.borderSoft} borderWidth={1} cornerRadius={radius.sm}>
+          <text color={T.textMuted} fontSize={10}>▲</text>
+          <text color={T.textDim} fontSize={10}>2/5</text>
+        </box>
+      </box>
+    )
+  }
+
   return (
-    <box direction="row" gap={space[1]}>
-      {props.tabs.map(tab => (
-        <box padding={space[1]} paddingX={space[2]}
-          backgroundColor={tab.active ? T.activeBg : 0x00000000}
+    <box layer={LIGHTCODE_CHROME_LAYERED} floating="root" floatOffset={{ x: 56, y: 94 }} zIndex={12} direction="row" gap={space[2]}>
+      <box
+        width={34}
+        height={28}
+        backgroundColor={0x121317d4}
+        borderColor={T.border}
+        borderWidth={1}
+        cornerRadius={radius.sm}
+        alignX="center"
+        alignY="center"
+      >
+        <text color={T.textSecondary} fontSize={13}>☰</text>
+      </box>
+      <box
+        direction="row"
+        gap={space[2]}
+        alignY="center"
+        paddingX={space[3]}
+        height={28}
+        backgroundColor={0x121317d4}
+        borderColor={T.border}
+        borderWidth={1}
+        cornerRadius={radius.sm}
+      >
+        <text color={T.textPrimary} fontSize={12}>Compute Shaders</text>
+        <text color={T.textDim} fontSize={10}>›</text>
+        <text color={T.textPrimary} fontSize={12}>v_engine.zig</text>
+      </box>
+    </box>
+  )
+}
+
+function WorkspaceFooter(props: { transmissionMode: string }) {
+  if (!LIGHTCODE_FLOATING_CHROME) {
+    return (
+      <box width="100%" paddingLeft={54} paddingTop={12}>
+        <box
+          direction="row"
+          gap={space[3]}
+          alignY="center"
+          paddingX={space[3]}
+          height={24}
+          width="fit"
+          backgroundColor={0x121317d4}
+          borderColor={T.border}
+          borderWidth={1}
           cornerRadius={radius.sm}
-          borderColor={tab.active ? 0x2a6fff44 : 0x00000000}
-          borderWidth={tab.active ? 1 : 0}>
-          <text color={tab.active ? T.textPrimary : T.textSecondary} fontSize={11}>
-            {tab.label}{tab.count !== undefined ? ` ${tab.count}` : ""}
-          </text>
+        >
+          <text color={T.warm} fontSize={10}>⚡</text>
+          <text color={T.textSecondary} fontSize={10}>L24S</text>
+          <text color={T.textDim} fontSize={10}>CC15</text>
+          <text color={T.textMuted} fontSize={10}>|</text>
+          <text color={T.textSecondary} fontSize={10}>Zig</text>
+          <text color={T.textMuted} fontSize={10}>|</text>
+          <text color={T.textSecondary} fontSize={10}>Kitty {props.transmissionMode}</text>
+          <text color={T.textMuted} fontSize={10}>|</text>
+          <text color={T.textPrimary} fontSize={10}>Lightcode v2.0</text>
         </box>
-      ))}
+      </box>
+    )
+  }
+
+  return (
+    <box
+      layer={LIGHTCODE_CHROME_LAYERED}
+      floating="root"
+      floatOffset={{ x: 54, y: -30 }}
+      floatAttach={{ element: 6, parent: 6 }}
+      zIndex={12}
+      direction="row"
+      gap={space[3]}
+      alignY="center"
+      paddingX={space[3]}
+      height={24}
+      backgroundColor={0x121317d4}
+      borderColor={T.border}
+      borderWidth={1}
+      cornerRadius={radius.sm}
+    >
+      <text color={T.warm} fontSize={10}>⚡</text>
+      <text color={T.textSecondary} fontSize={10}>L24S</text>
+      <text color={T.textDim} fontSize={10}>CC15</text>
+      <text color={T.textMuted} fontSize={10}>|</text>
+      <text color={T.textSecondary} fontSize={10}>Zig</text>
+      <text color={T.textMuted} fontSize={10}>|</text>
+      <text color={T.textSecondary} fontSize={10}>Kitty {props.transmissionMode}</text>
+      <text color={T.textMuted} fontSize={10}>|</text>
+      <text color={T.textPrimary} fontSize={10}>Lightcode v2.0</text>
     </box>
   )
 }
 
-function Separator() {
-  return <box width="grow" height={1} backgroundColor={T.border} />
+function DebugHud() {
+  return (
+    <box
+      layer
+      floating="root"
+      floatOffset={{ x: 54, y: 54 }}
+      zIndex={20}
+      width="fit"
+      direction="column"
+      gap={2}
+      paddingX={space[2]}
+      paddingY={space[1]}
+      backgroundColor={0x101116e6}
+      borderColor={0xffffff14}
+      borderWidth={1}
+      cornerRadius={radius.sm}
+    >
+      <text color={T.warm} fontSize={10}>DEBUG</text>
+      <text color={T.textPrimary} fontSize={10}>{debugState.fps} FPS</text>
+      <text color={T.textSecondary} fontSize={10}>{debugState.frameTimeMs} ms</text>
+      <text color={T.textMuted} fontSize={10}>{debugState.layerCount} layers · {debugState.dirtyBeforeCount} dirty before</text>
+      <text color={T.textMuted} fontSize={10}>{debugState.repaintedCount} repainted</text>
+      <text color={T.textDim} fontSize={10}>{debugState.commandCount} cmds · {debugState.nodeCount} nodes</text>
+    </box>
+  )
 }
 
-function StatusDot(props: { color: number; size?: number }) {
-  const s = props.size ?? 8
-  return <box width={s} height={s} backgroundColor={props.color} cornerRadius={radius.full} />
-}
-
-// ── Memory Panel ──
-
-function MemoryPanel(props: { mouseX: () => number; mouseY: () => number }) {
-  const drag = useDraggablePanel(20, 50)
-  const items = [
-    { icon: "S", label: "compute_shader_pipeline", desc: "struct - v_engine.zig:102", iconBg: 0x2a1a0aff, iconColor: T.orange },
-    { icon: "V", label: "vertex_buffer", desc: "buffer - graphics.zig:44", iconBg: 0x0a1a1aff, iconColor: T.cyan },
-    { icon: "M", label: "camera_matrix", desc: "mat4 - camera.zig:88", iconBg: 0x151020ff, iconColor: T.purple },
-    { icon: "C", label: "lightcode_core", desc: "module - core.zig:1", iconBg: 0x0a1a0aff, iconColor: T.green },
+function MemoryPanel() {
+  const rows = [
+    { title: "buffer Size", left: "86:3904", right: "buffer › [396]" },
+    { title: "bitwise", left: "- [1266]", right: "-" },
+    { title: "funcieb.buffer_fut()", left: "23080003" },
+    { title: "buffer.size › buntil.zig", left: "30080003" },
+  ]
+  const references = [
+    { label: "funcieb.buffer_fut()", value: "23080003" },
+    { label: "buffer.size › buntil.zig", value: "30080003" },
   ]
 
-  // Subtle perspective tilt — panel leans slightly right, reacts to mouse
-  const tiltY = () => 2 + (props.mouseX() - 500) * 0.002
-  const tiltX = () => -0.5 + (props.mouseY() - 400) * 0.001
-
   return (
-    <box {...drag.dragProps} floating="root" floatOffset={{ x: drag.offsetX(), y: drag.offsetY() }} zIndex={10} width={270}
-      transform={{ perspective: 800, rotateY: tiltY(), rotateX: tiltX() }}
-      backgroundColor={T.panelBg} backdropBlur={T.blur} cornerRadius={T.panelRadius}
-      padding={space[4]} direction="column" gap={space[3]}
-      borderColor={T.borderLight} borderWidth={1}
-      shadow={[
-        { x: 0, y: 4, blur: 16, color: 0x00000040 },
-        { x: 0, y: 16, blur: 48, color: 0x00000030 },
-      ]}>
-      <PanelHeader title="Memory Panel" actions="+ =" />
-      <SearchBar />
-      <TabBar tabs={[
-        { label: "All", active: true },
-        { label: "Facts", count: 12 },
-        { label: "Symbols", count: 28 },
-        { label: "Decisions", count: 7 },
-      ]} />
-      <Separator />
-      {items.map((item) => (
-        <box direction="row" gap={space[3]} alignY="center" padding={space[2]}
-          cornerRadius={radius.md} hoverStyle={{ backgroundColor: T.hoverBg }}>
-          <box width={32} height={32} backgroundColor={item.iconBg}
-            cornerRadius={radius.full} alignX="center" alignY="center"
-            borderColor={T.border} borderWidth={1}>
-            <text color={item.iconColor} fontSize={13}>{item.icon}</text>
+    <ShaderPanel
+      title="Memory"
+      subtitle="LC_TOKENS · accentGolden.focusView"
+      width={336}
+      initialX={78}
+      initialY={430}
+      contentChrome={false}
+      flat
+    >
+      <box direction="row" gap={space[1]} width="grow">
+        <TinyChip label="LC_TOKENS" active compact />
+        <TinyChip label="accentGolden" compact />
+        <TinyChip label="focusView" compact />
+      </box>
+      <Rule />
+      <box direction="column" gap={space[2]} width="grow">
+        {rows.map((row, index) => (
+          <box direction="column" gap={space[1]} width="grow">
+            <box direction="row" alignY="center" gap={space[2]}>
+              <text color={index < 2 ? T.warm : T.textSecondary} fontSize={11}>{row.title}</text>
+              <box width="grow" />
+            </box>
+            <box direction="row" gap={space[2]} width="grow">
+              <box width="grow" padding={space[2]} backgroundColor={T.rowBg} borderColor={T.borderSoft} borderWidth={1} cornerRadius={radius.sm}>
+                <text color={T.textSecondary} fontSize={10}>{row.left}</text>
+              </box>
+              {index < 2 ? (
+                <box width={96} padding={space[2]} backgroundColor={T.rowBg} borderColor={T.borderSoft} borderWidth={1} cornerRadius={radius.sm}>
+                  <text color={T.textSecondary} fontSize={9}>{row.right ?? "-"}</text>
+                </box>
+              ) : null}
+            </box>
           </box>
-          <box direction="column" gap={2} width="grow">
-            <text color={T.textPrimary} fontSize={12}>{item.label}</text>
-            <text color={T.textMuted} fontSize={10}>{item.desc}</text>
+        ))}
+      </box>
+      <Rule />
+      <text color={T.textMuted} fontSize={10}>References</text>
+      <box direction="column" gap={space[2]} width="grow">
+        {references.map((ref) => (
+          <box width="grow" direction="column" gap={2} padding={space[2]} backgroundColor={0xffffff03} borderColor={T.borderSoft} borderWidth={1} cornerRadius={radius.sm}>
+            <box direction="row" gap={space[2]} alignY="center">
+              <text color={T.textDim} fontSize={10}>☰</text>
+              <text color={T.textSecondary} fontSize={10}>{ref.label}</text>
+            </box>
+            <text color={T.textMuted} fontSize={10}>{ref.value}</text>
           </box>
-          <StatusDot color={T.orange} size={6} />
-        </box>
-      ))}
-    </box>
+        ))}
+      </box>
+    </ShaderPanel>
   )
 }
 
-// ── Agents Panel ──
-
-function AgentsPanel(props: { mouseX: () => number; mouseY: () => number }) {
-  const drag = useDraggablePanel(-20, -70)
-  const agents = [
-    { name: "coder-01", status: "Working...", statusColor: T.green, avatarBg: 0x0a200aff, avatarIcon: "C", task: "Refactoring compute_shader_pipeline", progress: 60, progressColor: T.orange },
-    { name: "analyzer-02", status: "Idle", statusColor: T.textDim, avatarBg: 0x10101aff, avatarIcon: "A", task: "Detected 3 optimizations", action: "Review" },
-    { name: "doc-writer", status: "Idle", statusColor: T.blue, avatarBg: 0x0a1020ff, avatarIcon: "D", task: "Ready" },
+function DiffPanel() {
+  const diffLines = [
+    { n: "1", t: "import lightloopproccea,", c: T.warmDim },
+    { n: "2", t: "import lighhcompute;", c: T.warmDim },
+    { n: "4", t: "type: EngineDispatcher.LightCompiler", c: T.textSecondary },
+    { n: "6", t: "const bindings = buildBindings(ctx)", c: T.textMuted },
   ]
 
-  // Mirrored tilt — panel leans left (opposite of Memory), reacts to mouse
-  const tiltY = () => -2 + (props.mouseX() - 500) * 0.002
-  const tiltX = () => 1 + (props.mouseY() - 400) * 0.001
-
   return (
-    <box {...drag.dragProps} floating="root" floatOffset={{ x: drag.offsetX(), y: drag.offsetY() }} floatAttach={{ element: 7, parent: 7 }}
-      zIndex={10} width={280}
-      transform={{ perspective: 800, rotateY: tiltY(), rotateX: tiltX() }}
-      backgroundColor={T.panelBg} backdropBlur={T.blur}
-      cornerRadius={T.panelRadius} padding={space[4]} direction="column" gap={space[3]}
-      borderColor={T.borderLight} borderWidth={1}
-      shadow={[
-        { x: 0, y: 4, blur: 16, color: 0x00000040 },
-        { x: 0, y: 16, blur: 48, color: 0x00000030 },
-      ]}>
-      <PanelHeader title="Agents Panel" actions="+" />
-      <Separator />
-      {agents.map((agent) => (
-        <box direction="column" gap={space[2]} padding={space[3]}
-          cornerRadius={T.cardRadius} backgroundColor={0xffffff06}
-          borderColor={T.border} borderWidth={1}>
-          <box direction="row" alignY="center" gap={space[2]} width="grow">
-            <box width={28} height={28} backgroundColor={agent.avatarBg}
-              cornerRadius={radius.full} alignX="center" alignY="center"
-              borderColor={T.border} borderWidth={1}>
-              <text color={agent.statusColor} fontSize={12}>{agent.avatarIcon}</text>
-            </box>
-            <box direction="column" gap={1} width="grow">
-              <text color={T.textPrimary} fontSize={12}>{agent.name}</text>
-              <box direction="row" gap={space[1]} alignY="center">
-                <StatusDot color={agent.statusColor} size={6} />
-                <text color={T.textSecondary} fontSize={10}>{agent.status}</text>
-              </box>
-            </box>
-          </box>
-          <text color={T.textMuted} fontSize={10}>{agent.task}</text>
-          {agent.progress !== undefined ? (
-            <box width="grow" height={4} backgroundColor={0xffffff0a} cornerRadius={radius.full}>
-              <box width={`${agent.progress}%`} height={4} backgroundColor={agent.progressColor}
-                cornerRadius={radius.full} />
-            </box>
-          ) : null}
-          {agent.action ? (
-            <box direction="row" alignX="right">
-              <box padding={space[1]} paddingX={space[2]} backgroundColor={0x22c55e18}
-                cornerRadius={radius.sm} borderColor={0x22c55e30} borderWidth={1}>
-                <text color={T.green} fontSize={10}>{agent.action}</text>
-              </box>
-            </box>
-          ) : null}
-        </box>
-      ))}
-    </box>
-  )
-}
-
-// ── Run Console ──
-
-function BuildConsole(props: { mouseX: () => number; mouseY: () => number }) {
-  const drag = useDraggablePanel(20, -70)
-
-  // Slight forward lean — like the Diff panel in the mock
-  const tiltY = () => -1.5 + (props.mouseX() - 500) * 0.002
-  const tiltX = () => -1 + (props.mouseY() - 400) * 0.001
-
-  return (
-    <box {...drag.dragProps} floating="root" floatOffset={{ x: drag.offsetX(), y: drag.offsetY() }} floatAttach={{ element: 6, parent: 6 }}
-      zIndex={10} width={320}
-      transform={{ perspective: 800, rotateY: tiltY(), rotateX: tiltX() }}
-      backgroundColor={T.panelBg} backdropBlur={T.blur}
-      cornerRadius={T.panelRadius} padding={space[4]} direction="column" gap={space[3]}
-      borderColor={T.borderLight} borderWidth={1}
-      shadow={[
-        { x: 0, y: 4, blur: 16, color: 0x00000040 },
-        { x: 0, y: 16, blur: 48, color: 0x00000030 },
-      ]}>
-      <PanelHeader title="Run Console" actions="*" />
-      <Separator />
-      <box direction="row" alignY="center" gap={space[2]} padding={space[2]}
-        backgroundColor={0xffffff06} cornerRadius={radius.md}>
-        <StatusDot color={T.green} />
-        <text color={T.textPrimary} fontSize={12}>build & test</text>
+    <ShaderPanel
+      title="Diff / Changes"
+      subtitle="LightEngine.zig"
+      width={316}
+      initialX={720}
+      initialY={150}
+      zIndex={11}
+    >
+      <box direction="row" alignY="center" padding={space[2]} backgroundColor={0xffffff04} borderColor={T.borderSoft} borderWidth={1} cornerRadius={radius.sm}>
+        <text color={T.warm} fontSize={11}>LightEngine.zig</text>
         <box width="grow" />
-        <text color={T.textSecondary} fontSize={10}>2.4s</text>
+        <text color={T.textDim} fontSize={10}>⌃</text>
       </box>
-      <box direction="column" gap={space[1]} paddingLeft={space[2]}>
-        <box direction="row" gap={space[2]}><text color={T.textDim} fontSize={10}>16</text><text color={T.textMuted} fontSize={10}>12:40:22 Compiling v_engine.zig ...</text></box>
-        <box direction="row" gap={space[2]}><text color={T.textDim} fontSize={10}>16</text><text color={T.textMuted} fontSize={10}>12:40:23 Linking modules ...</text></box>
-        <box direction="row" gap={space[2]}><text color={T.textDim} fontSize={10}>t</text><text color={T.textMuted} fontSize={10}>12:40:24 Running tests ...</text></box>
+      <box direction="column" gap={space[1]} paddingTop={space[1]}>
+        {diffLines.map((line, index) => (
+          <box direction="row" gap={space[2]} paddingY={2} backgroundColor={index === 2 ? 0x54211a28 : 0x00000000}>
+            <text color={T.textDim} fontSize={10}>{line.n}</text>
+            <text color={line.c} fontSize={10}>{line.t}</text>
+          </box>
+        ))}
       </box>
-      <box direction="column" gap={space[1]} paddingLeft={space[4]}>
-        <box direction="row" gap={space[2]} alignY="center"><text color={T.green} fontSize={10}>v</text><text color={T.textSecondary} fontSize={10}>test: shader_pipeline</text><box width="grow" /><text color={T.textMuted} fontSize={10}>0.12s</text></box>
-        <box direction="row" gap={space[2]} alignY="center"><text color={T.green} fontSize={10}>v</text><text color={T.textSecondary} fontSize={10}>test: camera_matrix</text><box width="grow" /><text color={T.textMuted} fontSize={10}>0.08s</text></box>
-        <box direction="row" gap={space[2]} alignY="center"><text color={T.green} fontSize={10}>v</text><text color={T.textSecondary} fontSize={10}>test: memory_integration</text><box width="grow" /><text color={T.textMuted} fontSize={10}>0.21s</text></box>
+      <Rule />
+      <box direction="row" alignX="right">
+        <box paddingX={space[2]} paddingY={4} backgroundColor={0xf3bf6b18} borderColor={0xf3bf6b32} borderWidth={1} cornerRadius={radius.sm}>
+          <text color={T.warm} fontSize={10}>Swap Changes</text>
+        </box>
       </box>
-      <Separator />
-      <text color={T.green} fontSize={12}>All tests passed</text>
-    </box>
+    </ShaderPanel>
   )
 }
 
-// ── Sidebar ──
-
-function Sidebar() {
-  const menuItems = [
-    { label: "Explorer", icon: ">" }, { label: "Memory", icon: "M" },
-    { label: "Agents", icon: "A" }, { label: "Runs", icon: "R" }, { label: "Search", icon: "?" },
+function EditorPanel() {
+  const lines = [
+    { n: "1", code: "func", rest: " compute_shader_pipeline(engine, shader) {" },
+    { n: "3", code: "const", rest: " color = i; 0, 0, 1;" },
+    { n: "4", code: "let", rest: " coff = 0;" },
+    { n: "5", code: "let", rest: " p: 712 = 0;" },
+    { n: "7", code: "if", rest: " (memory::vertex_buffer)" },
+    { n: "8", code: "", rest: "  color = coeff[letor)" },
+    { n: "9", code: "", rest: "  color = (coeff.x · memory.x), a0);" },
+    { n: "11", code: "else if", rest: "" },
+    { n: "12", code: "", rest: "  memory::camera_matrix 10, 10;" },
   ]
-  const files = [
-    { name: "v_engine.zig", active: true }, { name: "pipeline.zig", active: false },
-    { name: "renderer.zig", active: false }, { name: "memory.zig", active: false },
-    { name: "camera.zig", active: false },
+
+  return (
+    <ShaderPanel
+      title="v__engine.zig"
+      subtitle="Compute Shader Pipeline"
+      width={404}
+      initialX={620}
+      initialY={340}
+      zIndex={12}
+    >
+      <box direction="row" gap={space[2]}>
+        <TinyChip label="v__engine.zig" active />
+        <TinyChip label="⌘" />
+        <TinyChip label="↺" />
+      </box>
+      <box
+        direction="row"
+        gap={space[1]}
+        padding={space[1]}
+        backgroundColor={0xffffff03}
+        borderColor={T.borderSoft}
+        borderWidth={1}
+        cornerRadius={radius.sm}
+        width="fit"
+      >
+        <TinyChip label="◻" />
+        <TinyChip label="◫" />
+        <TinyChip label="☰" />
+        <TinyChip label="◔" />
+        <TinyChip label="☷" />
+      </box>
+      <Rule />
+      <box direction="row" alignY="center">
+        <text color={T.warm} fontSize={16}>⚑</text>
+        <text color={T.textPrimary} fontSize={15}>Compute Shader Pipeline</text>
+        <box width="grow" />
+        <text color={T.textDim} fontSize={11}>⇄</text>
+        <text color={T.textDim} fontSize={11}>×</text>
+      </box>
+      <Rule />
+      <box direction="column" gap={space[1]}>
+        {lines.map((line) => (
+          <box direction="row" gap={space[2]} alignY="center" paddingY={1}>
+            <text color={T.textDim} fontSize={10}>{line.n}</text>
+            <text color={line.code ? T.warm : T.textSecondary} fontSize={11}>{line.code}</text>
+            <text color={T.textPrimary} fontSize={11}>{line.rest}</text>
+          </box>
+        ))}
+      </box>
+      <box width="grow" height={1} backgroundColor={0xffffff06} />
+      <box direction="row" alignY="center">
+        <text color={T.textMuted} fontSize={10}>◈</text>
+        <text color={T.textMuted} fontSize={10}>Saturn v_engines</text>
+        <box width="grow" />
+        <box paddingX={space[2]} paddingY={4} backgroundColor={0xf3bf6b18} borderColor={0xf3bf6b32} borderWidth={1} cornerRadius={radius.sm}>
+          <text color={T.warm} fontSize={10}>Swap Change</text>
+        </box>
+      </box>
+    </ShaderPanel>
+  )
+}
+
+function AgentPanel() {
+  const logs = [
+    "States · Success",
+    "Gunair · Booter",
+    "Zig build compiled 62.60, 7.25s",
+    "Shader pipeline succeeded by cor placed by core4",
   ]
-  const pinned = ["compute_shader_pipeline", "vertex_buffer", "camera_matrix", "lightcode_core"]
 
   return (
-    <box floating="root" floatOffset={{ x: 0, y: 30 }} zIndex={9}
-      width={170} height="grow" backgroundColor={0x0d0d1cee} backdropBlur={10}
-      direction="column" gap={space[1]} borderColor={T.border} borderRight={1}
-      paddingTop={space[3]} paddingBottom={space[2]}>
-      <box paddingX={space[3]} paddingBottom={space[2]}><text color={T.textPrimary} fontSize={13}>Workspace</text></box>
-      {menuItems.map(item => (
-        <box direction="row" gap={space[2]} alignY="center" paddingX={space[3]} paddingY={space[1]}
-          hoverStyle={{ backgroundColor: T.hoverBg }}>
-          <text color={T.textDim} fontSize={11}>{item.icon}</text>
-          <text color={T.textSecondary} fontSize={11}>{item.label}</text>
-        </box>
-      ))}
-      <box paddingX={space[3]} paddingTop={space[3]}><text color={T.textMuted} fontSize={10}>Active Session</text></box>
-      {files.map(f => (
-        <box direction="row" gap={space[2]} alignY="center" paddingX={space[3]} paddingY={space[1]}
-          backgroundColor={f.active ? 0x2a6fff22 : 0x00000000} hoverStyle={{ backgroundColor: T.hoverBg }}>
-          <text color={T.textDim} fontSize={10}>o</text>
-          <text color={f.active ? T.textPrimary : T.textSecondary} fontSize={11}>{f.name}</text>
-        </box>
-      ))}
-      <box paddingX={space[3]} paddingTop={space[3]}><text color={T.textMuted} fontSize={10}>Pinned</text></box>
-      {pinned.map(name => (
-        <box direction="row" gap={space[2]} alignY="center" paddingX={space[3]} paddingY={space[1]}
-          hoverStyle={{ backgroundColor: T.hoverBg }}>
-          <text color={T.textDim} fontSize={10}>*</text>
-          <text color={T.textSecondary} fontSize={11}>{name}</text>
-        </box>
-      ))}
-    </box>
-  )
-}
-
-// ── Top Bar ──
-
-function TopBar() {
-  return (
-    <box floating="root" floatOffset={{ x: 0, y: 0 }} zIndex={11}
-      width="100%" height={28} backgroundColor={0x0a0a18ee}
-      direction="row" alignY="center" paddingX={space[3]} gap={space[4]}
-      borderColor={T.border} borderBottom={1}>
-      <box direction="row" gap={space[1]}>
-        <box width={10} height={10} backgroundColor={0xef4444ff} cornerRadius={radius.full} />
-        <box width={10} height={10} backgroundColor={0xf59e0bff} cornerRadius={radius.full} />
-        <box width={10} height={10} backgroundColor={0x22c55eff} cornerRadius={radius.full} />
+    <ShaderPanel
+      title="Agent Ⓖ | Running"
+      subtitle="Task. compute_shader_pipeline"
+      width={310}
+      initialX={790}
+      initialY={612}
+      zIndex={11}
+    >
+      <box direction="row" gap={space[2]} alignY="center">
+        <ChromeDot color={T.warm} />
+        <text color={T.textPrimary} fontSize={12}>Task. compute_shader_pipeline</text>
       </box>
-      <text color={T.textPrimary} fontSize={12}>Lightcodev2</text>
-      <text color={T.textDim} fontSize={11}>|</text>
-      <text color={T.textSecondary} fontSize={11}>Spatial Workbench</text>
-      <box width="grow" />
-      <box direction="row" gap={space[2]} padding={space[1]} paddingX={space[3]}
-        backgroundColor={0xffffff0a} cornerRadius={radius.full}>
-        <text color={T.textSecondary} fontSize={10}>Orbit</text>
-        <text color={T.textDim} fontSize={10}>|</text>
-        <text color={T.textMuted} fontSize={10}>Pan</text>
-        <text color={T.textDim} fontSize={10}>|</text>
-        <text color={T.textMuted} fontSize={10}>Zoom</text>
+      <Rule />
+      <box direction="column" gap={space[2]}>
+        {logs.map((log) => (
+          <box paddingY={2}><text color={T.textSecondary} fontSize={10}>{log}</text></box>
+        ))}
       </box>
-      <box width="grow" />
-      <text color={T.textMuted} fontSize={10}>Press q to exit</text>
-    </box>
+      <Rule />
+      <box direction="row" gap={space[2]} alignY="center" backgroundColor={0xffffff04} borderColor={T.borderSoft} borderWidth={1} cornerRadius={radius.sm} padding={space[2]}>
+        <text color={T.textDim} fontSize={10}>⌁</text>
+        <text color={T.textMuted} fontSize={10}>/</text>
+      </box>
+    </ShaderPanel>
   )
 }
 
-// ── Status Bar ──
-
-function StatusBar() {
-  return (
-    <box floating="root" floatOffset={{ x: 0, y: 0 }} floatAttach={{ element: 6, parent: 6 }}
-      zIndex={11} width="100%" height={26} backgroundColor={0x0a0a18ee}
-      direction="row" alignY="center" paddingX={space[3]} gap={space[4]}
-      borderColor={T.border} borderTop={1}>
-      <box direction="row" gap={space[1]} alignY="center">
-        <StatusDot color={T.green} size={7} />
-        <text color={T.textSecondary} fontSize={11}>All systems nominal</text>
-      </box>
-      <box width="grow" />
-      <text color={T.textDim} fontSize={10}>Ln 107, Col 23</text>
-      <text color={T.textDim} fontSize={10}>|</text>
-      <text color={T.textMuted} fontSize={10}>Zig</text>
-      <text color={T.textDim} fontSize={10}>|</text>
-      <text color={T.textMuted} fontSize={10}>UTF-8</text>
-    </box>
-  )
-}
-
-// ── App ──
-
-function App() {
-  const [mouseX, setMouseX] = createSignal(500)
-  const [mouseY, setMouseY] = createSignal(400)
+function App(props: { transmissionMode: string }) {
+  let rootRef: NodeHandle | undefined
+  let dumpedTree = false
 
   return (
-    <box width="100%" height="100%" backgroundColor={T.bg}
-      onMouseMove={(evt: NodeMouseEvent) => { setMouseX(evt.x); setMouseY(evt.y) }}>
-      <NodeGraph mouseX={mouseX} mouseY={mouseY} />
-      <TopBar />
-      <Sidebar />
-      <MemoryPanel mouseX={mouseX} mouseY={mouseY} />
-      <AgentsPanel mouseX={mouseX} mouseY={mouseY} />
-      <BuildConsole mouseX={mouseX} mouseY={mouseY} />
-      <StatusBar />
+    <box
+      ref={(handle) => {
+        rootRef = handle
+        if (LIGHTCODE_DUMP_TREE && rootRef && !dumpedTree) {
+          dumpedTree = true
+          queueMicrotask(() => {
+            appendFileSync(DEBUG_LOG, "[tree]\n" + debugDumpTree(rootRef!) + "\n")
+          })
+        }
+      }}
+      width="100%"
+      height="100%"
+      backgroundColor={T.bg}
+    >
+      {LIGHTCODE_SHOW_HUD ? <DebugHud /> : null}
+      {LIGHTCODE_STAGE >= 1 ? <NodeGraph /> : null}
+      {LIGHTCODE_STAGE >= 2 ? <WorkspaceHeader /> : null}
+      {LIGHTCODE_STAGE >= 3 ? <WorkspaceFooter transmissionMode={props.transmissionMode} /> : null}
+      {LIGHTCODE_STAGE >= 4 ? <MemoryPanel /> : null}
+      {LIGHTCODE_STAGE >= 5 ? <EditorPanel /> : null}
+      {LIGHTCODE_STAGE >= 6 ? <DiffPanel /> : null}
+      {LIGHTCODE_STAGE >= 6 ? <AgentPanel /> : null}
     </box>
   )
 }
-
-// ── Main ──
 
 async function main() {
+  try {
+    appendFileSync(DEBUG_LOG, "\n--- lightcode run ---\n")
+    appendFileSync("/tmp/tge-render-debug.log", "\n--- lightcode run ---\n")
+  } catch {}
+  process.on("uncaughtException", (err) => {
+    appendFileSync(DEBUG_LOG, `[uncaughtException] ${String(err?.stack || err)}\n`)
+  })
+  process.on("unhandledRejection", (err) => {
+    appendFileSync(DEBUG_LOG, `[unhandledRejection] ${String(err)}\n`)
+  })
+  process.on("exit", (code) => {
+    appendFileSync(DEBUG_LOG, `[exit] code=${code}\n`)
+  })
+  appendFileSync(DEBUG_LOG, "[main] handlers installed\n")
   await loadNebula()
+  appendFileSync(DEBUG_LOG, "[main] nebula loaded\n")
   const term = await createTerminal()
-  const cleanup = mount(() => <App />, term)
+  const wgpuBridge = probeWgpuCanvasBridge()
+  const selectedCanvasBackend = LIGHTCODE_CANVAS_BACKEND === "wgpu" && wgpuBridge.available ? tryCreateWgpuCanvasPainterBackend() : null
+  setCanvasPainterBackend(selectedCanvasBackend)
+  appendFileSync(DEBUG_LOG, `[main] terminal created kitty=${term.caps.kittyGraphics} mode=${term.caps.transmissionMode}\n`)
+  appendFileSync(DEBUG_LOG, `[main] canvasBackend=${getCanvasPainterBackendName()}\n`)
+  appendFileSync(DEBUG_LOG, `[main] wgpuBridge available=${wgpuBridge.available} path=${wgpuBridge.libraryPath ?? "none"} reason=${wgpuBridge.reason}\n`)
+  appendFileSync(DEBUG_LOG, `[main] requestedCanvasBackend=${LIGHTCODE_CANVAS_BACKEND}\n`)
+  appendFileSync(DEBUG_LOG, `[main] stage=${LIGHTCODE_STAGE}\n`)
+  appendFileSync(DEBUG_LOG, "[main] stages: 0=empty 1=nodegraph 2=header 3=footer 4=memory 5=editor 6=diff+agent\n")
+  if (LIGHTCODE_LOG_CADENCE) appendFileSync(DEBUG_LOG, "[main] cadence profiler enabled (/tmp/tge-cadence.log)\n")
+  setDebug(true)
+  appendFileSync(DEBUG_LOG, "[main] debug enabled\n")
+  const cleanup = mount(() => <App transmissionMode={term.caps.transmissionMode} />, term, {
+    maxFps: LIGHTCODE_MAX_FPS,
+    experimental: {
+      idleMaxFps: LIGHTCODE_IDLE_MAX_FPS,
+      partialUpdates: false,
+      forceLayerRepaint: LIGHTCODE_FORCE_LAYER_REPAINT,
+    },
+  })
+  appendFileSync(DEBUG_LOG, "[main] mounted\n")
+
+  let perfTimer: ReturnType<typeof setInterval> | null = null
+  let repaintTimer: ReturnType<typeof setInterval> | null = null
+  let exitTimer: ReturnType<typeof setTimeout> | null = null
+  if (LIGHTCODE_LOG_FPS) {
+    try {
+      appendFileSync(PERF_LOG, `\n--- lightcode perf stage=${LIGHTCODE_STAGE} ---\n`)
+    } catch {}
+    perfTimer = setInterval(() => {
+      appendFileSync(
+        PERF_LOG,
+        `fps=${debugState.fps} ms=${debugState.frameTimeMs} layers=${debugState.layerCount} dirtyBefore=${debugState.dirtyBeforeCount} repainted=${debugState.repaintedCount} cmds=${debugState.commandCount} nodes=${debugState.nodeCount}\n`,
+      )
+    }, 500)
+  }
+
+  if (LIGHTCODE_FORCE_REPAINT) {
+    appendFileSync(DEBUG_LOG, "[main] forced repaint enabled (~60fps target)\n")
+    repaintTimer = setInterval(() => {
+      markDirty()
+    }, 16)
+  }
+  if (LIGHTCODE_FORCE_LAYER_REPAINT) {
+    appendFileSync(DEBUG_LOG, "[main] forced layer repaint enabled\n")
+  }
+
+  if (LIGHTCODE_EXIT_AFTER_MS > 0) {
+    appendFileSync(DEBUG_LOG, `[main] auto-exit after ${LIGHTCODE_EXIT_AFTER_MS}ms\n`)
+    exitTimer = setTimeout(() => {
+      parser.destroy()
+      if (perfTimer) clearInterval(perfTimer)
+      if (repaintTimer) clearInterval(repaintTimer)
+      setCanvasPainterBackend(null)
+      cleanup.destroy()
+      term.destroy()
+      process.exit(0)
+    }, LIGHTCODE_EXIT_AFTER_MS)
+  }
 
   const parser = createParser((event) => {
     if (event.type === "key" && (event.key === "q" || (event.key === "c" && event.mods.ctrl))) {
       parser.destroy()
+      if (perfTimer) clearInterval(perfTimer)
+      if (repaintTimer) clearInterval(repaintTimer)
+      if (exitTimer) clearTimeout(exitTimer)
+      setCanvasPainterBackend(null)
       cleanup.destroy()
       term.destroy()
       process.exit(0)
@@ -607,6 +903,13 @@ async function main() {
   })
 
   term.onData((data) => parser.feed(data))
+  appendFileSync(DEBUG_LOG, "[main] input handler attached\n")
 }
 
-main().catch((err) => { console.error(err); process.exit(1) })
+main().catch((err) => {
+  try {
+    appendFileSync(DEBUG_LOG, `[main.catch] ${String(err?.stack || err)}\n`)
+  } catch {}
+  console.error(err)
+  process.exit(1)
+})

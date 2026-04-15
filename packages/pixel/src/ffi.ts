@@ -92,13 +92,79 @@ const FFI_DEFS = {
   tge_draw_text_font:         { args: [P, U, U, P, U, U, P], returns: FFIType.void },
 } as const
 
+const OPTIONAL_NEBULA_FFI_DEFS = {
+  tge_nebula: { args: [P, U, U, P, U, P], returns: FFIType.void },
+} as const
+
+const OPTIONAL_STARFIELD_FFI_DEFS = {
+  tge_starfield: { args: [P, U, U, P], returns: FFIType.void },
+} as const
+
+const OPTIONAL_BLIT_FFI_DEFS = {
+  tge_blit_rgba: { args: [P, U, U, P, U, P], returns: FFIType.void },
+} as const
+
 let lib: ReturnType<typeof dlopen<typeof FFI_DEFS>> | null = null
+let nebulaLib: ReturnType<typeof dlopen<typeof OPTIONAL_NEBULA_FFI_DEFS>> | null = null
+let starfieldLib: ReturnType<typeof dlopen<typeof OPTIONAL_STARFIELD_FFI_DEFS>> | null = null
+let blitLib: ReturnType<typeof dlopen<typeof OPTIONAL_BLIT_FFI_DEFS>> | null = null
+let nebulaChecked = false
+let starfieldChecked = false
+let blitChecked = false
 
 export function loadLib() {
   if (lib) return lib
   const path = findLib()
   lib = dlopen(path, FFI_DEFS)
   return lib
+}
+
+export function loadNebulaLib() {
+  if (nebulaChecked) return nebulaLib
+  nebulaChecked = true
+  const path = findLib()
+  try {
+    nebulaLib = dlopen(path, OPTIONAL_NEBULA_FFI_DEFS)
+  } catch {
+    nebulaLib = null
+  }
+  return nebulaLib
+}
+
+export function hasNebulaSupport() {
+  return loadNebulaLib() !== null
+}
+
+export function loadStarfieldLib() {
+  if (starfieldChecked) return starfieldLib
+  starfieldChecked = true
+  const path = findLib()
+  try {
+    starfieldLib = dlopen(path, OPTIONAL_STARFIELD_FFI_DEFS)
+  } catch {
+    starfieldLib = null
+  }
+  return starfieldLib
+}
+
+export function hasStarfieldSupport() {
+  return loadStarfieldLib() !== null
+}
+
+export function loadBlitLib() {
+  if (blitChecked) return blitLib
+  blitChecked = true
+  const path = findLib()
+  try {
+    blitLib = dlopen(path, OPTIONAL_BLIT_FFI_DEFS)
+  } catch {
+    blitLib = null
+  }
+  return blitLib
+}
+
+export function hasBlitSupport() {
+  return loadBlitLib() !== null
 }
 
 /** Get the buffer reference for FFI calls. bun:ffi accepts TypedArray directly for ptr params. */

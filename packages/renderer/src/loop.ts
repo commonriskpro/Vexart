@@ -38,6 +38,8 @@ import {
 } from "./node"
 import { isDirty, clearDirty, markDirty } from "./dirty"
 import { hasActiveAnimations } from "./animation"
+import { appendFileSync } from "node:fs"
+import { debugFrameStart, debugUpdateStats } from "./debug"
 import { fromConfig, identity, invert, multiply, translate, transformBounds, isIdentity } from "./matrix"
 import type { Matrix3 } from "./matrix"
 import { decodeImageForNode, scaleImage } from "./image"
@@ -52,20 +54,136 @@ import {
   imageIdForLayer,
   resetLayers,
   dirtyCount,
+  layerCount,
+  markLayerDamaged,
+  getPreviousLayerRect,
 } from "./layers"
 import { measureForClay, layoutText, getFont, fontToCSS } from "./text-layout"
 import { CanvasContext, paintCanvasCommands } from "./canvas"
-import { appendFileSync } from "fs"
+import { intersectRect } from "./damage"
+import { createCpuRendererBackend } from "./cpu-renderer-backend"
+import { createGpuRendererBackend } from "./gpu-renderer-backend"
+import {
+  buildRenderOp,
+  buildRenderGraphFrame,
+  cloneRenderGraphQueues,
+  createRenderGraphQueues,
+  resetRenderGraphQueues,
+  type EffectConfig,
+  type TextMeta,
+} from "./render-graph"
+import { getRendererBackend, setRendererBackend } from "./renderer-backend"
 
 const LOG = "/tmp/tge-layers.log"
+const RENDER_DEBUG_LOG = "/tmp/tge-render-debug.log"
+const CADENCE_LOG = "/tmp/tge-cadence.log"
+const DEBUG_CADENCE = process.env.TGE_DEBUG_CADENCE === "1"
+const PARTIAL_UPDATE = {
+  DIRECT_MAX_COVERAGE: 0.35,
+  LOCAL_MAX_COVERAGE: 0.75,
+  MIN_REGION_PIXELS: 64,
+} as const
+
 function log(msg: string) {
   appendFileSync(LOG, msg + "\n")
+}
+
+function renderDebug(msg: string) {
+  appendFileSync(RENDER_DEBUG_LOG, msg + "\n")
+}
+
+function cadenceDebug(msg: string) {
+  if (!DEBUG_CADENCE) return
+  appendFileSync(CADENCE_LOG, msg + "\n")
+}
+
+type FrameProfile = {
+  scheduledIntervalMs: number
+  scheduledDelayMs: number
+  timerDelayMs: number
+  sincePrevFrameMs: number
+  layoutMs: number
+  prepMs: number
+  paintMs: number
+  beginSyncMs: number
+  ioMs: number
+  endSyncMs: number
+  totalMs: number
+  commands: number
+  repainted: number
+  dirtyBefore: number
+}
+
+function countNodes(node: TGENode): number {
+  if (node.kind === "text") return 1
+  let total = 1
+  for (const child of node.children) total += countNodes(child)
+  return total
+}
+
+function hasPointerReactiveNodes(node: TGENode): boolean {
+  if (node.kind === "text") return false
+  const hasMouseCallbacks = !!(node.props.onMouseDown || node.props.onMouseUp || node.props.onMouseMove || node.props.onMouseOver || node.props.onMouseOut)
+  const hasHoverState = !!(node.props.hoverStyle || node.props.activeStyle || node.props.onPress)
+  if (hasMouseCallbacks || hasHoverState) return true
+  return node.children.some((child) => hasPointerReactiveNodes(child))
+}
+
+function hasTransformInSubtree(node: TGENode): boolean {
+  if (node.kind === "text") return false
+  if (node.props.transform) return true
+  return node.children.some((child) => hasTransformInSubtree(child))
+}
+
+function canUsePartialUpdates(boundaryNode: TGENode | null): boolean {
+  if (!boundaryNode || boundaryNode.kind === "text") return true
+  if (boundaryNode.props.floating) return false
+  if (boundaryNode.props.viewportClip === false) return false
+  if (hasTransformInSubtree(boundaryNode)) return false
+  return true
+}
+
+function canUseRegionalRepaint(boundaryNode: TGENode | null, hasScissor: boolean, isBg: boolean): boolean {
+  if (hasScissor) return false
+  if (isBg) return true
+  if (!boundaryNode || boundaryNode.kind === "text") return true
+  if (boundaryNode.props.viewportClip === false) return false
+  if (hasTransformInSubtree(boundaryNode)) return false
+  return true
+}
+
+function commandIntersectsRect(cmd: RenderCommand, rect: { x: number; y: number; width: number; height: number }): boolean {
+  const left = cmd.x
+  const top = cmd.y
+  const right = cmd.x + cmd.width
+  const bottom = cmd.y + cmd.height
+  return left < rect.x + rect.width && right > rect.x && top < rect.y + rect.height && bottom > rect.y
+}
+
+function clearRectRegion(buf: PixelBuffer, x: number, y: number, width: number, height: number, color = 0x00000000) {
+  const a = color & 0xff
+  const b = (color >>> 8) & 0xff
+  const g = (color >>> 16) & 0xff
+  const r = (color >>> 24) & 0xff
+  const x0 = Math.max(0, x)
+  const y0 = Math.max(0, y)
+  const x1 = Math.min(buf.width, x + width)
+  const y1 = Math.min(buf.height, y + height)
+  for (let yy = y0; yy < y1; yy++) {
+    const row = yy * buf.stride
+    for (let xx = x0; xx < x1; xx++) {
+      const i = row + xx * 4
+      buf.data[i] = r
+      buf.data[i + 1] = g
+      buf.data[i + 2] = b
+      buf.data[i + 3] = a
+    }
+  }
 }
 
 // ── Text metadata ──
 // During walkTree, we record text props for each <Text> node.
 // During paint, we look up the metadata by text content to do multi-line layout.
-type TextMeta = { content: string; fontId: number; fontSize: number; lineHeight: number }
 const textMetaMap = new Map<string, TextMeta>()
 
 // ── Selectable text collection ──
@@ -89,58 +207,17 @@ let selectableTextMode = false
 // After Clay layout, we match RECT commands to these configs by color+radius
 // (emitted in tree-walk order) and apply effects in paintCommand.
 
-type ShadowDef = { x: number; y: number; blur: number; color: number }
-
-type EffectConfig = {
-  color: number        // packed bgColor to match against RECT command
-  cornerRadius: number // to disambiguate rects with same color
-  shadow?: ShadowDef | ShadowDef[]
-  glow?: { radius: number; color: number; intensity: number }
-  gradient?: { type: "linear"; from: number; to: number; angle: number }
-           | { type: "radial"; from: number; to: number }
-  backdropBlur?: number
-  backdropBrightness?: number
-  backdropContrast?: number
-  backdropSaturate?: number
-  backdropGrayscale?: number
-  backdropInvert?: number
-  backdropSepia?: number
-  backdropHueRotate?: number
-  opacity?: number
-  cornerRadii?: { tl: number; tr: number; br: number; bl: number }
-  transform?: Float64Array       // 3×3 matrix (9 floats)
-  transformInverse?: Float64Array // inverse matrix for hit-testing
-  transformBounds?: { x: number; y: number; width: number; height: number } // AABB of transformed rect
-  /** Reference to the TGENode — used by paintCommand to read accumulated transform */
-  _node?: TGENode
-  /** When true, paintCommand skips individual affineBlit — subtree post-pass handles it */
-  _subtreeTransform?: boolean
-}
-
 /** Effects queue — populated during walkTree, consumed during paintCommand. */
-let effectsQueue: EffectConfig[] = []
+const renderGraphQueues = createRenderGraphQueues()
+let effectsQueue = renderGraphQueues.effects
 
 /** Background snapshots for subtree transform post-pass.
  *  Saved in paintCommand BEFORE the subtree root's RECT is painted.
  *  Keyed by node ID. Contains ONLY the background pixels (no subtree content). */
 const subtreeBgSnapshots = new Map<number, PixelBuffer>()
 
-/** Image queue — populated during walkTree for <img> nodes, consumed during paintCommand. */
-type ImagePaintConfig = {
-  color: number        // placeholder color to match against RECT command
-  cornerRadius: number
-  imageBuffer: { data: Uint8Array; width: number; height: number }
-  objectFit: "contain" | "cover" | "fill" | "none"
-}
-let imageQueue: ImagePaintConfig[] = []
-
-/** Canvas queue — populated during walkTree for <canvas> nodes, consumed during paintCommand. */
-type CanvasPaintConfig = {
-  color: number        // placeholder color to match against RECT command
-  onDraw: (ctx: CanvasContext) => void
-  viewport?: { x: number; y: number; zoom: number }
-}
-let canvasQueue: CanvasPaintConfig[] = []
+let imageQueue = renderGraphQueues.images
+let canvasQueue = renderGraphQueues.canvases
 
 export type RenderLoopOptions = {
   /** When true, text is rendered as ANSI escape codes (selectable/copiable)
@@ -163,10 +240,14 @@ export type RenderLoopOptions = {
     frameBudgetMs?: number
     /**
      * Maximum FPS cap. Default: 60.
-     * Idle: always 30fps. During animations: scales up to this value.
+     * Idle runs at up to 60fps (bounded by this value). During animations: scales up to this value.
      * Set to 30 to force 30fps always (e.g., for SSH).
      */
     maxFps?: number
+    /** Idle FPS cap override. Default: min(maxFps, 60). */
+    idleMaxFps?: number
+    /** Force layer retransmit even when the pixel buffer is unchanged. Benchmark/debug only. */
+    forceLayerRepaint?: boolean
   }
 }
 
@@ -183,6 +264,8 @@ export type RenderLoop = {
   feedScroll: (dx: number, dy: number) => void
   /** Feed mouse pointer position */
   feedPointer: (x: number, y: number, down: boolean) => void
+  /** Whether pointer movement can currently affect visible UI state. */
+  needsPointerRepaint: () => boolean
   /** Capture pointer — all mouse events go to this node until release.
    *  Like Element.setPointerCapture() in the DOM. Auto-released on button up. */
   setPointerCapture: (nodeId: number) => void
@@ -218,7 +301,8 @@ type LayerSlot = {
 
 export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): RenderLoop {
   const selectableText = opts?.selectableText ?? false
-  const expPartialUpdates = opts?.experimental?.partialUpdates ?? false
+  const expPartialUpdates = opts?.experimental?.partialUpdates
+    ?? (term.caps.kittyGraphics && term.caps.transmissionMode !== "direct")
   const expFrameBudgetMs = opts?.experimental?.frameBudgetMs ?? 0
   selectableTextMode = selectableText
   const root = createNode("root")
@@ -235,7 +319,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   // Detect backend: use layer compositor for kitty direct, old compositor for others
   const useLayerCompositing = term.caps.kittyGraphics
   const layerComposer = useLayerCompositing
-    ? createLayerComposer(term.write, term.rawWrite, term.caps.transmissionMode, true)
+    ? createLayerComposer(term.write, term.rawWrite, term.caps.transmissionMode, "auto")
     : null
   const fallbackComposer = !useLayerCompositing
     ? createComposer(term.write, term.rawWrite, term.caps)
@@ -246,9 +330,54 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
   let timer: ReturnType<typeof setTimeout> | null = null
   const maxFps = opts?.experimental?.maxFps ?? 60
-  const idleInterval = 33  // ~30fps
+  const idleMaxFps = opts?.experimental?.idleMaxFps ?? Math.min(maxFps, 60)
+  const forceLayerRepaint = opts?.experimental?.forceLayerRepaint === true
+  const idleFps = Math.max(1, Math.min(idleMaxFps, maxFps))
+  const idleInterval = Math.max(Math.round(1000 / idleFps), 8)
   const activeInterval = Math.max(Math.round(1000 / maxFps), 8) // min 8ms ≈ 120fps cap
+  const interactionBoostMs = 180
+  const partialUpdateMaxCoverage = term.caps.transmissionMode === "direct"
+    ? PARTIAL_UPDATE.DIRECT_MAX_COVERAGE
+    : PARTIAL_UPDATE.LOCAL_MAX_COVERAGE
   let isSuspended = false
+  let lastInteractionAt = performance.now()
+  let scheduledIntervalMs = 0
+  let scheduledDelayMs = 0
+  let scheduledAtMs = 0
+  let lastFrameStartedAt = 0
+  let nextFrameDeadlineMs = 0
+
+  function markInteractionActive() {
+    lastInteractionAt = performance.now()
+  }
+
+  function hasRecentInteraction() {
+    return performance.now() - lastInteractionAt < interactionBoostMs
+  }
+
+  function scheduleNextFrame() {
+    const interval = (hasActiveAnimations() || hasRecentInteraction()) ? activeInterval : idleInterval
+    const now = performance.now()
+
+    if (nextFrameDeadlineMs === 0 || scheduledIntervalMs !== interval) {
+      nextFrameDeadlineMs = now + interval
+    } else {
+      nextFrameDeadlineMs += interval
+      if (nextFrameDeadlineMs < now) {
+        nextFrameDeadlineMs = now
+      }
+    }
+
+    scheduledIntervalMs = interval
+    scheduledAtMs = now
+    const delay = Math.max(0, nextFrameDeadlineMs - now)
+    scheduledDelayMs = delay
+
+    timer = setTimeout(() => {
+      if (isDirty()) frame()
+      scheduleNextFrame()
+    }, delay)
+  }
 
   // ── Scroll + pointer state ──
   // Accumulates scroll deltas from input events between frames.
@@ -271,17 +400,75 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   let scrollSpeedCap = 0  // 0 = no cap (natural), >0 = lines per tick
   let lastFrameTime = Date.now()
 
+  const paintLegacyRenderOp = (
+    { buffer, offsetX, offsetY }: { buffer: PixelBuffer; offsetX: number; offsetY: number },
+    op: import("./render-graph").RenderGraphOp,
+  ) => {
+    switch (op.kind) {
+      case "effect":
+      case "rectangle": {
+        const rectangleInputs = op.kind === "rectangle" ? op.inputs : op.rect.inputs
+        const matchedEffect = op.kind === "effect" ? op.effect : rectangleInputs.effect
+        paintRectangleCore(buffer, op.command, offsetX, offsetY, rectangleInputs, matchedEffect)
+        return
+      }
+      case "image":
+        paintImageRenderOp(buffer, op.command, offsetX, offsetY, op.rect.inputs, op.image)
+        return
+      case "canvas":
+        paintCanvasRenderOp(buffer, op.command, offsetX, offsetY, op.canvas)
+        return
+      case "border":
+        paintBorderRenderOp(buffer, op.command, offsetX, offsetY, op.inputs)
+        return
+      case "text":
+        paintTextRenderOp(buffer, op.command, offsetX, offsetY, op.inputs)
+        return
+      case "raw-command":
+        paintCommand(buffer, op.command, offsetX, offsetY, op)
+        return
+    }
+  }
+
+  const defaultCpuRendererBackend = createCpuRendererBackend((ctx, op) => {
+    paintLegacyRenderOp(ctx, op)
+  })
+
+  const defaultGpuRendererBackend = createGpuRendererBackend((ctx, op) => {
+    paintLegacyRenderOp(ctx, op)
+  })
+
+  if (!getRendererBackend()) {
+    setRendererBackend(process.env.TGE_RENDERER_BACKEND === "gpu" ? defaultGpuRendererBackend : defaultCpuRendererBackend)
+  }
+
+  const paintCommandsWithRendererBackend = (buffer: PixelBuffer, commands: RenderCommand[], offsetX: number, offsetY: number) => {
+    const backend = getRendererBackend() ?? defaultCpuRendererBackend
+    const graph = buildRenderGraphFrame(commands, cloneRenderGraphQueues(renderGraphQueues), textMetaMap)
+    backend.paint({
+      buffer,
+      commands,
+      graph,
+      offsetX,
+      offsetY,
+    })
+  }
+
   /** Feed a scroll event from the input system. Called by mount(). */
   function feedScroll(dx: number, dy: number) {
     scrollDeltaX += dx
     scrollDeltaY += dy
+    markInteractionActive()
     markDirty() // scroll changes need a repaint
   }
 
   /** Feed mouse position from the input system. */
   function feedPointer(x: number, y: number, down: boolean) {
+    const moved = x !== pointerX || y !== pointerY
+    const changedDown = down !== pointerDown
     pointerX = x
     pointerY = y
+    if (moved || changedDown) markInteractionActive()
     // Queue edge transitions so they survive until next frame
     if (down && !pointerDown) pendingPress = true
     if (!down && pointerDown) pendingRelease = true
@@ -401,15 +588,25 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     // ── <canvas> intrinsic — imperative drawing surface ──
     if (node.kind === "canvas") {
       boxNodes.push(node)
-      clay.openElement()
+
+      const hasMouseProps = node.props.onMouseDown || node.props.onMouseUp || node.props.onMouseMove || node.props.onMouseOver || node.props.onMouseOut
+      const isInteractive = node.props.focusable || node.props.hoverStyle || node.props.activeStyle || node.props.focusStyle || node.props.onPress || hasMouseProps
+      if (isInteractive) {
+        clay.setId(`tge-node-${node.id}`)
+      } else {
+        clay.openElement()
+      }
 
       // Sizing: use pre-parsed or default to grow
       const ws = node._widthSizing ?? { type: SIZING.GROW, value: 0 }
       const hs = node._heightSizing ?? { type: SIZING.GROW, value: 0 }
       clay.configureSizing(ws.type, ws.value, hs.type, hs.value)
 
-      // Use a placeholder RECT so Clay emits a RECTANGLE command for painting
-      const placeholderColor = 0x00000002 // near-transparent, distinct from img placeholder
+      // Use a UNIQUE placeholder RECT so Clay emits a RECTANGLE command for painting.
+      // Important: paintCommand matches canvases by placeholder color. Using the same
+      // color for every canvas causes multiple surfaces to cross-wire visually.
+      // Pack node.id into RGB, keep alpha near-transparent.
+      const placeholderColor = (((node.id & 0x00ffffff) << 8) | 0x02) >>> 0
       clay.configureRectangle(placeholderColor, 0)
       rectNodes.push(node)
 
@@ -433,13 +630,14 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     // 2. Interactive nodes — for reliable layout readback (hit-testing)
     const hasMouseProps = node.props.onMouseDown || node.props.onMouseUp || node.props.onMouseMove || node.props.onMouseOver || node.props.onMouseOut
     const isInteractive = node.props.focusable || node.props.hoverStyle || node.props.activeStyle || node.props.focusStyle || node.props.onPress || hasMouseProps
+    const needsLayoutId = isInteractive || node.props.layer === true
     if (node.props.scrollX || node.props.scrollY) {
       const sid = node.props.scrollId ?? `tge-scroll-${scrollIdCounter++}`
       clay.setId(sid)
       if (node.props.scrollSpeed) {
         scrollSpeedCap = node.props.scrollSpeed
       }
-    } else if (isInteractive) {
+    } else if (needsLayoutId) {
       clay.setId(`tge-node-${node.id}`)
     } else {
       clay.openElement()
@@ -702,14 +900,14 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   function assignLayersSpatial(
     commands: RenderCommand[],
     boundaries: LayerBoundary[],
-  ): { bgSlot: LayerSlot; contentSlots: LayerSlot[] } {
+  ): { bgSlot: LayerSlot; contentSlots: LayerSlot[]; slotBoundaryByKey: Map<string, LayerBoundary> } {
     const bgSlot: LayerSlot = { key: "bg", z: -1, cmdIndices: [] }
 
     if (boundaries.length === 0) {
       for (let i = 0; i < commands.length; i++) {
         bgSlot.cmdIndices.push(i)
       }
-      return { bgSlot, contentSlots: [] }
+      return { bgSlot, contentSlots: [], slotBoundaryByKey: new Map() }
     }
 
     // ── Phase 1: Collect SCISSOR commands ──
@@ -852,13 +1050,25 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
           layerBounds.push({ slot, x: 0, y: 0, right: 0, bottom: 0, scissor: null, boundary: b })
         }
       } else {
-        // No bg, not scroll — zero bounds, will be handled by text matching
-        layerBounds.push({ slot, x: 0, y: 0, right: 0, bottom: 0, scissor: null, boundary: b })
+        // No bg, not scroll — use real Clay layout bounds when available.
+        // This is critical for floating/layer containers whose painted subtree
+        // lives in children rather than on the layer root itself.
+        const lx = Math.round(node.layout.x)
+        const ly = Math.round(node.layout.y)
+        const lw = Math.round(node.layout.width)
+        const lh = Math.round(node.layout.height)
+        if (lw > 0 && lh > 0) {
+          layerBounds.push({ slot, x: lx, y: ly, right: lx + lw, bottom: ly + lh, scissor: null, boundary: b })
+        } else {
+          // Fallback for truly layout-less layers: text matching only.
+          layerBounds.push({ slot, x: 0, y: 0, right: 0, bottom: 0, scissor: null, boundary: b })
+        }
       }
     }
 
     // ── Phase 3: Assign commands to layers ──
     const contentSlots: LayerSlot[] = layerBounds.map(lb => lb.slot)
+    const slotBoundaryByKey = new Map(layerBounds.map((lb) => [lb.slot.key, lb.boundary]))
 
     // Build a set of command indices claimed by scroll-container layers
     // (SCISSOR_START → SCISSOR_END inclusive, plus the preceding RECT if any)
@@ -981,7 +1191,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       }
     }
 
-    return { bgSlot, contentSlots }
+    return { bgSlot, contentSlots, slotBoundaryByKey }
   }
 
   /** Resolve a TGENode by its tree path (e.g. "r.0.1.2"). */
@@ -1044,12 +1254,13 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       }
     }
 
-    // Write layout for interactive nodes via Clay element ID lookup.
+    // Write layout for interactive/layer nodes via Clay element ID lookup.
     // This is reliable regardless of RECT command ordering/clipping.
     for (const node of boxNodes) {
       const hasMouseProps = node.props.onMouseDown || node.props.onMouseUp || node.props.onMouseMove || node.props.onMouseOver || node.props.onMouseOut
       const isInteractive = node.props.focusable || node.props.hoverStyle || node.props.activeStyle || node.props.focusStyle || node.props.onPress || hasMouseProps
-      if (!isInteractive) continue
+      const needsLayoutId = isInteractive || node.props.layer === true
+      if (!needsLayoutId) continue
       // Scroll containers use scrollId as their Clay ID, not tge-node-${id}
       const isScroll = node.props.scrollX || node.props.scrollY
       const clayLabel = isScroll && node.props.scrollId
@@ -1409,7 +1620,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   // ── Frame rendering ──
 
   /** Paint a single frame with layer compositing. */
-  function frameLayered() {
+  function frameLayered(profile?: FrameProfile) {
+    const dirtyBeforeFrame = dirtyCount()
+    let repaintedThisFrame = 0
+    const layoutStart = DEBUG_CADENCE ? performance.now() : 0
     // 0. Feed pointer + scroll to Clay before layout.
     // Clay_UpdateScrollContainers MUST be called every frame — it maintains
     // internal scroll state including momentum/deceleration.
@@ -1440,10 +1654,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
     // 1. Walk tree into Clay (first pass — feeds Clay, no counting)
     scrollSpeedCap = 0 // reset — will be set by walkTree if any node has scrollSpeed
-    effectsQueue = [] // reset effects for this frame
+    resetRenderGraphQueues(renderGraphQueues)
     subtreeBgSnapshots.clear() // reset transform background snapshots
-    imageQueue = [] // reset image paint queue for this frame
-    canvasQueue = [] // reset canvas paint queue for this frame
     pendingAnsiTexts = [] // reset ANSI text collection
     textMeasureIndex = 0 // reset text measure counter
     textMetas.length = 0 // clear text metadata
@@ -1467,9 +1679,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     // Only re-layout on clicks, NOT on hover changes (which happen every frame).
     if (hadClick) {
       scrollSpeedCap = 0
-      effectsQueue = []
-      imageQueue = []
-      canvasQueue = []
+      resetRenderGraphQueues(renderGraphQueues)
       pendingAnsiTexts = []
       textMeasureIndex = 0
       textMetas.length = 0
@@ -1484,16 +1694,22 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       writeLayoutBack(commands)
     }
 
+    if (profile) {
+      profile.layoutMs = performance.now() - layoutStart
+    }
+
     if (commands.length === 0) {
       clearDirty()
       return
     }
 
+    const prepStart = DEBUG_CADENCE ? performance.now() : 0
+
     // 2. Find layer boundaries and assign commands
     nextZ = 0
     const boundaries: LayerBoundary[] = []
     findLayerBoundaries(root, "r", boundaries)
-    const { bgSlot, contentSlots } = assignLayersSpatial(commands, boundaries)
+    const { bgSlot, contentSlots, slotBoundaryByKey } = assignLayersSpatial(commands, boundaries)
 
     // If no explicit layers found, everything non-bg becomes one content layer
     if (contentSlots.length === 0 && commands.length > bgSlot.cmdIndices.length) {
@@ -1513,12 +1729,26 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     const cellH = term.size.cellHeight || 16
 
     log(`[frame] cmds=${commands.length} layers=${allSlots.length} slots=[${allSlots.map(s => `${s.key}(${s.cmdIndices.length})`).join(',')}]`)
+    renderDebug(`[frame:start] cmds=${commands.length} layers=${allSlots.length}`)
 
+    if (profile) {
+      profile.prepMs = performance.now() - prepStart
+      profile.commands = commands.length
+      profile.dirtyBefore = dirtyBeforeFrame
+    }
+
+    const beginSyncStart = DEBUG_CADENCE ? performance.now() : 0
     term.beginSync()
+    if (profile) {
+      profile.beginSyncMs = performance.now() - beginSyncStart
+    }
 
     // 3. Render each layer slot
     const frameStart = expFrameBudgetMs > 0 ? performance.now() : 0
     let frameBudgetExceeded = false
+    const layerOrder: Layer[] = []
+    const paintStart = DEBUG_CADENCE ? performance.now() : 0
+    let ioMs = 0
 
     for (const slot of allSlots) {
       if (slot.cmdIndices.length === 0) continue
@@ -1539,6 +1769,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       }
 
       const layer = getOrCreateLayer(slot.key, slot.z)
+      const previousRect = getPreviousLayerRect(layer)
 
       // Compute bounding box from commands.
       // For scroll-container layers: use the SCISSOR rect as the PRIMARY
@@ -1604,28 +1835,97 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
       // Background layer at (0,0) fullscreen
       const isBg = slot.z < 0
-      const lx = isBg ? 0 : Math.floor(minX)
-      const ly = isBg ? 0 : Math.floor(minY)
-      const lw = isBg ? (Math.round(commands[0].width) || pw) : (Math.ceil(maxX) - lx)
-      const lh = isBg ? (Math.round(commands[0].height) || ph) : (Math.ceil(maxY) - ly)
+      let lx = isBg ? 0 : Math.floor(minX)
+      let ly = isBg ? 0 : Math.floor(minY)
+      let lw = isBg ? (Math.round(commands[0].width) || pw) : (Math.ceil(maxX) - lx)
+      let lh = isBg ? (Math.round(commands[0].height) || ph) : (Math.ceil(maxY) - ly)
+
+      const boundary = slotBoundaryByKey.get(slot.key)
+      const boundaryNode = boundary ? resolveNodeByPath(root, boundary.path) : null
+      const shouldViewportClip = boundaryNode?.props.viewportClip ?? true
+      const allowPartialUpdates = canUsePartialUpdates(boundaryNode)
+      const allowRegionalRepaint = canUseRegionalRepaint(boundaryNode, hasScissor, isBg)
+
+      // Browser-like default: layout may extend beyond the viewport, but visible
+      // rendering is clipped to the viewport. This applies to all composited
+      // content by default, with viewportClip={false} as an explicit opt-out.
+      if (shouldViewportClip) {
+        renderDebug(`[clip:before] slot=${slot.key} z=${slot.z} x=${lx} y=${ly} w=${lw} h=${lh} pw=${pw} ph=${ph}`)
+        const clipLeft = Math.max(0, lx)
+        const clipTop = Math.max(0, ly)
+        const clipRight = Math.min(pw, lx + lw)
+        const clipBottom = Math.min(ph, ly + lh)
+
+        if (clipLeft >= clipRight || clipTop >= clipBottom) {
+          renderDebug(`[clip:skip] slot=${slot.key} z=${slot.z} x=${lx} y=${ly} w=${lw} h=${lh}`)
+          if (slot.z >= 0) {
+            layerComposer!.removeLayer(imageIdForLayer(layer))
+          }
+          layer.dirty = false
+          continue
+        }
+
+        lx = clipLeft
+        ly = clipTop
+        lw = clipRight - clipLeft
+        lh = clipBottom - clipTop
+        renderDebug(`[clip:after] slot=${slot.key} z=${slot.z} x=${lx} y=${ly} w=${lw} h=${lh}`)
+      }
 
       updateLayerGeometry(layer, lx, ly, lw, lh)
+      if (previousRect && layer.damageRect) {
+        for (const lower of layerOrder) {
+          markLayerDamaged(lower, layer.damageRect)
+        }
+      }
+      layerOrder.push(layer)
 
       if (layer.buf) {
         // Paint into buffer and compare against previous frame
         const prev = layer.buf.data.slice()
-        clearLayer(layer, 0x00000000)
+        const layerRect = { x: lx, y: ly, width: lw, height: lh }
+        const clippedDamage = layer.damageRect ? intersectRect(layer.damageRect, layerRect) : null
+        const layerArea = lw * lh
+        const damageArea = clippedDamage ? clippedDamage.width * clippedDamage.height : 0
+        const useRegionalRepaint = !!(
+          allowRegionalRepaint
+          && clippedDamage
+          && damageArea > 0
+          && damageArea < layerArea * 0.4
+        )
+        if (layer.damageRect) {
+          const damageMsg = clippedDamage
+            ? `damage=${clippedDamage.width}x${clippedDamage.height}@(${clippedDamage.x},${clippedDamage.y}) area=${damageArea}/${layerArea}`
+            : `damage=none area=0/${layerArea}`
+          log(`  [${slot.key}] DAMAGE allow=${allowRegionalRepaint} ${damageMsg}`)
+        }
+
+        if (useRegionalRepaint && clippedDamage) {
+          clearRectRegion(
+            layer.buf,
+            clippedDamage.x - lx,
+            clippedDamage.y - ly,
+            clippedDamage.width,
+            clippedDamage.height,
+            0x00000000,
+          )
+        } else {
+          clearLayer(layer, 0x00000000)
+        }
 
         // Reset scissor stack before painting each layer to prevent leaks
         scissorStack.length = 0
 
         // Sort command indices to preserve SCISSOR ordering
         const sortedIndices = slot.cmdIndices.slice().sort((a, b) => a - b)
+        const layerCommands: RenderCommand[] = []
         for (const idx of sortedIndices) {
           const cmd = commands[idx]
           if (!cmd) continue
-          paintCommand(layer.buf, cmd, lx, ly)
+          if (useRegionalRepaint && clippedDamage && !commandIntersectsRect(cmd, clippedDamage)) continue
+          layerCommands.push(cmd)
         }
+        paintCommandsWithRendererBackend(layer.buf, layerCommands, lx, ly)
 
         // ── Transform hierarchy post-pass ──
         // For each subtree transform root, copy the flat-rendered subtree region
@@ -1735,32 +2035,48 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
           }
         }
 
-        const changed = layer.dirty || !buffersEqual(prev, layer.buf.data)
+        const changed = forceLayerRepaint || useRegionalRepaint ? true : (layer.dirty || !buffersEqual(prev, layer.buf.data))
         if (changed) {
+          repaintedThisFrame++
           const renderZ = selectableText ? -1 : layer.z
           const imageId = imageIdForLayer(layer)
 
           // [Experimental] Partial updates — try to patch only the dirty region
           let usedPatch = false
-          if (expPartialUpdates && !layer.dirty && layer.buf) {
+          if (expPartialUpdates && allowPartialUpdates && !layer.dirty && layer.buf) {
             const region = findDirtyRegion(prev, layer.buf.data, layer.buf.width, layer.buf.height)
             if (region) {
               const totalPixels = layer.buf.width * layer.buf.height
               const regionPixels = region.w * region.h
-              // Only use partial update if the dirty region is <50% of the layer
-              if (regionPixels < totalPixels * 0.5) {
+              // Partial updates are excellent for UI/mock-style compositions where
+              // only a local panel/card/cursor changes. For local file/shm transport
+              // we can be much more aggressive; for direct mode stay conservative.
+              if (
+                region.dirtyPixels >= PARTIAL_UPDATE.MIN_REGION_PIXELS
+                && regionPixels < totalPixels * partialUpdateMaxCoverage
+              ) {
                 const regionData = extractRegion(layer.buf.data, layer.buf.width, region.x, region.y, region.w, region.h)
+                const ioStart = DEBUG_CADENCE ? performance.now() : 0
                 usedPatch = layerComposer!.patchLayer(regionData, imageId, region.x, region.y, region.w, region.h)
+                if (DEBUG_CADENCE) ioMs += performance.now() - ioStart
                 if (usedPatch) {
-                  log(`  [${slot.key}] PATCH ${region.w}x${region.h} at (${region.x},${region.y}) (${(regionPixels * 4 / 1024).toFixed(0)}KB of ${(totalPixels * 4 / 1024).toFixed(0)}KB, ${region.dirtyPixels} dirty px)`)
+                  log(`  [${slot.key}] PATCH ${region.w}x${region.h} at (${region.x},${region.y}) coverage=${(regionPixels / totalPixels * 100).toFixed(1)}% threshold=${(partialUpdateMaxCoverage * 100).toFixed(0)}% dirty=${region.dirtyPixels}px`)
                 }
               }
             }
+          } else if (expPartialUpdates && !allowPartialUpdates && !layer.dirty) {
+            log(`  [${slot.key}] PATCH-SKIP unsafe boundary (floating/transform/overflow)`) 
           }
 
           if (!usedPatch) {
-            log(`  [${slot.key}] REPAINT ${lw}x${lh} at (${lx},${ly}) z=${renderZ} (${(lw * lh * 4 / 1024).toFixed(0)}KB) cmds=${slot.cmdIndices.length}`)
+            if (useRegionalRepaint && clippedDamage) {
+              log(`  [${slot.key}] REPAINT-REGION ${clippedDamage.width}x${clippedDamage.height} at (${clippedDamage.x},${clippedDamage.y}) within ${lw}x${lh} z=${renderZ}`)
+            } else {
+              log(`  [${slot.key}] REPAINT ${lw}x${lh} at (${lx},${ly}) z=${renderZ} (${(lw * lh * 4 / 1024).toFixed(0)}KB) cmds=${slot.cmdIndices.length}`)
+            }
+            const ioStart = DEBUG_CADENCE ? performance.now() : 0
             layerComposer!.renderLayer(layer.buf, imageId, lx, ly, renderZ, cellW, cellH)
+            if (DEBUG_CADENCE) ioMs += performance.now() - ioStart
           }
           markLayerClean(layer)
         } else {
@@ -1774,25 +2090,49 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     const activeKeys = new Set(allSlots.map(s => s.key))
     for (const [key, layer] of layerCache) {
       if (!activeKeys.has(key)) {
+        const ioStart = DEBUG_CADENCE ? performance.now() : 0
         layerComposer!.removeLayer(imageIdForLayer(layer))
+        if (DEBUG_CADENCE) ioMs += performance.now() - ioStart
         layerCache.delete(key)
       }
     }
 
     // 5. Emit ANSI text in selectableText mode
     if (selectableText && pendingAnsiTexts.length > 0) {
+      const ioStart = DEBUG_CADENCE ? performance.now() : 0
       emitAnsiText(term, pendingAnsiTexts, cellW, cellH)
+      if (DEBUG_CADENCE) ioMs += performance.now() - ioStart
     }
 
+    if (profile) {
+      const totalPaintMs = performance.now() - paintStart
+      profile.ioMs = ioMs
+      profile.paintMs = Math.max(0, totalPaintMs - ioMs)
+    }
+
+    const endSyncStart = DEBUG_CADENCE ? performance.now() : 0
     term.endSync()
+    if (profile) {
+      profile.endSyncMs = performance.now() - endSyncStart
+      profile.repainted = repaintedThisFrame
+    }
+    debugUpdateStats({
+      commandCount: commands.length,
+      dirtyBeforeCount: dirtyBeforeFrame,
+      layerCount: layerCount(),
+      nodeCount: countNodes(root),
+      repaintedCount: repaintedThisFrame,
+    })
     clearDirty()
   }
 
   /** Paint a single frame with the old single-buffer approach (fallback). */
-  function frameFallback() {
+  function frameFallback(profile?: FrameProfile) {
+    const dirtyBeforeFrame = 1
     log(`[frame] FALLBACK single-buffer`)
     if (!fallbackBuf) return
     clear(fallbackBuf, 0x04040aff)
+    const layoutStart = DEBUG_CADENCE ? performance.now() : 0
 
     // Feed pointer + scroll — must call every frame
     const now = Date.now()
@@ -1804,9 +2144,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     scrollDeltaY = 0
     scrollIdCounter = 0
 
-    effectsQueue = [] // reset effects for this frame
-    imageQueue = [] // reset image paint queue for this frame
-    canvasQueue = [] // reset canvas paint queue for this frame
+    resetRenderGraphQueues(renderGraphQueues)
     textMeasureIndex = 0
     textMetas.length = 0
     textMetaMap.clear()
@@ -1821,8 +2159,18 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     writeLayoutBack(commands)
     updateInteractiveStates()
 
-    for (const cmd of commands) {
-      paintCommand(fallbackBuf, cmd, 0, 0)
+    if (profile) {
+      profile.layoutMs = performance.now() - layoutStart
+      profile.commands = commands.length
+      profile.dirtyBefore = dirtyBeforeFrame
+      profile.prepMs = 0
+    }
+
+    const paintStart = DEBUG_CADENCE ? performance.now() : 0
+    paintCommandsWithRendererBackend(fallbackBuf, commands, 0, 0)
+
+    if (profile) {
+      profile.paintMs = performance.now() - paintStart
     }
 
     const cols = term.size.cols
@@ -1830,18 +2178,66 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     const cellW = term.size.cellWidth || 8
     const cellH = term.size.cellHeight || 16
 
+    const beginSyncStart = DEBUG_CADENCE ? performance.now() : 0
     term.beginSync()
+    if (profile) {
+      profile.beginSyncMs = performance.now() - beginSyncStart
+    }
+    const ioStart = DEBUG_CADENCE ? performance.now() : 0
     fallbackComposer!.render(fallbackBuf, 0, 0, cols, rows, cellW, cellH)
+    if (profile) {
+      profile.ioMs = performance.now() - ioStart
+    }
+    const endSyncStart = DEBUG_CADENCE ? performance.now() : 0
     term.endSync()
+    if (profile) {
+      profile.endSyncMs = performance.now() - endSyncStart
+      profile.repainted = 1
+    }
+    debugUpdateStats({
+      commandCount: commands.length,
+      dirtyBeforeCount: dirtyBeforeFrame,
+      layerCount: 1,
+      nodeCount: countNodes(root),
+      repaintedCount: 1,
+    })
     clearDirty()
   }
 
   /** Paint a frame — dispatches to layered or fallback based on backend. */
   function frame() {
+    const frameStartedAt = performance.now()
+    const profile: FrameProfile | undefined = DEBUG_CADENCE
+      ? {
+          scheduledIntervalMs,
+          scheduledDelayMs,
+          timerDelayMs: scheduledAtMs > 0 ? frameStartedAt - scheduledAtMs - scheduledDelayMs : 0,
+          sincePrevFrameMs: lastFrameStartedAt > 0 ? frameStartedAt - lastFrameStartedAt : 0,
+          layoutMs: 0,
+          prepMs: 0,
+          paintMs: 0,
+          beginSyncMs: 0,
+          ioMs: 0,
+          endSyncMs: 0,
+          totalMs: 0,
+          commands: 0,
+          repainted: 0,
+          dirtyBefore: 0,
+        }
+      : undefined
+    lastFrameStartedAt = frameStartedAt
+    const finishDebugFrame = debugFrameStart()
     if (useLayerCompositing) {
-      frameLayered()
+      frameLayered(profile)
     } else {
-      frameFallback()
+      frameFallback(profile)
+    }
+    finishDebugFrame()
+    if (profile) {
+      profile.totalMs = performance.now() - frameStartedAt
+      cadenceDebug(
+        `[frame] dt=${profile.sincePrevFrameMs.toFixed(2)}ms interval=${profile.scheduledIntervalMs.toFixed(2)}ms delay=${profile.scheduledDelayMs.toFixed(2)}ms timerDelay=${profile.timerDelayMs.toFixed(2)}ms total=${profile.totalMs.toFixed(2)}ms layout=${profile.layoutMs.toFixed(2)}ms prep=${profile.prepMs.toFixed(2)}ms paint=${profile.paintMs.toFixed(2)}ms io=${profile.ioMs.toFixed(2)}ms beginSync=${profile.beginSyncMs.toFixed(2)}ms endSync=${profile.endSyncMs.toFixed(2)}ms dirty=${profile.dirtyBefore} repainted=${profile.repainted} cmds=${profile.commands}`,
+      )
     }
   }
 
@@ -1871,6 +2267,11 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     feedScroll,
     feedPointer,
 
+    needsPointerRepaint() {
+      if (capturedNodeId !== 0) return true
+      return hasPointerReactiveNodes(root)
+    },
+
     setPointerCapture(nodeId: number) {
       capturedNodeId = nodeId
     },
@@ -1889,14 +2290,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
     start() {
       frame() // initial render
-      const scheduleNext = () => {
-        const interval = hasActiveAnimations() ? activeInterval : idleInterval
-        timer = setTimeout(() => {
-          if (isDirty()) frame()
-          scheduleNext()
-        }, interval)
-      }
-      scheduleNext()
+      nextFrameDeadlineMs = 0
+      scheduleNextFrame()
     },
 
     stop() {
@@ -1904,6 +2299,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         clearTimeout(timer)
         timer = null
       }
+      scheduledDelayMs = 0
+      nextFrameDeadlineMs = 0
     },
 
     frame,
@@ -1916,6 +2313,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         clearTimeout(timer)
         timer = null
       }
+      scheduledDelayMs = 0
+      nextFrameDeadlineMs = 0
       // Restore terminal (alt screen, cursor, mouse, etc.)
       term.suspend()
     },
@@ -1930,14 +2329,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       markAllDirty()
       // Restart the render loop with adaptive FPS
       frame()
-      const scheduleNext = () => {
-        const interval = hasActiveAnimations() ? activeInterval : idleInterval
-        timer = setTimeout(() => {
-          if (isDirty()) frame()
-          scheduleNext()
-        }, interval)
-      }
-      scheduleNext()
+      nextFrameDeadlineMs = 0
+      scheduleNextFrame()
     },
 
     suspended() {
@@ -1946,6 +2339,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
     destroy() {
       if (timer) clearTimeout(timer)
+      scheduledDelayMs = 0
+      nextFrameDeadlineMs = 0
       unsubResize()
       if (layerComposer) layerComposer.destroy()
       if (fallbackComposer) fallbackComposer.destroy()
@@ -2236,12 +2631,469 @@ function emitAnsiText(
   term.write("\x1b[39m")
 }
 
+function paintBorderRenderOp(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, offsetY: number, borderInputs: import("./render-graph").BorderRenderInputs) {
+  const x = Math.round(cmd.x) - offsetX
+  const y = Math.round(cmd.y) - offsetY
+  const w = Math.round(cmd.width)
+  const h = Math.round(cmd.height)
+  const [r, g, b, a] = cmd.color
+  if (borderInputs.cornerRadii) {
+    const cr = borderInputs.cornerRadii
+    paintWithScissorClip(buf, x + offsetX, y + offsetY, x, y, w, h,
+      () => paint.strokeRectCorners(buf, x, y, w, h, r, g, b, a, cr.tl, cr.tr, cr.br, cr.bl, borderInputs.width),
+      (tmp) => paint.strokeRectCorners(tmp, 0, 0, w, h, r, g, b, a, cr.tl, cr.tr, cr.br, cr.bl, borderInputs.width))
+    return
+  }
+  paintWithScissorClip(buf, x + offsetX, y + offsetY, x, y, w, h,
+    () => paint.strokeRect(buf, x, y, w, h, r, g, b, a, borderInputs.radius, borderInputs.width),
+    (tmp) => paint.strokeRect(tmp, 0, 0, w, h, r, g, b, a, borderInputs.radius, borderInputs.width))
+}
+
+function paintTextRenderOp(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, offsetY: number, textInputs: import("./render-graph").TextRenderInputs) {
+  const x = Math.round(cmd.x) - offsetX
+  const y = Math.round(cmd.y) - offsetY
+  const w = Math.round(cmd.width)
+  const [r, g, b, a] = cmd.color
+
+  if (selectableTextMode) {
+    pendingAnsiTexts.push({
+      text: textInputs.text,
+      x: x + offsetX,
+      y: y + offsetY,
+      r, g, b, a,
+      lineHeight: textInputs.lineHeight,
+      maxWidth: textInputs.maxWidth,
+      fontId: textInputs.fontId,
+    })
+    return
+  }
+
+  const scissor = activeScissor()
+  const absX = x + offsetX
+  const absY = y + offsetY
+  const textH = textInputs.textHeight
+  const partiallyClipped = scissor && (
+    absY < scissor.y || absY + textH > scissor.y + scissor.h ||
+    absX < scissor.x || absX + w > scissor.x + scissor.w
+  )
+
+  if (partiallyClipped && scissor) {
+    const tw = Math.max(w, 1)
+    const th = textH
+    if (tw <= 0 || th <= 0) return
+    const tmp = create(tw, th)
+    const result = layoutText(textInputs.text, textInputs.fontId, textInputs.maxWidth, textInputs.lineHeight)
+    if (result.lines.length <= 1) {
+      paint.drawText(tmp, 0, 0, textInputs.text, r, g, b, a)
+    } else {
+      for (let li = 0; li < result.lines.length; li++) {
+        const line = result.lines[li]
+        paint.drawText(tmp, 0, li * textInputs.lineHeight, line.text, r, g, b, a)
+      }
+    }
+    const srcLeft = Math.max(0, scissor.x - absX)
+    const srcTop = Math.max(0, scissor.y - absY)
+    const dstLeft = Math.max(absX, scissor.x) - offsetX
+    const dstTop = Math.max(absY, scissor.y) - offsetY
+    const copyW = Math.min(absX + tw, scissor.x + scissor.w) - Math.max(absX, scissor.x)
+    const copyH = Math.min(absY + th, scissor.y + scissor.h) - Math.max(absY, scissor.y)
+    if (copyW <= 0 || copyH <= 0) return
+    const sd = tmp.data
+    const dd = buf.data
+    for (let row = 0; row < copyH; row++) {
+      const sy = srcTop + row
+      const dy = dstTop + row
+      if (dy < 0 || dy >= buf.height) continue
+      for (let col = 0; col < copyW; col++) {
+        const sx = srcLeft + col
+        const dx = dstLeft + col
+        if (dx < 0 || dx >= buf.width) continue
+        const si = (sy * tmp.stride) + sx * 4
+        const sa = sd[si + 3]
+        if (sa === 0) continue
+        const di = (dy * buf.stride) + dx * 4
+        if (sa === 255) {
+          dd[di] = sd[si]; dd[di+1] = sd[si+1]; dd[di+2] = sd[si+2]; dd[di+3] = 255
+        } else {
+          const invSa = 255 - sa
+          dd[di] = Math.round((sd[si] * sa + dd[di] * invSa) / 255)
+          dd[di+1] = Math.round((sd[si+1] * sa + dd[di+1] * invSa) / 255)
+          dd[di+2] = Math.round((sd[si+2] * sa + dd[di+2] * invSa) / 255)
+          dd[di+3] = Math.min(255, sa + Math.round(dd[di+3] * invSa / 255))
+        }
+      }
+    }
+    return
+  }
+
+  const result = layoutText(textInputs.text, textInputs.fontId, textInputs.maxWidth, textInputs.lineHeight)
+  if (result.lines.length <= 1) {
+    paint.drawText(buf, x, y, textInputs.text, r, g, b, a)
+    return
+  }
+  for (let li = 0; li < result.lines.length; li++) {
+    const line = result.lines[li]
+    const lineY = y + li * textInputs.lineHeight
+    paint.drawText(buf, x, lineY, line.text, r, g, b, a)
+  }
+}
+
+function paintImageRenderOp(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, offsetY: number, rectangleInputs: import("./render-graph").RectangleRenderInputs, imgConfig: import("./render-graph").ImagePaintConfig) {
+  const x = Math.round(cmd.x) - offsetX
+  const y = Math.round(cmd.y) - offsetY
+  const w = Math.round(cmd.width)
+  const h = Math.round(cmd.height)
+  const radius = rectangleInputs.radius
+
+  const scaled = scaleImage(imgConfig.imageBuffer, w, h, imgConfig.objectFit)
+  const sd = scaled.data
+  const sw = scaled.width
+  const sh = scaled.height
+  const bd = buf.data
+  const ox = x + scaled.offsetX
+  const oy = y + scaled.offsetY
+
+  for (let iy = 0; iy < sh; iy++) {
+    const by = oy + iy
+    if (by < 0 || by >= buf.height) continue
+    const bufRow = by * buf.stride
+    const srcRow = iy * sw * 4
+    for (let ix = 0; ix < sw; ix++) {
+      const bx = ox + ix
+      if (bx < 0 || bx >= buf.width) continue
+      const si = srcRow + ix * 4
+      const sa = sd[si + 3]
+      if (sa === 0) continue
+      const di = bufRow + bx * 4
+      if (sa === 255) {
+        bd[di] = sd[si]
+        bd[di + 1] = sd[si + 1]
+        bd[di + 2] = sd[si + 2]
+        bd[di + 3] = 255
+      } else {
+        const da = bd[di + 3]
+        const invSa = 255 - sa
+        bd[di] = Math.round((sd[si] * sa + bd[di] * invSa) / 255)
+        bd[di + 1] = Math.round((sd[si + 1] * sa + bd[di + 1] * invSa) / 255)
+        bd[di + 2] = Math.round((sd[si + 2] * sa + bd[di + 2] * invSa) / 255)
+        bd[di + 3] = Math.min(255, sa + Math.round(da * invSa / 255))
+      }
+    }
+  }
+
+  if (radius <= 0) return
+  const mask = create(w, h)
+  paint.roundedRect(mask, 0, 0, w, h, 255, 255, 255, 255, radius)
+  const md = mask.data
+  for (let my = 0; my < h; my++) {
+    const by = y + my
+    if (by < 0 || by >= buf.height) continue
+    const bufRow = by * buf.stride
+    const mRow = my * mask.stride
+    for (let mx = 0; mx < w; mx++) {
+      const bx = x + mx
+      if (bx < 0 || bx >= buf.width) continue
+      const mi = mRow + mx * 4 + 3
+      if (mi < md.length && md[mi] === 0) {
+        const di = bufRow + bx * 4
+        bd[di] = 0; bd[di + 1] = 0; bd[di + 2] = 0; bd[di + 3] = 0
+      }
+    }
+  }
+}
+
+function paintCanvasRenderOp(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, offsetY: number, canvasConfig: import("./render-graph").CanvasPaintConfig) {
+  const x = Math.round(cmd.x) - offsetX
+  const y = Math.round(cmd.y) - offsetY
+  const w = Math.round(cmd.width)
+  const h = Math.round(cmd.height)
+  if (w <= 0 || h <= 0) return
+  const tmp = create(w, h)
+  const ctx = new CanvasContext(canvasConfig.viewport)
+  canvasConfig.onDraw(ctx)
+  paintCanvasCommands(tmp, ctx, w, h)
+  over(buf, tmp, x, y)
+}
+
+function paintRectGlow(buf: PixelBuffer, x: number, y: number, w: number, h: number, radius: number, glow: NonNullable<EffectConfig["glow"]>, offsetX: number, offsetY: number) {
+  const gr = (glow.color >>> 24) & 0xff
+  const gg = (glow.color >>> 16) & 0xff
+  const gb = (glow.color >>> 8) & 0xff
+  const ga = Math.round(((glow.color & 0xff) * glow.intensity) / 100)
+  const spread = glow.radius
+  const blurR = Math.ceil(spread * 0.6)
+  const margin = spread + blurR
+  const tw = w + margin * 2
+  const th = h + margin * 2
+  if (tw <= 0 || th <= 0) return
+  const tmp = create(tw, th)
+  const lx = margin
+  const ly = margin
+  if (radius > 0) paint.roundedRect(tmp, lx, ly, w, h, gr, gg, gb, ga, radius)
+  else paint.fillRect(tmp, lx, ly, w, h, gr, gg, gb, ga)
+  paint.blur(tmp, 0, 0, tw, th, blurR, 3)
+  overScissored(buf, tmp, x - margin, y - margin, offsetX, offsetY)
+}
+
+function paintRectShadows(buf: PixelBuffer, x: number, y: number, w: number, h: number, radius: number, shadow: NonNullable<EffectConfig["shadow"]>, offsetX: number, offsetY: number) {
+  const shadows = Array.isArray(shadow) ? shadow : [shadow]
+  for (const s of shadows) {
+    const sr = (s.color >>> 24) & 0xff
+    const sg = (s.color >>> 16) & 0xff
+    const sb = (s.color >>> 8) & 0xff
+    const sa = s.color & 0xff
+    const blurR = Math.ceil(s.blur)
+    const margin = blurR * 2
+    const tw = w + margin * 2 + Math.abs(s.x)
+    const th = h + margin * 2 + Math.abs(s.y)
+    if (tw <= 0 || th <= 0) continue
+    const tmp = create(tw, th)
+    const lx = margin + Math.max(0, s.x)
+    const ly = margin + Math.max(0, s.y)
+    if (radius > 0) paint.roundedRect(tmp, lx, ly, w, h, sr, sg, sb, sa, radius)
+    else paint.fillRect(tmp, lx, ly, w, h, sr, sg, sb, sa)
+    paint.blur(tmp, 0, 0, tw, th, blurR, 3)
+    const dx = x - margin + Math.min(0, s.x)
+    const dy = y - margin + Math.min(0, s.y)
+    overScissored(buf, tmp, dx, dy, offsetX, offsetY)
+  }
+}
+
+function paintBackdropEffects(buf: PixelBuffer, x: number, y: number, w: number, h: number, matchedEffect: EffectConfig, offsetX: number, offsetY: number) {
+  const blurR = matchedEffect.backdropBlur ? Math.ceil(matchedEffect.backdropBlur) : 0
+  const effRadius = matchedEffect.cornerRadius
+  let bx = x, by = y, bw = w, bh = h
+  const bs = activeScissor()
+  if (bs) {
+    const bl = Math.max(bx, bs.x - offsetX)
+    const bt = Math.max(by, bs.y - offsetY)
+    const br = Math.min(bx + bw, bs.x + bs.w - offsetX)
+    const bb = Math.min(by + bh, bs.y + bs.h - offsetY)
+    if (bl >= br || bt >= bb) return true
+    bx = bl; by = bt; bw = br - bl; bh = bb - bt
+  }
+
+  let saved: Uint8Array | null = null
+  if (effRadius > 0) saved = sub(buf, bx, by, bw, bh).data
+  if (blurR > 0) paint.blur(buf, bx, by, bw, bh, blurR, 3)
+  if (matchedEffect.backdropBrightness !== undefined) paint.filterBrightness(buf, bx, by, bw, bh, matchedEffect.backdropBrightness)
+  if (matchedEffect.backdropContrast !== undefined) paint.filterContrast(buf, bx, by, bw, bh, matchedEffect.backdropContrast)
+  if (matchedEffect.backdropSaturate !== undefined) paint.filterSaturate(buf, bx, by, bw, bh, matchedEffect.backdropSaturate)
+  if (matchedEffect.backdropGrayscale !== undefined) paint.filterGrayscale(buf, bx, by, bw, bh, matchedEffect.backdropGrayscale)
+  if (matchedEffect.backdropInvert !== undefined) paint.filterInvert(buf, bx, by, bw, bh, matchedEffect.backdropInvert)
+  if (matchedEffect.backdropSepia !== undefined) paint.filterSepia(buf, bx, by, bw, bh, matchedEffect.backdropSepia)
+  if (matchedEffect.backdropHueRotate !== undefined) paint.filterHueRotate(buf, bx, by, bw, bh, matchedEffect.backdropHueRotate)
+
+  if (effRadius > 0 && saved) {
+    const mask = create(w, h)
+    paint.roundedRect(mask, 0, 0, w, h, 255, 255, 255, 255, effRadius)
+    const md = mask.data
+    const d = buf.data
+    const maskOffX = bx - x
+    const maskOffY = by - y
+    for (let ly = 0; ly < bh; ly++) {
+      const bufRow = (by + ly) * buf.stride
+      const savRow = ly * bw * 4
+      const mRow = (maskOffY + ly) * mask.stride
+      for (let lx = 0; lx < bw; lx++) {
+        const mi = mRow + (maskOffX + lx) * 4 + 3
+        if (md[mi] === 0) {
+          const bo = bufRow + (bx + lx) * 4
+          const si = savRow + lx * 4
+          d[bo] = saved[si]; d[bo+1] = saved[si+1]; d[bo+2] = saved[si+2]; d[bo+3] = saved[si+3]
+        } else if (md[mi] < 255) {
+          const bo = bufRow + (bx + lx) * 4
+          const si = savRow + lx * 4
+          const ma = md[mi] / 255
+          const ia = 1 - ma
+          d[bo] = Math.round(d[bo] * ma + saved[si] * ia)
+          d[bo+1] = Math.round(d[bo+1] * ma + saved[si+1] * ia)
+          d[bo+2] = Math.round(d[bo+2] * ma + saved[si+2] * ia)
+          d[bo+3] = Math.round(d[bo+3] * ma + saved[si+3] * ia)
+        }
+      }
+    }
+  }
+
+  if (matchedEffect.gradient) {
+    const grad = matchedEffect.gradient
+    const tmp = create(w, h)
+    if (grad.type === "linear") {
+      paint.linearGradient(tmp, 0, 0, w, h,
+        (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
+        (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff,
+        grad.angle)
+    } else {
+      const cx = Math.round(w / 2)
+      const cy = Math.round(h / 2)
+      const gradRadius = Math.round(Math.max(w, h) / 2)
+      paint.radialGradient(tmp, cx, cy, gradRadius,
+        (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
+        (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff)
+    }
+    if (effRadius > 0) {
+      const mask = create(w, h)
+      paint.roundedRect(mask, 0, 0, w, h, 255, 255, 255, 255, effRadius)
+      const gd = tmp.data
+      const md = mask.data
+      for (let i = 3; i < w * h * 4; i += 4) {
+        if (md[i] === 0) { gd[i-3] = 0; gd[i-2] = 0; gd[i-1] = 0; gd[i] = 0 }
+        else if (md[i] < 255) { gd[i] = Math.round((gd[i] * md[i]) / 255) }
+      }
+    }
+    over(buf, tmp, x, y)
+  } else {
+    const [r, g, b, a] = cmd.color
+    if (a > 1) {
+      if (effRadius > 0) paint.roundedRect(buf, x, y, w, h, r, g, b, a, effRadius)
+      else paint.fillRect(buf, x, y, w, h, r, g, b, a)
+    }
+  }
+  return true
+}
+
+function paintRectangleCore(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, offsetY: number, rectangleInputs: import("./render-graph").RectangleRenderInputs, matchedEffect: EffectConfig | null) {
+  const x = Math.round(cmd.x) - offsetX
+  const y = Math.round(cmd.y) - offsetY
+  const w = Math.round(cmd.width)
+  const h = Math.round(cmd.height)
+  const [r, g, b, a] = cmd.color
+  const radius = rectangleInputs.radius
+
+  if (matchedEffect?._subtreeTransform && matchedEffect._node) {
+    const nodeId = matchedEffect._node.id
+    const snap = create(w, h)
+    for (let row = 0; row < h; row++) {
+      const sy = y + row
+      if (sy < 0 || sy >= buf.height) continue
+      const srcOff = sy * buf.stride
+      const dstOff = row * snap.stride
+      for (let col = 0; col < w; col++) {
+        const sx = x + col
+        if (sx < 0 || sx >= buf.width) continue
+        const si = srcOff + sx * 4
+        const di = dstOff + col * 4
+        snap.data[di] = buf.data[si]; snap.data[di+1] = buf.data[si+1]
+        snap.data[di+2] = buf.data[si+2]; snap.data[di+3] = buf.data[si+3]
+      }
+    }
+    subtreeBgSnapshots.set(nodeId, snap)
+  }
+
+  if (matchedEffect?.glow) paintRectGlow(buf, x, y, w, h, radius, matchedEffect.glow, offsetX, offsetY)
+  if (matchedEffect?.shadow) paintRectShadows(buf, x, y, w, h, radius, matchedEffect.shadow, offsetX, offsetY)
+
+  const hasBackdrop = matchedEffect && (
+    matchedEffect.backdropBlur || matchedEffect.backdropBrightness !== undefined ||
+    matchedEffect.backdropContrast !== undefined || matchedEffect.backdropSaturate !== undefined ||
+    matchedEffect.backdropGrayscale !== undefined || matchedEffect.backdropInvert !== undefined ||
+    matchedEffect.backdropSepia !== undefined || matchedEffect.backdropHueRotate !== undefined
+  )
+  if (hasBackdrop && matchedEffect) {
+    const handled = paintBackdropEffects(buf, x, y, w, h, matchedEffect, offsetX, offsetY)
+    if (handled) return
+  }
+
+  const elemOpacity = matchedEffect?.opacity
+  const useOpacity = elemOpacity !== undefined && elemOpacity < 1
+  const hasXform = matchedEffect?.transform !== undefined && (matchedEffect as any)._transformConfig && !matchedEffect._subtreeTransform
+  const useTemp = useOpacity || hasXform
+  const target = useTemp ? create(w, h) : buf
+  const tx = useTemp ? 0 : x
+  const ty = useTemp ? 0 : y
+
+  if (matchedEffect?.gradient) {
+    const grad = matchedEffect.gradient
+    if (radius > 0) {
+      const tmp = create(w, h)
+      if (grad.type === "linear") {
+        paint.linearGradient(tmp, 0, 0, w, h,
+          (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
+          (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff,
+          grad.angle)
+      } else {
+        const cx = Math.round(w / 2)
+        const cy = Math.round(h / 2)
+        const gradRadius = Math.round(Math.max(w, h) / 2)
+        paint.radialGradient(tmp, cx, cy, gradRadius,
+          (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
+          (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff)
+      }
+      const mask = create(w, h)
+      paint.roundedRect(mask, 0, 0, w, h, 255, 255, 255, 255, radius)
+      const gd = tmp.data
+      const md = mask.data
+      for (let i = 3; i < w * h * 4; i += 4) {
+        if (md[i] === 0) { gd[i - 3] = 0; gd[i - 2] = 0; gd[i - 1] = 0; gd[i] = 0 }
+        else if (md[i] < 255) gd[i] = Math.round((gd[i] * md[i]) / 255)
+      }
+      over(target, tmp, tx, ty)
+    } else {
+      if (grad.type === "linear") {
+        paint.linearGradient(target, tx, ty, w, h,
+          (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
+          (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff,
+          grad.angle)
+      } else {
+        const cx = tx + Math.round(w / 2)
+        const cy = ty + Math.round(h / 2)
+        const gradRadius = Math.round(Math.max(w, h) / 2)
+        paint.radialGradient(target, cx, cy, gradRadius,
+          (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
+          (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff)
+      }
+    }
+  } else if (matchedEffect?.cornerRadii) {
+    const cr = matchedEffect.cornerRadii
+    paintWithScissorClip(target, x + offsetX, y + offsetY, tx, ty, w, h,
+      () => paint.roundedRectCorners(target, tx, ty, w, h, r, g, b, a, cr.tl, cr.tr, cr.br, cr.bl),
+      (tmp) => paint.roundedRectCorners(tmp, 0, 0, w, h, r, g, b, a, cr.tl, cr.tr, cr.br, cr.bl))
+  } else if (radius > 0) {
+    paintWithScissorClip(target, x + offsetX, y + offsetY, tx, ty, w, h,
+      () => paint.roundedRect(target, tx, ty, w, h, r, g, b, a, radius),
+      (tmp) => paint.roundedRect(tmp, 0, 0, w, h, r, g, b, a, radius))
+  } else {
+    const clipped = clipToScissor(x + offsetX, y + offsetY, w, h, offsetX, offsetY)
+    if (clipped) paint.fillRect(target, useOpacity ? clipped.x - x : clipped.x, useOpacity ? clipped.y - y : clipped.y, clipped.w, clipped.h, r, g, b, a)
+  }
+
+  if (!useTemp) return
+  if (hasXform) {
+    const cfg = (matchedEffect as any)._transformConfig as NonNullable<import("./node").TGEProps["transform"]>
+    const originProp = (matchedEffect as any)._transformOrigin
+    let ox = w / 2, oy = h / 2
+    if (originProp === "top-left") { ox = 0; oy = 0 }
+    else if (originProp === "top-right") { ox = w; oy = 0 }
+    else if (originProp === "bottom-left") { ox = 0; oy = h }
+    else if (originProp === "bottom-right") { ox = w; oy = h }
+    else if (originProp && typeof originProp === "object") { ox = originProp.x * w; oy = originProp.y * h }
+    const matrix = fromConfig(cfg, ox, oy)
+    if (!matrix || isIdentity(matrix)) {
+      if (useOpacity) withOpacity(buf, target, x, y, elemOpacity!)
+      else over(buf, target, x, y)
+      return
+    }
+    let src = target
+    if (useOpacity) {
+      const data = src.data
+      const mul = Math.round((elemOpacity!) * 255)
+      for (let i = 3; i < data.length; i += 4) data[i] = (data[i] * mul) >> 8
+    }
+    const bounds = transformBounds(matrix, w, h)
+    const inv = invert(matrix)
+    if (inv) paint.affineBlit(buf, src, inv, x + bounds.x, y + bounds.y, bounds.width, bounds.height)
+    return
+  }
+  if (useOpacity) withOpacity(buf, target, x, y, elemOpacity!)
+  else over(buf, target, x, y)
+}
+
 /**
  * Paint a Clay RenderCommand into a pixel buffer.
  * offsetX/offsetY translate from absolute screen coords to local buffer coords.
  * Respects active scissor rect for clipping.
  */
-function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, offsetY: number) {
+function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, offsetY: number, renderOpOverride?: import("./render-graph").RenderGraphOp | null) {
   // Handle scissor commands
   if (cmd.type === CMD.SCISSOR_START) {
     pushScissor(cmd)
@@ -2260,585 +3112,45 @@ function paintCommand(buf: PixelBuffer, cmd: RenderCommand, offsetX: number, off
   const w = Math.round(cmd.width)
   const h = Math.round(cmd.height)
   const [r, g, b, a] = cmd.color
+  const renderOp = renderOpOverride ?? buildRenderOp(cmd, renderGraphQueues, textMetaMap)
 
-  switch (cmd.type) {
-    case CMD.RECTANGLE: {
-      const radius = Math.round(cmd.cornerRadius)
-      const cmdColor = ((r << 24) | (g << 16) | (b << 8) | a) >>> 0
+  switch (renderOp?.kind) {
+    case "rectangle":
+    case "effect": {
+      const rectangleInputs = renderOp.kind === "rectangle"
+        ? renderOp.inputs
+        : renderOp.rect.inputs
 
       // ── Check for <img> image data matching this RECT ──
-      const imgIdx = imageQueue.findIndex(
-        (im) => im.color === cmdColor && im.cornerRadius === radius
-      )
-      if (imgIdx >= 0) {
-        const imgConfig = imageQueue[imgIdx]
-        imageQueue.splice(imgIdx, 1) // consume
-
-        // Scale image to fit layout box
-        const scaled = scaleImage(imgConfig.imageBuffer, w, h, imgConfig.objectFit)
-
-        // Copy pixels: src-over composite the image onto the buffer
-        const sd = scaled.data
-        const sw = scaled.width
-        const sh = scaled.height
-        const bd = buf.data
-        const ox = x + scaled.offsetX
-        const oy = y + scaled.offsetY
-
-        for (let iy = 0; iy < sh; iy++) {
-          const by = oy + iy
-          if (by < 0 || by >= buf.height) continue
-          const bufRow = by * buf.stride
-          const srcRow = iy * sw * 4
-          for (let ix = 0; ix < sw; ix++) {
-            const bx = ox + ix
-            if (bx < 0 || bx >= buf.width) continue
-            const si = srcRow + ix * 4
-            const sa = sd[si + 3]
-            if (sa === 0) continue
-            const di = bufRow + bx * 4
-            if (sa === 255) {
-              // Fully opaque — direct copy
-              bd[di] = sd[si]
-              bd[di + 1] = sd[si + 1]
-              bd[di + 2] = sd[si + 2]
-              bd[di + 3] = 255
-            } else {
-              // Alpha blend (src-over)
-              const da = bd[di + 3]
-              const invSa = 255 - sa
-              bd[di]     = Math.round((sd[si]     * sa + bd[di]     * invSa) / 255)
-              bd[di + 1] = Math.round((sd[si + 1] * sa + bd[di + 1] * invSa) / 255)
-              bd[di + 2] = Math.round((sd[si + 2] * sa + bd[di + 2] * invSa) / 255)
-              bd[di + 3] = Math.min(255, sa + Math.round(da * invSa / 255))
-            }
-          }
-        }
-
-        // Apply cornerRadius mask if needed
-        if (radius > 0) {
-          const mask = create(w, h)
-          paint.roundedRect(mask, 0, 0, w, h, 255, 255, 255, 255, radius)
-          const md = mask.data
-          // Restore pixels outside the rounded rect
-          for (let my = 0; my < h; my++) {
-            const by = y + my
-            if (by < 0 || by >= buf.height) continue
-            const bufRow = by * buf.stride
-            const mRow = my * mask.stride
-            for (let mx = 0; mx < w; mx++) {
-              const bx = x + mx
-              if (bx < 0 || bx >= buf.width) continue
-              const mi = mRow + mx * 4 + 3  // mask alpha
-              if (mi < md.length && md[mi] === 0) {
-                // Outside rounded rect — clear to transparent
-                const di = bufRow + bx * 4
-                bd[di] = 0; bd[di + 1] = 0; bd[di + 2] = 0; bd[di + 3] = 0
-              }
-            }
-          }
-        }
+      if (rectangleInputs.image) {
+        paintImageRenderOp(buf, cmd, offsetX, offsetY, rectangleInputs, rectangleInputs.image)
         break
       }
 
       // ── Check for <canvas> node matching this RECT ──
-      const canvasIdx = canvasQueue.findIndex(
-        (c) => c.color === cmdColor
-      )
-      if (canvasIdx >= 0) {
-        const canvasConfig = canvasQueue[canvasIdx]
-        canvasQueue.splice(canvasIdx, 1) // consume
-
-        // Create a temp buffer for the canvas (isolated from neighbors)
-        if (w > 0 && h > 0) {
-          const tmp = create(w, h)
-          const ctx = new CanvasContext(canvasConfig.viewport)
-          canvasConfig.onDraw(ctx)
-          paintCanvasCommands(tmp, ctx, w, h)
-          over(buf, tmp, x, y)
-        }
+      if (rectangleInputs.canvas) {
+        paintCanvasRenderOp(buf, cmd, offsetX, offsetY, rectangleInputs.canvas)
         break
       }
 
       // Check for shadow/glow/gradient effects matching this RECT
-      const effectIdx = effectsQueue.findIndex(
-        (e) => e.color === cmdColor && e.cornerRadius === radius
-      )
-      let matchedEffect: EffectConfig | null = null
-      if (effectIdx >= 0) {
-        matchedEffect = effectsQueue[effectIdx]
-        effectsQueue.splice(effectIdx, 1) // consume — one match per node
-
-        // Subtree transform: snapshot the background BEFORE painting the subtree.
-        // This captures only the bg pixels (app background, etc.) without any
-        // subtree content. The post-pass uses this to restore the background
-        // in areas not covered by the transformed blit.
-        if (matchedEffect._subtreeTransform && matchedEffect._node) {
-          const nodeId = matchedEffect._node.id
-          const snap = create(w, h)
-          for (let row = 0; row < h; row++) {
-            const sy = y + row
-            if (sy < 0 || sy >= buf.height) continue
-            const srcOff = sy * buf.stride
-            const dstOff = row * snap.stride
-            for (let col = 0; col < w; col++) {
-              const sx = x + col
-              if (sx < 0 || sx >= buf.width) continue
-              const si = srcOff + sx * 4
-              const di = dstOff + col * 4
-              snap.data[di] = buf.data[si]; snap.data[di+1] = buf.data[si+1]
-              snap.data[di+2] = buf.data[si+2]; snap.data[di+3] = buf.data[si+3]
-            }
-          }
-          subtreeBgSnapshots.set(nodeId, snap)
-        }
-
-        // Effects use TEMPORARY BUFFERS to avoid destructive in-place blur.
-        // Without this, blur() would corrupt neighboring pixels (other cards,
-        // text, background). The temp buffer isolates the effect, then we
-        // composite it onto the main buffer with src-over alpha blending.
-
-        // Glow: rounded rect in glow color → blur → composite
-        if (matchedEffect.glow) {
-          const gl = matchedEffect.glow
-          const gr = (gl.color >>> 24) & 0xff
-          const gg = (gl.color >>> 16) & 0xff
-          const gb = (gl.color >>> 8) & 0xff
-          const ga = Math.round(((gl.color & 0xff) * gl.intensity) / 100)
-          const spread = gl.radius
-          const blurR = Math.ceil(spread * 0.6)
-          const margin = spread + blurR
-          // Temp buffer sized to contain the glow + blur margin
-          const tw = w + margin * 2
-          const th = h + margin * 2
-          if (tw > 0 && th > 0) {
-            const tmp = create(tw, th)
-            // Paint shape centered in temp buffer
-            const lx = margin
-            const ly = margin
-            if (radius > 0) {
-              paint.roundedRect(tmp, lx, ly, w, h, gr, gg, gb, ga, radius)
-            } else {
-              paint.fillRect(tmp, lx, ly, w, h, gr, gg, gb, ga)
-            }
-            // Blur the entire temp buffer — safe, no neighbors to corrupt
-            paint.blur(tmp, 0, 0, tw, th, blurR, 3)
-            // Composite onto main buffer
-            overScissored(buf, tmp, x - margin, y - margin, offsetX, offsetY)
-          }
-        }
-
-        // Shadow: rounded rect at offset → blur → composite (supports array)
-        if (matchedEffect.shadow) {
-          const shadows = Array.isArray(matchedEffect.shadow) ? matchedEffect.shadow : [matchedEffect.shadow]
-          for (const s of shadows) {
-            const sr = (s.color >>> 24) & 0xff
-            const sg = (s.color >>> 16) & 0xff
-            const sb = (s.color >>> 8) & 0xff
-            const sa = s.color & 0xff
-            const blurR = Math.ceil(s.blur)
-            const margin = blurR * 2
-            const tw = w + margin * 2 + Math.abs(s.x)
-            const th = h + margin * 2 + Math.abs(s.y)
-            if (tw > 0 && th > 0) {
-              const tmp = create(tw, th)
-              const lx = margin + Math.max(0, s.x)
-              const ly = margin + Math.max(0, s.y)
-              if (radius > 0) {
-                paint.roundedRect(tmp, lx, ly, w, h, sr, sg, sb, sa, radius)
-              } else {
-                paint.fillRect(tmp, lx, ly, w, h, sr, sg, sb, sa)
-              }
-              paint.blur(tmp, 0, 0, tw, th, blurR, 3)
-              const dx = x - margin + Math.min(0, s.x)
-              const dy = y - margin + Math.min(0, s.y)
-              overScissored(buf, tmp, dx, dy, offsetX, offsetY)
-            }
-          }
-        }
-      }
-
-      // Backdrop filters — blur + brightness/contrast/saturate/grayscale/invert/sepia/hue-rotate
-      const hasBackdrop = matchedEffect && (
-        matchedEffect.backdropBlur || matchedEffect.backdropBrightness !== undefined ||
-        matchedEffect.backdropContrast !== undefined || matchedEffect.backdropSaturate !== undefined ||
-        matchedEffect.backdropGrayscale !== undefined || matchedEffect.backdropInvert !== undefined ||
-        matchedEffect.backdropSepia !== undefined || matchedEffect.backdropHueRotate !== undefined
-      )
-      if (hasBackdrop && matchedEffect) {
-        const blurR = matchedEffect.backdropBlur ? Math.ceil(matchedEffect.backdropBlur) : 0
-        const effRadius = matchedEffect.cornerRadius
-
-        // Clip backdrop region to scissor — prevents blur/filters from affecting
-        // pixels outside the scroll container viewport.
-        let bx = x, by = y, bw = w, bh = h
-        const bs = activeScissor()
-        if (bs) {
-          const bl = Math.max(bx, bs.x - offsetX)
-          const bt = Math.max(by, bs.y - offsetY)
-          const br = Math.min(bx + bw, bs.x + bs.w - offsetX)
-          const bb = Math.min(by + bh, bs.y + bs.h - offsetY)
-          if (bl >= br || bt >= bb) break // fully clipped
-          bx = bl; by = bt; bw = br - bl; bh = bb - bt
-        }
-
-        // Save corner pixels BEFORE blur so we can restore them after.
-        // The blur operates on a rectangle but the element may be rounded —
-        // pixels outside the rounded rect must remain untouched.
-        let saved: Uint8Array | null = null
-        if (effRadius > 0) {
-          saved = sub(buf, bx, by, bw, bh).data
-        }
-
-        // Blur directly in the main buffer at the clipped region.
-        if (blurR > 0) paint.blur(buf, bx, by, bw, bh, blurR, 3)
-
-        // Apply backdrop filters in CSS spec order
-        if (matchedEffect.backdropBrightness !== undefined) paint.filterBrightness(buf, bx, by, bw, bh, matchedEffect.backdropBrightness)
-        if (matchedEffect.backdropContrast !== undefined) paint.filterContrast(buf, bx, by, bw, bh, matchedEffect.backdropContrast)
-        if (matchedEffect.backdropSaturate !== undefined) paint.filterSaturate(buf, bx, by, bw, bh, matchedEffect.backdropSaturate)
-        if (matchedEffect.backdropGrayscale !== undefined) paint.filterGrayscale(buf, bx, by, bw, bh, matchedEffect.backdropGrayscale)
-        if (matchedEffect.backdropInvert !== undefined) paint.filterInvert(buf, bx, by, bw, bh, matchedEffect.backdropInvert)
-        if (matchedEffect.backdropSepia !== undefined) paint.filterSepia(buf, bx, by, bw, bh, matchedEffect.backdropSepia)
-        if (matchedEffect.backdropHueRotate !== undefined) paint.filterHueRotate(buf, bx, by, bw, bh, matchedEffect.backdropHueRotate)
-
-        // Restore pixels outside the rounded rect (corners)
-        // Use the clipped region (bx, by, bw, bh) since that's what we saved/blurred.
-        // The mask is generated for the FULL element (w, h) but we only iterate the clipped portion,
-        // offsetting into the mask by (bx-x, by-y) to get the correct mask position.
-        if (effRadius > 0 && saved) {
-          const mask = create(w, h)
-          paint.roundedRect(mask, 0, 0, w, h, 255, 255, 255, 255, effRadius)
-          const md = mask.data
-          const d = buf.data
-          const maskOffX = bx - x
-          const maskOffY = by - y
-          for (let ly = 0; ly < bh; ly++) {
-            const bufRow = (by + ly) * buf.stride
-            const savRow = ly * bw * 4
-            const mRow = (maskOffY + ly) * mask.stride
-            for (let lx = 0; lx < bw; lx++) {
-              const mi = mRow + (maskOffX + lx) * 4 + 3
-              if (md[mi] === 0) {
-                // Outside rounded rect — restore original pixel
-                const bo = bufRow + (bx + lx) * 4
-                const si = savRow + lx * 4
-                d[bo] = saved[si]; d[bo+1] = saved[si+1]; d[bo+2] = saved[si+2]; d[bo+3] = saved[si+3]
-              } else if (md[mi] < 255) {
-                // Anti-aliased edge — blend between original and blurred
-                const bo = bufRow + (bx + lx) * 4
-                const si = savRow + lx * 4
-                const ma = md[mi] / 255
-                const ia = 1 - ma
-                d[bo]   = Math.round(d[bo]   * ma + saved[si]   * ia)
-                d[bo+1] = Math.round(d[bo+1] * ma + saved[si+1] * ia)
-                d[bo+2] = Math.round(d[bo+2] * ma + saved[si+2] * ia)
-                d[bo+3] = Math.round(d[bo+3] * ma + saved[si+3] * ia)
-              }
-            }
-          }
-        }
-
-        // Now paint backgroundColor / gradient on top of the blurred region
-        if (matchedEffect.gradient) {
-          const grad = matchedEffect.gradient
-          const tmp = create(w, h)
-          if (grad.type === "linear") {
-            paint.linearGradient(tmp, 0, 0, w, h,
-              (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
-              (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff,
-              grad.angle)
-          } else {
-            const cx = Math.round(w / 2)
-            const cy = Math.round(h / 2)
-            const gradRadius = Math.round(Math.max(w, h) / 2)
-            paint.radialGradient(tmp, cx, cy, gradRadius,
-              (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
-              (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff)
-          }
-          if (effRadius > 0) {
-            // Mask gradient to rounded rect
-            const mask = create(w, h)
-            paint.roundedRect(mask, 0, 0, w, h, 255, 255, 255, 255, effRadius)
-            const gd = tmp.data
-            const md = mask.data
-            for (let i = 3; i < w * h * 4; i += 4) {
-              if (md[i] === 0) { gd[i-3] = 0; gd[i-2] = 0; gd[i-1] = 0; gd[i] = 0 }
-              else if (md[i] < 255) { gd[i] = Math.round((gd[i] * md[i]) / 255) }
-            }
-          }
-          over(buf, tmp, x, y)
-        } else if (a > 1) {
-          // Paint solid backgroundColor on top of blur (skip if just placeholder)
-          if (effRadius > 0) {
-            paint.roundedRect(buf, x, y, w, h, r, g, b, a, effRadius)
-          } else {
-            paint.fillRect(buf, x, y, w, h, r, g, b, a)
-          }
-        }
-        // Skip the separate fill below — already handled
-        break
-      }
-
-      // Paint the actual rect ON TOP of shadow/glow (no backdrop path)
-      // If opacity < 1 OR transform is set, paint into temp buffer.
-      // Transform uses affineBlit; opacity uses withOpacity; both can combine.
-      //
-      // Transform: per-node affineBlit for LEAF transforms only.
-      // Subtree transforms (_subtreeTransform=true) are handled by the post-pass —
-      // they paint flat here and get blitted as a whole subtree afterwards.
-      const elemOpacity = matchedEffect?.opacity
-      const useOpacity = elemOpacity !== undefined && elemOpacity < 1
-      const hasXform = matchedEffect?.transform !== undefined
-        && (matchedEffect as any)._transformConfig
-        && !matchedEffect._subtreeTransform  // skip: post-pass handles subtree
-      const useTemp = useOpacity || hasXform
-      const target = useTemp ? create(w, h) : buf
-      const tx = useTemp ? 0 : x
-      const ty = useTemp ? 0 : y
-
-      if (matchedEffect?.gradient) {
-        // Gradient fill: paint gradient, then mask to rounded rect shape
-        const grad = matchedEffect.gradient
-        if (radius > 0) {
-          // For rounded rects: paint gradient into temp buffer, then mask with SDF
-          const tmp = create(w, h)
-          if (grad.type === "linear") {
-            paint.linearGradient(tmp, 0, 0, w, h,
-              (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
-              (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff,
-              grad.angle)
-          } else {
-            const cx = Math.round(w / 2)
-            const cy = Math.round(h / 2)
-            const gradRadius = Math.round(Math.max(w, h) / 2)
-            paint.radialGradient(tmp, cx, cy, gradRadius,
-              (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
-              (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff)
-          }
-          // Mask: create a rounded rect alpha mask and multiply
-          const mask = create(w, h)
-          paint.roundedRect(mask, 0, 0, w, h, 255, 255, 255, 255, radius)
-          // Apply mask: zero out gradient pixels where mask alpha is 0
-          const gd = tmp.data
-          const md = mask.data
-          for (let i = 3; i < w * h * 4; i += 4) {
-            if (md[i] === 0) { gd[i - 3] = 0; gd[i - 2] = 0; gd[i - 1] = 0; gd[i] = 0 }
-            else if (md[i] < 255) {
-              // Anti-aliased edge — scale alpha
-              gd[i] = Math.round((gd[i] * md[i]) / 255)
-            }
-          }
-          over(target, tmp, tx, ty)
-        } else {
-          // No radius: paint gradient directly
-          if (grad.type === "linear") {
-            paint.linearGradient(target, tx, ty, w, h,
-              (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
-              (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff,
-              grad.angle)
-          } else {
-            const cx = tx + Math.round(w / 2)
-            const cy = ty + Math.round(h / 2)
-            const gradRadius = Math.round(Math.max(w, h) / 2)
-            paint.radialGradient(target, cx, cy, gradRadius,
-              (grad.from >>> 24) & 0xff, (grad.from >>> 16) & 0xff, (grad.from >>> 8) & 0xff, grad.from & 0xff,
-              (grad.to >>> 24) & 0xff, (grad.to >>> 16) & 0xff, (grad.to >>> 8) & 0xff, grad.to & 0xff)
-          }
-        }
-      } else if (matchedEffect?.cornerRadii) {
-        const cr = matchedEffect.cornerRadii
-        paintWithScissorClip(target, x + offsetX, y + offsetY, tx, ty, w, h,
-          () => paint.roundedRectCorners(target, tx, ty, w, h, r, g, b, a, cr.tl, cr.tr, cr.br, cr.bl),
-          (tmp) => paint.roundedRectCorners(tmp, 0, 0, w, h, r, g, b, a, cr.tl, cr.tr, cr.br, cr.bl))
-      } else if (radius > 0) {
-        paintWithScissorClip(target, x + offsetX, y + offsetY, tx, ty, w, h,
-          () => paint.roundedRect(target, tx, ty, w, h, r, g, b, a, radius),
-          (tmp) => paint.roundedRect(tmp, 0, 0, w, h, r, g, b, a, radius))
-      } else {
-        // Clip to scissor for flat rects — prevents painting outside scroll containers
-        const clipped = clipToScissor(x + offsetX, y + offsetY, w, h, offsetX, offsetY)
-        if (clipped) {
-          paint.fillRect(target, useOpacity ? clipped.x - x : clipped.x,
-            useOpacity ? clipped.y - y : clipped.y, clipped.w, clipped.h, r, g, b, a)
-        }
-      }
-
-      // Composite temp buffer → destination (opacity and/or transform)
-      if (useTemp) {
-        if (hasXform) {
-          // Compute transform matrix from the node's local config
-          const cfg = (matchedEffect as any)._transformConfig as NonNullable<import("./node").TGEProps["transform"]>
-          const originProp = (matchedEffect as any)._transformOrigin
-          let ox = w / 2, oy = h / 2
-          if (originProp === "top-left") { ox = 0; oy = 0 }
-          else if (originProp === "top-right") { ox = w; oy = 0 }
-          else if (originProp === "bottom-left") { ox = 0; oy = h }
-          else if (originProp === "bottom-right") { ox = w; oy = h }
-          else if (originProp && typeof originProp === "object") { ox = originProp.x * w; oy = originProp.y * h }
-          const matrix = fromConfig(cfg, ox, oy)
-
-          if (!matrix || isIdentity(matrix)) {
-            // No actual transform — just composite normally
-            if (useOpacity) {
-              withOpacity(buf, target, x, y, elemOpacity!)
-            } else {
-              over(buf, target, x, y)
-            }
-          } else {
-            // Compute output bounds
-            const bounds = transformBounds(matrix, w, h)
-
-            // Apply opacity to temp buffer first if needed
-            let src = target
-            if (useOpacity) {
-              // Multiply alpha of every pixel by opacity
-              const data = src.data
-              const mul = Math.round((elemOpacity!) * 255)
-              for (let i = 3; i < data.length; i += 4) {
-                data[i] = (data[i] * mul) >> 8
-              }
-            }
-
-            // Compute inverse matrix for Zig blit (dst→src mapping)
-            const inv = invert(matrix)
-            if (inv) {
-              paint.affineBlit(
-                buf, src, inv,
-                x + bounds.x, y + bounds.y,
-                bounds.width, bounds.height
-              )
-            }
-          }
-        } else if (useOpacity) {
-          withOpacity(buf, target, x, y, elemOpacity!)
-        } else {
-          over(buf, target, x, y)
-        }
-      }
+      let matchedEffect: EffectConfig | null = renderOp.kind === "effect" ? renderOp.effect : rectangleInputs.effect
+      paintRectangleCore(buf, cmd, offsetX, offsetY, rectangleInputs, matchedEffect)
       break
     }
 
-    case CMD.BORDER: {
-      const radius = Math.round(cmd.cornerRadius)
-      const bw = Math.round(cmd.extra1) || 1
-      // Check if this border matches a per-corner radius effect
-      const cmdBorderColor = ((r << 24) | (g << 16) | (b << 8) | a) >>> 0
-      const borderEffectIdx = effectsQueue.findIndex(
-        (e) => e.cornerRadii && e.color !== undefined
-      )
-      if (borderEffectIdx >= 0 && effectsQueue[borderEffectIdx].cornerRadii) {
-        const cr = effectsQueue[borderEffectIdx].cornerRadii!
-        paintWithScissorClip(buf, x + offsetX, y + offsetY, x, y, w, h,
-          () => paint.strokeRectCorners(buf, x, y, w, h, r, g, b, a, cr.tl, cr.tr, cr.br, cr.bl, bw),
-          (tmp) => paint.strokeRectCorners(tmp, 0, 0, w, h, r, g, b, a, cr.tl, cr.tr, cr.br, cr.bl, bw))
-      } else {
-        paintWithScissorClip(buf, x + offsetX, y + offsetY, x, y, w, h,
-          () => paint.strokeRect(buf, x, y, w, h, r, g, b, a, radius, bw),
-          (tmp) => paint.strokeRect(tmp, 0, 0, w, h, r, g, b, a, radius, bw))
-      }
+    case "border": {
+      paintBorderRenderOp(buf, cmd, offsetX, offsetY, renderOp.inputs)
       break
     }
 
-    case CMD.TEXT: {
-      if (!cmd.text) break
-      const meta = textMetaMap.get(cmd.text)
-      const fontId = meta?.fontId ?? 0
-      const lineHeight = meta?.lineHeight ?? 17
-
-      if (selectableTextMode) {
-        // Collect for ANSI rendering — use ABSOLUTE coordinates (add offset back)
-        pendingAnsiTexts.push({
-          text: cmd.text,
-          x: x + offsetX,
-          y: y + offsetY,
-          r, g, b, a,
-          lineHeight,
-          maxWidth: Math.max(w, 1),
-          fontId,
-        })
-        break
-      }
-
-      // Pixel paint mode — render bitmap text
-      // If scissor is active and text is partially outside, render into a temp
-      // buffer and copy only the visible portion. This prevents text from
-      // bleeding outside scroll containers.
-      const scissor = activeScissor()
-      const absX = x + offsetX
-      const absY = y + offsetY
-      const textH = h > 0 ? h : lineHeight
-      const partiallyClipped = scissor && (
-        absY < scissor.y || absY + textH > scissor.y + scissor.h ||
-        absX < scissor.x || absX + w > scissor.x + scissor.w
-      )
-
-      if (partiallyClipped && scissor) {
-        // Render text into temp buffer, then copy only the scissor-visible portion
-        const tw = Math.max(w, 1)
-        const th = textH
-        if (tw > 0 && th > 0) {
-          const tmp = create(tw, th)
-          const maxTextWidth = Math.max(w, 1)
-          const result = layoutText(cmd.text, fontId, maxTextWidth, lineHeight)
-          if (result.lines.length <= 1) {
-            paint.drawText(tmp, 0, 0, cmd.text, r, g, b, a)
-          } else {
-            for (let li = 0; li < result.lines.length; li++) {
-              const line = result.lines[li]
-              paint.drawText(tmp, 0, li * lineHeight, line.text, r, g, b, a)
-            }
-          }
-          // Copy only the visible portion
-          const srcLeft = Math.max(0, scissor.x - absX)
-          const srcTop = Math.max(0, scissor.y - absY)
-          const dstLeft = Math.max(absX, scissor.x) - offsetX
-          const dstTop = Math.max(absY, scissor.y) - offsetY
-          const copyW = Math.min(absX + tw, scissor.x + scissor.w) - Math.max(absX, scissor.x)
-          const copyH = Math.min(absY + th, scissor.y + scissor.h) - Math.max(absY, scissor.y)
-          if (copyW > 0 && copyH > 0) {
-            const sd = tmp.data
-            const dd = buf.data
-            for (let row = 0; row < copyH; row++) {
-              const sy = srcTop + row
-              const dy = dstTop + row
-              if (dy < 0 || dy >= buf.height) continue
-              for (let col = 0; col < copyW; col++) {
-                const sx = srcLeft + col
-                const dx = dstLeft + col
-                if (dx < 0 || dx >= buf.width) continue
-                const si = (sy * tmp.stride) + sx * 4
-                const sa = sd[si + 3]
-                if (sa === 0) continue
-                const di = (dy * buf.stride) + dx * 4
-                if (sa === 255) {
-                  dd[di] = sd[si]; dd[di+1] = sd[si+1]; dd[di+2] = sd[si+2]; dd[di+3] = 255
-                } else {
-                  const invSa = 255 - sa
-                  dd[di]   = Math.round((sd[si]   * sa + dd[di]   * invSa) / 255)
-                  dd[di+1] = Math.round((sd[si+1] * sa + dd[di+1] * invSa) / 255)
-                  dd[di+2] = Math.round((sd[si+2] * sa + dd[di+2] * invSa) / 255)
-                  dd[di+3] = Math.min(255, sa + Math.round(dd[di+3] * invSa / 255))
-                }
-              }
-            }
-          }
-        }
-      } else {
-        // No scissor or fully inside — paint directly
-        const maxTextWidth = Math.max(w, 1)
-        const result = layoutText(cmd.text, fontId, maxTextWidth, lineHeight)
-        if (result.lines.length <= 1) {
-          paint.drawText(buf, x, y, cmd.text, r, g, b, a)
-        } else {
-          for (let li = 0; li < result.lines.length; li++) {
-            const line = result.lines[li]
-            const lineY = y + li * lineHeight
-            paint.drawText(buf, x, lineY, line.text, r, g, b, a)
-          }
-        }
-      }
+    case "text": {
+      paintTextRenderOp(buf, cmd, offsetX, offsetY, renderOp.inputs)
       break
     }
+
+    case "raw-command":
+    default:
+      break
   }
 }
