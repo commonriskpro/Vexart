@@ -11,6 +11,7 @@ export type ShadowDef = {
 }
 
 export type EffectConfig = {
+  renderObjectId?: number
   color: number
   cornerRadius: number
   shadow?: ShadowDef | ShadowDef[]
@@ -73,6 +74,7 @@ export interface BackdropRenderMetadata {
 }
 
 export type ImagePaintConfig = {
+  renderObjectId?: number
   color: number
   cornerRadius: number
   imageBuffer: { data: Uint8Array; width: number; height: number }
@@ -80,6 +82,7 @@ export type ImagePaintConfig = {
 }
 
 export type CanvasPaintConfig = {
+  renderObjectId?: number
   color: number
   onDraw: (ctx: CanvasContext) => void
   viewport?: { x: number; y: number; zoom: number }
@@ -99,6 +102,7 @@ export type TextMeta = {
 }
 
 export type RectangleRenderInputs = {
+  renderObjectId: number | null
   color: number
   radius: number
   image: ImagePaintConfig | null
@@ -122,12 +126,14 @@ export type TextRenderInputs = {
 
 export type RectangleRenderOp = {
   kind: "rectangle"
+  renderObjectId: number | null
   command: RenderCommand
   inputs: RectangleRenderInputs
 }
 
 export type ImageRenderOp = {
   kind: "image"
+  renderObjectId: number | null
   command: RenderCommand
   rect: RectangleRenderOp
   image: ImagePaintConfig
@@ -135,6 +141,7 @@ export type ImageRenderOp = {
 
 export type CanvasRenderOp = {
   kind: "canvas"
+  renderObjectId: number | null
   command: RenderCommand
   rect: RectangleRenderOp
   canvas: CanvasPaintConfig
@@ -142,6 +149,7 @@ export type CanvasRenderOp = {
 
 export type EffectRenderOp = {
   kind: "effect"
+  renderObjectId: number | null
   command: RenderCommand
   rect: RectangleRenderOp
   effect: EffectConfig
@@ -153,18 +161,21 @@ export type EffectRenderOp = {
 
 export type BorderRenderOp = {
   kind: "border"
+  renderObjectId: number | null
   command: RenderCommand
   inputs: BorderRenderInputs
 }
 
 export type TextRenderOp = {
   kind: "text"
+  renderObjectId: number | null
   command: RenderCommand
   inputs: TextRenderInputs
 }
 
 export type RawCommandRenderOp = {
   kind: "raw-command"
+  renderObjectId: number | null
   command: RenderCommand
 }
 
@@ -201,20 +212,29 @@ export function cloneRenderGraphQueues(queues: RenderGraphQueues): RenderGraphQu
   }
 }
 
-export function getRectangleRenderInputs(cmd: RenderCommand, queues: RenderGraphQueues): RectangleRenderInputs {
+export function getRectangleRenderInputs(cmd: RenderCommand, queues: RenderGraphQueues, renderObjectId: number | null): RectangleRenderInputs {
   const radius = Math.round(cmd.cornerRadius)
   const color = packColor(cmd.color[0], cmd.color[1], cmd.color[2], cmd.color[3])
 
-  const imageIdx = queues.images.findIndex((entry) => entry.color === color && entry.cornerRadius === radius)
-  const image = imageIdx >= 0 ? queues.images.splice(imageIdx, 1)[0] : null
+  const imageIdx = renderObjectId !== null
+    ? queues.images.findIndex((entry) => entry.renderObjectId === renderObjectId)
+    : -1
+  const fallbackImageIdx = imageIdx >= 0 ? imageIdx : queues.images.findIndex((entry) => entry.color === color && entry.cornerRadius === radius)
+  const image = fallbackImageIdx >= 0 ? queues.images.splice(fallbackImageIdx, 1)[0] : null
 
-  const canvasIdx = queues.canvases.findIndex((entry) => entry.color === color)
-  const canvas = canvasIdx >= 0 ? queues.canvases.splice(canvasIdx, 1)[0] : null
+  const canvasIdx = renderObjectId !== null
+    ? queues.canvases.findIndex((entry) => entry.renderObjectId === renderObjectId)
+    : -1
+  const fallbackCanvasIdx = canvasIdx >= 0 ? canvasIdx : queues.canvases.findIndex((entry) => entry.color === color)
+  const canvas = fallbackCanvasIdx >= 0 ? queues.canvases.splice(fallbackCanvasIdx, 1)[0] : null
 
-  const effectIdx = queues.effects.findIndex((entry) => entry.color === color && entry.cornerRadius === radius)
-  const effect = effectIdx >= 0 ? queues.effects.splice(effectIdx, 1)[0] : null
+  const effectIdx = renderObjectId !== null
+    ? queues.effects.findIndex((entry) => entry.renderObjectId === renderObjectId)
+    : -1
+  const fallbackEffectIdx = effectIdx >= 0 ? effectIdx : queues.effects.findIndex((entry) => entry.color === color && entry.cornerRadius === radius)
+  const effect = fallbackEffectIdx >= 0 ? queues.effects.splice(fallbackEffectIdx, 1)[0] : null
 
-  return { color, radius, image, canvas, effect }
+  return { renderObjectId, color, radius, image, canvas, effect }
 }
 
 export function getBorderRenderInputs(cmd: RenderCommand, queues: RenderGraphQueues): BorderRenderInputs {
@@ -419,16 +439,19 @@ function createClipStackEntry(cmd: RenderCommand, depth: number): ClipStackEntry
   }
 }
 
-export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, textMetaMap: Map<string, TextMeta>): RenderGraphOp | null {
+export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, textMetaMap: Map<string, TextMeta>, ownerIds?: { rect: number | null; text: number | null }): RenderGraphOp | null {
   if (cmd.type === CMD.RECTANGLE) {
+    const renderObjectId = ownerIds?.rect ?? null
     const rect: RectangleRenderOp = {
       kind: "rectangle",
+      renderObjectId,
       command: cmd,
-      inputs: getRectangleRenderInputs(cmd, queues),
+      inputs: getRectangleRenderInputs(cmd, queues, renderObjectId),
     }
     if (rect.inputs.image) {
       return {
         kind: "image",
+        renderObjectId,
         command: cmd,
         rect,
         image: rect.inputs.image,
@@ -437,6 +460,7 @@ export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, tex
     if (rect.inputs.canvas) {
       return {
         kind: "canvas",
+        renderObjectId,
         command: cmd,
         rect,
         canvas: rect.inputs.canvas,
@@ -448,6 +472,7 @@ export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, tex
       const effectStateId = getEffectStateId(rect.inputs.effect)
       return {
         kind: "effect",
+        renderObjectId,
         command: cmd,
         rect,
         effect: rect.inputs.effect,
@@ -462,30 +487,44 @@ export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, tex
   if (cmd.type === CMD.BORDER) {
     return {
       kind: "border",
+      renderObjectId: null,
       command: cmd,
       inputs: getBorderRenderInputs(cmd, queues),
     }
   }
   if (cmd.type === CMD.TEXT) {
+    const renderObjectId = ownerIds?.text ?? null
     const inputs = getTextRenderInputs(cmd, textMetaMap)
     if (!inputs) return null
     return {
       kind: "text",
+      renderObjectId,
       command: cmd,
       inputs,
     }
   }
   return {
     kind: "raw-command",
+    renderObjectId: null,
     command: cmd,
   }
 }
 
-export function buildRenderGraphFrame(commands: RenderCommand[], queues: RenderGraphQueues, textMetaMap: Map<string, TextMeta>): RenderGraphFrame {
+export function buildRenderGraphFrame(
+  commands: RenderCommand[],
+  queues: RenderGraphQueues,
+  textMetaMap: Map<string, TextMeta>,
+  owners?: { rectNodeIds: number[]; textNodeIds: number[] },
+): RenderGraphFrame {
   const ops: RenderGraphOp[] = []
   const clipStack: ClipStackEntry[] = []
+  let rectIdx = 0
+  let textIdx = 0
   for (const cmd of commands) {
-    const op = buildRenderOp(cmd, queues, textMetaMap)
+    const op = buildRenderOp(cmd, queues, textMetaMap, {
+      rect: cmd.type === CMD.RECTANGLE ? owners?.rectNodeIds[rectIdx++] ?? null : null,
+      text: cmd.type === CMD.TEXT ? owners?.textNodeIds[textIdx++] ?? null : null,
+    })
     if (op?.kind === "effect") {
       const backdrop = createBackdropMetadata(op.effect, cmd, clipStack)
       ops.push({

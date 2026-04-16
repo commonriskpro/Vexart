@@ -7,7 +7,7 @@ import {
   destroyWgpuCanvasTarget,
   readbackWgpuCanvasTargetRGBA,
   renderWgpuCanvasTargetImage,
-} from "../packages/renderer/src/wgpu-canvas-bridge"
+} from "@tge/gpu"
 
 const pixels = new Uint8Array([
   255, 0, 0, 255,

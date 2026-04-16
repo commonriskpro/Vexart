@@ -35,7 +35,7 @@
  */
 
 import type { JSX } from "solid-js"
-import { useFocus, useDrag, type NodeMouseEvent } from "@tge/renderer"
+import { useFocus, useDrag, type NodeMouseEvent } from "@tge/renderer-solid"
 
 // ── Types ──
 

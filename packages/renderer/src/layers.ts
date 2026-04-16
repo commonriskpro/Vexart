@@ -24,8 +24,8 @@
  *   5. Clean layers: skip entirely (terminal still has the old image)
  */
 
-import type { PixelBuffer } from "@tge/pixel"
-import { create, clear } from "@tge/pixel"
+import type { PixelBuffer } from "@tge/compat-software"
+import { create, clear } from "@tge/compat-software"
 import type { DamageRect } from "./damage"
 import { unionRect } from "./damage"
 

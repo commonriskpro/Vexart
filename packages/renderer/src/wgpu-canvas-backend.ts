@@ -1,4 +1,4 @@
-import { create, paint, type PixelBuffer } from "@tge/pixel"
+import { create, paint, type PixelBuffer } from "@tge/compat-software"
 import { appendFileSync } from "node:fs"
 import type { CanvasPainterBackend } from "./canvas-backend"
 import { type CanvasContext, type CanvasDrawCommand, paintCanvasCommandsCPU } from "./canvas"

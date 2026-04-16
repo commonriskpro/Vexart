@@ -11,9 +11,9 @@
  * Requires: bun zig:build (to produce libtge.dylib)
  */
 
-import { createTerminal } from "@tge/terminal"
-import { create, paint, clear } from "@tge/pixel"
-import { createComposer } from "@tge/output"
+import { createTerminal } from "@tge/platform-terminal"
+import { create, paint, clear } from "@tge/compat-software"
+import { createComposer } from "@tge/output-compat"
 import { createParser } from "@tge/input"
 
 async function main() {

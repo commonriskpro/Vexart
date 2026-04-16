@@ -27,7 +27,7 @@ import {
   type RouteProps,
   type ScreenProps,
   type NavigationStackHandle,
-} from "@tge/renderer"
+} from "@tge/renderer-solid"
 
 // ═══════════════════════════════════════════════════════════════════
 // ── Flat Router Components ──

@@ -1,7 +1,7 @@
 import { performance } from "node:perf_hooks"
 import { writeFileSync } from "node:fs"
-import { createTerminal } from "../packages/terminal/src"
-import { createLayerComposer } from "../packages/output/src"
+import { createTerminal } from "@tge/platform-terminal"
+import { createLayerComposer } from "@tge/output-kitty"
 import {
   createWgpuCanvasContext,
   createWgpuCanvasTarget,
@@ -9,7 +9,7 @@ import {
   destroyWgpuCanvasTarget,
   readbackWgpuCanvasTargetRGBA,
   renderWgpuCanvasTargetClear,
-} from "../packages/renderer/src/wgpu-canvas-bridge"
+} from "@tge/gpu"
 
 const WIDTH = Number(process.env.TGE_WGPU_BENCH_WIDTH ?? 320)
 const HEIGHT = Number(process.env.TGE_WGPU_BENCH_HEIGHT ?? 180)

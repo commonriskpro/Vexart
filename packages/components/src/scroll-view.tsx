@@ -28,7 +28,7 @@
  */
 
 import type { JSX } from "solid-js"
-import { createScrollHandle, type ScrollHandle } from "@tge/renderer/scroll"
+import { createScrollHandle, type ScrollHandle } from "@tge/renderer-solid"
 
 let scrollViewCounter = 0
 

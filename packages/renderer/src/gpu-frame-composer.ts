@@ -1,5 +1,5 @@
-import type { PixelBuffer } from "@tge/pixel"
-import type { LayerComposer } from "@tge/output"
+import type { PixelBuffer } from "@tge/compat-software"
+import type { LayerComposer } from "@tge/output-kitty"
 
 const FINAL_FRAME_IMAGE_ID = 3
 

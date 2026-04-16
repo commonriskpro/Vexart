@@ -21,7 +21,7 @@
  *   const cleanup = mount(() => <App />, terminal)
  */
 
-import { createTerminal, type Terminal } from "@tge/terminal"
+import { createTerminal, type Terminal } from "@tge/platform-terminal"
 import { createParser, type KeyEvent, type MouseEvent as TgeMouseEvent, type InputEvent } from "@tge/input"
 import { createRenderLoop } from "./loop"
 import { render as solidRender } from "./reconciler"
@@ -241,7 +241,7 @@ export type {
 
 // Re-export terminal creation + types for consumers
 export { createTerminal }
-export type { Terminal, Capabilities, TerminalSize } from "@tge/terminal"
+export type { Terminal, Capabilities, TerminalSize } from "@tge/platform-terminal"
 
 // Re-export input types and utilities for consumers
 export type { KeyEvent, InputEvent }
@@ -475,7 +475,8 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
         || event.action === "scroll"
         || (event.action === "move" && (isButtonDown || loop.needsPointerRepaint()))
       if (shouldRepaint) {
-        markDirty()
+        const shouldGlobalDirty = event.action !== "move" || !isButtonDown
+        if (shouldGlobalDirty) markDirty()
         loop.requestInteractionFrame(event.action === "scroll" ? "scroll" : "pointer")
       }
       return

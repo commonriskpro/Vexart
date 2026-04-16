@@ -13,11 +13,11 @@
  * Requires: bun zig:build && bun run clay:build
  */
 
-import { createTerminal } from "@tge/terminal"
-import { create, clear, paint } from "@tge/pixel"
-import { createComposer } from "@tge/output"
+import { createTerminal } from "@tge/platform-terminal"
+import { create, clear, paint } from "@tge/compat-software"
+import { createComposer } from "@tge/output-compat"
 import { createParser } from "@tge/input"
-import { clay, CMD, SIZING, DIRECTION, ALIGN_X, ALIGN_Y } from "@tge/renderer/clay"
+import { clay, CMD, SIZING, DIRECTION, ALIGN_X, ALIGN_Y } from "@tge/layout-clay"
 
 async function main() {
   const term = await createTerminal()

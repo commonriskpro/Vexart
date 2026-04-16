@@ -18,10 +18,11 @@
  * with recursive layer detection at ANY depth in the tree.
  */
 
-import type { Terminal } from "@tge/terminal"
-import type { PixelBuffer } from "@tge/pixel"
-import { create, clear, paint, over, sub, withOpacity } from "@tge/pixel"
-import { createComposer, createLayerComposer } from "@tge/output"
+import type { Terminal } from "@tge/platform-terminal"
+import type { PixelBuffer } from "@tge/compat-software"
+import { create, clear, paint, over, sub, withOpacity } from "@tge/compat-software"
+import { createLayerComposer } from "@tge/output-kitty"
+import { createComposer } from "@tge/output-compat"
 import { clay, CMD, ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, SIZING, DIRECTION } from "./clay"
 import type { RenderCommand } from "./clay"
 import {
@@ -84,13 +85,46 @@ import {
   type RendererBackendFrameContext,
   type RendererBackendLayerContext,
 } from "./renderer-backend"
+import {
+  boostWindowFor as schedulerBoostWindowFor,
+  hasRecentInteraction as schedulerHasRecentInteraction,
+  type InteractionKind,
+} from "./frame-scheduler"
+import {
+  rectArea as damageRectArea,
+  sumOverlapArea as damageSumOverlapArea,
+  buffersEqual as damageBuffersEqual,
+  findDirtyRegion as damageFindDirtyRegion,
+  extractRegion as damageExtractRegion,
+} from "./damage-tracker"
+import {
+  canUsePartialUpdates as presenterCanUsePartialUpdates,
+  canUseRegionalRepaint as presenterCanUseRegionalRepaint,
+  commandIntersectsRect as presenterCommandIntersectsRect,
+  clearRectRegion as presenterClearRectRegion,
+} from "./frame-presenter"
+import {
+  buildNodeMouseEvent,
+  isFullyOutsideScrollViewport,
+} from "./hit-test"
+import {
+  writeSequentialCommandLayout,
+  writeLayoutFromElementIds,
+} from "./layout-writeback"
+import {
+  findLayerBoundaries as plannerFindLayerBoundaries,
+  resolveNodeByPath as plannerResolveNodeByPath,
+  collectAllTexts as plannerCollectAllTexts,
+} from "./layer-planner"
 
 const LOG = "/tmp/tge-layers.log"
 const RENDER_DEBUG_LOG = "/tmp/tge-render-debug.log"
 const CADENCE_LOG = "/tmp/tge-cadence.log"
 const RESIZE_DEBUG_LOG = "/tmp/tge-resize.log"
+const DRAG_REPRO_LOG = "/tmp/tge-drag-repro.log"
 const DEBUG_CADENCE = process.env.TGE_DEBUG_CADENCE === "1"
 const DEBUG_RESIZE = process.env.TGE_DEBUG_RESIZE === "1"
+const DEBUG_DRAG_REPRO = process.env.TGE_DEBUG_DRAG_REPRO === "1"
 const PARTIAL_UPDATE = {
   DIRECT_MAX_COVERAGE: 0.35,
   LOCAL_MAX_COVERAGE: 0.75,
@@ -113,6 +147,21 @@ function cadenceDebug(msg: string) {
 function resizeDebug(msg: string) {
   if (!DEBUG_RESIZE) return
   appendFileSync(RESIZE_DEBUG_LOG, `[renderer:loop] ${msg}\n`)
+}
+
+function dragReproDebug(msg: string) {
+  if (!DEBUG_DRAG_REPRO) return
+  appendFileSync(DRAG_REPRO_LOG, msg + "\n")
+}
+
+function findNodeByDebugName(node: TGENode, debugName: string): TGENode | null {
+  if (node.kind !== "text" && node.props.debugName === debugName) return node
+  for (const child of node.children) {
+    if (child.kind === "text") continue
+    const found = findNodeByDebugName(child, debugName)
+    if (found) return found
+  }
+  return null
 }
 
 type FrameProfile = {
@@ -154,49 +203,19 @@ function hasTransformInSubtree(node: TGENode): boolean {
 }
 
 function canUsePartialUpdates(boundaryNode: TGENode | null): boolean {
-  if (!boundaryNode || boundaryNode.kind === "text") return true
-  if (boundaryNode.props.floating) return false
-  if (boundaryNode.props.viewportClip === false) return false
-  if (hasTransformInSubtree(boundaryNode)) return false
-  return true
+  return presenterCanUsePartialUpdates(boundaryNode)
 }
 
 function canUseRegionalRepaint(boundaryNode: TGENode | null, hasScissor: boolean, isBg: boolean): boolean {
-  if (hasScissor) return false
-  if (isBg) return true
-  if (!boundaryNode || boundaryNode.kind === "text") return true
-  if (boundaryNode.props.viewportClip === false) return false
-  if (hasTransformInSubtree(boundaryNode)) return false
-  return true
+  return presenterCanUseRegionalRepaint(boundaryNode, hasScissor, isBg)
 }
 
 function commandIntersectsRect(cmd: RenderCommand, rect: { x: number; y: number; width: number; height: number }): boolean {
-  const left = cmd.x
-  const top = cmd.y
-  const right = cmd.x + cmd.width
-  const bottom = cmd.y + cmd.height
-  return left < rect.x + rect.width && right > rect.x && top < rect.y + rect.height && bottom > rect.y
+  return presenterCommandIntersectsRect(cmd, rect)
 }
 
 function clearRectRegion(buf: PixelBuffer, x: number, y: number, width: number, height: number, color = 0x00000000) {
-  const a = color & 0xff
-  const b = (color >>> 8) & 0xff
-  const g = (color >>> 16) & 0xff
-  const r = (color >>> 24) & 0xff
-  const x0 = Math.max(0, x)
-  const y0 = Math.max(0, y)
-  const x1 = Math.min(buf.width, x + width)
-  const y1 = Math.min(buf.height, y + height)
-  for (let yy = y0; yy < y1; yy++) {
-    const row = yy * buf.stride
-    for (let xx = x0; xx < x1; xx++) {
-      const i = row + xx * 4
-      buf.data[i] = r
-      buf.data[i + 1] = g
-      buf.data[i + 2] = b
-      buf.data[i + 3] = a
-    }
-  }
+  presenterClearRectRegion(buf, x, y, width, height, color)
 }
 
 // ── Text metadata ──
@@ -340,20 +359,11 @@ type PreparedLayerSlot = {
 }
 
 function rectArea(rect: DamageRect | null | undefined) {
-  if (!rect) return 0
-  if (rect.width <= 0 || rect.height <= 0) return 0
-  return rect.width * rect.height
+  return damageRectArea(rect)
 }
 
 function sumOverlapArea(rects: DamageRect[]) {
-  let overlap = 0
-  for (let i = 0; i < rects.length; i++) {
-    for (let j = i + 1; j < rects.length; j++) {
-      const intersection = intersectRect(rects[i], rects[j])
-      overlap += rectArea(intersection)
-    }
-  }
-  return overlap
+  return damageSumOverlapArea(rects)
 }
 
 export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): RenderLoop {
@@ -416,23 +426,24 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   let lastPresentedInteractionLatencyMs = 0
   let lastPresentedInteractionType: string | null = null
   let isRenderingFrame = false
-  let pendingInteractionFrameKind: "pointer" | "scroll" | "key" | null = null
+  let pendingInteractionFrameKind: InteractionKind | null = null
 
-  function boostWindowFor(kind: "pointer" | "scroll" | "key") {
-    if (kind === "pointer") return pointerInteractionBoostMs
-    if (kind === "scroll") return scrollInteractionBoostMs
-    return keyInteractionBoostMs
+  function boostWindowFor(kind: InteractionKind) {
+    return schedulerBoostWindowFor(kind, {
+      key: keyInteractionBoostMs,
+      scroll: scrollInteractionBoostMs,
+      pointer: pointerInteractionBoostMs,
+    })
   }
 
-  function markInteractionActive(kind: "pointer" | "scroll" | "key" = "pointer") {
+  function markInteractionActive(kind: InteractionKind = "pointer") {
     const now = performance.now()
     lastInteractionAt = now
     interactionBoostUntilMs = Math.max(interactionBoostUntilMs, now + boostWindowFor(kind))
   }
 
   function hasRecentInteraction() {
-    if (capturedNodeId !== 0 || pointerDown) return true
-    return performance.now() < interactionBoostUntilMs
+    return schedulerHasRecentInteraction(performance.now(), interactionBoostUntilMs, capturedNodeId, pointerDown)
   }
 
   function scheduleNextFrame() {
@@ -459,7 +470,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     }, delay)
   }
 
-  function nudgeInteraction(kind: "pointer" | "scroll" | "key") {
+  function nudgeInteraction(kind: InteractionKind) {
     markInteractionActive(kind)
     if (isSuspended) return
     if (timer === null) return
@@ -479,7 +490,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     }, targetDelay)
   }
 
-  function requestInteractionFrame(kind: "pointer" | "scroll" | "key") {
+  function requestInteractionFrame(kind: InteractionKind) {
     markInteractionActive(kind)
     if (isSuspended) return
     if (!isDirty()) return
@@ -561,7 +572,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     backendOverride?: RendererBackend,
   ) => {
     const backend = backendOverride ?? getRendererBackend() ?? defaultCpuRendererBackend
-    const graph = buildRenderGraphFrame(commands, cloneRenderGraphQueues(renderGraphQueues), textMetaMap)
+    const graph = buildRenderGraphFrame(commands, cloneRenderGraphQueues(renderGraphQueues), textMetaMap, {
+      rectNodeIds: rectNodes.map((node) => node.id),
+      textNodeIds: textNodes.map((node) => node.id),
+    })
     return backend.paint({
       buffer,
       commands,
@@ -699,6 +713,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       // Queue image data for paintCommand
       if (imgBuf) {
         imageQueue.push({
+          renderObjectId: node.id,
           color: placeholderColor,
           cornerRadius: node.props.cornerRadius ?? 0,
           imageBuffer: imgBuf,
@@ -738,6 +753,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       // Queue canvas config for paintCommand
       if (node.props.onDraw) {
         canvasQueue.push({
+          renderObjectId: node.id,
           color: placeholderColor,
           onDraw: node.props.onDraw,
           viewport: node.props.viewport,
@@ -863,7 +879,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
       // Record effects for this RECT — matched during paint
       if (vp.shadow || vp.glow || vp.gradient || hasBackdropFilter || vp.cornerRadii || vp.opacity !== undefined || hasTransform) {
-        const effect: EffectConfig = { color: bgColor, cornerRadius: cr, _node: node }
+        const effect: EffectConfig = { renderObjectId: node.id, color: bgColor, cornerRadius: cr, _node: node }
         if (vp.shadow) {
           effect.shadow = vp.shadow
         }
@@ -967,6 +983,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
    */
   type LayerBoundary = {
     path: string
+    nodeId: number
     z: number
     /** True if this node is a scroll container (scrollX/scrollY). */
     isScroll: boolean
@@ -988,25 +1005,14 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     result: LayerBoundary[],
     insideScroll = false,
   ) {
-    if (node.kind === "text") return
-
-    const isScroll = !!(node.props.scrollX || node.props.scrollY)
-    const isInteractionLayer = shouldPromoteInteractionLayer(node)
-
-    if (node.props.layer === true || isInteractionLayer) {
-      result.push({
-        path,
-        z: nextZ++,
-        isScroll,
-        hasBg: node.props.backgroundColor !== undefined,
-        insideScroll,
-      })
-    }
-
-    const childInsideScroll = insideScroll || isScroll
-    for (let i = 0; i < node.children.length; i++) {
-      findLayerBoundaries(node.children[i], `${path}.${i}`, result, childInsideScroll)
-    }
+    plannerFindLayerBoundaries(
+      node,
+      path,
+      result,
+      () => nextZ++,
+      shouldPromoteInteractionLayer,
+      insideScroll,
+    )
   }
 
   /**
@@ -1121,7 +1127,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       const node = resolveNodeByPath(root, b.path)
       if (!node) continue
 
-      const slot: LayerSlot = { key: `layer:${b.path}`, z: b.z, cmdIndices: [] }
+      const slot: LayerSlot = { key: `layer:${b.nodeId}`, z: b.z, cmdIndices: [] }
       let scissor: ScissorPair | null = null
 
       // If this layer is a scroll container, find its SCISSOR pair
@@ -1363,7 +1369,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
     // Handle no-bounds layers: extract TEXT commands from bgSlot by content match
     for (const lb of noBoundsLayers) {
-      const node = resolveNodeByPath(root, lb.slot.key.replace("layer:", ""))
+      const boundary = slotBoundaryByKey.get(lb.slot.key)
+      if (!boundary) continue
+      const node = resolveNodeByPath(root, boundary.path)
       if (!node) continue
 
       const texts = collectAllTexts(node)
@@ -1389,30 +1397,12 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
   /** Resolve a TGENode by its tree path (e.g. "r.0.1.2"). */
   function resolveNodeByPath(fromRoot: TGENode, path: string): TGENode | null {
-    const parts = path.split(".")
-    let node = fromRoot
-    // Skip "r" (root prefix)
-    for (let i = 1; i < parts.length; i++) {
-      const idx = parseInt(parts[i])
-      if (isNaN(idx) || idx >= node.children.length) return null
-      node = node.children[idx]
-    }
-    return node
+    return plannerResolveNodeByPath(fromRoot, path)
   }
 
   /** Collect all text strings from a node's subtree. */
   function collectAllTexts(node: TGENode): string[] {
-    const result: string[] = []
-    function walk(n: TGENode) {
-      if (n.kind === "text") {
-        const t = n.text || collectText(n)
-        if (t) result.push(t)
-        return
-      }
-      for (const child of n.children) walk(child)
-    }
-    walk(node)
-    return result
+    return plannerCollectAllTexts(node, collectText)
   }
 
   // ── Layout writeback ──
@@ -1426,47 +1416,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
    * first command that spatially contains them (approximation).
    */
   function writeLayoutBack(commands: RenderCommand[]) {
-    let rectIdx = 0
-    let textIdx = 0
-
-    for (const cmd of commands) {
-      if (cmd.type === CMD.RECTANGLE && rectIdx < rectNodes.length) {
-        const node = rectNodes[rectIdx]
-        node.layout.x = cmd.x
-        node.layout.y = cmd.y
-        node.layout.width = cmd.width
-        node.layout.height = cmd.height
-        rectIdx++
-      } else if (cmd.type === CMD.TEXT && textIdx < textNodes.length) {
-        const node = textNodes[textIdx]
-        node.layout.x = cmd.x
-        node.layout.y = cmd.y
-        node.layout.width = cmd.width
-        node.layout.height = cmd.height
-        textIdx++
-      }
-    }
-
-    // Write layout for interactive/layer nodes via Clay element ID lookup.
-    // This is reliable regardless of RECT command ordering/clipping.
-    for (const node of boxNodes) {
-      const hasMouseProps = node.props.onMouseDown || node.props.onMouseUp || node.props.onMouseMove || node.props.onMouseOver || node.props.onMouseOut
-      const isInteractive = node.props.focusable || node.props.hoverStyle || node.props.activeStyle || node.props.focusStyle || node.props.onPress || hasMouseProps
-      const needsLayoutId = isInteractive || node.props.layer === true
-      if (!needsLayoutId) continue
-      // Scroll containers use scrollId as their Clay ID, not tge-node-${id}
-      const isScroll = node.props.scrollX || node.props.scrollY
-      const clayLabel = isScroll && node.props.scrollId
-        ? node.props.scrollId
-        : `tge-node-${node.id}`
-      const data = clay.getElementData(clayLabel)
-      if (data.found) {
-        node.layout.x = data.x
-        node.layout.y = data.y
-        node.layout.width = data.width
-        node.layout.height = data.height
-      }
-    }
+    writeSequentialCommandLayout(commands, rectNodes, textNodes)
+    writeLayoutFromElementIds(boxNodes)
 
     // For box nodes that had backgroundColor, layout was already written via RECT.
     // For box nodes WITHOUT backgroundColor, attempt to inherit from their first
@@ -1587,8 +1538,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
   /** Build a NodeMouseEvent for the given node using current pointer state. */
   function makeMouseEvent(node: TGENode): NodeMouseEvent {
-    const l = node.layout
-    return { x: pointerX, y: pointerY, nodeX: pointerX - l.x, nodeY: pointerY - l.y, width: l.width, height: l.height }
+    return buildNodeMouseEvent(node, pointerX, pointerY)
   }
 
   /** Track nodes with interactive styles for hit-testing + focus bridging.
@@ -1628,32 +1578,20 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       // that overlap other screen areas, causing false hover/click detection.
       // Only applies to children of scroll containers, NOT the scroll container itself.
       if (!(node.props.scrollX || node.props.scrollY)) {
+        const fullyOutsideViewport = isFullyOutsideScrollViewport(node)
         let scrollParent = node.parent
         while (scrollParent) {
           if (scrollParent.props.scrollX || scrollParent.props.scrollY) {
-            const sl = scrollParent.layout
-            if (sl.width > 0 && sl.height > 0) {
-              const fullyOutside = l.y + l.height <= sl.y || l.y >= sl.y + sl.height ||
-                                   l.x + l.width <= sl.x || l.x >= sl.x + sl.width
-              if (fullyOutside) {
-                // Clear hover state if it was previously set
-                if (node._hovered) { node._hovered = false; changed = true }
-                if (node._active) { node._active = false; changed = true }
-              }
+            if (fullyOutsideViewport) {
+              if (node._hovered) { node._hovered = false; changed = true }
+              if (node._active) { node._active = false; changed = true }
             }
             break
           }
           scrollParent = scrollParent.parent
         }
         // If fully outside, skip hit-testing for this node
-        if (scrollParent) {
-          const sl = scrollParent.layout
-          if (sl.width > 0 && sl.height > 0) {
-            const fullyOutside = l.y + l.height <= sl.y || l.y >= sl.y + sl.height ||
-                                 l.x + l.width <= sl.x || l.x >= sl.x + sl.width
-            if (fullyOutside) continue
-          }
-        }
+        if (scrollParent && fullyOutsideViewport) continue
       }
 
       // If this node has pointer capture, it's "hovered" regardless of position.
@@ -1816,8 +1754,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     let target: TGENode | null = node
     while (target) {
       if (target.props.layer === true) {
-        const path = nodePathById.get(target.id)
-        return path ? `layer:${path}` : "bg"
+        return `layer:${target.id}`
       }
       target = target.parent
     }
@@ -2102,8 +2039,17 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         renderDebug(`[clip:after] slot=${slot.key} z=${slot.z} x=${lx} y=${ly} w=${lw} h=${lh}`)
       }
 
-      updateLayerGeometry(layer, lx, ly, lw, lh, { moveOnly: freezeWhileInteracting })
-      if (previousRect && layer.damageRect && !freezeWhileInteracting) {
+      updateLayerGeometry(layer, lx, ly, lw, lh, { moveOnly: false })
+      if (DEBUG_DRAG_REPRO && boundaryNode?.props.debugName === "drag-target") {
+        const prev = previousRect
+          ? `prev=(${previousRect.x},${previousRect.y},${previousRect.width}x${previousRect.height})`
+          : "prev=none"
+        const damage = layer.damageRect
+          ? `damage=(${layer.damageRect.x},${layer.damageRect.y},${layer.damageRect.width}x${layer.damageRect.height})`
+          : "damage=none"
+        dragReproDebug(`[prepare] slot=${slot.key} bounds=(${lx},${ly},${lw}x${lh}) layer=(${layer.x},${layer.y},${layer.width}x${layer.height}) ${prev} dirty=${layer.dirty ? 1 : 0} ${damage} freeze=${freezeWhileInteracting ? 1 : 0}`)
+      }
+      if (previousRect && layer.damageRect) {
         for (const lower of layerOrder) {
           markLayerDamaged(lower, layer.damageRect)
         }
@@ -2208,7 +2154,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
           requiresReadback: layersRequiringReadback.has(slot.key),
         }
 
-        const canReuseStableLayer = !forceLayerRepaint && !useRegionalRepaint && !layer.dirty && !prepared.layer.damageRect
+        const canReuseStableLayer = !freezeWhileInteracting && !forceLayerRepaint && !useRegionalRepaint && !layer.dirty && !prepared.layer.damageRect
         if (freezeWhileInteracting && !canReuseStableLayer) {
           const damage = prepared.layer.damageRect
             ? `${prepared.layer.damageRect.width}x${prepared.layer.damageRect.height}@(${prepared.layer.damageRect.x},${prepared.layer.damageRect.y})`
@@ -2218,7 +2164,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         if (canReuseStableLayer) {
           const geometryChanged = layer.x !== layer.prevX || layer.y !== layer.prevY || layer.z !== layer.prevZ
           const renderZ = selectableText ? -1 : layer.z
-          const needsPlacementRefresh = freezeWhileInteracting && geometryChanged && framePlan?.strategy === "layered-raw"
+          const needsPlacementRefresh = false
           if (freezeWhileInteracting) {
             log(`  [${slot.key}|${prepared.debugName}] DRAG-CHECK geometry=${geometryChanged ? 1 : 0} strategy=${framePlan?.strategy ?? "none"} placement=${needsPlacementRefresh ? 1 : 0} prev=(${layer.prevX},${layer.prevY}) next=(${layer.x},${layer.y}) z=${layer.prevZ}->${layer.z}`)
           }
@@ -2402,7 +2348,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
           }
         }
 
-        const changed = forceLayerRepaint || useRegionalRepaint ? true : (layer.dirty || !buffersEqual(prev, layer.buf.data))
+        const changed = forceLayerRepaint || useRegionalRepaint ? true : (layer.dirty || !damageBuffersEqual(prev, layer.buf.data))
         if (backendDeferredFinalLayer) {
           backend.syncLayerBuffer?.({
             buffer: layer.buf,
@@ -2422,7 +2368,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
           // [Experimental] Partial updates — try to patch only the dirty region
           let usedPatch = false
           if (expPartialUpdates && allowPartialUpdates && !layer.dirty && layer.buf) {
-            const region = findDirtyRegion(prev, layer.buf.data, layer.buf.width, layer.buf.height)
+            const region = damageFindDirtyRegion(prev, layer.buf.data, layer.buf.width, layer.buf.height)
             if (region) {
               const totalPixels = layer.buf.width * layer.buf.height
               const regionPixels = region.w * region.h
@@ -2433,7 +2379,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
                 region.dirtyPixels >= PARTIAL_UPDATE.MIN_REGION_PIXELS
                 && regionPixels < totalPixels * partialUpdateMaxCoverage
               ) {
-                const regionData = extractRegion(layer.buf.data, layer.buf.width, region.x, region.y, region.w, region.h)
+                const regionData = damageExtractRegion(layer.buf.data, layer.buf.width, region.x, region.y, region.w, region.h)
                 const ioStart = DEBUG_CADENCE ? performance.now() : 0
                 usedPatch = layerComposer!.patchLayer(regionData, imageId, region.x, region.y, region.w, region.h)
                 if (DEBUG_CADENCE) ioMs += performance.now() - ioStart
@@ -2447,6 +2393,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
           }
 
           if (!usedPatch) {
+            if (DEBUG_DRAG_REPRO && prepared.debugName === "drag-target") {
+              dragReproDebug(`[present] slot=${slot.key} changed=1 usedPatch=0 z=${renderZ} pos=(${lx},${ly}) size=${lw}x${lh} raw=${backendRawLayer ? 1 : 0}`)
+            }
             if (useRegionalRepaint && clippedDamage) {
               log(`  [${slot.key}] REPAINT-REGION ${clippedDamage.width}x${clippedDamage.height} at (${clippedDamage.x},${clippedDamage.y}) within ${lw}x${lh} z=${renderZ}`)
             } else {
@@ -2462,6 +2411,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
           }
           markLayerClean(layer)
         } else {
+          if (DEBUG_DRAG_REPRO && prepared.debugName === "drag-target") {
+            dragReproDebug(`[present] slot=${slot.key} changed=0 skip pos=(${lx},${ly}) size=${lw}x${lh}`)
+          }
           log(`  [${slot.key}] SKIP (unchanged)`)
           markLayerClean(layer)
         }
@@ -2577,6 +2529,14 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     const commands = clay.endLayout()
 
     writeLayoutBack(commands)
+    if (DEBUG_DRAG_REPRO) {
+      const dragNode = findNodeByDebugName(root, "drag-target")
+      if (dragNode) {
+        const offsetX = dragNode.props.floatOffset?.x ?? 0
+        const offsetY = dragNode.props.floatOffset?.y ?? 0
+        dragReproDebug(`[fallback:layout] offset=(${Math.round(offsetX)},${Math.round(offsetY)}) layout=(${Math.round(dragNode.layout.x)},${Math.round(dragNode.layout.y)},${Math.round(dragNode.layout.width)}x${Math.round(dragNode.layout.height)}) cmds=${commands.length}`)
+      }
+    }
     updateInteractiveStates()
 
     if (profile) {
@@ -2604,6 +2564,12 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       profile.beginSyncMs = performance.now() - beginSyncStart
     }
     const ioStart = DEBUG_CADENCE ? performance.now() : 0
+    if (DEBUG_DRAG_REPRO) {
+      const dragNode = findNodeByDebugName(root, "drag-target")
+      if (dragNode) {
+        dragReproDebug(`[fallback:present] pos=(${Math.round(dragNode.layout.x)},${Math.round(dragNode.layout.y)}) size=(${Math.round(dragNode.layout.width)}x${Math.round(dragNode.layout.height)})`) 
+      }
+    }
     fallbackComposer!.render(fallbackBuf, 0, 0, cols, rows, cellW, cellH)
     if (profile) {
       profile.ioMs = performance.now() - ioStart

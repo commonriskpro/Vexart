@@ -33,9 +33,9 @@
 
 import { createSignal, createContext, useContext, onMount, onCleanup, createEffect } from "solid-js"
 import type { JSX, Accessor } from "solid-js"
-import { markDirty, createParticleSystem, useInteractionLayer, markNodeLayerDamaged, requestInteractionFrame } from "@tge/renderer"
-import type { CanvasContext, NodeHandle, NodeMouseEvent, ParticleConfig, ParticleSystem } from "@tge/renderer"
-import type { InteractionBinding } from "@tge/renderer"
+import { markDirty, createParticleSystem, useInteractionLayer, markNodeLayerDamaged, requestInteractionFrame } from "@tge/renderer-solid"
+import type { CanvasContext, NodeHandle, NodeMouseEvent, ParticleConfig, ParticleSystem } from "@tge/renderer-solid"
+import type { InteractionBinding } from "@tge/renderer-solid"
 
 // ── Scene item types ──
 
@@ -358,7 +358,6 @@ export function SceneCanvas(props: SceneCanvasProps) {
         const prevOverlayRects = getOverlayDamageRects(dragTarget)
         const world = screenToWorld(evt.nodeX, evt.nodeY)
         dragPreviewMap.set(dragTarget, { x: world.x - dragAnchorX, y: world.y - dragAnchorY })
-        markDirty()
         invalidateSceneForNode(dragTarget, prevRect, prevOverlayRects)
         requestInteractionFrame("pointer")
       }
@@ -390,7 +389,6 @@ export function SceneCanvas(props: SceneCanvasProps) {
         def.onDrag(preview.x, preview.y)
       }
       dragPreviewMap.delete(dragTarget)
-      markDirty()
       invalidateSceneForNode(dragTarget, null, prevOverlayRects)
       requestInteractionFrame("pointer")
     }

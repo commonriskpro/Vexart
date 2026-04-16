@@ -27,8 +27,8 @@ import {
   highlightsToTokens,
   type SyntaxStyle,
   type Token,
-} from "@tge/renderer"
-import { markDirty } from "@tge/renderer"
+} from "@tge/renderer-solid"
+import { markDirty } from "@tge/renderer-solid"
 
 const LINE_HEIGHT = 17
 const CHAR_WIDTH = 9

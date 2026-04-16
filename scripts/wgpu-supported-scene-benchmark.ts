@@ -1,9 +1,7 @@
 import { performance } from "node:perf_hooks"
-import { create } from "../packages/pixel/src"
-import { setCanvasPainterBackend } from "../packages/renderer/src"
-import { CanvasContext, paintCanvasCommandsCPU, paintCanvasCommands } from "../packages/renderer/src/canvas"
-import { tryCreateWgpuCanvasPainterBackend } from "../packages/renderer/src/wgpu-canvas-backend"
-import { probeWgpuCanvasBridge } from "../packages/renderer/src/wgpu-canvas-bridge"
+import { create } from "@tge/compat-software"
+import { setCanvasPainterBackend, CanvasContext, paintCanvasCommandsCPU, paintCanvasCommands } from "@tge/compat-canvas"
+import { tryCreateWgpuCanvasPainterBackend, probeWgpuCanvasBridge } from "@tge/gpu"
 
 const WIDTH = Number(process.env.TGE_SCENE_BENCH_WIDTH ?? 440)
 const HEIGHT = Number(process.env.TGE_SCENE_BENCH_HEIGHT ?? 180)

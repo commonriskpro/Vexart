@@ -11,7 +11,7 @@
 
 import { createSignal } from "solid-js"
 import { mount, markDirty, probeWgpuCanvasBridge, setCanvasPainterBackend } from "@tge/renderer"
-import { tryCreateWgpuCanvasPainterBackend } from "../packages/renderer/src/wgpu-canvas-backend"
+import { tryCreateWgpuCanvasPainterBackend } from "@tge/gpu"
 import { createTerminal } from "@tge/terminal"
 import { createParser } from "@tge/input"
 import type { CanvasContext } from "@tge/renderer"

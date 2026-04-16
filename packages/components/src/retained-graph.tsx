@@ -1,6 +1,6 @@
 import { createContext, useContext } from "solid-js"
-import { createSignal, type Accessor, type JSX } from "solid-js"
-import { markDirty, useDrag, type CanvasContext, type NodeHandle } from "@tge/renderer"
+import { createEffect, createSignal, type Accessor, type JSX } from "solid-js"
+import { markNodeLayerDamaged, useDrag, type CanvasContext, type NodeHandle } from "@tge/renderer-solid"
 
 export interface RetainedGraphPoint {
   x: number
@@ -177,13 +177,21 @@ export interface RetainedGraphFieldProps {
   id: string
   zIndex?: number
   onDraw: (ctx: CanvasContext, size: { width: number; height: number }, viewport: RetainedGraphViewport) => void
+  watch?: Accessor<unknown> | (() => unknown)
 }
 
 export function RetainedGraphField(props: RetainedGraphFieldProps) {
   const graph = getGraphContext()
+  let fieldHandle: NodeHandle | null = null
+
+  createEffect(() => {
+    props.watch?.()
+    if (!fieldHandle) return
+    markNodeLayerDamaged(fieldHandle.id)
+  })
 
   return (
-    <box layer floating="parent" floatOffset={{ x: 0, y: 0 }} zIndex={props.zIndex ?? 0} width={graph.width()} height={graph.height()} pointerPassthrough>
+    <box ref={(handle) => { fieldHandle = handle }} layer floating="parent" floatOffset={{ x: 0, y: 0 }} zIndex={props.zIndex ?? 0} width={graph.width()} height={graph.height()} pointerPassthrough>
       <surface
         width={graph.width()}
         height={graph.height()}
@@ -309,7 +317,6 @@ export function RetainedGraphNode(props: RetainedGraphNodeProps) {
       if (!props.onDrag) return
       const world = graph.screenToWorld(event.x, event.y)
       props.onDrag(world.x - dragOffsetX, world.y - dragOffsetY)
-      markDirty()
     },
   })
 

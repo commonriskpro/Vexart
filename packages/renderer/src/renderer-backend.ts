@@ -1,4 +1,4 @@
-import type { PixelBuffer } from "@tge/pixel"
+import type { PixelBuffer } from "@tge/compat-software"
 import type { RenderCommand } from "./clay"
 import type { DamageRect } from "./damage"
 import type { GpuLayerStrategyMode } from "./gpu-layer-strategy"

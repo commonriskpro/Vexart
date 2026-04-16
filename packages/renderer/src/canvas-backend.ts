@@ -1,4 +1,4 @@
-import type { PixelBuffer } from "@tge/pixel"
+import type { PixelBuffer } from "@tge/compat-software"
 import type { CanvasContext } from "./canvas"
 
 export type CanvasPainterBackend = {

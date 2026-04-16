@@ -1,4 +1,4 @@
-import { getWgpuCanvasBridgeInfo, probeWgpuCanvasBridge } from "../packages/renderer/src/wgpu-canvas-bridge"
+import { getWgpuCanvasBridgeInfo, probeWgpuCanvasBridge } from "@tge/gpu"
 
 console.log(JSON.stringify({
   probe: probeWgpuCanvasBridge(),

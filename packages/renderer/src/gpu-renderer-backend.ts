@@ -1,4 +1,4 @@
-import { create, paint } from "@tge/pixel"
+import { create, paint } from "@tge/compat-software"
 import { appendFileSync } from "node:fs"
 import { CanvasContext, paintCanvasCommands } from "./canvas"
 import { getAtlas } from "./font-atlas"

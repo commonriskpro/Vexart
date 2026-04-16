@@ -33,7 +33,7 @@
 
 import { createSignal } from "solid-js"
 import type { JSX } from "solid-js"
-import type { Terminal } from "@tge/terminal"
+import type { Terminal } from "@tge/platform-terminal"
 
 // ── Types ──
 
