@@ -107,6 +107,40 @@ export function Toolbar(props: { children: JSX.Element; justify?: boolean }) {
   )
 }
 
+const INSPECTOR_ROW_TONE = {
+  DEFAULT: "default",
+  WARM: "warm",
+  COOL: "cool",
+  MUTED: "muted",
+} as const
+
+export type InspectorRowTone = (typeof INSPECTOR_ROW_TONE)[keyof typeof INSPECTOR_ROW_TONE]
+
+function getInspectorValueColor(tone?: InspectorRowTone) {
+  if (tone === INSPECTOR_ROW_TONE.WARM) return colors.warm
+  if (tone === INSPECTOR_ROW_TONE.COOL) return colors.blueSoft
+  if (tone === INSPECTOR_ROW_TONE.MUTED) return colors.textDim
+  return colors.textSoft
+}
+
+export function InspectorRow(props: {
+  label: string
+  value: string
+  tone?: InspectorRowTone
+  leading?: JSX.Element
+  trailing?: JSX.Element
+}) {
+  return (
+    <box direction="row" gap={space[2]} alignY="center" width="grow">
+      {props.leading}
+      <text color={colors.textDim} fontSize={9}>{props.label}</text>
+      <box width="grow" />
+      <text color={getInspectorValueColor(props.tone)} fontSize={10}>{props.value}</text>
+      {props.trailing}
+    </box>
+  )
+}
+
 export function AppBar(props: {
   children: JSX.Element
   x: number
@@ -142,20 +176,41 @@ export function AppBar(props: {
 }
 
 export function StatusRow(props: { label: string; value: string }) {
-  return (
-    <box direction="row" alignY="center" width="grow">
-      <text color={colors.textDim} fontSize={9}>{props.label}</text>
-      <box width="grow" />
-      <text color={colors.textSoft} fontSize={10}>{props.value}</text>
-    </box>
-  )
+  return <InspectorRow label={props.label} value={props.value} />
 }
 
 export function KeyValueList(props: { rows: Array<[string, string]>; inset?: boolean }) {
   return (
     <PanelSection inset={props.inset} padded gap={space[2]}>
-      {props.rows.map((row) => <StatusRow label={row[0]} value={row[1]} />)}
+      {props.rows.map((row) => <InspectorRow label={row[0]} value={row[1]} />)}
     </PanelSection>
+  )
+}
+
+export function PanelFooter(props: {
+  children: JSX.Element
+  separated?: boolean
+  inset?: boolean
+  justify?: boolean
+}) {
+  return (
+    <box width="grow" direction="column" gap={space[2]}>
+      {props.separated === false ? null : <Rule />}
+      <box
+        width="grow"
+        direction="row"
+        gap={space[2]}
+        alignY="center"
+        padding={props.inset ? space[2] : undefined}
+        backgroundColor={props.inset ? 0xffffff02 : undefined}
+        borderColor={props.inset ? colors.panelBorder : undefined}
+        borderWidth={props.inset ? 1 : 0}
+        cornerRadius={props.inset ? radius.md : undefined}
+      >
+        {props.children}
+        {props.justify ? <box width="grow" /> : null}
+      </box>
+    </box>
   )
 }
 
@@ -218,6 +273,47 @@ export function drawOverlayCard(
   ctx.rect(x, y, width, height, { fill: 0x2a2118ea, radius: 9, stroke: 0xf3bf6b30, strokeWidth: 1 })
   ctx.text(x + 16, y + 10, title, colors.white)
   ctx.text(x + 16, y + 28, value, colors.warm)
+}
+
+export function ShellFrame(props: {
+  x: number
+  y: number
+  width: number
+  height: number
+  zIndex?: number
+  debugName?: string
+  children?: JSX.Element
+  backgroundColor?: number
+  gradient?: Gradient
+  borderColor?: number
+  shadow?: Shadow
+  topRuleTo?: number
+  bottomRuleTo?: number
+  bottomRuleOpacity?: number
+}) {
+  return (
+    <box
+      layer
+      debugName={props.debugName ?? "shell-frame"}
+      floating="root"
+      floatOffset={{ x: props.x, y: props.y }}
+      zIndex={props.zIndex ?? 1}
+      width={props.width}
+      height={props.height}
+      backgroundColor={props.backgroundColor ?? colors.panel}
+      gradient={props.gradient}
+      borderColor={props.borderColor ?? colors.panelBorder}
+      borderWidth={1}
+      cornerRadius={12}
+      shadow={props.shadow}
+    >
+      <box width="grow" height={1} gradient={{ type: "linear", from: 0xffffff08, to: props.topRuleTo ?? colors.warmLine, angle: 0 }} />
+      <box width="grow" height="grow" direction="column">
+        {props.children ?? <box width="grow" height="grow" />}
+      </box>
+      <box width="grow" height={1} gradient={{ type: "linear", from: 0x00000000, to: props.bottomRuleTo ?? 0xffffff08, angle: 0 }} opacity={props.bottomRuleOpacity ?? 0.8} />
+    </box>
+  )
 }
 
 export function PanelHeader(props: { title: string; subtitle?: string; accent?: number; dragProps?: Record<string, unknown>; actions?: JSX.Element }) {

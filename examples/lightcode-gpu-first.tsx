@@ -20,13 +20,15 @@ import {
   CodeFrame,
   colors as lightcodeColors,
   drawOverlayCard,
+  InspectorRow,
   InlineActions,
-  KeyValueList,
   Metric,
   Panel,
+  PanelFooter,
   PanelSection,
   radius,
   Rule,
+  ShellFrame,
   space,
   SurfaceCard,
   Toolbar,
@@ -224,25 +226,20 @@ function createPanelTraceHandlers(id: string) {
 
 function Shell() {
   return (
-    <box
-      layer
+    <ShellFrame
       debugName="shell"
-      floating="root"
-      floatOffset={{ x: FRAME.x, y: FRAME.y }}
+      x={FRAME.x}
+      y={FRAME.y}
       zIndex={1}
       width={FRAME.w}
       height={FRAME.h}
       backgroundColor={C.frame}
       gradient={PANEL_GRADIENTS ? { type: "linear", from: C.frameInner, to: C.frame, angle: 90 } : undefined}
       borderColor={C.frameBorder}
-      borderWidth={1}
-      cornerRadius={12}
       shadow={PANEL_SHADOWS ? { x: 0, y: 14, blur: 24, color: 0x00000028 } : undefined}
     >
-      <box width="grow" height={1} gradient={{ type: "linear", from: 0xffffff08, to: C.warmLine, angle: 0 }} />
       <box width="grow" height="grow" />
-      <box width="grow" height={1} gradient={{ type: "linear", from: 0x00000000, to: 0xffffff08, angle: 0 }} opacity={0.8} />
-    </box>
+    </ShellFrame>
   )
 }
 
@@ -406,12 +403,11 @@ function DiffPanel() {
       <PanelSection gap={space[1]}>
         <For each={lines}>{(line, index) => <box paddingX={index() === 2 ? space[1] : 0} paddingY={2} backgroundColor={index() === 2 ? 0x54211a28 : 0x00000000} borderColor={index() === 2 ? C.activeBorder : 0x00000000} borderWidth={index() === 2 ? 1 : 0} cornerRadius={radius.sm}><text color={index() < 2 ? C.warm : C.textSoft} fontSize={10}>{index() + 1} · {line}</text></box>}</For>
       </PanelSection>
-      <Rule />
-      <Toolbar>
+      <PanelFooter>
         <text color={C.textDim} fontSize={9}>staged · ready</text>
         <box width="grow" />
         <Button label="Swap Changes" />
-      </Toolbar>
+      </PanelFooter>
     </Panel>
   )
 }
@@ -438,7 +434,7 @@ function EditorPanel() {
         lines={lines}
         rightMeta="4D"
         tools={<InlineActions><ToolIcon label="◻" /><ToolIcon label="▤" active /><ToolIcon label="◉" /></InlineActions>}
-        footer={<Toolbar><text color={C.textDim} fontSize={9}>◈</text><text color={C.textSoft} fontSize={10}>return  v_engine</text><box width="grow" /><Button label="Swap Changes" /></Toolbar>}
+        footer={<PanelFooter separated={false}><text color={C.textDim} fontSize={9}>◈</text><text color={C.textSoft} fontSize={10}>return  v_engine</text><box width="grow" /><Button label="Swap Changes" /></PanelFooter>}
       />
     </Panel>
   )
@@ -458,12 +454,15 @@ function AgentPanel() {
         <Metric label="agent" value="running" warm />
         <Metric label="task" value="compute" />
       </box>
-      <KeyValueList rows={rows} inset />
-      <Rule />
-      <Toolbar><SurfaceCard padded>
+      <PanelSection inset padded gap={space[2]}>
+        <For each={rows}>{(row, index) => <InspectorRow label={row[0]} value={row[1]} tone={index() === 0 ? "cool" : undefined} />}</For>
+      </PanelSection>
+      <PanelFooter>
+        <SurfaceCard padded>
         <text color={C.textDim} fontSize={9}>⋮</text>
         <text color={C.textDim} fontSize={9}>runner ready</text>
-      </SurfaceCard></Toolbar>
+        </SurfaceCard>
+      </PanelFooter>
     </Panel>
   )
 }
