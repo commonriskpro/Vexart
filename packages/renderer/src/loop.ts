@@ -58,6 +58,7 @@ import {
   layerCount,
   markLayerDamaged,
   getPreviousLayerRect,
+  removeLayer,
 } from "./layers"
 import { measureForClay, layoutText, getFont, fontToCSS } from "./text-layout"
 import { CanvasContext, paintCanvasCommands } from "./canvas"
@@ -2469,6 +2470,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         const ioStart = DEBUG_CADENCE ? performance.now() : 0
         layerComposer!.removeLayer(imageIdForLayer(layer))
         if (DEBUG_CADENCE) ioMs += performance.now() - ioStart
+        removeLayer(layer)
         layerCache.delete(key)
       }
     }

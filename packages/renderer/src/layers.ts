@@ -95,6 +95,11 @@ export function getLayer(id: number): Layer | undefined {
   return layers.get(id)
 }
 
+/** Remove a layer from the registry. */
+export function removeLayer(layer: Layer) {
+  layers.delete(layer.id)
+}
+
 /** Get all layers sorted by z-order. */
 export function allLayers(): Layer[] {
   return Array.from(layers.values()).sort((a, b) => a.z - b.z)
