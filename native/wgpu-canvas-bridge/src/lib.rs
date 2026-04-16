@@ -6,8 +6,8 @@ use std::time::Instant;
 use bytemuck::{Pod, Zeroable};
 use wgpu::{util::DeviceExt, Buffer, Device, Queue, RenderPipeline, Texture, TextureFormat, TextureUsages, COPY_BYTES_PER_ROW_ALIGNMENT};
 
-const ABI_VERSION: u32 = 1;
-const BRIDGE_VERSION: u32 = 1;
+const ABI_VERSION: u32 = 4;
+const BRIDGE_VERSION: u32 = 5;
 
 const STATUS_SUCCESS: u32 = 0;
 const STATUS_INVALID_ARGUMENT: u32 = 2;
@@ -54,6 +54,18 @@ pub struct TgeWgpuCanvasFrameStats {
 }
 
 #[repr(C)]
+pub struct TgeWgpuBackdropFilterParams {
+    pub blur: f32,
+    pub brightness: f32,
+    pub contrast: f32,
+    pub saturate: f32,
+    pub grayscale: f32,
+    pub invert: f32,
+    pub sepia: f32,
+    pub hue_rotate: f32,
+}
+
+#[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct RectFillInstance {
     x: f32,
@@ -73,6 +85,27 @@ pub struct ImageInstance {
     y: f32,
     w: f32,
     h: f32,
+    opacity: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+pub struct GlyphInstance {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    u: f32,
+    v: f32,
+    uw: f32,
+    vh: f32,
+    r: f32,
+    g: f32,
+    b: f32,
+    a: f32,
     opacity: f32,
     _pad0: f32,
     _pad1: f32,
@@ -103,6 +136,10 @@ pub struct LinearGradientInstance {
     y: f32,
     w: f32,
     h: f32,
+    box_w: f32,
+    box_h: f32,
+    radius: f32,
+    _pad0: f32,
     from_r: f32,
     from_g: f32,
     from_b: f32,
@@ -113,8 +150,8 @@ pub struct LinearGradientInstance {
     to_a: f32,
     dir_x: f32,
     dir_y: f32,
-    _pad0: f32,
     _pad1: f32,
+    _pad2: f32,
 }
 
 #[repr(C)]
@@ -124,6 +161,10 @@ pub struct RadialGradientInstance {
     y: f32,
     w: f32,
     h: f32,
+    box_w: f32,
+    box_h: f32,
+    radius: f32,
+    _pad0: f32,
     from_r: f32,
     from_g: f32,
     from_b: f32,
@@ -132,10 +173,10 @@ pub struct RadialGradientInstance {
     to_g: f32,
     to_b: f32,
     to_a: f32,
-    _pad0: f32,
     _pad1: f32,
     _pad2: f32,
     _pad3: f32,
+    _pad4: f32,
 }
 
 #[repr(C)]
@@ -268,6 +309,7 @@ struct ContextRecord {
     radial_gradient_pipeline: RenderPipeline,
     image_bind_group_layout: wgpu::BindGroupLayout,
     image_pipeline: RenderPipeline,
+    glyph_pipeline: RenderPipeline,
     image_transform_pipeline: RenderPipeline,
 }
 
@@ -293,8 +335,9 @@ struct ActiveLayerRecord {
 
 struct ImageRecord {
     context_handle: u64,
-    _width: u32,
-    _height: u32,
+    width: u32,
+    height: u32,
+    rgba: Vec<u8>,
     _texture: Texture,
     _sampler: wgpu::Sampler,
     bind_group: wgpu::BindGroup,
@@ -375,6 +418,93 @@ fn unpack_rgba_u32(value: u32) -> wgpu::Color {
         g: ((value >> 16) & 0xff) as f64 / 255.0,
         b: ((value >> 8) & 0xff) as f64 / 255.0,
         a: (value & 0xff) as f64 / 255.0,
+    }
+}
+
+fn clamp_u8(value: f32) -> u8 {
+    value.clamp(0.0, 255.0).round() as u8
+}
+
+fn maybe_filter_param(value: f32) -> Option<f32> {
+    if value.is_nan() { None } else { Some(value) }
+}
+
+fn create_image_record_from_rgba(context: &ContextRecord, width: u32, height: u32, rgba: &[u8]) -> ImageRecord {
+    let texture = context.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("tge-wgpu-canvas-image"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    context.queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        rgba,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width * 4),
+            rows_per_image: Some(height),
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+
+    let sampler = context.device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("tge-wgpu-canvas-image-sampler"),
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        address_mode_w: wgpu::AddressMode::ClampToEdge,
+        mag_filter: wgpu::FilterMode::Nearest,
+        min_filter: wgpu::FilterMode::Nearest,
+        mipmap_filter: wgpu::FilterMode::Nearest,
+        ..Default::default()
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let bind_group = context.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("tge-wgpu-canvas-image-bind-group"),
+        layout: &context.image_bind_group_layout,
+        entries: &[
+            wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) },
+            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&sampler) },
+        ],
+    });
+
+    ImageRecord {
+        context_handle: 0,
+        width,
+        height,
+        rgba: rgba.to_vec(),
+        _texture: texture,
+        _sampler: sampler,
+        bind_group,
+    }
+}
+
+fn insert_image_record(context_handle: u64, mut record: ImageRecord) -> Result<u64, u32> {
+    record.context_handle = context_handle;
+    let handle = NEXT_IMAGE_HANDLE.fetch_add(1, Ordering::Relaxed);
+    if let Ok(mut images) = IMAGES.lock() {
+        images.insert(handle, record);
+        clear_last_error();
+        Ok(handle)
+    } else {
+        set_last_error("failed to lock image table");
+        Err(STATUS_INTERNAL_ERROR)
     }
 }
 
@@ -1058,6 +1188,96 @@ fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
     })
 }
 
+fn create_glyph_pipeline(device: &Device, layout: &wgpu::BindGroupLayout, format: TextureFormat) -> RenderPipeline {
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("tge-wgpu-glyph-shader"),
+        source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(r#"
+struct VSOut {
+  @builtin(position) position: vec4<f32>,
+  @location(0) uv: vec2<f32>,
+  @location(1) color: vec4<f32>,
+  @location(2) opacity: f32,
+}
+
+@group(0) @binding(0) var image_tex: texture_2d<f32>;
+@group(0) @binding(1) var image_sampler: sampler;
+
+@vertex
+fn vs_main(
+  @builtin(vertex_index) vertex_index: u32,
+  @location(0) rect: vec4<f32>,
+  @location(1) uv_rect: vec4<f32>,
+  @location(2) color: vec4<f32>,
+  @location(3) opacity: vec4<f32>,
+) -> VSOut {
+  var quad = array<vec2<f32>, 6>(
+    vec2<f32>(0.0, 0.0),
+    vec2<f32>(1.0, 0.0),
+    vec2<f32>(0.0, 1.0),
+    vec2<f32>(0.0, 1.0),
+    vec2<f32>(1.0, 0.0),
+    vec2<f32>(1.0, 1.0),
+  );
+  let q = quad[vertex_index];
+  var out: VSOut;
+  out.position = vec4<f32>(rect.x + q.x * rect.z, rect.y + q.y * rect.w, 0.0, 1.0);
+  out.uv = vec2<f32>(uv_rect.x + q.x * uv_rect.z, uv_rect.y + q.y * uv_rect.w);
+  out.color = color;
+  out.opacity = opacity.x;
+  return out;
+}
+
+@fragment
+fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
+  let sample = textureSample(image_tex, image_sampler, in.uv);
+  let alpha = sample.a * in.color.a * in.opacity;
+  return vec4<f32>(in.color.rgb, alpha);
+}
+        "#)),
+    });
+
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("tge-wgpu-glyph-pipeline-layout"),
+        bind_group_layouts: &[layout],
+        push_constant_ranges: &[],
+    });
+
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("tge-wgpu-glyph-pipeline"),
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs_main"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            buffers: &[wgpu::VertexBufferLayout {
+                array_stride: std::mem::size_of::<GlyphInstance>() as u64,
+                step_mode: wgpu::VertexStepMode::Instance,
+                attributes: &[
+                    wgpu::VertexAttribute { offset: 0, shader_location: 0, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 16, shader_location: 1, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 32, shader_location: 2, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 48, shader_location: 3, format: wgpu::VertexFormat::Float32x4 },
+                ],
+            }],
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview: None,
+        cache: None,
+    })
+}
+
 fn create_image_transform_pipeline(device: &Device, layout: &wgpu::BindGroupLayout, format: TextureFormat) -> RenderPipeline {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("tge-wgpu-image-transform-shader"),
@@ -1157,18 +1377,31 @@ fn create_linear_gradient_pipeline(device: &Device, format: TextureFormat) -> Re
 struct VSOut {
   @builtin(position) position: vec4<f32>,
   @location(0) uv: vec2<f32>,
-  @location(1) from_color: vec4<f32>,
-  @location(2) to_color: vec4<f32>,
-  @location(3) dir: vec2<f32>,
+  @location(1) box: vec2<f32>,
+  @location(2) radius: f32,
+  @location(3) from_color: vec4<f32>,
+  @location(4) to_color: vec4<f32>,
+  @location(5) dir: vec2<f32>,
+}
+
+fn rounded_mask(local: vec2<f32>, size: vec2<f32>, radius: f32) -> f32 {
+  if (radius <= 0.0) {
+    return 1.0;
+  }
+  let r = min(radius, min(size.x, size.y) * 0.5);
+  let q = abs(local - size * 0.5) - (size * 0.5 - vec2<f32>(r, r));
+  let outside = length(max(q, vec2<f32>(0.0, 0.0))) - r;
+  return select(0.0, 1.0, outside <= 0.0);
 }
 
 @vertex
 fn vs_main(
   @builtin(vertex_index) vertex_index: u32,
   @location(0) rect: vec4<f32>,
-  @location(1) from_color: vec4<f32>,
-  @location(2) to_color: vec4<f32>,
-  @location(3) dir_pad: vec4<f32>,
+  @location(1) box_radius: vec4<f32>,
+  @location(2) from_color: vec4<f32>,
+  @location(3) to_color: vec4<f32>,
+  @location(4) dir_pad: vec4<f32>,
 ) -> VSOut {
   var quad = array<vec2<f32>, 6>(
     vec2<f32>(0.0, 0.0),
@@ -1183,6 +1416,8 @@ fn vs_main(
   var out: VSOut;
   out.position = vec4<f32>(rect.x + uv.x * rect.z, rect.y + uv.y * rect.w, 0.0, 1.0);
   out.uv = uv;
+  out.box = box_radius.xy;
+  out.radius = box_radius.z;
   out.from_color = from_color;
   out.to_color = to_color;
   out.dir = normalize(vec2<f32>(dir_pad.x, dir_pad.y));
@@ -1191,9 +1426,13 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
+  let mask = rounded_mask(in.uv * in.box, in.box, in.radius);
+  if (mask <= 0.0) {
+    discard;
+  }
   let centered = in.uv - vec2<f32>(0.5, 0.5);
   let t = clamp(dot(centered, in.dir) + 0.5, 0.0, 1.0);
-  return mix(in.from_color, in.to_color, t);
+  return mix(in.from_color, in.to_color, t) * mask;
 }
         "#)),
     });
@@ -1213,6 +1452,7 @@ fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
                     wgpu::VertexAttribute { offset: 16, shader_location: 1, format: wgpu::VertexFormat::Float32x4 },
                     wgpu::VertexAttribute { offset: 32, shader_location: 2, format: wgpu::VertexFormat::Float32x4 },
                     wgpu::VertexAttribute { offset: 48, shader_location: 3, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 64, shader_location: 4, format: wgpu::VertexFormat::Float32x4 },
                 ],
             }],
         },
@@ -1241,17 +1481,30 @@ fn create_radial_gradient_pipeline(device: &Device, format: TextureFormat) -> Re
 struct VSOut {
   @builtin(position) position: vec4<f32>,
   @location(0) uv: vec2<f32>,
-  @location(1) from_color: vec4<f32>,
-  @location(2) to_color: vec4<f32>,
+  @location(1) box: vec2<f32>,
+  @location(2) radius: f32,
+  @location(3) from_color: vec4<f32>,
+  @location(4) to_color: vec4<f32>,
+}
+
+fn rounded_mask(local: vec2<f32>, size: vec2<f32>, radius: f32) -> f32 {
+  if (radius <= 0.0) {
+    return 1.0;
+  }
+  let r = min(radius, min(size.x, size.y) * 0.5);
+  let q = abs(local - size * 0.5) - (size * 0.5 - vec2<f32>(r, r));
+  let outside = length(max(q, vec2<f32>(0.0, 0.0))) - r;
+  return select(0.0, 1.0, outside <= 0.0);
 }
 
 @vertex
 fn vs_main(
   @builtin(vertex_index) vertex_index: u32,
   @location(0) rect: vec4<f32>,
-  @location(1) from_color: vec4<f32>,
-  @location(2) to_color: vec4<f32>,
-  @location(3) _pad: vec4<f32>,
+  @location(1) box_radius: vec4<f32>,
+  @location(2) from_color: vec4<f32>,
+  @location(3) to_color: vec4<f32>,
+  @location(4) _pad: vec4<f32>,
 ) -> VSOut {
   var quad = array<vec2<f32>, 6>(
     vec2<f32>(0.0, 0.0),
@@ -1266,6 +1519,8 @@ fn vs_main(
   var out: VSOut;
   out.position = vec4<f32>(rect.x + uv.x * rect.z, rect.y + uv.y * rect.w, 0.0, 1.0);
   out.uv = uv;
+  out.box = box_radius.xy;
+  out.radius = box_radius.z;
   out.from_color = from_color;
   out.to_color = to_color;
   return out;
@@ -1273,9 +1528,13 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
+  let mask = rounded_mask(in.uv * in.box, in.box, in.radius);
+  if (mask <= 0.0) {
+    discard;
+  }
   let p = in.uv - vec2<f32>(0.5, 0.5);
   let d = clamp(length(p) * 2.0, 0.0, 1.0);
-  return mix(in.from_color, in.to_color, d);
+  return mix(in.from_color, in.to_color, d) * mask;
 }
         "#)),
     });
@@ -1295,6 +1554,7 @@ fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
                     wgpu::VertexAttribute { offset: 16, shader_location: 1, format: wgpu::VertexFormat::Float32x4 },
                     wgpu::VertexAttribute { offset: 32, shader_location: 2, format: wgpu::VertexFormat::Float32x4 },
                     wgpu::VertexAttribute { offset: 48, shader_location: 3, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 64, shader_location: 4, format: wgpu::VertexFormat::Float32x4 },
                 ],
             }],
         },
@@ -1484,6 +1744,7 @@ pub extern "C" fn tge_wgpu_canvas_context_create(opts: *const TgeWgpuCanvasInitO
         linear_gradient_pipeline: create_linear_gradient_pipeline(&device, TextureFormat::Rgba8Unorm),
         radial_gradient_pipeline: create_radial_gradient_pipeline(&device, TextureFormat::Rgba8Unorm),
         image_pipeline: create_image_pipeline(&device, &image_bind_group_layout, TextureFormat::Rgba8Unorm),
+        glyph_pipeline: create_glyph_pipeline(&device, &image_bind_group_layout, TextureFormat::Rgba8Unorm),
         image_transform_pipeline: create_image_transform_pipeline(&device, &image_bind_group_layout, TextureFormat::Rgba8Unorm),
         image_bind_group_layout,
         device,
@@ -1617,77 +1878,11 @@ pub extern "C" fn tge_wgpu_canvas_image_create(
     };
 
     let rgba = unsafe { std::slice::from_raw_parts(rgba_ptr, needed) };
-    let texture = context.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("tge-wgpu-canvas-image"),
-        size: wgpu::Extent3d {
-            width: descriptor.width,
-            height: descriptor.height,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-        view_formats: &[],
-    });
-    context.queue.write_texture(
-        wgpu::TexelCopyTextureInfo {
-            texture: &texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        rgba,
-        wgpu::TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(descriptor.width * 4),
-            rows_per_image: Some(descriptor.height),
-        },
-        wgpu::Extent3d {
-            width: descriptor.width,
-            height: descriptor.height,
-            depth_or_array_layers: 1,
-        },
-    );
-
-    let sampler = context.device.create_sampler(&wgpu::SamplerDescriptor {
-        label: Some("tge-wgpu-canvas-image-sampler"),
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
-        address_mode_v: wgpu::AddressMode::ClampToEdge,
-        address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Nearest,
-        min_filter: wgpu::FilterMode::Nearest,
-        mipmap_filter: wgpu::FilterMode::Nearest,
-        ..Default::default()
-    });
-    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-    let bind_group = context.device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("tge-wgpu-canvas-image-bind-group"),
-        layout: &context.image_bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) },
-            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&sampler) },
-        ],
-    });
-
-    let record = ImageRecord {
-        context_handle,
-        _width: descriptor.width,
-        _height: descriptor.height,
-        _texture: texture,
-        _sampler: sampler,
-        bind_group,
-    };
-    let handle = NEXT_IMAGE_HANDLE.fetch_add(1, Ordering::Relaxed);
-    if let Ok(mut images) = IMAGES.lock() {
-        images.insert(handle, record);
-        clear_last_error();
-        return handle;
+    let record = create_image_record_from_rgba(&context, descriptor.width, descriptor.height, rgba);
+    match insert_image_record(context_handle, record) {
+        Ok(handle) => handle,
+        Err(_) => 0,
     }
-
-    set_last_error("failed to lock image table");
-    0
 }
 
 #[no_mangle]
@@ -1741,12 +1936,310 @@ fn with_target_mut<'a>(targets: &'a mut HashMap<u64, TargetRecord>, context_hand
     Ok(target)
 }
 
+fn with_image<'a>(images: &'a HashMap<u64, ImageRecord>, context_handle: u64, image_handle: u64, label: &str) -> Result<&'a ImageRecord, u32> {
+    let image = images.get(&image_handle).ok_or_else(|| {
+        set_last_error(&format!("{label} image handle was not found"));
+        STATUS_INVALID_HANDLE
+    })?;
+    if image.context_handle != context_handle {
+        set_last_error(&format!("{label} image/context mismatch"));
+        return Err(STATUS_INVALID_HANDLE);
+    }
+    Ok(image)
+}
+
+fn apply_box_blur_rgba(data: &mut [u8], width: u32, height: u32, radius: u32) {
+    if radius == 0 || width == 0 || height == 0 {
+        return;
+    }
+    let w = width as usize;
+    let h = height as usize;
+    let r = radius as usize;
+    let mut tmp = vec![0u8; data.len()];
+
+    for y in 0..h {
+        for x in 0..w {
+            let start = x.saturating_sub(r);
+            let end = (x + r).min(w - 1);
+            let mut sum = [0u32; 4];
+            let mut count = 0u32;
+            for sx in start..=end {
+                let idx = (y * w + sx) * 4;
+                sum[0] += data[idx] as u32;
+                sum[1] += data[idx + 1] as u32;
+                sum[2] += data[idx + 2] as u32;
+                sum[3] += data[idx + 3] as u32;
+                count += 1;
+            }
+            let dst = (y * w + x) * 4;
+            tmp[dst] = (sum[0] / count) as u8;
+            tmp[dst + 1] = (sum[1] / count) as u8;
+            tmp[dst + 2] = (sum[2] / count) as u8;
+            tmp[dst + 3] = (sum[3] / count) as u8;
+        }
+    }
+
+    for y in 0..h {
+        for x in 0..w {
+            let start = y.saturating_sub(r);
+            let end = (y + r).min(h - 1);
+            let mut sum = [0u32; 4];
+            let mut count = 0u32;
+            for sy in start..=end {
+                let idx = (sy * w + x) * 4;
+                sum[0] += tmp[idx] as u32;
+                sum[1] += tmp[idx + 1] as u32;
+                sum[2] += tmp[idx + 2] as u32;
+                sum[3] += tmp[idx + 3] as u32;
+                count += 1;
+            }
+            let dst = (y * w + x) * 4;
+            data[dst] = (sum[0] / count) as u8;
+            data[dst + 1] = (sum[1] / count) as u8;
+            data[dst + 2] = (sum[2] / count) as u8;
+            data[dst + 3] = (sum[3] / count) as u8;
+        }
+    }
+}
+
+fn apply_backdrop_filters_rgba(data: &mut [u8], width: u32, height: u32, params: &TgeWgpuBackdropFilterParams) {
+    if let Some(blur) = maybe_filter_param(params.blur) {
+        if blur > 0.0 {
+            apply_box_blur_rgba(data, width, height, blur.ceil() as u32);
+        }
+    }
+
+    let brightness = maybe_filter_param(params.brightness);
+    let contrast = maybe_filter_param(params.contrast);
+    let saturate = maybe_filter_param(params.saturate);
+    let grayscale = maybe_filter_param(params.grayscale);
+    let invert = maybe_filter_param(params.invert);
+    let sepia = maybe_filter_param(params.sepia);
+    let hue_rotate = maybe_filter_param(params.hue_rotate);
+
+    let hue_matrix = hue_rotate.map(|degrees| {
+        let rad = degrees.to_radians();
+        let cos = rad.cos();
+        let sin = rad.sin();
+        [
+            0.213 + cos * 0.787 - sin * 0.213,
+            0.715 - cos * 0.715 - sin * 0.715,
+            0.072 - cos * 0.072 + sin * 0.928,
+            0.213 - cos * 0.213 + sin * 0.143,
+            0.715 + cos * 0.285 + sin * 0.140,
+            0.072 - cos * 0.072 - sin * 0.283,
+            0.213 - cos * 0.213 - sin * 0.787,
+            0.715 - cos * 0.715 + sin * 0.715,
+            0.072 + cos * 0.928 + sin * 0.072,
+        ]
+    });
+
+    for px in data.chunks_exact_mut(4) {
+        let mut r = px[0] as f32;
+        let mut g = px[1] as f32;
+        let mut b = px[2] as f32;
+
+        if let Some(value) = brightness {
+            let factor = value / 100.0;
+            r *= factor;
+            g *= factor;
+            b *= factor;
+        }
+
+        if let Some(value) = contrast {
+            let factor = value / 100.0;
+            r = ((r / 255.0 - 0.5) * factor + 0.5) * 255.0;
+            g = ((g / 255.0 - 0.5) * factor + 0.5) * 255.0;
+            b = ((b / 255.0 - 0.5) * factor + 0.5) * 255.0;
+        }
+
+        let luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+        if let Some(value) = saturate {
+            let factor = value / 100.0;
+            r = luma + (r - luma) * factor;
+            g = luma + (g - luma) * factor;
+            b = luma + (b - luma) * factor;
+        }
+
+        if let Some(value) = grayscale {
+            let factor = (value / 100.0).clamp(0.0, 1.0);
+            r = r * (1.0 - factor) + luma * factor;
+            g = g * (1.0 - factor) + luma * factor;
+            b = b * (1.0 - factor) + luma * factor;
+        }
+
+        if let Some(value) = invert {
+            let factor = (value / 100.0).clamp(0.0, 1.0);
+            r = r * (1.0 - factor) + (255.0 - r) * factor;
+            g = g * (1.0 - factor) + (255.0 - g) * factor;
+            b = b * (1.0 - factor) + (255.0 - b) * factor;
+        }
+
+        if let Some(value) = sepia {
+            let factor = (value / 100.0).clamp(0.0, 1.0);
+            let sr = (r * 0.393) + (g * 0.769) + (b * 0.189);
+            let sg = (r * 0.349) + (g * 0.686) + (b * 0.168);
+            let sb = (r * 0.272) + (g * 0.534) + (b * 0.131);
+            r = r * (1.0 - factor) + sr * factor;
+            g = g * (1.0 - factor) + sg * factor;
+            b = b * (1.0 - factor) + sb * factor;
+        }
+
+        if let Some(matrix) = hue_matrix {
+            let nr = r * matrix[0] + g * matrix[1] + b * matrix[2];
+            let ng = r * matrix[3] + g * matrix[4] + b * matrix[5];
+            let nb = r * matrix[6] + g * matrix[7] + b * matrix[8];
+            r = nr;
+            g = ng;
+            b = nb;
+        }
+
+        px[0] = clamp_u8(r);
+        px[1] = clamp_u8(g);
+        px[2] = clamp_u8(b);
+    }
+}
+
+fn apply_rounded_rect_mask_rgba(data: &mut [u8], image_width: u32, image_height: u32, mask_x: u32, mask_y: u32, mask_width: u32, mask_height: u32, radius: f32) {
+    if mask_width == 0 || mask_height == 0 {
+        for px in data.chunks_exact_mut(4) {
+            px[3] = 0;
+        }
+        return;
+    }
+    let max_radius = (mask_width.min(mask_height) as f32) * 0.5;
+    let r = radius.clamp(0.0, max_radius);
+    let iw = image_width as usize;
+    let ih = image_height as usize;
+    let mx = mask_x as f32;
+    let my = mask_y as f32;
+    let mw = mask_width as f32;
+    let mh = mask_height as f32;
+
+    for y in 0..ih {
+        for x in 0..iw {
+            let idx = (y * iw + x) * 4;
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+
+            if px < mx || px >= mx + mw || py < my || py >= my + mh {
+                data[idx + 3] = 0;
+                continue;
+            }
+
+            if r <= 0.0 {
+                continue;
+            }
+
+            let local_x = px - mx;
+            let local_y = py - my;
+            let inner_left = r;
+            let inner_top = r;
+            let inner_right = mw - r;
+            let inner_bottom = mh - r;
+
+            let inside_core = (local_x >= inner_left && local_x < inner_right) || (local_y >= inner_top && local_y < inner_bottom);
+            if inside_core {
+                continue;
+            }
+
+            let corner_cx = if local_x < inner_left { inner_left } else { inner_right };
+            let corner_cy = if local_y < inner_top { inner_top } else { inner_bottom };
+            let dx = local_x - corner_cx;
+            let dy = local_y - corner_cy;
+            if dx * dx + dy * dy > r * r {
+                data[idx + 3] = 0;
+            }
+        }
+    }
+}
+
 fn load_op_from_mode(load_mode: u32, clear_rgba: u32) -> wgpu::LoadOp<wgpu::Color> {
     if load_mode == 0 {
         wgpu::LoadOp::Clear(unpack_rgba_u32(clear_rgba))
     } else {
         wgpu::LoadOp::Load
     }
+}
+
+fn read_target_region_rgba(context: &ContextRecord, target: &mut TargetRecord, rx: u32, ry: u32, rw: u32, rh: u32) -> Result<(Vec<u8>, f64, f64), u32> {
+    if rx + rw > target.width || ry + rh > target.height {
+        set_last_error("readback region exceeds target bounds");
+        return Err(STATUS_INVALID_ARGUMENT);
+    }
+
+    let padded_bytes_per_row = compute_padded_bytes_per_row(rw);
+    let needed = rw as usize * rh as usize * 4;
+    let staging_size = padded_bytes_per_row as u64 * rh as u64;
+    if target.region_readback.is_none() || target.region_readback_size < staging_size {
+        target.region_readback = Some(context.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("tge-wgpu-canvas-readback-region"),
+            size: staging_size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        }));
+        target.region_readback_size = staging_size;
+    }
+    let staging = target.region_readback.as_ref().expect("region readback buffer must exist");
+
+    let started = Instant::now();
+    let mut encoder = context.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("tge-wgpu-readback-region-encoder") });
+    encoder.copy_texture_to_buffer(
+        wgpu::TexelCopyTextureInfo {
+            texture: &target.texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d { x: rx, y: ry, z: 0 },
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyBufferInfo {
+            buffer: &staging,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(padded_bytes_per_row),
+                rows_per_image: Some(rh),
+            },
+        },
+        wgpu::Extent3d { width: rw, height: rh, depth_or_array_layers: 1 },
+    );
+    context.queue.submit(Some(encoder.finish()));
+    let gpu_ms = started.elapsed().as_secs_f64() * 1000.0;
+
+    let readback_started = Instant::now();
+    let slice = staging.slice(..);
+    let (tx, rxch) = std::sync::mpsc::channel();
+    slice.map_async(wgpu::MapMode::Read, move |result| {
+        let _ = tx.send(result);
+    });
+    let _ = context.device.poll(wgpu::PollType::Wait);
+    match rxch.recv() {
+        Ok(Ok(())) => {}
+        Ok(Err(err)) => {
+            set_last_error(&format!("region map_async failed: {err:?}"));
+            return Err(STATUS_INTERNAL_ERROR);
+        }
+        Err(_) => {
+            set_last_error("region map_async channel failed");
+            return Err(STATUS_INTERNAL_ERROR);
+        }
+    }
+
+    let mut data = vec![0u8; needed];
+    let mapped = slice.get_mapped_range();
+    let row_bytes = rw as usize * 4;
+    let padded_row_bytes = padded_bytes_per_row as usize;
+    for row in 0..rh as usize {
+        let src_start = row * padded_row_bytes;
+        let src_end = src_start + row_bytes;
+        let dst_start = row * row_bytes;
+        let dst_end = dst_start + row_bytes;
+        data[dst_start..dst_end].copy_from_slice(&mapped[src_start..src_end]);
+    }
+    drop(mapped);
+    staging.unmap();
+
+    let readback_ms = readback_started.elapsed().as_secs_f64() * 1000.0;
+    Ok((data, gpu_ms, readback_ms))
 }
 
 #[no_mangle]
@@ -1988,85 +2481,153 @@ pub extern "C" fn tge_wgpu_canvas_target_readback_region_rgba(
         return STATUS_INVALID_ARGUMENT;
     }
 
-    let padded_bytes_per_row = compute_padded_bytes_per_row(rw);
     let needed = rw as usize * rh as usize * 4;
     if (dst_len as usize) < needed {
         set_last_error("readback region destination buffer is too small for RGBA output");
         return STATUS_INVALID_ARGUMENT;
     }
 
-    let staging_size = padded_bytes_per_row as u64 * rh as u64;
-    if target.region_readback.is_none() || target.region_readback_size < staging_size {
-        target.region_readback = Some(context.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("tge-wgpu-canvas-readback-region"),
-            size: staging_size,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        }));
-        target.region_readback_size = staging_size;
-    }
-    let staging = target.region_readback.as_ref().expect("region readback buffer must exist");
-
     let started = Instant::now();
-    let mut encoder = context.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("tge-wgpu-readback-region-encoder") });
-    encoder.copy_texture_to_buffer(
-        wgpu::TexelCopyTextureInfo {
-            texture: &target.texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d { x: rx, y: ry, z: 0 },
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::TexelCopyBufferInfo {
-            buffer: &staging,
-            layout: wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(padded_bytes_per_row),
-                rows_per_image: Some(rh),
-            },
-        },
-        wgpu::Extent3d { width: rw, height: rh, depth_or_array_layers: 1 },
-    );
-    context.queue.submit(Some(encoder.finish()));
-    let gpu_ms = started.elapsed().as_secs_f64() * 1000.0;
-
-    let readback_started = Instant::now();
-    let slice = staging.slice(..);
-    let (tx, rxch) = std::sync::mpsc::channel();
-    slice.map_async(wgpu::MapMode::Read, move |result| {
-        let _ = tx.send(result);
-    });
-    let _ = context.device.poll(wgpu::PollType::Wait);
-    match rxch.recv() {
-        Ok(Ok(())) => {}
-        Ok(Err(err)) => {
-            set_last_error(&format!("region map_async failed: {err:?}"));
-            return STATUS_INTERNAL_ERROR;
-        }
-        Err(_) => {
-            set_last_error("region map_async channel failed");
-            return STATUS_INTERNAL_ERROR;
-        }
-    }
-
-    let mapped = slice.get_mapped_range();
+    let (data, gpu_ms, readback_ms) = match read_target_region_rgba(&context, target, rx, ry, rw, rh) {
+        Ok(value) => value,
+        Err(code) => return code,
+    };
     let dst_rgba = unsafe { std::slice::from_raw_parts_mut(dst, needed) };
-    let row_bytes = rw as usize * 4;
-    let padded_row_bytes = padded_bytes_per_row as usize;
-    for row in 0..rh as usize {
-        let src_start = row * padded_row_bytes;
-        let src_end = src_start + row_bytes;
-        let dst_start = row * row_bytes;
-        let dst_end = dst_start + row_bytes;
-        dst_rgba[dst_start..dst_end].copy_from_slice(&mapped[src_start..src_end]);
-    }
-    drop(mapped);
-    staging.unmap();
-
-    let readback_ms = readback_started.elapsed().as_secs_f64() * 1000.0;
+    dst_rgba.copy_from_slice(&data);
     let total_ms = started.elapsed().as_secs_f64() * 1000.0;
     write_stats(stats, gpu_ms, readback_ms, total_ms);
     clear_last_error();
     STATUS_SUCCESS
+}
+
+#[no_mangle]
+pub extern "C" fn tge_wgpu_canvas_target_copy_region_to_image(
+    context_handle: u64,
+    target_handle: u64,
+    rx: u32,
+    ry: u32,
+    rw: u32,
+    rh: u32,
+    stats: *mut TgeWgpuCanvasFrameStats,
+) -> u64 {
+    write_stats(stats, 0.0, 0.0, 0.0);
+    if rw == 0 || rh == 0 {
+        set_last_error("copy_region_to_image width/height must be > 0");
+        return 0;
+    }
+    let started = Instant::now();
+    let context = match get_context(context_handle, "copy_region_to_image") {
+        Ok(value) => value,
+        Err(_) => return 0,
+    };
+    let mut targets = if let Ok(targets) = TARGETS.lock() {
+        targets
+    } else {
+        set_last_error("failed to lock target table for copy_region_to_image");
+        return 0;
+    };
+    let target = match with_target_mut(&mut targets, context_handle, target_handle, "copy_region_to_image") {
+        Ok(value) => value,
+        Err(_) => return 0,
+    };
+    let (data, gpu_ms, readback_ms) = match read_target_region_rgba(&context, target, rx, ry, rw, rh) {
+        Ok(value) => value,
+        Err(_) => return 0,
+    };
+    drop(targets);
+    let record = create_image_record_from_rgba(&context, rw, rh, &data);
+    let total_ms = started.elapsed().as_secs_f64() * 1000.0;
+    write_stats(stats, gpu_ms, readback_ms, total_ms);
+    match insert_image_record(context_handle, record) {
+        Ok(handle) => handle,
+        Err(_) => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tge_wgpu_canvas_image_filter_backdrop(
+    context_handle: u64,
+    image_handle: u64,
+    params: *const TgeWgpuBackdropFilterParams,
+) -> u64 {
+    if params.is_null() {
+        set_last_error("image_filter_backdrop requires params");
+        return 0;
+    }
+    let context = match get_context(context_handle, "image_filter_backdrop") {
+        Ok(value) => value,
+        Err(_) => return 0,
+    };
+    let params = unsafe { std::ptr::read(params) };
+    let images = if let Ok(images) = IMAGES.lock() {
+        images
+    } else {
+        set_last_error("failed to lock image table for image_filter_backdrop");
+        return 0;
+    };
+    let image = match with_image(&images, context_handle, image_handle, "image_filter_backdrop") {
+        Ok(value) => value,
+        Err(_) => return 0,
+    };
+    let mut rgba = image.rgba.clone();
+    let width = image.width;
+    let height = image.height;
+    drop(images);
+    apply_backdrop_filters_rgba(&mut rgba, width, height, &params);
+    let record = create_image_record_from_rgba(&context, width, height, &rgba);
+    match insert_image_record(context_handle, record) {
+        Ok(handle) => handle,
+        Err(_) => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tge_wgpu_canvas_image_mask_rounded_rect(
+    context_handle: u64,
+    image_handle: u64,
+    mask_x: u32,
+    mask_y: u32,
+    mask_width: u32,
+    mask_height: u32,
+    radius: f32,
+) -> u64 {
+    let context = match get_context(context_handle, "image_mask_rounded_rect") {
+        Ok(value) => value,
+        Err(_) => return 0,
+    };
+    let images = if let Ok(images) = IMAGES.lock() {
+        images
+    } else {
+        set_last_error("failed to lock image table for image_mask_rounded_rect");
+        return 0;
+    };
+    let image = match with_image(&images, context_handle, image_handle, "image_mask_rounded_rect") {
+        Ok(value) => value,
+        Err(_) => return 0,
+    };
+    let mut rgba = image.rgba.clone();
+    let width = image.width;
+    let height = image.height;
+    drop(images);
+    apply_rounded_rect_mask_rgba(&mut rgba, width, height, mask_x, mask_y, mask_width, mask_height, radius);
+    let record = create_image_record_from_rgba(&context, width, height, &rgba);
+    match insert_image_record(context_handle, record) {
+        Ok(handle) => handle,
+        Err(_) => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tge_wgpu_canvas_target_composite_image_layer(
+    context_handle: u64,
+    target_handle: u64,
+    image_handle: u64,
+    instance_ptr: *const ImageInstance,
+    load_mode: u32,
+    clear_rgba: u32,
+    stats: *mut TgeWgpuCanvasFrameStats,
+) -> u32 {
+    tge_wgpu_canvas_target_render_image_layer(context_handle, target_handle, image_handle, instance_ptr, load_mode, clear_rgba, stats)
 }
 
 #[no_mangle]
@@ -2495,6 +3056,110 @@ pub extern "C" fn tge_wgpu_canvas_target_render_images_layer(
             pass.set_bind_group(0, &image.bind_group, &[]);
             pass.set_vertex_buffer(0, instance_buffer.slice(..));
             pass.draw(0..6, 0..image_count);
+        }
+        context.queue.submit(Some(encoder.finish()));
+    }
+    let total_ms = started.elapsed().as_secs_f64() * 1000.0;
+    write_stats(stats, total_ms, 0.0, total_ms);
+    clear_last_error();
+    STATUS_SUCCESS
+}
+
+#[no_mangle]
+pub extern "C" fn tge_wgpu_canvas_target_render_glyphs_layer(
+    context_handle: u64,
+    target_handle: u64,
+    image_handle: u64,
+    glyphs_ptr: *const GlyphInstance,
+    glyph_count: u32,
+    load_mode: u32,
+    clear_rgba: u32,
+    stats: *mut TgeWgpuCanvasFrameStats,
+) -> u32 {
+    write_stats(stats, 0.0, 0.0, 0.0);
+    if glyphs_ptr.is_null() || glyph_count == 0 {
+        set_last_error("render_glyphs_layer requires a non-empty glyph instance buffer");
+        return STATUS_INVALID_ARGUMENT;
+    }
+    let context = match get_context(context_handle, "render_glyphs_layer") {
+        Ok(value) => value,
+        Err(code) => return code,
+    };
+    let mut targets = if let Ok(targets) = TARGETS.lock() {
+        targets
+    } else {
+        set_last_error("failed to lock target table for render_glyphs_layer");
+        return STATUS_INTERNAL_ERROR;
+    };
+    let target = match with_target_mut(&mut targets, context_handle, target_handle, "render_glyphs_layer") {
+        Ok(value) => value,
+        Err(code) => return code,
+    };
+    let images = if let Ok(images) = IMAGES.lock() {
+        images
+    } else {
+        set_last_error("failed to lock image table for render_glyphs_layer");
+        return STATUS_INTERNAL_ERROR;
+    };
+    let image = if let Some(image) = images.get(&image_handle) {
+        if image.context_handle != context_handle {
+            set_last_error("render_glyphs_layer image/context mismatch");
+            return STATUS_INVALID_HANDLE;
+        }
+        image
+    } else {
+        set_last_error("render_glyphs_layer image handle was not found");
+        return STATUS_INVALID_HANDLE;
+    };
+
+    let instances = unsafe { std::slice::from_raw_parts(glyphs_ptr, glyph_count as usize) };
+    let instance_buffer = context.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("tge-wgpu-glyphs-layer-instance-buffer"),
+        contents: bytemuck::cast_slice(instances),
+        usage: wgpu::BufferUsages::VERTEX,
+    });
+
+    let started = Instant::now();
+    let view = target.texture.create_view(&wgpu::TextureViewDescriptor::default());
+    if let Some(active) = target.active_layer.as_mut() {
+        {
+            let mut pass = active.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("tge-wgpu-glyphs-layer-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations { load: load_op_from_mode(if active.first_pass { active.first_load_mode } else { 1 }, active.clear_rgba), store: wgpu::StoreOp::Store },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            pass.set_pipeline(&context.glyph_pipeline);
+            pass.set_bind_group(0, &image.bind_group, &[]);
+            pass.set_vertex_buffer(0, instance_buffer.slice(..));
+            pass.draw(0..6, 0..glyph_count);
+        }
+        active.first_pass = false;
+    } else {
+        let mut encoder = context.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("tge-wgpu-glyphs-layer-encoder") });
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("tge-wgpu-glyphs-layer-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations { load: load_op_from_mode(load_mode, clear_rgba), store: wgpu::StoreOp::Store },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            pass.set_pipeline(&context.glyph_pipeline);
+            pass.set_bind_group(0, &image.bind_group, &[]);
+            pass.set_vertex_buffer(0, instance_buffer.slice(..));
+            pass.draw(0..6, 0..glyph_count);
         }
         context.queue.submit(Some(encoder.finish()));
     }

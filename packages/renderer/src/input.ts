@@ -25,6 +25,15 @@ type InputSubscriber = (event: InputEvent) => void
 
 const subscribers: InputSubscriber[] = []
 
+export type InteractionTrace = {
+  seq: number
+  at: number
+  kind: string | null
+}
+
+let interactionSeq = 0
+let latestInteraction: InteractionTrace = { seq: 0, at: 0, kind: null }
+
 /** Subscribe to all input events. Returns unsubscribe. */
 export function onInput(handler: InputSubscriber): () => void {
   subscribers.push(handler)
@@ -36,9 +45,20 @@ export function onInput(handler: InputSubscriber): () => void {
 
 /** Dispatch an event to all subscribers. Called by the parser bridge in mount(). */
 export function dispatchInput(event: InputEvent) {
+  if (event.type === "key") {
+    interactionSeq += 1
+    latestInteraction = { seq: interactionSeq, at: performance.now(), kind: `key:${event.key}` }
+  } else if (event.type === "mouse") {
+    interactionSeq += 1
+    latestInteraction = { seq: interactionSeq, at: performance.now(), kind: "mouse" }
+  }
   for (const sub of subscribers) {
     sub(event)
   }
+}
+
+export function getLatestInteractionTrace(): InteractionTrace {
+  return latestInteraction
 }
 
 // ── Keyboard hook ──

@@ -60,19 +60,26 @@ Clay RenderCommands + Canvas commands
   - `LayerComposer.renderLayerRaw()`
 - Lightcode WGPU harness separated from CPU baseline.
 
-## What is still CPU-only
+## What is still CPU-assisted (updated)
 
-The heavy renderer path in `packages/renderer/src/loop.ts -> paintCommand()` still handles on CPU:
+The original Stage 5 hotspot list is no longer the main reality.
 
-- generic `RECTANGLE`
-- `BORDER`
-- box gradients
-- glow/shadow for generic boxes
-- backdrop filters
-- rounded rect masking
-- generic text paint for UI
-- image fit/mask path for generic `<img>`
-- subtree transform fallback paths
+Verified today:
+
+- generic `RECTANGLE`: GPU path
+- `BORDER`: GPU path
+- box gradients: GPU path
+- glow/shadow for generic boxes: GPU path
+- common backdrop path: GPU path
+- final layer composition: GPU path
+
+What still keeps some CPU involvement today is narrower:
+
+- UI text is still rasterized into cached sprites on CPU before GPU composition
+- `<canvas>` callbacks still draw into CPU buffers before GPU upload
+- some transform-heavy layers still use CPU subtree post-pass before sync-back into retained GPU targets
+- some localized mask/fallback work (for example per-corner backdrop masking) still exists even though it is no longer a Stage 4 blocker
+- non-visual `raw-command` ops (e.g. scissor control flow) still appear in fallback logs, but they are not the old chrome/panel paint hotspot
 
 ## Measured reality
 
@@ -83,6 +90,20 @@ Stage 5 frame breakdown showed:
 - the dominant cost is still `paint`,
 - the canvas backend alone does not explain the total GPU-frame paint cost,
 - the remaining hotspot is the chrome/panel renderer path.
+
+### Updated reading after Stage 4 closeout
+
+Recent Kitty benchmarks and fallback audits changed the interpretation:
+
+- `gpu-auto` on Lightcode stage 5 is now around `16.76ms` steady median versus CPU `34.02ms`
+- the strategy auto-selects `final-frame-raw`
+- fallback audits for `lightcode`, `showcase`, and `void-showcase` no longer show generic panel/chrome paint falling back to CPU; only `raw-command` control ops remain in the common logs
+
+Conclusion:
+
+> the original Stage 5 chrome/panel bottleneck has been materially reduced enough to treat the core migration as complete.
+
+What remains after this is not the old panel/chrome renderer crisis, but narrower follow-up work around text/image generation, cache quality, and polish.
 
 ---
 
@@ -360,6 +381,23 @@ Cons:
 - promote from text-run sprites to glyph-atlas rendering
 - preserve layout/text shaping on CPU
 - move actual composition fully to GPU
+
+### Current practical status
+
+The architecture now has a proper next-step path toward T2:
+
+- text layout still happens on CPU;
+- glyph bitmaps come from the runtime font atlas cache;
+- the source tree now includes a dedicated glyph-layer bridge path for UV-atlas rendering.
+
+Important:
+
+- the currently built/runtime-validated bridge may still be on the old image ABI, so the common runtime can legitimately keep using text-run sprites until the bridge is rebuilt with glyph support;
+- the new source path is the architecturally correct target, but it is not honest to claim runtime activation until the native bridge is rebuilt and benchmarked.
+
+So the honest classification is:
+
+> UV-atlas glyph path implemented in source; runtime activation pending native bridge rebuild + benchmark validation.
 
 ## Decision
 
@@ -663,6 +701,20 @@ The exact ABI names may differ, but the missing capability is clear: the bridge 
   - layered upload
   - final-frame upload
   - partial region paths
+
+Important implementation note:
+
+- this module must stay a pure decision layer;
+- it must consume real frame/layer metrics coming from `loop.ts` / compositor prep;
+- it must not invent strategy from dummy defaults inside the GPU painter backend.
+
+### `packages/renderer/src/gpu-frame-composer.ts`
+
+- explicit GPU composition orchestration for Stage 4
+- owns mode switching between:
+  - `layered-raw`
+  - `final-frame-raw`
+- centralizes transition cleanup when the engine switches between retained layer images and one final frame image
 
 ### `packages/renderer/src/gpu-text-cache.ts`
 

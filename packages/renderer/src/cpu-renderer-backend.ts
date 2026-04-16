@@ -8,6 +8,7 @@ export function createCpuRendererBackend(paintOp: (ctx: RendererBackendPaintCont
       for (const op of ctx.graph.ops) {
         paintOp(ctx, op)
       }
+      return { output: "buffer", strategy: null }
     },
   }
 }

@@ -94,6 +94,11 @@ const MAX_CACHE = 500
 const layoutCache = new Map<string, { lines: LayoutLine[]; height: number; lineCount: number }>()
 const MAX_LAYOUT_CACHE = 1000
 
+function touchTextCacheEntry<K, V>(cache: Map<K, V>, key: K, value: V) {
+  cache.delete(key)
+  cache.set(key, value)
+}
+
 function cacheKey(text: string, font: string): string {
   return `${font}\0${text}`
 }
@@ -103,7 +108,10 @@ function layoutCacheKey(text: string, fontId: number, maxWidth: number, lineHeig
 }
 
 function getCachedLayout(text: string, fontId: number, maxWidth: number, lineHeight: number) {
-  return layoutCache.get(layoutCacheKey(text, fontId, maxWidth, lineHeight))
+  const key = layoutCacheKey(text, fontId, maxWidth, lineHeight)
+  const cached = layoutCache.get(key)
+  if (cached) touchTextCacheEntry(layoutCache, key, cached)
+  return cached
 }
 
 function setCachedLayout(text: string, fontId: number, maxWidth: number, lineHeight: number, value: { lines: LayoutLine[]; height: number; lineCount: number }) {
@@ -133,6 +141,8 @@ export function prepareText(
     }
     prepared = prepareWithSegments(text, css, options)
     preparedCache.set(key, prepared)
+  } else {
+    touchTextCacheEntry(preparedCache, key, prepared)
   }
   return prepared
 }
@@ -282,6 +292,8 @@ export function measureForClay(
     }
     prepared = prepareWithSegments(text, css)
     preparedCache.set(key, prepared)
+  } else {
+    touchTextCacheEntry(preparedCache, key, prepared)
   }
 
   const width = measureNaturalWidth(prepared)
@@ -294,6 +306,13 @@ export function clearTextCache() {
   preparedCache.clear()
   layoutCache.clear()
   clearCache()
+}
+
+export function getTextLayoutCacheStats() {
+  return {
+    preparedCount: preparedCache.size,
+    layoutCount: layoutCache.size,
+  }
 }
 
 // Re-export types

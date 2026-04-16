@@ -23,7 +23,7 @@ export { createLayerComposer } from "./layer-composer"
 export type { LayerComposer } from "./layer-composer"
 
 // Transmission mode probing (used by @tge/terminal during init)
-export { probeShm, probeFile, patchRegion, transmitRaw, transmitRawAt } from "./kitty"
+export { probeShm, probeFile, patchRegion, transmitRaw, transmitRawAt, getKittyTransportStats, resetKittyTransportStats } from "./kitty"
 export type { TransmissionMode, CompressMode } from "./kitty"
 
 // Individual backends (for advanced use)

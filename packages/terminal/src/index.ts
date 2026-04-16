@@ -16,12 +16,20 @@
  */
 
 import { detect, type TerminalKind } from "./detect"
+import { appendFileSync } from "node:fs"
 import { inTmux, parentTerminal, passthroughSupported, createWriter, wrapPassthrough } from "./tmux"
 import { inferCaps, probeKittyGraphics, queryColors, type Capabilities } from "./caps"
 import { getSize, queryPixelSize, onResize, type TerminalSize, type ResizeHandler } from "./size"
 import { enter, leave, beginSync, endSync, installExitHandlers, type LifecycleState } from "./lifecycle"
 
 const DEBUG_KITTY_PROBE = process.env.TGE_DEBUG_KITTY === "1" || process.env.TGE_DEBUG_KITTY_SHM === "1"
+const DEBUG_RESIZE = process.env.TGE_DEBUG_RESIZE === "1"
+const RESIZE_DEBUG_LOG = "/tmp/tge-resize.log"
+
+function logTerminalResize(message: string) {
+  if (!DEBUG_RESIZE) return
+  appendFileSync(RESIZE_DEBUG_LOG, `[terminal:index] ${message}\n`)
+}
 
 // ── Types ──
 
@@ -154,6 +162,11 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
     }
   }
 
+  const forcedTransmissionMode = process.env.TGE_FORCE_TRANSMISSION_MODE
+  if (forcedTransmissionMode === "direct" || forcedTransmissionMode === "file" || forcedTransmissionMode === "shm") {
+    caps.transmissionMode = forcedTransmissionMode
+  }
+
   if (DEBUG_KITTY_PROBE) {
     console.error("[tge/terminal] transmission mode decision", {
       kittyGraphics: caps.kittyGraphics,
@@ -196,6 +209,7 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
     cellWidth: pixelInfo.cellWidth,
     cellHeight: pixelInfo.cellHeight,
   }
+  const resizeHandlers = new Set<ResizeHandler>()
 
   // Determine dark/light
   const isDark = bgColor
@@ -210,12 +224,21 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
 
   // Resize tracking — keep size object updated
   const unsubResize = onResize(stdout, (newSize) => {
+    logTerminalResize(`source cols=${newSize.cols} rows=${newSize.rows} pw=${newSize.pixelWidth} ph=${newSize.pixelHeight} cw=${newSize.cellWidth} ch=${newSize.cellHeight}`)
     size.cols = newSize.cols
     size.rows = newSize.rows
-    // Recalculate pixel dimensions from cell size
-    if (size.cellWidth > 0) {
+    if (newSize.pixelWidth > 0 && newSize.pixelHeight > 0) {
+      size.pixelWidth = newSize.pixelWidth
+      size.pixelHeight = newSize.pixelHeight
+    } else if (size.cellWidth > 0) {
       size.pixelWidth = size.cols * size.cellWidth
       size.pixelHeight = size.rows * size.cellHeight
+    }
+    if (newSize.cellWidth > 0) size.cellWidth = newSize.cellWidth
+    if (newSize.cellHeight > 0) size.cellHeight = newSize.cellHeight
+    logTerminalResize(`normalized cols=${size.cols} rows=${size.rows} pw=${size.pixelWidth} ph=${size.pixelHeight} cw=${size.cellWidth} ch=${size.cellHeight} subscribers=${resizeHandlers.size}`)
+    for (const handler of resizeHandlers) {
+      handler(size)
     }
   })
 
@@ -228,7 +251,14 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
     writeBytes: (data: Uint8Array) => { stdout.write(data) },
     beginSync: () => beginSync(rawWrite),
     endSync: () => endSync(rawWrite),
-    onResize: (handler: ResizeHandler) => onResize(stdout, handler),
+    onResize: (handler: ResizeHandler) => {
+      resizeHandlers.add(handler)
+      logTerminalResize(`subscribe subscribers=${resizeHandlers.size}`)
+      return () => {
+        resizeHandlers.delete(handler)
+        logTerminalResize(`unsubscribe subscribers=${resizeHandlers.size}`)
+      }
+    },
     onData: (handler: (data: Buffer) => void) => {
       stdin.on("data", handler)
       return () => { stdin.off("data", handler) }

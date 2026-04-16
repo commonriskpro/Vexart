@@ -10,7 +10,7 @@ const STATUS = {
   internalError: 5,
 } as const
 
-const BRIDGE_ABI_VERSION = 1
+const BRIDGE_ABI_VERSION = 4
 
 const BRIDGE_NAMES: Record<string, string> = {
   darwin: "libtge_wgpu_canvas_bridge.dylib",
@@ -30,6 +30,9 @@ const BRIDGE_FFI_DEFS = {
   tge_wgpu_canvas_target_destroy: { args: [FFIType.u64, FFIType.u64], returns: FFIType.void },
   tge_wgpu_canvas_image_create: { args: [FFIType.u64, FFIType.ptr, FFIType.ptr, FFIType.u32], returns: FFIType.u64 },
   tge_wgpu_canvas_image_destroy: { args: [FFIType.u64, FFIType.u64], returns: FFIType.void },
+  tge_wgpu_canvas_target_copy_region_to_image: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.u64 },
+  tge_wgpu_canvas_image_filter_backdrop: { args: [FFIType.u64, FFIType.u64, FFIType.ptr], returns: FFIType.u64 },
+  tge_wgpu_canvas_image_mask_rounded_rect: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.f32], returns: FFIType.u64 },
   tge_wgpu_canvas_target_render_clear: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.ptr], returns: FFIType.u32 },
   tge_wgpu_canvas_target_begin_layer: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.u32], returns: FFIType.u32 },
   tge_wgpu_canvas_target_end_layer: { args: [FFIType.u64, FFIType.u64], returns: FFIType.u32 },
@@ -46,11 +49,18 @@ const BRIDGE_FFI_DEFS = {
   tge_wgpu_canvas_target_render_beziers_layer: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.u32 },
   tge_wgpu_canvas_target_render_shape_rects_layer: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.u32 },
   tge_wgpu_canvas_target_render_glows_layer: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.u32 },
+  tge_wgpu_canvas_target_composite_image_layer: { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.u32 },
   tge_wgpu_canvas_target_readback_rgba: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.u32 },
   tge_wgpu_canvas_target_readback_region_rgba: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.u32 },
 } as const
 
 type WgpuBridgeLib = ReturnType<typeof dlopen<typeof BRIDGE_FFI_DEFS>>
+
+const BRIDGE_GLYPH_FFI_DEFS = {
+  tge_wgpu_canvas_target_render_glyphs_layer: { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.u32 },
+} as const
+
+type WgpuGlyphBridgeLib = ReturnType<typeof dlopen<typeof BRIDGE_GLYPH_FFI_DEFS>>
 
 export type WgpuCanvasBridgeProbe = {
   available: boolean
@@ -102,6 +112,9 @@ export type WgpuCanvasLinearGradient = {
   y: number
   w: number
   h: number
+  boxW: number
+  boxH: number
+  radius: number
   from: number
   to: number
   dirX: number
@@ -113,6 +126,9 @@ export type WgpuCanvasRadialGradient = {
   y: number
   w: number
   h: number
+  boxW: number
+  boxH: number
+  radius: number
   from: number
   to: number
 }
@@ -178,6 +194,33 @@ export type WgpuCanvasGlow = {
   intensity: number
 }
 
+export type WgpuCanvasGlyphInstance = {
+  x: number
+  y: number
+  w: number
+  h: number
+  u: number
+  v: number
+  uw: number
+  vh: number
+  r: number
+  g: number
+  b: number
+  a: number
+  opacity: number
+}
+
+export interface WgpuBackdropFilterParams {
+  blur: number | null
+  brightness: number | null
+  contrast: number | null
+  saturate: number | null
+  grayscale: number | null
+  invert: number | null
+  sepia: number | null
+  hueRotate: number | null
+}
+
 export type WgpuCanvasContextHandle = bigint
 export type WgpuCanvasTargetHandle = bigint
 export type WgpuCanvasImageHandle = bigint
@@ -236,9 +279,24 @@ function readFrameStats(buf: Float64Array): WgpuCanvasFrameStats {
   }
 }
 
+function createBackdropFilterParamsBuffer(params: WgpuBackdropFilterParams) {
+  const data = new Float32Array(8)
+  data[0] = params.blur ?? Number.NaN
+  data[1] = params.brightness ?? Number.NaN
+  data[2] = params.contrast ?? Number.NaN
+  data[3] = params.saturate ?? Number.NaN
+  data[4] = params.grayscale ?? Number.NaN
+  data[5] = params.invert ?? Number.NaN
+  data[6] = params.sepia ?? Number.NaN
+  data[7] = params.hueRotate ?? Number.NaN
+  return data
+}
+
 let bridgeLib: WgpuBridgeLib | null = null
 let bridgeChecked = false
 let bridgePath: string | null = null
+let glyphBridgeLib: WgpuGlyphBridgeLib | null = null
+let glyphBridgeChecked = false
 
 function findBridgePath() {
   const name = BRIDGE_NAMES[process.platform] ?? "libtge_wgpu_canvas_bridge.so"
@@ -320,6 +378,25 @@ export function getWgpuCanvasBridgeInfo() {
   return readBridgeInfo(lib)
 }
 
+function loadWgpuGlyphBridge() {
+  if (glyphBridgeChecked) return glyphBridgeLib
+  glyphBridgeChecked = true
+  if (!bridgePath) return null
+  try {
+    glyphBridgeLib = dlopen(bridgePath, BRIDGE_GLYPH_FFI_DEFS)
+  } catch {
+    glyphBridgeLib = null
+  }
+  return glyphBridgeLib
+}
+
+export function supportsWgpuCanvasGlyphLayer() {
+  const info = getWgpuCanvasBridgeInfo()
+  if (!info) return false
+  if (info.bridgeVersion < 5) return false
+  return !!loadWgpuGlyphBridge()
+}
+
 export function createWgpuCanvasContext(options?: WgpuCanvasInitOptions) {
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
@@ -365,6 +442,60 @@ export function destroyWgpuCanvasImage(contextHandle: WgpuCanvasContextHandle, i
   const lib = loadWgpuCanvasBridge()
   if (!lib) return
   lib.symbols.tge_wgpu_canvas_image_destroy(contextHandle, imageHandle)
+}
+
+export function copyWgpuCanvasTargetRegionToImage(
+  contextHandle: WgpuCanvasContextHandle,
+  targetHandle: WgpuCanvasTargetHandle,
+  region: { x: number; y: number; width: number; height: number },
+) {
+  const lib = loadWgpuCanvasBridge()
+  if (!lib) throw new Error("WGPU canvas bridge is not loaded")
+  const stats = new Float64Array(3)
+  const handle = BigInt(lib.symbols.tge_wgpu_canvas_target_copy_region_to_image(
+    contextHandle,
+    targetHandle,
+    region.x,
+    region.y,
+    region.width,
+    region.height,
+    stats,
+  ))
+  if (handle === 0n) throw new Error(readLastError(lib))
+  return { handle, stats: readFrameStats(stats) }
+}
+
+export function filterWgpuCanvasImageBackdrop(
+  contextHandle: WgpuCanvasContextHandle,
+  imageHandle: WgpuCanvasImageHandle,
+  params: WgpuBackdropFilterParams,
+) {
+  const lib = loadWgpuCanvasBridge()
+  if (!lib) throw new Error("WGPU canvas bridge is not loaded")
+  const data = createBackdropFilterParamsBuffer(params)
+  const handle = BigInt(lib.symbols.tge_wgpu_canvas_image_filter_backdrop(contextHandle, imageHandle, data))
+  if (handle === 0n) throw new Error(readLastError(lib))
+  return handle
+}
+
+export function maskWgpuCanvasImageRoundedRect(
+  contextHandle: WgpuCanvasContextHandle,
+  imageHandle: WgpuCanvasImageHandle,
+  mask: { x: number; y: number; width: number; height: number; radius: number },
+) {
+  const lib = loadWgpuCanvasBridge()
+  if (!lib) throw new Error("WGPU canvas bridge is not loaded")
+  const handle = BigInt(lib.symbols.tge_wgpu_canvas_image_mask_rounded_rect(
+    contextHandle,
+    imageHandle,
+    mask.x,
+    mask.y,
+    mask.width,
+    mask.height,
+    mask.radius,
+  ))
+  if (handle === 0n) throw new Error(readLastError(lib))
+  return handle
 }
 
 export function renderWgpuCanvasTargetClear(contextHandle: WgpuCanvasContextHandle, targetHandle: WgpuCanvasTargetHandle, rgba: number) {
@@ -530,6 +661,28 @@ export function renderWgpuCanvasTargetImageLayer(
   return readFrameStats(stats)
 }
 
+export function compositeWgpuCanvasTargetImageLayer(
+  contextHandle: WgpuCanvasContextHandle,
+  targetHandle: WgpuCanvasTargetHandle,
+  imageHandle: WgpuCanvasImageHandle,
+  instance: { x: number; y: number; w: number; h: number; opacity: number },
+  loadMode: 0 | 1,
+  clearRgba = 0x00000000,
+) {
+  const lib = loadWgpuCanvasBridge()
+  if (!lib) throw new Error("WGPU canvas bridge is not loaded")
+  const data = new Float32Array(8)
+  data[0] = instance.x
+  data[1] = instance.y
+  data[2] = instance.w
+  data[3] = instance.h
+  data[4] = instance.opacity
+  const stats = new Float64Array(3)
+  const status = Number(lib.symbols.tge_wgpu_canvas_target_composite_image_layer(contextHandle, targetHandle, imageHandle, data, loadMode, clearRgba >>> 0, stats))
+  if (status !== STATUS.success) throw new Error(readLastError(lib))
+  return readFrameStats(stats)
+}
+
 export function renderWgpuCanvasTargetImagesLayer(
   contextHandle: WgpuCanvasContextHandle,
   targetHandle: WgpuCanvasTargetHandle,
@@ -588,6 +741,41 @@ export function renderWgpuCanvasTargetTransformedImagesLayer(
   return readFrameStats(stats)
 }
 
+export function renderWgpuCanvasTargetGlyphsLayer(
+  contextHandle: WgpuCanvasContextHandle,
+  targetHandle: WgpuCanvasTargetHandle,
+  imageHandle: WgpuCanvasImageHandle,
+  instances: WgpuCanvasGlyphInstance[],
+  loadMode: 0 | 1,
+  clearRgba = 0x00000000,
+) {
+  const lib = loadWgpuGlyphBridge()
+  if (!lib) throw new Error("WGPU glyph bridge extension is not loaded")
+  if (instances.length === 0) throw new Error("renderWgpuCanvasTargetGlyphsLayer requires at least one glyph instance")
+  const data = new Float32Array(instances.length * 16)
+  for (let i = 0; i < instances.length; i++) {
+    const instance = instances[i]
+    const base = i * 16
+    data[base] = instance.x
+    data[base + 1] = instance.y
+    data[base + 2] = instance.w
+    data[base + 3] = instance.h
+    data[base + 4] = instance.u
+    data[base + 5] = instance.v
+    data[base + 6] = instance.uw
+    data[base + 7] = instance.vh
+    data[base + 8] = instance.r
+    data[base + 9] = instance.g
+    data[base + 10] = instance.b
+    data[base + 11] = instance.a
+    data[base + 12] = instance.opacity
+  }
+  const stats = new Float64Array(3)
+  const status = Number(lib.symbols.tge_wgpu_canvas_target_render_glyphs_layer(contextHandle, targetHandle, imageHandle, data, instances.length, loadMode, clearRgba >>> 0, stats))
+  if (status !== STATUS.success) throw new Error(readLastError(loadWgpuCanvasBridge()!))
+  return readFrameStats(stats)
+}
+
 export function renderWgpuCanvasTargetLinearGradientsLayer(
   contextHandle: WgpuCanvasContextHandle,
   targetHandle: WgpuCanvasTargetHandle,
@@ -598,26 +786,30 @@ export function renderWgpuCanvasTargetLinearGradientsLayer(
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
   if (gradients.length === 0) throw new Error("renderWgpuCanvasTargetLinearGradientsLayer requires at least one gradient")
-  const data = new Float32Array(gradients.length * 16)
+  const data = new Float32Array(gradients.length * 20)
   for (let i = 0; i < gradients.length; i++) {
     const gradient = gradients[i]
-    const base = i * 16
+    const base = i * 20
     data[base] = gradient.x
     data[base + 1] = gradient.y
     data[base + 2] = gradient.w
     data[base + 3] = gradient.h
-    data[base + 4] = ((gradient.from >>> 24) & 0xff) / 255
-    data[base + 5] = ((gradient.from >>> 16) & 0xff) / 255
-    data[base + 6] = ((gradient.from >>> 8) & 0xff) / 255
-    data[base + 7] = (gradient.from & 0xff) / 255
-    data[base + 8] = ((gradient.to >>> 24) & 0xff) / 255
-    data[base + 9] = ((gradient.to >>> 16) & 0xff) / 255
-    data[base + 10] = ((gradient.to >>> 8) & 0xff) / 255
-    data[base + 11] = (gradient.to & 0xff) / 255
-    data[base + 12] = gradient.dirX
-    data[base + 13] = gradient.dirY
-    data[base + 14] = 0
-    data[base + 15] = 0
+    data[base + 4] = gradient.boxW
+    data[base + 5] = gradient.boxH
+    data[base + 6] = gradient.radius
+    data[base + 7] = 0
+    data[base + 8] = ((gradient.from >>> 24) & 0xff) / 255
+    data[base + 9] = ((gradient.from >>> 16) & 0xff) / 255
+    data[base + 10] = ((gradient.from >>> 8) & 0xff) / 255
+    data[base + 11] = (gradient.from & 0xff) / 255
+    data[base + 12] = ((gradient.to >>> 24) & 0xff) / 255
+    data[base + 13] = ((gradient.to >>> 16) & 0xff) / 255
+    data[base + 14] = ((gradient.to >>> 8) & 0xff) / 255
+    data[base + 15] = (gradient.to & 0xff) / 255
+    data[base + 16] = gradient.dirX
+    data[base + 17] = gradient.dirY
+    data[base + 18] = 0
+    data[base + 19] = 0
   }
   const stats = new Float64Array(3)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_linear_gradients_layer(contextHandle, targetHandle, data, gradients.length, loadMode, clearRgba >>> 0, stats))
@@ -635,22 +827,30 @@ export function renderWgpuCanvasTargetRadialGradientsLayer(
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
   if (gradients.length === 0) throw new Error("renderWgpuCanvasTargetRadialGradientsLayer requires at least one gradient")
-  const data = new Float32Array(gradients.length * 16)
+  const data = new Float32Array(gradients.length * 20)
   for (let i = 0; i < gradients.length; i++) {
     const gradient = gradients[i]
-    const base = i * 16
+    const base = i * 20
     data[base] = gradient.x
     data[base + 1] = gradient.y
     data[base + 2] = gradient.w
     data[base + 3] = gradient.h
-    data[base + 4] = ((gradient.from >>> 24) & 0xff) / 255
-    data[base + 5] = ((gradient.from >>> 16) & 0xff) / 255
-    data[base + 6] = ((gradient.from >>> 8) & 0xff) / 255
-    data[base + 7] = (gradient.from & 0xff) / 255
-    data[base + 8] = ((gradient.to >>> 24) & 0xff) / 255
-    data[base + 9] = ((gradient.to >>> 16) & 0xff) / 255
-    data[base + 10] = ((gradient.to >>> 8) & 0xff) / 255
-    data[base + 11] = (gradient.to & 0xff) / 255
+    data[base + 4] = gradient.boxW
+    data[base + 5] = gradient.boxH
+    data[base + 6] = gradient.radius
+    data[base + 7] = 0
+    data[base + 8] = ((gradient.from >>> 24) & 0xff) / 255
+    data[base + 9] = ((gradient.from >>> 16) & 0xff) / 255
+    data[base + 10] = ((gradient.from >>> 8) & 0xff) / 255
+    data[base + 11] = (gradient.from & 0xff) / 255
+    data[base + 12] = ((gradient.to >>> 24) & 0xff) / 255
+    data[base + 13] = ((gradient.to >>> 16) & 0xff) / 255
+    data[base + 14] = ((gradient.to >>> 8) & 0xff) / 255
+    data[base + 15] = (gradient.to & 0xff) / 255
+    data[base + 16] = 0
+    data[base + 17] = 0
+    data[base + 18] = 0
+    data[base + 19] = 0
   }
   const stats = new Float64Array(3)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_radial_gradients_layer(contextHandle, targetHandle, data, gradients.length, loadMode, clearRgba >>> 0, stats))

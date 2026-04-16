@@ -12,6 +12,8 @@
  * fit in one terminal cell. Typically ~8x16 or ~10x20.
  */
 
+import { appendFileSync } from "node:fs"
+
 export type TerminalSize = {
   /** Terminal width in columns (cells) */
   cols: number
@@ -109,19 +111,56 @@ export function queryPixelSize(
 
 export type ResizeHandler = (size: TerminalSize) => void
 
+const RESIZE_DEBUG = process.env.TGE_DEBUG_RESIZE === "1"
+const RESIZE_DEBUG_LOG = "/tmp/tge-resize.log"
+
+function logResize(message: string) {
+  if (!RESIZE_DEBUG) return
+  appendFileSync(RESIZE_DEBUG_LOG, `[terminal:size] ${message}\n`)
+}
+
 /**
  * Listen for terminal resize events (SIGWINCH).
  *
  * Returns an unsubscribe function.
  */
 export function onResize(stdout: NodeJS.WriteStream, handler: ResizeHandler): () => void {
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  let last = getSize(stdout)
+
+  const sameSize = (a: TerminalSize, b: TerminalSize) => {
+    return a.cols === b.cols &&
+      a.rows === b.rows &&
+      a.pixelWidth === b.pixelWidth &&
+      a.pixelHeight === b.pixelHeight &&
+      a.cellWidth === b.cellWidth &&
+      a.cellHeight === b.cellHeight
+  }
+
+  const emit = () => {
+    timeout = null
+    const next = getSize(stdout)
+    if (sameSize(last, next)) {
+      logResize(`emit skipped cols=${next.cols} rows=${next.rows} pw=${next.pixelWidth} ph=${next.pixelHeight} cw=${next.cellWidth} ch=${next.cellHeight}`)
+      return
+    }
+    last = next
+    logResize(`emit cols=${next.cols} rows=${next.rows} pw=${next.pixelWidth} ph=${next.pixelHeight} cw=${next.cellWidth} ch=${next.cellHeight}`)
+    handler(next)
+  }
+
   const listener = () => {
-    handler(getSize(stdout))
+    logResize(`listener fired cols=${stdout.columns || 0} rows=${stdout.rows || 0}`)
+    if (timeout) clearTimeout(timeout)
+    timeout = setTimeout(emit, 0)
   }
 
   stdout.on("resize", listener)
+  process.on("SIGWINCH", listener)
 
   return () => {
+    if (timeout) clearTimeout(timeout)
     stdout.off("resize", listener)
+    process.off("SIGWINCH", listener)
   }
 }

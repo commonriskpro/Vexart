@@ -26,6 +26,12 @@ export type AtlasInfo = {
 }
 
 const atlasCache = new Map<number, AtlasInfo>()
+const MAX_FONT_ATLAS_CACHE = 16
+
+function touchAtlasCacheEntry(fontId: number, atlas: AtlasInfo) {
+  atlasCache.delete(fontId)
+  atlasCache.set(fontId, atlas)
+}
 
 /** Check if we have a system font available (approximate). */
 function resolveFontFamily(family: string): string {
@@ -45,7 +51,10 @@ function resolveFontFamily(family: string): string {
  */
 export function generateAtlas(fontId: number, desc: FontDescriptor): AtlasInfo {
   const cached = atlasCache.get(fontId)
-  if (cached) return cached
+  if (cached) {
+    touchAtlasCacheEntry(fontId, cached)
+    return cached
+  }
 
   const family = resolveFontFamily(desc.family)
   const size = desc.size
@@ -109,16 +118,37 @@ export function generateAtlas(fontId: number, desc: FontDescriptor): AtlasInfo {
   }
 
   const info: AtlasInfo = { fontId, cellWidth, cellHeight, ascender, data, glyphWidths }
+  if (atlasCache.size >= MAX_FONT_ATLAS_CACHE) {
+    const first = atlasCache.keys().next().value
+    if (first !== undefined) atlasCache.delete(first)
+  }
   atlasCache.set(fontId, info)
   return info
 }
 
 /** Get a cached atlas or generate one. */
 export function getAtlas(fontId: number, desc: FontDescriptor): AtlasInfo {
-  return atlasCache.get(fontId) ?? generateAtlas(fontId, desc)
+  const cached = atlasCache.get(fontId)
+  if (cached) {
+    touchAtlasCacheEntry(fontId, cached)
+    return cached
+  }
+  return generateAtlas(fontId, desc)
 }
 
 /** Clear all cached atlases. */
 export function clearAtlasCache() {
   atlasCache.clear()
+}
+
+export function getFontAtlasCacheStats() {
+  let bytes = 0
+  for (const atlas of atlasCache.values()) {
+    bytes += atlas.data.byteLength
+    bytes += atlas.glyphWidths.byteLength
+  }
+  return {
+    atlasCount: atlasCache.size,
+    bytes,
+  }
 }

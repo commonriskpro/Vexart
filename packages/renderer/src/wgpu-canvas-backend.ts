@@ -62,6 +62,31 @@ type WgpuTextImageRecord = WgpuImageRecord & {
   key: string
 }
 
+export type WgpuCanvasPainterCacheStats = {
+  targetCount: number
+  targetBytes: number
+  textImageCount: number
+  textImageBytes: number
+}
+
+const MAX_WGPU_CANVAS_TEXT_IMAGES = 128
+
+let wgpuCanvasPainterStatsProvider: (() => WgpuCanvasPainterCacheStats) | null = null
+
+function touchCanvasPainterTextEntry(cache: Map<string, WgpuTextImageRecord>, key: string, value: WgpuTextImageRecord) {
+  cache.delete(key)
+  cache.set(key, value)
+}
+
+export function getWgpuCanvasPainterCacheStats(): WgpuCanvasPainterCacheStats {
+  return wgpuCanvasPainterStatsProvider?.() ?? {
+    targetCount: 0,
+    targetBytes: 0,
+    textImageCount: 0,
+    textImageBytes: 0,
+  }
+}
+
 type IntBounds = {
   left: number
   top: number
@@ -183,7 +208,7 @@ type MixedGpuBatch =
   | { kind: "radialGradient"; gradients: WgpuCanvasRadialGradient[] }
   | { kind: "image"; image: Uint8Array; imageW: number; imageH: number; instances: { x: number; y: number; w: number; h: number; opacity: number }[] }
 
-function batchMixedSceneOps(ops: MixedGpuOp[]) {
+export function batchMixedSceneOps(ops: MixedGpuOp[]) {
   const batches: MixedGpuBatch[] = []
   let current: MixedGpuBatch | null = null
 
@@ -302,7 +327,7 @@ function batchMixedSceneOps(ops: MixedGpuOp[]) {
   return batches
 }
 
-function collectSupportedMixedScene(ctx: CanvasContext, canvasW: number, canvasH: number) {
+export function collectSupportedMixedScene(ctx: CanvasContext, canvasW: number, canvasH: number) {
   const commands = ctx._commands as CanvasDrawCommand[]
   const vp = ctx.viewport
   const z = vp.zoom
@@ -393,7 +418,7 @@ function collectSupportedMixedScene(ctx: CanvasContext, canvasW: number, canvasH
           y: 1 - (top / canvasH) * 2,
           w: (clippedW / canvasW) * 2,
           h: -(clippedH / canvasH) * 2,
-          color: cmd.fill,
+          color: cmd.fill!,
         },
       })
       continue
@@ -559,6 +584,9 @@ function collectSupportedMixedScene(ctx: CanvasContext, canvasW: number, canvasH
           y: 1 - (y / canvasH) * 2,
           w: (w / canvasW) * 2,
           h: -(h / canvasH) * 2,
+          boxW: w,
+          boxH: h,
+          radius: 0,
           from: cmd.from,
           to: cmd.to,
           dirX: Math.cos(radians),
@@ -585,6 +613,9 @@ function collectSupportedMixedScene(ctx: CanvasContext, canvasW: number, canvasH
           y: 1 - ((centerY - r) / canvasH) * 2,
           w: ((r * 2) / canvasW) * 2,
           h: -(((r * 2) / canvasH) * 2),
+          boxW: r * 2,
+          boxH: r * 2,
+          radius: r,
           from: cmd.from,
           to: cmd.to,
         },
@@ -608,6 +639,12 @@ class WgpuCanvasPainterBackend implements CanvasPainterBackend {
 
   constructor() {
     this.#context = createWgpuCanvasContext()
+    wgpuCanvasPainterStatsProvider = () => ({
+      targetCount: this.#target ? 1 : 0,
+      targetBytes: this.#target ? this.#target.width * this.#target.height * 4 : 0,
+      textImageCount: this.#textImages.size,
+      textImageBytes: Array.from(this.#textImages.values()).reduce((sum, image) => sum + image.width * image.height * 4, 0),
+    })
   }
 
   #getTarget(width: number, height: number) {
@@ -640,7 +677,10 @@ class WgpuCanvasPainterBackend implements CanvasPainterBackend {
   #getTextImage(text: string, color: number) {
     const key = `${color}:${text}`
     const cached = this.#textImages.get(key)
-    if (cached) return cached.handle
+    if (cached) {
+      touchCanvasPainterTextEntry(this.#textImages, key, cached)
+      return cached.handle
+    }
     const width = Math.max(1, paint.measureText(text))
     const height = 16
     const buf = create(width, height)
@@ -650,6 +690,14 @@ class WgpuCanvasPainterBackend implements CanvasPainterBackend {
     const a = color & 0xff
     paint.drawText(buf, 0, 0, text, r, g, b, a)
     const handle = createWgpuCanvasImage(this.#context, { width, height }, buf.data)
+    if (this.#textImages.size >= MAX_WGPU_CANVAS_TEXT_IMAGES) {
+      const first = this.#textImages.keys().next().value
+      if (first) {
+        const stale = this.#textImages.get(first)
+        if (stale) destroyWgpuCanvasImage(this.#context, stale.handle)
+        this.#textImages.delete(first)
+      }
+    }
     this.#textImages.set(key, { key, width, height, handle })
     return handle
   }

@@ -160,6 +160,14 @@ export type CanvasImageCache = {
   clear: () => void
 }
 
+const canvasImageCaches = new Set<Map<string, CanvasRasterImage>>()
+const MAX_CANVAS_IMAGE_CACHE_ENTRIES = 64
+
+function touchCanvasCacheEntry(cache: Map<string, CanvasRasterImage>, key: string, value: CanvasRasterImage) {
+  cache.delete(key)
+  cache.set(key, value)
+}
+
 // ── Viewport ──
 
 export type Viewport = {
@@ -388,12 +396,16 @@ export class CanvasContext {
 
 export function createCanvasImageCache(): CanvasImageCache {
   const cache = new Map<string, CanvasRasterImage>()
+  canvasImageCaches.add(cache)
 
   return {
     get(width, height, key, draw) {
       const fullKey = `${key}:${width}x${height}`
       const cached = cache.get(fullKey)
-      if (cached) return cached
+      if (cached) {
+        touchCanvasCacheEntry(cache, fullKey, cached)
+        return cached
+      }
 
       const buf = create(width, height)
       const ctx = new CanvasContext()
@@ -401,12 +413,30 @@ export function createCanvasImageCache(): CanvasImageCache {
       paintCanvasCommands(buf, ctx, width, height)
 
       const image = { data: buf.data, width: buf.width, height: buf.height }
+      if (cache.size >= MAX_CANVAS_IMAGE_CACHE_ENTRIES) {
+        const first = cache.keys().next().value
+        if (first) cache.delete(first)
+      }
       cache.set(fullKey, image)
       return image
     },
     clear() {
       cache.clear()
     },
+  }
+}
+
+export function getCanvasImageCacheStats() {
+  let entryCount = 0
+  let bytes = 0
+  for (const cache of canvasImageCaches) {
+    entryCount += cache.size
+    for (const image of cache.values()) bytes += image.data.byteLength
+  }
+  return {
+    cacheCount: canvasImageCaches.size,
+    entryCount,
+    bytes,
   }
 }
 

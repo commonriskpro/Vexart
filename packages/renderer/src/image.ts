@@ -32,6 +32,13 @@ export type RawImage = DecodedImage
 const imageCache = new Map<string, DecodedImage>()
 const pendingDecodes = new Map<string, Promise<DecodedImage | null>>()
 const scaledImageCaches = new Set<Map<string, DecodedImage>>()
+const MAX_IMAGE_CACHE = 128
+const MAX_SCALED_CACHE_ENTRIES = 256
+
+function touchCacheEntry<K, V>(cache: Map<K, V>, key: K, value: V) {
+  cache.delete(key)
+  cache.set(key, value)
+}
 
 export type ScaledImageCache = {
   get: (src: RawImage, targetW: number, targetH: number, key: string) => RawImage
@@ -47,8 +54,15 @@ export function createScaledImageCache(): ScaledImageCache {
       if (targetW === src.width && targetH === src.height) return src
       const fullKey = `${key}:${src.width}x${src.height}->${targetW}x${targetH}`
       const cached = cache.get(fullKey)
-      if (cached) return cached
+      if (cached) {
+        touchCacheEntry(cache, fullKey, cached)
+        return cached
+      }
       const scaled = nearestNeighborScale(src, targetW, targetH)
+      if (cache.size >= MAX_SCALED_CACHE_ENTRIES) {
+        const first = cache.keys().next().value
+        if (first) cache.delete(first)
+      }
       cache.set(fullKey, scaled)
       return scaled
     },
@@ -69,6 +83,7 @@ export function decodeImageForNode(node: TGENode) {
   // Check cache first
   const cached = imageCache.get(src)
   if (cached) {
+    touchCacheEntry(imageCache, src, cached)
     node._imageBuffer = cached
     node._imageState = "loaded"
     return
@@ -97,6 +112,10 @@ export function decodeImageForNode(node: TGENode) {
   promise.then((result) => {
     pendingDecodes.delete(src)
     if (result) {
+      if (imageCache.size >= MAX_IMAGE_CACHE) {
+        const first = imageCache.keys().next().value
+        if (first) imageCache.delete(first)
+      }
       imageCache.set(src, result)
       node._imageBuffer = result
       node._imageState = "loaded"
@@ -274,4 +293,23 @@ function nearestNeighborScale(
 export function clearImageCache() {
   imageCache.clear()
   for (const cache of scaledImageCaches) cache.clear()
+}
+
+export function getImageCacheStats() {
+  let decodedBytes = 0
+  for (const image of imageCache.values()) decodedBytes += image.data.byteLength
+  let scaledEntries = 0
+  let scaledBytes = 0
+  for (const cache of scaledImageCaches) {
+    scaledEntries += cache.size
+    for (const image of cache.values()) scaledBytes += image.data.byteLength
+  }
+  return {
+    decodedCount: imageCache.size,
+    decodedBytes,
+    pendingCount: pendingDecodes.size,
+    scaledCacheCount: scaledImageCaches.size,
+    scaledEntries,
+    scaledBytes,
+  }
 }
