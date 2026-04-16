@@ -18,6 +18,7 @@
 import type { PixelBuffer } from "@tge/pixel"
 import * as kitty from "./kitty"
 import type { CompressMode, TransmissionMode } from "./kitty"
+import { resolveKittyTransportMode } from "./transport-manager"
 
 export type LayerEntry = {
   id: number
@@ -154,13 +155,14 @@ export function createLayerComposer(
 
   return {
     renderLayer(buf, imageId, pixelX, pixelY, z, cellW, cellH) {
+      const effectiveMode = resolveKittyTransportMode(mode)
       // Convert pixel coordinates to cell coordinates
       const col = Math.floor(pixelX / cellW)
       const row = Math.floor(pixelY / cellH)
 
       // Delete old image before re-transmit — Kitty requires explicit removal
       // to update the visible placement reliably.
-      if (activeIds.has(imageId) && mode !== "shm") {
+      if (activeIds.has(imageId) && effectiveMode !== "shm") {
         kitty.remove(write, imageId)
       }
 
@@ -171,35 +173,36 @@ export function createLayerComposer(
       if (z < 0) {
         // Background layer — pre-composite on black (nothing behind it)
         const opaque = compositeOnBlack(buf)
-        kitty.transmitAt(write, opaque, imageId, col, row, { z, placementId: placementIdForLayer(imageId), mode, compress })
+         kitty.transmitAt(write, opaque, imageId, col, row, { z, placementId: placementIdForLayer(imageId), mode: effectiveMode, compress })
       } else {
         // Content layer — keep alpha for terminal compositing
-        kitty.transmitAt(write, buf, imageId, col, row, { z, placementId: placementIdForLayer(imageId), mode, compress })
+         kitty.transmitAt(write, buf, imageId, col, row, { z, placementId: placementIdForLayer(imageId), mode: effectiveMode, compress })
       }
       activeIds.add(imageId)
     },
 
     renderLayerRaw(data, width, height, imageId, pixelX, pixelY, z, cellW, cellH) {
+      const effectiveMode = resolveKittyTransportMode(mode)
       const col = Math.floor(pixelX / cellW)
       const row = Math.floor(pixelY / cellH)
 
-      if (activeIds.has(imageId) && mode !== "shm") {
+      if (activeIds.has(imageId) && effectiveMode !== "shm") {
         kitty.remove(write, imageId)
       }
 
       if (z < 0) {
         // Raw path currently assumes the caller already prepared the final bytes.
         // Keep behavior explicit: no extra alpha compositing here.
-        kitty.transmitRawAt(write, { data, width, height }, imageId, col, row, { z, placementId: placementIdForLayer(imageId), mode, compress, format: 32 })
+         kitty.transmitRawAt(write, { data, width, height }, imageId, col, row, { z, placementId: placementIdForLayer(imageId), mode: effectiveMode, compress, format: 32 })
       } else {
-        kitty.transmitRawAt(write, { data, width, height }, imageId, col, row, { z, placementId: placementIdForLayer(imageId), mode, compress, format: 32 })
+         kitty.transmitRawAt(write, { data, width, height }, imageId, col, row, { z, placementId: placementIdForLayer(imageId), mode: effectiveMode, compress, format: 32 })
       }
       activeIds.add(imageId)
     },
 
     patchLayer(regionData, imageId, rx, ry, rw, rh) {
       if (!activeIds.has(imageId)) return false
-      kitty.patchRegion(write, imageId, regionData, rx, ry, rw, rh, { mode, compress })
+      kitty.patchRegion(write, imageId, regionData, rx, ry, rw, rh, { mode: resolveKittyTransportMode(mode), compress })
       return true
     },
 

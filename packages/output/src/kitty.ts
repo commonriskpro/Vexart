@@ -14,6 +14,8 @@
 
 import type { PixelBuffer } from "@tge/pixel"
 import { deflateSync } from "node:zlib"
+import { reportKittyTransportFailure, reportKittyTransportSuccess, resolveKittyTransportMode, TRANSPORT_FAILURE_REASON } from "./transport-manager"
+import { prepareNativeKittyShm, releaseNativeKittyShm } from "./kitty-shm-native"
 
 type RawImageData = {
   data: Uint8Array
@@ -133,8 +135,14 @@ type PersistentFileTransport = {
   activeSlot: number
 }
 
+type InFlightShmEntry = {
+  handle: number
+  timer: Timer
+}
+
 // POSIX constants
 const O_CREAT = 0x200
+const O_EXCL = 0x800
 const O_RDWR = 0x2
 const PROT_READ = 1
 const PROT_WRITE = 2
@@ -148,6 +156,35 @@ let persistentFileTransport: PersistentFileTransport | null = null
 let persistentFileGeneration = 0
 let persistentFileCleanupInstalled = false
 const retiredPersistentFilePaths = new Set<string>()
+const inFlightShmHandles = new Map<number, InFlightShmEntry>()
+let shmCleanupInstalled = false
+
+function createKittyShmName(kind: "gfx" | "patch" | "probe") {
+  return `/tge-${kind}-${process.pid}-${shmCounter++}`
+}
+
+function installShmCleanup() {
+  if (shmCleanupInstalled) return
+  shmCleanupInstalled = true
+  process.on("exit", () => {
+    for (const entry of inFlightShmHandles.values()) {
+      clearTimeout(entry.timer)
+      try { releaseNativeKittyShm(entry.handle, true) } catch {}
+    }
+    inFlightShmHandles.clear()
+  })
+}
+
+function retainNativeShmHandle(handle: number, ttlMs = 1500) {
+  installShmCleanup()
+  const timer = setTimeout(() => {
+    const entry = inFlightShmHandles.get(handle)
+    if (!entry) return
+    inFlightShmHandles.delete(handle)
+    try { releaseNativeKittyShm(handle, true) } catch {}
+  }, ttlMs)
+  inFlightShmHandles.set(handle, { handle, timer })
+}
 
 function loadShmLib(): ShmLib {
   if (shmLib) return shmLib
@@ -316,54 +353,26 @@ function transmitShm(
   placementId: number | undefined,
   data: Uint8Array,
   compress: boolean,
-) {
-  const lib = loadShmLib()
-  const { ptr } = require("bun:ffi")
-  const name = `/tge-gfx-${process.pid}-${shmCounter++}`
-  const nameBytes = Buffer.from(name + "\0")
-  const payload = compress ? deflateSync(data) : data
-  const size = payload.length
+): boolean {
+  try {
+    const name = createKittyShmName("gfx")
+    const payload = compress ? deflateSync(data) : data
+    const prepared = prepareNativeKittyShm(name, payload, 0o666)
 
-  // Create shared memory segment
-  const fd = lib.shm_open(nameBytes, O_CREAT | O_RDWR, 0o666)
-  if (fd < 0) {
-    // Fallback to direct if shm fails
-    transmitDirect(write, buf, id, action, format, z, placementId, data, compress)
-    return
+    const nameB64 = Buffer.from(name).toString("base64")
+    let meta = `a=${action},f=${format},i=${id},s=${buf.width},v=${buf.height},t=s,q=2`
+    if (compress) meta += `,o=z`
+    if (z !== undefined) meta += `,z=${z}`
+    if (placementId !== undefined) meta += `,p=${placementId}`
+    recordKittyStats("shm", "transmit", data.length, meta.length + nameB64.length + 16)
+    write(`\x1b_G${meta};${nameB64}\x1b\\`)
+    retainNativeShmHandle(prepared.handle)
+    reportKittyTransportSuccess("shm")
+    return true
+  } catch {
+    reportKittyTransportFailure("shm", TRANSPORT_FAILURE_REASON.RUNTIME_TRANSPORT_ERROR)
+    return false
   }
-
-  // Set size and map into memory
-  if (lib.ftruncate(fd, size) !== 0) {
-    lib.close(fd)
-    lib.shm_unlink(nameBytes)
-    transmitDirect(write, buf, id, action, format, z, placementId, data, compress)
-    return
-  }
-
-  const mapAddr = lib.mmap(null, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)
-  if (mapAddr === -1 || mapAddr === 0) {
-    lib.close(fd)
-    lib.shm_unlink(nameBytes)
-    transmitDirect(write, buf, id, action, format, z, placementId, data, compress)
-    return
-  }
-
-  // Copy (possibly compressed) pixel data to shared memory
-  lib.memcpy(mapAddr, Number(ptr(payload)), size)
-  lib.msync(mapAddr, size, MS_SYNC)
-
-  // Cleanup mmap and fd — terminal will read from shm name and unlink it
-  lib.munmap(mapAddr, size)
-  lib.close(fd)
-
-  // Send escape code with shm name (base64 encoded)
-  const nameB64 = Buffer.from(name).toString("base64")
-  let meta = `a=${action},f=${format},i=${id},s=${buf.width},v=${buf.height},t=s,q=2`
-  if (compress) meta += `,o=z`
-  if (z !== undefined) meta += `,z=${z}`
-  if (placementId !== undefined) meta += `,p=${placementId}`
-  recordKittyStats("shm", "transmit", data.length, meta.length + nameB64.length + 16)
-  write(`\x1b_G${meta};${nameB64}\x1b\\`)
 }
 
 // ── Persistent File Transmission (t=f) ──
@@ -387,10 +396,9 @@ function transmitFile(
   placementId: number | undefined,
   data: Uint8Array,
   compress: boolean,
-) {
-  const payload = compress ? deflateSync(data) : data
-
+): boolean {
   try {
+    const payload = compress ? deflateSync(data) : data
     const filePayload = writePersistentFilePayload(payload)
     let meta = `a=${action},f=${format},i=${id},s=${buf.width},v=${buf.height},t=f,S=${filePayload.size},O=${filePayload.offset},q=2`
     if (compress) meta += `,o=z`
@@ -398,9 +406,11 @@ function transmitFile(
     if (placementId !== undefined) meta += `,p=${placementId}`
     recordKittyStats("file", "transmit", data.length, meta.length + filePayload.pathB64.length + 16)
     write(`\x1b_G${meta};${filePayload.pathB64}\x1b\\`)
+    reportKittyTransportSuccess("file")
+    return true
   } catch {
-    // Fallback to direct if file write fails
-    transmitDirect(write, buf, id, action, format, z, placementId, data, compress)
+    reportKittyTransportFailure("file", TRANSPORT_FAILURE_REASON.RUNTIME_TRANSPORT_ERROR)
+    return false
   }
 }
 
@@ -468,20 +478,26 @@ export function transmit(
   const action = opts?.action ?? "T"
   const format = opts?.format ?? 32
   const z = opts?.z
-  const mode = opts?.mode ?? "direct"
+  const requestedMode = opts?.mode ?? "direct"
+  let mode: TransmissionMode = resolveKittyTransportMode(requestedMode)
   const data = format === 32 ? buf.data : stripAlpha(buf.data, buf.width * buf.height)
   const compress = resolveCompression(mode, data.length, opts?.compress ?? COMPRESS_MODE.AUTO)
 
-  switch (mode) {
-    case "shm":
-      transmitShm(write, buf, id, action, format, z, opts?.placementId, data, compress)
-      break
-    case "file":
-      transmitFile(write, buf, id, action, format, z, opts?.placementId, data, compress)
-      break
-    case "direct":
-      transmitDirect(write, buf, id, action, format, z, opts?.placementId, data, compress)
-      break
+  while (true) {
+    switch (mode) {
+      case "shm":
+        if (transmitShm(write, buf, id, action, format, z, opts?.placementId, data, compress)) return
+        mode = resolveKittyTransportMode("shm")
+        continue
+      case "file":
+        if (transmitFile(write, buf, id, action, format, z, opts?.placementId, data, compress)) return
+        mode = resolveKittyTransportMode("file")
+        continue
+      case "direct":
+        transmitDirect(write, buf, id, action, format, z, opts?.placementId, data, compress)
+        reportKittyTransportSuccess("direct")
+        return
+    }
   }
 }
 
@@ -502,21 +518,27 @@ export function transmitRaw(
   const action = opts?.action ?? "T"
   const format = opts?.format ?? 32
   const z = opts?.z
-  const mode = opts?.mode ?? "direct"
+  const requestedMode = opts?.mode ?? "direct"
+  let mode: TransmissionMode = resolveKittyTransportMode(requestedMode)
   const payload = format === 32 ? image.data : stripAlpha(image.data, image.width * image.height)
   const compress = resolveCompression(mode, payload.length, opts?.compress ?? COMPRESS_MODE.AUTO)
   const buf = { data: image.data, width: image.width, height: image.height, stride: image.width * 4 } satisfies PixelBuffer
 
-  switch (mode) {
-    case "shm":
-      transmitShm(write, buf, id, action, format, z, opts?.placementId, payload, compress)
-      break
-    case "file":
-      transmitFile(write, buf, id, action, format, z, opts?.placementId, payload, compress)
-      break
-    case "direct":
-      transmitDirect(write, buf, id, action, format, z, opts?.placementId, payload, compress)
-      break
+  while (true) {
+    switch (mode) {
+      case "shm":
+        if (transmitShm(write, buf, id, action, format, z, opts?.placementId, payload, compress)) return
+        mode = resolveKittyTransportMode("shm")
+        continue
+      case "file":
+        if (transmitFile(write, buf, id, action, format, z, opts?.placementId, payload, compress)) return
+        mode = resolveKittyTransportMode("file")
+        continue
+      case "direct":
+        transmitDirect(write, buf, id, action, format, z, opts?.placementId, payload, compress)
+        reportKittyTransportSuccess("direct")
+        return
+    }
   }
 }
 
@@ -592,7 +614,8 @@ export function patchRegion(
   rh: number,
   opts?: { mode?: TransmissionMode; compress?: CompressMode },
 ) {
-  const mode = opts?.mode ?? "direct"
+  const requestedMode = opts?.mode ?? "direct"
+  let mode: TransmissionMode = resolveKittyTransportMode(requestedMode)
   const compress = resolveCompression(mode, regionData.length, opts?.compress ?? COMPRESS_MODE.AUTO)
   const payload = compress ? deflateSync(regionData) : regionData
 
@@ -601,48 +624,42 @@ export function patchRegion(
   let meta = `a=f,i=${id},r=1,x=${rx},y=${ry},s=${rw},v=${rh},f=32,X=1,q=2`
   if (compress) meta += `,o=z`
 
-  switch (mode) {
-    case "shm": {
-      const lib = loadShmLib()
-      const { ptr } = require("bun:ffi")
-      const name = `/tge-patch-${process.pid}-${shmCounter++}`
-      const nameBytes = Buffer.from(name + "\0")
-      const size = payload.length
-
-      const fd = lib.shm_open(nameBytes, O_CREAT | O_RDWR, 0o666)
-      if (fd < 0) {
+  while (true) {
+    switch (mode) {
+      case "shm": {
+        try {
+          const name = createKittyShmName("patch")
+          const prepared = prepareNativeKittyShm(name, payload, 0o666)
+          const nameB64 = Buffer.from(name).toString("base64")
+          recordKittyStats("shm", "patch", regionData.length, meta.length + nameB64.length + 16)
+          write(`\x1b_G${meta},t=s;${nameB64}\x1b\\`)
+          retainNativeShmHandle(prepared.handle)
+          reportKittyTransportSuccess("shm")
+          return
+        } catch {
+          reportKittyTransportFailure("shm", TRANSPORT_FAILURE_REASON.RUNTIME_TRANSPORT_ERROR)
+          mode = resolveKittyTransportMode("shm")
+          continue
+        }
+      }
+      case "file": {
+        try {
+          const filePayload = writePersistentFilePayload(payload)
+          recordKittyStats("file", "patch", regionData.length, meta.length + filePayload.pathB64.length + 24)
+          write(`\x1b_G${meta},t=f,S=${filePayload.size},O=${filePayload.offset};${filePayload.pathB64}\x1b\\`)
+          reportKittyTransportSuccess("file")
+          return
+        } catch {
+          reportKittyTransportFailure("file", TRANSPORT_FAILURE_REASON.RUNTIME_TRANSPORT_ERROR)
+          mode = resolveKittyTransportMode("file")
+          continue
+        }
+      }
+      case "direct":
         patchRegionDirect(write, meta, payload)
+        reportKittyTransportSuccess("direct")
         return
-      }
-      lib.ftruncate(fd, size)
-      const mapAddr = lib.mmap(null, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)
-      if (mapAddr === -1 || mapAddr === 0) {
-        lib.close(fd); lib.shm_unlink(nameBytes)
-        patchRegionDirect(write, meta, payload)
-        return
-      }
-      lib.memcpy(mapAddr, Number(ptr(payload)), size)
-      lib.msync(mapAddr, size, MS_SYNC)
-      lib.munmap(mapAddr, size)
-      lib.close(fd)
-      const nameB64 = Buffer.from(name).toString("base64")
-      recordKittyStats("shm", "patch", regionData.length, meta.length + nameB64.length + 16)
-      write(`\x1b_G${meta},t=s;${nameB64}\x1b\\`)
-      break
     }
-    case "file": {
-      try {
-        const filePayload = writePersistentFilePayload(payload)
-        recordKittyStats("file", "patch", regionData.length, meta.length + filePayload.pathB64.length + 24)
-        write(`\x1b_G${meta},t=f,S=${filePayload.size},O=${filePayload.offset};${filePayload.pathB64}\x1b\\`)
-      } catch {
-        patchRegionDirect(write, meta, payload)
-      }
-      break
-    }
-    case "direct":
-      patchRegionDirect(write, meta, payload)
-      break
   }
 }
 
@@ -690,6 +707,7 @@ export function probeShm(
 ): Promise<boolean> {
   return new Promise((resolve) => {
     let done = false
+    let probeHandle = 0
 
     probeDebug("probeShm:start", { timeout })
 
@@ -698,6 +716,9 @@ export function probeShm(
       done = true
       offData(handler)
       clearTimeout(timer)
+      if (probeHandle) {
+        try { releaseNativeKittyShm(probeHandle, true) } catch {}
+      }
     }
 
     const handler = (data: Buffer) => {
@@ -724,38 +745,15 @@ export function probeShm(
 
     // Create a 1x1 RGBA shm segment for probing
     try {
-      const lib = loadShmLib()
-      const { ptr } = require("bun:ffi")
-      const name = `/tge-probe-${process.pid}`
-      const nameBytes = Buffer.from(name + "\0")
+      const name = createKittyShmName("probe")
       const size = 64 * 64 * 4
-
-      const fd = lib.shm_open(nameBytes, O_CREAT | O_RDWR, 0o600)
-      probeDebug("probeShm:shm_open", { fd, name })
-      if (fd < 0) {
-        probeDebug("probeShm:shm_open-failed")
-        cleanup(); resolve(false); return
-      }
-      lib.ftruncate(fd, size)
-
-      const mapAddr = lib.mmap(null, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)
-      probeDebug("probeShm:mmap", { mapAddr, size })
-      if (mapAddr === -1 || mapAddr === 0) {
-        lib.close(fd)
-        lib.shm_unlink(nameBytes)
-        probeDebug("probeShm:mmap-failed")
-        cleanup()
-        resolve(false)
-        return
-      }
 
       // Write a non-trivial payload so the probe is closer to real transport.
       const pixel = new Uint8Array(size)
       pixel.fill(0xff)
-      lib.memcpy(mapAddr, Number(ptr(pixel)), size)
-      lib.msync(mapAddr, size, MS_SYNC)
-      lib.munmap(mapAddr, size)
-      lib.close(fd)
+      const prepared = prepareNativeKittyShm(name, pixel, 0o666)
+      probeHandle = prepared.handle
+      probeDebug("probeShm:prepared", { handle: prepared.handle, name, size })
 
       // Send query — terminal will try to read from shm, respond OK or error
       // Terminal will shm_unlink after reading (per spec)

@@ -264,6 +264,8 @@ export type RenderLoopOptions = {
     maxFps?: number
     /** Idle FPS cap override. Default: min(maxFps, 60). */
     idleMaxFps?: number
+    /** Interaction-driven frame cap. Default: min(maxFps, 60). */
+    interactionMaxFps?: number
     /** Force layer retransmit even when the pixel buffer is unchanged. Benchmark/debug only. */
     forceLayerRepaint?: boolean
   }
@@ -296,6 +298,8 @@ export type RenderLoop = {
   /** Register a callback to run after Clay processes scroll but before walkTree.
    *  Returns unregister function. Used by VirtualList for zero-latency scroll sync. */
   onPostScroll: (cb: () => void) => () => void
+  /** Mark the owner layer of a node as dirty, optionally with a global damage rect. */
+  markNodeLayerDamaged: (nodeId: number, rect?: DamageRect) => void
   /** Suspend rendering — stop loop, restore terminal for external process ($EDITOR) */
   suspend: () => void
   /** Resume rendering — re-enter TGE mode, force full repaint */
@@ -385,10 +389,13 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   let timer: ReturnType<typeof setTimeout> | null = null
   const maxFps = opts?.experimental?.maxFps ?? 60
   const idleMaxFps = opts?.experimental?.idleMaxFps ?? Math.min(maxFps, 60)
+  const interactionMaxFps = opts?.experimental?.interactionMaxFps ?? Math.min(maxFps, 60)
   const forceLayerRepaint = opts?.experimental?.forceLayerRepaint === true
   const idleFps = Math.max(1, Math.min(idleMaxFps, maxFps))
+  const interactionFps = Math.max(1, Math.min(interactionMaxFps, maxFps))
   const idleInterval = Math.max(Math.round(1000 / idleFps), 8)
   const activeInterval = Math.max(Math.round(1000 / maxFps), 8) // min 8ms ≈ 120fps cap
+  const interactionInterval = Math.max(Math.round(1000 / interactionFps), 8)
   const keyInteractionBoostMs = 220
   const scrollInteractionBoostMs = 320
   const pointerInteractionBoostMs = 520
@@ -404,10 +411,12 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   let lastFrameStartedAt = 0
   let nextFrameDeadlineMs = 0
   let interactionBoostUntilMs = performance.now()
+  let lastInteractionFrameAt = 0
   let lastPresentedInteractionSeq = 0
   let lastPresentedInteractionLatencyMs = 0
   let lastPresentedInteractionType: string | null = null
   let isRenderingFrame = false
+  let pendingInteractionFrameKind: "pointer" | "scroll" | "key" | null = null
 
   function boostWindowFor(kind: "pointer" | "scroll" | "key") {
     if (kind === "pointer") return pointerInteractionBoostMs
@@ -456,7 +465,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     if (timer === null) return
     if (!isDirty()) return
     const now = performance.now()
-    const targetDelay = kind === "pointer" ? 0 : kind === "scroll" ? 1 : interactionNudgeDelayMs
+    const wait = Math.max(0, interactionInterval - (now - lastInteractionFrameAt))
+    const targetDelay = Math.max(kind === "pointer" ? 0 : kind === "scroll" ? 1 : interactionNudgeDelayMs, wait)
     if (scheduledDelayMs <= targetDelay + 1) return
     clearTimeout(timer)
     timer = null
@@ -472,17 +482,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   function requestInteractionFrame(kind: "pointer" | "scroll" | "key") {
     markInteractionActive(kind)
     if (isSuspended) return
-    if (isRenderingFrame) return
     if (!isDirty()) return
-    if (timer) {
-      clearTimeout(timer)
-      timer = null
-    }
-    scheduledDelayMs = 0
-    scheduledAtMs = performance.now()
-    nextFrameDeadlineMs = 0
-    frame()
-    scheduleNextFrame()
+    pendingInteractionFrameKind = kind
+    if (isRenderingFrame) return
+    nudgeInteraction(kind)
   }
 
   // ── Scroll + pointer state ──
@@ -643,9 +646,11 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   /** ALL box nodes in walkTree order (open/close pairs = Clay element order). */
   const boxNodes: TGENode[] = []
   const nodePathById = new Map<number, string>()
+  const nodeRefById = new Map<number, TGENode>()
 
   function walkTree(node: TGENode, parentDir?: number, insideTransform?: boolean, path = "r") {
     nodePathById.set(node.id, path)
+    nodeRefById.set(node.id, node)
     if (node.kind === "text") {
       const content = node.text || collectText(node)
       if (!content) return
@@ -2643,6 +2648,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     if (isRenderingFrame) return
     isRenderingFrame = true
     const frameStartedAt = performance.now()
+    if (hasRecentInteraction()) lastInteractionFrameAt = frameStartedAt
     try {
       const profile: FrameProfile | undefined = DEBUG_CADENCE
         ? {
@@ -2678,6 +2684,13 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       }
     } finally {
       isRenderingFrame = false
+      if (pendingInteractionFrameKind && !isSuspended && isDirty()) {
+        const kind = pendingInteractionFrameKind
+        pendingInteractionFrameKind = null
+        nudgeInteraction(kind)
+      } else {
+        pendingInteractionFrameKind = null
+      }
     }
   }
 
@@ -2764,6 +2777,17 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     },
 
     frame,
+
+    markNodeLayerDamaged(nodeId: number, rect?: DamageRect) {
+      const node = nodeRefById.get(nodeId)
+      if (!node) return
+      const key = getLayerKeyForNode(node)
+      const layer = layerCache.get(key)
+      if (!layer) return
+      if (rect) markLayerDamaged(layer, rect)
+      else layer.dirty = true
+      markDirty()
+    },
 
     suspend() {
       if (isSuspended) return

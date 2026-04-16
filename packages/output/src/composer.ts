@@ -18,6 +18,7 @@ import type { Capabilities } from "@tge/terminal"
 import * as kitty from "./kitty"
 import * as placeholder from "./placeholder"
 import * as halfblock from "./halfblock"
+import { resolveKittyTransportMode } from "./transport-manager"
 
 export type BackendKind = "kitty" | "placeholder" | "halfblock"
 
@@ -102,6 +103,7 @@ export function createComposer(
   }
 
   function renderKitty(buf: PixelBuffer, col: number, row: number) {
+    const effectiveMode = resolveKittyTransportMode(caps.transmissionMode)
     // Double-buffer: transmit with new ID, then delete old
     const prevId = imageId
     const wasActive = active
@@ -110,7 +112,7 @@ export function createComposer(
     const opaque = compositeOnBlack(buf)
     rawWrite(`\x1b7`) // save cursor
     rawWrite(`\x1b[${row + 1};${col + 1}H`) // move cursor
-    kitty.transmit(gfxWrite, opaque, imageId, { action: "T", mode: caps.transmissionMode, compress: "auto" })
+    kitty.transmit(gfxWrite, opaque, imageId, { action: "T", mode: effectiveMode, compress: "auto" })
     rawWrite(`\x1b8`) // restore cursor
 
     if (wasActive) kitty.remove(gfxWrite, prevId)

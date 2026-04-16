@@ -10,7 +10,7 @@ const STATUS = {
   internalError: 5,
 } as const
 
-const BRIDGE_ABI_VERSION = 4
+const BRIDGE_ABI_VERSION = 5
 
 const BRIDGE_NAMES: Record<string, string> = {
   darwin: "libtge_wgpu_canvas_bridge.dylib",
@@ -33,6 +33,7 @@ const BRIDGE_FFI_DEFS = {
   tge_wgpu_canvas_target_copy_region_to_image: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.u64 },
   tge_wgpu_canvas_image_filter_backdrop: { args: [FFIType.u64, FFIType.u64, FFIType.ptr], returns: FFIType.u64 },
   tge_wgpu_canvas_image_mask_rounded_rect: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.f32], returns: FFIType.u64 },
+  tge_wgpu_canvas_image_mask_rounded_rect_corners: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.f32, FFIType.f32, FFIType.f32, FFIType.f32], returns: FFIType.u64 },
   tge_wgpu_canvas_target_render_clear: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.ptr], returns: FFIType.u32 },
   tge_wgpu_canvas_target_begin_layer: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.u32], returns: FFIType.u32 },
   tge_wgpu_canvas_target_end_layer: { args: [FFIType.u64, FFIType.u64], returns: FFIType.u32 },
@@ -48,7 +49,10 @@ const BRIDGE_FFI_DEFS = {
   tge_wgpu_canvas_target_render_polygons_layer: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.u32 },
   tge_wgpu_canvas_target_render_beziers_layer: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.u32 },
   tge_wgpu_canvas_target_render_shape_rects_layer: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.u32 },
+  tge_wgpu_canvas_target_render_shape_rect_corners_layer: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.u32 },
   tge_wgpu_canvas_target_render_glows_layer: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.u32 },
+  tge_wgpu_canvas_target_render_nebulas_layer: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.u32 },
+  tge_wgpu_canvas_target_render_starfields_layer: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.u32 },
   tge_wgpu_canvas_target_composite_image_layer: { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.u32 },
   tge_wgpu_canvas_target_readback_rgba: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.u32 },
   tge_wgpu_canvas_target_readback_region_rgba: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.u32 },
@@ -185,6 +189,26 @@ export type WgpuCanvasShapeRect = {
   stroke?: number
 }
 
+export type WgpuCanvasCornerRadii = {
+  tl: number
+  tr: number
+  br: number
+  bl: number
+}
+
+export type WgpuCanvasShapeRectCorners = {
+  x: number
+  y: number
+  w: number
+  h: number
+  boxW: number
+  boxH: number
+  radii: WgpuCanvasCornerRadii
+  strokeWidth: number
+  fill?: number
+  stroke?: number
+}
+
 export type WgpuCanvasGlow = {
   x: number
   y: number
@@ -192,6 +216,41 @@ export type WgpuCanvasGlow = {
   h: number
   color: number
   intensity: number
+}
+
+export type WgpuCanvasNebulaStop = {
+  color: number
+  position: number
+}
+
+export type WgpuCanvasNebula = {
+  x: number
+  y: number
+  w: number
+  h: number
+  seed: number
+  scale: number
+  octaves: number
+  gain: number
+  lacunarity: number
+  warp: number
+  detail: number
+  dust: number
+  stops: [WgpuCanvasNebulaStop, WgpuCanvasNebulaStop, WgpuCanvasNebulaStop, WgpuCanvasNebulaStop]
+}
+
+export type WgpuCanvasStarfield = {
+  x: number
+  y: number
+  w: number
+  h: number
+  seed: number
+  count: number
+  clusterCount: number
+  clusterStars: number
+  warmColor: number
+  neutralColor: number
+  coolColor: number
 }
 
 export type WgpuCanvasGlyphInstance = {
@@ -493,6 +552,29 @@ export function maskWgpuCanvasImageRoundedRect(
     mask.width,
     mask.height,
     mask.radius,
+  ))
+  if (handle === 0n) throw new Error(readLastError(lib))
+  return handle
+}
+
+export function maskWgpuCanvasImageRoundedRectCorners(
+  contextHandle: WgpuCanvasContextHandle,
+  imageHandle: WgpuCanvasImageHandle,
+  mask: { x: number; y: number; width: number; height: number; radii: WgpuCanvasCornerRadii },
+) {
+  const lib = loadWgpuCanvasBridge()
+  if (!lib) throw new Error("WGPU canvas bridge is not loaded")
+  const handle = BigInt(lib.symbols.tge_wgpu_canvas_image_mask_rounded_rect_corners(
+    contextHandle,
+    imageHandle,
+    mask.x,
+    mask.y,
+    mask.width,
+    mask.height,
+    mask.radii.tl,
+    mask.radii.tr,
+    mask.radii.br,
+    mask.radii.bl,
   ))
   if (handle === 0n) throw new Error(readLastError(lib))
   return handle
@@ -1015,6 +1097,51 @@ export function renderWgpuCanvasTargetShapeRectsLayer(
   return readFrameStats(stats)
 }
 
+export function renderWgpuCanvasTargetShapeRectCornersLayer(
+  contextHandle: WgpuCanvasContextHandle,
+  targetHandle: WgpuCanvasTargetHandle,
+  rects: WgpuCanvasShapeRectCorners[],
+  loadMode: 0 | 1,
+  clearRgba = 0x00000000,
+) {
+  const lib = loadWgpuCanvasBridge()
+  if (!lib) throw new Error("WGPU canvas bridge is not loaded")
+  if (rects.length === 0) throw new Error("renderWgpuCanvasTargetShapeRectCornersLayer requires at least one rect")
+  const data = new Float32Array(rects.length * 24)
+  for (let i = 0; i < rects.length; i++) {
+    const rect = rects[i]
+    const base = i * 24
+    data[base] = rect.x
+    data[base + 1] = rect.y
+    data[base + 2] = rect.w
+    data[base + 3] = rect.h
+    data[base + 4] = rect.fill ? ((rect.fill >>> 24) & 0xff) / 255 : 0
+    data[base + 5] = rect.fill ? ((rect.fill >>> 16) & 0xff) / 255 : 0
+    data[base + 6] = rect.fill ? ((rect.fill >>> 8) & 0xff) / 255 : 0
+    data[base + 7] = rect.fill ? (rect.fill & 0xff) / 255 : 0
+    data[base + 8] = rect.stroke ? ((rect.stroke >>> 24) & 0xff) / 255 : 0
+    data[base + 9] = rect.stroke ? ((rect.stroke >>> 16) & 0xff) / 255 : 0
+    data[base + 10] = rect.stroke ? ((rect.stroke >>> 8) & 0xff) / 255 : 0
+    data[base + 11] = rect.stroke ? (rect.stroke & 0xff) / 255 : 0
+    data[base + 12] = rect.radii.tl
+    data[base + 13] = rect.radii.tr
+    data[base + 14] = rect.radii.br
+    data[base + 15] = rect.radii.bl
+    data[base + 16] = rect.strokeWidth
+    data[base + 17] = rect.fill ? 1 : 0
+    data[base + 18] = rect.stroke ? 1 : 0
+    data[base + 19] = rect.boxW
+    data[base + 20] = rect.boxH
+    data[base + 21] = 0
+    data[base + 22] = 0
+    data[base + 23] = 0
+  }
+  const stats = new Float64Array(3)
+  const status = Number(lib.symbols.tge_wgpu_canvas_target_render_shape_rect_corners_layer(contextHandle, targetHandle, data, rects.length, loadMode, clearRgba >>> 0, stats))
+  if (status !== STATUS.success) throw new Error(readLastError(lib))
+  return readFrameStats(stats)
+}
+
 export function renderWgpuCanvasTargetGlowsLayer(
   contextHandle: WgpuCanvasContextHandle,
   targetHandle: WgpuCanvasTargetHandle,
@@ -1044,6 +1171,93 @@ export function renderWgpuCanvasTargetGlowsLayer(
   }
   const stats = new Float64Array(3)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_glows_layer(contextHandle, targetHandle, data, glows.length, loadMode, clearRgba >>> 0, stats))
+  if (status !== STATUS.success) throw new Error(readLastError(lib))
+  return readFrameStats(stats)
+}
+
+export function renderWgpuCanvasTargetNebulasLayer(
+  contextHandle: WgpuCanvasContextHandle,
+  targetHandle: WgpuCanvasTargetHandle,
+  nebulas: WgpuCanvasNebula[],
+  loadMode: 0 | 1,
+  clearRgba = 0x00000000,
+) {
+  const lib = loadWgpuCanvasBridge()
+  if (!lib) throw new Error("WGPU canvas bridge is not loaded")
+  if (nebulas.length === 0) throw new Error("renderWgpuCanvasTargetNebulasLayer requires at least one nebula")
+  const data = new Float32Array(nebulas.length * 32)
+  for (let i = 0; i < nebulas.length; i++) {
+    const nebula = nebulas[i]
+    const base = i * 32
+    data[base] = nebula.x
+    data[base + 1] = nebula.y
+    data[base + 2] = nebula.w
+    data[base + 3] = nebula.h
+    data[base + 4] = nebula.seed
+    data[base + 5] = nebula.scale
+    data[base + 6] = nebula.octaves
+    data[base + 7] = nebula.gain / 100
+    data[base + 8] = nebula.lacunarity / 100
+    data[base + 9] = nebula.warp / 100
+    data[base + 10] = nebula.detail / 100
+    data[base + 11] = nebula.dust / 100
+    for (let si = 0; si < 4; si++) {
+      const stop = nebula.stops[si]
+      const stopBase = base + 12 + si * 5
+      data[stopBase] = stop.position
+      data[stopBase + 1] = ((stop.color >>> 24) & 0xff) / 255
+      data[stopBase + 2] = ((stop.color >>> 16) & 0xff) / 255
+      data[stopBase + 3] = ((stop.color >>> 8) & 0xff) / 255
+      data[stopBase + 4] = (stop.color & 0xff) / 255
+    }
+  }
+  const stats = new Float64Array(3)
+  const status = Number(lib.symbols.tge_wgpu_canvas_target_render_nebulas_layer(contextHandle, targetHandle, data, nebulas.length, loadMode, clearRgba >>> 0, stats))
+  if (status !== STATUS.success) throw new Error(readLastError(lib))
+  return readFrameStats(stats)
+}
+
+export function renderWgpuCanvasTargetStarfieldsLayer(
+  contextHandle: WgpuCanvasContextHandle,
+  targetHandle: WgpuCanvasTargetHandle,
+  starfields: WgpuCanvasStarfield[],
+  loadMode: 0 | 1,
+  clearRgba = 0x00000000,
+) {
+  const lib = loadWgpuCanvasBridge()
+  if (!lib) throw new Error("WGPU canvas bridge is not loaded")
+  if (starfields.length === 0) throw new Error("renderWgpuCanvasTargetStarfieldsLayer requires at least one starfield")
+  const data = new Float32Array(starfields.length * 24)
+  for (let i = 0; i < starfields.length; i++) {
+    const starfield = starfields[i]
+    const base = i * 24
+    data[base] = starfield.x
+    data[base + 1] = starfield.y
+    data[base + 2] = starfield.w
+    data[base + 3] = starfield.h
+    data[base + 4] = starfield.seed
+    data[base + 5] = starfield.count
+    data[base + 6] = starfield.clusterCount
+    data[base + 7] = starfield.clusterStars
+    data[base + 8] = ((starfield.warmColor >>> 24) & 0xff) / 255
+    data[base + 9] = ((starfield.warmColor >>> 16) & 0xff) / 255
+    data[base + 10] = ((starfield.warmColor >>> 8) & 0xff) / 255
+    data[base + 11] = (starfield.warmColor & 0xff) / 255
+    data[base + 12] = ((starfield.neutralColor >>> 24) & 0xff) / 255
+    data[base + 13] = ((starfield.neutralColor >>> 16) & 0xff) / 255
+    data[base + 14] = ((starfield.neutralColor >>> 8) & 0xff) / 255
+    data[base + 15] = (starfield.neutralColor & 0xff) / 255
+    data[base + 16] = ((starfield.coolColor >>> 24) & 0xff) / 255
+    data[base + 17] = ((starfield.coolColor >>> 16) & 0xff) / 255
+    data[base + 18] = ((starfield.coolColor >>> 8) & 0xff) / 255
+    data[base + 19] = (starfield.coolColor & 0xff) / 255
+    data[base + 20] = 0
+    data[base + 21] = 0
+    data[base + 22] = 0
+    data[base + 23] = 0
+  }
+  const stats = new Float64Array(3)
+  const status = Number(lib.symbols.tge_wgpu_canvas_target_render_starfields_layer(contextHandle, targetHandle, data, starfields.length, loadMode, clearRgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return readFrameStats(stats)
 }

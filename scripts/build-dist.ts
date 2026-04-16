@@ -169,6 +169,18 @@ if (existsSync(clayLib)) {
   console.log(`  ⚠️ libclay not found at ${clayLib}`)
 }
 
+// Kitty SHM helper shared lib
+const kittyShmDir = resolve(vendorDir, "kitty-shm", target)
+mkdirSync(kittyShmDir, { recursive: true })
+const kittyShmName = process.platform === "darwin" ? "libtge_kitty_shm_helper.dylib" : "libtge_kitty_shm_helper.so"
+const kittyShmLib = resolve(ROOT, "native/kitty-shm-helper/build", kittyShmName)
+if (existsSync(kittyShmLib)) {
+  cpSync(kittyShmLib, resolve(kittyShmDir, kittyShmName))
+  console.log(`  ✅ kitty shm helper → vendor/kitty-shm/${target}/`)
+} else {
+  console.log(`  ⚠️ kitty shm helper not found at ${kittyShmLib}`)
+}
+
 // ── 4. Copy tree-sitter assets ──
 console.log("🌳 Copying tree-sitter assets...")
 

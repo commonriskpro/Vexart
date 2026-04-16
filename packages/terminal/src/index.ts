@@ -148,23 +148,34 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
 
   // Step 3b: probe transmission mode (shm → file → direct)
   // Only for local connections with kitty graphics support
+  let transportProbe = { shm: false, file: false }
   if (!opts.skipProbe && caps.kittyGraphics && !caps.tmux && !isRemoteConnection()) {
     const { probeShm, probeFile } = await import("@tge/output")
     const shmOk = await probeShm(write, addDataHandler, removeDataHandler, opts.probeTimeout ?? 2000)
+    transportProbe.shm = shmOk
+    const fileOk = await probeFile(write, addDataHandler, removeDataHandler, opts.probeTimeout ?? 2000)
+    transportProbe.file = fileOk
     if (shmOk) {
       caps.transmissionMode = "shm"
-    } else {
-      const fileOk = await probeFile(write, addDataHandler, removeDataHandler, opts.probeTimeout ?? 2000)
-      if (fileOk) {
-        caps.transmissionMode = "file"
-      }
-      // else stays "direct" (default)
+    } else if (fileOk) {
+      caps.transmissionMode = "file"
     }
   }
 
   const forcedTransmissionMode = process.env.TGE_FORCE_TRANSMISSION_MODE
+  const { configureKittyTransportManager, resolveKittyTransportMode } = await import("@tge/output")
   if (forcedTransmissionMode === "direct" || forcedTransmissionMode === "file" || forcedTransmissionMode === "shm") {
-    caps.transmissionMode = forcedTransmissionMode
+    configureKittyTransportManager({
+      preferredMode: forcedTransmissionMode,
+      probe: transportProbe,
+    })
+    caps.transmissionMode = resolveKittyTransportMode(forcedTransmissionMode)
+  } else {
+    configureKittyTransportManager({
+      preferredMode: caps.transmissionMode,
+      probe: transportProbe,
+    })
+    caps.transmissionMode = resolveKittyTransportMode(caps.transmissionMode)
   }
 
   if (DEBUG_KITTY_PROBE) {

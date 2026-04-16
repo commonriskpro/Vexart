@@ -353,9 +353,16 @@ function NodeGraph(props: { selectedNode: string; onSelectedNodeChange: (id: str
           {LIGHTCODE_GRAPH_OVERLAY ? (
             <SceneOverlay
               id="active-chip"
-              draw={(ctx: CanvasContext) => {
+              dependsOn={() => [props.selectedNode]}
+              bounds={(scene) => {
+                const pos = scene.getNodePosition(props.selectedNode)
+                if (!pos) return null
+                return { x: pos.x - 92, y: pos.y + 72, width: 292, height: 54 }
+              }}
+              draw={(ctx: CanvasContext, scene) => {
                 const node = getNodeMeta(props.selectedNode)
-                const pos = graph.getPosition(props.selectedNode)
+                const pos = scene.getNodePosition(props.selectedNode)
+                if (!pos) return
                 const x = pos.x - 92
                 const y = pos.y + 72
                 ctx.rect(x + 6, y + 6, 292, 54, { fill: 0x00000050, radius: 10 })

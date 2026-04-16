@@ -13,6 +13,7 @@
     "zig:build": "cd zig && zig build -Doptimize=ReleaseFast",
     "zig:test": "cd zig && zig build test --summary all",
     "clay:build": "cc -shared -O2 -o vendor/libclay.dylib -DCLAY_IMPLEMENTATION -DCLAY_DISABLE_SIMD vendor/clay_wrapper.c -I vendor",
+    "kitty-shm:build": "sh -c 'mkdir -p native/kitty-shm-helper/build && if [ \"$(uname)\" = Darwin ]; then cc -shared -O2 -o native/kitty-shm-helper/build/libtge_kitty_shm_helper.dylib native/kitty-shm-helper/kitty_shm_helper.c; else cc -shared -O2 -fPIC -o native/kitty-shm-helper/build/libtge_kitty_shm_helper.so native/kitty-shm-helper/kitty_shm_helper.c; fi'",
     "font:gen": "bun run scripts/gen-font-atlas.ts",
     "build:dist": "bun run scripts/build-dist.ts",
     "bench:lightcode-stage4": "bun run scripts/lightcode-stage4-bench.ts",

@@ -24,6 +24,7 @@ type ShmLib = {
 }
 
 const O_CREAT = 0x200
+const O_EXCL = 0x800
 const O_RDWR = 0x2
 const PROT_READ = 1
 const PROT_WRITE = 2
@@ -94,7 +95,9 @@ async function runShm() {
   const nameBytes = Buffer.from(name + "\0")
   const pixel = new Uint8Array([0, 0, 0, 0])
 
-  const fd = lib.shm_open(nameBytes, O_CREAT | O_RDWR, 0o666)
+  try { lib.shm_unlink(nameBytes) } catch {}
+
+  const fd = lib.shm_open(nameBytes, O_CREAT | O_EXCL | O_RDWR, 0o666)
   if (fd < 0) {
     return { mode: "shm", setup: { fd }, reply: "<shm_open failed>" }
   }
@@ -108,12 +111,13 @@ async function runShm() {
   }
 
   lib.memcpy(mapAddr, Number(ptr(pixel)), pixel.length)
-  lib.munmap(mapAddr, pixel.length)
-  lib.close(fd)
 
   const nameB64 = Buffer.from(name).toString("base64")
   const payload = `\x1b_Gi=${id},s=1,v=1,a=q,t=s,f=32;${nameB64}\x1b\\`
   const reply = await queryKitty(id, payload)
+  lib.munmap(mapAddr, pixel.length)
+  lib.close(fd)
+  try { lib.shm_unlink(nameBytes) } catch {}
   return { mode: "shm", setup: { fd, mapAddr, name, nameB64 }, reply }
 }
 

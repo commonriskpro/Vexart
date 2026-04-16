@@ -33,8 +33,8 @@
 
 import { createSignal, createContext, useContext, onMount, onCleanup, createEffect } from "solid-js"
 import type { JSX, Accessor } from "solid-js"
-import { markDirty, createParticleSystem, useInteractionLayer } from "@tge/renderer"
-import type { CanvasContext, NodeMouseEvent, ParticleConfig, ParticleSystem } from "@tge/renderer"
+import { markDirty, createParticleSystem, useInteractionLayer, markNodeLayerDamaged, requestInteractionFrame } from "@tge/renderer"
+import type { CanvasContext, NodeHandle, NodeMouseEvent, ParticleConfig, ParticleSystem } from "@tge/renderer"
 import type { InteractionBinding } from "@tge/renderer"
 
 // ── Scene item types ──
@@ -63,6 +63,8 @@ export type SceneEdgeDef = {
   id: string
   from: Accessor<{ x: number; y: number }>
   to: Accessor<{ x: number; y: number }>
+  fromId?: string
+  toId?: string
   color: number
   width?: number
   glow?: boolean
@@ -77,7 +79,16 @@ export type SceneParticlesDef = {
 
 type SceneOverlayDef = {
   id: string
-  draw: (ctx: CanvasContext) => void
+  draw: (ctx: CanvasContext, scene: SceneOverlayRenderState) => void
+  bounds?: (scene: SceneOverlayRenderState) => { x: number; y: number; width: number; height: number } | null
+  dependsOn?: string[] | (() => string[])
+}
+
+export type SceneOverlayRenderState = {
+  getNodePosition: (id: string) => { x: number; y: number } | null
+  getCommittedNodePosition: (id: string) => { x: number; y: number } | null
+  isDraggingNode: (id?: string) => boolean
+  viewport: () => { x: number; y: number; zoom: number }
 }
 
 // ── Registry (context) ──
@@ -119,6 +130,7 @@ export type SceneCanvasProps = {
 
 export function SceneCanvas(props: SceneCanvasProps) {
   const interaction = useInteractionLayer()
+  const interactionBinding = props.interaction === "auto" ? interaction : props.interaction ?? "none"
   // ── Scene registries ──
   const nodeMap = new Map<string, SceneNodeDef>()
   const edgeMap = new Map<string, SceneEdgeDef>()
@@ -179,6 +191,118 @@ export function SceneCanvas(props: SceneCanvasProps) {
   let dragAnchorY = 0
   let panAnchorX = 0
   let panAnchorY = 0
+  let surfaceHandle: NodeHandle | null = null
+  const dragPreviewMap = new Map<string, { x: number; y: number }>()
+
+  const overlayState: SceneOverlayRenderState = {
+    getNodePosition: (id) => {
+      const def = nodeMap.get(id)
+      if (!def) return null
+      return getNodeRenderPoint(id, def)
+    },
+    getCommittedNodePosition: (id) => {
+      const def = nodeMap.get(id)
+      if (!def) return null
+      return { x: def.x(), y: def.y() }
+    },
+    isDraggingNode: (id) => id === undefined ? dragTarget !== null : dragTarget === id,
+    viewport: getViewport,
+  }
+
+  function mergeRect(
+    a: { x: number; y: number; width: number; height: number } | null,
+    b: { x: number; y: number; width: number; height: number } | null,
+  ) {
+    if (!a) return b
+    if (!b) return a
+    const left = Math.min(a.x, b.x)
+    const top = Math.min(a.y, b.y)
+    const right = Math.max(a.x + a.width, b.x + b.width)
+    const bottom = Math.max(a.y + a.height, b.y + b.height)
+    return { x: left, y: top, width: right - left, height: bottom - top }
+  }
+
+  function worldToLocal(x: number, y: number) {
+    const vp = getViewport()
+    return {
+      x: (x - vp.x) * vp.zoom,
+      y: (y - vp.y) * vp.zoom,
+    }
+  }
+
+  function getNodeRenderPoint(id: string, def: SceneNodeDef) {
+    return dragPreviewMap.get(id) ?? { x: def.x(), y: def.y() }
+  }
+
+  function getNodeDamageRect(def: SceneNodeDef, x: number, y: number) {
+    if (!surfaceHandle) return null
+    const local = worldToLocal(x, y)
+    const glowPad = def.glow ? def.glow.radius * getViewport().zoom * 2 : 0
+    const labelPad = Math.max(def.label?.length ?? 0, def.sublabel?.length ?? 0) * 4
+    const pad = Math.ceil(def.radius * getViewport().zoom + glowPad + labelPad + 18)
+    return {
+      x: Math.floor(surfaceHandle.layout.x + local.x - pad),
+      y: Math.floor(surfaceHandle.layout.y + local.y - pad),
+      width: pad * 2,
+      height: pad * 2,
+    }
+  }
+
+  function getEdgeDamageRect(def: SceneEdgeDef) {
+    if (!surfaceHandle) return null
+    const fromSource = def.fromId ? (dragPreviewMap.get(def.fromId) ?? def.from()) : def.from()
+    const toSource = def.toId ? (dragPreviewMap.get(def.toId) ?? def.to()) : def.to()
+    const from = worldToLocal(fromSource.x, fromSource.y)
+    const to = worldToLocal(toSource.x, toSource.y)
+    const pad = Math.ceil(Math.max(def.glowWidth ?? 0, def.width ?? 1, 48) * getViewport().zoom)
+    const left = Math.floor(surfaceHandle.layout.x + Math.min(from.x, to.x) - pad)
+    const top = Math.floor(surfaceHandle.layout.y + Math.min(from.y, to.y) - pad)
+    const right = Math.ceil(surfaceHandle.layout.x + Math.max(from.x, to.x) + pad)
+    const bottom = Math.ceil(surfaceHandle.layout.y + Math.max(from.y, to.y) + pad)
+    return { x: left, y: top, width: right - left, height: bottom - top }
+  }
+
+  function getOverlayDependencies(def: SceneOverlayDef) {
+    if (!def.dependsOn) return []
+    return typeof def.dependsOn === "function" ? def.dependsOn() : def.dependsOn
+  }
+
+  function getOverlayDamageRects(nodeId: string) {
+    const rects: Array<{ x: number; y: number; width: number; height: number }> = []
+    for (const overlay of overlayMap.values()) {
+      if (!overlay.bounds) continue
+      if (!getOverlayDependencies(overlay).includes(nodeId)) continue
+      const rect = overlay.bounds(overlayState)
+      if (rect) rects.push(rect)
+    }
+    return rects
+  }
+
+  function invalidateSceneForNode(
+    nodeId: string,
+    prevRect: { x: number; y: number; width: number; height: number } | null,
+    prevOverlayRects: Array<{ x: number; y: number; width: number; height: number }> = [],
+  ) {
+    if (!surfaceHandle) return
+    let rect = prevRect
+    for (const overlayRect of prevOverlayRects) {
+      rect = mergeRect(rect, overlayRect)
+    }
+    const def = nodeMap.get(nodeId)
+    if (def) {
+      const next = getNodeRenderPoint(nodeId, def)
+      rect = mergeRect(rect, getNodeDamageRect(def, next.x, next.y))
+    }
+    for (const edge of edgeMap.values()) {
+      if (edge.fromId !== nodeId && edge.toId !== nodeId) continue
+      rect = mergeRect(rect, getEdgeDamageRect(edge))
+    }
+    for (const overlayRect of getOverlayDamageRects(nodeId)) {
+      rect = mergeRect(rect, overlayRect)
+    }
+    if (rect) markNodeLayerDamaged(surfaceHandle.id, rect)
+    else markNodeLayerDamaged(surfaceHandle.id)
+  }
 
   function screenToWorld(sx: number, sy: number) {
     const vp = getViewport()
@@ -192,8 +316,9 @@ export function SceneCanvas(props: SceneCanvasProps) {
     // Reverse order — last registered = visually on top
     const entries = [...nodeMap.entries()].reverse()
     for (const [id, def] of entries) {
-      const dx = worldX - def.x()
-      const dy = worldY - def.y()
+      const point = getNodeRenderPoint(id, def)
+      const dx = worldX - point.x
+      const dy = worldY - point.y
       if (dx * dx + dy * dy <= def.radius * def.radius) return id
     }
     return null
@@ -209,19 +334,16 @@ export function SceneCanvas(props: SceneCanvasProps) {
       if (def?.onSelect) def.onSelect()
       if (def?.onDrag) {
         dragTarget = hit
-        dragAnchorX = world.x - def.x()
-        dragAnchorY = world.y - def.y()
-        const binding = props.interaction ?? "auto"
-        if (binding === "auto") interaction.begin("drag")
-        else if (binding !== "none") binding.begin("drag")
+        const point = getNodeRenderPoint(hit, def)
+        dragAnchorX = world.x - point.x
+        dragAnchorY = world.y - point.y
+        if (interactionBinding !== "none") interactionBinding.begin("drag")
       }
     } else if (interactive) {
       isPanning = true
       panAnchorX = evt.x
       panAnchorY = evt.y
-      const binding = props.interaction ?? "auto"
-      if (binding === "auto") interaction.begin("drag")
-      else if (binding !== "none") binding.begin("drag")
+      if (interactionBinding !== "none") interactionBinding.begin("drag")
     }
   }
 
@@ -231,9 +353,14 @@ export function SceneCanvas(props: SceneCanvasProps) {
     if (dragTarget) {
       const def = nodeMap.get(dragTarget)
       if (def?.onDrag) {
+        const prevPoint = getNodeRenderPoint(dragTarget, def)
+        const prevRect = getNodeDamageRect(def, prevPoint.x, prevPoint.y)
+        const prevOverlayRects = getOverlayDamageRects(dragTarget)
         const world = screenToWorld(evt.nodeX, evt.nodeY)
-        def.onDrag(world.x - dragAnchorX, world.y - dragAnchorY)
+        dragPreviewMap.set(dragTarget, { x: world.x - dragAnchorX, y: world.y - dragAnchorY })
         markDirty()
+        invalidateSceneForNode(dragTarget, prevRect, prevOverlayRects)
+        requestInteractionFrame("pointer")
       }
     } else if (isPanning) {
       const dx = (evt.x - panAnchorX) / vp.zoom
@@ -250,14 +377,25 @@ export function SceneCanvas(props: SceneCanvasProps) {
         setInternalPanY(newY)
       }
       markDirty()
+      requestInteractionFrame("pointer")
     }
   }
 
   function handleMouseUp() {
+    if (dragTarget) {
+      const def = nodeMap.get(dragTarget)
+      const preview = dragPreviewMap.get(dragTarget)
+      const prevOverlayRects = getOverlayDamageRects(dragTarget)
+      if (def?.onDrag && preview) {
+        def.onDrag(preview.x, preview.y)
+      }
+      dragPreviewMap.delete(dragTarget)
+      markDirty()
+      invalidateSceneForNode(dragTarget, null, prevOverlayRects)
+      requestInteractionFrame("pointer")
+    }
     if (dragTarget || isPanning) {
-      const binding = props.interaction ?? "auto"
-      if (binding === "auto") interaction.end("drag")
-      else if (binding !== "none") binding.end("drag")
+      if (interactionBinding !== "none") interactionBinding.end("drag")
     }
     dragTarget = null
     isPanning = false
@@ -266,8 +404,8 @@ export function SceneCanvas(props: SceneCanvasProps) {
   // ── Drawing ──
 
   function drawEdge(ctx: CanvasContext, def: SceneEdgeDef) {
-    const from = def.from()
-    const to = def.to()
+    const from = def.fromId ? (dragPreviewMap.get(def.fromId) ?? def.from()) : def.from()
+    const to = def.toId ? (dragPreviewMap.get(def.toId) ?? def.to()) : def.to()
     const dx = to.x - from.x
     const dy = to.y - from.y
     const len = Math.sqrt(dx * dx + dy * dy)
@@ -296,8 +434,9 @@ export function SceneCanvas(props: SceneCanvasProps) {
   function isNodeVisible(def: SceneNodeDef) {
     const bounds = getViewportBounds()
     if (!bounds) return true
-    const x = def.x()
-    const y = def.y()
+    const point = getNodeRenderPoint(def.id, def)
+    const x = point.x
+    const y = point.y
     const glowPad = def.glow ? def.glow.radius * 2 : 0
     const pad = def.radius + glowPad + 12
     return x + pad >= bounds.left && x - pad <= bounds.right && y + pad >= bounds.top && y - pad <= bounds.bottom
@@ -317,8 +456,9 @@ export function SceneCanvas(props: SceneCanvasProps) {
   }
 
   function drawNode(ctx: CanvasContext, def: SceneNodeDef) {
-    const x = def.x()
-    const y = def.y()
+    const point = getNodeRenderPoint(def.id, def)
+    const x = point.x
+    const y = point.y
     const selected = def.selected?.() ?? false
     const sides = typeof def.shape === "number" ? def.shape
       : def.shape === "hexagon" ? 6
@@ -416,7 +556,7 @@ export function SceneCanvas(props: SceneCanvasProps) {
 
     // Layer 5: Overlays
     for (const def of overlayMap.values()) {
-      def.draw(ctx)
+      def.draw(ctx, overlayState)
     }
 
     // Layer 6: Foreground
@@ -426,10 +566,13 @@ export function SceneCanvas(props: SceneCanvasProps) {
   return (
     <SceneCtx.Provider value={registry}>
       <surface
-        ref={interaction.ref}
+        ref={(handle) => {
+          if (interactionBinding !== "none") interactionBinding.ref(handle)
+          surfaceHandle = handle
+        }}
         width={props.width ?? "grow"}
         height={props.height ?? "grow"}
-        interactionMode={interaction.mode() === "none" ? undefined : interaction.mode()}
+        interactionMode={interactionBinding === "none" ? undefined : interactionBinding.mode() === "none" ? undefined : interactionBinding.mode()}
         viewport={getViewport()}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -504,6 +647,8 @@ export type SceneEdgeProps = {
   id: string
   from: Accessor<{ x: number; y: number }> | { x: number; y: number }
   to: Accessor<{ x: number; y: number }> | { x: number; y: number }
+  fromId?: string
+  toId?: string
   color: number
   width?: number
   glow?: boolean
@@ -524,6 +669,8 @@ export function SceneEdge(props: SceneEdgeProps) {
       id: props.id,
       from: fromAcc,
       to: toAcc,
+      fromId: props.fromId,
+      toId: props.toId,
       color: props.color,
       width: props.width,
       glow: props.glow,
@@ -556,7 +703,9 @@ export function SceneParticles(props: SceneParticlesProps) {
 
 export type SceneOverlayProps = {
   id: string
-  draw: (ctx: CanvasContext) => void
+  draw: (ctx: CanvasContext, scene: SceneOverlayRenderState) => void
+  bounds?: (scene: SceneOverlayRenderState) => { x: number; y: number; width: number; height: number } | null
+  dependsOn?: string[] | (() => string[])
 }
 
 /** Imperative overlay — for custom draw logic on top of the scene. */
@@ -565,7 +714,7 @@ export function SceneOverlay(props: SceneOverlayProps) {
   if (!reg) return null
 
   onMount(() => {
-    reg.registerOverlay({ id: props.id, draw: props.draw })
+    reg.registerOverlay({ id: props.id, draw: props.draw, bounds: props.bounds, dependsOn: props.dependsOn })
   })
 
   onCleanup(() => reg.unregisterOverlay(props.id))

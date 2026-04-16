@@ -2,6 +2,8 @@ import { create, paint, type PixelBuffer } from "@tge/pixel"
 import { appendFileSync } from "node:fs"
 import type { CanvasPainterBackend } from "./canvas-backend"
 import { type CanvasContext, type CanvasDrawCommand, paintCanvasCommandsCPU } from "./canvas"
+import { getAtlas } from "./font-atlas"
+import { getFont } from "./text-layout"
 import {
   createWgpuCanvasImage,
   createWgpuCanvasContext,
@@ -17,20 +19,29 @@ import {
   renderWgpuCanvasTargetImage,
   renderWgpuCanvasTargetImageLayer,
   renderWgpuCanvasTargetImagesLayer,
+  renderWgpuCanvasTargetGlyphsLayer,
   renderWgpuCanvasTargetGlowsLayer,
   renderWgpuCanvasTargetLinearGradientsLayer,
+  renderWgpuCanvasTargetNebulasLayer,
   renderWgpuCanvasTargetPolygonsLayer,
   renderWgpuCanvasTargetRadialGradientsLayer,
   renderWgpuCanvasTargetRects,
   renderWgpuCanvasTargetRectsLayer,
+  renderWgpuCanvasTargetShapeRectCornersLayer,
   renderWgpuCanvasTargetShapeRectsLayer,
+  renderWgpuCanvasTargetStarfieldsLayer,
+  supportsWgpuCanvasGlyphLayer,
   type WgpuCanvasCircle,
   type WgpuCanvasBezier,
+  type WgpuCanvasGlyphInstance,
   type WgpuCanvasContextHandle,
   type WgpuCanvasGlow,
   type WgpuCanvasImageHandle,
+  type WgpuCanvasNebula,
   type WgpuCanvasPolygon,
+  type WgpuCanvasShapeRectCorners,
   type WgpuCanvasShapeRect,
+  type WgpuCanvasStarfield,
   type WgpuCanvasTargetHandle,
   type WgpuCanvasRectFill,
   type WgpuCanvasLinearGradient,
@@ -60,6 +71,15 @@ type WgpuImageRecord = {
 
 type WgpuTextImageRecord = WgpuImageRecord & {
   key: string
+}
+
+type WgpuGlyphAtlasRecord = {
+  handle: WgpuCanvasImageHandle
+  cellWidth: number
+  cellHeight: number
+  columns: number
+  rows: number
+  glyphWidths: Float32Array
 }
 
 export type WgpuCanvasPainterCacheStats = {
@@ -190,10 +210,13 @@ type MixedGpuOp =
   | { kind: "circle"; circle: WgpuCanvasCircle }
   | { kind: "polygon"; polygon: WgpuCanvasPolygon }
   | { kind: "shapeRect"; rect: WgpuCanvasShapeRect }
+  | { kind: "shapeRectCorners"; rect: WgpuCanvasShapeRectCorners }
   | { kind: "text"; text: string; color: number; instance: { x: number; y: number; w: number; h: number; opacity: number } }
   | { kind: "rect"; rect: WgpuCanvasRectFill }
   | { kind: "linearGradient"; gradient: WgpuCanvasLinearGradient }
   | { kind: "radialGradient"; gradient: WgpuCanvasRadialGradient }
+  | { kind: "nebula"; nebula: WgpuCanvasNebula }
+  | { kind: "starfield"; starfield: WgpuCanvasStarfield }
   | { kind: "image"; image: Uint8Array; imageW: number; imageH: number; instance: { x: number; y: number; w: number; h: number; opacity: number } }
 
 type MixedGpuBatch =
@@ -202,11 +225,40 @@ type MixedGpuBatch =
   | { kind: "circle"; circles: WgpuCanvasCircle[] }
   | { kind: "polygon"; polygons: WgpuCanvasPolygon[] }
   | { kind: "shapeRect"; rects: WgpuCanvasShapeRect[] }
+  | { kind: "shapeRectCorners"; rects: WgpuCanvasShapeRectCorners[] }
   | { kind: "text"; text: string; color: number; instances: { x: number; y: number; w: number; h: number; opacity: number }[] }
   | { kind: "rect"; rects: WgpuCanvasRectFill[] }
   | { kind: "linearGradient"; gradients: WgpuCanvasLinearGradient[] }
   | { kind: "radialGradient"; gradients: WgpuCanvasRadialGradient[] }
+  | { kind: "nebula"; nebulas: WgpuCanvasNebula[] }
+  | { kind: "starfield"; starfields: WgpuCanvasStarfield[] }
   | { kind: "image"; image: Uint8Array; imageW: number; imageH: number; instances: { x: number; y: number; w: number; h: number; opacity: number }[] }
+
+function sampleStops(stops: { color: number; position: number }[], position: number) {
+  if (stops.length === 0) return 0x00000000
+  const sorted = stops.slice().sort((a, b) => a.position - b.position)
+  if (position <= sorted[0].position) return sorted[0].color
+  if (position >= sorted[sorted.length - 1].position) return sorted[sorted.length - 1].color
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const from = sorted[i]
+    const to = sorted[i + 1]
+    if (position < from.position || position > to.position) continue
+    const span = Math.max(0.0001, to.position - from.position)
+    const t = (position - from.position) / span
+    const mix = (a: number, b: number) => Math.round(a + (b - a) * t)
+    return (
+      (mix((from.color >>> 24) & 0xff, (to.color >>> 24) & 0xff) << 24) |
+      (mix((from.color >>> 16) & 0xff, (to.color >>> 16) & 0xff) << 16) |
+      (mix((from.color >>> 8) & 0xff, (to.color >>> 8) & 0xff) << 8) |
+      mix(from.color & 0xff, to.color & 0xff)
+    ) >>> 0
+  }
+  return sorted[sorted.length - 1].color
+}
+
+function normalizeNebulaStops(stops: { color: number; position: number }[]) {
+  return [0, 1 / 3, 2 / 3, 1].map((position) => ({ color: sampleStops(stops, position), position })) as WgpuCanvasNebula["stops"]
+}
 
 export function batchMixedSceneOps(ops: MixedGpuOp[]) {
   const batches: MixedGpuBatch[] = []
@@ -269,6 +321,16 @@ export function batchMixedSceneOps(ops: MixedGpuOp[]) {
       continue
     }
 
+    if (op.kind === "shapeRectCorners") {
+      if (current?.kind === "shapeRectCorners") {
+        current.rects.push(op.rect)
+        continue
+      }
+      flush()
+      current = { kind: "shapeRectCorners", rects: [op.rect] }
+      continue
+    }
+
     if (op.kind === "rect") {
       if (current?.kind === "rect") {
         current.rects.push(op.rect)
@@ -296,6 +358,26 @@ export function batchMixedSceneOps(ops: MixedGpuOp[]) {
       }
       flush()
       current = { kind: "radialGradient", gradients: [op.gradient] }
+      continue
+    }
+
+    if (op.kind === "nebula") {
+      if (current?.kind === "nebula") {
+        current.nebulas.push(op.nebula)
+        continue
+      }
+      flush()
+      current = { kind: "nebula", nebulas: [op.nebula] }
+      continue
+    }
+
+    if (op.kind === "starfield") {
+      if (current?.kind === "starfield") {
+        current.starfields.push(op.starfield)
+        continue
+      }
+      flush()
+      current = { kind: "starfield", starfields: [op.starfield] }
       continue
     }
 
@@ -340,6 +422,47 @@ export function collectSupportedMixedScene(ctx: CanvasContext, canvasW: number, 
   const ops: MixedGpuOp[] = []
   let bounds: IntBounds | null = null
   for (const cmd of commands) {
+    if (cmd.kind === "line") {
+      const mx = (cmd.x0 + cmd.x1) * 0.5
+      const my = (cmd.y0 + cmd.y1) * 0.5
+      const x0 = tx(cmd.x0)
+      const y0 = ty(cmd.y0)
+      const cx = tx(mx)
+      const cy = ty(my)
+      const x1 = tx(cmd.x1)
+      const y1 = ty(cmd.y1)
+      const strokeWidth = ts(cmd.width)
+      const pad = Math.max(2, Math.ceil(strokeWidth * 0.5) + 2)
+      const left = Math.max(0, Math.min(x0, cx, x1) - pad)
+      const top = Math.max(0, Math.min(y0, cy, y1) - pad)
+      const right = Math.min(canvasW, Math.max(x0, cx, x1) + pad)
+      const bottom = Math.min(canvasH, Math.max(y0, cy, y1) + pad)
+      const clippedW = right - left
+      const clippedH = bottom - top
+      if (clippedW <= 0 || clippedH <= 0) continue
+      bounds = unionBounds(bounds, boundsFromRect(left, top, right, bottom))
+      ops.push({
+        kind: "bezier",
+        bezier: {
+          x: (left / canvasW) * 2 - 1,
+          y: 1 - (top / canvasH) * 2,
+          w: (clippedW / canvasW) * 2,
+          h: -(clippedH / canvasH) * 2,
+          boxW: clippedW,
+          boxH: clippedH,
+          x0: x0 - left,
+          y0: y0 - top,
+          cx: cx - left,
+          cy: cy - top,
+          x1: x1 - left,
+          y1: y1 - top,
+          color: cmd.color,
+          strokeWidth,
+        },
+      })
+      continue
+    }
+
     if (cmd.kind === "bezier") {
       const x0 = tx(cmd.x0)
       const y0 = ty(cmd.y0)
@@ -419,6 +542,72 @@ export function collectSupportedMixedScene(ctx: CanvasContext, canvasW: number, 
           w: (clippedW / canvasW) * 2,
           h: -(clippedH / canvasH) * 2,
           color: cmd.fill!,
+        },
+      })
+      continue
+    }
+
+    if (cmd.kind === "nebula") {
+      const x = tx(cmd.x)
+      const y = ty(cmd.y)
+      const w = ts(cmd.w)
+      const h = ts(cmd.h)
+      const left = Math.max(0, x)
+      const top = Math.max(0, y)
+      const right = Math.min(canvasW, x + w)
+      const bottom = Math.min(canvasH, y + h)
+      const clippedW = right - left
+      const clippedH = bottom - top
+      if (clippedW <= 0 || clippedH <= 0) continue
+      bounds = unionBounds(bounds, boundsFromRect(left, top, right, bottom))
+      ops.push({
+        kind: "nebula",
+        nebula: {
+          x: (x / canvasW) * 2 - 1,
+          y: 1 - (y / canvasH) * 2,
+          w: (w / canvasW) * 2,
+          h: -(h / canvasH) * 2,
+          seed: cmd.seed,
+          scale: ts(cmd.scale),
+          octaves: cmd.octaves,
+          gain: cmd.gain,
+          lacunarity: cmd.lacunarity,
+          warp: cmd.warp,
+          detail: cmd.detail,
+          dust: cmd.dust,
+          stops: normalizeNebulaStops(cmd.stops),
+        },
+      })
+      continue
+    }
+
+    if (cmd.kind === "starfield") {
+      const x = tx(cmd.x)
+      const y = ty(cmd.y)
+      const w = ts(cmd.w)
+      const h = ts(cmd.h)
+      const left = Math.max(0, x)
+      const top = Math.max(0, y)
+      const right = Math.min(canvasW, x + w)
+      const bottom = Math.min(canvasH, y + h)
+      const clippedW = right - left
+      const clippedH = bottom - top
+      if (clippedW <= 0 || clippedH <= 0) continue
+      bounds = unionBounds(bounds, boundsFromRect(left, top, right, bottom))
+      ops.push({
+        kind: "starfield",
+        starfield: {
+          x: (x / canvasW) * 2 - 1,
+          y: 1 - (y / canvasH) * 2,
+          w: (w / canvasW) * 2,
+          h: -(h / canvasH) * 2,
+          seed: cmd.seed,
+          count: cmd.count,
+          clusterCount: cmd.clusterCount,
+          clusterStars: cmd.clusterStars,
+          warmColor: cmd.warmColor,
+          neutralColor: cmd.neutralColor,
+          coolColor: cmd.coolColor,
         },
       })
       continue
@@ -635,6 +824,7 @@ class WgpuCanvasPainterBackend implements CanvasPainterBackend {
   #target: WgpuTargetRecord | null = null
   #images = new WeakMap<Uint8Array, WgpuImageRecord>()
   #textImages = new Map<string, WgpuTextImageRecord>()
+  #glyphAtlases = new Map<string, WgpuGlyphAtlasRecord>()
   #frame = 0
 
   constructor() {
@@ -661,6 +851,8 @@ class WgpuCanvasPainterBackend implements CanvasPainterBackend {
     if (this.#target) destroyWgpuCanvasTarget(this.#context, this.#target.handle)
     for (const image of this.#textImages.values()) destroyWgpuCanvasImage(this.#context, image.handle)
     this.#textImages.clear()
+    for (const atlas of this.#glyphAtlases.values()) destroyWgpuCanvasImage(this.#context, atlas.handle)
+    this.#glyphAtlases.clear()
     // WeakMap is not iterable; image handles intentionally live for backend lifetime.
     destroyWgpuCanvasContext(this.#context)
   }
@@ -702,6 +894,48 @@ class WgpuCanvasPainterBackend implements CanvasPainterBackend {
     return handle
   }
 
+  #getGlyphAtlas(fontId: number) {
+    const key = `${fontId}`
+    const cached = this.#glyphAtlases.get(key)
+    if (cached) return cached
+    const font = getFont(fontId)
+    const atlas = getAtlas(fontId, font)
+    const columns = 16
+    const rows = Math.ceil(95 / columns)
+    const width = atlas.cellWidth * columns
+    const height = atlas.cellHeight * rows
+    const rgba = new Uint8Array(width * height * 4)
+    for (let glyphIndex = 0; glyphIndex < 95; glyphIndex++) {
+      const col = glyphIndex % columns
+      const row = Math.floor(glyphIndex / columns)
+      const srcOffset = glyphIndex * atlas.cellWidth * atlas.cellHeight
+      for (let py = 0; py < atlas.cellHeight; py++) {
+        for (let px = 0; px < atlas.cellWidth; px++) {
+          const srcIndex = srcOffset + py * atlas.cellWidth + px
+          const alpha = atlas.data[srcIndex]
+          const dx = col * atlas.cellWidth + px
+          const dy = row * atlas.cellHeight + py
+          const di = (dy * width + dx) * 4
+          rgba[di] = 255
+          rgba[di + 1] = 255
+          rgba[di + 2] = 255
+          rgba[di + 3] = alpha
+        }
+      }
+    }
+    const handle = createWgpuCanvasImage(this.#context, { width, height }, rgba)
+    const record = {
+      handle,
+      cellWidth: atlas.cellWidth,
+      cellHeight: atlas.cellHeight,
+      columns,
+      rows,
+      glyphWidths: atlas.glyphWidths,
+    }
+    this.#glyphAtlases.set(key, record)
+    return record
+  }
+
   paint(buf: PixelBuffer, ctx: CanvasContext, canvasW: number, canvasH: number) {
     this.#frame += 1
     const mixedInfo = collectSupportedMixedScene(ctx, canvasW, canvasH)
@@ -717,6 +951,8 @@ class WgpuCanvasPainterBackend implements CanvasPainterBackend {
           renderWgpuCanvasTargetBeziersLayer(this.#context, target, batch.beziers, first ? 0 : 1, 0x00000000)
         } else if (batch.kind === "shapeRect") {
           renderWgpuCanvasTargetShapeRectsLayer(this.#context, target, batch.rects, first ? 0 : 1, 0x00000000)
+        } else if (batch.kind === "shapeRectCorners") {
+          renderWgpuCanvasTargetShapeRectCornersLayer(this.#context, target, batch.rects, first ? 0 : 1, 0x00000000)
         } else if (batch.kind === "glow") {
           renderWgpuCanvasTargetGlowsLayer(this.#context, target, batch.glows, first ? 0 : 1, 0x00000000)
         } else if (batch.kind === "circle") {
@@ -727,9 +963,58 @@ class WgpuCanvasPainterBackend implements CanvasPainterBackend {
           renderWgpuCanvasTargetLinearGradientsLayer(this.#context, target, batch.gradients, first ? 0 : 1, 0x00000000)
         } else if (batch.kind === "radialGradient") {
           renderWgpuCanvasTargetRadialGradientsLayer(this.#context, target, batch.gradients, first ? 0 : 1, 0x00000000)
+        } else if (batch.kind === "nebula") {
+          renderWgpuCanvasTargetNebulasLayer(this.#context, target, batch.nebulas, first ? 0 : 1, 0x00000000)
+        } else if (batch.kind === "starfield") {
+          renderWgpuCanvasTargetStarfieldsLayer(this.#context, target, batch.starfields, first ? 0 : 1, 0x00000000)
         } else if (batch.kind === "text") {
-          const imageHandle = this.#getTextImage(batch.text, batch.color)
-          renderWgpuCanvasTargetImagesLayer(this.#context, target, imageHandle, batch.instances, first ? 0 : 1, 0x00000000)
+          if (supportsWgpuCanvasGlyphLayer()) {
+            const atlas = this.#getGlyphAtlas(0)
+            const glyphs: WgpuCanvasGlyphInstance[] = []
+            let canUseGlyphs = true
+            for (const instance of batch.instances) {
+              let cursorX = instance.x
+              for (const glyph of batch.text) {
+                const code = glyph.codePointAt(0)
+                if (code === undefined || code < 32 || code > 126) {
+                  canUseGlyphs = false
+                  break
+                }
+                const glyphIndex = code - 32
+                const advancePx = atlas.glyphWidths[glyphIndex] || atlas.cellWidth
+                const advance = (advancePx / canvasW) * 2
+                if (glyph !== " ") {
+                  const col = glyphIndex % atlas.columns
+                  const row = Math.floor(glyphIndex / atlas.columns)
+                  glyphs.push({
+                    x: cursorX,
+                    y: instance.y,
+                    w: (atlas.cellWidth / canvasW) * 2,
+                    h: -((atlas.cellHeight / canvasH) * 2),
+                    u: (col * atlas.cellWidth) / (atlas.cellWidth * atlas.columns),
+                    v: (row * atlas.cellHeight) / (atlas.cellHeight * atlas.rows),
+                    uw: atlas.cellWidth / (atlas.cellWidth * atlas.columns),
+                    vh: atlas.cellHeight / (atlas.cellHeight * atlas.rows),
+                    r: ((batch.color >>> 24) & 0xff) / 255,
+                    g: ((batch.color >>> 16) & 0xff) / 255,
+                    b: ((batch.color >>> 8) & 0xff) / 255,
+                    a: (batch.color & 0xff) / 255,
+                    opacity: instance.opacity,
+                  })
+                }
+                cursorX += advance
+              }
+              if (!canUseGlyphs) break
+            }
+            if (canUseGlyphs && glyphs.length > 0) renderWgpuCanvasTargetGlyphsLayer(this.#context, target, atlas.handle, glyphs, first ? 0 : 1, 0x00000000)
+            else {
+              const imageHandle = this.#getTextImage(batch.text, batch.color)
+              renderWgpuCanvasTargetImagesLayer(this.#context, target, imageHandle, batch.instances, first ? 0 : 1, 0x00000000)
+            }
+          } else {
+            const imageHandle = this.#getTextImage(batch.text, batch.color)
+            renderWgpuCanvasTargetImagesLayer(this.#context, target, imageHandle, batch.instances, first ? 0 : 1, 0x00000000)
+          }
         } else {
           const imageHandle = this.#getImage(batch.image, batch.imageW, batch.imageH)
           renderWgpuCanvasTargetImagesLayer(this.#context, target, imageHandle, batch.instances, first ? 0 : 1, 0x00000000)

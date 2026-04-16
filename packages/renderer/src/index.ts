@@ -31,7 +31,11 @@ import { markAllDirty } from "./layers"
 import { resetFocus } from "./focus"
 import { resetSelection } from "./selection"
 import { bindLoop, unbindLoop } from "./pointer"
+import { markNodeLayerDamaged } from "./pointer"
+import { requestInteractionFrame } from "./pointer"
 export { beginNodeInteraction, endNodeInteraction, useInteractionLayer } from "./interaction"
+export { markNodeLayerDamaged } from "./pointer"
+export { requestInteractionFrame } from "./pointer"
 
 export type { RenderLoop, RenderLoopOptions } from "./loop"
 export { createRenderLoop } from "./loop"
@@ -385,6 +389,8 @@ export type MountOptions = {
   experimental?: {
     /** Idle FPS cap override. Default: min(maxFps, 60). */
     idleMaxFps?: number
+    /** Interaction-driven frame cap. Default: min(maxFps, 60). */
+    interactionMaxFps?: number
     /** Partial updates: transmit only changed region of layers via Kitty a=f. Default: enabled automatically for Kitty local file/shm transports. */
     partialUpdates?: boolean
     /** Frame budget in ms. Defer non-bg layers if exceeded. 0 = disabled. Default: 0 */
@@ -411,6 +417,7 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
     experimental: {
       ...opts?.experimental,
       maxFps: opts?.maxFps,
+      interactionMaxFps: opts?.experimental?.interactionMaxFps ?? opts?.maxFps,
     },
   })
 

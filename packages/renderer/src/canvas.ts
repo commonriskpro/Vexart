@@ -68,14 +68,6 @@ type PolygonCmd = {
   strokeWidth: number
 }
 
-type ArcCmd = {
-  kind: "arc"
-  cx: number; cy: number
-  rx: number; ry: number
-  color: number
-  strokeWidth: number
-}
-
 type TextCmd = {
   kind: "text"
   x: number; y: number
@@ -145,7 +137,7 @@ type StarfieldCmd = {
   coolColor: number
 }
 
-type DrawCmd = LineCmd | BezierCmd | CircleCmd | RectCmd | PolygonCmd | ArcCmd | TextCmd | GlowCmd | ImageCmd | RadialGradientCmd | LinearGradientCmd | NebulaCmd | StarfieldCmd
+type DrawCmd = LineCmd | BezierCmd | CircleCmd | RectCmd | PolygonCmd | TextCmd | GlowCmd | ImageCmd | RadialGradientCmd | LinearGradientCmd | NebulaCmd | StarfieldCmd
 
 export type CanvasDrawCommand = DrawCmd
 

@@ -8,8 +8,8 @@
  *   bun --conditions=browser run examples/lightcode-gpu-first.tsx
  */
 
-process.env.LIGHTCODE_CANVAS_BACKEND = "wgpu"
-process.env.TGE_RENDERER_BACKEND = "gpu"
+process.env.LIGHTCODE_CANVAS_BACKEND = process.env.LIGHTCODE_CANVAS_BACKEND ?? "wgpu"
+process.env.TGE_RENDERER_BACKEND = process.env.TGE_RENDERER_BACKEND ?? "gpu"
 
 import { createSignal, For, type JSX } from "solid-js"
 import { appendFileSync } from "node:fs"
@@ -38,7 +38,6 @@ import {
 } from "@tge/lightcode"
 import type { GraphLegendItemData } from "@tge/lightcode"
 import {
-  createCanvasImageCache,
   debugState,
   getCanvasPainterBackendName,
   markDirty,
@@ -50,7 +49,7 @@ import {
 import { createTerminal } from "@tge/terminal"
 import { createParser } from "@tge/input"
 import { resetKittyTransportStats, getKittyTransportStats } from "@tge/output"
-import { createSpaceBackground, type SpaceBackground, SceneCanvas, SceneNode, SceneEdge, SceneOverlay } from "@tge/components"
+import { SceneCanvas, SceneNode, SceneEdge, SceneOverlay } from "@tge/components"
 import { tryCreateWgpuCanvasPainterBackend } from "../packages/renderer/src/wgpu-canvas-backend"
 import type { CanvasContext } from "@tge/renderer"
 
@@ -62,26 +61,24 @@ const MAX_FPS = Number(process.env.LIGHTCODE_MAX_FPS ?? 60)
 const IDLE_MAX_FPS = Number(process.env.LIGHTCODE_IDLE_MAX_FPS ?? 60)
 const FORCE_REPAINT = process.env.LIGHTCODE_FORCE_REPAINT === "1"
 const TRACE = process.env.LIGHTCODE_GPU_FIRST_TRACE === "1"
-const SHOW_SHELL = process.env.LIGHTCODE_GPU_FIRST_SHOW_SHELL === "1"
-const SHOW_HEADER = process.env.LIGHTCODE_GPU_FIRST_SHOW_HEADER === "1"
-const SHOW_FOOTER = process.env.LIGHTCODE_GPU_FIRST_SHOW_FOOTER === "1"
-const SHOW_SPACE = process.env.LIGHTCODE_GPU_FIRST_SHOW_SPACE === "1"
-const SHOW_GRAPH_BG = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_BG === "1"
-const SHOW_GRAPH_EDGES = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_EDGES === "1"
+const SHOW_SHELL = process.env.LIGHTCODE_GPU_FIRST_SHOW_SHELL !== "0"
+const SHOW_HEADER = process.env.LIGHTCODE_GPU_FIRST_SHOW_HEADER !== "0"
+const SHOW_FOOTER = process.env.LIGHTCODE_GPU_FIRST_SHOW_FOOTER !== "0"
+const SHOW_SPACE = process.env.LIGHTCODE_GPU_FIRST_SHOW_SPACE !== "0"
+const SHOW_GRAPH_BG = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_BG !== "0"
+const SHOW_GRAPH_EDGES = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_EDGES !== "0"
 const SHOW_GRAPH_NODES = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_NODES !== "0"
-const SHOW_GRAPH_OVERLAY = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_OVERLAY === "1"
-const SHOW_GRAPH_LEGEND = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_LEGEND === "1"
-const SHOW_MEMORY = process.env.LIGHTCODE_GPU_FIRST_SHOW_MEMORY === "1"
-const SHOW_DIFF = process.env.LIGHTCODE_GPU_FIRST_SHOW_DIFF === "1"
-const SHOW_EDITOR = process.env.LIGHTCODE_GPU_FIRST_SHOW_EDITOR === "1"
-const SHOW_AGENT = process.env.LIGHTCODE_GPU_FIRST_SHOW_AGENT === "1"
+const SHOW_GRAPH_OVERLAY = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_OVERLAY !== "0"
+const SHOW_GRAPH_LEGEND = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_LEGEND !== "0"
+const SHOW_MEMORY = process.env.LIGHTCODE_GPU_FIRST_SHOW_MEMORY !== "0"
+const SHOW_DIFF = process.env.LIGHTCODE_GPU_FIRST_SHOW_DIFF !== "0"
+const SHOW_EDITOR = process.env.LIGHTCODE_GPU_FIRST_SHOW_EDITOR !== "0"
+const SHOW_AGENT = process.env.LIGHTCODE_GPU_FIRST_SHOW_AGENT !== "0"
 const PANEL_SHADOWS = process.env.LIGHTCODE_GPU_FIRST_PANEL_SHADOWS !== "0"
 const PANEL_GRADIENTS = process.env.LIGHTCODE_GPU_FIRST_PANEL_GRADIENTS !== "0"
 const NODES_ONLY_HARNESS = !SHOW_SHELL && !SHOW_HEADER && !SHOW_FOOTER && !SHOW_SPACE && !SHOW_GRAPH_BG && !SHOW_GRAPH_EDGES && !SHOW_GRAPH_OVERLAY && !SHOW_GRAPH_LEGEND && !SHOW_MEMORY && !SHOW_DIFF && !SHOW_EDITOR && !SHOW_AGENT
 
 const FRAME = { x: 34, y: 78, w: 1760, h: 826 }
-const panelBgCache = createCanvasImageCache()
-let spaceBg: SpaceBackground | null = null
 
 const C = {
   ...lightcodeColors,
@@ -184,36 +181,37 @@ function getNode(id: string) {
   return nodes.find((node) => node.id === id) ?? nodes[0]
 }
 
-async function loadSpace() {
-  spaceBg = createSpaceBackground({
-    width: 1600,
-    height: 1000,
+function drawSpaceBackdrop(ctx: CanvasContext, x: number, y: number, w: number, h: number) {
+  ctx.rect(x, y, w, h, { fill: C.bg })
+  ctx.linearGradient(x, y, w, h, 0x06080d66, 0x0e111800, 90)
+  ctx.nebula(x, y, w, h, [
+    { color: 0x04050700, position: 0 },
+    { color: 0x12243588, position: 0.34 },
+    { color: 0x26485da0, position: 0.6 },
+    { color: 0x8b5c38a0, position: 0.82 },
+    { color: 0xf3bf6b58, position: 1 },
+  ], {
     seed: 1337,
-    backgroundColor: C.bg,
-    nebula: {
-      renderScale: 0.44,
-      stops: [
-        { color: 0x04050700, position: 0 },
-        { color: 0x12243588, position: 0.34 },
-        { color: 0x26485da0, position: 0.6 },
-        { color: 0x8b5c38a0, position: 0.82 },
-        { color: 0xf3bf6b58, position: 1 },
-      ],
-      noise: { scale: 168, octaves: 5, gain: 56, lacunarity: 206, warp: 50, detail: 94, dust: 62 },
-    },
-    starfield: {
-      renderScale: 0.72,
-      count: 620,
-      clusterCount: 8,
-      clusterStars: 84,
-      warmColor: 0xf3d7a1d6,
-      coolColor: 0xc1d7ffd2,
-      neutralColor: 0xffffffd0,
-    },
-    sparkles: { count: 3, color: 0xfff2d8ff },
-    atmosphere: { count: 4, colors: [0x7db6ff10, 0xf3bf6b10, 0xffffff08] },
+    scale: 168,
+    octaves: 5,
+    gain: 56,
+    lacunarity: 206,
+    warp: 50,
+    detail: 94,
+    dust: 62,
   })
-  markDirty()
+  ctx.starfield(x, y, w, h, {
+    seed: 1337 ^ 0x9e3779b9,
+    count: 620,
+    clusterCount: 8,
+    clusterStars: 84,
+    warmColor: 0xf3d7a1d6,
+    coolColor: 0xc1d7ffd2,
+    neutralColor: 0xffffffd0,
+  })
+  ctx.glow(x + w * 0.16, y + h * 0.22, Math.round(w * 0.16), Math.round(h * 0.12), 0x7db6ff10, 18)
+  ctx.glow(x + w * 0.68, y + h * 0.28, Math.round(w * 0.12), Math.round(h * 0.09), 0xf3bf6b14, 22)
+  ctx.glow(x + w * 0.52, y + h * 0.68, Math.round(w * 0.14), Math.round(h * 0.1), 0xffffff08, 14)
 }
 
 function createPanelTraceHandlers(id: string) {
@@ -304,35 +302,25 @@ function GraphPlane(props: { selectedNode: string; onSelect: (id: string) => voi
         viewport={{ x: 0, y: 0, zoom: 1 }}
         background={(ctx: CanvasContext) => {
           if (SHOW_GRAPH_BG) {
-            const graphBg = panelBgCache.get(FRAME.w, FRAME.h, "lightcode-gpu-first-bg", (bg) => {
-              bg.rect(0, 0, FRAME.w, FRAME.h, { fill: 0x090a0d88, stroke: C.frameBorder, strokeWidth: 1 })
-              bg.radialGradient(704 - FRAME.x, 430 - FRAME.y, 500, 0xf3bf6b14, 0x00000000)
-              bg.radialGradient(246 - FRAME.x, 240 - FRAME.y, 260, 0xffffff06, 0x00000000)
-              bg.glow(704 - FRAME.x, 430 - FRAME.y, 148, 148, 0xf3bf6b28, 26)
-            })
-            ctx.drawImage(0, 0, FRAME.w, FRAME.h, graphBg.data, graphBg.width, graphBg.height, 1)
+            ctx.rect(0, 0, FRAME.w, FRAME.h, { fill: 0x090a0d88, stroke: C.frameBorder, strokeWidth: 1 })
+            ctx.radialGradient(704 - FRAME.x, 430 - FRAME.y, 500, 0xf3bf6b14, 0x00000000)
+            ctx.radialGradient(246 - FRAME.x, 240 - FRAME.y, 260, 0xffffff06, 0x00000000)
+            ctx.glow(704 - FRAME.x, 430 - FRAME.y, 148, 148, 0xf3bf6b28, 26)
           }
 
-          if (SHOW_SPACE && spaceBg) {
-            spaceBg.draw(ctx, {
-              x: NODES_ONLY_HARNESS ? 0 : -Math.round((bgSize.w - FRAME.w) * 0.5),
-              y: NODES_ONLY_HARNESS ? 0 : -Math.round((bgSize.h - FRAME.h) * 0.5),
-              w: bgSize.w,
-              h: bgSize.h,
-              nebulaOpacity: 0.28,
-              starsOpacity: 0.78,
-              sparklesOpacity: 0.24,
-              atmosphereOpacity: 0.8,
-              showNebula: true,
-              showAtmosphere: true,
-              showStars: true,
-              showSparkles: true,
-            })
+          if (SHOW_SPACE) {
+            drawSpaceBackdrop(
+              ctx,
+              NODES_ONLY_HARNESS ? 0 : -Math.round((bgSize.w - FRAME.w) * 0.5),
+              NODES_ONLY_HARNESS ? 0 : -Math.round((bgSize.h - FRAME.h) * 0.5),
+              bgSize.w,
+              bgSize.h,
+            )
           }
         }}
       >
         <For each={SHOW_GRAPH_EDGES ? edges : []}>
-          {(edge) => <SceneEdge id={edge.id} from={graph.getEdgeAnchor(edge.from)} to={graph.getEdgeAnchor(edge.to)} color={edge.color} glow />}
+          {(edge) => <SceneEdge id={edge.id} fromId={edge.from} toId={edge.to} from={graph.getEdgeAnchor(edge.from)} to={graph.getEdgeAnchor(edge.to)} color={edge.color} glow />}
         </For>
 
         <For each={SHOW_GRAPH_NODES ? graphNodes : []}>
@@ -364,9 +352,15 @@ function GraphPlane(props: { selectedNode: string; onSelect: (id: string) => voi
 
         {SHOW_GRAPH_OVERLAY ? <SceneOverlay
           id="active-task-chip"
-          draw={(ctx: CanvasContext) => {
+          dependsOn={() => [props.selectedNode]}
+          bounds={(scene) => {
+            const position = scene.getNodePosition(props.selectedNode)
+            if (!position) return null
+            return { x: position.x - 86, y: position.y + 68, width: 270, height: 50 }
+          }}
+          draw={(ctx: CanvasContext, scene) => {
             const node = getNode(props.selectedNode)
-            const position = graph.getPosition(props.selectedNode)
+            const position = scene.getNodePosition(props.selectedNode)
             if (!position) return
             const x = position.x - 86
             const y = position.y + 68
@@ -521,11 +515,12 @@ async function main() {
     appendFileSync(DEBUG_LOG, "\n--- lightcode gpu-first run ---\n")
   } catch {}
 
-  await loadSpace()
   resetKittyTransportStats()
   const term = await createTerminal()
   const bridge = probeWgpuCanvasBridge()
-  const selectedCanvasBackend = bridge.available ? tryCreateWgpuCanvasPainterBackend() : null
+  const selectedCanvasBackend = process.env.LIGHTCODE_CANVAS_BACKEND === "cpu"
+    ? null
+    : bridge.available ? tryCreateWgpuCanvasPainterBackend() : null
   setCanvasPainterBackend(selectedCanvasBackend)
 
   appendFileSync(DEBUG_LOG, `[main] terminal created kitty=${term.caps.kittyGraphics} mode=${term.caps.transmissionMode}\n`)

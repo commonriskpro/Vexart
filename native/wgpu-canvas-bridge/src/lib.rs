@@ -6,8 +6,8 @@ use std::time::Instant;
 use bytemuck::{Pod, Zeroable};
 use wgpu::{util::DeviceExt, Buffer, Device, Queue, RenderPipeline, Texture, TextureFormat, TextureUsages, COPY_BYTES_PER_ROW_ALIGNMENT};
 
-const ABI_VERSION: u32 = 4;
-const BRIDGE_VERSION: u32 = 5;
+const ABI_VERSION: u32 = 5;
+const BRIDGE_VERSION: u32 = 6;
 
 const STATUS_SUCCESS: u32 = 0;
 const STATUS_INVALID_ARGUMENT: u32 = 2;
@@ -277,6 +277,35 @@ pub struct ShapeRectInstance {
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
+pub struct ShapeRectCornersInstance {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    fill_r: f32,
+    fill_g: f32,
+    fill_b: f32,
+    fill_a: f32,
+    stroke_r: f32,
+    stroke_g: f32,
+    stroke_b: f32,
+    stroke_a: f32,
+    radius_tl: f32,
+    radius_tr: f32,
+    radius_br: f32,
+    radius_bl: f32,
+    stroke_width: f32,
+    has_fill: f32,
+    has_stroke: f32,
+    size_x: f32,
+    size_y: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
 pub struct GlowInstance {
     x: f32,
     y: f32,
@@ -292,6 +321,72 @@ pub struct GlowInstance {
     _pad2: f32,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+pub struct NebulaInstance {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    seed: f32,
+    scale: f32,
+    octaves: f32,
+    gain: f32,
+    lacunarity: f32,
+    warp: f32,
+    detail: f32,
+    dust: f32,
+    stop0_pos: f32,
+    stop0_r: f32,
+    stop0_g: f32,
+    stop0_b: f32,
+    stop0_a: f32,
+    stop1_pos: f32,
+    stop1_r: f32,
+    stop1_g: f32,
+    stop1_b: f32,
+    stop1_a: f32,
+    stop2_pos: f32,
+    stop2_r: f32,
+    stop2_g: f32,
+    stop2_b: f32,
+    stop2_a: f32,
+    stop3_pos: f32,
+    stop3_r: f32,
+    stop3_g: f32,
+    stop3_b: f32,
+    stop3_a: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+pub struct StarfieldInstance {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    seed: f32,
+    count: f32,
+    cluster_count: f32,
+    cluster_stars: f32,
+    warm_r: f32,
+    warm_g: f32,
+    warm_b: f32,
+    warm_a: f32,
+    neutral_r: f32,
+    neutral_g: f32,
+    neutral_b: f32,
+    neutral_a: f32,
+    cool_r: f32,
+    cool_g: f32,
+    cool_b: f32,
+    cool_a: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
+    _pad3: f32,
+}
+
 #[derive(Clone)]
 struct ContextRecord {
     _power_preference: u32,
@@ -304,7 +399,10 @@ struct ContextRecord {
     polygon_pipeline: RenderPipeline,
     bezier_pipeline: RenderPipeline,
     shape_rect_pipeline: RenderPipeline,
+    shape_rect_corners_pipeline: RenderPipeline,
     glow_pipeline: RenderPipeline,
+    nebula_pipeline: RenderPipeline,
+    starfield_pipeline: RenderPipeline,
     linear_gradient_pipeline: RenderPipeline,
     radial_gradient_pipeline: RenderPipeline,
     image_bind_group_layout: wgpu::BindGroupLayout,
@@ -991,6 +1089,381 @@ fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
                     wgpu::VertexAttribute { offset: 32, shader_location: 2, format: wgpu::VertexFormat::Float32x4 },
                     wgpu::VertexAttribute { offset: 48, shader_location: 3, format: wgpu::VertexFormat::Float32x4 },
                     wgpu::VertexAttribute { offset: 64, shader_location: 4, format: wgpu::VertexFormat::Float32x4 },
+                ],
+            }],
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview: None,
+        cache: None,
+    })
+}
+
+fn create_shape_rect_corners_pipeline(device: &Device, format: TextureFormat) -> RenderPipeline {
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("tge-wgpu-shape-rect-corners-shader"),
+        source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(r#"
+struct VSOut {
+  @builtin(position) position: vec4<f32>,
+  @location(0) uv: vec2<f32>,
+  @location(1) fill_color: vec4<f32>,
+  @location(2) stroke_color: vec4<f32>,
+  @location(3) radii: vec4<f32>,
+  @location(4) params0: vec4<f32>,
+  @location(5) params1: vec4<f32>,
+}
+
+fn corner_radius(p: vec2<f32>, radii: vec4<f32>) -> f32 {
+  if (p.x >= 0.0 && p.y < 0.0) { return radii.y; }
+  if (p.x >= 0.0 && p.y >= 0.0) { return radii.z; }
+  if (p.x < 0.0 && p.y >= 0.0) { return radii.w; }
+  return radii.x;
+}
+
+fn sd_round_rect_corners(p: vec2<f32>, half_size: vec2<f32>, radii: vec4<f32>) -> f32 {
+  let radius = corner_radius(p, radii);
+  let q = abs(p) - (half_size - vec2<f32>(radius, radius));
+  return length(max(q, vec2<f32>(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - radius;
+}
+
+@vertex
+fn vs_main(
+  @builtin(vertex_index) vertex_index: u32,
+  @location(0) rect: vec4<f32>,
+  @location(1) fill_color: vec4<f32>,
+  @location(2) stroke_color: vec4<f32>,
+  @location(3) radii: vec4<f32>,
+  @location(4) params0: vec4<f32>,
+  @location(5) params1: vec4<f32>,
+) -> VSOut {
+  var quad = array<vec2<f32>, 6>(
+    vec2<f32>(0.0, 0.0),
+    vec2<f32>(1.0, 0.0),
+    vec2<f32>(0.0, 1.0),
+    vec2<f32>(0.0, 1.0),
+    vec2<f32>(1.0, 0.0),
+    vec2<f32>(1.0, 1.0),
+  );
+  let uv = quad[vertex_index];
+  var out: VSOut;
+  out.position = vec4<f32>(rect.x + uv.x * rect.z, rect.y + uv.y * rect.w, 0.0, 1.0);
+  out.uv = uv;
+  out.fill_color = fill_color;
+  out.stroke_color = stroke_color;
+  out.radii = radii;
+  out.params0 = params0;
+  out.params1 = params1;
+  return out;
+}
+
+@fragment
+fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
+  let stroke_width = in.params0.x;
+  let has_fill = in.params0.y;
+  let has_stroke = in.params0.z;
+  let size = in.params1.xy;
+  let p = in.uv * size - size * 0.5;
+  let half_size = size * 0.5;
+  let sd = sd_round_rect_corners(p, half_size, in.radii);
+  let aa = 1.0;
+  if (sd > aa) { discard; }
+  if (has_stroke > 0.5 && sd >= -stroke_width - aa) {
+    let alpha = select(1.0 - smoothstep(0.0, aa, sd), 1.0, sd <= 0.0);
+    return vec4<f32>(in.stroke_color.rgb, in.stroke_color.a * alpha);
+  }
+  if (has_fill > 0.5) {
+    let alpha = 1.0 - smoothstep(0.0, aa, sd);
+    return vec4<f32>(in.fill_color.rgb, in.fill_color.a * alpha);
+  }
+  discard;
+}
+        "#)),
+    });
+
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("tge-wgpu-shape-rect-corners-pipeline"),
+        layout: None,
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs_main"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            buffers: &[wgpu::VertexBufferLayout {
+                array_stride: std::mem::size_of::<ShapeRectCornersInstance>() as u64,
+                step_mode: wgpu::VertexStepMode::Instance,
+                attributes: &[
+                    wgpu::VertexAttribute { offset: 0, shader_location: 0, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 16, shader_location: 1, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 32, shader_location: 2, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 48, shader_location: 3, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 64, shader_location: 4, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 80, shader_location: 5, format: wgpu::VertexFormat::Float32x4 },
+                ],
+            }],
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview: None,
+        cache: None,
+    })
+}
+
+fn create_nebula_pipeline(device: &Device, format: TextureFormat) -> RenderPipeline {
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("tge-wgpu-nebula-shader"),
+        source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(r#"
+struct VSOut {
+  @builtin(position) position: vec4<f32>,
+  @location(0) uv: vec2<f32>,
+  @location(1) params0: vec4<f32>,
+  @location(2) params1: vec4<f32>,
+  @location(3) stop0: vec4<f32>,
+  @location(4) stop1: vec4<f32>,
+  @location(5) stop2: vec4<f32>,
+  @location(6) stop3: vec4<f32>,
+  @location(7) stopa: vec4<f32>,
+}
+
+fn hash21(p: vec2<f32>) -> f32 {
+  let h = dot(p, vec2<f32>(127.1, 311.7));
+  return fract(sin(h) * 43758.5453123);
+}
+
+fn noise(p: vec2<f32>) -> f32 {
+  let i = floor(p);
+  let f = fract(p);
+  let a = hash21(i);
+  let b = hash21(i + vec2<f32>(1.0, 0.0));
+  let c = hash21(i + vec2<f32>(0.0, 1.0));
+  let d = hash21(i + vec2<f32>(1.0, 1.0));
+  let u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+fn fbm(p_in: vec2<f32>, octaves: i32, lacunarity: f32, gain: f32) -> f32 {
+  var p = p_in;
+  var value = 0.0;
+  var amp = 0.5;
+  for (var i = 0; i < 6; i = i + 1) {
+    if (i >= octaves) { break; }
+    value = value + noise(p) * amp;
+    p = p * lacunarity;
+    amp = amp * gain;
+  }
+  return value;
+}
+
+fn sample_gradient(t: f32, stop0: vec4<f32>, stop1: vec4<f32>, stop2: vec4<f32>, stop3: vec4<f32>, stopa: vec4<f32>) -> vec4<f32> {
+  if (t <= stop0.x) { return vec4<f32>(stop0.y, stop0.z, stop0.w, stopa.x); }
+  if (t <= stop1.x) {
+    let u = clamp((t - stop0.x) / max(0.0001, stop1.x - stop0.x), 0.0, 1.0);
+    return mix(vec4<f32>(stop0.y, stop0.z, stop0.w, stopa.x), vec4<f32>(stop1.y, stop1.z, stop1.w, stopa.y), u);
+  }
+  if (t <= stop2.x) {
+    let u = clamp((t - stop1.x) / max(0.0001, stop2.x - stop1.x), 0.0, 1.0);
+    return mix(vec4<f32>(stop1.y, stop1.z, stop1.w, stopa.y), vec4<f32>(stop2.y, stop2.z, stop2.w, stopa.z), u);
+  }
+  let u = clamp((t - stop2.x) / max(0.0001, stop3.x - stop2.x), 0.0, 1.0);
+  return mix(vec4<f32>(stop2.y, stop2.z, stop2.w, stopa.z), vec4<f32>(stop3.y, stop3.z, stop3.w, stopa.w), u);
+}
+
+@vertex
+fn vs_main(
+  @builtin(vertex_index) vertex_index: u32,
+  @location(0) rect: vec4<f32>,
+  @location(1) params0: vec4<f32>,
+  @location(2) params1: vec4<f32>,
+  @location(3) stop0: vec4<f32>,
+  @location(4) stop1: vec4<f32>,
+  @location(5) stop2: vec4<f32>,
+  @location(6) stop3: vec4<f32>,
+  @location(7) stopa: vec4<f32>,
+) -> VSOut {
+  var quad = array<vec2<f32>, 6>(
+    vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
+    vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0),
+  );
+  let uv = quad[vertex_index];
+  var out: VSOut;
+  out.position = vec4<f32>(rect.x + uv.x * rect.z, rect.y + uv.y * rect.w, 0.0, 1.0);
+  out.uv = uv;
+  out.params0 = params0;
+  out.params1 = params1;
+  out.stop0 = stop0;
+  out.stop1 = stop1;
+  out.stop2 = stop2;
+  out.stop3 = stop3;
+  out.stopa = stopa;
+  return out;
+}
+
+@fragment
+fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
+  let seed = in.params0.x;
+  let scale = max(1.0, in.params0.y);
+  let octaves = i32(max(1.0, in.params0.z));
+  let gain = clamp(in.params0.w, 0.1, 0.95);
+  let lacunarity = max(1.1, in.params1.x);
+  let warp = in.params1.y;
+  let detail = in.params1.z;
+  let dust = in.params1.w;
+  var p = in.uv * scale / 64.0 + vec2<f32>(seed * 0.13, seed * 0.29);
+  let warp_x = fbm(p + vec2<f32>(5.2, 1.3), octaves, lacunarity, gain);
+  let warp_y = fbm(p + vec2<f32>(1.7, 9.2), octaves, lacunarity, gain);
+  p = p + vec2<f32>(warp_x, warp_y) * warp;
+  let density = clamp(fbm(p, octaves, lacunarity, gain) * detail + noise(p * 2.7) * dust * 0.25, 0.0, 1.0);
+  return sample_gradient(density, in.stop0, in.stop1, in.stop2, in.stop3, in.stopa);
+}
+        "#)),
+    });
+
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("tge-wgpu-nebula-pipeline"),
+        layout: None,
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs_main"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            buffers: &[wgpu::VertexBufferLayout {
+                array_stride: std::mem::size_of::<NebulaInstance>() as u64,
+                step_mode: wgpu::VertexStepMode::Instance,
+                attributes: &[
+                    wgpu::VertexAttribute { offset: 0, shader_location: 0, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 16, shader_location: 1, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 32, shader_location: 2, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 48, shader_location: 3, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 64, shader_location: 4, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 80, shader_location: 5, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 96, shader_location: 6, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 112, shader_location: 7, format: wgpu::VertexFormat::Float32x4 },
+                ],
+            }],
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview: None,
+        cache: None,
+    })
+}
+
+fn create_starfield_pipeline(device: &Device, format: TextureFormat) -> RenderPipeline {
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("tge-wgpu-starfield-shader"),
+        source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(r#"
+struct VSOut {
+  @builtin(position) position: vec4<f32>,
+  @location(0) uv: vec2<f32>,
+  @location(1) params0: vec4<f32>,
+  @location(2) warm: vec4<f32>,
+  @location(3) neutral: vec4<f32>,
+  @location(4) cool: vec4<f32>,
+}
+
+fn hash21(p: vec2<f32>) -> f32 {
+  let h = dot(p, vec2<f32>(127.1, 311.7));
+  return fract(sin(h) * 43758.5453123);
+}
+
+fn hash22(p: vec2<f32>) -> vec2<f32> {
+  return vec2<f32>(hash21(p), hash21(p + vec2<f32>(19.19, 7.13)));
+}
+
+@vertex
+fn vs_main(
+  @builtin(vertex_index) vertex_index: u32,
+  @location(0) rect: vec4<f32>,
+  @location(1) params0: vec4<f32>,
+  @location(2) warm: vec4<f32>,
+  @location(3) neutral: vec4<f32>,
+  @location(4) cool: vec4<f32>,
+) -> VSOut {
+  var quad = array<vec2<f32>, 6>(
+    vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
+    vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0),
+  );
+  let uv = quad[vertex_index];
+  var out: VSOut;
+  out.position = vec4<f32>(rect.x + uv.x * rect.z, rect.y + uv.y * rect.w, 0.0, 1.0);
+  out.uv = uv;
+  out.params0 = params0;
+  out.warm = warm;
+  out.neutral = neutral;
+  out.cool = cool;
+  return out;
+}
+
+@fragment
+fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
+  let seed = in.params0.x;
+  let count = max(1.0, in.params0.y);
+  let cluster_count = max(0.0, in.params0.z);
+  let cluster_stars = max(0.0, in.params0.w);
+  let density = count / 1200.0;
+  let cell = floor(in.uv * vec2<f32>(160.0, 90.0));
+  let local = fract(in.uv * vec2<f32>(160.0, 90.0)) - 0.5;
+  let rnd = hash22(cell + seed);
+  let star = smoothstep(0.03 + density * 0.1, 0.0, length(local - (rnd - 0.5) * 0.8)) * step(1.0 - density, rnd.x);
+  let cluster_density = (cluster_count * cluster_stars) / 12000.0;
+  let cluster = hash21(floor(in.uv * vec2<f32>(28.0, 16.0)) + seed * 1.7);
+  let cluster_boost = smoothstep(1.0 - cluster_density, 1.0, cluster);
+  let twinkle = 0.65 + 0.35 * sin((rnd.x + rnd.y + seed) * 32.0);
+  let warmth = hash21(cell + vec2<f32>(seed * 2.1, seed * 0.7));
+  let color = mix(in.neutral, mix(in.warm, in.cool, step(0.55, warmth)), step(0.2, abs(warmth - 0.5)));
+  let alpha = clamp((star + cluster_boost * star * 0.6) * twinkle, 0.0, 1.0);
+  return vec4<f32>(color.rgb, color.a * alpha);
+}
+        "#)),
+    });
+
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("tge-wgpu-starfield-pipeline"),
+        layout: None,
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs_main"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            buffers: &[wgpu::VertexBufferLayout {
+                array_stride: std::mem::size_of::<StarfieldInstance>() as u64,
+                step_mode: wgpu::VertexStepMode::Instance,
+                attributes: &[
+                    wgpu::VertexAttribute { offset: 0, shader_location: 0, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 16, shader_location: 1, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 32, shader_location: 2, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 48, shader_location: 3, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 64, shader_location: 4, format: wgpu::VertexFormat::Float32x4 },
+                    wgpu::VertexAttribute { offset: 80, shader_location: 5, format: wgpu::VertexFormat::Float32x4 },
                 ],
             }],
         },
@@ -1740,7 +2213,10 @@ pub extern "C" fn tge_wgpu_canvas_context_create(opts: *const TgeWgpuCanvasInitO
         polygon_pipeline: create_polygon_pipeline(&device, TextureFormat::Rgba8Unorm),
         bezier_pipeline: create_bezier_pipeline(&device, TextureFormat::Rgba8Unorm),
         shape_rect_pipeline: create_shape_rect_pipeline(&device, TextureFormat::Rgba8Unorm),
+        shape_rect_corners_pipeline: create_shape_rect_corners_pipeline(&device, TextureFormat::Rgba8Unorm),
         glow_pipeline: create_glow_pipeline(&device, TextureFormat::Rgba8Unorm),
+        nebula_pipeline: create_nebula_pipeline(&device, TextureFormat::Rgba8Unorm),
+        starfield_pipeline: create_starfield_pipeline(&device, TextureFormat::Rgba8Unorm),
         linear_gradient_pipeline: create_linear_gradient_pipeline(&device, TextureFormat::Rgba8Unorm),
         radial_gradient_pipeline: create_radial_gradient_pipeline(&device, TextureFormat::Rgba8Unorm),
         image_pipeline: create_image_pipeline(&device, &image_bind_group_layout, TextureFormat::Rgba8Unorm),
@@ -2149,6 +2625,72 @@ fn apply_rounded_rect_mask_rgba(data: &mut [u8], image_width: u32, image_height:
             let dx = local_x - corner_cx;
             let dy = local_y - corner_cy;
             if dx * dx + dy * dy > r * r {
+                data[idx + 3] = 0;
+            }
+        }
+    }
+}
+
+fn apply_rounded_rect_corners_mask_rgba(data: &mut [u8], image_width: u32, image_height: u32, mask_x: u32, mask_y: u32, mask_width: u32, mask_height: u32, tl: f32, tr: f32, br: f32, bl: f32) {
+    if mask_width == 0 || mask_height == 0 {
+        for px in data.chunks_exact_mut(4) {
+            px[3] = 0;
+        }
+        return;
+    }
+    let max_radius = (mask_width.min(mask_height) as f32) * 0.5;
+    let tl = tl.clamp(0.0, max_radius);
+    let tr = tr.clamp(0.0, max_radius);
+    let br = br.clamp(0.0, max_radius);
+    let bl = bl.clamp(0.0, max_radius);
+    let iw = image_width as usize;
+    let ih = image_height as usize;
+    let mx = mask_x as f32;
+    let my = mask_y as f32;
+    let mw = mask_width as f32;
+    let mh = mask_height as f32;
+
+    for y in 0..ih {
+        for x in 0..iw {
+            let idx = (y * iw + x) * 4;
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+
+            if px < mx || px >= mx + mw || py < my || py >= my + mh {
+                data[idx + 3] = 0;
+                continue;
+            }
+
+            let local_x = px - mx;
+            let local_y = py - my;
+            let radius = if local_x >= mw - tr && local_y < tr {
+                tr
+            } else if local_x >= mw - br && local_y >= mh - br {
+                br
+            } else if local_x < bl && local_y >= mh - bl {
+                bl
+            } else {
+                tl
+            };
+
+            if radius <= 0.0 {
+                continue;
+            }
+
+            let inner_left = if local_y < tl { tl } else if local_y >= mh - bl { bl } else { 0.0 };
+            let inner_right = if local_y < tr { mw - tr } else if local_y >= mh - br { mw - br } else { mw };
+            let inner_top = if local_x < tl { tl } else if local_x >= mw - tr { tr } else { 0.0 };
+            let inner_bottom = if local_x < bl { mh - bl } else if local_x >= mw - br { mh - br } else { mh };
+            let inside_core = (local_x >= inner_left && local_x < inner_right) || (local_y >= inner_top && local_y < inner_bottom);
+            if inside_core {
+                continue;
+            }
+
+            let corner_cx = if local_x < inner_left { inner_left } else { inner_right };
+            let corner_cy = if local_y < inner_top { inner_top } else { inner_bottom };
+            let dx = local_x - corner_cx;
+            let dy = local_y - corner_cy;
+            if dx * dx + dy * dy > radius * radius {
                 data[idx + 3] = 0;
             }
         }
@@ -2610,6 +3152,45 @@ pub extern "C" fn tge_wgpu_canvas_image_mask_rounded_rect(
     let height = image.height;
     drop(images);
     apply_rounded_rect_mask_rgba(&mut rgba, width, height, mask_x, mask_y, mask_width, mask_height, radius);
+    let record = create_image_record_from_rgba(&context, width, height, &rgba);
+    match insert_image_record(context_handle, record) {
+        Ok(handle) => handle,
+        Err(_) => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tge_wgpu_canvas_image_mask_rounded_rect_corners(
+    context_handle: u64,
+    image_handle: u64,
+    mask_x: u32,
+    mask_y: u32,
+    mask_width: u32,
+    mask_height: u32,
+    tl: f32,
+    tr: f32,
+    br: f32,
+    bl: f32,
+) -> u64 {
+    let context = match get_context(context_handle, "image_mask_rounded_rect_corners") {
+        Ok(value) => value,
+        Err(_) => return 0,
+    };
+    let images = if let Ok(images) = IMAGES.lock() {
+        images
+    } else {
+        set_last_error("failed to lock image table for image_mask_rounded_rect_corners");
+        return 0;
+    };
+    let image = match with_image(&images, context_handle, image_handle, "image_mask_rounded_rect_corners") {
+        Ok(value) => value,
+        Err(_) => return 0,
+    };
+    let mut rgba = image.rgba.clone();
+    let width = image.width;
+    let height = image.height;
+    drop(images);
+    apply_rounded_rect_corners_mask_rgba(&mut rgba, width, height, mask_x, mask_y, mask_width, mask_height, tl, tr, br, bl);
     let record = create_image_record_from_rgba(&context, width, height, &rgba);
     match insert_image_record(context_handle, record) {
         Ok(handle) => handle,
@@ -3784,6 +4365,89 @@ pub extern "C" fn tge_wgpu_canvas_target_render_shape_rects_layer(
 }
 
 #[no_mangle]
+pub extern "C" fn tge_wgpu_canvas_target_render_shape_rect_corners_layer(
+    context_handle: u64,
+    target_handle: u64,
+    rects_ptr: *const ShapeRectCornersInstance,
+    rect_count: u32,
+    load_mode: u32,
+    clear_rgba: u32,
+    stats: *mut TgeWgpuCanvasFrameStats,
+) -> u32 {
+    write_stats(stats, 0.0, 0.0, 0.0);
+    if rects_ptr.is_null() || rect_count == 0 {
+        set_last_error("render_shape_rect_corners_layer requires a non-empty rect instance buffer");
+        return STATUS_INVALID_ARGUMENT;
+    }
+    let context = match get_context(context_handle, "render_shape_rect_corners_layer") {
+        Ok(value) => value,
+        Err(code) => return code,
+    };
+    let mut targets = if let Ok(targets) = TARGETS.lock() { targets } else {
+        set_last_error("failed to lock target table for render_shape_rect_corners_layer");
+        return STATUS_INTERNAL_ERROR;
+    };
+    let target = match with_target_mut(&mut targets, context_handle, target_handle, "render_shape_rect_corners_layer") {
+        Ok(value) => value,
+        Err(code) => return code,
+    };
+
+    let rects = unsafe { std::slice::from_raw_parts(rects_ptr, rect_count as usize) };
+    let instance_buffer = context.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("tge-wgpu-shape-rect-corners-instance-buffer"),
+        contents: bytemuck::cast_slice(rects),
+        usage: wgpu::BufferUsages::VERTEX,
+    });
+
+    let started = Instant::now();
+    let view = target.texture.create_view(&wgpu::TextureViewDescriptor::default());
+    if let Some(active) = target.active_layer.as_mut() {
+        {
+            let mut pass = active.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("tge-wgpu-shape-rect-corners-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations { load: load_op_from_mode(if active.first_pass { active.first_load_mode } else { 1 }, active.clear_rgba), store: wgpu::StoreOp::Store },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            pass.set_pipeline(&context.shape_rect_corners_pipeline);
+            pass.set_vertex_buffer(0, instance_buffer.slice(..));
+            pass.draw(0..6, 0..rect_count);
+        }
+        active.first_pass = false;
+    } else {
+        let mut encoder = context.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("tge-wgpu-shape-rect-corners-encoder") });
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("tge-wgpu-shape-rect-corners-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations { load: load_op_from_mode(load_mode, clear_rgba), store: wgpu::StoreOp::Store },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            pass.set_pipeline(&context.shape_rect_corners_pipeline);
+            pass.set_vertex_buffer(0, instance_buffer.slice(..));
+            pass.draw(0..6, 0..rect_count);
+        }
+        context.queue.submit(Some(encoder.finish()));
+    }
+    let total_ms = started.elapsed().as_secs_f64() * 1000.0;
+    write_stats(stats, total_ms, 0.0, total_ms);
+    clear_last_error();
+    STATUS_SUCCESS
+}
+
+#[no_mangle]
 pub extern "C" fn tge_wgpu_canvas_target_render_glows_layer(
     context_handle: u64,
     target_handle: u64,
@@ -3859,6 +4523,138 @@ pub extern "C" fn tge_wgpu_canvas_target_render_glows_layer(
             pass.set_pipeline(&context.glow_pipeline);
             pass.set_vertex_buffer(0, instance_buffer.slice(..));
             pass.draw(0..6, 0..glow_count);
+        }
+        context.queue.submit(Some(encoder.finish()));
+    }
+    let total_ms = started.elapsed().as_secs_f64() * 1000.0;
+    write_stats(stats, total_ms, 0.0, total_ms);
+    clear_last_error();
+    STATUS_SUCCESS
+}
+
+#[no_mangle]
+pub extern "C" fn tge_wgpu_canvas_target_render_nebulas_layer(
+    context_handle: u64,
+    target_handle: u64,
+    nebulas_ptr: *const NebulaInstance,
+    nebula_count: u32,
+    load_mode: u32,
+    clear_rgba: u32,
+    stats: *mut TgeWgpuCanvasFrameStats,
+) -> u32 {
+    write_stats(stats, 0.0, 0.0, 0.0);
+    if nebulas_ptr.is_null() || nebula_count == 0 {
+        set_last_error("render_nebulas_layer requires a non-empty instance buffer");
+        return STATUS_INVALID_ARGUMENT;
+    }
+    let context = match get_context(context_handle, "render_nebulas_layer") { Ok(value) => value, Err(code) => return code };
+    let mut targets = if let Ok(targets) = TARGETS.lock() { targets } else { set_last_error("failed to lock target table for render_nebulas_layer"); return STATUS_INTERNAL_ERROR; };
+    let target = match with_target_mut(&mut targets, context_handle, target_handle, "render_nebulas_layer") { Ok(value) => value, Err(code) => return code };
+    let nebulas = unsafe { std::slice::from_raw_parts(nebulas_ptr, nebula_count as usize) };
+    let instance_buffer = context.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("tge-wgpu-nebula-instance-buffer"),
+        contents: bytemuck::cast_slice(nebulas),
+        usage: wgpu::BufferUsages::VERTEX,
+    });
+    let started = Instant::now();
+    let view = target.texture.create_view(&wgpu::TextureViewDescriptor::default());
+    if let Some(active) = target.active_layer.as_mut() {
+        {
+            let mut pass = active.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("tge-wgpu-nebula-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations { load: load_op_from_mode(if active.first_pass { active.first_load_mode } else { 1 }, active.clear_rgba), store: wgpu::StoreOp::Store },
+                })], depth_stencil_attachment: None, timestamp_writes: None, occlusion_query_set: None,
+            });
+            pass.set_pipeline(&context.nebula_pipeline);
+            pass.set_vertex_buffer(0, instance_buffer.slice(..));
+            pass.draw(0..6, 0..nebula_count);
+        }
+        active.first_pass = false;
+    } else {
+        let mut encoder = context.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("tge-wgpu-nebula-encoder") });
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("tge-wgpu-nebula-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations { load: load_op_from_mode(load_mode, clear_rgba), store: wgpu::StoreOp::Store },
+                })], depth_stencil_attachment: None, timestamp_writes: None, occlusion_query_set: None,
+            });
+            pass.set_pipeline(&context.nebula_pipeline);
+            pass.set_vertex_buffer(0, instance_buffer.slice(..));
+            pass.draw(0..6, 0..nebula_count);
+        }
+        context.queue.submit(Some(encoder.finish()));
+    }
+    let total_ms = started.elapsed().as_secs_f64() * 1000.0;
+    write_stats(stats, total_ms, 0.0, total_ms);
+    clear_last_error();
+    STATUS_SUCCESS
+}
+
+#[no_mangle]
+pub extern "C" fn tge_wgpu_canvas_target_render_starfields_layer(
+    context_handle: u64,
+    target_handle: u64,
+    starfields_ptr: *const StarfieldInstance,
+    starfield_count: u32,
+    load_mode: u32,
+    clear_rgba: u32,
+    stats: *mut TgeWgpuCanvasFrameStats,
+) -> u32 {
+    write_stats(stats, 0.0, 0.0, 0.0);
+    if starfields_ptr.is_null() || starfield_count == 0 {
+        set_last_error("render_starfields_layer requires a non-empty instance buffer");
+        return STATUS_INVALID_ARGUMENT;
+    }
+    let context = match get_context(context_handle, "render_starfields_layer") { Ok(value) => value, Err(code) => return code };
+    let mut targets = if let Ok(targets) = TARGETS.lock() { targets } else { set_last_error("failed to lock target table for render_starfields_layer"); return STATUS_INTERNAL_ERROR; };
+    let target = match with_target_mut(&mut targets, context_handle, target_handle, "render_starfields_layer") { Ok(value) => value, Err(code) => return code };
+    let starfields = unsafe { std::slice::from_raw_parts(starfields_ptr, starfield_count as usize) };
+    let instance_buffer = context.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("tge-wgpu-starfield-instance-buffer"),
+        contents: bytemuck::cast_slice(starfields),
+        usage: wgpu::BufferUsages::VERTEX,
+    });
+    let started = Instant::now();
+    let view = target.texture.create_view(&wgpu::TextureViewDescriptor::default());
+    if let Some(active) = target.active_layer.as_mut() {
+        {
+            let mut pass = active.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("tge-wgpu-starfield-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations { load: load_op_from_mode(if active.first_pass { active.first_load_mode } else { 1 }, active.clear_rgba), store: wgpu::StoreOp::Store },
+                })], depth_stencil_attachment: None, timestamp_writes: None, occlusion_query_set: None,
+            });
+            pass.set_pipeline(&context.starfield_pipeline);
+            pass.set_vertex_buffer(0, instance_buffer.slice(..));
+            pass.draw(0..6, 0..starfield_count);
+        }
+        active.first_pass = false;
+    } else {
+        let mut encoder = context.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("tge-wgpu-starfield-encoder") });
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("tge-wgpu-starfield-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations { load: load_op_from_mode(load_mode, clear_rgba), store: wgpu::StoreOp::Store },
+                })], depth_stencil_attachment: None, timestamp_writes: None, occlusion_query_set: None,
+            });
+            pass.set_pipeline(&context.starfield_pipeline);
+            pass.set_vertex_buffer(0, instance_buffer.slice(..));
+            pass.draw(0..6, 0..starfield_count);
         }
         context.queue.submit(Some(encoder.finish()));
     }

@@ -1,5 +1,5 @@
 import { createSignal, type Accessor } from "solid-js"
-import { markDirty, markAllDirty } from "@tge/renderer"
+import { markDirty } from "@tge/renderer"
 
 export interface GraphPoint {
   x: number
@@ -49,13 +49,11 @@ export function useDraggableGraph<TNode extends GraphNodeSeed>(nodes: TNode[]): 
   function moveNode(id: string, x: number, y: number) {
     setPositions((prev) => ({ ...prev, [id]: { x, y } }))
     markDirty()
-    markAllDirty()
   }
 
   function reset() {
     setPositions(initialPositions)
     markDirty()
-    markAllDirty()
   }
 
   return {

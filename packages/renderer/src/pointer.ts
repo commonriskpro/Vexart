@@ -17,6 +17,7 @@
  */
 
 import type { RenderLoop } from "./loop"
+import type { DamageRect } from "./damage"
 
 /** The currently active render loop — set by mount(), cleared on destroy. */
 let activeLoop: RenderLoop | null = null
@@ -56,4 +57,12 @@ export function onPostScroll(cb: () => void): () => void {
   return activeLoop?.onPostScroll(cb) ?? (() => {})
 }
 
+/** Mark the owner layer of a node as dirty, optionally with a regional damage rect. */
+export function markNodeLayerDamaged(nodeId: number, rect?: DamageRect): void {
+  activeLoop?.markNodeLayerDamaged(nodeId, rect)
+}
 
+/** Request an interaction-priority frame for visible pointer/scroll/key updates. */
+export function requestInteractionFrame(kind: "pointer" | "scroll" | "key"): void {
+  activeLoop?.requestInteractionFrame(kind)
+}

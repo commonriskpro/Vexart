@@ -26,6 +26,7 @@ import {
   destroyWgpuCanvasTarget,
   endWgpuCanvasTargetLayer,
   filterWgpuCanvasImageBackdrop,
+  maskWgpuCanvasImageRoundedRectCorners,
   maskWgpuCanvasImageRoundedRect,
   probeWgpuCanvasBridge,
   readbackWgpuCanvasTargetRGBA,
@@ -38,6 +39,7 @@ import {
   renderWgpuCanvasTargetPolygonsLayer,
   renderWgpuCanvasTargetRadialGradientsLayer,
   renderWgpuCanvasTargetRectsLayer,
+  renderWgpuCanvasTargetShapeRectCornersLayer,
   renderWgpuCanvasTargetShapeRectsLayer,
   renderWgpuCanvasTargetGlyphsLayer,
   renderWgpuCanvasTargetTransformedImagesLayer,
@@ -47,6 +49,7 @@ import {
   type WgpuCanvasGlow,
   type WgpuCanvasImageHandle,
   type WgpuCanvasRectFill,
+  type WgpuCanvasShapeRectCorners,
   type WgpuCanvasShapeRect,
   type WgpuCanvasTargetHandle,
 } from "./wgpu-canvas-bridge"
@@ -272,8 +275,6 @@ function isSupportedRectangle(op: RectangleRenderOp) {
 }
 
 function isSupportedEffect(op: EffectRenderOp) {
-  if (op.backdrop) return op.effect.transform === undefined && !op.effect.cornerRadii
-  if (op.effect.cornerRadii) return false
   return true
 }
 
@@ -373,6 +374,7 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
   let frameGeneration = 0
   let currentFrame: RendererBackendFrameContext | null = null
   let currentFrameLayers: RenderedLayerRecord[] = []
+  let renderOpToImage: ((op: RenderGraphOp, width: number, height: number, offsetX: number, offsetY: number) => WgpuCanvasImageHandle | null) | null = null
   const activeLayerKeys = new Set<string>()
   let suppressFinalPresentation = false
   let lastStrategyTelemetry: {
@@ -800,7 +802,6 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
       return cached.handle
     }
     if (cached) destroyWgpuCanvasImage(context, cached.handle)
-    const tmp = create(width, height)
     const spriteOp: Extract<RenderGraphOp, { kind: "effect" }> = {
       ...op,
       effect: {
@@ -811,19 +812,63 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
         opacity: undefined,
       },
     }
-    fallbackPaintOp({
-      buffer: tmp,
-      commands: [spriteOp.command],
-      graph: { ops: [spriteOp] },
-      offsetX: Math.round(op.command.x),
-      offsetY: Math.round(op.command.y),
-      frame: null,
-      layer: null,
-    }, spriteOp)
-    const handle = createWgpuCanvasImage(context, { width, height }, tmp.data)
+    const renderSprite = renderOpToImage as ((op: RenderGraphOp, width: number, height: number, offsetX: number, offsetY: number) => WgpuCanvasImageHandle | null) | null
+    const handle = renderSprite
+      ? renderSprite(spriteOp, width, height, Math.round(op.command.x), Math.round(op.command.y))
+      : null
+    if (!handle) return null
     transformSpriteCache.set(key, { key, handle, width, height })
     trimTransformSpriteCache()
     return handle
+  }
+
+  const renderGradientSprite = (
+    gradient: NonNullable<EffectRenderOp["effect"]["gradient"]>,
+    width: number,
+    height: number,
+    opacity: number,
+    cornerRadii: EffectRenderOp["effect"]["cornerRadii"],
+  ) => {
+    if (!context) return null
+    const target = createWgpuCanvasTarget(context, { width, height })
+    try {
+      if (gradient.type === "linear") {
+        renderWgpuCanvasTargetLinearGradientsLayer(context, target, [{
+          x: -1,
+          y: 1,
+          w: 2,
+          h: -2,
+          boxW: width,
+          boxH: height,
+          radius: 0,
+          from: opacity < 1 ? applyOpacityToColor(gradient.from, opacity) : gradient.from,
+          to: opacity < 1 ? applyOpacityToColor(gradient.to, opacity) : gradient.to,
+          dirX: Math.cos((gradient.angle * Math.PI) / 180),
+          dirY: Math.sin((gradient.angle * Math.PI) / 180),
+        }], 0, 0x00000000)
+      } else {
+        renderWgpuCanvasTargetRadialGradientsLayer(context, target, [{
+          x: -1,
+          y: 1,
+          w: 2,
+          h: -2,
+          boxW: width,
+          boxH: height,
+          radius: Math.max(width, height) * 0.5,
+          from: opacity < 1 ? applyOpacityToColor(gradient.from, opacity) : gradient.from,
+          to: opacity < 1 ? applyOpacityToColor(gradient.to, opacity) : gradient.to,
+        }], 0, 0x00000000)
+      }
+      let handle = copyWgpuCanvasTargetRegionToImage(context, target, { x: 0, y: 0, width, height }).handle
+      if (cornerRadii) {
+        const masked = maskWgpuCanvasImageRoundedRectCorners(context, handle, { x: 0, y: 0, width, height, radii: cornerRadii })
+        destroyWgpuCanvasImage(context, handle)
+        handle = masked
+      }
+      return handle
+    } finally {
+      destroyWgpuCanvasTarget(context, target)
+    }
   }
 
   const clipRect = (cmd: { x: number; y: number; width: number; height: number }, ctx: RendererBackendPaintContext) => {
@@ -858,6 +903,7 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
     let first = true
     const rects: WgpuCanvasRectFill[] = []
     const shapeRects: WgpuCanvasShapeRect[] = []
+    const shapeRectCorners: WgpuCanvasShapeRectCorners[] = []
     const linearGradients: Parameters<typeof renderWgpuCanvasTargetLinearGradientsLayer>[2] = []
     const radialGradients: Parameters<typeof renderWgpuCanvasTargetRadialGradientsLayer>[2] = []
     const glows: WgpuCanvasGlow[] = []
@@ -877,6 +923,13 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
       if (shapeRects.length === 0) return
       renderWgpuCanvasTargetShapeRectsLayer(context, targetHandle, shapeRects, first ? 0 : 1, 0x00000000)
       shapeRects.length = 0
+      first = false
+      targetMutationVersion += 1
+    }
+    const flushShapeRectCorners = () => {
+      if (shapeRectCorners.length === 0) return
+      renderWgpuCanvasTargetShapeRectCornersLayer(context, targetHandle, shapeRectCorners, first ? 0 : 1, 0x00000000)
+      shapeRectCorners.length = 0
       first = false
       targetMutationVersion += 1
     }
@@ -931,6 +984,7 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
     const flushAll = () => {
       flushRects()
       flushShapeRects()
+      flushShapeRectCorners()
       flushLinearGradients()
       flushRadialGradients()
       flushGlows()
@@ -1138,8 +1192,9 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
         if (op.kind === "effect") {
           let effectOp = op
           const effectOpacity = effectOp.effect.opacity ?? 1
+          const cornerRadii = effectOp.effect.cornerRadii
 
-          if (effectOp.backdrop && !effectOp.effect.cornerRadii) {
+          if (effectOp.backdrop && !cornerRadii) {
             flushAll()
             if (layerOpen) {
               endWgpuCanvasTargetLayer(context, targetHandle)
@@ -1151,7 +1206,7 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
               ensureLoadedLayer()
               const bounds = opBounds(effectOp, ctx.buffer.width, ctx.buffer.height)
               if (bounds) {
-                const group = transformedImageGroups.get(sprite.handle) ?? { handle: sprite.handle, instances: [] }
+        const group = (transformedImageGroups.get(sprite.handle) ?? { handle: sprite.handle, instances: [] as { p0: { x: number; y: number }; p1: { x: number; y: number }; p2: { x: number; y: number }; p3: { x: number; y: number }; opacity: number }[] })
                 const matrix = effectOp.effect.transform
                 const width = Math.max(1, Math.round(effectOp.command.width))
                 const height = Math.max(1, Math.round(effectOp.command.height))
@@ -1188,6 +1243,35 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
             effectOp = stripBackdropEffectOp(effectOp)
           }
 
+          if (effectOp.backdrop && cornerRadii) {
+            flushAll()
+            if (layerOpen) {
+              endWgpuCanvasTargetLayer(context, targetHandle)
+              layerOpen = false
+            }
+            const sprite = getBackdropSprite(effectOp)
+            if (!sprite) return false
+            const masked = maskWgpuCanvasImageRoundedRectCorners(context, sprite.handle, {
+              x: Math.max(0, Math.round(effectOp.command.x) - sprite.bounds.left),
+              y: Math.max(0, Math.round(effectOp.command.y) - sprite.bounds.top),
+              width: Math.max(1, Math.round(effectOp.command.width)),
+              height: Math.max(1, Math.round(effectOp.command.height)),
+              radii: cornerRadii,
+            })
+            compositeWgpuCanvasTargetImageLayer(context, targetHandle, masked, {
+              x: (sprite.bounds.left / ctx.buffer.width) * 2 - 1,
+              y: 1 - (sprite.bounds.top / ctx.buffer.height) * 2,
+              w: ((sprite.bounds.right - sprite.bounds.left) / ctx.buffer.width) * 2,
+              h: -(((sprite.bounds.bottom - sprite.bounds.top) / ctx.buffer.height) * 2),
+              opacity: effectOpacity,
+            }, first ? 0 : 1, 0x00000000)
+            destroyWgpuCanvasImage(context, masked)
+            first = false
+            targetMutationVersion += 1
+            markDirty(sprite.bounds.left, sprite.bounds.top, sprite.bounds.right, sprite.bounds.bottom)
+            effectOp = stripBackdropEffectOp(effectOp)
+          }
+
           if (effectOp.backdrop) {
             flushAll()
             if (layerOpen) {
@@ -1206,7 +1290,7 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
             if (!bounds) continue
             const handle = getTransformSprite(effectOp)
             if (!handle) return false
-            const group = transformedImageGroups.get(handle) ?? { handle, instances: [] }
+            const group = (transformedImageGroups.get(handle) ?? { handle, instances: [] as { p0: { x: number; y: number }; p1: { x: number; y: number }; p2: { x: number; y: number }; p3: { x: number; y: number }; opacity: number }[] })
             const matrix = effectOp.effect.transform
             const width = Math.max(1, Math.round(effectOp.command.width))
             const height = Math.max(1, Math.round(effectOp.command.height))
@@ -1236,6 +1320,22 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
           const radius = clampShapeRadius(effectOp.rect.inputs.radius, boxW, boxH)
 
           if (!effectOp.effect.gradient && !effectOp.effect.glow && !effectOp.effect.shadow) {
+            if (cornerRadii) {
+              shapeRectCorners.push({
+                x: (clip.left / ctx.buffer.width) * 2 - 1,
+                y: 1 - (clip.top / ctx.buffer.height) * 2,
+                w: (boxW / ctx.buffer.width) * 2,
+                h: -((boxH / ctx.buffer.height) * 2),
+                boxW,
+                boxH,
+                radii: cornerRadii,
+                strokeWidth: 0,
+                fill: baseFill,
+              })
+              markDirty(clip.left, clip.top, clip.right, clip.bottom)
+              flushAll()
+              continue
+            }
             shapeRects.push({
               x: (clip.left / ctx.buffer.width) * 2 - 1,
               y: 1 - (clip.top / ctx.buffer.height) * 2,
@@ -1253,32 +1353,60 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
           }
 
           if (!effectOp.effect.gradient && (effectOp.command.color[3] ?? 0) > 1) {
-            shapeRects.push({
-              x: (clip.left / ctx.buffer.width) * 2 - 1,
-              y: 1 - (clip.top / ctx.buffer.height) * 2,
-              w: (boxW / ctx.buffer.width) * 2,
-              h: -((boxH / ctx.buffer.height) * 2),
-              boxW,
-              boxH,
-              radius,
-              strokeWidth: 0,
-              fill: baseFill,
-            })
+            if (cornerRadii) {
+              shapeRectCorners.push({
+                x: (clip.left / ctx.buffer.width) * 2 - 1,
+                y: 1 - (clip.top / ctx.buffer.height) * 2,
+                w: (boxW / ctx.buffer.width) * 2,
+                h: -((boxH / ctx.buffer.height) * 2),
+                boxW,
+                boxH,
+                radii: cornerRadii,
+                strokeWidth: 0,
+                fill: baseFill,
+              })
+            } else {
+              shapeRects.push({
+                x: (clip.left / ctx.buffer.width) * 2 - 1,
+                y: 1 - (clip.top / ctx.buffer.height) * 2,
+                w: (boxW / ctx.buffer.width) * 2,
+                h: -((boxH / ctx.buffer.height) * 2),
+                boxW,
+                boxH,
+                radius,
+                strokeWidth: 0,
+                fill: baseFill,
+              })
+            }
             markDirty(clip.left, clip.top, clip.right, clip.bottom)
           }
 
           if (effectOp.effect.gradient) {
-            shapeRects.push({
-              x: (clip.left / ctx.buffer.width) * 2 - 1,
-              y: 1 - (clip.top / ctx.buffer.height) * 2,
-              w: (boxW / ctx.buffer.width) * 2,
-              h: -((boxH / ctx.buffer.height) * 2),
-              boxW,
-              boxH,
-              radius,
-              strokeWidth: 0,
-              fill: baseFill,
-            })
+            if (!cornerRadii) {
+              shapeRects.push({
+                x: (clip.left / ctx.buffer.width) * 2 - 1,
+                y: 1 - (clip.top / ctx.buffer.height) * 2,
+                w: (boxW / ctx.buffer.width) * 2,
+                h: -((boxH / ctx.buffer.height) * 2),
+                boxW,
+                boxH,
+                radius,
+                strokeWidth: 0,
+                fill: baseFill,
+              })
+            } else if ((effectOp.command.color[3] ?? 0) > 1) {
+              shapeRectCorners.push({
+                x: (clip.left / ctx.buffer.width) * 2 - 1,
+                y: 1 - (clip.top / ctx.buffer.height) * 2,
+                w: (boxW / ctx.buffer.width) * 2,
+                h: -((boxH / ctx.buffer.height) * 2),
+                boxW,
+                boxH,
+                radii: cornerRadii,
+                strokeWidth: 0,
+                fill: baseFill,
+              })
+            }
             markDirty(clip.left, clip.top, clip.right, clip.bottom)
           }
 
@@ -1322,6 +1450,23 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
           }
 
           if (effectOp.effect.gradient?.type === "linear") {
+            if (cornerRadii) {
+              flushAll()
+              const handle = renderGradientSprite(effectOp.effect.gradient, boxW, boxH, effectOpacity, cornerRadii)
+              if (!handle) return false
+              compositeWgpuCanvasTargetImageLayer(context, targetHandle, handle, {
+                x: (clip.left / ctx.buffer.width) * 2 - 1,
+                y: 1 - (clip.top / ctx.buffer.height) * 2,
+                w: (boxW / ctx.buffer.width) * 2,
+                h: -((boxH / ctx.buffer.height) * 2),
+                opacity: 1,
+              }, first ? 0 : 1, 0x00000000)
+              destroyWgpuCanvasImage(context, handle)
+              first = false
+              targetMutationVersion += 1
+              markDirty(clip.left, clip.top, clip.right, clip.bottom)
+              continue
+            }
             const from = effectOpacity < 1 ? applyOpacityToColor(effectOp.effect.gradient.from, effectOpacity) : effectOp.effect.gradient.from
             const to = effectOpacity < 1 ? applyOpacityToColor(effectOp.effect.gradient.to, effectOpacity) : effectOp.effect.gradient.to
             linearGradients.push({
@@ -1343,6 +1488,23 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
           }
 
           if (effectOp.effect.gradient?.type === "radial") {
+            if (cornerRadii) {
+              flushAll()
+              const handle = renderGradientSprite(effectOp.effect.gradient, boxW, boxH, effectOpacity, cornerRadii)
+              if (!handle) return false
+              compositeWgpuCanvasTargetImageLayer(context, targetHandle, handle, {
+                x: (clip.left / ctx.buffer.width) * 2 - 1,
+                y: 1 - (clip.top / ctx.buffer.height) * 2,
+                w: (boxW / ctx.buffer.width) * 2,
+                h: -((boxH / ctx.buffer.height) * 2),
+                opacity: 1,
+              }, first ? 0 : 1, 0x00000000)
+              destroyWgpuCanvasImage(context, handle)
+              first = false
+              targetMutationVersion += 1
+              markDirty(clip.left, clip.top, clip.right, clip.bottom)
+              continue
+            }
             const from = effectOpacity < 1 ? applyOpacityToColor(effectOp.effect.gradient.from, effectOpacity) : effectOp.effect.gradient.from
             const to = effectOpacity < 1 ? applyOpacityToColor(effectOp.effect.gradient.to, effectOpacity) : effectOp.effect.gradient.to
             radialGradients.push({
@@ -1367,6 +1529,21 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
         if (op.kind === "border") {
           const boxW = clip.right - clip.left
           const boxH = clip.bottom - clip.top
+          if (op.inputs.cornerRadii) {
+            shapeRectCorners.push({
+              x: (clip.left / ctx.buffer.width) * 2 - 1,
+              y: 1 - (clip.top / ctx.buffer.height) * 2,
+              w: (boxW / ctx.buffer.width) * 2,
+              h: -((boxH / ctx.buffer.height) * 2),
+              boxW,
+              boxH,
+              radii: op.inputs.cornerRadii,
+              strokeWidth: op.inputs.width,
+              stroke: ((op.command.color[0] << 24) | (op.command.color[1] << 16) | (op.command.color[2] << 8) | op.command.color[3]) >>> 0,
+            })
+            markDirty(clip.left, clip.top, clip.right, clip.bottom)
+            continue
+          }
           shapeRects.push({
             x: (clip.left / ctx.buffer.width) * 2 - 1,
             y: 1 - (clip.top / ctx.buffer.height) * 2,
@@ -1574,6 +1751,27 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
         width: frame.viewportWidth,
         height: frame.viewportHeight,
       },
+    }
+  }
+
+  renderOpToImage = (op, width, height, offsetX, offsetY) => {
+    if (!context) return null
+    const target = createWgpuCanvasTarget(context, { width, height })
+    try {
+      const spriteCtx: RendererBackendPaintContext = {
+        buffer: create(width, height),
+        commands: [op.command],
+        graph: { ops: [op] },
+        offsetX,
+        offsetY,
+        frame: null,
+        layer: null,
+      }
+      const ok = renderFrame(spriteCtx, target, "none")
+      if (!ok) return null
+      return copyWgpuCanvasTargetRegionToImage(context, target, { x: 0, y: 0, width, height }).handle
+    } finally {
+      destroyWgpuCanvasTarget(context, target)
     }
   }
 

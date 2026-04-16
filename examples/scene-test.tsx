@@ -133,9 +133,17 @@ function App() {
         {/* Tooltip overlay */}
         <SceneOverlay
           id="tooltip"
-          draw={(ctx: CanvasContext) => {
+          dependsOn={() => [selected()]}
+          bounds={(scene) => {
             const sel = selected()
-            const pos = positions()[sel]
+            const pos = scene.getNodePosition(sel)
+            const node = initialNodes.find(n => n.id === sel)
+            if (!pos || !node) return null
+            return { x: pos.x - 80, y: pos.y + node.radius + 15, width: 160, height: 28 }
+          }}
+          draw={(ctx: CanvasContext, scene) => {
+            const sel = selected()
+            const pos = scene.getNodePosition(sel)
             if (!pos) return
             const node = initialNodes.find(n => n.id === sel)
             if (!node) return
