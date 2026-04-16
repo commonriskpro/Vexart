@@ -116,10 +116,34 @@ const INSPECTOR_ROW_TONE = {
 
 export type InspectorRowTone = (typeof INSPECTOR_ROW_TONE)[keyof typeof INSPECTOR_ROW_TONE]
 
+const GRAPH_LEGEND_TONE = {
+  DEFAULT: "default",
+  WARM: "warm",
+  COOL: "cool",
+  MUTED: "muted",
+} as const
+
+export type GraphLegendTone = (typeof GRAPH_LEGEND_TONE)[keyof typeof GRAPH_LEGEND_TONE]
+
+export interface GraphLegendItemData {
+  glyph: string
+  label: string
+  detail?: string
+  swatchColor?: number
+  tone?: GraphLegendTone
+}
+
 function getInspectorValueColor(tone?: InspectorRowTone) {
   if (tone === INSPECTOR_ROW_TONE.WARM) return colors.warm
   if (tone === INSPECTOR_ROW_TONE.COOL) return colors.blueSoft
   if (tone === INSPECTOR_ROW_TONE.MUTED) return colors.textDim
+  return colors.textSoft
+}
+
+function getLegendToneColor(tone?: GraphLegendTone) {
+  if (tone === GRAPH_LEGEND_TONE.WARM) return colors.warm
+  if (tone === GRAPH_LEGEND_TONE.COOL) return colors.blueSoft
+  if (tone === GRAPH_LEGEND_TONE.MUTED) return colors.textDim
   return colors.textSoft
 }
 
@@ -211,6 +235,28 @@ export function PanelFooter(props: {
         {props.justify ? <box width="grow" /> : null}
       </box>
     </box>
+  )
+}
+
+export function GraphLegend(props: {
+  title?: string
+  items: GraphLegendItemData[]
+}) {
+  return (
+    <PanelSection inset padded gap={space[2]}>
+      {props.title ? <text color={colors.textDim} fontSize={9}>{props.title}</text> : null}
+      {props.items.map((item) => (
+        <box direction="row" gap={space[2]} alignY="center" width="grow">
+          <box direction="row" gap={space[1]} alignY="center" width="grow">
+            <box width={18} height={18} alignX="center" alignY="center" backgroundColor={0xffffff03} borderColor={item.swatchColor ?? colors.panelBorder} borderWidth={1} cornerRadius={radius.sm}>
+              <text color={item.swatchColor ?? getLegendToneColor(item.tone)} fontSize={8}>{item.glyph}</text>
+            </box>
+            <text color={getLegendToneColor(item.tone)} fontSize={10}>{item.label}</text>
+          </box>
+          {item.detail ? <text color={colors.textDim} fontSize={9}>{item.detail}</text> : null}
+        </box>
+      ))}
+    </PanelSection>
   )
 }
 

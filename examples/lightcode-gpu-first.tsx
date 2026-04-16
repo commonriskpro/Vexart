@@ -20,6 +20,7 @@ import {
   CodeFrame,
   colors as lightcodeColors,
   drawOverlayCard,
+  GraphLegend,
   InspectorRow,
   InlineActions,
   Metric,
@@ -34,6 +35,7 @@ import {
   Toolbar,
   ToolIcon,
 } from "@tge/lightcode"
+import type { GraphLegendItemData } from "@tge/lightcode"
 import {
   createCanvasImageCache,
   debugState,
@@ -67,6 +69,7 @@ const SHOW_GRAPH_BG = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_BG !== "0"
 const SHOW_GRAPH_EDGES = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_EDGES !== "0"
 const SHOW_GRAPH_NODES = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_NODES !== "0"
 const SHOW_GRAPH_OVERLAY = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_OVERLAY !== "0"
+const SHOW_GRAPH_LEGEND = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_LEGEND !== "0"
 const SHOW_MEMORY = process.env.LIGHTCODE_GPU_FIRST_SHOW_MEMORY !== "0"
 const SHOW_DIFF = process.env.LIGHTCODE_GPU_FIRST_SHOW_DIFF !== "0"
 const SHOW_EDITOR = process.env.LIGHTCODE_GPU_FIRST_SHOW_EDITOR !== "0"
@@ -157,6 +160,7 @@ function enabledSurfacesLine() {
     SHOW_GRAPH_EDGES ? "graph-edges" : null,
     SHOW_GRAPH_NODES ? "graph-nodes" : null,
     SHOW_GRAPH_OVERLAY ? "graph-overlay" : null,
+    SHOW_GRAPH_LEGEND ? "graph-legend" : null,
     SHOW_MEMORY ? "memory" : null,
     SHOW_DIFF ? "diff" : null,
     SHOW_EDITOR ? "editor" : null,
@@ -166,6 +170,13 @@ function enabledSurfacesLine() {
   ].filter((value): value is string => value !== null)
   return parts.join(",")
 }
+
+const graphLegendItems: GraphLegendItemData[] = [
+  { glyph: "◆", label: "Compute task", detail: "active pipeline", swatchColor: C.warm, tone: "warm" },
+  { glyph: "⬡", label: "Buffer / dispatch", detail: "runtime data", swatchColor: C.blue, tone: "cool" },
+  { glyph: "⬢", label: "Agent / format", detail: "product shell", swatchColor: 0xe8e4db90 },
+  { glyph: "◻", label: "Source module", detail: "zig file", swatchColor: 0xece7dd80, tone: "muted" },
+]
 
 function getNode(id: string) {
   return nodes.find((node) => node.id === id) ?? nodes[0]
@@ -360,6 +371,19 @@ function GraphPlane(props: { selectedNode: string; onSelect: (id: string) => voi
   )
 }
 
+function GraphLegendPanel() {
+  return (
+    <Panel title="Graph Legend" subtitle="Node semantics · GPU-first" accent={C.warmLine} x={78} y={124} width={308} zIndex={11} gradient={PANEL_GRADIENTS ? { type: "linear", from: C.panel, to: C.panelAlt, angle: 90 } : undefined} shadow={PANEL_SHADOWS ? { x: 0, y: 12, blur: 18, color: 0x00000024 } : undefined} {...createPanelTraceHandlers("Graph Legend")}>
+      <GraphLegend title="Shapes + tones" items={graphLegendItems} />
+      <PanelFooter>
+        <text color={C.textDim} fontSize={9}>selected graph semantics</text>
+        <box width="grow" />
+        <Chip label="GPU-first" active />
+      </PanelFooter>
+    </Panel>
+  )
+}
+
 function MemoryPanel() {
   return (
     <Panel title="Memory" subtitle="LC_TOKENS · accentGolden.focusView" accent={C.warmLine} x={64} y={560} width={336} zIndex={12} gradient={PANEL_GRADIENTS ? { type: "linear", from: C.panel, to: C.panelAlt, angle: 90 } : undefined} shadow={PANEL_SHADOWS ? { x: 0, y: 12, blur: 18, color: 0x00000024 } : undefined} {...createPanelTraceHandlers("Memory")}>
@@ -474,6 +498,7 @@ function App() {
     <box width="100%" height="100%" backgroundColor={C.bg}>
       {SHOW_SHELL ? <Shell /> : null}
       <GraphPlane selectedNode={selectedNode()} onSelect={setSelectedNode} />
+      {SHOW_GRAPH_LEGEND ? <GraphLegendPanel /> : null}
       {SHOW_HEADER ? <HeaderBar /> : null}
       {SHOW_FOOTER ? <FooterBar /> : null}
       {SHOW_MEMORY ? <MemoryPanel /> : null}
