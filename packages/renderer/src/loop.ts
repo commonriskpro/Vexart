@@ -1278,8 +1278,29 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
     const noBoundsLayers = layerBounds.filter(lb => lb.right <= lb.x && !lb.scissor)
 
+    function overlapArea(
+      ax: number,
+      ay: number,
+      ar: number,
+      ab: number,
+      bx: number,
+      by: number,
+      br: number,
+      bb: number,
+    ) {
+      const left = Math.max(ax, bx)
+      const top = Math.max(ay, by)
+      const right = Math.min(ar, br)
+      const bottom = Math.min(ab, bb)
+      if (right <= left || bottom <= top) return 0
+      return (right - left) * (bottom - top)
+    }
+
     // Assign remaining commands (not claimed by scissor layers)
-    // to static layers by spatial containment, or to bgSlot
+    // to static layers by strongest spatial overlap, or to bgSlot.
+    // Using only cmd.x/cmd.y is too unstable for overlapping floating
+    // layers because a large command can have its top-left inside a
+    // neighbor even when most of its area belongs to another panel.
     for (let i = 0; i < commands.length; i++) {
       if (claimedByScissor.has(i)) continue
 
@@ -1294,13 +1315,38 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       // Spatial assignment for remaining commands
       const cx = Math.round(cmd.x)
       const cy = Math.round(cmd.y)
+      const cw = Math.max(1, Math.round(cmd.width))
+      const ch = Math.max(1, Math.round(cmd.height))
+      const cr = cx + cw
+      const cb = cy + ch
 
       let assigned = false
+      let best: LayerBounds | null = null
+      let bestArea = 0
       for (const lb of sortedBounds) {
-        if (cx >= lb.x && cy >= lb.y && cx < lb.right && cy < lb.bottom) {
-          lb.slot.cmdIndices.push(i)
-          assigned = true
-          break
+        const area = overlapArea(cx, cy, cr, cb, lb.x, lb.y, lb.right, lb.bottom)
+        if (area > bestArea) {
+          best = lb
+          bestArea = area
+          continue
+        }
+        if (area === bestArea && area > 0 && best && lb.slot.z > best.slot.z) {
+          best = lb
+        }
+      }
+
+      if (best && bestArea > 0) {
+        best.slot.cmdIndices.push(i)
+        assigned = true
+      }
+
+      if (!assigned) {
+        for (const lb of sortedBounds) {
+          if (cx >= lb.x && cy >= lb.y && cx < lb.right && cy < lb.bottom) {
+            lb.slot.cmdIndices.push(i)
+            assigned = true
+            break
+          }
         }
       }
 
