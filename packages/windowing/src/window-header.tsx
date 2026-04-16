@@ -1,6 +1,6 @@
 import type { JSX } from "solid-js"
 import type { NodeMouseEvent } from "@tge/renderer-solid"
-import { Text } from "../text"
+import { Text } from "../../components/src/text"
 import { useWindowManagerContext, useWindowDescriptor } from "./context"
 import type { WindowDragHandleProps } from "./use-window-drag"
 import { WindowControls } from "./window-controls"

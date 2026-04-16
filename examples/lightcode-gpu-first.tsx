@@ -45,12 +45,11 @@ import {
   probeWgpuCanvasBridge,
   setDebug,
   setCanvasPainterBackend,
-  useDrag,
 } from "@tge/renderer"
 import { createTerminal } from "@tge/terminal"
 import { createParser } from "@tge/input"
 import { resetKittyTransportStats, getKittyTransportStats } from "@tge/output-kitty"
-import { RetainedGraph, RetainedGraphField } from "@tge/components"
+import { SceneCanvas, SceneEdge, SceneNode, SceneOverlay } from "@tge/components"
 import { tryCreateWgpuCanvasPainterBackend } from "@tge/gpu"
 import type { CanvasContext } from "@tge/renderer"
 
@@ -255,119 +254,69 @@ function GraphPlane(props: { selectedNode: string; onSelect: (id: string) => voi
   const graphWidth = NODES_ONLY_HARNESS ? 1860 : FRAME.w
   const graphHeight = NODES_ONLY_HARNESS ? 1160 : FRAME.h
 
-  function GraphHitNode(hit: { node: NodeMeta }) {
-    let dragOffsetX = 0
-    let dragOffsetY = 0
-    const x = () => graph.getNodeX(hit.node)()
-    const y = () => graph.getNodeY(hit.node)()
-    const pad = hit.node.radius + 28
-    const { dragProps } = useDrag({
-      onDragStart: (event) => {
-        appendFileSync(DEBUG_LOG, `[graph-select] ${hit.node.id}\n`)
-        props.onSelect(hit.node.id)
-        dragOffsetX = event.nodeX - x()
-        dragOffsetY = event.nodeY - y()
-      },
-      onDrag: (event) => {
-        const nextX = event.nodeX - dragOffsetX
-        const nextY = event.nodeY - dragOffsetY
-        appendFileSync(DEBUG_LOG, `[graph-drag] ${hit.node.id} ${Math.round(nextX)} ${Math.round(nextY)}\n`)
-        graph.moveNode(hit.node.id, nextX, nextY)
-      },
-    })
-
-    return (
-      <box
-        {...dragProps}
-        floating="parent"
-        floatOffset={{ x: x() - pad, y: y() - pad }}
-        width={pad * 2}
-        height={pad * 2}
-      />
-    )
-  }
-
-  function worldToLocal(x: number, y: number) {
-    return { x, y }
-  }
-
-  function drawNodeField(ctx: CanvasContext) {
-    for (const node of SHOW_GRAPH_NODES ? graphNodes : []) {
-      const x = graph.getNodeX(node)()
-      const y = graph.getNodeY(node)()
-      const selected = props.selectedNode === node.id
-      const sides = typeof node.shape === "number" ? node.shape
-        : node.shape === "hexagon" ? 6
-        : node.shape === "diamond" ? 4
-        : node.shape === "octagon" ? 8
-        : 0
-      const rotation = node.shape === "diamond" ? 45 : sides >= 6 ? 30 : 0
-      const glow = { color: node.glow, radius: node.active ? 36 : 16, intensity: node.active ? 72 : 20 }
-      const outerR = selected ? glow.radius * 2 : glow.radius
-      const outerI = selected ? glow.intensity * 0.7 : glow.intensity * 0.4
-      const outerA = Math.round((glow.color & 0xff) * 0.4)
-      const outerColor = ((glow.color & 0xffffff00) | outerA) >>> 0
-      ctx.glow(x, y, node.radius + outerR, node.radius + outerR, outerColor, Math.round(outerI))
-      const innerA = Math.round((glow.color & 0xff) * 0.7)
-      const innerColor = ((glow.color & 0xffffff00) | innerA) >>> 0
-      ctx.glow(x, y, node.radius + 5, node.radius + 5, innerColor, selected ? glow.intensity : Math.round(glow.intensity * 0.5))
-      if (sides > 0) {
-        ctx.polygon(x, y, node.radius, sides, {
-          fill: node.fill,
-          stroke: node.stroke,
-          strokeWidth: selected ? 3 : 2,
-          rotation,
-        })
-      } else {
-        ctx.circle(x, y, node.radius, {
-          fill: node.fill,
-          stroke: node.stroke,
-          strokeWidth: selected ? 3 : 2,
-        })
-      }
-      if (selected) {
-        const pulseColor = ((node.stroke & 0xffffff00) | 14) >>> 0
-        ctx.glow(x, y, node.radius + 45, node.radius + 45, pulseColor, 35)
-      }
-      if (node.label) ctx.text(x - Math.round(node.label.length * 7 / 2), y - (node.subtitle ? 6 : 4), node.label, 0xeeeeeeff)
-      if (node.subtitle) ctx.text(x - Math.round(node.subtitle.length * 7 / 2), y + 8, node.subtitle, 0x666680ff)
-    }
-  }
-
-  function drawEdgeField(ctx: CanvasContext) {
-    for (const edge of SHOW_GRAPH_EDGES ? edges : []) {
-      const fromPoint = graph.getEdgeAnchor(edge.from)()
-      const toPoint = graph.getEdgeAnchor(edge.to)()
-      const dx = toPoint.x - fromPoint.x
-      const dy = toPoint.y - fromPoint.y
-      const len = Math.sqrt(dx * dx + dy * dy)
-      const bend = 0.1
-      const mx = (fromPoint.x + toPoint.x) / 2
-      const my = (fromPoint.y + toPoint.y) / 2
-      const cpx = len === 0 ? fromPoint.x : mx + (-dy / len) * (len * bend)
-      const cpy = len === 0 ? fromPoint.y : my + (dx / len) * (len * bend)
-      const glowAlpha = edge.color & 0xff
-      const glowColor = ((edge.color & 0xffffff00) | Math.round(glowAlpha * 0.3)) >>> 0
-      ctx.bezier(fromPoint.x, fromPoint.y, cpx, cpy, toPoint.x, toPoint.y, { color: glowColor, width: 6 })
-      ctx.bezier(fromPoint.x, fromPoint.y, cpx, cpy, toPoint.x, toPoint.y, { color: edge.color, width: 1 })
-    }
-  }
-
-  function drawOverlayField(ctx: CanvasContext) {
-    if (!SHOW_GRAPH_OVERLAY) return
-    const position = graph.getPosition(props.selectedNode)
-    const node = getNode(props.selectedNode)
-    drawOverlayCard(ctx, position.x - 86, position.y + 68, 270, 50, `Task: ${node.label || "active_node"}`, `Type: ${node.kind}`)
-  }
-
   return (
-    <box layer floating={NODES_ONLY_HARNESS ? undefined : "root"} floatOffset={NODES_ONLY_HARNESS ? undefined : { x: FRAME.x, y: FRAME.y }} width={graphWidth} height={graphHeight} pointerPassthrough={!NODES_ONLY_HARNESS}>
-      <RetainedGraph width={graphWidth} height={graphHeight} viewport={{ x: 0, y: 0, zoom: 1 }}>
-        <RetainedGraphField id="edges" zIndex={10} watch={graph.positions} onDraw={(ctx) => drawEdgeField(ctx)} />
-        <RetainedGraphField id="nodes" zIndex={20} watch={graph.positions} onDraw={(ctx) => drawNodeField(ctx)} />
-        {SHOW_GRAPH_OVERLAY ? <RetainedGraphField id="overlay" zIndex={30} watch={graph.positions} onDraw={(ctx) => drawOverlayField(ctx)} /> : null}
-      </RetainedGraph>
-      <For each={SHOW_GRAPH_NODES ? graphNodes : []}>{(node) => <GraphHitNode node={node} />}</For>
+    <box layer floating={NODES_ONLY_HARNESS ? undefined : "root"} floatOffset={NODES_ONLY_HARNESS ? undefined : { x: FRAME.x, y: FRAME.y }} width={graphWidth} height={graphHeight}>
+      <SceneCanvas interactive={false} width={graphWidth} height={graphHeight} viewport={{ x: 0, y: 0, zoom: 1 }}>
+        <For each={SHOW_GRAPH_EDGES ? edges : []}>
+          {(edge) => (
+            <SceneEdge
+              id={edge.id}
+              from={graph.getEdgeAnchor(edge.from)}
+              to={graph.getEdgeAnchor(edge.to)}
+              fromId={edge.from}
+              toId={edge.to}
+              color={edge.color}
+              glow
+              glowWidth={6}
+            />
+          )}
+        </For>
+
+        <For each={SHOW_GRAPH_NODES ? graphNodes : []}>
+          {(node) => (
+            <SceneNode
+              id={node.id}
+              x={graph.getNodeX(node)}
+              y={graph.getNodeY(node)}
+              radius={node.radius}
+              shape={node.shape}
+              fill={node.fill}
+              stroke={node.stroke}
+              glow={{ color: node.glow, radius: node.active ? 36 : 16, intensity: node.active ? 72 : 20 }}
+              selected={() => props.selectedNode === node.id}
+              label={node.label}
+              sublabel={node.subtitle}
+              statusDot={node.active ? { color: C.warm, glow: true } : undefined}
+              onSelect={() => {
+                appendFileSync(DEBUG_LOG, `[graph-select] ${node.id}\n`)
+                props.onSelect(node.id)
+              }}
+              onDrag={(x, y) => {
+                appendFileSync(DEBUG_LOG, `[graph-drag] ${node.id} ${Math.round(x)} ${Math.round(y)}\n`)
+                graph.moveNode(node.id, x, y)
+              }}
+            />
+          )}
+        </For>
+
+        {SHOW_GRAPH_OVERLAY ? (
+          <SceneOverlay
+            id="overlay"
+            dependsOn={() => [props.selectedNode]}
+            bounds={(scene) => {
+              const position = scene.getNodePosition(props.selectedNode)
+              if (!position) return null
+              return { x: position.x - 86, y: position.y + 68, width: 270, height: 50 }
+            }}
+            draw={(ctx: CanvasContext, scene) => {
+              const position = scene.getNodePosition(props.selectedNode)
+              if (!position) return
+              const node = getNode(props.selectedNode)
+              drawOverlayCard(ctx, position.x - 86, position.y + 68, 270, 50, `Task: ${node.label || "active_node"}`, `Type: ${node.kind}`)
+            }}
+          />
+        ) : null}
+      </SceneCanvas>
     </box>
   )
 }

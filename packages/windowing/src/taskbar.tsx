@@ -1,6 +1,6 @@
 import type { JSX } from "solid-js"
-import { Button } from "../button"
-import { Text } from "../text"
+import { Button } from "../../components/src/button"
+import { Text } from "../../components/src/text"
 import { useWindowList, useWindowManagerContext } from "./context"
 import { getTaskbarAction, listTaskbarWindows, TASKBAR_ACTION, type TaskbarAction } from "./taskbar-helpers"
 import type { WindowBounds, WindowDescriptor } from "./types"

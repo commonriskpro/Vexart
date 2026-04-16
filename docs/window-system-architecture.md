@@ -529,7 +529,7 @@ No convertir cada hijo en `layer` por paranoia.
 ## Suggested structure
 
 ```txt
-packages/components/src/windowing/
+packages/windowing/src/
   types.ts
   manager.ts
   context.ts

@@ -2,70 +2,74 @@
 
 ## Goal
 
-Rediseñar TGE/Vexart como un motor gráfico GPU-only, con dominios separados, responsabilidades claras y un core que exponga primitives de engine en vez de policy de UI.
+Documentar la arquitectura real del motor **como existe hoy**, qué partes son core real, qué partes siguen siendo bridges temporales, y cuál es la arquitectura objetivo más eficiente para reducir complejidad, legado CPU y ownership ambiguo.
 
-Este documento define:
-
-1. cómo funciona hoy el sistema,
-2. qué responsabilidades están mal ubicadas,
-3. cuál es la arquitectura target,
-4. qué paquetes/dominios deben existir,
-5. qué APIs sobreviven y cuáles deben deprecarse,
-6. qué significa “done” para considerar el rediseño exitoso.
+Este documento ya no es solo una visión aspiracional.
+Ahora también funciona como **reality check técnico** después de la primera pasada del refactor.
 
 ---
 
 ## Executive summary
 
-Hoy TGE ya tiene piezas valiosas de motor gráfico real:
+TGE/Vexart ya avanzó bastante hacia una dirección GPU-first, pero el repo sigue en un estado intermedio:
 
-- terminal/caps,
-- parser de input,
-- adaptación a Clay para layout,
-- render graph,
-- backend GPU,
-- compositor por capas,
-- output Kitty con SHM/file/direct.
+- hay packages nuevos,
+- hay mejores boundaries públicos,
+- hay `renderObjectId`,
+- hay más separación que antes,
 
-Pero el sistema sigue mezclando demasiada lógica de UI con el core del renderer. El problema dominante está en `packages/renderer/src/loop.ts`, que actúa como God Object y concentra:
+pero todavía existe una diferencia importante entre:
 
-- scheduling,
-- layout,
-- layout writeback,
-- hit-testing,
-- bubbling de eventos,
-- focus,
-- hover/active/focus state,
-- layer planning,
-- damage tracking,
-- heurísticas de interacción,
-- compositor,
-- presentación final.
+- **arquitectura nominal** (lo que los package names sugieren), y
+- **arquitectura real** (dónde vive el código y quién lo controla de verdad).
 
-La dirección correcta NO es seguir parcheando bugs aislados. La dirección correcta es:
+La ineficiencia principal HOY no es solo de performance.
+Es de **modelo mental**.
 
-> separar engine core de runtime UI,
-> hacer GPU-only el camino oficial,
-> sacar el legado CPU y compat del hot path,
-> y reemplazar heurísticas por identidad explícita.
+Los problemas más caros ahora son:
+
+- facades temporales que parecen paquetes reales,
+- `loop.ts` todavía demasiado central,
+- path CPU/compat todavía presente en el hot path conceptual,
+- heurísticas que siguen vivas aunque ya exista identidad explícita,
+- ownership físico partido entre `renderer`, `components`, `windowing`, `output` y varios bridges.
+
+La dirección correcta ya no es “seguir agregando packages”.
+La dirección correcta es:
+
+> reducir capas falsas,
+> colapsar bridges innecesarios,
+> aislar compat fuera del core oficial,
+> y dejar un engine que sea entendible de punta a punta.
 
 ---
 
 ## Design principles
 
-## 1. GPU-only first
+### 1. GPU-only official path
 
-El core oficial del motor debe asumir:
+El motor oficial debe optimizar para:
 
 - renderer GPU,
 - composición GPU,
 - output Kitty raw/shm como path principal.
 
-Los paths CPU/universales pueden sobrevivir solo como `compat`/`legacy`, nunca como constraint de diseño del core.
+El software raster y los fallbacks pueden existir, pero no deben seguir dictando el diseño del core.
 
-## 2. Core engine without UI policy
+### 2. Real ownership over facade layering
 
-El motor no debe decidir:
+Un package solo vale como boundary real si tiene:
+
+- source ownership propio,
+- API pública propia,
+- responsabilidad propia,
+- y dependencias coherentes.
+
+Si un package es solo `export * from "../../otro/src/..."`, entonces es **bridge público**, no arquitectura real.
+
+### 3. Core engine without UI policy
+
+El core no debe seguir decidiendo:
 
 - bubbling de `onPress`,
 - focus scopes,
@@ -73,288 +77,291 @@ El motor no debe decidir:
 - drag semantics,
 - resize semantics,
 - semántica Enter/Space,
-- overlays de alto nivel,
-- window manager behavior.
+- overlay/dialog/window policy.
 
-Eso vive en el runtime UI.
+Eso es runtime UI.
 
-## 3. Explicit identity over heuristics
+### 4. Explicit identity over heuristics
 
-Nada de atar render objects por:
+El sistema debe rastrear ownership visual por IDs explícitos, no por:
 
-- overlap espacial ambiguo,
 - color placeholders,
-- text matching,
-- orden implícito del árbol,
-- path heurístico.
+- corner radius,
+- path heurístico,
+- orden implícito,
+- matching textual/espacial ambiguo.
 
-Todo objeto visual/layer/render op relevante necesita identidad explícita.
+### 5. Fewer conceptual models
 
-## 4. Correctness before optimization
+Si dos abstracciones resuelven el mismo problema central, una sobra.
 
-Optimizaciones como:
+El repo debe reducir:
+
+- modelos duplicados de scene,
+- package families puramente nominales,
+- rutas paralelas de output/presentation,
+- bridges perpetuos.
+
+### 6. Correctness and clarity before optimization
+
+No tiene sentido optimizar un sistema que todavía es difícil de explicar.
+
+Primero:
+
+- ownership claro,
+- path oficial claro,
+- compat aislado,
+- runtime distinguido del core.
+
+Después recién:
 
 - partial updates,
-- move-only,
 - stable reuse,
-- retained interaction layers,
-
-solo pueden vivir arriba de un pipeline correcto y verificable.
-
-## 5. Domains over monolith
-
-Cada dominio debe tener ownership claro:
-
-- platform,
-- input,
-- scene,
-- layout,
-- render graph,
-- gpu renderer,
-- compositor,
-- output,
-- runtime UI,
-- components,
-- compat.
+- move-only,
+- GPU readback minimization.
 
 ---
 
-## Current architecture
+## Verified current architecture
 
-## High-level flow today
+## Real runtime flow today
 
 ```txt
-stdin/terminal
-  -> @tge/input parser
-  -> @tge/renderer mount/index
-  -> Solid reconciler
-  -> retained TGENode tree
-  -> walkTree() into Clay
+app/examples
+  -> packages/renderer/src/index.ts
+  -> createRenderLoop() in packages/renderer/src/loop.ts
+  -> TGENode retained tree
+  -> Clay translation in packages/renderer/src/clay.ts
   -> RenderCommand[]
-  -> layer assignment + damage + render graph
-  -> CPU/GPU backend
-  -> layer composer / final composer
-  -> Kitty / fallback output
+  -> render graph + layer planning in renderer internals
+  -> GPU / CPU-ish paint helpers
+  -> Kitty layer composer or compat composer
+  -> terminal output
 ```
 
-## Packages involved today
+## Files that currently anchor the system
 
-### Platform / terminal
-- `packages/terminal/src/index.ts`
-- `packages/terminal/src/lifecycle.ts`
-- `packages/terminal/src/caps.ts`
-- `packages/terminal/src/detect.ts`
-
-### Input
-- `packages/input/src/parser.ts`
-- `packages/input/src/mouse.ts`
-- `packages/input/src/keyboard.ts`
-- `packages/input/src/index.ts`
-
-### Renderer/runtime
+### Runtime entry
 - `packages/renderer/src/index.ts`
 - `packages/renderer/src/loop.ts`
 - `packages/renderer/src/reconciler.ts`
+
+### Scene/layout/graph
 - `packages/renderer/src/node.ts`
+- `packages/renderer/src/clay.ts`
+- `packages/renderer/src/render-graph.ts`
+- `packages/renderer/src/layout-writeback.ts`
+
+### GPU/compositor/output
+- `packages/renderer/src/gpu-renderer-backend.ts`
+- `packages/renderer/src/gpu-frame-composer.ts`
+- `packages/renderer/src/gpu-layer-strategy.ts`
+- `packages/output/src/layer-composer.ts`
+- `packages/output/src/kitty.ts`
+- `packages/output/src/composer.ts`
+
+### Compat still active
+- `packages/renderer/src/cpu-renderer-backend.ts`
+- `packages/pixel/src/*`
+- `packages/renderer/src/canvas.ts`
+- `packages/renderer/src/wgpu-canvas-backend.ts`
+
+### UI/runtime coupling points
 - `packages/renderer/src/focus.ts`
 - `packages/renderer/src/interaction.ts`
 - `packages/renderer/src/drag.ts`
-- `packages/renderer/src/pointer.ts`
 - `packages/renderer/src/scroll.ts`
+- `packages/components/src/scene-canvas.tsx`
+- `packages/windowing/src/*`
 
-### Layout
-- `packages/renderer/src/clay.ts`
+---
 
-### Render graph and layers
-- `packages/renderer/src/render-graph.ts`
+## Current repo reality after the first bridge pass
+
+## What improved
+
+- public boundaries exist where before there were only folders,
+- direct imports to `packages/*/src/*` from examples/scripts were cut,
+- `renderObjectId` exists,
+- `loop.ts` shed some helper responsibilities,
+- `Portal`/overlay handling is less fake than before,
+- windowing and profiling/repro material now exist explicitly.
+
+## What is still not truly solved
+
+### 1. Package graph is still partially performative
+
+These packages exist today mainly as temporary facades:
+
+- `@tge/renderer-solid`
+- `@tge/platform-terminal`
+- `@tge/windowing`
+- `@tge/compositor`
+- `@tge/render-graph`
+- `@tge/scene`
+- `@tge/text`
+- `@tge/compat-text-ansi`
+
+That is useful as a migration tool, but dangerous if people start treating facade names as proof of real ownership.
+
+### 2. `loop.ts` is still the operational center of gravity
+
+It is better than before, but still owns too much frame orchestration and too much policy coupling.
+
+### 3. Compat/software abstractions still leak into the official path
+
+`@tge/compat-software` is still present in imports used by:
+
+- `packages/renderer/src/loop.ts`
 - `packages/renderer/src/layers.ts`
-- `packages/renderer/src/damage.ts`
-
-### Backends and composition
 - `packages/renderer/src/gpu-renderer-backend.ts`
-- `packages/renderer/src/cpu-renderer-backend.ts`
-- `packages/renderer/src/gpu-frame-composer.ts`
-- `packages/output/src/layer-composer.ts`
-- `packages/output/src/composer.ts`
-- `packages/output/src/kitty.ts`
-- `packages/output/src/transport-manager.ts`
+- `packages/renderer/src/wgpu-canvas-backend.ts`
 
-### Legacy software paint
-- `packages/pixel/src/index.ts`
-- `packages/pixel/src/buffer.ts`
-- `packages/pixel/src/composite.ts`
+That means the core still thinks in terms of `PixelBuffer` more than a truly GPU-first architecture should.
 
-### UI/product layer
-- `packages/components/src/*`
-- `packages/components/src/windowing/*`
-- `packages/void/src/*` (packaging todavía no consolidado)
+### 4. Explicit identity is present, but heuristics still survive as fallback
 
----
+`packages/renderer/src/render-graph.ts` now prefers `renderObjectId`, but still keeps fallback matching by:
 
-## Architectural smells in the current design
+- `color + cornerRadius`
+- `color`
 
-## 1. `loop.ts` is a God Object
+That keeps ambiguity alive.
 
-`packages/renderer/src/loop.ts` concentra demasiada arquitectura. Es el smell principal del repo.
+### 5. Windowing ownership is now physically correct
 
-Consecuencia:
+`@tge/windowing` now owns its source in:
 
-- debugging difícil,
-- ownership confuso,
-- optimizaciones acopladas a policy,
-- bugs transversales difíciles de aislar.
+- `packages/windowing/src/*`
 
-## 2. UI policy inside renderer core
+The remaining work is cleanup of stale references and dependency shaping, not the move itself.
 
-Hoy el core del renderer participa en:
+### 6. Scene decision is now made
 
-- focus registration,
-- focus scopes,
-- click bubbling,
-- hover/active/focus semantics,
-- drag interaction promotion,
-- relayout inmediato post-click,
-- hit-area expansion,
-- scroll-aware hit-testing de widgets.
+The retained visual model is no longer undecided:
 
-Eso es runtime UI, no graphics engine.
+- `SceneCanvas` survives,
+- `RetainedGraph` is retired.
 
-## 3. Heuristic layer assignment
-
-`assignLayersSpatial()` en `loop.ts` usa heurísticas de overlap/bounds para decidir ownership visual. El repro `demo18` mostró por evidencia que esto puede contaminar un layer local con commands fullscreen.
-
-## 4. CPU legacy contaminates the hot path
-
-El core todavía arrastra:
-
-- `PixelBuffer` como modelo fundacional,
-- backend CPU en el mismo dominio conceptual,
-- fallback composer universal,
-- canvas imperative legacy,
-- selectable ANSI text mezclado con renderer visual.
-
-## 5. Kitchen-sink public surface
-
-`packages/renderer/src/index.ts` exporta demasiadas cosas heterogéneas. Eso debilita fronteras de dominio y ownership.
-
-## 6. Package boundaries are partially fake
-
-Hay separación por carpetas, pero no siempre por package real. Mientras eso siga así, la arquitectura por dominios no existe de verdad.
+That removes one of the largest conceptual duplications in the repo.
 
 ---
 
-## What must leave the core path
+## Architectural smells that matter most now
 
-## Move to compat / legacy
+### 1. Fake boundaries in the hot path
 
-- `packages/pixel/src/*`
-- `packages/renderer/src/cpu-renderer-backend.ts`
-- `packages/output/src/composer.ts` como default principal
-- `packages/output/src/placeholder.ts`
-- `packages/output/src/halfblock.ts`
-- `packages/renderer/src/canvas.ts` como primitive central
-- ANSI/selectable text mixed into the main renderer path
+Internal code should not need to hop through facade packages just to reach its own real owner.
 
-## Move to UI runtime
+### 2. Too many conceptual package families
 
-- focus scopes
-- focus registry
-- press bubbling
-- Enter/Space semantics
-- hover/active/focus style merge
-- drag semantics
-- resize semantics
-- portal/overlay behavior
-- widget-specific hit-testing policy
+The repo currently communicates more package domains than it truly owns.
+
+### 3. Runtime semantics still live too low
+
+Focus, interaction semantics and some widget/runtime policy are still too close to renderer core internals.
+
+### 4. Compat is isolated publicly, but not conceptually enough
+
+Moving code to `compat-*` names helps, but the hot path still carries too much of that worldview.
+
+### 5. Composition ownership is still split
+
+Today composition is spread across:
+
+- `loop.ts`
+- `gpu-frame-composer.ts`
+- `output/src/layer-composer.ts`
+
+The package called `@tge/compositor` does not yet own composition in a real sense.
 
 ---
 
-## Target architecture
+## Efficiency-first target architecture
+
+The most efficient architecture for this repo is **not** the one with the most package names.
+It is the one with the clearest ownership.
 
 ## Layered model
 
 ```txt
-Platform/Host
-  -> Input
-  -> Core Engine
+Platform / Host
+  -> Engine Core
   -> UI Runtime
-  -> Components / Product Features
-  -> Compat / Legacy
+  -> Components / Product
+  -> Compat / Legacy / Lab
 ```
 
 ## 1. Platform / Host
 
-### Packages
+### Keep real
+- terminal lifecycle
+- caps probing
+- resize/raw mode
+- semantic input parser
+
+### Likely packages
 - `@tge/platform-terminal`
 - `@tge/input`
 
-### Responsibilities
-- terminal lifecycle
-- caps probing
-- raw mode / alt screen
-- resize
-- byte streams to semantic input events
-
-## 2. Core Engine
-
-### Packages
-- `@tge/scene`
-- `@tge/layout-clay`
-- `@tge/render-graph`
-- `@tge/gpu`
-- `@tge/compositor`
-- `@tge/output-kitty`
+## 2. Engine Core
 
 ### Responsibilities
-- scene graph / render object model
-- transforms
-- layout integration
-- hit-test primitives
+- retained node model or render object model
+- layout replay
+- explicit render identity
 - render graph generation
-- damage tracking
 - layer planning
+- damage tracking
 - GPU rendering
-- composition
-- Kitty presentation
+- Kitty presentation boundary
 
-### Non-responsibilities
-The core engine must NOT own:
+### Critical rule
+This layer should be explainable without using widget words.
 
-- widget semantics,
-- focus policy,
-- bubbling,
-- dialog/window semantics,
-- drag naming/policy.
+### Packages/domains
+- scene/layout/render-graph/gpu/output may remain separate **only if** their ownership is physically real
+- otherwise they should stay as internal modules until the split is real
 
 ## 3. UI Runtime
 
+### Responsibilities
+- Solid integration
+- event routing above primitive hit-testing
+- focus model
+- press semantics
+- hover/active/focus merge
+- drag/resize abstractions
+- overlay root policy
+
 ### Package
-- `@tge/runtime-ui` or `@tge/renderer-solid`
+- `@tge/renderer-solid` or a renamed `@tge/runtime-ui`
+
+### Rule
+This is allowed to think in terms of widgets.
+The engine core is not.
+
+## 4. Components / Product
 
 ### Responsibilities
-- Solid reconciler
-- event routing on top of primitive hit-test
-- focus model
-- hover/active/focus states
-- press semantics
-- drag/resize abstractions
-- portal/overlay roots
-
-## 4. Components / Product layer
+- headless widgets
+- design system
+- desktop/window manager
+- demos/product conventions
 
 ### Packages
 - `@tge/components`
 - `@tge/void`
 - `@tge/windowing`
-- product-specific packages later (`@tge/lightcode`, etc.)
+
+## 5. Compat / Legacy / Lab
 
 ### Responsibilities
-- headless components
-- design system
-- desktop/window manager
-- application/product conventions
-
-## 5. Compat / Legacy
+- software raster fallback
+- fallback output
+- imperative canvas legacy
+- ANSI/selectable text legacy
+- profiling harnesses / experiments
 
 ### Packages
 - `@tge/compat-software`
@@ -362,117 +369,67 @@ The core engine must NOT own:
 - `@tge/compat-canvas`
 - `@tge/compat-text-ansi`
 
-### Responsibilities
-- software raster fallback
-- halfblock/placeholder output
-- legacy imperative canvas
-- ANSI/selectable text path
-
 ### Rule
-Never drive the main architectural decisions of the core.
+These packages may survive for compatibility, but they must stop shaping the official engine story.
 
 ---
 
-## Proposed package map
+## Keep / fuse / retire
 
-## Core packages
+| Area | Recommendation | Why |
+| --- | --- | --- |
+| `@tge/platform-terminal` + `@tge/input` | **keep** | real cohesive ownership |
+| `renderer/src/index.ts` + `loop.ts` + runtime helpers | **keep but simplify** | still the operational core |
+| `@tge/renderer-solid` facade | **keep publicly, reduce internally** | public boundary useful, internal bridge harmful |
+| `@tge/windowing` | **keep** | package now owns its source physically |
+| `SceneCanvas` | **keep as primary retained scene API** | declarative scene abstraction with integrated hit-testing and overlays |
+| `RetainedGraph` | **retire** | duplicated retained model with higher conceptual cost |
+| `@tge/compositor` facade | **retire or make real** | today it is mostly a label, not an owner |
+| `@tge/render-graph` facade | **retire or make real** | same problem |
+| `@tge/scene` facade | **retire or make real** | same problem |
+| `@tge/text` facade | **retire or make real** | same problem |
+| `@tge/compat-text-ansi` | **retire if unused** | looks transitional and low-value today |
+| CPU/software path in hot path | **reduce aggressively** | blocks clean GPU-first reasoning |
+| heuristic render-graph fallback | **retire** | explicit IDs already exist |
 
-### `@tge/platform-terminal`
-Owns:
-- terminal creation
-- lifecycle
-- caps
-- resize
+---
 
-### `@tge/input`
-Owns:
-- parser
-- keyboard/mouse/focus/paste events
+## Reduction priorities
 
-### `@tge/scene`
-Owns:
-- scene nodes
-- render object identity
-- normalized props
-- handles
+## Priority 1 — Stop lying to ourselves about ownership
 
-### `@tge/layout-clay`
-Owns:
-- Clay FFI
-- scene -> layout translation
-- layout readback contract
+- mark which packages are bridges,
+- stop using facade names internally where they obscure real ownership,
+- keep bridges only as public compatibility boundaries.
 
-### `@tge/render-graph`
-Owns:
-- render ops
-- layer/frame plan
-- metadata for effects/text/images/canvas
+## Priority 2 — Keep `SceneCanvas`, retire `RetainedGraph`
 
-### `@tge/text`
-Owns:
-- font registry
-- glyph atlases
-- text layout
-- text GPU path
+- migrate remaining consumers to `SceneCanvas`,
+- remove `RetainedGraph` exports and implementation,
+- keep a single retained visual model.
 
-### `@tge/gpu`
-Owns:
-- GPU renderer backend
-- retained targets
-- draw passes
-- readback boundary
+## Priority 3 — Finish windowing cleanup after the physical move
 
-### `@tge/compositor`
-Owns:
-- composition strategy
-- layering
-- retained surfaces
-- final frame vs layered frame policy
+- treat `packages/windowing/src/*` as the real owner,
+- remove stale references to the old `components/src/windowing/*` location,
+- simplify cross-package dependencies over time.
 
-### `@tge/output-kitty`
-Owns:
-- Kitty raw transmit
-- placement
-- patching
-- SHM/file/direct transport health
+## Priority 4 — Remove heuristics from render graph ownership
 
-## Runtime / product packages
+- make `renderObjectId` mandatory for image/canvas/effect ownership,
+- kill fallback matching by `color` / `cornerRadius`.
 
-### `@tge/renderer-solid`
-Owns:
-- Solid renderer integration
-- mount
-- runtime UI policy built on primitives
+## Priority 5 — Reduce compat from the official hot path
 
-### `@tge/components`
-Owns headless widgets.
+- stop making `PixelBuffer` the conceptual center of the renderer,
+- isolate CPU/software fallbacks behind explicit compat boundaries.
 
-### `@tge/void`
-Owns the design system.
+## Priority 6 — Make compositor ownership real
 
-### `@tge/windowing`
-Owns desktop/window manager behavior.
+Decide whether composition lives in:
 
-## Compat packages
-
-### `@tge/compat-software`
-Owns:
-- `PixelBuffer`
-- Zig software raster
-- CPU renderer backend
-
-### `@tge/output-compat`
-Owns:
-- halfblock
-- placeholder
-
-### `@tge/compat-canvas`
-Owns:
-- imperative canvas adapter
-
-### `@tge/compat-text-ansi`
-Owns:
-- selectable ANSI text mode
+- a real `@tge/compositor` package,
+- or in renderer/output internals with no fake package pretending otherwise.
 
 ---
 
@@ -483,8 +440,7 @@ Owns:
 - terminal creation APIs
 - input parser APIs
 - `mount()`
-- Solid reconciler public integration
-- clean runtime hooks that truly belong to the runtime layer
+- Solid integration APIs that truly belong to the runtime layer
 - Kitty raw/shm transport APIs
 - headless components
 - design system components
@@ -500,88 +456,52 @@ Owns:
 ## APIs to remove from the core public story
 
 - universal fallback composer as principal abstraction
-- direct exposure of legacy software paint as part of official engine path
+- direct exposure of software paint as part of the official path
 - widget semantics mixed into core renderer exports
-
----
-
-## Required conceptual changes
-
-## 1. Replace heuristics with explicit IDs
-
-Introduce stable identifiers for:
-
-- render objects,
-- layers,
-- effect payloads,
-- images,
-- canvas payloads,
-- layout ownership.
-
-Without this, the engine will keep producing ambiguous ownership bugs.
-
-## 2. Replace widget semantics with compositing hints
-
-Instead of compositor logic based on `interactionMode: "drag"`, move toward neutral engine hints such as:
-
-- `compositingHint`
-- `retentionHint`
-- `movementHint`
-- `readbackHint`
-
-## 3. Real overlay / portal root
-
-Portals must be structural primitives, not full-screen visual hacks.
-
-## 4. Scroll state owned by engine, not by components through Clay internals
-
-The runtime/components should consume normalized scroll state from the engine.
+- facade-only packages presented as if they were real domain owners
 
 ---
 
 ## Definition of Done
 
-The redesign is only considered complete when all of these are true:
+The architecture is only “done” when all of these are true:
 
-## Package boundaries
-- package ownership is real, not folder-based fiction
-- examples stop importing internals from `packages/*/src/*`
+## Ownership and package truth
+- hot-path ownership is physically real, not facade-driven fiction
+- bridges are documented as bridges or removed
+- `windowing` source ownership matches package ownership
 
-## GPU-only core
-- the official engine path is GPU-only
-- CPU/software paths are fully outside the main hot path
+## GPU-first clarity
+- the official engine path is GPU-first end to end
+- compat/software paths are outside the main reasoning path
 
-## Clean architecture
-- `loop.ts` no longer acts as God Object
-- event policy is not embedded in the core render loop
-- layer assignment does not depend on fragile heuristics
-
-## Runtime/UI separation
+## Runtime separation
 - focus, bubbling, drag semantics and widget policy live above the core engine
 
+## Identity and correctness
+- layer/render ownership no longer depends on heuristic fallback as a base model
+
+## Reduced conceptual surface
+- only one primary scene abstraction survives
+- composition ownership is understandable in one place
+
 ## Operational confidence
-- minimal repros exist for render/compositor/layout bugs
-- performance optimizations are reintroduced only behind validated tests and instrumentation
+- minimal repros exist for engine bugs
+- optimization recovery happens only after structure is simplified and verified
 
 ---
 
 ## Final recommendation
 
-The project should intentionally pivot from:
+Do not keep optimizing the repo as if the hard part were just performance.
 
-> “renderer with a lot of UI logic inside”
+The hard part now is architectural honesty.
 
-to:
+The engine will get faster only after it gets:
 
-> “GPU graphics engine + UI runtime + components on top”.
+- easier to explain,
+- easier to trace,
+- easier to own,
+- and less polluted by fake boundaries and legacy assumptions.
 
-That means accepting:
-
-- a complete repo refactor,
-- package boundary cleanup,
-- deprecations,
-- and probably breaking changes.
-
-That is not a failure.
-
-That is the cost of getting to a real engine architecture.
+That is the next architectural objective.

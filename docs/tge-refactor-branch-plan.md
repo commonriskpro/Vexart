@@ -2,208 +2,234 @@
 
 ## Goal
 
-Ejecutar el refactor GPU-only del repo con branches claras, scope acotado por fase y menor riesgo de mezclar workstreams incompatibles.
+Actualizar la estrategia de branches para la etapa actual del refactor.
 
-Este documento define:
+La primera pasada ya hizo algo importante:
 
-- la estrategia de branches,
-- qué entra en cada una,
-- el orden recomendado,
-- qué depende de qué,
-- cómo saber si una branch está lista para merge.
+- creó boundaries públicas mejores,
+- introdujo bridges temporales,
+- y redujo parte del caos inicial.
+
+Pero ahora el riesgo principal cambió.
+
+Ya no es solo “mezclar package split con loop split”.
+Ahora el riesgo es:
+
+> quedarse demasiado tiempo en una arquitectura puente,
+> con packages nominales,
+> bridges eternos,
+> y compat todavía demasiado cerca del hot path.
+
+Por eso este branch plan se actualiza para priorizar **auditoría + reducción + retiro de bridges**.
 
 ---
 
 ## Branching principles
 
-## 1. One architectural objective per branch
+### 1. One reduction objective per branch
 
-No mezclar:
+No mezclar en una sola branch:
 
-- package split,
-- loop split,
-- IDs,
-- GPU-only cleanup,
-- UI runtime extraction
+- auditoría de ownership,
+- retiro de bridges,
+- convergencia de scene abstractions,
+- cleanup del hot path GPU,
+- runtime clarification,
+- optimization recovery.
 
-en una sola branch monstruosa.
+### 2. A branch must reduce ambiguity
 
-## 2. Merge by enabling the next branch
+Cada branch nueva debe dejar el repo:
 
-Cada branch debe desbloquear la siguiente, no intentar cerrar todo el rediseño de una sola vez.
+- más fácil de explicar,
+- con ownership más claro,
+- o con menos bridges/deuda que antes.
 
-## 3. Keep compatibility bridges temporary and explicit
+### 3. Public compat is allowed; internal fiction is not
 
-Si una branch necesita adapters temporales, se documentan y se eliminan en la fase siguiente.
+Un bridge público puede sobrevivir.
+Pero no debe seguir gobernando la arquitectura interna.
 
-## 4. Repros are mandatory
+### 4. Repros remain mandatory
 
-`examples/window-drag-repro.tsx` debe seguir funcionando y usarse como criterio de validación del engine.
+`examples/window-drag-repro.tsx` y los harnesses de profiling relevantes siguen siendo diagnósticos oficiales del engine.
 
----
+### 5. No optimization branch before structure is simpler
 
-## Suggested branch sequence
-
-## Branch 00 — Architecture freeze
-
-### Name
-`arch/00-freeze-gpu-only-direction`
-
-### Scope
-- docs only
-- freeze statement
-- architectural decisions
-- acceptance criteria for the pivot
-
-### Inputs
-- `docs/tge-gpu-only-engine-architecture.md`
-- `docs/tge-gpu-only-refactor-roadmap.md`
-- `docs/tge-package-migration-matrix.md`
-
-### Exit criteria
-- the project formally accepts GPU-only + domain split as the direction
+Si una branch mejora performance pero mantiene ownership confuso, está fuera de orden.
 
 ---
 
-## Branch 01 — Real package boundaries
+## What the previous branch pass achieved
+
+La branch previa resolvió una **bridge pass** útil:
+
+- boundaries públicas,
+- helpers extraídos,
+- `renderObjectId`,
+- overlay root inicial,
+- packages/facades para los dominios target.
+
+Eso desbloqueó el siguiente trabajo.
+No lo reemplaza.
+
+---
+
+## Suggested branch sequence now
+
+## Branch 08 — Current-state audit
 
 ### Name
-`arch/01-package-boundaries`
+`arch/08-current-state-audit`
 
 ### Scope
-- add/normalize `package.json` per real package
-- exports map cleanup
-- stop importing `packages/*/src/*` directly
-- update build scripts to respect package boundaries
+- mapear cómo está conectado el motor HOY
+- marcar packages reales vs bridges
+- identificar duplicación y ownership ambiguo
+- actualizar docs para reflejar realidad, no intención
 
 ### Key targets
-- `packages/components`
-- `packages/void`
-- `packages/renderer`
-- output/input/terminal package boundaries
-- scripts and examples imports
-
-### Risks
-- examples and dist build may break temporarily
+- docs de arquitectura / roadmap / migration matrix
+- package graph real
+- hot path real (`renderer/index.ts` + `loop.ts` + output)
 
 ### Exit criteria
-- examples and app code import through public package boundaries only
+- existe un mapa explícito de real owners, bridges y legacy paths
+
+### Execution document
+- `docs/tge-current-state-audit-plan.md`
+
+### Expected artifact
+- `docs/tge-current-state-audit-report.md`
 
 ---
 
-## Branch 02 — Split renderer monolith
+## Branch 09 — Bridge retirement
 
 ### Name
-`arch/02-split-loop-monolith`
+`arch/09-bridge-retirement`
 
 ### Scope
-- split `packages/renderer/src/loop.ts`
-- extract scheduler/layout/layer/damage/presenter modules
-- no major behavior redesign yet
+- retirar fachadas innecesarias
+- documentar las que sobreviven como compat pública
+- reducir dependencia interna de package aliases fake
 
 ### Key targets
-- `loop.ts`
-- new modules:
-  - `frame-scheduler.ts`
-  - `layout-pass.ts`
-  - `layout-writeback.ts`
-  - `layer-planner.ts`
-  - `damage-tracker.ts`
-  - `frame-presenter.ts`
+- `@tge/compositor`
+- `@tge/render-graph`
+- `@tge/scene`
+- `@tge/text`
+- `@tge/compat-text-ansi`
 
 ### Exit criteria
-- `loop.ts` is orchestration-only or close to it
+- cada facade restante tiene razón explícita de existir
+- el grafo interno del repo es más honesto que antes
 
 ---
 
-## Branch 03 — Explicit render identity
+## Branch 10 — Scene and windowing ownership cleanup
 
 ### Name
-`arch/03-render-object-ids`
+`arch/10-scene-windowing-ownership`
 
 ### Scope
-- introduce explicit IDs for render objects/layers
-- remove heuristic ownership assumptions where possible
-- redesign `assignLayersSpatial()` and related ownership rules
+- consolidar `SceneCanvas` como abstracción visual principal
+- retirar `RetainedGraph`
+- limpiar el dominio `windowing` después del move físico al package real
 
 ### Key targets
-- render object identity
-- layer planner
-- render graph queues
-- layout writeback ownership
+- `packages/components/src/scene-canvas.tsx`
+- `packages/components/src/retained-graph.tsx`
+- `packages/windowing/src/*`
 
 ### Exit criteria
-- ownership does not depend primarily on overlap/path/color/text heuristics
+- `SceneCanvas` queda como única familia visual retained
+- `RetainedGraph` deja de existir en código productivo
+- `windowing` queda limpio de referencias al ownership viejo
 
 ---
 
-## Branch 04 — GPU-only core cleanup
+## Branch 11 — GPU core path reduction
 
 ### Name
-`arch/04-gpu-only-core`
+`arch/11-gpu-core-reduction`
 
 ### Scope
-- remove CPU path from official hot path
-- move software raster pieces to compat packages
-- redefine official output path around Kitty raw/shm
+- sacar compat/software del path conceptual oficial
+- reducir dependencia de `PixelBuffer` en el hot path
+- aclarar ownership entre renderer/gpu/compositor/output
 
 ### Key targets
 - `packages/pixel/src/*`
-- `cpu-renderer-backend.ts`
-- `output/composer.ts`
-- fallback output backends
+- `packages/renderer/src/cpu-renderer-backend.ts`
+- `packages/renderer/src/gpu-renderer-backend.ts`
+- `packages/renderer/src/gpu-frame-composer.ts`
+- `packages/output/src/composer.ts`
 
 ### Exit criteria
-- official engine path is unambiguously GPU-only
+- el path oficial del engine puede explicarse como GPU-first sin arrastrar compat como base mental
 
 ---
 
-## Branch 05 — UI runtime extraction
+## Branch 12 — Runtime UI clarification
 
 ### Name
-`arch/05-runtime-ui-extraction`
+`arch/12-runtime-ui-clarification`
 
 ### Scope
-- move focus, bubbling, interaction policy and widget semantics above the core
-- leave only primitives in the engine
+- mover más policy de UI arriba del core
+- aclarar focus / press / drag / resize / scroll ownership
+- terminar de separar engine primitives de widget semantics
 
 ### Key targets
 - `focus.ts`
+- `interaction.ts`
 - event routing / press semantics
-- hover/active/focus merge
-- drag/resize semantics policy
-- portal/overlay semantics preparation
+- scroll ownership
+- overlay/dialog policy
 
 ### Exit criteria
-- core engine no longer behaves like a widget runtime
+- el core engine ya no piensa como widget runtime
 
 ---
 
-## Branch 06 — Overlay and portal roots
+## Branch 13 — Explicit ownership completion
 
 ### Name
-`arch/06-overlay-roots`
+`arch/13-explicit-ownership-completion`
 
 ### Scope
-- introduce real overlay root / portal tree
-- refactor dialog/tooltip/popover/windowing to use it
+- terminar el retiro de heurísticas
+- hacer que `renderObjectId` sea la base real del ownership
+- simplificar writeback y layer ownership
+
+### Key targets
+- `packages/renderer/src/render-graph.ts`
+- `packages/renderer/src/layer-planner.ts`
+- `packages/renderer/src/layout-writeback.ts`
 
 ### Exit criteria
-- overlays no longer depend on structural hacks
+- ownership visual ya no depende principalmente de color/path/radius/text heuristics
 
 ---
 
-## Branch 07 — Controlled optimization reintroduction
+## Branch 14 — Controlled optimization recovery
 
 ### Name
-`arch/07-optimization-recovery`
+`arch/14-optimization-recovery`
 
 ### Scope
-- reintroduce partial updates, stable reuse, move-only, etc.
-- only after correctness is reestablished on the new architecture
+- reintroducir partial updates, stable reuse, move-only, etc.
+- solo después de la reducción estructural
+
+### Required conditions
+- repro mínimo
+- criterio de éxito
+- rollback plan
+- instrumentation/logging
 
 ### Exit criteria
-- optimizations exist with repros, metrics and rollback strategy
+- optimizaciones medidas y revertibles, sin volver a esconder deuda estructural
 
 ---
 
@@ -215,8 +241,9 @@ Each branch must specify:
 
 - which repros/examples validate it
 - which docs are updated
-- which temporary adapters are introduced
+- which bridges are introduced, retired or kept
 - what the rollback plan is
+- what ambiguity the branch removes
 
 ## Required docs to update
 
@@ -232,48 +259,51 @@ At minimum, each branch must update one or more of:
 
 | Branch | Owner focus |
 | --- | --- |
-| 00 | architecture / decision-making |
-| 01 | repo/package/build system |
-| 02 | renderer core refactor |
-| 03 | scene/layout/render-graph ownership model |
-| 04 | GPU/output/compositor core |
-| 05 | runtime UI and component contracts |
-| 06 | overlays/windowing integration |
-| 07 | performance and optimization |
+| 08 | architecture audit / system mapping |
+| 09 | package graph honesty / bridge retirement |
+| 10 | scene model and windowing ownership |
+| 11 | GPU/output/compositor core reduction |
+| 12 | runtime UI and component contracts |
+| 13 | render ownership / IDs / heuristics removal |
+| 14 | performance and optimization |
 
 ---
 
 ## Main execution document for future sessions
 
-If a future session needs to **execute the plan**, the primary operational document should be:
+If a future session needs to **execute the updated plan**, the primary operational document should still be:
 
 ## `docs/tge-package-migration-matrix.md`
 
 Why:
 
-- it tells you what survives,
-- what moves,
-- what dies,
-- what phase owns each area,
-- and prevents accidental work on the wrong layer.
+- it now tells you what is real,
+- what is bridge,
+- what should be reduced,
+- what should be fused,
+- and what phase/branch owns each cleanup.
 
 The supporting documents are:
 
-- `docs/tge-gpu-only-engine-architecture.md` — the why and target shape
-- `docs/tge-gpu-only-refactor-roadmap.md` — the phase strategy
-- `docs/tge-refactor-branch-plan.md` — the branch execution order
+- `docs/tge-gpu-only-engine-architecture.md` — current reality + target architecture
+- `docs/tge-gpu-only-refactor-roadmap.md` — reduction strategy
+- `docs/tge-refactor-branch-plan.md` — branch execution order
+- `docs/tge-current-state-audit-plan.md` — concrete backlog for `arch/08-current-state-audit`
+- `docs/tge-current-state-audit-report.md` — actual output of the audit branch
 
 If someone asks “what do we do NEXT?”, start with the branch plan.
-If someone asks “why are we doing this?”, start with the architecture doc.
-If someone asks “what exact files/packages are in scope?”, start with the migration matrix.
+If someone asks “how is the system connected TODAY?”, start with the architecture doc.
+If someone asks “what exact packages/files should we reduce or retire?”, start with the migration matrix.
 
 ---
 
 ## Final recommendation
 
-Use branches to protect the architecture from panic-driven changes.
+Use branches to protect the repo from a new kind of failure:
 
-The biggest risk now is not slowness.
-The biggest risk is mixing package split, engine redesign, UI extraction and optimizations in the same branch and losing the plot.
+not panic-driven changes,
+but **bridge-driven complacency**.
 
-This branch plan exists to prevent exactly that.
+The next stage is not about adding more structure.
+
+It is about removing the structure that only looks real from far away.

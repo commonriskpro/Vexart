@@ -1,5 +1,5 @@
 import type { JSX } from "solid-js"
-import type { ShadowConfig } from "../box"
+import type { ShadowConfig } from "../../components/src/box"
 import { useWindowManagerContext, useWindowDescriptor } from "./context"
 import { WINDOW_STATUS, type WindowDescriptor } from "./types"
 import { useWindowDrag, type WindowDragHandleProps } from "./use-window-drag"

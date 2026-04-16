@@ -2,257 +2,198 @@
 
 ## Goal
 
-Ejecutar un refactor completo del repo para convertir TGE/Vexart en un stack GPU-only, con dominios separados, package boundaries reales y un core limpio antes de seguir agregando features.
+Actualizar el roadmap del refactor para reflejar una realidad importante:
 
-Este roadmap prioriza:
+- ya hubo una primera pasada fuerte de migración,
+- ya existen facades y boundaries públicos mejores,
+- pero el repo todavía no quedó estructuralmente limpio.
 
-- claridad arquitectónica,
-- separación de responsabilidades,
-- rendimiento,
-- correctitud,
-- eliminación del legado CPU del hot path.
+Por eso, el trabajo que sigue ya no es solo “seguir la migración original”.
+Ahora hace falta una etapa explícita de:
+
+> auditoría,
+> reducción,
+> retiro de bridges,
+> y simplificación del core oficial.
 
 ---
 
-## Strategic decision
+## Strategic reset
 
-## We are optimizing for:
+## We are optimizing for now
 
-- GPU-only main path
-- explicit ownership by domain
-- correctness before optimizations
-- clean packages before new features
-- renderer core as engine, not as UI framework
+- understanding the engine as it exists today
+- reducing fake architectural layers
+- isolating compat from the official path
+- converging duplicate abstractions
+- making ownership physically real
+- only then recovering performance
 
-## We are NOT optimizing for:
+## We are NOT optimizing for now
 
-- preserving every compatibility path in the core
-- zero breaking changes
-- shipping more widgets before cleaning architecture
-- universal fallback as a first-class architectural constraint
+- adding more package names just to look modular
+- preserving every bridge forever
+- treating facade packages as if they were real owners
+- reintroducing optimizations before the system is simpler
+- shipping more UI features while ownership is still muddy
 
 ---
 
 ## Migration rules
 
-## Rule 1
-No new product/UI features until architecture phases 0-3 are complete.
+### Rule 1
+No new engine-adjacent product features while the current-state audit and bridge reduction are incomplete.
 
-## Rule 2
-Every refactor step must move code toward stronger domain boundaries.
+### Rule 2
+Every change must reduce ambiguity in ownership, not just move code around.
 
-## Rule 3
-Every optimization must be reintroduced only after the simpler correct path is proven.
+### Rule 3
+If a package is only a reexport bridge, it must be documented as such or retired.
 
-## Rule 4
-Every package must have a real public API boundary.
+### Rule 4
+A compatibility path may survive publicly, but must not keep dominating the core mental model.
 
-## Rule 5
-Minimal repros like `examples/window-drag-repro.tsx` stay as official engine diagnostics.
+### Rule 5
+Minimal repros like `examples/window-drag-repro.tsx` and targeted profiling harnesses stay as official diagnostics.
+
+### Rule 6
+Optimization work is allowed only after a simpler correct path is proven and easier to reason about.
 
 ---
 
-## Phase 0 — Freeze and declare the pivot
+## Status of the original phases after the first bridge pass
+
+The original P0-P7 plan is still useful, but its state must be described honestly.
+
+| Phase | Current status | Reality |
+| --- | --- | --- |
+| P0 — freeze / prepare | completed | Direction accepted: GPU-only + cleaner split |
+| P1 — package boundaries | bridge-pass complete | public boundaries improved, but several packages are still facade-only |
+| P2 — split `loop.ts` | partial | helpers extracted, but `loop.ts` still owns too much |
+| P3 — explicit render identity | partial | `renderObjectId` exists, heuristic fallback still remains |
+| P4 — formalize GPU-only core | partial | compat was renamed/extracted publicly, but still leaks into the hot path |
+| P5 — move UI policy to runtime | partial | some coupling reduced, but runtime semantics still sit too low |
+| P6 — real overlays/portal roots | partial | overlay root exists, but the broader runtime/overlay model is not fully clean |
+| P7 — optimization recovery | not started | helper grouping happened, but optimization reintroduction is still pending by the roadmap's own rules |
+
+### Important interpretation
+
+The first pass solved **migration pressure**.
+It did **not** finish architectural cleanup.
+
+---
+
+## New roadmap track: reduction and clarification
+
+This is the roadmap that should guide work **today**.
+
+## R0 — Current-state architecture audit
 
 ### Objective
-
-Congelar el crecimiento accidental y declarar GPU-only + clean split como la dirección oficial.
+Map the real architecture instead of the intended one.
 
 ### Actions
-
-- freeze de features nuevas de UI/windowing
-- freeze de optimizaciones nuevas en renderer/compositor
-- declarar `demo18` como repro oficial para bugs del engine
-- documentar que CPU/fallback dejan de ser la dirección oficial del core
+- document real owners of hot-path files
+- mark every facade package as **real owner** or **temporary bridge**
+- identify duplicate abstractions (`SceneCanvas` vs `RetainedGraph`, etc.)
+- identify compat paths still present in the official runtime path
 
 ### Exit criteria
-
-- el equipo acepta que la prioridad ya no es feature velocity sino refactor estructural
-- hay una narrativa única de arquitectura target
+- the repo has a written map of what is real, what is bridge, what is legacy
 
 ---
 
-## Phase 1 — Establish real package boundaries
+## R1 — Bridge retirement plan
 
 ### Objective
-
-Transformar la estructura por carpetas en arquitectura real por paquetes.
+Stop relying on facade packages as internal architecture.
 
 ### Actions
+- decide which bridges remain public compat only
+- reduce internal imports through facade layers where they hide real ownership
+- retire low-value facades that are not part of the published story
 
-- crear `package.json` reales por dominio
-- prohibir imports directos a `packages/*/src/*`
-- definir exports map limpios por paquete
-- mover compat/legacy a namespaces explícitos
-- separar `components`, `void`, `windowing` y core runtime en packages reales
-
-### Expected package families
-
-- `@tge/platform-terminal`
-- `@tge/input`
-- `@tge/scene`
-- `@tge/layout-clay`
-- `@tge/render-graph`
-- `@tge/text`
-- `@tge/gpu`
+### Likely targets
 - `@tge/compositor`
-- `@tge/output-kitty`
-- `@tge/renderer-solid`
-- `@tge/components`
-- `@tge/void`
-- `@tge/windowing`
-- `@tge/compat-*`
-
-### Risks
-
-- build scripts actuales dependen de supuestos monolíticos
-- examples pueden romperse al primer corte de boundaries
+- `@tge/render-graph`
+- `@tge/scene`
+- `@tge/text`
+- `@tge/compat-text-ansi`
 
 ### Exit criteria
-
-- ningún example importa internals desde `src/`
-- cada dominio tiene owner y frontera pública clara
+- every surviving bridge has a reason
+- fake package layering no longer dominates internal reasoning
 
 ---
 
-## Phase 2 — Split `loop.ts`
+## R2 — Core path reduction
 
 ### Objective
-
-Eliminar el God Object principal.
-
-### Extract into dedicated modules
-
-- `frame-scheduler.ts`
-- `layout-pass.ts`
-- `layout-writeback.ts`
-- `hit-test.ts`
-- `event-dispatch.ts`
-- `layer-planner.ts`
-- `damage-tracker.ts`
-- `frame-presenter.ts`
-
-### Key rule
-
-No cambiar comportamiento profundo todavía si no hace falta. Primero separar responsabilidades.
-
-### Risks
-
-- refactor grande con mucho surface area
-- tests actuales pueden no cubrir suficientes invariantes
-
-### Exit criteria
-
-- `loop.ts` queda como orchestrator del frame, no como implementación total del sistema
-
----
-
-## Phase 3 — Introduce explicit render identity
-
-### Objective
-
-Eliminar heurísticas frágiles y ownership ambiguo.
+Make the official engine path materially simpler.
 
 ### Actions
-
-- introducir `RenderObjectId`
-- introducir identidad explícita para layers
-- indexar render graph queues por ID, no por heurísticas
-- asociar layout writeback por IDs explícitos cuando sea posible
-- revisar `assignLayersSpatial()` y reemplazar overlap heurístico por ownership explícito donde aplique
-
-### Problems this phase must solve
-
-- contaminación de layers por commands fullscreen
-- matching de images/canvas/effects por placeholders ambiguos
-- writeback geométrico aproximado
+- reduce dependence on `@tge/compat-software` in the hot path
+- make the official path clearly GPU-first + Kitty-first
+- separate compat code conceptually, not just by package name
+- decide whether compositor is a real package or just internal modules
 
 ### Exit criteria
-
-- el renderer puede rastrear ownership visual sin apoyarse en color/path/text matching como base principal
+- the core official path can be explained without centering `PixelBuffer` or CPU fallback logic
 
 ---
 
-## Phase 4 — Formalize GPU-only core
+## R3 — Converge duplicated abstractions
 
 ### Objective
-
-Hacer que el camino principal del engine sea inequívocamente GPU-only.
+Reduce conceptual duplication.
 
 ### Actions
-
-- mover `packages/pixel/src/*` a `compat-software`
-- mover `cpu-renderer-backend.ts` fuera del core principal
-- quitar el CPU path del hot path del renderer principal
-- sacar output universal del renderer core
-- dejar `output-kitty` como target principal de performance
-
-### Important note
-
-GPU-only no elimina todo readback CPU en el boundary final si Kitty lo requiere, pero sí elimina el software raster como modelo principal del sistema.
+- keep `SceneCanvas` as the primary retained drawing abstraction
+- retire `RetainedGraph` after migrating the remaining consumers
+- finish cleanup after moving `windowing` source ownership into its actual package
 
 ### Exit criteria
-
-- el core principal ya no depende conceptualmente de `PixelBuffer` ni del CPU renderer para su operación oficial
+- one primary visual scene abstraction survives
+- package ownership and source ownership match for windowing
 
 ---
 
-## Phase 5 — Move UI policy to runtime layer
+## R4 — Runtime clarification
 
 ### Objective
-
-Sacar lógica de framework/UI del core gráfico.
-
-### Move out of core
-
-- focus scopes
-- focus registration policy
-- tab order
-- `onPress` bubbling
-- Enter/Space semantics
-- hover/active/focus merge
-- drag/resize semantics
-- dialog/window/portal policy
-
-### Keep in core only as primitives
-
-- primitive hit-test
-- pointer capture primitive
-- primitive event stream
-- geometry/layout data
-
-### Exit criteria
-
-- el core engine ya no “piensa” como widget runtime
-
----
-
-## Phase 6 — Real overlay and portal roots
-
-### Objective
-
-Dejar de resolver overlays estructuralmente con hacks visuales.
+Draw a hard line between engine primitives and runtime semantics.
 
 ### Actions
-
-- introducir overlay tree o portal root real
-- separar parent lógico de parent visual cuando haga falta
-- rediseñar `Portal`, `Dialog`, `Popover`, `Tooltip`, `Windowing` encima de esa primitive
+- move focus policy, bubbling and widget semantics higher
+- keep only hit-test/pointer/layout primitives in core
+- clarify scroll ownership and overlay behavior
 
 ### Exit criteria
-
-- overlays y ventanas dejan de depender de cajas full-screen fake como mecanismo estructural
+- the engine core can be described without widget language
 
 ---
 
-## Phase 7 — Reintroduce optimizations carefully
+## R5 — Heuristic retirement
 
 ### Objective
+Finish replacing compatibility heuristics with explicit ownership.
 
-Recuperar performance sobre una base correcta.
+### Actions
+- make `renderObjectId` mandatory where possible
+- remove fallback matching by color/radius/path from the base model
+- simplify layout ownership/writeback rules
 
-### Candidate optimizations to reintroduce
+### Exit criteria
+- ownership bugs are traceable by explicit IDs, not guesswork
 
+---
+
+## R6 — Controlled optimization recovery
+
+### Objective
+Recover performance on top of a simpler architecture.
+
+### Candidate optimizations
 - partial updates
 - move-only placement refresh
 - stable layer reuse
@@ -261,114 +202,102 @@ Recuperar performance sobre una base correcta.
 - GPU readback minimization
 
 ### Condition
+Each optimization returns only if it has:
 
-Cada optimización vuelve solo si tiene:
-
-- repro mínimo,
-- criterio de éxito,
-- rollback claro,
+- minimal repro,
+- success criteria,
+- rollback strategy,
 - instrumentation/logging.
 
 ### Exit criteria
-
-- performance improvements without correctness regressions in minimal repros and product demos
+- measurable gains without correctness regressions in repros and product demos
 
 ---
 
-## Public API strategy during migration
+## Public API strategy during reduction
 
-## APIs that must remain stable as long as possible
+## APIs that should remain stable as long as possible
 
 - terminal creation
 - input parser
 - `mount()`
 - core runtime hooks that truly belong to the runtime layer
-- components headless already adopted by examples/apps
+- headless components already adopted by examples/apps
 
-## APIs that should be deprecated early
+## APIs that should be deprecated aggressively
 
 - direct public CPU backend usage
 - `PixelBuffer` as central user-facing abstraction
-- imperative canvas path as strategic drawing API
+- imperative canvas as strategic drawing API
 - strategy tuning APIs exposed from renderer internals
+- facade-only domains pretending to be first-class architecture
 
-## APIs that should move packages
+## APIs that may survive only as public compat
 
-- focus and interaction helpers
-- runtime UI hooks
-- windowing helpers
-- compat output/backends
+- software raster helpers
+- fallback output helpers
+- temporary reexport packages needed during external transition
 
 ---
 
 ## Risks
 
-## 1. Text system complexity
+### 1. False halfway states
+The worst outcome is staying too long in “half clean, half facade, half legacy”.
 
-Text is usually the hardest part to move cleanly to GPU-only without hidden software assumptions.
+### 2. Package churn without clarity
+Moving names without moving ownership creates more confusion, not less.
 
-## 2. Backdrop/transform/readback edge cases
+### 3. Scene/runtime duplication
+Keeping multiple first-class visual abstractions raises every future cost.
 
-Visual effects can force ugly readback paths if not redesigned carefully.
-
-## 3. Packaging churn
-
-A clean package split will break scripts/examples until boundaries are stabilized.
-
-## 4. API churn fatigue
-
-A real cleanup means deprecations and breaking changes. This must be accepted explicitly.
-
-## 5. False halfway states
-
-The worst possible outcome is a repo that is “half GPU-only, half legacy” for too long. That must be actively avoided.
+### 4. Optimization pressure too early
+Performance work done before structural simplification will reintroduce hidden coupling.
 
 ---
 
 ## Success metrics
 
 ## Structural
-
-- `loop.ts` no longer acts as a monolith
-- package boundaries are real and enforced
-- compat code is isolated from the official hot path
+- facade packages are either retired or explicitly documented as compat bridges
+- package ownership is physically real where it matters
+- `windowing` ownership matches its package
+- `loop.ts` stops being the explanation for everything
 
 ## Technical
-
-- minimal engine repros can be debugged by following explicit IDs and stage ownership
-- no heuristic ownership bugs remain in core layer assignment
+- the official engine path is explainable without centering compat-software
+- ownership is traceable through explicit IDs and stage boundaries
 - compositor strategy becomes understandable and testable
 
 ## Product-level
-
-- windowing, overlays and complex UI can be built on top of the runtime without forcing engine hacks
-- new features stop requiring “special cases” in the renderer core
+- windowing, overlays and complex UI stop forcing engine hacks
+- new features stop requiring special cases in the renderer core
 
 ---
 
 ## Recommended order of work today
 
-1. Approve target architecture and package map.
-2. Stop new feature work.
-3. Create real package boundaries.
-4. Split `loop.ts`.
-5. Introduce explicit IDs.
-6. Move CPU/compat out of the core path.
-7. Move UI policy to runtime.
-8. Rebuild windowing and overlays on the cleaned runtime.
+1. Audit the current architecture as it really exists.
+2. Mark bridges vs real owners.
+3. Retire or collapse fake boundaries.
+4. Reduce compat from the official hot path.
+5. Converge duplicate abstractions.
+6. Clarify runtime vs engine responsibilities.
+7. Remove heuristic fallback where explicit identity already exists.
+8. Only then reintroduce optimizations.
 
 ---
 
 ## Final recommendation
 
-Do not treat this as a small cleanup.
+Do not treat the next stage as “more refactor of the same kind”.
 
-Treat it as a controlled architectural pivot.
+Treat it as a **reduction program**.
 
-The right success condition is not:
+The correct success condition now is not:
 
-> “we fixed the drag bug”
+> “we created more packages”
 
-The right success condition is:
+The correct success condition is:
 
-> “the engine became understandable, separable and GPU-first enough that bugs like this stop being mysterious”.
+> “the engine became simpler, more honest and easier to reason about than the bridge-heavy intermediate state”.

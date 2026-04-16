@@ -1,5 +1,5 @@
-import { Button } from "../button"
-import { Text } from "../text"
+import { Button } from "../../components/src/button"
+import { Text } from "../../components/src/text"
 import { useWindowManagerContext, useWindowDescriptor } from "./context"
 import { WINDOW_STATUS } from "./types"
 

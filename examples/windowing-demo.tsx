@@ -288,10 +288,10 @@ function WorkspaceLauncher() {
 
 function ExplorerWindowContent() {
   const files = [
-    "packages/components/src/windowing/manager.ts",
-    "packages/components/src/windowing/context.tsx",
-    "packages/components/src/windowing/window-frame.tsx",
-    "packages/components/src/windowing/taskbar.tsx",
+    "packages/windowing/src/manager.ts",
+    "packages/windowing/src/context.tsx",
+    "packages/windowing/src/window-frame.tsx",
+    "packages/windowing/src/taskbar.tsx",
     "examples/windowing-demo.tsx",
   ]
 

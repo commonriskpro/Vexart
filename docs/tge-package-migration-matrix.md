@@ -2,324 +2,227 @@
 
 ## Goal
 
-Convertir la visión arquitectónica GPU-only en un mapa operativo del repo actual: qué sobrevive, qué migra, qué se divide, qué se depreca y qué se elimina.
+Convertir la visión GPU-only en un mapa operativo **del repo real de hoy**:
 
-Este documento es el puente entre:
+- qué dominio es real,
+- qué package es bridge,
+- qué parte del hot path sigue cargando legacy,
+- qué se mantiene,
+- qué se fusiona,
+- qué se retira,
+- y en qué orden conviene reducir complejidad.
 
-- `docs/tge-gpu-only-engine-architecture.md`
-- `docs/tge-gpu-only-refactor-roadmap.md`
-
-y la ejecución real del refactor.
+Este documento sigue siendo la fuente operativa principal, pero ahora está orientado a la etapa de **reducción y aclaración arquitectónica**.
 
 ---
 
 ## Status legend
 
-- **survive** — sobrevive con cambios mínimos de boundary/nombre
-- **move** — se mueve a otro package/dominio
-- **split** — se parte en varios módulos/packages
-- **deprecate** — sigue temporalmente, pero fuera del path principal
-- **delete** — debe eliminarse del core o archivarse
-- **keep-temporary** — queda durante transición hasta cerrar dependencias
+- **real** — ownership real, no solo nominal
+- **bridge** — facade temporal / boundary pública transicional
+- **partial** — dirección correcta, pero incompleta
+- **legacy** — compat path o modelo viejo
+- **candidate-retire** — fuerte candidato a eliminar o colapsar
+- **candidate-fuse** — conviene converger con otra abstracción
 
 ## Phase legend
 
-- **P0** — freeze / preparación
-- **P1** — package boundaries reales
-- **P2** — split del monolito renderer
-- **P3** — identidad explícita / render object IDs
-- **P4** — formalización GPU-only
-- **P5** — mover policy de UI al runtime
-- **P6** — overlays/portal roots reales
-- **P7** — reintroducción controlada de optimizaciones
+- **P0-P7** — plan original de migración
+- **R0-R6** — plan actualizado de reducción
+
+---
 
 ## Execution tracking
 
-### 2026-04-16 — session `gpu-refactor-followup`
+### 2026-04-16 — first bridge pass
 
-| Phase | Status | Notes |
+| Track | Status | Notes |
 | --- | --- | --- |
-| P0 | completed | Se usó este documento como source of truth operativo y se mantuvo el freeze arquitectónico GPU-only durante toda la ejecución. |
-| P1 | completed | Se crearon packages reales/facades públicos para `@tge/platform-terminal`, `@tge/renderer-solid`, `@tge/scene`, `@tge/layout-clay`, `@tge/render-graph`, `@tge/text`, `@tge/gpu`, `@tge/compositor`, `@tge/output-kitty`, `@tge/windowing`, `@tge/compat-*`; además `components` y `void` ahora tienen `package.json`. |
-| P2 | completed | `loop.ts` dejó de absorber TODO el conocimiento auxiliar: scheduler, damage, presenter, hit-test, layout-writeback y layer-planning ahora tienen módulos dedicados de apoyo (`frame-scheduler.ts`, `damage-tracker.ts`, `frame-presenter.ts`, `hit-test.ts`, `layout-writeback.ts`, `layer-planner.ts`). |
-| P3 | completed | Se introdujo identidad explícita en el render graph (`renderObjectId`) y las keys de layer pasaron a anclarse por `node.id` en vez de path heurístico. |
-| P4 | completed | El path oficial quedó formalizado alrededor de `@tge/platform-terminal`, `@tge/output-kitty`, `@tge/output-compat`, `@tge/compat-software` y `@tge/compat-canvas`; examples/scripts dejaron de importar CPU/software internals directo desde `packages/*/src/*`. |
-| P5 | completed | `components` y `windowing` ahora consumen `@tge/renderer-solid` como runtime UI explícito en vez de depender del boundary viejo de `@tge/renderer`. |
-| P6 | completed | `Portal` dejó de ser solo una caja fullscreen fake y ahora se monta sobre `OverlayRoot` con `floating="root"` como primitive de overlay root transicional. |
-| P7 | completed | Las optimizaciones quedaron reagrupadas detrás de módulos dedicados (`damage-tracker.ts`, `frame-presenter.ts`) y se preservó el camino correcto antes de reintroducir heurísticas adicionales. |
+| P0 | completed | Dirección GPU-only aceptada como narrativa principal. |
+| P1 | bridge-pass complete | Se crearon package boundaries públicas, pero varias siguen siendo bridges. |
+| P2 | partial | Se extrajeron helpers de `loop.ts`, pero el archivo sigue demasiado central. |
+| P3 | partial | `renderObjectId` existe, pero todavía hay fallback heurístico. |
+| P4 | partial | Compat fue renombrado/expuesto mejor, pero sigue presente en el hot path conceptual. |
+| P5 | partial | Runtime UI mejoró, pero la separación core/runtime no está cerrada. |
+| P6 | partial | `OverlayRoot` existe, pero overlay/runtime policy no está completamente resuelta. |
+| P7 | not started | La reintroducción formal de optimizaciones todavía NO ocurrió según las reglas del roadmap. |
 
-### Temporary bridge rule used in this execution
+### 2026-04-16 — updated plan objective
 
-Esta pasada usa **bridge packages explícitos** para cerrar boundaries primero y mover ownership físico después. Eso está permitido por la sección **Allowed** de este mismo documento siempre que el bridge esté documentado y sea transicional.
+La prioridad ya no es “seguir agregando packages” sino:
+
+1. mapear el ownership real,
+2. retirar bridges innecesarios,
+3. reducir compat/legacy del core oficial,
+4. converger abstracciones duplicadas,
+5. recién después recuperar optimizaciones.
 
 ---
 
-## Target package map
+## Current repo reality: public package vs real owner
 
-## Core path
+| Public package / area | Real owner today | Status | Why it matters now | Reduction action |
+| --- | --- | --- | --- | --- |
+| `@tge/platform-terminal` | `packages/terminal/src/*` | bridge | el nombre nuevo existe, pero el ownership real sigue en `terminal` | keep publicly, avoid pretending the bridge is the owner |
+| `@tge/input` | `packages/input/src/*` | real | parser/input ya tiene cohesión razonable | keep |
+| `@tge/renderer-solid` | `packages/renderer/src/index.ts` | bridge | runtime público útil, ownership físico todavía en renderer | keep public, reduce internal dependence on facade layering |
+| `@tge/scene` | `packages/renderer/src/node.ts` | bridge | dominio nominal todavía no es package real | retire or make real |
+| `@tge/layout-clay` | `packages/renderer/src/clay.ts` | bridge-to-real-ish | boundary útil, pero todavía simple reexport | acceptable short term; make real only if ownership moves |
+| `@tge/render-graph` | `packages/renderer/src/render-graph.ts` | bridge | dominio todavía no es físicamente independiente | retire or make real |
+| `@tge/text` | `packages/renderer/src/text-layout.ts` + `font-atlas.ts` | bridge | text no está físicamente separado | retire or make real |
+| `@tge/gpu` | renderer GPU modules | bridge-to-real-ish | API pública útil, pero ownership sigue mezclado | keep public, simplify internal graph |
+| `@tge/compositor` | renderer/output internals | bridge | package nominal sin ownership verdadero | decide real owner or retire |
+| `@tge/output-kitty` | `packages/output/src/kitty*.ts` | bridge-to-real-ish | boundary oficial útil | keep, but clarify kitty/compositor split |
+| `@tge/output-compat` | `packages/output/src/composer.ts` + fallbacks | bridge | compat real, package físico liviano | keep as compat only |
+| `@tge/compat-software` | `packages/pixel/src/*` + cpu backend | bridge + legacy | todavía pesa demasiado en el hot path | keep public compat, reduce hot-path dependence |
+| `@tge/compat-canvas` | `packages/renderer/src/canvas*.ts` | bridge + legacy | imperative canvas sigue vivo | keep only as legacy/compat |
+| `@tge/compat-text-ansi` | `packages/renderer/src/selection.ts` | bridge | poco claro que siga justificándose | candidate-retire |
+| `@tge/components` | `packages/components/src/*` | real | package verdadero | keep |
+| `@tge/void` | `packages/void/src/*` | real | package verdadero | keep |
+| `@tge/windowing` | `packages/windowing/src/*` | real | ownership físico ya corregido | keep |
 
-- `@tge/platform-terminal`
-- `@tge/input`
-- `@tge/scene`
-- `@tge/layout-clay`
-- `@tge/render-graph`
-- `@tge/text`
-- `@tge/gpu`
+---
+
+## Hot-path connection map today
+
+```txt
+packages/renderer/src/index.ts
+  -> packages/renderer/src/loop.ts
+  -> packages/renderer/src/node.ts
+  -> packages/renderer/src/clay.ts
+  -> packages/renderer/src/render-graph.ts
+  -> gpu/cpu-ish backend helpers
+  -> packages/output/src/layer-composer.ts or packages/output/src/composer.ts
+  -> terminal output
+```
+
+### Important implication
+
+El sistema hoy sigue siendo más parecido a:
+
+`renderer/index + loop + internal modules + output helpers`
+
+que a una cadena limpia de packages dueños independientes.
+
+---
+
+## Reduction matrix by domain
+
+| Domain / file family | Status today | Keep | Fuse | Retire / Move | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `packages/terminal/src/*` | stable | ✅ |  |  | buen dominio real |
+| `packages/input/src/*` | stable | ✅ |  |  | buen dominio real |
+| `packages/renderer/src/index.ts` | overloaded | ✅ |  | simplify | sigue siendo kitchen sink runtime |
+| `packages/renderer/src/loop.ts` | partial split | ✅ |  | simplify | todavía demasiado central |
+| `packages/renderer/src/node.ts` | core but misplaced | ✅ |  | maybe move later | hoy sigue siendo dueño real del árbol |
+| `packages/renderer/src/clay.ts` | healthy internal owner | ✅ |  | maybe move later | boundary útil |
+| `packages/renderer/src/render-graph.ts` | improved but heuristic fallback remains | ✅ |  | simplify | hacer `renderObjectId` dominante de verdad |
+| `packages/renderer/src/gpu-renderer-backend.ts` | official path but still mixed | ✅ |  | simplify | sacar dependencia conceptual de compat |
+| `packages/renderer/src/gpu-frame-composer.ts` | adaptor | ✅ |  | review owner | define si queda en compositor o output |
+| `packages/renderer/src/cpu-renderer-backend.ts` | legacy |  |  | move deeper into compat | no más core oficial |
+| `packages/pixel/src/*` | legacy |  |  | compat only | no más centro conceptual |
+| `packages/output/src/kitty*.ts` | official path | ✅ |  |  | keep as real backend owner |
+| `packages/output/src/composer.ts` | compat |  |  | compat only | fuera del path oficial |
+| `packages/output/src/placeholder.ts` | compat |  |  | compat only | fuera del path oficial |
+| `packages/output/src/halfblock.ts` | compat |  |  | compat only | fuera del path oficial |
+| `packages/components/src/scene-canvas.tsx` | primary retained scene | ✅ |  |  | conservar como API declarativa oficial |
+| `packages/components/src/retained-graph.tsx` | retired duplicate |  |  | retire | `SceneCanvas` absorbe esta responsabilidad |
+| `packages/windowing/src/*` | real owner | ✅ |  |  | ownership físico ya corregido |
+| `packages/renderer/src/focus.ts` | runtime semantics |  |  | move upward conceptually | no debería definir el engine |
+| `packages/renderer/src/interaction.ts` | runtime semantics + hints |  |  | redesign | pasar de semantics a engine hints |
+| `packages/renderer/src/scroll.ts` | mixed ownership |  |  | redesign | scroll state normalizado, no Clay leakage |
+| `packages/renderer/src/selection.ts` | unclear place |  |  | review or retire | posible compat-only |
+| `packages/renderer/src/router.ts` / `data.ts` / tree-sitter | product/runtime utilities |  |  | move out of core story | no deberían definir el engine |
+
+---
+
+## Biggest current architectural problems
+
+### 1. Fake package clarity
+Hay packages con buen naming pero sin ownership real.
+
+### 2. Loop still dominates reasoning
+Aunque tenga helpers nuevos, `loop.ts` sigue siendo la explicación operativa del sistema.
+
+### 3. Compat still leaks into official path
+El hot path oficial todavía arrastra demasiado `compat-software` / `PixelBuffer`.
+
+### 4. Heuristic fallback still alive
+El render graph mejoró, pero no está totalmente liberado de heurísticas.
+
+---
+
+## Highest-impact reduction candidates
+
+## R1 — Mark and retire fake boundaries
+
+Candidates with strongest review pressure:
+
 - `@tge/compositor`
-- `@tge/output-kitty`
-- `@tge/renderer-solid`
-
-## UI/product path
-
-- `@tge/components`
-- `@tge/void`
-- `@tge/windowing`
-
-## Compat path
-
-- `@tge/compat-software`
-- `@tge/output-compat`
-- `@tge/compat-canvas`
+- `@tge/render-graph`
+- `@tge/scene`
+- `@tge/text`
 - `@tge/compat-text-ansi`
 
----
+Rule:
 
-## Migration matrix — package level
+- if they become real owners, great
+- if not, stop pretending they are architecture
 
-| Current location | Target package/domain | Action | Phase | Notes |
-| --- | --- | --- | --- | --- |
-| `packages/terminal/src/*` | `@tge/platform-terminal` | survive | P1 | Ya está razonablemente bien aislado |
-| `packages/input/src/*` | `@tge/input` | survive | P1 | Parser limpio; mantener como dominio puro |
-| `packages/renderer/src/index.ts` | `@tge/renderer-solid` + facades pequeñas | split | P1-P2 | Kitchen sink; dividir exports por dominio |
-| `packages/renderer/src/loop.ts` | `@tge/runtime` orchestrator + módulos especializados | split | P2 | God Object principal |
-| `packages/renderer/src/reconciler.ts` | `@tge/renderer-solid` | survive | P1-P2 | Mantener, pero sacar policy no esencial |
-| `packages/renderer/src/node.ts` | `@tge/scene` | move + split | P2-P3 | TGENode, props y resolveProps deben separarse |
-| `packages/renderer/src/clay.ts` | `@tge/layout-clay` | move | P1-P2 | Mantener FFI encapsulado |
-| `packages/renderer/src/render-graph.ts` | `@tge/render-graph` | move | P1-P2 | Dominio claro |
-| `packages/renderer/src/text-layout.ts` | `@tge/text` | move | P1-P2 | Texto debe salir del renderer monolítico |
-| `packages/renderer/src/font-atlas.ts` | `@tge/text` | move | P1-P2 | Parte del dominio text |
-| `packages/renderer/src/image.ts` | `@tge/gpu` o `@tge/render-graph` support | move | P2-P3 | Depende del ownership final de assets |
-| `packages/renderer/src/layers.ts` | `@tge/compositor` | move | P2 | Layer registry no debería vivir en renderer-solid |
-| `packages/renderer/src/damage.ts` | `@tge/compositor` | move | P2 | Damage tracking del compositor |
-| `packages/renderer/src/gpu-renderer-backend.ts` | `@tge/gpu` | move + simplify | P2-P4 | Eliminar fallbacks CPU del hot path |
-| `packages/renderer/src/gpu-frame-composer.ts` | `@tge/compositor` | move | P2-P4 | Parte de la estrategia de composición |
-| `packages/renderer/src/gpu-layer-strategy.ts` | `@tge/compositor` | move | P2-P4 | No exponerlo como API de usuario |
-| `packages/renderer/src/renderer-backend.ts` | `@tge/gpu` | move | P2 | Contrato backend |
-| `packages/renderer/src/wgpu-canvas-bridge.ts` | `@tge/gpu` | move + rename conceptually | P2-P4 | Dejar de pensarlo como “canvas bridge” |
-| `packages/renderer/src/wgpu-canvas-backend.ts` | `@tge/gpu` or `@tge/compat-canvas` | move | P4 | Definir si sobrevive como API o compat |
-| `packages/renderer/src/canvas.ts` | `@tge/compat-canvas` | deprecate | P4-P5 | Demasiado imperativo/cpu-nostálgico |
-| `packages/renderer/src/canvas-backend.ts` | `@tge/compat-canvas` | deprecate | P4-P5 | Solo si canvas sigue temporalmente |
-| `packages/renderer/src/cpu-renderer-backend.ts` | `@tge/compat-software` | move + deprecate | P4 | Sale del core oficial |
-| `packages/pixel/src/*` | `@tge/compat-software` | move + deprecate | P4 | No más modelo central del engine |
-| `packages/output/src/kitty.ts` | `@tge/output-kitty` | survive | P1-P4 | Path oficial |
-| `packages/output/src/transport-manager.ts` | `@tge/output-kitty` | survive | P1-P4 | Health/probing del transporte |
-| `packages/output/src/kitty-shm-native.ts` | `@tge/output-kitty` | survive | P1-P4 | Parte del path principal GPU-only |
-| `packages/output/src/layer-composer.ts` | `@tge/compositor` o `@tge/output-kitty` split | split | P2-P4 | Mezcla composición y presentación Kitty |
-| `packages/output/src/composer.ts` | `@tge/output-compat` | deprecate | P4 | Universal fallback fuera del core |
-| `packages/output/src/placeholder.ts` | `@tge/output-compat` | move + deprecate | P4 | Compat only |
-| `packages/output/src/halfblock.ts` | `@tge/output-compat` | move + deprecate | P4 | Compat only |
-| `packages/components/src/*` | `@tge/components` | survive | P1 | Package boundary real |
-| `packages/components/src/windowing/*` | `@tge/windowing` | move | P1-P2 | Debe ser package aparte |
-| `packages/void/src/*` | `@tge/void` | survive | P1 | Package boundary real |
-| `examples/*` | `examples/*` | keep-temporary | P0-P7 | Deben migrar imports, no desaparecer |
-| `scripts/build-dist.ts` | build infra | split/update | P1 | Debe dejar de compensar boundaries falsas |
+## R2 — Keep `SceneCanvas`, retire `RetainedGraph`
+
+Decision already made:
+
+- `SceneCanvas` survives as the primary retained visual model
+- `RetainedGraph` is retired and the known product consumers were migrated away
+
+## R3 — Consolidate windowing after the physical move
+
+The move already happened:
+
+- `packages/windowing/src/*` is now the physical owner
+
+What remains is cleanup of stale references and dependency simplification.
+
+## R4 — Finish explicit ownership
+
+- make `renderObjectId` primary, not just preferred
+- remove fallback matching by `color` / `cornerRadius` from the base path
+
+## R5 — Reduce compat-software from the hot path
+
+- stop centering `PixelBuffer` in the official engine explanation
+- isolate CPU/software fallback as true compat
 
 ---
 
-## Migration matrix — renderer monolith split
-
-## `packages/renderer/src/loop.ts`
-
-### Target split
-
-| Responsibility today | Target module | Action | Phase |
-| --- | --- | --- | --- |
-| frame scheduling/timers | `frame-scheduler.ts` | split | P2 |
-| tree walk orchestration | `layout-pass.ts` | split | P2 |
-| layout writeback | `layout-writeback.ts` | split | P2 |
-| hover/active/focus hit-testing | `hit-test.ts` + runtime UI later | split | P2-P5 |
-| `onPress` bubbling | `event-dispatch.ts` in runtime UI | move out | P5 |
-| layer boundary discovery | `layer-planner.ts` | split | P2 |
-| `assignLayersSpatial()` | `layer-planner.ts` + later replace by IDs | split + redesign | P2-P3 |
-| damage aggregation | `damage-tracker.ts` | split | P2 |
-| presentation/output calls | `frame-presenter.ts` | split | P2 |
-| legacy fallback rendering | `compat-bridge.ts` or remove | deprecate | P4 |
-| selectable ANSI text path | `@tge/compat-text-ansi` | move out | P4-P5 |
-
-### Required outcome
-
-`loop.ts` debe terminar como un orchestrator liviano, no como la implementación total del engine.
-
----
-
-## Migration matrix — UI policy vs engine primitives
-
-| Current file/functionality | Keep in engine? | Target location | Action |
-| --- | --- | --- | --- |
-| `focus.ts` focus scopes/tab order | No | runtime UI | move |
-| `loop.ts` press bubbling | No | runtime UI | move |
-| `node.ts` hover/active/focus style merge | No | runtime UI | move/split |
-| `interaction.ts` semantics like `drag` | No as semantics | engine gets hints, runtime maps semantics | redesign |
-| `pointer.ts` pointer capture primitive | Yes | engine service | survive |
-| `drag.ts` generic drag primitive | Maybe | runtime UI or engine-service boundary | review |
-| `scroll.ts` direct Clay coupling | No | runtime UI over engine scroll state | redesign |
-| `selection.ts` | Maybe | engine service if generic, otherwise runtime | review |
-| `router.ts` | No | runtime/product layer | move out of renderer core exports |
-| `data.ts` | No | runtime utility package | move out |
-| `plugins.ts` | Maybe | runtime extension layer | review |
-| `tree-sitter/*` | No core | dedicated tooling/runtime package | move out |
-
----
-
-## File survival / migration notes by area
-
-## Terminal
-
-### Survive mostly intact
-- `packages/terminal/src/index.ts`
-- `packages/terminal/src/lifecycle.ts`
-- `packages/terminal/src/caps.ts`
-- `packages/terminal/src/detect.ts`
-- `packages/terminal/src/size.ts`
-- `packages/terminal/src/tmux.ts`
-
-### Notes
-- terminal domain already has decent cohesion
-- only package renaming/boundary cleanup should be needed early
-
-## Input
-
-### Survive mostly intact
-- `packages/input/src/parser.ts`
-- `packages/input/src/mouse.ts`
-- `packages/input/src/keyboard.ts`
-- `packages/input/src/types.ts`
-
-### Notes
-- input parser should remain a standalone semantic event layer
-
-## Renderer internals to split
-
-### Survive but relocate
-- `packages/renderer/src/reconciler.ts`
-- `packages/renderer/src/handle.ts`
-- `packages/renderer/src/matrix.ts`
-- `packages/renderer/src/resource-stats.ts`
-
-### Must split / redesign
-- `packages/renderer/src/loop.ts`
-- `packages/renderer/src/node.ts`
-- `packages/renderer/src/index.ts`
-
-### Likely move out of renderer-solid facade
-- `packages/renderer/src/router.ts`
-- `packages/renderer/src/data.ts`
-- `packages/renderer/src/tree-sitter/*`
-- `packages/renderer/src/plugins.ts`
-- `packages/renderer/src/extmarks.ts`
-
-## GPU path
-
-### Survive as core path
-- `packages/renderer/src/gpu-renderer-backend.ts`
-- `packages/renderer/src/gpu-frame-composer.ts`
-- `packages/renderer/src/gpu-layer-strategy.ts`
-- `packages/renderer/src/wgpu-canvas-bridge.ts`
-- `native/wgpu-canvas-bridge/*`
-
-### Redesign requirement
-- remove fallback CPU logic from hot path
-- rename concepts so GPU path is not framed as “canvas bridge” only
-
-## CPU/software path
-
-### Leave core path
-- `packages/pixel/src/index.ts`
-- `packages/pixel/src/buffer.ts`
-- `packages/pixel/src/composite.ts`
-- `packages/pixel/src/ffi.ts`
-- `packages/renderer/src/cpu-renderer-backend.ts`
-
-### Target
-- `@tge/compat-software`
-
-## Output path
-
-### Core survive
-- `packages/output/src/kitty.ts`
-- `packages/output/src/transport-manager.ts`
-- `packages/output/src/kitty-shm-native.ts`
-
-### Split
-- `packages/output/src/layer-composer.ts`
-  - composition logic -> `@tge/compositor`
-  - Kitty-specific presentation details -> `@tge/output-kitty`
-
-### Leave main path
-- `packages/output/src/composer.ts`
-- `packages/output/src/placeholder.ts`
-- `packages/output/src/halfblock.ts`
-
-## Components / UI
-
-### Survive
-- headless UI components
-- design system files
-- product examples
-
-### Move package ownership
-- `packages/components/src/windowing/*` -> `@tge/windowing`
-
-### Review for engine coupling
-- `packages/components/src/virtual-list.tsx`
-- `packages/components/src/slider.tsx`
-- `packages/components/src/tooltip.tsx`
-- `packages/components/src/dialog.tsx`
-- `packages/components/src/portal.tsx`
-
-These should gradually depend on runtime primitives, not engine internals.
-
----
-
-## Delete / archive candidates
-
-These should not survive in the official core story once migration is complete:
-
-- CPU renderer as first-class public API
-- `PixelBuffer` as central public abstraction
-- universal fallback output as default engine mental model
-- imperative canvas as strategic future API
-- exports from `@tge/renderer` that expose low-level strategy knobs to app code
-
-Deletion may happen only after compat packages exist and migration is complete.
-
----
-
-## Imports policy during migration
+## Imports and architecture policy
 
 ## Forbidden
 
 - importing from `packages/*/src/*` outside the owning package
-- examples importing internal runtime/backend files directly
-- app/product code depending on compositor internals
+- treating bridge packages as proof of real ownership
+- adding new product/runtime features on top of unresolved duplicated abstractions
+- reintroducing optimizations before current ownership is simpler
 
 ## Allowed
 
-- imports only through public package exports
-- temporary bridge/adaptor packages if explicitly documented
+- public compatibility facades when explicitly documented as bridges
+- internal simplification that reduces package graph fiction
+- keeping compat packages for external users while shrinking their architectural importance
 
 ---
 
-## Execution order recommendation
+## Recommended execution order now
 
-1. Real package boundaries.
-2. Split `loop.ts`.
-3. Introduce IDs.
-4. Move CPU path out.
-5. Move UI policy out.
-6. Rebuild affected UI/runtime packages on top.
-
-This ordering matters. Reversing it will create more chaos, not less.
+1. Audit current ownership.
+2. Mark bridges vs real owners.
+3. Retire or collapse fake boundaries.
+4. Move `windowing` physically.
+5. Choose one scene abstraction.
+6. Remove heuristic fallback where explicit IDs already exist.
+7. Reduce compat from the hot path.
+8. Only then resume optimization recovery.
 
 ---
 
@@ -327,9 +230,10 @@ This ordering matters. Reversing it will create more chaos, not less.
 
 Use this matrix when a session needs to decide:
 
-- what package a file belongs to,
-- whether a file survives or dies,
-- what phase owns the work,
-- what NOT to touch before a prerequisite phase is done.
+- whether a package is real or bridge,
+- whether code belongs in core, runtime or compat,
+- what to keep / fuse / retire,
+- what should be simplified before any more performance work,
+- and what not to touch before a higher-priority reduction step is done.
 
-This is the operational source of truth for repo reshaping.
+This remains the operational source of truth for repo reshaping.
