@@ -323,7 +323,8 @@ function Panel(props: {
       gap={space[3]}
     >
       <PanelHeader title={props.title} subtitle={props.subtitle} accent={props.accent} dragProps={drag.dragProps as unknown as Record<string, unknown>} />
-      <box width="grow" direction="column" gap={space[3]} backgroundColor={C.panelInner} borderColor={C.panelBorder} borderWidth={1} cornerRadius={radius.md} padding={space[3]}>
+      <Rule />
+      <box width="grow" direction="column" gap={space[3]} padding={space[1]}>
         {props.children}
       </box>
     </box>
