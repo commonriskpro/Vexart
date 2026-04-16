@@ -210,11 +210,10 @@ function usePanelDrag(id: string, x: number, y: number, interaction: ReturnType<
   let lastTraceAt = 0
 
   const { dragProps, dragging } = useDrag({
-    interaction: "none",
+    interaction,
     onDragStart: (event: NodeMouseEvent) => {
       anchorX = event.nodeX
       anchorY = event.nodeY
-      interaction.begin("drag")
       if (TRACE) log(`[drag-start] panel=${id} x=${offsetX()} y=${offsetY()} surfaces=${enabledSurfacesLine()}`)
     },
     onDrag: (event: NodeMouseEvent) => {
@@ -228,7 +227,6 @@ function usePanelDrag(id: string, x: number, y: number, interaction: ReturnType<
       log(`[drag] panel=${id} x=${Math.round(event.x - anchorX)} y=${Math.round(event.y - anchorY)} frameMs=${debugState.frameTimeMs} input=${debugState.interactionType ?? "none"} latency=${debugState.interactionLatencyMs} strategy=${debugState.rendererStrategy ?? "none"} output=${debugState.rendererOutput ?? "none"} dirty=${debugState.dirtyBeforeCount} repainted=${debugState.repaintedCount} moveOnly=${debugState.moveOnlyCount} moveFallback=${debugState.moveFallbackCount} stableReuse=${debugState.stableReuseCount}`)
     },
     onDragEnd: () => {
-      interaction.end("drag")
       if (!TRACE) return
       log(`[drag-end] panel=${id} x=${offsetX()} y=${offsetY()} frameMs=${debugState.frameTimeMs} input=${debugState.interactionType ?? "none"} latency=${debugState.interactionLatencyMs}`)
     },

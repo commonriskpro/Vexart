@@ -174,7 +174,7 @@ export { setPointerCapture, releasePointerCapture, onPostScroll } from "./pointe
 // Re-export drag hook
 export { useDrag } from "./drag"
 export type { DragOptions, DragProps, DragState } from "./drag"
-export type { InteractionLayerState } from "./interaction"
+export type { InteractionBinding, InteractionLayerState } from "./interaction"
 
 // Re-export hover hook
 export { useHover } from "./hover"

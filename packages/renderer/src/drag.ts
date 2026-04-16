@@ -21,6 +21,7 @@ import { type NodeMouseEvent } from "./node"
 import { type NodeHandle } from "./handle"
 import { setPointerCapture } from "./pointer"
 import { beginNodeInteraction, endNodeInteraction } from "./interaction"
+import type { InteractionBinding, InteractionLayerState } from "./interaction"
 
 export type DragOptions = {
   /** Called on mousedown. Return false to prevent drag start. */
@@ -31,8 +32,8 @@ export type DragOptions = {
   onDragEnd?: (evt: NodeMouseEvent) => void
   /** Whether drag is disabled. */
   disabled?: () => boolean
-  /** Engine interaction handling. "auto" marks the drag target as interactive; "none" lets callers manage it manually. */
-  interaction?: "auto" | "none"
+  /** Engine interaction handling. "auto" marks the drag target, "none" disables it, or pass an interaction layer state. */
+  interaction?: InteractionBinding
 }
 
 export type DragProps = {
@@ -54,9 +55,37 @@ export function useDrag(opts: DragOptions): DragState {
   let node: NodeHandle["_node"] | null = null
   const [dragging, setDragging] = createSignal(false)
 
+  function getInteractionLayer(): InteractionLayerState | null {
+    const interaction = opts.interaction
+    if (!interaction || interaction === "auto" || interaction === "none") return null
+    return interaction
+  }
+
+  function beginInteraction() {
+    const interaction = opts.interaction ?? "auto"
+    if (interaction === "none") return
+    if (interaction !== "auto") {
+      interaction.begin("drag")
+      return
+    }
+    if (node) beginNodeInteraction(node, "drag")
+  }
+
+  function endInteraction() {
+    const interaction = opts.interaction ?? "auto"
+    if (interaction === "none") return
+    if (interaction !== "auto") {
+      interaction.end("drag")
+      return
+    }
+    if (node) endNodeInteraction(node, "drag")
+  }
+
   function handleRef(handle: NodeHandle) {
     nodeId = handle.id
     node = handle._node
+    const interaction = getInteractionLayer()
+    if (interaction) interaction.ref(handle)
   }
 
   function handleMouseDown(evt: NodeMouseEvent) {
@@ -64,7 +93,7 @@ export function useDrag(opts: DragOptions): DragState {
     const allow = opts.onDragStart?.(evt)
     if (allow === false) return
     setDragging(true)
-    if (node && (opts.interaction ?? "auto") === "auto") beginNodeInteraction(node, "drag")
+    beginInteraction()
     if (nodeId) setPointerCapture(nodeId)
   }
 
@@ -77,7 +106,7 @@ export function useDrag(opts: DragOptions): DragState {
   function handleMouseUp(evt: NodeMouseEvent) {
     if (!dragging()) return
     setDragging(false)
-    if (node && (opts.interaction ?? "auto") === "auto") endNodeInteraction(node, "drag")
+    endInteraction()
     opts.onDragEnd?.(evt)
   }
 

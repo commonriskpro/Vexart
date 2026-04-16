@@ -52,6 +52,8 @@ export type InteractionLayerState = {
   end: (mode?: Exclude<InteractionMode, "none">) => void
 }
 
+export type InteractionBinding = "auto" | "none" | InteractionLayerState
+
 export function useInteractionLayer(): InteractionLayerState {
   let node: TGENode | null = null
   const [mode, setMode] = createSignal<InteractionMode>("none")
