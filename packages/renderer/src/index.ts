@@ -30,6 +30,7 @@ import { markDirty } from "./dirty"
 import { resetFocus } from "./focus"
 import { resetSelection } from "./selection"
 import { bindLoop, unbindLoop } from "./pointer"
+export { beginNodeInteraction, endNodeInteraction } from "./interaction"
 
 export type { RenderLoop, RenderLoopOptions } from "./loop"
 export { createRenderLoop } from "./loop"
@@ -88,7 +89,7 @@ export type { FocusHandle } from "./focus"
 export { markDirty } from "./dirty"
 
 // Re-export image utilities
-export { clearImageCache, createScaledImageCache } from "./image"
+export { clearImageCache, createScaledImageCache, getImageCacheStats } from "./image"
 export type { RawImage, ScaledImageCache } from "./image"
 
 // Data fetching hooks
@@ -103,20 +104,58 @@ export { createHandle } from "./handle"
 export type { PressEvent, NodeMouseEvent } from "./node"
 
 // Re-export canvas API
-export { CanvasContext, createCanvasImageCache } from "./canvas"
+export { CanvasContext, createCanvasImageCache, getCanvasImageCacheStats } from "./canvas"
 export type { Viewport, StrokeStyle, FillStyle, ShapeStyle } from "./canvas"
 export { setCanvasPainterBackend, getCanvasPainterBackend, getCanvasPainterBackendName } from "./canvas-backend"
 export type { CanvasPainterBackend } from "./canvas-backend"
 export { setRendererBackend, getRendererBackend, getRendererBackendName } from "./renderer-backend"
-export type { RendererBackend } from "./renderer-backend"
+export type {
+  RendererBackend,
+  RendererBackendFrameContext,
+  RendererBackendLayerContext,
+  RendererBackendPaintContext,
+  RendererBackendPaintResult,
+  RendererBackendFramePlan,
+  RendererBackendFrameResult,
+  RendererBackendSyncLayerContext,
+} from "./renderer-backend"
 export { createCpuRendererBackend } from "./cpu-renderer-backend"
-export { createGpuRendererBackend } from "./gpu-renderer-backend"
+export { createGpuRendererBackend, getGpuRendererBackendCacheStats } from "./gpu-renderer-backend"
+export { createGpuFrameComposer } from "./gpu-frame-composer"
 export { chooseGpuLayerStrategy } from "./gpu-layer-strategy"
-export { createRenderGraphQueues, resetRenderGraphQueues, cloneRenderGraphQueues, buildRenderOp, buildRenderGraphFrame } from "./render-graph"
-export type { RenderGraphOp, RenderGraphFrame, RectangleRenderOp, BorderRenderOp, TextRenderOp, ImageRenderOp, CanvasRenderOp, EffectRenderOp, RawCommandRenderOp } from "./render-graph"
-export { probeWgpuCanvasBridge, loadWgpuCanvasBridge } from "./wgpu-canvas-bridge"
-export type { WgpuCanvasBridgeProbe } from "./wgpu-canvas-bridge"
-export { tryCreateWgpuCanvasPainterBackend } from "./wgpu-canvas-backend"
+export {
+  BACKDROP_FILTER_KIND,
+  createRenderGraphQueues,
+  resetRenderGraphQueues,
+  cloneRenderGraphQueues,
+  buildRenderOp,
+  buildRenderGraphFrame,
+} from "./render-graph"
+export type {
+  RenderBounds,
+  BackdropFilterKind,
+  BackdropFilterParams,
+  BackdropRenderMetadata,
+  RenderGraphOp,
+  RenderGraphFrame,
+  RectangleRenderOp,
+  BorderRenderOp,
+  TextRenderOp,
+  ImageRenderOp,
+  CanvasRenderOp,
+  EffectRenderOp,
+  RawCommandRenderOp,
+} from "./render-graph"
+export {
+  probeWgpuCanvasBridge,
+  loadWgpuCanvasBridge,
+  copyWgpuCanvasTargetRegionToImage,
+  filterWgpuCanvasImageBackdrop,
+  maskWgpuCanvasImageRoundedRect,
+  compositeWgpuCanvasTargetImageLayer,
+} from "./wgpu-canvas-bridge"
+export type { WgpuCanvasBridgeProbe, WgpuBackdropFilterParams } from "./wgpu-canvas-bridge"
+export { tryCreateWgpuCanvasPainterBackend, getWgpuCanvasPainterCacheStats } from "./wgpu-canvas-backend"
 
 // Re-export particle system
 export { createParticleSystem } from "./particles"
@@ -141,8 +180,10 @@ export { useHover } from "./hover"
 export type { HoverOptions, HoverProps, HoverState } from "./hover"
 
 // Re-export text layout system
-export { registerFont, getFont, clearTextCache } from "./text-layout"
+export { registerFont, getFont, clearTextCache, getTextLayoutCacheStats } from "./text-layout"
 export type { FontDescriptor } from "./text-layout"
+export { getFontAtlasCacheStats } from "./font-atlas"
+export { getRendererResourceStats } from "./resource-stats"
 
 // Re-export scroll system
 export type { ScrollHandle } from "./scroll"
@@ -304,13 +345,13 @@ export function useTerminalDimensions(terminal: Terminal): {
   const [cellW, setCellW] = createSignal(terminal.size.cellWidth || 8)
   const [cellH, setCellH] = createSignal(terminal.size.cellHeight || 16)
 
-  const unsub = terminal.onResize(() => {
-    setWidth(terminal.size.pixelWidth || terminal.size.cols * (terminal.size.cellWidth || 8))
-    setHeight(terminal.size.pixelHeight || terminal.size.rows * (terminal.size.cellHeight || 16))
-    setCols(terminal.size.cols)
-    setRows(terminal.size.rows)
-    setCellW(terminal.size.cellWidth || 8)
-    setCellH(terminal.size.cellHeight || 16)
+  const unsub = terminal.onResize((size) => {
+    setWidth(size.pixelWidth || size.cols * (size.cellWidth || 8))
+    setHeight(size.pixelHeight || size.rows * (size.cellHeight || 16))
+    setCols(size.cols)
+    setRows(size.rows)
+    setCellW(size.cellWidth || 8)
+    setCellH(size.cellHeight || 16)
   })
 
   onCleanup(() => unsub())
@@ -423,11 +464,15 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
         || event.action === "release"
         || event.action === "scroll"
         || (event.action === "move" && (isButtonDown || loop.needsPointerRepaint()))
-      if (shouldRepaint) markDirty()
+      if (shouldRepaint) {
+        markDirty()
+        loop.requestInteractionFrame(event.action === "scroll" ? "scroll" : "pointer")
+      }
       return
     }
 
     markDirty() // key/focus/paste can change visible state
+    loop.requestInteractionFrame("key")
   })
   const unsubData = terminal.onData((data) => parser.feed(data))
 

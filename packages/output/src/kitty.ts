@@ -21,8 +21,70 @@ type RawImageData = {
   height: number
 }
 
+export type KittyTransportStats = {
+  transmitCalls: number
+  patchCalls: number
+  payloadBytes: number
+  estimatedTtyBytes: number
+  byMode: Record<TransmissionMode, { transmitCalls: number; patchCalls: number; payloadBytes: number; estimatedTtyBytes: number }>
+}
+
 const CHUNK_SIZE = 4096
 const DEBUG_KITTY_PROBE = process.env.TGE_DEBUG_KITTY === "1" || process.env.TGE_DEBUG_KITTY_SHM === "1"
+
+const kittyTransportStats: KittyTransportStats = {
+  transmitCalls: 0,
+  patchCalls: 0,
+  payloadBytes: 0,
+  estimatedTtyBytes: 0,
+  byMode: {
+    shm: { transmitCalls: 0, patchCalls: 0, payloadBytes: 0, estimatedTtyBytes: 0 },
+    file: { transmitCalls: 0, patchCalls: 0, payloadBytes: 0, estimatedTtyBytes: 0 },
+    direct: { transmitCalls: 0, patchCalls: 0, payloadBytes: 0, estimatedTtyBytes: 0 },
+  },
+}
+
+function recordKittyStats(mode: TransmissionMode, kind: "transmit" | "patch", payloadBytes: number, estimatedTtyBytes: number) {
+  const bucket = kittyTransportStats.byMode[mode]
+  if (kind === "transmit") {
+    kittyTransportStats.transmitCalls += 1
+    bucket.transmitCalls += 1
+  } else {
+    kittyTransportStats.patchCalls += 1
+    bucket.patchCalls += 1
+  }
+  kittyTransportStats.payloadBytes += payloadBytes
+  kittyTransportStats.estimatedTtyBytes += estimatedTtyBytes
+  bucket.payloadBytes += payloadBytes
+  bucket.estimatedTtyBytes += estimatedTtyBytes
+}
+
+export function resetKittyTransportStats() {
+  kittyTransportStats.transmitCalls = 0
+  kittyTransportStats.patchCalls = 0
+  kittyTransportStats.payloadBytes = 0
+  kittyTransportStats.estimatedTtyBytes = 0
+  for (const mode of ["shm", "file", "direct"] as const) {
+    kittyTransportStats.byMode[mode].transmitCalls = 0
+    kittyTransportStats.byMode[mode].patchCalls = 0
+    kittyTransportStats.byMode[mode].payloadBytes = 0
+    kittyTransportStats.byMode[mode].estimatedTtyBytes = 0
+  }
+}
+
+export function getKittyTransportStats(): KittyTransportStats {
+  return {
+    transmitCalls: kittyTransportStats.transmitCalls,
+    patchCalls: kittyTransportStats.patchCalls,
+    payloadBytes: kittyTransportStats.payloadBytes,
+    estimatedTtyBytes: kittyTransportStats.estimatedTtyBytes,
+    byMode: {
+      shm: { ...kittyTransportStats.byMode.shm },
+      file: { ...kittyTransportStats.byMode.file },
+      direct: { ...kittyTransportStats.byMode.direct },
+    },
+  }
+}
 
 function probeDebug(message: string, extra?: unknown) {
   if (!DEBUG_KITTY_PROBE) return
@@ -251,6 +313,7 @@ function transmitShm(
   action: string,
   format: number,
   z: number | undefined,
+  placementId: number | undefined,
   data: Uint8Array,
   compress: boolean,
 ) {
@@ -265,7 +328,7 @@ function transmitShm(
   const fd = lib.shm_open(nameBytes, O_CREAT | O_RDWR, 0o666)
   if (fd < 0) {
     // Fallback to direct if shm fails
-    transmitDirect(write, buf, id, action, format, z, data, compress)
+    transmitDirect(write, buf, id, action, format, z, placementId, data, compress)
     return
   }
 
@@ -273,7 +336,7 @@ function transmitShm(
   if (lib.ftruncate(fd, size) !== 0) {
     lib.close(fd)
     lib.shm_unlink(nameBytes)
-    transmitDirect(write, buf, id, action, format, z, data, compress)
+    transmitDirect(write, buf, id, action, format, z, placementId, data, compress)
     return
   }
 
@@ -281,12 +344,13 @@ function transmitShm(
   if (mapAddr === -1 || mapAddr === 0) {
     lib.close(fd)
     lib.shm_unlink(nameBytes)
-    transmitDirect(write, buf, id, action, format, z, data, compress)
+    transmitDirect(write, buf, id, action, format, z, placementId, data, compress)
     return
   }
 
   // Copy (possibly compressed) pixel data to shared memory
   lib.memcpy(mapAddr, Number(ptr(payload)), size)
+  lib.msync(mapAddr, size, MS_SYNC)
 
   // Cleanup mmap and fd — terminal will read from shm name and unlink it
   lib.munmap(mapAddr, size)
@@ -297,6 +361,8 @@ function transmitShm(
   let meta = `a=${action},f=${format},i=${id},s=${buf.width},v=${buf.height},t=s,q=2`
   if (compress) meta += `,o=z`
   if (z !== undefined) meta += `,z=${z}`
+  if (placementId !== undefined) meta += `,p=${placementId}`
+  recordKittyStats("shm", "transmit", data.length, meta.length + nameB64.length + 16)
   write(`\x1b_G${meta};${nameB64}\x1b\\`)
 }
 
@@ -318,6 +384,7 @@ function transmitFile(
   action: string,
   format: number,
   z: number | undefined,
+  placementId: number | undefined,
   data: Uint8Array,
   compress: boolean,
 ) {
@@ -328,10 +395,12 @@ function transmitFile(
     let meta = `a=${action},f=${format},i=${id},s=${buf.width},v=${buf.height},t=f,S=${filePayload.size},O=${filePayload.offset},q=2`
     if (compress) meta += `,o=z`
     if (z !== undefined) meta += `,z=${z}`
+    if (placementId !== undefined) meta += `,p=${placementId}`
+    recordKittyStats("file", "transmit", data.length, meta.length + filePayload.pathB64.length + 16)
     write(`\x1b_G${meta};${filePayload.pathB64}\x1b\\`)
   } catch {
     // Fallback to direct if file write fails
-    transmitDirect(write, buf, id, action, format, z, data, compress)
+    transmitDirect(write, buf, id, action, format, z, placementId, data, compress)
   }
 }
 
@@ -344,6 +413,7 @@ function transmitDirect(
   action: string,
   format: number,
   z: number | undefined,
+  placementId: number | undefined,
   data: Uint8Array,
   compress: boolean,
 ) {
@@ -355,12 +425,15 @@ function transmitDirect(
   let meta = `a=${action},f=${format},i=${id},s=${buf.width},v=${buf.height},q=2`
   if (compress) meta += `,o=z`
   if (z !== undefined) meta += `,z=${z}`
+  if (placementId !== undefined) meta += `,p=${placementId}`
 
   if (chunks.length === 1) {
+    recordKittyStats("direct", "transmit", data.length, meta.length + chunks[0].length + 16)
     write(`\x1b_G${meta};${chunks[0]}\x1b\\`)
     return
   }
 
+  recordKittyStats("direct", "transmit", data.length, meta.length + b64.length + chunks.length * 12)
   write(`\x1b_G${meta},m=1;${chunks[0]}\x1b\\`)
   for (let i = 1; i < chunks.length - 1; i++) {
     write(`\x1b_Gm=1;${chunks[i]}\x1b\\`)
@@ -386,6 +459,7 @@ export function transmit(
     action?: "t" | "T" | "p"
     format?: 24 | 32
     z?: number
+    placementId?: number
     mode?: TransmissionMode
     /** Compression policy. auto compresses only when it is likely worth it. */
     compress?: CompressMode
@@ -400,13 +474,13 @@ export function transmit(
 
   switch (mode) {
     case "shm":
-      transmitShm(write, buf, id, action, format, z, data, compress)
+      transmitShm(write, buf, id, action, format, z, opts?.placementId, data, compress)
       break
     case "file":
-      transmitFile(write, buf, id, action, format, z, data, compress)
+      transmitFile(write, buf, id, action, format, z, opts?.placementId, data, compress)
       break
     case "direct":
-      transmitDirect(write, buf, id, action, format, z, data, compress)
+      transmitDirect(write, buf, id, action, format, z, opts?.placementId, data, compress)
       break
   }
 }
@@ -420,6 +494,7 @@ export function transmitRaw(
     action?: "t" | "T" | "p"
     format?: 24 | 32
     z?: number
+    placementId?: number
     mode?: TransmissionMode
     compress?: CompressMode
   },
@@ -434,13 +509,13 @@ export function transmitRaw(
 
   switch (mode) {
     case "shm":
-      transmitShm(write, buf, id, action, format, z, payload, compress)
+      transmitShm(write, buf, id, action, format, z, opts?.placementId, payload, compress)
       break
     case "file":
-      transmitFile(write, buf, id, action, format, z, payload, compress)
+      transmitFile(write, buf, id, action, format, z, opts?.placementId, payload, compress)
       break
     case "direct":
-      transmitDirect(write, buf, id, action, format, z, payload, compress)
+      transmitDirect(write, buf, id, action, format, z, opts?.placementId, payload, compress)
       break
   }
 }
@@ -472,11 +547,11 @@ export function transmitAt(
   id: number,
   col: number,
   row: number,
-  opts?: { z?: number; mode?: TransmissionMode; compress?: CompressMode },
+  opts?: { z?: number; placementId?: number; mode?: TransmissionMode; compress?: CompressMode },
 ) {
   write(`\x1b7`) // save cursor
   write(`\x1b[${row + 1};${col + 1}H`) // move cursor
-  transmit(write, buf, id, { action: "T", z: opts?.z, mode: opts?.mode, compress: opts?.compress })
+  transmit(write, buf, id, { action: "T", z: opts?.z, placementId: opts?.placementId, mode: opts?.mode, compress: opts?.compress })
   write(`\x1b8`) // restore cursor
 }
 
@@ -487,11 +562,11 @@ export function transmitRawAt(
   id: number,
   col: number,
   row: number,
-  opts?: { z?: number; mode?: TransmissionMode; compress?: CompressMode; format?: 24 | 32 },
+  opts?: { z?: number; placementId?: number; mode?: TransmissionMode; compress?: CompressMode; format?: 24 | 32 },
 ) {
   write(`\x1b7`)
   write(`\x1b[${row + 1};${col + 1}H`)
-  transmitRaw(write, image, id, { action: "T", z: opts?.z, mode: opts?.mode, compress: opts?.compress, format: opts?.format })
+  transmitRaw(write, image, id, { action: "T", z: opts?.z, placementId: opts?.placementId, mode: opts?.mode, compress: opts?.compress, format: opts?.format })
   write(`\x1b8`)
 }
 
@@ -547,15 +622,18 @@ export function patchRegion(
         return
       }
       lib.memcpy(mapAddr, Number(ptr(payload)), size)
+      lib.msync(mapAddr, size, MS_SYNC)
       lib.munmap(mapAddr, size)
       lib.close(fd)
       const nameB64 = Buffer.from(name).toString("base64")
+      recordKittyStats("shm", "patch", regionData.length, meta.length + nameB64.length + 16)
       write(`\x1b_G${meta},t=s;${nameB64}\x1b\\`)
       break
     }
     case "file": {
       try {
         const filePayload = writePersistentFilePayload(payload)
+        recordKittyStats("file", "patch", regionData.length, meta.length + filePayload.pathB64.length + 24)
         write(`\x1b_G${meta},t=f,S=${filePayload.size},O=${filePayload.offset};${filePayload.pathB64}\x1b\\`)
       } catch {
         patchRegionDirect(write, meta, payload)
@@ -574,9 +652,11 @@ function patchRegionDirect(write: (data: string) => void, meta: string, payload:
   if (chunks.length === 0) return
 
   if (chunks.length === 1) {
+    recordKittyStats("direct", "patch", payload.length, meta.length + chunks[0].length + 16)
     write(`\x1b_G${meta};${chunks[0]}\x1b\\`)
     return
   }
+  recordKittyStats("direct", "patch", payload.length, meta.length + b64.length + chunks.length * 12)
   write(`\x1b_G${meta},m=1;${chunks[0]}\x1b\\`)
   for (let i = 1; i < chunks.length - 1; i++) {
     write(`\x1b_Ga=f,m=1;${chunks[i]}\x1b\\`)
@@ -648,7 +728,7 @@ export function probeShm(
       const { ptr } = require("bun:ffi")
       const name = `/tge-probe-${process.pid}`
       const nameBytes = Buffer.from(name + "\0")
-      const size = 4 // 1x1 RGBA
+      const size = 64 * 64 * 4
 
       const fd = lib.shm_open(nameBytes, O_CREAT | O_RDWR, 0o600)
       probeDebug("probeShm:shm_open", { fd, name })
@@ -669,9 +749,11 @@ export function probeShm(
         return
       }
 
-      // Write 1 transparent pixel
-      const pixel = new Uint8Array([0, 0, 0, 0])
-      lib.memcpy(mapAddr, Number(ptr(pixel)), 4)
+      // Write a non-trivial payload so the probe is closer to real transport.
+      const pixel = new Uint8Array(size)
+      pixel.fill(0xff)
+      lib.memcpy(mapAddr, Number(ptr(pixel)), size)
+      lib.msync(mapAddr, size, MS_SYNC)
       lib.munmap(mapAddr, size)
       lib.close(fd)
 
@@ -679,7 +761,7 @@ export function probeShm(
       // Terminal will shm_unlink after reading (per spec)
       const nameB64 = Buffer.from(name).toString("base64")
       probeDebug("probeShm:query-sent", { name, nameB64 })
-      write(`\x1b_Gi=32,s=1,v=1,a=q,t=s,f=32;${nameB64}\x1b\\`)
+      write(`\x1b_Gi=32,s=64,v=64,a=q,t=s,f=32;${nameB64}\x1b\\`)
     } catch (error) {
       probeDebug("probeShm:exception", error)
       cleanup()

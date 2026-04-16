@@ -39,6 +39,12 @@ export type DebugStats = {
   frameTimeMs: number
   /** Number of compositing layers */
   layerCount: number
+  /** Layers moved via placement-only compositor updates this frame */
+  moveOnlyCount: number
+  /** Layers that wanted move-only but had to repaint instead */
+  moveFallbackCount: number
+  /** Stable layers reused without repaint */
+  stableReuseCount: number
   /** Dirty layers before rendering this frame */
   dirtyBeforeCount: number
   /** Layers actually repainted this frame */
@@ -47,16 +53,55 @@ export type DebugStats = {
   nodeCount: number
   /** Total render commands from Clay */
   commandCount: number
+  /** Selected renderer strategy for the current frame */
+  rendererStrategy: string | null
+  /** Actual presentation/output path used for the current frame */
+  rendererOutput: string | null
+  /** Whether this frame required CPU layer readback safety */
+  requiresLayerReadback: boolean
+  /** Total tracked renderer/cache bytes */
+  resourceBytes: number
+  /** GPU-side tracked bytes subset */
+  gpuResourceBytes: number
+  /** Total tracked cache/resource entries */
+  resourceEntries: number
+  /** Active terminal transmission mode used for output cost decisions */
+  transmissionMode: string | null
+  /** Estimated layered output bytes for this frame */
+  estimatedLayeredBytes: number
+  /** Estimated final-frame output bytes for this frame */
+  estimatedFinalBytes: number
+  /** Latency from latest input event to presented frame, if measured */
+  interactionLatencyMs: number
+  /** Last interaction kind that produced the measured latency */
+  interactionType: string | null
+  /** Monotonic sequence of the last interaction that reached presentation */
+  presentedInteractionSeq: number
 }
 
 const [debugEnabled, setDebugEnabled] = createSignal(false)
 const [fps, setFps] = createSignal(0)
 const [frameTimeMs, setFrameTimeMs] = createSignal(0)
 const [layerCount, setLayerCount] = createSignal(0)
+const [moveOnlyCount, setMoveOnlyCount] = createSignal(0)
+const [moveFallbackCount, setMoveFallbackCount] = createSignal(0)
+const [stableReuseCount, setStableReuseCount] = createSignal(0)
 const [dirtyBeforeCount, setDirtyBeforeCount] = createSignal(0)
 const [repaintedCount, setRepaintedCount] = createSignal(0)
 const [nodeCount, setNodeCount] = createSignal(0)
 const [commandCount, setCommandCount] = createSignal(0)
+const [rendererStrategy, setRendererStrategy] = createSignal<string | null>(null)
+const [rendererOutput, setRendererOutput] = createSignal<string | null>(null)
+const [requiresLayerReadback, setRequiresLayerReadback] = createSignal(false)
+const [resourceBytes, setResourceBytes] = createSignal(0)
+const [gpuResourceBytes, setGpuResourceBytes] = createSignal(0)
+const [resourceEntries, setResourceEntries] = createSignal(0)
+const [transmissionMode, setTransmissionMode] = createSignal<string | null>(null)
+const [estimatedLayeredBytes, setEstimatedLayeredBytes] = createSignal(0)
+const [estimatedFinalBytes, setEstimatedFinalBytes] = createSignal(0)
+const [interactionLatencyMs, setInteractionLatencyMs] = createSignal(0)
+const [interactionType, setInteractionType] = createSignal<string | null>(null)
+const [presentedInteractionSeq, setPresentedInteractionSeq] = createSignal(0)
 
 // FPS tracking
 let frameTimestamps: number[] = []
@@ -101,17 +146,47 @@ export function debugFrameStart(): () => void {
 /** Update debug stats from the render loop. */
 export function debugUpdateStats(stats: {
   layerCount: number
+  moveOnlyCount?: number
+  moveFallbackCount?: number
+  stableReuseCount?: number
   dirtyBeforeCount: number
   repaintedCount: number
   nodeCount: number
   commandCount: number
+  rendererStrategy?: string | null
+  rendererOutput?: string | null
+  requiresLayerReadback?: boolean
+  resourceBytes?: number
+  gpuResourceBytes?: number
+  resourceEntries?: number
+  transmissionMode?: string | null
+  estimatedLayeredBytes?: number
+  estimatedFinalBytes?: number
+  interactionLatencyMs?: number
+  interactionType?: string | null
+  presentedInteractionSeq?: number
 }) {
   if (!debugEnabled()) return
   setLayerCount(stats.layerCount)
+  setMoveOnlyCount(stats.moveOnlyCount ?? 0)
+  setMoveFallbackCount(stats.moveFallbackCount ?? 0)
+  setStableReuseCount(stats.stableReuseCount ?? 0)
   setDirtyBeforeCount(stats.dirtyBeforeCount)
   setRepaintedCount(stats.repaintedCount)
   setNodeCount(stats.nodeCount)
   setCommandCount(stats.commandCount)
+  setRendererStrategy(stats.rendererStrategy ?? null)
+  setRendererOutput(stats.rendererOutput ?? null)
+  setRequiresLayerReadback(stats.requiresLayerReadback ?? false)
+  setResourceBytes(stats.resourceBytes ?? 0)
+  setGpuResourceBytes(stats.gpuResourceBytes ?? 0)
+  setResourceEntries(stats.resourceEntries ?? 0)
+  setTransmissionMode(stats.transmissionMode ?? null)
+  setEstimatedLayeredBytes(stats.estimatedLayeredBytes ?? 0)
+  setEstimatedFinalBytes(stats.estimatedFinalBytes ?? 0)
+  setInteractionLatencyMs(stats.interactionLatencyMs ?? 0)
+  setInteractionType(stats.interactionType ?? null)
+  setPresentedInteractionSeq(stats.presentedInteractionSeq ?? 0)
 }
 
 /** Reactive debug stats — read in SolidJS components. */
@@ -120,10 +195,25 @@ export const debugState = {
   get fps() { return fps() },
   get frameTimeMs() { return frameTimeMs() },
   get layerCount() { return layerCount() },
+  get moveOnlyCount() { return moveOnlyCount() },
+  get moveFallbackCount() { return moveFallbackCount() },
+  get stableReuseCount() { return stableReuseCount() },
   get dirtyBeforeCount() { return dirtyBeforeCount() },
   get repaintedCount() { return repaintedCount() },
   get nodeCount() { return nodeCount() },
   get commandCount() { return commandCount() },
+  get rendererStrategy() { return rendererStrategy() },
+  get rendererOutput() { return rendererOutput() },
+  get requiresLayerReadback() { return requiresLayerReadback() },
+  get resourceBytes() { return resourceBytes() },
+  get gpuResourceBytes() { return gpuResourceBytes() },
+  get resourceEntries() { return resourceEntries() },
+  get transmissionMode() { return transmissionMode() },
+  get estimatedLayeredBytes() { return estimatedLayeredBytes() },
+  get estimatedFinalBytes() { return estimatedFinalBytes() },
+  get interactionLatencyMs() { return interactionLatencyMs() },
+  get interactionType() { return interactionType() },
+  get presentedInteractionSeq() { return presentedInteractionSeq() },
 }
 
 /**
@@ -132,7 +222,7 @@ export const debugState = {
  */
 export function debugStatsLine(): string {
   if (!debugEnabled()) return ""
-  return `${fps()} FPS | ${frameTimeMs()}ms | ${layerCount()} layers | ${dirtyBeforeCount()} dirty before | ${repaintedCount()} repainted | ${nodeCount()} nodes | ${commandCount()} cmds`
+  return `${fps()} FPS | ${frameTimeMs()}ms | ${layerCount()} layers | move=${moveOnlyCount()}/${moveFallbackCount()}/${stableReuseCount()} | ${dirtyBeforeCount()} dirty before | ${repaintedCount()} repainted | ${nodeCount()} nodes | ${commandCount()} cmds | strategy=${rendererStrategy() ?? "none"} | output=${rendererOutput() ?? "none"} | tx=${transmissionMode() ?? "none"} | est=${estimatedLayeredBytes()}/${estimatedFinalBytes()}B | input=${interactionType() ?? "none"}@${interactionLatencyMs()}ms | readback=${requiresLayerReadback() ? 1 : 0} | res=${resourceEntries()}@${resourceBytes()}B gpu=${gpuResourceBytes()}B`
 }
 
 function describeNode(node: TGENode, depth: number): string {

@@ -13,6 +13,8 @@ import { SIZING, DIRECTION, ALIGN_X, ALIGN_Y } from "./clay"
 
 export type TGENodeKind = "box" | "text" | "img" | "canvas" | "root"
 
+export type InteractionMode = "none" | "drag"
+
 /** Event passed to onPress handlers. Supports stopPropagation like DOM events. */
 export type PressEvent = {
   /** Prevent the event from bubbling to parent nodes. */
@@ -86,6 +88,8 @@ export type TGEProps = {
 
   // Compositing
   layer?: boolean  // Opt-in: this node becomes its own compositing layer
+  interactionMode?: InteractionMode
+  debugName?: string
 
   // Scrolling / Clipping
   scrollX?: boolean  // Enable horizontal scroll clipping
@@ -267,6 +271,8 @@ export type TGENode = {
   _accTransform: Float64Array | null
   /** Inverse accumulated transform — for hit-testing (screen → local coords) */
   _accTransformInverse: Float64Array | null
+  /** Transient engine-managed interaction mode for compositor optimizations. */
+  _interactionMode: InteractionMode
 }
 
 /** Computed layout geometry from Clay — written each frame after layout */
@@ -300,6 +306,7 @@ export function createNode(kind: TGENodeKind): TGENode {
     _transformInverse: null,
     _accTransform: null,
     _accTransformInverse: null,
+    _interactionMode: "none",
   }
 }
 

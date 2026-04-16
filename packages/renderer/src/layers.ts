@@ -51,6 +51,7 @@ export type Layer = {
   prevY: number
   prevW: number
   prevH: number
+  prevZ: number
   /** Accumulated global damage rect for this layer. */
   damageRect: DamageRect | null
 }
@@ -82,6 +83,7 @@ export function createLayer(z: number): Layer {
     prevY: -1,
     prevW: -1,
     prevH: -1,
+    prevZ: z,
     damageRect: null,
   }
   layers.set(id, layer)
@@ -123,7 +125,7 @@ export function anyLayerDirty(): boolean {
  * Update a layer's geometry. If position or size changed, marks it dirty.
  * Also ensures the pixel buffer exists and is the right size.
  */
-export function updateLayerGeometry(layer: Layer, x: number, y: number, w: number, h: number) {
+export function updateLayerGeometry(layer: Layer, x: number, y: number, w: number, h: number, opts?: { moveOnly?: boolean }) {
   if (w <= 0 || h <= 0) return
 
   const hadPrev = layer.prevW > 0 && layer.prevH > 0
@@ -146,8 +148,12 @@ export function updateLayerGeometry(layer: Layer, x: number, y: number, w: numbe
   }
 
   if (moved) {
-    layer.dirty = true
-    layer.damageRect = prevRect ? unionRect(prevRect, nextRect) : nextRect
+    if (opts?.moveOnly && !resized && layer.buf) {
+      layer.damageRect = null
+    } else {
+      layer.dirty = true
+      layer.damageRect = prevRect ? unionRect(prevRect, nextRect) : nextRect
+    }
   }
 
   if (!moved && !resized && !layer.damageRect) {
@@ -167,6 +173,7 @@ export function markLayerClean(layer: Layer) {
   layer.prevY = layer.y
   layer.prevW = layer.width
   layer.prevH = layer.height
+  layer.prevZ = layer.z
   layer.damageRect = null
 }
 

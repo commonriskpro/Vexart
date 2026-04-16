@@ -71,6 +71,16 @@ export type LayerComposer = {
     rh: number,
   ) => boolean
 
+  /** Re-place an already transmitted image without re-uploading pixels. */
+  placeLayer: (
+    imageId: number,
+    pixelX: number,
+    pixelY: number,
+    z: number,
+    cellW: number,
+    cellH: number,
+  ) => boolean
+
   /** Remove a layer's image from the terminal. */
   removeLayer: (imageId: number) => void
 
@@ -140,6 +150,8 @@ export function createLayerComposer(
     return { data: out, width: w, height: h, stride: w * 4 }
   }
 
+  const placementIdForLayer = (imageId: number) => imageId
+
   return {
     renderLayer(buf, imageId, pixelX, pixelY, z, cellW, cellH) {
       // Convert pixel coordinates to cell coordinates
@@ -148,7 +160,7 @@ export function createLayerComposer(
 
       // Delete old image before re-transmit — Kitty requires explicit removal
       // to update the visible placement reliably.
-      if (activeIds.has(imageId)) {
+      if (activeIds.has(imageId) && mode !== "shm") {
         kitty.remove(write, imageId)
       }
 
@@ -159,10 +171,10 @@ export function createLayerComposer(
       if (z < 0) {
         // Background layer — pre-composite on black (nothing behind it)
         const opaque = compositeOnBlack(buf)
-        kitty.transmitAt(write, opaque, imageId, col, row, { z, mode, compress })
+        kitty.transmitAt(write, opaque, imageId, col, row, { z, placementId: placementIdForLayer(imageId), mode, compress })
       } else {
         // Content layer — keep alpha for terminal compositing
-        kitty.transmitAt(write, buf, imageId, col, row, { z, mode, compress })
+        kitty.transmitAt(write, buf, imageId, col, row, { z, placementId: placementIdForLayer(imageId), mode, compress })
       }
       activeIds.add(imageId)
     },
@@ -171,16 +183,16 @@ export function createLayerComposer(
       const col = Math.floor(pixelX / cellW)
       const row = Math.floor(pixelY / cellH)
 
-      if (activeIds.has(imageId)) {
+      if (activeIds.has(imageId) && mode !== "shm") {
         kitty.remove(write, imageId)
       }
 
       if (z < 0) {
         // Raw path currently assumes the caller already prepared the final bytes.
         // Keep behavior explicit: no extra alpha compositing here.
-        kitty.transmitRawAt(write, { data, width, height }, imageId, col, row, { z, mode, compress, format: 32 })
+        kitty.transmitRawAt(write, { data, width, height }, imageId, col, row, { z, placementId: placementIdForLayer(imageId), mode, compress, format: 32 })
       } else {
-        kitty.transmitRawAt(write, { data, width, height }, imageId, col, row, { z, mode, compress, format: 32 })
+        kitty.transmitRawAt(write, { data, width, height }, imageId, col, row, { z, placementId: placementIdForLayer(imageId), mode, compress, format: 32 })
       }
       activeIds.add(imageId)
     },
@@ -188,6 +200,14 @@ export function createLayerComposer(
     patchLayer(regionData, imageId, rx, ry, rw, rh) {
       if (!activeIds.has(imageId)) return false
       kitty.patchRegion(write, imageId, regionData, rx, ry, rw, rh, { mode, compress })
+      return true
+    },
+
+    placeLayer(imageId, pixelX, pixelY, z, cellW, cellH) {
+      if (!activeIds.has(imageId)) return false
+      const col = Math.floor(pixelX / cellW)
+      const row = Math.floor(pixelY / cellH)
+      kitty.place(write, imageId, col, row, { z, placementId: placementIdForLayer(imageId) })
       return true
     },
 
