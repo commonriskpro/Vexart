@@ -1,0 +1,16 @@
+process.env.LIGHTCODE_CANVAS_BACKEND = process.env.LIGHTCODE_CANVAS_BACKEND ?? "wgpu"
+process.env.TGE_RENDERER_BACKEND = process.env.TGE_RENDERER_BACKEND ?? "gpu"
+
+process.env.LIGHTCODE_GPU_FIRST_SHOW_SHELL = "0"
+process.env.LIGHTCODE_GPU_FIRST_SHOW_HEADER = "0"
+process.env.LIGHTCODE_GPU_FIRST_SHOW_FOOTER = "0"
+process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_OVERLAY = "0"
+process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_LEGEND = "0"
+process.env.LIGHTCODE_GPU_FIRST_SHOW_MEMORY = "0"
+process.env.LIGHTCODE_GPU_FIRST_SHOW_DIFF = "0"
+process.env.LIGHTCODE_GPU_FIRST_SHOW_EDITOR = "0"
+process.env.LIGHTCODE_GPU_FIRST_SHOW_AGENT = "0"
+
+await import("./lightcode-gpu-first")
+
+export {}
