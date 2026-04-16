@@ -477,20 +477,20 @@ function GraphPlane(props: { selectedNode: string; onSelect: (id: string) => voi
 function MemoryPanel() {
   return (
     <Panel title="Memory" subtitle="LC_TOKENS · accentGolden.focusView" accent={C.warmLine} x={64} y={560} width={336} zIndex={12}>
-      <box direction="row" gap={space[1]}>
+      <box direction="row" gap={space[1]} width="grow">
         <Chip label="LC_TOKENS" active />
         <Chip label="accentGolden" />
         <Chip label="focusView" />
       </box>
-      <box direction="row" gap={space[2]}>
+      <box direction="row" gap={space[2]} width="grow">
         <Metric label="bufferSize" value="868:3704" warm />
         <Metric label="buffer" value="[396]" />
       </box>
       <Rule />
       <text color={C.textSoft} fontSize={10}>References</text>
-      <box direction="column" gap={space[2]}>
-        <box padding={space[2]} backgroundColor={C.chip} borderColor={C.panelBorder} borderWidth={1} cornerRadius={radius.sm}><text color={C.text} fontSize={10}>function_buffer_init()</text></box>
-        <box padding={space[2]} backgroundColor={C.chip} borderColor={C.panelBorder} borderWidth={1} cornerRadius={radius.sm}><text color={C.text} fontSize={10}>buffer.size › builtin.zig</text></box>
+      <box direction="column" gap={space[2]} width="grow">
+        <box width="grow" padding={space[2]} backgroundColor={C.chip} borderColor={C.panelBorder} borderWidth={1} cornerRadius={radius.sm}><text color={C.text} fontSize={10}>function_buffer_init()</text></box>
+        <box width="grow" padding={space[2]} backgroundColor={C.chip} borderColor={C.panelBorder} borderWidth={1} cornerRadius={radius.sm}><text color={C.text} fontSize={10}>buffer.size › builtin.zig</text></box>
       </box>
     </Panel>
   )
