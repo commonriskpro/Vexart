@@ -78,6 +78,7 @@ interface BoxProps {
   bottom?: number
   floatAttach?: { element?: number; parent?: number }
   pointerPassthrough?: boolean
+  interactionMode?: "none" | "drag"
   // Effects
   shadow?: ShadowProp
   glow?: { radius: number; color: string | number; intensity?: number }
@@ -445,9 +446,12 @@ declare module "solid-js" {
         maxHeight?: number
         flexGrow?: number
         layer?: boolean
+        interactionMode?: "none" | "drag"
         onMouseDown?: (evt: any) => void
         onMouseUp?: (evt: any) => void
         onMouseMove?: (evt: any) => void
+        onMouseOver?: (evt: any) => void
+        onMouseOut?: (evt: any) => void
         ref?: (handle: any) => void
       }
     }

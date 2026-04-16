@@ -689,6 +689,15 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
     return id
   }
 
+  const clearCanvasSpriteCache = () => {
+    if (!context) return
+    for (const record of canvasSpriteCache.values()) {
+      destroyWgpuCanvasImage(context, record.handle)
+      destroyWgpuCanvasTarget(context, record.target)
+    }
+    canvasSpriteCache.clear()
+  }
+
   const getCanvasSprite = (op: Extract<RenderGraphOp, { kind: "canvas" }>) => {
     if (!context) return null
     const viewport = op.canvas.viewport
@@ -1575,6 +1584,7 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
       currentFrameLayers = []
       activeLayerKeys.clear()
       suppressFinalPresentation = false
+      clearCanvasSpriteCache()
       if (!gpuAvailable || !context || !ctx.useLayerCompositing) {
         lastStrategy = null
         lastStrategyTelemetry = { preferred: null, chosen: null, estimatedLayeredBytes: 0, estimatedFinalBytes: 0 }

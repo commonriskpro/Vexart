@@ -27,6 +27,7 @@ import { createRenderLoop } from "./loop"
 import { render as solidRender } from "./reconciler"
 import { dispatchInput } from "./input"
 import { markDirty } from "./dirty"
+import { markAllDirty } from "./layers"
 import { resetFocus } from "./focus"
 import { resetSelection } from "./selection"
 import { bindLoop, unbindLoop } from "./pointer"
@@ -34,6 +35,7 @@ export { beginNodeInteraction, endNodeInteraction, useInteractionLayer } from ".
 
 export type { RenderLoop, RenderLoopOptions } from "./loop"
 export { createRenderLoop } from "./loop"
+export { markAllDirty } from "./layers"
 
 // Re-export SolidJS control flow
 export { For, Show, Switch, Match, Index, ErrorBoundary } from "./reconciler"

@@ -33,8 +33,9 @@
 
 import { createSignal, createContext, useContext, onMount, onCleanup, createEffect } from "solid-js"
 import type { JSX, Accessor } from "solid-js"
-import { markDirty, createParticleSystem } from "@tge/renderer"
+import { markDirty, createParticleSystem, useInteractionLayer } from "@tge/renderer"
 import type { CanvasContext, NodeMouseEvent, ParticleConfig, ParticleSystem } from "@tge/renderer"
+import type { InteractionBinding } from "@tge/renderer"
 
 // ── Scene item types ──
 
@@ -110,11 +111,14 @@ export type SceneCanvasProps = {
   /** Width/height props passed to the surface. */
   width?: number | string
   height?: number | string
+  /** Interaction layer binding for drag-only promotion/freeze. */
+  interaction?: InteractionBinding
   /** Children — <SceneNode>, <SceneEdge>, <SceneParticles> */
   children?: JSX.Element
 }
 
 export function SceneCanvas(props: SceneCanvasProps) {
+  const interaction = useInteractionLayer()
   // ── Scene registries ──
   const nodeMap = new Map<string, SceneNodeDef>()
   const edgeMap = new Map<string, SceneEdgeDef>()
@@ -207,11 +211,17 @@ export function SceneCanvas(props: SceneCanvasProps) {
         dragTarget = hit
         dragAnchorX = world.x - def.x()
         dragAnchorY = world.y - def.y()
+        const binding = props.interaction ?? "auto"
+        if (binding === "auto") interaction.begin("drag")
+        else if (binding !== "none") binding.begin("drag")
       }
     } else if (interactive) {
       isPanning = true
       panAnchorX = evt.x
       panAnchorY = evt.y
+      const binding = props.interaction ?? "auto"
+      if (binding === "auto") interaction.begin("drag")
+      else if (binding !== "none") binding.begin("drag")
     }
   }
 
@@ -244,6 +254,11 @@ export function SceneCanvas(props: SceneCanvasProps) {
   }
 
   function handleMouseUp() {
+    if (dragTarget || isPanning) {
+      const binding = props.interaction ?? "auto"
+      if (binding === "auto") interaction.end("drag")
+      else if (binding !== "none") binding.end("drag")
+    }
     dragTarget = null
     isPanning = false
   }
@@ -411,8 +426,10 @@ export function SceneCanvas(props: SceneCanvasProps) {
   return (
     <SceneCtx.Provider value={registry}>
       <surface
+        ref={interaction.ref}
         width={props.width ?? "grow"}
         height={props.height ?? "grow"}
+        interactionMode={interaction.mode() === "none" ? undefined : interaction.mode()}
         viewport={getViewport()}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}

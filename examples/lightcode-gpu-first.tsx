@@ -62,21 +62,22 @@ const MAX_FPS = Number(process.env.LIGHTCODE_MAX_FPS ?? 60)
 const IDLE_MAX_FPS = Number(process.env.LIGHTCODE_IDLE_MAX_FPS ?? 60)
 const FORCE_REPAINT = process.env.LIGHTCODE_FORCE_REPAINT === "1"
 const TRACE = process.env.LIGHTCODE_GPU_FIRST_TRACE === "1"
-const SHOW_SHELL = process.env.LIGHTCODE_GPU_FIRST_SHOW_SHELL !== "0"
-const SHOW_HEADER = process.env.LIGHTCODE_GPU_FIRST_SHOW_HEADER !== "0"
-const SHOW_FOOTER = process.env.LIGHTCODE_GPU_FIRST_SHOW_FOOTER !== "0"
-const SHOW_SPACE = process.env.LIGHTCODE_GPU_FIRST_SHOW_SPACE !== "0"
-const SHOW_GRAPH_BG = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_BG !== "0"
-const SHOW_GRAPH_EDGES = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_EDGES !== "0"
+const SHOW_SHELL = process.env.LIGHTCODE_GPU_FIRST_SHOW_SHELL === "1"
+const SHOW_HEADER = process.env.LIGHTCODE_GPU_FIRST_SHOW_HEADER === "1"
+const SHOW_FOOTER = process.env.LIGHTCODE_GPU_FIRST_SHOW_FOOTER === "1"
+const SHOW_SPACE = process.env.LIGHTCODE_GPU_FIRST_SHOW_SPACE === "1"
+const SHOW_GRAPH_BG = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_BG === "1"
+const SHOW_GRAPH_EDGES = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_EDGES === "1"
 const SHOW_GRAPH_NODES = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_NODES !== "0"
-const SHOW_GRAPH_OVERLAY = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_OVERLAY !== "0"
-const SHOW_GRAPH_LEGEND = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_LEGEND !== "0"
-const SHOW_MEMORY = process.env.LIGHTCODE_GPU_FIRST_SHOW_MEMORY !== "0"
-const SHOW_DIFF = process.env.LIGHTCODE_GPU_FIRST_SHOW_DIFF !== "0"
-const SHOW_EDITOR = process.env.LIGHTCODE_GPU_FIRST_SHOW_EDITOR !== "0"
-const SHOW_AGENT = process.env.LIGHTCODE_GPU_FIRST_SHOW_AGENT !== "0"
+const SHOW_GRAPH_OVERLAY = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_OVERLAY === "1"
+const SHOW_GRAPH_LEGEND = process.env.LIGHTCODE_GPU_FIRST_SHOW_GRAPH_LEGEND === "1"
+const SHOW_MEMORY = process.env.LIGHTCODE_GPU_FIRST_SHOW_MEMORY === "1"
+const SHOW_DIFF = process.env.LIGHTCODE_GPU_FIRST_SHOW_DIFF === "1"
+const SHOW_EDITOR = process.env.LIGHTCODE_GPU_FIRST_SHOW_EDITOR === "1"
+const SHOW_AGENT = process.env.LIGHTCODE_GPU_FIRST_SHOW_AGENT === "1"
 const PANEL_SHADOWS = process.env.LIGHTCODE_GPU_FIRST_PANEL_SHADOWS !== "0"
 const PANEL_GRADIENTS = process.env.LIGHTCODE_GPU_FIRST_PANEL_GRADIENTS !== "0"
+const NODES_ONLY_HARNESS = !SHOW_SHELL && !SHOW_HEADER && !SHOW_FOOTER && !SHOW_SPACE && !SHOW_GRAPH_BG && !SHOW_GRAPH_EDGES && !SHOW_GRAPH_OVERLAY && !SHOW_GRAPH_LEGEND && !SHOW_MEMORY && !SHOW_DIFF && !SHOW_EDITOR && !SHOW_AGENT
 
 const FRAME = { x: 34, y: 78, w: 1760, h: 826 }
 const panelBgCache = createCanvasImageCache()
@@ -288,16 +289,18 @@ function FooterBar() {
 }
 
 function GraphPlane(props: { selectedNode: string; onSelect: (id: string) => void }) {
-  const graphNodes = nodes.map((node) => ({ ...node, x: node.x - FRAME.x, y: node.y - FRAME.y }))
+  const graphNodes = NODES_ONLY_HARNESS ? nodes : nodes.map((node) => ({ ...node, x: node.x - FRAME.x, y: node.y - FRAME.y }))
   const graph = useDraggableGraph(graphNodes)
-  const bgSize = { w: FRAME.w, h: FRAME.h }
+  const bgSize = { w: NODES_ONLY_HARNESS ? 1860 : FRAME.w, h: NODES_ONLY_HARNESS ? 1160 : FRAME.h }
+  const graphWidth = NODES_ONLY_HARNESS ? "100%" : FRAME.w
+  const graphHeight = NODES_ONLY_HARNESS ? "100%" : FRAME.h
 
   return (
-    <box floating="root" floatOffset={{ x: FRAME.x, y: FRAME.y }} width={FRAME.w} height={FRAME.h} pointerPassthrough>
+    <box floating={NODES_ONLY_HARNESS ? undefined : "root"} floatOffset={NODES_ONLY_HARNESS ? undefined : { x: FRAME.x, y: FRAME.y }} width={graphWidth} height={graphHeight} pointerPassthrough={!NODES_ONLY_HARNESS}>
       <SceneCanvas
         interactive={false}
-        width={FRAME.w}
-        height={FRAME.h}
+        width={graphWidth}
+        height={graphHeight}
         viewport={{ x: 0, y: 0, zoom: 1 }}
         background={(ctx: CanvasContext) => {
           if (SHOW_GRAPH_BG) {
@@ -312,8 +315,8 @@ function GraphPlane(props: { selectedNode: string; onSelect: (id: string) => voi
 
           if (SHOW_SPACE && spaceBg) {
             spaceBg.draw(ctx, {
-              x: -Math.round((bgSize.w - FRAME.w) * 0.5),
-              y: -Math.round((bgSize.h - FRAME.h) * 0.5),
+              x: NODES_ONLY_HARNESS ? 0 : -Math.round((bgSize.w - FRAME.w) * 0.5),
+              y: NODES_ONLY_HARNESS ? 0 : -Math.round((bgSize.h - FRAME.h) * 0.5),
               w: bgSize.w,
               h: bgSize.h,
               nebulaOpacity: 0.28,
@@ -347,10 +350,14 @@ function GraphPlane(props: { selectedNode: string; onSelect: (id: string) => voi
               label={node.label}
               sublabel={node.subtitle}
               onSelect={() => {
+                appendFileSync(DEBUG_LOG, `[graph-select] ${node.id}\n`)
                 props.onSelect(node.id)
                 markDirty()
               }}
-              onDrag={(x, y) => graph.moveNode(node.id, x, y)}
+              onDrag={(x, y) => {
+                appendFileSync(DEBUG_LOG, `[graph-drag] ${node.id} ${Math.round(x)} ${Math.round(y)}\n`)
+                graph.moveNode(node.id, x, y)
+              }}
             />
           )}
         </For>
