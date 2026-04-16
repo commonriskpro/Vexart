@@ -145,6 +145,17 @@ export function SceneCanvas(props: SceneCanvasProps) {
     return props.viewport ?? { x: internalPanX(), y: internalPanY(), zoom: internalZoom() }
   }
 
+  function getViewportBounds() {
+    if (typeof props.width !== "number" || typeof props.height !== "number") return null
+    const vp = getViewport()
+    return {
+      left: vp.x,
+      top: vp.y,
+      right: vp.x + props.width / vp.zoom,
+      bottom: vp.y + props.height / vp.zoom,
+    }
+  }
+
   // ── Animation tick for particles ──
   let tickInterval: ReturnType<typeof setInterval> | null = null
   onMount(() => {
@@ -267,6 +278,29 @@ export function SceneCanvas(props: SceneCanvasProps) {
     ctx.bezier(from.x, from.y, cpx, cpy, to.x, to.y, { color: def.color, width: lineWidth })
   }
 
+  function isNodeVisible(def: SceneNodeDef) {
+    const bounds = getViewportBounds()
+    if (!bounds) return true
+    const x = def.x()
+    const y = def.y()
+    const glowPad = def.glow ? def.glow.radius * 2 : 0
+    const pad = def.radius + glowPad + 12
+    return x + pad >= bounds.left && x - pad <= bounds.right && y + pad >= bounds.top && y - pad <= bounds.bottom
+  }
+
+  function isEdgeVisible(def: SceneEdgeDef) {
+    const bounds = getViewportBounds()
+    if (!bounds) return true
+    const from = def.from()
+    const to = def.to()
+    const pad = Math.max(def.glowWidth ?? 0, def.width ?? 1, 48)
+    const minX = Math.min(from.x, to.x) - pad
+    const maxX = Math.max(from.x, to.x) + pad
+    const minY = Math.min(from.y, to.y) - pad
+    const maxY = Math.max(from.y, to.y) + pad
+    return maxX >= bounds.left && minX <= bounds.right && maxY >= bounds.top && minY <= bounds.bottom
+  }
+
   function drawNode(ctx: CanvasContext, def: SceneNodeDef) {
     const x = def.x()
     const y = def.y()
@@ -355,11 +389,13 @@ export function SceneCanvas(props: SceneCanvasProps) {
 
     // Layer 3: Edges
     for (const def of edgeMap.values()) {
+      if (!isEdgeVisible(def)) continue
       drawEdge(ctx, def)
     }
 
     // Layer 4: Nodes
     for (const def of nodeMap.values()) {
+      if (!isNodeVisible(def)) continue
       drawNode(ctx, def)
     }
 

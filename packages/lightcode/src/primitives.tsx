@@ -336,6 +336,7 @@ export function ShellFrame(props: {
   topRuleTo?: number
   bottomRuleTo?: number
   bottomRuleOpacity?: number
+  pointerPassthrough?: boolean
 }) {
   return (
     <box
@@ -352,6 +353,7 @@ export function ShellFrame(props: {
       borderWidth={1}
       cornerRadius={12}
       shadow={props.shadow}
+      pointerPassthrough={props.pointerPassthrough}
     >
       <box width="grow" height={1} gradient={{ type: "linear", from: 0xffffff08, to: props.topRuleTo ?? colors.warmLine, angle: 0 }} />
       <box width="grow" height="grow" direction="column">

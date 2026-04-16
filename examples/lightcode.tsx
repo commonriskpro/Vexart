@@ -10,6 +10,7 @@ import { createTerminal } from "@tge/terminal"
 import { createParser } from "@tge/input"
 import { getKittyTransportStats, resetKittyTransportStats } from "@tge/output"
 import { createSpaceBackground, type SpaceBackground, SceneCanvas, SceneNode, SceneEdge, SceneOverlay } from "@tge/components"
+import { useDraggableGraph } from "@tge/lightcode"
 import { tryCreateWgpuCanvasPainterBackend } from "../packages/renderer/src/wgpu-canvas-backend"
 import { radius, space } from "@tge/void"
 import type { CanvasContext, NodeMouseEvent } from "@tge/renderer"
@@ -256,10 +257,11 @@ const edges = [
 ]
 
 function NodeGraph(props: { selectedNode: string; onSelectedNodeChange: (id: string) => void }) {
-  const [positions, setPositions] = createSignal(Object.fromEntries(nodes.map((node) => [node.id, { x: node.x, y: node.y }])))
+  const graphNodes = nodes.map((node) => ({ ...node, x: node.x - WORKSPACE.x, y: node.y - WORKSPACE.y }))
+  const graph = useDraggableGraph(graphNodes)
   const [viewport, setViewport] = createSignal({ x: 0, y: 0, zoom: 1 })
   const frame = WORKSPACE
-  const bgSize = { w: 1860, h: 1160 }
+  const bgSize = { w: frame.w, h: frame.h }
 
   function clamp(v: number, lo: number, hi: number) {
     if (v < lo) return lo
@@ -267,108 +269,104 @@ function NodeGraph(props: { selectedNode: string; onSelectedNodeChange: (id: str
     return v
   }
 
-  function getPos(id: string) {
-    return () => positions()[id] ?? { x: 0, y: 0 }
-  }
-
   return (
-      <SceneCanvas
-        interactive={false}
-        viewport={viewport()}
-        onViewportChange={(vp) => {
-          debug(`[viewport] x=${vp.x.toFixed(2)} y=${vp.y.toFixed(2)} zoom=${vp.zoom.toFixed(3)}`)
-          setViewport(vp)
-        }}
-        background={(ctx: CanvasContext) => {
-        const bgBaseX = frame.x - Math.round((bgSize.w - frame.w) * 0.5)
-        const bgBaseY = frame.y - Math.round((bgSize.h - frame.h) * 0.5)
-
-      if (LIGHTCODE_GRAPH_BG) {
-          const graphBg = graphBgCache.get(frame.w, frame.h, "lightcode-graph-bg-v1", (bg) => {
-            bg.rect(0, 0, frame.w, frame.h, { fill: 0x0a0a0d88, stroke: T.frame, strokeWidth: 1 })
-            bg.radialGradient(690 - frame.x, 430 - frame.y, 540, 0xf3bf6b18, 0x00000000)
-            bg.radialGradient(260 - frame.x, 240 - frame.y, 300, 0xffffff08, 0x00000000)
-            bg.radialGradient(980 - frame.x, 660 - frame.y, 260, 0xf3bf6b10, 0x00000000)
-            bg.glow(690 - frame.x, 430 - frame.y, 170, 170, 0xf3bf6b30, 32)
-            bg.glow(1230 - frame.x, 208 - frame.y, 72, 72, 0xf3bf6b18, 18)
-          })
-          ctx.drawImage(frame.x, frame.y, frame.w, frame.h, graphBg.data, graphBg.width, graphBg.height, 1)
-        }
-
-        if (LIGHTCODE_GRAPH_NEBULA && spaceBg) {
-          spaceBg.draw(ctx, {
-            x: bgBaseX,
-            y: bgBaseY,
-            w: bgSize.w,
-            h: bgSize.h,
-            nebulaOpacity: 0.34,
-            starsOpacity: 0.88,
-            sparklesOpacity: 0.38,
-            atmosphereOpacity: 1,
-            showNebula: LIGHTCODE_SPACE_SHOW_NEBULA,
-            showAtmosphere: LIGHTCODE_SPACE_SHOW_ATMOSPHERE,
-            showStars: LIGHTCODE_SPACE_SHOW_STARS,
-            showSparkles: LIGHTCODE_SPACE_SHOW_SPARKLES,
-          })
-        }
-      }}
-    >
-      <For each={LIGHTCODE_GRAPH_EDGES ? edges : []}>
-        {(edge) => (
-          <SceneEdge
-            id={edge.id}
-            from={getPos(edge.from)}
-            to={getPos(edge.to)}
-            color={edge.color}
-            glow={LIGHTCODE_GRAPH_EDGE_GLOW}
-          />
-        )}
-      </For>
-
-      <For each={LIGHTCODE_GRAPH_NODES ? nodes : []}>
-        {(node) => (
-          <SceneNode
-            id={node.id}
-            x={() => positions()[node.id]?.x ?? node.x}
-            y={() => positions()[node.id]?.y ?? node.y}
-            radius={node.radius}
-            shape={node.shape}
-            fill={node.fill}
-            stroke={node.stroke}
-            glow={LIGHTCODE_GRAPH_NODE_GLOW ? { color: node.glow, radius: node.status === "active" ? 38 : 18, intensity: node.status === "active" ? 75 : 22 } : undefined}
-            selected={() => props.selectedNode === node.id}
-            label={LIGHTCODE_GRAPH_NODE_TEXT ? node.label : undefined}
-            sublabel={LIGHTCODE_GRAPH_NODE_TEXT ? node.subtitle : undefined}
-            statusDot={LIGHTCODE_GRAPH_NODE_STATUS && node.status === "active" ? { color: T.warm, glow: true } : undefined}
-            onSelect={() => {
-              props.onSelectedNodeChange(node.id)
-              markDirty()
-            }}
-            onDrag={(x, y) => {
-              setPositions((prev) => ({ ...prev, [node.id]: { x, y } }))
-              markDirty()
-            }}
-          />
-        )}
-      </For>
-
-      {LIGHTCODE_GRAPH_OVERLAY ? (
-        <SceneOverlay
-          id="active-chip"
-          draw={(ctx: CanvasContext) => {
-            const node = getNodeMeta(props.selectedNode)
-            const pos = positions()[props.selectedNode]
-            if (!pos) return
-            const x = pos.x - 92
-            const y = pos.y + 72
-            ctx.rect(x + 6, y + 6, 292, 54, { fill: 0x00000050, radius: 10 })
-            ctx.rect(x, y, 292, 54, { fill: 0x2b2118ee, radius: 10, stroke: 0xf3bf6b34, strokeWidth: 1 })
-            ctx.text(x + 16, y + 9, `Task: ${node.label || "active_node"}`, T.textPrimary)
-            ctx.text(x + 16, y + 28, `Type: ${node.kind}`, T.warmDim)
+      <box floating="root" floatOffset={{ x: frame.x, y: frame.y }} width={frame.w} height={frame.h}>
+        <SceneCanvas
+          interactive={false}
+          width={frame.w}
+          height={frame.h}
+          viewport={viewport()}
+          onViewportChange={(vp) => {
+            debug(`[viewport] x=${vp.x.toFixed(2)} y=${vp.y.toFixed(2)} zoom=${vp.zoom.toFixed(3)}`)
+            setViewport(vp)
           }}
-        />
-      ) : null}
-    </SceneCanvas>
+          background={(ctx: CanvasContext) => {
+            const bgBaseX = -Math.round((bgSize.w - frame.w) * 0.5)
+            const bgBaseY = -Math.round((bgSize.h - frame.h) * 0.5)
+
+            if (LIGHTCODE_GRAPH_BG) {
+              const graphBg = graphBgCache.get(frame.w, frame.h, "lightcode-graph-bg-v1", (bg) => {
+                bg.rect(0, 0, frame.w, frame.h, { fill: 0x0a0a0d88, stroke: T.frame, strokeWidth: 1 })
+                bg.radialGradient(690 - frame.x, 430 - frame.y, 540, 0xf3bf6b18, 0x00000000)
+                bg.radialGradient(260 - frame.x, 240 - frame.y, 300, 0xffffff08, 0x00000000)
+                bg.radialGradient(980 - frame.x, 660 - frame.y, 260, 0xf3bf6b10, 0x00000000)
+                bg.glow(690 - frame.x, 430 - frame.y, 170, 170, 0xf3bf6b30, 32)
+                bg.glow(1230 - frame.x, 208 - frame.y, 72, 72, 0xf3bf6b18, 18)
+              })
+              ctx.drawImage(0, 0, frame.w, frame.h, graphBg.data, graphBg.width, graphBg.height, 1)
+            }
+
+            if (LIGHTCODE_GRAPH_NEBULA && spaceBg) {
+              spaceBg.draw(ctx, {
+                x: bgBaseX,
+                y: bgBaseY,
+                w: bgSize.w,
+                h: bgSize.h,
+                nebulaOpacity: 0.34,
+                starsOpacity: 0.88,
+                sparklesOpacity: 0.38,
+                atmosphereOpacity: 1,
+                showNebula: LIGHTCODE_SPACE_SHOW_NEBULA,
+                showAtmosphere: LIGHTCODE_SPACE_SHOW_ATMOSPHERE,
+                showStars: LIGHTCODE_SPACE_SHOW_STARS,
+                showSparkles: LIGHTCODE_SPACE_SHOW_SPARKLES,
+              })
+            }
+          }}
+        >
+          <For each={LIGHTCODE_GRAPH_EDGES ? edges : []}>
+            {(edge) => (
+              <SceneEdge
+                id={edge.id}
+                from={graph.getEdgeAnchor(edge.from)}
+                to={graph.getEdgeAnchor(edge.to)}
+                color={edge.color}
+                glow={LIGHTCODE_GRAPH_EDGE_GLOW}
+              />
+            )}
+          </For>
+
+          <For each={LIGHTCODE_GRAPH_NODES ? graphNodes : []}>
+            {(node) => (
+              <SceneNode
+                id={node.id}
+                x={graph.getNodeX(node)}
+                y={graph.getNodeY(node)}
+                radius={node.radius}
+                shape={node.shape}
+                fill={node.fill}
+                stroke={node.stroke}
+                glow={LIGHTCODE_GRAPH_NODE_GLOW ? { color: node.glow, radius: node.status === "active" ? 38 : 18, intensity: node.status === "active" ? 75 : 22 } : undefined}
+                selected={() => props.selectedNode === node.id}
+                label={LIGHTCODE_GRAPH_NODE_TEXT ? node.label : undefined}
+                sublabel={LIGHTCODE_GRAPH_NODE_TEXT ? node.subtitle : undefined}
+                statusDot={LIGHTCODE_GRAPH_NODE_STATUS && node.status === "active" ? { color: T.warm, glow: true } : undefined}
+                onSelect={() => {
+                  props.onSelectedNodeChange(node.id)
+                  markDirty()
+                }}
+                onDrag={(x, y) => graph.moveNode(node.id, x, y)}
+              />
+            )}
+          </For>
+
+          {LIGHTCODE_GRAPH_OVERLAY ? (
+            <SceneOverlay
+              id="active-chip"
+              draw={(ctx: CanvasContext) => {
+                const node = getNodeMeta(props.selectedNode)
+                const pos = graph.getPosition(props.selectedNode)
+                const x = pos.x - 92
+                const y = pos.y + 72
+                ctx.rect(x + 6, y + 6, 292, 54, { fill: 0x00000050, radius: 10 })
+                ctx.rect(x, y, 292, 54, { fill: 0x2b2118ee, radius: 10, stroke: 0xf3bf6b34, strokeWidth: 1 })
+                ctx.text(x + 16, y + 9, `Task: ${node.label || "active_node"}`, T.textPrimary)
+                ctx.text(x + 16, y + 28, `Type: ${node.kind}`, T.warmDim)
+              }}
+            />
+          ) : null}
+        </SceneCanvas>
+      </box>
   )
 }
 

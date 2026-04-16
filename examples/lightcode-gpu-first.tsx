@@ -34,6 +34,7 @@ import {
   SurfaceCard,
   Toolbar,
   ToolIcon,
+  useDraggableGraph,
 } from "@tge/lightcode"
 import type { GraphLegendItemData } from "@tge/lightcode"
 import {
@@ -248,6 +249,7 @@ function Shell() {
       gradient={PANEL_GRADIENTS ? { type: "linear", from: C.frameInner, to: C.frame, angle: 90 } : undefined}
       borderColor={C.frameBorder}
       shadow={PANEL_SHADOWS ? { x: 0, y: 14, blur: 24, color: 0x00000028 } : undefined}
+      pointerPassthrough
     >
       <box width="grow" height="grow" />
     </ShellFrame>
@@ -286,88 +288,86 @@ function FooterBar() {
 }
 
 function GraphPlane(props: { selectedNode: string; onSelect: (id: string) => void }) {
-  const [positions, setPositions] = createSignal(Object.fromEntries(nodes.map((node) => [node.id, { x: node.x, y: node.y }])))
-  const bgSize = { w: 1860, h: 1160 }
-
-  function pos(id: string) {
-    return () => positions()[id] ?? { x: 0, y: 0 }
-  }
+  const graphNodes = nodes.map((node) => ({ ...node, x: node.x - FRAME.x, y: node.y - FRAME.y }))
+  const graph = useDraggableGraph(graphNodes)
+  const bgSize = { w: FRAME.w, h: FRAME.h }
 
   return (
-    <SceneCanvas
-      interactive={false}
-      viewport={{ x: 0, y: 0, zoom: 1 }}
-      background={(ctx: CanvasContext) => {
-        if (SHOW_GRAPH_BG) {
-          const graphBg = panelBgCache.get(FRAME.w, FRAME.h, "lightcode-gpu-first-bg", (bg) => {
-            bg.rect(0, 0, FRAME.w, FRAME.h, { fill: 0x090a0d88, stroke: C.frameBorder, strokeWidth: 1 })
-            bg.radialGradient(704 - FRAME.x, 430 - FRAME.y, 500, 0xf3bf6b14, 0x00000000)
-            bg.radialGradient(246 - FRAME.x, 240 - FRAME.y, 260, 0xffffff06, 0x00000000)
-            bg.glow(704 - FRAME.x, 430 - FRAME.y, 148, 148, 0xf3bf6b28, 26)
-          })
-          ctx.drawImage(FRAME.x, FRAME.y, FRAME.w, FRAME.h, graphBg.data, graphBg.width, graphBg.height, 1)
-        }
+    <box floating="root" floatOffset={{ x: FRAME.x, y: FRAME.y }} width={FRAME.w} height={FRAME.h} pointerPassthrough>
+      <SceneCanvas
+        interactive={false}
+        width={FRAME.w}
+        height={FRAME.h}
+        viewport={{ x: 0, y: 0, zoom: 1 }}
+        background={(ctx: CanvasContext) => {
+          if (SHOW_GRAPH_BG) {
+            const graphBg = panelBgCache.get(FRAME.w, FRAME.h, "lightcode-gpu-first-bg", (bg) => {
+              bg.rect(0, 0, FRAME.w, FRAME.h, { fill: 0x090a0d88, stroke: C.frameBorder, strokeWidth: 1 })
+              bg.radialGradient(704 - FRAME.x, 430 - FRAME.y, 500, 0xf3bf6b14, 0x00000000)
+              bg.radialGradient(246 - FRAME.x, 240 - FRAME.y, 260, 0xffffff06, 0x00000000)
+              bg.glow(704 - FRAME.x, 430 - FRAME.y, 148, 148, 0xf3bf6b28, 26)
+            })
+            ctx.drawImage(0, 0, FRAME.w, FRAME.h, graphBg.data, graphBg.width, graphBg.height, 1)
+          }
 
-        if (SHOW_SPACE && spaceBg) {
-          spaceBg.draw(ctx, {
-            x: FRAME.x - Math.round((bgSize.w - FRAME.w) * 0.5),
-            y: FRAME.y - Math.round((bgSize.h - FRAME.h) * 0.5),
-            w: bgSize.w,
-            h: bgSize.h,
-            nebulaOpacity: 0.28,
-            starsOpacity: 0.78,
-            sparklesOpacity: 0.24,
-            atmosphereOpacity: 0.8,
-            showNebula: true,
-            showAtmosphere: true,
-            showStars: true,
-            showSparkles: true,
-          })
-        }
-      }}
-    >
-      <For each={SHOW_GRAPH_EDGES ? edges : []}>
-        {(edge) => <SceneEdge id={edge.id} from={pos(edge.from)} to={pos(edge.to)} color={edge.color} glow />}
-      </For>
-
-      <For each={SHOW_GRAPH_NODES ? nodes : []}>
-        {(node) => (
-          <SceneNode
-            id={node.id}
-            x={() => positions()[node.id]?.x ?? node.x}
-            y={() => positions()[node.id]?.y ?? node.y}
-            radius={node.radius}
-            shape={node.shape}
-            fill={node.fill}
-            stroke={node.stroke}
-            glow={{ color: node.glow, radius: node.active ? 36 : 16, intensity: node.active ? 72 : 20 }}
-            selected={() => props.selectedNode === node.id}
-            label={node.label}
-            sublabel={node.subtitle}
-            onSelect={() => {
-              props.onSelect(node.id)
-              markDirty()
-            }}
-            onDrag={(x, y) => {
-              setPositions((prev) => ({ ...prev, [node.id]: { x, y } }))
-              markDirty()
-            }}
-          />
-        )}
-      </For>
-
-      {SHOW_GRAPH_OVERLAY ? <SceneOverlay
-        id="active-task-chip"
-        draw={(ctx: CanvasContext) => {
-          const node = getNode(props.selectedNode)
-          const position = positions()[props.selectedNode]
-          if (!position) return
-          const x = position.x - 86
-          const y = position.y + 68
-          drawOverlayCard(ctx, x, y, 270, 50, `Task: ${node.label || "active_node"}`, `Type: ${node.kind}`)
+          if (SHOW_SPACE && spaceBg) {
+            spaceBg.draw(ctx, {
+              x: -Math.round((bgSize.w - FRAME.w) * 0.5),
+              y: -Math.round((bgSize.h - FRAME.h) * 0.5),
+              w: bgSize.w,
+              h: bgSize.h,
+              nebulaOpacity: 0.28,
+              starsOpacity: 0.78,
+              sparklesOpacity: 0.24,
+              atmosphereOpacity: 0.8,
+              showNebula: true,
+              showAtmosphere: true,
+              showStars: true,
+              showSparkles: true,
+            })
+          }
         }}
-      /> : null}
-    </SceneCanvas>
+      >
+        <For each={SHOW_GRAPH_EDGES ? edges : []}>
+          {(edge) => <SceneEdge id={edge.id} from={graph.getEdgeAnchor(edge.from)} to={graph.getEdgeAnchor(edge.to)} color={edge.color} glow />}
+        </For>
+
+        <For each={SHOW_GRAPH_NODES ? graphNodes : []}>
+          {(node) => (
+            <SceneNode
+              id={node.id}
+              x={graph.getNodeX(node)}
+              y={graph.getNodeY(node)}
+              radius={node.radius}
+              shape={node.shape}
+              fill={node.fill}
+              stroke={node.stroke}
+              glow={{ color: node.glow, radius: node.active ? 36 : 16, intensity: node.active ? 72 : 20 }}
+              selected={() => props.selectedNode === node.id}
+              label={node.label}
+              sublabel={node.subtitle}
+              onSelect={() => {
+                props.onSelect(node.id)
+                markDirty()
+              }}
+              onDrag={(x, y) => graph.moveNode(node.id, x, y)}
+            />
+          )}
+        </For>
+
+        {SHOW_GRAPH_OVERLAY ? <SceneOverlay
+          id="active-task-chip"
+          draw={(ctx: CanvasContext) => {
+            const node = getNode(props.selectedNode)
+            const position = graph.getPosition(props.selectedNode)
+            if (!position) return
+            const x = position.x - 86
+            const y = position.y + 68
+            drawOverlayCard(ctx, x, y, 270, 50, `Task: ${node.label || "active_node"}`, `Type: ${node.kind}`)
+          }}
+        /> : null}
+      </SceneCanvas>
+    </box>
   )
 }
 
