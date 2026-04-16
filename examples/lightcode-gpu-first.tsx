@@ -14,24 +14,39 @@ process.env.TGE_RENDERER_BACKEND = "gpu"
 import { createSignal, For, type JSX } from "solid-js"
 import { appendFileSync } from "node:fs"
 import {
-  mount,
-  markDirty,
-  useInteractionLayer,
-  useDrag,
-  setDebug,
-  debugState,
+  AppBar,
+  Button,
+  Chip,
+  CodeFrame,
+  colors as lightcodeColors,
+  drawOverlayCard,
+  InlineActions,
+  KeyValueList,
+  Metric,
+  Panel,
+  PanelSection,
+  radius,
+  Rule,
+  space,
+  SurfaceCard,
+  Toolbar,
+  ToolIcon,
+} from "@tge/lightcode"
+import {
   createCanvasImageCache,
+  debugState,
   getCanvasPainterBackendName,
+  markDirty,
+  mount,
   probeWgpuCanvasBridge,
+  setDebug,
   setCanvasPainterBackend,
-  type NodeMouseEvent,
 } from "@tge/renderer"
 import { createTerminal } from "@tge/terminal"
 import { createParser } from "@tge/input"
 import { resetKittyTransportStats, getKittyTransportStats } from "@tge/output"
 import { createSpaceBackground, type SpaceBackground, SceneCanvas, SceneNode, SceneEdge, SceneOverlay } from "@tge/components"
 import { tryCreateWgpuCanvasPainterBackend } from "../packages/renderer/src/wgpu-canvas-backend"
-import { radius, space } from "@tge/void"
 import type { CanvasContext } from "@tge/renderer"
 
 const DEBUG_LOG = "/tmp/lightcode-gpu-first-debug.log"
@@ -62,31 +77,15 @@ const panelBgCache = createCanvasImageCache()
 let spaceBg: SpaceBackground | null = null
 
 const C = {
+  ...lightcodeColors,
   bg: 0x050507ff,
   frame: 0x0b0c10f8,
   frameInner: 0x0f1117e8,
   frameBorder: 0xffffff12,
-  line: 0xffffff08,
-  panel: 0x12141ae8,
-  panelAlt: 0x0f1117ec,
   panelInner: 0x0c0e13f6,
-  panelBorder: 0xffffff12,
-  panelBorderWarm: 0xf3bf6b20,
-  panelBorderCool: 0x8db5ff1c,
-  warm: 0xf3bf6bff,
   warmSoft: 0xf3bf6b2e,
-  warmLine: 0xf3bf6b22,
   blue: 0x90a8d0ff,
-  blueSoft: 0x90a8d028,
-  white: 0xf3ede2ff,
-  text: 0xe7dfd3ff,
-  textSoft: 0xbcb3a6ff,
-  textDim: 0x7d766eff,
-  textMute: 0x5d5852ff,
-  chip: 0xffffff06,
-  activeLine: 0xf3bf6b10,
-  activeBorder: 0xf3bf6b26,
-}
+} 
 
 type PanelId = "memory" | "diff" | "editor" | "agent"
 
@@ -202,133 +201,25 @@ async function loadSpace() {
   markDirty()
 }
 
-function usePanelDrag(id: string, x: number, y: number, interaction: ReturnType<typeof useInteractionLayer>) {
-  const [offsetX, setOffsetX] = createSignal(x)
-  const [offsetY, setOffsetY] = createSignal(y)
-  let anchorX = 0
-  let anchorY = 0
+function createPanelTraceHandlers(id: string) {
   let lastTraceAt = 0
 
-  const { dragProps, dragging } = useDrag({
-    interaction,
-    onDragStart: (event: NodeMouseEvent) => {
-      anchorX = event.nodeX
-      anchorY = event.nodeY
-      if (TRACE) log(`[drag-start] panel=${id} x=${offsetX()} y=${offsetY()} surfaces=${enabledSurfacesLine()}`)
+  return {
+    onDragStart: (_event: unknown, position: { x: number; y: number }) => {
+      if (TRACE) log(`[drag-start] panel=${id} x=${position.x} y=${position.y} surfaces=${enabledSurfacesLine()}`)
     },
-    onDrag: (event: NodeMouseEvent) => {
-      setOffsetX(Math.round(event.x - anchorX))
-      setOffsetY(Math.round(event.y - anchorY))
-      markDirty()
+    onDragMove: (_event: unknown, position: { x: number; y: number }) => {
       if (!TRACE) return
       const now = Date.now()
       if (now - lastTraceAt < 120) return
       lastTraceAt = now
-      log(`[drag] panel=${id} x=${Math.round(event.x - anchorX)} y=${Math.round(event.y - anchorY)} frameMs=${debugState.frameTimeMs} input=${debugState.interactionType ?? "none"} latency=${debugState.interactionLatencyMs} strategy=${debugState.rendererStrategy ?? "none"} output=${debugState.rendererOutput ?? "none"} dirty=${debugState.dirtyBeforeCount} repainted=${debugState.repaintedCount} moveOnly=${debugState.moveOnlyCount} moveFallback=${debugState.moveFallbackCount} stableReuse=${debugState.stableReuseCount}`)
+      log(`[drag] panel=${id} x=${position.x} y=${position.y} frameMs=${debugState.frameTimeMs} input=${debugState.interactionType ?? "none"} latency=${debugState.interactionLatencyMs} strategy=${debugState.rendererStrategy ?? "none"} output=${debugState.rendererOutput ?? "none"} dirty=${debugState.dirtyBeforeCount} repainted=${debugState.repaintedCount} moveOnly=${debugState.moveOnlyCount} moveFallback=${debugState.moveFallbackCount} stableReuse=${debugState.stableReuseCount}`)
     },
-    onDragEnd: () => {
+    onDragEnd: (_event: unknown, position: { x: number; y: number }) => {
       if (!TRACE) return
-      log(`[drag-end] panel=${id} x=${offsetX()} y=${offsetY()} frameMs=${debugState.frameTimeMs} input=${debugState.interactionType ?? "none"} latency=${debugState.interactionLatencyMs}`)
+      log(`[drag-end] panel=${id} x=${position.x} y=${position.y} frameMs=${debugState.frameTimeMs} input=${debugState.interactionType ?? "none"} latency=${debugState.interactionLatencyMs}`)
     },
-  })
-
-  return { dragProps, dragging, offsetX, offsetY }
-}
-
-function Rule() {
-  return <box width="grow" height={1} backgroundColor={C.line} />
-}
-
-function Chip(props: { label: string; active?: boolean }) {
-  return (
-    <box paddingX={space[2]} paddingY={4} backgroundColor={props.active ? 0xf3bf6b14 : C.chip} borderColor={props.active ? C.panelBorderWarm : C.panelBorder} borderWidth={1} cornerRadius={radius.sm}>
-      <text color={props.active ? C.white : C.textSoft} fontSize={9}>{props.label}</text>
-    </box>
-  )
-}
-
-function ToolIcon(props: { label: string; active?: boolean }) {
-  return (
-    <box width={18} height={18} alignX="center" alignY="center" backgroundColor={props.active ? 0xf3bf6b16 : 0xffffff03} borderColor={props.active ? C.panelBorderWarm : C.panelBorder} borderWidth={1} cornerRadius={radius.sm}>
-      <text color={props.active ? C.warm : C.textDim} fontSize={8}>{props.label}</text>
-    </box>
-  )
-}
-
-function Button(props: { label: string }) {
-  return (
-    <box paddingX={space[2]} paddingY={4} backgroundColor={0xf3bf6b18} borderColor={C.panelBorderWarm} borderWidth={1} cornerRadius={radius.sm}>
-      <text color={C.warm} fontSize={10}>{props.label}</text>
-    </box>
-  )
-}
-
-function Metric(props: { label: string; value: string; warm?: boolean }) {
-  return (
-    <box direction="column" gap={2} paddingX={space[2]} paddingY={space[1]} backgroundColor={props.warm ? 0xf3bf6b10 : C.chip} borderColor={props.warm ? C.panelBorderWarm : C.panelBorder} borderWidth={1} cornerRadius={radius.sm}>
-      <text color={C.textMute} fontSize={8}>{props.label}</text>
-      <text color={props.warm ? C.warm : C.text} fontSize={10}>{props.value}</text>
-    </box>
-  )
-}
-
-function PanelHeader(props: { title: string; subtitle?: string; accent?: number; dragProps?: Record<string, unknown> }) {
-  return (
-    <box {...(props.dragProps ?? {})} direction="column" gap={space[2]} width="grow">
-      <box direction="row" alignY="center" width="grow">
-        <text color={C.textSoft} fontSize={12}>{props.title}</text>
-        <box width="grow" />
-        <box direction="row" gap={space[1]}>
-          <ToolIcon label="◻" />
-          <ToolIcon label="✕" />
-        </box>
-      </box>
-      <box width="grow" height={1} gradient={{ type: "linear", from: 0xffffff06, to: props.accent ?? C.warmLine, angle: 0 }} />
-      {props.subtitle ? <text color={C.textDim} fontSize={9}>{props.subtitle}</text> : null}
-    </box>
-  )
-}
-
-function Panel(props: {
-  title: string
-  subtitle?: string
-  accent?: number
-  x: number
-  y: number
-  width: number
-  zIndex?: number
-  children: JSX.Element
-}) {
-  const interaction = useInteractionLayer()
-  const drag = usePanelDrag(props.title, props.x, props.y, interaction)
-
-  return (
-    <box
-      ref={interaction.ref}
-      layer
-      debugName={`panel:${props.title}`}
-      interactionMode={interaction.mode() === "none" ? undefined : interaction.mode()}
-      floating="root"
-      floatOffset={{ x: drag.offsetX(), y: drag.offsetY() }}
-      zIndex={props.zIndex ?? 10}
-      width={props.width}
-      backgroundColor={C.panel}
-      gradient={PANEL_GRADIENTS ? { type: "linear", from: C.panel, to: C.panelAlt, angle: 90 } : undefined}
-      borderColor={props.accent === C.blueSoft ? C.panelBorderCool : C.panelBorder}
-      borderWidth={1}
-      cornerRadius={12}
-      shadow={PANEL_SHADOWS ? { x: 0, y: 12, blur: 18, color: 0x00000024 } : undefined}
-      padding={space[3]}
-      direction="column"
-      gap={space[3]}
-    >
-      <PanelHeader title={props.title} subtitle={props.subtitle} accent={props.accent} dragProps={drag.dragProps as unknown as Record<string, unknown>} />
-      <Rule />
-      <box width="grow" direction="column" gap={space[3]} padding={space[1]}>
-        {props.children}
-      </box>
-    </box>
-  )
+  }
 }
 
 function Shell() {
@@ -357,22 +248,22 @@ function Shell() {
 
 function HeaderBar() {
   return (
-    <box layer debugName="header" floating="root" floatOffset={{ x: FRAME.x + 20, y: FRAME.y + 18 }} zIndex={20} direction="row" gap={space[2]}>
-      <box width={32} height={26} alignX="center" alignY="center" backgroundColor={C.panel} borderColor={C.panelBorder} borderWidth={1} cornerRadius={radius.sm}>
+    <box floating="root" floatOffset={{ x: FRAME.x + 20, y: FRAME.y + 18 }} direction="row" gap={space[2]}>
+      <SurfaceCard width={32} padded>
         <text color={C.textSoft} fontSize={11}>☰</text>
-      </box>
-      <box direction="row" gap={space[2]} alignY="center" paddingX={space[3]} height={26} backgroundColor={C.panel} borderColor={C.panelBorder} borderWidth={1} cornerRadius={radius.sm}>
+      </SurfaceCard>
+      <AppBar debugName="header" x={FRAME.x + 20 + 32 + space[2]} y={FRAME.y + 18} zIndex={20} gap={space[2]} paddingX={space[3]} height={26}>
         <text color={C.text} fontSize={11}>Compute Shaders</text>
         <text color={C.textDim} fontSize={9}>⌄</text>
         <text color={C.text} fontSize={11}>v_engine.zig</text>
-      </box>
+      </AppBar>
     </box>
   )
 }
 
 function FooterBar() {
   return (
-    <box layer debugName="footer" floating="root" floatOffset={{ x: FRAME.x + 18, y: FRAME.y + FRAME.h - 24 }} zIndex={20} direction="row" gap={space[3]} alignY="center" paddingX={space[3]} height={24} width={FRAME.w - 36} backgroundColor={C.panel} borderColor={C.panelBorder} borderWidth={1} cornerRadius={radius.sm}>
+    <AppBar debugName="footer" x={FRAME.x + 18} y={FRAME.y + FRAME.h - 24} zIndex={20} gap={space[3]} paddingX={space[3]} height={24} width={FRAME.w - 36}>
       <text color={C.warm} fontSize={10}>⚡</text>
       <text color={C.textSoft} fontSize={10}>L345</text>
       <text color={C.textDim} fontSize={10}>EC15</text>
@@ -382,7 +273,7 @@ function FooterBar() {
       <text color={C.textSoft} fontSize={10}>GPU-first</text>
       <box width="grow" />
       <text color={C.textSoft} fontSize={10}>Lightcode v2.0</text>
-    </box>
+    </AppBar>
   )
 }
 
@@ -465,10 +356,7 @@ function GraphPlane(props: { selectedNode: string; onSelect: (id: string) => voi
           if (!position) return
           const x = position.x - 86
           const y = position.y + 68
-          ctx.rect(x + 4, y + 4, 270, 50, { fill: 0x00000044, radius: 9 })
-          ctx.rect(x, y, 270, 50, { fill: 0x2a2118ea, radius: 9, stroke: 0xf3bf6b30, strokeWidth: 1 })
-          ctx.text(x + 16, y + 10, `Task: ${node.label || "active_node"}`, C.white)
-          ctx.text(x + 16, y + 28, `Type: ${node.kind}`, C.warm)
+          drawOverlayCard(ctx, x, y, 270, 50, `Task: ${node.label || "active_node"}`, `Type: ${node.kind}`)
         }}
       /> : null}
     </SceneCanvas>
@@ -477,7 +365,7 @@ function GraphPlane(props: { selectedNode: string; onSelect: (id: string) => voi
 
 function MemoryPanel() {
   return (
-    <Panel title="Memory" subtitle="LC_TOKENS · accentGolden.focusView" accent={C.warmLine} x={64} y={560} width={336} zIndex={12}>
+    <Panel title="Memory" subtitle="LC_TOKENS · accentGolden.focusView" accent={C.warmLine} x={64} y={560} width={336} zIndex={12} gradient={PANEL_GRADIENTS ? { type: "linear", from: C.panel, to: C.panelAlt, angle: 90 } : undefined} shadow={PANEL_SHADOWS ? { x: 0, y: 12, blur: 18, color: 0x00000024 } : undefined} {...createPanelTraceHandlers("Memory")}>
       <box direction="row" gap={space[1]} width="grow">
         <Chip label="LC_TOKENS" active />
         <Chip label="accentGolden" />
@@ -489,10 +377,10 @@ function MemoryPanel() {
       </box>
       <Rule />
       <text color={C.textSoft} fontSize={10}>References</text>
-      <box direction="column" gap={space[2]} width="grow">
-        <box width="grow" padding={space[2]} backgroundColor={C.chip} borderColor={C.panelBorder} borderWidth={1} cornerRadius={radius.sm}><text color={C.text} fontSize={10}>function_buffer_init()</text></box>
-        <box width="grow" padding={space[2]} backgroundColor={C.chip} borderColor={C.panelBorder} borderWidth={1} cornerRadius={radius.sm}><text color={C.text} fontSize={10}>buffer.size › builtin.zig</text></box>
-      </box>
+      <PanelSection gap={space[2]}>
+        <SurfaceCard width="grow" padded><text color={C.text} fontSize={10}>function_buffer_init()</text></SurfaceCard>
+        <SurfaceCard width="grow" padded><text color={C.text} fontSize={10}>buffer.size › builtin.zig</text></SurfaceCard>
+      </PanelSection>
     </Panel>
   )
 }
@@ -506,25 +394,24 @@ function DiffPanel() {
   ]
 
   return (
-    <Panel title="Diff / Changes" subtitle="LightEngine.zig" accent={C.warmLine} x={1262} y={124} width={474} zIndex={13}>
-      <box direction="row" gap={space[2]}>
+    <Panel title="Diff / Changes" subtitle="LightEngine.zig" accent={C.warmLine} x={1262} y={124} width={474} zIndex={13} gradient={PANEL_GRADIENTS ? { type: "linear", from: C.panel, to: C.panelAlt, angle: 90 } : undefined} shadow={PANEL_SHADOWS ? { x: 0, y: 12, blur: 18, color: 0x00000024 } : undefined} {...createPanelTraceHandlers("Diff / Changes")}>
+      <Toolbar>
         <Metric label="changes" value="04" warm />
         <Metric label="file" value="LightEngine.zig" />
-      </box>
-      <box direction="row" alignY="center" padding={space[2]} backgroundColor={C.chip} borderColor={C.panelBorder} borderWidth={1} cornerRadius={radius.sm}>
+      </Toolbar>
+      <SurfaceCard padded justify>
         <text color={C.warm} fontSize={11}>LightEngine.zig</text>
-        <box width="grow" />
         <text color={C.textDim} fontSize={9}>⌃</text>
-      </box>
-      <box direction="column" gap={space[1]}>
+      </SurfaceCard>
+      <PanelSection gap={space[1]}>
         <For each={lines}>{(line, index) => <box paddingX={index() === 2 ? space[1] : 0} paddingY={2} backgroundColor={index() === 2 ? 0x54211a28 : 0x00000000} borderColor={index() === 2 ? C.activeBorder : 0x00000000} borderWidth={index() === 2 ? 1 : 0} cornerRadius={radius.sm}><text color={index() < 2 ? C.warm : C.textSoft} fontSize={10}>{index() + 1} · {line}</text></box>}</For>
-      </box>
+      </PanelSection>
       <Rule />
-      <box direction="row" alignY="center">
+      <Toolbar>
         <text color={C.textDim} fontSize={9}>staged · ready</text>
         <box width="grow" />
         <Button label="Swap Changes" />
-      </box>
+      </Toolbar>
     </Panel>
   )
 }
@@ -543,51 +430,22 @@ function EditorPanel() {
   ]
 
   return (
-    <Panel title="v_engine.zig" subtitle="Compute Shader Pipeline" accent={C.warmLine} x={890} y={294} width={742} zIndex={14}>
-      <box direction="row" gap={space[2]} alignY="center">
-        <box direction="row" gap={space[2]} width="grow">
-          <Chip label="v_engine.zig" active />
-          <Chip label="Compute Shader" />
-          <Chip label="COMPUTE" />
-        </box>
-        <box direction="row" gap={space[1]}>
-          <ToolIcon label="◻" />
-          <ToolIcon label="▤" active />
-          <ToolIcon label="◉" />
-        </box>
-      </box>
-      <Rule />
-      <box direction="row" alignY="center">
-        <text color={C.warm} fontSize={14}>▣</text>
-        <text color={C.text} fontSize={14}>Compute Shader Pipeline</text>
-        <box width="grow" />
-        <text color={C.textDim} fontSize={9}>4D</text>
-      </box>
-      <Rule />
-      <box direction="column" gap={space[1]} padding={space[3]} backgroundColor={0xffffff02} borderColor={C.panelBorder} borderWidth={1} cornerRadius={radius.md}>
-        <For each={lines}>
-          {(line) => (
-            <box direction="row" gap={space[2]} alignY="center" paddingX={line.active ? space[1] : 0} paddingY={1} backgroundColor={line.active ? C.activeLine : 0x00000000} borderColor={line.active ? C.activeBorder : 0x00000000} borderWidth={line.active ? 1 : 0} cornerRadius={radius.sm}>
-              <box width={20} alignX="right"><text color={C.textDim} fontSize={9}>{line.n}</text></box>
-              {line.head ? <text color={C.warm} fontSize={10}>{line.head}</text> : null}
-              <text color={C.text} fontSize={10}>{line.tail}</text>
-            </box>
-          )}
-        </For>
-      </box>
-      <Rule />
-      <box direction="row" alignY="center" gap={space[2]}>
-        <text color={C.textDim} fontSize={9}>◈</text>
-        <text color={C.textSoft} fontSize={10}>return  v_engine</text>
-        <box width="grow" />
-        <Button label="Swap Changes" />
-      </box>
+    <Panel title="v_engine.zig" subtitle="Compute Shader Pipeline" accent={C.warmLine} x={890} y={294} width={742} zIndex={14} gradient={PANEL_GRADIENTS ? { type: "linear", from: C.panel, to: C.panelAlt, angle: 90 } : undefined} shadow={PANEL_SHADOWS ? { x: 0, y: 12, blur: 18, color: 0x00000024 } : undefined} {...createPanelTraceHandlers("v_engine.zig")}>
+      <CodeFrame
+        title="Compute Shader Pipeline"
+        chips={["v_engine.zig", "Compute Shader", "COMPUTE"]}
+        activeChip="v_engine.zig"
+        lines={lines}
+        rightMeta="4D"
+        tools={<InlineActions><ToolIcon label="◻" /><ToolIcon label="▤" active /><ToolIcon label="◉" /></InlineActions>}
+        footer={<Toolbar><text color={C.textDim} fontSize={9}>◈</text><text color={C.textSoft} fontSize={10}>return  v_engine</text><box width="grow" /><Button label="Swap Changes" /></Toolbar>}
+      />
     </Panel>
   )
 }
 
 function AgentPanel() {
-  const rows = [
+  const rows: Array<[string, string]> = [
     ["Status", "Success"],
     ["Compiler", "Runner"],
     ["File batch", "12.68, 7/66"],
@@ -595,19 +453,17 @@ function AgentPanel() {
   ]
 
   return (
-    <Panel title="Agent · Running" subtitle="Task · compute_shader_pipeline" accent={C.blueSoft} x={1322} y={662} width={404} zIndex={12}>
+    <Panel title="Agent · Running" subtitle="Task · compute_shader_pipeline" accent={C.blueSoft} x={1322} y={662} width={404} zIndex={12} gradient={PANEL_GRADIENTS ? { type: "linear", from: C.panel, to: C.panelAlt, angle: 90 } : undefined} shadow={PANEL_SHADOWS ? { x: 0, y: 12, blur: 18, color: 0x00000024 } : undefined} {...createPanelTraceHandlers("Agent · Running")}>
       <box direction="row" gap={space[2]}>
         <Metric label="agent" value="running" warm />
         <Metric label="task" value="compute" />
       </box>
-      <box direction="column" gap={space[2]} backgroundColor={0xffffff02} borderColor={C.panelBorder} borderWidth={1} cornerRadius={radius.sm} padding={space[2]}>
-        <For each={rows}>{(row) => <box direction="row" alignY="center"><text color={C.textDim} fontSize={9}>{row[0]}</text><box width="grow" /><text color={C.textSoft} fontSize={10}>{row[1]}</text></box>}</For>
-      </box>
+      <KeyValueList rows={rows} inset />
       <Rule />
-      <box direction="row" gap={space[2]} alignY="center" backgroundColor={C.chip} borderColor={C.panelBorder} borderWidth={1} cornerRadius={radius.sm} padding={space[2]}>
+      <Toolbar><SurfaceCard padded>
         <text color={C.textDim} fontSize={9}>⋮</text>
         <text color={C.textDim} fontSize={9}>runner ready</text>
-      </box>
+      </SurfaceCard></Toolbar>
     </Panel>
   )
 }

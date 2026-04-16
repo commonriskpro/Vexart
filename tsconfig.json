@@ -20,6 +20,7 @@
       "@tge/renderer": ["./packages/renderer/src/index.ts"],
       "@tge/renderer/*": ["./packages/renderer/src/*"],
       "@tge/components": ["./packages/components/src/index.ts"],
+      "@tge/lightcode": ["./packages/lightcode/src/index.ts"],
 
       "@tge/void": ["./packages/void/src/index.ts"]
     }
