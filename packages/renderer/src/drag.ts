@@ -16,6 +16,7 @@
  *   <box {...dragProps} width={200} height={12} backgroundColor="#333" />
  */
 
+import { createSignal } from "solid-js"
 import { type NodeMouseEvent } from "./node"
 import { type NodeHandle } from "./handle"
 import { setPointerCapture } from "./pointer"
@@ -51,7 +52,7 @@ export type DragState = {
 export function useDrag(opts: DragOptions): DragState {
   let nodeId = 0
   let node: NodeHandle["_node"] | null = null
-  let isDragging = false
+  const [dragging, setDragging] = createSignal(false)
 
   function handleRef(handle: NodeHandle) {
     nodeId = handle.id
@@ -62,26 +63,26 @@ export function useDrag(opts: DragOptions): DragState {
     if (opts.disabled?.()) return
     const allow = opts.onDragStart?.(evt)
     if (allow === false) return
-    isDragging = true
+    setDragging(true)
     if (node && (opts.interaction ?? "auto") === "auto") beginNodeInteraction(node, "drag")
     if (nodeId) setPointerCapture(nodeId)
   }
 
   function handleMouseMove(evt: NodeMouseEvent) {
-    if (!isDragging) return
+    if (!dragging()) return
     if (opts.disabled?.()) return
     opts.onDrag(evt)
   }
 
   function handleMouseUp(evt: NodeMouseEvent) {
-    if (!isDragging) return
-    isDragging = false
+    if (!dragging()) return
+    setDragging(false)
     if (node && (opts.interaction ?? "auto") === "auto") endNodeInteraction(node, "drag")
     opts.onDragEnd?.(evt)
   }
 
   return {
-    dragging: () => isDragging,
+    dragging,
     dragProps: {
       ref: handleRef,
       onMouseDown: handleMouseDown,

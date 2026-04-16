@@ -88,6 +88,7 @@ export type TGEProps = {
 
   // Compositing
   layer?: boolean  // Opt-in: this node becomes its own compositing layer
+  /** Declarative interaction state used by engine-level retained drag/compositor policies. */
   interactionMode?: InteractionMode
   debugName?: string
 

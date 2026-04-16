@@ -1,4 +1,6 @@
+import { createSignal } from "solid-js"
 import type { InteractionMode, TGENode } from "./node"
+import type { NodeHandle } from "./handle"
 import { markDirty } from "./dirty"
 
 function getNodeInteractionMode(node: TGENode): InteractionMode {
@@ -40,4 +42,40 @@ export function shouldPromoteInteractionLayer(node: TGENode | null | undefined):
 export function shouldFreezeInteractionLayer(node: TGENode | null | undefined): boolean {
   if (!node) return false
   return getNodeInteractionMode(node) === "drag"
+}
+
+export type InteractionLayerState = {
+  ref: (handle: NodeHandle) => void
+  node: () => TGENode | null
+  mode: () => InteractionMode
+  begin: (mode?: Exclude<InteractionMode, "none">) => void
+  end: (mode?: Exclude<InteractionMode, "none">) => void
+}
+
+export function useInteractionLayer(): InteractionLayerState {
+  let node: TGENode | null = null
+  const [mode, setMode] = createSignal<InteractionMode>("none")
+
+  function ref(handle: NodeHandle) {
+    node = handle._node
+  }
+
+  function begin(nextMode: Exclude<InteractionMode, "none"> = "drag") {
+    setMode(nextMode)
+    if (node) beginNodeInteraction(node, nextMode)
+  }
+
+  function end(expectedMode?: Exclude<InteractionMode, "none">) {
+    if (expectedMode && mode() !== expectedMode) return
+    setMode("none")
+    if (node) endNodeInteraction(node, expectedMode)
+  }
+
+  return {
+    ref,
+    node: () => node,
+    mode,
+    begin,
+    end,
+  }
 }

@@ -30,7 +30,7 @@ import { markDirty } from "./dirty"
 import { resetFocus } from "./focus"
 import { resetSelection } from "./selection"
 import { bindLoop, unbindLoop } from "./pointer"
-export { beginNodeInteraction, endNodeInteraction } from "./interaction"
+export { beginNodeInteraction, endNodeInteraction, useInteractionLayer } from "./interaction"
 
 export type { RenderLoop, RenderLoopOptions } from "./loop"
 export { createRenderLoop } from "./loop"
@@ -101,7 +101,7 @@ export type { NodeHandle } from "./handle"
 export { createHandle } from "./handle"
 
 // Re-export press event + mouse event types
-export type { PressEvent, NodeMouseEvent } from "./node"
+export type { PressEvent, NodeMouseEvent, InteractionMode } from "./node"
 
 // Re-export canvas API
 export { CanvasContext, createCanvasImageCache, getCanvasImageCacheStats } from "./canvas"
@@ -174,6 +174,7 @@ export { setPointerCapture, releasePointerCapture, onPostScroll } from "./pointe
 // Re-export drag hook
 export { useDrag } from "./drag"
 export type { DragOptions, DragProps, DragState } from "./drag"
+export type { InteractionLayerState } from "./interaction"
 
 // Re-export hover hook
 export { useHover } from "./hover"

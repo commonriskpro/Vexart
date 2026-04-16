@@ -14,10 +14,9 @@ process.env.TGE_RENDERER_BACKEND = "gpu"
 import { createSignal, For, type JSX } from "solid-js"
 import { appendFileSync } from "node:fs"
 import {
-  beginNodeInteraction,
-  endNodeInteraction,
   mount,
   markDirty,
+  useInteractionLayer,
   useDrag,
   setDebug,
   debugState,
@@ -26,7 +25,6 @@ import {
   probeWgpuCanvasBridge,
   setCanvasPainterBackend,
   type NodeMouseEvent,
-  type NodeHandle,
 } from "@tge/renderer"
 import { createTerminal } from "@tge/terminal"
 import { createParser } from "@tge/input"
@@ -204,7 +202,7 @@ async function loadSpace() {
   markDirty()
 }
 
-function usePanelDrag(id: string, x: number, y: number, getInteractionNode?: () => NodeHandle["_node"] | null) {
+function usePanelDrag(id: string, x: number, y: number, interaction: ReturnType<typeof useInteractionLayer>) {
   const [offsetX, setOffsetX] = createSignal(x)
   const [offsetY, setOffsetY] = createSignal(y)
   let anchorX = 0
@@ -216,8 +214,7 @@ function usePanelDrag(id: string, x: number, y: number, getInteractionNode?: () 
     onDragStart: (event: NodeMouseEvent) => {
       anchorX = event.nodeX
       anchorY = event.nodeY
-      const node = getInteractionNode?.()
-      if (node) beginNodeInteraction(node, "drag")
+      interaction.begin("drag")
       if (TRACE) log(`[drag-start] panel=${id} x=${offsetX()} y=${offsetY()} surfaces=${enabledSurfacesLine()}`)
     },
     onDrag: (event: NodeMouseEvent) => {
@@ -231,8 +228,7 @@ function usePanelDrag(id: string, x: number, y: number, getInteractionNode?: () 
       log(`[drag] panel=${id} x=${Math.round(event.x - anchorX)} y=${Math.round(event.y - anchorY)} frameMs=${debugState.frameTimeMs} input=${debugState.interactionType ?? "none"} latency=${debugState.interactionLatencyMs} strategy=${debugState.rendererStrategy ?? "none"} output=${debugState.rendererOutput ?? "none"} dirty=${debugState.dirtyBeforeCount} repainted=${debugState.repaintedCount} moveOnly=${debugState.moveOnlyCount} moveFallback=${debugState.moveFallbackCount} stableReuse=${debugState.stableReuseCount}`)
     },
     onDragEnd: () => {
-      const node = getInteractionNode?.()
-      if (node) endNodeInteraction(node, "drag")
+      interaction.end("drag")
       if (!TRACE) return
       log(`[drag-end] panel=${id} x=${offsetX()} y=${offsetY()} frameMs=${debugState.frameTimeMs} input=${debugState.interactionType ?? "none"} latency=${debugState.interactionLatencyMs}`)
     },
@@ -305,15 +301,15 @@ function Panel(props: {
   zIndex?: number
   children: JSX.Element
 }) {
-  let panelHandle: NodeHandle | undefined
-  const drag = usePanelDrag(props.title, props.x, props.y, () => panelHandle?._node ?? null)
+  const interaction = useInteractionLayer()
+  const drag = usePanelDrag(props.title, props.x, props.y, interaction)
 
   return (
     <box
-      ref={(handle) => { panelHandle = handle }}
+      ref={interaction.ref}
       layer
       debugName={`panel:${props.title}`}
-      interactionMode={drag.dragging() ? "drag" : undefined}
+      interactionMode={interaction.mode() === "none" ? undefined : interaction.mode()}
       floating="root"
       floatOffset={{ x: drag.offsetX(), y: drag.offsetY() }}
       zIndex={props.zIndex ?? 10}
