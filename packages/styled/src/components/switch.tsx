@@ -10,8 +10,8 @@
 
 import { Switch } from "@tge/components"
 import type { SwitchRenderContext } from "@tge/components"
-import { radius, space, font, weight } from "./tokens"
-import { themeColors } from "./theme"
+import { radius, space, font, weight } from "../tokens/tokens"
+import { themeColors } from "../theme/theme"
 
 const TRACK_WIDTH = 36
 const TRACK_HEIGHT = 20

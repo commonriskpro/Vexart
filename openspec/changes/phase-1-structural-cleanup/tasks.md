@@ -192,11 +192,11 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
 
 ## 12. Fold @tge/void into @vexart/styled (slice 12)
 
-- [ ] 12.1 Create subdirectory structure in `packages/styled/src/`: `tokens/`, `theme/`, `components/`, `typography/`
-- [ ] 12.2 `git mv packages/void/src/tokens.ts packages/styled/src/tokens/tokens.ts`
-- [ ] 12.3 `git mv packages/void/src/theme.ts packages/styled/src/theme/theme.ts`
-- [ ] 12.4 `git mv packages/void/src/typography.tsx packages/styled/src/typography/typography.tsx`
-- [ ] 12.5 Move all styled component files to `packages/styled/src/components/`:
+- [x] 12.1 Create subdirectory structure in `packages/styled/src/`: `tokens/`, `theme/`, `components/`, `typography/`
+- [x] 12.2 `git mv packages/void/src/tokens.ts packages/styled/src/tokens/tokens.ts`
+- [x] 12.3 `git mv packages/void/src/theme.ts packages/styled/src/theme/theme.ts`
+- [x] 12.4 `git mv packages/void/src/typography.tsx packages/styled/src/typography/typography.tsx`
+- [x] 12.5 Move all styled component files to `packages/styled/src/components/`:
   - `git mv packages/void/src/button.tsx packages/styled/src/components/button.tsx`
   - `git mv packages/void/src/card.tsx packages/styled/src/components/card.tsx`
   - `git mv packages/void/src/badge.tsx packages/styled/src/components/badge.tsx`
@@ -218,12 +218,12 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
   - `git mv packages/void/src/table.tsx packages/styled/src/components/table.tsx`
   - `git mv packages/void/src/toast.tsx packages/styled/src/components/toast.tsx`
   - `git mv packages/void/src/tooltip.tsx packages/styled/src/components/tooltip.tsx`
-- [ ] 12.6 Update internal imports within moved files — leave `@tge/*` bare imports as-is (shims exist). Fix any relative paths broken by the move
-- [ ] 12.7 Create subdirectory barrels: `tokens/index.ts`, `theme/index.ts`, `components/index.ts`, `typography/index.ts`
-- [ ] 12.8 Generate `packages/styled/src/index.ts` barrel re-exporting all subdirectory barrels, matching the old `@tge/void` export surface
-- [ ] 12.9 Update `packages/styled/src/public.ts` to re-export from `./index`
-- [ ] 12.10 Create shim: rewrite `packages/void/src/index.ts` to `export * from "@vexart/styled"`. Update `packages/void/package.json` to add `@vexart/styled: "workspace:*"` dependency. Delete moved files from old location
-- [ ] 12.11 Run `bun install && bun run typecheck` — must be green
+- [x] 12.6 Update internal imports within moved files — leave `@tge/*` bare imports as-is (shims exist). Fix any relative paths broken by the move
+- [x] 12.7 Create subdirectory barrels: `tokens/index.ts`, `theme/index.ts`, `components/index.ts`, `typography/index.ts`
+- [x] 12.8 Generate `packages/styled/src/index.ts` barrel re-exporting all subdirectory barrels, matching the old `@tge/void` export surface
+- [x] 12.9 Update `packages/styled/src/public.ts` to re-export from `./index`
+- [x] 12.10 Create shim: rewrite `packages/void/src/index.ts` to `export * from "@vexart/styled"`. Update `packages/void/package.json` to add `@vexart/styled: "workspace:*"` dependency. Delete moved files from old location
+- [x] 12.11 Run `bun install && bun run typecheck` — must be green
 - [ ] 12.12 Commit: `refactor(styled): fold @tge/void into @vexart/styled with shim`
 
 ## 13. Rename @tge/devtools to @vexart/internal-devtools (slice 13)

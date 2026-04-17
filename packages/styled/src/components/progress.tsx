@@ -10,8 +10,8 @@
 
 import { ProgressBar } from "@tge/components"
 import type { ProgressBarRenderContext } from "@tge/components"
-import { radius } from "./tokens"
-import { themeColors } from "./theme"
+import { radius } from "../tokens/tokens"
+import { themeColors } from "../theme/theme"
 
 export type VoidProgressProps = {
   value: number

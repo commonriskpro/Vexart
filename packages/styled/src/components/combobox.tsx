@@ -18,8 +18,8 @@
 
 import { Combobox } from "@tge/components"
 import type { ComboboxOption, ComboboxInputContext, ComboboxOptionContext } from "@tge/components"
-import { radius, space, font, shadows, glows } from "./tokens"
-import { themeColors } from "./theme"
+import { radius, space, font, shadows, glows } from "../tokens/tokens"
+import { themeColors } from "../theme/theme"
 
 export type VoidComboboxProps = {
   value?: string

@@ -11,8 +11,8 @@
  */
 
 import { Tooltip } from "@tge/components"
-import { radius, space, font, shadows } from "./tokens"
-import { themeColors } from "./theme"
+import { radius, space, font, shadows } from "../tokens/tokens"
+import { themeColors } from "../theme/theme"
 import type { JSX } from "solid-js"
 
 export type VoidTooltipProps = {

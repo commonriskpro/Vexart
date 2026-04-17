@@ -7,8 +7,8 @@
  * signals are read inside SolidJS effects (not captured eagerly).
  */
 
-import { radius, space, font, weight } from "./tokens"
-import { themeColors } from "./theme"
+import { radius, space, font, weight } from "../tokens/tokens"
+import { themeColors } from "../theme/theme"
 
 type BadgeVariant = "default" | "secondary" | "outline" | "destructive"
 

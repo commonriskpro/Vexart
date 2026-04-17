@@ -32,8 +32,8 @@ import { createContext, useContext } from "solid-js"
 import type { JSX } from "solid-js"
 import { Show } from "@tge/renderer-solid"
 import { Popover } from "@tge/components"
-import { radius, space, font, shadows } from "./tokens"
-import { themeColors } from "./theme"
+import { radius, space, font, shadows } from "../tokens/tokens"
+import { themeColors } from "../theme/theme"
 
 // ── Context ──
 

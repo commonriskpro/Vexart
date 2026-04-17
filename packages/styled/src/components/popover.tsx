@@ -20,8 +20,8 @@
  */
 
 import { Popover } from "@tge/components"
-import { radius, space, shadows } from "./tokens"
-import { themeColors } from "./theme"
+import { radius, space, shadows } from "../tokens/tokens"
+import { themeColors } from "../theme/theme"
 import type { JSX } from "solid-js"
 
 export type VoidPopoverProps = {

@@ -10,8 +10,8 @@
 
 import { Checkbox } from "@tge/components"
 import type { CheckboxRenderContext } from "@tge/components"
-import { radius, space, font, glows } from "./tokens"
-import { themeColors } from "./theme"
+import { radius, space, font, glows } from "../tokens/tokens"
+import { themeColors } from "../theme/theme"
 
 export type VoidCheckboxProps = {
   checked: boolean

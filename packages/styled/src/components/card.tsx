@@ -10,8 +10,8 @@
  *   └── CardFooter
  */
 
-import { radius, space, font, weight, shadows } from "./tokens"
-import { themeColors } from "./theme"
+import { radius, space, font, weight, shadows } from "../tokens/tokens"
+import { themeColors } from "../theme/theme"
 
 // ── Card ──
 

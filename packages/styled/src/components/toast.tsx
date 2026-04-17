@@ -17,8 +17,8 @@
 import { createToaster } from "@tge/components"
 import type { ToastData, ToastPosition, ToasterHandle } from "@tge/components"
 import type { JSX } from "solid-js"
-import { radius, space, font, weight, shadows } from "./tokens"
-import { themeColors } from "./theme"
+import { radius, space, font, weight, shadows } from "../tokens/tokens"
+import { themeColors } from "../theme/theme"
 
 export type VoidToasterOptions = {
   position?: ToastPosition

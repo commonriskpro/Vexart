@@ -17,8 +17,8 @@
 
 import { RadioGroup } from "@tge/components"
 import type { RadioOption, RadioOptionContext } from "@tge/components"
-import { radius, space, font, weight } from "./tokens"
-import { themeColors } from "./theme"
+import { radius, space, font, weight } from "../tokens/tokens"
+import { themeColors } from "../theme/theme"
 
 const INDICATOR_SIZE = 16
 const DOT_SIZE = 8

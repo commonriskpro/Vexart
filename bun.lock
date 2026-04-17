@@ -146,6 +146,9 @@
     "packages/void": {
       "name": "@tge/void",
       "version": "0.0.1",
+      "dependencies": {
+        "@vexart/styled": "workspace:*",
+      },
     },
   },
   "packages": {

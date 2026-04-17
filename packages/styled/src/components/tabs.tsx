@@ -17,8 +17,8 @@
 
 import { Tabs } from "@tge/components"
 import type { TabItem, TabRenderContext } from "@tge/components"
-import { radius, space, font, weight } from "./tokens"
-import { themeColors } from "./theme"
+import { radius, space, font, weight } from "../tokens/tokens"
+import { themeColors } from "../theme/theme"
 
 type TabsVariant = "default" | "line"
 

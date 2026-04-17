@@ -11,8 +11,8 @@
  * (not in intermediate objects) so SolidJS wraps them in tracked effects.
  */
 
-import { radius, space, font, weight, shadows, glows } from "./tokens"
-import { themeColors } from "./theme"
+import { radius, space, font, weight, shadows, glows } from "../tokens/tokens"
+import { themeColors } from "../theme/theme"
 
 type ButtonVariant = "default" | "secondary" | "outline" | "ghost" | "destructive" | "link"
 type ButtonSize = "xs" | "sm" | "default" | "lg" | "icon" | "icon-sm" | "icon-lg"

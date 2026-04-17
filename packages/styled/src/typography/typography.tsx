@@ -4,8 +4,8 @@
  * H1, H2, H3, H4, P, Lead, Large, Small, Muted
  */
 
-import { font, weight } from "./tokens"
-import { themeColors } from "./theme"
+import { font, weight } from "../tokens/tokens"
+import { themeColors } from "../theme/theme"
 
 export interface TypographyProps {
   children?: any

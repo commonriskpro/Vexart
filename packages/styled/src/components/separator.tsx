@@ -4,7 +4,7 @@
  * Orientation: horizontal (default), vertical
  */
 
-import { themeColors } from "./theme"
+import { themeColors } from "../theme/theme"
 
 export interface SeparatorProps {
   orientation?: "horizontal" | "vertical"

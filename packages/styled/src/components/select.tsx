@@ -18,8 +18,8 @@
 
 import { Select } from "@tge/components"
 import type { SelectOption, SelectTriggerContext, SelectOptionContext } from "@tge/components"
-import { radius, space, font, shadows, glows } from "./tokens"
-import { themeColors } from "./theme"
+import { radius, space, font, shadows, glows } from "../tokens/tokens"
+import { themeColors } from "../theme/theme"
 
 export type VoidSelectProps = {
   value?: string

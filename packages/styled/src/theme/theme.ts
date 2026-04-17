@@ -20,7 +20,7 @@
  */
 
 import { createSignal, createContext, useContext } from "solid-js"
-import { colors as defaultColors, radius, space, font, weight, shadows } from "./tokens"
+import { colors as defaultColors, radius, space, font, weight, shadows } from "../tokens/tokens"
 
 // ── Types ──
 

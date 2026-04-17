@@ -5,8 +5,8 @@
  * Shows a colored circle with the first character of the name.
  */
 
-import { font, weight } from "./tokens"
-import { themeColors } from "./theme"
+import { font, weight } from "../tokens/tokens"
+import { themeColors } from "../theme/theme"
 
 type AvatarSize = "sm" | "default" | "lg"
 

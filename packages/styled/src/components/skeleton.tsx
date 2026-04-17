@@ -4,8 +4,8 @@
  * Renders a muted rounded rectangle as a content placeholder.
  */
 
-import { radius } from "./tokens"
-import { themeColors } from "./theme"
+import { radius } from "../tokens/tokens"
+import { themeColors } from "../theme/theme"
 
 export interface SkeletonProps {
   width?: number | string
