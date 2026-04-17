@@ -10,7 +10,7 @@
  * Run: bun --conditions=browser run examples/text-wrap.tsx
  */
 
-import { mount, onInput } from "@tge/renderer"
+import { mount, onInput } from "@tge/renderer-solid"
 import { Box, Text, RichText, Span } from "@tge/components"
 import { colors, radius, space, shadows } from "@tge/void"
 import { createTerminal } from "@tge/terminal"

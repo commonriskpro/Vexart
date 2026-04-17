@@ -66,9 +66,9 @@ La branch se considera útil solo si produce TODOS estos outputs:
 - `packages/renderer/src/gpu-frame-composer.ts`
 - `packages/renderer/src/gpu-layer-strategy.ts`
 - `packages/renderer/src/gpu-raster-staging.ts`
-- `packages/renderer/src/surface-transform-staging.ts`
 - `packages/renderer/src/render-surface.ts`
 - `packages/renderer/src/canvas.ts`
+- `packages/renderer/src/wgpu-mixed-scene.ts`
 - `packages/renderer/src/wgpu-canvas-backend.ts`
 - `packages/renderer/src/focus.ts`
 - `packages/renderer/src/interaction.ts`
@@ -155,7 +155,7 @@ Entender quién compone realmente y dónde sigue entrando compat/fallback.
 - `packages/output/src/kitty.ts`
 - `packages/pixel/src/*`
 - `packages/renderer/src/gpu-raster-staging.ts`
-- `packages/renderer/src/surface-transform-staging.ts`
+- `packages/renderer/src/wgpu-mixed-scene.ts`
 
 ### Questions to answer
 - quién es el compositor real hoy

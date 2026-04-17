@@ -9,7 +9,7 @@ Practical patterns for building TGE applications. Each recipe is self-contained 
 The smallest possible TGE application:
 
 ```tsx
-import { mount } from "@tge/renderer"
+import { mount } from "@tge/renderer-solid"
 import { Box, Text } from "@tge/components"
 import { createTerminal } from "@tge/terminal"
 
@@ -32,7 +32,7 @@ mount(App, terminal)
 Classic counter with keyboard interaction:
 
 ```tsx
-import { mount } from "@tge/renderer"
+import { mount } from "@tge/renderer-solid"
 import { Box, Text, Button } from "@tge/components"
 import { colors, radius, space } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
@@ -65,7 +65,7 @@ mount(App, terminal)
 A contact form with validation:
 
 ```tsx
-import { mount, onInput } from "@tge/renderer"
+import { mount, onInput } from "@tge/renderer-solid"
 import { Box, Text, Input, Button } from "@tge/components"
 import { colors, radius, space, shadows } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
@@ -139,7 +139,7 @@ mount(App, terminal)
 Multiple independent widgets, each on its own compositing layer:
 
 ```tsx
-import { mount } from "@tge/renderer"
+import { mount } from "@tge/renderer-solid"
 import { Box, Text } from "@tge/components"
 import { colors, radius, space, shadows } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
@@ -195,7 +195,7 @@ mount(App, terminal)
 ## Settings Panel with Tabs
 
 ```tsx
-import { mount } from "@tge/renderer"
+import { mount } from "@tge/renderer-solid"
 import { Box, Text, Tabs, Checkbox, List } from "@tge/components"
 import { colors, radius, space, shadows } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
@@ -271,12 +271,13 @@ mount(App, terminal)
 ## Scrollable Log Viewer
 
 ```tsx
-import { mount, onInput } from "@tge/renderer"
+import { mount } from "@tge/renderer-solid"
+import { onInput } from "@tge/runtime"
 import { Box, Text, ScrollView } from "@tge/components"
 import { colors, radius, space } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
 import { createSignal, onCleanup } from "solid-js"
-import { For } from "@tge/renderer"
+import { For } from "@tge/renderer-solid"
 
 function App() {
   const [logs, setLogs] = createSignal<string[]>([])
@@ -384,7 +385,7 @@ process.stdin.on("data", (data) => {
 ## Conditional Rendering
 
 ```tsx
-import { Show } from "@tge/renderer"
+import { Show } from "@tge/renderer-solid"
 import { createSignal } from "solid-js"
 
 function App() {
@@ -410,7 +411,7 @@ function App() {
 ## Dynamic Lists
 
 ```tsx
-import { For } from "@tge/renderer"
+import { For } from "@tge/renderer-solid"
 import { createSignal } from "solid-js"
 
 function TodoList() {
@@ -446,11 +447,12 @@ function TodoList() {
 Using `createForm` for full form lifecycle management:
 
 ```tsx
-import { mount, useQuery, useMutation } from "@tge/renderer"
+import { mount } from "@tge/renderer-solid"
+import { useQuery, useMutation } from "@tge/runtime"
 import { Box, Text, Input, Button, createForm } from "@tge/components"
 import { colors, radius, space, shadows } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
-import { Show } from "@tge/renderer"
+import { Show } from "@tge/renderer-solid"
 
 function RegistrationForm() {
   const form = createForm({
@@ -539,11 +541,12 @@ mount(RegistrationForm, terminal)
 `useQuery` for async data, `useMutation` for operations:
 
 ```tsx
-import { mount, useQuery, useMutation } from "@tge/renderer"
+import { mount } from "@tge/renderer-solid"
+import { useQuery, useMutation } from "@tge/runtime"
 import { Box, Text, VirtualList } from "@tge/components"
 import { colors, space, radius } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
-import { Show, For } from "@tge/renderer"
+import { Show, For } from "@tge/renderer-solid"
 
 type User = { id: number; name: string; email: string }
 
@@ -613,7 +616,7 @@ mount(UserManager, terminal)
 Render 10,000 items with no performance hit. Mouse hover highlights items, click to select:
 
 ```tsx
-import { mount } from "@tge/renderer"
+import { mount } from "@tge/renderer-solid"
 import { Box, Text, VirtualList } from "@tge/components"
 import { colors, space, radius } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
@@ -677,7 +680,8 @@ mount(BigList, terminal)
 Spring physics and eased transitions:
 
 ```tsx
-import { mount, createTransition, createSpring } from "@tge/renderer"
+import { mount } from "@tge/renderer-solid"
+import { createTransition, createSpring } from "@tge/runtime"
 import { Box, Text } from "@tge/components"
 import { colors, radius } from "@tge/void"
 import { createTerminal } from "@tge/terminal"

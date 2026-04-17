@@ -65,11 +65,11 @@ La prioridad ya no es “seguir agregando packages” sino:
 | --- | --- | --- | --- | --- |
 | `@tge/platform-terminal` | `packages/terminal/src/*` | bridge | el nombre nuevo existe, pero el ownership real sigue en `terminal` | keep publicly, avoid pretending the bridge is the owner |
 | `@tge/input` | `packages/input/src/*` | real | parser/input ya tiene cohesión razonable | keep |
-| `@tge/renderer-solid` | `packages/renderer/src/index.ts` | bridge | runtime público útil, ownership físico todavía en renderer | keep public, reduce internal dependence on facade layering |
-| `@tge/scene` | `packages/renderer/src/node.ts` | bridge | dominio nominal todavía no es package real | retire or make real |
-| `@tge/layout-clay` | `packages/renderer/src/clay.ts` | bridge-to-real-ish | boundary útil, pero todavía simple reexport | acceptable short term; make real only if ownership moves |
-| `@tge/render-graph` | `packages/renderer/src/render-graph.ts` | bridge | dominio todavía no es físicamente independiente | retire or make real |
-| `@tge/text` | `packages/renderer/src/text-layout.ts` + `font-atlas.ts` | bridge | text no está físicamente separado | retire or make real |
+| `@tge/renderer-solid` | `packages/renderer-solid/src/*` + `packages/renderer/src/index.ts` compat umbrella | bridge | facade pública útil, pero el ownership engine/runtime principal ya vive en core/runtime | keep public, reduce umbrella scope over time |
+| `@tge/scene` | `packages/core/src/node.ts` | bridge-to-real-ish | el árbol retenido ya tiene owner físico real aunque el package nominal siga siendo debatible | keep as concept or retire facade later |
+| `@tge/layout-clay` | `packages/core/src/clay.ts` | bridge-to-real-ish | boundary útil con owner físico real | acceptable short term |
+| `@tge/render-graph` | `packages/core/src/render-graph.ts` | bridge-to-real-ish | dominio ya tiene owner físico real en core | acceptable short term |
+| `@tge/text` | `packages/core/src/text-layout.ts` + `font-atlas.ts` | bridge-to-real-ish | text ya no vive físicamente en renderer | acceptable short term |
 | `@tge/gpu` | renderer GPU modules | bridge-to-real-ish | API pública útil, pero ownership sigue mezclado | keep public, simplify internal graph |
 | `@tge/compositor` | renderer/output internals | bridge | package nominal sin ownership verdadero | decide real owner or retire |
 | `@tge/output-kitty` | `packages/output/src/kitty*.ts` | bridge-to-real-ish | boundary oficial útil | keep, but clarify kitty/compositor split |
@@ -87,10 +87,10 @@ La prioridad ya no es “seguir agregando packages” sino:
 
 ```txt
 packages/renderer/src/index.ts
-  -> packages/renderer/src/loop.ts
-  -> packages/renderer/src/node.ts
-  -> packages/renderer/src/clay.ts
-  -> packages/renderer/src/render-graph.ts
+  -> packages/runtime/src/loop.ts
+  -> packages/core/src/node.ts
+  -> packages/core/src/clay.ts
+  -> packages/core/src/render-graph.ts
   -> gpu backends + raster staging helpers
   -> packages/output/src/layer-composer.ts
   -> terminal output
@@ -100,7 +100,7 @@ packages/renderer/src/index.ts
 
 El sistema hoy sigue siendo más parecido a:
 
-`renderer/index + loop + internal modules + kitty output helpers`
+`renderer compat umbrella + runtime/core owners + kitty output helpers`
 
 que a una cadena limpia de packages dueños independientes.
 
@@ -112,13 +112,9 @@ que a una cadena limpia de packages dueños independientes.
 | --- | --- | --- | --- | --- | --- |
 | `packages/terminal/src/*` | stable | ✅ |  |  | buen dominio real |
 | `packages/input/src/*` | stable | ✅ |  |  | buen dominio real |
-| `packages/renderer/src/index.ts` | overloaded | ✅ |  | simplify | sigue siendo kitchen sink runtime |
-| `packages/renderer/src/loop.ts` | partial split | ✅ |  | simplify | todavía demasiado central |
-| `packages/renderer/src/node.ts` | core but misplaced | ✅ |  | maybe move later | hoy sigue siendo dueño real del árbol |
-| `packages/renderer/src/clay.ts` | healthy internal owner | ✅ |  | maybe move later | boundary útil |
-| `packages/renderer/src/render-graph.ts` | improved | ✅ |  | simplify | `image/canvas/effect` ya usan `renderObjectId`; queda limpiar ownership adyacente |
-| `packages/renderer/src/gpu-renderer-backend.ts` | official path but still mixed | ✅ |  | simplify | sacar dependencia conceptual de compat |
-| `packages/renderer/src/gpu-frame-composer.ts` | adaptor | ✅ |  | review owner | define si queda en compositor o output |
+| `packages/renderer/src/index.ts` | compatibility umbrella | ✅ |  | simplify | ya no es owner del engine/runtime; queda como facade pública |
+| `packages/core/src/*` | real engine owner | ✅ |  |  | core físico ya consolidado |
+| `packages/runtime/src/*` | real runtime owner | ✅ |  |  | runtime físico ya consolidado |
 | `packages/renderer/src/cpu-renderer-backend.ts` | retired |  |  | remove | ya salió del repo oficial |
 | `packages/pixel/src/*` | staging implementation |  |  | reduce conceptual role | no más centro conceptual del renderer |
 | `packages/output/src/kitty*.ts` | official path | ✅ |  |  | keep as real backend owner |
@@ -141,14 +137,14 @@ que a una cadena limpia de packages dueños independientes.
 ### 1. Fake package clarity
 Hay packages con buen naming pero sin ownership real.
 
-### 2. Loop still dominates reasoning
-Aunque tenga helpers nuevos, `loop.ts` sigue siendo la explicación operativa del sistema.
+### 2. Runtime loop still dominates reasoning
+Aunque ya viva en `packages/runtime/src/loop.ts`, el loop sigue siendo la explicación operativa del sistema.
 
 ### 3. Compat still leaks into official path
 El hot path oficial ya no arrastra CPU backend ni output compat, pero todavía arrastra demasiado staging raster (`PixelBuffer` / `@tge/pixel`) en rutas GPU internas.
 
 ### 4. Ownership cleanup is not fully done
-El render graph base ya no usa fallback heurístico para `image/canvas/effect`, pero todavía queda limpieza en ownership adyacente.
+La separación física principal ya está hecha, pero todavía queda limpieza en facades, shims y dominios adyacentes.
 
 ---
 

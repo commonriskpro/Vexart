@@ -38,19 +38,17 @@ import {
 import type { GraphLegendItemData } from "@tge/lightcode"
 import {
   debugState,
-  getCanvasPainterBackendName,
   markDirty,
   mount,
   probeWgpuCanvasBridge,
   setDebug,
-  setCanvasPainterBackend,
-} from "@tge/renderer"
+} from "@tge/renderer-solid"
 import { createTerminal } from "@tge/terminal"
 import { createParser } from "@tge/input"
 import { resetKittyTransportStats, getKittyTransportStats } from "@tge/output-kitty"
 import { SceneCanvas, SceneEdge, SceneNode, SceneOverlay } from "@tge/components"
-import { tryCreateWgpuCanvasPainterBackend } from "@tge/gpu"
-import type { CanvasContext } from "@tge/renderer"
+import { getCanvasPainterBackendName, setCanvasPainterBackend, tryCreateWgpuCanvasPainterBackend } from "@tge/compat-canvas"
+import type { CanvasContext } from "@tge/renderer-solid"
 
 const DEBUG_LOG = "/tmp/lightcode-gpu-first-debug.log"
 const PERF_LOG = "/tmp/lightcode-gpu-first-perf.log"
@@ -482,7 +480,6 @@ async function main() {
     maxFps: MAX_FPS,
     experimental: {
       idleMaxFps: IDLE_MAX_FPS,
-      partialUpdates: false,
       forceLayerRepaint: false,
     },
   })

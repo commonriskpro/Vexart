@@ -16,12 +16,12 @@ Este documento es el **output operativo** de `arch/08-current-state-audit`.
 
 ## Audit summary
 
-La conclusión central es simple:
+La conclusión central, actualizada después del move físico principal, es esta:
 
-> el engine hoy no está gobernado por la cadena de package names nuevos;
-> está gobernado por `packages/renderer/src/index.ts` + `packages/renderer/src/loop.ts` + output helpers.
+> el ownership real del engine/runtime principal ya no vive en `packages/renderer/src/*`;
+> vive en `packages/core/src/*` + `packages/runtime/src/*`, mientras `packages/renderer/src/index.ts` quedó como umbrella de compat.
 
-La primera bridge pass sirvió para ordenar boundaries públicos, pero todavía no resolvió ownership físico ni el peso conceptual del legacy.
+La primera bridge pass resolvió el ownership físico del tranche principal. Lo que queda ahora es cleanup conceptual y reducción de compat.
 
 ---
 
@@ -31,21 +31,23 @@ La primera bridge pass sirvió para ordenar boundaries públicos, pero todavía 
 
 - `packages/renderer-solid/src/index.ts`
   - facade pública
-  - reexporta `../../renderer/src/index`
+  - compone `@tge/core` + `@tge/runtime` + reconciler/mount glue
 - owner operativo real:
-  - `packages/renderer/src/index.ts`
+  - `packages/core/src/*`
+  - `packages/runtime/src/*`
+  - `packages/renderer/src/index.ts` como umbrella de compat
 
 ## Runtime path
 
 ```txt
 mount()
   -> packages/renderer/src/index.ts
-  -> createRenderLoop() in packages/renderer/src/loop.ts
+  -> createRenderLoop() in packages/runtime/src/loop.ts
   -> Solid reconciler in packages/renderer/src/reconciler.ts
-  -> TGENode tree in packages/renderer/src/node.ts
-  -> Clay translation in packages/renderer/src/clay.ts
+  -> TGENode tree in packages/core/src/node.ts
+  -> Clay translation in packages/core/src/clay.ts
   -> RenderCommand[]
-  -> render graph + layer planning in renderer internals
+  -> render graph + layer planning in core internals
   -> backend paint (GPU + fallback paths)
   -> output layered Kitty or output compat
   -> terminal write
@@ -60,18 +62,18 @@ mount()
 - parser:
   - `packages/input/src/parser.ts`
 - dispatch bus:
-  - `packages/renderer/src/input.ts`
-- focus/runtime policy still in core:
-  - `packages/renderer/src/focus.ts`
+  - `packages/runtime/src/input.ts`
+- focus/runtime policy:
+  - `packages/runtime/src/focus.ts`
 - pointer/scroll feed into frame loop:
-  - `packages/renderer/src/loop.ts`
+  - `packages/runtime/src/loop.ts`
 
 ## Output path
 
 ### Layered Kitty path
 - `packages/output/src/layer-composer.ts`
 - `packages/output/src/kitty.ts`
-- adapted by `packages/renderer/src/gpu-frame-composer.ts`
+- adapted by `packages/core/src/gpu-frame-composer.ts`
 
 ### Compat/fallback path
 - `packages/output/src/composer.ts`
@@ -80,11 +82,13 @@ mount()
 
 ## Hot-path conclusion
 
-The real owner graph today is still closer to:
+This report originally described the pre-move state.
 
-`renderer/index -> renderer/loop -> renderer internals -> output internals`
+After the main physical move tranche, the hot path is now closer to:
 
-than to a truly separated package graph.
+`renderer compat umbrella -> runtime/loop -> core internals -> output internals`
+
+The remaining mismatch is now mostly facade/shim cleanup, not missing physical ownership for the main engine/runtime path.
 
 ---
 
@@ -94,13 +98,13 @@ than to a truly separated package graph.
 | --- | --- | --- | --- |
 | `@tge/platform-terminal` | public bridge | `packages/terminal/src/*` | keep public |
 | `@tge/input` | real | `packages/input/src/*` | keep |
-| `@tge/renderer-solid` | public bridge | `packages/renderer/src/index.ts` | keep public, reduce internal dependence |
-| `@tge/scene` | retire candidate | `packages/renderer/src/node.ts` | retire or make real |
-| `@tge/layout-clay` | low-value bridge | `packages/renderer/src/clay.ts` | acceptable short term |
-| `@tge/render-graph` | retire candidate | `packages/renderer/src/render-graph.ts` | retire or make real |
-| `@tge/text` | retire candidate | `packages/renderer/src/text-layout.ts`, `font-atlas.ts` | retire or make real |
-| `@tge/gpu` | public bridge | renderer GPU modules | keep public |
-| `@tge/compositor` | retire candidate | renderer/output internals | retire or make real |
+| `@tge/renderer-solid` | public bridge | `packages/renderer-solid/src/*` + compat umbrella | keep public, reduce internal dependence |
+| `@tge/scene` | retire candidate | `packages/core/src/node.ts` | retire facade or make real |
+| `@tge/layout-clay` | low-value bridge | `packages/core/src/clay.ts` | acceptable short term |
+| `@tge/render-graph` | retire candidate | `packages/core/src/render-graph.ts` | retire facade or make real |
+| `@tge/text` | retire candidate | `packages/core/src/text-layout.ts`, `font-atlas.ts` | retire facade or make real |
+| `@tge/gpu` | public bridge | `packages/core/src/*` GPU modules | keep public |
+| `@tge/compositor` | retire candidate | core/output internals | retire or make real |
 | `@tge/output-kitty` | public bridge | `packages/output/src/kitty*.ts` | keep public |
 | `@tge/output-compat` | retired | retired | removed from runtime and repo |
 | `@tge/compat-software` | retired | retired | removed; the remaining raster staging lives directly under renderer + `@tge/pixel` |
@@ -112,7 +116,7 @@ than to a truly separated package graph.
 
 ## Bridge conclusion
 
-The new package graph improved public boundaries, but many target-domain packages are still bridges, not owners.
+The public package graph still has bridge packages, but the main engine/runtime owners now live physically in `packages/core/src/*` and `packages/runtime/src/*`.
 
 ---
 
@@ -140,24 +144,23 @@ The current problem is residual raster staging inside an otherwise GPU-only rend
 
 Relevant files:
 
-- `packages/renderer/src/layers.ts`
-- `packages/renderer/src/renderer-backend.ts`
-- `packages/renderer/src/gpu-renderer-backend.ts`
-- `packages/renderer/src/wgpu-canvas-backend.ts`
-- `packages/renderer/src/gpu-raster-staging.ts`
-- `packages/renderer/src/surface-transform-staging.ts`
+- `packages/core/src/layers.ts`
+- `packages/core/src/renderer-backend.ts`
+- `packages/core/src/gpu-renderer-backend.ts`
+- `packages/core/src/wgpu-mixed-scene.ts`
+- `packages/core/src/gpu-raster-staging.ts`
 
 ### Why this matters
 
-The problem is no longer CPU fallback selection. The problem is that the renderer still creates temporary raster surfaces in several GPU paths instead of staying GPU-native all the way until final raw RGBA handoff.
+The problem is no longer CPU fallback selection. The core official path already stopped depending on layer-owned raster surfaces; the remaining work is isolating compat raster helpers and reintroducing missing features with GPU-native implementations.
 
 ### Residual legacy inventory
 
 | File | Residual legacy role today | GPU-native target | Retirement condition |
 | --- | --- | --- | --- |
-| `packages/renderer/src/gpu-raster-staging.ts` | consolidated staging helper for temporary text/canvas/readback/upload/copy-to-image boundaries that still appear in GPU internals | direct GPU op encoding into retained GPU targets/layers without temporary raster surfaces | no common renderer op requires temporary raster surface materialization before final readback |
-| `packages/renderer/src/surface-transform-staging.ts` | subtree transform post-pass that still depends on surface staging, even after removing the dead snapshot branch | transform composition handled as GPU pass or isolated compat path | transform-heavy subtrees stop forcing temporary CPU-visible surfaces in the official path |
-| `packages/renderer/src/canvas.ts` | imperative `CanvasContext` family still shapes part of the official renderer reasoning | compat/lab boundary only, not structural core dependency | official path can be explained without `CanvasContext` as a central renderer concept |
+| `packages/core/src/gpu-raster-staging.ts` | consolidated staging helper for compat text plus readback/upload/copy-to-image boundaries | direct GPU op encoding into retained GPU targets/layers without temporary raster surfaces | the official core no longer depends on compat text raster and the remaining readback/upload helpers stay boundary-only |
+| `packages/core/src/canvas.ts` | imperative `CanvasContext` family still shapes part of the official renderer reasoning | compat/lab boundary only, not structural core dependency | official path can be explained without `CanvasContext` as a central renderer concept |
+| `packages/core/src/wgpu-canvas-backend.ts` | compat/lab painter backend that still does readback and CPU fallback for imperative canvas validation | move fully out of the core official mental model | examples/scripts/tooling stop treating it as core architecture |
 
 ### Operational rule
 
@@ -176,7 +179,7 @@ Current reality:
 
 Relevant files:
 
-- `packages/renderer/src/canvas.ts`
+- `packages/core/src/canvas.ts`
 - `packages/components/src/scene-canvas.tsx`
 - `examples/lightcode-gpu-first.tsx`
 
@@ -188,26 +191,42 @@ Two first-class visual abstractions still depend on `CanvasContext` semantics.
 
 Relevant files:
 
-- `packages/renderer/src/gpu-raster-staging.ts`
-- `packages/renderer/src/surface-transform-staging.ts`
-- `packages/renderer/src/canvas.ts`
+- `packages/core/src/gpu-raster-staging.ts`
+- `packages/core/src/canvas.ts`
 
 ### Current reality
 
-The official path is GPU-only at the backend/output level, but some render operations still require temporary raster surfaces before the final raw RGBA handoff to Kitty.
+The official path is now GPU-native end-to-end in architecture: the loop no longer owns layer raster memory, and the backend returns explicit raw presentation payloads only at the presentation boundary.
+The official path is GPU-only at the backend/output level, and subtree/nested transforms now fail fast instead of using surface staging.
+The official path is GPU-only at the backend/output level, and subtree/nested transforms now run through GPU layer-boundary composition instead of surface staging.
+
+The layer model also started its migration away from raw ownership:
+
+- `Layer` now exposes GPU-facing `backing` metadata as its identity
+- `updateLayerGeometry()` no longer allocates or owns raw backing memory
+- `loop.ts` now consumes raw layer payloads returned by the backend instead of painting/diffing/presenting from `RasterSurface`
+- backend paint/layer contexts now carry `backing` + target dimensions, so the contract no longer talks only in terms of layer-owned raw surfaces
+
+### Verified end-to-end progress
+
+- the official core no longer keeps `RasterSurface` as layer state in `layers.ts` / `loop.ts`
+- `gpu-renderer-backend.ts` no longer allocates `createRasterSurface(...)` for sprite rendering
+- raw bytes now appear in the official path as backend output payloads for Kitty presentation, not as the renderer's default layer memory model
 
 ### Verified progress since the first GPU-only pass
 
 - `gpu-raster-staging.ts` now owns copy-to-image staging instead of leaking raw bridge calls through `gpu-renderer-backend.ts`
-- canvas fallback staging now forces direct CPU raster instead of bouncing through a GPU -> CPU -> GPU loop
-- `surface-transform-staging.ts` no longer carries a dead `snapshot` branch; the current post-pass is explicitly copy -> clear -> affine blit
+- the official canvas renderer path no longer falls back to CPU raster; unsupported canvas commands now require a GPU-native implementation or fail-fast
+- subtree/nested retained transforms no longer use surface staging in the official path; support now runs through GPU layer-boundary composition
+- `gpu-renderer-backend.ts` no longer falls back to `createGpuTextImage()`; official text now uses glyph atlas or fail-fast
+- mixed-scene GPU analysis moved into `packages/core/src/wgpu-mixed-scene.ts` so the official core no longer imports the compat painter backend module
 
 ## E. Explicit ownership progress
 
 Relevant files:
 
-- `packages/renderer/src/render-graph.ts`
-- `packages/renderer/src/loop.ts`
+- `packages/core/src/render-graph.ts`
+- `packages/runtime/src/loop.ts`
 
 ### Current reality
 
@@ -224,8 +243,13 @@ Explicit ownership still needs follow-up outside that base path:
 
 ### Compat leakage conclusion
 
-The question is no longer “how do we stop falling back to CPU?”
-The question now is “how much raster staging still remains before the renderer becomes GPU-native end to end?”.
+The question is no longer “how do we stop falling back to CPU?” and it is no longer “when do we become GPU-native end to end?” for the core path.
+The question now is “which missing capabilities do we reintroduce next with GPU-native implementations, and which compat raster helpers can be isolated further?”.
+
+For the architecture-level replacement map of the remaining text/transform/canvas functions, see:
+
+- `docs/tge-gpu-native-remaining-architecture.md`
+- `docs/tge-gpu-native-end-to-end-redesign.md`
 
 ---
 

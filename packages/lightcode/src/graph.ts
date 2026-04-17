@@ -1,5 +1,5 @@
 import { createSignal, type Accessor } from "solid-js"
-import { markDirty } from "@tge/renderer"
+import { markDirty } from "../../runtime/src/index"
 
 export interface GraphPoint {
   x: number

@@ -1,7 +1,7 @@
 import { performance } from "node:perf_hooks"
 import { create } from "@tge/pixel"
-import { setCanvasPainterBackend, CanvasContext, paintCanvasCommandsCPU, paintCanvasCommands } from "@tge/compat-canvas"
-import { tryCreateWgpuCanvasPainterBackend, probeWgpuCanvasBridge } from "@tge/gpu"
+import { setCanvasPainterBackend, CanvasContext, paintCanvasCommandsCPU, paintCanvasCommands, tryCreateWgpuCanvasPainterBackend } from "@tge/compat-canvas"
+import { probeWgpuCanvasBridge } from "@tge/gpu"
 
 const WIDTH = Number(process.env.TGE_SCENE_BENCH_WIDTH ?? 440)
 const HEIGHT = Number(process.env.TGE_SCENE_BENCH_HEIGHT ?? 180)

@@ -178,7 +178,7 @@ Headless components provide interaction props in their render context. Spread th
 Like `Element.setPointerCapture()` in the DOM. When a node captures the pointer, ALL mouse events route to it regardless of cursor position — essential for drag interactions.
 
 ```typescript
-import { setPointerCapture, releasePointerCapture } from "@tge/renderer"
+import { setPointerCapture, releasePointerCapture } from "@tge/runtime"
 
 setPointerCapture(nodeId)     // Lock — all mouse events go to this node
 releasePointerCapture(nodeId) // Unlock — auto-released on button up

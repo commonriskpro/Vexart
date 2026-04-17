@@ -132,9 +132,10 @@ Stop relying on facade packages as internal architecture.
 Make the official engine path materially simpler.
 
 ### Actions
-- reduce remaining raster staging in the hot path (`gpu-raster-staging`, `surface-transform-staging`, `canvas.ts`)
-- keep copy-to-image/readback/upload staging folded into explicit helper boundaries instead of leaking raw bridge calls through the backend
-- remove dead transform staging branches when they are proven unused
+- keep `gpu-raster-staging` and compat canvas helpers outside the official hot path
+- keep copy-to-image/readback/upload staging folded into explicit boundary helpers instead of leaking raw bridge calls through the backend
+- harden the new subtree transform GPU pass and expand unsupported coverage
+- move painter-only canvas APIs out of the core official story (`createCanvasImageCache`, painter backend selection, WGPU canvas painter backend exports)
 - keep the official path clearly GPU-first + Kitty-first
 - separate implementation staging from the conceptual renderer model
 - decide whether compositor is a real package or just internal modules
@@ -188,6 +189,9 @@ Finish replacing compatibility heuristics with explicit ownership.
 ### Current status
 - `image` / `canvas` / `effect` attachment in `render-graph.ts` already moved to `renderObjectId`-only matching
 - remaining heuristic retirement work is now outside that base path (border/text/writeback/layer ownership)
+- official text no longer falls back to raster image staging in `gpu-renderer-backend.ts`; unsupported cases now fail fast until GPU-native coverage grows
+- subtree/nested retained transforms no longer use surface staging in the official path; support now runs through GPU layer-boundary composition
+- `Layer` / `loop` / `gpu-renderer-backend` no longer model the official path around layer-owned `RasterSurface`
 
 ### Exit criteria
 - ownership bugs are traceable by explicit IDs, not guesswork

@@ -1,5 +1,5 @@
 import { createSignal, onCleanup } from "solid-js"
-import { mount, onInput, useTerminalDimensions } from "@tge/renderer"
+import { mount, onInput, useTerminalDimensions } from "@tge/renderer-solid"
 import {
   Box,
   Button,
@@ -457,7 +457,6 @@ async function main() {
   const cleanup = mount(() => <App terminal={term} />, term, {
     maxFps: 60,
     experimental: {
-      partialUpdates: false,
       forceLayerRepaint: false,
     },
   })

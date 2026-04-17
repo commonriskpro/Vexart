@@ -12,7 +12,7 @@
  *   - Programmatic scrollTo/scrollBy/scrollIntoView
  *
  * Usage:
- *   import { ScrollHandle } from "@tge/renderer"
+ *   import { ScrollHandle } from "@tge/runtime"
  *
  *   let scrollRef: ScrollHandle
  *

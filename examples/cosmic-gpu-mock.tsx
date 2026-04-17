@@ -5,12 +5,11 @@ import {
   mount,
   onInput,
   probeWgpuCanvasBridge,
-  setCanvasPainterBackend,
-  tryCreateWgpuCanvasPainterBackend,
   useTerminalDimensions,
   type CanvasContext,
   type MountHandle,
-} from "@tge/renderer"
+} from "@tge/renderer-solid"
+import { setCanvasPainterBackend, tryCreateWgpuCanvasPainterBackend } from "@tge/compat-canvas"
 import type { JSX } from "solid-js"
 
 type ViewportValue = {

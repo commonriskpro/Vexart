@@ -10,11 +10,11 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, markDirty, probeWgpuCanvasBridge, setCanvasPainterBackend } from "@tge/renderer"
-import { tryCreateWgpuCanvasPainterBackend } from "@tge/gpu"
+import { mount, markDirty, probeWgpuCanvasBridge } from "@tge/renderer-solid"
+import { setCanvasPainterBackend, tryCreateWgpuCanvasPainterBackend } from "@tge/compat-canvas"
 import { createTerminal } from "@tge/terminal"
 import { createParser } from "@tge/input"
-import type { CanvasContext } from "@tge/renderer"
+import type { CanvasContext } from "@tge/renderer-solid"
 
 const probe = probeWgpuCanvasBridge()
 const wgpuBackend = probe.available ? tryCreateWgpuCanvasPainterBackend() : null

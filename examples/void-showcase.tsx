@@ -23,7 +23,7 @@
  * Run:  bun run examples/void-showcase.tsx
  */
 
-import { mount, onInput } from "@tge/renderer"
+import { mount, onInput } from "@tge/renderer-solid"
 import { createTerminal } from "@tge/terminal"
 import {
   Button,

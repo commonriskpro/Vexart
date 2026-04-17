@@ -5,7 +5,7 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, markDirty } from "@tge/renderer"
+import { mount, markDirty } from "@tge/renderer-solid"
 import { createTerminal } from "@tge/terminal"
 import { createParser } from "@tge/input"
 import { colors, radius, space, font } from "@tge/void"

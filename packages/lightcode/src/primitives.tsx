@@ -1,5 +1,6 @@
 import { createSignal, type JSX } from "solid-js"
-import { markDirty, useDrag, useInteractionLayer, type CanvasContext, type NodeMouseEvent } from "@tge/renderer"
+import { markDirty, useDrag, useInteractionLayer, type NodeMouseEvent } from "../../runtime/src/index"
+import type { CanvasContext } from "../../core/src/index"
 import { colors, radius, space } from "./tokens"
 
 type Gradient =

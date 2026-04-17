@@ -5,15 +5,15 @@
  */
 
 import { createSignal, For, onCleanup, type JSX } from "solid-js"
-import { mount, markDirty, useDrag, setDebug, debugState, debugDumpTree, createCanvasImageCache, getCanvasPainterBackendName, probeWgpuCanvasBridge, setCanvasPainterBackend, type NodeHandle } from "@tge/renderer"
+import { mount, markDirty, useDrag, setDebug, debugState, debugDumpTree, probeWgpuCanvasBridge, type NodeHandle } from "@tge/renderer-solid"
 import { createTerminal } from "@tge/terminal"
 import { createParser } from "@tge/input"
 import { getKittyTransportStats, resetKittyTransportStats } from "@tge/output-kitty"
 import { createSpaceBackground, type SpaceBackground, SceneCanvas, SceneNode, SceneEdge, SceneOverlay } from "@tge/components"
 import { useDraggableGraph } from "@tge/lightcode"
-import { tryCreateWgpuCanvasPainterBackend } from "@tge/gpu"
+import { createCanvasImageCache, getCanvasPainterBackendName, setCanvasPainterBackend, tryCreateWgpuCanvasPainterBackend } from "@tge/compat-canvas"
 import { radius, space } from "@tge/void"
-import type { CanvasContext, NodeMouseEvent } from "@tge/renderer"
+import type { CanvasContext, NodeMouseEvent } from "@tge/renderer-solid"
 import { appendFileSync } from "node:fs"
 
 let spaceBg: SpaceBackground | null = null
@@ -1188,7 +1188,6 @@ async function main() {
     maxFps: LIGHTCODE_MAX_FPS,
     experimental: {
       idleMaxFps: LIGHTCODE_IDLE_MAX_FPS,
-      partialUpdates: false,
       forceLayerRepaint: LIGHTCODE_FORCE_LAYER_REPAINT,
     },
   })
@@ -1205,7 +1204,7 @@ async function main() {
       const kittyStats = getKittyTransportStats()
       appendFileSync(
         PERF_LOG,
-        `fps=${debugState.fps} ms=${debugState.frameTimeMs} layers=${debugState.layerCount} dirtyBefore=${debugState.dirtyBeforeCount} repainted=${debugState.repaintedCount} cmds=${debugState.commandCount} nodes=${debugState.nodeCount} strategy=${debugState.rendererStrategy ?? "none"} output=${debugState.rendererOutput ?? "none"} tx=${debugState.transmissionMode ?? "none"} estLayered=${debugState.estimatedLayeredBytes} estFinal=${debugState.estimatedFinalBytes} readback=${debugState.requiresLayerReadback ? 1 : 0} resBytes=${debugState.resourceBytes} gpuBytes=${debugState.gpuResourceBytes} resEntries=${debugState.resourceEntries} txPayload=${kittyStats.payloadBytes} txTty=${kittyStats.estimatedTtyBytes} txCalls=${kittyStats.transmitCalls} txPatch=${kittyStats.patchCalls}\n`,
+        `fps=${debugState.fps} ms=${debugState.frameTimeMs} layers=${debugState.layerCount} dirtyBefore=${debugState.dirtyBeforeCount} repainted=${debugState.repaintedCount} cmds=${debugState.commandCount} nodes=${debugState.nodeCount} strategy=${debugState.rendererStrategy ?? "none"} output=${debugState.rendererOutput ?? "none"} tx=${debugState.transmissionMode ?? "none"} estLayered=${debugState.estimatedLayeredBytes} estFinal=${debugState.estimatedFinalBytes} resBytes=${debugState.resourceBytes} gpuBytes=${debugState.gpuResourceBytes} resEntries=${debugState.resourceEntries} txPayload=${kittyStats.payloadBytes} txTty=${kittyStats.estimatedTtyBytes} txCalls=${kittyStats.transmitCalls} txPatch=${kittyStats.patchCalls}\n`,
       )
     }, 500)
   }

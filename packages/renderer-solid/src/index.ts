@@ -1,5 +1,251 @@
 /**
- * Temporary runtime facade while the renderer internals are still being split.
+ * @tge/renderer-solid — Solid adapter surface for TGE.
+ *
+ * Publicly composes:
+ * - @tge/core     → engine / renderer core
+ * - @tge/runtime  → input / focus / interaction / syntax / extmarks
+ * - Solid-specific reconciler + mount wiring
  */
 
-export * from "../../renderer/src/index"
+import { createTerminal, type Terminal } from "@tge/platform-terminal"
+import { createParser, type KeyEvent, type MouseEvent as TgeMouseEvent, type InputEvent } from "@tge/input"
+import { createRenderLoop } from "../../runtime/src/index"
+import { render as solidRender } from "./reconciler"
+import { dispatchInput } from "../../runtime/src/input"
+import { markDirty } from "../../runtime/src/dirty"
+import { markAllDirty } from "../../core/src/layers"
+import { resetFocus } from "../../runtime/src/focus"
+import { resetSelection } from "../../runtime/src/selection"
+import { bindLoop, unbindLoop } from "../../runtime/src/pointer"
+import { createSignal, onCleanup } from "solid-js"
+
+// ── Core + Runtime re-exports (the real implementations, no shim) ──
+export * from "../../core/src/index"
+export * from "../../runtime/src/index"
+
+// SolidJS control flow + context API
+export { For, Show, Switch, Match, Index, ErrorBoundary } from "./reconciler"
+export { createContext, useContext } from "solid-js"
+
+// Reconciler primitives used by babel-preset-solid universal mode
+export {
+  createComponent,
+  createElement,
+  solidCreateTextNode as createTextNode,
+  insertNode,
+  insert,
+  spread,
+  setProp,
+  mergeProps,
+  effect,
+  memo,
+  use,
+} from "./reconciler"
+export { render as solidRender } from "./reconciler"
+
+// Plugin slot system
+export { createSlotRegistry, createSlot } from "./plugins"
+export type { SlotRegistry, SlotComponent, TgePlugin, TgePluginApi } from "./plugins"
+
+// Terminal creation + types
+export { createTerminal }
+export type { Terminal, Capabilities, TerminalSize } from "@tge/platform-terminal"
+
+// Input types
+export type { KeyEvent, InputEvent }
+export type { MouseEvent as TgeMouseEvent, PasteEvent, FocusEvent, MouseAction, Modifiers } from "@tge/input"
+
+// ── Mouse button constants ──
+
+export const MouseButton = {
+  LEFT: 0,
+  MIDDLE: 1,
+  RIGHT: 2,
+  RELEASE: 3,
+  SCROLL_UP: 64,
+  SCROLL_DOWN: 65,
+} as const
+
+// ── RGBA utility class ──
+
+export class RGBA {
+  readonly r: number
+  readonly g: number
+  readonly b: number
+  readonly a: number
+
+  constructor(r: number, g: number, b: number, a = 1) {
+    this.r = Math.round(r * 255)
+    this.g = Math.round(g * 255)
+    this.b = Math.round(b * 255)
+    this.a = Math.round(a * 255)
+  }
+
+  static fromInts(r: number, g: number, b: number, a = 255): RGBA {
+    const c = new RGBA(0, 0, 0, 0)
+    ;(c as any).r = r
+    ;(c as any).g = g
+    ;(c as any).b = b
+    ;(c as any).a = a
+    return c
+  }
+
+  static fromHex(hex: string): RGBA {
+    const h = hex.startsWith("#") ? hex.slice(1) : hex
+    const r = parseInt(h.slice(0, 2), 16)
+    const g = parseInt(h.slice(2, 4), 16)
+    const b = parseInt(h.slice(4, 6), 16)
+    const a = h.length >= 8 ? parseInt(h.slice(6, 8), 16) : 255
+    return RGBA.fromInts(r, g, b, a)
+  }
+
+  static fromValues(r: number, g: number, b: number, a = 1): RGBA {
+    return new RGBA(r, g, b, a)
+  }
+
+  toU32(): number {
+    return ((this.r << 24) | (this.g << 16) | (this.b << 8) | this.a) >>> 0
+  }
+
+  valueOf(): number {
+    return this.toU32()
+  }
+
+  toString(): string {
+    return `rgba(${this.r}, ${this.g}, ${this.b}, ${(this.a / 255).toFixed(2)})`
+  }
+}
+
+// ── useTerminalDimensions hook ──
+
+export function useTerminalDimensions(terminal: Terminal): {
+  width: () => number
+  height: () => number
+  cols: () => number
+  rows: () => number
+  cellWidth: () => number
+  cellHeight: () => number
+} {
+  const [width, setWidth] = createSignal(terminal.size.pixelWidth || terminal.size.cols * (terminal.size.cellWidth || 8))
+  const [height, setHeight] = createSignal(terminal.size.pixelHeight || terminal.size.rows * (terminal.size.cellHeight || 16))
+  const [cols, setCols] = createSignal(terminal.size.cols)
+  const [rows, setRows] = createSignal(terminal.size.rows)
+  const [cellW, setCellW] = createSignal(terminal.size.cellWidth || 8)
+  const [cellH, setCellH] = createSignal(terminal.size.cellHeight || 16)
+
+  const unsub = terminal.onResize((size) => {
+    setWidth(size.pixelWidth || size.cols * (size.cellWidth || 8))
+    setHeight(size.pixelHeight || size.rows * (size.cellHeight || 16))
+    setCols(size.cols)
+    setRows(size.rows)
+    setCellW(size.cellWidth || 8)
+    setCellH(size.cellHeight || 16)
+  })
+
+  onCleanup(() => unsub())
+
+  return { width, height, cols, rows, cellWidth: cellW, cellHeight: cellH }
+}
+
+/**
+ * Decode paste bytes to string — normalizes line endings.
+ */
+export function decodePasteBytes(bytes: Uint8Array | string): string {
+  if (typeof bytes === "string") return bytes
+  return new TextDecoder().decode(bytes)
+}
+
+// ── Mount types ──
+
+export type MountOptions = {
+  maxFps?: number
+  experimental?: {
+    idleMaxFps?: number
+    interactionMaxFps?: number
+    frameBudgetMs?: number
+    forceLayerRepaint?: boolean
+  }
+}
+
+export type MountHandle = {
+  suspend: () => void
+  resume: () => void
+  suspended: () => boolean
+  destroy: () => void
+}
+
+// ── mount ──
+
+export function mount(component: () => any, terminal: Terminal, opts?: MountOptions): MountHandle {
+  const loop = createRenderLoop(terminal, {
+    experimental: {
+      ...opts?.experimental,
+      maxFps: opts?.maxFps,
+      interactionMaxFps: opts?.experimental?.interactionMaxFps ?? opts?.maxFps,
+    },
+  })
+
+  const dispose = solidRender(component, loop.root)
+
+  bindLoop(loop)
+
+  const cellW = terminal.size.cellWidth || 8
+  const cellH = terminal.size.cellHeight || 16
+  const pixW = terminal.size.pixelWidth || terminal.size.cols * cellW
+  const pixH = terminal.size.pixelHeight || terminal.size.rows * cellH
+  const cellWf = pixW / terminal.size.cols
+  const cellHf = pixH / terminal.size.rows
+
+  let isButtonDown = false
+
+  const parser = createParser((event) => {
+    if (loop.suspended()) return
+    dispatchInput(event)
+
+    if (event.type === "mouse") {
+      if (event.action === "press") isButtonDown = true
+      else if (event.action === "release") isButtonDown = false
+
+      const px = event.x * cellWf + cellWf * 0.5
+      const py = (event.y + 1) * cellHf
+      loop.feedPointer(px, py, isButtonDown)
+
+      if (event.action === "scroll") {
+        const dy = event.button === 64 ? cellH : -cellH
+        loop.feedScroll(0, dy)
+      }
+
+      const shouldRepaint = event.action === "press"
+        || event.action === "release"
+        || event.action === "scroll"
+        || (event.action === "move" && (isButtonDown || loop.needsPointerRepaint()))
+      if (shouldRepaint) {
+        const shouldGlobalDirty = event.action !== "move" || !isButtonDown
+        if (shouldGlobalDirty) markDirty()
+        loop.requestInteractionFrame(event.action === "scroll" ? "scroll" : "pointer")
+      }
+      return
+    }
+
+    markDirty()
+    loop.requestInteractionFrame("key")
+  })
+  const unsubData = terminal.onData((data) => parser.feed(data))
+
+  loop.start()
+
+  return {
+    suspend: () => loop.suspend(),
+    resume: () => loop.resume(),
+    suspended: () => loop.suspended(),
+    destroy: () => {
+      unsubData()
+      parser.destroy()
+      unbindLoop()
+      resetFocus()
+      resetSelection()
+      dispose()
+      loop.destroy()
+    },
+  }
+}

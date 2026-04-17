@@ -164,7 +164,6 @@ No lo reemplaza.
 - `packages/renderer/src/gpu-renderer-backend.ts`
 - `packages/renderer/src/gpu-frame-composer.ts`
 - `packages/renderer/src/gpu-raster-staging.ts`
-- `packages/renderer/src/surface-transform-staging.ts`
 
 ### Exit criteria
 - el path oficial del engine puede explicarse como GPU-first sin arrastrar compat como base mental
@@ -176,8 +175,9 @@ No lo reemplaza.
 - loop fallback eliminado
 - copy-to-image staging encapsulado detrás de `gpu-raster-staging.ts`
 - `render-graph.ts` ya no hace matching heurístico por `color` / `cornerRadius` para `image` / `canvas` / `effect`
-- `surface-transform-staging.ts` ya no carga la rama muerta de `snapshot`
-- remaining work: shrink the remaining raster staging and finish GPU-native internals for transforms/canvas internals
+- subtree/nested transforms ya no usan surface staging; ahora pasan por GPU layer-boundary composition
+- `Layer` / `loop` / backend oficial ya no dependen de layer-owned `RasterSurface`
+- remaining work: harden subtree transforms, expand canvas internals y keep compat raster helpers outside the core story
 
 ### Recommended execution slices
 
@@ -187,10 +187,10 @@ No lo reemplaza.
 - done when the official path can be described without centering `canvas.ts`
 
 #### 11B — Neutralize raster staging helpers
-- shrink `gpu-raster-staging.ts` and `surface-transform-staging.ts`
+- shrink `gpu-raster-staging.ts`
 - keep canvas text/readback staging folded into `gpu-raster-staging.ts` instead of spawning a second staging module
-- push any unavoidable temporary surfaces behind neutral helper boundaries
-- remove dead transform staging branches when they are proven unused
+- push any unavoidable temporary surfaces behind explicit compat/boundary helper modules
+- harden subtree/nested transforms on top of the dedicated GPU pass
 - done when staging is implementation residue, not the engine story
 
 #### 11C — Make GPU terminology canonical

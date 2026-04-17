@@ -69,7 +69,7 @@ If you see pixel output — congratulations, TGE is working.
 Create a file called `my-app.tsx`:
 
 ```tsx
-import { mount } from "@tge/renderer"
+import { mount } from "@tge/renderer-solid"
 import { Box, Text } from "@tge/components"
 import { colors, radius } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
@@ -125,7 +125,7 @@ On every signal change, only step 2–4 re-run, and only for dirty regions.
 ## Adding Interactivity
 
 ```tsx
-import { mount } from "@tge/renderer"
+import { mount } from "@tge/renderer-solid"
 import { Box, Text, Button } from "@tge/components"
 import { colors, radius } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
@@ -155,9 +155,12 @@ Press **Tab** to focus the button, then **Enter** or **Space** to increment. Pre
 When integrating TGE into your project, the key imports are:
 
 ```typescript
-// Core — always needed
+// Solid adapter — main app entrypoint
 import { createTerminal } from "@tge/terminal"
-import { mount } from "@tge/renderer"
+import { mount } from "@tge/renderer-solid"
+
+// Engine core — low-level rendering APIs when needed
+import { probeWgpuCanvasBridge } from "@tge/core"
 
 // Components — pick what you need
 import { Box, Text, Button, Input, Checkbox, Tabs, List, ProgressBar, ScrollView } from "@tge/components"
@@ -165,12 +168,12 @@ import { Box, Text, Button, Input, Checkbox, Tabs, List, ProgressBar, ScrollView
 // Design tokens — optional but recommended
 import { colors, space, radius, font, weight, shadows } from "@tge/void"
 
-// Hooks — for custom interactive components
-import { useKeyboard, useMouse, useFocus, onInput, setPointerCapture, releasePointerCapture } from "@tge/renderer"
+// Runtime hooks — for custom interactive components
+import { useKeyboard, useMouse, useFocus, onInput, setPointerCapture, releasePointerCapture } from "@tge/runtime"
 
 // SolidJS — for reactive state
 import { createSignal, createEffect, onCleanup } from "solid-js"
-import { For, Show } from "@tge/renderer"
+import { For, Show } from "@tge/renderer-solid"
 ```
 
 ## Next Steps

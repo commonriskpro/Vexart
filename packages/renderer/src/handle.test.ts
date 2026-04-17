@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { createNode, insertChild, removeChild } from "./node"
-import { createHandle } from "./handle"
+import { createNode, insertChild, removeChild } from "../../core/src/node"
+import { createHandle } from "../../runtime/src/handle"
 
 describe("createHandle", () => {
   test("wraps a node with correct id and kind", () => {

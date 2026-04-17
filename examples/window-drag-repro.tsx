@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js"
 import { createTerminal } from "@tge/terminal"
 import { createParser } from "@tge/input"
-import { markDirty, mount, onInput, useDrag, type NodeMouseEvent } from "@tge/renderer"
+import { markDirty, mount, onInput, useDrag, type NodeMouseEvent } from "@tge/renderer-solid"
 
 const REPRO_CONFIG = {
   PARTIAL_UPDATES: process.env.TGE_REPRO_PARTIAL_UPDATES === "1",
@@ -125,7 +125,6 @@ async function main() {
   const cleanup = mount(() => <App />, term, {
     maxFps: 60,
     experimental: {
-      partialUpdates: REPRO_CONFIG.PARTIAL_UPDATES,
       forceLayerRepaint: REPRO_CONFIG.FORCE_LAYER_REPAINT,
     },
   })

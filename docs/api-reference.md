@@ -347,7 +347,7 @@ import { createLayerComposer } from "@tge/output"
 
 ---
 
-## @tge/renderer
+## @tge/renderer-solid
 
 SolidJS reconciler + Clay layout engine integration. This is the bridge that turns JSX into pixels.
 
@@ -358,7 +358,7 @@ SolidJS reconciler + Clay layout engine integration. This is the bridge that tur
 Returns a cleanup function.
 
 ```typescript
-import { mount } from "@tge/renderer"
+import { mount } from "@tge/renderer-solid"
 import { createTerminal } from "@tge/terminal"
 
 function App() {
@@ -384,7 +384,7 @@ Manually mark the render loop as dirty, triggering a repaint on the next frame.
 Data fetching hooks. See [Hooks & Signals](hooks.md#usequery) for full API.
 
 ```typescript
-import { useQuery, useMutation } from "@tge/renderer"
+import { useQuery, useMutation } from "@tge/runtime"
 ```
 
 ### `createTransition(signal, options?)` and `createSpring(signal, options?)`
@@ -392,7 +392,7 @@ import { useQuery, useMutation } from "@tge/renderer"
 Animation primitives. See [Hooks & Signals](hooks.md#createtransition) for full API.
 
 ```typescript
-import { createTransition, createSpring } from "@tge/renderer"
+import { createTransition, createSpring } from "@tge/runtime"
 ```
 
 ### `PressEvent`
@@ -400,7 +400,7 @@ import { createTransition, createSpring } from "@tge/renderer"
 Event object passed to `onPress` handlers. Supports event bubbling with `stopPropagation()`.
 
 ```typescript
-import type { PressEvent } from "@tge/renderer"
+import type { PressEvent } from "@tge/runtime"
 
 type PressEvent = {
   stopPropagation: () => void
@@ -421,7 +421,7 @@ type PressEvent = {
 Event object passed to per-node mouse callbacks (`onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseOver`, `onMouseOut`). These events do NOT bubble — they dispatch directly to the target node.
 
 ```typescript
-import type { NodeMouseEvent } from "@tge/renderer"
+import type { NodeMouseEvent } from "@tge/runtime"
 
 type NodeMouseEvent = {
   x: number        // Absolute pixel X position
@@ -445,7 +445,7 @@ type NodeMouseEvent = {
 Lock all mouse events to a specific node, regardless of cursor position. Essential for drag interactions — the captured node receives `onMouseMove` and `onMouseUp` even when the pointer moves outside its bounds.
 
 ```typescript
-import { setPointerCapture } from "@tge/renderer"
+import { setPointerCapture } from "@tge/runtime"
 
 setPointerCapture(nodeId)  // All mouse events route to this node
 ```
@@ -455,7 +455,7 @@ setPointerCapture(nodeId)  // All mouse events route to this node
 Unlock pointer capture. Automatically called on mouse button up, but can be called explicitly at any time.
 
 ```typescript
-import { releasePointerCapture } from "@tge/renderer"
+import { releasePointerCapture } from "@tge/runtime"
 
 releasePointerCapture(nodeId)  // Restore normal hit-testing
 ```
@@ -465,8 +465,8 @@ releasePointerCapture(nodeId)  // Restore normal hit-testing
 Encapsulates drag interactions — pointer capture, `isDragging` flag, and mouse event wiring. Spread `dragProps` on the drag target.
 
 ```typescript
-import { useDrag } from "@tge/renderer"
-import type { DragOptions, DragProps, DragState } from "@tge/renderer"
+import { useDrag } from "@tge/runtime"
+import type { DragOptions, DragProps, DragState } from "@tge/runtime"
 
 type DragOptions = {
   onDragStart?: (event: NodeMouseEvent) => void
@@ -500,8 +500,8 @@ const { dragging, dragProps } = useDrag({
 Encapsulates hover detection with configurable enter/leave delays. Spread `hoverProps` on the target.
 
 ```typescript
-import { useHover } from "@tge/renderer"
-import type { HoverOptions, HoverProps, HoverState } from "@tge/renderer"
+import { useHover } from "@tge/runtime"
+import type { HoverOptions, HoverProps, HoverState } from "@tge/runtime"
 
 type HoverOptions = {
   delay?: number          // ms before onEnter fires (default: 0)
@@ -535,7 +535,7 @@ const { hovered, hoverProps } = useHover({
 Create a focus trap (used by Dialog internally). Returns a cleanup function.
 
 ```typescript
-import { pushFocusScope } from "@tge/renderer"
+import { pushFocusScope } from "@tge/runtime"
 import { onCleanup } from "solid-js"
 
 function Modal() {
@@ -554,7 +554,7 @@ Focus management. See [Hooks & Signals](hooks.md#usefocus) for full API.
 Re-exported from SolidJS for convenience:
 
 ```typescript
-import { For, Show, Switch, Match, Index, ErrorBoundary } from "@tge/renderer"
+import { For, Show, Switch, Match, Index, ErrorBoundary } from "@tge/renderer-solid"
 
 // Conditional rendering
 <Show when={visible()}>

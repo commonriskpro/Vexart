@@ -1,7 +1,7 @@
 /**
  * Debug: verify Clay FFI produces render commands.
  */
-import { clay, CMD, SIZING, DIRECTION, ALIGN_X, ALIGN_Y } from "@tge/renderer/clay"
+import { clay, CMD, SIZING, DIRECTION, ALIGN_X, ALIGN_Y } from "../packages/core/src/clay"
 
 // Init Clay
 const ok = clay.init(800, 600)

@@ -131,11 +131,11 @@ Después recién:
 ```txt
 app/examples
   -> packages/renderer/src/index.ts
-  -> createRenderLoop() in packages/renderer/src/loop.ts
+  -> createRenderLoop() in packages/runtime/src/loop.ts
   -> TGENode retained tree
-  -> Clay translation in packages/renderer/src/clay.ts
+  -> Clay translation in packages/core/src/clay.ts
   -> RenderCommand[]
-  -> render graph + layer planning in renderer internals
+  -> render graph + layer planning in core internals
   -> GPU backends + raster staging helpers
   -> Kitty layer composer (raw-only)
   -> terminal output
@@ -171,36 +171,40 @@ Everything before that should be reasoned about as GPU targets, GPU images, GPU 
 
 ### Runtime entry
 - `packages/renderer/src/index.ts`
-- `packages/renderer/src/loop.ts`
+- `packages/runtime/src/loop.ts`
 - `packages/renderer/src/reconciler.ts`
 
 ### Scene/layout/graph
-- `packages/renderer/src/node.ts`
-- `packages/renderer/src/clay.ts`
-- `packages/renderer/src/render-graph.ts`
-- `packages/renderer/src/layout-writeback.ts`
+- `packages/core/src/node.ts`
+- `packages/core/src/clay.ts`
+- `packages/core/src/render-graph.ts`
+- `packages/core/src/layout-writeback.ts`
 
 ### GPU/compositor/output
-- `packages/renderer/src/gpu-renderer-backend.ts`
-- `packages/renderer/src/gpu-frame-composer.ts`
-- `packages/renderer/src/gpu-layer-strategy.ts`
+- `packages/core/src/gpu-renderer-backend.ts`
+- `packages/core/src/gpu-frame-composer.ts`
+- `packages/core/src/gpu-layer-strategy.ts`
 - `packages/output/src/layer-composer.ts`
 - `packages/output/src/kitty.ts`
 
 ### Staging still active
 - `packages/pixel/src/*`
-- `packages/renderer/src/pixel-buffer.ts`
-- `packages/renderer/src/render-surface.ts`
-- `packages/renderer/src/gpu-raster-staging.ts`
-- `packages/renderer/src/surface-transform-staging.ts`
-- `packages/renderer/src/canvas.ts`
-- `packages/renderer/src/wgpu-canvas-backend.ts`
+- `packages/core/src/pixel-buffer.ts`
+- `packages/core/src/render-surface.ts`
+- `packages/core/src/gpu-raster-staging.ts`
+- `packages/core/src/canvas.ts`
+- `packages/core/src/wgpu-mixed-scene.ts`
+
+### Compat / lab canvas path
+- `packages/core/src/wgpu-canvas-backend.ts`
+- `packages/core/src/canvas-backend.ts`
+- `packages/compat-canvas/src/index.ts`
 
 ### UI/runtime coupling points
-- `packages/renderer/src/focus.ts`
-- `packages/renderer/src/interaction.ts`
-- `packages/renderer/src/drag.ts`
-- `packages/renderer/src/scroll.ts`
+- `packages/runtime/src/focus.ts`
+- `packages/runtime/src/interaction.ts`
+- `packages/runtime/src/drag.ts`
+- `packages/runtime/src/scroll.ts`
 - `packages/components/src/scene-canvas.tsx`
 - `packages/windowing/src/*`
 
@@ -236,16 +240,28 @@ The remaining bridges are the ones that still have public value.
 
 It is better than before, but still owns too much frame orchestration and too much policy coupling.
 
-### 3. Raster staging still leaks into the official path
+### 3. The official path is now materially GPU-native end to end
 
-The issue is no longer `@tge/compat-software` or CPU fallback.
-The issue now is residual raster staging in:
+The issue is no longer `@tge/compat-software`, CPU fallback, or layer-owned raster memory in the official path.
+The remaining work now lives in:
 
-- `packages/renderer/src/gpu-raster-staging.ts`
-- `packages/renderer/src/surface-transform-staging.ts`
-- `packages/renderer/src/canvas.ts`
+- `packages/core/src/gpu-raster-staging.ts`
+- `packages/core/src/canvas.ts`
 
-That means the core no longer thinks in CPU backend terms, but it still does not think in GPU targets/images/layers all the way through.
+These are now boundary/compat concerns and missing-feature concerns, not the core layer model.
+
+Subtree/nested transforms no longer use the deleted surface staging path; they now render through GPU layer-boundary composition.
+
+That means the core now thinks in GPU layers/targets/images all the way through its main rendering contract.
+
+The official core also no longer imports the compat painter backend module for mixed-scene analysis; that logic now lives in `packages/core/src/wgpu-mixed-scene.ts`.
+
+### Remaining architecture reference
+
+For the concrete GPU-native replacement plan — especially text, transform staging, and which helper functions should survive vs be replaced — see:
+
+- `docs/tge-gpu-native-remaining-architecture.md`
+- `docs/tge-gpu-native-end-to-end-redesign.md`
 
 ### 4. Explicit identity is now real on the base render-graph path
 
@@ -405,7 +421,7 @@ These packages may survive for compatibility, but they must stop shaping the off
 | Area | Recommendation | Why |
 | --- | --- | --- |
 | `@tge/platform-terminal` + `@tge/input` | **keep** | real cohesive ownership |
-| `renderer/src/index.ts` + `loop.ts` + runtime helpers | **keep but simplify** | still the operational core |
+| `packages/runtime/src/loop.ts` + runtime helpers | **keep but simplify** | runtime real ya separado, pero sigue concentrando mucha explicación operativa |
 | `@tge/renderer-solid` facade | **keep publicly, reduce internally** | public boundary useful, internal bridge harmful |
 | `@tge/windowing` | **keep** | package now owns its source physically |
 | `SceneCanvas` | **keep as primary retained scene API** | declarative scene abstraction with integrated hit-testing and overlays |
@@ -421,6 +437,7 @@ These packages may survive for compatibility, but they must stop shaping the off
 
 ## Priority 1 — Stop lying to ourselves about ownership
 
+- core/runtime physical move tranche: already complete for the main engine/runtime path
 - mark which packages are bridges,
 - stop using facade names internally where they obscure real ownership,
 - keep bridges only as public compatibility boundaries.

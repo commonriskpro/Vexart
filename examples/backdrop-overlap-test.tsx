@@ -11,7 +11,7 @@
  *   TGE_RENDERER_BACKEND=gpu bun --conditions=browser run examples/backdrop-overlap-test.tsx
  */
 
-import { mount, onInput } from "@tge/renderer"
+import { mount, onInput } from "@tge/renderer-solid"
 import { createTerminal } from "@tge/terminal"
 import { font, radius, space } from "@tge/void"
 

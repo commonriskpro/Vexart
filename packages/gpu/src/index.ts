@@ -5,7 +5,7 @@
 export {
   createGpuRendererBackend,
   getGpuRendererBackendCacheStats,
-} from "../../renderer/src/gpu-renderer-backend"
+} from "../../core/src/gpu-renderer-backend"
 
 export {
   probeWgpuCanvasBridge,
@@ -45,7 +45,7 @@ export {
   renderWgpuCanvasTargetStarfieldsLayer,
   getWgpuCanvasBridgeInfo,
   supportsWgpuCanvasGlyphLayer,
-} from "../../renderer/src/wgpu-canvas-bridge"
+} from "../../core/src/wgpu-canvas-bridge"
 
 export type {
   WgpuCanvasBridgeProbe,
@@ -71,14 +71,9 @@ export type {
   WgpuCanvasNebulaStop,
   WgpuCanvasStarfield,
   WgpuCanvasGlyphInstance,
-} from "../../renderer/src/wgpu-canvas-bridge"
+} from "../../core/src/wgpu-canvas-bridge"
 
-export {
-  tryCreateWgpuCanvasPainterBackend,
-  getWgpuCanvasPainterCacheStats,
-} from "../../renderer/src/wgpu-canvas-backend"
-
-export { setRendererBackend, getRendererBackend, getRendererBackendName } from "../../renderer/src/renderer-backend"
+export { setRendererBackend, getRendererBackend, getRendererBackendName } from "../../core/src/renderer-backend"
 export type {
   RendererBackend,
   RendererBackendFrameContext,
@@ -87,5 +82,5 @@ export type {
   RendererBackendLayerContext,
   RendererBackendPaintContext,
   RendererBackendPaintResult,
-  RendererBackendSyncLayerContext,
-} from "../../renderer/src/renderer-backend"
+  RendererBackendLayerBacking,
+} from "../../core/src/renderer-backend"

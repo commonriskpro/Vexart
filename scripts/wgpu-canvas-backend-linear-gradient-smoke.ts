@@ -1,6 +1,5 @@
 import { create } from "@tge/pixel"
-import { CanvasContext, setCanvasPainterBackend, paintCanvasCommands } from "@tge/compat-canvas"
-import { tryCreateWgpuCanvasPainterBackend } from "@tge/gpu"
+import { CanvasContext, setCanvasPainterBackend, paintCanvasCommands, tryCreateWgpuCanvasPainterBackend } from "@tge/compat-canvas"
 
 const backend = tryCreateWgpuCanvasPainterBackend()
 if (!backend) throw new Error("WGPU canvas backend is not available")

@@ -19,7 +19,7 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, onInput, type ScrollHandle } from "@tge/renderer"
+import { mount, onInput, type ScrollHandle } from "@tge/renderer-solid"
 import { Box, Text, ScrollView } from "@tge/components"
 import { createTerminal } from "@tge/terminal"
 

@@ -5,13 +5,13 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, markDirty, useDrag, useMouse } from "@tge/renderer"
+import { mount, markDirty, useDrag, useMouse } from "@tge/renderer-solid"
 import { createTerminal } from "@tge/terminal"
 import { createParser } from "@tge/input"
 import { hasNebulaSupport } from "@tge/pixel"
 import { createSpaceBackground, type SpaceBackground } from "@tge/components"
 import { space } from "@tge/void"
-import type { CanvasContext, NodeHandle, NodeMouseEvent } from "@tge/renderer"
+import type { CanvasContext, NodeHandle, NodeMouseEvent } from "@tge/renderer-solid"
 
 type NebulaSample = {
   name: string
