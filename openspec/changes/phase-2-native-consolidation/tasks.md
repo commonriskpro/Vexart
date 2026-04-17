@@ -113,9 +113,9 @@ Objective: Author 4 NEW WGPU pipelines that (a) introduce conic gradient (genuin
 
 Objective: Implement layout computation using Taffy, replacing Clay's role. Per design §5.2, §10, REQ-NB-004.
 
-- [ ] [ATOMIC] 6.1 Create `native/libvexart/src/layout/tree.rs` with `LayoutTree` struct owning a `taffy::Tree` and a `HashMap<u64, taffy::NodeId>` for stable ID mapping. Implement `build_from_commands()` that parses the flat command buffer into Taffy nodes with proper `Style` settings per design §10 migration map. Per design §4, §10.
-- [ ] 6.2 Implement Clay → Taffy style translations in `tree.rs`: `"grow"` → `Dimension::Auto + flex_grow=1.0`, `"fit"` → `Dimension::Auto`, fixed → `Length(n)`, percent → `Percent(n)`, `direction` → `FlexDirection`, `alignX/alignY` → `JustifyContent/AlignItems`, `gap` → both axes equal, padding/border/min/max direct mapping. Per design §10.
-- [ ] 6.3 Implement `floating`/`absolute` positioning translation: `Position::Absolute` with computed `inset` from TS-side attach math. Per design §10.
+- [x] [ATOMIC] 6.1 Create `native/libvexart/src/layout/tree.rs` with `LayoutTree` struct owning a `taffy::Tree` and a `HashMap<u64, taffy::NodeId>` for stable ID mapping. Implement `build_from_commands()` that parses the flat command buffer into Taffy nodes with proper `Style` settings per design §10 migration map. Per design §4, §10.
+- [x] 6.2 Implement Clay → Taffy style translations in `tree.rs`: `"grow"` → `Dimension::Auto + flex_grow=1.0`, `"fit"` → `Dimension::Auto`, fixed → `Length(n)`, percent → `Percent(n)`, `direction` → `FlexDirection`, `alignX/alignY` → `JustifyContent/AlignItems`, `gap` → both axes equal, padding/border/min/max direct mapping. Per design §10.
+- [x] 6.3 Implement `floating`/`absolute` positioning translation: `Position::Absolute` with computed `inset` from TS-side attach math. Per design §10.
 - [ ] 6.4 Create `native/libvexart/src/layout/writeback.rs` with `write_layout()` that reads `taffy::Tree::layout(node)` computed values and writes `PositionedCommand` structs to the caller output buffer. Respect `out_cap`. Per design §4.
 - [ ] 6.5 Wire `vexart_layout_compute()` in `lib.rs` to call `build_from_commands()` + `taffy.compute_layout_with_measure()` + `write_layout()`. Per design §5.2.
 - [ ] 6.6 Wire `vexart_layout_measure()` to return `(0.0, 0.0)` per DEC-011 stub. Per design §5.2.
