@@ -21,6 +21,7 @@
  * | Latin Extended A | 256–383         | Full Latin Extended A block           |
  * | General Punct.   | 0x2010–0x205E   | ·  —  …  "  "  etc.                  |
  * | Arrows           | 0x2190–0x21FF   | ←→↑↓⇒⟳ etc.                          |
+ * | Math Operators   | 0x2200–0x22FF   | ∀∃∈≡≠≤≥∑∏√∞ etc.                     |
  * | Misc Technical   | 0x2300–0x23FF   | ⌃⌘⌥⏎⌫ etc.                           |
  * | Box Drawing      | 0x2500–0x257F   | ─│┌┐└┘├┤┬┴┼ etc.                     |
  * | Block Elements   | 0x2580–0x259F   | ▀▄█▌▐ etc.                            |
@@ -28,7 +29,7 @@
  * | Misc Symbols     | 0x2600–0x26FF   | ☰⚡★☆✓✗ etc.                          |
  * | Dingbats         | 0x2700–0x27BF   | ✦✧⟳❯❮ etc.                           |
  *
- * Total: ~890 glyphs. At 14px, atlas texture is ~448×504px ≈ 900KB RGBA.
+ * Total: ~1146 glyphs. At 14px, atlas texture is ~448×728px ≈ 1.3MB RGBA.
  */
 
 import { createCanvas } from "@napi-rs/canvas"
@@ -48,6 +49,7 @@ export const ATLAS_RANGES: GlyphRange[] = [
   { start: 0x00A0, end: 0x017F }, // Latin-1 Supplement + Latin Extended A
   { start: 0x2010, end: 0x205E }, // General Punctuation
   { start: 0x2190, end: 0x21FF }, // Arrows
+  { start: 0x2200, end: 0x22FF }, // Mathematical Operators (∀∃∈≡≠≤≥∑∏√∞ etc.)
   { start: 0x2300, end: 0x23FF }, // Miscellaneous Technical (⌃⌘⌥⏎ etc.)
   { start: 0x2500, end: 0x27BF }, // Box Drawing + Block + Geometric + Misc Symbols + Dingbats
 ]

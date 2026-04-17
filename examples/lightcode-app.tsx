@@ -100,7 +100,7 @@ function LightcodeHeader(props: {
       onMouseMove={props.ctx.dragHandleProps?.onMouseMove}
       onMouseUp={props.ctx.dragHandleProps?.onMouseUp}
     >
-      <text color={colors.textDim} fontSize={9}>≡</text>
+      <text color={colors.textDim} fontSize={9}>☰</text>
       <text color={colors.textSoft} fontSize={10}>{props.win.title}</text>
       <box width="grow" />
       <WindowControls windowId={props.win.id} buttonSize={16} gap={4} />
