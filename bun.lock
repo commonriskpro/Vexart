@@ -42,8 +42,8 @@
     "packages/devtools": {
       "name": "@tge/devtools",
       "version": "0.0.1",
-      "bin": {
-        "tge-devtools": "src/server.ts",
+      "dependencies": {
+        "@vexart/internal-devtools": "workspace:*",
       },
     },
     "packages/engine": {

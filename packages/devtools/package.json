@@ -3,8 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "main": "src/server.ts",
-  "bin": {
-    "tge-devtools": "src/server.ts"
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@vexart/internal-devtools": "workspace:*"
   }
 }

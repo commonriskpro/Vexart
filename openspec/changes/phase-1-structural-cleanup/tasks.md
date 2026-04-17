@@ -228,15 +228,15 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
 
 ## 13. Rename @tge/devtools to @vexart/internal-devtools (slice 13)
 
-- [ ] 13.1 `git mv packages/devtools/src/kitty.ts packages/internal-devtools/src/kitty.ts`
-- [ ] 13.2 `git mv packages/devtools/src/server.ts packages/internal-devtools/src/server.ts`
-- [ ] 13.3 Update internal imports within moved files — verify no broken references
-- [ ] 13.4 Generate `packages/internal-devtools/src/index.ts` barrel re-exporting kitty and server symbols
-- [ ] 13.5 Update `packages/internal-devtools/src/public.ts` to re-export from `./index`
-- [ ] 13.6 Update `packages/internal-devtools/package.json`: set `"private": true`, ensure name is `@vexart/internal-devtools` (REQ-PB-002)
-- [ ] 13.7 Create shim: rewrite `packages/devtools/src/index.ts` to `export * from "@vexart/internal-devtools"`. Update `packages/devtools/package.json` to add `@vexart/internal-devtools: "workspace:*"` dependency. Delete moved files from old location
-- [ ] 13.8 Run `bun install && bun run typecheck` — must be green
-- [ ] 13.9 Commit: `refactor(internal-devtools): rename @tge/devtools to @vexart/internal-devtools with shim`
+- [x] 13.1 `git mv packages/devtools/src/kitty.ts packages/internal-devtools/src/kitty.ts`
+- [x] 13.2 `git mv packages/devtools/src/server.ts packages/internal-devtools/src/server.ts`
+- [x] 13.3 Update internal imports within moved files — verify no broken references
+- [x] 13.4 Generate `packages/internal-devtools/src/index.ts` barrel re-exporting kitty and server symbols
+- [x] 13.5 Update `packages/internal-devtools/src/public.ts` to re-export from `./index`
+- [x] 13.6 Update `packages/internal-devtools/package.json`: set `"private": true`, ensure name is `@vexart/internal-devtools` (REQ-PB-002)
+- [x] 13.7 Create shim: rewrite `packages/devtools/src/index.ts` to `export * from "@vexart/internal-devtools"`. Update `packages/devtools/package.json` to add `@vexart/internal-devtools: "workspace:*"` dependency. Delete moved files from old location
+- [x] 13.8 Run `bun install && bun run typecheck` — must be green
+- [x] 13.9 Commit: `refactor(internal-devtools): rename @tge/devtools to @vexart/internal-devtools with shim`
 
 ## 14. Rewrite all @tge/* imports to @vexart/* and drop shims (slice 14) — ⚠️ HIGH RISK
 
