@@ -1,4 +1,17 @@
-import { clay } from "../ffi/clay"
+/**
+ * scroll.ts — Phase 2 native path
+ *
+ * Provides scroll handles for programmatic scroll control.
+ * Per design §11, §10: Taffy layout output drives scroll geometry;
+ * scroll state is managed TS-side (no Clay dependency).
+ *
+ * The ScrollHandle API is preserved for API continuity. Scroll positions
+ * are tracked in this module; the vexart composite layer handles the
+ * scissor clipping during paint (paint-side, unchanged).
+ *
+ * Grep gate: rg "import.*clay" packages/engine/src/loop/scroll.ts → 0 hits
+ */
+
 import { markDirty } from "../reconciler/dirty"
 
 export type ScrollHandle = {
@@ -18,47 +31,79 @@ export type ScrollHandle = {
   readonly _clayId: string
 }
 
+/** Internal scroll state per scroll container. */
+type ScrollState = {
+  scrollX: number
+  scrollY: number
+  contentWidth: number
+  contentHeight: number
+  viewportWidth: number
+  viewportHeight: number
+}
+
 const scrollHandles = new Map<string, ScrollHandle>()
+const scrollStates = new Map<string, ScrollState>()
+
+function getState(clayId: string): ScrollState {
+  let state = scrollStates.get(clayId)
+  if (!state) {
+    state = { scrollX: 0, scrollY: 0, contentWidth: 0, contentHeight: 0, viewportWidth: 0, viewportHeight: 0 }
+    scrollStates.set(clayId, state)
+  }
+  return state
+}
+
+/** Update scroll container geometry from Taffy PositionedCommand output. Called by loop.ts after layout. */
+export function updateScrollContainerGeometry(
+  clayId: string,
+  viewportWidth: number,
+  viewportHeight: number,
+  contentWidth: number,
+  contentHeight: number,
+) {
+  const state = getState(clayId)
+  state.viewportWidth = viewportWidth
+  state.viewportHeight = viewportHeight
+  state.contentWidth = contentWidth
+  state.contentHeight = contentHeight
+}
 
 export function createScrollHandle(clayId: string): ScrollHandle {
   const existing = scrollHandles.get(clayId)
   if (existing) return existing
 
   const handle: ScrollHandle = {
-    get scrollX() { return clay.getScrollContainerData(clayId).scrollX },
-    get scrollY() { return clay.getScrollContainerData(clayId).scrollY },
-    get contentWidth() { return clay.getScrollContainerData(clayId).contentWidth },
-    get contentHeight() { return clay.getScrollContainerData(clayId).contentHeight },
-    get viewportWidth() { return clay.getScrollContainerData(clayId).viewportWidth },
-    get viewportHeight() { return clay.getScrollContainerData(clayId).viewportHeight },
-    get y() { return clay.getScrollContainerData(clayId).scrollY },
-    get height() { return clay.getScrollContainerData(clayId).viewportHeight },
-    get scrollHeight() { return clay.getScrollContainerData(clayId).contentHeight },
-    get scrollTop() { return -clay.getScrollContainerData(clayId).scrollY },
+    get scrollX() { return getState(clayId).scrollX },
+    get scrollY() { return getState(clayId).scrollY },
+    get contentWidth() { return getState(clayId).contentWidth },
+    get contentHeight() { return getState(clayId).contentHeight },
+    get viewportWidth() { return getState(clayId).viewportWidth },
+    get viewportHeight() { return getState(clayId).viewportHeight },
+    get y() { return getState(clayId).scrollY },
+    get height() { return getState(clayId).viewportHeight },
+    get scrollHeight() { return getState(clayId).contentHeight },
+    get scrollTop() { return -getState(clayId).scrollY },
     scrollTo(y: number) {
-      const data = clay.getScrollContainerData(clayId)
-      if (!data.found) return
-      const maxScroll = Math.min(0, -(data.contentHeight - data.viewportHeight))
+      const state = getState(clayId)
+      const maxScroll = Math.min(0, -(state.contentHeight - state.viewportHeight))
       const clamped = Math.max(maxScroll, Math.min(0, y))
-      clay.setScrollPosition(clayId, data.scrollX, clamped)
+      state.scrollY = clamped
       markDirty()
     },
     scrollBy(dy: number) {
-      const data = clay.getScrollContainerData(clayId)
-      if (!data.found) return
-      const newY = data.scrollY + dy
-      const maxScroll = Math.min(0, -(data.contentHeight - data.viewportHeight))
+      const state = getState(clayId)
+      const newY = state.scrollY + dy
+      const maxScroll = Math.min(0, -(state.contentHeight - state.viewportHeight))
       const clamped = Math.max(maxScroll, Math.min(0, newY))
-      clay.setScrollPosition(clayId, data.scrollX, clamped)
+      state.scrollY = clamped
       markDirty()
     },
     scrollIntoView(y: number, height: number) {
-      const data = clay.getScrollContainerData(clayId)
-      if (!data.found) return
-      const visibleTop = -data.scrollY
-      const visibleBottom = visibleTop + data.viewportHeight
+      const state = getState(clayId)
+      const visibleTop = -state.scrollY
+      const visibleBottom = visibleTop + state.viewportHeight
       if (y < visibleTop) handle.scrollTo(-y)
-      else if (y + height > visibleBottom) handle.scrollTo(-(y + height - data.viewportHeight))
+      else if (y + height > visibleBottom) handle.scrollTo(-(y + height - state.viewportHeight))
     },
     get _clayId() { return clayId },
   }
@@ -69,4 +114,5 @@ export function createScrollHandle(clayId: string): ScrollHandle {
 
 export function resetScrollHandles() {
   scrollHandles.clear()
+  scrollStates.clear()
 }
