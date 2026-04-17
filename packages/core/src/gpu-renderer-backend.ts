@@ -179,6 +179,8 @@ type CanvasSpriteRecord = {
   handle: WgpuCanvasImageHandle
   width: number
   height: number
+  usedThisFrame: boolean
+  unusedFrames: number
 }
 
 type TransformSpriteRecord = {
@@ -202,6 +204,44 @@ type BackdropSpriteRecord = {
   handle: WgpuCanvasImageHandle
   width: number
   height: number
+}
+
+type ImageInstance = {
+  x: number
+  y: number
+  w: number
+  h: number
+  opacity: number
+}
+
+type TransformedImageInstance = {
+  p0: { x: number; y: number }
+  p1: { x: number; y: number }
+  p2: { x: number; y: number }
+  p3: { x: number; y: number }
+  opacity: number
+}
+
+type ImageGroup = {
+  handle: WgpuCanvasImageHandle
+  instances: ImageInstance[]
+}
+
+type GlyphGroup = {
+  handle: WgpuCanvasImageHandle
+  instances: WgpuCanvasGlyphInstance[]
+}
+
+type TransformedImageGroup = {
+  handle: WgpuCanvasImageHandle
+  instances: TransformedImageInstance[]
+}
+
+type DirtyBoundsRect = {
+  left: number
+  top: number
+  right: number
+  bottom: number
 }
 
 type IntBounds = {
@@ -243,6 +283,23 @@ function applyOpacityToColor(color: number, opacity: number) {
   const alpha = color & 0xff
   const nextAlpha = Math.max(0, Math.min(255, Math.round(alpha * opacity)))
   return (color & 0xffffff00) | nextAlpha
+}
+
+const matrixHashBuffer = new ArrayBuffer(8)
+const matrixHashView = new DataView(matrixHashBuffer)
+
+function hashMatrix(matrix: Float64Array | undefined) {
+  if (!matrix) return 0
+  let hash = 0x811c9dc5
+  for (let i = 0; i < matrix.length; i++) {
+    const value = Number.isFinite(matrix[i]) ? matrix[i] : 0
+    matrixHashView.setFloat64(0, value, true)
+    for (let j = 0; j < 8; j++) {
+      hash ^= matrixHashView.getUint8(j)
+      hash = Math.imul(hash, 0x01000193)
+    }
+  }
+  return hash >>> 0
 }
 
 function isSupportedRectangle(op: RectangleRenderOp) {
@@ -349,6 +406,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   const canvasFunctionIds = new WeakMap<Function, number>()
   let nextCanvasFunctionId = 1
   let frameGeneration = 0
+  let framesSinceStrategyChange = 0
   let currentFrame: RendererBackendFrameContext | null = null
   let currentFrameLayers: RenderedLayerRecord[] = []
   let renderOpToImage: ((op: RenderGraphOp, width: number, height: number, offsetX: number, offsetY: number) => WgpuCanvasImageHandle | null) | null = null
@@ -365,6 +423,187 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     estimatedLayeredBytes: 0,
     estimatedFinalBytes: 0,
   }
+  const rects: WgpuCanvasRectFill[] = []
+  const shapeRects: WgpuCanvasShapeRect[] = []
+  const shapeRectCorners: WgpuCanvasShapeRectCorners[] = []
+  const linearGradients: Parameters<typeof renderWgpuCanvasTargetLinearGradientsLayer>[2] = []
+  const radialGradients: Parameters<typeof renderWgpuCanvasTargetRadialGradientsLayer>[2] = []
+  const glows: WgpuCanvasGlow[] = []
+  const imageGroups = new Map<bigint, ImageGroup>()
+  const glyphGroups = new Map<bigint, GlyphGroup>()
+  const transformedImageGroups = new Map<bigint, TransformedImageGroup>()
+  const transientFullFrameImages: WgpuCanvasImageHandle[] = []
+  const tempGlyphs: WgpuCanvasGlyphInstance[] = []
+  const dirtyRects: DirtyBoundsRect[] = []
+  const cacheStats: GpuRendererBackendCacheStats = {
+    layerTargetCount: 0,
+    layerTargetBytes: 0,
+    textImageCount: 0,
+    textImageBytes: 0,
+    glyphAtlasCount: 0,
+    glyphAtlasBytes: 0,
+    canvasSpriteCount: 0,
+    canvasSpriteBytes: 0,
+    transformSpriteCount: 0,
+    transformSpriteBytes: 0,
+    fallbackSpriteCount: 0,
+    fallbackSpriteBytes: 0,
+    backdropSourceCount: 0,
+    backdropSourceBytes: 0,
+    backdropSpriteCount: 0,
+    backdropSpriteBytes: 0,
+  }
+
+  const layerTargetBytes = (record: TargetRecord) => record.width * record.height * 4
+  const glyphAtlasBytes = (record: GlyphAtlasRecord) => record.cellWidth * record.columns * record.cellHeight * record.rows * 4
+  const canvasSpriteBytes = (record: CanvasSpriteRecord) => record.width * record.height * 4
+  const transformSpriteBytes = (record: TransformSpriteRecord) => record.width * record.height * 4
+  const backdropSourceBytes = (record: BackdropSourceRecord) => (record.bounds.right - record.bounds.left) * (record.bounds.bottom - record.bounds.top) * 4
+  const backdropSpriteBytes = (record: BackdropSpriteRecord) => record.width * record.height * 4
+
+  const setLayerTargetRecord = (key: string, record: TargetRecord) => {
+    const existing = layerTargets.get(key)
+    if (existing) {
+      cacheStats.layerTargetCount -= 1
+      cacheStats.layerTargetBytes -= layerTargetBytes(existing)
+    }
+    layerTargets.set(key, record)
+    cacheStats.layerTargetCount += 1
+    cacheStats.layerTargetBytes += layerTargetBytes(record)
+  }
+
+  const deleteLayerTargetRecord = (key: string) => {
+    const existing = layerTargets.get(key)
+    if (!existing) return null
+    layerTargets.delete(key)
+    cacheStats.layerTargetCount -= 1
+    cacheStats.layerTargetBytes -= layerTargetBytes(existing)
+    return existing
+  }
+
+  const setGlyphAtlasRecord = (key: string, record: GlyphAtlasRecord) => {
+    const existing = glyphAtlases.get(key)
+    if (existing) {
+      cacheStats.glyphAtlasCount -= 1
+      cacheStats.glyphAtlasBytes -= glyphAtlasBytes(existing)
+    }
+    glyphAtlases.set(key, record)
+    cacheStats.glyphAtlasCount += 1
+    cacheStats.glyphAtlasBytes += glyphAtlasBytes(record)
+  }
+
+  const deleteGlyphAtlasRecord = (key: string) => {
+    const existing = glyphAtlases.get(key)
+    if (!existing) return null
+    glyphAtlases.delete(key)
+    cacheStats.glyphAtlasCount -= 1
+    cacheStats.glyphAtlasBytes -= glyphAtlasBytes(existing)
+    return existing
+  }
+
+  const setCanvasSpriteRecord = (key: string, record: CanvasSpriteRecord) => {
+    const existing = canvasSpriteCache.get(key)
+    if (existing) {
+      cacheStats.canvasSpriteCount -= 1
+      cacheStats.canvasSpriteBytes -= canvasSpriteBytes(existing)
+    }
+    canvasSpriteCache.set(key, record)
+    cacheStats.canvasSpriteCount += 1
+    cacheStats.canvasSpriteBytes += canvasSpriteBytes(record)
+  }
+
+  const deleteCanvasSpriteRecord = (key: string) => {
+    const existing = canvasSpriteCache.get(key)
+    if (!existing) return null
+    canvasSpriteCache.delete(key)
+    cacheStats.canvasSpriteCount -= 1
+    cacheStats.canvasSpriteBytes -= canvasSpriteBytes(existing)
+    return existing
+  }
+
+  const clearCanvasSpriteRecords = () => {
+    canvasSpriteCache.clear()
+    cacheStats.canvasSpriteCount = 0
+    cacheStats.canvasSpriteBytes = 0
+  }
+
+  const setTransformSpriteRecord = (key: string, record: TransformSpriteRecord) => {
+    const existing = transformSpriteCache.get(key)
+    if (existing) {
+      cacheStats.transformSpriteCount -= 1
+      cacheStats.transformSpriteBytes -= transformSpriteBytes(existing)
+    }
+    transformSpriteCache.set(key, record)
+    cacheStats.transformSpriteCount += 1
+    cacheStats.transformSpriteBytes += transformSpriteBytes(record)
+  }
+
+  const deleteTransformSpriteRecord = (key: string) => {
+    const existing = transformSpriteCache.get(key)
+    if (!existing) return null
+    transformSpriteCache.delete(key)
+    cacheStats.transformSpriteCount -= 1
+    cacheStats.transformSpriteBytes -= transformSpriteBytes(existing)
+    return existing
+  }
+
+  const clearTransformSpriteRecords = () => {
+    transformSpriteCache.clear()
+    cacheStats.transformSpriteCount = 0
+    cacheStats.transformSpriteBytes = 0
+  }
+
+  const setBackdropSourceRecord = (key: string, record: BackdropSourceRecord) => {
+    const existing = backdropSourceCache.get(key)
+    if (existing) {
+      cacheStats.backdropSourceCount -= 1
+      cacheStats.backdropSourceBytes -= backdropSourceBytes(existing)
+    }
+    backdropSourceCache.set(key, record)
+    cacheStats.backdropSourceCount += 1
+    cacheStats.backdropSourceBytes += backdropSourceBytes(record)
+  }
+
+  const deleteBackdropSourceRecord = (key: string) => {
+    const existing = backdropSourceCache.get(key)
+    if (!existing) return null
+    backdropSourceCache.delete(key)
+    cacheStats.backdropSourceCount -= 1
+    cacheStats.backdropSourceBytes -= backdropSourceBytes(existing)
+    return existing
+  }
+
+  const clearBackdropSourceRecords = () => {
+    backdropSourceCache.clear()
+    cacheStats.backdropSourceCount = 0
+    cacheStats.backdropSourceBytes = 0
+  }
+
+  const setBackdropSpriteRecord = (key: string, record: BackdropSpriteRecord) => {
+    const existing = backdropSpriteCache.get(key)
+    if (existing) {
+      cacheStats.backdropSpriteCount -= 1
+      cacheStats.backdropSpriteBytes -= backdropSpriteBytes(existing)
+    }
+    backdropSpriteCache.set(key, record)
+    cacheStats.backdropSpriteCount += 1
+    cacheStats.backdropSpriteBytes += backdropSpriteBytes(record)
+  }
+
+  const deleteBackdropSpriteRecord = (key: string) => {
+    const existing = backdropSpriteCache.get(key)
+    if (!existing) return null
+    backdropSpriteCache.delete(key)
+    cacheStats.backdropSpriteCount -= 1
+    cacheStats.backdropSpriteBytes -= backdropSpriteBytes(existing)
+    return existing
+  }
+
+  const clearBackdropSpriteRecords = () => {
+    backdropSpriteCache.clear()
+    cacheStats.backdropSpriteCount = 0
+    cacheStats.backdropSpriteBytes = 0
+  }
 
   const recordCurrentFrameLayer = (layer: RenderedLayerRecord) => {
     const existingIndex = currentFrameLayers.findIndex((entry) => entry.key === layer.key)
@@ -375,46 +614,30 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     currentFrameLayers.push(layer)
   }
 
-  const applyStrategyHysteresis = (preferred: GpuLayerStrategyMode, frame: RendererBackendFrameContext): GpuLayerStrategyMode => {
-    if (!lastStrategy) return preferred
-    if (preferred === lastStrategy) return preferred
-    const dirtyRatio = frame.totalPixelArea > 0 ? frame.dirtyPixelArea / frame.totalPixelArea : 0
-    const outputRatio = frame.estimatedFinalBytes > 0 ? frame.estimatedLayeredBytes / frame.estimatedFinalBytes : 0
-    if (preferred === "layered-raw") {
-      if (frame.dirtyLayerCount === 0) return preferred
-      if (outputRatio < 0.42) return preferred
-      if (dirtyRatio < 0.12 && frame.overlapRatio < 0.03) return preferred
-      return lastStrategy
-    }
-    if (frame.fullRepaint) return preferred
-    if (dirtyRatio > 0.42) return preferred
-    if (frame.overlapRatio > 0.12) return preferred
-    if (outputRatio > 0.82) return preferred
-    return lastStrategy
-  }
-
   const clearSpriteCaches = () => {
     if (!context) return
     for (const record of glyphAtlases.values()) {
       destroyWgpuCanvasImage(context, record.handle)
     }
     glyphAtlases.clear()
+    cacheStats.glyphAtlasCount = 0
+    cacheStats.glyphAtlasBytes = 0
     for (const record of canvasSpriteCache.values()) {
       destroyWgpuCanvasImage(context, record.handle)
     }
-    canvasSpriteCache.clear()
+    clearCanvasSpriteRecords()
     for (const record of transformSpriteCache.values()) {
       destroyWgpuCanvasImage(context, record.handle)
     }
-    transformSpriteCache.clear()
+    clearTransformSpriteRecords()
     for (const record of backdropSourceCache.values()) {
       destroyWgpuCanvasImage(context, record.handle)
     }
-    backdropSourceCache.clear()
+    clearBackdropSourceRecords()
     for (const record of backdropSpriteCache.values()) {
       destroyWgpuCanvasImage(context, record.handle)
     }
-    backdropSpriteCache.clear()
+    clearBackdropSpriteRecords()
   }
 
   const pruneBackdropCaches = (activeFrameId: number) => {
@@ -422,12 +645,12 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     for (const [key, record] of backdropSourceCache) {
       if (record.frameId === activeFrameId) continue
       destroyWgpuCanvasImage(context, record.handle)
-      backdropSourceCache.delete(key)
+      deleteBackdropSourceRecord(key)
     }
     for (const [key, record] of backdropSpriteCache) {
       if (record.frameId === activeFrameId) continue
       destroyWgpuCanvasImage(context, record.handle)
-      backdropSpriteCache.delete(key)
+      deleteBackdropSpriteRecord(key)
     }
   }
 
@@ -475,7 +698,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     }
     if (existing) destroyWgpuCanvasTarget(context, existing.handle)
     const handle = createWgpuCanvasTarget(context, { width, height })
-    layerTargets.set(key, { key, width, height, handle })
+    setLayerTargetRecord(key, { key, width, height, handle })
     return handle
   }
 
@@ -484,7 +707,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     for (const [key, record] of layerTargets) {
       if (activeLayerKeys.has(key)) continue
       destroyWgpuCanvasTarget(context, record.handle)
-      layerTargets.delete(key)
+      deleteLayerTargetRecord(key)
     }
   }
 
@@ -497,8 +720,29 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       if (record) {
         destroyWgpuCanvasImage(context, record.handle)
       }
-      canvasSpriteCache.delete(first)
+      deleteCanvasSpriteRecord(first)
     }
+  }
+
+  const markCanvasSpritesUnusedForFrame = () => {
+    for (const record of canvasSpriteCache.values()) {
+      record.usedThisFrame = false
+    }
+  }
+
+  const pruneCanvasSpriteCache = () => {
+    if (!context) return
+    for (const [key, record] of canvasSpriteCache) {
+      if (record.usedThisFrame) {
+        record.unusedFrames = 0
+        continue
+      }
+      record.unusedFrames += 1
+      if (record.unusedFrames < 3) continue
+      destroyWgpuCanvasImage(context, record.handle)
+      deleteCanvasSpriteRecord(key)
+    }
+    trimCanvasSpriteCache()
   }
 
   const trimTransformSpriteCache = () => {
@@ -508,28 +752,11 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       if (!first) break
       const record = transformSpriteCache.get(first)
       if (record) destroyWgpuCanvasImage(context, record.handle)
-      transformSpriteCache.delete(first)
+      deleteTransformSpriteRecord(first)
     }
   }
 
-  gpuRendererBackendStatsProvider = () => ({
-    layerTargetCount: layerTargets.size,
-    layerTargetBytes: Array.from(layerTargets.values()).reduce((sum, record) => sum + record.width * record.height * 4, 0),
-    textImageCount: 0,
-    textImageBytes: 0,
-    glyphAtlasCount: glyphAtlases.size,
-    glyphAtlasBytes: Array.from(glyphAtlases.values()).reduce((sum, record) => sum + record.cellWidth * record.columns * record.cellHeight * record.rows * 4, 0),
-    canvasSpriteCount: canvasSpriteCache.size,
-    canvasSpriteBytes: Array.from(canvasSpriteCache.values()).reduce((sum, record) => sum + record.width * record.height * 4, 0),
-    transformSpriteCount: transformSpriteCache.size,
-    transformSpriteBytes: Array.from(transformSpriteCache.values()).reduce((sum, record) => sum + record.width * record.height * 4, 0),
-    fallbackSpriteCount: 0,
-    fallbackSpriteBytes: 0,
-    backdropSourceCount: backdropSourceCache.size,
-    backdropSourceBytes: Array.from(backdropSourceCache.values()).reduce((sum, record) => sum + (record.bounds.right - record.bounds.left) * (record.bounds.bottom - record.bounds.top) * 4, 0),
-    backdropSpriteCount: backdropSpriteCache.size,
-    backdropSpriteBytes: Array.from(backdropSpriteCache.values()).reduce((sum, record) => sum + record.width * record.height * 4, 0),
-  })
+  gpuRendererBackendStatsProvider = () => cacheStats
 
   const getImage = (rgba: Uint8Array, width: number, height: number) => {
     if (!context) return null
@@ -590,10 +817,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       if (first) {
         const stale = glyphAtlases.get(first)
         if (stale) destroyWgpuCanvasImage(context, stale.handle)
-        glyphAtlases.delete(first)
+        deleteGlyphAtlasRecord(first)
       }
     }
-    glyphAtlases.set(key, record)
+    setGlyphAtlasRecord(key, record)
     return record
   }
 
@@ -605,30 +832,17 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     return id
   }
 
-  const clearCanvasSpriteCache = () => {
-    if (!context) return
-    for (const record of canvasSpriteCache.values()) {
-      destroyWgpuCanvasImage(context, record.handle)
-    }
-    canvasSpriteCache.clear()
-  }
-
   const getCanvasSprite = (op: Extract<RenderGraphOp, { kind: "canvas" }>) => {
     if (!context) return null
     const viewport = op.canvas.viewport
     const fnId = getCanvasFunctionId(op.canvas.onDraw)
     const width = Math.max(1, Math.round(op.command.width))
     const height = Math.max(1, Math.round(op.command.height))
-    const key = JSON.stringify({
-      fnId,
-      width,
-      height,
-      viewportX: viewport?.x ?? 0,
-      viewportY: viewport?.y ?? 0,
-      viewportZoom: viewport?.zoom ?? 1,
-    })
+    const key = `${fnId}:${width}:${height}:${viewport?.x ?? 0}:${viewport?.y ?? 0}:${viewport?.zoom ?? 1}`
     const cached = canvasSpriteCache.get(key)
     if (cached && cached.width === width && cached.height === height) {
+      cached.usedThisFrame = true
+      cached.unusedFrames = 0
       touchMapEntry(canvasSpriteCache, key, cached)
       return cached.handle
     }
@@ -640,7 +854,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     if (canvasCtx._commands.length === 0) {
       const empty = createEmptyGpuImage(context, width, height)
       const handle = empty.handle
-      canvasSpriteCache.set(key, { key, handle, width, height })
+      setCanvasSpriteRecord(key, { key, handle, width, height, usedThisFrame: true, unusedFrames: 0 })
       trimCanvasSpriteCache()
       return handle
     }
@@ -723,7 +937,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       try {
         const copied = copyGpuTargetRegionToImage(context, target, { x: 0, y: 0, width, height })
         const handle = copied.handle
-        canvasSpriteCache.set(key, { key, handle, width, height })
+        setCanvasSpriteRecord(key, { key, handle, width, height, usedThisFrame: true, unusedFrames: 0 })
         trimCanvasSpriteCache()
         return handle
       } finally {
@@ -737,14 +951,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     if (!context) return null
     const width = Math.max(1, Math.round(op.command.width))
     const height = Math.max(1, Math.round(op.command.height))
-    const key = JSON.stringify({
-      kind: op.kind,
-      command: op.command,
-      width,
-      height,
-      transform: Array.from(op.effect.transform ?? []),
-      opacity: op.effect.opacity ?? 1,
-    })
+    const key = `${op.kind}:${op.command.type}:${op.command.x}:${op.command.y}:${op.command.width}:${op.command.height}:${op.command.color[0]}:${op.command.color[1]}:${op.command.color[2]}:${op.command.color[3]}:${op.command.cornerRadius}:${op.command.extra1}:${op.command.extra2}:${op.command.text ?? ""}:${width}:${height}:${hashMatrix(op.effect.transform)}:${op.effect.opacity ?? 1}`
     const cached = transformSpriteCache.get(key)
     if (cached && cached.width === width && cached.height === height) {
       touchMapEntry(transformSpriteCache, key, cached)
@@ -766,7 +973,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       ? renderSprite(spriteOp, width, height, Math.round(op.command.x), Math.round(op.command.y))
       : null
     if (!handle) return null
-    transformSpriteCache.set(key, { key, handle, width, height })
+    setTransformSpriteRecord(key, { key, handle, width, height })
     trimTransformSpriteCache()
     return handle
   }
@@ -850,15 +1057,18 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   ): { ok: boolean; rawLayer: { data: Uint8Array; width: number; height: number } | null } => {
     if (!context) return { ok: false, rawLayer: null }
     let first = true
-    const rects: WgpuCanvasRectFill[] = []
-    const shapeRects: WgpuCanvasShapeRect[] = []
-    const shapeRectCorners: WgpuCanvasShapeRectCorners[] = []
-    const linearGradients: Parameters<typeof renderWgpuCanvasTargetLinearGradientsLayer>[2] = []
-    const radialGradients: Parameters<typeof renderWgpuCanvasTargetRadialGradientsLayer>[2] = []
-    const glows: WgpuCanvasGlow[] = []
-    const imageGroups = new Map<bigint, { handle: WgpuCanvasImageHandle; instances: { x: number; y: number; w: number; h: number; opacity: number }[] }>()
-    const glyphGroups = new Map<bigint, { handle: WgpuCanvasImageHandle; instances: WgpuCanvasGlyphInstance[] }>()
-    const transformedImageGroups = new Map<bigint, { handle: WgpuCanvasImageHandle; instances: { p0: { x: number; y: number }; p1: { x: number; y: number }; p2: { x: number; y: number }; p3: { x: number; y: number }; opacity: number }[] }>()
+    rects.length = 0
+    shapeRects.length = 0
+    shapeRectCorners.length = 0
+    linearGradients.length = 0
+    radialGradients.length = 0
+    glows.length = 0
+    imageGroups.clear()
+    glyphGroups.clear()
+    transformedImageGroups.clear()
+    transientFullFrameImages.length = 0
+    tempGlyphs.length = 0
+    dirtyRects.length = 0
     let targetMutationVersion = 0
 
     const flushRects = () => {
@@ -943,7 +1153,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     }
 
     let dirtyBounds: IntBounds | null = null
-    const transientFullFrameImages: WgpuCanvasImageHandle[] = []
     let layerOpen = true
 
     frameGeneration += 1
@@ -1002,7 +1211,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         bounds: workBounds,
         handle: copied.handle,
       }
-      backdropSourceCache.set(sourceKey, record)
+      setBackdropSourceRecord(sourceKey, record)
       return record
     }
 
@@ -1041,7 +1250,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         height: source.bounds.bottom - source.bounds.top,
       }
       if (cached) destroyWgpuCanvasImage(context, cached.handle)
-      backdropSpriteCache.set(spriteKey, record)
+      setBackdropSpriteRecord(spriteKey, record)
       return record
     }
 
@@ -1095,7 +1304,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
               ensureLoadedLayer()
               const bounds = opBounds(effectOp, ctx.target.width, ctx.target.height)
               if (bounds) {
-        const group = (transformedImageGroups.get(sprite.handle) ?? { handle: sprite.handle, instances: [] as { p0: { x: number; y: number }; p1: { x: number; y: number }; p2: { x: number; y: number }; p3: { x: number; y: number }; opacity: number }[] })
+                const group = transformedImageGroups.get(sprite.handle) ?? { handle: sprite.handle, instances: [] as TransformedImageInstance[] }
                 const matrix = effectOp.effect.transform
                 const width = Math.max(1, Math.round(effectOp.command.width))
                 const height = Math.max(1, Math.round(effectOp.command.height))
@@ -1170,7 +1379,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             if (!bounds) continue
             const handle = getTransformSprite(effectOp)
             if (!handle) return { ok: false, rawLayer: null }
-            const group = (transformedImageGroups.get(handle) ?? { handle, instances: [] as { p0: { x: number; y: number }; p1: { x: number; y: number }; p2: { x: number; y: number }; p3: { x: number; y: number }; opacity: number }[] })
+            const group = transformedImageGroups.get(handle) ?? { handle, instances: [] as TransformedImageInstance[] }
             const matrix = effectOp.effect.transform
             const width = Math.max(1, Math.round(effectOp.command.width))
             const height = Math.max(1, Math.round(effectOp.command.height))
@@ -1478,8 +1687,8 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             const atlasRecord = getGlyphAtlas(op.inputs.fontId)
             usedGlyphPath = !!atlasRecord
             if (atlasRecord) {
-              const tempGlyphs: WgpuCanvasGlyphInstance[] = []
-              const dirtyRects: { left: number; top: number; right: number; bottom: number }[] = []
+              tempGlyphs.length = 0
+              dirtyRects.length = 0
               for (let li = 0; li < layout.lines.length; li++) {
                 const line = layout.lines[li]
                 let cursorX = textX
@@ -1653,13 +1862,15 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       currentFrameLayers = []
       activeLayerKeys.clear()
       suppressFinalPresentation = false
-      clearCanvasSpriteCache()
+      markCanvasSpritesUnusedForFrame()
       if (!gpuAvailable || !context || !ctx.useLayerCompositing) {
         lastStrategy = null
+        framesSinceStrategyChange = 0
         lastStrategyTelemetry = { preferred: null, chosen: null, estimatedLayeredBytes: 0, estimatedFinalBytes: 0 }
         return { strategy: null }
       }
       if (FORCED_LAYER_STRATEGY) {
+        framesSinceStrategyChange = lastStrategy === FORCED_LAYER_STRATEGY ? framesSinceStrategyChange + 1 : 0
         lastStrategy = FORCED_LAYER_STRATEGY
         lastStrategyTelemetry = {
           preferred: FORCED_LAYER_STRATEGY,
@@ -1669,41 +1880,27 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         }
         return { strategy: lastStrategy }
       }
-      if (ctx.hasSubtreeTransforms) {
-        lastStrategy = "final-frame-raw"
-        lastStrategyTelemetry = {
-          preferred: "final-frame-raw",
-          chosen: "final-frame-raw",
-          estimatedLayeredBytes: ctx.estimatedLayeredBytes,
-          estimatedFinalBytes: ctx.estimatedFinalBytes,
-        }
-        return { strategy: lastStrategy }
-      }
-      if (ctx.hasActiveInteraction) {
-        lastStrategy = "layered-raw"
-        lastStrategyTelemetry = {
-          preferred: "layered-raw",
-          chosen: "layered-raw",
-          estimatedLayeredBytes: ctx.estimatedLayeredBytes,
-          estimatedFinalBytes: ctx.estimatedFinalBytes,
-        }
-        return { strategy: lastStrategy }
-      }
-      const preferred = chooseGpuLayerStrategy({
+      const previousStrategy = lastStrategy
+      const chosen = chooseGpuLayerStrategy({
         dirtyLayerCount: ctx.dirtyLayerCount,
         dirtyPixelArea: ctx.dirtyPixelArea,
         totalPixelArea: ctx.totalPixelArea,
         overlapPixelArea: ctx.overlapPixelArea,
         overlapRatio: ctx.overlapRatio,
         fullRepaint: ctx.fullRepaint,
+        hasSubtreeTransforms: ctx.hasSubtreeTransforms,
+        hasActiveInteraction: ctx.hasActiveInteraction,
         transmissionMode: ctx.transmissionMode,
         estimatedLayeredBytes: ctx.estimatedLayeredBytes,
         estimatedFinalBytes: ctx.estimatedFinalBytes,
+        lastStrategy: previousStrategy,
+        framesSinceChange: framesSinceStrategyChange,
       })
-      lastStrategy = applyStrategyHysteresis(preferred, ctx)
+      framesSinceStrategyChange = chosen === previousStrategy ? framesSinceStrategyChange + 1 : 0
+      lastStrategy = chosen
       lastStrategyTelemetry = {
-        preferred,
-        chosen: lastStrategy,
+        preferred: chosen,
+        chosen,
         estimatedLayeredBytes: ctx.estimatedLayeredBytes,
         estimatedFinalBytes: ctx.estimatedFinalBytes,
       }
@@ -1791,6 +1988,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     },
     endFrame(ctx) {
       currentFrame = null
+      pruneCanvasSpriteCache()
       if (!gpuAvailable || !context || !ctx.useLayerCompositing) return { output: "none", strategy: lastStrategy }
       if (suppressFinalPresentation) {
         pruneLayerTargets()

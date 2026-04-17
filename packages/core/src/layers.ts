@@ -76,167 +76,260 @@ function backingForLayer(id: number, width: number, height: number) {
   }
 }
 
-/** All active layers, keyed by layer ID. */
-const layers = new Map<number, Layer>()
-
-/** Next layer ID counter. */
-let nextLayerId = 0
-
-/** Create a new layer. Returns the layer. */
-export function createLayer(z: number): Layer {
-  const id = nextLayerId++
-  const layer: Layer = {
-    id,
-    z,
-    x: 0,
-    y: 0,
-    width: 0,
-    height: 0,
-    backing: null,
-    dirty: true,
-    prevX: -1,
-    prevY: -1,
-    prevW: -1,
-    prevH: -1,
-    prevZ: z,
-    damageRect: null,
-  }
-  layers.set(id, layer)
-  return layer
+export type LayerStore = {
+  createLayer: (z: number) => Layer
+  getLayer: (id: number) => Layer | undefined
+  removeLayer: (layer: Layer) => void
+  allLayers: () => Layer[]
+  markLayerDirty: (id: number) => void
+  markAllDirty: () => void
+  anyLayerDirty: () => boolean
+  updateLayerGeometry: (layer: Layer, x: number, y: number, w: number, h: number, opts?: { moveOnly?: boolean }) => void
+  markLayerClean: (layer: Layer) => void
+  markLayerDamaged: (layer: Layer, rect: DamageRect) => void
+  getLayerRect: (layer: Layer) => DamageRect
+  getPreviousLayerRect: (layer: Layer) => DamageRect | null
+  imageIdForLayer: (layer: Layer) => number
+  resetLayers: () => void
+  dirtyCount: () => number
+  layerCount: () => number
 }
 
-/** Get a layer by ID. */
-export function getLayer(id: number): Layer | undefined {
-  return layers.get(id)
-}
+export function createLayerStore(): LayerStore {
+  const layers = new Map<number, Layer>()
+  let nextLayerId = 0
 
-/** Remove a layer from the registry. */
-export function removeLayer(layer: Layer) {
-  layers.delete(layer.id)
-}
-
-/** Get all layers sorted by z-order. */
-export function allLayers(): Layer[] {
-  return Array.from(layers.values()).sort((a, b) => a.z - b.z)
-}
-
-/** Mark a layer as dirty (needs repaint + retransmit). */
-export function markLayerDirty(id: number) {
-  const layer = layers.get(id)
-  if (layer) layer.dirty = true
-}
-
-/** Mark ALL layers dirty (e.g., on resize). */
-export function markAllDirty() {
-  for (const layer of layers.values()) {
-    layer.dirty = true
-  }
-}
-
-/** Check if ANY layer is dirty. */
-export function anyLayerDirty(): boolean {
-  for (const layer of layers.values()) {
-    if (layer.dirty) return true
-  }
-  return false
-}
-
-/**
- * Update a layer's geometry. If position or size changed, marks it dirty.
- * This function owns geometry/damage/backing metadata only.
- */
-export function updateLayerGeometry(layer: Layer, x: number, y: number, w: number, h: number, opts?: { moveOnly?: boolean }) {
-  if (w <= 0 || h <= 0) return
-
-  const hadPrev = layer.prevW > 0 && layer.prevH > 0
-  const prevRect = hadPrev
-    ? { x: layer.prevX, y: layer.prevY, width: layer.prevW, height: layer.prevH }
-    : null
-  const moved = x !== layer.prevX || y !== layer.prevY
-  const resized = w !== layer.prevW || h !== layer.prevH
-  const nextRect = { x, y, width: w, height: h }
-
-  layer.x = x
-  layer.y = y
-  layer.width = w
-  layer.height = h
-  layer.backing = backingForLayer(layer.id, w, h)
-
-  if (resized) {
-    layer.dirty = true
-    layer.damageRect = nextRect
+  const createLayer = (z: number): Layer => {
+    const id = nextLayerId++
+    const layer: Layer = {
+      id,
+      z,
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+      backing: null,
+      dirty: true,
+      prevX: -1,
+      prevY: -1,
+      prevW: -1,
+      prevH: -1,
+      prevZ: z,
+      damageRect: null,
+    }
+    layers.set(id, layer)
+    return layer
   }
 
-  if (moved) {
-    if (opts?.moveOnly && !resized) {
-      layer.damageRect = null
-    } else {
+  const getLayer = (id: number) => layers.get(id)
+
+  const removeLayer = (layer: Layer) => {
+    layers.delete(layer.id)
+  }
+
+  const allLayers = () => Array.from(layers.values()).sort((a, b) => a.z - b.z)
+
+  const markLayerDirty = (id: number) => {
+    const layer = layers.get(id)
+    if (layer) layer.dirty = true
+  }
+
+  const markAllDirty = () => {
+    for (const layer of layers.values()) {
       layer.dirty = true
-      layer.damageRect = prevRect ? unionRect(prevRect, nextRect) : nextRect
     }
   }
 
-  if (!moved && !resized && !layer.damageRect) {
+  const anyLayerDirty = () => {
+    for (const layer of layers.values()) {
+      if (layer.dirty) return true
+    }
+    return false
+  }
+
+  const updateLayerGeometry = (layer: Layer, x: number, y: number, w: number, h: number, opts?: { moveOnly?: boolean }) => {
+    if (w <= 0 || h <= 0) return
+
+    const hadPrev = layer.prevW > 0 && layer.prevH > 0
+    const prevRect = hadPrev
+      ? { x: layer.prevX, y: layer.prevY, width: layer.prevW, height: layer.prevH }
+      : null
+    const moved = x !== layer.prevX || y !== layer.prevY
+    const resized = w !== layer.prevW || h !== layer.prevH
+    const nextRect = { x, y, width: w, height: h }
+
+    layer.x = x
+    layer.y = y
+    layer.width = w
+    layer.height = h
+    layer.backing = backingForLayer(layer.id, w, h)
+
+    if (resized) {
+      layer.dirty = true
+      layer.damageRect = nextRect
+    }
+
+    if (moved) {
+      if (opts?.moveOnly && !resized) {
+        layer.damageRect = null
+      } else {
+        layer.dirty = true
+        layer.damageRect = prevRect ? unionRect(prevRect, nextRect) : nextRect
+      }
+    }
+
+    if (!moved && !resized && !layer.damageRect) {
+      layer.damageRect = null
+    }
+  }
+
+  const markLayerClean = (layer: Layer) => {
+    layer.dirty = false
+    layer.prevX = layer.x
+    layer.prevY = layer.y
+    layer.prevW = layer.width
+    layer.prevH = layer.height
+    layer.prevZ = layer.z
     layer.damageRect = null
   }
-}
 
-/** Mark a layer as clean (after successful transmit). */
-export function markLayerClean(layer: Layer) {
-  layer.dirty = false
-  layer.prevX = layer.x
-  layer.prevY = layer.y
-  layer.prevW = layer.width
-  layer.prevH = layer.height
-  layer.prevZ = layer.z
-  layer.damageRect = null
-}
+  const markLayerDamaged = (layer: Layer, rect: DamageRect) => {
+    layer.damageRect = layer.damageRect ? unionRect(layer.damageRect, rect) : rect
+    layer.dirty = true
+  }
 
-export function markLayerDamaged(layer: Layer, rect: DamageRect) {
-  layer.damageRect = layer.damageRect ? unionRect(layer.damageRect, rect) : rect
-  layer.dirty = true
-}
-
-export function getLayerRect(layer: Layer): DamageRect {
-  return {
+  const getLayerRect = (layer: Layer): DamageRect => ({
     x: layer.x,
     y: layer.y,
     width: layer.width,
     height: layer.height,
-  }
-}
+  })
 
-export function getPreviousLayerRect(layer: Layer): DamageRect | null {
-  if (layer.prevW <= 0 || layer.prevH <= 0) return null
+  const getPreviousLayerRect = (layer: Layer): DamageRect | null => {
+    if (layer.prevW <= 0 || layer.prevH <= 0) return null
+    return {
+      x: layer.prevX,
+      y: layer.prevY,
+      width: layer.prevW,
+      height: layer.prevH,
+    }
+  }
+
+  const imageIdForLayer = (layer: Layer) => layer.backing?.imageId ?? BASE_IMAGE_ID + layer.id
+
+  const resetLayers = () => {
+    layers.clear()
+    nextLayerId = 0
+  }
+
+  const dirtyCount = () => {
+    let count = 0
+    for (const layer of layers.values()) {
+      if (layer.dirty) count++
+    }
+    return count
+  }
+
+  const layerCount = () => layers.size
+
   return {
-    x: layer.prevX,
-    y: layer.prevY,
-    width: layer.prevW,
-    height: layer.prevH,
+    createLayer,
+    getLayer,
+    removeLayer,
+    allLayers,
+    markLayerDirty,
+    markAllDirty,
+    anyLayerDirty,
+    updateLayerGeometry,
+    markLayerClean,
+    markLayerDamaged,
+    getLayerRect,
+    getPreviousLayerRect,
+    imageIdForLayer,
+    resetLayers,
+    dirtyCount,
+    layerCount,
   }
 }
 
-/** Get the Kitty image ID for a layer. */
+const defaultLayerStore = createLayerStore()
+
+/** @deprecated Use createLayerStore() and keep state per render loop instance. */
+export function createLayer(z: number): Layer {
+  return defaultLayerStore.createLayer(z)
+}
+
+/** @deprecated Use createLayerStore() and keep state per render loop instance. */
+export function getLayer(id: number): Layer | undefined {
+  return defaultLayerStore.getLayer(id)
+}
+
+/** @deprecated Use createLayerStore() and keep state per render loop instance. */
+export function removeLayer(layer: Layer) {
+  defaultLayerStore.removeLayer(layer)
+}
+
+/** @deprecated Use createLayerStore() and keep state per render loop instance. */
+export function allLayers(): Layer[] {
+  return defaultLayerStore.allLayers()
+}
+
+/** @deprecated Use createLayerStore() and keep state per render loop instance. */
+export function markLayerDirty(id: number) {
+  defaultLayerStore.markLayerDirty(id)
+}
+
+/** @deprecated Use createLayerStore() and keep state per render loop instance. */
+export function markAllDirty() {
+  defaultLayerStore.markAllDirty()
+}
+
+/** @deprecated Use createLayerStore() and keep state per render loop instance. */
+export function anyLayerDirty(): boolean {
+  return defaultLayerStore.anyLayerDirty()
+}
+
+/** @deprecated Use createLayerStore() and keep state per render loop instance. */
+export function updateLayerGeometry(layer: Layer, x: number, y: number, w: number, h: number, opts?: { moveOnly?: boolean }) {
+  defaultLayerStore.updateLayerGeometry(layer, x, y, w, h, opts)
+}
+
+/** @deprecated Use createLayerStore() and keep state per render loop instance. */
+export function markLayerClean(layer: Layer) {
+  defaultLayerStore.markLayerClean(layer)
+}
+
+/** @deprecated Use createLayerStore() and keep state per render loop instance. */
+export function markLayerDamaged(layer: Layer, rect: DamageRect) {
+  defaultLayerStore.markLayerDamaged(layer, rect)
+}
+
+/** @deprecated Use createLayerStore() and keep state per render loop instance. */
+export function getLayerRect(layer: Layer): DamageRect {
+  return defaultLayerStore.getLayerRect(layer)
+}
+
+/** @deprecated Use createLayerStore() and keep state per render loop instance. */
+export function getPreviousLayerRect(layer: Layer): DamageRect | null {
+  return defaultLayerStore.getPreviousLayerRect(layer)
+}
+
+/** @deprecated Use createLayerStore() and keep state per render loop instance. */
 export function imageIdForLayer(layer: Layer): number {
-  return layer.backing?.imageId ?? BASE_IMAGE_ID + layer.id
+  return defaultLayerStore.imageIdForLayer(layer)
 }
 
-/** Reset the entire layer system. */
+/** @deprecated Use createLayerStore() and keep state per render loop instance. */
 export function resetLayers() {
-  layers.clear()
-  nextLayerId = 0
+  defaultLayerStore.resetLayers()
 }
 
-/** Get count of dirty layers (for debug/stats). */
+/** @deprecated Use createLayerStore() and keep state per render loop instance. */
 export function dirtyCount(): number {
-  let count = 0
-  for (const layer of layers.values()) {
-    if (layer.dirty) count++
-  }
-  return count
+  return defaultLayerStore.dirtyCount()
 }
 
-/** Get total layer count. */
+/** @deprecated Use createLayerStore() and keep state per render loop instance. */
 export function layerCount(): number {
-  return layers.size
+  return defaultLayerStore.layerCount()
 }

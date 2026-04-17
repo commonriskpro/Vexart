@@ -66,6 +66,13 @@ const BRIDGE_GLYPH_FFI_DEFS = {
 
 type WgpuGlyphBridgeLib = ReturnType<typeof dlopen<typeof BRIDGE_GLYPH_FFI_DEFS>>
 
+type StagingBufferPool = {
+  float32: Float32Array
+  float64: Float64Array
+  stats: Float64Array
+  getFloat32: (requiredLength: number) => Float32Array
+}
+
 export type WgpuCanvasBridgeProbe = {
   available: boolean
   libraryPath: string | null
@@ -338,8 +345,44 @@ function readFrameStats(buf: Float64Array): WgpuCanvasFrameStats {
   }
 }
 
-function createBackdropFilterParamsBuffer(params: WgpuBackdropFilterParams) {
-  const data = new Float32Array(8)
+function createStagingBufferPool(): StagingBufferPool {
+  const pool: StagingBufferPool = {
+    float32: new Float32Array(16384),
+    float64: new Float64Array(64),
+    stats: new Float64Array(0),
+    getFloat32(requiredLength) {
+      if (requiredLength > pool.float32.length) {
+        let nextLength = pool.float32.length
+        while (nextLength < requiredLength) nextLength *= 2
+        pool.float32 = new Float32Array(nextLength)
+      }
+      const view = pool.float32.subarray(0, requiredLength)
+      view.fill(0)
+      return view
+    },
+  }
+  pool.stats = pool.float64.subarray(0, 3)
+  return pool
+}
+
+const stagingBufferPools = new Map<WgpuCanvasContextHandle, StagingBufferPool>()
+
+function getStagingBufferPool(contextHandle: WgpuCanvasContextHandle) {
+  const pool = stagingBufferPools.get(contextHandle)
+  if (!pool) throw new Error("WGPU canvas staging pool is not initialized")
+  return pool
+}
+
+function getStatsBuffer(pool: StagingBufferPool) {
+  const stats = pool.stats
+  stats[0] = 0
+  stats[1] = 0
+  stats[2] = 0
+  return stats
+}
+
+function createBackdropFilterParamsBuffer(pool: StagingBufferPool, params: WgpuBackdropFilterParams) {
+  const data = pool.getFloat32(8)
   data[0] = params.blur ?? Number.NaN
   data[1] = params.brightness ?? Number.NaN
   data[2] = params.contrast ?? Number.NaN
@@ -464,12 +507,14 @@ export function createWgpuCanvasContext(options?: WgpuCanvasInitOptions) {
   const init = createInitOptionsBuffer(options)
   const handle = BigInt(lib.symbols.tge_wgpu_canvas_context_create(init))
   if (handle === 0n) throw new Error(readLastError(lib))
+  stagingBufferPools.set(handle, createStagingBufferPool())
   return handle
 }
 
 export function destroyWgpuCanvasContext(contextHandle: WgpuCanvasContextHandle) {
   const lib = loadWgpuCanvasBridge()
   if (!lib) return
+  stagingBufferPools.delete(contextHandle)
   lib.symbols.tge_wgpu_canvas_context_destroy(contextHandle)
 }
 
@@ -510,7 +555,7 @@ export function copyWgpuCanvasTargetRegionToImage(
 ) {
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(getStagingBufferPool(contextHandle))
   const handle = BigInt(lib.symbols.tge_wgpu_canvas_target_copy_region_to_image(
     contextHandle,
     targetHandle,
@@ -531,7 +576,7 @@ export function filterWgpuCanvasImageBackdrop(
 ) {
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
-  const data = createBackdropFilterParamsBuffer(params)
+  const data = createBackdropFilterParamsBuffer(getStagingBufferPool(contextHandle), params)
   const handle = BigInt(lib.symbols.tge_wgpu_canvas_image_filter_backdrop(contextHandle, imageHandle, data))
   if (handle === 0n) throw new Error(readLastError(lib))
   return handle
@@ -583,7 +628,7 @@ export function maskWgpuCanvasImageRoundedRectCorners(
 export function renderWgpuCanvasTargetClear(contextHandle: WgpuCanvasContextHandle, targetHandle: WgpuCanvasTargetHandle, rgba: number) {
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(getStagingBufferPool(contextHandle))
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_clear(contextHandle, targetHandle, rgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return readFrameStats(stats)
@@ -607,7 +652,7 @@ export function readbackWgpuCanvasTargetRGBA(contextHandle: WgpuCanvasContextHan
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
   const data = new Uint8Array(byteLength)
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(getStagingBufferPool(contextHandle))
   const status = Number(lib.symbols.tge_wgpu_canvas_target_readback_rgba(contextHandle, targetHandle, data, data.length, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return { data, stats: readFrameStats(stats) }
@@ -622,7 +667,7 @@ export function readbackWgpuCanvasTargetRegionRGBA(
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
   const byteLength = region.width * region.height * 4
   const data = new Uint8Array(byteLength)
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(getStagingBufferPool(contextHandle))
   const status = Number(lib.symbols.tge_wgpu_canvas_target_readback_region_rgba(
     contextHandle,
     targetHandle,
@@ -648,7 +693,8 @@ export function renderWgpuCanvasTargetRects(
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
   if (rects.length === 0) throw new Error("renderWgpuCanvasTargetRects requires at least one rect")
 
-  const data = new Float32Array(rects.length * 8)
+  const pool = getStagingBufferPool(contextHandle)
+  const data = pool.getFloat32(rects.length * 8)
   for (let i = 0; i < rects.length; i++) {
     const rect = rects[i]
     const base = i * 8
@@ -662,7 +708,7 @@ export function renderWgpuCanvasTargetRects(
     data[base + 7] = (rect.color & 0xff) / 255
   }
 
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(pool)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_rects(contextHandle, targetHandle, data, rects.length, clearRgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return readFrameStats(stats)
@@ -678,7 +724,8 @@ export function renderWgpuCanvasTargetRectsLayer(
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
   if (rects.length === 0) throw new Error("renderWgpuCanvasTargetRectsLayer requires at least one rect")
-  const data = new Float32Array(rects.length * 8)
+  const pool = getStagingBufferPool(contextHandle)
+  const data = pool.getFloat32(rects.length * 8)
   for (let i = 0; i < rects.length; i++) {
     const rect = rects[i]
     const base = i * 8
@@ -691,7 +738,7 @@ export function renderWgpuCanvasTargetRectsLayer(
     data[base + 6] = ((rect.color >>> 8) & 0xff) / 255
     data[base + 7] = (rect.color & 0xff) / 255
   }
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(pool)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_rects_layer(contextHandle, targetHandle, data, rects.length, loadMode, clearRgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return readFrameStats(stats)
@@ -706,7 +753,8 @@ export function renderWgpuCanvasTargetImage(
 ) {
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
-  const data = new Float32Array(8)
+  const pool = getStagingBufferPool(contextHandle)
+  const data = pool.getFloat32(8)
   data[0] = instance.x
   data[1] = instance.y
   data[2] = instance.w
@@ -715,7 +763,7 @@ export function renderWgpuCanvasTargetImage(
   data[5] = 0
   data[6] = 0
   data[7] = 0
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(pool)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_image(contextHandle, targetHandle, imageHandle, data, clearRgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return readFrameStats(stats)
@@ -731,13 +779,14 @@ export function renderWgpuCanvasTargetImageLayer(
 ) {
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
-  const data = new Float32Array(8)
+  const pool = getStagingBufferPool(contextHandle)
+  const data = pool.getFloat32(8)
   data[0] = instance.x
   data[1] = instance.y
   data[2] = instance.w
   data[3] = instance.h
   data[4] = instance.opacity
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(pool)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_image_layer(contextHandle, targetHandle, imageHandle, data, loadMode, clearRgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return readFrameStats(stats)
@@ -753,13 +802,14 @@ export function compositeWgpuCanvasTargetImageLayer(
 ) {
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
-  const data = new Float32Array(8)
+  const pool = getStagingBufferPool(contextHandle)
+  const data = pool.getFloat32(8)
   data[0] = instance.x
   data[1] = instance.y
   data[2] = instance.w
   data[3] = instance.h
   data[4] = instance.opacity
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(pool)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_composite_image_layer(contextHandle, targetHandle, imageHandle, data, loadMode, clearRgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return readFrameStats(stats)
@@ -776,7 +826,8 @@ export function renderWgpuCanvasTargetImagesLayer(
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
   if (instances.length === 0) throw new Error("renderWgpuCanvasTargetImagesLayer requires at least one image instance")
-  const data = new Float32Array(instances.length * 8)
+  const pool = getStagingBufferPool(contextHandle)
+  const data = pool.getFloat32(instances.length * 8)
   for (let i = 0; i < instances.length; i++) {
     const instance = instances[i]
     const base = i * 8
@@ -786,7 +837,7 @@ export function renderWgpuCanvasTargetImagesLayer(
     data[base + 3] = instance.h
     data[base + 4] = instance.opacity
   }
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(pool)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_images_layer(contextHandle, targetHandle, imageHandle, data, instances.length, loadMode, clearRgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return readFrameStats(stats)
@@ -803,7 +854,8 @@ export function renderWgpuCanvasTargetTransformedImagesLayer(
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
   if (instances.length === 0) throw new Error("renderWgpuCanvasTargetTransformedImagesLayer requires at least one instance")
-  const data = new Float32Array(instances.length * 12)
+  const pool = getStagingBufferPool(contextHandle)
+  const data = pool.getFloat32(instances.length * 12)
   for (let i = 0; i < instances.length; i++) {
     const instance = instances[i]
     const base = i * 12
@@ -817,7 +869,7 @@ export function renderWgpuCanvasTargetTransformedImagesLayer(
     data[base + 7] = instance.p3.y
     data[base + 8] = instance.opacity
   }
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(pool)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_transformed_images_layer(contextHandle, targetHandle, imageHandle, data, instances.length, loadMode, clearRgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return readFrameStats(stats)
@@ -834,7 +886,8 @@ export function renderWgpuCanvasTargetGlyphsLayer(
   const lib = loadWgpuGlyphBridge()
   if (!lib) throw new Error("WGPU glyph bridge extension is not loaded")
   if (instances.length === 0) throw new Error("renderWgpuCanvasTargetGlyphsLayer requires at least one glyph instance")
-  const data = new Float32Array(instances.length * 16)
+  const pool = getStagingBufferPool(contextHandle)
+  const data = pool.getFloat32(instances.length * 16)
   for (let i = 0; i < instances.length; i++) {
     const instance = instances[i]
     const base = i * 16
@@ -852,7 +905,7 @@ export function renderWgpuCanvasTargetGlyphsLayer(
     data[base + 11] = instance.a
     data[base + 12] = instance.opacity
   }
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(pool)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_glyphs_layer(contextHandle, targetHandle, imageHandle, data, instances.length, loadMode, clearRgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(loadWgpuCanvasBridge()!))
   return readFrameStats(stats)
@@ -868,7 +921,8 @@ export function renderWgpuCanvasTargetLinearGradientsLayer(
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
   if (gradients.length === 0) throw new Error("renderWgpuCanvasTargetLinearGradientsLayer requires at least one gradient")
-  const data = new Float32Array(gradients.length * 20)
+  const pool = getStagingBufferPool(contextHandle)
+  const data = pool.getFloat32(gradients.length * 20)
   for (let i = 0; i < gradients.length; i++) {
     const gradient = gradients[i]
     const base = i * 20
@@ -893,7 +947,7 @@ export function renderWgpuCanvasTargetLinearGradientsLayer(
     data[base + 18] = 0
     data[base + 19] = 0
   }
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(pool)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_linear_gradients_layer(contextHandle, targetHandle, data, gradients.length, loadMode, clearRgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return readFrameStats(stats)
@@ -909,7 +963,8 @@ export function renderWgpuCanvasTargetRadialGradientsLayer(
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
   if (gradients.length === 0) throw new Error("renderWgpuCanvasTargetRadialGradientsLayer requires at least one gradient")
-  const data = new Float32Array(gradients.length * 20)
+  const pool = getStagingBufferPool(contextHandle)
+  const data = pool.getFloat32(gradients.length * 20)
   for (let i = 0; i < gradients.length; i++) {
     const gradient = gradients[i]
     const base = i * 20
@@ -934,7 +989,7 @@ export function renderWgpuCanvasTargetRadialGradientsLayer(
     data[base + 18] = 0
     data[base + 19] = 0
   }
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(pool)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_radial_gradients_layer(contextHandle, targetHandle, data, gradients.length, loadMode, clearRgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return readFrameStats(stats)
@@ -950,7 +1005,8 @@ export function renderWgpuCanvasTargetCirclesLayer(
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
   if (circles.length === 0) throw new Error("renderWgpuCanvasTargetCirclesLayer requires at least one circle")
-  const data = new Float32Array(circles.length * 16)
+  const pool = getStagingBufferPool(contextHandle)
+  const data = pool.getFloat32(circles.length * 16)
   for (let i = 0; i < circles.length; i++) {
     const circle = circles[i]
     const base = i * 16
@@ -971,7 +1027,7 @@ export function renderWgpuCanvasTargetCirclesLayer(
     data[base + 14] = circle.stroke ? 1 : 0
     data[base + 15] = 0
   }
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(pool)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_circles_layer(contextHandle, targetHandle, data, circles.length, loadMode, clearRgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return readFrameStats(stats)
@@ -987,7 +1043,8 @@ export function renderWgpuCanvasTargetPolygonsLayer(
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
   if (polys.length === 0) throw new Error("renderWgpuCanvasTargetPolygonsLayer requires at least one polygon")
-  const data = new Float32Array(polys.length * 20)
+  const pool = getStagingBufferPool(contextHandle)
+  const data = pool.getFloat32(polys.length * 20)
   for (let i = 0; i < polys.length; i++) {
     const poly = polys[i]
     const base = i * 20
@@ -1009,7 +1066,7 @@ export function renderWgpuCanvasTargetPolygonsLayer(
     data[base + 15] = poly.sides
     data[base + 16] = poly.rotationDeg
   }
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(pool)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_polygons_layer(contextHandle, targetHandle, data, polys.length, loadMode, clearRgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return readFrameStats(stats)
@@ -1025,7 +1082,8 @@ export function renderWgpuCanvasTargetBeziersLayer(
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
   if (beziers.length === 0) throw new Error("renderWgpuCanvasTargetBeziersLayer requires at least one bezier")
-  const data = new Float32Array(beziers.length * 20)
+  const pool = getStagingBufferPool(contextHandle)
+  const data = pool.getFloat32(beziers.length * 20)
   for (let i = 0; i < beziers.length; i++) {
     const bezier = beziers[i]
     const base = i * 20
@@ -1050,7 +1108,7 @@ export function renderWgpuCanvasTargetBeziersLayer(
     data[base + 18] = 0
     data[base + 19] = 0
   }
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(pool)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_beziers_layer(contextHandle, targetHandle, data, beziers.length, loadMode, clearRgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return readFrameStats(stats)
@@ -1066,7 +1124,8 @@ export function renderWgpuCanvasTargetShapeRectsLayer(
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
   if (rects.length === 0) throw new Error("renderWgpuCanvasTargetShapeRectsLayer requires at least one rect")
-  const data = new Float32Array(rects.length * 20)
+  const pool = getStagingBufferPool(contextHandle)
+  const data = pool.getFloat32(rects.length * 20)
   for (let i = 0; i < rects.length; i++) {
     const rect = rects[i]
     const base = i * 20
@@ -1091,7 +1150,7 @@ export function renderWgpuCanvasTargetShapeRectsLayer(
     data[base + 18] = 0
     data[base + 19] = 0
   }
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(pool)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_shape_rects_layer(contextHandle, targetHandle, data, rects.length, loadMode, clearRgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return readFrameStats(stats)
@@ -1107,7 +1166,8 @@ export function renderWgpuCanvasTargetShapeRectCornersLayer(
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
   if (rects.length === 0) throw new Error("renderWgpuCanvasTargetShapeRectCornersLayer requires at least one rect")
-  const data = new Float32Array(rects.length * 24)
+  const pool = getStagingBufferPool(contextHandle)
+  const data = pool.getFloat32(rects.length * 24)
   for (let i = 0; i < rects.length; i++) {
     const rect = rects[i]
     const base = i * 24
@@ -1136,7 +1196,7 @@ export function renderWgpuCanvasTargetShapeRectCornersLayer(
     data[base + 22] = 0
     data[base + 23] = 0
   }
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(pool)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_shape_rect_corners_layer(contextHandle, targetHandle, data, rects.length, loadMode, clearRgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return readFrameStats(stats)
@@ -1152,7 +1212,8 @@ export function renderWgpuCanvasTargetGlowsLayer(
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
   if (glows.length === 0) throw new Error("renderWgpuCanvasTargetGlowsLayer requires at least one glow")
-  const data = new Float32Array(glows.length * 12)
+  const pool = getStagingBufferPool(contextHandle)
+  const data = pool.getFloat32(glows.length * 12)
   for (let i = 0; i < glows.length; i++) {
     const glow = glows[i]
     const base = i * 12
@@ -1169,7 +1230,7 @@ export function renderWgpuCanvasTargetGlowsLayer(
     data[base + 10] = 0
     data[base + 11] = 0
   }
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(pool)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_glows_layer(contextHandle, targetHandle, data, glows.length, loadMode, clearRgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return readFrameStats(stats)
@@ -1185,7 +1246,8 @@ export function renderWgpuCanvasTargetNebulasLayer(
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
   if (nebulas.length === 0) throw new Error("renderWgpuCanvasTargetNebulasLayer requires at least one nebula")
-  const data = new Float32Array(nebulas.length * 32)
+  const pool = getStagingBufferPool(contextHandle)
+  const data = pool.getFloat32(nebulas.length * 32)
   for (let i = 0; i < nebulas.length; i++) {
     const nebula = nebulas[i]
     const base = i * 32
@@ -1211,7 +1273,7 @@ export function renderWgpuCanvasTargetNebulasLayer(
       data[stopBase + 4] = (stop.color & 0xff) / 255
     }
   }
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(pool)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_nebulas_layer(contextHandle, targetHandle, data, nebulas.length, loadMode, clearRgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return readFrameStats(stats)
@@ -1227,7 +1289,8 @@ export function renderWgpuCanvasTargetStarfieldsLayer(
   const lib = loadWgpuCanvasBridge()
   if (!lib) throw new Error("WGPU canvas bridge is not loaded")
   if (starfields.length === 0) throw new Error("renderWgpuCanvasTargetStarfieldsLayer requires at least one starfield")
-  const data = new Float32Array(starfields.length * 24)
+  const pool = getStagingBufferPool(contextHandle)
+  const data = pool.getFloat32(starfields.length * 24)
   for (let i = 0; i < starfields.length; i++) {
     const starfield = starfields[i]
     const base = i * 24
@@ -1256,7 +1319,7 @@ export function renderWgpuCanvasTargetStarfieldsLayer(
     data[base + 22] = 0
     data[base + 23] = 0
   }
-  const stats = new Float64Array(3)
+  const stats = getStatsBuffer(pool)
   const status = Number(lib.symbols.tge_wgpu_canvas_target_render_starfields_layer(contextHandle, targetHandle, data, starfields.length, loadMode, clearRgba >>> 0, stats))
   if (status !== STATUS.success) throw new Error(readLastError(lib))
   return readFrameStats(stats)

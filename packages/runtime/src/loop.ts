@@ -35,7 +35,7 @@ import {
   resolveProps,
 } from "../../core/src/node"
 import { shouldFreezeInteractionLayer, shouldPromoteInteractionLayer } from "./interaction"
-import { isDirty, clearDirty, markDirty } from "./dirty"
+import { createDirtyTracker } from "./dirty"
 import { hasActiveAnimations } from "./animation"
 import { appendFileSync } from "node:fs"
 import { debugFrameStart, debugUpdateStats } from "./debug"
@@ -45,27 +45,21 @@ import { decodeImageForNode } from "./image"
 import { focusedId, setFocusedId, getNodeFocusId } from "./focus"
 import {
   type Layer,
-  createLayer,
-  markAllDirty,
-  updateLayerGeometry,
-  markLayerClean,
-  imageIdForLayer,
-  resetLayers,
-  dirtyCount,
-  layerCount,
-  markLayerDamaged,
-  getPreviousLayerRect,
-  removeLayer,
+  createLayerStore,
 } from "../../core/src/layers"
 import { measureForClay, layoutText, getFont, fontToCSS } from "../../core/src/text-layout"
-import { intersectRect, type DamageRect } from "../../core/src/damage"
+import {
+  intersectRect,
+  rectArea as damageRectArea,
+  sumOverlapArea as damageSumOverlapArea,
+  type DamageRect,
+} from "../../core/src/damage"
 import { createGpuRendererBackend } from "../../core/src/gpu-renderer-backend"
 import { createGpuFrameComposer } from "../../core/src/gpu-frame-composer"
 import { summarizeRendererResourceStats } from "../../core/src/resource-stats"
 import { getLatestInteractionTrace } from "./input"
 import {
   buildRenderGraphFrame,
-  cloneRenderGraphQueues,
   createRenderGraphQueues,
   resetRenderGraphQueues,
   type EffectConfig,
@@ -84,14 +78,6 @@ import {
   type InteractionKind,
 } from "./frame-scheduler"
 import {
-  rectArea as damageRectArea,
-  sumOverlapArea as damageSumOverlapArea,
-} from "../../core/src/damage-tracker"
-import {
-  canUseRegionalRepaint as presenterCanUseRegionalRepaint,
-  commandIntersectsRect as presenterCommandIntersectsRect,
-} from "../../core/src/frame-presenter"
-import {
   buildNodeMouseEvent,
   isFullyOutsideScrollViewport,
 } from "./hit-test"
@@ -99,11 +85,6 @@ import {
   writeSequentialCommandLayout,
   writeLayoutFromElementIds,
 } from "../../core/src/layout-writeback"
-import {
-  resolveNodeByPath as plannerResolveNodeByPath,
-  collectAllTexts as plannerCollectAllTexts,
-} from "../../core/src/layer-planner"
-
 const LOG = "/tmp/tge-layers.log"
 const RENDER_DEBUG_LOG = "/tmp/tge-render-debug.log"
 const CADENCE_LOG = "/tmp/tge-cadence.log"
@@ -184,11 +165,20 @@ function hasTransformInSubtree(node: TGENode): boolean {
 }
 
 function canUseRegionalRepaint(boundaryNode: TGENode | null, hasScissor: boolean, isBg: boolean): boolean {
-  return presenterCanUseRegionalRepaint(boundaryNode, hasScissor, isBg)
+  if (hasScissor) return false
+  if (isBg) return true
+  if (!boundaryNode || boundaryNode.kind === "text") return true
+  if (boundaryNode.props.viewportClip === false) return false
+  if (hasTransformInSubtree(boundaryNode)) return false
+  return true
 }
 
 function commandIntersectsRect(cmd: RenderCommand, rect: { x: number; y: number; width: number; height: number }): boolean {
-  return presenterCommandIntersectsRect(cmd, rect)
+  const left = cmd.x
+  const top = cmd.y
+  const right = cmd.x + cmd.width
+  const bottom = cmd.y + cmd.height
+  return left < rect.x + rect.width && right > rect.x && top < rect.y + rect.height && bottom > rect.y
 }
 
 // ── Text metadata ──
@@ -207,6 +197,8 @@ let effectsQueue = renderGraphQueues.effects
 
 let imageQueue = renderGraphQueues.images
 let canvasQueue = renderGraphQueues.canvases
+const frameDirtyRects: DamageRect[] = []
+const activeSlotKeys = new Set<string>()
 
 export type RenderLoopOptions = {
   /** Experimental optimizations — these may change or be removed. */
@@ -314,6 +306,22 @@ function sumOverlapArea(rects: DamageRect[]) {
 }
 
 export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): RenderLoop {
+  const dirtyTracker = createDirtyTracker()
+  const markDirty = dirtyTracker.markDirty
+  const isDirty = dirtyTracker.isDirty
+  const clearDirty = dirtyTracker.clearDirty
+  const layerStore = createLayerStore()
+  const createLayer = layerStore.createLayer
+  const markAllDirty = layerStore.markAllDirty
+  const updateLayerGeometry = layerStore.updateLayerGeometry
+  const markLayerClean = layerStore.markLayerClean
+  const imageIdForLayer = layerStore.imageIdForLayer
+  const resetLayers = layerStore.resetLayers
+  const dirtyCount = layerStore.dirtyCount
+  const layerCount = layerStore.layerCount
+  const markLayerDamaged = layerStore.markLayerDamaged
+  const getPreviousLayerRect = layerStore.getPreviousLayerRect
+  const removeLayer = layerStore.removeLayer
   const expFrameBudgetMs = opts?.experimental?.frameBudgetMs ?? 0
   if (!term.caps.kittyGraphics) {
     throw new Error("TGE GPU-only renderer requires a terminal with Kitty graphics support")
@@ -444,6 +452,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   let pointerDown = false
   let pointerDirty = true  // Feed at least once — also used to detect pointer movement for onMouseMove
   let capturedNodeId = 0   // Pointer capture: 0 = none, >0 = node.id that captures all mouse events
+  const rectNodeById = new Map<number, TGENode>()
 
   // Post-scroll callbacks — fire AFTER clay.updateScroll() but BEFORE walkTree.
   // Used by VirtualList to read Clay's scroll offset with zero latency.
@@ -462,6 +471,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     setRendererBackend(defaultGpuRendererBackend)
   }
 
+  const getActiveRendererBackend = (): RendererBackend => getRendererBackend() ?? defaultGpuRendererBackend
+
   const paintCommandsWithRendererBackend = (
     target: { width: number; height: number },
     commands: RenderCommand[],
@@ -471,8 +482,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     layer: RendererBackendLayerContext | null = null,
     backendOverride?: RendererBackend,
   ) => {
-    const backend = backendOverride ?? getRendererBackend() ?? defaultGpuRendererBackend
-    const graph = buildRenderGraphFrame(commands, cloneRenderGraphQueues(renderGraphQueues), textMetaMap, {
+    const backend = backendOverride ?? getActiveRendererBackend()
+    const graph = buildRenderGraphFrame(commands, renderGraphQueues, textMetaMap, {
       rectNodeIds: rectNodes.map((node) => node.id),
       textNodeIds: textNodes.map((node) => node.id),
     })
@@ -611,7 +622,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       // Use a placeholder RECT so Clay emits a RECTANGLE command for painting
       const placeholderColor = 0x00000001 // near-transparent
       clay.configureRectangle(placeholderColor, node.props.cornerRadius ?? 0)
-      rectNodes.push(node)
+      registerRectNode(node)
 
       // Queue image data for paintCommand
       if (imgBuf) {
@@ -651,7 +662,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       // Pack node.id into RGB, keep alpha near-transparent.
       const placeholderColor = (((node.id & 0x00ffffff) << 8) | 0x02) >>> 0
       clay.configureRectangle(placeholderColor, 0)
-      rectNodes.push(node)
+      registerRectNode(node)
 
       // Queue canvas config for paintCommand
       if (node.props.onDraw) {
@@ -778,7 +789,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       const bgColor = vp.backgroundColor !== undefined ? (vp.backgroundColor as number) : 0x00000001 // near-transparent placeholder
       const cr = vp.cornerRadius ?? 0
       clay.configureRectangle(bgColor, cr)
-      rectNodes.push(node)
+      registerRectNode(node)
 
       // Record effects for this RECT — matched during paint
       if (vp.shadow || vp.glow || vp.gradient || hasBackdropFilter || vp.cornerRadii || vp.opacity !== undefined || hasTransform) {
@@ -1309,15 +1320,37 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
   /** Resolve a TGENode by its tree path (e.g. "r.0.1.2"). */
   function resolveNodeByPath(fromRoot: TGENode, path: string): TGENode | null {
-    return plannerResolveNodeByPath(fromRoot, path)
+    const parts = path.split(".")
+    let node = fromRoot
+    for (let i = 1; i < parts.length; i++) {
+      const idx = parseInt(parts[i])
+      if (isNaN(idx) || idx >= node.children.length) return null
+      node = node.children[idx]
+    }
+    return node
   }
 
   /** Collect all text strings from a node's subtree. */
   function collectAllTexts(node: TGENode): string[] {
-    return plannerCollectAllTexts(node, collectText)
+    const result: string[] = []
+    const walk = (current: TGENode) => {
+      if (current.kind === "text") {
+        const text = current.text || collectText(current)
+        if (text) result.push(text)
+        return
+      }
+      for (const child of current.children) walk(child)
+    }
+    walk(node)
+    return result
   }
 
   // ── Layout writeback ──
+
+  function registerRectNode(node: TGENode) {
+    rectNodes.push(node)
+    rectNodeById.set(node.id, node)
+  }
 
   /**
    * After Clay layout, write computed geometry back to TGENodes.
@@ -1469,11 +1502,12 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     pendingRelease = false
 
     // Check if a node has pointer capture — if so, it receives all events
-    const captureNode = capturedNodeId !== 0 ? rectNodes.find(n => n.id === capturedNodeId) : null
+    const captureNode = capturedNodeId !== 0 ? (rectNodeById.get(capturedNodeId) ?? null) : null
 
     // Walk all rect nodes (they have layout) and check hover/active/focus
     let newActiveNode: TGENode | null = null
     let pressedThisFrame: TGENode | null = null  // Node hit during justPressed (for fast-click detection)
+    let hoveredPressTarget: TGENode | null = null
     for (const node of rectNodes) {
       const hasInteractiveStyle = node.props.hoverStyle || node.props.activeStyle || node.props.focusStyle
       const isFocusable = node.props.focusable
@@ -1550,6 +1584,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
                  pointerY >= hitY && pointerY < hitY + hitH
       }
       const isDown = isOver && pointerDown
+      if (!hoveredPressTarget && isOver && (node.props.onPress || node.props.focusable)) {
+        hoveredPressTarget = node
+      }
 
       // Dispatch mouse enter/leave
       if (node._hovered !== isOver) {
@@ -1601,7 +1638,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       clickTarget = pressedThisFrame // Scenario B: fast click
     } else if (justReleased && pressOriginSet) {
       // Scenario C: find hovered node at release position
-      const hovered = rectNodes.find(n => n._hovered && (n.props.onPress || n.props.focusable))
+      const hovered = hoveredPressTarget
       if (hovered) clickTarget = hovered
     }
     if (justReleased) pressOriginSet = false
@@ -1744,11 +1781,12 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     resetRenderGraphQueues(renderGraphQueues)
     textMeasureIndex = 0 // reset text measure counter
     textMetas.length = 0 // clear text metadata
-    textMetaMap.clear()
-    clay.resetTextMeasures() // reset C-side counter
-    rectNodes.length = 0
-    textNodes.length = 0
-    boxNodes.length = 0
+      textMetaMap.clear()
+      clay.resetTextMeasures() // reset C-side counter
+      rectNodes.length = 0
+      rectNodeById.clear()
+      textNodes.length = 0
+      boxNodes.length = 0
     clay.beginLayout()
     walkTree(root)
      let commands = clay.endLayout()
@@ -1770,6 +1808,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       textMetaMap.clear()
       clay.resetTextMeasures()
       rectNodes.length = 0
+      rectNodeById.clear()
       textNodes.length = 0
       boxNodes.length = 0
       clay.beginLayout()
@@ -2003,22 +2042,26 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       })
     }
 
-    const dirtyRects = forceLayerRepaint
-      ? preparedSlots.map((prepared) => prepared.bounds)
-      : preparedSlots
-          .map((prepared) => prepared.useRegionalRepaint && prepared.clippedDamage ? prepared.clippedDamage : prepared.layer.damageRect)
-          .filter((rect): rect is DamageRect => rectArea(rect) > 0)
-    const dirtyLayerCountForFrame = forceLayerRepaint
-      ? preparedSlots.length
-      : preparedSlots.filter((prepared) => rectArea(prepared.useRegionalRepaint ? prepared.clippedDamage : prepared.layer.damageRect) > 0).length
-    const dirtyPixelArea = dirtyRects.reduce((sum, rect) => sum + rectArea(rect), 0)
+    frameDirtyRects.length = 0
+    let dirtyLayerCountForFrame = 0
+    let dirtyPixelArea = 0
+    for (const prepared of preparedSlots) {
+      const dirtyRect = forceLayerRepaint
+        ? prepared.bounds
+        : (prepared.useRegionalRepaint && prepared.clippedDamage ? prepared.clippedDamage : prepared.layer.damageRect)
+      const area = rectArea(dirtyRect)
+      if (area <= 0 || !dirtyRect) continue
+      frameDirtyRects.push(dirtyRect)
+      dirtyLayerCountForFrame += 1
+      dirtyPixelArea += area
+    }
     const totalPixelArea = Math.max(1, viewportWidth * viewportHeight)
-    const overlapPixelArea = sumOverlapArea(dirtyRects)
+    const overlapPixelArea = sumOverlapArea(frameDirtyRects)
     const fullRepaint = forceLayerRepaint || dirtyPixelArea >= totalPixelArea * 0.85 || dirtyLayerCountForFrame >= preparedSlots.length
-    const estimatedLayeredBytes = dirtyRects.reduce((sum, rect) => sum + rectArea(rect) * 4, 0)
+    const estimatedLayeredBytes = dirtyPixelArea * 4
       + dirtyLayerCountForFrame * (term.caps.transmissionMode === "direct" ? 2048 : 512)
     const estimatedFinalBytes = viewportWidth * viewportHeight * 4
-    const backend = getRendererBackend() ?? defaultGpuRendererBackend
+    const backend = getActiveRendererBackend()
     const frameCtx: RendererBackendFrameContext = {
       viewportWidth,
       viewportHeight,
@@ -2110,10 +2153,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
           }
         }
 
-        // Sort command indices to preserve SCISSOR ordering
-        const sortedIndices = slot.cmdIndices.slice().sort((a, b) => a - b)
         const layerCommands: RenderCommand[] = []
-        for (const idx of sortedIndices) {
+        for (const idx of slot.cmdIndices) {
           const cmd = commands[idx]
           if (!cmd) continue
           if (useRegionalRepaint && clippedDamage && !commandIntersectsRect(cmd, clippedDamage)) continue
@@ -2156,9 +2197,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     }
 
     // 4. Clean up orphan layers (layers from previous frame that no longer exist)
-    const activeKeys = new Set(preparedSlots.map((prepared) => prepared.slot.key))
+    activeSlotKeys.clear()
+    for (const prepared of preparedSlots) activeSlotKeys.add(prepared.slot.key)
     for (const [key, layer] of layerCache) {
-      if (!activeKeys.has(key)) {
+      if (!activeSlotKeys.has(key)) {
         const ioStart = DEBUG_CADENCE ? performance.now() : 0
         layerComposer!.removeLayer(imageIdForLayer(layer))
         if (DEBUG_CADENCE) ioMs += performance.now() - ioStart
@@ -2406,72 +2448,4 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       clay.destroy()
     },
   }
-}
-
-/** Fast byte-level comparison of two buffers. */
-function buffersEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false
-  for (let i = 0; i < a.length; i += 4) {
-    if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2] || a[i + 3] !== b[i + 3]) {
-      return false
-    }
-  }
-  return true
-}
-
-/**
- * [Experimental] Find the bounding box of dirty pixels between two buffers.
- * Returns null if buffers are identical, or {x, y, w, h, dirtyPixels} with the
- * minimal axis-aligned bounding box containing all changed pixels.
- */
-function findDirtyRegion(
-  prev: Uint8Array,
-  curr: Uint8Array,
-  width: number,
-  height: number,
-): { x: number; y: number; w: number; h: number; dirtyPixels: number } | null {
-  let minX = width, minY = height, maxX = -1, maxY = -1
-  let dirtyPixels = 0
-  const stride = width * 4
-
-  for (let y = 0; y < height; y++) {
-    const rowOff = y * stride
-    for (let x = 0; x < width; x++) {
-      const off = rowOff + x * 4
-      if (prev[off] !== curr[off] || prev[off + 1] !== curr[off + 1] ||
-          prev[off + 2] !== curr[off + 2] || prev[off + 3] !== curr[off + 3]) {
-        if (x < minX) minX = x
-        if (x > maxX) maxX = x
-        if (y < minY) minY = y
-        if (y > maxY) maxY = y
-        dirtyPixels++
-      }
-    }
-  }
-
-  if (maxX < 0) return null // identical
-  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1, dirtyPixels }
-}
-
-/**
- * [Experimental] Extract a sub-region from a pixel buffer as a flat RGBA array.
- * Used to prepare data for patchRegion().
- */
-function extractRegion(
-  data: Uint8Array,
-  bufWidth: number,
-  rx: number,
-  ry: number,
-  rw: number,
-  rh: number,
-): Uint8Array {
-  const out = new Uint8Array(rw * rh * 4)
-  const srcStride = bufWidth * 4
-  const dstStride = rw * 4
-  for (let y = 0; y < rh; y++) {
-    const srcOff = (ry + y) * srcStride + rx * 4
-    const dstOff = y * dstStride
-    out.set(data.subarray(srcOff, srcOff + dstStride), dstOff)
-  }
-  return out
 }

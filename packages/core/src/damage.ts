@@ -30,3 +30,24 @@ export function expandRect(rect: DamageRect, padding: number): DamageRect {
 export function translateRect(rect: DamageRect, dx: number, dy: number): DamageRect {
   return { x: rect.x + dx, y: rect.y + dy, width: rect.width, height: rect.height }
 }
+
+export function rectArea(rect: DamageRect | null | undefined) {
+  if (!rect) return 0
+  if (rect.width <= 0 || rect.height <= 0) return 0
+  return rect.width * rect.height
+}
+
+export function sumOverlapArea(rects: DamageRect[]) {
+  let overlap = 0
+  for (let i = 0; i < rects.length; i++) {
+    for (let j = i + 1; j < rects.length; j++) {
+      const left = Math.max(rects[i].x, rects[j].x)
+      const top = Math.max(rects[i].y, rects[j].y)
+      const right = Math.min(rects[i].x + rects[i].width, rects[j].x + rects[j].width)
+      const bottom = Math.min(rects[i].y + rects[i].height, rects[j].y + rects[j].height)
+      if (right <= left || bottom <= top) continue
+      overlap += (right - left) * (bottom - top)
+    }
+  }
+  return overlap
+}

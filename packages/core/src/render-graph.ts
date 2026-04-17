@@ -93,6 +93,10 @@ export type RenderGraphQueues = {
   canvases: CanvasPaintConfig[]
 }
 
+type RenderGraphQueueState = {
+  borderEffectIndex: number
+}
+
 export type TextMeta = {
   content: string
   fontId: number
@@ -204,10 +208,12 @@ export function resetRenderGraphQueues(queues: RenderGraphQueues) {
 }
 
 export function cloneRenderGraphQueues(queues: RenderGraphQueues): RenderGraphQueues {
+  // buildRenderGraphFrame no longer mutates queue arrays, so callers can reuse
+  // the original queue references without paying 3x slice() allocations.
   return {
-    effects: queues.effects.slice(),
-    images: queues.images.slice(),
-    canvases: queues.canvases.slice(),
+    effects: queues.effects,
+    images: queues.images,
+    canvases: queues.canvases,
   }
 }
 
@@ -215,23 +221,32 @@ export function getRectangleRenderInputs(cmd: RenderCommand, queues: RenderGraph
   const radius = Math.round(cmd.cornerRadius)
   const color = packColor(cmd.color[0], cmd.color[1], cmd.color[2], cmd.color[3])
 
-  const imageIdx = renderObjectId !== null ? queues.images.findIndex((entry) => entry.renderObjectId === renderObjectId) : -1
-  const image = imageIdx >= 0 ? queues.images.splice(imageIdx, 1)[0] : null
+  const image = renderObjectId !== null
+    ? queues.images.find((entry) => entry.renderObjectId === renderObjectId) ?? null
+    : null
 
-  const canvasIdx = renderObjectId !== null ? queues.canvases.findIndex((entry) => entry.renderObjectId === renderObjectId) : -1
-  const canvas = canvasIdx >= 0 ? queues.canvases.splice(canvasIdx, 1)[0] : null
+  const canvas = renderObjectId !== null
+    ? queues.canvases.find((entry) => entry.renderObjectId === renderObjectId) ?? null
+    : null
 
-  const effectIdx = renderObjectId !== null ? queues.effects.findIndex((entry) => entry.renderObjectId === renderObjectId) : -1
-  const effect = effectIdx >= 0 ? queues.effects.splice(effectIdx, 1)[0] : null
+  const effect = renderObjectId !== null
+    ? queues.effects.find((entry) => entry.renderObjectId === renderObjectId) ?? null
+    : null
 
   return { renderObjectId, color, radius, image, canvas, effect }
 }
 
-export function getBorderRenderInputs(cmd: RenderCommand, queues: RenderGraphQueues): BorderRenderInputs {
+export function getBorderRenderInputs(cmd: RenderCommand, queues: RenderGraphQueues, state: RenderGraphQueueState): BorderRenderInputs {
   const radius = Math.round(cmd.cornerRadius)
   const width = Math.round(cmd.extra1) || 1
-  const effectIdx = queues.effects.findIndex((entry) => entry.cornerRadii !== undefined)
-  const effect = effectIdx >= 0 ? queues.effects.splice(effectIdx, 1)[0] : null
+  let effect: EffectConfig | null = null
+  for (let i = state.borderEffectIndex; i < queues.effects.length; i++) {
+    const entry = queues.effects[i]
+    if (entry.cornerRadii === undefined) continue
+    effect = entry
+    state.borderEffectIndex = i + 1
+    break
+  }
   return {
     radius,
     width,
@@ -348,15 +363,26 @@ function getTransformMatrix(effect: EffectConfig) {
 function getTransformStateId(effect: EffectConfig) {
   const matrix = getTransformMatrix(effect)
   if (!matrix) return "transform:none"
-  return `transform:${Array.from(matrix, serializeMatrixValue).join(",")}`
+  let id = "transform:"
+  for (let i = 0; i < matrix.length; i++) {
+    if (i > 0) id += ","
+    id += serializeMatrixValue(matrix[i])
+  }
+  return id
 }
 
 function getEffectStateId(effect: EffectConfig) {
-  const shadow = Array.isArray(effect.shadow)
-    ? effect.shadow.map((entry) => `${entry.x}:${entry.y}:${entry.blur}:${entry.color}`).join("|")
-    : effect.shadow
-      ? `${effect.shadow.x}:${effect.shadow.y}:${effect.shadow.blur}:${effect.shadow.color}`
-      : "none"
+  let shadow = "none"
+  if (Array.isArray(effect.shadow)) {
+    shadow = ""
+    for (let i = 0; i < effect.shadow.length; i++) {
+      const entry = effect.shadow[i]
+      if (i > 0) shadow += "|"
+      shadow += `${entry.x}:${entry.y}:${entry.blur}:${entry.color}`
+    }
+  } else if (effect.shadow) {
+    shadow = `${effect.shadow.x}:${effect.shadow.y}:${effect.shadow.blur}:${effect.shadow.color}`
+  }
   const glow = effect.glow ? `${effect.glow.radius}:${effect.glow.color}:${effect.glow.intensity}` : "none"
   const gradient = effect.gradient
     ? effect.gradient.type === "linear"
@@ -364,27 +390,17 @@ function getEffectStateId(effect: EffectConfig) {
       : `radial:${effect.gradient.from}:${effect.gradient.to}`
     : "none"
   const params = getBackdropFilterParams(effect)
-  return [
-    `color:${effect.color}`,
-    `radius:${effect.cornerRadius}`,
-    `shadow:${shadow}`,
-    `glow:${glow}`,
-    `gradient:${gradient}`,
-    `blur:${params.blur ?? "none"}`,
-    `brightness:${params.brightness ?? "none"}`,
-    `contrast:${params.contrast ?? "none"}`,
-    `saturate:${params.saturate ?? "none"}`,
-    `grayscale:${params.grayscale ?? "none"}`,
-    `invert:${params.invert ?? "none"}`,
-    `sepia:${params.sepia ?? "none"}`,
-    `hueRotate:${params.hueRotate ?? "none"}`,
-    `opacity:${effect.opacity ?? "none"}`,
-  ].join(";")
+  return `color:${effect.color};radius:${effect.cornerRadius};shadow:${shadow};glow:${glow};gradient:${gradient};blur:${params.blur ?? "none"};brightness:${params.brightness ?? "none"};contrast:${params.contrast ?? "none"};saturate:${params.saturate ?? "none"};grayscale:${params.grayscale ?? "none"};invert:${params.invert ?? "none"};sepia:${params.sepia ?? "none"};hueRotate:${params.hueRotate ?? "none"};opacity:${effect.opacity ?? "none"}`
 }
 
 function createClipStateId(stack: ClipStackEntry[]) {
   if (stack.length === 0) return "clip:none"
-  return `clip:${stack.map((entry) => entry.id).join(">")}`
+  let id = "clip:"
+  for (let i = 0; i < stack.length; i++) {
+    if (i > 0) id += ">"
+    id += stack[i].id
+  }
+  return id
 }
 
 function createBackdropSourceKey(effect: EffectConfig, clipStateId: string, transformStateId: string) {
@@ -428,7 +444,7 @@ function createClipStackEntry(cmd: RenderCommand, depth: number): ClipStackEntry
   }
 }
 
-export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, textMetaMap: Map<string, TextMeta>, ownerIds?: { rect: number | null; text: number | null }): RenderGraphOp | null {
+export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, queueState: RenderGraphQueueState, textMetaMap: Map<string, TextMeta>, ownerIds?: { rect: number | null; text: number | null }): RenderGraphOp | null {
   if (cmd.type === CMD.RECTANGLE) {
     const renderObjectId = ownerIds?.rect ?? null
     const rect: RectangleRenderOp = {
@@ -478,7 +494,7 @@ export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, tex
       kind: "border",
       renderObjectId: null,
       command: cmd,
-      inputs: getBorderRenderInputs(cmd, queues),
+      inputs: getBorderRenderInputs(cmd, queues, queueState),
     }
   }
   if (cmd.type === CMD.TEXT) {
@@ -507,10 +523,11 @@ export function buildRenderGraphFrame(
 ): RenderGraphFrame {
   const ops: RenderGraphOp[] = []
   const clipStack: ClipStackEntry[] = []
+  const queueState: RenderGraphQueueState = { borderEffectIndex: 0 }
   let rectIdx = 0
   let textIdx = 0
   for (const cmd of commands) {
-    const op = buildRenderOp(cmd, queues, textMetaMap, {
+    const op = buildRenderOp(cmd, queues, queueState, textMetaMap, {
       rect: cmd.type === CMD.RECTANGLE ? owners?.rectNodeIds[rectIdx++] ?? null : null,
       text: cmd.type === CMD.TEXT ? owners?.textNodeIds[textIdx++] ?? null : null,
     })

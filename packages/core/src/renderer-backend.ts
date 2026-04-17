@@ -90,6 +90,20 @@ export type RendererBackendPaintContext = {
   layer: RendererBackendLayerContext | null
 }
 
+/**
+ * Renderer backend extension point.
+ *
+ * The runtime currently ships with a GPU render-graph backend, but the loop
+ * talks to it through this interface so alternative backends can plug into the
+ * same frame lifecycle in the future (for example WebGL, Vulkan, remote, or
+ * test/instrumentation backends).
+ *
+ * Hooks are intentionally split by phase:
+ * - beginFrame: inspect frame-wide heuristics and choose a strategy
+ * - paint: render one layer or standalone target
+ * - reuseLayer: opt into retained-layer reuse without repainting
+ * - endFrame: finalize frame-wide presentation work
+ */
 export type RendererBackend = {
   name: string
   beginFrame?: (ctx: RendererBackendFrameContext) => RendererBackendFramePlan | void
@@ -109,5 +123,5 @@ export function getRendererBackend() {
 }
 
 export function getRendererBackendName() {
-  return activeRendererBackend?.name ?? "cpu-legacy"
+  return activeRendererBackend?.name ?? "none"
 }

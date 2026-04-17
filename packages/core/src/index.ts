@@ -69,27 +69,13 @@ export {
   unionRect,
   expandRect,
   translateRect,
+  rectArea as damageRectArea,
+  sumOverlapArea as damageSumOverlapArea,
   rectRight,
   rectBottom,
   isEmptyRect,
 } from "./damage"
 export type { DamageRect } from "./damage"
-
-export {
-  rectArea as damageRectArea,
-  sumOverlapArea as damageSumOverlapArea,
-  buffersEqual as damageBuffersEqual,
-  findDirtyRegion as damageFindDirtyRegion,
-  extractRegion as damageExtractRegion,
-} from "./damage-tracker"
-
-export {
-  resolveNodeByPath,
-  collectAllTexts,
-  findLayerBoundaries,
-  claimScissorCommands,
-} from "./layer-planner"
-export type { LayerSlot, LayerBoundary } from "./layer-planner"
 
 export { CanvasContext } from "./canvas"
 export type { Viewport, StrokeStyle, FillStyle, ShapeStyle, CanvasDrawCommand } from "./canvas"
@@ -108,10 +94,8 @@ export type { ParticleConfig, ParticleSystem } from "./particles"
 
 export * from "./layers"
 export * from "./wgpu-mixed-scene"
-export * from "./render-surface"
 export * from "./gpu-raster-staging"
 export * from "./layout-writeback"
-export * from "./frame-presenter"
 export * from "./pixel-buffer"
 export * from "./paint-bridge"
 export * from "./node"
