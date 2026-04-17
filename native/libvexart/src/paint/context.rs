@@ -1,16 +1,84 @@
 // native/libvexart/src/paint/context.rs
-// Placeholder WgpuContext — real wgpu::Instance/Adapter/Device/Queue init lands in Slice 5.
+// Real WGPU context: Instance/Adapter/Device/Queue + image bind group layout.
+// Per design §17.1, §17.4. Replaces Phase 2 Slice 2 placeholder.
 
-/// Placeholder WGPU context.
-/// Real initialization (Instance/Adapter/Device/Queue) lands in Slice 5.
+/// Real WGPU rendering context — Instance, Adapter, Device, Queue.
+/// Also owns the image bind group layout shared by image + image_transform pipelines.
 pub struct WgpuContext {
-    // TODO(Slice 5): wgpu::Instance, adapter, device, queue fields.
-    _placeholder: (),
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
+    /// 2-binding BGL (texture @ 0, sampler @ 1, both fragment-visible).
+    /// Ported from bridge L2185-2205.
+    pub image_bind_group_layout: wgpu::BindGroupLayout,
 }
 
 impl WgpuContext {
-    /// Create a no-op stub context (Phase 2 only — Slice 5 provides real init).
+    /// Initialize WGPU: request adapter → request device → build image BGL.
+    /// Blocks on the async calls via pollster. Panics if no suitable adapter is found
+    /// (caller's ffi_guard! converts that to ERR_PANIC with a descriptive message).
+    pub fn new() -> Self {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            flags: wgpu::InstanceFlags::empty(),
+            backend_options: wgpu::BackendOptions::default(),
+            memory_budget_thresholds: Default::default(),
+            display: Default::default(),
+        });
+
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::default(),
+            compatible_surface: None,
+            force_fallback_adapter: false,
+        }))
+        .expect("no suitable WGPU adapter found");
+
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            label: Some("vexart-device"),
+            required_features: wgpu::Features::empty(),
+            required_limits: wgpu::Limits::downlevel_defaults(),
+            memory_hints: wgpu::MemoryHints::Performance,
+            trace: wgpu::Trace::Off,
+            experimental_features: Default::default(),
+        }))
+        .expect("failed to create WGPU device");
+
+        // 2-binding image BGL — ported from bridge L2185-2205.
+        let image_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("vexart-image-bind-group-layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
+
+        Self {
+            device,
+            queue,
+            image_bind_group_layout,
+        }
+    }
+
+    /// Stub constructor — used only when full GPU init is not needed (e.g. in non-gpu tests).
+    /// Do NOT call this in production code paths.
+    #[allow(dead_code)]
     pub fn new_stub() -> Self {
-        Self { _placeholder: () }
+        // For non-gpu-tests paths we still need a real device.
+        // This is intentionally identical to new() — no real "stub" is possible for wgpu.
+        Self::new()
     }
 }

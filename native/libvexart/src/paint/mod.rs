@@ -16,7 +16,7 @@ pub struct PaintContext {
 impl PaintContext {
     pub fn new() -> Self {
         Self {
-            wgpu: context::WgpuContext::new_stub(),
+            wgpu: context::WgpuContext::new(),
         }
     }
 
