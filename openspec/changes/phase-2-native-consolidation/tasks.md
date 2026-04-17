@@ -128,9 +128,9 @@ Objective: Implement layout computation using Taffy, replacing Clay's role. Per 
 
 Objective: Port the 139-LOC C SHM transport to Rust using `nix` crate with real implementation. Per design §5.6, REQ-NB-006.
 
-- [ ] [ATOMIC] 7.1 Implement `native/libvexart/src/kitty/shm.rs` with real POSIX SHM: `shm_open` + `ftruncate` + `mmap` + `memcpy` + `munmap` in `vexart_kitty_shm_prepare()`, and `close(fd)` + optional `shm_unlink` in `vexart_kitty_shm_release()`. Use `nix::sys::mman::*` and `nix::unistd::close`. Per design §5.6, REQ-NB-006, proposal Kitty scope boundary.
-- [ ] 7.2 Add error handling: invalid name → `ERR_INVALID_ARG` with `set_last_error()`, `shm_open` failure → `ERR_KITTY_TRANSPORT` with OS error message. Per REQ-NB-006.
-- [ ] 7.3 Verify: `cargo check` passes with `nix` crate linked.
+- [x] [ATOMIC] 7.1 Implement `native/libvexart/src/kitty/shm.rs` with real POSIX SHM: `shm_open` + `ftruncate` + `mmap` + `memcpy` + `munmap` in `vexart_kitty_shm_prepare()`, and `close(fd)` + optional `shm_unlink` in `vexart_kitty_shm_release()`. Use `nix::sys::mman::*` and `nix::unistd::close`. Per design §5.6, REQ-NB-006, proposal Kitty scope boundary.
+- [x] 7.2 Add error handling: invalid name → `ERR_INVALID_ARG` with `set_last_error()`, `shm_open` failure → `ERR_KITTY_TRANSPORT` with OS error message. Per REQ-NB-006.
+- [x] 7.3 Verify: `cargo check` passes with `nix` crate linked.
 
 ---
 
