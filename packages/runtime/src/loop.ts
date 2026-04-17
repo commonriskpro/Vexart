@@ -1751,7 +1751,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     boxNodes.length = 0
     clay.beginLayout()
     walkTree(root)
-    let commands = clay.endLayout()
+     let commands = clay.endLayout()
 
     // Write layout geometry back to TGENodes for ref access
     writeLayoutBack(commands)
