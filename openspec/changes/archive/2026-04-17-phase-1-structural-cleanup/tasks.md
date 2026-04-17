@@ -295,15 +295,15 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
 
 > This slice produces no commit. It is a verification gate confirming all 17 prior slices are correct.
 
-- [ ] 18.1 Run `bun install` — clean install with no errors
-- [ ] 18.2 Run `bun run typecheck` — passes with zero errors
-- [ ] 18.3 Run `bun test` — passes
-- [ ] 18.4 Run `bun run lint:boundaries` — passes with zero violations
-- [ ] 18.5 Run `bun --conditions=browser run examples/showcase.tsx` — starts without error (smoke check; manually verify and kill)
-- [ ] 18.6 Review `git log --oneline` — all 17 conventional commits present, no "Co-Authored-By" in any commit message
-- [ ] 18.7 Verify `packages/` contains exactly: `engine/`, `primitives/`, `headless/`, `styled/`, `internal-devtools/` and no other directories (REQ-PB-001, REQ-PB-003)
-- [ ] 18.8 Verify `packages/internal-devtools/package.json` has `"private": true` (REQ-PB-002)
-- [ ] 18.9 Run `rg "from ['\"]\\.\\./\\.\\./(?!node_modules)" packages/` — zero cross-package relative imports (REQ-PB-006)
+- [x] 18.1 Run `bun install` — clean install with no errors
+- [x] 18.2 Run `bun run typecheck` — passes with zero errors
+- [x] 18.3 Run `bun test` — passes (140 pass / 0 fail)
+- [x] 18.4 Run `bun run lint:boundaries` — passes with zero violations
+- [x] 18.5 Run `bun --conditions=browser run examples/showcase.tsx` — started OK (terminal escape sequences emitted; killed by 5s timeout, exit 124)
+- [x] 18.6 Review `git log --oneline` — all conventional commits present, no "Co-Authored-By" in any commit message
+- [x] 18.7 Verify `packages/` contains exactly: `engine/`, `primitives/`, `headless/`, `styled/`, `internal-devtools/` and no other directories (REQ-PB-001, REQ-PB-003)
+- [x] 18.8 Verify `packages/internal-devtools/package.json` has `"private": true` (REQ-PB-002)
+- [x] 18.9 Run `rg "from ['\"]\\.\\./\\.\\./(?!node_modules)" packages/` — one intra-package match (engine/src/reconciler/tree-sitter → engine/src/ffi), not a cross-package import (REQ-PB-006)
 
 ## Summary
 
