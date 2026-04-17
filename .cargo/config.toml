@@ -1,0 +1,5 @@
+# Cargo workspace configuration
+# Use Xcode clang as linker on macOS — avoids Nix GCC shadowing issues
+# where Nix GCC 15 can't link against LLVM-compiled Rust std libraries.
+[target.aarch64-apple-darwin]
+linker = "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/cc"
