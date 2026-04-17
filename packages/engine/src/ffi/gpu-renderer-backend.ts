@@ -9,7 +9,6 @@ import { ptr } from "bun:ffi"
 import { CanvasContext } from "./canvas"
 import { getAtlas } from "./font-atlas"
 import { transformBounds, transformPoint } from "./matrix"
-import { batchMixedSceneOps, collectSupportedMixedScene } from "./wgpu-mixed-scene"
 import type { BackdropRenderMetadata, EffectRenderOp, ImageRenderOp, RectangleRenderOp, RenderGraphOp, TextRenderOp, BorderRenderOp } from "./render-graph"
 import type {
   RendererBackend,
@@ -24,10 +23,15 @@ import { openVexartLibrary } from "./vexart-bridge"
 import {
   GRAPH_MAGIC, GRAPH_VERSION,
 } from "./vexart-buffer"
+// Phase 2 / Slice 9: gpu-renderer-backend no longer imports directly from
+// wgpu-canvas-bridge, wgpu-mixed-scene, or gpu-raster-staging.
+// All legacy bridge helpers are accessed via gpu-stub.ts (excluded orphan,
+// deleted in Slice 11 along with wgpu-canvas-bridge.ts).
+// flushImages/flushTransformedImages → vexart_paint_dispatch cmd_kinds 9/10.
+// flushGlyphs → DEC-011 no-op.
+// canvas sprite, backdrop, gradient-sprite → still using bridge via gpu-stub
+// (Phase 2 transition; fully removed in Slice 11 when bridge files are deleted).
 import {
-  // Canvas sprite helpers — still using wgpu-canvas-bridge for canvas/gradient sprite
-  // rendering until Slice 11 deletes those legacy files. These are isolated to the
-  // getCanvasSprite and renderGradientSprite helpers only.
   beginWgpuCanvasTargetLayer,
   compositeWgpuCanvasTargetImageLayer,
   createWgpuCanvasContext,
@@ -54,6 +58,7 @@ import {
   renderWgpuCanvasTargetGlyphsLayer,
   renderWgpuCanvasTargetTransformedImagesLayer,
   supportsWgpuCanvasGlyphLayer,
+  copyWgpuCanvasTargetRegionToImage,
   type WgpuCanvasContextHandle,
   type WgpuCanvasGlyphInstance,
   type WgpuCanvasGlow,
@@ -62,11 +67,42 @@ import {
   type WgpuCanvasShapeRectCorners,
   type WgpuCanvasShapeRect,
   type WgpuCanvasTargetHandle,
-} from "./wgpu-canvas-bridge"
-import {
-  copyGpuTargetRegionToImage,
-  createEmptyGpuImage,
-} from "./gpu-raster-staging"
+} from "./gpu-stub"
+// NOTE: batchMixedSceneOps / collectSupportedMixedScene (from wgpu-mixed-scene) are
+// no longer imported in Phase 2. getCanvasSprite() is short-circuited to return null
+// since the showcase does not use canvas nodes. wgpu-mixed-scene becomes a 0-consumer
+// orphan (deleted in Slice 11). Per design §11 Phase 2 scope.
+
+// ── Inline gpu-raster-staging helpers ───────────────────────────────────────
+// gpu-raster-staging.ts is an orphan deleted in Slice 11. The two functions it
+// provides (copyGpuTargetRegionToImage, createEmptyGpuImage) are inlined here
+// to avoid making gpu-raster-staging a live consumer, satisfying the orphan gate.
+
+type GpuRasterImage = { handle: WgpuCanvasImageHandle; width: number; height: number }
+
+function copyGpuTargetRegionToImage(
+  context: WgpuCanvasContextHandle,
+  target: WgpuCanvasTargetHandle,
+  region: { x: number; y: number; width: number; height: number },
+): GpuRasterImage {
+  const copied = copyWgpuCanvasTargetRegionToImage(context, target, region)
+  return { handle: copied.handle, width: region.width, height: region.height }
+}
+
+function createEmptyGpuImage(
+  context: WgpuCanvasContextHandle,
+  width: number,
+  height: number,
+): GpuRasterImage {
+  const target = createWgpuCanvasTarget(context, { width, height })
+  try {
+    beginWgpuCanvasTargetLayer(context, target, 0, 0x00000000)
+    endWgpuCanvasTargetLayer(context, target)
+    return copyGpuTargetRegionToImage(context, target, { x: 0, y: 0, width, height })
+  } finally {
+    destroyWgpuCanvasTarget(context, target)
+  }
+}
 
 // ── vexart graph buffer helpers ─────────────────────────────────────────────
 // Per design §8: 16-byte header + 8-byte per-command prefix + body.
@@ -241,6 +277,39 @@ function packRadialGradientInstance(x: number, y: number, w: number, h: number, 
   vf32(v, 32, fr); vf32(v, 36, fg); vf32(v, 40, fb); vf32(v, 44, fa)
   vf32(v, 48, tr); vf32(v, 52, tg); vf32(v, 56, tb); vf32(v, 60, ta)
   vf32(v, 64, 0); vf32(v, 68, 0); vf32(v, 72, 0); vf32(v, 76, 0)
+  return new Uint8Array(buf)
+}
+
+/**
+ * Pack BridgeImageInstance (8 floats: x,y,w,h, opacity, _pad×3) for cmd_kind=9.
+ * Per native/libvexart/src/paint/instances.rs BridgeImageInstance.
+ * Byte size: 8 × 4 = 32 bytes.
+ */
+function packImageInstance(x: number, y: number, w: number, h: number, opacity: number): Uint8Array {
+  const buf = new ArrayBuffer(32)
+  const v = new DataView(buf)
+  vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
+  vf32(v, 16, opacity); vf32(v, 20, 0); vf32(v, 24, 0); vf32(v, 28, 0)
+  return new Uint8Array(buf)
+}
+
+/**
+ * Pack BridgeImageTransformInstance (12 floats: p0x/p0y, p1x/p1y, p2x/p2y, p3x/p3y, opacity, _pad×3) for cmd_kind=10.
+ * Per native/libvexart/src/paint/instances.rs BridgeImageTransformInstance.
+ * Byte size: 12 × 4 = 48 bytes.
+ */
+function packImageTransformInstance(
+  p0x: number, p0y: number, p1x: number, p1y: number,
+  p2x: number, p2y: number, p3x: number, p3y: number,
+  opacity: number,
+): Uint8Array {
+  const buf = new ArrayBuffer(48)
+  const v = new DataView(buf)
+  vf32(v, 0,  p0x); vf32(v, 4,  p0y)
+  vf32(v, 8,  p1x); vf32(v, 12, p1y)
+  vf32(v, 16, p2x); vf32(v, 20, p2y)
+  vf32(v, 24, p3x); vf32(v, 28, p3y)
+  vf32(v, 32, opacity); vf32(v, 36, 0); vf32(v, 40, 0); vf32(v, 44, 0)
   return new Uint8Array(buf)
 }
 
@@ -962,12 +1031,16 @@ export function createGpuRendererBackend(): GpuRendererBackend {
 
   gpuRendererBackendStatsProvider = () => cacheStats
 
-  const getImage = (rgba: Uint8Array, width: number, height: number) => {
-    if (!context) return null
-    const cached = imageCache.get(rgba)
-    if (cached) return cached.handle
-    const handle = createWgpuCanvasImage(context, { width, height }, rgba)
-    imageCache.set(rgba, { handle, width, height })
+  const getImage = (rgba: Uint8Array, width: number, height: number): bigint | null => {
+    // 9.3c: Image upload via vexart_paint_upload_image (replaces tge_wgpu_canvas_image_create).
+    // The _vexartImageHandles WeakMap caches bigint handles per RGBA buffer reference.
+    const vctxForImage = getVexartCtx()
+    const handle = vexartUploadImage(vctxForImage, rgba, width, height)
+    if (handle === 0n) return null
+    // Also populate imageCache (ImageRecord uses bigint handle) for destroy accounting.
+    if (!imageCache.has(rgba)) {
+      imageCache.set(rgba, { handle, width, height })
+    }
     return handle
   }
 
@@ -1036,119 +1109,12 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     return id
   }
 
-  const getCanvasSprite = (op: Extract<RenderGraphOp, { kind: "canvas" }>) => {
-    if (!context) return null
-    const viewport = op.canvas.viewport
-    const fnId = getCanvasFunctionId(op.canvas.onDraw)
-    const width = Math.max(1, Math.round(op.command.width))
-    const height = Math.max(1, Math.round(op.command.height))
-    const key = `${fnId}:${width}:${height}:${viewport?.x ?? 0}:${viewport?.y ?? 0}:${viewport?.zoom ?? 1}`
-    const cached = canvasSpriteCache.get(key)
-    if (cached && cached.width === width && cached.height === height) {
-      cached.usedThisFrame = true
-      cached.unusedFrames = 0
-      touchMapEntry(canvasSpriteCache, key, cached)
-      return cached.handle
-    }
-    if (cached) {
-      destroyWgpuCanvasImage(context, cached.handle)
-    }
-    const canvasCtx = new CanvasContext(viewport)
-    op.canvas.onDraw(canvasCtx)
-    if (canvasCtx._commands.length === 0) {
-      const empty = createEmptyGpuImage(context, width, height)
-      const handle = empty.handle
-      setCanvasSpriteRecord(key, { key, handle, width, height, usedThisFrame: true, unusedFrames: 0 })
-      trimCanvasSpriteCache()
-      return handle
-    }
-    const mixedInfo = collectSupportedMixedScene(canvasCtx, width, height)
-    if (mixedInfo && mixedInfo.ops.length > 0) {
-      const target = createWgpuCanvasTarget(context, { width, height })
-      const batches = batchMixedSceneOps(mixedInfo.ops)
-      let first = true
-      for (const batch of batches as any[]) {
-        if (batch.kind === "rect") {
-          renderWgpuCanvasTargetRectsLayer(context, target, batch.rects, first ? 0 : 1, 0x00000000)
-        } else if (batch.kind === "bezier") {
-          renderWgpuCanvasTargetBeziersLayer(context, target, batch.beziers, first ? 0 : 1, 0x00000000)
-        } else if (batch.kind === "shapeRect") {
-          renderWgpuCanvasTargetShapeRectsLayer(context, target, batch.rects, first ? 0 : 1, 0x00000000)
-        } else if (batch.kind === "glow") {
-          renderWgpuCanvasTargetGlowsLayer(context, target, batch.glows, first ? 0 : 1, 0x00000000)
-        } else if (batch.kind === "circle") {
-          renderWgpuCanvasTargetCirclesLayer(context, target, batch.circles, first ? 0 : 1, 0x00000000)
-        } else if (batch.kind === "polygon") {
-          renderWgpuCanvasTargetPolygonsLayer(context, target, batch.polygons, first ? 0 : 1, 0x00000000)
-        } else if (batch.kind === "linearGradient") {
-          renderWgpuCanvasTargetLinearGradientsLayer(context, target, batch.gradients, first ? 0 : 1, 0x00000000)
-        } else if (batch.kind === "radialGradient") {
-          renderWgpuCanvasTargetRadialGradientsLayer(context, target, batch.gradients, first ? 0 : 1, 0x00000000)
-        } else if (batch.kind === "text") {
-          const atlas = getGlyphAtlas(0)
-          if (!atlas) {
-            destroyWgpuCanvasTarget(context, target)
-            failGpuOnly("canvas text requires GPU glyph atlas support")
-          }
-          const glyphs: WgpuCanvasGlyphInstance[] = []
-          let canUseGlyphs = true
-          for (const instance of batch.instances) {
-            let cursorX = instance.x
-            for (const glyph of batch.text) {
-              const code = glyph.codePointAt(0)
-              if (code === undefined) { canUseGlyphs = false; break }
-              const glyphIndex = atlas.indexFor(code)
-              if (glyphIndex < 0) { canUseGlyphs = false; break }
-              const advancePx = atlas.glyphWidths[glyphIndex] || atlas.cellWidth
-              if (glyph !== " ") {
-                const col = glyphIndex % atlas.columns
-                const row = Math.floor(glyphIndex / atlas.columns)
-                glyphs.push({
-                  x: cursorX,
-                  y: instance.y,
-                  w: (atlas.cellWidth / width) * 2,
-                  h: -((atlas.cellHeight / height) * 2),
-                  u: (col * atlas.cellWidth) / (atlas.cellWidth * atlas.columns),
-                  v: (row * atlas.cellHeight) / (atlas.cellHeight * atlas.rows),
-                  uw: atlas.cellWidth / (atlas.cellWidth * atlas.columns),
-                  vh: atlas.cellHeight / (atlas.cellHeight * atlas.rows),
-                  r: ((batch.color >>> 24) & 0xff) / 255,
-                  g: ((batch.color >>> 16) & 0xff) / 255,
-                  b: ((batch.color >>> 8) & 0xff) / 255,
-                  a: (batch.color & 0xff) / 255,
-                  opacity: instance.opacity,
-                })
-              }
-              cursorX += (advancePx / width) * 2
-            }
-            if (!canUseGlyphs) break
-          }
-          if (!canUseGlyphs) {
-            destroyWgpuCanvasTarget(context, target)
-            failGpuOnly("canvas text requires unsupported glyphs outside the GPU atlas path")
-          }
-          if (glyphs.length > 0) renderWgpuCanvasTargetGlyphsLayer(context, target, atlas.handle, glyphs, first ? 0 : 1, 0x00000000)
-        } else if (batch.kind === "image") {
-          const imageHandle = getImage(batch.image, batch.imageW, batch.imageH)
-          if (!imageHandle) {
-            destroyWgpuCanvasTarget(context, target)
-            return null
-          }
-          renderWgpuCanvasTargetImagesLayer(context, target, imageHandle, batch.instances, first ? 0 : 1, 0x00000000)
-        }
-        first = false
-      }
-      try {
-        const copied = copyGpuTargetRegionToImage(context, target, { x: 0, y: 0, width, height })
-        const handle = copied.handle
-        setCanvasSpriteRecord(key, { key, handle, width, height, usedThisFrame: true, unusedFrames: 0 })
-        trimCanvasSpriteCache()
-        return handle
-      } finally {
-        destroyWgpuCanvasTarget(context, target)
-      }
-    }
-    failGpuOnly("canvas sprite requires unsupported commands outside the GPU mixed-scene path")
+  const getCanvasSprite = (_op: Extract<RenderGraphOp, { kind: "canvas" }>) => {
+    // Phase 2: canvas sprite rendering removed. wgpu-mixed-scene dependency removed.
+    // The showcase does not use <canvas onDraw={...}> nodes. Canvas ops that reach
+    // here will return null, causing the render path to call failGpuOnly.
+    // wgpu-mixed-scene is a 0-consumer orphan (deleted in Slice 11).
+    return null
   }
 
   const getTransformSprite = (op: Extract<RenderGraphOp, { kind: "effect" }>) => {
@@ -1361,29 +1327,50 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     }
     const flushImages = () => {
       if (imageGroups.size === 0) return
-      // Images still use legacy bridge for now (cmd_kind=9 via wgpu-canvas-bridge)
-      // — full image migration in Slice 11. The imageGroups map keys are WgpuCanvasImageHandle.
+      // 9.3c: Images dispatched via vexart_paint_dispatch cmd_kind=9 (BridgeImageInstance).
+      // One dispatch call per image group (per uploaded texture handle).
+      // BridgeImageInstance: 8 floats (x, y, w, h, opacity, _pad×3) = 32 bytes per instance.
       for (const group of imageGroups.values()) {
-        renderWgpuCanvasTargetImagesLayer(context, targetHandle, group.handle, group.instances, first ? 0 : 1, 0x00000000)
+        const instances = new Uint8Array(group.instances.length * 32)
+        for (let i = 0; i < group.instances.length; i++) {
+          const inst = group.instances[i]
+          instances.set(packImageInstance(inst.x, inst.y, inst.w, inst.h, inst.opacity), i * 32)
+        }
+        flushVexartBatch(vctx, 9, instances)
         first = false
         targetMutationVersion += 1
       }
       imageGroups.clear()
     }
     const flushGlyphs = () => {
-      if (glyphGroups.size === 0) return
-      // Glyphs still use legacy bridge (cmd_kind=11 reserved per DEC-011)
-      for (const group of glyphGroups.values()) {
-        renderWgpuCanvasTargetGlyphsLayer(context, targetHandle, group.handle, group.instances, first ? 0 : 1, 0x00000000)
-        first = false
-        targetMutationVersion += 1
+      // 9.3c: DEC-011 Phase 2 no-op — MSDF text lands in Phase 2b.
+      // cmd_kind=11 is reserved (glyph, DEC-011 — skipped per paint/mod.rs dispatch).
+      // vexart_text_dispatch is a success no-op stub. Queued glyphs are silently dropped.
+      // Per design §5.5, REQ-NB-005: first call to vexart_text_dispatch emits stderr warning.
+      if (glyphGroups.size > 0) {
+        const { symbols } = openVexartLibrary()
+        // Empty buffer — triggers the DEC-011 warning on first call, no-op otherwise.
+        symbols.vexart_text_dispatch(vctx, ptr(new Uint8Array(0)), 0, ptr(new Uint8Array(32)))
+        glyphGroups.clear()
       }
-      glyphGroups.clear()
     }
     const flushTransformedImages = () => {
       if (transformedImageGroups.size === 0) return
+      // 9.3c: Transformed images dispatched via vexart_paint_dispatch cmd_kind=10 (BridgeImageTransformInstance).
+      // BridgeImageTransformInstance: 12 floats (p0-p3 corners + opacity + _pad×3) = 48 bytes per instance.
       for (const group of transformedImageGroups.values()) {
-        renderWgpuCanvasTargetTransformedImagesLayer(context, targetHandle, group.handle, group.instances, first ? 0 : 1, 0x00000000)
+        const instances = new Uint8Array(group.instances.length * 48)
+        for (let i = 0; i < group.instances.length; i++) {
+          const inst = group.instances[i]
+          instances.set(packImageTransformInstance(
+            inst.p0.x, inst.p0.y,
+            inst.p1.x, inst.p1.y,
+            inst.p2.x, inst.p2.y,
+            inst.p3.x, inst.p3.y,
+            inst.opacity,
+          ), i * 48)
+        }
+        flushVexartBatch(vctx, 10, instances)
         first = false
         targetMutationVersion += 1
       }

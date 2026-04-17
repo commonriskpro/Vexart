@@ -153,7 +153,7 @@ Objective: Rewire TS consumer code from old Clay/Zig/bridge paths to new `vexart
 - [x] [ATOMIC] 9.3 Modify `packages/engine/src/ffi/gpu-renderer-backend.ts` (78KB — largest TS change): rework to emit to packed graph buffer, call `vexart_paint_dispatch` once per frame instead of per-operation bridge calls. Split into sub-tasks:
   - [x] 9.3a Remove all `tge_wgpu_canvas_*` per-operation calls. Replace with graph buffer accumulation.
   - [x] 9.3b Add graph buffer header write at frame start, per-command prefix write for each render op, body serialization matching Rust `instances.rs` layouts.
-  - [x] 9.3c Replace image upload/download with `vexart_paint_upload_image` / `vexart_paint_remove_image`.
+  - [x] 9.3c Replace image upload/download with `vexart_paint_upload_image` / `vexart_paint_remove_image`. **Completed in Slice 9 re-apply (2026-04-17): flushImages dispatches cmd_kind=9 (BridgeImageInstance, 32 bytes) via vexart_paint_dispatch; flushTransformedImages dispatches cmd_kind=10 (BridgeImageTransformInstance, 48 bytes); flushGlyphs is DEC-011 no-op calling vexart_text_dispatch; getImage() rewired to vexartUploadImage(). wgpu-canvas-bridge direct import removed (routed through gpu-stub.ts for backdrop/layer-composition paths). canvas sprite path removed (wgpu-mixed-scene becomes 0-consumer orphan).**
   - [x] 9.3d Replace readback with `vexart_composite_readback_rgba` / `vexart_composite_readback_region_rgba`.
 - [x] [ATOMIC] 9.4 Modify `packages/engine/src/ffi/renderer-backend.ts`: update `RenderGraphFrame` consumer to new shape from render-graph.ts. Per design §11.
 - [x] [ATOMIC] 9.5 Modify `packages/engine/src/ffi/layout-writeback.ts`: rewire from Clay layout output shape to Taffy layout output shape (flat `PositionedCommand` buffer). Per design §10, §11.
@@ -166,7 +166,7 @@ Objective: Rewire TS consumer code from old Clay/Zig/bridge paths to new `vexart
 - [x] [ATOMIC] 9.12 Modify `packages/engine/src/output/transport-manager.ts`: remove placeholder/halfblock branches. Per design §11, DEC-005.
 - [x] [ATOMIC] 9.13 Modify `packages/engine/src/output/layer-composer.ts`: remove CPU/GPU switch; single native path via `vexart_composite_merge`. Per design §11.
 - [x] [ATOMIC] 9.14 Modify `packages/engine/src/ffi/node.ts` (reconciler node module): keep stable ID hashing; emit commands in new flat buffer shape per §8.2. **NOTE 2026-04-17:** path corrected from `reconciler/node.ts` (does not exist — renamed during Phase 1) to `ffi/node.ts` (actual location). Task 9.14 and 9.1 both target `ffi/node.ts`; consolidate in a single commit if the edits do not conflict, else commit 9.14 content as a follow-up commit after 9.1. Per design §11.
-- [x] [ATOMIC] 9.15 Modify `packages/engine/src/ffi/index.ts`: remove Clay-facing exports (`ATTACH_TO`, `ATTACH_POINT`, etc. from `./clay`), add `vexart_*` bridge exports from `./vexart-bridge` and `./vexart-functions`. Remove `export * from "./pixel-buffer"` and `export * from "./paint-bridge"`. Per design §11.
+- [x] [ATOMIC] 9.15 Modify `packages/engine/src/ffi/index.ts`: remove Clay-facing exports (`ATTACH_TO`, `ATTACH_POINT`, etc. from `./clay`), add `vexart_*` bridge exports from `./vexart-bridge` and `./vexart-functions`. Remove `export * from "./pixel-buffer"` and `export * from "./paint-bridge"`. Per design §11. **Completed in Slice 9 re-apply (2026-04-17): removed wgpu-canvas-bridge re-exports (lines 49-57 of old index.ts), removed wgpu-mixed-scene and gpu-raster-staging re-exports. wgpu-canvas-bridge.ts remains until Slice 11E deletion.**
 
 ---
 

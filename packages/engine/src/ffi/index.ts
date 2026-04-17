@@ -46,15 +46,9 @@ export type {
   RawCommandRenderOp,
 } from "./render-graph"
 
-export {
-  probeWgpuCanvasBridge,
-  loadWgpuCanvasBridge,
-  copyWgpuCanvasTargetRegionToImage,
-  filterWgpuCanvasImageBackdrop,
-  maskWgpuCanvasImageRoundedRect,
-  compositeWgpuCanvasTargetImageLayer,
-} from "./wgpu-canvas-bridge"
-export type { WgpuCanvasBridgeProbe, WgpuBackdropFilterParams } from "./wgpu-canvas-bridge"
+// NOTE: wgpu-canvas-bridge re-exports removed per Slice 9 task 9.15 completion (2026-04-17).
+// wgpu-canvas-bridge.ts still exists (deleted in Slice 11E); no longer part of public surface.
+// Callers should use vexart-bridge / vexart-functions for native GPU operations.
 
 export { getRendererResourceStats } from "./resource-stats"
 
@@ -93,8 +87,8 @@ export { createParticleSystem } from "./particles"
 export type { ParticleConfig, ParticleSystem } from "./particles"
 
 export * from "./layers"
-export * from "./wgpu-mixed-scene"
-export * from "./gpu-raster-staging"
+// NOTE: wgpu-mixed-scene and gpu-raster-staging re-exports removed per Slice 9
+// task 9.15 completion (2026-04-17). These are orphan modules deleted in Slice 11.
 export * from "./layout-writeback"
 // NOTE: pixel-buffer and paint-bridge re-exports removed per Slice 9 migration.
 // These files still exist (deleted in Slice 11) but are no longer part of the
