@@ -44,8 +44,8 @@ function measureCanvasText(text: string) {
   for (const glyph of text) {
     const code = glyph.codePointAt(0)
     if (code === undefined) continue
-    if (code < 32 || code > 126) return null
-    const glyphIndex = code - 32
+    const glyphIndex = atlas.indexFor(code)
+    if (glyphIndex < 0) return null // glyph outside atlas ranges — unsupported
     width += atlas.glyphWidths[glyphIndex] || atlas.cellWidth
   }
   return {
