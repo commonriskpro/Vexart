@@ -156,12 +156,12 @@ Objective: Rewire TS consumer code from old Clay/Zig/bridge paths to new `vexart
   - [x] 9.3c Replace image upload/download with `vexart_paint_upload_image` / `vexart_paint_remove_image`.
   - [x] 9.3d Replace readback with `vexart_composite_readback_rgba` / `vexart_composite_readback_region_rgba`.
 - [x] [ATOMIC] 9.4 Modify `packages/engine/src/ffi/renderer-backend.ts`: update `RenderGraphFrame` consumer to new shape from render-graph.ts. Per design §11.
-- [ ] [ATOMIC] 9.5 Modify `packages/engine/src/ffi/layout-writeback.ts`: rewire from Clay layout output shape to Taffy layout output shape (flat `PositionedCommand` buffer). Per design §10, §11.
+- [x] [ATOMIC] 9.5 Modify `packages/engine/src/ffi/layout-writeback.ts`: rewire from Clay layout output shape to Taffy layout output shape (flat `PositionedCommand` buffer). Per design §10, §11.
 - [x] [ATOMIC] 9.6 Modify `packages/engine/src/ffi/canvas.ts`: rewire from `tge_wgpu_canvas_*` calls to `vexart_paint_*` + `vexart_composite_*`. Per design §11.
-- [ ] [ATOMIC] 9.7 Modify `packages/engine/src/ffi/font-atlas.ts`: adapt to Phase 2 text stub — no glyph data uploaded, calls `vexart_text_load_atlas` (success no-op). Per design §11.
-- [ ] [ATOMIC] 9.8 Modify `packages/engine/src/ffi/text-layout.ts`: adapt to Phase 2 text stub — `vexart_text_measure` returns `(0, 0)`, text nodes occupy zero layout space. Per design §11, DEC-011.
-- [ ] [ATOMIC] 9.9 Modify `packages/engine/src/loop/loop.ts`: replace `clay.*` calls with `vexart_context_*` + `vexart_layout_*` + `vexart_paint_*` + `vexart_composite_*` via new bridge. Remove Clay layout orchestration. Per design §11.
-- [ ] [ATOMIC] 9.10 Modify `packages/engine/src/loop/scroll.ts`: consume Taffy output shape instead of Clay layout output. Scissor logic unchanged. Per design §11 — verify `rg "import.*clay" packages/engine/src/loop/scroll.ts` returns 0 after edit.
+- [x] [ATOMIC] 9.7 Modify `packages/engine/src/ffi/font-atlas.ts`: adapt to Phase 2 text stub — no glyph data uploaded, calls `vexart_text_load_atlas` (success no-op). Per design §11.
+- [x] [ATOMIC] 9.8 Modify `packages/engine/src/ffi/text-layout.ts`: adapt to Phase 2 text stub — `vexart_text_measure` returns `(0, 0)`, text nodes occupy zero layout space. Per design §11, DEC-011.
+- [x] [ATOMIC] 9.9 Modify `packages/engine/src/loop/loop.ts`: replace `clay.*` calls with `vexart_context_*` + `vexart_layout_*` + `vexart_paint_*` + `vexart_composite_*` via new bridge. Remove Clay layout orchestration. Per design §11.
+- [x] [ATOMIC] 9.10 Modify `packages/engine/src/loop/scroll.ts`: consume Taffy output shape instead of Clay layout output. Scissor logic unchanged. Per design §11 — verify `rg "import.*clay" packages/engine/src/loop/scroll.ts` returns 0 after edit.
 - [ ] [ATOMIC] 9.11 Modify `packages/engine/src/output/kitty-shm-native.ts`: rewire `bun:ffi` loader from `libkitty-shm-helper` to `libvexart`'s `vexart_kitty_shm_*` exports. Signature-compatible. Per design §11.
 - [ ] [ATOMIC] 9.12 Modify `packages/engine/src/output/transport-manager.ts`: remove placeholder/halfblock branches. Per design §11, DEC-005.
 - [ ] [ATOMIC] 9.13 Modify `packages/engine/src/output/layer-composer.ts`: remove CPU/GPU switch; single native path via `vexart_composite_merge`. Per design §11.
