@@ -11,40 +11,30 @@ pub mod paint;
 pub mod text;
 pub mod types;
 
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use ffi::panic::{ERR_GPU_DEVICE_LOST, ERR_INVALID_ARG, OK};
 use types::FrameStats;
 
-// ─── Global image registry ────────────────────────────────────────────────
-// Holds GPU textures uploaded via vexart_paint_upload_image.
-// Per design §5.17 (task 5a.17): ImageRecord keyed by opaque u64 handle.
+// ─── Single shared PaintContext (lazy-initialized, persisted across all FFI calls) ──
+// One PaintContext owns: WgpuContext (Instance/Adapter/Device/Queue + 13 pipelines +
+// image bind group layout) + image registry + render target. Initializing wgpu costs
+// 200-300ms (adapter request, device, shader compilation, pipeline creation), so we
+// MUST persist it across vexart_paint_dispatch / vexart_paint_upload_image /
+// vexart_paint_remove_image calls. Recreating per call would cap render rate at 3-5 fps
+// and would break image handles (cross-device texture references). Per design §17,
+// post-Apply #2a architectural fix.
 
 static NEXT_IMAGE_HANDLE: AtomicU64 = AtomicU64::new(1);
 
-/// Per-image GPU resources.
-struct ImageEntry {
-    /// Owning the texture keeps it alive.
-    _texture: wgpu::Texture,
-    _view: wgpu::TextureView,
-    _sampler: wgpu::Sampler,
-    _bind_group: wgpu::BindGroup,
-}
-
-static IMAGE_REGISTRY: LazyLock<Mutex<HashMap<u64, ImageEntry>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
-
-// ─── Shared WgpuContext for image operations ──────────────────────────────
-// Image upload/remove need a Device. We lazily initialize one shared context.
-static SHARED_WGPU: LazyLock<Mutex<Option<paint::context::WgpuContext>>> =
+static SHARED_PAINT: LazyLock<Mutex<Option<paint::PaintContext>>> =
     LazyLock::new(|| Mutex::new(None));
 
-fn get_or_init_wgpu() -> std::sync::MutexGuard<'static, Option<paint::context::WgpuContext>> {
-    let mut guard = SHARED_WGPU.lock().unwrap();
+fn get_or_init_paint() -> MutexGuard<'static, Option<paint::PaintContext>> {
+    let mut guard = SHARED_PAINT.lock().unwrap();
     if guard.is_none() {
-        *guard = Some(paint::context::WgpuContext::new());
+        *guard = Some(paint::PaintContext::new());
     }
     guard
 }
@@ -207,7 +197,11 @@ pub unsafe extern "C" fn vexart_paint_dispatch(
         } else {
             std::slice::from_raw_parts(graph_ptr, graph_len as usize)
         };
-        let mut pctx = paint::PaintContext::new();
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
         pctx.dispatch(target, graph, stats_out)
     })
 }
@@ -236,11 +230,12 @@ pub unsafe extern "C" fn vexart_paint_upload_image(
         }
         let rgba = std::slice::from_raw_parts(image_ptr, image_len as usize);
 
-        let mut guard = get_or_init_wgpu();
-        let wgpu_ctx = match guard.as_mut() {
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
             Some(c) => c,
             None => return ERR_GPU_DEVICE_LOST,
         };
+        let wgpu_ctx = &pctx.wgpu;
 
         let texture = wgpu_ctx.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("vexart-image"),
@@ -305,14 +300,16 @@ pub unsafe extern "C" fn vexart_paint_upload_image(
                 ],
             });
 
+        // Sampler is held alive internally by bind_group's Arc — drop here is OK.
+        let _ = sampler;
+
         let handle = NEXT_IMAGE_HANDLE.fetch_add(1, Ordering::Relaxed);
-        IMAGE_REGISTRY.lock().unwrap().insert(
+        pctx.images.insert(
             handle,
-            ImageEntry {
-                _texture: texture,
-                _view: view,
-                _sampler: sampler,
-                _bind_group: bind_group,
+            paint::ImageRecord {
+                texture,
+                view,
+                bind_group,
             },
         );
 
@@ -328,7 +325,10 @@ pub extern "C" fn vexart_paint_remove_image(_ctx: u64, image: u64) -> i32 {
         if image == 0 {
             return ERR_INVALID_ARG;
         }
-        IMAGE_REGISTRY.lock().unwrap().remove(&image);
+        let mut guard = get_or_init_paint();
+        if let Some(pctx) = guard.as_mut() {
+            pctx.images.remove(&image);
+        }
         OK
     })
 }
