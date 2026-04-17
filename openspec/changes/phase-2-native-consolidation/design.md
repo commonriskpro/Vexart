@@ -383,11 +383,41 @@ Exports with >8 logical fields (paint dispatch, composite merge, per-primitive i
 
 ### 8.2 Per-command prefix
 
+**NORMATIVE cmd_kind allocation (as deployed across Apply #2a + #2b + §17.6):**
+
 | Offset | Size | Field |
 |---:|---:|---|
-| 0 | u16 | `cmd_kind` (enum: 0=Rect, 1=RectCorners, 2=Circle, 3=Line, 4=Bezier, 5=Polygon, 6=GradientLinear, 7=GradientRadial, 8=GradientConic, 9=Image, 10=Glow, 11=Shadow, 12=BlurSource, 13=Filter, 14=Blend, 15=LayerBegin, 16=LayerEnd) |
+| 0 | u16 | `cmd_kind` (see table below) |
 | 2 | u16 | `flags` (bit 0 = has transform, bit 1 = has scissor, bit 2 = layer override) |
 | 4 | u32 | `payload_bytes` — body length following this 8-byte prefix |
+
+| cmd_kind | Pipeline | Apply | Instance struct (Rust) |
+|---:|---|---|---|
+| 0 | rect (flat) | 5a | `BridgeRectInstance` |
+| 1 | shape_rect (SDF uniform radius) | 5a | `BridgeShapeRectInstance` |
+| 2 | shape_rect_corners (per-corner radius) | 5a | `BridgeShapeRectCornersInstance` |
+| 3 | circle | 5a | `BridgeCircleInstance` |
+| 4 | polygon | 5a | `BridgePolygonInstance` |
+| 5 | bezier | 5a | `BridgeBezierInstance` |
+| 6 | glow | 5a | `BridgeGlowInstance` |
+| 7 | nebula | 5a | `BridgeNebulaInstance` |
+| 8 | starfield | 5a | `BridgeStarfieldInstance` |
+| 9 | image | 5a | `BridgeImageInstance` |
+| 10 | image_transform | 5a | `BridgeImageTransformInstance` |
+| 11 | reserved (was glyph, DEC-011 stub — skipped) | — | — |
+| 12 | gradient_linear | 5a | `BridgeLinearGradientInstance` |
+| 13 | gradient_radial | 5a | `BridgeRadialGradientInstance` |
+| 14 | gradient_conic | 5b | `ConicGradientInstance` |
+| 15 | backdrop_blur | 5b | `BackdropBlurInstance` |
+| 16 | backdrop_filter | 5b | `BackdropFilterInstance` |
+| 17 | image_mask | 5b | `ImageMaskInstance` |
+| 18..=31 | reserved for Phase 2b | — | blend, gradient_stroke, MSDF text |
+
+**Shadow is NOT a cmd_kind.** Per design §17.3, shadow is implemented TS-side in `gpu-renderer-backend.ts` by re-emitting `GlowInstance` with offset `(s.x, s.y)` and padding `s.blur * 2` — i.e., shadow emits `cmd_kind = 6 (glow)` with shifted rect. Preserve this pattern in Slice 9 consumer migration.
+
+**Blend and gradient_stroke are deferred to Phase 2b** per design §17.3. Do not allocate cmd_kinds for them in Phase 2.
+
+Authoritative source: `native/libvexart/src/paint/mod.rs` — functions `instance_stride_for_kind()` and `pipeline_for_kind()`. Any TS-side emitter MUST agree with these functions or dispatch will silently mis-route commands.
 
 ### 8.3 Example: Rect command body
 
