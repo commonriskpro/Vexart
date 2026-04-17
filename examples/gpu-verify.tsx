@@ -84,7 +84,7 @@ function GradientCard(props: { title: string; value: string; color: number; acce
       direction="column"
       gap={6}
       padding={16}
-      width={200}
+      width="grow"
       cornerRadius={12}
       gradient={{ type: "linear", from: 0x111318ff, to: 0x1a1d24ff, angle: 135 }}
       borderColor={props.accent}
@@ -215,20 +215,22 @@ function SystemStatus(props: { strategy: () => string }) {
 /** Per-corner radius test */
 function CornerTest() {
   return (
-    <box direction="row" gap={12} alignY="center" width="grow">
-      <box width={48} height={48} backgroundColor={0x1e2230ff}
-        cornerRadii={{ tl: 20, tr: 4, br: 20, bl: 4 }}
-        borderColor={BLUE} borderWidth={1} />
-      <box width={48} height={48} backgroundColor={0x1e2230ff}
-        cornerRadii={{ tl: 4, tr: 20, br: 4, bl: 20 }}
-        borderColor={PURPLE} borderWidth={1} />
-      <box width={48} height={48} backgroundColor={0x1e2230ff}
-        cornerRadii={{ tl: 24, tr: 24, br: 0, bl: 0 }}
-        borderColor={WARM} borderWidth={1} />
-      <box width={48} height={48} backgroundColor={0x1e2230ff}
-        cornerRadii={{ tl: 0, tr: 0, br: 24, bl: 24 }}
-        borderColor={GREEN} borderWidth={1} />
-      <text color={MUTED} fontSize={9}>per-corner radius</text>
+    <box direction="column" gap={10} width="grow">
+      <box direction="row" gap={12} alignY="center" width="grow">
+        <box width={48} height={48} backgroundColor={0x1e2230ff}
+          cornerRadii={{ tl: 20, tr: 4, br: 20, bl: 4 }}
+          borderColor={BLUE} borderWidth={1} />
+        <box width={48} height={48} backgroundColor={0x1e2230ff}
+          cornerRadii={{ tl: 4, tr: 20, br: 4, bl: 20 }}
+          borderColor={PURPLE} borderWidth={1} />
+        <box width={48} height={48} backgroundColor={0x1e2230ff}
+          cornerRadii={{ tl: 24, tr: 24, br: 0, bl: 0 }}
+          borderColor={WARM} borderWidth={1} />
+        <box width={48} height={48} backgroundColor={0x1e2230ff}
+          cornerRadii={{ tl: 0, tr: 0, br: 24, bl: 24 }}
+          borderColor={GREEN} borderWidth={1} />
+      </box>
+      <text color={MUTED} fontSize={9}>tl/br asymmetric · tr/bl asymmetric · top cap · bottom cap</text>
     </box>
   )
 }
@@ -236,33 +238,31 @@ function CornerTest() {
 /** Multi-shadow test */
 function ShadowTest() {
   return (
-    <box direction="row" gap={16} alignY="center" width="grow">
-      <box width={64} height={40} cornerRadius={8}
-        backgroundColor={0x1a1d24ff}
-        shadow={{ x: 0, y: 4, blur: 12, color: 0x00000060 }}>
-        <box width="grow" height="grow" alignX="center" alignY="center">
-          <text color={TEXT} fontSize={9}>single</text>
+    <box direction="column" gap={10} width="grow">
+      <box direction="row" gap={12} width="grow">
+        <box width="grow" height={44} cornerRadius={8}
+          backgroundColor={0x1a1d24ff}
+          shadow={{ x: 0, y: 4, blur: 12, color: 0x00000060 }}
+          alignX="center" alignY="center">
+          <text color={TEXT} fontSize={9}>single shadow</text>
+        </box>
+        <box width="grow" height={44} cornerRadius={8}
+          backgroundColor={0x1a1d24ff}
+          shadow={[
+            { x: -4, y: -4, blur: 8, color: 0x7ab4e830 },
+            { x:  4, y:  4, blur: 8, color: 0x00000050 },
+          ]}
+          alignX="center" alignY="center">
+          <text color={TEXT} fontSize={9}>multi shadow</text>
+        </box>
+        <box width="grow" height={44} cornerRadius={8}
+          backgroundColor={0x0f1016c0}
+          backdropBlur={6}
+          borderColor={0xffffff20} borderWidth={1}
+          alignX="center" alignY="center">
+          <text color={TEXT} fontSize={9}>backdrop blur</text>
         </box>
       </box>
-      <box width={64} height={40} cornerRadius={8}
-        backgroundColor={0x1a1d24ff}
-        shadow={[
-          { x: -4, y: -4, blur: 8,  color: 0x7ab4e830 },
-          { x:  4, y:  4, blur: 8,  color: 0x00000050 },
-        ]}>
-        <box width="grow" height="grow" alignX="center" alignY="center">
-          <text color={TEXT} fontSize={9}>multi</text>
-        </box>
-      </box>
-      <box width={64} height={40} cornerRadius={8}
-        backgroundColor={0x0f1016c0}
-        backdropBlur={6}
-        borderColor={0xffffff20} borderWidth={1}>
-        <box width="grow" height="grow" alignX="center" alignY="center">
-          <text color={TEXT} fontSize={9}>blur</text>
-        </box>
-      </box>
-      <text color={MUTED} fontSize={9}>shadows + backdrop</text>
     </box>
   )
 }
@@ -274,7 +274,7 @@ function App() {
 
   return (
     <box width="100%" height="100%" backgroundColor={BG}
-      direction="column" gap={16} padding={32}>
+      direction="column" gap={12} padding={20}>
 
       {/* Header */}
       <box direction="row" gap={10} alignY="center">
@@ -299,7 +299,7 @@ function App() {
           <UnicodeTest />
         </GlassPanel>
 
-        <box direction="column" gap={16} width={280}>
+        <box direction="column" gap={16} width="grow">
           <GlassPanel title="Per-corner radius">
             <CornerTest />
           </GlassPanel>
