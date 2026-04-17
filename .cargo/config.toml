@@ -1,5 +1,14 @@
-# Cargo workspace configuration
-# Use Xcode clang as linker on macOS — avoids Nix GCC shadowing issues
-# where Nix GCC 15 can't link against LLVM-compiled Rust std libraries.
+# Cargo workspace configuration.
+#
+# Why this file exists: Nix home-manager can place GCC 15 on PATH as `cc`,
+# which cannot link against LLVM-compiled Rust std libraries (unresolved
+# `-liconv`, symbol mismatches). Pinning the linker here isolates cargo from
+# shell PATH ordering so builds are reproducible across dev machines.
+#
+# Why /usr/bin/cc: it is the stable macOS Command Line Tools shim that
+# forwards to the active Xcode / CLT toolchain (respects `xcode-select`),
+# which ships with every Apple dev environment. Previous iteration hardcoded
+# `/Applications/Xcode.app/...` — that path breaks on machines with only
+# Command Line Tools installed or Xcode in a non-default location.
 [target.aarch64-apple-darwin]
-linker = "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/cc"
+linker = "/usr/bin/cc"
