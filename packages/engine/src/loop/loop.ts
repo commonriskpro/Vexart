@@ -20,9 +20,16 @@
 
 import type { Terminal } from "../terminal/index"
 import { createLayerComposer } from "../output/layer-composer"
-import { clay, CMD, ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, SIZING, DIRECTION } from "../ffi/clay"
-import type { RenderCommand } from "../ffi/clay"
+// Phase 2 migration: clay import removed per Slice 9 (design §11).
+// clay.ts still compiles (deleted in Slice 11). Constants moved to ffi/node.ts.
+// RenderCommand + CMD moved to render-graph.ts. clay.* calls use VexartLayoutCtx.
+import { CMD as _CMD_RG } from "../ffi/render-graph"
+import type { RenderCommand } from "../ffi/render-graph"
 import {
+  SIZING,
+  DIRECTION,
+  ALIGN_X,
+  ALIGN_Y,
   type TGENode,
   type SizingInfo,
   type NodeMouseEvent,
@@ -34,6 +41,465 @@ import {
   parseAlignY,
   resolveProps,
 } from "../ffi/node"
+import { openVexartLibrary } from "../ffi/vexart-bridge"
+import { GRAPH_MAGIC, GRAPH_VERSION } from "../ffi/vexart-buffer"
+import { parseLayoutOutput } from "../ffi/layout-writeback"
+import { ptr } from "bun:ffi"
+
+// ── Local constants previously from clay.ts ───────────────────────────────
+
+/** CMD constants — same values as in the legacy Clay bridge. */
+const CMD = {
+  ..._CMD_RG,
+} as const
+
+/** Floating attach-to mode. */
+const ATTACH_TO = {
+  NONE: 0,
+  PARENT: 1,
+  ELEMENT: 2,
+  ROOT: 3,
+} as const
+
+/** Floating attach point (3x3 grid). */
+const ATTACH_POINT = {
+  LEFT_TOP: 0,
+  LEFT_CENTER: 1,
+  LEFT_BOTTOM: 2,
+  CENTER_TOP: 3,
+  CENTER_CENTER: 4,
+  CENTER_BOTTOM: 5,
+  RIGHT_TOP: 6,
+  RIGHT_CENTER: 7,
+  RIGHT_BOTTOM: 8,
+} as const
+
+/** Pointer capture mode. */
+const POINTER_CAPTURE = {
+  CAPTURE: 0,
+  PASSTHROUGH: 1,
+} as const
+
+// ── VexartLayoutCtx ───────────────────────────────────────────────────────
+// Drop-in replacement for the legacy clay object. Builds a flat layout
+// command buffer during walkTree, then calls vexart_layout_compute.
+// Returns synthetic RenderCommand[] from the Taffy PositionedCommand output.
+
+/** Layout node open payload constants */
+const OPEN_PAYLOAD_BYTES = 112
+const LAYOUT_CMD_OPEN = 0
+const LAYOUT_CMD_CLOSE = 1
+const FLAG_IS_ROOT = 1 << 0
+const FLAG_FLOATING_ABS = 1 << 1
+const FLAG_SCROLL_X = 1 << 2
+const FLAG_SCROLL_Y = 1 << 3
+
+// Layout buffer — 256KB, re-used each frame (no allocations on hot path).
+const _layoutBuf = new ArrayBuffer(256 * 1024)
+const _layoutView = new DataView(_layoutBuf)
+const _layoutU8 = new Uint8Array(_layoutBuf)
+const _outBuf = new ArrayBuffer(256 * 1024)
+const _outU8 = new Uint8Array(_outBuf)
+const _outUsedBuf = new Uint32Array(1)
+
+// Per-node accumulated state for building OPEN payload
+type NodeOpenState = {
+  nodeId: number
+  parentNodeId: number
+  flags: number
+  flexDir: number
+  posKind: number
+  sizeWKind: number
+  sizeHKind: number
+  sizeW: number
+  sizeH: number
+  minW: number; minH: number
+  maxW: number; maxH: number
+  flexGrow: number; flexShrink: number
+  justifyContent: number; alignItems: number; alignContent: number
+  padTop: number; padRight: number; padBottom: number; padLeft: number
+  borderTop: number; borderRight: number; borderBottom: number; borderLeft: number
+  gapRow: number; gapCol: number
+  insetTop: number; insetRight: number; insetBottom: number; insetLeft: number
+  // Synthetic render command data
+  bgColor: number
+  cornerRadius: number
+}
+
+const _defaultOpen = (): NodeOpenState => ({
+  nodeId: 0, parentNodeId: 0, flags: 0,
+  flexDir: 1 /* column */, posKind: 0, sizeWKind: 0, sizeHKind: 0, sizeW: 0, sizeH: 0,
+  minW: 0, minH: 0, maxW: 0, maxH: 0, flexGrow: 0, flexShrink: 1,
+  justifyContent: 0, alignItems: 0, alignContent: 0,
+  padTop: 0, padRight: 0, padBottom: 0, padLeft: 0,
+  borderTop: 0, borderRight: 0, borderBottom: 0, borderLeft: 0,
+  gapRow: 0, gapCol: 0,
+  insetTop: 0, insetRight: 0, insetBottom: 0, insetLeft: 0,
+  bgColor: 0, cornerRadius: 0,
+})
+
+/** Write f32 at offset in the layout buffer (little-endian). */
+function _lf32(off: number, v: number) { _layoutView.setFloat32(off, v, true) }
+/** Write u8 at offset. */
+function _lu8(off: number, v: number) { _layoutView.setUint8(off, v) }
+/** Write u16 at offset (little-endian). */
+function _lu16(off: number, v: number) { _layoutView.setUint16(off, v, true) }
+/** Write u32 at offset (little-endian). */
+function _lu32(off: number, v: number) { _layoutView.setUint32(off, v, true) }
+/** Write u64 at offset (little-endian) as number (safe for id < 2^53). */
+function _lu64(off: number, v: number) { _layoutView.setBigUint64(off, BigInt(v), true) }
+
+/** Vexart size kind enum (matches layout/tree.rs: 0=Auto,1=Length,2=Percent) */
+function _vxSizeKind(k: number): number {
+  // SIZING from node.ts: FIT=0, GROW=1, PERCENT=2, FIXED=3
+  if (k === 1 /* GROW */) return 0  // Auto
+  if (k === 3 /* FIXED */) return 1  // Length
+  if (k === 2 /* PERCENT */) return 2  // Percent
+  return 0  // Auto (FIT maps to Auto with no flex_grow)
+}
+
+/** Vexart flex-grow from SIZING: GROW=1.0, others=0.0 */
+function _vxFlexGrow(sizing: SizingInfo | null, explicit: number): number {
+  if (explicit > 0) return explicit
+  if (sizing?.type === 1 /* GROW */) return 1.0
+  return 0.0
+}
+
+/** Vexart justify_content / align_items from ALIGN_X/ALIGN_Y enum.
+ *  Rust: 0=Start, 1=End, 2=Center, 3=SpaceBetween, 255=None
+ *  Clay ALIGN_X: LEFT=0, RIGHT=1, CENTER=2, SPACE_BETWEEN=3
+ */
+function _vxAlign(v: number): number {
+  if (v === 1 /* RIGHT/BOTTOM */) return 1
+  if (v === 2 /* CENTER */) return 2
+  if (v === 3 /* SPACE_BETWEEN */) return 3
+  return 0 // LEFT/TOP → Start
+}
+
+/**
+ * VexartLayoutCtx — Clay-compatible layout context backed by vexart_layout_compute.
+ * Methods mirror the legacy `clay` object API for drop-in use in loop.ts.
+ */
+function createVexartLayoutCtx() {
+  let _vxCtx: bigint = 0n
+  let _cmdCount = 0
+  let _offset = 0
+  let _parentStack: NodeOpenState[] = []
+  let _current: NodeOpenState = _defaultOpen()
+  let _allOpenStates: NodeOpenState[] = []  // order matches OPEN commands
+  let _pendingSetId: string | null = null
+  let _scrollOffsets = new Map<string, { x: number; y: number }>()
+  let _scrollDataCache = new Map<string, { scrollX: number; scrollY: number; contentWidth: number; contentHeight: number; viewportWidth: number; viewportHeight: number; found: boolean }>()
+
+  function _initCtx() {
+    if (_vxCtx !== 0n) return
+    const { symbols } = openVexartLibrary()
+    const ctxBuf = new BigUint64Array(1)
+    symbols.vexart_context_create(ptr(new Uint8Array(0)), 0, ptr(ctxBuf))
+    _vxCtx = ctxBuf[0]
+  }
+
+  function _writeOpenCommand(state: NodeOpenState) {
+    const off = _offset
+    // 8-byte prefix
+    _lu16(off, LAYOUT_CMD_OPEN)
+    _lu16(off + 2, state.flags)
+    _lu32(off + 4, OPEN_PAYLOAD_BYTES)
+    const pOff = off + 8
+    // Payload (112 bytes)
+    _lu64(pOff, state.nodeId)
+    _lu64(pOff + 8, state.parentNodeId)
+    _lu8(pOff + 16, state.flexDir)
+    _lu8(pOff + 17, state.posKind)
+    _lu8(pOff + 18, state.sizeWKind)
+    _lu8(pOff + 19, state.sizeHKind)
+    _lf32(pOff + 20, state.sizeW)
+    _lf32(pOff + 24, state.sizeH)
+    _lf32(pOff + 28, state.minW)
+    _lf32(pOff + 32, state.minH)
+    _lf32(pOff + 36, state.maxW)
+    _lf32(pOff + 40, state.maxH)
+    _lf32(pOff + 44, state.flexGrow)
+    _lf32(pOff + 48, state.flexShrink)
+    _lu8(pOff + 52, _vxAlign(state.justifyContent))
+    _lu8(pOff + 53, _vxAlign(state.alignItems))
+    _lu8(pOff + 54, _vxAlign(state.alignContent))
+    _lu8(pOff + 55, 0) // _pad
+    _lf32(pOff + 56, state.padTop)
+    _lf32(pOff + 60, state.padRight)
+    _lf32(pOff + 64, state.padBottom)
+    _lf32(pOff + 68, state.padLeft)
+    _lf32(pOff + 72, state.borderTop)
+    _lf32(pOff + 76, state.borderRight)
+    _lf32(pOff + 80, state.borderBottom)
+    _lf32(pOff + 84, state.borderLeft)
+    _lf32(pOff + 88, state.gapRow)
+    _lf32(pOff + 92, state.gapCol)
+    _lf32(pOff + 96, state.insetTop)
+    _lf32(pOff + 100, state.insetRight)
+    _lf32(pOff + 104, state.insetBottom)
+    _lf32(pOff + 108, state.insetLeft)
+    _offset += 8 + OPEN_PAYLOAD_BYTES
+    _cmdCount++
+    _allOpenStates.push(state)
+  }
+
+  function _writeCloseCommand() {
+    const off = _offset
+    _lu16(off, LAYOUT_CMD_CLOSE)
+    _lu16(off + 2, 0)
+    _lu32(off + 4, 0)
+    _offset += 8
+    _cmdCount++
+  }
+
+  function _finalizeHeader() {
+    _lu32(0, GRAPH_MAGIC)
+    _lu32(4, GRAPH_VERSION)
+    _lu32(8, _cmdCount)
+    _lu32(12, _offset)
+  }
+
+  // Last layout result — used by writeLayoutBack to update ALL nodes
+  let _lastLayoutMap: Map<bigint, import("../ffi/layout-writeback").PositionedCommand> | null = null
+  function getLastLayoutMap() { return _lastLayoutMap }
+
+  return {
+    /** Access the last parsed layout map for direct node layout updates. */
+    getLastLayoutMap,
+
+    init(width: number, height: number): boolean {
+      _initCtx()
+      if (_vxCtx === 0n) return false
+      const { symbols } = openVexartLibrary()
+      return symbols.vexart_context_resize(_vxCtx, width, height) === 0
+    },
+
+    setDimensions(width: number, height: number) {
+      _initCtx()
+      if (_vxCtx === 0n) return
+      const { symbols } = openVexartLibrary()
+      symbols.vexart_context_resize(_vxCtx, width, height)
+    },
+
+    destroy() {
+      if (_vxCtx === 0n) return
+      const { symbols } = openVexartLibrary()
+      symbols.vexart_context_destroy(_vxCtx)
+      _vxCtx = 0n
+    },
+
+    beginLayout() {
+      _offset = 16  // reserve header space
+      _cmdCount = 0
+      _parentStack = []
+      _allOpenStates = []
+      _current = _defaultOpen()
+      _pendingSetId = null
+    },
+
+    endLayout(): RenderCommand[] {
+      // Finalize + call vexart_layout_compute
+      _finalizeHeader()
+      _initCtx()
+      if (_vxCtx === 0n) return []
+      const { symbols } = openVexartLibrary()
+      _outUsedBuf[0] = 0
+      const bufBytes = _offset
+      const result = symbols.vexart_layout_compute(
+        _vxCtx,
+        ptr(_layoutU8),
+        bufBytes,
+        ptr(_outU8),
+        _outBuf.byteLength,
+        ptr(_outUsedBuf),
+      ) as number
+      if (result !== 0) return []
+      const used = _outUsedBuf[0]
+      // Parse PositionedCommands and synthesize RenderCommand[]
+      const layoutMap = parseLayoutOutput(_outBuf, used)
+      _lastLayoutMap = layoutMap
+      const cmds: RenderCommand[] = []
+      for (const state of _allOpenStates) {
+        const pos = layoutMap.get(BigInt(state.nodeId))
+        if (!pos) continue
+        if (state.bgColor !== 0 || state.cornerRadius !== 0) {
+          cmds.push({
+            type: CMD.RECTANGLE,
+            x: pos.x,
+            y: pos.y,
+            width: pos.width,
+            height: pos.height,
+            color: [
+              (state.bgColor >>> 24) & 0xff,
+              (state.bgColor >>> 16) & 0xff,
+              (state.bgColor >>> 8) & 0xff,
+              state.bgColor & 0xff,
+            ],
+            cornerRadius: state.cornerRadius,
+            extra1: 0,
+            extra2: 0,
+          } as RenderCommand)
+        }
+      }
+      return cmds
+    },
+
+    /** Set the current node's stable Vexart ID. Called right after openElement/setId. */
+    setCurrentNodeId(nodeId: number) {
+      if (_current) _current.nodeId = nodeId
+    },
+
+    openElement() {
+      const parent = _parentStack.length > 0 ? _parentStack[_parentStack.length - 1] : null
+      const state: NodeOpenState = _defaultOpen()
+      state.parentNodeId = parent?.nodeId ?? 0
+      if (_parentStack.length === 0) state.flags |= FLAG_IS_ROOT
+      _pendingSetId = null
+      _parentStack.push(state)
+      _current = state
+    },
+
+    closeElement() {
+      const state = _parentStack.pop()
+      if (!state) return
+      _writeOpenCommand(state)
+      _writeCloseCommand()
+      _current = _parentStack.length > 0 ? _parentStack[_parentStack.length - 1] : _defaultOpen()
+    },
+
+    setId(id: string) {
+      // In legacy Clay, setId() calls openElement() internally.
+      // Here we do the same: push a new state and mark the id.
+      const parent = _parentStack.length > 0 ? _parentStack[_parentStack.length - 1] : null
+      const state: NodeOpenState = _defaultOpen()
+      state.parentNodeId = parent?.nodeId ?? 0
+      if (_parentStack.length === 0) state.flags |= FLAG_IS_ROOT
+      _pendingSetId = id
+      _parentStack.push(state)
+      _current = state
+    },
+
+    configureLayout(dir: number, px: number, py: number, gap: number, ax: number, ay: number) {
+      const s = _current
+      s.flexDir = dir
+      s.padLeft = px; s.padRight = px; s.padTop = py; s.padBottom = py
+      s.gapRow = gap; s.gapCol = gap
+      s.justifyContent = ax; s.alignItems = ay
+    },
+
+    configureLayoutFull(dir: number, padL: number, padR: number, padT: number, padB: number, gap: number, ax: number, ay: number) {
+      const s = _current
+      s.flexDir = dir
+      s.padLeft = padL; s.padRight = padR; s.padTop = padT; s.padBottom = padB
+      s.gapRow = gap; s.gapCol = gap
+      s.justifyContent = ax; s.alignItems = ay
+    },
+
+    configureSizing(wType: number, wVal: number, hType: number, hVal: number) {
+      const s = _current
+      s.sizeWKind = _vxSizeKind(wType)
+      s.sizeW = wVal
+      s.sizeHKind = _vxSizeKind(hType)
+      s.sizeH = hVal
+      if (wType === 1 /* GROW */) s.flexGrow = 1.0
+    },
+
+    configureSizingMinMax(wType: number, wVal: number, minW: number, maxW: number, hType: number, hVal: number, minH: number, maxH: number) {
+      const s = _current
+      s.sizeWKind = _vxSizeKind(wType)
+      s.sizeW = wVal
+      s.sizeHKind = _vxSizeKind(hType)
+      s.sizeH = hVal
+      s.minW = minW; s.maxW = maxW; s.minH = minH; s.maxH = maxH
+      if (wType === 1 /* GROW */) s.flexGrow = 1.0
+    },
+
+    configureRectangle(color: number, radius: number) {
+      _current.bgColor = color
+      _current.cornerRadius = radius
+    },
+
+    configureBorder(_color: number, _width: number) {
+      // Border reservation noted; full border rendering handled by paint layer
+      const s = _current
+      const w = _width
+      s.borderTop = w; s.borderRight = w; s.borderBottom = w; s.borderLeft = w
+    },
+
+    configureBorderSides(_color: number, _l: number, _r: number, _t: number, _b: number, _btw: number) {
+      const s = _current
+      s.borderLeft = _l; s.borderRight = _r; s.borderTop = _t; s.borderBottom = _b
+    },
+
+    configureFloating(attachTo: number, ox: number, oy: number, _z: number, _ape: number, _app: number, _pc: number, _pid: number) {
+      const s = _current
+      s.flags |= FLAG_FLOATING_ABS
+      s.posKind = 1  // Absolute
+      s.insetLeft = ox; s.insetTop = oy
+    },
+
+    configureClip(_sx: boolean, _sy: boolean, _ox: number, _oy: number) {
+      const s = _current
+      if (_sx) s.flags |= FLAG_SCROLL_X
+      if (_sy) s.flags |= FLAG_SCROLL_Y
+    },
+
+    text(_content: string, _color: number, _fontId: number, _fontSize: number) {
+      // Phase 2 DEC-011: text occupies zero space. Emit a zero-size OPEN/CLOSE pair.
+      const state: NodeOpenState = _defaultOpen()
+      state.parentNodeId = _parentStack.length > 0 ? _parentStack[_parentStack.length - 1].nodeId : 0
+      state.sizeWKind = 0; state.sizeHKind = 0  // Auto
+      _writeOpenCommand(state)
+      _writeCloseCommand()
+    },
+
+    setTextMeasure(_index: number, _w: number, _h: number) {
+      // Phase 2 no-op (vexart_layout_measure is a stub)
+    },
+
+    resetTextMeasures() {
+      // Phase 2 no-op
+    },
+
+    hashString(s: string): number {
+      let h = 0x811c9dc5
+      for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i)
+        h = Math.imul(h, 0x01000193)
+      }
+      return h >>> 0
+    },
+
+    setPointer(_x: number, _y: number, _down: boolean) {
+      // Phase 2: pointer handling is done TS-side in updateInteractiveStates
+    },
+
+    updateScroll(_dx: number, _dy: number, _dt: number) {
+      // Phase 2: scroll handled TS-side
+    },
+
+    getScrollOffset(): { x: number; y: number } {
+      // Phase 2: scroll offset from TS-side scroll state
+      return { x: 0, y: 0 }
+    },
+
+    getScrollContainerData(id: string): { scrollX: number; scrollY: number; contentWidth: number; contentHeight: number; viewportWidth: number; viewportHeight: number; found: boolean } {
+      return _scrollDataCache.get(id) ?? { scrollX: 0, scrollY: 0, contentWidth: 0, contentHeight: 0, viewportWidth: 0, viewportHeight: 0, found: false }
+    },
+
+    setScrollPosition(id: string, x: number, y: number) {
+      const d = _scrollDataCache.get(id)
+      if (d) { d.scrollX = x; d.scrollY = y }
+    },
+
+    getElementData(label: string): { found: boolean; x: number; y: number; width: number; height: number } {
+      return { found: false, x: 0, y: 0, width: 0, height: 0 }
+    },
+  }
+}
+
+const clay = createVexartLayoutCtx()
 import { shouldFreezeInteractionLayer, shouldPromoteInteractionLayer } from "../reconciler/interaction"
 import { createDirtyTracker } from "../reconciler/dirty"
 import { hasActiveAnimations } from "./animation"
@@ -609,9 +1075,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         decodeImageForNode(node)
       }
 
-      // Emit a Clay element for layout (sized to image or explicit size)
+      // Emit a layout element for this image node
       boxNodes.push(node)
       clay.openElement()
+      clay.setCurrentNodeId(node.id)
 
       // Sizing: use pre-parsed if explicit, else image intrinsic size, else fit
       const imgBuf = node._imageBuffer
@@ -650,13 +1117,14 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       } else {
         clay.openElement()
       }
+      clay.setCurrentNodeId(node.id)
 
       // Sizing: use pre-parsed or default to grow
       const ws = node._widthSizing ?? { type: SIZING.GROW, value: 0 }
       const hs = node._heightSizing ?? { type: SIZING.GROW, value: 0 }
       clay.configureSizing(ws.type, ws.value, hs.type, hs.value)
 
-      // Use a UNIQUE placeholder RECT so Clay emits a RECTANGLE command for painting.
+      // Use a UNIQUE placeholder RECT so Canvas emits a RECTANGLE command for painting.
       // Important: paintCommand matches canvases by placeholder color. Using the same
       // color for every canvas causes multiple surfaces to cross-wire visually.
       // Pack node.id into RGB, keep alpha near-transparent.
@@ -697,6 +1165,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     } else {
       clay.openElement()
     }
+    clay.setCurrentNodeId(node.id)
 
     // Layout — resolve aliases, then use per-side padding if set
     const dir = parseDirection(node.props.direction ?? node.props.flexDirection)
@@ -1361,7 +1830,32 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
    * first command that spatially contains them (approximation).
    */
   function writeLayoutBack(commands: RenderCommand[]) {
-    writeSequentialCommandLayout(commands, rectNodes, textNodes)
+    // Phase 2: Use vexart layout map directly for all box nodes.
+    // writeSequentialCommandLayout and writeLayoutFromElementIds are now no-ops.
+    const layoutMap = clay.getLastLayoutMap()
+    if (layoutMap && layoutMap.size > 0) {
+      for (const node of boxNodes) {
+        const pos = layoutMap.get(BigInt(node.id))
+        if (pos) {
+          node.layout.x = pos.x
+          node.layout.y = pos.y
+          node.layout.width = pos.width
+          node.layout.height = pos.height
+        }
+      }
+      for (const node of textNodes) {
+        const pos = layoutMap.get(BigInt(node.id))
+        if (pos) {
+          node.layout.x = pos.x
+          node.layout.y = pos.y
+          node.layout.width = pos.width
+          node.layout.height = pos.height
+        }
+      }
+    } else {
+      // Fallback: use synthetic commands for rect layout writeback
+      writeSequentialCommandLayout(commands, rectNodes, textNodes)
+    }
     writeLayoutFromElementIds(boxNodes)
 
     // For box nodes that had backgroundColor, layout was already written via RECT.
