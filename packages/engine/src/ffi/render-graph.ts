@@ -1,7 +1,39 @@
 import type { CanvasContext } from "./canvas"
 import type { TGENode } from "./node"
-import { CMD, type RenderCommand } from "./clay"
-import { packColor } from "./paint-bridge"
+
+// ── Legacy Clay RenderCommand type (kept for Phase 2 compatibility) ──
+// render-graph.ts accepts RenderCommand objects produced by the legacy Clay path
+// and the vexart path alike. The TYPE definition is unchanged; serialization
+// into the §8 packed graph buffer happens in serializeRenderGraphFrame().
+
+/** Clay-compatible command type constants. */
+export const CMD = {
+  NONE: 0,
+  RECTANGLE: 1,
+  BORDER: 2,
+  TEXT: 3,
+  IMAGE: 4,
+  SCISSOR_START: 5,
+  SCISSOR_END: 6,
+} as const
+
+export type RenderCommand = {
+  type: number
+  x: number
+  y: number
+  width: number
+  height: number
+  color: [number, number, number, number] // r,g,b,a 0-255
+  cornerRadius: number
+  extra1: number // border width, font size
+  extra2: number // text length, font id
+  text?: string
+}
+
+// ── Color packing (inlined, formerly from paint-bridge.ts) ──
+function packColor(r: number, g: number, b: number, a: number): number {
+  return (((r & 0xff) << 24) | ((g & 0xff) << 16) | ((b & 0xff) << 8) | (a & 0xff)) >>> 0
+}
 
 export type ShadowDef = {
   x: number
