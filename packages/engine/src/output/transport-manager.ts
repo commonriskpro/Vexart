@@ -1,3 +1,7 @@
+// transport-manager.ts — Phase 2 native path
+// Placeholder and halfblock transport branches removed per DEC-005 / REQ-NB-002.
+// Only Kitty (shm, file, direct) transport remains. Per design §11.
+
 export type TransmissionMode = "shm" | "file" | "direct"
 
 const TRANSPORT_HEALTH = {
