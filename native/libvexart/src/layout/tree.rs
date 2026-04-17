@@ -88,7 +88,7 @@ const CMD_NODE_OPEN: u16 = 0;
 const CMD_NODE_CLOSE: u16 = 1;
 
 /// Flag bits in the per-command flags field.
-const FLAG_IS_ROOT: u16 = 1 << 0;
+pub(crate) const FLAG_IS_ROOT: u16 = 1 << 0;
 const FLAG_FLOATING_ABSOLUTE: u16 = 1 << 1;
 // FLAG_SCROLL_X = 1 << 2  (parsed but not used in Slice 6 — scroll handled paint-side)
 // FLAG_SCROLL_Y = 1 << 3  (same)
@@ -216,7 +216,8 @@ impl LayoutTree {
                     // Parse packed Style.
                     let packed = parse_packed_style(payload);
                     let is_absolute = (flags & FLAG_FLOATING_ABSOLUTE) != 0;
-                    let style = pack_to_taffy_style(&packed, is_absolute);
+                    let is_root = (flags & FLAG_IS_ROOT) != 0;
+                    let style = pack_to_taffy_style(&packed, is_absolute, is_root);
 
                     // Create or update Taffy node.
                     let taffy_node = if let Some(&existing) = self.id_map.get(&node_id) {
@@ -236,7 +237,6 @@ impl LayoutTree {
                         }
                     };
 
-                    let is_root = (flags & FLAG_IS_ROOT) != 0;
                     if is_root {
                         self.root = Some(taffy_node);
                     } else {
@@ -447,7 +447,10 @@ fn align_content_from_u8(byte: u8) -> Option<AlignContent> {
 /// Build a Taffy `Style` from a `PackedStyle` per design §10 migration map.
 ///
 /// - `is_absolute`: when true, sets `position = Position::Absolute` and fills `inset`.
-pub(crate) fn pack_to_taffy_style(packed: &PackedStyle, is_absolute: bool) -> Style {
+/// - `is_root`: when true AND `flex_grow > 0` AND `size = Auto`, expands root to `percent(1.0)`
+///   so that a "grow" root fills the viewport. Taffy's `flex_grow` applies to flex *items*
+///   within a parent; the root has no parent, so explicit percent(1.0) is needed.
+pub(crate) fn pack_to_taffy_style(packed: &PackedStyle, is_absolute: bool, is_root: bool) -> Style {
     let position = if is_absolute || packed.position_kind == 1 {
         Position::Absolute
     } else {
@@ -497,6 +500,22 @@ pub(crate) fn pack_to_taffy_style(packed: &PackedStyle, is_absolute: bool) -> St
         },
     };
 
+    // Root-level "grow" expansion:
+    // When the root node encodes width/height="grow" (flex_grow>0, size=Auto), Taffy
+    // cannot apply flex_grow (the root has no parent flex container to flex against).
+    // Translate this to percent(1.0) so the root fills the available viewport space.
+    // This matches Clay's behavior where the root with grow=1 fills the terminal.
+    let size_w = if is_root && packed.flex_grow > 0.0 && packed.size_w_kind == 0 {
+        Dimension::percent(1.0)
+    } else {
+        dim_from_kind_value(packed.size_w_kind, packed.size_w_value)
+    };
+    let size_h = if is_root && packed.flex_grow > 0.0 && packed.size_h_kind == 0 {
+        Dimension::percent(1.0)
+    } else {
+        dim_from_kind_value(packed.size_h_kind, packed.size_h_value)
+    };
+
     Style {
         display: Display::Flex,
         position,
@@ -504,8 +523,8 @@ pub(crate) fn pack_to_taffy_style(packed: &PackedStyle, is_absolute: bool) -> St
         flex_grow: packed.flex_grow,
         flex_shrink: packed.flex_shrink,
         size: Size {
-            width: dim_from_kind_value(packed.size_w_kind, packed.size_w_value),
-            height: dim_from_kind_value(packed.size_h_kind, packed.size_h_value),
+            width: size_w,
+            height: size_h,
         },
         min_size,
         max_size,
@@ -613,7 +632,6 @@ pub struct TestNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ffi::panic::ERR_INVALID_ARG;
 
     /// Helper: make a single-root node with grow sizing.
     fn root_grow_node() -> TestNode {
@@ -682,19 +700,19 @@ mod tests {
         // NOTE: Taffy 0.10.x uses constructor functions not enum variants.
         // Length
         let packed = make_packed_style_with_size(1, 100.0, 1, 200.0);
-        let style = pack_to_taffy_style(&packed, false);
+        let style = pack_to_taffy_style(&packed, false, false);
         assert_eq!(style.size.width, Dimension::length(100.0));
         assert_eq!(style.size.height, Dimension::length(200.0));
 
         // Percent
         let packed = make_packed_style_with_size(2, 0.5, 2, 1.0);
-        let style = pack_to_taffy_style(&packed, false);
+        let style = pack_to_taffy_style(&packed, false, false);
         assert_eq!(style.size.width, Dimension::percent(0.5));
         assert_eq!(style.size.height, Dimension::percent(1.0));
 
         // Auto
         let packed = make_packed_style_with_size(0, 0.0, 0, 0.0);
-        let style = pack_to_taffy_style(&packed, false);
+        let style = pack_to_taffy_style(&packed, false, false);
         assert_eq!(style.size.width, Dimension::auto());
         assert_eq!(style.size.height, Dimension::auto());
     }
@@ -712,7 +730,7 @@ mod tests {
         ];
         for &(byte, expected) in cases {
             let packed = make_packed_style_with_justify(byte);
-            let style = pack_to_taffy_style(&packed, false);
+            let style = pack_to_taffy_style(&packed, false, false);
             assert_eq!(
                 style.justify_content, expected,
                 "justify_content mismatch for byte {byte}"

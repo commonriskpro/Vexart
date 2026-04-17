@@ -128,7 +128,7 @@ mod tests {
     use super::*;
     use crate::ffi::buffer::{GRAPH_MAGIC, GRAPH_VERSION};
     use crate::ffi::panic::OK;
-    use crate::layout::tree::{build_test_buffer, LayoutTree, TestNode, FLAG_IS_ROOT};
+    use crate::layout::tree::{LayoutTree, TestNode, FLAG_IS_ROOT};
 
     fn build_two_node_tree() -> LayoutTree {
         let mut tree = LayoutTree::new();

@@ -120,7 +120,7 @@ Objective: Implement layout computation using Taffy, replacing Clay's role. Per 
 - [x] 6.5 Wire `vexart_layout_compute()` in `lib.rs` to call `build_from_commands()` + `taffy.compute_layout_with_measure()` + `write_layout()`. Per design §5.2.
 - [x] 6.6 Wire `vexart_layout_measure()` to return `(0.0, 0.0)` per DEC-011 stub. Per design §5.2.
 - [x] 6.7 Wire `vexart_layout_writeback()` to accept flat writeback buffer with scroll offsets / handle updates. Per design §5.2.
-- [ ] 6.8 Verify: `cargo check` passes with Taffy integration compiled.
+- [x] 6.8 Verify: `cargo check` passes with Taffy integration compiled.
 
 ---
 
