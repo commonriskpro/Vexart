@@ -44,11 +44,11 @@ Objective: Establish the Cargo workspace and pinned toolchain. Per design §2, �
 
 Objective: Add a new TS loader for `libvexart` alongside existing bridge loaders. No existing code paths change yet. Per design §8.4, §12.3.
 
-- [ ] [ATOMIC] 4.1 Create `packages/engine/src/ffi/vexart-bridge.ts` with `dlopen` loader resolving `native/${platform}/libvexart.{dylib,so,dll}`. Define symbol signatures for all 20 exports per design §5. Wire version handshake: `vexart_version()` must return `0x00020000`. Per design §12, §8.4.
-- [ ] [ATOMIC] 4.2 Create `packages/engine/src/ffi/vexart-functions.ts` with typed TS wrappers for each `vexart_*` function, using the packed buffer pattern from design §8. Export `EXPECTED_BRIDGE_VERSION = 0x00020000`, `GRAPH_MAGIC`, `GRAPH_VERSION`, `writeHeader()`. Per design §8.4, REQ-NB-003.
-- [ ] [ATOMIC] 4.3 Create `packages/engine/src/ffi/vexart-buffer.ts` with `ArrayBuffer(65536)` graph buffer, `DataView`, `writeHeader()`, `writeCommandPrefix()`, and per-command body writers for Rect, Gradient, Shadow, etc. Per design §8.
-- [ ] 4.4 Create `packages/engine/src/ffi/bridge.test.ts`: smoke test that `vexart_version()` returns `0x00020000` and version mismatch throws `VexartNativeError`. Per design §13.3.
-- [ ] 4.5 Verify: `bun run typecheck` passes (new files are not yet imported by consumers).
+- [x] [ATOMIC] 4.1 Create `packages/engine/src/ffi/vexart-bridge.ts` with `dlopen` loader resolving `native/${platform}/libvexart.{dylib,so,dll}`. Define symbol signatures for all 20 exports per design §5. Wire version handshake: `vexart_version()` must return `0x00020000`. Per design §12, §8.4.
+- [x] [ATOMIC] 4.2 Create `packages/engine/src/ffi/vexart-functions.ts` with typed TS wrappers for each `vexart_*` function, using the packed buffer pattern from design §8. Export `EXPECTED_BRIDGE_VERSION = 0x00020000`, `GRAPH_MAGIC`, `GRAPH_VERSION`, `writeHeader()`. Per design §8.4, REQ-NB-003.
+- [x] [ATOMIC] 4.3 Create `packages/engine/src/ffi/vexart-buffer.ts` with `ArrayBuffer(65536)` graph buffer, `DataView`, `writeHeader()`, `writeCommandPrefix()`, and per-command body writers for Rect, Gradient, Shadow, etc. Per design §8.
+- [x] 4.4 Create `packages/engine/src/ffi/bridge.test.ts`: smoke test that `vexart_version()` returns `0x00020000` and version mismatch throws `VexartNativeError`. Per design §13.3.
+- [x] 4.5 Verify: `bun run typecheck` passes (new files are not yet imported by consumers).
 
 ---
 
