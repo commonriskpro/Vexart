@@ -7,6 +7,7 @@ pub const GRAPH_VERSION: u32 = 0x00020000; // Phase 2.0
 
 /// Header of every paint/composite call buffer (first 16 bytes).
 #[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct GraphHeader {
     pub magic: u32,
     pub version: u32,
