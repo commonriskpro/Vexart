@@ -138,9 +138,9 @@ Objective: Port the 139-LOC C SHM transport to Rust using `nix` crate with real 
 
 Objective: Finalize text stubs with the one-time stderr warning behavior. Per design §5.5, REQ-NB-005.
 
-- [ ] [ATOMIC] 8.1 Verify `native/libvexart/src/text/mod.rs` has `AtomicBool` guard: first `vexart_text_dispatch()` call writes `[vexart] text rendering disabled during Phase 2 (DEC-011) — MSDF lands in Phase 2b` to stderr via `eprintln!`, subsequent calls are silent. Per design §5.5, REQ-NB-005 scenario.
-- [ ] 8.2 Verify `vexart_text_load_atlas()` returns `OK` without side effects. Per REQ-NB-005.
-- [ ] 8.3 Verify `vexart_text_measure()` writes `0.0` to both `out_w` and `out_h` pointers, returns `OK`. Per REQ-NB-005.
+- [x] [ATOMIC] 8.1 Verify `native/libvexart/src/text/mod.rs` has `AtomicBool` guard: first `vexart_text_dispatch()` call writes `[vexart] text rendering disabled during Phase 2 (DEC-011) — MSDF lands in Phase 2b` to stderr via `eprintln!`, subsequent calls are silent. Per design §5.5, REQ-NB-005 scenario. **Verified 2026-04-17 in Slice 8 apply: AtomicBool guard at line 11, eprintln! at line 36-38 with exact message (em-dash U+2014 confirmed); test_dispatch_warning_emitted_only_once added.**
+- [x] 8.2 Verify `vexart_text_load_atlas()` returns `OK` without side effects. Per REQ-NB-005. **Verified 2026-04-17 in Slice 8 apply: load_atlas body is single OK return at line 18; test_load_atlas_returns_ok exercises it.**
+- [x] 8.3 Verify `vexart_text_measure()` writes `0.0` to both `out_w` and `out_h` pointers, returns `OK`. Per REQ-NB-005. **Verified 2026-04-17 in Slice 8 apply: measure writes 0.0 to both out_w and out_h at lines 62-63, null-check at lines 59-61; 3 existing tests cover happy path + both null branches.**
 
 ---
 

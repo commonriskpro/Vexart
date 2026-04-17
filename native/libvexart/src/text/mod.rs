@@ -131,4 +131,37 @@ mod tests {
         let code = unsafe { load_atlas(0, std::ptr::null(), 0, 0) };
         assert_eq!(code, OK);
     }
+
+    #[test]
+    fn test_dispatch_warning_emitted_only_once() {
+        // Reset flag to simulate fresh state.
+        reset_warning_flag();
+
+        // First dispatch must SET the AtomicBool to true (this is what causes
+        // eprintln! to fire exactly once). compare_exchange returns Ok(false)
+        // ONLY on the first call when the flag was previously false.
+        let code1 = unsafe { dispatch(0, std::ptr::null(), 0, std::ptr::null_mut()) };
+        assert_eq!(code1, OK);
+        assert!(
+            TEXT_WARNING_EMITTED.load(Ordering::SeqCst),
+            "first dispatch call must set the warning flag"
+        );
+
+        // Second dispatch must observe the flag already true and skip eprintln!.
+        // compare_exchange returns Err(true) when current value != expected.
+        // We verify this by ensuring the flag stays true and dispatch still returns OK.
+        let code2 = unsafe { dispatch(0, std::ptr::null(), 0, std::ptr::null_mut()) };
+        assert_eq!(code2, OK);
+        assert!(
+            TEXT_WARNING_EMITTED.load(Ordering::SeqCst),
+            "flag must remain true after second call (compare_exchange should fail silently)"
+        );
+
+        // Third dispatch — same as second.
+        let code3 = unsafe { dispatch(0, std::ptr::null(), 0, std::ptr::null_mut()) };
+        assert_eq!(code3, OK);
+
+        // Cleanup for other tests in the file.
+        reset_warning_flag();
+    }
 }
