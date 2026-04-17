@@ -259,14 +259,14 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
 
 ## 15. Declare workspace:* dependencies on all new packages (slice 15)
 
-- [ ] 15.1 **Audit `@vexart/engine`**: Run `rg "from ['\"]@vexart" packages/engine/src/` — engine MUST import zero `@vexart/*` packages (REQ-PB-004). If any found, this is a layer violation; fix before proceeding
-- [ ] 15.2 **Audit `@vexart/primitives`**: Run `rg "from ['\"]@vexart" packages/primitives/src/` — primitives may import `@vexart/engine`. Add `"@vexart/engine": "workspace:*"` to `packages/primitives/package.json` dependencies
-- [ ] 15.3 **Audit `@vexart/headless`**: Run `rg "from ['\"]@vexart" packages/headless/src/` — headless may import `@vexart/engine` and `@vexart/primitives`. Add both as `workspace:*` dependencies
-- [ ] 15.4 **Audit `@vexart/styled`**: Run `rg "from ['\"]@vexart" packages/styled/src/` — styled may import `@vexart/engine`, `@vexart/primitives`, `@vexart/headless`. Add all found as `workspace:*` dependencies
-- [ ] 15.5 **Audit `@vexart/internal-devtools`**: Run `rg "from ['\"]@vexart" packages/internal-devtools/src/` — may depend on any public layer. Add found dependencies as `workspace:*`
-- [ ] 15.6 Run `bun install` — must resolve all workspace references cleanly
-- [ ] 15.7 Run `bun run typecheck` — must be green (REQ-PB-005)
-- [ ] 15.8 Commit: `chore(deps): declare workspace:* dependencies on all new packages`
+- [x] 15.1 **Audit `@vexart/engine`**: Run `rg "from ['\"]@vexart" packages/engine/src/` — engine MUST import zero `@vexart/*` packages (REQ-PB-004). If any found, this is a layer violation; fix before proceeding
+- [x] 15.2 **Audit `@vexart/primitives`**: Run `rg "from ['\"]@vexart" packages/primitives/src/` — primitives may import `@vexart/engine`. Add `"@vexart/engine": "workspace:*"` to `packages/primitives/package.json` dependencies
+- [x] 15.3 **Audit `@vexart/headless`**: Run `rg "from ['\"]@vexart" packages/headless/src/` — headless may import `@vexart/engine` and `@vexart/primitives`. Add both as `workspace:*` dependencies
+- [x] 15.4 **Audit `@vexart/styled`**: Run `rg "from ['\"]@vexart" packages/styled/src/` — styled may import `@vexart/engine`, `@vexart/primitives`, `@vexart/headless`. Add all found as `workspace:*` dependencies
+- [x] 15.5 **Audit `@vexart/internal-devtools`**: Run `rg "from ['\"]@vexart" packages/internal-devtools/src/` — may depend on any public layer. Add found dependencies as `workspace:*`
+- [x] 15.6 Run `bun install` — must resolve all workspace references cleanly
+- [x] 15.7 Run `bun run typecheck` — must be green (REQ-PB-005)
+- [x] 15.8 Commit: `chore(deps): declare workspace:* dependencies on all new packages`
 
 ## 16. Add dependency-cruiser config and lint:boundaries script (slice 16)
 
