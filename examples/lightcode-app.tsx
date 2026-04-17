@@ -13,13 +13,19 @@
 
 process.env.LIGHTCODE_CANVAS_BACKEND = process.env.LIGHTCODE_CANVAS_BACKEND ?? "wgpu"
 
+import { appendFileSync } from "node:fs"
 import { For } from "solid-js"
 import {
   mount,
   useTerminalDimensions,
+  createTerminal,
 } from "@tge/renderer-solid"
-import type { Terminal } from "@tge/terminal"
-import { createTerminal } from "@tge/terminal"
+import type { Terminal } from "@tge/renderer-solid"
+
+const LOG = "/tmp/lightcode-app.log"
+function log(msg: string) {
+  try { appendFileSync(LOG, `[${new Date().toISOString()}] ${msg}\n`) } catch {}
+}
 import {
   createWindowManager,
   Desktop,
@@ -74,25 +80,7 @@ const EDGES: GraphEdgeDef[] = [
   { id: "e7", from: "runner",      to: "central", color: 0xffffff18, glow: true },
 ]
 
-// ── Space background (generated once at startup) ──
-const spaceBg = createSpaceBackground({
-  seed: 0xdead_beef,
-  width:  2400,
-  height: 1600,
-  backgroundColor: 0x04050aff,
-  nebula: {
-    stops: [
-      { color: 0xf3a04010, position: 0.0 },
-      { color: 0x7db6ff0c, position: 0.45 },
-      { color: 0x00000000, position: 1.0 },
-    ],
-    noise: { scale: 260, octaves: 5, gain: 50, lacunarity: 200, warp: 55, dust: 0.35 },
-    renderScale: 0.4,
-  },
-  starfield: { count: 380, clusterCount: 5, clusterStars: 50 },
-  sparkles: { count: 4, color: 0xfff2d2ff },
-  atmosphere: { count: 5, colors: [0xf3a04018, 0x7db6ff14, 0xffffff08] },
-})
+
 
 // ── Custom window header using Lightcode design tokens ──
 
@@ -127,11 +115,12 @@ function App(props: {
   manager: ReturnType<typeof createWindowManager>
   registry: ReturnType<typeof createWindowRegistry>
   graph: ReturnType<typeof createGraphState>
+  spaceBg: ReturnType<typeof createSpaceBackground>
 }) {
   const dims = useTerminalDimensions(props.term)
 
   function drawBackground(ctx: CanvasContext) {
-    spaceBg.draw(ctx, { x: 0, y: 0, w: dims.width(), h: dims.height() })
+    props.spaceBg.draw(ctx, { x: 0, y: 0, w: dims.width(), h: dims.height() })
   }
 
   return (
@@ -220,12 +209,16 @@ function App(props: {
 // ── Main (async boot) ──
 
 async function main() {
+  log("--- lightcode-app boot ---")
+
   // Terminal
   const term = await createTerminal()
+  log(`terminal: kitty=${term.caps.kittyGraphics} mode=${term.caps.transmissionMode}`)
 
   // Canvas backend
   const wgpuBackend = tryCreateWgpuCanvasPainterBackend()
   if (wgpuBackend) setCanvasPainterBackend(wgpuBackend)
+  log(`canvas backend: ${wgpuBackend ? "wgpu" : "cpu"}`)
 
   // Window system
   const manager = createWindowManager()
@@ -318,15 +311,42 @@ async function main() {
     }, { x: 975, y: 583, width: 320, height: 240 })
   }
 
+  // Space background — after terminal so pixel FFI is warm
+  log("creating space background...")
+  const spaceBg = createSpaceBackground({
+    seed: 0xdead_beef,
+    width:  2400,
+    height: 1600,
+    backgroundColor: 0x04050aff,
+    nebula: {
+      stops: [
+        { color: 0xf3a04010, position: 0.0 },
+        { color: 0x7db6ff0c, position: 0.45 },
+        { color: 0x00000000, position: 1.0 },
+      ],
+      noise: { scale: 260, octaves: 5, gain: 50, lacunarity: 200, warp: 55, dust: 0.35 },
+      renderScale: 0.4,
+    },
+    starfield: { count: 380, clusterCount: 5, clusterStars: 50 },
+    sparkles: { count: 4, color: 0xfff2d2ff },
+    atmosphere: { count: 5, colors: [0xf3a04018, 0x7db6ff14, 0xffffff08] },
+  })
+  log("space background ready")
+
   // Flush on clean exit
   process.on("exit", () => { void persistence.flush() })
 
+  log("mounting app...")
   // Mount
   mount(
-    () => <App term={term} manager={manager} registry={registry} graph={graph} />,
+    () => <App term={term} manager={manager} registry={registry} graph={graph} spaceBg={spaceBg} />,
     term,
     { maxFps: 60 },
   )
+  log("mounted")
 }
 
-void main()
+main().catch(e => {
+  log(`FATAL: ${e instanceof Error ? e.stack : String(e)}`)
+  process.exit(1)
+})
