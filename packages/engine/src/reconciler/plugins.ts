@@ -33,7 +33,7 @@
 
 import { createSignal } from "solid-js"
 import type { JSX } from "solid-js"
-import type { Terminal } from "@vexart/engine"
+import type { Terminal } from "../terminal/index"
 
 // ── Types ──
 

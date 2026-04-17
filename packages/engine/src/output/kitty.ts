@@ -14,7 +14,7 @@
 
 import type { PixelBuffer } from "../paint-legacy/index"
 import { deflateSync } from "node:zlib"
-import { reportKittyTransportFailure, reportKittyTransportSuccess, resolveKittyTransportMode, TRANSPORT_FAILURE_REASON } from "./transport-manager"
+import { type TransmissionMode, reportKittyTransportFailure, reportKittyTransportSuccess, resolveKittyTransportMode, TRANSPORT_FAILURE_REASON } from "./transport-manager"
 import { prepareNativeKittyShm, releaseNativeKittyShm } from "./kitty-shm-native"
 
 type RawImageData = {
@@ -99,7 +99,7 @@ function probeDebug(message: string, extra?: unknown) {
 
 // ── Transmission Modes ──
 
-export type TransmissionMode = "shm" | "file" | "direct"
+export type { TransmissionMode } from "./transport-manager"
 
 const COMPRESS_MODE = {
   AUTO: "auto",

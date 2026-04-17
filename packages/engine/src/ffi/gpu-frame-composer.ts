@@ -1,4 +1,4 @@
-import type { LayerComposer } from "@vexart/engine"
+import type { LayerComposer } from "../output/layer-composer"
 
 const FINAL_FRAME_IMAGE_ID = 3
 

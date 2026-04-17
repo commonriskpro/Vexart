@@ -18,8 +18,8 @@
  * with recursive layer detection at ANY depth in the tree.
  */
 
-import type { Terminal } from "@vexart/engine"
-import { createLayerComposer } from "@vexart/engine"
+import type { Terminal } from "../terminal/index"
+import { createLayerComposer } from "../output/layer-composer"
 import { clay, CMD, ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, SIZING, DIRECTION } from "../ffi/clay"
 import type { RenderCommand } from "../ffi/clay"
 import {

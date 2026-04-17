@@ -2,7 +2,7 @@
 
 import { createSignal } from "solid-js"
 import { onInput } from "../loop/input"
-import type { KeyEvent } from "@vexart/engine"
+import type { KeyEvent } from "../input/types"
 import type { TGENode, PressEvent } from "../ffi/node"
 
 export type FocusEntry = {

@@ -40,7 +40,8 @@
     "showcase": "bun --conditions=browser run examples/showcase.tsx",
     "demo:gpu": "bun --conditions=browser run examples/gpu-verify.tsx",
     "demo:gpu:perf": "VEXART_LOG_PERF=1 bun --conditions=browser run examples/gpu-verify.tsx",
-    "devtools": "bun run packages/internal-devtools/src/server.ts"
+    "devtools": "bun run packages/internal-devtools/src/server.ts",
+    "lint:boundaries": "depcruise packages --config .dependency-cruiser.cjs"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
@@ -48,6 +49,7 @@
     "@napi-rs/canvas": "^0.1.97",
     "@types/bun": "^1.3.12",
     "babel-preset-solid": "^1.9.0",
+    "dependency-cruiser": "^16.10.0",
     "esbuild": "^0.28.0",
     "opentype.js": "^1.3.4",
     "solid-js": "^1.9.0",

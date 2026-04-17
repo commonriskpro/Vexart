@@ -270,18 +270,18 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
 
 ## 16. Add dependency-cruiser config and lint:boundaries script (slice 16)
 
-- [ ] 16.1 Pin `dependency-cruiser@^16.10.0` as devDependency in root `package.json`. Run `bun install`
-- [ ] 16.2 Create `.dependency-cruiser.cjs` at repo root with rules implementing REQ-PB-004, REQ-PB-006, REQ-PB-007:
+- [x] 16.1 Pin `dependency-cruiser@^16.10.0` as devDependency in root `package.json`. Run `bun install`
+- [x] 16.2 Create `.dependency-cruiser.cjs` at repo root with rules implementing REQ-PB-004, REQ-PB-006, REQ-PB-007:
   - **no-circular**: forbidden rule on `circular: true`, severity `error`
   - **no-upward-import** (4 rules): engine → (primitives|headless|styled) = error; primitives → (headless|styled) = error; headless → styled = error
   - **no-relative-cross-package**: forbidden rule matching `^packages/([^/]+)/src/.*` importing via relative `../../` into a different `packages/(?!\\1)` directory
   - **no-same-layer-lateral**: placeholder rule with comment "Invariant during Phase 1; becomes operational when layer sibling packages are introduced"
   - Options: `{ tsConfig: { fileName: "tsconfig.json" }, doNotFollow: { path: "node_modules" } }`
-- [ ] 16.3 Add `"lint:boundaries": "depcruise packages --config .dependency-cruiser.cjs"` script to root `package.json`
-- [ ] 16.4 Run `bun run lint:boundaries` — must exit 0 with zero violations
-- [ ] 16.5 **Smoke test**: Temporarily insert an illegal import in `packages/primitives/src/` (e.g., `import {} from "@vexart/headless"`). Run `bun run lint:boundaries` — must exit non-zero with error. Revert the illegal import
-- [ ] 16.6 Run `bun install && bun run typecheck` — must be green
-- [ ] 16.7 Commit: `chore(lint): add dependency-cruiser config and lint:boundaries script`
+- [x] 16.3 Add `"lint:boundaries": "depcruise packages --config .dependency-cruiser.cjs"` script to root `package.json`
+- [x] 16.4 Run `bun run lint:boundaries` — must exit 0 with zero violations
+- [x] 16.5 **Smoke test**: Temporarily insert an illegal import in `packages/primitives/src/` (e.g., `import {} from "@vexart/headless"`). Run `bun run lint:boundaries` — must exit non-zero with error. Revert the illegal import
+- [x] 16.6 Run `bun install && bun run typecheck` — must be green
+- [x] 16.7 Commit: `chore(lint): add dependency-cruiser config and lint:boundaries script`
 
 ## 17. Rename root package to vexart and update tsconfig paths (slice 17)
 

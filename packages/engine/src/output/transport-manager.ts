@@ -1,4 +1,4 @@
-import type { TransmissionMode } from "./kitty"
+export type TransmissionMode = "shm" | "file" | "direct"
 
 const TRANSPORT_HEALTH = {
   UNKNOWN: "unknown",
