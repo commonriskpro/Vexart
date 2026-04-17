@@ -2,7 +2,7 @@
  * Build script — creates a distributable npm package.
  *
  * Output: dist/
- *   tge.js              ← single minified bundle (all @tge/* packages)
+ *   tge.js              ← single minified bundle (all @vexart/* packages)
  *   tge.d.ts            ← public API type declarations (TODO)
  *   solid-plugin.js     ← babel preload for JSX transform
  *   vendor/

@@ -285,11 +285,11 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
 
 ## 17. Rename root package to vexart and update tsconfig paths (slice 17)
 
-- [ ] 17.1 Update root `package.json` `name` field from `"tge"` to `"vexart"` (REQ-PB-009)
-- [ ] 17.2 Verify `tsconfig.json` paths — all should already be `@vexart/*` after slice 14. Confirm no `@tge/*` remnants
-- [ ] 17.3 Run `rg "@tge/" examples/ scripts/ solid-plugin.ts tsconfig.json package.json` — expect ZERO matches (REQ-PB-009)
-- [ ] 17.4 Run `bun install && bun run typecheck` — must be green
-- [ ] 17.5 Commit: `chore: rename root package to vexart and update tsconfig paths`
+- [x] 17.1 Update root `package.json` `name` field from `"tge"` to `"vexart"` (REQ-PB-009)
+- [x] 17.2 Verify `tsconfig.json` paths — all should already be `@vexart/*` after slice 14. Confirm no `@tge/*` remnants
+- [x] 17.3 Run `rg "@tge/" examples/ scripts/ solid-plugin.ts tsconfig.json package.json` — expect ZERO matches (REQ-PB-009)
+- [x] 17.4 Run `bun install && bun run typecheck` — must be green
+- [x] 17.5 Commit: `chore: rename root package to vexart and update tsconfig paths`
 
 ## 18. Final verification — typecheck + test + lint:boundaries (slice 18) — verification only
 

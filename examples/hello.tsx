@@ -3,7 +3,7 @@
  *
  * Real JSX rendering: SolidJS components → Clay layout → Zig paint → terminal.
  * This is the first example that uses actual JSX compilation through
- * babel-preset-solid with generate: "universal" targeting @tge/renderer-solid.
+ * babel-preset-solid with generate: "universal" targeting @vexart/engine.
  *
  * Run: bun run examples/hello.tsx
  * Requires: bun zig:build && bun run clay:build
