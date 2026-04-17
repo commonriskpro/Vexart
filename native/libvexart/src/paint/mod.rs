@@ -9,7 +9,6 @@ pub mod pipelines;
 use std::collections::HashMap;
 use std::time::Instant;
 
-use bytemuck::cast_slice;
 use wgpu::util::DeviceExt;
 
 use crate::ffi::panic::{ERR_INVALID_ARG, OK};
@@ -27,7 +26,6 @@ pub struct PaintContext {
     pub wgpu: context::WgpuContext,
     /// Image registry: handle → ImageRecord. Key is monotonically-increasing u64.
     pub images: HashMap<u64, ImageRecord>,
-    next_image_handle: u64,
     /// Minimal offscreen target for dispatch (64×64 Rgba8Unorm).
     /// In Slice 5a we create one default target; Slice 6+ wires real per-context targets.
     pub target_texture: wgpu::Texture,
@@ -58,7 +56,6 @@ impl PaintContext {
         Self {
             wgpu,
             images: HashMap::new(),
-            next_image_handle: 1,
             target_texture,
             target_view,
         }

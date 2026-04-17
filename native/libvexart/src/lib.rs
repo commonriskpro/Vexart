@@ -11,8 +11,43 @@ pub mod paint;
 pub mod text;
 pub mod types;
 
-use ffi::panic::{ERR_INVALID_ARG, OK};
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{LazyLock, Mutex};
+
+use ffi::panic::{ERR_GPU_DEVICE_LOST, ERR_INVALID_ARG, OK};
 use types::FrameStats;
+
+// ─── Global image registry ────────────────────────────────────────────────
+// Holds GPU textures uploaded via vexart_paint_upload_image.
+// Per design §5.17 (task 5a.17): ImageRecord keyed by opaque u64 handle.
+
+static NEXT_IMAGE_HANDLE: AtomicU64 = AtomicU64::new(1);
+
+/// Per-image GPU resources.
+struct ImageEntry {
+    /// Owning the texture keeps it alive.
+    _texture: wgpu::Texture,
+    _view: wgpu::TextureView,
+    _sampler: wgpu::Sampler,
+    _bind_group: wgpu::BindGroup,
+}
+
+static IMAGE_REGISTRY: LazyLock<Mutex<HashMap<u64, ImageEntry>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+// ─── Shared WgpuContext for image operations ──────────────────────────────
+// Image upload/remove need a Device. We lazily initialize one shared context.
+static SHARED_WGPU: LazyLock<Mutex<Option<paint::context::WgpuContext>>> =
+    LazyLock::new(|| Mutex::new(None));
+
+fn get_or_init_wgpu() -> std::sync::MutexGuard<'static, Option<paint::context::WgpuContext>> {
+    let mut guard = SHARED_WGPU.lock().unwrap();
+    if guard.is_none() {
+        *guard = Some(paint::context::WgpuContext::new());
+    }
+    guard
+}
 
 // ─── §5.1 Version & lifecycle ─────────────────────────────────────────────
 
@@ -177,35 +212,123 @@ pub unsafe extern "C" fn vexart_paint_dispatch(
     })
 }
 
-/// RGBA/BGRA → GPU texture; returns handle in `out_image`. Phase 2 stub.
+/// RGBA/BGRA → GPU texture; returns handle in `out_image`.
+/// Per design §5.3, task 5a.17.
 ///
 /// # Safety
 /// `image_ptr` must be valid for `image_len` bytes; `out_image` must be valid if non-null.
 #[no_mangle]
 pub unsafe extern "C" fn vexart_paint_upload_image(
-    ctx: u64,
+    _ctx: u64,
     image_ptr: *const u8,
     image_len: u32,
     width: u32,
     height: u32,
-    format: u32,
+    _format: u32,
     out_image: *mut u64,
 ) -> i32 {
     ffi_guard!({
-        let _ = (ctx, image_ptr, image_len, width, height, format);
         if out_image.is_null() {
             return ERR_INVALID_ARG;
         }
-        *out_image = 0;
+        if image_ptr.is_null() || image_len == 0 || width == 0 || height == 0 {
+            return ERR_INVALID_ARG;
+        }
+        let rgba = std::slice::from_raw_parts(image_ptr, image_len as usize);
+
+        let mut guard = get_or_init_wgpu();
+        let wgpu_ctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+
+        let texture = wgpu_ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("vexart-image"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+
+        wgpu_ctx.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            rgba,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(width * 4),
+                rows_per_image: Some(height),
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = wgpu_ctx.device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("vexart-image-sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+            ..Default::default()
+        });
+        let bind_group = wgpu_ctx
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("vexart-image-bind-group"),
+                layout: &wgpu_ctx.image_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&sampler),
+                    },
+                ],
+            });
+
+        let handle = NEXT_IMAGE_HANDLE.fetch_add(1, Ordering::Relaxed);
+        IMAGE_REGISTRY.lock().unwrap().insert(
+            handle,
+            ImageEntry {
+                _texture: texture,
+                _view: view,
+                _sampler: sampler,
+                _bind_group: bind_group,
+            },
+        );
+
+        *out_image = handle;
         OK
     })
 }
 
-/// Free GPU texture. Phase 2 stub.
+/// Free GPU texture. Per design §5.3, task 5a.17.
 #[no_mangle]
-pub extern "C" fn vexart_paint_remove_image(ctx: u64, image: u64) -> i32 {
+pub extern "C" fn vexart_paint_remove_image(_ctx: u64, image: u64) -> i32 {
     ffi_guard!({
-        let _ = (ctx, image);
+        if image == 0 {
+            return ERR_INVALID_ARG;
+        }
+        IMAGE_REGISTRY.lock().unwrap().remove(&image);
         OK
     })
 }
