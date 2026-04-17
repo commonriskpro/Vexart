@@ -111,15 +111,15 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
 
 ## 9. Fold @tge/pixel into engine/src/paint-legacy (slice 9)
 
-- [ ] 9.1 Create `packages/engine/src/paint-legacy/` directory
-- [ ] 9.2 `git mv packages/pixel/src/*.ts packages/engine/src/paint-legacy/` — moves `index.ts`, `ffi.ts`, `composite.ts`, `buffer.ts`, `dirty.ts`, and test files
-- [ ] 9.3 Update internal imports within moved files — `ffi.ts` likely imports from `@tge/core` (now `@vexart/engine`); update accordingly. Since both are now in the same package, convert cross-module imports to relative paths (e.g., `../ffi/`)
-- [ ] 9.4 Create `packages/engine/src/paint-legacy/README.md` with warning: "TEMPORARY — Phase 1 only. Deleted wholesale in Phase 2 per DEC-004. Do not add new imports from this directory."
-- [ ] 9.5 Create `packages/engine/src/paint-legacy/index.ts` barrel if not already the moved one
-- [ ] 9.6 Update `packages/engine/src/public.ts` to re-export paint-legacy symbols
-- [ ] 9.7 Create shim: rewrite `packages/pixel/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/pixel/package.json` to add `@vexart/engine: "workspace:*"` dependency. Delete remaining moved files from old location
-- [ ] 9.8 Run `bun install && bun run typecheck` — must be green
-- [ ] 9.9 Commit: `refactor(engine): fold @tge/pixel into engine/src/paint-legacy with shim`
+- [x] 9.1 Create `packages/engine/src/paint-legacy/` directory
+- [x] 9.2 `git mv packages/pixel/src/*.ts packages/engine/src/paint-legacy/` — moves `index.ts`, `ffi.ts`, `composite.ts`, `buffer.ts`, `dirty.ts`, and test files
+- [x] 9.3 Update internal imports within moved files — `ffi.ts` likely imports from `@tge/core` (now `@vexart/engine`); update accordingly. Since both are now in the same package, convert cross-module imports to relative paths (e.g., `../ffi/`)
+- [x] 9.4 Create `packages/engine/src/paint-legacy/README.md` with warning: "TEMPORARY — Phase 1 only. Deleted wholesale in Phase 2 per DEC-004. Do not add new imports from this directory."
+- [x] 9.5 Create `packages/engine/src/paint-legacy/index.ts` barrel if not already the moved one
+- [x] 9.6 Update `packages/engine/src/public.ts` to re-export paint-legacy symbols
+- [x] 9.7 Create shim: rewrite `packages/pixel/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/pixel/package.json` to add `@vexart/engine: "workspace:*"` dependency. Delete remaining moved files from old location
+- [x] 9.8 Run `bun install && bun run typecheck` — must be green
+- [x] 9.9 Commit: `refactor(engine): fold @tge/pixel into engine/src/paint-legacy with shim`
 
 ## 10. Fold @tge/layout-clay + gpu stubs into engine (slice 10)
 

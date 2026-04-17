@@ -1,5 +1,2 @@
-/**
- * Temporary bridge package for Clay layout integration.
- */
-
-export * from "../../engine/src/ffi/index"
+// @tge/layout-clay shim — all symbols now live in @vexart/engine
+export * from "@vexart/engine"

@@ -49,6 +49,9 @@
     "packages/gpu": {
       "name": "@tge/gpu",
       "version": "0.0.1",
+      "dependencies": {
+        "@vexart/engine": "workspace:*",
+      },
     },
     "packages/headless": {
       "name": "@vexart/headless",
@@ -68,6 +71,9 @@
     "packages/layout-clay": {
       "name": "@tge/layout-clay",
       "version": "0.0.1",
+      "dependencies": {
+        "@vexart/engine": "workspace:*",
+      },
     },
     "packages/output": {
       "name": "@tge/output",
