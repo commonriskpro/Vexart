@@ -63,7 +63,6 @@ await build({
     "@tge/renderer-solid": resolve(ROOT, "packages/renderer-solid/src/index.ts"),
     "@tge/layout-clay": resolve(ROOT, "packages/layout-clay/src/index.ts"),
     "@tge/gpu": resolve(ROOT, "packages/gpu/src/index.ts"),
-    "@tge/compat-canvas": resolve(ROOT, "packages/compat-canvas/src/index.ts"),
   },
   // Inject FFI path override — tell the bundle to look in vendor/ next to itself
   define: {

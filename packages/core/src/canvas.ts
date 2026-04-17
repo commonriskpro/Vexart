@@ -1,24 +1,8 @@
 /**
  * CanvasContext — imperative 2D drawing API for <canvas> nodes.
  *
- * ## COMPAT/LAB BOUNDARY — architectural rules
- *
- * This module is NOT the canonical rendering model for TGE.
- * It exists to support imperative canvas APIs (SceneCanvas, etc.)
- * without dictating the internal architecture of the GPU renderer.
- *
- * The official GPU renderer path lives in core/src/gpu-renderer-backend.ts
- * and does NOT center CanvasContext semantics.
- *
- * Rules:
- * 1. New rendering features must be implemented through render-graph ops,
- *    NOT through CanvasContext extensions.
- * 2. The CPU raster painter (canvas-raster-painter.ts) lives in compat-canvas/,
- *    not here — it is explicitly transition-only staging.
- * 3. This module may survive publicly as a compat surface, but must not
- *    be used to justify CPU raster paths in the official renderer.
- *
- * ## Implementation
+ * Collects draw commands (rect, circle, line, bezier, text, image, glow…)
+ * which are executed by the GPU renderer via wgpu-mixed-scene ops.
  *
  * Unlike <box>/<text>, <canvas> bypasses Clay for its INTERNAL content.
  * Clay only knows the canvas's outer bounding box. All drawing inside

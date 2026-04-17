@@ -1,10 +1,7 @@
 /**
- * Transition-only raster staging helpers for GPU renderer internals.
- * These helpers exist to quarantine temporary surface materialization while
- * the official path moves toward direct GPU targets/layers/images.
- *
- * Note: CPU raster text helpers (createGpuTextImage) live in
- * compat-canvas/src/gpu-text-compat.ts — not here.
+ * GPU raster staging helpers for GPU renderer internals.
+ * Helpers for surface materialization, GPU target management,
+ * and raster image staging on the GPU path.
  */
 
 import { type RasterSurface } from "./render-surface"

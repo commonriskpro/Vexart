@@ -1,18 +1,14 @@
-import { getCanvasImageCacheStats } from "../../compat-canvas/src/canvas-image-cache"
 import { getFontAtlasCacheStats } from "./font-atlas"
 import { getGpuRendererBackendCacheStats } from "./gpu-renderer-backend"
 import { getImageCacheStats } from "../../runtime/src/image"
 import { getTextLayoutCacheStats } from "./text-layout"
-import { getWgpuCanvasPainterCacheStats } from "../../compat-canvas/src/wgpu-canvas-backend"
 
 export function getRendererResourceStats() {
   return {
     image: getImageCacheStats(),
-    canvasImage: getCanvasImageCacheStats(),
     textLayout: getTextLayoutCacheStats(),
     fontAtlas: getFontAtlasCacheStats(),
     gpuRenderer: getGpuRendererBackendCacheStats(),
-    wgpuCanvasPainter: getWgpuCanvasPainterCacheStats(),
   }
 }
 
@@ -21,7 +17,6 @@ export function summarizeRendererResourceStats() {
   const totalBytes =
     stats.image.decodedBytes +
     stats.image.scaledBytes +
-    stats.canvasImage.bytes +
     stats.fontAtlas.bytes +
     stats.gpuRenderer.layerTargetBytes +
     stats.gpuRenderer.textImageBytes +
@@ -30,9 +25,7 @@ export function summarizeRendererResourceStats() {
     stats.gpuRenderer.transformSpriteBytes +
     stats.gpuRenderer.fallbackSpriteBytes +
     stats.gpuRenderer.backdropSourceBytes +
-    stats.gpuRenderer.backdropSpriteBytes +
-    stats.wgpuCanvasPainter.targetBytes +
-    stats.wgpuCanvasPainter.textImageBytes
+    stats.gpuRenderer.backdropSpriteBytes
   return {
     totalBytes,
     gpuBytes:
@@ -43,13 +36,10 @@ export function summarizeRendererResourceStats() {
       stats.gpuRenderer.transformSpriteBytes +
       stats.gpuRenderer.fallbackSpriteBytes +
       stats.gpuRenderer.backdropSourceBytes +
-      stats.gpuRenderer.backdropSpriteBytes +
-      stats.wgpuCanvasPainter.targetBytes +
-      stats.wgpuCanvasPainter.textImageBytes,
+      stats.gpuRenderer.backdropSpriteBytes,
     cacheEntries:
       stats.image.decodedCount +
       stats.image.scaledEntries +
-      stats.canvasImage.entryCount +
       stats.textLayout.preparedCount +
       stats.textLayout.layoutCount +
       stats.fontAtlas.atlasCount +
@@ -59,8 +49,7 @@ export function summarizeRendererResourceStats() {
       stats.gpuRenderer.transformSpriteCount +
       stats.gpuRenderer.fallbackSpriteCount +
       stats.gpuRenderer.backdropSourceCount +
-      stats.gpuRenderer.backdropSpriteCount +
-      stats.wgpuCanvasPainter.textImageCount,
+      stats.gpuRenderer.backdropSpriteCount,
     stats,
   }
 }
