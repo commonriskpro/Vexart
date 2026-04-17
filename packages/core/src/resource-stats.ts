@@ -1,4 +1,4 @@
-import { getCanvasImageCacheStats } from "./canvas"
+import { getCanvasImageCacheStats } from "../../compat-canvas/src/canvas-image-cache"
 import { getFontAtlasCacheStats } from "./font-atlas"
 import { getGpuRendererBackendCacheStats } from "./gpu-renderer-backend"
 import { getImageCacheStats } from "../../runtime/src/image"

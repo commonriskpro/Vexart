@@ -92,7 +92,7 @@ export {
 export type { LayerSlot, LayerBoundary } from "./layer-planner"
 
 export { CanvasContext } from "./canvas"
-export type { Viewport, StrokeStyle, FillStyle, ShapeStyle } from "./canvas"
+export type { Viewport, StrokeStyle, FillStyle, ShapeStyle, CanvasDrawCommand } from "./canvas"
 
 export {
   registerFont,
@@ -112,7 +112,6 @@ export * from "./render-surface"
 export * from "./gpu-raster-staging"
 export * from "./layout-writeback"
 export * from "./frame-presenter"
-export * from "./canvas-backend"
 export * from "./pixel-buffer"
 export * from "./paint-bridge"
 export * from "./node"

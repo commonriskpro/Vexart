@@ -11,7 +11,7 @@
 
 import type { RasterSurface } from "../../core/src/render-surface"
 import { appendFileSync } from "node:fs"
-import type { CanvasPainterBackend } from "../../core/src/canvas-backend"
+import type { CanvasPainterBackend } from "./canvas-backend"
 import type { CanvasContext } from "../../core/src/canvas"
 import { paintCanvasCommandsCPU } from "./canvas-raster-painter"
 import { getAtlas } from "../../core/src/font-atlas"
