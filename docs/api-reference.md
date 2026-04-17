@@ -1,12 +1,39 @@
 # API Reference
 
-Complete reference for every TGE package. Each package can be used independently.
+Complete reference for every TGE package.
+
+> **Single entry point:** In application code, import everything from `@tge/renderer-solid`. It re-exports `createTerminal`, `mount`, all hooks, all types. The individual packages below are documented for completeness — you rarely need to import them directly.
+
+---
+
+## @tge/renderer-solid
+
+The main entry point for all TGE applications. Re-exports the full public surface.
+
+```typescript
+import {
+  createTerminal, mount,          // bootstrap
+  useTerminalDimensions,          // reactive terminal size
+  For, Show,                      // SolidJS control flow
+  useKeyboard, useMouse,          // input hooks
+  useFocus, setFocus,             // focus management
+  useDrag, useHover,              // interaction hooks
+  createTransition, createSpring, // animation
+  setPointerCapture,              // drag support
+  RGBA, MouseButton,              // utilities
+  SyntaxStyle, KANAGAWA, ONE_DARK,// syntax highlighting
+} from "@tge/renderer-solid"
+```
+
+See [Hooks & Signals](hooks.md) and [Developer Guide](../manual/developer-guide.md) for full API.
 
 ---
 
 ## @tge/terminal
 
 Terminal detection, capability probing, lifecycle management, and raw I/O.
+
+> **Note:** `createTerminal` is re-exported from `@tge/renderer-solid`. Import it from there in application code.
 
 ### `createTerminal(opts?): Promise<Terminal>`
 
@@ -347,11 +374,11 @@ import { createLayerComposer } from "@tge/output"
 
 ---
 
-## @tge/renderer-solid
+## @tge/renderer-solid — Detailed API
 
-SolidJS reconciler + Clay layout engine integration. This is the bridge that turns JSX into pixels.
+SolidJS reconciler + Clay layout engine integration. The bridge that turns JSX into pixels.
 
-### `mount(component, terminal): () => void`
+### `mount(component, terminal, opts?): MountHandle`
 
 **The main entry point for JSX apps.** Creates the render loop, mounts the SolidJS component tree, connects keyboard/mouse input, and starts the 30fps render loop.
 
@@ -359,7 +386,7 @@ Returns a cleanup function.
 
 ```typescript
 import { mount } from "@tge/renderer-solid"
-import { createTerminal } from "@tge/terminal"
+import { createTerminal } from "@tge/renderer-solid"
 
 function App() {
   return <Box><Text>Hello</Text></Box>
@@ -384,7 +411,7 @@ Manually mark the render loop as dirty, triggering a repaint on the next frame.
 Data fetching hooks. See [Hooks & Signals](hooks.md#usequery) for full API.
 
 ```typescript
-import { useQuery, useMutation } from "@tge/runtime"
+import { useQuery, useMutation } from "@tge/renderer-solid"
 ```
 
 ### `createTransition(signal, options?)` and `createSpring(signal, options?)`
@@ -392,7 +419,7 @@ import { useQuery, useMutation } from "@tge/runtime"
 Animation primitives. See [Hooks & Signals](hooks.md#createtransition) for full API.
 
 ```typescript
-import { createTransition, createSpring } from "@tge/runtime"
+import { createTransition, createSpring } from "@tge/renderer-solid"
 ```
 
 ### `PressEvent`
@@ -400,7 +427,7 @@ import { createTransition, createSpring } from "@tge/runtime"
 Event object passed to `onPress` handlers. Supports event bubbling with `stopPropagation()`.
 
 ```typescript
-import type { PressEvent } from "@tge/runtime"
+import type { PressEvent } from "@tge/renderer-solid"
 
 type PressEvent = {
   stopPropagation: () => void
@@ -421,7 +448,7 @@ type PressEvent = {
 Event object passed to per-node mouse callbacks (`onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseOver`, `onMouseOut`). These events do NOT bubble — they dispatch directly to the target node.
 
 ```typescript
-import type { NodeMouseEvent } from "@tge/runtime"
+import type { NodeMouseEvent } from "@tge/renderer-solid"
 
 type NodeMouseEvent = {
   x: number        // Absolute pixel X position
@@ -445,7 +472,7 @@ type NodeMouseEvent = {
 Lock all mouse events to a specific node, regardless of cursor position. Essential for drag interactions — the captured node receives `onMouseMove` and `onMouseUp` even when the pointer moves outside its bounds.
 
 ```typescript
-import { setPointerCapture } from "@tge/runtime"
+import { setPointerCapture } from "@tge/renderer-solid"
 
 setPointerCapture(nodeId)  // All mouse events route to this node
 ```
@@ -455,7 +482,7 @@ setPointerCapture(nodeId)  // All mouse events route to this node
 Unlock pointer capture. Automatically called on mouse button up, but can be called explicitly at any time.
 
 ```typescript
-import { releasePointerCapture } from "@tge/runtime"
+import { releasePointerCapture } from "@tge/renderer-solid"
 
 releasePointerCapture(nodeId)  // Restore normal hit-testing
 ```
@@ -465,8 +492,8 @@ releasePointerCapture(nodeId)  // Restore normal hit-testing
 Encapsulates drag interactions — pointer capture, `isDragging` flag, and mouse event wiring. Spread `dragProps` on the drag target.
 
 ```typescript
-import { useDrag } from "@tge/runtime"
-import type { DragOptions, DragProps, DragState } from "@tge/runtime"
+import { useDrag } from "@tge/renderer-solid"
+import type { DragOptions, DragProps, DragState } from "@tge/renderer-solid"
 
 type DragOptions = {
   onDragStart?: (event: NodeMouseEvent) => void
@@ -500,8 +527,8 @@ const { dragging, dragProps } = useDrag({
 Encapsulates hover detection with configurable enter/leave delays. Spread `hoverProps` on the target.
 
 ```typescript
-import { useHover } from "@tge/runtime"
-import type { HoverOptions, HoverProps, HoverState } from "@tge/runtime"
+import { useHover } from "@tge/renderer-solid"
+import type { HoverOptions, HoverProps, HoverState } from "@tge/renderer-solid"
 
 type HoverOptions = {
   delay?: number          // ms before onEnter fires (default: 0)
@@ -535,7 +562,7 @@ const { hovered, hoverProps } = useHover({
 Create a focus trap (used by Dialog internally). Returns a cleanup function.
 
 ```typescript
-import { pushFocusScope } from "@tge/runtime"
+import { pushFocusScope } from "@tge/renderer-solid"
 import { onCleanup } from "solid-js"
 
 function Modal() {

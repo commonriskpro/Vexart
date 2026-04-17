@@ -11,7 +11,7 @@ The smallest possible TGE application:
 ```tsx
 import { mount } from "@tge/renderer-solid"
 import { Box, Text } from "@tge/components"
-import { createTerminal } from "@tge/terminal"
+import { createTerminal } from "@tge/renderer-solid"
 
 function App() {
   return (
@@ -35,7 +35,7 @@ Classic counter with keyboard interaction:
 import { mount } from "@tge/renderer-solid"
 import { Box, Text, Button } from "@tge/components"
 import { colors, radius, space } from "@tge/void"
-import { createTerminal } from "@tge/terminal"
+import { createTerminal } from "@tge/renderer-solid"
 import { createSignal } from "solid-js"
 
 function App() {
@@ -68,7 +68,7 @@ A contact form with validation:
 import { mount, onInput } from "@tge/renderer-solid"
 import { Box, Text, Input, Button } from "@tge/components"
 import { colors, radius, space, shadows } from "@tge/void"
-import { createTerminal } from "@tge/terminal"
+import { createTerminal } from "@tge/renderer-solid"
 import { createSignal, onCleanup } from "solid-js"
 
 function App() {
@@ -142,7 +142,7 @@ Multiple independent widgets, each on its own compositing layer:
 import { mount } from "@tge/renderer-solid"
 import { Box, Text } from "@tge/components"
 import { colors, radius, space, shadows } from "@tge/void"
-import { createTerminal } from "@tge/terminal"
+import { createTerminal } from "@tge/renderer-solid"
 import { createSignal, onCleanup } from "solid-js"
 
 function Clock() {
@@ -198,7 +198,7 @@ mount(App, terminal)
 import { mount } from "@tge/renderer-solid"
 import { Box, Text, Tabs, Checkbox, List } from "@tge/components"
 import { colors, radius, space, shadows } from "@tge/void"
-import { createTerminal } from "@tge/terminal"
+import { createTerminal } from "@tge/renderer-solid"
 import { createSignal } from "solid-js"
 
 function App() {
@@ -275,7 +275,7 @@ import { mount } from "@tge/renderer-solid"
 import { onInput } from "@tge/runtime"
 import { Box, Text, ScrollView } from "@tge/components"
 import { colors, radius, space } from "@tge/void"
-import { createTerminal } from "@tge/terminal"
+import { createTerminal } from "@tge/renderer-solid"
 import { createSignal, onCleanup } from "solid-js"
 import { For } from "@tge/renderer-solid"
 
@@ -328,7 +328,7 @@ mount(App, terminal)
 Use TGE as a pixel buffer library without any JSX or layout engine:
 
 ```typescript
-import { createTerminal } from "@tge/terminal"
+import { createTerminal } from "@tge/renderer-solid"
 import { create, paint, clear } from "@tge/pixel"
 import { createComposer } from "@tge/output"
 
@@ -451,7 +451,7 @@ import { mount } from "@tge/renderer-solid"
 import { useQuery, useMutation } from "@tge/runtime"
 import { Box, Text, Input, Button, createForm } from "@tge/components"
 import { colors, radius, space, shadows } from "@tge/void"
-import { createTerminal } from "@tge/terminal"
+import { createTerminal } from "@tge/renderer-solid"
 import { Show } from "@tge/renderer-solid"
 
 function RegistrationForm() {
@@ -545,7 +545,7 @@ import { mount } from "@tge/renderer-solid"
 import { useQuery, useMutation } from "@tge/runtime"
 import { Box, Text, VirtualList } from "@tge/components"
 import { colors, space, radius } from "@tge/void"
-import { createTerminal } from "@tge/terminal"
+import { createTerminal } from "@tge/renderer-solid"
 import { Show, For } from "@tge/renderer-solid"
 
 type User = { id: number; name: string; email: string }
@@ -619,7 +619,7 @@ Render 10,000 items with no performance hit. Mouse hover highlights items, click
 import { mount } from "@tge/renderer-solid"
 import { Box, Text, VirtualList } from "@tge/components"
 import { colors, space, radius } from "@tge/void"
-import { createTerminal } from "@tge/terminal"
+import { createTerminal } from "@tge/renderer-solid"
 import { createSignal } from "solid-js"
 
 // Generate 10,000 items
@@ -684,7 +684,7 @@ import { mount } from "@tge/renderer-solid"
 import { createTransition, createSpring } from "@tge/runtime"
 import { Box, Text } from "@tge/components"
 import { colors, radius } from "@tge/void"
-import { createTerminal } from "@tge/terminal"
+import { createTerminal } from "@tge/renderer-solid"
 import { createSignal } from "solid-js"
 
 function AnimatedUI() {

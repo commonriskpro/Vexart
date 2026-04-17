@@ -427,8 +427,7 @@ export { createNordToaster } from "./toast"
 ## Step 6: Use it
 
 ```typescript
-import { mount } from "@tge/renderer-solid"
-import { createTerminal } from "@tge/terminal"
+import { mount, createTerminal } from "@tge/renderer-solid"
 import { NordButton, NordSwitch, NordList, colors } from "@nord/tge-theme"
 
 function App() {
