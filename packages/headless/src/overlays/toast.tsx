@@ -28,7 +28,7 @@
 
 import { createSignal, For } from "solid-js"
 import type { JSX } from "solid-js"
-import { Portal } from "./portal"
+import { Portal } from "../containers/portal"
 
 // ── Types ──
 

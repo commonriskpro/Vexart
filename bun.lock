@@ -27,6 +27,10 @@
     "packages/components": {
       "name": "@tge/components",
       "version": "0.0.1",
+      "dependencies": {
+        "@vexart/headless": "workspace:*",
+        "@vexart/primitives": "workspace:*",
+      },
     },
     "packages/core": {
       "name": "@tge/core",

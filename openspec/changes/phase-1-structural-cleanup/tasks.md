@@ -138,16 +138,16 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
 
 > **Risk**: Misclassification of components between primitives and headless. Every file is verified against the explicit table in `design.md §4`. Founder-resolved: `scene-canvas.tsx` is DELETED (not moved); `space-background.ts` is DELETED (not moved).
 
-- [ ] 11.1 **Delete `scene-canvas.tsx`**: Remove `packages/components/src/scene-canvas.tsx` (founder Q1: DEPRECATED, no replacement in Phase 1)
-- [ ] 11.2 **Delete `space-background.ts`**: Remove `packages/components/src/space-background.ts` (founder Q2: DELETED)
-- [ ] 11.3 **Audit examples for deleted files**: `rg "createSpaceBackground\|SpaceBackground\|SceneCanvas\|SceneNode\|SceneEdge\|SceneParticles\|SceneOverlay" examples/`. Delete `examples/nebula-demo.tsx` (imports `createSpaceBackground`) and `examples/scene-test.tsx` (imports `SceneCanvas`). Remove any root `package.json` scripts referencing these files if they exist
-- [ ] 11.4 **Create headless subdirectory structure** in `packages/headless/src/`: `inputs/`, `display/`, `containers/`, `collections/`, `overlays/`, `navigation/`, `forms/`
-- [ ] 11.5 **Move primitives files** (4 files → `packages/primitives/src/`):
+- [x] 11.1 **Delete `scene-canvas.tsx`**: Remove `packages/components/src/scene-canvas.tsx` (founder Q1: DEPRECATED, no replacement in Phase 1)
+- [x] 11.2 **Delete `space-background.ts`**: Remove `packages/components/src/space-background.ts` (founder Q2: DELETED)
+- [x] 11.3 **Audit examples for deleted files**: `rg "createSpaceBackground\|SpaceBackground\|SceneCanvas\|SceneNode\|SceneEdge\|SceneParticles\|SceneOverlay" examples/`. Delete `examples/nebula-demo.tsx` (imports `createSpaceBackground`) and `examples/scene-test.tsx` (imports `SceneCanvas`). Remove any root `package.json` scripts referencing these files if they exist
+- [x] 11.4 **Create headless subdirectory structure** in `packages/headless/src/`: `inputs/`, `display/`, `containers/`, `collections/`, `overlays/`, `navigation/`, `forms/`
+- [x] 11.5 **Move primitives files** (4 files → `packages/primitives/src/`):
   - `git mv packages/components/src/box.tsx packages/primitives/src/box.tsx`
   - `git mv packages/components/src/text.tsx packages/primitives/src/text.tsx`
   - `git mv packages/components/src/rich-text.tsx packages/primitives/src/rich-text.tsx`
   - `git mv packages/components/src/wrap-row.tsx packages/primitives/src/wrap-row.tsx`
-- [ ] 11.6 **Move headless inputs/** (9 files):
+- [x] 11.6 **Move headless inputs/** (9 files):
   - `git mv packages/components/src/button.tsx packages/headless/src/inputs/button.tsx`
   - `git mv packages/components/src/checkbox.tsx packages/headless/src/inputs/checkbox.tsx`
   - `git mv packages/components/src/switch.tsx packages/headless/src/inputs/switch.tsx`
@@ -157,37 +157,37 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
   - `git mv packages/components/src/slider.tsx packages/headless/src/inputs/slider.tsx`
   - `git mv packages/components/src/select.tsx packages/headless/src/inputs/select.tsx`
   - `git mv packages/components/src/combobox.tsx packages/headless/src/inputs/combobox.tsx`
-- [ ] 11.7 **Move headless display/** (3 files):
+- [x] 11.7 **Move headless display/** (3 files):
   - `git mv packages/components/src/progress-bar.tsx packages/headless/src/display/progress-bar.tsx`
   - `git mv packages/components/src/code.tsx packages/headless/src/display/code.tsx`
   - `git mv packages/components/src/markdown.tsx packages/headless/src/display/markdown.tsx`
-- [ ] 11.8 **Move headless containers/** (4 files):
+- [x] 11.8 **Move headless containers/** (4 files):
   - `git mv packages/components/src/scroll-view.tsx packages/headless/src/containers/scroll-view.tsx`
   - `git mv packages/components/src/tabs.tsx packages/headless/src/containers/tabs.tsx`
   - `git mv packages/components/src/portal.tsx packages/headless/src/containers/portal.tsx`
   - `git mv packages/components/src/overlay-root.tsx packages/headless/src/containers/overlay-root.tsx`
-- [ ] 11.9 **Move headless collections/** (3 files):
+- [x] 11.9 **Move headless collections/** (3 files):
   - `git mv packages/components/src/list.tsx packages/headless/src/collections/list.tsx`
   - `git mv packages/components/src/virtual-list.tsx packages/headless/src/collections/virtual-list.tsx`
   - `git mv packages/components/src/table.tsx packages/headless/src/collections/table.tsx`
-- [ ] 11.10 **Move headless overlays/** (3 files):
+- [x] 11.10 **Move headless overlays/** (3 files):
   - `git mv packages/components/src/dialog.tsx packages/headless/src/overlays/dialog.tsx`
   - `git mv packages/components/src/tooltip.tsx packages/headless/src/overlays/tooltip.tsx`
   - `git mv packages/components/src/toast.tsx packages/headless/src/overlays/toast.tsx`
-- [ ] 11.11 **Move headless navigation/** (2 files):
+- [x] 11.11 **Move headless navigation/** (2 files):
   - `git mv packages/components/src/router.tsx packages/headless/src/navigation/router.tsx`
   - `git mv packages/components/src/diff.tsx packages/headless/src/navigation/diff.tsx`
-- [ ] 11.12 **Move headless forms/** (1 file):
+- [x] 11.12 **Move headless forms/** (1 file):
   - `git mv packages/components/src/form.tsx packages/headless/src/forms/form.tsx`
-- [ ] 11.13 **Update internal imports in moved files** — each moved file imports from `@tge/renderer-solid`, `@tge/core`, `@tge/runtime`, etc. Leave these as bare `@tge/*` imports for now (shims still exist). Fix any relative imports that broke due to the move (e.g., `./overlay-root` → `../containers/overlay-root` if cross-referenced)
-- [ ] 11.14 **Generate `packages/primitives/src/index.ts`** barrel re-exporting: `Box`, `Text`, `RichText`, `Span`, `WrapRow` plus all type exports from the 4 primitive files
-- [ ] 11.15 **Generate `packages/primitives/src/public.ts`** re-exporting from `./index`
-- [ ] 11.16 **Generate subdirectory barrels for headless**: create `inputs/index.ts`, `display/index.ts`, `containers/index.ts`, `collections/index.ts`, `overlays/index.ts`, `navigation/index.ts`, `forms/index.ts` — each re-exports its directory's symbols
-- [ ] 11.17 **Generate `packages/headless/src/index.ts`** barrel re-exporting all subdirectory barrels plus any root-level exports. Include all type exports. Exclude `scene-canvas`, `space-background`, and all windowing symbols
-- [ ] 11.18 **Generate `packages/headless/src/public.ts`** re-exporting from `./index`
-- [ ] 11.19 **Create shim**: rewrite `packages/components/src/index.ts` to re-export from both `@vexart/primitives` and `@vexart/headless`. Update `packages/components/package.json` to add both as `workspace:*` dependencies. The shim must export all symbols that the old barrel exported (minus deleted scene-canvas, space-background, and windowing symbols)
-- [ ] 11.20 **Remove `@tge/windowing` re-exports from components shim** — these were already removed in slice 1; verify they are absent
-- [ ] 11.21 Run `bun install && bun run typecheck` — must be green
+- [x] 11.13 **Update internal imports in moved files** — each moved file imports from `@tge/renderer-solid`, `@tge/core`, `@tge/runtime`, etc. Leave these as bare `@tge/*` imports for now (shims still exist). Fix any relative imports that broke due to the move (e.g., `./overlay-root` → `../containers/overlay-root` if cross-referenced)
+- [x] 11.14 **Generate `packages/primitives/src/index.ts`** barrel re-exporting: `Box`, `Text`, `RichText`, `Span`, `WrapRow` plus all type exports from the 4 primitive files
+- [x] 11.15 **Generate `packages/primitives/src/public.ts`** re-exporting from `./index`
+- [x] 11.16 **Generate subdirectory barrels for headless**: create `inputs/index.ts`, `display/index.ts`, `containers/index.ts`, `collections/index.ts`, `overlays/index.ts`, `navigation/index.ts`, `forms/index.ts` — each re-exports its directory's symbols
+- [x] 11.17 **Generate `packages/headless/src/index.ts`** barrel re-exporting all subdirectory barrels plus any root-level exports. Include all type exports. Exclude `scene-canvas`, `space-background`, and all windowing symbols
+- [x] 11.18 **Generate `packages/headless/src/public.ts`** re-exporting from `./index`
+- [x] 11.19 **Create shim**: rewrite `packages/components/src/index.ts` to re-export from both `@vexart/primitives` and `@vexart/headless`. Update `packages/components/package.json` to add both as `workspace:*` dependencies. The shim must export all symbols that the old barrel exported (minus deleted scene-canvas, space-background, and windowing symbols)
+- [x] 11.20 **Remove `@tge/windowing` re-exports from components shim** — these were already removed in slice 1; verify they are absent
+- [x] 11.21 Run `bun install && bun run typecheck` — must be green
 - [ ] 11.22 Commit: `refactor(primitives,headless): split @tge/components per design §4 table`
 
 ## 12. Fold @tge/void into @vexart/styled (slice 12)

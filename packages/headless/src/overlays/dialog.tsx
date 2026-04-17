@@ -27,7 +27,7 @@
 
 import { onCleanup } from "solid-js"
 import { pushFocusScope, useFocus } from "@tge/renderer-solid"
-import { Portal } from "./portal"
+import { Portal } from "../containers/portal"
 
 // ── Types ──
 
