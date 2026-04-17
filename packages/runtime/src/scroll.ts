@@ -1,4 +1,4 @@
-import { clay } from "../../core/src/clay"
+import { clay } from "../../engine/src/ffi/clay"
 import { markDirty } from "./dirty"
 
 export type ScrollHandle = {

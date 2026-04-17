@@ -20,8 +20,8 @@
 
 import type { Terminal } from "@tge/platform-terminal"
 import { createLayerComposer } from "@tge/output-kitty"
-import { clay, CMD, ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, SIZING, DIRECTION } from "../../core/src/clay"
-import type { RenderCommand } from "../../core/src/clay"
+import { clay, CMD, ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, SIZING, DIRECTION } from "../../engine/src/ffi/clay"
+import type { RenderCommand } from "../../engine/src/ffi/clay"
 import {
   type TGENode,
   type SizingInfo,
@@ -33,30 +33,30 @@ import {
   parseAlignX,
   parseAlignY,
   resolveProps,
-} from "../../core/src/node"
+} from "../../engine/src/ffi/node"
 import { shouldFreezeInteractionLayer, shouldPromoteInteractionLayer } from "./interaction"
 import { createDirtyTracker } from "./dirty"
 import { hasActiveAnimations } from "./animation"
 import { appendFileSync } from "node:fs"
 import { debugFrameStart, debugUpdateStats } from "./debug"
-import { fromConfig, identity, invert, multiply, translate, transformBounds, transformPoint, isIdentity } from "../../core/src/matrix"
-import type { Matrix3 } from "../../core/src/matrix"
+import { fromConfig, identity, invert, multiply, translate, transformBounds, transformPoint, isIdentity } from "../../engine/src/ffi/matrix"
+import type { Matrix3 } from "../../engine/src/ffi/matrix"
 import { decodeImageForNode } from "./image"
 import { focusedId, setFocusedId, getNodeFocusId } from "./focus"
 import {
   type Layer,
   createLayerStore,
-} from "../../core/src/layers"
-import { measureForClay, layoutText, getFont, fontToCSS } from "../../core/src/text-layout"
+} from "../../engine/src/ffi/layers"
+import { measureForClay, layoutText, getFont, fontToCSS } from "../../engine/src/ffi/text-layout"
 import {
   intersectRect,
   rectArea as damageRectArea,
   sumOverlapArea as damageSumOverlapArea,
   type DamageRect,
-} from "../../core/src/damage"
-import { createGpuRendererBackend } from "../../core/src/gpu-renderer-backend"
-import { createGpuFrameComposer } from "../../core/src/gpu-frame-composer"
-import { summarizeRendererResourceStats } from "../../core/src/resource-stats"
+} from "../../engine/src/ffi/damage"
+import { createGpuRendererBackend } from "../../engine/src/ffi/gpu-renderer-backend"
+import { createGpuFrameComposer } from "../../engine/src/ffi/gpu-frame-composer"
+import { summarizeRendererResourceStats } from "../../engine/src/ffi/resource-stats"
 import { getLatestInteractionTrace } from "./input"
 import {
   buildRenderGraphFrame,
@@ -64,14 +64,14 @@ import {
   resetRenderGraphQueues,
   type EffectConfig,
   type TextMeta,
-} from "../../core/src/render-graph"
+} from "../../engine/src/ffi/render-graph"
 import {
   getRendererBackend,
   setRendererBackend,
   type RendererBackend,
   type RendererBackendFrameContext,
   type RendererBackendLayerContext,
-} from "../../core/src/renderer-backend"
+} from "../../engine/src/ffi/renderer-backend"
 import {
   boostWindowFor as schedulerBoostWindowFor,
   hasRecentInteraction as schedulerHasRecentInteraction,
@@ -84,7 +84,7 @@ import {
 import {
   writeSequentialCommandLayout,
   writeLayoutFromElementIds,
-} from "../../core/src/layout-writeback"
+} from "../../engine/src/ffi/layout-writeback"
 const LOG = "/tmp/tge-layers.log"
 const RENDER_DEBUG_LOG = "/tmp/tge-render-debug.log"
 const CADENCE_LOG = "/tmp/tge-cadence.log"

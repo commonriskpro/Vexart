@@ -56,9 +56,9 @@ export {
 export type { DebugStats } from "./debug"
 
 export { markDirty } from "./dirty"
-export { markAllDirty } from "../../core/src/layers"
+export { markAllDirty } from "../../engine/src/ffi/layers"
 
-export type { PressEvent, NodeMouseEvent, InteractionMode } from "../../core/src/node"
+export type { PressEvent, NodeMouseEvent, InteractionMode } from "../../engine/src/ffi/node"
 export type { NodeHandle } from "./handle"
 export { createHandle } from "./handle"
 

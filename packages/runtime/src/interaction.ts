@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js"
-import type { InteractionMode, TGENode } from "../../core/src/node"
+import type { InteractionMode, TGENode } from "../../engine/src/ffi/node"
 import type { NodeHandle } from "./handle"
 
 function getNodeInteractionMode(node: TGENode): InteractionMode {

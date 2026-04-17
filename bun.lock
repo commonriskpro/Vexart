@@ -31,6 +31,9 @@
     "packages/core": {
       "name": "@tge/core",
       "version": "0.0.1",
+      "dependencies": {
+        "@vexart/engine": "workspace:*",
+      },
     },
     "packages/devtools": {
       "name": "@tge/devtools",

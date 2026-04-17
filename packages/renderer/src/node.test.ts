@@ -9,8 +9,8 @@ import {
   parseDirection,
   parseAlignX,
   parseAlignY,
-} from "../../core/src/node"
-import { SIZING, DIRECTION, ALIGN_X, ALIGN_Y } from "../../core/src/clay"
+} from "../../engine/src/ffi/node"
+import { SIZING, DIRECTION, ALIGN_X, ALIGN_Y } from "../../engine/src/ffi/clay"
 
 describe("createNode", () => {
   test("creates a box node", () => {

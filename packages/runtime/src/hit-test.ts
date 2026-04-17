@@ -1,4 +1,4 @@
-import type { TGENode, NodeMouseEvent } from "../../core/src/node"
+import type { TGENode, NodeMouseEvent } from "../../engine/src/ffi/node"
 
 export function buildNodeMouseEvent(node: TGENode, pointerX: number, pointerY: number): NodeMouseEvent {
   const l = node.layout

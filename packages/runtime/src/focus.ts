@@ -3,7 +3,7 @@
 import { createSignal } from "solid-js"
 import { onInput } from "./input"
 import type { KeyEvent } from "@tge/input"
-import type { TGENode, PressEvent } from "../../core/src/node"
+import type { TGENode, PressEvent } from "../../engine/src/ffi/node"
 
 export type FocusEntry = {
   id: string

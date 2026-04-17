@@ -13,14 +13,14 @@ import { createRenderLoop } from "../../runtime/src/index"
 import { render as solidRender } from "./reconciler"
 import { dispatchInput } from "../../runtime/src/input"
 import { markDirty } from "../../runtime/src/dirty"
-import { markAllDirty } from "../../core/src/layers"
+import { markAllDirty } from "../../engine/src/ffi/layers"
 import { resetFocus } from "../../runtime/src/focus"
 import { resetSelection } from "../../runtime/src/selection"
 import { bindLoop, unbindLoop } from "../../runtime/src/pointer"
 import { createSignal, onCleanup } from "solid-js"
 
 // ── Core + Runtime re-exports (the real implementations, no shim) ──
-export * from "../../core/src/index"
+export * from "../../engine/src/ffi/index"
 export * from "../../runtime/src/index"
 
 // SolidJS control flow + context API

@@ -11,7 +11,7 @@
 // which is resolved via jsxImportSource or direct reference.
 // This file ensures SolidJS's module augmentation picks up our elements.
 
-import type { TGEProps, NodeMouseEvent } from "../../core/src/node"
+import type { TGEProps, NodeMouseEvent } from "../../engine/src/ffi/node"
 import type { NodeHandle } from "../../runtime/src/handle"
 
 // Re-declare using the SAME types as jsx-runtime.d.ts to avoid intersection conflicts.

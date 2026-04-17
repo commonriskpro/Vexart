@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createNode, insertChild, removeChild } from "../../core/src/node"
+import { createNode, insertChild, removeChild } from "../../engine/src/ffi/node"
 import { createHandle } from "../../runtime/src/handle"
 
 describe("createHandle", () => {

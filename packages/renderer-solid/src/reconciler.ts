@@ -19,7 +19,7 @@ import {
   removeChild,
   parseColor,
   parseSizing,
-} from "../../core/src/node"
+} from "../../engine/src/ffi/node"
 import { markDirty } from "../../runtime/src/dirty"
 import { createHandle } from "../../runtime/src/handle"
 import { registerNodeFocusable, unregisterNodeFocusable, updateNodeFocusEntry } from "../../runtime/src/focus"

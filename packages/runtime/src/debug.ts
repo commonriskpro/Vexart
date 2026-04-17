@@ -26,7 +26,7 @@
 
 import { createSignal } from "solid-js"
 import type { NodeHandle } from "./handle"
-import type { TGENode } from "../../core/src/node"
+import type { TGENode } from "../../engine/src/ffi/node"
 
 // ── Debug state ──
 
