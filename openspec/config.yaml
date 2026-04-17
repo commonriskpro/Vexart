@@ -1,0 +1,64 @@
+schema: spec-driven
+
+context: |
+  Project: Vexart — GPU-accelerated UI engine for modern terminals (Kitty graphics protocol).
+  Stack (target v0.9): TypeScript (Bun runtime) + Rust (single cdylib libvexart).
+  Stack (current v0.1): TS + Rust (wgpu-canvas-bridge) + Zig + C (Clay) — migration in phases.
+  Architecture: 4-layer public packages (@vexart/engine → primitives → headless → styled) + libvexart native.
+  Testing: bun test (unit), tsc --noEmit (typecheck), cargo test (native), golden image suite (Phase 4).
+  Style: see docs/PRD.md (product), docs/ARCHITECTURE.md (target structure), docs/API-POLICY.md (API rules).
+
+strict_tdd: false
+# Rationale: Phases 0-1 are cleanup/migration (deletes, renames, boundary lint) where TDD
+# does not apply. Activate via PR to this config when Phase 2b (advanced rendering) starts —
+# there TDD around MSDF pipeline, compositor-thread path, and ResourceManager pays off.
+
+testing:
+  test_runner:
+    command: "bun test"
+    framework: "bun:test"
+  layers:
+    unit: true
+    integration: false      # no integration harness yet; visual tests fill this role
+    e2e: false              # no E2E framework; golden image suite is planned for Phase 4
+  coverage:
+    available: false
+  quality:
+    typecheck: "bun run typecheck"    # tsc --noEmit
+    linter: null                       # not configured yet; dependency-cruiser lands in Phase 1
+    formatter: null                    # not configured yet
+  native:
+    rust: "cargo test"
+    zig: "cd zig && zig build test --summary all"   # deleted in Phase 2
+
+rules:
+  proposal:
+    - Every proposal MUST cite the PRD section(s) it satisfies (docs/PRD.md).
+    - Every proposal MUST include a rollback plan when modifying shipped packages.
+    - Every proposal MUST list the affected packages explicitly (no wildcard scope).
+  specs:
+    - Use Given/When/Then for scenarios.
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY).
+    - Reference ARCHITECTURE.md section numbers when specifying contracts.
+  design:
+    - Include a dependency diagram when touching package boundaries.
+    - Document any deviation from ARCHITECTURE.md with rationale and migration plan.
+    - For native changes, specify Rust crate versions with justification.
+  tasks:
+    - Group by phase (infrastructure → implementation → testing → docs).
+    - Use hierarchical numbering (1.1, 1.2, 2.1, etc.).
+    - Each task MUST be completable in one Claude session (≤ ~45 min of work).
+    - Tasks that delete code MUST also update consumers in the same task.
+  apply:
+    - Follow conventions in AGENTS.md (single-word vars, const over let, no any, no mocks).
+    - Never add Co-Authored-By or AI attribution to commits.
+    - Use conventional commits (feat:, fix:, refactor:, chore:, docs:).
+    - Never build after changes unless explicitly part of the task.
+  verify:
+    test_command: "bun test"
+    typecheck_command: "bun run typecheck"
+    build_command: ""     # no default build gate; per-task if needed
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas (package deletions, API removals).
+    - Ensure main specs (openspec/specs/) reflect the new reality after archive.
