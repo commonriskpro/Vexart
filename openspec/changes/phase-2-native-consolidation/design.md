@@ -31,9 +31,25 @@ publish = false                          # crates.io publishing is out of scope 
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"          # forces explicit unsafe blocks in unsafe fns — FFI safety
+
+# NOTE: [profile.*] sections MUST live in the root workspace Cargo.toml.
+# Cargo ignores `[profile.*]` blocks defined in workspace-member manifests
+# (warning: "profiles for the non root package will be ignored"). See §2.3
+# below for the required root profile definitions — they are normative even
+# though §2.2 originally documented them under the member crate.
+
+[profile.release]
+lto = "fat"         # single-binary; LTO is cheap on one crate and gives the most savings
+codegen-units = 1   # deterministic builds + best LTO; ~5% extra compile time is acceptable
+panic = "abort"     # panics in FFI are caught via catch_unwind; unwinding past FFI is UB anyway
+opt-level = 3
+strip = "symbols"   # ship-size only; debug symbols stripped for dist builds
+
+[profile.dev]
+opt-level = 1       # wgpu debug builds at opt-level 0 are painfully slow
 ```
 
-Rationale: `resolver = "2"` is required for edition 2021 feature resolution with `wgpu 29`'s feature-gated back-ends. `publish = false` guards against accidental `cargo publish`. `unsafe_op_in_unsafe_fn = "deny"` is a cheap safety net for the FFI boundary (`docs/ARCHITECTURE.md §4.2`).
+Rationale: `resolver = "2"` is required for edition 2021 feature resolution with `wgpu 29`'s feature-gated back-ends. `publish = false` guards against accidental `cargo publish`. `unsafe_op_in_unsafe_fn = "deny"` is a cheap safety net for the FFI boundary (`docs/ARCHITECTURE.md §4.2`). Profiles are defined at the workspace root per Cargo's profile-resolution rules — earlier drafts of this design placed them in §2.2 under the member crate, which is ineffective.
 
 ### 2.2 `native/libvexart/Cargo.toml`
 
@@ -66,15 +82,10 @@ nix    = { version = "0.29", default-features = false, features = ["mman", "fs"]
 [dev-dependencies]
 # Integration-test helpers land here when tests/ is populated.
 
-[profile.release]
-lto = "fat"         # single-binary; LTO is cheap on one crate and gives the most savings
-codegen-units = 1   # deterministic builds + best LTO; ~5% extra compile time is acceptable
-panic = "abort"     # panics in FFI are caught via catch_unwind; unwinding past FFI is UB anyway
-opt-level = 3
-strip = "symbols"   # ship-size only; debug symbols stripped for dist builds
-
-[profile.dev]
-opt-level = 1       # wgpu debug builds at opt-level 0 are painfully slow
+# NOTE: [profile.*] blocks were previously documented here but Cargo ignores
+# them when declared in a workspace member. They are normatively defined in
+# the ROOT Cargo.toml per §2.1 — see the profile block there for the actual
+# values. This member manifest MUST NOT declare `[profile.*]` sections.
 ```
 
 **Rationale for decisions**:
