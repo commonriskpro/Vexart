@@ -39,6 +39,34 @@ fn get_or_init_paint() -> MutexGuard<'static, Option<paint::PaintContext>> {
     guard
 }
 
+// ─── Single shared LayoutContext (lazy-initialized, persisted across all layout FFI calls) ──
+// Mirrors the SHARED_PAINT pattern from commit cd4297f. One LayoutContext owns a TaffyTree
+// and stable ID map (HashMap<u64, NodeId>) that MUST be retained across frames so that
+// incremental node updates work correctly (set_style on existing nodes rather than recreating).
+// The `ctx: u64` parameter is accepted but ignored in Phase 2 (TODO Phase 3: per-context
+// isolation). vexart_context_resize updates the viewport on this singleton.
+//
+// SendableLayoutContext wraps LayoutContext to mark it Send + Sync.
+// SAFETY: Bun's JS runtime is single-threaded. All FFI calls arrive on the same OS thread.
+// The Mutex ensures exclusive access. TaffyTree's CompactLength contains a *const () for
+// CSS calc() expressions (unused in Vexart Phase 2); the pointer never crosses thread
+// boundaries. This is the same pattern used for SHARED_PAINT (wgpu NonNull pointers).
+struct SendableLayoutContext(Option<layout::LayoutContext>);
+// SAFETY: See comment above.
+unsafe impl Send for SendableLayoutContext {}
+unsafe impl Sync for SendableLayoutContext {}
+
+static SHARED_LAYOUT: LazyLock<Mutex<SendableLayoutContext>> =
+    LazyLock::new(|| Mutex::new(SendableLayoutContext(None)));
+
+fn get_or_init_layout() -> MutexGuard<'static, SendableLayoutContext> {
+    let mut guard = SHARED_LAYOUT.lock().unwrap();
+    if guard.0.is_none() {
+        guard.0 = Some(layout::LayoutContext::new());
+    }
+    guard
+}
+
 // ─── §5.1 Version & lifecycle ─────────────────────────────────────────────
 
 /// Returns the Phase 2.0 bridge version constant (0x00020000).
@@ -79,10 +107,22 @@ pub extern "C" fn vexart_context_destroy(ctx: u64) -> i32 {
 }
 
 /// Resizes surface + invalidates size-dependent resources.
+///
+/// Updates the SHARED_LAYOUT viewport so that subsequent `vexart_layout_compute` calls
+/// use the correct terminal dimensions.
+///
+/// TODO Phase 3: The `ctx: u64` parameter will select a per-context layout instance.
+/// Currently all contexts share SHARED_LAYOUT (Phase 2 single-context model).
 #[no_mangle]
 pub extern "C" fn vexart_context_resize(ctx: u64, width: u32, height: u32) -> i32 {
     ffi_guard!({
-        let _ = (ctx, width, height);
+        let _ = ctx; // Phase 2: single context; ctx parameter ignored.
+        if width > 0 && height > 0 {
+            let mut guard = get_or_init_layout();
+            if let Some(lctx) = guard.0.as_mut() {
+                lctx.set_viewport(width as f32, height as f32);
+            }
+        }
         OK
     })
 }
@@ -120,7 +160,8 @@ pub unsafe extern "C" fn vexart_layout_compute(
         };
         let mut used = 0u32;
         let code = {
-            let mut lctx = layout::LayoutContext::new();
+            let mut guard = get_or_init_layout();
+            let lctx = guard.0.as_mut().unwrap();
             lctx.compute(cmds, out, &mut used)
         };
         *out_used = used;
@@ -151,7 +192,10 @@ pub unsafe extern "C" fn vexart_layout_measure(
         } else {
             std::slice::from_raw_parts(text_ptr, text_len as usize)
         };
-        let lctx = layout::LayoutContext::new();
+        // DEC-011: measure returns (0.0, 0.0) per Phase 2 text stub.
+        // Routed through SHARED_LAYOUT singleton for consistency.
+        let guard = get_or_init_layout();
+        let lctx = guard.0.as_ref().unwrap();
         lctx.measure(text, font_id, font_size, &mut *out_w, &mut *out_h)
     })
 }
@@ -172,7 +216,10 @@ pub unsafe extern "C" fn vexart_layout_writeback(
         } else {
             std::slice::from_raw_parts(writeback_ptr, writeback_len as usize)
         };
-        let mut lctx = layout::LayoutContext::new();
+        // Parse writeback buffer (scroll offsets). Currently a validation no-op
+        // until Slice 9 wires scroll offsets into the paint layer.
+        let mut guard = get_or_init_layout();
+        let lctx = guard.0.as_mut().unwrap();
         lctx.writeback(wb)
     })
 }
