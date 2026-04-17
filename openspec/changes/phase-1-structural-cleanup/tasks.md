@@ -123,16 +123,16 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
 
 ## 10. Fold @tge/layout-clay + gpu stubs into engine (slice 10)
 
-- [ ] 10.1 `git mv packages/layout-clay/src/index.ts packages/engine/src/loop/clay-layout.ts` — layout-clay is a single-file stub; rename to descriptive name in loop/ directory
-- [ ] 10.2 `git mv packages/gpu/src/index.ts packages/engine/src/ffi/gpu-stub.ts` — gpu is a single-file stub; rename to descriptive name in ffi/ directory
-- [ ] 10.3 Update internal imports within moved files — verify no broken references
-- [ ] 10.4 Update `packages/engine/src/loop/index.ts` barrel to include clay-layout exports
-- [ ] 10.5 Update `packages/engine/src/ffi/index.ts` barrel to include gpu-stub exports (or merge into existing ffi barrel)
-- [ ] 10.6 Update `packages/engine/src/public.ts` to re-export any new symbols
-- [ ] 10.7 Create shim for `@tge/layout-clay`: rewrite `packages/layout-clay/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/layout-clay/package.json` to add `@vexart/engine: "workspace:*"` dependency
-- [ ] 10.8 Create shim for `@tge/gpu`: rewrite `packages/gpu/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/gpu/package.json` to add `@vexart/engine: "workspace:*"` dependency
-- [ ] 10.9 Run `bun install && bun run typecheck` — must be green
-- [ ] 10.10 Commit: `refactor(engine): fold @tge/layout-clay + gpu stubs into engine with shim`
+- [x] 10.1 `git mv packages/layout-clay/src/index.ts packages/engine/src/loop/clay-layout.ts` — layout-clay is a single-file stub; rename to descriptive name in loop/ directory
+- [x] 10.2 `git mv packages/gpu/src/index.ts packages/engine/src/ffi/gpu-stub.ts` — gpu is a single-file stub; rename to descriptive name in ffi/ directory
+- [x] 10.3 Update internal imports within moved files — verify no broken references
+- [x] 10.4 Update `packages/engine/src/loop/index.ts` barrel to include clay-layout exports
+- [x] 10.5 Update `packages/engine/src/ffi/index.ts` barrel to include gpu-stub exports (or merge into existing ffi barrel)
+- [x] 10.6 Update `packages/engine/src/public.ts` to re-export any new symbols
+- [x] 10.7 Create shim for `@tge/layout-clay`: rewrite `packages/layout-clay/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/layout-clay/package.json` to add `@vexart/engine: "workspace:*"` dependency
+- [x] 10.8 Create shim for `@tge/gpu`: rewrite `packages/gpu/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/gpu/package.json` to add `@vexart/engine: "workspace:*"` dependency
+- [x] 10.9 Run `bun install && bun run typecheck` — must be green
+- [x] 10.10 Commit: `refactor(engine): fold @tge/layout-clay + gpu stubs into engine with shim`
 
 ## 11. Split @tge/components per design §4 table (slice 11) — ⚠️ HIGH RISK
 
