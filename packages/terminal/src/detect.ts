@@ -26,8 +26,9 @@ export function detect(): TerminalKind {
   // Ghostty sets GHOSTTY_RESOURCES_DIR
   if (env["GHOSTTY_RESOURCES_DIR"]) return "ghostty"
 
-  // Kitty sets KITTY_PID or KITTY_WINDOW_ID
+  // Kitty sets KITTY_PID or KITTY_WINDOW_ID, or TERM=xterm-kitty
   if (env["KITTY_PID"] || env["KITTY_WINDOW_ID"]) return "kitty"
+  if (env["TERM"] === "xterm-kitty") return "kitty"
 
   // WezTerm sets WEZTERM_EXECUTABLE or WEZTERM_PANE
   if (env["WEZTERM_EXECUTABLE"] || env["WEZTERM_PANE"]) return "wezterm"
