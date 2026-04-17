@@ -188,7 +188,7 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
 - [x] 11.19 **Create shim**: rewrite `packages/components/src/index.ts` to re-export from both `@vexart/primitives` and `@vexart/headless`. Update `packages/components/package.json` to add both as `workspace:*` dependencies. The shim must export all symbols that the old barrel exported (minus deleted scene-canvas, space-background, and windowing symbols)
 - [x] 11.20 **Remove `@tge/windowing` re-exports from components shim** — these were already removed in slice 1; verify they are absent
 - [x] 11.21 Run `bun install && bun run typecheck` — must be green
-- [ ] 11.22 Commit: `refactor(primitives,headless): split @tge/components per design §4 table`
+- [x] 11.22 Commit: `refactor(primitives,headless): split @tge/components per design §4 table`
 
 ## 12. Fold @tge/void into @vexart/styled (slice 12)
 
