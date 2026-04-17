@@ -1,15 +1,41 @@
 /**
- * TGENode — the bridge between SolidJS reconciler and Clay layout.
+ * TGENode — the bridge between SolidJS reconciler and Taffy/vexart layout.
  *
  * SolidJS creates/manipulates TGENodes via createRenderer methods.
- * Each frame, we walk the TGENode tree and "replay" it into Clay
- * for layout calculation.
+ * Each frame, we walk the TGENode tree and emit layout commands into
+ * the vexart_layout_compute packed buffer per design §8.
  *
- * TGENode is a simple retained tree — Clay is stateless immediate-mode,
- * so we need to maintain the tree structure ourselves.
+ * TGENode is a simple retained tree. Taffy is stateless from TS's perspective
+ * (layout tree is rebuilt each frame via the flat command buffer).
+ *
+ * Phase 2 migration: removed Clay FFI dependency. Constants are now
+ * local to this module, matching the same numeric values for backward
+ * compatibility with any callers that read them.
  */
 
-import { SIZING, DIRECTION, ALIGN_X, ALIGN_Y } from "./clay"
+// ── Layout constants (previously from clay.ts) ──
+// Numeric values preserved for backward compat; semantics map to Taffy via
+// vexart_layout_compute's command buffer parser in native/libvexart/src/layout/tree.rs.
+
+/** Sizing type enum — matches SIZING in legacy clay.ts. */
+export const SIZING = {
+  FIT: 0,
+  GROW: 1,
+  PERCENT: 2,
+  FIXED: 3,
+} as const
+
+/** Flex direction enum — matches DIRECTION in legacy clay.ts. */
+export const DIRECTION = {
+  LEFT_TO_RIGHT: 0,
+  TOP_TO_BOTTOM: 1,
+} as const
+
+/** Horizontal alignment enum — matches ALIGN_X in legacy clay.ts. */
+export const ALIGN_X = { LEFT: 0, RIGHT: 1, CENTER: 2, SPACE_BETWEEN: 3 } as const
+
+/** Vertical alignment enum — matches ALIGN_Y in legacy clay.ts. */
+export const ALIGN_Y = { TOP: 0, BOTTOM: 1, CENTER: 2, SPACE_BETWEEN: 3 } as const
 
 export type TGENodeKind = "box" | "text" | "img" | "canvas" | "root"
 

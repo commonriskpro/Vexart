@@ -148,8 +148,8 @@ Objective: Finalize text stubs with the one-time stderr warning behavior. Per de
 
 Objective: Rewire TS consumer code from old Clay/Zig/bridge paths to new `vexart_*` FFI. Clay path still compiles behind internal feature flag. Per design §11.
 
-- [ ] [ATOMIC] 9.1 Modify `packages/engine/src/ffi/node.ts`: convert internal shape from Clay-oriented to flat command buffer format per design §8. Each node emits a `cmd_kind` + `flags` + `payload_bytes` prefix. Per design §11.
-- [ ] [ATOMIC] 9.2 Modify `packages/engine/src/ffi/render-graph.ts`: remove `import ... from "./clay"` (Clay type dependencies), keep all exported types (`ShadowDef`, `EffectConfig`, `BackdropFilterParams`, `RenderGraphFrame`, `RectangleRenderOp`, etc.), adapt `buildRenderGraphFrame()` to serialize into the §8 packed graph buffer format consumed by `vexart_paint_dispatch`. Per design §16 Q3 resolution, §11.
+- [x] [ATOMIC] 9.1 Modify `packages/engine/src/ffi/node.ts`: convert internal shape from Clay-oriented to flat command buffer format per design §8. Each node emits a `cmd_kind` + `flags` + `payload_bytes` prefix. Per design §11.
+- [x] [ATOMIC] 9.2 Modify `packages/engine/src/ffi/render-graph.ts`: remove `import ... from "./clay"` (Clay type dependencies), keep all exported types (`ShadowDef`, `EffectConfig`, `BackdropFilterParams`, `RenderGraphFrame`, `RectangleRenderOp`, etc.), adapt `buildRenderGraphFrame()` to serialize into the §8 packed graph buffer format consumed by `vexart_paint_dispatch`. Per design §16 Q3 resolution, §11.
 - [ ] [ATOMIC] 9.3 Modify `packages/engine/src/ffi/gpu-renderer-backend.ts` (78KB — largest TS change): rework to emit to packed graph buffer, call `vexart_paint_dispatch` once per frame instead of per-operation bridge calls. Split into sub-tasks:
   - [ ] 9.3a Remove all `tge_wgpu_canvas_*` per-operation calls. Replace with graph buffer accumulation.
   - [ ] 9.3b Add graph buffer header write at frame start, per-command prefix write for each render op, body serialization matching Rust `instances.rs` layouts.
@@ -165,8 +165,8 @@ Objective: Rewire TS consumer code from old Clay/Zig/bridge paths to new `vexart
 - [ ] [ATOMIC] 9.11 Modify `packages/engine/src/output/kitty-shm-native.ts`: rewire `bun:ffi` loader from `libkitty-shm-helper` to `libvexart`'s `vexart_kitty_shm_*` exports. Signature-compatible. Per design §11.
 - [ ] [ATOMIC] 9.12 Modify `packages/engine/src/output/transport-manager.ts`: remove placeholder/halfblock branches. Per design §11, DEC-005.
 - [ ] [ATOMIC] 9.13 Modify `packages/engine/src/output/layer-composer.ts`: remove CPU/GPU switch; single native path via `vexart_composite_merge`. Per design §11.
-- [ ] [ATOMIC] 9.14 Modify `packages/engine/src/ffi/node.ts` (reconciler node module): keep stable ID hashing; emit commands in new flat buffer shape per §8.2. **NOTE 2026-04-17:** path corrected from `reconciler/node.ts` (does not exist — renamed during Phase 1) to `ffi/node.ts` (actual location). Task 9.14 and 9.1 both target `ffi/node.ts`; consolidate in a single commit if the edits do not conflict, else commit 9.14 content as a follow-up commit after 9.1. Per design §11.
-- [ ] [ATOMIC] 9.15 Modify `packages/engine/src/ffi/index.ts`: remove Clay-facing exports (`ATTACH_TO`, `ATTACH_POINT`, etc. from `./clay`), add `vexart_*` bridge exports from `./vexart-bridge` and `./vexart-functions`. Remove `export * from "./pixel-buffer"` and `export * from "./paint-bridge"`. Per design §11.
+- [x] [ATOMIC] 9.14 Modify `packages/engine/src/ffi/node.ts` (reconciler node module): keep stable ID hashing; emit commands in new flat buffer shape per §8.2. **NOTE 2026-04-17:** path corrected from `reconciler/node.ts` (does not exist — renamed during Phase 1) to `ffi/node.ts` (actual location). Task 9.14 and 9.1 both target `ffi/node.ts`; consolidate in a single commit if the edits do not conflict, else commit 9.14 content as a follow-up commit after 9.1. Per design §11.
+- [x] [ATOMIC] 9.15 Modify `packages/engine/src/ffi/index.ts`: remove Clay-facing exports (`ATTACH_TO`, `ATTACH_POINT`, etc. from `./clay`), add `vexart_*` bridge exports from `./vexart-bridge` and `./vexart-functions`. Remove `export * from "./pixel-buffer"` and `export * from "./paint-bridge"`. Per design §11.
 
 ---
 
