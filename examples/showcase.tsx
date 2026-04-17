@@ -29,14 +29,14 @@ import {
   createSpring,
   For,
   Show,
-} from "@tge/renderer-solid"
+} from "@vexart/engine"
 import {
   Slider,
   Combobox,
   VirtualList,
   Dialog,
   createForm,
-} from "@tge/components"
+} from "@vexart/headless"
 import {
   Button,
   Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, CardAction,
@@ -56,7 +56,7 @@ import {
   H2, H3, H4, P, Small, Muted,
   colors, themeColors, radius, space, font, weight, shadows, glows,
   darkTheme, lightTheme, setTheme,
-} from "@tge/void"
+} from "@vexart/styled"
 
 // ── Shared helpers ──
 

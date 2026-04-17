@@ -8,8 +8,8 @@
  *   <VoidProgress value={progress()} max={100} />
  */
 
-import { ProgressBar } from "@tge/components"
-import type { ProgressBarRenderContext } from "@tge/components"
+import { ProgressBar } from "@vexart/headless"
+import type { ProgressBarRenderContext } from "@vexart/headless"
 import { radius } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 

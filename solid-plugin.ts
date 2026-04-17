@@ -1,6 +1,6 @@
 /**
  * Bun preload plugin — transforms .tsx/.jsx files through babel-preset-solid
- * with { generate: "universal", moduleName: "@tge/renderer" }.
+ * with { generate: "universal", moduleName: "@vexart/engine" }.
  *
  * This makes SolidJS JSX compile to our custom createRenderer instead of
  * the DOM renderer. Without this, Bun's built-in JSX transpiler would
@@ -53,7 +53,7 @@ plugin({
             "babel-preset-solid",
             {
               generate: "universal",
-              moduleName: "@tge/renderer",
+              moduleName: "@vexart/engine",
             },
           ],
           ["@babel/preset-typescript", { onlyRemoveTypeImports: true }],

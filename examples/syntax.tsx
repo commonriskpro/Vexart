@@ -16,9 +16,10 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, onInput, SyntaxStyle, ONE_DARK, KANAGAWA } from "@tge/renderer-solid"
-import { Box, Text, Code } from "@tge/components"
-import { createTerminal } from "@tge/terminal"
+import { mount, onInput, SyntaxStyle, ONE_DARK, KANAGAWA } from "@vexart/engine"
+import { Box, Text } from "@vexart/primitives"
+import { Code } from "@vexart/headless"
+import { createTerminal } from "@vexart/engine"
 
 const TS_CODE = `import { createSignal } from "solid-js"
 

@@ -8,8 +8,8 @@
  *   <VoidSwitch checked={darkMode()} onChange={setDarkMode} label="Dark mode" />
  */
 
-import { Switch } from "@tge/components"
-import type { SwitchRenderContext } from "@tge/components"
+import { Switch } from "@vexart/headless"
+import type { SwitchRenderContext } from "@vexart/headless"
 import { radius, space, font, weight } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 

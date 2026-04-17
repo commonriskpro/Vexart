@@ -12,7 +12,7 @@
  * For the styled version, use @tge/void Dialog which applies Void design tokens.
  *
  * Usage:
- *   import { Show } from "@tge/renderer-solid"
+ *   import { Show } from "@vexart/engine"
  *   import { Dialog } from "@tge/components"
  *
  *   <Show when={isOpen()}>
@@ -26,7 +26,7 @@
  */
 
 import { onCleanup } from "solid-js"
-import { pushFocusScope, useFocus } from "@tge/renderer-solid"
+import { pushFocusScope, useFocus } from "@vexart/engine"
 import { Portal } from "../containers/portal"
 
 // ── Types ──

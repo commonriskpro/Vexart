@@ -16,8 +16,8 @@
  *   />
  */
 
-import { Select } from "@tge/components"
-import type { SelectOption, SelectTriggerContext, SelectOptionContext } from "@tge/components"
+import { Select } from "@vexart/headless"
+import type { SelectOption, SelectTriggerContext, SelectOptionContext } from "@vexart/headless"
 import { radius, space, font, shadows, glows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 

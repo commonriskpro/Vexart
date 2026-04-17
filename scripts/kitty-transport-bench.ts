@@ -14,7 +14,7 @@
  *   TGE_BENCH_W=640 TGE_BENCH_H=360 TGE_BENCH_FRAMES=60 bun scripts/kitty-transport-bench.ts
  */
 
-import { transmit, type TransmissionMode } from "@tge/output-kitty"
+import { transmit, type TransmissionMode } from "@vexart/engine"
 
 type BenchResult = {
   avgMs: number

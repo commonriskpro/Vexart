@@ -13,15 +13,11 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, onInput } from "@tge/renderer-solid"
-import {
-  Box,
-  Text,
-  Input,
-  Button,
-} from "@tge/components"
-import { createTerminal } from "@tge/terminal"
-import { colors, radius, space, shadows } from "@tge/void"
+import { mount, onInput } from "@vexart/engine"
+import { Box, Text } from "@vexart/primitives"
+import { Input, Button } from "@vexart/headless"
+import { createTerminal } from "@vexart/engine"
+import { colors, radius, space, shadows } from "@vexart/styled"
 
 function App() {
   const [name, setName] = createSignal("")

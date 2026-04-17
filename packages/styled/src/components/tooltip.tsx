@@ -10,7 +10,7 @@
  *   </VoidTooltip>
  */
 
-import { Tooltip } from "@tge/components"
+import { Tooltip } from "@vexart/headless"
 import { radius, space, font, shadows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 import type { JSX } from "solid-js"

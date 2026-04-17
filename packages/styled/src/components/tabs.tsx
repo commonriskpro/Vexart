@@ -15,8 +15,8 @@
  *   />
  */
 
-import { Tabs } from "@tge/components"
-import type { TabItem, TabRenderContext } from "@tge/components"
+import { Tabs } from "@vexart/headless"
+import type { TabItem, TabRenderContext } from "@vexart/headless"
 import { radius, space, font, weight } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 

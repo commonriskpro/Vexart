@@ -8,8 +8,8 @@
  *   <VoidInput value={name()} onChange={setName} placeholder="Your name…" />
  */
 
-import { Input } from "@tge/components"
-import type { InputRenderContext } from "@tge/components"
+import { Input } from "@vexart/headless"
+import type { InputRenderContext } from "@vexart/headless"
 import { radius, space, font, shadows, glows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 

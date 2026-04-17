@@ -12,10 +12,10 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, useFocus, onInput } from "@tge/renderer-solid"
-import { Box, Text } from "@tge/components"
-import { createTerminal } from "@tge/terminal"
-import { colors, radius, space, shadows } from "@tge/void"
+import { mount, useFocus, onInput } from "@vexart/engine"
+import { Box, Text } from "@vexart/primitives"
+import { createTerminal } from "@vexart/engine"
+import { colors, radius, space, shadows } from "@vexart/styled"
 
 // ── Shadow showcase ──
 

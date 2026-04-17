@@ -3,7 +3,7 @@
  */
 
 import { createSignal } from "solid-js"
-import type { KeyEvent, MouseEvent as TGEMouseEvent, InputEvent } from "@tge/input"
+import type { KeyEvent, MouseEvent as TGEMouseEvent, InputEvent } from "@vexart/engine"
 
 type InputSubscriber = (event: InputEvent) => void
 

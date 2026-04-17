@@ -10,13 +10,13 @@
  * Run: bun run examples/layer-scroll.tsx
  */
 
-import { mount, onInput } from "@tge/renderer-solid"
-import { createTerminal } from "@tge/terminal"
+import { mount, onInput } from "@vexart/engine"
+import { createTerminal } from "@vexart/engine"
 import {
   Button, Card, CardHeader, CardTitle, CardContent,
   Badge, H3, P, Muted,
   colors, radius, space, font, weight,
-} from "@tge/void"
+} from "@vexart/styled"
 
 function ItemCard(props: { title: string; color: number; index: number }) {
   return (

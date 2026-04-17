@@ -33,7 +33,7 @@ mkdirSync(DIST, { recursive: true })
 console.log("📦 Bundling TypeScript...")
 
 await build({
-  entryPoints: [resolve(ROOT, "packages/renderer-solid/src/index.ts")],
+  entryPoints: [resolve(ROOT, "packages/engine/src/index.ts")],
   bundle: true,
   format: "esm",
   platform: "node",
@@ -54,15 +54,7 @@ await build({
   ],
   // Replace monorepo workspace imports with relative paths
   alias: {
-    "@tge/platform-terminal": resolve(ROOT, "packages/platform-terminal/src/index.ts"),
-    "@tge/terminal": resolve(ROOT, "packages/terminal/src/index.ts"),
-    "@tge/input": resolve(ROOT, "packages/input/src/index.ts"),
-    "@tge/pixel": resolve(ROOT, "packages/pixel/src/index.ts"),
-    "@tge/output": resolve(ROOT, "packages/output/src/index.ts"),
-    "@tge/output-kitty": resolve(ROOT, "packages/output-kitty/src/index.ts"),
-    "@tge/renderer-solid": resolve(ROOT, "packages/renderer-solid/src/index.ts"),
-    "@tge/layout-clay": resolve(ROOT, "packages/layout-clay/src/index.ts"),
-    "@tge/gpu": resolve(ROOT, "packages/gpu/src/index.ts"),
+    "@vexart/engine": resolve(ROOT, "packages/engine/src/index.ts"),
   },
   // Inject FFI path override — tell the bundle to look in vendor/ next to itself
   define: {
@@ -97,7 +89,7 @@ const solidPlugin = {
 }
 
 await build({
-  entryPoints: [resolve(ROOT, "packages/components/src/index.ts")],
+  entryPoints: [resolve(ROOT, "packages/headless/src/index.ts")],
   bundle: true,
   format: "esm",
   platform: "node",
@@ -116,9 +108,9 @@ await build({
     "tge",
   ],
   alias: {
-    "@tge/renderer": resolve(ROOT, "packages/renderer/src/index.ts"),
-    "@tge/renderer-solid": resolve(ROOT, "packages/renderer-solid/src/index.ts"),
-    "@tge/windowing": resolve(ROOT, "packages/windowing/src/index.ts"),
+    "@vexart/engine": resolve(ROOT, "packages/engine/src/index.ts"),
+    "@vexart/primitives": resolve(ROOT, "packages/primitives/src/index.ts"),
+    "@vexart/headless": resolve(ROOT, "packages/headless/src/index.ts"),
   },
   plugins: [solidPlugin],
 })
@@ -127,7 +119,7 @@ await build({
 console.log("📦 Bundling void...")
 
 await build({
-  entryPoints: [resolve(ROOT, "packages/void/src/index.ts")],
+  entryPoints: [resolve(ROOT, "packages/styled/src/index.ts")],
   bundle: true,
   format: "esm",
   platform: "node",
@@ -141,6 +133,12 @@ await build({
     "@napi-rs/canvas",
     "tge",
   ],
+  alias: {
+    "@vexart/engine": resolve(ROOT, "packages/engine/src/index.ts"),
+    "@vexart/primitives": resolve(ROOT, "packages/primitives/src/index.ts"),
+    "@vexart/headless": resolve(ROOT, "packages/headless/src/index.ts"),
+    "@vexart/styled": resolve(ROOT, "packages/styled/src/index.ts"),
+  },
   plugins: [solidPlugin],
 })
 
@@ -190,7 +188,7 @@ if (existsSync(kittyShmLib)) {
 // ── 4. Copy tree-sitter assets ──
 console.log("🌳 Copying tree-sitter assets...")
 
-const assetsDir = resolve(ROOT, "packages/renderer/src/tree-sitter/assets")
+const assetsDir = resolve(ROOT, "packages/engine/src/reconciler/tree-sitter/assets")
 const distAssets = resolve(DIST, "tree-sitter/assets")
 cpSync(assetsDir, distAssets, { recursive: true })
 console.log(`  ✅ tree-sitter assets → tree-sitter/assets/`)
@@ -198,7 +196,7 @@ console.log(`  ✅ tree-sitter assets → tree-sitter/assets/`)
 // ── 5. Copy parser worker ──
 console.log("👷 Copying parser worker...")
 cpSync(
-  resolve(ROOT, "packages/renderer/src/tree-sitter/parser.worker.ts"),
+  resolve(ROOT, "packages/engine/src/reconciler/tree-sitter/parser.worker.ts"),
   resolve(DIST, "tree-sitter/parser.worker.ts")
 )
 console.log(`  ✅ parser.worker.ts → tree-sitter/`)

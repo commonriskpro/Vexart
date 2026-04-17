@@ -49,8 +49,8 @@ import {
   type Token,
   getTreeSitterClient,
   highlightsToTokens,
-} from "@tge/renderer-solid"
-import type { KeyEvent } from "@tge/input"
+} from "@vexart/engine"
+import type { KeyEvent } from "@vexart/engine"
 
 // ── Theme type ──
 

@@ -8,8 +8,8 @@
  *   <VoidCheckbox checked={agreed()} onChange={setAgreed} label="I agree" />
  */
 
-import { Checkbox } from "@tge/components"
-import type { CheckboxRenderContext } from "@tge/components"
+import { Checkbox } from "@vexart/headless"
+import type { CheckboxRenderContext } from "@vexart/headless"
 import { radius, space, font, glows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 

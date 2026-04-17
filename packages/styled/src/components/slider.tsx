@@ -10,8 +10,8 @@
  *   <VoidSlider value={volume()} onChange={setVolume} min={0} max={100} />
  */
 
-import { Slider } from "@tge/components"
-import type { SliderRenderContext } from "@tge/components"
+import { Slider } from "@vexart/headless"
+import type { SliderRenderContext } from "@vexart/headless"
 import { radius, space, font, shadows, glows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 

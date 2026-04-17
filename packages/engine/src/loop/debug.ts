@@ -13,7 +13,7 @@
  *   - toggleDebug() / setDebug(enabled) control visibility
  *
  * Usage:
- *   import { toggleDebug, debugState } from "@tge/runtime"
+ *   import { toggleDebug, debugState } from "@vexart/engine"
  *
  *   // Toggle with Ctrl+Shift+D:
  *   onInput((e) => {

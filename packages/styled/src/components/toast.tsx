@@ -14,8 +14,8 @@
  *   toast({ message: "Error!", variant: "error" })
  */
 
-import { createToaster } from "@tge/components"
-import type { ToastData, ToastPosition, ToasterHandle } from "@tge/components"
+import { createToaster } from "@vexart/headless"
+import type { ToastData, ToastPosition, ToasterHandle } from "@vexart/headless"
 import type { JSX } from "solid-js"
 import { radius, space, font, weight, shadows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"

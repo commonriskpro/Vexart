@@ -16,10 +16,11 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, onInput } from "@tge/renderer-solid"
-import { Box, Text, ScrollView } from "@tge/components"
-import { createTerminal } from "@tge/terminal"
-import { colors, radius, space } from "@tge/void"
+import { mount, onInput } from "@vexart/engine"
+import { Box, Text } from "@vexart/primitives"
+import { ScrollView } from "@vexart/headless"
+import { createTerminal } from "@vexart/engine"
+import { colors, radius, space } from "@vexart/styled"
 
 // ── Generate sample items ──
 

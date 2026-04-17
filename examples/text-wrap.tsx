@@ -10,10 +10,10 @@
  * Run: bun --conditions=browser run examples/text-wrap.tsx
  */
 
-import { mount, onInput } from "@tge/renderer-solid"
-import { Box, Text, RichText, Span } from "@tge/components"
-import { colors, radius, space, shadows } from "@tge/void"
-import { createTerminal } from "@tge/terminal"
+import { mount, onInput } from "@vexart/engine"
+import { Box, Text, RichText, Span } from "@vexart/primitives"
+import { colors, radius, space, shadows } from "@vexart/styled"
+import { createTerminal } from "@vexart/engine"
 import { onCleanup } from "solid-js"
 
 function App() {

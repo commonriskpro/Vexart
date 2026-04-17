@@ -21,10 +21,10 @@
  */
 
 import { createSignal, onCleanup } from "solid-js"
-import { mount, useFocus, onInput } from "@tge/renderer-solid"
-import { Box, Text } from "@tge/components"
-import { createTerminal } from "@tge/terminal"
-import { colors, radius, space } from "@tge/void"
+import { mount, useFocus, onInput } from "@vexart/engine"
+import { Box, Text } from "@vexart/primitives"
+import { createTerminal } from "@vexart/engine"
+import { colors, radius, space } from "@vexart/styled"
 
 // ── Clock widget — auto-ticking, no user input ──
 

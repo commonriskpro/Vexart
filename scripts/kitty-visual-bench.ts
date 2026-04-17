@@ -11,9 +11,9 @@
  *   bun scripts/kitty-visual-bench.ts
  */
 
-import { createTerminal } from "@tge/terminal"
-import { kitty, type TransmissionMode } from "@tge/output"
-import { createParser } from "@tge/input"
+import { createTerminal } from "@vexart/engine"
+import { kitty, type TransmissionMode } from "@vexart/engine"
+import { createParser } from "@vexart/engine"
 
 type VisualStats = {
   avgFrameMs: number

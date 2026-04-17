@@ -224,7 +224,7 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
 - [x] 12.9 Update `packages/styled/src/public.ts` to re-export from `./index`
 - [x] 12.10 Create shim: rewrite `packages/void/src/index.ts` to `export * from "@vexart/styled"`. Update `packages/void/package.json` to add `@vexart/styled: "workspace:*"` dependency. Delete moved files from old location
 - [x] 12.11 Run `bun install && bun run typecheck` — must be green
-- [ ] 12.12 Commit: `refactor(styled): fold @tge/void into @vexart/styled with shim`
+- [x] 12.12 Commit: `refactor(styled): fold @tge/void into @vexart/styled with shim`
 
 ## 13. Rename @tge/devtools to @vexart/internal-devtools (slice 13)
 
@@ -242,20 +242,20 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
 
 > **Risk**: Global codemod across the entire repo. Missing a file or misrouting a `@tge/components` import is the primary risk. The codemod is broken into sub-tasks to keep each step verifiable and reversible.
 
-- [ ] 14.1 **Rewrite engine-bound imports**: Replace all `from "@tge/core"`, `from "@tge/runtime"`, `from "@tge/input"`, `from "@tge/terminal"`, `from "@tge/output"`, `from "@tge/output-kitty"`, `from "@tge/renderer-solid"`, `from "@tge/renderer"`, `from "@tge/pixel"`, `from "@tge/gpu"`, `from "@tge/layout-clay"`, `from "@tge/platform-terminal"` with `from "@vexart/engine"` across `packages/`, `examples/`, `scripts/`
-- [ ] 14.2 **Rewrite component imports**: Replace all `from "@tge/components"` with the correct destination — symbols that live in `@vexart/primitives` (Box, Text, RichText, Span, WrapRow + their types) must import from `@vexart/primitives`; all other symbols must import from `@vexart/headless`. Use `rg -l "from \"@tge/components\""` to find all consumer files, then rewrite each file's import statement splitting primitives vs headless symbols per the §4 split table
-- [ ] 14.3 **Rewrite void imports**: Replace all `from "@tge/void"` with `from "@vexart/styled"` across `packages/`, `examples/`, `scripts/`
-- [ ] 14.4 **Rewrite devtools imports**: Replace all `from "@tge/devtools"` with `from "@vexart/internal-devtools"` across `packages/`, `examples/`, `scripts/`
-- [ ] 14.5 **Update `solid-plugin.ts`**: Replace any `@tge/*` references with `@vexart/*` equivalents
-- [ ] 14.6 **Update `tsconfig.json` paths**: Remove all `@tge/*` path mappings. Ensure all `@vexart/*` path mappings exist and point to correct `packages/*/src/index.ts` files. Add any missing: `@vexart/engine`, `@vexart/primitives`, `@vexart/headless`, `@vexart/styled`, `@vexart/internal-devtools`
-- [ ] 14.7 **Update root `package.json` scripts**: Replace any `@tge/*` references in script commands (e.g., `devtools` script references `packages/devtools/`) with `@vexart/*` equivalents (e.g., `packages/internal-devtools/`)
-- [ ] 14.8 **Rewrite cross-package relative imports**: Run `rg "from ['\"]\\.\\./\\.\\./" packages/` and replace any remaining cross-package relative imports with bare `@vexart/*` specifiers (REQ-PB-006)
-- [ ] 14.9 **Delete all shim package directories**: Remove `packages/core/`, `packages/runtime/`, `packages/input/`, `packages/terminal/`, `packages/output/`, `packages/output-kitty/`, `packages/renderer-solid/`, `packages/renderer/`, `packages/pixel/`, `packages/gpu/`, `packages/layout-clay/`, `packages/platform-terminal/`, `packages/components/`, `packages/void/`, `packages/devtools/` — these are now empty (only contained shims)
-- [ ] 14.10 **Remove old `@tge/*` path mappings from `tsconfig.json`** — should be empty after 14.6 but verify
-- [ ] 14.11 **Assert zero `@tge/` references**: Run `rg "@tge/" packages examples scripts solid-plugin.ts tsconfig.json` and expect ZERO matches. If any remain, fix before proceeding
-- [ ] 14.12 Run `bun install && bun run typecheck` — must be green
-- [ ] 14.13 Run `bun test` — must be green
-- [ ] 14.14 Commit: `refactor: rewrite all @tge/* imports to @vexart/* and drop shims`
+- [x] 14.1 **Rewrite engine-bound imports**: Replace all `from "@tge/core"`, `from "@tge/runtime"`, `from "@tge/input"`, `from "@tge/terminal"`, `from "@tge/output"`, `from "@tge/output-kitty"`, `from "@tge/renderer-solid"`, `from "@tge/renderer"`, `from "@tge/pixel"`, `from "@tge/gpu"`, `from "@tge/layout-clay"`, `from "@tge/platform-terminal"` with `from "@vexart/engine"` across `packages/`, `examples/`, `scripts/`
+- [x] 14.2 **Rewrite component imports**: Replace all `from "@tge/components"` with the correct destination — symbols that live in `@vexart/primitives` (Box, Text, RichText, Span, WrapRow + their types) must import from `@vexart/primitives`; all other symbols must import from `@vexart/headless`. Use `rg -l "from \"@tge/components\""` to find all consumer files, then rewrite each file's import statement splitting primitives vs headless symbols per the §4 split table
+- [x] 14.3 **Rewrite void imports**: Replace all `from "@tge/void"` with `from "@vexart/styled"` across `packages/`, `examples/`, `scripts/`
+- [x] 14.4 **Rewrite devtools imports**: Replace all `from "@tge/devtools"` with `from "@vexart/internal-devtools"` across `packages/`, `examples/`, `scripts/`
+- [x] 14.5 **Update `solid-plugin.ts`**: Replace any `@tge/*` references with `@vexart/*` equivalents
+- [x] 14.6 **Update `tsconfig.json` paths**: Remove all `@tge/*` path mappings. Ensure all `@vexart/*` path mappings exist and point to correct `packages/*/src/index.ts` files. Add any missing: `@vexart/engine`, `@vexart/primitives`, `@vexart/headless`, `@vexart/styled`, `@vexart/internal-devtools`
+- [x] 14.7 **Update root `package.json` scripts**: Replace any `@tge/*` references in script commands (e.g., `devtools` script references `packages/devtools/`) with `@vexart/*` equivalents (e.g., `packages/internal-devtools/`)
+- [x] 14.8 **Rewrite cross-package relative imports**: Run `rg "from ['\"]\\.\\./\\.\\./" packages/` and replace any remaining cross-package relative imports with bare `@vexart/*` specifiers (REQ-PB-006)
+- [x] 14.9 **Delete all shim package directories**: Remove `packages/core/`, `packages/runtime/`, `packages/input/`, `packages/terminal/`, `packages/output/`, `packages/output-kitty/`, `packages/renderer-solid/`, `packages/renderer/`, `packages/pixel/`, `packages/gpu/`, `packages/layout-clay/`, `packages/platform-terminal/`, `packages/components/`, `packages/void/`, `packages/devtools/` — these are now empty (only contained shims)
+- [x] 14.10 **Remove old `@tge/*` path mappings from `tsconfig.json`** — should be empty after 14.6 but verify
+- [x] 14.11 **Assert zero `@tge/` references**: Run `rg "@tge/" packages examples scripts solid-plugin.ts tsconfig.json` and expect ZERO matches. If any remain, fix before proceeding
+- [x] 14.12 Run `bun install && bun run typecheck` — must be green
+- [x] 14.13 Run `bun test` — must be green
+- [x] 14.14 Commit: `refactor: rewrite all @tge/* imports to @vexart/* and drop shims`
 
 ## 15. Declare workspace:* dependencies on all new packages (slice 15)
 

@@ -16,8 +16,8 @@
  *   />
  */
 
-import { Combobox } from "@tge/components"
-import type { ComboboxOption, ComboboxInputContext, ComboboxOptionContext } from "@tge/components"
+import { Combobox } from "@vexart/headless"
+import type { ComboboxOption, ComboboxInputContext, ComboboxOptionContext } from "@vexart/headless"
 import { radius, space, font, shadows, glows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 

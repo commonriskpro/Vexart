@@ -7,7 +7,7 @@ import {
   destroyWgpuCanvasTarget,
   readbackWgpuCanvasTargetRGBA,
   renderWgpuCanvasTargetImage,
-} from "@tge/gpu"
+} from "@vexart/engine"
 
 const pixels = new Uint8Array([
   255, 0, 0, 255,

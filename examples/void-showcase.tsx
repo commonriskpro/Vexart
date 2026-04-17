@@ -23,8 +23,8 @@
  * Run:  bun run examples/void-showcase.tsx
  */
 
-import { mount, onInput } from "@tge/renderer-solid"
-import { createTerminal } from "@tge/terminal"
+import { mount, onInput } from "@vexart/engine"
+import { createTerminal } from "@vexart/engine"
 import {
   Button,
   Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter,
@@ -34,7 +34,7 @@ import {
   Skeleton,
   H1, H2, H3, H4, P, Lead, Large, Small, Muted,
   colors, radius, space, font, weight, shadows,
-} from "@tge/void"
+} from "@vexart/styled"
 
 // ── Section wrapper ──
 

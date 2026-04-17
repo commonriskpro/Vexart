@@ -40,7 +40,7 @@
     "showcase": "bun --conditions=browser run examples/showcase.tsx",
     "demo:gpu": "bun --conditions=browser run examples/gpu-verify.tsx",
     "demo:gpu:perf": "VEXART_LOG_PERF=1 bun --conditions=browser run examples/gpu-verify.tsx",
-    "devtools": "bun run packages/devtools/src/server.ts"
+    "devtools": "bun run packages/internal-devtools/src/server.ts"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",

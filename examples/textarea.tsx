@@ -20,10 +20,11 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, onInput } from "@tge/renderer-solid"
-import { Box, Text, Textarea, Button } from "@tge/components"
-import type { TextareaHandle } from "@tge/components"
-import { createTerminal } from "@tge/terminal"
+import { mount, onInput } from "@vexart/engine"
+import { Box, Text } from "@vexart/primitives"
+import { Textarea, Button } from "@vexart/headless"
+import type { TextareaHandle } from "@vexart/headless"
+import { createTerminal } from "@vexart/engine"
 
 function App() {
   const [code, setCode] = createSignal("Hello TGE!\nThis is a multiline textarea.\n\nTry typing, arrows, Home/End, PgUp/PgDown.\nShift+arrows to select.\nCtrl+Enter to submit.")

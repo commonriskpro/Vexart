@@ -27,7 +27,7 @@ import {
   type RouteProps,
   type ScreenProps,
   type NavigationStackHandle,
-} from "@tge/renderer-solid"
+} from "@vexart/engine"
 
 // ═══════════════════════════════════════════════════════════════════
 // ── Flat Router Components ──

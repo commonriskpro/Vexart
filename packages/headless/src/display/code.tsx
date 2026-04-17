@@ -23,8 +23,8 @@ import {
   highlightsToTokens,
   type SyntaxStyle,
   type Token,
-} from "@tge/renderer-solid"
-import { markDirty } from "@tge/renderer-solid"
+} from "@vexart/engine"
+import { markDirty } from "@vexart/engine"
 
 const LINE_HEIGHT = 17
 const CHAR_WIDTH = 9

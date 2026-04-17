@@ -8,7 +8,7 @@
  * Requires: bun zig:build
  */
 
-import { create, paint, get } from "@tge/pixel"
+import { create, paint, get } from "@vexart/engine"
 
 const buf = create(100, 100)
 

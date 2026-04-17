@@ -9,11 +9,11 @@
  * Requires: bun zig:build && bun run clay:build
  */
 
-import { mount } from "@tge/renderer-solid"
-import { Box, Text } from "@tge/components"
-import { createTerminal } from "@tge/terminal"
-import { createParser } from "@tge/input"
-import { colors, radius, space } from "@tge/void"
+import { mount } from "@vexart/engine"
+import { Box, Text } from "@vexart/primitives"
+import { createTerminal } from "@vexart/engine"
+import { createParser } from "@vexart/engine"
+import { colors, radius, space } from "@vexart/styled"
 
 function Card(props: { title: string; subtitle: string }) {
   return (

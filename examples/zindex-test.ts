@@ -12,7 +12,7 @@
  * Press q to quit.
  */
 
-import { createTerminal } from "@tge/terminal"
+import { createTerminal } from "@vexart/engine"
 
 const term = await createTerminal()
 const { cellWidth, cellHeight } = term.size

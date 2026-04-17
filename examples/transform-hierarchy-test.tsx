@@ -12,10 +12,10 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, markDirty } from "@tge/renderer-solid"
-import { createTerminal } from "@tge/terminal"
-import { createParser } from "@tge/input"
-// import { colors, radius, space, font } from "@tge/void"
+import { mount, markDirty } from "@vexart/engine"
+import { createTerminal } from "@vexart/engine"
+import { createParser } from "@vexart/engine"
+// import { colors, radius, space, font } from "@vexart/styled"
 
 function App() {
   const [angle, setAngle] = createSignal(0)

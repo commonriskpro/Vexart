@@ -16,18 +16,11 @@
  */
 
 import { createSignal, onCleanup } from "solid-js"
-import { mount, onInput } from "@tge/renderer-solid"
-import {
-  Box,
-  Text,
-  Button,
-  ProgressBar,
-  Checkbox,
-  Tabs,
-  List,
-} from "@tge/components"
-import { createTerminal } from "@tge/terminal"
-import { colors, radius, space } from "@tge/void"
+import { mount, onInput } from "@vexart/engine"
+import { Box, Text } from "@vexart/primitives"
+import { Button, ProgressBar, Checkbox, Tabs, List } from "@vexart/headless"
+import { createTerminal } from "@vexart/engine"
+import { colors, radius, space } from "@vexart/styled"
 
 // ── Button showcase ──
 

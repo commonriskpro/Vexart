@@ -19,7 +19,7 @@
  *   </VoidPopover>
  */
 
-import { Popover } from "@tge/components"
+import { Popover } from "@vexart/headless"
 import { radius, space, shadows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 import type { JSX } from "solid-js"

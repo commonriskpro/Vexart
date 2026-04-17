@@ -15,8 +15,8 @@
  *   />
  */
 
-import { RadioGroup } from "@tge/components"
-import type { RadioOption, RadioOptionContext } from "@tge/components"
+import { RadioGroup } from "@vexart/headless"
+import type { RadioOption, RadioOptionContext } from "@vexart/headless"
 import { radius, space, font, weight } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 

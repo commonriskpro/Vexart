@@ -12,7 +12,7 @@
  *   - Programmatic scrollTo/scrollBy/scrollIntoView
  *
  * Usage:
- *   import { ScrollHandle } from "@tge/runtime"
+ *   import { ScrollHandle } from "@vexart/engine"
  *
  *   let scrollRef: ScrollHandle
  *
@@ -28,7 +28,7 @@
  */
 
 import type { JSX } from "solid-js"
-import { createScrollHandle, type ScrollHandle } from "@tge/renderer-solid"
+import { createScrollHandle, type ScrollHandle } from "@vexart/engine"
 
 let scrollViewCounter = 0
 

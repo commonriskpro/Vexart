@@ -1,7 +1,7 @@
 import { performance } from "node:perf_hooks"
 import { writeFileSync } from "node:fs"
-import { createTerminal } from "@tge/platform-terminal"
-import { createLayerComposer } from "@tge/output-kitty"
+import { createTerminal } from "@vexart/engine"
+import { createLayerComposer } from "@vexart/engine"
 import {
   createWgpuCanvasContext,
   createWgpuCanvasTarget,
@@ -9,7 +9,7 @@ import {
   destroyWgpuCanvasTarget,
   readbackWgpuCanvasTargetRGBA,
   renderWgpuCanvasTargetClear,
-} from "@tge/gpu"
+} from "@vexart/engine"
 
 const WIDTH = Number(process.env.TGE_WGPU_BENCH_WIDTH ?? 320)
 const HEIGHT = Number(process.env.TGE_WGPU_BENCH_HEIGHT ?? 180)

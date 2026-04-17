@@ -1,4 +1,4 @@
-import type { LayerComposer } from "@tge/output-kitty"
+import type { LayerComposer } from "@vexart/engine"
 
 const FINAL_FRAME_IMAGE_ID = 3
 

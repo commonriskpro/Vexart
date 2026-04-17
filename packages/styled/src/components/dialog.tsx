@@ -6,7 +6,7 @@
  * backdrop overlay with blur, and proper spacing.
  *
  * Usage:
- *   import { Show } from "@tge/renderer-solid"
+ *   import { Show } from "@vexart/engine"
  *   import { VoidDialog } from "tge/void"
  *
  *   <Show when={isOpen()}>
@@ -21,7 +21,7 @@
  *   </Show>
  */
 
-import { Dialog } from "@tge/components"
+import { Dialog } from "@vexart/headless"
 import { radius, space, font, weight, shadows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 

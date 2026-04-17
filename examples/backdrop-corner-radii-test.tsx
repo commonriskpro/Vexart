@@ -9,9 +9,9 @@
  *   TGE_RENDERER_BACKEND=gpu bun --conditions=browser run examples/backdrop-corner-radii-test.tsx
  */
 
-import { mount, onInput } from "@tge/renderer-solid"
-import { createTerminal } from "@tge/terminal"
-import { font, space } from "@tge/void"
+import { mount, onInput } from "@vexart/engine"
+import { createTerminal } from "@vexart/engine"
+import { font, space } from "@vexart/styled"
 
 function CornerCard(props: {
   title: string

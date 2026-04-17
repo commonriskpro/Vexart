@@ -16,9 +16,10 @@
  * Requires: bun zig:build && bun run clay:build
  */
 
-import { mount, onInput, SyntaxStyle, KANAGAWA } from "@tge/renderer-solid"
-import { Box, Text, Markdown, ScrollView } from "@tge/components"
-import { createTerminal } from "@tge/terminal"
+import { mount, onInput, SyntaxStyle, KANAGAWA } from "@vexart/engine"
+import { Box, Text } from "@vexart/primitives"
+import { Markdown, ScrollView } from "@vexart/headless"
+import { createTerminal } from "@vexart/engine"
 
 const MD_CONTENT = `# Welcome to TGE
 

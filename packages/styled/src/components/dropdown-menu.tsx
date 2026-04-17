@@ -30,8 +30,8 @@
 
 import { createContext, useContext } from "solid-js"
 import type { JSX } from "solid-js"
-import { Show } from "@tge/renderer-solid"
-import { Popover } from "@tge/components"
+import { Show } from "@vexart/engine"
+import { Popover } from "@vexart/headless"
 import { radius, space, font, shadows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 

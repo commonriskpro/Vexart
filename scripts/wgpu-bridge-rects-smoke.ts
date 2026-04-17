@@ -5,7 +5,7 @@ import {
   destroyWgpuCanvasTarget,
   readbackWgpuCanvasTargetRGBA,
   renderWgpuCanvasTargetRects,
-} from "@tge/gpu"
+} from "@vexart/engine"
 
 const ctx = createWgpuCanvasContext()
 const target = createWgpuCanvasTarget(ctx, { width: 8, height: 8 })

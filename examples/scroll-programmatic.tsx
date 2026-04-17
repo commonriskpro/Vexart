@@ -19,9 +19,10 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, onInput, type ScrollHandle } from "@tge/renderer-solid"
-import { Box, Text, ScrollView } from "@tge/components"
-import { createTerminal } from "@tge/terminal"
+import { mount, onInput, type ScrollHandle } from "@vexart/engine"
+import { Box, Text } from "@vexart/primitives"
+import { ScrollView } from "@vexart/headless"
+import { createTerminal } from "@vexart/engine"
 
 // ── Generate sample items ──
 

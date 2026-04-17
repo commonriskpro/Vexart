@@ -1,8 +1,8 @@
 import { createSignal, For } from "solid-js"
 import { createEffect } from "solid-js"
-import { createTerminal } from "@tge/terminal"
-import { createParser } from "@tge/input"
-import { mount, useDrag, markDirty, debugState, setDebug, type NodeMouseEvent } from "@tge/renderer-solid"
+import { createTerminal } from "@vexart/engine"
+import { createParser } from "@vexart/engine"
+import { mount, useDrag, markDirty, debugState, setDebug, type NodeMouseEvent } from "@vexart/engine"
 import { appendFileSync } from "node:fs"
 
 const LOG = "/tmp/interaction-latency.log"

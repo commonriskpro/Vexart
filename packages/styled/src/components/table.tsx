@@ -16,8 +16,8 @@
  *   />
  */
 
-import { Table } from "@tge/components"
-import type { TableColumn, TableCellContext } from "@tge/components"
+import { Table } from "@vexart/headless"
+import type { TableColumn, TableCellContext } from "@vexart/headless"
 import type { JSX } from "solid-js"
 import { radius, space, font, weight, shadows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
