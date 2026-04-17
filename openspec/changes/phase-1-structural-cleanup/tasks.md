@@ -47,16 +47,16 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
 
 ## 4. Fold @tge/runtime into engine/src/reconciler + loop (slice 4)
 
-- [ ] 4.1 Create `packages/engine/src/reconciler/` and `packages/engine/src/loop/` directories
-- [ ] 4.2 Classify runtime source files: reconciler-bound files (`router.ts`, `pointer.ts`, `selection.ts`, `hover.ts`, `hit-test.ts`, `interaction.ts`, `focus.ts`, `drag.ts`, `extmarks.ts`, `dirty.ts`, `handle.ts`, `data.ts`) → `engine/src/reconciler/`; loop-bound files (`loop.ts`, `input.ts`, `scroll.ts`, `image.ts`, `frame-scheduler.ts`, `animation.ts`, `debug.ts`) → `engine/src/loop/`; tree-sitter directory (`tree-sitter/`) → `engine/src/reconciler/tree-sitter/` (syntax highlighting is reconciler-adjacent)
-- [ ] 4.3 `git mv` each runtime source file to its classified destination (one command per file group for atomicity)
-- [ ] 4.4 Update all internal imports within the moved files — relative paths between runtime files that are now split across `reconciler/` and `loop/` must be updated (e.g., `./loop` becomes `../loop/loop`, `./focus` becomes `../reconciler/focus`)
-- [ ] 4.5 Create `packages/engine/src/reconciler/index.ts` barrel that re-exports all symbols from files in this directory
-- [ ] 4.6 Create `packages/engine/src/loop/index.ts` barrel that re-exports all symbols from files in this directory
-- [ ] 4.7 Update `packages/engine/src/public.ts` to re-export the reconciler and loop symbols that `@tge/runtime` previously exposed
-- [ ] 4.8 Create shim: rewrite `packages/runtime/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/runtime/package.json` to add `@vexart/engine: "workspace:*"` dependency. Delete any remaining source files in `packages/runtime/src/` that were moved (the old barrel and moved files)
-- [ ] 4.9 Run `bun install && bun run typecheck` — must be green
-- [ ] 4.10 Commit: `refactor(engine): fold @tge/runtime into engine/src/reconciler + loop with shim`
+- [x] 4.1 Create `packages/engine/src/reconciler/` and `packages/engine/src/loop/` directories
+- [x] 4.2 Classify runtime source files: reconciler-bound files (`router.ts`, `pointer.ts`, `selection.ts`, `hover.ts`, `hit-test.ts`, `interaction.ts`, `focus.ts`, `drag.ts`, `extmarks.ts`, `dirty.ts`, `handle.ts`, `data.ts`) → `engine/src/reconciler/`; loop-bound files (`loop.ts`, `input.ts`, `scroll.ts`, `image.ts`, `frame-scheduler.ts`, `animation.ts`, `debug.ts`) → `engine/src/loop/`; tree-sitter directory (`tree-sitter/`) → `engine/src/reconciler/tree-sitter/` (syntax highlighting is reconciler-adjacent)
+- [x] 4.3 `git mv` each runtime source file to its classified destination (one command per file group for atomicity)
+- [x] 4.4 Update all internal imports within the moved files — relative paths between runtime files that are now split across `reconciler/` and `loop/` must be updated (e.g., `./loop` becomes `../loop/loop`, `./focus` becomes `../reconciler/focus`)
+- [x] 4.5 Create `packages/engine/src/reconciler/index.ts` barrel that re-exports all symbols from files in this directory
+- [x] 4.6 Create `packages/engine/src/loop/index.ts` barrel that re-exports all symbols from files in this directory
+- [x] 4.7 Update `packages/engine/src/public.ts` to re-export the reconciler and loop symbols that `@tge/runtime` previously exposed
+- [x] 4.8 Create shim: rewrite `packages/runtime/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/runtime/package.json` to add `@vexart/engine: "workspace:*"` dependency. Delete any remaining source files in `packages/runtime/src/` that were moved (the old barrel and moved files)
+- [x] 4.9 Run `bun install && bun run typecheck` — must be green
+- [x] 4.10 Commit: `refactor(engine): fold @tge/runtime into engine/src/reconciler + loop with shim`
 
 ## 5. Fold @tge/input into engine/src/input + hooks (slice 5)
 

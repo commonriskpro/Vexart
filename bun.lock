@@ -57,6 +57,9 @@
     "packages/input": {
       "name": "@tge/input",
       "version": "0.0.1",
+      "dependencies": {
+        "@vexart/engine": "workspace:*",
+      },
     },
     "packages/internal-devtools": {
       "name": "@vexart/internal-devtools",
