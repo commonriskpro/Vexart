@@ -96,16 +96,11 @@ export * from "./layers"
 export * from "./wgpu-mixed-scene"
 export * from "./gpu-raster-staging"
 export * from "./layout-writeback"
-export * from "./pixel-buffer"
-export * from "./paint-bridge"
+// NOTE: pixel-buffer and paint-bridge re-exports removed per Slice 9 migration.
+// These files still exist (deleted in Slice 11) but are no longer part of the
+// public index surface. Use vexart-bridge / vexart-functions directly.
 export * from "./node"
 
-export {
-  ATTACH_TO,
-  ATTACH_POINT,
-  POINTER_CAPTURE,
-  SIZING,
-  DIRECTION,
-  ALIGN_X,
-  ALIGN_Y,
-} from "./clay"
+// ── vexart native bridge (Phase 2) ──
+export * from "./vexart-bridge"
+export * from "./vexart-functions"
