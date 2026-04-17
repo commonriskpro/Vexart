@@ -216,23 +216,14 @@ export function getRectangleRenderInputs(cmd: RenderCommand, queues: RenderGraph
   const radius = Math.round(cmd.cornerRadius)
   const color = packColor(cmd.color[0], cmd.color[1], cmd.color[2], cmd.color[3])
 
-  const imageIdx = renderObjectId !== null
-    ? queues.images.findIndex((entry) => entry.renderObjectId === renderObjectId)
-    : -1
-  const fallbackImageIdx = imageIdx >= 0 ? imageIdx : queues.images.findIndex((entry) => entry.color === color && entry.cornerRadius === radius)
-  const image = fallbackImageIdx >= 0 ? queues.images.splice(fallbackImageIdx, 1)[0] : null
+  const imageIdx = renderObjectId !== null ? queues.images.findIndex((entry) => entry.renderObjectId === renderObjectId) : -1
+  const image = imageIdx >= 0 ? queues.images.splice(imageIdx, 1)[0] : null
 
-  const canvasIdx = renderObjectId !== null
-    ? queues.canvases.findIndex((entry) => entry.renderObjectId === renderObjectId)
-    : -1
-  const fallbackCanvasIdx = canvasIdx >= 0 ? canvasIdx : queues.canvases.findIndex((entry) => entry.color === color)
-  const canvas = fallbackCanvasIdx >= 0 ? queues.canvases.splice(fallbackCanvasIdx, 1)[0] : null
+  const canvasIdx = renderObjectId !== null ? queues.canvases.findIndex((entry) => entry.renderObjectId === renderObjectId) : -1
+  const canvas = canvasIdx >= 0 ? queues.canvases.splice(canvasIdx, 1)[0] : null
 
-  const effectIdx = renderObjectId !== null
-    ? queues.effects.findIndex((entry) => entry.renderObjectId === renderObjectId)
-    : -1
-  const fallbackEffectIdx = effectIdx >= 0 ? effectIdx : queues.effects.findIndex((entry) => entry.color === color && entry.cornerRadius === radius)
-  const effect = fallbackEffectIdx >= 0 ? queues.effects.splice(fallbackEffectIdx, 1)[0] : null
+  const effectIdx = renderObjectId !== null ? queues.effects.findIndex((entry) => entry.renderObjectId === renderObjectId) : -1
+  const effect = effectIdx >= 0 ? queues.effects.splice(effectIdx, 1)[0] : null
 
   return { renderObjectId, color, radius, image, canvas, effect }
 }

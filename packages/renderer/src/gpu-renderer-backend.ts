@@ -17,7 +17,6 @@ import { getFont, layoutText } from "./text-layout"
 import {
   beginWgpuCanvasTargetLayer,
   compositeWgpuCanvasTargetImageLayer,
-  copyWgpuCanvasTargetRegionToImage,
   createWgpuCanvasContext,
   createWgpuCanvasImage,
   createWgpuCanvasTarget,
@@ -53,6 +52,7 @@ import {
 } from "./wgpu-canvas-bridge"
 import {
   compositeTargetReadbackToSurface,
+  copyGpuTargetRegionToImage,
   createGpuCanvasImage,
   createGpuTextImage,
   uploadRasterDataToTarget,
@@ -709,7 +709,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         first = false
       }
       try {
-        const copied = copyWgpuCanvasTargetRegionToImage(context, target, { x: 0, y: 0, width, height })
+        const copied = copyGpuTargetRegionToImage(context, target, { x: 0, y: 0, width, height })
         const handle = copied.handle
         canvasSpriteCache.set(key, { key, handle, width, height })
         trimCanvasSpriteCache()
@@ -800,7 +800,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           to: opacity < 1 ? applyOpacityToColor(gradient.to, opacity) : gradient.to,
         }], 0, 0x00000000)
       }
-      let handle = copyWgpuCanvasTargetRegionToImage(context, target, { x: 0, y: 0, width, height }).handle
+      let handle = copyGpuTargetRegionToImage(context, target, { x: 0, y: 0, width, height }).handle
       if (cornerRadii) {
         const masked = maskWgpuCanvasImageRoundedRectCorners(context, handle, { x: 0, y: 0, width, height, radii: cornerRadii })
         destroyWgpuCanvasImage(context, handle)
@@ -982,7 +982,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       const width = workBounds.right - workBounds.left
       const height = workBounds.bottom - workBounds.top
       if (width <= 0 || height <= 0) return null
-      const copied = copyWgpuCanvasTargetRegionToImage(context, targetHandle, {
+      const copied = copyGpuTargetRegionToImage(context, targetHandle, {
         x: workBounds.left,
         y: workBounds.top,
         width,
@@ -1589,7 +1589,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     try {
       let first = true
       for (const layer of orderedLayers) {
-        const copied = copyWgpuCanvasTargetRegionToImage(context, layer.handle, {
+        const copied = copyGpuTargetRegionToImage(context, layer.handle, {
           x: 0,
           y: 0,
           width: layer.width,
@@ -1637,7 +1637,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       }
       const ok = renderFrame(spriteCtx, target, "none")
       if (!ok) return null
-      return copyWgpuCanvasTargetRegionToImage(context, target, { x: 0, y: 0, width, height }).handle
+      return copyGpuTargetRegionToImage(context, target, { x: 0, y: 0, width, height }).handle
     } finally {
       destroyWgpuCanvasTarget(context, target)
     }

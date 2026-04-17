@@ -247,14 +247,15 @@ The issue now is residual raster staging in:
 
 That means the core no longer thinks in CPU backend terms, but it still does not think in GPU targets/images/layers all the way through.
 
-### 4. Explicit identity is present, but heuristics still survive as fallback
+### 4. Explicit identity is now real on the base render-graph path
 
-`packages/renderer/src/render-graph.ts` now prefers `renderObjectId`, but still keeps fallback matching by:
+`packages/renderer/src/render-graph.ts` now claims `image`, `canvas`, and `effect` attachment by `renderObjectId` without falling back to:
 
 - `color + cornerRadius`
 - `color`
 
-That keeps ambiguity alive.
+That removes the old ambiguity from the base path.
+Remaining ownership cleanup still lives in adjacent systems like border/text/writeback/layer assignment.
 
 ### 5. Windowing ownership is now physically correct
 

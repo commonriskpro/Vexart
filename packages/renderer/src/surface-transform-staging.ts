@@ -10,7 +10,6 @@ import type { Matrix3 } from "./matrix"
 
 export function applySubtreeTransformToSurface(params: {
   surface: RasterSurface
-  snapshot: RasterSurface | null
   regionX: number
   regionY: number
   width: number
@@ -18,7 +17,7 @@ export function applySubtreeTransformToSurface(params: {
   inverse: Matrix3
   bounds: { x: number; y: number; width: number; height: number }
 }) {
-  const { surface, snapshot, regionX, regionY, width, height, inverse, bounds } = params
+  const { surface, regionX, regionY, width, height, inverse, bounds } = params
   const tmp = createRasterSurface(width, height)
 
   for (let row = 0; row < height; row++) {
@@ -38,37 +37,18 @@ export function applySubtreeTransformToSurface(params: {
     }
   }
 
-  if (snapshot) {
-    for (let row = 0; row < height; row++) {
-      const sy = regionY + row
-      if (sy < 0 || sy >= surface.height) continue
-      const bufOff = sy * surface.stride
-      const snapOff = row * snapshot.stride
-      for (let col = 0; col < width; col++) {
-        const sx = regionX + col
-        if (sx < 0 || sx >= surface.width) continue
-        const bi = bufOff + sx * 4
-        const si = snapOff + col * 4
-        surface.data[bi] = snapshot.data[si]
-        surface.data[bi + 1] = snapshot.data[si + 1]
-        surface.data[bi + 2] = snapshot.data[si + 2]
-        surface.data[bi + 3] = snapshot.data[si + 3]
-      }
-    }
-  } else {
-    for (let row = 0; row < height; row++) {
-      const sy = regionY + row
-      if (sy < 0 || sy >= surface.height) continue
-      const off = sy * surface.stride
-      for (let col = 0; col < width; col++) {
-        const sx = regionX + col
-        if (sx < 0 || sx >= surface.width) continue
-        const i = off + sx * 4
-        surface.data[i] = 0
-        surface.data[i + 1] = 0
-        surface.data[i + 2] = 0
-        surface.data[i + 3] = 0
-      }
+  for (let row = 0; row < height; row++) {
+    const sy = regionY + row
+    if (sy < 0 || sy >= surface.height) continue
+    const off = sy * surface.stride
+    for (let col = 0; col < width; col++) {
+      const sx = regionX + col
+      if (sx < 0 || sx >= surface.width) continue
+      const i = off + sx * 4
+      surface.data[i] = 0
+      surface.data[i + 1] = 0
+      surface.data[i + 2] = 0
+      surface.data[i + 3] = 0
     }
   }
 

@@ -229,11 +229,6 @@ const textMetaMap = new Map<string, TextMeta>()
 const renderGraphQueues = createRenderGraphQueues()
 let effectsQueue = renderGraphQueues.effects
 
-/** Background snapshots for subtree transform post-pass.
- *  Saved in paintCommand BEFORE the subtree root's RECT is painted.
- *  Keyed by node ID. Contains ONLY the background pixels (no subtree content). */
-const subtreeBgSnapshots = new Map<number, RasterSurface>()
-
 let imageQueue = renderGraphQueues.images
 let canvasQueue = renderGraphQueues.canvases
 
@@ -1758,7 +1753,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     // 1. Walk tree into Clay (first pass — feeds Clay, no counting)
     scrollSpeedCap = 0 // reset — will be set by walkTree if any node has scrollSpeed
     resetRenderGraphQueues(renderGraphQueues)
-    subtreeBgSnapshots.clear() // reset transform background snapshots
     textMeasureIndex = 0 // reset text measure counter
     textMetas.length = 0 // clear text metadata
     textMetaMap.clear()
@@ -2223,10 +2217,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
             const bounds = transformBounds(matrix, nw, nh)
             const inv = invert(matrix)
             if (inv) {
-              const bgSnap = subtreeBgSnapshots.get(node.id)
               applySubtreeTransformToSurface({
                 surface: src,
-                snapshot: bgSnap ?? null,
                 regionX: rx,
                 regionY: ry,
                 width: nw,
@@ -2234,7 +2226,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
                 inverse: inv,
                 bounds,
               })
-              if (bgSnap) subtreeBgSnapshots.delete(node.id)
             }
           }
         }

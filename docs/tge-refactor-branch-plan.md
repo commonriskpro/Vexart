@@ -174,7 +174,10 @@ No lo reemplaza.
 - output compat eliminado
 - selectable ANSI eliminado
 - loop fallback eliminado
-- remaining work: shrink raster staging and finish GPU-native internals
+- copy-to-image staging encapsulado detrás de `gpu-raster-staging.ts`
+- `render-graph.ts` ya no hace matching heurístico por `color` / `cornerRadius` para `image` / `canvas` / `effect`
+- `surface-transform-staging.ts` ya no carga la rama muerta de `snapshot`
+- remaining work: shrink the remaining raster staging and finish GPU-native internals for transforms/canvas internals
 
 ### Recommended execution slices
 
@@ -187,6 +190,7 @@ No lo reemplaza.
 - shrink `gpu-raster-staging.ts` and `surface-transform-staging.ts`
 - keep canvas text/readback staging folded into `gpu-raster-staging.ts` instead of spawning a second staging module
 - push any unavoidable temporary surfaces behind neutral helper boundaries
+- remove dead transform staging branches when they are proven unused
 - done when staging is implementation residue, not the engine story
 
 #### 11C — Make GPU terminology canonical
@@ -197,6 +201,7 @@ No lo reemplaza.
 #### 11D — Finish explicit ownership
 - make `renderObjectId` dominant where explicit identity exists
 - remove heuristic fallback matching by `color` / `cornerRadius`
+- status: done for the `image` / `canvas` / `effect` base path in `render-graph.ts`; remaining ownership work moved to adjacent systems
 - done when ownership bugs are traceable without guesswork
 
 #### 11E — Lock the output boundary

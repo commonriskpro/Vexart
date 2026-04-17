@@ -41,7 +41,7 @@ Este documento sigue siendo la fuente operativa principal, pero ahora está orie
 | P0 | completed | Dirección GPU-only aceptada como narrativa principal. |
 | P1 | strong partial | Se retiraron weak facades y quedaron sólo los bridges públicos con valor real. |
 | P2 | partial | `loop.ts` ya no sostiene single-buffer fallback ni painter raster directo, pero sigue siendo demasiado central. |
-| P3 | partial | `renderObjectId` existe, pero todavía hay fallback heurístico. |
+| P3 | strong partial | `renderObjectId` ya domina `image/canvas/effect` en `render-graph.ts`, pero todavía queda trabajo de ownership fuera de ese base path. |
 | P4 | strong partial | CPU backend, output compat, selectable ANSI y loop fallback ya salieron del path oficial. |
 | P5 | partial | Runtime UI mejoró, pero la separación core/runtime no está cerrada. |
 | P6 | partial | `OverlayRoot` existe, pero overlay/runtime policy no está completamente resuelta. |
@@ -116,7 +116,7 @@ que a una cadena limpia de packages dueños independientes.
 | `packages/renderer/src/loop.ts` | partial split | ✅ |  | simplify | todavía demasiado central |
 | `packages/renderer/src/node.ts` | core but misplaced | ✅ |  | maybe move later | hoy sigue siendo dueño real del árbol |
 | `packages/renderer/src/clay.ts` | healthy internal owner | ✅ |  | maybe move later | boundary útil |
-| `packages/renderer/src/render-graph.ts` | improved but heuristic fallback remains | ✅ |  | simplify | hacer `renderObjectId` dominante de verdad |
+| `packages/renderer/src/render-graph.ts` | improved | ✅ |  | simplify | `image/canvas/effect` ya usan `renderObjectId`; queda limpiar ownership adyacente |
 | `packages/renderer/src/gpu-renderer-backend.ts` | official path but still mixed | ✅ |  | simplify | sacar dependencia conceptual de compat |
 | `packages/renderer/src/gpu-frame-composer.ts` | adaptor | ✅ |  | review owner | define si queda en compositor o output |
 | `packages/renderer/src/cpu-renderer-backend.ts` | retired |  |  | remove | ya salió del repo oficial |
@@ -147,8 +147,8 @@ Aunque tenga helpers nuevos, `loop.ts` sigue siendo la explicación operativa de
 ### 3. Compat still leaks into official path
 El hot path oficial ya no arrastra CPU backend ni output compat, pero todavía arrastra demasiado staging raster (`PixelBuffer` / `@tge/pixel`) en rutas GPU internas.
 
-### 4. Heuristic fallback still alive
-El render graph mejoró, pero no está totalmente liberado de heurísticas.
+### 4. Ownership cleanup is not fully done
+El render graph base ya no usa fallback heurístico para `image/canvas/effect`, pero todavía queda limpieza en ownership adyacente.
 
 ---
 
@@ -187,7 +187,8 @@ What remains is cleanup of stale references and dependency simplification.
 ## R4 — Finish explicit ownership
 
 - make `renderObjectId` primary, not just preferred
-- remove fallback matching by `color` / `cornerRadius` from the base path
+- remove fallback matching by `color` / `cornerRadius` from the remaining base path
+- continue cleanup in border/text/writeback/layer ownership after the `image/canvas/effect` cut
 
 ## R5 — Reduce raster staging from the hot path
 

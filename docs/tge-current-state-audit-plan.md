@@ -65,6 +65,9 @@ La branch se considera útil solo si produce TODOS estos outputs:
 - `packages/renderer/src/gpu-renderer-backend.ts`
 - `packages/renderer/src/gpu-frame-composer.ts`
 - `packages/renderer/src/gpu-layer-strategy.ts`
+- `packages/renderer/src/gpu-raster-staging.ts`
+- `packages/renderer/src/surface-transform-staging.ts`
+- `packages/renderer/src/render-surface.ts`
 - `packages/renderer/src/canvas.ts`
 - `packages/renderer/src/wgpu-canvas-backend.ts`
 - `packages/renderer/src/focus.ts`
@@ -73,7 +76,6 @@ La branch se considera útil solo si produce TODOS estos outputs:
 - `packages/renderer/src/scroll.ts`
 - `packages/output/src/kitty.ts`
 - `packages/output/src/layer-composer.ts`
-- `packages/output/src/composer.ts`
 - `packages/pixel/src/*`
 - `packages/components/src/scene-canvas.tsx`
 - `packages/windowing/src/*`

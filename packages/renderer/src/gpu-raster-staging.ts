@@ -10,6 +10,7 @@ import { paint } from "./pixel-buffer"
 import { createRasterSurface, type RasterSurface } from "./render-surface"
 import {
   beginWgpuCanvasTargetLayer,
+  copyWgpuCanvasTargetRegionToImage,
   createWgpuCanvasImage,
   destroyWgpuCanvasImage,
   endWgpuCanvasTargetLayer,
@@ -23,6 +24,13 @@ import {
 
 export type GpuRasterImage = {
   handle: WgpuCanvasImageHandle
+  width: number
+  height: number
+}
+
+export type GpuTargetRegion = {
+  x: number
+  y: number
   width: number
   height: number
 }
@@ -78,6 +86,19 @@ export function createGpuCanvasImage(
     handle: createWgpuCanvasImage(context, { width: surface.width, height: surface.height }, surface.data),
     width: surface.width,
     height: surface.height,
+  }
+}
+
+export function copyGpuTargetRegionToImage(
+  context: WgpuCanvasContextHandle,
+  target: WgpuCanvasTargetHandle,
+  region: GpuTargetRegion,
+): GpuRasterImage {
+  const copied = copyWgpuCanvasTargetRegionToImage(context, target, region)
+  return {
+    handle: copied.handle,
+    width: region.width,
+    height: region.height,
   }
 }
 

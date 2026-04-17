@@ -155,8 +155,8 @@ The problem is no longer CPU fallback selection. The problem is that the rendere
 
 | File | Residual legacy role today | GPU-native target | Retirement condition |
 | --- | --- | --- | --- |
-| `packages/renderer/src/gpu-raster-staging.ts` | consolidated staging helper for temporary text/canvas/readback/upload surfaces that still appear in GPU internals | direct GPU op encoding into retained GPU targets/layers without temporary raster surfaces | no common renderer op requires temporary raster surface materialization before final readback |
-| `packages/renderer/src/surface-transform-staging.ts` | subtree transform post-pass that still depends on surface staging | transform composition handled as GPU pass or isolated compat path | transform-heavy subtrees stop forcing temporary CPU-visible surfaces in the official path |
+| `packages/renderer/src/gpu-raster-staging.ts` | consolidated staging helper for temporary text/canvas/readback/upload/copy-to-image boundaries that still appear in GPU internals | direct GPU op encoding into retained GPU targets/layers without temporary raster surfaces | no common renderer op requires temporary raster surface materialization before final readback |
+| `packages/renderer/src/surface-transform-staging.ts` | subtree transform post-pass that still depends on surface staging, even after removing the dead snapshot branch | transform composition handled as GPU pass or isolated compat path | transform-heavy subtrees stop forcing temporary CPU-visible surfaces in the official path |
 | `packages/renderer/src/canvas.ts` | imperative `CanvasContext` family still shapes part of the official renderer reasoning | compat/lab boundary only, not structural core dependency | official path can be explained without `CanvasContext` as a central renderer concept |
 
 ### Operational rule
@@ -195,6 +195,32 @@ Relevant files:
 ### Current reality
 
 The official path is GPU-only at the backend/output level, but some render operations still require temporary raster surfaces before the final raw RGBA handoff to Kitty.
+
+### Verified progress since the first GPU-only pass
+
+- `gpu-raster-staging.ts` now owns copy-to-image staging instead of leaking raw bridge calls through `gpu-renderer-backend.ts`
+- canvas fallback staging now forces direct CPU raster instead of bouncing through a GPU -> CPU -> GPU loop
+- `surface-transform-staging.ts` no longer carries a dead `snapshot` branch; the current post-pass is explicitly copy -> clear -> affine blit
+
+## E. Explicit ownership progress
+
+Relevant files:
+
+- `packages/renderer/src/render-graph.ts`
+- `packages/renderer/src/loop.ts`
+
+### Current reality
+
+For `image`, `canvas`, and `effect` attachment, the render graph no longer falls back to matching by `color` / `cornerRadius`.
+Those queues are now claimed by `renderObjectId`, which matches the way `loop.ts` enqueues them (`renderObjectId: node.id`).
+
+### Remaining work
+
+Explicit ownership still needs follow-up outside that base path:
+
+- border-specific attachment logic
+- text/layout/writeback relationships
+- any remaining layer/content matching that still depends on geometry or content heuristics
 
 ### Compat leakage conclusion
 

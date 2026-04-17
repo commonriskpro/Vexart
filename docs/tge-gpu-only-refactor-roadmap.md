@@ -133,6 +133,8 @@ Make the official engine path materially simpler.
 
 ### Actions
 - reduce remaining raster staging in the hot path (`gpu-raster-staging`, `surface-transform-staging`, `canvas.ts`)
+- keep copy-to-image/readback/upload staging folded into explicit helper boundaries instead of leaking raw bridge calls through the backend
+- remove dead transform staging branches when they are proven unused
 - keep the official path clearly GPU-first + Kitty-first
 - separate implementation staging from the conceptual renderer model
 - decide whether compositor is a real package or just internal modules
@@ -182,6 +184,10 @@ Finish replacing compatibility heuristics with explicit ownership.
 - make `renderObjectId` mandatory where possible
 - remove fallback matching by color/radius/path from the base model
 - simplify layout ownership/writeback rules
+
+### Current status
+- `image` / `canvas` / `effect` attachment in `render-graph.ts` already moved to `renderObjectId`-only matching
+- remaining heuristic retirement work is now outside that base path (border/text/writeback/layer ownership)
 
 ### Exit criteria
 - ownership bugs are traceable by explicit IDs, not guesswork
