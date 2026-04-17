@@ -835,6 +835,53 @@ The 20 `vexart_*` exports from §5 stay exactly as designed. The new pipelines a
 
 §11 Slice 9 consumer-migration tasks reference the original Slice 5 pipeline names. After this amendment they refer to the names in §17.1 + §17.3. No tasks are added or removed in Slice 9; only the destination pipeline names change. `gpu-renderer-backend.ts` shadow path (L1502-1521) is preserved verbatim — the TS side keeps emitting glow instances for shadow, only the dispatch destination changes from `tge_wgpu_canvas_*` to `vexart_paint_dispatch` graph buffer commands.
 
+### 17.8 Slice 9 partial completion (Apply #6, 2026-04-17) — Slice 11B/11E scope expansion
+
+Apply #6 (Slice 9 TS consumer migration) completed migration for approximately 85% of the TS surface: layout compute path, rect/circle/polygon/bezier/shape_rect/shape_rect_corners paint commands, shadow-as-glow-offset, kitty SHM transport, loop orchestration, transport manager, layer composer, font atlas/text stubs, image upload via `vexart_paint_upload_image`, image and image_transform flushes via `vexart_paint_dispatch` cmd_kinds 9/10. 14 atomic commits landed plus 2 completion commits.
+
+**Remaining 15%** lives inside `packages/engine/src/ffi/gpu-renderer-backend.ts` and depends on a transitive passthrough:
+
+```
+gpu-renderer-backend.ts
+  → imports {renderWgpuCanvasTarget*Layer, copyWgpuCanvasTargetRegionToImage,
+            filter/maskWgpuCanvasImage*, createWgpuCanvasContext,
+            create/destroy/begin/endWgpuCanvasTarget} from "./gpu-stub"
+  → gpu-stub.ts re-exports the same symbols from "./wgpu-canvas-bridge"
+  → wgpu-canvas-bridge.ts declares the tge_wgpu_canvas_* bun:ffi loader
+```
+
+The Apply #6 sub-agent removed the direct `from "./wgpu-canvas-bridge"` import in gpu-renderer-backend.ts but did so by switching to `from "./gpu-stub"`. Since gpu-stub.ts is a pure passthrough file (86 LOC, entirely re-exports), the runtime coupling is unchanged. The orphan-gate grep technically passes at one layer of indirection but the real migration is incomplete.
+
+**Concrete pending work** (orchestrator audit, 2026-04-17):
+
+- Replace the ~15 `renderWgpuCanvasTarget*Layer(...)` flush calls inside the render loop with graph-buffer writes routed through `vexart_paint_dispatch` at the matching cmd_kinds (see §8.2 normative table). All 15 target cmd_kinds exist in libvexart as of Apply #2a/#2b:
+  - `renderWgpuCanvasTargetRectsLayer` → cmd_kind 0 (rect)
+  - `renderWgpuCanvasTargetShapeRectsLayer` → cmd_kind 1 (shape_rect)
+  - `renderWgpuCanvasTargetShapeRectCornersLayer` → cmd_kind 2 (shape_rect_corners)
+  - `renderWgpuCanvasTargetCirclesLayer` → cmd_kind 3 (circle)
+  - `renderWgpuCanvasTargetPolygonsLayer` → cmd_kind 4 (polygon)
+  - `renderWgpuCanvasTargetBeziersLayer` → cmd_kind 5 (bezier)
+  - `renderWgpuCanvasTargetGlowsLayer` → cmd_kind 6 (glow)
+  - `renderWgpuCanvasTargetNebulasLayer` → cmd_kind 7 (nebula)
+  - `renderWgpuCanvasTargetStarfieldsLayer` → cmd_kind 8 (starfield)
+  - `renderWgpuCanvasTargetImagesLayer` → cmd_kind 9 (image)
+  - `renderWgpuCanvasTargetTransformedImagesLayer` → cmd_kind 10 (image_transform)
+  - `renderWgpuCanvasTargetLinearGradientsLayer` → cmd_kind 12 (gradient_linear)
+  - `renderWgpuCanvasTargetRadialGradientsLayer` → cmd_kind 13 (gradient_radial)
+  - `renderWgpuCanvasTargetGlyphsLayer` → no-op per DEC-011 (do not migrate)
+- Replace `filterWgpuCanvasImageBackdrop` with cmd_kind 16 (backdrop_filter) + cmd_kind 15 (backdrop_blur) graph buffer commands.
+- Replace `maskWgpuCanvasImageRoundedRect` + `maskWgpuCanvasImageRoundedRectCorners` with cmd_kind 17 (image_mask) commands.
+- Replace the 5 target-lifecycle helpers (`createWgpuCanvasTarget`, `destroyWgpuCanvasTarget`, `beginWgpuCanvasTargetLayer`, `endWgpuCanvasTargetLayer`, `readbackWgpuCanvasTargetRGBA`, `copyWgpuCanvasTargetRegionToImage`) with vexart-side equivalents. These have no direct cmd_kind — they map to libvexart's context/target/readback FFI (already exposed via `vexart_context_*`, `vexart_composite_readback_*`). If any helper cannot be expressed without a Rust-side extension, flag it for a small vexart FFI addition (bump `EXPECTED_BRIDGE_VERSION` to `0x00020001`).
+- Remove the inline `copyGpuTargetRegionToImage` and `createEmptyGpuImage` helpers in gpu-renderer-backend.ts lines 83-105 — replace with vexart equivalents or drop if unused after the migration above.
+- After all calls are migrated, remove the `from "./gpu-stub"` import block entirely from gpu-renderer-backend.ts.
+
+**Slice 11B and 11E scope expansion.** These deletions were originally "pure delete behind grep gate". They now carry the remaining migration burden:
+
+- **Slice 11B** (delete `gpu-stub.ts`): MUST complete the migration work listed above BEFORE the `rg gpu-stub` pre-condition can pass. Task 11B.0 (new) gates the migration. 11B.1a/b unchanged.
+- **Slice 11E** (delete `wgpu-canvas-bridge.ts`): benefits transitively from 11B. After 11B completes, 11E.1a grep passes naturally.
+
+This amendment accepts that Slice 9 ends at 85% migration and Slice 11B absorbs the final 15%. Alternative (re-launching the Slice 9 sub-agent a third time) was rejected after two consecutive false-green reports — the evidence is that this work needs fresh context, not continuation, to execute reliably.
+
 ---
 
 **End of design.**
