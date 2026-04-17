@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "windows": [
+    {
+      "id": "diff-viewer-1",
+      "kind": "diff-viewer",
+      "bounds": {
+        "x": 930,
+        "y": 122,
+        "width": 360,
+        "height": 240
+      },
+      "status": "normal",
+      "zIndex": 100,
+      "contentState": {
+        "filename": "LightEngine.zig",
+        "diff": "--- a/LightEngine.zig\n+++ b/LightEngine.zig\n@@ -1,4 +1,4 @@\n import lightoopmetre'.\n import lighncoonpute'.\n \n-type: EngineStatement.LightongEmeta.zig\n+type: EngineInstance.LightEngine.zig\n",
+        "language": "zig"
+      }
+    },
+    {
+      "id": "code-editor-2",
+      "kind": "code-editor",
+      "bounds": {
+        "x": 680,
+        "y": 268,
+        "width": 520,
+        "height": 320
+      },
+      "status": "normal",
+      "zIndex": 101,
+      "contentState": {
+        "filename": "v_engine.zig",
+        "content": "func compute_shader_pipeline(engine,\n\n  const compute_shader: _shader) {\n    let color = 1, 0, 0, 1;\n    let colff = 0;\n    let p: 712 = 0;\n\n    if (memory::vertex_buffer)\n      colet = coeff(oto)\n      color = (coeff.x * memory.x), me);\n    }\n    # else if\n      memory::camera_matrix [0, 1];\n    }\n\n    return v_engine\n",
+        "language": "zig"
+      }
+    },
+    {
+      "id": "memory-panel-3",
+      "kind": "memory-panel",
+      "bounds": {
+        "x": 68,
+        "y": 518,
+        "width": 280,
+        "height": 260
+      },
+      "status": "normal",
+      "zIndex": 102,
+      "contentState": {
+        "title": "Memory",
+        "entries": [
+          {
+            "key": "LC_TOKENS",
+            "value": "accentGolden.focusView",
+            "warm": true
+          },
+          {
+            "key": "bufferSize",
+            "value": "888:3704"
+          },
+          {
+            "key": "buffer",
+            "value": "[396]"
+          }
+        ],
+        "references": [
+          {
+            "kind": "fn",
+            "name": "funcinc_buffer_int(l)",
+            "file": "funth.zig",
+            "line": 19
+          },
+          {
+            "kind": "var",
+            "name": "buffer_size > burnlib.zig",
+            "file": "burnlib.zig",
+            "line": 33
+          }
+        ]
+      }
+    },
+    {
+      "id": "agent-panel-4",
+      "kind": "agent-panel",
+      "bounds": {
+        "x": 975,
+        "y": 583,
+        "width": 320,
+        "height": 240
+      },
+      "status": "normal",
+      "zIndex": 103,
+      "contentState": {
+        "agentName": "C",
+        "status": "running",
+        "task": "compute_shader_pipeline",
+        "source": "Suectoss",
+        "model": "Bubber",
+        "logs": [
+          {
+            "level": "info",
+            "message": "F00 batch pointing 12.88_7fe6"
+          },
+          {
+            "level": "success",
+            "message": "Sparter pipeline succeeded by completed."
+          }
+        ]
+      }
+    }
+  ],
+  "order": [
+    "diff-viewer-1",
+    "code-editor-2",
+    "memory-panel-3",
+    "agent-panel-4"
+  ],
+  "focusedId": "agent-panel-4",
+  "graph": {
+    "positions": {
+      "central": {
+        "x": 580,
+        "y": 360
+      },
+      "lightengine": {
+        "x": 340,
+        "y": 140
+      },
+      "verlee": {
+        "x": 260,
+        "y": 240
+      },
+      "dispatch": {
+        "x": 240,
+        "y": 360
+      },
+      "vertex": {
+        "x": 160,
+        "y": 460
+      },
+      "camera": {
+        "x": 380,
+        "y": 520
+      },
+      "femgas": {
+        "x": 520,
+        "y": 530
+      },
+      "runner": {
+        "x": 600,
+        "y": 630
+      }
+    },
+    "viewport": {
+      "x": 0,
+      "y": 0,
+      "zoom": 1
+    }
+  }
+}
