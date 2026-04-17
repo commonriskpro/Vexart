@@ -1,5 +1,21 @@
 # TGE — Terminal Graphics Engine
 
+## Authoritative documents
+
+Vexart's source of truth lives in three master documents under `docs/`. When their
+guidance conflicts with anything described below, **the master documents win** and
+the content below is treated as legacy TGE reference pending Phase 1 rewrite.
+
+- [`docs/PRD.md`](docs/PRD.md) — product requirements, phased roadmap, decision log.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — target layered package structure and
+  native boundary.
+- [`docs/API-POLICY.md`](docs/API-POLICY.md) — public vs. internal API rules.
+
+Every change is executed through the SDD workflow under `openspec/` (see
+`openspec/README.md`). Legacy pre-PRD documents (`TGE-*`, `MIGRATION-ANALYSIS.md`,
+`docs.md`) have been archived to `docs/archive/` and MUST NOT be used as a reference
+for new work.
+
 ## What is TGE
 
 Pixel-native terminal rendering engine. Developers write JSX (SolidJS), TGE renders browser-quality UI in the terminal with anti-aliased corners, shadows (single + multi), gradients (linear + radial), glow effects, backdrop blur (glassmorphism), and per-corner radius.
