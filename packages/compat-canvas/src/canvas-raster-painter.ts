@@ -1,7 +1,7 @@
 import type { PixelBuffer } from "@tge/pixel"
 import { paint } from "@tge/pixel"
-import { getCanvasPainterBackend } from "./canvas-backend"
-import type { CanvasContext } from "./canvas"
+import { getCanvasPainterBackend } from "../../core/src/canvas-backend"
+import type { CanvasContext } from "../../core/src/canvas"
 
 function unpack(c: number): [number, number, number, number] {
   return [(c >>> 24) & 0xff, (c >>> 16) & 0xff, (c >>> 8) & 0xff, c & 0xff]

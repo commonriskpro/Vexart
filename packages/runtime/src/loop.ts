@@ -481,7 +481,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       targetHeight: target.height,
       backing: layer?.backing ?? null,
       target,
-      buffer: target,
       commands,
       graph,
       offsetX,
@@ -2123,9 +2122,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
         const paintResult = paintCommandsWithRendererBackend({ width: lw, height: lh }, layerCommands, lx, ly, frameCtx, layerCtx, backend)
         const backendSkipPresent = paintResult?.output === "skip-present"
-        const backendRawLayer = paintResult?.output === "raw-layer"
+        const backendKittyPayload = paintResult?.output === "kitty-payload"
         if (backendSkipPresent) rendererOutput = paintResult?.strategy ?? framePlan?.strategy ?? "skip-present"
-        if (backendRawLayer) rendererOutput = "layered-raw"
+        if (backendKittyPayload) rendererOutput = "layered-raw"
 
         if (backendSkipPresent) {
           repaintedThisFrame++
@@ -2133,7 +2132,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
           continue
         }
 
-        if (backendRawLayer && paintResult?.rawLayer) {
+        if (backendKittyPayload && paintResult?.kittyPayload) {
           repaintedThisFrame++
           const renderZ = layer.z
           const imageId = imageIdForLayer(layer)
@@ -2146,7 +2145,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
             log(`  [${slot.key}] REPAINT ${lw}x${lh} at (${lx},${ly}) z=${renderZ} (${(lw * lh * 4 / 1024).toFixed(0)}KB) cmds=${slot.cmdIndices.length}`)
           }
           const ioStart = DEBUG_CADENCE ? performance.now() : 0
-          layerComposer!.renderLayerRaw(paintResult.rawLayer.data, paintResult.rawLayer.width, paintResult.rawLayer.height, imageId, lx, ly, renderZ, cellW, cellH)
+          layerComposer!.renderLayerRaw(paintResult.kittyPayload.data, paintResult.kittyPayload.width, paintResult.kittyPayload.height, imageId, lx, ly, renderZ, cellW, cellH)
           if (DEBUG_CADENCE) ioMs += performance.now() - ioStart
           markLayerClean(layer)
           continue

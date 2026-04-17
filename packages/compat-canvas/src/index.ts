@@ -23,4 +23,7 @@ export type { CanvasPainterBackend } from "../../core/src/canvas-backend"
 export {
   tryCreateWgpuCanvasPainterBackend,
   getWgpuCanvasPainterCacheStats,
-} from "../../core/src/wgpu-canvas-backend"
+} from "./wgpu-canvas-backend"
+
+export { createGpuTextImage } from "./gpu-text-compat"
+export type { GpuRasterImage } from "./gpu-text-compat"

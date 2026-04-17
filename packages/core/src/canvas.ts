@@ -1,13 +1,28 @@
 /**
  * CanvasContext — imperative 2D drawing API for <canvas> nodes.
  *
- * This module is a COMPAT/LAB boundary.
- * It survives for imperative canvas consumers, but it is not the canonical
- * renderer architecture for the GPU-native path.
+ * ## COMPAT/LAB BOUNDARY — architectural rules
+ *
+ * This module is NOT the canonical rendering model for TGE.
+ * It exists to support imperative canvas APIs (SceneCanvas, etc.)
+ * without dictating the internal architecture of the GPU renderer.
+ *
+ * The official GPU renderer path lives in core/src/gpu-renderer-backend.ts
+ * and does NOT center CanvasContext semantics.
+ *
+ * Rules:
+ * 1. New rendering features must be implemented through render-graph ops,
+ *    NOT through CanvasContext extensions.
+ * 2. The CPU raster painter (canvas-raster-painter.ts) lives in compat-canvas/,
+ *    not here — it is explicitly transition-only staging.
+ * 3. This module may survive publicly as a compat surface, but must not
+ *    be used to justify CPU raster paths in the official renderer.
+ *
+ * ## Implementation
  *
  * Unlike <box>/<text>, <canvas> bypasses Clay for its INTERNAL content.
  * Clay only knows the canvas's outer bounding box. All drawing inside
- * is done directly via Zig FFI paint primitives.
+ * is done via buffered draw commands flushed at render time.
  *
  * Draw commands are buffered during onDraw() and flushed in paintCommand().
  * A viewport transform (translate + scale) is applied to all coordinates
@@ -16,11 +31,11 @@
  * Architecture:
  *   JSX <canvas onDraw={ctx => ...}> → walkTree emits Clay RECT
  *     → paintCommand detects canvas node → creates CanvasContext
- *       → executes onDraw callback → flushes draw commands to pixel buffer
+ *       → executes onDraw callback → flushes draw commands via compat painter
  */
 
 import { create, over } from "@tge/pixel"
-import { paintCanvasCommandsToRasterSurface } from "./canvas-raster-painter"
+import { paintCanvasCommandsToRasterSurface } from "../../compat-canvas/src/canvas-raster-painter"
 
 // ── Draw command types ──
 
@@ -434,4 +449,4 @@ export function getCanvasImageCacheStats() {
   }
 }
 
-export { paintCanvasCommands, paintCanvasCommandsCPU } from "./canvas-raster-painter"
+export { paintCanvasCommands, paintCanvasCommandsCPU } from "../../compat-canvas/src/canvas-raster-painter"

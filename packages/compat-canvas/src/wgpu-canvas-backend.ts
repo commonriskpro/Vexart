@@ -1,11 +1,23 @@
-import type { RasterSurface } from "./render-surface"
+/**
+ * Compat/lab WGPU painter backend.
+ *
+ * Implements CanvasPainterBackend for imperative canvas APIs (SceneCanvas, etc.).
+ * This is NOT the canonical renderer architecture — it is a compat painter
+ * that uses GPU acceleration where possible and falls back to CPU raster.
+ *
+ * The official GPU renderer path lives in core/src/gpu-renderer-backend.ts
+ * and does NOT use this file.
+ */
+
+import type { RasterSurface } from "../../core/src/render-surface"
 import { appendFileSync } from "node:fs"
-import type { CanvasPainterBackend } from "./canvas-backend"
-import type { CanvasContext } from "./canvas"
+import type { CanvasPainterBackend } from "../../core/src/canvas-backend"
+import type { CanvasContext } from "../../core/src/canvas"
 import { paintCanvasCommandsCPU } from "./canvas-raster-painter"
-import { getAtlas } from "./font-atlas"
-import { getFont } from "./text-layout"
-import { createGpuTextImage, readbackTargetToSurface } from "./gpu-raster-staging"
+import { getAtlas } from "../../core/src/font-atlas"
+import { getFont } from "../../core/src/text-layout"
+import { readbackTargetToSurface } from "../../core/src/gpu-raster-staging"
+import { createGpuTextImage } from "./gpu-text-compat"
 import {
   createWgpuCanvasImage,
   createWgpuCanvasContext,
@@ -33,13 +45,13 @@ import {
   type WgpuCanvasGlyphInstance,
   type WgpuCanvasContextHandle,
   type WgpuCanvasImageHandle,
-} from "./wgpu-canvas-bridge"
+} from "../../core/src/wgpu-canvas-bridge"
 import {
   batchMixedSceneOps,
   collectSupportedMixedScene,
   collectSupportedRects,
   collectSupportedSingleImage,
-} from "./wgpu-mixed-scene"
+} from "../../core/src/wgpu-mixed-scene"
 
 type WgpuTargetRecord = {
   width: number
@@ -99,11 +111,6 @@ export function getWgpuCanvasPainterCacheStats(): WgpuCanvasPainterCacheStats {
   }
 }
 
-/**
- * Compat/lab painter backend.
- * This is NOT the canonical renderer architecture; it exists for examples,
- * smoke tests, and imperative canvas validation.
- */
 class WgpuCanvasPainterBackend implements CanvasPainterBackend {
   name = "wgpu"
   #context: WgpuCanvasContextHandle

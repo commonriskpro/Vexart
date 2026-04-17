@@ -3,7 +3,7 @@ import { getFontAtlasCacheStats } from "./font-atlas"
 import { getGpuRendererBackendCacheStats } from "./gpu-renderer-backend"
 import { getImageCacheStats } from "../../runtime/src/image"
 import { getTextLayoutCacheStats } from "./text-layout"
-import { getWgpuCanvasPainterCacheStats } from "./wgpu-canvas-backend"
+import { getWgpuCanvasPainterCacheStats } from "../../compat-canvas/src/wgpu-canvas-backend"
 
 export function getRendererResourceStats() {
   return {

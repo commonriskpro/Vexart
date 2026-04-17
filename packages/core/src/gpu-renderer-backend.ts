@@ -825,8 +825,8 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     const h = Math.round(cmd.height)
     const left = Math.max(0, x)
     const top = Math.max(0, y)
-    const right = Math.min(ctx.buffer.width, x + w)
-    const bottom = Math.min(ctx.buffer.height, y + h)
+    const right = Math.min(ctx.target.width, x + w)
+    const bottom = Math.min(ctx.target.height, y + h)
     if (right <= left || bottom <= top) return null
     return { x, y, w, h, left, top, right, bottom }
   }
@@ -974,7 +974,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     })
 
     const getBackdropWorkBounds = (op: EffectRenderOp, metadata: BackdropRenderMetadata) => {
-      return clampBackdropBounds(metadata.outputBounds, ctx.buffer.width, ctx.buffer.height)
+      return clampBackdropBounds(metadata.outputBounds, ctx.target.width, ctx.target.height)
     }
 
     const getBackdropSource = (op: EffectRenderOp, metadata: BackdropRenderMetadata) => {
@@ -1054,10 +1054,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             const boxW = clip.right - clip.left
             const boxH = clip.bottom - clip.top
             shapeRects.push({
-              x: (clip.left / ctx.buffer.width) * 2 - 1,
-              y: 1 - (clip.top / ctx.buffer.height) * 2,
-              w: (boxW / ctx.buffer.width) * 2,
-              h: -((boxH / ctx.buffer.height) * 2),
+              x: (clip.left / ctx.target.width) * 2 - 1,
+              y: 1 - (clip.top / ctx.target.height) * 2,
+              w: (boxW / ctx.target.width) * 2,
+              h: -((boxH / ctx.target.height) * 2),
               boxW,
               boxH,
               radius: clampShapeRadius(op.inputs.radius, boxW, boxH),
@@ -1066,10 +1066,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             })
           } else {
             rects.push({
-              x: (clip.left / ctx.buffer.width) * 2 - 1,
-              y: 1 - (clip.top / ctx.buffer.height) * 2,
-              w: ((clip.right - clip.left) / ctx.buffer.width) * 2,
-              h: -(((clip.bottom - clip.top) / ctx.buffer.height) * 2),
+              x: (clip.left / ctx.target.width) * 2 - 1,
+              y: 1 - (clip.top / ctx.target.height) * 2,
+              w: ((clip.right - clip.left) / ctx.target.width) * 2,
+              h: -(((clip.bottom - clip.top) / ctx.target.height) * 2),
               color: op.inputs.color,
             })
           }
@@ -1091,7 +1091,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             if (!sprite) return { ok: false, rawLayer: null }
             if (effectOp.effect.transform) {
               ensureLoadedLayer()
-              const bounds = opBounds(effectOp, ctx.buffer.width, ctx.buffer.height)
+              const bounds = opBounds(effectOp, ctx.target.width, ctx.target.height)
               if (bounds) {
         const group = (transformedImageGroups.get(sprite.handle) ?? { handle: sprite.handle, instances: [] as { p0: { x: number; y: number }; p1: { x: number; y: number }; p2: { x: number; y: number }; p3: { x: number; y: number }; opacity: number }[] })
                 const matrix = effectOp.effect.transform
@@ -1104,10 +1104,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
                 const p2 = transformPoint(matrix, 0, height)
                 const p3 = transformPoint(matrix, width, height)
                 group.instances.push({
-                  p0: { x: ((baseX + p0.x) / ctx.buffer.width) * 2 - 1, y: 1 - ((baseY + p0.y) / ctx.buffer.height) * 2 },
-                  p1: { x: ((baseX + p1.x) / ctx.buffer.width) * 2 - 1, y: 1 - ((baseY + p1.y) / ctx.buffer.height) * 2 },
-                  p2: { x: ((baseX + p2.x) / ctx.buffer.width) * 2 - 1, y: 1 - ((baseY + p2.y) / ctx.buffer.height) * 2 },
-                  p3: { x: ((baseX + p3.x) / ctx.buffer.width) * 2 - 1, y: 1 - ((baseY + p3.y) / ctx.buffer.height) * 2 },
+                  p0: { x: ((baseX + p0.x) / ctx.target.width) * 2 - 1, y: 1 - ((baseY + p0.y) / ctx.target.height) * 2 },
+                  p1: { x: ((baseX + p1.x) / ctx.target.width) * 2 - 1, y: 1 - ((baseY + p1.y) / ctx.target.height) * 2 },
+                  p2: { x: ((baseX + p2.x) / ctx.target.width) * 2 - 1, y: 1 - ((baseY + p2.y) / ctx.target.height) * 2 },
+                  p3: { x: ((baseX + p3.x) / ctx.target.width) * 2 - 1, y: 1 - ((baseY + p3.y) / ctx.target.height) * 2 },
                   opacity: effectOpacity,
                 })
                 transformedImageGroups.set(sprite.handle, group)
@@ -1117,10 +1117,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             } else {
               ensureLoadedLayer()
               compositeWgpuCanvasTargetImageLayer(context, targetHandle, sprite.handle, {
-                x: (sprite.bounds.left / ctx.buffer.width) * 2 - 1,
-                y: 1 - (sprite.bounds.top / ctx.buffer.height) * 2,
-                w: ((sprite.bounds.right - sprite.bounds.left) / ctx.buffer.width) * 2,
-                h: -(((sprite.bounds.bottom - sprite.bounds.top) / ctx.buffer.height) * 2),
+                x: (sprite.bounds.left / ctx.target.width) * 2 - 1,
+                y: 1 - (sprite.bounds.top / ctx.target.height) * 2,
+                w: ((sprite.bounds.right - sprite.bounds.left) / ctx.target.width) * 2,
+                h: -(((sprite.bounds.bottom - sprite.bounds.top) / ctx.target.height) * 2),
                 opacity: effectOpacity,
               }, 1, 0x00000000)
               first = false
@@ -1146,10 +1146,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
               radii: cornerRadii,
             })
             compositeWgpuCanvasTargetImageLayer(context, targetHandle, masked, {
-              x: (sprite.bounds.left / ctx.buffer.width) * 2 - 1,
-              y: 1 - (sprite.bounds.top / ctx.buffer.height) * 2,
-              w: ((sprite.bounds.right - sprite.bounds.left) / ctx.buffer.width) * 2,
-              h: -(((sprite.bounds.bottom - sprite.bounds.top) / ctx.buffer.height) * 2),
+              x: (sprite.bounds.left / ctx.target.width) * 2 - 1,
+              y: 1 - (sprite.bounds.top / ctx.target.height) * 2,
+              w: ((sprite.bounds.right - sprite.bounds.left) / ctx.target.width) * 2,
+              h: -(((sprite.bounds.bottom - sprite.bounds.top) / ctx.target.height) * 2),
               opacity: effectOpacity,
             }, first ? 0 : 1, 0x00000000)
             destroyWgpuCanvasImage(context, masked)
@@ -1164,7 +1164,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           }
 
           if (effectOp.effect.transform) {
-            const bounds = opBounds(effectOp, ctx.buffer.width, ctx.buffer.height)
+            const bounds = opBounds(effectOp, ctx.target.width, ctx.target.height)
             if (!bounds) continue
             const handle = getTransformSprite(effectOp)
             if (!handle) return { ok: false, rawLayer: null }
@@ -1179,10 +1179,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             const p2 = transformPoint(matrix, 0, height)
             const p3 = transformPoint(matrix, width, height)
             group.instances.push({
-              p0: { x: ((baseX + p0.x) / ctx.buffer.width) * 2 - 1, y: 1 - ((baseY + p0.y) / ctx.buffer.height) * 2 },
-              p1: { x: ((baseX + p1.x) / ctx.buffer.width) * 2 - 1, y: 1 - ((baseY + p1.y) / ctx.buffer.height) * 2 },
-              p2: { x: ((baseX + p2.x) / ctx.buffer.width) * 2 - 1, y: 1 - ((baseY + p2.y) / ctx.buffer.height) * 2 },
-              p3: { x: ((baseX + p3.x) / ctx.buffer.width) * 2 - 1, y: 1 - ((baseY + p3.y) / ctx.buffer.height) * 2 },
+              p0: { x: ((baseX + p0.x) / ctx.target.width) * 2 - 1, y: 1 - ((baseY + p0.y) / ctx.target.height) * 2 },
+              p1: { x: ((baseX + p1.x) / ctx.target.width) * 2 - 1, y: 1 - ((baseY + p1.y) / ctx.target.height) * 2 },
+              p2: { x: ((baseX + p2.x) / ctx.target.width) * 2 - 1, y: 1 - ((baseY + p2.y) / ctx.target.height) * 2 },
+              p3: { x: ((baseX + p3.x) / ctx.target.width) * 2 - 1, y: 1 - ((baseY + p3.y) / ctx.target.height) * 2 },
               opacity: effectOp.effect.opacity ?? 1,
             })
             transformedImageGroups.set(handle, group)
@@ -1200,10 +1200,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           if (!effectOp.effect.gradient && !effectOp.effect.glow && !effectOp.effect.shadow) {
             if (cornerRadii) {
               shapeRectCorners.push({
-                x: (clip.left / ctx.buffer.width) * 2 - 1,
-                y: 1 - (clip.top / ctx.buffer.height) * 2,
-                w: (boxW / ctx.buffer.width) * 2,
-                h: -((boxH / ctx.buffer.height) * 2),
+                x: (clip.left / ctx.target.width) * 2 - 1,
+                y: 1 - (clip.top / ctx.target.height) * 2,
+                w: (boxW / ctx.target.width) * 2,
+                h: -((boxH / ctx.target.height) * 2),
                 boxW,
                 boxH,
                 radii: cornerRadii,
@@ -1215,10 +1215,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
               continue
             }
             shapeRects.push({
-              x: (clip.left / ctx.buffer.width) * 2 - 1,
-              y: 1 - (clip.top / ctx.buffer.height) * 2,
-              w: (boxW / ctx.buffer.width) * 2,
-              h: -((boxH / ctx.buffer.height) * 2),
+              x: (clip.left / ctx.target.width) * 2 - 1,
+              y: 1 - (clip.top / ctx.target.height) * 2,
+              w: (boxW / ctx.target.width) * 2,
+              h: -((boxH / ctx.target.height) * 2),
               boxW,
               boxH,
               radius,
@@ -1233,10 +1233,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           if (!effectOp.effect.gradient && (effectOp.command.color[3] ?? 0) > 1) {
             if (cornerRadii) {
               shapeRectCorners.push({
-                x: (clip.left / ctx.buffer.width) * 2 - 1,
-                y: 1 - (clip.top / ctx.buffer.height) * 2,
-                w: (boxW / ctx.buffer.width) * 2,
-                h: -((boxH / ctx.buffer.height) * 2),
+                x: (clip.left / ctx.target.width) * 2 - 1,
+                y: 1 - (clip.top / ctx.target.height) * 2,
+                w: (boxW / ctx.target.width) * 2,
+                h: -((boxH / ctx.target.height) * 2),
                 boxW,
                 boxH,
                 radii: cornerRadii,
@@ -1245,10 +1245,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
               })
             } else {
               shapeRects.push({
-                x: (clip.left / ctx.buffer.width) * 2 - 1,
-                y: 1 - (clip.top / ctx.buffer.height) * 2,
-                w: (boxW / ctx.buffer.width) * 2,
-                h: -((boxH / ctx.buffer.height) * 2),
+                x: (clip.left / ctx.target.width) * 2 - 1,
+                y: 1 - (clip.top / ctx.target.height) * 2,
+                w: (boxW / ctx.target.width) * 2,
+                h: -((boxH / ctx.target.height) * 2),
                 boxW,
                 boxH,
                 radius,
@@ -1262,10 +1262,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           if (effectOp.effect.gradient) {
             if (!cornerRadii) {
               shapeRects.push({
-                x: (clip.left / ctx.buffer.width) * 2 - 1,
-                y: 1 - (clip.top / ctx.buffer.height) * 2,
-                w: (boxW / ctx.buffer.width) * 2,
-                h: -((boxH / ctx.buffer.height) * 2),
+                x: (clip.left / ctx.target.width) * 2 - 1,
+                y: 1 - (clip.top / ctx.target.height) * 2,
+                w: (boxW / ctx.target.width) * 2,
+                h: -((boxH / ctx.target.height) * 2),
                 boxW,
                 boxH,
                 radius,
@@ -1274,10 +1274,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
               })
             } else if ((effectOp.command.color[3] ?? 0) > 1) {
               shapeRectCorners.push({
-                x: (clip.left / ctx.buffer.width) * 2 - 1,
-                y: 1 - (clip.top / ctx.buffer.height) * 2,
-                w: (boxW / ctx.buffer.width) * 2,
-                h: -((boxH / ctx.buffer.height) * 2),
+                x: (clip.left / ctx.target.width) * 2 - 1,
+                y: 1 - (clip.top / ctx.target.height) * 2,
+                w: (boxW / ctx.target.width) * 2,
+                h: -((boxH / ctx.target.height) * 2),
                 boxW,
                 boxH,
                 radii: cornerRadii,
@@ -1295,14 +1295,14 @@ export function createGpuRendererBackend(): GpuRendererBackend {
               const pad = blur * 2
               const left = Math.max(0, clip.left + Math.min(0, s.x) - pad)
               const top = Math.max(0, clip.top + Math.min(0, s.y) - pad)
-              const right = Math.min(ctx.buffer.width, clip.right + Math.max(0, s.x) + pad)
-              const bottom = Math.min(ctx.buffer.height, clip.bottom + Math.max(0, s.y) + pad)
+              const right = Math.min(ctx.target.width, clip.right + Math.max(0, s.x) + pad)
+              const bottom = Math.min(ctx.target.height, clip.bottom + Math.max(0, s.y) + pad)
               const intensity = Math.min(100, Math.max(1, Math.round(((s.color & 0xff) / 255) * 100)))
               glows.push({
-                x: (left / ctx.buffer.width) * 2 - 1,
-                y: 1 - (top / ctx.buffer.height) * 2,
-                w: ((right - left) / ctx.buffer.width) * 2,
-                h: -(((bottom - top) / ctx.buffer.height) * 2),
+                x: (left / ctx.target.width) * 2 - 1,
+                y: 1 - (top / ctx.target.height) * 2,
+                w: ((right - left) / ctx.target.width) * 2,
+                h: -(((bottom - top) / ctx.target.height) * 2),
                 color: effectOpacity < 1 ? applyOpacityToColor(s.color, effectOpacity) : s.color,
                 intensity,
               })
@@ -1314,13 +1314,13 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             const margin = effectOp.effect.glow.radius
             const left = Math.max(0, clip.left - margin)
             const top = Math.max(0, clip.top - margin)
-            const right = Math.min(ctx.buffer.width, clip.right + margin)
-            const bottom = Math.min(ctx.buffer.height, clip.bottom + margin)
+            const right = Math.min(ctx.target.width, clip.right + margin)
+            const bottom = Math.min(ctx.target.height, clip.bottom + margin)
             glows.push({
-              x: (left / ctx.buffer.width) * 2 - 1,
-              y: 1 - (top / ctx.buffer.height) * 2,
-              w: ((right - left) / ctx.buffer.width) * 2,
-              h: -(((bottom - top) / ctx.buffer.height) * 2),
+              x: (left / ctx.target.width) * 2 - 1,
+              y: 1 - (top / ctx.target.height) * 2,
+              w: ((right - left) / ctx.target.width) * 2,
+              h: -(((bottom - top) / ctx.target.height) * 2),
               color: effectOpacity < 1 ? applyOpacityToColor(effectOp.effect.glow.color, effectOpacity) : effectOp.effect.glow.color,
               intensity: effectOp.effect.glow.intensity,
             })
@@ -1333,10 +1333,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
               const handle = renderGradientSprite(effectOp.effect.gradient, boxW, boxH, effectOpacity, cornerRadii)
               if (!handle) return { ok: false, rawLayer: null }
               compositeWgpuCanvasTargetImageLayer(context, targetHandle, handle, {
-                x: (clip.left / ctx.buffer.width) * 2 - 1,
-                y: 1 - (clip.top / ctx.buffer.height) * 2,
-                w: (boxW / ctx.buffer.width) * 2,
-                h: -((boxH / ctx.buffer.height) * 2),
+                x: (clip.left / ctx.target.width) * 2 - 1,
+                y: 1 - (clip.top / ctx.target.height) * 2,
+                w: (boxW / ctx.target.width) * 2,
+                h: -((boxH / ctx.target.height) * 2),
                 opacity: 1,
               }, first ? 0 : 1, 0x00000000)
               destroyWgpuCanvasImage(context, handle)
@@ -1348,10 +1348,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             const from = effectOpacity < 1 ? applyOpacityToColor(effectOp.effect.gradient.from, effectOpacity) : effectOp.effect.gradient.from
             const to = effectOpacity < 1 ? applyOpacityToColor(effectOp.effect.gradient.to, effectOpacity) : effectOp.effect.gradient.to
             linearGradients.push({
-              x: (clip.left / ctx.buffer.width) * 2 - 1,
-              y: 1 - (clip.top / ctx.buffer.height) * 2,
-              w: (boxW / ctx.buffer.width) * 2,
-              h: -((boxH / ctx.buffer.height) * 2),
+              x: (clip.left / ctx.target.width) * 2 - 1,
+              y: 1 - (clip.top / ctx.target.height) * 2,
+              w: (boxW / ctx.target.width) * 2,
+              h: -((boxH / ctx.target.height) * 2),
               boxW,
               boxH,
               radius,
@@ -1371,10 +1371,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
               const handle = renderGradientSprite(effectOp.effect.gradient, boxW, boxH, effectOpacity, cornerRadii)
               if (!handle) return { ok: false, rawLayer: null }
               compositeWgpuCanvasTargetImageLayer(context, targetHandle, handle, {
-                x: (clip.left / ctx.buffer.width) * 2 - 1,
-                y: 1 - (clip.top / ctx.buffer.height) * 2,
-                w: (boxW / ctx.buffer.width) * 2,
-                h: -((boxH / ctx.buffer.height) * 2),
+                x: (clip.left / ctx.target.width) * 2 - 1,
+                y: 1 - (clip.top / ctx.target.height) * 2,
+                w: (boxW / ctx.target.width) * 2,
+                h: -((boxH / ctx.target.height) * 2),
                 opacity: 1,
               }, first ? 0 : 1, 0x00000000)
               destroyWgpuCanvasImage(context, handle)
@@ -1386,10 +1386,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             const from = effectOpacity < 1 ? applyOpacityToColor(effectOp.effect.gradient.from, effectOpacity) : effectOp.effect.gradient.from
             const to = effectOpacity < 1 ? applyOpacityToColor(effectOp.effect.gradient.to, effectOpacity) : effectOp.effect.gradient.to
             radialGradients.push({
-              x: (clip.left / ctx.buffer.width) * 2 - 1,
-              y: 1 - (clip.top / ctx.buffer.height) * 2,
-              w: (boxW / ctx.buffer.width) * 2,
-              h: -((boxH / ctx.buffer.height) * 2),
+              x: (clip.left / ctx.target.width) * 2 - 1,
+              y: 1 - (clip.top / ctx.target.height) * 2,
+              w: (boxW / ctx.target.width) * 2,
+              h: -((boxH / ctx.target.height) * 2),
               boxW,
               boxH,
               radius,
@@ -1409,10 +1409,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           const boxH = clip.bottom - clip.top
           if (op.inputs.cornerRadii) {
             shapeRectCorners.push({
-              x: (clip.left / ctx.buffer.width) * 2 - 1,
-              y: 1 - (clip.top / ctx.buffer.height) * 2,
-              w: (boxW / ctx.buffer.width) * 2,
-              h: -((boxH / ctx.buffer.height) * 2),
+              x: (clip.left / ctx.target.width) * 2 - 1,
+              y: 1 - (clip.top / ctx.target.height) * 2,
+              w: (boxW / ctx.target.width) * 2,
+              h: -((boxH / ctx.target.height) * 2),
               boxW,
               boxH,
               radii: op.inputs.cornerRadii,
@@ -1423,10 +1423,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             continue
           }
           shapeRects.push({
-            x: (clip.left / ctx.buffer.width) * 2 - 1,
-            y: 1 - (clip.top / ctx.buffer.height) * 2,
-            w: (boxW / ctx.buffer.width) * 2,
-            h: -((boxH / ctx.buffer.height) * 2),
+            x: (clip.left / ctx.target.width) * 2 - 1,
+            y: 1 - (clip.top / ctx.target.height) * 2,
+            w: (boxW / ctx.target.width) * 2,
+            h: -((boxH / ctx.target.height) * 2),
             boxW,
             boxH,
             radius: clampShapeRadius(op.inputs.radius, boxW, boxH),
@@ -1441,10 +1441,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           if (!imageHandle) return { ok: false, rawLayer: null }
           const group = imageGroups.get(imageHandle) ?? { handle: imageHandle, instances: [] }
           group.instances.push({
-            x: (clip.x / ctx.buffer.width) * 2 - 1,
-            y: 1 - (clip.y / ctx.buffer.height) * 2,
-            w: (clip.w / ctx.buffer.width) * 2,
-            h: -((clip.h / ctx.buffer.height) * 2),
+            x: (clip.x / ctx.target.width) * 2 - 1,
+            y: 1 - (clip.y / ctx.target.height) * 2,
+            w: (clip.w / ctx.target.width) * 2,
+            h: -((clip.h / ctx.target.height) * 2),
             opacity: 1,
           })
           imageGroups.set(imageHandle, group)
@@ -1456,10 +1456,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           if (!imageHandle) return { ok: false, rawLayer: null }
           const group = imageGroups.get(imageHandle) ?? { handle: imageHandle, instances: [] }
           group.instances.push({
-            x: (clip.x / ctx.buffer.width) * 2 - 1,
-            y: 1 - (clip.y / ctx.buffer.height) * 2,
-            w: (clip.w / ctx.buffer.width) * 2,
-            h: -((clip.h / ctx.buffer.height) * 2),
+            x: (clip.x / ctx.target.width) * 2 - 1,
+            y: 1 - (clip.y / ctx.target.height) * 2,
+            w: (clip.w / ctx.target.width) * 2,
+            h: -((clip.h / ctx.target.height) * 2),
             opacity: 1,
           })
           imageGroups.set(imageHandle, group)
@@ -1499,14 +1499,14 @@ export function createGpuRendererBackend(): GpuRendererBackend {
                   const glyphTop = Math.round(cursorY)
                   const glyphRight = glyphLeft + atlasRecord.cellWidth
                   const glyphBottom = glyphTop + atlasRecord.cellHeight
-                  if (glyphRight > 0 && glyphBottom > 0 && glyphLeft < ctx.buffer.width && glyphTop < ctx.buffer.height) {
+                  if (glyphRight > 0 && glyphBottom > 0 && glyphLeft < ctx.target.width && glyphTop < ctx.target.height) {
                     const col = glyphIndex % atlasRecord.columns
                     const row = Math.floor(glyphIndex / atlasRecord.columns)
                     tempGlyphs.push({
-                      x: (glyphLeft / ctx.buffer.width) * 2 - 1,
-                      y: 1 - (glyphTop / ctx.buffer.height) * 2,
-                      w: (atlasRecord.cellWidth / ctx.buffer.width) * 2,
-                      h: -((atlasRecord.cellHeight / ctx.buffer.height) * 2),
+                      x: (glyphLeft / ctx.target.width) * 2 - 1,
+                      y: 1 - (glyphTop / ctx.target.height) * 2,
+                      w: (atlasRecord.cellWidth / ctx.target.width) * 2,
+                      h: -((atlasRecord.cellHeight / ctx.target.height) * 2),
                       u: (col * atlasRecord.cellWidth) / (atlasRecord.cellWidth * atlasRecord.columns),
                       v: (row * atlasRecord.cellHeight) / (atlasRecord.cellHeight * atlasRecord.rows),
                       uw: atlasRecord.cellWidth / (atlasRecord.cellWidth * atlasRecord.columns),
@@ -1520,8 +1520,8 @@ export function createGpuRendererBackend(): GpuRendererBackend {
                     dirtyRects.push({
                       left: Math.max(0, glyphLeft),
                       top: Math.max(0, glyphTop),
-                      right: Math.min(ctx.buffer.width, glyphRight),
-                      bottom: Math.min(ctx.buffer.height, glyphBottom),
+                      right: Math.min(ctx.target.width, glyphRight),
+                      bottom: Math.min(ctx.target.height, glyphBottom),
                     })
                   }
                   cursorX += advance
@@ -1629,7 +1629,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         targetHeight: height,
         backing: null,
         target: { width, height },
-        buffer: { width, height },
         commands: [op.command],
         graph: { ops: [op] },
         offsetX,
@@ -1727,7 +1726,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       const layerCtx = ctx.layer
       const delegatedFrame = !!(currentFrame && frameCtx && currentFrame === frameCtx)
       if (delegatedFrame && frameCtx.useLayerCompositing && layerCtx) {
-        const layerTarget = getLayerTarget(layerCtx.key, ctx.buffer.width, ctx.buffer.height)
+        const layerTarget = getLayerTarget(layerCtx.key, ctx.target.width, ctx.target.height)
         if (!layerTarget) {
           suppressFinalPresentation = true
           failGpuOnly(`could not allocate GPU layer target for ${layerCtx.key}`)
@@ -1753,10 +1752,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           })
           return { output: "skip-present", strategy: lastStrategy }
         }
-        return { output: "raw-layer", strategy: lastStrategy, rawLayer: result.rawLayer ?? undefined }
+        return { output: "kitty-payload", strategy: lastStrategy, kittyPayload: result.rawLayer ?? undefined }
       }
 
-      const standaloneHandle = getStandaloneTarget(ctx.buffer.width, ctx.buffer.height)
+      const standaloneHandle = getStandaloneTarget(ctx.target.width, ctx.target.height)
       if (!standaloneHandle) {
         suppressFinalPresentation = true
         failGpuOnly("could not allocate standalone GPU target")
@@ -1766,7 +1765,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         suppressFinalPresentation = true
         failGpuOnly("standalone GPU render failed")
       }
-      return { output: "raw-layer", strategy: lastStrategy, rawLayer: result.rawLayer ?? undefined }
+      return { output: "kitty-payload", strategy: lastStrategy, kittyPayload: result.rawLayer ?? undefined }
     },
     reuseLayer(ctx) {
       if (!gpuAvailable || !context) return false

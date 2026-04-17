@@ -50,9 +50,9 @@ export type RendererBackendLayerContext = {
 }
 
 export type RendererBackendPaintResult = {
-  output: "raw-layer" | "skip-present"
+  output: "kitty-payload" | "skip-present"
   strategy?: GpuLayerStrategyMode | null
-  rawLayer?: {
+  kittyPayload?: {
     data: Uint8Array
     width: number
     height: number
@@ -79,11 +79,6 @@ export type RendererBackendPaintContext = {
   backing: RendererBackendLayerBacking | null
   /** GPU target descriptor for the current paint. Width/height only — no raw bytes. */
   target: {
-    width: number
-    height: number
-  }
-  /** Compatibility alias while backend code still reads `ctx.buffer.width/height`. No raw bytes live here. */
-  buffer: {
     width: number
     height: number
   }
