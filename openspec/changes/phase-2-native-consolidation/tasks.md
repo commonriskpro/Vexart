@@ -150,14 +150,14 @@ Objective: Rewire TS consumer code from old Clay/Zig/bridge paths to new `vexart
 
 - [x] [ATOMIC] 9.1 Modify `packages/engine/src/ffi/node.ts`: convert internal shape from Clay-oriented to flat command buffer format per design §8. Each node emits a `cmd_kind` + `flags` + `payload_bytes` prefix. Per design §11.
 - [x] [ATOMIC] 9.2 Modify `packages/engine/src/ffi/render-graph.ts`: remove `import ... from "./clay"` (Clay type dependencies), keep all exported types (`ShadowDef`, `EffectConfig`, `BackdropFilterParams`, `RenderGraphFrame`, `RectangleRenderOp`, etc.), adapt `buildRenderGraphFrame()` to serialize into the §8 packed graph buffer format consumed by `vexart_paint_dispatch`. Per design §16 Q3 resolution, §11.
-- [ ] [ATOMIC] 9.3 Modify `packages/engine/src/ffi/gpu-renderer-backend.ts` (78KB — largest TS change): rework to emit to packed graph buffer, call `vexart_paint_dispatch` once per frame instead of per-operation bridge calls. Split into sub-tasks:
-  - [ ] 9.3a Remove all `tge_wgpu_canvas_*` per-operation calls. Replace with graph buffer accumulation.
-  - [ ] 9.3b Add graph buffer header write at frame start, per-command prefix write for each render op, body serialization matching Rust `instances.rs` layouts.
-  - [ ] 9.3c Replace image upload/download with `vexart_paint_upload_image` / `vexart_paint_remove_image`.
-  - [ ] 9.3d Replace readback with `vexart_composite_readback_rgba` / `vexart_composite_readback_region_rgba`.
-- [ ] [ATOMIC] 9.4 Modify `packages/engine/src/ffi/renderer-backend.ts`: update `RenderGraphFrame` consumer to new shape from render-graph.ts. Per design §11.
+- [x] [ATOMIC] 9.3 Modify `packages/engine/src/ffi/gpu-renderer-backend.ts` (78KB — largest TS change): rework to emit to packed graph buffer, call `vexart_paint_dispatch` once per frame instead of per-operation bridge calls. Split into sub-tasks:
+  - [x] 9.3a Remove all `tge_wgpu_canvas_*` per-operation calls. Replace with graph buffer accumulation.
+  - [x] 9.3b Add graph buffer header write at frame start, per-command prefix write for each render op, body serialization matching Rust `instances.rs` layouts.
+  - [x] 9.3c Replace image upload/download with `vexart_paint_upload_image` / `vexart_paint_remove_image`.
+  - [x] 9.3d Replace readback with `vexart_composite_readback_rgba` / `vexart_composite_readback_region_rgba`.
+- [x] [ATOMIC] 9.4 Modify `packages/engine/src/ffi/renderer-backend.ts`: update `RenderGraphFrame` consumer to new shape from render-graph.ts. Per design §11.
 - [ ] [ATOMIC] 9.5 Modify `packages/engine/src/ffi/layout-writeback.ts`: rewire from Clay layout output shape to Taffy layout output shape (flat `PositionedCommand` buffer). Per design §10, §11.
-- [ ] [ATOMIC] 9.6 Modify `packages/engine/src/ffi/canvas.ts`: rewire from `tge_wgpu_canvas_*` calls to `vexart_paint_*` + `vexart_composite_*`. Per design §11.
+- [x] [ATOMIC] 9.6 Modify `packages/engine/src/ffi/canvas.ts`: rewire from `tge_wgpu_canvas_*` calls to `vexart_paint_*` + `vexart_composite_*`. Per design §11.
 - [ ] [ATOMIC] 9.7 Modify `packages/engine/src/ffi/font-atlas.ts`: adapt to Phase 2 text stub — no glyph data uploaded, calls `vexart_text_load_atlas` (success no-op). Per design §11.
 - [ ] [ATOMIC] 9.8 Modify `packages/engine/src/ffi/text-layout.ts`: adapt to Phase 2 text stub — `vexart_text_measure` returns `(0, 0)`, text nodes occupy zero layout space. Per design §11, DEC-011.
 - [ ] [ATOMIC] 9.9 Modify `packages/engine/src/loop/loop.ts`: replace `clay.*` calls with `vexart_context_*` + `vexart_layout_*` + `vexart_paint_*` + `vexart_composite_*` via new bridge. Remove Clay layout orchestration. Per design §11.

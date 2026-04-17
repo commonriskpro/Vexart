@@ -1,4 +1,11 @@
+// gpu-renderer-backend.ts — Phase 2 native path
+// Rewired from tge_wgpu_canvas_* bridge calls to vexart_paint_dispatch + vexart_composite_*
+// per design §11, §8.2 cmd_kind allocation. Shadow preserved at L1502-1521 as glow (cmd_kind=6).
+// Per §17.3: shadow emits GlowInstance with offset (s.x,s.y), padding (s.blur*2).
+// wgpu-canvas-bridge.ts is still imported for canvas sprite helpers (deleted in Slice 11).
+
 import { appendFileSync } from "node:fs"
+import { ptr } from "bun:ffi"
 import { CanvasContext } from "./canvas"
 import { getAtlas } from "./font-atlas"
 import { transformBounds, transformPoint } from "./matrix"
@@ -13,7 +20,14 @@ import type {
 } from "./renderer-backend"
 import { chooseGpuLayerStrategy, type GpuLayerStrategyMode } from "./gpu-layer-strategy"
 import { getFont, layoutText } from "./text-layout"
+import { openVexartLibrary } from "./vexart-bridge"
 import {
+  GRAPH_MAGIC, GRAPH_VERSION,
+} from "./vexart-buffer"
+import {
+  // Canvas sprite helpers — still using wgpu-canvas-bridge for canvas/gradient sprite
+  // rendering until Slice 11 deletes those legacy files. These are isolated to the
+  // getCanvasSprite and renderGradientSprite helpers only.
   beginWgpuCanvasTargetLayer,
   compositeWgpuCanvasTargetImageLayer,
   createWgpuCanvasContext,
@@ -53,6 +67,182 @@ import {
   copyGpuTargetRegionToImage,
   createEmptyGpuImage,
 } from "./gpu-raster-staging"
+
+// ── vexart graph buffer helpers ─────────────────────────────────────────────
+// Per design §8: 16-byte header + 8-byte per-command prefix + body.
+// Used by flushVexartBatch() to build the packed buffer and call vexart_paint_dispatch.
+
+/** Write u16 little-endian at offset in DataView */
+function vu16(view: DataView, offset: number, val: number) { view.setUint16(offset, val, true) }
+/** Write u32 little-endian at offset in DataView */
+function vu32(view: DataView, offset: number, val: number) { view.setUint32(offset, val, true) }
+/** Write f32 little-endian at offset in DataView */
+function vf32(view: DataView, offset: number, val: number) { view.setFloat32(offset, val, true) }
+
+// Image upload registry: WeakMap<Uint8Array, u64 handle> for vexart_paint_upload_image.
+// Handles are stored as BigInt since FFI u64 may exceed safe integer range.
+const _vexartImageHandles = new WeakMap<Uint8Array, bigint>()
+
+/** Upload an RGBA image via vexart_paint_upload_image. Returns u64 handle or 0n on failure. */
+function vexartUploadImage(ctx: bigint, data: Uint8Array, width: number, height: number): bigint {
+  const cached = _vexartImageHandles.get(data)
+  if (cached !== undefined) return cached
+  const { symbols } = openVexartLibrary()
+  const handleBuf = new BigUint64Array(1)
+  const handlePtr = ptr(handleBuf)
+  const result = symbols.vexart_paint_upload_image(
+    ctx, ptr(data), data.byteLength, width, height, 0 /* format=RGBA */, handlePtr
+  ) as number
+  if (result !== 0) return 0n
+  const handle = handleBuf[0]
+  _vexartImageHandles.set(data, handle)
+  return handle
+}
+
+/** Release a vexart image handle. */
+function vexartRemoveImage(ctx: bigint, handle: bigint) {
+  if (!handle) return
+  const { symbols } = openVexartLibrary()
+  symbols.vexart_paint_remove_image(ctx, handle)
+}
+
+/** Readback RGBA from vexart context default target. Returns Uint8Array or null. */
+function vexartReadbackRgba(ctx: bigint, width: number, height: number): Uint8Array | null {
+  const { symbols } = openVexartLibrary()
+  const size = width * height * 4
+  const dst = new Uint8Array(size)
+  const statsPtr = null as unknown as Uint8Array  // null ptr
+  const result = symbols.vexart_composite_readback_rgba(
+    ctx, 0n /* target=0: context default */, ptr(dst), size, ptr(new Uint8Array(32))
+  ) as number
+  if (result !== 0) return null
+  return dst
+}
+
+/**
+ * Build a §8 graph buffer containing the given instances and call vexart_paint_dispatch.
+ * instanceData: flat packed bytes for all instances of this cmd_kind.
+ * cmd_kind: one of 0-17 per §8.2.
+ */
+function flushVexartBatch(ctx: bigint, cmdKind: number, instanceData: Uint8Array): void {
+  if (instanceData.byteLength === 0) return
+  const { symbols } = openVexartLibrary()
+  const PREFIX = 8
+  const HEADER = 16
+  const total = HEADER + PREFIX + instanceData.byteLength
+  const buf = new ArrayBuffer(total)
+  const view = new DataView(buf)
+  // Header
+  vu32(view, 0, GRAPH_MAGIC)
+  vu32(view, 4, GRAPH_VERSION)
+  vu32(view, 8, 1)   // cmd_count = 1
+  vu32(view, 12, PREFIX + instanceData.byteLength)  // payload_bytes
+  // Command prefix
+  vu16(view, 16, cmdKind)
+  vu16(view, 18, 0)  // flags = 0
+  vu32(view, 20, instanceData.byteLength)
+  // Instance data
+  new Uint8Array(buf).set(instanceData, HEADER + PREFIX)
+  const statsOut = new Uint8Array(32)
+  symbols.vexart_paint_dispatch(ctx, 0n, ptr(new Uint8Array(buf)), total, ptr(statsOut))
+}
+
+/** Pack BridgeRectInstance (8 floats: x,y,w,h,r,g,b,a) for cmd_kind=0. */
+function packRectInstance(x: number, y: number, w: number, h: number, color: number): Uint8Array {
+  const r = ((color >>> 24) & 0xff) / 255
+  const g = ((color >>> 16) & 0xff) / 255
+  const b = ((color >>> 8) & 0xff) / 255
+  const a = (color & 0xff) / 255
+  const buf = new ArrayBuffer(32)
+  const v = new DataView(buf)
+  vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
+  vf32(v, 16, r); vf32(v, 20, g); vf32(v, 24, b); vf32(v, 28, a)
+  return new Uint8Array(buf)
+}
+
+/**
+ * Pack BridgeShapeRectInstance (20 floats: x,y,w,h + fill rgba + stroke rgba +
+ * radius + strokeWidth + hasFill + hasStroke + sizeX + sizeY + pad*2) for cmd_kind=1.
+ */
+function packShapeRectInstance(x: number, y: number, w: number, h: number, boxW: number, boxH: number, radius: number, fill: number, stroke: number, strokeWidth: number): Uint8Array {
+  const buf = new ArrayBuffer(80)
+  const v = new DataView(buf)
+  const fr = ((fill >>> 24) & 0xff) / 255; const fg = ((fill >>> 16) & 0xff) / 255; const fb = ((fill >>> 8) & 0xff) / 255; const fa = (fill & 0xff) / 255
+  const sr = ((stroke >>> 24) & 0xff) / 255; const sg = ((stroke >>> 16) & 0xff) / 255; const sb = ((stroke >>> 8) & 0xff) / 255; const sa = (stroke & 0xff) / 255
+  const hasFill = (fill & 0xff) > 0 ? 1.0 : 0.0
+  const hasStroke = strokeWidth > 0 && (stroke & 0xff) > 0 ? 1.0 : 0.0
+  vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
+  vf32(v, 16, fr); vf32(v, 20, fg); vf32(v, 24, fb); vf32(v, 28, fa)
+  vf32(v, 32, sr); vf32(v, 36, sg); vf32(v, 40, sb); vf32(v, 44, sa)
+  vf32(v, 48, radius); vf32(v, 52, strokeWidth); vf32(v, 56, hasFill); vf32(v, 60, hasStroke)
+  vf32(v, 64, boxW); vf32(v, 68, boxH); vf32(v, 72, 0); vf32(v, 76, 0)
+  return new Uint8Array(buf)
+}
+
+/**
+ * Pack BridgeShapeRectCornersInstance (24 floats) for cmd_kind=2.
+ */
+function packShapeRectCornersInstance(x: number, y: number, w: number, h: number, boxW: number, boxH: number, radii: { tl: number; tr: number; br: number; bl: number }, fill: number, stroke: number, strokeWidth: number): Uint8Array {
+  const buf = new ArrayBuffer(96)
+  const v = new DataView(buf)
+  const fr = ((fill >>> 24) & 0xff) / 255; const fg = ((fill >>> 16) & 0xff) / 255; const fb = ((fill >>> 8) & 0xff) / 255; const fa = (fill & 0xff) / 255
+  const sr = ((stroke >>> 24) & 0xff) / 255; const sg = ((stroke >>> 16) & 0xff) / 255; const sb = ((stroke >>> 8) & 0xff) / 255; const sa = (stroke & 0xff) / 255
+  const hasFill = (fill & 0xff) > 0 ? 1.0 : 0.0
+  const hasStroke = strokeWidth > 0 && (stroke & 0xff) > 0 ? 1.0 : 0.0
+  vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
+  vf32(v, 16, fr); vf32(v, 20, fg); vf32(v, 24, fb); vf32(v, 28, fa)
+  vf32(v, 32, sr); vf32(v, 36, sg); vf32(v, 40, sb); vf32(v, 44, sa)
+  vf32(v, 48, radii.tl); vf32(v, 52, radii.tr); vf32(v, 56, radii.br); vf32(v, 60, radii.bl)
+  vf32(v, 64, strokeWidth); vf32(v, 68, hasFill); vf32(v, 72, hasStroke); vf32(v, 76, boxW)
+  vf32(v, 80, boxH); vf32(v, 84, 0); vf32(v, 88, 0); vf32(v, 92, 0)
+  return new Uint8Array(buf)
+}
+
+/**
+ * Pack BridgeGlowInstance (12 floats: x,y,w,h + r,g,b,a + intensity + pad*3) for cmd_kind=6.
+ * Used for both glow and shadow (shadow = glow with offset-adjusted rect per §17.3).
+ */
+function packGlowInstance(x: number, y: number, w: number, h: number, color: number, intensity: number): Uint8Array {
+  const buf = new ArrayBuffer(48)
+  const v = new DataView(buf)
+  const r = ((color >>> 24) & 0xff) / 255; const g = ((color >>> 16) & 0xff) / 255; const b = ((color >>> 8) & 0xff) / 255; const a = (color & 0xff) / 255
+  vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
+  vf32(v, 16, r); vf32(v, 20, g); vf32(v, 24, b); vf32(v, 28, a)
+  vf32(v, 32, intensity); vf32(v, 36, 0); vf32(v, 40, 0); vf32(v, 44, 0)
+  return new Uint8Array(buf)
+}
+
+/**
+ * Pack BridgeLinearGradientInstance (20 floats) for cmd_kind=12.
+ */
+function packLinearGradientInstance(x: number, y: number, w: number, h: number, boxW: number, boxH: number, radius: number, from: number, to: number, dirX: number, dirY: number): Uint8Array {
+  const buf = new ArrayBuffer(80)
+  const v = new DataView(buf)
+  const fr = ((from >>> 24) & 0xff) / 255; const fg = ((from >>> 16) & 0xff) / 255; const fb = ((from >>> 8) & 0xff) / 255; const fa = (from & 0xff) / 255
+  const tr = ((to >>> 24) & 0xff) / 255; const tg = ((to >>> 16) & 0xff) / 255; const tb = ((to >>> 8) & 0xff) / 255; const ta = (to & 0xff) / 255
+  vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
+  vf32(v, 16, boxW); vf32(v, 20, boxH); vf32(v, 24, radius); vf32(v, 28, 0)
+  vf32(v, 32, fr); vf32(v, 36, fg); vf32(v, 40, fb); vf32(v, 44, fa)
+  vf32(v, 48, tr); vf32(v, 52, tg); vf32(v, 56, tb); vf32(v, 60, ta)
+  vf32(v, 64, dirX); vf32(v, 68, dirY); vf32(v, 72, 0); vf32(v, 76, 0)
+  return new Uint8Array(buf)
+}
+
+/**
+ * Pack BridgeRadialGradientInstance (20 floats) for cmd_kind=13.
+ */
+function packRadialGradientInstance(x: number, y: number, w: number, h: number, boxW: number, boxH: number, radius: number, from: number, to: number): Uint8Array {
+  const buf = new ArrayBuffer(80)
+  const v = new DataView(buf)
+  const fr = ((from >>> 24) & 0xff) / 255; const fg = ((from >>> 16) & 0xff) / 255; const fb = ((from >>> 8) & 0xff) / 255; const fa = (from & 0xff) / 255
+  const tr = ((to >>> 24) & 0xff) / 255; const tg = ((to >>> 16) & 0xff) / 255; const tb = ((to >>> 8) & 0xff) / 255; const ta = (to & 0xff) / 255
+  vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
+  vf32(v, 16, boxW); vf32(v, 20, boxH); vf32(v, 24, radius); vf32(v, 28, 0)
+  vf32(v, 32, fr); vf32(v, 36, fg); vf32(v, 40, fb); vf32(v, 44, fa)
+  vf32(v, 48, tr); vf32(v, 52, tg); vf32(v, 56, tb); vf32(v, 60, ta)
+  vf32(v, 64, 0); vf32(v, 68, 0); vf32(v, 72, 0); vf32(v, 76, 0)
+  return new Uint8Array(buf)
+}
 
 export type GpuRendererBackend = RendererBackend & {
   getLastStrategy: () => GpuLayerStrategyMode | null
@@ -393,6 +583,20 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   const probe = probeWgpuCanvasBridge()
   const gpuAvailable = probe.available
   const context = gpuAvailable ? createWgpuCanvasContext() : null
+
+  // vexart context handle — allocated on first use.
+  // Phase 2: used for vexart_paint_dispatch (flush) and readback.
+  let _vexartCtx: bigint | null = null
+  function getVexartCtx(): bigint {
+    if (_vexartCtx !== null) return _vexartCtx
+    const { symbols } = openVexartLibrary()
+    const ctxBuf = new BigUint64Array(1)
+    const optsPtr = ptr(new Uint8Array(0))
+    const result = symbols.vexart_context_create(optsPtr, 0, ptr(ctxBuf)) as number
+    if (result !== 0) return 0n
+    _vexartCtx = ctxBuf[0]
+    return _vexartCtx
+  }
   let lastStrategy: GpuLayerStrategyMode | null = null
   let standaloneTarget: TargetRecord | null = null
   let finalFrameTarget: TargetRecord | null = null
@@ -1071,50 +1275,94 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     dirtyRects.length = 0
     let targetMutationVersion = 0
 
+    // ── vexart_paint_dispatch flush helpers ───────────────────────────────
+    // Per design §11 / §8.2: each flush accumulates instances, packs into
+    // a graph buffer per cmd_kind, then calls vexart_paint_dispatch once.
+    const vctx = getVexartCtx()
+
     const flushRects = () => {
       if (rects.length === 0) return
-      renderWgpuCanvasTargetRectsLayer(context, targetHandle, rects, first ? 0 : 1, 0x00000000)
+      // Dispatch via vexart_paint_dispatch (cmd_kind=0: BridgeRectInstance)
+      const instances = new Uint8Array(rects.length * 32)
+      for (let i = 0; i < rects.length; i++) {
+        const r = rects[i]
+        instances.set(packRectInstance(r.x, r.y, r.w, r.h, r.color), i * 32)
+      }
+      flushVexartBatch(vctx, 0, instances)
       rects.length = 0
       first = false
       targetMutationVersion += 1
     }
     const flushShapeRects = () => {
       if (shapeRects.length === 0) return
-      renderWgpuCanvasTargetShapeRectsLayer(context, targetHandle, shapeRects, first ? 0 : 1, 0x00000000)
+      // Dispatch via vexart_paint_dispatch (cmd_kind=1: BridgeShapeRectInstance)
+      const instances = new Uint8Array(shapeRects.length * 80)
+      for (let i = 0; i < shapeRects.length; i++) {
+        const r = shapeRects[i]
+        instances.set(packShapeRectInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.fill ?? 0, r.stroke ?? 0, r.strokeWidth), i * 80)
+      }
+      flushVexartBatch(vctx, 1, instances)
       shapeRects.length = 0
       first = false
       targetMutationVersion += 1
     }
     const flushShapeRectCorners = () => {
       if (shapeRectCorners.length === 0) return
-      renderWgpuCanvasTargetShapeRectCornersLayer(context, targetHandle, shapeRectCorners, first ? 0 : 1, 0x00000000)
+      // Dispatch via vexart_paint_dispatch (cmd_kind=2: BridgeShapeRectCornersInstance)
+      const instances = new Uint8Array(shapeRectCorners.length * 96)
+      for (let i = 0; i < shapeRectCorners.length; i++) {
+        const r = shapeRectCorners[i]
+        instances.set(packShapeRectCornersInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radii, r.fill ?? 0, r.stroke ?? 0, r.strokeWidth), i * 96)
+      }
+      flushVexartBatch(vctx, 2, instances)
       shapeRectCorners.length = 0
       first = false
       targetMutationVersion += 1
     }
     const flushLinearGradients = () => {
       if (linearGradients.length === 0) return
-      renderWgpuCanvasTargetLinearGradientsLayer(context, targetHandle, linearGradients, first ? 0 : 1, 0x00000000)
+      // Dispatch via vexart_paint_dispatch (cmd_kind=12: BridgeLinearGradientInstance)
+      const instances = new Uint8Array(linearGradients.length * 80)
+      for (let i = 0; i < linearGradients.length; i++) {
+        const r = linearGradients[i]
+        instances.set(packLinearGradientInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.from, r.to, r.dirX, r.dirY), i * 80)
+      }
+      flushVexartBatch(vctx, 12, instances)
       linearGradients.length = 0
       first = false
       targetMutationVersion += 1
     }
     const flushRadialGradients = () => {
       if (radialGradients.length === 0) return
-      renderWgpuCanvasTargetRadialGradientsLayer(context, targetHandle, radialGradients, first ? 0 : 1, 0x00000000)
+      // Dispatch via vexart_paint_dispatch (cmd_kind=13: BridgeRadialGradientInstance)
+      const instances = new Uint8Array(radialGradients.length * 80)
+      for (let i = 0; i < radialGradients.length; i++) {
+        const r = radialGradients[i]
+        instances.set(packRadialGradientInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.from, r.to), i * 80)
+      }
+      flushVexartBatch(vctx, 13, instances)
       radialGradients.length = 0
       first = false
       targetMutationVersion += 1
     }
     const flushGlows = () => {
       if (glows.length === 0) return
-      renderWgpuCanvasTargetGlowsLayer(context, targetHandle, glows, first ? 0 : 1, 0x00000000)
+      // Dispatch via vexart_paint_dispatch (cmd_kind=6: BridgeGlowInstance)
+      // NOTE: shadow also uses cmd_kind=6 via offset-adjusted rect per design §17.3
+      const instances = new Uint8Array(glows.length * 48)
+      for (let i = 0; i < glows.length; i++) {
+        const g = glows[i]
+        instances.set(packGlowInstance(g.x, g.y, g.w, g.h, g.color, g.intensity ?? 80), i * 48)
+      }
+      flushVexartBatch(vctx, 6, instances)
       glows.length = 0
       first = false
       targetMutationVersion += 1
     }
     const flushImages = () => {
       if (imageGroups.size === 0) return
+      // Images still use legacy bridge for now (cmd_kind=9 via wgpu-canvas-bridge)
+      // — full image migration in Slice 11. The imageGroups map keys are WgpuCanvasImageHandle.
       for (const group of imageGroups.values()) {
         renderWgpuCanvasTargetImagesLayer(context, targetHandle, group.handle, group.instances, first ? 0 : 1, 0x00000000)
         first = false
@@ -1124,6 +1372,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     }
     const flushGlyphs = () => {
       if (glyphGroups.size === 0) return
+      // Glyphs still use legacy bridge (cmd_kind=11 reserved per DEC-011)
       for (const group of glyphGroups.values()) {
         renderWgpuCanvasTargetGlyphsLayer(context, targetHandle, group.handle, group.instances, first ? 0 : 1, 0x00000000)
         first = false
@@ -1762,12 +2011,15 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       for (const handle of transientFullFrameImages) destroyWgpuCanvasImage(context, handle)
       return { ok: true as const, rawLayer: null }
     }
-    const readback = readbackWgpuCanvasTargetRGBA(context, targetHandle, ctx.targetWidth * ctx.targetHeight * 4)
+    // 9.3d: Use vexart_composite_readback_rgba instead of tge_wgpu_canvas readback.
+    const vCtx = getVexartCtx()
+    const rgba = vexartReadbackRgba(vCtx, ctx.targetWidth, ctx.targetHeight)
     for (const handle of transientFullFrameImages) destroyWgpuCanvasImage(context, handle)
+    if (!rgba) return { ok: false, rawLayer: null }
     return {
       ok: true as const,
       rawLayer: {
-        data: readback.data,
+        data: rgba,
         width: ctx.targetWidth,
         height: ctx.targetHeight,
       },
