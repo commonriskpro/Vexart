@@ -1,34 +1,123 @@
 // native/libvexart/src/paint/pipelines/mod.rs
-// Pipeline registry — each render pipeline lives in its own submodule.
-// Stubs here; real WGSL + RenderPipeline creation lands in Slice 5.
+// PipelineRegistry: holds all 13 ported GPU render pipelines.
+// Per design §17.1, §17.6, tasks 5a.2–5a.15.
 
-// Slice 5 pipeline modules (created empty for now):
-// pub mod rect;
-// pub mod rect_corners;
-// pub mod circle;
-// pub mod line;
-// pub mod bezier;
-// pub mod polygon;
-// pub mod gradient_linear;
-// pub mod gradient_radial;
-// pub mod gradient_conic;
-// pub mod gradient_stroke;
-// pub mod image;
-// pub mod image_transform;
-// pub mod glow;
-// pub mod shadow;
-// pub mod blur;
-// pub mod filter;
-// pub mod blend;
+pub mod bezier;
+pub mod circle;
+pub mod glow;
+pub mod gradient_linear;
+pub mod gradient_radial;
+pub mod image;
+pub mod image_transform;
+pub mod nebula;
+pub mod polygon;
+pub mod rect;
+pub mod rect_corners;
+pub mod shape_rect;
+pub mod starfield;
 
-/// Holds all render pipelines per kind. Empty in Phase 2 Slice 2.
+use wgpu::{BindGroupLayout, Device, RenderPipeline, TextureFormat};
+
+/// Holds all 13 ported render pipelines indexed by cmd_kind.
+/// cmd_kind allocation per design §17.6:
+///   0 = rect, 1 = shape_rect, 2 = shape_rect_corners, 3 = circle,
+///   4 = polygon, 5 = bezier, 6 = glow, 7 = nebula, 8 = starfield,
+///   9 = image, 10 = image_transform, 11 = gradient_linear, 12 = gradient_radial
+/// (11 is reserved-unused for glyph per DEC-011; actual cmd_kind 11 not dispatched)
 pub struct PipelineRegistry {
-    // TODO(Slice 5): add wgpu::RenderPipeline fields per primitive kind.
-    _placeholder: (),
+    pub rect: RenderPipeline,
+    pub shape_rect: RenderPipeline,
+    pub shape_rect_corners: RenderPipeline,
+    pub circle: RenderPipeline,
+    pub polygon: RenderPipeline,
+    pub bezier: RenderPipeline,
+    pub glow: RenderPipeline,
+    pub nebula: RenderPipeline,
+    pub starfield: RenderPipeline,
+    pub image: RenderPipeline,
+    pub image_transform: RenderPipeline,
+    pub gradient_linear: RenderPipeline,
+    pub gradient_radial: RenderPipeline,
 }
 
 impl PipelineRegistry {
-    pub fn new_stub() -> Self {
-        Self { _placeholder: () }
+    /// Create all 13 pipelines. Called once at WgpuContext init.
+    pub fn new(device: &Device, format: TextureFormat, image_bgl: &BindGroupLayout) -> Self {
+        Self {
+            rect: rect::create(device, format),
+            shape_rect: shape_rect::create(device, format),
+            shape_rect_corners: rect_corners::create(device, format),
+            circle: circle::create(device, format),
+            polygon: polygon::create(device, format),
+            bezier: bezier::create(device, format),
+            glow: glow::create(device, format),
+            nebula: nebula::create(device, format),
+            starfield: starfield::create(device, format),
+            image: image::create(device, format, image_bgl),
+            image_transform: image_transform::create(device, format, image_bgl),
+            gradient_linear: gradient_linear::create(device, format),
+            gradient_radial: gradient_radial::create(device, format),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(feature = "gpu-tests")]
+    #[test]
+    fn test_pipeline_registry_creates_all() {
+        use super::*;
+        use wgpu::TextureFormat;
+
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            flags: wgpu::InstanceFlags::empty(),
+            backend_options: wgpu::BackendOptions::default(),
+            memory_budget_thresholds: Default::default(),
+            display: Default::default(),
+        });
+
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::default(),
+            compatible_surface: None,
+            force_fallback_adapter: false,
+        }))
+        .expect("no adapter");
+
+        let (device, _queue) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+                label: Some("test-device"),
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::downlevel_defaults(),
+                memory_hints: wgpu::MemoryHints::Performance,
+                trace: wgpu::Trace::Off,
+                experimental_features: Default::default(),
+            }))
+            .expect("device creation failed");
+
+        let image_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("test-image-bgl"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+
+        // Should not panic — all 13 pipelines compile successfully.
+        let _registry = PipelineRegistry::new(&device, TextureFormat::Rgba8Unorm, &image_bgl);
     }
 }

@@ -119,6 +119,338 @@ pub struct ImageInstance {
     pub uv: [f32; 4],      // u0, v0, u1, v1
 }
 
+// ─── Bridge-layout structs for Slice 5a pipeline port ─────────────────────
+// These mirror the exact field layout from native/wgpu-canvas-bridge/src/lib.rs.
+// They are used directly by the pipeline VertexBufferLayout in Slice 5a.
+// Slice 9 may reconcile with the engine TS struct shape.
+
+/// Mirrors bridge RectFillInstance (8 floats: x,y,w,h + r,g,b,a).
+/// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct BridgeRectInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+    pub a: f32,
+}
+
+/// Mirrors bridge CircleInstance (16 floats).
+/// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct BridgeCircleInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub fill_r: f32,
+    pub fill_g: f32,
+    pub fill_b: f32,
+    pub fill_a: f32,
+    pub stroke_r: f32,
+    pub stroke_g: f32,
+    pub stroke_b: f32,
+    pub stroke_a: f32,
+    pub stroke_norm: f32,
+    pub has_fill: f32,
+    pub has_stroke: f32,
+    pub _pad0: f32,
+}
+
+/// Mirrors bridge PolygonInstance (20 floats).
+/// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct BridgePolygonInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub fill_r: f32,
+    pub fill_g: f32,
+    pub fill_b: f32,
+    pub fill_a: f32,
+    pub stroke_r: f32,
+    pub stroke_g: f32,
+    pub stroke_b: f32,
+    pub stroke_a: f32,
+    pub stroke_norm: f32,
+    pub has_fill: f32,
+    pub has_stroke: f32,
+    pub sides: f32,
+    pub rotation_deg: f32,
+    pub _pad0: f32,
+    pub _pad1: f32,
+    pub _pad2: f32,
+}
+
+/// Mirrors bridge BezierInstance (20 floats).
+/// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct BridgeBezierInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub x0: f32,
+    pub y0: f32,
+    pub cx: f32,
+    pub cy: f32,
+    pub x1: f32,
+    pub y1: f32,
+    pub size_x: f32,
+    pub size_y: f32,
+    pub color_r: f32,
+    pub color_g: f32,
+    pub color_b: f32,
+    pub color_a: f32,
+    pub stroke_width: f32,
+    pub aa_width: f32,
+    pub _pad0: f32,
+    pub _pad1: f32,
+}
+
+/// Mirrors bridge ShapeRectInstance (20 floats).
+/// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct BridgeShapeRectInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub fill_r: f32,
+    pub fill_g: f32,
+    pub fill_b: f32,
+    pub fill_a: f32,
+    pub stroke_r: f32,
+    pub stroke_g: f32,
+    pub stroke_b: f32,
+    pub stroke_a: f32,
+    pub radius: f32,
+    pub stroke_width: f32,
+    pub has_fill: f32,
+    pub has_stroke: f32,
+    pub size_x: f32,
+    pub size_y: f32,
+    pub _pad0: f32,
+    pub _pad1: f32,
+}
+
+/// Mirrors bridge ShapeRectCornersInstance (24 floats).
+/// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct BridgeShapeRectCornersInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub fill_r: f32,
+    pub fill_g: f32,
+    pub fill_b: f32,
+    pub fill_a: f32,
+    pub stroke_r: f32,
+    pub stroke_g: f32,
+    pub stroke_b: f32,
+    pub stroke_a: f32,
+    pub radius_tl: f32,
+    pub radius_tr: f32,
+    pub radius_br: f32,
+    pub radius_bl: f32,
+    pub stroke_width: f32,
+    pub has_fill: f32,
+    pub has_stroke: f32,
+    pub size_x: f32,
+    pub size_y: f32,
+    pub _pad0: f32,
+    pub _pad1: f32,
+    pub _pad2: f32,
+}
+
+/// Mirrors bridge GlowInstance (12 floats: x,y,w,h + color(rgba) + intensity + 3 pad).
+/// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct BridgeGlowInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub color_r: f32,
+    pub color_g: f32,
+    pub color_b: f32,
+    pub color_a: f32,
+    pub intensity: f32,
+    pub _pad0: f32,
+    pub _pad1: f32,
+    pub _pad2: f32,
+}
+
+/// Mirrors bridge NebulaInstance (32 floats).
+/// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct BridgeNebulaInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub seed: f32,
+    pub scale: f32,
+    pub octaves: f32,
+    pub gain: f32,
+    pub lacunarity: f32,
+    pub warp: f32,
+    pub detail: f32,
+    pub dust: f32,
+    pub stop0_pos: f32,
+    pub stop0_r: f32,
+    pub stop0_g: f32,
+    pub stop0_b: f32,
+    pub stop0_a: f32,
+    pub stop1_pos: f32,
+    pub stop1_r: f32,
+    pub stop1_g: f32,
+    pub stop1_b: f32,
+    pub stop1_a: f32,
+    pub stop2_pos: f32,
+    pub stop2_r: f32,
+    pub stop2_g: f32,
+    pub stop2_b: f32,
+    pub stop2_a: f32,
+    pub stop3_pos: f32,
+    pub stop3_r: f32,
+    pub stop3_g: f32,
+    pub stop3_b: f32,
+    pub stop3_a: f32,
+}
+
+/// Mirrors bridge StarfieldInstance (24 floats: x,y,w,h + params0(seed,count,cluster_count,cluster_stars) + warm(rgba) + neutral(rgba) + cool(rgba) + 4 pad).
+/// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct BridgeStarfieldInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub seed: f32,
+    pub count: f32,
+    pub cluster_count: f32,
+    pub cluster_stars: f32,
+    pub warm_r: f32,
+    pub warm_g: f32,
+    pub warm_b: f32,
+    pub warm_a: f32,
+    pub neutral_r: f32,
+    pub neutral_g: f32,
+    pub neutral_b: f32,
+    pub neutral_a: f32,
+    pub cool_r: f32,
+    pub cool_g: f32,
+    pub cool_b: f32,
+    pub cool_a: f32,
+    pub _pad0: f32,
+    pub _pad1: f32,
+    pub _pad2: f32,
+    pub _pad3: f32,
+}
+
+/// Mirrors bridge ImageInstance (8 floats: x,y,w,h + opacity + 3 pad).
+/// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct BridgeImageInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub opacity: f32,
+    pub _pad0: f32,
+    pub _pad1: f32,
+    pub _pad2: f32,
+}
+
+/// Mirrors bridge ImageTransformInstance (12 floats: p0(4 floats) + p1(4 floats) + opacity + 3 pad).
+/// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct BridgeImageTransformInstance {
+    pub p0x: f32,
+    pub p0y: f32,
+    pub p1x: f32,
+    pub p1y: f32,
+    pub p2x: f32,
+    pub p2y: f32,
+    pub p3x: f32,
+    pub p3y: f32,
+    pub opacity: f32,
+    pub _pad0: f32,
+    pub _pad1: f32,
+    pub _pad2: f32,
+}
+
+/// Mirrors bridge LinearGradientInstance (20 floats).
+/// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct BridgeLinearGradientInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub box_w: f32,
+    pub box_h: f32,
+    pub radius: f32,
+    pub _pad0: f32,
+    pub from_r: f32,
+    pub from_g: f32,
+    pub from_b: f32,
+    pub from_a: f32,
+    pub to_r: f32,
+    pub to_g: f32,
+    pub to_b: f32,
+    pub to_a: f32,
+    pub dir_x: f32,
+    pub dir_y: f32,
+    pub _pad1: f32,
+    pub _pad2: f32,
+}
+
+/// Mirrors bridge RadialGradientInstance (20 floats).
+/// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct BridgeRadialGradientInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub box_w: f32,
+    pub box_h: f32,
+    pub radius: f32,
+    pub _pad0: f32,
+    pub from_r: f32,
+    pub from_g: f32,
+    pub from_b: f32,
+    pub from_a: f32,
+    pub to_r: f32,
+    pub to_g: f32,
+    pub to_b: f32,
+    pub to_a: f32,
+    pub _pad1: f32,
+    pub _pad2: f32,
+    pub _pad3: f32,
+    pub _pad4: f32,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
