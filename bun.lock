@@ -86,6 +86,9 @@
     "packages/pixel": {
       "name": "@tge/pixel",
       "version": "0.0.1",
+      "dependencies": {
+        "@vexart/engine": "workspace:*",
+      },
     },
     "packages/platform-terminal": {
       "name": "@tge/platform-terminal",

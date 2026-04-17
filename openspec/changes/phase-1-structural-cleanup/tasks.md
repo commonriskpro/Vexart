@@ -99,15 +99,15 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
 
 ## 8. Fold @tge/renderer-solid + renderer into engine/src/reconciler (slice 8)
 
-- [ ] 8.1 `git mv packages/renderer-solid/src/reconciler.ts packages/renderer-solid/src/plugins.ts packages/renderer-solid/src/jsx.d.ts packages/engine/src/reconciler/` — move core reconciler files
-- [ ] 8.2 Move renderer tests: `git mv packages/renderer/src/handle.test.ts packages/renderer/src/node.test.ts packages/engine/src/reconciler/`
-- [ ] 8.3 Update internal imports within moved reconciler files — `renderer-solid/src/index.ts` had relative imports to `../../runtime/src/index`, `../../runtime/src/input`, `../../core/src/index`, etc. Now that runtime and core are in engine, update these to relative paths like `../loop/index`, `../reconciler/input`, `../ffi/index`
-- [ ] 8.4 Update `packages/engine/src/reconciler/index.ts` barrel to include the new reconciler files and their exports
-- [ ] 8.5 Update `packages/engine/src/public.ts` to re-export reconciler symbols (SolidJS control flow, mount, createComponent, createElement, etc.)
-- [ ] 8.6 Create shim for `@tge/renderer-solid`: rewrite `packages/renderer-solid/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/renderer-solid/package.json` to add `@vexart/engine: "workspace:*"` dependency. Delete moved files from old location
-- [ ] 8.7 Create shim for `@tge/renderer`: rewrite `packages/renderer/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/renderer/package.json` to add `@vexart/engine: "workspace:*"` dependency (note: renderer had no index.ts, only tests — create a minimal shim)
-- [ ] 8.8 Run `bun install && bun run typecheck` — must be green
-- [ ] 8.9 Commit: `refactor(engine): fold @tge/renderer-solid + renderer into engine/src/reconciler with shim`
+- [x] 8.1 `git mv packages/renderer-solid/src/reconciler.ts packages/renderer-solid/src/plugins.ts packages/renderer-solid/src/jsx.d.ts packages/engine/src/reconciler/` — move core reconciler files
+- [x] 8.2 Move renderer tests: `git mv packages/renderer/src/handle.test.ts packages/renderer/src/node.test.ts packages/engine/src/reconciler/`
+- [x] 8.3 Update internal imports within moved reconciler files — `renderer-solid/src/index.ts` had relative imports to `../../runtime/src/index`, `../../runtime/src/input`, `../../core/src/index`, etc. Now that runtime and core are in engine, update these to relative paths like `../loop/index`, `../reconciler/input`, `../ffi/index`
+- [x] 8.4 Update `packages/engine/src/reconciler/index.ts` barrel to include the new reconciler files and their exports
+- [x] 8.5 Update `packages/engine/src/public.ts` to re-export reconciler symbols (SolidJS control flow, mount, createComponent, createElement, etc.)
+- [x] 8.6 Create shim for `@tge/renderer-solid`: rewrite `packages/renderer-solid/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/renderer-solid/package.json` to add `@vexart/engine: "workspace:*"` dependency. Delete moved files from old location
+- [x] 8.7 Create shim for `@tge/renderer`: rewrite `packages/renderer/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/renderer/package.json` to add `@vexart/engine: "workspace:*"` dependency (note: renderer had no index.ts, only tests — create a minimal shim)
+- [x] 8.8 Run `bun install && bun run typecheck` — must be green
+- [x] 8.9 Commit: `refactor(engine): fold @tge/renderer-solid + renderer into engine/src/reconciler with shim`
 
 ## 9. Fold @tge/pixel into engine/src/paint-legacy (slice 9)
 

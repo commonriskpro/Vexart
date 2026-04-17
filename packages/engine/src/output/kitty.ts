@@ -12,7 +12,7 @@
  * @see https://sw.kovidgoyal.net/kitty/graphics-protocol/
  */
 
-import type { PixelBuffer } from "@tge/pixel"
+import type { PixelBuffer } from "../paint-legacy/index"
 import { deflateSync } from "node:zlib"
 import { reportKittyTransportFailure, reportKittyTransportSuccess, resolveKittyTransportMode, TRANSPORT_FAILURE_REASON } from "./transport-manager"
 import { prepareNativeKittyShm, releaseNativeKittyShm } from "./kitty-shm-native"

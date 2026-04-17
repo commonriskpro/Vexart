@@ -18,7 +18,7 @@
  *       → executes onDraw callback → flushes draw commands via compat painter
  */
 
-import { over } from "@tge/pixel"
+import { over } from "../paint-legacy/index"
 
 // ── Draw command types ──
 

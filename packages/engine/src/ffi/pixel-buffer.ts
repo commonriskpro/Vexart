@@ -14,4 +14,4 @@ export {
   over,
   sub,
   withOpacity,
-} from "@tge/pixel"
+} from "../paint-legacy/index"
