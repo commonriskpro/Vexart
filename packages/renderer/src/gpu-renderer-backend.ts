@@ -1,6 +1,5 @@
-import { create, paint } from "@tge/compat-software"
 import { appendFileSync } from "node:fs"
-import { CanvasContext, paintCanvasCommands } from "./canvas"
+import { CanvasContext } from "./canvas"
 import { getAtlas } from "./font-atlas"
 import { transformBounds, transformPoint } from "./matrix"
 import { batchMixedSceneOps, collectSupportedMixedScene } from "./wgpu-canvas-backend"
@@ -30,7 +29,6 @@ import {
   maskWgpuCanvasImageRoundedRect,
   probeWgpuCanvasBridge,
   readbackWgpuCanvasTargetRGBA,
-  readbackWgpuCanvasTargetRegionRGBA,
   renderWgpuCanvasTargetBeziersLayer,
   renderWgpuCanvasTargetCirclesLayer,
   renderWgpuCanvasTargetGlowsLayer,
@@ -53,6 +51,13 @@ import {
   type WgpuCanvasShapeRect,
   type WgpuCanvasTargetHandle,
 } from "./wgpu-canvas-bridge"
+import {
+  compositeTargetReadbackToSurface,
+  createGpuCanvasImage,
+  createGpuTextImage,
+  uploadRasterDataToTarget,
+} from "./gpu-raster-staging"
+import { createRasterSurface } from "./render-surface"
 
 export type GpuRendererBackend = RendererBackend & {
   getLastStrategy: () => GpuLayerStrategyMode | null
@@ -80,7 +85,6 @@ export type GpuRendererBackendCacheStats = {
 const MAX_GPU_TEXT_IMAGES = 256
 const MAX_GPU_GLYPH_ATLASES = 32
 const MAX_GPU_CANVAS_SPRITES = 64
-const MAX_GPU_FALLBACK_SPRITES = 128
 const MAX_GPU_TRANSFORM_SPRITES = 64
 
 let gpuRendererBackendStatsProvider: (() => GpuRendererBackendCacheStats) | null = null
@@ -128,6 +132,10 @@ function logGpuResize(message: string) {
   appendFileSync(GPU_RENDERER_DEBUG_LOG, `[resize] ${message}\n`)
 }
 
+function failGpuOnly(message: string): never {
+  throw new Error(`TGE GPU-only renderer: ${message}`)
+}
+
 type TargetRecord = {
   key: string
   width: number
@@ -165,19 +173,11 @@ type GlyphAtlasRecord = {
 type CanvasSpriteRecord = {
   key: string
   handle: WgpuCanvasImageHandle
-  target: WgpuCanvasTargetHandle
   width: number
   height: number
 }
 
 type TransformSpriteRecord = {
-  key: string
-  handle: WgpuCanvasImageHandle
-  width: number
-  height: number
-}
-
-type FallbackSpriteRecord = {
   key: string
   handle: WgpuCanvasImageHandle
   width: number
@@ -241,35 +241,6 @@ function applyOpacityToColor(color: number, opacity: number) {
   return (color & 0xffffff00) | nextAlpha
 }
 
-function compositeReadback(dst: Uint8Array, src: Uint8Array) {
-  for (let i = 0; i < src.length; i += 4) {
-    const sa = src[i + 3]
-    if (sa === 0) continue
-    if (sa === 255) {
-      dst[i] = src[i]
-      dst[i + 1] = src[i + 1]
-      dst[i + 2] = src[i + 2]
-      dst[i + 3] = 255
-      continue
-    }
-    const da = dst[i + 3]
-    const invSa = 255 - sa
-    dst[i] = Math.round((src[i] * sa + dst[i] * invSa) / 255)
-    dst[i + 1] = Math.round((src[i + 1] * sa + dst[i + 1] * invSa) / 255)
-    dst[i + 2] = Math.round((src[i + 2] * sa + dst[i + 2] * invSa) / 255)
-    dst[i + 3] = Math.min(255, sa + Math.round(da * invSa / 255))
-  }
-}
-
-function compositeRegionReadback(dst: Uint8Array, dstWidth: number, src: Uint8Array, region: { x: number; y: number; width: number; height: number }) {
-  const rowBytes = region.width * 4
-  for (let row = 0; row < region.height; row++) {
-    const srcStart = row * rowBytes
-    const dstStart = ((region.y + row) * dstWidth + region.x) * 4
-    compositeReadback(dst.subarray(dstStart, dstStart + rowBytes), src.subarray(srcStart, srcStart + rowBytes))
-  }
-}
-
 function isSupportedRectangle(op: RectangleRenderOp) {
   return !op.inputs.image && !op.inputs.canvas && !op.inputs.effect
 }
@@ -298,6 +269,10 @@ function isSupportedOp(op: RenderGraphOp) {
   if (op.kind === "image") return isSupportedImage(op)
   if (op.kind === "canvas") return true
   return false
+}
+
+function getUnsupportedGpuOps(ops: RenderGraphOp[]) {
+  return ops.filter((op) => !isSupportedOp(op))
 }
 
 function opBounds(op: RenderGraphOp, width: number, height: number) {
@@ -353,7 +328,7 @@ function opBounds(op: RenderGraphOp, width: number, height: number) {
   return { left, top, right, bottom, width: right - left, height: bottom - top }
 }
 
-export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendPaintContext, op: RenderGraphOp) => void): GpuRendererBackend {
+export function createGpuRendererBackend(): GpuRendererBackend {
   const probe = probeWgpuCanvasBridge()
   const gpuAvailable = probe.available
   const context = gpuAvailable ? createWgpuCanvasContext() : null
@@ -364,7 +339,6 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
   const textImages = new Map<string, ImageRecord>()
   const glyphAtlases = new Map<string, GlyphAtlasRecord>()
   const imageCache = new WeakMap<Uint8Array, ImageRecord>()
-  const fallbackSpriteCache = new Map<string, FallbackSpriteRecord>()
   const canvasSpriteCache = new Map<string, CanvasSpriteRecord>()
   const transformSpriteCache = new Map<string, TransformSpriteRecord>()
   const backdropSourceCache = new Map<string, BackdropSourceRecord>()
@@ -416,7 +390,7 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
     return lastStrategy
   }
 
-  const clearFallbackSpriteCache = () => {
+  const clearSpriteCaches = () => {
     if (!context) return
     for (const record of textImages.values()) {
       destroyWgpuCanvasImage(context, record.handle)
@@ -426,13 +400,8 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
       destroyWgpuCanvasImage(context, record.handle)
     }
     glyphAtlases.clear()
-    for (const record of fallbackSpriteCache.values()) {
-      destroyWgpuCanvasImage(context, record.handle)
-    }
-    fallbackSpriteCache.clear()
     for (const record of canvasSpriteCache.values()) {
       destroyWgpuCanvasImage(context, record.handle)
-      destroyWgpuCanvasTarget(context, record.target)
     }
     canvasSpriteCache.clear()
     for (const record of transformSpriteCache.values()) {
@@ -480,7 +449,7 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
     } else {
       logGpuResize(`create first target width=${width} height=${height}`)
     }
-    clearFallbackSpriteCache()
+    clearSpriteCaches()
     const handle = createWgpuCanvasTarget(context, { width, height })
     standaloneTarget = { key: "standalone", width, height, handle }
     logGpuResize(`created target width=${width} height=${height}`)
@@ -520,17 +489,6 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
     }
   }
 
-  const trimFallbackSpriteCache = () => {
-    if (!context) return
-    while (fallbackSpriteCache.size > MAX_GPU_FALLBACK_SPRITES) {
-      const first = fallbackSpriteCache.keys().next().value
-      if (!first) break
-      const record = fallbackSpriteCache.get(first)
-      if (record) destroyWgpuCanvasImage(context, record.handle)
-      fallbackSpriteCache.delete(first)
-    }
-  }
-
   const trimCanvasSpriteCache = () => {
     if (!context) return
     while (canvasSpriteCache.size > MAX_GPU_CANVAS_SPRITES) {
@@ -539,7 +497,6 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
       const record = canvasSpriteCache.get(first)
       if (record) {
         destroyWgpuCanvasImage(context, record.handle)
-        destroyWgpuCanvasTarget(context, record.target)
       }
       canvasSpriteCache.delete(first)
     }
@@ -567,8 +524,8 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
     canvasSpriteBytes: Array.from(canvasSpriteCache.values()).reduce((sum, record) => sum + record.width * record.height * 4, 0),
     transformSpriteCount: transformSpriteCache.size,
     transformSpriteBytes: Array.from(transformSpriteCache.values()).reduce((sum, record) => sum + record.width * record.height * 4, 0),
-    fallbackSpriteCount: fallbackSpriteCache.size,
-    fallbackSpriteBytes: Array.from(fallbackSpriteCache.values()).reduce((sum, record) => sum + record.width * record.height * 4, 0),
+    fallbackSpriteCount: 0,
+    fallbackSpriteBytes: 0,
     backdropSourceCount: backdropSourceCache.size,
     backdropSourceBytes: Array.from(backdropSourceCache.values()).reduce((sum, record) => sum + (record.bounds.right - record.bounds.left) * (record.bounds.bottom - record.bounds.top) * 4, 0),
     backdropSpriteCount: backdropSpriteCache.size,
@@ -577,20 +534,7 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
 
   const uploadBufferToTarget = (targetHandle: WgpuCanvasTargetHandle, width: number, height: number, data: Uint8Array) => {
     if (!context) return false
-    const image = createWgpuCanvasImage(context, { width, height }, data)
-    beginWgpuCanvasTargetLayer(context, targetHandle, 0, 0x00000000)
-    try {
-      compositeWgpuCanvasTargetImageLayer(context, targetHandle, image, {
-        x: -1,
-        y: 1,
-        w: 2,
-        h: -2,
-        opacity: 1,
-      }, 0, 0x00000000)
-    } finally {
-      endWgpuCanvasTargetLayer(context, targetHandle)
-      destroyWgpuCanvasImage(context, image)
-    }
+    uploadRasterDataToTarget(context, targetHandle, width, height, data)
     return true
   }
 
@@ -611,11 +555,8 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
       touchMapEntry(textImages, key, cached)
       return cached.handle
     }
-    const width = Math.max(1, paint.measureText(text))
-    const height = 16
-    const buf = create(width, height)
-    paint.drawText(buf, 0, 0, text, color[0], color[1], color[2], color[3])
-    const handle = createWgpuCanvasImage(context, { width, height }, buf.data)
+    const image = createGpuTextImage(context, text, color)
+    const handle = image.handle
     if (textImages.size >= MAX_GPU_TEXT_IMAGES) {
       const first = textImages.keys().next().value
       if (first) {
@@ -624,7 +565,7 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
         textImages.delete(first)
       }
     }
-    textImages.set(key, { handle, width, height })
+    textImages.set(key, { handle, width: image.width, height: image.height })
     return handle
   }
 
@@ -695,7 +636,6 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
     if (!context) return
     for (const record of canvasSpriteCache.values()) {
       destroyWgpuCanvasImage(context, record.handle)
-      destroyWgpuCanvasTarget(context, record.target)
     }
     canvasSpriteCache.clear()
   }
@@ -721,7 +661,6 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
     }
     if (cached) {
       destroyWgpuCanvasImage(context, cached.handle)
-      destroyWgpuCanvasTarget(context, cached.target)
     }
     const canvasCtx = new CanvasContext(viewport)
     op.canvas.onDraw(canvasCtx)
@@ -769,17 +708,19 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
         }
         first = false
       }
-      const copied = copyWgpuCanvasTargetRegionToImage(context, target, { x: 0, y: 0, width, height })
-      const handle = copied.handle
-      canvasSpriteCache.set(key, { key, handle, target, width, height })
-      trimCanvasSpriteCache()
-      return handle
+      try {
+        const copied = copyWgpuCanvasTargetRegionToImage(context, target, { x: 0, y: 0, width, height })
+        const handle = copied.handle
+        canvasSpriteCache.set(key, { key, handle, width, height })
+        trimCanvasSpriteCache()
+        return handle
+      } finally {
+        destroyWgpuCanvasTarget(context, target)
+      }
     }
-    const tmp = create(width, height)
-    paintCanvasCommands(tmp, canvasCtx, width, height)
-    const target = createWgpuCanvasTarget(context, { width, height })
-    const handle = createWgpuCanvasImage(context, { width, height }, tmp.data)
-    canvasSpriteCache.set(key, { key, handle, target, width, height })
+    const image = createGpuCanvasImage(context, width, height, canvasCtx)
+    const handle = image.handle
+    canvasSpriteCache.set(key, { key, handle, width, height })
     trimCanvasSpriteCache()
     return handle
   }
@@ -1004,21 +945,6 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
       dirtyBounds = unionBounds(dirtyBounds, { left, top, right, bottom })
     }
 
-    const syncCpuBufferFromTarget = () => {
-      const readback = readbackWgpuCanvasTargetRGBA(context, targetHandle, ctx.buffer.width * ctx.buffer.height * 4)
-      ctx.buffer.data.set(readback.data)
-    }
-
-    const restartLayerFromCpuBuffer = () => {
-      const handle = createWgpuCanvasImage(context, { width: ctx.buffer.width, height: ctx.buffer.height }, ctx.buffer.data)
-      transientFullFrameImages.push(handle)
-      beginWgpuCanvasTargetLayer(context, targetHandle, 0, 0x00000000)
-      layerOpen = true
-      renderWgpuCanvasTargetImagesLayer(context, targetHandle, handle, [{ x: -1, y: 1, w: 2, h: -2, opacity: 1 }], 0, 0x00000000)
-      first = false
-      targetMutationVersion += 1
-    }
-
     const ensureLoadedLayer = () => {
       if (layerOpen) return
       beginWgpuCanvasTargetLayer(context, targetHandle, 1, 0x00000000)
@@ -1109,51 +1035,6 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
       if (cached) destroyWgpuCanvasImage(context, cached.handle)
       backdropSpriteCache.set(spriteKey, record)
       return record
-    }
-
-    const renderFallbackSprite = (op: RenderGraphOp) => {
-      if (!context) return false
-      const bounds = opBounds(op, ctx.buffer.width, ctx.buffer.height)
-      if (!bounds) return true
-      const key = JSON.stringify({
-        kind: op.kind,
-        command: op.command,
-        left: bounds.left,
-        top: bounds.top,
-        width: bounds.width,
-        height: bounds.height,
-      })
-      let handle: WgpuCanvasImageHandle
-      const cached = fallbackSpriteCache.get(key)
-      if (cached && cached.width === bounds.width && cached.height === bounds.height) {
-        handle = cached.handle
-      } else {
-        if (cached) destroyWgpuCanvasImage(context, cached.handle)
-        const tmp = create(bounds.width, bounds.height)
-        fallbackPaintOp({
-          buffer: tmp,
-          commands: [op.command],
-          graph: { ops: [op] },
-          offsetX: bounds.left,
-          offsetY: bounds.top,
-          frame: null,
-          layer: null,
-        }, op)
-        handle = createWgpuCanvasImage(context, { width: bounds.width, height: bounds.height }, tmp.data)
-        fallbackSpriteCache.set(key, { key, handle, width: bounds.width, height: bounds.height })
-        trimFallbackSpriteCache()
-      }
-      const group = imageGroups.get(handle) ?? { handle, instances: [] }
-      group.instances.push({
-        x: (bounds.left / ctx.buffer.width) * 2 - 1,
-        y: 1 - (bounds.top / ctx.buffer.height) * 2,
-        w: (bounds.width / ctx.buffer.width) * 2,
-        h: -((bounds.height / ctx.buffer.height) * 2),
-        opacity: 1,
-      })
-      imageGroups.set(handle, group)
-      markDirty(bounds.left, bounds.top, bounds.right, bounds.bottom)
-      return true
     }
 
     beginWgpuCanvasTargetLayer(context, targetHandle, 0, 0x00000000)
@@ -1273,16 +1154,7 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
           }
 
           if (effectOp.backdrop) {
-            flushAll()
-            if (layerOpen) {
-              endWgpuCanvasTargetLayer(context, targetHandle)
-              layerOpen = false
-            }
-            syncCpuBufferFromTarget()
-            fallbackPaintOp(ctx, op)
-            restartLayerFromCpuBuffer()
-            markDirty(clip.left, clip.top, clip.right, clip.bottom)
-            continue
+            failGpuOnly("backdrop effect requires removed software fallback path")
           }
 
           if (effectOp.effect.transform) {
@@ -1674,9 +1546,7 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
           }
           continue
         }
-
-        flushAll()
-        if (!renderFallbackSprite(op)) return false
+        failGpuOnly(`unsupported render op kind=${op.kind}`)
       }
       flushAll()
     } finally {
@@ -1695,14 +1565,12 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
       const fullArea = ctx.buffer.width * ctx.buffer.height
       const regionArea = width * height
       if (regionArea > 0 && regionArea < fullArea * 0.8) {
-        const readback = readbackWgpuCanvasTargetRegionRGBA(context, targetHandle, { x: boundsRef.left, y: boundsRef.top, width, height })
-        compositeRegionReadback(ctx.buffer.data, ctx.buffer.width, readback.data, { x: boundsRef.left, y: boundsRef.top, width, height })
+        compositeTargetReadbackToSurface(context, targetHandle, ctx.buffer, { region: { x: boundsRef.left, y: boundsRef.top, width, height } })
         for (const handle of transientFullFrameImages) destroyWgpuCanvasImage(context, handle)
         return true
       }
     }
-    const readback = readbackWgpuCanvasTargetRGBA(context, targetHandle, ctx.buffer.width * ctx.buffer.height * 4)
-    compositeReadback(ctx.buffer.data, readback.data)
+    compositeTargetReadbackToSurface(context, targetHandle, ctx.buffer)
     for (const handle of transientFullFrameImages) destroyWgpuCanvasImage(context, handle)
     return true
   }
@@ -1759,7 +1627,7 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
     const target = createWgpuCanvasTarget(context, { width, height })
     try {
       const spriteCtx: RendererBackendPaintContext = {
-        buffer: create(width, height),
+        buffer: createRasterSurface(width, height),
         commands: [op.command],
         graph: { ops: [op] },
         offsetX,
@@ -1830,20 +1698,17 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
     },
     paint(ctx) {
       if (!gpuAvailable || !context) {
-        for (const op of ctx.graph.ops) fallbackPaintOp(ctx, op)
-        return { output: "buffer", strategy: null }
+        failGpuOnly("GPU backend unavailable; CPU fallback was removed")
       }
 
-      const fallbackCounts = new Map<string, number>()
-      for (const op of ctx.graph.ops) {
-        if (!isSupportedOp(op)) {
-          fallbackCounts.set(op.kind, (fallbackCounts.get(op.kind) ?? 0) + 1)
-        }
-      }
-      if (fallbackCounts.size > 0) {
-        logGpuRenderer(`[frame] fallback=${JSON.stringify(Object.fromEntries(fallbackCounts))} totalOps=${ctx.graph.ops.length}`)
+      const unsupported = getUnsupportedGpuOps(ctx.graph.ops)
+      if (unsupported.length > 0) {
+        const counts = new Map<string, number>()
+        for (const op of unsupported) counts.set(op.kind, (counts.get(op.kind) ?? 0) + 1)
+        logGpuRenderer(`[frame] unsupported=${JSON.stringify(Object.fromEntries(counts))} totalOps=${ctx.graph.ops.length}`)
+        failGpuOnly(`unsupported render ops encountered: ${Array.from(counts.entries()).map(([kind, count]) => `${kind}=${count}`).join(", ")}`)
       } else {
-        logGpuRenderer(`[frame] fallback={} totalOps=${ctx.graph.ops.length}`)
+        logGpuRenderer(`[frame] unsupported={} totalOps=${ctx.graph.ops.length}`)
       }
 
       const frameCtx = ctx.frame
@@ -1853,16 +1718,14 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
         const layerTarget = getLayerTarget(layerCtx.key, ctx.buffer.width, ctx.buffer.height)
         if (!layerTarget) {
           suppressFinalPresentation = true
-          for (const op of ctx.graph.ops) fallbackPaintOp(ctx, op)
-          return { output: "buffer", strategy: lastStrategy }
+          failGpuOnly(`could not allocate GPU layer target for ${layerCtx.key}`)
         }
         activeLayerKeys.add(layerCtx.key)
         const readbackMode = lastStrategy === "final-frame-raw" && !layerCtx.requiresReadback ? "none" : "auto"
         const ok = renderFrame(ctx, layerTarget, readbackMode)
         if (!ok) {
           suppressFinalPresentation = true
-          for (const op of ctx.graph.ops) fallbackPaintOp(ctx, op)
-          return { output: "buffer", strategy: lastStrategy }
+          failGpuOnly(`GPU layer render failed for ${layerCtx.key}`)
         }
         if (lastStrategy === "final-frame-raw" && !layerCtx.requiresReadback) {
           recordCurrentFrameLayer({
@@ -1883,14 +1746,12 @@ export function createGpuRendererBackend(fallbackPaintOp: (ctx: RendererBackendP
       const standaloneHandle = getStandaloneTarget(ctx.buffer.width, ctx.buffer.height)
       if (!standaloneHandle) {
         suppressFinalPresentation = true
-        for (const op of ctx.graph.ops) fallbackPaintOp(ctx, op)
-        return { output: "buffer", strategy: lastStrategy }
+        failGpuOnly("could not allocate standalone GPU target")
       }
       const ok = renderFrame(ctx, standaloneHandle)
       if (!ok) {
         suppressFinalPresentation = true
-        for (const op of ctx.graph.ops) fallbackPaintOp(ctx, op)
-        return { output: "buffer", strategy: lastStrategy }
+        failGpuOnly("standalone GPU render failed")
       }
       return { output: frameCtx?.useLayerCompositing ? "raw-layer" : "buffer", strategy: lastStrategy }
     },

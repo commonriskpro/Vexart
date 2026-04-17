@@ -9,7 +9,6 @@
  */
 
 process.env.LIGHTCODE_CANVAS_BACKEND = process.env.LIGHTCODE_CANVAS_BACKEND ?? "wgpu"
-process.env.TGE_RENDERER_BACKEND = process.env.TGE_RENDERER_BACKEND ?? "gpu"
 
 import { createSignal, For, type JSX } from "solid-js"
 import { appendFileSync } from "node:fs"

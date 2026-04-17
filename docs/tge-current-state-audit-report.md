@@ -102,8 +102,8 @@ than to a truly separated package graph.
 | `@tge/gpu` | public bridge | renderer GPU modules | keep public |
 | `@tge/compositor` | retire candidate | renderer/output internals | retire or make real |
 | `@tge/output-kitty` | public bridge | `packages/output/src/kitty*.ts` | keep public |
-| `@tge/output-compat` | public bridge | `packages/output/src/composer.ts` + fallbacks | keep as compat only |
-| `@tge/compat-software` | public bridge + legacy | `packages/pixel/src/*` + cpu backend | keep public, remove from official hot path |
+| `@tge/output-compat` | retired | retired | removed from runtime and repo |
+| `@tge/compat-software` | retired | retired | removed; the remaining raster staging lives directly under renderer + `@tge/pixel` |
 | `@tge/compat-canvas` | low-value bridge | `packages/renderer/src/canvas*.ts` | keep only as legacy/compat |
 | `@tge/compat-text-ansi` | retire candidate | `packages/renderer/src/selection.ts` | retire |
 | `@tge/components` | real | `packages/components/src/*` | keep |
@@ -118,33 +118,59 @@ The new package graph improved public boundaries, but many target-domain package
 
 ## 3. Compat leakage map
 
-## A. Software/CPU leakage into the official renderer path
+### Update after GPU-only cleanup
 
-Files with direct `@tge/compat-software` impact in the hot path:
+The original audit is now partially outdated.
+The following legacy pieces were removed from the official path after the audit:
 
-- `packages/renderer/src/loop.ts`
+- `cpu-renderer-backend.ts`
+- `legacy-render-painter.ts`
+- selectable ANSI path
+- `@tge/compat-software`
+- `@tge/output-compat`
+- `output/src/composer.ts`
+- `output/src/placeholder.ts`
+- `output/src/halfblock.ts`
+- the single-buffer fallback branch in `loop.ts`
+
+So the current problem is no longer “CPU fallback dominates the official path”.
+The current problem is residual raster staging inside an otherwise GPU-only renderer.
+
+## A. Residual raster staging in the official renderer path
+
+Relevant files:
+
 - `packages/renderer/src/layers.ts`
 - `packages/renderer/src/renderer-backend.ts`
 - `packages/renderer/src/gpu-renderer-backend.ts`
 - `packages/renderer/src/wgpu-canvas-backend.ts`
+- `packages/renderer/src/gpu-raster-staging.ts`
+- `packages/renderer/src/surface-transform-staging.ts`
 
 ### Why this matters
 
-Even though compat has a package now, the renderer still thinks in `PixelBuffer` terms more than a truly GPU-first core should.
+The problem is no longer CPU fallback selection. The problem is that the renderer still creates temporary raster surfaces in several GPU paths instead of staying GPU-native all the way until final raw RGBA handoff.
 
-## B. CPU fallback still shapes the GPU path
+### Residual legacy inventory
 
-Relevant files:
+| File | Residual legacy role today | GPU-native target | Retirement condition |
+| --- | --- | --- | --- |
+| `packages/renderer/src/gpu-raster-staging.ts` | consolidated staging helper for temporary text/canvas/readback/upload surfaces that still appear in GPU internals | direct GPU op encoding into retained GPU targets/layers without temporary raster surfaces | no common renderer op requires temporary raster surface materialization before final readback |
+| `packages/renderer/src/surface-transform-staging.ts` | subtree transform post-pass that still depends on surface staging | transform composition handled as GPU pass or isolated compat path | transform-heavy subtrees stop forcing temporary CPU-visible surfaces in the official path |
+| `packages/renderer/src/canvas.ts` | imperative `CanvasContext` family still shapes part of the official renderer reasoning | compat/lab boundary only, not structural core dependency | official path can be explained without `CanvasContext` as a central renderer concept |
 
-- `packages/renderer/src/gpu-renderer-backend.ts`
-- `packages/renderer/src/cpu-renderer-backend.ts`
-- `packages/renderer/src/wgpu-canvas-backend.ts`
+### Operational rule
 
-### Current reality
+Any new migration work should remove entries from this table or shrink their role.
+If a change adds a new staging helper to the official path, it is architectural debt, not progress.
 
-- GPU backend still accepts fallback paint behavior
-- CPU remains the conceptual default in several runtime paths
-- examples still need explicit env forcing for GPU-first behavior
+## B. CPU fallback no longer shapes the official path
+
+Current reality:
+
+- `cpu-renderer-backend.ts` was removed
+- total fallback and per-op fallback were removed from the official GPU backend
+- the loop no longer keeps a single-buffer fallback branch
 
 ## C. Imperative canvas is not “just compat” yet
 
@@ -158,28 +184,22 @@ Relevant files:
 
 Two first-class visual abstractions still depend on `CanvasContext` semantics.
 
-## D. Compat output still hangs from official presentation
+## D. Remaining staging pressure
 
 Relevant files:
 
-- `packages/renderer/src/loop.ts`
-- `packages/output/src/composer.ts`
+- `packages/renderer/src/gpu-raster-staging.ts`
+- `packages/renderer/src/surface-transform-staging.ts`
+- `packages/renderer/src/canvas.ts`
 
 ### Current reality
 
-Fallback output is still part of the operational renderer path, not just a dusty corner package.
-
-## E. ANSI/selectable text is still embedded in renderer behavior
-
-Relevant files:
-
-- `packages/renderer/src/index.ts`
-- `packages/renderer/src/loop.ts`
-- `packages/renderer/src/selection.ts`
+The official path is GPU-only at the backend/output level, but some render operations still require temporary raster surfaces before the final raw RGBA handoff to Kitty.
 
 ### Compat leakage conclusion
 
-Compat was renamed and surfaced better, but it is still structurally important enough to distort the official engine story.
+The question is no longer “how do we stop falling back to CPU?”
+The question now is “how much raster staging still remains before the renderer becomes GPU-native end to end?”.
 
 ---
 
@@ -315,11 +335,8 @@ Useful public API, but still an internal bridge if overused.
 
 Priority order:
 
-1. `@tge/compat-text-ansi`
-2. `@tge/compositor`
-3. `@tge/render-graph`
-4. `@tge/scene`
-5. `@tge/text`
+1. clean remaining public bridges that still only exist for packaging value
+2. keep only `renderer-solid`, `platform-terminal`, `output-kitty`, `gpu` where they still provide real external value
 
 ## `arch/10-scene-windowing-ownership`
 
@@ -332,8 +349,8 @@ Priority order:
 
 Priority order:
 
-1. reduce `@tge/compat-software` from renderer hot-path reasoning
-2. push CPU/backend fallback deeper into compat
+1. reduce `@tge/pixel` / `PixelBuffer` from renderer hot-path reasoning
+2. push raster staging behind neutral surface helpers
 3. isolate imperative canvas fallback more aggressively
 
 ## `arch/12-runtime-ui-clarification`
@@ -367,7 +384,7 @@ The repo is now in a better state than before the bridge pass.
 But it is still in an intermediate architecture where:
 
 - public package structure suggests more separation than physically exists,
-- compat still leaks into the official path,
+- residual raster staging still leaks into the official path,
 - runtime policy still lives too low,
 - and scene/composition ownership is still duplicated or ambiguous.
 

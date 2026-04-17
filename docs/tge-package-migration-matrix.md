@@ -39,10 +39,10 @@ Este documento sigue siendo la fuente operativa principal, pero ahora está orie
 | Track | Status | Notes |
 | --- | --- | --- |
 | P0 | completed | Dirección GPU-only aceptada como narrativa principal. |
-| P1 | bridge-pass complete | Se crearon package boundaries públicas, pero varias siguen siendo bridges. |
-| P2 | partial | Se extrajeron helpers de `loop.ts`, pero el archivo sigue demasiado central. |
+| P1 | strong partial | Se retiraron weak facades y quedaron sólo los bridges públicos con valor real. |
+| P2 | partial | `loop.ts` ya no sostiene single-buffer fallback ni painter raster directo, pero sigue siendo demasiado central. |
 | P3 | partial | `renderObjectId` existe, pero todavía hay fallback heurístico. |
-| P4 | partial | Compat fue renombrado/expuesto mejor, pero sigue presente en el hot path conceptual. |
+| P4 | strong partial | CPU backend, output compat, selectable ANSI y loop fallback ya salieron del path oficial. |
 | P5 | partial | Runtime UI mejoró, pero la separación core/runtime no está cerrada. |
 | P6 | partial | `OverlayRoot` existe, pero overlay/runtime policy no está completamente resuelta. |
 | P7 | not started | La reintroducción formal de optimizaciones todavía NO ocurrió según las reglas del roadmap. |
@@ -73,8 +73,8 @@ La prioridad ya no es “seguir agregando packages” sino:
 | `@tge/gpu` | renderer GPU modules | bridge-to-real-ish | API pública útil, pero ownership sigue mezclado | keep public, simplify internal graph |
 | `@tge/compositor` | renderer/output internals | bridge | package nominal sin ownership verdadero | decide real owner or retire |
 | `@tge/output-kitty` | `packages/output/src/kitty*.ts` | bridge-to-real-ish | boundary oficial útil | keep, but clarify kitty/compositor split |
-| `@tge/output-compat` | `packages/output/src/composer.ts` + fallbacks | bridge | compat real, package físico liviano | keep as compat only |
-| `@tge/compat-software` | `packages/pixel/src/*` + cpu backend | bridge + legacy | todavía pesa demasiado en el hot path | keep public compat, reduce hot-path dependence |
+| `@tge/output-compat` | retired | retired | ya no sostiene nada del path oficial | remove from docs/runtime story |
+| `@tge/compat-software` | retired | retired | wrapper eliminado; quedaba ocultando que el staging real vive en `@tge/pixel` | remove from docs/runtime story |
 | `@tge/compat-canvas` | `packages/renderer/src/canvas*.ts` | bridge + legacy | imperative canvas sigue vivo | keep only as legacy/compat |
 | `@tge/compat-text-ansi` | `packages/renderer/src/selection.ts` | bridge | poco claro que siga justificándose | candidate-retire |
 | `@tge/components` | `packages/components/src/*` | real | package verdadero | keep |
@@ -91,8 +91,8 @@ packages/renderer/src/index.ts
   -> packages/renderer/src/node.ts
   -> packages/renderer/src/clay.ts
   -> packages/renderer/src/render-graph.ts
-  -> gpu/cpu-ish backend helpers
-  -> packages/output/src/layer-composer.ts or packages/output/src/composer.ts
+  -> gpu backends + raster staging helpers
+  -> packages/output/src/layer-composer.ts
   -> terminal output
 ```
 
@@ -100,7 +100,7 @@ packages/renderer/src/index.ts
 
 El sistema hoy sigue siendo más parecido a:
 
-`renderer/index + loop + internal modules + output helpers`
+`renderer/index + loop + internal modules + kitty output helpers`
 
 que a una cadena limpia de packages dueños independientes.
 
@@ -119,12 +119,12 @@ que a una cadena limpia de packages dueños independientes.
 | `packages/renderer/src/render-graph.ts` | improved but heuristic fallback remains | ✅ |  | simplify | hacer `renderObjectId` dominante de verdad |
 | `packages/renderer/src/gpu-renderer-backend.ts` | official path but still mixed | ✅ |  | simplify | sacar dependencia conceptual de compat |
 | `packages/renderer/src/gpu-frame-composer.ts` | adaptor | ✅ |  | review owner | define si queda en compositor o output |
-| `packages/renderer/src/cpu-renderer-backend.ts` | legacy |  |  | move deeper into compat | no más core oficial |
-| `packages/pixel/src/*` | legacy |  |  | compat only | no más centro conceptual |
+| `packages/renderer/src/cpu-renderer-backend.ts` | retired |  |  | remove | ya salió del repo oficial |
+| `packages/pixel/src/*` | staging implementation |  |  | reduce conceptual role | no más centro conceptual del renderer |
 | `packages/output/src/kitty*.ts` | official path | ✅ |  |  | keep as real backend owner |
-| `packages/output/src/composer.ts` | compat |  |  | compat only | fuera del path oficial |
-| `packages/output/src/placeholder.ts` | compat |  |  | compat only | fuera del path oficial |
-| `packages/output/src/halfblock.ts` | compat |  |  | compat only | fuera del path oficial |
+| `packages/output/src/composer.ts` | retired |  |  | remove | ya salió del repo oficial |
+| `packages/output/src/placeholder.ts` | retired |  |  | remove | ya salió del repo oficial |
+| `packages/output/src/halfblock.ts` | retired |  |  | remove | ya salió del repo oficial |
 | `packages/components/src/scene-canvas.tsx` | primary retained scene | ✅ |  |  | conservar como API declarativa oficial |
 | `packages/components/src/retained-graph.tsx` | retired duplicate |  |  | retire | `SceneCanvas` absorbe esta responsabilidad |
 | `packages/windowing/src/*` | real owner | ✅ |  |  | ownership físico ya corregido |
@@ -145,7 +145,7 @@ Hay packages con buen naming pero sin ownership real.
 Aunque tenga helpers nuevos, `loop.ts` sigue siendo la explicación operativa del sistema.
 
 ### 3. Compat still leaks into official path
-El hot path oficial todavía arrastra demasiado `compat-software` / `PixelBuffer`.
+El hot path oficial ya no arrastra CPU backend ni output compat, pero todavía arrastra demasiado staging raster (`PixelBuffer` / `@tge/pixel`) en rutas GPU internas.
 
 ### 4. Heuristic fallback still alive
 El render graph mejoró, pero no está totalmente liberado de heurísticas.
@@ -189,10 +189,11 @@ What remains is cleanup of stale references and dependency simplification.
 - make `renderObjectId` primary, not just preferred
 - remove fallback matching by `color` / `cornerRadius` from the base path
 
-## R5 — Reduce compat-software from the hot path
+## R5 — Reduce raster staging from the hot path
 
-- stop centering `PixelBuffer` in the official engine explanation
-- isolate CPU/software fallback as true compat
+- stop centering `PixelBuffer` / `@tge/pixel` in the official engine explanation
+- keep only the minimum staging needed before Kitty raw output
+- move the rest of the software painter logic out of the official path
 
 ---
 
@@ -218,11 +219,12 @@ What remains is cleanup of stale references and dependency simplification.
 1. Audit current ownership.
 2. Mark bridges vs real owners.
 3. Retire or collapse fake boundaries.
-4. Move `windowing` physically.
-5. Choose one scene abstraction.
-6. Remove heuristic fallback where explicit IDs already exist.
-7. Reduce compat from the hot path.
-8. Only then resume optimization recovery.
+4. Remove CPU/output compat/selectable fallback paths from the official runtime.
+5. Move `windowing` physically.
+6. Choose one scene abstraction.
+7. Reduce raster staging from the hot path.
+8. Remove heuristic fallback where explicit IDs already exist.
+9. Only then resume optimization recovery.
 
 ---
 

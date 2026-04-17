@@ -34,7 +34,7 @@ La meta correcta es:
 
 ## What we already know (verified)
 
-Según `docs/tge-gpu-first-renderer-design.md` y `docs/tge-gpu-first-remaining-work.md`:
+Según `docs/tge-gpu-only-engine-architecture.md` y `docs/tge-current-state-audit-report.md`:
 
 - rects/borders/gradients/glow-shadow genéricos ya tienen path GPU
 - common backdrop path ya tiene soporte GPU como ruta principal

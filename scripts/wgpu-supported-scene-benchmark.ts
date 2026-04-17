@@ -1,5 +1,5 @@
 import { performance } from "node:perf_hooks"
-import { create } from "@tge/compat-software"
+import { create } from "@tge/pixel"
 import { setCanvasPainterBackend, CanvasContext, paintCanvasCommandsCPU, paintCanvasCommands } from "@tge/compat-canvas"
 import { tryCreateWgpuCanvasPainterBackend, probeWgpuCanvasBridge } from "@tge/gpu"
 

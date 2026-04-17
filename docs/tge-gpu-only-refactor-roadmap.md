@@ -68,10 +68,10 @@ The original P0-P7 plan is still useful, but its state must be described honestl
 | Phase | Current status | Reality |
 | --- | --- | --- |
 | P0 — freeze / prepare | completed | Direction accepted: GPU-only + cleaner split |
-| P1 — package boundaries | bridge-pass complete | public boundaries improved, but several packages are still facade-only |
-| P2 — split `loop.ts` | partial | helpers extracted, but `loop.ts` still owns too much |
+| P1 — package boundaries | mostly complete | weak facades were retired; remaining public bridges still exist by choice |
+| P2 — split `loop.ts` | partial but materially improved | helpers extracted and fallback paths removed, but `loop.ts` still coordinates too much |
 | P3 — explicit render identity | partial | `renderObjectId` exists, heuristic fallback still remains |
-| P4 — formalize GPU-only core | partial | compat was renamed/extracted publicly, but still leaks into the hot path |
+| P4 — formalize GPU-only core | strong partial | CPU backend, output compat, selectable ANSI and loop fallback were removed from the official path |
 | P5 — move UI policy to runtime | partial | some coupling reduced, but runtime semantics still sit too low |
 | P6 — real overlays/portal roots | partial | overlay root exists, but the broader runtime/overlay model is not fully clean |
 | P7 — optimization recovery | not started | helper grouping happened, but optimization reintroduction is still pending by the roadmap's own rules |
@@ -132,13 +132,13 @@ Stop relying on facade packages as internal architecture.
 Make the official engine path materially simpler.
 
 ### Actions
-- reduce dependence on `@tge/compat-software` in the hot path
-- make the official path clearly GPU-first + Kitty-first
-- separate compat code conceptually, not just by package name
+- reduce remaining raster staging in the hot path (`gpu-raster-staging`, `surface-transform-staging`, `canvas.ts`)
+- keep the official path clearly GPU-first + Kitty-first
+- separate implementation staging from the conceptual renderer model
 - decide whether compositor is a real package or just internal modules
 
 ### Exit criteria
-- the core official path can be explained without centering `PixelBuffer` or CPU fallback logic
+- the core official path can be explained without centering `PixelBuffer`, CPU fallback, or output compat logic
 
 ---
 
@@ -280,11 +280,12 @@ Performance work done before structural simplification will reintroduce hidden c
 1. Audit the current architecture as it really exists.
 2. Mark bridges vs real owners.
 3. Retire or collapse fake boundaries.
-4. Reduce compat from the official hot path.
-5. Converge duplicate abstractions.
-6. Clarify runtime vs engine responsibilities.
-7. Remove heuristic fallback where explicit identity already exists.
-8. Only then reintroduce optimizations.
+4. Remove CPU/output compat/selectable fallback paths from the official renderer.
+5. Reduce raster staging from the official hot path.
+6. Converge duplicate abstractions.
+7. Clarify runtime vs engine responsibilities.
+8. Remove heuristic fallback where explicit identity already exists.
+9. Only then reintroduce optimizations.
 
 ---
 

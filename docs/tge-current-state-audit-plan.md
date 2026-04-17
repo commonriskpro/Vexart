@@ -65,7 +65,6 @@ La branch se considera útil solo si produce TODOS estos outputs:
 - `packages/renderer/src/gpu-renderer-backend.ts`
 - `packages/renderer/src/gpu-frame-composer.ts`
 - `packages/renderer/src/gpu-layer-strategy.ts`
-- `packages/renderer/src/cpu-renderer-backend.ts`
 - `packages/renderer/src/canvas.ts`
 - `packages/renderer/src/wgpu-canvas-backend.ts`
 - `packages/renderer/src/focus.ts`
@@ -152,9 +151,9 @@ Entender quién compone realmente y dónde sigue entrando compat/fallback.
 - `packages/renderer/src/gpu-layer-strategy.ts`
 - `packages/output/src/layer-composer.ts`
 - `packages/output/src/kitty.ts`
-- `packages/output/src/composer.ts`
-- `packages/renderer/src/cpu-renderer-backend.ts`
 - `packages/pixel/src/*`
+- `packages/renderer/src/gpu-raster-staging.ts`
+- `packages/renderer/src/surface-transform-staging.ts`
 
 ### Questions to answer
 - quién es el compositor real hoy
@@ -188,8 +187,6 @@ Clasificar todos los `packages/*/src/index.ts` como:
 - `packages/gpu/src/index.ts`
 - `packages/compositor/src/index.ts`
 - `packages/output-kitty/src/index.ts`
-- `packages/output-compat/src/index.ts`
-- `packages/compat-software/src/index.ts`
 - `packages/compat-canvas/src/index.ts`
 - `packages/compat-text-ansi/src/index.ts`
 - `packages/windowing/src/index.ts`

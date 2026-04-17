@@ -161,13 +161,48 @@ No lo reemplaza.
 
 ### Key targets
 - `packages/pixel/src/*`
-- `packages/renderer/src/cpu-renderer-backend.ts`
 - `packages/renderer/src/gpu-renderer-backend.ts`
 - `packages/renderer/src/gpu-frame-composer.ts`
-- `packages/output/src/composer.ts`
+- `packages/renderer/src/gpu-raster-staging.ts`
+- `packages/renderer/src/surface-transform-staging.ts`
 
 ### Exit criteria
 - el path oficial del engine puede explicarse como GPU-first sin arrastrar compat como base mental
+
+### Current status
+- CPU backend eliminado
+- output compat eliminado
+- selectable ANSI eliminado
+- loop fallback eliminado
+- remaining work: shrink raster staging and finish GPU-native internals
+
+### Recommended execution slices
+
+#### 11A — Quarantine imperative canvas
+- make `canvas.ts` and `CanvasContext` explicitly compat/lab-oriented in the docs and imports
+- stop treating canvas semantics as default renderer architecture
+- done when the official path can be described without centering `canvas.ts`
+
+#### 11B — Neutralize raster staging helpers
+- shrink `gpu-raster-staging.ts` and `surface-transform-staging.ts`
+- keep canvas text/readback staging folded into `gpu-raster-staging.ts` instead of spawning a second staging module
+- push any unavoidable temporary surfaces behind neutral helper boundaries
+- done when staging is implementation residue, not the engine story
+
+#### 11C — Make GPU terminology canonical
+- describe internals as GPU targets, GPU images, GPU layers, GPU compositor state
+- keep raw RGBA only at the output edge
+- done when docs and code comments stop explaining the engine through `PixelBuffer`
+
+#### 11D — Finish explicit ownership
+- make `renderObjectId` dominant where explicit identity exists
+- remove heuristic fallback matching by `color` / `cornerRadius`
+- done when ownership bugs are traceable without guesswork
+
+#### 11E — Lock the output boundary
+- keep `layer-composer` raw-only and Kitty-only in the official path
+- validate that the path remains `GPU target -> readback RGBA -> raw bytes -> Kitty`
+- done when no internal stage reintroduces raw-byte reasoning before final presentation
 
 ---
 

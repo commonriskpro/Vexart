@@ -1,4 +1,4 @@
-import type { PixelBuffer } from "@tge/compat-software"
+import type { RasterSurface } from "./render-surface"
 import type { RenderCommand } from "./clay"
 import type { DamageRect } from "./damage"
 import type { GpuLayerStrategyMode } from "./gpu-layer-strategy"
@@ -15,7 +15,6 @@ export type RendererBackendFrameContext = {
   overlapRatio: number
   fullRepaint: boolean
   useLayerCompositing: boolean
-  selectableText: boolean
   hasActiveInteraction: boolean
   requiresLayerReadback: boolean
   transmissionMode: "direct" | "file" | "shm"
@@ -37,7 +36,7 @@ export type RendererBackendLayerContext = {
 }
 
 export type RendererBackendSyncLayerContext = {
-  buffer: PixelBuffer
+  buffer: RasterSurface
   frame: RendererBackendFrameContext
   layer: RendererBackendLayerContext
 }
@@ -62,7 +61,7 @@ export type RendererBackendFrameResult = {
 }
 
 export type RendererBackendPaintContext = {
-  buffer: PixelBuffer
+  buffer: RasterSurface
   commands: RenderCommand[]
   graph: RenderGraphFrame
   offsetX: number

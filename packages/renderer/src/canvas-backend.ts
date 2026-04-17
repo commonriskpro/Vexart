@@ -1,9 +1,9 @@
-import type { PixelBuffer } from "@tge/compat-software"
+import type { RasterSurface } from "./render-surface"
 import type { CanvasContext } from "./canvas"
 
 export type CanvasPainterBackend = {
   name: string
-  paint: (buf: PixelBuffer, ctx: CanvasContext, canvasW: number, canvasH: number) => void
+  paint: (surface: RasterSurface, ctx: CanvasContext, canvasW: number, canvasH: number) => void
 }
 
 let activeCanvasPainterBackend: CanvasPainterBackend | null = null

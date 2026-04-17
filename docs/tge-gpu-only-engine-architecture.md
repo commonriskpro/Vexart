@@ -11,36 +11,38 @@ Ahora también funciona como **reality check técnico** después de la primera p
 
 ## Executive summary
 
-TGE/Vexart ya avanzó bastante hacia una dirección GPU-first, pero el repo sigue en un estado intermedio:
+TGE/Vexart ya dejó atrás la etapa más obvia de compat/CPU híbrido.
 
-- hay packages nuevos,
-- hay mejores boundaries públicos,
-- hay `renderObjectId`,
-- hay más separación que antes,
+Hoy el path oficial ya es mucho más honesto:
 
-pero todavía existe una diferencia importante entre:
+- `cpu-renderer-backend.ts` fue eliminado,
+- `RetainedGraph` fue retirado,
+- `windowing` ya tiene ownership físico real,
+- `legacy-render-painter.ts` fue eliminado,
+- `@tge/compat-software` fue eliminado,
+- `@tge/output-compat` y los backends `composer` / `placeholder` / `halfblock` fueron eliminados,
+- `loop.ts` ya no sostiene un single-buffer fallback,
+- `layer-composer.ts` quedó raw-only,
+- `RasterSurface` ya no es alias de `PixelBuffer`.
 
-- **arquitectura nominal** (lo que los package names sugieren), y
-- **arquitectura real** (dónde vive el código y quién lo controla de verdad).
+Eso significa que la conversación cambió.
 
-La ineficiencia principal HOY no es solo de performance.
-Es de **modelo mental**.
+El problema principal YA NO es “cómo salimos del CPU backend”.
+Eso ya salió.
 
-Los problemas más caros ahora son:
+El problema principal ahora es:
 
-- facades temporales que parecen paquetes reales,
-- `loop.ts` todavía demasiado central,
-- path CPU/compat todavía presente en el hot path conceptual,
-- heurísticas que siguen vivas aunque ya exista identidad explícita,
-- ownership físico partido entre `renderer`, `components`, `windowing`, `output` y varios bridges.
+- cuánto staging raster transicional sigue vivo,
+- cuánto del render graph sigue dependiendo de paths no 100% GPU-native,
+- y qué piezas faltan para que el engine interno piense en GPU targets/layers/images primero,
+  y en raw RGBA sólo al borde de Kitty.
 
-La dirección correcta ya no es “seguir agregando packages”.
+La dirección correcta ya no es “seguir borrando fallbacks obvios”.
 La dirección correcta es:
 
-> reducir capas falsas,
-> colapsar bridges innecesarios,
-> aislar compat fuera del core oficial,
-> y dejar un engine que sea entendible de punta a punta.
+> reducir staging raster a lo mínimo necesario,
+> hacer GPU-native los ops que todavía dependen de surfaces temporales,
+> y dejar `PixelBuffer`/`@tge/pixel` como detalle interno cada vez más acotado.
 
 ---
 
@@ -134,10 +136,36 @@ app/examples
   -> Clay translation in packages/renderer/src/clay.ts
   -> RenderCommand[]
   -> render graph + layer planning in renderer internals
-  -> GPU / CPU-ish paint helpers
-  -> Kitty layer composer or compat composer
+  -> GPU backends + raster staging helpers
+  -> Kitty layer composer (raw-only)
   -> terminal output
 ```
+
+## Canonical official path
+
+This is the path that all migration and cleanup work must preserve and simplify:
+
+```txt
+loop
+  -> render-graph
+  -> gpu-renderer-backend
+  -> gpu-frame-composer
+  -> layer-composer (raw-only)
+  -> kitty
+```
+
+### Output boundary contract
+
+The only mandatory raw crossing in the official path is:
+
+```txt
+GPU target
+  -> readback RGBA
+  -> raw bytes
+  -> Kitty
+```
+
+Everything before that should be reasoned about as GPU targets, GPU images, GPU layers and GPU composition state — not as `PixelBuffer`-shaped engine architecture.
 
 ## Files that currently anchor the system
 
@@ -158,11 +186,13 @@ app/examples
 - `packages/renderer/src/gpu-layer-strategy.ts`
 - `packages/output/src/layer-composer.ts`
 - `packages/output/src/kitty.ts`
-- `packages/output/src/composer.ts`
 
-### Compat still active
-- `packages/renderer/src/cpu-renderer-backend.ts`
+### Staging still active
 - `packages/pixel/src/*`
+- `packages/renderer/src/pixel-buffer.ts`
+- `packages/renderer/src/render-surface.ts`
+- `packages/renderer/src/gpu-raster-staging.ts`
+- `packages/renderer/src/surface-transform-staging.ts`
 - `packages/renderer/src/canvas.ts`
 - `packages/renderer/src/wgpu-canvas-backend.ts`
 
@@ -183,9 +213,11 @@ app/examples
 - public boundaries exist where before there were only folders,
 - direct imports to `packages/*/src/*` from examples/scripts were cut,
 - `renderObjectId` exists,
-- `loop.ts` shed some helper responsibilities,
+- `loop.ts` shed major fallback responsibilities,
 - `Portal`/overlay handling is less fake than before,
-- windowing and profiling/repro material now exist explicitly.
+- `windowing` now owns its source physically,
+- the official loop is Kitty-only + layered/raw-only,
+- the official renderer path no longer has CPU fallback or selectable ANSI text.
 
 ## What is still not truly solved
 
@@ -196,28 +228,24 @@ These packages exist today mainly as temporary facades:
 - `@tge/renderer-solid`
 - `@tge/platform-terminal`
 - `@tge/windowing`
-- `@tge/compositor`
-- `@tge/render-graph`
-- `@tge/scene`
-- `@tge/text`
-- `@tge/compat-text-ansi`
 
-That is useful as a migration tool, but dangerous if people start treating facade names as proof of real ownership.
+The weak facades (`compositor`, `render-graph`, `scene`, `text`, `compat-text-ansi`) were already retired.
+The remaining bridges are the ones that still have public value.
 
 ### 2. `loop.ts` is still the operational center of gravity
 
 It is better than before, but still owns too much frame orchestration and too much policy coupling.
 
-### 3. Compat/software abstractions still leak into the official path
+### 3. Raster staging still leaks into the official path
 
-`@tge/compat-software` is still present in imports used by:
+The issue is no longer `@tge/compat-software` or CPU fallback.
+The issue now is residual raster staging in:
 
-- `packages/renderer/src/loop.ts`
-- `packages/renderer/src/layers.ts`
-- `packages/renderer/src/gpu-renderer-backend.ts`
-- `packages/renderer/src/wgpu-canvas-backend.ts`
+- `packages/renderer/src/gpu-raster-staging.ts`
+- `packages/renderer/src/surface-transform-staging.ts`
+- `packages/renderer/src/canvas.ts`
 
-That means the core still thinks in terms of `PixelBuffer` more than a truly GPU-first architecture should.
+That means the core no longer thinks in CPU backend terms, but it still does not think in GPU targets/images/layers all the way through.
 
 ### 4. Explicit identity is present, but heuristics still survive as fallback
 
@@ -261,9 +289,10 @@ The repo currently communicates more package domains than it truly owns.
 
 Focus, interaction semantics and some widget/runtime policy are still too close to renderer core internals.
 
-### 4. Compat is isolated publicly, but not conceptually enough
+### 4. Staging is isolated better, but not GPU-native enough yet
 
-Moving code to `compat-*` names helps, but the hot path still carries too much of that worldview.
+We already removed CPU backend, selectable ANSI, output-compat and the obvious fallback layers.
+What remains is the smaller but more important problem: the engine still creates temporary raster surfaces for some GPU paths.
 
 ### 5. Composition ownership is still split
 
@@ -357,17 +386,13 @@ The engine core is not.
 ## 5. Compat / Legacy / Lab
 
 ### Responsibilities
-- software raster fallback
-- fallback output
+- residual raster staging during the transition to GPU-native internals
 - imperative canvas legacy
-- ANSI/selectable text legacy
 - profiling harnesses / experiments
 
 ### Packages
-- `@tge/compat-software`
-- `@tge/output-compat`
 - `@tge/compat-canvas`
-- `@tge/compat-text-ansi`
+- `@tge/pixel` (implementation library, not core surface contract)
 
 ### Rule
 These packages may survive for compatibility, but they must stop shaping the official engine story.
@@ -384,12 +409,9 @@ These packages may survive for compatibility, but they must stop shaping the off
 | `@tge/windowing` | **keep** | package now owns its source physically |
 | `SceneCanvas` | **keep as primary retained scene API** | declarative scene abstraction with integrated hit-testing and overlays |
 | `RetainedGraph` | **retire** | duplicated retained model with higher conceptual cost |
-| `@tge/compositor` facade | **retire or make real** | today it is mostly a label, not an owner |
-| `@tge/render-graph` facade | **retire or make real** | same problem |
-| `@tge/scene` facade | **retire or make real** | same problem |
-| `@tge/text` facade | **retire or make real** | same problem |
-| `@tge/compat-text-ansi` | **retire if unused** | looks transitional and low-value today |
-| CPU/software path in hot path | **reduce aggressively** | blocks clean GPU-first reasoning |
+| weak facades (`@tge/compositor`, `@tge/render-graph`, `@tge/scene`, `@tge/text`, `@tge/compat-text-ansi`) | **retired** | no longer part of the real package graph |
+| CPU backend / output compat / selectable ANSI | **retired** | no longer part of the official engine path |
+| residual raster staging in GPU path | **reduce aggressively** | blocks true GPU-native internals |
 | heuristic render-graph fallback | **retire** | explicit IDs already exist |
 
 ---
@@ -402,27 +424,28 @@ These packages may survive for compatibility, but they must stop shaping the off
 - stop using facade names internally where they obscure real ownership,
 - keep bridges only as public compatibility boundaries.
 
-## Priority 2 — Keep `SceneCanvas`, retire `RetainedGraph`
+## Priority 2 — Finish the last raster staging cuts
+
+- remove raster staging from the official GPU paths wherever the bridge/paint helper only exists because a GPU-native implementation is missing,
+- make `render-surface.ts` a neutral contract while shrinking the role of `pixel-buffer.ts`,
+- keep raw RGBA only at the output boundary to Kitty.
+
+## Priority 3 — Keep `SceneCanvas`, retire `RetainedGraph`
 
 - migrate remaining consumers to `SceneCanvas`,
 - remove `RetainedGraph` exports and implementation,
 - keep a single retained visual model.
 
-## Priority 3 — Finish windowing cleanup after the physical move
+## Priority 4 — Finish windowing cleanup after the physical move
 
 - treat `packages/windowing/src/*` as the real owner,
 - remove stale references to the old `components/src/windowing/*` location,
 - simplify cross-package dependencies over time.
 
-## Priority 4 — Remove heuristics from render graph ownership
+## Priority 5 — Remove heuristics from render graph ownership
 
 - make `renderObjectId` mandatory for image/canvas/effect ownership,
 - kill fallback matching by `color` / `cornerRadius`.
-
-## Priority 5 — Reduce compat from the official hot path
-
-- stop making `PixelBuffer` the conceptual center of the renderer,
-- isolate CPU/software fallbacks behind explicit compat boundaries.
 
 ## Priority 6 — Make compositor ownership real
 
@@ -460,6 +483,17 @@ Decide whether composition lives in:
 - widget semantics mixed into core renderer exports
 - facade-only packages presented as if they were real domain owners
 
+## Forbidden transitional patterns
+
+The cleanup is going in the wrong direction if any branch reintroduces one of these as part of the official path:
+
+- a CPU renderer backend as normal runtime architecture
+- output compat or selectable ANSI as part of the official renderer story
+- `PixelBuffer` as the main conceptual boundary of the engine
+- `CanvasContext` as the strategic future of the renderer core
+- heuristic render ownership when `renderObjectId` is already available
+- raw bytes before the final output boundary to Kitty
+
 ---
 
 ## Definition of Done
@@ -474,16 +508,20 @@ The architecture is only “done” when all of these are true:
 ## GPU-first clarity
 - the official engine path is GPU-first end to end
 - compat/software paths are outside the main reasoning path
+- raw bytes only appear at the final Kitty output boundary
+- `canvas.ts` is no longer a structural dependency of the official path
 
 ## Runtime separation
 - focus, bubbling, drag semantics and widget policy live above the core engine
 
 ## Identity and correctness
 - layer/render ownership no longer depends on heuristic fallback as a base model
+- `renderObjectId` is the dominant ownership mechanism where explicit identity exists
 
 ## Reduced conceptual surface
 - only one primary scene abstraction survives
 - composition ownership is understandable in one place
+- `@tge/pixel` is implementation detail, not renderer mental model
 
 ## Operational confidence
 - minimal repros exist for engine bugs

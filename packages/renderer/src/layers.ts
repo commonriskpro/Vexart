@@ -24,8 +24,8 @@
  *   5. Clean layers: skip entirely (terminal still has the old image)
  */
 
-import type { PixelBuffer } from "@tge/compat-software"
-import { create, clear } from "@tge/compat-software"
+import type { RasterSurface } from "./render-surface"
+import { createRasterSurface, clearRasterSurface } from "./render-surface"
 import type { DamageRect } from "./damage"
 import { unionRect } from "./damage"
 
@@ -42,8 +42,8 @@ export type Layer = {
   /** Size in pixels. */
   width: number
   height: number
-  /** Pixel buffer for this layer. Null until first paint. */
-  buf: PixelBuffer | null
+  /** Raster surface for this layer. Null until first paint. */
+  surface: RasterSurface | null
   /** Whether this layer needs repainting. */
   dirty: boolean
   /** Previous position/size — to detect if placement needs updating. */
@@ -77,7 +77,7 @@ export function createLayer(z: number): Layer {
     y: 0,
     width: 0,
     height: 0,
-    buf: null,
+    surface: null,
     dirty: true,
     prevX: -1,
     prevY: -1,
@@ -146,14 +146,14 @@ export function updateLayerGeometry(layer: Layer, x: number, y: number, w: numbe
   layer.width = w
   layer.height = h
 
-  if (resized || !layer.buf) {
-    layer.buf = create(w, h)
+  if (resized || !layer.surface) {
+    layer.surface = createRasterSurface(w, h)
     layer.dirty = true
     layer.damageRect = nextRect
   }
 
   if (moved) {
-    if (opts?.moveOnly && !resized && layer.buf) {
+    if (opts?.moveOnly && !resized && layer.surface) {
       layer.damageRect = null
     } else {
       layer.dirty = true
@@ -168,7 +168,7 @@ export function updateLayerGeometry(layer: Layer, x: number, y: number, w: numbe
 
 /** Clear a layer's pixel buffer. */
 export function clearLayer(layer: Layer, color = 0x00000000) {
-  if (layer.buf) clear(layer.buf, color)
+  if (layer.surface) clearRasterSurface(layer.surface, color)
 }
 
 /** Mark a layer as clean (after successful transmit). */

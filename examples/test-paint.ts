@@ -8,7 +8,7 @@
  * Requires: bun zig:build
  */
 
-import { create, paint, get } from "@tge/compat-software"
+import { create, paint, get } from "@tge/pixel"
 
 const buf = create(100, 100)
 

@@ -737,7 +737,6 @@ function App(props: AppProps) {
   )
 }
 
-process.env.TGE_RENDERER_BACKEND = "gpu"
 
 const probe = probeWgpuCanvasBridge()
 const canvasBackend = probe.available ? tryCreateWgpuCanvasPainterBackend() : null

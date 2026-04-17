@@ -1,4 +1,4 @@
-import type { PixelBuffer } from "@tge/compat-software"
+import type { RasterSurface } from "./render-surface"
 import type { TGENode } from "./node"
 import type { RenderCommand } from "./clay"
 
@@ -33,7 +33,7 @@ export function commandIntersectsRect(cmd: RenderCommand, rect: { x: number; y: 
   return left < rect.x + rect.width && right > rect.x && top < rect.y + rect.height && bottom > rect.y
 }
 
-export function clearRectRegion(buf: PixelBuffer, x: number, y: number, width: number, height: number, color = 0x00000000) {
+export function clearRectRegion(buf: RasterSurface, x: number, y: number, width: number, height: number, color = 0x00000000) {
   const a = color & 0xff
   const b = (color >>> 8) & 0xff
   const g = (color >>> 16) & 0xff

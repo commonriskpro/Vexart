@@ -11,6 +11,7 @@ import {
   createWindowManager,
   useWindowList,
   useWindowManagerContext,
+  type WindowDescriptor,
   type WindowManagerState,
   type WindowOpenInput,
 } from "@tge/components"
@@ -150,7 +151,7 @@ function MouseDebugOverlay(props: { terminal: Terminal }) {
       shadow={{ x: 0, y: 10, blur: 24, color: 0x00000030 }}
     >
       <Text color={colors.foreground} fontSize={12}>Input probe</Text>
-      <Text color={colors.mutedForeground} fontSize={10}>{`renderer=gpu? ${process.env.TGE_RENDERER_BACKEND === "gpu" ? "yes" : "no"}`}</Text>
+      <Text color={colors.mutedForeground} fontSize={10}>renderer=gpu-only</Text>
       <Text color={colors.mutedForeground} fontSize={10}>{`kittyGraphics=${String(props.terminal.caps.kittyGraphics)} transport=${props.terminal.caps.transmissionMode}`}</Text>
       <Text color={0x7fd0f7ff} fontSize={10}>{lastMouse()}</Text>
       <Text color={colors.mutedForeground} fontSize={10}>{`press=${String(counts().press)} move=${String(counts().move)} release=${String(counts().release)} scroll=${String(counts().scroll)}`}</Text>
@@ -314,7 +315,7 @@ function InspectorWindowContent() {
   const windows = useWindowList()
 
   const openCount = () => windows().length
-  const minimizedCount = () => windows().filter((window) => window.status === "minimized").length
+  const minimizedCount = () => windows().filter((window: WindowDescriptor) => window.status === "minimized").length
 
   return (
     <box width="grow" height="grow" direction="column" gap={space[2]}>
@@ -330,7 +331,7 @@ function InspectorWindowContent() {
       <Text color={colors.mutedForeground} fontSize={11}>{`focused: ${context.focusedWindowId() ?? "none"}`}</Text>
 
       <box width="grow" height="grow" direction="column" gap={space[1]}>
-        {windows().map((window) => (
+        {windows().map((window: WindowDescriptor) => (
           <box direction="row" gap={space[2]} paddingX={8} paddingY={6} backgroundColor={window.focused ? 0xffffff10 : 0xffffff06} cornerRadius={6}>
             <Text color={colors.foreground} fontSize={11}>{window.title}</Text>
             <Text color={colors.mutedForeground} fontSize={11}>{window.status}</Text>
@@ -350,7 +351,7 @@ function ConsoleWindowContent() {
   ])
 
   let previous = context.state()
-  const unsubscribe = context.manager.subscribe((next) => {
+  const unsubscribe = context.manager.subscribe((next: WindowManagerState) => {
     const events = describeWindowEvents(previous, next)
     previous = next
     if (events.length === 0) return

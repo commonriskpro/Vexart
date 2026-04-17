@@ -1,4 +1,4 @@
-import { create } from "@tge/compat-software"
+import { create } from "@tge/pixel"
 import { CanvasContext, setCanvasPainterBackend, paintCanvasCommands } from "@tge/compat-canvas"
 import { tryCreateWgpuCanvasPainterBackend } from "@tge/gpu"
 

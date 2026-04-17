@@ -1,5 +1,5 @@
 import { createScaledImageCache, type CanvasContext, type RawImage } from "@tge/renderer-solid"
-import { create, paint, withOpacity, hasNebulaSupport, hasStarfieldSupport, type PixelBuffer } from "@tge/compat-software"
+import { create, paint, withOpacity, hasNebulaSupport, hasStarfieldSupport, type PixelBuffer } from "@tge/pixel"
 
 type NoiseOptions = {
   scale: number

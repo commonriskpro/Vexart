@@ -109,7 +109,7 @@ export { createHandle } from "./handle"
 // Re-export press event + mouse event types
 export type { PressEvent, NodeMouseEvent, InteractionMode } from "./node"
 
-// Re-export canvas API
+// Re-export imperative canvas API (compat/lab boundary, not canonical core path)
 export { CanvasContext, createCanvasImageCache, getCanvasImageCacheStats } from "./canvas"
 export type { Viewport, StrokeStyle, FillStyle, ShapeStyle } from "./canvas"
 export { setCanvasPainterBackend, getCanvasPainterBackend, getCanvasPainterBackendName } from "./canvas-backend"
@@ -125,7 +125,6 @@ export type {
   RendererBackendFrameResult,
   RendererBackendSyncLayerContext,
 } from "./renderer-backend"
-export { createCpuRendererBackend } from "./cpu-renderer-backend"
 export { createGpuRendererBackend, getGpuRendererBackendCacheStats } from "./gpu-renderer-backend"
 export { createGpuFrameComposer } from "./gpu-frame-composer"
 export { chooseGpuLayerStrategy } from "./gpu-layer-strategy"
@@ -381,8 +380,6 @@ export function useTerminalDimensions(terminal: Terminal): {
  * Returns a cleanup function that tears down everything.
  */
 export type MountOptions = {
-  /** Render text as ANSI (selectable/copiable) instead of bitmap pixels. */
-  selectableText?: boolean
   /** Maximum FPS cap. Default: 60. Idle: up to 60fps, animations: up to maxFps. */
   maxFps?: number
   /** Experimental optimizations — these may change or be removed. */
@@ -413,7 +410,6 @@ export type MountHandle = {
 
 export function mount(component: () => any, terminal: Terminal, opts?: MountOptions): MountHandle {
   const loop = createRenderLoop(terminal, {
-    selectableText: opts?.selectableText,
     experimental: {
       ...opts?.experimental,
       maxFps: opts?.maxFps,

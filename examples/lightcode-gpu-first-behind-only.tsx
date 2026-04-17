@@ -1,5 +1,4 @@
 process.env.LIGHTCODE_CANVAS_BACKEND = process.env.LIGHTCODE_CANVAS_BACKEND ?? "wgpu"
-process.env.TGE_RENDERER_BACKEND = process.env.TGE_RENDERER_BACKEND ?? "gpu"
 
 process.env.LIGHTCODE_GPU_FIRST_SHOW_SHELL = "0"
 process.env.LIGHTCODE_GPU_FIRST_SHOW_HEADER = "0"

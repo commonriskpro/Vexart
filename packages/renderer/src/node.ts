@@ -223,7 +223,7 @@ export type TGEProps = {
   objectFit?: "contain" | "cover" | "fill" | "none"
 
   // Canvas (<canvas> intrinsic)
-  /** Imperative draw callback — called each frame with a CanvasContext. */
+  /** Imperative draw callback — compat/lab canvas API, called each frame with a CanvasContext. */
   onDraw?: (ctx: import("./canvas").CanvasContext) => void
   /** Viewport transform for pan/zoom. { x, y, zoom }. */
   viewport?: { x: number; y: number; zoom: number }

@@ -1,9 +1,11 @@
-import { create, paint, type PixelBuffer } from "@tge/compat-software"
+import type { RasterSurface } from "./render-surface"
 import { appendFileSync } from "node:fs"
 import type { CanvasPainterBackend } from "./canvas-backend"
-import { type CanvasContext, type CanvasDrawCommand, paintCanvasCommandsCPU } from "./canvas"
+import { type CanvasContext, type CanvasDrawCommand } from "./canvas"
+import { paintCanvasCommandsCPU } from "./canvas-raster-painter"
 import { getAtlas } from "./font-atlas"
 import { getFont } from "./text-layout"
+import { createGpuTextImage, measureRasterTextWidth, readbackTargetToSurface } from "./gpu-raster-staging"
 import {
   createWgpuCanvasImage,
   createWgpuCanvasContext,
@@ -12,8 +14,6 @@ import {
   destroyWgpuCanvasContext,
   destroyWgpuCanvasTarget,
   probeWgpuCanvasBridge,
-  readbackWgpuCanvasTargetRGBA,
-  readbackWgpuCanvasTargetRegionRGBA,
   renderWgpuCanvasTargetCirclesLayer,
   renderWgpuCanvasTargetBeziersLayer,
   renderWgpuCanvasTargetImage,
@@ -643,7 +643,7 @@ export function collectSupportedMixedScene(ctx: CanvasContext, canvasW: number, 
     if (cmd.kind === "text") {
       const x = tx(cmd.x)
       const y = ty(cmd.y)
-      const w = Math.max(1, paint.measureText(cmd.text))
+      const w = measureRasterTextWidth(cmd.text)
       const h = 16
       const left = Math.max(0, x)
       const top = Math.max(0, y)
@@ -873,15 +873,8 @@ class WgpuCanvasPainterBackend implements CanvasPainterBackend {
       touchCanvasPainterTextEntry(this.#textImages, key, cached)
       return cached.handle
     }
-    const width = Math.max(1, paint.measureText(text))
-    const height = 16
-    const buf = create(width, height)
-    const r = (color >>> 24) & 0xff
-    const g = (color >>> 16) & 0xff
-    const b = (color >>> 8) & 0xff
-    const a = color & 0xff
-    paint.drawText(buf, 0, 0, text, r, g, b, a)
-    const handle = createWgpuCanvasImage(this.#context, { width, height }, buf.data)
+    const image = createGpuTextImage(this.#context, text, color)
+    const handle = image.handle
     if (this.#textImages.size >= MAX_WGPU_CANVAS_TEXT_IMAGES) {
       const first = this.#textImages.keys().next().value
       if (first) {
@@ -890,7 +883,7 @@ class WgpuCanvasPainterBackend implements CanvasPainterBackend {
         this.#textImages.delete(first)
       }
     }
-    this.#textImages.set(key, { key, width, height, handle })
+    this.#textImages.set(key, { key, width: image.width, height: image.height, handle })
     return handle
   }
 
@@ -936,7 +929,7 @@ class WgpuCanvasPainterBackend implements CanvasPainterBackend {
     return record
   }
 
-  paint(buf: PixelBuffer, ctx: CanvasContext, canvasW: number, canvasH: number) {
+  paint(surface: RasterSurface, ctx: CanvasContext, canvasW: number, canvasH: number) {
     this.#frame += 1
     const mixedInfo = collectSupportedMixedScene(ctx, canvasW, canvasH)
     if (mixedInfo && mixedInfo.ops.length > 0) {
@@ -1034,25 +1027,12 @@ class WgpuCanvasPainterBackend implements CanvasPainterBackend {
       const regionArea = region ? region.width * region.height : fullArea
       const useRegionReadback = !!(region && region.width > 0 && region.height > 0 && regionArea < fullArea * WGPU_REGION_READBACK_THRESHOLD)
       const readbackStart = performance.now()
-      const readback = useRegionReadback
-        ? readbackWgpuCanvasTargetRegionRGBA(this.#context, target, region)
-        : readbackWgpuCanvasTargetRGBA(this.#context, target, canvasW * canvasH * 4)
+      const readback = readbackTargetToSurface(this.#context, target, surface, { region: useRegionReadback ? region : null })
       const readbackMs = performance.now() - readbackStart
       const copyStart = performance.now()
-      if (useRegionReadback && region) {
-        const rowBytes = region.width * 4
-        for (let row = 0; row < region.height; row++) {
-          const srcStart = row * rowBytes
-          const srcEnd = srcStart + rowBytes
-          const dstStart = ((region.y + row) * canvasW + region.x) * 4
-          buf.data.set(readback.data.subarray(srcStart, srcEnd), dstStart)
-        }
-      } else {
-        buf.data.set(readback.data)
-      }
       const copyMs = performance.now() - copyStart
       const compositeMs = 0
-      const readbackMode = useRegionReadback && region ? `region ${region.width}x${region.height}@(${region.x},${region.y})` : "full"
+      const readbackMode = readback.mode === "region" && region ? `region ${region.width}x${region.height}@(${region.x},${region.y})` : "full"
       logWgpuBackend(`[frame ${this.#frame}] mode=mixed cmds=${mixedInfo.ops.length} batches=${batches.length} readbackMode=${readbackMode} render=${renderMs.toFixed(2)}ms readback=${readbackMs.toFixed(2)}ms copy=${copyMs.toFixed(2)}ms composite=${compositeMs.toFixed(2)}ms total=${(renderMs + readbackMs + copyMs + compositeMs).toFixed(2)}ms size=${canvasW}x${canvasH}`)
       return
     }
@@ -1065,10 +1045,9 @@ class WgpuCanvasPainterBackend implements CanvasPainterBackend {
       renderWgpuCanvasTargetImage(this.#context, target, imageHandle, singleImage.instance, 0x00000000)
       const renderMs = performance.now() - renderStart
       const readbackStart = performance.now()
-      const { data } = readbackWgpuCanvasTargetRGBA(this.#context, target, canvasW * canvasH * 4)
+      readbackTargetToSurface(this.#context, target, surface)
       const readbackMs = performance.now() - readbackStart
       const copyStart = performance.now()
-      buf.data.set(data)
       const copyMs = performance.now() - copyStart
       const compositeMs = 0
       logWgpuBackend(`[frame ${this.#frame}] mode=image cmds=1 render=${renderMs.toFixed(2)}ms readback=${readbackMs.toFixed(2)}ms copy=${copyMs.toFixed(2)}ms composite=${compositeMs.toFixed(2)}ms total=${(renderMs + readbackMs + copyMs + compositeMs).toFixed(2)}ms size=${canvasW}x${canvasH}`)
@@ -1077,7 +1056,7 @@ class WgpuCanvasPainterBackend implements CanvasPainterBackend {
 
     const rects = collectSupportedRects(ctx, canvasW, canvasH)
     if (!rects) {
-      paintCanvasCommandsCPU(buf, ctx, canvasW, canvasH)
+      paintCanvasCommandsCPU(surface, ctx, canvasW, canvasH)
       return
     }
     if (rects.length === 0) return
@@ -1087,10 +1066,9 @@ class WgpuCanvasPainterBackend implements CanvasPainterBackend {
     renderWgpuCanvasTargetRects(this.#context, target, rects, 0x00000000)
     const renderMs = performance.now() - renderStart
     const readbackStart = performance.now()
-    const { data } = readbackWgpuCanvasTargetRGBA(this.#context, target, canvasW * canvasH * 4)
+    readbackTargetToSurface(this.#context, target, surface)
     const readbackMs = performance.now() - readbackStart
     const copyStart = performance.now()
-    buf.data.set(data)
     const copyMs = performance.now() - copyStart
     const compositeMs = 0
     logWgpuBackend(`[frame ${this.#frame}] mode=rects cmds=${rects.length} render=${renderMs.toFixed(2)}ms readback=${readbackMs.toFixed(2)}ms copy=${copyMs.toFixed(2)}ms composite=${compositeMs.toFixed(2)}ms total=${(renderMs + readbackMs + copyMs + compositeMs).toFixed(2)}ms size=${canvasW}x${canvasH}`)

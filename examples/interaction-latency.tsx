@@ -1,5 +1,3 @@
-process.env.TGE_RENDERER_BACKEND = process.env.TGE_RENDERER_BACKEND ?? "gpu"
-
 import { createSignal, For } from "solid-js"
 import { createEffect } from "solid-js"
 import { createTerminal } from "@tge/terminal"

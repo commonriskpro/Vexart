@@ -41,7 +41,7 @@ async function main() {
     for (let i = 0; i < ITERATIONS; i++) {
       term.beginSync()
       const start = performance.now()
-      composer.renderLayer(pixelBuf, 9001, 0, 0, -1, term.size.cellWidth, term.size.cellHeight)
+      composer.renderLayerRaw(pixelBuf.data, pixelBuf.width, pixelBuf.height, 9001, 0, 0, -1, term.size.cellWidth, term.size.cellHeight)
       term.endSync()
       layerTimes.push(performance.now() - start)
     }
