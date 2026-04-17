@@ -49,7 +49,7 @@ import {
   type Token,
   getTreeSitterClient,
   highlightsToTokens,
-} from "@tge/renderer"
+} from "@tge/renderer-solid"
 import type { KeyEvent } from "@tge/input"
 
 // ── Theme type ──

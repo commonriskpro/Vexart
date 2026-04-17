@@ -1,10 +1,8 @@
-process.env.TGE_RENDERER_BACKEND = process.env.TGE_RENDERER_BACKEND ?? "gpu"
-
 import { createSignal, For } from "solid-js"
 import { createEffect } from "solid-js"
 import { createTerminal } from "@tge/terminal"
 import { createParser } from "@tge/input"
-import { mount, useDrag, markDirty, debugState, setDebug, type NodeMouseEvent } from "@tge/renderer"
+import { mount, useDrag, markDirty, debugState, setDebug, type NodeMouseEvent } from "@tge/renderer-solid"
 import { appendFileSync } from "node:fs"
 
 const LOG = "/tmp/interaction-latency.log"
@@ -106,7 +104,6 @@ async function main() {
     maxFps: 60,
     experimental: {
       idleMaxFps: 60,
-      partialUpdates: false,
       forceLayerRepaint: false,
     },
   })

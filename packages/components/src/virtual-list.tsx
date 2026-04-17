@@ -28,7 +28,7 @@
 
 import { createSignal, For, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import { useFocus, createScrollHandle, onPostScroll, markDirty, type NodeHandle } from "@tge/renderer"
+import { useFocus, createScrollHandle, onPostScroll, markDirty, type NodeHandle } from "@tge/renderer-solid"
 
 // ── Types ──
 

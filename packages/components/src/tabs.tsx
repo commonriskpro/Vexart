@@ -30,7 +30,7 @@
  */
 
 import type { JSX } from "solid-js"
-import { useFocus } from "@tge/renderer"
+import { useFocus } from "@tge/renderer-solid"
 
 // ── Types ──
 

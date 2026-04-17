@@ -16,7 +16,7 @@
  * Requires: bun zig:build && bun run clay:build
  */
 
-import { mount, onInput, SyntaxStyle, KANAGAWA } from "@tge/renderer"
+import { mount, onInput, SyntaxStyle, KANAGAWA } from "@tge/renderer-solid"
 import { Box, Text, Markdown, ScrollView } from "@tge/components"
 import { createTerminal } from "@tge/terminal"
 

@@ -5,7 +5,7 @@ import {
   destroyWgpuCanvasTarget,
   readbackWgpuCanvasTargetRGBA,
   renderWgpuCanvasTargetRects,
-} from "../packages/renderer/src/wgpu-canvas-bridge"
+} from "@tge/gpu"
 
 const ctx = createWgpuCanvasContext()
 const target = createWgpuCanvasTarget(ctx, { width: 8, height: 8 })

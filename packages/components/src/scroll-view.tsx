@@ -12,7 +12,7 @@
  *   - Programmatic scrollTo/scrollBy/scrollIntoView
  *
  * Usage:
- *   import { ScrollHandle } from "@tge/renderer"
+ *   import { ScrollHandle } from "@tge/runtime"
  *
  *   let scrollRef: ScrollHandle
  *
@@ -28,7 +28,7 @@
  */
 
 import type { JSX } from "solid-js"
-import { createScrollHandle, type ScrollHandle } from "@tge/renderer/scroll"
+import { createScrollHandle, type ScrollHandle } from "@tge/renderer-solid"
 
 let scrollViewCounter = 0
 

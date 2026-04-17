@@ -25,7 +25,7 @@
 
 import type { JSX } from "solid-js"
 import { Lexer, type MarkedToken, type Tokens } from "marked"
-import { type SyntaxStyle } from "@tge/renderer"
+import { type SyntaxStyle } from "@tge/renderer-solid"
 import { Code } from "./code"
 
 const LINE_HEIGHT = 17

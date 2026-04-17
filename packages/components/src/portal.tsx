@@ -25,6 +25,7 @@
  */
 
 import type { JSX } from "solid-js"
+import { OverlayRoot } from "./overlay-root"
 
 export type PortalProps = {
   children?: JSX.Element
@@ -33,18 +34,14 @@ export type PortalProps = {
 /**
  * Portal component.
  *
- * Wraps children in a full-screen overlay layer.
- * The layer prop ensures it composites independently with high z-index.
- * Width/height "100%" fills the entire terminal viewport.
+ * Wraps children in a root-attached overlay plane.
+ * This keeps the logical parent in the component tree while the visual parent
+ * is the renderer root — the transitional primitive required by the refactor.
  */
 export function Portal(props: PortalProps) {
   return (
-    <box
-      layer
-      width="100%"
-      height="100%"
-    >
+    <OverlayRoot>
       {props.children}
-    </box>
+    </OverlayRoot>
   )
 }

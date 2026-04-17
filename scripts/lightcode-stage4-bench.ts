@@ -5,8 +5,7 @@ import { join } from "node:path"
 
 type Run = {
   key: string
-  canvas: "cpu" | "wgpu"
-  renderer: "cpu" | "gpu"
+  canvas: "wgpu"
   force: "auto" | "layered-raw" | "final-frame-raw"
 }
 
@@ -21,7 +20,6 @@ type Sample = {
 type Report = {
   key: string
   canvas: string
-  renderer: string
   force: string
   exitCode: number | null
   kitty: boolean
@@ -39,10 +37,9 @@ const DEBUG = "/tmp/lightcode-debug.log"
 const GPU = "/tmp/tge-gpu-renderer.log"
 const OUT = process.env.LIGHTCODE_STAGE4_BENCH_DIR ?? `/tmp/lightcode-stage4-bench-${Date.now()}`
 const RUNS: Run[] = [
-  { key: "gpu-auto", canvas: "wgpu", renderer: "gpu", force: "auto" },
-  { key: "gpu-layered", canvas: "wgpu", renderer: "gpu", force: "layered-raw" },
-  { key: "gpu-final", canvas: "wgpu", renderer: "gpu", force: "final-frame-raw" },
-  { key: "cpu", canvas: "cpu", renderer: "cpu", force: "auto" },
+  { key: "gpu-auto", canvas: "wgpu", force: "auto" },
+  { key: "gpu-layered", canvas: "wgpu", force: "layered-raw" },
+  { key: "gpu-final", canvas: "wgpu", force: "final-frame-raw" },
 ]
 
 function nums(values: number[]) {
@@ -112,7 +109,6 @@ function runOne(item: Run, outDir: string) {
   const env: Record<string, string> = {
     ...process.env,
     LIGHTCODE_CANVAS_BACKEND: item.canvas,
-    TGE_RENDERER_BACKEND: item.renderer,
     LIGHTCODE_LOG_FPS: process.env.LIGHTCODE_LOG_FPS ?? "1",
     LIGHTCODE_FORCE_REPAINT: process.env.LIGHTCODE_FORCE_REPAINT ?? "1",
     LIGHTCODE_FORCE_LAYER_REPAINT: process.env.LIGHTCODE_FORCE_LAYER_REPAINT ?? "1",
@@ -149,7 +145,6 @@ async function saveLogs(item: Run, outDir: string, code: number | null): Promise
   return {
     key: item.key,
     canvas: item.canvas,
-    renderer: item.renderer,
     force: item.force,
     exitCode: code,
     kitty: kitty.kitty,

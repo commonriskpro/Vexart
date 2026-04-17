@@ -1,4 +1,4 @@
-import { createScaledImageCache, type CanvasContext, type RawImage } from "@tge/renderer"
+import { createScaledImageCache, type CanvasContext, type RawImage } from "@tge/renderer-solid"
 import { create, paint, withOpacity, hasNebulaSupport, hasStarfieldSupport, type PixelBuffer } from "@tge/pixel"
 
 type NoiseOptions = {

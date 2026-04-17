@@ -7,50 +7,52 @@ How TGE turns JSX into pixels in your terminal.
 ## Rendering Pipeline
 
 ```
-                 ┌─────────────────────────────────────────────┐
-                 │                  YOUR CODE                  │
-                 │                                             │
-                 │   function App() {                          │
-                 │     return <Box><Text>Hello</Text></Box>    │
-                 │   }                                         │
-                 │   mount(App, terminal)                      │
-                 └──────────────────┬──────────────────────────┘
-                                    │
-                          ┌─────────▼─────────┐
-                          │  1. JSX → Nodes    │
-                          │  (SolidJS          │
-                          │   createRenderer)  │
-                          └─────────┬──────────┘
-                                    │
-                          ┌─────────▼─────────┐
-                          │  2. Nodes → Layout │
-                          │  (Clay, C via FFI) │
-                          └─────────┬──────────┘
-                                    │
-                          ┌─────────▼─────────┐
-                          │  3. Layout → Paint │
-                          │  (Zig via FFI,     │
-                          │   SDF primitives)  │
-                          └─────────┬──────────┘
-                                    │
-                          ┌─────────▼─────────┐
-                          │  4. Paint → Output │
-                          │  (Kitty graphics   │
-                          │   protocol)        │
-                          └─────────┬──────────┘
-                                    │
-                          ┌─────────▼─────────┐
-                          │  5. Terminal       │
-                          │  (GPU-rendered     │
-                          │   pixel image)     │
-                          └───────────────────┘
+┌─────────────────────────────────────────────────────┐
+│                     YOUR CODE                       │
+│                                                     │
+│   function App() {                                  │
+│     return <box><text>Hello</text></box>            │
+│   }                                                 │
+│   mount(App, terminal)                              │
+└──────────────────────┬──────────────────────────────┘
+                       │
+             ┌─────────▼─────────┐
+             │  1. JSX → Nodes   │
+             │  (SolidJS         │
+             │   createRenderer) │
+             └─────────┬─────────┘
+                       │
+             ┌─────────▼─────────┐
+             │  2. Nodes → Layout│
+             │  (Clay, C via FFI)│
+             └─────────┬─────────┘
+                       │
+             ┌─────────▼─────────┐
+             │  3. Layout → GPU  │
+             │  (WGPU, Zig SDF   │
+             │   primitives)     │
+             └─────────┬─────────┘
+                       │
+             ┌─────────▼─────────┐
+             │  4. GPU → Terminal│
+             │  (Kitty SHM,      │
+             │   readback)       │
+             └─────────┬─────────┘
+                       │
+             ┌─────────▼─────────┐
+             │  5. Terminal      │
+             │  (GPU-rendered    │
+             │   pixel image)    │
+             └───────────────────┘
 ```
+
+**TGE is GPU-only.** A terminal with Kitty graphics support is required (Kitty, Ghostty, WezTerm). The renderer throws at startup if the terminal does not support it.
 
 ---
 
 ## Step 1: JSX → Node Tree
 
-TGE uses SolidJS's `createRenderer` in **universal mode**. This means SolidJS knows nothing about the DOM — it calls TGE's custom reconciler methods:
+TGE uses SolidJS's `createRenderer` in **universal mode**. SolidJS knows nothing about the DOM — it calls TGE's custom reconciler methods:
 
 ```
 createElement(tag)        → creates a TGE node
@@ -59,7 +61,7 @@ insertNode(parent, child) → inserts into tree
 setProp(node, key, value) → updates a property
 ```
 
-The Babel plugin (`solid-plugin.ts`) compiles JSX using `babel-preset-solid` with `generate: "universal"` and `moduleName: "@tge/renderer"`. This emits imports from `@tge/renderer` instead of the DOM renderer.
+The Babel plugin (`solid-plugin.ts`) compiles JSX using `babel-preset-solid` with `generate: "universal"` and `moduleName: "@tge/renderer-solid"`.
 
 **Key point:** SolidJS doesn't create a virtual DOM. It generates fine-grained reactive subscriptions. When a signal changes, only the specific `setProp()` call that reads it re-executes.
 
@@ -82,135 +84,109 @@ Clay is a single C header (`vendor/clay.h`) compiled to a shared library. It pro
 - Border, corner radius
 - SCISSOR clipping (for scroll containers)
 
-Clay runs in **microseconds** — fast enough for 30fps re-layout on every frame.
+Clay runs in **microseconds** — fast enough for re-layout on every frame.
 
 The output is a flat array of **render commands**: rectangles, borders, text, scissors. Each command has an absolute position and size.
 
 ---
 
-## Step 3: Layout → Pixel Paint
+## Step 3: Layout → GPU Render
 
-Render commands are painted into a `PixelBuffer` (RGBA, 4 bytes per pixel) using the Zig paint engine.
+Render commands are submitted to the **GPU renderer backend** (`gpu-renderer-backend.ts`) which translates them to WGPU draw calls via Zig SDF primitives.
 
-Each command type maps to a Zig FFI call:
+### GPU Renderer Backend
 
-| Command | Zig Function |
-|---------|-------------|
-| RECTANGLE (no radius) | `tge_fill_rect` |
-| RECTANGLE (with radius) | `tge_rounded_rect` |
-| RECTANGLE (per-corner radius) | `tge_rounded_rect_corners` |
-| BORDER | `tge_stroke_rect` |
-| BORDER (per-corner) | `tge_stroke_rect_corners` |
-| TEXT | `tge_draw_text` |
-| TEXT (runtime font) | `tge_draw_text_font` |
+The renderer maintains a **layer system**. Nodes with the `layer` prop get their own WGPU render target:
 
-All paint functions use **SDF (Signed Distance Field)** anti-aliasing. The SDF is evaluated per-pixel:
+```
+box layer  → own WGPU target (LayerSlot)
+  text     → rendered into parent's target
+box layer  → own WGPU target (LayerSlot)
+  text     → rendered into this target
+```
+
+Each frame:
+1. Walk the render command list
+2. Assign commands to layer slots by spatial containment
+3. For each dirty layer: run GPU paint operations
+4. Composite layers into final output
+
+### SDF Primitives (Zig → WGPU)
+
+All shapes use SDF (Signed Distance Field) anti-aliasing:
 
 ```
 distance = sdf(pixel, shape)
 alpha = smoothstep(0.5, -0.5, distance)
-blend(buffer, pixel, color * alpha)
+blend(gpu_buffer, pixel, color * alpha)
 ```
 
-This produces sub-pixel smooth edges — no jagged corners, no aliasing artifacts.
+This produces sub-pixel smooth edges. No jagged corners, no aliasing.
+
+| Render Command | Zig Function |
+|----------------|-------------|
+| Rectangle (no radius) | `tge_fill_rect` |
+| Rectangle (with radius) | `tge_rounded_rect` |
+| Rectangle (per-corner radius) | `tge_rounded_rect_corners` |
+| Border | `tge_stroke_rect` |
+| Text | `tge_draw_text` / `tge_draw_text_font` |
 
 ### Effects Pipeline
 
-Effects are NOT part of Clay's layout. They're handled in a side-map (`effectsQueue`) populated during tree walking:
+Effects are handled in a side-map (`effectsQueue`) populated during tree walking:
 
-1. During tree walk, if a node has `shadow`, `glow`, `gradient`, `backdropBlur`, backdrop filters, or `opacity` props, record the effect config.
-2. In `paintCommand()`, match effects to RECT commands by color + cornerRadius.
+1. If a node has `shadow`, `glow`, `gradient`, `backdropBlur`, backdrop filters, or `opacity`, record the effect config.
+2. In `paintCommand()`, match effects to RECT commands.
 3. Paint order:
-   a. **Glow** — rounded rect → blur → composite onto main buffer (isolated temp buffer)
-   b. **Shadow** — rounded rect at offset → blur → composite (supports array for multi-shadow)
-   c. **Backdrop filters** — applied IN-PLACE on main buffer in CSS spec order:
-      - `backdropBlur` → box blur (3-pass ≈ Gaussian)
-      - `backdropBrightness` → per-pixel brightness adjustment
-      - `backdropContrast` → per-pixel contrast adjustment
-      - `backdropSaturate` → per-pixel saturation
-      - `backdropGrayscale` → per-pixel grayscale conversion
-      - `backdropInvert` → per-pixel color inversion
-      - `backdropSepia` → per-pixel sepia tone
-      - `backdropHueRotate` → per-pixel hue rotation
-   d. **Corner restoration** — for rounded rects, save pixels before blur, restore outside SDF mask
-   e. **Background/gradient** — paint solid color or gradient fill
-   f. **Opacity** — if element has `opacity < 1`, paint into temp buffer, composite via `withOpacity()`
+   - **Glow** → blur → composite onto layer target
+   - **Shadow** → blur at offset → composite (supports array for multi-shadow)
+   - **Backdrop filters** → applied in-place: `backdropBlur`, `backdropBrightness`, `backdropContrast`, `backdropSaturate`, `backdropGrayscale`, `backdropInvert`, `backdropSepia`, `backdropHueRotate`
+   - **Background/gradient** → solid color or gradient fill
+   - **Opacity** → paint into temp buffer, composite via `withOpacity()`
 
-**Why isolated buffers?** Blur is destructive in-place. Without isolation, blur corrupts neighboring content.
+### Glyph Atlas
+
+Text uses a runtime-generated glyph atlas (~1146 glyphs across 7 Unicode blocks). The atlas is generated once at startup via `@napi-rs/canvas` and uploaded to the GPU as a texture. Glyphs are looked up by codepoint index.
+
+Covered blocks: ASCII, Latin-1 + Extended-A, General Punctuation, Arrows, Mathematical Operators, Miscellaneous Technical, Box Drawing + Block + Geometric + Misc Symbols + Dingbats.
 
 ### Scissor Clipping
 
-All paint primitives respect the active scissor (scroll container bounds). Three strategies:
+All paint primitives respect the active scissor (scroll container bounds):
 
-| Strategy | Used for | How |
-|----------|----------|-----|
-| `clipToScissor()` | Flat rects | Clamp coordinates before `fillRect` |
-| `paintWithScissorClip()` | Rounded rects, per-corner radius, borders | Render to temp buffer, copy visible portion |
-| Temp buffer + alpha blend | Text | Render text to temp buffer, copy scissor-visible pixels |
-| Region clipping | Backdrop blur/filters | Clip the blur/filter region to scissor bounds before applying |
-| `overScissored()` | Shadows, glow | Clip the composite source to scissor before `over()` |
-
-Without scissor clipping, elements inside scroll containers would bleed outside their viewport — rounded rects, text, blur effects, and shadows would paint over sibling elements like tab bars.
+| Strategy | Used for |
+|----------|----------|
+| Coordinate clamp | Flat rects |
+| Temp buffer + copy | Rounded rects, borders, text |
+| Region clamp | Backdrop filters |
+| Composite clip | Shadows, glow |
 
 ---
 
-## Step 4: Pixel Buffer → Terminal
+## Step 4: GPU → Terminal
 
-The pixel buffer is converted to terminal output by the output backend.
+Each dirty layer is read back from WGPU via **SHM (shared memory)** and transmitted to the terminal using the Kitty graphics protocol.
 
-### Kitty Direct Backend
-
-The Kitty graphics protocol transmits pixel data as base64-encoded PNG/raw chunks:
+### Kitty SHM Transport
 
 ```
-\x1b_Ga=T,f=32,s=<width>,t=<height>,p=<placement_id>,q=2;
-<base64 pixel data>
-\x1b\
+WGPU readback → RGBA bytes in shared memory
+  → Kitty SHM command: \x1b_Ga=T,t=s,f=32,...;<SHM path>\x1b\
+    → Terminal GPU decodes and renders
 ```
 
-The terminal GPU decodes and renders the image. This is FAST — no per-cell overhead.
+SHM transport avoids base64 encoding and socket copying — the terminal reads directly from the memory-mapped region. This is the lowest-latency Kitty transport mode.
 
-### Kitty Placeholder Backend (tmux)
+### Layer Compositing
 
-Inside tmux, direct Kitty graphics don't work. Instead, TGE uses Unicode placeholder mode:
+Layers map to Kitty image placements. Each layer has a stable Kitty image ID. Only dirty layers retransmit:
 
-1. Upload the image to the terminal
-2. Print a grid of Unicode placeholder characters (`\u10EEEE`)
-3. Each character is decorated with diacritics that encode the image ID and position
-4. The terminal maps placeholders to image regions
-
-### Halfblock Backend (Fallback)
-
-For terminals without Kitty graphics, TGE falls back to halfblock characters (`▀`):
-
-- Each character cell represents 2 vertical pixels
-- Foreground color = top pixel, background color = bottom pixel
-- Resolution: 2 colors per cell (vs full RGBA with Kitty)
-
----
-
-## Layer Compositing
-
-When a `<Box>` has the `layer` prop, it's promoted to its own Kitty image:
-
-```tsx
-<Box layer>          ←  gets its own Kitty image (ID 1)
-  <Text>Static</Text>
-</Box>
-<Box layer>          ←  gets its own Kitty image (ID 2)
-  <Text>{counter()}</Text>
-</Box>
+```
+Frame N: layer 1 dirty (counter changed) → transmit ~1KB
+Frame N: layer 2 clean (background) → no transmission
 ```
 
-Each layer:
-- Has its own `PixelBuffer`
-- Tracks its own dirty flag
-- Only retransmits to the terminal when its content changes
-- Stays in terminal GPU VRAM when clean
-
-**Spatial command assignment**: Clay emits a flat array of commands. TGE assigns each command to a layer based on spatial containment — if the command's bounding box falls within a layer's anchor rectangle, it belongs to that layer.
-
-This is critical for performance. In a dashboard with 5 widgets, updating one counter only retransmits ~1KB instead of the entire screen.
+In a dashboard with 5 widgets, updating one counter retransmits ~1KB instead of the entire screen.
 
 ---
 
@@ -219,110 +195,122 @@ This is critical for performance. In a dashboard with 5 widgets, updating one co
 ```
 Signal change (createSignal setter)
   → SolidJS fires effect
-    → setProp(node, key, newValue) — pre-parses color/sizing ONCE
+    → setProp(node, key, newValue)  ← pre-parses color/sizing ONCE
       → markDirty()
-        → next frame tick (adaptive 30-60fps):
+        → next frame tick (adaptive fps):
           → Clay beginLayout/endLayout
             → walk commands
-              → paint dirty regions (effects, backdrop filters, opacity)
-                → output dirty layers
+              → GPU paint dirty layers
+                → SHM readback + Kitty output
 ```
 
-Animation active → 60fps. Idle → 30fps. Transitions back after ~200ms cooldown.
-
-The entire cycle from signal change to pixels on screen takes single-digit milliseconds.
+Animation active → 60fps. Idle → lower fps. The entire cycle from signal change to pixels on screen takes single-digit milliseconds.
 
 ### FFI ARM64 Safety
 
-ARM64 has 8 general-purpose registers (x0-x7) for function arguments. bun:ffi silently corrupts parameters beyond the 8th when they spill to the stack.
+ARM64 passes function arguments in 8 registers (x0–x7). `bun:ffi` silently corrupts parameters beyond the 8th.
 
-**Solution:** All FFI functions that would exceed 8 params use a packed buffer pattern:
-- TypeScript packs spatial/extra params into a shared `ArrayBuffer(64)` via `DataView`
+**Solution:** All FFI functions that exceed 8 params use a packed buffer pattern:
+- TypeScript packs params into a shared `ArrayBuffer(64)` via `DataView`
 - A single `Uint8Array` view is passed as one pointer argument
 - Zig unpacks via `@bitCast` (zero-cost reinterpret)
 
-**Performance:** The `ArrayBuffer` is allocated ONCE at module load. Zero allocations per FFI call. At 60fps with 100 nodes, this eliminates ~18,000 allocations/second.
+The `ArrayBuffer` is allocated **once at module load**. Zero allocations per FFI call.
 
-```
-TypeScript (pack):   _v.setInt32(0, x, true); _v.setInt32(4, y, true); ...
-FFI call:            tge_rounded_rect(bufPtr, width, height, color, _p)
-Zig (unpack):        const x = rd_i32(p, 0); const y = rd_i32(p, 4); ...
-```
+---
 
-### Focus System Architecture
-
-TGE's focus system bridges the SolidJS reactive layer and the paint loop:
+## Focus System
 
 ```
 <box focusable>
   → reconciler.setProperty("focusable", true)
-    → registerNodeFocusable(node) — creates FocusEntry in active scope
-      → Tab/Shift+Tab cycles through active scope entries
+    → registerNodeFocusable(node) → FocusEntry in active scope
+      → Tab/Shift+Tab cycles through scope
         → focusedId() signal updates
-          → updateInteractiveStates() reads focusedId(), sets node._focused
-            → resolveProps() merges focusStyle when _focused=true
+          → updateInteractiveStates() sets node._focused
+            → resolveProps() merges focusStyle
               → paintCommand renders merged visual props
 ```
 
 **Focus scopes** enable focus traps (e.g., Dialog):
 - `pushFocusScope()` creates a new scope — Tab only cycles within it
-- `popScope()` (returned by push) restores the previous scope and focus
-- Scopes stack — nested dialogs create nested traps
+- Nested dialogs create nested traps
 
-**`useFocus()`** exists for component-level focus (custom onKeyDown handlers).
-**`<box focusable>`** exists for node-level focus (declarative, zero boilerplate).
+**Event bubbling**: `onPress` bubbles up the parent chain. Per-node mouse events (`onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseOver`, `onMouseOut`) do NOT bubble. Pointer capture (`setPointerCapture`/`releasePointerCapture`) routes all mouse events to a specific node, enabling drag.
 
-**Event bubbling**: `onPress` events bubble up the parent chain like DOM click events. When a node without `onPress` is clicked, the event walks up to the nearest ancestor with a handler. Each handler receives a `PressEvent` with `stopPropagation()`. Mouse clicks on focusable nodes automatically set focus (like browser behavior). Per-node mouse events (`onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseOver`, `onMouseOut`) do NOT bubble — they dispatch directly to the target node via `NodeMouseEvent` (`{ x, y, nodeX, nodeY, width, height }`). Pointer capture (`setPointerCapture`/`releasePointerCapture`) routes all mouse events to a specific node regardless of cursor position, enabling drag interactions. Interactive elements have a minimum hit-area of one terminal cell (`cellW x cellH`) to ensure small elements are still clickable — this only affects hit-testing, not visual rendering.
-
-### Auto-RECT for Interactive Nodes
-
-Any node with `onPress`, `focusable`, `hoverStyle`, `activeStyle`, `focusStyle`, or mouse callbacks automatically gets a near-transparent RECT placeholder (`0x00000001`). This ensures the node enters `rectNodes` for hit-testing without requiring explicit `backgroundColor`. In the browser, any `<div>` is clickable — TGE now matches this behavior.
-
-### Border Space Reservation
-
-If `focusStyle`, `hoverStyle`, or `activeStyle` define `borderWidth`, the engine reserves that space in Clay with a transparent border when inactive. This prevents layout jitter when interactive styles activate — equivalent to CSS `outline` behavior.
-
-### Click Re-Layout
-
-When a click is dispatched (`onPress` or focus change), the engine re-runs `walkTree` + `endLayout` in the same frame. This eliminates the ~33ms visual delay that would otherwise occur because layout was computed before the click callback mutated the tree.
-
-### Scroll Container Hit-Testing
-
-Nodes fully outside their scroll container ancestor viewport are skipped during hit-testing. This prevents off-screen items (with layout coordinates that may overlap other screen areas) from receiving false hover/click events. The scroll container itself is NOT skipped.
-
-**Cleanup on removal**: `removeNode()` calls `unregisterSubtree()` to recursively unregister all focusable descendants. Without this, destroyed children remain as ghost entries in the focus ring.
-
-**Interaction props pattern**: Every headless component provides interaction props in its render context (like Radix UI's `asChild` pattern). Consumers spread these props on the root element for automatic mouse+keyboard support. For example, `Button` provides `ctx.buttonProps` = `{ focusable, onPress }`, `List` provides `ctx.itemProps` = `{ onPress }`. The `useDrag` and `useHover` hooks follow the same spread-props pattern for drag and hover interactions, encapsulating pointer capture and delayed timers respectively.
+Interactive elements have a minimum hit area of one terminal cell to ensure small elements are clickable.
 
 ---
 
 ## Module Dependency Graph
 
 ```
-@tge/components ──→ @tge/renderer ──→ @tge/pixel ──→ Zig (libtge)
-       │                  │                │
-       │                  │                └──→ bun:ffi
-       │                  │
-       ├──→ @tge/void     ├──→ @tge/terminal ──→ process.stdin/stdout
-       │                  │
-       │                  ├──→ @tge/input
-       │                  │
-       │                  ├──→ @tge/output ──→ Kitty protocol
-       │                  │
-       │                  └──→ Clay (libclay) ──→ bun:ffi
+@tge/components ──→ @tge/renderer-solid ──→ @tge/pixel ──→ Zig (libtge)
+       │                    │                    │
+       │                    │                    └──→ bun:ffi
+       │                    │
+       ├──→ @tge/void        ├──→ @tge/terminal
+       │                    │
+       │                    ├──→ @tge/input
+       │                    │
+       │                    ├──→ @tge/output-kitty ──→ Kitty SHM
+       │                    │
+       │                    └──→ Clay (libclay) ──→ bun:ffi
        │
        └──→ solid-js (signals, control flow)
+
+@tge/windowing ──→ @tge/renderer-solid
 ```
 
-### Independence
+**Single entry point for apps:** `@tge/renderer-solid` re-exports everything you need — `createTerminal`, `mount`, all hooks, all types.
 
-Each lower package can be used without the packages above it:
+---
 
-- **@tge/pixel** alone: imperative pixel painting
-- **@tge/pixel + @tge/output**: paint and display, no layout
-- **@tge/pixel + @tge/output + @tge/terminal**: full imperative pipeline
-- **+ @tge/renderer**: add JSX and layout
-- **+ @tge/components + @tge/void**: full framework experience
+## Key Design Decisions
+
+### Why GPU-only?
+
+CPU raster pipelines (painting to a `Uint8Array` then base64-encoding for Kitty) are bottlenecked by:
+- Memory bandwidth (CPU → GPU copy per frame)
+- Encoding cost (base64 is ~33% overhead)
+- No layer caching (entire screen retransmitted on any change)
+
+The GPU path eliminates all three: WGPU renders directly, SHM avoids encoding, layer caching retransmits only dirty regions.
+
+### Why SolidJS (not React)?
+
+- **No VDOM** — fine-grained reactive subscriptions, only dirty `setProp` calls re-execute
+- **`createRenderer`** — 10-method universal renderer API, no reconciler complexity
+- **Tiny runtime** — ~7KB reactive core, no scheduler, no fiber tree
+
+### Why Clay (not Yoga/Taffy)?
+
+- **Single C header** — no cmake, no cargo
+- **Microsecond performance** — designed for 60fps game UIs
+- **Renderer-agnostic** — outputs render commands, not DOM mutations
+
+### Why Zig (not Rust/C)?
+
+- **Zero overhead FFI** — compiles to C ABI, `bun:ffi` calls with no marshaling cost
+- **Comptime** — font atlas computed at compile time
+- **Simplicity** — SDF primitives are ~200 lines each, write directly into caller's buffer
+
+### Why Bun (not Node)?
+
+- **`bun:ffi`** — native FFI without N-API or node-gyp
+- **Fast startup** — <50ms vs Node's 200ms+
+- **TypeScript native** — runs `.ts`/`.tsx` directly
+
+### Why Pixel-Native (not Cell-Based)?
+
+Cell-based TUI frameworks (Blessed, Ink, Bubbletea) cannot render:
+- Anti-aliased rounded corners
+- Drop shadows with blur
+- Gradients
+- Glow effects
+- Sub-cell positioning
+
+TGE renders these natively because it owns the pixel buffer.
 
 ---
 
@@ -332,29 +320,16 @@ Each lower package can be used without the packages above it:
 
 ```bash
 bun run zig:build
-# → cd zig && zig build -Doptimize=ReleaseFast
-# → produces zig/zig-out/lib/libtge.dylib (macOS) or libtge.so (Linux)
+# cd zig && zig build -Doptimize=ReleaseFast
+# → zig/zig-out/lib/libtge.dylib (macOS) or libtge.so (Linux)
 ```
-
-The Zig build compiles:
-- `lib.zig` — FFI exports
-- `rect.zig`, `circle.zig`, `line.zig` — SDF primitives
-- `shadow.zig` — Box blur
-- `halo.zig` — Radial glow
-- `gradient.zig` — Linear/radial gradients
-- `filters.zig` — Backdrop filter operations (brightness, contrast, saturate, grayscale, invert, sepia, hue-rotate)
-- `blendmodes.zig` — CSS blend modes (16 modes: multiply, screen, overlay, etc.)
-- `text.zig` — Bitmap text renderer
-- `font_atlas.zig` — Generated SF Mono 14px glyph data
 
 ### Clay Shared Library
 
 ```bash
 bun run clay:build
-# → cc -shared -O2 -o vendor/libclay.dylib -DCLAY_IMPLEMENTATION vendor/clay_wrapper.c
+# cc -shared -O2 -o vendor/libclay.dylib -DCLAY_IMPLEMENTATION vendor/clay_wrapper.c
 ```
-
-Clay is a single C header. The wrapper adds TGE-specific functions: `configure_clip`, `get_scroll_offset`, `set_id`.
 
 ### SolidJS Babel Plugin
 
@@ -363,43 +338,4 @@ Clay is a single C header. The wrapper adds TGE-specific functions: `configure_c
 preload = ["./solid-plugin.ts"]
 ```
 
-The plugin transforms `.tsx` files through `babel-preset-solid` with universal renderer mode, targeting `@tge/renderer` instead of the DOM.
-
----
-
-## Key Design Decisions
-
-### Why SolidJS (not React)?
-
-- **No VDOM** — SolidJS compiles to direct signal subscriptions. When a signal changes, only the exact DOM operation (in TGE's case, `setProp`) re-executes. React's reconciliation would re-render entire subtrees.
-- **`createRenderer`** — SolidJS provides a universal renderer API (10 methods). TGE implements these 10 methods to own the entire rendering pipeline. React's `react-reconciler` is far more complex.
-- **Tiny runtime** — SolidJS's reactive core is ~7KB. No scheduler, no fiber tree, no synthetic events.
-
-### Why Clay (not Yoga/Taffy)?
-
-- **Single C header** — No build system, no cmake, no cargo. One `#include`, one `cc` command.
-- **Microsecond performance** — Clay is designed for 60fps game UIs. It's faster than any other layout engine we benchmarked.
-- **Renderer-agnostic** — Clay outputs render commands, not DOM mutations. Perfect for TGE's pixel pipeline.
-
-### Why Zig (not Rust/C)?
-
-- **Zero overhead FFI** — Zig compiles to C ABI with no runtime. `bun:ffi` calls Zig functions with no marshaling cost.
-- **Comptime** — The font atlas is a comptime-evaluated 2D array. No runtime file loading.
-- **Simplicity** — SDF paint primitives are ~200 lines of Zig each. No allocator needed (we write directly into the caller's buffer).
-
-### Why Bun (not Node)?
-
-- **`bun:ffi`** — Native FFI without N-API or node-gyp. Load a `.dylib` and call functions directly.
-- **Fast startup** — Bun starts in <50ms. Node takes 200ms+ with similar workload.
-- **TypeScript native** — No tsc build step needed. Bun runs .ts/.tsx directly.
-
-### Why Pixel-Native (not Cell-Based)?
-
-Cell-based TUI frameworks (Blessed, Ink, Bubbletea) are limited to character grid resolution. They can't render:
-- Anti-aliased rounded corners
-- Drop shadows with blur
-- Gradients
-- Glow effects
-- Sub-cell positioning
-
-TGE renders at full pixel resolution. A 1920x1080 terminal gets 1920x1080 pixels of rendering space — same as a browser window.
+Transforms `.tsx` files through `babel-preset-solid` with universal renderer mode, targeting `@tge/renderer-solid`.

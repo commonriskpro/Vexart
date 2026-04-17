@@ -20,7 +20,7 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, onInput } from "@tge/renderer"
+import { mount, onInput } from "@tge/renderer-solid"
 import { Box, Text, Textarea, Button } from "@tge/components"
 import type { TextareaHandle } from "@tge/components"
 import { createTerminal } from "@tge/terminal"

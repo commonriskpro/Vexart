@@ -1,7 +1,7 @@
 import { performance } from "node:perf_hooks"
 import { writeFileSync } from "node:fs"
-import { createTerminal } from "../packages/terminal/src"
-import { patchRegion, transmitRawAt } from "../packages/output/src"
+import { createTerminal } from "@tge/platform-terminal"
+import { patchRegion, transmitRawAt } from "@tge/output-kitty"
 import {
   createWgpuCanvasContext,
   createWgpuCanvasTarget,
@@ -10,7 +10,7 @@ import {
   readbackWgpuCanvasTargetRGBA,
   readbackWgpuCanvasTargetRegionRGBA,
   renderWgpuCanvasTargetClear,
-} from "../packages/renderer/src/wgpu-canvas-bridge"
+} from "@tge/gpu"
 
 const WIDTH = Number(process.env.TGE_WGPU_SUBREGION_WIDTH ?? 320)
 const HEIGHT = Number(process.env.TGE_WGPU_SUBREGION_HEIGHT ?? 180)

@@ -284,7 +284,7 @@ All fields in a theme type are **required in the type** but **optional in the pr
 // packages/nord/src/code.tsx
 import { Code } from "@tge/components"
 import type { CodeTheme } from "@tge/components"
-import type { SyntaxStyle } from "@tge/renderer"
+import type { SyntaxStyle } from "@tge/renderer-solid"
 import { colors, radius, space } from "./tokens"
 
 const nordCodeTheme: CodeTheme = {
@@ -318,7 +318,7 @@ export function NordCode(props: {
 // packages/nord/src/markdown.tsx
 import { Markdown } from "@tge/components"
 import type { MarkdownTheme } from "@tge/components"
-import type { SyntaxStyle } from "@tge/renderer"
+import type { SyntaxStyle } from "@tge/renderer-solid"
 import { colors } from "./tokens"
 
 const nordMarkdownTheme: MarkdownTheme = {
@@ -427,8 +427,7 @@ export { createNordToaster } from "./toast"
 ## Step 6: Use it
 
 ```typescript
-import { mount } from "@tge/renderer"
-import { createTerminal } from "@tge/terminal"
+import { mount, createTerminal } from "@tge/renderer-solid"
 import { NordButton, NordSwitch, NordList, colors } from "@nord/tge-theme"
 
 function App() {

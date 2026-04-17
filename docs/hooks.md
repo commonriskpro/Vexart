@@ -3,7 +3,7 @@
 TGE provides reactive hooks for building custom interactive components. All hooks return SolidJS signals — when input changes, your UI automatically updates.
 
 ```typescript
-import { useKeyboard, useMouse, useFocus, useInput, onInput, setFocus, markDirty } from "@tge/renderer"
+import { useKeyboard, useMouse, useFocus, useInput, onInput, setFocus, markDirty } from "@tge/renderer-solid"
 ```
 
 ---
@@ -122,7 +122,7 @@ function useFocus(opts?: {
 ### Building a Custom Interactive Component
 
 ```tsx
-import { useFocus } from "@tge/renderer"
+import { useFocus } from "@tge/renderer-solid"
 import { Box, Text } from "@tge/components"
 import { colors } from "@tge/void"
 
@@ -146,7 +146,7 @@ function ColorPicker(props: { colors: number[]; selected: number; onChange: (i: 
       borderWidth={focused() ? 2 : 1}
       cornerRadius={4}
     >
-      <For each={props.colors}>
+        <For each={props.colors}>
         {(color, i) => (
           <Box
             width={24}
@@ -204,7 +204,7 @@ function onInput(handler: (event: InputEvent) => void): () => void
 ### Usage
 
 ```tsx
-import { onInput } from "@tge/renderer"
+import { onInput } from "@tge/renderer-solid"
 import { onCleanup } from "solid-js"
 
 function App() {
@@ -263,7 +263,7 @@ function markDirty(): void
 ### Usage
 
 ```typescript
-import { markDirty } from "@tge/renderer"
+import { markDirty } from "@tge/renderer-solid"
 
 // After modifying external state
 someExternalState.value = newValue
@@ -292,7 +292,7 @@ Returns a cleanup function that pops the scope and restores previous focus.
 ### Usage
 
 ```tsx
-import { pushFocusScope } from "@tge/renderer"
+import { pushFocusScope } from "@tge/renderer-solid"
 import { onCleanup } from "solid-js"
 
 function Modal(props: { children: any }) {
@@ -385,8 +385,8 @@ function useQuery<T>(fetcher: () => Promise<T>, options?: QueryOptions): QueryRe
 ### Usage
 
 ```tsx
-import { useQuery } from "@tge/renderer"
-import { Show, For } from "@tge/renderer"
+import { useQuery } from "@tge/renderer-solid"
+import { Show, For } from "@tge/renderer-solid"
 
 function UserList() {
   const users = useQuery(() => fetch("/api/users").then(r => r.json()))
@@ -440,7 +440,7 @@ function useMutation<T, V = void>(
 ### Usage
 
 ```tsx
-import { useMutation } from "@tge/renderer"
+import { useMutation } from "@tge/renderer-solid"
 
 function SaveButton() {
   const save = useMutation(
@@ -477,7 +477,7 @@ function createTransition(
 ### Usage
 
 ```tsx
-import { createTransition } from "@tge/renderer"
+import { createTransition } from "@tge/renderer-solid"
 import { createSignal } from "solid-js"
 
 function ExpandingBox() {
@@ -510,7 +510,7 @@ function createSpring(
 ### Usage
 
 ```tsx
-import { createSpring } from "@tge/renderer"
+import { createSpring } from "@tge/renderer-solid"
 
 const springY = createSpring(() => active() ? 0 : 100, { stiffness: 200, damping: 20 })
 <box floatOffset={{ x: 0, y: springY() }}>...</box>
@@ -525,7 +525,7 @@ Encapsulates drag interactions — pointer capture, `isDragging` flag, and mouse
 ### Signature
 
 ```typescript
-import { useDrag } from "@tge/renderer"
+import { useDrag } from "@tge/renderer-solid"
 
 type DragOptions = {
   onDragStart?: (event: NodeMouseEvent) => void
@@ -545,7 +545,7 @@ function useDrag(options: DragOptions): DragState
 ### Usage
 
 ```tsx
-import { useDrag } from "@tge/renderer"
+import { useDrag } from "@tge/renderer-solid"
 
 function DragTrack(props: { value: number; onChange: (v: number) => void }) {
   const { dragging, dragProps } = useDrag({
@@ -580,7 +580,7 @@ Encapsulates hover detection with configurable enter/leave delays. Returns `hove
 ### Signature
 
 ```typescript
-import { useHover } from "@tge/renderer"
+import { useHover } from "@tge/renderer-solid"
 
 type HoverOptions = {
   delay?: number          // ms before onEnter fires (default: 0)
@@ -600,7 +600,7 @@ function useHover(options?: HoverOptions): HoverState
 ### Usage
 
 ```tsx
-import { useHover } from "@tge/renderer"
+import { useHover } from "@tge/renderer-solid"
 
 function HoverCard(props: { children: any }) {
   const { hovered, hoverProps } = useHover({

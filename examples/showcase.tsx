@@ -29,7 +29,7 @@ import {
   createSpring,
   For,
   Show,
-} from "@tge/renderer"
+} from "@tge/renderer-solid"
 import {
   Slider,
   Combobox,

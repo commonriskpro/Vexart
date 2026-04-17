@@ -95,7 +95,6 @@ export function decodePasteBytes(bytes: Uint8Array | string): string
 // ── Mount ──
 
 export interface MountOptions {
-  selectableText?: boolean
 }
 
 export interface MountHandle {
@@ -431,7 +430,6 @@ export declare const POINTER_CAPTURE: { readonly CAPTURE: 0; readonly PASSTHROUG
 // ── Render loop (advanced) ──
 
 export interface RenderLoopOptions {
-  selectableText?: boolean
 }
 
 export interface RenderLoop {

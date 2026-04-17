@@ -5,7 +5,7 @@
 Anti-aliased corners. Drop shadows. Gradients. Glow effects. Backdrop filters (blur, brightness, contrast, grayscale). Element opacity. Interactive focus management. Form validation. Data fetching hooks. Virtualized lists. All rendered as real pixels — not ASCII boxes.
 
 ```tsx
-import { mount } from "@tge/renderer"
+import { mount } from "@tge/renderer-solid"
 import { Box, Text, Button } from "@tge/components"
 import { colors, radius, shadows } from "@tge/void"
 import { createTerminal } from "@tge/terminal"
@@ -98,7 +98,9 @@ TGE is a monorepo with 7 packages. Each layer is independent and can be used sta
 | [`@tge/input`](docs/api-reference.md#tgeinput) | Keyboard/mouse event parsing | Foundation |
 | [`@tge/pixel`](docs/api-reference.md#tgepixel) | Pixel buffer + SDF paint primitives (Zig) | Foundation |
 | [`@tge/output`](docs/api-reference.md#tgeoutput) | Kitty/placeholder/halfblock backends | Foundation |
-| [`@tge/renderer`](docs/api-reference.md#tgerenderer) | SolidJS reconciler + Clay layout | Integration |
+| [`@tge/core`](docs/api-reference.md) | GPU renderer core, render graph, frame composition | Engine |
+| [`@tge/runtime`](docs/api-reference.md) | Input, focus, pointer, interaction runtime | Runtime |
+| [`@tge/renderer-solid`](docs/api-reference.md) | Solid adapter, mount, reconciler surface | Integration |
 | [`@tge/components`](docs/components.md) | Box, Text, Button, Input, etc. | UI |
 | [`@tge/void`](docs/void.md) | Design tokens, theming, and design system | UI |
 
@@ -127,7 +129,7 @@ term.endSync(term.write)
 
 ```tsx
 import { mount, useKeyboard, useMouse, useFocus, onInput, pushFocusScope,
-         useQuery, useMutation, createTransition, createSpring } from "@tge/renderer"
+         useQuery, useMutation, createTransition, createSpring } from "@tge/renderer-solid"
 import { Box, Text, Button, Input, Checkbox, Tabs, List, ProgressBar, ScrollView,
          Dialog, Select, Switch, RadioGroup, Table, Toast, Router,
          Tooltip, Combobox, Slider, VirtualList, createForm } from "@tge/components"

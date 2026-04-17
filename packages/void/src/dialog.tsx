@@ -6,7 +6,7 @@
  * backdrop overlay with blur, and proper spacing.
  *
  * Usage:
- *   import { Show } from "@tge/renderer"
+ *   import { Show } from "@tge/renderer-solid"
  *   import { VoidDialog } from "tge/void"
  *
  *   <Show when={isOpen()}>

@@ -16,7 +16,7 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, onInput, SyntaxStyle, ONE_DARK, KANAGAWA } from "@tge/renderer"
+import { mount, onInput, SyntaxStyle, ONE_DARK, KANAGAWA } from "@tge/renderer-solid"
 import { Box, Text, Code } from "@tge/components"
 import { createTerminal } from "@tge/terminal"
 

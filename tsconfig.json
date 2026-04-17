@@ -3,6 +3,7 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "baseUrl": ".",
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
     "strict": true,
@@ -13,15 +14,19 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "paths": {
+      "@tge/platform-terminal": ["./packages/platform-terminal/src/index.ts"],
       "@tge/terminal": ["./packages/terminal/src/index.ts"],
       "@tge/input": ["./packages/input/src/index.ts"],
+      "@tge/renderer-solid": ["./packages/renderer-solid/src/index.ts"],
       "@tge/pixel": ["./packages/pixel/src/index.ts"],
       "@tge/output": ["./packages/output/src/index.ts"],
-      "@tge/renderer": ["./packages/renderer/src/index.ts"],
-      "@tge/renderer/*": ["./packages/renderer/src/*"],
+      "@tge/output-kitty": ["./packages/output-kitty/src/index.ts"],
+      "@tge/renderer": ["./packages/renderer-solid/src/index.ts"],
+      "@tge/renderer/*": ["./packages/renderer-solid/src/*"],
+      "@tge/layout-clay": ["./packages/layout-clay/src/index.ts"],
+      "@tge/gpu": ["./packages/gpu/src/index.ts"],
       "@tge/components": ["./packages/components/src/index.ts"],
-      "@tge/lightcode": ["./packages/lightcode/src/index.ts"],
-
+      "@tge/windowing": ["./packages/windowing/src/index.ts"],
       "@tge/void": ["./packages/void/src/index.ts"]
     }
   },

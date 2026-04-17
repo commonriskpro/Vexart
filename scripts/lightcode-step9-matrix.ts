@@ -74,7 +74,6 @@ function runOne(run: Run) {
   const env: Record<string, string> = {
     ...process.env,
     LIGHTCODE_CANVAS_BACKEND: "wgpu",
-    TGE_RENDERER_BACKEND: "gpu",
     LIGHTCODE_LOG_FPS: process.env.LIGHTCODE_LOG_FPS ?? "1",
     LIGHTCODE_FORCE_REPAINT: process.env.LIGHTCODE_FORCE_REPAINT ?? "1",
     LIGHTCODE_FORCE_LAYER_REPAINT: process.env.LIGHTCODE_FORCE_LAYER_REPAINT ?? "1",

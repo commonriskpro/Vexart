@@ -10,7 +10,7 @@
  * Run: bun run examples/layer-scroll.tsx
  */
 
-import { mount, onInput } from "@tge/renderer"
+import { mount, onInput } from "@tge/renderer-solid"
 import { createTerminal } from "@tge/terminal"
 import {
   Button, Card, CardHeader, CardTitle, CardContent,

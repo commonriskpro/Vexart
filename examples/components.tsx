@@ -16,7 +16,7 @@
  */
 
 import { createSignal, onCleanup } from "solid-js"
-import { mount, onInput } from "@tge/renderer"
+import { mount, onInput } from "@tge/renderer-solid"
 import {
   Box,
   Text,

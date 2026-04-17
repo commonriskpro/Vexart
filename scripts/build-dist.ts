@@ -33,7 +33,7 @@ mkdirSync(DIST, { recursive: true })
 console.log("📦 Bundling TypeScript...")
 
 await build({
-  entryPoints: [resolve(ROOT, "packages/renderer/src/index.ts")],
+  entryPoints: [resolve(ROOT, "packages/renderer-solid/src/index.ts")],
   bundle: true,
   format: "esm",
   platform: "node",
@@ -54,10 +54,15 @@ await build({
   ],
   // Replace monorepo workspace imports with relative paths
   alias: {
+    "@tge/platform-terminal": resolve(ROOT, "packages/platform-terminal/src/index.ts"),
     "@tge/terminal": resolve(ROOT, "packages/terminal/src/index.ts"),
     "@tge/input": resolve(ROOT, "packages/input/src/index.ts"),
     "@tge/pixel": resolve(ROOT, "packages/pixel/src/index.ts"),
     "@tge/output": resolve(ROOT, "packages/output/src/index.ts"),
+    "@tge/output-kitty": resolve(ROOT, "packages/output-kitty/src/index.ts"),
+    "@tge/renderer-solid": resolve(ROOT, "packages/renderer-solid/src/index.ts"),
+    "@tge/layout-clay": resolve(ROOT, "packages/layout-clay/src/index.ts"),
+    "@tge/gpu": resolve(ROOT, "packages/gpu/src/index.ts"),
   },
   // Inject FFI path override — tell the bundle to look in vendor/ next to itself
   define: {
@@ -112,7 +117,8 @@ await build({
   ],
   alias: {
     "@tge/renderer": resolve(ROOT, "packages/renderer/src/index.ts"),
-    "@tge/renderer/scroll": resolve(ROOT, "packages/renderer/src/scroll.ts"),
+    "@tge/renderer-solid": resolve(ROOT, "packages/renderer-solid/src/index.ts"),
+    "@tge/windowing": resolve(ROOT, "packages/windowing/src/index.ts"),
   },
   plugins: [solidPlugin],
 })

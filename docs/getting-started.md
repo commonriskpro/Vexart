@@ -9,7 +9,9 @@ This guide walks you through installing TGE, building the native libraries, and 
 | [Bun](https://bun.sh/) | >= 1.1.0 | Runtime, FFI, test runner |
 | [Zig](https://ziglang.org/) | >= 0.14 | Build the pixel paint engine |
 | A C compiler (`cc`) | Any | Build the Clay layout engine |
-| Terminal with Kitty graphics | — | Kitty, Ghostty, or WezTerm |
+| **Terminal with Kitty graphics** | — | **Required** — Kitty, Ghostty, or WezTerm |
+
+> TGE is GPU-only. It **will not run** in terminals without Kitty graphics protocol support (xterm, Terminal.app, iTerm2, etc.).
 
 ### Install Bun
 
@@ -23,84 +25,70 @@ curl -fsSL https://bun.sh/install | bash
 # macOS
 brew install zig
 
-# Linux (download from ziglang.org)
-# Windows (download from ziglang.org)
+# Linux / Windows — download from https://ziglang.org/download/
 ```
 
 ## Installation
 
 ```bash
-# Clone the repo
 git clone https://github.com/commonriskpro/Vexart.git tge
 cd tge
-
-# Install dependencies
 bun install
 ```
 
 ## Build Native Libraries
 
-TGE uses two native libraries via `bun:ffi`. You need to build both before running anything:
+TGE uses two native libraries via `bun:ffi`. Build both before running:
 
 ```bash
-# 1. Build Zig pixel engine (libtge.dylib / libtge.so)
+# 1. Zig pixel + GPU engine (libtge.dylib / libtge.so)
 bun run zig:build
 
-# 2. Build Clay layout engine (libclay.dylib / libclay.so)
+# 2. Clay layout engine (libclay.dylib / libclay.so)
 bun run clay:build
 ```
 
-These produce shared libraries in `zig/zig-out/lib/` and `vendor/` respectively.
-
-## Verify Installation
-
-```bash
-# Run the Phase 1 demo (imperative pixel painting, no JSX)
-bun run demo
-
-# You should see a rendered card with gradients, rounded rects, and a glowing circle.
-# Press Ctrl+C to exit.
-```
-
-If you see pixel output — congratulations, TGE is working.
-
 ## Your First App
 
-Create a file called `my-app.tsx`:
+Create `my-app.tsx`:
 
 ```tsx
-import { mount } from "@tge/renderer"
-import { Box, Text } from "@tge/components"
+import { createTerminal, mount, useTerminalDimensions } from "@tge/renderer-solid"
 import { colors, radius } from "@tge/void"
-import { createTerminal } from "@tge/terminal"
+import { createSignal } from "solid-js"
 
-function App() {
-  return (
-    <Box
-      width="100%"
-      height="100%"
-      padding={24}
-      backgroundColor={colors.background}
-      direction="column"
-      alignX="center"
-      alignY="center"
-    >
-      <Box
-        padding={20}
-        backgroundColor={colors.card}
-        cornerRadius={radius.xl}
-        direction="column"
-        gap={8}
+async function main() {
+  const terminal = await createTerminal()
+
+  function App() {
+    const dims = useTerminalDimensions(terminal)
+
+    return (
+      <box
+        width={dims.width()}
+        height={dims.height()}
+        backgroundColor={colors.background}
+        alignX="center"
+        alignY="center"
       >
-        <Text color={colors.foreground}>Welcome to TGE</Text>
-        <Text color={colors.mutedForeground}>Pixel-native terminal rendering</Text>
-      </Box>
-    </Box>
-  )
+        <box
+          padding={20}
+          backgroundColor={colors.card}
+          cornerRadius={radius.xl}
+          direction="column"
+          gap={8}
+        >
+          <text color={colors.foreground}>Welcome to TGE</text>
+          <text color={colors.mutedForeground}>Pixel-native terminal rendering</text>
+        </box>
+      </box>
+    )
+  }
+
+  mount(App, terminal)
 }
 
-const terminal = await createTerminal()
-mount(App, terminal)
+main()
 ```
 
 Run it:
@@ -109,74 +97,117 @@ Run it:
 bun --conditions=browser run my-app.tsx
 ```
 
-> **Why `--conditions=browser`?** SolidJS exports a reactive runtime under the `browser` condition and a one-shot SSR renderer under `node`. TGE needs the reactive runtime. The demo scripts in `package.json` already include this flag.
+> **Why `--conditions=browser`?** SolidJS exports a reactive runtime under the `browser` condition and a one-shot SSR runtime under `node`. TGE needs the reactive runtime. All example scripts in `package.json` already include this flag.
 
 ## Understanding the Pipeline
 
 When you call `mount(App, terminal)`, TGE:
 
 1. **Evaluates JSX** — SolidJS `createRenderer` converts your component tree into TGE nodes
-2. **Runs Clay layout** — Nodes are measured and positioned by the Clay layout engine (C via FFI)
-3. **Paints pixels** — Layout results are painted into a pixel buffer using Zig SDF primitives
-4. **Outputs to terminal** — The pixel buffer is sent to the terminal via the Kitty graphics protocol
+2. **Runs Clay layout** — Nodes are measured and positioned (C via FFI, microseconds)
+3. **Renders on GPU** — Layout results are rendered via WGPU using Zig SDF primitives
+4. **Outputs via SHM** — The GPU frame is read back and sent to the terminal via Kitty graphics over shared memory
 
-On every signal change, only step 2–4 re-run, and only for dirty regions.
+On every signal change, only dirty layers re-render and retransmit.
 
 ## Adding Interactivity
 
 ```tsx
-import { mount } from "@tge/renderer"
-import { Box, Text, Button } from "@tge/components"
-import { colors, radius } from "@tge/void"
-import { createTerminal } from "@tge/terminal"
+import { createTerminal, mount, useTerminalDimensions } from "@tge/renderer-solid"
+import { Button } from "@tge/components"
+import { colors, radius, space } from "@tge/void"
 import { createSignal } from "solid-js"
 
-function App() {
-  const [count, setCount] = createSignal(0)
+async function main() {
+  const terminal = await createTerminal()
 
-  return (
-    <Box width="100%" height="100%" padding={24} backgroundColor={colors.background}>
-      <Box padding={16} backgroundColor={colors.card} cornerRadius={radius.lg} direction="column" gap={12}>
-        <Text color={colors.foreground}>Count: {count()}</Text>
-        <Button onPress={() => setCount(c => c + 1)}>Increment</Button>
-      </Box>
-    </Box>
-  )
+  function App() {
+    const dims = useTerminalDimensions(terminal)
+    const [count, setCount] = createSignal(0)
+
+    return (
+      <box
+        width={dims.width()}
+        height={dims.height()}
+        padding={space[6]}
+        backgroundColor={colors.background}
+        direction="column"
+        gap={space[4]}
+        alignX="center"
+        alignY="center"
+      >
+        <text color={colors.foreground}>Count: {count()}</text>
+        <Button onPress={() => setCount(c => c + 1)}>
+          Increment
+        </Button>
+      </box>
+    )
+  }
+
+  mount(App, terminal)
 }
 
-const terminal = await createTerminal()
-mount(App, terminal)
+main()
 ```
 
-Press **Tab** to focus the button, then **Enter** or **Space** to increment. Press **Ctrl+C** to quit.
+Press **Tab** to focus the button, **Enter** or **Space** to increment. **Ctrl+C** to quit.
 
-## Project Structure
+## Import Map
 
-When integrating TGE into your project, the key imports are:
+Everything you need comes from a small set of packages:
 
 ```typescript
-// Core — always needed
-import { createTerminal } from "@tge/terminal"
-import { mount } from "@tge/renderer"
+// ── Core (single entry point) ──
+import {
+  createTerminal,         // create + probe terminal
+  mount,                  // mount your app
+  useTerminalDimensions,  // reactive terminal size
+  createSignal,           // from solid-js, re-exported
+  For, Show,              // control flow
+  useKeyboard, useMouse,  // input hooks
+  useFocus, setFocus,     // focus management
+  useDrag, useHover,      // interaction hooks
+  createTransition,       // animation
+  createSpring,           // physics animation
+  setPointerCapture,      // drag support
+  RGBA,                   // color utility class
+} from "@tge/renderer-solid"
 
-// Components — pick what you need
-import { Box, Text, Button, Input, Checkbox, Tabs, List, ProgressBar, ScrollView } from "@tge/components"
+// ── UI Components ──
+import {
+  Button, Input, Textarea, Checkbox, Switch,
+  Tabs, List, VirtualList, Table,
+  Select, Combobox, Slider,
+  Dialog, Toast, Tooltip, Popover,
+  ScrollView, Diff, Code, Markdown,
+  ProgressBar,
+} from "@tge/components"
 
-// Design tokens — optional but recommended
+// ── Canvas / Scene graph ──
+import {
+  SceneCanvas, SceneNode, SceneEdge,
+  createSpaceBackground,
+} from "@tge/components"
+
+// ── Design tokens ──
 import { colors, space, radius, font, weight, shadows } from "@tge/void"
 
-// Hooks — for custom interactive components
-import { useKeyboard, useMouse, useFocus, onInput, setPointerCapture, releasePointerCapture } from "@tge/renderer"
+// ── Windowing system ──
+import {
+  createWindowManager,
+  Desktop, WindowHost, WindowFrame,
+  WindowControls, WindowHeader,
+} from "@tge/windowing"
 
-// SolidJS — for reactive state
-import { createSignal, createEffect, onCleanup } from "solid-js"
-import { For, Show } from "@tge/renderer"
+// ── SolidJS reactivity ──
+import { createSignal, createEffect, createMemo, onCleanup } from "solid-js"
 ```
 
 ## Next Steps
 
-- [Components](components.md) — Learn every built-in component
-- [Hooks & Signals](hooks.md) — Build custom interactive components
-- [Design Tokens](tokens.md) — Customize the visual theme
-- [API Reference](api-reference.md) — Complete API for all packages
-- [Examples & Recipes](examples.md) — Common patterns and cookbook
+- [Components](components.md) — Every built-in component
+- [Hooks & Signals](hooks.md) — Custom interactive components
+- [Visual Effects](../manual/visual-effects.md) — Shadows, gradients, blur, glow
+- [Layout & Sizing](../manual/layout-and-sizing.md) — Flexbox layout system
+- [API Reference](api-reference.md) — Complete package API
+- [Examples & Recipes](examples.md) — Common patterns
