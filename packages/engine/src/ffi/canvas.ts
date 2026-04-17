@@ -18,7 +18,9 @@
  *       → executes onDraw callback → flushes draw commands via compat painter
  */
 
-import { over } from "../paint-legacy/index"
+// NOTE: paint-legacy import removed per Slice 9 migration (DEC-004, REQ-NB-002).
+// canvas.ts draw commands are now consumed by the gpu-renderer-backend via
+// the wgpu-mixed-scene path; the legacy CPU paint path is no longer referenced.
 
 // ── Draw command types ──
 
