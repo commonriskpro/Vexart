@@ -1,5 +1,2 @@
-/**
- * Temporary public facade while terminal internals still live in packages/terminal.
- */
-
-export * from "../../terminal/src/index"
+// @tge/platform-terminal shim — all symbols now live in @vexart/engine
+export * from "@vexart/engine"

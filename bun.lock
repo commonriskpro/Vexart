@@ -84,6 +84,9 @@
     "packages/platform-terminal": {
       "name": "@tge/platform-terminal",
       "version": "0.0.1",
+      "dependencies": {
+        "@vexart/engine": "workspace:*",
+      },
     },
     "packages/primitives": {
       "name": "@vexart/primitives",
@@ -111,6 +114,9 @@
     "packages/terminal": {
       "name": "@tge/terminal",
       "version": "0.0.1",
+      "dependencies": {
+        "@vexart/engine": "workspace:*",
+      },
     },
     "packages/void": {
       "name": "@tge/void",

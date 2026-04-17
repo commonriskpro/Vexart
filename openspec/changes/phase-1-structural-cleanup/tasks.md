@@ -60,16 +60,16 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
 
 ## 5. Fold @tge/input into engine/src/input + hooks (slice 5)
 
-- [ ] 5.1 Create `packages/engine/src/input/` and `packages/engine/src/hooks/` directories
-- [ ] 5.2 Classify input source files: parsing/dispatch files (`parser.ts`, `mouse.ts`, `keyboard.ts`, `types.ts`) → `engine/src/input/`; no hook files exist in `@tge/input` currently (hooks like `useKeyboard`/`useMouse`/`useFocus` live in runtime). Move all input source files to `engine/src/input/`
-- [ ] 5.3 `git mv packages/input/src/parser.ts packages/input/src/mouse.ts packages/input/src/keyboard.ts packages/input/src/types.ts packages/engine/src/input/`
-- [ ] 5.4 Move tests: `git mv packages/input/src/mouse.test.ts packages/input/src/parser.test.ts packages/input/src/keyboard.test.ts packages/engine/src/input/`
-- [ ] 5.5 Create `packages/engine/src/input/index.ts` barrel re-exporting all input symbols
-- [ ] 5.6 Update internal imports within moved files — verify no broken relative paths
-- [ ] 5.7 Update `packages/engine/src/public.ts` to re-export input symbols
-- [ ] 5.8 Create shim: rewrite `packages/input/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/input/package.json` to add `@vexart/engine: "workspace:*"` dependency. Delete remaining moved files from old location
-- [ ] 5.9 Run `bun install && bun run typecheck` — must be green
-- [ ] 5.10 Commit: `refactor(engine): fold @tge/input into engine/src/input + hooks with shim`
+- [x] 5.1 Create `packages/engine/src/input/` and `packages/engine/src/hooks/` directories
+- [x] 5.2 Classify input source files: parsing/dispatch files (`parser.ts`, `mouse.ts`, `keyboard.ts`, `types.ts`) → `engine/src/input/`; no hook files exist in `@tge/input` currently (hooks like `useKeyboard`/`useMouse`/`useFocus` live in runtime). Move all input source files to `engine/src/input/`
+- [x] 5.3 `git mv packages/input/src/parser.ts packages/input/src/mouse.ts packages/input/src/keyboard.ts packages/input/src/types.ts packages/engine/src/input/`
+- [x] 5.4 Move tests: `git mv packages/input/src/mouse.test.ts packages/input/src/parser.test.ts packages/input/src/keyboard.test.ts packages/engine/src/input/`
+- [x] 5.5 Create `packages/engine/src/input/index.ts` barrel re-exporting all input symbols
+- [x] 5.6 Update internal imports within moved files — verify no broken relative paths
+- [x] 5.7 Update `packages/engine/src/public.ts` to re-export input symbols
+- [x] 5.8 Create shim: rewrite `packages/input/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/input/package.json` to add `@vexart/engine: "workspace:*"` dependency. Delete remaining moved files from old location
+- [x] 5.9 Run `bun install && bun run typecheck` — must be green
+- [x] 5.10 Commit: `refactor(engine): fold @tge/input into engine/src/input + hooks with shim`
 
 ## 6. Fold @tge/terminal + platform-terminal into engine/src/terminal (slice 6)
 
