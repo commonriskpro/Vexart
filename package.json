@@ -37,8 +37,6 @@
     "demo14": "bun --conditions=browser run examples/textarea.tsx",
     "demo15": "bun --conditions=browser run examples/syntax.tsx",
     "demo16": "bun --conditions=browser run examples/markdown.tsx",
-    "demo17": "bun --conditions=browser run examples/windowing-demo.tsx",
-    "demo18": "bun --conditions=browser run examples/window-drag-repro.tsx",
     "showcase": "bun --conditions=browser run examples/showcase.tsx",
     "demo:gpu": "bun --conditions=browser run examples/gpu-verify.tsx",
     "demo:gpu:perf": "VEXART_LOG_PERF=1 bun --conditions=browser run examples/gpu-verify.tsx",

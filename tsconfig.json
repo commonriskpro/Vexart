@@ -26,7 +26,6 @@
       "@tge/layout-clay": ["./packages/layout-clay/src/index.ts"],
       "@tge/gpu": ["./packages/gpu/src/index.ts"],
       "@tge/components": ["./packages/components/src/index.ts"],
-      "@tge/windowing": ["./packages/windowing/src/index.ts"],
       "@tge/void": ["./packages/void/src/index.ts"]
     }
   },
