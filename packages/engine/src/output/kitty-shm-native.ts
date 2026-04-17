@@ -1,80 +1,77 @@
-import { dlopen, FFIType, ptr } from "bun:ffi"
-import { resolve } from "node:path"
+/**
+ * kitty-shm-native.ts — Phase 2 native path
+ *
+ * Rewired from libkitty-shm-helper to libvexart's vexart_kitty_shm_* exports.
+ * Per design §11, §5.6 (Translation 4), REQ-NB-006.
+ *
+ * Signature differences from legacy tge_kitty_shm_prepare:
+ *   BEFORE: (name_ptr: *const char, data_ptr: *const u8, data_len: u64, mode: u32) → u64
+ *   AFTER:  (name_ptr: *const u8, name_len: u32, data_ptr: *const u8, data_len: u32, mode: u32, out_handle: *mut u64) → i32
+ *
+ * Returns i32 (0=OK, negative=error); handle via out_handle pointer.
+ */
 
-const HELPER_NAMES: Record<string, string> = {
-  darwin: "libtge_kitty_shm_helper.dylib",
-  linux: "libtge_kitty_shm_helper.so",
-  win32: "tge_kitty_shm_helper.dll",
-}
-
-const HELPER_DEFS = {
-  tge_kitty_shm_helper_version: { args: [], returns: FFIType.u32 },
-  tge_kitty_shm_get_last_error_length: { args: [], returns: FFIType.u32 },
-  tge_kitty_shm_copy_last_error: { args: [FFIType.ptr, FFIType.u32], returns: FFIType.u32 },
-  tge_kitty_shm_prepare: { args: [FFIType.ptr, FFIType.ptr, FFIType.u64, FFIType.u32], returns: FFIType.u64 },
-  tge_kitty_shm_release: { args: [FFIType.u64, FFIType.u32], returns: FFIType.u32 },
-} as const
-
-type KittyShmLib = ReturnType<typeof dlopen<typeof HELPER_DEFS>>
-
-let helperLib: KittyShmLib | null = null
-
-function findHelperLib() {
-  const name = HELPER_NAMES[process.platform] ?? "libtge_kitty_shm_helper.so"
-  const arch = process.arch === "arm64" ? "arm64" : "x64"
-  const target = `${arch}-${process.platform}`
-  const candidates = [
-    resolve(import.meta.dir, "vendor/kitty-shm", target, name),
-    resolve(import.meta.dir, "../../../native/kitty-shm-helper/build", name),
-    resolve(process.cwd(), "native/kitty-shm-helper/build", name),
-  ]
-  for (const path of candidates) {
-    try {
-      if (Bun.file(path).size > 0) return path
-    } catch {}
-  }
-  return candidates[0]
-}
-
-function loadHelper() {
-  if (helperLib) return helperLib
-  helperLib = dlopen(findHelperLib(), HELPER_DEFS)
-  return helperLib
-}
-
-function readLastError() {
-  const lib = loadHelper()
-  const len = lib.symbols.tge_kitty_shm_get_last_error_length()
-  if (len === 0) return "unknown kitty shm helper error"
-  const buf = Buffer.alloc(len + 1)
-  lib.symbols.tge_kitty_shm_copy_last_error(ptr(buf), buf.length)
-  return buf.toString("utf8").replace(/\0+$/, "")
-}
+import { ptr } from "bun:ffi"
+import { openVexartLibrary, VexartNativeError } from "../ffi/vexart-bridge"
 
 export interface NativeKittyShmHandle {
+  /** SHM handle — stored as number for API compatibility with kitty.ts consumers.
+   *  Internally: the u64 handle from vexart_kitty_shm_prepare is stored in _bigintHandle.
+   *  Values that exceed Number.MAX_SAFE_INTEGER will be truncated — acceptable since
+   *  SHM handles are typically small fd values on macOS. */
   handle: number
   name: string
+  /** BigInt handle for passing to vexart_kitty_shm_release. */
+  _bigintHandle: bigint
+}
+
+// Internal registry mapping numeric handles to bigint handles for release.
+const _handleRegistry = new Map<number, bigint>()
+
+function readLastError(): string {
+  const { symbols } = openVexartLibrary()
+  const len = symbols.vexart_get_last_error_length() as number
+  if (len === 0) return "unknown vexart kitty shm error"
+  const buf = new Uint8Array(len)
+  symbols.vexart_copy_last_error(ptr(buf), len)
+  return new TextDecoder().decode(buf)
 }
 
 export function prepareNativeKittyShm(name: string, data: Uint8Array, mode = 0o666): NativeKittyShmHandle {
-  const lib = loadHelper()
-  const nameBytes = Buffer.from(name + "\0")
-  const handle = Number(lib.symbols.tge_kitty_shm_prepare(ptr(nameBytes), ptr(data), data.length, mode))
-  if (!handle) {
-    throw new Error(readLastError())
+  const { symbols } = openVexartLibrary()
+  const nameBytes = new TextEncoder().encode(name)
+  const handleBuf = new BigUint64Array(1)
+  const result = symbols.vexart_kitty_shm_prepare(
+    ptr(nameBytes),
+    nameBytes.byteLength,
+    ptr(data),
+    data.byteLength,
+    mode,
+    ptr(handleBuf),
+  ) as number
+  if (result !== 0) {
+    throw new VexartNativeError(result, `vexart_kitty_shm_prepare failed: ${readLastError()}`)
   }
-  return { handle, name }
+  const bigintHandle = handleBuf[0]
+  const numHandle = Number(bigintHandle)
+  _handleRegistry.set(numHandle, bigintHandle)
+  return { handle: numHandle, name, _bigintHandle: bigintHandle }
 }
 
 export function releaseNativeKittyShm(handle: number, unlinkName: boolean) {
   if (!handle) return
-  const lib = loadHelper()
-  const status = lib.symbols.tge_kitty_shm_release(handle, unlinkName ? 1 : 0)
-  if (status !== 0) {
-    throw new Error(readLastError())
+  const { symbols } = openVexartLibrary()
+  // Retrieve bigint handle from registry, fall back to BigInt(handle)
+  const bigintHandle = _handleRegistry.get(handle) ?? BigInt(handle)
+  _handleRegistry.delete(handle)
+  const result = symbols.vexart_kitty_shm_release(bigintHandle, unlinkName ? 1 : 0) as number
+  if (result !== 0) {
+    throw new VexartNativeError(result, `vexart_kitty_shm_release failed: ${readLastError()}`)
   }
 }
 
-export function getNativeKittyShmHelperVersion() {
-  return loadHelper().symbols.tge_kitty_shm_helper_version()
+/** Phase 2: returns vexart version as proxy for kitty shm helper version. */
+export function getNativeKittyShmHelperVersion(): number {
+  const { symbols } = openVexartLibrary()
+  return symbols.vexart_version() as number
 }
