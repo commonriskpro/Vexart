@@ -1,0 +1,30 @@
+[package]
+name = "libvexart"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+name = "vexart"                 # produces libvexart.{dylib,so,dll}
+crate-type = ["cdylib", "rlib"] # cdylib for FFI; rlib so Rust integration tests can link
+
+[dependencies]
+taffy  = "0.10.1"   # layout engine — direct Clay replacement (DEC-004)
+wgpu   = "29.0.1"   # GPU rendering — upgrade from bridge's pinned 26
+pollster = "0.4"    # minimal sync executor to block on wgpu async — kept from old bridge
+bytemuck = { version = "1.25", features = ["derive"] } # Pod/Zeroable for instance buffers
+nix    = { version = "0.29", default-features = false, features = ["mman", "fs"] } # POSIX SHM only
+
+# Reserved for Phase 2b — NOT added in Phase 2 Cargo.toml (REQ-NB-009 allows deferral):
+# base64 = "0.22.1"   # Kitty protocol encoding — Phase 2b Tier 1 / DEC-010
+# flate2 = "1.1.9"    # zlib deflate for Kitty o=z — Phase 2b Tier 1 / DEC-010
+# fdsm   = "0.8.0"    # MSDF atlas generator — Phase 2b / DEC-008
+
+[dev-dependencies]
+# Integration-test helpers land here when tests/ is populated.
+
+[features]
+gpu-tests = [] # gated integration tests requiring real WGPU (run with --features gpu-tests)
