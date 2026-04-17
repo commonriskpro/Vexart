@@ -25,14 +25,14 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
 
 ## 2. Scaffold five new package roots (slice 2)
 
-- [ ] 2.1 Create `packages/engine/` with `package.json` (name: `@vexart/engine`, no deps), `tsconfig.json` inheriting root config, `src/public.ts` (empty), `src/index.ts` (`export * from "./public"`)
-- [ ] 2.2 Create `packages/primitives/` with same shape (name: `@vexart/primitives`)
-- [ ] 2.3 Create `packages/headless/` with same shape (name: `@vexart/headless`)
-- [ ] 2.4 Create `packages/styled/` with same shape (name: `@vexart/styled`)
-- [ ] 2.5 Create `packages/internal-devtools/` with same shape + `"private": true` (name: `@vexart/internal-devtools`)
-- [ ] 2.6 Add path mappings to `tsconfig.json` for all five `@vexart/*` packages pointing to their `src/index.ts`
-- [ ] 2.7 Run `bun install && bun run typecheck` — must be green (new packages have no consumers yet)
-- [ ] 2.8 Commit: `chore(engine,primitives,headless,styled,internal-devtools): scaffold empty package roots`
+- [x] 2.1 Create `packages/engine/` with `package.json` (name: `@vexart/engine`, no deps), `tsconfig.json` inheriting root config, `src/public.ts` (empty), `src/index.ts` (`export * from "./public"`)
+- [x] 2.2 Create `packages/primitives/` with same shape (name: `@vexart/primitives`)
+- [x] 2.3 Create `packages/headless/` with same shape (name: `@vexart/headless`)
+- [x] 2.4 Create `packages/styled/` with same shape (name: `@vexart/styled`)
+- [x] 2.5 Create `packages/internal-devtools/` with same shape + `"private": true` (name: `@vexart/internal-devtools`)
+- [x] 2.6 Add path mappings to `tsconfig.json` for all five `@vexart/*` packages pointing to their `src/index.ts`
+- [x] 2.7 Run `bun install && bun run typecheck` — must be green (new packages have no consumers yet)
+- [x] 2.8 Commit: `chore(engine,primitives,headless,styled,internal-devtools): scaffold empty package roots`
 
 ## 3. Fold @tge/core into engine/src/ffi (slice 3)
 

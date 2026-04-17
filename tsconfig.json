@@ -26,7 +26,12 @@
       "@tge/layout-clay": ["./packages/layout-clay/src/index.ts"],
       "@tge/gpu": ["./packages/gpu/src/index.ts"],
       "@tge/components": ["./packages/components/src/index.ts"],
-      "@tge/void": ["./packages/void/src/index.ts"]
+      "@tge/void": ["./packages/void/src/index.ts"],
+      "@vexart/engine": ["./packages/engine/src/index.ts"],
+      "@vexart/primitives": ["./packages/primitives/src/index.ts"],
+      "@vexart/headless": ["./packages/headless/src/index.ts"],
+      "@vexart/styled": ["./packages/styled/src/index.ts"],
+      "@vexart/internal-devtools": ["./packages/internal-devtools/src/index.ts"]
     }
   },
   "include": [
