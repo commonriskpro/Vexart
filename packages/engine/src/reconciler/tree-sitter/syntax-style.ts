@@ -19,7 +19,7 @@
  *   style.colorFor("keyword.function")  // → 0xc678ddff (dot-fallback)
  */
 
-import { parseColor } from "../../../engine/src/ffi/node"
+import { parseColor } from "../../ffi/node"
 
 // ── Types ──
 

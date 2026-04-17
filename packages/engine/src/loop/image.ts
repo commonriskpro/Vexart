@@ -16,8 +16,8 @@
  * Images are cached by src path — same path = same decoded buffer.
  */
 
-import type { TGENode } from "../../engine/src/ffi/node"
-import { markDirty } from "./dirty"
+import type { TGENode } from "../ffi/node"
+import { markDirty } from "../reconciler/dirty"
 
 // ── Cache ──
 

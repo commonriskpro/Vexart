@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createNode, insertChild, removeChild } from "../../engine/src/ffi/node"
-import { createHandle } from "../../runtime/src/handle"
+import { createHandle } from "../../engine/src/reconciler/handle"
 
 describe("createHandle", () => {
   test("wraps a node with correct id and kind", () => {

@@ -1,7 +1,7 @@
 /** useDrag runtime hook. */
 
 import { createSignal } from "solid-js"
-import { type NodeMouseEvent } from "../../engine/src/ffi/node"
+import { type NodeMouseEvent } from "../ffi/node"
 import { type NodeHandle } from "./handle"
 import { setPointerCapture } from "./pointer"
 import { beginNodeInteraction, endNodeInteraction } from "./interaction"

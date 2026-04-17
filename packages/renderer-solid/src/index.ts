@@ -9,19 +9,20 @@
 
 import { createTerminal, type Terminal } from "@tge/platform-terminal"
 import { createParser, type KeyEvent, type MouseEvent as TgeMouseEvent, type InputEvent } from "@tge/input"
-import { createRenderLoop } from "../../runtime/src/index"
+import { createRenderLoop } from "../../engine/src/loop/loop"
 import { render as solidRender } from "./reconciler"
-import { dispatchInput } from "../../runtime/src/input"
-import { markDirty } from "../../runtime/src/dirty"
+import { dispatchInput } from "../../engine/src/loop/input"
+import { markDirty } from "../../engine/src/reconciler/dirty"
 import { markAllDirty } from "../../engine/src/ffi/layers"
-import { resetFocus } from "../../runtime/src/focus"
-import { resetSelection } from "../../runtime/src/selection"
-import { bindLoop, unbindLoop } from "../../runtime/src/pointer"
+import { resetFocus } from "../../engine/src/reconciler/focus"
+import { resetSelection } from "../../engine/src/reconciler/selection"
+import { bindLoop, unbindLoop } from "../../engine/src/reconciler/pointer"
 import { createSignal, onCleanup } from "solid-js"
 
 // ── Core + Runtime re-exports (the real implementations, no shim) ──
 export * from "../../engine/src/ffi/index"
-export * from "../../runtime/src/index"
+export * from "../../engine/src/reconciler/index"
+export * from "../../engine/src/loop/index"
 
 // SolidJS control flow + context API
 export { For, Show, Switch, Match, Index, ErrorBoundary } from "./reconciler"

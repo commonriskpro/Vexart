@@ -97,6 +97,9 @@
     "packages/runtime": {
       "name": "@tge/runtime",
       "version": "0.0.1",
+      "dependencies": {
+        "@vexart/engine": "workspace:*",
+      },
     },
     "packages/styled": {
       "name": "@vexart/styled",

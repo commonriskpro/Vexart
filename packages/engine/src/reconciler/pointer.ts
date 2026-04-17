@@ -1,7 +1,7 @@
 /** Pointer capture runtime boundary. */
 
-import type { RenderLoop } from "./loop"
-import type { DamageRect } from "../../engine/src/ffi/damage"
+import type { RenderLoop } from "../loop/loop"
+import type { DamageRect } from "../ffi/damage"
 
 let activeLoop: RenderLoop | null = null
 

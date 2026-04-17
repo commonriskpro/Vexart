@@ -20,8 +20,8 @@
 
 import type { Terminal } from "@tge/platform-terminal"
 import { createLayerComposer } from "@tge/output-kitty"
-import { clay, CMD, ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, SIZING, DIRECTION } from "../../engine/src/ffi/clay"
-import type { RenderCommand } from "../../engine/src/ffi/clay"
+import { clay, CMD, ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, SIZING, DIRECTION } from "../ffi/clay"
+import type { RenderCommand } from "../ffi/clay"
 import {
   type TGENode,
   type SizingInfo,
@@ -33,30 +33,30 @@ import {
   parseAlignX,
   parseAlignY,
   resolveProps,
-} from "../../engine/src/ffi/node"
-import { shouldFreezeInteractionLayer, shouldPromoteInteractionLayer } from "./interaction"
-import { createDirtyTracker } from "./dirty"
+} from "../ffi/node"
+import { shouldFreezeInteractionLayer, shouldPromoteInteractionLayer } from "../reconciler/interaction"
+import { createDirtyTracker } from "../reconciler/dirty"
 import { hasActiveAnimations } from "./animation"
 import { appendFileSync } from "node:fs"
 import { debugFrameStart, debugUpdateStats } from "./debug"
-import { fromConfig, identity, invert, multiply, translate, transformBounds, transformPoint, isIdentity } from "../../engine/src/ffi/matrix"
-import type { Matrix3 } from "../../engine/src/ffi/matrix"
+import { fromConfig, identity, invert, multiply, translate, transformBounds, transformPoint, isIdentity } from "../ffi/matrix"
+import type { Matrix3 } from "../ffi/matrix"
 import { decodeImageForNode } from "./image"
-import { focusedId, setFocusedId, getNodeFocusId } from "./focus"
+import { focusedId, setFocusedId, getNodeFocusId } from "../reconciler/focus"
 import {
   type Layer,
   createLayerStore,
-} from "../../engine/src/ffi/layers"
-import { measureForClay, layoutText, getFont, fontToCSS } from "../../engine/src/ffi/text-layout"
+} from "../ffi/layers"
+import { measureForClay, layoutText, getFont, fontToCSS } from "../ffi/text-layout"
 import {
   intersectRect,
   rectArea as damageRectArea,
   sumOverlapArea as damageSumOverlapArea,
   type DamageRect,
-} from "../../engine/src/ffi/damage"
-import { createGpuRendererBackend } from "../../engine/src/ffi/gpu-renderer-backend"
-import { createGpuFrameComposer } from "../../engine/src/ffi/gpu-frame-composer"
-import { summarizeRendererResourceStats } from "../../engine/src/ffi/resource-stats"
+} from "../ffi/damage"
+import { createGpuRendererBackend } from "../ffi/gpu-renderer-backend"
+import { createGpuFrameComposer } from "../ffi/gpu-frame-composer"
+import { summarizeRendererResourceStats } from "../ffi/resource-stats"
 import { getLatestInteractionTrace } from "./input"
 import {
   buildRenderGraphFrame,
@@ -64,14 +64,14 @@ import {
   resetRenderGraphQueues,
   type EffectConfig,
   type TextMeta,
-} from "../../engine/src/ffi/render-graph"
+} from "../ffi/render-graph"
 import {
   getRendererBackend,
   setRendererBackend,
   type RendererBackend,
   type RendererBackendFrameContext,
   type RendererBackendLayerContext,
-} from "../../engine/src/ffi/renderer-backend"
+} from "../ffi/renderer-backend"
 import {
   boostWindowFor as schedulerBoostWindowFor,
   hasRecentInteraction as schedulerHasRecentInteraction,
@@ -80,11 +80,11 @@ import {
 import {
   buildNodeMouseEvent,
   isFullyOutsideScrollViewport,
-} from "./hit-test"
+} from "../reconciler/hit-test"
 import {
   writeSequentialCommandLayout,
   writeLayoutFromElementIds,
-} from "../../engine/src/ffi/layout-writeback"
+} from "../ffi/layout-writeback"
 const LOG = "/tmp/tge-layers.log"
 const RENDER_DEBUG_LOG = "/tmp/tge-render-debug.log"
 const CADENCE_LOG = "/tmp/tge-cadence.log"

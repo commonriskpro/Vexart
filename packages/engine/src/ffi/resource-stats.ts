@@ -1,6 +1,6 @@
 import { getFontAtlasCacheStats } from "./font-atlas"
 import { getGpuRendererBackendCacheStats } from "./gpu-renderer-backend"
-import { getImageCacheStats } from "../../../runtime/src/image"
+import { getImageCacheStats } from "../loop/image"
 import { getTextLayoutCacheStats } from "./text-layout"
 
 export function getRendererResourceStats() {

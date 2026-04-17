@@ -1,4 +1,4 @@
-import type { TGENode, LayoutRect } from "../../engine/src/ffi/node"
+import type { TGENode, LayoutRect } from "../ffi/node"
 import { setFocus, focusedId } from "./focus"
 
 export type NodeHandle = {

@@ -1,5 +1,5 @@
-import { clay } from "../../engine/src/ffi/clay"
-import { markDirty } from "./dirty"
+import { clay } from "../ffi/clay"
+import { markDirty } from "../reconciler/dirty"
 
 export type ScrollHandle = {
   readonly scrollX: number

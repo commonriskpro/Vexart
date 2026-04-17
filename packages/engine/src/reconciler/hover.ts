@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js"
-import { type NodeMouseEvent } from "../../engine/src/ffi/node"
+import { type NodeMouseEvent } from "../ffi/node"
 
 export type HoverOptions = {
   onEnter?: () => void

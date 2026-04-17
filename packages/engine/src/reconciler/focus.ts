@@ -1,9 +1,9 @@
 /** Focus runtime system. */
 
 import { createSignal } from "solid-js"
-import { onInput } from "./input"
+import { onInput } from "../loop/input"
 import type { KeyEvent } from "@tge/input"
-import type { TGENode, PressEvent } from "../../engine/src/ffi/node"
+import type { TGENode, PressEvent } from "../ffi/node"
 
 export type FocusEntry = {
   id: string

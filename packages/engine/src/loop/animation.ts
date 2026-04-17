@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js"
-import { markDirty } from "./dirty"
+import { markDirty } from "../reconciler/dirty"
 
 let activeCount = 0
 

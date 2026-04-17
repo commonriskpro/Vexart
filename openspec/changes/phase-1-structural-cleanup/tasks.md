@@ -36,14 +36,14 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
 
 ## 3. Fold @tge/core into engine/src/ffi (slice 3)
 
-- [ ] 3.1 `git mv packages/core/src packages/engine/src/ffi` — moves all 21 source files from core into engine's ffi directory (REQ-PB-010)
-- [ ] 3.2 Update all internal imports within the moved files — any relative cross-references between the moved files remain valid (they moved as a unit), but verify no references to `../../<other-package>/src/` remain; if found, rewrite to use the tsconfig path alias for the other package
-- [ ] 3.3 Update `packages/engine/src/public.ts` to re-export all symbols that `packages/core/src/index.ts` previously exported (reference the moved `ffi/index.ts`)
-- [ ] 3.4 Update `packages/engine/src/index.ts` to re-export from `./public`
-- [ ] 3.5 Create shim: new `packages/core/src/index.ts` containing `export * from "@vexart/engine"`. Update `packages/core/package.json` to add `@vexart/engine: "workspace:*"` in dependencies
-- [ ] 3.6 Verify `tsconfig.json` still has `@tge/core` path mapping pointing to `packages/core/src/index.ts` (shim) — it does; confirm no change needed
-- [ ] 3.7 Run `bun install && bun run typecheck` — must be green (all old `@tge/core` consumers resolve through the shim)
-- [ ] 3.8 Commit: `refactor(engine): fold @tge/core into engine/src/ffi with shim`
+- [x] 3.1 `git mv packages/core/src packages/engine/src/ffi` — moves all 21 source files from core into engine's ffi directory (REQ-PB-010)
+- [x] 3.2 Update all internal imports within the moved files — any relative cross-references between the moved files remain valid (they moved as a unit), but verify no references to `../../<other-package>/src/` remain; if found, rewrite to use the tsconfig path alias for the other package
+- [x] 3.3 Update `packages/engine/src/public.ts` to re-export all symbols that `packages/core/src/index.ts` previously exported (reference the moved `ffi/index.ts`)
+- [x] 3.4 Update `packages/engine/src/index.ts` to re-export from `./public`
+- [x] 3.5 Create shim: new `packages/core/src/index.ts` containing `export * from "@vexart/engine"`. Update `packages/core/package.json` to add `@vexart/engine: "workspace:*"` in dependencies
+- [x] 3.6 Verify `tsconfig.json` still has `@tge/core` path mapping pointing to `packages/core/src/index.ts` (shim) — it does; confirm no change needed
+- [x] 3.7 Run `bun install && bun run typecheck` — must be green (all old `@tge/core` consumers resolve through the shim)
+- [x] 3.8 Commit: `refactor(engine): fold @tge/core into engine/src/ffi with shim`
 
 ## 4. Fold @tge/runtime into engine/src/reconciler + loop (slice 4)
 
