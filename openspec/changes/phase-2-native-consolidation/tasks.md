@@ -52,31 +52,60 @@ Objective: Add a new TS loader for `libvexart` alongside existing bridge loaders
 
 ---
 
-## Slice 5: Port WGPU Pipelines from `native/wgpu-canvas-bridge/` to `libvexart/src/paint/` (Safe)
+## Slice 5: Port + Author WGPU Pipelines into `libvexart/src/paint/` (Safe)
 
-Objective: Move real WGPU rendering logic into libvexart. This is the largest Rust-side work. Per design §4, §5.3, exploration Q4.
+**SUPERSEDED by design §17 (Apply-time amendment 2026-04-17).** Original 21-task structure was calibrated against an assumed bridge layout that did not match reality. Slice 5 now splits into Slice 5a (port + infra) and Slice 5b (NEW GPU pipelines that replace CPU paths per DEC-012). All downstream slices (6, 7, ...) are unchanged.
 
-- [ ] [ATOMIC] 5.1 Create `native/libvexart/src/paint/context.rs` with real `WgpuContext` initialization: `wgpu::Instance::default()`, adapter request, device+queue creation via `pollster::block_on`. Port from `native/wgpu-canvas-bridge/src/lib.rs` context creation logic, upgrading to `wgpu 29.0.1` API shapes. Per design §9, exploration Q4.
-- [x] [ATOMIC] 5.2 Create `native/libvexart/src/paint/instances.rs` with `#[repr(C)]` `Pod + Zeroable` instance structs for each pipeline: `RectInstance`, `CircleInstance`, `LineInstance`, `BezierInstance`, `GradientInstance`, `GlowInstance`, `ShadowInstance`, `BlurSourceInstance`, `FilterInstance`, `BlendInstance`, `ImageInstance`. Per design §4. **Done early in Slice 2 apply (2026-04-17); all 11 structs present with bytemuck Pod+Zeroable derives. Slice 5 work remaining: wire these into pipelines.**
-- [ ] 5.3 Create `native/libvexart/src/paint/pipelines/mod.rs` with `PipelineRegistry` struct holding `wgpu::RenderPipeline` per kind. Per design §4.
-- [ ] 5.4 Create `native/libvexart/src/paint/pipelines/rect.rs` with SDF rect pipeline: WGSL shader via `include_str!("../shaders/sdf_rect.wgsl")`, vertex+fragment pipeline creation, instance buffer upload. Port shader logic from `wgpu-canvas-bridge` rect rendering.
-- [ ] 5.5 Create `native/libvexart/src/paint/pipelines/rect_corners.rs` for per-corner radius variant.
-- [ ] 5.6 Create `native/libvexart/src/paint/pipelines/circle.rs` with ellipse SDF pipeline.
-- [ ] 5.7 Create `native/libvexart/src/paint/pipelines/line.rs` and `bezier.rs` with anti-aliased line/bezier pipelines.
-- [ ] 5.8 Create `native/libvexart/src/paint/pipelines/gradient_linear.rs` with 2-stop + multi-stop linear gradient pipeline. Per exploration Q3 (NEW_SHADER for multi-stop).
-- [ ] 5.9 Create `native/libvexart/src/paint/pipelines/gradient_radial.rs` with 2-stop + multi-stop radial gradient pipeline.
-- [ ] 5.10 Create `native/libvexart/src/paint/pipelines/gradient_conic.rs` with conic gradient pipeline. Per exploration Q3.
-- [ ] 5.11 Create `native/libvexart/src/paint/pipelines/glow.rs` with outer glow/halo pipeline (plateau + falloff). Per exploration Q3.
-- [ ] 5.12 Create `native/libvexart/src/paint/pipelines/shadow.rs` with drop shadow + inset shadow pipeline. Per exploration Q3.
-- [ ] 5.13 Create `native/libvexart/src/paint/pipelines/blur.rs` with backdrop blur source pipeline.
-- [ ] 5.14 Create `native/libvexart/src/paint/pipelines/filter.rs` with brightness/contrast/saturate/grayscale/invert/sepia/hue-rotate filter pipelines.
-- [ ] 5.15 Create `native/libvexart/src/paint/pipelines/blend.rs` with 16 CSS blend modes pipeline.
-- [ ] 5.16 Create `native/libvexart/src/paint/pipelines/image.rs` with image upload + render pipeline.
-- [ ] 5.17 Create `native/libvexart/src/paint/pipelines/gradient_stroke.rs` with gradient border stroke pipeline. Per exploration Q3.
-- [ ] 5.18 Create WGSL shader files under `native/libvexart/src/paint/shaders/`: `sdf_rect.wgsl`, `linear_gradient.wgsl`, `radial_gradient.wgsl`, `conic_gradient.wgsl`, `glow.wgsl`, `shadow.wgsl`, `backdrop_filter.wgsl`, `blend_mode.wgsl`. Embed via `include_str!`.
-- [ ] 5.19 Wire `paint/mod.rs` `dispatch()` to parse graph buffer header (§8), iterate commands, route to pipeline by `cmd_kind`, upload instance buffers, submit `wgpu::CommandEncoder`. Per design §5.3.
-- [ ] 5.20 Wire `vexart_paint_upload_image()` and `vexart_paint_remove_image()` in `lib.rs` to create/destroy `wgpu::Texture` resources. Per design §5.3.
-- [ ] 5.21 Verify: `cargo check` from repo root passes with real WGPU code compiled.
+### Slice 5a — Port + Infra (Apply #2a)
+
+Objective: Port the 13 portable GPU pipelines from `native/wgpu-canvas-bridge/src/lib.rs` (monolithic 4675 LOC) into the `libvexart/src/paint/pipelines/` modular tree, upgrade WGPU 26 → 29.0.1, wire the `vexart_paint_dispatch` graph buffer parser, and ship a working `libvexart.dylib` with all 13 pipelines registered. No new shaders authored. Per design §17.1, §17.4, §17.6.
+
+**Hard rules for Apply #2a:**
+- **Do NOT touch `paint/instances.rs`** — already complete from Slice 2 apply (11 Pod+Zeroable structs). Apply #2a wires them into pipelines.
+- **Do NOT author new WGSL** — every shader in 5a is `include_str!` of a `.wgsl` file produced by extracting the inline raw string from the bridge source line range listed in §17.1.
+- **Do NOT port `glyph_pipeline`** (DEC-011 — text stays stubbed).
+- **Do NOT port the 4 CPU functions** (`apply_box_blur_rgba`, `apply_backdrop_filters_rgba`, `apply_rounded_rect_mask_rgba`, `apply_rounded_rect_corners_mask_rgba`) — they become NEW GPU pipelines in Slice 5b.
+
+- [ ] [ATOMIC] 5a.1 Replace stub in `native/libvexart/src/paint/context.rs` with real `WgpuContext` init: `wgpu::Instance::default()`, adapter request via `request_adapter`, device + queue via `pollster::block_on(adapter.request_device(...))`. Port the 2-binding `image_bind_group_layout` (texture + sampler at fragment stage) from bridge L2185-2205. Upgrade all API call shapes from `wgpu = "26"` to `wgpu = "29.0.1"` — note `request_adapter` and `request_device` signatures changed (read wgpu 27/28/29 changelogs in-line during the work). Per design §17.1, §17.4.
+- [ ] [ATOMIC] 5a.2 Replace stub in `native/libvexart/src/paint/pipelines/mod.rs` with real `PipelineRegistry` struct that holds 13 named `wgpu::RenderPipeline` fields (rect, shape_rect, shape_rect_corners, circle, polygon, bezier, glow, nebula, starfield, image, image_transform, gradient_linear, gradient_radial). Add `PipelineRegistry::new(device, format, image_bgl)` constructor that calls each `paint::pipelines::*::create()` in order. Per design §17.6.
+- [ ] 5a.3 Create `native/libvexart/src/paint/shaders/rect.wgsl` (extract from bridge L612-642 raw string) and `paint/pipelines/rect.rs` with `pub fn create(device, format) -> RenderPipeline` that follows bridge L646-677 pipeline descriptor (Instance step mode, ALPHA_BLENDING, Float32x4 + Float32x4 vertex attributes for `rect` + `color`, `cache: None`).
+- [ ] 5a.4 Same pattern: `paint/shaders/circle.wgsl` (bridge L683-738) + `paint/pipelines/circle.rs`. Vertex attributes per `CircleInstance` (16 floats).
+- [ ] 5a.5 Same: `paint/shaders/polygon.wgsl` (bridge L778-885) + `paint/pipelines/polygon.rs`. Vertex attributes per `PolygonInstance` (20 floats).
+- [ ] 5a.6 Same: `paint/shaders/bezier.wgsl` (bridge L889-1002) + `paint/pipelines/bezier.rs`. Vertex attributes per `BezierInstance` (20 floats).
+- [ ] 5a.7 Same: `paint/shaders/shape_rect.wgsl` (bridge L1006-1112) + `paint/pipelines/shape_rect.rs`. Vertex attributes per `ShapeRectInstance` (20 floats).
+- [ ] 5a.8 Same: `paint/shaders/rect_corners.wgsl` (bridge L1116-1231) + `paint/pipelines/rect_corners.rs`. Vertex attributes per `ShapeRectCornersInstance` (24 floats).
+- [ ] 5a.9 Same: `paint/shaders/glow.wgsl` (bridge L1491-1571) + `paint/pipelines/glow.rs`. Vertex attributes per `GlowInstance` (12 floats).
+- [ ] 5a.10 Same: `paint/shaders/nebula.wgsl` (bridge L1235-1380, complex 32-float instance with 4 gradient stops) + `paint/pipelines/nebula.rs`.
+- [ ] 5a.11 Same: `paint/shaders/starfield.wgsl` (bridge L1384-1487, 24-float instance with cluster + warm/neutral/cool colors) + `paint/pipelines/starfield.rs`.
+- [ ] 5a.12 Same: `paint/shaders/image.wgsl` (bridge L1575-1663) + `paint/pipelines/image.rs`. Uses `image_bind_group_layout` (texture + sampler bindings).
+- [ ] 5a.13 Same: `paint/shaders/image_transform.wgsl` (bridge L1757-1845) + `paint/pipelines/image_transform.rs`. Uses `image_bind_group_layout`.
+- [ ] 5a.14 Same: `paint/shaders/gradient_linear.wgsl` (bridge L1849-1949) + `paint/pipelines/gradient_linear.rs`. Vertex attributes per `LinearGradientInstance` (20 floats).
+- [ ] 5a.15 Same: `paint/shaders/gradient_radial.wgsl` (bridge L1953 to end of fn) + `paint/pipelines/gradient_radial.rs`. Vertex attributes per `RadialGradientInstance` (20 floats).
+- [ ] [ATOMIC] 5a.16 Wire `paint/mod.rs` `PaintContext::dispatch()` to (a) parse `graph_ptr` per design §8 (`parse_header()` returns `cmd_count` and `payload_bytes`), (b) iterate `cmd_count` command headers (cmd_kind + flags + payload_bytes), (c) for each command, deserialize payload into the appropriate Pod struct (`bytemuck::from_bytes`), (d) accumulate instance batches per pipeline (group by cmd_kind), (e) upload each batch as a `wgpu::Buffer` (vertex buffer with `Instance` step mode) via `device.create_buffer_init`, (f) submit one `wgpu::CommandEncoder` per frame with one render pass per pipeline that has instances, (g) write `gpu_ms` and `total_ms` into `*stats_out` if non-null. Use cmd_kind allocation per design §17.6 (0..10 reserved for the 13 ports; 11 reserved unused; 12-15 reserved for Slice 5b). Stub the dispatch for unknown cmd_kinds with a no-op (silent skip — Slice 5b will fill them).
+- [ ] [ATOMIC] 5a.17 Wire `vexart_paint_upload_image()` in `lib.rs` to create a `wgpu::Texture` from the input RGBA bytes (use `device.create_texture_with_data` from `wgpu::util::DeviceExt`), create a sampler, build an `wgpu::BindGroup` with the existing `image_bind_group_layout`, and store all 3 in an `Image` registry inside `PaintContext`. Return the registry handle as the `out_image` u64. Wire `vexart_paint_remove_image()` to drop the entry.
+- [ ] 5a.18 Add Rust unit test `native/libvexart/src/paint/pipelines/mod.rs` `#[cfg(test)] tests`: assert `PipelineRegistry::new(device, format, bgl)` returns OK when given a valid device. Use `pollster::block_on` to obtain a real adapter / device for the test (gated behind `#[cfg(feature = "gpu-tests")]`).
+- [ ] 5a.19 Add Rust unit test in `native/libvexart/src/paint/mod.rs`: build a graph buffer with 1 rect command (cmd_kind = 0), call `PaintContext::dispatch()` against a 64x64 offscreen target, verify it returns OK. Gated behind `#[cfg(feature = "gpu-tests")]`.
+- [ ] 5a.20 Verify: from repo root, `cargo check` passes with real WGPU code compiled. Then `cargo build` succeeds and produces `target/debug/libvexart.dylib`. Then `bun run typecheck` still passes (no TS imports yet of the new pipelines). The bridge.test.ts from Slice 4 still passes (no regression).
+
+### Slice 5b — NEW GPU pipelines per DEC-012 (Apply #2b)
+
+Objective: Author 4 NEW WGPU pipelines that (a) introduce conic gradient (genuinely new) and (b) replace the 4 CPU pixel-mutation functions in the bridge with GPU equivalents per DEC-012 ("todo por WGPU, nada por CPU"). Wire each new pipeline behind a new `cmd_kind` tag in `vexart_paint_dispatch`. Per design §17.2, §17.3, §17.4, §17.5, §17.6.
+
+**Hard rules for Apply #2b:**
+- All shaders authored from scratch (no port source). Reference algorithms documented per shader below.
+- New pipelines plug into `PipelineRegistry` and `PaintContext::dispatch()` from Slice 5a — Apply #2b extends, never refactors.
+- Each new pipeline gets a new `Pod + Zeroable` instance struct in `paint/instances.rs` if its parameters do not fit existing structs.
+
+- [ ] [ATOMIC] 5b.1 Create `paint/shaders/gradient_conic.wgsl` + `paint/pipelines/gradient_conic.rs` + `ConicGradientInstance` struct in `paint/instances.rs`. Algorithm: fragment shader computes `atan2(uv.y - center.y, uv.x - center.x)` normalized to [0, 1], samples a 2-stop or multi-stop color along that angle. Mirror the API shape of `LinearGradientInstance` with an extra `start_angle` field. Wire `cmd_kind = 12` in `paint/mod.rs` dispatch.
+- [ ] [ATOMIC] 5b.2 Create `paint/shaders/backdrop_blur.wgsl` + `paint/pipelines/backdrop_blur.rs` + `BackdropBlurInstance` struct (fields: rect [4 floats], blur_radius f32, padding). 2-pass Gaussian blur: pipeline runs ping-pong, first pass = horizontal Gaussian sample, second pass = vertical. Replaces `apply_box_blur_rgba` (bridge L2427-2480). Wire `cmd_kind = 13` (note: requires 2 render passes per dispatch — design accordingly in `PaintContext::dispatch()`).
+- [ ] [ATOMIC] 5b.3 Create `paint/shaders/backdrop_filter.wgsl` + `paint/pipelines/backdrop_filter.rs` + `BackdropFilterInstance` struct (fields per `TgeWgpuBackdropFilterParams` from bridge L57-66: blur ignored here — handled by 5b.2 — plus brightness, contrast, saturate, grayscale, invert, sepia, hue_rotate as 7 f32 fields + `_pad`). Single fragment shader applies the 7 ops in order: brightness multiply → contrast curve → saturate via luma blend (matrix from bridge L2502-2511) → grayscale luma → invert → sepia matrix → hue rotation matrix (3x3 derived from cos/sin of degrees, formula from bridge L2492-2500). Replaces `apply_backdrop_filters_rgba` (bridge L2481-2579). Wire `cmd_kind = 14`.
+- [ ] [ATOMIC] 5b.4 Create `paint/shaders/image_mask.wgsl` + `paint/pipelines/image_mask.rs` + `ImageMaskInstance` struct (fields: rect [4 floats], mask_rect [4 floats], radius_uniform f32, radius_per_corner [4 floats: tl/tr/br/bl], mode u32 [0 = uniform, 1 = per-corner]). Single fragment shader with `if mode == 0` branch using `radius_uniform`, else uses the 4-corner SDF (signed distance to rounded rect corners). Replaces `apply_rounded_rect_mask_rgba` (bridge L2580-2633) AND `apply_rounded_rect_corners_mask_rgba` (bridge L2634-2699) in one pipeline. Wire `cmd_kind = 15`.
+- [ ] 5b.5 Update `PipelineRegistry` to hold the 4 new pipelines. Update its `new()` constructor to call the 4 new `create()` functions.
+- [ ] 5b.6 Add Rust unit test for gradient_conic: build a 32x32 offscreen target, dispatch 1 conic command 360°-spanning red→blue, sample center pixel — expect midpoint color (purple-ish). Gated `#[cfg(feature = "gpu-tests")]`.
+- [ ] 5b.7 Add Rust unit test for backdrop_blur: solid red 32x32 target, apply blur radius 4, verify edge pixels still red and center still red (uniform color stays uniform under blur). Gated `gpu-tests`.
+- [ ] 5b.8 Add Rust unit test for backdrop_filter: white 32x32 target, apply `brightness=50` (50%), verify all pixels mid-gray (0x80). Then test `invert=100` on white target → all pixels black. Gated `gpu-tests`.
+- [ ] 5b.9 Add Rust unit test for image_mask: red 64x64 image, mask with `radius_uniform=10` over center 40x40 rect, verify corner pixels of mask region are transparent (mask cuts the corners). Gated `gpu-tests`.
+- [ ] 5b.10 Verify: from repo root, `cargo check` passes. `cargo build` produces `libvexart.dylib`. `bun run typecheck` still passes. `cargo test --features gpu-tests` runs all 5a + 5b GPU tests green.
 
 ---
 

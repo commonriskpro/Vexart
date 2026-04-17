@@ -717,4 +717,94 @@ Re-apply in smaller slices after spec/design/tasks update to reflect discovered 
 
 ---
 
+## 17. Apply-time amendment (2026-04-17, Apply #2 prep)
+
+When opening Apply #2 (Slice 5), inspection of `native/wgpu-canvas-bridge/src/lib.rs` (4675 LOC, single monolith) revealed that the original Slice 5 task list was calibrated against an assumed bridge structure that does not match reality. This section reconciles the design with the actual bridge inventory and locks the founder decisions taken during Apply #2 planning. **Section 17 is normative and supersedes anything in §4, §5, or §11 that contradicts it.**
+
+### 17.1 Real bridge inventory (audit, not assumption)
+
+The bridge has **14 GPU pipelines** (each one `create_X_pipeline` function with an inline `r#"..."#` WGSL string) and **4 CPU image-mutation functions**. There are no external `.wgsl` files. There is no `include_str!` shader loading. Every pipeline lives in a single `lib.rs`.
+
+**Pipelines actually present** (with source line numbers for the port phase):
+
+| # | Bridge fn | Instance struct | Shader site | Phase 2 destination |
+|---|---|---|---|---|
+| 1 | `create_rect_pipeline` (L609) | `RectFillInstance` (8 floats, flat fill no SDF) | L612-642 | `paint/pipelines/rect.rs` (flat path) |
+| 2 | `create_circle_pipeline` (L680) | `CircleInstance` (16 floats) | L683-738 | `paint/pipelines/circle.rs` |
+| 3 | `create_polygon_pipeline` (L775) | `PolygonInstance` (20 floats, sides+rotation) | L778-885 | `paint/pipelines/polygon.rs` |
+| 4 | `create_bezier_pipeline` (L886) | `BezierInstance` (20 floats) | L889-1002 | `paint/pipelines/bezier.rs` |
+| 5 | `create_shape_rect_pipeline` (L1003) | `ShapeRectInstance` (20 floats, uniform radius+stroke) | L1006-1112 | `paint/pipelines/shape_rect.rs` |
+| 6 | `create_shape_rect_corners_pipeline` (L1113) | `ShapeRectCornersInstance` (24 floats, per-corner radius) | L1116-1231 | `paint/pipelines/rect_corners.rs` |
+| 7 | `create_nebula_pipeline` (L1232) | `NebulaInstance` (32 floats, 4 gradient stops) | L1235-1380 | `paint/pipelines/nebula.rs` |
+| 8 | `create_starfield_pipeline` (L1381) | `StarfieldInstance` (24 floats, procedural stars) | L1384-1487 | `paint/pipelines/starfield.rs` |
+| 9 | `create_glow_pipeline` (L1488) | `GlowInstance` (12 floats) | L1491-1571 | `paint/pipelines/glow.rs` |
+| 10 | `create_image_pipeline` (L1572) | `ImageInstance` (8 floats) | L1575-1663 | `paint/pipelines/image.rs` |
+| 11 | `create_glyph_pipeline` (L1664) | `GlyphInstance` (16 floats) | L1667-1753 | **SKIP per DEC-011** (text stub) |
+| 12 | `create_image_transform_pipeline` (L1754) | `ImageTransformInstance` (12 floats) | L1757-1845 | `paint/pipelines/image_transform.rs` |
+| 13 | `create_linear_gradient_pipeline` (L1846) | `LinearGradientInstance` (20 floats) | L1849-1949 | `paint/pipelines/gradient_linear.rs` |
+| 14 | `create_radial_gradient_pipeline` (L1950) | `RadialGradientInstance` (20 floats) | L1953-end | `paint/pipelines/gradient_radial.rs` |
+
+**Common pipeline shape** (every `create_*_pipeline` fn): inline raw WGSL → `device.create_shader_module` → `device.create_render_pipeline` with `Instance` step mode, `ALPHA_BLENDING` color target, `cache: None`. No depth/stencil. No multisample.
+
+### 17.2 CPU functions to be REPLACED with GPU pipelines (DEC-012)
+
+Per the founder principle "todo por WGPU, nada por CPU" (decision log entry pending):
+
+| # | CPU fn | Lines | Replaces with |
+|---|---|---|---|
+| 1 | `apply_box_blur_rgba` | L2427-2480 | NEW `paint/pipelines/backdrop_blur.rs` + `backdrop_blur.wgsl` (2-pass Gaussian H+V) |
+| 2 | `apply_backdrop_filters_rgba` | L2481-2579 | NEW `paint/pipelines/backdrop_filter.rs` + `backdrop_filter.wgsl` (7-op chain in one fragment shader: brightness → contrast → saturate → grayscale → invert → sepia → hue-rotate) |
+| 3 | `apply_rounded_rect_mask_rgba` | L2580-2633 | NEW `paint/pipelines/image_mask.rs` + `image_mask.wgsl` (uniform-radius branch) |
+| 4 | `apply_rounded_rect_corners_mask_rgba` | L2634-2699 | Same `image_mask.wgsl` shader, per-corner branch (single shader with branching) |
+
+### 17.3 Pipelines design originally requested but bridge does not contain
+
+Reconciliation:
+
+| Design name | Status | Resolution |
+|---|---|---|
+| `gradient_conic.rs` (originally task 5.10) | NEW | Created from scratch in Apply #2b — single radial-coordinate-with-angle shader |
+| `shadow.rs` (originally task 5.12) | **CANCELLED** | Shadow has no dedicated pipeline today. `gpu-renderer-backend.ts` L1502-1521 implements `effect.shadow` by re-emitting `GlowInstance` with offset (`s.x`, `s.y`) and padding (`s.blur * 2`) into the existing `glow_pipeline`. This TS-side reuse is preserved during Slice 9 wiring. No Rust shader work required. |
+| `blur.rs` + `filter.rs` (originally tasks 5.13, 5.14) | **MERGED** | Bridge implementation is one CPU function for blur and one for the 7 filters; per DEC-012 they become two GPU pipelines but live in §17.2 row 1 and row 2 — single source of truth. |
+| `blend.rs` (originally task 5.15) | **DEFERRED to Phase 2b** | Not present in bridge in any form. 16 CSS blend modes is genuinely new design surface. Founder decision (Apply #2 planning): defer. |
+| `gradient_stroke.rs` (originally task 5.17) | **DEFERRED to Phase 2b** | Not present in bridge. Founder decision: defer. |
+
+### 17.4 Slice 5 split — Apply #2a (port) and Apply #2b (NEW GPU)
+
+The original 21-task Slice 5 splits along the port-vs-create boundary:
+
+- **Slice 5a — Port + Infra (~17 tasks).** Single sub-agent run. Mechanical port of the 13 portable pipelines (excluding glyph), wgpu 26 → 29 API migration concentrated in `paint/context.rs`, `vexart_paint_dispatch` graph buffer parser, basic tests. No new shaders authored.
+- **Slice 5b — NEW GPU pipelines (~10 tasks).** Single sub-agent run. Authors 4 new shaders that replace CPU paths plus `gradient_conic`. Adds `cmd_kind` tags 12-15 to `vexart_paint_dispatch`'s graph protocol.
+
+Slice numbering downstream of 5 is **unchanged** — Slice 6 (Taffy), Slice 7 (Kitty SHM), etc. remain as written. Internal split of Slice 5 is the only restructure.
+
+### 17.5 Architectural decision pending PRD amendment
+
+**DEC-012 (NEW, candidate for `docs/PRD.md §12 Decision Log`):**
+
+> No CPU pixel rendering. Every operation that mutates pixel bytes (fill, stroke, blur, filter chain, mask, composite) MUST execute on the GPU through a WGPU pipeline. The only acceptable CPU pixel paths are: (a) GPU→CPU readback when terminal output protocols require it (e.g. Kitty PNG/zlib encoding in Phase 2b), (b) one-time texture upload from disk-loaded image bytes. CPU image mutation helpers like the Phase 1 `apply_*_rgba` family are removed in Phase 2 and forbidden in future code.
+
+Rationale: WGPU-only rendering is the differentiating value proposition of Vexart vs terminal UI libraries that fall back to CPU box blur. Founder explicitly invoked this principle during Apply #2 planning ("aquí no queremos renderizar nada por CPU, todo por WGPU es el punto de todo"). DEC-012 is referenced in `openspec/changes/phase-2-native-consolidation/specs/native-binary/spec.md` as a normative invariant for Apply #2 work; formal PRD insertion happens at Phase 2 archive time.
+
+### 17.6 §5 FFI exports — unchanged count (still 20)
+
+The 20 `vexart_*` exports from §5 stay exactly as designed. The new pipelines added in §17.2 and §17.3 do NOT increase the FFI surface: they are dispatched through `vexart_paint_dispatch` via additional `cmd_kind` tags inside the §8 graph buffer protocol. New tag allocation:
+
+| cmd_kind | Pipeline | Apply |
+|---|---|---|
+| 0..10 | Reserved for the 13 ported pipelines (rect, shape_rect, shape_rect_corners, circle, polygon, bezier, glow, nebula, starfield, image, image_transform, gradient_linear, gradient_radial) | 5a |
+| 12 | gradient_conic | 5b |
+| 13 | backdrop_blur | 5b |
+| 14 | backdrop_filter | 5b |
+| 15 | image_mask | 5b |
+| 11, 16-31 | Reserved for Phase 2b (blend, gradient_stroke, MSDF text, etc.) | future |
+
+`cmd_kind = 11` is reserved (originally would have been glyph, now skipped per DEC-011).
+
+### 17.7 Effect on §11 migration sequence
+
+§11 Slice 9 consumer-migration tasks reference the original Slice 5 pipeline names. After this amendment they refer to the names in §17.1 + §17.3. No tasks are added or removed in Slice 9; only the destination pipeline names change. `gpu-renderer-backend.ts` shadow path (L1502-1521) is preserved verbatim — the TS side keeps emitting glow instances for shadow, only the dispatch destination changes from `tge_wgpu_canvas_*` to `vexart_paint_dispatch` graph buffer commands.
+
+---
+
 **End of design.**
