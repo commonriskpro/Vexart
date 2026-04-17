@@ -1,4 +1,4 @@
-import type { RenderCommand } from "./clay"
+import type { RenderCommand } from "./render-graph"
 import type { DamageRect } from "./damage"
 import type { GpuLayerStrategyMode } from "./gpu-layer-strategy"
 import type { RenderGraphFrame } from "./render-graph"
