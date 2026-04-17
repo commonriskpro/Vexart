@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = [
+  "native/libvexart",
+]
+# Future Phase 2b / 3 members land here (e.g. native/internal-atlas-gen).
+# No glob members — every crate added requires a PRD trace.
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.95.0"
+license = "SEE LICENSE IN LICENSE.md"   # dual-license: see docs/PRD.md §10.1 / DEC-003
+authors = ["Vexart Founder"]
+repository = "https://github.com/vexart/vexart"
+publish = false                          # crates.io publishing is out of scope for v0.9
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"          # forces explicit unsafe blocks in unsafe fns — FFI safety
+
+[profile.release]
+lto = "fat"         # single-binary; LTO is cheap on one crate and gives the most savings
+codegen-units = 1   # deterministic builds + best LTO; ~5% extra compile time is acceptable
+panic = "abort"     # panics in FFI are caught via catch_unwind; unwinding past FFI is UB anyway
+opt-level = 3
+strip = "symbols"   # ship-size only; debug symbols stripped for dist builds
+
+[profile.dev]
+opt-level = 1       # wgpu debug builds at opt-level 0 are painfully slow

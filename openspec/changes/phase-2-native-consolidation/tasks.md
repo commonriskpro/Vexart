@@ -4,7 +4,7 @@
 
 Objective: Create an immutable rollback point before any Phase 2 work begins.
 
-- [ ] 1.1 Create annotated git tag: `git tag -a pre-phase-2 -m "Phase 2 baseline — pre-consolidation"`. Per design §14.
+- [x] 1.1 Create annotated git tag: `git tag -a pre-phase-2 -m "Phase 2 baseline — pre-consolidation"`. Per design §14.
 
 ---
 
@@ -12,21 +12,21 @@ Objective: Create an immutable rollback point before any Phase 2 work begins.
 
 Objective: Create the full crate skeleton with all 20 FFI stubs returning OK, no deletions of existing code. Per design §4 and §5.
 
-- [ ] 2.1 Create directory `native/libvexart/src/` with subdirectories `layout/`, `paint/`, `composite/`, `kitty/`, `text/`, `ffi/`, and `paint/pipelines/`, `paint/shaders/`. Per design §4.
-- [ ] 2.2 Create `native/libvexart/Cargo.toml` with `crate-type = ["cdylib", "rlib"]`, dependencies `taffy = "0.10.1"`, `wgpu = "29.0.1"`, `pollster = "0.4"`, `bytemuck = "1.25"` (with derive), `nix = "0.29"` (features `mman`, `fs` only). Pin all with rationale comments. Per design §2.2, REQ-NB-009.
-- [ ] 2.3 Create `native/libvexart/src/types.rs` with `#[repr(C)]` structs: `Color`, `Rect`, `TransformMatrix`, `FrameStats`, `NodeHandle(u64)`. Per design §4.
-- [ ] 2.4 Create `native/libvexart/src/ffi/mod.rs` re-exporting `buffer`, `error`, `panic` submodules. Per design §4.
-- [ ] 2.5 Create `native/libvexart/src/ffi/error.rs` with `thread_local! LAST_ERROR` storage, `set_last_error()`, `clear_last_error()`, `vexart_get_last_error_length()`, `vexart_copy_last_error()`. Per design §6, REQ-NB-003.
-- [ ] 2.6 Create `native/libvexart/src/ffi/panic.rs` with error code constants (`OK=0`, `ERR_PANIC=-1` through `ERR_INVALID_ARG=-9`) and `ffi_guard!` macro. Per design §7, REQ-NB-003.
-- [ ] 2.7 Create `native/libvexart/src/ffi/buffer.rs` with `GRAPH_MAGIC = 0x56584152`, `GRAPH_VERSION = 0x00020000`, `GraphHeader` struct, `parse_header()` function. Per design §8.
-- [ ] 2.8 Create `native/libvexart/src/layout/mod.rs` with `LayoutContext` struct (owns Taffy `Tree`), stub `compute()`, `measure()`, `writeback()` methods. Per design §4, §5.2.
-- [ ] 2.9 Create `native/libvexart/src/paint/mod.rs` with `PaintContext` struct stub (no GPU init yet), `dispatch()` returning `OK`. Per design §4.
-- [ ] 2.10 Create `native/libvexart/src/paint/context.rs` with placeholder `WgpuContext` struct (empty for now; real init in Slice 5). Per design §4.
-- [ ] 2.11 Create `native/libvexart/src/composite/mod.rs` with `composite_merge()` and `readback_rgba()` stubs returning `OK`. Per design §4.
-- [ ] 2.12 Create `native/libvexart/src/kitty/mod.rs` re-exporting `shm`. Create `native/libvexart/src/kitty/shm.rs` with `vexart_kitty_shm_prepare()` and `vexart_kitty_shm_release()` stubs returning `OK`. Per design §4.
-- [ ] 2.13 Create `native/libvexart/src/text/mod.rs` with `vexart_text_load_atlas()`, `vexart_text_dispatch()`, `vexart_text_measure()` stubs. `dispatch` returns OK with `AtomicBool` first-call warning emitting `[vexart] text rendering disabled during Phase 2 (DEC-011)` to stderr. `measure` writes `0.0, 0.0`. Per design §5.5, REQ-NB-005.
-- [ ] 2.14 Create `native/libvexart/src/lib.rs` with all 20 `#[no_mangle] pub extern "C" fn` exports wrapping bodies in `ffi_guard!`, plus `vexart_version()` returning `0x00020000`. Module re-exports. Per design §5, REQ-NB-003.
-- [ ] 2.15 Verify crate compiles: `cd native/libvexart && cargo check`. Fix any compilation errors.
+- [x] 2.1 Create directory `native/libvexart/src/` with subdirectories `layout/`, `paint/`, `composite/`, `kitty/`, `text/`, `ffi/`, and `paint/pipelines/`, `paint/shaders/`. Per design §4.
+- [x] 2.2 Create `native/libvexart/Cargo.toml` with `crate-type = ["cdylib", "rlib"]`, dependencies `taffy = "0.10.1"`, `wgpu = "29.0.1"`, `pollster = "0.4"`, `bytemuck = "1.25"` (with derive), `nix = "0.29"` (features `mman`, `fs` only). Pin all with rationale comments. Per design §2.2, REQ-NB-009.
+- [x] 2.3 Create `native/libvexart/src/types.rs` with `#[repr(C)]` structs: `Color`, `Rect`, `TransformMatrix`, `FrameStats`, `NodeHandle(u64)`. Per design §4.
+- [x] 2.4 Create `native/libvexart/src/ffi/mod.rs` re-exporting `buffer`, `error`, `panic` submodules. Per design §4.
+- [x] 2.5 Create `native/libvexart/src/ffi/error.rs` with `thread_local! LAST_ERROR` storage, `set_last_error()`, `clear_last_error()`, `vexart_get_last_error_length()`, `vexart_copy_last_error()`. Per design §6, REQ-NB-003.
+- [x] 2.6 Create `native/libvexart/src/ffi/panic.rs` with error code constants (`OK=0`, `ERR_PANIC=-1` through `ERR_INVALID_ARG=-9`) and `ffi_guard!` macro. Per design §7, REQ-NB-003.
+- [x] 2.7 Create `native/libvexart/src/ffi/buffer.rs` with `GRAPH_MAGIC = 0x56584152`, `GRAPH_VERSION = 0x00020000`, `GraphHeader` struct, `parse_header()` function. Per design §8.
+- [x] 2.8 Create `native/libvexart/src/layout/mod.rs` with `LayoutContext` struct (owns Taffy `Tree`), stub `compute()`, `measure()`, `writeback()` methods. Per design §4, §5.2.
+- [x] 2.9 Create `native/libvexart/src/paint/mod.rs` with `PaintContext` struct stub (no GPU init yet), `dispatch()` returning `OK`. Per design §4.
+- [x] 2.10 Create `native/libvexart/src/paint/context.rs` with placeholder `WgpuContext` struct (empty for now; real init in Slice 5). Per design §4.
+- [x] 2.11 Create `native/libvexart/src/composite/mod.rs` with `composite_merge()` and `readback_rgba()` stubs returning `OK`. Per design §4.
+- [x] 2.12 Create `native/libvexart/src/kitty/mod.rs` re-exporting `shm`. Create `native/libvexart/src/kitty/shm.rs` with `vexart_kitty_shm_prepare()` and `vexart_kitty_shm_release()` stubs returning `OK`. Per design §4.
+- [x] 2.13 Create `native/libvexart/src/text/mod.rs` with `vexart_text_load_atlas()`, `vexart_text_dispatch()`, `vexart_text_measure()` stubs. `dispatch` returns OK with `AtomicBool` first-call warning emitting `[vexart] text rendering disabled during Phase 2 (DEC-011)` to stderr. `measure` writes `0.0, 0.0`. Per design §5.5, REQ-NB-005.
+- [x] 2.14 Create `native/libvexart/src/lib.rs` with all 20 `#[no_mangle] pub extern "C" fn` exports wrapping bodies in `ffi_guard!`, plus `vexart_version()` returning `0x00020000`. Module re-exports. Per design §5, REQ-NB-003.
+- [x] 2.15 Verify crate compiles: `cd native/libvexart && cargo check`. Fix any compilation errors.
 
 ---
 
@@ -34,9 +34,9 @@ Objective: Create the full crate skeleton with all 20 FFI stubs returning OK, no
 
 Objective: Establish the Cargo workspace and pinned toolchain. Per design §2, §3, REQ-NB-008.
 
-- [ ] 3.1 Create root `Cargo.toml` with `[workspace] resolver = "2"`, `members = ["native/libvexart"]`, `workspace.package` block (edition 2021, rust-version 1.95.0, publish = false), and `workspace.lints.rust` with `unsafe_op_in_unsafe_fn = "deny"`. Per design §2.1.
-- [ ] 3.2 Create `rust-toolchain.toml` with `channel = "1.95.0"`, `components = ["rustfmt", "clippy", "rust-src"]`, `targets = ["aarch64-apple-darwin"]`, `profile = "minimal"`. Per design §3, founder resolution.
-- [ ] 3.3 Verify workspace builds: `cargo check` from repo root. Per REQ-NB-008.
+- [x] 3.1 Create root `Cargo.toml` with `[workspace] resolver = "2"`, `members = ["native/libvexart"]`, `workspace.package` block (edition 2021, rust-version 1.95.0, publish = false), and `workspace.lints.rust` with `unsafe_op_in_unsafe_fn = "deny"`. Per design §2.1.
+- [x] 3.2 Create `rust-toolchain.toml` with `channel = "1.95.0"`, `components = ["rustfmt", "clippy", "rust-src"]`, `targets = ["aarch64-apple-darwin"]`, `profile = "minimal"`. Per design §3, founder resolution.
+- [x] 3.3 Verify workspace builds: `cargo check` from repo root. Per REQ-NB-008.
 
 ---
 
