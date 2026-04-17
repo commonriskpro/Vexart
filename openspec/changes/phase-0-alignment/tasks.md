@@ -82,7 +82,7 @@ Each group = one conventional commit. Execution follows the dependency order fro
 
 > **NOTE**: These files/dirs likely already exist on disk from the current session. The implementer MUST verify existence before skipping.
 
-- [ ] **5.1** Verify OpenSpec scaffold paths exist and stage.
+- [x] **5.1** Verify OpenSpec scaffold paths exist and stage.
   - Verify each path:
     ```
     ls openspec/config.yaml openspec/README.md
@@ -92,7 +92,7 @@ Each group = one conventional commit. Execution follows the dependency order fro
   - Stage: `git add openspec/`.
   - **Commit**: none standalone (committed as part of 5.2).
 
-- [ ] **5.2** Verify `.atl/skill-registry.md` exists and stage.
+- [x] **5.2** Verify `.atl/skill-registry.md` exists and stage.
   - Run: `ls .atl/skill-registry.md` — must exist.
   - If missing: recreate per PRD §10.3 guidance.
   - Stage: `git add .atl/`.
@@ -101,7 +101,7 @@ Each group = one conventional commit. Execution follows the dependency order fro
 
 ## 6. Traceability verification
 
-- [ ] **6.1** Run all REQ-PG-XXX verification checks from design.md.
+- [x] **6.1** Run all REQ-PG-XXX verification checks from design.md.
   - Execute each check and print PASS/FAIL:
 
     **REQ-PG-001** — Master docs exist + cited:
@@ -155,7 +155,7 @@ Each group = one conventional commit. Execution follows the dependency order fro
 
 ## 7. Merge preparation
 
-- [ ] **7.1** Verify commit history and prepare for merge.
+- [x] **7.1** Verify commit history and prepare for merge.
   - Run: `git log --oneline phase-0-alignment --not main` — should show 4 commits:
     1. `docs: add master PRD, ARCHITECTURE, API-POLICY`
     2. `chore: archive legacy TGE docs to docs/archive/`
