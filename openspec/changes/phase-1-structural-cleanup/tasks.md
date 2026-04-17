@@ -73,16 +73,16 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
 
 ## 6. Fold @tge/terminal + platform-terminal into engine/src/terminal (slice 6)
 
-- [ ] 6.1 Create `packages/engine/src/terminal/` directory
-- [ ] 6.2 `git mv packages/terminal/src/*.ts packages/engine/src/terminal/` — moves `index.ts`, `detect.ts`, `size.ts`, `lifecycle.ts`, `caps.ts`, `tmux.ts`
-- [ ] 6.3 `git mv packages/platform-terminal/src/index.ts packages/engine/src/terminal/platform.ts` — platform-terminal is a single-file stub; rename to avoid collision with terminal's index.ts
-- [ ] 6.4 Update internal imports within moved files — `platform.ts` may import from `@tge/terminal` (now sibling); update to relative `./` paths or keep bare `@tge/terminal` (shim still exists)
-- [ ] 6.5 Create `packages/engine/src/terminal/index.ts` barrel re-exporting all terminal + platform symbols
-- [ ] 6.6 Update `packages/engine/src/public.ts` to re-export terminal symbols
-- [ ] 6.7 Create shim for `@tge/terminal`: rewrite `packages/terminal/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/terminal/package.json` to add `@vexart/engine: "workspace:*"` dependency
-- [ ] 6.8 Create shim for `@tge/platform-terminal`: rewrite `packages/platform-terminal/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/platform-terminal/package.json` to add `@vexart/engine: "workspace:*"` dependency
-- [ ] 6.9 Run `bun install && bun run typecheck` — must be green
-- [ ] 6.10 Commit: `refactor(engine): fold @tge/terminal + platform-terminal into engine/src/terminal with shim`
+- [x] 6.1 Create `packages/engine/src/terminal/` directory
+- [x] 6.2 `git mv packages/terminal/src/*.ts packages/engine/src/terminal/` — moves `index.ts`, `detect.ts`, `size.ts`, `lifecycle.ts`, `caps.ts`, `tmux.ts`
+- [x] 6.3 `git mv packages/platform-terminal/src/index.ts packages/engine/src/terminal/platform.ts` — platform-terminal is a single-file stub; rename to avoid collision with terminal's index.ts
+- [x] 6.4 Update internal imports within moved files — `platform.ts` may import from `@tge/terminal` (now sibling); update to relative `./` paths or keep bare `@tge/terminal` (shim still exists)
+- [x] 6.5 Create `packages/engine/src/terminal/index.ts` barrel re-exporting all terminal + platform symbols
+- [x] 6.6 Update `packages/engine/src/public.ts` to re-export terminal symbols
+- [x] 6.7 Create shim for `@tge/terminal`: rewrite `packages/terminal/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/terminal/package.json` to add `@vexart/engine: "workspace:*"` dependency
+- [x] 6.8 Create shim for `@tge/platform-terminal`: rewrite `packages/platform-terminal/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/platform-terminal/package.json` to add `@vexart/engine: "workspace:*"` dependency
+- [x] 6.9 Run `bun install && bun run typecheck` — must be green
+- [x] 6.10 Commit: `refactor(engine): fold @tge/terminal + platform-terminal into engine/src/terminal with shim`
 
 ## 7. Fold @tge/output + output-kitty into engine/src/output (slice 7)
 

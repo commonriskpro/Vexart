@@ -72,10 +72,16 @@
     "packages/output": {
       "name": "@tge/output",
       "version": "0.0.1",
+      "dependencies": {
+        "@vexart/engine": "workspace:*",
+      },
     },
     "packages/output-kitty": {
       "name": "@tge/output-kitty",
       "version": "0.0.1",
+      "dependencies": {
+        "@vexart/engine": "workspace:*",
+      },
     },
     "packages/pixel": {
       "name": "@tge/pixel",
