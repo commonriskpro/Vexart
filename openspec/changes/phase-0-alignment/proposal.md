@@ -1,8 +1,19 @@
 # Proposal: Phase 0 — Architectural Alignment
 
+## PRD citations
+
+This proposal satisfies the following sections of the master product requirements document:
+
+- `docs/PRD.md §11` — Phase 0 of the v0.9 roadmap ("Architectural Alignment" exit criteria).
+- `docs/PRD.md §10.3` — Process constraints (solo dev, SDD workflow mandated).
+- `docs/PRD.md §12 DEC-007` — SDD adopted as the single execution methodology for every change.
+- `docs/PRD.md §12 DEC-001` — "Vexart" replaces "TGE" as the product name (informs legacy doc archiving).
+- `docs/ARCHITECTURE.md §1.3` — Relationship between PRD, ARCHITECTURE, and API-POLICY.
+- `docs/API-POLICY.md §1` — Master doc hierarchy as the basis for API governance.
+
 ## Intent
 
-Lock product and architecture decisions before any code is written or deleted. Vexart was previously "TGE" with scattered decisions. This phase establishes three immutable master docs and the SDD workflow so every subsequent phase has a single source of truth and a traceable execution path. **This proposal is retroactive** — it formalizes work already done in docs/ and openspec/ bootstrap.
+Lock product and architecture decisions before any code is written or deleted, per `docs/PRD.md §11` Phase 0. Vexart was previously "TGE" with scattered decisions. This phase establishes three immutable master docs and the SDD workflow (`docs/PRD.md §12 DEC-007`) so every subsequent phase has a single source of truth and a traceable execution path. **This proposal is retroactive** — it formalizes work already done in `docs/` and `openspec/` bootstrap.
 
 ## Scope
 
@@ -64,8 +75,10 @@ None. Phase 0 is the foundation everything else depends on.
 
 ## Success Criteria
 
-- [ ] `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/API-POLICY.md` present on `main`.
-- [ ] `openspec/config.yaml` valid YAML, `openspec/README.md` present.
-- [ ] `docs/archive/` holds TGE-ARCHITECTURE-REPORT.md + TGE-AUDIT.md + TGE-ROADMAP.md + MIGRATION-ANALYSIS.md + docs.md.
-- [ ] `AGENTS.md` references the three master docs as authoritative.
-- [ ] Change archived under `openspec/changes/archive/2026-04-17-phase-0-alignment/` after verify.
+Maps to `docs/PRD.md §11` Phase 0 exit criteria and REQ-PG-001 through REQ-PG-007 in the `project-governance` spec.
+
+- [ ] `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/API-POLICY.md` present on `main` (satisfies `docs/PRD.md §11` — "docs/ARCHITECTURE.md with the 4-layer architecture", "docs/API-POLICY.md with the public/internal contract policy").
+- [ ] `openspec/config.yaml` valid YAML, `openspec/README.md` present (satisfies `docs/PRD.md §11` — "SDD framework initialized in `/openspec/`" + `docs/PRD.md §12 DEC-007`).
+- [ ] `docs/archive/` holds TGE-ARCHITECTURE-REPORT.md + TGE-AUDIT.md + TGE-ROADMAP.md + MIGRATION-ANALYSIS.md + docs.md (enforces `docs/PRD.md §11` Phase 0 scope — legacy docs must not confuse agents).
+- [ ] `AGENTS.md` references the three master docs as authoritative (supports `docs/PRD.md §10.3` — AI agents execute tasks, founder verifies).
+- [ ] Change archived under `openspec/changes/archive/2026-04-17-phase-0-alignment/` after verify (satisfies the SDD lifecycle per `docs/PRD.md §12 DEC-007`).
