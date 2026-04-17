@@ -11,8 +11,8 @@
 // which is resolved via jsxImportSource or direct reference.
 // This file ensures SolidJS's module augmentation picks up our elements.
 
-import type { TGEProps, NodeMouseEvent } from "../../engine/src/ffi/node"
-import type { NodeHandle } from "../../engine/src/reconciler/handle"
+import type { TGEProps, NodeMouseEvent } from "../ffi/node"
+import type { NodeHandle } from "./handle"
 
 // Re-declare using the SAME types as jsx-runtime.d.ts to avoid intersection conflicts.
 // Shadow accepts single object OR array.

@@ -86,16 +86,16 @@ This document breaks the Phase 1 structural cleanup into 18 commit slices follow
 
 ## 7. Fold @tge/output + output-kitty into engine/src/output (slice 7)
 
-- [ ] 7.1 Create `packages/engine/src/output/` directory
-- [ ] 7.2 `git mv packages/output/src/*.ts packages/engine/src/output/` — moves `index.ts`, `kitty.ts`, `kitty-shm-native.ts`, `layer-composer.ts`, `transport-manager.ts`
-- [ ] 7.3 `git mv packages/output-kitty/src/index.ts packages/engine/src/output/kitty-stub.ts` — output-kitty is a single-file stub; rename to avoid collision
-- [ ] 7.4 Update internal imports within moved files — fix any cross-package relative paths
-- [ ] 7.5 Create `packages/engine/src/output/index.ts` barrel re-exporting all output symbols
-- [ ] 7.6 Update `packages/engine/src/public.ts` to re-export output symbols
-- [ ] 7.7 Create shim for `@tge/output`: rewrite `packages/output/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/output/package.json` to add `@vexart/engine: "workspace:*"` dependency. Delete remaining moved files from old location
-- [ ] 7.8 Create shim for `@tge/output-kitty`: rewrite `packages/output-kitty/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/output-kitty/package.json` to add `@vexart/engine: "workspace:*"` dependency
-- [ ] 7.9 Run `bun install && bun run typecheck` — must be green
-- [ ] 7.10 Commit: `refactor(engine): fold @tge/output + output-kitty into engine/src/output with shim`
+- [x] 7.1 Create `packages/engine/src/output/` directory
+- [x] 7.2 `git mv packages/output/src/*.ts packages/engine/src/output/` — moves `index.ts`, `kitty.ts`, `kitty-shm-native.ts`, `layer-composer.ts`, `transport-manager.ts`
+- [x] 7.3 `git mv packages/output-kitty/src/index.ts packages/engine/src/output/kitty-stub.ts` — output-kitty is a single-file stub; rename to avoid collision
+- [x] 7.4 Update internal imports within moved files — fix any cross-package relative paths
+- [x] 7.5 Create `packages/engine/src/output/index.ts` barrel re-exporting all output symbols
+- [x] 7.6 Update `packages/engine/src/public.ts` to re-export output symbols
+- [x] 7.7 Create shim for `@tge/output`: rewrite `packages/output/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/output/package.json` to add `@vexart/engine: "workspace:*"` dependency. Delete remaining moved files from old location
+- [x] 7.8 Create shim for `@tge/output-kitty`: rewrite `packages/output-kitty/src/index.ts` to `export * from "@vexart/engine"`. Update `packages/output-kitty/package.json` to add `@vexart/engine: "workspace:*"` dependency
+- [x] 7.9 Run `bun install && bun run typecheck` — must be green
+- [x] 7.10 Commit: `refactor(engine): fold @tge/output + output-kitty into engine/src/output with shim`
 
 ## 8. Fold @tge/renderer-solid + renderer into engine/src/reconciler (slice 8)
 

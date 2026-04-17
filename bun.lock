@@ -101,10 +101,16 @@
     "packages/renderer": {
       "name": "@tge/renderer",
       "version": "0.0.1",
+      "dependencies": {
+        "@vexart/engine": "workspace:*",
+      },
     },
     "packages/renderer-solid": {
       "name": "@tge/renderer-solid",
       "version": "0.0.1",
+      "dependencies": {
+        "@vexart/engine": "workspace:*",
+      },
     },
     "packages/runtime": {
       "name": "@tge/runtime",

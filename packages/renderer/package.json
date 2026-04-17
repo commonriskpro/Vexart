@@ -2,6 +2,9 @@
   "name": "@tge/renderer",
   "version": "0.0.1",
   "type": "module",
-  "main": "../renderer-solid/src/index.ts",
-  "types": "../renderer-solid/src/index.ts"
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@vexart/engine": "workspace:*"
+  }
 }

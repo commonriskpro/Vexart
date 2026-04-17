@@ -19,10 +19,10 @@ import {
   removeChild,
   parseColor,
   parseSizing,
-} from "../../engine/src/ffi/node"
-import { markDirty } from "../../engine/src/reconciler/dirty"
-import { createHandle } from "../../engine/src/reconciler/handle"
-import { registerNodeFocusable, unregisterNodeFocusable, updateNodeFocusEntry } from "../../engine/src/reconciler/focus"
+} from "../ffi/node"
+import { markDirty } from "./dirty"
+import { createHandle } from "./handle"
+import { registerNodeFocusable, unregisterNodeFocusable, updateNodeFocusEntry } from "./focus"
 
 // ── Color props that need pre-parsing ──
 // These are resolved from string → u32 ONCE in setProperty,
