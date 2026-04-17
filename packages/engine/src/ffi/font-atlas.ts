@@ -34,6 +34,12 @@
 
 import { createCanvas } from "@napi-rs/canvas"
 import type { FontDescriptor } from "./text-layout"
+import { openVexartLibrary } from "./vexart-bridge"
+
+// ── Phase 2 DEC-011 note ─────────────────────────────────────────────────────
+// loadFontAtlas() calls vexart_text_load_atlas which is a success no-op in Phase 2.
+// The atlas data is generated here for future use in Phase 2b when MSDF text lands.
+// Per design §11, §5.5, REQ-NB-005.
 
 // ── Glyph range definition ────────────────────────────────────────────────
 
@@ -213,6 +219,26 @@ export function getAtlas(fontId: number, desc: FontDescriptor): AtlasInfo {
 /** Clear all cached atlases. */
 export function clearAtlasCache() {
   atlasCache.clear()
+}
+
+/**
+ * Load a font atlas via vexart_text_load_atlas.
+ * Phase 2: vexart_text_load_atlas is a success no-op (DEC-011).
+ * The atlas is generated here and cached for Phase 2b MSDF text rendering.
+ * API continuity: callers can already call this — it will succeed silently.
+ *
+ * @param ctx   vexart context handle (u64 as bigint)
+ * @param fontId  Font ID (0 = default)
+ * @param desc    Font descriptor
+ * @returns true on success
+ */
+export function loadFontAtlas(ctx: bigint, fontId: number, desc: FontDescriptor): boolean {
+  const atlas = generateAtlas(fontId, desc)
+  const { symbols } = openVexartLibrary()
+  const { ptr } = require("bun:ffi")
+  const result = symbols.vexart_text_load_atlas(ctx, ptr(atlas.data), atlas.data.byteLength, fontId) as number
+  // Phase 2: vexart_text_load_atlas always returns OK (DEC-011 no-op)
+  return result === 0
 }
 
 export function getFontAtlasCacheStats() {
