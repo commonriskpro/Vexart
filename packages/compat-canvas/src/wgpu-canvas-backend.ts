@@ -76,6 +76,7 @@ type WgpuGlyphAtlasRecord = {
   columns: number
   rows: number
   glyphWidths: Float32Array
+  indexFor: (cp: number) => number
 }
 
 export type WgpuCanvasPainterCacheStats = {
@@ -183,12 +184,13 @@ class WgpuCanvasPainterBackend implements CanvasPainterBackend {
     if (cached) return cached
     const font = getFont(fontId)
     const atlas = getAtlas(fontId, font)
-    const columns = 16
-    const rows = Math.ceil(95 / columns)
+    const glyphCount = atlas.glyphCount
+    const columns = 32
+    const rows = Math.ceil(glyphCount / columns)
     const width = atlas.cellWidth * columns
     const height = atlas.cellHeight * rows
     const rgba = new Uint8Array(width * height * 4)
-    for (let glyphIndex = 0; glyphIndex < 95; glyphIndex++) {
+    for (let glyphIndex = 0; glyphIndex < glyphCount; glyphIndex++) {
       const col = glyphIndex % columns
       const row = Math.floor(glyphIndex / columns)
       const srcOffset = glyphIndex * atlas.cellWidth * atlas.cellHeight
@@ -207,7 +209,7 @@ class WgpuCanvasPainterBackend implements CanvasPainterBackend {
       }
     }
     const handle = createWgpuCanvasImage(this.#context, { width, height }, rgba)
-    const record = { handle, cellWidth: atlas.cellWidth, cellHeight: atlas.cellHeight, columns, rows, glyphWidths: atlas.glyphWidths }
+    const record = { handle, cellWidth: atlas.cellWidth, cellHeight: atlas.cellHeight, columns, rows, glyphWidths: atlas.glyphWidths, indexFor: atlas.indexFor }
     this.#glyphAtlases.set(key, record)
     return record
   }
@@ -241,8 +243,9 @@ class WgpuCanvasPainterBackend implements CanvasPainterBackend {
               let cursorX = instance.x
               for (const glyph of batch.text) {
                 const code = glyph.codePointAt(0)
-                if (code === undefined || code < 32 || code > 126) { canUseGlyphs = false; break }
-                const glyphIndex = code - 32
+                if (code === undefined) { canUseGlyphs = false; break }
+                const glyphIndex = atlas.indexFor(code)
+                if (glyphIndex < 0) { canUseGlyphs = false; break }
                 const advancePx = atlas.glyphWidths[glyphIndex] || atlas.cellWidth
                 if (glyph !== " ") {
                   const col = glyphIndex % atlas.columns

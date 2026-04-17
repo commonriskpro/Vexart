@@ -170,6 +170,8 @@ type GlyphAtlasRecord = {
   rows: number
   glyphWidths: Float32Array
   ascender: number
+  /** Returns glyphIndex for a codepoint, or -1 if not in atlas. */
+  indexFor: (cp: number) => number
 }
 
 type CanvasSpriteRecord = {
@@ -548,12 +550,13 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     }
     const font = getFont(fontId)
     const atlas = getAtlas(fontId, font)
-    const columns = 16
-    const rows = Math.ceil(95 / columns)
+    const glyphCount = atlas.glyphCount
+    const columns = 32
+    const rows = Math.ceil(glyphCount / columns)
     const width = atlas.cellWidth * columns
     const height = atlas.cellHeight * rows
     const rgba = new Uint8Array(width * height * 4)
-    for (let glyphIndex = 0; glyphIndex < 95; glyphIndex++) {
+    for (let glyphIndex = 0; glyphIndex < glyphCount; glyphIndex++) {
       const col = glyphIndex % columns
       const row = Math.floor(glyphIndex / columns)
       const srcOffset = glyphIndex * atlas.cellWidth * atlas.cellHeight
@@ -580,6 +583,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       rows,
       glyphWidths: atlas.glyphWidths,
       ascender: atlas.ascender,
+      indexFor: atlas.indexFor,
     }
     if (glyphAtlases.size >= MAX_GPU_GLYPH_ATLASES) {
       const first = glyphAtlases.keys().next().value
@@ -674,11 +678,9 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             let cursorX = instance.x
             for (const glyph of batch.text) {
               const code = glyph.codePointAt(0)
-              if (code === undefined || code < 32 || code > 126) {
-                canUseGlyphs = false
-                break
-              }
-              const glyphIndex = code - 32
+              if (code === undefined) { canUseGlyphs = false; break }
+              const glyphIndex = atlas.indexFor(code)
+              if (glyphIndex < 0) { canUseGlyphs = false; break }
               const advancePx = atlas.glyphWidths[glyphIndex] || atlas.cellWidth
               if (glyph !== " ") {
                 const col = glyphIndex % atlas.columns
@@ -1485,11 +1487,11 @@ export function createGpuRendererBackend(): GpuRendererBackend {
                 for (const glyph of line.text) {
                   const code = glyph.codePointAt(0)
                   if (code === undefined) continue
-                  if (code < 32 || code > 126) {
+                  const glyphIndex = atlasRecord.indexFor(code)
+                  if (glyphIndex < 0) {
                     usedGlyphPath = false
                     break
                   }
-                  const glyphIndex = code - 32
                   const advance = atlasRecord.glyphWidths[glyphIndex] || atlasRecord.cellWidth
                   if (glyph === " ") {
                     cursorX += advance

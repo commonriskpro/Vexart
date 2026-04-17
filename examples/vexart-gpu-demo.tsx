@@ -1,7 +1,7 @@
 /**
- * Vexart GPU Demo — cosmic IDE-style UI with live performance profiling.
+ * Vexart GPU Demo - cosmic IDE-style UI with live performance profiling.
  *
- * Estilo: fondo cósmico oscuro, grafo de nodos conectados, paneles flotantes
+ * Estilo: fondo cosmico oscuro, grafo de nodos conectados, paneles flotantes
  * de code / memory / diff / agent, header + footer de IDE.
  * Profiling en pantalla: panel GPU stats con fps, frame ms, layers, strategy.
  *
@@ -13,10 +13,10 @@
  *   tail -f /tmp/vexart-gpu-demo-perf.log
  *
  * Flags:
- *   VEXART_MAX_FPS=60        — frame cap (default 60)
- *   VEXART_FORCE_REPAINT=1   — force dirty every frame (stress test)
- *   VEXART_LOG_PERF=1        — write perf log to /tmp/vexart-gpu-demo-perf.log
- *   VEXART_EXIT_AFTER_MS=N   — auto-exit after N ms (benchmark mode)
+ *   VEXART_MAX_FPS=60        - frame cap (default 60)
+ *   VEXART_FORCE_REPAINT=1   - force dirty every frame (stress test)
+ *   VEXART_LOG_PERF=1        - write perf log to /tmp/vexart-gpu-demo-perf.log
+ *   VEXART_EXIT_AFTER_MS=N   - auto-exit after N ms (benchmark mode)
  */
 
 process.env.LIGHTCODE_CANVAS_BACKEND = process.env.LIGHTCODE_CANVAS_BACKEND ?? "wgpu"
@@ -60,7 +60,7 @@ import {
 } from "@tge/lightcode"
 import type { CanvasContext } from "@tge/renderer-solid"
 
-// ── Config ──────────────────────────────────────────────────────────────────
+// -- Config ------------------------------------------------------------------
 
 const MAX_FPS        = Number(process.env.VEXART_MAX_FPS ?? 60)
 const LOG_PERF       = process.env.VEXART_LOG_PERF === "1"
@@ -68,7 +68,7 @@ const FORCE_REPAINT  = process.env.VEXART_FORCE_REPAINT === "1"
 const EXIT_AFTER_MS  = Number(process.env.VEXART_EXIT_AFTER_MS ?? 0)
 const PERF_LOG       = "/tmp/vexart-gpu-demo-perf.log"
 
-// ── Palette ─────────────────────────────────────────────────────────────────
+// -- Palette -----------------------------------------------------------------
 
 const BG        = 0x050507ff
 const FRAME     = 0x0b0c10f8
@@ -82,10 +82,10 @@ const TEXT      = 0xe8e4dbff
 const TEXT_SOFT = 0xa8a49cff
 const TEXT_DIM  = 0x6b6760ff
 
-// Frame bounds (pixel coords — demo at 1920×1080 scale)
+// Frame bounds (pixel coords - demo at 1920x1080 scale)
 const F = { x: 34, y: 60, w: 1760, h: 840 }
 
-// ── Scene graph data ─────────────────────────────────────────────────────────
+// -- Scene graph data ---------------------------------------------------------
 
 type NodeShape = "diamond" | "hexagon" | "octagon" | number
 
@@ -105,7 +105,7 @@ type NodeMeta = {
 }
 
 const SCENE_NODES: NodeMeta[] = [
-  // Central active compute node — diamond, gold glow
+  // Central active compute node - diamond, gold glow
   { id: "pipeline", label: "gpu_render_backend", subtitle: "GPU / kitty-payload", kind: "compute",
     x: 640, y: 400, radius: 44, shape: "diamond",
     fill: 0x4d2f0cff, stroke: WARM, glow: WARM_GLOW, active: true },
@@ -158,13 +158,13 @@ const SCENE_EDGES = [
   { id: "e11", from: "wgpu",      to: "pipeline",    color: 0x90a8d050 },
 ]
 
-// ── Perf state (reactive) ────────────────────────────────────────────────────
+// -- Perf state (reactive) ----------------------------------------------------
 
 function usePerfStats() {
   const [fps, setFps]       = createSignal(0)
   const [ms, setMs]         = createSignal(0)
   const [layers, setLayers] = createSignal(0)
-  const [strategy, setStrategy] = createSignal("—")
+  const [strategy, setStrategy] = createSignal("-")
   const [txBytes, setTxBytes]   = createSignal(0)
   const [repainted, setRepainted] = createSignal(0)
 
@@ -173,7 +173,7 @@ function usePerfStats() {
     setFps(debugState.fps ?? 0)
     setMs(debugState.frameTimeMs ?? 0)
     setLayers(debugState.layerCount ?? 0)
-    setStrategy(debugState.rendererStrategy ?? "—")
+    setStrategy(debugState.rendererStrategy ?? "-")
     setTxBytes(kittyStats.payloadBytes ?? 0)
     setRepainted(debugState.repaintedCount ?? 0)
 
@@ -196,7 +196,7 @@ function usePerfStats() {
   return { fps, ms, layers, strategy, txBytes, repainted }
 }
 
-// ── Components ───────────────────────────────────────────────────────────────
+// -- Components ---------------------------------------------------------------
 
 function Shell() {
   return (
@@ -240,9 +240,9 @@ function Footer() {
       zIndex={20} gap={space[3]} paddingX={space[3]} height={24} width={F.w - 36}>
       <text color={WARM} fontSize={10}>⚡</text>
       <text color={TEXT_SOFT} fontSize={10}>GPU-native</text>
-      <text color={TEXT_DIM} fontSize={10}>·</text>
+      <text color={TEXT_DIM} fontSize={10}>.</text>
       <text color={TEXT_SOFT} fontSize={10}>kitty-payload</text>
-      <text color={TEXT_DIM} fontSize={10}>·</text>
+      <text color={TEXT_DIM} fontSize={10}>.</text>
       <text color={TEXT_SOFT} fontSize={10}>wgpu bridge</text>
       <box width="grow" />
       <text color={TEXT_SOFT} fontSize={10}>Vexart Engine v0.1</text>
@@ -316,7 +316,7 @@ function GraphPlane(props: { selectedNode: string; onSelect: (id: string) => voi
   )
 }
 
-// ── Code panel: gpu-renderer-backend internals ───────────────────────────────
+// -- Code panel: gpu-renderer-backend internals -------------------------------
 
 function CodePanel() {
   const lines = [
@@ -365,7 +365,7 @@ function CodePanel() {
   )
 }
 
-// ── Diff panel: renderer contract changes ────────────────────────────────────
+// -- Diff panel: renderer contract changes ------------------------------------
 
 function DiffPanel() {
   const lines = [
@@ -422,7 +422,7 @@ function DiffPanel() {
   )
 }
 
-// ── Memory panel: compat-canvas modules ─────────────────────────────────────
+// -- Memory panel: compat-canvas modules -------------------------------------
 
 function MemoryPanel() {
   return (
@@ -459,7 +459,7 @@ function MemoryPanel() {
   )
 }
 
-// ── GPU stats panel (live profiling) ─────────────────────────────────────────
+// -- GPU stats panel (live profiling) -----------------------------------------
 
 function GpuStatsPanel() {
   const perf = usePerfStats()
@@ -485,7 +485,7 @@ function GpuStatsPanel() {
         <InspectorRow label="tx bytes" value={`${(perf.txBytes() / 1024).toFixed(1)} KB`} />
       </PanelSection>
       <PanelFooter>
-        <text color={TEXT_DIM} fontSize={9}>⟳ 200ms poll</text>
+        <text color={TEXT_DIM} fontSize={9}>~ 200ms poll</text>
         <box width="grow" />
         <Chip label="GPU" active />
       </PanelFooter>
@@ -493,7 +493,7 @@ function GpuStatsPanel() {
   )
 }
 
-// ── Agent panel ──────────────────────────────────────────────────────────────
+// -- Agent panel --------------------------------------------------------------
 
 function AgentPanel() {
   const rows: Array<[string, string]> = [
@@ -531,7 +531,7 @@ function AgentPanel() {
   )
 }
 
-// ── App root ─────────────────────────────────────────────────────────────────
+// -- App root -----------------------------------------------------------------
 
 function App() {
   const [selected, setSelected] = createSignal("pipeline")
@@ -551,7 +551,7 @@ function App() {
   )
 }
 
-// ── Entry ────────────────────────────────────────────────────────────────────
+// -- Entry --------------------------------------------------------------------
 
 async function main() {
   resetKittyTransportStats()
