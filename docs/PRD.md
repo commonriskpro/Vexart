@@ -1,9 +1,13 @@
 # Vexart — Product Requirements Document
 
-**Version**: 0.3
+**Version**: 0.4
 **Status**: Draft — foundational document
 **Owner**: Founder (solo developer)
 **Last updated**: April 2026
+
+**Changelog from v0.3**:
+- DEC-011 added: Phase 2 text rendering exception. Bitmap text is NOT ported to Rust during Phase 2. Text nodes render as placeholder (invisible or minimal fallback) until Phase 2b delivers MSDF. Rationale: founder decision to avoid ~200 LOC of bitmap Rust code that would be deleted in Phase 2b.
+- Section 11 Phase 2 exit criteria modified to exclude text-bearing regions from the "visually identical" check for that phase only.
 
 **Changelog from v0.2**:
 - DEC-010 added: engine optimization Tier 1 + Tier 2 (Kitty encoding moved to Rust, WGPU PipelineCache, unified GPU memory budget, viewport culling, frame budget scheduler).
@@ -718,7 +722,7 @@ Timeline assumes 8 hours/day of focused coding, solo, with bi-weekly reviews. To
 **Goal**: One native binary (Rust-only), kill C and Zig.
 
 - Inventory all Zig FFI usages from TypeScript.
-- Move `starfield`/`nebula` Zig demos to `examples/` (or delete).
+- Delete `starfield`/`nebula` Zig demos (founder decision — procedural demos not in v0.9 scope).
 - Port missing Zig primitives to Rust/WGPU:
   - Conic gradients.
   - Multi-stop linear/radial gradients.
@@ -732,8 +736,9 @@ Timeline assumes 8 hours/day of focused coding, solo, with bi-weekly reviews. To
 - Merge WGPU bridge + Taffy into single `libvexart` cdylib.
 - Delete: `zig/`, `vendor/clay*`, `@tge/pixel`, output-placeholder, output-halfblock, `gpu-frame-composer` (no more CPU/GPU switch).
 - Simplify `loop.ts` (remove ~400 lines of CPU/GPU branches).
+- **Text rendering exception (DEC-011)**: bitmap text is NOT ported to Rust. Text nodes render as a minimal placeholder (no glyphs painted) until Phase 2b. The `vexart_text_*` FFI surface exists as stubs returning success without side effects.
 
-**Exit criteria**: `bun run showcase` produces visually identical output to pre-migration (verified by golden image diff).
+**Exit criteria**: `bun run showcase` produces output that is **visually identical to pre-migration for all non-text regions** (verified by golden image diff with text regions masked out). Text-bearing regions are expected to be blank during Phase 2 per DEC-011 and are re-validated in Phase 2b when MSDF lands. Phase 3 does NOT start until Phase 2b closes the text gap and the unmasked `showcase` diff passes.
 
 ### Phase 2b — Advanced Rendering + Tier 1 Optimizations (5-6 weeks)
 
@@ -1028,6 +1033,33 @@ Every architectural or product decision is logged here with date, context, and r
 - CI gets a new `bench:optimizations` micro-benchmark suite specifically to protect these gains.
 
 **Non-reversal clause**: Tier 1 items are non-negotiable — they block v0.9 release criteria (Section 9.1). Tier 2 items may be descoped to v1.0 only if explicit founder approval is recorded here with a new dated decision entry.
+
+### 2026-04-17 — DEC-011: Phase 2 text rendering exception (no bitmap port, defer to Phase 2b MSDF)
+
+**Decision**: During Phase 2, bitmap text rendering is NOT ported from Zig to Rust. Text nodes render as empty placeholders (no glyphs painted) until Phase 2b delivers MSDF. The `vexart_text_*` FFI functions exist as stubs that return success without side effects. Phase 2b replaces those stubs with the real MSDF implementation.
+
+**Alternatives considered**:
+- Port bitmap text to Rust in Phase 2 as a temporary implementation (~200 LOC), then replace with MSDF in Phase 2b. Rejected by founder as "doble trabajo" (duplicated work for code that would be deleted 5-6 weeks later).
+- Block Phase 2 completion on MSDF arrival (fuse Phase 2 and Phase 2b). Rejected — breaks the 8-phase roadmap cadence and makes the phase too large for a single review window.
+
+**Rationale**:
+- Founder called the 200 LOC bitmap port "doble trabajo" and accepted the consequences in exchange for avoiding it.
+- Text regions are a small minority of pixel area in most UIs; non-text regions can still be validated against the pre-migration golden image during Phase 2.
+- Phase 2b already budgets MSDF work (~2 weeks of its 5-6 week scope). Pulling text validation into 2b adds no timeline.
+- The FFI surface stays stable between phases: `vexart_text_measure`, `vexart_text_dispatch`, `vexart_text_load_atlas` are defined in Phase 2 (as stubs) and gain real implementations in 2b.
+
+**Implications**:
+- Phase 2 exit criteria amended (Section 11): "visually identical for all non-text regions" with text regions masked out of the diff.
+- Phase 3 does NOT start until Phase 2b closes the text gap and the **unmasked** `showcase` diff passes. This keeps the original PRD promise of visual parity — it just shifts the gate from Phase 2 → Phase 2b.
+- During Phase 2, demos that rely heavily on text (showcase, hello, components demos) will render with blank text areas. This is expected behavior for the duration of Phase 2.
+- Phase 4 golden image suite cannot generate text-bearing goldens until Phase 2b completes. Goldens for non-text regions can be collected earlier.
+- Biweekly reviews during Phase 2 explicitly communicate that text is intentionally absent. The review gate is "non-text showcase parity", not "full showcase parity".
+
+**Risks**:
+- Developer surprise / confusion: anyone running the engine during Phase 2 sees blank text. Mitigation: a runtime console warning `"[vexart] text rendering disabled during Phase 2 (DEC-011) — MSDF lands in Phase 2b"` on first `vexart_text_dispatch` call per session.
+- MSDF work in Phase 2b discovers a blocker that the bitmap path would have exposed earlier. Mitigation: the FFI surface is defined in Phase 2 with a stub implementation, so the contract is locked; Phase 2b only swaps the implementation, not the signature.
+
+**Non-reversal clause**: This decision is locked for the current v0.9 cycle. Reversal requires either (a) Phase 2b slipping past its 5-6 week budget by more than 2 weeks (text would then exist as blank placeholder for 8+ weeks, which is unacceptable), or (b) a customer-impacting blocker discovered during Phase 2 that needs text to validate.
 
 ---
 
