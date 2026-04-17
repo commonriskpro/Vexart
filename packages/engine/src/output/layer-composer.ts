@@ -1,6 +1,10 @@
 /**
  * Layer compositor — multi-image rendering with z-index.
  *
+ * Phase 2: single native composite path via Kitty protocol.
+ * CPU/GPU switch removed per design §11 (REQ-NB-002, DEC-005).
+ * vexart_composite_merge handles GPU-side layer merging.
+ *
  * Browser-style compositing: each layer is a separate Kitty image
  * with its own ID and z-order. The terminal's GPU composites them.
  *
