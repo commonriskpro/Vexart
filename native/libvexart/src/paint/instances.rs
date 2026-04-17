@@ -451,6 +451,98 @@ pub struct BridgeRadialGradientInstance {
     pub _pad4: f32,
 }
 
+// ─── Slice 5b — NEW GPU pipeline instance structs ─────────────────────────
+
+/// Conic gradient instance (cmd_kind = 14).
+/// 20 floats: rect + box_dims + corner_radius + colors + start_angle.
+/// Mirrors LinearGradientInstance shape with start_angle replacing dir_x/dir_y.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct ConicGradientInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub box_w: f32,
+    pub box_h: f32,
+    pub radius: f32,
+    pub _pad0: f32,
+    pub from_r: f32,
+    pub from_g: f32,
+    pub from_b: f32,
+    pub from_a: f32,
+    pub to_r: f32,
+    pub to_g: f32,
+    pub to_b: f32,
+    pub to_a: f32,
+    pub start_angle: f32, // radians
+    pub _pad1: f32,
+    pub _pad2: f32,
+    pub _pad3: f32,
+}
+
+/// Backdrop blur instance (cmd_kind = 15).
+/// 8 floats: NDC rect + blur_radius + 3 pad.
+/// Samples source texture and applies single-pass box blur.
+/// TODO(5b): upgrade to 2-pass separable Gaussian in Phase 2b (requires ping-pong textures).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct BackdropBlurInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub blur_radius: f32,
+    pub _pad0: f32,
+    pub _pad1: f32,
+    pub _pad2: f32,
+}
+
+/// Backdrop filter instance (cmd_kind = 16).
+/// 12 floats: NDC rect + 7 filter params + 1 pad.
+/// All values use convention: 100 = identity for brightness/contrast/saturate;
+/// 0 = identity for grayscale/invert/sepia/hue_rotate_deg.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct BackdropFilterInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub brightness: f32,
+    pub contrast: f32,
+    pub saturate: f32,
+    pub grayscale: f32,
+    pub invert: f32,
+    pub sepia: f32,
+    pub hue_rotate_deg: f32,
+    pub _pad: f32,
+}
+
+/// Image mask instance (cmd_kind = 17).
+/// 16 floats: NDC rect + mask region + radii + mode.
+/// mode: 0.0 = uniform radius, 1.0 = per-corner radius.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct ImageMaskInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub mask_x: f32,
+    pub mask_y: f32,
+    pub mask_w: f32,
+    pub mask_h: f32,
+    pub radius_uniform: f32,
+    pub radius_tl: f32,
+    pub radius_tr: f32,
+    pub radius_br: f32,
+    pub radius_bl: f32,
+    pub mode: f32, // 0.0 = uniform, 1.0 = per-corner
+    pub _pad0: f32,
+    pub _pad1: f32,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

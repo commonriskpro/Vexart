@@ -62,11 +62,14 @@ impl PaintContext {
     }
 
     /// Parse the graph buffer per design §8 and dispatch render commands.
-    /// cmd_kind allocation (§17.6):
-    ///   0=rect, 1=shape_rect, 2=shape_rect_corners, 3=circle, 4=polygon,
-    ///   5=bezier, 6=glow, 7=nebula, 8=starfield, 9=image, 10=image_transform,
-    ///   (11 reserved-unused/glyph, skipped), 12=gradient_linear, 13=gradient_radial,
-    ///   14..=31 reserved for Slice 5b — silently skipped.
+    /// cmd_kind allocation (§17.6, as deployed across Slice 5a + 5b):
+    ///   Slice 5a (ported pipelines):
+    ///     0=rect, 1=shape_rect, 2=shape_rect_corners, 3=circle, 4=polygon,
+    ///     5=bezier, 6=glow, 7=nebula, 8=starfield, 9=image, 10=image_transform,
+    ///     11=reserved (glyph, DEC-011 — skipped), 12=gradient_linear, 13=gradient_radial
+    ///   Slice 5b (NEW GPU pipelines, DEC-012):
+    ///     14=gradient_conic, 15=backdrop_blur, 16=backdrop_filter, 17=image_mask
+    ///   18..=31 reserved for Phase 2b (blend, gradient_stroke, MSDF text, etc.)
     pub fn dispatch(&mut self, _target: u64, graph: &[u8], stats_out: *mut FrameStats) -> i32 {
         let t_start = Instant::now();
 
@@ -120,8 +123,8 @@ impl PaintContext {
             let payload = &graph[offset..payload_end];
             offset = payload_end;
 
-            // cmd_kinds 11 and 14..=31 are reserved / Slice 5b — silently skip.
-            if cmd_kind == 11 || cmd_kind >= 14 {
+            // cmd_kind 11 is reserved (glyph, DEC-011) and 18+ are future — silently skip.
+            if cmd_kind == 11 || cmd_kind >= 18 {
                 continue;
             }
 
@@ -149,12 +152,14 @@ impl PaintContext {
                 });
 
         // We need a fresh render pass per pipeline (clearing on first, loading on rest).
-        // For simplicity in Slice 5a, iterate in cmd_kind order.
+        // Iterate over all known cmd_kinds in order (skipping 11 per DEC-011).
+        // Slice 5a: 0-10, 12-13 | Slice 5b: 14-17
         let mut first_pass = true;
-        for kind in 0u16..14u16 {
-            if kind == 11 {
-                continue;
-            }
+        for &kind in &[
+            0u16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // Slice 5a first 11 pipelines
+            12, 13, // Slice 5a gradient pipelines (11 skipped)
+            14, 15, 16, 17, // Slice 5b NEW GPU pipelines
+        ] {
             let batch = match batches.get(&kind) {
                 Some(b) if !b.is_empty() => b,
                 _ => continue,
@@ -246,6 +251,7 @@ fn instance_stride_for_kind(kind: u16) -> usize {
     use instances::*;
     use std::mem::size_of;
     match kind {
+        // Slice 5a — ported pipelines
         0 => size_of::<BridgeRectInstance>(),
         1 => size_of::<BridgeShapeRectInstance>(),
         2 => size_of::<BridgeShapeRectCornersInstance>(),
@@ -259,6 +265,11 @@ fn instance_stride_for_kind(kind: u16) -> usize {
         10 => size_of::<BridgeImageTransformInstance>(),
         12 => size_of::<BridgeLinearGradientInstance>(),
         13 => size_of::<BridgeRadialGradientInstance>(),
+        // Slice 5b — NEW GPU pipelines (DEC-012)
+        14 => size_of::<ConicGradientInstance>(),
+        15 => size_of::<BackdropBlurInstance>(),
+        16 => size_of::<BackdropFilterInstance>(),
+        17 => size_of::<ImageMaskInstance>(),
         _ => 0,
     }
 }
@@ -269,6 +280,7 @@ fn pipeline_for_kind<'a>(
     reg: &'a pipelines::PipelineRegistry,
 ) -> &'a wgpu::RenderPipeline {
     match kind {
+        // Slice 5a — ported pipelines
         0 => &reg.rect,
         1 => &reg.shape_rect,
         2 => &reg.shape_rect_corners,
@@ -282,6 +294,11 @@ fn pipeline_for_kind<'a>(
         10 => &reg.image_transform,
         12 => &reg.gradient_linear,
         13 => &reg.gradient_radial,
+        // Slice 5b — NEW GPU pipelines (DEC-012)
+        14 => &reg.gradient_conic,
+        15 => &reg.backdrop_blur,
+        16 => &reg.backdrop_filter,
+        17 => &reg.image_mask,
         _ => panic!("pipeline_for_kind called with unsupported kind {kind}"),
     }
 }
