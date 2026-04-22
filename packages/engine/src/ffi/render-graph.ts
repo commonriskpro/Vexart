@@ -542,6 +542,11 @@ export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, que
       inputs,
     }
   }
+  // SCISSOR_START/END are handled by the clipStack in buildRenderGraphFrame,
+  // not as renderable ops. Skip them here.
+  if (cmd.type === CMD.SCISSOR_START || cmd.type === CMD.SCISSOR_END) {
+    return null
+  }
   return {
     kind: "raw-command",
     renderObjectId: null,
@@ -561,6 +566,16 @@ export function buildRenderGraphFrame(
   let rectIdx = 0
   let textIdx = 0
   for (const cmd of commands) {
+    // Process SCISSOR commands for clipStack before building render ops
+    if (cmd.type === CMD.SCISSOR_START) {
+      clipStack.push(createClipStackEntry(cmd, clipStack.length))
+      continue
+    }
+    if (cmd.type === CMD.SCISSOR_END) {
+      clipStack.pop()
+      continue
+    }
+
     const op = buildRenderOp(cmd, queues, queueState, textMetaMap, {
       rect: cmd.type === CMD.RECTANGLE ? owners?.rectNodeIds[rectIdx++] ?? null : null,
       text: cmd.type === CMD.TEXT ? owners?.textNodeIds[textIdx++] ?? null : null,
@@ -576,14 +591,6 @@ export function buildRenderGraphFrame(
       })
     } else if (op) {
       ops.push(op)
-    }
-
-    if (cmd.type === CMD.SCISSOR_START) {
-      clipStack.push(createClipStackEntry(cmd, clipStack.length))
-      continue
-    }
-    if (cmd.type === CMD.SCISSOR_END) {
-      clipStack.pop()
     }
   }
   return { ops }
