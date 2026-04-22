@@ -61,11 +61,10 @@ export type FontDescriptor = {
 
 const fontRegistry = new Map<number, FontDescriptor>()
 
-// Default: .SF NS Mono 14px (matches our bitmap atlas).
-// The dot-prefixed name is required for @napi-rs/canvas to find
-// the real monospace font on macOS. "SF Mono" without the dot
-// falls back to a proportional font.
-fontRegistry.set(0, { family: ".SF NS Mono", size: 14 })
+// Default: SF Pro 14px — Apple's proportional system UI font.
+// Clean, modern, designed for UI. Dot-prefixed name required for
+// @napi-rs/canvas on macOS to resolve the real system font.
+fontRegistry.set(0, { family: ".SF NS", size: 14 })
 
 /** Register a font for use with TGE text rendering. */
 export function registerFont(id: number, desc: FontDescriptor) {

@@ -61,16 +61,11 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
-  // Sample the atlas. For simplified SDF: distance is stored in the R channel.
-  // For true MSDF: median(R,G,B) would be used. Phase 3+ upgrade path.
   let sampled = textureSample(t_atlas, s_atlas, in.uv);
 
-  // SDF threshold: 0.5 is the boundary between inside and outside.
-  // smoothstep gives a 1-pixel anti-aliased edge.
-  // The width of the transition band controls edge sharpness vs AA quality.
-  let dist = sampled.r;
-  let alpha = smoothstep(0.4, 0.6, dist);
+  // Bitmap atlas: glyph coverage is in the alpha channel (white text on transparent).
+  // The atlas is supersampled (3×) and GPU linear-filtered, giving smooth edges.
+  let alpha = sampled.a;
 
-  // Modulate the glyph color alpha by the distance field alpha.
   return vec4<f32>(in.color.rgb, in.color.a * alpha);
 }

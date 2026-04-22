@@ -548,8 +548,12 @@ type ImageRecord = {
 
 type GlyphAtlasRecord = {
   handle: VexartImageHandle
+  /** Atlas texture cell dimensions (supersampled, for UV calculation). */
   cellWidth: number
   cellHeight: number
+  /** Display cell dimensions (original size, for quad sizing). */
+  displayCellWidth: number
+  displayCellHeight: number
   columns: number
   rows: number
   glyphWidths: Float32Array
@@ -1221,6 +1225,8 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       handle,
       cellWidth: atlas.cellWidth,
       cellHeight: atlas.cellHeight,
+      displayCellWidth: atlas.displayCellWidth,
+      displayCellHeight: atlas.displayCellHeight,
       columns,
       rows,
       glyphWidths: atlas.glyphWidths,
@@ -2105,23 +2111,26 @@ export function createGpuRendererBackend(): GpuRendererBackend {
                     usedGlyphPath = false
                     break
                   }
-                  const advance = atlasRecord.glyphWidths[glyphIndex] || atlasRecord.cellWidth
+                  const advance = atlasRecord.glyphWidths[glyphIndex] || atlasRecord.displayCellWidth
                   if (glyph === " ") {
                     cursorX += advance
                     continue
                   }
                   const glyphLeft = Math.round(cursorX)
                   const glyphTop = Math.round(cursorY)
-                  const glyphRight = glyphLeft + atlasRecord.cellWidth
-                  const glyphBottom = glyphTop + atlasRecord.cellHeight
+                  // Use display dimensions for quad sizing (original px size)
+                  const glyphRight = glyphLeft + atlasRecord.displayCellWidth
+                  const glyphBottom = glyphTop + atlasRecord.displayCellHeight
                   if (glyphRight > 0 && glyphBottom > 0 && glyphLeft < ctx.target.width && glyphTop < ctx.target.height) {
                     const col = glyphIndex % atlasRecord.columns
                     const row = Math.floor(glyphIndex / atlasRecord.columns)
                     tempGlyphs.push({
+                      // Quad position + size: use DISPLAY dimensions (original px)
                       x: (glyphLeft / ctx.target.width) * 2 - 1,
                       y: 1 - (glyphTop / ctx.target.height) * 2,
-                      w: (atlasRecord.cellWidth / ctx.target.width) * 2,
-                      h: -((atlasRecord.cellHeight / ctx.target.height) * 2),
+                      w: (atlasRecord.displayCellWidth / ctx.target.width) * 2,
+                      h: -((atlasRecord.displayCellHeight / ctx.target.height) * 2),
+                      // UV coords: use TEXTURE dimensions (supersampled)
                       u: (col * atlasRecord.cellWidth) / (atlasRecord.cellWidth * atlasRecord.columns),
                       v: (row * atlasRecord.cellHeight) / (atlasRecord.cellHeight * atlasRecord.rows),
                       uw: atlasRecord.cellWidth / (atlasRecord.cellWidth * atlasRecord.columns),

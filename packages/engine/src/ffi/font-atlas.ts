@@ -79,12 +79,16 @@ export const GLYPH_COUNT = CODEPOINTS.length
 
 export type AtlasInfo = {
   fontId: number
+  /** Cell dimensions in the atlas texture (supersampled pixels). */
   cellWidth: number
   cellHeight: number
+  /** Display cell dimensions (original size, for quad sizing). */
+  displayCellWidth: number
+  displayCellHeight: number
   ascender: number
   /** Grayscale alpha, GLYPH_COUNT * cellWidth * cellHeight bytes. */
   data: Uint8Array
-  /** Per-glyph advance widths, indexed by glyphIndex. */
+  /** Per-glyph advance widths at original size, indexed by glyphIndex. */
   glyphWidths: Float32Array
   /** Total number of glyphs in this atlas. */
   glyphCount: number
@@ -122,6 +126,9 @@ function resolveFontFamily(family: string): string {
  * Generate a font atlas covering ATLAS_RANGES for the given font descriptor.
  * Returns cell dimensions and grayscale alpha data.
  */
+/** Atlas supersampling factor — render glyphs at 2× size for crisp text on Retina displays. */
+const ATLAS_SUPERSAMPLE = 2
+
 export function generateAtlas(fontId: number, desc: FontDescriptor): AtlasInfo {
   const cached = atlasCache.get(fontId)
   if (cached) {
@@ -131,11 +138,15 @@ export function generateAtlas(fontId: number, desc: FontDescriptor): AtlasInfo {
 
   const family = resolveFontFamily(desc.family)
   const size = desc.size
+  const hiresSize = size * ATLAS_SUPERSAMPLE
   const weight = desc.weight ?? 400
   const style = desc.style ?? "normal"
+  // Measure at original size (for layout advance widths)
   const fontCSS = `${style === "italic" ? "italic " : ""}${weight} ${size}px "${family}"`
+  // Render at supersampled size (for atlas texture quality)
+  const hiresFontCSS = `${style === "italic" ? "italic " : ""}${weight} ${hiresSize}px "${family}"`
 
-  // ── Measure pass: find max cell dimensions across all glyphs ──
+  // ── Measure pass at ORIGINAL size (layout advance widths must match) ──
 
   const measureCanvas = createCanvas(200, 200)
   const measureCtx = measureCanvas.getContext("2d")
@@ -160,8 +171,9 @@ export function generateAtlas(fontId: number, desc: FontDescriptor): AtlasInfo {
     if (desc2 > maxDescent) maxDescent = desc2
   }
 
-  const cellWidth = Math.max(maxWidth, 1)
-  const cellHeight = Math.max(maxAscent + maxDescent + 1, 1)
+  // Cell dimensions at supersampled size (for the atlas texture)
+  const cellWidth = Math.max(maxWidth * ATLAS_SUPERSAMPLE, 1)
+  const cellHeight = Math.max((maxAscent + maxDescent + 1) * ATLAS_SUPERSAMPLE, 1)
   const ascender = maxAscent
 
   // ── Render pass: draw each glyph into its cell ──
@@ -174,7 +186,7 @@ export function generateAtlas(fontId: number, desc: FontDescriptor): AtlasInfo {
     const canvas = createCanvas(cellWidth, cellHeight)
     const ctx = canvas.getContext("2d")
     ctx.clearRect(0, 0, cellWidth, cellHeight)
-    ctx.font = fontCSS
+    ctx.font = hiresFontCSS
     ctx.fillStyle = "#ffffff"
     ctx.textBaseline = "top"
     ctx.fillText(String.fromCodePoint(cp), 0, 0)
@@ -187,10 +199,15 @@ export function generateAtlas(fontId: number, desc: FontDescriptor): AtlasInfo {
     }
   }
 
+  const displayCellWidth = Math.max(maxWidth, 1)
+  const displayCellHeight = Math.max(maxAscent + maxDescent + 1, 1)
+
   const info: AtlasInfo = {
     fontId,
     cellWidth,
     cellHeight,
+    displayCellWidth,
+    displayCellHeight,
     ascender,
     data,
     glyphWidths,
