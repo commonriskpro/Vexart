@@ -195,7 +195,9 @@ function createVexartLayoutCtx() {
     if (_vxCtx !== 0n) return
     const { symbols } = openVexartLibrary()
     const ctxBuf = new BigUint64Array(1)
-    symbols.vexart_context_create(ptr(new Uint8Array(0)), 0, ptr(ctxBuf))
+    // opts_ptr: pass a 1-byte dummy buffer (Bun FFI rejects zero-length ArrayBufferView).
+    // Rust side ignores opts_ptr when opts_len == 0.
+    symbols.vexart_context_create(ptr(new Uint8Array(1)), 0, ptr(ctxBuf))
     _vxCtx = ctxBuf[0]
   }
 

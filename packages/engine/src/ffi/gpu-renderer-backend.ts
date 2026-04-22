@@ -649,7 +649,8 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     if (_vexartCtx !== null) return _vexartCtx
     const { symbols } = openVexartLibrary()
     const ctxBuf = new BigUint64Array(1)
-    const optsPtr = ptr(new Uint8Array(0))
+    // Bun FFI rejects zero-length ArrayBufferView for ptr(); use 1-byte dummy.
+    const optsPtr = ptr(new Uint8Array(1))
     const result = symbols.vexart_context_create(optsPtr, 0, ptr(ctxBuf)) as number
     if (result !== 0) return 0n
     _vexartCtx = ctxBuf[0]
@@ -1338,8 +1339,8 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       // Per design §5.5, REQ-NB-005: first call to vexart_text_dispatch emits stderr warning.
       if (glyphGroups.size > 0) {
         const { symbols } = openVexartLibrary()
-        // Empty buffer — triggers the DEC-011 warning on first call, no-op otherwise.
-        symbols.vexart_text_dispatch(vctx, ptr(new Uint8Array(0)), 0, ptr(new Uint8Array(32)))
+        // 1-byte dummy buffer — Bun FFI rejects zero-length. Triggers DEC-011 warning on first call.
+        symbols.vexart_text_dispatch(vctx, ptr(new Uint8Array(1)), 0, ptr(new Uint8Array(32)))
         glyphGroups.clear()
       }
     }
