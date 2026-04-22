@@ -246,3 +246,40 @@ export function debugDumpTree(target: NodeHandle | TGENode): string {
   const node = "_node" in target ? target._node : target
   return describeNode(node, 0)
 }
+
+/**
+ * Dump nodes that were culled by AABB viewport culling.
+ * Only meaningful when cullingEnabled is true in the WalkTreeState.
+ *
+ * @param root       - TGENode root to traverse
+ * @param viewport   - Current viewport rect for AABB comparison
+ * @returns Human-readable dump of all culled node subtree roots.
+ */
+export function debugDumpCulledNodes(
+  root: TGENode,
+  viewport: { width: number; height: number },
+): string {
+  const lines: string[] = []
+
+  function visit(node: TGENode, depth: number) {
+    if (node.kind === "text") return
+    const isScrollContainer = !!(node.props.scrollX || node.props.scrollY)
+    const l = node.layout
+    if (!isScrollContainer && l.width > 0 && l.height > 0 && node.children.length > 0) {
+      const fullyLeft = l.x + l.width <= 0
+      const fullyRight = l.x >= viewport.width
+      const fullyAbove = l.y + l.height <= 0
+      const fullyBelow = l.y >= viewport.height
+      if (fullyLeft || fullyRight || fullyAbove || fullyBelow) {
+        const pad = "  ".repeat(depth)
+        const reason = fullyLeft ? "left" : fullyRight ? "right" : fullyAbove ? "above" : "below"
+        lines.push(`${pad}[culled:${reason}] ${node.kind}#${node.id} bounds=(${l.x},${l.y},${l.width}x${l.height})`)
+        return // Don't recurse — entire subtree is culled
+      }
+    }
+    for (const child of node.children) visit(child, depth + 1)
+  }
+
+  visit(root, 0)
+  return lines.length > 0 ? lines.join("\n") : "(no culled nodes)"
+}
