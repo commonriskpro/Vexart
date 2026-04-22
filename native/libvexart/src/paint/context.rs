@@ -60,13 +60,7 @@ impl WgpuContext {
         // SAFETY: data comes from a previous wgpu call (get_data()) on the same platform/version.
         //         The version tag in the filename ensures we only load compatible data (REQ-2B-602).
         //         fallback: true means wgpu will create an empty cache if data is invalid (REQ-2B-604).
-        let wgpu_pipeline_cache = unsafe {
-            device.create_pipeline_cache(&wgpu::PipelineCacheDescriptor {
-                label: Some("vexart-pipeline-cache"),
-                data: pipeline_cache_mgr.data(),
-                fallback: true,
-            })
-        };
+        let wgpu_pipeline_cache: Option<wgpu::PipelineCache> = None;
 
         // 2-binding image BGL — ported from bridge L2185-2205.
         let image_bind_group_layout =
@@ -96,13 +90,15 @@ impl WgpuContext {
             &device,
             wgpu::TextureFormat::Rgba8Unorm,
             &image_bind_group_layout,
-            Some(&wgpu_pipeline_cache),
+            wgpu_pipeline_cache.as_ref(),
         );
 
         // Save compiled pipeline cache to disk for next run (REQ-2B-601).
         // get_data() returns None on Metal/non-Vulkan — save() handles that gracefully.
-        if let Some(data) = wgpu_pipeline_cache.get_data() {
-            pipeline_cache_mgr.save(&data);
+        if let Some(cache) = &wgpu_pipeline_cache {
+            if let Some(data) = cache.get_data() {
+                pipeline_cache_mgr.save(&data);
+            }
         }
 
         Self {

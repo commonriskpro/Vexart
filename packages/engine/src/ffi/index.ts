@@ -48,6 +48,7 @@ export type {
 
 // NOTE: wgpu-canvas-bridge.ts deleted in Phase 2b Slice 2 (REQ-2B-008).
 // All compositing routes through vexart_composite_* FFI.
+export * from "./wgpu-canvas-bridge"
 
 export { getRendererResourceStats } from "./resource-stats"
 

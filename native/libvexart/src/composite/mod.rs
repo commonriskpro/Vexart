@@ -125,9 +125,9 @@ pub fn composite_render_image_layer(
 
     let instance = BridgeImageInstance {
         x: ndc_x,
-        y: ndc_y - ndc_h, // bottom-left corner in NDC
+        y: ndc_y, // top-left corner in NDC
         w: ndc_w,
-        h: ndc_h,
+        h: -ndc_h,
         opacity: 1.0,
         _pad0: 0.0,
         _pad1: 0.0,

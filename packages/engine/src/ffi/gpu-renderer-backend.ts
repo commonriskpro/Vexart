@@ -2179,10 +2179,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         } else {
           vexartCompositeRenderImageLayer(
             vctx, targetHandle, copied.handle,
-            (layer.x / frame.viewportWidth) * 2 - 1,
-            1 - (layer.y / frame.viewportHeight) * 2,
-            (layer.width / frame.viewportWidth) * 2,
-            -((layer.height / frame.viewportHeight) * 2),
+            layer.x,
+            layer.y,
+            layer.width,
+            layer.height,
             first ? 0 : 1, 0x00000000,
           )
         }
