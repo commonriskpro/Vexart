@@ -43,10 +43,10 @@ fn vs_main(
 
   let local = quad[vertex_index];
 
-  // NDC position: top-left is (pos_size.x, pos_size.y), size is (pos_size.z, pos_size.w).
-  // Y is flipped: NDC +y is up, but our glyph quads are specified top-down.
+  // NDC position: same convention as rect shader — x,y is top-left corner in NDC,
+  // w,h are signed sizes (h is typically negative for top-down layout).
   let ndc_x = pos_size.x + local.x * pos_size.z;
-  let ndc_y = pos_size.y - local.y * pos_size.w;
+  let ndc_y = pos_size.y + local.y * pos_size.w;
 
   // Atlas UV: top-left is (uv_rect.x, uv_rect.y), size is (uv_rect.z, uv_rect.w).
   let uv_x = uv_rect.x + local.x * uv_rect.z;

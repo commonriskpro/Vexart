@@ -222,22 +222,94 @@ export function clearAtlasCache() {
 }
 
 /**
- * Load a font atlas via vexart_text_load_atlas.
- * Phase 2: vexart_text_load_atlas is a success no-op (DEC-011).
- * The atlas is generated here and cached for Phase 2b MSDF text rendering.
- * API continuity: callers can already call this — it will succeed silently.
+ * Load a font atlas into the Rust GPU text pipeline via vexart_text_load_atlas.
  *
- * @param ctx   vexart context handle (u64 as bigint)
- * @param fontId  Font ID (0 = default)
+ * Generates a bitmap atlas as a PNG (via @napi-rs/canvas) and a metrics JSON
+ * matching the format expected by native/libvexart/src/text/glyph_info.rs.
+ * The Rust side decodes the PNG, uploads as GPU texture, and creates the atlas
+ * bind group for the MSDF glyph pipeline (cmd_kind=18).
+ *
+ * @param ctx     vexart context handle (u64 as bigint) — unused by Rust (global paint ctx)
+ * @param fontId  Font ID (1-15 for Rust atlas registry; 0 maps to 1 for the default font)
  * @param desc    Font descriptor
  * @returns true on success
  */
 export function loadFontAtlas(ctx: bigint, fontId: number, desc: FontDescriptor): boolean {
   const atlas = generateAtlas(fontId, desc)
   const { symbols } = openVexartLibrary()
-  const { ptr } = require("bun:ffi")
-  const result = symbols.vexart_text_load_atlas(ctx, ptr(atlas.data), atlas.data.byteLength, fontId) as number
-  // Phase 2: vexart_text_load_atlas always returns OK (DEC-011 no-op)
+  const { ptr } = require("bun:ffi") as typeof import("bun:ffi")
+
+  // Rust atlas registry requires fontId 1-15. Map fontId 0 → 1 for the default font.
+  const rustFontId = fontId === 0 ? 1 : fontId
+
+  // ── Build RGBA atlas texture as PNG ──
+  const columns = 32
+  const rows = Math.ceil(atlas.glyphCount / columns)
+  const texW = atlas.cellWidth * columns
+  const texH = atlas.cellHeight * rows
+  const canvas = createCanvas(texW, texH)
+  const canvasCtx = canvas.getContext("2d")
+  const imgData = canvasCtx.createImageData(texW, texH)
+  const pixels = imgData.data
+
+  for (let gi = 0; gi < atlas.glyphCount; gi++) {
+    const col = gi % columns
+    const row = Math.floor(gi / columns)
+    const srcOff = gi * atlas.cellWidth * atlas.cellHeight
+    for (let py = 0; py < atlas.cellHeight; py++) {
+      for (let px = 0; px < atlas.cellWidth; px++) {
+        const alpha = atlas.data[srcOff + py * atlas.cellWidth + px]
+        const dx = col * atlas.cellWidth + px
+        const dy = row * atlas.cellHeight + py
+        const di = (dy * texW + dx) * 4
+        pixels[di] = 255     // R
+        pixels[di + 1] = 255 // G
+        pixels[di + 2] = 255 // B
+        pixels[di + 3] = alpha
+      }
+    }
+  }
+  canvasCtx.putImageData(imgData, 0, 0)
+  const pngBuffer = canvas.toBuffer("image/png")
+
+  // ── Build metrics JSON ──
+  const glyphs: any[] = []
+  for (let gi = 0; gi < atlas.glyphCount; gi++) {
+    const cp = CODEPOINTS[gi]
+    const col = gi % columns
+    const row = Math.floor(gi / columns)
+    glyphs.push({
+      codepoint: cp,
+      char: String.fromCodePoint(cp),
+      atlasX: col * atlas.cellWidth,
+      atlasY: row * atlas.cellHeight,
+      atlasW: atlas.cellWidth,
+      atlasH: atlas.cellHeight,
+      xOffset: 0,
+      yOffset: 0,
+      xAdvance: Math.round(atlas.glyphWidths[gi]),
+    })
+  }
+  const metricsJson = JSON.stringify({
+    fontName: desc.family,
+    atlasWidth: texW,
+    atlasHeight: texH,
+    refSize: desc.size,
+    cellWidth: atlas.cellWidth,
+    cellHeight: atlas.cellHeight,
+    glyphs,
+  })
+
+  const pngU8 = new Uint8Array(pngBuffer)
+  const metricsU8 = new TextEncoder().encode(metricsJson)
+
+  const result = symbols.vexart_text_load_atlas(
+    ctx,
+    rustFontId,
+    ptr(pngU8), pngU8.byteLength,
+    ptr(metricsU8), metricsU8.byteLength,
+  ) as number
+
   return result === 0
 }
 

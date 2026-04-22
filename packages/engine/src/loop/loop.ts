@@ -190,6 +190,9 @@ function createVexartLayoutCtx() {
   let _parentStack: NodeOpenState[] = []
   let _current: NodeOpenState = _defaultOpen()
   let _allOpenStates: NodeOpenState[] = []  // order matches OPEN commands
+  // Text entries — stores metadata for CMD.TEXT generation in endLayout()
+  type TextEntry = { nodeId: number; content: string; color: number; fontId: number; fontSize: number }
+  let _textEntries: TextEntry[] = []
   let _pendingSetId: string | null = null
   let _scrollOffsets = new Map<string, { x: number; y: number }>()
   let _scrollDataCache = new Map<string, { scrollX: number; scrollY: number; contentWidth: number; contentHeight: number; viewportWidth: number; viewportHeight: number; found: boolean }>()
@@ -299,6 +302,7 @@ function createVexartLayoutCtx() {
       _cmdCount = 0
       _parentStack = []
       _allOpenStates = []
+      _textEntries = []
       _current = _defaultOpen()
       _pendingSetId = null
     },
@@ -347,6 +351,28 @@ function createVexartLayoutCtx() {
             extra2: 0,
           } as RenderCommand)
         }
+      }
+      // Generate CMD.TEXT commands from text entries
+      for (const te of _textEntries) {
+        const pos = layoutMap.get(BigInt(te.nodeId))
+        if (!pos) continue
+        cmds.push({
+          type: CMD.TEXT,
+          x: pos.x,
+          y: pos.y,
+          width: pos.width,
+          height: pos.height,
+          color: [
+            (te.color >>> 24) & 0xff,
+            (te.color >>> 16) & 0xff,
+            (te.color >>> 8) & 0xff,
+            te.color & 0xff,
+          ],
+          cornerRadius: 0,
+          extra1: te.fontSize,
+          extra2: te.fontId,
+          text: te.content,
+        } as RenderCommand)
       }
       return cmds
     },
@@ -492,6 +518,8 @@ function createVexartLayoutCtx() {
       }
       _writeOpenCommand(state)
       _writeCloseCommand()
+      // Store text metadata for CMD.TEXT generation in endLayout()
+      _textEntries.push({ nodeId: state.nodeId, content: _content, color: _color, fontId: _fontId, fontSize: _fontSize })
     },
 
     setTextMeasure(_index: number, _w: number, _h: number) {

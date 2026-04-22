@@ -7,7 +7,7 @@
 import { appendFileSync } from "node:fs"
 import { ptr } from "bun:ffi"
 import { CanvasContext } from "./canvas"
-import { getAtlas } from "./font-atlas"
+import { getAtlas, loadFontAtlas, ATLAS_RANGES } from "./font-atlas"
 import { transformBounds, transformPoint } from "./matrix"
 import type { BackdropRenderMetadata, EffectRenderOp, ImageRenderOp, RectangleRenderOp, RenderGraphOp, TextRenderOp, BorderRenderOp } from "./render-graph"
 import type {
@@ -780,6 +780,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   // vexart context handle — allocated on first use.
   // Phase 2b: used for all vexart_paint_dispatch + vexart_composite_* calls.
   let _vexartCtx: bigint | null = null
+  let _defaultAtlasLoaded = false
   function getVexartCtx(): bigint {
     if (_vexartCtx !== null) return _vexartCtx
     const { symbols } = openVexartLibrary()
@@ -789,6 +790,12 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     const result = symbols.vexart_context_create(optsPtr, 0, ptr(ctxBuf)) as number
     if (result !== 0) return 0n
     _vexartCtx = ctxBuf[0]
+    // Load default font atlas (fontId=0) into the Rust GPU text pipeline.
+    if (!_defaultAtlasLoaded) {
+      _defaultAtlasLoaded = true
+      const defaultDesc = getFont(0) // { family: "monospace", size: 14, weight: 400 }
+      loadFontAtlas(_vexartCtx, 0, defaultDesc)
+    }
     return _vexartCtx
   }
   let lastStrategy: GpuLayerStrategyMode | null = null
@@ -1470,16 +1477,49 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       imageGroups.clear()
     }
     const flushGlyphs = () => {
-      // 9.3c: DEC-011 Phase 2 no-op — MSDF text lands in Phase 2b.
-      // cmd_kind=11 is reserved (glyph, DEC-011 — skipped per paint/mod.rs dispatch).
-      // vexart_text_dispatch is a success no-op stub. Queued glyphs are silently dropped.
-      // Per design §5.5, REQ-NB-005: first call to vexart_text_dispatch emits stderr warning.
-      if (glyphGroups.size > 0) {
-        const { symbols } = openVexartLibrary()
-        // 1-byte dummy buffer — Bun FFI rejects zero-length. Triggers DEC-011 warning on first call.
-        symbols.vexart_text_dispatch(vctx, ptr(new Uint8Array(1)), 0, ptr(new Uint8Array(32)))
-        glyphGroups.clear()
+      if (glyphGroups.size === 0) return
+      const { symbols } = openVexartLibrary()
+      // Pack all glyph instances as MsdfGlyphInstance (64 bytes each).
+      // fontId 0 → rustFontId 1 (Rust atlas registry is 1-15).
+      let totalGlyphs = 0
+      for (const group of glyphGroups.values()) totalGlyphs += group.instances.length
+      if (totalGlyphs === 0) { glyphGroups.clear(); return }
+
+      const STRIDE = 64 // MsdfGlyphInstance: 12 f32 + 4 u32 = 64 bytes
+      const buf = new ArrayBuffer(totalGlyphs * STRIDE)
+      const view = new DataView(buf)
+      let off = 0
+      for (const group of glyphGroups.values()) {
+        // Determine rustAtlasId from the group. The group key is the image handle
+        // from getGlyphAtlas — but we need the Rust atlas_id (1-15).
+        // For now, all glyphs use the default font → rustAtlasId = 1.
+        const rustAtlasId = 1
+        for (const g of group.instances) {
+          view.setFloat32(off + 0, g.x, true)    // NDC x
+          view.setFloat32(off + 4, g.y, true)    // NDC y
+          view.setFloat32(off + 8, g.w, true)    // NDC w
+          view.setFloat32(off + 12, g.h, true)   // NDC h
+          view.setFloat32(off + 16, g.u, true)   // UV x
+          view.setFloat32(off + 20, g.v, true)   // UV y
+          view.setFloat32(off + 24, g.uw, true)  // UV w
+          view.setFloat32(off + 28, g.vh, true)  // UV h
+          view.setFloat32(off + 32, g.r, true)   // color R
+          view.setFloat32(off + 36, g.g, true)   // color G
+          view.setFloat32(off + 40, g.b, true)   // color B
+          view.setFloat32(off + 44, g.a * (g.opacity ?? 1), true) // color A
+          view.setUint32(off + 48, rustAtlasId, true) // atlas_id
+          view.setUint32(off + 52, 0, true)      // _pad0
+          view.setUint32(off + 56, 0, true)      // _pad1
+          view.setUint32(off + 60, 0, true)      // _pad2
+          off += STRIDE
+        }
       }
+      const glyphU8 = new Uint8Array(buf)
+      const statsU8 = new Uint8Array(32) // FrameStats output (unused for now)
+      symbols.vexart_text_dispatch(vctx, targetHandle, ptr(glyphU8), glyphU8.byteLength, ptr(statsU8))
+      first = false
+      targetMutationVersion += 1
+      glyphGroups.clear()
     }
     const flushTransformedImages = () => {
       if (transformedImageGroups.size === 0) return
@@ -2042,8 +2082,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           continue
         }
         if (op.kind === "text") {
-          // DEC-011: glyph layer not supported until Phase 2b MSDF pipeline.
-          const useGlyphAtlas = false
+          const useGlyphAtlas = true
           let usedGlyphPath = false
           if (useGlyphAtlas) {
             const layout = layoutText(op.inputs.text, op.inputs.fontId, op.inputs.maxWidth, op.inputs.lineHeight)
