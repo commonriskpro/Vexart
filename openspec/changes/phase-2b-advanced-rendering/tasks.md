@@ -40,9 +40,9 @@
 
 ## Phase 6: PipelineCache + ResourceManager (parallel after Slice 1)
 
-- [ ] 6.1 Create `native/libvexart/src/paint/pipeline_cache.rs` and persist shared cache loading/saving (REQ-2B-601/602/603/604).
-- [ ] 6.2 Create `native/libvexart/src/resource/{mod.rs,priority.rs,eviction.rs,stats.rs}` and route all GPU assets through `ResourceManager` (REQ-2B-701/702/703/704/705).
-- [ ] 6.3 Wire `packages/engine/src/resources/stats.ts` + `packages/engine/src/ffi/functions.ts` to the budget/stats FFI; add eviction/cold-start/warm-start tests.
+- [x] 6.1 Create `native/libvexart/src/paint/pipeline_cache.rs` and persist shared cache loading/saving (REQ-2B-601/602/603/604).
+- [x] 6.2 Create `native/libvexart/src/resource/{mod.rs,priority.rs,eviction.rs,stats.rs}` and route all GPU assets through `ResourceManager` (REQ-2B-701/702/703/704/705).
+- [x] 6.3 Wire `packages/engine/src/resources/stats.ts` + `packages/engine/src/ffi/functions.ts` to the budget/stats FFI; add eviction/cold-start/warm-start tests.
 
 ## Phase 7: Exit gates + polish
 

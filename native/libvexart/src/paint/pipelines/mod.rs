@@ -67,31 +67,39 @@ pub struct PipelineRegistry {
 
 impl PipelineRegistry {
     /// Create all 19 pipelines. Called once at WgpuContext init.
-    pub fn new(device: &Device, format: TextureFormat, image_bgl: &BindGroupLayout) -> Self {
+    ///
+    /// `cache` — optional wgpu PipelineCache handle for fast warm-start (REQ-2B-601).
+    /// On backends that don't support caching (Metal), cache is a no-op and ignored by wgpu.
+    pub fn new(
+        device: &Device,
+        format: TextureFormat,
+        image_bgl: &BindGroupLayout,
+        cache: Option<&wgpu::PipelineCache>,
+    ) -> Self {
         Self {
             // Slice 5a
-            rect: rect::create(device, format),
-            shape_rect: shape_rect::create(device, format),
-            shape_rect_corners: rect_corners::create(device, format),
-            circle: circle::create(device, format),
-            polygon: polygon::create(device, format),
-            bezier: bezier::create(device, format),
-            glow: glow::create(device, format),
-            nebula: nebula::create(device, format),
-            starfield: starfield::create(device, format),
-            image: image::create(device, format, image_bgl),
-            image_transform: image_transform::create(device, format, image_bgl),
-            gradient_linear: gradient_linear::create(device, format),
-            gradient_radial: gradient_radial::create(device, format),
+            rect: rect::create(device, format, cache),
+            shape_rect: shape_rect::create(device, format, cache),
+            shape_rect_corners: rect_corners::create(device, format, cache),
+            circle: circle::create(device, format, cache),
+            polygon: polygon::create(device, format, cache),
+            bezier: bezier::create(device, format, cache),
+            glow: glow::create(device, format, cache),
+            nebula: nebula::create(device, format, cache),
+            starfield: starfield::create(device, format, cache),
+            image: image::create(device, format, image_bgl, cache),
+            image_transform: image_transform::create(device, format, image_bgl, cache),
+            gradient_linear: gradient_linear::create(device, format, cache),
+            gradient_radial: gradient_radial::create(device, format, cache),
             // Slice 5b
-            gradient_conic: gradient_conic::create(device, format),
-            backdrop_blur: backdrop_blur::create(device, format, image_bgl),
-            backdrop_filter: backdrop_filter::create(device, format, image_bgl),
-            image_mask: image_mask::create(device, format, image_bgl),
+            gradient_conic: gradient_conic::create(device, format, cache),
+            backdrop_blur: backdrop_blur::create(device, format, image_bgl, cache),
+            backdrop_filter: backdrop_filter::create(device, format, image_bgl, cache),
+            image_mask: image_mask::create(device, format, image_bgl, cache),
             // Phase 2b Slice 4
-            glyph: glyph::create(device, format, image_bgl),
+            glyph: glyph::create(device, format, image_bgl, cache),
             // Phase 2b Slice 5 — self-filter
-            self_filter: filter::create(device, format, image_bgl),
+            self_filter: filter::create(device, format, image_bgl, cache),
         }
     }
 }
@@ -152,7 +160,7 @@ mod tests {
             ],
         });
 
-        // Should not panic — all 17 pipelines compile successfully (13 Slice 5a + 4 Slice 5b).
-        let _registry = PipelineRegistry::new(&device, TextureFormat::Rgba8Unorm, &image_bgl);
+        // Should not panic — all 19 pipelines compile successfully (13 Slice 5a + 4 Slice 5b + 2 Phase 2b).
+        let _registry = PipelineRegistry::new(&device, TextureFormat::Rgba8Unorm, &image_bgl, None);
     }
 }

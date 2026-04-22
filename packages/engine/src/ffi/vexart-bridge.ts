@@ -77,6 +77,10 @@ const VEXART_SYMBOLS = {
   vexart_kitty_shm_prepare: { args: [FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_kitty_shm_release: { args: [FFIType.u64, FFIType.u32],                returns: FFIType.i32  },
 
+  // §5.8 Resource manager (Phase 2b Slice 6)
+  vexart_resource_get_stats:  { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
+  vexart_resource_set_budget: { args: [FFIType.u64, FFIType.u32],                          returns: FFIType.i32 },
+
   // §5.7 Error retrieval
   vexart_get_last_error_length: { args: [],                     returns: FFIType.u32 },
   vexart_copy_last_error:       { args: [FFIType.ptr, FFIType.u32], returns: FFIType.u32 },

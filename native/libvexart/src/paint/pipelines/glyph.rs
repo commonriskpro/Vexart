@@ -14,6 +14,7 @@ pub fn create(
     device: &Device,
     format: TextureFormat,
     image_bgl: &BindGroupLayout,
+    cache: Option<&wgpu::PipelineCache>,
 ) -> RenderPipeline {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("vexart-msdf-text-shader"),
@@ -88,6 +89,6 @@ pub fn create(
         depth_stencil: None,
         multisample: wgpu::MultisampleState::default(),
         multiview_mask: None,
-        cache: None,
+        cache,
     })
 }

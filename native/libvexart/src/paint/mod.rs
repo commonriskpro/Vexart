@@ -4,6 +4,7 @@
 
 pub mod context;
 pub mod instances;
+pub mod pipeline_cache;
 pub mod pipelines;
 
 use std::collections::HashMap;

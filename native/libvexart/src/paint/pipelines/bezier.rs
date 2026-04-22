@@ -4,7 +4,7 @@
 
 use wgpu::{Device, RenderPipeline, TextureFormat};
 
-pub fn create(device: &Device, format: TextureFormat) -> RenderPipeline {
+pub fn create(device: &Device, format: TextureFormat, cache: Option<&wgpu::PipelineCache>) -> RenderPipeline {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("vexart-bezier-shader"),
         source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/bezier.wgsl").into()),
@@ -69,6 +69,6 @@ pub fn create(device: &Device, format: TextureFormat) -> RenderPipeline {
         depth_stencil: None,
         multisample: wgpu::MultisampleState::default(),
         multiview_mask: None,
-        cache: None,
+        cache,
     })
 }

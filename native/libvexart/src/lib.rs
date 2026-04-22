@@ -8,6 +8,7 @@ pub mod ffi;
 pub mod kitty;
 pub mod layout;
 pub mod paint;
+pub mod resource;
 pub mod text;
 pub mod types;
 
@@ -65,6 +66,18 @@ fn get_or_init_layout() -> MutexGuard<'static, SendableLayoutContext> {
         guard.0 = Some(layout::LayoutContext::new());
     }
     guard
+}
+
+// ─── Single shared ResourceManager (lazy-initialized, Phase 2b Slice 6) ──
+// Global GPU memory budget manager. Initialized on first stats/budget call.
+// Phase 2b: single-context model — one manager for all GPU assets.
+// Phase 3: extract into per-context ResourceManager when multi-context lands.
+
+static SHARED_RESOURCE: LazyLock<Mutex<resource::ResourceManager>> =
+    LazyLock::new(|| Mutex::new(resource::ResourceManager::new()));
+
+fn get_or_init_resource() -> &'static Mutex<resource::ResourceManager> {
+    &SHARED_RESOURCE
 }
 
 // ─── §5.1 Version & lifecycle ─────────────────────────────────────────────
@@ -774,6 +787,64 @@ pub unsafe extern "C" fn vexart_kitty_shm_prepare(
 #[no_mangle]
 pub extern "C" fn vexart_kitty_shm_release(handle: u64, unlink_flag: u32) -> i32 {
     ffi_guard!({ kitty::shm::shm_release(handle, unlink_flag) })
+}
+
+// ─── §5.8 Resource manager (Phase 2b Slice 6) ────────────────────────────
+
+/// Retrieve current ResourceManager statistics as a JSON-encoded UTF-8 buffer.
+///
+/// The buffer is written to `out_ptr` (up to `out_cap` bytes).
+/// `out_used` receives the number of bytes written (excluding NUL).
+///
+/// Returns:
+///   OK (0)              — stats written successfully
+///   ERR_INVALID_ARG (-9) — out_ptr is null or out_cap is 0
+///
+/// # Safety
+/// `out_ptr` must be valid for `out_cap` bytes; `out_used` must be a valid mutable pointer.
+///
+/// (REQ-2B-704)
+#[no_mangle]
+pub unsafe extern "C" fn vexart_resource_get_stats(
+    _ctx: u64,
+    out_ptr: *mut u8,
+    out_cap: u32,
+    out_used: *mut u32,
+) -> i32 {
+    ffi_guard!({
+        if out_ptr.is_null() || out_cap == 0 || out_used.is_null() {
+            return ERR_INVALID_ARG;
+        }
+
+        // Phase 2b: ResourceManager is a static singleton (lazy-initialized).
+        // Statistics are collected from the global manager on every call.
+        let guard = get_or_init_resource();
+        let mgr = guard.lock().unwrap();
+        let stats = resource::stats::collect_stats(&mgr);
+        let json = stats.to_json();
+        let bytes = json.as_bytes();
+
+        let write_len = bytes.len().min(out_cap as usize);
+        let out_slice = std::slice::from_raw_parts_mut(out_ptr, write_len);
+        out_slice.copy_from_slice(&bytes[..write_len]);
+        *out_used = write_len as u32;
+        OK
+    })
+}
+
+/// Set the ResourceManager memory budget.
+///
+/// `budget_mb`: budget in megabytes (minimum 32MB enforced by ResourceManager).
+/// (REQ-2B-703)
+#[no_mangle]
+pub extern "C" fn vexart_resource_set_budget(_ctx: u64, budget_mb: u32) -> i32 {
+    ffi_guard!({
+        let budget_bytes = (budget_mb as u64) * 1024 * 1024;
+        let guard = get_or_init_resource();
+        let mut mgr = guard.lock().unwrap();
+        mgr.set_budget(budget_bytes);
+        OK
+    })
 }
 
 // ─── §5.7 Error retrieval (re-exported from ffi::error) ──────────────────
