@@ -543,6 +543,36 @@ pub struct ImageMaskInstance {
     pub _pad1: f32,
 }
 
+// ─── Phase 2b Slice 5 — Self-filter pipeline (cmd_kind = 19) ─────────────────
+
+/// Self-filter instance (cmd_kind = 19).
+/// 12 floats: NDC rect [4] + 7 filter params + 1 pad = 48 bytes.
+///
+/// Same layout as BackdropFilterInstance (REQ-2B-403 + design §5).
+/// All values use convention: 100 = identity for brightness/contrast/saturate;
+/// 0 = identity for grayscale/invert/sepia/hue_rotate_deg.
+///
+/// Shader sees:
+///   @location(0) rect:    vec4<f32>  (x,y,w,h NDC)
+///   @location(1) params0: vec4<f32>  (brightness, contrast, saturate, grayscale)
+///   @location(2) params1: vec4<f32>  (invert, sepia, hue_rotate_deg, _pad)
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct SelfFilterInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub brightness: f32,
+    pub contrast: f32,
+    pub saturate: f32,
+    pub grayscale: f32,
+    pub invert: f32,
+    pub sepia: f32,
+    pub hue_rotate_deg: f32,
+    pub _pad: f32,
+}
+
 // ─── Phase 2b — MSDF text pipeline (cmd_kind = 18) ─────────────────────────
 
 /// MSDF glyph instance (cmd_kind = 18).
@@ -675,5 +705,66 @@ mod tests {
         let inst = MsdfGlyphInstance::default();
         let bytes: &[u8] = cast_slice(std::slice::from_ref(&inst));
         assert!(bytes.iter().all(|&b| b == 0), "Default must be all zeros");
+    }
+
+    // ── Phase 2b Slice 5 — SelfFilterInstance tests ─────────────────────────
+
+    #[test]
+    fn test_self_filter_instance_size_is_48_bytes() {
+        // SelfFilterInstance must be exactly 48 bytes:
+        // 12 f32 (rect[4] + brightness + contrast + saturate + grayscale +
+        //         invert + sepia + hue_rotate_deg + _pad) = 12 × 4 = 48 bytes.
+        // This matches BackdropFilterInstance layout (design §5 Decision).
+        assert_eq!(std::mem::size_of::<SelfFilterInstance>(), 48);
+    }
+
+    #[test]
+    fn test_self_filter_instance_pod_roundtrip() {
+        let inst = SelfFilterInstance {
+            x: -0.5,
+            y: -0.5,
+            w: 1.0,
+            h: 1.0,
+            brightness: 150.0, // 150% — brighter
+            contrast: 100.0,   // identity
+            saturate: 80.0,    // desaturate slightly
+            grayscale: 0.0,    // identity
+            invert: 0.0,       // identity
+            sepia: 0.0,        // identity
+            hue_rotate_deg: 45.0,
+            _pad: 0.0,
+        };
+
+        let bytes: &[u8] = cast_slice(std::slice::from_ref(&inst));
+        assert_eq!(bytes.len(), 48, "SelfFilterInstance must be 48 bytes");
+
+        let back: &[SelfFilterInstance] = cast_slice(bytes);
+        assert!((back[0].x - (-0.5)).abs() < f32::EPSILON);
+        assert!((back[0].brightness - 150.0).abs() < f32::EPSILON);
+        assert!((back[0].hue_rotate_deg - 45.0).abs() < f32::EPSILON);
+        assert_eq!(back[0]._pad, 0.0);
+    }
+
+    #[test]
+    fn test_self_filter_instance_zeroable() {
+        // bytemuck::Zeroable: all-zeros must be valid (derived alongside Pod).
+        let inst = SelfFilterInstance::default();
+        assert_eq!(inst.x, 0.0);
+        assert_eq!(inst.brightness, 0.0);
+        assert_eq!(inst._pad, 0.0);
+        // Verify bytemuck cast works on a zero instance.
+        let bytes: &[u8] = bytemuck::bytes_of(&inst);
+        assert!(bytes.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn test_self_filter_instance_matches_backdrop_filter_size() {
+        // REQ-2B-403: self_filter uses same uniform layout as backdrop_filter.
+        // Both must be 48 bytes for the shader to read the vertex attributes correctly.
+        assert_eq!(
+            std::mem::size_of::<SelfFilterInstance>(),
+            std::mem::size_of::<BackdropFilterInstance>(),
+            "SelfFilterInstance and BackdropFilterInstance must have the same size"
+        );
     }
 }

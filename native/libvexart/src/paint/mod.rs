@@ -136,7 +136,11 @@ impl PaintContext {
     ///     11=reserved (glyph, DEC-011 — skipped), 12=gradient_linear, 13=gradient_radial
     ///   Slice 5b (NEW GPU pipelines, DEC-012):
     ///     14=gradient_conic, 15=backdrop_blur, 16=backdrop_filter, 17=image_mask
-    ///   18..=31 reserved for Phase 2b (blend, gradient_stroke, MSDF text, etc.)
+    ///   Phase 2b Slice 4:
+    ///     18=glyph (MSDF text, REQ-2B-203/204)
+    ///   Phase 2b Slice 5:
+    ///     19=self_filter (REQ-2B-402/403/404)
+    ///   20..=31 reserved for Phase 2b (blend, gradient_stroke, etc.)
     ///
     /// Phase 2b: `target` is resolved from the TargetRegistry.
     /// If target=0, falls back to the PaintContext default offscreen texture.
@@ -193,9 +197,10 @@ impl PaintContext {
             let payload = &graph[offset..payload_end];
             offset = payload_end;
 
-            // cmd_kind 11 is the legacy glyph slot (unused); 19+ are future — silently skip.
-            // cmd_kind 18 is now the MSDF glyph pipeline (Phase 2b Slice 4).
-            if cmd_kind == 11 || cmd_kind > 18 {
+            // cmd_kind 11 is the legacy glyph slot (unused); 20+ are future — silently skip.
+            // cmd_kind 18 = MSDF glyph pipeline (Phase 2b Slice 4).
+            // cmd_kind 19 = self-filter pipeline (Phase 2b Slice 5).
+            if cmd_kind == 11 || cmd_kind > 19 {
                 continue;
             }
 
@@ -258,7 +263,8 @@ impl PaintContext {
                 0u16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
                 12, 13,
                 14, 15, 16, 17,
-                18, // Phase 2b: MSDF glyph pipeline
+                18, // Phase 2b Slice 4: MSDF glyph pipeline
+                19, // Phase 2b Slice 5: self-filter pipeline
             ] {
                 let batch = match batches.get(&kind) {
                     Some(b) if !b.is_empty() => b,
@@ -320,7 +326,7 @@ impl PaintContext {
                 // Pipelines that sample a texture need bind group 0.
                 // cmd_kind 18 (glyph): use fallback for now (atlas bind group wired via
                 // text::dispatch_glyph_instances for the dedicated text::dispatch path).
-                if kind == 9 || kind == 10 || kind == 15 || kind == 16 || kind == 17 || kind == 18 {
+                if kind == 9 || kind == 10 || kind == 15 || kind == 16 || kind == 17 || kind == 18 || kind == 19 {
                     pass.set_bind_group(0, &self.fallback_bind_group, &[]);
                 }
                 pass.draw(0..6, 0..instance_count);
@@ -338,13 +344,14 @@ impl PaintContext {
 
             // We need a fresh render pass per pipeline (clearing on first, loading on rest).
             // Iterate over all known cmd_kinds in order (skipping 11 per legacy slot).
-            // Slice 5a: 0-10, 12-13 | Slice 5b: 14-17 | Phase 2b Slice 4: 18
+            // Slice 5a: 0-10, 12-13 | Slice 5b: 14-17 | Phase 2b Slice 4: 18 | Phase 2b Slice 5: 19
             let mut first_pass = true;
             for &kind in &[
                 0u16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // Slice 5a first 11 pipelines
                 12, 13, // Slice 5a gradient pipelines (11 skipped)
                 14, 15, 16, 17, // Slice 5b NEW GPU pipelines
-                18,     // Phase 2b Slice 4: MSDF glyph
+                18, // Phase 2b Slice 4: MSDF glyph
+                19, // Phase 2b Slice 5: self-filter
             ] {
                 let batch = match batches.get(&kind) {
                     Some(b) if !b.is_empty() => b,
@@ -403,7 +410,7 @@ impl PaintContext {
                 // the fallback bind group in Slice 5b (real source wiring is Slice 9+ work).
                 // cmd_kind 18=glyph uses the fallback here; atlas bind group is set via
                 // text::dispatch_glyph_instances for the dedicated text::dispatch path.
-                if kind == 9 || kind == 10 || kind == 15 || kind == 16 || kind == 17 || kind == 18 {
+                if kind == 9 || kind == 10 || kind == 15 || kind == 16 || kind == 17 || kind == 18 || kind == 19 {
                     pass.set_bind_group(0, &self.fallback_bind_group, &[]);
                 }
                 // 6 vertices per quad (2 triangles), instance_count instances.
@@ -469,6 +476,8 @@ fn instance_stride_for_kind(kind: u16) -> usize {
         17 => size_of::<ImageMaskInstance>(),
         // Phase 2b Slice 4 — MSDF glyph pipeline
         18 => size_of::<MsdfGlyphInstance>(),
+        // Phase 2b Slice 5 — self-filter pipeline
+        19 => size_of::<SelfFilterInstance>(),
         _ => 0,
     }
 }
@@ -500,6 +509,8 @@ fn pipeline_for_kind<'a>(
         17 => &reg.image_mask,
         // Phase 2b Slice 4 — MSDF glyph pipeline
         18 => &reg.glyph,
+        // Phase 2b Slice 5 — self-filter pipeline
+        19 => &reg.self_filter,
         _ => panic!("pipeline_for_kind called with unsupported kind {kind}"),
     }
 }

@@ -32,11 +32,11 @@
 
 ## Phase 5: Compositor animations + self filters + hints (depends on Slice 1)
 
-- [ ] 5.1 Add `filter` prop plumbing in `packages/engine/src/types.ts` and interactive style merging (REQ-2B-401/405).
-- [ ] 5.2 Implement `native/libvexart/src/paint/{pipelines/filter.rs,shaders/self_filter.wgsl}` and hook self-filter dispatch in `paint/mod.rs` (REQ-2B-402/403/404).
-- [ ] 5.3 Wire `willChange` and `contain` in `packages/engine/src/loop/assign-layers.ts` and invalidation boundaries (REQ-2B-501/502/503).
-- [ ] 5.4 Add compositor descriptor registration + fast-path frame logic in `packages/engine/src/animation/compositor-path.ts` (REQ-2B-301/302/303/304/305).
-- [ ] 5.5 Add fallback-warning tests and microbenchmarks for animation/filter/hint behavior in `packages/engine/src/animation/compositor-path.ts` and `packages/engine/src/loop/assign-layers.ts` (REQ-2B-301/305/401/405/501/503).
+- [x] 5.1 Add `filter` prop plumbing in `packages/engine/src/types.ts` and interactive style merging (REQ-2B-401/405).
+- [x] 5.2 Implement `native/libvexart/src/paint/{pipelines/filter.rs,shaders/self_filter.wgsl}` and hook self-filter dispatch in `paint/mod.rs` (REQ-2B-402/403/404).
+- [x] 5.3 Wire `willChange` and `contain` in `packages/engine/src/loop/assign-layers.ts` and invalidation boundaries (REQ-2B-501/502/503).
+- [x] 5.4 Add compositor descriptor registration + fast-path frame logic in `packages/engine/src/animation/compositor-path.ts` (REQ-2B-301/302/303/304/305).
+- [x] 5.5 Add fallback-warning tests and microbenchmarks for animation/filter/hint behavior in `packages/engine/src/animation/compositor-path.ts` and `packages/engine/src/loop/assign-layers.ts` (REQ-2B-301/305/401/405/501/503).
 
 ## Phase 6: PipelineCache + ResourceManager (parallel after Slice 1)
 

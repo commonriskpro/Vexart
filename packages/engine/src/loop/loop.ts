@@ -1155,7 +1155,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     // 2. Interactive nodes — for reliable layout readback (hit-testing)
     const hasMouseProps = node.props.onMouseDown || node.props.onMouseUp || node.props.onMouseMove || node.props.onMouseOver || node.props.onMouseOut
     const isInteractive = node.props.focusable || node.props.hoverStyle || node.props.activeStyle || node.props.focusStyle || node.props.onPress || hasMouseProps
-    const needsLayoutId = isInteractive || node.props.layer === true
+    // willChange pre-promotes to own layer — needs a stable layout ID for layer key (REQ-2B-501)
+    const hasWillChange = node.props.willChange !== undefined
+    const needsLayoutId = isInteractive || node.props.layer === true || hasWillChange
     if (node.props.scrollX || node.props.scrollY) {
       const sid = node.props.scrollId ?? `tge-scroll-${scrollIdCounter++}`
       clay.setId(sid)
@@ -1255,7 +1257,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     const hasMouseCallbacks = vp.onMouseDown || vp.onMouseUp || vp.onMouseMove || vp.onMouseOver || vp.onMouseOut
     const isInteractiveNode = vp.onPress || vp.focusable || vp.hoverStyle || vp.activeStyle || vp.focusStyle || hasMouseCallbacks
     const hasTransform = vp.transform !== undefined
-    const needsRect = vp.backgroundColor !== undefined || vp.gradient !== undefined || hasBackdropFilter || vp.opacity !== undefined || isInteractiveNode || hasTransform
+    const hasSelfFilter = vp.filter !== undefined
+    const needsRect = vp.backgroundColor !== undefined || vp.gradient !== undefined || hasBackdropFilter || vp.opacity !== undefined || isInteractiveNode || hasTransform || hasSelfFilter
     if (needsRect) {
       const bgColor = vp.backgroundColor !== undefined ? (vp.backgroundColor as number) : 0x00000001 // near-transparent placeholder
       const cr = vp.cornerRadius ?? 0
@@ -1263,7 +1266,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       registerRectNode(node)
 
       // Record effects for this RECT — matched during paint
-      if (vp.shadow || vp.glow || vp.gradient || hasBackdropFilter || vp.cornerRadii || vp.opacity !== undefined || hasTransform) {
+      if (vp.shadow || vp.glow || vp.gradient || hasBackdropFilter || vp.cornerRadii || vp.opacity !== undefined || hasTransform || vp.filter) {
         const effect: EffectConfig = { renderObjectId: node.id, color: bgColor, cornerRadius: cr, _node: node }
         if (vp.shadow) {
           effect.shadow = vp.shadow
@@ -1293,6 +1296,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         if (vp.backdropHueRotate !== undefined) effect.backdropHueRotate = vp.backdropHueRotate
         if (vp.opacity !== undefined) effect.opacity = vp.opacity
         if (vp.cornerRadii) effect.cornerRadii = vp.cornerRadii
+        // Self-filter: wire FilterConfig into the effect (REQ-2B-401/402)
+        if (vp.filter) effect.filter = vp.filter
         if (hasTransform && vp.transform) {
           const usesSubtreeTransformPass = node.children.length > 0
           if (!usesSubtreeTransformPass) {
@@ -1392,7 +1397,19 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     const isScroll = !!(node.props.scrollX || node.props.scrollY)
     const isInteractionLayer = shouldPromoteInteractionLayer(node)
     const hasSubtreeTransform = !!(node.props.transform && node.children.length > 0)
-    if (node.props.layer === true || isInteractionLayer || hasSubtreeTransform) {
+    // willChange pre-promotes the node to its own layer (REQ-2B-501).
+    // Only valid values trigger promotion; invalid values are silently ignored.
+    const willChange = node.props.willChange
+    const validWillChangeValues = new Set(["transform", "opacity", "filter", "scroll"])
+    const willChangeValues = willChange ? (Array.isArray(willChange) ? willChange : [willChange]) : []
+    const hasValidWillChange = willChangeValues.some(v => validWillChangeValues.has(v))
+    if (hasValidWillChange && !willChangeValues.every(v => validWillChangeValues.has(v))) {
+      // Some invalid values present — warn in debug mode (REQ-2B-501)
+      if (process.env.TGE_DEBUG) {
+        console.warn(`[TGE] willChange contains unrecognized value(s): ${willChangeValues.filter(v => !validWillChangeValues.has(v)).join(", ")}`)
+      }
+    }
+    if (node.props.layer === true || isInteractionLayer || hasSubtreeTransform || hasValidWillChange) {
       result.push({
         path,
         nodeId: node.id,

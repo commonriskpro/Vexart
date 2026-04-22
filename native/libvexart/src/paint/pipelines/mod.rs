@@ -7,6 +7,7 @@ pub mod backdrop_blur;
 pub mod backdrop_filter;
 pub mod bezier;
 pub mod circle;
+pub mod filter;
 pub mod glyph;
 pub mod glow;
 pub mod gradient_conic;
@@ -24,8 +25,8 @@ pub mod starfield;
 
 use wgpu::{BindGroupLayout, Device, RenderPipeline, TextureFormat};
 
-/// Holds all 18 render pipelines indexed by cmd_kind.
-/// cmd_kind allocation per design §17.6 (as-deployed in Slice 5a + 5b + Phase 2b Slice 4):
+/// Holds all 19 render pipelines indexed by cmd_kind.
+/// cmd_kind allocation per design §17.6 (as-deployed in Slice 5a + 5b + Phase 2b Slice 4 + 5):
 ///   Slice 5a (ported):
 ///     0 = rect, 1 = shape_rect, 2 = shape_rect_corners, 3 = circle,
 ///     4 = polygon, 5 = bezier, 6 = glow, 7 = nebula, 8 = starfield,
@@ -35,7 +36,9 @@ use wgpu::{BindGroupLayout, Device, RenderPipeline, TextureFormat};
 ///     14 = gradient_conic, 15 = backdrop_blur, 16 = backdrop_filter, 17 = image_mask
 ///   Phase 2b Slice 4 (MSDF text):
 ///     18 = glyph (MSDF text, REQ-2B-203/204)
-///   19..=31 reserved for Phase 2b (blend, gradient_stroke, self-filter, etc.)
+///   Phase 2b Slice 5 (self-filter):
+///     19 = self_filter (REQ-2B-402/403/404)
+///   20..=31 reserved for Phase 2b (blend, gradient_stroke, etc.)
 pub struct PipelineRegistry {
     // ── Slice 5a ──────────────────────────────────────────────────────────────
     pub rect: RenderPipeline,
@@ -58,10 +61,12 @@ pub struct PipelineRegistry {
     pub image_mask: RenderPipeline,
     // ── Phase 2b Slice 4 (MSDF text) ─────────────────────────────────────────
     pub glyph: RenderPipeline,
+    // ── Phase 2b Slice 5 (self-filter) ───────────────────────────────────────
+    pub self_filter: RenderPipeline,
 }
 
 impl PipelineRegistry {
-    /// Create all 18 pipelines. Called once at WgpuContext init.
+    /// Create all 19 pipelines. Called once at WgpuContext init.
     pub fn new(device: &Device, format: TextureFormat, image_bgl: &BindGroupLayout) -> Self {
         Self {
             // Slice 5a
@@ -85,6 +90,8 @@ impl PipelineRegistry {
             image_mask: image_mask::create(device, format, image_bgl),
             // Phase 2b Slice 4
             glyph: glyph::create(device, format, image_bgl),
+            // Phase 2b Slice 5 — self-filter
+            self_filter: filter::create(device, format, image_bgl),
         }
     }
 }

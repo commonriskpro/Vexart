@@ -74,8 +74,28 @@ export type NodeMouseEvent = {
   height: number
 }
 
+/** Self-filter configuration — applied to the element's own paint output. */
+export type FilterConfig = {
+  /** Gaussian blur radius in px. Default: 0 (no blur). */
+  blur?: number
+  /** Brightness: 0=black, 100=unchanged, 200=2x bright. */
+  brightness?: number
+  /** Contrast: 0=grey, 100=unchanged, 200=high contrast. */
+  contrast?: number
+  /** Saturation: 0=grayscale, 100=unchanged, 200=hyper-saturated. */
+  saturate?: number
+  /** Grayscale: 0=unchanged, 100=full grayscale. */
+  grayscale?: number
+  /** Invert: 0=unchanged, 100=fully inverted. */
+  invert?: number
+  /** Sepia: 0=unchanged, 100=full sepia. */
+  sepia?: number
+  /** Hue rotation in degrees (0-360). */
+  hueRotate?: number
+}
+
 /** Interactive style props — usable in hoverStyle, activeStyle, focusStyle */
-export type InteractiveStyleProps = Partial<Pick<TGEProps, "backgroundColor" | "borderColor" | "borderWidth" | "cornerRadius" | "borderRadius" | "shadow" | "boxShadow" | "glow" | "gradient" | "backdropBlur" | "backdropBrightness" | "backdropContrast" | "backdropSaturate" | "backdropGrayscale" | "backdropInvert" | "backdropSepia" | "backdropHueRotate" | "opacity">>
+export type InteractiveStyleProps = Partial<Pick<TGEProps, "backgroundColor" | "borderColor" | "borderWidth" | "cornerRadius" | "borderRadius" | "shadow" | "boxShadow" | "glow" | "gradient" | "backdropBlur" | "backdropBrightness" | "backdropContrast" | "backdropSaturate" | "backdropGrayscale" | "backdropInvert" | "backdropSepia" | "backdropHueRotate" | "opacity" | "filter">>
 
 export type TGEProps = {
   // Layout
@@ -195,6 +215,29 @@ export type TGEProps = {
   backdropSepia?: number
   /** Backdrop hue-rotate filter. 0-360 degrees, 0/360=unchanged. */
   backdropHueRotate?: number
+
+  /**
+   * Self-filter applied to this element's own paint output.
+   * Unlike backdropBlur/backdropFilter which affect content BEHIND the element,
+   * `filter` affects the element's own rendered pixels (REQ-2B-401).
+   */
+  filter?: FilterConfig
+
+  /**
+   * Hint that this property will change soon — pre-promotes the node to its own
+   * GPU compositing layer to avoid runtime promotion cost (REQ-2B-501).
+   * Accepted values: "transform", "opacity", "filter", "scroll".
+   */
+  willChange?: string | string[]
+
+  /**
+   * Containment boundary hint (REQ-2B-502).
+   * - 'none': no containment (default).
+   * - 'layout': size changes inside do not re-lay out siblings.
+   * - 'paint': content clipped to bounds; no overflow visible.
+   * - 'strict': layout + paint combined.
+   */
+  contain?: 'none' | 'layout' | 'paint' | 'strict'
 
   // Interactive states — merged over base props when active
   hoverStyle?: InteractiveStyleProps
