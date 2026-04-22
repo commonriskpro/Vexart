@@ -15,8 +15,8 @@ import { existsSync } from "node:fs"
 
 // ── Version constant ────────────────────────────────────────────────────────
 
-/** Expected bridge version for Phase 2.0 — matches vexart_version() return value. */
-export const EXPECTED_BRIDGE_VERSION = 0x00020000 as const
+/** Expected bridge version for Phase 2b — matches vexart_version() return value. */
+export const EXPECTED_BRIDGE_VERSION = 0x00020B00 as const
 
 // ── Error class ─────────────────────────────────────────────────────────────
 
@@ -50,7 +50,17 @@ const VEXART_SYMBOLS = {
   vexart_paint_upload_image:  { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr],       returns: FFIType.i32 },
   vexart_paint_remove_image:  { args: [FFIType.u64, FFIType.u64],              returns: FFIType.i32  },
 
-  // §5.4 Composite
+  // §5.4 Composite — target registry (Phase 2b)
+  vexart_composite_target_create:       { args: [FFIType.u64, FFIType.u32, FFIType.u32, FFIType.ptr],              returns: FFIType.i32 },
+  vexart_composite_target_destroy:      { args: [FFIType.u64, FFIType.u64],                                        returns: FFIType.i32 },
+  vexart_composite_target_begin_layer:  { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.u32],             returns: FFIType.i32 },
+  vexart_composite_target_end_layer:    { args: [FFIType.u64, FFIType.u64],                                        returns: FFIType.i32 },
+  // §5.4 Composite — image ops (Phase 2b)
+  vexart_composite_render_image_layer:  { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.f32, FFIType.f32, FFIType.f32, FFIType.f32, FFIType.u32, FFIType.u32], returns: FFIType.i32 },
+  vexart_composite_copy_region_to_image:{ args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
+  vexart_composite_image_filter_backdrop:{ args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
+  vexart_composite_image_mask_rounded_rect:{ args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.ptr],           returns: FFIType.i32 },
+  // §5.4 Composite — readback + legacy merge
   vexart_composite_merge:               { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
   vexart_composite_readback_rgba:       { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_composite_readback_region_rgba:{ args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.ptr, FFIType.u32, FFIType.ptr],          returns: FFIType.i32 },

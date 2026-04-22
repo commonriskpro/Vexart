@@ -3,11 +3,8 @@ resolver = "2"
 members = [
   "native/libvexart",
 ]
-# wgpu-canvas-bridge excluded from workspace — legacy crate still needed at runtime
-# for GPU target lifecycle/compositing until Phase 2b. Compiles independently.
-exclude = [
-  "native/wgpu-canvas-bridge",
-]
+# wgpu-canvas-bridge deleted in Phase 2b Slice 2 (bridge-deletion task 2.3).
+# All compositing now routes through libvexart vexart_composite_* FFI.
 
 [workspace.package]
 edition = "2021"

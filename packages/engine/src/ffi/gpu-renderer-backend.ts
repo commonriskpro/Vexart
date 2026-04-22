@@ -1,8 +1,8 @@
-// gpu-renderer-backend.ts — Phase 2 native path
-// Rewired from tge_wgpu_canvas_* bridge calls to vexart_paint_dispatch + vexart_composite_*
-// per design §11, §8.2 cmd_kind allocation. Shadow preserved at L1502-1521 as glow (cmd_kind=6).
+// gpu-renderer-backend.ts — Phase 2b native path
+// All GPU target lifecycle, compositing, readback, and backdrop/mask operations
+// rewired to vexart_composite_* FFI (Phase 2b Slice 2). wgpu-canvas-bridge deleted.
+// Per design §11, §8.2 cmd_kind allocation. Shadow preserved at L1502-1521 as glow (cmd_kind=6).
 // Per §17.3: shadow emits GlowInstance with offset (s.x,s.y), padding (s.blur*2).
-// wgpu-canvas-bridge.ts is still imported for canvas sprite helpers (deleted in Slice 11).
 
 import { appendFileSync } from "node:fs"
 import { ptr } from "bun:ffi"
@@ -23,83 +23,202 @@ import { openVexartLibrary } from "./vexart-bridge"
 import {
   GRAPH_MAGIC, GRAPH_VERSION,
 } from "./vexart-buffer"
-// Phase 2 / Slice 11B: gpu-stub.ts removed. GPU target lifecycle and compositing
-// operations still route through wgpu-canvas-bridge.ts (old libwgpu_canvas_bridge dylib)
-// until Phase 2b ports full compositing to libvexart. Paint primitives already route
-// through vexart_paint_dispatch (cmd_kinds 0-17).
-// flushImages/flushTransformedImages → vexart_paint_dispatch cmd_kinds 9/10.
-// flushGlyphs → DEC-011 no-op.
-import {
-  beginWgpuCanvasTargetLayer,
-  compositeWgpuCanvasTargetImageLayer,
-  createWgpuCanvasContext,
-  createWgpuCanvasImage,
-  createWgpuCanvasTarget,
-  destroyWgpuCanvasImage,
-  destroyWgpuCanvasTarget,
-  endWgpuCanvasTargetLayer,
-  filterWgpuCanvasImageBackdrop,
-  maskWgpuCanvasImageRoundedRectCorners,
-  maskWgpuCanvasImageRoundedRect,
-  probeWgpuCanvasBridge,
-  readbackWgpuCanvasTargetRGBA,
-  renderWgpuCanvasTargetRectsLayer,
-  renderWgpuCanvasTargetShapeRectsLayer,
-  renderWgpuCanvasTargetShapeRectCornersLayer,
-  renderWgpuCanvasTargetCirclesLayer,
-  renderWgpuCanvasTargetPolygonsLayer,
-  renderWgpuCanvasTargetBeziersLayer,
-  renderWgpuCanvasTargetGlowsLayer,
-  renderWgpuCanvasTargetImagesLayer,
-  renderWgpuCanvasTargetLinearGradientsLayer,
-  renderWgpuCanvasTargetRadialGradientsLayer,
-  renderWgpuCanvasTargetTransformedImagesLayer,
-  supportsWgpuCanvasGlyphLayer,
-  copyWgpuCanvasTargetRegionToImage,
-  type WgpuCanvasContextHandle,
-  type WgpuCanvasGlyphInstance,
-  type WgpuCanvasGlow,
-  type WgpuCanvasImageHandle,
-  type WgpuCanvasRectFill,
-  type WgpuCanvasShapeRectCorners,
-  type WgpuCanvasShapeRect,
-  type WgpuCanvasTargetHandle,
-} from "./wgpu-canvas-bridge"
-// NOTE: batchMixedSceneOps / collectSupportedMixedScene (from wgpu-mixed-scene) are
-// no longer imported in Phase 2. getCanvasSprite() is short-circuited to return null
-// since the showcase does not use canvas nodes. wgpu-mixed-scene becomes a 0-consumer
-// orphan (deleted in Slice 11). Per design §11 Phase 2 scope.
+// Phase 2b: All paint + composite ops route through libvexart.
+// Paint primitives: vexart_paint_dispatch cmd_kinds 0-17.
+// Target lifecycle: vexart_composite_target_create/destroy/begin_layer/end_layer.
+// Compositing: vexart_composite_render_image_layer.
+// Copy region: vexart_composite_copy_region_to_image.
+// Backdrop filter: vexart_composite_image_filter_backdrop.
+// Mask: vexart_composite_image_mask_rounded_rect.
+// Readback: vexart_composite_readback_rgba.
+// Images: vexart_paint_upload_image / vexart_paint_remove_image.
+// Glyphs: DEC-011 no-op.
+
+// ── Handle types (bigint u64 — same shape as bridge was) ─────────────────────
+type VexartTargetHandle = bigint
+type VexartImageHandle = bigint
+
+// ── Vexart composite helpers ─────────────────────────────────────────────────
+// Inline wrappers for new Phase 2b composite FFI exports.
+
+/** Create an offscreen RGBA8 render target. Returns bigint handle or 0n on failure. */
+function vexartCompositeTargetCreate(vctx: bigint, width: number, height: number): bigint {
+  const { symbols } = openVexartLibrary()
+  const out = new BigUint64Array(1)
+  const result = symbols.vexart_composite_target_create(vctx, width, height, ptr(out)) as number
+  if (result !== 0) return 0n
+  return out[0]
+}
+
+/** Destroy an offscreen render target. */
+function vexartCompositeTargetDestroy(vctx: bigint, target: bigint): void {
+  if (!target) return
+  const { symbols } = openVexartLibrary()
+  symbols.vexart_composite_target_destroy(vctx, target)
+}
+
+/** Begin a render layer on the target. loadMode=0 clears to clearRgba. */
+function vexartCompositeTargetBeginLayer(vctx: bigint, target: bigint, loadMode: 0 | 1, clearRgba: number): void {
+  const { symbols } = openVexartLibrary()
+  const result = symbols.vexart_composite_target_begin_layer(vctx, target, loadMode, clearRgba >>> 0) as number
+  if (result !== 0) throw new Error(`vexart_composite_target_begin_layer failed: ${result}`)
+}
+
+/** End the active render layer and submit GPU work. */
+function vexartCompositeTargetEndLayer(vctx: bigint, target: bigint): void {
+  const { symbols } = openVexartLibrary()
+  const result = symbols.vexart_composite_target_end_layer(vctx, target) as number
+  if (result !== 0) throw new Error(`vexart_composite_target_end_layer failed: ${result}`)
+}
+
+/** Composite an image onto a target. x/y/w/h are NDC coordinates. */
+function vexartCompositeRenderImageLayer(
+  vctx: bigint,
+  target: bigint,
+  image: bigint,
+  x: number, y: number, w: number, h: number,
+  z: number,
+  clearRgba: number,
+): void {
+  const { symbols } = openVexartLibrary()
+  const result = symbols.vexart_composite_render_image_layer(vctx, target, image, x, y, w, h, z, clearRgba >>> 0) as number
+  if (result !== 0) throw new Error(`vexart_composite_render_image_layer failed: ${result}`)
+}
+
+/** Extract a rectangular region from a target into a new image handle. Returns 0n on failure. */
+function vexartCompositeCopyRegionToImage(
+  vctx: bigint,
+  target: bigint,
+  x: number, y: number, w: number, h: number,
+): bigint {
+  const { symbols } = openVexartLibrary()
+  const out = new BigUint64Array(1)
+  const result = symbols.vexart_composite_copy_region_to_image(vctx, target, x, y, w, h, ptr(out)) as number
+  if (result !== 0) return 0n
+  return out[0]
+}
+
+/** Apply backdrop filter params to an image. params: float32 array [blur,brightness,contrast,saturate,grayscale,invert,sepia,hueRotate]. Returns 0n on failure. */
+function vexartCompositeImageFilterBackdrop(
+  vctx: bigint,
+  image: bigint,
+  params: WgpuBackdropFilterParams,
+): bigint {
+  const { symbols } = openVexartLibrary()
+  const paramBuf = new Float32Array(8)
+  paramBuf[0] = params.blur ?? Number.NaN
+  paramBuf[1] = params.brightness ?? Number.NaN
+  paramBuf[2] = params.contrast ?? Number.NaN
+  paramBuf[3] = params.saturate ?? Number.NaN
+  paramBuf[4] = params.grayscale ?? Number.NaN
+  paramBuf[5] = params.invert ?? Number.NaN
+  paramBuf[6] = params.sepia ?? Number.NaN
+  paramBuf[7] = params.hueRotate ?? Number.NaN
+  const out = new BigUint64Array(1)
+  const result = symbols.vexart_composite_image_filter_backdrop(
+    vctx, image, ptr(new Uint8Array(paramBuf.buffer)), paramBuf.byteLength, ptr(out)
+  ) as number
+  if (result !== 0) return 0n
+  return out[0]
+}
+
+/** Apply rounded-rect mask. rectBuf = 6×f32: radius_uniform, tl, tr, br, bl, mode (0=uniform 1=per-corner). Returns 0n on failure. */
+function vexartCompositeImageMaskRoundedRect(
+  vctx: bigint,
+  image: bigint,
+  rectBuf: Float32Array,
+): bigint {
+  const { symbols } = openVexartLibrary()
+  const out = new BigUint64Array(1)
+  const result = symbols.vexart_composite_image_mask_rounded_rect(
+    vctx, image, ptr(new Uint8Array(rectBuf.buffer)), ptr(out)
+  ) as number
+  if (result !== 0) return 0n
+  return out[0]
+}
+
+/** Full readback from a vexart target. Returns Uint8Array or null. */
+function vexartCompositeReadbackRgba(vctx: bigint, target: bigint, byteLength: number): Uint8Array | null {
+  const { symbols } = openVexartLibrary()
+  const data = new Uint8Array(byteLength)
+  const statsOut = new Uint8Array(32)
+  const result = symbols.vexart_composite_readback_rgba(vctx, target, ptr(data), byteLength, ptr(statsOut)) as number
+  if (result !== 0) return null
+  return data
+}
+
+// ── Backdrop filter params type (mirror of WgpuBackdropFilterParams) ─────────
+type WgpuBackdropFilterParams = {
+  blur: number | null
+  brightness: number | null
+  contrast: number | null
+  saturate: number | null
+  grayscale: number | null
+  invert: number | null
+  sepia: number | null
+  hueRotate: number | null
+}
 
 // ── Inline gpu-raster-staging helpers ───────────────────────────────────────
 // gpu-raster-staging.ts is an orphan deleted in Slice 11. The two functions it
 // provides (copyGpuTargetRegionToImage, createEmptyGpuImage) are inlined here
-// to avoid making gpu-raster-staging a live consumer, satisfying the orphan gate.
+// using vexart composite FFI (Phase 2b Slice 2).
 
-type GpuRasterImage = { handle: WgpuCanvasImageHandle; width: number; height: number }
+type GpuRasterImage = { handle: VexartImageHandle; width: number; height: number }
 
 function copyGpuTargetRegionToImage(
-  context: WgpuCanvasContextHandle,
-  target: WgpuCanvasTargetHandle,
+  vctx: bigint,
+  target: VexartTargetHandle,
   region: { x: number; y: number; width: number; height: number },
 ): GpuRasterImage {
-  const copied = copyWgpuCanvasTargetRegionToImage(context, target, region)
-  return { handle: copied.handle, width: region.width, height: region.height }
+  const handle = vexartCompositeCopyRegionToImage(vctx, target, region.x, region.y, region.width, region.height)
+  return { handle, width: region.width, height: region.height }
 }
 
 function createEmptyGpuImage(
-  context: WgpuCanvasContextHandle,
+  vctx: bigint,
   width: number,
   height: number,
 ): GpuRasterImage {
-  const target = createWgpuCanvasTarget(context, { width, height })
+  const target = vexartCompositeTargetCreate(vctx, width, height)
   try {
-    beginWgpuCanvasTargetLayer(context, target, 0, 0x00000000)
-    endWgpuCanvasTargetLayer(context, target)
-    return copyGpuTargetRegionToImage(context, target, { x: 0, y: 0, width, height })
+    vexartCompositeTargetBeginLayer(vctx, target, 0, 0x00000000)
+    vexartCompositeTargetEndLayer(vctx, target)
+    return copyGpuTargetRegionToImage(vctx, target, { x: 0, y: 0, width, height })
   } finally {
-    destroyWgpuCanvasTarget(context, target)
+    vexartCompositeTargetDestroy(vctx, target)
   }
 }
+
+// ── Glyph instance type (retained for type-compatibility inside getGlyphAtlas) ─
+type WgpuCanvasGlyphInstance = {
+  x: number; y: number; w: number; h: number
+  u: number; v: number; uw: number; vh: number
+  r: number; g: number; b: number; a: number
+  opacity: number
+}
+
+// ── ShapeRect / ShapeRectCorners types (used by push arrays) ─────────────────
+type WgpuCanvasRectFill = { x: number; y: number; w: number; h: number; color: number }
+
+type WgpuCanvasShapeRect = {
+  x: number; y: number; w: number; h: number
+  boxW: number; boxH: number
+  radius: number; strokeWidth: number
+  fill?: number; stroke?: number
+}
+
+type WgpuCanvasCornerRadii = { tl: number; tr: number; br: number; bl: number }
+
+type WgpuCanvasShapeRectCorners = {
+  x: number; y: number; w: number; h: number
+  boxW: number; boxH: number
+  radii: WgpuCanvasCornerRadii
+  strokeWidth: number
+  fill?: number; stroke?: number
+}
+
+type WgpuCanvasGlow = { x: number; y: number; w: number; h: number; color: number; intensity: number }
 
 // ── vexart graph buffer helpers ─────────────────────────────────────────────
 // Per design §8: 16-byte header + 8-byte per-command prefix + body.
@@ -156,8 +275,9 @@ function vexartReadbackRgba(ctx: bigint, width: number, height: number): Uint8Ar
  * Build a §8 graph buffer containing the given instances and call vexart_paint_dispatch.
  * instanceData: flat packed bytes for all instances of this cmd_kind.
  * cmd_kind: one of 0-17 per §8.2.
+ * target: 0n = default context target, non-zero = specific registry target.
  */
-function flushVexartBatch(ctx: bigint, cmdKind: number, instanceData: Uint8Array): void {
+function flushVexartBatch(ctx: bigint, cmdKind: number, instanceData: Uint8Array, target: bigint = 0n): void {
   if (instanceData.byteLength === 0) return
   const { symbols } = openVexartLibrary()
   const PREFIX = 8
@@ -177,7 +297,15 @@ function flushVexartBatch(ctx: bigint, cmdKind: number, instanceData: Uint8Array
   // Instance data
   new Uint8Array(buf).set(instanceData, HEADER + PREFIX)
   const statsOut = new Uint8Array(32)
-  symbols.vexart_paint_dispatch(ctx, 0n, ptr(new Uint8Array(buf)), total, ptr(statsOut))
+  symbols.vexart_paint_dispatch(ctx, target, ptr(new Uint8Array(buf)), total, ptr(statsOut))
+}
+
+/**
+ * Flush a single-instance batch to a specific vexart target handle.
+ * Convenience wrapper over flushVexartBatch for sprite rendering.
+ */
+function flushVexartBatchToTarget(ctx: bigint, target: bigint, cmdKind: number, instanceData: Uint8Array): void {
+  flushVexartBatch(ctx, cmdKind, instanceData, target)
 }
 
 /** Pack BridgeRectInstance (8 floats: x,y,w,h,r,g,b,a) for cmd_kind=0. */
@@ -390,7 +518,7 @@ type TargetRecord = {
   key: string
   width: number
   height: number
-  handle: WgpuCanvasTargetHandle
+  handle: VexartTargetHandle
 }
 
 type RenderedLayerRecord = {
@@ -400,7 +528,7 @@ type RenderedLayerRecord = {
   y: number
   width: number
   height: number
-  handle: WgpuCanvasTargetHandle
+  handle: VexartTargetHandle
   isBackground: boolean
   subtreeTransform:
     | {
@@ -413,13 +541,13 @@ type RenderedLayerRecord = {
 }
 
 type ImageRecord = {
-  handle: WgpuCanvasImageHandle
+  handle: VexartImageHandle
   width: number
   height: number
 }
 
 type GlyphAtlasRecord = {
-  handle: WgpuCanvasImageHandle
+  handle: VexartImageHandle
   cellWidth: number
   cellHeight: number
   columns: number
@@ -432,7 +560,7 @@ type GlyphAtlasRecord = {
 
 type CanvasSpriteRecord = {
   key: string
-  handle: WgpuCanvasImageHandle
+  handle: VexartImageHandle
   width: number
   height: number
   usedThisFrame: boolean
@@ -441,7 +569,7 @@ type CanvasSpriteRecord = {
 
 type TransformSpriteRecord = {
   key: string
-  handle: WgpuCanvasImageHandle
+  handle: VexartImageHandle
   width: number
   height: number
 }
@@ -450,14 +578,14 @@ type BackdropSourceRecord = {
   key: string
   frameId: number
   bounds: IntBounds
-  handle: WgpuCanvasImageHandle
+  handle: VexartImageHandle
 }
 
 type BackdropSpriteRecord = {
   key: string
   frameId: number
   bounds: IntBounds
-  handle: WgpuCanvasImageHandle
+  handle: VexartImageHandle
   width: number
   height: number
 }
@@ -479,17 +607,17 @@ type TransformedImageInstance = {
 }
 
 type ImageGroup = {
-  handle: WgpuCanvasImageHandle
+  handle: VexartImageHandle
   instances: ImageInstance[]
 }
 
 type GlyphGroup = {
-  handle: WgpuCanvasImageHandle
+  handle: VexartImageHandle
   instances: WgpuCanvasGlyphInstance[]
 }
 
 type TransformedImageGroup = {
-  handle: WgpuCanvasImageHandle
+  handle: VexartImageHandle
   instances: TransformedImageInstance[]
 }
 
@@ -646,12 +774,11 @@ function opBounds(op: RenderGraphOp, width: number, height: number) {
 }
 
 export function createGpuRendererBackend(): GpuRendererBackend {
-  const probe = probeWgpuCanvasBridge()
-  const gpuAvailable = probe.available
-  const context = gpuAvailable ? createWgpuCanvasContext() : null
+  // Phase 2b: GPU is always available via libvexart — no bridge probe needed.
+  const gpuAvailable = true
 
   // vexart context handle — allocated on first use.
-  // Phase 2: used for vexart_paint_dispatch (flush) and readback.
+  // Phase 2b: used for all vexart_paint_dispatch + vexart_composite_* calls.
   let _vexartCtx: bigint | null = null
   function getVexartCtx(): bigint {
     if (_vexartCtx !== null) return _vexartCtx
@@ -680,7 +807,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   let framesSinceStrategyChange = 0
   let currentFrame: RendererBackendFrameContext | null = null
   let currentFrameLayers: RenderedLayerRecord[] = []
-  let renderOpToImage: ((op: RenderGraphOp, width: number, height: number, offsetX: number, offsetY: number) => WgpuCanvasImageHandle | null) | null = null
+  let renderOpToImage: ((op: RenderGraphOp, width: number, height: number, offsetX: number, offsetY: number) => VexartImageHandle | null) | null = null
   const activeLayerKeys = new Set<string>()
   let suppressFinalPresentation = false
   let lastStrategyTelemetry: {
@@ -694,16 +821,18 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     estimatedLayeredBytes: 0,
     estimatedFinalBytes: 0,
   }
+  type LinearGradientItem = { x: number; y: number; w: number; h: number; boxW: number; boxH: number; radius: number; from: number; to: number; dirX: number; dirY: number }
+  type RadialGradientItem = { x: number; y: number; w: number; h: number; boxW: number; boxH: number; radius: number; from: number; to: number }
   const rects: WgpuCanvasRectFill[] = []
   const shapeRects: WgpuCanvasShapeRect[] = []
   const shapeRectCorners: WgpuCanvasShapeRectCorners[] = []
-  const linearGradients: Parameters<typeof renderWgpuCanvasTargetLinearGradientsLayer>[2] = []
-  const radialGradients: Parameters<typeof renderWgpuCanvasTargetRadialGradientsLayer>[2] = []
+  const linearGradients: LinearGradientItem[] = []
+  const radialGradients: RadialGradientItem[] = []
   const glows: WgpuCanvasGlow[] = []
   const imageGroups = new Map<bigint, ImageGroup>()
   const glyphGroups = new Map<bigint, GlyphGroup>()
   const transformedImageGroups = new Map<bigint, TransformedImageGroup>()
-  const transientFullFrameImages: WgpuCanvasImageHandle[] = []
+  const transientFullFrameImages: VexartImageHandle[] = []
   const tempGlyphs: WgpuCanvasGlyphInstance[] = []
   const dirtyRects: DirtyBoundsRect[] = []
   const cacheStats: GpuRendererBackendCacheStats = {
@@ -886,110 +1015,113 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   }
 
   const clearSpriteCaches = () => {
-    if (!context) return
+    const vctx = getVexartCtx()
     for (const record of glyphAtlases.values()) {
-      destroyWgpuCanvasImage(context, record.handle)
+      vexartRemoveImage(vctx, record.handle)
     }
     glyphAtlases.clear()
     cacheStats.glyphAtlasCount = 0
     cacheStats.glyphAtlasBytes = 0
     for (const record of canvasSpriteCache.values()) {
-      destroyWgpuCanvasImage(context, record.handle)
+      vexartRemoveImage(vctx, record.handle)
     }
     clearCanvasSpriteRecords()
     for (const record of transformSpriteCache.values()) {
-      destroyWgpuCanvasImage(context, record.handle)
+      vexartRemoveImage(vctx, record.handle)
     }
     clearTransformSpriteRecords()
     for (const record of backdropSourceCache.values()) {
-      destroyWgpuCanvasImage(context, record.handle)
+      vexartRemoveImage(vctx, record.handle)
     }
     clearBackdropSourceRecords()
     for (const record of backdropSpriteCache.values()) {
-      destroyWgpuCanvasImage(context, record.handle)
+      vexartRemoveImage(vctx, record.handle)
     }
     clearBackdropSpriteRecords()
   }
 
   const pruneBackdropCaches = (activeFrameId: number) => {
-    if (!context) return
+    const vctx = getVexartCtx()
     for (const [key, record] of backdropSourceCache) {
       if (record.frameId === activeFrameId) continue
-      destroyWgpuCanvasImage(context, record.handle)
+      vexartRemoveImage(vctx, record.handle)
       deleteBackdropSourceRecord(key)
     }
     for (const [key, record] of backdropSpriteCache) {
       if (record.frameId === activeFrameId) continue
-      destroyWgpuCanvasImage(context, record.handle)
+      vexartRemoveImage(vctx, record.handle)
       deleteBackdropSpriteRecord(key)
     }
   }
 
   const destroyTargetRecord = (record: TargetRecord | null) => {
-    if (!context || !record) return
-    destroyWgpuCanvasTarget(context, record.handle)
+    if (!record) return
+    vexartCompositeTargetDestroy(getVexartCtx(), record.handle)
   }
 
   const getStandaloneTarget = (width: number, height: number) => {
-    if (!context) return null
+    const vctx = getVexartCtx()
     if (standaloneTarget && standaloneTarget.width === width && standaloneTarget.height === height) {
       logGpuResize(`reuse target width=${width} height=${height}`)
       return standaloneTarget.handle
     }
     if (standaloneTarget) {
       logGpuResize(`destroy target prevWidth=${standaloneTarget.width} prevHeight=${standaloneTarget.height} nextWidth=${width} nextHeight=${height}`)
-      destroyWgpuCanvasTarget(context, standaloneTarget.handle)
+      vexartCompositeTargetDestroy(vctx, standaloneTarget.handle)
     } else {
       logGpuResize(`create first target width=${width} height=${height}`)
     }
     clearSpriteCaches()
-    const handle = createWgpuCanvasTarget(context, { width, height })
+    const handle = vexartCompositeTargetCreate(vctx, width, height)
+    if (!handle) return null
     standaloneTarget = { key: "standalone", width, height, handle }
     logGpuResize(`created target width=${width} height=${height}`)
     return handle
   }
 
   const getFinalFrameTarget = (width: number, height: number) => {
-    if (!context) return null
+    const vctx = getVexartCtx()
     if (finalFrameTarget && finalFrameTarget.width === width && finalFrameTarget.height === height) {
       return finalFrameTarget.handle
     }
     destroyTargetRecord(finalFrameTarget)
-    const handle = createWgpuCanvasTarget(context, { width, height })
+    const handle = vexartCompositeTargetCreate(vctx, width, height)
+    if (!handle) return null
     finalFrameTarget = { key: "final-frame", width, height, handle }
     return handle
   }
 
   const getLayerTarget = (key: string, width: number, height: number) => {
-    if (!context) return null
+    const vctx = getVexartCtx()
     const existing = layerTargets.get(key)
     if (existing && existing.width === width && existing.height === height) {
       touchMapEntry(layerTargets, key, existing)
       return existing.handle
     }
-    if (existing) destroyWgpuCanvasTarget(context, existing.handle)
-    const handle = createWgpuCanvasTarget(context, { width, height })
+    if (existing) vexartCompositeTargetDestroy(vctx, existing.handle)
+    const handle = vexartCompositeTargetCreate(vctx, width, height)
+    if (!handle) return null
     setLayerTargetRecord(key, { key, width, height, handle })
     return handle
   }
 
   const pruneLayerTargets = () => {
-    if (!context) return
+    const vctx = getVexartCtx()
     for (const [key, record] of layerTargets) {
       if (activeLayerKeys.has(key)) continue
-      destroyWgpuCanvasTarget(context, record.handle)
+      vexartCompositeTargetDestroy(vctx, record.handle)
       deleteLayerTargetRecord(key)
     }
   }
 
   const trimCanvasSpriteCache = () => {
-    if (!context) return
+    const vctx = getVexartCtx()
     while (canvasSpriteCache.size > MAX_GPU_CANVAS_SPRITES) {
       const first = canvasSpriteCache.keys().next().value
       if (!first) break
       const record = canvasSpriteCache.get(first)
       if (record) {
-        destroyWgpuCanvasImage(context, record.handle)
+        vexartRemoveImage(vctx, record.handle)
       }
       deleteCanvasSpriteRecord(first)
     }
@@ -1002,7 +1134,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   }
 
   const pruneCanvasSpriteCache = () => {
-    if (!context) return
+    const vctx = getVexartCtx()
     for (const [key, record] of canvasSpriteCache) {
       if (record.usedThisFrame) {
         record.unusedFrames = 0
@@ -1010,19 +1142,19 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       }
       record.unusedFrames += 1
       if (record.unusedFrames < 3) continue
-      destroyWgpuCanvasImage(context, record.handle)
+      vexartRemoveImage(vctx, record.handle)
       deleteCanvasSpriteRecord(key)
     }
     trimCanvasSpriteCache()
   }
 
   const trimTransformSpriteCache = () => {
-    if (!context) return
+    const vctx = getVexartCtx()
     while (transformSpriteCache.size > MAX_GPU_TRANSFORM_SPRITES) {
       const first = transformSpriteCache.keys().next().value
       if (!first) break
       const record = transformSpriteCache.get(first)
-      if (record) destroyWgpuCanvasImage(context, record.handle)
+      if (record) vexartRemoveImage(vctx, record.handle)
       deleteTransformSpriteRecord(first)
     }
   }
@@ -1030,7 +1162,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   gpuRendererBackendStatsProvider = () => cacheStats
 
   const getImage = (rgba: Uint8Array, width: number, height: number): bigint | null => {
-    // 9.3c: Image upload via vexart_paint_upload_image (replaces tge_wgpu_canvas_image_create).
+    // Image upload via vexart_paint_upload_image.
     // The _vexartImageHandles WeakMap caches bigint handles per RGBA buffer reference.
     const vctxForImage = getVexartCtx()
     const handle = vexartUploadImage(vctxForImage, rgba, width, height)
@@ -1043,7 +1175,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   }
 
   const getGlyphAtlas = (fontId: number) => {
-    if (!context) return null
+    const vctx = getVexartCtx()
     const key = `${fontId}`
     const cached = glyphAtlases.get(key)
     if (cached) {
@@ -1076,7 +1208,8 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         }
       }
     }
-    const handle = createWgpuCanvasImage(context, { width, height }, rgba)
+    const handle = vexartUploadImage(vctx, rgba, width, height)
+    if (!handle) return null
     const record: GlyphAtlasRecord = {
       handle,
       cellWidth: atlas.cellWidth,
@@ -1091,7 +1224,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       const first = glyphAtlases.keys().next().value
       if (first) {
         const stale = glyphAtlases.get(first)
-        if (stale) destroyWgpuCanvasImage(context, stale.handle)
+        if (stale) vexartRemoveImage(vctx, stale.handle)
         deleteGlyphAtlasRecord(first)
       }
     }
@@ -1116,7 +1249,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   }
 
   const getTransformSprite = (op: Extract<RenderGraphOp, { kind: "effect" }>) => {
-    if (!context) return null
+    const vctx = getVexartCtx()
     const width = Math.max(1, Math.round(op.command.width))
     const height = Math.max(1, Math.round(op.command.height))
     const key = `${op.kind}:${op.command.type}:${op.command.x}:${op.command.y}:${op.command.width}:${op.command.height}:${op.command.color[0]}:${op.command.color[1]}:${op.command.color[2]}:${op.command.color[3]}:${op.command.cornerRadius}:${op.command.extra1}:${op.command.extra2}:${op.command.text ?? ""}:${width}:${height}:${hashMatrix(op.effect.transform)}:${op.effect.opacity ?? 1}`
@@ -1125,7 +1258,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       touchMapEntry(transformSpriteCache, key, cached)
       return cached.handle
     }
-    if (cached) destroyWgpuCanvasImage(context, cached.handle)
+    if (cached) vexartRemoveImage(vctx, cached.handle)
     const spriteOp: Extract<RenderGraphOp, { kind: "effect" }> = {
       ...op,
       effect: {
@@ -1136,7 +1269,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         opacity: undefined,
       },
     }
-    const renderSprite = renderOpToImage as ((op: RenderGraphOp, width: number, height: number, offsetX: number, offsetY: number) => WgpuCanvasImageHandle | null) | null
+    const renderSprite = renderOpToImage as ((op: RenderGraphOp, width: number, height: number, offsetX: number, offsetY: number) => VexartImageHandle | null) | null
     const handle = renderSprite
       ? renderSprite(spriteOp, width, height, Math.round(op.command.x), Math.round(op.command.y))
       : null
@@ -1153,45 +1286,42 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     opacity: number,
     cornerRadii: EffectRenderOp["effect"]["cornerRadii"],
   ) => {
-    if (!context) return null
-    const target = createWgpuCanvasTarget(context, { width, height })
+    const vctx = getVexartCtx()
+    const target = vexartCompositeTargetCreate(vctx, width, height)
+    if (!target) return null
     try {
+      // Render gradient into target via vexart_paint_dispatch (cmd_kinds 12/13)
       if (gradient.type === "linear") {
-        renderWgpuCanvasTargetLinearGradientsLayer(context, target, [{
-          x: -1,
-          y: 1,
-          w: 2,
-          h: -2,
-          boxW: width,
-          boxH: height,
-          radius: 0,
-          from: opacity < 1 ? applyOpacityToColor(gradient.from, opacity) : gradient.from,
-          to: opacity < 1 ? applyOpacityToColor(gradient.to, opacity) : gradient.to,
-          dirX: Math.cos((gradient.angle * Math.PI) / 180),
-          dirY: Math.sin((gradient.angle * Math.PI) / 180),
-        }], 0, 0x00000000)
+        const from = opacity < 1 ? applyOpacityToColor(gradient.from, opacity) : gradient.from
+        const to = opacity < 1 ? applyOpacityToColor(gradient.to, opacity) : gradient.to
+        const instance = packLinearGradientInstance(-1, 1, 2, -2, width, height, 0, from, to,
+          Math.cos((gradient.angle * Math.PI) / 180),
+          Math.sin((gradient.angle * Math.PI) / 180),
+        )
+        flushVexartBatchToTarget(vctx, target, 12, instance)
       } else {
-        renderWgpuCanvasTargetRadialGradientsLayer(context, target, [{
-          x: -1,
-          y: 1,
-          w: 2,
-          h: -2,
-          boxW: width,
-          boxH: height,
-          radius: Math.max(width, height) * 0.5,
-          from: opacity < 1 ? applyOpacityToColor(gradient.from, opacity) : gradient.from,
-          to: opacity < 1 ? applyOpacityToColor(gradient.to, opacity) : gradient.to,
-        }], 0, 0x00000000)
+        const from = opacity < 1 ? applyOpacityToColor(gradient.from, opacity) : gradient.from
+        const to = opacity < 1 ? applyOpacityToColor(gradient.to, opacity) : gradient.to
+        const instance = packRadialGradientInstance(-1, 1, 2, -2, width, height, Math.max(width, height) * 0.5, from, to)
+        flushVexartBatchToTarget(vctx, target, 13, instance)
       }
-      let handle = copyGpuTargetRegionToImage(context, target, { x: 0, y: 0, width, height }).handle
+      let handle = copyGpuTargetRegionToImage(vctx, target, { x: 0, y: 0, width, height }).handle
       if (cornerRadii) {
-        const masked = maskWgpuCanvasImageRoundedRectCorners(context, handle, { x: 0, y: 0, width, height, radii: cornerRadii })
-        destroyWgpuCanvasImage(context, handle)
+        // per-corner mask: mode=1, tl/tr/br/bl
+        const rectBuf = new Float32Array(6)
+        rectBuf[0] = 0  // uniform radius (unused in per-corner mode)
+        rectBuf[1] = cornerRadii.tl
+        rectBuf[2] = cornerRadii.tr
+        rectBuf[3] = cornerRadii.br
+        rectBuf[4] = cornerRadii.bl
+        rectBuf[5] = 1  // mode=1 means per-corner
+        const masked = vexartCompositeImageMaskRoundedRect(vctx, handle, rectBuf)
+        vexartRemoveImage(vctx, handle)
         handle = masked
       }
       return handle
     } finally {
-      destroyWgpuCanvasTarget(context, target)
+      vexartCompositeTargetDestroy(vctx, target)
     }
   }
 
@@ -1220,10 +1350,9 @@ export function createGpuRendererBackend(): GpuRendererBackend {
 
   const renderFrame = (
     ctx: RendererBackendPaintContext,
-    targetHandle: WgpuCanvasTargetHandle,
+    targetHandle: VexartTargetHandle,
     readbackMode: "auto" | "none" = "auto",
   ): { ok: boolean; rawLayer: { data: Uint8Array; width: number; height: number } | null } => {
-    if (!context) return { ok: false, rawLayer: null }
     let first = true
     rects.length = 0
     shapeRects.length = 0
@@ -1398,7 +1527,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
 
     const ensureLoadedLayer = () => {
       if (layerOpen) return
-      beginWgpuCanvasTargetLayer(context, targetHandle, 1, 0x00000000)
+      vexartCompositeTargetBeginLayer(vctx, targetHandle, 1, 0x00000000)
       layerOpen = true
     }
 
@@ -1433,7 +1562,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       const width = workBounds.right - workBounds.left
       const height = workBounds.bottom - workBounds.top
       if (width <= 0 || height <= 0) return null
-      const copied = copyGpuTargetRegionToImage(context, targetHandle, {
+      const copied = copyGpuTargetRegionToImage(vctx, targetHandle, {
         x: workBounds.left,
         y: workBounds.top,
         width,
@@ -1450,7 +1579,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     }
 
     const getBackdropSprite = (op: EffectRenderOp) => {
-      if (!context) return null
       if (!op.backdrop) return null
       const source = getBackdropSource(op, op.backdrop)
       if (!source) return null
@@ -1459,20 +1587,16 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       if (cached && cached.frameId === frameGeneration) {
         return cached
       }
-      let handle = filterWgpuCanvasImageBackdrop(context, source.handle, op.backdrop.filterParams)
+      let handle = vexartCompositeImageFilterBackdrop(vctx, source.handle, op.backdrop.filterParams)
+      if (!handle) return null
       if (op.rect.inputs.radius > 0) {
-        const localX = Math.max(0, Math.round(op.backdrop.outputBounds.x - source.bounds.left))
-        const localY = Math.max(0, Math.round(op.backdrop.outputBounds.y - source.bounds.top))
-        const localWidth = Math.max(1, Math.round(op.backdrop.outputBounds.width))
-        const localHeight = Math.max(1, Math.round(op.backdrop.outputBounds.height))
-        const masked = maskWgpuCanvasImageRoundedRect(context, handle, {
-          x: localX,
-          y: localY,
-          width: localWidth,
-          height: localHeight,
-          radius: op.rect.inputs.radius,
-        })
-        destroyWgpuCanvasImage(context, handle)
+        // uniform radius mask
+        const rectBuf = new Float32Array(6)
+        rectBuf[0] = op.rect.inputs.radius
+        rectBuf[1] = 0; rectBuf[2] = 0; rectBuf[3] = 0; rectBuf[4] = 0
+        rectBuf[5] = 0  // mode=0 means uniform
+        const masked = vexartCompositeImageMaskRoundedRect(vctx, handle, rectBuf)
+        vexartRemoveImage(vctx, handle)
         handle = masked
       }
       const record: BackdropSpriteRecord = {
@@ -1483,12 +1607,12 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         width: source.bounds.right - source.bounds.left,
         height: source.bounds.bottom - source.bounds.top,
       }
-      if (cached) destroyWgpuCanvasImage(context, cached.handle)
+      if (cached) vexartRemoveImage(vctx, cached.handle)
       setBackdropSpriteRecord(spriteKey, record)
       return record
     }
 
-    beginWgpuCanvasTargetLayer(context, targetHandle, 0, 0x00000000)
+    vexartCompositeTargetBeginLayer(vctx, targetHandle, 0, 0x00000000)
 
     try {
       for (const op of ctx.graph.ops) {
@@ -1529,7 +1653,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           if (effectOp.backdrop && !cornerRadii) {
             flushAll()
             if (layerOpen) {
-              endWgpuCanvasTargetLayer(context, targetHandle)
+              vexartCompositeTargetEndLayer(vctx, targetHandle)
               layerOpen = false
             }
             const sprite = getBackdropSprite(effectOp)
@@ -1561,13 +1685,14 @@ export function createGpuRendererBackend(): GpuRendererBackend {
               }
             } else {
               ensureLoadedLayer()
-              compositeWgpuCanvasTargetImageLayer(context, targetHandle, sprite.handle, {
-                x: (sprite.bounds.left / ctx.target.width) * 2 - 1,
-                y: 1 - (sprite.bounds.top / ctx.target.height) * 2,
-                w: ((sprite.bounds.right - sprite.bounds.left) / ctx.target.width) * 2,
-                h: -(((sprite.bounds.bottom - sprite.bounds.top) / ctx.target.height) * 2),
-                opacity: effectOpacity,
-              }, 1, 0x00000000)
+              vexartCompositeRenderImageLayer(
+                vctx, targetHandle, sprite.handle,
+                (sprite.bounds.left / ctx.target.width) * 2 - 1,
+                1 - (sprite.bounds.top / ctx.target.height) * 2,
+                ((sprite.bounds.right - sprite.bounds.left) / ctx.target.width) * 2,
+                -(((sprite.bounds.bottom - sprite.bounds.top) / ctx.target.height) * 2),
+                1, 0x00000000,
+              )
               first = false
               targetMutationVersion += 1
               markDirty(sprite.bounds.left, sprite.bounds.top, sprite.bounds.right, sprite.bounds.bottom)
@@ -1578,26 +1703,29 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           if (effectOp.backdrop && cornerRadii) {
             flushAll()
             if (layerOpen) {
-              endWgpuCanvasTargetLayer(context, targetHandle)
+              vexartCompositeTargetEndLayer(vctx, targetHandle)
               layerOpen = false
             }
             const sprite = getBackdropSprite(effectOp)
             if (!sprite) return { ok: false, rawLayer: null }
-            const masked = maskWgpuCanvasImageRoundedRectCorners(context, sprite.handle, {
-              x: Math.max(0, Math.round(effectOp.command.x) - sprite.bounds.left),
-              y: Math.max(0, Math.round(effectOp.command.y) - sprite.bounds.top),
-              width: Math.max(1, Math.round(effectOp.command.width)),
-              height: Math.max(1, Math.round(effectOp.command.height)),
-              radii: cornerRadii,
-            })
-            compositeWgpuCanvasTargetImageLayer(context, targetHandle, masked, {
-              x: (sprite.bounds.left / ctx.target.width) * 2 - 1,
-              y: 1 - (sprite.bounds.top / ctx.target.height) * 2,
-              w: ((sprite.bounds.right - sprite.bounds.left) / ctx.target.width) * 2,
-              h: -(((sprite.bounds.bottom - sprite.bounds.top) / ctx.target.height) * 2),
-              opacity: effectOpacity,
-            }, first ? 0 : 1, 0x00000000)
-            destroyWgpuCanvasImage(context, masked)
+            // per-corner mask
+            const maskRectBuf = new Float32Array(6)
+            maskRectBuf[0] = 0
+            maskRectBuf[1] = cornerRadii.tl
+            maskRectBuf[2] = cornerRadii.tr
+            maskRectBuf[3] = cornerRadii.br
+            maskRectBuf[4] = cornerRadii.bl
+            maskRectBuf[5] = 1  // mode=1 per-corner
+            const masked = vexartCompositeImageMaskRoundedRect(vctx, sprite.handle, maskRectBuf)
+            vexartCompositeRenderImageLayer(
+              vctx, targetHandle, masked,
+              (sprite.bounds.left / ctx.target.width) * 2 - 1,
+              1 - (sprite.bounds.top / ctx.target.height) * 2,
+              ((sprite.bounds.right - sprite.bounds.left) / ctx.target.width) * 2,
+              -(((sprite.bounds.bottom - sprite.bounds.top) / ctx.target.height) * 2),
+              first ? 0 : 1, 0x00000000,
+            )
+            vexartRemoveImage(vctx, masked)
             first = false
             targetMutationVersion += 1
             markDirty(sprite.bounds.left, sprite.bounds.top, sprite.bounds.right, sprite.bounds.bottom)
@@ -1777,14 +1905,15 @@ export function createGpuRendererBackend(): GpuRendererBackend {
               flushAll()
               const handle = renderGradientSprite(effectOp.effect.gradient, boxW, boxH, effectOpacity, cornerRadii)
               if (!handle) return { ok: false, rawLayer: null }
-              compositeWgpuCanvasTargetImageLayer(context, targetHandle, handle, {
-                x: (clip.left / ctx.target.width) * 2 - 1,
-                y: 1 - (clip.top / ctx.target.height) * 2,
-                w: (boxW / ctx.target.width) * 2,
-                h: -((boxH / ctx.target.height) * 2),
-                opacity: 1,
-              }, first ? 0 : 1, 0x00000000)
-              destroyWgpuCanvasImage(context, handle)
+              vexartCompositeRenderImageLayer(
+                vctx, targetHandle, handle,
+                (clip.left / ctx.target.width) * 2 - 1,
+                1 - (clip.top / ctx.target.height) * 2,
+                (boxW / ctx.target.width) * 2,
+                -((boxH / ctx.target.height) * 2),
+                first ? 0 : 1, 0x00000000,
+              )
+              vexartRemoveImage(vctx, handle)
               first = false
               targetMutationVersion += 1
               markDirty(clip.left, clip.top, clip.right, clip.bottom)
@@ -1815,14 +1944,15 @@ export function createGpuRendererBackend(): GpuRendererBackend {
               flushAll()
               const handle = renderGradientSprite(effectOp.effect.gradient, boxW, boxH, effectOpacity, cornerRadii)
               if (!handle) return { ok: false, rawLayer: null }
-              compositeWgpuCanvasTargetImageLayer(context, targetHandle, handle, {
-                x: (clip.left / ctx.target.width) * 2 - 1,
-                y: 1 - (clip.top / ctx.target.height) * 2,
-                w: (boxW / ctx.target.width) * 2,
-                h: -((boxH / ctx.target.height) * 2),
-                opacity: 1,
-              }, first ? 0 : 1, 0x00000000)
-              destroyWgpuCanvasImage(context, handle)
+              vexartCompositeRenderImageLayer(
+                vctx, targetHandle, handle,
+                (clip.left / ctx.target.width) * 2 - 1,
+                1 - (clip.top / ctx.target.height) * 2,
+                (boxW / ctx.target.width) * 2,
+                -((boxH / ctx.target.height) * 2),
+                first ? 0 : 1, 0x00000000,
+              )
+              vexartRemoveImage(vctx, handle)
               first = false
               targetMutationVersion += 1
               markDirty(clip.left, clip.top, clip.right, clip.bottom)
@@ -1912,7 +2042,8 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           continue
         }
         if (op.kind === "text") {
-          const useGlyphAtlas = supportsWgpuCanvasGlyphLayer()
+          // DEC-011: glyph layer not supported until Phase 2b MSDF pipeline.
+          const useGlyphAtlas = false
           let usedGlyphPath = false
           if (useGlyphAtlas) {
             const layout = layoutText(op.inputs.text, op.inputs.fontId, op.inputs.maxWidth, op.inputs.lineHeight)
@@ -1988,18 +2119,17 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       }
       flushAll()
     } finally {
-      if (layerOpen) endWgpuCanvasTargetLayer(context, targetHandle)
+      if (layerOpen) vexartCompositeTargetEndLayer(vctx, targetHandle)
     }
 
     if (first) return { ok: true as const, rawLayer: null }
     if (readbackMode === "none") {
-      for (const handle of transientFullFrameImages) destroyWgpuCanvasImage(context, handle)
+      for (const handle of transientFullFrameImages) vexartRemoveImage(vctx, handle)
       return { ok: true as const, rawLayer: null }
     }
-    // 9.3d: Use vexart_composite_readback_rgba instead of tge_wgpu_canvas readback.
-    const vCtx = getVexartCtx()
-    const rgba = vexartReadbackRgba(vCtx, ctx.targetWidth, ctx.targetHeight)
-    for (const handle of transientFullFrameImages) destroyWgpuCanvasImage(context, handle)
+    // Phase 2b: readback from the specific vexart target (not context default).
+    const rgba = vexartCompositeReadbackRgba(vctx, targetHandle, ctx.targetWidth * ctx.targetHeight * 4)
+    for (const handle of transientFullFrameImages) vexartRemoveImage(vctx, handle)
     if (!rgba) return { ok: false, rawLayer: null }
     return {
       ok: true as const,
@@ -2012,20 +2142,20 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   }
 
   const composeFinalFrame = (frame: RendererBackendFrameContext): RendererBackendFrameResult | null => {
-    if (!context) return null
     if (currentFrameLayers.length === 0) {
       pruneLayerTargets()
       return { output: "none", strategy: lastStrategy }
     }
+    const vctx = getVexartCtx()
     const targetHandle = getFinalFrameTarget(frame.viewportWidth, frame.viewportHeight)
     if (!targetHandle) return null
-    const tempImages: WgpuCanvasImageHandle[] = []
+    const tempImages: VexartImageHandle[] = []
     const orderedLayers = currentFrameLayers.slice().sort((a, b) => a.z - b.z)
-    beginWgpuCanvasTargetLayer(context, targetHandle, 0, 0x00000000)
+    vexartCompositeTargetBeginLayer(vctx, targetHandle, 0, 0x00000000)
     try {
       let first = true
       for (const layer of orderedLayers) {
-        const copied = copyGpuTargetRegionToImage(context, layer.handle, {
+        const copied = copyGpuTargetRegionToImage(vctx, layer.handle, {
           x: 0,
           y: 0,
           width: layer.width,
@@ -2033,35 +2163,43 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         })
         tempImages.push(copied.handle)
         if (layer.subtreeTransform) {
-          renderWgpuCanvasTargetTransformedImagesLayer(context, targetHandle, copied.handle, [{
-            p0: { x: (layer.subtreeTransform.p0.x / frame.viewportWidth) * 2 - 1, y: 1 - (layer.subtreeTransform.p0.y / frame.viewportHeight) * 2 },
-            p1: { x: (layer.subtreeTransform.p1.x / frame.viewportWidth) * 2 - 1, y: 1 - (layer.subtreeTransform.p1.y / frame.viewportHeight) * 2 },
-            p2: { x: (layer.subtreeTransform.p2.x / frame.viewportWidth) * 2 - 1, y: 1 - (layer.subtreeTransform.p2.y / frame.viewportHeight) * 2 },
-            p3: { x: (layer.subtreeTransform.p3.x / frame.viewportWidth) * 2 - 1, y: 1 - (layer.subtreeTransform.p3.y / frame.viewportHeight) * 2 },
-            opacity: 1,
-          }], first ? 0 : 1, 0x00000000)
+          // Dispatch transformed image via vexart_paint_dispatch cmd_kind=10
+          const inst = packImageTransformInstance(
+            (layer.subtreeTransform.p0.x / frame.viewportWidth) * 2 - 1,
+            1 - (layer.subtreeTransform.p0.y / frame.viewportHeight) * 2,
+            (layer.subtreeTransform.p1.x / frame.viewportWidth) * 2 - 1,
+            1 - (layer.subtreeTransform.p1.y / frame.viewportHeight) * 2,
+            (layer.subtreeTransform.p2.x / frame.viewportWidth) * 2 - 1,
+            1 - (layer.subtreeTransform.p2.y / frame.viewportHeight) * 2,
+            (layer.subtreeTransform.p3.x / frame.viewportWidth) * 2 - 1,
+            1 - (layer.subtreeTransform.p3.y / frame.viewportHeight) * 2,
+            1,
+          )
+          flushVexartBatchToTarget(vctx, targetHandle, 10, inst)
         } else {
-          compositeWgpuCanvasTargetImageLayer(context, targetHandle, copied.handle, {
-            x: (layer.x / frame.viewportWidth) * 2 - 1,
-            y: 1 - (layer.y / frame.viewportHeight) * 2,
-            w: (layer.width / frame.viewportWidth) * 2,
-            h: -((layer.height / frame.viewportHeight) * 2),
-            opacity: 1,
-          }, first ? 0 : 1, 0x00000000)
+          vexartCompositeRenderImageLayer(
+            vctx, targetHandle, copied.handle,
+            (layer.x / frame.viewportWidth) * 2 - 1,
+            1 - (layer.y / frame.viewportHeight) * 2,
+            (layer.width / frame.viewportWidth) * 2,
+            -((layer.height / frame.viewportHeight) * 2),
+            first ? 0 : 1, 0x00000000,
+          )
         }
         first = false
       }
     } finally {
-      endWgpuCanvasTargetLayer(context, targetHandle)
-      for (const handle of tempImages) destroyWgpuCanvasImage(context, handle)
+      vexartCompositeTargetEndLayer(vctx, targetHandle)
+      for (const handle of tempImages) vexartRemoveImage(vctx, handle)
     }
     pruneLayerTargets()
-    const readback = readbackWgpuCanvasTargetRGBA(context, targetHandle, frame.viewportWidth * frame.viewportHeight * 4)
+    const readbackData = vexartCompositeReadbackRgba(vctx, targetHandle, frame.viewportWidth * frame.viewportHeight * 4)
+    if (!readbackData) return null
     return {
       output: "final-frame-raw",
       strategy: lastStrategy,
       finalFrame: {
-        data: readback.data,
+        data: readbackData,
         width: frame.viewportWidth,
         height: frame.viewportHeight,
       },
@@ -2069,8 +2207,9 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   }
 
   renderOpToImage = (op, width, height, offsetX, offsetY) => {
-    if (!context) return null
-    const target = createWgpuCanvasTarget(context, { width, height })
+    const vctx = getVexartCtx()
+    const target = vexartCompositeTargetCreate(vctx, width, height)
+    if (!target) return null
     try {
       const spriteCtx: RendererBackendPaintContext = {
         targetWidth: width,
@@ -2086,9 +2225,9 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       }
       const result = renderFrame(spriteCtx, target, "none")
       if (!result.ok) return null
-      return copyGpuTargetRegionToImage(context, target, { x: 0, y: 0, width, height }).handle
+      return copyGpuTargetRegionToImage(vctx, target, { x: 0, y: 0, width, height }).handle
     } finally {
-      destroyWgpuCanvasTarget(context, target)
+      vexartCompositeTargetDestroy(vctx, target)
     }
   }
 
@@ -2100,7 +2239,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       activeLayerKeys.clear()
       suppressFinalPresentation = false
       markCanvasSpritesUnusedForFrame()
-      if (!gpuAvailable || !context || !ctx.useLayerCompositing) {
+      if (!gpuAvailable || !ctx.useLayerCompositing) {
         lastStrategy = null
         framesSinceStrategyChange = 0
         lastStrategyTelemetry = { preferred: null, chosen: null, estimatedLayeredBytes: 0, estimatedFinalBytes: 0 }
@@ -2144,7 +2283,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       return { strategy: lastStrategy }
     },
     paint(ctx) {
-      if (!gpuAvailable || !context) {
+      if (!gpuAvailable) {
         failGpuOnly("GPU backend unavailable; CPU fallback was removed")
       }
 
@@ -2204,7 +2343,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       return { output: "kitty-payload", strategy: lastStrategy, kittyPayload: result.rawLayer ?? undefined }
     },
     reuseLayer(ctx) {
-      if (!gpuAvailable || !context) return false
+      if (!gpuAvailable) return false
       const record = layerTargets.get(ctx.layer.key)
       if (!record) return false
       activeLayerKeys.add(ctx.layer.key)
@@ -2226,7 +2365,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     endFrame(ctx) {
       currentFrame = null
       pruneCanvasSpriteCache()
-      if (!gpuAvailable || !context || !ctx.useLayerCompositing) return { output: "none", strategy: lastStrategy }
+      if (!gpuAvailable || !ctx.useLayerCompositing) return { output: "none", strategy: lastStrategy }
       if (suppressFinalPresentation) {
         pruneLayerTargets()
         return { output: "none", strategy: lastStrategy }

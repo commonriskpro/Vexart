@@ -11,10 +11,10 @@
 
 ## Phase 2: Rewire GPU backend (BLOCKING)
 
-- [ ] 2.1 [ATOMIC] Replace all `wgpu-canvas-bridge` layer/composite/readback calls in `packages/engine/src/ffi/gpu-renderer-backend.ts` with `vexart_*` equivalents (REQ-2B-008).
-- [ ] 2.2 [ATOMIC] Remove `beginWgpuCanvasTargetLayer`/final-frame bridge usage; switch context creation to `vexart_context_create` and image helpers to `vexart_paint_upload_image`/`vexart_paint_remove_image`.
-- [ ] 2.3 Delete `packages/engine/src/ffi/wgpu-canvas-bridge.ts` and `native/wgpu-canvas-bridge/`; grep gate zero `wgpu-canvas-bridge|tge_wgpu_canvas|createWgpuCanvasContext` refs (REQ-2B-008).
-- [ ] 2.4 Visual-check `showcase.tsx` after the rewire and log any target/composite regressions.
+- [x] 2.1 [ATOMIC] Replace all `wgpu-canvas-bridge` layer/composite/readback calls in `packages/engine/src/ffi/gpu-renderer-backend.ts` with `vexart_*` equivalents (REQ-2B-008).
+- [x] 2.2 [ATOMIC] Remove `beginWgpuCanvasTargetLayer`/final-frame bridge usage; switch context creation to `vexart_context_create` and image helpers to `vexart_paint_upload_image`/`vexart_paint_remove_image`.
+- [x] 2.3 Delete `packages/engine/src/ffi/wgpu-canvas-bridge.ts` and `native/wgpu-canvas-bridge/`; grep gate zero `wgpu-canvas-bridge|tge_wgpu_canvas|createWgpuCanvasContext` refs (REQ-2B-008).
+- [x] 2.4 Visual-check `showcase.tsx` after the rewire and log any target/composite regressions.
 
 ## Phase 3: Native Kitty encoding (depends on Slice 1)
 

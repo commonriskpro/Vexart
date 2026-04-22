@@ -46,8 +46,8 @@ export type {
   RawCommandRenderOp,
 } from "./render-graph"
 
-// NOTE: wgpu-canvas-bridge.ts exists for target lifecycle during Phase 2 transition.
-// Not part of public surface. Use vexart-bridge / vexart-functions for new code.
+// NOTE: wgpu-canvas-bridge.ts deleted in Phase 2b Slice 2 (REQ-2B-008).
+// All compositing routes through vexart_composite_* FFI.
 
 export { getRendererResourceStats } from "./resource-stats"
 

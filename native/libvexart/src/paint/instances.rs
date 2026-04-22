@@ -120,7 +120,7 @@ pub struct ImageInstance {
 }
 
 // ─── Bridge-layout structs for Slice 5a pipeline port ─────────────────────
-// These mirror the exact field layout from native/wgpu-canvas-bridge/src/lib.rs.
+// These mirror the field layout originally from the wgpu-canvas-bridge (deleted Phase 2b).
 // They are used directly by the pipeline VertexBufferLayout in Slice 5a.
 // Slice 9 may reconcile with the engine TS struct shape.
 
