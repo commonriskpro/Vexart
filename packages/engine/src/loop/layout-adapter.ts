@@ -504,7 +504,17 @@ export function createVexartLayoutCtx() {
       s.flexDir = dir
       s.padLeft = px; s.padRight = px; s.padTop = py; s.padBottom = py
       s.gapRow = gap; s.gapCol = gap
-      s.justifyContent = ax; s.alignItems = ay
+      // Flexbox: justify_content = main axis, align_items = cross axis.
+      // Column: main=vertical(Y), cross=horizontal(X)
+      // Row:    main=horizontal(X), cross=vertical(Y)
+      // ax=alignX (horizontal), ay=alignY (vertical)
+      if (dir === 1 /* column */ || dir === 3 /* column-reverse */) {
+        s.justifyContent = ay  // vertical = main axis
+        s.alignItems = ax      // horizontal = cross axis
+      } else {
+        s.justifyContent = ax  // horizontal = main axis
+        s.alignItems = ay      // vertical = cross axis
+      }
     },
 
     configureLayoutFull(dir: number, padL: number, padR: number, padT: number, padB: number, gap: number, ax: number, ay: number) {
@@ -512,7 +522,13 @@ export function createVexartLayoutCtx() {
       s.flexDir = dir
       s.padLeft = padL; s.padRight = padR; s.padTop = padT; s.padBottom = padB
       s.gapRow = gap; s.gapCol = gap
-      s.justifyContent = ax; s.alignItems = ay
+      if (dir === 1 || dir === 3) {
+        s.justifyContent = ay
+        s.alignItems = ax
+      } else {
+        s.justifyContent = ax
+        s.alignItems = ay
+      }
     },
 
     configureSizing(wType: number, wVal: number, hType: number, hVal: number) {
