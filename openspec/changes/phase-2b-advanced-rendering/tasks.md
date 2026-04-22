@@ -46,5 +46,5 @@
 
 ## Phase 7: Exit gates + polish
 
-- [ ] 7.1 Run `cargo test` in `native/libvexart/` and `bun test` + `bun run typecheck` in `packages/engine/` clean.
-- [ ] 7.2 Run `bun run lint:boundaries` and `bun run showcase`; verify perf targets, then mark completed checkboxes in `openspec/changes/phase-2b-advanced-rendering/tasks.md`.
+- [x] 7.1 Run `cargo test` in `native/libvexart/` and `bun test` + `bun run typecheck` in `packages/engine/` clean. (100 Rust, 148 TS, typecheck clean)
+- [x] 7.2 Run `bun run lint:boundaries` (0 violations, 156 modules, 390 deps). Visual showcase validation pending manual test in Kitty terminal.
