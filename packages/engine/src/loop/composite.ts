@@ -259,19 +259,25 @@ function applyScrollOffsets(commands: RenderCommand[], s: CompositeFrameState) {
     const handle = createScrollHandle(sid)
 
     // Step 4: Update scroll geometry from layout output.
-    // The PositionedCommand gives us content extents via contentW/contentH.
-    if (layoutMap) {
-      const pos = layoutMap.get(BigInt(node.id))
-      if (pos) {
-        // Viewport is the node's own layout size; content is the child extent
-        const vpW = pos.width
-        const vpH = pos.height
-        // contentW/contentH from Taffy is the total child extent
-        const ctW = pos.contentW > 0 ? pos.contentW : vpW
-        const ctH = pos.contentH > 0 ? pos.contentH : vpH
-        updateScrollContainerGeometry(sid, vpW, vpH, ctW, ctH)
-      }
+    // Viewport = the scroll container's own layout size.
+    // Content = the total extent of all children (computed from their layouts).
+    // The PositionedCommand's contentW/contentH is the container's content-box
+    // (size minus padding), NOT the total child extent. We compute the real
+    // content extent by walking children and finding the maximum bottom/right edge.
+    const vpW = node.layout.width
+    const vpH = node.layout.height
+    let maxChildBottom = 0
+    let maxChildRight = 0
+    for (const child of node.children) {
+      if (child.kind === "text") continue
+      const cb = child.layout.y - node.layout.y + child.layout.height
+      const cr = child.layout.x - node.layout.x + child.layout.width
+      if (cb > maxChildBottom) maxChildBottom = cb
+      if (cr > maxChildRight) maxChildRight = cr
     }
+    const ctW = Math.max(maxChildRight, vpW)
+    const ctH = Math.max(maxChildBottom, vpH)
+    updateScrollContainerGeometry(sid, vpW, vpH, ctW, ctH)
 
     const ox = node.props.scrollX ? handle.scrollX : 0
     const oy = node.props.scrollY ? handle.scrollY : 0
@@ -414,11 +420,9 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
       const l = node.layout
       if (l.width <= 0 || l.height <= 0) continue
       if (px >= l.x && px < l.x + l.width && py >= l.y && py < l.y + l.height) {
-        // Pick innermost: replace if this node is a descendant of current target
         if (!scrollTarget) {
           scrollTarget = node
         } else {
-          // Check if node is inside scrollTarget
           let p = node.parent
           while (p) {
             if (p === scrollTarget) { scrollTarget = node; break }

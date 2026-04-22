@@ -79,6 +79,8 @@
 // native/libvexart/src/layout/tree.rs
 use std::collections::HashMap;
 use taffy::prelude::*;
+use taffy::geometry::Point;
+use taffy::style::Overflow;
 
 use crate::ffi::buffer::parse_header;
 use crate::ffi::panic::{ERR_INVALID_ARG, ERR_LAYOUT_FAILED, OK};
@@ -90,8 +92,8 @@ const CMD_NODE_CLOSE: u16 = 1;
 /// Flag bits in the per-command flags field.
 pub(crate) const FLAG_IS_ROOT: u16 = 1 << 0;
 const FLAG_FLOATING_ABSOLUTE: u16 = 1 << 1;
-// FLAG_SCROLL_X = 1 << 2  (parsed but not used in Slice 6 — scroll handled paint-side)
-// FLAG_SCROLL_Y = 1 << 3  (same)
+const FLAG_SCROLL_X: u16 = 1 << 2;
+const FLAG_SCROLL_Y: u16 = 1 << 3;
 
 /// Size of the LAYOUT_NODE_OPEN payload (fixed).
 pub const OPEN_PAYLOAD_BYTES: usize = 112;
@@ -222,7 +224,8 @@ impl LayoutTree {
                     let packed = parse_packed_style(payload);
                     let is_absolute = (flags & FLAG_FLOATING_ABSOLUTE) != 0;
                     let is_root = (flags & FLAG_IS_ROOT) != 0;
-                    let style = pack_to_taffy_style(&packed, is_absolute, is_root);
+                    let is_scroll = (flags & (FLAG_SCROLL_X | FLAG_SCROLL_Y)) != 0;
+                    let style = pack_to_taffy_style(&packed, is_absolute, is_root, is_scroll);
 
                     // Create or update Taffy node.
                     let taffy_node = if let Some(&existing) = self.id_map.get(&node_id) {
@@ -455,7 +458,10 @@ fn align_content_from_u8(byte: u8) -> Option<AlignContent> {
 /// - `is_root`: when true AND `flex_grow > 0` AND `size = Auto`, expands root to `percent(1.0)`
 ///   so that a "grow" root fills the viewport. Taffy's `flex_grow` applies to flex *items*
 ///   within a parent; the root has no parent, so explicit percent(1.0) is needed.
-pub(crate) fn pack_to_taffy_style(packed: &PackedStyle, is_absolute: bool, is_root: bool) -> Style {
+/// - `is_scroll`: when true, sets `overflow: Scroll` so children can overflow and
+///   the TS-side scroll system handles clipping + offset. Without this, Taffy's
+///   default `flex_shrink: 1` compresses children to fit the container.
+pub(crate) fn pack_to_taffy_style(packed: &PackedStyle, is_absolute: bool, is_root: bool, is_scroll: bool) -> Style {
     let position = if is_absolute || packed.position_kind == 1 {
         Position::Absolute
     } else {
@@ -521,9 +527,19 @@ pub(crate) fn pack_to_taffy_style(packed: &PackedStyle, is_absolute: bool, is_ro
         dim_from_kind_value(packed.size_h_kind, packed.size_h_value)
     };
 
+    // Scroll containers need overflow: Scroll so Taffy lets children extend
+    // beyond the container bounds. Without this, flex_shrink compresses
+    // children to fit and there's nothing to scroll.
+    let overflow = if is_scroll {
+        Point { x: Overflow::Scroll, y: Overflow::Scroll }
+    } else {
+        Point { x: Overflow::Visible, y: Overflow::Visible }
+    };
+
     Style {
         display: Display::Flex,
         position,
+        overflow,
         flex_direction: flex_dir_from_u8(packed.flex_direction),
         flex_grow: packed.flex_grow,
         flex_shrink: packed.flex_shrink,
@@ -705,19 +721,19 @@ mod tests {
         // NOTE: Taffy 0.10.x uses constructor functions not enum variants.
         // Length
         let packed = make_packed_style_with_size(1, 100.0, 1, 200.0);
-        let style = pack_to_taffy_style(&packed, false, false);
+        let style = pack_to_taffy_style(&packed, false, false, false);
         assert_eq!(style.size.width, Dimension::length(100.0));
         assert_eq!(style.size.height, Dimension::length(200.0));
 
         // Percent
         let packed = make_packed_style_with_size(2, 0.5, 2, 1.0);
-        let style = pack_to_taffy_style(&packed, false, false);
+        let style = pack_to_taffy_style(&packed, false, false, false);
         assert_eq!(style.size.width, Dimension::percent(0.5));
         assert_eq!(style.size.height, Dimension::percent(1.0));
 
         // Auto
         let packed = make_packed_style_with_size(0, 0.0, 0, 0.0);
-        let style = pack_to_taffy_style(&packed, false, false);
+        let style = pack_to_taffy_style(&packed, false, false, false);
         assert_eq!(style.size.width, Dimension::auto());
         assert_eq!(style.size.height, Dimension::auto());
     }
@@ -735,7 +751,7 @@ mod tests {
         ];
         for &(byte, expected) in cases {
             let packed = make_packed_style_with_justify(byte);
-            let style = pack_to_taffy_style(&packed, false, false);
+            let style = pack_to_taffy_style(&packed, false, false, false);
             assert_eq!(
                 style.justify_content, expected,
                 "justify_content mismatch for byte {byte}"
