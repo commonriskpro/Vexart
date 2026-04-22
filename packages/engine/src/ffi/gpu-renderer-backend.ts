@@ -1381,7 +1381,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         const r = rects[i]
         instances.set(packRectInstance(r.x, r.y, r.w, r.h, r.color), i * 32)
       }
-      flushVexartBatch(vctx, 0, instances)
+      flushVexartBatch(vctx, 0, instances, targetHandle)
       rects.length = 0
       first = false
       targetMutationVersion += 1
@@ -1394,7 +1394,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         const r = shapeRects[i]
         instances.set(packShapeRectInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.fill ?? 0, r.stroke ?? 0, r.strokeWidth), i * 80)
       }
-      flushVexartBatch(vctx, 1, instances)
+      flushVexartBatch(vctx, 1, instances, targetHandle)
       shapeRects.length = 0
       first = false
       targetMutationVersion += 1
@@ -1407,7 +1407,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         const r = shapeRectCorners[i]
         instances.set(packShapeRectCornersInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radii, r.fill ?? 0, r.stroke ?? 0, r.strokeWidth), i * 96)
       }
-      flushVexartBatch(vctx, 2, instances)
+      flushVexartBatch(vctx, 2, instances, targetHandle)
       shapeRectCorners.length = 0
       first = false
       targetMutationVersion += 1
@@ -1420,7 +1420,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         const r = linearGradients[i]
         instances.set(packLinearGradientInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.from, r.to, r.dirX, r.dirY), i * 80)
       }
-      flushVexartBatch(vctx, 12, instances)
+      flushVexartBatch(vctx, 12, instances, targetHandle)
       linearGradients.length = 0
       first = false
       targetMutationVersion += 1
@@ -1433,7 +1433,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         const r = radialGradients[i]
         instances.set(packRadialGradientInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.from, r.to), i * 80)
       }
-      flushVexartBatch(vctx, 13, instances)
+      flushVexartBatch(vctx, 13, instances, targetHandle)
       radialGradients.length = 0
       first = false
       targetMutationVersion += 1
@@ -1447,7 +1447,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         const g = glows[i]
         instances.set(packGlowInstance(g.x, g.y, g.w, g.h, g.color, g.intensity ?? 80), i * 48)
       }
-      flushVexartBatch(vctx, 6, instances)
+      flushVexartBatch(vctx, 6, instances, targetHandle)
       glows.length = 0
       first = false
       targetMutationVersion += 1
@@ -1463,7 +1463,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           const inst = group.instances[i]
           instances.set(packImageInstance(inst.x, inst.y, inst.w, inst.h, inst.opacity), i * 32)
         }
-        flushVexartBatch(vctx, 9, instances)
+        flushVexartBatch(vctx, 9, instances, targetHandle)
         first = false
         targetMutationVersion += 1
       }
@@ -1497,7 +1497,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             inst.opacity,
           ), i * 48)
         }
-        flushVexartBatch(vctx, 10, instances)
+        flushVexartBatch(vctx, 10, instances, targetHandle)
         first = false
         targetMutationVersion += 1
       }

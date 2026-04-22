@@ -124,6 +124,8 @@ type NodeOpenState = {
   // Synthetic render command data
   bgColor: number
   cornerRadius: number
+  // Deferred OPEN tracking — written to buffer when first child opens or at closeElement
+  _openWritten: boolean
 }
 
 const _defaultOpen = (): NodeOpenState => ({
@@ -133,6 +135,7 @@ const _defaultOpen = (): NodeOpenState => ({
   justifyContent: 0, alignItems: 0, alignContent: 0,
   padTop: 0, padRight: 0, padBottom: 0, padLeft: 0,
   borderTop: 0, borderRight: 0, borderBottom: 0, borderLeft: 0,
+  _openWritten: false,
   gapRow: 0, gapCol: 0,
   insetTop: 0, insetRight: 0, insetBottom: 0, insetLeft: 0,
   bgColor: 0, cornerRadius: 0,
@@ -322,6 +325,7 @@ function createVexartLayoutCtx() {
       const layoutMap = parseLayoutOutput(_outBuf, used)
       _lastLayoutMap = layoutMap
       const cmds: RenderCommand[] = []
+
       for (const state of _allOpenStates) {
         const pos = layoutMap.get(BigInt(state.nodeId))
         if (!pos) continue
@@ -353,6 +357,15 @@ function createVexartLayoutCtx() {
     },
 
     openElement() {
+      // Flush the parent's OPEN before opening a child.
+      // This ensures the buffer order is: OPEN(parent) OPEN(child) ... CLOSE(child) CLOSE(parent)
+      if (_parentStack.length > 0) {
+        const parentState = _parentStack[_parentStack.length - 1]
+        if (!parentState._openWritten) {
+          _writeOpenCommand(parentState)
+          parentState._openWritten = true
+        }
+      }
       const parent = _parentStack.length > 0 ? _parentStack[_parentStack.length - 1] : null
       const state: NodeOpenState = _defaultOpen()
       state.parentNodeId = parent?.nodeId ?? 0
@@ -365,7 +378,11 @@ function createVexartLayoutCtx() {
     closeElement() {
       const state = _parentStack.pop()
       if (!state) return
-      _writeOpenCommand(state)
+      // If this node's OPEN was never written (leaf node with no children),
+      // write it now before the CLOSE.
+      if (!state._openWritten) {
+        _writeOpenCommand(state)
+      }
       _writeCloseCommand()
       _current = _parentStack.length > 0 ? _parentStack[_parentStack.length - 1] : _defaultOpen()
     },
@@ -373,6 +390,14 @@ function createVexartLayoutCtx() {
     setId(id: string) {
       // In legacy Clay, setId() calls openElement() internally.
       // Here we do the same: push a new state and mark the id.
+      // Flush parent's OPEN first (same as openElement).
+      if (_parentStack.length > 0) {
+        const parentState = _parentStack[_parentStack.length - 1]
+        if (!parentState._openWritten) {
+          _writeOpenCommand(parentState)
+          parentState._openWritten = true
+        }
+      }
       const parent = _parentStack.length > 0 ? _parentStack[_parentStack.length - 1] : null
       const state: NodeOpenState = _defaultOpen()
       state.parentNodeId = parent?.nodeId ?? 0
@@ -447,11 +472,24 @@ function createVexartLayoutCtx() {
       if (_sy) s.flags |= FLAG_SCROLL_Y
     },
 
-    text(_content: string, _color: number, _fontId: number, _fontSize: number) {
-      // Phase 2 DEC-011: text occupies zero space. Emit a zero-size OPEN/CLOSE pair.
+    text(_content: string, _color: number, _fontId: number, _fontSize: number, nodeId?: number, measuredW?: number, measuredH?: number) {
+      // Flush parent OPEN before emitting child text node (same as openElement).
+      if (_parentStack.length > 0) {
+        const parentState = _parentStack[_parentStack.length - 1]
+        if (!parentState._openWritten) {
+          _writeOpenCommand(parentState)
+          parentState._openWritten = true
+        }
+      }
       const state: NodeOpenState = _defaultOpen()
+      if (nodeId !== undefined) state.nodeId = nodeId
       state.parentNodeId = _parentStack.length > 0 ? _parentStack[_parentStack.length - 1].nodeId : 0
-      state.sizeWKind = 0; state.sizeHKind = 0  // Auto
+      if (measuredW !== undefined && measuredH !== undefined && measuredW > 0 && measuredH > 0) {
+        state.sizeWKind = 1; state.sizeW = measuredW    // Length (Rust value 1 = Dimension::length)
+        state.sizeHKind = 1; state.sizeH = measuredH    // Length (Rust value 1 = Dimension::length)
+      } else {
+        state.sizeWKind = 0; state.sizeHKind = 0  // Auto (0x0 without measure callback)
+      }
       _writeOpenCommand(state)
       _writeCloseCommand()
     },
@@ -1065,7 +1103,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       textMetas.push(meta)
       textMetaMap.set(content, meta)
 
-      clay.text(content, color, fontId, fontSize)
+      clay.text(content, color, fontId, fontSize, node.id, measurement.width, measurement.height)
       textNodes.push(node)
       return
     }
