@@ -7,12 +7,22 @@ pub mod instances;
 pub mod pipelines;
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use wgpu::util::DeviceExt;
 
 use crate::ffi::panic::{ERR_INVALID_ARG, OK};
 use crate::types::FrameStats;
+
+/// Monotonic image handle allocator. Shared between paint (upload_image) and
+/// composite (copy_region_to_image / filter / mask operations).
+pub static NEXT_IMAGE_HANDLE: AtomicU64 = AtomicU64::new(1);
+
+/// Allocate the next image handle.
+pub fn alloc_image_handle() -> u64 {
+    NEXT_IMAGE_HANDLE.fetch_add(1, Ordering::Relaxed)
+}
 
 /// Holds a GPU texture + view + bind group for one uploaded image.
 pub struct ImageRecord {
@@ -21,13 +31,15 @@ pub struct ImageRecord {
     pub bind_group: wgpu::BindGroup,
 }
 
-/// Owns the WGPU rendering context, all render pipelines, and image registry.
+/// Owns the WGPU rendering context, all render pipelines, image registry, and target registry.
 pub struct PaintContext {
     pub wgpu: context::WgpuContext,
     /// Image registry: handle → ImageRecord. Key is monotonically-increasing u64.
     pub images: HashMap<u64, ImageRecord>,
-    /// Minimal offscreen target for dispatch (64×64 Rgba8Unorm).
-    /// In Slice 5a we create one default target; Slice 6+ wires real per-context targets.
+    /// Target registry: handle → TargetRecord. Embeds registry per design decision
+    /// "Target registry lives inside SHARED_PAINT singleton".
+    pub targets: crate::composite::target::TargetRegistry,
+    /// Default 64×64 offscreen target for dispatch when target=0 is passed.
     pub target_texture: wgpu::Texture,
     pub target_view: wgpu::TextureView,
     /// Fallback bind group for texture-sampling pipelines (backdrop_blur, backdrop_filter,
@@ -105,6 +117,7 @@ impl PaintContext {
         Self {
             wgpu,
             images: HashMap::new(),
+            targets: crate::composite::target::TargetRegistry::new(),
             target_texture,
             target_view,
             fallback_bind_group,
@@ -120,7 +133,10 @@ impl PaintContext {
     ///   Slice 5b (NEW GPU pipelines, DEC-012):
     ///     14=gradient_conic, 15=backdrop_blur, 16=backdrop_filter, 17=image_mask
     ///   18..=31 reserved for Phase 2b (blend, gradient_stroke, MSDF text, etc.)
-    pub fn dispatch(&mut self, _target: u64, graph: &[u8], stats_out: *mut FrameStats) -> i32 {
+    ///
+    /// Phase 2b: `target` is resolved from the TargetRegistry.
+    /// If target=0, falls back to the PaintContext default offscreen texture.
+    pub fn dispatch(&mut self, target: u64, graph: &[u8], stats_out: *mut FrameStats) -> i32 {
         let t_start = Instant::now();
 
         if graph.is_empty() {
@@ -191,89 +207,200 @@ impl PaintContext {
             return OK;
         }
 
-        // Step 3: Submit one CommandEncoder with one render pass per non-empty kind.
-        let t_gpu_start = Instant::now();
-
-        let mut encoder =
-            self.wgpu
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("vexart-frame-encoder"),
-                });
-
-        // We need a fresh render pass per pipeline (clearing on first, loading on rest).
-        // Iterate over all known cmd_kinds in order (skipping 11 per DEC-011).
-        // Slice 5a: 0-10, 12-13 | Slice 5b: 14-17
-        let mut first_pass = true;
-        for &kind in &[
-            0u16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // Slice 5a first 11 pipelines
-            12, 13, // Slice 5a gradient pipelines (11 skipped)
-            14, 15, 16, 17, // Slice 5b NEW GPU pipelines
-        ] {
-            let batch = match batches.get(&kind) {
-                Some(b) if !b.is_empty() => b,
-                _ => continue,
+        // Step 3: Resolve the render target view.
+        // Phase 2b: real target handles are looked up from the TargetRegistry.
+        // If target=0 or unknown, fall back to the PaintContext default offscreen texture.
+        //
+        // SAFETY: We extract raw pointers to fields inside `self` to work around Rust's
+        // split-borrow limitation. All raw pointers remain valid for the duration of this
+        // function — the pointed-to values are owned by `self` which outlives the block.
+        // Bun FFI is single-threaded; no concurrent mutation occurs.
+        let (render_view_ptr, use_active_encoder): (*const wgpu::TextureView, bool) =
+            if target != 0 {
+                if let Some(rec) = self.targets.get(target) {
+                    let has_layer = rec.active_layer.is_some();
+                    (&rec.view as *const wgpu::TextureView, has_layer)
+                } else {
+                    (&self.target_view as *const wgpu::TextureView, false)
+                }
+            } else {
+                (&self.target_view as *const wgpu::TextureView, false)
             };
 
-            let instance_stride = instance_stride_for_kind(kind);
-            if instance_stride == 0 {
-                continue;
-            }
-            let instance_count = (batch.len() / instance_stride) as u32;
-            if instance_count == 0 {
-                continue;
-            }
+        let t_gpu_start = Instant::now();
 
-            let vertex_buf =
-                self.wgpu
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        // When a target has an active layer, we add render passes to its encoder.
+        // Otherwise we create a standalone encoder and submit it.
+        if use_active_encoder {
+            // SAFETY: rec is in self.targets which is stable for this call.
+            // We split the borrow manually: view_ptr and encoder_ptr point to disjoint
+            // fields of the same TargetRecord. They are not aliased during use.
+            let rec_ptr: *mut crate::composite::target::TargetRecord = self
+                .targets
+                .get_mut(target)
+                .expect("target disappeared") as *mut _;
+
+            // SAFETY: rec_ptr is valid; view and active_layer are disjoint fields.
+            let view_ref: &wgpu::TextureView = unsafe { &(*rec_ptr).view };
+            let layer: &mut crate::composite::target::ActiveLayerRecord = unsafe {
+                (*rec_ptr)
+                    .active_layer
+                    .as_mut()
+                    .expect("active layer disappeared")
+            };
+
+            for &kind in &[
+                0u16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+                12, 13,
+                14, 15, 16, 17,
+            ] {
+                let batch = match batches.get(&kind) {
+                    Some(b) if !b.is_empty() => b,
+                    _ => continue,
+                };
+                let instance_stride = instance_stride_for_kind(kind);
+                if instance_stride == 0 { continue; }
+                let instance_count = (batch.len() / instance_stride) as u32;
+                if instance_count == 0 { continue; }
+
+                // SAFETY: self.wgpu.device is a disjoint field from self.targets.
+                let vertex_buf = self.wgpu.device.create_buffer_init(
+                    &wgpu::util::BufferInitDescriptor {
                         label: Some("vexart-instance-buf"),
                         contents: batch,
                         usage: wgpu::BufferUsages::VERTEX,
-                    });
-
-            let load_op = if first_pass {
-                first_pass = false;
-                wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
-            } else {
-                wgpu::LoadOp::Load
-            };
-
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("vexart-render-pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.target_view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: load_op,
-                        store: wgpu::StoreOp::Store,
                     },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
+                );
 
-            let pipeline = pipeline_for_kind(kind, &self.wgpu.pipelines);
-            pass.set_pipeline(pipeline);
-            pass.set_vertex_buffer(0, vertex_buf.slice(..));
-            // Pipelines that sample a texture need bind group 0 set.
-            // cmd_kinds 9=image, 10=image_transform use per-image bind groups (looked up
-            // from the image registry if available; fall back to the dummy bind group).
-            // cmd_kinds 15=backdrop_blur, 16=backdrop_filter, 17=image_mask always use
-            // the fallback bind group in Slice 5b (real source wiring is Slice 9+ work).
-            if kind == 9 || kind == 10 || kind == 15 || kind == 16 || kind == 17 {
-                pass.set_bind_group(0, &self.fallback_bind_group, &[]);
+                let load_op = if layer.first_pass {
+                    layer.first_pass = false;
+                    if layer.first_load_mode == 0 {
+                        let c = layer.clear_rgba;
+                        wgpu::LoadOp::Clear(wgpu::Color {
+                            r: ((c >> 24) & 0xff) as f64 / 255.0,
+                            g: ((c >> 16) & 0xff) as f64 / 255.0,
+                            b: ((c >> 8) & 0xff) as f64 / 255.0,
+                            a: (c & 0xff) as f64 / 255.0,
+                        })
+                    } else {
+                        wgpu::LoadOp::Load
+                    }
+                } else {
+                    wgpu::LoadOp::Load
+                };
+
+                let mut pass = layer.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("vexart-layer-render-pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: view_ref,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: load_op,
+                            store: wgpu::StoreOp::Store,
+                        },
+                        depth_slice: None,
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+
+                // SAFETY: self.wgpu.pipelines and self.fallback_bind_group are disjoint
+                // from self.targets; the references are valid for this pass scope.
+                let pipeline = pipeline_for_kind(kind, &self.wgpu.pipelines);
+                pass.set_pipeline(pipeline);
+                pass.set_vertex_buffer(0, vertex_buf.slice(..));
+                if kind == 9 || kind == 10 || kind == 15 || kind == 16 || kind == 17 {
+                    pass.set_bind_group(0, &self.fallback_bind_group, &[]);
+                }
+                pass.draw(0..6, 0..instance_count);
             }
-            // 6 vertices per quad (2 triangles), instance_count instances.
-            pass.draw(0..6, 0..instance_count);
-        }
+            // Do NOT submit — that happens in end_layer.
+        } else {
+            // SAFETY: render_view_ptr was extracted from self above; it remains valid.
+            let render_view: &wgpu::TextureView = unsafe { &*render_view_ptr };
+            // No active layer: create standalone encoder, render, submit.
+            let mut encoder = self.wgpu.device.create_command_encoder(
+                &wgpu::CommandEncoderDescriptor {
+                    label: Some("vexart-frame-encoder"),
+                },
+            );
 
-        let cmd = encoder.finish();
-        self.wgpu.queue.submit(std::iter::once(cmd));
+            // We need a fresh render pass per pipeline (clearing on first, loading on rest).
+            // Iterate over all known cmd_kinds in order (skipping 11 per DEC-011).
+            // Slice 5a: 0-10, 12-13 | Slice 5b: 14-17
+            let mut first_pass = true;
+            for &kind in &[
+                0u16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // Slice 5a first 11 pipelines
+                12, 13, // Slice 5a gradient pipelines (11 skipped)
+                14, 15, 16, 17, // Slice 5b NEW GPU pipelines
+            ] {
+                let batch = match batches.get(&kind) {
+                    Some(b) if !b.is_empty() => b,
+                    _ => continue,
+                };
+
+                let instance_stride = instance_stride_for_kind(kind);
+                if instance_stride == 0 {
+                    continue;
+                }
+                let instance_count = (batch.len() / instance_stride) as u32;
+                if instance_count == 0 {
+                    continue;
+                }
+
+                let vertex_buf =
+                    self.wgpu
+                        .device
+                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("vexart-instance-buf"),
+                            contents: batch,
+                            usage: wgpu::BufferUsages::VERTEX,
+                        });
+
+                let load_op = if first_pass {
+                    first_pass = false;
+                    wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+                } else {
+                    wgpu::LoadOp::Load
+                };
+
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("vexart-render-pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: render_view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: load_op,
+                            store: wgpu::StoreOp::Store,
+                        },
+                        depth_slice: None,
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+
+                let pipeline = pipeline_for_kind(kind, &self.wgpu.pipelines);
+                pass.set_pipeline(pipeline);
+                pass.set_vertex_buffer(0, vertex_buf.slice(..));
+                // Pipelines that sample a texture need bind group 0 set.
+                // cmd_kinds 9=image, 10=image_transform use per-image bind groups (looked up
+                // from the image registry if available; fall back to the dummy bind group).
+                // cmd_kinds 15=backdrop_blur, 16=backdrop_filter, 17=image_mask always use
+                // the fallback bind group in Slice 5b (real source wiring is Slice 9+ work).
+                if kind == 9 || kind == 10 || kind == 15 || kind == 16 || kind == 17 {
+                    pass.set_bind_group(0, &self.fallback_bind_group, &[]);
+                }
+                // 6 vertices per quad (2 triangles), instance_count instances.
+                pass.draw(0..6, 0..instance_count);
+            }
+
+            let cmd = encoder.finish();
+            self.wgpu.queue.submit(std::iter::once(cmd));
+        }
 
         let gpu_us = t_gpu_start.elapsed().as_micros() as u64;
         let cpu_us = t_start.elapsed().as_micros() as u64;

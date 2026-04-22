@@ -11,7 +11,7 @@ pub mod paint;
 pub mod text;
 pub mod types;
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use ffi::panic::{ERR_GPU_DEVICE_LOST, ERR_INVALID_ARG, OK};
@@ -25,8 +25,8 @@ use types::FrameStats;
 // vexart_paint_remove_image calls. Recreating per call would cap render rate at 3-5 fps
 // and would break image handles (cross-device texture references). Per design §17,
 // post-Apply #2a architectural fix.
-
-static NEXT_IMAGE_HANDLE: AtomicU64 = AtomicU64::new(1);
+//
+// NEXT_IMAGE_HANDLE is now in paint::NEXT_IMAGE_HANDLE for sharing with composite ops.
 
 static SHARED_PAINT: LazyLock<Mutex<Option<paint::PaintContext>>> =
     LazyLock::new(|| Mutex::new(None));
@@ -69,11 +69,12 @@ fn get_or_init_layout() -> MutexGuard<'static, SendableLayoutContext> {
 
 // ─── §5.1 Version & lifecycle ─────────────────────────────────────────────
 
-/// Returns the Phase 2.0 bridge version constant (0x00020000).
+/// Returns the Phase 2b version constant (0x00020B00).
 /// TS mount path checks this against EXPECTED_BRIDGE_VERSION. Per design §12 rule 2.
+/// Phase 2b Slice 1: target registry + compositing + real readback.
 #[no_mangle]
 pub extern "C" fn vexart_version() -> u32 {
-    0x00020000
+    0x00020B00
 }
 
 /// Allocates PaintContext + LayoutContext; returns opaque handle in `out_ctx`.
@@ -350,7 +351,7 @@ pub unsafe extern "C" fn vexart_paint_upload_image(
         // Sampler is held alive internally by bind_group's Arc — drop here is OK.
         let _ = sampler;
 
-        let handle = NEXT_IMAGE_HANDLE.fetch_add(1, Ordering::Relaxed);
+        let handle = paint::NEXT_IMAGE_HANDLE.fetch_add(1, Ordering::Relaxed);
         pctx.images.insert(
             handle,
             paint::ImageRecord {
@@ -382,6 +383,189 @@ pub extern "C" fn vexart_paint_remove_image(_ctx: u64, image: u64) -> i32 {
 
 // ─── §5.4 Composite ──────────────────────────────────────────────────────
 
+// ── Target lifecycle (Phase 2b Slice 1) ──────────────────────────────────
+
+/// Create an offscreen RGBA8 render target. Returns handle in `*out_target`.
+/// (REQ-2B-001)
+///
+/// # Safety
+/// `out_target` must be a valid mutable pointer.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_composite_target_create(
+    _ctx: u64,
+    width: u32,
+    height: u32,
+    out_target: *mut u64,
+) -> i32 {
+    ffi_guard!({
+        if out_target.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        composite::target_create(pctx, width, height, out_target)
+    })
+}
+
+/// Destroy an offscreen render target and release GPU memory.
+/// (REQ-2B-001)
+#[no_mangle]
+pub extern "C" fn vexart_composite_target_destroy(_ctx: u64, target: u64) -> i32 {
+    ffi_guard!({
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        composite::target_destroy(pctx, target)
+    })
+}
+
+/// Begin a render layer on the target. `load_mode=0` clears to `clear_rgba`.
+/// (REQ-2B-002)
+#[no_mangle]
+pub extern "C" fn vexart_composite_target_begin_layer(
+    _ctx: u64,
+    target: u64,
+    load_mode: u32,
+    clear_rgba: u32,
+) -> i32 {
+    ffi_guard!({
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        composite::target_begin_layer(pctx, target, load_mode, clear_rgba)
+    })
+}
+
+/// End the active render layer and submit GPU work.
+/// (REQ-2B-002)
+#[no_mangle]
+pub extern "C" fn vexart_composite_target_end_layer(_ctx: u64, target: u64) -> i32 {
+    ffi_guard!({
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        composite::target_end_layer(pctx, target)
+    })
+}
+
+// ── Compositing (Phase 2b Slice 1) ────────────────────────────────────────
+
+/// Composite an image onto a target at (x,y,w,h) with the given z-order.
+/// (REQ-2B-003)
+#[no_mangle]
+pub extern "C" fn vexart_composite_render_image_layer(
+    _ctx: u64,
+    target: u64,
+    image: u64,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    z: u32,
+    clear_rgba: u32,
+) -> i32 {
+    ffi_guard!({
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        composite::composite_render_image_layer(pctx, target, image, x, y, w, h, z, clear_rgba)
+    })
+}
+
+/// Extract a rectangular region from a target into a new image handle.
+/// (REQ-2B-004)
+///
+/// # Safety
+/// `out_image` must be a valid mutable pointer.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_composite_copy_region_to_image(
+    _ctx: u64,
+    target: u64,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    out_image: *mut u64,
+) -> i32 {
+    ffi_guard!({
+        if out_image.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        composite::copy_region_to_image(pctx, target, x, y, w, h, out_image)
+    })
+}
+
+/// Apply 7-op backdrop filter to an image, returning new image handle.
+/// `params_ptr` = 7 × f32: brightness, contrast, saturate, grayscale, invert, sepia, hue_rotate_deg.
+/// (REQ-2B-006)
+///
+/// # Safety
+/// `params_ptr` must be valid for `params_len` bytes; `out_image` must be valid.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_composite_image_filter_backdrop(
+    _ctx: u64,
+    image: u64,
+    params_ptr: *const u8,
+    params_len: u32,
+    out_image: *mut u64,
+) -> i32 {
+    ffi_guard!({
+        if out_image.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        composite::image_filter_backdrop(pctx, image, params_ptr, params_len, out_image)
+    })
+}
+
+/// Apply rounded-rect SDF mask to an image, returning new image handle.
+/// `rect_ptr` = 6 × f32: radius_uniform, tl, tr, br, bl, mode.
+/// (REQ-2B-006)
+///
+/// # Safety
+/// `rect_ptr` must be valid for 24 bytes; `out_image` must be valid.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_composite_image_mask_rounded_rect(
+    _ctx: u64,
+    image: u64,
+    rect_ptr: *const u8,
+    out_image: *mut u64,
+) -> i32 {
+    ffi_guard!({
+        if out_image.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        composite::image_mask_rounded_rect(pctx, image, rect_ptr, out_image)
+    })
+}
+
+// ── Legacy composite stub ─────────────────────────────────────────────────
+
 /// Z-order layer merge to final target. Phase 2 stub.
 ///
 /// # Safety
@@ -404,28 +588,35 @@ pub unsafe extern "C" fn vexart_composite_merge(
     })
 }
 
-/// Blocking GPU→CPU readback of full target. Phase 2 stub.
+/// Blocking GPU→CPU readback of full target.
 ///
 /// # Safety
 /// `dst` must be valid for `dst_cap` bytes if non-null.
 #[no_mangle]
 pub unsafe extern "C" fn vexart_composite_readback_rgba(
-    ctx: u64,
+    _ctx: u64,
     target: u64,
     dst: *mut u8,
     dst_cap: u32,
     stats_out: *mut FrameStats,
 ) -> i32 {
-    ffi_guard!({ composite::readback_rgba(ctx, target, dst, dst_cap, stats_out) })
+    ffi_guard!({
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        composite::readback_rgba(pctx, target, dst, dst_cap, stats_out)
+    })
 }
 
-/// Region readback; `rect_ptr` = 4×u32 (x,y,w,h). Phase 2 stub.
+/// Region readback; `rect_ptr` = 4×u32 (x,y,w,h).
 ///
 /// # Safety
 /// `rect_ptr` must be valid for 16 bytes; `dst` must be valid for `dst_cap` bytes.
 #[no_mangle]
 pub unsafe extern "C" fn vexart_composite_readback_region_rgba(
-    ctx: u64,
+    _ctx: u64,
     target: u64,
     rect_ptr: *const u8,
     dst: *mut u8,
@@ -438,7 +629,12 @@ pub unsafe extern "C" fn vexart_composite_readback_region_rgba(
         } else {
             std::slice::from_raw_parts(rect_ptr, 16)
         };
-        composite::readback_region_rgba(ctx, target, rect, dst, dst_cap, stats_out)
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        composite::readback_region_rgba(pctx, target, rect, dst, dst_cap, stats_out)
     })
 }
 
