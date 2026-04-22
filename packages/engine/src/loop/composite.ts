@@ -19,7 +19,7 @@
 
 import type { Terminal } from "../terminal/index"
 import type { RenderCommand } from "../ffi/render-graph"
-import { resetRenderGraphQueues } from "../ffi/render-graph"
+import { resetRenderGraphQueues, CMD } from "../ffi/render-graph"
 import type { TextMeta } from "../ffi/render-graph"
 import type { TGENode } from "../ffi/node"
 import { debugFrameStart, debugUpdateStats } from "./debug"
@@ -49,6 +49,7 @@ import type { DamageRect } from "../ffi/damage"
 import type { Layer } from "../ffi/layers"
 import type { RendererBackend } from "../ffi/renderer-backend"
 import type { GpuFrameComposer } from "../output/gpu-frame-composer"
+import { createScrollHandle, updateScrollContainerGeometry } from "./scroll"
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -236,6 +237,116 @@ function writeLayoutBack(commands: RenderCommand[], s: CompositeFrameState) {
   })
 }
 
+/**
+ * After layout writeback, apply TS-side scroll offsets to:
+ *   1. Render commands (so GPU renderer draws at scrolled positions)
+ *   2. Node layout rects (so hit-testing uses scrolled positions)
+ *
+ * Also updates scroll container geometry (viewport + content extents) in scroll.ts
+ * so that clamping works correctly.
+ *
+ * SCISSOR commands are excluded from offset adjustment — they always reflect
+ * the scroll container's viewport bounds (not the scrolled content position).
+ */
+function applyScrollOffsets(commands: RenderCommand[], s: CompositeFrameState) {
+  const layoutMap = s.clay.getLastLayoutMap()
+
+  for (const node of s.boxNodes) {
+    if (!node.props.scrollX && !node.props.scrollY) continue
+
+    // Determine stable scroll id (must match what walkTree used)
+    const sid = node.props.scrollId ?? `tge-scroll-${node.id}`
+    const handle = createScrollHandle(sid)
+
+    // Step 4: Update scroll geometry from layout output.
+    // The PositionedCommand gives us content extents via contentW/contentH.
+    if (layoutMap) {
+      const pos = layoutMap.get(BigInt(node.id))
+      if (pos) {
+        // Viewport is the node's own layout size; content is the child extent
+        const vpW = pos.width
+        const vpH = pos.height
+        // contentW/contentH from Taffy is the total child extent
+        const ctW = pos.contentW > 0 ? pos.contentW : vpW
+        const ctH = pos.contentH > 0 ? pos.contentH : vpH
+        updateScrollContainerGeometry(sid, vpW, vpH, ctW, ctH)
+      }
+    }
+
+    const ox = node.props.scrollX ? handle.scrollX : 0
+    const oy = node.props.scrollY ? handle.scrollY : 0
+    if (ox === 0 && oy === 0) continue
+
+    // Collect all descendant node IDs for command offset (skip nested scroll containers)
+    const descendantIds = new Set<number>()
+    collectDescendantIds(node, descendantIds)
+
+    // Offset render commands for descendants (not SCISSOR commands — they use viewport coords)
+    for (const cmd of commands) {
+      if (cmd.type === CMD.SCISSOR_START || cmd.type === CMD.SCISSOR_END) continue
+      // Find which node owns this command by matching position against descendants
+      // We offset ALL non-scissor commands that belong to scroll descendants.
+      // Since we know the set of descendant node IDs, we match via the layoutMap.
+      // This is a best-effort O(n) scan — acceptable for scroll containers.
+      // NOTE: Commands don't carry nodeId directly, so we offset by position match.
+      // We compare the command position against the pre-offset layout positions.
+      // The descendant node layouts haven't been scrolled yet (this runs before
+      // applyOffsetToDescendants), so cmd.x/y matches their raw layout.x/y.
+      if (isCommandForDescendant(cmd, descendantIds, layoutMap)) {
+        cmd.x += ox
+        cmd.y += oy
+      }
+    }
+
+    // Offset all descendant node layout rects for hit-testing
+    applyOffsetToDescendants(node, ox, oy)
+  }
+}
+
+/** Collect nodeIds of all descendants, stopping at nested scroll containers. */
+function collectDescendantIds(container: TGENode, ids: Set<number>) {
+  for (const child of container.children) {
+    ids.add(child.id)
+    if (!child.props.scrollX && !child.props.scrollY) {
+      collectDescendantIds(child, ids)
+    }
+  }
+}
+
+/**
+ * Check if a command corresponds to a descendant node.
+ * Since commands don't have nodeId attached, we match by layout position.
+ */
+function isCommandForDescendant(
+  cmd: RenderCommand,
+  descendantIds: Set<number>,
+  layoutMap: Map<bigint, import("../ffi/layout-writeback").PositionedCommand> | null,
+): boolean {
+  if (!layoutMap) return false
+  for (const id of descendantIds) {
+    const pos = layoutMap.get(BigInt(id))
+    if (!pos) continue
+    // Match by exact position (commands use exact layoutMap values before offset)
+    if (Math.abs(pos.x - cmd.x) < 0.5 && Math.abs(pos.y - cmd.y) < 0.5 &&
+        Math.abs(pos.width - cmd.width) < 0.5 && Math.abs(pos.height - cmd.height) < 0.5) {
+      return true
+    }
+  }
+  return false
+}
+
+function applyOffsetToDescendants(container: TGENode, ox: number, oy: number) {
+  for (const child of container.children) {
+    child.layout.x += ox
+    child.layout.y += oy
+    // Recurse into children that are NOT themselves scroll containers
+    // (nested scroll containers will apply their own offset separately)
+    if (!child.props.scrollX && !child.props.scrollY) {
+      applyOffsetToDescendants(child, ox, oy)
+    }
+  }
+}
+
 function updateInteractiveStates(s: CompositeFrameState): boolean {
   const bag: InteractiveStatesBag = {
     rectNodes: s.rectNodes,
@@ -291,7 +402,38 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     sdx = Math.max(-maxDelta, Math.min(maxDelta, sdx))
     sdy = Math.max(-maxDelta, Math.min(maxDelta, sdy))
   }
-  s.clay.updateScroll(sdx, sdy, dt)
+  // Route scroll deltas to TS-side scroll state.
+  // Find the innermost scroll container whose layout bounds contain the pointer,
+  // using previous-frame node layout for hit detection.
+  if (sdx !== 0 || sdy !== 0) {
+    let scrollTarget: TGENode | null = null
+    const px = s.pointer.x
+    const py = s.pointer.y
+    for (const node of s.boxNodes) {
+      if (!node.props.scrollX && !node.props.scrollY) continue
+      const l = node.layout
+      if (l.width <= 0 || l.height <= 0) continue
+      if (px >= l.x && px < l.x + l.width && py >= l.y && py < l.y + l.height) {
+        // Pick innermost: replace if this node is a descendant of current target
+        if (!scrollTarget) {
+          scrollTarget = node
+        } else {
+          // Check if node is inside scrollTarget
+          let p = node.parent
+          while (p) {
+            if (p === scrollTarget) { scrollTarget = node; break }
+            p = p.parent
+          }
+        }
+      }
+    }
+    if (scrollTarget) {
+      const sid = scrollTarget.props.scrollId ?? `tge-scroll-${scrollTarget.id}`
+      const handle = createScrollHandle(sid)
+      if (scrollTarget.props.scrollY && sdy !== 0) handle.scrollBy(-sdy)
+      if (scrollTarget.props.scrollX && sdx !== 0) handle.scrollBy(-sdx)
+    }
+  }
   s.scroll.x = 0
   s.scroll.y = 0
   s.walkCounters.scrollIdCounter = 0
@@ -307,6 +449,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
 
   // ── Step 3: Write layout back + interaction states ──
   writeLayoutBack(commands, s)
+  applyScrollOffsets(commands, s)
   const hadClick = updateInteractiveStates(s)
 
   // Re-layout on click for instant visual feedback (same frame)
@@ -316,6 +459,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     walkTreeOnce(s)
     commands = s.clay.endLayout()
     writeLayoutBack(commands, s)
+    applyScrollOffsets(commands, s)
   }
 
   if (profile) profile.layoutMs = performance.now() - layoutStart

@@ -251,8 +251,12 @@ export function walkTree(
   const hasWillChange = node.props.willChange !== undefined
   const needsLayoutId = isInteractive || node.props.layer === true || hasWillChange
   if (node.props.scrollX || node.props.scrollY) {
-    const sid = node.props.scrollId ?? `tge-scroll-${state.scrollIdCounter.value++}`
+    // Use node.id for a stable scroll ID that survives frame resets.
+    // Fallback to user-provided scrollId for programmatic scroll handles.
+    const sid = node.props.scrollId ?? `tge-scroll-${node.id}`
     clay.setId(sid)
+    // Track counter for legacy compat (still incremented but not used for ID)
+    state.scrollIdCounter.value++
     if (node.props.scrollSpeed) {
       state.scrollSpeedCap.value = node.props.scrollSpeed
     }

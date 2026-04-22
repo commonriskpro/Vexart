@@ -1528,7 +1528,7 @@ function App(props: { terminal: any }) {
                 backgroundColor={active() ? colors.background : "transparent"}
                 hoverStyle={{ backgroundColor: active() ? colors.background : colors.accent }}
                 focusStyle={{ borderColor: "#4488cc", borderWidth: 1 }}
-                borderBottom={active() ? 2 : 0}
+                borderBottom={2}
                 borderColor={active() ? "#4488cc" : "transparent"}
                 height="fit"
               >

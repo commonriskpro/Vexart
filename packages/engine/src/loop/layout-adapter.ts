@@ -296,52 +296,150 @@ export function createVexartLayoutCtx() {
       // Parse PositionedCommands and synthesize RenderCommand[]
       const layoutMap = parseLayoutOutput(_outBuf, used)
       _lastLayoutMap = layoutMap
-      const cmds: RenderCommand[] = []
 
+      // ── Unified DFS command emission with SCISSOR bracketing ──
+      //
+      // _allOpenStates is in DFS (tree) order — same order nodes were opened.
+      // Each entry has nodeId, parentNodeId, and flags (including FLAG_SCROLL_X/Y).
+      // _textEntries are also in DFS order, but interleaved with box states.
+      //
+      // We need to emit: RECT commands for box nodes, TEXT commands for text
+      // nodes — all in DFS order, with SCISSOR_START/END around descendants
+      // of scroll containers.
+      //
+      // Strategy:
+      //   1. Build a unified DFS sequence (box states + text entries) ordered
+      //      by their position in the tree walk (i.e. DFS index).
+      //   2. Track a scroll ancestor stack. When entering a scroll container,
+      //      push SCISSOR_START. When we exit (next sibling/ancestor outside),
+      //      push SCISSOR_END.
+      //
+      // Since _allOpenStates doesn't carry DFS indices for text entries
+      // (text entries were interleaved during the walk), we use parentNodeId
+      // to assign text entries to their parent's position in the sequence.
+
+      // Build nodeId → DFS index map from _allOpenStates
+      const dfsIndex = new Map<number, number>()
+      for (let i = 0; i < _allOpenStates.length; i++) {
+        dfsIndex.set(_allOpenStates[i].nodeId, i)
+      }
+
+      // Assign each text entry a DFS position: parent's index + 0.5
+      // (appears after parent's RECT, before any box children that come after)
+      // Use parentNodeId from the text state to place it correctly.
+      type TextEntry = { nodeId: number; content: string; color: number; fontId: number; fontSize: number }
+      type DFSItem =
+        | { kind: 'box'; state: NodeOpenState; idx: number }
+        | { kind: 'text'; entry: TextEntry; idx: number }
+
+      const items: DFSItem[] = []
       for (const state of _allOpenStates) {
-        const pos = layoutMap.get(BigInt(state.nodeId))
-        if (!pos) continue
-        if (state.bgColor !== 0 || state.cornerRadius !== 0) {
-          cmds.push({
-            type: CMD.RECTANGLE,
-            x: pos.x,
-            y: pos.y,
-            width: pos.width,
-            height: pos.height,
-            color: [
-              (state.bgColor >>> 24) & 0xff,
-              (state.bgColor >>> 16) & 0xff,
-              (state.bgColor >>> 8) & 0xff,
-              state.bgColor & 0xff,
-            ],
-            cornerRadius: state.cornerRadius,
-            extra1: 0,
-            extra2: 0,
-          } as RenderCommand)
+        items.push({ kind: 'box', state, idx: dfsIndex.get(state.nodeId) ?? 0 })
+      }
+      for (const te of _textEntries) {
+        // Text node's own DFS index (it appears in _allOpenStates as a leaf node)
+        const textIdx = dfsIndex.get(te.nodeId) ?? 0
+        items.push({ kind: 'text', entry: te, idx: textIdx })
+      }
+      items.sort((a, b) => a.idx - b.idx)
+
+      // Build scroll container set
+      const scrollContainerIds = new Set<number>()
+      for (const state of _allOpenStates) {
+        if (state.flags & (FLAG_SCROLL_X | FLAG_SCROLL_Y)) {
+          scrollContainerIds.add(state.nodeId)
         }
       }
-      // Generate CMD.TEXT commands from text entries
-      for (const te of _textEntries) {
-        const pos = layoutMap.get(BigInt(te.nodeId))
-        if (!pos) continue
-        cmds.push({
-          type: CMD.TEXT,
-          x: pos.x,
-          y: pos.y,
-          width: pos.width,
-          height: pos.height,
-          color: [
-            (te.color >>> 24) & 0xff,
-            (te.color >>> 16) & 0xff,
-            (te.color >>> 8) & 0xff,
-            te.color & 0xff,
-          ],
-          cornerRadius: 0,
-          extra1: te.fontSize,
-          extra2: te.fontId,
-          text: te.content,
-        } as RenderCommand)
+
+      // Build parent map for ancestor traversal
+      const parentById = new Map<number, number>()
+      for (const state of _allOpenStates) {
+        parentById.set(state.nodeId, state.parentNodeId)
       }
+
+      function findScrollAncestor(nodeId: number): number | null {
+        let pid = parentById.get(nodeId) ?? 0
+        while (pid !== 0) {
+          if (scrollContainerIds.has(pid)) return pid
+          pid = parentById.get(pid) ?? 0
+        }
+        return null
+      }
+
+      // Emit commands in unified DFS order
+      const cmds: RenderCommand[] = []
+      // Track which scroll containers have an open scissor
+      // When a node's scroll ancestor changes (we leave a scissor region),
+      // we need to emit SCISSOR_END for that container.
+      // We track this via a stack of currently open scissor node IDs.
+      const scissorStack: number[] = []
+
+      function closeScissorsUntil(targetAncestor: number | null) {
+        // Pop scissor entries until the stack matches targetAncestor
+        while (scissorStack.length > 0) {
+          const top = scissorStack[scissorStack.length - 1]
+          if (top === targetAncestor) break
+          scissorStack.pop()
+          cmds.push({ type: CMD.SCISSOR_END, x: 0, y: 0, width: 0, height: 0, color: [0, 0, 0, 0] as [number,number,number,number], cornerRadius: 0, extra1: 0, extra2: 0 })
+        }
+      }
+
+      function makeRect(pos: { x: number; y: number; width: number; height: number }, state: NodeOpenState): RenderCommand {
+        return {
+          type: CMD.RECTANGLE,
+          x: pos.x, y: pos.y, width: pos.width, height: pos.height,
+          color: [(state.bgColor >>> 24) & 0xff, (state.bgColor >>> 16) & 0xff, (state.bgColor >>> 8) & 0xff, state.bgColor & 0xff] as [number,number,number,number],
+          cornerRadius: state.cornerRadius,
+          extra1: 0, extra2: 0,
+        }
+      }
+
+      for (const item of items) {
+        if (item.kind === 'box') {
+          const { state } = item
+          const pos = layoutMap.get(BigInt(state.nodeId))
+          if (!pos) continue
+
+          if (scrollContainerIds.has(state.nodeId)) {
+            // Scroll container: close any inner scissors, emit own RECT, open scissor
+            const myAncestor = findScrollAncestor(state.nodeId)
+            closeScissorsUntil(myAncestor)
+            // Emit container's own RECT (background of the scroll viewport)
+            if (state.bgColor !== 0 || state.cornerRadius !== 0) {
+              cmds.push(makeRect(pos, state))
+            }
+            // Open scissor for this container's children
+            cmds.push({ type: CMD.SCISSOR_START, x: pos.x, y: pos.y, width: pos.width, height: pos.height, color: [0, 0, 0, 0] as [number,number,number,number], cornerRadius: 0, extra1: 0, extra2: 0 })
+            scissorStack.push(state.nodeId)
+          } else {
+            // Normal box: ensure correct scissor context then emit RECT
+            const myAncestor = findScrollAncestor(state.nodeId)
+            closeScissorsUntil(myAncestor)
+            // Emit RECT if needed
+            if (state.bgColor !== 0 || state.cornerRadius !== 0) {
+              cmds.push(makeRect(pos, state))
+            }
+          }
+        } else {
+          // Text entry
+          const te = item.entry
+          const pos = layoutMap.get(BigInt(te.nodeId))
+          if (!pos) continue
+
+          const myAncestor = findScrollAncestor(te.nodeId)
+          closeScissorsUntil(myAncestor)
+          cmds.push({
+            type: CMD.TEXT,
+            x: pos.x, y: pos.y, width: pos.width, height: pos.height,
+            color: [(te.color >>> 24) & 0xff, (te.color >>> 16) & 0xff, (te.color >>> 8) & 0xff, te.color & 0xff] as [number,number,number,number],
+            cornerRadius: 0, extra1: te.fontSize, extra2: te.fontId, text: te.content,
+          })
+        }
+      }
+
+      // Close any remaining open scissors
+      closeScissorsUntil(null)
+
       return cmds
     },
 
