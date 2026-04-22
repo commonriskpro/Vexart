@@ -70,7 +70,10 @@ const VEXART_SYMBOLS = {
   vexart_text_dispatch:   { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_text_measure:    { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.f32, FFIType.ptr, FFIType.ptr],           returns: FFIType.i32 },
 
-  // §5.6 Kitty SHM transport
+  // §5.6 Kitty transport (Phase 2b Slice 3)
+  vexart_kitty_emit_frame:    { args: [FFIType.u64, FFIType.u64, FFIType.u32], returns: FFIType.i32  },
+  vexart_kitty_set_transport: { args: [FFIType.u64, FFIType.u32],              returns: FFIType.i32  },
+  // §5.6 Kitty SHM helpers (legacy — used directly by kitty.ts shm path)
   vexart_kitty_shm_prepare: { args: [FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_kitty_shm_release: { args: [FFIType.u64, FFIType.u32],                returns: FFIType.i32  },
 

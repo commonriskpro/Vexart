@@ -17,6 +17,7 @@ type PixelBuffer = { data: Uint8Array; width: number; height: number; stride: nu
 import { deflateSync } from "node:zlib"
 import { type TransmissionMode, reportKittyTransportFailure, reportKittyTransportSuccess, resolveKittyTransportMode, TRANSPORT_FAILURE_REASON } from "./transport-manager"
 import { prepareNativeKittyShm, releaseNativeKittyShm } from "./kitty-shm-native"
+import { openVexartLibrary } from "../ffi/vexart-bridge"
 
 type RawImageData = {
   data: Uint8Array
@@ -453,6 +454,27 @@ function transmitDirect(
 }
 
 // ── Public API ──
+
+/**
+ * Transmit a frame via the native Rust Kitty encoder (preferred path).
+ *
+ * Single FFI call: GPU readback → zlib compress → base64 → Kitty escape → stdout.
+ * No data passes through JavaScript — per REQ-2B-101.
+ *
+ * @param ctx     — vexart context handle (bigint)
+ * @param target  — offscreen render target handle (bigint)
+ * @param imageId — Kitty image ID to assign to this frame
+ * @returns true on success, false if the native call fails (caller should fall back to TS path)
+ */
+export function transmitFrameNative(ctx: bigint, target: bigint, imageId: number): boolean {
+  try {
+    const { symbols } = openVexartLibrary()
+    const result = symbols.vexart_kitty_emit_frame(ctx, target, imageId) as number
+    return result === 0
+  } catch {
+    return false
+  }
+}
 
 /**
  * Transmit a pixel buffer as a Kitty graphics image.

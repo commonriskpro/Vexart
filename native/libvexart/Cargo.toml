@@ -18,13 +18,16 @@ pollster = "0.4"    # minimal sync executor to block on wgpu async — kept from
 bytemuck = { version = "1.25", features = ["derive"] } # Pod/Zeroable for instance buffers
 nix    = { version = "0.29", default-features = false, features = ["mman", "fs"] } # POSIX SHM only
 
-# Reserved for Phase 2b — NOT added in Phase 2 Cargo.toml (REQ-NB-009 allows deferral):
-# base64 = "0.22.1"   # Kitty protocol encoding — Phase 2b Tier 1 / DEC-010
-# flate2 = "1.1.9"    # zlib deflate for Kitty o=z — Phase 2b Tier 1 / DEC-010
+base64 = "0.22"       # Kitty protocol encoding — Phase 2b Tier 1 / DEC-010
+flate2 = "1.1"        # zlib deflate for Kitty o=z — Phase 2b Tier 1 / DEC-010
 # fdsm   = "0.8.0"    # MSDF atlas generator — Phase 2b / DEC-008
 
 [dev-dependencies]
 # Integration-test helpers land here when tests/ is populated.
+
+[[bench]]
+name = "bench_kitty_encoding"
+harness = false # use custom timing; avoids criterion dependency for now
 
 [features]
 gpu-tests = [] # gated integration tests requiring real WGPU (run with --features gpu-tests)

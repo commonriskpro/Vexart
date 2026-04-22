@@ -685,9 +685,38 @@ pub unsafe extern "C" fn vexart_text_measure(
     ffi_guard!({ text::measure(ctx, text_ptr, text_len, font_id, font_size, out_w, out_h) })
 }
 
-// ─── §5.6 Kitty SHM transport ────────────────────────────────────────────
+// ─── §5.6 Kitty transport ────────────────────────────────────────────────
 
-/// POSIX SHM prepare (shm_open + ftruncate + mmap + memcpy + munmap). Phase 2 Slice 2 stub.
+/// Emit a complete frame to the terminal via the Kitty graphics protocol.
+///
+/// Performs: GPU readback → zlib compress → base64 encode → Kitty escape sequences → stdout.
+/// Transport mode is selected via `vexart_kitty_set_transport` (default: direct/base64).
+///
+/// Returns OK (0) on success, ERR_KITTY_TRANSPORT (-7) on failure.
+/// (REQ-2B-101)
+#[no_mangle]
+pub extern "C" fn vexart_kitty_emit_frame(_ctx: u64, target: u64, image_id: u32) -> i32 {
+    ffi_guard!({
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        kitty::transport::emit_frame(pctx, target, image_id)
+    })
+}
+
+/// Select the Kitty transport mode for this context.
+///
+/// `mode`: 0=direct (base64 inline), 1=file (temp file), 2=shm (POSIX shared memory).
+/// Default is direct (0). Mode is stored per-thread.
+/// (REQ-2B-102)
+#[no_mangle]
+pub extern "C" fn vexart_kitty_set_transport(_ctx: u64, mode: u32) -> i32 {
+    ffi_guard!({ kitty::transport::set_transport_mode(mode) })
+}
+
+/// POSIX SHM prepare (shm_open + ftruncate + mmap + memcpy + munmap). Phase 2 Slice 2.
 ///
 /// # Safety
 /// All pointer args must be valid for their respective lengths.
@@ -705,7 +734,7 @@ pub unsafe extern "C" fn vexart_kitty_shm_prepare(
     })
 }
 
-/// POSIX SHM release (close + optional shm_unlink). Phase 2 Slice 2 stub.
+/// POSIX SHM release (close + optional shm_unlink). Phase 2 Slice 2.
 #[no_mangle]
 pub extern "C" fn vexart_kitty_shm_release(handle: u64, unlink_flag: u32) -> i32 {
     ffi_guard!({ kitty::shm::shm_release(handle, unlink_flag) })

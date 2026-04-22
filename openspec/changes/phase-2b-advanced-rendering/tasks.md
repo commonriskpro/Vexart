@@ -18,9 +18,9 @@
 
 ## Phase 3: Native Kitty encoding (depends on Slice 1)
 
-- [ ] 3.1 Add `base64` + `flate2` deps to `native/libvexart/Cargo.toml`; create `native/libvexart/src/kitty/{encoder.rs,writer.rs,transport.rs}` (REQ-2B-101/102/103/104/105).
-- [ ] 3.2 Implement `vexart_kitty_emit_frame` in `native/libvexart/src/lib.rs` and route TS output through one FFI call in `packages/engine/src/output/kitty.ts`.
-- [ ] 3.3 Keep SHM/file/direct transport selection working from Rust; add stdout-flush/error-path tests and a <0.5ms benchmark (REQ-2B-102/104/105).
+- [x] 3.1 Add `base64` + `flate2` deps to `native/libvexart/Cargo.toml`; create `native/libvexart/src/kitty/{encoder.rs,writer.rs,transport.rs}` (REQ-2B-101/102/103/104/105).
+- [x] 3.2 Implement `vexart_kitty_emit_frame` in `native/libvexart/src/lib.rs` and route TS output through one FFI call in `packages/engine/src/output/kitty.ts`.
+- [x] 3.3 Keep SHM/file/direct transport selection working from Rust; add stdout-flush/error-path tests and a <0.5ms benchmark (REQ-2B-102/104/105).
 
 ## Phase 4: MSDF text pipeline (depends on Slice 1)
 
