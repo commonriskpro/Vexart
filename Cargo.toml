@@ -3,8 +3,11 @@ resolver = "2"
 members = [
   "native/libvexart",
 ]
-# Future Phase 2b / 3 members land here (e.g. native/internal-atlas-gen).
-# No glob members — every crate added requires a PRD trace.
+# wgpu-canvas-bridge excluded from workspace — legacy crate still needed at runtime
+# for GPU target lifecycle/compositing until Phase 2b. Compiles independently.
+exclude = [
+  "native/wgpu-canvas-bridge",
+]
 
 [workspace.package]
 edition = "2021"

@@ -300,7 +300,7 @@ function createVexartLayoutCtx() {
       _pendingSetId = null
     },
 
-    endLayout(): RenderCommand[] {
+     endLayout(): RenderCommand[] {
       // Finalize + call vexart_layout_compute
       _finalizeHeader()
       _initCtx()
