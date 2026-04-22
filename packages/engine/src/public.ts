@@ -6,11 +6,5 @@ export * from "./input/index"
 export * from "./terminal/index"
 export * from "./output/index"
 export * from "./mount"
-// paint-legacy exports — DirtyRect and DirtyTracker excluded to avoid name conflict with reconciler/dirty
-export { create, resize, clear, clearRect, get, set, sub, rgba, pack, alpha } from "./paint-legacy/buffer"
-export type { PixelBuffer } from "./paint-legacy/buffer"
-export { hasNebulaSupport, hasStarfieldSupport, hasBlitSupport } from "./paint-legacy/ffi"
-export { over, withOpacity } from "./paint-legacy/composite"
-export { createTracker } from "./paint-legacy/dirty"
-export type { DirtyRect } from "./paint-legacy/dirty"
-export { paint } from "./paint-legacy/index"
+// paint-legacy exports removed — Phase 2 Slice 11G (DEC-004).
+// All CPU paint paths deleted. Use vexart_paint_dispatch for GPU rendering.

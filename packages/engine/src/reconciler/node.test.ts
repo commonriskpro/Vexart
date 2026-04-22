@@ -10,7 +10,11 @@ import {
   parseAlignX,
   parseAlignY,
 } from "../ffi/node"
-import { SIZING, DIRECTION, ALIGN_X, ALIGN_Y } from "../ffi/clay"
+// Constants inlined from former clay.ts (deleted in Phase 2 Slice 11A per DEC-004)
+const SIZING = { FIT: 0, GROW: 1, PERCENT: 2, FIXED: 3 } as const
+const DIRECTION = { LEFT_TO_RIGHT: 0, TOP_TO_BOTTOM: 1 } as const
+const ALIGN_X = { LEFT: 0, RIGHT: 1, CENTER: 2, SPACE_BETWEEN: 3 } as const
+const ALIGN_Y = { TOP: 0, BOTTOM: 1, CENTER: 2, SPACE_BETWEEN: 3 } as const
 
 describe("createNode", () => {
   test("creates a box node", () => {

@@ -23,14 +23,12 @@ import { openVexartLibrary } from "./vexart-bridge"
 import {
   GRAPH_MAGIC, GRAPH_VERSION,
 } from "./vexart-buffer"
-// Phase 2 / Slice 9: gpu-renderer-backend no longer imports directly from
-// wgpu-canvas-bridge, wgpu-mixed-scene, or gpu-raster-staging.
-// All legacy bridge helpers are accessed via gpu-stub.ts (excluded orphan,
-// deleted in Slice 11 along with wgpu-canvas-bridge.ts).
+// Phase 2 / Slice 11B: gpu-stub.ts removed. GPU target lifecycle and compositing
+// operations still route through wgpu-canvas-bridge.ts (old libwgpu_canvas_bridge dylib)
+// until Phase 2b ports full compositing to libvexart. Paint primitives already route
+// through vexart_paint_dispatch (cmd_kinds 0-17).
 // flushImages/flushTransformedImages → vexart_paint_dispatch cmd_kinds 9/10.
 // flushGlyphs → DEC-011 no-op.
-// canvas sprite, backdrop, gradient-sprite → still using bridge via gpu-stub
-// (Phase 2 transition; fully removed in Slice 11 when bridge files are deleted).
 import {
   beginWgpuCanvasTargetLayer,
   compositeWgpuCanvasTargetImageLayer,
@@ -45,17 +43,8 @@ import {
   maskWgpuCanvasImageRoundedRect,
   probeWgpuCanvasBridge,
   readbackWgpuCanvasTargetRGBA,
-  renderWgpuCanvasTargetBeziersLayer,
-  renderWgpuCanvasTargetCirclesLayer,
-  renderWgpuCanvasTargetGlowsLayer,
-  renderWgpuCanvasTargetImagesLayer,
   renderWgpuCanvasTargetLinearGradientsLayer,
-  renderWgpuCanvasTargetPolygonsLayer,
   renderWgpuCanvasTargetRadialGradientsLayer,
-  renderWgpuCanvasTargetRectsLayer,
-  renderWgpuCanvasTargetShapeRectCornersLayer,
-  renderWgpuCanvasTargetShapeRectsLayer,
-  renderWgpuCanvasTargetGlyphsLayer,
   renderWgpuCanvasTargetTransformedImagesLayer,
   supportsWgpuCanvasGlyphLayer,
   copyWgpuCanvasTargetRegionToImage,
@@ -67,7 +56,7 @@ import {
   type WgpuCanvasShapeRectCorners,
   type WgpuCanvasShapeRect,
   type WgpuCanvasTargetHandle,
-} from "./gpu-stub"
+} from "./wgpu-canvas-bridge"
 // NOTE: batchMixedSceneOps / collectSupportedMixedScene (from wgpu-mixed-scene) are
 // no longer imported in Phase 2. getCanvasSprite() is short-circuited to return null
 // since the showcase does not use canvas nodes. wgpu-mixed-scene becomes a 0-consumer

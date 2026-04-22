@@ -6,4 +6,4 @@ export * from "./image"
 export * from "./frame-scheduler"
 export * from "./animation"
 export * from "./debug"
-// clay-layout is a pass-through stub to ffi; already re-exported via public.ts ffi section
+// clay-layout.ts deleted in Phase 2 Slice 11H. Layout now via Taffy in libvexart.

@@ -12,7 +12,8 @@
  * @see https://sw.kovidgoyal.net/kitty/graphics-protocol/
  */
 
-import type { PixelBuffer } from "../paint-legacy/index"
+// PixelBuffer type inlined from former paint-legacy/buffer.ts (deleted in Phase 2, DEC-004)
+type PixelBuffer = { data: Uint8Array; width: number; height: number; stride: number }
 import { deflateSync } from "node:zlib"
 import { type TransmissionMode, reportKittyTransportFailure, reportKittyTransportSuccess, resolveKittyTransportMode, TRANSPORT_FAILURE_REASON } from "./transport-manager"
 import { prepareNativeKittyShm, releaseNativeKittyShm } from "./kitty-shm-native"

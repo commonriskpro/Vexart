@@ -521,7 +521,7 @@ import {
   type DamageRect,
 } from "../ffi/damage"
 import { createGpuRendererBackend } from "../ffi/gpu-renderer-backend"
-import { createGpuFrameComposer } from "../ffi/gpu-frame-composer"
+import { createGpuFrameComposer, type GpuFrameComposer } from "../output/gpu-frame-composer"
 import { summarizeRendererResourceStats } from "../ffi/resource-stats"
 import { getLatestInteractionTrace } from "./input"
 import {
