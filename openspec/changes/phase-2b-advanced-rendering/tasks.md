@@ -24,11 +24,11 @@
 
 ## Phase 4: MSDF text pipeline (depends on Slice 1)
 
-- [ ] 4.1 Create `packages/internal-atlas-gen` for TTF→MSDF PNG+metrics output (REQ-2B-201).
-- [ ] 4.2 Implement `native/libvexart/src/text/{atlas.rs,glyph_info.rs,render.rs,mod.rs}` for atlas load, metrics parse, and dispatch (REQ-2B-202/204).
-- [ ] 4.3 Add `native/libvexart/src/paint/{pipelines/glyph.rs,shaders/msdf_text.wgsl}` and wire the new cmd kind in `paint/mod.rs` (REQ-2B-203/204).
-- [ ] 4.4 Delete bitmap text references; grep gate zero `tge_draw_text|tge_load_font_atlas|tge_measure_text` matches in `packages/` and `native/` (REQ-2B-205).
-- [ ] 4.5 Add visual tests at 8px, 16px, 32px, and 72px for text sharpness (REQ-2B-201/203/204).
+- [x] 4.1 Create `packages/internal-atlas-gen` for TTF→MSDF PNG+metrics output (REQ-2B-201).
+- [x] 4.2 Implement `native/libvexart/src/text/{atlas.rs,glyph_info.rs,render.rs,mod.rs}` for atlas load, metrics parse, and dispatch (REQ-2B-202/204).
+- [x] 4.3 Add `native/libvexart/src/paint/{pipelines/glyph.rs,shaders/msdf_text.wgsl}` and wire the new cmd kind in `paint/mod.rs` (REQ-2B-203/204).
+- [x] 4.4 Delete bitmap text references; grep gate zero `tge_draw_text|tge_load_font_atlas|tge_measure_text` matches in `packages/` and `native/` (REQ-2B-205).
+- [x] 4.5 Unit tests: `MsdfGlyphInstance` Pod roundtrip + metrics JSON parse (visual tests at 8/16/32/72px deferred to Slice 7 per design — needs running engine) (REQ-2B-201/203/204).
 
 ## Phase 5: Compositor animations + self filters + hints (depends on Slice 1)
 

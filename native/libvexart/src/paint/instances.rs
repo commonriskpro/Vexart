@@ -543,6 +543,44 @@ pub struct ImageMaskInstance {
     pub _pad1: f32,
 }
 
+// ─── Phase 2b — MSDF text pipeline (cmd_kind = 18) ─────────────────────────
+
+/// MSDF glyph instance (cmd_kind = 18).
+/// 16 f32 / 4 u32 fields = 64 bytes total.
+///
+/// Matches MsdfGlyphInstance layout in design §4.3:
+///   x, y, w, h  — NDC quad position + size
+///   uv_x, uv_y, uv_w, uv_h — atlas UV rect (0..1 normalized)
+///   color_r/g/b/a — glyph color + alpha
+///   atlas_id — which loaded atlas texture to sample (1-15)
+///   _pad0/_pad1/_pad2 — alignment padding to 64 bytes
+///
+/// Shader sees:
+///   @location(0) pos_size: vec4<f32>  (x,y,w,h)
+///   @location(1) uv_rect:  vec4<f32>  (uv_x,uv_y,uv_w,uv_h)
+///   @location(2) color:    vec4<f32>  (r,g,b,a)
+///   @location(3) ids:      vec4<u32>  (atlas_id, pad0, pad1, pad2)
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct MsdfGlyphInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub uv_x: f32,
+    pub uv_y: f32,
+    pub uv_w: f32,
+    pub uv_h: f32,
+    pub color_r: f32,
+    pub color_g: f32,
+    pub color_b: f32,
+    pub color_a: f32,
+    pub atlas_id: u32,
+    pub _pad0: u32,
+    pub _pad1: u32,
+    pub _pad2: u32,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -576,5 +614,66 @@ mod tests {
         let bytes: &[u8] = cast_slice(std::slice::from_ref(&inst));
         let back: &[ShadowInstance] = cast_slice(bytes);
         assert_eq!(back[0].blur, 12.0);
+    }
+
+    // ── Phase 2b Slice 4 — MsdfGlyphInstance tests ──────────────────────────
+
+    #[test]
+    fn test_msdf_glyph_instance_size_is_64_bytes() {
+        // MsdfGlyphInstance must be exactly 64 bytes:
+        // 12 f32 (48 bytes) + 4 u32 (16 bytes) = 64 bytes.
+        // This ensures the vertex buffer stride matches the WGSL @location layout.
+        assert_eq!(std::mem::size_of::<MsdfGlyphInstance>(), 64);
+    }
+
+    #[test]
+    fn test_msdf_glyph_instance_pod_roundtrip() {
+        let inst = MsdfGlyphInstance {
+            x: -0.5,
+            y: 0.75,
+            w: 0.1,
+            h: 0.15,
+            uv_x: 0.0,
+            uv_y: 0.0,
+            uv_w: 0.0625,  // 64/1024
+            uv_h: 0.0625,
+            color_r: 1.0,
+            color_g: 0.9,
+            color_b: 0.8,
+            color_a: 1.0,
+            atlas_id: 3,
+            _pad0: 0,
+            _pad1: 0,
+            _pad2: 0,
+        };
+
+        let bytes: &[u8] = cast_slice(std::slice::from_ref(&inst));
+        assert_eq!(bytes.len(), 64, "MsdfGlyphInstance must be 64 bytes");
+
+        let back: &[MsdfGlyphInstance] = cast_slice(bytes);
+        assert_eq!(back[0].atlas_id, 3);
+        assert!((back[0].x - (-0.5)).abs() < f32::EPSILON);
+        assert!((back[0].color_r - 1.0).abs() < f32::EPSILON);
+        assert!((back[0].uv_w - 0.0625).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_msdf_glyph_instance_zeroable() {
+        // bytemuck::Zeroable: all-zeros must be valid (Pod derives Zeroable).
+        // Use Default which is derived alongside Zeroable (Default = zeroed for Pod types).
+        let inst = MsdfGlyphInstance::default();
+        assert_eq!(inst.atlas_id, 0);
+        assert_eq!(inst.x, 0.0);
+        assert_eq!(inst._pad0, 0);
+        // Verify bytemuck cast_slice works on a zero instance.
+        let bytes: &[u8] = bytemuck::bytes_of(&inst);
+        assert!(bytes.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn test_msdf_glyph_instance_default_is_zeroed() {
+        let inst = MsdfGlyphInstance::default();
+        let bytes: &[u8] = cast_slice(std::slice::from_ref(&inst));
+        assert!(bytes.iter().all(|&b| b == 0), "Default must be all zeros");
     }
 }

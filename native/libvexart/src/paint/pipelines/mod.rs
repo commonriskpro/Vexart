@@ -1,11 +1,13 @@
 // native/libvexart/src/paint/pipelines/mod.rs
-// PipelineRegistry: holds all 17 GPU render pipelines (13 ported + 4 new from Slice 5b).
-// Per design §17.1, §17.6, tasks 5a.2–5a.15, 5b.1–5b.5.
+// PipelineRegistry: holds all 18 GPU render pipelines (13 ported + 4 new from Slice 5b
+// + 1 MSDF text from Phase 2b Slice 4).
+// Per design §17.1, §17.6, tasks 5a.2–5a.15, 5b.1–5b.5, 4.3.
 
 pub mod backdrop_blur;
 pub mod backdrop_filter;
 pub mod bezier;
 pub mod circle;
+pub mod glyph;
 pub mod glow;
 pub mod gradient_conic;
 pub mod gradient_linear;
@@ -22,16 +24,18 @@ pub mod starfield;
 
 use wgpu::{BindGroupLayout, Device, RenderPipeline, TextureFormat};
 
-/// Holds all 17 render pipelines indexed by cmd_kind.
-/// cmd_kind allocation per design §17.6 (as-deployed in Slice 5a + 5b):
+/// Holds all 18 render pipelines indexed by cmd_kind.
+/// cmd_kind allocation per design §17.6 (as-deployed in Slice 5a + 5b + Phase 2b Slice 4):
 ///   Slice 5a (ported):
 ///     0 = rect, 1 = shape_rect, 2 = shape_rect_corners, 3 = circle,
 ///     4 = polygon, 5 = bezier, 6 = glow, 7 = nebula, 8 = starfield,
-///     9 = image, 10 = image_transform, 11 = reserved (glyph, DEC-011),
+///     9 = image, 10 = image_transform, 11 = reserved (legacy glyph slot — unused),
 ///     12 = gradient_linear, 13 = gradient_radial
 ///   Slice 5b (NEW GPU pipelines, DEC-012):
 ///     14 = gradient_conic, 15 = backdrop_blur, 16 = backdrop_filter, 17 = image_mask
-///   18..=31 reserved for Phase 2b (blend, gradient_stroke, MSDF text, etc.)
+///   Phase 2b Slice 4 (MSDF text):
+///     18 = glyph (MSDF text, REQ-2B-203/204)
+///   19..=31 reserved for Phase 2b (blend, gradient_stroke, self-filter, etc.)
 pub struct PipelineRegistry {
     // ── Slice 5a ──────────────────────────────────────────────────────────────
     pub rect: RenderPipeline,
@@ -52,10 +56,12 @@ pub struct PipelineRegistry {
     pub backdrop_blur: RenderPipeline,
     pub backdrop_filter: RenderPipeline,
     pub image_mask: RenderPipeline,
+    // ── Phase 2b Slice 4 (MSDF text) ─────────────────────────────────────────
+    pub glyph: RenderPipeline,
 }
 
 impl PipelineRegistry {
-    /// Create all 17 pipelines. Called once at WgpuContext init.
+    /// Create all 18 pipelines. Called once at WgpuContext init.
     pub fn new(device: &Device, format: TextureFormat, image_bgl: &BindGroupLayout) -> Self {
         Self {
             // Slice 5a
@@ -77,6 +83,8 @@ impl PipelineRegistry {
             backdrop_blur: backdrop_blur::create(device, format, image_bgl),
             backdrop_filter: backdrop_filter::create(device, format, image_bgl),
             image_mask: image_mask::create(device, format, image_bgl),
+            // Phase 2b Slice 4
+            glyph: glyph::create(device, format, image_bgl),
         }
     }
 }

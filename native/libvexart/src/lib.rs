@@ -638,43 +638,65 @@ pub unsafe extern "C" fn vexart_composite_readback_region_rgba(
     })
 }
 
-// ─── §5.5 Text stubs (DEC-011 / REQ-NB-005) ─────────────────────────────
+// ─── §5.5 Text — MSDF pipeline (Phase 2b, REQ-2B-202/204) ───────────────
 
-/// Success no-op atlas load. Phase 2 stub.
+/// Load a pre-generated MSDF atlas PNG + metrics JSON into GPU memory.
+///
+/// `font_id`: 1-15 (0 and >15 return ERR_INVALID_FONT).
+/// Returns ERR_INVALID_FONT (-8) if font_id is already loaded, PNG is invalid,
+/// or metrics JSON is malformed (REQ-2B-202).
 ///
 /// # Safety
-/// `atlas_ptr` must be valid for `atlas_len` bytes if non-null.
+/// All pointer args must be valid for their respective lengths.
 #[no_mangle]
 pub unsafe extern "C" fn vexart_text_load_atlas(
-    ctx: u64,
-    atlas_ptr: *const u8,
-    atlas_len: u32,
+    _ctx: u64,
     font_id: u32,
+    png_ptr: *const u8,
+    png_len: u32,
+    metrics_ptr: *const u8,
+    metrics_len: u32,
 ) -> i32 {
-    ffi_guard!({ text::load_atlas(ctx, atlas_ptr, atlas_len, font_id) })
+    ffi_guard!({
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        text::load_atlas(pctx, font_id, png_ptr, png_len, metrics_ptr, metrics_len)
+    })
 }
 
-/// Success no-op. First call emits DEC-011 warning. Phase 2 stub.
+/// Dispatch MSDF glyph rendering from a packed MsdfGlyphInstance buffer (cmd_kind=18).
 ///
 /// # Safety
 /// `glyphs_ptr` must be valid for `glyphs_len` bytes if non-null.
 #[no_mangle]
 pub unsafe extern "C" fn vexart_text_dispatch(
-    ctx: u64,
+    _ctx: u64,
+    target: u64,
     glyphs_ptr: *const u8,
     glyphs_len: u32,
     stats_out: *mut FrameStats,
 ) -> i32 {
-    ffi_guard!({ text::dispatch(ctx, glyphs_ptr, glyphs_len, stats_out) })
+    ffi_guard!({
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        text::dispatch(pctx, target, glyphs_ptr, glyphs_len, stats_out)
+    })
 }
 
-/// Writes `*out_w = 0.0; *out_h = 0.0`. Phase 2 stub per DEC-011.
+/// Measure a UTF-8 text string using loaded atlas metrics.
+/// Returns (0.0, 0.0) if atlas for font_id is not yet loaded (graceful degradation).
 ///
 /// # Safety
 /// `out_w` and `out_h` must be valid mutable f32 pointers.
 #[no_mangle]
 pub unsafe extern "C" fn vexart_text_measure(
-    ctx: u64,
+    _ctx: u64,
     text_ptr: *const u8,
     text_len: u32,
     font_id: u32,
@@ -682,7 +704,21 @@ pub unsafe extern "C" fn vexart_text_measure(
     out_w: *mut f32,
     out_h: *mut f32,
 ) -> i32 {
-    ffi_guard!({ text::measure(ctx, text_ptr, text_len, font_id, font_size, out_w, out_h) })
+    ffi_guard!({
+        if out_w.is_null() || out_h.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let guard = get_or_init_paint();
+        let pctx = match guard.as_ref() {
+            Some(c) => c,
+            None => {
+                *out_w = 0.0;
+                *out_h = 0.0;
+                return OK;
+            }
+        };
+        text::measure(pctx, text_ptr, text_len, font_id, font_size, out_w, out_h)
+    })
 }
 
 // ─── §5.6 Kitty transport ────────────────────────────────────────────────

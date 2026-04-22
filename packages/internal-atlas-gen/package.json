@@ -1,0 +1,16 @@
+{
+  "name": "@vexart/internal-atlas-gen",
+  "version": "0.0.1",
+  "description": "Dev tool: TTF font → 1024×1024 atlas PNG + metrics JSON (Phase 2b MSDF pipeline)",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "internal-atlas-gen": "./src/gen.ts"
+  },
+  "scripts": {
+    "gen": "bun run src/gen.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

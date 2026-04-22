@@ -39,11 +39,14 @@ pub struct PaintContext {
     /// Target registry: handle → TargetRecord. Embeds registry per design decision
     /// "Target registry lives inside SHARED_PAINT singleton".
     pub targets: crate::composite::target::TargetRegistry,
+    /// MSDF atlas registry: font_id (1-15) → AtlasRecord (GPU texture + metrics).
+    /// Phase 2b Slice 4 addition per REQ-2B-202.
+    pub atlases: crate::text::atlas::AtlasRegistry,
     /// Default 64×64 offscreen target for dispatch when target=0 is passed.
     pub target_texture: wgpu::Texture,
     pub target_view: wgpu::TextureView,
     /// Fallback bind group for texture-sampling pipelines (backdrop_blur, backdrop_filter,
-    /// image_mask) when no explicit source image is provided. A 1×1 transparent RGBA texture.
+    /// image_mask, glyph) when no explicit source image is provided. A 1×1 transparent RGBA texture.
     pub fallback_bind_group: wgpu::BindGroup,
 }
 
@@ -118,6 +121,7 @@ impl PaintContext {
             wgpu,
             images: HashMap::new(),
             targets: crate::composite::target::TargetRegistry::new(),
+            atlases: crate::text::atlas::AtlasRegistry::new(),
             target_texture,
             target_view,
             fallback_bind_group,
@@ -189,8 +193,9 @@ impl PaintContext {
             let payload = &graph[offset..payload_end];
             offset = payload_end;
 
-            // cmd_kind 11 is reserved (glyph, DEC-011) and 18+ are future — silently skip.
-            if cmd_kind == 11 || cmd_kind >= 18 {
+            // cmd_kind 11 is the legacy glyph slot (unused); 19+ are future — silently skip.
+            // cmd_kind 18 is now the MSDF glyph pipeline (Phase 2b Slice 4).
+            if cmd_kind == 11 || cmd_kind > 18 {
                 continue;
             }
 
@@ -253,6 +258,7 @@ impl PaintContext {
                 0u16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
                 12, 13,
                 14, 15, 16, 17,
+                18, // Phase 2b: MSDF glyph pipeline
             ] {
                 let batch = match batches.get(&kind) {
                     Some(b) if !b.is_empty() => b,
@@ -311,7 +317,10 @@ impl PaintContext {
                 let pipeline = pipeline_for_kind(kind, &self.wgpu.pipelines);
                 pass.set_pipeline(pipeline);
                 pass.set_vertex_buffer(0, vertex_buf.slice(..));
-                if kind == 9 || kind == 10 || kind == 15 || kind == 16 || kind == 17 {
+                // Pipelines that sample a texture need bind group 0.
+                // cmd_kind 18 (glyph): use fallback for now (atlas bind group wired via
+                // text::dispatch_glyph_instances for the dedicated text::dispatch path).
+                if kind == 9 || kind == 10 || kind == 15 || kind == 16 || kind == 17 || kind == 18 {
                     pass.set_bind_group(0, &self.fallback_bind_group, &[]);
                 }
                 pass.draw(0..6, 0..instance_count);
@@ -328,13 +337,14 @@ impl PaintContext {
             );
 
             // We need a fresh render pass per pipeline (clearing on first, loading on rest).
-            // Iterate over all known cmd_kinds in order (skipping 11 per DEC-011).
-            // Slice 5a: 0-10, 12-13 | Slice 5b: 14-17
+            // Iterate over all known cmd_kinds in order (skipping 11 per legacy slot).
+            // Slice 5a: 0-10, 12-13 | Slice 5b: 14-17 | Phase 2b Slice 4: 18
             let mut first_pass = true;
             for &kind in &[
                 0u16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // Slice 5a first 11 pipelines
                 12, 13, // Slice 5a gradient pipelines (11 skipped)
                 14, 15, 16, 17, // Slice 5b NEW GPU pipelines
+                18,     // Phase 2b Slice 4: MSDF glyph
             ] {
                 let batch = match batches.get(&kind) {
                     Some(b) if !b.is_empty() => b,
@@ -391,7 +401,9 @@ impl PaintContext {
                 // from the image registry if available; fall back to the dummy bind group).
                 // cmd_kinds 15=backdrop_blur, 16=backdrop_filter, 17=image_mask always use
                 // the fallback bind group in Slice 5b (real source wiring is Slice 9+ work).
-                if kind == 9 || kind == 10 || kind == 15 || kind == 16 || kind == 17 {
+                // cmd_kind 18=glyph uses the fallback here; atlas bind group is set via
+                // text::dispatch_glyph_instances for the dedicated text::dispatch path.
+                if kind == 9 || kind == 10 || kind == 15 || kind == 16 || kind == 17 || kind == 18 {
                     pass.set_bind_group(0, &self.fallback_bind_group, &[]);
                 }
                 // 6 vertices per quad (2 triangles), instance_count instances.
@@ -455,6 +467,8 @@ fn instance_stride_for_kind(kind: u16) -> usize {
         15 => size_of::<BackdropBlurInstance>(),
         16 => size_of::<BackdropFilterInstance>(),
         17 => size_of::<ImageMaskInstance>(),
+        // Phase 2b Slice 4 — MSDF glyph pipeline
+        18 => size_of::<MsdfGlyphInstance>(),
         _ => 0,
     }
 }
@@ -484,6 +498,8 @@ fn pipeline_for_kind<'a>(
         15 => &reg.backdrop_blur,
         16 => &reg.backdrop_filter,
         17 => &reg.image_mask,
+        // Phase 2b Slice 4 — MSDF glyph pipeline
+        18 => &reg.glyph,
         _ => panic!("pipeline_for_kind called with unsupported kind {kind}"),
     }
 }
