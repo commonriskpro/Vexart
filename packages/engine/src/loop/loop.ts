@@ -15,7 +15,7 @@ import { type TGENode, createNode, parseSizing } from "../ffi/node"
 import { createVexartLayoutCtx } from "./layout-adapter"
 
 const clay = createVexartLayoutCtx()
-import { createDirtyTracker } from "../reconciler/dirty"
+import { markDirty as globalMarkDirty, isDirty as globalIsDirty, clearDirty as globalClearDirty, onGlobalDirty } from "../reconciler/dirty"
 import { hasActiveAnimations } from "./animation"
 import { appendFileSync } from "node:fs"
 import { debugFrameStart } from "./debug"
@@ -101,8 +101,20 @@ export type RenderLoop = {
 }
 
 export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): RenderLoop {
-  const { markDirty, isDirty, clearDirty } = createDirtyTracker()
-  const { createLayer, markAllDirty, updateLayerGeometry, markLayerClean, imageIdForLayer, resetLayers, dirtyCount, layerCount, markLayerDamaged, getPreviousLayerRect, removeLayer } = createLayerStore()
+  // Use the global dirty tracker shared with reconciler + mount.
+  // The reconciler calls markDirty() on every DOM change; mount calls it on input.
+  // Using a separate tracker would make the loop blind to those events.
+  const isDirty = globalIsDirty
+  const clearDirty = globalClearDirty
+  const layerStore = createLayerStore()
+  const { createLayer, updateLayerGeometry, markLayerClean, imageIdForLayer, resetLayers, dirtyCount, layerCount, markLayerDamaged, getPreviousLayerRect, removeLayer } = layerStore
+  const markAllDirty = layerStore.markAllDirty
+
+  // When any caller (reconciler, mount, focus system) marks dirty via the
+  // global tracker, also mark all GPU layers dirty so the paint phase
+  // doesn't reuse stale cached layers.
+  const markDirty = globalMarkDirty
+  onGlobalDirty(() => markAllDirty())
   const expFrameBudgetMs = opts?.experimental?.frameBudgetMs ?? 0
 
   if (!term.caps.kittyGraphics) throw new Error("TGE GPU-only renderer requires a terminal with Kitty graphics support")
@@ -239,7 +251,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     if (!down && pointer.down) pointer.pendingRelease = true
     pointer.down = down
     pointer.dirty = true
-    if (moved || changedDown) nudgeInteraction("pointer")
+    if (moved || changedDown) {
+      markDirty()
+      nudgeInteraction("pointer")
+    }
   }
 
   // ── Stable CompositeFrameState (built once, mutated each frame) ──

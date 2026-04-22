@@ -41,17 +41,25 @@ export function createDirtyTracker(): DirtyTracker {
 
 const defaultDirtyTracker = createDirtyTracker()
 
-/** @deprecated Use createDirtyTracker() and keep state per render loop instance. */
-export function markDirty() {
-  defaultDirtyTracker.markDirty()
+/** Callback invoked whenever markDirty() is called.
+ *  Used by the render loop to also mark all layers dirty. */
+let _onDirtyCallback: (() => void) | null = null
+
+/** Register a callback to be called whenever the global markDirty fires.
+ *  The render loop uses this to chain markAllDirty (layer store). */
+export function onGlobalDirty(cb: () => void) {
+  _onDirtyCallback = cb
 }
 
-/** @deprecated Use createDirtyTracker() and keep state per render loop instance. */
+export function markDirty() {
+  defaultDirtyTracker.markDirty()
+  _onDirtyCallback?.()
+}
+
 export function isDirty(): boolean {
   return defaultDirtyTracker.isDirty()
 }
 
-/** @deprecated Use createDirtyTracker() and keep state per render loop instance. */
 export function clearDirty() {
   defaultDirtyTracker.clearDirty()
 }
