@@ -178,11 +178,16 @@ impl LayoutTree {
             Err(_) => return ERR_INVALID_ARG,
         };
 
+        // Phase 2: full rebuild each frame. Without this reset, existing nodes
+        // accumulate duplicate children via add_child() on every frame, causing
+        // layout to collapse (each child gets 1/N of the space where N grows
+        // every frame). Phase 3 will replace this with incremental diffing.
+        self.taffy = TaffyTree::new();
+        self.id_map.clear();
+        self.root = None;
+
         let mut offset = 16usize; // after header
         let mut parent_stack: Vec<NodeId> = Vec::new();
-        // Track which node_ids we saw this frame for future diffing (Phase 3).
-        // For now we just rebuild. If root was previously set we keep any pre-existing
-        // nodes that appear again (set_style updates them).
 
         for _cmd_idx in 0..header.cmd_count {
             // Each command starts with an 8-byte prefix.

@@ -31,6 +31,8 @@
 // If `out.len()` < 16 + N×40, writes as many complete records as fit. Sets `*out_used` to
 // bytes actually written. Returns OK — caller checks `*out_used` vs expected.
 
+use std::collections::HashMap;
+
 use crate::ffi::buffer::{GRAPH_MAGIC, GRAPH_VERSION};
 use crate::ffi::panic::OK;
 use crate::layout::tree::LayoutTree;
@@ -40,17 +42,15 @@ pub const POSITIONED_COMMAND_BYTES: usize = 40;
 
 /// Write computed layout to `out`, setting `*out_used` to bytes written.
 ///
+/// Performs a DFS walk from the root to accumulate **absolute** positions.
+/// Taffy's `layout.location` is parent-relative; we sum ancestor offsets
+/// so the TS side receives screen-absolute coordinates ready for painting.
+///
 /// Returns `OK` always. If the buffer is too small for all records,
 /// writes as many as fit (including the header if ≥ 16 bytes available).
 pub fn write_layout(tree: &LayoutTree, out: &mut [u8], out_used: &mut u32) -> i32 {
-    // Collect all (node_id, NodeId) pairs, sorted by stable ID for determinism.
-    let mut entries: Vec<(u64, taffy::NodeId)> =
-        tree.id_map.iter().map(|(&id, &node)| (id, node)).collect();
-    entries.sort_unstable_by_key(|&(id, _)| id);
-
-    let cmd_count = entries.len();
+    let cmd_count = tree.id_map.len();
     let payload_bytes = cmd_count * POSITIONED_COMMAND_BYTES;
-    let total_needed = 16 + payload_bytes;
 
     // Write the header if we have at least 16 bytes.
     if out.len() < 16 {
@@ -63,64 +63,77 @@ pub fn write_layout(tree: &LayoutTree, out: &mut [u8], out_used: &mut u32) -> i3
     out[8..12].copy_from_slice(&(cmd_count as u32).to_le_bytes());
     out[12..16].copy_from_slice(&(payload_bytes as u32).to_le_bytes());
 
-    if total_needed > out.len() {
-        // Buffer too small for all records; write as many as fit.
-        let records_that_fit = (out.len() - 16) / POSITIONED_COMMAND_BYTES;
-        let mut offset = 16usize;
-        for (node_id, taffy_node) in entries.iter().take(records_that_fit) {
-            write_record(tree, *node_id, *taffy_node, out, offset);
-            offset += POSITIONED_COMMAND_BYTES;
-        }
-        *out_used = offset as u32;
-        return OK;
-    }
-
-    // Enough space — write all records.
-    let mut offset = 16usize;
-    for (node_id, taffy_node) in &entries {
-        write_record(tree, *node_id, *taffy_node, out, offset);
-        offset += POSITIONED_COMMAND_BYTES;
-    }
-    *out_used = offset as u32;
-    OK
-}
-
-/// Write a single 40-byte PositionedCommand at `out[offset..]`.
-fn write_record(
-    tree: &LayoutTree,
-    node_id: u64,
-    taffy_node: taffy::NodeId,
-    out: &mut [u8],
-    offset: usize,
-) {
-    let layout = match tree.taffy.layout(taffy_node) {
-        Ok(l) => l,
-        Err(_) => {
-            // Node has no computed layout (shouldn't happen after compute(); write zeros).
-            out[offset..offset + POSITIONED_COMMAND_BYTES].fill(0);
-            return;
+    let root = match tree.root {
+        Some(r) => r,
+        None => {
+            *out_used = 16;
+            return OK;
         }
     };
 
-    let x = layout.location.x;
-    let y = layout.location.y;
-    let w = layout.size.width;
-    let h = layout.size.height;
-    // Content area = size minus padding (Taffy's padding field is top/right/bottom/left).
-    let content_x = x + layout.padding.left;
-    let content_y = y + layout.padding.top;
-    let content_w = w - layout.padding.left - layout.padding.right;
-    let content_h = h - layout.padding.top - layout.padding.bottom;
+    // Build reverse map: TaffyNodeId → Vexart stable node_id.
+    let reverse: HashMap<taffy::NodeId, u64> = tree
+        .id_map
+        .iter()
+        .map(|(&vx_id, &taffy_id)| (taffy_id, vx_id))
+        .collect();
 
-    out[offset..offset + 8].copy_from_slice(&node_id.to_le_bytes());
-    out[offset + 8..offset + 12].copy_from_slice(&x.to_le_bytes());
-    out[offset + 12..offset + 16].copy_from_slice(&y.to_le_bytes());
-    out[offset + 16..offset + 20].copy_from_slice(&w.to_le_bytes());
-    out[offset + 20..offset + 24].copy_from_slice(&h.to_le_bytes());
-    out[offset + 24..offset + 28].copy_from_slice(&content_x.to_le_bytes());
-    out[offset + 28..offset + 32].copy_from_slice(&content_y.to_le_bytes());
-    out[offset + 32..offset + 36].copy_from_slice(&content_w.to_le_bytes());
-    out[offset + 36..offset + 40].copy_from_slice(&content_h.to_le_bytes());
+    // DFS walk accumulating absolute positions.
+    let max_records = (out.len() - 16) / POSITIONED_COMMAND_BYTES;
+    let mut offset = 16usize;
+    let mut records_written = 0usize;
+
+    // Stack: (taffy_node, abs_x, abs_y)
+    let mut stack: Vec<(taffy::NodeId, f32, f32)> = vec![(root, 0.0, 0.0)];
+
+    while let Some((node, parent_abs_x, parent_abs_y)) = stack.pop() {
+        if records_written >= max_records {
+            break;
+        }
+
+        let layout = match tree.taffy.layout(node) {
+            Ok(l) => l,
+            Err(_) => continue,
+        };
+
+        let abs_x = parent_abs_x + layout.location.x;
+        let abs_y = parent_abs_y + layout.location.y;
+        let w = layout.size.width;
+        let h = layout.size.height;
+        let content_x = abs_x + layout.padding.left;
+        let content_y = abs_y + layout.padding.top;
+        let content_w = w - layout.padding.left - layout.padding.right;
+        let content_h = h - layout.padding.top - layout.padding.bottom;
+
+        if let Some(&vx_id) = reverse.get(&node) {
+            out[offset..offset + 8].copy_from_slice(&vx_id.to_le_bytes());
+            out[offset + 8..offset + 12].copy_from_slice(&abs_x.to_le_bytes());
+            out[offset + 12..offset + 16].copy_from_slice(&abs_y.to_le_bytes());
+            out[offset + 16..offset + 20].copy_from_slice(&w.to_le_bytes());
+            out[offset + 20..offset + 24].copy_from_slice(&h.to_le_bytes());
+            out[offset + 24..offset + 28].copy_from_slice(&content_x.to_le_bytes());
+            out[offset + 28..offset + 32].copy_from_slice(&content_y.to_le_bytes());
+            out[offset + 32..offset + 36].copy_from_slice(&content_w.to_le_bytes());
+            out[offset + 36..offset + 40].copy_from_slice(&content_h.to_le_bytes());
+            offset += POSITIONED_COMMAND_BYTES;
+            records_written += 1;
+        }
+
+        // Push children in reverse order so left-most child is processed first.
+        if let Ok(children) = tree.taffy.children(node) {
+            for &child in children.iter().rev() {
+                stack.push((child, abs_x, abs_y));
+            }
+        }
+    }
+
+    // Update header with actual records written (may be fewer if buffer was small).
+    out[8..12].copy_from_slice(&(records_written as u32).to_le_bytes());
+    out[12..16]
+        .copy_from_slice(&((records_written * POSITIONED_COMMAND_BYTES) as u32).to_le_bytes());
+
+    *out_used = (16 + records_written * POSITIONED_COMMAND_BYTES) as u32;
+    OK
 }
 
 #[cfg(test)]
