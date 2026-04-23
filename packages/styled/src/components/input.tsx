@@ -41,7 +41,7 @@ export function VoidInput(props: VoidInputProps) {
           height={36}
           paddingLeft={space[3]}
           paddingRight={space[3]}
-          backgroundColor={themeColors.transparent}
+          backgroundColor={themeColors.card}
           cornerRadius={radius.md}
           borderColor={ctx.focused ? themeColors.ring : themeColors.input}
           borderWidth={1}

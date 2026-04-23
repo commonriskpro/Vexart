@@ -43,7 +43,7 @@ export function VoidCheckbox(props: VoidCheckboxProps) {
             width={BOX_SIZE}
             height={BOX_SIZE}
             cornerRadius={radius.sm}
-            backgroundColor={ctx.checked ? themeColors.primary : themeColors.transparent}
+            backgroundColor={ctx.checked ? themeColors.primary : themeColors.card}
             borderColor={
               ctx.focused ? themeColors.ring
                 : ctx.checked ? themeColors.primary

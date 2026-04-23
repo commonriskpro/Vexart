@@ -27,9 +27,11 @@ export function VoidProgress(props: VoidProgressProps) {
       max={props.max}
       renderBar={(ctx: ProgressBarRenderContext) => (
         <box
-          width={props.width ?? "grow"}
+          width={props.width ?? 220}
           height={props.height ?? 6}
-          backgroundColor={themeColors.secondary}
+          backgroundColor={themeColors.card}
+          borderColor={themeColors.border}
+          borderWidth={1}
           cornerRadius={radius.full}
         >
           <box

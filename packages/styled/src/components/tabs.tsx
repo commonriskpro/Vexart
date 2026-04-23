@@ -52,14 +52,16 @@ export function VoidTabs(props: VoidTabsProps) {
           backgroundColor={
             variant() === "default" && ctx.active
               ? themeColors.background
-              : themeColors.transparent
+              : variant() === "line" && ctx.active
+                ? themeColors.secondary
+                : themeColors.transparent
           }
           borderBottom={variant() === "line" && ctx.active ? 2 : 0}
           borderColor={variant() === "line" && ctx.active ? themeColors.foreground : themeColors.transparent}
           hoverStyle={{
             backgroundColor: variant() === "default"
               ? ctx.active ? themeColors.background : themeColors.accent
-              : themeColors.transparent,
+              : ctx.active ? themeColors.secondary : themeColors.accent,
           }}
         >
           <text
@@ -76,9 +78,9 @@ export function VoidTabs(props: VoidTabsProps) {
       renderTabBar={(children) => (
         <box
           direction="row"
-          backgroundColor={variant() === "default" ? themeColors.muted : themeColors.transparent}
-          cornerRadius={variant() === "default" ? radius.lg : 0}
-          padding={variant() === "default" ? space[0.5] : 0}
+          backgroundColor={variant() === "default" ? themeColors.muted : themeColors.card}
+          cornerRadius={variant() === "default" ? radius.lg : radius.md}
+          padding={variant() === "default" ? space[0.5] : space[0.5]}
           borderBottom={variant() === "line" ? 1 : 0}
           borderColor={themeColors.border}
           gap={variant() === "line" ? space[1] : 0}

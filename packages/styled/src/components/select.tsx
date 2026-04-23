@@ -50,7 +50,7 @@ export function VoidSelect(props: VoidSelectProps) {
               width={props.width ?? "grow"}
               paddingLeft={space[3]}
               paddingRight={space[2]}
-            backgroundColor={ctx.disabled ? themeColors.muted : themeColors.transparent}
+            backgroundColor={ctx.disabled ? themeColors.muted : themeColors.card}
             cornerRadius={radius.md}
             borderColor={ctx.focused ? themeColors.ring : themeColors.input}
             borderWidth={1}

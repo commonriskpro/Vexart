@@ -406,7 +406,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     if (scrollTarget) {
       const sid = scrollTarget.props.scrollId ?? `tge-scroll-${scrollTarget.id}`
       const handle = createScrollHandle(sid)
-      if (scrollTarget.props.scrollY && sdy !== 0) handle.scrollBy(-sdy)
+      if (scrollTarget.props.scrollY && sdy !== 0) handle.scrollBy(sdy)
       if (scrollTarget.props.scrollX && sdx !== 0) handle.scrollBy(-sdx)
     }
   }

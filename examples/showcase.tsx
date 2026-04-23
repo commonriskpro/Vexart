@@ -781,9 +781,9 @@ function TabDataVirtual() {
           <Show when={mockData.data()}>
             <For each={mockData.data()!.users}>
               {(user) => (
-                <box direction="row" gap={space[3]} padding={space[2]} backgroundColor={themeColors.card} cornerRadius={radius.md}>
+                <box direction="row" gap={space[3]} padding={space[2]} width="100%" alignY="center" backgroundColor={themeColors.card} cornerRadius={radius.md}>
                   <Avatar name={user.name} size="sm" />
-                  <box direction="column">
+                  <box direction="column" width="grow">
                     <text color={themeColors.foreground} fontSize={font.sm}>{user.name}</text>
                     <text color={themeColors.mutedForeground} fontSize={font.xs}>{user.role}</text>
                   </box>
@@ -822,14 +822,23 @@ function TabDataVirtual() {
             renderItem={(item, index, ctx) => (
               <box
                 height={28}
+                width="100%"
                 direction="row" gap={space[3]}
                 paddingX={space[3]} alignY="center"
                 backgroundColor={ctx.selected ? "#1a2a3a" : ctx.highlighted ? themeColors.accent : ctx.hovered ? themeColors.secondary : themeColors.background}
               >
-                <text color={themeColors.mutedForeground} fontSize={10}>{String(index + 1).padStart(4, " ")}</text>
-                <text color={ctx.selected ? "#4fc4d4" : themeColors.foreground} fontSize={font.xs}>{item.name}</text>
-                <text color={themeColors.mutedForeground} fontSize={10}>{item.category}</text>
-                <text color="#4488cc" fontSize={10}>{item.value}</text>
+                <box width={28} alignX="right">
+                  <text color={themeColors.mutedForeground} fontSize={10}>{String(index + 1)}</text>
+                </box>
+                <box width={92}>
+                  <text color={ctx.selected ? "#4fc4d4" : themeColors.foreground} fontSize={font.xs}>{item.name}</text>
+                </box>
+                <box width="grow">
+                  <text color={themeColors.mutedForeground} fontSize={10}>{item.category}</text>
+                </box>
+                <box width={44} alignX="right">
+                  <text color="#4488cc" fontSize={10}>{item.value}</text>
+                </box>
               </box>
             )}
           />
@@ -969,11 +978,11 @@ function VoidInputDemo() {
     <box direction="column" gap={space[3]} width={320}>
       <box direction="column" gap={space[1]}>
         <text color={themeColors.mutedForeground} fontSize={font.xs}>Name</text>
-        <VoidInput value={name()} onChange={setName} placeholder="Your name..." />
+        <VoidInput width={320} value={name()} onChange={setName} placeholder="Your name..." />
       </box>
       <box direction="column" gap={space[1]}>
         <text color={themeColors.mutedForeground} fontSize={font.xs}>Email</text>
-        <VoidInput value={email()} onChange={setEmail} placeholder="you@example.com" />
+        <VoidInput width={320} value={email()} onChange={setEmail} placeholder="you@example.com" />
       </box>
       <Show when={name() || email()}>
         <text color={themeColors.mutedForeground} fontSize={font.xs}>
@@ -1037,7 +1046,7 @@ function VoidProgressDemo() {
             {progress() >= 100 ? "Done!" : `${progress()}%`}
           </text>
         </box>
-        <VoidProgress value={progress()} />
+        <VoidProgress width={220} value={progress()} />
         <box direction="row" gap={space[2]} paddingTop={space[1]}>
           <box focusable onPress={startUpload}><Button size="xs">Simulate Upload</Button></box>
           <box focusable onPress={resetUpload}><Button size="xs" variant="outline">Reset</Button></box>
@@ -1050,7 +1059,7 @@ function VoidProgressDemo() {
           <box width="grow"><text color={themeColors.foreground} fontSize={font.sm}>Tasks completed</text></box>
           <text color={themeColors.mutedForeground} fontSize={font.xs}>{tasks()}/{TOTAL_TASKS}</text>
         </box>
-        <VoidProgress value={tasks()} max={TOTAL_TASKS} />
+        <VoidProgress width={220} value={tasks()} max={TOTAL_TASKS} />
         <box direction="row" gap={space[2]} paddingTop={space[1]}>
           <box focusable onPress={() => setTasks(t => Math.min(TOTAL_TASKS, t + 1))}>
             <Button size="xs">Complete Task</Button>
