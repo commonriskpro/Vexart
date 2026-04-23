@@ -25,7 +25,7 @@ function ShadowSection() {
       <Text color={colors.mutedForeground} fontSize={12}>
         Drop Shadows
       </Text>
-      <Box direction="row" gap={space[8]} padding={space[6]} backgroundColor={0x2a2a3eff} cornerRadius={12}>
+      <Box direction="row" gap={space[8]}>
         <Box
           backgroundColor={colors.card}
           cornerRadius={radius.xl}
