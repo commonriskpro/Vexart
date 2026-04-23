@@ -17,7 +17,7 @@
  * Run: bun run showcase
  */
 
-import { createSignal, onCleanup } from "solid-js"
+import { createEffect, createSignal, onCleanup } from "solid-js"
 import {
   mount,
   createTerminal,
@@ -25,6 +25,7 @@ import {
   useFocus,
   useQuery,
   useTerminalDimensions,
+  createScrollHandle,
   createTransition,
   createSpring,
   For,
@@ -214,154 +215,131 @@ function TabVisualEffects() {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function TabBackdropFilters() {
+  const filterTiles = [
+    {
+      title: "Brightness",
+      label: "brightness 180",
+      gradient: { from: 0x4488ccff, to: 0x22c55eff, angle: 45 },
+      panel: { backdropBrightness: 180 },
+      textColor: "#fff",
+    },
+    {
+      title: "Contrast",
+      label: "contrast 200",
+      gradient: { from: 0x4488ccff, to: 0x22c55eff, angle: 45 },
+      panel: { backdropContrast: 200 },
+      textColor: "#fff",
+    },
+    {
+      title: "Grayscale",
+      label: "grayscale 100",
+      gradient: { from: 0xdc2626ff, to: 0xf59e0bff, angle: 0 },
+      panel: { backdropGrayscale: 100 },
+      textColor: "#fff",
+    },
+    {
+      title: "Invert",
+      label: "invert 100",
+      gradient: { from: 0x4488ccff, to: 0xa855f7ff, angle: 0 },
+      panel: { backdropInvert: 100 },
+      textColor: "#000",
+    },
+    {
+      title: "Sepia",
+      label: "sepia 100",
+      gradient: { from: 0x4488ccff, to: 0x22c55eff, angle: 90 },
+      panel: { backdropSepia: 100 },
+      textColor: "#fff",
+    },
+    {
+      title: "Hue Rotate",
+      label: "hue +180°",
+      gradient: { from: 0xdc2626ff, to: 0x4488ccff, angle: 0 },
+      panel: { backdropHueRotate: 180 },
+      textColor: "#fff",
+    },
+  ] as const
+
   return (
     <box direction="column" gap={space[4]} padding={space[4]} width="grow">
-      {/* Glassmorphism */}
-      <SectionBox title="GLASSMORPHISM (backdrop blur + semi-transparent)">
-        <box width={450} height={130} gradient={{ type: "linear", from: 0x56d4c8ff, to: 0xdc2626ff, angle: 0 }} padding={space[3]} direction="column" gap={space[3]}>
-          <box direction="row" gap={40}>
-            <text color={0x000000ff} fontSize={24} fontWeight={700}>BLUR</text>
-            <text color={0xffffffff} fontSize={24} fontWeight={700}>TEST</text>
-            <text color={0x000000ff} fontSize={24} fontWeight={700}>SHARP</text>
+      <SectionBox title="BACKDROP FILTERS (current supported showcase)">
+        <box direction="column" gap={space[4]}>
+          <box width={540} height={170} gradient={{ type: "linear", from: 0x56d4c8ff, to: 0xdc2626ff, angle: 0 }} cornerRadius={radius.lg}>
+            <box direction="row" gap={40} paddingTop={14} paddingLeft={24}>
+              <text color={0x000000ff} fontSize={24} fontWeight={700}>BLUR</text>
+              <text color={0xffffffff} fontSize={24} fontWeight={700}>TEST</text>
+              <text color={0x000000ff} fontSize={24} fontWeight={700}>SHARP</text>
+            </box>
+            <box
+              width={380}
+              height={72}
+              backgroundColor={0xffffff20}
+              backdropBlur={16}
+              cornerRadius={radius.xl}
+              borderWidth={1}
+              borderColor={0xffffff30}
+              floating="parent"
+              floatOffset={{ x: 80, y: 74 }}
+              alignX="center"
+              alignY="center"
+            >
+              <text color={themeColors.foreground} fontSize={font.sm}>glass panel — content behind is blurred</text>
+            </box>
           </box>
-          <box
-            width={380} height={60}
-            backgroundColor={0xffffff20}
-            backdropBlur={16}
-            cornerRadius={radius.xl}
-            borderWidth={1} borderColor={0xffffff30}
-            alignX="center" alignY="center"
-          >
-            <text color={themeColors.foreground} fontSize={font.sm}>glass panel — content behind is blurred</text>
-          </box>
-        </box>
-      </SectionBox>
 
-      {/* Backdrop filters — each on a gradient background */}
-      <SectionBox title="BACKDROP FILTERS (7 CSS-spec filters)">
-        <box direction="column" gap={space[3]}>
-          {/* Background stripe with text to show filter effects */}
-          <box direction="row" gap={space[2]}>
-            {/* Brightness */}
-            <box width={130} height={96} gradient={{ type: "linear", from: 0x4488ccff, to: 0x22c55eff, angle: 45 }} padding={space[2]} direction="column" gap={space[2]}>
-              <text color="#fff" fontSize={font.xs} fontWeight={weight.semibold}>Brightness</text>
-              <box
-                width={110} height={40}
-                backdropBrightness={180}
-                backgroundColor={0xffffff08}
-                cornerRadius={radius.md}
-                alignX="center" alignY="center"
-              >
+          <box direction="row" gap={space[3]}>
+            <box width={160} height={120} gradient={{ type: "linear", from: 0x4488ccff, to: 0x22c55eff, angle: 45 }} cornerRadius={radius.lg}>
+              <box width={120} height={48} backdropBrightness={180} backgroundColor={0xffffff08} cornerRadius={radius.md} floating="parent" floatOffset={{ x: 20, y: 48 }} alignX="center" alignY="center">
                 <text color="#fff" fontSize={font.xs}>brightness 180</text>
               </box>
+              <box paddingTop={10} paddingLeft={12}><text color="#fff" fontSize={font.xs} fontWeight={weight.semibold}>Brightness</text></box>
             </box>
 
-            {/* Contrast */}
-            <box width={130} height={96} gradient={{ type: "linear", from: 0x4488ccff, to: 0x22c55eff, angle: 45 }} padding={space[2]} direction="column" gap={space[2]}>
-              <text color="#fff" fontSize={font.xs} fontWeight={weight.semibold}>Contrast</text>
-              <box
-                width={110} height={40}
-                backdropContrast={200}
-                backgroundColor={0xffffff08}
-                cornerRadius={radius.md}
-                alignX="center" alignY="center"
-              >
+            <box width={160} height={120} gradient={{ type: "linear", from: 0x4488ccff, to: 0x22c55eff, angle: 45 }} cornerRadius={radius.lg}>
+              <box width={120} height={48} backdropContrast={200} backgroundColor={0xffffff08} cornerRadius={radius.md} floating="parent" floatOffset={{ x: 20, y: 48 }} alignX="center" alignY="center">
                 <text color="#fff" fontSize={font.xs}>contrast 200</text>
               </box>
+              <box paddingTop={10} paddingLeft={12}><text color="#fff" fontSize={font.xs} fontWeight={weight.semibold}>Contrast</text></box>
             </box>
 
-            {/* Grayscale */}
-            <box width={130} height={96} gradient={{ type: "linear", from: 0xdc2626ff, to: 0xf59e0bff, angle: 0 }} padding={space[2]} direction="column" gap={space[2]}>
-              <text color="#fff" fontSize={font.xs} fontWeight={weight.semibold}>Grayscale</text>
-              <box
-                width={110} height={40}
-                backdropGrayscale={100}
-                backgroundColor={0xffffff08}
-                cornerRadius={radius.md}
-                alignX="center" alignY="center"
-              >
+            <box width={160} height={120} gradient={{ type: "linear", from: 0xdc2626ff, to: 0xf59e0bff, angle: 0 }} cornerRadius={radius.lg}>
+              <box width={120} height={48} backdropGrayscale={100} backgroundColor={0xffffff08} cornerRadius={radius.md} floating="parent" floatOffset={{ x: 20, y: 48 }} alignX="center" alignY="center">
                 <text color="#fff" fontSize={font.xs}>grayscale 100</text>
               </box>
+              <box paddingTop={10} paddingLeft={12}><text color="#fff" fontSize={font.xs} fontWeight={weight.semibold}>Grayscale</text></box>
             </box>
           </box>
 
-          <box direction="row" gap={space[2]}>
-            {/* Invert */}
-            <box width={130} height={96} gradient={{ type: "linear", from: 0x4488ccff, to: 0xa855f7ff, angle: 0 }} padding={space[2]} direction="column" gap={space[2]}>
-              <text color="#fff" fontSize={font.xs} fontWeight={weight.semibold}>Invert</text>
-              <box
-                width={110} height={40}
-                backdropInvert={100}
-                backgroundColor={0xffffff08}
-                cornerRadius={radius.md}
-                alignX="center" alignY="center"
-              >
+          <box direction="row" gap={space[3]}>
+            <box width={160} height={120} gradient={{ type: "linear", from: 0x4488ccff, to: 0xa855f7ff, angle: 0 }} cornerRadius={radius.lg}>
+              <box width={120} height={48} backdropInvert={100} backgroundColor={0xffffff08} cornerRadius={radius.md} floating="parent" floatOffset={{ x: 20, y: 48 }} alignX="center" alignY="center">
                 <text color="#000" fontSize={font.xs}>invert 100</text>
               </box>
+              <box paddingTop={10} paddingLeft={12}><text color="#fff" fontSize={font.xs} fontWeight={weight.semibold}>Invert</text></box>
             </box>
 
-            {/* Sepia */}
-            <box width={130} height={96} gradient={{ type: "linear", from: 0x4488ccff, to: 0x22c55eff, angle: 90 }} padding={space[2]} direction="column" gap={space[2]}>
-              <text color="#fff" fontSize={font.xs} fontWeight={weight.semibold}>Sepia</text>
-              <box
-                width={110} height={40}
-                backdropSepia={100}
-                backgroundColor={0xffffff08}
-                cornerRadius={radius.md}
-                alignX="center" alignY="center"
-              >
+            <box width={160} height={120} gradient={{ type: "linear", from: 0x4488ccff, to: 0x22c55eff, angle: 90 }} cornerRadius={radius.lg}>
+              <box width={120} height={48} backdropSepia={100} backgroundColor={0xffffff08} cornerRadius={radius.md} floating="parent" floatOffset={{ x: 20, y: 48 }} alignX="center" alignY="center">
                 <text color="#fff" fontSize={font.xs}>sepia 100</text>
               </box>
+              <box paddingTop={10} paddingLeft={12}><text color="#fff" fontSize={font.xs} fontWeight={weight.semibold}>Sepia</text></box>
             </box>
 
-            {/* Hue rotate */}
-            <box width={130} height={96} gradient={{ type: "linear", from: 0xdc2626ff, to: 0x4488ccff, angle: 0 }} padding={space[2]} direction="column" gap={space[2]}>
-              <text color="#fff" fontSize={font.xs} fontWeight={weight.semibold}>Hue Rotate</text>
-              <box
-                width={110} height={40}
-                backdropHueRotate={180}
-                backgroundColor={0xffffff08}
-                cornerRadius={radius.md}
-                alignX="center" alignY="center"
-              >
+            <box width={160} height={120} gradient={{ type: "linear", from: 0xdc2626ff, to: 0x4488ccff, angle: 0 }} cornerRadius={radius.lg}>
+              <box width={120} height={48} backdropHueRotate={180} backgroundColor={0xffffff08} cornerRadius={radius.md} floating="parent" floatOffset={{ x: 20, y: 48 }} alignX="center" alignY="center">
                 <text color="#fff" fontSize={font.xs}>hue +180°</text>
               </box>
+              <box paddingTop={10} paddingLeft={12}><text color="#fff" fontSize={font.xs} fontWeight={weight.semibold}>Hue Rotate</text></box>
             </box>
           </box>
 
-          <box direction="row" gap={space[2]}>
-            {/* Saturate */}
-            <box width={130} height={96} gradient={{ type: "linear", from: 0x4488ccff, to: 0xf59e0bff, angle: 0 }} padding={space[2]} direction="column" gap={space[2]}>
-              <text color="#fff" fontSize={font.xs} fontWeight={weight.semibold}>Desaturate</text>
-              <box
-                width={110} height={40}
-                backdropSaturate={0}
-                backgroundColor={0xffffff08}
-                cornerRadius={radius.md}
-                alignX="center" alignY="center"
-              >
-                <text color="#fff" fontSize={font.xs}>saturate 0</text>
-              </box>
+          <box width={300} height={120} gradient={{ type: "linear", from: 0x22c55eff, to: 0x3b82f6ff, angle: 0 }} cornerRadius={radius.lg}>
+            <box direction="row" gap={30} paddingTop={10} paddingLeft={14}>
+              <text color={0x000000ff} fontSize={20} fontWeight={700}>VEXART</text>
+              <text color={0xffffffff} fontSize={20} fontWeight={700}>ENGINE</text>
             </box>
-
-            {/* Combined blur + brightness + saturate */}
-            <box width={270} height={110} gradient={{ type: "linear", from: 0x22c55eff, to: 0x3b82f6ff, angle: 0 }} padding={space[2]} direction="column" gap={space[2]}>
-              <box direction="row" gap={30}>
-                <text color={0x000000ff} fontSize={20} fontWeight={700}>VEXART</text>
-                <text color={0xffffffff} fontSize={20} fontWeight={700}>ENGINE</text>
-              </box>
-              <box
-                width={230} height={45}
-                backdropBlur={12}
-                backdropBrightness={130}
-                backdropSaturate={160}
-                backgroundColor={0xffffff15}
-                cornerRadius={radius.lg}
-                borderWidth={1} borderColor={0xffffff20}
-                alignX="center" alignY="center"
-              >
-                <text color="#fff" fontSize={font.xs}>blur + bright + saturate combined</text>
-              </box>
+            <box width={250} height={50} backdropBlur={12} backdropBrightness={130} backdropSaturate={160} backgroundColor={0xffffff15} cornerRadius={radius.lg} borderWidth={1} borderColor={0xffffff20} floating="parent" floatOffset={{ x: 24, y: 54 }} alignX="center" alignY="center">
+              <text color="#fff" fontSize={font.xs}>blur + bright + saturate combined</text>
             </box>
           </box>
         </box>
@@ -1486,6 +1464,11 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   const [activeTab, setActiveTab] = createSignal(0)
   const dims = useTerminalDimensions(props.terminal)
 
+  createEffect(() => {
+    const id = `showcase-tab-${activeTab()}`
+    createScrollHandle(id).scrollTo(0)
+  })
+
   useFocus({
     id: "tab-nav",
     onKeyDown(e) {
@@ -1554,7 +1537,7 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
         </box>
       ) : null}
       {activeTab() === 1 ? (
-        <box height="grow" direction="column" scrollY scrollId="showcase-tab-1">
+        <box height="grow" direction="column">
           <TabBackdropFilters />
         </box>
       ) : null}

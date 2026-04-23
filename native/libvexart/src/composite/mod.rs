@@ -174,13 +174,17 @@ pub fn composite_render_image_layer(
 
         let clear_op = if layer.first_pass {
             layer.first_pass = false;
-            let c = clear_rgba;
-            wgpu::LoadOp::Clear(wgpu::Color {
-                r: ((c >> 24) & 0xff) as f64 / 255.0,
-                g: ((c >> 16) & 0xff) as f64 / 255.0,
-                b: ((c >> 8) & 0xff) as f64 / 255.0,
-                a: (c & 0xff) as f64 / 255.0,
-            })
+            if layer.first_load_mode == 0 {
+                let c = layer.clear_rgba;
+                wgpu::LoadOp::Clear(wgpu::Color {
+                    r: ((c >> 24) & 0xff) as f64 / 255.0,
+                    g: ((c >> 16) & 0xff) as f64 / 255.0,
+                    b: ((c >> 8) & 0xff) as f64 / 255.0,
+                    a: (c & 0xff) as f64 / 255.0,
+                })
+            } else {
+                wgpu::LoadOp::Load
+            }
         } else {
             wgpu::LoadOp::Load
         };
@@ -537,59 +541,27 @@ pub fn readback_region_rgba(
 
 // ─── Task 1.5: Backdrop filter + mask on images ───────────────────────────
 
-/// Apply the 7-op backdrop filter chain to an image, producing a new image handle.
-///
-/// `params_ptr` points to a 28-byte buffer: 7 × f32 in order:
-///   brightness, contrast, saturate, grayscale, invert, sepia, hue_rotate_deg
-///
-/// The filter is applied using the existing `backdrop_filter` pipeline (cmd_kind=16).
-/// Returns the new image handle in `*out_image`.
-pub fn image_filter_backdrop(
-    pctx: &mut PaintContext,
-    image: u64,
-    params_ptr: *const u8,
-    params_len: u32,
-    out_image: *mut u64,
-) -> i32 {
-    use crate::paint::instances::BackdropFilterInstance;
-    use bytemuck::bytes_of;
-    use wgpu::util::DeviceExt;
-
-    if out_image.is_null() {
-        return ERR_INVALID_ARG;
-    }
-    if params_ptr.is_null() || params_len < 28 {
-        return ERR_INVALID_ARG;
-    }
-
-    // Read 7 filter params.
-    // SAFETY: caller guarantees params_ptr is valid for params_len bytes.
-    let params: &[f32] = unsafe {
-        std::slice::from_raw_parts(params_ptr as *const f32, 7)
-    };
-    let brightness = params[0];
-    let contrast = params[1];
-    let saturate = params[2];
-    let grayscale = params[3];
-    let invert = params[4];
-    let sepia = params[5];
-    let hue_rotate_deg = params[6];
-
-    // Determine source image size.
-    let (src_w, src_h) = match pctx.images.get(&image) {
+fn source_image_size(pctx: &PaintContext, image: u64) -> Result<(u32, u32), i32> {
+    match pctx.images.get(&image) {
         Some(img) => {
             let size = img.texture.size();
-            (size.width, size.height)
+            Ok((size.width, size.height))
         }
-        None => return ERR_INVALID_HANDLE,
-    };
+        None => Err(ERR_INVALID_HANDLE),
+    }
+}
 
-    // Create destination texture (same size as source).
-    let dst_texture = pctx.wgpu.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("vexart-filter-dst"),
+fn create_effect_destination(
+    pctx: &PaintContext,
+    label: &'static str,
+    width: u32,
+    height: u32,
+) -> (wgpu::Texture, wgpu::TextureView) {
+    let texture = pctx.wgpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
         size: wgpu::Extent3d {
-            width: src_w,
-            height: src_h,
+            width,
+            height,
             depth_or_array_layers: 1,
         },
         mip_level_count: 1,
@@ -601,9 +573,141 @@ pub fn image_filter_backdrop(
             | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     });
-    let dst_view = dst_texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    (texture, view)
+}
 
-    // Build filter instance (full-NDC quad).
+fn register_effect_output(
+    pctx: &mut PaintContext,
+    label: &'static str,
+    texture: wgpu::Texture,
+    view: wgpu::TextureView,
+) -> u64 {
+    let sampler = pctx.wgpu.device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some(label),
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        address_mode_w: wgpu::AddressMode::ClampToEdge,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+        ..Default::default()
+    });
+    let bind_group = pctx.wgpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some(label),
+        layout: &pctx.wgpu.image_bind_group_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&sampler),
+            },
+        ],
+    });
+
+    let handle = crate::paint::alloc_image_handle();
+    pctx.images.insert(
+        handle,
+        crate::paint::ImageRecord {
+            texture,
+            view,
+            bind_group,
+        },
+    );
+    handle
+}
+
+fn remove_temp_image(pctx: &mut PaintContext, handle: u64) {
+    let _ = pctx.images.remove(&handle);
+}
+
+fn render_blur_image(
+    pctx: &mut PaintContext,
+    image: u64,
+    blur_radius: f32,
+) -> Result<u64, i32> {
+    use crate::paint::instances::BackdropBlurInstance;
+    use bytemuck::bytes_of;
+    use wgpu::util::DeviceExt;
+
+    let (src_w, src_h) = source_image_size(pctx, image)?;
+    let (dst_texture, dst_view) = create_effect_destination(pctx, "vexart-blur-dst", src_w, src_h);
+
+    let instance = BackdropBlurInstance {
+        x: -1.0,
+        y: -1.0,
+        w: 2.0,
+        h: 2.0,
+        blur_radius,
+        _pad0: 0.0,
+        _pad1: 0.0,
+        _pad2: 0.0,
+    };
+
+    let vertex_buf = pctx.wgpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("vexart-blur-instance-buf"),
+        contents: bytes_of(&instance),
+        usage: wgpu::BufferUsages::VERTEX,
+    });
+
+    let src_bg_ptr: *const wgpu::BindGroup = {
+        let img = pctx.images.get(&image).unwrap();
+        &img.bind_group as *const wgpu::BindGroup
+    };
+
+    let mut encoder = pctx.wgpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("vexart-blur-encoder"),
+    });
+
+    {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("vexart-blur-pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &dst_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+
+        pass.set_pipeline(&pctx.wgpu.pipelines.backdrop_blur);
+        pass.set_vertex_buffer(0, vertex_buf.slice(..));
+        pass.set_bind_group(0, unsafe { &*src_bg_ptr }, &[]);
+        pass.draw(0..6, 0..1);
+    }
+
+    pctx.wgpu.queue.submit(std::iter::once(encoder.finish()));
+    Ok(register_effect_output(pctx, "vexart-blur-bind-group", dst_texture, dst_view))
+}
+
+fn render_color_filter_image(
+    pctx: &mut PaintContext,
+    image: u64,
+    brightness: f32,
+    contrast: f32,
+    saturate: f32,
+    grayscale: f32,
+    invert: f32,
+    sepia: f32,
+    hue_rotate_deg: f32,
+) -> Result<u64, i32> {
+    use crate::paint::instances::BackdropFilterInstance;
+    use bytemuck::bytes_of;
+    use wgpu::util::DeviceExt;
+
+    let (src_w, src_h) = source_image_size(pctx, image)?;
+    let (dst_texture, dst_view) = create_effect_destination(pctx, "vexart-filter-dst", src_w, src_h);
+
     let instance = BackdropFilterInstance {
         x: -1.0,
         y: -1.0,
@@ -625,7 +729,6 @@ pub fn image_filter_backdrop(
         usage: wgpu::BufferUsages::VERTEX,
     });
 
-    // Extract source bind group before mutable ops.
     let src_bg_ptr: *const wgpu::BindGroup = {
         let img = pctx.images.get(&image).unwrap();
         &img.bind_group as *const wgpu::BindGroup
@@ -655,51 +758,115 @@ pub fn image_filter_backdrop(
 
         pass.set_pipeline(&pctx.wgpu.pipelines.backdrop_filter);
         pass.set_vertex_buffer(0, vertex_buf.slice(..));
-        // SAFETY: src_bg_ptr is stable — image is in pctx.images (heap map).
         pass.set_bind_group(0, unsafe { &*src_bg_ptr }, &[]);
         pass.draw(0..6, 0..1);
     }
 
     pctx.wgpu.queue.submit(std::iter::once(encoder.finish()));
+    Ok(register_effect_output(pctx, "vexart-filter-bind-group", dst_texture, dst_view))
+}
 
-    // Register new image.
-    let sampler = pctx.wgpu.device.create_sampler(&wgpu::SamplerDescriptor {
-        label: Some("vexart-filter-sampler"),
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
-        address_mode_v: wgpu::AddressMode::ClampToEdge,
-        address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        mipmap_filter: wgpu::MipmapFilterMode::Nearest,
-        ..Default::default()
-    });
-    let dst_bind_group = pctx.wgpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("vexart-filter-bind-group"),
-        layout: &pctx.wgpu.image_bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&dst_view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::Sampler(&sampler),
-            },
-        ],
-    });
+/// Apply backdrop blur + color filter chain to an image, producing a new image handle.
+///
+/// `params_ptr` points to a 32-byte buffer: 8 × f32 in order:
+///   blur, brightness, contrast, saturate, grayscale, invert, sepia, hue_rotate_deg
+///
+/// NaN means "parameter absent" from the TS caller.
+/// Blur is applied first, then the 7-op color filter chain.
+/// Returns the new image handle in `*out_image`.
+pub fn image_filter_backdrop(
+    pctx: &mut PaintContext,
+    image: u64,
+    params_ptr: *const u8,
+    params_len: u32,
+    out_image: *mut u64,
+) -> i32 {
+    if out_image.is_null() {
+        return ERR_INVALID_ARG;
+    }
+    if params_ptr.is_null() || params_len < 32 {
+        return ERR_INVALID_ARG;
+    }
 
-    let handle = crate::paint::alloc_image_handle();
-    pctx.images.insert(
-        handle,
-        crate::paint::ImageRecord {
-            texture: dst_texture,
-            view: dst_view,
-            bind_group: dst_bind_group,
-        },
-    );
+    // Read 8 filter params.
+    // SAFETY: caller guarantees params_ptr is valid for params_len bytes.
+    let params: &[f32] = unsafe {
+        std::slice::from_raw_parts(params_ptr as *const f32, 8)
+    };
+    let blur_raw = params[0];
+    let brightness_raw = params[1];
+    let contrast_raw = params[2];
+    let saturate_raw = params[3];
+    let grayscale_raw = params[4];
+    let invert_raw = params[5];
+    let sepia_raw = params[6];
+    let hue_rotate_deg_raw = params[7];
 
-    // SAFETY: out_image is non-null (checked above).
-    unsafe { *out_image = handle };
+    let blur = if blur_raw.is_nan() { 0.0 } else { blur_raw.max(0.0) };
+    let brightness = if brightness_raw.is_nan() { 100.0 } else { brightness_raw };
+    let contrast = if contrast_raw.is_nan() { 100.0 } else { contrast_raw };
+    let saturate = if saturate_raw.is_nan() { 100.0 } else { saturate_raw };
+    let grayscale = if grayscale_raw.is_nan() { 0.0 } else { grayscale_raw };
+    let invert = if invert_raw.is_nan() { 0.0 } else { invert_raw };
+    let sepia = if sepia_raw.is_nan() { 0.0 } else { sepia_raw };
+    let hue_rotate_deg = if hue_rotate_deg_raw.is_nan() { 0.0 } else { hue_rotate_deg_raw };
+
+    let has_blur = blur > 0.0;
+    let has_color = (brightness - 100.0).abs() > f32::EPSILON
+        || (contrast - 100.0).abs() > f32::EPSILON
+        || (saturate - 100.0).abs() > f32::EPSILON
+        || grayscale.abs() > f32::EPSILON
+        || invert.abs() > f32::EPSILON
+        || sepia.abs() > f32::EPSILON
+        || hue_rotate_deg.abs() > f32::EPSILON;
+
+    if source_image_size(pctx, image).is_err() {
+        return ERR_INVALID_HANDLE;
+    }
+
+    let mut current_image = image;
+    let mut blur_image = None;
+
+    if has_blur {
+        let handle = match render_blur_image(pctx, current_image, blur) {
+            Ok(handle) => handle,
+            Err(code) => return code,
+        };
+        current_image = handle;
+        blur_image = Some(handle);
+    }
+
+    if has_color {
+        let filtered = match render_color_filter_image(
+            pctx,
+            current_image,
+            brightness,
+            contrast,
+            saturate,
+            grayscale,
+            invert,
+            sepia,
+            hue_rotate_deg,
+        ) {
+            Ok(handle) => handle,
+            Err(code) => {
+                if let Some(handle) = blur_image {
+                    remove_temp_image(pctx, handle);
+                }
+                return code;
+            }
+        };
+        if let Some(handle) = blur_image {
+            remove_temp_image(pctx, handle);
+        }
+        current_image = filtered;
+    }
+
+    if current_image == image {
+        return ERR_INVALID_ARG;
+    }
+
+    unsafe { *out_image = current_image };
     OK
 }
 

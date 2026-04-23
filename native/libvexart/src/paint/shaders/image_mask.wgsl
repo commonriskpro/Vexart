@@ -15,7 +15,6 @@ struct VSOut {
   @builtin(position) position: vec4<f32>,
   @location(0) uv: vec2<f32>,        // texture UV for source sampling
   @location(1) local_uv: vec2<f32>,  // UV relative to mask region [0,1]
-  @location(2) mask_size: vec2<f32>, // mask region size (NDC half-extents)
   @location(3) radii: vec4<f32>,     // tl, tr, br, bl (all uniform if mode==0)
 }
 
@@ -64,9 +63,6 @@ fn vs_main(
   );
   // Local UV within the mask region [0,1].
   out.local_uv = uv;
-  // Mask half-size in NDC units (divided by 2 to get half-extent for SDF).
-  out.mask_size = vec2<f32>(mask_rect.z * 0.5, mask_rect.w * 0.5);
-
   let mode = radii_bl_mode_pad.y;
   let r_uniform = radii_u_tl_tr_br.x;
   if (mode < 0.5) {
@@ -88,9 +84,10 @@ fn vs_main(
 fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
   let sampled = textureSample(t_source, s_source, in.uv);
 
-  // Map local_uv [0,1] to centred coordinates for SDF.
-  let hs = in.mask_size;  // half-size
-  let p = (in.local_uv - vec2<f32>(0.5, 0.5)) * in.mask_size * 2.0;
+  // Use source image pixel dimensions so corner radii remain in px.
+  let size_px = vec2<f32>(textureDimensions(t_source));
+  let hs = size_px * 0.5;
+  let p = (in.local_uv - vec2<f32>(0.5, 0.5)) * size_px;
 
   let dist = sd_rounded_rect(p, hs, in.radii);
 

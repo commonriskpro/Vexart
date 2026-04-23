@@ -19,6 +19,7 @@
 
 import { render as solidRender } from "../reconciler/reconciler"
 import type { TGENode } from "../ffi/node"
+import { insertChild, removeChild } from "../ffi/node"
 import { createRenderLoop } from "../loop/loop"
 import { markDirty } from "../reconciler/dirty"
 import { setRendererBackend, getRendererBackend } from "../ffi/renderer-backend"
@@ -34,6 +35,8 @@ export type RenderToBufferResult = {
   width: number
   height: number
 }
+
+type LoopInstance = ReturnType<typeof createRenderLoop>
 
 // ── Mock terminal ────────────────────────────────────────────────────────────
 
@@ -148,6 +151,31 @@ export async function renderToBuffer(
   height: number,
   frames = 2,
 ): Promise<RenderToBufferResult> {
+  return captureToBuffer(width, height, frames, (loop) => solidRender(component as () => TGENode, loop.root))
+}
+
+/**
+ * Render a pre-built TGENode tree once to a raw RGBA pixel buffer.
+ * Useful for low-level tests that want to bypass JSX/Solid compilation.
+ */
+export async function renderNodeToBuffer(
+  node: TGENode,
+  width: number,
+  height: number,
+  frames = 2,
+): Promise<RenderToBufferResult> {
+  return captureToBuffer(width, height, frames, (loop) => {
+    insertChild(loop.root, node)
+    return () => removeChild(loop.root, node)
+  })
+}
+
+async function captureToBuffer(
+  width: number,
+  height: number,
+  frames: number,
+  mountScene: (loop: LoopInstance) => () => void,
+): Promise<RenderToBufferResult> {
   // Force final-frame-raw so the GPU backend composites all layers into a
   // single RGBA buffer that endFrame can return to us.
   const prevStrategy = process.env["TGE_GPU_FORCE_LAYER_STRATEGY"]
@@ -166,7 +194,7 @@ export async function renderToBuffer(
     experimental: { forceLayerRepaint: true },
   })
 
-  const dispose = solidRender(component as () => TGENode, loop.root)
+  const dispose = mountScene(loop)
   bindLoop(loop)
   markDirty()
 

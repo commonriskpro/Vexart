@@ -71,7 +71,7 @@ function vexartCompositeTargetEndLayer(vctx: bigint, target: bigint): void {
   if (result !== 0) throw new Error(`vexart_composite_target_end_layer failed: ${result}`)
 }
 
-/** Composite an image onto a target. x/y/w/h are NDC coordinates. */
+/** Composite an image onto a target. x/y/w/h are pixel coordinates. */
 function vexartCompositeRenderImageLayer(
   vctx: bigint,
   target: bigint,
@@ -98,7 +98,7 @@ function vexartCompositeCopyRegionToImage(
   return out[0]
 }
 
-/** Apply backdrop filter params to an image. params: float32 array [blur,brightness,contrast,saturate,grayscale,invert,sepia,hueRotate]. Returns 0n on failure. */
+/** Apply backdrop filter params to an image. params: float32 array [blur, brightness, contrast, saturate, grayscale, invert, sepia, hueRotate]. NaN means "not requested". Returns 0n on failure. */
 function vexartCompositeImageFilterBackdrop(
   vctx: bigint,
   image: bigint,
@@ -1733,10 +1733,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
               ensureLoadedLayer()
               vexartCompositeRenderImageLayer(
                 vctx, targetHandle, sprite.handle,
-                (sprite.bounds.left / ctx.target.width) * 2 - 1,
-                1 - (sprite.bounds.top / ctx.target.height) * 2,
-                ((sprite.bounds.right - sprite.bounds.left) / ctx.target.width) * 2,
-                -(((sprite.bounds.bottom - sprite.bounds.top) / ctx.target.height) * 2),
+                sprite.bounds.left,
+                sprite.bounds.top,
+                sprite.bounds.right - sprite.bounds.left,
+                sprite.bounds.bottom - sprite.bounds.top,
                 1, 0x00000000,
               )
               first = false
@@ -1765,10 +1765,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             const masked = vexartCompositeImageMaskRoundedRect(vctx, sprite.handle, maskRectBuf)
             vexartCompositeRenderImageLayer(
               vctx, targetHandle, masked,
-              (sprite.bounds.left / ctx.target.width) * 2 - 1,
-              1 - (sprite.bounds.top / ctx.target.height) * 2,
-              ((sprite.bounds.right - sprite.bounds.left) / ctx.target.width) * 2,
-              -(((sprite.bounds.bottom - sprite.bounds.top) / ctx.target.height) * 2),
+              sprite.bounds.left,
+              sprite.bounds.top,
+              sprite.bounds.right - sprite.bounds.left,
+              sprite.bounds.bottom - sprite.bounds.top,
               first ? 0 : 1, 0x00000000,
             )
             vexartRemoveImage(vctx, masked)
@@ -1953,10 +1953,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
               if (!handle) return { ok: false, rawLayer: null }
               vexartCompositeRenderImageLayer(
                 vctx, targetHandle, handle,
-                (clip.left / ctx.target.width) * 2 - 1,
-                1 - (clip.top / ctx.target.height) * 2,
-                (boxW / ctx.target.width) * 2,
-                -((boxH / ctx.target.height) * 2),
+                clip.left,
+                clip.top,
+                boxW,
+                boxH,
                 first ? 0 : 1, 0x00000000,
               )
               vexartRemoveImage(vctx, handle)
@@ -1992,10 +1992,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
               if (!handle) return { ok: false, rawLayer: null }
               vexartCompositeRenderImageLayer(
                 vctx, targetHandle, handle,
-                (clip.left / ctx.target.width) * 2 - 1,
-                1 - (clip.top / ctx.target.height) * 2,
-                (boxW / ctx.target.width) * 2,
-                -((boxH / ctx.target.height) * 2),
+                clip.left,
+                clip.top,
+                boxW,
+                boxH,
                 first ? 0 : 1, 0x00000000,
               )
               vexartRemoveImage(vctx, handle)

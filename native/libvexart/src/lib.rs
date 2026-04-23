@@ -524,8 +524,8 @@ pub unsafe extern "C" fn vexart_composite_copy_region_to_image(
     })
 }
 
-/// Apply 7-op backdrop filter to an image, returning new image handle.
-/// `params_ptr` = 7 × f32: brightness, contrast, saturate, grayscale, invert, sepia, hue_rotate_deg.
+/// Apply backdrop blur + 7-op color filter chain to an image, returning new image handle.
+/// `params_ptr` = 8 × f32: blur, brightness, contrast, saturate, grayscale, invert, sepia, hue_rotate_deg.
 /// (REQ-2B-006)
 ///
 /// # Safety
