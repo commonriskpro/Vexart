@@ -293,6 +293,33 @@ pub struct BridgeGlowInstance {
     pub _pad2: f32,
 }
 
+/// Mirrors bridge ShadowInstance (20 floats: rect + color + radii + params).
+/// Used by the dedicated analytic box-shadow pipeline.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct BridgeShadowInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub color_r: f32,
+    pub color_g: f32,
+    pub color_b: f32,
+    pub color_a: f32,
+    pub radius_tl: f32,
+    pub radius_tr: f32,
+    pub radius_br: f32,
+    pub radius_bl: f32,
+    pub box_w: f32,
+    pub box_h: f32,
+    pub offset_x: f32,
+    pub offset_y: f32,
+    pub blur: f32,
+    pub _pad0: f32,
+    pub _pad1: f32,
+    pub _pad2: f32,
+}
+
 /// Mirrors bridge NebulaInstance (32 floats).
 /// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
 #[repr(C)]
@@ -643,6 +670,41 @@ mod tests {
         };
         let bytes: &[u8] = cast_slice(std::slice::from_ref(&inst));
         let back: &[ShadowInstance] = cast_slice(bytes);
+        assert_eq!(back[0].blur, 12.0);
+    }
+
+    #[test]
+    fn test_bridge_shadow_instance_size_is_80_bytes() {
+        assert_eq!(std::mem::size_of::<BridgeShadowInstance>(), 80);
+    }
+
+    #[test]
+    fn test_bridge_shadow_instance_pod_roundtrip() {
+        let inst = BridgeShadowInstance {
+            x: -1.0,
+            y: 1.0,
+            w: 2.0,
+            h: -2.0,
+            color_r: 0.0,
+            color_g: 0.0,
+            color_b: 0.0,
+            color_a: 0.4,
+            radius_tl: 16.0,
+            radius_tr: 16.0,
+            radius_br: 16.0,
+            radius_bl: 16.0,
+            box_w: 200.0,
+            box_h: 100.0,
+            offset_x: 0.0,
+            offset_y: 8.0,
+            blur: 12.0,
+            _pad0: 0.0,
+            _pad1: 0.0,
+            _pad2: 0.0,
+        };
+        let bytes: &[u8] = cast_slice(std::slice::from_ref(&inst));
+        let back: &[BridgeShadowInstance] = cast_slice(bytes);
+        assert_eq!(back[0].offset_y, 8.0);
         assert_eq!(back[0].blur, 12.0);
     }
 

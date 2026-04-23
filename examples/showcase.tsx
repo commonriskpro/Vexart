@@ -6,7 +6,7 @@
  * Within each tab: scroll content with mouse wheel.
  *
  * Features validated:
- *   Tab 1 — Visual Effects: shadows, glow, gradients (linear/radial), per-corner radius, multi-shadow
+ *   Tab 1 — Visual Effects: analytic shadows, glow, gradients (linear/radial), per-corner radius, multi-shadow
  *   Tab 2 — Backdrop Filters: 7 CSS filters + glassmorphism + element opacity
  *   Tab 3 — Interactive: focusStyle, onPress, hover/active, Dialog focus trap
  *   Tab 4 — Forms: createForm validation, Combobox, Slider
@@ -77,7 +77,7 @@ function SectionBox(props: { title: string; children: unknown }) {
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // TAB 1: Visual Effects
-// Validates: shadows, glow, linear/radial gradient, per-corner radius,
+// Validates: analytic shadows, glow, linear/radial gradient, per-corner radius,
 //            multi-shadow, gradient + rounded rect masking
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -85,7 +85,7 @@ function TabVisualEffects() {
   return (
     <box direction="column" gap={space[4]} padding={space[4]} width="grow">
       {/* Shadows */}
-      <SectionBox title="DROP SHADOWS (sm / md / lg / colored)">
+      <SectionBox title="DROP SHADOWS (analytic offset / sm / md / lg / colored)">
         <box direction="row" gap={space[6]}>
           <box backgroundColor={themeColors.card} cornerRadius={radius.lg} padding={space[5]} shadow={shadows.sm}>
             <text color={themeColors.foreground} fontSize={font.sm}>Subtle</text>
@@ -98,6 +98,62 @@ function TabVisualEffects() {
           </box>
           <box backgroundColor={themeColors.card} cornerRadius={radius.lg} padding={space[5]} shadow={{ x: 4, y: 4, blur: 12, color: 0xa855f760 }}>
             <text color="#a855f7" fontSize={font.sm}>Purple</text>
+          </box>
+        </box>
+      </SectionBox>
+
+      <SectionBox title="ANALYTIC SHADOW FIDELITY (offset + radius on light surface)">
+        <box
+          direction="column"
+          gap={space[4]}
+          padding={space[4]}
+          cornerRadius={radius.xl}
+          gradient={{ type: "linear", from: 0xf2f5faff, to: 0xd8e0ebff, angle: 90 }}
+        >
+          <text color={0x334155ff} fontSize={font.xs}>Real shadow should separate from the card, not glow evenly in all directions.</text>
+          <box direction="row" gap={space[5]} alignY="center">
+            <box
+              width={148}
+              height={92}
+              backgroundColor={0xffffffff}
+              cornerRadius={radius.xl}
+              borderWidth={1}
+              borderColor={0x94a3b814}
+              padding={space[4]}
+              shadow={{ x: 0, y: 10, blur: 14, color: 0x0f172a46 }}
+            >
+              <text color={0x0f172aff} fontSize={font.sm}>Soft depth</text>
+              <text color={0x475569ff} fontSize={font.xs}>y=10 blur=14</text>
+            </box>
+            <box
+              width={156}
+              height={92}
+              backgroundColor={0xffffffff}
+              cornerRadii={{ tl: 24, tr: 8, br: 24, bl: 8 }}
+              borderWidth={1}
+              borderColor={0x94a3b814}
+              padding={space[4]}
+              shadow={{ x: 14, y: 18, blur: 18, color: 0x1e293b4a }}
+            >
+              <text color={0x0f172aff} fontSize={font.sm}>Offset card</text>
+              <text color={0x475569ff} fontSize={font.xs}>per-corner + diagonal</text>
+            </box>
+            <box
+              width={164}
+              height={92}
+              backgroundColor={0xf8fafcff}
+              cornerRadius={radius.xl}
+              borderWidth={1}
+              borderColor={0x94a3b820}
+              padding={space[4]}
+              shadow={[
+                { x: 0, y: 2, blur: 4, color: 0x0f172a30 },
+                { x: 0, y: 14, blur: 22, color: 0x0f172a22 },
+              ]}
+            >
+              <text color={0x0f172aff} fontSize={font.sm}>Stacked layers</text>
+              <text color={0x475569ff} fontSize={font.xs}>contact + ambient</text>
+            </box>
           </box>
         </box>
       </SectionBox>

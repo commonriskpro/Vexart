@@ -141,7 +141,9 @@ impl PaintContext {
     ///     18=glyph (MSDF text, REQ-2B-203/204)
     ///   Phase 2b Slice 5:
     ///     19=self_filter (REQ-2B-402/403/404)
-    ///   20..=31 reserved for Phase 2b (blend, gradient_stroke, etc.)
+    ///   Phase 4+:
+    ///     20=shadow (analytic box-shadow)
+    ///   21..=31 reserved for future pipelines (blend, gradient_stroke, etc.)
     ///
     /// Phase 2b: `target` is resolved from the TargetRegistry.
     /// If target=0, falls back to the PaintContext default offscreen texture.
@@ -479,6 +481,8 @@ fn instance_stride_for_kind(kind: u16) -> usize {
         18 => size_of::<MsdfGlyphInstance>(),
         // Phase 2b Slice 5 — self-filter pipeline
         19 => size_of::<SelfFilterInstance>(),
+        // Phase 4+ — analytic box-shadow pipeline
+        20 => size_of::<BridgeShadowInstance>(),
         _ => 0,
     }
 }
@@ -512,6 +516,8 @@ fn pipeline_for_kind<'a>(
         18 => &reg.glyph,
         // Phase 2b Slice 5 — self-filter pipeline
         19 => &reg.self_filter,
+        // Phase 4+ — analytic box-shadow pipeline
+        20 => &reg.shadow,
         _ => panic!("pipeline_for_kind called with unsupported kind {kind}"),
     }
 }
@@ -719,5 +725,38 @@ mod tests {
         let mut ctx = PaintContext::new();
         let result = ctx.dispatch(1, &buf, std::ptr::null_mut());
         assert_eq!(result, OK, "image_mask dispatch should return OK");
+    }
+
+    #[cfg(feature = "gpu-tests")]
+    #[test]
+    fn test_dispatch_shadow_returns_ok() {
+        let instance = instances::BridgeShadowInstance {
+            x: -1.0,
+            y: 1.0,
+            w: 2.0,
+            h: -2.0,
+            color_r: 0.0,
+            color_g: 0.0,
+            color_b: 0.0,
+            color_a: 0.4,
+            radius_tl: 16.0,
+            radius_tr: 16.0,
+            radius_br: 16.0,
+            radius_bl: 16.0,
+            box_w: 64.0,
+            box_h: 32.0,
+            offset_x: 0.0,
+            offset_y: 6.0,
+            blur: 12.0,
+            _pad0: 0.0,
+            _pad1: 0.0,
+            _pad2: 0.0,
+        };
+        let payload = bytemuck::bytes_of(&instance).to_vec();
+        let buf = make_graph_buf(20, &payload);
+
+        let mut ctx = PaintContext::new();
+        let result = ctx.dispatch(1, &buf, std::ptr::null_mut());
+        assert_eq!(result, OK, "shadow dispatch should return OK");
     }
 }

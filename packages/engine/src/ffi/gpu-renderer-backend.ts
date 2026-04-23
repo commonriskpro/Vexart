@@ -1,8 +1,7 @@
 // gpu-renderer-backend.ts — Phase 2b native path
 // All GPU target lifecycle, compositing, readback, and backdrop/mask operations
 // rewired to vexart_composite_* FFI (Phase 2b Slice 2). wgpu-canvas-bridge deleted.
-// Per design §11, §8.2 cmd_kind allocation. Shadow preserved at L1502-1521 as glow (cmd_kind=6).
-// Per §17.3: shadow emits GlowInstance with offset (s.x,s.y), padding (s.blur*2).
+// Per design §11, §8.2 cmd_kind allocation. Shadow uses dedicated cmd_kind=20.
 
 import { appendFileSync } from "node:fs"
 import { ptr } from "bun:ffi"
@@ -24,7 +23,7 @@ import {
   GRAPH_MAGIC, GRAPH_VERSION,
 } from "./vexart-buffer"
 // Phase 2b: All paint + composite ops route through libvexart.
-// Paint primitives: vexart_paint_dispatch cmd_kinds 0-17.
+// Paint primitives: vexart_paint_dispatch cmd_kinds 0-20.
 // Target lifecycle: vexart_composite_target_create/destroy/begin_layer/end_layer.
 // Compositing: vexart_composite_render_image_layer.
 // Copy region: vexart_composite_copy_region_to_image.
@@ -220,6 +219,15 @@ type WgpuCanvasShapeRectCorners = {
 
 type WgpuCanvasGlow = { x: number; y: number; w: number; h: number; color: number; intensity: number }
 
+type WgpuCanvasShadow = {
+  x: number; y: number; w: number; h: number
+  color: number
+  radii: WgpuCanvasCornerRadii
+  boxW: number; boxH: number
+  offsetX: number; offsetY: number
+  blur: number
+}
+
 // ── vexart graph buffer helpers ─────────────────────────────────────────────
 // Per design §8: 16-byte header + 8-byte per-command prefix + body.
 // Used by flushVexartBatch() to build the packed buffer and call vexart_paint_dispatch.
@@ -274,7 +282,7 @@ function vexartReadbackRgba(ctx: bigint, width: number, height: number): Uint8Ar
 /**
  * Build a §8 graph buffer containing the given instances and call vexart_paint_dispatch.
  * instanceData: flat packed bytes for all instances of this cmd_kind.
- * cmd_kind: one of 0-17 per §8.2.
+ * cmd_kind: one of 0-20 per §8.2.
  * target: 0n = default context target, non-zero = specific registry target.
  */
 function flushVexartBatch(ctx: bigint, cmdKind: number, instanceData: Uint8Array, target: bigint = 0n): void {
@@ -361,7 +369,6 @@ function packShapeRectCornersInstance(x: number, y: number, w: number, h: number
 
 /**
  * Pack BridgeGlowInstance (12 floats: x,y,w,h + r,g,b,a + intensity + pad*3) for cmd_kind=6.
- * Used for both glow and shadow (shadow = glow with offset-adjusted rect per §17.3).
  */
 function packGlowInstance(x: number, y: number, w: number, h: number, color: number, intensity: number): Uint8Array {
   const buf = new ArrayBuffer(48)
@@ -370,6 +377,33 @@ function packGlowInstance(x: number, y: number, w: number, h: number, color: num
   vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
   vf32(v, 16, r); vf32(v, 20, g); vf32(v, 24, b); vf32(v, 28, a)
   vf32(v, 32, intensity); vf32(v, 36, 0); vf32(v, 40, 0); vf32(v, 44, 0)
+  return new Uint8Array(buf)
+}
+
+/**
+ * Pack BridgeShadowInstance (20 floats) for cmd_kind=20.
+ */
+function packShadowInstance(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  color: number,
+  radii: WgpuCanvasCornerRadii,
+  boxW: number,
+  boxH: number,
+  offsetX: number,
+  offsetY: number,
+  blur: number,
+): Uint8Array {
+  const buf = new ArrayBuffer(80)
+  const v = new DataView(buf)
+  const r = ((color >>> 24) & 0xff) / 255; const g = ((color >>> 16) & 0xff) / 255; const b = ((color >>> 8) & 0xff) / 255; const a = (color & 0xff) / 255
+  vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
+  vf32(v, 16, r); vf32(v, 20, g); vf32(v, 24, b); vf32(v, 28, a)
+  vf32(v, 32, radii.tl); vf32(v, 36, radii.tr); vf32(v, 40, radii.br); vf32(v, 44, radii.bl)
+  vf32(v, 48, boxW); vf32(v, 52, boxH); vf32(v, 56, offsetX); vf32(v, 60, offsetY)
+  vf32(v, 64, blur); vf32(v, 68, 0); vf32(v, 72, 0); vf32(v, 76, 0)
   return new Uint8Array(buf)
 }
 
@@ -839,6 +873,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   const shapeRectCorners: WgpuCanvasShapeRectCorners[] = []
   const linearGradients: LinearGradientItem[] = []
   const radialGradients: RadialGradientItem[] = []
+  const shadows: WgpuCanvasShadow[] = []
   const glows: WgpuCanvasGlow[] = []
   const imageGroups = new Map<bigint, ImageGroup>()
   const glyphGroups = new Map<bigint, GlyphGroup>()
@@ -1454,7 +1489,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     const flushGlows = () => {
       if (glows.length === 0) return
       // Dispatch via vexart_paint_dispatch (cmd_kind=6: BridgeGlowInstance)
-      // NOTE: shadow also uses cmd_kind=6 via offset-adjusted rect per design §17.3
       const instances = new Uint8Array(glows.length * 48)
       for (let i = 0; i < glows.length; i++) {
         const g = glows[i]
@@ -1462,6 +1496,19 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       }
       flushVexartBatch(vctx, 6, instances, targetHandle)
       glows.length = 0
+      first = false
+      targetMutationVersion += 1
+    }
+    const flushShadows = () => {
+      if (shadows.length === 0) return
+      // Dispatch via vexart_paint_dispatch (cmd_kind=20: BridgeShadowInstance)
+      const instances = new Uint8Array(shadows.length * 80)
+      for (let i = 0; i < shadows.length; i++) {
+        const s = shadows[i]
+        instances.set(packShadowInstance(s.x, s.y, s.w, s.h, s.color, s.radii, s.boxW, s.boxH, s.offsetX, s.offsetY, s.blur), i * 80)
+      }
+      flushVexartBatch(vctx, 20, instances, targetHandle)
+      shadows.length = 0
       first = false
       targetMutationVersion += 1
     }
@@ -1555,6 +1602,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       flushShapeRectCorners()
       flushLinearGradients()
       flushRadialGradients()
+      flushShadows()
       flushGlows()
       flushImages()
       flushGlyphs()
@@ -1908,22 +1956,28 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           }
 
           if (effectOp.effect.shadow) {
-            const shadows = Array.isArray(effectOp.effect.shadow) ? effectOp.effect.shadow : [effectOp.effect.shadow]
-            for (const s of shadows) {
-              const blur = Math.ceil(s.blur)
-              const pad = blur * 2
+            const shadowDefs = Array.isArray(effectOp.effect.shadow) ? effectOp.effect.shadow : [effectOp.effect.shadow]
+            const shadowRadii = cornerRadii ?? { tl: radius, tr: radius, br: radius, bl: radius }
+            for (const s of shadowDefs) {
+              const blur = Math.max(0, s.blur)
+              const blurPad = Math.ceil(blur)
+              const pad = blurPad * 2
               const left = Math.max(0, clip.left + Math.min(0, s.x) - pad)
               const top = Math.max(0, clip.top + Math.min(0, s.y) - pad)
               const right = Math.min(ctx.target.width, clip.right + Math.max(0, s.x) + pad)
               const bottom = Math.min(ctx.target.height, clip.bottom + Math.max(0, s.y) + pad)
-              const intensity = Math.min(100, Math.max(1, Math.round(((s.color & 0xff) / 255) * 100)))
-              glows.push({
+              shadows.push({
                 x: (left / ctx.target.width) * 2 - 1,
                 y: 1 - (top / ctx.target.height) * 2,
                 w: ((right - left) / ctx.target.width) * 2,
                 h: -(((bottom - top) / ctx.target.height) * 2),
                 color: effectOpacity < 1 ? applyOpacityToColor(s.color, effectOpacity) : s.color,
-                intensity,
+                radii: shadowRadii,
+                boxW,
+                boxH,
+                offsetX: s.x,
+                offsetY: s.y,
+                blur,
               })
               markDirty(left, top, right, bottom)
             }

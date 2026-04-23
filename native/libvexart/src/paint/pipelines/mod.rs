@@ -1,6 +1,6 @@
 // native/libvexart/src/paint/pipelines/mod.rs
-// PipelineRegistry: holds all 18 GPU render pipelines (13 ported + 4 new from Slice 5b
-// + 1 MSDF text from Phase 2b Slice 4).
+// PipelineRegistry: holds all 20 GPU render pipelines (13 ported + 4 new from Slice 5b
+// + 1 MSDF text + 1 self-filter + 1 analytic shadow pipeline).
 // Per design §17.1, §17.6, tasks 5a.2–5a.15, 5b.1–5b.5, 4.3.
 
 pub mod backdrop_blur;
@@ -21,11 +21,12 @@ pub mod polygon;
 pub mod rect;
 pub mod rect_corners;
 pub mod shape_rect;
+pub mod shadow;
 pub mod starfield;
 
 use wgpu::{BindGroupLayout, Device, RenderPipeline, TextureFormat};
 
-/// Holds all 19 render pipelines indexed by cmd_kind.
+/// Holds all 20 render pipelines indexed by cmd_kind.
 /// cmd_kind allocation per design §17.6 (as-deployed in Slice 5a + 5b + Phase 2b Slice 4 + 5):
 ///   Slice 5a (ported):
 ///     0 = rect, 1 = shape_rect, 2 = shape_rect_corners, 3 = circle,
@@ -38,7 +39,9 @@ use wgpu::{BindGroupLayout, Device, RenderPipeline, TextureFormat};
 ///     18 = glyph (MSDF text, REQ-2B-203/204)
 ///   Phase 2b Slice 5 (self-filter):
 ///     19 = self_filter (REQ-2B-402/403/404)
-///   20..=31 reserved for Phase 2b (blend, gradient_stroke, etc.)
+///   Phase 4+:
+///     20 = shadow (analytic box-shadow)
+///   21..=31 reserved for future pipelines (blend, gradient_stroke, etc.)
 pub struct PipelineRegistry {
     // ── Slice 5a ──────────────────────────────────────────────────────────────
     pub rect: RenderPipeline,
@@ -63,10 +66,12 @@ pub struct PipelineRegistry {
     pub glyph: RenderPipeline,
     // ── Phase 2b Slice 5 (self-filter) ───────────────────────────────────────
     pub self_filter: RenderPipeline,
+    // ── Phase 4+ ─────────────────────────────────────────────────────────────
+    pub shadow: RenderPipeline,
 }
 
 impl PipelineRegistry {
-    /// Create all 19 pipelines. Called once at WgpuContext init.
+    /// Create all 20 pipelines. Called once at WgpuContext init.
     ///
     /// `cache` — optional wgpu PipelineCache handle for fast warm-start (REQ-2B-601).
     /// On backends that don't support caching (Metal), cache is a no-op and ignored by wgpu.
@@ -100,6 +105,8 @@ impl PipelineRegistry {
             glyph: glyph::create(device, format, image_bgl, cache),
             // Phase 2b Slice 5 — self-filter
             self_filter: filter::create(device, format, image_bgl, cache),
+            // Phase 4+ — analytic box-shadow
+            shadow: shadow::create(device, format, cache),
         }
     }
 }
