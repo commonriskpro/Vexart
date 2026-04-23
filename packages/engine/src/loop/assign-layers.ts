@@ -357,11 +357,39 @@ export function assignLayersSpatial(
     }
   }
 
-  const sortedBounds = [...layerBounds]
-    .filter(lb => lb.right > lb.x && !lb.scissor)
-    .sort((a, b) => b.slot.z - a.slot.z)
+  // ── Phase 3: Assign commands to layers using nodeId ancestry ──
+  //
+  // Each command has cmd.nodeId (set by endLayout). Each layer boundary has
+  // boundary.nodeId. A command belongs to a layer if its nodeId IS the layer
+  // node or is a DESCENDANT of the layer node in the TGENode tree.
+  //
+  // This replaces the old spatial-overlap approach which was fragile — a
+  // focused element with larger border could produce commands that spatially
+  // overlapped other layers, stealing their commands.
 
-  const noBoundsLayers = layerBounds.filter(lb => lb.right <= lb.x && !lb.scissor)
+  // Build nodeId → layer mapping. Inner layers (higher z) take priority.
+  // Pre-collect descendant sets for each layer boundary node.
+  const layerDescendants = new Map<number, Set<number>>()
+  for (const lb of layerBounds) {
+    if (lb.scissor) continue // scissor layers handled above
+    const node = resolveNodeByPath(root, lb.boundary.path)
+    if (!node) continue
+    const ids = new Set<number>()
+    ids.add(node.id)
+    function collectIds(n: TGENode) {
+      for (const child of n.children) {
+        ids.add(child.id)
+        collectIds(child)
+      }
+    }
+    collectIds(node)
+    layerDescendants.set(lb.boundary.nodeId, ids)
+  }
+
+  // Sort layers by z descending so inner layers claim commands first
+  const sortedBounds = [...layerBounds]
+    .filter(lb => !lb.scissor)
+    .sort((a, b) => b.slot.z - a.slot.z)
 
   for (let i = 0; i < commands.length; i++) {
     if (claimedByScissor.has(i)) continue
@@ -373,36 +401,12 @@ export function assignLayersSpatial(
       continue
     }
 
-    const cx = Math.round(cmd.x)
-    const cy = Math.round(cmd.y)
-    const cw = Math.max(1, Math.round(cmd.width))
-    const ch = Math.max(1, Math.round(cmd.height))
-    const cr = cx + cw
-    const cb = cy + ch
-
     let assigned = false
-    let best: LayerBounds | null = null
-    let bestArea = 0
-    for (const lb of sortedBounds) {
-      const area = overlapArea(cx, cy, cr, cb, lb.x, lb.y, lb.right, lb.bottom)
-      if (area > bestArea) {
-        best = lb
-        bestArea = area
-        continue
-      }
-      if (area === bestArea && area > 0 && best && lb.slot.z > best.slot.z) {
-        best = lb
-      }
-    }
-
-    if (best && bestArea > 0) {
-      best.slot.cmdIndices.push(i)
-      assigned = true
-    }
-
-    if (!assigned) {
+    if (cmd.nodeId !== undefined) {
+      // Match by nodeId ancestry — find the innermost layer that contains this node
       for (const lb of sortedBounds) {
-        if (cx >= lb.x && cy >= lb.y && cx < lb.right && cy < lb.bottom) {
+        const descendants = layerDescendants.get(lb.boundary.nodeId)
+        if (descendants && descendants.has(cmd.nodeId)) {
           lb.slot.cmdIndices.push(i)
           assigned = true
           break
@@ -411,32 +415,27 @@ export function assignLayersSpatial(
     }
 
     if (!assigned) {
-      bgSlot.cmdIndices.push(i)
-    }
-  }
-
-  // Handle no-bounds layers: extract TEXT commands from bgSlot by content match
-  for (const lb of noBoundsLayers) {
-    const boundary = slotBoundaryByKey.get(lb.slot.key)
-    if (!boundary) continue
-    const node = resolveNodeByPath(root, boundary.path)
-    if (!node) continue
-
-    const texts = collectAllTexts(node, collectText)
-    if (texts.length === 0) continue
-
-    const toMove: number[] = []
-    for (const cmdIdx of bgSlot.cmdIndices) {
-      const cmd = commands[cmdIdx]
-      if (cmd.type === CMD.TEXT && cmd.text && texts.includes(cmd.text)) {
-        toMove.push(cmdIdx)
+      // Fallback: spatial overlap for commands without nodeId
+      const cx = Math.round(cmd.x)
+      const cy = Math.round(cmd.y)
+      const cw = Math.max(1, Math.round(cmd.width))
+      const ch = Math.max(1, Math.round(cmd.height))
+      const cr = cx + cw
+      const cb = cy + ch
+      let best: LayerBounds | null = null
+      let bestArea = 0
+      for (const lb of sortedBounds) {
+        const area = overlapArea(cx, cy, cr, cb, lb.x, lb.y, lb.right, lb.bottom)
+        if (area > bestArea) { best = lb; bestArea = area }
+      }
+      if (best && bestArea > 0) {
+        best.slot.cmdIndices.push(i)
+        assigned = true
       }
     }
 
-    for (const idx of toMove) {
-      const pos = bgSlot.cmdIndices.indexOf(idx)
-      if (pos >= 0) bgSlot.cmdIndices.splice(pos, 1)
-      lb.slot.cmdIndices.push(idx)
+    if (!assigned) {
+      bgSlot.cmdIndices.push(i)
     }
   }
 
