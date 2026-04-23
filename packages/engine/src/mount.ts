@@ -144,9 +144,8 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
     },
   })
 
-  const dispose = solidRender(component, loop.root)
-
   bindLoop(loop)
+  const dispose = solidRender(component, loop.root)
 
   const cellW = terminal.size.cellWidth || 8
   const cellH = terminal.size.cellHeight || 16

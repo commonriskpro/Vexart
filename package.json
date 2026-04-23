@@ -35,6 +35,7 @@
     "demo14": "bun --conditions=browser run examples/textarea.tsx",
     "demo15": "bun --conditions=browser run examples/syntax.tsx",
     "demo16": "bun --conditions=browser run examples/markdown.tsx",
+    "demo:virtual-list-scroll": "bun --conditions=browser run examples/virtual-list-scroll-debug.tsx",
     "showcase": "bun --conditions=browser run examples/showcase.tsx",
     "showcase:tab2": "bun --conditions=browser run examples/showcase-tab2.tsx",
     "showcase:tab2:diagnostic": "bun --conditions=browser run examples/showcase-tab2-diagnostic.tsx",

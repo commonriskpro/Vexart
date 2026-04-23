@@ -194,8 +194,8 @@ async function captureToBuffer(
     experimental: { forceLayerRepaint: true },
   })
 
-  const dispose = mountScene(loop)
   bindLoop(loop)
+  const dispose = mountScene(loop)
   markDirty()
 
   // Run frames — first frame initialises layout, second stabilises

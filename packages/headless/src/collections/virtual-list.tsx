@@ -28,7 +28,7 @@
 
 import { createSignal, For, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import { useFocus, createScrollHandle, onPostScroll, markDirty, type NodeHandle } from "@vexart/engine"
+import { useFocus, createScrollHandle, onPostScroll, markDirty } from "@vexart/engine"
 
 // ── Types ──
 
@@ -77,7 +77,6 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
 
   const scrollId = `vlist-${Math.random().toString(36).slice(2, 8)}`
   const scrollHandle = createScrollHandle(scrollId)
-  let containerRef: NodeHandle | undefined
 
   // Read Clay scroll position reactively
   const scrollPos = () => {
@@ -85,25 +84,19 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     return scrollHandle.scrollTop
   }
 
-  const startIndex = () => Math.max(0, Math.floor(scrollPos() / props.itemHeight) - overscan())
-
   const endIndex = () => {
     const raw = Math.floor(scrollPos() / props.itemHeight) + viewportItems()
     return Math.min(props.items.length, raw + overscan())
   }
 
-  const visibleItems = () => props.items.slice(startIndex(), endIndex())
-
-  const topPad = () => Math.max(0, startIndex() * props.itemHeight)
+  const visibleItems = () => props.items.slice(0, endIndex())
 
   // Bottom spacer
   const bottomPad = () => Math.max(0, totalHeight() - endIndex() * props.itemHeight)
 
-  // Compute item index from absolute mouse Y
-  function indexFromAbsY(absY: number): number {
-    const containerY = containerRef?.layout.y ?? 0
-    const localY = absY - containerY + scrollPos()
-    const idx = Math.floor(localY / props.itemHeight)
+  function indexFromLocalY(localY: number, height: number): number {
+    if (localY < 0 || localY >= height) return -1
+    const idx = Math.floor((localY + scrollPos()) / props.itemHeight)
     return idx >= 0 && idx < props.items.length ? idx : -1
   }
 
@@ -171,18 +164,20 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
 
   const unsubPostScroll = onPostScroll(() => {
     setScrollTick(t => t + 1)
+    markDirty()
   })
   onCleanup(() => unsubPostScroll())
 
   return (
     <box
-      ref={(h: NodeHandle) => { containerRef = h }}
+      layer
       height={props.height}
       width={props.width ?? "grow"}
+      backgroundColor={0x00000001}
       scrollY
       scrollId={scrollId}
       onMouseMove={(e) => {
-        const idx = indexFromAbsY(e.y)
+        const idx = indexFromLocalY(e.nodeY, e.height)
         if (idx !== hoveredIndex()) {
           setHoveredIndex(idx)
           markDirty()
@@ -202,13 +197,9 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
         }
       }}
     >
-      {() => {
-        const tp = topPad()
-        return tp > 0 ? <box height={tp} /> : null
-      }}
       <For each={visibleItems()}>
         {(item, idx) => {
-          const index = startIndex() + idx()
+          const index = idx()
           const render = () => {
             const ctx: VirtualListItemContext = {
               selected: props.selectedIndex === index,
@@ -216,7 +207,11 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
               hovered: hoveredIndex() === index,
               index,
             }
-            return props.renderItem(item, index, ctx)
+            return (
+              <box height={props.itemHeight} width="100%">
+                {props.renderItem(item, index, ctx)}
+              </box>
+            )
           }
           return render as unknown as JSX.Element
         }}
