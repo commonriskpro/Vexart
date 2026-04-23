@@ -390,8 +390,6 @@ export function walkTree(
         const usesSubtreeTransformPass = node.children.length > 0
         if (!usesSubtreeTransformPass) {
           effect.transform = new Float64Array(9)
-          ;(effect as any)._transformConfig = vp.transform
-          ;(effect as any)._transformOrigin = vp.transformOrigin
         }
       }
       state.effectsQueue.push(effect)
@@ -400,9 +398,9 @@ export function walkTree(
 
   // Borders — per-side or uniform (uses resolved visual props)
   const maxInteractiveBorder = Math.max(
-    (node.props.focusStyle as any)?.borderWidth ?? 0,
-    (node.props.hoverStyle as any)?.borderWidth ?? 0,
-    (node.props.activeStyle as any)?.borderWidth ?? 0,
+    node.props.focusStyle?.borderWidth ?? 0,
+    node.props.hoverStyle?.borderWidth ?? 0,
+    node.props.activeStyle?.borderWidth ?? 0,
   )
   const effectiveBorderWidth = Math.max(vp.borderWidth ?? 0, maxInteractiveBorder)
 

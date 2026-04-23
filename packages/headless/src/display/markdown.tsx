@@ -119,7 +119,7 @@ function inlineToText(tokens: MarkedToken[] | undefined): string {
       case "br": result += "\n"; break
       case "del": result += inlineToText(tok.tokens as MarkedToken[]); break
       case "escape": result += tok.text; break
-      default: if ("text" in tok) result += (tok as any).text; break
+      default: if ("text" in tok) result += (tok as { text: string }).text; break
     }
   }
   return result
@@ -138,7 +138,7 @@ function inlineToSpans(tokens: MarkedToken[] | undefined, baseColor: string | nu
       case "br": spans.push({ text: "\n", color: baseColor }); break
       case "del": spans.push(...inlineToSpans(tok.tokens as MarkedToken[], th.del, th)); break
       case "escape": spans.push({ text: tok.text, color: baseColor }); break
-      default: if ("text" in tok) spans.push({ text: (tok as any).text, color: baseColor }); break
+      default: if ("text" in tok) spans.push({ text: (tok as { text: string }).text, color: baseColor }); break
     }
   }
   return spans
@@ -284,7 +284,7 @@ function renderToken(token: MarkedToken, props: MarkdownProps, th: MarkdownTheme
       if ("text" in token) {
         return (
           <box width="100%">
-            <text color={fg} fontSize={14}>{(token as any).text}</text>
+            <text color={fg} fontSize={14}>{(token as { text: string }).text}</text>
           </box>
         )
       }

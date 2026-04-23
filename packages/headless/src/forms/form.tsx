@@ -156,7 +156,7 @@ export function createForm<T extends Record<string, any>>(options: FormOptions<T
       if (formErrors) {
         for (const [key, msg] of Object.entries(formErrors)) {
           if (key in errorSignals) {
-            (errorSignals as any)[key][1](msg)
+            errorSignals[key as keyof T][1](msg)
             valid = false
           }
         }

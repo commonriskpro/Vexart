@@ -10,21 +10,24 @@
  * polyfill with @napi-rs/canvas before first use.
  */
 
-import { createCanvas } from "@napi-rs/canvas"
+import { createCanvas, type Canvas as NapiCanvas } from "@napi-rs/canvas"
 
 // ── Canvas polyfill for Pretext ──
 // Must be set BEFORE importing Pretext, because it calls
 // getMeasureContext() on first prepare().
 if (typeof globalThis.OffscreenCanvas === "undefined") {
-  ;(globalThis as any).OffscreenCanvas = class OffscreenCanvas {
-    private _canvas: any
+  // Polyfill OffscreenCanvas for Pretext in Bun (no DOM/Web APIs).
+  // The class only needs to implement getContext("2d") — the subset Pretext uses.
+  // Cast is required because the Bun type declaration expects the full DOM interface.
+  globalThis.OffscreenCanvas = class OffscreenCanvasPolyfill {
+    private _canvas: NapiCanvas
     constructor(w: number, h: number) {
       this._canvas = createCanvas(w, h)
     }
-    getContext(type: string) {
+    getContext(type: "2d") {
       return this._canvas.getContext(type)
     }
-  }
+  } as unknown as typeof OffscreenCanvas
 }
 
 // Now safe to import Pretext
@@ -160,7 +163,7 @@ export function measureTextHeight(
   lineHeight: number,
 ): number {
   const prepared = prepareText(text, fontId)
-  const result = layout(prepared as any, maxWidth, lineHeight)
+  const result = layout(prepared, maxWidth, lineHeight)
   return result.height
 }
 

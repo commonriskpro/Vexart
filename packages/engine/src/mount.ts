@@ -41,11 +41,11 @@ export class RGBA {
   }
 
   static fromInts(r: number, g: number, b: number, a = 255): RGBA {
-    const c = new RGBA(0, 0, 0, 0)
-    ;(c as any).r = r
-    ;(c as any).g = g
-    ;(c as any).b = b
-    ;(c as any).a = a
+    const c = Object.create(RGBA.prototype) as RGBA
+    ;(c as { r: number }).r = r
+    ;(c as { g: number }).g = g
+    ;(c as { b: number }).b = b
+    ;(c as { a: number }).a = a
     return c
   }
 

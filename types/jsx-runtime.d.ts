@@ -93,6 +93,45 @@ interface BoxProps {
   backdropHueRotate?: number
   opacity?: number
   cornerRadii?: { tl: number; tr: number; br: number; bl: number }
+  /** Self-filter applied to this element's own paint output. */
+  filter?: {
+    blur?: number
+    brightness?: number
+    contrast?: number
+    saturate?: number
+    grayscale?: number
+    invert?: number
+    sepia?: number
+    hueRotate?: number
+  }
+  /** Hint that a property will change soon — pre-promotes node to GPU compositing layer. */
+  willChange?: string | string[]
+  /**
+   * Containment boundary hint.
+   * - 'none': no containment (default).
+   * - 'layout': size changes inside do not re-lay out siblings.
+   * - 'paint': content clipped to bounds.
+   * - 'strict': layout + paint combined.
+   */
+  contain?: "none" | "layout" | "paint" | "strict"
+  /** Default true for browser-like viewport clipping of floating layers. */
+  viewportClip?: boolean
+  /** 2D affine + pseudo-perspective transform. */
+  transform?: {
+    translateX?: number
+    translateY?: number
+    rotate?: number
+    scale?: number
+    scaleX?: number
+    scaleY?: number
+    skewX?: number
+    skewY?: number
+    perspective?: number
+    rotateX?: number
+    rotateY?: number
+  }
+  /** Transform origin point. Default: "center". */
+  transformOrigin?: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | { x: number; y: number }
   // Interactive states — merged over base visual props when active
   hoverStyle?: {
     backgroundColor?: ColorValue
