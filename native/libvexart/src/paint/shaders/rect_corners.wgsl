@@ -56,7 +56,11 @@ fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
   let stroke_width = in.params0.x;
   let has_fill = in.params0.y;
   let has_stroke = in.params0.z;
-  let size = in.params1.xy;
+  // Packed in TS as:
+  //   params0 = (stroke_width, has_fill, has_stroke, boxW)
+  //   params1 = (boxH, 0, 0, 0)
+  // So the rect size is (params0.w, params1.x), NOT params1.xy.
+  let size = vec2<f32>(in.params0.w, in.params1.x);
   let p = in.uv * size - size * 0.5;
   let half_size = size * 0.5;
   let sd = sd_round_rect_corners(p, half_size, in.radii);
