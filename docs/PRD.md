@@ -1121,3 +1121,20 @@ Different aspects of Vexart are "owned" by different documents and processes. Wh
 ---
 
 **END OF PRD v0.1**
+
+### Issue: Real box-shadow shader (deferred to Phase 4+)
+
+**Status**: Open — identified during Phase 3 demo verification.
+
+**Problem**: Drop shadows (`shadow` prop) currently render using the same glow/halo shader (cmd_kind=6) as the `glow` prop. Both produce a radial halo effect. Real CSS-like box-shadows need a dedicated shader that:
+1. Draws a rectangle offset by (x, y) from the element
+2. Applies gaussian blur to the rectangle
+3. Uses the shadow color with proper alpha blending
+
+**Current behavior**: `shadow={{ x: 4, y: 4, blur: 8, color: 0xa8483e60 }}` looks identical to a glow — no directional offset visible.
+
+**Expected behavior**: Shadow should appear as a blurred copy of the element shifted by (x, y), creating depth/elevation effect like CSS `box-shadow`.
+
+**Impact**: Low — dark shadows on dark backgrounds are nearly invisible anyway. Colored shadows show as glows. The visual difference only matters for light themes or elevated card designs.
+
+**Fix**: Add a dedicated shadow shader (cmd_kind=20+) that renders an offset blurred rectangle instead of reusing the radial halo.
