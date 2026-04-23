@@ -5,8 +5,8 @@
  * Design ref: openspec/changes/phase-3-loop-decomposition/design.md §Output+Coordinator
  *
  * Owns the full per-frame pipeline:
- *   1. Feed pointer/scroll to Clay
- *   2. walkTree → Clay → endLayout
+ *   1. Feed pointer/scroll to layoutAdapter (no-op stubs — handled TS-side)
+ *   2. walkTree → layoutAdapter → endLayout
  *   3. writeLayoutBack + updateInteractiveStates
  *   4. Re-layout on click (instant visual feedback)
  *   5. findLayerBoundaries + assignLayersSpatial
@@ -94,8 +94,8 @@ export type CompositeFrameState = {
   // Terminal (for beginSync/endSync, cell size)
   term: Terminal
 
-  // Clay layout adapter
-  clay: ReturnType<typeof createVexartLayoutCtx>
+  // Layout adapter (Taffy-backed, drop-in replacement for the legacy Clay object)
+  layoutAdapter: ReturnType<typeof createVexartLayoutCtx>
 
   // Accumulated scroll deltas (reset to 0 after consumption)
   scroll: { x: number; y: number }
@@ -204,7 +204,7 @@ function buildWalkState(s: CompositeFrameState): WalkTreeState {
     canvasQueue: s.renderGraphQueues.canvases,
     textMetaMap: s.textMetaMap,
     rectNodeById: s.rectNodeById,
-    clay: s.clay,
+    clay: s.layoutAdapter,
   }
 }
 
@@ -222,15 +222,14 @@ function resetWalkAccumulators(s: CompositeFrameState) {
   s.walkCounters.textMeasureIndex = 0
   s.textMetas.length = 0
   s.textMetaMap.clear()
-  s.clay.resetTextMeasures()
   s.rectNodes.length = 0
   s.rectNodeById.clear()
   s.textNodes.length = 0
   s.boxNodes.length = 0
 }
 
-function writeLayoutBack(commands: RenderCommand[], s: CompositeFrameState) {
-  _writeLayoutBack(commands, s.clay.getLastLayoutMap(), {
+function writeLayoutBack(s: CompositeFrameState) {
+  _writeLayoutBack(s.layoutAdapter.getLastLayoutMap(), {
     rectNodes: s.rectNodes,
     textNodes: s.textNodes,
     boxNodes: s.boxNodes,
@@ -249,8 +248,6 @@ function writeLayoutBack(commands: RenderCommand[], s: CompositeFrameState) {
  * the scroll container's viewport bounds (not the scrolled content position).
  */
 function applyScrollOffsets(commands: RenderCommand[], s: CompositeFrameState) {
-  const layoutMap = s.clay.getLastLayoutMap()
-
   for (const node of s.boxNodes) {
     if (!node.props.scrollX && !node.props.scrollY) continue
 
@@ -290,15 +287,10 @@ function applyScrollOffsets(commands: RenderCommand[], s: CompositeFrameState) {
     // Offset render commands for descendants (not SCISSOR commands — they use viewport coords)
     for (const cmd of commands) {
       if (cmd.type === CMD.SCISSOR_START || cmd.type === CMD.SCISSOR_END) continue
-      // Find which node owns this command by matching position against descendants
-      // We offset ALL non-scissor commands that belong to scroll descendants.
-      // Since we know the set of descendant node IDs, we match via the layoutMap.
-      // This is a best-effort O(n) scan — acceptable for scroll containers.
-      // NOTE: Commands don't carry nodeId directly, so we offset by position match.
-      // We compare the command position against the pre-offset layout positions.
-      // The descendant node layouts haven't been scrolled yet (this runs before
-      // applyOffsetToDescendants), so cmd.x/y matches their raw layout.x/y.
-      if (isCommandForDescendant(cmd, descendantIds, layoutMap)) {
+      // Match by nodeId ancestry: check if the command belongs to a descendant node.
+      // cmd.nodeId is set by layout-adapter.endLayout() for every RECT and TEXT command.
+      // This is reliable — it doesn't depend on positional overlap heuristics.
+      if (cmd.nodeId !== undefined && descendantIds.has(cmd.nodeId)) {
         cmd.x += ox
         cmd.y += oy
       }
@@ -319,27 +311,6 @@ function collectDescendantIds(container: TGENode, ids: Set<number>) {
   }
 }
 
-/**
- * Check if a command corresponds to a descendant node.
- * Since commands don't have nodeId attached, we match by layout position.
- */
-function isCommandForDescendant(
-  cmd: RenderCommand,
-  descendantIds: Set<number>,
-  layoutMap: Map<bigint, import("../ffi/layout-writeback").PositionedCommand> | null,
-): boolean {
-  if (!layoutMap) return false
-  for (const id of descendantIds) {
-    const pos = layoutMap.get(BigInt(id))
-    if (!pos) continue
-    // Match by exact position (commands use exact layoutMap values before offset)
-    if (Math.abs(pos.x - cmd.x) < 0.5 && Math.abs(pos.y - cmd.y) < 0.5 &&
-        Math.abs(pos.width - cmd.width) < 0.5 && Math.abs(pos.height - cmd.height) < 0.5) {
-      return true
-    }
-  }
-  return false
-}
 
 function applyOffsetToDescendants(container: TGENode, ox: number, oy: number) {
   for (const child of container.children) {
@@ -398,7 +369,8 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   const dt = Math.min((now - s.lastFrameTime.value) / 1000, 0.1)
   s.lastFrameTime.value = now
 
-  s.clay.setPointer(s.pointer.x, s.pointer.y, s.pointer.down)
+  // Note: pointer handling is done TS-side in updateInteractiveStates.
+  // setPointer()/updateScroll() were Clay-era no-ops and have been removed.
 
   let sdx = s.scroll.x
   let sdy = s.scroll.y
@@ -447,22 +419,22 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
 
   // ── Step 2: Walk tree → Clay layout ──
   resetWalkAccumulators(s)
-  s.clay.beginLayout()
+  s.layoutAdapter.beginLayout()
   walkTreeOnce(s)
-  let commands = s.clay.endLayout()
+  let commands = s.layoutAdapter.endLayout()
 
   // ── Step 3: Write layout back + interaction states ──
-  writeLayoutBack(commands, s)
+  writeLayoutBack(s)
   applyScrollOffsets(commands, s)
   const hadClick = updateInteractiveStates(s)
 
   // Re-layout on click for instant visual feedback (same frame)
   if (hadClick) {
     resetWalkAccumulators(s)
-    s.clay.beginLayout()
+    s.layoutAdapter.beginLayout()
     walkTreeOnce(s)
-    commands = s.clay.endLayout()
-    writeLayoutBack(commands, s)
+    commands = s.layoutAdapter.endLayout()
+    writeLayoutBack(s)
     applyScrollOffsets(commands, s)
   }
 
@@ -531,8 +503,6 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     root: s.root,
     renderGraphQueues: s.renderGraphQueues,
     textMetaMap: s.textMetaMap,
-    rectNodes: s.rectNodes,
-    textNodes: s.textNodes,
     layerComposer: s.layerComposer,
     backendOverride: s.backendOverride,
     lastPresentedInteractionSeq: s.lastPresentedInteractionSeq,

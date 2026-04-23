@@ -149,9 +149,8 @@ export function walkTree(
     const fontId = node.props.fontId ?? 0
     const lineHeight = node.props.lineHeight ?? Math.ceil(fontSize * 1.2)
 
-    // Pre-measure with Pretext for Clay
+    // Pre-measure text dimensions for layout (passed directly to clay.text)
     const measurement = measureForClay(content, fontId, fontSize)
-    clay.setTextMeasure(state.textMeasureIndex.value, measurement.width, measurement.height)
     state.textMeasureIndex.value++
 
     // Track metadata for multi-line paint
@@ -423,14 +422,15 @@ export function walkTree(
     clay.configureBorder(borderColor, effectiveBorderWidth)
   }
 
-  // Scroll / clip container
+  // Scroll / clip container.
+  // Scroll offsets are applied TS-side in applyScrollOffsets() after layout —
+  // the offset params here were Clay-era no-ops and have been removed.
   if (node.props.scrollX || node.props.scrollY) {
-    const offset = clay.getScrollOffset()
     clay.configureClip(
       node.props.scrollX ?? false,
       node.props.scrollY ?? false,
-      offset.x,
-      offset.y,
+      0,
+      0,
     )
   }
 

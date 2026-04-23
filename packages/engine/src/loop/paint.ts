@@ -102,11 +102,9 @@ export type PaintFrameState = {
   // Root node — needed to resolve boundary paths
   root: TGENode
 
-  // Render graph queues — for paintCommandsWithRendererBackend
+  // Render graph queues — for buildRenderGraphFrame
   renderGraphQueues: ReturnType<typeof import("../ffi/render-graph").createRenderGraphQueues>
   textMetaMap: Map<string, import("../ffi/render-graph").TextMeta>
-  rectNodes: TGENode[]
-  textNodes: TGENode[]
 
   // GPU layer composer (Kitty output)
   layerComposer: GpuFrameComposer | null
@@ -241,8 +239,6 @@ export function paintFrame(
     root,
     renderGraphQueues,
     textMetaMap,
-    rectNodes,
-    textNodes,
     layerComposer,
     lastPresentedInteractionSeq,
     lastPresentedInteractionLatencyMs,
@@ -555,10 +551,8 @@ export function paintFrame(
       }
 
       // Build render graph and invoke backend
-      const graph = buildRenderGraphFrame(layerCommands, renderGraphQueues, textMetaMap, {
-        rectNodeIds: rectNodes.map((node) => node.id),
-        textNodeIds: textNodes.map((node) => node.id),
-      })
+      // All commands carry nodeId (set by layout-adapter.endLayout()).
+      const graph = buildRenderGraphFrame(layerCommands, renderGraphQueues, textMetaMap)
       const paintResult = backend.paint({
         targetWidth: lw,
         targetHeight: lh,

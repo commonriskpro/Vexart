@@ -1,7 +1,7 @@
 /**
- * layout-writeback.ts — Phase 2 native path
+ * layout-writeback.ts — Taffy layout output parsing.
  *
- * Parses the Taffy PositionedCommand flat buffer produced by vexart_layout_compute.
+ * Parses the PositionedCommand flat buffer produced by vexart_layout_compute.
  * Per design §10 (Translation 2), §11.
  *
  * Output buffer format from native/libvexart/src/layout/writeback.rs::write_layout():
@@ -17,10 +17,6 @@
  *     f32 content_w     (4 bytes)
  *     f32 content_h     (4 bytes)
  *                       = 40 bytes total
- *
- * Legacy Clay functions (writeLayoutFromElementIds, writeSequentialCommandLayout)
- * are kept for backward compat — they are no-ops in Phase 2 and will be deleted
- * in Slice 11 along with clay.ts.
  */
 
 import type { TGENode } from "./node"
@@ -100,31 +96,10 @@ export function writeLayoutFromPositionedCommands(
   }
 }
 
-// ── Legacy Clay compatibility shims ─────────────────────────────────────────
-// The following functions existed in the Clay layout path. They are kept as
-// no-ops so that callers in loop.ts compile without modification until
-// Slice 11 deletes the Clay path entirely.
-
-/** @deprecated Phase 2 no-op — use writeLayoutFromPositionedCommands instead. */
+/** @deprecated Use writeLayoutFromPositionedCommands or the layoutMap directly. */
 export function applyCommandLayout(node: TGENode, cmd: { x: number; y: number; width: number; height: number }) {
   node.layout.x = cmd.x
   node.layout.y = cmd.y
   node.layout.width = cmd.width
   node.layout.height = cmd.height
-}
-
-/** @deprecated Phase 2 no-op — Clay element ID lookup removed. */
-export function writeLayoutFromElementIds(_boxNodes: TGENode[]): void {
-  // No-op: Clay getElementData() is gone. Layout is written via
-  // writeLayoutFromPositionedCommands after vexart_layout_compute.
-}
-
-/** @deprecated Phase 2 no-op — CMD.RECTANGLE/CMD.TEXT patterns removed. */
-export function writeSequentialCommandLayout(
-  _commands: unknown[],
-  _rectNodes: TGENode[],
-  _textNodes: TGENode[],
-): void {
-  // No-op: Clay render commands are gone. Layout is written via
-  // writeLayoutFromPositionedCommands after vexart_layout_compute.
 }

@@ -1,10 +1,9 @@
 import type { CanvasContext } from "./canvas"
 import type { TGENode } from "./node"
 
-// ── Legacy Clay RenderCommand type (kept for Phase 2 compatibility) ──
-// render-graph.ts accepts RenderCommand objects produced by the legacy Clay path
-// and the vexart path alike. The TYPE definition is unchanged; serialization
-// into the §8 packed graph buffer happens in serializeRenderGraphFrame().
+// ── RenderCommand type ──
+// Commands are produced by layout-adapter.endLayout() and carry nodeId for
+// matching commands to effects, images, and layer assignments.
 
 /** Clay-compatible command type constants. */
 export const CMD = {
@@ -560,13 +559,10 @@ export function buildRenderGraphFrame(
   commands: RenderCommand[],
   queues: RenderGraphQueues,
   textMetaMap: Map<string, TextMeta>,
-  owners?: { rectNodeIds: number[]; textNodeIds: number[] },
 ): RenderGraphFrame {
   const ops: RenderGraphOp[] = []
   const clipStack: ClipStackEntry[] = []
   const queueState: RenderGraphQueueState = { borderEffectIndex: 0 }
-  let rectIdx = 0
-  let textIdx = 0
   for (const cmd of commands) {
     // Process SCISSOR commands for clipStack before building render ops
     if (cmd.type === CMD.SCISSOR_START) {
@@ -578,10 +574,10 @@ export function buildRenderGraphFrame(
       continue
     }
 
-    // Use cmd.nodeId directly when available (set by endLayout).
-    // Fall back to counter-based mapping for legacy compatibility.
-    const rectId = cmd.nodeId ?? (cmd.type === CMD.RECTANGLE ? owners?.rectNodeIds[rectIdx++] ?? null : null)
-    const textId = cmd.nodeId ?? (cmd.type === CMD.TEXT ? owners?.textNodeIds[textIdx++] ?? null : null)
+    // Use cmd.nodeId directly (set by layout-adapter.endLayout()).
+    // All commands carry nodeId — the legacy counter-based fallback has been removed.
+    const rectId = cmd.nodeId ?? null
+    const textId = cmd.nodeId ?? null
     const op = buildRenderOp(cmd, queues, queueState, textMetaMap, {
       rect: cmd.type === CMD.RECTANGLE ? rectId : null,
       text: cmd.type === CMD.TEXT ? textId : null,

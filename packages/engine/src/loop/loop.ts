@@ -14,7 +14,7 @@ import { createLayerComposer } from "../output/layer-composer"
 import { type TGENode, createNode, parseSizing } from "../ffi/node"
 import { createVexartLayoutCtx } from "./layout-adapter"
 
-const clay = createVexartLayoutCtx()
+const layoutAdapter = createVexartLayoutCtx()
 import { markDirty as globalMarkDirty, isDirty as globalIsDirty, clearDirty as globalClearDirty, onGlobalDirty } from "../reconciler/dirty"
 import { hasActiveAnimations } from "./animation"
 import { appendFileSync } from "node:fs"
@@ -125,7 +125,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   root.props = { width: viewportWidth, height: viewportHeight }
   root._widthSizing = parseSizing(viewportWidth)
   root._heightSizing = parseSizing(viewportHeight)
-  clay.init(viewportWidth, viewportHeight)
+  layoutAdapter.init(viewportWidth, viewportHeight)
 
   const layerComposer = createGpuFrameComposer(createLayerComposer(term.write, term.rawWrite, term.caps.transmissionMode, "auto"))
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -263,7 +263,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     viewportWidth,
     viewportHeight,
     term,
-    clay,
+    layoutAdapter,
     scroll,
     pointer,
     postScrollCallbacks,
@@ -333,7 +333,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     const newH = size.pixelHeight || size.rows * (size.cellHeight || 16)
     resizeDebug(`handler cols=${size.cols} rows=${size.rows} pw=${size.pixelWidth} ph=${size.pixelHeight} cw=${size.cellWidth} ch=${size.cellHeight} newW=${newW} newH=${newH} timer=${timer ? 1 : 0} suspended=${isSuspended ? 1 : 0}`)
     viewportWidth = newW; viewportHeight = newH
-    clay.setDimensions(newW, newH)
+    layoutAdapter.setDimensions(newW, newH)
     root.props.width = newW; root.props.height = newH
     root._widthSizing = parseSizing(newW); root._heightSizing = parseSizing(newH)
     layerComposer.clear(); resetLayers(); layerCache.clear()
@@ -397,7 +397,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       unsubResize()
       layerComposer.destroy()
       resetLayers(); layerCache.clear()
-      clay.destroy()
+      layoutAdapter.destroy()
     },
   }
 }

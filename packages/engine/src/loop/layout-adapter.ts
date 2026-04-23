@@ -562,11 +562,36 @@ export function createVexartLayoutCtx() {
       s.borderTop = w; s.borderRight = w; s.borderBottom = w; s.borderLeft = w
     },
 
+    /**
+     * Configure per-side border widths for space reservation.
+     *
+     * SUPPORTED: per-side border widths (_l, _r, _t, _b) — mapped to Taffy border.
+     * NOT SUPPORTED: borderBetweenChildren (_btw) — Taffy has no equivalent;
+     *   this was a Clay-specific layout primitive. Use `gap` instead.
+     * NOTE: _color is ignored here; border color is applied at paint time via effects queue.
+     */
     configureBorderSides(_color: number, _l: number, _r: number, _t: number, _b: number, _btw: number) {
       const s = _current
       s.borderLeft = _l; s.borderRight = _r; s.borderTop = _t; s.borderBottom = _b
     },
 
+    /**
+     * Configure a floating (absolutely-positioned) element.
+     *
+     * SUPPORTED (maps to Taffy absolute position with insets):
+     *   - ox, oy → inset_left, inset_top (pixel offset from attach origin)
+     *
+     * NOT SUPPORTED (Clay-specific features with no Taffy equivalent):
+     *   - attachTo (PARENT/ROOT/ELEMENT) — Taffy has no attach-point concept;
+     *     all floating elements are positioned relative to their containing block.
+     *   - attachPoints (ape/app — 3×3 grid anchor) — not available in Taffy.
+     *   - pointerPassthrough (_pc) — must be implemented at the hit-test layer (TS-side).
+     *   - elementId (_pid) — "attach to element" mode is not supported; use ox/oy directly.
+     *   - zIndex (_z) — z-ordering is handled via the layer system, not Taffy.
+     *
+     * The correct Taffy mapping for floating is absolute position + insets.
+     * Callers that need attach-point semantics must compute ox/oy themselves.
+     */
     configureFloating(attachTo: number, ox: number, oy: number, _z: number, _ape: number, _app: number, _pc: number, _pid: number) {
       const s = _current
       s.flags |= FLAG_FLOATING_ABS
@@ -574,6 +599,16 @@ export function createVexartLayoutCtx() {
       s.insetLeft = ox; s.insetTop = oy
     },
 
+    /**
+     * Configure scroll/clip container flags.
+     *
+     * SUPPORTED: _sx/_sy set FLAG_SCROLL_X/Y on the Taffy node so that
+     *   Taffy uses overflow:scroll (children are not compressed by flex_shrink).
+     *
+     * NOT SUPPORTED: _ox/_oy (Clay-era scroll offsets) — scroll offsets are
+     *   now applied TS-side in applyScrollOffsets() after layout. These params
+     *   are accepted for signature compatibility but intentionally ignored.
+     */
     configureClip(_sx: boolean, _sy: boolean, _ox: number, _oy: number) {
       const s = _current
       if (_sx) s.flags |= FLAG_SCROLL_X
@@ -604,14 +639,6 @@ export function createVexartLayoutCtx() {
       _textEntries.push({ nodeId: state.nodeId, content: _content, color: _color, fontId: _fontId, fontSize: _fontSize })
     },
 
-    setTextMeasure(_index: number, _w: number, _h: number) {
-      // Phase 2 no-op (vexart_layout_measure is a stub)
-    },
-
-    resetTextMeasures() {
-      // Phase 2 no-op
-    },
-
     hashString(s: string): number {
       let h = 0x811c9dc5
       for (let i = 0; i < s.length; i++) {
@@ -619,19 +646,6 @@ export function createVexartLayoutCtx() {
         h = Math.imul(h, 0x01000193)
       }
       return h >>> 0
-    },
-
-    setPointer(_x: number, _y: number, _down: boolean) {
-      // Phase 2: pointer handling is done TS-side in updateInteractiveStates
-    },
-
-    updateScroll(_dx: number, _dy: number, _dt: number) {
-      // Phase 2: scroll handled TS-side
-    },
-
-    getScrollOffset(): { x: number; y: number } {
-      // Phase 2: scroll offset from TS-side scroll state
-      return { x: 0, y: 0 }
     },
 
     getScrollContainerData(id: string): { scrollX: number; scrollY: number; contentWidth: number; contentHeight: number; viewportWidth: number; viewportHeight: number; found: boolean } {

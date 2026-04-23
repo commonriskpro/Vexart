@@ -11,12 +11,7 @@
 
 import type { TGENode, NodeMouseEvent } from "../ffi/node"
 import { resolveProps, createPressEvent } from "../ffi/node"
-import type { RenderCommand } from "../ffi/render-graph"
 import type { PositionedCommand } from "../ffi/layout-writeback"
-import {
-  writeSequentialCommandLayout,
-  writeLayoutFromElementIds,
-} from "../ffi/layout-writeback"
 import {
   fromConfig,
   identity,
@@ -41,26 +36,22 @@ export type WriteLayoutBackState = {
 }
 
 /**
- * After Clay layout, write computed geometry back to TGENodes.
+ * After layout compute, write geometry back to TGENodes.
  *
- * RECT commands map 1:1 with rectNodes (same order as walkTree).
- * TEXT commands map 1:1 with textNodes (same order as walkTree).
- * Box nodes without backgroundColor also get layout from the
- * first command that spatially contains them (approximation).
+ * Uses the vexart layout map (from vexart_layout_compute / Taffy) to write
+ * exact position+size into every box and text node's .layout field.
  *
- * @param commands   Synthetic RenderCommand[] from layout-adapter.endLayout()
- * @param layoutMap  Vexart per-node positioned layout (null if not available)
+ * @param layoutMap  Vexart per-node positioned layout (from layout-adapter.getLastLayoutMap())
  * @param state      Mutable node lists (mutated in-place)
  */
 export function writeLayoutBack(
-  commands: RenderCommand[],
   layoutMap: Map<bigint, PositionedCommand> | null,
   state: WriteLayoutBackState,
 ) {
   const { rectNodes, textNodes, boxNodes } = state
 
-  // Phase 2: Use vexart layout map directly for all box nodes.
-  // writeSequentialCommandLayout and writeLayoutFromElementIds are now no-ops.
+  // Use vexart layout map directly for all box and text nodes.
+  // The map is always populated by vexart_layout_compute (Taffy).
   if (layoutMap && layoutMap.size > 0) {
     for (const node of boxNodes) {
       const pos = layoutMap.get(BigInt(node.id))
@@ -80,11 +71,7 @@ export function writeLayoutBack(
         node.layout.height = pos.height
       }
     }
-  } else {
-    // Fallback: use synthetic commands for rect layout writeback
-    writeSequentialCommandLayout(commands, rectNodes, textNodes)
   }
-  writeLayoutFromElementIds(boxNodes)
 
   // For box nodes that had backgroundColor, layout was already written via RECT.
   // For box nodes WITHOUT backgroundColor, attempt to inherit from their first

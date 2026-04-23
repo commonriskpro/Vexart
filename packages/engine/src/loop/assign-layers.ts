@@ -115,23 +115,6 @@ type LayerBounds = {
   boundary: LayerBoundary
 }
 
-function overlapArea(
-  ax: number,
-  ay: number,
-  ar: number,
-  ab: number,
-  bx: number,
-  by: number,
-  br: number,
-  bb: number,
-): number {
-  const left = Math.max(ax, bx)
-  const top = Math.max(ay, by)
-  const right = Math.min(ar, br)
-  const bottom = Math.min(ab, bb)
-  if (right <= left || bottom <= top) return 0
-  return (right - left) * (bottom - top)
-}
 
 /**
  * State bag for assignLayersSpatial.
@@ -201,7 +184,7 @@ export function assignLayersSpatial(
     }
   }
 
-  // ── Phase 2: Build layer slots with bounds ──
+  // ── Build layer slots with bounds ──
   const layerBounds: LayerBounds[] = []
 
   // Collect ALL scroll container nodes in walkTree order (to map scissors to layers)
@@ -403,7 +386,9 @@ export function assignLayersSpatial(
 
     let assigned = false
     if (cmd.nodeId !== undefined) {
-      // Match by nodeId ancestry — find the innermost layer that contains this node
+      // Match by nodeId ancestry — find the innermost layer that contains this node.
+      // ALL commands now carry nodeId (set by layout-adapter.endLayout()).
+      // Commands that don't match any layer fall through to bgSlot.
       for (const lb of sortedBounds) {
         const descendants = layerDescendants.get(lb.boundary.nodeId)
         if (descendants && descendants.has(cmd.nodeId)) {
@@ -411,30 +396,6 @@ export function assignLayersSpatial(
           assigned = true
           break
         }
-      }
-    }
-
-
-    if (!assigned && cmd.nodeId === undefined) {
-      // Fallback: spatial overlap ONLY for commands without nodeId (legacy).
-      // Commands WITH nodeId that didn't match any layer go to bgSlot —
-      // never use spatial fallback for them (it causes viewport-sized rects
-      // like the root background to steal into content layers).
-      const cx = Math.round(cmd.x)
-      const cy = Math.round(cmd.y)
-      const cw = Math.max(1, Math.round(cmd.width))
-      const ch = Math.max(1, Math.round(cmd.height))
-      const cr = cx + cw
-      const cb = cy + ch
-      let best: LayerBounds | null = null
-      let bestArea = 0
-      for (const lb of sortedBounds) {
-        const area = overlapArea(cx, cy, cr, cb, lb.x, lb.y, lb.right, lb.bottom)
-        if (area > bestArea) { best = lb; bestArea = area }
-      }
-      if (best && bestArea > 0) {
-        best.slot.cmdIndices.push(i)
-        assigned = true
       }
     }
 
