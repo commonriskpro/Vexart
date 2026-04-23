@@ -42,7 +42,9 @@
     "lint:boundaries": "depcruise packages --config .dependency-cruiser.cjs",
     "gen:jsx-runtime": "bun run scripts/gen-jsx-runtime.ts",
     "test:visual": "bun --conditions=browser run scripts/visual-test/runner.ts",
-    "test:visual:update": "bun --conditions=browser run scripts/visual-test/runner.ts --update"
+    "test:visual:update": "bun --conditions=browser run scripts/visual-test/runner.ts --update",
+    "perf:baseline": "bun --conditions=browser run scripts/perf-baseline.ts",
+    "perf:check": "bun --conditions=browser run scripts/perf-baseline.ts --check"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",

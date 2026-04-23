@@ -1,212 +1,301 @@
-# TGE — Terminal Graphics Engine
+# Vexart
 
 **Pixel-native terminal rendering engine.** Write JSX, get browser-quality UI in your terminal.
 
-Anti-aliased corners. Drop shadows. Gradients. Glow effects. Backdrop filters (blur, brightness, contrast, grayscale). Element opacity. Interactive focus management. Form validation. Data fetching hooks. Virtualized lists. All rendered as real pixels — not ASCII boxes.
+Anti-aliased corners. Drop shadows. Linear & radial gradients. Glow effects. Backdrop blur (glassmorphism). Element opacity. Per-corner radius. All rendered as real GPU pixels — not ASCII boxes.
 
 ```tsx
-import { mount } from "@tge/renderer-solid"
-import { Box, Text, Button } from "@tge/components"
-import { colors, radius, shadows } from "@tge/void"
-import { createTerminal } from "@tge/terminal"
+import { mount, createTerminal } from "@vexart/engine"
+import { Box, Text } from "@vexart/primitives"
 
-function App() {
-  return (
-    <Box padding={24} backgroundColor={colors.background} direction="column" gap={16}>
-      <Box padding={16} backgroundColor={colors.card} cornerRadius={radius.lg} shadow={shadows.md}>
-        <Text color={colors.foreground}>Hello from TGE</Text>
-      </Box>
-      <Button onPress={() => process.exit(0)}>Quit</Button>
-    </Box>
-  )
-}
-
-const terminal = await createTerminal()
-mount(App, terminal)
+const term = await createTerminal()
+mount(() => (
+  <Box
+    width="100%"
+    height="100%"
+    backgroundColor={0x141414ff}
+    alignX="center"
+    alignY="center"
+  >
+    <Text color={0xfafafaff} fontSize={16}>Hello from Vexart!</Text>
+  </Box>
+), term)
 ```
 
-## How It Works
-
-```
-JSX (SolidJS createRenderer)
-  → Clay layout (C via FFI — microsecond perf)
-    → Pixel paint (Zig via FFI — SDF primitives)
-      → Output backend (Kitty / placeholder / halfblock)
-        → Terminal
-```
-
-TGE is **not** a cell-based TUI framework. It renders actual pixels using the Kitty graphics protocol, with SDF (Signed Distance Field) anti-aliasing for every shape. The result looks like a browser — but it's your terminal.
+---
 
 ## Features
 
-- **Pixel-perfect rendering** — SDF anti-aliased rounded rects, circles, lines, Bezier curves
-- **JSX components** — Write SolidJS JSX, TGE handles the rest
-- **Real layout engine** — Clay (C library) provides CSS-like flexbox layout in microseconds
-- **Design tokens** — Built-in dark theme with semantic color, spacing, radius, and shadow tokens
+- **GPU-accelerated rendering** — WGPU (Metal/Vulkan/DX12) via a single Rust cdylib
+- **Pixel-perfect shapes** — SDF anti-aliased rounded rects, circles, lines, Bezier curves
+- **JSX components** — SolidJS `createRenderer`; fine-grained reactive updates, no VDOM
+- **CSS-grade layout** — Taffy flexbox in Rust; microsecond layout times
+- **Design tokens** — shadcn-compatible dark theme with semantic color, spacing, radius, shadows
 - **28 headless components** — Button, Input, Select, Dialog, Combobox, Slider, VirtualList, and more
-- **Focus management** — Tab/Shift+Tab cycling, per-component keyboard handlers
-- **Reactive rendering** — SolidJS signals drive dirty-flag repaint (no VDOM diffing)
-- **Layer compositing** — Per-component Kitty images, only dirty layers retransmit
-- **Shadow & glow effects** — Drop shadows and glow as Box props, blur-composited in isolation
-- **Multiple output backends** — Kitty direct, Kitty placeholder (tmux), halfblock fallback
-- **Animations** — `createTransition` and `createSpring` with 12 easing presets and adaptive 30-60fps
-- **Runtime theming** — Hot-swappable themes via `ThemeProvider`, `createTheme`, `setTheme`
-- **Backdrop filters** — 7 CSS-spec filters: brightness, contrast, saturate, grayscale, invert, sepia, hue-rotate
-- **Element opacity** — Per-element opacity multiplier with isolated compositing
-- **Declarative focus** — `<box focusable>` with `focusStyle`, `onPress`, `onKeyDown`
-- **Focus trap** — Dialog-level focus scoping with `pushFocusScope`
-- **Form validation** — `createForm()` with sync/async validators, touched/dirty/submitting
+- **Focus management** — Tab/Shift-Tab cycling, per-node keyboard handlers, focus scoping
+- **Drop shadows & glow** — declarative `shadow` and `glow` props, rendered via GPU
+- **Gradients** — linear and radial, multi-stop
+- **Backdrop filters** — blur, brightness, contrast, saturate, grayscale, invert, sepia, hue-rotate
+- **Element opacity** — per-element alpha with isolated compositing
+- **Scroll containers** — virtualized lists, programmatic scroll, smooth inertia
+- **Animations** — `createTransition` + `createSpring` with 12 easing presets, 30-60 fps adaptive
+- **Pointer capture** — drag interactions via `setPointerCapture` / `releasePointerCapture`
+- **Form validation** — `createForm()` with sync/async validators, touched/dirty/submitting state
 - **Data fetching** — `useQuery` (retry, refetch, interval) and `useMutation` (optimistic + rollback)
-- **List virtualization** — `VirtualList` renders only visible items with O(1) scroll
-- **ARM64-safe FFI** — All Zig calls use ≤8 params via shared packed buffer (zero allocations)
+- **Syntax highlighting** — Tree-sitter grammars, One Dark and Kanagawa themes
+- **Markdown rendering** — inline styling via `<Markdown>` component
+
+---
 
 ## Requirements
 
-- [Bun](https://bun.sh/) >= 1.1.0
-- [Zig](https://ziglang.org/) >= 0.14 (for building the paint engine)
-- A terminal with [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) support (Kitty, Ghostty, WezTerm)
+| Dependency | Version | Notes |
+|------------|---------|-------|
+| [Bun](https://bun.sh/) | ≥ 1.1.0 | Runtime |
+| Rust toolchain | stable | For `cargo build` (native library) |
+| Kitty-compatible terminal | — | Kitty, Ghostty, or WezTerm |
+
+> Vexart requires a terminal that supports the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). It exits with a clear error on unsupported terminals.
+
+---
 
 ## Quick Start
 
 ```bash
-# Clone and install
-git clone https://github.com/commonriskpro/Vexart.git tge
-cd tge
-bun install
+# 1. Install
+bun add vexart
 
-# Build native libraries
-bun run zig:build    # Zig pixel engine → libtge.dylib
-bun run clay:build   # Clay layout engine → libclay.dylib
+# 2. Configure JSX transform (babel.config.js or similar)
+import { vexartSolidPlugin } from "vexart/solid-plugin"
+# moduleName: "vexart/engine"
 
-# Run examples
-bun run demo3        # JSX rendering
-bun run demo4        # Interactive (focus, signals)
-bun run demo8        # Component showcase
-bun run demo9        # Shadow & glow effects
-bun run demo10       # Text input form
+# 3. Write your app
 ```
-
-> **Note:** JSX examples require the `--conditions=browser` flag (already set in package.json scripts). SolidJS needs the browser export condition for its reactive runtime.
-
-## Architecture
-
-TGE is a monorepo with 7 packages. Each layer is independent and can be used standalone.
-
-| Package | Purpose | Layer |
-|---------|---------|-------|
-| [`@tge/terminal`](docs/api-reference.md#tgeterminal) | Terminal detection, capabilities, raw I/O | Foundation |
-| [`@tge/input`](docs/api-reference.md#tgeinput) | Keyboard/mouse event parsing | Foundation |
-| [`@tge/pixel`](docs/api-reference.md#tgepixel) | Pixel buffer + SDF paint primitives (Zig) | Foundation |
-| [`@tge/output`](docs/api-reference.md#tgeoutput) | Kitty/placeholder/halfblock backends | Foundation |
-| [`@tge/core`](docs/api-reference.md) | GPU renderer core, render graph, frame composition | Engine |
-| [`@tge/runtime`](docs/api-reference.md) | Input, focus, pointer, interaction runtime | Runtime |
-| [`@tge/renderer-solid`](docs/api-reference.md) | Solid adapter, mount, reconciler surface | Integration |
-| [`@tge/components`](docs/components.md) | Box, Text, Button, Input, etc. | UI |
-| [`@tge/void`](docs/void.md) | Design tokens, theming, and design system | UI |
-
-### Low-Level (no JSX)
-
-```typescript
-import { createTerminal } from "@tge/terminal"
-import { create, paint } from "@tge/pixel"
-import { createComposer } from "@tge/output"
-
-const term = await createTerminal()
-const buf = create(term.size.pixelWidth, term.size.pixelHeight)
-const composer = createComposer(term.write, term.rawWrite, term.caps)
-
-// Paint directly
-paint.roundedRect(buf, 10, 10, 200, 100, 0x4f, 0xc4, 0xd4, 0xff, 12)
-paint.drawText(buf, 20, 30, "Hello", 0xe0, 0xe6, 0xf0, 0xff)
-
-// Output to terminal
-term.beginSync(term.write)
-composer.render(buf, 0, 0, term.size.cols, term.size.rows, term.size.cellWidth, term.size.cellHeight)
-term.endSync(term.write)
-```
-
-### High-Level (JSX)
 
 ```tsx
-import { mount, useKeyboard, useMouse, useFocus, onInput, pushFocusScope,
-         useQuery, useMutation, createTransition, createSpring } from "@tge/renderer-solid"
-import { Box, Text, Button, Input, Checkbox, Tabs, List, ProgressBar, ScrollView,
-         Dialog, Select, Switch, RadioGroup, Table, Toast, Router,
-         Tooltip, Combobox, Slider, VirtualList, createForm } from "@tge/components"
-import { createTerminal } from "@tge/terminal"
+import { mount, createTerminal, createParser } from "@vexart/engine"
+import { Box, Text, Button } from "@vexart/primitives"
+import { colors, radius, space } from "@vexart/styled"
 
 function App() {
   return (
-    <Box padding={16} backgroundColor={0x0e0e18ff} cornerRadius={8}>
-      <Text color={0xe0e6f0ff}>Hello TGE</Text>
+    <Box
+      width="100%"
+      height="100%"
+      backgroundColor={colors.background}
+      direction="column"
+      alignX="center"
+      alignY="center"
+      gap={space[4]}
+    >
+      <Box
+        backgroundColor={colors.card}
+        cornerRadius={radius.lg}
+        padding={space[6]}
+        direction="column"
+        gap={space[2]}
+      >
+        <Text color={colors.foreground} fontSize={16}>Hello from Vexart</Text>
+        <Text color={colors.mutedForeground} fontSize={12}>Browser-quality UI in your terminal</Text>
+      </Box>
+      <Button onPress={() => process.exit(0)}>
+        {(ctx) => (
+          <Box {...ctx.buttonProps} backgroundColor={colors.primary} cornerRadius={radius.md} padding={space[3]}>
+            <Text color={colors.background}>Quit</Text>
+          </Box>
+        )}
+      </Button>
     </Box>
   )
 }
 
-const terminal = await createTerminal()
-mount(App, terminal)
+const term = await createTerminal()
+const app = mount(() => <App />, term)
+const parser = createParser((e) => {
+  if (e.type === "key" && e.key === "q") process.exit(0)
+})
+term.onData((d) => parser.feed(d))
 ```
 
-## Documentation
+---
 
-| Document | Description |
-|----------|-------------|
-| [Getting Started](docs/getting-started.md) | Installation, setup, first app |
-| [API Reference](docs/api-reference.md) | Complete API for all packages |
-| [Components](docs/components.md) | All components with props and examples |
-| [Hooks & Signals](docs/hooks.md) | useKeyboard, useMouse, useFocus, onInput |
-| [Design Tokens](docs/tokens.md) | Colors, spacing, radius, shadows |
-| [Architecture](docs/architecture.md) | Rendering pipeline, internals |
-| [Examples & Recipes](docs/examples.md) | Cookbook for common patterns |
-| [Creating Theme Packages](manual/creating-theme-packages.md) | Creating custom design systems/themes |
+## Architecture
 
-## Examples
+```
+JSX (SolidJS createRenderer)
+  → Taffy layout (Rust via FFI — microsecond perf)
+    → WGPU paint (Rust GPU — SDF primitives, compositor)
+      → Kitty graphics protocol
+        → Terminal
+```
 
-The `examples/` directory contains working demos for every feature:
+Vexart is **not** a cell-based TUI framework. It renders actual pixels using the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) — the result looks like a browser running inside your terminal.
 
-| Demo | Command | Description |
-|------|---------|-------------|
-| Phase 1 | `bun run demo` | Imperative pixel painting (no JSX) |
-| Phase 2 | `bun run demo2` | Clay layout engine (no JSX) |
-| Hello | `bun run demo3` | First JSX rendering |
-| Interactive | `bun run demo4` | Focus, signals, keyboard |
-| Layers | `bun run demo5` | Per-component layer compositing |
-| Dashboard | `bun run demo6` | Multi-widget dashboard (5 layers) |
-| Scroll | `bun run demo7` | Scroll containers |
-| Components | `bun run demo8` | Full component showcase |
-| Effects | `bun run demo9` | Shadows and glow |
-| Input | `bun run demo10` | Text input form |
-| Showcase | `bun run showcase` | Comprehensive feature showcase (7 tabs) |
+### Package layers
+
+| Package | Purpose | Layer |
+|---------|---------|-------|
+| `@vexart/engine` | Core engine: render loop, GPU backend, SolidJS reconciler, input, focus, animation, data fetching | Foundation |
+| `@vexart/primitives` | Low-level JSX nodes: `Box`, `Text`, `RichText`, `Span`, `WrapRow` | Primitives |
+| `@vexart/headless` | Behaviour-only components: Button, Input, Dialog, Select, Tabs, List, Table, VirtualList, etc. | Headless |
+| `@vexart/styled` | Design tokens + styled components (shadcn-compatible): `colors`, `radius`, `space`, `font`, `shadows` | Styled |
+
+Dependencies flow one way: `engine → primitives → headless → styled`. You can use any layer independently.
+
+### Native binary — libvexart
+
+A single Rust cdylib (`native/target/release/libvexart.dylib`) handles all GPU work:
+- **Layout** — Taffy flexbox (CSS Grid / Flex)
+- **Paint** — WGPU shaders: SDF rounded rects, shadows, gradients, blur, compositor
+- **MSDF text** — Multi-channel signed-distance-field font rendering; sharp at any size
+
+Built with:
+```bash
+cargo build --release
+```
+
+---
+
+## Components (28)
+
+| Component | Category | Description |
+|-----------|----------|-------------|
+| `Box` | Primitives | Layout container with all visual props |
+| `Text` | Primitives | Text display with font, color, size |
+| `RichText` | Primitives | Multi-span inline text |
+| `Span` | Primitives | Inline text span within RichText |
+| `WrapRow` | Primitives | Flex-wrap row (Clay compat) |
+| `ScrollView` | Containers | Scrollable container with visual scrollbar |
+| `Portal` | Containers | Render subtree at root level |
+| `Button` | Inputs | Clickable element (headless render context) |
+| `Input` | Inputs | Single-line text input |
+| `Textarea` | Inputs | Multi-line editor (2D cursor, syntax, keybindings) |
+| `Checkbox` | Inputs | Toggle checkbox |
+| `Switch` | Inputs | Toggle switch |
+| `RadioGroup` | Inputs | Radio option group |
+| `Slider` | Inputs | Numeric range (click-to-position + drag) |
+| `Select` | Overlays | Dropdown with keyboard navigation |
+| `Combobox` | Overlays | Autocomplete with filtering |
+| `Dialog` | Overlays | Modal with focus trap + Escape |
+| `Tooltip` | Overlays | Delayed tooltip on hover |
+| `Popover` | Overlays | Controlled popover panel |
+| `Tabs` | Navigation | Tab switcher |
+| `Router` | Navigation | Flat + stack navigation |
+| `List` | Collections | Scrollable selectable list |
+| `Table` | Collections | Data table with row selection |
+| `VirtualList` | Collections | Virtualized list (O(1) scroll, fixed-height rows) |
+| `ProgressBar` | Display | Progress indicator |
+| `Code` | Display | Syntax-highlighted code block |
+| `Markdown` | Display | Markdown renderer with inline styling |
+| `Diff` | Display | Unified diff viewer |
+
+Also: `createForm` factory, `Toast` (imperative), `createToaster`.
+
+---
+
+## Effects reference
+
+All effects are JSX props — no imperative API needed:
+
+```tsx
+// Drop shadow
+<Box shadow={{ x: 0, y: 4, blur: 12, color: 0x00000060 }}>
+
+// Multi-shadow
+<Box shadow={[{ x: 0, y: 2, blur: 4, color: 0x0000004f }, { x: 0, y: 8, blur: 24, color: 0x00000030 }]}>
+
+// Outer glow
+<Box glow={{ radius: 20, color: 0x56d4c8ff, intensity: 60 }}>
+
+// Linear gradient
+<Box gradient={{ type: "linear", from: 0x1a1a2eff, to: 0x0a0a0fff, angle: 90 }}>
+
+// Radial gradient
+<Box gradient={{ type: "radial", from: 0x56d4c8ff, to: 0x00000000 }}>
+
+// Backdrop blur (glassmorphism)
+<Box backdropBlur={12} backgroundColor={0xffffff1a}>
+
+// Per-corner radius
+<Box cornerRadii={{ tl: 20, tr: 20, br: 0, bl: 0 }}>
+
+// Interactive states
+<Box
+  focusable
+  backgroundColor={0x1e1e2eff}
+  hoverStyle={{ backgroundColor: 0x2a2a3eff }}
+  activeStyle={{ backgroundColor: 0x3a3a4eff }}
+  focusStyle={{ borderColor: 0x4488ccff, borderWidth: 2 }}
+  onPress={() => doAction()}
+>
+```
+
+---
 
 ## Terminal Support
 
-| Terminal | Backend | Quality |
-|----------|---------|---------|
-| Kitty | Direct | Best — native pixel rendering |
-| Ghostty | Direct | Best — native pixel rendering |
-| WezTerm | Direct/Placeholder | Good |
-| tmux (in Kitty/Ghostty) | Placeholder | Good — Unicode placeholder mode |
-| iTerm2 | Halfblock | Basic — 2 colors per cell |
-| Other | Halfblock | Basic — fallback |
+| Terminal | Protocol | Quality |
+|----------|----------|---------|
+| Kitty | Kitty direct | ✅ Best — native pixel rendering |
+| Ghostty | Kitty direct | ✅ Best — native pixel rendering |
+| WezTerm | Kitty direct | ✅ Best |
+| tmux (inside Kitty/Ghostty) | Kitty placeholder | ✅ Good |
+| Other | — | ❌ Exits with clear error message |
+
+---
 
 ## Development
 
 ```bash
-bun install           # Install dependencies
-bun run zig:build     # Build Zig shared library
-bun run clay:build    # Build Clay shared library
-bun test              # Run tests (128 tests, ~150ms)
-bun typecheck         # TypeScript type check
-bun run zig:test      # Run Zig tests
+bun install                  # Install JS dependencies
+cargo build --release        # Build libvexart (Rust GPU backend)
+
+bun test                     # Run unit tests
+bun typecheck                # TypeScript type check
+cargo test                   # Run Rust unit tests
+
+bun run example              # Run hello world example
+bun run showcase             # Run comprehensive feature showcase (7 tabs)
+bun run test:visual          # Run golden image visual tests
+bun run test:visual:update   # Regenerate visual test references
+bun run perf:baseline        # Run perf baseline + save to scripts/perf-baseline.json
+bun run build:dist           # Build distributable tge-0.0.1.tgz
 ```
 
-## Tech Stack
+---
 
-- **[SolidJS](https://www.solidjs.com/)** — Reactive runtime via `createRenderer` (universal mode). No VDOM. Signal-driven dirty tracking.
-- **[Clay](https://github.com/nicbarker/clay)** — Layout engine. Single C header, microsecond performance, CSS-like flexbox. Called via `bun:ffi`.
-- **[Zig](https://ziglang.org/)** — Pixel painting engine. SDF primitives, alpha blending, box blur. Compiled to shared library, called via `bun:ffi`.
-- **[Bun](https://bun.sh/)** — Runtime. FFI for native libraries, TypeScript execution, test runner.
+## Examples
+
+See [`examples/README.md`](examples/README.md) for a full list of examples with descriptions and run commands.
+
+Quick-start examples:
+
+```bash
+bun run example        # Hello World — first JSX render
+bun run demo4          # Interactive — focus, signals, keyboard
+bun run demo7          # Scroll containers
+bun run demo8          # Component showcase (all 28 components)
+bun run demo9          # Shadow & glow effects
+bun run showcase       # Comprehensive 7-tab feature showcase
+```
+
+---
+
+## Links
+
+- [Product Requirements (PRD)](docs/PRD.md) — phased roadmap and decision log
+- [Architecture Reference](docs/ARCHITECTURE.md) — package structure and data-flow contracts
+- [API Policy](docs/API-POLICY.md) — public vs. internal API rules
+- [Examples](examples/) — working demos for every feature
+- [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/)
+- [WGPU](https://wgpu.rs/) — GPU abstraction (Metal / Vulkan / DX12)
+- [Taffy](https://github.com/DioxusLabs/taffy) — Rust layout engine (CSS Flex + Grid)
+- [SolidJS Universal](https://github.com/solidjs/solid/tree/main/packages/solid/universal) — JSX reconciler
+
+---
 
 ## License
 
-MIT
+Source-available. Free for personal use, open-source projects, and commercial products with annual revenue under $1M USD. A commercial license is required for products at or above $1M ARR.
+
+See [LICENSE](LICENSE) for full terms.

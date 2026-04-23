@@ -1,0 +1,67 @@
+Vexart Source-Available License
+Version 1.0, April 2026
+
+Copyright (c) 2026 Vexart Contributors
+
+---
+
+## Grant of Rights
+
+Permission is hereby granted, free of charge, to any individual or organization
+("Licensee") obtaining a copy of this software and associated documentation files
+(the "Software"), to use, copy, modify, merge, publish, and distribute the Software,
+subject to the conditions below.
+
+---
+
+## Free Use
+
+This license is FREE for:
+
+1. **Personal use** — any individual for private, non-commercial purposes.
+2. **Open-source projects** — any project whose source code is publicly available
+   under an OSI-approved open-source license.
+3. **Small commercial use** — any product or service whose total annual gross revenue
+   (across all products and services offered by the same legal entity) is less than
+   one million US dollars (USD $1,000,000) in the most recent twelve-month period.
+
+---
+
+## Commercial License Required
+
+Any entity whose total annual gross revenue equals or exceeds USD $1,000,000 must
+obtain a separate commercial license before using the Software in any product or
+service that generates revenue.
+
+Commercial license tiers:
+
+- **Standard**: USD $299 per developer per year — for products below USD $10,000,000
+  annual gross revenue.
+- **Enterprise**: USD $10,000 per year (unlimited seats) — for products at or above
+  USD $10,000,000 annual gross revenue or requiring a written license agreement.
+
+To obtain a commercial license, contact: license@vexart.dev
+
+---
+
+## Conditions
+
+1. **Attribution**: All copies or substantial portions of the Software must include
+   this copyright notice and license text.
+2. **No sublicensing**: You may not sublicense the Software under different terms.
+3. **No DRM or license enforcement**: This license is enforced on the honor system.
+   Vexart does not include technical measures to prevent use. Commercial licensees
+   agree to self-certify compliance.
+4. **No trademark rights**: This license does not grant rights to use the Vexart
+   name, logo, or other trademarks. Do not imply endorsement by Vexart.
+
+---
+
+## Disclaimer
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
