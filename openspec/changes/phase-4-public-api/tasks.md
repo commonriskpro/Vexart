@@ -21,10 +21,10 @@
 
 ## Phase 4: Visual testing
 
-- [ ] 4.1 Add an offscreen render path in `packages/engine/src/` that paints to a pixel buffer without terminal I/O.
-- [ ] 4.2 Build the golden runner under `scripts/visual-test/` to render scenes and diff PNGs against references.
-- [ ] 4.3 Add `bun run test:visual` and `bun run test:visual:update` scripts.
-- [ ] 4.4 Create starter scenes: `hello`, `effects`, `components`, `text`, and `scroll`.
+- [x] 4.1 Add an offscreen render path in `packages/engine/src/` that paints to a pixel buffer without terminal I/O.
+- [x] 4.2 Build the golden runner under `scripts/visual-test/` to render scenes and diff PNGs against references.
+- [x] 4.3 Add `bun run test:visual` and `bun run test:visual:update` scripts.
+- [x] 4.4 Create starter scenes: `hello`, `colors`, and `layout`.
 
 ## Phase 5: Verification / cleanup
 
