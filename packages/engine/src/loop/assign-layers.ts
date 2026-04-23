@@ -414,8 +414,12 @@ export function assignLayersSpatial(
       }
     }
 
-    if (!assigned) {
-      // Fallback: spatial overlap for commands without nodeId
+
+    if (!assigned && cmd.nodeId === undefined) {
+      // Fallback: spatial overlap ONLY for commands without nodeId (legacy).
+      // Commands WITH nodeId that didn't match any layer go to bgSlot —
+      // never use spatial fallback for them (it causes viewport-sized rects
+      // like the root background to steal into content layers).
       const cx = Math.round(cmd.x)
       const cy = Math.round(cmd.y)
       const cw = Math.max(1, Math.round(cmd.width))
