@@ -1,11 +1,15 @@
 /**
- * Text wrap & rich text demo — Pretext integration showcase.
+ * Text & rich text demo — typography showcase.
  *
  * Shows:
- * - Word wrapping within containers of different widths
- * - Multi-line text with automatic height calculation
+ * - Multiple text sizes and colors
  * - Inline rich text (Spans in a row)
- * - Two-column layout with wrapping text
+ * - Two-column layout with short text
+ * - SF Pro font rendering quality
+ *
+ * NOTE: Automatic text wrapping within fixed-width containers is not yet
+ * supported — Taffy computes layout before text measurement, so long text
+ * renders as a single line. Use short text or manual line breaks for now.
  *
  * Run: bun --conditions=browser run examples/text-wrap.tsx
  */
@@ -22,10 +26,6 @@ function App() {
   })
   onCleanup(unsub)
 
-  const longText = "TGE is a pixel-native terminal rendering engine. Write JSX and get browser-quality UI in your terminal with anti-aliased corners, drop shadows, gradients, and glow effects. This text wraps automatically within its container using Pretext layout."
-
-  const features = "Features: word wrapping, multi-line layout, BiDi support, CJK line breaking, rich inline text with mixed fonts. Powered by @chenglou/pretext."
-
   return (
     <Box
       width="100%"
@@ -33,43 +33,31 @@ function App() {
       padding={space[6]}
       backgroundColor={colors.background}
       direction="column"
-      gap={space[2]}
+      gap={space[4]}
     >
-      <Text color={colors.foreground}>Pretext Integration Demo — press Q to quit</Text>
+      <Text color={colors.foreground} fontSize={16}>Typography Demo — press Q to quit</Text>
 
-      <Box direction="row" gap={space[4]}>
-        {/* Wide card with word wrap */}
-        <Box direction="column" gap={space[0.5]}>
-          <Text color={colors.mutedForeground}>Word wrap (400px):</Text>
-          <Box
-            width={400}
-            padding={space[4]}
-            backgroundColor={colors.card}
-            cornerRadius={radius.lg}
-            shadow={shadows.sm}
-          >
-            <Text color={colors.foreground}>{longText}</Text>
-          </Box>
-        </Box>
-
-        {/* Narrow card with word wrap */}
-        <Box direction="column" gap={space[0.5]}>
-          <Text color={colors.mutedForeground}>Narrow (200px):</Text>
-          <Box
-            width={200}
-            padding={space[2]}
-            backgroundColor={colors.card}
-            cornerRadius={radius.lg}
-            shadow={shadows.sm}
-          >
-            <Text color="#4fc4d4">{features}</Text>
-          </Box>
+      {/* Text sizes */}
+      <Box direction="column" gap={space[2]}>
+        <Text color={colors.mutedForeground} fontSize={12}>Text sizes:</Text>
+        <Box
+          padding={space[4]}
+          backgroundColor={colors.card}
+          cornerRadius={radius.lg}
+          shadow={shadows.sm}
+          direction="column"
+          gap={space[2]}
+        >
+          <Text color={colors.foreground} fontSize={12}>12px — Small body text</Text>
+          <Text color={colors.foreground} fontSize={14}>14px — Default body text</Text>
+          <Text color={colors.foreground} fontSize={16}>16px — Large body text</Text>
+          <Text color={colors.foreground} fontSize={20}>20px — Heading text</Text>
         </Box>
       </Box>
 
       {/* Inline rich text — spans flow horizontally */}
-      <Box direction="column" gap={space[0.5]}>
-        <Text color={colors.mutedForeground}>Inline spans (row flow):</Text>
+      <Box direction="column" gap={space[2]}>
+        <Text color={colors.mutedForeground} fontSize={12}>Inline spans (row flow):</Text>
         <Box
           padding={space[4]}
           backgroundColor={colors.card}
@@ -79,7 +67,7 @@ function App() {
           gap={space[1]}
         >
           <RichText>
-            <Span color={colors.foreground}>TGE </Span>
+            <Span color={colors.foreground}>Vexart </Span>
             <Span color="#4fc4d4">renders pixels </Span>
             <Span color={colors.foreground}>in your </Span>
             <Span color="#f59e0b">terminal</Span>
@@ -88,46 +76,61 @@ function App() {
             <Span color={colors.mutedForeground}>Powered by: </Span>
             <Span color="#4eaed0">SolidJS </Span>
             <Span color={colors.mutedForeground}>+ </Span>
-            <Span color="#22c55e">Clay </Span>
+            <Span color="#22c55e">Taffy </Span>
             <Span color={colors.mutedForeground}>+ </Span>
-            <Span color="#a78bfa">Zig </Span>
+            <Span color="#a78bfa">Rust/WGPU </Span>
             <Span color={colors.mutedForeground}>+ </Span>
             <Span color="#a8483e">Pretext</Span>
           </RichText>
         </Box>
       </Box>
 
-      {/* Two columns with wrapping text */}
+      {/* Two columns with short text */}
       <Box direction="row" gap={space[4]}>
         <Box
           width={300}
-          padding={space[2]}
+          padding={space[4]}
           backgroundColor={colors.card}
           cornerRadius={radius.md}
           borderColor={colors.border}
           borderWidth={1}
           direction="column"
-          gap={space[1]}
+          gap={space[2]}
         >
-          <Text color={colors.foreground}>Column A</Text>
-          <Text color={colors.foreground}>
-            Clay provides CSS-like flexbox layout with microsecond performance. Each text element is measured by Pretext and positioned by Clay.
-          </Text>
+          <Text color={colors.foreground} fontSize={14}>Layout Engine</Text>
+          <Text color={colors.mutedForeground} fontSize={12}>Taffy — CSS flexbox in Rust</Text>
+          <Text color={colors.mutedForeground} fontSize={12}>Microsecond performance</Text>
+          <Text color={colors.mutedForeground} fontSize={12}>Per-frame full rebuild</Text>
         </Box>
         <Box
           width={300}
-          padding={space[2]}
+          padding={space[4]}
           backgroundColor={colors.card}
           cornerRadius={radius.md}
           borderColor={colors.border}
           borderWidth={1}
           direction="column"
-          gap={space[1]}
+          gap={space[2]}
         >
-          <Text color={colors.foreground}>Column B</Text>
-          <Text color="#f59e0b">
-            Zig handles the pixel painting with SDF anti-aliased primitives. Every shape is rendered with sub-pixel precision.
-          </Text>
+          <Text color="#f59e0b" fontSize={14}>Paint Engine</Text>
+          <Text color={colors.mutedForeground} fontSize={12}>WGPU — GPU-accelerated rendering</Text>
+          <Text color={colors.mutedForeground} fontSize={12}>SDF anti-aliased primitives</Text>
+          <Text color={colors.mutedForeground} fontSize={12}>Sub-pixel precision</Text>
+        </Box>
+      </Box>
+
+      {/* Color palette */}
+      <Box direction="column" gap={space[2]}>
+        <Text color={colors.mutedForeground} fontSize={12}>Color palette:</Text>
+        <Box direction="row" gap={space[2]}>
+          <Text color="#4fc4d4">Cyan</Text>
+          <Text color="#4eaed0">Blue</Text>
+          <Text color="#f59e0b">Amber</Text>
+          <Text color="#a78bfa">Purple</Text>
+          <Text color="#22c55e">Green</Text>
+          <Text color="#a8483e">Red</Text>
+          <Text color={colors.foreground}>White</Text>
+          <Text color={colors.mutedForeground}>Muted</Text>
         </Box>
       </Box>
     </Box>
