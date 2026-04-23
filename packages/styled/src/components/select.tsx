@@ -43,13 +43,13 @@ export function VoidSelect(props: VoidSelectProps) {
         disabled={props.disabled}
         focusId={props.focusId}
         renderTrigger={(ctx: SelectTriggerContext) => (
-          <box
-            direction="row"
-            alignY="center"
-            height={36}
-            width={props.width}
-            paddingLeft={space[3]}
-            paddingRight={space[2]}
+            <box
+              direction="row"
+              alignY="center"
+              height={36}
+              width={props.width ?? "grow"}
+              paddingLeft={space[3]}
+              paddingRight={space[2]}
             backgroundColor={ctx.disabled ? themeColors.muted : themeColors.transparent}
             cornerRadius={radius.md}
             borderColor={ctx.focused ? themeColors.ring : themeColors.input}
@@ -84,6 +84,7 @@ export function VoidSelect(props: VoidSelectProps) {
           <box
             direction="row"
             alignY="center"
+            width="grow"
             gap={space[2]}
             paddingTop={space[1.5]}
             paddingBottom={space[1.5]}
@@ -113,14 +114,13 @@ export function VoidSelect(props: VoidSelectProps) {
         renderContent={(children) => (
           <box
             direction="column"
+            width={props.width ?? "grow"}
             backgroundColor={themeColors.popover}
             cornerRadius={radius.md}
             borderColor={themeColors.border}
             borderWidth={1}
             padding={space[0.5]}
             shadow={shadows.md}
-            maxHeight={240}
-            scrollY
           >
             {children}
           </box>

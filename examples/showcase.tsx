@@ -852,13 +852,13 @@ function VoidSliderDemo() {
 
   return (
     <box direction="column" gap={space[3]} width={300}>
-      <box direction="column" gap={space[1]}>
+      <box direction="column" gap={space[1]} width="grow">
         <text color={themeColors.foreground} fontSize={font.sm}>Volume</text>
-        <VoidSlider value={volume()} onChange={setVolume} min={0} max={100} />
+        <VoidSlider width={220} value={volume()} onChange={setVolume} min={0} max={100} />
       </box>
-      <box direction="column" gap={space[1]}>
+      <box direction="column" gap={space[1]} width="grow">
         <text color={themeColors.foreground} fontSize={font.sm}>Brightness</text>
-        <VoidSlider value={brightness()} onChange={setBrightness} min={0} max={100} step={5} />
+        <VoidSlider width={220} value={brightness()} onChange={setBrightness} min={0} max={100} step={5} />
       </box>
     </box>
   )
@@ -881,6 +881,7 @@ function VoidComboboxDemo() {
   return (
     <box direction="column" gap={space[2]} width={250}>
       <VoidCombobox
+        width={250}
         value={fruit()}
         onChange={setFruit}
         options={fruits}

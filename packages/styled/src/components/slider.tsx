@@ -42,8 +42,8 @@ export function VoidSlider(props: VoidSliderProps) {
       largeStep={props.largeStep}
       disabled={props.disabled}
       focusId={props.focusId}
-      renderSlider={(ctx: SliderRenderContext) => (
-        <box direction="row" gap={space[2]} alignY="center" width={props.width}>
+        renderSlider={(ctx: SliderRenderContext) => (
+        <box direction="row" gap={space[2]} alignY="center" width={props.width ?? 220}>
           {/* Track — spread trackProps for mouse click/drag */}
           <box
             {...ctx.trackProps}

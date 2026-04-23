@@ -46,7 +46,7 @@ export function VoidCombobox(props: VoidComboboxProps) {
         <box
           direction="row"
           alignY="center"
-          width={props.width}
+          width={props.width ?? "grow"}
           height={36}
           paddingLeft={space[3]}
           paddingRight={space[2]}
@@ -83,6 +83,7 @@ export function VoidCombobox(props: VoidComboboxProps) {
         <box
           direction="row"
           alignY="center"
+          width="grow"
           gap={space[2]}
           paddingTop={space[1.5]}
           paddingBottom={space[1.5]}
@@ -110,14 +111,13 @@ export function VoidCombobox(props: VoidComboboxProps) {
       renderContent={(children) => (
         <box
           direction="column"
+          width={props.width ?? "grow"}
           backgroundColor={themeColors.popover}
           cornerRadius={radius.md}
           borderColor={themeColors.border}
           borderWidth={1}
           padding={space[0.5]}
           shadow={shadows.md}
-          maxHeight={240}
-          scrollY
         >
           {children}
         </box>

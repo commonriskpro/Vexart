@@ -23,7 +23,7 @@
  * Run:  bun run examples/void-showcase.tsx
  */
 
-import { mount, onInput } from "@vexart/engine"
+import { mount, onInput, useTerminalDimensions } from "@vexart/engine"
 import { createTerminal } from "@vexart/engine"
 import {
   Button,
@@ -381,20 +381,32 @@ function TypographyShowcase() {
 
 // ── App ──
 
-function App() {
+function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
+  const dims = useTerminalDimensions(props.terminal)
+  const paneHeight = () => Math.max(160, dims.height() - space[6] * 2 - 44)
+
   return (
     <box
-      width="grow"
-      height="grow"
+      width={dims.width()}
+      height={dims.height()}
       backgroundColor={colors.background}
       direction="row"
       padding={space[6]}
       gap={space[6]}
     >
       {/* Left column: Engine features */}
-      <box direction="column" width="grow" scrollY={true}>
+      <box direction="column" width="grow" height="grow" gap={space[3]}>
         <H3>Engine Features</H3>
-        <box paddingTop={space[3]}>
+        <box
+          layer
+          scrollY
+          height={paneHeight()}
+          scrollId="void-showcase-engine"
+          direction="column"
+          paddingTop={space[3]}
+          paddingRight={space[2]}
+          gap={space[2]}
+        >
           <EngineFeatures />
         </box>
       </box>
@@ -403,13 +415,22 @@ function App() {
       <Separator orientation="vertical" />
 
       {/* Right column: Void components + Typography */}
-      <box direction="column" width="grow" scrollY={true}>
+      <box direction="column" width="grow" height="grow" gap={space[3]}>
         <H3>Void Components</H3>
-        <box paddingTop={space[3]}>
+        <box
+          layer
+          scrollY
+          height={paneHeight()}
+          scrollId="void-showcase-components"
+          direction="column"
+          paddingTop={space[3]}
+          paddingRight={space[2]}
+          gap={space[2]}
+        >
           <VoidComponents />
-        </box>
-        <box paddingTop={space[4]}>
-          <TypographyShowcase />
+          <box paddingTop={space[4]}>
+            <TypographyShowcase />
+          </box>
         </box>
       </box>
     </box>
@@ -420,7 +441,7 @@ function App() {
 
 async function main() {
   const term = await createTerminal()
-  const cleanup = mount(() => <App />, term)
+  const cleanup = mount(() => <App terminal={term} />, term)
   const exitAfterMs = Number(process.env.TGE_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
 
   const shutdown = () => {
