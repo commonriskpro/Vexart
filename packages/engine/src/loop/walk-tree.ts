@@ -290,22 +290,18 @@ export function walkTree(
     clay.configureLayout(dir, px, py, gap, ax, ay)
   }
 
-  // Sizing — use pre-parsed values, fallback to FIT.
-  // CSS align-items:stretch emulation — if parent is column and child has no
-  // explicit width, auto-stretch to fill parent width (and vice versa for row).
+  // Sizing — use pre-parsed values, fallback to FIT (Auto in Taffy).
+  // Cross-axis stretching is handled by Taffy's default align_items: Stretch
+  // (activated via alignItems=255/None in _defaultOpen). No manual stretch
+  // emulation needed — removed the stretchW/stretchH hack that incorrectly
+  // used flexGrow (main-axis only) for cross-axis stretching.
   const hasFlexGrowAlias = node.props.flexGrow !== undefined && node.props.width === undefined
-  const stretchW = !node._widthSizing && !hasFlexGrowAlias && parentDir === DIRECTION.TOP_TO_BOTTOM
-  const stretchH = !node._heightSizing && parentDir === DIRECTION.LEFT_TO_RIGHT
   const FIT_DEFAULT: SizingInfo = { type: SIZING.FIT, value: 0 }
   const GROW_DEFAULT: SizingInfo = { type: SIZING.GROW, value: 0 }
   const ws = hasFlexGrowAlias
     ? GROW_DEFAULT
-    : stretchW
-      ? GROW_DEFAULT
-      : (node._widthSizing ?? FIT_DEFAULT)
-  const hs = stretchH
-    ? GROW_DEFAULT
-    : (node._heightSizing ?? FIT_DEFAULT)
+    : (node._widthSizing ?? FIT_DEFAULT)
+  const hs = node._heightSizing ?? FIT_DEFAULT
   const hasMinMax = node.props.minWidth !== undefined || node.props.maxWidth !== undefined ||
                     node.props.minHeight !== undefined || node.props.maxHeight !== undefined
   if (hasMinMax) {

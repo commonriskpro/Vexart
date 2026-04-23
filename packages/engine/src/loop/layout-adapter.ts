@@ -100,7 +100,9 @@ export const _defaultOpen = (): NodeOpenState => ({
   nodeId: 0, parentNodeId: 0, flags: 0,
   flexDir: 1 /* column */, posKind: 0, sizeWKind: 0, sizeHKind: 0, sizeW: 0, sizeH: 0,
   minW: 0, minH: 0, maxW: 0, maxH: 0, flexGrow: 0, flexShrink: 1,
-  justifyContent: 0, alignItems: 0, alignContent: 0,
+  // 255 = None → Taffy uses its default (Stretch for align_items, Start for justify_content).
+  // Clay used implicit stretch; Taffy needs 255 (None) to activate the same default behavior.
+  justifyContent: 255, alignItems: 255, alignContent: 255,
   padTop: 0, padRight: 0, padBottom: 0, padLeft: 0,
   borderTop: 0, borderRight: 0, borderBottom: 0, borderLeft: 0,
   _openWritten: false,
@@ -504,7 +506,15 @@ export function createVexartLayoutCtx() {
       s.flexDir = dir
       s.padLeft = px; s.padRight = px; s.padTop = py; s.padBottom = py
       s.gapRow = gap; s.gapCol = gap
-      s.justifyContent = ax; s.alignItems = ay
+      // Flexbox: justify_content = main axis, align_items = cross axis.
+      // Vexart API: alignX = always horizontal, alignY = always vertical.
+      // Column: main=Y, cross=X → swap so alignX→align_items, alignY→justify_content
+      // Row:    main=X, cross=Y → no swap (alignX→justify_content, alignY→align_items)
+      if (dir === 1 /* column */ || dir === 3 /* column-reverse */) {
+        s.justifyContent = ay; s.alignItems = ax
+      } else {
+        s.justifyContent = ax; s.alignItems = ay
+      }
     },
 
     configureLayoutFull(dir: number, padL: number, padR: number, padT: number, padB: number, gap: number, ax: number, ay: number) {
@@ -512,7 +522,11 @@ export function createVexartLayoutCtx() {
       s.flexDir = dir
       s.padLeft = padL; s.padRight = padR; s.padTop = padT; s.padBottom = padB
       s.gapRow = gap; s.gapCol = gap
-      s.justifyContent = ax; s.alignItems = ay
+      if (dir === 1 || dir === 3) {
+        s.justifyContent = ay; s.alignItems = ax
+      } else {
+        s.justifyContent = ax; s.alignItems = ay
+      }
     },
 
     configureSizing(wType: number, wVal: number, hType: number, hVal: number) {
