@@ -28,6 +28,8 @@ export type RenderCommand = {
   extra1: number // border width, font size
   extra2: number // text length, font id
   text?: string
+  /** Stable node ID for matching render ops to effects/images. */
+  nodeId?: number
 }
 
 // ── Color packing (inlined, formerly from paint-bridge.ts) ──
@@ -576,9 +578,13 @@ export function buildRenderGraphFrame(
       continue
     }
 
+    // Use cmd.nodeId directly when available (set by endLayout).
+    // Fall back to counter-based mapping for legacy compatibility.
+    const rectId = cmd.nodeId ?? (cmd.type === CMD.RECTANGLE ? owners?.rectNodeIds[rectIdx++] ?? null : null)
+    const textId = cmd.nodeId ?? (cmd.type === CMD.TEXT ? owners?.textNodeIds[textIdx++] ?? null : null)
     const op = buildRenderOp(cmd, queues, queueState, textMetaMap, {
-      rect: cmd.type === CMD.RECTANGLE ? owners?.rectNodeIds[rectIdx++] ?? null : null,
-      text: cmd.type === CMD.TEXT ? owners?.textNodeIds[textIdx++] ?? null : null,
+      rect: cmd.type === CMD.RECTANGLE ? rectId : null,
+      text: cmd.type === CMD.TEXT ? textId : null,
     })
     if (op?.kind === "effect") {
       const backdrop = createBackdropMetadata(op.effect, cmd, clipStack)

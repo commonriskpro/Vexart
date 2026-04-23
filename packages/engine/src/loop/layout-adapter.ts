@@ -393,6 +393,7 @@ export function createVexartLayoutCtx() {
           color: [(state.bgColor >>> 24) & 0xff, (state.bgColor >>> 16) & 0xff, (state.bgColor >>> 8) & 0xff, state.bgColor & 0xff] as [number,number,number,number],
           cornerRadius: state.cornerRadius,
           extra1: 0, extra2: 0,
+          nodeId: state.nodeId,
         }
       }
 
@@ -435,6 +436,7 @@ export function createVexartLayoutCtx() {
             x: pos.x, y: pos.y, width: pos.width, height: pos.height,
             color: [(te.color >>> 24) & 0xff, (te.color >>> 16) & 0xff, (te.color >>> 8) & 0xff, te.color & 0xff] as [number,number,number,number],
             cornerRadius: 0, extra1: te.fontSize, extra2: te.fontId, text: te.content,
+            nodeId: te.nodeId,
           })
         }
       }
