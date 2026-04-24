@@ -81,6 +81,16 @@ export type PaintProfiler = {
   paintReuseMs: number
   paintRenderGraphMs: number
   paintBackendPaintMs: number
+  paintBackendCompositeMs: number
+  paintBackendReadbackMs: number
+  paintBackendNativeEmitMs: number
+  paintBackendNativeReadbackMs: number
+  paintBackendNativeCompressMs: number
+  paintBackendNativeShmPrepareMs: number
+  paintBackendNativeWriteMs: number
+  paintBackendNativeRawBytes: number
+  paintBackendNativePayloadBytes: number
+  paintBackendUniformMs: number
   paintLayerCleanupMs: number
   paintBackendEndMs: number
   paintPresentationMs: number
@@ -178,6 +188,22 @@ function hasTransformInSubtree(node: TGENode): boolean {
   if (node.kind === "text") return false
   if (node.props.transform) return true
   return node.children.some((child) => hasTransformInSubtree(child))
+}
+
+function applyBackendProfile(profile: PaintProfiler | undefined, backend: RendererBackend) {
+  if (!profile) return
+  const backendProfile = backend.drainProfile?.()
+  if (!backendProfile) return
+  profile.paintBackendCompositeMs += backendProfile.compositeMs
+  profile.paintBackendReadbackMs += backendProfile.readbackMs
+  profile.paintBackendNativeEmitMs += backendProfile.nativeEmitMs
+  profile.paintBackendNativeReadbackMs += backendProfile.nativeReadbackMs
+  profile.paintBackendNativeCompressMs += backendProfile.nativeCompressMs
+  profile.paintBackendNativeShmPrepareMs += backendProfile.nativeShmPrepareMs
+  profile.paintBackendNativeWriteMs += backendProfile.nativeWriteMs
+  profile.paintBackendNativeRawBytes += backendProfile.nativeRawBytes
+  profile.paintBackendNativePayloadBytes += backendProfile.nativePayloadBytes
+  profile.paintBackendUniformMs += backendProfile.uniformUpdateMs
 }
 
 function computeSubtreeTransformQuad(node: TGENode) {
@@ -612,6 +638,7 @@ export function paintFrame(
     const backendEndStart = profile ? performance.now() : 0
     const frameResult = backend.endFrame?.(frameCtx)
     if (profile) profile.paintBackendEndMs += performance.now() - backendEndStart
+    applyBackendProfile(profile, backend)
     return {
       repaintedKeys: [],
       anyDirty: false,
@@ -849,6 +876,7 @@ export function paintFrame(
   const backendEndStart = profile ? performance.now() : 0
   const frameResult = backend.endFrame?.(frameCtx)
   if (profile) profile.paintBackendEndMs += performance.now() - backendEndStart
+  applyBackendProfile(profile, backend)
   if (frameResult?.output === "native-presented") {
     // Native path: Rust already emitted the full frame — nothing to do in JS.
     rendererOutput = "native-presented"

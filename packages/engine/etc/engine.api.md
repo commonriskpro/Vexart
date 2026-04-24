@@ -1969,6 +1969,7 @@ export type RendererBackend = {
         layers: RendererBackendRetainedLayer[];
     }) => RendererBackendFrameResult | null | void;
     endFrame?: (ctx: RendererBackendFrameContext) => RendererBackendFrameResult | null | void;
+    drainProfile?: () => RendererBackendProfile;
 };
 
 // @public (undocumented)
@@ -2090,6 +2091,14 @@ export type RendererBackendPaintResult = {
     output: "native-presented";
     strategy?: GpuLayerStrategyMode | null;
     stats?: NativePresentationStats | null;
+};
+
+// @public (undocumented)
+export type RendererBackendProfile = {
+    compositeMs: number;
+    readbackMs: number;
+    nativeEmitMs: number;
+    uniformUpdateMs: number;
 };
 
 // @public (undocumented)

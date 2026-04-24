@@ -15,6 +15,7 @@ import type {
   RendererBackend,
   RendererBackendFrameContext,
   RendererBackendFramePlan,
+  RendererBackendProfile,
   RendererBackendFrameResult,
   RendererBackendPaintContext,
   RendererBackendRetainedLayer,
@@ -29,6 +30,7 @@ import {
 import {
   allocNativeStatsBuf,
   decodeNativePresentationStats,
+  type NativePresentationStats,
 } from "./native-presentation-stats"
 import {
   isNativePresentationCapable,
@@ -891,6 +893,42 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   let renderOpToImage: ((op: RenderGraphOp, width: number, height: number, offsetX: number, offsetY: number) => VexartImageHandle | null) | null = null
   const activeLayerKeys = new Set<string>()
   let suppressFinalPresentation = false
+  const backendProfile: RendererBackendProfile = {
+    compositeMs: 0,
+    readbackMs: 0,
+    nativeEmitMs: 0,
+    nativeReadbackMs: 0,
+    nativeCompressMs: 0,
+    nativeShmPrepareMs: 0,
+    nativeWriteMs: 0,
+    nativeRawBytes: 0,
+    nativePayloadBytes: 0,
+    uniformUpdateMs: 0,
+  }
+  const resetBackendProfile = () => {
+    backendProfile.compositeMs = 0
+    backendProfile.readbackMs = 0
+    backendProfile.nativeEmitMs = 0
+    backendProfile.nativeReadbackMs = 0
+    backendProfile.nativeCompressMs = 0
+    backendProfile.nativeShmPrepareMs = 0
+    backendProfile.nativeWriteMs = 0
+    backendProfile.nativeRawBytes = 0
+    backendProfile.nativePayloadBytes = 0
+    backendProfile.uniformUpdateMs = 0
+  }
+  const addBackendProfile = (key: keyof RendererBackendProfile, start: number) => {
+    backendProfile[key] += performance.now() - start
+  }
+  const addNativeStatsProfile = (stats: NativePresentationStats | null) => {
+    if (!stats) return
+    backendProfile.nativeReadbackMs += stats.readbackUs / 1000
+    backendProfile.nativeCompressMs += stats.compressUs / 1000
+    backendProfile.nativeShmPrepareMs += stats.shmPrepareUs / 1000
+    backendProfile.nativeWriteMs += stats.writeUs / 1000
+    backendProfile.nativeRawBytes += stats.rawBytes
+    backendProfile.nativePayloadBytes += stats.payloadBytes
+  }
   let lastStrategyTelemetry: {
     preferred: GpuLayerStrategyMode | null
     chosen: GpuLayerStrategyMode | null
@@ -2176,7 +2214,9 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       return { ok: true as const, rawLayer: null }
     }
     if (readbackRegion && readbackRegion.width > 0 && readbackRegion.height > 0) {
+      const readbackStart = performance.now()
       const rgba = vexartCompositeReadbackRegionRgba(vctx, targetHandle, readbackRegion)
+      addBackendProfile("readbackMs", readbackStart)
       for (const handle of transientFullFrameImages) vexartRemoveImage(vctx, handle)
       if (!rgba) return { ok: false, rawLayer: null }
       return {
@@ -2190,7 +2230,9 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       }
     }
     // Phase 2b: readback from the specific vexart target (not context default).
+    const readbackStart = performance.now()
     const rgba = vexartCompositeReadbackRgba(vctx, targetHandle, ctx.targetWidth * ctx.targetHeight * 4)
+    addBackendProfile("readbackMs", readbackStart)
     for (const handle of transientFullFrameImages) vexartRemoveImage(vctx, handle)
     if (!rgba) return { ok: false, rawLayer: null }
     return {
@@ -2212,7 +2254,9 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     const targetHandle = getFinalFrameTarget(frame.viewportWidth, frame.viewportHeight)
     if (!targetHandle) return null
     const orderedLayers = layers.slice().sort((a, b) => a.z - b.z)
+    const compositeStart = performance.now()
     vexartCompositeTargetBeginLayer(vctx, targetHandle, 0, 0x00000000)
+    addBackendProfile("compositeMs", compositeStart)
     try {
       for (const layer of orderedLayers) {
         const quad = layer.subtreeTransform ?? {
@@ -2232,12 +2276,17 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           1 - (quad.p3.y / frame.viewportHeight) * 2,
           layer.opacity,
         )
-        if (!compositeTargetUniformToTarget(vctx, targetHandle, layer.handle, inst)) {
+        const uniformStart = performance.now()
+        const uniformUpdated = compositeTargetUniformToTarget(vctx, targetHandle, layer.handle, inst)
+        addBackendProfile("uniformUpdateMs", uniformStart)
+        if (!uniformUpdated) {
           return null
         }
       }
     } finally {
+      const compositeEndStart = performance.now()
       vexartCompositeTargetEndLayer(vctx, targetHandle)
+      addBackendProfile("compositeMs", compositeEndStart)
     }
     pruneLayerTargets()
 
@@ -2249,14 +2298,17 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       try {
         const { symbols } = openVexartLibrary()
         ensureNativeKittyTransport(frame.transmissionMode)
+        const nativeEmitStart = performance.now()
         const rc = symbols.vexart_kitty_emit_frame_with_stats(
           vctx,
           targetHandle,
           3, // FINAL_FRAME_IMAGE_ID — same as gpu-frame-composer
           ptr(statsBuf),
         ) as number
+        addBackendProfile("nativeEmitMs", nativeEmitStart)
         if (rc === 0) {
           const stats = decodeNativePresentationStats(statsBuf)
+          addNativeStatsProfile(stats)
           return { output: "native-presented", strategy: lastStrategy, stats }
         }
         // Native emission failed — fall through to TS raw path.
@@ -2270,7 +2322,9 @@ export function createGpuRendererBackend(): GpuRendererBackend {
 
     // ── TS fallback: readback RGBA and return raw payload ──
     // Used when native presentation is disabled or unsupported.
+    const readbackStart = performance.now()
     const readbackData = vexartCompositeReadbackRgba(vctx, targetHandle, frame.viewportWidth * frame.viewportHeight * 4)
+    addBackendProfile("readbackMs", readbackStart)
     if (!readbackData) return null
     return {
       output: "final-frame-raw",
@@ -2336,6 +2390,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   return {
     name: "gpu-render-graph",
     beginFrame(ctx): RendererBackendFramePlan {
+      resetBackendProfile()
       currentFrame = ctx
       currentFrameLayers = []
       activeLayerKeys.clear()
@@ -2496,21 +2551,29 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             && region.width > 0
             && region.height > 0
             && region.width * region.height < ctx.target.width * ctx.target.height
+          const regionEmitStart = shouldPresentRegion ? performance.now() : 0
           const regionStats = shouldPresentRegion
             ? nativeEmitRegionTarget(layerTarget, nativeImageId, region.x, region.y, region.width, region.height, frameCtx.transmissionMode)
             : null
+          if (shouldPresentRegion) addBackendProfile("nativeEmitMs", regionEmitStart)
           if (regionStats !== null) {
+            addNativeStatsProfile(regionStats)
             nativeLayerPresentDirty(layerCtx.key)
             return { output: "native-presented", strategy: lastStrategy, stats: regionStats }
           }
           const col = Math.floor(layerCtx.bounds.x / Math.max(1, ctx.cellWidth ?? 1))
           const row = Math.floor(layerCtx.bounds.y / Math.max(1, ctx.cellHeight ?? 1))
+          const nativeEmitStart = performance.now()
           const stats = nativeEmitLayerTarget(layerTarget, nativeImageId, col, row, layerCtx.z, frameCtx.transmissionMode)
+          addBackendProfile("nativeEmitMs", nativeEmitStart)
           if (stats !== null) {
+            addNativeStatsProfile(stats)
             nativeLayerPresentDirty(layerCtx.key)
             return { output: "native-presented", strategy: lastStrategy, stats }
           }
+          const readbackStart = performance.now()
           const rgba = vexartCompositeReadbackRgba(getVexartCtx(), layerTarget, ctx.target.width * ctx.target.height * 4)
+          addBackendProfile("readbackMs", readbackStart)
           return {
             output: "kitty-payload",
             strategy: lastStrategy,
@@ -2556,6 +2619,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       return true
     },
     compositeRetainedFrame(ctx) {
+      resetBackendProfile()
       return composeRetainedFrame(ctx.frame, ctx.layers)
     },
     endFrame(ctx) {
@@ -2577,6 +2641,11 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     },
     getLastStrategy() {
       return lastStrategy
+    },
+    drainProfile() {
+      const profile = { ...backendProfile }
+      resetBackendProfile()
+      return profile
     },
   }
 }

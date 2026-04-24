@@ -88,6 +88,16 @@ export type FrameProfile = {
   paintReuseMs: number
   paintRenderGraphMs: number
   paintBackendPaintMs: number
+  paintBackendCompositeMs: number
+  paintBackendReadbackMs: number
+  paintBackendNativeEmitMs: number
+  paintBackendNativeReadbackMs: number
+  paintBackendNativeCompressMs: number
+  paintBackendNativeShmPrepareMs: number
+  paintBackendNativeWriteMs: number
+  paintBackendNativeRawBytes: number
+  paintBackendNativePayloadBytes: number
+  paintBackendUniformMs: number
   paintLayerCleanupMs: number
   paintBackendEndMs: number
   paintPresentationMs: number
@@ -627,6 +637,19 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     const frameResult = backend.compositeRetainedFrame?.({ frame: frameCtx, layers: retainedLayers }) ?? null
     if (profile) {
       profile.paintBackendPaintMs = performance.now() - retainedPaintStart
+      const backendProfile = backend.drainProfile?.()
+      if (backendProfile) {
+        profile.paintBackendCompositeMs += backendProfile.compositeMs
+        profile.paintBackendReadbackMs += backendProfile.readbackMs
+        profile.paintBackendNativeEmitMs += backendProfile.nativeEmitMs
+        profile.paintBackendNativeReadbackMs += backendProfile.nativeReadbackMs
+        profile.paintBackendNativeCompressMs += backendProfile.nativeCompressMs
+        profile.paintBackendNativeShmPrepareMs += backendProfile.nativeShmPrepareMs
+        profile.paintBackendNativeWriteMs += backendProfile.nativeWriteMs
+        profile.paintBackendNativeRawBytes += backendProfile.nativeRawBytes
+        profile.paintBackendNativePayloadBytes += backendProfile.nativePayloadBytes
+        profile.paintBackendUniformMs += backendProfile.uniformUpdateMs
+      }
       profile.paintMs = profile.paintBackendPaintMs
       profile.commands = 0
       profile.dirtyBefore = dirtyBeforeFrame

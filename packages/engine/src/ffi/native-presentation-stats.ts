@@ -2,7 +2,7 @@
  * native-presentation-stats.ts
  * TypeScript mirror of the Rust `NativePresentationStats` packed struct.
  *
- * Struct layout (64 bytes, version=1, all LE):
+ * Struct layout (96 bytes, version=2, all LE):
  *   offset 0  u32 version
  *   offset 4  u32 mode
  *   offset 8  u64 rgba_bytes_read
@@ -13,6 +13,10 @@
  *   offset 48 u64 total_us
  *   offset 56 u32 transport
  *   offset 60 u32 flags
+ *   offset 64 u64 compress_us
+ *   offset 72 u64 shm_prepare_us
+ *   offset 80 u64 raw_bytes
+ *   offset 88 u64 payload_bytes
  *
  * Phase 2b — native presentation. See native/libvexart/src/types.rs.
  */
@@ -20,7 +24,7 @@
 // ── Constants matching Rust ───────────────────────────────────────────────
 
 /** @public */
-export const NATIVE_STATS_VERSION = 1 as const
+export const NATIVE_STATS_VERSION = 2 as const
 
 /** @public */
 export const NATIVE_STATS_MODE = {
@@ -43,10 +47,11 @@ export const NATIVE_STATS_FLAG = {
   NATIVE_USED: 1,
   FALLBACK: 2,
   VALID: 4,
+  COMPRESSED: 8,
 } as const
 
 /** @public Byte size of the NativePresentationStats struct. */
-export const NATIVE_STATS_BYTE_SIZE = 64
+export const NATIVE_STATS_BYTE_SIZE = 96
 
 // ── TypeScript mirror type ────────────────────────────────────────────────
 
@@ -72,6 +77,14 @@ export type NativePresentationStats = {
   transport: number
   /** Flags bitfield (bit 0=native_used, bit 1=fallback, bit 2=valid). */
   flags: number
+  /** Native zlib compression time in microseconds. */
+  compressUs: number
+  /** Native SHM prepare/copy/sync time in microseconds. */
+  shmPrepareUs: number
+  /** Raw input byte count before compression. */
+  rawBytes: number
+  /** Payload byte count written after compression policy. */
+  payloadBytes: number
 }
 
 // ── Decoder ──────────────────────────────────────────────────────────────
@@ -79,7 +92,7 @@ export type NativePresentationStats = {
 /**
  * Decode a `NativePresentationStats` struct from a Uint8Array.
  *
- * The buffer must be at least 64 bytes. If the version field is 0 (uninitialized),
+ * The buffer must be at least 96 bytes. If the version field is 0 (uninitialized),
  * returns null to indicate no valid stats were written.
  *
  * BigInt u64 fields are cast to number — safe for values ≤ Number.MAX_SAFE_INTEGER
@@ -109,6 +122,10 @@ export function decodeNativePresentationStats(buf: Uint8Array): NativePresentati
     totalUs: u64(48),
     transport: view.getUint32(56, true),
     flags: view.getUint32(60, true),
+    compressUs: version >= 2 ? u64(64) : 0,
+    shmPrepareUs: version >= 2 ? u64(72) : 0,
+    rawBytes: version >= 2 ? u64(80) : 0,
+    payloadBytes: version >= 2 ? u64(88) : 0,
   }
 }
 
@@ -130,7 +147,7 @@ export function allocNativeStatsBuf(): Uint8Array {
  */
 /** @public */
 export function isNativeStatsValid(stats: NativePresentationStats | null): boolean {
-  return !!(stats && (stats.flags & NATIVE_STATS_FLAG.VALID) !== 0 && stats.version === NATIVE_STATS_VERSION)
+  return !!(stats && (stats.flags & NATIVE_STATS_FLAG.VALID) !== 0 && stats.version >= 1)
 }
 
 /**
@@ -156,5 +173,6 @@ export function formatNativeStats(stats: NativePresentationStats): string {
     : stats.mode === NATIVE_STATS_MODE.DELETE ? "delete"
     : "unknown"
   const fallback = (stats.flags & NATIVE_STATS_FLAG.FALLBACK) ? " [fallback]" : ""
-  return `native[${transport}] ${mode}${fallback} rb=${stats.rgbaBytesRead}B emit=${stats.kittyBytesEmitted}B total=${stats.totalUs}µs`
+  const compression = (stats.flags & NATIVE_STATS_FLAG.COMPRESSED) ? " zlib" : " raw"
+  return `native[${transport}] ${mode}${fallback}${compression} rb=${stats.rgbaBytesRead}B payload=${stats.payloadBytes}B total=${stats.totalUs}µs`
 }

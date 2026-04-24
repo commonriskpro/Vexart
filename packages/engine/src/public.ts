@@ -15,6 +15,7 @@ export type {
   RendererBackendPaintResult,
   RendererBackendFramePlan,
   RendererBackendFrameResult,
+  RendererBackendProfile,
   RendererBackendLayerBacking,
   RendererBackendRetainedLayer,
 } from "./ffi/renderer-backend"

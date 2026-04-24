@@ -9,10 +9,10 @@ import {
 } from "./native-presentation-stats"
 
 describe("native-presentation-stats", () => {
-  it("decodes the 64-byte native stats struct", () => {
+  it("decodes the native stats struct", () => {
     const buf = new Uint8Array(NATIVE_STATS_BYTE_SIZE)
     const view = new DataView(buf.buffer)
-    view.setUint32(0, 1, true)
+    view.setUint32(0, 2, true)
     view.setUint32(4, NATIVE_STATS_MODE.REGION, true)
     view.setUint32(8, 0, true)
     view.setUint32(16, 4096, true)
@@ -21,7 +21,11 @@ describe("native-presentation-stats", () => {
     view.setUint32(40, 56, true)
     view.setUint32(48, 78, true)
     view.setUint32(56, NATIVE_STATS_TRANSPORT.SHM, true)
-    view.setUint32(60, NATIVE_STATS_FLAG.NATIVE_USED | NATIVE_STATS_FLAG.VALID, true)
+    view.setUint32(60, NATIVE_STATS_FLAG.NATIVE_USED | NATIVE_STATS_FLAG.VALID | NATIVE_STATS_FLAG.COMPRESSED, true)
+    view.setUint32(64, 90, true)
+    view.setUint32(72, 123, true)
+    view.setUint32(80, 8192, true)
+    view.setUint32(88, 2048, true)
 
     const stats = decodeNativePresentationStats(buf)
 
@@ -33,6 +37,10 @@ describe("native-presentation-stats", () => {
     expect(stats?.writeUs).toBe(56)
     expect(stats?.totalUs).toBe(78)
     expect(stats?.transport).toBe(NATIVE_STATS_TRANSPORT.SHM)
+    expect(stats?.compressUs).toBe(90)
+    expect(stats?.shmPrepareUs).toBe(123)
+    expect(stats?.rawBytes).toBe(8192)
+    expect(stats?.payloadBytes).toBe(2048)
   })
 
   it("returns null for an uninitialized stats buffer", () => {
@@ -41,7 +49,7 @@ describe("native-presentation-stats", () => {
 
   it("formats native stats for debug output", () => {
     const stats = {
-      version: 1,
+      version: 2,
       mode: NATIVE_STATS_MODE.LAYER,
       rgbaBytesRead: 0,
       kittyBytesEmitted: 1024,
@@ -50,9 +58,13 @@ describe("native-presentation-stats", () => {
       writeUs: 0,
       totalUs: 30,
       transport: NATIVE_STATS_TRANSPORT.SHM,
-      flags: NATIVE_STATS_FLAG.NATIVE_USED | NATIVE_STATS_FLAG.VALID,
+      flags: NATIVE_STATS_FLAG.NATIVE_USED | NATIVE_STATS_FLAG.VALID | NATIVE_STATS_FLAG.COMPRESSED,
+      compressUs: 5,
+      shmPrepareUs: 6,
+      rawBytes: 4096,
+      payloadBytes: 1024,
     }
 
-    expect(formatNativeStats(stats)).toBe("native[shm] layer rb=0B emit=1024B total=30µs")
+    expect(formatNativeStats(stats)).toBe("native[shm] layer zlib rb=0B payload=1024B total=30µs")
   })
 })

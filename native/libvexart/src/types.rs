@@ -66,8 +66,9 @@ impl NodeHandle {
 /// Native presentation statistics — filled by `vexart_kitty_emit_frame_with_stats`
 /// and related native presentation exports.
 ///
-/// Versioned struct for FFI stability. Total size: 64 bytes.
+/// Versioned struct for FFI stability. Total size: 96 bytes.
 /// Phase 2b: version=1, mode/transport are u32 enum values.
+/// Phase 10: version=2 adds native compression/SHM payload breakdown.
 ///
 /// mode values: 0=unknown, 1=final-frame, 2=layer, 3=region, 4=delete
 /// transport values: 0=direct, 1=file, 2=shm
@@ -95,10 +96,18 @@ pub struct NativePresentationStats {
     pub transport: u32,
     /// Flags bitfield.
     pub flags: u32,
+    /// Native zlib compression time in microseconds.
+    pub compress_us: u64,
+    /// Native SHM prepare/copy/sync time in microseconds.
+    pub shm_prepare_us: u64,
+    /// Raw input byte count before compression.
+    pub raw_bytes: u64,
+    /// Payload byte count written to SHM/direct after compression policy.
+    pub payload_bytes: u64,
 }
 
 impl NativePresentationStats {
-    pub const VERSION: u32 = 1;
+    pub const VERSION: u32 = 2;
     pub const MODE_UNKNOWN: u32 = 0;
     pub const MODE_FINAL_FRAME: u32 = 1;
     pub const MODE_LAYER: u32 = 2;
@@ -110,4 +119,5 @@ impl NativePresentationStats {
     pub const FLAG_NATIVE_USED: u32 = 1;
     pub const FLAG_FALLBACK: u32 = 2;
     pub const FLAG_VALID: u32 = 4;
+    pub const FLAG_COMPRESSED: u32 = 8;
 }

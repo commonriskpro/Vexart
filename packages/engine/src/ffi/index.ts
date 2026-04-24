@@ -15,6 +15,7 @@ export type {
   RendererBackendPaintResult,
   RendererBackendFramePlan,
   RendererBackendFrameResult,
+  RendererBackendProfile,
   RendererBackendLayerBacking,
 } from "./renderer-backend"
 

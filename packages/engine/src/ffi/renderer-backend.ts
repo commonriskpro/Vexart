@@ -123,6 +123,20 @@ export type RendererBackendFrameResult =
     }
 
 /** @public */
+export type RendererBackendProfile = {
+  compositeMs: number
+  readbackMs: number
+  nativeEmitMs: number
+  nativeReadbackMs: number
+  nativeCompressMs: number
+  nativeShmPrepareMs: number
+  nativeWriteMs: number
+  nativeRawBytes: number
+  nativePayloadBytes: number
+  uniformUpdateMs: number
+}
+
+/** @public */
 export type RendererBackendPaintContext = {
   targetWidth: number
   targetHeight: number
@@ -164,6 +178,7 @@ export type RendererBackend = {
   reuseLayer?: (ctx: { frame: RendererBackendFrameContext; layer: RendererBackendLayerContext }) => boolean | void
   compositeRetainedFrame?: (ctx: { frame: RendererBackendFrameContext; layers: RendererBackendRetainedLayer[] }) => RendererBackendFrameResult | null | void
   endFrame?: (ctx: RendererBackendFrameContext) => RendererBackendFrameResult | null | void
+  drainProfile?: () => RendererBackendProfile
 }
 
 let activeRendererBackend: RendererBackend | null = null

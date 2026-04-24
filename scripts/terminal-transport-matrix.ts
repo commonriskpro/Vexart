@@ -163,7 +163,7 @@ function toTransport(value: string): Transport {
   return TRANSPORT.DIRECT
 }
 
-function runBenchmark(transport: Transport, frames: number, warmup: number): BenchmarkReportSummary | null {
+function runBenchmark(transport: Transport, frames: number, warmup: number, nativePresentation: boolean): BenchmarkReportSummary | null {
   const output = `/tmp/vexart-frame-breakdown-${transport}-${process.pid}.json`
   const command = [
     "bun",
@@ -175,6 +175,7 @@ function runBenchmark(transport: Transport, frames: number, warmup: number): Ben
     `--transport=${transport}`,
     `--output=${output}`,
   ]
+  if (nativePresentation) command.push("--native-presentation")
   const result = Bun.spawnSync(command, {
     cwd: process.cwd(),
     stdout: "inherit",
@@ -223,7 +224,7 @@ async function collectActiveReport(options: CliOptions): Promise<ValidationRepor
         afterLoopEnabled,
         fallbackReason: getNativePresentationFallbackReason(),
       },
-      benchmark: options.bench ? runBenchmark(transport, options.frames, options.warmup) : null,
+      benchmark: options.bench ? runBenchmark(transport, options.frames, options.warmup, afterLoopEnabled && transport === TRANSPORT.SHM) : null,
     }
   } finally {
     term.destroy()
@@ -248,7 +249,7 @@ function collectStaticReport(options: CliOptions): ValidationReport {
       afterLoopEnabled: isNativePresentationEnabled(),
       fallbackReason: getNativePresentationFallbackReason(),
     },
-    benchmark: options.bench ? runBenchmark(toTransport(caps.transmissionMode), options.frames, options.warmup) : null,
+    benchmark: options.bench ? runBenchmark(toTransport(caps.transmissionMode), options.frames, options.warmup, false) : null,
   }
 }
 

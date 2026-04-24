@@ -26,6 +26,7 @@ interface CliOptions {
   warmup: number
   output: string
   transport: TransmissionMode
+  nativePresentation: boolean
 }
 
 interface Size {
@@ -97,6 +98,16 @@ interface CadenceFrame {
   paintReuseMs: number
   paintRenderGraphMs: number
   paintBackendPaintMs: number
+  paintBackendCompositeMs: number
+  paintBackendReadbackMs: number
+  paintBackendNativeEmitMs: number
+  paintBackendNativeReadbackMs: number
+  paintBackendNativeCompressMs: number
+  paintBackendNativeShmPrepareMs: number
+  paintBackendNativeWriteMs: number
+  paintBackendNativeRawBytes: number
+  paintBackendNativePayloadBytes: number
+  paintBackendUniformMs: number
   paintLayerCleanupMs: number
   paintBackendEndMs: number
   paintPresentationMs: number
@@ -138,6 +149,16 @@ interface StageSummary {
   paintReuseMs: PercentileSummary
   paintRenderGraphMs: PercentileSummary
   paintBackendPaintMs: PercentileSummary
+  paintBackendCompositeMs: PercentileSummary
+  paintBackendReadbackMs: PercentileSummary
+  paintBackendNativeEmitMs: PercentileSummary
+  paintBackendNativeReadbackMs: PercentileSummary
+  paintBackendNativeCompressMs: PercentileSummary
+  paintBackendNativeShmPrepareMs: PercentileSummary
+  paintBackendNativeWriteMs: PercentileSummary
+  paintBackendNativeRawBytes: PercentileSummary
+  paintBackendNativePayloadBytes: PercentileSummary
+  paintBackendUniformMs: PercentileSummary
   paintLayerCleanupMs: PercentileSummary
   paintBackendEndMs: PercentileSummary
   paintPresentationMs: PercentileSummary
@@ -166,7 +187,7 @@ interface ScenarioReport {
 }
 
 interface BenchmarkReport {
-  version: 2
+  version: 3
   generatedAt: string
   runtime: string
   platform: string
@@ -174,6 +195,7 @@ interface BenchmarkReport {
   frames: number
   warmup: number
   transport: TransmissionMode
+  nativePresentation: boolean
   scenarios: ScenarioReport[]
 }
 
@@ -199,6 +221,7 @@ function parseCli(): CliOptions {
   let warmup = DEFAULT_WARMUP
   let output = REPORT_PATH
   let transport: TransmissionMode = "shm"
+  let nativePresentation = false
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
     if (arg === "--frames") frames = Number(args[++i] ?? frames)
@@ -215,12 +238,19 @@ function parseCli(): CliOptions {
       const value = arg.slice("--transport=".length)
       if (value === "direct" || value === "file" || value === "shm") transport = value
     }
+    else if (arg === "--native-presentation") nativePresentation = true
+    else if (arg === "--no-native-presentation") nativePresentation = false
+    else if (arg.startsWith("--native-presentation=")) {
+      const value = arg.slice("--native-presentation=".length)
+      nativePresentation = value === "1" || value === "true" || value === "yes"
+    }
   }
   return {
     frames: Number.isFinite(frames) && frames > 0 ? Math.floor(frames) : DEFAULT_FRAMES,
     warmup: Number.isFinite(warmup) && warmup >= 0 ? Math.floor(warmup) : DEFAULT_WARMUP,
     output,
     transport,
+    nativePresentation,
   }
 }
 
@@ -393,6 +423,16 @@ function parseCadenceLine(line: string): CadenceFrame | null {
     paintReuseMs: value("reuse"),
     paintRenderGraphMs: value("renderGraph"),
     paintBackendPaintMs: value("backendPaint"),
+    paintBackendCompositeMs: value("backendComposite"),
+    paintBackendReadbackMs: value("backendReadback"),
+    paintBackendNativeEmitMs: value("backendNativeEmit"),
+    paintBackendNativeReadbackMs: value("backendNativeReadback"),
+    paintBackendNativeCompressMs: value("backendNativeCompress"),
+    paintBackendNativeShmPrepareMs: value("backendNativeShmPrepare"),
+    paintBackendNativeWriteMs: value("backendNativeWrite"),
+    paintBackendNativeRawBytes: value("backendNativeRawBytes"),
+    paintBackendNativePayloadBytes: value("backendNativePayloadBytes"),
+    paintBackendUniformMs: value("backendUniform"),
     paintLayerCleanupMs: value("layerCleanup"),
     paintBackendEndMs: value("backendEnd"),
     paintPresentationMs: value("presentation"),
@@ -447,6 +487,16 @@ function summarizeFrames(frames: CadenceFrame[]): StageSummary {
     paintReuseMs: summarize(frames.map((frame) => frame.paintReuseMs)),
     paintRenderGraphMs: summarize(frames.map((frame) => frame.paintRenderGraphMs)),
     paintBackendPaintMs: summarize(frames.map((frame) => frame.paintBackendPaintMs)),
+    paintBackendCompositeMs: summarize(frames.map((frame) => frame.paintBackendCompositeMs)),
+    paintBackendReadbackMs: summarize(frames.map((frame) => frame.paintBackendReadbackMs)),
+    paintBackendNativeEmitMs: summarize(frames.map((frame) => frame.paintBackendNativeEmitMs)),
+    paintBackendNativeReadbackMs: summarize(frames.map((frame) => frame.paintBackendNativeReadbackMs)),
+    paintBackendNativeCompressMs: summarize(frames.map((frame) => frame.paintBackendNativeCompressMs)),
+    paintBackendNativeShmPrepareMs: summarize(frames.map((frame) => frame.paintBackendNativeShmPrepareMs)),
+    paintBackendNativeWriteMs: summarize(frames.map((frame) => frame.paintBackendNativeWriteMs)),
+    paintBackendNativeRawBytes: summarize(frames.map((frame) => frame.paintBackendNativeRawBytes)),
+    paintBackendNativePayloadBytes: summarize(frames.map((frame) => frame.paintBackendNativePayloadBytes)),
+    paintBackendUniformMs: summarize(frames.map((frame) => frame.paintBackendUniformMs)),
     paintLayerCleanupMs: summarize(frames.map((frame) => frame.paintLayerCleanupMs)),
     paintBackendEndMs: summarize(frames.map((frame) => frame.paintBackendEndMs)),
     paintPresentationMs: summarize(frames.map((frame) => frame.paintPresentationMs)),
@@ -468,14 +518,14 @@ function topSymbols(counts: Map<string, number>): SymbolCount[] {
 
 function topStageP95(summary: StageSummary) {
   return Object.entries(summary)
-    .filter(([stage]) => stage !== "totalMs" && stage !== "ffiCallCount")
+    .filter(([stage]) => stage !== "totalMs" && stage !== "ffiCallCount" && !stage.endsWith("Bytes"))
     .map(([stage, value]) => ({ stage, p95: value.p95 }))
     .filter((entry) => entry.p95 > 0)
     .sort((a, b) => b.p95 - a.p95)
     .slice(0, 6)
 }
 
-async function runScenario(engine: EngineModules, name: ScenarioName, size: Size, frames: number, warmup: number, transport: TransmissionMode): Promise<ScenarioReport> {
+async function runScenario(engine: EngineModules, name: ScenarioName, size: Size, frames: number, warmup: number, transport: TransmissionMode, nativePresentation: boolean): Promise<ScenarioReport> {
   await clearCadenceLog()
   engine.resetVexartFfiCallCounts()
   const capturedProfiles: CadenceFrame[] = []
@@ -498,6 +548,16 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
       paintReuseMs: profile.paintReuseMs,
       paintRenderGraphMs: profile.paintRenderGraphMs,
       paintBackendPaintMs: profile.paintBackendPaintMs,
+      paintBackendCompositeMs: profile.paintBackendCompositeMs,
+      paintBackendReadbackMs: profile.paintBackendReadbackMs,
+      paintBackendNativeEmitMs: profile.paintBackendNativeEmitMs,
+      paintBackendNativeReadbackMs: profile.paintBackendNativeReadbackMs,
+      paintBackendNativeCompressMs: profile.paintBackendNativeCompressMs,
+      paintBackendNativeShmPrepareMs: profile.paintBackendNativeShmPrepareMs,
+      paintBackendNativeWriteMs: profile.paintBackendNativeWriteMs,
+      paintBackendNativeRawBytes: profile.paintBackendNativeRawBytes,
+      paintBackendNativePayloadBytes: profile.paintBackendNativePayloadBytes,
+      paintBackendUniformMs: profile.paintBackendUniformMs,
       paintLayerCleanupMs: profile.paintLayerCleanupMs,
       paintBackendEndMs: profile.paintBackendEndMs,
       paintPresentationMs: profile.paintPresentationMs,
@@ -521,8 +581,8 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
   const loop = engine.createRenderLoop(term as never, {
     experimental: {
       forceLayerRepaint,
-      nativePresentation: false,
-      nativeLayerRegistry: false,
+      nativePresentation,
+      nativeLayerRegistry: nativePresentation,
       nativeSceneGraph: true,
       nativeEventDispatch: true,
       nativeSceneLayout: true,
@@ -595,6 +655,16 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
         paintReuseMs: 0,
         paintRenderGraphMs: 0,
         paintBackendPaintMs: 0,
+        paintBackendCompositeMs: 0,
+        paintBackendReadbackMs: 0,
+        paintBackendNativeEmitMs: 0,
+        paintBackendNativeReadbackMs: 0,
+        paintBackendNativeCompressMs: 0,
+        paintBackendNativeShmPrepareMs: 0,
+        paintBackendNativeWriteMs: 0,
+        paintBackendNativeRawBytes: 0,
+        paintBackendNativePayloadBytes: 0,
+        paintBackendUniformMs: 0,
         paintLayerCleanupMs: 0,
         paintBackendEndMs: 0,
         paintPresentationMs: 0,
@@ -657,6 +727,12 @@ function printScenario(report: ScenarioReport) {
   if (stages.length > 0) {
     console.log(`    bottlenecks p95: ${stages.map((entry) => `${entry.stage}=${entry.p95.toFixed(2)}`).join(", ")}`)
   }
+  if (report.summary.paintBackendNativeEmitMs.p95 > 0) {
+    const raw = report.summary.paintBackendNativeRawBytes.p50
+    const payload = report.summary.paintBackendNativePayloadBytes.p50
+    const ratio = raw > 0 ? payload / raw : 0
+    console.log(`    native emit p95: rb=${report.summary.paintBackendNativeReadbackMs.p95.toFixed(2)} compress=${report.summary.paintBackendNativeCompressMs.p95.toFixed(2)} shm=${report.summary.paintBackendNativeShmPrepareMs.p95.toFixed(2)} write=${report.summary.paintBackendNativeWriteMs.p95.toFixed(2)} ms payload=${(payload / 1024).toFixed(0)}KB raw=${(raw / 1024).toFixed(0)}KB ratio=${ratio.toFixed(2)}`)
+  }
   if (report.topFfiSymbols.length > 0) {
     console.log(`    top ffi: ${report.topFfiSymbols.slice(0, 4).map((entry) => `${entry.symbol}:${entry.count}`).join(", ")}`)
   }
@@ -673,16 +749,16 @@ async function main() {
     { name: SCENARIO.COMPOSITOR_ONLY, size: { width: 1920, height: 1080 } },
   ]
 
-  console.log(`\n🔬 Vexart frame breakdown — frames=${options.frames} warmup=${options.warmup} transport=${options.transport}\n`)
+  console.log(`\n🔬 Vexart frame breakdown — frames=${options.frames} warmup=${options.warmup} transport=${options.transport} nativePresentation=${options.nativePresentation ? "on" : "off"}\n`)
   const reports: ScenarioReport[] = []
   for (const scenario of scenarios) {
-    const report = await runScenario(engine, scenario.name, scenario.size, options.frames, options.warmup, options.transport)
+    const report = await runScenario(engine, scenario.name, scenario.size, options.frames, options.warmup, options.transport, options.nativePresentation)
     reports.push(report)
     printScenario(report)
   }
 
   const output: BenchmarkReport = {
-    version: 2,
+    version: 3,
     generatedAt: new Date().toISOString(),
     runtime: `bun ${Bun.version}`,
     platform: process.platform,
@@ -690,6 +766,7 @@ async function main() {
     frames: options.frames,
     warmup: options.warmup,
     transport: options.transport,
+    nativePresentation: options.nativePresentation,
     scenarios: reports,
   }
   await mkdir(dirname(options.output), { recursive: true })
