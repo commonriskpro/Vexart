@@ -52,7 +52,7 @@ export interface ConfigureKittyTransportManagerOptions {
 }
 
 const state: KittyTransportManagerState = {
-  preferredMode: "direct",
+  preferredMode: "shm",
   activeMode: "direct",
   probe: { shm: false, file: false },
   health: {
@@ -82,7 +82,7 @@ function canUseMode(mode: TransmissionMode) {
 
 /** @public */
 export function resetKittyTransportManager() {
-  state.preferredMode = "direct"
+  state.preferredMode = "shm"
   state.activeMode = "direct"
   state.probe.shm = false
   state.probe.file = false

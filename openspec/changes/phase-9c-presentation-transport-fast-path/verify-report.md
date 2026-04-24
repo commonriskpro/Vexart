@@ -21,6 +21,7 @@ shm    dashboard-1080p p95:  7.48ms
 - Direct base64 remains too expensive for 1080p.
 - File transport brings full dashboard under the 10ms gate and dirty-region near the 5ms target.
 - SHM transport brings dirty-region under 5ms and full dashboard under the 8.33ms aspirational 120fps frame budget in this smoke run.
+- SHM is now the benchmark/default transport policy; file is the fallback, direct is the last-resort compatibility path.
 
 ## Verification
 

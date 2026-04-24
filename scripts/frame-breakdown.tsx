@@ -198,7 +198,7 @@ function parseCli(): CliOptions {
   let frames = DEFAULT_FRAMES
   let warmup = DEFAULT_WARMUP
   let output = REPORT_PATH
-  let transport: TransmissionMode = "direct"
+  let transport: TransmissionMode = "shm"
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
     if (arg === "--frames") frames = Number(args[++i] ?? frames)

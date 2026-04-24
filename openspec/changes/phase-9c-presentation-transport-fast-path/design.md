@@ -13,6 +13,14 @@ This confirms the bottleneck is transport/presentation, not layout.
 
 ## Benchmark transport selection
 
+The runtime transport policy is:
+
+```txt
+SHM → file → direct
+```
+
+SHM is the default happy path. File transport is the local fallback when SHM is unavailable. Direct base64 is the last-resort compatibility path.
+
 `scripts/frame-breakdown.tsx` accepts:
 
 ```bash
@@ -22,6 +30,8 @@ bun run bench:frame-breakdown -- --transport=shm
 ```
 
 The script configures the Kitty transport manager to make mock-terminal runs reflect the requested transport instead of silently falling back to direct.
+
+If no transport is passed, the benchmark defaults to `shm` to match the intended production happy path.
 
 ## Strategy forcing
 

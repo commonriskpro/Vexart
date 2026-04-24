@@ -6,11 +6,21 @@
 
 The frame breakdown benchmark SHALL support explicit Kitty transport selection for `direct`, `file`, and `shm`.
 
+The frame breakdown benchmark SHALL default to `shm` when no transport is specified.
+
+The transport manager SHALL prefer `shm` as its default policy, fallback to `file` when SHM is unavailable, and use `direct` only when neither local transport is available.
+
 #### Scenario: Run file transport benchmark
 
 - **WHEN** the benchmark is run with `--transport=file`
 - **THEN** the mock terminal capabilities use file transport
 - **AND** the Kitty transport manager is configured to keep file transport active.
+
+#### Scenario: Run default transport benchmark
+
+- **WHEN** the benchmark is run without `--transport`
+- **THEN** the mock terminal capabilities use SHM transport
+- **AND** the Kitty transport manager is configured with SHM as preferred transport.
 
 ### Requirement: No implicit final-frame forcing
 
