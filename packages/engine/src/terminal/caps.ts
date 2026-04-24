@@ -15,6 +15,7 @@
 import type { TerminalKind } from "./detect"
 import { inTmux, passthroughSupported, createWriter } from "./tmux"
 
+/** @public */
 export type Capabilities = {
   /** Terminal emulator name */
   kind: TerminalKind
@@ -51,7 +52,7 @@ export type Capabilities = {
   transmissionMode: "shm" | "file" | "direct"
 }
 
-/** Infer capabilities from terminal kind without any I/O. */
+/** @public */
 export function inferCaps(kind: TerminalKind): Capabilities {
   const tmux = inTmux()
 
@@ -148,10 +149,7 @@ export function inferCaps(kind: TerminalKind): Capabilities {
 /**
  * Probe for Kitty graphics protocol support.
  *
- * Sends a 1x1 transparent PNG probe image and checks if the
- * terminal responds with OK. Handles tmux passthrough.
- *
- * Returns true if kitty graphics are supported.
+ * @public
  */
 export function probeKittyGraphics(
   write: (data: string) => void,
@@ -194,10 +192,9 @@ export function probeKittyGraphics(
 }
 
 /**
- * Query terminal colors (background, foreground) via OSC 10/11.
+ * Query terminal background and foreground colors.
  *
- * Returns parsed colors or null if the terminal doesn't respond.
- * Uses OSC 11 for background, OSC 10 for foreground.
+ * @public
  */
 export function queryColors(
   write: (data: string) => void,

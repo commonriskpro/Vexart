@@ -31,7 +31,6 @@
 import { createContext, useContext } from "solid-js"
 import type { JSX } from "solid-js"
 import { Show } from "@vexart/engine"
-import { Popover } from "@vexart/headless"
 import { radius, space, font, shadows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
@@ -49,13 +48,14 @@ const DropdownContext = createContext<DropdownCtx>({
 
 // ── Root ──
 
+/** @public */
 export type VoidDropdownMenuProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   children?: any
 }
 
-export function VoidDropdownMenu(props: VoidDropdownMenuProps) {
+function VoidDropdownMenuRoot(props: VoidDropdownMenuProps) {
   const ctx: DropdownCtx = {
     open: () => props.open,
     close: () => props.onOpenChange(false),
@@ -72,17 +72,20 @@ export function VoidDropdownMenu(props: VoidDropdownMenuProps) {
 
 // ── Trigger ──
 
+/** @public */
 export type VoidDropdownMenuTriggerProps = {
   children?: JSX.Element
 }
 
-function VoidDropdownMenuTrigger(props: VoidDropdownMenuTriggerProps) {
+/** @public */
+export function VoidDropdownMenuTrigger(props: VoidDropdownMenuTriggerProps) {
   // Trigger is just a passthrough — the consumer wraps it in <box onPress> or similar
   return <>{props.children}</>
 }
 
 // ── Content ──
 
+/** @public */
 export type VoidDropdownMenuContentProps = {
   children?: any
   width?: number | string
@@ -91,7 +94,8 @@ export type VoidDropdownMenuContentProps = {
   sideOffset?: number
 }
 
-function VoidDropdownMenuContent(props: VoidDropdownMenuContentProps) {
+/** @public */
+export function VoidDropdownMenuContent(props: VoidDropdownMenuContentProps) {
   const ctx = useContext(DropdownContext)
 
   return (
@@ -120,6 +124,7 @@ function VoidDropdownMenuContent(props: VoidDropdownMenuContentProps) {
 
 // ── Item ──
 
+/** @public */
 export type VoidDropdownMenuItemProps = {
   onSelect?: () => void
   variant?: "default" | "destructive"
@@ -128,7 +133,8 @@ export type VoidDropdownMenuItemProps = {
   children?: any
 }
 
-function VoidDropdownMenuItem(props: VoidDropdownMenuItemProps) {
+/** @public */
+export function VoidDropdownMenuItem(props: VoidDropdownMenuItemProps) {
   const ctx = useContext(DropdownContext)
 
   const fg = () => props.variant === "destructive"
@@ -168,7 +174,8 @@ function VoidDropdownMenuItem(props: VoidDropdownMenuItemProps) {
 
 // ── Separator ──
 
-function VoidDropdownMenuSeparator() {
+/** @public */
+export function VoidDropdownMenuSeparator() {
   return (
     <box
       width="grow"
@@ -182,12 +189,14 @@ function VoidDropdownMenuSeparator() {
 
 // ── Label ──
 
+/** @public */
 export type VoidDropdownMenuLabelProps = {
   children?: any
   inset?: boolean
 }
 
-function VoidDropdownMenuLabel(props: VoidDropdownMenuLabelProps) {
+/** @public */
+export function VoidDropdownMenuLabel(props: VoidDropdownMenuLabelProps) {
   return (
     <box
       paddingTop={space[1.5]}
@@ -204,8 +213,11 @@ function VoidDropdownMenuLabel(props: VoidDropdownMenuLabelProps) {
 
 // ── Attach sub-components ──
 
-VoidDropdownMenu.Trigger = VoidDropdownMenuTrigger
-VoidDropdownMenu.Content = VoidDropdownMenuContent
-VoidDropdownMenu.Item = VoidDropdownMenuItem
-VoidDropdownMenu.Separator = VoidDropdownMenuSeparator
-VoidDropdownMenu.Label = VoidDropdownMenuLabel
+/** @public */
+export const VoidDropdownMenu = Object.assign(VoidDropdownMenuRoot, {
+  Trigger: VoidDropdownMenuTrigger,
+  Content: VoidDropdownMenuContent,
+  Item: VoidDropdownMenuItem,
+  Separator: VoidDropdownMenuSeparator,
+  Label: VoidDropdownMenuLabel,
+})

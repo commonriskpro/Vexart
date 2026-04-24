@@ -167,10 +167,7 @@ describe("deregisterAnimationDescriptor", () => {
 // ── REQ-2B-303: Fast-path frame detection ──────────────────────────────────
 
 describe("isCompositorOnlyFrame", () => {
-  test("returns false (Phase 2b: fast path is infrastructure-only, GPU wiring in Phase 3)", () => {
-    // Phase 2b guarantees the descriptor TABLE is built correctly.
-    // isCompositorOnlyFrame always returns false until Phase 3 wires
-    // vexart_composite_update_uniform. This test documents that contract.
+  test("returns true when only compositor descriptors are active this frame", () => {
     const id = nodeId()
     markLayerBacked(id)
     registerAnimationDescriptor({
@@ -181,6 +178,25 @@ describe("isCompositorOnlyFrame", () => {
       startTime: performance.now(),
       physics: { kind: "spring", stiffness: 170, damping: 26, mass: 1 },
     })
+
+    expect(isCompositorOnlyFrame()).toBe(true)
+
+    deregisterAllDescriptors(id)
+    unmarkLayerBacked(id)
+  })
+
+  test("returns false when a non-compositor prop dirtied an animated node", () => {
+    const id = nodeId()
+    markLayerBacked(id)
+    registerAnimationDescriptor({
+      nodeId: id,
+      property: "transform",
+      from: 0,
+      to: 1,
+      startTime: performance.now(),
+      physics: { kind: "spring", stiffness: 170, damping: 26, mass: 1 },
+    })
+    onNodePropertyChanged(id, "width")
 
     expect(isCompositorOnlyFrame()).toBe(false)
 

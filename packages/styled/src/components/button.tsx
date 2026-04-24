@@ -14,9 +14,12 @@
 import { radius, space, font, weight, shadows, glows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
-type ButtonVariant = "default" | "secondary" | "outline" | "ghost" | "destructive" | "link"
-type ButtonSize = "xs" | "sm" | "default" | "lg" | "icon" | "icon-sm" | "icon-lg"
+/** @public */
+export type ButtonVariant = "default" | "secondary" | "outline" | "ghost" | "destructive" | "link"
+/** @public */
+export type ButtonSize = "xs" | "sm" | "default" | "lg" | "icon" | "icon-sm" | "icon-lg"
 
+/** @public */
 export interface ButtonProps {
   variant?: ButtonVariant
   size?: ButtonSize
@@ -122,6 +125,7 @@ const variantGetters: Record<ButtonVariant, VariantColors> = {
   },
 }
 
+/** @public */
 export function Button(props: ButtonProps) {
   const v = props.variant ?? "default"
   const s = props.size ?? "default"

@@ -54,17 +54,13 @@ const ESC = {
   reset: "\x1b[0m",
 } as const
 
+/** @public */
 export type LifecycleState = {
   active: boolean
   rawModeWas: boolean
 }
 
-/**
- * Enter TGE mode — prepare the terminal for pixel rendering.
- *
- * Must be called before any rendering. Returns a cleanup function
- * that restores the terminal to its original state.
- */
+/** @public */
 export function enter(
   stdin: NodeJS.ReadStream,
   write: (data: string) => void,
@@ -112,11 +108,7 @@ export function enter(
   return state
 }
 
-/**
- * Leave TGE mode — restore the terminal to its original state.
- *
- * Reverses everything `enter()` did. Safe to call multiple times.
- */
+/** @public */
 export function leave(
   stdin: NodeJS.ReadStream,
   write: (data: string) => void,
@@ -161,17 +153,12 @@ export function leave(
   }
 }
 
-/**
- * Begin synchronized output frame.
- *
- * Wraps a batch of writes so the terminal holds rendering
- * until the end marker, eliminating tearing.
- */
+/** @public */
 export function beginSync(write: (data: string) => void) {
   write(ESC.syncBegin)
 }
 
-/** End synchronized output frame. */
+/** @public */
 export function endSync(write: (data: string) => void) {
   write(ESC.syncEnd)
 }

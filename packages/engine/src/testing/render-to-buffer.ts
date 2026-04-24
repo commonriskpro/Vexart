@@ -22,6 +22,15 @@ import type { TGENode } from "../ffi/node"
 import { insertChild, removeChild } from "../ffi/node"
 import { createRenderLoop } from "../loop/loop"
 import { markDirty } from "../reconciler/dirty"
+import { dispatchInput } from "../loop/input"
+import {
+  nativeSceneCreateNode,
+  nativeSceneDestroyNode,
+  nativeSceneInsert,
+  nativeSceneRemove,
+  nativeSceneSetProp,
+  nativeSceneSetText,
+} from "../ffi/native-scene"
 import { setRendererBackend, getRendererBackend } from "../ffi/renderer-backend"
 import { createGpuRendererBackend } from "../ffi/gpu-renderer-backend"
 import { bindLoop, unbindLoop } from "../reconciler/pointer"
@@ -37,6 +46,37 @@ export type RenderToBufferResult = {
 }
 
 type LoopInstance = ReturnType<typeof createRenderLoop>
+
+export type RenderLoopInteractionHelpers = {
+  clickAt: (x: number, y: number) => Promise<void>
+  keyPress: (key: string, char?: string) => Promise<void>
+  frame: () => Promise<void>
+}
+
+function nativeKindForNode(node: TGENode) {
+  if (node.kind === "root") return "root"
+  if (node.kind === "text") return "text"
+  if (node.kind === "img") return "img"
+  if (node.kind === "canvas") return "canvas"
+  return "box"
+}
+
+function mirrorNodeToNative(node: TGENode, parentNativeId?: bigint | null) {
+  node._nativeId = nativeSceneCreateNode(nativeKindForNode(node))
+  if (parentNativeId && node._nativeId) nativeSceneInsert(parentNativeId, node._nativeId)
+  for (const [key, value] of Object.entries(node.props)) {
+    if (value !== undefined) nativeSceneSetProp(node._nativeId, key, value)
+  }
+  if (node.kind === "text") nativeSceneSetText(node._nativeId, node.text)
+  for (const child of node.children) mirrorNodeToNative(child, node._nativeId)
+}
+
+function unmirrorNodeFromNative(node: TGENode, parentNativeId?: bigint | null) {
+  for (const child of node.children) unmirrorNodeFromNative(child, node._nativeId)
+  if (parentNativeId && node._nativeId) nativeSceneRemove(parentNativeId, node._nativeId)
+  if (node._nativeId) nativeSceneDestroyNode(node._nativeId)
+  node._nativeId = null
+}
 
 // ── Mock terminal ────────────────────────────────────────────────────────────
 
@@ -100,18 +140,88 @@ function createCapturingBackend(gpuBackend: RendererBackend): {
   getCaptured: () => Uint8Array | null
   capturedWidth: () => number
   capturedHeight: () => number
+  getLastFrameStrategy: () => string | null
+  getLastFrameOutput: () => string | null
 } {
   let captured: Uint8Array | null = null
   let capturedW = 0
   let capturedH = 0
+  let layeredCapture: Uint8Array | null = null
+  let layeredW = 0
+  let layeredH = 0
+  let lastFrameStrategy: string | null = null
+  let lastFrameOutput: string | null = null
+
+  const compositeLayerIntoFrame = (
+    frame: Uint8Array,
+    frameWidth: number,
+    frameHeight: number,
+    layer: Uint8Array,
+    layerWidth: number,
+    layerHeight: number,
+    offsetX: number,
+    offsetY: number,
+  ) => {
+    for (let y = 0; y < layerHeight; y++) {
+      const dstY = offsetY + y
+      if (dstY < 0 || dstY >= frameHeight) continue
+      for (let x = 0; x < layerWidth; x++) {
+        const dstX = offsetX + x
+        if (dstX < 0 || dstX >= frameWidth) continue
+        const srcIndex = (y * layerWidth + x) * 4
+        const dstIndex = (dstY * frameWidth + dstX) * 4
+        const srcA = layer[srcIndex + 3] / 255
+        if (srcA <= 0) continue
+        const dstA = frame[dstIndex + 3] / 255
+        const outA = srcA + dstA * (1 - srcA)
+        if (outA <= 0) continue
+        const srcR = layer[srcIndex] / 255
+        const srcG = layer[srcIndex + 1] / 255
+        const srcB = layer[srcIndex + 2] / 255
+        const dstR = frame[dstIndex] / 255
+        const dstG = frame[dstIndex + 1] / 255
+        const dstB = frame[dstIndex + 2] / 255
+        const outR = (srcR * srcA + dstR * dstA * (1 - srcA)) / outA
+        const outG = (srcG * srcA + dstG * dstA * (1 - srcA)) / outA
+        const outB = (srcB * srcA + dstB * dstA * (1 - srcA)) / outA
+        frame[dstIndex] = Math.max(0, Math.min(255, Math.round(outR * 255)))
+        frame[dstIndex + 1] = Math.max(0, Math.min(255, Math.round(outG * 255)))
+        frame[dstIndex + 2] = Math.max(0, Math.min(255, Math.round(outB * 255)))
+        frame[dstIndex + 3] = Math.max(0, Math.min(255, Math.round(outA * 255)))
+      }
+    }
+  }
 
   const backend: RendererBackend = {
     name: "capturing",
-    beginFrame: (ctx) => gpuBackend.beginFrame?.(ctx),
-    paint: (ctx) => gpuBackend.paint(ctx),
+    beginFrame(ctx) {
+      layeredW = ctx.viewportWidth
+      layeredH = ctx.viewportHeight
+      layeredCapture = new Uint8Array(layeredW * layeredH * 4)
+      const plan = gpuBackend.beginFrame?.(ctx)
+      lastFrameStrategy = plan?.strategy ?? null
+      return plan
+    },
+    paint(ctx) {
+      const result = gpuBackend.paint(ctx)
+      if (result?.output === "kitty-payload" && result.kittyPayload && ctx.layer && layeredCapture) {
+        compositeLayerIntoFrame(
+          layeredCapture,
+          layeredW,
+          layeredH,
+          result.kittyPayload.data,
+          result.kittyPayload.width,
+          result.kittyPayload.height,
+          ctx.layer.bounds.x,
+          ctx.layer.bounds.y,
+        )
+      }
+      return result
+    },
     reuseLayer: (ctx) => gpuBackend.reuseLayer?.(ctx),
     endFrame(ctx: RendererBackendFrameContext): RendererBackendFrameResult | null {
       const result = gpuBackend.endFrame?.(ctx)
+      lastFrameOutput = result?.output ?? null
       if (result?.output === "final-frame-raw" && result.finalFrame) {
         // Copy RGBA pixels — don't retain the backend's buffer reference
         captured = new Uint8Array(result.finalFrame.data)
@@ -119,6 +229,11 @@ function createCapturingBackend(gpuBackend: RendererBackend): {
         capturedH = result.finalFrame.height
         // Return none — suppress Kitty output
         return { output: "none", strategy: result.strategy }
+      }
+      if (!captured && layeredCapture) {
+        captured = new Uint8Array(layeredCapture)
+        capturedW = layeredW
+        capturedH = layeredH
       }
       // Fallback: layered-raw strategy — no full-frame buffer available yet.
       // The caller will retry with forceLayerRepaint or rely on layer kittyPayloads.
@@ -131,6 +246,8 @@ function createCapturingBackend(gpuBackend: RendererBackend): {
     getCaptured: () => captured,
     capturedWidth: () => capturedW,
     capturedHeight: () => capturedH,
+    getLastFrameStrategy: () => lastFrameStrategy,
+    getLastFrameOutput: () => lastFrameOutput,
   }
 }
 
@@ -165,8 +282,49 @@ export async function renderNodeToBuffer(
   frames = 2,
 ): Promise<RenderToBufferResult> {
   return captureToBuffer(width, height, frames, (loop) => {
+    if (loop.root._nativeId) mirrorNodeToNative(node, loop.root._nativeId)
     insertChild(loop.root, node)
-    return () => removeChild(loop.root, node)
+    return () => {
+      if (loop.root._nativeId) unmirrorNodeFromNative(node, loop.root._nativeId)
+      removeChild(loop.root, node)
+    }
+  })
+}
+
+export async function renderNodeToBufferAfterInteractions(
+  node: TGENode,
+  width: number,
+  height: number,
+  interact: (helpers: RenderLoopInteractionHelpers) => Promise<void> | void,
+  frames = 2,
+): Promise<RenderToBufferResult> {
+  return captureToBuffer(width, height, frames, (loop) => {
+    if (loop.root._nativeId) mirrorNodeToNative(node, loop.root._nativeId)
+    insertChild(loop.root, node)
+    return () => {
+      if (loop.root._nativeId) unmirrorNodeFromNative(node, loop.root._nativeId)
+      removeChild(loop.root, node)
+    }
+  }, async (loop) => {
+    const nextFrame = async () => {
+      loop.frame()
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    }
+    const helpers: RenderLoopInteractionHelpers = {
+      async clickAt(x, y) {
+        loop.feedPointer(x, y, true)
+        await nextFrame()
+        loop.feedPointer(x, y, false)
+        await nextFrame()
+      },
+      async keyPress(key, char = "") {
+        dispatchInput({ type: "key", key, char, mods: { shift: false, alt: false, ctrl: false, meta: false } })
+        markDirty()
+        await nextFrame()
+      },
+      frame: nextFrame,
+    }
+    await interact(helpers)
   })
 }
 
@@ -175,6 +333,7 @@ async function captureToBuffer(
   height: number,
   frames: number,
   mountScene: (loop: LoopInstance) => () => void,
+  interact?: (loop: LoopInstance) => Promise<void> | void,
 ): Promise<RenderToBufferResult> {
   // Force final-frame-raw so the GPU backend composites all layers into a
   // single RGBA buffer that endFrame can return to us.
@@ -184,14 +343,25 @@ async function captureToBuffer(
   const term = createMockTerminal(width, height)
 
   const gpuBackend = createGpuRendererBackend()
-  const { backend, getCaptured, capturedWidth, capturedHeight } = createCapturingBackend(gpuBackend)
+  const { backend, getCaptured, capturedWidth, capturedHeight, getLastFrameStrategy, getLastFrameOutput } = createCapturingBackend(gpuBackend)
 
   // Save + replace the active backend
   const prevBackend = getRendererBackend()
   setRendererBackend(backend)
 
   const loop = createRenderLoop(term, {
-    experimental: { forceLayerRepaint: true },
+    experimental: {
+      forceLayerRepaint: true,
+      // Offscreen visual tests need a deterministic retained render path, but
+      // screenshots intentionally capture explicit raw readback instead of the
+      // runtime terminal presentation path.
+      nativePresentation: false,
+      nativeLayerRegistry: false,
+      nativeSceneGraph: true,
+      nativeEventDispatch: true,
+      nativeSceneLayout: true,
+        nativeRenderGraph: false,
+    },
   })
 
   bindLoop(loop)
@@ -204,6 +374,13 @@ async function captureToBuffer(
     // Give SolidJS effects a tick to settle between frames
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
     markDirty()
+  }
+
+  if (interact) {
+    await interact(loop)
+    markDirty()
+    loop.frame()
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
   }
 
   // Tear down
@@ -225,7 +402,8 @@ async function captureToBuffer(
   if (!pixels) {
     throw new Error(
       `renderToBuffer: no pixels captured after ${frames} frames. ` +
-      `Make sure libvexart is built (cargo build --release) and the scene has visible content.`,
+      `Make sure libvexart is built (cargo build --release) and the scene has visible content. ` +
+      `lastStrategy=${getLastFrameStrategy() ?? "none"} lastOutput=${getLastFrameOutput() ?? "none"}`,
     )
   }
 

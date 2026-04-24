@@ -13,9 +13,9 @@ import { openVexartLibrary, VexartNativeError, EXPECTED_BRIDGE_VERSION } from ".
 
 export { EXPECTED_BRIDGE_VERSION, VexartNativeError } from "./vexart-bridge"
 
-/** Graph buffer magic number: "VXAR" in little-endian u32. */
+/** @public */
 export const GRAPH_MAGIC   = 0x56584152 as const
-/** Graph buffer version: Phase 2.0. */
+/** @public */
 export const GRAPH_VERSION = 0x00020000 as const
 
 // ── Last-error helpers ──────────────────────────────────────────────────────
@@ -25,6 +25,7 @@ export const GRAPH_VERSION = 0x00020000 as const
  * Calls vexart_get_last_error_length + vexart_copy_last_error into a temporary buffer.
  * Returns empty string if no error is set.
  */
+/** @public */
 export function vexartGetLastError(): string {
   const { symbols } = openVexartLibrary()
   const len = symbols.vexart_get_last_error_length() as number
@@ -40,6 +41,7 @@ export function vexartGetLastError(): string {
  * Returns the bridge version reported by the native library.
  * Use assertBridgeVersion to validate it matches EXPECTED_BRIDGE_VERSION.
  */
+/** @public */
 export function vexartVersion(): number {
   const { symbols } = openVexartLibrary()
   return symbols.vexart_version() as number
@@ -53,6 +55,7 @@ export function vexartVersion(): number {
  * @param actual - version number returned by vexartVersion() or a test override
  * @param expected - expected version (default: EXPECTED_BRIDGE_VERSION)
  */
+/** @public */
 export function assertBridgeVersion(
   actual: number,
   expected: number = EXPECTED_BRIDGE_VERSION,
@@ -68,13 +71,12 @@ export function assertBridgeVersion(
 // ── Packed buffer writeHeader ───────────────────────────────────────────────
 
 /**
- * Write the 16-byte graph buffer header into graphView.
- * Must be called at the start of each frame before any command writes.
- * Matches the Rust parse_header() contract in native/libvexart/src/ffi/buffer.rs.
+ * Write the 16-byte graph buffer header into a graph buffer.
  *
- * @param view       DataView over the graph buffer
- * @param cmdCount   Number of commands that follow
- * @param payloadBytes Total bytes of payload after the header
+ * @public
+ * @param view - DataView over the graph buffer.
+ * @param cmdCount - Number of commands that follow.
+ * @param payloadBytes - Total payload bytes after the header.
  */
 export function writeHeader(view: DataView, cmdCount: number, payloadBytes: number): void {
   view.setUint32(0,  GRAPH_MAGIC,   true)

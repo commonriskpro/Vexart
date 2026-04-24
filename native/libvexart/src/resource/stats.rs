@@ -93,6 +93,7 @@ pub fn collect_stats(mgr: &ResourceManager) -> ResourceStats {
 fn resource_kind_name(kind: ResourceKind) -> &'static str {
     match kind {
         ResourceKind::LayerTarget => "LayerTarget",
+        ResourceKind::TerminalImage => "TerminalImage",
         ResourceKind::FontAtlas => "FontAtlas",
         ResourceKind::GlyphAtlas => "GlyphAtlas",
         ResourceKind::ImageSprite => "ImageSprite",

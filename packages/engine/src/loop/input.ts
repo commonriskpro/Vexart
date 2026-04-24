@@ -5,10 +5,12 @@
 import { createSignal } from "solid-js"
 import type { KeyEvent, MouseEvent as TGEMouseEvent, InputEvent } from "../input/types"
 
-type InputSubscriber = (event: InputEvent) => void
+/** @public */
+export type InputSubscriber = (event: InputEvent) => void
 
 const subscribers: InputSubscriber[] = []
 
+/** @public */
 export type InteractionTrace = {
   seq: number
   at: number
@@ -18,6 +20,7 @@ export type InteractionTrace = {
 let interactionSeq = 0
 let latestInteraction: InteractionTrace = { seq: 0, at: 0, kind: null }
 
+/** @public */
 export function onInput(handler: InputSubscriber): () => void {
   subscribers.push(handler)
   return () => {
@@ -26,6 +29,7 @@ export function onInput(handler: InputSubscriber): () => void {
   }
 }
 
+/** @public */
 export function dispatchInput(event: InputEvent) {
   if (event.type === "key") {
     interactionSeq += 1
@@ -37,15 +41,18 @@ export function dispatchInput(event: InputEvent) {
   for (const sub of subscribers) sub(event)
 }
 
+/** @public */
 export function getLatestInteractionTrace(): InteractionTrace {
   return latestInteraction
 }
 
+/** @public */
 export type KeyboardState = {
   key: () => KeyEvent | null
   pressed: (name: string) => boolean
 }
 
+/** @public */
 export function useKeyboard(): KeyboardState {
   const [key, setKey] = createSignal<KeyEvent | null>(null)
   onInput((event) => {
@@ -57,11 +64,13 @@ export function useKeyboard(): KeyboardState {
   }
 }
 
+/** @public */
 export type MouseState = {
   mouse: () => TGEMouseEvent | null
   pos: () => { x: number; y: number }
 }
 
+/** @public */
 export function useMouse(): MouseState {
   const [mouse, setMouse] = createSignal<TGEMouseEvent | null>(null)
   onInput((event) => {
@@ -76,6 +85,7 @@ export function useMouse(): MouseState {
   }
 }
 
+/** @public */
 export function useInput(): () => InputEvent | null {
   const [event, setEvent] = createSignal<InputEvent | null>(null)
   onInput((e) => setEvent(e))

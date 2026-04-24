@@ -21,6 +21,15 @@ export type {
 export { createGpuRendererBackend, getGpuRendererBackendCacheStats } from "./gpu-renderer-backend"
 export { createGpuFrameComposer } from "../output/gpu-frame-composer"
 export { chooseGpuLayerStrategy } from "./gpu-layer-strategy"
+export {
+  nativeChooseFrameStrategy,
+  buildNativeFrameExecutionStats,
+  formatNativeFrameReasonFlags,
+  NATIVE_FRAME_STRATEGY,
+  NATIVE_FRAME_TRANSPORT,
+  NATIVE_FRAME_REASON,
+} from "./native-frame-orchestrator"
+export type { NativeFramePlanInput, NativeFramePlan, NativeFrameStrategy, NativeFrameExecutionStats, NativeFrameExecutionStatsInput } from "./native-frame-orchestrator"
 
 export {
   BACKDROP_FILTER_KIND,
@@ -94,3 +103,56 @@ export * from "./node"
 // ── vexart native bridge (Phase 2) ──
 export * from "./vexart-bridge"
 export * from "./vexart-functions"
+
+// ── Phase 2b: native presentation ──
+export {
+  isNativePresentationEnabled,
+  enableNativePresentation,
+  disableNativePresentation,
+  getNativePresentationFallbackReason,
+  isNativePresentationCapable,
+} from "./native-presentation-flags"
+export {
+  isNativeLayerRegistryEnabled,
+  enableNativeLayerRegistry,
+  disableNativeLayerRegistry,
+  nativeLayerRegistryFallbackReason,
+} from "./native-layer-registry-flags"
+export {
+  decodeNativePresentationStats,
+  allocNativeStatsBuf,
+  isNativeStatsValid,
+  isNativeStatsFallback,
+  formatNativeStats,
+  NATIVE_STATS_VERSION,
+  NATIVE_STATS_MODE,
+  NATIVE_STATS_TRANSPORT,
+  NATIVE_STATS_FLAG,
+  NATIVE_STATS_BYTE_SIZE,
+} from "./native-presentation-stats"
+export type { NativePresentationStats } from "./native-presentation-stats"
+export {
+  nativeLayerUpsert,
+  nativeLayerPresentDirty,
+  nativeLayerReuse,
+  nativeLayerRemove,
+  clearNativeLayerRegistryMirror,
+} from "./native-layer-registry"
+export type {
+  NativeLayerDescriptor,
+  NativeLayerUpsertResult,
+} from "./native-layer-registry"
+export {
+  isNativeSceneGraphEnabled,
+  enableNativeSceneGraph,
+  disableNativeSceneGraph,
+} from "./native-scene-graph-flags"
+export {
+  nativeSceneCreateNode,
+  nativeSceneInsert,
+  nativeSceneRemove,
+  nativeSceneDestroyNode,
+  nativeSceneSetProp,
+  nativeSceneSetText,
+  destroyNativeScene,
+} from "./native-scene"

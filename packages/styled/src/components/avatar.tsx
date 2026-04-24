@@ -8,8 +8,10 @@
 import { font, weight } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
-type AvatarSize = "sm" | "default" | "lg"
+/** @public */
+export type AvatarSize = "sm" | "default" | "lg"
 
+/** @public */
 export interface AvatarProps {
   name: string
   size?: AvatarSize
@@ -22,6 +24,7 @@ const sizeMap: Record<AvatarSize, { px: number; fontSize: number }> = {
   lg:      { px: 40, fontSize: font.base },
 }
 
+/** @public */
 export function Avatar(props: AvatarProps) {
   const s = props.size ?? "default"
   const ss = sizeMap[s]

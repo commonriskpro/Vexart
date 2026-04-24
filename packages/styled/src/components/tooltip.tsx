@@ -1,13 +1,7 @@
 /**
  * Tooltip — styled tooltip using Void design tokens.
  *
- * Built on top of the headless @tge/components Tooltip.
- * Shows a small text label on hover with configurable delay.
- *
- * Usage:
- *   <VoidTooltip content="Save your work">
- *     <Button>Save</Button>
- *   </VoidTooltip>
+ * @public
  */
 
 import { Tooltip } from "@vexart/headless"
@@ -15,6 +9,7 @@ import { radius, space, font, shadows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 import type { JSX } from "solid-js"
 
+/** @public */
 export type VoidTooltipProps = {
   content: string
   children: JSX.Element
@@ -25,6 +20,7 @@ export type VoidTooltipProps = {
   offset?: number
 }
 
+/** @public */
 export function VoidTooltip(props: VoidTooltipProps) {
   return (
     <Tooltip

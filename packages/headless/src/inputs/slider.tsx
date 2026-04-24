@@ -1,37 +1,9 @@
 /**
  * Slider — truly headless numeric range input.
  *
- * CONTROLLED component — parent owns the value.
- * Focus-aware with keyboard control (Left/Right/Home/End).
- * Mouse-aware: click track to jump, drag to scrub (via useDrag).
+ * Handles value math, keyboard control, and drag interaction while visuals are supplied by `renderSlider`.
  *
- * Provides:
- *   - Value tracking within [min, max]
- *   - Step increments
- *   - Keyboard navigation
- *   - Mouse interaction (click + drag with pointer capture)
- *   - Focus management
- *   - Percentage calculation for visual rendering
- *
- * ALL visual styling is the consumer's responsibility.
- * Use @tge/void VoidSlider for a styled version.
- *
- * Usage:
- *   <Slider
- *     value={volume()}
- *     onChange={setVolume}
- *     min={0} max={100} step={1}
- *     renderSlider={(ctx) => (
- *       <box {...ctx.trackProps} width={200} height={8} backgroundColor="#333" cornerRadius={4}>
- *         <box
- *           width={`${ctx.percentage}%`}
- *           height={8}
- *           backgroundColor="#4488cc"
- *           cornerRadius={4}
- *         />
- *       </box>
- *     )}
- *   />
+ * @public
  */
 
 import type { JSX } from "solid-js"
@@ -39,6 +11,7 @@ import { useFocus, useDrag, type NodeMouseEvent } from "@vexart/engine"
 
 // ── Types ──
 
+/** @public */
 export type SliderTrackProps = {
   ref: (handle: any) => void
   onMouseDown: (evt: NodeMouseEvent) => void
@@ -47,6 +20,7 @@ export type SliderTrackProps = {
   focusable: true
 }
 
+/** @public */
 export type SliderRenderContext = {
   /** Current value. */
   value: number
@@ -66,6 +40,7 @@ export type SliderRenderContext = {
   trackProps: SliderTrackProps
 }
 
+/** @public */
 export type SliderProps = {
   /** Current value. */
   value: number
@@ -87,6 +62,7 @@ export type SliderProps = {
   renderSlider: (ctx: SliderRenderContext) => JSX.Element
 }
 
+/** @public */
 export function Slider(props: SliderProps) {
   const min = () => props.min ?? 0
   const max = () => props.max ?? 100

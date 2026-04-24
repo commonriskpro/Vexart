@@ -1,11 +1,7 @@
 /**
- * VoidCheckbox — shadcn-compatible checkbox using Void design tokens.
+ * VoidCheckbox — styled checkbox using Void design tokens.
  *
- * Built on top of the headless @tge/components Checkbox.
- * 16×16px box, border-input, checked bg primary, check mark, focus glow.
- *
- * Usage:
- *   <VoidCheckbox checked={agreed()} onChange={setAgreed} label="I agree" />
+ * @public
  */
 
 import { Checkbox } from "@vexart/headless"
@@ -13,6 +9,7 @@ import type { CheckboxRenderContext } from "@vexart/headless"
 import { radius, space, font, glows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
+/** @public */
 export type VoidCheckboxProps = {
   checked: boolean
   onChange?: (checked: boolean) => void
@@ -23,6 +20,7 @@ export type VoidCheckboxProps = {
 
 const BOX_SIZE = 16
 
+/** @public */
 export function VoidCheckbox(props: VoidCheckboxProps) {
   return (
     <Checkbox

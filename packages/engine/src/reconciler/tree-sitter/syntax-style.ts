@@ -23,6 +23,7 @@ import { parseColor } from "../../ffi/node"
 
 // ── Types ──
 
+/** @public */
 export type StyleDefinition = {
   fg?: number  // packed RGBA
   bg?: number  // packed RGBA
@@ -31,6 +32,7 @@ export type StyleDefinition = {
   underline?: boolean
 }
 
+/** @public */
 export type ThemeTokenStyle = {
   scope: string[]
   style: {
@@ -42,11 +44,12 @@ export type ThemeTokenStyle = {
   }
 }
 
-/** Simple theme rules: scope name → foreground color */
+/** @public */
 export type SimpleThemeRules = Record<string, string | number>
 
 // ── SyntaxStyle class ──
 
+/** @public */
 export class SyntaxStyle {
   private styles = new Map<string, StyleDefinition>()
   private idMap = new Map<string, number>()
@@ -57,12 +60,9 @@ export class SyntaxStyle {
     this.defaultColor = defaultColor
   }
 
-  /**
-   * Create from structured theme rules (opentui-compatible).
+  /** Create from structured theme rules.
    *
-   *   SyntaxStyle.fromTheme([
-   *     { scope: ["keyword", "keyword.function"], style: { foreground: "#c678dd" } },
-   *   ])
+   * @public
    */
   static fromTheme(rules: ThemeTokenStyle[], defaultColor: string | number = "#e0e0e0"): SyntaxStyle {
     const style = new SyntaxStyle(parseColor(defaultColor))
@@ -80,10 +80,9 @@ export class SyntaxStyle {
     return style
   }
 
-  /**
-   * Create from simple rules (shorthand — scope: color).
+  /** Create from simple scope-to-color rules.
    *
-   *   SyntaxStyle.fromSimple({ keyword: "#c678dd", string: "#98c379" })
+   * @public
    */
   static fromSimple(rules: SimpleThemeRules, defaultColor: string | number = "#e0e0e0"): SyntaxStyle {
     const style = new SyntaxStyle(parseColor(defaultColor))
@@ -148,7 +147,7 @@ export class SyntaxStyle {
 
 // ── Built-in themes ──
 
-/** One Dark-inspired theme */
+/** @public */
 export const ONE_DARK: ThemeTokenStyle[] = [
   { scope: ["keyword", "keyword.function", "keyword.operator", "keyword.return"], style: { foreground: "#c678dd" } },
   { scope: ["string", "string.special"], style: { foreground: "#98c379" } },
@@ -168,7 +167,7 @@ export const ONE_DARK: ThemeTokenStyle[] = [
   { scope: ["label"], style: { foreground: "#e06c75" } },
 ]
 
-/** Kanagawa-inspired theme matching Gentleman.Dots aesthetics */
+/** @public */
 export const KANAGAWA: ThemeTokenStyle[] = [
   { scope: ["keyword", "keyword.function", "keyword.operator", "keyword.return"], style: { foreground: "#957fb8" } },
   { scope: ["string", "string.special"], style: { foreground: "#98bb6c" } },

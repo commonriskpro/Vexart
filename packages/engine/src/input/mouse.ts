@@ -21,7 +21,7 @@
 
 import type { MouseEvent, Modifiers, MouseAction } from "./types"
 
-/** Try to parse a mouse event from the data. Returns [event, consumed] or null. */
+/** @public Try to parse a mouse event from the data. Returns the event and consumed byte count, or null. */
 export function parseMouse(data: string): [MouseEvent, number] | null {
   // SGR format: \x1b[<{button};{x};{y}{M|m}
   const match = data.match(/^\x1b\[<(\d+);(\d+);(\d+)([Mm])/)

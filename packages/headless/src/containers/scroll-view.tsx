@@ -43,6 +43,7 @@ const SCROLLBAR = {
   padding: 2,
 } as const
 
+/** @public */
 export type ScrollViewProps = {
   /** Ref callback — receives a ScrollHandle for programmatic control. */
   ref?: (handle: ScrollHandle) => void
@@ -135,6 +136,7 @@ function Scrollbar(props: { handle: ScrollHandle; height: number | string }) {
   )
 }
 
+/** @public */
 export function ScrollView(props: ScrollViewProps) {
   const clayId = `tge-scrollview-${scrollViewCounter++}`
   const showScrollbar = props.showScrollbar ?? true

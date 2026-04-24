@@ -1,5 +1,6 @@
 import type { JSX } from "solid-js"
 
+/** @public */
 export type OverlayRootProps = {
   children?: JSX.Element
   zIndex?: number
@@ -8,8 +9,7 @@ export type OverlayRootProps = {
 /**
  * OverlayRoot — attach visual content to the root overlay plane.
  *
- * This is a transitional primitive that separates the logical parent
- * from the visual parent by anchoring overlays to the renderer root.
+ * @public
  */
 export function OverlayRoot(props: OverlayRootProps) {
   return (

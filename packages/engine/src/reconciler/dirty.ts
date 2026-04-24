@@ -7,19 +7,24 @@ import { appendFileSync } from "node:fs"
 const DIRTY_DEBUG_LOG = "/tmp/tge-dirty.log"
 const DIRTY_LOG_LIMIT = 200
 
+/** @public */
 export type DirtyTracker = {
   markDirty: () => void
   isDirty: () => boolean
-  clearDirty: () => void
+  clearDirty: (expectedVersion?: number) => void
+  dirtyVersion: () => number
 }
 
+/** @public */
 export function createDirtyTracker(): DirtyTracker {
   let dirty = true
+  let version = 0
   let dirtyLogCount = 0
 
   return {
     markDirty() {
       dirty = true
+      version += 1
       if (process.env.TGE_DEBUG_DIRTY === "1" && dirtyLogCount < DIRTY_LOG_LIMIT) {
         dirtyLogCount++
         const stack = new Error().stack
@@ -33,8 +38,12 @@ export function createDirtyTracker(): DirtyTracker {
     isDirty() {
       return dirty
     },
-    clearDirty() {
+    clearDirty(expectedVersion?: number) {
+      if (expectedVersion !== undefined && expectedVersion !== version) return
       dirty = false
+    },
+    dirtyVersion() {
+      return version
     },
   }
 }
@@ -47,19 +56,27 @@ let _onDirtyCallback: (() => void) | null = null
 
 /** Register a callback to be called whenever the global markDirty fires.
  *  The render loop uses this to chain markAllDirty (layer store). */
+/** @public */
 export function onGlobalDirty(cb: () => void) {
   _onDirtyCallback = cb
 }
 
+/** @public */
 export function markDirty() {
   defaultDirtyTracker.markDirty()
   _onDirtyCallback?.()
 }
 
+/** @public */
 export function isDirty(): boolean {
   return defaultDirtyTracker.isDirty()
 }
 
-export function clearDirty() {
-  defaultDirtyTracker.clearDirty()
+/** @public */
+export function clearDirty(expectedVersion?: number) {
+  defaultDirtyTracker.clearDirty(expectedVersion)
+}
+
+export function dirtyVersion() {
+  return defaultDirtyTracker.dirtyVersion()
 }

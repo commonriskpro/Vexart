@@ -22,6 +22,7 @@ import type { JSX } from "solid-js"
 // ── Span ──
 // A Span holds text content. RichText concatenates all Spans.
 
+/** @public */
 export type SpanProps = {
   color?: string | number
   fontSize?: number
@@ -35,6 +36,7 @@ export type SpanProps = {
  * Span — inline text fragment. Rendered as a <text> node.
  * Can be used inside RichText or standalone.
  */
+/** @public */
 export function Span(props: SpanProps) {
   return (
     <text
@@ -51,6 +53,7 @@ export function Span(props: SpanProps) {
 
 // ── RichText ──
 
+/** @public */
 export type RichTextProps = {
   maxWidth?: number
   lineHeight?: number
@@ -63,6 +66,7 @@ export type RichTextProps = {
  * RichText — wraps children <Span> elements in a horizontal row.
  * Clay will lay them out left-to-right within the container width.
  */
+/** @public */
 export function RichText(props: RichTextProps) {
   return (
     <box

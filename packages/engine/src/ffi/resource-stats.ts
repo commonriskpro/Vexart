@@ -4,7 +4,7 @@ import { getImageCacheStats } from "../loop/image"
 import { getTextLayoutCacheStats } from "./text-layout"
 import { openVexartLibrary } from "./vexart-bridge"
 
-/** ResourceStats shape — mirrors Rust ResourceStats JSON output (ARCHITECTURE.md §8.4). */
+/** @public */
 export type ResourceStats = {
   budgetBytes: number
   currentUsage: number
@@ -20,6 +20,7 @@ export type ResourceStats = {
  * Returns `null` if the library is unavailable or the call fails.
  * (REQ-2B-704)
  */
+/** @public */
 export function getNativeResourceStats(): ResourceStats | null {
   try {
     const { symbols } = openVexartLibrary()
@@ -46,6 +47,7 @@ export function getNativeResourceStats(): ResourceStats | null {
  * Returns true on success, false if the library is unavailable.
  * (REQ-2B-703)
  */
+/** @public */
 export function setNativeResourceBudget(budgetMb: number): boolean {
   try {
     const { symbols } = openVexartLibrary()
@@ -56,6 +58,7 @@ export function setNativeResourceBudget(budgetMb: number): boolean {
   }
 }
 
+/** @public */
 export function getRendererResourceStats() {
   return {
     image: getImageCacheStats(),

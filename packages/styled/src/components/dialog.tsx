@@ -1,32 +1,18 @@
 /**
  * Dialog — styled modal dialog using Void design tokens.
  *
- * Built on top of the headless @tge/components Dialog primitive.
- * Adds Void styling: dark card background, rounded corners, shadows,
- * backdrop overlay with blur, and proper spacing.
+ * Built on top of the headless dialog primitive.
  *
- * Usage:
- *   import { Show } from "@vexart/engine"
- *   import { VoidDialog } from "tge/void"
- *
- *   <Show when={isOpen()}>
- *     <VoidDialog onClose={() => setOpen(false)}>
- *       <VoidDialog.Title>Confirm</VoidDialog.Title>
- *       <VoidDialog.Description>Are you sure?</VoidDialog.Description>
- *       <VoidDialog.Footer>
- *         <Button variant="ghost" onPress={() => setOpen(false)}>Cancel</Button>
- *         <Button onPress={() => { confirm(); setOpen(false) }}>OK</Button>
- *       </VoidDialog.Footer>
- *     </VoidDialog>
- *   </Show>
+ * @public
  */
 
 import { Dialog } from "@vexart/headless"
-import { radius, space, font, weight, shadows } from "../tokens/tokens"
+import { radius, space, font, weight } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
 // ── Types ──
 
+/** @public */
 export type VoidDialogProps = {
   /** Called when the dialog should close (Escape, overlay click). */
   onClose?: () => void
@@ -37,21 +23,24 @@ export type VoidDialogProps = {
   children?: any
 }
 
+/** @public */
 export type VoidDialogTitleProps = {
   children?: any
 }
 
+/** @public */
 export type VoidDialogDescriptionProps = {
   children?: any
 }
 
+/** @public */
 export type VoidDialogFooterProps = {
   children?: any
 }
 
 // ── Styled Dialog ──
 
-export function VoidDialog(props: VoidDialogProps) {
+function VoidDialogRoot(props: VoidDialogProps) {
   return (
     <Dialog onClose={props.onClose}>
       <Dialog.Overlay
@@ -76,7 +65,8 @@ export function VoidDialog(props: VoidDialogProps) {
 
 // ── Sub-components ──
 
-function VoidDialogTitle(props: VoidDialogTitleProps) {
+/** @public */
+export function VoidDialogTitle(props: VoidDialogTitleProps) {
   return (
     <text
       color={themeColors.cardForeground}
@@ -88,7 +78,8 @@ function VoidDialogTitle(props: VoidDialogTitleProps) {
   )
 }
 
-function VoidDialogDescription(props: VoidDialogDescriptionProps) {
+/** @public */
+export function VoidDialogDescription(props: VoidDialogDescriptionProps) {
   return (
     <text
       color={themeColors.mutedForeground}
@@ -99,7 +90,8 @@ function VoidDialogDescription(props: VoidDialogDescriptionProps) {
   )
 }
 
-function VoidDialogFooter(props: VoidDialogFooterProps) {
+/** @public */
+export function VoidDialogFooter(props: VoidDialogFooterProps) {
   return (
     <box
       direction="row"
@@ -114,6 +106,9 @@ function VoidDialogFooter(props: VoidDialogFooterProps) {
 
 // ── Attach sub-components ──
 
-VoidDialog.Title = VoidDialogTitle
-VoidDialog.Description = VoidDialogDescription
-VoidDialog.Footer = VoidDialogFooter
+/** @public */
+export const VoidDialog = Object.assign(VoidDialogRoot, {
+  Title: VoidDialogTitle,
+  Description: VoidDialogDescription,
+  Footer: VoidDialogFooter,
+})

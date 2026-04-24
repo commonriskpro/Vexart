@@ -1,19 +1,7 @@
 /**
  * Table — styled data table using Void design tokens.
  *
- * Built on top of the headless @tge/components Table.
- * Provides ALL visual rendering via render props.
- *
- * Usage:
- *   <VoidTable
- *     columns={[
- *       { key: "name", header: "Name", width: 160 },
- *       { key: "email", header: "Email", width: "grow" },
- *     ]}
- *     data={users()}
- *     selectedRow={idx()}
- *     onSelectedRowChange={setIdx}
- *   />
+ * @public
  */
 
 import { Table } from "@vexart/headless"
@@ -22,6 +10,7 @@ import type { JSX } from "solid-js"
 import { radius, space, font, weight, shadows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
+/** @public */
 export type VoidTableProps = {
   columns: TableColumn[]
   data: Record<string, any>[]
@@ -34,6 +23,7 @@ export type VoidTableProps = {
   focusId?: string
 }
 
+/** @public */
 export function VoidTable(props: VoidTableProps) {
   const striped = () => props.striped ?? true
 

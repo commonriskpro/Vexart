@@ -1,21 +1,6 @@
 /**
- * CanvasContext — imperative 2D drawing API for <canvas> nodes.
- *
- * Collects draw commands (rect, circle, line, bezier, text, image, glow…)
- * which are executed by the GPU renderer via wgpu-mixed-scene ops.
- *
- * Unlike <box>/<text>, <canvas> bypasses Clay for its INTERNAL content.
- * Clay only knows the canvas's outer bounding box. All drawing inside
- * is done via buffered draw commands flushed at render time.
- *
- * Draw commands are buffered during onDraw() and flushed in paintCommand().
- * A viewport transform (translate + scale) is applied to all coordinates
- * before painting — enabling pan/zoom with zero overhead.
- *
- * Architecture:
- *   JSX <canvas onDraw={ctx => ...}> → walkTree emits Clay RECT
- *     → paintCommand detects canvas node → creates CanvasContext
- *       → executes onDraw callback → flushes draw commands via compat painter
+ * Imperative drawing API for canvas nodes.
+ * Draw commands are buffered during onDraw and consumed by the GPU renderer.
  */
 
 // NOTE: paint-legacy import removed per Slice 9 migration (DEC-004, REQ-NB-002).
@@ -24,14 +9,16 @@
 
 // ── Draw command types ──
 
-type LineCmd = {
+/** @public */
+export type LineCmd = {
   kind: "line"
   x0: number; y0: number; x1: number; y1: number
   color: number
   width: number
 }
 
-type BezierCmd = {
+/** @public */
+export type BezierCmd = {
   kind: "bezier"
   x0: number; y0: number
   cx: number; cy: number
@@ -40,7 +27,8 @@ type BezierCmd = {
   width: number
 }
 
-type CircleCmd = {
+/** @public */
+export type CircleCmd = {
   kind: "circle"
   cx: number; cy: number
   rx: number; ry: number
@@ -49,7 +37,8 @@ type CircleCmd = {
   strokeWidth: number
 }
 
-type RectCmd = {
+/** @public */
+export type RectCmd = {
   kind: "rect"
   x: number; y: number
   w: number; h: number
@@ -59,7 +48,8 @@ type RectCmd = {
   radius: number
 }
 
-type PolygonCmd = {
+/** @public */
+export type PolygonCmd = {
   kind: "polygon"
   cx: number; cy: number
   radius: number
@@ -70,14 +60,16 @@ type PolygonCmd = {
   strokeWidth: number
 }
 
-type TextCmd = {
+/** @public */
+export type TextCmd = {
   kind: "text"
   x: number; y: number
   text: string
   color: number
 }
 
-type GlowCmd = {
+/** @public */
+export type GlowCmd = {
   kind: "glow"
   cx: number; cy: number
   rx: number; ry: number
@@ -85,7 +77,8 @@ type GlowCmd = {
   intensity: number
 }
 
-type ImageCmd = {
+/** @public */
+export type ImageCmd = {
   kind: "image"
   x: number; y: number
   w: number; h: number
@@ -95,7 +88,8 @@ type ImageCmd = {
   opaque?: boolean
 }
 
-type RadialGradientCmd = {
+/** @public */
+export type RadialGradientCmd = {
   kind: "radialGradient"
   cx: number; cy: number
   radius: number
@@ -103,7 +97,8 @@ type RadialGradientCmd = {
   to: number    // edge color
 }
 
-type LinearGradientCmd = {
+/** @public */
+export type LinearGradientCmd = {
   kind: "linearGradient"
   x: number; y: number
   w: number; h: number
@@ -111,7 +106,8 @@ type LinearGradientCmd = {
   angle: number
 }
 
-type NebulaCmd = {
+/** @public */
+export type NebulaCmd = {
   kind: "nebula"
   x: number; y: number
   w: number; h: number
@@ -126,7 +122,8 @@ type NebulaCmd = {
   dust: number
 }
 
-type StarfieldCmd = {
+/** @public */
+export type StarfieldCmd = {
   kind: "starfield"
   x: number; y: number
   w: number; h: number
@@ -139,12 +136,15 @@ type StarfieldCmd = {
   coolColor: number
 }
 
-type DrawCmd = LineCmd | BezierCmd | CircleCmd | RectCmd | PolygonCmd | TextCmd | GlowCmd | ImageCmd | RadialGradientCmd | LinearGradientCmd | NebulaCmd | StarfieldCmd
+/** @public */
+export type DrawCmd = LineCmd | BezierCmd | CircleCmd | RectCmd | PolygonCmd | TextCmd | GlowCmd | ImageCmd | RadialGradientCmd | LinearGradientCmd | NebulaCmd | StarfieldCmd
 
+/** @public */
 export type CanvasDrawCommand = DrawCmd
 
 // ── Viewport ──
 
+/** @public */
 export type Viewport = {
   x: number
   y: number
@@ -155,15 +155,18 @@ const DEFAULT_VIEWPORT: Viewport = { x: 0, y: 0, zoom: 1 }
 
 // ── Style shorthand ──
 
+/** @public */
 export type StrokeStyle = {
   color: number
   width?: number
 }
 
+/** @public */
 export type FillStyle = {
   color: number
 }
 
+/** @public */
 export type ShapeStyle = {
   fill?: number
   stroke?: number
@@ -173,6 +176,7 @@ export type ShapeStyle = {
 
 // ── CanvasContext ──
 
+/** @public */
 export class CanvasContext {
   /** @internal draw command buffer — flushed by paintCanvasCommands */
   _commands: DrawCmd[] = []
@@ -368,5 +372,3 @@ export class CanvasContext {
     })
   }
 }
-
-

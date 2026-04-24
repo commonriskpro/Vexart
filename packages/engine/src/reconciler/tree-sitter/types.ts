@@ -2,23 +2,23 @@
  * Tree-sitter types — shared between client (main thread) and worker.
  */
 
-/** A highlight range within a single line */
+/** @public */
 export type HighlightRange = {
   startCol: number
   endCol: number
   group: string
 }
 
-/** Highlight response for a single line */
+/** @public */
 export type HighlightResponse = {
   line: number
   highlights: HighlightRange[]
 }
 
-/** Simplified highlight: [startIndex, endIndex, groupName] */
+/** @public */
 export type SimpleHighlight = [number, number, string]
 
-/** Configuration for a filetype parser */
+/** @public */
 export type FiletypeParserConfig = {
   filetype: string
   aliases?: string[]

@@ -57,6 +57,18 @@ mount(() => (
 
 > Vexart requires a terminal that supports the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). It exits with a clear error on unsupported terminals.
 
+### Retained runtime default
+
+- The Rust-retained runtime is now the **default path** on Kitty-compatible transports (`direct`, `file`, and `shm`).
+- Explicit raw readback stays isolated to offscreen / screenshot / debug flows.
+- Emergency fallback for the full retained stack:
+
+```bash
+VEXART_RETAINED=0 bun run showcase
+```
+
+- Narrow per-feature overrides still exist for debugging, but `VEXART_RETAINED=0` is the compatibility-window kill switch.
+
 ---
 
 ## Quick Start

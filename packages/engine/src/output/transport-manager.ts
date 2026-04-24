@@ -2,16 +2,19 @@
 // Placeholder and halfblock transport branches removed per DEC-005 / REQ-NB-002.
 // Only Kitty (shm, file, direct) transport remains. Per design §11.
 
+/** @public */
 export type TransmissionMode = "shm" | "file" | "direct"
 
-const TRANSPORT_HEALTH = {
+/** @public */
+export const TRANSPORT_HEALTH = {
   UNKNOWN: "unknown",
   HEALTHY: "healthy",
   DEGRADED: "degraded",
   UNSUPPORTED: "unsupported",
 } as const
 
-const TRANSPORT_FAILURE_REASON = {
+/** @public */
+export const TRANSPORT_FAILURE_REASON = {
   PROBE_FAILED: "probe_failed",
   SHM_OPEN_FAILED: "shm_open_failed",
   FTRUNCATE_FAILED: "ftruncate_failed",
@@ -20,15 +23,19 @@ const TRANSPORT_FAILURE_REASON = {
   RUNTIME_TRANSPORT_ERROR: "runtime_transport_error",
 } as const
 
+/** @public */
 export type KittyTransportHealth = (typeof TRANSPORT_HEALTH)[keyof typeof TRANSPORT_HEALTH]
+/** @public */
 export type KittyTransportFailureReason = (typeof TRANSPORT_FAILURE_REASON)[keyof typeof TRANSPORT_FAILURE_REASON]
 
+/** @public */
 export interface KittyTransportTelemetryBucket {
   success: number
   failure: number
   fallback: number
 }
 
+/** @public */
 export interface KittyTransportManagerState {
   preferredMode: TransmissionMode
   activeMode: TransmissionMode
@@ -38,6 +45,7 @@ export interface KittyTransportManagerState {
   telemetry: Record<TransmissionMode, KittyTransportTelemetryBucket>
 }
 
+/** @public */
 export interface ConfigureKittyTransportManagerOptions {
   preferredMode: TransmissionMode
   probe: Record<Exclude<TransmissionMode, "direct">, boolean>
@@ -72,6 +80,7 @@ function canUseMode(mode: TransmissionMode) {
   return state.health[mode] !== TRANSPORT_HEALTH.UNSUPPORTED && state.health[mode] !== TRANSPORT_HEALTH.DEGRADED
 }
 
+/** @public */
 export function resetKittyTransportManager() {
   state.preferredMode = "direct"
   state.activeMode = "direct"
@@ -88,6 +97,7 @@ export function resetKittyTransportManager() {
   }
 }
 
+/** @public */
 export function configureKittyTransportManager(options: ConfigureKittyTransportManagerOptions) {
   state.preferredMode = options.preferredMode
   state.probe.shm = options.probe.shm
@@ -99,6 +109,7 @@ export function configureKittyTransportManager(options: ConfigureKittyTransportM
   state.lastFailureReason = null
 }
 
+/** @public */
 export function resolveKittyTransportMode(requestedMode: TransmissionMode) {
   if (requestedMode === "direct") return "direct"
   if (canUseMode(requestedMode)) return requestedMode
@@ -118,12 +129,14 @@ export function resolveKittyTransportMode(requestedMode: TransmissionMode) {
   return "direct"
 }
 
+/** @public */
 export function reportKittyTransportSuccess(mode: TransmissionMode) {
   state.telemetry[mode].success += 1
   if (mode !== "direct") state.health[mode] = TRANSPORT_HEALTH.HEALTHY
   state.activeMode = mode
 }
 
+/** @public */
 export function reportKittyTransportFailure(mode: TransmissionMode, reason: KittyTransportFailureReason) {
   state.telemetry[mode].failure += 1
   state.lastFailureReason = reason
@@ -131,6 +144,7 @@ export function reportKittyTransportFailure(mode: TransmissionMode, reason: Kitt
   state.activeMode = resolveKittyTransportMode(nextMode(mode))
 }
 
+/** @public */
 export function getKittyTransportManagerState(): KittyTransportManagerState {
   return {
     preferredMode: state.preferredMode,
@@ -145,5 +159,3 @@ export function getKittyTransportManagerState(): KittyTransportManagerState {
     },
   }
 }
-
-export { TRANSPORT_FAILURE_REASON, TRANSPORT_HEALTH }

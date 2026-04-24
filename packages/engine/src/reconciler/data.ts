@@ -1,35 +1,13 @@
 /**
- * Data fetching hooks — useQuery and useMutation.
- *
- * SolidJS-reactive data fetching primitives for TGE.
- * Inspired by TanStack Query but lightweight and terminal-focused.
- *
- * Features:
- *   - Automatic loading/error/data state management
- *   - Refetch support
- *   - Optimistic mutations with rollback
- *   - Reactive — components re-render on state changes
- *
- * Usage:
- *   const users = useQuery(() => fetch("/api/users").then(r => r.json()))
- *
- *   <Show when={users.loading()}>
- *     <text>Loading...</text>
- *   </Show>
- *   <Show when={users.error()}>
- *     <text color="#ff4444">{users.error()!.message}</text>
- *   </Show>
- *   <Show when={users.data()}>
- *     <For each={users.data()!}>
- *       {(user) => <text>{user.name}</text>}
- *     </For>
- *   </Show>
+ * Data fetching hooks for retained UI state.
+ * These helpers expose lightweight query and mutation primitives for Solid-based apps.
  */
 
 import { createSignal, onCleanup } from "solid-js"
 
 // ── Types ──
 
+/** @public */
 export type QueryResult<T> = {
   /** The fetched data (undefined while loading or on error). */
   data: () => T | undefined
@@ -43,6 +21,7 @@ export type QueryResult<T> = {
   mutate: (data: T | ((prev: T | undefined) => T)) => void
 }
 
+/** @public */
 export type QueryOptions = {
   /** Whether to run the query immediately. Default: true. */
   enabled?: boolean
@@ -54,6 +33,7 @@ export type QueryOptions = {
   retryDelay?: number
 }
 
+/** @public */
 export type MutationResult<T, V> = {
   /** The result of the last successful mutation. */
   data: () => T | undefined
@@ -67,6 +47,7 @@ export type MutationResult<T, V> = {
   reset: () => void
 }
 
+/** @public */
 export type MutationOptions<T, V> = {
   /** Called before the mutation — return optimistic data to set immediately. */
   onMutate?: (variables: V) => T | undefined
@@ -80,6 +61,7 @@ export type MutationOptions<T, V> = {
 
 // ── useQuery ──
 
+/** @public */
 export function useQuery<T>(
   fetcher: () => Promise<T>,
   options?: QueryOptions,
@@ -148,6 +130,7 @@ export function useQuery<T>(
 
 // ── useMutation ──
 
+/** @public */
 export function useMutation<T, V = void>(
   mutator: (variables: V) => Promise<T>,
   options?: MutationOptions<T, V>,

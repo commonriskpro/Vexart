@@ -1,29 +1,9 @@
 /**
  * VirtualList — virtualized list that only renders visible items.
  *
- * Architecture:
- *   - Clay handles ALL scroll (scrollY on container)
- *   - Renders items from index 0 to endIndex (visible + overscan)
- *   - bottomPad fills remaining height so Clay knows total content size
- *   - Clay clips items above the viewport via scissor
- *   - Mouse interaction (hover/click) is handled at the CONTAINER level
- *     using nodeY + scrollOffset to compute which item is under the cursor.
- *     Per-item callbacks don't work because: (1) off-screen items have layout
- *     coords that overlap other screen areas, (2) SolidJS For thunk recreates
- *     nodes each frame, losing interactive state.
+ * Handles viewport slicing, scrolling, hover, and keyboard navigation.
  *
- * Usage:
- *   <VirtualList
- *     items={allUsers}
- *     itemHeight={24}
- *     height={400}
- *     overscan={5}
- *     renderItem={(item, index, ctx) => (
- *       <box height={24} padding={4} backgroundColor="#1a1a1a">
- *         <text color="#fff">{item.name}</text>
- *       </box>
- *     )}
- *   />
+ * @public
  */
 
 import { createSignal, For, onCleanup } from "solid-js"
@@ -32,6 +12,7 @@ import { useFocus, createScrollHandle, onPostScroll, markDirty } from "@vexart/e
 
 // ── Types ──
 
+/** @public */
 export type VirtualListItemContext = {
   /** Whether this item is selected (for single-select mode). */
   selected: boolean
@@ -43,6 +24,7 @@ export type VirtualListItemContext = {
   index: number
 }
 
+/** @public */
 export type VirtualListProps<T> = {
   /** Full list of items. */
   items: T[]
@@ -66,6 +48,7 @@ export type VirtualListProps<T> = {
   focusId?: string
 }
 
+/** @public */
 export function VirtualList<T>(props: VirtualListProps<T>) {
   const [scrollTick, setScrollTick] = createSignal(0)
   const [highlightedIndex, setHighlightedIndex] = createSignal(props.selectedIndex ?? -1)

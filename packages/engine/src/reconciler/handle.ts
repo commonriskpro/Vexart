@@ -1,6 +1,7 @@
 import type { TGENode, LayoutRect } from "../ffi/node"
 import { setFocus, focusedId } from "./focus"
 
+/** @public */
 export type NodeHandle = {
   readonly id: number
   readonly kind: string
@@ -16,6 +17,7 @@ export type NodeHandle = {
 
 const handleCache = new WeakMap<TGENode, NodeHandle>()
 
+/** @public */
 export function createHandle(node: TGENode): NodeHandle {
   const cached = handleCache.get(node)
   if (cached) return cached

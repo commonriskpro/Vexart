@@ -75,6 +75,7 @@ pub fn write_layout(tree: &LayoutTree, out: &mut [u8], out_used: &mut u32) -> i3
     let reverse: HashMap<taffy::NodeId, u64> = tree
         .id_map
         .iter()
+        .filter(|(vx_id, _)| **vx_id != 0)
         .map(|(&vx_id, &taffy_id)| (taffy_id, vx_id))
         .collect();
 

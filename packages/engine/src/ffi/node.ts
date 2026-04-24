@@ -17,7 +17,7 @@
 // Numeric values preserved for backward compat; semantics map to Taffy via
 // vexart_layout_compute's command buffer parser in native/libvexart/src/layout/tree.rs.
 
-/** Sizing type enum — matches SIZING in legacy clay.ts. */
+/** @public Sizing type enum that preserves the legacy clay sizing values. */
 export const SIZING = {
   FIT: 0,
   GROW: 1,
@@ -25,23 +25,25 @@ export const SIZING = {
   FIXED: 3,
 } as const
 
-/** Flex direction enum — matches DIRECTION in legacy clay.ts. */
+/** @public Flex direction enum that preserves the legacy clay direction values. */
 export const DIRECTION = {
   LEFT_TO_RIGHT: 0,
   TOP_TO_BOTTOM: 1,
 } as const
 
-/** Horizontal alignment enum — matches ALIGN_X in legacy clay.ts. */
+/** @public Horizontal alignment enum that preserves the legacy clay horizontal alignment values. */
 export const ALIGN_X = { LEFT: 0, RIGHT: 1, CENTER: 2, SPACE_BETWEEN: 3 } as const
 
-/** Vertical alignment enum — matches ALIGN_Y in legacy clay.ts. */
+/** @public Vertical alignment enum that preserves the legacy clay vertical alignment values. */
 export const ALIGN_Y = { TOP: 0, BOTTOM: 1, CENTER: 2, SPACE_BETWEEN: 3 } as const
 
+/** @public */
 export type TGENodeKind = "box" | "text" | "img" | "canvas" | "root"
 
+/** @public */
 export type InteractionMode = "none" | "drag"
 
-/** Event passed to onPress handlers. Supports stopPropagation like DOM events. */
+/** @public Event passed to onPress handlers. Supports stopPropagation like DOM events. */
 export type PressEvent = {
   /** Prevent the event from bubbling to parent nodes. */
   stopPropagation: () => void
@@ -49,7 +51,7 @@ export type PressEvent = {
   readonly propagationStopped: boolean
 }
 
-/** Create a PressEvent instance. */
+/** @public Create a PressEvent instance. */
 export function createPressEvent(): PressEvent {
   let stopped = false
   return {
@@ -58,7 +60,7 @@ export function createPressEvent(): PressEvent {
   }
 }
 
-/** Mouse event passed to onMouseDown/Up/Move/Over/Out handlers. */
+/** @public Mouse event passed to onMouseDown, onMouseUp, onMouseMove, onMouseOver, and onMouseOut handlers. */
 export type NodeMouseEvent = {
   /** Pointer X in absolute pixels (screen-space). */
   x: number
@@ -74,7 +76,7 @@ export type NodeMouseEvent = {
   height: number
 }
 
-/** Self-filter configuration — applied to the element's own paint output. */
+/** @public Self-filter configuration applied to the element's own paint output. */
 export type FilterConfig = {
   /** Gaussian blur radius in px. Default: 0 (no blur). */
   blur?: number
@@ -94,9 +96,10 @@ export type FilterConfig = {
   hueRotate?: number
 }
 
-/** Interactive style props — usable in hoverStyle, activeStyle, focusStyle */
+/** @public Interactive style props usable in hoverStyle, activeStyle, and focusStyle. */
 export type InteractiveStyleProps = Partial<Pick<TGEProps, "backgroundColor" | "borderColor" | "borderWidth" | "cornerRadius" | "borderRadius" | "shadow" | "boxShadow" | "glow" | "gradient" | "backdropBlur" | "backdropBrightness" | "backdropContrast" | "backdropSaturate" | "backdropGrayscale" | "backdropInvert" | "backdropSepia" | "backdropHueRotate" | "opacity" | "filter">>
 
+/** @public */
 export type TGEProps = {
   // Layout
   direction?: "row" | "column"
@@ -294,7 +297,7 @@ export type TGEProps = {
   // Canvas (<canvas> intrinsic)
   /** Imperative draw callback — compat/lab canvas API, called each frame with a CanvasContext. */
   onDraw?: (ctx: import("./canvas").CanvasContext) => void
-  /** Viewport transform for pan/zoom. { x, y, zoom }. */
+  /** Viewport transform for pan and zoom. */
   viewport?: { x: number; y: number; zoom: number }
 
   // Text
@@ -309,6 +312,7 @@ export type TGEProps = {
   fontStyle?: "normal" | "italic"
 }
 
+/** @public */
 export type TGENode = {
   kind: TGENodeKind
   props: TGEProps
@@ -317,6 +321,8 @@ export type TGENode = {
   parent: TGENode | null
   /** Stable unique identifier for this node */
   id: number
+  /** Native scene node ID used by the Rust-retained scene graph skeleton. */
+  _nativeId: bigint | null
   /** Whether this node has been removed from the tree */
   destroyed: boolean
   /** Computed layout rect — written after Clay layout pass */
@@ -345,7 +351,7 @@ export type TGENode = {
   _interactionMode: InteractionMode
 }
 
-/** Computed layout geometry from Clay — written each frame after layout */
+/** @public Computed layout geometry written each frame after layout. */
 export type LayoutRect = {
   x: number
   y: number
@@ -355,6 +361,7 @@ export type LayoutRect = {
 
 let nextNodeId = 1
 
+/** @public */
 export function createNode(kind: TGENodeKind): TGENode {
   return {
     kind,
@@ -363,6 +370,7 @@ export function createNode(kind: TGENodeKind): TGENode {
     children: [],
     parent: null,
     id: nextNodeId++,
+    _nativeId: null,
     destroyed: false,
     layout: { x: 0, y: 0, width: 0, height: 0 },
     _hovered: false,
@@ -387,6 +395,7 @@ export function createNode(kind: TGENodeKind): TGENode {
  *   3. Resolve padding shorthand: [Y,X] or [T,R,B,L]
  *   4. Merge hoverStyle/activeStyle/focusStyle when active
  */
+/** @public */
 export function resolveProps(node: TGENode): TGEProps {
   let base = node.props
 
@@ -427,6 +436,7 @@ export function createTextNode(text: string): TGENode {
   return node
 }
 
+/** @public */
 export function insertChild(parent: TGENode, child: TGENode, anchor?: TGENode) {
   child.parent = parent
   if (anchor) {
@@ -439,6 +449,7 @@ export function insertChild(parent: TGENode, child: TGENode, anchor?: TGENode) {
   parent.children.push(child)
 }
 
+/** @public */
 export function removeChild(parent: TGENode, child: TGENode) {
   const idx = parent.children.indexOf(child)
   if (idx >= 0) parent.children.splice(idx, 1)
@@ -448,6 +459,7 @@ export function removeChild(parent: TGENode, child: TGENode) {
 
 // ── Color parsing ──
 
+/** @public */
 export function parseColor(value: string | number | undefined): number {
   if (value === undefined) return 0
   if (typeof value === "number") return value
@@ -460,8 +472,10 @@ export function parseColor(value: string | number | undefined): number {
 
 // ── Sizing parsing ──
 
+/** @public */
 export type SizingInfo = { type: number; value: number }
 
+/** @public */
 export function parseSizing(value: number | string | undefined): SizingInfo | null {
   if (value === undefined) return null
   if (typeof value === "number") return { type: SIZING.FIXED, value }
@@ -474,11 +488,13 @@ export function parseSizing(value: number | string | undefined): SizingInfo | nu
   return { type: SIZING.FIT, value: 0 }
 }
 
+/** @public */
 export function parseDirection(value: string | undefined): number {
   if (value === "row") return DIRECTION.LEFT_TO_RIGHT
   return DIRECTION.TOP_TO_BOTTOM
 }
 
+/** @public */
 export function parseAlignX(value: string | undefined): number {
   if (value === "right" || value === "flex-end") return ALIGN_X.RIGHT
   if (value === "center") return ALIGN_X.CENTER
@@ -486,6 +502,7 @@ export function parseAlignX(value: string | undefined): number {
   return ALIGN_X.LEFT // "left", "flex-start", or default
 }
 
+/** @public */
 export function parseAlignY(value: string | undefined): number {
   if (value === "bottom" || value === "flex-end") return ALIGN_Y.BOTTOM
   if (value === "center") return ALIGN_Y.CENTER

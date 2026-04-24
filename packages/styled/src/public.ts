@@ -15,7 +15,7 @@ export {
   glows,
   theme,
 } from "./tokens/tokens"
-export type { VoidTheme } from "./tokens/tokens"
+export type { VoidTheme, Shadow, Glow } from "./tokens/tokens"
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
@@ -39,13 +39,13 @@ export type { TypographyProps } from "./typography/typography"
 // ── Components ────────────────────────────────────────────────────────────────
 
 export { Avatar } from "./components/avatar"
-export type { AvatarProps } from "./components/avatar"
+export type { AvatarProps, AvatarSize } from "./components/avatar"
 
 export { Badge } from "./components/badge"
-export type { BadgeProps } from "./components/badge"
+export type { BadgeProps, BadgeVariant } from "./components/badge"
 
 export { Button } from "./components/button"
-export type { ButtonProps } from "./components/button"
+export type { ButtonProps, ButtonVariant, ButtonSize } from "./components/button"
 
 export {
   Card,
@@ -71,8 +71,9 @@ export type { VoidCheckboxProps } from "./components/checkbox"
 
 export { VoidCombobox } from "./components/combobox"
 export type { VoidComboboxProps } from "./components/combobox"
+export type { ComboboxOption } from "@vexart/headless"
 
-export { VoidDialog } from "./components/dialog"
+export { VoidDialog, VoidDialogTitle, VoidDialogDescription, VoidDialogFooter } from "./components/dialog"
 export type {
   VoidDialogProps,
   VoidDialogTitleProps,
@@ -80,7 +81,14 @@ export type {
   VoidDialogFooterProps,
 } from "./components/dialog"
 
-export { VoidDropdownMenu } from "./components/dropdown-menu"
+export {
+  VoidDropdownMenu,
+  VoidDropdownMenuTrigger,
+  VoidDropdownMenuContent,
+  VoidDropdownMenuItem,
+  VoidDropdownMenuSeparator,
+  VoidDropdownMenuLabel,
+} from "./components/dropdown-menu"
 export type {
   VoidDropdownMenuProps,
   VoidDropdownMenuTriggerProps,
@@ -100,9 +108,11 @@ export type { VoidProgressProps } from "./components/progress"
 
 export { VoidRadioGroup } from "./components/radio-group"
 export type { VoidRadioGroupProps } from "./components/radio-group"
+export type { RadioOption } from "@vexart/headless"
 
 export { VoidSelect } from "./components/select"
 export type { VoidSelectProps } from "./components/select"
+export type { SelectOption } from "@vexart/headless"
 
 export { Separator } from "./components/separator"
 export type { SeparatorProps } from "./components/separator"
@@ -118,12 +128,15 @@ export type { VoidSwitchProps } from "./components/switch"
 
 export { VoidTable } from "./components/table"
 export type { VoidTableProps } from "./components/table"
+export type { TableColumn } from "@vexart/headless"
 
 export { VoidTabs } from "./components/tabs"
-export type { VoidTabsProps } from "./components/tabs"
+export type { VoidTabsProps, TabsVariant } from "./components/tabs"
+export type { TabItem } from "@vexart/headless"
 
 export { createVoidToaster } from "./components/toast"
 export type { VoidToasterOptions } from "./components/toast"
+export type { ToastInput, ToastPosition, ToasterHandle } from "@vexart/headless"
 
 export { VoidTooltip } from "./components/tooltip"
 export type { VoidTooltipProps } from "./components/tooltip"

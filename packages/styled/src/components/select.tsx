@@ -1,19 +1,7 @@
 /**
  * Select — styled dropdown using Void design tokens.
  *
- * Built on top of the headless @tge/components Select.
- * Provides ALL visual rendering via render props.
- *
- * Usage:
- *   <VoidSelect
- *     value={value()}
- *     onChange={setValue}
- *     options={[
- *       { value: "dark", label: "Dark" },
- *       { value: "light", label: "Light" },
- *     ]}
- *     placeholder="Choose theme…"
- *   />
+ * @public
  */
 
 import { Select } from "@vexart/headless"
@@ -21,6 +9,7 @@ import type { SelectOption, SelectTriggerContext, SelectOptionContext } from "@v
 import { radius, space, font, shadows, glows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
+/** @public */
 export type VoidSelectProps = {
   value?: string
   onChange?: (value: string) => void
@@ -32,6 +21,7 @@ export type VoidSelectProps = {
   children?: any
 }
 
+/** @public */
 export function VoidSelect(props: VoidSelectProps) {
   if (props.options) {
     return (

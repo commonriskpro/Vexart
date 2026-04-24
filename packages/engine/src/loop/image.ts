@@ -21,12 +21,14 @@ import { markDirty } from "../reconciler/dirty"
 
 // ── Cache ──
 
-type DecodedImage = {
+/** @public */
+export type DecodedImage = {
   data: Uint8Array
   width: number
   height: number
 }
 
+/** @public */
 export type RawImage = DecodedImage
 
 const imageCache = new Map<string, DecodedImage>()
@@ -40,11 +42,13 @@ function touchCacheEntry<K, V>(cache: Map<K, V>, key: K, value: V) {
   cache.set(key, value)
 }
 
+/** @public */
 export type ScaledImageCache = {
   get: (src: RawImage, targetW: number, targetH: number, key: string) => RawImage
   clear: () => void
 }
 
+/** @public */
 export function createScaledImageCache(): ScaledImageCache {
   const cache = new Map<string, DecodedImage>()
   scaledImageCaches.add(cache)
@@ -76,6 +80,7 @@ export function createScaledImageCache(): ScaledImageCache {
  * Trigger image decode for a node. Non-blocking — sets _imageBuffer when done.
  * Called during walkTree when we encounter an img node with _imageState === "idle".
  */
+/** @public */
 export function decodeImageForNode(node: TGENode) {
   const src = node.props.src
   if (!src) return
@@ -207,6 +212,7 @@ async function decodePNG(buffer: ArrayBuffer, src: string): Promise<DecodedImage
  * Scale image pixels to fit a target box.
  * Returns a new RGBA buffer at the target dimensions.
  */
+/** @public */
 export function scaleImage(
   src: DecodedImage,
   targetW: number,
@@ -290,11 +296,13 @@ function nearestNeighborScale(
 }
 
 /** Clear the image cache (e.g., on hot reload). */
+/** @public */
 export function clearImageCache() {
   imageCache.clear()
   for (const cache of scaledImageCaches) cache.clear()
 }
 
+/** @public */
 export function getImageCacheStats() {
   let decodedBytes = 0
   for (const image of imageCache.values()) decodedBytes += image.data.byteLength

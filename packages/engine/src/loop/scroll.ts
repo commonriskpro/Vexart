@@ -14,6 +14,7 @@
 
 import { markDirty } from "../reconciler/dirty"
 
+/** @public */
 export type ScrollHandle = {
   readonly scrollX: number
   readonly scrollY: number
@@ -53,7 +54,7 @@ function getState(clayId: string): ScrollState {
   return state
 }
 
-/** Update scroll container geometry from Taffy PositionedCommand output. Called by loop.ts after layout. */
+/** @public Update scroll container geometry from layout output. */
 export function updateScrollContainerGeometry(
   clayId: string,
   viewportWidth: number,
@@ -68,6 +69,7 @@ export function updateScrollContainerGeometry(
   state.contentHeight = contentHeight
 }
 
+/** @public */
 export function createScrollHandle(clayId: string): ScrollHandle {
   const existing = scrollHandles.get(clayId)
   if (existing) return existing
@@ -112,6 +114,7 @@ export function createScrollHandle(clayId: string): ScrollHandle {
   return handle
 }
 
+/** @public */
 export function resetScrollHandles() {
   scrollHandles.clear()
   scrollStates.clear()

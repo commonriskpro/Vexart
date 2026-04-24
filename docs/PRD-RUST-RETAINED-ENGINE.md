@@ -1,7 +1,7 @@
 # Vexart — Rust-Retained Engine PRD
 
 **Version**: 0.1  
-**Status**: Draft proposal — not yet master source of truth  
+**Status**: Adopted companion PRD — execution source for retained-engine migration
 **Owner**: Founder  
 **Last updated**: April 2026
 
@@ -34,7 +34,7 @@ The current hybrid backend works, but too much frame-critical ownership remains 
 - TS owns `TGENode` tree objects.
 - TS walks the tree and builds render commands.
 - TS builds and routes render graph operations.
-- TS owns layer strategy, layer target handles, sprite caches, and final-frame orchestration.
+- TS still owns too much frame orchestration, even though Rust already chooses frame strategy and native retained/compositor paths now handle part of the present lifecycle.
 - TS receives raw RGBA buffers from Rust for terminal presentation in key paths.
 - Feature wiring can drift: a Rust shader can exist but remain unreachable if TS does not pack or dispatch it.
 
@@ -330,6 +330,13 @@ Rust chooses frame strategy using native access to damage, resources, and termin
 
 TS may pass hints, but Rust makes the final choice.
 
+Current implementation note:
+
+- Rust frame planning is live behind the retained path.
+- Compositor-only retained frames skip walk/layout/assign/paint and use retained composition plus `vexart_composite_update_uniform` for transform/opacity-only updates.
+- Phase 6 FFI-count targets are now verified in the benchmark harness (`0` no-op calls, `6` dirty-frame calls).
+- JS remains the control-plane shell for Solid reactivity, callbacks, and mutation handoff by design; the remaining PRD work is now default cutover and cleanup.
+
 ---
 
 ## 12. Performance Targets
@@ -422,6 +429,12 @@ Exit criteria:
 
 Goal: Rust generates and batches render operations.
 
+Current implementation note:
+
+- Native render graph snapshot, mixed native/TS translation, and Rust-owned frame strategy selection are already in progress.
+- Frame orchestration is no longer purely a future concern: `skip-present`, `layered-dirty`, `layered-region`, and `final-frame` already exist in production behind the retained path.
+- Compositor-only retained frames already have a real fast path, but the runtime is not yet a fully reconciler-free shell.
+
 Tasks:
 
 - Convert scene nodes directly into native render ops.
@@ -437,6 +450,13 @@ Exit criteria:
 ### Phase F — Default Cutover And Cleanup
 
 Goal: native scene graph becomes default.
+
+Current implementation note:
+
+- Kitty-compatible transports now default the retained scene/event/layout/render/presentation stack on.
+- Native presentation now uses the active Kitty transport (`direct`, `file`, or `shm`) instead of restricting retained defaulting to SHM-only sessions.
+- `VEXART_RETAINED=0` is the emergency override for the whole retained stack during the compatibility window.
+- Remaining cutover gates are visual parity and API-snapshot infrastructure; cleanup/deletion remains a later phase.
 
 Tasks:
 
@@ -459,8 +479,9 @@ The migration must be invisible to users.
 
 Required safeguards:
 
-- Feature flag: `experimental.nativeSceneGraph`.
-- Environment override for emergency fallback.
+- Default runtime: retained-on when native presentation is available.
+- Environment override for emergency fallback: `VEXART_RETAINED=0`.
+- Per-feature overrides remain available for debugging and targeted rollback.
 - Golden image comparison between old and native paths.
 - Event behavior tests for keyboard, mouse, focus, scroll, bubbling, pointer capture.
 - API extractor diff must show no unapproved public API break.
@@ -521,15 +542,17 @@ JS debug overlay reads these stats through FFI and displays them without owning 
 
 ---
 
-## 18. Decisions Required
+## 18. Decisions Resolved
 
-Before implementation, the founder must approve:
+The founder-approved roadmap is recorded in [`ROADMAP-RUST-RETAINED-ENGINE.md`](./ROADMAP-RUST-RETAINED-ENGINE.md) and promoted by DEC-012 in [`PRD.md`](./PRD.md).
 
-1. Whether this replaces or extends the current Phase 2b/3 roadmap.
-2. Whether `nativeSceneGraph` becomes a Phase 3 goal or a new Phase 3b.
-3. Whether native presentation is mandatory before any new visual shader work.
-4. Whether old TS render graph path is retained for one release or removed before v0.9.
-5. Whether input parsing remains JS initially or moves to Rust with hit-testing.
+Resolved decisions:
+
+1. This roadmap extends the current v0.9 roadmap and supersedes the older long-term TS-owned frame-pipeline target.
+2. `nativeSceneGraph` is implemented after Native Layer Registry as a retained-engine migration phase, behind a feature flag.
+3. Native Presentation is mandatory before major new shader/material ownership work.
+4. The old TS render graph path is retained for one compatibility window, then removed or isolated as test/emergency fallback after native cutover.
+5. Input byte parsing remains in JS initially; hit-testing, interaction state, focus traversal data, and event record generation move to Rust during the native layout/damage/hit-test phase.
 
 ---
 

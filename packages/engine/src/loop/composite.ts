@@ -21,10 +21,12 @@ import type { Terminal } from "../terminal/index"
 import type { RenderCommand } from "../ffi/render-graph"
 import { resetRenderGraphQueues, CMD } from "../ffi/render-graph"
 import type { TextMeta } from "../ffi/render-graph"
-import type { TGENode } from "../ffi/node"
-import { debugFrameStart, debugUpdateStats } from "./debug"
+import { resolveProps, type TGENode } from "../ffi/node"
+import { fromConfig, isIdentity, multiply, transformPoint, translate } from "../ffi/matrix"
+import { debugFrameStart, debugUpdateStats, isDebugEnabled } from "./debug"
 import {
   writeLayoutBack as _writeLayoutBack,
+  updateCommandsToLayoutMap as _updateCommandsToLayoutMap,
   updateInteractiveStates as _updateInteractiveStates,
   type InteractiveStatesBag,
 } from "./layout"
@@ -45,11 +47,13 @@ import {
 } from "./paint"
 import type { createVexartLayoutCtx } from "./layout-adapter"
 import { summarizeRendererResourceStats } from "../ffi/resource-stats"
+import { hasCompositorAnimations, isCompositorOnlyFrame, resetFrameTracking } from "../animation/compositor-path"
 import type { DamageRect } from "../ffi/damage"
 import type { Layer } from "../ffi/layers"
 import type { RendererBackend } from "../ffi/renderer-backend"
 import type { GpuFrameComposer } from "../output/gpu-frame-composer"
 import { createScrollHandle, updateScrollContainerGeometry } from "./scroll"
+import { nativeSceneComputeLayout } from "../ffi/native-scene"
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -136,6 +140,7 @@ export type CompositeFrameState = {
   layerCache: Map<string, Layer>
   activeSlotKeys: Set<string>
   frameDirtyRects: DamageRect[]
+  pendingNodeDamageRects: Array<{ nodeId: number; rect: DamageRect }>
 
   // Layer store methods (coordinator owns the store)
   getOrCreateLayer: (key: string, z: number) => Layer
@@ -150,7 +155,8 @@ export type CompositeFrameState = {
   // Dirty tracking
   markDirty: () => void
   markAllDirty: () => void
-  clearDirty: () => void
+  clearDirty: (expectedVersion?: number) => void
+  dirtyVersion: () => number
   dirtyCount: () => number
 
   // Layer composer (Kitty output)
@@ -162,6 +168,9 @@ export type CompositeFrameState = {
   // Frame config flags
   useLayerCompositing: boolean
   forceLayerRepaint: boolean
+  useNativePressDispatch: boolean
+  useNativeSceneLayout: boolean
+  useNativeRenderGraph: boolean
   expFrameBudgetMs: number
   transmissionMode: "direct" | "file" | "shm"
 
@@ -229,11 +238,16 @@ function resetWalkAccumulators(s: CompositeFrameState) {
 }
 
 function writeLayoutBack(s: CompositeFrameState) {
-  _writeLayoutBack(s.layoutAdapter.getLastLayoutMap(), {
+  const layoutMap = s.useNativeSceneLayout
+    ? nativeSceneComputeLayout()
+    : s.layoutAdapter.getLastLayoutMap()
+  _writeLayoutBack(layoutMap, {
     rectNodes: s.rectNodes,
     textNodes: s.textNodes,
     boxNodes: s.boxNodes,
+    pendingNodeDamageRects: s.pendingNodeDamageRects,
   })
+  return layoutMap
 }
 
 /**
@@ -324,7 +338,94 @@ function applyOffsetToDescendants(container: TGENode, ox: number, oy: number) {
   }
 }
 
-function updateInteractiveStates(s: CompositeFrameState): boolean {
+function resolveNodeById(root: TGENode, id: number): TGENode | null {
+  if (root.id === id) return root
+  if (root.kind === "text") return null
+  for (const child of root.children) {
+    const resolved = resolveNodeById(child, id)
+    if (resolved) return resolved
+  }
+  return null
+}
+
+function computeNodeLocalTransform(node: TGENode) {
+  const vp = resolveProps(node)
+  if (!vp.transform) return null
+  const l = node.layout
+  const originProp = vp.transformOrigin
+  let ox = l.width / 2
+  let oy = l.height / 2
+  if (originProp === "top-left") { ox = 0; oy = 0 }
+  else if (originProp === "top-right") { ox = l.width; oy = 0 }
+  else if (originProp === "bottom-left") { ox = 0; oy = l.height }
+  else if (originProp === "bottom-right") { ox = l.width; oy = l.height }
+  else if (originProp && typeof originProp === "object") { ox = originProp.x * l.width; oy = originProp.y * l.height }
+  const matrix = fromConfig(vp.transform, ox, oy)
+  return isIdentity(matrix) ? null : matrix
+}
+
+function computeNodeSubtreeTransformQuad(node: TGENode) {
+  const chain: TGENode[] = []
+  let current: TGENode | null = node
+  while (current) {
+    const matrix = computeNodeLocalTransform(current)
+    if (matrix) chain.push(current)
+    current = current.parent
+  }
+  if (chain.length === 0) return null
+  chain.reverse()
+
+  const transformAbsolutePoint = (x: number, y: number) => {
+    let point = { x, y }
+    for (const target of chain) {
+      const matrix = computeNodeLocalTransform(target)
+      if (!matrix) continue
+      const l = target.layout
+      const absolute = multiply(multiply(translate(l.x, l.y), matrix), translate(-l.x, -l.y))
+      point = transformPoint(absolute, point.x, point.y)
+    }
+    return point
+  }
+
+  const x = node.layout.x
+  const y = node.layout.y
+  const w = node.layout.width
+  const h = node.layout.height
+  return {
+    p0: transformAbsolutePoint(x, y),
+    p1: transformAbsolutePoint(x + w, y),
+    p2: transformAbsolutePoint(x, y + h),
+    p3: transformAbsolutePoint(x + w, y + h),
+  }
+}
+
+function buildRetainedCompositorLayers(s: CompositeFrameState) {
+  const layers: import("../ffi/renderer-backend").RendererBackendRetainedLayer[] = []
+  for (const [key, layer] of s.layerCache) {
+    const bounds = { x: layer.x, y: layer.y, width: layer.width, height: layer.height }
+    if (key === "bg") {
+      layers.push({ key, z: layer.z, bounds, subtreeTransform: null, isBackground: true, opacity: 1 })
+      continue
+    }
+    if (!key.startsWith("layer:")) continue
+    const nodeId = Number(key.slice(6))
+    const node = s.nodeRefById.get(nodeId) ?? resolveNodeById(s.root, nodeId)
+    const vp = node ? resolveProps(node) : null
+    layers.push({
+      key,
+      z: layer.z,
+      bounds,
+      subtreeTransform: node ? computeNodeSubtreeTransformQuad(node) : null,
+      isBackground: false,
+      opacity: typeof vp?.opacity === "number" ? vp.opacity : 1,
+    })
+  }
+  layers.sort((a, b) => a.z - b.z)
+  return layers
+}
+
+function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; changed: boolean } {
+  let changed = false
   const bag: InteractiveStatesBag = {
     rectNodes: s.rectNodes,
     rectNodeById: s.rectNodeById,
@@ -339,7 +440,8 @@ function updateInteractiveStates(s: CompositeFrameState): boolean {
     prevActiveNode: s.pointer.prevActiveNode,
     cellWidth: s.term.size.cellWidth || 8,
     cellHeight: s.term.size.cellHeight || 16,
-    onChanged: () => { s.markDirty(); s.markAllDirty() },
+    onChanged: () => { changed = true; s.markDirty(); s.markAllDirty() },
+    useNativePressDispatch: s.useNativePressDispatch,
   }
   const hadClick = _updateInteractiveStates(bag)
   // Write back mutable fields
@@ -349,7 +451,7 @@ function updateInteractiveStates(s: CompositeFrameState): boolean {
   s.pointer.prevActiveNode = bag.prevActiveNode
   s.pointer.capturedNodeId = bag.capturedNodeId
   s.pointer.dirty = bag.pointerDirty
-  return hadClick
+  return { hadClick, changed }
 }
 
 // ── compositeFrame ────────────────────────────────────────────────────────
@@ -361,6 +463,7 @@ function updateInteractiveStates(s: CompositeFrameState): boolean {
  * Returns early (without clearing dirty) if Clay emits no commands.
  */
 export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
+  const dirtyVersionAtFrameStart = s.dirtyVersion()
   const dirtyBeforeFrame = s.dirtyCount()
   const layoutStart = s.debugCadence ? performance.now() : 0
 
@@ -417,31 +520,110 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   // Post-scroll hooks
   for (const cb of s.postScrollCallbacks) cb()
 
+  const backend = s.backendOverride!
+  const compositorOnlyFrame = hasCompositorAnimations()
+    && isCompositorOnlyFrame()
+    && s.scroll.x === 0
+    && s.scroll.y === 0
+    && !s.pointer.pendingPress
+    && !s.pointer.pendingRelease
+    && !s.pointer.down
+    && !s.pointer.dirty
+    && !!backend.compositeRetainedFrame
+    && s.layerCache.size > 0
+
+  if (compositorOnlyFrame) {
+    const retainedLayers = buildRetainedCompositorLayers(s)
+    const dirtyLayerCount = retainedLayers.filter((layer) => layer.opacity < 0.999 || !!layer.subtreeTransform).length
+    const dirtyPixelArea = retainedLayers.reduce((sum, layer) => sum + layer.bounds.width * layer.bounds.height, 0)
+    const totalPixelArea = Math.max(1, s.viewportWidth * s.viewportHeight)
+    const frameCtx = {
+      viewportWidth: s.viewportWidth,
+      viewportHeight: s.viewportHeight,
+      dirtyLayerCount,
+      layerCount: retainedLayers.length,
+      dirtyPixelArea,
+      totalPixelArea,
+      overlapPixelArea: 0,
+      overlapRatio: 0,
+      fullRepaint: false,
+      useLayerCompositing: s.useLayerCompositing,
+      hasSubtreeTransforms: retainedLayers.some((layer) => !!layer.subtreeTransform),
+      hasActiveInteraction: false,
+      transmissionMode: s.transmissionMode,
+      estimatedLayeredBytes: dirtyPixelArea * 4,
+      estimatedFinalBytes: totalPixelArea * 4,
+    } satisfies import("../ffi/renderer-backend").RendererBackendFrameContext
+    s.term.beginSync()
+    const frameResult = backend.compositeRetainedFrame?.({ frame: frameCtx, layers: retainedLayers }) ?? null
+    s.term.endSync()
+    const resourceSummary = isDebugEnabled()
+      ? summarizeRendererResourceStats()
+      : { totalBytes: 0, gpuBytes: 0, cacheEntries: 0 }
+    debugUpdateStats({
+      commandCount: 0,
+      dirtyBeforeCount: dirtyBeforeFrame,
+      layerCount: s.layerCount(),
+      moveOnlyCount: 0,
+      moveFallbackCount: 0,
+      stableReuseCount: retainedLayers.length,
+      nodeCount: s.nodeCount(),
+      repaintedCount: 0,
+      rendererStrategy: frameResult?.strategy ?? "final-frame",
+      rendererOutput: frameResult?.output ?? "none",
+      dirtyPixelArea: frameCtx.dirtyPixelArea,
+      totalPixelArea: frameCtx.totalPixelArea,
+      overlapPixelArea: frameCtx.overlapPixelArea,
+      overlapRatio: frameCtx.overlapRatio,
+      fullRepaint: frameCtx.fullRepaint,
+      transmissionMode: frameCtx.transmissionMode,
+      estimatedLayeredBytes: frameCtx.estimatedLayeredBytes,
+      estimatedFinalBytes: frameCtx.estimatedFinalBytes,
+      interactionLatencyMs: s.lastPresentedInteractionLatencyMs.value,
+      interactionType: s.lastPresentedInteractionType.value,
+      presentedInteractionSeq: s.lastPresentedInteractionSeq.value,
+      resourceBytes: resourceSummary.totalBytes,
+      gpuResourceBytes: resourceSummary.gpuBytes,
+      resourceEntries: resourceSummary.cacheEntries,
+      nativeStats: frameResult?.output === "native-presented" ? (frameResult.stats ?? null) : null,
+      nativeFrameReasonFlags: null,
+    })
+    resetFrameTracking()
+    s.clearDirty(dirtyVersionAtFrameStart)
+    return
+  }
+
   // ── Step 2: Walk tree → Clay layout ──
   resetWalkAccumulators(s)
+  s.pendingNodeDamageRects.length = 0
   s.layoutAdapter.beginLayout()
   walkTreeOnce(s)
   let commands = s.layoutAdapter.endLayout()
+  let layoutMap = writeLayoutBack(s)
+  if (s.useNativeSceneLayout) _updateCommandsToLayoutMap(commands, layoutMap)
 
   // ── Step 3: Write layout back + interaction states ──
-  writeLayoutBack(s)
   applyScrollOffsets(commands, s)
-  const hadClick = updateInteractiveStates(s)
+  const interaction = updateInteractiveStates(s)
 
-  // Re-layout on click for instant visual feedback (same frame)
-  if (hadClick) {
+  // Re-layout on any interactive state change for instant visual feedback (same frame).
+  // Hover/active/focus styles mutate node state after the first layout pass; if we only
+  // relayout on click, that dirty mark gets cleared at frame end and visual state only
+  // appears on an unrelated repaint (for example terminal resize).
+  if (interaction.changed || interaction.hadClick) {
     resetWalkAccumulators(s)
     s.layoutAdapter.beginLayout()
     walkTreeOnce(s)
     commands = s.layoutAdapter.endLayout()
-    writeLayoutBack(s)
+    layoutMap = writeLayoutBack(s)
+    if (s.useNativeSceneLayout) _updateCommandsToLayoutMap(commands, layoutMap)
     applyScrollOffsets(commands, s)
   }
 
   if (profile) profile.layoutMs = performance.now() - layoutStart
 
   if (commands.length === 0) {
-    s.clearDirty()
+    s.clearDirty(dirtyVersionAtFrameStart)
     return
   }
 
@@ -486,6 +668,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     transmissionMode: s.transmissionMode,
     useLayerCompositing: s.useLayerCompositing,
     forceLayerRepaint: s.forceLayerRepaint,
+    useNativeRenderGraph: s.useNativeRenderGraph,
     expFrameBudgetMs: s.expFrameBudgetMs,
     debugCadence: s.debugCadence,
     debugDragRepro: s.debugDragRepro,
@@ -500,6 +683,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     layerCache: s.layerCache,
     activeSlotKeys: s.activeSlotKeys,
     frameDirtyRects: s.frameDirtyRects,
+    pendingNodeDamageRects: s.pendingNodeDamageRects,
     root: s.root,
     renderGraphQueues: s.renderGraphQueues,
     textMetaMap: s.textMetaMap,
@@ -521,7 +705,9 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   s.lastPresentedInteractionType.value = paintState.lastPresentedInteractionType.value
 
   // Override debug stats with coordinator-owned values (nodeCount, dirtyBefore)
-  const resourceSummary = summarizeRendererResourceStats()
+  const resourceSummary = isDebugEnabled()
+    ? summarizeRendererResourceStats()
+    : { totalBytes: 0, gpuBytes: 0, cacheEntries: 0 }
   debugUpdateStats({
     commandCount: paintResult.commandCount,
     dirtyBeforeCount: dirtyBeforeFrame,
@@ -533,6 +719,11 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     repaintedCount: paintResult.repaintedThisFrame,
     rendererStrategy: paintResult.frameResult?.strategy ?? null,
     rendererOutput: paintResult.rendererOutput,
+    dirtyPixelArea: paintResult.frameCtx.dirtyPixelArea,
+    totalPixelArea: paintResult.frameCtx.totalPixelArea,
+    overlapPixelArea: paintResult.frameCtx.overlapPixelArea,
+    overlapRatio: paintResult.frameCtx.overlapRatio,
+    fullRepaint: paintResult.frameCtx.fullRepaint,
     transmissionMode: paintResult.frameCtx.transmissionMode,
     estimatedLayeredBytes: paintResult.frameCtx.estimatedLayeredBytes,
     estimatedFinalBytes: paintResult.frameCtx.estimatedFinalBytes,
@@ -542,6 +733,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     resourceBytes: resourceSummary.totalBytes,
     gpuResourceBytes: resourceSummary.gpuBytes,
     resourceEntries: resourceSummary.cacheEntries,
+    nativeFrameReasonFlags: paintResult.framePlan?.nativePlan?.reasonFlags ?? null,
   })
 
   if (profile) {
@@ -557,5 +749,6 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     profile.repainted = paintResult.repaintedThisFrame
   }
 
-  s.clearDirty()
+  s.clearDirty(dirtyVersionAtFrameStart)
+  resetFrameTracking()
 }

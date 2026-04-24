@@ -1,18 +1,7 @@
 /**
  * RadioGroup — styled radio button group using Void design tokens.
  *
- * Built on top of the headless @tge/components RadioGroup.
- * Provides ALL visual rendering via renderOption.
- *
- * Usage:
- *   <VoidRadioGroup
- *     value={plan()}
- *     onChange={setPlan}
- *     options={[
- *       { value: "free", label: "Free" },
- *       { value: "pro", label: "Pro" },
- *     ]}
- *   />
+ * @public
  */
 
 import { RadioGroup } from "@vexart/headless"
@@ -23,6 +12,7 @@ import { themeColors } from "../theme/theme"
 const INDICATOR_SIZE = 16
 const DOT_SIZE = 8
 
+/** @public */
 export type VoidRadioGroupProps = {
   value?: string
   onChange?: (value: string) => void
@@ -32,6 +22,7 @@ export type VoidRadioGroupProps = {
   direction?: "column" | "row"
 }
 
+/** @public */
 export function VoidRadioGroup(props: VoidRadioGroupProps) {
   return (
     <RadioGroup

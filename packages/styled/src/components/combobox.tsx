@@ -1,19 +1,7 @@
 /**
  * Combobox — styled autocomplete dropdown using Void design tokens.
  *
- * Built on top of the headless @tge/components Combobox.
- * Provides input, dropdown, option, and empty state visuals.
- *
- * Usage:
- *   <VoidCombobox
- *     value={fruit()}
- *     onChange={setFruit}
- *     options={[
- *       { value: "apple", label: "Apple" },
- *       { value: "banana", label: "Banana" },
- *     ]}
- *     placeholder="Search fruit..."
- *   />
+ * @public
  */
 
 import { Combobox } from "@vexart/headless"
@@ -21,6 +9,7 @@ import type { ComboboxOption, ComboboxInputContext, ComboboxOptionContext } from
 import { radius, space, font, shadows, glows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
+/** @public */
 export type VoidComboboxProps = {
   value?: string
   onChange?: (value: string) => void
@@ -32,6 +21,7 @@ export type VoidComboboxProps = {
   filter?: (option: ComboboxOption, query: string) => boolean
 }
 
+/** @public */
 export function VoidCombobox(props: VoidComboboxProps) {
   return (
     <Combobox

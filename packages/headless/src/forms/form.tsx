@@ -1,40 +1,9 @@
 /**
  * Form validation system — reactive form state management.
  *
- * Inspired by React Hook Form / Formik but designed for SolidJS signals.
- * Creates reactive form state with field-level and form-level validation.
+ * Creates reactive field state plus sync/async validation helpers.
  *
- * Features:
- *   - Field-level validators (sync and async)
- *   - Form-level validation
- *   - Touched/dirty tracking per field
- *   - Submit handling with validation gate
- *   - Error messages as reactive signals
- *   - Reset support
- *
- * Usage:
- *   const form = createForm({
- *     initialValues: { name: "", email: "" },
- *     validate: {
- *       name: (v) => v.length < 2 ? "Too short" : undefined,
- *       email: (v) => !v.includes("@") ? "Invalid email" : undefined,
- *     },
- *     onSubmit: async (values) => {
- *       await saveUser(values)
- *     },
- *   })
- *
- *   // In JSX:
- *   <Input
- *     value={form.values.name()}
- *     onInput={(v) => form.setValue("name", v)}
- *   />
- *   <Show when={form.errors.name()}>
- *     <text color="#ff4444">{form.errors.name()}</text>
- *   </Show>
- *   <Button onPress={form.submit} disabled={form.submitting()}>
- *     Submit
- *   </Button>
+ * @public
  */
 
 import { createSignal, batch } from "solid-js"
@@ -42,11 +11,14 @@ import { createSignal, batch } from "solid-js"
 // ── Types ──
 
 /** Validator returns error string or undefined/null for valid. */
+/** @public */
 export type FieldValidator<T> = (value: T, allValues: Record<string, any>) => string | undefined | null
 
 /** Async validator — same signature but returns a Promise. */
+/** @public */
 export type AsyncFieldValidator<T> = (value: T, allValues: Record<string, any>) => Promise<string | undefined | null>
 
+/** @public */
 export type FormOptions<T extends Record<string, any>> = {
   /** Initial values for all fields. */
   initialValues: T
@@ -62,6 +34,7 @@ export type FormOptions<T extends Record<string, any>> = {
   validateOnChange?: boolean
 }
 
+/** @public */
 export type FieldState = {
   /** Current error message (undefined = valid). */
   error: () => string | undefined
@@ -71,6 +44,7 @@ export type FieldState = {
   dirty: () => boolean
 }
 
+/** @public */
 export type FormHandle<T extends Record<string, any>> = {
   /** Reactive field values — form.values.fieldName() */
   values: { [K in keyof T]: () => T[K] }
@@ -100,6 +74,7 @@ export type FormHandle<T extends Record<string, any>> = {
 
 // ── Factory ──
 
+/** @public */
 export function createForm<T extends Record<string, any>>(options: FormOptions<T>): FormHandle<T> {
   const fields = Object.keys(options.initialValues) as (keyof T)[]
 

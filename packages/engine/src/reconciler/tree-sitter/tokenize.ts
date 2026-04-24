@@ -19,7 +19,7 @@
 import type { SimpleHighlight } from "./types"
 import type { SyntaxStyle } from "./syntax-style"
 
-/** A colored token — one piece of text with one color */
+/** @public */
 export type Token = {
   text: string
   color: number
@@ -38,10 +38,11 @@ function specificity(group: string): number {
 /**
  * Convert tree-sitter highlights to per-line colored tokens.
  *
- * @param source — full source text
- * @param highlights — SimpleHighlight[] from the worker
- * @param style — SyntaxStyle for scope→color mapping
- * @returns Token[][] — one array of tokens per line
+ * @public
+ * @param source - Full source text.
+ * @param highlights - Highlight ranges from the worker.
+ * @param style - Scope-to-color style mapping.
+ * @returns One token array per line.
  */
 export function highlightsToTokens(
   source: string,

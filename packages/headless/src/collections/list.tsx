@@ -1,29 +1,9 @@
 /**
  * List — truly headless selectable list.
  *
- * CONTROLLED component — parent owns selectedIndex state.
- * Focus-aware with Up/Down arrow navigation.
+ * Handles focus, keyboard navigation, and selection while visuals are supplied by `renderItem`.
  *
- * This is a BEHAVIOR-ONLY component. It provides:
- *   - Focus management (useFocus)
- *   - Keyboard navigation (Up/Down/j/k/Enter)
- *   - Selection tracking
- *
- * ALL visual styling is the consumer's responsibility via renderItem.
- * Use @tge/void VoidList for a styled version.
- *
- * Usage:
- *   <List
- *     items={["Alpha", "Beta", "Gamma"]}
- *     selectedIndex={idx()}
- *     onSelectedChange={setIdx}
- *     onSelect={(i) => console.log("picked", items[i])}
- *     renderItem={(item, ctx) => (
- *       <box backgroundColor={ctx.selected ? "#334" : "#111"} padding={4}>
- *         <text color={ctx.selected ? "#fff" : "#aaa"}>{item}</text>
- *       </box>
- *     )}
- *   />
+ * @public
  */
 
 import type { JSX } from "solid-js"
@@ -31,6 +11,7 @@ import { useFocus } from "@vexart/engine"
 
 // ── Types ──
 
+/** @public */
 export type ListItemContext = {
   selected: boolean
   focused: boolean
@@ -41,6 +22,7 @@ export type ListItemContext = {
   }
 }
 
+/** @public */
 export type ListProps = {
   items: string[]
   selectedIndex: number
@@ -54,6 +36,7 @@ export type ListProps = {
   renderList?: (children: JSX.Element) => JSX.Element
 }
 
+/** @public */
 export function List(props: ListProps) {
   const count = () => props.items.length
   const disabled = () => props.disabled ?? false

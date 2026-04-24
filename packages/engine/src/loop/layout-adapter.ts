@@ -412,7 +412,7 @@ export function createVexartLayoutCtx() {
               cmds.push(makeRect(pos, state))
             }
             // Open scissor for this container's children
-            cmds.push({ type: CMD.SCISSOR_START, x: pos.x, y: pos.y, width: pos.width, height: pos.height, color: [0, 0, 0, 0] as [number,number,number,number], cornerRadius: 0, extra1: 0, extra2: 0 })
+            cmds.push({ type: CMD.SCISSOR_START, x: pos.x, y: pos.y, width: pos.width, height: pos.height, color: [0, 0, 0, 0] as [number,number,number,number], cornerRadius: 0, extra1: 0, extra2: 0, nodeId: state.nodeId })
             scissorStack.push(state.nodeId)
           } else {
             // Normal box: ensure correct scissor context then emit RECT

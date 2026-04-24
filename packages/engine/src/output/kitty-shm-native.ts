@@ -14,6 +14,7 @@
 import { ptr } from "bun:ffi"
 import { openVexartLibrary, VexartNativeError } from "../ffi/vexart-bridge"
 
+/** @public */
 export interface NativeKittyShmHandle {
   /** SHM handle — stored as number for API compatibility with kitty.ts consumers.
    *  Internally: the u64 handle from vexart_kitty_shm_prepare is stored in _bigintHandle.
@@ -37,6 +38,7 @@ function readLastError(): string {
   return new TextDecoder().decode(buf)
 }
 
+/** @public */
 export function prepareNativeKittyShm(name: string, data: Uint8Array, mode = 0o666): NativeKittyShmHandle {
   const { symbols } = openVexartLibrary()
   const nameBytes = new TextEncoder().encode(name)
@@ -58,6 +60,7 @@ export function prepareNativeKittyShm(name: string, data: Uint8Array, mode = 0o6
   return { handle: numHandle, name, _bigintHandle: bigintHandle }
 }
 
+/** @public */
 export function releaseNativeKittyShm(handle: number, unlinkName: boolean) {
   if (!handle) return
   const { symbols } = openVexartLibrary()
@@ -71,6 +74,7 @@ export function releaseNativeKittyShm(handle: number, unlinkName: boolean) {
 }
 
 /** Phase 2: returns vexart version as proxy for kitty shm helper version. */
+/** @public */
 export function getNativeKittyShmHelperVersion(): number {
   const { symbols } = openVexartLibrary()
   return symbols.vexart_version() as number

@@ -8,6 +8,8 @@
     "packages/*"
   ],
   "scripts": {
+    "api:update": "rm -rf .api-extractor-temp && tsc -p tsconfig.api.json && bunx api-extractor run --local --config packages/engine/api-extractor.json && bunx api-extractor run --local --config packages/primitives/api-extractor.json && bunx api-extractor run --local --config packages/headless/api-extractor.json && bunx api-extractor run --local --config packages/styled/api-extractor.json",
+    "api:check": "bun run api:update",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "rust:build": "cargo build --release",
@@ -46,10 +48,12 @@
     "gen:jsx-runtime": "bun run scripts/gen-jsx-runtime.ts",
     "test:visual": "bun --conditions=browser run scripts/visual-test/runner.ts",
     "test:visual:update": "bun --conditions=browser run scripts/visual-test/runner.ts --update",
-    "perf:baseline": "bun --conditions=browser run scripts/perf-baseline.ts",
-    "perf:check": "bun --conditions=browser run scripts/perf-baseline.ts --check"
+    "perf:baseline": "bun --conditions=browser run scripts/perf-baseline.tsx",
+    "perf:check": "bun --conditions=browser run scripts/perf-baseline.tsx --check",
+    "perf:frame-orchestrator": "bun --conditions=browser run scripts/frame-orchestrator-bench.ts"
   },
   "devDependencies": {
+    "@microsoft/api-extractor": "^7.52.10",
     "@babel/core": "^7.29.0",
     "@babel/preset-typescript": "^7.28.5",
     "@napi-rs/canvas": "^0.1.97",

@@ -6,9 +6,11 @@ This directory holds all Vexart engineering artifacts produced by the SDD workfl
 
 These three live in `docs/` and are **immutable during phase execution**. Every change proposal in `openspec/changes/` MUST cite which sections of these it satisfies.
 
-- [`docs/PRD.md`](../docs/PRD.md) — what and why (v0.3).
-- [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) — target code organization (v0.1).
+- [`docs/PRD.md`](../docs/PRD.md) — what and why (v0.5).
+- [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) — target code organization (v0.2).
 - [`docs/API-POLICY.md`](../docs/API-POLICY.md) — public vs. internal rules (v0.1).
+- [`docs/PRD-RUST-RETAINED-ENGINE.md`](../docs/PRD-RUST-RETAINED-ENGINE.md) — retained-engine migration contract.
+- [`docs/ROADMAP-RUST-RETAINED-ENGINE.md`](../docs/ROADMAP-RUST-RETAINED-ENGINE.md) — retained-engine phase sequencing.
 
 ## Structure
 

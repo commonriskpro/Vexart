@@ -1,11 +1,7 @@
 /**
- * VoidProgress — shadcn-compatible progress bar using Void design tokens.
+ * VoidProgress — styled progress bar using Void design tokens.
  *
- * Built on top of the headless @tge/components ProgressBar.
- * h-1.5 (6px track), primary fill, muted background.
- *
- * Usage:
- *   <VoidProgress value={progress()} max={100} />
+ * @public
  */
 
 import { ProgressBar } from "@vexart/headless"
@@ -13,6 +9,7 @@ import type { ProgressBarRenderContext } from "@vexart/headless"
 import { radius } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
+/** @public */
 export type VoidProgressProps = {
   value: number
   max?: number
@@ -20,6 +17,7 @@ export type VoidProgressProps = {
   height?: number
 }
 
+/** @public */
 export function VoidProgress(props: VoidProgressProps) {
   return (
     <ProgressBar

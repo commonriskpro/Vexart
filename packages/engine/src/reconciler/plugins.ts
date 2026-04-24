@@ -38,11 +38,13 @@ import type { Terminal } from "../terminal/index"
 // ── Types ──
 
 /** A renderable component factory */
+/** @public */
 export type SlotComponent = () => JSX.Element
 
 /** Plugin API exposed to plugins during setup.
  *  Base API includes slots + terminal. Apps extend with custom context
  *  (theme, app state, etc.) by passing a richer object to setup(). */
+/** @public */
 export type TgePluginApi<Context = {}> = {
   /** Register/unregister components in named slots */
   slots: SlotRegistry
@@ -52,6 +54,7 @@ export type TgePluginApi<Context = {}> = {
 
 /** Plugin interface.
  *  @template Context — extra context the host app provides (theme, api, etc.) */
+/** @public */
 export type TgePlugin<Context = {}> = {
   /** Plugin name (for debugging) */
   name: string
@@ -61,6 +64,7 @@ export type TgePlugin<Context = {}> = {
 
 // ── Slot Registry ──
 
+/** @public */
 export type SlotRegistry = {
   /** Register a component in a named slot. Returns an unregister function. */
   register: (slotName: string, component: SlotComponent) => () => void
@@ -75,6 +79,7 @@ export type SlotRegistry = {
 }
 
 /** Create a new slot registry. */
+/** @public */
 export function createSlotRegistry(): SlotRegistry {
   const slots = new Map<string, SlotComponent[]>()
   const [version, setVersion] = createSignal(0)
@@ -118,12 +123,7 @@ export function createSlotRegistry(): SlotRegistry {
   }
 }
 
-/**
- * Create a Slot component for a named slot.
- *
- * Returns a SolidJS component that renders all components
- * registered for that slot name.
- */
+/** @public */
 export function createSlot(
   slotName: string,
   registry: SlotRegistry,

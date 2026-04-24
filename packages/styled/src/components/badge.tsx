@@ -10,8 +10,10 @@
 import { radius, space, font, weight } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
-type BadgeVariant = "default" | "secondary" | "outline" | "destructive"
+/** @public */
+export type BadgeVariant = "default" | "secondary" | "outline" | "destructive"
 
+/** @public */
 export interface BadgeProps {
   variant?: BadgeVariant
   children?: any
@@ -53,6 +55,7 @@ const variantGetters: Record<BadgeVariant, VariantColors> = {
   },
 }
 
+/** @public */
 export function Badge(props: BadgeProps) {
   const v = props.variant ?? "default"
   const vg = variantGetters[v]

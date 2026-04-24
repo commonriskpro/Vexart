@@ -27,9 +27,18 @@
 import { createSignal } from "solid-js"
 import type { NodeHandle } from "../reconciler/handle"
 import type { TGENode } from "../ffi/node"
+import { buildNativeFrameExecutionStats, formatNativeFrameReasonFlags, type NativeFrameExecutionStats, type NativeFrameStrategy } from "../ffi/native-frame-orchestrator"
+import { getNativePresentationFallbackReason, isNativePresentationEnabled } from "../ffi/native-presentation-flags"
+import { formatNativeStats, type NativePresentationStats } from "../ffi/native-presentation-stats"
+import { getNativeSceneGraphFallbackReason, isNativeSceneGraphEnabled } from "../ffi/native-scene-graph-flags"
+import { getNativeEventDispatchFallbackReason, isNativeEventDispatchEnabled } from "../ffi/native-event-dispatch-flags"
+import { getNativeSceneLayoutFallbackReason, isNativeSceneLayoutEnabled } from "../ffi/native-scene-layout-flags"
+import { getNativeRenderGraphFallbackReason, isNativeRenderGraphEnabled } from "../ffi/native-render-graph-flags"
+import { isNativeLayerRegistryEnabled, nativeLayerRegistryFallbackReason } from "../ffi/native-layer-registry-flags"
 
 // ── Debug state ──
 
+/** @public */
 export type DebugStats = {
   /** Whether debug overlay is visible */
   enabled: boolean
@@ -75,6 +84,22 @@ export type DebugStats = {
   interactionType: string | null
   /** Monotonic sequence of the last interaction that reached presentation */
   presentedInteractionSeq: number
+  /** Whether native presentation is active for this frame */
+  nativePresentationActive: boolean
+  /** Whether the retained runtime is in default or fallback mode */
+  retainedMode: "default" | "fallback"
+  /** Aggregate reason when the retained runtime fell back */
+  retainedFallbackReason: string | null
+  /** Fallback reason if native presentation was disabled */
+  nativePresentationFallbackReason: string | null
+  /** Last native presentation stats (if available) */
+  nativeStats: NativePresentationStats | null
+  /** Native frame planner reason flags for the chosen strategy, if available */
+  nativeFrameReasonFlags: number | null
+  /** Structured native frame execution stats for debug/inspection */
+  nativeFrameStats: NativeFrameExecutionStats | null
+  /** FFI call count recorded for the latest frame */
+  ffiCallCount: number
 }
 
 const [debugEnabled, setDebugEnabled] = createSignal(false)
@@ -99,22 +124,33 @@ const [estimatedFinalBytes, setEstimatedFinalBytes] = createSignal(0)
 const [interactionLatencyMs, setInteractionLatencyMs] = createSignal(0)
 const [interactionType, setInteractionType] = createSignal<string | null>(null)
 const [presentedInteractionSeq, setPresentedInteractionSeq] = createSignal(0)
+const [nativePresentationActive, setNativePresentationActive] = createSignal(false)
+const [retainedMode, setRetainedMode] = createSignal<"default" | "fallback">("fallback")
+const [retainedFallbackReason, setRetainedFallbackReason] = createSignal<string | null>(null)
+const [nativePresentationFallbackReason, setNativePresentationFallbackReason] = createSignal<string | null>(null)
+const [nativeStats, setNativeStats] = createSignal<NativePresentationStats | null>(null)
+const [nativeFrameReasonFlags, setNativeFrameReasonFlags] = createSignal<number | null>(null)
+const [nativeFrameStats, setNativeFrameStats] = createSignal<NativeFrameExecutionStats | null>(null)
+const [ffiCallCount, setFfiCallCount] = createSignal(0)
 
 // FPS tracking
 let frameTimestamps: number[] = []
 let lastFrameStart = 0
 
 /** Toggle debug overlay on/off. */
+/** @public */
 export function toggleDebug() {
   setDebugEnabled((v) => !v)
 }
 
 /** Set debug overlay state explicitly. */
+/** @public */
 export function setDebug(enabled: boolean) {
   setDebugEnabled(enabled)
 }
 
 /** Check if debug is enabled (reactive). */
+/** @public */
 export function isDebugEnabled(): boolean {
   return debugEnabled()
 }
@@ -123,6 +159,7 @@ export function isDebugEnabled(): boolean {
  * Call at the START of each frame to track timing.
  * Returns a finish callback to call at the END of the frame.
  */
+/** @public */
 export function debugFrameStart(): () => void {
   if (!debugEnabled()) return () => {}
 
@@ -141,6 +178,7 @@ export function debugFrameStart(): () => void {
 }
 
 /** Update debug stats from the render loop. */
+/** @public */
 export function debugUpdateStats(stats: {
   layerCount: number
   moveOnlyCount?: number
@@ -152,6 +190,11 @@ export function debugUpdateStats(stats: {
   commandCount: number
   rendererStrategy?: string | null
   rendererOutput?: string | null
+  dirtyPixelArea?: number
+  totalPixelArea?: number
+  overlapPixelArea?: number
+  overlapRatio?: number
+  fullRepaint?: boolean
   resourceBytes?: number
   gpuResourceBytes?: number
   resourceEntries?: number
@@ -161,8 +204,13 @@ export function debugUpdateStats(stats: {
   interactionLatencyMs?: number
   interactionType?: string | null
   presentedInteractionSeq?: number
+  nativeStats?: NativePresentationStats | null
+  nativeFrameReasonFlags?: number | null
+  ffiCallCount?: number
+  ffiCallsBySymbol?: Record<string, number>
 }) {
   if (!debugEnabled()) return
+  const retained = getRetainedModeSnapshot()
   setLayerCount(stats.layerCount)
   setMoveOnlyCount(stats.moveOnlyCount ?? 0)
   setMoveFallbackCount(stats.moveFallbackCount ?? 0)
@@ -182,9 +230,56 @@ export function debugUpdateStats(stats: {
   setInteractionLatencyMs(stats.interactionLatencyMs ?? 0)
   setInteractionType(stats.interactionType ?? null)
   setPresentedInteractionSeq(stats.presentedInteractionSeq ?? 0)
+  // Native presentation stats (Phase 2b)
+  const isNative = stats.rendererOutput === "native-presented"
+  setNativePresentationActive(isNative)
+  setRetainedMode(retained.mode)
+  setRetainedFallbackReason(retained.reason)
+  setNativePresentationFallbackReason(getNativePresentationFallbackReason())
+  setNativeStats(stats.nativeStats ?? null)
+  const nextReasonFlags = stats.nativeFrameReasonFlags ?? null
+  setNativeFrameReasonFlags(nextReasonFlags)
+  setFfiCallCount(stats.ffiCallCount ?? 0)
+  setNativeFrameStats(buildNativeFrameExecutionStats({
+    strategy: (stats.rendererStrategy as NativeFrameStrategy | null) ?? null,
+    reasonFlags: nextReasonFlags,
+    dirtyLayerCount: stats.dirtyBeforeCount,
+    dirtyPixelArea: stats.dirtyPixelArea ?? 0,
+    totalPixelArea: stats.totalPixelArea ?? 0,
+    overlapPixelArea: stats.overlapPixelArea ?? 0,
+    overlapRatio: stats.overlapRatio ?? 0,
+    fullRepaint: stats.fullRepaint ?? false,
+    transmissionMode: (stats.transmissionMode as "direct" | "file" | "shm" | null) ?? null,
+    estimatedLayeredBytes: stats.estimatedLayeredBytes ?? 0,
+    estimatedFinalBytes: stats.estimatedFinalBytes ?? 0,
+    repaintedCount: stats.repaintedCount,
+    stableReuseCount: stats.stableReuseCount ?? 0,
+    moveOnlyCount: stats.moveOnlyCount ?? 0,
+    moveFallbackCount: stats.moveFallbackCount ?? 0,
+    resourceBytes: stats.resourceBytes ?? 0,
+    gpuResourceBytes: stats.gpuResourceBytes ?? 0,
+    resourceEntries: stats.resourceEntries ?? 0,
+    rendererOutput: stats.rendererOutput ?? null,
+    nativePresentationStats: stats.nativeStats ?? null,
+    ffiCallCount: stats.ffiCallCount ?? 0,
+    ffiCallsBySymbol: stats.ffiCallsBySymbol ?? {},
+  }))
+}
+
+export function debugRecordFfiCounts(count: number, callsBySymbol: Record<string, number>) {
+  if (!debugEnabled()) return
+  setFfiCallCount(count)
+  const current = nativeFrameStats()
+  if (!current) return
+  setNativeFrameStats({
+    ...current,
+    ffiCallCount: count,
+    ffiCallsBySymbol: callsBySymbol,
+  })
 }
 
 /** Reactive debug stats — read in SolidJS components. */
+/** @public */
 export const debugState = {
   get enabled() { return debugEnabled() },
   get fps() { return fps() },
@@ -208,15 +303,45 @@ export const debugState = {
   get interactionLatencyMs() { return interactionLatencyMs() },
   get interactionType() { return interactionType() },
   get presentedInteractionSeq() { return presentedInteractionSeq() },
+  get nativePresentationActive() { return nativePresentationActive() },
+  get retainedMode() { return retainedMode() },
+  get retainedFallbackReason() { return retainedFallbackReason() },
+  get nativePresentationFallbackReason() { return nativePresentationFallbackReason() },
+  get nativeStats() { return nativeStats() },
+  get nativeFrameReasonFlags() { return nativeFrameReasonFlags() },
+  get nativeFrameStats() { return nativeFrameStats() },
+  get ffiCallCount() { return ffiCallCount() },
 }
 
 /**
  * Format debug stats as a single-line string.
  * Useful for rendering in a text overlay.
  */
+/** @public */
 export function debugStatsLine(): string {
   if (!debugEnabled()) return ""
-  return `${fps()} FPS | ${frameTimeMs()}ms | ${layerCount()} layers | move=${moveOnlyCount()}/${moveFallbackCount()}/${stableReuseCount()} | ${dirtyBeforeCount()} dirty before | ${repaintedCount()} repainted | ${nodeCount()} nodes | ${commandCount()} cmds | strategy=${rendererStrategy() ?? "none"} | output=${rendererOutput() ?? "none"} | tx=${transmissionMode() ?? "none"} | est=${estimatedLayeredBytes()}/${estimatedFinalBytes()}B | input=${interactionType() ?? "none"}@${interactionLatencyMs()}ms | res=${resourceEntries()}@${resourceBytes()}B gpu=${gpuResourceBytes()}B`
+  const native = nativePresentationActive() ? "on" : "off"
+  const fallback = nativePresentationFallbackReason() ? ` [${nativePresentationFallbackReason()}]` : ""
+  const retained = retainedMode()
+  const retainedFallback = retainedFallbackReason() ? ` [${retainedFallbackReason()}]` : ""
+  const nStatsStr = nativeStats() ? ` | ${formatNativeStats(nativeStats()!)}` : ""
+  const frameReason = nativeFrameReasonFlags()
+  const frameReasonStr = frameReason !== null && frameReason !== 0 ? ` reasons=${formatNativeFrameReasonFlags(frameReason)}` : ""
+  return `${fps()} FPS | ${frameTimeMs()}ms | ${layerCount()} layers | move=${moveOnlyCount()}/${moveFallbackCount()}/${stableReuseCount()} | ${dirtyBeforeCount()} dirty before | ${repaintedCount()} repainted | ${nodeCount()} nodes | ${commandCount()} cmds | ffi=${ffiCallCount()} | strategy=${rendererStrategy() ?? "none"}${frameReasonStr} | output=${rendererOutput() ?? "none"} | tx=${transmissionMode() ?? "none"} | est=${estimatedLayeredBytes()}/${estimatedFinalBytes()}B | input=${interactionType() ?? "none"}@${interactionLatencyMs()}ms | res=${resourceEntries()}@${resourceBytes()}B gpu=${gpuResourceBytes()}B | retained=${retained}${retainedFallback} | native=${native}${fallback}${nStatsStr}`
+}
+
+function getRetainedModeSnapshot(): { mode: "default" | "fallback"; reason: string | null } {
+  const disabled = [
+    ["scene", isNativeSceneGraphEnabled(), getNativeSceneGraphFallbackReason()],
+    ["events", isNativeEventDispatchEnabled(), getNativeEventDispatchFallbackReason()],
+    ["layout", isNativeSceneLayoutEnabled(), getNativeSceneLayoutFallbackReason()],
+    ["render", isNativeRenderGraphEnabled(), getNativeRenderGraphFallbackReason()],
+    ["presentation", isNativePresentationEnabled(), getNativePresentationFallbackReason()],
+    ["layers", isNativeLayerRegistryEnabled(), nativeLayerRegistryFallbackReason()],
+  ].flatMap(([name, enabled, reason]) => enabled ? [] : [`${name}: ${reason ?? "disabled"}`])
+
+  if (disabled.length === 0) return { mode: "default", reason: null }
+  return { mode: "fallback", reason: disabled.join("; ") }
 }
 
 function describeNode(node: TGENode, depth: number): string {
@@ -242,6 +367,7 @@ function describeNode(node: TGENode, depth: number): string {
   return lines.join("\n")
 }
 
+/** @public */
 export function debugDumpTree(target: NodeHandle | TGENode): string {
   const node = "_node" in target ? target._node : target
   return describeNode(node, 0)
@@ -255,6 +381,7 @@ export function debugDumpTree(target: NodeHandle | TGENode): string {
  * @param viewport   - Current viewport rect for AABB comparison
  * @returns Human-readable dump of all culled node subtree roots.
  */
+/** @public */
 export function debugDumpCulledNodes(
   root: TGENode,
   viewport: { width: number; height: number },

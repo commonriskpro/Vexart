@@ -30,6 +30,7 @@ import { unionRect } from "./damage"
 
 // ── Layer type ──
 
+/** @public */
 export type Layer = {
   /** Unique layer ID. Also used as Kitty image ID. */
   id: number
@@ -41,14 +42,6 @@ export type Layer = {
   /** Size in pixels. */
   width: number
   height: number
-  /** GPU-facing backing metadata for this layer. */
-  backing: {
-    kind: "gpu" | "raw"
-    imageId: number
-    targetKey: string
-    width: number
-    height: number
-  } | null
   /** Whether this layer needs repainting. */
   dirty: boolean
   /** Previous position/size — to detect if placement needs updating. */
@@ -63,19 +56,10 @@ export type Layer = {
 
 // ── Layer registry ──
 
-/** Image IDs 1-2 are reserved for double-buffering in the old single-image path. */
+/** Image IDs 1-2 are reserved for legacy single-image paths. */
 const BASE_IMAGE_ID = 10
 
-function backingForLayer(id: number, width: number, height: number) {
-  return {
-    kind: "gpu" as const,
-    imageId: BASE_IMAGE_ID + id,
-    targetKey: `layer:${id}`,
-    width,
-    height,
-  }
-}
-
+/** @public */
 export type LayerStore = {
   createLayer: (z: number) => Layer
   getLayer: (id: number) => Layer | undefined
@@ -95,6 +79,7 @@ export type LayerStore = {
   layerCount: () => number
 }
 
+/** @public */
 export function createLayerStore(): LayerStore {
   const layers = new Map<number, Layer>()
   let nextLayerId = 0
@@ -108,7 +93,6 @@ export function createLayerStore(): LayerStore {
       y: 0,
       width: 0,
       height: 0,
-      backing: null,
       dirty: true,
       prevX: -1,
       prevY: -1,
@@ -162,8 +146,6 @@ export function createLayerStore(): LayerStore {
     layer.y = y
     layer.width = w
     layer.height = h
-    layer.backing = backingForLayer(layer.id, w, h)
-
     if (resized) {
       layer.dirty = true
       layer.damageRect = nextRect
@@ -215,7 +197,7 @@ export function createLayerStore(): LayerStore {
     }
   }
 
-  const imageIdForLayer = (layer: Layer) => layer.backing?.imageId ?? BASE_IMAGE_ID + layer.id
+  const imageIdForLayer = (layer: Layer) => BASE_IMAGE_ID + layer.id
 
   const resetLayers = () => {
     layers.clear()
@@ -251,5 +233,3 @@ export function createLayerStore(): LayerStore {
     layerCount,
   }
 }
-
-

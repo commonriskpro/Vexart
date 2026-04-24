@@ -1,15 +1,17 @@
 /**
- * Separator — shadcn-compatible visual divider.
+ * Separator — styled visual divider.
  *
- * Orientation: horizontal (default), vertical
+ * @public
  */
 
 import { themeColors } from "../theme/theme"
 
+/** @public */
 export interface SeparatorProps {
   orientation?: "horizontal" | "vertical"
 }
 
+/** @public */
 export function Separator(props: SeparatorProps) {
   const vertical = props.orientation === "vertical"
 

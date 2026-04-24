@@ -28,6 +28,7 @@
  */
 
 /** A single extmark — a positioned decoration in a text buffer */
+/** @public */
 export type Extmark = {
   id: number
   /** Start character offset (inclusive) */
@@ -51,6 +52,7 @@ export type Extmark = {
 }
 
 /** Options for creating an extmark */
+/** @public */
 export type CreateExtmarkOptions = Omit<Extmark, "id">
 
 /**
@@ -59,6 +61,7 @@ export type CreateExtmarkOptions = Omit<Extmark, "id">
  * Thread-safe for single-threaded use (no locks needed).
  * Extmarks are stored in a flat array sorted by start position.
  */
+/** @public */
 export class ExtmarkManager {
   private extmarks: Extmark[] = []
   private types = new Map<string, number>()
@@ -148,11 +151,9 @@ export class ExtmarkManager {
   /**
    * Adjust extmark positions after a text edit.
    *
-   * Call this after inserting or deleting text to keep extmarks in sync.
-   *
-   * @param editStart — character offset where the edit starts
-   * @param oldEnd — character offset where the old text ended
-   * @param newEnd — character offset where the new text ends
+   * @param editStart - Character offset where the edit starts.
+   * @param oldEnd - Character offset where the old text ended.
+   * @param newEnd - Character offset where the new text ends.
    */
   adjustForEdit(editStart: number, oldEnd: number, newEnd: number): void {
     const delta = newEnd - oldEnd

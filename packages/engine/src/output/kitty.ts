@@ -19,12 +19,14 @@ import { type TransmissionMode, reportKittyTransportFailure, reportKittyTranspor
 import { prepareNativeKittyShm, releaseNativeKittyShm } from "./kitty-shm-native"
 import { openVexartLibrary } from "../ffi/vexart-bridge"
 
-type RawImageData = {
+/** @public */
+export type RawImageData = {
   data: Uint8Array
   width: number
   height: number
 }
 
+/** @public */
 export type KittyTransportStats = {
   transmitCalls: number
   patchCalls: number
@@ -63,6 +65,7 @@ function recordKittyStats(mode: TransmissionMode, kind: "transmit" | "patch", pa
   bucket.estimatedTtyBytes += estimatedTtyBytes
 }
 
+/** @public */
 export function resetKittyTransportStats() {
   kittyTransportStats.transmitCalls = 0
   kittyTransportStats.patchCalls = 0
@@ -76,6 +79,7 @@ export function resetKittyTransportStats() {
   }
 }
 
+/** @public */
 export function getKittyTransportStats(): KittyTransportStats {
   return {
     transmitCalls: kittyTransportStats.transmitCalls,
@@ -103,10 +107,12 @@ function probeDebug(message: string, extra?: unknown) {
 
 export type { TransmissionMode } from "./transport-manager"
 
-const COMPRESS_MODE = {
+/** @public */
+export const COMPRESS_MODE = {
   AUTO: "auto",
 } as const
 
+/** @public */
 export type CompressMode = boolean | (typeof COMPRESS_MODE)["AUTO"]
 
 /**
@@ -363,6 +369,7 @@ function transmitShm(
 
     const nameB64 = Buffer.from(name).toString("base64")
     let meta = `a=${action},f=${format},i=${id},s=${buf.width},v=${buf.height},t=s,q=2`
+    if (action === "T") meta += `,C=1`
     if (compress) meta += `,o=z`
     if (z !== undefined) meta += `,z=${z}`
     if (placementId !== undefined) meta += `,p=${placementId}`
@@ -403,6 +410,7 @@ function transmitFile(
     const payload = compress ? deflateSync(data) : data
     const filePayload = writePersistentFilePayload(payload)
     let meta = `a=${action},f=${format},i=${id},s=${buf.width},v=${buf.height},t=f,S=${filePayload.size},O=${filePayload.offset},q=2`
+    if (action === "T") meta += `,C=1`
     if (compress) meta += `,o=z`
     if (z !== undefined) meta += `,z=${z}`
     if (placementId !== undefined) meta += `,p=${placementId}`
@@ -435,6 +443,7 @@ function transmitDirect(
   if (chunks.length === 0) return
 
   let meta = `a=${action},f=${format},i=${id},s=${buf.width},v=${buf.height},q=2`
+  if (action === "T") meta += `,C=1`
   if (compress) meta += `,o=z`
   if (z !== undefined) meta += `,z=${z}`
   if (placementId !== undefined) meta += `,p=${placementId}`
@@ -525,6 +534,7 @@ export function transmit(
 }
 
 /** Transmit raw RGBA/RGB bytes without constructing a PixelBuffer wrapper upstream. */
+/** @public */
 export function transmitRaw(
   write: (data: string) => void,
   image: RawImageData,
@@ -601,6 +611,7 @@ export function transmitAt(
 }
 
 /** Transmit + place raw RGBA/RGB bytes without a PixelBuffer intermediary. */
+/** @public */
 export function transmitRawAt(
   write: (data: string) => void,
   image: RawImageData,
@@ -621,12 +632,15 @@ export function transmitRawAt(
  * Uses Kitty's animation frame protocol to update a sub-rectangle of an
  * existing image. The terminal composites the new data over the existing frame.
  *
- * @param regionData — raw RGBA pixel data for the dirty region only
- * @param rx, ry — offset within the image where the patch starts
- * @param rw, rh — dimensions of the patch region
+ * @param regionData - Raw RGBA pixel data for the dirty region only.
+ * @param rx - X offset within the image where the patch starts.
+ * @param ry - Y offset within the image where the patch starts.
+ * @param rw - Width of the patch region.
+ * @param rh - Height of the patch region.
  *
  * Experimental: requires the image to have been transmitted at least once.
  */
+/** @public */
 export function patchRegion(
   write: (data: string) => void,
   id: number,
@@ -722,6 +736,7 @@ export function clearAll(write: (data: string) => void) {
  * Creates a tiny 1x1 shm segment, sends a query action (a=q),
  * and checks if terminal responds with OK.
  */
+/** @public */
 export function probeShm(
   write: (data: string) => void,
   onData: (handler: (data: Buffer) => void) => void,
@@ -797,6 +812,7 @@ export function probeShm(
  * Writes a 1x1 pixel to a temp file, sends a query action (a=q),
  * and checks if terminal responds with OK.
  */
+/** @public */
 export function probeFile(
   write: (data: string) => void,
   onData: (handler: (data: Buffer) => void) => void,

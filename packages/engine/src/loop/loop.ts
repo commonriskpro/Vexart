@@ -15,10 +15,10 @@ import { type TGENode, createNode, parseSizing } from "../ffi/node"
 import { createVexartLayoutCtx } from "./layout-adapter"
 
 const layoutAdapter = createVexartLayoutCtx()
-import { markDirty as globalMarkDirty, isDirty as globalIsDirty, clearDirty as globalClearDirty, onGlobalDirty } from "../reconciler/dirty"
+import { markDirty as globalMarkDirty, isDirty as globalIsDirty, clearDirty as globalClearDirty, dirtyVersion as globalDirtyVersion, onGlobalDirty } from "../reconciler/dirty"
 import { hasActiveAnimations } from "./animation"
 import { appendFileSync } from "node:fs"
-import { debugFrameStart } from "./debug"
+import { debugFrameStart, debugRecordFfiCounts } from "./debug"
 import { type Layer, createLayerStore } from "../ffi/layers"
 import { type DamageRect } from "../ffi/damage"
 import { createGpuRendererBackend } from "../ffi/gpu-renderer-backend"
@@ -32,6 +32,20 @@ import {
 } from "./frame-scheduler"
 import { compositeFrame, type CompositeFrameState, type FrameProfile } from "./composite"
 import { createFrameScheduler } from "../scheduler/index"
+import {
+  disableNativeLayerRegistry,
+  enableNativeLayerRegistry,
+  nativeLayerRegistryForcedOffReason,
+  isNativeLayerRegistryForcedOff,
+} from "../ffi/native-layer-registry-flags"
+import { clearNativeLayerRegistryMirror } from "../ffi/native-layer-registry"
+import { disableNativeEventDispatch, enableNativeEventDispatch, isNativeEventDispatchEnabled } from "../ffi/native-event-dispatch-flags"
+import { disableNativeRenderGraph, enableNativeRenderGraph, isNativeRenderGraphEnabled } from "../ffi/native-render-graph-flags"
+import { disableNativeSceneLayout, enableNativeSceneLayout, isNativeSceneLayoutEnabled } from "../ffi/native-scene-layout-flags"
+import { destroyNativeScene, nativeSceneCreateNode, nativeSceneSetCellSize } from "../ffi/native-scene"
+import { disableNativeSceneGraph, enableNativeSceneGraph, isNativeSceneGraphEnabled } from "../ffi/native-scene-graph-flags"
+import { disableNativePresentation, enableNativePresentation, isNativePresentationEnabled, isNativePresentationForcedOff, nativePresentationForcedOffReason } from "../ffi/native-presentation-flags"
+import { getVexartFfiCallCount, getVexartFfiCallCountsBySymbol, resetVexartFfiCallCounts } from "../ffi/vexart-bridge"
 
 const LOG = "/tmp/tge-layers.log"
 const RENDER_DEBUG_LOG = "/tmp/tge-render-debug.log"
@@ -64,10 +78,12 @@ function hasPointerReactiveNodes(node: TGENode): boolean {
 
 // ── Module-level shared state ──
 const textMetaMap = new Map<string, TextMeta>()
-const renderGraphQueues = createRenderGraphQueues()
-const frameDirtyRects: DamageRect[] = []
-const activeSlotKeys = new Set<string>()
+  const renderGraphQueues = createRenderGraphQueues()
+  const frameDirtyRects: DamageRect[] = []
+  const pendingNodeDamageRects: Array<{ nodeId: number; rect: DamageRect }> = []
+  const activeSlotKeys = new Set<string>()
 
+/** @public */
 export type RenderLoopOptions = {
   experimental?: {
     frameBudgetMs?: number
@@ -75,9 +91,16 @@ export type RenderLoopOptions = {
     idleMaxFps?: number
     interactionMaxFps?: number
     forceLayerRepaint?: boolean
+    nativePresentation?: boolean
+    nativeLayerRegistry?: boolean
+    nativeSceneGraph?: boolean
+    nativeEventDispatch?: boolean
+    nativeSceneLayout?: boolean
+    nativeRenderGraph?: boolean
   }
 }
 
+/** @public */
 export type RenderLoop = {
   root: TGENode
   start: () => void
@@ -100,6 +123,7 @@ export type RenderLoop = {
   destroy: () => void
 }
 
+/** @public */
 export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): RenderLoop {
   // Use the global dirty tracker shared with reconciler + mount.
   // The reconciler calls markDirty() on every DOM change; mount calls it on input.
@@ -110,16 +134,72 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   const { createLayer, updateLayerGeometry, markLayerClean, imageIdForLayer, resetLayers, dirtyCount, layerCount, markLayerDamaged, getPreviousLayerRect, removeLayer } = layerStore
   const markAllDirty = layerStore.markAllDirty
 
-  // When any caller (reconciler, mount, focus system) marks dirty via the
-  // global tracker, also mark all GPU layers dirty so the paint phase
-  // doesn't reuse stale cached layers.
   const markDirty = globalMarkDirty
-  onGlobalDirty(() => markAllDirty())
   const expFrameBudgetMs = opts?.experimental?.frameBudgetMs ?? 0
 
   if (!term.caps.kittyGraphics) throw new Error("TGE GPU-only renderer requires a terminal with Kitty graphics support")
+  const nativePresentationRequested = opts?.experimental?.nativePresentation !== false
+  if (!nativePresentationRequested) {
+    disableNativePresentation("nativePresentation disabled by render loop option")
+  } else if (isNativePresentationForcedOff()) {
+    disableNativePresentation(nativePresentationForcedOffReason() ?? "native presentation forced off")
+  } else {
+    enableNativePresentation(`terminal probe selected ${term.caps.transmissionMode} transport`)
+  }
+
+  const nativeLayerRegistryRequested = opts?.experimental?.nativeLayerRegistry !== false
+  if (!nativeLayerRegistryRequested) {
+    disableNativeLayerRegistry("nativeLayerRegistry disabled by render loop option")
+  } else if (isNativeLayerRegistryForcedOff()) {
+    disableNativeLayerRegistry(nativeLayerRegistryForcedOffReason() ?? "nativeLayerRegistry forced off")
+  } else if (nativePresentationRequested) {
+    enableNativeLayerRegistry()
+  } else {
+    disableNativeLayerRegistry("nativeLayerRegistry requires native presentation")
+  }
+
+  const retainedDefaultRequested = isNativePresentationEnabled()
+  const nativeSceneGraphRequested = opts?.experimental?.nativeSceneGraph ?? retainedDefaultRequested
+  if (!nativeSceneGraphRequested) {
+    const reason = opts?.experimental?.nativeSceneGraph === false
+      ? "nativeSceneGraph disabled by render loop option"
+        : "nativeSceneGraph default requires native presentation"
+    disableNativeSceneGraph(reason)
+  }
+  else enableNativeSceneGraph()
+
+  const nativeEventDispatchRequested = opts?.experimental?.nativeEventDispatch ?? retainedDefaultRequested
+  if (!nativeEventDispatchRequested) {
+    const reason = opts?.experimental?.nativeEventDispatch === false
+      ? "nativeEventDispatch disabled by render loop option"
+        : "nativeEventDispatch default requires native presentation"
+    disableNativeEventDispatch(reason)
+  }
+  else enableNativeEventDispatch()
+
+  const nativeSceneLayoutRequested = opts?.experimental?.nativeSceneLayout ?? retainedDefaultRequested
+  if (!nativeSceneLayoutRequested) {
+    const reason = opts?.experimental?.nativeSceneLayout === false
+      ? "nativeSceneLayout disabled by render loop option"
+        : "nativeSceneLayout default requires native presentation"
+    disableNativeSceneLayout(reason)
+  }
+  else enableNativeSceneLayout()
+
+  const nativeRenderGraphRequested = opts?.experimental?.nativeRenderGraph ?? retainedDefaultRequested
+  if (!nativeRenderGraphRequested) {
+    const reason = opts?.experimental?.nativeRenderGraph === false
+      ? "nativeRenderGraph disabled by render loop option"
+        : "nativeRenderGraph default requires native presentation"
+    disableNativeRenderGraph(reason)
+  }
+  else enableNativeRenderGraph()
 
   const root = createNode("root")
+  if (isNativeSceneGraphEnabled()) {
+    root._nativeId = nativeSceneCreateNode("root")
+    nativeSceneSetCellSize(term.size.cellWidth || 8, term.size.cellHeight || 16)
+  }
   let viewportWidth = term.size.pixelWidth || term.size.cols * (term.size.cellWidth || 8)
   let viewportHeight = term.size.pixelHeight || term.size.rows * (term.size.cellHeight || 16)
   root.props = { width: viewportWidth, height: viewportHeight }
@@ -127,12 +207,17 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   root._heightSizing = parseSizing(viewportHeight)
   layoutAdapter.init(viewportWidth, viewportHeight)
 
-  const layerComposer = createGpuFrameComposer(createLayerComposer(term.write, term.rawWrite, term.caps.transmissionMode, "auto"))
+  const layerComposer = isNativePresentationEnabled()
+    ? null
+    : createGpuFrameComposer(createLayerComposer(term.write, term.rawWrite, term.caps.transmissionMode, "auto"))
   let timer: ReturnType<typeof setTimeout> | null = null
   const maxFps = opts?.experimental?.maxFps ?? 60
   const idleMaxFps = opts?.experimental?.idleMaxFps ?? Math.min(maxFps, 60)
   const interactionMaxFps = opts?.experimental?.interactionMaxFps ?? Math.min(maxFps, 60)
   const forceLayerRepaint = opts?.experimental?.forceLayerRepaint === true
+  const useNativePressDispatch = isNativeEventDispatchEnabled() && isNativeSceneGraphEnabled()
+  const useNativeSceneLayout = isNativeSceneLayoutEnabled() && isNativeSceneGraphEnabled()
+  const useNativeRenderGraph = isNativeRenderGraphEnabled() && isNativeSceneGraphEnabled()
   const idleFps = Math.max(1, Math.min(idleMaxFps, maxFps))
   const interactionFps = Math.max(1, Math.min(interactionMaxFps, maxFps))
   const idleInterval = Math.max(Math.round(1000 / idleFps), 8)
@@ -150,6 +235,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   let nextFrameDeadlineMs = 0
   let interactionBoostUntilMs = performance.now()
   let lastInteractionFrameAt = 0
+  let loopStarted = false
   let isRenderingFrame = false
   let pendingInteractionFrameKind: InteractionKind | null = null
 
@@ -235,6 +321,34 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     if (!isRenderingFrame) nudgeInteraction(kind)
   }
 
+  function wakeForDirty(kind: InteractionKind = "pointer") {
+    if (!loopStarted || isSuspended || !isDirty()) return
+    markInteractionActive(kind)
+    if (isRenderingFrame) {
+      pendingInteractionFrameKind = pendingInteractionFrameKind ?? kind
+      return
+    }
+    if (timer === null) {
+      scheduledDelayMs = 0
+      scheduledAtMs = performance.now()
+      nextFrameDeadlineMs = scheduledAtMs
+      timer = setTimeout(() => { if (isDirty()) frame(); scheduleNextFrame() }, 0)
+      return
+    }
+    nudgeInteraction(kind)
+  }
+
+  // When any caller (reconciler, mount, focus system) marks dirty via the
+  // global tracker, also mark all GPU layers dirty so the paint phase does
+  // not reuse stale cached layers, then wake the loop. This is essential for
+  // Solid updates caused by event handlers running during a frame: the state
+  // mutation may happen after the input nudge, so dirty itself must schedule
+  // the follow-up repaint.
+  onGlobalDirty(() => {
+    markAllDirty()
+    wakeForDirty("pointer")
+  })
+
   function feedScroll(dx: number, dy: number) {
     scroll.x += dx; scroll.y += dy
     markInteractionActive("scroll")
@@ -271,14 +385,17 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     rectNodes, textNodes, boxNodes, textMetas,
     textMetaMap, rectNodeById, nodePathById, nodeRefById,
     renderGraphQueues,
-    layerCache, activeSlotKeys, frameDirtyRects,
+    layerCache, activeSlotKeys, frameDirtyRects, pendingNodeDamageRects,
     getOrCreateLayer,
     getPreviousLayerRect, updateLayerGeometry, markLayerDamaged, markLayerClean, imageIdForLayer, removeLayer, layerCount,
-    markDirty, markAllDirty, clearDirty, dirtyCount,
+    markDirty, markAllDirty, clearDirty, dirtyVersion: globalDirtyVersion, dirtyCount,
     layerComposer,
     backendOverride: getActiveBackend(),
     useLayerCompositing: true,
     forceLayerRepaint,
+    useNativePressDispatch,
+    useNativeSceneLayout,
+    useNativeRenderGraph,
     expFrameBudgetMs,
     transmissionMode: term.caps.transmissionMode,
     debugCadence: DEBUG_CADENCE,
@@ -295,6 +412,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
   function frame() {
     if (isRenderingFrame) return
+    if (!isDirty() && !hasActiveAnimations() && !hasRecentInteraction() && pendingInteractionFrameKind === null) return
     isRenderingFrame = true
     const frameStartedAt = performance.now()
     if (hasRecentInteraction()) lastInteractionFrameAt = frameStartedAt
@@ -307,10 +425,12 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       cs.viewportWidth = viewportWidth
       cs.viewportHeight = viewportHeight
       cs.backendOverride = getActiveBackend()
+      resetVexartFfiCallCounts()
       const finishDebugFrame = debugFrameStart()
       compositeFrame(cs, profile)
       // Drain scheduler lanes in priority order after the main frame
       scheduler.drainFrame(expFrameBudgetMs > 0 ? expFrameBudgetMs : 12, () => !hasRecentInteraction() && !isDirty())
+      debugRecordFfiCounts(getVexartFfiCallCount(), Object.fromEntries(getVexartFfiCallCountsBySymbol()))
       finishDebugFrame()
       if (profile) {
         profile.totalMs = performance.now() - frameStartedAt
@@ -333,10 +453,12 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     const newH = size.pixelHeight || size.rows * (size.cellHeight || 16)
     resizeDebug(`handler cols=${size.cols} rows=${size.rows} pw=${size.pixelWidth} ph=${size.pixelHeight} cw=${size.cellWidth} ch=${size.cellHeight} newW=${newW} newH=${newH} timer=${timer ? 1 : 0} suspended=${isSuspended ? 1 : 0}`)
     viewportWidth = newW; viewportHeight = newH
+    if (isNativeSceneGraphEnabled()) nativeSceneSetCellSize(size.cellWidth || 8, size.cellHeight || 16)
     layoutAdapter.setDimensions(newW, newH)
     root.props.width = newW; root.props.height = newH
     root._widthSizing = parseSizing(newW); root._heightSizing = parseSizing(newH)
-    layerComposer.clear(); resetLayers(); layerCache.clear()
+    clearNativeLayerRegistryMirror()
+    layerComposer?.clear(); resetLayers(); layerCache.clear()
     markDirty(); markAllDirty(); markInteractionActive()
     resizeDebug(`dirty marked newW=${newW} newH=${newH}`)
     if (isSuspended || timer === null) { resizeDebug(`skip immediate frame suspended=${isSuspended ? 1 : 0} timer=${timer ? 1 : 0}`); return }
@@ -362,8 +484,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       postScrollCallbacks.push(cb)
       return () => { const idx = postScrollCallbacks.indexOf(cb); if (idx >= 0) postScrollCallbacks.splice(idx, 1) }
     },
-    start() { frame(); nextFrameDeadlineMs = 0; scheduleNextFrame() },
-    stop() { if (timer) { clearTimeout(timer); timer = null }; scheduledDelayMs = 0; nextFrameDeadlineMs = 0 },
+    start() { loopStarted = true; frame(); nextFrameDeadlineMs = 0; scheduleNextFrame() },
+    stop() { loopStarted = false; if (timer) { clearTimeout(timer); timer = null }; scheduledDelayMs = 0; nextFrameDeadlineMs = 0 },
     frame,
     markNodeLayerDamaged(nodeId: number, rect?: DamageRect) {
       const node = nodeRefById.get(nodeId)
@@ -386,7 +508,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       if (!isSuspended) return
       isSuspended = false
       term.resume()
+      clearNativeLayerRegistryMirror()
       markDirty(); markAllDirty()
+      loopStarted = true
       frame(); nextFrameDeadlineMs = 0; scheduleNextFrame()
     },
     suspended() { return isSuspended },
@@ -395,7 +519,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       if (timer) clearTimeout(timer)
       scheduledDelayMs = 0; nextFrameDeadlineMs = 0
       unsubResize()
-      layerComposer.destroy()
+      clearNativeLayerRegistryMirror()
+      destroyNativeScene()
+      layerComposer?.destroy()
       resetLayers(); layerCache.clear()
       layoutAdapter.destroy()
     },

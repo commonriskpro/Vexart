@@ -1,13 +1,7 @@
 /**
  * Slider — styled numeric range input using Void design tokens.
  *
- * Built on top of the headless @tge/components Slider.
- * Provides track, fill, thumb, and focus ring visuals.
- *
- * The thumb is rendered as a small circle at the end of the fill bar.
- *
- * Usage:
- *   <VoidSlider value={volume()} onChange={setVolume} min={0} max={100} />
+ * @public
  */
 
 import { Slider } from "@vexart/headless"
@@ -15,6 +9,7 @@ import type { SliderRenderContext } from "@vexart/headless"
 import { radius, space, font, shadows, glows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
+/** @public */
 export type VoidSliderProps = {
   value: number
   onChange: (value: number) => void
@@ -31,6 +26,7 @@ export type VoidSliderProps = {
 const THUMB_SIZE = 16
 const TRACK_H = 6
 
+/** @public */
 export function VoidSlider(props: VoidSliderProps) {
   return (
     <Slider

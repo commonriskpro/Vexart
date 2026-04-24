@@ -16,11 +16,24 @@ export type {
   RendererBackendFramePlan,
   RendererBackendFrameResult,
   RendererBackendLayerBacking,
+  RendererBackendRetainedLayer,
 } from "./ffi/renderer-backend"
 
 export { createGpuRendererBackend, getGpuRendererBackendCacheStats } from "./ffi/gpu-renderer-backend"
 export { createGpuFrameComposer } from "./output/gpu-frame-composer"
 export { chooseGpuLayerStrategy } from "./ffi/gpu-layer-strategy"
+export type { GpuFrameComposer } from "./output/gpu-frame-composer"
+export type { GpuLayerStrategyInput, GpuLayerStrategyMode } from "./ffi/gpu-layer-strategy"
+export type { GpuRendererBackend, GpuRendererBackendCacheStats } from "./ffi/gpu-renderer-backend"
+export {
+  nativeChooseFrameStrategy,
+  buildNativeFrameExecutionStats,
+  formatNativeFrameReasonFlags,
+  NATIVE_FRAME_STRATEGY,
+  NATIVE_FRAME_TRANSPORT,
+  NATIVE_FRAME_REASON,
+} from "./ffi/native-frame-orchestrator"
+export type { NativeFramePlanInput, NativeFramePlan, NativeFrameStrategy, NativeFrameExecutionStats, NativeFrameExecutionStatsInput } from "./ffi/native-frame-orchestrator"
 
 export {
   BACKDROP_FILTER_KIND,
@@ -31,6 +44,17 @@ export {
   buildRenderGraphFrame,
 } from "./ffi/render-graph"
 export type {
+  RenderCommand,
+  ShadowDef,
+  EffectConfig,
+  ImagePaintConfig,
+  CanvasPaintConfig,
+  RenderGraphQueues,
+  TextMeta,
+  RenderGraphQueueState,
+  RectangleRenderInputs,
+  BorderRenderInputs,
+  TextRenderInputs,
   RenderBounds,
   BackdropFilterKind,
   BackdropFilterParams,
@@ -47,6 +71,7 @@ export type {
 } from "./ffi/render-graph"
 
 export { getRendererResourceStats } from "./ffi/resource-stats"
+export type { ResourceStats } from "./ffi/resource-stats"
 
 export {
   identity,
@@ -79,7 +104,26 @@ export {
 export type { DamageRect } from "./ffi/damage"
 
 export { CanvasContext } from "./ffi/canvas"
-export type { Viewport, StrokeStyle, FillStyle, ShapeStyle, CanvasDrawCommand } from "./ffi/canvas"
+export type {
+  Viewport,
+  StrokeStyle,
+  FillStyle,
+  ShapeStyle,
+  CanvasDrawCommand,
+  DrawCmd,
+  LineCmd,
+  BezierCmd,
+  CircleCmd,
+  RectCmd,
+  PolygonCmd,
+  TextCmd,
+  GlowCmd,
+  ImageCmd,
+  RadialGradientCmd,
+  LinearGradientCmd,
+  NebulaCmd,
+  StarfieldCmd,
+} from "./ffi/canvas"
 
 export {
   registerFont,
@@ -137,6 +181,7 @@ export type {
 
 export {
   EXPECTED_BRIDGE_VERSION,
+  VEXART_SYMBOLS,
   VexartNativeError,
   openVexartLibrary,
   closeVexartLibrary,
@@ -321,6 +366,7 @@ export {
 } from "./loop/input"
 export type {
   InteractionTrace,
+  InputSubscriber,
   KeyboardState,
   MouseState,
 } from "./loop/input"
@@ -340,6 +386,7 @@ export {
   getImageCacheStats,
 } from "./loop/image"
 export type { RawImage, ScaledImageCache } from "./loop/image"
+export type { DecodedImage } from "./loop/image"
 
 export {
   boostWindowFor,
@@ -358,6 +405,7 @@ export type {
   TransitionConfig,
   SpringConfig,
 } from "./loop/animation"
+export type { CompositorProperty } from "./animation/compositor-path"
 
 export {
   toggleDebug,
@@ -371,6 +419,7 @@ export {
   debugDumpCulledNodes,
 } from "./loop/debug"
 export type { DebugStats } from "./loop/debug"
+export type { NativePresentationStats } from "./ffi/native-presentation-stats"
 
 // ── Input ─────────────────────────────────────────────────────────────────────
 
@@ -403,6 +452,7 @@ export type { Terminal, TerminalOptions } from "./terminal/index"
 export type { TerminalKind } from "./terminal/detect"
 export type { Capabilities } from "./terminal/caps"
 export type { TerminalSize, ResizeHandler } from "./terminal/size"
+export type { LifecycleState } from "./terminal/lifecycle"
 export { detect } from "./terminal/detect"
 export { inferCaps, probeKittyGraphics, queryColors } from "./terminal/caps"
 export { getSize, queryPixelSize, onResize } from "./terminal/size"
@@ -423,7 +473,9 @@ export {
   getKittyTransportStats,
   resetKittyTransportStats,
 } from "./output/kitty"
-export type { TransmissionMode, CompressMode } from "./output/kitty"
+export { COMPRESS_MODE } from "./output/kitty"
+export type { KittyTransportStats, RawImageData, CompressMode } from "./output/kitty"
+export type { TransmissionMode } from "./output/transport-manager"
 
 export {
   configureKittyTransportManager,
@@ -436,8 +488,10 @@ export {
   TRANSPORT_HEALTH,
 } from "./output/transport-manager"
 export type {
+  ConfigureKittyTransportManagerOptions,
   KittyTransportFailureReason,
   KittyTransportHealth,
+  KittyTransportTelemetryBucket,
   KittyTransportManagerState,
 } from "./output/transport-manager"
 

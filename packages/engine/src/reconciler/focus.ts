@@ -2,9 +2,12 @@
 
 import { createSignal } from "solid-js"
 import { onInput } from "../loop/input"
-import type { KeyEvent } from "../input/types"
+import type { InputEvent, KeyEvent } from "../input/types"
 import type { TGENode, PressEvent } from "../ffi/node"
+import { isNativeEventDispatchEnabled } from "../ffi/native-event-dispatch-flags"
+import { nativeFocusNext, nativeFocusPrev } from "../ffi/native-scene-events"
 
+/** @public */
 export type FocusEntry = {
   id: string
   onKeyDown?: (event: KeyEvent) => void
@@ -22,7 +25,13 @@ const scopes: FocusScope[] = [{ entries: [], previousFocusId: null }]
 function activeScope(): FocusScope { return scopes[scopes.length - 1] }
 function activeRegistry(): FocusEntry[] { return activeScope().entries }
 
-export const [focusedId, setFocusedId] = createSignal<string | null>(null)
+const [focusedIdSignal, setFocusedIdSignal] = createSignal<string | null>(null)
+
+/** @public */
+export const focusedId = focusedIdSignal
+
+/** @public */
+export const setFocusedId = setFocusedIdSignal
 
 function registerFocusable(entry: FocusEntry): () => void {
   const scope = activeScope()
@@ -56,6 +65,25 @@ function focusPrev() {
   setFocusedId(reg[prev].id)
 }
 
+function setFocusByNativeNodeId(nodeId: bigint) {
+  if (!nodeId) return false
+  for (const scope of scopes) {
+    const entry = scope.entries.find((candidate) => candidate.node?._nativeId === nodeId)
+    if (!entry) continue
+    setFocusedId(entry.id)
+    return true
+  }
+  return false
+}
+
+function focusNative(direction: "next" | "prev") {
+  const current = getFocusedEntry()?.node?._nativeId
+  const next = direction === "next" ? nativeFocusNext(current) : nativeFocusPrev(current)
+  if (!next) return false
+  return setFocusByNativeNodeId(next)
+}
+
+/** @public */
 export function setFocus(id: string) {
   for (const scope of scopes) {
     if (scope.entries.some((e) => e.id === id)) {
@@ -65,6 +93,7 @@ export function setFocus(id: string) {
   }
 }
 
+/** @public */
 export function pushFocusScope(): () => void {
   const scope: FocusScope = { entries: [], previousFocusId: focusedId() }
   scopes.push(scope)
@@ -78,6 +107,7 @@ export function pushFocusScope(): () => void {
   }
 }
 
+/** @public */
 export function getFocusedEntry(): FocusEntry | undefined {
   const current = focusedId()
   if (!current) return undefined
@@ -95,25 +125,33 @@ let focusInputConnected = false
 function ensureFocusInput() {
   if (focusInputConnected) return
   focusInputConnected = true
-  onInput((event) => {
-    if (event.type !== "key") return
-    if (event.key === "tab") {
-      if (event.mods.shift) focusPrev()
-      else focusNext()
-      return
-    }
-    if (event.key === "enter" || event.key === " ") {
-      const entry = getFocusedEntry()
-      if (entry?.onPress) {
-        entry.onPress()
-        return
-      }
-    }
-    const entry = getFocusedEntry()
-    if (entry?.onKeyDown) entry.onKeyDown(event)
-  })
+  onInput(dispatchFocusInput)
 }
 
+export function dispatchFocusInput(event: InputEvent) {
+  if (event.type !== "key") return
+  if (event.key === "tab") {
+    const handledByNative = isNativeEventDispatchEnabled()
+      ? (event.mods.shift ? focusNative("prev") : focusNative("next"))
+      : false
+    if (!handledByNative) {
+      if (event.mods.shift) focusPrev()
+      else focusNext()
+    }
+    return
+  }
+  if (event.key === "enter" || event.key === " ") {
+    const entry = getFocusedEntry()
+    if (entry?.onPress) {
+      entry.onPress()
+      return
+    }
+  }
+  const entry = getFocusedEntry()
+  if (entry?.onKeyDown) entry.onKeyDown(event)
+}
+
+/** @public */
 export type FocusHandle = {
   focused: () => boolean
   focus: () => void
@@ -122,6 +160,7 @@ export type FocusHandle = {
 
 let nextId = 0
 
+/** @public */
 export function useFocus(opts: { id?: string; onKeyDown?: (event: KeyEvent) => void; onPress?: () => void } = {}): FocusHandle {
   ensureFocusInput()
   const id = opts.id ?? `focus-${nextId++}`
@@ -131,6 +170,7 @@ export function useFocus(opts: { id?: string; onKeyDown?: (event: KeyEvent) => v
 
 const nodeFocusMap = new Map<number, string>()
 
+/** @public */
 export function registerNodeFocusable(node: TGENode): () => void {
   ensureFocusInput()
   const id = `node-focus-${node.id}`
@@ -138,6 +178,7 @@ export function registerNodeFocusable(node: TGENode): () => void {
   return registerFocusable({ id, onKeyDown: node.props.onKeyDown, onPress: node.props.onPress, node })
 }
 
+/** @public */
 export function updateNodeFocusEntry(node: TGENode) {
   const focusId = nodeFocusMap.get(node.id)
   if (!focusId) return
@@ -151,6 +192,7 @@ export function updateNodeFocusEntry(node: TGENode) {
   }
 }
 
+/** @public */
 export function unregisterNodeFocusable(node: TGENode) {
   const focusId = nodeFocusMap.get(node.id)
   if (!focusId) return
@@ -168,10 +210,12 @@ export function unregisterNodeFocusable(node: TGENode) {
   }
 }
 
+/** @public */
 export function getNodeFocusId(node: TGENode): string | undefined {
   return nodeFocusMap.get(node.id)
 }
 
+/** @public */
 export function resetFocus() {
   scopes.length = 1
   scopes[0].entries.length = 0

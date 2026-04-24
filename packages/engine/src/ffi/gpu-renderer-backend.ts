@@ -2,6 +2,8 @@
 // All GPU target lifecycle, compositing, readback, and backdrop/mask operations
 // rewired to vexart_composite_* FFI (Phase 2b Slice 2). wgpu-canvas-bridge deleted.
 // Per design §11, §8.2 cmd_kind allocation. Shadow uses dedicated cmd_kind=20.
+// Phase 2b Native Presentation: final-frame and layer presentation can route
+// through native Rust Kitty output when nativePresentation flag is active.
 
 import { appendFileSync } from "node:fs"
 import { ptr } from "bun:ffi"
@@ -15,13 +17,30 @@ import type {
   RendererBackendFramePlan,
   RendererBackendFrameResult,
   RendererBackendPaintContext,
+  RendererBackendRetainedLayer,
 } from "./renderer-backend"
 import { chooseGpuLayerStrategy, type GpuLayerStrategyMode } from "./gpu-layer-strategy"
+import { nativeChooseFrameStrategy, NATIVE_FRAME_STRATEGY, NATIVE_FRAME_TRANSPORT, type NativeFramePlan } from "./native-frame-orchestrator"
 import { getFont, layoutText } from "./text-layout"
 import { openVexartLibrary } from "./vexart-bridge"
 import {
   GRAPH_MAGIC, GRAPH_VERSION,
 } from "./vexart-buffer"
+import {
+  allocNativeStatsBuf,
+  decodeNativePresentationStats,
+} from "./native-presentation-stats"
+import {
+  isNativePresentationCapable,
+  disableNativePresentation,
+  logNativePresentationFallback,
+} from "./native-presentation-flags"
+import {
+  nativeLayerPresentDirty,
+  nativeLayerReuse,
+  nativeLayerUpsert,
+} from "./native-layer-registry"
+import { ensureNativeKittyTransport, nativeEmitLayerTarget, nativeEmitRegionTarget } from "./native-presentation-ops"
 // Phase 2b: All paint + composite ops route through libvexart.
 // Paint primitives: vexart_paint_dispatch cmd_kinds 0-20.
 // Target lifecycle: vexart_composite_target_create/destroy/begin_layer/end_layer.
@@ -198,8 +217,6 @@ type WgpuCanvasGlyphInstance = {
 }
 
 // ── ShapeRect / ShapeRectCorners types (used by push arrays) ─────────────────
-type WgpuCanvasRectFill = { x: number; y: number; w: number; h: number; color: number }
-
 type WgpuCanvasShapeRect = {
   x: number; y: number; w: number; h: number
   boxW: number; boxH: number
@@ -316,17 +333,10 @@ function flushVexartBatchToTarget(ctx: bigint, target: bigint, cmdKind: number, 
   flushVexartBatch(ctx, cmdKind, instanceData, target)
 }
 
-/** Pack BridgeRectInstance (8 floats: x,y,w,h,r,g,b,a) for cmd_kind=0. */
-function packRectInstance(x: number, y: number, w: number, h: number, color: number): Uint8Array {
-  const r = ((color >>> 24) & 0xff) / 255
-  const g = ((color >>> 16) & 0xff) / 255
-  const b = ((color >>> 8) & 0xff) / 255
-  const a = (color & 0xff) / 255
-  const buf = new ArrayBuffer(32)
-  const v = new DataView(buf)
-  vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
-  vf32(v, 16, r); vf32(v, 20, g); vf32(v, 24, b); vf32(v, 28, a)
-  return new Uint8Array(buf)
+function compositeTargetUniformToTarget(ctx: bigint, target: bigint, sourceTarget: bigint, instanceData: Uint8Array): boolean {
+  const { symbols } = openVexartLibrary()
+  const rc = symbols.vexart_composite_update_uniform(ctx, target, sourceTarget, ptr(instanceData), 0) as number
+  return rc === 0
 }
 
 /**
@@ -472,10 +482,12 @@ function packImageTransformInstance(
   return new Uint8Array(buf)
 }
 
+/** @public */
 export type GpuRendererBackend = RendererBackend & {
   getLastStrategy: () => GpuLayerStrategyMode | null
 }
 
+/** @public */
 export type GpuRendererBackendCacheStats = {
   layerTargetCount: number
   layerTargetBytes: number
@@ -506,6 +518,7 @@ function touchMapEntry<K, V>(cache: Map<K, V>, key: K, value: V) {
   cache.set(key, value)
 }
 
+/** @public */
 export function getGpuRendererBackendCacheStats(): GpuRendererBackendCacheStats {
   return gpuRendererBackendStatsProvider?.() ?? {
     layerTargetCount: 0,
@@ -530,9 +543,14 @@ export function getGpuRendererBackendCacheStats(): GpuRendererBackendCacheStats 
 const GPU_RENDERER_DEBUG = process.env.TGE_DEBUG_GPU_RENDERER === "1"
 const GPU_RENDERER_DEBUG_LOG = "/tmp/tge-gpu-renderer.log"
 const RESIZE_DEBUG = process.env.TGE_DEBUG_RESIZE === "1"
-const FORCED_LAYER_STRATEGY = process.env.TGE_GPU_FORCE_LAYER_STRATEGY === "layered-raw" || process.env.TGE_GPU_FORCE_LAYER_STRATEGY === "final-frame-raw"
-  ? process.env.TGE_GPU_FORCE_LAYER_STRATEGY
-  : null
+function getForcedLayerStrategy(): GpuLayerStrategyMode | null {
+  const forcedStrategyValue = process.env.TGE_GPU_FORCE_LAYER_STRATEGY
+  if (forcedStrategyValue === "skip-present") return "skip-present"
+  if (forcedStrategyValue === "layered-dirty" || forcedStrategyValue === "layered-raw") return "layered-dirty"
+  if (forcedStrategyValue === "layered-region") return "layered-region"
+  if (forcedStrategyValue === "final-frame" || forcedStrategyValue === "final-frame-raw") return "final-frame"
+  return null
+}
 
 function logGpuRenderer(message: string) {
   if (!GPU_RENDERER_DEBUG) return
@@ -572,6 +590,7 @@ type RenderedLayerRecord = {
         p3: { x: number; y: number }
       }
     | null
+  opacity: number
 }
 
 type ImageRecord = {
@@ -811,6 +830,7 @@ function opBounds(op: RenderGraphOp, width: number, height: number) {
   return { left, top, right, bottom, width: right - left, height: bottom - top }
 }
 
+/** @public */
 export function createGpuRendererBackend(): GpuRendererBackend {
   // Phase 2b: GPU is always available via libvexart — no bridge probe needed.
   const gpuAvailable = true
@@ -837,6 +857,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     return _vexartCtx
   }
   let lastStrategy: GpuLayerStrategyMode | null = null
+  let lastNativeFramePlan: NativeFramePlan | null = null
   let standaloneTarget: TargetRecord | null = null
   let finalFrameTarget: TargetRecord | null = null
   const layerTargets = new Map<string, TargetRecord>()
@@ -868,7 +889,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   }
   type LinearGradientItem = { x: number; y: number; w: number; h: number; boxW: number; boxH: number; radius: number; from: number; to: number; dirX: number; dirY: number }
   type RadialGradientItem = { x: number; y: number; w: number; h: number; boxW: number; boxH: number; radius: number; from: number; to: number }
-  const rects: WgpuCanvasRectFill[] = []
   const shapeRects: WgpuCanvasShapeRect[] = []
   const shapeRectCorners: WgpuCanvasShapeRectCorners[] = []
   const linearGradients: LinearGradientItem[] = []
@@ -1402,7 +1422,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     readbackMode: "auto" | "none" = "auto",
   ): { ok: boolean; rawLayer: { data: Uint8Array; width: number; height: number } | null } => {
     let first = true
-    rects.length = 0
     shapeRects.length = 0
     shapeRectCorners.length = 0
     linearGradients.length = 0
@@ -1421,19 +1440,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     // a graph buffer per cmd_kind, then calls vexart_paint_dispatch once.
     const vctx = getVexartCtx()
 
-    const flushRects = () => {
-      if (rects.length === 0) return
-      // Dispatch via vexart_paint_dispatch (cmd_kind=0: BridgeRectInstance)
-      const instances = new Uint8Array(rects.length * 32)
-      for (let i = 0; i < rects.length; i++) {
-        const r = rects[i]
-        instances.set(packRectInstance(r.x, r.y, r.w, r.h, r.color), i * 32)
-      }
-      flushVexartBatch(vctx, 0, instances, targetHandle)
-      rects.length = 0
-      first = false
-      targetMutationVersion += 1
-    }
     const flushShapeRects = () => {
       if (shapeRects.length === 0) return
       // Dispatch via vexart_paint_dispatch (cmd_kind=1: BridgeShapeRectInstance)
@@ -1597,7 +1603,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       transformedImageGroups.clear()
     }
     const flushAll = () => {
-      flushRects()
       flushShapeRects()
       flushShapeRectCorners()
       flushLinearGradients()
@@ -1610,7 +1615,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     }
 
     let dirtyBounds: IntBounds | null = null
-    let layerOpen = true
+    let layerOpen = false
 
     frameGeneration += 1
     pruneBackdropCaches(frameGeneration)
@@ -1706,36 +1711,24 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       return record
     }
 
-    vexartCompositeTargetBeginLayer(vctx, targetHandle, 0, 0x00000000)
-
     try {
       for (const op of ctx.graph.ops) {
         const clip = clipRect(op.command, ctx)
         if (!clip) continue
         if (op.kind === "rectangle") {
-          if (op.inputs.radius > 0) {
-            const boxW = clip.right - clip.left
-            const boxH = clip.bottom - clip.top
-            shapeRects.push({
-              x: (clip.left / ctx.target.width) * 2 - 1,
-              y: 1 - (clip.top / ctx.target.height) * 2,
-              w: (boxW / ctx.target.width) * 2,
-              h: -((boxH / ctx.target.height) * 2),
-              boxW,
-              boxH,
-              radius: clampShapeRadius(op.inputs.radius, boxW, boxH),
-              strokeWidth: 0,
-              fill: op.inputs.color,
-            })
-          } else {
-            rects.push({
-              x: (clip.left / ctx.target.width) * 2 - 1,
-              y: 1 - (clip.top / ctx.target.height) * 2,
-              w: ((clip.right - clip.left) / ctx.target.width) * 2,
-              h: -(((clip.bottom - clip.top) / ctx.target.height) * 2),
-              color: op.inputs.color,
-            })
-          }
+          const boxW = clip.right - clip.left
+          const boxH = clip.bottom - clip.top
+          shapeRects.push({
+            x: (clip.left / ctx.target.width) * 2 - 1,
+            y: 1 - (clip.top / ctx.target.height) * 2,
+            w: (boxW / ctx.target.width) * 2,
+            h: -((boxH / ctx.target.height) * 2),
+            boxW,
+            boxH,
+            radius: clampShapeRadius(op.inputs.radius, boxW, boxH),
+            strokeWidth: 0,
+            fill: op.inputs.color,
+          })
           markDirty(clip.left, clip.top, clip.right, clip.bottom)
           continue
         }
@@ -2243,58 +2236,73 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     }
   }
 
-  const composeFinalFrame = (frame: RendererBackendFrameContext): RendererBackendFrameResult | null => {
-    if (currentFrameLayers.length === 0) {
+  const composeLayersToFrame = (frame: RendererBackendFrameContext, layers: RenderedLayerRecord[]): RendererBackendFrameResult | null => {
+    if (layers.length === 0) {
       pruneLayerTargets()
       return { output: "none", strategy: lastStrategy }
     }
     const vctx = getVexartCtx()
     const targetHandle = getFinalFrameTarget(frame.viewportWidth, frame.viewportHeight)
     if (!targetHandle) return null
-    const tempImages: VexartImageHandle[] = []
-    const orderedLayers = currentFrameLayers.slice().sort((a, b) => a.z - b.z)
+    const orderedLayers = layers.slice().sort((a, b) => a.z - b.z)
     vexartCompositeTargetBeginLayer(vctx, targetHandle, 0, 0x00000000)
     try {
-      let first = true
       for (const layer of orderedLayers) {
-        const copied = copyGpuTargetRegionToImage(vctx, layer.handle, {
-          x: 0,
-          y: 0,
-          width: layer.width,
-          height: layer.height,
-        })
-        tempImages.push(copied.handle)
-        if (layer.subtreeTransform) {
-          // Dispatch transformed image via vexart_paint_dispatch cmd_kind=10
-          const inst = packImageTransformInstance(
-            (layer.subtreeTransform.p0.x / frame.viewportWidth) * 2 - 1,
-            1 - (layer.subtreeTransform.p0.y / frame.viewportHeight) * 2,
-            (layer.subtreeTransform.p1.x / frame.viewportWidth) * 2 - 1,
-            1 - (layer.subtreeTransform.p1.y / frame.viewportHeight) * 2,
-            (layer.subtreeTransform.p2.x / frame.viewportWidth) * 2 - 1,
-            1 - (layer.subtreeTransform.p2.y / frame.viewportHeight) * 2,
-            (layer.subtreeTransform.p3.x / frame.viewportWidth) * 2 - 1,
-            1 - (layer.subtreeTransform.p3.y / frame.viewportHeight) * 2,
-            1,
-          )
-          flushVexartBatchToTarget(vctx, targetHandle, 10, inst)
-        } else {
-          vexartCompositeRenderImageLayer(
-            vctx, targetHandle, copied.handle,
-            layer.x,
-            layer.y,
-            layer.width,
-            layer.height,
-            first ? 0 : 1, 0x00000000,
-          )
+        const quad = layer.subtreeTransform ?? {
+          p0: { x: layer.x, y: layer.y },
+          p1: { x: layer.x + layer.width, y: layer.y },
+          p2: { x: layer.x, y: layer.y + layer.height },
+          p3: { x: layer.x + layer.width, y: layer.y + layer.height },
         }
-        first = false
+        const inst = packImageTransformInstance(
+          (quad.p0.x / frame.viewportWidth) * 2 - 1,
+          1 - (quad.p0.y / frame.viewportHeight) * 2,
+          (quad.p1.x / frame.viewportWidth) * 2 - 1,
+          1 - (quad.p1.y / frame.viewportHeight) * 2,
+          (quad.p2.x / frame.viewportWidth) * 2 - 1,
+          1 - (quad.p2.y / frame.viewportHeight) * 2,
+          (quad.p3.x / frame.viewportWidth) * 2 - 1,
+          1 - (quad.p3.y / frame.viewportHeight) * 2,
+          layer.opacity,
+        )
+        if (!compositeTargetUniformToTarget(vctx, targetHandle, layer.handle, inst)) {
+          return null
+        }
       }
     } finally {
       vexartCompositeTargetEndLayer(vctx, targetHandle)
-      for (const handle of tempImages) vexartRemoveImage(vctx, handle)
     }
     pruneLayerTargets()
+
+    // ── Native final-frame presentation path ──
+    // When native presentation is enabled, emit the frame directly from Rust
+    // using the active Kitty transport without returning RGBA to JS.
+    if (isNativePresentationCapable(frame.transmissionMode)) {
+      const statsBuf = allocNativeStatsBuf()
+      try {
+        const { symbols } = openVexartLibrary()
+        ensureNativeKittyTransport(frame.transmissionMode)
+        const rc = symbols.vexart_kitty_emit_frame_with_stats(
+          vctx,
+          targetHandle,
+          3, // FINAL_FRAME_IMAGE_ID — same as gpu-frame-composer
+          ptr(statsBuf),
+        ) as number
+        if (rc === 0) {
+          const stats = decodeNativePresentationStats(statsBuf)
+          return { output: "native-presented", strategy: lastStrategy, stats }
+        }
+        // Native emission failed — fall through to TS raw path.
+        disableNativePresentation("vexart_kitty_emit_frame_with_stats returned non-zero")
+        logNativePresentationFallback("final-frame native emit failed, reverting to explicit readback path")
+      } catch (e) {
+        disableNativePresentation(`vexart_kitty_emit_frame_with_stats threw: ${e}`)
+        logNativePresentationFallback("final-frame native emit threw, reverting to explicit readback path")
+      }
+    }
+
+    // ── TS fallback: readback RGBA and return raw payload ──
+    // Used when native presentation is disabled or unsupported.
     const readbackData = vexartCompositeReadbackRgba(vctx, targetHandle, frame.viewportWidth * frame.viewportHeight * 4)
     if (!readbackData) return null
     return {
@@ -2306,6 +2314,31 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         height: frame.viewportHeight,
       },
     }
+  }
+
+  const composeFinalFrame = (frame: RendererBackendFrameContext): RendererBackendFrameResult | null => {
+    return composeLayersToFrame(frame, currentFrameLayers)
+  }
+
+  const composeRetainedFrame = (frame: RendererBackendFrameContext, layers: RendererBackendRetainedLayer[]): RendererBackendFrameResult | null => {
+    const retainedLayers: RenderedLayerRecord[] = []
+    for (const layer of layers) {
+      const record = layerTargets.get(layer.key)
+      if (!record) continue
+      retainedLayers.push({
+        key: layer.key,
+        z: layer.z,
+        x: layer.bounds.x,
+        y: layer.bounds.y,
+        width: layer.bounds.width,
+        height: layer.bounds.height,
+        handle: record.handle,
+        isBackground: layer.isBackground,
+        subtreeTransform: layer.subtreeTransform,
+        opacity: layer.opacity,
+      })
+    }
+    return composeLayersToFrame(frame, retainedLayers)
   }
 
   renderOpToImage = (op, width, height, offsetX, offsetY) => {
@@ -2343,22 +2376,52 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       markCanvasSpritesUnusedForFrame()
       if (!gpuAvailable || !ctx.useLayerCompositing) {
         lastStrategy = null
+        lastNativeFramePlan = null
         framesSinceStrategyChange = 0
         lastStrategyTelemetry = { preferred: null, chosen: null, estimatedLayeredBytes: 0, estimatedFinalBytes: 0 }
         return { strategy: null }
       }
-      if (FORCED_LAYER_STRATEGY) {
-        framesSinceStrategyChange = lastStrategy === FORCED_LAYER_STRATEGY ? framesSinceStrategyChange + 1 : 0
-        lastStrategy = FORCED_LAYER_STRATEGY
+      const forcedStrategy = getForcedLayerStrategy()
+      if (forcedStrategy) {
+        framesSinceStrategyChange = lastStrategy === forcedStrategy ? framesSinceStrategyChange + 1 : 0
+        lastStrategy = forcedStrategy
+        lastNativeFramePlan = null
         lastStrategyTelemetry = {
-          preferred: FORCED_LAYER_STRATEGY,
-          chosen: FORCED_LAYER_STRATEGY,
+          preferred: forcedStrategy,
+          chosen: forcedStrategy,
           estimatedLayeredBytes: ctx.estimatedLayeredBytes,
           estimatedFinalBytes: ctx.estimatedFinalBytes,
         }
         return { strategy: lastStrategy }
       }
       const previousStrategy = lastStrategy
+      lastNativeFramePlan = nativeChooseFrameStrategy({
+        dirtyLayerCount: ctx.dirtyLayerCount,
+        dirtyPixelArea: ctx.dirtyPixelArea,
+        totalPixelArea: ctx.totalPixelArea,
+        overlapPixelArea: ctx.overlapPixelArea,
+        overlapRatio: ctx.overlapRatio,
+        fullRepaint: ctx.fullRepaint,
+        hasSubtreeTransforms: ctx.hasSubtreeTransforms,
+        hasActiveInteraction: ctx.hasActiveInteraction,
+        transmissionMode: ctx.transmissionMode === "shm"
+          ? NATIVE_FRAME_TRANSPORT.SHM
+          : ctx.transmissionMode === "file"
+            ? NATIVE_FRAME_TRANSPORT.FILE
+            : NATIVE_FRAME_TRANSPORT.DIRECT,
+        lastStrategy: previousStrategy === "skip-present"
+          ? NATIVE_FRAME_STRATEGY.SKIP_PRESENT
+          : previousStrategy === "layered-region"
+            ? NATIVE_FRAME_STRATEGY.LAYERED_REGION
+            : previousStrategy === "layered-dirty"
+              ? NATIVE_FRAME_STRATEGY.LAYERED_DIRTY
+              : previousStrategy === "final-frame"
+                ? NATIVE_FRAME_STRATEGY.FINAL_FRAME
+                : null,
+        framesSinceChange: framesSinceStrategyChange,
+        estimatedLayeredBytes: ctx.estimatedLayeredBytes,
+        estimatedFinalBytes: ctx.estimatedFinalBytes,
+      })
       const chosen = chooseGpuLayerStrategy({
         dirtyLayerCount: ctx.dirtyLayerCount,
         dirtyPixelArea: ctx.dirtyPixelArea,
@@ -2373,7 +2436,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         estimatedFinalBytes: ctx.estimatedFinalBytes,
         lastStrategy: previousStrategy,
         framesSinceChange: framesSinceStrategyChange,
-      })
+      }, lastNativeFramePlan)
       framesSinceStrategyChange = chosen === previousStrategy ? framesSinceStrategyChange + 1 : 0
       lastStrategy = chosen
       lastStrategyTelemetry = {
@@ -2382,7 +2445,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         estimatedLayeredBytes: ctx.estimatedLayeredBytes,
         estimatedFinalBytes: ctx.estimatedFinalBytes,
       }
-      return { strategy: lastStrategy }
+      return { strategy: lastStrategy, nativePlan: lastNativeFramePlan }
     },
     paint(ctx) {
       if (!gpuAvailable) {
@@ -2409,13 +2472,29 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           failGpuOnly(`could not allocate GPU layer target for ${layerCtx.key}`)
         }
         activeLayerKeys.add(layerCtx.key)
-        const readbackMode = lastStrategy === "final-frame-raw" ? "none" : "auto"
+        if (lastStrategy === "skip-present") {
+          return { output: "skip-present", strategy: lastStrategy }
+        }
+        const useNativeLayerPresentation = lastStrategy !== "final-frame"
+          && isNativePresentationCapable(frameCtx.transmissionMode)
+        const nativeLayer = useNativeLayerPresentation
+          ? nativeLayerUpsert(layerCtx.key, {
+              target: layerTarget,
+              x: layerCtx.bounds.x,
+              y: layerCtx.bounds.y,
+              width: layerCtx.bounds.width,
+              height: layerCtx.bounds.height,
+              z: layerCtx.z,
+            })
+          : null
+        const nativeImageId = nativeLayer?.imageId ?? 0
+        const readbackMode = lastStrategy === "final-frame" || useNativeLayerPresentation ? "none" : "auto"
         const result = renderFrame(ctx, layerTarget, readbackMode)
         if (!result.ok) {
           suppressFinalPresentation = true
           failGpuOnly(`GPU layer render failed for ${layerCtx.key}`)
         }
-        if (lastStrategy === "final-frame-raw") {
+        if (lastStrategy === "final-frame") {
           recordCurrentFrameLayer({
             key: layerCtx.key,
             z: layerCtx.z,
@@ -2426,9 +2505,47 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             handle: layerTarget,
             isBackground: layerCtx.isBackground,
             subtreeTransform: layerCtx.subtreeTransform,
+            opacity: 1,
           })
           return { output: "skip-present", strategy: lastStrategy }
         }
+        if (useNativeLayerPresentation && nativeImageId > 0) {
+          const repaint = layerCtx.repaintRect
+          const region = repaint
+            ? {
+                x: Math.max(0, Math.floor(repaint.x - layerCtx.bounds.x)),
+                y: Math.max(0, Math.floor(repaint.y - layerCtx.bounds.y)),
+                width: Math.min(ctx.target.width, Math.ceil(repaint.width)),
+                height: Math.min(ctx.target.height, Math.ceil(repaint.height)),
+              }
+            : null
+          const shouldPresentRegion = lastStrategy === "layered-region"
+            && !!region
+            && region.width > 0
+            && region.height > 0
+            && region.width * region.height < ctx.target.width * ctx.target.height
+          const regionStats = shouldPresentRegion
+            ? nativeEmitRegionTarget(layerTarget, nativeImageId, region.x, region.y, region.width, region.height, frameCtx.transmissionMode)
+            : null
+          if (regionStats !== null) {
+            nativeLayerPresentDirty(layerCtx.key)
+            return { output: "native-presented", strategy: lastStrategy, stats: regionStats }
+          }
+          const col = Math.floor(layerCtx.bounds.x / Math.max(1, ctx.cellWidth ?? 1))
+          const row = Math.floor(layerCtx.bounds.y / Math.max(1, ctx.cellHeight ?? 1))
+          const stats = nativeEmitLayerTarget(layerTarget, nativeImageId, col, row, layerCtx.z, frameCtx.transmissionMode)
+          if (stats !== null) {
+            nativeLayerPresentDirty(layerCtx.key)
+            return { output: "native-presented", strategy: lastStrategy, stats }
+          }
+          const rgba = vexartCompositeReadbackRgba(getVexartCtx(), layerTarget, ctx.target.width * ctx.target.height * 4)
+          return {
+            output: "kitty-payload",
+            strategy: lastStrategy,
+            kittyPayload: rgba ? { data: rgba, width: ctx.target.width, height: ctx.target.height } : undefined,
+          }
+        }
+        // Return kitty payload — paint.ts will route to native or TS path based on nativePresentation flag.
         return { output: "kitty-payload", strategy: lastStrategy, kittyPayload: result.rawLayer ?? undefined }
       }
 
@@ -2449,20 +2566,25 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       const record = layerTargets.get(ctx.layer.key)
       if (!record) return false
       activeLayerKeys.add(ctx.layer.key)
-      if (lastStrategy === "final-frame-raw") {
-        recordCurrentFrameLayer({
-          key: ctx.layer.key,
+      nativeLayerReuse(ctx.layer.key)
+        if (lastStrategy === "final-frame") {
+          recordCurrentFrameLayer({
+            key: ctx.layer.key,
           z: ctx.layer.z,
           x: ctx.layer.bounds.x,
           y: ctx.layer.bounds.y,
           width: ctx.layer.bounds.width,
           height: ctx.layer.bounds.height,
-          handle: record.handle,
-          isBackground: ctx.layer.isBackground,
-          subtreeTransform: ctx.layer.subtreeTransform,
-        })
+            handle: record.handle,
+            isBackground: ctx.layer.isBackground,
+            subtreeTransform: ctx.layer.subtreeTransform,
+            opacity: 1,
+          })
       }
       return true
+    },
+    compositeRetainedFrame(ctx) {
+      return composeRetainedFrame(ctx.frame, ctx.layers)
     },
     endFrame(ctx) {
       currentFrame = null
@@ -2472,7 +2594,11 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         pruneLayerTargets()
         return { output: "none", strategy: lastStrategy }
       }
-      if (lastStrategy !== "final-frame-raw") {
+      if (lastStrategy === "skip-present") {
+        pruneLayerTargets()
+        return { output: "none", strategy: lastStrategy }
+      }
+      if (lastStrategy !== "final-frame") {
         pruneLayerTargets()
         return { output: "none", strategy: lastStrategy }
       }

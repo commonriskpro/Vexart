@@ -1,28 +1,9 @@
 /**
  * Dialog — headless modal dialog primitive.
  *
- * Provides the structure and behavior without any styles:
- *   - Portal rendering (above all content)
- *   - Overlay backdrop (clickable to close)
- *   - Focus trap: Tab/Shift+Tab cycles only within the dialog
- *   - Escape key to close (via onClose callback)
- *   - Focus restore: when closed, focus returns to previously focused element
- *   - Composable parts: Dialog, Dialog.Overlay, Dialog.Content, Dialog.Close
+ * Provides focus scoping, overlay/content composition, and close behavior.
  *
- * For the styled version, use @tge/void Dialog which applies Void design tokens.
- *
- * Usage:
- *   import { Show } from "@vexart/engine"
- *   import { Dialog } from "@tge/components"
- *
- *   <Show when={isOpen()}>
- *     <Dialog onClose={() => setOpen(false)}>
- *       <Dialog.Overlay backgroundColor="#00000088" />
- *       <Dialog.Content>
- *         <text>Are you sure?</text>
- *       </Dialog.Content>
- *     </Dialog>
- *   </Show>
+ * @public
  */
 
 import { onCleanup } from "solid-js"
@@ -31,6 +12,7 @@ import { Portal } from "../containers/portal"
 
 // ── Types ──
 
+/** @public */
 export type DialogProps = {
   /** Dialog content. Should contain Dialog.Overlay and/or Dialog.Content. */
   children?: any
@@ -38,6 +20,7 @@ export type DialogProps = {
   onClose?: () => void
 }
 
+/** @public */
 export type DialogOverlayProps = {
   /** Background color of the overlay. Default: none (headless). */
   backgroundColor?: string | number
@@ -48,6 +31,7 @@ export type DialogOverlayProps = {
   children?: any
 }
 
+/** @public */
 export type DialogContentProps = {
   /** Content of the dialog panel. */
   children?: any
@@ -63,6 +47,7 @@ export type DialogContentProps = {
   backgroundColor?: string | number
 }
 
+/** @public */
 export type DialogCloseProps = {
   /** Element that closes the dialog when activated. */
   children?: any
@@ -70,13 +55,7 @@ export type DialogCloseProps = {
 
 // ── Dialog Root ──
 
-/**
- * Dialog root. Renders children inside a Portal (above all content).
- * Wrap with <Show when={open}> to control visibility.
- *
- * Automatically creates a focus scope (trap) and handles Escape to close.
- */
-export function Dialog(props: DialogProps) {
+function DialogRoot(props: DialogProps) {
   // Push a focus scope — Tab will only cycle within the dialog
   const popScope = pushFocusScope()
 
@@ -103,12 +82,8 @@ export function Dialog(props: DialogProps) {
 
 // ── Dialog Overlay ──
 
-/**
- * Semi-transparent backdrop behind the dialog content.
- * Headless = no default style. Pass backgroundColor/backdropBlur for visual effect.
- * Click on overlay fires onClick (or Dialog's onClose if not specified).
- */
-function DialogOverlay(props: DialogOverlayProps) {
+/** @public */
+export function DialogOverlay(props: DialogOverlayProps) {
   return (
     <box
       width="100%"
@@ -124,11 +99,8 @@ function DialogOverlay(props: DialogOverlayProps) {
 
 // ── Dialog Content ──
 
-/**
- * The dialog panel that contains the actual content.
- * Headless = minimal defaults. Styled version adds bg, border, padding, shadow.
- */
-function DialogContent(props: DialogContentProps) {
+/** @public The dialog panel that contains the content. */
+export function DialogContent(props: DialogContentProps) {
   return (
     <box
       width={props.width ?? "fit"}
@@ -144,16 +116,16 @@ function DialogContent(props: DialogContentProps) {
 
 // ── Dialog Close ──
 
-/**
- * Wraps a child element that should close the dialog when activated.
- * In headless mode, just renders children. Wire onPress at the consumer level.
- */
-function DialogClose(props: DialogCloseProps) {
+/** @public Wrapper for a child element that closes the dialog when activated. */
+export function DialogClose(props: DialogCloseProps) {
   return <>{props.children}</>
 }
 
 // ── Attach sub-components ──
 
-Dialog.Overlay = DialogOverlay
-Dialog.Content = DialogContent
-Dialog.Close = DialogClose
+/** @public */
+export const Dialog = Object.assign(DialogRoot, {
+  Overlay: DialogOverlay,
+  Content: DialogContent,
+  Close: DialogClose,
+})

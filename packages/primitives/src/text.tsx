@@ -14,6 +14,7 @@
 
 import type { JSX } from "solid-js"
 
+/** @public */
 export type TextProps = {
   // Visual
   color?: string | number
@@ -34,6 +35,7 @@ export type TextProps = {
   children?: JSX.Element
 }
 
+/** @public */
 export function Text(props: TextProps) {
   return (
     <text

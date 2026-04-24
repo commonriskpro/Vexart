@@ -1,26 +1,9 @@
 /**
  * Button — truly headless interactive button.
  *
- * Focus-aware component with Enter/Space and mouse click activation.
+ * Handles focus plus keyboard/mouse activation while leaving visuals to `renderButton`.
  *
- * This is a BEHAVIOR-ONLY component. It provides:
- *   - Focus management (useFocus)
- *   - Keyboard activation (Enter/Space)
- *   - Mouse click activation (via buttonProps spread)
- *   - Pressed state tracking (100ms visual feedback)
- *
- * ALL visual styling is the consumer's responsibility via renderButton.
- * Use @tge/void Button for a styled version.
- *
- * Usage:
- *   <Button
- *     onPress={() => save()}
- *     renderButton={(ctx) => (
- *       <box {...ctx.buttonProps} backgroundColor={ctx.pressed ? "#333" : "#222"} padding={8} cornerRadius={6}>
- *         <text color="#fff">Save</text>
- *       </box>
- *     )}
- *   />
+ * @public
  */
 
 import { createSignal } from "solid-js"
@@ -29,6 +12,7 @@ import { useFocus } from "@vexart/engine"
 
 // ── Types ──
 
+/** @public */
 export type ButtonRenderContext = {
   focused: boolean
   pressed: boolean
@@ -40,6 +24,7 @@ export type ButtonRenderContext = {
   }
 }
 
+/** @public */
 export type ButtonProps = {
   /** Press handler — fires on Enter or Space when focused. */
   onPress?: () => void
@@ -51,6 +36,7 @@ export type ButtonProps = {
   renderButton: (ctx: ButtonRenderContext) => JSX.Element
 }
 
+/** @public */
 export function Button(props: ButtonProps) {
   const [pressed, setPressed] = createSignal(false)
   const disabled = () => props.disabled ?? false

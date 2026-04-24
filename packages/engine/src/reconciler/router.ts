@@ -1,10 +1,14 @@
 import { createSignal, createContext, useContext } from "solid-js"
 import type { JSX } from "solid-js"
 
+/** @public */
 export type NavigationEntry = { path: string; params?: Record<string, any> }
+/** @public */
 export type RouteDefinition = { path: string; component: (props: RouteProps) => JSX.Element }
+/** @public */
 export type RouteProps = { params?: Record<string, any> }
 
+/** @public */
 export type RouterContextValue = {
   current: () => string
   navigate: (path: string, params?: Record<string, any>) => void
@@ -15,15 +19,19 @@ export type RouterContextValue = {
 
 const RouterContext = createContext<RouterContextValue>()
 
+/** @public */
 export function useRouter(): RouterContextValue {
   const ctx = useContext(RouterContext)
   if (!ctx) throw new Error("useRouter() must be used within a <Router>")
   return ctx
 }
 
+/** @public */
 export type RouterProps = { initial?: string; children?: JSX.Element }
+/** @public */
 export type FlatRouteProps = { path: string; component: (props: RouteProps) => JSX.Element }
 
+/** @public */
 export function createRouter(initialPath: string) {
   const [history, setHistory] = createSignal<NavigationEntry[]>([{ path: initialPath }])
   const current = () => history()[history().length - 1].path
@@ -38,8 +46,11 @@ export function createRouter(initialPath: string) {
   return { current, navigate, goBack, params, history }
 }
 
+/** @public */
 export type ScreenEntry = { key: string; component: (props: ScreenProps) => JSX.Element; params?: Record<string, any> }
+/** @public */
 export type ScreenProps = { params?: Record<string, any>; goBack: () => void }
+/** @public */
 export type NavigationStackHandle = {
   push: (component: (props: ScreenProps) => JSX.Element, params?: Record<string, any>) => void
   pop: () => boolean
@@ -53,6 +64,7 @@ export type NavigationStackHandle = {
 
 let stackKeyCounter = 0
 
+/** @public */
 export function createNavigationStack(initialComponent?: (props: ScreenProps) => JSX.Element): NavigationStackHandle {
   const [stack, setStack] = createSignal<ScreenEntry[]>(initialComponent ? [{ key: `screen-${stackKeyCounter++}`, component: initialComponent }] : [])
   function push(component: (props: ScreenProps) => JSX.Element, params?: Record<string, any>) {

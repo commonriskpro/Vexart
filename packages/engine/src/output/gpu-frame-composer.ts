@@ -2,6 +2,7 @@ import type { LayerComposer } from "../output/layer-composer"
 
 const FINAL_FRAME_IMAGE_ID = 3
 
+/** @public */
 export type GpuFrameComposer = {
   renderLayerRaw: (
     data: Uint8Array,
@@ -43,6 +44,7 @@ export type GpuFrameComposer = {
   destroy: () => void
 }
 
+/** @public */
 export function createGpuFrameComposer(layerComposer: LayerComposer): GpuFrameComposer {
   let mode: "layered-raw" | "final-frame-raw" | null = null
 

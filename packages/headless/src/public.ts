@@ -25,7 +25,7 @@ export type { InputRenderContext, InputProps } from "./inputs/input"
 export { RadioGroup } from "./inputs/radio-group"
 export type { RadioOption, RadioOptionContext, RadioGroupProps } from "./inputs/radio-group"
 
-export { Select } from "./inputs/select"
+export { Select, SelectTrigger, SelectContent, SelectItem } from "./inputs/select"
 export type {
   SelectOption,
   SelectTriggerContext,
@@ -89,7 +89,7 @@ export type { VirtualListItemContext, VirtualListProps } from "./collections/vir
 
 // ── Overlays ──────────────────────────────────────────────────────────────────
 
-export { Dialog } from "./overlays/dialog"
+export { Dialog, DialogOverlay, DialogContent, DialogClose } from "./overlays/dialog"
 export type {
   DialogProps,
   DialogOverlayProps,
@@ -122,6 +122,28 @@ export type { DiffTheme, DiffProps } from "./navigation/diff"
 export { Router, Route, useRouterContext, NavigationStack, useStack } from "./navigation/router"
 export type { RouterProps, RouteComponentProps, NavigationStackProps } from "./navigation/router"
 
+// ── Re-exported engine contracts referenced by headless public types ─────────
+
+export { ExtmarkManager } from "@vexart/engine"
+export type {
+  CreateExtmarkOptions,
+  Extmark,
+  NavigationStackHandle,
+  NavigationEntry,
+  NodeMouseEvent,
+  Modifiers,
+  RouteProps,
+  RouterContextValue,
+  ScreenEntry,
+  ScreenProps,
+  ScrollHandle,
+  SimpleThemeRules,
+  StyleDefinition,
+  SyntaxStyle,
+  ThemeTokenStyle,
+  KeyEvent,
+} from "@vexart/engine"
+
 // ── Forms ─────────────────────────────────────────────────────────────────────
 
 export { createForm } from "./forms/form"
@@ -132,3 +154,5 @@ export type {
   FieldState,
   FormHandle,
 } from "./forms/form"
+
+export type { KeyBindingAction } from "./inputs/textarea"

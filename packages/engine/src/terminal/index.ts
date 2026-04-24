@@ -33,6 +33,7 @@ function logTerminalResize(message: string) {
 
 // ── Types ──
 
+/** @public */
 export type Terminal = {
   /** Terminal emulator kind */
   kind: TerminalKind
@@ -72,6 +73,7 @@ export type Terminal = {
   destroy: () => void
 }
 
+/** @public */
 export type TerminalOptions = {
   /** stdin stream (default: process.stdin) */
   stdin?: NodeJS.ReadStream
@@ -88,18 +90,9 @@ export type TerminalOptions = {
 // ── Factory ──
 
 /**
- * Create and initialize a Terminal.
+ * Create and initialize a terminal handle.
  *
- * Performs:
- *   1. Detect terminal emulator
- *   2. Infer capabilities from env
- *   3. (optional) Probe for Kitty graphics support
- *   4. (optional) Query terminal colors
- *   5. Query pixel dimensions
- *   6. Enter TGE mode (raw, alt screen, mouse, etc.)
- *   7. Install exit handlers for cleanup
- *
- * Returns a Terminal object that the rest of TGE uses.
+ * @public
  */
 export async function createTerminal(opts: TerminalOptions = {}): Promise<Terminal> {
   const stdin = opts.stdin ?? process.stdin

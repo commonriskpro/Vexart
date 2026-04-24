@@ -1,30 +1,9 @@
 /**
  * Switch — truly headless toggle switch.
  *
- * CONTROLLED component — parent owns the checked state.
- * Focus-aware with Enter/Space toggle.
+ * Handles focus and toggling while leaving visuals to `renderSwitch`.
  *
- * This is a BEHAVIOR-ONLY component. It provides:
- *   - Focus management (useFocus)
- *   - Keyboard toggle (Enter/Space)
- *   - Checked state tracking
- *
- * ALL visual styling is the consumer's responsibility via renderSwitch.
- * Use @tge/void VoidSwitch for a styled version.
- *
- * Usage:
- *   <Switch
- *     checked={enabled()}
- *     onChange={setEnabled}
- *     renderSwitch={({ checked, focused, disabled }) => (
- *       <box direction="row" gap={8} alignY="center">
- *         <box width={36} height={20} backgroundColor={checked ? "#22c55e" : "#333"} cornerRadius={10}>
- *           <box width={14} height={14} backgroundColor="#fff" cornerRadius={7} />
- *         </box>
- *         <text>Dark mode</text>
- *       </box>
- *     )}
- *   />
+ * @public
  */
 
 import type { JSX } from "solid-js"
@@ -32,6 +11,7 @@ import { useFocus } from "@vexart/engine"
 
 // ── Types ──
 
+/** @public */
 export type SwitchRenderContext = {
   checked: boolean
   focused: boolean
@@ -43,6 +23,7 @@ export type SwitchRenderContext = {
   }
 }
 
+/** @public */
 export type SwitchProps = {
   /** Whether the switch is on. */
   checked: boolean
@@ -56,6 +37,7 @@ export type SwitchProps = {
   renderSwitch: (ctx: SwitchRenderContext) => JSX.Element
 }
 
+/** @public */
 export function Switch(props: SwitchProps) {
   const disabled = () => props.disabled ?? false
 

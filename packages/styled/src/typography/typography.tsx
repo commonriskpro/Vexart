@@ -7,11 +7,13 @@
 import { font, weight } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
+/** @public */
 export interface TypographyProps {
   children?: any
   color?: string | number
 }
 
+/** @public */
 export function H1(props: TypographyProps) {
   return (
     <text
@@ -24,6 +26,7 @@ export function H1(props: TypographyProps) {
   )
 }
 
+/** @public */
 export function H2(props: TypographyProps) {
   return (
     <text
@@ -36,6 +39,7 @@ export function H2(props: TypographyProps) {
   )
 }
 
+/** @public */
 export function H3(props: TypographyProps) {
   return (
     <text
@@ -48,6 +52,7 @@ export function H3(props: TypographyProps) {
   )
 }
 
+/** @public */
 export function H4(props: TypographyProps) {
   return (
     <text
@@ -60,6 +65,7 @@ export function H4(props: TypographyProps) {
   )
 }
 
+/** @public */
 export function P(props: TypographyProps) {
   return (
     <text
@@ -71,6 +77,7 @@ export function P(props: TypographyProps) {
   )
 }
 
+/** @public */
 export function Lead(props: TypographyProps) {
   return (
     <text
@@ -82,6 +89,7 @@ export function Lead(props: TypographyProps) {
   )
 }
 
+/** @public */
 export function Large(props: TypographyProps) {
   return (
     <text
@@ -94,6 +102,7 @@ export function Large(props: TypographyProps) {
   )
 }
 
+/** @public */
 export function Small(props: TypographyProps) {
   return (
     <text
@@ -106,6 +115,7 @@ export function Small(props: TypographyProps) {
   )
 }
 
+/** @public */
 export function Muted(props: TypographyProps) {
   return (
     <text

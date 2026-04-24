@@ -1,36 +1,9 @@
 /**
  * RadioGroup — truly headless radio button group.
  *
- * CONTROLLED component — parent owns the selected value.
- * Focus-aware with Up/Down arrow navigation and Enter/Space selection.
+ * Handles focus, keyboard navigation, and selection while visuals are supplied by `renderOption`.
  *
- * This is a BEHAVIOR-ONLY component. It provides:
- *   - Focus management (useFocus)
- *   - Keyboard navigation (Up/Down/Left/Right, skip disabled)
- *   - Selection tracking
- *
- * ALL visual styling is the consumer's responsibility via renderOption.
- * Use @tge/void VoidRadioGroup for a styled version.
- *
- * Usage:
- *   <RadioGroup
- *     value={size()}
- *     onChange={setSize}
- *     options={[
- *       { value: "small", label: "Small" },
- *       { value: "medium", label: "Medium" },
- *       { value: "large", label: "Large" },
- *     ]}
- *     renderOption={(opt, ctx) => (
- *       <box direction="row" gap={8} alignY="center">
- *         <box width={16} height={16} cornerRadius={8}
- *           borderColor={ctx.selected ? "#22c55e" : "#666"} borderWidth={1}>
- *           {ctx.selected ? <box width={8} height={8} cornerRadius={4} backgroundColor="#22c55e" /> : null}
- *         </box>
- *         <text>{opt.label}</text>
- *       </box>
- *     )}
- *   />
+ * @public
  */
 
 import type { JSX } from "solid-js"
@@ -38,12 +11,14 @@ import { useFocus } from "@vexart/engine"
 
 // ── Types ──
 
+/** @public */
 export type RadioOption = {
   value: string
   label: string
   disabled?: boolean
 }
 
+/** @public */
 export type RadioOptionContext = {
   /** Whether this option is currently selected. */
   selected: boolean
@@ -59,6 +34,7 @@ export type RadioOptionContext = {
   }
 }
 
+/** @public */
 export type RadioGroupProps = {
   /** Currently selected value. */
   value?: string
@@ -76,6 +52,7 @@ export type RadioGroupProps = {
   renderGroup?: (children: JSX.Element) => JSX.Element
 }
 
+/** @public */
 export function RadioGroup(props: RadioGroupProps) {
   const disabled = () => props.disabled ?? false
 

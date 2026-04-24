@@ -54,6 +54,7 @@ import type { KeyEvent } from "@vexart/engine"
 
 // ── Theme type ──
 
+/** @public */
 export type TextareaTheme = {
   /** Accent color (cursor, focused border). */
   accent: string | number
@@ -89,7 +90,7 @@ const LINE_HEIGHT = 17
 
 // ── KeyBinding system ──
 
-const KEY_BINDING_ACTION = {
+export const KEY_BINDING_ACTION = {
   CURSOR_LEFT: "cursor-left",
   CURSOR_RIGHT: "cursor-right",
   CURSOR_UP: "cursor-up",
@@ -107,8 +108,10 @@ const KEY_BINDING_ACTION = {
   SUBMIT: "submit",
 } as const
 
-type KeyBindingAction = (typeof KEY_BINDING_ACTION)[keyof typeof KEY_BINDING_ACTION]
+/** @public */
+export type KeyBindingAction = (typeof KEY_BINDING_ACTION)[keyof typeof KEY_BINDING_ACTION]
 
+/** @public */
 export type KeyBinding = {
   key: string
   ctrl?: boolean
@@ -167,6 +170,7 @@ function mergeKeyBindings(defaults: KeyBinding[], overrides: KeyBinding[]): KeyB
 
 // ── VisualCursor ──
 
+/** @public */
 export type VisualCursor = {
   /** Absolute offset from buffer start */
   readonly offset: number
@@ -178,6 +182,7 @@ export type VisualCursor = {
 
 // ── TextareaHandle — imperative ref API ──
 
+/** @public */
 export type TextareaHandle = {
   /** Full text content */
   readonly plainText: string
@@ -205,10 +210,9 @@ export type TextareaHandle = {
   focus: () => void
   /** Remove focus from the textarea */
   blur: () => void
-  /** Set cursor color at runtime */
-  set cursorColor(color: string | number)
-  /** Get cursor color */
+  /** Cursor color used to render the caret. */
   get cursorColor(): string | number
+  set cursorColor(color: string | number)
   /** Access the extmarks manager for this textarea */
   readonly extmarks: ExtmarkManager
 }
@@ -249,6 +253,7 @@ function rowColToOffset(lines: string[], row: number, col: number): number {
 
 // ── Props ──
 
+/** @public */
 export type TextareaProps = {
   /** Ref callback — receives a TextareaHandle for imperative control. */
   ref?: (handle: TextareaHandle) => void
@@ -308,6 +313,7 @@ export type TextareaProps = {
 
 // ── Component ──
 
+/** @public */
 export function Textarea(props: TextareaProps) {
   const [cursor, setCursor] = createSignal(props.value.length)
   const [selStart, setSelStart] = createSignal(-1)

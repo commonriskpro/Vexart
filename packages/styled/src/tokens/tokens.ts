@@ -29,6 +29,7 @@ function alphaHex(hex: string, a: number): string {
 // ── Semantic Color Tokens ──
 // All colors are hex strings — Decision 2: "Colors accept strings."
 
+/** @public */
 export const colors = {
   // App background + default text
   background:           "#0a0a0a",        // near-OLED black
@@ -81,6 +82,7 @@ export const colors = {
 
 const BASE_RADIUS = 10
 
+/** @public */
 export const radius = {
   sm:   Math.round(BASE_RADIUS * 0.6),  // 6
   md:   Math.round(BASE_RADIUS * 0.8),  // 8
@@ -92,6 +94,7 @@ export const radius = {
 
 // ── Spacing Scale ──
 
+/** @public */
 export const space = {
   px:  1,
   0.5: 2,
@@ -112,6 +115,7 @@ export const space = {
 
 // ── Font Scale ──
 
+/** @public */
 export const font = {
   xs:      10,
   sm:      12,
@@ -125,6 +129,7 @@ export const font = {
 
 // ── Font Weight ──
 
+/** @public */
 export const weight = {
   normal:   400,
   medium:   500,
@@ -135,8 +140,10 @@ export const weight = {
 // ── Shadow presets — more visible on dark backgrounds ──
 // Shadow colors remain u32 because the shadow prop expects packed RGBA numbers.
 
-type Shadow = { x: number; y: number; blur: number; color: number }
+/** @public */
+export type Shadow = { x: number; y: number; blur: number; color: number }
 
+/** @public */
 export const shadows: Record<"xs" | "sm" | "md" | "lg" | "xl", Shadow[]> = {
   xs:  [
     { x: 0, y: 1, blur: 2, color: hexToU32(alphaHex("#000000", 0.3)) },
@@ -162,8 +169,10 @@ export const shadows: Record<"xs" | "sm" | "md" | "lg" | "xl", Shadow[]> = {
 // ── Glow presets — for focus rings on interactive elements ──
 // Used as `glow` prop on focused boxes to simulate focus-visible:ring.
 
-type Glow = { radius: number; color: number; intensity?: number }
+/** @public */
+export type Glow = { radius: number; color: number; intensity?: number }
 
+/** @public */
 export const glows: Record<"ring" | "destructive" | "success", Glow> = {
   ring:        { radius: 6, color: hexToU32(alphaHex("#737373", 0.5)), intensity: 40 },
   destructive: { radius: 6, color: hexToU32(alphaHex("#dc2626", 0.5)), intensity: 40 },
@@ -172,6 +181,7 @@ export const glows: Record<"ring" | "destructive" | "success", Glow> = {
 
 // ── Composite theme export ──
 
+/** @public */
 export const theme = {
   colors,
   radius,
@@ -182,4 +192,5 @@ export const theme = {
   glows,
 } as const
 
+/** @public */
 export type VoidTheme = typeof theme

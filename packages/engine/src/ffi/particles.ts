@@ -1,28 +1,13 @@
 /**
- * Particle system for canvas-based effects.
- *
- * Designed for ambient backgrounds (stars, dust, fireflies, nebula particles).
- * NOT a physics engine — just simple position + velocity + lifetime with drift.
- *
- * Usage:
- *   const stars = createParticleSystem({ count: 200, ... })
- *
- *   <canvas onDraw={(ctx) => stars.draw(ctx)} />
- *
- *   // In a setInterval or animation loop:
- *   stars.tick(dt)
- *
- * Architecture:
- *   - Particles stored as flat typed arrays (SoA) for cache efficiency
- *   - tick() advances simulation: position += velocity, handles respawn
- *   - draw() emits circle/glow commands to CanvasContext (no allocations)
- *   - Respawn reuses dead particles in-place (no GC pressure)
+ * Particle system for canvas-based ambient effects.
+ * Uses flat typed arrays and in-place respawn to avoid per-frame allocations.
  */
 
 import type { CanvasContext } from "./canvas"
 
 // ── Configuration ──
 
+/** @public */
 export type ParticleConfig = {
   /** Number of particles. */
   count: number
@@ -48,12 +33,13 @@ export type ParticleConfig = {
   twinkle?: boolean
   /** Twinkle speed multiplier (default 1). */
   twinkleSpeed?: number
-  /** Drift direction bias { dx, dy } in pixels/sec. */
+  /** Drift direction bias in pixels per second. */
   drift?: { dx: number; dy: number }
 }
 
 // ── Particle System ──
 
+/** @public */
 export type ParticleSystem = {
   /** Advance simulation by dt seconds. */
   tick: (dt: number) => void
@@ -69,6 +55,7 @@ function rand(min: number, max: number): number {
   return min + Math.random() * (max - min)
 }
 
+/** @public */
 export function createParticleSystem(config: ParticleConfig): ParticleSystem {
   const n = config.count
   const bounds = config.bounds

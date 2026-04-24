@@ -1,7 +1,7 @@
 # Vexart — Architecture Reference
 
-**Version**: 0.1
-**Status**: Target architecture — describes the state of the codebase after Phase 5 of the v0.9 roadmap.
+**Version**: 0.2
+**Status**: Target architecture — describes the state of the codebase after the Rust-retained engine cutover in the v0.9 roadmap.
 **Owner**: Founder (solo developer)
 **Companion to**: [PRD](./PRD.md), [API-POLICY](./API-POLICY.md)
 
@@ -9,7 +9,7 @@
 
 ## ⚠️ How to read this document
 
-This document describes the **target architecture** — how Vexart is organized after all v0.9 phases complete. It is **not** a description of the current v0.1 codebase.
+This document describes the **target architecture** — how Vexart is organized after all v0.9 phases and the Rust-retained engine cutover complete. It is **not** a description of the current hybrid codebase.
 
 **When reading this as an AI agent**: treat this as the source of truth for code organization. Any file layout, module boundary, data-flow contract, or convention described here is the authoritative answer. If your task contradicts this document, the document wins — flag the contradiction and stop.
 
@@ -109,20 +109,19 @@ If a conflict emerges, the PRD wins at the policy layer; this document wins at t
 └──────────────────────┬─────────────────────────────┘
                        ▼
 ┌────────────────────────────────────────────────────┐
-│  @vexart/engine — SolidJS reconciler + loop        │
-│  1. Reconciler builds TGENode tree                 │
-│  2. Frame scheduler decides FPS + priority         │
-│  3. Loop orchestrates phases:                      │
-│     walk-tree → layout → assign-layers →           │
-│     paint → composite → output                     │
+│  @vexart/engine — SolidJS shell + FFI binding      │
+│  1. Reconciler sends node mutations to Rust        │
+│  2. JS stores callback registry + public handles   │
+│  3. JS forwards input and dispatches native events │
 └──────────────────────┬─────────────────────────────┘
                        │  FFI (packed ArrayBuffer, ≤8 params)
                        ▼
 ┌────────────────────────────────────────────────────┐
 │  libvexart.{dylib,so,dll} — Rust cdylib            │
-│  Modules: layout (Taffy) / paint (WGPU) /          │
-│  composite / resource / text (MSDF) / kitty        │
-│  (encoder) / ffi (buffer decoders)                 │
+│  Modules: scene / layout (Taffy) / damage /        │
+│  hit-test / layer registry / render graph /        │
+│  paint (WGPU) / composite / resource / text        │
+│  (MSDF) / kitty encoder / frame orchestrator       │
 └──────────────────────┬─────────────────────────────┘
                        │  bytes to stdout (Kitty protocol)
                        ▼
@@ -183,9 +182,29 @@ No other binaries exist. No other languages. If a task proposes adding a third r
 | Layer | Language | Why |
 |---|---|---|
 | Styled, Headless, Primitives | TypeScript (with JSX) | Developer-facing API surface. Leverages SolidJS reactivity. |
-| Engine | TypeScript | Orchestration, reconciliation, reactivity, input parsing, hooks. Bun runtime. |
-| libvexart | Rust (cdylib) | Layout (Taffy), paint (WGPU), composite, Kitty encoding. Zero-overhead, cross-platform. |
+| Engine | TypeScript | Public JS/JSX shell: reconciliation adapter, hooks, callback registry, handles, feature flags, compatibility fallback. Bun runtime. |
+| libvexart | Rust (cdylib) | Retained scene graph, layout, damage, hit-testing, layer registry, render graph, frame orchestration, resources, paint, composite, Kitty encoding. Zero-overhead, cross-platform. |
 | Shaders | WGSL | One shader language, runs on Metal, Vulkan, DX12 via WGPU. |
+
+### 2.5 Retained ownership rule
+
+After the retained-engine cutover, Rust is the single implementation owner for frame-critical behavior. TypeScript may request a frame, forward events, and dispatch callbacks, but it must not own ordinary layout state, render graph generation, layer target lifetime, terminal image IDs, or raw terminal presentation payloads.
+
+Allowed TypeScript hot-path responsibilities:
+
+- Encode SolidJS create/update/remove mutations into native scene FFI calls.
+- Keep JS callback closures in a registry keyed by native node IDs.
+- Forward keyboard/pointer input to Rust and invoke returned callback records.
+- Maintain public handles as lightweight wrappers over native IDs.
+- Keep explicit readback APIs for screenshot, debug, test, or offscreen rendering.
+
+Forbidden as target-state responsibilities:
+
+- Rebuilding the layout tree per frame in TypeScript.
+- Generating ordinary paint/render graph command batches in TypeScript.
+- Owning GPU layer target handles or terminal image IDs in TypeScript.
+- Returning full-frame or layer RGBA buffers to TypeScript for normal terminal presentation.
+- Making final frame strategy decisions in TypeScript.
 
 ---
 
@@ -210,14 +229,10 @@ packages/engine/
 │   │   ├── focus.ts           — focusable registration lifecycle
 │   │   └── handle.ts          — createHandle, NodeHandle interface
 │   │
-│   ├── loop/                  — frame loop (index.ts ≤ 400 lines)
-│   │   ├── index.ts           — createRenderLoop() orchestrator
-│   │   ├── walk-tree.ts       — TGENode walk, viewport culling, interactive node collection
-│   │   ├── layout.ts          — FFI call into Taffy, damage computation
-│   │   ├── assign-layers.ts   — 3-phase layer assignment (scroll, background, static)
-│   │   ├── paint.ts           — FFI dispatch to libvexart paint module
-│   │   ├── composite.ts       — FFI dispatch to libvexart composite module
-│   │   └── output.ts          — FFI dispatch to libvexart kitty encoder
+│   ├── loop/                  — thin compatibility shell (index.ts ≤ 400 lines)
+│   │   ├── index.ts           — createRenderLoop(): request native frames, dispatch callbacks
+│   │   ├── fallback/          — legacy TS-owned path, test/emergency only after cutover
+│   │   └── stats.ts           — decode native frame/presentation stats
 │   │
 │   ├── hooks/                 — SolidJS hooks for user code
 │   │   ├── use-focus.ts
@@ -228,10 +243,10 @@ packages/engine/
 │   │   ├── use-hover.ts
 │   │   └── use-query.ts       — data hooks (query, mutation)
 │   │
-│   ├── input/                 — terminal input pipeline
+│   ├── input/                 — terminal input pipeline and native-event bridge
 │   │   ├── parser.ts          — ANSI/SGR/URXVT escape sequence decoder
-│   │   ├── dispatch.ts        — parsed events → SolidJS signals
-│   │   ├── hit-test.ts        — (x, y) → nodeId with transform + scissor awareness
+│   │   ├── dispatch.ts        — parsed events → native input FFI → JS callback dispatch
+│   │   ├── event-decoder.ts   — native event records → PressEvent / NodeMouseEvent wrappers
 │   │   ├── pointer-capture.ts — setPointerCapture / releasePointerCapture
 │   │   └── bracketed-paste.ts — paste event decoding
 │   │
@@ -241,7 +256,7 @@ packages/engine/
 │   │   ├── easing.ts          — easing presets
 │   │   └── compositor-path.ts — compositor-thread fast path for transform/opacity
 │   │
-│   ├── scheduler/             — frame budget scheduler (Tier 2 optimization)
+│   ├── scheduler/             — JS-side user timing / compatibility scheduler
 │   │   ├── index.ts           — scheduleTask(priority, fn)
 │   │   ├── priority.ts        — user-blocking / user-visible / background queues
 │   │   └── budget.ts          — per-frame budget accounting
@@ -250,6 +265,9 @@ packages/engine/
 │   │   ├── bridge.ts          — bun:ffi loader, dylib resolution
 │   │   ├── buffer.ts          — packed ArrayBuffer(64) pattern
 │   │   ├── types.ts           — TS mirrors of Rust FFI types
+│   │   ├── scene.ts           — scene/node mutation wrappers
+│   │   ├── props.ts           — prop encoder + generated prop IDs
+│   │   ├── native-events.ts   — event record decoder
 │   │   └── functions.ts       — stub signatures for every vexart_* export
 │   │
 │   ├── resources/             — TS-side observers of libvexart's ResourceManager
@@ -877,20 +895,20 @@ If any condition fails at runtime, Vexart falls back to the normal path with a `
 ### 7.2 Data flow for a compositor-animated frame
 
 ```
-createSpring(0, 1, { duration: 300 })
+createSpring(0, 1, { compositor: { nodeId, property: 'transform' } })
          │
          ▼
 Animation descriptor registered:
   { nodeId, property: 'transform', from, to, easing, startTime }
          │
-         ▼ (per frame, NOT via reconciler)
-Compositor path updates node's transform uniform
+         ▼ (qualifying compositor-only frame)
+Compositor path reuses retained layer target and applies transform/opacity update
          │
          ▼
-vexart_composite_update_uniform(target, nodeId, transformMatrix)
+vexart_composite_update_uniform(target, sourceTarget, transformQuad+opacity)
          │
          ▼
-WGPU updates uniform buffer ONLY — no paint, no layout
+WGPU updates retained composition without walk/layout/assign/paint
          │
          ▼
 Composite + Kitty emit as normal
@@ -898,12 +916,10 @@ Composite + Kitty emit as normal
 
 ### 7.3 Why this bypasses the main thread
 
-- The animation tick reads from a descriptor table in the scheduler.
-- No SolidJS signal is mutated.
-- No reconciler traversal.
-- No walk-tree, no layout, no assign-layers, no paint.
-- Only the composite uniform update + output phases run.
-- Target: 60fps maintained even if main thread is saturated processing other work.
+- Production today already skips walk-tree, layout, assign-layers, and paint for qualifying compositor-only retained frames.
+- The frame loop reuses retained layer targets and runs only compositor composition + output for those frames.
+- The remaining gap is FULL JS-bypass ownership: Solid/reconciler updates may still happen before the compositor-only frame is selected.
+- Target remains: 60fps maintained even if the main thread is busy with unrelated work.
 
 ### 7.4 When to fall back
 
@@ -994,30 +1010,30 @@ type ResourceStats = {
 
 | Thread | Owner | What runs there |
 |---|---|---|
-| **JS event loop** | Bun | Reconciler, walk-tree, assign-layers, hooks, input parsing, scheduler |
-| **Rust sync thread** | Rust main | FFI calls from JS execute here; layout (Taffy), paint dispatch, composite |
+| **JS event loop** | Bun | Solid reconciler adapter, hooks, callback registry, input byte parsing, event dispatch, compatibility fallback |
+| **Rust sync thread** | Rust main | FFI calls from JS execute here; retained scene mutation, layout, damage, hit-testing, layer registry, render graph generation, frame orchestration, paint dispatch, composite, Kitty encode/present |
 | **WGPU submission** | WGPU internal | Command buffer submission to GPU driver (Metal/Vulkan/DX12) |
 | **WGPU GPU callbacks** | WGPU internal | GPU fence callbacks, readback completion |
 | **Kitty writer** | Rust-owned | Buffered stdout writes from the Kitty encoder |
 
-**There is no worker thread in JavaScript**. Bun's event loop is the single JS thread. All TS code is synchronous or `async`-over-microtasks.
+**There is no worker thread in JavaScript**. Bun's event loop is the single JS thread. All TS code is synchronous or `async`-over-microtasks. Compositor-fast-path work is native-owned; JavaScript does not run a separate render worker.
 
 **There is no `tokio` or `rayon` in the Rust main path** for v0.9. Parallelism is deferred to v1.x per DEC-010's non-goal list.
 
 ### 9.2 Thread safety contract
 
 - FFI calls from JS to Rust are synchronous. TS awaits completion.
-- Rust internal state is not accessed concurrently. Every FFI call takes a context handle and mutates it in-thread.
+- Rust internal state is not accessed concurrently. Every FFI call takes a context/scene handle and mutates it in-thread.
 - WGPU handles concurrency internally — user code does not interact with GPU threads directly.
 - The Kitty writer is a buffered `std::io::BufWriter` over stdout; writes are serialized at the OS level.
 
 ### 9.3 Why this model is sufficient for terminal UI
 
-- Frame budget (16.6ms at 60fps) is mostly consumed by paint + composite + output, all of which happen in Rust → GPU. The JS thread has >10ms available for reconciliation and walk.
+- Frame budget (16.6ms at 60fps) is mostly consumed by paint + composite + output, all of which happen in Rust → GPU. The JS thread stays on control-plane work and callback dispatch.
 - Terminal UIs have small node counts (50-500 typical). Parallelism overhead > gain.
 - Input latency is already below perception threshold with the adaptive loop + boost windows.
 
-If profiling in v1.x shows the JS thread saturated, the solution is the scheduler (user-visible tasks split across frames), not more threads.
+If profiling in v1.x shows the JS thread saturated, the solution is to move additional control-plane work into the native event/frame boundary or split JS user-visible tasks across frames — not to reintroduce JS frame ownership.
 
 ---
 
@@ -1444,7 +1460,7 @@ This section documents deviations between the current v0.1 codebase and the targ
 | `output-placeholder` + `output-halfblock` backends | Deleted; Kitty-only | Phase 2 |
 | `gpu-frame-composer.ts` with CPU/GPU switch | Deleted; no CPU mode | Phase 2 |
 | Three native binaries (`libclay`, `libtge` Zig, `libwgpu_bridge`) | One native binary (`libvexart`) | Phase 2 |
-| Kitty encoding in TypeScript (`Buffer.from(...).toString('base64')` in `packages/output/src/kitty.ts`) | Native Rust in `libvexart/src/kitty/` | Phase 2b |
+| Kitty encoding / normal presentation in TypeScript (`Buffer.from(...).toString('base64')` and raw RGBA payloads) | Native Rust presentation; JS receives stats/status only | Retained R1 / Phase 2b Native Presentation |
 | `cache: None` in all WGPU pipelines (`native/wgpu-canvas-bridge/src/lib.rs` lines 676, 771, 882, 999, 1109, 1228, 1377, 1484, 1568, 1660) | Shared persistent `PipelineCache` on disk | Phase 2b |
 | 5 independent caches with `MAX_*` constants (text-layout, font-atlas, image, etc.) | Unified `ResourceManager` with 128 MB default budget | Phase 2b |
 | 89-glyph ASCII bitmap font atlas | MSDF atlas (1024×1024) per runtime-loaded font | Phase 2b |
@@ -1463,6 +1479,12 @@ This section documents deviations between the current v0.1 codebase and the targ
 | No `bench:optimizations` benchmark suite | Per-optimization micro-benchmarks | Phase 2b + Phase 3 |
 | `starfield` / `nebula` Zig primitives | Moved to `examples/` or deleted | Phase 2 |
 | Runtime font atlases limited to 15 ids | Unlimited (governed by `ResourceManager` budget) | Phase 2b |
+| TS owns layer GPU target handles and terminal image IDs | Rust `LayerRegistry` owns target/image lifecycle and resource accounting | Retained R2 |
+| TS `TGENode` tree is the only retained scene state | Rust-retained scene graph is the default runtime on Kitty-compatible transports (`direct`, `file`, `shm`); fallback remains available via `VEXART_RETAINED=0` during the compatibility window | Retained R3-R7 |
+| TS computes layout, damage, hit-testing, and event target traversal | Rust computes layout/damage/hit-test and returns event records to JS | Retained R4 |
+| TS generates ordinary render graph / paint command batches | Rust generates and batches render ops from native scene data | Retained R5 |
+| TS chooses frame strategy and coordinates presentation lifecycle | Rust frame orchestrator chooses `skip-present`, `layered-dirty`, `layered-region`, or `final-frame` | Retained R6 |
+| Old TS render graph and raw presentation path remain compatibility code | Native retained path is default; old path emergency/test-only, then deleted or isolated | Retained R7-R8 |
 
 ---
 
@@ -1488,13 +1510,18 @@ All exports prefixed `vexart_{module}_{action}`. Each has a matching stub in `pa
 
 ```
 vexart_context_create / destroy
+vexart_scene_create / destroy / clear
+vexart_node_create / destroy / insert / remove / set_props
+vexart_text_set_content / load_atlas / dispatch
+vexart_input_pointer / key / events_read
+vexart_frame_request / render / present
+vexart_layer_upsert / mark_dirty / reuse / remove / present_dirty
 vexart_target_create / destroy
-vexart_layout_compute
-vexart_paint_dispatch
-vexart_composite_merge
+vexart_layout_compute              // compatibility/offscreen fallback path
+vexart_paint_dispatch              // explicit offscreen / emergency fallback path after 3g cleanup
+vexart_composite_merge             // explicit offscreen / emergency fallback path after 3g cleanup
 vexart_resource_stats / evict / set_budget
-vexart_text_load_atlas / dispatch
-vexart_kitty_emit_frame / set_transport
+vexart_kitty_emit_frame / emit_layer_target / emit_region_target / delete_layer / set_transport
 vexart_pipeline_cache_load / save
 vexart_get_last_error_length / copy_last_error
 vexart_version
@@ -1513,4 +1540,4 @@ The exact list is maintained in `native/libvexart/src/lib.rs` and mirrored in `p
 
 ---
 
-**END OF ARCHITECTURE v0.1**
+**END OF ARCHITECTURE v0.2**

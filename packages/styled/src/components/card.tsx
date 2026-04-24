@@ -1,13 +1,7 @@
 /**
- * Card — shadcn-compatible card composition.
+ * Card — styled card composition using Void design tokens.
  *
- * Composition:
- *   Card
- *   ├── CardHeader
- *   │   ├── CardTitle
- *   │   └── CardDescription
- *   ├── CardContent
- *   └── CardFooter
+ * @public
  */
 
 import { radius, space, font, weight, shadows } from "../tokens/tokens"
@@ -15,11 +9,13 @@ import { themeColors } from "../theme/theme"
 
 // ── Card ──
 
+/** @public */
 export interface CardProps {
   children?: any
   size?: "default" | "sm"
 }
 
+/** @public */
 export function Card(props: CardProps) {
   const sm = props.size === "sm"
   return (
@@ -41,10 +37,12 @@ export function Card(props: CardProps) {
 
 // ── CardHeader ──
 
+/** @public */
 export interface CardHeaderProps {
   children?: any
 }
 
+/** @public */
 export function CardHeader(props: CardHeaderProps) {
   return (
     <box
@@ -60,10 +58,12 @@ export function CardHeader(props: CardHeaderProps) {
 
 // ── CardTitle ──
 
+/** @public */
 export interface CardTitleProps {
   children?: any
 }
 
+/** @public */
 export function CardTitle(props: CardTitleProps) {
   return (
     <text
@@ -79,10 +79,12 @@ export function CardTitle(props: CardTitleProps) {
 
 // ── CardDescription ──
 
+/** @public */
 export interface CardDescriptionProps {
   children?: any
 }
 
+/** @public */
 export function CardDescription(props: CardDescriptionProps) {
   return (
     <text
@@ -96,10 +98,12 @@ export function CardDescription(props: CardDescriptionProps) {
 
 // ── CardContent ──
 
+/** @public */
 export interface CardContentProps {
   children?: any
 }
 
+/** @public */
 export function CardContent(props: CardContentProps) {
   return (
     <box
@@ -113,10 +117,12 @@ export function CardContent(props: CardContentProps) {
 
 // ── CardFooter ──
 
+/** @public */
 export interface CardFooterProps {
   children?: any
 }
 
+/** @public */
 export function CardFooter(props: CardFooterProps) {
   return (
     <box
@@ -134,10 +140,12 @@ export function CardFooter(props: CardFooterProps) {
 // ── CardAction ──
 // Positioned top-right, for buttons or icon actions on the card header.
 
+/** @public */
 export interface CardActionProps {
   children?: any
 }
 
+/** @public */
 export function CardAction(props: CardActionProps) {
   return (
     <box alignX="right" alignY="top">

@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js"
 import { type NodeMouseEvent } from "../ffi/node"
 
+/** @public */
 export type HoverOptions = {
   onEnter?: () => void
   onLeave?: () => void
@@ -9,16 +10,19 @@ export type HoverOptions = {
   disabled?: () => boolean
 }
 
+/** @public */
 export type HoverProps = {
   onMouseOver: (evt: NodeMouseEvent) => void
   onMouseOut: (evt: NodeMouseEvent) => void
 }
 
+/** @public */
 export type HoverState = {
   hovered: () => boolean
   hoverProps: HoverProps
 }
 
+/** @public */
 export function useHover(opts?: HoverOptions): HoverState {
   const [hovered, setHovered] = createSignal(false)
   let enterTimer: ReturnType<typeof setTimeout> | null = null

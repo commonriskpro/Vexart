@@ -1,11 +1,7 @@
 /**
  * SolidJS custom renderer for TGE.
  *
- * Implements the 10 methods required by solid-js/universal createRenderer.
- * Translates JSX operations into TGENode tree manipulations.
- *
- * The reconciler doesn't do rendering itself — it just maintains the
- * TGENode tree. The render loop walks this tree each frame.
+ * @public
  */
 
 import { createRenderer } from "solid-js/universal"
@@ -22,7 +18,18 @@ import {
 } from "../ffi/node"
 import { markDirty } from "./dirty"
 import { createHandle } from "./handle"
+import { markLayerBacked, onNodePropertyChanged, onSubtreeChanged, unmarkLayerBacked } from "../animation/compositor-path"
 import { registerNodeFocusable, unregisterNodeFocusable, updateNodeFocusEntry } from "./focus"
+import { markNodeLayerDamaged } from "./pointer"
+import {
+  nativeSceneCreateNode,
+  nativeSceneDestroyNode,
+  nativeSceneInsert,
+  nativeSceneRemove,
+  nativeSceneSetProp,
+  nativeSceneSetText,
+} from "../ffi/native-scene"
+import { isNativeSceneGraphEnabled } from "../ffi/native-scene-graph-flags"
 
 // ── Color props that need pre-parsing ──
 // These are resolved from string → u32 ONCE in setProperty,
@@ -40,6 +47,58 @@ const STYLE_SUB_COLOR_PROPS = new Set([
   "backgroundColor",
   "borderColor",
 ])
+
+const VISUAL_DAMAGE_PROPS = new Set([
+  "backgroundColor",
+  "borderColor",
+  "borderWidth",
+  "borderLeft",
+  "borderRight",
+  "borderTop",
+  "borderBottom",
+  "cornerRadius",
+  "borderRadius",
+  "cornerRadii",
+  "shadow",
+  "boxShadow",
+  "glow",
+  "gradient",
+  "backdropBlur",
+  "backdropBrightness",
+  "backdropContrast",
+  "backdropSaturate",
+  "backdropGrayscale",
+  "backdropInvert",
+  "backdropSepia",
+  "backdropHueRotate",
+  "opacity",
+  "filter",
+  "transform",
+  "transformOrigin",
+  "color",
+  "fontSize",
+  "fontId",
+  "lineHeight",
+  "fontWeight",
+  "fontStyle",
+  "src",
+  "objectFit",
+  "onDraw",
+  "viewport",
+])
+
+function markNodeVisualDamage(node: TGENode) {
+  if (node.layout.width > 0 && node.layout.height > 0) {
+    markNodeLayerDamaged(node.id, {
+      x: node.layout.x,
+      y: node.layout.y,
+      width: node.layout.width,
+      height: node.layout.height,
+    })
+    return
+  }
+  markNodeLayerDamaged(node.id)
+}
 
 /** Resolve a color value (string or number) to u32. Called once per prop change, not per frame. */
 function resolveColor(value: unknown): number {
@@ -87,32 +146,52 @@ function unregisterSubtree(node: TGENode) {
   }
 }
 
-export const {
-  render,
-  effect,
-  memo,
-  createComponent,
-  createElement,
-  createTextNode: solidCreateTextNode,
-  insertNode,
-  insert,
-  spread,
-  setProp,
-  mergeProps,
-  use,
-} = createRenderer<TGENode>({
+function hasCompositorLayerBacking(node: TGENode) {
+  if (node.props.layer === true) return true
+  const willChange = node.props.willChange
+  if (!willChange) return false
+  const values = Array.isArray(willChange) ? willChange : [willChange]
+  return values.includes("transform") || values.includes("opacity")
+}
+
+function syncCompositorLayerBacking(node: TGENode) {
+  if (hasCompositorLayerBacking(node)) {
+    markLayerBacked(node.id)
+    return
+  }
+  unmarkLayerBacked(node.id)
+}
+
+function unmarkSubtreeLayerBacking(node: TGENode) {
+  unmarkLayerBacked(node.id)
+  for (const child of node.children) {
+    unmarkSubtreeLayerBacking(child)
+  }
+}
+
+const renderer = createRenderer<TGENode>({
   createElement(type: string): TGENode {
     const kind = type === "text" ? "text" : type === "img" ? "img" : type === "canvas" || type === "surface" ? "canvas" : "box"
     const node = createNode(kind)
+    if (isNativeSceneGraphEnabled()) {
+      node._nativeId = nativeSceneCreateNode(kind)
+    }
     return node
   },
 
   createTextNode(value: string): TGENode {
-    return createTextNode(String(value))
+    const node = createTextNode(String(value))
+    if (isNativeSceneGraphEnabled()) {
+      node._nativeId = nativeSceneCreateNode("text")
+      nativeSceneSetText(node._nativeId, node.text)
+    }
+    return node
   },
 
   replaceText(node: TGENode, value: string) {
     node.text = String(value)
+    nativeSceneSetText(node._nativeId, node.text)
+    markNodeVisualDamage(node)
     markDirty()
   },
 
@@ -135,6 +214,7 @@ export const {
         node.props.paddingTop = p[0]; node.props.paddingRight = p[1]
         node.props.paddingBottom = p[2]; node.props.paddingLeft = p[3]
       }
+      nativeSceneSetProp(node._nativeId, "padding", value)
       markDirty()
       return
     }
@@ -148,6 +228,7 @@ export const {
           (node.props as Record<string, unknown>)[key] = style[key]
         }
       }
+      nativeSceneSetProp(node._nativeId, "style", style)
       markDirty()
       return
     }
@@ -155,6 +236,8 @@ export const {
     // ── Pre-parse colors: string → u32 once, not every frame ──
     if (COLOR_PROPS.has(name)) {
       (node.props as Record<string, unknown>)[name] = resolveColor(value)
+      nativeSceneSetProp(node._nativeId, name, (node.props as Record<string, unknown>)[name])
+      markNodeVisualDamage(node)
       markDirty()
       return
     }
@@ -163,12 +246,14 @@ export const {
     if (name === "width") {
       (node.props as Record<string, unknown>)[name] = value
       node._widthSizing = parseSizing(value as number | string | undefined)
+      nativeSceneSetProp(node._nativeId, name, value)
       markDirty()
       return
     }
     if (name === "height") {
       (node.props as Record<string, unknown>)[name] = value
       node._heightSizing = parseSizing(value as number | string | undefined)
+      nativeSceneSetProp(node._nativeId, name, value)
       markDirty()
       return
     }
@@ -176,6 +261,8 @@ export const {
     // Pre-parse glow.color
     if (name === "glow") {
       (node.props as Record<string, unknown>)[name] = resolveGlow(value)
+      nativeSceneSetProp(node._nativeId, name, (node.props as Record<string, unknown>)[name])
+      markNodeVisualDamage(node)
       markDirty()
       return
     }
@@ -183,6 +270,8 @@ export const {
     // Pre-parse interactive style color fields
     if (name === "hoverStyle" || name === "activeStyle" || name === "focusStyle") {
       (node.props as Record<string, unknown>)[name] = resolveInteractiveStyle(value)
+      nativeSceneSetProp(node._nativeId, name, (node.props as Record<string, unknown>)[name])
+      markNodeVisualDamage(node)
       markDirty()
       return
     }
@@ -195,6 +284,8 @@ export const {
       } else {
         unregisterNodeFocusable(node)
       }
+      nativeSceneSetProp(node._nativeId, name, value)
+      onNodePropertyChanged(node.id, name)
       markDirty()
       return
     }
@@ -203,16 +294,25 @@ export const {
     if (name === "onKeyDown" || name === "onPress") {
       (node.props as Record<string, unknown>)[name] = value
       updateNodeFocusEntry(node)
+      nativeSceneSetProp(node._nativeId, name, value)
+      onNodePropertyChanged(node.id, name)
       markDirty()
       return
     }
 
     (node.props as Record<string, unknown>)[name] = value
+    if (name === "layer" || name === "willChange") syncCompositorLayerBacking(node)
+    nativeSceneSetProp(node._nativeId, name, value)
+    onNodePropertyChanged(node.id, name)
+    if (VISUAL_DAMAGE_PROPS.has(name)) markNodeVisualDamage(node)
     markDirty()
   },
 
   insertNode(parent: TGENode, node: TGENode, anchor?: TGENode) {
     insertChild(parent, node, anchor)
+    syncCompositorLayerBacking(node)
+    onSubtreeChanged(parent.id)
+    nativeSceneInsert(parent._nativeId, node._nativeId, anchor?._nativeId)
     markDirty()
   },
 
@@ -225,6 +325,10 @@ export const {
     // Without this, destroyed children remain as ghost entries in the
     // focus ring and Tab key cycles through invisible elements.
     unregisterSubtree(node)
+    unmarkSubtreeLayerBacking(node)
+    onSubtreeChanged(parent.id)
+    nativeSceneRemove(parent._nativeId, node._nativeId)
+    nativeSceneDestroyNode(node._nativeId)
     removeChild(parent, node)
     markDirty()
   },
@@ -243,6 +347,31 @@ export const {
     return node.parent.children[idx + 1]
   },
 })
+
+/** @public */
+export const render = renderer.render
+/** @public */
+export const effect = renderer.effect
+/** @public */
+export const memo = renderer.memo
+/** @public */
+export const createComponent = renderer.createComponent
+/** @public */
+export const createElement = renderer.createElement
+/** @public */
+export const solidCreateTextNode = renderer.createTextNode
+/** @public */
+export const insertNode = renderer.insertNode
+/** @public */
+export const insert = renderer.insert
+/** @public */
+export const spread = renderer.spread
+/** @public */
+export const setProp = renderer.setProp
+/** @public */
+export const mergeProps = renderer.mergeProps
+/** @public */
+export const use = renderer.use
 
 // Re-export SolidJS control flow
 export { For, Show, Switch, Match, Index, ErrorBoundary } from "solid-js"

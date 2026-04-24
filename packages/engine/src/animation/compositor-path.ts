@@ -16,7 +16,7 @@
  *   GPU: (Phase 3) vexart_composite_update_uniform(target, nodeId, matrix)
  */
 
-/** Properties that can animate on the compositor thread (REQ-2B-301). */
+/** @public Properties that can animate on the compositor thread. */
 export type CompositorProperty = "transform" | "opacity"
 
 /** Easing or spring descriptor for the animation. */
@@ -57,6 +57,7 @@ function descriptorKey(nodeId: number, property: CompositorProperty): string {
  * Called when the node has layer={true} or willChange containing 'transform'/'opacity'.
  * Required for compositor qualification (REQ-2B-304 condition 2).
  */
+/** @public */
 export function markLayerBacked(nodeId: number): void {
   layerBackedNodes.add(nodeId)
 }
@@ -64,6 +65,7 @@ export function markLayerBacked(nodeId: number): void {
 /**
  * Remove layer-backed status (node destroyed or prop removed).
  */
+/** @public */
 export function unmarkLayerBacked(nodeId: number): void {
   layerBackedNodes.delete(nodeId)
 }
@@ -193,9 +195,9 @@ export function onSubtreeChanged(nodeId: number): void {
  * The infrastructure is in place; Phase 3 will unlock the actual fast path.
  */
 export function isCompositorOnlyFrame(): boolean {
-  // Phase 2b: always fall back to full repaint.
-  // The descriptor table is built correctly; the GPU fast-path is Phase 3.
-  return false
+  if (descriptors.size === 0) return false
+  if (dirtyNonCompositorNodes.size > 0) return false
+  return true
 }
 
 /**

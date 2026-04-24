@@ -3,10 +3,10 @@
 // Phase 2b Slice 3, task 3.1. Per REQ-2B-101/103.
 //
 // Kitty direct-mode chunking (4096-byte base64 chunks):
-//   First chunk:  \x1b_Ga=T,f=32,s={w},v={h},i={id},o=z,m=1;{b64}\x1b\\
+//   First chunk:  \x1b_Ga=T,f=32,s={w},v={h},i={id},C=1,o=z,m=1;{b64}\x1b\\
 //   Middle chunks: \x1b_Gm=1;{b64}\x1b\\
 //   Last chunk:   \x1b_Gm=0;{b64}\x1b\\
-//   Single chunk: \x1b_Ga=T,f=32,s={w},v={h},i={id},o=z,m=0;{b64}\x1b\\
+//   Single chunk: \x1b_Ga=T,f=32,s={w},v={h},i={id},C=1,o=z,m=0;{b64}\x1b\\
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
@@ -52,7 +52,7 @@ pub fn encode_frame_direct(rgba: &[u8], width: u32, height: u32, image_id: u32) 
     if chunks.is_empty() {
         // Empty frame — emit a minimal escape with m=0 and no data.
         let header = format!(
-            "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},o=z,m=0;\x1b\\"
+            "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},C=1,o=z,m=0;\x1b\\"
         );
         out.extend_from_slice(header.as_bytes());
         return out;
@@ -61,7 +61,7 @@ pub fn encode_frame_direct(rgba: &[u8], width: u32, height: u32, image_id: u32) 
     if chunks.len() == 1 {
         // Single chunk: no continuation.
         let seq = format!(
-            "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},o=z,m=0;{}\x1b\\",
+            "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},C=1,o=z,m=0;{}\x1b\\",
             chunks[0]
         );
         out.extend_from_slice(seq.as_bytes());
@@ -71,7 +71,7 @@ pub fn encode_frame_direct(rgba: &[u8], width: u32, height: u32, image_id: u32) 
     // Multiple chunks.
     // First chunk: carries all metadata, m=1 (more follows).
     let first = format!(
-        "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},o=z,m=1;{}\x1b\\",
+        "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},C=1,o=z,m=1;{}\x1b\\",
         chunks[0]
     );
     out.extend_from_slice(first.as_bytes());
@@ -178,6 +178,10 @@ mod tests {
         assert!(
             text.contains("a=T"),
             "output must include a=T (transmit+display)"
+        );
+        assert!(
+            text.contains("C=1"),
+            "output must include C=1 to prevent terminal cursor movement/scroll"
         );
         assert!(
             text.contains("s=64"),

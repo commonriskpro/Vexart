@@ -33,6 +33,7 @@ export type LayerEntry = {
   height: number
 }
 
+/** @public */
 export type LayerComposer = {
   /** Render raw RGBA bytes directly, avoiding a PixelBuffer wrapper upstream. */
   renderLayerRaw: (
@@ -84,10 +85,11 @@ export type LayerComposer = {
 /**
  * Create a layer compositor for the kitty direct backend.
  *
- * @param write — write function for Kitty graphics escapes
- * @param rawWrite — write function for ANSI cursor positioning
- * @param mode — transmission mode: "shm" | "file" | "direct"
+ * @param write - Write function for Kitty graphics escapes.
+ * @param rawWrite - Write function reserved for cursor positioning hooks.
+ * @param mode - Transmission mode.
  */
+/** @public */
 export function createLayerComposer(
   write: (data: string) => void,
   rawWrite: (data: string) => void,

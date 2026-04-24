@@ -1,26 +1,10 @@
 /**
  * Tooltip — truly headless tooltip/popover primitive.
  *
- * Provides behavior only:
- *   - Trigger element that shows/hides content
- *   - Delayed show/hide (configurable)
- *   - Portal rendering (above all content)
- *   - Keyboard: Escape to dismiss
+ * Provides delayed show/hide behavior plus portal rendering.
+ * Consumers own all visuals through `renderTooltip`.
  *
- * ALL visual styling is the consumer's responsibility.
- * Use @tge/void VoidTooltip for a styled version.
- *
- * Usage:
- *   <Tooltip
- *     content="Save your work"
- *     renderTooltip={(content) => (
- *       <box backgroundColor="#333" padding={4} cornerRadius={4}>
- *         <text color="#fff" fontSize={12}>{content}</text>
- *       </box>
- *     )}
- *   >
- *     <text>Hover me</text>
- *   </Tooltip>
+ * @public
  */
 
 import { createSignal } from "solid-js"
@@ -29,6 +13,7 @@ import { Portal } from "../containers/portal"
 
 // ── Types ──
 
+/** @public */
 export type TooltipProps = {
   /** Text content to show in the tooltip. */
   content: string
@@ -48,6 +33,7 @@ export type TooltipProps = {
   offset?: number
 }
 
+/** @public */
 export function Tooltip(props: TooltipProps) {
   const [visible, setVisible] = createSignal(false)
   let showTimer: ReturnType<typeof setTimeout> | null = null
@@ -98,31 +84,18 @@ export function Tooltip(props: TooltipProps) {
 /**
  * Popover — truly headless popover primitive.
  *
- * Like Tooltip but for interactive content (forms, menus).
- * Stays open until explicitly closed. Supports focus trap.
+ * Similar to `Tooltip`, but intended for interactive content.
  *
- * Usage:
- *   <Popover
- *     open={isOpen()}
- *     onOpenChange={setOpen}
- *     renderTrigger={(ctx) => (
- *       <box focusable onPress={() => ctx.toggle()}>
- *         <text>Open menu</text>
- *       </box>
- *     )}
- *     renderContent={() => (
- *       <box backgroundColor="#1a1a2e" padding={8} cornerRadius={8}>
- *         <text>Popover content</text>
- *       </box>
- *     )}
- *   />
+ * @public
  */
 
+/** @public */
 export type PopoverTriggerContext = {
   open: boolean
   toggle: () => void
 }
 
+/** @public */
 export type PopoverProps = {
   /** Controlled open state. */
   open: boolean
@@ -138,6 +111,7 @@ export type PopoverProps = {
   offset?: number
 }
 
+/** @public */
 export function Popover(props: PopoverProps) {
   const toggle = () => props.onOpenChange(!props.open)
 

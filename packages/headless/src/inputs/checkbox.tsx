@@ -1,29 +1,9 @@
 /**
  * Checkbox — truly headless toggleable checkbox.
  *
- * CONTROLLED component — the parent owns the checked state.
- * Focus-aware with Enter/Space toggle.
+ * Handles focus and toggling while leaving visuals to `renderCheckbox`.
  *
- * This is a BEHAVIOR-ONLY component. It provides:
- *   - Focus management (useFocus)
- *   - Keyboard toggle (Enter/Space)
- *   - Checked state tracking
- *
- * ALL visual styling is the consumer's responsibility via renderCheckbox.
- * Use @tge/void VoidCheckbox for a styled version.
- *
- * Usage:
- *   <Checkbox
- *     checked={agreed()}
- *     onChange={setAgreed}
- *     renderCheckbox={({ checked, focused, disabled }) => (
- *       <box direction="row" gap={8} alignY="center">
- *         <box width={16} height={16} backgroundColor={checked ? "#22c55e" : "#333"}
- *           cornerRadius={3} borderColor={focused ? "#22c55e" : "#666"} borderWidth={1} />
- *         <text>I agree</text>
- *       </box>
- *     )}
- *   />
+ * @public
  */
 
 import type { JSX } from "solid-js"
@@ -31,6 +11,7 @@ import { useFocus } from "@vexart/engine"
 
 // ── Types ──
 
+/** @public */
 export type CheckboxRenderContext = {
   checked: boolean
   focused: boolean
@@ -42,6 +23,7 @@ export type CheckboxRenderContext = {
   }
 }
 
+/** @public */
 export type CheckboxProps = {
   /** Whether the checkbox is checked. */
   checked: boolean
@@ -55,6 +37,7 @@ export type CheckboxProps = {
   renderCheckbox: (ctx: CheckboxRenderContext) => JSX.Element
 }
 
+/** @public */
 export function Checkbox(props: CheckboxProps) {
   const disabled = () => props.disabled ?? false
 

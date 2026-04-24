@@ -1,35 +1,9 @@
 /**
  * Input — truly headless single-line text input.
  *
- * CONTROLLED component — parent owns value state.
- * Focus-aware with full keyboard editing.
+ * Handles editing, selection, paste, focus, and caret state while visuals are supplied by `renderInput`.
  *
- * This is a BEHAVIOR-ONLY component. It provides:
- *   - Focus management (useFocus)
- *   - Full keyboard editing (insert, delete, navigation, selection)
- *   - Cursor position tracking
- *   - Selection range tracking
- *   - Paste handling (bracketed paste)
- *   - Blink timer management
- *
- * ALL visual rendering is the consumer's responsibility via renderInput.
- * Use @tge/void VoidInput for a styled version.
- *
- * Usage:
- *   <Input
- *     value={name()}
- *     onChange={setName}
- *     placeholder="Enter your name..."
- *     renderInput={(ctx) => (
- *       <box width={200} height={24} backgroundColor="#222" cornerRadius={4}
- *         borderColor={ctx.focused ? "#4488cc" : "#666"} borderWidth={1} padding={4}>
- *         <text color={ctx.showPlaceholder ? "#666" : "#fff"}>{ctx.displayText}</text>
- *         {ctx.focused && ctx.blink ? (
- *           <box width={2} height={17} backgroundColor="#4488cc" />
- *         ) : null}
- *       </box>
- *     )}
- *   />
+ * @public
  */
 
 import { createSignal, onCleanup } from "solid-js"
@@ -38,6 +12,7 @@ import { useFocus, onInput } from "@vexart/engine"
 
 // ── Types ──
 
+/** @public */
 export type InputRenderContext = {
   /** Current text value. */
   value: string
@@ -62,6 +37,7 @@ export type InputRenderContext = {
   }
 }
 
+/** @public */
 export type InputProps = {
   value: string
   onChange?: (value: string) => void
@@ -73,6 +49,7 @@ export type InputProps = {
   renderInput: (ctx: InputRenderContext) => JSX.Element
 }
 
+/** @public */
 export function Input(props: InputProps) {
   const [cursor, setCursor] = createSignal(props.value.length)
   const [selStart, setSelStart] = createSignal(-1)

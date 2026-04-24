@@ -12,6 +12,7 @@
 
 import type { JSX } from "solid-js"
 
+/** @public */
 export type ShadowConfig = {
   x: number      // Horizontal offset (px)
   y: number      // Vertical offset (px)
@@ -19,12 +20,14 @@ export type ShadowConfig = {
   color: number  // Shadow color (packed RGBA u32)
 }
 
+/** @public */
 export type GlowConfig = {
   radius: number           // Glow spread radius (px)
   color: string | number   // Glow color (hex string or packed RGBA u32)
   intensity?: number       // 0-100, default 80
 }
 
+/** @public */
 export type BoxProps = {
   // Layout
   direction?: "row" | "column"
@@ -65,6 +68,7 @@ export type BoxProps = {
   children?: JSX.Element
 }
 
+/** @public */
 export function Box(props: BoxProps) {
   return (
     <box

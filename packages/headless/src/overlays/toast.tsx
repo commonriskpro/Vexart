@@ -2,28 +2,8 @@
  * Toast — truly headless notification system.
  *
  * Provides an imperative API for showing auto-dismissing notifications.
- * Toasts stack and dismiss themselves after a configurable duration.
  *
- * This is a BEHAVIOR-ONLY system. It provides:
- *   - Imperative toast() API
- *   - Auto-dismiss timer
- *   - Stack management (max visible, overflow trim)
- *   - Dismiss by ID / dismiss all
- *
- * ALL visual rendering is the consumer's responsibility via renderToast.
- * Use @tge/void createVoidToaster for a styled version.
- *
- * Usage:
- *   const { toast, Toaster } = createToaster({
- *     renderToast: (t, dismiss) => (
- *       <box backgroundColor="#222" padding={8} cornerRadius={6}>
- *         <text color="#fff">{t.message}</text>
- *       </box>
- *     ),
- *   })
- *
- *   // In your app root: <Toaster />
- *   // Anywhere: toast("File saved!")
+ * @public
  */
 
 import { createSignal, For } from "solid-js"
@@ -32,8 +12,10 @@ import { Portal } from "../containers/portal"
 
 // ── Types ──
 
+/** @public */
 export type ToastVariant = "default" | "success" | "error" | "warning" | "info"
 
+/** @public */
 export type ToastPosition =
   | "top-right"
   | "top-left"
@@ -42,6 +24,7 @@ export type ToastPosition =
   | "top-center"
   | "bottom-center"
 
+/** @public */
 export type ToastData = {
   id: number
   message: string
@@ -50,6 +33,7 @@ export type ToastData = {
   description?: string
 }
 
+/** @public */
 export type ToastInput = string | {
   message: string
   variant?: ToastVariant
@@ -57,6 +41,7 @@ export type ToastInput = string | {
   description?: string
 }
 
+/** @public */
 export type ToasterOptions = {
   /** Position on screen. Default: "bottom-right". */
   position?: ToastPosition
@@ -72,6 +57,7 @@ export type ToasterOptions = {
   renderToast: (toast: ToastData, dismiss: () => void) => JSX.Element
 }
 
+/** @public */
 export type ToasterHandle = {
   toast: (input: ToastInput) => number
   dismiss: (id: number) => void
@@ -83,6 +69,7 @@ export type ToasterHandle = {
 
 let nextToastId = 0
 
+/** @public */
 export function createToaster(options: ToasterOptions): ToasterHandle {
   const position = options.position ?? "bottom-right"
   const maxVisible = options.maxVisible ?? 5

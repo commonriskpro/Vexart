@@ -1,11 +1,7 @@
 /**
  * Switch — styled toggle switch using Void design tokens.
  *
- * Built on top of the headless @tge/components Switch.
- * Provides ALL visual rendering via renderSwitch.
- *
- * Usage:
- *   <VoidSwitch checked={darkMode()} onChange={setDarkMode} label="Dark mode" />
+ * @public
  */
 
 import { Switch } from "@vexart/headless"
@@ -19,6 +15,7 @@ const THUMB_SIZE = 14
 const THUMB_OFFSET = 3
 const THUMB_TRAVEL = TRACK_WIDTH - THUMB_SIZE - THUMB_OFFSET * 2
 
+/** @public */
 export type VoidSwitchProps = {
   checked: boolean
   onChange?: (checked: boolean) => void
@@ -27,6 +24,7 @@ export type VoidSwitchProps = {
   focusId?: string
 }
 
+/** @public */
 export function VoidSwitch(props: VoidSwitchProps) {
   return (
     <Switch

@@ -6,12 +6,14 @@ function getNodeInteractionMode(node: TGENode): InteractionMode {
   return (node.props.interactionMode as InteractionMode | undefined) ?? node._interactionMode
 }
 
+/** @public */
 export function beginNodeInteraction(node: TGENode, mode: Exclude<InteractionMode, "none">) {
   if (node.destroyed) return
   if (node._interactionMode === mode) return
   node._interactionMode = mode
 }
 
+/** @public */
 export function endNodeInteraction(node: TGENode, mode?: Exclude<InteractionMode, "none">) {
   if (node.destroyed) return
   if (mode && node._interactionMode !== mode) return
@@ -19,11 +21,13 @@ export function endNodeInteraction(node: TGENode, mode?: Exclude<InteractionMode
   node._interactionMode = "none"
 }
 
+/** @public */
 export function hasActiveNodeInteraction(node: TGENode | null | undefined): boolean {
   if (!node) return false
   return getNodeInteractionMode(node) !== "none"
 }
 
+/** @public */
 export function hasInteractionInSubtree(node: TGENode | null | undefined): boolean {
   if (!node) return false
   if (getNodeInteractionMode(node) !== "none") return true
@@ -31,16 +35,19 @@ export function hasInteractionInSubtree(node: TGENode | null | undefined): boole
   return node.children.some((child) => hasInteractionInSubtree(child))
 }
 
+/** @public */
 export function shouldPromoteInteractionLayer(node: TGENode | null | undefined): boolean {
   if (!node) return false
   return getNodeInteractionMode(node) === "drag"
 }
 
+/** @public */
 export function shouldFreezeInteractionLayer(node: TGENode | null | undefined): boolean {
   if (!node) return false
   return getNodeInteractionMode(node) === "drag"
 }
 
+/** @public */
 export type InteractionLayerState = {
   ref: (handle: NodeHandle) => void
   node: () => TGENode | null
@@ -49,8 +56,10 @@ export type InteractionLayerState = {
   end: (mode?: Exclude<InteractionMode, "none">) => void
 }
 
+/** @public */
 export type InteractionBinding = "auto" | "none" | InteractionLayerState
 
+/** @public */
 export function useInteractionLayer(): InteractionLayerState {
   let node: TGENode | null = null
   const [mode, setMode] = createSignal<InteractionMode>("none")

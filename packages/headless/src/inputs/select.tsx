@@ -1,31 +1,9 @@
 /**
  * Select — truly headless dropdown select primitive.
  *
- * CONTROLLED component — parent owns the selected value.
- * Focus-aware with keyboard navigation (Up/Down/Enter/Escape).
+ * Handles focus, keyboard navigation, open/close state, and option selection.
  *
- * This is a BEHAVIOR-ONLY component. It provides:
- *   - Focus management (useFocus)
- *   - Keyboard navigation (Up/Down/Enter/Escape)
- *   - Open/close state
- *   - Option registration + selection
- *   - Highlight tracking
- *
- * ALL visual styling is the consumer's responsibility.
- * Use @tge/void VoidSelect for a styled version.
- *
- * Usage (simple — options prop):
- *   <Select
- *     value={value()}
- *     onChange={setValue}
- *     options={[
- *       { value: "apple", label: "Apple" },
- *       { value: "banana", label: "Banana" },
- *     ]}
- *     placeholder="Pick a fruit…"
- *     renderTrigger={(ctx) => <text>{ctx.selectedLabel || ctx.placeholder}</text>}
- *     renderOption={(opt, ctx) => <text>{opt.label}</text>}
- *   />
+ * @public
  */
 
 import { createSignal, createContext, useContext } from "solid-js"
@@ -34,12 +12,14 @@ import { useFocus } from "@vexart/engine"
 
 // ── Types ──
 
+/** @public */
 export type SelectOption = {
   value: string
   label: string
   disabled?: boolean
 }
 
+/** @public */
 export type SelectTriggerContext = {
   /** Currently selected label (or undefined). */
   selectedLabel: string | undefined
@@ -53,6 +33,7 @@ export type SelectTriggerContext = {
   disabled: boolean
 }
 
+/** @public */
 export type SelectOptionContext = {
   /** Whether this option is currently highlighted via keyboard. */
   highlighted: boolean
@@ -62,6 +43,7 @@ export type SelectOptionContext = {
   disabled: boolean
 }
 
+/** @public */
 export type SelectProps = {
   /** Currently selected value. */
   value?: string
@@ -85,14 +67,17 @@ export type SelectProps = {
   children?: JSX.Element
 }
 
+/** @public */
 export type SelectTriggerProps = {
   children?: JSX.Element
 }
 
+/** @public */
 export type SelectContentProps = {
   children?: JSX.Element
 }
 
+/** @public */
 export type SelectItemProps = {
   value: string
   disabled?: boolean
@@ -123,7 +108,7 @@ function useSelectContext(): SelectContextValue {
 
 // ── Select Root ──
 
-export function Select(props: SelectProps) {
+function SelectRoot(props: SelectProps) {
   const [open, setOpen] = createSignal(false)
   const [highlightedIndex, setHighlightedIndex] = createSignal(0)
   const [registeredOptions, setRegisteredOptions] = createSignal<SelectOption[]>([])
@@ -265,16 +250,19 @@ export function Select(props: SelectProps) {
 
 // ── Compound sub-components ──
 
-function SelectTrigger(props: SelectTriggerProps) {
+/** @public */
+export function SelectTrigger(props: SelectTriggerProps) {
   return <>{props.children}</>
 }
 
-function SelectContent(props: SelectContentProps) {
+/** @public */
+export function SelectContent(props: SelectContentProps) {
   const ctx = useSelectContext()
   return <>{ctx.open() ? props.children : null}</>
 }
 
-function SelectItem(props: SelectItemProps) {
+/** @public */
+export function SelectItem(props: SelectItemProps) {
   const ctx = useSelectContext()
   const disabled = () => props.disabled ?? false
   const label = typeof props.children === "string" ? props.children : props.value
@@ -284,6 +272,9 @@ function SelectItem(props: SelectItemProps) {
 
 // ── Attach sub-components ──
 
-Select.Trigger = SelectTrigger
-Select.Content = SelectContent
-Select.Item = SelectItem
+/** @public */
+export const Select = Object.assign(SelectRoot, {
+  Trigger: SelectTrigger,
+  Content: SelectContent,
+  Item: SelectItem,
+})

@@ -1,19 +1,9 @@
 /**
  * Code — syntax-highlighted code block for TGE.
  *
- * Renders source code with per-token coloring via tree-sitter.
- * Each line is a row of <text> elements with individual colors.
+ * Renders source code with tree-sitter token coloring.
  *
- * Truly headless: all visual properties come from the `theme` prop.
- * Use @tge/void VoidCode for a styled version.
- *
- * Usage:
- *   <Code
- *     content={sourceCode}
- *     language="typescript"
- *     syntaxStyle={style}
- *     theme={{ bg: 0x1e1e2eff, lineNumberFg: 0x555555ff, radius: 8, padding: 12 }}
- *   />
+ * @public
  */
 
 import { createSignal, createEffect, onCleanup } from "solid-js"
@@ -31,6 +21,7 @@ const CHAR_WIDTH = 9
 
 // ── Theme ──
 
+/** @public */
 export type CodeTheme = {
   /** Background color. */
   bg: string | number
@@ -51,6 +42,7 @@ const CODE_DEFAULTS: CodeTheme = {
 
 // ── Types ──
 
+/** @public */
 export type CodeProps = {
   content: string
   language: string
@@ -63,6 +55,7 @@ export type CodeProps = {
   streaming?: boolean
 }
 
+/** @public */
 export function Code(props: CodeProps) {
   const t = () => ({ ...CODE_DEFAULTS, ...props.theme })
   const [tokens, setTokens] = createSignal<Token[][]>([])

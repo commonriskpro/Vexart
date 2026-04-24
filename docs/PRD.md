@@ -1,9 +1,14 @@
 # Vexart — Product Requirements Document
 
-**Version**: 0.4
+**Version**: 0.5
 **Status**: Draft — foundational document
 **Owner**: Founder (solo developer)
 **Last updated**: April 2026
+
+**Changelog from v0.4**:
+- DEC-012 added: Rust-retained engine roadmap adopted as the execution path for the remaining engine migration. `docs/PRD-RUST-RETAINED-ENGINE.md` and `docs/ROADMAP-RUST-RETAINED-ENGINE.md` are now companion source-of-truth documents for native ownership sequencing.
+- Section 6 extended with the retained-engine target: Rust owns scene graph, layout, damage, layer registry, render graph, frame orchestration, resources, paint, composite, hit-testing, and Kitty presentation; TypeScript remains the Solid/JSX shell, public API, hooks, callback registry, and compatibility fallback.
+- Section 11 extended with a Rust-retained migration overlay that supersedes older TS-owned frame-pipeline assumptions after Native Presentation.
 
 **Changelog from v0.3**:
 - DEC-011 added: Phase 2 text rendering exception. Bitmap text is NOT ported to Rust during Phase 2. Text nodes render as placeholder (invisible or minimal fallback) until Phase 2b delivers MSDF. Rationale: founder decision to avoid ~200 LOC of bitmap Rust code that would be deleted in Phase 2b.
@@ -489,6 +494,41 @@ Every headless component exposes its render API via a **render prop with context
 - `ctx.*Props` objects are stable contracts. Adding a field is minor (0.x.+1). Removing or renaming is breaking (0.+1.0).
 - Styled components wrap headless components and supply their own renderers with token-based styling.
 
+### 6.7 Rust-retained engine migration target
+
+The v0.9 engine migration follows the retained Rust roadmap in [`PRD-RUST-RETAINED-ENGINE.md`](./PRD-RUST-RETAINED-ENGINE.md) and [`ROADMAP-RUST-RETAINED-ENGINE.md`](./ROADMAP-RUST-RETAINED-ENGINE.md).
+
+The target ownership model is:
+
+```txt
+JS/Solid public API
+  -> thin Bun FFI binding
+  -> Rust-retained scene graph
+  -> Rust layout + damage + hit-testing + layer assignment
+  -> Rust render graph + WGPU paint
+  -> Rust composite + dirty-region readback
+  -> Rust Kitty encoding + stdout
+```
+
+TypeScript remains responsible for:
+
+- SolidJS custom renderer adapter.
+- Public package APIs, types, hooks, components, and callback registry.
+- Encoding node mutations and prop updates into compact FFI payloads.
+- Terminal lifecycle and compatibility fallback while the migration is in flight.
+- Dispatching JS callbacks returned by Rust event records.
+
+Rust becomes responsible for the frame-critical hot path:
+
+- Retained scene graph and native node IDs.
+- Layout, damage computation, layer assignment, hit-testing, scroll clipping, and pointer capture metadata.
+- Render graph generation, pipeline batching, paint, composite, resources, Kitty output, and frame strategy.
+- Native stats for frame cost, output strategy, emitted bytes, readback bytes, resource usage, and event counts.
+
+Normal terminal presentation MUST NOT return raw RGBA buffers to JavaScript. RGBA readback into JS is allowed only for explicit screenshot, debug, test, or offscreen APIs.
+
+This section supersedes older wording that implies TypeScript permanently owns `walk-tree`, layer assignment, render graph generation, or terminal presentation. During migration, the old TypeScript path may remain behind feature flags and emergency fallback, but it is not the target architecture.
+
 ---
 
 ## 7. Quality Bar
@@ -872,6 +912,37 @@ Timeline assumes 8 hours/day of focused coding, solo, with bi-weekly reviews. To
 
 **Exit criteria**: all v0.9 release criteria from Section 9.1 met. Announcement published.
 
+### Rust-retained engine migration overlay
+
+The roadmap above remains the product roadmap, but the engine internals now follow the retained Rust migration overlay below. This overlay is the execution sequence for moving ownership out of TypeScript without breaking the public JS/JSX API.
+
+Source documents:
+
+- [`docs/PRD-RUST-RETAINED-ENGINE.md`](./PRD-RUST-RETAINED-ENGINE.md)
+- [`docs/ROADMAP-RUST-RETAINED-ENGINE.md`](./ROADMAP-RUST-RETAINED-ENGINE.md)
+- Active SDD changes under `openspec/changes/phase-2b-native-presentation` and later retained-engine phases.
+
+| Retained phase | Name | Outcome | Status gate |
+|---|---|---|---|
+| R0 | Approval and baseline | Founder-approved roadmap, baseline metrics, feature flags | No retained implementation starts without baseline evidence. |
+| R1 | Native Presentation | Rust emits normal terminal output; JS receives stats/status only | `rgbaBytesRead === 0` for normal presentation; visual parity verified. |
+| R2 | Native Layer Registry | Rust owns layer targets, terminal image IDs, lifecycle, and resource accounting | TS no longer owns presentation GPU target handles. |
+| R3 | Native Scene Graph Skeleton | Solid mutations mirror into a Rust-retained tree behind flag | Native scene snapshot matches TS tree fixtures. |
+| R4 | Native Layout, Damage, and Hit-Testing | Rust computes layout, damage, layers, hit-test, and event records | Interaction parity passes for focus, scroll, pointer capture, bubbling. |
+| R5 | Native Render Graph | Rust generates and batches render operations from native scene data | Showcase renders without TS render graph generation on native path. |
+| R6 | Native Frame Orchestrator | Rust chooses frame strategy and owns native frame lifecycle | Dirty/no-op/frame stats meet FFI and latency targets. |
+| R7 | Default Cutover | Native retained path is default; old TS path emergency-only | API extractor shows no unapproved public break; goldens pass. |
+| R8 | Cleanup | Delete or isolate dead TS hot-path ownership | TS renderer internals are a thin binding shell. |
+
+Rules for this overlay:
+
+- Public JS/JSX behavior MUST remain stable throughout the migration.
+- Every retained phase MUST have OpenSpec proposal, spec, design, tasks, and verify report before implementation is considered complete.
+- Fallback stays available for one compatibility window, but each phase must make the fallback boundary smaller.
+- Old TS render graph, layer target cache, and raw presentation payload paths are deleted or test-only after native cutover.
+
+This overlay supersedes any phase text that treats TypeScript ownership of frame preparation or presentation as permanent.
+
 ### Phase 6 — Buffer (built-in)
 
 **Goal**: absorb the overruns that will happen.
@@ -1061,6 +1132,30 @@ Every architectural or product decision is logged here with date, context, and r
 
 **Non-reversal clause**: This decision is locked for the current v0.9 cycle. Reversal requires either (a) Phase 2b slipping past its 5-6 week budget by more than 2 weeks (text would then exist as blank placeholder for 8+ weeks, which is unacceptable), or (b) a customer-impacting blocker discovered during Phase 2 that needs text to validate.
 
+### 2026-04-23 — DEC-012: Rust-retained engine roadmap adopted
+
+**Decision**: Adopt the Rust-retained engine roadmap as the execution path for the remaining engine migration. The public JS/JSX API remains stable, but frame-critical ownership moves progressively into `libvexart`: native presentation first, then layer registry, scene graph, layout/damage/hit-testing, render graph, frame orchestration, default cutover, and cleanup.
+
+**Companion documents**:
+- [`docs/PRD-RUST-RETAINED-ENGINE.md`](./PRD-RUST-RETAINED-ENGINE.md)
+- [`docs/ROADMAP-RUST-RETAINED-ENGINE.md`](./ROADMAP-RUST-RETAINED-ENGINE.md)
+
+**Alternatives considered**:
+- Keep the decomposed TypeScript frame pipeline as the long-term architecture. Rejected: it leaves JS allocations, duplicated resource ownership, render graph drift, and raw presentation payload risk in the hot path.
+- Rewrite everything into Rust in one pass. Rejected: too risky for public API compatibility and debugging.
+- Move only Kitty presentation to Rust and stop. Rejected: useful first win, but does not address scene, render graph, resource, or layer ownership drift.
+
+**Rationale**: Native Presentation already proves the first boundary can move safely: Rust can emit terminal output and expose stats while TypeScript keeps the public API and fallback path. Continuing boundary-by-boundary gives measurable performance wins without forcing users to migrate app code.
+
+**Implications**:
+- `docs/ARCHITECTURE.md` describes the post-cutover retained architecture, not the temporary hybrid state.
+- OpenSpec changes for retained phases are mandatory before implementation.
+- Normal terminal presentation must keep raw RGBA out of JS. JS readback remains explicit-only for tests, screenshots, debug, or offscreen APIs.
+- The retained runtime now defaults on for Kitty-compatible transports (`direct`, `file`, and `shm`); `VEXART_RETAINED=0` preserves the emergency compatibility-window fallback, and narrower per-feature flags remain available for debugging.
+- Existing loop decomposition remains valuable as a compatibility/fallback shell, but not as permanent rendering ownership.
+
+**Non-reversal clause**: Reversal requires profiling evidence that the retained Rust path cannot meet or exceed the hybrid path after obvious fixes, plus founder approval recorded as a new decision.
+
 ---
 
 ## 13. Glossary
@@ -1120,7 +1215,7 @@ Different aspects of Vexart are "owned" by different documents and processes. Wh
 
 ---
 
-**END OF PRD v0.1**
+**END OF PRD v0.5**
 
 ### Issue: Real box-shadow shader (deferred to Phase 4+)
 

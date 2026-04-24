@@ -1,22 +1,7 @@
 /**
  * Popover — styled popover panel using Void design tokens.
  *
- * Built on top of the headless @tge/components Popover.
- * Renders a floating panel anchored to a trigger element.
- *
- * Usage:
- *   const [open, setOpen] = createSignal(false)
- *
- *   <VoidPopover
- *     open={open()}
- *     onOpenChange={setOpen}
- *     trigger={<Button>Options</Button>}
- *   >
- *     <box direction="column" gap={4}>
- *       <text color={themeColors.foreground}>Option 1</text>
- *       <text color={themeColors.foreground}>Option 2</text>
- *     </box>
- *   </VoidPopover>
+ * @public
  */
 
 import { Popover } from "@vexart/headless"
@@ -24,6 +9,7 @@ import { radius, space, shadows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 import type { JSX } from "solid-js"
 
+/** @public */
 export type VoidPopoverProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -34,6 +20,7 @@ export type VoidPopoverProps = {
   width?: number | string
 }
 
+/** @public */
 export function VoidPopover(props: VoidPopoverProps) {
   return (
     <Popover

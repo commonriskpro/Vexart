@@ -18,6 +18,7 @@
 
 import type { JSX } from "solid-js"
 
+/** @public */
 export type WrapRowProps = {
   /** Total available width. */
   width: number
@@ -31,6 +32,7 @@ export type WrapRowProps = {
   children?: JSX.Element
 }
 
+/** @public */
 export function WrapRow(props: WrapRowProps) {
   const gap = () => props.gap ?? 0
   const rowGap = () => props.rowGap ?? gap()

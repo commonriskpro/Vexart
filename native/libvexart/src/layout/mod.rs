@@ -7,6 +7,7 @@ pub mod writeback;
 
 use crate::ffi::buffer::parse_header;
 use crate::ffi::panic::{ERR_INVALID_ARG, OK};
+use crate::scene::SceneGraph;
 
 /// Owns the Taffy layout tree and viewport state for a single vexart context.
 ///
@@ -53,6 +54,20 @@ impl LayoutContext {
         }
 
         // Write the PositionedCommand output buffer.
+        writeback::write_layout(&self.tree, out, out_used)
+    }
+
+    pub fn compute_scene(&mut self, scene: &SceneGraph, out: &mut [u8], out_used: &mut u32) -> i32 {
+        let code = self.tree.build_from_scene(scene);
+        if code != OK {
+            *out_used = 0;
+            return code;
+        }
+        let code = self.tree.compute();
+        if code != OK {
+            *out_used = 0;
+            return code;
+        }
         writeback::write_layout(&self.tree, out, out_used)
     }
 

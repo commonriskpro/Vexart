@@ -12,10 +12,12 @@ import { markDirty } from "./reconciler/dirty"
 import { resetFocus } from "./reconciler/focus"
 import { resetSelection } from "./reconciler/selection"
 import { bindLoop, unbindLoop } from "./reconciler/pointer"
+import { destroyNativeScene } from "./ffi/native-scene"
 import type { Terminal } from "./terminal/index"
 
 // ── Mouse button constants ──
 
+/** @public */
 export const MouseButton = {
   LEFT: 0,
   MIDDLE: 1,
@@ -27,6 +29,7 @@ export const MouseButton = {
 
 // ── RGBA utility class ──
 
+/** @public */
 export class RGBA {
   readonly r: number
   readonly g: number
@@ -77,6 +80,7 @@ export class RGBA {
 
 // ── useTerminalDimensions hook ──
 
+/** @public */
 export function useTerminalDimensions(terminal: Terminal): {
   width: () => number
   height: () => number
@@ -109,6 +113,7 @@ export function useTerminalDimensions(terminal: Terminal): {
 /**
  * Decode paste bytes to string — normalizes line endings.
  */
+/** @public */
 export function decodePasteBytes(bytes: Uint8Array | string): string {
   if (typeof bytes === "string") return bytes
   return new TextDecoder().decode(bytes)
@@ -116,6 +121,7 @@ export function decodePasteBytes(bytes: Uint8Array | string): string {
 
 // ── Mount types ──
 
+/** @public */
 export type MountOptions = {
   maxFps?: number
   experimental?: {
@@ -123,9 +129,16 @@ export type MountOptions = {
     interactionMaxFps?: number
     frameBudgetMs?: number
     forceLayerRepaint?: boolean
+    nativePresentation?: boolean
+    nativeLayerRegistry?: boolean
+    nativeSceneGraph?: boolean
+    nativeEventDispatch?: boolean
+    nativeSceneLayout?: boolean
+    nativeRenderGraph?: boolean
   }
 }
 
+/** @public */
 export type MountHandle = {
   suspend: () => void
   resume: () => void
@@ -135,6 +148,7 @@ export type MountHandle = {
 
 // ── mount ──
 
+/** @public */
 export function mount(component: () => any, terminal: Terminal, opts?: MountOptions): MountHandle {
   const loop = createRenderLoop(terminal, {
     experimental: {
@@ -203,6 +217,7 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
       resetFocus()
       resetSelection()
       dispose()
+      destroyNativeScene()
       loop.destroy()
     },
   }

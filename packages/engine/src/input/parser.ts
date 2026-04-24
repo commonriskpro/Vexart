@@ -19,8 +19,10 @@ import type { InputEvent, FocusEvent, PasteEvent } from "./types"
 import { parseKey } from "./keyboard"
 import { parseMouse } from "./mouse"
 
+/** @public */
 export type InputHandler = (event: InputEvent) => void
 
+/** @public */
 export type InputParser = {
   /** Feed raw data from stdin. Emits events via the handler. */
   feed: (data: Buffer) => void
@@ -34,6 +36,7 @@ export type InputParser = {
  * Call `feed()` with each Buffer from stdin.on("data").
  * The handler receives parsed InputEvent objects.
  */
+/** @public */
 export function createParser(handler: InputHandler): InputParser {
   let buffer = ""
   let pasting = false

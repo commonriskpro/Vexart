@@ -8,6 +8,7 @@
  * Detection order matters — more specific checks first.
  */
 
+/** @public */
 export type TerminalKind =
   | "ghostty"
   | "kitty"
@@ -19,7 +20,7 @@ export type TerminalKind =
   | "xterm"
   | "unknown"
 
-/** Detect the terminal emulator from environment variables. */
+/** @public */
 export function detect(): TerminalKind {
   const env = process.env
 

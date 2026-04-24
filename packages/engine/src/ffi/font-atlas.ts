@@ -330,6 +330,7 @@ export function loadFontAtlas(ctx: bigint, fontId: number, desc: FontDescriptor)
   return result === 0
 }
 
+/** @public */
 export function getFontAtlasCacheStats() {
   let bytes = 0
   for (const atlas of atlasCache.values()) {

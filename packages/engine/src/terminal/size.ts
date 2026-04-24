@@ -14,6 +14,7 @@
 
 import { appendFileSync } from "node:fs"
 
+/** @public */
 export type TerminalSize = {
   /** Terminal width in columns (cells) */
   cols: number
@@ -29,7 +30,7 @@ export type TerminalSize = {
   cellHeight: number
 }
 
-/** Get the current terminal size. */
+/** @public */
 export function getSize(stdout: NodeJS.WriteStream): TerminalSize {
   const cols = stdout.columns || 80
   const rows = stdout.rows || 24
@@ -51,10 +52,9 @@ export function getSize(stdout: NodeJS.WriteStream): TerminalSize {
 }
 
 /**
- * Query pixel dimensions via CSI 14t escape sequence.
+ * Query terminal pixel dimensions.
  *
- * Response format: \x1b[4;{height};{width}t
- * Most modern terminals support this (xterm, kitty, ghostty, wezterm, foot).
+ * @public
  */
 export function queryPixelSize(
   write: (data: string) => void,
@@ -109,6 +109,7 @@ export function queryPixelSize(
   })
 }
 
+/** @public */
 export type ResizeHandler = (size: TerminalSize) => void
 
 const RESIZE_DEBUG = process.env.TGE_DEBUG_RESIZE === "1"
@@ -119,11 +120,7 @@ function logResize(message: string) {
   appendFileSync(RESIZE_DEBUG_LOG, `[terminal:size] ${message}\n`)
 }
 
-/**
- * Listen for terminal resize events (SIGWINCH).
- *
- * Returns an unsubscribe function.
- */
+/** @public */
 export function onResize(stdout: NodeJS.WriteStream, handler: ResizeHandler): () => void {
   let timeout: ReturnType<typeof setTimeout> | null = null
   let last = getSize(stdout)

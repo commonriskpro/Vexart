@@ -84,6 +84,7 @@ use taffy::style::Overflow;
 
 use crate::ffi::buffer::parse_header;
 use crate::ffi::panic::{ERR_INVALID_ARG, ERR_LAYOUT_FAILED, OK};
+use crate::scene::{PropValue, SceneGraph};
 
 /// Command kinds in the layout input buffer.
 const CMD_NODE_OPEN: u16 = 0;
@@ -295,6 +296,71 @@ impl LayoutTree {
         OK
     }
 
+    pub fn build_from_scene(&mut self, scene: &SceneGraph) -> i32 {
+        let mut roots: Vec<u64> = scene
+            .nodes
+            .values()
+            .filter(|node| node.parent.is_none())
+            .map(|node| node.id)
+            .collect();
+        roots.sort_unstable();
+
+        if roots.is_empty() {
+            self.root = None;
+            for (_, node) in self.id_map.drain() {
+                let _ = self.taffy.remove(node);
+            }
+            return OK;
+        }
+
+        let mut seen = HashMap::<u64, NodeId>::new();
+        let root = if roots.len() == 1 {
+            match self.sync_scene_node(scene, roots[0], true, &mut seen) {
+                Ok(node) => node,
+                Err(code) => return code,
+            }
+        } else {
+            let synthetic_id = 0u64;
+            let synthetic_style = Style {
+                display: Display::Flex,
+                size: Size { width: Dimension::percent(1.0), height: Dimension::percent(1.0) },
+                flex_direction: FlexDirection::Column,
+                ..Style::default()
+            };
+            let synthetic = match self.ensure_taffy_node(synthetic_id, synthetic_style, &mut seen) {
+                Ok(node) => node,
+                Err(code) => return code,
+            };
+            let mut child_nodes = Vec::with_capacity(roots.len());
+            for root_id in roots {
+                let child = match self.sync_scene_node(scene, root_id, false, &mut seen) {
+                    Ok(node) => node,
+                    Err(code) => return code,
+                };
+                child_nodes.push(child);
+            }
+            if let Err(_) = self.taffy.set_children(synthetic, &child_nodes) {
+                return ERR_LAYOUT_FAILED;
+            }
+            synthetic
+        };
+
+        let stale: Vec<(u64, NodeId)> = self
+            .id_map
+            .iter()
+            .filter(|(id, _)| !seen.contains_key(id))
+            .map(|(id, node)| (*id, *node))
+            .collect();
+        for (id, node) in stale {
+            self.id_map.remove(&id);
+            let _ = self.taffy.remove(node);
+        }
+
+        self.id_map = seen;
+        self.root = Some(root);
+        OK
+    }
+
     /// Compute layout against `self.viewport_w` × `self.viewport_h`.
     ///
     /// Returns `OK` on success, `ERR_LAYOUT_FAILED` if Taffy fails.
@@ -323,6 +389,172 @@ impl LayoutTree {
             Err(_) => ERR_LAYOUT_FAILED,
         }
     }
+
+    fn sync_scene_node(&mut self, scene: &SceneGraph, scene_node_id: u64, is_root: bool, seen: &mut HashMap<u64, NodeId>) -> Result<NodeId, i32> {
+        let Some(scene_node) = scene.nodes.get(&scene_node_id) else {
+            return Err(ERR_INVALID_ARG);
+        };
+        let packed = packed_style_from_scene(scene, scene_node_id);
+        let style = pack_to_taffy_style(&packed, scene_prop_truthy(scene, scene_node_id, prop_hash("floating")), is_root, scene_prop_truthy(scene, scene_node_id, prop_hash("scrollX")) || scene_prop_truthy(scene, scene_node_id, prop_hash("scrollY")));
+        let node = self.ensure_taffy_node(scene_node_id, style, seen)?;
+        let mut children = Vec::with_capacity(scene_node.children.len());
+        for &child_id in &scene_node.children {
+            children.push(self.sync_scene_node(scene, child_id, false, seen)?);
+        }
+        if let Err(_) = self.taffy.set_children(node, &children) {
+            return Err(ERR_LAYOUT_FAILED);
+        }
+        Ok(node)
+    }
+
+    fn ensure_taffy_node(&mut self, scene_node_id: u64, style: Style, seen: &mut HashMap<u64, NodeId>) -> Result<NodeId, i32> {
+        let node = if let Some(&existing) = self.id_map.get(&scene_node_id) {
+            if let Err(_) = self.taffy.set_style(existing, style) {
+                return Err(ERR_LAYOUT_FAILED);
+            }
+            existing
+        } else {
+            match self.taffy.new_leaf(style) {
+                Ok(node) => node,
+                Err(_) => return Err(ERR_LAYOUT_FAILED),
+            }
+        };
+        seen.insert(scene_node_id, node);
+        Ok(node)
+    }
+}
+
+fn scene_numeric_prop(scene: &SceneGraph, node_id: u64, prop_id: u16) -> Option<f32> {
+    match scene.nodes.get(&node_id).and_then(|node| node.props.get(&prop_id)) {
+        Some(PropValue::I32(v)) => Some(*v as f32),
+        Some(PropValue::U32(v)) => Some(*v as f32),
+        Some(PropValue::F32(v)) => Some(*v),
+        _ => None,
+    }
+}
+
+fn scene_string_prop<'a>(scene: &'a SceneGraph, node_id: u64, prop_id: u16) -> Option<&'a str> {
+    match scene.nodes.get(&node_id).and_then(|node| node.props.get(&prop_id)) {
+        Some(PropValue::String(v)) => Some(v.as_str()),
+        _ => None,
+    }
+}
+
+fn scene_prop_truthy(scene: &SceneGraph, node_id: u64, prop_id: u16) -> bool {
+    matches!(scene.nodes.get(&node_id).and_then(|node| node.props.get(&prop_id)), Some(PropValue::Bool(true)) | Some(PropValue::Capability(true)))
+}
+
+fn scene_size_prop(scene: &SceneGraph, node_id: u64, prop_id: u16) -> (u8, f32) {
+    if let Some(value) = scene_numeric_prop(scene, node_id, prop_id) {
+        return (1, value);
+    }
+    let Some(value) = scene_string_prop(scene, node_id, prop_id) else {
+        return (0, 0.0);
+    };
+    if value == "grow" || value == "fit" || value == "auto" {
+        return (0, 0.0);
+    }
+    if let Some(percent) = value.strip_suffix('%').and_then(|raw| raw.parse::<f32>().ok()) {
+        return (2, percent / 100.0);
+    }
+    (0, 0.0)
+}
+
+fn scene_direction_prop(scene: &SceneGraph, node_id: u64) -> u8 {
+    let value = scene_string_prop(scene, node_id, prop_hash("direction"))
+        .or_else(|| scene_string_prop(scene, node_id, prop_hash("flexDirection")));
+    match value {
+        Some("row") => 0,
+        Some("column") => 1,
+        Some("row-reverse") => 2,
+        Some("column-reverse") => 3,
+        _ => 1,
+    }
+}
+
+fn scene_align_value(value: &str) -> u8 {
+    match value {
+        "left" | "top" | "flex-start" | "start" => 0,
+        "right" | "bottom" | "flex-end" | "end" => 1,
+        "center" => 2,
+        "space-between" => 3,
+        "space-around" => 4,
+        "space-evenly" => 5,
+        _ => 255,
+    }
+}
+
+fn scene_alignment(scene: &SceneGraph, node_id: u64, direction: u8) -> (u8, u8) {
+    let ax = scene_string_prop(scene, node_id, prop_hash("alignX"))
+        .or_else(|| scene_string_prop(scene, node_id, prop_hash("justifyContent")))
+        .map(scene_align_value)
+        .unwrap_or(0);
+    let ay = scene_string_prop(scene, node_id, prop_hash("alignY"))
+        .or_else(|| scene_string_prop(scene, node_id, prop_hash("alignItems")))
+        .map(scene_align_value)
+        .unwrap_or(0);
+    if direction == 1 || direction == 3 {
+        (ay, ax)
+    } else {
+        (ax, ay)
+    }
+}
+
+fn packed_style_from_scene(scene: &SceneGraph, node_id: u64) -> PackedStyle {
+    let direction = scene_direction_prop(scene, node_id);
+    let (justify, align) = scene_alignment(scene, node_id, direction);
+    let uniform_padding = scene_numeric_prop(scene, node_id, prop_hash("padding")).unwrap_or(0.0);
+    let padding_x = scene_numeric_prop(scene, node_id, prop_hash("paddingX")).unwrap_or(uniform_padding);
+    let padding_y = scene_numeric_prop(scene, node_id, prop_hash("paddingY")).unwrap_or(uniform_padding);
+    let uniform_border = scene_numeric_prop(scene, node_id, 5).unwrap_or(0.0);
+    let width = scene_size_prop(scene, node_id, 1);
+    let height = scene_size_prop(scene, node_id, 2);
+    let flex_grow = scene_numeric_prop(scene, node_id, prop_hash("flexGrow")).unwrap_or_else(|| {
+        let width_grow = matches!(scene_string_prop(scene, node_id, 1), Some("grow"));
+        let height_grow = matches!(scene_string_prop(scene, node_id, 2), Some("grow"));
+        if width_grow || height_grow { 1.0 } else { 0.0 }
+    });
+
+    PackedStyle {
+        flex_direction: direction,
+        position_kind: if scene_prop_truthy(scene, node_id, prop_hash("floating")) { 1 } else { 0 },
+        size_w_kind: width.0,
+        size_h_kind: height.0,
+        size_w_value: width.1,
+        size_h_value: height.1,
+        min_w: scene_numeric_prop(scene, node_id, prop_hash("minWidth")).unwrap_or(0.0),
+        min_h: scene_numeric_prop(scene, node_id, prop_hash("minHeight")).unwrap_or(0.0),
+        max_w: scene_numeric_prop(scene, node_id, prop_hash("maxWidth")).unwrap_or(0.0),
+        max_h: scene_numeric_prop(scene, node_id, prop_hash("maxHeight")).unwrap_or(0.0),
+        flex_grow,
+        flex_shrink: scene_numeric_prop(scene, node_id, prop_hash("flexShrink")).unwrap_or(1.0),
+        justify_content: justify,
+        align_items: align,
+        align_content: align,
+        padding_top: scene_numeric_prop(scene, node_id, prop_hash("paddingTop")).unwrap_or(padding_y),
+        padding_right: scene_numeric_prop(scene, node_id, prop_hash("paddingRight")).unwrap_or(padding_x),
+        padding_bottom: scene_numeric_prop(scene, node_id, prop_hash("paddingBottom")).unwrap_or(padding_y),
+        padding_left: scene_numeric_prop(scene, node_id, prop_hash("paddingLeft")).unwrap_or(padding_x),
+        border_top: scene_numeric_prop(scene, node_id, prop_hash("borderTop")).unwrap_or(uniform_border),
+        border_right: scene_numeric_prop(scene, node_id, prop_hash("borderRight")).unwrap_or(uniform_border),
+        border_bottom: scene_numeric_prop(scene, node_id, prop_hash("borderBottom")).unwrap_or(uniform_border),
+        border_left: scene_numeric_prop(scene, node_id, prop_hash("borderLeft")).unwrap_or(uniform_border),
+        gap_row: scene_numeric_prop(scene, node_id, prop_hash("gap")).unwrap_or(0.0),
+        gap_column: scene_numeric_prop(scene, node_id, prop_hash("gap")).unwrap_or(0.0),
+        inset_top: 0.0,
+        inset_right: 0.0,
+        inset_bottom: 0.0,
+        inset_left: 0.0,
+    }
+}
+
+fn prop_hash(name: &str) -> u16 {
+    let mut hash: u32 = 2166136261;
+    for byte in name.as_bytes() {
+        hash ^= *byte as u32;
+        hash = hash.wrapping_mul(16777619);
+    }
+    ((hash % 60000) + 1000) as u16
 }
 
 /// Read a f32 from a byte slice at a given offset (little-endian).
@@ -653,6 +885,7 @@ pub struct TestNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scene::{NativeNodeKind, SceneGraph};
 
     /// Helper: make a single-root node with grow sizing.
     fn root_grow_node() -> TestNode {
@@ -811,6 +1044,67 @@ mod tests {
             "c1 height={}",
             c1.size.height
         );
+    }
+
+    #[test]
+    fn test_build_from_scene_reuses_nodes_and_prunes_removed_children() {
+        let mut scene = SceneGraph::new();
+        let root = scene.create_node(NativeNodeKind::Root);
+        let a = scene.create_node(NativeNodeKind::Box);
+        let b = scene.create_node(NativeNodeKind::Box);
+        scene.insert(root, a, None);
+        scene.insert(root, b, None);
+
+        scene.set_props(root, &{
+            let mut bytes = Vec::new();
+            bytes.extend_from_slice(&3u16.to_le_bytes());
+            for (prop_id, kind, payload) in [
+                (1u16, 3u8, 100u32.to_le_bytes().to_vec()),
+                (2u16, 3u8, 20u32.to_le_bytes().to_vec()),
+                (prop_hash("direction"), 5u8, b"row".to_vec()),
+            ] {
+                bytes.extend_from_slice(&prop_id.to_le_bytes());
+                bytes.push(kind);
+                bytes.push(0);
+                bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+                bytes.extend_from_slice(&payload);
+            }
+            bytes
+        });
+
+        for node in [a, b] {
+            scene.set_props(node, &{
+                let mut bytes = Vec::new();
+                bytes.extend_from_slice(&2u16.to_le_bytes());
+                for (prop_id, payload) in [(1u16, 20u32.to_le_bytes().to_vec()), (2u16, 10u32.to_le_bytes().to_vec())] {
+                    bytes.extend_from_slice(&prop_id.to_le_bytes());
+                    bytes.push(3);
+                    bytes.push(0);
+                    bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+                    bytes.extend_from_slice(&payload);
+                }
+                bytes
+            });
+        }
+
+        let mut tree = LayoutTree::new();
+        tree.viewport_w = 100.0;
+        tree.viewport_h = 20.0;
+        assert_eq!(tree.build_from_scene(&scene), OK);
+        assert_eq!(tree.compute(), OK);
+        let first_a = tree.id_map.get(&a).copied().unwrap();
+        let first_b = tree.id_map.get(&b).copied().unwrap();
+        assert_ne!(first_a, first_b);
+
+        scene.destroy_subtree(b);
+        assert_eq!(tree.build_from_scene(&scene), OK);
+        assert_eq!(tree.compute(), OK);
+        let second_a = tree.id_map.get(&a).copied().unwrap();
+        assert_eq!(first_a, second_a);
+        assert!(tree.id_map.get(&b).is_none());
+        let children = tree.taffy.children(tree.root.unwrap()).unwrap();
+        assert_eq!(children.len(), 1);
+        assert_eq!(children[0], second_a);
     }
 
     // ── Helper builders for tests ──────────────────────────────────────

@@ -7,6 +7,7 @@ import { setPointerCapture } from "./pointer"
 import { beginNodeInteraction, endNodeInteraction } from "./interaction"
 import type { InteractionBinding, InteractionLayerState } from "./interaction"
 
+/** @public */
 export type DragOptions = {
   onDragStart?: (evt: NodeMouseEvent) => boolean | void
   onDrag: (evt: NodeMouseEvent) => void
@@ -15,6 +16,7 @@ export type DragOptions = {
   interaction?: InteractionBinding
 }
 
+/** @public */
 export type DragProps = {
   ref: (handle: NodeHandle) => void
   onMouseDown: (evt: NodeMouseEvent) => void
@@ -22,11 +24,13 @@ export type DragProps = {
   onMouseUp: (evt: NodeMouseEvent) => void
 }
 
+/** @public */
 export type DragState = {
   dragging: () => boolean
   dragProps: DragProps
 }
 
+/** @public */
 export function useDrag(opts: DragOptions): DragState {
   let nodeId = 0
   let node: NodeHandle["_node"] | null = null

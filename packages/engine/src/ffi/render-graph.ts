@@ -16,6 +16,7 @@ export const CMD = {
   SCISSOR_END: 6,
 } as const
 
+/** @public */
 export type RenderCommand = {
   type: number
   x: number
@@ -36,6 +37,7 @@ function packColor(r: number, g: number, b: number, a: number): number {
   return (((r & 0xff) << 24) | ((g & 0xff) << 16) | ((b & 0xff) << 8) | (a & 0xff)) >>> 0
 }
 
+/** @public */
 export type ShadowDef = {
   x: number
   y: number
@@ -43,6 +45,7 @@ export type ShadowDef = {
   color: number
 }
 
+/** @public */
 export type EffectConfig = {
   renderObjectId?: number
   color: number
@@ -68,14 +71,17 @@ export type EffectConfig = {
   _node?: TGENode
 }
 
+/** @public */
 export const BACKDROP_FILTER_KIND = {
   BLUR: "blur",
   COLOR: "color",
   BLUR_COLOR: "blur-color",
 } as const
 
+/** @public */
 export type BackdropFilterKind = (typeof BACKDROP_FILTER_KIND)[keyof typeof BACKDROP_FILTER_KIND]
 
+/** @public */
 export interface RenderBounds {
   x: number
   y: number
@@ -83,6 +89,7 @@ export interface RenderBounds {
   height: number
 }
 
+/** @public */
 export interface BackdropFilterParams {
   blur: number | null
   brightness: number | null
@@ -94,6 +101,7 @@ export interface BackdropFilterParams {
   hueRotate: number | null
 }
 
+/** @public */
 export interface BackdropRenderMetadata {
   backdropSourceKey: string
   filterKind: BackdropFilterKind
@@ -107,6 +115,7 @@ export interface BackdropRenderMetadata {
   effectStateId: string
 }
 
+/** @public */
 export type ImagePaintConfig = {
   renderObjectId?: number
   color: number
@@ -115,6 +124,7 @@ export type ImagePaintConfig = {
   objectFit: "contain" | "cover" | "fill" | "none"
 }
 
+/** @public */
 export type CanvasPaintConfig = {
   renderObjectId?: number
   color: number
@@ -122,16 +132,19 @@ export type CanvasPaintConfig = {
   viewport?: { x: number; y: number; zoom: number }
 }
 
+/** @public */
 export type RenderGraphQueues = {
   effects: EffectConfig[]
   images: ImagePaintConfig[]
   canvases: CanvasPaintConfig[]
 }
 
-type RenderGraphQueueState = {
+/** @public */
+export type RenderGraphQueueState = {
   borderEffectIndex: number
 }
 
+/** @public */
 export type TextMeta = {
   content: string
   fontId: number
@@ -139,6 +152,7 @@ export type TextMeta = {
   lineHeight: number
 }
 
+/** @public */
 export type RectangleRenderInputs = {
   renderObjectId: number | null
   color: number
@@ -148,12 +162,14 @@ export type RectangleRenderInputs = {
   effect: EffectConfig | null
 }
 
+/** @public */
 export type BorderRenderInputs = {
   radius: number
   width: number
   cornerRadii: { tl: number; tr: number; br: number; bl: number } | null
 }
 
+/** @public */
 export type TextRenderInputs = {
   text: string
   fontId: number
@@ -162,6 +178,7 @@ export type TextRenderInputs = {
   textHeight: number
 }
 
+/** @public */
 export type RectangleRenderOp = {
   kind: "rectangle"
   renderObjectId: number | null
@@ -169,6 +186,7 @@ export type RectangleRenderOp = {
   inputs: RectangleRenderInputs
 }
 
+/** @public */
 export type ImageRenderOp = {
   kind: "image"
   renderObjectId: number | null
@@ -177,6 +195,7 @@ export type ImageRenderOp = {
   image: ImagePaintConfig
 }
 
+/** @public */
 export type CanvasRenderOp = {
   kind: "canvas"
   renderObjectId: number | null
@@ -185,6 +204,7 @@ export type CanvasRenderOp = {
   canvas: CanvasPaintConfig
 }
 
+/** @public */
 export type EffectRenderOp = {
   kind: "effect"
   renderObjectId: number | null
@@ -197,6 +217,7 @@ export type EffectRenderOp = {
   effectStateId: string
 }
 
+/** @public */
 export type BorderRenderOp = {
   kind: "border"
   renderObjectId: number | null
@@ -204,6 +225,7 @@ export type BorderRenderOp = {
   inputs: BorderRenderInputs
 }
 
+/** @public */
 export type TextRenderOp = {
   kind: "text"
   renderObjectId: number | null
@@ -211,14 +233,17 @@ export type TextRenderOp = {
   inputs: TextRenderInputs
 }
 
+/** @public */
 export type RawCommandRenderOp = {
   kind: "raw-command"
   renderObjectId: number | null
   command: RenderCommand
 }
 
+/** @public */
 export type RenderGraphOp = RectangleRenderOp | ImageRenderOp | CanvasRenderOp | EffectRenderOp | BorderRenderOp | TextRenderOp | RawCommandRenderOp
 
+/** @public */
 export type RenderGraphFrame = {
   ops: RenderGraphOp[]
 }
@@ -228,6 +253,7 @@ type ClipStackEntry = {
   id: string
 }
 
+/** @public */
 export function createRenderGraphQueues(): RenderGraphQueues {
   return {
     effects: [],
@@ -236,12 +262,14 @@ export function createRenderGraphQueues(): RenderGraphQueues {
   }
 }
 
+/** @public */
 export function resetRenderGraphQueues(queues: RenderGraphQueues) {
   queues.effects.length = 0
   queues.images.length = 0
   queues.canvases.length = 0
 }
 
+/** @public */
 export function cloneRenderGraphQueues(queues: RenderGraphQueues): RenderGraphQueues {
   // buildRenderGraphFrame no longer mutates queue arrays, so callers can reuse
   // the original queue references without paying 3x slice() allocations.
@@ -479,6 +507,7 @@ function createClipStackEntry(cmd: RenderCommand, depth: number): ClipStackEntry
   }
 }
 
+/** @public */
 export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, queueState: RenderGraphQueueState, textMetaMap: Map<string, TextMeta>, ownerIds?: { rect: number | null; text: number | null }): RenderGraphOp | null {
   if (cmd.type === CMD.RECTANGLE) {
     const renderObjectId = ownerIds?.rect ?? null
@@ -555,6 +584,7 @@ export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, que
   }
 }
 
+/** @public */
 export function buildRenderGraphFrame(
   commands: RenderCommand[],
   queues: RenderGraphQueues,

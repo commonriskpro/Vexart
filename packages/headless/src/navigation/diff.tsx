@@ -3,21 +3,7 @@
  *
  * Renders a unified diff with per-line coloring.
  *
- * Truly headless: all visual properties come from the `theme` prop.
- * Use @tge/void VoidDiff for a styled version.
- *
- * Usage:
- *   <Diff
- *     diff={unifiedDiffString}
- *     syntaxStyle={style}
- *     filetype="typescript"
- *     theme={{
- *       fg: 0xe0e0e0ff, muted: 0x888888ff,
- *       addedBg: 0x1a3a1aff, removedBg: 0x3a1a1aff,
- *       addedSign: 0x4ec94eff, removedSign: 0xe05050ff,
- *       bg: 0x1a1a2eff, radius: 4,
- *     }}
- *   />
+ * @public
  */
 
 import { createSignal, createEffect, onCleanup } from "solid-js"
@@ -35,6 +21,7 @@ const CHAR_WIDTH = 9
 
 // ── Theme ──
 
+/** @public */
 export type DiffTheme = {
   /** Default text color. */
   fg: string | number
@@ -85,6 +72,7 @@ const DIFF_DEFAULTS: DiffTheme = {
 
 // ── Types ──
 
+/** @public */
 export type DiffProps = {
   diff: string
   syntaxStyle?: SyntaxStyle
@@ -145,6 +133,7 @@ function parseDiff(diff: string): DiffLine[] {
 
 // ── Component ──
 
+/** @public */
 export function Diff(props: DiffProps) {
   const th = () => ({ ...DIFF_DEFAULTS, ...props.theme })
   const showLineNumbers = () => props.showLineNumbers ?? true

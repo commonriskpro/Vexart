@@ -11,6 +11,11 @@
 
 import type { TGENode, NodeMouseEvent } from "../ffi/node"
 import { resolveProps, createPressEvent } from "../ffi/node"
+import type { DamageRect } from "../ffi/damage"
+import { unionRect } from "../ffi/damage"
+import { CMD, type RenderCommand } from "../ffi/render-graph"
+import type { NativePointerEventRecord } from "../ffi/native-scene-events"
+import { NATIVE_EVENT_FLAG, nativePressChain } from "../ffi/native-scene-events"
 import type { PositionedCommand } from "../ffi/layout-writeback"
 import {
   fromConfig,
@@ -20,6 +25,7 @@ import {
   translate,
   isIdentity,
 } from "../ffi/matrix"
+import { nativeSceneSetLayout } from "../ffi/native-scene"
 import { focusedId, setFocusedId, getNodeFocusId } from "../reconciler/focus"
 import { buildNodeMouseEvent, isFullyOutsideScrollViewport } from "../reconciler/hit-test"
 
@@ -33,6 +39,27 @@ export type WriteLayoutBackState = {
   rectNodes: TGENode[]
   textNodes: TGENode[]
   boxNodes: TGENode[]
+  pendingNodeDamageRects?: Array<{ nodeId: number; rect: DamageRect }>
+}
+
+function isNonEmptyLayoutRect(rect: { width: number; height: number }) {
+  return rect.width > 0 && rect.height > 0
+}
+
+export function damageRectForLayoutTransition(
+  prev: { x: number; y: number; width: number; height: number },
+  next: { x: number; y: number; width: number; height: number },
+): DamageRect | null {
+  const prevRect = isNonEmptyLayoutRect(prev)
+    ? { x: prev.x, y: prev.y, width: prev.width, height: prev.height }
+    : null
+  const nextRect = isNonEmptyLayoutRect(next)
+    ? { x: next.x, y: next.y, width: next.width, height: next.height }
+    : null
+  if (!prevRect && !nextRect) return null
+  if (!prevRect) return nextRect
+  if (!nextRect) return prevRect
+  return unionRect(prevRect, nextRect)
 }
 
 /**
@@ -48,7 +75,7 @@ export function writeLayoutBack(
   layoutMap: Map<bigint, PositionedCommand> | null,
   state: WriteLayoutBackState,
 ) {
-  const { rectNodes, textNodes, boxNodes } = state
+  const { rectNodes, textNodes, boxNodes, pendingNodeDamageRects } = state
 
   // Use vexart layout map directly for all box and text nodes.
   // The map is always populated by vexart_layout_compute (Taffy).
@@ -56,19 +83,27 @@ export function writeLayoutBack(
     for (const node of boxNodes) {
       const pos = layoutMap.get(BigInt(node.id))
       if (pos) {
+        const prev = { x: node.layout.x, y: node.layout.y, width: node.layout.width, height: node.layout.height }
         node.layout.x = pos.x
         node.layout.y = pos.y
         node.layout.width = pos.width
         node.layout.height = pos.height
+        const damage = damageRectForLayoutTransition(prev, node.layout)
+        if (damage && pendingNodeDamageRects) pendingNodeDamageRects.push({ nodeId: node.id, rect: damage })
+        nativeSceneSetLayout(node._nativeId, pos.x, pos.y, pos.width, pos.height)
       }
     }
     for (const node of textNodes) {
       const pos = layoutMap.get(BigInt(node.id))
       if (pos) {
+        const prev = { x: node.layout.x, y: node.layout.y, width: node.layout.width, height: node.layout.height }
         node.layout.x = pos.x
         node.layout.y = pos.y
         node.layout.width = pos.width
         node.layout.height = pos.height
+        const damage = damageRectForLayoutTransition(prev, node.layout)
+        if (damage && pendingNodeDamageRects) pendingNodeDamageRects.push({ nodeId: node.id, rect: damage })
+        nativeSceneSetLayout(node._nativeId, pos.x, pos.y, pos.width, pos.height)
       }
     }
   }
@@ -183,6 +218,23 @@ export function writeLayoutBack(
   for (const node of textNodes) computeAccTransform(node)
 }
 
+export function updateCommandsToLayoutMap(
+  commands: RenderCommand[],
+  layoutMap: Map<bigint, PositionedCommand> | null,
+) {
+  if (!layoutMap || layoutMap.size === 0) return
+
+  for (const command of commands) {
+    if (command.type === CMD.SCISSOR_END || command.nodeId === undefined) continue
+    const pos = layoutMap.get(BigInt(command.nodeId))
+    if (!pos) continue
+    command.x = pos.x
+    command.y = pos.y
+    command.width = pos.width
+    command.height = pos.height
+  }
+}
+
 // ── Interactive state (hover/active/focus) ────────────────────────────────
 
 /**
@@ -206,6 +258,47 @@ export type InteractiveStatesBag = {
   cellHeight: number
   /** Called when any interaction state changes (triggers repaint). */
   onChanged: () => void
+  /** Dispatch click callbacks from the native retained scene chain. */
+  useNativePressDispatch?: boolean
+}
+
+export type NativePressChainReader = (x: number, y: number) => NativePointerEventRecord[]
+
+export function dispatchNativePressChain(
+  nodes: TGENode[],
+  x: number,
+  y: number,
+  readChain: NativePressChainReader = nativePressChain,
+) {
+  const chain = readChain(x, y)
+  if (chain.length === 0) return false
+
+  const nodeByNativeId = new Map<bigint, TGENode>()
+  for (const node of nodes) {
+    if (node._nativeId) nodeByNativeId.set(node._nativeId, node)
+  }
+
+  const event = createPressEvent()
+  let dispatched = false
+
+  for (const record of chain) {
+    if (event.propagationStopped) break
+    const node = nodeByNativeId.get(record.nodeId)
+    if (!node) continue
+
+    if ((record.flags & NATIVE_EVENT_FLAG.FOCUSABLE) === NATIVE_EVENT_FLAG.FOCUSABLE && node.props.focusable) {
+      const fid = getNodeFocusId(node)
+      if (fid) setFocusedId(fid)
+      dispatched = true
+    }
+
+    if ((record.flags & NATIVE_EVENT_FLAG.ON_PRESS) === NATIVE_EVENT_FLAG.ON_PRESS && node.props.onPress) {
+      node.props.onPress(event)
+      dispatched = true
+    }
+  }
+
+  return dispatched
 }
 
 /**
@@ -380,20 +473,24 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
     // gets a chance to handle the event. Call event.stopPropagation() in an
     // onPress handler to prevent further bubbling.
     changed = true // Focus/press change — needs repaint
-    const event = createPressEvent()
-    let target: TGENode | null = clickTarget
+    if (bag.useNativePressDispatch) {
+      dispatchNativePressChain(bag.rectNodes, bag.pointerX, bag.pointerY)
+    } else {
+      const event = createPressEvent()
+      let target: TGENode | null = clickTarget
 
-    while (target && !event.propagationStopped) {
-      // Focus: first focusable ancestor wins (like browser)
-      if (target.props.focusable && !event.propagationStopped) {
-        const fid = getNodeFocusId(target)
-        if (fid) setFocusedId(fid)
+      while (target && !event.propagationStopped) {
+        // Focus: first focusable ancestor wins (like browser)
+        if (target.props.focusable && !event.propagationStopped) {
+          const fid = getNodeFocusId(target)
+          if (fid) setFocusedId(fid)
+        }
+        // Dispatch onPress if present
+        if (target.props.onPress) {
+          target.props.onPress(event)
+        }
+        target = target.parent
       }
-      // Dispatch onPress if present
-      if (target.props.onPress) {
-        target.props.onPress(event)
-      }
-      target = target.parent
     }
   }
   // After click dispatch, focus may have changed — update _focused on all

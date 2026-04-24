@@ -1,21 +1,9 @@
 /**
- * Router components — JSX wrappers for TGE's navigation system.
+ * Router components — JSX wrappers for TGE navigation.
  *
- * Two navigation models (Decision 10: Dual Router):
+ * Supports both flat route maps and stack navigation.
  *
- * FLAT routing:
- *   <Router initial="home">
- *     <Route path="home" component={Home} />
- *     <Route path="settings" component={Settings} />
- *   </Router>
- *
- * STACK routing:
- *   <NavigationStack initial={HomeScreen}>
- *     {(screen) => <box>{screen()}</box>}
- *   </NavigationStack>
- *
- * The core router logic lives in @tge/renderer/router.
- * These components provide the declarative JSX interface.
+ * @public
  */
 
 import { createContext, useContext } from "solid-js"
@@ -35,23 +23,20 @@ import {
 
 const RouterCtx = createContext<RouterContextValue>()
 
+/** @public */
 export type RouterProps = {
   /** Initial route path. Defaults to first Route's path. */
   initial?: string
   children?: any
 }
 
+/** @public */
 export type RouteComponentProps = {
   path: string
   component: (props: RouteProps) => JSX.Element
 }
 
-/**
- * Router — flat route container.
- *
- * Reads <Route> children at mount time and renders the current match.
- * Navigate via useRouter().navigate("path").
- */
+/** @public */
 export function Router(props: RouterProps) {
   // Extract route definitions from children
   // Children are <Route> elements — they register themselves via context
@@ -91,9 +76,7 @@ export function Router(props: RouterProps) {
   )
 }
 
-/**
- * Route — renders its component only when the path matches.
- */
+/** @public */
 export function Route(props: RouteComponentProps) {
   const ctx = useContext(RouterCtx)
   if (!ctx) throw new Error("<Route> must be used within a <Router>")
@@ -107,9 +90,7 @@ export function Route(props: RouteComponentProps) {
   )
 }
 
-/**
- * useRouter — access the router from any component within <Router>.
- */
+/** @public */
 export function useRouterContext(): RouterContextValue {
   const ctx = useContext(RouterCtx)
   if (!ctx) throw new Error("useRouterContext() must be used within a <Router>")
@@ -122,23 +103,14 @@ export function useRouterContext(): RouterContextValue {
 
 const StackCtx = createContext<NavigationStackHandle>()
 
+/** @public */
 export type NavigationStackProps = {
   /** Initial screen component. */
   initial?: (props: ScreenProps) => JSX.Element
   children?: any
 }
 
-/**
- * NavigationStack — stack-based navigation container.
- *
- * Renders the top-most screen from the stack.
- * Navigate via useStack().push(Screen) / useStack().pop().
- *
- * Usage:
- *   <NavigationStack initial={HomeScreen} />
- *
- * Screens receive { params, goBack } as props.
- */
+/** @public */
 export function NavigationStack(props: NavigationStackProps) {
   const nav = createNavigationStack(props.initial)
 
@@ -157,9 +129,7 @@ export function NavigationStack(props: NavigationStackProps) {
   )
 }
 
-/**
- * useStack — access the navigation stack from any component.
- */
+/** @public */
 export function useStack(): NavigationStackHandle {
   const ctx = useContext(StackCtx)
   if (!ctx) throw new Error("useStack() must be used within a <NavigationStack>")

@@ -1,17 +1,7 @@
 /**
  * Toast — styled notification system using Void design tokens.
  *
- * Built on top of the headless @tge/components createToaster.
- * Provides ALL visual rendering via renderToast.
- *
- * Theme reactivity: variant colors use getter functions so themeColors
- * signals are read inside SolidJS effects (not captured eagerly).
- *
- * Usage:
- *   const { toast, Toaster } = createVoidToaster()
- *   <Toaster />
- *   toast("Settings saved")
- *   toast({ message: "Error!", variant: "error" })
+ * @public
  */
 
 import { createToaster } from "@vexart/headless"
@@ -20,6 +10,7 @@ import type { JSX } from "solid-js"
 import { radius, space, font, weight, shadows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
+/** @public */
 export type VoidToasterOptions = {
   position?: ToastPosition
   maxVisible?: number
@@ -41,6 +32,7 @@ const variantGetters: Record<string, VariantColors> = {
   info:    { accent: () => "#3b82f6",              border: () => "#3b82f640" },
 }
 
+/** @public */
 export function createVoidToaster(options: VoidToasterOptions = {}): ToasterHandle {
   return createToaster({
     position: options.position ?? "bottom-right",

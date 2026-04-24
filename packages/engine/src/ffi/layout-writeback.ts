@@ -22,7 +22,7 @@
 import type { TGENode } from "./node"
 import { GRAPH_MAGIC, GRAPH_VERSION } from "./vexart-buffer"
 
-/** Computed layout for one node from vexart_layout_compute output. */
+/** @public Computed layout for one node from vexart layout output. */
 export type PositionedCommand = {
   nodeId: bigint
   x: number
@@ -35,16 +35,17 @@ export type PositionedCommand = {
   contentH: number
 }
 
-/** Size in bytes of one PositionedCommand record in the vexart output buffer. */
+/** @public Size in bytes of one positioned-command record in the layout output buffer. */
 export const POSITIONED_CMD_STRIDE = 40
 
 /**
  * Parse the PositionedCommand flat buffer written by vexart_layout_compute.
  * Returns a Map indexed by node_id (bigint) for O(1) lookup.
  *
- * @param outBuf  ArrayBuffer filled by vexart_layout_compute (includes §8 header)
- * @param usedBytes  Number of bytes written (from out_used pointer)
+ * @param outBuf - ArrayBuffer filled by vexart_layout_compute.
+ * @param usedBytes - Number of bytes written into the buffer.
  */
+/** @public */
 export function parseLayoutOutput(
   outBuf: ArrayBuffer,
   usedBytes: number,
@@ -79,9 +80,10 @@ export function parseLayoutOutput(
  * Write layout from a PositionedCommand map to TGENode trees.
  * Maps node.id (number) to bigint key for the layout map.
  *
- * @param nodes   TGENode array to update layout on
- * @param layoutMap  Output from parseLayoutOutput
+ * @param nodes - TGENode array to update.
+ * @param layoutMap - Output from parseLayoutOutput.
  */
+/** @public */
 export function writeLayoutFromPositionedCommands(
   nodes: TGENode[],
   layoutMap: Map<bigint, PositionedCommand>,
@@ -96,7 +98,7 @@ export function writeLayoutFromPositionedCommands(
   }
 }
 
-/** @deprecated Use writeLayoutFromPositionedCommands or the layoutMap directly. */
+/** @public @deprecated Use writeLayoutFromPositionedCommands or the layout map directly. */
 export function applyCommandLayout(node: TGENode, cmd: { x: number; y: number; width: number; height: number }) {
   node.layout.x = cmd.x
   node.layout.y = cmd.y

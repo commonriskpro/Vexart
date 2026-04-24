@@ -34,6 +34,7 @@ pub type ResourceKey = u64;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ResourceKind {
     LayerTarget,
+    TerminalImage,
     FontAtlas,
     GlyphAtlas,
     ImageSprite,

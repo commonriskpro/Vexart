@@ -1,40 +1,9 @@
 /**
- * Combobox — truly headless autocomplete/combobox primitive.
+ * Combobox — truly headless autocomplete primitive.
  *
- * Combines a text input with a filterable dropdown list.
- * CONTROLLED component — parent owns the value.
+ * Handles filtering, focus, open/close state, and keyboard navigation.
  *
- * Provides:
- *   - Text input with filtering
- *   - Keyboard navigation (Up/Down/Enter/Escape)
- *   - Focus management
- *   - Open/close state
- *   - Highlight tracking
- *
- * ALL visual styling is the consumer's responsibility.
- * Use @tge/void VoidCombobox for a styled version.
- *
- * Usage:
- *   <Combobox
- *     value={value()}
- *     onChange={setValue}
- *     options={fruits}
- *     renderInput={(ctx) => (
- *       <box borderWidth={1} borderColor={ctx.focused ? "#4488cc" : "#333"} padding={4}>
- *         <text color="#fff">{ctx.inputValue || ctx.placeholder}</text>
- *       </box>
- *     )}
- *     renderOption={(option, ctx) => (
- *       <box backgroundColor={ctx.highlighted ? "#333" : "transparent"} padding={4}>
- *         <text color="#fff">{option.label}</text>
- *       </box>
- *     )}
- *     renderContent={(children) => (
- *       <box backgroundColor="#1a1a2e" cornerRadius={6} padding={4}>
- *         {children}
- *       </box>
- *     )}
- *   />
+ * @public
  */
 
 import { createSignal } from "solid-js"
@@ -43,12 +12,14 @@ import { useFocus } from "@vexart/engine"
 
 // ── Types ──
 
+/** @public */
 export type ComboboxOption = {
   value: string
   label: string
   disabled?: boolean
 }
 
+/** @public */
 export type ComboboxInputContext = {
   /** Current text in the input. */
   inputValue: string
@@ -64,6 +35,7 @@ export type ComboboxInputContext = {
   selectedLabel: string | undefined
 }
 
+/** @public */
 export type ComboboxOptionContext = {
   /** Whether this option is highlighted via keyboard. */
   highlighted: boolean
@@ -73,6 +45,7 @@ export type ComboboxOptionContext = {
   disabled: boolean
 }
 
+/** @public */
 export type ComboboxProps = {
   /** Currently selected value. */
   value?: string
@@ -98,6 +71,7 @@ export type ComboboxProps = {
   renderEmpty?: () => JSX.Element
 }
 
+/** @public */
 export function Combobox(props: ComboboxProps) {
   const [open, setOpen] = createSignal(false)
   const [query, setQuery] = createSignal("")

@@ -1,14 +1,17 @@
-/** 3×3 matrix as 9-element Float64Array (row-major) */
+/** @public 3×3 matrix as 9-element Float64Array (row-major). */
 export type Matrix3 = Float64Array
 
+/** @public */
 export function identity(): Matrix3 {
   return new Float64Array([1, 0, 0, 0, 1, 0, 0, 0, 1])
 }
 
+/** @public */
 export function translate(tx: number, ty: number): Matrix3 {
   return new Float64Array([1, 0, tx, 0, 1, ty, 0, 0, 1])
 }
 
+/** @public */
 export function rotate(degrees: number): Matrix3 {
   const rad = (degrees * Math.PI) / 180
   const c = Math.cos(rad)
@@ -16,20 +19,24 @@ export function rotate(degrees: number): Matrix3 {
   return new Float64Array([c, -s, 0, s, c, 0, 0, 0, 1])
 }
 
+/** @public */
 export function scale(s: number): Matrix3 {
   return new Float64Array([s, 0, 0, 0, s, 0, 0, 0, 1])
 }
 
+/** @public */
 export function scaleXY(sx: number, sy: number): Matrix3 {
   return new Float64Array([sx, 0, 0, 0, sy, 0, 0, 0, 1])
 }
 
+/** @public */
 export function skew(degreesX: number, degreesY: number): Matrix3 {
   const tx = Math.tan((degreesX * Math.PI) / 180)
   const ty = Math.tan((degreesY * Math.PI) / 180)
   return new Float64Array([1, tx, 0, ty, 1, 0, 0, 0, 1])
 }
 
+/** @public */
 export function perspective(distance: number, rotateX = 0, rotateY = 0): Matrix3 {
   if (distance <= 0) return identity()
   const rxRad = (rotateX * Math.PI) / 180
@@ -45,6 +52,7 @@ export function perspective(distance: number, rotateX = 0, rotateY = 0): Matrix3
   return new Float64Array([a, 0, 0, 0, d, 0, p, q, 1])
 }
 
+/** @public */
 export function multiply(a: Matrix3, b: Matrix3): Matrix3 {
   return new Float64Array([
     a[0] * b[0] + a[1] * b[3] + a[2] * b[6],
@@ -59,6 +67,7 @@ export function multiply(a: Matrix3, b: Matrix3): Matrix3 {
   ])
 }
 
+/** @public */
 export function invert(m: Matrix3): Matrix3 | null {
   const a = m[0], b = m[1], c = m[2]
   const d = m[3], e = m[4], f = m[5]
@@ -78,6 +87,7 @@ export function invert(m: Matrix3): Matrix3 | null {
   return new Float64Array([A * inv, D * inv, G * inv, B * inv, E * inv, H * inv, C * inv, F * inv, I * inv])
 }
 
+/** @public */
 export function transformPoint(m: Matrix3, x: number, y: number): { x: number; y: number } {
   const w = m[6] * x + m[7] * y + m[8]
   if (Math.abs(w) < 1e-12) return { x: 0, y: 0 }
@@ -87,6 +97,7 @@ export function transformPoint(m: Matrix3, x: number, y: number): { x: number; y
   }
 }
 
+/** @public */
 export function transformBounds(m: Matrix3, w: number, h: number): { x: number; y: number; width: number; height: number } {
   const p0 = transformPoint(m, 0, 0)
   const p1 = transformPoint(m, w, 0)
@@ -99,6 +110,7 @@ export function transformBounds(m: Matrix3, w: number, h: number): { x: number; 
   return { x: Math.floor(minX), y: Math.floor(minY), width: Math.ceil(maxX - minX), height: Math.ceil(maxY - minY) }
 }
 
+/** @public */
 export function fromConfig(config: { translateX?: number; translateY?: number; rotate?: number; scale?: number; scaleX?: number; scaleY?: number; skewX?: number; skewY?: number; perspective?: number; rotateX?: number; rotateY?: number }, originX: number, originY: number): Matrix3 {
   let m = identity()
   if (config.translateX || config.translateY) m = multiply(m, translate(config.translateX || 0, config.translateY || 0))
@@ -113,6 +125,7 @@ export function fromConfig(config: { translateX?: number; translateY?: number; r
   return m
 }
 
+/** @public */
 export function isIdentity(m: Matrix3): boolean {
   return (
     Math.abs(m[0] - 1) < 1e-6 &&

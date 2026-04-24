@@ -1,26 +1,9 @@
 /**
  * Markdown — renders markdown content as TGE components.
  *
- * Uses `marked` (Lexer) to tokenize markdown, then maps tokens
- * to TGE JSX elements with full inline styling.
+ * Tokenizes markdown and maps it to headless TGE primitives.
  *
- * Truly headless: all visual properties come from the `theme` prop.
- * Use @tge/void VoidMarkdown for a styled version.
- *
- * Usage:
- *   <Markdown
- *     content={markdownString}
- *     syntaxStyle={style}
- *     theme={{
- *       fg: 0xe0e0e0ff, muted: 0x888888ff,
- *       heading: 0x56d4c8ff, link: 0x61afefff,
- *       bold: 0xffffffff, italic: 0xc0a0e0ff,
- *       codeFg: 0xe5c07bff, codeBg: 0x2c313aff,
- *       blockquoteBorder: 0x7c6eaeff,
- *       listBullet: 0x4eaed0ff, tableBg: 0x1a1a2eff,
- *       hrColor: 0x333333ff, del: 0x666666ff,
- *     }}
- *   />
+ * @public
  */
 
 import type { JSX } from "solid-js"
@@ -32,6 +15,7 @@ const LINE_HEIGHT = 17
 
 // ── Theme ──
 
+/** @public */
 export type MarkdownTheme = {
   /** Default text foreground. */
   fg: string | number
@@ -85,6 +69,7 @@ const MD_DEFAULTS: MarkdownTheme = {
 
 // ── Types ──
 
+/** @public */
 export type MarkdownProps = {
   content: string
   syntaxStyle: SyntaxStyle
@@ -295,6 +280,7 @@ function renderToken(token: MarkedToken, props: MarkdownProps, th: MarkdownTheme
 
 // ── Component ──
 
+/** @public */
 export function Markdown(props: MarkdownProps) {
   const th = () => ({ ...MD_DEFAULTS, ...props.theme })
 

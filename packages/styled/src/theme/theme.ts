@@ -25,7 +25,9 @@ import { colors as defaultColors, radius, space, font, weight, shadows } from ".
 // ── Types ──
 
 /** Color token map — keys match the default void tokens, values are hex strings. */
+/** @public */
 export type ColorTokens = { [K in keyof typeof defaultColors]: string }
+/** @public */
 export type ThemeDefinition = {
   colors: Partial<ColorTokens>
 }
@@ -36,6 +38,7 @@ export type ThemeDefinition = {
  * Create a theme definition from partial overrides.
  * Overrides are merged with the default void tokens.
  */
+/** @public */
 export function createTheme(overrides?: ThemeDefinition): Required<ThemeDefinition> {
   return {
     colors: { ...defaultColors, ...overrides?.colors },
@@ -43,9 +46,11 @@ export function createTheme(overrides?: ThemeDefinition): Required<ThemeDefiniti
 }
 
 /** The default dark theme (same as current void tokens). */
+/** @public */
 export const darkTheme = createTheme()
 
 /** A light theme preset. */
+/** @public */
 export const lightTheme = createTheme({
   colors: {
     background: "#ffffff",
@@ -95,6 +100,7 @@ for (const key of Object.keys(defaultColors) as (keyof ColorTokens)[]) {
  * The getter pattern is transparent — themeColors.background
  * looks and behaves like a string. No valueOf(), no function calls.
  */
+/** @public */
 export const themeColors: ColorTokens = Object.defineProperties(
   {} as ColorTokens,
   Object.fromEntries(
@@ -112,6 +118,7 @@ export const themeColors: ColorTokens = Object.defineProperties(
  * Switch the active theme at runtime.
  * Updates all reactive color signals — only subscribed components re-render.
  */
+/** @public */
 export function setTheme(theme: Required<ThemeDefinition>) {
   setActiveThemeSig(theme)
   for (const key of Object.keys(defaultColors) as (keyof ColorTokens)[]) {
@@ -123,6 +130,7 @@ export function setTheme(theme: Required<ThemeDefinition>) {
 /**
  * Get the current active theme definition (non-reactive snapshot).
  */
+/** @public */
 export function getTheme(): Required<ThemeDefinition> {
   return activeTheme()
 }
@@ -142,6 +150,7 @@ const ThemeContext = createContext<{
  * For most apps, the global setTheme() is sufficient.
  * Use ThemeProvider only if you need nested/different themes in subtrees.
  */
+/** @public */
 export function ThemeProvider(props: {
   theme?: Required<ThemeDefinition>
   children?: any
@@ -162,6 +171,7 @@ export function ThemeProvider(props: {
 /**
  * Access the current theme context (reactive).
  */
+/** @public */
 export function useTheme() {
   return useContext(ThemeContext)
 }

@@ -4,15 +4,20 @@
 // Per design §5, REQ-NB-003.
 
 pub mod composite;
+pub mod frame;
 pub mod ffi;
 pub mod kitty;
+pub mod layer;
 pub mod layout;
 pub mod paint;
 pub mod resource;
+pub mod render_graph;
+pub mod scene;
 pub mod text;
 pub mod types;
 
 use std::sync::atomic::Ordering;
+use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use ffi::panic::{ERR_GPU_DEVICE_LOST, ERR_INVALID_ARG, OK};
@@ -78,6 +83,478 @@ static SHARED_RESOURCE: LazyLock<Mutex<resource::ResourceManager>> =
 
 fn get_or_init_resource() -> &'static Mutex<resource::ResourceManager> {
     &SHARED_RESOURCE
+}
+
+// ─── Single shared LayerRegistry (Phase 2c native layer ownership) ──────────
+
+static SHARED_LAYER_REGISTRY: LazyLock<Mutex<layer::LayerRegistry>> =
+    LazyLock::new(|| Mutex::new(layer::LayerRegistry::new()));
+
+fn get_or_init_layer_registry() -> &'static Mutex<layer::LayerRegistry> {
+    &SHARED_LAYER_REGISTRY
+}
+
+// ─── Single shared SceneGraph registry (Phase 3b skeleton) ─────────────────
+
+struct SendableSceneRegistry(HashMap<u64, scene::SceneGraph>, u64);
+unsafe impl Send for SendableSceneRegistry {}
+unsafe impl Sync for SendableSceneRegistry {}
+
+static SHARED_SCENES: LazyLock<Mutex<SendableSceneRegistry>> =
+    LazyLock::new(|| Mutex::new(SendableSceneRegistry(HashMap::new(), 1)));
+
+// ─── Phase 3b Scene Graph exports ──────────────────────────────────────────
+
+#[no_mangle]
+pub unsafe extern "C" fn vexart_scene_create(_ctx: u64, out_scene: *mut u64) -> i32 {
+    ffi_guard!({
+        if out_scene.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let mut guard = SHARED_SCENES.lock().unwrap();
+        let handle = guard.1;
+        guard.1 += 1;
+        guard.0.insert(handle, scene::SceneGraph::new());
+        *out_scene = handle;
+        OK
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn vexart_scene_destroy(_ctx: u64, scene: u64) -> i32 {
+    ffi_guard!({
+        let mut guard = SHARED_SCENES.lock().unwrap();
+        guard.0.remove(&scene);
+        OK
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn vexart_scene_clear(_ctx: u64, scene: u64) -> i32 {
+    ffi_guard!({
+        let mut guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get_mut(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        graph.clear();
+        OK
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vexart_node_create(_ctx: u64, scene: u64, kind: u32, out_node: *mut u64) -> i32 {
+    ffi_guard!({
+        if out_node.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let Some(node_kind) = scene::NativeNodeKind::from_u32(kind) else {
+            return ERR_INVALID_ARG;
+        };
+        let mut guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get_mut(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        *out_node = graph.create_node(node_kind);
+        OK
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn vexart_node_destroy(_ctx: u64, scene: u64, node: u64) -> i32 {
+    ffi_guard!({
+        let mut guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get_mut(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        if graph.destroy_subtree(node) { OK } else { ERR_INVALID_ARG }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn vexart_node_insert(_ctx: u64, scene: u64, parent: u64, child: u64, anchor: u64) -> i32 {
+    ffi_guard!({
+        let mut guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get_mut(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        let anchor_id = if anchor == 0 { None } else { Some(anchor) };
+        if graph.insert(parent, child, anchor_id) { OK } else { ERR_INVALID_ARG }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn vexart_node_remove(_ctx: u64, scene: u64, parent: u64, child: u64) -> i32 {
+    ffi_guard!({
+        let mut guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get_mut(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        if graph.remove(parent, child) { OK } else { ERR_INVALID_ARG }
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vexart_node_set_props(
+    _ctx: u64,
+    scene: u64,
+    node: u64,
+    props_ptr: *const u8,
+    props_len: u32,
+) -> i32 {
+    ffi_guard!({
+        if props_ptr.is_null() || props_len == 0 {
+            return ERR_INVALID_ARG;
+        }
+        let props = std::slice::from_raw_parts(props_ptr, props_len as usize);
+        let mut guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get_mut(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        if graph.set_props(node, props) { OK } else { ERR_INVALID_ARG }
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vexart_text_set_content(
+    _ctx: u64,
+    scene: u64,
+    node: u64,
+    text_ptr: *const u8,
+    text_len: u32,
+) -> i32 {
+    ffi_guard!({
+        let text = if text_ptr.is_null() || text_len == 0 {
+            &[][..]
+        } else {
+            std::slice::from_raw_parts(text_ptr, text_len as usize)
+        };
+        let mut guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get_mut(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        if graph.set_text(node, text) { OK } else { ERR_INVALID_ARG }
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vexart_node_set_layout(
+    _ctx: u64,
+    scene: u64,
+    node: u64,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+) -> i32 {
+    ffi_guard!({
+        let mut guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get_mut(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        if graph.set_layout(node, scene::NativeLayoutRect { x, y, width, height }) { OK } else { ERR_INVALID_ARG }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn vexart_scene_set_cell_size(
+    _ctx: u64,
+    scene: u64,
+    width: f32,
+    height: f32,
+) -> i32 {
+    ffi_guard!({
+        let mut guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get_mut(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        graph.set_cell_size(width, height);
+        OK
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vexart_scene_snapshot(
+    _ctx: u64,
+    scene: u64,
+    out_ptr: *mut u8,
+    out_cap: u32,
+    out_used: *mut u32,
+) -> i32 {
+    ffi_guard!({
+        if out_ptr.is_null() || out_used.is_null() || out_cap == 0 {
+            return ERR_INVALID_ARG;
+        }
+        let guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        let json = graph.snapshot_json();
+        let bytes = json.as_bytes();
+        let write_len = bytes.len().min(out_cap as usize);
+        let out_slice = std::slice::from_raw_parts_mut(out_ptr, write_len);
+        out_slice.copy_from_slice(&bytes[..write_len]);
+        *out_used = write_len as u32;
+        OK
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vexart_scene_layout_compute(
+    _ctx: u64,
+    scene: u64,
+    out_ptr: *mut u8,
+    out_cap: u32,
+    out_used: *mut u32,
+) -> i32 {
+    ffi_guard!({
+        if out_used.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        let out = if out_ptr.is_null() || out_cap == 0 {
+            &mut [][..]
+        } else {
+            std::slice::from_raw_parts_mut(out_ptr, out_cap as usize)
+        };
+        let mut used = 0u32;
+        let code = {
+            let mut guard = get_or_init_layout();
+            let lctx = guard.0.as_mut().unwrap();
+            lctx.compute_scene(graph, out, &mut used)
+        };
+        *out_used = used;
+        code
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vexart_scene_render_graph_snapshot(
+    _ctx: u64,
+    scene: u64,
+    out_ptr: *mut u8,
+    out_cap: u32,
+    out_used: *mut u32,
+) -> i32 {
+    ffi_guard!({
+        if out_ptr.is_null() || out_used.is_null() || out_cap == 0 {
+            return ERR_INVALID_ARG;
+        }
+        let guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        let json = render_graph::snapshot_json(graph);
+        let bytes = json.as_bytes();
+        let write_len = bytes.len().min(out_cap as usize);
+        let out_slice = std::slice::from_raw_parts_mut(out_ptr, write_len);
+        out_slice.copy_from_slice(&bytes[..write_len]);
+        *out_used = write_len as u32;
+        OK
+    })
+}
+
+/// Choose a native frame presentation strategy from packed frame telemetry.
+///
+/// `input_ptr` must point to a `frame::NativeFramePlanInput::BYTE_LEN` buffer.
+/// `out_ptr` must point to a writable `frame::NativeFramePlan::BYTE_LEN` buffer.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_frame_choose_strategy(
+    _ctx: u64,
+    input_ptr: *const u8,
+    input_len: u32,
+    out_ptr: *mut u8,
+) -> i32 {
+    ffi_guard!({
+        if input_ptr.is_null() || out_ptr.is_null() || (input_len as usize) < frame::NativeFramePlanInput::BYTE_LEN {
+            return ERR_INVALID_ARG;
+        }
+        let input_bytes = std::slice::from_raw_parts(input_ptr, frame::NativeFramePlanInput::BYTE_LEN);
+        let Some(input) = frame::NativeFramePlanInput::from_bytes(input_bytes) else {
+            return ERR_INVALID_ARG;
+        };
+        let plan = frame::choose_frame_strategy(input);
+        let out = std::slice::from_raw_parts_mut(out_ptr, frame::NativeFramePlan::BYTE_LEN);
+        if !plan.write_to(out) {
+            return ERR_INVALID_ARG;
+        }
+        OK
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vexart_scene_hit_test(
+    _ctx: u64,
+    scene: u64,
+    x: f32,
+    y: f32,
+    out_node: *mut u64,
+) -> i32 {
+    ffi_guard!({
+        if out_node.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        *out_node = graph.hit_test(x, y).unwrap_or(0);
+        OK
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vexart_input_pointer(
+    _ctx: u64,
+    scene: u64,
+    pointer_ptr: *const u8,
+    pointer_len: u32,
+    out_events: *mut u8,
+    out_cap: u32,
+    out_used: *mut u32,
+) -> i32 {
+    ffi_guard!({
+        if pointer_ptr.is_null() || out_events.is_null() || out_used.is_null() || out_cap < scene::NativeEventRecord::BYTE_LEN as u32 {
+            return ERR_INVALID_ARG;
+        }
+        let bytes = std::slice::from_raw_parts(pointer_ptr, pointer_len as usize);
+        if bytes.len() < 12 {
+            return ERR_INVALID_ARG;
+        }
+        let x = f32::from_le_bytes(bytes[0..4].try_into().unwrap());
+        let y = f32::from_le_bytes(bytes[4..8].try_into().unwrap());
+        let kind = u16::from_le_bytes(bytes[8..10].try_into().unwrap());
+
+        let guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        let Some(event) = graph.pointer_event(x, y, kind) else {
+            *out_used = 0;
+            return OK;
+        };
+        let out = std::slice::from_raw_parts_mut(out_events, scene::NativeEventRecord::BYTE_LEN);
+        if !event.write_to(out) {
+            return ERR_INVALID_ARG;
+        }
+        *out_used = scene::NativeEventRecord::BYTE_LEN as u32;
+        OK
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vexart_events_read(
+    _ctx: u64,
+    _scene: u64,
+    _out_events: *mut u8,
+    _out_cap: u32,
+    out_used: *mut u32,
+) -> i32 {
+    ffi_guard!({
+        if out_used.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        *out_used = 0;
+        OK
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn vexart_input_set_pointer_capture(_ctx: u64, scene: u64, node: u64) -> i32 {
+    ffi_guard!({
+        let mut guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get_mut(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        if graph.set_pointer_capture(node) { OK } else { ERR_INVALID_ARG }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn vexart_input_release_pointer_capture(_ctx: u64, scene: u64, node: u64) -> i32 {
+    ffi_guard!({
+        let mut guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get_mut(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        if graph.release_pointer_capture(node) { OK } else { ERR_INVALID_ARG }
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vexart_input_press_chain(
+    _ctx: u64,
+    scene: u64,
+    x: f32,
+    y: f32,
+    out_events: *mut u8,
+    out_cap: u32,
+    out_used: *mut u32,
+) -> i32 {
+    ffi_guard!({
+        if out_events.is_null() || out_used.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        let chain = graph.press_chain(x, y);
+        let max_records = (out_cap as usize) / scene::NativeEventRecord::BYTE_LEN;
+        let used_records = chain.len().min(max_records);
+        let out = std::slice::from_raw_parts_mut(out_events, used_records * scene::NativeEventRecord::BYTE_LEN);
+        for (i, event) in chain.into_iter().take(used_records).enumerate() {
+            let start = i * scene::NativeEventRecord::BYTE_LEN;
+            let end = start + scene::NativeEventRecord::BYTE_LEN;
+            if !event.write_to(&mut out[start..end]) {
+                return ERR_INVALID_ARG;
+            }
+        }
+        *out_used = (used_records * scene::NativeEventRecord::BYTE_LEN) as u32;
+        OK
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vexart_scene_focus_next(
+    _ctx: u64,
+    scene: u64,
+    current: u64,
+    out_node: *mut u64,
+) -> i32 {
+    ffi_guard!({
+        if out_node.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        *out_node = graph.focus_next((current != 0).then_some(current)).unwrap_or(0);
+        OK
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vexart_scene_focus_prev(
+    _ctx: u64,
+    scene: u64,
+    current: u64,
+    out_node: *mut u64,
+) -> i32 {
+    ffi_guard!({
+        if out_node.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        *out_node = graph.focus_prev((current != 0).then_some(current)).unwrap_or(0);
+        OK
+    })
 }
 
 // ─── §5.1 Version & lifecycle ─────────────────────────────────────────────
@@ -496,6 +973,64 @@ pub extern "C" fn vexart_composite_render_image_layer(
     })
 }
 
+/// Composite an image onto a target using an explicit transformed quad + opacity.
+///
+/// # Safety
+/// `params_ptr` must point to a packed `BridgeImageTransformInstance` buffer (48 bytes).
+#[no_mangle]
+pub unsafe extern "C" fn vexart_composite_render_image_transform_layer(
+    _ctx: u64,
+    target: u64,
+    image: u64,
+    params_ptr: *const u8,
+    clear_rgba: u32,
+) -> i32 {
+    ffi_guard!({
+        if params_ptr.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let params = std::slice::from_raw_parts(
+            params_ptr,
+            std::mem::size_of::<paint::instances::BridgeImageTransformInstance>(),
+        );
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        composite::composite_render_image_transform_layer(pctx, target, image, params, clear_rgba)
+    })
+}
+
+/// Composite one retained source target onto another using only transform/opacity params.
+///
+/// # Safety
+/// `params_ptr` must point to a packed `BridgeImageTransformInstance` buffer (48 bytes).
+#[no_mangle]
+pub unsafe extern "C" fn vexart_composite_update_uniform(
+    _ctx: u64,
+    target: u64,
+    source_target: u64,
+    params_ptr: *const u8,
+    clear_rgba: u32,
+) -> i32 {
+    ffi_guard!({
+        if params_ptr.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let params = std::slice::from_raw_parts(
+            params_ptr,
+            std::mem::size_of::<paint::instances::BridgeImageTransformInstance>(),
+        );
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        composite::composite_update_uniform(pctx, target, source_target, params, clear_rgba)
+    })
+}
+
 /// Extract a rectangular region from a target into a new image handle.
 /// (REQ-2B-004)
 ///
@@ -752,6 +1287,330 @@ pub extern "C" fn vexart_kitty_emit_frame(_ctx: u64, target: u64, image_id: u32)
             None => return ERR_GPU_DEVICE_LOST,
         };
         kitty::transport::emit_frame(pctx, target, image_id)
+    })
+}
+
+/// Emit a complete frame with native presentation stats.
+///
+/// Like `vexart_kitty_emit_frame` but writes timing and byte-count stats to `*stats_out`.
+/// Pass null for `stats_out` if stats are not needed (equivalent to the base version).
+///
+/// # Safety
+/// `stats_out` must be a valid mutable pointer to `NativePresentationStats` or null.
+/// Phase 2b — native presentation path.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_kitty_emit_frame_with_stats(
+    _ctx: u64,
+    target: u64,
+    image_id: u32,
+    stats_out: *mut types::NativePresentationStats,
+) -> i32 {
+    ffi_guard!({
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        kitty::transport::emit_frame_with_stats(pctx, target, image_id, stats_out)
+    })
+}
+
+/// Emit a pre-encoded RGBA layer natively (dirty-layer presentation path).
+///
+/// `rgba_ptr`/`rgba_len` — raw RGBA pixel data (width × height × 4 bytes).
+/// `layer_ptr` — width, height as u32 LE followed by col, row, z as i32 LE.
+/// Transport mode is selected via `vexart_kitty_set_transport`.
+///
+/// # Safety
+/// `rgba_ptr` must be valid for `rgba_len` bytes; `stats_out` valid if non-null.
+/// Phase 2b — native layer presentation.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_kitty_emit_layer(
+    _ctx: u64,
+    image_id: u32,
+    rgba_ptr: *const u8,
+    rgba_len: u32,
+    layer_ptr: *const u8,
+    stats_out: *mut types::NativePresentationStats,
+) -> i32 {
+    ffi_guard!({
+        if layer_ptr.is_null() {
+            return ffi::panic::ERR_INVALID_ARG;
+        }
+        let bytes = std::slice::from_raw_parts(layer_ptr, 20);
+        let width = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        let height = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+        let col = i32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]);
+        let row = i32::from_le_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]);
+        let z = i32::from_le_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]);
+        kitty::transport::emit_layer_native(
+            image_id, rgba_ptr, rgba_len, width, height, col, row, z, stats_out,
+        )
+    })
+}
+
+/// Emit a painted GPU target as a positioned Kitty layer without returning RGBA to JS.
+///
+/// `layer_ptr` — col, row, z as i32 LE.
+///
+/// # Safety
+/// `layer_ptr` must be valid for 12 bytes.
+/// `stats_out` must be valid if non-null.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_kitty_emit_layer_target(
+    _ctx: u64,
+    target: u64,
+    image_id: u32,
+    layer_ptr: *const u8,
+    stats_out: *mut types::NativePresentationStats,
+) -> i32 {
+    ffi_guard!({
+        if layer_ptr.is_null() {
+            return ffi::panic::ERR_INVALID_ARG;
+        }
+        let bytes = std::slice::from_raw_parts(layer_ptr, 12);
+        let col = i32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        let row = i32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+        let z = i32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]);
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        kitty::transport::emit_layer_target_with_stats(
+            pctx, target, image_id, col, row, z, stats_out,
+        )
+    })
+}
+
+/// Emit a region patch natively (dirty-region presentation path).
+///
+/// `rgba_ptr`/`rgba_len` — raw RGBA pixel data for the dirty region (rw × rh × 4 bytes).
+/// `region_ptr` — 4 × u32 packed: [rx, ry, rw, rh] (16 bytes).
+/// `stats_out` — pointer to `NativePresentationStats` or null.
+///
+/// Uses a packed params approach to stay within the ≤8 parameter ARM64 FFI limit.
+///
+/// # Safety
+/// `rgba_ptr` must be valid for `rgba_len` bytes.
+/// `region_ptr` must be valid for 16 bytes.
+/// `stats_out` must be valid if non-null.
+/// Phase 2b — native region presentation.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_kitty_emit_region(
+    _ctx: u64,
+    image_id: u32,
+    rgba_ptr: *const u8,
+    rgba_len: u32,
+    region_ptr: *const u8,
+    stats_out: *mut types::NativePresentationStats,
+) -> i32 {
+    ffi_guard!({
+        if region_ptr.is_null() {
+            return ffi::panic::ERR_INVALID_ARG;
+        }
+        // Read 4 × u32 LE from potentially unaligned byte pointer.
+        let bytes = std::slice::from_raw_parts(region_ptr, 16);
+        let rx = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        let ry = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+        let rw = u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]);
+        let rh = u32::from_le_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]);
+        kitty::transport::emit_region_native(
+            image_id, rgba_ptr, rgba_len, rx, ry, rw, rh, stats_out,
+        )
+    })
+}
+
+/// Emit a region patch from a painted GPU target without returning RGBA to JS.
+///
+/// `region_ptr` — 4 × u32 packed: [rx, ry, rw, rh] (16 bytes), relative to target.
+///
+/// # Safety
+/// `region_ptr` must be valid for 16 bytes.
+/// `stats_out` must be valid if non-null.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_kitty_emit_region_target(
+    _ctx: u64,
+    target: u64,
+    image_id: u32,
+    region_ptr: *const u8,
+    stats_out: *mut types::NativePresentationStats,
+) -> i32 {
+    ffi_guard!({
+        if region_ptr.is_null() {
+            return ffi::panic::ERR_INVALID_ARG;
+        }
+        let bytes = std::slice::from_raw_parts(region_ptr, 16);
+        let rx = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        let ry = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+        let rw = u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]);
+        let rh = u32::from_le_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]);
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        kitty::transport::emit_region_target_with_stats(pctx, target, image_id, rx, ry, rw, rh, stats_out)
+    })
+}
+
+/// Delete a Kitty image by ID natively.
+///
+/// # Safety
+/// `stats_out` must be valid if non-null.
+/// Phase 2b — native layer deletion.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_kitty_delete_layer(
+    _ctx: u64,
+    image_id: u32,
+    stats_out: *mut types::NativePresentationStats,
+) -> i32 {
+    ffi_guard!({ kitty::transport::delete_layer_native(image_id, stats_out) })
+}
+
+// ─── Phase 2c Native Layer Registry ───────────────────────────────────────
+
+/// Upsert a native layer record by stable key and descriptor.
+///
+/// `key_ptr/key_len`: UTF-8 stable layer key.
+/// `desc_ptr`: 40-byte packed LayerDescriptor:
+///   target:u64, x:f32, y:f32, width:u32, height:u32, z:i32, flags:u32, frame:u64.
+/// `out_ptr`: 24-byte LayerUpsertResult:
+///   handle:u64, terminal_image_id:u32, flags:u32, bytes:u64.
+///
+/// # Safety
+/// All pointers must be valid for their documented lengths.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_layer_upsert(
+    _ctx: u64,
+    key_ptr: *const u8,
+    key_len: u32,
+    desc_ptr: *const u8,
+    out_ptr: *mut u8,
+) -> i32 {
+    ffi_guard!({
+        if key_ptr.is_null() || key_len == 0 || desc_ptr.is_null() || out_ptr.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let key_bytes = std::slice::from_raw_parts(key_ptr, key_len as usize);
+        let desc_bytes = std::slice::from_raw_parts(desc_ptr, layer::LayerDescriptor::BYTE_LEN);
+        let Some(desc) = layer::LayerDescriptor::from_bytes(desc_bytes) else {
+            return ERR_INVALID_ARG;
+        };
+        let key = layer::LayerKey::from_bytes(key_bytes);
+        let resources = get_or_init_resource();
+        let mut resources_guard = resources.lock().unwrap();
+        let registry = get_or_init_layer_registry();
+        let mut registry_guard = registry.lock().unwrap();
+        let result = registry_guard.upsert(key, desc, &mut resources_guard);
+        let out = std::slice::from_raw_parts_mut(out_ptr, layer::LayerUpsertResult::BYTE_LEN);
+        if !result.write_to(out) {
+            return ERR_INVALID_ARG;
+        }
+        OK
+    })
+}
+
+/// Mark a native layer dirty.
+#[no_mangle]
+pub extern "C" fn vexart_layer_mark_dirty(_ctx: u64, layer_handle: u64) -> i32 {
+    ffi_guard!({
+        let registry = get_or_init_layer_registry();
+        let mut registry_guard = registry.lock().unwrap();
+        if registry_guard.mark_dirty(layer_handle) { OK } else { ERR_INVALID_ARG }
+    })
+}
+
+/// Mark a native layer as reused in `frame` and write its terminal image ID to `out_image_id`.
+///
+/// # Safety
+/// `out_image_id` must be valid if non-null.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_layer_reuse(
+    _ctx: u64,
+    layer_handle: u64,
+    frame: u64,
+    out_image_id: *mut u32,
+) -> i32 {
+    ffi_guard!({
+        if out_image_id.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let resources = get_or_init_resource();
+        let mut resources_guard = resources.lock().unwrap();
+        let registry = get_or_init_layer_registry();
+        let mut registry_guard = registry.lock().unwrap();
+        let Some(image_id) = registry_guard.reuse(layer_handle, frame, &mut resources_guard) else {
+            return ERR_INVALID_ARG;
+        };
+        *out_image_id = image_id;
+        OK
+    })
+}
+
+/// Remove a native layer and write the terminal image ID that should be deleted.
+///
+/// # Safety
+/// `out_image_id` must be valid if non-null.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_layer_remove(
+    _ctx: u64,
+    layer_handle: u64,
+    out_image_id: *mut u32,
+) -> i32 {
+    ffi_guard!({
+        if out_image_id.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let resources = get_or_init_resource();
+        let mut resources_guard = resources.lock().unwrap();
+        let registry = get_or_init_layer_registry();
+        let mut registry_guard = registry.lock().unwrap();
+        let Some(image_id) = registry_guard.remove(layer_handle, &mut resources_guard) else {
+            return ERR_INVALID_ARG;
+        };
+        *out_image_id = image_id;
+        OK
+    })
+}
+
+/// Clear all native layer records and resource accounting.
+#[no_mangle]
+pub extern "C" fn vexart_layer_clear(_ctx: u64) -> i32 {
+    ffi_guard!({
+        let resources = get_or_init_resource();
+        let mut resources_guard = resources.lock().unwrap();
+        let registry = get_or_init_layer_registry();
+        let mut registry_guard = registry.lock().unwrap();
+        registry_guard.clear(&mut resources_guard);
+        OK
+    })
+}
+
+/// Mark a dirty layer as presented and write its terminal image ID.
+///
+/// # Safety
+/// `out_image_id` must be valid if non-null.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_layer_present_dirty(
+    _ctx: u64,
+    layer_handle: u64,
+    frame: u64,
+    out_image_id: *mut u32,
+) -> i32 {
+    ffi_guard!({
+        if out_image_id.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let resources = get_or_init_resource();
+        let mut resources_guard = resources.lock().unwrap();
+        let registry = get_or_init_layer_registry();
+        let mut registry_guard = registry.lock().unwrap();
+        let Some(image_id) = registry_guard.mark_presented(layer_handle, frame, &mut resources_guard) else {
+            return ERR_INVALID_ARG;
+        };
+        *out_image_id = image_id;
+        OK
     })
 }
 

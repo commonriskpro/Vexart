@@ -1,10 +1,12 @@
 import type { TGENode, NodeMouseEvent } from "../ffi/node"
 
+/** @public */
 export function buildNodeMouseEvent(node: TGENode, pointerX: number, pointerY: number): NodeMouseEvent {
   const l = node.layout
   return { x: pointerX, y: pointerY, nodeX: pointerX - l.x, nodeY: pointerY - l.y, width: l.width, height: l.height }
 }
 
+/** @public */
 export function isFullyOutsideScrollViewport(node: TGENode) {
   if (node.props.scrollX || node.props.scrollY) return false
   const l = node.layout

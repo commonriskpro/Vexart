@@ -1,11 +1,7 @@
 /**
- * VoidInput — shadcn-compatible single-line text input using Void design tokens.
+ * VoidInput — styled single-line text input using Void design tokens.
  *
- * Built on top of the headless @tge/components Input.
- * h-9, border-input, focus ring with glow, placeholder color, disabled opacity.
- *
- * Usage:
- *   <VoidInput value={name()} onChange={setName} placeholder="Your name…" />
+ * @public
  */
 
 import { Input } from "@vexart/headless"
@@ -13,6 +9,7 @@ import type { InputRenderContext } from "@vexart/headless"
 import { radius, space, font, shadows, glows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
+/** @public */
 export type VoidInputProps = {
   value: string
   onChange?: (value: string) => void
@@ -23,6 +20,7 @@ export type VoidInputProps = {
   width?: number | string
 }
 
+/** @public */
 export function VoidInput(props: VoidInputProps) {
   return (
     <Input

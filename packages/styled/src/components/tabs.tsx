@@ -20,8 +20,10 @@ import type { TabItem, TabRenderContext } from "@vexart/headless"
 import { radius, space, font, weight } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
-type TabsVariant = "default" | "line"
+/** @public */
+export type TabsVariant = "default" | "line"
 
+/** @public */
 export type VoidTabsProps = {
   activeTab: number
   onTabChange?: (index: number) => void
@@ -30,6 +32,7 @@ export type VoidTabsProps = {
   focusId?: string
 }
 
+/** @public */
 export function VoidTabs(props: VoidTabsProps) {
   const variant = () => props.variant ?? "default"
 

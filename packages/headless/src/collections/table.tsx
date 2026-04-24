@@ -1,31 +1,9 @@
 /**
  * Table — truly headless data table.
  *
- * CONTROLLED component — parent owns selectedRow state.
- * Focus-aware with Up/Down arrow navigation for row selection.
+ * Handles row selection and keyboard navigation while visuals are supplied by render props.
  *
- * This is a BEHAVIOR-ONLY component. It provides:
- *   - Focus management (useFocus)
- *   - Keyboard navigation (Up/Down/j/k/Enter)
- *   - Row selection tracking
- *
- * ALL visual rendering is the consumer's responsibility via render props.
- * Use @tge/void VoidTable for a styled version.
- *
- * Usage:
- *   <Table
- *     columns={[
- *       { key: "name", header: "Name", width: 120 },
- *       { key: "role", header: "Role", width: "grow" },
- *     ]}
- *     data={users()}
- *     selectedRow={idx()}
- *     onSelectedRowChange={setIdx}
- *     renderHeader={(col) => <text color="#888" fontSize={12}>{col.header}</text>}
- *     renderCell={(value, col, rowIdx, ctx) => (
- *       <text color={ctx.selected ? "#fff" : "#aaa"}>{String(value)}</text>
- *     )}
- *   />
+ * @public
  */
 
 import type { JSX } from "solid-js"
@@ -33,6 +11,7 @@ import { useFocus } from "@vexart/engine"
 
 // ── Types ──
 
+/** @public */
 export type TableColumn = {
   key: string
   header: string
@@ -40,6 +19,7 @@ export type TableColumn = {
   align?: "left" | "center" | "right"
 }
 
+/** @public */
 export type TableCellContext = {
   selected: boolean
   focused: boolean
@@ -50,6 +30,7 @@ export type TableCellContext = {
   }
 }
 
+/** @public */
 export type TableProps = {
   columns: TableColumn[]
   data: Record<string, any>[]
@@ -69,6 +50,7 @@ export type TableProps = {
   renderTable?: (children: JSX.Element) => JSX.Element
 }
 
+/** @public */
 export function Table(props: TableProps) {
   const disabled = () => props.disabled ?? false
   const showHeader = () => props.showHeader !== false && !!props.renderHeader

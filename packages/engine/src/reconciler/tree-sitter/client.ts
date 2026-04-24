@@ -17,7 +17,11 @@ import { resolve } from "path"
 
 let extraParsers: FiletypeParserConfig[] = []
 
-/** Register additional parsers BEFORE client.initialize(). */
+/**
+ * Register additional parsers before client initialization.
+ *
+ * @public
+ */
 export function addDefaultParsers(parsers: FiletypeParserConfig[]) {
   for (const parser of parsers) {
     extraParsers = [
@@ -27,6 +31,7 @@ export function addDefaultParsers(parsers: FiletypeParserConfig[]) {
   }
 }
 
+/** @public */
 export class TreeSitterClient {
   private worker: Worker | undefined
   private initialized = false
@@ -163,7 +168,7 @@ export class TreeSitterClient {
 
 let singleton: TreeSitterClient | undefined
 
-/** Get the shared TreeSitterClient instance. */
+/** @public */
 export function getTreeSitterClient(): TreeSitterClient {
   if (!singleton) {
     singleton = new TreeSitterClient()

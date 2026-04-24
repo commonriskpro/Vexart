@@ -1,32 +1,9 @@
 /**
  * Tabs — truly headless tab switcher.
  *
- * CONTROLLED component — parent owns activeTab state.
- * Focus-aware with Left/Right arrow navigation.
+ * Handles focus, keyboard navigation, and active tab state while visuals are supplied by render props.
  *
- * This is a BEHAVIOR-ONLY component. It provides:
- *   - Focus management (useFocus)
- *   - Keyboard navigation (Left/Right, wraps around)
- *   - Active tab tracking
- *   - Lazy content rendering
- *
- * ALL visual styling is the consumer's responsibility via render props.
- * Use @tge/void VoidTabs for a styled version.
- *
- * Usage:
- *   <Tabs
- *     activeTab={tab()}
- *     onTabChange={setTab}
- *     tabs={[
- *       { label: "Info", content: () => <text>Info panel</text> },
- *       { label: "Settings", content: () => <text>Settings panel</text> },
- *     ]}
- *     renderTab={(tab, ctx) => (
- *       <box backgroundColor={ctx.active ? "#334" : "#111"} padding={8}>
- *         <text color={ctx.active ? "#fff" : "#888"}>{tab.label}</text>
- *       </box>
- *     )}
- *   />
+ * @public
  */
 
 import type { JSX } from "solid-js"
@@ -34,11 +11,13 @@ import { useFocus } from "@vexart/engine"
 
 // ── Types ──
 
+/** @public */
 export type TabItem = {
   label: string
   content: () => JSX.Element
 }
 
+/** @public */
 export type TabRenderContext = {
   active: boolean
   focused: boolean
@@ -49,6 +28,7 @@ export type TabRenderContext = {
   }
 }
 
+/** @public */
 export type TabsProps = {
   activeTab: number
   onTabChange?: (index: number) => void
@@ -64,6 +44,7 @@ export type TabsProps = {
   renderContainer?: (tabBar: JSX.Element, panel: JSX.Element) => JSX.Element
 }
 
+/** @public */
 export function Tabs(props: TabsProps) {
   const count = () => props.tabs.length
 

@@ -75,7 +75,7 @@ const KITTY_KEYS: Record<number, string> = {
   57383: "f20",
 }
 
-/** Try to parse a keyboard event from the data. Returns [event, consumed] or null. */
+/** @public Try to parse a keyboard event from the data. Returns the event and consumed byte count, or null. */
 export function parseKey(data: string): [KeyEvent, number] | null {
   if (data.length === 0) return null
 

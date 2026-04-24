@@ -1,18 +1,20 @@
 /**
- * Skeleton — shadcn-compatible loading placeholder.
+ * Skeleton — styled loading placeholder.
  *
- * Renders a muted rounded rectangle as a content placeholder.
+ * @public
  */
 
 import { radius } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
+/** @public */
 export interface SkeletonProps {
   width?: number | string
   height?: number | string
   cornerRadius?: number
 }
 
+/** @public */
 export function Skeleton(props: SkeletonProps) {
   return (
     <box

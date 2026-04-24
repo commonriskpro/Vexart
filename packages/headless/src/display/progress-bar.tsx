@@ -1,34 +1,16 @@
 /**
  * ProgressBar — truly headless progress indicator.
  *
- * Pure visual component — no focus or interaction.
- * Calculates the fill ratio from value/max.
+ * Computes ratio and fill width while leaving visuals to `renderBar`.
  *
- * This is a BEHAVIOR-ONLY component. It provides:
- *   - Value clamping (0 to max)
- *   - Ratio calculation
- *   - Fill width computation
- *
- * ALL visual styling is the consumer's responsibility via renderBar.
- * Use @tge/void VoidProgressBar for a styled version.
- *
- * Usage:
- *   <ProgressBar
- *     value={75}
- *     max={100}
- *     width={200}
- *     renderBar={({ ratio, fillWidth, width, height }) => (
- *       <box width={width} height={height} backgroundColor="#333" cornerRadius={6}>
- *         <box width={fillWidth} height={height} backgroundColor="#22c55e" cornerRadius={6} />
- *       </box>
- *     )}
- *   />
+ * @public
  */
 
 import type { JSX } from "solid-js"
 
 // ── Types ──
 
+/** @public */
 export type ProgressBarRenderContext = {
   /** Value between 0 and 1. */
   ratio: number
@@ -44,6 +26,7 @@ export type ProgressBarRenderContext = {
   max: number
 }
 
+/** @public */
 export type ProgressBarProps = {
   value: number
   max?: number
@@ -53,6 +36,7 @@ export type ProgressBarProps = {
   renderBar: (ctx: ProgressBarRenderContext) => JSX.Element
 }
 
+/** @public */
 export function ProgressBar(props: ProgressBarProps) {
   const max = () => props.max ?? 100
   const barWidth = () => props.width ?? 200

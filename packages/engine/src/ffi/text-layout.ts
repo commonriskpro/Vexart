@@ -55,6 +55,7 @@ import {
 // Maps fontId → font descriptor string (CSS font shorthand).
 // fontId 0 is always the default monospace font.
 
+/** @public */
 export type FontDescriptor = {
   family: string
   size: number
@@ -70,12 +71,14 @@ const fontRegistry = new Map<number, FontDescriptor>()
 fontRegistry.set(0, { family: ".SF NS", size: 14 })
 
 /** Register a font for use with TGE text rendering. */
+/** @public */
 export function registerFont(id: number, desc: FontDescriptor) {
   fontRegistry.set(id, desc)
   clearCache()
 }
 
 /** Get font descriptor by ID. Falls back to default. */
+/** @public */
 export function getFont(id: number): FontDescriptor {
   return fontRegistry.get(id) ?? fontRegistry.get(0)!
 }
@@ -326,12 +329,14 @@ export function measureForClay(
 }
 
 /** Clear all prepared text caches. */
+/** @public */
 export function clearTextCache() {
   preparedCache.clear()
   layoutCache.clear()
   clearCache()
 }
 
+/** @public */
 export function getTextLayoutCacheStats() {
   return {
     preparedCount: preparedCache.size,

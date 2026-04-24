@@ -7,6 +7,7 @@
 
 // ── Modifiers ──
 
+/** @public */
 export type Modifiers = {
   shift: boolean
   alt: boolean
@@ -14,9 +15,10 @@ export type Modifiers = {
   meta: boolean
 }
 
+/** @public */
 export const NO_MODS: Modifiers = { shift: false, alt: false, ctrl: false, meta: false }
 
-/** Decode Kitty/xterm modifier bitmask (1-based: value - 1 = mask). */
+/** @public */
 export function decodeMods(n: number): Modifiers {
   const m = n - 1
   return {
@@ -29,6 +31,7 @@ export function decodeMods(n: number): Modifiers {
 
 // ── Key Event ──
 
+/** @public */
 export type KeyEvent = {
   type: "key"
   key: string          // normalized key name: "a", "enter", "f1", "tab", etc.
@@ -38,8 +41,10 @@ export type KeyEvent = {
 
 // ── Mouse Event ──
 
+/** @public */
 export type MouseAction = "press" | "release" | "move" | "scroll"
 
+/** @public */
 export type MouseEvent = {
   type: "mouse"
   action: MouseAction
@@ -51,6 +56,7 @@ export type MouseEvent = {
 
 // ── Focus Event ──
 
+/** @public */
 export type FocusEvent = {
   type: "focus"
   focused: boolean
@@ -58,6 +64,7 @@ export type FocusEvent = {
 
 // ── Paste Event ──
 
+/** @public */
 export type PasteEvent = {
   type: "paste"
   text: string
@@ -65,10 +72,12 @@ export type PasteEvent = {
 
 // ── Resize Event ──
 
+/** @public */
 export type ResizeEvent = {
   type: "resize"
 }
 
 // ── Union ──
 
+/** @public */
 export type InputEvent = KeyEvent | MouseEvent | FocusEvent | PasteEvent | ResizeEvent
