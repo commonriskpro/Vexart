@@ -38,6 +38,7 @@ pub enum ResourceKind {
     FontAtlas,
     GlyphAtlas,
     ImageSprite,
+    CanvasDisplayList,
     TransformSprite,
     BackdropSprite,
 }

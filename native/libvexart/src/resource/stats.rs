@@ -97,6 +97,7 @@ fn resource_kind_name(kind: ResourceKind) -> &'static str {
         ResourceKind::FontAtlas => "FontAtlas",
         ResourceKind::GlyphAtlas => "GlyphAtlas",
         ResourceKind::ImageSprite => "ImageSprite",
+        ResourceKind::CanvasDisplayList => "CanvasDisplayList",
         ResourceKind::TransformSprite => "TransformSprite",
         ResourceKind::BackdropSprite => "BackdropSprite",
     }

@@ -52,6 +52,7 @@ export interface NativeRenderOpSnapshot {
   fontId: number
   objectFit?: "contain" | "cover" | "fill" | "none"
   canvasViewportJson?: string
+  canvasDisplayListHandle?: number
   materialKey: string
   effectKey: string
   imageSource: string
@@ -413,6 +414,7 @@ function directNativeCanvasOp(command: RenderCommand, op: NativeRenderOpSnapshot
     ...canvas,
     color: op.color,
     viewport: viewport ?? canvas.viewport,
+    nativeDisplayListHandle: op.canvasDisplayListHandle && op.canvasDisplayListHandle > 0 ? BigInt(op.canvasDisplayListHandle) : canvas.nativeDisplayListHandle,
   }
   const rect: RectangleRenderOp = {
     kind: "rectangle",

@@ -162,3 +162,9 @@ export {
   nativeImageAssetRelease,
 } from "./native-image-assets"
 export type { NativeImageAssetInput } from "./native-image-assets"
+export {
+  nativeCanvasDisplayListUpdate,
+  nativeCanvasDisplayListTouch,
+  nativeCanvasDisplayListRelease,
+} from "./native-canvas-display-list"
+export type { NativeCanvasDisplayListInput } from "./native-canvas-display-list"

@@ -142,6 +142,12 @@ export type DrawCmd = LineCmd | BezierCmd | CircleCmd | RectCmd | PolygonCmd | T
 /** @public */
 export type CanvasDrawCommand = DrawCmd
 
+/** @public */
+export type CanvasDisplayList = {
+  version: 1
+  commands: DrawCmd[]
+}
+
 // ── Viewport ──
 
 /** @public */
@@ -371,4 +377,39 @@ export class CanvasContext {
       coolColor: options?.coolColor ?? 0xbfd8ffe0,
     })
   }
+}
+
+function normalizeCanvasCommand(command: DrawCmd): unknown {
+  if (command.kind === "image") {
+    return {
+      ...command,
+      data: Array.from(command.data),
+    }
+  }
+  if (command.kind === "nebula") {
+    return {
+      ...command,
+      stops: command.stops.map((stop) => ({ color: stop.color, position: stop.position })),
+    }
+  }
+  return command
+}
+
+/** @public */
+export function serializeCanvasDisplayList(commands: DrawCmd[]): Uint8Array {
+  const list: CanvasDisplayList = {
+    version: 1,
+    commands: commands.map((command) => normalizeCanvasCommand(command)) as DrawCmd[],
+  }
+  return new TextEncoder().encode(JSON.stringify(list))
+}
+
+/** @public */
+export function hashCanvasDisplayList(bytes: Uint8Array): string {
+  let hash = 0x811c9dc5
+  for (const byte of bytes) {
+    hash ^= byte
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0")
 }

@@ -4,6 +4,7 @@
 // Per design §5, REQ-NB-003.
 
 pub mod composite;
+pub mod canvas_display_list;
 pub mod frame;
 pub mod ffi;
 pub mod image_asset;
@@ -198,6 +199,13 @@ static SHARED_IMAGE_ASSETS: LazyLock<Mutex<image_asset::ImageAssetRegistry>> =
 
 fn get_or_init_image_assets() -> &'static Mutex<image_asset::ImageAssetRegistry> {
     &SHARED_IMAGE_ASSETS
+}
+
+static SHARED_CANVAS_DISPLAY_LISTS: LazyLock<Mutex<canvas_display_list::CanvasDisplayListRegistry>> =
+    LazyLock::new(|| Mutex::new(canvas_display_list::CanvasDisplayListRegistry::new()));
+
+fn get_or_init_canvas_display_lists() -> &'static Mutex<canvas_display_list::CanvasDisplayListRegistry> {
+    &SHARED_CANVAS_DISPLAY_LISTS
 }
 
 // ─── Single shared LayerRegistry (Phase 2c native layer ownership) ──────────
@@ -1871,6 +1879,62 @@ pub extern "C" fn vexart_image_asset_release(_ctx: u64, _scene: u64, handle: u64
             }
             OK
         } else { ERR_INVALID_ARG }
+    })
+}
+
+/// Register or update a native canvas display list.
+///
+/// # Safety
+/// All pointers must be valid for their documented lengths.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_canvas_display_list_update(
+    _ctx: u64,
+    _scene: u64,
+    key_ptr: *const u8,
+    key_len: u32,
+    bytes_ptr: *const u8,
+    bytes_len: u32,
+    out_handle: *mut u64,
+) -> i32 {
+    ffi_guard!({
+        if key_ptr.is_null() || key_len == 0 || bytes_ptr.is_null() || bytes_len == 0 || out_handle.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let key = String::from_utf8_lossy(std::slice::from_raw_parts(key_ptr, key_len as usize)).to_string();
+        let bytes = std::slice::from_raw_parts(bytes_ptr, bytes_len as usize);
+        let hash = canvas_display_list::hash_display_list(bytes);
+
+        let resources = get_or_init_resource();
+        let mut resources_guard = resources.lock().unwrap();
+        let registry = get_or_init_canvas_display_lists();
+        let mut registry_guard = registry.lock().unwrap();
+        let Some(handle) = registry_guard.update(key, bytes, hash, &mut resources_guard) else {
+            return ERR_INVALID_ARG;
+        };
+        *out_handle = handle;
+        OK
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn vexart_canvas_display_list_touch(_ctx: u64, _scene: u64, handle: u64) -> i32 {
+    ffi_guard!({
+        let resources = get_or_init_resource();
+        let mut resources_guard = resources.lock().unwrap();
+        let registry = get_or_init_canvas_display_lists();
+        let registry_guard = registry.lock().unwrap();
+        if registry_guard.touch(handle, &mut resources_guard) { OK } else { ERR_INVALID_ARG }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn vexart_canvas_display_list_release(_ctx: u64, _scene: u64, handle: u64) -> i32 {
+    ffi_guard!({
+        let resources = get_or_init_resource();
+        let mut resources_guard = resources.lock().unwrap();
+        let registry = get_or_init_canvas_display_lists();
+        let mut registry_guard = registry.lock().unwrap();
+        if registry_guard.release(handle, &mut resources_guard) { OK } else { ERR_INVALID_ARG }
     })
 }
 

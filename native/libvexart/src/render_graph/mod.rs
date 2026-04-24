@@ -37,6 +37,7 @@ pub struct NativeRenderOp {
     pub font_id: u32,
     pub object_fit: String,
     pub canvas_viewport_json: String,
+    pub canvas_display_list_handle: u64,
     pub material_key: String,
     pub effect_key: String,
     pub image_source: String,
@@ -104,7 +105,7 @@ pub fn snapshot_json(scene: &SceneGraph) -> String {
         .iter()
         .map(|op| {
             format!(
-                "{{\"kind\":\"{}\",\"nodeId\":{},\"x\":{},\"y\":{},\"width\":{},\"height\":{},\"color\":{},\"cornerRadius\":{},\"borderWidth\":{},\"opacity\":{},\"text\":{:?},\"fontSize\":{},\"fontId\":{},\"objectFit\":{:?},\"canvasViewportJson\":{:?},\"materialKey\":{:?},\"effectKey\":{:?},\"imageSource\":{:?},\"imageHandle\":{},\"hasGradient\":{},\"hasShadow\":{},\"hasGlow\":{},\"hasFilter\":{},\"hasBackdrop\":{},\"hasTransform\":{},\"hasOpacity\":{},\"hasCornerRadii\":{},\"gradientJson\":{:?},\"shadowJson\":{:?},\"glowJson\":{:?},\"filterJson\":{:?},\"transformJson\":{:?},\"cornerRadiiJson\":{:?},\"backdropBlur\":{},\"backdropBrightness\":{},\"backdropContrast\":{},\"backdropSaturate\":{},\"backdropGrayscale\":{},\"backdropInvert\":{},\"backdropSepia\":{},\"backdropHueRotate\":{}}}",
+                "{{\"kind\":\"{}\",\"nodeId\":{},\"x\":{},\"y\":{},\"width\":{},\"height\":{},\"color\":{},\"cornerRadius\":{},\"borderWidth\":{},\"opacity\":{},\"text\":{:?},\"fontSize\":{},\"fontId\":{},\"objectFit\":{:?},\"canvasViewportJson\":{:?},\"canvasDisplayListHandle\":{},\"materialKey\":{:?},\"effectKey\":{:?},\"imageSource\":{:?},\"imageHandle\":{},\"hasGradient\":{},\"hasShadow\":{},\"hasGlow\":{},\"hasFilter\":{},\"hasBackdrop\":{},\"hasTransform\":{},\"hasOpacity\":{},\"hasCornerRadii\":{},\"gradientJson\":{:?},\"shadowJson\":{:?},\"glowJson\":{:?},\"filterJson\":{:?},\"transformJson\":{:?},\"cornerRadiiJson\":{:?},\"backdropBlur\":{},\"backdropBrightness\":{},\"backdropContrast\":{},\"backdropSaturate\":{},\"backdropGrayscale\":{},\"backdropInvert\":{},\"backdropSepia\":{},\"backdropHueRotate\":{}}}",
                 kind_name(&op.kind),
                 op.node_id,
                 op.x,
@@ -120,6 +121,7 @@ pub fn snapshot_json(scene: &SceneGraph) -> String {
                 op.font_id,
                 op.object_fit,
                 op.canvas_viewport_json,
+                op.canvas_display_list_handle,
                 op.material_key,
                 op.effect_key,
                 op.image_source,
@@ -202,6 +204,7 @@ fn collect_ops(scene: &SceneGraph, node_id: u64, out: &mut Vec<NativeRenderOp>) 
                         font_id: 0,
                         object_fit: String::new(),
                         canvas_viewport_json: String::new(),
+                        canvas_display_list_handle: 0,
                         material_key: material_key(&rect_kind, color, &effect_key_value),
                         effect_key: effect_key_value,
                         image_source: String::new(),
@@ -248,6 +251,7 @@ fn collect_ops(scene: &SceneGraph, node_id: u64, out: &mut Vec<NativeRenderOp>) 
                         font_id: 0,
                         object_fit: String::new(),
                         canvas_viewport_json: String::new(),
+                        canvas_display_list_handle: 0,
                         material_key: material_key(&NativeRenderOpKind::Border, color_prop(scene, node_id, PROP_BORDER_COLOR).unwrap_or(0), ""),
                         effect_key: String::new(),
                         image_source: String::new(),
@@ -300,6 +304,7 @@ fn collect_ops(scene: &SceneGraph, node_id: u64, out: &mut Vec<NativeRenderOp>) 
                     font_id: 0,
                     object_fit: string_prop(scene, node_id, prop_hash("objectFit")).unwrap_or_else(|| "contain".to_string()),
                     canvas_viewport_json: String::new(),
+                    canvas_display_list_handle: 0,
                     material_key: material_key(&NativeRenderOpKind::Image, 0, ""),
                     effect_key: String::new(),
                     image_source: source,
@@ -332,6 +337,9 @@ fn collect_ops(scene: &SceneGraph, node_id: u64, out: &mut Vec<NativeRenderOp>) 
         NativeNodeKind::Canvas => {
             if has_area {
                 let effect_key_value = effect_key(&features);
+                let canvas_display_list_handle = string_prop(scene, node_id, prop_hash("__canvasDisplayListHandle"))
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .unwrap_or(0);
                 out.push(NativeRenderOp {
                     kind: NativeRenderOpKind::Canvas,
                     node_id,
@@ -348,6 +356,7 @@ fn collect_ops(scene: &SceneGraph, node_id: u64, out: &mut Vec<NativeRenderOp>) 
                     font_id: 0,
                     object_fit: String::new(),
                     canvas_viewport_json: string_prop(scene, node_id, prop_hash("viewport")).unwrap_or_default(),
+                    canvas_display_list_handle,
                     material_key: material_key(&NativeRenderOpKind::Canvas, 0, &effect_key_value),
                     effect_key: effect_key_value,
                     image_source: String::new(),
@@ -396,6 +405,7 @@ fn collect_ops(scene: &SceneGraph, node_id: u64, out: &mut Vec<NativeRenderOp>) 
                     font_id: numeric_prop(scene, node_id, prop_hash("fontId")).unwrap_or(0.0).max(0.0) as u32,
                     object_fit: String::new(),
                     canvas_viewport_json: String::new(),
+                    canvas_display_list_handle: 0,
                     material_key: material_key(&NativeRenderOpKind::Text, color_prop(scene, node_id, PROP_COLOR).unwrap_or(0xe0e0e0ff), ""),
                     effect_key: String::new(),
                     image_source: String::new(),

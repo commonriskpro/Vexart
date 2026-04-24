@@ -131,6 +131,8 @@ export type CanvasPaintConfig = {
   color: number
   onDraw: (ctx: CanvasContext) => void
   viewport?: { x: number; y: number; zoom: number }
+  nativeDisplayListHandle?: bigint | null
+  displayListHash?: string | null
 }
 
 /** @public */

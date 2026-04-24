@@ -25,6 +25,8 @@ import {
   resolveProps,
 } from "../ffi/node"
 import { measureForClay } from "../ffi/text-layout"
+import { CanvasContext, hashCanvasDisplayList, serializeCanvasDisplayList } from "../ffi/canvas"
+import { nativeCanvasDisplayListTouch, nativeCanvasDisplayListUpdate, syncNativeCanvasDisplayListHandle } from "../ffi/native-canvas-display-list"
 import { decodeImageForNode } from "./image"
 import { ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, type createVexartLayoutCtx } from "./layout-adapter"
 import type { EffectConfig, TextMeta, ImagePaintConfig, CanvasPaintConfig } from "../ffi/render-graph"
@@ -228,11 +230,23 @@ export function walkTree(
 
     // Queue canvas config for paintCommand
     if (node.props.onDraw) {
+      const ctx = new CanvasContext(node.props.viewport)
+      node.props.onDraw(ctx)
+      const bytes = serializeCanvasDisplayList(ctx._commands)
+      const hash = hashCanvasDisplayList(bytes)
+      if (node._nativeCanvasDisplayListHandle && node._canvasDisplayListHash === hash) {
+        nativeCanvasDisplayListTouch(node._nativeCanvasDisplayListHandle)
+      } else {
+        const handle = nativeCanvasDisplayListUpdate({ key: `canvas:${node.id}`, bytes })
+        if (handle) syncNativeCanvasDisplayListHandle(node, handle, hash)
+      }
       state.canvasQueue.push({
         renderObjectId: node.id,
         color: placeholderColor,
         onDraw: node.props.onDraw,
         viewport: node.props.viewport,
+        nativeDisplayListHandle: node._nativeCanvasDisplayListHandle,
+        displayListHash: node._canvasDisplayListHash,
       })
     }
 
