@@ -1,9 +1,14 @@
 # Vexart — Product Requirements Document
 
-**Version**: 0.5
-**Status**: Draft — foundational document
+**Version**: 0.6
+**Status**: Closed — v0.9 performance contract locked
 **Owner**: Founder (solo developer)
 **Last updated**: April 2026
+
+**Changelog from v0.5**:
+- DEC-013 added: 120fps / 5ms performance program adopted as an aspirational v0.9+ execution track, with hard gates for no-op, dirty-region, compositor-only, and full-dashboard frame categories.
+- Section 7.3 extended with explicit 120fps-class frame budgets. The release performance contract targets a 1080p (`1920×1080`) dashboard workload; the current `14.23 ms/frame` 800×600 offscreen measurement remains only a temporary dev baseline until the 1080p benchmark lands.
+- `docs/PERFORMANCE-120FPS-PLAN.md` added as the execution plan for profiling, optimization phases, and CI gates.
 
 **Changelog from v0.4**:
 - DEC-012 added: Rust-retained engine roadmap adopted as the execution path for the remaining engine migration. `docs/PRD-RUST-RETAINED-ENGINE.md` and `docs/ROADMAP-RUST-RETAINED-ENGINE.md` are now companion source-of-truth documents for native ownership sequencing.
@@ -275,6 +280,20 @@ These optimizations are shipped at v0.9 because they are **10× more expensive t
   - `background` (cache warming, prefetch, telemetry) — only in idle windows.
   - Mirrors the semantics of `scheduler.postTask` in the web platform.
   - When a frame exceeds its budget, `background` tasks defer to next frame; `user-visible` tasks may split across frames.
+
+**Tier 3 — 120fps-class retained runtime (v0.9+ aspirational, performance-contract tracked)**:
+
+- **Goal**: make optimized retained paths capable of 120fps-class budgets without changing the public JSX API.
+- **Frame budget math**: 120fps allows `8.33 ms/frame`; Vexart's aggressive engineering target is `5.0 ms` for optimized dirty/compositor paths to leave terminal/I/O headroom.
+- **Baseline reality**: as of 2026-04-24, `bun run perf:check` reports `14.23 ms/frame` on the dashboard 800×600 offscreen benchmark. That benchmark is not the release contract; the 120fps program MUST add and optimize against a 1080p (`1920×1080`) dashboard benchmark because that is the normal desktop terminal size.
+- **Scope**:
+  - profiling-first instrumentation before optimization claims;
+  - no-op frame and small dirty-region fast paths;
+  - compositor-only transform/opacity path under `8.33 ms p95`;
+  - full native canvas display-list GPU replay where canvas rendering is a bottleneck;
+  - FFI/batch allocation reduction on the retained path;
+  - CI gates for no-op, dirty-region, compositor-only, and full-dashboard frame categories.
+- **Non-goal**: promising terminal-visible 120fps on every terminal. The engine can target 120fps-class production, but Kitty/Ghostty/WezTerm presentation loops and display refresh may cap perceived output.
 
 #### Interaction
 
@@ -556,6 +575,10 @@ Measured on Apple M1 Pro, Kitty 0.41+, 2560×1600 retina:
 | **Cold start — warm cache** | < 50 ms | Time from `mount()` to first visible pixel, pre-existing `pipeline.{platform}.bin`. |
 | Sustained frame time (idle) | < 2 ms @ 8 fps | 99th percentile walk+layout+paint time. |
 | Sustained frame time (active) | < 10 ms @ 60 fps | 99th percentile during `showcase.tsx` interactions. |
+| **No-op retained frame** | < 1 ms (p99) | No scene mutation; Rust/TS shell must avoid render graph rebuild and GPU work. |
+| **Small dirty-region frame** | < 5 ms (p95) | Single dirty layer/region such as hover, focus ring, cursor, or button state. |
+| **Compositor-only transform/opacity frame** | < 8.33 ms (p95) | 120fps-class budget for layer-uniform updates with no layout/paint regeneration. |
+| **Full dashboard 1080p frame** | < 8.33 ms aspirational, < 10 ms release gate | `1920×1080` realistic dashboard workload. 800×600 remains a smoke/dev benchmark only. |
 | Input-to-visual latency (typical) | < 50 ms (p95) | Keyboard event → rendered frame in user's eyes. |
 | Input-to-visual latency (compositor-animated transform/opacity) | < 16 ms (p95) | For properties running on the compositor-thread path. |
 | Frame time during JS-blocking work (compositor-only animations) | < 16 ms | 60fps maintained while main thread is saturated. |
@@ -569,7 +592,7 @@ Measured on Apple M1 Pro, Kitty 0.41+, 2560×1600 retina:
 | GPU memory per font (MSDF) | ≤ 4 MB | One 1024×1024 RGBA8 atlas. |
 | **GPU memory total (configurable budget)** | Default 128 MB | Unified resource manager enforces cap; exceeds trigger LRU eviction. |
 
-CI runs `bench:showcase` on every PR and fails if any metric regresses by >10% from `main`. Specific optimization regressions (cold-start-warm, Kitty encoding, viewport culling savings) have dedicated micro-benchmarks in `bench:optimizations`.
+CI runs `bench:showcase` on every PR and fails if any metric regresses by >10% from `main`. Specific optimization regressions (cold-start-warm, Kitty encoding, viewport culling savings, retained no-op, dirty-region, compositor-only, and dashboard frame categories) have dedicated micro-benchmarks in `bench:optimizations` or `docs/PERFORMANCE-120FPS-PLAN.md` follow-up tasks.
 
 ### 7.4 Supported terminals (v0.9)
 
@@ -1156,11 +1179,47 @@ Every architectural or product decision is logged here with date, context, and r
 
 **Non-reversal clause**: Reversal requires profiling evidence that the retained Rust path cannot meet or exceed the hybrid path after obvious fixes, plus founder approval recorded as a new decision.
 
+### 2026-04-24 — DEC-013: 120fps / 5ms performance program adopted
+
+**Decision**: Vexart adopts a 120fps-class performance program for the retained Rust runtime. The program does **not** claim that every full scene will render at 120fps today. It commits the product to profiling and optimizing the retained path until no-op, dirty-region, and compositor-only frames meet 120fps-class budgets, while full-dashboard frames are measured and gated at 1080p (`1920×1080`) because that is the normal desktop terminal workload.
+
+**Companion document**:
+- [`docs/PERFORMANCE-120FPS-PLAN.md`](./PERFORMANCE-120FPS-PLAN.md)
+
+**Targets**:
+- No-op retained frame: `<1 ms p99`.
+- Small dirty-region frame: `<5 ms p95`.
+- Compositor-only transform/opacity frame: `<8.33 ms p95`.
+- Full dashboard 1080p (`1920×1080`) frame: `<10 ms release gate`, `<8.33 ms aspirational`.
+- Input-to-visual for optimized compositor interactions: `<16 ms p95`.
+
+**Current baseline**:
+- `bun run perf:check` on 2026-04-24: `14.23 ms/frame` for the dashboard 800×600 offscreen benchmark.
+- This is a temporary dev/smoke baseline, not the release target. The first performance-plan milestone MUST add a 1080p dashboard benchmark and use that as the dashboard gate.
+
+**Alternatives considered**:
+- Claim 120fps now because the retained runtime moved to Rust. Rejected — architecture improves the ceiling, but the only current dashboard measurement is an 800×600 smoke benchmark at ~14 ms; the release workload must be measured at 1080p.
+- Keep only the old 60fps target. Rejected — it underspecifies the engine's differentiator and leaves too much performance on the table after the Rust-retained cutover.
+- Make `5 ms` a universal product promise. Rejected — terminal presentation, scene complexity, and full-frame work make that dishonest. `5 ms` is a fast-path engineering target, not a universal guarantee.
+
+**Rationale**:
+- 120fps requires `8.33 ms/frame`; a `5 ms` engine-side target creates headroom for terminal I/O, scheduling jitter, and presentation overhead.
+- Rust-retained ownership removes the largest architectural blockers, but the remaining work is measurement-driven: no-op short-circuiting, dirty-region minimization, native canvas replay, FFI batching, allocation elimination, and terminal presentation pacing.
+- User-facing credibility depends on separating proven measurements from aspirational targets.
+
+**Implications**:
+- Performance work must start with a phase breakdown profiler; no optimization claim is accepted without per-stage numbers.
+- CI gates must distinguish no-op, dirty-region, compositor-only, and full-dashboard workloads.
+- Future SDD changes for performance must cite this decision and update the companion plan when targets or baselines change.
+
+**Non-reversal clause**: The program can adjust thresholds based on profiling evidence, but Vexart must keep explicit per-category performance budgets. Dropping the 120fps-class track requires founder approval and a new dated decision.
+
 ---
 
 ## 13. Glossary
 
 - **Adaptive render loop**: frame scheduler that varies FPS based on activity (idle 8fps, active up to 60fps).
+- **120fps-class frame**: a frame category whose engine-side work fits within `8.33 ms` at p95/p99 depending on the metric. Vexart uses `5 ms` as the aggressive fast-path target for small dirty-region work to preserve terminal/I/O headroom.
 - **Backdrop filter**: CSS-style filter applied to content *behind* an element (e.g. glassmorphism blur).
 - **Clay**: C-based layout engine currently in use. Being replaced by Taffy in Phase 2.
 - **Closed source (in this PRD)**: source code is not publicly available, but binaries are distributed with a license agreement.

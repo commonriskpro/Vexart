@@ -62,6 +62,14 @@ function cadenceDebug(msg: string) { if (!DEBUG_CADENCE) return; appendFileSync(
 function resizeDebug(msg: string) { if (!DEBUG_RESIZE) return; appendFileSync(RESIZE_DEBUG_LOG, `[renderer:loop] ${msg}\n`) }
 function dragReproDebug(msg: string) { if (!DEBUG_DRAG_REPRO) return; appendFileSync(DRAG_REPRO_LOG, msg + "\n") }
 
+type FrameProfileSink = (profile: FrameProfile) => void
+
+let frameProfileSink: FrameProfileSink | null = null
+
+export function setFrameProfileSink(sink: FrameProfileSink | null) {
+  frameProfileSink = sink
+}
+
 function countNodes(node: TGENode): number {
   if (node.kind === "text") return 1
   let total = 1
@@ -400,7 +408,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     useNativeRenderGraph,
     expFrameBudgetMs,
     transmissionMode: term.caps.transmissionMode,
-    debugCadence: DEBUG_CADENCE,
+    debugCadence: DEBUG_CADENCE || !!frameProfileSink,
     debugDragRepro: DEBUG_DRAG_REPRO,
     lastPresentedInteractionSeq,
     lastPresentedInteractionLatencyMs,
@@ -419,7 +427,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     const frameStartedAt = performance.now()
     if (hasRecentInteraction()) lastInteractionFrameAt = frameStartedAt
     try {
-      const profile: FrameProfile | undefined = DEBUG_CADENCE
+      const profile: FrameProfile | undefined = DEBUG_CADENCE || frameProfileSink
         ? { scheduledIntervalMs, scheduledDelayMs, timerDelayMs: scheduledAtMs > 0 ? frameStartedAt - scheduledAtMs - scheduledDelayMs : 0, sincePrevFrameMs: lastFrameStartedAt > 0 ? frameStartedAt - lastFrameStartedAt : 0, layoutMs: 0, prepMs: 0, paintMs: 0, beginSyncMs: 0, ioMs: 0, endSyncMs: 0, totalMs: 0, commands: 0, repainted: 0, dirtyBefore: 0 }
         : undefined
       lastFrameStartedAt = frameStartedAt
@@ -427,6 +435,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       cs.viewportWidth = viewportWidth
       cs.viewportHeight = viewportHeight
       cs.backendOverride = getActiveBackend()
+      cs.debugCadence = DEBUG_CADENCE || !!frameProfileSink
       resetVexartFfiCallCounts()
       const finishDebugFrame = debugFrameStart()
       compositeFrame(cs, profile)
@@ -437,6 +446,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       if (profile) {
         profile.totalMs = performance.now() - frameStartedAt
         cadenceDebug(`[frame] dt=${profile.sincePrevFrameMs.toFixed(2)}ms interval=${profile.scheduledIntervalMs.toFixed(2)}ms delay=${profile.scheduledDelayMs.toFixed(2)}ms timerDelay=${profile.timerDelayMs.toFixed(2)}ms total=${profile.totalMs.toFixed(2)}ms layout=${profile.layoutMs.toFixed(2)}ms prep=${profile.prepMs.toFixed(2)}ms paint=${profile.paintMs.toFixed(2)}ms io=${profile.ioMs.toFixed(2)}ms beginSync=${profile.beginSyncMs.toFixed(2)}ms endSync=${profile.endSyncMs.toFixed(2)}ms dirty=${profile.dirtyBefore} repainted=${profile.repainted} cmds=${profile.commands}`)
+        frameProfileSink?.({ ...profile })
       }
     } finally {
       isRenderingFrame = false

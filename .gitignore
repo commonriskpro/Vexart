@@ -18,3 +18,4 @@ zig/libtge.a
 target/
 .api-extractor-temp/
 packages/*/etc/.temp/
+scripts/frame-breakdown-report.json

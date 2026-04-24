@@ -52,6 +52,8 @@
     "test:visual:native-render-graph": "bun --conditions=browser run scripts/visual-test/runner.ts --native-render-graph-parity",
     "perf:baseline": "bun --conditions=browser run scripts/perf-baseline.tsx",
     "perf:check": "bun --conditions=browser run scripts/perf-baseline.tsx --check",
+    "bench:frame-breakdown": "bun --conditions=browser run scripts/frame-breakdown.tsx",
+    "bench:dashboard-1080p": "bun --conditions=browser run scripts/frame-breakdown.tsx --frames=300 --warmup=5",
     "perf:frame-orchestrator": "bun --conditions=browser run scripts/frame-orchestrator-bench.ts",
     "check:retained-cleanup": "bun run scripts/check-retained-cleanup.ts",
     "docs:dev": "bun run --cwd website dev",

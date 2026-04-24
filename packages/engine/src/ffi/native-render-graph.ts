@@ -99,12 +99,16 @@ type NativeClipStackEntry = {
 export function nativeRenderGraphSnapshot(): NativeRenderGraphSnapshot | null {
   const scene = nativeSceneHandle()
   if (!scene) return null
-  const out = new Uint8Array(64 * 1024)
-  const used = new Uint32Array(1)
   const { symbols } = openVexartLibrary()
-  const rc = symbols.vexart_scene_render_graph_snapshot(1n, scene, ptr(out), out.byteLength, ptr(used)) as number
-  if (rc !== 0) return null
-  return JSON.parse(new TextDecoder().decode(out.slice(0, used[0]))) as NativeRenderGraphSnapshot
+  for (let cap = 64 * 1024; cap <= 1024 * 1024; cap *= 2) {
+    const out = new Uint8Array(cap)
+    const used = new Uint32Array(1)
+    const rc = symbols.vexart_scene_render_graph_snapshot(1n, scene, ptr(out), out.byteLength, ptr(used)) as number
+    if (rc !== 0) return null
+    if (used[0] >= out.byteLength) continue
+    return JSON.parse(new TextDecoder().decode(out.slice(0, used[0]))) as NativeRenderGraphSnapshot
+  }
+  return null
 }
 
 function parseJsonValue<T>(value: string): T | undefined {
