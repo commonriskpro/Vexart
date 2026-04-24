@@ -2993,6 +2993,10 @@ export const VEXART_SYMBOLS: {
         readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
         readonly returns: FFIType.int32_t;
     };
+    readonly vexart_input_interaction_frame: {
+        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
+        readonly returns: FFIType.int32_t;
+    };
     readonly vexart_input_set_pointer_capture: {
         readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t];
         readonly returns: FFIType.int32_t;
