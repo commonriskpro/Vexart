@@ -57,6 +57,8 @@
     "perf:transport:shm": "bun --conditions=browser run scripts/frame-breakdown.tsx --frames=60 --warmup=5 --transport=shm && bun run scripts/frame-breakdown-gate.ts --transport=shm",
     "perf:transport:file": "bun --conditions=browser run scripts/frame-breakdown.tsx --frames=60 --warmup=5 --transport=file && bun run scripts/frame-breakdown-gate.ts --transport=file",
     "perf:transport:check": "bun run perf:transport:shm && bun run perf:transport:file",
+    "validate:terminal-transport": "bun --conditions=browser run scripts/terminal-transport-matrix.ts",
+    "validate:terminal-transport:bench": "bun --conditions=browser run scripts/terminal-transport-matrix.ts --bench --frames=60 --warmup=5",
     "perf:frame-orchestrator": "bun --conditions=browser run scripts/frame-orchestrator-bench.ts",
     "check:retained-cleanup": "bun run scripts/check-retained-cleanup.ts",
     "docs:dev": "bun run --cwd website dev",
