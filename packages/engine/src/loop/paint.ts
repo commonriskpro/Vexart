@@ -494,7 +494,13 @@ export function paintFrame(
         : "damage=none"
       dragReproDebug(`[prepare] slot=${slot.key} bounds=(${lx},${ly},${lw}x${lh}) layer=(${layer.x},${layer.y},${layer.width}x${layer.height}) ${prev} dirty=${layer.dirty ? 1 : 0} ${damage} freeze=${freezeWhileInteracting ? 1 : 0}`)
     }
-    if (previousRect && layer.damageRect) {
+    const geometryChanged = !!previousRect && (
+      previousRect.x !== layer.x
+      || previousRect.y !== layer.y
+      || previousRect.width !== layer.width
+      || previousRect.height !== layer.height
+    )
+    if (geometryChanged && layer.damageRect) {
       for (const lower of layerOrder) {
         markLayerDamaged(lower, layer.damageRect)
       }
@@ -550,7 +556,7 @@ export function paintFrame(
   }
   const totalPixelArea = Math.max(1, viewportWidth * viewportHeight)
   const overlapPixelArea = sumOverlapArea(frameDirtyRects)
-  const fullRepaint = forceLayerRepaint || dirtyPixelArea >= totalPixelArea * 0.85 || dirtyLayerCountForFrame >= preparedSlots.length
+  const fullRepaint = forceLayerRepaint || dirtyPixelArea >= totalPixelArea * 0.85
   const estimatedLayeredBytes = dirtyPixelArea * 4
     + dirtyLayerCountForFrame * (state.transmissionMode === "direct" ? 2048 : 512)
   const estimatedFinalBytes = viewportWidth * viewportHeight * 4
@@ -632,7 +638,10 @@ export function paintFrame(
     const lh = prepared.bounds.height
     const clippedDamage = prepared.clippedDamage
     const useRegionalRepaint = prepared.useRegionalRepaint
-    const effectiveUseRegionalRepaint = useRegionalRepaint && !isNativePresentationCapable(state.transmissionMode)
+    const imageId = imageIdForLayer(layer)
+    const nativePresentationCapable = isNativePresentationCapable(state.transmissionMode)
+    const canPatchRegionalLayer = nativePresentationCapable || layerComposer?.hasLayer(imageId) === true
+    const effectiveUseRegionalRepaint = useRegionalRepaint && canPatchRegionalLayer
     const freezeWhileInteracting = prepared.freezeWhileInteracting
 
     if (lw > 0 && lh > 0) {
@@ -644,7 +653,7 @@ export function paintFrame(
         isBackground: prepared.isBackground,
         bounds: prepared.bounds,
         dirtyRect: prepared.layer.damageRect,
-        repaintRect: useRegionalRepaint ? clippedDamage : prepared.layer.damageRect,
+        repaintRect: effectiveUseRegionalRepaint ? clippedDamage : prepared.layer.damageRect,
         allowRegionalRepaint: prepared.allowRegionalRepaint,
         retainedDuringInteraction: freezeWhileInteracting,
       }
@@ -769,7 +778,7 @@ export function paintFrame(
         }
 
         // Fallback-only bridge path for non-default backends that still return raw RGBA while native mode is active.
-        if (isNativePresentationCapable(state.transmissionMode)) {
+        if (nativePresentationCapable) {
           const { data, width: pw, height: ph } = paintResult.kittyPayload
           const col = Math.floor(lx / cellW)
           const row = Math.floor(ly / cellH)
@@ -797,7 +806,12 @@ export function paintFrame(
         }
         const ioStart = debugCadence ? performance.now() : 0
         const presentationStart = profile ? performance.now() : 0
-        layerComposer!.renderLayerRaw(paintResult.kittyPayload.data, paintResult.kittyPayload.width, paintResult.kittyPayload.height, imageId, lx, ly, renderZ, cellW, cellH)
+        const region = paintResult.kittyPayload.region
+        if (region) {
+          layerComposer!.patchLayer(paintResult.kittyPayload.data, imageId, region.x, region.y, region.width, region.height)
+        } else {
+          layerComposer!.renderLayerRaw(paintResult.kittyPayload.data, paintResult.kittyPayload.width, paintResult.kittyPayload.height, imageId, lx, ly, renderZ, cellW, cellH)
+        }
         if (profile) profile.paintPresentationMs += performance.now() - presentationStart
         if (debugCadence) ioMs += performance.now() - ioStart
         markLayerClean(layer)

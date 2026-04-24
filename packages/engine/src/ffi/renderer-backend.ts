@@ -80,6 +80,7 @@ export type RendererBackendPaintResult =
         data: Uint8Array
         width: number
         height: number
+        region?: DamageRect
       }
     }
   | {

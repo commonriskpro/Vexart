@@ -4,7 +4,6 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 process.env.TGE_DEBUG_CADENCE = "1"
-process.env.TGE_GPU_FORCE_LAYER_STRATEGY = process.env.TGE_GPU_FORCE_LAYER_STRATEGY ?? "final-frame-raw"
 
 const SCENARIO = {
   DASHBOARD_SMOKE: "dashboard-800x600",
@@ -20,11 +19,13 @@ const DEFAULT_WARMUP = 5
 const REPORT_PATH = join(dirname(fileURLToPath(import.meta.url)), "frame-breakdown-report.json")
 
 type ScenarioName = (typeof SCENARIO)[keyof typeof SCENARIO]
+type TransmissionMode = "direct" | "file" | "shm"
 
 interface CliOptions {
   frames: number
   warmup: number
   output: string
+  transport: TransmissionMode
 }
 
 interface Size {
@@ -54,7 +55,7 @@ interface TerminalCaps {
   syncOutput: boolean
   tmux: boolean
   parentKind: null
-  transmissionMode: "direct"
+  transmissionMode: TransmissionMode
 }
 
 interface MockTerminal {
@@ -172,6 +173,7 @@ interface BenchmarkReport {
   arch: string
   frames: number
   warmup: number
+  transport: TransmissionMode
   scenarios: ScenarioReport[]
 }
 
@@ -188,6 +190,7 @@ interface EngineModules {
   resetVexartFfiCallCounts: typeof import("../packages/engine/src/ffi/vexart-bridge").resetVexartFfiCallCounts
   getVexartFfiCallCount: typeof import("../packages/engine/src/ffi/vexart-bridge").getVexartFfiCallCount
   getVexartFfiCallCountsBySymbol: typeof import("../packages/engine/src/ffi/vexart-bridge").getVexartFfiCallCountsBySymbol
+  configureKittyTransportManager: typeof import("../packages/engine/src/output/transport-manager").configureKittyTransportManager
 }
 
 function parseCli(): CliOptions {
@@ -195,6 +198,7 @@ function parseCli(): CliOptions {
   let frames = DEFAULT_FRAMES
   let warmup = DEFAULT_WARMUP
   let output = REPORT_PATH
+  let transport: TransmissionMode = "direct"
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
     if (arg === "--frames") frames = Number(args[++i] ?? frames)
@@ -203,15 +207,24 @@ function parseCli(): CliOptions {
     else if (arg.startsWith("--warmup=")) warmup = Number(arg.slice("--warmup=".length))
     else if (arg === "--output") output = args[++i] ?? output
     else if (arg.startsWith("--output=")) output = arg.slice("--output=".length)
+    else if (arg === "--transport") {
+      const value = args[++i]
+      if (value === "direct" || value === "file" || value === "shm") transport = value
+    }
+    else if (arg.startsWith("--transport=")) {
+      const value = arg.slice("--transport=".length)
+      if (value === "direct" || value === "file" || value === "shm") transport = value
+    }
   }
   return {
     frames: Number.isFinite(frames) && frames > 0 ? Math.floor(frames) : DEFAULT_FRAMES,
     warmup: Number.isFinite(warmup) && warmup >= 0 ? Math.floor(warmup) : DEFAULT_WARMUP,
     output,
+    transport,
   }
 }
 
-function createMockTerminal(width: number, height: number): MockTerminal {
+function createMockTerminal(width: number, height: number, transport: TransmissionMode): MockTerminal {
   const noop = () => {}
   const cellWidth = 8
   const cellHeight = 16
@@ -230,7 +243,7 @@ function createMockTerminal(width: number, height: number): MockTerminal {
       syncOutput: false,
       tmux: false,
       parentKind: null,
-      transmissionMode: "direct",
+      transmissionMode: transport,
     },
     size: {
       cols: Math.ceil(width / cellWidth),
@@ -325,6 +338,7 @@ async function loadEngine(): Promise<EngineModules> {
   const pointer = await import("../packages/engine/src/reconciler/pointer")
   const compositor = await import("../packages/engine/src/animation/compositor-path")
   const bridge = await import("../packages/engine/src/ffi/vexart-bridge")
+  const transport = await import("../packages/engine/src/output/transport-manager")
   return {
     createRenderLoop: loop.createRenderLoop,
     setFrameProfileSink: loop.setFrameProfileSink,
@@ -338,6 +352,7 @@ async function loadEngine(): Promise<EngineModules> {
     resetVexartFfiCallCounts: bridge.resetVexartFfiCallCounts,
     getVexartFfiCallCount: bridge.getVexartFfiCallCount,
     getVexartFfiCallCountsBySymbol: bridge.getVexartFfiCallCountsBySymbol,
+    configureKittyTransportManager: transport.configureKittyTransportManager,
   }
 }
 
@@ -460,7 +475,7 @@ function topStageP95(summary: StageSummary) {
     .slice(0, 6)
 }
 
-async function runScenario(engine: EngineModules, name: ScenarioName, size: Size, frames: number, warmup: number): Promise<ScenarioReport> {
+async function runScenario(engine: EngineModules, name: ScenarioName, size: Size, frames: number, warmup: number, transport: TransmissionMode): Promise<ScenarioReport> {
   await clearCadenceLog()
   engine.resetVexartFfiCallCounts()
   const capturedProfiles: CadenceFrame[] = []
@@ -497,7 +512,11 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
       ffiCallCount: 0,
     })
   })
-  const term = createMockTerminal(size.width, size.height)
+  engine.configureKittyTransportManager({
+    preferredMode: transport,
+    probe: { shm: transport === "shm", file: transport === "file" || transport === "shm" },
+  })
+  const term = createMockTerminal(size.width, size.height, transport)
   const forceLayerRepaint = name === SCENARIO.DASHBOARD_SMOKE || name === SCENARIO.DASHBOARD_1080P
   const loop = engine.createRenderLoop(term as never, {
     experimental: {
@@ -654,10 +673,10 @@ async function main() {
     { name: SCENARIO.COMPOSITOR_ONLY, size: { width: 1920, height: 1080 } },
   ]
 
-  console.log(`\n🔬 Vexart frame breakdown — frames=${options.frames} warmup=${options.warmup}\n`)
+  console.log(`\n🔬 Vexart frame breakdown — frames=${options.frames} warmup=${options.warmup} transport=${options.transport}\n`)
   const reports: ScenarioReport[] = []
   for (const scenario of scenarios) {
-    const report = await runScenario(engine, scenario.name, scenario.size, options.frames, options.warmup)
+    const report = await runScenario(engine, scenario.name, scenario.size, options.frames, options.warmup, options.transport)
     reports.push(report)
     printScenario(report)
   }
@@ -670,6 +689,7 @@ async function main() {
     arch: process.arch,
     frames: options.frames,
     warmup: options.warmup,
+    transport: options.transport,
     scenarios: reports,
   }
   await mkdir(dirname(options.output), { recursive: true })

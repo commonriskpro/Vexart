@@ -39,6 +39,7 @@ export type GpuFrameComposer = {
     cellW: number,
     cellH: number,
   ) => boolean
+  hasLayer: (imageId: number) => boolean
   removeLayer: (imageId: number) => void
   clear: () => void
   destroy: () => void
@@ -79,6 +80,9 @@ export function createGpuFrameComposer(layerComposer: LayerComposer): GpuFrameCo
       ensureLayeredMode()
       if (mode === null) mode = "layered-raw"
       return layerComposer.placeLayer(imageId, pixelX, pixelY, z, cellW, cellH)
+    },
+    hasLayer(imageId) {
+      return mode === "layered-raw" && layerComposer.hasLayer(imageId)
     },
     removeLayer(imageId) {
       if (mode === "final-frame-raw") return

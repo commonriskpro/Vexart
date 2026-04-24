@@ -165,6 +165,33 @@ function vexartCompositeReadbackRgba(vctx: bigint, target: bigint, byteLength: n
   return data
 }
 
+/** Region readback from a vexart target. Region is target-local pixels. */
+function vexartCompositeReadbackRegionRgba(
+  vctx: bigint,
+  target: bigint,
+  region: { x: number; y: number; width: number; height: number },
+): Uint8Array | null {
+  const { symbols } = openVexartLibrary()
+  const data = new Uint8Array(region.width * region.height * 4)
+  const rect = new Uint8Array(16)
+  const view = new DataView(rect.buffer)
+  view.setUint32(0, region.x, true)
+  view.setUint32(4, region.y, true)
+  view.setUint32(8, region.width, true)
+  view.setUint32(12, region.height, true)
+  const statsOut = new Uint8Array(32)
+  const result = symbols.vexart_composite_readback_region_rgba(
+    vctx,
+    target,
+    ptr(rect),
+    ptr(data),
+    data.byteLength,
+    ptr(statsOut),
+  ) as number
+  if (result !== 0) return null
+  return data
+}
+
 // ── Backdrop filter params type (mirror of WgpuBackdropFilterParams) ─────────
 type WgpuBackdropFilterParams = {
   blur: number | null
@@ -1343,7 +1370,8 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     ctx: RendererBackendPaintContext,
     targetHandle: VexartTargetHandle,
     readbackMode: "auto" | "none" = "auto",
-  ): { ok: boolean; rawLayer: { data: Uint8Array; width: number; height: number } | null } => {
+    readbackRegion?: { x: number; y: number; width: number; height: number } | null,
+  ): { ok: boolean; rawLayer: { data: Uint8Array; width: number; height: number; region?: { x: number; y: number; width: number; height: number } } | null } => {
     let first = true
     shapeRects.length = 0
     shapeRectCorners.length = 0
@@ -2147,6 +2175,20 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       for (const handle of transientFullFrameImages) vexartRemoveImage(vctx, handle)
       return { ok: true as const, rawLayer: null }
     }
+    if (readbackRegion && readbackRegion.width > 0 && readbackRegion.height > 0) {
+      const rgba = vexartCompositeReadbackRegionRgba(vctx, targetHandle, readbackRegion)
+      for (const handle of transientFullFrameImages) vexartRemoveImage(vctx, handle)
+      if (!rgba) return { ok: false, rawLayer: null }
+      return {
+        ok: true as const,
+        rawLayer: {
+          data: rgba,
+          width: readbackRegion.width,
+          height: readbackRegion.height,
+          region: readbackRegion,
+        },
+      }
+    }
     // Phase 2b: readback from the specific vexart target (not context default).
     const rgba = vexartCompositeReadbackRgba(vctx, targetHandle, ctx.targetWidth * ctx.targetHeight * 4)
     for (const handle of transientFullFrameImages) vexartRemoveImage(vctx, handle)
@@ -2413,7 +2455,22 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           : null
         const nativeImageId = nativeLayer?.imageId ?? 0
         const readbackMode = lastStrategy === "final-frame" || useNativeLayerPresentation ? "none" : "auto"
-        const result = renderFrame(ctx, layerTarget, readbackMode)
+        const repaint = layerCtx.repaintRect
+        const region = repaint
+          ? {
+              x: Math.max(0, Math.floor(repaint.x - layerCtx.bounds.x)),
+              y: Math.max(0, Math.floor(repaint.y - layerCtx.bounds.y)),
+              width: Math.min(ctx.target.width, Math.ceil(repaint.width)),
+              height: Math.min(ctx.target.height, Math.ceil(repaint.height)),
+            }
+          : null
+        const shouldReadbackRegion = !useNativeLayerPresentation
+          && lastStrategy !== "final-frame"
+          && !!region
+          && region.width > 0
+          && region.height > 0
+          && region.width * region.height < ctx.target.width * ctx.target.height
+        const result = renderFrame(ctx, layerTarget, readbackMode, shouldReadbackRegion ? region : null)
         if (!result.ok) {
           suppressFinalPresentation = true
           failGpuOnly(`GPU layer render failed for ${layerCtx.key}`)
@@ -2434,15 +2491,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           return { output: "skip-present", strategy: lastStrategy }
         }
         if (useNativeLayerPresentation && nativeImageId > 0) {
-          const repaint = layerCtx.repaintRect
-          const region = repaint
-            ? {
-                x: Math.max(0, Math.floor(repaint.x - layerCtx.bounds.x)),
-                y: Math.max(0, Math.floor(repaint.y - layerCtx.bounds.y)),
-                width: Math.min(ctx.target.width, Math.ceil(repaint.width)),
-                height: Math.min(ctx.target.height, Math.ceil(repaint.height)),
-              }
-            : null
           const shouldPresentRegion = lastStrategy === "layered-region"
             && !!region
             && region.width > 0

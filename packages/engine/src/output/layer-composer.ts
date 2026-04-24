@@ -72,6 +72,9 @@ export type LayerComposer = {
     cellH: number,
   ) => boolean
 
+  /** Return whether an image has already been transmitted and can be patched/placed. */
+  hasLayer: (imageId: number) => boolean
+
   /** Remove a layer's image from the terminal. */
   removeLayer: (imageId: number) => void
 
@@ -133,6 +136,10 @@ export function createLayerComposer(
       const row = Math.floor(pixelY / cellH)
       kitty.place(write, imageId, col, row, { z, placementId: placementIdForLayer(imageId) })
       return true
+    },
+
+    hasLayer(imageId) {
+      return activeIds.has(imageId)
     },
 
     removeLayer(imageId) {

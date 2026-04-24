@@ -931,6 +931,7 @@ export type GpuFrameComposer = {
     renderFinalFrameRaw: (data: Uint8Array, width: number, height: number, z: number, cellW: number, cellH: number) => void;
     patchLayer: (regionData: Uint8Array, imageId: number, rx: number, ry: number, rw: number, rh: number) => boolean;
     placeLayer: (imageId: number, pixelX: number, pixelY: number, z: number, cellW: number, cellH: number) => boolean;
+    hasLayer: (imageId: number) => boolean;
     removeLayer: (imageId: number) => void;
     clear: () => void;
     destroy: () => void;
@@ -1230,6 +1231,7 @@ export type LayerComposer = {
     renderLayerRaw: (data: Uint8Array, width: number, height: number, imageId: number, pixelX: number, pixelY: number, z: number, cellW: number, cellH: number) => void;
     patchLayer: (regionData: Uint8Array, imageId: number, rx: number, ry: number, rw: number, rh: number) => boolean;
     placeLayer: (imageId: number, pixelX: number, pixelY: number, z: number, cellW: number, cellH: number) => boolean;
+    hasLayer: (imageId: number) => boolean;
     removeLayer: (imageId: number) => void;
     clear: () => void;
     destroy: () => void;
@@ -2079,6 +2081,7 @@ export type RendererBackendPaintResult = {
         data: Uint8Array;
         width: number;
         height: number;
+        region?: DamageRect;
     };
 } | {
     output: "skip-present";
