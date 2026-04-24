@@ -146,6 +146,27 @@ function textContainerParityFixture() {
   return box("root", { width: 300, height: 120, direction: "column", padding: 12 }, [container])
 }
 
+function nestedScrollParityFixture() {
+  return box("root", { width: 320, height: 240, direction: "column", padding: 12 }, [
+    box("outerScroll", { width: 180, height: 120, direction: "column", padding: 6, gap: 4, scrollY: true }, [
+      box("innerScroll", { width: 140, height: 80, direction: "column", padding: 5, gap: 3, scrollY: true }, [
+        box("innerA", { width: 90, height: 20 }, []),
+        box("innerB", { width: 100, height: 30 }, []),
+      ]),
+      box("outerTail", { width: 120, height: 25 }, []),
+    ]),
+  ])
+}
+
+function borderPaddingParityFixture() {
+  return box("root", { width: 260, height: 180, direction: "column", padding: 10 }, [
+    box("card", { width: 180, height: 100, direction: "column", padding: 12, borderWidth: 3, gap: 6 }, [
+      box("cardHeader", { width: 120, height: 20, borderWidth: 2, paddingX: 4, paddingY: 2 }, []),
+      box("cardBody", { width: 130, height: 30, paddingLeft: 8, paddingTop: 4 }, []),
+    ]),
+  ])
+}
+
 function assertParity(root: FixtureNode, labels: string[]) {
   const nodes = collectFixtureNodes(root)
   mirrorToNative(root)
@@ -195,4 +216,14 @@ describe("native scene layout parity", () => {
   test("matches compat layout for text containers with child text nodes", () => {
     assertParity(textContainerParityFixture(), ["root", "textContainer"])
   })
+
+  test("matches compat layout for nested scroll containers", () => {
+    assertParity(nestedScrollParityFixture(), ["root", "outerScroll", "innerScroll", "innerA", "innerB", "outerTail"])
+  })
+
+  test("matches compat layout for border and padding combinations", () => {
+    assertParity(borderPaddingParityFixture(), ["root", "card", "cardHeader", "cardBody"])
+  })
+
+  test.todo("matches compat layout for multiline text wrapping", () => {})
 })

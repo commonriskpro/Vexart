@@ -26,12 +26,14 @@ import {
   nativeFocusPrev,
   NATIVE_EVENT_FLAG,
   nativePressChain,
+  nativeInteractionFrame,
   nativeReleasePointerCapture,
   nativeSetPointerCapture,
 } from "./native-scene-events"
 import { disableNativeSceneGraph, enableNativeSceneGraph } from "./native-scene-graph-flags"
-import { dispatchNativePressChain } from "../loop/layout"
+import { dispatchNativeInteractionFrame, dispatchNativePressChain, type InteractiveStatesBag } from "../loop/layout"
 import { resetFocus } from "../reconciler/focus"
+import { getVexartFfiCallCountsBySymbol, resetVexartFfiCallCounts } from "./vexart-bridge"
 
 beforeEach(() => {
   enableNativeSceneGraph()
@@ -108,6 +110,106 @@ describe("native scene graph", () => {
     expect(event?.nodeY).toBe(5)
     expect(event?.width).toBe(30)
     expect(event?.height).toBe(40)
+  })
+
+  test("native interaction frame emits hover active mouse and press records", () => {
+    const root = createNode("root")
+    root._nativeId = nativeSceneCreateNode("root")
+
+    const parent = createElement("box")
+    setProp(parent, "focusable", true)
+    const child = createElement("box")
+    setProp(child, "onMouseOver", () => {})
+    setProp(child, "onMouseMove", () => {})
+    setProp(child, "onMouseDown", () => {})
+    setProp(child, "onMouseUp", () => {})
+    setProp(child, "onPress", () => {})
+
+    insertNode(root, parent)
+    insertNode(parent, child)
+    nativeSceneSetLayout(parent._nativeId, 0, 0, 100, 100)
+    nativeSceneSetLayout(child._nativeId, 10, 10, 20, 20)
+
+    const move = nativeInteractionFrame({ x: 15, y: 15, pointerDown: false, pointerDirty: true, pendingPress: false, pendingRelease: false })
+    expect(move.some((record) => record.nodeId === child._nativeId! && record.eventKind === NATIVE_EVENT_KIND.MOUSE_OVER)).toBe(true)
+    expect(move.some((record) => record.nodeId === child._nativeId! && record.eventKind === NATIVE_EVENT_KIND.MOUSE_MOVE)).toBe(true)
+
+    const down = nativeInteractionFrame({ x: 15, y: 15, pointerDown: true, pointerDirty: false, pendingPress: true, pendingRelease: false })
+    expect(down.some((record) => record.nodeId === child._nativeId! && record.eventKind === NATIVE_EVENT_KIND.MOUSE_DOWN)).toBe(true)
+
+    const up = nativeInteractionFrame({ x: 15, y: 15, pointerDown: false, pointerDirty: false, pendingPress: false, pendingRelease: true })
+    expect(up.some((record) => record.nodeId === child._nativeId! && record.eventKind === NATIVE_EVENT_KIND.MOUSE_UP)).toBe(true)
+    expect(up.some((record) => record.nodeId === child._nativeId! && record.eventKind === NATIVE_EVENT_KIND.PRESS_CANDIDATE)).toBe(true)
+    expect(up.some((record) => record.nodeId === parent._nativeId! && record.eventKind === NATIVE_EVENT_KIND.PRESS_CANDIDATE)).toBe(true)
+  })
+
+  test("native interaction dispatcher invokes JS mouse and press callbacks", () => {
+    const root = createNode("root")
+    root._nativeId = nativeSceneCreateNode("root")
+    const calls: string[] = []
+
+    const node = createElement("box")
+    setProp(node, "focusable", true)
+    setProp(node, "onMouseOver", () => calls.push("over"))
+    setProp(node, "onMouseMove", () => calls.push("move"))
+    setProp(node, "onMouseDown", () => calls.push("down"))
+    setProp(node, "onMouseUp", () => calls.push("up"))
+    setProp(node, "onPress", () => calls.push("press"))
+
+    insertNode(root, node)
+    nativeSceneSetLayout(node._nativeId, 10, 10, 20, 20)
+    const rectNodeById = new Map([[node.id, node]])
+    const bag: InteractiveStatesBag = {
+      rectNodes: [node],
+      rectNodeById,
+      pointerX: 15,
+      pointerY: 15,
+      pointerDown: false,
+      pointerDirty: true,
+      pendingPress: false,
+      pendingRelease: false,
+      capturedNodeId: 0,
+      pressOriginSet: false,
+      prevActiveNode: null,
+      cellWidth: 8,
+      cellHeight: 16,
+      onChanged: () => calls.push("changed"),
+      useNativePressDispatch: true,
+      useNativeInteractionDispatch: true,
+    }
+
+    dispatchNativeInteractionFrame(bag)
+    bag.pointerDirty = false
+    bag.pointerDown = true
+    bag.pendingPress = true
+    dispatchNativeInteractionFrame(bag)
+    bag.pointerDown = false
+    bag.pendingRelease = true
+    dispatchNativeInteractionFrame(bag)
+
+    expect(calls).toContain("over")
+    expect(calls).toContain("move")
+    expect(calls).toContain("down")
+    expect(calls).toContain("up")
+    expect(calls).toContain("press")
+    expect(node._hovered).toBe(true)
+    expect(node._active).toBe(false)
+  })
+
+  test("native interaction frame uses one batched FFI call", () => {
+    const root = createNode("root")
+    root._nativeId = nativeSceneCreateNode("root")
+    const node = createElement("box")
+    setProp(node, "onMouseMove", () => {})
+    insertNode(root, node)
+    nativeSceneSetLayout(node._nativeId, 10, 10, 20, 20)
+
+    resetVexartFfiCallCounts()
+    const records = nativeInteractionFrame({ x: 15, y: 15, pointerDown: false, pointerDirty: true, pendingPress: false, pendingRelease: false })
+    const counts = getVexartFfiCallCountsBySymbol()
+
+    expect(records.length).toBeGreaterThan(0)
+    expect(counts.get("vexart_input_interaction_frame")).toBe(1)
   })
 
   test("native press chain bubbles from target to relevant ancestors", () => {

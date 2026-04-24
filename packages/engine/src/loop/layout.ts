@@ -14,8 +14,8 @@ import { resolveProps, createPressEvent } from "../ffi/node"
 import type { DamageRect } from "../ffi/damage"
 import { unionRect } from "../ffi/damage"
 import { CMD, type RenderCommand } from "../ffi/render-graph"
-import type { NativePointerEventRecord } from "../ffi/native-scene-events"
-import { NATIVE_EVENT_FLAG, nativePressChain } from "../ffi/native-scene-events"
+import type { NativeInteractionFrameInput, NativePointerEventRecord } from "../ffi/native-scene-events"
+import { NATIVE_EVENT_FLAG, NATIVE_EVENT_KIND, nativeInteractionFrame, nativePressChain } from "../ffi/native-scene-events"
 import type { PositionedCommand } from "../ffi/layout-writeback"
 import {
   fromConfig,
@@ -35,6 +35,10 @@ function syncNativeInteractiveState(node: TGENode) {
   nativeSceneSetProp(node._nativeId, "__focused", node._focused)
 }
 
+function syncNativeFocusState(node: TGENode) {
+  nativeSceneSetProp(node._nativeId, "__focused", node._focused)
+}
+
 // ── Layout writeback ──────────────────────────────────────────────────────
 
 /**
@@ -46,6 +50,7 @@ export type WriteLayoutBackState = {
   textNodes: TGENode[]
   boxNodes: TGENode[]
   pendingNodeDamageRects?: Array<{ nodeId: number; rect: DamageRect }>
+  syncNativeLayout?: boolean
 }
 
 function isNonEmptyLayoutRect(rect: { width: number; height: number }) {
@@ -82,6 +87,7 @@ export function writeLayoutBack(
   state: WriteLayoutBackState,
 ) {
   const { rectNodes, textNodes, boxNodes, pendingNodeDamageRects } = state
+  const syncNativeLayout = state.syncNativeLayout ?? true
 
   // Use vexart layout map directly for all box and text nodes.
   // The map is always populated by vexart_layout_compute (Taffy).
@@ -96,7 +102,7 @@ export function writeLayoutBack(
         node.layout.height = pos.height
         const damage = damageRectForLayoutTransition(prev, node.layout)
         if (damage && pendingNodeDamageRects) pendingNodeDamageRects.push({ nodeId: node.id, rect: damage })
-        nativeSceneSetLayout(node._nativeId, pos.x, pos.y, pos.width, pos.height)
+        if (syncNativeLayout) nativeSceneSetLayout(node._nativeId, pos.x, pos.y, pos.width, pos.height)
       }
     }
     for (const node of textNodes) {
@@ -109,7 +115,7 @@ export function writeLayoutBack(
         node.layout.height = pos.height
         const damage = damageRectForLayoutTransition(prev, node.layout)
         if (damage && pendingNodeDamageRects) pendingNodeDamageRects.push({ nodeId: node.id, rect: damage })
-        nativeSceneSetLayout(node._nativeId, pos.x, pos.y, pos.width, pos.height)
+        if (syncNativeLayout) nativeSceneSetLayout(node._nativeId, pos.x, pos.y, pos.width, pos.height)
       }
     }
   }
@@ -266,6 +272,8 @@ export type InteractiveStatesBag = {
   onChanged: () => void
   /** Dispatch click callbacks from the native retained scene chain. */
   useNativePressDispatch?: boolean
+  /** Dispatch hover/active/mouse callbacks from native retained scene records. */
+  useNativeInteractionDispatch?: boolean
 }
 
 export type NativePressChainReader = (x: number, y: number) => NativePointerEventRecord[]
@@ -307,6 +315,129 @@ export function dispatchNativePressChain(
   return dispatched
 }
 
+export type NativeInteractionFrameReader = (input: NativeInteractionFrameInput) => NativePointerEventRecord[]
+
+function eventFromNativeRecord(record: NativePointerEventRecord): NodeMouseEvent {
+  return {
+    x: record.x,
+    y: record.y,
+    nodeX: record.nodeX,
+    nodeY: record.nodeY,
+    width: record.width,
+    height: record.height,
+  }
+}
+
+export function dispatchNativeInteractionFrame(
+  bag: InteractiveStatesBag,
+  readFrame: NativeInteractionFrameReader = nativeInteractionFrame,
+) {
+  // JS-CALLBACK-SHELL: Rust owns retained hit-testing and interactive state;
+  // this function only mirrors native records into JS node caches and invokes
+  // user callbacks stored on TGENode props.
+  const records = readFrame({
+    x: bag.pointerX,
+    y: bag.pointerY,
+    pointerDown: bag.pointerDown,
+    pointerDirty: bag.pointerDirty,
+    pendingPress: bag.pendingPress,
+    pendingRelease: bag.pendingRelease,
+  })
+
+  const justReleased = bag.pendingRelease
+  bag.pendingPress = false
+  bag.pendingRelease = false
+  bag.pointerDirty = false
+  if (justReleased) {
+    bag.pressOriginSet = false
+    bag.capturedNodeId = 0
+  }
+
+  const nodeByNativeId = new Map<bigint, TGENode>()
+  for (const node of bag.rectNodes) {
+    if (node._nativeId) nodeByNativeId.set(node._nativeId, node)
+  }
+
+  const currentFocusId = focusedId()
+  const event = createPressEvent()
+  let changed = false
+  let hadClick = false
+
+  for (const record of records) {
+    const node = nodeByNativeId.get(record.nodeId)
+    if (!node) continue
+    const mouse = eventFromNativeRecord(record)
+
+    if (record.eventKind === NATIVE_EVENT_KIND.MOUSE_OVER) {
+      if (!node._hovered) { node._hovered = true; changed = true }
+      if (node.props.onMouseOver) node.props.onMouseOver(mouse)
+      continue
+    }
+
+    if (record.eventKind === NATIVE_EVENT_KIND.MOUSE_OUT) {
+      if (node._hovered) { node._hovered = false; changed = true }
+      if (node.props.onMouseOut) node.props.onMouseOut(mouse)
+      continue
+    }
+
+    if (record.eventKind === NATIVE_EVENT_KIND.MOUSE_DOWN) {
+      bag.pressOriginSet = true
+      if (!node._active) { node._active = true; changed = true }
+      bag.prevActiveNode = node
+      if (node.props.onMouseDown) node.props.onMouseDown(mouse)
+      continue
+    }
+
+    if (record.eventKind === NATIVE_EVENT_KIND.MOUSE_UP) {
+      if (node._active) { node._active = false; changed = true }
+      if (node.props.onMouseUp) node.props.onMouseUp(mouse)
+      continue
+    }
+
+    if (record.eventKind === NATIVE_EVENT_KIND.ACTIVE_END) {
+      if (node._active) { node._active = false; changed = true }
+      continue
+    }
+
+    if (record.eventKind === NATIVE_EVENT_KIND.MOUSE_MOVE) {
+      if (node.props.onMouseMove) node.props.onMouseMove(mouse)
+      continue
+    }
+
+    if (record.eventKind === NATIVE_EVENT_KIND.PRESS_CANDIDATE) {
+      if (event.propagationStopped) continue
+      if ((record.flags & NATIVE_EVENT_FLAG.FOCUSABLE) === NATIVE_EVENT_FLAG.FOCUSABLE && node.props.focusable) {
+        const fid = getNodeFocusId(node)
+        if (fid) setFocusedId(fid)
+        hadClick = true
+        changed = true
+      }
+      if ((record.flags & NATIVE_EVENT_FLAG.ON_PRESS) === NATIVE_EVENT_FLAG.ON_PRESS && node.props.onPress) {
+        node.props.onPress(event)
+        hadClick = true
+        changed = true
+      }
+    }
+  }
+
+  const newFocusId = focusedId()
+  if (newFocusId !== currentFocusId) {
+    for (const node of bag.rectNodes) {
+      if (!node.props.focusable) continue
+      const nodeFocusId = getNodeFocusId(node)
+      const isFocused = nodeFocusId !== undefined && nodeFocusId === newFocusId
+      if (node._focused !== isFocused) {
+        node._focused = isFocused
+        syncNativeFocusState(node)
+        changed = true
+      }
+    }
+  }
+
+  if (changed) bag.onChanged()
+  return { hadClick, changed }
+}
+
 /**
  * Track nodes with interactive styles for hit-testing + focus bridging.
  * Also dispatches per-node mouse callbacks (onMouseDown/Up/Move/Over/Out).
@@ -317,6 +448,13 @@ export function dispatchNativePressChain(
  * Returns true if a click was dispatched (focus/onPress fired).
  */
 export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
+  if (bag.useNativeInteractionDispatch) {
+    return dispatchNativeInteractionFrame(bag).hadClick
+  }
+
+  // COMPAT-FALLBACK: Full TS hit-test/hover/active loop. Retained native
+  // frames bypass this branch unless native interaction dispatch is disabled
+  // or a currently unsupported transform-hit-test fallback is required.
   let changed = false
   const currentFocusId = focusedId()
 

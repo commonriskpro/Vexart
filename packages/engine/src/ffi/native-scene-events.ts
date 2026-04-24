@@ -7,6 +7,19 @@ export const NATIVE_EVENT_KIND = {
   POINTER_DOWN: 2,
   POINTER_UP: 3,
   PRESS_CANDIDATE: 4,
+  MOUSE_OVER: 5,
+  MOUSE_OUT: 6,
+  MOUSE_DOWN: 7,
+  MOUSE_UP: 8,
+  MOUSE_MOVE: 9,
+  ACTIVE_END: 10,
+} as const
+
+export const NATIVE_INTERACTION_FLAG = {
+  POINTER_DOWN: 1,
+  POINTER_DIRTY: 2,
+  POINTER_PRESSED: 4,
+  POINTER_RELEASED: 8,
 } as const
 
 export const NATIVE_EVENT_FLAG = {
@@ -70,6 +83,44 @@ export function nativePressChain(x: number, y: number) {
   const used = new Uint32Array(1)
   const { symbols } = openVexartLibrary()
   const rc = symbols.vexart_input_press_chain(1n, scene, x, y, ptr(out), out.byteLength, ptr(used)) as number
+  if (rc !== 0 || used[0] === 0) return []
+  const records = [] as NativePointerEventRecord[]
+  for (let offset = 0; offset < used[0]; offset += EVENT_RECORD_BYTES) {
+    records.push(decodeEvent(out.subarray(offset, offset + EVENT_RECORD_BYTES)))
+  }
+  return records
+}
+
+export interface NativeInteractionFrameInput {
+  x: number
+  y: number
+  pointerDown: boolean
+  pointerDirty: boolean
+  pendingPress: boolean
+  pendingRelease: boolean
+}
+
+export function nativeInteractionFrame(input: NativeInteractionFrameInput) {
+  const scene = nativeSceneHandle()
+  if (!scene) return []
+
+  let flags = 0
+  if (input.pointerDown) flags |= NATIVE_INTERACTION_FLAG.POINTER_DOWN
+  if (input.pointerDirty) flags |= NATIVE_INTERACTION_FLAG.POINTER_DIRTY
+  if (input.pendingPress) flags |= NATIVE_INTERACTION_FLAG.POINTER_PRESSED
+  if (input.pendingRelease) flags |= NATIVE_INTERACTION_FLAG.POINTER_RELEASED
+
+  const pointer = new Uint8Array(12)
+  const pointerView = new DataView(pointer.buffer)
+  pointerView.setFloat32(0, input.x, true)
+  pointerView.setFloat32(4, input.y, true)
+  pointerView.setUint16(8, flags, true)
+  pointerView.setUint16(10, 0, true)
+
+  const out = new Uint8Array(EVENT_RECORD_BYTES * 64)
+  const used = new Uint32Array(1)
+  const { symbols } = openVexartLibrary()
+  const rc = symbols.vexart_input_interaction_frame(1n, scene, ptr(pointer), pointer.byteLength, ptr(out), out.byteLength, ptr(used)) as number
   if (rc !== 0 || used[0] === 0) return []
   const records = [] as NativePointerEventRecord[]
   for (let offset = 0; offset < used[0]; offset += EVENT_RECORD_BYTES) {

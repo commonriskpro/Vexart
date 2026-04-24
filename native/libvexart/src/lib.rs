@@ -89,6 +89,26 @@ fn get_or_init_scene_layout() -> MutexGuard<'static, SendableLayoutContext> {
     guard
 }
 
+fn sync_scene_layout_from_output(graph: &mut scene::SceneGraph, out: &[u8], used: u32) {
+    const HEADER_BYTES: usize = 16;
+    const RECORD_BYTES: usize = 40;
+    let used_len = used as usize;
+    if used_len < HEADER_BYTES || out.len() < HEADER_BYTES {
+        return;
+    }
+    let count = u32::from_le_bytes(out[8..12].try_into().unwrap_or([0; 4])) as usize;
+    let max_records = (used_len.saturating_sub(HEADER_BYTES)).min(out.len().saturating_sub(HEADER_BYTES)) / RECORD_BYTES;
+    for i in 0..count.min(max_records) {
+        let offset = HEADER_BYTES + i * RECORD_BYTES;
+        let node = u64::from_le_bytes(out[offset..offset + 8].try_into().unwrap_or([0; 8]));
+        let x = f32::from_le_bytes(out[offset + 8..offset + 12].try_into().unwrap_or([0; 4]));
+        let y = f32::from_le_bytes(out[offset + 12..offset + 16].try_into().unwrap_or([0; 4]));
+        let width = f32::from_le_bytes(out[offset + 16..offset + 20].try_into().unwrap_or([0; 4]));
+        let height = f32::from_le_bytes(out[offset + 20..offset + 24].try_into().unwrap_or([0; 4]));
+        let _ = graph.set_layout(node, scene::NativeLayoutRect { x, y, width, height });
+    }
+}
+
 // ─── Single shared ResourceManager (lazy-initialized, Phase 2b Slice 6) ──
 // Global GPU memory budget manager. Initialized on first stats/budget call.
 // Phase 2b: single-context model — one manager for all GPU assets.
@@ -300,8 +320,8 @@ pub unsafe extern "C" fn vexart_scene_snapshot(
         if out_ptr.is_null() || out_used.is_null() || out_cap == 0 {
             return ERR_INVALID_ARG;
         }
-        let guard = SHARED_SCENES.lock().unwrap();
-        let Some(graph) = guard.0.get(&scene) else {
+        let mut scenes = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = scenes.0.get_mut(&scene) else {
             return ERR_INVALID_ARG;
         };
         let json = graph.snapshot_json();
@@ -326,8 +346,8 @@ pub unsafe extern "C" fn vexart_scene_layout_compute(
         if out_used.is_null() {
             return ERR_INVALID_ARG;
         }
-        let guard = SHARED_SCENES.lock().unwrap();
-        let Some(graph) = guard.0.get(&scene) else {
+        let mut guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get_mut(&scene) else {
             return ERR_INVALID_ARG;
         };
         let out = if out_ptr.is_null() || out_cap == 0 {
@@ -343,6 +363,9 @@ pub unsafe extern "C" fn vexart_scene_layout_compute(
             let lctx = guard.0.as_mut().unwrap();
             lctx.compute_scene(graph, atlases, out, &mut used)
         };
+        if code == OK {
+            sync_scene_layout_from_output(graph, out, used);
+        }
         *out_used = used;
         code
     })
@@ -458,6 +481,48 @@ pub unsafe extern "C" fn vexart_input_pointer(
             return ERR_INVALID_ARG;
         }
         *out_used = scene::NativeEventRecord::BYTE_LEN as u32;
+        OK
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vexart_input_interaction_frame(
+    _ctx: u64,
+    scene: u64,
+    pointer_ptr: *const u8,
+    pointer_len: u32,
+    out_events: *mut u8,
+    out_cap: u32,
+    out_used: *mut u32,
+) -> i32 {
+    ffi_guard!({
+        if pointer_ptr.is_null() || out_events.is_null() || out_used.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let bytes = std::slice::from_raw_parts(pointer_ptr, pointer_len as usize);
+        if bytes.len() < 12 {
+            return ERR_INVALID_ARG;
+        }
+        let x = f32::from_le_bytes(bytes[0..4].try_into().unwrap());
+        let y = f32::from_le_bytes(bytes[4..8].try_into().unwrap());
+        let flags = u16::from_le_bytes(bytes[8..10].try_into().unwrap());
+
+        let mut guard = SHARED_SCENES.lock().unwrap();
+        let Some(graph) = guard.0.get_mut(&scene) else {
+            return ERR_INVALID_ARG;
+        };
+        let records = graph.interaction_frame(x, y, flags);
+        let max_records = (out_cap as usize) / scene::NativeEventRecord::BYTE_LEN;
+        let used_records = records.len().min(max_records);
+        let out = std::slice::from_raw_parts_mut(out_events, used_records * scene::NativeEventRecord::BYTE_LEN);
+        for (i, event) in records.into_iter().take(used_records).enumerate() {
+            let start = i * scene::NativeEventRecord::BYTE_LEN;
+            let end = start + scene::NativeEventRecord::BYTE_LEN;
+            if !event.write_to(&mut out[start..end]) {
+                return ERR_INVALID_ARG;
+            }
+        }
+        *out_used = (used_records * scene::NativeEventRecord::BYTE_LEN) as u32;
         OK
     })
 }

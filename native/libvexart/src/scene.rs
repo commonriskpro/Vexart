@@ -2,7 +2,7 @@
 // Phase 3b — Rust-retained scene graph skeleton.
 
 use crate::ffi::buffer::{GRAPH_MAGIC, GRAPH_VERSION};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 const LAYOUT_CMD_OPEN: u16 = 0;
 const LAYOUT_CMD_CLOSE: u16 = 1;
@@ -68,6 +68,8 @@ pub struct SceneGraph {
     next_node_id: u64,
     pub nodes: HashMap<u64, NativeNode>,
     pub captured_node: Option<u64>,
+    hovered_nodes: HashSet<u64>,
+    active_node: Option<u64>,
     pub cell_width: f32,
     pub cell_height: f32,
 }
@@ -91,6 +93,12 @@ impl NativeEventRecord {
     pub const KIND_POINTER_DOWN: u16 = 2;
     pub const KIND_POINTER_UP: u16 = 3;
     pub const KIND_PRESS_CANDIDATE: u16 = 4;
+    pub const KIND_MOUSE_OVER: u16 = 5;
+    pub const KIND_MOUSE_OUT: u16 = 6;
+    pub const KIND_MOUSE_DOWN: u16 = 7;
+    pub const KIND_MOUSE_UP: u16 = 8;
+    pub const KIND_MOUSE_MOVE: u16 = 9;
+    pub const KIND_ACTIVE_END: u16 = 10;
 
     pub const FLAG_FOCUSABLE: u16 = 1;
     pub const FLAG_ON_PRESS: u16 = 2;
@@ -120,6 +128,8 @@ impl SceneGraph {
             next_node_id: 1,
             nodes: HashMap::new(),
             captured_node: None,
+            hovered_nodes: HashSet::new(),
+            active_node: None,
             cell_width: 0.0,
             cell_height: 0.0,
         }
@@ -129,6 +139,8 @@ impl SceneGraph {
         self.nodes.clear();
         self.next_node_id = 1;
         self.captured_node = None;
+        self.hovered_nodes.clear();
+        self.active_node = None;
         self.cell_width = 0.0;
         self.cell_height = 0.0;
     }
@@ -251,6 +263,10 @@ impl SceneGraph {
         if self.captured_node == Some(node_id) {
             self.captured_node = None;
         }
+        self.hovered_nodes.remove(&node_id);
+        if self.active_node == Some(node_id) {
+            self.active_node = None;
+        }
         true
     }
 
@@ -308,17 +324,78 @@ impl SceneGraph {
     pub fn pointer_event(&self, x: f32, y: f32, event_kind: u16) -> Option<NativeEventRecord> {
         let node_id = self.hit_test(x, y)?;
         let node = self.nodes.get(&node_id)?;
-        Some(NativeEventRecord {
-            node_id,
-            event_kind,
-            flags: if self.captured_node == Some(node_id) { NativeEventRecord::FLAG_CAPTURED } else { 0 },
-            x,
-            y,
-            node_x: x - node.layout.x,
-            node_y: y - node.layout.y,
-            width: node.layout.width,
-            height: node.layout.height,
-        })
+        Some(self.event_record_for_node(node_id, event_kind, x, y, node))
+    }
+
+    pub fn interaction_frame(&mut self, x: f32, y: f32, flags: u16) -> Vec<NativeEventRecord> {
+        const POINTER_DOWN: u16 = 1 << 0;
+        const POINTER_DIRTY: u16 = 1 << 1;
+        const POINTER_PRESSED: u16 = 1 << 2;
+        const POINTER_RELEASED: u16 = 1 << 3;
+
+        let pointer_down = (flags & POINTER_DOWN) != 0;
+        let pointer_dirty = (flags & POINTER_DIRTY) != 0;
+        let just_pressed = (flags & POINTER_PRESSED) != 0;
+        let just_released = (flags & POINTER_RELEASED) != 0;
+
+        let hovered = self.hovered_interactive_nodes(x, y);
+        let hovered_set: HashSet<u64> = hovered.iter().copied().collect();
+        let mut out = vec![];
+
+        let mut previous: Vec<u64> = self.hovered_nodes.iter().copied().collect();
+        previous.sort_unstable();
+        for node_id in previous {
+            if hovered_set.contains(&node_id) {
+                continue;
+            }
+            if let Some(node) = self.nodes.get(&node_id) {
+                out.push(self.event_record_for_node(node_id, NativeEventRecord::KIND_MOUSE_OUT, x, y, node));
+            }
+        }
+
+        for node_id in &hovered {
+            if let Some(node) = self.nodes.get(node_id) {
+                if !self.hovered_nodes.contains(node_id) {
+                    out.push(self.event_record_for_node(*node_id, NativeEventRecord::KIND_MOUSE_OVER, x, y, node));
+                }
+                if pointer_dirty {
+                    out.push(self.event_record_for_node(*node_id, NativeEventRecord::KIND_MOUSE_MOVE, x, y, node));
+                }
+            }
+        }
+
+        if just_pressed {
+            let target = self.hit_test(x, y).filter(|node_id| self.has_interactive_behavior(*node_id));
+            self.active_node = target;
+            if let Some(node_id) = target {
+                if let Some(node) = self.nodes.get(&node_id) {
+                    out.push(self.event_record_for_node(node_id, NativeEventRecord::KIND_MOUSE_DOWN, x, y, node));
+                }
+            }
+        }
+
+        if just_released {
+            let active = self.active_node.take();
+            if let Some(node_id) = active {
+                if let Some(node) = self.nodes.get(&node_id) {
+                    out.push(self.event_record_for_node(node_id, NativeEventRecord::KIND_MOUSE_UP, x, y, node));
+                    out.push(self.event_record_for_node(node_id, NativeEventRecord::KIND_ACTIVE_END, x, y, node));
+                }
+                if hovered_set.contains(&node_id) {
+                    out.extend(self.press_chain(x, y));
+                }
+            }
+            self.captured_node = None;
+        } else if !pointer_down {
+            if let Some(node_id) = self.active_node.take() {
+                if let Some(node) = self.nodes.get(&node_id) {
+                    out.push(self.event_record_for_node(node_id, NativeEventRecord::KIND_ACTIVE_END, x, y, node));
+                }
+            }
+        }
+
+        self.hovered_nodes = hovered_set;
+        out
     }
 
     pub fn press_chain(&self, x: f32, y: f32) -> Vec<NativeEventRecord> {
@@ -354,6 +431,62 @@ impl SceneGraph {
             current = node.parent;
         }
         chain
+    }
+
+    fn event_record_for_node(&self, node_id: u64, event_kind: u16, x: f32, y: f32, node: &NativeNode) -> NativeEventRecord {
+        NativeEventRecord {
+            node_id,
+            event_kind,
+            flags: if self.captured_node == Some(node_id) { NativeEventRecord::FLAG_CAPTURED } else { 0 },
+            x,
+            y,
+            node_x: x - node.layout.x,
+            node_y: y - node.layout.y,
+            width: node.layout.width,
+            height: node.layout.height,
+        }
+    }
+
+    fn hovered_interactive_nodes(&self, x: f32, y: f32) -> Vec<u64> {
+        if let Some(captured) = self.captured_node {
+            if self.nodes.contains_key(&captured) {
+                return vec![captured];
+            }
+        }
+
+        let mut roots: Vec<u64> = self
+            .nodes
+            .values()
+            .filter(|node| node.parent.is_none())
+            .map(|node| node.id)
+            .collect();
+        roots.sort_unstable();
+        let mut out = vec![];
+        for root_id in roots {
+            self.collect_hovered_interactive_nodes(root_id, x, y, &mut out);
+        }
+        out
+    }
+
+    fn collect_hovered_interactive_nodes(&self, node_id: u64, x: f32, y: f32, out: &mut Vec<u64>) {
+        let Some(node) = self.nodes.get(&node_id) else {
+            return;
+        };
+        let is_inside_self = self.point_inside_rect(node.layout, x, y);
+        if self.is_scroll_container(node_id) && !is_inside_self {
+            return;
+        }
+
+        for child_id in &node.children {
+            self.collect_hovered_interactive_nodes(*child_id, x, y, out);
+        }
+
+        if self.point_inside_hit_area(node.layout, x, y)
+            && !self.is_pointer_passthrough(node_id)
+            && self.has_interactive_behavior(node_id)
+        {
+            out.push(node_id);
+        }
     }
 
     pub fn set_pointer_capture(&mut self, node_id: u64) -> bool {
@@ -398,6 +531,14 @@ impl SceneGraph {
         let idx = ordered.iter().position(|id| *id == current_id).unwrap_or(0);
         let prev = if idx == 0 { ordered.len() - 1 } else { idx - 1 };
         Some(ordered[prev])
+    }
+
+    pub fn is_hovered(&self, node_id: u64) -> bool {
+        self.hovered_nodes.contains(&node_id)
+    }
+
+    pub fn is_active(&self, node_id: u64) -> bool {
+        self.active_node == Some(node_id)
     }
 
     fn hit_test_node(&self, node_id: u64, x: f32, y: f32) -> Option<u64> {
@@ -698,6 +839,25 @@ impl SceneGraph {
             self.nodes.get(&node_id).and_then(|node| node.props.get(&PROP_ON_PRESS)),
             Some(PropValue::Bool(true)) | Some(PropValue::Capability(true))
         )
+    }
+
+    fn has_mouse_callback(&self, node_id: u64) -> bool {
+        [11u16, 12u16, 13u16, 14u16, 15u16]
+            .into_iter()
+            .any(|prop_id| self.prop_truthy(node_id, prop_id))
+    }
+
+    fn has_style_callback_state(&self, node_id: u64) -> bool {
+        [prop_hash("hoverStyle"), prop_hash("activeStyle"), prop_hash("focusStyle")]
+            .into_iter()
+            .any(|prop_id| self.nodes.get(&node_id).and_then(|node| node.props.get(&prop_id)).is_some())
+    }
+
+    fn has_interactive_behavior(&self, node_id: u64) -> bool {
+        self.is_focusable(node_id)
+            || self.has_on_press(node_id)
+            || self.has_mouse_callback(node_id)
+            || self.has_style_callback_state(node_id)
     }
 
     fn is_scroll_container(&self, node_id: u64) -> bool {
@@ -1013,6 +1173,55 @@ mod tests {
         assert_eq!(scene.hit_test(13.9, 15.9), Some(node));
         assert_eq!(scene.hit_test(5.9, 6.0), None);
         assert_eq!(scene.hit_test(15.1, 17.1), None);
+    }
+
+    #[test]
+    fn interaction_frame_emits_hover_active_mouse_and_press_records() {
+        let mut scene = SceneGraph::new();
+        let parent = scene.create_node(NativeNodeKind::Box);
+        let child = scene.create_node(NativeNodeKind::Box);
+        scene.insert(parent, child, None);
+        scene.set_layout(parent, NativeLayoutRect { x: 0.0, y: 0.0, width: 100.0, height: 100.0 });
+        scene.set_layout(child, NativeLayoutRect { x: 10.0, y: 10.0, width: 20.0, height: 20.0 });
+        scene.set_props(parent, &single_bool_prop(9, true));
+        scene.set_props(child, &{
+            let mut bytes = Vec::new();
+            bytes.extend_from_slice(&2u16.to_le_bytes());
+            for prop_id in [10u16, 13u16] {
+                bytes.extend_from_slice(&prop_id.to_le_bytes());
+                bytes.push(6);
+                bytes.push(0);
+                bytes.extend_from_slice(&1u32.to_le_bytes());
+                bytes.push(1);
+            }
+            bytes
+        });
+
+        let move_records = scene.interaction_frame(15.0, 15.0, 1 << 1);
+        assert!(move_records.iter().any(|record| record.node_id == child && record.event_kind == NativeEventRecord::KIND_MOUSE_OVER));
+        assert!(move_records.iter().any(|record| record.node_id == child && record.event_kind == NativeEventRecord::KIND_MOUSE_MOVE));
+
+        let down_records = scene.interaction_frame(15.0, 15.0, (1 << 0) | (1 << 2));
+        assert!(down_records.iter().any(|record| record.node_id == child && record.event_kind == NativeEventRecord::KIND_MOUSE_DOWN));
+
+        let up_records = scene.interaction_frame(15.0, 15.0, 1 << 3);
+        assert!(up_records.iter().any(|record| record.node_id == child && record.event_kind == NativeEventRecord::KIND_MOUSE_UP));
+        assert!(up_records.iter().any(|record| record.node_id == child && record.event_kind == NativeEventRecord::KIND_PRESS_CANDIDATE));
+        assert!(up_records.iter().any(|record| record.node_id == parent && record.event_kind == NativeEventRecord::KIND_PRESS_CANDIDATE));
+    }
+
+    #[test]
+    fn interaction_frame_emits_mouse_out_when_pointer_leaves() {
+        let mut scene = SceneGraph::new();
+        let node = scene.create_node(NativeNodeKind::Box);
+        scene.set_layout(node, NativeLayoutRect { x: 0.0, y: 0.0, width: 20.0, height: 20.0 });
+        scene.set_props(node, &single_bool_prop(14, true));
+
+        let enter = scene.interaction_frame(10.0, 10.0, 1 << 1);
+        assert!(enter.iter().any(|record| record.event_kind == NativeEventRecord::KIND_MOUSE_OVER));
+
+        let leave = scene.interaction_frame(40.0, 40.0, 1 << 1);
+        assert!(leave.iter().any(|record| record.node_id == node && record.event_kind == NativeEventRecord::KIND_MOUSE_OUT));
     }
 
     #[test]

@@ -59,6 +59,7 @@ export const VEXART_SYMBOLS = {
   vexart_frame_choose_strategy: { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_scene_hit_test:    { args: [FFIType.u64, FFIType.u64, FFIType.f32, FFIType.f32, FFIType.ptr], returns: FFIType.i32 },
   vexart_input_pointer:     { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
+  vexart_input_interaction_frame: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_input_set_pointer_capture: { args: [FFIType.u64, FFIType.u64, FFIType.u64], returns: FFIType.i32 },
   vexart_input_release_pointer_capture: { args: [FFIType.u64, FFIType.u64, FFIType.u64], returns: FFIType.i32 },
   vexart_input_press_chain:  { args: [FFIType.u64, FFIType.u64, FFIType.f32, FFIType.f32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },

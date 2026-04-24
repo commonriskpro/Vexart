@@ -570,7 +570,7 @@ fn effective_prop(scene: &SceneGraph, node_id: u64, prop_id: u16) -> Option<Prop
         value = base_prop(scene, node_id, prop_hash("boxShadow"));
     }
 
-    if prop_truthy(scene, node_id, prop_hash("__hovered")) {
+    if scene.is_hovered(node_id) || prop_truthy(scene, node_id, prop_hash("__hovered")) {
         if let Some(override_value) = style_prop_value(scene, node_id, prop_hash("hoverStyle"), prop_id) {
             value = Some(override_value);
         }
@@ -580,7 +580,7 @@ fn effective_prop(scene: &SceneGraph, node_id: u64, prop_id: u16) -> Option<Prop
             value = Some(override_value);
         }
     }
-    if prop_truthy(scene, node_id, prop_hash("__active")) {
+    if scene.is_active(node_id) || prop_truthy(scene, node_id, prop_hash("__active")) {
         if let Some(override_value) = style_prop_value(scene, node_id, prop_hash("activeStyle"), prop_id) {
             value = Some(override_value);
         }

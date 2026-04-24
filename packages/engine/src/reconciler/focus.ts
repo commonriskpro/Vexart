@@ -27,6 +27,10 @@ function activeRegistry(): FocusEntry[] { return activeScope().entries }
 
 const [focusedIdSignal, setFocusedIdSignal] = createSignal<string | null>(null)
 
+// JS-CALLBACK-SHELL: Rust owns retained focus traversal order, but the focused
+// id remains a Solid signal because user components read it reactively and JS
+// owns `onKeyDown` / `onPress` callback invocation.
+
 /** @public */
 export const focusedId = focusedIdSignal
 

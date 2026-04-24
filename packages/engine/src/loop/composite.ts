@@ -250,6 +250,7 @@ function writeLayoutBack(s: CompositeFrameState) {
     textNodes: s.textNodes,
     boxNodes: s.boxNodes,
     pendingNodeDamageRects: s.pendingNodeDamageRects,
+    syncNativeLayout: !s.useNativeSceneLayout,
   })
   return nodeLayoutMap
 }
@@ -443,6 +444,7 @@ function buildRetainedCompositorLayers(s: CompositeFrameState) {
 
 function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; changed: boolean } {
   let changed = false
+  const hasTransformHitTestFallback = s.rectNodes.some((node) => !!node._accTransformInverse || !!node._transformInverse)
   const bag: InteractiveStatesBag = {
     rectNodes: s.rectNodes,
     rectNodeById: s.rectNodeById,
@@ -459,6 +461,7 @@ function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; c
     cellHeight: s.term.size.cellHeight || 16,
     onChanged: () => { changed = true; s.markDirty(); s.markAllDirty() },
     useNativePressDispatch: s.useNativePressDispatch,
+    useNativeInteractionDispatch: s.useNativePressDispatch && !hasTransformHitTestFallback,
   }
   const hadClick = _updateInteractiveStates(bag)
   // Write back mutable fields
