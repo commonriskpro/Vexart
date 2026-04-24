@@ -106,8 +106,6 @@ async function main() {
     experimental: {
       idleMaxFps: 60,
       forceLayerRepaint: false,
-      nativeSceneLayout: false,
-      nativeRenderGraph: false,
     },
   })
 

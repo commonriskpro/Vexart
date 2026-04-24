@@ -44,5 +44,8 @@ jobs:
       - name: Visual regression gate
         run: bun run test:visual
 
+      - name: Native render graph visual parity gate
+        run: bun run test:visual:native-render-graph
+
       - name: Performance regression gate
         run: bun run perf:check && bun run perf:frame-orchestrator

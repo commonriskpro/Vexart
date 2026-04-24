@@ -159,8 +159,6 @@ async function main() {
   const term = await createTerminal()
   const app = mount(() => <App terminal={term} />, term, {
     experimental: {
-      nativeSceneLayout: false,
-      nativeRenderGraph: false,
     },
   })
   const exitAfterMs = Number(process.env.TGE_EXIT_AFTER_MS ?? 0)

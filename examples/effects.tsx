@@ -268,8 +268,6 @@ async function main() {
   const term = await createTerminal()
   const cleanup = mount(() => <App terminal={term} />, term, {
     experimental: {
-      nativeSceneLayout: false,
-      nativeRenderGraph: false,
     },
   })
 

@@ -3,7 +3,7 @@ import { createNode } from "./node"
 import { createElement, insertNode, setProp, solidCreateTextNode } from "../reconciler/reconciler"
 import { destroyNativeScene, nativeSceneCreateNode, nativeSceneSetLayout } from "./native-scene"
 import { disableNativeSceneGraph, enableNativeSceneGraph } from "./native-scene-graph-flags"
-import { nativeRenderGraphSnapshot, translateNativeRenderGraphSnapshot, type NativeRenderGraphSnapshot } from "./native-render-graph"
+import { nativeRenderGraphSnapshot, translateNativeRenderGraphSnapshot, type NativeRenderGraphSnapshot, type NativeRenderOpSnapshot } from "./native-render-graph"
 import { CMD, type RenderGraphQueues } from "./render-graph"
 import { resetFocus } from "../reconciler/focus"
 
@@ -16,6 +16,52 @@ afterEach(() => {
   resetFocus()
   disableNativeSceneGraph()
 })
+
+function nativeOp(overrides: Partial<NativeRenderOpSnapshot>): NativeRenderOpSnapshot {
+  return {
+    kind: "rect",
+    nodeId: 1,
+    x: 0,
+    y: 0,
+    width: 10,
+    height: 10,
+    color: 0x000000ff,
+    cornerRadius: 0,
+    borderWidth: 0,
+    opacity: 1,
+    text: "",
+    fontSize: 0,
+    fontId: 0,
+    objectFit: "contain",
+    canvasViewportJson: "",
+    materialKey: "pipeline:rect:1",
+    effectKey: "",
+    imageSource: "",
+    hasGradient: false,
+    hasShadow: false,
+    hasGlow: false,
+    hasFilter: false,
+    hasBackdrop: false,
+    hasTransform: false,
+    hasOpacity: false,
+    hasCornerRadii: false,
+    gradientJson: "",
+    shadowJson: "",
+    glowJson: "",
+    filterJson: "",
+    transformJson: "",
+    cornerRadiiJson: "",
+    backdropBlur: null,
+    backdropBrightness: null,
+    backdropContrast: null,
+    backdropSaturate: null,
+    backdropGrayscale: null,
+    backdropInvert: null,
+    backdropSepia: null,
+    backdropHueRotate: null,
+    ...overrides,
+  }
+}
 
 describe("native render graph snapshot", () => {
   test("emits rect border and text ops from scene and layout", () => {
@@ -46,6 +92,31 @@ describe("native render graph snapshot", () => {
     expect(snapshot?.ops[1]).toMatchObject({ kind: "border", nodeId: Number(box._nativeId), borderWidth: 2, color: 0x00ff00ff })
     expect(snapshot?.ops[2]).toMatchObject({ kind: "text", nodeId: Number(text._nativeId), text: "hello", fontSize: 16, color: 0xffffffff })
     expect(snapshot?.ops[2]?.materialKey).toContain("pipeline:text")
+  })
+
+  test("emits text op for JSX-style text container with child text node", () => {
+    const root = createNode("root")
+    root._nativeId = nativeSceneCreateNode("root")
+
+    const text = createElement("text")
+    setProp(text, "color", 0xffffffff)
+    setProp(text, "fontSize", 16)
+    const leaf = solidCreateTextNode("Hello from TGE")
+
+    insertNode(root, text)
+    insertNode(text, leaf)
+    nativeSceneSetLayout(text._nativeId, 8, 9, 100, 17)
+
+    const snapshot = nativeRenderGraphSnapshot()
+    expect(snapshot).not.toBeNull()
+    expect(snapshot?.ops).toHaveLength(1)
+    expect(snapshot?.ops[0]).toMatchObject({
+      kind: "text",
+      nodeId: Number(text._nativeId),
+      text: "Hello from TGE",
+      fontSize: 16,
+      color: 0xffffffff,
+    })
   })
 
   test("emits effect image and canvas ops with batches", () => {
@@ -107,12 +178,52 @@ describe("native render graph snapshot", () => {
     expect(graph.ops.map((op) => op.kind)).toEqual(["rectangle", "text"])
   })
 
+  test("translates rect border and text directly from native snapshot values", () => {
+    const snapshot: NativeRenderGraphSnapshot = {
+      ops: [
+        nativeOp({ kind: "rect", nodeId: 1, color: 0x11223344, cornerRadius: 7 }),
+        nativeOp({ kind: "border", nodeId: 1, color: 0xaabbccdd, cornerRadius: 7, borderWidth: 3 }),
+        nativeOp({ kind: "text", nodeId: 2, color: 0x55667788, text: "native text", fontSize: 15, fontId: 4 }),
+      ],
+      batches: [],
+    }
+
+    const commands = [
+      { type: CMD.RECTANGLE, x: 0, y: 0, width: 10, height: 10, color: [0, 0, 0, 0] as [number, number, number, number], cornerRadius: 0, extra1: 0, extra2: 0, nodeId: 1 },
+      { type: CMD.BORDER, x: 0, y: 0, width: 10, height: 10, color: [0, 0, 0, 0] as [number, number, number, number], cornerRadius: 0, extra1: 0, extra2: 0, nodeId: 1 },
+      { type: CMD.TEXT, x: 0, y: 12, width: 80, height: 18, color: [0, 0, 0, 0] as [number, number, number, number], cornerRadius: 0, extra1: 0, extra2: 0, text: "fallback text", nodeId: 2 },
+    ]
+
+    const graph = translateNativeRenderGraphSnapshot(snapshot, commands, { effects: [], images: [], canvases: [] }, new Map())
+
+    expect(graph.ops.map((op) => op.kind)).toEqual(["rectangle", "border", "text"])
+    expect(graph.ops[0]?.kind).toBe("rectangle")
+    if (graph.ops[0]?.kind === "rectangle") {
+      expect(graph.ops[0].inputs.color).toBe(0x11223344)
+      expect(graph.ops[0].inputs.radius).toBe(7)
+      expect(graph.ops[0].command.color).toEqual([0x11, 0x22, 0x33, 0x44])
+    }
+    expect(graph.ops[1]?.kind).toBe("border")
+    if (graph.ops[1]?.kind === "border") {
+      expect(graph.ops[1].inputs.width).toBe(3)
+      expect(graph.ops[1].inputs.radius).toBe(7)
+      expect(graph.ops[1].command.color).toEqual([0xaa, 0xbb, 0xcc, 0xdd])
+    }
+    expect(graph.ops[2]?.kind).toBe("text")
+    if (graph.ops[2]?.kind === "text") {
+      expect(graph.ops[2].inputs.text).toBe("native text")
+      expect(graph.ops[2].inputs.fontId).toBe(4)
+      expect(graph.ops[2].command.color).toEqual([0x55, 0x66, 0x77, 0x88])
+      expect(graph.ops[2].command.text).toBe("native text")
+    }
+  })
+
   test("translates effect image and canvas snapshot ops into backend graph ops", () => {
     const snapshot: NativeRenderGraphSnapshot = {
       ops: [
         { kind: "effect", nodeId: 1, x: 0, y: 0, width: 10, height: 10, color: 1, cornerRadius: 0, borderWidth: 0, opacity: 1, text: "", fontSize: 0, fontId: 0, materialKey: "pipeline:effect:1", effectKey: "gradient+shadow", imageSource: "", hasGradient: true, hasShadow: true, hasGlow: false, hasFilter: false, hasBackdrop: false, hasTransform: false, hasOpacity: false, gradientJson: '{"type":"linear","from":1,"to":2,"angle":90}', shadowJson: '{"x":0,"y":2,"blur":4,"color":3}', glowJson: "", filterJson: "", transformJson: "", backdropBlur: null, backdropBrightness: null, backdropContrast: null, backdropSaturate: null, backdropGrayscale: null, backdropInvert: null, backdropSepia: null, backdropHueRotate: null },
-        { kind: "image", nodeId: 2, x: 0, y: 0, width: 20, height: 10, color: 0, cornerRadius: 0, borderWidth: 0, opacity: 1, text: "", fontSize: 0, fontId: 0, materialKey: "pipeline:image:0", effectKey: "", imageSource: "demo.png", hasGradient: false, hasShadow: false, hasGlow: false, hasFilter: false, hasBackdrop: false, hasTransform: false, hasOpacity: false, gradientJson: "", shadowJson: "", glowJson: "", filterJson: "", transformJson: "", backdropBlur: null, backdropBrightness: null, backdropContrast: null, backdropSaturate: null, backdropGrayscale: null, backdropInvert: null, backdropSepia: null, backdropHueRotate: null },
-        { kind: "canvas", nodeId: 3, x: 0, y: 0, width: 20, height: 10, color: 0, cornerRadius: 0, borderWidth: 0, opacity: 1, text: "", fontSize: 0, fontId: 0, materialKey: "pipeline:canvas:0", effectKey: "", imageSource: "", hasGradient: false, hasShadow: false, hasGlow: false, hasFilter: false, hasBackdrop: false, hasTransform: false, hasOpacity: false, gradientJson: "", shadowJson: "", glowJson: "", filterJson: "", transformJson: "", backdropBlur: null, backdropBrightness: null, backdropContrast: null, backdropSaturate: null, backdropGrayscale: null, backdropInvert: null, backdropSepia: null, backdropHueRotate: null },
+        { kind: "image", nodeId: 2, x: 0, y: 0, width: 20, height: 10, color: 0, cornerRadius: 0, borderWidth: 0, opacity: 1, text: "", fontSize: 0, fontId: 0, objectFit: "cover", canvasViewportJson: "", materialKey: "pipeline:image:0", effectKey: "", imageSource: "demo.png", hasGradient: false, hasShadow: false, hasGlow: false, hasFilter: false, hasBackdrop: false, hasTransform: false, hasOpacity: false, gradientJson: "", shadowJson: "", glowJson: "", filterJson: "", transformJson: "", backdropBlur: null, backdropBrightness: null, backdropContrast: null, backdropSaturate: null, backdropGrayscale: null, backdropInvert: null, backdropSepia: null, backdropHueRotate: null },
+        { kind: "canvas", nodeId: 3, x: 0, y: 0, width: 20, height: 10, color: 0, cornerRadius: 0, borderWidth: 0, opacity: 1, text: "", fontSize: 0, fontId: 0, objectFit: "contain", canvasViewportJson: '{"x":3,"y":4,"zoom":2}', materialKey: "pipeline:canvas:0", effectKey: "", imageSource: "", hasGradient: false, hasShadow: false, hasGlow: false, hasFilter: false, hasBackdrop: false, hasTransform: false, hasOpacity: false, gradientJson: "", shadowJson: "", glowJson: "", filterJson: "", transformJson: "", backdropBlur: null, backdropBrightness: null, backdropContrast: null, backdropSaturate: null, backdropGrayscale: null, backdropInvert: null, backdropSepia: null, backdropHueRotate: null },
       ],
       batches: [],
     }
@@ -132,6 +243,19 @@ describe("native render graph snapshot", () => {
     const graph = translateNativeRenderGraphSnapshot(snapshot, commands, queues, textMetaMap)
     expect(graph.ops.map((op) => op.kind)).toEqual(["effect", "image", "canvas"])
     expect(graph.ops[0]?.kind).toBe("effect")
+    if (graph.ops[0]?.kind === "effect") expect(graph.ops[0].rect.inputs.color).toBe(1)
+    expect(graph.ops[1]?.kind).toBe("image")
+    if (graph.ops[1]?.kind === "image") {
+      expect(graph.ops[1].image.imageBuffer).toBe(queues.images[0]?.imageBuffer)
+      expect(graph.ops[1].image.objectFit).toBe("cover")
+      expect(graph.ops[1].rect.inputs.color).toBe(0)
+    }
+    expect(graph.ops[2]?.kind).toBe("canvas")
+    if (graph.ops[2]?.kind === "canvas") {
+      expect(graph.ops[2].canvas.onDraw).toBe(queues.canvases[0]?.onDraw)
+      expect(graph.ops[2].canvas.viewport).toEqual({ x: 3, y: 4, zoom: 2 })
+      expect(graph.ops[2].rect.inputs.color).toBe(0)
+    }
   })
 
   test("translates effect snapshot with transform json into backend effect op", () => {
@@ -151,6 +275,37 @@ describe("native render graph snapshot", () => {
     if (graph.ops[0]?.kind === "effect") {
       expect(graph.ops[0].effect.transform).toBeDefined()
       expect(graph.ops[0].effect.gradient).toBeDefined()
+    }
+  })
+
+  test("translates native corner radii effect metadata without JS effect queue", () => {
+    const snapshot: NativeRenderGraphSnapshot = {
+      ops: [
+        nativeOp({
+          kind: "effect",
+          nodeId: 1,
+          color: 0x123456ff,
+          cornerRadius: 0,
+          effectKey: "cornerRadii",
+          materialKey: "pipeline:effect:305419903:cornerRadii",
+          hasCornerRadii: true,
+          cornerRadiiJson: '{"tl":24,"tr":8,"br":24,"bl":8}',
+        }),
+      ],
+      batches: [],
+    }
+    const commands = [
+      { type: CMD.RECTANGLE, x: 0, y: 0, width: 20, height: 10, color: [0, 0, 0, 0] as [number, number, number, number], cornerRadius: 0, extra1: 0, extra2: 0, nodeId: 1 },
+    ]
+
+    const graph = translateNativeRenderGraphSnapshot(snapshot, commands, { effects: [], images: [], canvases: [] }, new Map())
+
+    expect(graph.ops).toHaveLength(1)
+    expect(graph.ops[0]?.kind).toBe("effect")
+    if (graph.ops[0]?.kind === "effect") {
+      expect(graph.ops[0].effect.cornerRadii).toEqual({ tl: 24, tr: 8, br: 24, bl: 8 })
+      expect(graph.ops[0].rect.inputs.effect?.cornerRadii).toEqual({ tl: 24, tr: 8, br: 24, bl: 8 })
+      expect(graph.ops[0].effectStateId).toContain("cornerRadii:24:8:24:8")
     }
   })
 

@@ -65,8 +65,24 @@ unsafe impl Sync for SendableLayoutContext {}
 static SHARED_LAYOUT: LazyLock<Mutex<SendableLayoutContext>> =
     LazyLock::new(|| Mutex::new(SendableLayoutContext(None)));
 
+// Native retained scene layout must not reuse the flat command-buffer layout tree.
+// The compat layout adapter (`vexart_layout_compute`) and retained scene layout can
+// run back-to-back in parity tests and diagnostics with overlapping node ids. Sharing
+// one TaffyTree lets stale parent/child relations from the flat path contaminate the
+// retained scene path, which can create cycles inside Taffy and crash across FFI.
+static SHARED_SCENE_LAYOUT: LazyLock<Mutex<SendableLayoutContext>> =
+    LazyLock::new(|| Mutex::new(SendableLayoutContext(None)));
+
 fn get_or_init_layout() -> MutexGuard<'static, SendableLayoutContext> {
     let mut guard = SHARED_LAYOUT.lock().unwrap();
+    if guard.0.is_none() {
+        guard.0 = Some(layout::LayoutContext::new());
+    }
+    guard
+}
+
+fn get_or_init_scene_layout() -> MutexGuard<'static, SendableLayoutContext> {
+    let mut guard = SHARED_SCENE_LAYOUT.lock().unwrap();
     if guard.0.is_none() {
         guard.0 = Some(layout::LayoutContext::new());
     }
@@ -323,7 +339,7 @@ pub unsafe extern "C" fn vexart_scene_layout_compute(
         let paint_guard = get_or_init_paint();
         let atlases = paint_guard.as_ref().map(|paint| &paint.atlases);
         let code = {
-            let mut guard = get_or_init_layout();
+            let mut guard = get_or_init_scene_layout();
             let lctx = guard.0.as_mut().unwrap();
             lctx.compute_scene(graph, atlases, out, &mut used)
         };
@@ -613,6 +629,10 @@ pub extern "C" fn vexart_context_resize(ctx: u64, width: u32, height: u32) -> i3
         if width > 0 && height > 0 {
             let mut guard = get_or_init_layout();
             if let Some(lctx) = guard.0.as_mut() {
+                lctx.set_viewport(width as f32, height as f32);
+            }
+            let mut scene_guard = get_or_init_scene_layout();
+            if let Some(lctx) = scene_guard.0.as_mut() {
                 lctx.set_viewport(width as f32, height as f32);
             }
         }

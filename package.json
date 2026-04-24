@@ -49,6 +49,7 @@
     "gen:jsx-runtime": "bun run scripts/gen-jsx-runtime.ts",
     "test:visual": "bun --conditions=browser run scripts/visual-test/runner.ts",
     "test:visual:update": "bun --conditions=browser run scripts/visual-test/runner.ts --update",
+    "test:visual:native-render-graph": "bun --conditions=browser run scripts/visual-test/runner.ts --native-render-graph-parity",
     "perf:baseline": "bun --conditions=browser run scripts/perf-baseline.tsx",
     "perf:check": "bun --conditions=browser run scripts/perf-baseline.tsx --check",
     "perf:frame-orchestrator": "bun --conditions=browser run scripts/frame-orchestrator-bench.ts",

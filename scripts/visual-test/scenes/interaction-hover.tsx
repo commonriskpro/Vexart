@@ -1,4 +1,4 @@
-import { renderToBufferAfterInteractions } from "../../../packages/engine/src/testing/render-to-buffer"
+import { renderToBufferAfterInteractions, type RenderToBufferOptions } from "../../../packages/engine/src/testing/render-to-buffer"
 import { Panel, SceneFrame, SCENE_HEIGHT, SCENE_WIDTH } from "../helpers"
 
 export const width = SCENE_WIDTH
@@ -14,8 +14,8 @@ function App() {
   )
 }
 
-export function render() {
+export function render(options?: RenderToBufferOptions) {
   return renderToBufferAfterInteractions(() => <App />, width, height, async (helpers) => {
     await helpers.pointerMove(72, 122)
-  })
+  }, 2, options)
 }

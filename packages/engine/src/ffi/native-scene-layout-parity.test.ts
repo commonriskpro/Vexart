@@ -138,6 +138,14 @@ function scrollParityFixture() {
   ])
 }
 
+function textContainerParityFixture() {
+  const container = createNode("text") as FixtureNode
+  container._label = "textContainer"
+  container.props = { fontSize: 16 }
+  insertChild(container, createTextNode("Hello from TGE") as FixtureNode)
+  return box("root", { width: 300, height: 120, direction: "column", padding: 12 }, [container])
+}
+
 function assertParity(root: FixtureNode, labels: string[]) {
   const nodes = collectFixtureNodes(root)
   mirrorToNative(root)
@@ -182,5 +190,9 @@ describe("native scene layout parity", () => {
 
   test("matches compat layout for scroll and nested layout fixture", () => {
     assertParity(scrollParityFixture(), ["root", "scroll", "scrollChildA", "scrollChildB", "nestedRow", "nestedLeft", "nestedRight"])
+  })
+
+  test("matches compat layout for text containers with child text nodes", () => {
+    assertParity(textContainerParityFixture(), ["root", "textContainer"])
   })
 })

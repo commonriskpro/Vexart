@@ -41,6 +41,16 @@ import { nativeLayerRemove } from "../ffi/native-layer-registry"
 import { nativeDeleteLayer, nativeEmitLayer } from "../ffi/native-presentation-ops"
 import type { NativePresentationStats } from "../ffi/native-presentation-stats"
 
+let lastNativeRenderGraphLayerCount = 0
+let lastNativeRenderGraphOpCount = 0
+
+export function getLastNativeRenderGraphUsage() {
+  return {
+    layerCount: lastNativeRenderGraphLayerCount,
+    opCount: lastNativeRenderGraphOpCount,
+  }
+}
+
 // ── PreparedLayerSlot ─────────────────────────────────────────────────────
 
 /** Per-slot metadata computed during the layer prep pass. */
@@ -316,6 +326,8 @@ export function paintFrame(
   const slotBoundaryByKey = plan.slotBoundaryByKey
   const nativeSnapshot = state.useNativeRenderGraph ? nativeRenderGraphSnapshot() : null
   const nativeToTsNodeId = nativeSnapshot ? buildNativeToTsNodeIdMap(root) : null
+  lastNativeRenderGraphLayerCount = 0
+  lastNativeRenderGraphOpCount = 0
 
   const frameStart = expFrameBudgetMs > 0 ? performance.now() : 0
   let frameBudgetExceeded = false
@@ -667,6 +679,10 @@ export function paintFrame(
       const graph = useNativeGraphForLayer
         ? translateNativeRenderGraphSnapshot(nativeSnapshot!, layerCommands, renderGraphQueues, textMetaMap, nativeToTsNodeId ?? undefined)
         : buildRenderGraphFrame(layerCommands, renderGraphQueues, textMetaMap)
+      if (useNativeGraphForLayer) {
+        lastNativeRenderGraphLayerCount++
+        lastNativeRenderGraphOpCount += graph.ops.length
+      }
       const paintResult = backend.paint({
         targetWidth: lw,
         targetHeight: lh,

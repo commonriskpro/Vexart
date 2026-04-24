@@ -141,7 +141,5 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
 const terminal = await createTerminal()
 mount(() => <App terminal={terminal} />, terminal, {
   experimental: {
-    nativeSceneLayout: false,
-    nativeRenderGraph: false,
   },
 })

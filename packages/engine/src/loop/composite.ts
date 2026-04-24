@@ -54,6 +54,7 @@ import type { RendererBackend } from "../ffi/renderer-backend"
 import type { GpuFrameComposer } from "../output/gpu-frame-composer"
 import { createScrollHandle, updateScrollContainerGeometry } from "./scroll"
 import { nativeSceneComputeLayout } from "../ffi/native-scene"
+import type { PositionedCommand } from "../ffi/layout-writeback"
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -241,13 +242,29 @@ function writeLayoutBack(s: CompositeFrameState) {
   const layoutMap = s.useNativeSceneLayout
     ? nativeSceneComputeLayout()
     : s.layoutAdapter.getLastLayoutMap()
-  _writeLayoutBack(layoutMap, {
+  const nodeLayoutMap = s.useNativeSceneLayout
+    ? mapNativeLayoutToNodeIds(layoutMap, s)
+    : layoutMap
+  _writeLayoutBack(nodeLayoutMap, {
     rectNodes: s.rectNodes,
     textNodes: s.textNodes,
     boxNodes: s.boxNodes,
     pendingNodeDamageRects: s.pendingNodeDamageRects,
   })
-  return layoutMap
+  return nodeLayoutMap
+}
+
+function mapNativeLayoutToNodeIds(layoutMap: Map<bigint, PositionedCommand> | null, s: CompositeFrameState) {
+  if (!layoutMap || layoutMap.size === 0) return layoutMap
+  const mapped = new Map<bigint, PositionedCommand>()
+  const nodes = [...s.boxNodes, ...s.textNodes]
+  for (const node of nodes) {
+    const pos = (node._nativeId ? layoutMap.get(node._nativeId) : undefined)
+      ?? layoutMap.get(BigInt(node.id))
+    if (!pos) continue
+    mapped.set(BigInt(node.id), { ...pos, nodeId: BigInt(node.id) })
+  }
+  return mapped
 }
 
 /**

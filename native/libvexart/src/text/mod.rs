@@ -241,14 +241,20 @@ pub(crate) fn measure_text_layout(
     }
 
     let metrics = resolve_font_metrics(atlases, font_id, font_size, line_height);
-    let Some(limit) = max_width.filter(|width| width.is_finite() && *width > 0.0) else {
-        return measure_unwrapped_lines(text, &metrics, white_space);
+    let measured = if let Some(limit) = max_width.filter(|width| width.is_finite() && *width > 0.0) {
+        match white_space {
+            WhiteSpaceMode::Normal => measure_wrapped_normal(text, limit, &metrics, word_break),
+            WhiteSpaceMode::PreWrap => measure_wrapped_pre_wrap(text, limit, &metrics, word_break),
+        }
+    } else {
+        measure_unwrapped_lines(text, &metrics, white_space)
     };
 
-    match white_space {
-        WhiteSpaceMode::Normal => measure_wrapped_normal(text, limit, &metrics, word_break),
-        WhiteSpaceMode::PreWrap => measure_wrapped_pre_wrap(text, limit, &metrics, word_break),
+    if font_id == 0 {
+        return (measured.0.ceil(), measured.1.ceil());
     }
+
+    measured
 }
 
 /// Load a pre-generated MSDF atlas PNG + metrics JSON into the GPU.
@@ -568,7 +574,7 @@ mod tests {
             WordBreakMode::Normal,
             None,
         );
-        assert!((width - (5.0 * BUILTIN_ADVANCE)).abs() < 0.01);
+        assert_eq!(width, (5.0 * BUILTIN_ADVANCE).ceil());
         assert_eq!(height, 17.0);
     }
 
@@ -600,7 +606,7 @@ mod tests {
             WordBreakMode::Normal,
             None,
         );
-        assert!((width - (5.0 * BUILTIN_ADVANCE)).abs() < 0.01);
+        assert_eq!(width, (5.0 * BUILTIN_ADVANCE).ceil());
         assert_eq!(height, 34.0);
     }
 }

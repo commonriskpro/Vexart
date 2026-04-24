@@ -5,8 +5,11 @@ import {
   type BackdropFilterKind,
   type BackdropFilterParams,
   type BackdropRenderMetadata,
+  type BorderRenderOp,
+  type CanvasRenderOp,
   type EffectConfig,
   type EffectRenderOp,
+  type ImageRenderOp,
   type RectangleRenderInputs,
   type RectangleRenderOp,
   type RenderCommand,
@@ -14,6 +17,7 @@ import {
   type RenderGraphOp,
   type RenderGraphQueues,
   type RenderBounds,
+  type TextRenderOp,
   type TextMeta,
   CMD,
 } from "./render-graph"
@@ -46,6 +50,8 @@ export interface NativeRenderOpSnapshot {
   text: string
   fontSize: number
   fontId: number
+  objectFit?: "contain" | "cover" | "fill" | "none"
+  canvasViewportJson?: string
   materialKey: string
   effectKey: string
   imageSource: string
@@ -56,11 +62,13 @@ export interface NativeRenderOpSnapshot {
   hasBackdrop: boolean
   hasTransform: boolean
   hasOpacity: boolean
+  hasCornerRadii?: boolean
   gradientJson: string
   shadowJson: string
   glowJson: string
   filterJson: string
   transformJson: string
+  cornerRadiiJson?: string
   backdropBlur: number | null
   backdropBrightness: number | null
   backdropContrast: number | null
@@ -225,8 +233,11 @@ function getEffectStateId(effect: EffectConfig) {
       ? `linear:${effect.gradient.from}:${effect.gradient.to}:${effect.gradient.angle}`
       : `radial:${effect.gradient.from}:${effect.gradient.to}`
     : "none"
+  const cornerRadii = effect.cornerRadii
+    ? `${effect.cornerRadii.tl}:${effect.cornerRadii.tr}:${effect.cornerRadii.br}:${effect.cornerRadii.bl}`
+    : "none"
   const params = getBackdropFilterParams(effect)
-  return `color:${effect.color};radius:${effect.cornerRadius};shadow:${shadow};glow:${glow};gradient:${gradient};blur:${params.blur ?? "none"};brightness:${params.brightness ?? "none"};contrast:${params.contrast ?? "none"};saturate:${params.saturate ?? "none"};grayscale:${params.grayscale ?? "none"};invert:${params.invert ?? "none"};sepia:${params.sepia ?? "none"};hueRotate:${params.hueRotate ?? "none"};opacity:${effect.opacity ?? "none"}`
+  return `color:${effect.color};radius:${effect.cornerRadius};cornerRadii:${cornerRadii};shadow:${shadow};glow:${glow};gradient:${gradient};blur:${params.blur ?? "none"};brightness:${params.brightness ?? "none"};contrast:${params.contrast ?? "none"};saturate:${params.saturate ?? "none"};grayscale:${params.grayscale ?? "none"};invert:${params.invert ?? "none"};sepia:${params.sepia ?? "none"};hueRotate:${params.hueRotate ?? "none"};opacity:${effect.opacity ?? "none"}`
 }
 
 function createClipStateId(stack: NativeClipStackEntry[]) {
@@ -265,9 +276,30 @@ function createBackdropMetadata(effect: EffectConfig, command: RenderCommand, cl
   }
 }
 
-function nativeEffectConfig(op: NativeRenderOpSnapshot): EffectConfig {
+function unpackColor(color: number): [number, number, number, number] {
+  return [
+    (color >>> 24) & 0xff,
+    (color >>> 16) & 0xff,
+    (color >>> 8) & 0xff,
+    color & 0xff,
+  ]
+}
+
+function nativeCommand(command: RenderCommand, op: NativeRenderOpSnapshot): RenderCommand {
+  return {
+    ...command,
+    color: unpackColor(op.color),
+    cornerRadius: op.cornerRadius,
+    extra1: op.kind === NATIVE_RENDER_OP_KIND.BORDER ? op.borderWidth : op.kind === NATIVE_RENDER_OP_KIND.TEXT ? op.fontSize : command.extra1,
+    extra2: op.kind === NATIVE_RENDER_OP_KIND.TEXT ? op.fontId : command.extra2,
+    text: op.kind === NATIVE_RENDER_OP_KIND.TEXT ? op.text : command.text,
+  }
+}
+
+function nativeEffectConfig(op: NativeRenderOpSnapshot, queueHint?: EffectConfig): EffectConfig {
   const transform = parseJsonValue<Record<string, number>>(op.transformJson)
   const matrix = transform ? fromConfig(transform, op.width / 2, op.height / 2) : undefined
+  const cornerRadii = parseJsonValue<{ tl: number; tr: number; br: number; bl: number }>(op.cornerRadiiJson ?? "")
   return {
     renderObjectId: op.nodeId,
     color: op.color,
@@ -284,15 +316,15 @@ function nativeEffectConfig(op: NativeRenderOpSnapshot): EffectConfig {
     backdropSepia: op.backdropSepia ?? undefined,
     backdropHueRotate: op.backdropHueRotate ?? undefined,
     filter: parseJsonValue(op.filterJson),
+    cornerRadii,
     opacity: op.hasOpacity ? op.opacity : undefined,
     transform: matrix,
+    _node: queueHint?._node,
   }
 }
 
-function directNativeEffectOp(command: RenderCommand, op: NativeRenderOpSnapshot, clipStack: NativeClipStackEntry[]): EffectRenderOp {
-  const effect = nativeEffectConfig(op)
-  const backdrop = createBackdropMetadata(effect, command, clipStack)
-  const rectInputs: RectangleRenderInputs = {
+function nativeRectangleInputs(op: NativeRenderOpSnapshot, effect: EffectConfig | null = null): RectangleRenderInputs {
+  return {
     renderObjectId: op.nodeId,
     color: op.color,
     radius: Math.round(op.cornerRadius),
@@ -300,11 +332,113 @@ function directNativeEffectOp(command: RenderCommand, op: NativeRenderOpSnapshot
     canvas: null,
     effect,
   }
+}
+
+function directNativeRectangleOp(command: RenderCommand, op: NativeRenderOpSnapshot): RectangleRenderOp {
+  return {
+    kind: "rectangle",
+    renderObjectId: op.nodeId,
+    command,
+    inputs: nativeRectangleInputs(op),
+  }
+}
+
+function directNativeBorderOp(command: RenderCommand, op: NativeRenderOpSnapshot): BorderRenderOp {
+  const cornerRadii = parseJsonValue<{ tl: number; tr: number; br: number; bl: number }>(op.cornerRadiiJson ?? "")
+  return {
+    kind: "border",
+    renderObjectId: op.nodeId,
+    command,
+    inputs: {
+      radius: Math.round(op.cornerRadius),
+      width: Math.round(op.borderWidth) || 1,
+      cornerRadii: cornerRadii ?? null,
+    },
+  }
+}
+
+function directNativeTextOp(command: RenderCommand, op: NativeRenderOpSnapshot, textMetaMap: Map<string, TextMeta>): TextRenderOp | null {
+  const text = op.text || command.text || ""
+  if (!text) return null
+  const meta = textMetaMap.get(text) ?? (command.text ? textMetaMap.get(command.text) : undefined)
+  const lineHeight = meta?.lineHeight ?? 17
+  return {
+    kind: "text",
+    renderObjectId: op.nodeId,
+    command,
+    inputs: {
+      text,
+      fontId: op.fontId || meta?.fontId || 0,
+      lineHeight,
+      maxWidth: Math.max(Math.round(command.width), 1),
+      textHeight: Math.round(command.height) > 0 ? Math.round(command.height) : lineHeight,
+    },
+  }
+}
+
+function directNativeImageOp(command: RenderCommand, op: NativeRenderOpSnapshot, queues: RenderGraphQueues): ImageRenderOp | null {
+  const image = queues.images.find((entry) => entry.renderObjectId === op.nodeId) ?? null
+  if (!image) return null
+  const resolvedImage = {
+    ...image,
+    color: op.color,
+    cornerRadius: op.cornerRadius,
+    objectFit: op.objectFit ?? image.objectFit,
+  }
   const rect: RectangleRenderOp = {
     kind: "rectangle",
     renderObjectId: op.nodeId,
     command,
-    inputs: rectInputs,
+    inputs: {
+      ...nativeRectangleInputs(op),
+      image: resolvedImage,
+    },
+  }
+  return {
+    kind: "image",
+    renderObjectId: op.nodeId,
+    command,
+    rect,
+    image: resolvedImage,
+  }
+}
+
+function directNativeCanvasOp(command: RenderCommand, op: NativeRenderOpSnapshot, queues: RenderGraphQueues): CanvasRenderOp | null {
+  const canvas = queues.canvases.find((entry) => entry.renderObjectId === op.nodeId) ?? null
+  if (!canvas) return null
+  const viewport = parseJsonValue<{ x: number; y: number; zoom: number }>(op.canvasViewportJson ?? "")
+  const resolvedCanvas = {
+    ...canvas,
+    color: op.color,
+    viewport: viewport ?? canvas.viewport,
+  }
+  const rect: RectangleRenderOp = {
+    kind: "rectangle",
+    renderObjectId: op.nodeId,
+    command,
+    inputs: {
+      ...nativeRectangleInputs(op),
+      canvas: resolvedCanvas,
+    },
+  }
+  return {
+    kind: "canvas",
+    renderObjectId: op.nodeId,
+    command,
+    rect,
+    canvas: resolvedCanvas,
+  }
+}
+
+function directNativeEffectOp(command: RenderCommand, op: NativeRenderOpSnapshot, queues: RenderGraphQueues, clipStack: NativeClipStackEntry[]): EffectRenderOp {
+  const queueHint = queues.effects.find((entry) => entry.renderObjectId === op.nodeId)
+  const effect = nativeEffectConfig(op, queueHint)
+  const backdrop = createBackdropMetadata(effect, command, clipStack)
+  const rect: RectangleRenderOp = {
+    kind: "rectangle",
+    renderObjectId: op.nodeId,
+    command,
+    inputs: nativeRectangleInputs(op, effect),
   }
   return {
     kind: "effect",
@@ -317,6 +451,23 @@ function directNativeEffectOp(command: RenderCommand, op: NativeRenderOpSnapshot
     clipStateId: backdrop?.clipStateId ?? createClipStateId(clipStack),
     effectStateId: backdrop?.effectStateId ?? getEffectStateId(effect),
   }
+}
+
+function directNativeOp(
+  command: RenderCommand,
+  op: NativeRenderOpSnapshot,
+  queues: RenderGraphQueues,
+  textMetaMap: Map<string, TextMeta>,
+  clipStack: NativeClipStackEntry[],
+): RenderGraphOp | null {
+  const resolvedCommand = nativeCommand(command, op)
+  if (op.kind === NATIVE_RENDER_OP_KIND.EFFECT) return directNativeEffectOp(resolvedCommand, op, queues, clipStack)
+  if (op.kind === NATIVE_RENDER_OP_KIND.RECT) return directNativeRectangleOp(resolvedCommand, op)
+  if (op.kind === NATIVE_RENDER_OP_KIND.BORDER) return directNativeBorderOp(resolvedCommand, op)
+  if (op.kind === NATIVE_RENDER_OP_KIND.TEXT) return directNativeTextOp(resolvedCommand, op, textMetaMap)
+  if (op.kind === NATIVE_RENDER_OP_KIND.IMAGE) return directNativeImageOp(resolvedCommand, op, queues)
+  if (op.kind === NATIVE_RENDER_OP_KIND.CANVAS) return directNativeCanvasOp(resolvedCommand, op, queues)
+  return null
 }
 
 function buildNativeOpLookup(snapshot: NativeRenderGraphSnapshot, nativeToTsNodeId?: Map<number, number>) {
@@ -364,9 +515,12 @@ export function translateNativeRenderGraphSnapshot(
       continue
     }
     const nativeOp = pickNativeOpForCommand(command, nativeLookup)
-    if (nativeOp?.kind === NATIVE_RENDER_OP_KIND.EFFECT) {
-      ops.push(directNativeEffectOp(command, nativeOp, clipStack))
-      continue
+    if (nativeOp) {
+      const op = directNativeOp(command, nativeOp, queues, textMetaMap, clipStack)
+      if (op) {
+        ops.push(op)
+        continue
+      }
     }
     const ownerIds = {
       rect: command.type === CMD.RECTANGLE ? (command.nodeId ?? null) : null,

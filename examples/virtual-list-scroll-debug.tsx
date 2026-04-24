@@ -204,8 +204,6 @@ async function main() {
 
   const handle = mount(() => <App terminal={terminal} />, terminal, {
     experimental: {
-      nativeSceneLayout: false,
-      nativeRenderGraph: false,
     },
   })
   log("mount ok")

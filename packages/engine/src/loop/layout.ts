@@ -25,9 +25,15 @@ import {
   translate,
   isIdentity,
 } from "../ffi/matrix"
-import { nativeSceneSetLayout } from "../ffi/native-scene"
+import { nativeSceneSetLayout, nativeSceneSetProp } from "../ffi/native-scene"
 import { focusedId, setFocusedId, getNodeFocusId } from "../reconciler/focus"
 import { buildNodeMouseEvent, isFullyOutsideScrollViewport } from "../reconciler/hit-test"
+
+function syncNativeInteractiveState(node: TGENode) {
+  nativeSceneSetProp(node._nativeId, "__hovered", node._hovered)
+  nativeSceneSetProp(node._nativeId, "__active", node._active)
+  nativeSceneSetProp(node._nativeId, "__focused", node._focused)
+}
 
 // ── Layout writeback ──────────────────────────────────────────────────────
 
@@ -354,8 +360,10 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
       while (scrollParent) {
         if (scrollParent.props.scrollX || scrollParent.props.scrollY) {
           if (fullyOutsideViewport) {
-            if (node._hovered) { node._hovered = false; changed = true }
-            if (node._active) { node._active = false; changed = true }
+            let stateChanged = false
+            if (node._hovered) { node._hovered = false; changed = true; stateChanged = true }
+            if (node._active) { node._active = false; changed = true; stateChanged = true }
+            if (stateChanged) syncNativeInteractiveState(node)
           }
           break
         }
@@ -418,6 +426,7 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
       if (isOver && node.props.onMouseOver) node.props.onMouseOver(makeMouseEvent(node))
       if (!isOver && node.props.onMouseOut) node.props.onMouseOut(makeMouseEvent(node))
       node._hovered = isOver
+      syncNativeInteractiveState(node)
       changed = true
     }
 
@@ -434,6 +443,7 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
 
     if (node._active !== isDown) {
       node._active = isDown
+      syncNativeInteractiveState(node)
       changed = true
     }
     if (isDown) newActiveNode = node
@@ -444,6 +454,7 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
       const isFocused = nodeFocusId !== undefined && nodeFocusId === currentFocusId
       if (node._focused !== isFocused) {
         node._focused = isFocused
+        syncNativeInteractiveState(node)
         changed = true
       }
     }
@@ -504,6 +515,7 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
         const isFocused = nodeFocusId !== undefined && nodeFocusId === newFocusId
         if (node._focused !== isFocused) {
           node._focused = isFocused
+          syncNativeInteractiveState(node)
         }
       }
     }

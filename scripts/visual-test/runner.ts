@@ -6,8 +6,9 @@
  * and reports pass/fail with pixel diff percentage.
  *
  * Usage:
- *   bun run scripts/visual-test/runner.ts          — compare mode
- *   bun run scripts/visual-test/runner.ts --update  — regenerate references
+ *   bun run scripts/visual-test/runner.ts                              — compare mode
+ *   bun run scripts/visual-test/runner.ts --update                     — regenerate references
+ *   bun run scripts/visual-test/runner.ts --native-render-graph-parity — compare native vs compat
  *
  * Scene contract (each .tsx file must export):
  *   export const width: number
@@ -19,13 +20,14 @@ import { readdirSync, existsSync, mkdirSync, writeFileSync, readFileSync } from 
 import { join, basename, dirname } from "node:path"
 import { fileURLToPath } from "node:url"
 import { createCanvas, loadImage } from "@napi-rs/canvas"
-import type { RenderToBufferResult } from "../../packages/engine/src/testing/render-to-buffer"
+import type { RenderToBufferOptions, RenderToBufferResult } from "../../packages/engine/src/testing/render-to-buffer"
 import { renderToBuffer } from "../../packages/engine/src/testing/render-to-buffer"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const SCENES_DIR = join(__dirname, "scenes")
 const REFS_DIR = join(__dirname, "references")
 const UPDATE = process.argv.includes("--update")
+const NATIVE_RENDER_GRAPH_PARITY = process.argv.includes("--native-render-graph-parity")
 
 // Diff threshold: percentage of pixels allowed to differ before FAIL
 const DIFF_THRESHOLD = 0.5
@@ -77,7 +79,7 @@ type SceneModule = {
   width: number
   height: number
   Scene?: () => unknown
-  render?: () => Promise<RenderToBufferResult>
+  render?: (options?: RenderToBufferOptions) => Promise<RenderToBufferResult>
 }
 
 async function loadScene(scenePath: string): Promise<SceneModule> {
@@ -90,6 +92,12 @@ async function loadScene(scenePath: string): Promise<SceneModule> {
   return mod
 }
 
+async function renderScene(mod: SceneModule, options: RenderToBufferOptions): Promise<RenderToBufferResult> {
+  return mod.render
+    ? await mod.render(options)
+    : await renderToBuffer(() => mod.Scene!(), mod.width, mod.height, 2, options)
+}
+
 // ── Runner ────────────────────────────────────────────────────────────────────
 
 async function runScene(scenePath: string): Promise<{ name: string; pass: boolean; diff: number; message: string }> {
@@ -99,9 +107,7 @@ async function runScene(scenePath: string): Promise<{ name: string; pass: boolea
   let result
   try {
     const mod = await loadScene(scenePath)
-    result = mod.render
-      ? await mod.render()
-      : await renderToBuffer(() => mod.Scene!(), mod.width, mod.height)
+    result = await renderScene(mod, { nativeRenderGraph: false })
   } catch (err) {
     return {
       name,
@@ -162,6 +168,55 @@ async function runScene(scenePath: string): Promise<{ name: string; pass: boolea
   }
 }
 
+async function runNativeRenderGraphParityScene(scenePath: string): Promise<{ name: string; pass: boolean; diff: number; message: string }> {
+  const name = basename(scenePath, ".tsx")
+
+  let compat
+  let native
+  try {
+    const mod = await loadScene(scenePath)
+    compat = await renderScene(mod, { nativeRenderGraph: false })
+    native = await renderScene(mod, { nativeRenderGraph: true })
+  } catch (err) {
+    return {
+      name,
+      pass: false,
+      diff: 100,
+      message: `render failed: ${err instanceof Error ? err.message : String(err)}`,
+    }
+  }
+
+  if (compat.width !== native.width || compat.height !== native.height) {
+    return {
+      name,
+      pass: false,
+      diff: 100,
+      message: `size mismatch: compat ${compat.width}x${compat.height}, native ${native.width}x${native.height}`,
+    }
+  }
+
+  if (native.nativeRenderGraphLayerCount <= 0 || native.nativeRenderGraphOpCount <= 0) {
+    return {
+      name,
+      pass: false,
+      diff: 100,
+      message: `native render graph was not used: layers=${native.nativeRenderGraphLayerCount} ops=${native.nativeRenderGraphOpCount}`,
+    }
+  }
+
+  const diff = diffPixels(native.pixels, compat.pixels)
+  const pass = diff <= DIFF_THRESHOLD
+
+  return {
+    name,
+    pass,
+    diff,
+    message: pass
+      ? `native diff=${diff.toFixed(2)}% layers=${native.nativeRenderGraphLayerCount} ops=${native.nativeRenderGraphOpCount}`
+      : `native diff=${diff.toFixed(2)}% exceeds threshold of ${DIFF_THRESHOLD}% layers=${native.nativeRenderGraphLayerCount} ops=${native.nativeRenderGraphOpCount}`,
+  }
+}
+
 async function main() {
   if (!existsSync(SCENES_DIR)) {
     console.error(`scenes directory not found: ${SCENES_DIR}`)
@@ -177,13 +232,16 @@ async function main() {
     process.exit(1)
   }
 
-  console.log(`\n  Visual tests (${UPDATE ? "UPDATE" : "compare"} mode)\n`)
+  const mode = NATIVE_RENDER_GRAPH_PARITY ? "native render graph parity" : UPDATE ? "UPDATE" : "compare"
+  console.log(`\n  Visual tests (${mode} mode)\n`)
 
   let passed = 0
   let failed = 0
 
   for (const scenePath of scenes) {
-    const { name, pass, diff, message } = await runScene(scenePath)
+    const { name, pass, diff, message } = NATIVE_RENDER_GRAPH_PARITY
+      ? await runNativeRenderGraphParityScene(scenePath)
+      : await runScene(scenePath)
     const icon = pass ? "✓" : "✗"
     const label = pass ? "\x1b[32m" : "\x1b[31m"
     const reset = "\x1b[0m"

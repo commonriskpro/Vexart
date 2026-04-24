@@ -601,7 +601,11 @@ fn packed_style_from_scene(scene: &SceneGraph, node_id: u64) -> PackedStyle {
 
 fn scene_text_context(scene: &SceneGraph, node_id: u64) -> Option<LayoutNodeContext> {
     let node = scene.nodes.get(&node_id)?;
-    if node.kind != NativeNodeKind::Text || node.text.is_empty() {
+    if node.kind != NativeNodeKind::Text {
+        return None;
+    }
+    let text = collect_scene_text(scene, node_id);
+    if text.is_empty() {
         return None;
     }
 
@@ -611,8 +615,12 @@ fn scene_text_context(scene: &SceneGraph, node_id: u64) -> Option<LayoutNodeCont
     let font_id = scene_numeric_prop(scene, node_id, prop_hash("fontId"))
         .unwrap_or(0.0)
         .max(0.0) as u32;
-    let line_height = scene_numeric_prop(scene, node_id, prop_hash("lineHeight"))
-        .unwrap_or((font_size * 1.2).ceil());
+    let line_height = if font_id == 0 {
+        17.0
+    } else {
+        scene_numeric_prop(scene, node_id, prop_hash("lineHeight"))
+            .unwrap_or((font_size * 1.2).ceil())
+    };
     let white_space = match scene_string_prop(scene, node_id, prop_hash("whiteSpace")) {
         Some("pre-wrap") => WhiteSpaceMode::PreWrap,
         _ => WhiteSpaceMode::Normal,
@@ -623,13 +631,27 @@ fn scene_text_context(scene: &SceneGraph, node_id: u64) -> Option<LayoutNodeCont
     };
 
     Some(LayoutNodeContext::Text(TextMeasureContext {
-        text: node.text.clone(),
+        text,
         font_id,
         font_size,
         line_height,
         white_space,
         word_break,
     }))
+}
+
+fn collect_scene_text(scene: &SceneGraph, node_id: u64) -> String {
+    let Some(node) = scene.nodes.get(&node_id) else {
+        return String::new();
+    };
+    if !node.text.is_empty() {
+        return node.text.clone();
+    }
+    let mut text = String::new();
+    for child_id in &node.children {
+        text.push_str(&collect_scene_text(scene, *child_id));
+    }
+    text
 }
 
 fn prop_hash(name: &str) -> u16 {
@@ -1191,6 +1213,96 @@ mod tests {
         assert_eq!(children[0], second_a);
     }
 
+    #[test]
+    fn test_compute_scene_text_leaf_does_not_recurse() {
+        let mut scene = SceneGraph::new();
+        let root = scene.create_node(NativeNodeKind::Box);
+        let text = scene.create_node(NativeNodeKind::Text);
+        assert!(scene.insert(root, text, None));
+        set_u32_prop(&mut scene, root, 1, 400);
+        set_u32_prop(&mut scene, root, 2, 300);
+        set_string_prop(&mut scene, root, prop_hash("direction"), "column");
+        assert!(scene.set_text(text, b"hello"));
+
+        let mut tree = LayoutTree::new();
+        tree.viewport_w = 400.0;
+        tree.viewport_h = 300.0;
+        assert_eq!(tree.build_from_scene(&scene), OK);
+        assert_eq!(tree.compute(None), OK);
+
+        let text_node = tree.id_map.get(&text).copied().unwrap();
+        let layout = tree.taffy.layout(text_node).unwrap();
+        assert!(layout.size.width > 0.0);
+        assert!(layout.size.height > 0.0);
+    }
+
+    #[test]
+    fn test_compute_scene_text_container_collects_child_text() {
+        let mut scene = SceneGraph::new();
+        let root = scene.create_node(NativeNodeKind::Box);
+        let text_container = scene.create_node(NativeNodeKind::Text);
+        let text_leaf = scene.create_node(NativeNodeKind::Text);
+        assert!(scene.insert(root, text_container, None));
+        assert!(scene.insert(text_container, text_leaf, None));
+        set_u32_prop(&mut scene, root, 1, 400);
+        set_u32_prop(&mut scene, root, 2, 300);
+        assert!(scene.set_text(text_leaf, b"Hello from TGE"));
+
+        let mut tree = LayoutTree::new();
+        tree.viewport_w = 400.0;
+        tree.viewport_h = 300.0;
+        assert_eq!(tree.build_from_scene(&scene), OK);
+        assert_eq!(tree.compute(None), OK);
+
+        let container = tree.id_map.get(&text_container).copied().unwrap();
+        let layout = tree.taffy.layout(container).unwrap();
+        assert_eq!(layout.size.width, (14.0 * 8.65f32).ceil());
+        assert_eq!(layout.size.height, 17.0);
+    }
+
+    #[test]
+    fn test_compute_scene_parity_fixture_with_text_does_not_recurse() {
+        let mut scene = SceneGraph::new();
+        let root = scene.create_node(NativeNodeKind::Box);
+        let header = scene.create_node(NativeNodeKind::Box);
+        let row = scene.create_node(NativeNodeKind::Box);
+        let left = scene.create_node(NativeNodeKind::Box);
+        let right = scene.create_node(NativeNodeKind::Box);
+        let footer = scene.create_node(NativeNodeKind::Text);
+
+        assert!(scene.insert(root, header, None));
+        assert!(scene.insert(root, row, None));
+        assert!(scene.insert(row, left, None));
+        assert!(scene.insert(row, right, None));
+        assert!(scene.insert(root, footer, None));
+
+        set_u32_prop(&mut scene, root, 1, 400);
+        set_u32_prop(&mut scene, root, 2, 300);
+        set_string_prop(&mut scene, root, prop_hash("direction"), "column");
+        set_u32_prop(&mut scene, root, prop_hash("gap"), 20);
+        set_u32_prop(&mut scene, root, prop_hash("padding"), 20);
+        set_u32_prop(&mut scene, header, 1, 200);
+        set_u32_prop(&mut scene, header, 2, 40);
+        set_string_prop(&mut scene, row, prop_hash("direction"), "row");
+        set_u32_prop(&mut scene, row, prop_hash("gap"), 10);
+        set_u32_prop(&mut scene, row, prop_hash("paddingX"), 12);
+        set_u32_prop(&mut scene, row, prop_hash("paddingY"), 8);
+        set_u32_prop(&mut scene, row, 1, 200);
+        set_u32_prop(&mut scene, row, 2, 80);
+        set_u32_prop(&mut scene, left, 1, 50);
+        set_u32_prop(&mut scene, left, 2, 20);
+        set_u32_prop(&mut scene, right, 1, 70);
+        set_u32_prop(&mut scene, right, 2, 20);
+        assert!(scene.set_text(footer, b"hello"));
+
+        let mut tree = LayoutTree::new();
+        tree.viewport_w = 400.0;
+        tree.viewport_h = 300.0;
+        assert_eq!(tree.build_from_scene(&scene), OK);
+        assert_eq!(tree.compute(None), OK);
+        assert_eq!(tree.id_map.len(), 6);
+    }
+
     // ── Helper builders for tests ──────────────────────────────────────
 
     /// Root → child1 → child2 nested structure.
@@ -1274,6 +1386,29 @@ mod tests {
         write_close(&mut buf, &mut off);
 
         buf
+    }
+
+    fn set_u32_prop(scene: &mut SceneGraph, node: u64, prop_id: u16, value: u32) {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.extend_from_slice(&prop_id.to_le_bytes());
+        bytes.push(3);
+        bytes.push(0);
+        bytes.extend_from_slice(&4u32.to_le_bytes());
+        bytes.extend_from_slice(&value.to_le_bytes());
+        assert!(scene.set_props(node, &bytes));
+    }
+
+    fn set_string_prop(scene: &mut SceneGraph, node: u64, prop_id: u16, value: &str) {
+        let payload = value.as_bytes();
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.extend_from_slice(&prop_id.to_le_bytes());
+        bytes.push(5);
+        bytes.push(0);
+        bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(payload);
+        assert!(scene.set_props(node, &bytes));
     }
 
     fn make_packed_style_with_size(

@@ -21,6 +21,7 @@ import { render as solidRender } from "../reconciler/reconciler"
 import type { TGENode } from "../ffi/node"
 import { insertChild, removeChild } from "../ffi/node"
 import { createRenderLoop } from "../loop/loop"
+import { getLastNativeRenderGraphUsage } from "../loop/paint"
 import { markDirty } from "../reconciler/dirty"
 import { dispatchInput } from "../loop/input"
 import {
@@ -43,6 +44,13 @@ export type RenderToBufferResult = {
   pixels: Uint8Array
   width: number
   height: number
+  nativeRenderGraphLayerCount: number
+  nativeRenderGraphOpCount: number
+}
+
+export interface RenderToBufferOptions {
+  nativeRenderGraph?: boolean
+  nativeSceneLayout?: boolean
 }
 
 type LoopInstance = ReturnType<typeof createRenderLoop>
@@ -268,8 +276,9 @@ export async function renderToBuffer(
   width: number,
   height: number,
   frames = 2,
+  options: RenderToBufferOptions = {},
 ): Promise<RenderToBufferResult> {
-  return captureToBuffer(width, height, frames, (loop) => solidRender(component as () => TGENode, loop.root))
+  return captureToBuffer(width, height, frames, (loop) => solidRender(component as () => TGENode, loop.root), undefined, options)
 }
 
 export async function renderToBufferAfterInteractions(
@@ -278,6 +287,7 @@ export async function renderToBufferAfterInteractions(
   height: number,
   interact: (helpers: RenderLoopInteractionHelpers) => Promise<void> | void,
   frames = 2,
+  options: RenderToBufferOptions = {},
 ): Promise<RenderToBufferResult> {
   return captureToBuffer(width, height, frames, (loop) => solidRender(component as () => TGENode, loop.root), async (loop) => {
     const nextFrame = async () => {
@@ -303,7 +313,7 @@ export async function renderToBufferAfterInteractions(
       frame: nextFrame,
     }
     await interact(helpers)
-  })
+  }, options)
 }
 
 /**
@@ -315,6 +325,7 @@ export async function renderNodeToBuffer(
   width: number,
   height: number,
   frames = 2,
+  options: RenderToBufferOptions = {},
 ): Promise<RenderToBufferResult> {
   return captureToBuffer(width, height, frames, (loop) => {
     if (loop.root._nativeId) mirrorNodeToNative(node, loop.root._nativeId)
@@ -323,7 +334,7 @@ export async function renderNodeToBuffer(
       if (loop.root._nativeId) unmirrorNodeFromNative(node, loop.root._nativeId)
       removeChild(loop.root, node)
     }
-  })
+  }, undefined, options)
 }
 
 export async function renderNodeToBufferAfterInteractions(
@@ -332,6 +343,7 @@ export async function renderNodeToBufferAfterInteractions(
   height: number,
   interact: (helpers: RenderLoopInteractionHelpers) => Promise<void> | void,
   frames = 2,
+  options: RenderToBufferOptions = {},
 ): Promise<RenderToBufferResult> {
   return captureToBuffer(width, height, frames, (loop) => {
     if (loop.root._nativeId) mirrorNodeToNative(node, loop.root._nativeId)
@@ -364,7 +376,7 @@ export async function renderNodeToBufferAfterInteractions(
       frame: nextFrame,
     }
     await interact(helpers)
-  })
+  }, options)
 }
 
 async function captureToBuffer(
@@ -373,6 +385,7 @@ async function captureToBuffer(
   frames: number,
   mountScene: (loop: LoopInstance) => () => void,
   interact?: (loop: LoopInstance) => Promise<void> | void,
+  options: RenderToBufferOptions = {},
 ): Promise<RenderToBufferResult> {
   // Force final-frame-raw so the GPU backend composites all layers into a
   // single RGBA buffer that endFrame can return to us.
@@ -398,8 +411,8 @@ async function captureToBuffer(
       nativeLayerRegistry: false,
       nativeSceneGraph: true,
       nativeEventDispatch: true,
-      nativeSceneLayout: true,
-        nativeRenderGraph: false,
+      nativeSceneLayout: options.nativeSceneLayout ?? true,
+      nativeRenderGraph: options.nativeRenderGraph ?? false,
     },
   })
 
@@ -421,6 +434,8 @@ async function captureToBuffer(
     loop.frame()
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
   }
+
+  const nativeRenderGraphUsage = getLastNativeRenderGraphUsage()
 
   // Tear down
   unbindLoop()
@@ -450,5 +465,7 @@ async function captureToBuffer(
     pixels,
     width: capturedWidth(),
     height: capturedHeight(),
+    nativeRenderGraphLayerCount: nativeRenderGraphUsage.layerCount,
+    nativeRenderGraphOpCount: nativeRenderGraphUsage.opCount,
   }
 }

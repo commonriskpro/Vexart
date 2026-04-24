@@ -174,8 +174,6 @@ async function main() {
   //   - Starts 30fps render loop with dirty-flag optimization
   const cleanup = mount(() => <App terminal={term} />, term, {
     experimental: {
-      nativeSceneLayout: false,
-      nativeRenderGraph: false,
     },
   })
 
