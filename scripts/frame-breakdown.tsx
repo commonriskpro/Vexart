@@ -80,8 +80,26 @@ interface MockTerminal {
 
 interface CadenceFrame {
   totalMs: number
+  scrollMs: number
+  walkTreeMs: number
+  layoutComputeMs: number
+  layoutWritebackMs: number
+  interactionMs: number
+  relayoutMs: number
   layoutMs: number
+  layerAssignMs: number
   prepMs: number
+  paintNativeSnapshotMs: number
+  paintLayerPrepMs: number
+  paintFrameContextMs: number
+  paintBackendBeginMs: number
+  paintReuseMs: number
+  paintRenderGraphMs: number
+  paintBackendPaintMs: number
+  paintLayerCleanupMs: number
+  paintBackendEndMs: number
+  paintPresentationMs: number
+  paintInteractionStatsMs: number
   paintMs: number
   ioMs: number
   beginSyncMs: number
@@ -103,8 +121,26 @@ interface PercentileSummary {
 
 interface StageSummary {
   totalMs: PercentileSummary
+  scrollMs: PercentileSummary
+  walkTreeMs: PercentileSummary
+  layoutComputeMs: PercentileSummary
+  layoutWritebackMs: PercentileSummary
+  interactionMs: PercentileSummary
+  relayoutMs: PercentileSummary
   layoutMs: PercentileSummary
+  layerAssignMs: PercentileSummary
   prepMs: PercentileSummary
+  paintNativeSnapshotMs: PercentileSummary
+  paintLayerPrepMs: PercentileSummary
+  paintFrameContextMs: PercentileSummary
+  paintBackendBeginMs: PercentileSummary
+  paintReuseMs: PercentileSummary
+  paintRenderGraphMs: PercentileSummary
+  paintBackendPaintMs: PercentileSummary
+  paintLayerCleanupMs: PercentileSummary
+  paintBackendEndMs: PercentileSummary
+  paintPresentationMs: PercentileSummary
+  paintInteractionStatsMs: PercentileSummary
   paintMs: PercentileSummary
   ioMs: PercentileSummary
   beginSyncMs: PercentileSummary
@@ -129,7 +165,7 @@ interface ScenarioReport {
 }
 
 interface BenchmarkReport {
-  version: 1
+  version: 2
   generatedAt: string
   runtime: string
   platform: string
@@ -326,8 +362,26 @@ function parseCadenceLine(line: string): CadenceFrame | null {
   }
   return {
     totalMs: value("total"),
+    scrollMs: value("scroll"),
+    walkTreeMs: value("walk"),
+    layoutComputeMs: value("layoutCompute"),
+    layoutWritebackMs: value("layoutWriteback"),
+    interactionMs: value("interaction"),
+    relayoutMs: value("relayout"),
     layoutMs: value("layout"),
+    layerAssignMs: value("layerAssign"),
     prepMs: value("prep"),
+    paintNativeSnapshotMs: value("nativeSnapshot"),
+    paintLayerPrepMs: value("layerPrep"),
+    paintFrameContextMs: value("frameCtx"),
+    paintBackendBeginMs: value("backendBegin"),
+    paintReuseMs: value("reuse"),
+    paintRenderGraphMs: value("renderGraph"),
+    paintBackendPaintMs: value("backendPaint"),
+    paintLayerCleanupMs: value("layerCleanup"),
+    paintBackendEndMs: value("backendEnd"),
+    paintPresentationMs: value("presentation"),
+    paintInteractionStatsMs: value("interactionStats"),
     paintMs: value("paint"),
     ioMs: value("io"),
     beginSyncMs: value("beginSync"),
@@ -362,8 +416,26 @@ function summarize(values: number[]): PercentileSummary {
 function summarizeFrames(frames: CadenceFrame[]): StageSummary {
   return {
     totalMs: summarize(frames.map((frame) => frame.totalMs)),
+    scrollMs: summarize(frames.map((frame) => frame.scrollMs)),
+    walkTreeMs: summarize(frames.map((frame) => frame.walkTreeMs)),
+    layoutComputeMs: summarize(frames.map((frame) => frame.layoutComputeMs)),
+    layoutWritebackMs: summarize(frames.map((frame) => frame.layoutWritebackMs)),
+    interactionMs: summarize(frames.map((frame) => frame.interactionMs)),
+    relayoutMs: summarize(frames.map((frame) => frame.relayoutMs)),
     layoutMs: summarize(frames.map((frame) => frame.layoutMs)),
+    layerAssignMs: summarize(frames.map((frame) => frame.layerAssignMs)),
     prepMs: summarize(frames.map((frame) => frame.prepMs)),
+    paintNativeSnapshotMs: summarize(frames.map((frame) => frame.paintNativeSnapshotMs)),
+    paintLayerPrepMs: summarize(frames.map((frame) => frame.paintLayerPrepMs)),
+    paintFrameContextMs: summarize(frames.map((frame) => frame.paintFrameContextMs)),
+    paintBackendBeginMs: summarize(frames.map((frame) => frame.paintBackendBeginMs)),
+    paintReuseMs: summarize(frames.map((frame) => frame.paintReuseMs)),
+    paintRenderGraphMs: summarize(frames.map((frame) => frame.paintRenderGraphMs)),
+    paintBackendPaintMs: summarize(frames.map((frame) => frame.paintBackendPaintMs)),
+    paintLayerCleanupMs: summarize(frames.map((frame) => frame.paintLayerCleanupMs)),
+    paintBackendEndMs: summarize(frames.map((frame) => frame.paintBackendEndMs)),
+    paintPresentationMs: summarize(frames.map((frame) => frame.paintPresentationMs)),
+    paintInteractionStatsMs: summarize(frames.map((frame) => frame.paintInteractionStatsMs)),
     paintMs: summarize(frames.map((frame) => frame.paintMs)),
     ioMs: summarize(frames.map((frame) => frame.ioMs)),
     beginSyncMs: summarize(frames.map((frame) => frame.beginSyncMs)),
@@ -379,6 +451,15 @@ function topSymbols(counts: Map<string, number>): SymbolCount[] {
     .slice(0, 12)
 }
 
+function topStageP95(summary: StageSummary) {
+  return Object.entries(summary)
+    .filter(([stage]) => stage !== "totalMs" && stage !== "ffiCallCount")
+    .map(([stage, value]) => ({ stage, p95: value.p95 }))
+    .filter((entry) => entry.p95 > 0)
+    .sort((a, b) => b.p95 - a.p95)
+    .slice(0, 6)
+}
+
 async function runScenario(engine: EngineModules, name: ScenarioName, size: Size, frames: number, warmup: number): Promise<ScenarioReport> {
   await clearCadenceLog()
   engine.resetVexartFfiCallCounts()
@@ -386,8 +467,26 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
   engine.setFrameProfileSink((profile) => {
     capturedProfiles.push({
       totalMs: profile.totalMs,
+      scrollMs: profile.scrollMs,
+      walkTreeMs: profile.walkTreeMs,
+      layoutComputeMs: profile.layoutComputeMs,
+      layoutWritebackMs: profile.layoutWritebackMs,
+      interactionMs: profile.interactionMs,
+      relayoutMs: profile.relayoutMs,
       layoutMs: profile.layoutMs,
+      layerAssignMs: profile.layerAssignMs,
       prepMs: profile.prepMs,
+      paintNativeSnapshotMs: profile.paintNativeSnapshotMs,
+      paintLayerPrepMs: profile.paintLayerPrepMs,
+      paintFrameContextMs: profile.paintFrameContextMs,
+      paintBackendBeginMs: profile.paintBackendBeginMs,
+      paintReuseMs: profile.paintReuseMs,
+      paintRenderGraphMs: profile.paintRenderGraphMs,
+      paintBackendPaintMs: profile.paintBackendPaintMs,
+      paintLayerCleanupMs: profile.paintLayerCleanupMs,
+      paintBackendEndMs: profile.paintBackendEndMs,
+      paintPresentationMs: profile.paintPresentationMs,
+      paintInteractionStatsMs: profile.paintInteractionStatsMs,
       paintMs: profile.paintMs,
       ioMs: profile.ioMs,
       beginSyncMs: profile.beginSyncMs,
@@ -399,9 +498,10 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
     })
   })
   const term = createMockTerminal(size.width, size.height)
+  const forceLayerRepaint = name === SCENARIO.DASHBOARD_SMOKE || name === SCENARIO.DASHBOARD_1080P
   const loop = engine.createRenderLoop(term as never, {
     experimental: {
-      forceLayerRepaint: true,
+      forceLayerRepaint,
       nativePresentation: false,
       nativeLayerRegistry: false,
       nativeSceneGraph: true,
@@ -458,7 +558,37 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
       }
       const elapsed = performance.now() - start
       const ffiCallCount = engine.getVexartFfiCallCount() - beforeFfi
-      manualFrames.push({ totalMs: elapsed, layoutMs: 0, prepMs: 0, paintMs: 0, ioMs: 0, beginSyncMs: 0, endSyncMs: 0, commands: 0, repainted: 0, dirtyBefore: 0, ffiCallCount })
+      manualFrames.push({
+        totalMs: elapsed,
+        scrollMs: 0,
+        walkTreeMs: 0,
+        layoutComputeMs: 0,
+        layoutWritebackMs: 0,
+        interactionMs: 0,
+        relayoutMs: 0,
+        layoutMs: 0,
+        layerAssignMs: 0,
+        prepMs: 0,
+        paintNativeSnapshotMs: 0,
+        paintLayerPrepMs: 0,
+        paintFrameContextMs: 0,
+        paintBackendBeginMs: 0,
+        paintReuseMs: 0,
+        paintRenderGraphMs: 0,
+        paintBackendPaintMs: 0,
+        paintLayerCleanupMs: 0,
+        paintBackendEndMs: 0,
+        paintPresentationMs: 0,
+        paintInteractionStatsMs: 0,
+        paintMs: 0,
+        ioMs: 0,
+        beginSyncMs: 0,
+        endSyncMs: 0,
+        commands: 0,
+        repainted: 0,
+        dirtyBefore: 0,
+        ffiCallCount,
+      })
       await tick()
     }
 
@@ -501,9 +631,13 @@ function printScenario(report: ScenarioReport) {
   const layout = report.summary.layoutMs
   const paint = report.summary.paintMs
   const ffi = report.summary.ffiCallCount
+  const stages = topStageP95(report.summary)
   console.log(`  ${report.name.padEnd(18)} ${report.width}×${report.height} frames=${report.framesMeasured}`)
   console.log(`    total p50=${total.p50.toFixed(2)} p95=${total.p95.toFixed(2)} p99=${total.p99.toFixed(2)} avg=${total.avg.toFixed(2)} ms`)
   console.log(`    layout p95=${layout.p95.toFixed(2)} paint p95=${paint.p95.toFixed(2)} ffi avg=${ffi.avg.toFixed(1)}`)
+  if (stages.length > 0) {
+    console.log(`    bottlenecks p95: ${stages.map((entry) => `${entry.stage}=${entry.p95.toFixed(2)}`).join(", ")}`)
+  }
   if (report.topFfiSymbols.length > 0) {
     console.log(`    top ffi: ${report.topFfiSymbols.slice(0, 4).map((entry) => `${entry.symbol}:${entry.count}`).join(", ")}`)
   }
@@ -529,7 +663,7 @@ async function main() {
   }
 
   const output: BenchmarkReport = {
-    version: 1,
+    version: 2,
     generatedAt: new Date().toISOString(),
     runtime: `bun ${Bun.version}`,
     platform: process.platform,

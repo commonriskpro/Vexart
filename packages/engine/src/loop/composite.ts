@@ -55,6 +55,7 @@ import type { GpuFrameComposer } from "../output/gpu-frame-composer"
 import { createScrollHandle, updateScrollContainerGeometry } from "./scroll"
 import { nativeSceneComputeLayout } from "../ffi/native-scene"
 import type { PositionedCommand } from "../ffi/layout-writeback"
+import { DIRTY_KIND, type DirtyScope } from "../reconciler/dirty"
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -71,8 +72,26 @@ export type FrameProfile = {
   scheduledDelayMs: number
   timerDelayMs: number
   sincePrevFrameMs: number
+  scrollMs: number
+  walkTreeMs: number
+  layoutComputeMs: number
+  layoutWritebackMs: number
+  interactionMs: number
+  relayoutMs: number
   layoutMs: number
+  layerAssignMs: number
   prepMs: number
+  paintNativeSnapshotMs: number
+  paintLayerPrepMs: number
+  paintFrameContextMs: number
+  paintBackendBeginMs: number
+  paintReuseMs: number
+  paintRenderGraphMs: number
+  paintBackendPaintMs: number
+  paintLayerCleanupMs: number
+  paintBackendEndMs: number
+  paintPresentationMs: number
+  paintInteractionStatsMs: number
   paintMs: number
   beginSyncMs: number
   ioMs: number
@@ -154,7 +173,7 @@ export type CompositeFrameState = {
   layerCount: () => number
 
   // Dirty tracking
-  markDirty: () => void
+  markDirty: (scope?: DirtyScope) => void
   markAllDirty: () => void
   clearDirty: (expectedVersion?: number) => void
   dirtyVersion: () => number
@@ -444,6 +463,21 @@ function buildRetainedCompositorLayers(s: CompositeFrameState) {
 
 function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; changed: boolean } {
   let changed = false
+  const visualNodeIds = new Set<number>()
+  const queueNodeVisualDamage = (node: TGENode) => {
+    visualNodeIds.add(node.id)
+    if (node.layout.width <= 0 || node.layout.height <= 0) return
+    const padding = 32
+    s.pendingNodeDamageRects.push({
+      nodeId: node.id,
+      rect: {
+        x: node.layout.x - padding,
+        y: node.layout.y - padding,
+        width: node.layout.width + padding * 2,
+        height: node.layout.height + padding * 2,
+      },
+    })
+  }
   const bag: InteractiveStatesBag = {
     rectNodes: s.rectNodes,
     rectNodeById: s.rectNodeById,
@@ -458,7 +492,16 @@ function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; c
     prevActiveNode: s.pointer.prevActiveNode,
     cellWidth: s.term.size.cellWidth || 8,
     cellHeight: s.term.size.cellHeight || 16,
-    onChanged: () => { changed = true; s.markDirty(); s.markAllDirty() },
+    onChanged: () => {
+      changed = true
+      if (visualNodeIds.size === 0) {
+        s.markDirty()
+        s.markAllDirty()
+        return
+      }
+      for (const nodeId of visualNodeIds) s.markDirty({ kind: DIRTY_KIND.NODE_VISUAL, nodeId })
+    },
+    onNodeVisualChanged: queueNodeVisualDamage,
     useNativePressDispatch: s.useNativePressDispatch,
     useNativeInteractionDispatch: s.useNativePressDispatch,
   }
@@ -485,6 +528,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   const dirtyVersionAtFrameStart = s.dirtyVersion()
   const dirtyBeforeFrame = s.dirtyCount()
   const layoutStart = s.debugCadence ? performance.now() : 0
+  const scrollStart = profile ? performance.now() : 0
 
   // ── Step 1: Feed scroll + pointer to Clay ──
   const now = Date.now()
@@ -538,6 +582,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
 
   // Post-scroll hooks
   for (const cb of s.postScrollCallbacks) cb()
+  if (profile) profile.scrollMs = performance.now() - scrollStart
 
   const backend = s.backendOverride!
   const compositorOnlyFrame = hasCompositorAnimations()
@@ -552,7 +597,9 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     && s.layerCache.size > 0
 
   if (compositorOnlyFrame) {
+    const retainedPrepStart = profile ? performance.now() : 0
     const retainedLayers = buildRetainedCompositorLayers(s)
+    if (profile) profile.paintLayerPrepMs = performance.now() - retainedPrepStart
     const dirtyLayerCount = retainedLayers.filter((layer) => layer.opacity < 0.999 || !!layer.subtreeTransform).length
     const dirtyPixelArea = retainedLayers.reduce((sum, layer) => sum + layer.bounds.width * layer.bounds.height, 0)
     const totalPixelArea = Math.max(1, s.viewportWidth * s.viewportHeight)
@@ -573,9 +620,21 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
       estimatedLayeredBytes: dirtyPixelArea * 4,
       estimatedFinalBytes: totalPixelArea * 4,
     } satisfies import("../ffi/renderer-backend").RendererBackendFrameContext
+    const beginSyncStart = profile ? performance.now() : 0
     s.term.beginSync()
+    if (profile) profile.beginSyncMs = performance.now() - beginSyncStart
+    const retainedPaintStart = profile ? performance.now() : 0
     const frameResult = backend.compositeRetainedFrame?.({ frame: frameCtx, layers: retainedLayers }) ?? null
+    if (profile) {
+      profile.paintBackendPaintMs = performance.now() - retainedPaintStart
+      profile.paintMs = profile.paintBackendPaintMs
+      profile.commands = 0
+      profile.dirtyBefore = dirtyBeforeFrame
+      profile.repainted = 0
+    }
+    const endSyncStart = profile ? performance.now() : 0
     s.term.endSync()
+    if (profile) profile.endSyncMs = performance.now() - endSyncStart
     const resourceSummary = isDebugEnabled()
       ? summarizeRendererResourceStats()
       : { totalBytes: 0, gpuBytes: 0, cacheEntries: 0 }
@@ -616,20 +675,29 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   resetWalkAccumulators(s)
   s.pendingNodeDamageRects.length = 0
   s.layoutAdapter.beginLayout()
+  const walkStart = profile ? performance.now() : 0
   walkTreeOnce(s)
+  if (profile) profile.walkTreeMs = performance.now() - walkStart
+  const layoutComputeStart = profile ? performance.now() : 0
   let commands = s.layoutAdapter.endLayout()
+  if (profile) profile.layoutComputeMs = performance.now() - layoutComputeStart
+  const layoutWritebackStart = profile ? performance.now() : 0
   let layoutMap = writeLayoutBack(s)
   if (s.useNativeSceneLayout) _updateCommandsToLayoutMap(commands, layoutMap)
 
   // ── Step 3: Write layout back + interaction states ──
   applyScrollOffsets(commands, s)
+  if (profile) profile.layoutWritebackMs = performance.now() - layoutWritebackStart
+  const interactionStart = profile ? performance.now() : 0
   const interaction = updateInteractiveStates(s)
+  if (profile) profile.interactionMs = performance.now() - interactionStart
 
   // Re-layout on any interactive state change for instant visual feedback (same frame).
   // Hover/active/focus styles mutate node state after the first layout pass; if we only
   // relayout on click, that dirty mark gets cleared at frame end and visual state only
   // appears on an unrelated repaint (for example terminal resize).
   if (interaction.changed || interaction.hadClick) {
+    const relayoutStart = profile ? performance.now() : 0
     resetWalkAccumulators(s)
     s.layoutAdapter.beginLayout()
     walkTreeOnce(s)
@@ -637,6 +705,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     layoutMap = writeLayoutBack(s)
     if (s.useNativeSceneLayout) _updateCommandsToLayoutMap(commands, layoutMap)
     applyScrollOffsets(commands, s)
+    if (profile) profile.relayoutMs = performance.now() - relayoutStart
   }
 
   if (profile) profile.layoutMs = performance.now() - layoutStart
@@ -647,6 +716,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   }
 
   const prepStart = s.debugCadence ? performance.now() : 0
+  const layerAssignStart = profile ? performance.now() : 0
 
   // ── Step 4: Layer boundary + slot assignment ──
   const nextZCounter = { value: 0 }
@@ -670,6 +740,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   s.renderDebug(`[frame:start] cmds=${commands.length} layers=${1 + contentSlots.length}`)
 
   if (profile) {
+    profile.layerAssignMs = performance.now() - layerAssignStart
     profile.prepMs = performance.now() - prepStart
     profile.commands = commands.length
     profile.dirtyBefore = dirtyBeforeFrame
@@ -714,6 +785,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     log: s.log,
     renderDebug: s.renderDebug,
     dragReproDebug: s.dragReproDebug,
+    profile,
   }
   const layerPlan = { bgSlot, contentSlots, slotBoundaryByKey, boundaries }
   const paintResult = _paintFrame(layerPlan, commands, cellW, cellH, paintState)

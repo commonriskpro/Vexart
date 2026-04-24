@@ -548,6 +548,23 @@ export const DIRECTION: {
 };
 
 // @public (undocumented)
+export const DIRTY_KIND: {
+    readonly FULL: "full";
+    readonly INTERACTION: "interaction";
+    readonly NODE_VISUAL: "node-visual";
+};
+
+// @public (undocumented)
+export type DirtyKind = (typeof DIRTY_KIND)[keyof typeof DIRTY_KIND];
+
+// @public (undocumented)
+export type DirtyScope = {
+    kind: DirtyKind;
+    nodeId?: number;
+    rect?: DamageRect;
+};
+
+// @public (undocumented)
 export type DirtyTracker = {
     markDirty: () => void;
     isDirty: () => boolean;
@@ -1281,7 +1298,7 @@ export type LineCmd = {
 };
 
 // @public (undocumented)
-export function markDirty(): void;
+export function markDirty(scope?: DirtyScope): void;
 
 // @public (undocumented)
 export function markNodeLayerDamaged(nodeId: number, rect?: DamageRect): void;
@@ -1645,7 +1662,7 @@ export type NodeMouseEvent = {
 export const ONE_DARK: ThemeTokenStyle[];
 
 // @public (undocumented)
-export function onGlobalDirty(cb: () => void): void;
+export function onGlobalDirty(cb: (scope: DirtyScope) => void): void;
 
 // @public (undocumented)
 export function onInput(handler: InputSubscriber): () => void;

@@ -73,6 +73,20 @@ export type PreparedLayerSlot = {
   freezeWhileInteracting: boolean
 }
 
+export type PaintProfiler = {
+  paintNativeSnapshotMs: number
+  paintLayerPrepMs: number
+  paintFrameContextMs: number
+  paintBackendBeginMs: number
+  paintReuseMs: number
+  paintRenderGraphMs: number
+  paintBackendPaintMs: number
+  paintLayerCleanupMs: number
+  paintBackendEndMs: number
+  paintPresentationMs: number
+  paintInteractionStatsMs: number
+}
+
 // ── PaintFrameState ───────────────────────────────────────────────────────
 
 /**
@@ -97,6 +111,7 @@ export type PaintFrameState = {
   // Debug flags
   debugCadence: boolean
   debugDragRepro: boolean
+  profile?: PaintProfiler
 
   // Layer store — injected methods (coordinator owns the store)
   getOrCreateLayer: (key: string, z: number) => Layer
@@ -321,11 +336,14 @@ export function paintFrame(
     renderDebug,
     dragReproDebug,
   } = state
+  const profile = state.profile
 
   const allSlots: LayerSlot[] = [plan.bgSlot, ...plan.contentSlots]
   const slotBoundaryByKey = plan.slotBoundaryByKey
+  const nativeSnapshotStart = profile ? performance.now() : 0
   const nativeSnapshot = state.useNativeRenderGraph ? nativeRenderGraphSnapshot() : null
   const nativeToTsNodeId = nativeSnapshot ? buildNativeToTsNodeIdMap(root) : null
+  if (profile) profile.paintNativeSnapshotMs += performance.now() - nativeSnapshotStart
   lastNativeRenderGraphLayerCount = 0
   lastNativeRenderGraphOpCount = 0
 
@@ -336,6 +354,7 @@ export function paintFrame(
   let ioMs = 0
 
   // ── Step 1: Layer prep ──
+  const layerPrepStart = profile ? performance.now() : 0
   for (const slot of allSlots) {
     if (slot.cmdIndices.length === 0) continue
 
@@ -512,8 +531,10 @@ export function paintFrame(
       freezeWhileInteracting,
     })
   }
+  if (profile) profile.paintLayerPrepMs += performance.now() - layerPrepStart
 
   // ── Step 2: Aggregate dirty rects + build frame context ──
+  const frameContextStart = profile ? performance.now() : 0
   frameDirtyRects.length = 0
   let dirtyLayerCountForFrame = 0
   let dirtyPixelArea = 0
@@ -552,7 +573,10 @@ export function paintFrame(
     estimatedLayeredBytes,
     estimatedFinalBytes,
   }
+  if (profile) profile.paintFrameContextMs += performance.now() - frameContextStart
+  const backendBeginStart = profile ? performance.now() : 0
   const framePlan = backend.beginFrame?.(frameCtx)
+  if (profile) profile.paintBackendBeginMs += performance.now() - backendBeginStart
   let rendererOutput: string | null = useLayerCompositing ? "buffer" : "buffer"
   let moveOnlyCount = 0
   let moveFallbackCount = 0
@@ -561,6 +585,7 @@ export function paintFrame(
   let nativePresentationStats: NativePresentationStats | null = null
 
   if (framePlan?.strategy === "skip-present") {
+    const cleanupStart = profile ? performance.now() : 0
     activeSlotKeys.clear()
     for (const prepared of preparedSlots) activeSlotKeys.add(prepared.slot.key)
     for (const [key, layer] of layerCache) {
@@ -577,7 +602,10 @@ export function paintFrame(
       removeLayer(layer)
       layerCache.delete(key)
     }
+    if (profile) profile.paintLayerCleanupMs += performance.now() - cleanupStart
+    const backendEndStart = profile ? performance.now() : 0
     const frameResult = backend.endFrame?.(frameCtx)
+    if (profile) profile.paintBackendEndMs += performance.now() - backendEndStart
     return {
       repaintedKeys: [],
       anyDirty: false,
@@ -650,10 +678,12 @@ export function paintFrame(
           moveFallbackCount++
           log(`  [${slot.key}|${prepared.debugName}] MOVE-FALLBACK repaint establish layered placement`)
         } else {
+          const reuseStart = profile ? performance.now() : 0
           const reused = backend.reuseLayer?.({
             frame: frameCtx,
             layer: layerCtx,
           }) === true
+          if (profile) profile.paintReuseMs += performance.now() - reuseStart
           if (reused) {
             stableReuseCount++
             if (framePlan?.strategy === "final-frame") rendererOutput = "final-frame-raw"
@@ -675,14 +705,17 @@ export function paintFrame(
 
       // Build render graph and invoke backend
       // All commands carry nodeId (set by layout-adapter.endLayout()).
+      const renderGraphStart = profile ? performance.now() : 0
       const useNativeGraphForLayer = !!(nativeSnapshot && nativeToTsNodeId && canUseNativeRenderGraphForLayer(nativeSnapshot, layerCommands, nativeToTsNodeId))
       const graph = useNativeGraphForLayer
         ? translateNativeRenderGraphSnapshot(nativeSnapshot!, layerCommands, renderGraphQueues, textMetaMap, nativeToTsNodeId ?? undefined)
         : buildRenderGraphFrame(layerCommands, renderGraphQueues, textMetaMap)
+      if (profile) profile.paintRenderGraphMs += performance.now() - renderGraphStart
       if (useNativeGraphForLayer) {
         lastNativeRenderGraphLayerCount++
         lastNativeRenderGraphOpCount += graph.ops.length
       }
+      const backendPaintStart = profile ? performance.now() : 0
       const paintResult = backend.paint({
         targetWidth: lw,
         targetHeight: lh,
@@ -697,6 +730,7 @@ export function paintFrame(
         frame: frameCtx,
         layer: layerCtx,
       })
+      if (profile) profile.paintBackendPaintMs += performance.now() - backendPaintStart
 
       const backendSkipPresent = paintResult?.output === "skip-present"
       const backendKittyPayload = paintResult?.output === "kitty-payload"
@@ -739,7 +773,9 @@ export function paintFrame(
           const { data, width: pw, height: ph } = paintResult.kittyPayload
           const col = Math.floor(lx / cellW)
           const row = Math.floor(ly / cellH)
+          const presentationStart = profile ? performance.now() : 0
           const nativeStats = nativeEmitLayer(imageId, data, pw, ph, col, row, renderZ, state.transmissionMode)
+          if (profile) profile.paintPresentationMs += performance.now() - presentationStart
           if (nativeStats !== null) {
             nativePresentationStats = nativeStats
             // Native emit succeeded — skip TS layer composer path.
@@ -760,7 +796,9 @@ export function paintFrame(
           log(`  [${slot.key}] REPAINT ${lw}x${lh} at (${lx},${ly}) z=${renderZ} (${(lw * lh * 4 / 1024).toFixed(0)}KB) cmds=${slot.cmdIndices.length}`)
         }
         const ioStart = debugCadence ? performance.now() : 0
+        const presentationStart = profile ? performance.now() : 0
         layerComposer!.renderLayerRaw(paintResult.kittyPayload.data, paintResult.kittyPayload.width, paintResult.kittyPayload.height, imageId, lx, ly, renderZ, cellW, cellH)
+        if (profile) profile.paintPresentationMs += performance.now() - presentationStart
         if (debugCadence) ioMs += performance.now() - ioStart
         markLayerClean(layer)
         continue
@@ -771,6 +809,7 @@ export function paintFrame(
   }
 
   // ── Step 4: Clean up orphan layers ──
+  const cleanupStart = profile ? performance.now() : 0
   activeSlotKeys.clear()
   for (const prepared of preparedSlots) activeSlotKeys.add(prepared.slot.key)
   for (const [key, layer] of layerCache) {
@@ -790,15 +829,19 @@ export function paintFrame(
       layerCache.delete(key)
     }
   }
+  if (profile) profile.paintLayerCleanupMs += performance.now() - cleanupStart
 
   // ── Step 5: Final-frame strategy ──
+  const backendEndStart = profile ? performance.now() : 0
   const frameResult = backend.endFrame?.(frameCtx)
+  if (profile) profile.paintBackendEndMs += performance.now() - backendEndStart
   if (frameResult?.output === "native-presented") {
     // Native path: Rust already emitted the full frame — nothing to do in JS.
     rendererOutput = "native-presented"
   } else if (frameResult?.output === "final-frame-raw" && frameResult.finalFrame) {
     rendererOutput = "final-frame-raw"
     const ioStart = debugCadence ? performance.now() : 0
+    const presentationStart = profile ? performance.now() : 0
     layerComposer!.renderFinalFrameRaw(
       frameResult.finalFrame.data,
       frameResult.finalFrame.width,
@@ -807,10 +850,12 @@ export function paintFrame(
       cellW,
       cellH,
     )
+    if (profile) profile.paintPresentationMs += performance.now() - presentationStart
     if (debugCadence) ioMs += performance.now() - ioStart
   }
 
   // ── Step 6: Interaction latency tracking + debug stats ──
+  const interactionStatsStart = profile ? performance.now() : 0
   const interaction = getLatestInteractionTrace()
   if (interaction.seq > lastPresentedInteractionSeq.value && repaintedThisFrame > 0) {
     lastPresentedInteractionSeq.value = interaction.seq
@@ -851,6 +896,7 @@ export function paintFrame(
     nativeStats: nativeFrameStats,
     nativeFrameReasonFlags: framePlan?.nativePlan?.reasonFlags ?? null,
   })
+  if (profile) profile.paintInteractionStatsMs += performance.now() - interactionStatsStart
 
   return {
     repaintedKeys: preparedSlots.filter(p => p.layer.dirty === false && activeSlotKeys.has(p.slot.key)).map(p => p.slot.key),

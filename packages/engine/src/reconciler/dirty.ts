@@ -3,9 +3,27 @@
  */
 
 import { appendFileSync } from "node:fs"
+import type { DamageRect } from "../ffi/damage"
 
 const DIRTY_DEBUG_LOG = "/tmp/tge-dirty.log"
 const DIRTY_LOG_LIMIT = 200
+
+/** @public */
+export const DIRTY_KIND = {
+  FULL: "full",
+  INTERACTION: "interaction",
+  NODE_VISUAL: "node-visual",
+} as const
+
+/** @public */
+export type DirtyKind = (typeof DIRTY_KIND)[keyof typeof DIRTY_KIND]
+
+/** @public */
+export type DirtyScope = {
+  kind: DirtyKind
+  nodeId?: number
+  rect?: DamageRect
+}
 
 /** @public */
 export type DirtyTracker = {
@@ -52,19 +70,19 @@ const defaultDirtyTracker = createDirtyTracker()
 
 /** Callback invoked whenever markDirty() is called.
  *  Used by the render loop to also mark all layers dirty. */
-let _onDirtyCallback: (() => void) | null = null
+let _onDirtyCallback: ((scope: DirtyScope) => void) | null = null
 
 /** Register a callback to be called whenever the global markDirty fires.
  *  The render loop uses this to chain markAllDirty (layer store). */
 /** @public */
-export function onGlobalDirty(cb: () => void) {
+export function onGlobalDirty(cb: (scope: DirtyScope) => void) {
   _onDirtyCallback = cb
 }
 
 /** @public */
-export function markDirty() {
+export function markDirty(scope?: DirtyScope) {
   defaultDirtyTracker.markDirty()
-  _onDirtyCallback?.()
+  _onDirtyCallback?.(scope ?? { kind: DIRTY_KIND.FULL })
 }
 
 /** @public */

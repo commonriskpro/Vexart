@@ -210,13 +210,14 @@ export type {
 } from "./reconciler/data"
 
 export {
+  DIRTY_KIND,
   createDirtyTracker,
   onGlobalDirty,
   markDirty,
   isDirty,
   clearDirty,
 } from "./reconciler/dirty"
-export type { DirtyTracker } from "./reconciler/dirty"
+export type { DirtyKind, DirtyScope, DirtyTracker } from "./reconciler/dirty"
 
 export {
   useDrag,

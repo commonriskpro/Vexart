@@ -270,6 +270,8 @@ export type InteractiveStatesBag = {
   cellHeight: number
   /** Called when any interaction state changes (triggers repaint). */
   onChanged: () => void
+  /** Called when a specific node had visual-only interaction state changes. */
+  onNodeVisualChanged?: (node: TGENode) => void
   /** Dispatch click callbacks from the native retained scene chain. */
   useNativePressDispatch?: boolean
   /** Dispatch hover/active/mouse callbacks from native retained scene records. */
@@ -369,33 +371,33 @@ export function dispatchNativeInteractionFrame(
     const mouse = eventFromNativeRecord(record)
 
     if (record.eventKind === NATIVE_EVENT_KIND.MOUSE_OVER) {
-      if (!node._hovered) { node._hovered = true; changed = true }
+      if (!node._hovered) { node._hovered = true; changed = true; bag.onNodeVisualChanged?.(node) }
       if (node.props.onMouseOver) node.props.onMouseOver(mouse)
       continue
     }
 
     if (record.eventKind === NATIVE_EVENT_KIND.MOUSE_OUT) {
-      if (node._hovered) { node._hovered = false; changed = true }
+      if (node._hovered) { node._hovered = false; changed = true; bag.onNodeVisualChanged?.(node) }
       if (node.props.onMouseOut) node.props.onMouseOut(mouse)
       continue
     }
 
     if (record.eventKind === NATIVE_EVENT_KIND.MOUSE_DOWN) {
       bag.pressOriginSet = true
-      if (!node._active) { node._active = true; changed = true }
+      if (!node._active) { node._active = true; changed = true; bag.onNodeVisualChanged?.(node) }
       bag.prevActiveNode = node
       if (node.props.onMouseDown) node.props.onMouseDown(mouse)
       continue
     }
 
     if (record.eventKind === NATIVE_EVENT_KIND.MOUSE_UP) {
-      if (node._active) { node._active = false; changed = true }
+      if (node._active) { node._active = false; changed = true; bag.onNodeVisualChanged?.(node) }
       if (node.props.onMouseUp) node.props.onMouseUp(mouse)
       continue
     }
 
     if (record.eventKind === NATIVE_EVENT_KIND.ACTIVE_END) {
-      if (node._active) { node._active = false; changed = true }
+      if (node._active) { node._active = false; changed = true; bag.onNodeVisualChanged?.(node) }
       continue
     }
 
@@ -429,6 +431,7 @@ export function dispatchNativeInteractionFrame(
       if (node._focused !== isFocused) {
         node._focused = isFocused
         syncNativeFocusState(node)
+        bag.onNodeVisualChanged?.(node)
         changed = true
       }
     }
@@ -499,8 +502,8 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
         if (scrollParent.props.scrollX || scrollParent.props.scrollY) {
           if (fullyOutsideViewport) {
             let stateChanged = false
-            if (node._hovered) { node._hovered = false; changed = true; stateChanged = true }
-            if (node._active) { node._active = false; changed = true; stateChanged = true }
+            if (node._hovered) { node._hovered = false; changed = true; stateChanged = true; bag.onNodeVisualChanged?.(node) }
+            if (node._active) { node._active = false; changed = true; stateChanged = true; bag.onNodeVisualChanged?.(node) }
             if (stateChanged) syncNativeInteractiveState(node)
           }
           break
@@ -565,6 +568,7 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
       if (!isOver && node.props.onMouseOut) node.props.onMouseOut(makeMouseEvent(node))
       node._hovered = isOver
       syncNativeInteractiveState(node)
+      bag.onNodeVisualChanged?.(node)
       changed = true
     }
 
@@ -582,6 +586,7 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
     if (node._active !== isDown) {
       node._active = isDown
       syncNativeInteractiveState(node)
+      bag.onNodeVisualChanged?.(node)
       changed = true
     }
     if (isDown) newActiveNode = node
@@ -593,6 +598,7 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
       if (node._focused !== isFocused) {
         node._focused = isFocused
         syncNativeInteractiveState(node)
+        bag.onNodeVisualChanged?.(node)
         changed = true
       }
     }
@@ -654,6 +660,7 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
         if (node._focused !== isFocused) {
           node._focused = isFocused
           syncNativeInteractiveState(node)
+          bag.onNodeVisualChanged?.(node)
         }
       }
     }

@@ -15,7 +15,7 @@ import { type TGENode, createNode, parseSizing } from "../ffi/node"
 import { createVexartLayoutCtx } from "./layout-adapter"
 
 const layoutAdapter = createVexartLayoutCtx()
-import { markDirty as globalMarkDirty, isDirty as globalIsDirty, clearDirty as globalClearDirty, dirtyVersion as globalDirtyVersion, onGlobalDirty } from "../reconciler/dirty"
+import { DIRTY_KIND, markDirty as globalMarkDirty, isDirty as globalIsDirty, clearDirty as globalClearDirty, dirtyVersion as globalDirtyVersion, onGlobalDirty, type DirtyScope } from "../reconciler/dirty"
 import { hasActiveAnimations } from "./animation"
 import { appendFileSync } from "node:fs"
 import { debugFrameStart, debugRecordFfiCounts } from "./debug"
@@ -354,8 +354,21 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   // Solid updates caused by event handlers running during a frame: the state
   // mutation may happen after the input nudge, so dirty itself must schedule
   // the follow-up repaint.
-  onGlobalDirty(() => {
-    markAllDirty()
+  const queueScopedNodeDamage = (scope: DirtyScope) => {
+    if (scope.kind !== DIRTY_KIND.NODE_VISUAL || scope.nodeId === undefined) return false
+    const node = nodeRefById.get(scope.nodeId)
+    if (!node) return false
+    const rect = scope.rect ?? (node.layout.width > 0 && node.layout.height > 0
+      ? { x: node.layout.x - 32, y: node.layout.y - 32, width: node.layout.width + 64, height: node.layout.height + 64 }
+      : null)
+    if (!rect) return false
+    pendingNodeDamageRects.push({ nodeId: scope.nodeId, rect })
+    return true
+  }
+
+  onGlobalDirty((scope) => {
+    if (scope.kind === DIRTY_KIND.FULL) markAllDirty()
+    else if (scope.kind === DIRTY_KIND.NODE_VISUAL && !queueScopedNodeDamage(scope)) markAllDirty()
     wakeForDirty("pointer")
   })
 
@@ -376,7 +389,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     pointer.down = down
     pointer.dirty = true
     if (moved || changedDown) {
-      markDirty()
+      markDirty({ kind: DIRTY_KIND.INTERACTION })
       nudgeInteraction("pointer")
     }
   }
@@ -428,7 +441,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     if (hasRecentInteraction()) lastInteractionFrameAt = frameStartedAt
     try {
       const profile: FrameProfile | undefined = DEBUG_CADENCE || frameProfileSink
-        ? { scheduledIntervalMs, scheduledDelayMs, timerDelayMs: scheduledAtMs > 0 ? frameStartedAt - scheduledAtMs - scheduledDelayMs : 0, sincePrevFrameMs: lastFrameStartedAt > 0 ? frameStartedAt - lastFrameStartedAt : 0, layoutMs: 0, prepMs: 0, paintMs: 0, beginSyncMs: 0, ioMs: 0, endSyncMs: 0, totalMs: 0, commands: 0, repainted: 0, dirtyBefore: 0 }
+        ? { scheduledIntervalMs, scheduledDelayMs, timerDelayMs: scheduledAtMs > 0 ? frameStartedAt - scheduledAtMs - scheduledDelayMs : 0, sincePrevFrameMs: lastFrameStartedAt > 0 ? frameStartedAt - lastFrameStartedAt : 0, scrollMs: 0, walkTreeMs: 0, layoutComputeMs: 0, layoutWritebackMs: 0, interactionMs: 0, relayoutMs: 0, layoutMs: 0, layerAssignMs: 0, prepMs: 0, paintNativeSnapshotMs: 0, paintLayerPrepMs: 0, paintFrameContextMs: 0, paintBackendBeginMs: 0, paintReuseMs: 0, paintRenderGraphMs: 0, paintBackendPaintMs: 0, paintLayerCleanupMs: 0, paintBackendEndMs: 0, paintPresentationMs: 0, paintInteractionStatsMs: 0, paintMs: 0, beginSyncMs: 0, ioMs: 0, endSyncMs: 0, totalMs: 0, commands: 0, repainted: 0, dirtyBefore: 0 }
         : undefined
       lastFrameStartedAt = frameStartedAt
       // Update mutable viewport fields in cs (may change on resize)
@@ -445,7 +458,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       finishDebugFrame()
       if (profile) {
         profile.totalMs = performance.now() - frameStartedAt
-        cadenceDebug(`[frame] dt=${profile.sincePrevFrameMs.toFixed(2)}ms interval=${profile.scheduledIntervalMs.toFixed(2)}ms delay=${profile.scheduledDelayMs.toFixed(2)}ms timerDelay=${profile.timerDelayMs.toFixed(2)}ms total=${profile.totalMs.toFixed(2)}ms layout=${profile.layoutMs.toFixed(2)}ms prep=${profile.prepMs.toFixed(2)}ms paint=${profile.paintMs.toFixed(2)}ms io=${profile.ioMs.toFixed(2)}ms beginSync=${profile.beginSyncMs.toFixed(2)}ms endSync=${profile.endSyncMs.toFixed(2)}ms dirty=${profile.dirtyBefore} repainted=${profile.repainted} cmds=${profile.commands}`)
+        cadenceDebug(`[frame] dt=${profile.sincePrevFrameMs.toFixed(2)}ms interval=${profile.scheduledIntervalMs.toFixed(2)}ms delay=${profile.scheduledDelayMs.toFixed(2)}ms timerDelay=${profile.timerDelayMs.toFixed(2)}ms total=${profile.totalMs.toFixed(2)}ms scroll=${profile.scrollMs.toFixed(2)}ms walk=${profile.walkTreeMs.toFixed(2)}ms layoutCompute=${profile.layoutComputeMs.toFixed(2)}ms layoutWriteback=${profile.layoutWritebackMs.toFixed(2)}ms interaction=${profile.interactionMs.toFixed(2)}ms relayout=${profile.relayoutMs.toFixed(2)}ms layout=${profile.layoutMs.toFixed(2)}ms layerAssign=${profile.layerAssignMs.toFixed(2)}ms prep=${profile.prepMs.toFixed(2)}ms nativeSnapshot=${profile.paintNativeSnapshotMs.toFixed(2)}ms layerPrep=${profile.paintLayerPrepMs.toFixed(2)}ms frameCtx=${profile.paintFrameContextMs.toFixed(2)}ms backendBegin=${profile.paintBackendBeginMs.toFixed(2)}ms reuse=${profile.paintReuseMs.toFixed(2)}ms renderGraph=${profile.paintRenderGraphMs.toFixed(2)}ms backendPaint=${profile.paintBackendPaintMs.toFixed(2)}ms layerCleanup=${profile.paintLayerCleanupMs.toFixed(2)}ms backendEnd=${profile.paintBackendEndMs.toFixed(2)}ms presentation=${profile.paintPresentationMs.toFixed(2)}ms interactionStats=${profile.paintInteractionStatsMs.toFixed(2)}ms paint=${profile.paintMs.toFixed(2)}ms io=${profile.ioMs.toFixed(2)}ms beginSync=${profile.beginSyncMs.toFixed(2)}ms endSync=${profile.endSyncMs.toFixed(2)}ms dirty=${profile.dirtyBefore} repainted=${profile.repainted} cmds=${profile.commands}`)
         frameProfileSink?.({ ...profile })
       }
     } finally {
