@@ -333,6 +333,8 @@ export type TGENode = {
   _focused: boolean
   /** Decoded image RGBA data — set by image decode pipeline, read by paintCommand */
   _imageBuffer: { data: Uint8Array; width: number; height: number } | null
+  /** Native image asset handle for Rust-owned image resource identity. */
+  _nativeImageHandle: bigint | null
   /** Image decode state — prevents re-triggering decode */
   _imageState: "idle" | "loading" | "loaded" | "error"
   /** Pre-parsed width sizing — resolved once in setProperty, read every frame */
@@ -377,6 +379,7 @@ export function createNode(kind: TGENodeKind): TGENode {
     _active: false,
     _focused: false,
     _imageBuffer: null,
+    _nativeImageHandle: null,
     _imageState: "idle",
     _widthSizing: null,
     _heightSizing: null,

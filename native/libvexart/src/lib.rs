@@ -6,6 +6,7 @@
 pub mod composite;
 pub mod frame;
 pub mod ffi;
+pub mod image_asset;
 pub mod kitty;
 pub mod layer;
 pub mod layout;
@@ -16,7 +17,6 @@ pub mod scene;
 pub mod text;
 pub mod types;
 
-use std::sync::atomic::Ordering;
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
@@ -109,6 +109,78 @@ fn sync_scene_layout_from_output(graph: &mut scene::SceneGraph, out: &[u8], used
     }
 }
 
+fn upload_image_record(
+    pctx: &mut paint::PaintContext,
+    handle: u64,
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+) {
+    let wgpu_ctx = &pctx.wgpu;
+    let texture = wgpu_ctx.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("vexart-image"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+
+    wgpu_ctx.queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        rgba,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width * 4),
+            rows_per_image: Some(height),
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let sampler = wgpu_ctx.device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("vexart-image-sampler"),
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        address_mode_w: wgpu::AddressMode::ClampToEdge,
+        mag_filter: wgpu::FilterMode::Nearest,
+        min_filter: wgpu::FilterMode::Nearest,
+        mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+        ..Default::default()
+    });
+    let bind_group = wgpu_ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("vexart-image-bind-group"),
+        layout: &wgpu_ctx.image_bind_group_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&sampler),
+            },
+        ],
+    });
+    let _ = sampler;
+    pctx.images.insert(handle, paint::ImageRecord { texture, view, bind_group });
+}
+
 // ─── Single shared ResourceManager (lazy-initialized, Phase 2b Slice 6) ──
 // Global GPU memory budget manager. Initialized on first stats/budget call.
 // Phase 2b: single-context model — one manager for all GPU assets.
@@ -119,6 +191,13 @@ static SHARED_RESOURCE: LazyLock<Mutex<resource::ResourceManager>> =
 
 fn get_or_init_resource() -> &'static Mutex<resource::ResourceManager> {
     &SHARED_RESOURCE
+}
+
+static SHARED_IMAGE_ASSETS: LazyLock<Mutex<image_asset::ImageAssetRegistry>> =
+    LazyLock::new(|| Mutex::new(image_asset::ImageAssetRegistry::new()));
+
+fn get_or_init_image_assets() -> &'static Mutex<image_asset::ImageAssetRegistry> {
+    &SHARED_IMAGE_ASSETS
 }
 
 // ─── Single shared LayerRegistry (Phase 2c native layer ownership) ──────────
@@ -862,83 +941,8 @@ pub unsafe extern "C" fn vexart_paint_upload_image(
             Some(c) => c,
             None => return ERR_GPU_DEVICE_LOST,
         };
-        let wgpu_ctx = &pctx.wgpu;
-
-        let texture = wgpu_ctx.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("vexart-image"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-
-        wgpu_ctx.queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            rgba,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(width * 4),
-                rows_per_image: Some(height),
-            },
-            wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-        );
-
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = wgpu_ctx.device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("vexart-image-sampler"),
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
-            ..Default::default()
-        });
-        let bind_group = wgpu_ctx
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("vexart-image-bind-group"),
-                layout: &wgpu_ctx.image_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&sampler),
-                    },
-                ],
-            });
-
-        // Sampler is held alive internally by bind_group's Arc — drop here is OK.
-        let _ = sampler;
-
-        let handle = paint::NEXT_IMAGE_HANDLE.fetch_add(1, Ordering::Relaxed);
-        pctx.images.insert(
-            handle,
-            paint::ImageRecord {
-                texture,
-                view,
-                bind_group,
-            },
-        );
+        let handle = paint::alloc_image_handle();
+        upload_image_record(pctx, handle, rgba, width, height);
 
         *out_image = handle;
         OK
@@ -1792,6 +1796,81 @@ pub extern "C" fn vexart_resource_set_budget(_ctx: u64, budget_mb: u32) -> i32 {
         let mut mgr = guard.lock().unwrap();
         mgr.set_budget(budget_bytes);
         OK
+    })
+}
+
+/// Register or update a native image asset from decoded RGBA bytes.
+///
+/// `meta_ptr` is 8 bytes: width:u32, height:u32.
+/// `out_handle` receives the stable native image handle.
+///
+/// # Safety
+/// All pointers must be valid for their documented lengths.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_image_asset_register(
+    _ctx: u64,
+    _scene: u64,
+    key_ptr: *const u8,
+    key_len: u32,
+    rgba_ptr: *const u8,
+    rgba_len: u32,
+    meta_ptr: *const u8,
+    out_handle: *mut u64,
+) -> i32 {
+    ffi_guard!({
+        if key_ptr.is_null() || key_len == 0 || rgba_ptr.is_null() || rgba_len == 0 || meta_ptr.is_null() || out_handle.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let key_bytes = std::slice::from_raw_parts(key_ptr, key_len as usize);
+        let key = String::from_utf8_lossy(key_bytes).to_string();
+        let rgba = std::slice::from_raw_parts(rgba_ptr, rgba_len as usize);
+        let meta = std::slice::from_raw_parts(meta_ptr, 8);
+        let width = u32::from_le_bytes(meta[0..4].try_into().unwrap_or([0; 4]));
+        let height = u32::from_le_bytes(meta[4..8].try_into().unwrap_or([0; 4]));
+
+        let resources = get_or_init_resource();
+        let mut resources_guard = resources.lock().unwrap();
+        let registry = get_or_init_image_assets();
+        let mut registry_guard = registry.lock().unwrap();
+        let Some(handle) = registry_guard.register(key, rgba, width, height, &mut resources_guard) else {
+            return ERR_INVALID_ARG;
+        };
+        let mut paint_guard = get_or_init_paint();
+        let pctx = match paint_guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        upload_image_record(pctx, handle, rgba, width, height);
+        *out_handle = handle;
+        OK
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn vexart_image_asset_touch(_ctx: u64, _scene: u64, handle: u64) -> i32 {
+    ffi_guard!({
+        let resources = get_or_init_resource();
+        let mut resources_guard = resources.lock().unwrap();
+        let registry = get_or_init_image_assets();
+        let registry_guard = registry.lock().unwrap();
+        if registry_guard.touch(handle, &mut resources_guard) { OK } else { ERR_INVALID_ARG }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn vexart_image_asset_release(_ctx: u64, _scene: u64, handle: u64) -> i32 {
+    ffi_guard!({
+        let resources = get_or_init_resource();
+        let mut resources_guard = resources.lock().unwrap();
+        let registry = get_or_init_image_assets();
+        let mut registry_guard = registry.lock().unwrap();
+        if registry_guard.release(handle, &mut resources_guard) {
+            let mut paint_guard = get_or_init_paint();
+            if let Some(pctx) = paint_guard.as_mut() {
+                pctx.images.remove(&handle);
+            }
+            OK
+        } else { ERR_INVALID_ARG }
     })
 }
 

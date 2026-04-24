@@ -193,6 +193,7 @@ export function walkTree(
         color: placeholderColor,
         cornerRadius: node.props.cornerRadius ?? 0,
         imageBuffer: imgBuf,
+        nativeImageHandle: node._nativeImageHandle,
         objectFit: node.props.objectFit ?? "contain",
       })
     }

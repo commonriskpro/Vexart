@@ -156,3 +156,9 @@ export {
   nativeSceneSetText,
   destroyNativeScene,
 } from "./native-scene"
+export {
+  nativeImageAssetRegister,
+  nativeImageAssetTouch,
+  nativeImageAssetRelease,
+} from "./native-image-assets"
+export type { NativeImageAssetInput } from "./native-image-assets"

@@ -121,6 +121,7 @@ export type ImagePaintConfig = {
   color: number
   cornerRadius: number
   imageBuffer: { data: Uint8Array; width: number; height: number }
+  nativeImageHandle?: bigint | null
   objectFit: "contain" | "cover" | "fill" | "none"
 }
 

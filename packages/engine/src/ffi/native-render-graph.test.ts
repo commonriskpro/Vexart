@@ -222,7 +222,7 @@ describe("native render graph snapshot", () => {
     const snapshot: NativeRenderGraphSnapshot = {
       ops: [
         { kind: "effect", nodeId: 1, x: 0, y: 0, width: 10, height: 10, color: 1, cornerRadius: 0, borderWidth: 0, opacity: 1, text: "", fontSize: 0, fontId: 0, materialKey: "pipeline:effect:1", effectKey: "gradient+shadow", imageSource: "", hasGradient: true, hasShadow: true, hasGlow: false, hasFilter: false, hasBackdrop: false, hasTransform: false, hasOpacity: false, gradientJson: '{"type":"linear","from":1,"to":2,"angle":90}', shadowJson: '{"x":0,"y":2,"blur":4,"color":3}', glowJson: "", filterJson: "", transformJson: "", backdropBlur: null, backdropBrightness: null, backdropContrast: null, backdropSaturate: null, backdropGrayscale: null, backdropInvert: null, backdropSepia: null, backdropHueRotate: null },
-        { kind: "image", nodeId: 2, x: 0, y: 0, width: 20, height: 10, color: 0, cornerRadius: 0, borderWidth: 0, opacity: 1, text: "", fontSize: 0, fontId: 0, objectFit: "cover", canvasViewportJson: "", materialKey: "pipeline:image:0", effectKey: "", imageSource: "demo.png", hasGradient: false, hasShadow: false, hasGlow: false, hasFilter: false, hasBackdrop: false, hasTransform: false, hasOpacity: false, gradientJson: "", shadowJson: "", glowJson: "", filterJson: "", transformJson: "", backdropBlur: null, backdropBrightness: null, backdropContrast: null, backdropSaturate: null, backdropGrayscale: null, backdropInvert: null, backdropSepia: null, backdropHueRotate: null },
+        { kind: "image", nodeId: 2, x: 0, y: 0, width: 20, height: 10, color: 0, cornerRadius: 0, borderWidth: 0, opacity: 1, text: "", fontSize: 0, fontId: 0, objectFit: "cover", canvasViewportJson: "", materialKey: "pipeline:image:0", effectKey: "", imageSource: "demo.png", imageHandle: 7, hasGradient: false, hasShadow: false, hasGlow: false, hasFilter: false, hasBackdrop: false, hasTransform: false, hasOpacity: false, gradientJson: "", shadowJson: "", glowJson: "", filterJson: "", transformJson: "", backdropBlur: null, backdropBrightness: null, backdropContrast: null, backdropSaturate: null, backdropGrayscale: null, backdropInvert: null, backdropSepia: null, backdropHueRotate: null },
         { kind: "canvas", nodeId: 3, x: 0, y: 0, width: 20, height: 10, color: 0, cornerRadius: 0, borderWidth: 0, opacity: 1, text: "", fontSize: 0, fontId: 0, objectFit: "contain", canvasViewportJson: '{"x":3,"y":4,"zoom":2}', materialKey: "pipeline:canvas:0", effectKey: "", imageSource: "", hasGradient: false, hasShadow: false, hasGlow: false, hasFilter: false, hasBackdrop: false, hasTransform: false, hasOpacity: false, gradientJson: "", shadowJson: "", glowJson: "", filterJson: "", transformJson: "", backdropBlur: null, backdropBrightness: null, backdropContrast: null, backdropSaturate: null, backdropGrayscale: null, backdropInvert: null, backdropSepia: null, backdropHueRotate: null },
       ],
       batches: [],
@@ -248,6 +248,7 @@ describe("native render graph snapshot", () => {
     if (graph.ops[1]?.kind === "image") {
       expect(graph.ops[1].image.imageBuffer).toBe(queues.images[0]?.imageBuffer)
       expect(graph.ops[1].image.objectFit).toBe("cover")
+      expect(graph.ops[1].image.nativeImageHandle).toBe(7n)
       expect(graph.ops[1].rect.inputs.color).toBe(0)
     }
     expect(graph.ops[2]?.kind).toBe("canvas")

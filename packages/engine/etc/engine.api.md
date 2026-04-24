@@ -524,6 +524,7 @@ export type DecodedImage = {
     data: Uint8Array;
     width: number;
     height: number;
+    nativeHandle?: bigint;
 };
 
 // @public (undocumented)
@@ -1030,6 +1031,7 @@ export type ImagePaintConfig = {
         width: number;
         height: number;
     };
+    nativeImageHandle?: bigint | null;
     objectFit: "contain" | "cover" | "fill" | "none";
 };
 
@@ -2569,6 +2571,7 @@ export type TGENode = {
         width: number;
         height: number;
     } | null;
+    _nativeImageHandle: bigint | null;
     _imageState: "idle" | "loading" | "loaded" | "error";
     _widthSizing: SizingInfo | null;
     _heightSizing: SizingInfo | null;
@@ -3179,6 +3182,18 @@ export const VEXART_SYMBOLS: {
     };
     readonly vexart_resource_set_budget: {
         readonly args: [FFIType.uint64_t, FFIType.uint32_t];
+        readonly returns: FFIType.int32_t;
+    };
+    readonly vexart_image_asset_register: {
+        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.ptr];
+        readonly returns: FFIType.int32_t;
+    };
+    readonly vexart_image_asset_touch: {
+        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t];
+        readonly returns: FFIType.int32_t;
+    };
+    readonly vexart_image_asset_release: {
+        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t];
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_get_last_error_length: {

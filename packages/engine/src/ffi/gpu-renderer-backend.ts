@@ -2105,7 +2105,9 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           continue
         }
         if (op.kind === "image") {
-          const imageHandle = getImage(op.image.imageBuffer.data, op.image.imageBuffer.width, op.image.imageBuffer.height)
+          const imageHandle = op.image.nativeImageHandle && op.image.nativeImageHandle > 0n
+            ? op.image.nativeImageHandle
+            : getImage(op.image.imageBuffer.data, op.image.imageBuffer.width, op.image.imageBuffer.height)
           if (!imageHandle) return { ok: false, rawLayer: null }
           const group = imageGroups.get(imageHandle) ?? { handle: imageHandle, instances: [] }
           group.instances.push({

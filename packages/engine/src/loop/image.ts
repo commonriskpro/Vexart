@@ -17,6 +17,7 @@
  */
 
 import type { TGENode } from "../ffi/node"
+import { nativeImageAssetRegister, nativeImageAssetTouch, syncNativeImageHandle } from "../ffi/native-image-assets"
 import { markDirty } from "../reconciler/dirty"
 
 // ── Cache ──
@@ -26,6 +27,7 @@ export type DecodedImage = {
   data: Uint8Array
   width: number
   height: number
+  nativeHandle?: bigint
 }
 
 /** @public */
@@ -90,6 +92,10 @@ export function decodeImageForNode(node: TGENode) {
   if (cached) {
     touchCacheEntry(imageCache, src, cached)
     node._imageBuffer = cached
+    if (cached.nativeHandle) {
+      nativeImageAssetTouch(cached.nativeHandle)
+      syncNativeImageHandle(node, cached.nativeHandle)
+    }
     node._imageState = "loaded"
     return
   }
@@ -100,6 +106,7 @@ export function decodeImageForNode(node: TGENode) {
     pendingDecodes.get(src)!.then((result) => {
       if (result) {
         node._imageBuffer = result
+        ensureNativeImageAsset(node, src, result)
         node._imageState = "loaded"
       } else {
         node._imageState = "error"
@@ -123,12 +130,25 @@ export function decodeImageForNode(node: TGENode) {
       }
       imageCache.set(src, result)
       node._imageBuffer = result
+      ensureNativeImageAsset(node, src, result)
       node._imageState = "loaded"
     } else {
       node._imageState = "error"
     }
     markDirty() // trigger re-render with image data
   })
+}
+
+function ensureNativeImageAsset(node: TGENode, src: string, image: DecodedImage) {
+  if (image.nativeHandle) {
+    nativeImageAssetTouch(image.nativeHandle)
+    syncNativeImageHandle(node, image.nativeHandle)
+    return
+  }
+  const handle = nativeImageAssetRegister({ key: src, data: image.data, width: image.width, height: image.height })
+  if (!handle) return
+  image.nativeHandle = handle
+  syncNativeImageHandle(node, handle)
 }
 
 /**

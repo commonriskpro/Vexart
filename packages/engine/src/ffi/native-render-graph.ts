@@ -55,6 +55,7 @@ export interface NativeRenderOpSnapshot {
   materialKey: string
   effectKey: string
   imageSource: string
+  imageHandle?: number
   hasGradient: boolean
   hasShadow: boolean
   hasGlow: boolean
@@ -384,6 +385,7 @@ function directNativeImageOp(command: RenderCommand, op: NativeRenderOpSnapshot,
     color: op.color,
     cornerRadius: op.cornerRadius,
     objectFit: op.objectFit ?? image.objectFit,
+    nativeImageHandle: op.imageHandle && op.imageHandle > 0 ? BigInt(op.imageHandle) : image.nativeImageHandle,
   }
   const rect: RectangleRenderOp = {
     kind: "rectangle",
