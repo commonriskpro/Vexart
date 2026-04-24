@@ -395,17 +395,9 @@ impl LayoutTree {
         match self.taffy.compute_layout_with_measure(
             root,
             available,
-            |known, available, _node_id, node_ctx, _style| {
+            |_known, _available, _node_id, node_ctx, _style| {
                 let Some(LayoutNodeContext::Text(text_ctx)) = node_ctx else {
                     return Size { width: 0.0, height: 0.0 };
-                };
-
-                let width_limit = match known.width {
-                    Some(width) => Some(width),
-                    None => match available.width {
-                        AvailableSpace::Definite(width) => Some(width),
-                        _ => None,
-                    },
                 };
 
                 let (width, height) = measure_text_layout(
@@ -413,15 +405,15 @@ impl LayoutTree {
                     text_ctx.font_id,
                     text_ctx.font_size,
                     text_ctx.line_height,
-                    width_limit,
+                    None,
                     text_ctx.white_space,
                     text_ctx.word_break,
                     atlases,
                 );
 
                 Size {
-                    width: known.width.unwrap_or(width),
-                    height: known.height.unwrap_or(height),
+                    width,
+                    height,
                 }
             },
         ) {
@@ -435,7 +427,7 @@ impl LayoutTree {
             return Err(ERR_INVALID_ARG);
         };
         let packed = packed_style_from_scene(scene, scene_node_id);
-        let style = pack_to_taffy_style(&packed, scene_prop_truthy(scene, scene_node_id, prop_hash("floating")), is_root, scene_prop_truthy(scene, scene_node_id, prop_hash("scrollX")) || scene_prop_truthy(scene, scene_node_id, prop_hash("scrollY")));
+        let style = pack_to_taffy_style(&packed, scene_has_floating(scene, scene_node_id), is_root, scene_prop_truthy(scene, scene_node_id, prop_hash("scrollX")) || scene_prop_truthy(scene, scene_node_id, prop_hash("scrollY")));
         let context = scene_text_context(scene, scene_node_id);
         let node = self.ensure_taffy_node(scene_node_id, style, context, seen)?;
         if scene_node.kind == NativeNodeKind::Text {
@@ -496,6 +488,9 @@ fn scene_prop_truthy(scene: &SceneGraph, node_id: u64, prop_id: u16) -> bool {
 }
 
 fn scene_size_prop(scene: &SceneGraph, node_id: u64, prop_id: u16) -> (u8, f32) {
+    if matches!(scene.nodes.get(&node_id).map(|node| node.kind), Some(NativeNodeKind::Text)) {
+        return (0, 0.0);
+    }
     if let Some(value) = scene_numeric_prop(scene, node_id, prop_id) {
         return (1, value);
     }
@@ -560,6 +555,7 @@ fn packed_style_from_scene(scene: &SceneGraph, node_id: u64) -> PackedStyle {
     let uniform_border = scene_numeric_prop(scene, node_id, 5).unwrap_or(0.0);
     let width = scene_size_prop(scene, node_id, 1);
     let height = scene_size_prop(scene, node_id, 2);
+    let (float_x, float_y) = scene_float_offset(scene, node_id);
     let flex_grow = scene_numeric_prop(scene, node_id, prop_hash("flexGrow")).unwrap_or_else(|| {
         let width_grow = matches!(scene_string_prop(scene, node_id, 1), Some("grow"));
         let height_grow = matches!(scene_string_prop(scene, node_id, 2), Some("grow"));
@@ -568,7 +564,7 @@ fn packed_style_from_scene(scene: &SceneGraph, node_id: u64) -> PackedStyle {
 
     PackedStyle {
         flex_direction: direction,
-        position_kind: if scene_prop_truthy(scene, node_id, prop_hash("floating")) { 1 } else { 0 },
+        position_kind: if scene_has_floating(scene, node_id) { 1 } else { 0 },
         size_w_kind: width.0,
         size_h_kind: height.0,
         size_w_value: width.1,
@@ -592,11 +588,31 @@ fn packed_style_from_scene(scene: &SceneGraph, node_id: u64) -> PackedStyle {
         border_left: scene_numeric_prop(scene, node_id, prop_hash("borderLeft")).unwrap_or(uniform_border),
         gap_row: scene_numeric_prop(scene, node_id, prop_hash("gap")).unwrap_or(0.0),
         gap_column: scene_numeric_prop(scene, node_id, prop_hash("gap")).unwrap_or(0.0),
-        inset_top: 0.0,
+        inset_top: float_y,
         inset_right: 0.0,
         inset_bottom: 0.0,
-        inset_left: 0.0,
+        inset_left: float_x,
     }
+}
+
+fn scene_has_floating(scene: &SceneGraph, node_id: u64) -> bool {
+    match scene.nodes.get(&node_id).and_then(|node| node.props.get(&prop_hash("floating"))) {
+        Some(PropValue::Bool(true)) | Some(PropValue::Capability(true)) => true,
+        Some(PropValue::String(value)) => !value.is_empty() && value != "false" && value != "null",
+        _ => false,
+    }
+}
+
+fn scene_float_offset(scene: &SceneGraph, node_id: u64) -> (f32, f32) {
+    let Some(raw) = scene_string_prop(scene, node_id, prop_hash("floatOffset")) else {
+        return (0.0, 0.0);
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
+        return (0.0, 0.0);
+    };
+    let x = value.get("x").and_then(|entry| entry.as_f64()).unwrap_or(0.0) as f32;
+    let y = value.get("y").and_then(|entry| entry.as_f64()).unwrap_or(0.0) as f32;
+    (x, y)
 }
 
 fn scene_text_context(scene: &SceneGraph, node_id: u64) -> Option<LayoutNodeContext> {

@@ -167,6 +167,24 @@ function borderPaddingParityFixture() {
   ])
 }
 
+function multilineTextParityFixture() {
+  return box("root", { width: 180, height: 120, direction: "column", padding: 10 }, [
+    box("narrow", { width: 80, direction: "column" }, [
+      text("wrappedText", "native text should match compat width"),
+    ]),
+  ])
+}
+
+function floatingParityFixture() {
+  return box("root", { width: 260, height: 180, direction: "column", padding: 10 }, [
+    box("anchor", { width: 160, height: 100, direction: "column", padding: 8 }, [
+      box("normal", { width: 50, height: 20 }, []),
+      box("floating", { width: 40, height: 30, floating: "parent", floatOffset: { x: 15, y: 25 } }, []),
+    ]),
+    box("afterAnchor", { width: 60, height: 20 }, []),
+  ])
+}
+
 function assertParity(root: FixtureNode, labels: string[]) {
   const nodes = collectFixtureNodes(root)
   mirrorToNative(root)
@@ -180,6 +198,14 @@ function assertParity(root: FixtureNode, labels: string[]) {
     const compatPos = compat.get(BigInt(node!.id))
     const nativePos = native.get(node!._nativeId!)
     expect(nativePos).toBeDefined()
+    if (
+      nativePos?.x !== compatPos?.x ||
+      nativePos?.y !== compatPos?.y ||
+      nativePos?.width !== compatPos?.width ||
+      nativePos?.height !== compatPos?.height
+    ) {
+      throw new Error(`${label}: native=${nativePos?.x},${nativePos?.y},${nativePos?.width},${nativePos?.height} compat=${compatPos?.x},${compatPos?.y},${compatPos?.width},${compatPos?.height}`)
+    }
     expect(nativePos?.x).toBe(compatPos?.x)
     expect(nativePos?.y).toBe(compatPos?.y)
     expect(nativePos?.width).toBe(compatPos?.width)
@@ -225,5 +251,11 @@ describe("native scene layout parity", () => {
     assertParity(borderPaddingParityFixture(), ["root", "card", "cardHeader", "cardBody"])
   })
 
-  test.todo("matches compat layout for multiline text wrapping", () => {})
+  test("matches compat layout for multiline text wrapping", () => {
+    assertParity(multilineTextParityFixture(), ["root", "narrow", "wrappedText"])
+  })
+
+  test("matches compat layout for floating absolute positioning", () => {
+    assertParity(floatingParityFixture(), ["root", "anchor", "normal", "floating", "afterAnchor"])
+  })
 })

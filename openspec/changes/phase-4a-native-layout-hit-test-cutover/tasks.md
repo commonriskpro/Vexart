@@ -10,7 +10,7 @@
 
 - [x] 2.1 Route `nativeSceneLayout` frames through `vexart_scene_layout_compute` as the source of truth and remove TS post-hoc layout sync from the native path in `packages/engine/src/loop/layout.ts`.
 - [x] 2.2 Keep compat layout intact behind the fallback flag, but isolate it so the retained path does not dual-write native layout state.
-- [ ] 2.3 Extend `packages/engine/src/ffi/native-scene-layout-parity.test.ts` with nested scroll, floating/absolute, wrap, border/padding, and alignment fixtures. (Nested scroll and border/padding landed; multiline text remains todo due native text wrap mismatch; floating/absolute still needs fixture.)
+- [x] 2.3 Extend `packages/engine/src/ffi/native-scene-layout-parity.test.ts` with nested scroll, floating/absolute, wrap, border/padding, and alignment fixtures.
 
 ## 3. Native Interactive State And Event Dispatch
 
