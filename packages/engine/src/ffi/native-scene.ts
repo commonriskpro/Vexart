@@ -66,6 +66,22 @@ function propIdFor(name: string): NativePropId | number {
   return NATIVE_PROP_ID[name as keyof typeof NATIVE_PROP_ID] ?? hashPropName(name)
 }
 
+function safeStringifyValue(value: unknown) {
+  const seen = new WeakSet<object>()
+  try {
+    return JSON.stringify(value, (_key, entry) => {
+      if (typeof entry === "function") return "[function]"
+      if (typeof entry === "bigint") return entry.toString()
+      if (!entry || typeof entry !== "object") return entry
+      if (seen.has(entry)) return "[circular]"
+      seen.add(entry)
+      return entry
+    })
+  } catch {
+    return '"[unserializable]"'
+  }
+}
+
 function ensureScene() {
   if (!isNativeSceneGraphEnabled()) return 0n
   if (sceneHandle !== null) return sceneHandle
@@ -105,7 +121,7 @@ function encodeProp(name: string, value: unknown) {
     payload = new TextEncoder().encode(value)
   } else if (value !== undefined && value !== null) {
     kind = PROP_KIND.STRING
-    payload = new TextEncoder().encode(JSON.stringify(value))
+    payload = new TextEncoder().encode(safeStringifyValue(value))
   } else {
     kind = PROP_KIND.STRING
     payload = new Uint8Array(0)
@@ -162,7 +178,7 @@ export function nativeSceneSetProp(node: bigint | null, name: string, value: unk
   if (!scene) return
   const payload = encodeProp(name, value)
   const { symbols } = openVexartLibrary()
-  symbols.vexart_node_set_props(1n, scene, node, ptr(payload), payload.byteLength)
+  symbols.vexart_node_set_props(1n, scene, node, payload.byteLength > 0 ? ptr(payload) : null, payload.byteLength)
 }
 
 export function nativeSceneSetText(node: bigint | null, text: string) {
@@ -171,7 +187,7 @@ export function nativeSceneSetText(node: bigint | null, text: string) {
   if (!scene) return
   const payload = new TextEncoder().encode(text)
   const { symbols } = openVexartLibrary()
-  symbols.vexart_text_set_content(1n, scene, node, ptr(payload), payload.byteLength)
+  symbols.vexart_text_set_content(1n, scene, node, payload.byteLength > 0 ? ptr(payload) : null, payload.byteLength)
 }
 
 export function nativeSceneSetLayout(node: bigint | null, x: number, y: number, width: number, height: number) {

@@ -1344,10 +1344,11 @@ Not expected in v0.9. New primitives require PRD amendment because they are arch
 
 ### 14.4 Visual tests (golden images)
 
-- ≥ 40 scenes covering every visual prop.
-- Reference PNGs stored in `tests/visual/references/`.
+- 40 scenes covering primitives, effects, components, and interaction snapshots.
+- Reference PNGs stored in `scripts/visual-test/references/`.
 - Diff threshold: 0.5% of pixels.
 - Refreshed via `bun run test:visual:update` after human review.
+- CI gate lives in `.github/workflows/phase4-gates.yml` and runs both API snapshot and visual regression checks.
 
 ### 14.5 Benchmarks
 

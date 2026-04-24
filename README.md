@@ -268,7 +268,7 @@ cargo test                   # Run Rust unit tests
 
 bun run example              # Run hello world example
 bun run showcase             # Run comprehensive feature showcase (7 tabs)
-bun run test:visual          # Run golden image visual tests
+bun run test:visual          # Run 40-scene golden image visual suite
 bun run test:visual:update   # Regenerate visual test references
 bun run perf:baseline        # Run perf baseline + save to scripts/perf-baseline.json
 bun run build:dist           # Build distributable tge-0.0.1.tgz

@@ -407,7 +407,7 @@ export type Modifiers = {
 // @public (undocumented)
 export type NavigationEntry = {
     path: string;
-    params?: Record<string, any>;
+    params?: NavigationParams;
 };
 
 // @public (undocumented)
@@ -415,11 +415,11 @@ export function NavigationStack(props: NavigationStackProps): JSX.Element;
 
 // @public (undocumented)
 export type NavigationStackHandle = {
-    push: (component: (props: ScreenProps) => JSX.Element, params?: Record<string, any>) => void;
+    push: (component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) => void;
     pop: () => boolean;
     goBack: () => boolean;
-    replace: (component: (props: ScreenProps) => JSX.Element, params?: Record<string, any>) => void;
-    reset: (component: (props: ScreenProps) => JSX.Element, params?: Record<string, any>) => void;
+    replace: (component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) => void;
+    reset: (component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) => void;
     depth: () => number;
     current: () => ScreenEntry | undefined;
     stack: () => ScreenEntry[];
@@ -542,7 +542,7 @@ export type RouteComponentProps = {
 
 // @public (undocumented)
 export type RouteProps = {
-    params?: Record<string, any>;
+    params?: NavigationParams;
 };
 
 // @public (undocumented)
@@ -551,9 +551,9 @@ export function Router(props: RouterProps): JSX.Element;
 // @public (undocumented)
 export type RouterContextValue = {
     current: () => string;
-    navigate: (path: string, params?: Record<string, any>) => void;
+    navigate: (path: string, params?: NavigationParams) => void;
     goBack: () => boolean;
-    params: () => Record<string, any> | undefined;
+    params: () => NavigationParams | undefined;
     history: () => NavigationEntry[];
 };
 
@@ -567,12 +567,12 @@ export type RouterProps = {
 export type ScreenEntry = {
     key: string;
     component: (props: ScreenProps) => JSX.Element;
-    params?: Record<string, any>;
+    params?: NavigationParams;
 };
 
 // @public (undocumented)
 export type ScreenProps = {
-    params?: Record<string, any>;
+    params?: NavigationParams;
     goBack: () => void;
 };
 
@@ -1005,6 +1005,10 @@ export type VisualCursor = {
     readonly row: number;
     readonly col: number;
 };
+
+// Warnings were encountered during analysis:
+//
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/reconciler/router.d.ts:7:5 - (ae-forgotten-export) The symbol "NavigationParams" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

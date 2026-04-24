@@ -2,18 +2,20 @@ import { createSignal, createContext, useContext } from "solid-js"
 import type { JSX } from "solid-js"
 
 /** @public */
-export type NavigationEntry = { path: string; params?: Record<string, any> }
+export type NavigationParams = Record<string, unknown>
+/** @public */
+export type NavigationEntry = { path: string; params?: NavigationParams }
 /** @public */
 export type RouteDefinition = { path: string; component: (props: RouteProps) => JSX.Element }
 /** @public */
-export type RouteProps = { params?: Record<string, any> }
+export type RouteProps = { params?: NavigationParams }
 
 /** @public */
 export type RouterContextValue = {
   current: () => string
-  navigate: (path: string, params?: Record<string, any>) => void
+  navigate: (path: string, params?: NavigationParams) => void
   goBack: () => boolean
-  params: () => Record<string, any> | undefined
+  params: () => NavigationParams | undefined
   history: () => NavigationEntry[]
 }
 
@@ -36,7 +38,7 @@ export function createRouter(initialPath: string) {
   const [history, setHistory] = createSignal<NavigationEntry[]>([{ path: initialPath }])
   const current = () => history()[history().length - 1].path
   const params = () => history()[history().length - 1].params
-  function navigate(path: string, navParams?: Record<string, any>) { setHistory((prev) => [...prev, { path, params: navParams }]) }
+  function navigate(path: string, navParams?: NavigationParams) { setHistory((prev) => [...prev, { path, params: navParams }]) }
   function goBack(): boolean {
     const h = history()
     if (h.length <= 1) return false
@@ -47,16 +49,16 @@ export function createRouter(initialPath: string) {
 }
 
 /** @public */
-export type ScreenEntry = { key: string; component: (props: ScreenProps) => JSX.Element; params?: Record<string, any> }
+export type ScreenEntry = { key: string; component: (props: ScreenProps) => JSX.Element; params?: NavigationParams }
 /** @public */
-export type ScreenProps = { params?: Record<string, any>; goBack: () => void }
+export type ScreenProps = { params?: NavigationParams; goBack: () => void }
 /** @public */
 export type NavigationStackHandle = {
-  push: (component: (props: ScreenProps) => JSX.Element, params?: Record<string, any>) => void
+  push: (component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) => void
   pop: () => boolean
   goBack: () => boolean
-  replace: (component: (props: ScreenProps) => JSX.Element, params?: Record<string, any>) => void
-  reset: (component: (props: ScreenProps) => JSX.Element, params?: Record<string, any>) => void
+  replace: (component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) => void
+  reset: (component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) => void
   depth: () => number
   current: () => ScreenEntry | undefined
   stack: () => ScreenEntry[]
@@ -67,7 +69,7 @@ let stackKeyCounter = 0
 /** @public */
 export function createNavigationStack(initialComponent?: (props: ScreenProps) => JSX.Element): NavigationStackHandle {
   const [stack, setStack] = createSignal<ScreenEntry[]>(initialComponent ? [{ key: `screen-${stackKeyCounter++}`, component: initialComponent }] : [])
-  function push(component: (props: ScreenProps) => JSX.Element, params?: Record<string, any>) {
+  function push(component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) {
     setStack((prev) => [...prev, { key: `screen-${stackKeyCounter++}`, component, params }])
   }
   function pop(): boolean {
@@ -76,14 +78,14 @@ export function createNavigationStack(initialComponent?: (props: ScreenProps) =>
     setStack((prev) => prev.slice(0, -1))
     return true
   }
-  function replace(component: (props: ScreenProps) => JSX.Element, params?: Record<string, any>) {
+  function replace(component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) {
     setStack((prev) => {
       const next = prev.slice(0, -1)
       next.push({ key: `screen-${stackKeyCounter++}`, component, params })
       return next
     })
   }
-  function reset(component: (props: ScreenProps) => JSX.Element, params?: Record<string, any>) {
+  function reset(component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) {
     setStack([{ key: `screen-${stackKeyCounter++}`, component, params }])
   }
   const current = () => { const s = stack(); return s.length > 0 ? s[s.length - 1] : undefined }

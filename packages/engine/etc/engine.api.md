@@ -357,9 +357,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 // @public (undocumented)
 export function createRouter(initialPath: string): {
     current: () => string;
-    navigate: (path: string, navParams?: Record<string, any>) => void;
+    navigate: (path: string, navParams?: NavigationParams) => void;
     goBack: () => boolean;
-    params: () => Record<string, any> | undefined;
+    params: () => NavigationParams | undefined;
     history: Accessor<NavigationEntry[]>;
 };
 
@@ -1574,16 +1574,16 @@ export type NativePresentationStats = {
 // @public (undocumented)
 export type NavigationEntry = {
     path: string;
-    params?: Record<string, any>;
+    params?: NavigationParams;
 };
 
 // @public (undocumented)
 export type NavigationStackHandle = {
-    push: (component: (props: ScreenProps) => JSX.Element, params?: Record<string, any>) => void;
+    push: (component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) => void;
     pop: () => boolean;
     goBack: () => boolean;
-    replace: (component: (props: ScreenProps) => JSX.Element, params?: Record<string, any>) => void;
-    reset: (component: (props: ScreenProps) => JSX.Element, params?: Record<string, any>) => void;
+    replace: (component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) => void;
+    reset: (component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) => void;
     depth: () => number;
     current: () => ScreenEntry | undefined;
     stack: () => ScreenEntry[];
@@ -2244,15 +2244,15 @@ export type RouteDefinition = {
 
 // @public (undocumented)
 export type RouteProps = {
-    params?: Record<string, any>;
+    params?: NavigationParams;
 };
 
 // @public (undocumented)
 export type RouterContextValue = {
     current: () => string;
-    navigate: (path: string, params?: Record<string, any>) => void;
+    navigate: (path: string, params?: NavigationParams) => void;
     goBack: () => boolean;
-    params: () => Record<string, any> | undefined;
+    params: () => NavigationParams | undefined;
     history: () => NavigationEntry[];
 };
 
@@ -2287,12 +2287,12 @@ export function scaleXY(sx: number, sy: number): Matrix3;
 export type ScreenEntry = {
     key: string;
     component: (props: ScreenProps) => JSX.Element;
-    params?: Record<string, any>;
+    params?: NavigationParams;
 };
 
 // @public (undocumented)
 export type ScreenProps = {
-    params?: Record<string, any>;
+    params?: NavigationParams;
     goBack: () => void;
 };
 
@@ -3215,6 +3215,10 @@ export function writeHeader(view: DataView, cmdCount: number, payloadBytes: numb
 
 // @public (undocumented)
 export function writeLayoutFromPositionedCommands(nodes: TGENode[], layoutMap: Map<bigint, PositionedCommand>): void;
+
+// Warnings were encountered during analysis:
+//
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/reconciler/router.d.ts:41:5 - (ae-forgotten-export) The symbol "NavigationParams" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

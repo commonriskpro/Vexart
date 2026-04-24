@@ -49,6 +49,7 @@ type LoopInstance = ReturnType<typeof createRenderLoop>
 
 export type RenderLoopInteractionHelpers = {
   clickAt: (x: number, y: number) => Promise<void>
+  pointerMove: (x: number, y: number) => Promise<void>
   keyPress: (key: string, char?: string) => Promise<void>
   frame: () => Promise<void>
 }
@@ -271,6 +272,40 @@ export async function renderToBuffer(
   return captureToBuffer(width, height, frames, (loop) => solidRender(component as () => TGENode, loop.root))
 }
 
+export async function renderToBufferAfterInteractions(
+  component: () => unknown,
+  width: number,
+  height: number,
+  interact: (helpers: RenderLoopInteractionHelpers) => Promise<void> | void,
+  frames = 2,
+): Promise<RenderToBufferResult> {
+  return captureToBuffer(width, height, frames, (loop) => solidRender(component as () => TGENode, loop.root), async (loop) => {
+    const nextFrame = async () => {
+      loop.frame()
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    }
+    const helpers: RenderLoopInteractionHelpers = {
+      async clickAt(x, y) {
+        loop.feedPointer(x, y, true)
+        await nextFrame()
+        loop.feedPointer(x, y, false)
+        await nextFrame()
+      },
+      async pointerMove(x, y) {
+        loop.feedPointer(x, y, false)
+        await nextFrame()
+      },
+      async keyPress(key, char = "") {
+        dispatchInput({ type: "key", key, char, mods: { shift: false, alt: false, ctrl: false, meta: false } })
+        markDirty()
+        await nextFrame()
+      },
+      frame: nextFrame,
+    }
+    await interact(helpers)
+  })
+}
+
 /**
  * Render a pre-built TGENode tree once to a raw RGBA pixel buffer.
  * Useful for low-level tests that want to bypass JSX/Solid compilation.
@@ -314,6 +349,10 @@ export async function renderNodeToBufferAfterInteractions(
       async clickAt(x, y) {
         loop.feedPointer(x, y, true)
         await nextFrame()
+        loop.feedPointer(x, y, false)
+        await nextFrame()
+      },
+      async pointerMove(x, y) {
         loop.feedPointer(x, y, false)
         await nextFrame()
       },

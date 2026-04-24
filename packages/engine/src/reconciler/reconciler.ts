@@ -108,19 +108,20 @@ function resolveColor(value: unknown): number {
 }
 
 /** Pre-parse color fields inside a glow object. */
-function resolveGlow(glow: any): any {
+function resolveGlow(glow: unknown): unknown {
   if (!glow || typeof glow !== "object") return glow
+  const candidate = glow as { radius?: unknown; color?: unknown; intensity?: unknown }
   return {
-    radius: glow.radius,
-    color: resolveColor(glow.color),
-    intensity: glow.intensity,
+    radius: candidate.radius,
+    color: resolveColor(candidate.color),
+    intensity: candidate.intensity,
   }
 }
 
 /** Pre-parse color fields inside an interactive style object (hoverStyle/activeStyle/focusStyle). */
-function resolveInteractiveStyle(style: any): any {
+function resolveInteractiveStyle(style: unknown): unknown {
   if (!style || typeof style !== "object") return style
-  const resolved = { ...style }
+  const resolved: Record<string, unknown> = { ...(style as Record<string, unknown>) }
   for (const key of STYLE_SUB_COLOR_PROPS) {
     if (key in resolved) {
       resolved[key] = resolveColor(resolved[key])

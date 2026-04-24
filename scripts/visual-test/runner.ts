@@ -19,6 +19,7 @@ import { readdirSync, existsSync, mkdirSync, writeFileSync, readFileSync } from 
 import { join, basename, dirname } from "node:path"
 import { fileURLToPath } from "node:url"
 import { createCanvas, loadImage } from "@napi-rs/canvas"
+import type { RenderToBufferResult } from "../../packages/engine/src/testing/render-to-buffer"
 import { renderToBuffer } from "../../packages/engine/src/testing/render-to-buffer"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -27,7 +28,7 @@ const REFS_DIR = join(__dirname, "references")
 const UPDATE = process.argv.includes("--update")
 
 // Diff threshold: percentage of pixels allowed to differ before FAIL
-const DIFF_THRESHOLD = 1.5
+const DIFF_THRESHOLD = 0.5
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -75,14 +76,17 @@ function diffPixels(a: Uint8Array, b: Uint8Array): number {
 type SceneModule = {
   width: number
   height: number
-  Scene: () => unknown
+  Scene?: () => unknown
+  render?: () => Promise<RenderToBufferResult>
 }
 
 async function loadScene(scenePath: string): Promise<SceneModule> {
   const mod = await import(scenePath) as SceneModule
   if (typeof mod.width !== "number") throw new Error(`Scene ${scenePath} must export \`width: number\``)
   if (typeof mod.height !== "number") throw new Error(`Scene ${scenePath} must export \`height: number\``)
-  if (typeof mod.Scene !== "function") throw new Error(`Scene ${scenePath} must export \`Scene\` function`)
+  if (typeof mod.Scene !== "function" && typeof mod.render !== "function") {
+    throw new Error(`Scene ${scenePath} must export either \`Scene\` or \`render\``)
+  }
   return mod
 }
 
@@ -95,7 +99,9 @@ async function runScene(scenePath: string): Promise<{ name: string; pass: boolea
   let result
   try {
     const mod = await loadScene(scenePath)
-    result = await renderToBuffer(() => mod.Scene(), mod.width, mod.height)
+    result = mod.render
+      ? await mod.render()
+      : await renderToBuffer(() => mod.Scene!(), mod.width, mod.height)
   } catch (err) {
     return {
       name,
