@@ -10,7 +10,7 @@
  * Run: bun run examples/layer-scroll.tsx
  */
 
-import { mount, onInput } from "@vexart/engine"
+import { mount, onInput, useTerminalDimensions } from "@vexart/engine"
 import { createTerminal } from "@vexart/engine"
 import {
   Button, Card, CardHeader, CardTitle, CardContent,
@@ -69,11 +69,13 @@ function RightColumn() {
   )
 }
 
-function App() {
+function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
+  const dims = useTerminalDimensions(props.terminal)
+
   return (
     <box
-      width="grow"
-      height="grow"
+      width={dims.width()}
+      height={dims.height()}
       backgroundColor={colors.background}
       direction="row"
       padding={space[4]}
@@ -110,7 +112,12 @@ function App() {
 
 async function main() {
   const term = await createTerminal()
-  const cleanup = mount(() => <App />, term)
+  const cleanup = mount(() => <App terminal={term} />, term, {
+    experimental: {
+      nativeSceneLayout: false,
+      nativeRenderGraph: false,
+    },
+  })
 
   onInput((event) => {
     if (event.type === "key") {

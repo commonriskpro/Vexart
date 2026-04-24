@@ -8,6 +8,8 @@ pub mod writeback;
 use crate::ffi::buffer::parse_header;
 use crate::ffi::panic::{ERR_INVALID_ARG, OK};
 use crate::scene::SceneGraph;
+use crate::text::atlas::AtlasRegistry;
+use crate::text::{measure_text_layout, WhiteSpaceMode, WordBreakMode};
 
 /// Owns the Taffy layout tree and viewport state for a single vexart context.
 ///
@@ -47,7 +49,7 @@ impl LayoutContext {
         }
 
         // Compute layout against current viewport size.
-        let code = self.tree.compute();
+        let code = self.tree.compute(None);
         if code != OK {
             *out_used = 0;
             return code;
@@ -57,13 +59,13 @@ impl LayoutContext {
         writeback::write_layout(&self.tree, out, out_used)
     }
 
-    pub fn compute_scene(&mut self, scene: &SceneGraph, out: &mut [u8], out_used: &mut u32) -> i32 {
+    pub fn compute_scene(&mut self, scene: &SceneGraph, atlases: Option<&AtlasRegistry>, out: &mut [u8], out_used: &mut u32) -> i32 {
         let code = self.tree.build_from_scene(scene);
         if code != OK {
             *out_used = 0;
             return code;
         }
-        let code = self.tree.compute();
+        let code = self.tree.compute(atlases);
         if code != OK {
             *out_used = 0;
             return code;
@@ -71,17 +73,29 @@ impl LayoutContext {
         writeback::write_layout(&self.tree, out, out_used)
     }
 
-    /// Phase 2 stub: measure returns (0.0, 0.0) per DEC-011.
+    /// Native text measure shared with retained layout.
     pub fn measure(
         &self,
-        _text: &[u8],
-        _font_id: u32,
-        _font_size: f32,
+        text: &[u8],
+        font_id: u32,
+        font_size: f32,
+        atlases: Option<&AtlasRegistry>,
         out_w: &mut f32,
         out_h: &mut f32,
     ) -> i32 {
-        *out_w = 0.0;
-        *out_h = 0.0;
+        let text = String::from_utf8_lossy(text);
+        let (width, height) = measure_text_layout(
+            &text,
+            font_id,
+            font_size,
+            font_size.max(17.0),
+            None,
+            WhiteSpaceMode::Normal,
+            WordBreakMode::Normal,
+            atlases,
+        );
+        *out_w = width;
+        *out_h = height;
         OK
     }
 

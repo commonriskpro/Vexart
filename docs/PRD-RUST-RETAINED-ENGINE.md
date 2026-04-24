@@ -453,8 +453,8 @@ Goal: native scene graph becomes default.
 
 Current implementation note:
 
-- Kitty-compatible transports now default the retained scene/event/layout/render/presentation stack on.
-- Native presentation now uses the active Kitty transport (`direct`, `file`, or `shm`) instead of restricting retained defaulting to SHM-only sessions.
+- SHM-capable terminals now default the retained scene/event/layout/render/presentation stack on.
+- Non-SHM terminals fall back automatically to the compatibility path instead of entering a partial retained mode by default.
 - `VEXART_RETAINED=0` is the emergency override for the whole retained stack during the compatibility window.
 - Remaining cutover gates are visual parity and API-snapshot infrastructure; cleanup/deletion remains a later phase.
 

@@ -12,14 +12,15 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, markDirty } from "@vexart/engine"
+import { mount, markDirty, useTerminalDimensions } from "@vexart/engine"
 import { createTerminal } from "@vexart/engine"
 import { createParser } from "@vexart/engine"
 // import { colors, radius, space, font } from "@vexart/styled"
 
-function App() {
+function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   const [angle, setAngle] = createSignal(0)
   const [clicks, setClicks] = createSignal<string[]>([])
+  const dims = useTerminalDimensions(props.terminal)
 
   // Animate rotation
   setInterval(() => {
@@ -34,8 +35,8 @@ function App() {
 
   return (
     <box
-      width="grow"
-      height="grow"
+      width={dims.width()}
+      height={dims.height()}
       backgroundColor={0x0a0a14ff}
       padding={30}
       gap={20}
@@ -225,7 +226,12 @@ function App() {
 
 async function main() {
   const term = await createTerminal()
-  const cleanup = mount(() => <App />, term)
+  const cleanup = mount(() => <App terminal={term} />, term, {
+    experimental: {
+      nativeSceneLayout: false,
+      nativeRenderGraph: false,
+    },
+  })
 
   const parser = createParser((event) => {
     if (event.type === "key" && (event.key === "q" || (event.key === "c" && event.mods.ctrl))) {

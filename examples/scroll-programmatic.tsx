@@ -19,7 +19,7 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, onInput, type ScrollHandle } from "@vexart/engine"
+import { mount, onInput, type ScrollHandle, useTerminalDimensions } from "@vexart/engine"
 import { Box, Text } from "@vexart/primitives"
 import { ScrollView } from "@vexart/headless"
 import { createTerminal } from "@vexart/engine"
@@ -43,9 +43,10 @@ function hslToHex(h: number): number {
 
 // ── App ──
 
-function App() {
+function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   let scrollRef: ScrollHandle | undefined
   const [info, setInfo] = createSignal("Scroll with mouse wheel, T=top, B=bottom, Up/Down=50px")
+  const dims = useTerminalDimensions(props.terminal)
 
   onInput((event) => {
     if (event.type !== "key") return
@@ -70,7 +71,7 @@ function App() {
   })
 
   return (
-    <box direction="column" width="100%" height="100%" backgroundColor="#0a0a14" padding={20} gap={12}>
+    <box direction="column" width={dims.width()} height={dims.height()} backgroundColor="#0a0a14" padding={20} gap={12}>
       {/* Header */}
       <box direction="column" gap={4}>
         <text color="#e0e0e0" fontSize={14}>Scroll Programmatic Demo (demo13)</text>
@@ -113,7 +114,12 @@ function App() {
 // ── Main ──
 
 const terminal = await createTerminal()
-const handle = mount(() => <App />, terminal)
+const handle = mount(() => <App terminal={terminal} />, terminal, {
+  experimental: {
+    nativeSceneLayout: false,
+    nativeRenderGraph: false,
+  },
+})
 
 process.on("SIGINT", () => {
   handle.destroy()

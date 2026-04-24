@@ -180,7 +180,7 @@ mod tests {
         // Build nested buffer: root OPEN, child OPEN, child CLOSE, root CLOSE
         let buf = build_nested_test_buffer(&root, &[child]);
         tree.build_from_commands(&buf);
-        tree.compute();
+        tree.compute(None);
         tree
     }
 

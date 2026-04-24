@@ -16,7 +16,7 @@
  * Requires: bun zig:build && bun run clay:build
  */
 
-import { mount, onInput, SyntaxStyle, KANAGAWA } from "@vexart/engine"
+import { mount, onInput, SyntaxStyle, KANAGAWA, useTerminalDimensions } from "@vexart/engine"
 import { Box, Text } from "@vexart/primitives"
 import { Markdown, ScrollView } from "@vexart/headless"
 import { createTerminal } from "@vexart/engine"
@@ -67,8 +67,9 @@ mount(() => <App />, terminal)
 That's it. **Happy hacking!**
 `
 
-function App() {
+function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   const style = SyntaxStyle.fromTheme(KANAGAWA)
+  const dims = useTerminalDimensions(props.terminal)
 
   onInput((event) => {
     if (event.type !== "key") return
@@ -76,7 +77,7 @@ function App() {
   })
 
   return (
-    <box direction="column" width="100%" height="100%" backgroundColor="#0a0a14" padding={20} gap={8}>
+    <box direction="column" width={dims.width()} height={dims.height()} backgroundColor="#0a0a14" padding={20} gap={8}>
       <text color="#888888" fontSize={14}>Markdown Demo (demo16) — Esc to quit</text>
 
       <ScrollView width="100%" height="100%" scrollY scrollSpeed={1} backgroundColor="#0f0f1a" cornerRadius={8} padding={16}>
@@ -87,7 +88,12 @@ function App() {
 }
 
 const terminal = await createTerminal()
-const handle = mount(() => <App />, terminal)
+const handle = mount(() => <App terminal={terminal} />, terminal, {
+  experimental: {
+    nativeSceneLayout: false,
+    nativeRenderGraph: false,
+  },
+})
 
 process.on("SIGINT", () => {
   handle.destroy()

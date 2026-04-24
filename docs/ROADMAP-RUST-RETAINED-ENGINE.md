@@ -404,8 +404,8 @@ Implication: Phase 0 is decision-complete, but not implementation-ready until ba
 
 **Current implementation note**:
 
-- Kitty-compatible transports now default the retained scene/event/layout/render/presentation stack on.
-- Native presentation now follows the active Kitty transport (`direct`, `file`, or `shm`) instead of limiting the default cutover to SHM-only sessions.
+- SHM-capable terminals now default the retained scene/event/layout/render/presentation stack on.
+- Non-SHM terminals intentionally fall back to the compatibility path by default so the cutover stays capability-safe.
 - `VEXART_RETAINED=0` now disables the full retained stack for the compatibility window.
 - Remaining open gates are golden parity and API-snapshot execution, not the default-flag flip itself.
 

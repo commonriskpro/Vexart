@@ -59,8 +59,8 @@ mount(() => (
 
 ### Retained runtime default
 
-- The Rust-retained runtime is now the **default path** on Kitty-compatible transports (`direct`, `file`, and `shm`).
-- Explicit raw readback stays isolated to offscreen / screenshot / debug flows.
+- The Rust-retained runtime is now the **default path** on SHM-capable Kitty terminals.
+- If SHM is unavailable, Vexart falls back to the compatibility path automatically.
 - Emergency fallback for the full retained stack:
 
 ```bash

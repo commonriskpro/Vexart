@@ -10,6 +10,246 @@ pub mod render;
 use crate::ffi::panic::{ERR_INVALID_ARG, ERR_INVALID_FONT, OK};
 use crate::paint::PaintContext;
 use crate::types::FrameStats;
+use atlas::AtlasRegistry;
+
+const BUILTIN_ADVANCE: f32 = 8.65;
+const BUILTIN_HEIGHT: f32 = 17.0;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WhiteSpaceMode {
+    Normal,
+    PreWrap,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WordBreakMode {
+    Normal,
+    KeepAll,
+}
+
+struct FontMeasureMetrics<'a> {
+    atlas: Option<&'a atlas::AtlasRecord>,
+    space_advance: f32,
+    fallback_advance: f32,
+    line_height: f32,
+    scale: f32,
+}
+
+fn resolve_font_metrics<'a>(atlases: Option<&'a AtlasRegistry>, font_id: u32, font_size: f32, line_height: f32) -> FontMeasureMetrics<'a> {
+    if font_id == 0 {
+        return FontMeasureMetrics {
+            atlas: None,
+            space_advance: BUILTIN_ADVANCE,
+            fallback_advance: BUILTIN_ADVANCE,
+            line_height: line_height.max(BUILTIN_HEIGHT),
+            scale: 1.0,
+        };
+    }
+
+    if let Some(atlas) = atlases.and_then(|registry| registry.get(font_id)) {
+        let scale = if atlas.ref_size > 0.0 { font_size / atlas.ref_size } else { 1.0 };
+        let space_advance = atlas
+            .glyphs
+            .get(&' ')
+            .map(|glyph| glyph.x_advance as f32 * scale)
+            .unwrap_or(atlas.cell_width as f32 * scale * 0.5);
+        let glyph_height = atlas.cell_height as f32 * scale;
+        return FontMeasureMetrics {
+            atlas: Some(atlas),
+            space_advance,
+            fallback_advance: space_advance,
+            line_height: line_height.max(glyph_height),
+            scale,
+        };
+    }
+
+    let fallback_advance = if font_size > 0.0 { font_size * 0.6 } else { BUILTIN_ADVANCE };
+    let fallback_height = if font_size > 0.0 { font_size * 1.2 } else { BUILTIN_HEIGHT };
+    FontMeasureMetrics {
+        atlas: None,
+        space_advance: fallback_advance,
+        fallback_advance,
+        line_height: line_height.max(fallback_height),
+        scale: 1.0,
+    }
+}
+
+fn measure_char(metrics: &FontMeasureMetrics<'_>, ch: char) -> f32 {
+    if ch == '\t' {
+        return metrics.space_advance * 4.0;
+    }
+    if ch.is_whitespace() {
+        return metrics.space_advance;
+    }
+    if let Some(atlas) = metrics.atlas {
+        if let Some(glyph) = atlas.glyphs.get(&ch) {
+            return glyph.x_advance as f32 * metrics.scale;
+        }
+    }
+    metrics.fallback_advance
+}
+
+fn measure_string(metrics: &FontMeasureMetrics<'_>, text: &str) -> f32 {
+    text.chars().map(|ch| measure_char(metrics, ch)).sum()
+}
+
+fn measure_unwrapped_lines(text: &str, metrics: &FontMeasureMetrics<'_>, white_space: WhiteSpaceMode) -> (f32, f32) {
+    let mut max_width: f32 = 0.0;
+    let mut line_count = 0u32;
+
+    for raw_line in text.split('\n') {
+        let line = match white_space {
+            WhiteSpaceMode::Normal => raw_line.split_whitespace().collect::<Vec<_>>().join(" "),
+            WhiteSpaceMode::PreWrap => raw_line.to_string(),
+        };
+        max_width = max_width.max(measure_string(metrics, &line));
+        line_count += 1;
+    }
+
+    if line_count == 0 {
+        return (0.0, 0.0);
+    }
+
+    (max_width, line_count as f32 * metrics.line_height)
+}
+
+fn wrap_long_word(word: &str, max_width: f32, metrics: &FontMeasureMetrics<'_>, current_width: &mut f32, max_line_width: &mut f32, line_count: &mut u32) {
+    for ch in word.chars() {
+        let width = measure_char(metrics, ch);
+        if *current_width > 0.0 && *current_width + width > max_width {
+            *max_line_width = max_line_width.max(*current_width);
+            *line_count += 1;
+            *current_width = 0.0;
+        }
+        *current_width += width;
+    }
+}
+
+fn measure_wrapped_normal(text: &str, max_width: f32, metrics: &FontMeasureMetrics<'_>, word_break: WordBreakMode) -> (f32, f32) {
+    let mut max_line_width: f32 = 0.0;
+    let mut line_count = 0u32;
+
+    for raw_line in text.split('\n') {
+        let words: Vec<&str> = raw_line.split_whitespace().collect();
+        let mut current_width: f32 = 0.0;
+
+        if words.is_empty() {
+            line_count += 1;
+            continue;
+        }
+
+        for word in words {
+            let word_width = measure_string(metrics, word);
+            if current_width == 0.0 {
+                if word_width > max_width && matches!(word_break, WordBreakMode::Normal) {
+                    wrap_long_word(word, max_width, metrics, &mut current_width, &mut max_line_width, &mut line_count);
+                } else {
+                    current_width = word_width;
+                }
+                continue;
+            }
+
+            let proposed = current_width + metrics.space_advance + word_width;
+            if proposed <= max_width {
+                current_width = proposed;
+                continue;
+            }
+
+            max_line_width = max_line_width.max(current_width);
+            line_count += 1;
+            current_width = 0.0;
+
+            if word_width > max_width && matches!(word_break, WordBreakMode::Normal) {
+                wrap_long_word(word, max_width, metrics, &mut current_width, &mut max_line_width, &mut line_count);
+            } else {
+                current_width = word_width;
+            }
+        }
+
+        max_line_width = max_line_width.max(current_width);
+        line_count += 1;
+    }
+
+    (max_line_width, line_count as f32 * metrics.line_height)
+}
+
+fn measure_wrapped_pre_wrap(text: &str, max_width: f32, metrics: &FontMeasureMetrics<'_>, word_break: WordBreakMode) -> (f32, f32) {
+    let mut max_line_width: f32 = 0.0;
+    let mut current_width: f32 = 0.0;
+    let mut line_count = 1u32;
+    let mut last_break_width = 0.0f32;
+
+    for ch in text.chars() {
+        if ch == '\n' {
+            max_line_width = max_line_width.max(current_width);
+            line_count += 1;
+            current_width = 0.0;
+            last_break_width = 0.0;
+            continue;
+        }
+
+        let width = measure_char(metrics, ch);
+        if current_width == 0.0 || current_width + width <= max_width {
+            current_width += width;
+            if ch.is_whitespace() {
+                last_break_width = current_width;
+            }
+            continue;
+        }
+
+        if ch.is_whitespace() {
+            max_line_width = max_line_width.max(current_width);
+            line_count += 1;
+            current_width = 0.0;
+            last_break_width = 0.0;
+            continue;
+        }
+
+        if last_break_width > 0.0 {
+            max_line_width = max_line_width.max(last_break_width);
+            line_count += 1;
+            current_width = (current_width - last_break_width) + width;
+            last_break_width = 0.0;
+            continue;
+        }
+
+        max_line_width = max_line_width.max(current_width);
+        line_count += 1;
+        current_width = width;
+
+        if matches!(word_break, WordBreakMode::KeepAll) {
+            last_break_width = 0.0;
+        }
+    }
+
+    max_line_width = max_line_width.max(current_width);
+    (max_line_width, line_count as f32 * metrics.line_height)
+}
+
+pub(crate) fn measure_text_layout(
+    text: &str,
+    font_id: u32,
+    font_size: f32,
+    line_height: f32,
+    max_width: Option<f32>,
+    white_space: WhiteSpaceMode,
+    word_break: WordBreakMode,
+    atlases: Option<&AtlasRegistry>,
+) -> (f32, f32) {
+    if text.is_empty() {
+        return (0.0, 0.0);
+    }
+
+    let metrics = resolve_font_metrics(atlases, font_id, font_size, line_height);
+    let Some(limit) = max_width.filter(|width| width.is_finite() && *width > 0.0) else {
+        return measure_unwrapped_lines(text, &metrics, white_space);
+    };
+
+    match white_space {
+        WhiteSpaceMode::Normal => measure_wrapped_normal(text, limit, &metrics, word_break),
+        WhiteSpaceMode::PreWrap => measure_wrapped_pre_wrap(text, limit, &metrics, word_break),
+    }
+}
 
 /// Load a pre-generated MSDF atlas PNG + metrics JSON into the GPU.
 ///
@@ -272,47 +512,19 @@ pub unsafe fn measure(
         }
     };
 
-    // If no atlas loaded for this font_id, return zero dimensions (graceful degradation).
-    let Some(atlas) = pctx.atlases.get(font_id) else {
-        *out_w = 0.0;
-        *out_h = 0.0;
-        return OK;
-    };
+    let (width, height) = measure_text_layout(
+        text,
+        font_id,
+        font_size,
+        font_size.max(BUILTIN_HEIGHT),
+        None,
+        WhiteSpaceMode::Normal,
+        WordBreakMode::Normal,
+        Some(&pctx.atlases),
+    );
 
-    // Derive scale from font_size vs atlas ref_size.
-    // We store ref_size implicitly: atlas cell height serves as the reference unit.
-    // If the atlas has a uniform cell height (from internal-atlas-gen), we use it.
-    // Fallback: assume ref_size = atlas.height / 16 rows = atlas.height * (CELL_H / ATLAS_H).
-    // For simplicity in Phase 2b, we use a ref_size derived from the cell height in the
-    // metrics JSON. Since we don't store ref_size in AtlasRecord directly, we estimate it
-    // as the common cell_h. A future phase can store it explicitly in the record.
-    //
-    // NOTE: The text system accumulates horizontal advance values scaled by font_size/ref_size.
-    // For Phase 2b correctness, we use a 1:1 scale approach: the atlas cell height *is* the
-    // reference size, and scaling is linear.
-    let ref_size = atlas.height as f32 / 16.0; // crude estimate: 16 glyph rows in a 1024px atlas
-    let scale = font_size / ref_size;
-
-    let mut total_w = 0.0f32;
-    let mut max_h = 0.0f32;
-
-    for ch in text.chars() {
-        if let Some(gm) = atlas.glyphs.get(&ch) {
-            total_w += gm.x_advance as f32 * scale;
-            let cell_h = gm.atlas_h as f32 * scale;
-            if cell_h > max_h {
-                max_h = cell_h;
-            }
-        } else {
-            // Unknown glyph: use a space-width estimate.
-            if let Some(space_gm) = atlas.glyphs.get(&' ') {
-                total_w += space_gm.x_advance as f32 * scale;
-            }
-        }
-    }
-
-    *out_w = total_w;
-    *out_h = if max_h > 0.0 { max_h } else { font_size };
+    *out_w = width;
+    *out_h = height;
 
     OK
 }
@@ -342,5 +554,53 @@ mod tests {
     #[test]
     fn test_err_invalid_font_value() {
         assert_eq!(ERR_INVALID_FONT, -8);
+    }
+
+    #[test]
+    fn test_measure_text_layout_builtin_single_line() {
+        let (width, height) = measure_text_layout(
+            "Hello",
+            0,
+            14.0,
+            17.0,
+            None,
+            WhiteSpaceMode::Normal,
+            WordBreakMode::Normal,
+            None,
+        );
+        assert!((width - (5.0 * BUILTIN_ADVANCE)).abs() < 0.01);
+        assert_eq!(height, 17.0);
+    }
+
+    #[test]
+    fn test_measure_text_layout_wraps_words() {
+        let (width, height) = measure_text_layout(
+            "hello world again",
+            0,
+            14.0,
+            17.0,
+            Some(50.0),
+            WhiteSpaceMode::Normal,
+            WordBreakMode::Normal,
+            None,
+        );
+        assert!(width <= 50.0);
+        assert!(height > 17.0);
+    }
+
+    #[test]
+    fn test_measure_text_layout_respects_newlines() {
+        let (width, height) = measure_text_layout(
+            "hello\nworld",
+            0,
+            14.0,
+            17.0,
+            None,
+            WhiteSpaceMode::Normal,
+            WordBreakMode::Normal,
+            None,
+        );
+        assert!((width - (5.0 * BUILTIN_ADVANCE)).abs() < 0.01);
+        assert_eq!(height, 34.0);
     }
 }

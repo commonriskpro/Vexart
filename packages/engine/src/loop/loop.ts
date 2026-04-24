@@ -143,8 +143,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     disableNativePresentation("nativePresentation disabled by render loop option")
   } else if (isNativePresentationForcedOff()) {
     disableNativePresentation(nativePresentationForcedOffReason() ?? "native presentation forced off")
+  } else if (term.caps.transmissionMode === "shm") {
+    enableNativePresentation("terminal probe selected SHM transport")
   } else {
-    enableNativePresentation(`terminal probe selected ${term.caps.transmissionMode} transport`)
+    disableNativePresentation(`native presentation requires SHM transport, got ${term.caps.transmissionMode}`)
   }
 
   const nativeLayerRegistryRequested = opts?.experimental?.nativeLayerRegistry !== false
@@ -152,10 +154,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     disableNativeLayerRegistry("nativeLayerRegistry disabled by render loop option")
   } else if (isNativeLayerRegistryForcedOff()) {
     disableNativeLayerRegistry(nativeLayerRegistryForcedOffReason() ?? "nativeLayerRegistry forced off")
-  } else if (nativePresentationRequested) {
+  } else if (nativePresentationRequested && term.caps.transmissionMode === "shm") {
     enableNativeLayerRegistry()
   } else {
-    disableNativeLayerRegistry("nativeLayerRegistry requires native presentation")
+    disableNativeLayerRegistry("nativeLayerRegistry requires native presentation with SHM transport")
   }
 
   const retainedDefaultRequested = isNativePresentationEnabled()
@@ -163,7 +165,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   if (!nativeSceneGraphRequested) {
     const reason = opts?.experimental?.nativeSceneGraph === false
       ? "nativeSceneGraph disabled by render loop option"
-        : "nativeSceneGraph default requires native presentation"
+        : "nativeSceneGraph default requires native presentation with SHM transport"
     disableNativeSceneGraph(reason)
   }
   else enableNativeSceneGraph()
@@ -172,7 +174,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   if (!nativeEventDispatchRequested) {
     const reason = opts?.experimental?.nativeEventDispatch === false
       ? "nativeEventDispatch disabled by render loop option"
-        : "nativeEventDispatch default requires native presentation"
+        : "nativeEventDispatch default requires native presentation with SHM transport"
     disableNativeEventDispatch(reason)
   }
   else enableNativeEventDispatch()
@@ -181,7 +183,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   if (!nativeSceneLayoutRequested) {
     const reason = opts?.experimental?.nativeSceneLayout === false
       ? "nativeSceneLayout disabled by render loop option"
-        : "nativeSceneLayout default requires native presentation"
+        : "nativeSceneLayout default requires native presentation with SHM transport"
     disableNativeSceneLayout(reason)
   }
   else enableNativeSceneLayout()
@@ -190,7 +192,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   if (!nativeRenderGraphRequested) {
     const reason = opts?.experimental?.nativeRenderGraph === false
       ? "nativeRenderGraph disabled by render loop option"
-        : "nativeRenderGraph default requires native presentation"
+        : "nativeRenderGraph default requires native presentation with SHM transport"
     disableNativeRenderGraph(reason)
   }
   else enableNativeRenderGraph()

@@ -29,7 +29,7 @@ bun run example
 
 ## Runtime behavior
 
-- retained/native is the default on Kitty-compatible transports
+- retained/native is the default on SHM-capable Kitty terminals
 - `VEXART_RETAINED=0` forces the emergency compatibility path
 
 The deeper handwritten guide still lives in [`docs/getting-started.md`](../../../docs/getting-started.md).

@@ -1481,7 +1481,7 @@ This section documents deviations between the current v0.1 codebase and the targ
 | `starfield` / `nebula` Zig primitives | Moved to `examples/` or deleted | Phase 2 |
 | Runtime font atlases limited to 15 ids | Unlimited (governed by `ResourceManager` budget) | Phase 2b |
 | TS owns layer GPU target handles and terminal image IDs | Rust `LayerRegistry` owns target/image lifecycle and resource accounting | Retained R2 |
-| TS `TGENode` tree is the only retained scene state | Rust-retained scene graph is the default runtime on Kitty-compatible transports (`direct`, `file`, `shm`); fallback remains available via `VEXART_RETAINED=0` during the compatibility window | Retained R3-R7 |
+| TS `TGENode` tree is the only retained scene state | Rust-retained scene graph is the default runtime on SHM-capable terminals; fallback remains available via `VEXART_RETAINED=0` during the compatibility window | Retained R3-R7 |
 | TS computes layout, damage, hit-testing, and event target traversal | Rust computes layout/damage/hit-test and returns event records to JS | Retained R4 |
 | TS generates ordinary render graph / paint command batches | Rust generates and batches render ops from native scene data | Retained R5 |
 | TS chooses frame strategy and coordinates presentation lifecycle | Rust frame orchestrator chooses `skip-present`, `layered-dirty`, `layered-region`, or `final-frame` | Retained R6 |

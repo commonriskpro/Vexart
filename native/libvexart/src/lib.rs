@@ -320,10 +320,12 @@ pub unsafe extern "C" fn vexart_scene_layout_compute(
             std::slice::from_raw_parts_mut(out_ptr, out_cap as usize)
         };
         let mut used = 0u32;
+        let paint_guard = get_or_init_paint();
+        let atlases = paint_guard.as_ref().map(|paint| &paint.atlases);
         let code = {
             let mut guard = get_or_init_layout();
             let lctx = guard.0.as_mut().unwrap();
-            lctx.compute_scene(graph, out, &mut used)
+            lctx.compute_scene(graph, atlases, out, &mut used)
         };
         *out_used = used;
         code
@@ -685,9 +687,11 @@ pub unsafe extern "C" fn vexart_layout_measure(
         };
         // DEC-011: measure returns (0.0, 0.0) per Phase 2 text stub.
         // Routed through SHARED_LAYOUT singleton for consistency.
+        let paint_guard = get_or_init_paint();
+        let atlases = paint_guard.as_ref().map(|paint| &paint.atlases);
         let guard = get_or_init_layout();
         let lctx = guard.0.as_ref().unwrap();
-        lctx.measure(text, font_id, font_size, &mut *out_w, &mut *out_h)
+        lctx.measure(text, font_id, font_size, atlases, &mut *out_w, &mut *out_h)
     })
 }
 

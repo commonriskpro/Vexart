@@ -268,27 +268,22 @@ const BUILTIN_HEIGHT = 17
 /**
  * Measure text for Taffy/vexart layout.
  *
- * Phase 2 (DEC-011): vexart_layout_measure is a stub that returns (0, 0).
- * Text nodes occupy zero layout space in Phase 2. This is expected behavior
- * per design §10 "Clay text measure callback" row:
- *   "In Phase 2, text measure callback always returns (0, 0) per DEC-011 —
- *    text nodes contribute zero to sibling sizing."
- *
- * Phase 2b will implement MSDF-based measurement via vexart_text_measure.
+ * Retained/native layout now performs real text measurement on the Rust side.
+ * The compat walk-tree path still uses `measureForClay()` directly because it
+ * pre-computes text box dimensions before emitting layout commands.
  */
 export function measureForVexart(
   _text: string,
   _fontId: number,
   _fontSize: number,
 ): { width: number; height: number } {
-  // DEC-011: Phase 2 text stub — returns zero dimensions.
-  return { width: 0, height: 0 }
+  return measureForClay(_text, _fontId, _fontSize)
 }
 
 /**
  * Measure text width for Clay layout.
- * Phase 2: this function is kept for backward compat. The vexart path
- * uses measureForVexart() which returns (0, 0) per DEC-011.
+ * Phase 2+ compat path: this function remains the authoritative TS-side text
+ * measurement helper for the decomposed layout shell and offscreen fallbacks.
  * Font 0: uses exact atlas metrics (8.65px/char) to match Zig renderer.
  * Other fonts: uses Pretext/canvas for accurate measurement.
  */

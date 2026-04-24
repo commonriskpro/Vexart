@@ -10,7 +10,7 @@
  *   TGE_RENDERER_BACKEND=gpu bun --conditions=browser run examples/backdrop-transform-test.tsx
  */
 
-import { mount, onInput } from "@vexart/engine"
+import { mount, onInput, useTerminalDimensions } from "@vexart/engine"
 import { createTerminal } from "@vexart/engine"
 import { font, radius, space } from "@vexart/styled"
 
@@ -49,9 +49,11 @@ function BackdropTransformCard(props: {
   )
 }
 
-function App() {
+function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
+  const dims = useTerminalDimensions(props.terminal)
+
   return (
-    <box width="grow" height="grow" backgroundColor={0x0a0a0aff} padding={space[5]} gap={space[5]}>
+    <box width={dims.width()} height={dims.height()} backgroundColor={0x0a0a0aff} padding={space[5]} gap={space[5]}>
       <box gap={space[2]}>
         <text color={0xffffffff} fontSize={20} fontWeight={700}>Backdrop + Transform Test</text>
         <text color={0xa3a3a3ff} fontSize={font.sm}>E3-20 — validate correctness and classify whether this path is supported or explicit fallback. Press q or Ctrl+C to exit.</text>
@@ -104,7 +106,12 @@ function App() {
 
 async function main() {
   const term = await createTerminal()
-  const cleanup = mount(() => <App />, term)
+  const cleanup = mount(() => <App terminal={term} />, term, {
+    experimental: {
+      nativeSceneLayout: false,
+      nativeRenderGraph: false,
+    },
+  })
   const exitAfterMs = Number(process.env.TGE_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
 
   const shutdown = () => {

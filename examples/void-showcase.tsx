@@ -441,7 +441,12 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
 
 async function main() {
   const term = await createTerminal()
-  const cleanup = mount(() => <App terminal={term} />, term)
+  const cleanup = mount(() => <App terminal={term} />, term, {
+    experimental: {
+      nativeSceneLayout: false,
+      nativeRenderGraph: false,
+    },
+  })
   const exitAfterMs = Number(process.env.TGE_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
 
   const shutdown = () => {

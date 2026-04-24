@@ -1151,7 +1151,7 @@ Every architectural or product decision is logged here with date, context, and r
 - `docs/ARCHITECTURE.md` describes the post-cutover retained architecture, not the temporary hybrid state.
 - OpenSpec changes for retained phases are mandatory before implementation.
 - Normal terminal presentation must keep raw RGBA out of JS. JS readback remains explicit-only for tests, screenshots, debug, or offscreen APIs.
-- The retained runtime now defaults on for Kitty-compatible transports (`direct`, `file`, and `shm`); `VEXART_RETAINED=0` preserves the emergency compatibility-window fallback, and narrower per-feature flags remain available for debugging.
+- The retained runtime now defaults on for SHM-capable terminals; `VEXART_RETAINED=0` preserves the emergency compatibility-window fallback, and narrower per-feature flags remain available for debugging.
 - Existing loop decomposition remains valuable as a compatibility/fallback shell, but not as permanent rendering ownership.
 
 **Non-reversal clause**: Reversal requires profiling evidence that the retained Rust path cannot meet or exceed the hybrid path after obvious fixes, plus founder approval recorded as a new decision.

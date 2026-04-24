@@ -62,8 +62,8 @@ export function isNativePresentationForcedOff(): boolean {
 /**
  * Enable native presentation mode programmatically.
  *
- * Call from the render loop setup after terminal capability probing confirms a
- * Kitty graphics transport is available. Does nothing if the env override is "0".
+ * Call from the render loop setup after terminal capability probing confirms
+ * SHM transport is available. Does nothing if the env override is "0".
  *
  * @param reason Optional description for debug logging.
  */
@@ -108,10 +108,12 @@ export function nativePresentationForcedOffReason(): string | null {
 
 /**
  * Check if native presentation can use the current Kitty transport.
+ *
+ * Phase 2b/3f default cutover only treats SHM as native-presentation capable.
  */
 export function isNativePresentationCapable(transmissionMode: "direct" | "file" | "shm"): boolean {
   if (!_nativePresentationEnabled) return false
-   return transmissionMode === "direct" || transmissionMode === "file" || transmissionMode === "shm"
+  return transmissionMode === "shm"
 }
 
 // ── Debug logging ─────────────────────────────────────────────────────────

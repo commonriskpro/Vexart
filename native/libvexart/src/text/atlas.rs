@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use crate::text::glyph_info::{parse_metrics, GlyphTable};
+use crate::text::glyph_info::{parse_metrics_bundle, GlyphTable};
 
 /// One loaded MSDF (or SDF/bitmap) atlas on the GPU.
 pub struct AtlasRecord {
@@ -16,6 +16,12 @@ pub struct AtlasRecord {
     pub bind_group: wgpu::BindGroup,
     /// Glyph metrics table: char → GlyphMetrics.
     pub glyphs: GlyphTable,
+    /// Reference size used when the atlas was generated.
+    pub ref_size: f32,
+    /// Cell width in atlas pixels.
+    pub cell_width: u32,
+    /// Cell height in atlas pixels.
+    pub cell_height: u32,
     /// Atlas pixel width.
     pub width: u32,
     /// Atlas pixel height.
@@ -68,7 +74,7 @@ impl AtlasRegistry {
         }
 
         // Parse metrics first — fail fast before touching GPU.
-        let glyphs = parse_metrics(metrics_json)?;
+        let parsed = parse_metrics_bundle(metrics_json)?;
 
         // Decode PNG to raw RGBA bytes.
         let (rgba_pixels, width, height) = decode_png(png_bytes)?;
@@ -145,7 +151,10 @@ impl AtlasRegistry {
                 texture,
                 view,
                 bind_group,
-                glyphs,
+                glyphs: parsed.glyphs,
+                ref_size: parsed.ref_size,
+                cell_width: parsed.cell_width,
+                cell_height: parsed.cell_height,
                 width,
                 height,
             },

@@ -28,6 +28,41 @@ pub struct GlyphMetrics {
 /// Lookup table: char → GlyphMetrics.
 pub type GlyphTable = HashMap<char, GlyphMetrics>;
 
+#[derive(Debug, Clone)]
+pub struct ParsedMetrics {
+    pub glyphs: GlyphTable,
+    pub ref_size: f32,
+    pub cell_width: u32,
+    pub cell_height: u32,
+}
+
+pub fn parse_metrics_bundle(json: &str) -> Result<ParsedMetrics, String> {
+    let root: serde_json::Value =
+        serde_json::from_str(json).map_err(|e| format!("metrics JSON parse error: {e}"))?;
+
+    let ref_size = root
+        .get("refSize")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(48.0) as f32;
+    let cell_width = root
+        .get("cellWidth")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(64) as u32;
+    let cell_height = root
+        .get("cellHeight")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(64) as u32;
+
+    let glyphs = parse_metrics(json)?;
+
+    Ok(ParsedMetrics {
+        glyphs,
+        ref_size,
+        cell_width,
+        cell_height,
+    })
+}
+
 /// Parse the metrics JSON produced by `@vexart/internal-atlas-gen`.
 ///
 /// Expected shape:

@@ -20,16 +20,17 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, onInput } from "@vexart/engine"
+import { mount, onInput, useTerminalDimensions } from "@vexart/engine"
 import { Box, Text } from "@vexart/primitives"
 import { Textarea, Button } from "@vexart/headless"
 import type { TextareaHandle } from "@vexart/headless"
 import { createTerminal } from "@vexart/engine"
 
-function App() {
+function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   const [code, setCode] = createSignal("Hello TGE!\nThis is a multiline textarea.\n\nTry typing, arrows, Home/End, PgUp/PgDown.\nShift+arrows to select.\nCtrl+Enter to submit.")
   const [status, setStatus] = createSignal("Ready — Tab to focus, type to edit")
   let textareaRef: TextareaHandle | undefined
+  const dims = useTerminalDimensions(props.terminal)
 
   onInput((event) => {
     if (event.type !== "key") return
@@ -37,7 +38,7 @@ function App() {
   })
 
   return (
-    <box direction="column" width="100%" height="100%" backgroundColor="#0a0a14" padding={20} gap={12}>
+    <box direction="column" width={dims.width()} height={dims.height()} backgroundColor="#0a0a14" padding={20} gap={12}>
       {/* Header */}
       <box direction="column" gap={4}>
         <text color="#e0e0e0" fontSize={14}>Textarea Demo (demo14)</text>
@@ -117,7 +118,12 @@ function App() {
 // ── Main ──
 
 const terminal = await createTerminal()
-const handle = mount(() => <App />, terminal)
+const handle = mount(() => <App terminal={terminal} />, terminal, {
+  experimental: {
+    nativeSceneLayout: false,
+    nativeRenderGraph: false,
+  },
+})
 
 process.on("SIGINT", () => {
   handle.destroy()

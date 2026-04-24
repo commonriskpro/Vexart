@@ -15,7 +15,7 @@
  *   q or Ctrl+C
  */
 
-import { mount, onInput } from "@vexart/engine"
+import { mount, onInput, useTerminalDimensions } from "@vexart/engine"
 import { createTerminal } from "@vexart/engine"
 import { font, radius, space, themeColors, weight } from "@vexart/styled"
 
@@ -33,9 +33,11 @@ function SectionBox(props: { title: string; children: unknown }) {
   )
 }
 
-export function App() {
+export function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
+  const dims = useTerminalDimensions(props.terminal)
+
   return (
-    <box width="grow" height="grow" backgroundColor={themeColors.background} padding={space[4]}>
+    <box width={dims.width()} height={dims.height()} backgroundColor={themeColors.background} padding={space[4]}>
       <box direction="column" gap={space[4]} width="grow" scrollY>
         <box direction="column" gap={space[1]}>
           <text color={themeColors.foreground} fontSize={20} fontWeight={700}>Showcase — Tab 2 Visual Check</text>
@@ -155,7 +157,12 @@ export function App() {
 
 async function main() {
   const term = await createTerminal()
-  const app = mount(() => <App />, term)
+  const app = mount(() => <App terminal={term} />, term, {
+    experimental: {
+      nativeSceneLayout: false,
+      nativeRenderGraph: false,
+    },
+  })
   const exitAfterMs = Number(process.env.TGE_EXIT_AFTER_MS ?? 0)
 
   const shutdown = () => {

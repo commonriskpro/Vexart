@@ -169,7 +169,7 @@ afterEach(() => {
 
 describe("native scene layout parity", () => {
   test("matches compat layout for core row/column gap padding fixture", () => {
-    assertParity(parityFixture(), ["root", "header", "row", "left", "right"])
+    assertParity(parityFixture(), ["root", "header", "row", "left", "right", "footer"])
   })
 
   test("matches compat layout for percent grow and constraint fixture", () => {

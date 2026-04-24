@@ -16,7 +16,7 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, onInput, SyntaxStyle, ONE_DARK, KANAGAWA } from "@vexart/engine"
+import { mount, onInput, SyntaxStyle, ONE_DARK, KANAGAWA, useTerminalDimensions } from "@vexart/engine"
 import { Box, Text } from "@vexart/primitives"
 import { Code } from "@vexart/headless"
 import { createTerminal } from "@vexart/engine"
@@ -49,9 +49,10 @@ app.listen(3000, () => {
   console.log("Server running on port 3000")
 })`
 
-function App() {
+function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   const [theme, setTheme] = createSignal<"onedark" | "kanagawa">("kanagawa")
   const style = () => SyntaxStyle.fromTheme(theme() === "onedark" ? ONE_DARK : KANAGAWA)
+  const dims = useTerminalDimensions(props.terminal)
 
   onInput((event) => {
     if (event.type !== "key") return
@@ -62,7 +63,7 @@ function App() {
   })
 
   return (
-    <box direction="column" width="100%" height="100%" backgroundColor="#0a0a14" padding={20} gap={12}>
+    <box direction="column" width={dims.width()} height={dims.height()} backgroundColor="#0a0a14" padding={20} gap={12}>
       <box direction="row" gap={20}>
         <text color="#e0e0e0" fontSize={14}>Syntax Highlighting Demo (demo15)</text>
         <text color="#888888" fontSize={14}>Theme: {theme()} — press T to toggle</text>
@@ -100,7 +101,12 @@ function App() {
 }
 
 const terminal = await createTerminal()
-const handle = mount(() => <App />, terminal)
+const handle = mount(() => <App terminal={terminal} />, terminal, {
+  experimental: {
+    nativeSceneLayout: false,
+    nativeRenderGraph: false,
+  },
+})
 
 process.on("SIGINT", () => {
   handle.destroy()

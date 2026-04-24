@@ -2,7 +2,7 @@ import { createSignal, For } from "solid-js"
 import { createEffect } from "solid-js"
 import { createTerminal } from "@vexart/engine"
 import { createParser } from "@vexart/engine"
-import { mount, useDrag, markDirty, debugState, setDebug, type NodeMouseEvent } from "@vexart/engine"
+import { mount, useDrag, markDirty, debugState, setDebug, type NodeMouseEvent, useTerminalDimensions } from "@vexart/engine"
 import { appendFileSync } from "node:fs"
 
 const LOG = "/tmp/interaction-latency.log"
@@ -28,11 +28,12 @@ function useDraggable(initialX: number, initialY: number) {
   return { x, y, dragProps }
 }
 
-function App() {
+function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   const drag = useDraggable(40, 40)
   const [selected, setSelected] = createSignal("focus-a")
   const [textValue, setTextValue] = createSignal("")
   const rows = Array.from({ length: 40 }, (_, i) => `Scroll row ${i + 1}`)
+  const dims = useTerminalDimensions(props.terminal)
 
   const handleTyping = (event: any) => {
     if (event.key === "backspace") {
@@ -54,7 +55,7 @@ function App() {
   })
 
   return (
-    <box width="100%" height="100%" backgroundColor={0x050507ff} padding={16} gap={16}>
+    <box width={dims.width()} height={dims.height()} backgroundColor={0x050507ff} padding={16} gap={16}>
       <text color={0xf3ede2ff} fontSize={16}>Interaction Latency Lab</text>
       <text color={0xc6bcaeff} fontSize={12}>Drag, scroll, focus and type. Metrics are written to /tmp/interaction-latency.log.</text>
       <box direction="row" gap={16} height="grow">
@@ -100,11 +101,13 @@ async function main() {
   const term = await createTerminal()
   setDebug(true)
   appendFileSync(LOG, `[main] terminal kitty=${term.caps.kittyGraphics} mode=${term.caps.transmissionMode}\n`)
-  const cleanup = mount(() => <App />, term, {
+  const cleanup = mount(() => <App terminal={term} />, term, {
     maxFps: 60,
     experimental: {
       idleMaxFps: 60,
       forceLayerRepaint: false,
+      nativeSceneLayout: false,
+      nativeRenderGraph: false,
     },
   })
 

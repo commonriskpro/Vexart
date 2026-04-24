@@ -16,7 +16,7 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, onInput } from "@vexart/engine"
+import { mount, onInput, useTerminalDimensions } from "@vexart/engine"
 import { Box, Text } from "@vexart/primitives"
 import { ScrollView } from "@vexart/headless"
 import { createTerminal } from "@vexart/engine"
@@ -58,8 +58,9 @@ function ItemRow(props: { label: string; color: string; index: number }) {
 
 // ── App ──
 
-function App() {
+function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   const [precise, setPrecise] = createSignal(true)
+  const dims = useTerminalDimensions(props.terminal)
 
   onInput((event) => {
     if (event.type === "key" && event.key === "tab") {
@@ -69,8 +70,8 @@ function App() {
 
   return (
     <Box
-      width="100%"
-      height="100%"
+      width={dims.width()}
+      height={dims.height()}
       backgroundColor={colors.background}
       direction="column"
       alignX="center"
@@ -116,7 +117,12 @@ function App() {
 
 async function main() {
   const term = await createTerminal()
-  const cleanup = mount(() => <App />, term)
+  const cleanup = mount(() => <App terminal={term} />, term, {
+    experimental: {
+      nativeSceneLayout: false,
+      nativeRenderGraph: false,
+    },
+  })
 
   onInput((event) => {
     if (event.type === "key") {

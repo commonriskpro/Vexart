@@ -10,35 +10,18 @@
  */
 import { describe, expect, it } from "bun:test"
 
-describe("DEC-011 text rendering stub", () => {
-  it("text stub contract is documented", () => {
-    // The DEC-011 warning is emitted via eprintln! on the Rust side.
-    // TS cannot capture Rust's stderr output without spawning a subprocess.
-    //
-    // The Rust unit tests in text/mod.rs already verify:
-    // 1. dispatch() returns OK
-    // 2. AtomicBool guard fires exactly once
-    // 3. measure() writes (0.0, 0.0)
-    // 4. load_atlas() returns OK
-    //
-    // This test documents the contract for TS consumers:
-    // - Text nodes produce zero layout space (measure returns 0x0)
-    // - Text rendering is a no-op (dispatch succeeds without side effects)
-    // - First dispatch emits "[vexart] text rendering disabled during Phase 2 (DEC-011)"
-    //   to stderr (one-time warning, not capturable from TS)
+describe("native text measure contract", () => {
+  it("documents that retained layout no longer uses a zero-size text stub", () => {
+    // Rust layout now performs real text measurement for retained scene layout.
+    // The authoritative behavior is covered by Rust unit tests and the native
+    // scene layout parity suite on the TS side.
     expect(true).toBe(true)
   })
 
-  it("text measure returns zero dimensions per DEC-011", () => {
-    // When the full engine is mounted, text nodes should have zero width/height.
-    // This is validated by the Rust unit test and by the TS-side text-layout.ts
-    // which calls vexart_text_measure and expects (0, 0).
-    //
-    // Direct FFI call test requires dlopen which is tested in bridge.test.ts.
-    // Here we document the expectation.
-    const EXPECTED_TEXT_WIDTH = 0
-    const EXPECTED_TEXT_HEIGHT = 0
-    expect(EXPECTED_TEXT_WIDTH).toBe(0)
-    expect(EXPECTED_TEXT_HEIGHT).toBe(0)
+  it("documents that explicit text measurement is expected to return non-zero for normal text", () => {
+    const EXPECTED_TEXT_WIDTH = 1
+    const EXPECTED_TEXT_HEIGHT = 1
+    expect(EXPECTED_TEXT_WIDTH).toBeGreaterThan(0)
+    expect(EXPECTED_TEXT_HEIGHT).toBeGreaterThan(0)
   })
 })

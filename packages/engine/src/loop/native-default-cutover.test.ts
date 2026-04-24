@@ -59,7 +59,7 @@ afterEach(() => {
 })
 
 describe("Phase 3f native default cutover", () => {
-  test("defaults to retained stack on kitty transports", () => {
+  test("defaults to retained stack on SHM terminals", () => {
     const loop = createRenderLoop(createMockTerminal("shm"))
 
     expect(isNativeSceneGraphEnabled()).toBe(true)
@@ -117,21 +117,21 @@ describe("Phase 3f native default cutover", () => {
     loop.destroy()
   })
 
-  test("direct kitty transport also keeps the retained stack enabled", () => {
+  test("non-SHM terminals fall back the retained default safely", () => {
     const loop = createRenderLoop(createMockTerminal("direct"))
 
-    expect(isNativeSceneGraphEnabled()).toBe(true)
-    expect(getNativeSceneGraphFallbackReason()).toBe(null)
-    expect(isNativeEventDispatchEnabled()).toBe(true)
-    expect(getNativeEventDispatchFallbackReason()).toBe(null)
-    expect(isNativeSceneLayoutEnabled()).toBe(true)
-    expect(getNativeSceneLayoutFallbackReason()).toBe(null)
-    expect(isNativeRenderGraphEnabled()).toBe(true)
-    expect(getNativeRenderGraphFallbackReason()).toBe(null)
-    expect(isNativePresentationEnabled()).toBe(true)
-    expect(getNativePresentationFallbackReason()).toBe(null)
-    expect(isNativeLayerRegistryEnabled()).toBe(true)
-    expect(nativeLayerRegistryFallbackReason()).toBe(null)
+    expect(isNativeSceneGraphEnabled()).toBe(false)
+    expect(getNativeSceneGraphFallbackReason()).toBe("nativeSceneGraph default requires native presentation with SHM transport")
+    expect(isNativeEventDispatchEnabled()).toBe(false)
+    expect(getNativeEventDispatchFallbackReason()).toBe("nativeEventDispatch default requires native presentation with SHM transport")
+    expect(isNativeSceneLayoutEnabled()).toBe(false)
+    expect(getNativeSceneLayoutFallbackReason()).toBe("nativeSceneLayout default requires native presentation with SHM transport")
+    expect(isNativeRenderGraphEnabled()).toBe(false)
+    expect(getNativeRenderGraphFallbackReason()).toBe("nativeRenderGraph default requires native presentation with SHM transport")
+    expect(isNativePresentationEnabled()).toBe(false)
+    expect(getNativePresentationFallbackReason()).toBe("native presentation requires SHM transport, got direct")
+    expect(isNativeLayerRegistryEnabled()).toBe(false)
+    expect(nativeLayerRegistryFallbackReason()).toBe("nativeLayerRegistry requires native presentation with SHM transport")
 
     loop.destroy()
   })

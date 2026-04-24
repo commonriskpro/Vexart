@@ -1,5 +1,5 @@
 import { createSignal, onCleanup } from "solid-js"
-import { mount, onInput, onPostScroll, createParser } from "@vexart/engine"
+import { mount, onInput, onPostScroll, createParser, useTerminalDimensions } from "@vexart/engine"
 import { Box, Text } from "@vexart/primitives"
 import { ScrollView, VirtualList } from "@vexart/headless"
 import { colors, radius, space } from "@vexart/styled"
@@ -23,11 +23,12 @@ const items = Array.from({ length: 300 }, (_, index) => ({
 
 const baselineItems = items.slice(0, 80)
 
-function App() {
+function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   const [selected, setSelected] = createSignal(-1)
   const [wheelCount, setWheelCount] = createSignal(0)
   const [postScrollCount, setPostScrollCount] = createSignal(0)
   const [lastWheel, setLastWheel] = createSignal("none")
+  const dims = useTerminalDimensions(props.terminal)
 
   const unsubInput = onInput((event) => {
     if (event.type !== "mouse") return
@@ -48,8 +49,8 @@ function App() {
 
   return (
     <Box
-      width="100%"
-      height="100%"
+      width={dims.width()}
+      height={dims.height()}
       backgroundColor={colors.background}
       padding={space[5]}
       direction="column"
@@ -201,7 +202,12 @@ async function main() {
   const terminal = await createTerminal()
   log(`terminal caps kind=${terminal.caps.kind} kittyGraphics=${String(terminal.caps.kittyGraphics)} kittyPlaceholder=${String(terminal.caps.kittyPlaceholder)} tmux=${String(terminal.caps.tmux)}`)
 
-  const handle = mount(() => <App />, terminal)
+  const handle = mount(() => <App terminal={terminal} />, terminal, {
+    experimental: {
+      nativeSceneLayout: false,
+      nativeRenderGraph: false,
+    },
+  })
   log("mount ok")
 
   const parser = createParser((event) => {

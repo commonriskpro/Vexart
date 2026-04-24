@@ -5,15 +5,16 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, markDirty } from "@vexart/engine"
+import { mount, markDirty, useTerminalDimensions } from "@vexart/engine"
 import { createTerminal } from "@vexart/engine"
 import { createParser } from "@vexart/engine"
 import { colors, radius, space, font } from "@vexart/styled"
 
-function App() {
+function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   const [angle, setAngle] = createSignal(0)
   const [clicks, setClicks] = createSignal(0)
   const [lastClicked, setLastClicked] = createSignal("")
+  const dims = useTerminalDimensions(props.terminal)
 
   // Animate rotation
   const interval = setInterval(() => {
@@ -29,8 +30,8 @@ function App() {
 
   return (
     <box
-      width="grow"
-      height="grow"
+      width={dims.width()}
+      height={dims.height()}
       backgroundColor={0x0a0a14ff}
       padding={40}
       gap={40}
@@ -217,7 +218,12 @@ function App() {
 
 async function main() {
   const term = await createTerminal()
-  const cleanup = mount(() => <App />, term)
+  const cleanup = mount(() => <App terminal={term} />, term, {
+    experimental: {
+      nativeSceneLayout: false,
+      nativeRenderGraph: false,
+    },
+  })
   const exitAfterMs = Number(process.env.TGE_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
 
   const shutdown = () => {

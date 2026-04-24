@@ -9,7 +9,7 @@
  * Requires: bun zig:build && bun run clay:build
  */
 
-import { mount } from "@vexart/engine"
+import { mount, useTerminalDimensions } from "@vexart/engine"
 import { Box, Text } from "@vexart/primitives"
 import { createTerminal } from "@vexart/engine"
 import { createParser } from "@vexart/engine"
@@ -45,11 +45,13 @@ function StatusDot(props: { color: string }) {
   )
 }
 
-function App() {
+function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
+  const dims = useTerminalDimensions(props.terminal)
+
   return (
     <Box
-      width="100%"
-      height="100%"
+      width={dims.width()}
+      height={dims.height()}
       backgroundColor={colors.background}
       direction="column"
       alignX="center"
@@ -87,7 +89,12 @@ function App() {
 async function main() {
   const term = await createTerminal()
 
-  const cleanup = mount(() => <App />, term)
+  const cleanup = mount(() => <App terminal={term} />, term, {
+    experimental: {
+      nativeSceneLayout: false,
+      nativeRenderGraph: false,
+    },
+  })
 
   const parser = createParser((event) => {
     if (event.type === "key" && (event.key === "q" || (event.key === "c" && event.mods.ctrl))) {

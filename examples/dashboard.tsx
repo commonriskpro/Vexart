@@ -21,7 +21,7 @@
  */
 
 import { createSignal, onCleanup } from "solid-js"
-import { mount, useFocus, onInput } from "@vexart/engine"
+import { mount, useFocus, onInput, useTerminalDimensions } from "@vexart/engine"
 import { Box, Text } from "@vexart/primitives"
 import { createTerminal } from "@vexart/engine"
 import { colors, radius, space } from "@vexart/styled"
@@ -259,11 +259,13 @@ function Stats() {
 
 // ── App layout ──
 
-function App() {
+function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
+  const dims = useTerminalDimensions(props.terminal)
+
   return (
     <Box
-      width="100%"
-      height="100%"
+      width={dims.width()}
+      height={dims.height()}
       backgroundColor={colors.background}
       direction="column"
       alignX="center"
@@ -303,7 +305,12 @@ function App() {
 
 async function main() {
   const term = await createTerminal()
-  const cleanup = mount(() => <App />, term)
+  const cleanup = mount(() => <App terminal={term} />, term, {
+    experimental: {
+      nativeSceneLayout: false,
+      nativeRenderGraph: false,
+    },
+  })
 
   onInput((event) => {
     if (event.type === "key") {

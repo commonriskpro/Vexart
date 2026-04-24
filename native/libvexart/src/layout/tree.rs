@@ -84,7 +84,9 @@ use taffy::style::Overflow;
 
 use crate::ffi::buffer::parse_header;
 use crate::ffi::panic::{ERR_INVALID_ARG, ERR_LAYOUT_FAILED, OK};
-use crate::scene::{PropValue, SceneGraph};
+use crate::scene::{NativeNodeKind, PropValue, SceneGraph};
+use crate::text::atlas::AtlasRegistry;
+use crate::text::{measure_text_layout, WhiteSpaceMode, WordBreakMode};
 
 /// Command kinds in the layout input buffer.
 const CMD_NODE_OPEN: u16 = 0;
@@ -135,7 +137,7 @@ pub(crate) struct PackedStyle {
 
 /// Maps stable Vexart node IDs (u64) to Taffy NodeIds, and tracks parent-child relationships.
 pub struct LayoutTree {
-    pub taffy: TaffyTree<()>,
+    pub taffy: TaffyTree<LayoutNodeContext>,
     /// Stable Vexart node ID → Taffy NodeId.
     pub id_map: HashMap<u64, NodeId>,
     /// The root Taffy node (set from is_root flag).
@@ -144,6 +146,21 @@ pub struct LayoutTree {
     pub viewport_w: f32,
     /// Viewport height for layout computation (updated by vexart_context_resize).
     pub viewport_h: f32,
+}
+
+#[derive(Debug, Clone)]
+pub enum LayoutNodeContext {
+    Text(TextMeasureContext),
+}
+
+#[derive(Debug, Clone)]
+pub struct TextMeasureContext {
+    pub text: String,
+    pub font_id: u32,
+    pub font_size: f32,
+    pub line_height: f32,
+    pub white_space: WhiteSpaceMode,
+    pub word_break: WordBreakMode,
 }
 
 impl LayoutTree {
@@ -327,7 +344,7 @@ impl LayoutTree {
                 flex_direction: FlexDirection::Column,
                 ..Style::default()
             };
-            let synthetic = match self.ensure_taffy_node(synthetic_id, synthetic_style, &mut seen) {
+            let synthetic = match self.ensure_taffy_node(synthetic_id, synthetic_style, None, &mut seen) {
                 Ok(node) => node,
                 Err(code) => return code,
             };
@@ -364,7 +381,7 @@ impl LayoutTree {
     /// Compute layout against `self.viewport_w` × `self.viewport_h`.
     ///
     /// Returns `OK` on success, `ERR_LAYOUT_FAILED` if Taffy fails.
-    pub fn compute(&mut self) -> i32 {
+    pub fn compute(&mut self, atlases: Option<&AtlasRegistry>) -> i32 {
         let root = match self.root {
             Some(r) => r,
             None => return OK, // No tree to compute.
@@ -375,14 +392,37 @@ impl LayoutTree {
             height: AvailableSpace::Definite(self.viewport_h),
         };
 
-        // Phase 2: text measure always returns (0, 0) per DEC-011.
-        // We use compute_layout_with_measure with a trivial closure.
         match self.taffy.compute_layout_with_measure(
             root,
             available,
-            |_known, _available, _node_id, _node_ctx, _style| Size {
-                width: 0.0,
-                height: 0.0,
+            |known, available, _node_id, node_ctx, _style| {
+                let Some(LayoutNodeContext::Text(text_ctx)) = node_ctx else {
+                    return Size { width: 0.0, height: 0.0 };
+                };
+
+                let width_limit = match known.width {
+                    Some(width) => Some(width),
+                    None => match available.width {
+                        AvailableSpace::Definite(width) => Some(width),
+                        _ => None,
+                    },
+                };
+
+                let (width, height) = measure_text_layout(
+                    &text_ctx.text,
+                    text_ctx.font_id,
+                    text_ctx.font_size,
+                    text_ctx.line_height,
+                    width_limit,
+                    text_ctx.white_space,
+                    text_ctx.word_break,
+                    atlases,
+                );
+
+                Size {
+                    width: known.width.unwrap_or(width),
+                    height: known.height.unwrap_or(height),
+                }
             },
         ) {
             Ok(()) => OK,
@@ -396,7 +436,11 @@ impl LayoutTree {
         };
         let packed = packed_style_from_scene(scene, scene_node_id);
         let style = pack_to_taffy_style(&packed, scene_prop_truthy(scene, scene_node_id, prop_hash("floating")), is_root, scene_prop_truthy(scene, scene_node_id, prop_hash("scrollX")) || scene_prop_truthy(scene, scene_node_id, prop_hash("scrollY")));
-        let node = self.ensure_taffy_node(scene_node_id, style, seen)?;
+        let context = scene_text_context(scene, scene_node_id);
+        let node = self.ensure_taffy_node(scene_node_id, style, context, seen)?;
+        if scene_node.kind == NativeNodeKind::Text {
+            return Ok(node);
+        }
         let mut children = Vec::with_capacity(scene_node.children.len());
         for &child_id in &scene_node.children {
             children.push(self.sync_scene_node(scene, child_id, false, seen)?);
@@ -407,14 +451,21 @@ impl LayoutTree {
         Ok(node)
     }
 
-    fn ensure_taffy_node(&mut self, scene_node_id: u64, style: Style, seen: &mut HashMap<u64, NodeId>) -> Result<NodeId, i32> {
+    fn ensure_taffy_node(&mut self, scene_node_id: u64, style: Style, context: Option<LayoutNodeContext>, seen: &mut HashMap<u64, NodeId>) -> Result<NodeId, i32> {
         let node = if let Some(&existing) = self.id_map.get(&scene_node_id) {
             if let Err(_) = self.taffy.set_style(existing, style) {
                 return Err(ERR_LAYOUT_FAILED);
             }
+            if let Err(_) = self.taffy.set_node_context(existing, context) {
+                return Err(ERR_LAYOUT_FAILED);
+            }
             existing
         } else {
-            match self.taffy.new_leaf(style) {
+            let created = match context {
+                Some(ctx) => self.taffy.new_leaf_with_context(style, ctx),
+                None => self.taffy.new_leaf(style),
+            };
+            match created {
                 Ok(node) => node,
                 Err(_) => return Err(ERR_LAYOUT_FAILED),
             }
@@ -546,6 +597,39 @@ fn packed_style_from_scene(scene: &SceneGraph, node_id: u64) -> PackedStyle {
         inset_bottom: 0.0,
         inset_left: 0.0,
     }
+}
+
+fn scene_text_context(scene: &SceneGraph, node_id: u64) -> Option<LayoutNodeContext> {
+    let node = scene.nodes.get(&node_id)?;
+    if node.kind != NativeNodeKind::Text || node.text.is_empty() {
+        return None;
+    }
+
+    let font_size = scene_numeric_prop(scene, node_id, 8)
+        .or_else(|| scene_numeric_prop(scene, node_id, prop_hash("fontSize")))
+        .unwrap_or(14.0);
+    let font_id = scene_numeric_prop(scene, node_id, prop_hash("fontId"))
+        .unwrap_or(0.0)
+        .max(0.0) as u32;
+    let line_height = scene_numeric_prop(scene, node_id, prop_hash("lineHeight"))
+        .unwrap_or((font_size * 1.2).ceil());
+    let white_space = match scene_string_prop(scene, node_id, prop_hash("whiteSpace")) {
+        Some("pre-wrap") => WhiteSpaceMode::PreWrap,
+        _ => WhiteSpaceMode::Normal,
+    };
+    let word_break = match scene_string_prop(scene, node_id, prop_hash("wordBreak")) {
+        Some("keep-all") => WordBreakMode::KeepAll,
+        _ => WordBreakMode::Normal,
+    };
+
+    Some(LayoutNodeContext::Text(TextMeasureContext {
+        text: node.text.clone(),
+        font_id,
+        font_size,
+        line_height,
+        white_space,
+        word_break,
+    }))
 }
 
 fn prop_hash(name: &str) -> u16 {
@@ -1002,7 +1086,7 @@ mod tests {
 
         let buf = build_test_buffer(&[root_grow_node()]);
         assert_eq!(tree.build_from_commands(&buf), OK);
-        assert_eq!(tree.compute(), OK);
+        assert_eq!(tree.compute(None), OK);
 
         let root = tree.root.unwrap();
         let layout = tree.taffy.layout(root).unwrap();
@@ -1020,7 +1104,7 @@ mod tests {
         // Root row direction + 2 children flex_grow=1 each.
         let buf = build_row_with_two_grow_children();
         assert_eq!(tree.build_from_commands(&buf), OK);
-        assert_eq!(tree.compute(), OK);
+        assert_eq!(tree.compute(None), OK);
 
         let root = tree.root.unwrap();
         let children: Vec<NodeId> = tree.taffy.children(root).unwrap();
@@ -1091,14 +1175,14 @@ mod tests {
         tree.viewport_w = 100.0;
         tree.viewport_h = 20.0;
         assert_eq!(tree.build_from_scene(&scene), OK);
-        assert_eq!(tree.compute(), OK);
+        assert_eq!(tree.compute(None), OK);
         let first_a = tree.id_map.get(&a).copied().unwrap();
         let first_b = tree.id_map.get(&b).copied().unwrap();
         assert_ne!(first_a, first_b);
 
         scene.destroy_subtree(b);
         assert_eq!(tree.build_from_scene(&scene), OK);
-        assert_eq!(tree.compute(), OK);
+        assert_eq!(tree.compute(None), OK);
         let second_a = tree.id_map.get(&a).copied().unwrap();
         assert_eq!(first_a, second_a);
         assert!(tree.id_map.get(&b).is_none());

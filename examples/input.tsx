@@ -13,17 +13,18 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, onInput } from "@vexart/engine"
+import { mount, onInput, useTerminalDimensions } from "@vexart/engine"
 import { Box, Text } from "@vexart/primitives"
 import { Input, Button } from "@vexart/headless"
 import { createTerminal } from "@vexart/engine"
 import { colors, radius, space, shadows } from "@vexart/styled"
 
-function App() {
+function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   const [name, setName] = createSignal("")
   const [email, setEmail] = createSignal("")
   const [message, setMessage] = createSignal("")
   const [submitted, setSubmitted] = createSignal(false)
+  const dims = useTerminalDimensions(props.terminal)
 
   function handleSubmit() {
     if (name() && email()) setSubmitted(true)
@@ -31,8 +32,8 @@ function App() {
 
   return (
     <Box
-      width="100%"
-      height="100%"
+      width={dims.width()}
+      height={dims.height()}
       backgroundColor={colors.background}
       direction="column"
       alignX="center"
@@ -204,7 +205,12 @@ function App() {
 
 async function main() {
   const term = await createTerminal()
-  const cleanup = mount(() => <App />, term)
+  const cleanup = mount(() => <App terminal={term} />, term, {
+    experimental: {
+      nativeSceneLayout: false,
+      nativeRenderGraph: false,
+    },
+  })
 
   onInput((event) => {
     if (event.type === "key") {

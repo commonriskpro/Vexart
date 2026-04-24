@@ -6,16 +6,15 @@ Implemented.
 
 ## Implemented
 
-- Defaulted the retained scene/event/layout/render stack on for Kitty-compatible transports by changing `createRenderLoop()` cutover semantics from opt-in to opt-out.
+- Defaulted the retained scene/event/layout/render stack on for SHM-capable terminals by changing `createRenderLoop()` cutover semantics from opt-in to opt-out.
 - Added global emergency fallback override `VEXART_RETAINED=0`, while preserving narrower per-feature `=0` overrides for debugging.
 - Added structured fallback reasons for scene graph, event dispatch, scene layout, and render graph flags.
 - Updated debug overlay state so it now reports `retained=default` vs `retained=fallback` with aggregate fallback reasons.
 - Added `packages/engine/src/loop/native-default-cutover.test.ts` to verify:
-  - Kitty transports default to retained mode,
+  - SHM terminals default to retained mode,
   - explicit opt-out still works,
   - global fallback disables the full retained stack,
-  - direct Kitty transport keeps retained enabled,
-  - global fallback still disables the full retained stack.
+  - non-SHM terminals fall back safely.
 - Updated user/docs wording to describe retained default behavior and the compatibility-window fallback.
 - Full automated interaction/unit suite passed via `bun test`.
 - Retained-path benchmark gate passed via `bun run perf:check`.

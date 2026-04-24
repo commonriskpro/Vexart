@@ -6,7 +6,6 @@ Implemented.
 
 ## Implemented Cleanup
 
-- Native presentation now follows the active Kitty transport (`direct`, `file`, or `shm`) instead of restricting retained defaulting to SHM-only sessions.
 - `createRenderLoop()` now instantiates the TS raw frame presenter only when native presentation is explicitly disabled, isolating raw terminal image orchestration to emergency/offscreen paths instead of the normal runtime.
 - TS layer state no longer stores per-layer backing metadata or terminal image ownership in `packages/engine/src/ffi/layers.ts`; the normal runtime now depends on the native layer registry for target/image lifecycle.
 - The TS render-graph builder stays available only as an explicit fallback/offscreen shell; the default retained runtime uses the native render-graph snapshot path.
@@ -27,7 +26,7 @@ Implemented.
 
 ## Behavior After Cleanup
 
-- Rust is now the implementation owner for normal terminal presentation on Kitty-compatible transports.
+- Rust is now the implementation owner for normal terminal presentation on the SHM-capable retained default path.
 - JS readback remains explicit-only for tests, screenshots, debug, or emergency opt-out flows.
 - `VEXART_RETAINED=0` still preserves the emergency compatibility-window fallback.
 
