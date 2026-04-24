@@ -37,8 +37,8 @@ if (_envOverride === "0") {
   _nativePresentationEnabled = false
   _fallbackReason = nativeRetainedFallbackReason()
 }
-// No env override: default is off (TS fallback path remains active).
-// Call enableNativePresentation() from mount to opt in programmatically.
+// No env override: mount/capability probing enables native presentation when
+// supported; explicit compatibility fallback remains behind env/runtime flags.
 
 // ── Public API ────────────────────────────────────────────────────────────
 

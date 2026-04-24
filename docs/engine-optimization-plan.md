@@ -149,7 +149,7 @@ const key = JSON.stringify({ kind, command, width, height, transform: Array.from
 - [ ] Delete `packages/core/src/damage-tracker.ts` — CPU pixel diff (`buffersEqual`, `findDirtyRegion`, `extractRegion`). Only used by the old software renderer.
 - [ ] Remove from `packages/core/src/index.ts` if exported
 
-### 2.2 Gut gpu-raster-staging.ts
+### 2.2 Gut deleted raster staging helpers
 
 - [ ] Delete `readbackTargetToSurface` (line 89)
 - [ ] Delete `compositeReadback` (line 112)

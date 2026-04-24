@@ -95,7 +95,7 @@ export { createParticleSystem } from "./particles"
 export type { ParticleConfig, ParticleSystem } from "./particles"
 
 export * from "./layers"
-// NOTE: wgpu-mixed-scene and gpu-raster-staging deleted in Phase 2 Slice 11.
+// NOTE: deleted experimental GPU modules are no longer exported from the engine.
 export * from "./layout-writeback"
 // NOTE: pixel-buffer, paint-bridge, clay.ts deleted in Phase 2 Slice 11.
 export * from "./node"

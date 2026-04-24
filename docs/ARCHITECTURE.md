@@ -9,7 +9,7 @@
 
 ## ⚠️ How to read this document
 
-This document describes the **target architecture** — how Vexart is organized after all v0.9 phases and the Rust-retained engine cutover complete. It is **not** a description of the current hybrid codebase.
+This document describes the **target architecture** — how Vexart is organized after all v0.9 phases and the Rust-retained engine cutover complete. It is **not** a description of temporary migration scaffolding.
 
 **When reading this as an AI agent**: treat this as the source of truth for code organization. Any file layout, module boundary, data-flow contract, or convention described here is the authoritative answer. If your task contradicts this document, the document wins — flag the contradiction and stop.
 

@@ -53,6 +53,7 @@
     "perf:baseline": "bun --conditions=browser run scripts/perf-baseline.tsx",
     "perf:check": "bun --conditions=browser run scripts/perf-baseline.tsx --check",
     "perf:frame-orchestrator": "bun --conditions=browser run scripts/frame-orchestrator-bench.ts",
+    "check:retained-cleanup": "bun run scripts/check-retained-cleanup.ts",
     "docs:dev": "bun run --cwd website dev",
     "docs:build": "bun run --cwd website build",
     "docs:preview": "bun run --cwd website preview"

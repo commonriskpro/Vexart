@@ -177,10 +177,9 @@ type WgpuBackdropFilterParams = {
   hueRotate: number | null
 }
 
-// ── Inline gpu-raster-staging helpers ───────────────────────────────────────
-// gpu-raster-staging.ts is an orphan deleted in Slice 11. The two functions it
-// provides (copyGpuTargetRegionToImage, createEmptyGpuImage) are inlined here
-// using vexart composite FFI (Phase 2b Slice 2).
+// ── Native GPU image helpers ────────────────────────────────────────────────
+// These helpers copy regions between native composite targets and native image
+// handles. They are binding-shell utilities, not a separate TS raster pipeline.
 
 type GpuRasterImage = { handle: VexartImageHandle; width: number; height: number }
 
@@ -508,7 +507,6 @@ export type GpuRendererBackendCacheStats = {
 }
 
 const MAX_GPU_GLYPH_ATLASES = 32
-const MAX_GPU_CANVAS_SPRITES = 64
 const MAX_GPU_TRANSFORM_SPRITES = 64
 
 let gpuRendererBackendStatsProvider: (() => GpuRendererBackendCacheStats) | null = null
@@ -613,15 +611,6 @@ type GlyphAtlasRecord = {
   ascender: number
   /** Returns glyphIndex for a codepoint, or -1 if not in atlas. */
   indexFor: (cp: number) => number
-}
-
-type CanvasSpriteRecord = {
-  key: string
-  handle: VexartImageHandle
-  width: number
-  height: number
-  usedThisFrame: boolean
-  unusedFrames: number
 }
 
 type TransformSpriteRecord = {
@@ -863,7 +852,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   const layerTargets = new Map<string, TargetRecord>()
   const glyphAtlases = new Map<string, GlyphAtlasRecord>()
   const imageCache = new WeakMap<Uint8Array, ImageRecord>()
-  const canvasSpriteCache = new Map<string, CanvasSpriteRecord>()
   const transformSpriteCache = new Map<string, TransformSpriteRecord>()
   const backdropSourceCache = new Map<string, BackdropSourceRecord>()
   const backdropSpriteCache = new Map<string, BackdropSpriteRecord>()
@@ -922,7 +910,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
 
   const layerTargetBytes = (record: TargetRecord) => record.width * record.height * 4
   const glyphAtlasBytes = (record: GlyphAtlasRecord) => record.cellWidth * record.columns * record.cellHeight * record.rows * 4
-  const canvasSpriteBytes = (record: CanvasSpriteRecord) => record.width * record.height * 4
   const transformSpriteBytes = (record: TransformSpriteRecord) => record.width * record.height * 4
   const backdropSourceBytes = (record: BackdropSourceRecord) => (record.bounds.right - record.bounds.left) * (record.bounds.bottom - record.bounds.top) * 4
   const backdropSpriteBytes = (record: BackdropSpriteRecord) => record.width * record.height * 4
@@ -965,32 +952,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     cacheStats.glyphAtlasCount -= 1
     cacheStats.glyphAtlasBytes -= glyphAtlasBytes(existing)
     return existing
-  }
-
-  const setCanvasSpriteRecord = (key: string, record: CanvasSpriteRecord) => {
-    const existing = canvasSpriteCache.get(key)
-    if (existing) {
-      cacheStats.canvasSpriteCount -= 1
-      cacheStats.canvasSpriteBytes -= canvasSpriteBytes(existing)
-    }
-    canvasSpriteCache.set(key, record)
-    cacheStats.canvasSpriteCount += 1
-    cacheStats.canvasSpriteBytes += canvasSpriteBytes(record)
-  }
-
-  const deleteCanvasSpriteRecord = (key: string) => {
-    const existing = canvasSpriteCache.get(key)
-    if (!existing) return null
-    canvasSpriteCache.delete(key)
-    cacheStats.canvasSpriteCount -= 1
-    cacheStats.canvasSpriteBytes -= canvasSpriteBytes(existing)
-    return existing
-  }
-
-  const clearCanvasSpriteRecords = () => {
-    canvasSpriteCache.clear()
-    cacheStats.canvasSpriteCount = 0
-    cacheStats.canvasSpriteBytes = 0
   }
 
   const setTransformSpriteRecord = (key: string, record: TransformSpriteRecord) => {
@@ -1088,10 +1049,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     glyphAtlases.clear()
     cacheStats.glyphAtlasCount = 0
     cacheStats.glyphAtlasBytes = 0
-    for (const record of canvasSpriteCache.values()) {
-      vexartRemoveImage(vctx, record.handle)
-    }
-    clearCanvasSpriteRecords()
     for (const record of transformSpriteCache.values()) {
       vexartRemoveImage(vctx, record.handle)
     }
@@ -1178,40 +1135,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       vexartCompositeTargetDestroy(vctx, record.handle)
       deleteLayerTargetRecord(key)
     }
-  }
-
-  const trimCanvasSpriteCache = () => {
-    const vctx = getVexartCtx()
-    while (canvasSpriteCache.size > MAX_GPU_CANVAS_SPRITES) {
-      const first = canvasSpriteCache.keys().next().value
-      if (!first) break
-      const record = canvasSpriteCache.get(first)
-      if (record) {
-        vexartRemoveImage(vctx, record.handle)
-      }
-      deleteCanvasSpriteRecord(first)
-    }
-  }
-
-  const markCanvasSpritesUnusedForFrame = () => {
-    for (const record of canvasSpriteCache.values()) {
-      record.usedThisFrame = false
-    }
-  }
-
-  const pruneCanvasSpriteCache = () => {
-    const vctx = getVexartCtx()
-    for (const [key, record] of canvasSpriteCache) {
-      if (record.usedThisFrame) {
-        record.unusedFrames = 0
-        continue
-      }
-      record.unusedFrames += 1
-      if (record.unusedFrames < 3) continue
-      vexartRemoveImage(vctx, record.handle)
-      deleteCanvasSpriteRecord(key)
-    }
-    trimCanvasSpriteCache()
   }
 
   const trimTransformSpriteCache = () => {
@@ -1309,10 +1232,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   }
 
   const getCanvasSprite = (_op: Extract<RenderGraphOp, { kind: "canvas" }>) => {
-    // Phase 2: canvas sprite rendering removed. wgpu-mixed-scene dependency removed.
-    // The showcase does not use <canvas onDraw={...}> nodes. Canvas ops that reach
-    // here will return null, causing the render path to call failGpuOnly.
-    // wgpu-mixed-scene is a 0-consumer orphan (deleted in Slice 11).
+    // Phase 8: TS canvas sprite orchestration is removed. Canvas display-list
+    // handles are registered natively; full native command replay belongs to a
+    // later rendering slice. Until then, canvas ops that require replay fail
+    // loudly instead of reviving a hidden TS-owned sprite cache.
     return null
   }
 
@@ -2375,7 +2298,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       currentFrameLayers = []
       activeLayerKeys.clear()
       suppressFinalPresentation = false
-      markCanvasSpritesUnusedForFrame()
       if (!gpuAvailable || !ctx.useLayerCompositing) {
         lastStrategy = null
         lastNativeFramePlan = null
@@ -2590,7 +2512,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     },
     endFrame(ctx) {
       currentFrame = null
-      pruneCanvasSpriteCache()
       if (!gpuAvailable || !ctx.useLayerCompositing) return { output: "none", strategy: lastStrategy }
       if (suppressFinalPresentation) {
         pruneLayerTargets()

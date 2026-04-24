@@ -3,9 +3,8 @@
  * Draw commands are buffered during onDraw and consumed by the GPU renderer.
  */
 
-// NOTE: paint-legacy import removed per Slice 9 migration (DEC-004, REQ-NB-002).
-// canvas.ts draw commands are now consumed by the gpu-renderer-backend via
-// the wgpu-mixed-scene path; the legacy CPU paint path is no longer referenced.
+// Canvas commands are serialized into native display lists when the retained
+// runtime is available. The callback API remains as the authoring/fallback shell.
 
 // ── Draw command types ──
 
