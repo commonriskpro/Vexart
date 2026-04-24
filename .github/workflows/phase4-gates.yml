@@ -43,3 +43,6 @@ jobs:
 
       - name: Visual regression gate
         run: bun run test:visual
+
+      - name: Performance regression gate
+        run: bun run perf:check && bun run perf:frame-orchestrator

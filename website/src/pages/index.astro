@@ -1,0 +1,31 @@
+---
+import DocsLayout from '../layouts/DocsLayout.astro'
+---
+
+<DocsLayout title="Vexart Docs" description="Pixel-native terminal UI engine documentation.">
+  <h1>Vexart Docs</h1>
+  <p class="muted">Browser-quality UI, rendered natively in the terminal.</p>
+
+  <p>
+    Vexart combines a SolidJS/JSX authoring shell with a retained Rust renderer and Kitty graphics output.
+  </p>
+
+  <div class="home-grid">
+    <a class="card" href="/guides/getting-started/">
+      <strong>Getting Started</strong>
+      Install Vexart, build the native library, and run your first app.
+    </a>
+    <a class="card" href="/guides/examples-cookbook/">
+      <strong>Examples Cookbook</strong>
+      Jump into runnable demos and example entrypoints.
+    </a>
+    <a class="card" href="/reference/api-overview/">
+      <strong>API Overview</strong>
+      Public packages, snapshots, and API policy.
+    </a>
+    <a class="card" href="/reference/licensing/">
+      <strong>Licensing</strong>
+      Source-available model, verification flow, and commercial tiers.
+    </a>
+  </div>
+</DocsLayout>

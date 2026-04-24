@@ -5,7 +5,8 @@
   "type": "module",
   "private": true,
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "website"
   ],
   "scripts": {
     "api:update": "rm -rf .api-extractor-temp && tsc -p tsconfig.api.json && bunx api-extractor run --local --config packages/engine/api-extractor.json && bunx api-extractor run --local --config packages/primitives/api-extractor.json && bunx api-extractor run --local --config packages/headless/api-extractor.json && bunx api-extractor run --local --config packages/styled/api-extractor.json",
@@ -50,7 +51,10 @@
     "test:visual:update": "bun --conditions=browser run scripts/visual-test/runner.ts --update",
     "perf:baseline": "bun --conditions=browser run scripts/perf-baseline.tsx",
     "perf:check": "bun --conditions=browser run scripts/perf-baseline.tsx --check",
-    "perf:frame-orchestrator": "bun --conditions=browser run scripts/frame-orchestrator-bench.ts"
+    "perf:frame-orchestrator": "bun --conditions=browser run scripts/frame-orchestrator-bench.ts",
+    "docs:dev": "bun run --cwd website dev",
+    "docs:build": "bun run --cwd website build",
+    "docs:preview": "bun run --cwd website preview"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "^7.52.10",
@@ -68,7 +72,7 @@
   "engines": {
     "bun": ">=1.1.0"
   },
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "@chenglou/pretext": "^0.0.5",
     "@modelcontextprotocol/sdk": "^1.29.0",
