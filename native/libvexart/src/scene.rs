@@ -4,6 +4,8 @@
 use crate::ffi::buffer::{GRAPH_MAGIC, GRAPH_VERSION};
 use std::collections::{HashMap, HashSet};
 
+type Matrix3 = [f32; 9];
+
 const LAYOUT_CMD_OPEN: u16 = 0;
 const LAYOUT_CMD_CLOSE: u16 = 1;
 const LAYOUT_OPEN_PAYLOAD_BYTES: usize = 112;
@@ -472,7 +474,7 @@ impl SceneGraph {
         let Some(node) = self.nodes.get(&node_id) else {
             return;
         };
-        let is_inside_self = self.point_inside_rect(node.layout, x, y);
+        let is_inside_self = self.point_inside_node_rect(node_id, x, y);
         if self.is_scroll_container(node_id) && !is_inside_self {
             return;
         }
@@ -481,7 +483,7 @@ impl SceneGraph {
             self.collect_hovered_interactive_nodes(*child_id, x, y, out);
         }
 
-        if self.point_inside_hit_area(node.layout, x, y)
+        if self.point_inside_node_hit_area(node_id, x, y)
             && !self.is_pointer_passthrough(node_id)
             && self.has_interactive_behavior(node_id)
         {
@@ -543,8 +545,8 @@ impl SceneGraph {
 
     fn hit_test_node(&self, node_id: u64, x: f32, y: f32) -> Option<u64> {
         let node = self.nodes.get(&node_id)?;
-        let is_inside_self = self.point_inside_rect(node.layout, x, y);
-        let is_inside_hit_area = self.point_inside_hit_area(node.layout, x, y);
+        let is_inside_self = self.point_inside_node_rect(node_id, x, y);
+        let is_inside_hit_area = self.point_inside_node_hit_area(node_id, x, y);
 
         if self.is_scroll_container(node_id) && !is_inside_self {
             return None;
@@ -586,6 +588,142 @@ impl SceneGraph {
         let hit_x = rect.x - (hit_width - rect.width) * 0.5;
         let hit_y = rect.y - (hit_height - rect.height) * 0.5;
         x >= hit_x && x < hit_x + hit_width && y >= hit_y && y < hit_y + hit_height
+    }
+
+    fn point_inside_node_rect(&self, node_id: u64, x: f32, y: f32) -> bool {
+        let Some(node) = self.nodes.get(&node_id) else {
+            return false;
+        };
+        let local = self.local_point_for_node(node_id, x, y);
+        match local {
+            Some((local_x, local_y)) => {
+                node.layout.width > 0.0
+                    && node.layout.height > 0.0
+                    && local_x >= 0.0
+                    && local_x < node.layout.width
+                    && local_y >= 0.0
+                    && local_y < node.layout.height
+            }
+            None => self.point_inside_rect(node.layout, x, y),
+        }
+    }
+
+    fn point_inside_node_hit_area(&self, node_id: u64, x: f32, y: f32) -> bool {
+        let Some(node) = self.nodes.get(&node_id) else {
+            return false;
+        };
+        let local = self.local_point_for_node(node_id, x, y);
+        match local {
+            Some((local_x, local_y)) => {
+                let hit_width = node.layout.width.max(self.cell_width);
+                let hit_height = node.layout.height.max(self.cell_height);
+                if hit_width <= 0.0 || hit_height <= 0.0 {
+                    return false;
+                }
+                let hit_x = -(hit_width - node.layout.width) * 0.5;
+                let hit_y = -(hit_height - node.layout.height) * 0.5;
+                local_x >= hit_x && local_x < hit_x + hit_width && local_y >= hit_y && local_y < hit_y + hit_height
+            }
+            None => self.point_inside_hit_area(node.layout, x, y),
+        }
+    }
+
+    fn local_point_for_node(&self, node_id: u64, x: f32, y: f32) -> Option<(f32, f32)> {
+        let node = self.nodes.get(&node_id)?;
+        let inv = self.accumulated_hit_inverse(node_id)?;
+        matrix_transform_point(inv, x - node.layout.x, y - node.layout.y)
+    }
+
+    fn accumulated_hit_inverse(&self, node_id: u64) -> Option<Matrix3> {
+        let node = self.nodes.get(&node_id)?;
+        let mut chain = vec![];
+        let mut current = node.parent;
+        while let Some(parent_id) = current {
+            if self.node_local_transform(parent_id).is_some() {
+                chain.push(parent_id);
+            }
+            current = self.nodes.get(&parent_id).and_then(|parent| parent.parent);
+        }
+        chain.reverse();
+
+        let own = self.node_local_transform(node_id);
+        if chain.is_empty() && own.is_none() {
+            return None;
+        }
+
+        let mut absolute = matrix_identity();
+        for ancestor_id in chain {
+            let ancestor = self.nodes.get(&ancestor_id)?;
+            let transform = self.node_local_transform(ancestor_id)?;
+            absolute = matrix_multiply(absolute, matrix_multiply(matrix_multiply(matrix_translate(ancestor.layout.x, ancestor.layout.y), transform), matrix_translate(-ancestor.layout.x, -ancestor.layout.y)));
+        }
+        if let Some(transform) = own {
+            absolute = matrix_multiply(absolute, matrix_multiply(matrix_multiply(matrix_translate(node.layout.x, node.layout.y), transform), matrix_translate(-node.layout.x, -node.layout.y)));
+        }
+
+        let local_forward = matrix_multiply(matrix_multiply(matrix_translate(-node.layout.x, -node.layout.y), absolute), matrix_translate(node.layout.x, node.layout.y));
+        matrix_invert(local_forward)
+    }
+
+    fn node_local_transform(&self, node_id: u64) -> Option<Matrix3> {
+        let node = self.nodes.get(&node_id)?;
+        let raw = self.string_prop(node_id, prop_hash("transform"))?;
+        let value = serde_json::from_str::<serde_json::Value>(raw).ok()?;
+        let (origin_x, origin_y) = self.transform_origin_for_node(node_id, node.layout);
+        let mut matrix = matrix_identity();
+        let translate_x = json_number(&value, "translateX").unwrap_or(0.0);
+        let translate_y = json_number(&value, "translateY").unwrap_or(0.0);
+        if translate_x != 0.0 || translate_y != 0.0 {
+            matrix = matrix_multiply(matrix, matrix_translate(translate_x, translate_y));
+        }
+        if origin_x != 0.0 || origin_y != 0.0 {
+            matrix = matrix_multiply(matrix, matrix_translate(origin_x, origin_y));
+        }
+        let perspective = json_number(&value, "perspective").unwrap_or(0.0);
+        let rotate_x = json_number(&value, "rotateX").unwrap_or(0.0);
+        let rotate_y = json_number(&value, "rotateY").unwrap_or(0.0);
+        if perspective > 0.0 && (rotate_x != 0.0 || rotate_y != 0.0) {
+            matrix = matrix_multiply(matrix, matrix_perspective(perspective, rotate_x, rotate_y));
+        }
+        let rotate = json_number(&value, "rotate").unwrap_or(0.0);
+        if rotate != 0.0 {
+            matrix = matrix_multiply(matrix, matrix_rotate(rotate));
+        }
+        let scale = json_number(&value, "scale").unwrap_or(1.0);
+        let scale_x = json_number(&value, "scaleX").unwrap_or(scale);
+        let scale_y = json_number(&value, "scaleY").unwrap_or(scale);
+        if scale_x != 1.0 || scale_y != 1.0 {
+            matrix = matrix_multiply(matrix, matrix_scale_xy(scale_x, scale_y));
+        }
+        let skew_x = json_number(&value, "skewX").unwrap_or(0.0);
+        let skew_y = json_number(&value, "skewY").unwrap_or(0.0);
+        if skew_x != 0.0 || skew_y != 0.0 {
+            matrix = matrix_multiply(matrix, matrix_skew(skew_x, skew_y));
+        }
+        if origin_x != 0.0 || origin_y != 0.0 {
+            matrix = matrix_multiply(matrix, matrix_translate(-origin_x, -origin_y));
+        }
+        if matrix_is_identity(matrix) { None } else { Some(matrix) }
+    }
+
+    fn transform_origin_for_node(&self, node_id: u64, layout: NativeLayoutRect) -> (f32, f32) {
+        let Some(raw) = self.string_prop(node_id, prop_hash("transformOrigin")) else {
+            return (layout.width * 0.5, layout.height * 0.5);
+        };
+        match raw {
+            "top-left" => (0.0, 0.0),
+            "top-right" => (layout.width, 0.0),
+            "bottom-left" => (0.0, layout.height),
+            "bottom-right" => (layout.width, layout.height),
+            _ => {
+                let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
+                    return (layout.width * 0.5, layout.height * 0.5);
+                };
+                let x = json_number(&value, "x").unwrap_or(0.5);
+                let y = json_number(&value, "y").unwrap_or(0.5);
+                (x * layout.width, y * layout.height)
+            }
+        }
     }
 
     fn write_layout_node(
@@ -914,6 +1052,109 @@ impl SceneGraph {
     }
 }
 
+fn json_number(value: &serde_json::Value, key: &str) -> Option<f32> {
+    value.get(key).and_then(|entry| entry.as_f64()).map(|entry| entry as f32)
+}
+
+fn matrix_identity() -> Matrix3 {
+    [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+}
+
+fn matrix_translate(tx: f32, ty: f32) -> Matrix3 {
+    [1.0, 0.0, tx, 0.0, 1.0, ty, 0.0, 0.0, 1.0]
+}
+
+fn matrix_rotate(degrees: f32) -> Matrix3 {
+    let rad = degrees * std::f32::consts::PI / 180.0;
+    let c = rad.cos();
+    let s = rad.sin();
+    [c, -s, 0.0, s, c, 0.0, 0.0, 0.0, 1.0]
+}
+
+fn matrix_scale_xy(sx: f32, sy: f32) -> Matrix3 {
+    [sx, 0.0, 0.0, 0.0, sy, 0.0, 0.0, 0.0, 1.0]
+}
+
+fn matrix_skew(degrees_x: f32, degrees_y: f32) -> Matrix3 {
+    let tx = (degrees_x * std::f32::consts::PI / 180.0).tan();
+    let ty = (degrees_y * std::f32::consts::PI / 180.0).tan();
+    [1.0, tx, 0.0, ty, 1.0, 0.0, 0.0, 0.0, 1.0]
+}
+
+fn matrix_perspective(distance: f32, rotate_x: f32, rotate_y: f32) -> Matrix3 {
+    if distance <= 0.0 {
+        return matrix_identity();
+    }
+    let rx = rotate_x * std::f32::consts::PI / 180.0;
+    let ry = rotate_y * std::f32::consts::PI / 180.0;
+    let cos_x = rx.cos();
+    let cos_y = ry.cos();
+    let sin_x = rx.sin();
+    let sin_y = ry.sin();
+    [cos_y, 0.0, 0.0, 0.0, cos_x, 0.0, -sin_y / distance, sin_x / distance, 1.0]
+}
+
+fn matrix_multiply(a: Matrix3, b: Matrix3) -> Matrix3 {
+    [
+        a[0] * b[0] + a[1] * b[3] + a[2] * b[6],
+        a[0] * b[1] + a[1] * b[4] + a[2] * b[7],
+        a[0] * b[2] + a[1] * b[5] + a[2] * b[8],
+        a[3] * b[0] + a[4] * b[3] + a[5] * b[6],
+        a[3] * b[1] + a[4] * b[4] + a[5] * b[7],
+        a[3] * b[2] + a[4] * b[5] + a[5] * b[8],
+        a[6] * b[0] + a[7] * b[3] + a[8] * b[6],
+        a[6] * b[1] + a[7] * b[4] + a[8] * b[7],
+        a[6] * b[2] + a[7] * b[5] + a[8] * b[8],
+    ]
+}
+
+fn matrix_invert(m: Matrix3) -> Option<Matrix3> {
+    let a = m[0];
+    let b = m[1];
+    let c = m[2];
+    let d = m[3];
+    let e = m[4];
+    let f = m[5];
+    let g = m[6];
+    let h = m[7];
+    let i = m[8];
+    let aa = e * i - f * h;
+    let bb = -(d * i - f * g);
+    let cc = d * h - e * g;
+    let dd = -(b * i - c * h);
+    let ee = a * i - c * g;
+    let ff = -(a * h - b * g);
+    let gg = b * f - c * e;
+    let hh = -(a * f - c * d);
+    let ii = a * e - b * d;
+    let det = a * aa + b * bb + c * cc;
+    if det.abs() < 1e-12 {
+        return None;
+    }
+    let inv = 1.0 / det;
+    Some([aa * inv, dd * inv, gg * inv, bb * inv, ee * inv, hh * inv, cc * inv, ff * inv, ii * inv])
+}
+
+fn matrix_transform_point(m: Matrix3, x: f32, y: f32) -> Option<(f32, f32)> {
+    let w = m[6] * x + m[7] * y + m[8];
+    if w.abs() < 1e-12 {
+        return None;
+    }
+    Some(((m[0] * x + m[1] * y + m[2]) / w, (m[3] * x + m[4] * y + m[5]) / w))
+}
+
+fn matrix_is_identity(m: Matrix3) -> bool {
+    (m[0] - 1.0).abs() < 1e-6
+        && m[1].abs() < 1e-6
+        && m[2].abs() < 1e-6
+        && m[3].abs() < 1e-6
+        && (m[4] - 1.0).abs() < 1e-6
+        && m[5].abs() < 1e-6
+        && m[6].abs() < 1e-6
+        && m[7].abs() < 1e-6
+        && (m[8] - 1.0).abs() < 1e-6
+}
+
 fn prop_hash(name: &str) -> u16 {
     let mut hash: u32 = 2166136261;
     for byte in name.as_bytes() {
@@ -973,6 +1214,18 @@ mod tests {
         bytes
     }
 
+    fn single_string_prop(prop_id: u16, value: &str) -> Vec<u8> {
+        let payload = value.as_bytes();
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.extend_from_slice(&prop_id.to_le_bytes());
+        bytes.push(5);
+        bytes.push(0);
+        bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(payload);
+        bytes
+    }
+
     #[test]
     fn insert_preserves_anchor_order() {
         let mut scene = SceneGraph::new();
@@ -1023,6 +1276,31 @@ mod tests {
 
         assert_eq!(scene.hit_test(15.0, 15.0), Some(child));
         assert_eq!(scene.hit_test(90.0, 90.0), Some(parent));
+    }
+
+    #[test]
+    fn hit_test_uses_transformed_visual_bounds() {
+        let mut scene = SceneGraph::new();
+        let node = scene.create_node(NativeNodeKind::Box);
+        scene.set_layout(node, NativeLayoutRect { x: 0.0, y: 0.0, width: 20.0, height: 20.0 });
+        scene.set_props(node, &single_string_prop(prop_hash("transform"), r#"{"translateX":50}"#));
+
+        assert_eq!(scene.hit_test(55.0, 10.0), Some(node));
+        assert_eq!(scene.hit_test(10.0, 10.0), None);
+    }
+
+    #[test]
+    fn hit_test_accumulates_ancestor_transforms() {
+        let mut scene = SceneGraph::new();
+        let parent = scene.create_node(NativeNodeKind::Box);
+        let child = scene.create_node(NativeNodeKind::Box);
+        scene.insert(parent, child, None);
+        scene.set_layout(parent, NativeLayoutRect { x: 10.0, y: 10.0, width: 100.0, height: 100.0 });
+        scene.set_layout(child, NativeLayoutRect { x: 20.0, y: 20.0, width: 20.0, height: 20.0 });
+        scene.set_props(parent, &single_string_prop(prop_hash("transform"), r#"{"translateX":50}"#));
+
+        assert_eq!(scene.hit_test(75.0, 25.0), Some(child));
+        assert_eq!(scene.hit_test(25.0, 25.0), None);
     }
 
     #[test]

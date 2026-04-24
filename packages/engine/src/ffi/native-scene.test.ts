@@ -143,6 +143,24 @@ describe("native scene graph", () => {
     expect(up.some((record) => record.nodeId === parent._nativeId! && record.eventKind === NATIVE_EVENT_KIND.PRESS_CANDIDATE)).toBe(true)
   })
 
+  test("native interaction frame hit-tests transformed visual bounds", () => {
+    const root = createNode("root")
+    root._nativeId = nativeSceneCreateNode("root")
+
+    const node = createElement("box")
+    setProp(node, "transform", { translateX: 50 })
+    setProp(node, "onMouseOver", () => {})
+
+    insertNode(root, node)
+    nativeSceneSetLayout(node._nativeId, 0, 0, 20, 20)
+
+    const original = nativeInteractionFrame({ x: 10, y: 10, pointerDown: false, pointerDirty: true, pendingPress: false, pendingRelease: false })
+    expect(original.some((record) => record.nodeId === node._nativeId! && record.eventKind === NATIVE_EVENT_KIND.MOUSE_OVER)).toBe(false)
+
+    const transformed = nativeInteractionFrame({ x: 55, y: 10, pointerDown: false, pointerDirty: true, pendingPress: false, pendingRelease: false })
+    expect(transformed.some((record) => record.nodeId === node._nativeId! && record.eventKind === NATIVE_EVENT_KIND.MOUSE_OVER)).toBe(true)
+  })
+
   test("native interaction dispatcher invokes JS mouse and press callbacks", () => {
     const root = createNode("root")
     root._nativeId = nativeSceneCreateNode("root")

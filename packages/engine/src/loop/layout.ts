@@ -454,7 +454,7 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
 
   // COMPAT-FALLBACK: Full TS hit-test/hover/active loop. Retained native
   // frames bypass this branch unless native interaction dispatch is disabled
-  // or a currently unsupported transform-hit-test fallback is required.
+  // by runtime flags or tests explicitly exercise the compatibility path.
   let changed = false
   const currentFocusId = focusedId()
 
