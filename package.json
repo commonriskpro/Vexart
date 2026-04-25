@@ -84,6 +84,7 @@
     "@chenglou/pretext": "^0.0.5",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "astro": "^6.1.9",
+    "flexily": "^0.6.0",
     "marked": "^18.0.0",
     "sharp": "^0.34.5",
     "web-tree-sitter": "^0.26.8",

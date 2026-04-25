@@ -9,6 +9,7 @@
         "@chenglou/pretext": "^0.0.5",
         "@modelcontextprotocol/sdk": "^1.29.0",
         "astro": "^6.1.9",
+        "flexily": "^0.6.0",
         "marked": "^18.0.0",
         "sharp": "^0.34.5",
         "web-tree-sitter": "^0.26.8",
@@ -26,6 +27,19 @@
         "opentype.js": "^1.3.4",
         "solid-js": "^1.9.0",
         "typescript": "^5.7.0",
+      },
+    },
+    "packages/app": {
+      "name": "@vexart/app",
+      "version": "0.9.0-beta.0",
+      "bin": {
+        "vexart": "./src/cli/index.ts",
+      },
+      "dependencies": {
+        "@vexart/engine": "workspace:*",
+        "@vexart/headless": "workspace:*",
+        "@vexart/primitives": "workspace:*",
+        "@vexart/styled": "workspace:*",
       },
     },
     "packages/engine": {
@@ -447,6 +461,8 @@
 
     "@ungap/structured-clone": ["@ungap/structured-clone@1.3.0", "", {}, "sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g=="],
 
+    "@vexart/app": ["@vexart/app@workspace:packages/app"],
+
     "@vexart/engine": ["@vexart/engine@workspace:packages/engine"],
 
     "@vexart/headless": ["@vexart/headless@workspace:packages/headless"],
@@ -704,6 +720,8 @@
     "finalhandler": ["finalhandler@2.1.1", "", { "dependencies": { "debug": "^4.4.0", "encodeurl": "^2.0.0", "escape-html": "^1.0.3", "on-finished": "^2.4.1", "parseurl": "^1.3.3", "statuses": "^2.0.1" } }, "sha512-S8KoZgRZN+a5rNwqTxlZZePjT/4cnm0ROV70LedRHZ0p8u9fRID0hJUZQpkKLzro8LfmC8sx23bY6tVNxv8pQA=="],
 
     "flattie": ["flattie@1.1.1", "", {}, "sha512-9UbaD6XdAL97+k/n+N7JwX46K/M6Zc6KcFYskrYL8wbBV/Uyk0CTAMY0VT+qiK5PM7AIc9aTWYtq65U7T+aCNQ=="],
+
+    "flexily": ["flexily@0.6.0", "", {}, "sha512-V2z9Nx+a77dicQUM5ktU6A4wSoNUbbVRocOCjXgLHIkhl/pdmrtX8MWQTwBJ3mCuB4pkniitvKW5C4tBo94XIg=="],
 
     "fontace": ["fontace@0.4.1", "", { "dependencies": { "fontkitten": "^1.0.2" } }, "sha512-lDMvbAzSnHmbYMTEld5qdtvNH2/pWpICOqpean9IgC7vUbUJc3k+k5Dokp85CegamqQpFbXf0rAVkbzpyTA8aw=="],
 

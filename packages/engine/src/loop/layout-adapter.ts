@@ -1,16 +1,42 @@
 /**
- * layout-adapter.ts — VexartLayoutCtx factory + layout buffer helpers.
+ * layout-adapter.ts — VexartLayoutCtx factory backed by Flexily.
  *
- * Drop-in replacement for the legacy clay object. Builds a flat layout
- * command tree during walkTree, then computes layout in TypeScript.
+ * Drop-in replacement for the legacy custom layout engine. Builds a
+ * Flexily node tree during walkTree open/close/configure calls, then
+ * computes layout via Flexily's calculateLayout() in endLayout().
  * Returns synthetic RenderCommand[] from the positioned layout output.
  *
- * Extracted from loop.ts lines ~49–568 as part of Phase 3 Slice 1.2.
- * Design ref: openspec/changes/phase-3-loop-decomposition/design.md §File Changes
+ * Flexily: pure JS, zero deps, zero-alloc hot path, Yoga-compatible API.
+ *
+ * Performance: uses parallel arrays (not WeakMap) for O(1) meta lookup,
+ * and a node pool to minimize GC churn across frames.
  */
 
 import type { RenderCommand } from "../ffi/render-graph"
 import { CMD as _CMD_RG } from "../ffi/render-graph"
+import {
+  Node,
+  FLEX_DIRECTION_COLUMN,
+  FLEX_DIRECTION_ROW,
+  POSITION_TYPE_ABSOLUTE,
+  OVERFLOW_SCROLL,
+  EDGE_LEFT,
+  EDGE_TOP,
+  EDGE_RIGHT,
+  EDGE_BOTTOM,
+  EDGE_ALL,
+  GUTTER_ALL,
+  DIRECTION_LTR,
+  ALIGN_FLEX_START,
+  ALIGN_FLEX_END,
+  ALIGN_CENTER,
+  ALIGN_SPACE_BETWEEN,
+  ALIGN_STRETCH,
+  JUSTIFY_FLEX_START,
+  JUSTIFY_FLEX_END,
+  JUSTIFY_CENTER,
+  JUSTIFY_SPACE_BETWEEN,
+} from "flexily"
 
 // ── Local constants previously from clay.ts ───────────────────────────────
 
@@ -48,15 +74,6 @@ export const POINTER_CAPTURE = {
 
 // ── VexartLayoutCtx ───────────────────────────────────────────────────────
 
-/** Layout node open payload constants */
-const OPEN_PAYLOAD_BYTES = 112
-const LAYOUT_CMD_OPEN = 0
-const LAYOUT_CMD_CLOSE = 1
-const FLAG_IS_ROOT = 1 << 0
-const FLAG_FLOATING_ABS = 1 << 1
-const FLAG_SCROLL_X = 1 << 2
-const FLAG_SCROLL_Y = 1 << 3
-
 export type PositionedCommand = {
   nodeId: number
   x: number
@@ -69,110 +86,130 @@ export type PositionedCommand = {
   contentH: number
 }
 
-// Per-node accumulated state for building OPEN payload
-export type NodeOpenState = {
-  nodeId: number
-  parentNodeId: number
-  flags: number
-  flexDir: number
-  posKind: number
-  sizeWKind: number
-  sizeHKind: number
-  sizeW: number
-  sizeH: number
-  minW: number; minH: number
-  maxW: number; maxH: number
-  flexGrow: number; flexShrink: number
-  /** Original sizing type for width (FIT=0, GROW=1, PERCENT=2, FIXED=3) */
-  origSizeWType: number
-  /** Original sizing type for height (FIT=0, GROW=1, PERCENT=2, FIXED=3) */
-  origSizeHType: number
-  justifyContent: number; alignItems: number; alignContent: number
-  padTop: number; padRight: number; padBottom: number; padLeft: number
-  borderTop: number; borderRight: number; borderBottom: number; borderLeft: number
-  gapRow: number; gapCol: number
-  insetTop: number; insetRight: number; insetBottom: number; insetLeft: number
-  zIndex: number
-  // Synthetic render command data
-  bgColor: number
-  cornerRadius: number
-  // Deferred OPEN tracking — written to buffer when first child opens or at closeElement
-  _openWritten: boolean
-}
-
-export const _defaultOpen = (): NodeOpenState => ({
-  nodeId: 0, parentNodeId: 0, flags: 0,
-  flexDir: 1 /* column */, posKind: 0, sizeWKind: 0, sizeHKind: 0, sizeW: 0, sizeH: 0,
-  minW: 0, minH: 0, maxW: 0, maxH: 0, flexGrow: 0, flexShrink: 1, origSizeWType: 0, origSizeHType: 0,
-  // 255 = None → Taffy uses its default (Stretch for align_items, Start for justify_content).
-  // Clay used implicit stretch; Taffy needs 255 (None) to activate the same default behavior.
-  justifyContent: 255, alignItems: 255, alignContent: 255,
-  padTop: 0, padRight: 0, padBottom: 0, padLeft: 0,
-  borderTop: 0, borderRight: 0, borderBottom: 0, borderLeft: 0,
-  _openWritten: false,
-  gapRow: 0, gapCol: 0,
-  insetTop: 0, insetRight: 0, insetBottom: 0, insetLeft: 0,
-  zIndex: 0,
-  bgColor: 0, cornerRadius: 0,
-})
-
-/** Vexart size kind enum (matches layout/tree.rs: 0=Auto,1=Length,2=Percent) */
-export function _vxSizeKind(k: number): number {
-  // SIZING from node.ts: FIT=0, GROW=1, PERCENT=2, FIXED=3
-  if (k === 1 /* GROW */) return 0  // Auto
-  if (k === 3 /* FIXED */) return 1  // Length
-  if (k === 2 /* PERCENT */) return 2  // Percent
-  return 0  // Auto (FIT maps to Auto with no flex_grow)
-}
-
-/** Vexart flex-grow from SIZING: GROW=1.0, others=0.0 */
-export function _vxFlexGrow(sizing: { type: number } | null, explicit: number): number {
-  if (explicit > 0) return explicit
-  if (sizing?.type === 1 /* GROW */) return 1.0
-  return 0.0
-}
-
-/** Vexart justify_content / align_items from ALIGN_X/ALIGN_Y enum.
- *  Rust: 0=Start, 1=End, 2=Center, 3=SpaceBetween, 255=None
- *  Clay ALIGN_X: LEFT=0, RIGHT=1, CENTER=2, SPACE_BETWEEN=3
+/**
+ * Map Vexart ALIGN_X/ALIGN_Y (0=left/top, 1=right/bottom, 2=center, 3=space-between)
+ * to Flexily justify constants.
  */
-export function _vxAlign(v: number): number {
-  if (v === 1 /* RIGHT/BOTTOM */) return 1
-  if (v === 2 /* CENTER */) return 2
-  if (v === 3 /* SPACE_BETWEEN */) return 3
-  return 0 // LEFT/TOP → Start
+function mapJustify(v: number): number {
+  if (v === 1) return JUSTIFY_FLEX_END
+  if (v === 2) return JUSTIFY_CENTER
+  if (v === 3) return JUSTIFY_SPACE_BETWEEN
+  return JUSTIFY_FLEX_START  // 0 or default
 }
 
 /**
- * VexartLayoutCtx — Clay-compatible layout context backed by TypeScript layout.
+ * Map Vexart ALIGN_X/ALIGN_Y to Flexily align constants.
+ * 255 = "None" in the old adapter → maps to ALIGN_STRETCH (Yoga/Flexily default for alignItems).
+ */
+function mapAlign(v: number): number {
+  if (v === 255) return ALIGN_STRETCH
+  if (v === 1) return ALIGN_FLEX_END
+  if (v === 2) return ALIGN_CENTER
+  if (v === 3) return ALIGN_SPACE_BETWEEN
+  return ALIGN_FLEX_START  // 0 or default
+}
+
+/**
+ * VexartLayoutCtx — Clay-compatible layout context backed by Flexily.
  * Methods mirror the legacy `clay` object API for drop-in use in loop.ts.
  */
 export function createVexartLayoutCtx() {
   let _viewportW = 0
   let _viewportH = 0
-  let _parentStack: NodeOpenState[] = []
-  let _current: NodeOpenState = _defaultOpen()
-  let _allOpenStates: NodeOpenState[] = []  // order matches OPEN commands
-  // Text entries — stores metadata for CMD.TEXT generation in endLayout()
-  type TextEntry = { nodeId: number; content: string; color: number; fontId: number; fontSize: number }
-  let _textEntries: TextEntry[] = []
-  let _pendingSetId: string | null = null
-  let _scrollOffsets = new Map<string, { x: number; y: number }>()
-  let _scrollDataCache = new Map<string, { scrollX: number; scrollY: number; contentWidth: number; contentHeight: number; viewportWidth: number; viewportHeight: number; found: boolean }>()
 
-  function _writeOpenCommand(state: NodeOpenState) {
-    _allOpenStates.push(state)
-  }
+  // ── Parallel arrays for O(1) meta access ──
+  // Index matches position in _allNodes. Avoids WeakMap overhead entirely.
+  let _allNodes: Node[] = []
+  let _nodeIds: number[] = []          // per-node Vexart ID
+  let _parentNodeIds: number[] = []    // parent's Vexart ID (0=root)
+  let _isFloating: boolean[] = []
+  let _isScrollX: boolean[] = []
+  let _isScrollY: boolean[] = []
+  let _zIndexes: number[] = []
+  let _bgColors: number[] = []
+  let _cornerRadii: number[] = []
+  let _dfsIndexes: number[] = []
+  // Text meta — only for text nodes
+  let _isText: boolean[] = []
+  let _textContents: string[] = []
+  let _textColors: number[] = []
+  let _textFontIds: number[] = []
+  let _textFontSizes: number[] = []
 
-  function _writeCloseCommand() {
-  }
+  // Quick lookup: Flexily Node → array index
+  const _nodeToIndex = new Map<Node, number>()
 
-  // Last layout result — used by writeLayoutBack to update ALL nodes
+  let _nodeStack: Node[] = []
+  let _currentNode: Node | null = null
+  let _currentIdx = -1
+  let _roots: Node[] = []
+  let _dfsCounter = 0
+  let _nodeCount = 0
+
+  // Scroll data cache (legacy compat)
+  const _scrollDataCache = new Map<string, { scrollX: number; scrollY: number; contentWidth: number; contentHeight: number; viewportWidth: number; viewportHeight: number; found: boolean }>()
+
+  // Last layout result
   let _lastLayoutMap: Map<number, PositionedCommand> | null = null
   function getLastLayoutMap() { return _lastLayoutMap }
 
+  function _addNode(node: Node, parentId: number, isRoot: boolean): number {
+    const idx = _nodeCount++
+    if (idx >= _allNodes.length) {
+      // Grow arrays (amortized)
+      _allNodes.push(node)
+      _nodeIds.push(0)
+      _parentNodeIds.push(parentId)
+      _isFloating.push(false)
+      _isScrollX.push(false)
+      _isScrollY.push(false)
+      _zIndexes.push(0)
+      _bgColors.push(0)
+      _cornerRadii.push(0)
+      _dfsIndexes.push(_dfsCounter++)
+      _isText.push(false)
+      _textContents.push("")
+      _textColors.push(0)
+      _textFontIds.push(0)
+      _textFontSizes.push(0)
+    } else {
+      // Reuse slot
+      _allNodes[idx] = node
+      _nodeIds[idx] = 0
+      _parentNodeIds[idx] = parentId
+      _isFloating[idx] = false
+      _isScrollX[idx] = false
+      _isScrollY[idx] = false
+      _zIndexes[idx] = 0
+      _bgColors[idx] = 0
+      _cornerRadii[idx] = 0
+      _dfsIndexes[idx] = _dfsCounter++
+      _isText[idx] = false
+      _textContents[idx] = ""
+      _textColors[idx] = 0
+      _textFontIds[idx] = 0
+      _textFontSizes[idx] = 0
+    }
+    _nodeToIndex.set(node, idx)
+    return idx
+  }
+
+  function _pushNode(node: Node, parentId: number) {
+    const idx = _addNode(node, parentId, _nodeStack.length === 0)
+
+    if (_nodeStack.length > 0) {
+      const parent = _nodeStack[_nodeStack.length - 1]
+      parent.insertChild(node, parent.getChildCount())
+    } else {
+      _roots.push(node)
+    }
+
+    _nodeStack.push(node)
+    _currentNode = node
+    _currentIdx = idx
+  }
+
   return {
-    /** Access the last parsed layout map for direct node layout updates. */
     getLastLayoutMap,
 
     init(width: number, height: number): boolean {
@@ -187,401 +224,330 @@ export function createVexartLayoutCtx() {
     },
 
     destroy() {
+      for (let i = 0; i < _nodeCount; i++) {
+        _allNodes[i].free()
+      }
+      _nodeCount = 0
+      _roots.length = 0
+      _nodeStack.length = 0
+      _currentNode = null
+      _currentIdx = -1
+      _nodeToIndex.clear()
     },
 
     beginLayout() {
-      _parentStack = []
-      _allOpenStates = []
-      _textEntries = []
-      _current = _defaultOpen()
-      _pendingSetId = null
+      // Free previous tree nodes
+      for (let i = 0; i < _nodeCount; i++) {
+        _allNodes[i].free()
+      }
+      _nodeCount = 0
+      _nodeStack.length = 0
+      _roots.length = 0
+      _currentNode = null
+      _currentIdx = -1
+      _dfsCounter = 0
+      _nodeToIndex.clear()
     },
 
-     endLayout(): RenderCommand[] {
-      const childrenByParent = new Map<number, NodeOpenState[]>()
-      for (const state of _allOpenStates) {
-        const children = childrenByParent.get(state.parentNodeId) ?? []
-        children.push(state)
-        childrenByParent.set(state.parentNodeId, children)
+    endLayout(): RenderCommand[] {
+      // Compute layout for each root
+      for (const root of _roots) {
+        root.calculateLayout(_viewportW, _viewportH, DIRECTION_LTR)
       }
 
-      const measured = new Map<number, { width: number; height: number }>()
-      function sizeValue(kind: number, value: number, parent: number, fallback: number) {
-        if (kind === 1) return value
-        if (kind === 2) return parent * value
-        return fallback
-      }
-      function measure(state: NodeOpenState, parentW: number, parentH: number): { width: number; height: number } {
-        const children = childrenByParent.get(state.nodeId) ?? []
-        // Compute this node's own dimensions first so children can reference them
-        const rootW = state.flags & FLAG_IS_ROOT ? _viewportW : parentW
-        const rootH = state.flags & FLAG_IS_ROOT ? _viewportH : parentH
-        const selfW = sizeValue(state.sizeWKind, state.sizeW, rootW, parentW)
-        const selfH = sizeValue(state.sizeHKind, state.sizeH, rootH, parentH)
-        let innerW = 0
-        let innerH = 0
-        for (const child of children) {
-          const childSize = measure(child, selfW, selfH)
-          if (state.flexDir === 0) {
-            innerW += childSize.width
-            innerH = Math.max(innerH, childSize.height)
-          } else {
-            innerW = Math.max(innerW, childSize.width)
-            innerH += childSize.height
-          }
-        }
-        const gap = Math.max(0, children.length - 1) * state.gapRow
-        if (state.flexDir === 0) innerW += gap
-        else innerH += gap
-        const fallbackW = innerW + state.padLeft + state.padRight + state.borderLeft + state.borderRight
-        const fallbackH = innerH + state.padTop + state.padBottom + state.borderTop + state.borderBottom
-        const width = Math.max(state.minW || 0, Math.min(state.maxW || Infinity, sizeValue(state.sizeWKind, state.sizeW, rootW, (state.flags & FLAG_IS_ROOT) ? _viewportW : fallbackW)))
-        const height = Math.max(state.minH || 0, Math.min(state.maxH || Infinity, sizeValue(state.sizeHKind, state.sizeH, rootH, (state.flags & FLAG_IS_ROOT) ? _viewportH : fallbackH)))
-        const result = { width, height }
-        measured.set(state.nodeId, result)
-        return result
-      }
-
+      // Collect absolute positions by walking the Flexily tree
       const layoutMap = new Map<number, PositionedCommand>()
-      function place(state: NodeOpenState, x: number, y: number, width: number, height: number) {
-        const contentX = x + state.padLeft + state.borderLeft
-        const contentY = y + state.padTop + state.borderTop
-        const contentW = Math.max(0, width - state.padLeft - state.padRight - state.borderLeft - state.borderRight)
-        const contentH = Math.max(0, height - state.padTop - state.padBottom - state.borderTop - state.borderBottom)
-        layoutMap.set(state.nodeId, { nodeId: state.nodeId, x, y, width, height, contentX, contentY, contentW, contentH })
-        const children = childrenByParent.get(state.nodeId) ?? []
-        let cursor = state.flexDir === 0 ? contentX : contentY
-        for (const child of children) {
-          if (child.posKind === 1) continue
-          const childSize = measured.get(child.nodeId) ?? { width: 0, height: 0 }
-          const isRow = state.flexDir === 0
-          const wGrow = child.origSizeWType === 1 /* GROW */
-          const hGrow = child.origSizeHType === 1 /* GROW */
-          // Main-axis: grow children fill remaining space
-          // Cross-axis: grow children stretch to parent content dimension
-          const childW = (wGrow && isRow) ? contentW   // main-axis grow in row
-            : (wGrow && !isRow) ? contentW              // cross-axis stretch in column
-            : childSize.width
-          const childH = (hGrow && !isRow) ? contentH   // main-axis grow in column
-            : (hGrow && isRow) ? contentH                // cross-axis stretch in row
-            : childSize.height
-          place(child, state.flexDir === 0 ? cursor : contentX, state.flexDir === 0 ? contentY : cursor, childW, childH)
-          cursor += (state.flexDir === 0 ? childW : childH) + state.gapRow
-        }
-        for (const child of children) {
-          if (child.posKind !== 1) continue
-          const childSize = measured.get(child.nodeId) ?? { width: 0, height: 0 }
-          place(child, contentX + child.insetLeft, contentY + child.insetTop, childSize.width, childSize.height)
+
+      const collectPositions = (node: Node, parentAbsX: number, parentAbsY: number) => {
+        const idx = _nodeToIndex.get(node)
+        if (idx === undefined) return
+
+        const left = node.getComputedLeft()
+        const top = node.getComputedTop()
+        const width = node.getComputedWidth()
+        const height = node.getComputedHeight()
+
+        const absX = parentAbsX + left
+        const absY = parentAbsY + top
+
+        const padL = node.getComputedPadding(EDGE_LEFT)
+        const padR = node.getComputedPadding(EDGE_RIGHT)
+        const padT = node.getComputedPadding(EDGE_TOP)
+        const padB = node.getComputedPadding(EDGE_BOTTOM)
+        const borL = node.getComputedBorder(EDGE_LEFT)
+        const borR = node.getComputedBorder(EDGE_RIGHT)
+        const borT = node.getComputedBorder(EDGE_TOP)
+        const borB = node.getComputedBorder(EDGE_BOTTOM)
+
+        layoutMap.set(_nodeIds[idx], {
+          nodeId: _nodeIds[idx],
+          x: absX, y: absY, width, height,
+          contentX: absX + padL + borL,
+          contentY: absY + padT + borT,
+          contentW: Math.max(0, width - padL - padR - borL - borR),
+          contentH: Math.max(0, height - padT - padB - borT - borB),
+        })
+
+        const childCount = node.getChildCount()
+        for (let i = 0; i < childCount; i++) {
+          const child = node.getChild(i)
+          if (child) collectPositions(child, absX, absY)
         }
       }
 
-      for (const root of childrenByParent.get(0) ?? []) {
-        const size = measure(root, _viewportW, _viewportH)
-        place(root, 0, 0, size.width, size.height)
+      for (const root of _roots) {
+        collectPositions(root, 0, 0)
       }
+
       _lastLayoutMap = layoutMap
 
       // ── Stacking-context command emission ─────────────────────────────────
-      //
-      // _allOpenStates is captured in DFS order, but rendering cannot be a raw
-      // global DFS once floating zIndex enters the picture. Browsers and OS
-      // compositors treat a positioned/z-ordered subtree atomically: children are
-      // ordered inside their parent context and cannot escape above a sibling
-      // context. We mirror that here by rebuilding the node tree from
-      // parentNodeId, sorting siblings by their local floating zIndex, and then
-      // emitting each subtree as a unit.
-      //
-      // This intentionally makes zIndex local to the parent stacking context,
-      // not one global number across the whole frame. A child with zIndex=999
-      // remains inside its parent window/context.
-
-      // Build nodeId → DFS index map from _allOpenStates
-      const dfsIndex = new Map<number, number>()
-      for (let i = 0; i < _allOpenStates.length; i++) {
-        dfsIndex.set(_allOpenStates[i].nodeId, i)
-      }
-
-      type TextEntry = { nodeId: number; content: string; color: number; fontId: number; fontSize: number }
-      const textById = new Map<number, TextEntry>()
-      for (const te of _textEntries) {
-        textById.set(te.nodeId, te)
-      }
-
-      // Build scroll container set
+      // Build children-by-nodeId and scroll/text lookups in one pass
+      const childrenByParent = new Map<number, number[]>()  // parentNodeId → child indices
       const scrollContainerIds = new Set<number>()
-      for (const state of _allOpenStates) {
-        if (state.flags & (FLAG_SCROLL_X | FLAG_SCROLL_Y)) {
-          scrollContainerIds.add(state.nodeId)
-        }
+      const textByNodeId = new Map<number, number>()  // nodeId → index
+
+      for (let i = 0; i < _nodeCount; i++) {
+        const pid = _parentNodeIds[i]
+        const arr = childrenByParent.get(pid)
+        if (arr) arr.push(i)
+        else childrenByParent.set(pid, [i])
+
+        if (_isScrollX[i] || _isScrollY[i]) scrollContainerIds.add(_nodeIds[i])
+        if (_isText[i]) textByNodeId.set(_nodeIds[i], i)
       }
 
       const cmds: RenderCommand[] = []
 
-      function makeRect(pos: { x: number; y: number; width: number; height: number }, state: NodeOpenState): RenderCommand {
-        return {
-          type: CMD.RECTANGLE,
-          x: pos.x, y: pos.y, width: pos.width, height: pos.height,
-          color: [(state.bgColor >>> 24) & 0xff, (state.bgColor >>> 16) & 0xff, (state.bgColor >>> 8) & 0xff, state.bgColor & 0xff] as [number,number,number,number],
-          cornerRadius: state.cornerRadius,
-          extra1: 0, extra2: 0,
-          nodeId: state.nodeId,
+      const sortedChildIndices = (parentId: number): number[] => {
+        const children = childrenByParent.get(parentId)
+        if (!children) return []
+        let hasFloating = false
+        for (let i = 0; i < children.length; i++) {
+          if (_isFloating[children[i]]) { hasFloating = true; break }
         }
-      }
-
-      function localZ(state: NodeOpenState) {
-        return (state.flags & FLAG_FLOATING_ABS) ? state.zIndex : 0
-      }
-
-      function sortedChildren(parentId: number) {
-        const children = childrenByParent.get(parentId) ?? []
-        if (!children.some((child) => child.posKind === 1)) return children
+        if (!hasFloating) return children
         return [...children].sort((a, b) => {
-          const z = localZ(a) - localZ(b)
+          const za = _isFloating[a] ? _zIndexes[a] : 0
+          const zb = _isFloating[b] ? _zIndexes[b] : 0
+          const z = za - zb
           if (z !== 0) return z
-          return (dfsIndex.get(a.nodeId) ?? 0) - (dfsIndex.get(b.nodeId) ?? 0)
+          return _dfsIndexes[a] - _dfsIndexes[b]
         })
       }
 
-      function emitText(te: TextEntry) {
-        const pos = layoutMap.get(te.nodeId)
+      const emitNode = (idx: number) => {
+        const nodeId = _nodeIds[idx]
+        const pos = layoutMap.get(nodeId)
         if (!pos) return
-        cmds.push({
+
+        const bgColor = _bgColors[idx]
+        if (bgColor !== 0 || _cornerRadii[idx] !== 0) {
+          cmds.push({
+            type: CMD.RECTANGLE,
+            x: pos.x, y: pos.y, width: pos.width, height: pos.height,
+            color: [(bgColor >>> 24) & 0xff, (bgColor >>> 16) & 0xff, (bgColor >>> 8) & 0xff, bgColor & 0xff] as [number, number, number, number],
+            cornerRadius: _cornerRadii[idx],
+            extra1: 0, extra2: 0,
+            nodeId,
+          })
+        }
+
+        const textIdx = textByNodeId.get(nodeId)
+        if (textIdx !== undefined) {
+          const tc = _textColors[textIdx]
+          cmds.push({
             type: CMD.TEXT,
             x: pos.x, y: pos.y, width: pos.width, height: pos.height,
-            color: [(te.color >>> 24) & 0xff, (te.color >>> 16) & 0xff, (te.color >>> 8) & 0xff, te.color & 0xff] as [number,number,number,number],
-            cornerRadius: 0, extra1: te.fontSize, extra2: te.fontId, text: te.content,
-            nodeId: te.nodeId,
-        })
-      }
-
-      function emitNode(state: NodeOpenState) {
-        const pos = layoutMap.get(state.nodeId)
-        if (!pos) return
-
-        if (state.bgColor !== 0 || state.cornerRadius !== 0) {
-          cmds.push(makeRect(pos, state))
+            color: [(tc >>> 24) & 0xff, (tc >>> 16) & 0xff, (tc >>> 8) & 0xff, tc & 0xff] as [number, number, number, number],
+            cornerRadius: 0, extra1: _textFontSizes[textIdx], extra2: _textFontIds[textIdx],
+            text: _textContents[textIdx],
+            nodeId,
+          })
         }
 
-        const text = textById.get(state.nodeId)
-        if (text) emitText(text)
-
-        const isScrollContainer = scrollContainerIds.has(state.nodeId)
-        if (isScrollContainer) {
-          cmds.push({ type: CMD.SCISSOR_START, x: pos.x, y: pos.y, width: pos.width, height: pos.height, color: [0, 0, 0, 0] as [number,number,number,number], cornerRadius: 0, extra1: 0, extra2: 0, nodeId: state.nodeId })
+        const isScroll = scrollContainerIds.has(nodeId)
+        if (isScroll) {
+          cmds.push({ type: CMD.SCISSOR_START, x: pos.x, y: pos.y, width: pos.width, height: pos.height, color: [0, 0, 0, 0] as [number, number, number, number], cornerRadius: 0, extra1: 0, extra2: 0, nodeId })
         }
 
-        for (const child of sortedChildren(state.nodeId)) {
-          emitNode(child)
+        for (const childIdx of sortedChildIndices(nodeId)) {
+          emitNode(childIdx)
         }
 
-        if (isScrollContainer) {
-          cmds.push({ type: CMD.SCISSOR_END, x: 0, y: 0, width: 0, height: 0, color: [0, 0, 0, 0] as [number,number,number,number], cornerRadius: 0, extra1: 0, extra2: 0 })
+        if (isScroll) {
+          cmds.push({ type: CMD.SCISSOR_END, x: 0, y: 0, width: 0, height: 0, color: [0, 0, 0, 0] as [number, number, number, number], cornerRadius: 0, extra1: 0, extra2: 0 })
         }
       }
 
-      for (const root of sortedChildren(0)) {
-        emitNode(root)
+      for (const childIdx of sortedChildIndices(0)) {
+        emitNode(childIdx)
       }
 
       return cmds
     },
 
-    /** Set the current node's stable Vexart ID. Called right after openElement/setId. */
     setCurrentNodeId(nodeId: number) {
-      if (_current) _current.nodeId = nodeId
+      if (_currentIdx >= 0) _nodeIds[_currentIdx] = nodeId
     },
 
     openElement() {
-      // Flush the parent's OPEN before opening a child.
-      // This ensures the buffer order is: OPEN(parent) OPEN(child) ... CLOSE(child) CLOSE(parent)
-      if (_parentStack.length > 0) {
-        const parentState = _parentStack[_parentStack.length - 1]
-        if (!parentState._openWritten) {
-          _writeOpenCommand(parentState)
-          parentState._openWritten = true
-        }
-      }
-      const parent = _parentStack.length > 0 ? _parentStack[_parentStack.length - 1] : null
-      const state: NodeOpenState = _defaultOpen()
-      state.parentNodeId = parent?.nodeId ?? 0
-      if (_parentStack.length === 0) state.flags |= FLAG_IS_ROOT
-      _pendingSetId = null
-      _parentStack.push(state)
-      _current = state
+      const node = Node.create()
+      const parentId = _nodeStack.length > 0 ? _nodeIds[_nodeToIndex.get(_nodeStack[_nodeStack.length - 1])!] : 0
+      _pushNode(node, parentId)
     },
 
     closeElement() {
-      const state = _parentStack.pop()
-      if (!state) return
-      // If this node's OPEN was never written (leaf node with no children),
-      // write it now before the CLOSE.
-      if (!state._openWritten) {
-        _writeOpenCommand(state)
+      if (_nodeStack.length === 0) return
+      _nodeStack.pop()
+      if (_nodeStack.length > 0) {
+        _currentNode = _nodeStack[_nodeStack.length - 1]
+        _currentIdx = _nodeToIndex.get(_currentNode)!
+      } else {
+        _currentNode = null
+        _currentIdx = -1
       }
-      _writeCloseCommand()
-      _current = _parentStack.length > 0 ? _parentStack[_parentStack.length - 1] : _defaultOpen()
     },
 
-    setId(id: string) {
-      // In legacy Clay, setId() calls openElement() internally.
-      // Here we do the same: push a new state and mark the id.
-      // Flush parent's OPEN first (same as openElement).
-      if (_parentStack.length > 0) {
-        const parentState = _parentStack[_parentStack.length - 1]
-        if (!parentState._openWritten) {
-          _writeOpenCommand(parentState)
-          parentState._openWritten = true
-        }
-      }
-      const parent = _parentStack.length > 0 ? _parentStack[_parentStack.length - 1] : null
-      const state: NodeOpenState = _defaultOpen()
-      state.parentNodeId = parent?.nodeId ?? 0
-      if (_parentStack.length === 0) state.flags |= FLAG_IS_ROOT
-      _pendingSetId = id
-      _parentStack.push(state)
-      _current = state
+    setId(_id: string) {
+      this.openElement()
     },
 
     configureLayout(dir: number, px: number, py: number, gap: number, ax: number, ay: number) {
-      const s = _current
-      s.flexDir = dir
-      s.padLeft = px; s.padRight = px; s.padTop = py; s.padBottom = py
-      s.gapRow = gap; s.gapCol = gap
-      // Flexbox: justify_content = main axis, align_items = cross axis.
-      // Vexart API: alignX = always horizontal, alignY = always vertical.
-      // Column: main=Y, cross=X → swap so alignX→align_items, alignY→justify_content
-      // Row:    main=X, cross=Y → no swap (alignX→justify_content, alignY→align_items)
-      if (dir === 1 /* column */ || dir === 3 /* column-reverse */) {
-        s.justifyContent = ay; s.alignItems = ax
+      if (!_currentNode) return
+      const node = _currentNode
+
+      node.setFlexDirection(dir === 0 ? FLEX_DIRECTION_ROW : FLEX_DIRECTION_COLUMN)
+
+      node.setPadding(EDGE_LEFT, px)
+      node.setPadding(EDGE_RIGHT, px)
+      node.setPadding(EDGE_TOP, py)
+      node.setPadding(EDGE_BOTTOM, py)
+
+      if (gap > 0) node.setGap(GUTTER_ALL, gap)
+
+      if (dir === 1) {
+        node.setJustifyContent(mapJustify(ay))
+        node.setAlignItems(mapAlign(ax))
       } else {
-        s.justifyContent = ax; s.alignItems = ay
+        node.setJustifyContent(mapJustify(ax))
+        node.setAlignItems(mapAlign(ay))
       }
     },
 
     configureLayoutFull(dir: number, padL: number, padR: number, padT: number, padB: number, gap: number, ax: number, ay: number) {
-      const s = _current
-      s.flexDir = dir
-      s.padLeft = padL; s.padRight = padR; s.padTop = padT; s.padBottom = padB
-      s.gapRow = gap; s.gapCol = gap
+      if (!_currentNode) return
+      const node = _currentNode
+
+      node.setFlexDirection(dir === 0 ? FLEX_DIRECTION_ROW : FLEX_DIRECTION_COLUMN)
+
+      node.setPadding(EDGE_LEFT, padL)
+      node.setPadding(EDGE_RIGHT, padR)
+      node.setPadding(EDGE_TOP, padT)
+      node.setPadding(EDGE_BOTTOM, padB)
+
+      if (gap > 0) node.setGap(GUTTER_ALL, gap)
+
       if (dir === 1 || dir === 3) {
-        s.justifyContent = ay; s.alignItems = ax
+        node.setJustifyContent(mapJustify(ay))
+        node.setAlignItems(mapAlign(ax))
       } else {
-        s.justifyContent = ax; s.alignItems = ay
+        node.setJustifyContent(mapJustify(ax))
+        node.setAlignItems(mapAlign(ay))
       }
     },
 
     configureSizing(wType: number, wVal: number, hType: number, hVal: number) {
-      const s = _current
-      s.sizeWKind = _vxSizeKind(wType)
-      s.sizeW = wVal
-      s.sizeHKind = _vxSizeKind(hType)
-      s.sizeH = hVal
-      s.origSizeWType = wType
-      s.origSizeHType = hType
-      if (wType === 1 /* GROW */ || hType === 1 /* GROW */) s.flexGrow = 1.0
+      if (!_currentNode) return
+      const node = _currentNode
+
+      // SIZING: FIT=0, GROW=1, PERCENT=2, FIXED=3
+      switch (wType) {
+        case 0: /* FIT */ break
+        case 1: /* GROW */ node.setFlexGrow(1); break
+        case 2: /* PERCENT */ node.setWidthPercent(wVal); break
+        case 3: /* FIXED */ node.setWidth(wVal); break
+      }
+
+      switch (hType) {
+        case 0: /* FIT */ break
+        case 1: /* GROW */ node.setFlexGrow(1); break
+        case 2: /* PERCENT */ node.setHeightPercent(hVal); break
+        case 3: /* FIXED */ node.setHeight(hVal); break
+      }
     },
 
     configureSizingMinMax(wType: number, wVal: number, minW: number, maxW: number, hType: number, hVal: number, minH: number, maxH: number) {
-      const s = _current
-      s.sizeWKind = _vxSizeKind(wType)
-      s.sizeW = wVal
-      s.sizeHKind = _vxSizeKind(hType)
-      s.sizeH = hVal
-      s.origSizeWType = wType
-      s.origSizeHType = hType
-      s.minW = minW; s.maxW = maxW; s.minH = minH; s.maxH = maxH
-      if (wType === 1 /* GROW */ || hType === 1 /* GROW */) s.flexGrow = 1.0
+      if (!_currentNode) return
+      this.configureSizing(wType, wVal, hType, hVal)
+
+      const node = _currentNode
+      if (minW > 0) node.setMinWidth(minW)
+      if (maxW < 100000) node.setMaxWidth(maxW)
+      if (minH > 0) node.setMinHeight(minH)
+      if (maxH < 100000) node.setMaxHeight(maxH)
     },
 
     configureRectangle(color: number, radius: number) {
-      _current.bgColor = color
-      _current.cornerRadius = radius
+      if (_currentIdx >= 0) {
+        _bgColors[_currentIdx] = color
+        _cornerRadii[_currentIdx] = radius
+      }
     },
 
     configureBorder(_color: number, _width: number) {
-      // Border reservation noted; full border rendering handled by paint layer
-      const s = _current
-      const w = _width
-      s.borderTop = w; s.borderRight = w; s.borderBottom = w; s.borderLeft = w
+      if (!_currentNode) return
+      _currentNode.setBorder(EDGE_ALL, _width)
     },
 
-    /**
-     * Configure per-side border widths for space reservation.
-     *
-     * SUPPORTED: per-side border widths (_l, _r, _t, _b) — mapped to Taffy border.
-     * NOT SUPPORTED: borderBetweenChildren (_btw) — Taffy has no equivalent;
-     *   this was a Clay-specific layout primitive. Use `gap` instead.
-     * NOTE: _color is ignored here; border color is applied at paint time via effects queue.
-     */
     configureBorderSides(_color: number, _l: number, _r: number, _t: number, _b: number, _btw: number) {
-      const s = _current
-      s.borderLeft = _l; s.borderRight = _r; s.borderTop = _t; s.borderBottom = _b
+      if (!_currentNode) return
+      const node = _currentNode
+      if (_l > 0) node.setBorder(EDGE_LEFT, _l)
+      if (_r > 0) node.setBorder(EDGE_RIGHT, _r)
+      if (_t > 0) node.setBorder(EDGE_TOP, _t)
+      if (_b > 0) node.setBorder(EDGE_BOTTOM, _b)
     },
 
-    /**
-     * Configure a floating (absolutely-positioned) element.
-     *
-     * SUPPORTED (maps to Taffy absolute position with insets):
-     *   - ox, oy → inset_left, inset_top (pixel offset from attach origin)
-     *
-     * NOT SUPPORTED (Clay-specific features with no Taffy equivalent):
-     *   - attachTo (PARENT/ROOT/ELEMENT) — Taffy has no attach-point concept;
-     *     all floating elements are positioned relative to their containing block.
-     *   - attachPoints (ape/app — 3×3 grid anchor) — not available in Taffy.
-     *   - pointerPassthrough (_pc) — must be implemented at the hit-test layer (TS-side).
-     *   - elementId (_pid) — "attach to element" mode is not supported; use ox/oy directly.
-      *   - zIndex (_z) — Taffy ignores paint order; endLayout() applies it when
-      *     emitting subtree-atomic stacking context commands.
-     *
-     * The correct Taffy mapping for floating is absolute position + insets.
-     * Callers that need attach-point semantics must compute ox/oy themselves.
-     */
     configureFloating(attachTo: number, ox: number, oy: number, _z: number, _ape: number, _app: number, _pc: number, _pid: number) {
-      const s = _current
-      s.flags |= FLAG_FLOATING_ABS
-      s.posKind = 1  // Absolute
-      s.insetLeft = ox; s.insetTop = oy
-      s.zIndex = _z
+      if (!_currentNode || _currentIdx < 0) return
+      _isFloating[_currentIdx] = true
+      _zIndexes[_currentIdx] = _z
+      _currentNode.setPositionType(POSITION_TYPE_ABSOLUTE)
+      if (ox !== 0) _currentNode.setPosition(EDGE_LEFT, ox)
+      if (oy !== 0) _currentNode.setPosition(EDGE_TOP, oy)
     },
 
-    /**
-     * Configure scroll/clip container flags.
-     *
-     * SUPPORTED: _sx/_sy set FLAG_SCROLL_X/Y on the Taffy node so that
-     *   Taffy uses overflow:scroll (children are not compressed by flex_shrink).
-     *
-     * NOT SUPPORTED: _ox/_oy (Clay-era scroll offsets) — scroll offsets are
-     *   now applied TS-side in applyScrollOffsets() after layout. These params
-     *   are accepted for signature compatibility but intentionally ignored.
-     */
     configureClip(_sx: boolean, _sy: boolean, _ox: number, _oy: number) {
-      const s = _current
-      if (_sx) s.flags |= FLAG_SCROLL_X
-      if (_sy) s.flags |= FLAG_SCROLL_Y
+      if (!_currentNode || _currentIdx < 0) return
+      if (_sx) _isScrollX[_currentIdx] = true
+      if (_sy) _isScrollY[_currentIdx] = true
+      if (_sx || _sy) _currentNode.setOverflow(OVERFLOW_SCROLL)
     },
 
     text(_content: string, _color: number, _fontId: number, _fontSize: number, nodeId?: number, measuredW?: number, measuredH?: number) {
-      // Flush parent OPEN before emitting child text node (same as openElement).
-      if (_parentStack.length > 0) {
-        const parentState = _parentStack[_parentStack.length - 1]
-        if (!parentState._openWritten) {
-          _writeOpenCommand(parentState)
-          parentState._openWritten = true
-        }
-      }
-      const state: NodeOpenState = _defaultOpen()
-      if (nodeId !== undefined) state.nodeId = nodeId
-      state.parentNodeId = _parentStack.length > 0 ? _parentStack[_parentStack.length - 1].nodeId : 0
-      if (measuredW !== undefined && measuredH !== undefined && measuredW > 0 && measuredH > 0) {
-        state.sizeWKind = 1; state.sizeW = measuredW    // Length (Rust value 1 = Dimension::length)
-        state.sizeHKind = 1; state.sizeH = measuredH    // Length (Rust value 1 = Dimension::length)
+      const node = Node.create()
+      const parentId = _nodeStack.length > 0 ? _nodeIds[_nodeToIndex.get(_nodeStack[_nodeStack.length - 1])!] : 0
+      const idx = _addNode(node, parentId, _nodeStack.length === 0)
+
+      _nodeIds[idx] = nodeId ?? 0
+      _isText[idx] = true
+      _textContents[idx] = _content
+      _textColors[idx] = _color
+      _textFontIds[idx] = _fontId
+      _textFontSizes[idx] = _fontSize
+
+      if (_nodeStack.length > 0) {
+        const parent = _nodeStack[_nodeStack.length - 1]
+        parent.insertChild(node, parent.getChildCount())
       } else {
-        state.sizeWKind = 0; state.sizeHKind = 0  // Auto (0x0 without measure callback)
+        _roots.push(node)
       }
-      _writeOpenCommand(state)
-      _writeCloseCommand()
-      // Store text metadata for CMD.TEXT generation in endLayout()
-      _textEntries.push({ nodeId: state.nodeId, content: _content, color: _color, fontId: _fontId, fontSize: _fontSize })
+
+      if (measuredW !== undefined && measuredH !== undefined && measuredW > 0 && measuredH > 0) {
+        node.setWidth(measuredW)
+        node.setHeight(measuredH)
+      }
     },
 
     hashString(s: string): number {
