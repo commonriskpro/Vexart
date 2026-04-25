@@ -3,7 +3,7 @@ import { createNode } from "./node"
 import { createElement, insertNode, setProp, solidCreateTextNode } from "../reconciler/reconciler"
 import { destroyNativeScene, nativeSceneCreateNode, nativeSceneSetLayout } from "./native-scene"
 import { disableNativeSceneGraph, enableNativeSceneGraph } from "./native-scene-graph-flags"
-import { nativeRenderGraphSnapshot, translateNativeRenderGraphSnapshot, type NativeRenderGraphSnapshot, type NativeRenderOpSnapshot } from "./native-render-graph"
+import { nativeRenderGraphSnapshot, nativeScenePaintRefsForCommands, translateNativeRenderGraphSnapshot, type NativeRenderGraphSnapshot, type NativeRenderOpSnapshot } from "./native-render-graph"
 import { CMD, type RenderGraphQueues } from "./render-graph"
 import { resetFocus } from "../reconciler/focus"
 
@@ -172,10 +172,39 @@ describe("native render graph snapshot", () => {
       { type: CMD.TEXT, x: 0, y: 0, width: 20, height: 10, color: [255, 255, 255, 255] as [number, number, number, number], cornerRadius: 0, extra1: 12, extra2: 0, text: "hello", nodeId: 2 },
     ]
     const queues: RenderGraphQueues = { effects: [], images: [], canvases: [] }
-    const textMetaMap = new Map([["hello", { content: "hello", fontId: 0, fontSize: 12, lineHeight: 14 }]])
+    const textMetaMap = new Map([[2, { nodeId: 2, content: "hello", fontId: 0, fontSize: 12, lineHeight: 14 }]])
 
     const graph = translateNativeRenderGraphSnapshot(snapshot, commands, queues, textMetaMap)
     expect(graph.ops.map((op) => op.kind)).toEqual(["rectangle", "text"])
+  })
+
+  test("looks up text metadata by node id instead of text content", () => {
+    const snapshot: NativeRenderGraphSnapshot = {
+      ops: [
+        { kind: "text", nodeId: 1, x: 0, y: 0, width: 40, height: 10, color: 1, cornerRadius: 0, borderWidth: 0, opacity: 1, text: "[]", fontSize: 10, fontId: 0, materialKey: "pipeline:text:1", effectKey: "", imageSource: "", hasGradient: false, hasShadow: false, hasGlow: false, hasFilter: false, hasBackdrop: false, hasTransform: false, hasOpacity: false, gradientJson: "", shadowJson: "", glowJson: "", filterJson: "", transformJson: "", backdropBlur: null, backdropBrightness: null, backdropContrast: null, backdropSaturate: null, backdropGrayscale: null, backdropInvert: null, backdropSepia: null, backdropHueRotate: null },
+        { kind: "text", nodeId: 2, x: 0, y: 20, width: 40, height: 20, color: 1, cornerRadius: 0, borderWidth: 0, opacity: 1, text: "[]", fontSize: 18, fontId: 0, materialKey: "pipeline:text:2", effectKey: "", imageSource: "", hasGradient: false, hasShadow: false, hasGlow: false, hasFilter: false, hasBackdrop: false, hasTransform: false, hasOpacity: false, gradientJson: "", shadowJson: "", glowJson: "", filterJson: "", transformJson: "", backdropBlur: null, backdropBrightness: null, backdropContrast: null, backdropSaturate: null, backdropGrayscale: null, backdropInvert: null, backdropSepia: null, backdropHueRotate: null },
+      ],
+      batches: [],
+    }
+    const commands = [
+      { type: CMD.TEXT, x: 0, y: 0, width: 40, height: 10, color: [255, 255, 255, 255] as [number, number, number, number], cornerRadius: 0, extra1: 10, extra2: 0, text: "[]", nodeId: 1 },
+      { type: CMD.TEXT, x: 0, y: 20, width: 40, height: 20, color: [255, 255, 255, 255] as [number, number, number, number], cornerRadius: 0, extra1: 18, extra2: 0, text: "[]", nodeId: 2 },
+    ]
+    const textMetaMap = new Map([
+      [1, { nodeId: 1, content: "[]", fontId: 0, fontSize: 10, lineHeight: 12 }],
+      [2, { nodeId: 2, content: "[]", fontId: 0, fontSize: 18, lineHeight: 22 }],
+    ])
+
+    const graph = translateNativeRenderGraphSnapshot(snapshot, commands, { effects: [], images: [], canvases: [] }, textMetaMap)
+    const textOps = graph.ops.filter((op) => op.kind === "text")
+
+    expect(textOps).toHaveLength(2)
+    if (textOps[0]?.kind === "text" && textOps[1]?.kind === "text") {
+      expect(textOps[0].inputs.fontSize).toBe(10)
+      expect(textOps[0].inputs.lineHeight).toBe(12)
+      expect(textOps[1].inputs.fontSize).toBe(18)
+      expect(textOps[1].inputs.lineHeight).toBe(22)
+    }
   })
 
   test("translates rect border and text directly from native snapshot values", () => {
@@ -311,6 +340,96 @@ describe("native render graph snapshot", () => {
     }
   })
 
+  test("selects direct scene paint refs only for Rust-supported ops", () => {
+    const snapshot: NativeRenderGraphSnapshot = {
+      ops: [
+        nativeOp({ kind: "rect", nodeId: 101 }),
+        nativeOp({ kind: "border", nodeId: 101, borderWidth: 2 }),
+        nativeOp({ kind: "text", nodeId: 102, text: "hello" }),
+        nativeOp({ kind: "image", nodeId: 103, imageHandle: 7, imageSource: "native.png" }),
+      ],
+      batches: [],
+    }
+    const commands = [
+      { type: CMD.RECTANGLE, x: 0, y: 0, width: 20, height: 10, color: [0, 0, 0, 0] as [number, number, number, number], cornerRadius: 0, extra1: 0, extra2: 0, nodeId: 1 },
+      { type: CMD.BORDER, x: 0, y: 0, width: 20, height: 10, color: [0, 0, 0, 0] as [number, number, number, number], cornerRadius: 0, extra1: 2, extra2: 0, nodeId: 1 },
+      { type: CMD.TEXT, x: 0, y: 12, width: 20, height: 10, color: [255, 255, 255, 255] as [number, number, number, number], cornerRadius: 0, extra1: 12, extra2: 0, text: "hello", nodeId: 2 },
+      { type: CMD.RECTANGLE, x: 0, y: 24, width: 20, height: 10, color: [0, 0, 0, 0] as [number, number, number, number], cornerRadius: 0, extra1: 0, extra2: 0, nodeId: 3 },
+    ]
+
+    const refs = nativeScenePaintRefsForCommands(snapshot, commands, new Map([[101, 1], [102, 2], [103, 3]]))
+
+    expect(refs).toEqual([
+      { nodeId: 101n, kind: 0 },
+      { nodeId: 101n, kind: 1 },
+      { nodeId: 102n, kind: 2 },
+      { nodeId: 103n, kind: 4 },
+    ])
+  })
+
+  test("rejects direct scene paint refs for images without native handles", () => {
+    const snapshot: NativeRenderGraphSnapshot = {
+      ops: [nativeOp({ kind: "image", nodeId: 1, imageHandle: 0, imageSource: "missing.png" })],
+      batches: [],
+    }
+    const commands = [
+      { type: CMD.RECTANGLE, x: 0, y: 0, width: 20, height: 10, color: [0, 0, 0, 0] as [number, number, number, number], cornerRadius: 0, extra1: 0, extra2: 0, nodeId: 1 },
+    ]
+
+    expect(nativeScenePaintRefsForCommands(snapshot, commands)).toBeNull()
+  })
+
+  test("rejects direct scene paint refs for unsupported native effects", () => {
+    const snapshot: NativeRenderGraphSnapshot = {
+      ops: [nativeOp({ kind: "effect", nodeId: 1, hasTransform: true, transformJson: '{"rotate":12}' })],
+      batches: [],
+    }
+    const commands = [
+      { type: CMD.RECTANGLE, x: 0, y: 0, width: 20, height: 10, color: [0, 0, 0, 0] as [number, number, number, number], cornerRadius: 0, extra1: 0, extra2: 0, nodeId: 1 },
+    ]
+
+    expect(nativeScenePaintRefsForCommands(snapshot, commands)).toBeNull()
+  })
+
+  test("rejects direct scene paint refs for transformed text", () => {
+    const snapshot: NativeRenderGraphSnapshot = {
+      ops: [nativeOp({ kind: "text", nodeId: 1, text: "hello", hasTransform: true, transformJson: '{"rotate":12}' })],
+      batches: [],
+    }
+    const commands = [
+      { type: CMD.TEXT, x: 0, y: 0, width: 20, height: 10, color: [255, 255, 255, 255] as [number, number, number, number], cornerRadius: 0, extra1: 12, extra2: 0, text: "hello", nodeId: 1 },
+    ]
+
+    expect(nativeScenePaintRefsForCommands(snapshot, commands)).toBeNull()
+  })
+
+  test("keeps canvas backdrop filter transform and masking semantics on fallback path", () => {
+    const command = { type: CMD.RECTANGLE, x: 0, y: 0, width: 20, height: 10, color: [0, 0, 0, 0] as [number, number, number, number], cornerRadius: 0, extra1: 0, extra2: 0, nodeId: 1 }
+    const cases: NativeRenderOpSnapshot[] = [
+      nativeOp({ kind: "canvas", nodeId: 1, canvasDisplayListHandle: 9 }),
+      nativeOp({ kind: "effect", nodeId: 1, hasBackdrop: true, backdropBlur: 8 }),
+      nativeOp({ kind: "effect", nodeId: 1, hasFilter: true, filterJson: '{"blur":3}' }),
+      nativeOp({ kind: "image", nodeId: 1, imageHandle: 7, hasTransform: true, transformJson: '{"rotate":12}' }),
+      nativeOp({ kind: "image", nodeId: 1, imageHandle: 7, hasCornerRadii: true, cornerRadiiJson: '{"tl":4,"tr":4,"br":4,"bl":4}' }),
+    ]
+
+    for (const op of cases) {
+      expect(nativeScenePaintRefsForCommands({ ops: [op], batches: [] }, [command])).toBeNull()
+    }
+  })
+
+  test("selects direct scene paint refs for supported native effects", () => {
+    const snapshot: NativeRenderGraphSnapshot = {
+      ops: [nativeOp({ kind: "effect", nodeId: 1, hasGradient: true, hasShadow: true, hasGlow: true, gradientJson: '{"type":"linear","from":1,"to":2,"angle":90}', shadowJson: '{"x":0,"y":2,"blur":4,"color":3}', glowJson: '{"radius":6,"color":4}' })],
+      batches: [],
+    }
+    const commands = [
+      { type: CMD.RECTANGLE, x: 0, y: 0, width: 20, height: 10, color: [0, 0, 0, 0] as [number, number, number, number], cornerRadius: 0, extra1: 0, extra2: 0, nodeId: 1 },
+    ]
+
+    expect(nativeScenePaintRefsForCommands(snapshot, commands)).toEqual([{ nodeId: 1n, kind: 3 }])
+  })
+
   test("preserves fallback ops for uncovered commands in mixed native layers", () => {
     const snapshot: NativeRenderGraphSnapshot = {
       ops: [
@@ -326,7 +445,7 @@ describe("native render graph snapshot", () => {
       snapshot,
       commands,
       { effects: [], images: [], canvases: [] },
-      new Map([["hello", { content: "hello", fontId: 0, fontSize: 12, lineHeight: 14 }]]),
+      new Map([[2, { nodeId: 2, content: "hello", fontId: 0, fontSize: 12, lineHeight: 14 }]]),
     )
 
     expect(graph.ops.map((op) => op.kind)).toEqual(["effect", "text"])

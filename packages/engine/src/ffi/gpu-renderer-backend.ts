@@ -22,7 +22,7 @@ import type {
 } from "./renderer-backend"
 import { chooseGpuLayerStrategy, type GpuLayerStrategyMode } from "./gpu-layer-strategy"
 import { nativeChooseFrameStrategy, NATIVE_FRAME_STRATEGY, NATIVE_FRAME_TRANSPORT, type NativeFramePlan } from "./native-frame-orchestrator"
-import { getFont, layoutText } from "./text-layout"
+import { builtinFontScale, getFont, layoutText } from "./text-layout"
 import { openVexartLibrary } from "./vexart-bridge"
 import {
   GRAPH_MAGIC, GRAPH_VERSION,
@@ -43,6 +43,7 @@ import {
   nativeLayerUpsert,
 } from "./native-layer-registry"
 import { ensureNativeKittyTransport, nativeEmitLayerTarget, nativeEmitRegionTarget } from "./native-presentation-ops"
+import type { NativeScenePaintOpRef } from "./native-render-graph"
 // Phase 2b: All paint + composite ops route through libvexart.
 // Paint primitives: vexart_paint_dispatch cmd_kinds 0-20.
 // Target lifecycle: vexart_composite_target_create/destroy/begin_layer/end_layer.
@@ -361,6 +362,46 @@ function flushVexartBatchToTarget(ctx: bigint, target: bigint, cmdKind: number, 
   flushVexartBatch(ctx, cmdKind, instanceData, target)
 }
 
+function dispatchNativeScenePaint(
+  ctx: bigint,
+  scene: bigint,
+  target: bigint,
+  targetWidth: number,
+  targetHeight: number,
+  offsetX: number,
+  offsetY: number,
+  refs: NativeScenePaintOpRef[],
+) {
+  if (!scene || refs.length === 0) return null
+  const { symbols } = openVexartLibrary()
+  const HEADER = 24
+  const REF = 16
+  const config = new Uint8Array(HEADER + refs.length * REF)
+  const view = new DataView(config.buffer)
+  view.setUint32(0, Math.max(0, Math.round(targetWidth)), true)
+  view.setUint32(4, Math.max(0, Math.round(targetHeight)), true)
+  view.setFloat32(8, offsetX, true)
+  view.setFloat32(12, offsetY, true)
+  view.setUint32(16, refs.length, true)
+  view.setUint32(20, 0, true)
+  for (let i = 0; i < refs.length; i++) {
+    const off = HEADER + i * REF
+    view.setBigUint64(off, refs[i].nodeId, true)
+    view.setUint32(off + 8, refs[i].kind, true)
+    view.setUint32(off + 12, 0, true)
+  }
+  const statsOut = new Uint8Array(32)
+  const rc = symbols.vexart_scene_paint_dispatch(ctx, scene, target, ptr(config), config.byteLength, ptr(statsOut)) as number
+  if (rc !== 0) return null
+  const stats = new DataView(statsOut.buffer, statsOut.byteOffset, statsOut.byteLength)
+  return {
+    gpuTimeUs: Number(stats.getBigUint64(0, true)),
+    cpuTimeUs: Number(stats.getBigUint64(8, true)),
+    drawCalls: stats.getUint32(16, true),
+    primitives: stats.getUint32(20, true),
+  }
+}
+
 function compositeTargetUniformToTarget(ctx: bigint, target: bigint, sourceTarget: bigint, instanceData: Uint8Array): boolean {
   const { symbols } = openVexartLibrary()
   const rc = symbols.vexart_composite_update_uniform(ctx, target, sourceTarget, ptr(instanceData), 0) as number
@@ -514,6 +555,13 @@ function packImageTransformInstance(
 export type GpuRendererBackend = RendererBackend & {
   getLastStrategy: () => GpuLayerStrategyMode | null
 }
+
+type NativeScenePaintContext = Omit<RendererBackendPaintContext, "graph"> & {
+  scene: bigint
+  refs: NativeScenePaintOpRef[]
+}
+
+type NativeScenePaintBackendResult = ReturnType<RendererBackend["paint"]>
 
 /** @public */
 export type GpuRendererBackendCacheStats = {
@@ -2129,10 +2177,13 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           const useGlyphAtlas = true
           let usedGlyphPath = false
           if (useGlyphAtlas) {
-            const layout = layoutText(op.inputs.text, op.inputs.fontId, op.inputs.maxWidth, op.inputs.lineHeight)
+            const layout = layoutText(op.inputs.text, op.inputs.fontId, op.inputs.maxWidth, op.inputs.lineHeight, op.inputs.fontSize)
             const textX = Math.round(op.command.x) - ctx.offsetX
             const textY = Math.round(op.command.y) - ctx.offsetY
             const atlasRecord = getGlyphAtlas(op.inputs.fontId)
+            const scale = op.inputs.fontId === 0
+              ? builtinFontScale(op.inputs.fontSize)
+              : op.inputs.fontSize / getFont(op.inputs.fontId).size
             usedGlyphPath = !!atlasRecord
             if (atlasRecord) {
               tempGlyphs.length = 0
@@ -2149,7 +2200,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
                     usedGlyphPath = false
                     break
                   }
-                  const advance = atlasRecord.glyphWidths[glyphIndex] || atlasRecord.displayCellWidth
+                  const advance = (atlasRecord.glyphWidths[glyphIndex] || atlasRecord.displayCellWidth) * scale
                   if (glyph === " ") {
                     cursorX += advance
                     continue
@@ -2157,8 +2208,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
                   const glyphLeft = Math.round(cursorX)
                   const glyphTop = Math.round(cursorY)
                   // Use display dimensions for quad sizing (original px size)
-                  const glyphRight = glyphLeft + atlasRecord.displayCellWidth
-                  const glyphBottom = glyphTop + atlasRecord.displayCellHeight
+                  const displayCellWidth = atlasRecord.displayCellWidth * scale
+                  const displayCellHeight = atlasRecord.displayCellHeight * scale
+                  const glyphRight = glyphLeft + displayCellWidth
+                  const glyphBottom = glyphTop + displayCellHeight
                   if (glyphRight > 0 && glyphBottom > 0 && glyphLeft < ctx.target.width && glyphTop < ctx.target.height) {
                     const col = glyphIndex % atlasRecord.columns
                     const row = Math.floor(glyphIndex / atlasRecord.columns)
@@ -2166,8 +2219,8 @@ export function createGpuRendererBackend(): GpuRendererBackend {
                       // Quad position + size: use DISPLAY dimensions (original px)
                       x: (glyphLeft / ctx.target.width) * 2 - 1,
                       y: 1 - (glyphTop / ctx.target.height) * 2,
-                      w: (atlasRecord.displayCellWidth / ctx.target.width) * 2,
-                      h: -((atlasRecord.displayCellHeight / ctx.target.height) * 2),
+                      w: (displayCellWidth / ctx.target.width) * 2,
+                      h: -((displayCellHeight / ctx.target.height) * 2),
                       // UV coords: use TEXTURE dimensions (supersampled)
                       u: (col * atlasRecord.cellWidth) / (atlasRecord.cellWidth * atlasRecord.columns),
                       v: (row * atlasRecord.cellHeight) / (atlasRecord.cellHeight * atlasRecord.rows),
@@ -2237,6 +2290,54 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     if (!rgba) return { ok: false, rawLayer: null }
     return {
       ok: true as const,
+      rawLayer: {
+        data: rgba,
+        width: ctx.targetWidth,
+        height: ctx.targetHeight,
+      },
+    }
+  }
+
+  const renderNativeSceneFrame = (
+    ctx: NativeScenePaintContext,
+    targetHandle: VexartTargetHandle,
+    readbackMode: "auto" | "none" = "auto",
+    readbackRegion?: { x: number; y: number; width: number; height: number } | null,
+  ): { ok: boolean; rawLayer: { data: Uint8Array; width: number; height: number; region?: { x: number; y: number; width: number; height: number } } | null } => {
+    const vctx = getVexartCtx()
+    const stats = dispatchNativeScenePaint(
+      vctx,
+      ctx.scene,
+      targetHandle,
+      ctx.target.width,
+      ctx.target.height,
+      ctx.offsetX,
+      ctx.offsetY,
+      ctx.refs,
+    )
+    if (!stats) return { ok: false, rawLayer: null }
+    if (readbackMode === "none") return { ok: true, rawLayer: null }
+    if (readbackRegion && readbackRegion.width > 0 && readbackRegion.height > 0) {
+      const readbackStart = performance.now()
+      const rgba = vexartCompositeReadbackRegionRgba(vctx, targetHandle, readbackRegion)
+      addBackendProfile("readbackMs", readbackStart)
+      if (!rgba) return { ok: false, rawLayer: null }
+      return {
+        ok: true,
+        rawLayer: {
+          data: rgba,
+          width: readbackRegion.width,
+          height: readbackRegion.height,
+          region: readbackRegion,
+        },
+      }
+    }
+    const readbackStart = performance.now()
+    const rgba = vexartCompositeReadbackRgba(vctx, targetHandle, ctx.targetWidth * ctx.targetHeight * 4)
+    addBackendProfile("readbackMs", readbackStart)
+    if (!rgba) return { ok: false, rawLayer: null }
+    return {
+      ok: true,
       rawLayer: {
         data: rgba,
         width: ctx.targetWidth,
@@ -2468,6 +2569,106 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       }
       return { strategy: lastStrategy, nativePlan: lastNativeFramePlan }
     },
+    paintNativeScene(ctx: NativeScenePaintContext): NativeScenePaintBackendResult {
+      if (!gpuAvailable) return undefined
+      const frameCtx = ctx.frame
+      const layerCtx = ctx.layer
+      const delegatedFrame = !!(currentFrame && frameCtx && currentFrame === frameCtx)
+      if (delegatedFrame && frameCtx.useLayerCompositing && layerCtx) {
+        const layerTarget = getLayerTarget(layerCtx.key, ctx.target.width, ctx.target.height)
+        if (!layerTarget) return undefined
+        activeLayerKeys.add(layerCtx.key)
+        if (lastStrategy === "skip-present") return { output: "skip-present", strategy: lastStrategy }
+        const useNativeLayerPresentation = lastStrategy !== "final-frame"
+          && isNativePresentationCapable(frameCtx.transmissionMode)
+        const nativeLayer = useNativeLayerPresentation
+          ? nativeLayerUpsert(layerCtx.key, {
+              target: layerTarget,
+              x: layerCtx.bounds.x,
+              y: layerCtx.bounds.y,
+              width: layerCtx.bounds.width,
+              height: layerCtx.bounds.height,
+              z: layerCtx.z,
+            })
+          : null
+        const nativeImageId = nativeLayer?.imageId ?? 0
+        const readbackMode = lastStrategy === "final-frame" || useNativeLayerPresentation ? "none" : "auto"
+        const repaint = layerCtx.repaintRect
+        const region = repaint
+          ? {
+              x: Math.max(0, Math.floor(repaint.x - layerCtx.bounds.x)),
+              y: Math.max(0, Math.floor(repaint.y - layerCtx.bounds.y)),
+              width: Math.min(ctx.target.width, Math.ceil(repaint.width)),
+              height: Math.min(ctx.target.height, Math.ceil(repaint.height)),
+            }
+          : null
+        const shouldReadbackRegion = !useNativeLayerPresentation
+          && lastStrategy !== "final-frame"
+          && !!region
+          && region.width > 0
+          && region.height > 0
+          && region.width * region.height < ctx.target.width * ctx.target.height
+        const result = renderNativeSceneFrame(ctx, layerTarget, readbackMode, shouldReadbackRegion ? region : null)
+        if (!result.ok) return undefined
+        if (lastStrategy === "final-frame") {
+          recordCurrentFrameLayer({
+            key: layerCtx.key,
+            z: layerCtx.z,
+            x: layerCtx.bounds.x,
+            y: layerCtx.bounds.y,
+            width: layerCtx.bounds.width,
+            height: layerCtx.bounds.height,
+            handle: layerTarget,
+            isBackground: layerCtx.isBackground,
+            subtreeTransform: layerCtx.subtreeTransform,
+            opacity: 1,
+          })
+          return { output: "skip-present", strategy: lastStrategy }
+        }
+        if (useNativeLayerPresentation && nativeImageId > 0) {
+          const shouldPresentRegion = lastStrategy === "layered-region"
+            && !!region
+            && region.width > 0
+            && region.height > 0
+            && region.width * region.height < ctx.target.width * ctx.target.height
+          const regionEmitStart = shouldPresentRegion ? performance.now() : 0
+          const regionStats = shouldPresentRegion
+            ? nativeEmitRegionTarget(layerTarget, nativeImageId, region.x, region.y, region.width, region.height, frameCtx.transmissionMode)
+            : null
+          if (shouldPresentRegion) addBackendProfile("nativeEmitMs", regionEmitStart)
+          if (regionStats !== null) {
+            addNativeStatsProfile(regionStats)
+            nativeLayerPresentDirty(layerCtx.key)
+            return { output: "native-presented", strategy: lastStrategy, stats: regionStats }
+          }
+          const col = Math.floor(layerCtx.bounds.x / Math.max(1, ctx.cellWidth ?? 1))
+          const row = Math.floor(layerCtx.bounds.y / Math.max(1, ctx.cellHeight ?? 1))
+          const nativeEmitStart = performance.now()
+          const stats = nativeEmitLayerTarget(layerTarget, nativeImageId, col, row, layerCtx.z, frameCtx.transmissionMode)
+          addBackendProfile("nativeEmitMs", nativeEmitStart)
+          if (stats !== null) {
+            addNativeStatsProfile(stats)
+            nativeLayerPresentDirty(layerCtx.key)
+            return { output: "native-presented", strategy: lastStrategy, stats }
+          }
+          const readbackStart = performance.now()
+          const rgba = vexartCompositeReadbackRgba(getVexartCtx(), layerTarget, ctx.target.width * ctx.target.height * 4)
+          addBackendProfile("readbackMs", readbackStart)
+          return {
+            output: "kitty-payload",
+            strategy: lastStrategy,
+            kittyPayload: rgba ? { data: rgba, width: ctx.target.width, height: ctx.target.height } : undefined,
+          }
+        }
+        return { output: "kitty-payload", strategy: lastStrategy, kittyPayload: result.rawLayer ?? undefined }
+      }
+
+      const standaloneHandle = getStandaloneTarget(ctx.target.width, ctx.target.height)
+      if (!standaloneHandle) return undefined
+      const result = renderNativeSceneFrame(ctx, standaloneHandle)
+      if (!result.ok) return undefined
+      return { output: "kitty-payload", strategy: lastStrategy, kittyPayload: result.rawLayer ?? undefined }
+    },
     paint(ctx) {
       if (!gpuAvailable) {
         failGpuOnly("GPU backend unavailable; CPU fallback was removed")
@@ -2647,5 +2848,5 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       resetBackendProfile()
       return profile
     },
-  }
+  } as GpuRendererBackend & { paintNativeScene: (ctx: NativeScenePaintContext) => NativeScenePaintBackendResult }
 }

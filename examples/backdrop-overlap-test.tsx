@@ -8,7 +8,7 @@
  * - distinct panel tints to catch source contamination/reuse bugs
  *
  * Run:
- *   TGE_RENDERER_BACKEND=gpu bun --conditions=browser run examples/backdrop-overlap-test.tsx
+ *   Vexart_RENDERER_BACKEND=gpu bun --conditions=browser run examples/backdrop-overlap-test.tsx
  */
 
 import { mount, onInput, useTerminalDimensions } from "@vexart/engine"
@@ -146,7 +146,7 @@ async function main() {
     experimental: {
     },
   })
-  const exitAfterMs = Number(process.env.TGE_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
+  const exitAfterMs = Number(process.env.VEXART_EXIT_AFTER_MS ?? process.env.TGE_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
 
   const shutdown = () => {
     cleanup.destroy()

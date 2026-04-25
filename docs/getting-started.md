@@ -1,61 +1,33 @@
 # Getting Started
 
-This guide walks you through installing TGE, building the native libraries, and rendering your first pixel-perfect UI in the terminal.
+This guide walks you through installing Vexart, building the Rust native runtime, and rendering your first pixel-perfect terminal UI.
 
 ## Prerequisites
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| [Bun](https://bun.sh/) | >= 1.1.0 | Runtime, FFI, test runner |
-| [Zig](https://ziglang.org/) | >= 0.14 | Build the pixel paint engine |
-| A C compiler (`cc`) | Any | Build the Clay layout engine |
-| **Terminal with Kitty graphics** | — | **Required** — Kitty, Ghostty, or WezTerm |
+| [Bun](https://bun.sh/) | >= 1.1.0 | TypeScript runtime, FFI, package scripts, test runner |
+| [Rust](https://www.rust-lang.org/tools/install) | stable | Builds `libvexart`, the native WGPU/Taffy runtime |
+| **Terminal with Kitty graphics** | — | Required: Kitty, Ghostty, or WezTerm |
 
-> TGE is GPU-only. It **will not run** in terminals without Kitty graphics protocol support (xterm, Terminal.app, iTerm2, etc.).
-
-### Install Bun
-
-```bash
-curl -fsSL https://bun.sh/install | bash
-```
-
-### Install Zig
-
-```bash
-# macOS
-brew install zig
-
-# Linux / Windows — download from https://ziglang.org/download/
-```
+> Vexart is GPU/Kitty-protocol first. Plain ANSI terminals are not a v0.9 target.
 
 ## Installation
 
 ```bash
-git clone https://github.com/commonriskpro/Vexart.git tge
-cd tge
+git clone https://github.com/commonriskpro/Vexart.git vexart
+cd vexart
 bun install
+cargo build
 ```
 
-## Build Native Libraries
-
-TGE uses two native libraries via `bun:ffi`. Build both before running:
-
-```bash
-# 1. Zig pixel + GPU engine (libtge.dylib / libtge.so)
-bun run zig:build
-
-# 2. Clay layout engine (libclay.dylib / libclay.so)
-bun run clay:build
-```
-
-## Your First App
+## Your first app
 
 Create `my-app.tsx`:
 
 ```tsx
-import { createTerminal, mount, useTerminalDimensions } from "@tge/renderer-solid"
-import { colors, radius } from "@tge/void"
-import { createSignal } from "solid-js"
+import { createTerminal, mount, useTerminalDimensions } from "@vexart/engine"
+import { colors, radius } from "@vexart/styled"
 
 async function main() {
   const terminal = await createTerminal()
@@ -78,7 +50,7 @@ async function main() {
           direction="column"
           gap={8}
         >
-          <text color={colors.foreground}>Welcome to TGE</text>
+          <text color={colors.foreground}>Welcome to Vexart</text>
           <text color={colors.mutedForeground}>Pixel-native terminal rendering</text>
         </box>
       </box>
@@ -97,117 +69,51 @@ Run it:
 bun --conditions=browser run my-app.tsx
 ```
 
-> **Why `--conditions=browser`?** SolidJS exports a reactive runtime under the `browser` condition and a one-shot SSR runtime under `node`. TGE needs the reactive runtime. All example scripts in `package.json` already include this flag.
+> **Why `--conditions=browser`?** SolidJS exposes its reactive runtime under the `browser` condition. Vexart needs that runtime for live updates.
 
-## Understanding the Pipeline
+## Runtime pipeline
 
-When you call `mount(App, terminal)`, TGE:
+When you call `mount(App, terminal)`, Vexart:
 
-1. **Evaluates JSX** — SolidJS `createRenderer` converts your component tree into TGE nodes
-2. **Runs Clay layout** — Nodes are measured and positioned (C via FFI, microseconds)
-3. **Renders on GPU** — Layout results are rendered via WGPU using Zig SDF primitives
-4. **Outputs via SHM** — The GPU frame is read back and sent to the terminal via Kitty graphics over shared memory
+1. Evaluates JSX with SolidJS.
+2. Mirrors retained nodes into the Rust scene graph.
+3. Computes layout with Taffy inside `libvexart`.
+4. Paints supported retained primitives/effects with WGPU.
+5. Presents through Kitty graphics, using native SHM on supported terminals.
 
-On every signal change, only dirty layers re-render and retransmit.
+TypeScript remains the JSX/Solid shell and callback boundary. Rust owns the retained scene, layout, render graph, paint, resource, and presentation fast paths.
 
-## Adding Interactivity
+## Package map
 
-```tsx
-import { createTerminal, mount, useTerminalDimensions } from "@tge/renderer-solid"
-import { Button } from "@tge/components"
-import { colors, radius, space } from "@tge/void"
-import { createSignal } from "solid-js"
+```ts
+// Core renderer/runtime
+import { createTerminal, mount, useTerminalDimensions } from "@vexart/engine"
 
-async function main() {
-  const terminal = await createTerminal()
+// Intrinsic component wrappers
+import { Box, Text, RichText, Span, WrapRow } from "@vexart/primitives"
 
-  function App() {
-    const dims = useTerminalDimensions(terminal)
-    const [count, setCount] = createSignal(0)
+// Headless behavior components
+import { Button, Input, Textarea, Checkbox, Dialog } from "@vexart/headless"
 
-    return (
-      <box
-        width={dims.width()}
-        height={dims.height()}
-        padding={space[6]}
-        backgroundColor={colors.background}
-        direction="column"
-        gap={space[4]}
-        alignX="center"
-        alignY="center"
-      >
-        <text color={colors.foreground}>Count: {count()}</text>
-        <Button onPress={() => setCount(c => c + 1)}>
-          Increment
-        </Button>
-      </box>
-    )
-  }
-
-  mount(App, terminal)
-}
-
-main()
+// Styled components and design tokens
+import { colors, radius, space, Button as StyledButton } from "@vexart/styled"
 ```
 
-Press **Tab** to focus the button, **Enter** or **Space** to increment. **Ctrl+C** to quit.
+## Validation commands
 
-## Import Map
-
-Everything you need comes from a small set of packages:
-
-```typescript
-// ── Core (single entry point) ──
-import {
-  createTerminal,         // create + probe terminal
-  mount,                  // mount your app
-  useTerminalDimensions,  // reactive terminal size
-  createSignal,           // from solid-js, re-exported
-  For, Show,              // control flow
-  useKeyboard, useMouse,  // input hooks
-  useFocus, setFocus,     // focus management
-  useDrag, useHover,      // interaction hooks
-  createTransition,       // animation
-  createSpring,           // physics animation
-  setPointerCapture,      // drag support
-  RGBA,                   // color utility class
-} from "@tge/renderer-solid"
-
-// ── UI Components ──
-import {
-  Button, Input, Textarea, Checkbox, Switch,
-  Tabs, List, VirtualList, Table,
-  Select, Combobox, Slider,
-  Dialog, Toast, Tooltip, Popover,
-  ScrollView, Diff, Code, Markdown,
-  ProgressBar,
-} from "@tge/components"
-
-// ── Canvas / Scene graph ──
-import {
-  SceneCanvas, SceneNode, SceneEdge,
-  createSpaceBackground,
-} from "@tge/components"
-
-// ── Design tokens ──
-import { colors, space, radius, font, weight, shadows } from "@tge/void"
-
-// ── Windowing system ──
-import {
-  createWindowManager,
-  Desktop, WindowHost, WindowFrame,
-  WindowControls, WindowHeader,
-} from "@tge/windowing"
-
-// ── SolidJS reactivity ──
-import { createSignal, createEffect, createMemo, onCleanup } from "solid-js"
+```bash
+cargo test
+cargo build
+bun run typecheck
+bun test
+bun run test:visual
+bun run docs:build
 ```
 
-## Next Steps
+## Next steps
 
-- [Components](components.md) — Every built-in component
-- [Hooks & Signals](hooks.md) — Custom interactive components
-- [Visual Effects](../manual/visual-effects.md) — Shadows, gradients, blur, glow
-- [Layout & Sizing](../manual/layout-and-sizing.md) — Flexbox layout system
-- [API Reference](api-reference.md) — Complete package API
-- [Examples & Recipes](examples.md) — Common patterns
+- [Components](components.md)
+- [Hooks & Signals](hooks.md)
+- [Examples & Recipes](examples.md)
+- [API Reference](api-reference.md)
+- [License Verification](license-verification.md)

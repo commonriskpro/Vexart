@@ -108,6 +108,9 @@ export type TGEProps = {
   padding?: number
   paddingX?: number
   paddingY?: number
+  margin?: number
+  marginX?: number
+  marginY?: number
   gap?: number
   alignX?: "left" | "right" | "center" | "space-between"
   alignY?: "top" | "bottom" | "center" | "space-between"
@@ -166,6 +169,12 @@ export type TGEProps = {
   paddingRight?: number
   paddingTop?: number
   paddingBottom?: number
+
+  // Per-side margin
+  marginLeft?: number
+  marginRight?: number
+  marginTop?: number
+  marginBottom?: number
 
   // Per-side borders
   borderLeft?: number

@@ -1,5 +1,5 @@
 /**
- * TGE Markdown Demo — renders markdown with syntax-highlighted code blocks.
+ * Vexart Markdown Demo — renders markdown with syntax-highlighted code blocks.
  *
  * Demonstrates:
  *   - Headings (h1-h3)
@@ -13,7 +13,7 @@
  *   - Esc/Q: quit
  *
  * Run:  bun run demo16 (requires Ghostty WITHOUT tmux)
- * Requires: bun zig:build && bun run clay:build
+ * Requires: bun install && cargo build
  */
 
 import { mount, onInput, SyntaxStyle, KANAGAWA, useTerminalDimensions } from "@vexart/engine"
@@ -21,9 +21,9 @@ import { Box, Text } from "@vexart/primitives"
 import { Markdown, ScrollView } from "@vexart/headless"
 import { createTerminal } from "@vexart/engine"
 
-const MD_CONTENT = `# Welcome to TGE
+const MD_CONTENT = `# Welcome to Vexart
 
-TGE is a **pixel-native terminal rendering engine**. Write JSX, get browser-quality UI in your terminal.
+Vexart is a **pixel-native terminal rendering engine**. Write JSX, get browser-quality UI in your terminal.
 
 ## Features
 
@@ -34,7 +34,7 @@ TGE is a **pixel-native terminal rendering engine**. Write JSX, get browser-qual
 
 ## Quick Start
 
-Install TGE and create your first app:
+Install Vexart and create your first app:
 
 \`\`\`typescript
 import { mount } from "tge"
@@ -44,7 +44,7 @@ import { createTerminal } from "tge/terminal"
 function App() {
   return (
     <Box backgroundColor="#1a1a2e" cornerRadius={12} padding={20}>
-      <Text color="#e0e0e0" fontSize={16}>Hello TGE!</Text>
+      <Text color="#e0e0e0" fontSize={16}>Hello Vexart!</Text>
     </Box>
   )
 }
@@ -55,11 +55,11 @@ mount(() => <App />, terminal)
 
 ## Architecture
 
-> TGE uses Clay for layout (microsecond performance), Zig for pixel painting (SDF primitives), and SolidJS for JSX reconciliation.
+> Vexart uses Rust/Taffy for layout, WGPU for pixel painting, and SolidJS for JSX reconciliation.
 
 1. JSX components declare the UI
-2. Clay computes the layout
-3. Zig paints pixels with SDF
+2. Taffy computes the layout
+3. WGPU paints pixels
 4. Output backend sends to terminal
 
 ---

@@ -59,7 +59,7 @@ export type WalkTreeState = {
   canvasQueue: CanvasPaintConfig[]
 
   // Text metadata map (keyed by content) — used during paint for multi-line layout
-  textMetaMap: Map<string, TextMeta>
+  textMetaMap: Map<number, TextMeta>
 
   // Rect node lookup (by id) — used by interaction state
   rectNodeById: Map<number, TGENode>
@@ -156,9 +156,9 @@ export function walkTree(
     state.textMeasureIndex.value++
 
     // Track metadata for multi-line paint
-    const meta: TextMeta = { content, fontId, fontSize, lineHeight }
+    const meta: TextMeta = { nodeId: node.id, content, fontId, fontSize, lineHeight }
     state.textMetas.push(meta)
-    state.textMetaMap.set(content, meta)
+    state.textMetaMap.set(node.id, meta)
 
     clay.text(content, color, fontId, fontSize, node.id, measurement.width, measurement.height)
     state.textNodes.push(node)

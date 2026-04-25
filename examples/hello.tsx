@@ -1,12 +1,12 @@
 /**
- * TGE Hello World — Phase 3 milestone.
+ * Vexart Hello World — Phase 3 milestone.
  *
- * Real JSX rendering: SolidJS components → Clay layout → Zig paint → terminal.
+ * Real JSX rendering: SolidJS components → Rust/Taffy layout → WGPU paint → terminal.
  * This is the first example that uses actual JSX compilation through
  * babel-preset-solid with generate: "universal" targeting @vexart/engine.
  *
  * Run: bun run examples/hello.tsx
- * Requires: bun zig:build && bun run clay:build
+ * Requires: bun install && cargo build
  */
 
 import { mount, useTerminalDimensions } from "@vexart/engine"
@@ -65,7 +65,7 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
       </Box>
 
       <Card
-        title="Hello from TGE"
+        title="Hello from Vexart"
         subtitle="Pixel-native terminal rendering"
       />
 

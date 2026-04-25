@@ -269,6 +269,23 @@ describe("native scene graph", () => {
     expect(nativeSceneHitTest(110, 110)).toBe(b._nativeId!)
   })
 
+  test("native hit test honors pointer passthrough without skipping children", () => {
+    const root = createNode("root")
+    root._nativeId = nativeSceneCreateNode("root")
+
+    const parent = createElement("box")
+    setProp(parent, "pointerPassthrough", true)
+    const child = createElement("box")
+
+    insertNode(root, parent)
+    insertNode(parent, child)
+    nativeSceneSetLayout(parent._nativeId, 0, 0, 100, 100)
+    nativeSceneSetLayout(child._nativeId, 10, 10, 20, 20)
+
+    expect(nativeSceneHitTest(15, 15)).toBe(child._nativeId!)
+    expect(nativeSceneHitTest(90, 90)).toBe(0n)
+  })
+
   test("native focus order follows preorder focusable nodes", () => {
     const root = createNode("root")
     root._nativeId = nativeSceneCreateNode("root")

@@ -24,9 +24,11 @@ import {
   type RendererBackend,
   type RendererBackendFrameContext,
   type RendererBackendLayerContext,
+  type RendererBackendPaintResult,
 } from "../ffi/renderer-backend"
 import { buildRenderGraphFrame } from "../ffi/render-graph"
-import { nativeRenderGraphSnapshot, translateNativeRenderGraphSnapshot } from "../ffi/native-render-graph"
+import { analyzeNativeRenderGraphCoverage, getNativeRenderGraphFrameStats, nativeRenderGraphSnapshot, nativeScenePaintRefsForCommands, translateNativeRenderGraphSnapshot } from "../ffi/native-render-graph"
+import { nativeSceneHandle } from "../ffi/native-scene"
 import { summarizeRendererResourceStats } from "../ffi/resource-stats"
 import { getLatestInteractionTrace } from "./input"
 import { shouldFreezeInteractionLayer } from "../reconciler/interaction"
@@ -41,13 +43,24 @@ import { nativeLayerRemove } from "../ffi/native-layer-registry"
 import { nativeDeleteLayer, nativeEmitLayer } from "../ffi/native-presentation-ops"
 import type { NativePresentationStats } from "../ffi/native-presentation-stats"
 
+type NativeScenePaintBackend = RendererBackend & {
+  paintNativeScene?: (ctx: Parameters<RendererBackend["paint"]>[0] & {
+    scene: bigint
+    refs: NonNullable<ReturnType<typeof nativeScenePaintRefsForCommands>>
+  }) => RendererBackendPaintResult | void
+}
+
 let lastNativeRenderGraphLayerCount = 0
 let lastNativeRenderGraphOpCount = 0
+let lastNativeRenderGraphFullyCoveredLayerCount = 0
+let lastNativeRenderGraphFallbackOpCount = 0
 
 export function getLastNativeRenderGraphUsage() {
   return {
     layerCount: lastNativeRenderGraphLayerCount,
     opCount: lastNativeRenderGraphOpCount,
+    fullyCoveredLayerCount: lastNativeRenderGraphFullyCoveredLayerCount,
+    fallbackOpCount: lastNativeRenderGraphFallbackOpCount,
   }
 }
 
@@ -146,7 +159,7 @@ export type PaintFrameState = {
 
   // Render graph queues — for buildRenderGraphFrame
   renderGraphQueues: ReturnType<typeof import("../ffi/render-graph").createRenderGraphQueues>
-  textMetaMap: Map<string, import("../ffi/render-graph").TextMeta>
+  textMetaMap: Map<number, import("../ffi/render-graph").TextMeta>
 
   // GPU layer composer (Kitty output)
   layerComposer: GpuFrameComposer | null
@@ -274,24 +287,7 @@ export function canUseNativeRenderGraphForLayer(
   commands: RenderCommand[],
   nativeToTsNodeId: Map<number, number>,
 ) {
-  if (!snapshot) return false
-  const renderableNodeIds = new Set<number>()
-  for (const command of commands) {
-    if (command.type === CMD.RECTANGLE || command.type === CMD.BORDER || command.type === CMD.TEXT) {
-      if (command.nodeId !== undefined) renderableNodeIds.add(command.nodeId)
-    }
-  }
-  if (renderableNodeIds.size === 0) return false
-
-  for (const op of snapshot.ops) {
-    const tsNodeId = nativeToTsNodeId.get(op.nodeId)
-    if (tsNodeId === undefined || !renderableNodeIds.has(tsNodeId)) continue
-    if (op.kind !== "rect" && op.kind !== "border" && op.kind !== "text" && op.kind !== "effect" && op.kind !== "image" && op.kind !== "canvas") {
-      return false
-    }
-    return true
-  }
-  return false
+  return analyzeNativeRenderGraphCoverage(snapshot, commands, nativeToTsNodeId).coveredCommands > 0
 }
 
 // ── paintFrame ────────────────────────────────────────────────────────────
@@ -372,6 +368,8 @@ export function paintFrame(
   if (profile) profile.paintNativeSnapshotMs += performance.now() - nativeSnapshotStart
   lastNativeRenderGraphLayerCount = 0
   lastNativeRenderGraphOpCount = 0
+  lastNativeRenderGraphFullyCoveredLayerCount = 0
+  lastNativeRenderGraphFallbackOpCount = 0
 
   const frameStart = expFrameBudgetMs > 0 ? performance.now() : 0
   let frameBudgetExceeded = false
@@ -739,43 +737,72 @@ export function paintFrame(
           layerCommands.push(cmd)
         }
 
-      // Build render graph and invoke backend
-      // All commands carry nodeId (set by layout-adapter.endLayout()).
-      const renderGraphStart = profile ? performance.now() : 0
-      const useNativeGraphForLayer = !!(nativeSnapshot && nativeToTsNodeId && canUseNativeRenderGraphForLayer(nativeSnapshot, layerCommands, nativeToTsNodeId))
-      const graph = useNativeGraphForLayer
-        ? translateNativeRenderGraphSnapshot(nativeSnapshot!, layerCommands, renderGraphQueues, textMetaMap, nativeToTsNodeId ?? undefined)
-        : buildRenderGraphFrame(layerCommands, renderGraphQueues, textMetaMap)
-      if (profile) profile.paintRenderGraphMs += performance.now() - renderGraphStart
-      if (useNativeGraphForLayer) {
-        lastNativeRenderGraphLayerCount++
-        lastNativeRenderGraphOpCount += graph.ops.length
-      }
-      const backendPaintStart = profile ? performance.now() : 0
-      const paintResult = backend.paint({
+      const nativePaintRefs = nativeSnapshot && nativeToTsNodeId
+        ? nativeScenePaintRefsForCommands(nativeSnapshot, layerCommands, nativeToTsNodeId)
+        : null
+      const nativePaintBackend = backend as NativeScenePaintBackend
+      const basePaintCtx = {
         targetWidth: lw,
         targetHeight: lh,
         backing: layerCtx.backing ?? null,
         target: { width: lw, height: lh },
         commands: layerCommands,
-        graph,
         offsetX: lx,
         offsetY: ly,
         cellWidth: cellW,
         cellHeight: cellH,
         frame: frameCtx,
         layer: layerCtx,
-      })
-      if (profile) profile.paintBackendPaintMs += performance.now() - backendPaintStart
+      }
+      let paintResult: RendererBackendPaintResult | undefined
+      let usedNativeScenePaint = false
+      if (nativePaintRefs && nativePaintBackend.paintNativeScene) {
+        const backendPaintStart = profile ? performance.now() : 0
+        paintResult = nativePaintBackend.paintNativeScene({
+          ...basePaintCtx,
+          graph: { ops: [] },
+          scene: nativeSceneHandle(),
+          refs: nativePaintRefs,
+        }) ?? undefined
+        if (profile) profile.paintBackendPaintMs += performance.now() - backendPaintStart
+        usedNativeScenePaint = !!paintResult
+        if (usedNativeScenePaint) {
+          lastNativeRenderGraphLayerCount++
+          lastNativeRenderGraphOpCount += nativePaintRefs.length
+          lastNativeRenderGraphFullyCoveredLayerCount++
+        }
+      }
 
-      const backendSkipPresent = paintResult?.output === "skip-present"
-      const backendKittyPayload = paintResult?.output === "kitty-payload"
-      const backendNativePresented = paintResult?.output === "native-presented"
-      if (backendSkipPresent) rendererOutput = paintResult?.strategy ?? framePlan?.strategy ?? "skip-present"
-      if (backendKittyPayload) rendererOutput = "layered-raw"
-      if (backendNativePresented) rendererOutput = "native-presented"
+      if (!paintResult) {
+        // Build render graph and invoke backend.
+        // All commands carry nodeId (set by layout-adapter.endLayout()).
+        const renderGraphStart = profile ? performance.now() : 0
+        const useNativeGraphForLayer = !!(nativeSnapshot && nativeToTsNodeId && canUseNativeRenderGraphForLayer(nativeSnapshot, layerCommands, nativeToTsNodeId))
+        const graph = useNativeGraphForLayer
+          ? translateNativeRenderGraphSnapshot(nativeSnapshot!, layerCommands, renderGraphQueues, textMetaMap, nativeToTsNodeId ?? undefined)
+          : buildRenderGraphFrame(layerCommands, renderGraphQueues, textMetaMap)
+        if (profile) profile.paintRenderGraphMs += performance.now() - renderGraphStart
+        if (useNativeGraphForLayer) {
+          const nativeFrameStats = getNativeRenderGraphFrameStats(graph)
+          lastNativeRenderGraphLayerCount++
+          lastNativeRenderGraphOpCount += graph.ops.length
+          if (nativeFrameStats?.fullyCovered) lastNativeRenderGraphFullyCoveredLayerCount++
+          lastNativeRenderGraphFallbackOpCount += nativeFrameStats?.fallbackCommands ?? 0
+        }
+        const backendPaintStart = profile ? performance.now() : 0
+        paintResult = backend.paint({
+          ...basePaintCtx,
+          graph,
+        }) ?? undefined
+        if (profile) profile.paintBackendPaintMs += performance.now() - backendPaintStart
+      }
 
-      if (backendSkipPresent) {
+      if (!paintResult) throw new Error(`GPU-only renderer backend did not return a layer payload for ${slot.key}`)
+      if (paintResult.output === "skip-present") rendererOutput = paintResult.strategy ?? framePlan?.strategy ?? "skip-present"
+      if (paintResult.output === "kitty-payload") rendererOutput = "layered-raw"
+      if (paintResult.output === "native-presented") rendererOutput = "native-presented"
+
+      if (paintResult.output === "skip-present") {
         repaintedThisFrame++
         markLayerClean(layer)
         continue
@@ -783,20 +810,20 @@ export function paintFrame(
 
       // ── native-presented: Rust already emitted the layer to the terminal ──
       // No RGBA payload arrives in JS — just record the repaint and move on.
-      if (backendNativePresented) {
-        nativePresentationStats = paintResult?.stats ?? nativePresentationStats
+      if (paintResult.output === "native-presented") {
+        nativePresentationStats = paintResult.stats ?? nativePresentationStats
         repaintedThisFrame++
         const renderZ = layer.z
         if (effectiveUseRegionalRepaint && clippedDamage) {
           log(`  [${slot.key}] NATIVE-REGION ${clippedDamage.width}x${clippedDamage.height} at (${clippedDamage.x},${clippedDamage.y}) within ${lw}x${lh} z=${renderZ}`)
         } else {
-          log(`  [${slot.key}] NATIVE-REPAINT ${lw}x${lh} at (${lx},${ly}) z=${renderZ} cmds=${slot.cmdIndices.length}`)
+          log(`  [${slot.key}] NATIVE-REPAINT ${lw}x${lh} at (${lx},${ly}) z=${renderZ} cmds=${slot.cmdIndices.length}${usedNativeScenePaint ? " graph=scene" : ""}`)
         }
         markLayerClean(layer)
         continue
       }
 
-      if (backendKittyPayload && paintResult?.kittyPayload) {
+      if (paintResult.output === "kitty-payload" && paintResult.kittyPayload) {
         repaintedThisFrame++
         const renderZ = layer.z
         const imageId = imageIdForLayer(layer)

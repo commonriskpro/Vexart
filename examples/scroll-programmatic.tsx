@@ -1,5 +1,5 @@
 /**
- * TGE Scroll Programmatic Demo — ScrollHandle API.
+ * Vexart Scroll Programmatic Demo — ScrollHandle API.
  *
  * Demonstrates programmatic scroll control:
  *   - scrollTo(0) — scroll to top
@@ -15,7 +15,7 @@
  *   - Q/Esc: quit
  *
  * Run:  bun run demo13 (requires Ghostty WITHOUT tmux)
- * Requires: bun zig:build && bun run clay:build
+ * Requires: bun install && cargo build
  */
 
 import { createSignal } from "solid-js"
@@ -62,7 +62,7 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
       scrollRef.scrollTo(bottom)
       setInfo(`Scrolled to bottom | Y=${scrollRef.scrollY.toFixed(0)}`)
     } else if (event.key === "up") {
-      scrollRef.scrollBy(50) // positive = scroll up (Clay uses negative Y)
+      scrollRef.scrollBy(50) // positive = scroll up (Vexart uses negative Y scroll offsets)
       setInfo(`Scrolled up | Y=${scrollRef.scrollY.toFixed(0)}`)
     } else if (event.key === "down") {
       scrollRef.scrollBy(-50) // negative = scroll down

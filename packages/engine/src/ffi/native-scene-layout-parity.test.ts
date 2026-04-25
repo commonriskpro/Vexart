@@ -63,7 +63,7 @@ function computeCompatLayout(root: FixtureNode) {
   const effectsQueue: [] = []
   const imageQueue: [] = []
   const canvasQueue: [] = []
-  const textMetaMap = new Map<string, TextMeta>()
+  const textMetaMap = new Map<number, TextMeta>()
   const rectNodeById = new Map<number, TGENode>()
 
   walkTree(root, {

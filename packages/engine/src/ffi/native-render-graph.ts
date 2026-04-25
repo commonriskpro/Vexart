@@ -91,6 +91,40 @@ export interface NativeRenderGraphSnapshot {
   batches: NativeRenderBatchSnapshot[]
 }
 
+export interface NativeRenderGraphCoverage {
+  renderableCommands: number
+  coveredCommands: number
+  fullyCovered: boolean
+}
+
+export interface NativeRenderGraphFrameStats {
+  renderableCommands: number
+  nativeCommands: number
+  fallbackCommands: number
+  scissorCommands: number
+  fullyCovered: boolean
+}
+
+export const NATIVE_SCENE_PAINT_OP_KIND = {
+  RECT: 0,
+  BORDER: 1,
+  TEXT: 2,
+  EFFECT: 3,
+  IMAGE: 4,
+  CANVAS: 5,
+} as const
+
+export type NativeScenePaintOpRef = {
+  nodeId: bigint
+  kind: number
+}
+
+const frameStats = new WeakMap<RenderGraphFrame, NativeRenderGraphFrameStats>()
+
+export function getNativeRenderGraphFrameStats(frame: RenderGraphFrame): NativeRenderGraphFrameStats | null {
+  return frameStats.get(frame) ?? null
+}
+
 type NativeClipStackEntry = {
   bounds: RenderBounds
   id: string
@@ -363,11 +397,12 @@ function directNativeBorderOp(command: RenderCommand, op: NativeRenderOpSnapshot
   }
 }
 
-function directNativeTextOp(command: RenderCommand, op: NativeRenderOpSnapshot, textMetaMap: Map<string, TextMeta>): TextRenderOp | null {
+function directNativeTextOp(command: RenderCommand, op: NativeRenderOpSnapshot, textMetaMap: Map<number, TextMeta>): TextRenderOp | null {
   const text = op.text || command.text || ""
   if (!text) return null
-  const meta = textMetaMap.get(text) ?? (command.text ? textMetaMap.get(command.text) : undefined)
-  const lineHeight = meta?.lineHeight ?? 17
+  const meta = textMetaMap.get(command.nodeId ?? op.nodeId)
+  const fontSize = meta?.fontSize ?? (Math.round(op.fontSize) || Math.round(command.extra1) || 14)
+  const lineHeight = meta?.lineHeight ?? Math.ceil(fontSize * 1.2)
   return {
     kind: "text",
     renderObjectId: op.nodeId,
@@ -375,6 +410,7 @@ function directNativeTextOp(command: RenderCommand, op: NativeRenderOpSnapshot, 
     inputs: {
       text,
       fontId: op.fontId || meta?.fontId || 0,
+      fontSize,
       lineHeight,
       maxWidth: Math.max(Math.round(command.width), 1),
       textHeight: Math.round(command.height) > 0 ? Math.round(command.height) : lineHeight,
@@ -465,7 +501,7 @@ function directNativeOp(
   command: RenderCommand,
   op: NativeRenderOpSnapshot,
   queues: RenderGraphQueues,
-  textMetaMap: Map<string, TextMeta>,
+  textMetaMap: Map<number, TextMeta>,
   clipStack: NativeClipStackEntry[],
 ): RenderGraphOp | null {
   const resolvedCommand = nativeCommand(command, op)
@@ -502,30 +538,123 @@ function pickNativeOpForCommand(command: RenderCommand, lookup: Map<string, Nati
   return null
 }
 
+function nativeScenePaintKind(kind: NativeRenderOpKind) {
+  if (kind === NATIVE_RENDER_OP_KIND.RECT) return NATIVE_SCENE_PAINT_OP_KIND.RECT
+  if (kind === NATIVE_RENDER_OP_KIND.BORDER) return NATIVE_SCENE_PAINT_OP_KIND.BORDER
+  if (kind === NATIVE_RENDER_OP_KIND.TEXT) return NATIVE_SCENE_PAINT_OP_KIND.TEXT
+  if (kind === NATIVE_RENDER_OP_KIND.EFFECT) return NATIVE_SCENE_PAINT_OP_KIND.EFFECT
+  if (kind === NATIVE_RENDER_OP_KIND.IMAGE) return NATIVE_SCENE_PAINT_OP_KIND.IMAGE
+  return NATIVE_SCENE_PAINT_OP_KIND.CANVAS
+}
+
+function isNativeScenePaintSupported(op: NativeRenderOpSnapshot) {
+  if (op.kind === NATIVE_RENDER_OP_KIND.TEXT) {
+    if (op.hasTransform || op.hasCornerRadii || op.hasFilter || op.hasBackdrop) return false
+    return true
+  }
+  if (op.kind === NATIVE_RENDER_OP_KIND.IMAGE) {
+    if ((op.imageHandle ?? 0) <= 0) return false
+    if (op.hasTransform || op.hasCornerRadii || op.hasFilter || op.hasBackdrop) return false
+    return true
+  }
+  if (op.kind === NATIVE_RENDER_OP_KIND.RECT || op.kind === NATIVE_RENDER_OP_KIND.BORDER) return true
+  if (op.kind !== NATIVE_RENDER_OP_KIND.EFFECT) return false
+  if (op.hasBackdrop || op.hasTransform || op.hasFilter) return false
+  if (op.hasGradient && op.hasCornerRadii) return false
+  return true
+}
+
+function isRenderableCommand(command: RenderCommand) {
+  return command.type === CMD.RECTANGLE || command.type === CMD.BORDER || command.type === CMD.TEXT
+}
+
+export function analyzeNativeRenderGraphCoverage(
+  snapshot: NativeRenderGraphSnapshot | null,
+  commands: RenderCommand[],
+  nativeToTsNodeId?: Map<number, number>,
+): NativeRenderGraphCoverage {
+  if (!snapshot) {
+    return { renderableCommands: 0, coveredCommands: 0, fullyCovered: false }
+  }
+  const nativeLookup = buildNativeOpLookup(snapshot, nativeToTsNodeId)
+  let renderableCommands = 0
+  let coveredCommands = 0
+  for (const command of commands) {
+    if (!isRenderableCommand(command)) continue
+    renderableCommands++
+    if (pickNativeOpForCommand(command, nativeLookup)) coveredCommands++
+  }
+  return {
+    renderableCommands,
+    coveredCommands,
+    fullyCovered: renderableCommands > 0 && coveredCommands === renderableCommands,
+  }
+}
+
+export function nativeScenePaintRefsForCommands(
+  snapshot: NativeRenderGraphSnapshot | null,
+  commands: RenderCommand[],
+  nativeToTsNodeId?: Map<number, number>,
+): NativeScenePaintOpRef[] | null {
+  if (!snapshot || commands.length === 0) return null
+  const nativeLookup = buildNativeOpLookup(snapshot, nativeToTsNodeId)
+  const nativeIdByTsId = new Map<number, number>()
+  if (nativeToTsNodeId) {
+    for (const [nativeId, tsId] of nativeToTsNodeId) nativeIdByTsId.set(tsId, nativeId)
+  }
+  const refs: NativeScenePaintOpRef[] = []
+  const seen = new Set<string>()
+  for (const command of commands) {
+    if (command.type === CMD.SCISSOR_START || command.type === CMD.SCISSOR_END) return null
+    if (!isRenderableCommand(command)) return null
+    if (command.nodeId === undefined) return null
+    const nativeOp = pickNativeOpForCommand(command, nativeLookup)
+    if (!nativeOp || !isNativeScenePaintSupported(nativeOp)) return null
+    const nativeNodeId = nativeIdByTsId.get(command.nodeId) ?? command.nodeId
+    const kind = nativeScenePaintKind(nativeOp.kind)
+    const key = `${nativeNodeId}:${kind}`
+    if (seen.has(key)) continue
+    refs.push({ nodeId: BigInt(nativeNodeId), kind })
+    seen.add(key)
+  }
+  return refs.length > 0 ? refs : null
+}
+
 export function translateNativeRenderGraphSnapshot(
   snapshot: NativeRenderGraphSnapshot,
   commands: RenderCommand[],
   queues: RenderGraphQueues,
-  textMetaMap: Map<string, TextMeta>,
+  textMetaMap: Map<number, TextMeta>,
   nativeToTsNodeId?: Map<number, number>,
 ): RenderGraphFrame {
   const ops: RenderGraphOp[] = []
+  const stats: NativeRenderGraphFrameStats = {
+    renderableCommands: 0,
+    nativeCommands: 0,
+    fallbackCommands: 0,
+    scissorCommands: 0,
+    fullyCovered: false,
+  }
   const queueState = { borderEffectIndex: 0 }
   const clipStack: NativeClipStackEntry[] = []
   const nativeLookup = buildNativeOpLookup(snapshot, nativeToTsNodeId)
   for (const command of commands) {
     if (command.type === CMD.SCISSOR_START) {
+      stats.scissorCommands++
       clipStack.push(createClipStackEntry(command, clipStack.length))
       continue
     }
     if (command.type === CMD.SCISSOR_END) {
+      stats.scissorCommands++
       clipStack.pop()
       continue
     }
+    if (isRenderableCommand(command)) stats.renderableCommands++
     const nativeOp = pickNativeOpForCommand(command, nativeLookup)
     if (nativeOp) {
       const op = directNativeOp(command, nativeOp, queues, textMetaMap, clipStack)
       if (op) {
+        stats.nativeCommands++
         ops.push(op)
         continue
       }
@@ -536,6 +665,7 @@ export function translateNativeRenderGraphSnapshot(
     }
     const op = buildRenderOp(command, queues, queueState, textMetaMap, ownerIds)
     if (!op) continue
+    if (isRenderableCommand(command)) stats.fallbackCommands++
     if (op.kind === "effect") {
       const backdrop = createBackdropMetadata(op.effect, command, clipStack)
       ops.push({
@@ -549,5 +679,8 @@ export function translateNativeRenderGraphSnapshot(
     }
     ops.push(op)
   }
-  return { ops }
+  stats.fullyCovered = stats.renderableCommands > 0 && stats.fallbackCommands === 0 && stats.nativeCommands === stats.renderableCommands
+  const frame = { ops }
+  frameStats.set(frame, stats)
+  return frame
 }

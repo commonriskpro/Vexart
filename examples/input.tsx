@@ -1,5 +1,5 @@
 /**
- * TGE Text Input Demo — demo10.
+ * Vexart Text Input Demo — demo10.
  *
  * Showcases the Input component:
  *   - Basic text input with placeholder
@@ -9,7 +9,7 @@
  *   - Selection with Shift+arrows, Ctrl+A
  *
  * Run:  bun run demo10 (requires Ghostty WITHOUT tmux)
- * Requires: bun zig:build && bun run clay:build
+ * Requires: bun install && cargo build
  */
 
 import { createSignal } from "solid-js"
@@ -41,7 +41,7 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
       gap={space[6]}
     >
       <Text color={colors.foreground} fontSize={16}>
-        TGE Text Input Demo
+        Vexart Text Input Demo
       </Text>
 
       {/* Form */}

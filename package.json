@@ -1,6 +1,6 @@
 {
   "name": "vexart",
-  "version": "0.0.1",
+  "version": "0.9.0-beta.0",
   "description": "Pixel-native terminal rendering engine. Write JSX, get browser-quality UI in your terminal.",
   "type": "module",
   "private": true,
@@ -38,6 +38,7 @@
     "demo14": "bun --conditions=browser run examples/textarea.tsx",
     "demo15": "bun --conditions=browser run examples/syntax.tsx",
     "demo16": "bun --conditions=browser run examples/markdown.tsx",
+    "demo:lightcode": "bun --conditions=browser run examples/lightcode.tsx",
     "demo:virtual-list-scroll": "bun --conditions=browser run examples/virtual-list-scroll-debug.tsx",
     "showcase": "bun --conditions=browser run examples/showcase.tsx",
     "showcase:tab2": "bun --conditions=browser run examples/showcase-tab2.tsx",
@@ -83,11 +84,16 @@
   },
   "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
+    "@astrojs/starlight": "^0.38.4",
     "@chenglou/pretext": "^0.0.5",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "astro": "^6.1.9",
     "marked": "^18.0.0",
     "sharp": "^0.34.5",
     "web-tree-sitter": "^0.26.8",
     "zod": "^4.3.6"
+  },
+  "overrides": {
+    "hono": "^4.12.14"
   }
 }

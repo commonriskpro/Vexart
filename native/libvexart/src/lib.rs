@@ -3,17 +3,17 @@
 // Every export wraps its body in ffi_guard! for panic safety.
 // Per design §5, REQ-NB-003.
 
-pub mod composite;
 pub mod canvas_display_list;
-pub mod frame;
+pub mod composite;
 pub mod ffi;
+pub mod frame;
 pub mod image_asset;
 pub mod kitty;
 pub mod layer;
 pub mod layout;
 pub mod paint;
-pub mod resource;
 pub mod render_graph;
+pub mod resource;
 pub mod scene;
 pub mod text;
 pub mod types;
@@ -98,7 +98,9 @@ fn sync_scene_layout_from_output(graph: &mut scene::SceneGraph, out: &[u8], used
         return;
     }
     let count = u32::from_le_bytes(out[8..12].try_into().unwrap_or([0; 4])) as usize;
-    let max_records = (used_len.saturating_sub(HEADER_BYTES)).min(out.len().saturating_sub(HEADER_BYTES)) / RECORD_BYTES;
+    let max_records = (used_len.saturating_sub(HEADER_BYTES))
+        .min(out.len().saturating_sub(HEADER_BYTES))
+        / RECORD_BYTES;
     for i in 0..count.min(max_records) {
         let offset = HEADER_BYTES + i * RECORD_BYTES;
         let node = u64::from_le_bytes(out[offset..offset + 8].try_into().unwrap_or([0; 8]));
@@ -106,7 +108,15 @@ fn sync_scene_layout_from_output(graph: &mut scene::SceneGraph, out: &[u8], used
         let y = f32::from_le_bytes(out[offset + 12..offset + 16].try_into().unwrap_or([0; 4]));
         let width = f32::from_le_bytes(out[offset + 16..offset + 20].try_into().unwrap_or([0; 4]));
         let height = f32::from_le_bytes(out[offset + 20..offset + 24].try_into().unwrap_or([0; 4]));
-        let _ = graph.set_layout(node, scene::NativeLayoutRect { x, y, width, height });
+        let _ = graph.set_layout(
+            node,
+            scene::NativeLayoutRect {
+                x,
+                y,
+                width,
+                height,
+            },
+        );
     }
 }
 
@@ -164,22 +174,31 @@ fn upload_image_record(
         mipmap_filter: wgpu::MipmapFilterMode::Nearest,
         ..Default::default()
     });
-    let bind_group = wgpu_ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("vexart-image-bind-group"),
-        layout: &wgpu_ctx.image_bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::Sampler(&sampler),
-            },
-        ],
-    });
+    let bind_group = wgpu_ctx
+        .device
+        .create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("vexart-image-bind-group"),
+            layout: &wgpu_ctx.image_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
     let _ = sampler;
-    pctx.images.insert(handle, paint::ImageRecord { texture, view, bind_group });
+    pctx.images.insert(
+        handle,
+        paint::ImageRecord {
+            texture,
+            view,
+            bind_group,
+        },
+    );
 }
 
 // ─── Single shared ResourceManager (lazy-initialized, Phase 2b Slice 6) ──
@@ -201,10 +220,12 @@ fn get_or_init_image_assets() -> &'static Mutex<image_asset::ImageAssetRegistry>
     &SHARED_IMAGE_ASSETS
 }
 
-static SHARED_CANVAS_DISPLAY_LISTS: LazyLock<Mutex<canvas_display_list::CanvasDisplayListRegistry>> =
-    LazyLock::new(|| Mutex::new(canvas_display_list::CanvasDisplayListRegistry::new()));
+static SHARED_CANVAS_DISPLAY_LISTS: LazyLock<
+    Mutex<canvas_display_list::CanvasDisplayListRegistry>,
+> = LazyLock::new(|| Mutex::new(canvas_display_list::CanvasDisplayListRegistry::new()));
 
-fn get_or_init_canvas_display_lists() -> &'static Mutex<canvas_display_list::CanvasDisplayListRegistry> {
+fn get_or_init_canvas_display_lists(
+) -> &'static Mutex<canvas_display_list::CanvasDisplayListRegistry> {
     &SHARED_CANVAS_DISPLAY_LISTS
 }
 
@@ -265,7 +286,12 @@ pub extern "C" fn vexart_scene_clear(_ctx: u64, scene: u64) -> i32 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn vexart_node_create(_ctx: u64, scene: u64, kind: u32, out_node: *mut u64) -> i32 {
+pub unsafe extern "C" fn vexart_node_create(
+    _ctx: u64,
+    scene: u64,
+    kind: u32,
+    out_node: *mut u64,
+) -> i32 {
     ffi_guard!({
         if out_node.is_null() {
             return ERR_INVALID_ARG;
@@ -289,19 +315,33 @@ pub extern "C" fn vexart_node_destroy(_ctx: u64, scene: u64, node: u64) -> i32 {
         let Some(graph) = guard.0.get_mut(&scene) else {
             return ERR_INVALID_ARG;
         };
-        if graph.destroy_subtree(node) { OK } else { ERR_INVALID_ARG }
+        if graph.destroy_subtree(node) {
+            OK
+        } else {
+            ERR_INVALID_ARG
+        }
     })
 }
 
 #[no_mangle]
-pub extern "C" fn vexart_node_insert(_ctx: u64, scene: u64, parent: u64, child: u64, anchor: u64) -> i32 {
+pub extern "C" fn vexart_node_insert(
+    _ctx: u64,
+    scene: u64,
+    parent: u64,
+    child: u64,
+    anchor: u64,
+) -> i32 {
     ffi_guard!({
         let mut guard = SHARED_SCENES.lock().unwrap();
         let Some(graph) = guard.0.get_mut(&scene) else {
             return ERR_INVALID_ARG;
         };
         let anchor_id = if anchor == 0 { None } else { Some(anchor) };
-        if graph.insert(parent, child, anchor_id) { OK } else { ERR_INVALID_ARG }
+        if graph.insert(parent, child, anchor_id) {
+            OK
+        } else {
+            ERR_INVALID_ARG
+        }
     })
 }
 
@@ -312,7 +352,11 @@ pub extern "C" fn vexart_node_remove(_ctx: u64, scene: u64, parent: u64, child: 
         let Some(graph) = guard.0.get_mut(&scene) else {
             return ERR_INVALID_ARG;
         };
-        if graph.remove(parent, child) { OK } else { ERR_INVALID_ARG }
+        if graph.remove(parent, child) {
+            OK
+        } else {
+            ERR_INVALID_ARG
+        }
     })
 }
 
@@ -333,7 +377,11 @@ pub unsafe extern "C" fn vexart_node_set_props(
         let Some(graph) = guard.0.get_mut(&scene) else {
             return ERR_INVALID_ARG;
         };
-        if graph.set_props(node, props) { OK } else { ERR_INVALID_ARG }
+        if graph.set_props(node, props) {
+            OK
+        } else {
+            ERR_INVALID_ARG
+        }
     })
 }
 
@@ -355,7 +403,11 @@ pub unsafe extern "C" fn vexart_text_set_content(
         let Some(graph) = guard.0.get_mut(&scene) else {
             return ERR_INVALID_ARG;
         };
-        if graph.set_text(node, text) { OK } else { ERR_INVALID_ARG }
+        if graph.set_text(node, text) {
+            OK
+        } else {
+            ERR_INVALID_ARG
+        }
     })
 }
 
@@ -374,7 +426,19 @@ pub unsafe extern "C" fn vexart_node_set_layout(
         let Some(graph) = guard.0.get_mut(&scene) else {
             return ERR_INVALID_ARG;
         };
-        if graph.set_layout(node, scene::NativeLayoutRect { x, y, width, height }) { OK } else { ERR_INVALID_ARG }
+        if graph.set_layout(
+            node,
+            scene::NativeLayoutRect {
+                x,
+                y,
+                width,
+                height,
+            },
+        ) {
+            OK
+        } else {
+            ERR_INVALID_ARG
+        }
     })
 }
 
@@ -496,10 +560,14 @@ pub unsafe extern "C" fn vexart_frame_choose_strategy(
     out_ptr: *mut u8,
 ) -> i32 {
     ffi_guard!({
-        if input_ptr.is_null() || out_ptr.is_null() || (input_len as usize) < frame::NativeFramePlanInput::BYTE_LEN {
+        if input_ptr.is_null()
+            || out_ptr.is_null()
+            || (input_len as usize) < frame::NativeFramePlanInput::BYTE_LEN
+        {
             return ERR_INVALID_ARG;
         }
-        let input_bytes = std::slice::from_raw_parts(input_ptr, frame::NativeFramePlanInput::BYTE_LEN);
+        let input_bytes =
+            std::slice::from_raw_parts(input_ptr, frame::NativeFramePlanInput::BYTE_LEN);
         let Some(input) = frame::NativeFramePlanInput::from_bytes(input_bytes) else {
             return ERR_INVALID_ARG;
         };
@@ -544,7 +612,11 @@ pub unsafe extern "C" fn vexart_input_pointer(
     out_used: *mut u32,
 ) -> i32 {
     ffi_guard!({
-        if pointer_ptr.is_null() || out_events.is_null() || out_used.is_null() || out_cap < scene::NativeEventRecord::BYTE_LEN as u32 {
+        if pointer_ptr.is_null()
+            || out_events.is_null()
+            || out_used.is_null()
+            || out_cap < scene::NativeEventRecord::BYTE_LEN as u32
+        {
             return ERR_INVALID_ARG;
         }
         let bytes = std::slice::from_raw_parts(pointer_ptr, pointer_len as usize);
@@ -601,7 +673,10 @@ pub unsafe extern "C" fn vexart_input_interaction_frame(
         let records = graph.interaction_frame(x, y, flags);
         let max_records = (out_cap as usize) / scene::NativeEventRecord::BYTE_LEN;
         let used_records = records.len().min(max_records);
-        let out = std::slice::from_raw_parts_mut(out_events, used_records * scene::NativeEventRecord::BYTE_LEN);
+        let out = std::slice::from_raw_parts_mut(
+            out_events,
+            used_records * scene::NativeEventRecord::BYTE_LEN,
+        );
         for (i, event) in records.into_iter().take(used_records).enumerate() {
             let start = i * scene::NativeEventRecord::BYTE_LEN;
             let end = start + scene::NativeEventRecord::BYTE_LEN;
@@ -638,7 +713,11 @@ pub extern "C" fn vexart_input_set_pointer_capture(_ctx: u64, scene: u64, node: 
         let Some(graph) = guard.0.get_mut(&scene) else {
             return ERR_INVALID_ARG;
         };
-        if graph.set_pointer_capture(node) { OK } else { ERR_INVALID_ARG }
+        if graph.set_pointer_capture(node) {
+            OK
+        } else {
+            ERR_INVALID_ARG
+        }
     })
 }
 
@@ -649,7 +728,11 @@ pub extern "C" fn vexart_input_release_pointer_capture(_ctx: u64, scene: u64, no
         let Some(graph) = guard.0.get_mut(&scene) else {
             return ERR_INVALID_ARG;
         };
-        if graph.release_pointer_capture(node) { OK } else { ERR_INVALID_ARG }
+        if graph.release_pointer_capture(node) {
+            OK
+        } else {
+            ERR_INVALID_ARG
+        }
     })
 }
 
@@ -674,7 +757,10 @@ pub unsafe extern "C" fn vexart_input_press_chain(
         let chain = graph.press_chain(x, y);
         let max_records = (out_cap as usize) / scene::NativeEventRecord::BYTE_LEN;
         let used_records = chain.len().min(max_records);
-        let out = std::slice::from_raw_parts_mut(out_events, used_records * scene::NativeEventRecord::BYTE_LEN);
+        let out = std::slice::from_raw_parts_mut(
+            out_events,
+            used_records * scene::NativeEventRecord::BYTE_LEN,
+        );
         for (i, event) in chain.into_iter().take(used_records).enumerate() {
             let start = i * scene::NativeEventRecord::BYTE_LEN;
             let end = start + scene::NativeEventRecord::BYTE_LEN;
@@ -702,7 +788,9 @@ pub unsafe extern "C" fn vexart_scene_focus_next(
         let Some(graph) = guard.0.get(&scene) else {
             return ERR_INVALID_ARG;
         };
-        *out_node = graph.focus_next((current != 0).then_some(current)).unwrap_or(0);
+        *out_node = graph
+            .focus_next((current != 0).then_some(current))
+            .unwrap_or(0);
         OK
     })
 }
@@ -722,7 +810,9 @@ pub unsafe extern "C" fn vexart_scene_focus_prev(
         let Some(graph) = guard.0.get(&scene) else {
             return ERR_INVALID_ARG;
         };
-        *out_node = graph.focus_prev((current != 0).then_some(current)).unwrap_or(0);
+        *out_node = graph
+            .focus_prev((current != 0).then_some(current))
+            .unwrap_or(0);
         OK
     })
 }
@@ -917,6 +1007,167 @@ pub unsafe extern "C" fn vexart_paint_dispatch(
             None => return ERR_GPU_DEVICE_LOST,
         };
         pctx.dispatch(target, graph, stats_out)
+    })
+}
+
+/// Execute paint directly from a retained scene graph.
+///
+/// The config buffer is owned by the caller and contains:
+/// - u32 target_width
+/// - u32 target_height
+/// - f32 offset_x
+/// - f32 offset_y
+/// - u32 ref_count
+/// - u32 reserved
+/// - ref_count × { u64 node_id, u32 op_kind, u32 reserved }
+///
+/// This is the Phase 3d direct path: Rust lowers retained scene render ops into
+/// the packed paint graph consumed by `PaintContext::dispatch`, so fully-covered
+/// retained layers do not require JS-side RenderGraphOp or cmd_kind packing.
+///
+/// # Safety
+/// `config_ptr` must be valid for `config_len` bytes; `stats_out` must be valid if non-null.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_scene_paint_dispatch(
+    _ctx: u64,
+    scene: u64,
+    target: u64,
+    config_ptr: *const u8,
+    config_len: u32,
+    stats_out: *mut FrameStats,
+) -> i32 {
+    ffi_guard!({
+        if config_ptr.is_null() || config_len == 0 {
+            return ERR_INVALID_ARG;
+        }
+        let config = std::slice::from_raw_parts(config_ptr, config_len as usize);
+        let (options, refs) = match render_graph::parse_scene_paint_config(config) {
+            Ok(parsed) => parsed,
+            Err(_) => return ERR_INVALID_ARG,
+        };
+        let paint_refs = refs
+            .iter()
+            .copied()
+            .filter(|entry| {
+                entry.kind != render_graph::NativeRenderOpKind::Text
+                    && entry.kind != render_graph::NativeRenderOpKind::Image
+            })
+            .collect::<Vec<_>>();
+        let text_refs = refs
+            .iter()
+            .copied()
+            .filter(|entry| entry.kind == render_graph::NativeRenderOpKind::Text)
+            .collect::<Vec<_>>();
+        let image_refs = refs
+            .iter()
+            .copied()
+            .filter(|entry| entry.kind == render_graph::NativeRenderOpKind::Image)
+            .collect::<Vec<_>>();
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        let (graph, glyphs, images) = {
+            let guard = SHARED_SCENES.lock().unwrap();
+            let Some(scene_graph) = guard.0.get(&scene) else {
+                return ERR_INVALID_ARG;
+            };
+            let graph = match render_graph::scene_to_paint_graph(scene_graph, &paint_refs, options)
+            {
+                Ok(graph) => graph,
+                Err(_) => return ERR_INVALID_ARG,
+            };
+            let glyphs = match render_graph::scene_to_text_glyphs(
+                scene_graph,
+                &text_refs,
+                options,
+                &pctx.atlases,
+            ) {
+                Ok(glyphs) => glyphs,
+                Err(_) => return ERR_INVALID_ARG,
+            };
+            let images =
+                match render_graph::scene_to_image_paints(scene_graph, &image_refs, options) {
+                    Ok(images) => images,
+                    Err(_) => return ERR_INVALID_ARG,
+                };
+            (graph, glyphs, images)
+        };
+        let use_layer = target != 0 && (!refs.is_empty());
+        if use_layer {
+            let begin_code = composite::target_begin_layer(pctx, target, 0, 0x00000000);
+            if begin_code != OK {
+                return begin_code;
+            }
+        }
+        let mut paint_stats = FrameStats::default();
+        let paint_code = pctx.dispatch(target, &graph, &mut paint_stats);
+        if paint_code != OK {
+            if use_layer {
+                if let Some(record) = pctx.targets.get_mut(target) {
+                    record.active_layer = None;
+                }
+            }
+            return paint_code;
+        }
+        let mut image_stats = FrameStats::default();
+        for image in &images {
+            let image_code = composite::composite_render_image_transform_layer(
+                pctx,
+                target,
+                image.image_handle,
+                image.params.as_slice(),
+                0x00000000,
+            );
+            if image_code != OK {
+                if use_layer {
+                    if let Some(record) = pctx.targets.get_mut(target) {
+                        record.active_layer = None;
+                    }
+                }
+                return image_code;
+            }
+            image_stats.draw_calls += 1;
+            image_stats.primitives += 1;
+        }
+        let mut text_stats = FrameStats::default();
+        let text_code = unsafe {
+            text::dispatch(
+                pctx,
+                target,
+                glyphs.as_ptr() as *const u8,
+                (glyphs.len() * std::mem::size_of::<paint::instances::MsdfGlyphInstance>()) as u32,
+                &mut text_stats,
+            )
+        };
+        if text_code != OK {
+            if use_layer {
+                if let Some(record) = pctx.targets.get_mut(target) {
+                    record.active_layer = None;
+                }
+            }
+            return text_code;
+        }
+        if use_layer {
+            let end_code = composite::target_end_layer(pctx, target);
+            if end_code != OK {
+                return end_code;
+            }
+        }
+        if !stats_out.is_null() {
+            unsafe {
+                (*stats_out).draw_calls =
+                    paint_stats.draw_calls + image_stats.draw_calls + text_stats.draw_calls;
+                (*stats_out).primitives =
+                    paint_stats.primitives + image_stats.primitives + text_stats.primitives;
+                (*stats_out).gpu_time_us =
+                    paint_stats.gpu_time_us + image_stats.gpu_time_us + text_stats.gpu_time_us;
+                (*stats_out).cpu_time_us =
+                    paint_stats.cpu_time_us + image_stats.cpu_time_us + text_stats.cpu_time_us;
+            }
+        }
+        OK
     })
 }
 
@@ -1551,7 +1802,9 @@ pub unsafe extern "C" fn vexart_kitty_emit_region_target(
             Some(c) => c,
             None => return ERR_GPU_DEVICE_LOST,
         };
-        kitty::transport::emit_region_target_with_stats(pctx, target, image_id, rx, ry, rw, rh, stats_out)
+        kitty::transport::emit_region_target_with_stats(
+            pctx, target, image_id, rx, ry, rw, rh, stats_out,
+        )
     })
 }
 
@@ -1618,7 +1871,11 @@ pub extern "C" fn vexart_layer_mark_dirty(_ctx: u64, layer_handle: u64) -> i32 {
     ffi_guard!({
         let registry = get_or_init_layer_registry();
         let mut registry_guard = registry.lock().unwrap();
-        if registry_guard.mark_dirty(layer_handle) { OK } else { ERR_INVALID_ARG }
+        if registry_guard.mark_dirty(layer_handle) {
+            OK
+        } else {
+            ERR_INVALID_ARG
+        }
     })
 }
 
@@ -1707,7 +1964,9 @@ pub unsafe extern "C" fn vexart_layer_present_dirty(
         let mut resources_guard = resources.lock().unwrap();
         let registry = get_or_init_layer_registry();
         let mut registry_guard = registry.lock().unwrap();
-        let Some(image_id) = registry_guard.mark_presented(layer_handle, frame, &mut resources_guard) else {
+        let Some(image_id) =
+            registry_guard.mark_presented(layer_handle, frame, &mut resources_guard)
+        else {
             return ERR_INVALID_ARG;
         };
         *out_image_id = image_id;
@@ -1826,7 +2085,13 @@ pub unsafe extern "C" fn vexart_image_asset_register(
     out_handle: *mut u64,
 ) -> i32 {
     ffi_guard!({
-        if key_ptr.is_null() || key_len == 0 || rgba_ptr.is_null() || rgba_len == 0 || meta_ptr.is_null() || out_handle.is_null() {
+        if key_ptr.is_null()
+            || key_len == 0
+            || rgba_ptr.is_null()
+            || rgba_len == 0
+            || meta_ptr.is_null()
+            || out_handle.is_null()
+        {
             return ERR_INVALID_ARG;
         }
         let key_bytes = std::slice::from_raw_parts(key_ptr, key_len as usize);
@@ -1840,7 +2105,8 @@ pub unsafe extern "C" fn vexart_image_asset_register(
         let mut resources_guard = resources.lock().unwrap();
         let registry = get_or_init_image_assets();
         let mut registry_guard = registry.lock().unwrap();
-        let Some(handle) = registry_guard.register(key, rgba, width, height, &mut resources_guard) else {
+        let Some(handle) = registry_guard.register(key, rgba, width, height, &mut resources_guard)
+        else {
             return ERR_INVALID_ARG;
         };
         let mut paint_guard = get_or_init_paint();
@@ -1861,7 +2127,11 @@ pub extern "C" fn vexart_image_asset_touch(_ctx: u64, _scene: u64, handle: u64) 
         let mut resources_guard = resources.lock().unwrap();
         let registry = get_or_init_image_assets();
         let registry_guard = registry.lock().unwrap();
-        if registry_guard.touch(handle, &mut resources_guard) { OK } else { ERR_INVALID_ARG }
+        if registry_guard.touch(handle, &mut resources_guard) {
+            OK
+        } else {
+            ERR_INVALID_ARG
+        }
     })
 }
 
@@ -1878,7 +2148,9 @@ pub extern "C" fn vexart_image_asset_release(_ctx: u64, _scene: u64, handle: u64
                 pctx.images.remove(&handle);
             }
             OK
-        } else { ERR_INVALID_ARG }
+        } else {
+            ERR_INVALID_ARG
+        }
     })
 }
 
@@ -1897,10 +2169,16 @@ pub unsafe extern "C" fn vexart_canvas_display_list_update(
     out_handle: *mut u64,
 ) -> i32 {
     ffi_guard!({
-        if key_ptr.is_null() || key_len == 0 || bytes_ptr.is_null() || bytes_len == 0 || out_handle.is_null() {
+        if key_ptr.is_null()
+            || key_len == 0
+            || bytes_ptr.is_null()
+            || bytes_len == 0
+            || out_handle.is_null()
+        {
             return ERR_INVALID_ARG;
         }
-        let key = String::from_utf8_lossy(std::slice::from_raw_parts(key_ptr, key_len as usize)).to_string();
+        let key = String::from_utf8_lossy(std::slice::from_raw_parts(key_ptr, key_len as usize))
+            .to_string();
         let bytes = std::slice::from_raw_parts(bytes_ptr, bytes_len as usize);
         let hash = canvas_display_list::hash_display_list(bytes);
 
@@ -1923,7 +2201,11 @@ pub extern "C" fn vexart_canvas_display_list_touch(_ctx: u64, _scene: u64, handl
         let mut resources_guard = resources.lock().unwrap();
         let registry = get_or_init_canvas_display_lists();
         let registry_guard = registry.lock().unwrap();
-        if registry_guard.touch(handle, &mut resources_guard) { OK } else { ERR_INVALID_ARG }
+        if registry_guard.touch(handle, &mut resources_guard) {
+            OK
+        } else {
+            ERR_INVALID_ARG
+        }
     })
 }
 
@@ -1934,7 +2216,11 @@ pub extern "C" fn vexart_canvas_display_list_release(_ctx: u64, _scene: u64, han
         let mut resources_guard = resources.lock().unwrap();
         let registry = get_or_init_canvas_display_lists();
         let mut registry_guard = registry.lock().unwrap();
-        if registry_guard.release(handle, &mut resources_guard) { OK } else { ERR_INVALID_ARG }
+        if registry_guard.release(handle, &mut resources_guard) {
+            OK
+        } else {
+            ERR_INVALID_ARG
+        }
     })
 }
 

@@ -1,5 +1,5 @@
 /**
- * TGE Dashboard Demo — per-layer granularity stress test.
+ * Vexart Dashboard Demo — per-layer granularity stress test.
  *
  * A multi-widget dashboard where EACH widget is its own compositing layer.
  * Interacting with one widget only retransmits that widget's tiny pixel
@@ -17,7 +17,7 @@
  * The Stats widget reads from the log file and updates reactively.
  *
  * Run:  bun run demo6 (requires Ghostty WITHOUT tmux)
- * Requires: bun zig:build && bun run clay:build
+ * Requires: bun install && cargo build
  */
 
 import { createSignal, onCleanup } from "solid-js"
@@ -274,7 +274,7 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
     >
       <Box layer>
         <Text color={colors.foreground} fontSize={16}>
-          TGE Dashboard — Per-Layer Granularity
+          Vexart Dashboard — Per-Layer Granularity
         </Text>
       </Box>
 

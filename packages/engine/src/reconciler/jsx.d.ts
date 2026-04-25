@@ -94,12 +94,21 @@ type ImgIntrinsicProps = {
   opacity?: number
 }
 
+type CanvasIntrinsicProps = TGEProps & {
+  ref?: RefCallback
+  onDraw?: TGEProps["onDraw"]
+  viewport?: TGEProps["viewport"]
+  children?: Children
+}
+
 declare module "solid-js" {
   namespace JSX {
     interface IntrinsicElements {
       box: BoxIntrinsicProps
       text: TextIntrinsicProps
+      image: ImgIntrinsicProps
       img: ImgIntrinsicProps
+      canvas: CanvasIntrinsicProps
     }
   }
 }

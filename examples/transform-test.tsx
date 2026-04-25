@@ -41,7 +41,7 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
       {/* Title */}
       <box direction="row" gap={10} alignY="center">
         <text color={0xffffffff} fontSize={20} fontWeight={700}>
-          TGE Transform System
+          Vexart Transform System
         </text>
         <text color={0x888888ff} fontSize={14}>
           {`angle: ${angle()}° | clicks: ${clicks()} | last: ${lastClicked() || "none"}`}
@@ -222,7 +222,7 @@ async function main() {
     experimental: {
     },
   })
-  const exitAfterMs = Number(process.env.TGE_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
+  const exitAfterMs = Number(process.env.VEXART_EXIT_AFTER_MS ?? process.env.TGE_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
 
   const shutdown = () => {
     parser.destroy()

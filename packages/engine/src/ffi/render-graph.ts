@@ -149,6 +149,7 @@ export type RenderGraphQueueState = {
 
 /** @public */
 export type TextMeta = {
+  nodeId: number
   content: string
   fontId: number
   fontSize: number
@@ -176,6 +177,7 @@ export type BorderRenderInputs = {
 export type TextRenderInputs = {
   text: string
   fontId: number
+  fontSize: number
   lineHeight: number
   maxWidth: number
   textHeight: number
@@ -320,16 +322,18 @@ export function getBorderRenderInputs(cmd: RenderCommand, queues: RenderGraphQue
   }
 }
 
-export function getTextRenderInputs(cmd: RenderCommand, textMetaMap: Map<string, TextMeta>): TextRenderInputs | null {
+export function getTextRenderInputs(cmd: RenderCommand, textMetaMap: Map<number, TextMeta>): TextRenderInputs | null {
   if (!cmd.text) return null
-  const meta = textMetaMap.get(cmd.text)
+  const meta = cmd.nodeId === undefined ? undefined : textMetaMap.get(cmd.nodeId)
   const fontId = meta?.fontId ?? 0
-  const lineHeight = meta?.lineHeight ?? 17
+  const fontSize = meta?.fontSize ?? (Math.round(cmd.extra1) || 14)
+  const lineHeight = meta?.lineHeight ?? Math.ceil(fontSize * 1.2)
   const maxWidth = Math.max(Math.round(cmd.width), 1)
   const textHeight = Math.round(cmd.height) > 0 ? Math.round(cmd.height) : lineHeight
   return {
     text: cmd.text,
     fontId,
+    fontSize,
     lineHeight,
     maxWidth,
     textHeight,
@@ -511,7 +515,7 @@ function createClipStackEntry(cmd: RenderCommand, depth: number): ClipStackEntry
 }
 
 /** @public */
-export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, queueState: RenderGraphQueueState, textMetaMap: Map<string, TextMeta>, ownerIds?: { rect: number | null; text: number | null }): RenderGraphOp | null {
+export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, queueState: RenderGraphQueueState, textMetaMap: Map<number, TextMeta>, ownerIds?: { rect: number | null; text: number | null }): RenderGraphOp | null {
   if (cmd.type === CMD.RECTANGLE) {
     const renderObjectId = ownerIds?.rect ?? null
     const rect: RectangleRenderOp = {
@@ -591,7 +595,7 @@ export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, que
 export function buildRenderGraphFrame(
   commands: RenderCommand[],
   queues: RenderGraphQueues,
-  textMetaMap: Map<string, TextMeta>,
+  textMetaMap: Map<number, TextMeta>,
 ): RenderGraphFrame {
   const ops: RenderGraphOp[] = []
   const clipStack: ClipStackEntry[] = []

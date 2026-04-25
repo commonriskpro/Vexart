@@ -1,14 +1,17 @@
 # Components
 
-TGE provides 28 built-in components across two packages.
+Vexart provides built-in components across three public packages.
 
-- **`@tge/components`** — Truly headless. Behavior only, zero visual coupling. Use render props or theme props to provide all styling.
-- **`@tge/void`** — Styled design system. Built on top of the headless layer.
+- **`@vexart/primitives`** — primitive wrappers: `Box`, `Text`, `RichText`, `Span`, `WrapRow`.
+- **`@vexart/headless`** — behavior only, zero visual coupling. Use render props/context props to provide styling.
+- **`@vexart/styled`** — styled design system built on top of the headless layer.
 
 ```typescript
-import { Box, Text, Button, Input, Checkbox, Tabs, List, ProgressBar, ScrollView,
+import { Box, Text } from "@vexart/primitives"
+import { Button, Input, Checkbox, Tabs, List, ProgressBar, ScrollView,
          Dialog, Select, Switch, RadioGroup, Table, createToaster, Router, Route, NavigationStack,
-         Tooltip, Popover, Combobox, Slider, VirtualList, createForm } from "@tge/components"
+         Tooltip, Popover, Combobox, Slider, VirtualList, createForm } from "@vexart/headless"
+import { colors, radius, space } from "@vexart/styled"
 ```
 
 ---
@@ -130,7 +133,7 @@ Interactive push button. Render props pattern — zero visual output. The render
 />
 ```
 
-For a styled version, use `@tge/void`'s `Button`.
+For a styled version, use `@vexart/styled`'s `Button`.
 
 ---
 
@@ -795,7 +798,7 @@ Render children at the root level (above all other content).
 
 ### Headless Architecture
 
-All interactive components in `@tge/components` provide **behavior only**:
+All interactive components in `@vexart/headless` provide **behavior only**:
 
 | Pattern | Components | You provide |
 |---------|-----------|-------------|

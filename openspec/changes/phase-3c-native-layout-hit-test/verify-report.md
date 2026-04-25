@@ -2,7 +2,7 @@
 
 ## Status
 
-Partially implemented.
+Implemented and verified for the v0.9 retained layout/damage/hit-test readiness gate.
 
 ## Verified
 
@@ -26,6 +26,9 @@ Partially implemented.
 - Added initial compat-vs-native layout parity coverage through `native-scene-layout-parity.test.ts`.
 - Added low-level native scene mirroring support to `renderNodeToBuffer()` when `nativeSceneGraph` is enabled.
 - Added automated retained-vs-compat offscreen smoke coverage for `showcase-tab2`.
+- Added retained layout parity coverage for text containers, nested scroll containers, border/padding combinations, multiline text wrapping, and floating absolute positioning.
+- Added bounded damage coverage for interactive style updates and text visual prop updates.
+- Added TS parity coverage for native pointer passthrough hit testing without skipping children.
 - User manually confirmed `showcase-tab2` and the main showcase looked correct and interactive in a capable real terminal with `VEXART_NATIVE_SCENE_GRAPH=1`, `VEXART_NATIVE_EVENT_DISPATCH=1`, `VEXART_NATIVE_SCENE_LAYOUT=1`, and `VEXART_NATIVE_RENDER_GRAPH=1`.
 - Added JS `onPress` dispatch from `nativePressChain()` behind the `nativeEventDispatch` experimental flag.
 - Added native-chain JS dispatch support for `PressEvent.stopPropagation()`.
@@ -50,8 +53,8 @@ Partially implemented.
 
 ## Required Verification
 
-- Native-owned layout computation from scene props now synchronizes `SceneGraph` directly into retained Taffy nodes, and the render loop can consume those maps behind `nativeSceneLayout`; broader retained-layout ownership cleanup is still pending.
-- Initial layout parity fixture coverage now includes core row/column + gap + padding, percent/grow/min-max constraints, alignment semantics, and a scroll/nested layout scene; broader fixture coverage is still pending.
+- Native-owned layout computation from scene props now synchronizes `SceneGraph` directly into retained Taffy nodes, and the render loop can consume those maps behind `nativeSceneLayout`.
+- Layout parity fixture coverage includes core row/column + gap + padding, percent/grow/min-max constraints, alignment semantics, text containers, nested scroll containers, border/padding combinations, multiline text wrapping, floating positioning, and scroll/nested layout scenes.
 - Offscreen scroll-child hit prevention is implemented and tested.
 - Native pointer capture is implemented and tested.
 - Native bubbling candidate chains are implemented and tested; JS `onPress` dispatch and `stopPropagation()` consumption are implemented behind `nativeEventDispatch`.
@@ -60,5 +63,5 @@ Partially implemented.
 - Minimum hit-area expansion is implemented and tested on the native path.
 - Focused-node `onKeyDown` remains JS-owned; only focus traversal ownership was cut over in this step.
 - Scene-derived native layout computation is tested for core row/gap sizing, command realignment, and multiple compat-vs-native parity fixtures including percent/grow/min-max constraints, alignment semantics, and scroll/nested layout; broad layout parity coverage is still pending.
-- Layout-transition node damage is computed and fed into layer invalidation, and bounded visual prop/text damage is bridged into the same system; full retained visual damage ownership beyond these changes is still pending.
+- Layout-transition node damage is computed and fed into layer invalidation; bounded visual prop, text visual prop, and interactive style damage are bridged into the same system.
 - Automated offscreen retained-vs-compat smoke exists for `showcase-tab2`, and the user manually confirmed core showcase visual/interactivity parity in a capable terminal; broader long-tail manual regression coverage is still useful but the original parity gate is no longer unverified.

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
+import { createNode } from "../ffi/node"
+import { NATIVE_EVENT_KIND, type NativePointerEventRecord } from "../ffi/native-scene-events"
 import { CMD, type RenderCommand } from "../ffi/render-graph"
-import { damageRectForLayoutTransition, updateCommandsToLayoutMap } from "./layout"
+import { damageRectForLayoutTransition, dispatchNativeInteractionFrame, updateCommandsToLayoutMap, type InteractiveStatesBag } from "./layout"
 
 describe("updateCommandsToLayoutMap", () => {
   test("realigns regular and scissor commands by nodeId", () => {
@@ -40,5 +42,48 @@ describe("damageRectForLayoutTransition", () => {
         { x: 5, y: 6, width: 7, height: 8 },
       ),
     ).toEqual({ x: 5, y: 6, width: 7, height: 8 })
+  })
+})
+
+describe("dispatchNativeInteractionFrame", () => {
+  test("clears pointer capture after native mouse-up callbacks run", () => {
+    const node = createNode("box")
+    node._nativeId = 7n
+    let captureDuringMouseUp = -1
+    const bag: InteractiveStatesBag = {
+      rectNodes: [node],
+      rectNodeById: new Map([[node.id, node]]),
+      pointerX: 10,
+      pointerY: 10,
+      pointerDown: false,
+      pointerDirty: false,
+      pendingPress: false,
+      pendingRelease: true,
+      capturedNodeId: node.id,
+      pressOriginSet: true,
+      prevActiveNode: node,
+      cellWidth: 8,
+      cellHeight: 16,
+      onChanged: () => {},
+    }
+    node.props.onMouseUp = () => {
+      captureDuringMouseUp = bag.capturedNodeId
+    }
+
+    dispatchNativeInteractionFrame(bag, () => [{
+      nodeId: 7n,
+      eventKind: NATIVE_EVENT_KIND.MOUSE_UP,
+      flags: 0,
+      x: 10,
+      y: 10,
+      nodeX: 1,
+      nodeY: 1,
+      width: 20,
+      height: 20,
+    } satisfies NativePointerEventRecord])
+
+    expect(captureDuringMouseUp).toBe(node.id)
+    expect(bag.capturedNodeId).toBe(0)
+    expect(bag.pressOriginSet).toBe(false)
   })
 })

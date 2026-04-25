@@ -161,7 +161,7 @@ async function main() {
     experimental: {
     },
   })
-  const exitAfterMs = Number(process.env.TGE_EXIT_AFTER_MS ?? 0)
+  const exitAfterMs = Number(process.env.VEXART_EXIT_AFTER_MS ?? process.env.TGE_EXIT_AFTER_MS ?? 0)
 
   const shutdown = () => {
     app.destroy()

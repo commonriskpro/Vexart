@@ -1,5 +1,5 @@
 /**
- * TGE Layer Compositing Demo — per-component layer granularity.
+ * Vexart Layer Compositing Demo — per-component layer granularity.
  *
  * Each component with `layer` prop gets its own Kitty image with z-index.
  * When the counter increments, ONLY the counter card (~12KB) retransmits.
@@ -12,7 +12,7 @@
  *   - Per-card layers: each card is its own compositing layer
  *
  * Run: bun run examples/layers.tsx (requires Ghostty WITHOUT tmux)
- * Requires: bun zig:build && bun run clay:build
+ * Requires: bun install && cargo build
  */
 
 import { createSignal } from "solid-js"
@@ -141,7 +141,7 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
     >
       <Box layer>
         <Text color={colors.foreground} fontSize={16}>
-          TGE Per-Layer Granularity Demo
+          Vexart Per-Layer Granularity Demo
         </Text>
       </Box>
 
@@ -168,7 +168,7 @@ async function main() {
   const term = await createTerminal()
 
   // mount() now handles everything:
-  //   - Creates render loop (Clay + Zig + output)
+  //   - Creates render loop (Rust/Taffy + WGPU + output)
   //   - Mounts SolidJS component tree
   //   - Connects terminal stdin → input parser → event dispatch
   //   - Starts 30fps render loop with dirty-flag optimization

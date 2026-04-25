@@ -43,6 +43,7 @@ import { disableNativeEventDispatch, enableNativeEventDispatch, isNativeEventDis
 import { disableNativeRenderGraph, enableNativeRenderGraph, isNativeRenderGraphEnabled } from "../ffi/native-render-graph-flags"
 import { disableNativeSceneLayout, enableNativeSceneLayout, isNativeSceneLayoutEnabled } from "../ffi/native-scene-layout-flags"
 import { destroyNativeScene, nativeSceneCreateNode, nativeSceneSetCellSize } from "../ffi/native-scene"
+import { nativeReleasePointerCapture, nativeSetPointerCapture } from "../ffi/native-scene-events"
 import { disableNativeSceneGraph, enableNativeSceneGraph, isNativeSceneGraphEnabled } from "../ffi/native-scene-graph-flags"
 import { disableNativePresentation, enableNativePresentation, isNativePresentationEnabled, isNativePresentationForcedOff, nativePresentationForcedOffReason } from "../ffi/native-presentation-flags"
 import { getVexartFfiCallCount, getVexartFfiCallCountsBySymbol, resetVexartFfiCallCounts } from "../ffi/vexart-bridge"
@@ -85,7 +86,7 @@ function hasPointerReactiveNodes(node: TGENode): boolean {
 }
 
 // ── Module-level shared state ──
-const textMetaMap = new Map<string, TextMeta>()
+const textMetaMap = new Map<number, TextMeta>()
   const renderGraphQueues = createRenderGraphQueues()
   const frameDirtyRects: DamageRect[] = []
   const pendingNodeDamageRects: Array<{ nodeId: number; rect: DamageRect }> = []
@@ -503,8 +504,16 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       if (pointer.capturedNodeId !== 0) return true
       return hasPointerReactiveNodes(root)
     },
-    setPointerCapture(nodeId: number) { pointer.capturedNodeId = nodeId },
-    releasePointerCapture(nodeId: number) { if (pointer.capturedNodeId === nodeId) pointer.capturedNodeId = 0 },
+    setPointerCapture(nodeId: number) {
+      pointer.capturedNodeId = nodeId
+      const nativeId = nodeRefById.get(nodeId)?._nativeId
+      if (nativeId) nativeSetPointerCapture(nativeId)
+    },
+    releasePointerCapture(nodeId: number) {
+      if (pointer.capturedNodeId === nodeId) pointer.capturedNodeId = 0
+      const nativeId = nodeRefById.get(nodeId)?._nativeId
+      if (nativeId) nativeReleasePointerCapture(nativeId)
+    },
     onPostScroll(cb: () => void) {
       postScrollCallbacks.push(cb)
       return () => { const idx = postScrollCallbacks.indexOf(cb); if (idx >= 0) postScrollCallbacks.splice(idx, 1) }

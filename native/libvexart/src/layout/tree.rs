@@ -123,6 +123,10 @@ pub(crate) struct PackedStyle {
     padding_right: f32,
     padding_bottom: f32,
     padding_left: f32,
+    margin_top: f32,
+    margin_right: f32,
+    margin_bottom: f32,
+    margin_left: f32,
     border_top: f32,
     border_right: f32,
     border_bottom: f32,
@@ -552,6 +556,9 @@ fn packed_style_from_scene(scene: &SceneGraph, node_id: u64) -> PackedStyle {
     let uniform_padding = scene_numeric_prop(scene, node_id, prop_hash("padding")).unwrap_or(0.0);
     let padding_x = scene_numeric_prop(scene, node_id, prop_hash("paddingX")).unwrap_or(uniform_padding);
     let padding_y = scene_numeric_prop(scene, node_id, prop_hash("paddingY")).unwrap_or(uniform_padding);
+    let uniform_margin = scene_numeric_prop(scene, node_id, prop_hash("margin")).unwrap_or(0.0);
+    let margin_x = scene_numeric_prop(scene, node_id, prop_hash("marginX")).unwrap_or(uniform_margin);
+    let margin_y = scene_numeric_prop(scene, node_id, prop_hash("marginY")).unwrap_or(uniform_margin);
     let uniform_border = scene_numeric_prop(scene, node_id, 5).unwrap_or(0.0);
     let width = scene_size_prop(scene, node_id, 1);
     let height = scene_size_prop(scene, node_id, 2);
@@ -582,6 +589,10 @@ fn packed_style_from_scene(scene: &SceneGraph, node_id: u64) -> PackedStyle {
         padding_right: scene_numeric_prop(scene, node_id, prop_hash("paddingRight")).unwrap_or(padding_x),
         padding_bottom: scene_numeric_prop(scene, node_id, prop_hash("paddingBottom")).unwrap_or(padding_y),
         padding_left: scene_numeric_prop(scene, node_id, prop_hash("paddingLeft")).unwrap_or(padding_x),
+        margin_top: scene_numeric_prop(scene, node_id, prop_hash("marginTop")).unwrap_or(margin_y),
+        margin_right: scene_numeric_prop(scene, node_id, prop_hash("marginRight")).unwrap_or(margin_x),
+        margin_bottom: scene_numeric_prop(scene, node_id, prop_hash("marginBottom")).unwrap_or(margin_y),
+        margin_left: scene_numeric_prop(scene, node_id, prop_hash("marginLeft")).unwrap_or(margin_x),
         border_top: scene_numeric_prop(scene, node_id, prop_hash("borderTop")).unwrap_or(uniform_border),
         border_right: scene_numeric_prop(scene, node_id, prop_hash("borderRight")).unwrap_or(uniform_border),
         border_bottom: scene_numeric_prop(scene, node_id, prop_hash("borderBottom")).unwrap_or(uniform_border),
@@ -632,7 +643,8 @@ fn scene_text_context(scene: &SceneGraph, node_id: u64) -> Option<LayoutNodeCont
         .unwrap_or(0.0)
         .max(0.0) as u32;
     let line_height = if font_id == 0 {
-        17.0
+        let scale = font_size.max(1.0) / 14.0;
+        (17.0 * scale).ceil()
     } else {
         scene_numeric_prop(scene, node_id, prop_hash("lineHeight"))
             .unwrap_or((font_size * 1.2).ceil())
@@ -708,6 +720,10 @@ fn parse_packed_style(payload: &[u8]) -> PackedStyle {
         padding_right: read_f32(payload, 60),
         padding_bottom: read_f32(payload, 64),
         padding_left: read_f32(payload, 68),
+        margin_top: 0.0,
+        margin_right: 0.0,
+        margin_bottom: 0.0,
+        margin_left: 0.0,
         border_top: read_f32(payload, 72),
         border_right: read_f32(payload, 76),
         border_bottom: read_f32(payload, 80),
@@ -908,6 +924,12 @@ pub(crate) fn pack_to_taffy_style(packed: &PackedStyle, is_absolute: bool, is_ro
             right: LengthPercentage::length(packed.padding_right),
             bottom: LengthPercentage::length(packed.padding_bottom),
             left: LengthPercentage::length(packed.padding_left),
+        },
+        margin: Rect {
+            top: LengthPercentageAuto::length(packed.margin_top),
+            right: LengthPercentageAuto::length(packed.margin_right),
+            bottom: LengthPercentageAuto::length(packed.margin_bottom),
+            left: LengthPercentageAuto::length(packed.margin_left),
         },
         border: Rect {
             top: LengthPercentage::length(packed.border_top),
@@ -1319,6 +1341,31 @@ mod tests {
         assert_eq!(tree.id_map.len(), 6);
     }
 
+    #[test]
+    fn test_compute_scene_margin_offsets_child_layout() {
+        let mut scene = SceneGraph::new();
+        let root = scene.create_node(NativeNodeKind::Box);
+        let child = scene.create_node(NativeNodeKind::Box);
+        assert!(scene.insert(root, child, None));
+        set_u32_prop(&mut scene, root, 1, 200);
+        set_u32_prop(&mut scene, root, 2, 100);
+        set_u32_prop(&mut scene, child, 1, 20);
+        set_u32_prop(&mut scene, child, 2, 10);
+        set_u32_prop(&mut scene, child, prop_hash("marginLeft"), 12);
+        set_u32_prop(&mut scene, child, prop_hash("marginTop"), 8);
+
+        let mut tree = LayoutTree::new();
+        tree.viewport_w = 200.0;
+        tree.viewport_h = 100.0;
+        assert_eq!(tree.build_from_scene(&scene), OK);
+        assert_eq!(tree.compute(None), OK);
+
+        let child_node = tree.id_map.get(&child).copied().unwrap();
+        let layout = tree.taffy.layout(child_node).unwrap();
+        assert_eq!(layout.location.x, 12.0);
+        assert_eq!(layout.location.y, 8.0);
+    }
+
     // ── Helper builders for tests ──────────────────────────────────────
 
     /// Root → child1 → child2 nested structure.
@@ -1453,6 +1500,10 @@ mod tests {
             padding_right: 0.0,
             padding_bottom: 0.0,
             padding_left: 0.0,
+            margin_top: 0.0,
+            margin_right: 0.0,
+            margin_bottom: 0.0,
+            margin_left: 0.0,
             border_top: 0.0,
             border_right: 0.0,
             border_bottom: 0.0,
@@ -1487,6 +1538,10 @@ mod tests {
             padding_right: 0.0,
             padding_bottom: 0.0,
             padding_left: 0.0,
+            margin_top: 0.0,
+            margin_right: 0.0,
+            margin_bottom: 0.0,
+            margin_left: 0.0,
             border_top: 0.0,
             border_right: 0.0,
             border_bottom: 0.0,

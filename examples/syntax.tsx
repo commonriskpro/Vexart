@@ -1,5 +1,5 @@
 /**
- * TGE Syntax Highlighting Demo — tree-sitter powered code blocks.
+ * Vexart Syntax Highlighting Demo — tree-sitter powered code blocks.
  *
  * Demonstrates:
  *   - Tree-sitter WASM parsing in a worker thread
@@ -12,7 +12,7 @@
  *   - Esc/Q: quit
  *
  * Run:  bun run demo15 (requires Ghostty WITHOUT tmux)
- * Requires: bun zig:build && bun run clay:build
+ * Requires: bun install && cargo build
  */
 
 import { createSignal } from "solid-js"

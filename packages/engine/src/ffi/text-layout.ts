@@ -108,23 +108,23 @@ function cacheKey(text: string, font: string): string {
   return `${font}\0${text}`
 }
 
-function layoutCacheKey(text: string, fontId: number, maxWidth: number, lineHeight: number) {
-  return `${fontId}\0${maxWidth}\0${lineHeight}\0${text}`
+function layoutCacheKey(text: string, fontId: number, fontSize: number, maxWidth: number, lineHeight: number) {
+  return `${fontId}\0${fontSize}\0${maxWidth}\0${lineHeight}\0${text}`
 }
 
-function getCachedLayout(text: string, fontId: number, maxWidth: number, lineHeight: number) {
-  const key = layoutCacheKey(text, fontId, maxWidth, lineHeight)
+function getCachedLayout(text: string, fontId: number, fontSize: number, maxWidth: number, lineHeight: number) {
+  const key = layoutCacheKey(text, fontId, fontSize, maxWidth, lineHeight)
   const cached = layoutCache.get(key)
   if (cached) touchTextCacheEntry(layoutCache, key, cached)
   return cached
 }
 
-function setCachedLayout(text: string, fontId: number, maxWidth: number, lineHeight: number, value: { lines: LayoutLine[]; height: number; lineCount: number }) {
+function setCachedLayout(text: string, fontId: number, fontSize: number, maxWidth: number, lineHeight: number, value: { lines: LayoutLine[]; height: number; lineCount: number }) {
   if (layoutCache.size >= MAX_LAYOUT_CACHE) {
     const first = layoutCache.keys().next().value
     if (first) layoutCache.delete(first)
   }
-  layoutCache.set(layoutCacheKey(text, fontId, maxWidth, lineHeight), value)
+  layoutCache.set(layoutCacheKey(text, fontId, fontSize, maxWidth, lineHeight), value)
   return value
 }
 
@@ -180,16 +180,19 @@ export function layoutText(
   fontId: number,
   maxWidth: number,
   lineHeight: number,
+  fontSize = getFont(fontId).size,
   options?: PrepareOptions,
 ): { lines: LayoutLine[]; height: number; lineCount: number } {
-  const cached = getCachedLayout(text, fontId, maxWidth, lineHeight)
+  const cached = getCachedLayout(text, fontId, fontSize, maxWidth, lineHeight)
   if (cached) return cached
 
   if (fontId === 0) {
-    return setCachedLayout(text, fontId, maxWidth, lineHeight, layoutBuiltinFont(text, maxWidth, lineHeight))
+    return setCachedLayout(text, fontId, fontSize, maxWidth, lineHeight, layoutBuiltinFont(text, maxWidth, lineHeight, fontSize))
   }
-  const prepared = prepareText(text, fontId, options)
-  return setCachedLayout(text, fontId, maxWidth, lineHeight, layoutWithLines(prepared, maxWidth, lineHeight))
+  const desc = getFont(fontId)
+  const effectiveDesc = desc.size === fontSize ? desc : { ...desc, size: fontSize }
+  const prepared = prepareWithSegments(text, fontToCSS(effectiveDesc), options)
+  return setCachedLayout(text, fontId, fontSize, maxWidth, lineHeight, layoutWithLines(prepared, maxWidth, lineHeight))
 }
 
 /** Word-wrap for built-in bitmap font using exact atlas advance width. */
@@ -197,8 +200,10 @@ function layoutBuiltinFont(
   text: string,
   maxWidth: number,
   lineHeight: number,
+  fontSize: number,
 ): { lines: LayoutLine[]; height: number; lineCount: number } {
-  const charsPerLine = Math.max(1, Math.floor(maxWidth / BUILTIN_ADVANCE))
+  const advance = builtinAdvance(fontSize)
+  const charsPerLine = Math.max(1, Math.floor(maxWidth / advance))
   const words = text.split(" ")
   const lines: LayoutLine[] = []
   let current = ""
@@ -208,7 +213,7 @@ function layoutBuiltinFont(
     if (candidate.length > charsPerLine && current) {
       lines.push({
         text: current,
-        width: Math.ceil(current.length * BUILTIN_ADVANCE),
+        width: Math.ceil(current.length * advance),
         start: { segmentIndex: 0, graphemeIndex: 0 },
         end: { segmentIndex: 0, graphemeIndex: 0 },
       })
@@ -220,7 +225,7 @@ function layoutBuiltinFont(
   if (current) {
     lines.push({
       text: current,
-      width: Math.ceil(current.length * BUILTIN_ADVANCE),
+      width: Math.ceil(current.length * advance),
       start: { segmentIndex: 0, graphemeIndex: 0 },
       end: { segmentIndex: 0, graphemeIndex: 0 },
     })
@@ -264,6 +269,19 @@ export function layoutRichText(
 // These MUST match zig/src/text.zig advance_hundredths and font_atlas.zig.
 const BUILTIN_ADVANCE = 8.65
 const BUILTIN_HEIGHT = 17
+const BUILTIN_FONT_SIZE = 14
+
+export function builtinFontScale(fontSize: number): number {
+  return Math.max(1, fontSize) / BUILTIN_FONT_SIZE
+}
+
+export function builtinAdvance(fontSize: number): number {
+  return BUILTIN_ADVANCE * builtinFontScale(fontSize)
+}
+
+export function builtinHeight(fontSize: number): number {
+  return Math.ceil(BUILTIN_HEIGHT * builtinFontScale(fontSize))
+}
 
 /**
  * Measure text for Taffy/vexart layout.
@@ -295,8 +313,8 @@ export function measureForClay(
   // Built-in atlas: use known metrics (JS string length = char count)
   if (fontId === 0) {
     return {
-      width: Math.ceil(text.length * BUILTIN_ADVANCE),
-      height: BUILTIN_HEIGHT,
+      width: Math.ceil(text.length * builtinAdvance(fontSize)),
+      height: builtinHeight(fontSize),
     }
   }
 

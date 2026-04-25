@@ -267,7 +267,7 @@ const key = JSON.stringify({ kind, command, width, height, transform: Array.from
 - [ ] `bun typecheck` — zero errors
 - [ ] `bun --conditions=browser run examples/showcase.tsx` — renders correctly
 - [ ] `bun --conditions=browser run examples/windowing-demo.tsx` — drag/resize/minimize work
-- [ ] Profile a 60fps drag with `TGE_PROFILE=1` — confirm zero typed array allocations per frame in the staging buffer path
+- [ ] Profile a 60fps drag with `VEXART_LOG_PERF=1` — confirm zero typed array allocations per frame in the staging buffer path
 - [ ] Measure frame time before/after — target: <4ms average
 
 ---

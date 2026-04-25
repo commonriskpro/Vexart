@@ -350,10 +350,6 @@ export function dispatchNativeInteractionFrame(
   bag.pendingPress = false
   bag.pendingRelease = false
   bag.pointerDirty = false
-  if (justReleased) {
-    bag.pressOriginSet = false
-    bag.capturedNodeId = 0
-  }
 
   const nodeByNativeId = new Map<bigint, TGENode>()
   for (const node of bag.rectNodes) {
@@ -420,6 +416,11 @@ export function dispatchNativeInteractionFrame(
         changed = true
       }
     }
+  }
+
+  if (justReleased) {
+    bag.pressOriginSet = false
+    bag.capturedNodeId = 0
   }
 
   const newFocusId = focusedId()

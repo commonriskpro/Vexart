@@ -154,10 +154,10 @@ export function buildNativeFrameExecutionStats(input: NativeFrameExecutionStatsI
 export function buildNodeMouseEvent(node: TGENode, pointerX: number, pointerY: number): NodeMouseEvent;
 
 // @public (undocumented)
-export function buildRenderGraphFrame(commands: RenderCommand[], queues: RenderGraphQueues, textMetaMap: Map<string, TextMeta>): RenderGraphFrame;
+export function buildRenderGraphFrame(commands: RenderCommand[], queues: RenderGraphQueues, textMetaMap: Map<number, TextMeta>): RenderGraphFrame;
 
 // @public (undocumented)
-export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, queueState: RenderGraphQueueState, textMetaMap: Map<string, TextMeta>, ownerIds?: {
+export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, queueState: RenderGraphQueueState, textMetaMap: Map<number, TextMeta>, ownerIds?: {
     rect: number | null;
     text: number | null;
 }): RenderGraphOp | null;
@@ -1592,6 +1592,10 @@ export type NativePresentationStats = {
     totalUs: number;
     transport: number;
     flags: number;
+    compressUs: number;
+    shmPrepareUs: number;
+    rawBytes: number;
+    payloadBytes: number;
 };
 
 // @public (undocumented)
@@ -2098,6 +2102,12 @@ export type RendererBackendProfile = {
     compositeMs: number;
     readbackMs: number;
     nativeEmitMs: number;
+    nativeReadbackMs: number;
+    nativeCompressMs: number;
+    nativeShmPrepareMs: number;
+    nativeWriteMs: number;
+    nativeRawBytes: number;
+    nativePayloadBytes: number;
     uniformUpdateMs: number;
 };
 
@@ -2552,6 +2562,7 @@ export type TextCmd = {
 
 // @public (undocumented)
 export type TextMeta = {
+    nodeId: number;
     content: string;
     fontId: number;
     fontSize: number;
@@ -2562,6 +2573,7 @@ export type TextMeta = {
 export type TextRenderInputs = {
     text: string;
     fontId: number;
+    fontSize: number;
     lineHeight: number;
     maxWidth: number;
     textHeight: number;
@@ -2637,6 +2649,9 @@ export type TGEProps = {
     padding?: number;
     paddingX?: number;
     paddingY?: number;
+    margin?: number;
+    marginX?: number;
+    marginY?: number;
     gap?: number;
     alignX?: "left" | "right" | "center" | "space-between";
     alignY?: "top" | "bottom" | "center" | "space-between";
@@ -2687,6 +2702,10 @@ export type TGEProps = {
     paddingRight?: number;
     paddingTop?: number;
     paddingBottom?: number;
+    marginLeft?: number;
+    marginRight?: number;
+    marginTop?: number;
+    marginBottom?: number;
     borderLeft?: number;
     borderRight?: number;
     borderTop?: number;
@@ -3071,6 +3090,10 @@ export const VEXART_SYMBOLS: {
     };
     readonly vexart_paint_dispatch: {
         readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
+        readonly returns: FFIType.int32_t;
+    };
+    readonly vexart_scene_paint_dispatch: {
+        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_paint_upload_image: {

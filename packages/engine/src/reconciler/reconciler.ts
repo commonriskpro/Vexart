@@ -172,7 +172,7 @@ function unmarkSubtreeLayerBacking(node: TGENode) {
 
 const renderer = createRenderer<TGENode>({
   createElement(type: string): TGENode {
-    const kind = type === "text" ? "text" : type === "img" ? "img" : type === "canvas" || type === "surface" ? "canvas" : "box"
+    const kind = type === "text" ? "text" : type === "img" || type === "image" ? "img" : type === "canvas" || type === "surface" ? "canvas" : "box"
     const node = createNode(kind)
     if (isNativeSceneGraphEnabled()) {
       node._nativeId = nativeSceneCreateNode(kind)
@@ -216,6 +216,30 @@ const renderer = createRenderer<TGENode>({
         node.props.paddingBottom = p[2]; node.props.paddingLeft = p[3]
       }
       nativeSceneSetProp(node._nativeId, "padding", value)
+      markDirty()
+      return
+    }
+
+    // Margin shorthand: [Y, X] or [T, R, B, L] → expand to per-side props.
+    if (name === "margin" && Array.isArray(value)) {
+      const p = value as number[]
+      if (p.length === 2) {
+        node.props.marginTop = p[0]; node.props.marginBottom = p[0]
+        node.props.marginLeft = p[1]; node.props.marginRight = p[1]
+        nativeSceneSetProp(node._nativeId, "marginTop", p[0])
+        nativeSceneSetProp(node._nativeId, "marginBottom", p[0])
+        nativeSceneSetProp(node._nativeId, "marginLeft", p[1])
+        nativeSceneSetProp(node._nativeId, "marginRight", p[1])
+      } else if (p.length === 4) {
+        node.props.marginTop = p[0]; node.props.marginRight = p[1]
+        node.props.marginBottom = p[2]; node.props.marginLeft = p[3]
+        nativeSceneSetProp(node._nativeId, "marginTop", p[0])
+        nativeSceneSetProp(node._nativeId, "marginRight", p[1])
+        nativeSceneSetProp(node._nativeId, "marginBottom", p[2])
+        nativeSceneSetProp(node._nativeId, "marginLeft", p[3])
+      } else {
+        nativeSceneSetProp(node._nativeId, "margin", value)
+      }
       markDirty()
       return
     }

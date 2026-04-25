@@ -41,9 +41,16 @@ impl WgpuContext {
         }))
         .expect("no suitable WGPU adapter found");
 
+        let pipeline_cache_supported = adapter.features().contains(wgpu::Features::PIPELINE_CACHE);
+        let required_features = if pipeline_cache_supported {
+            wgpu::Features::PIPELINE_CACHE
+        } else {
+            wgpu::Features::empty()
+        };
+
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("vexart-device"),
-            required_features: wgpu::Features::empty(),
+            required_features,
             required_limits: wgpu::Limits::downlevel_defaults(),
             memory_hints: wgpu::MemoryHints::Performance,
             trace: wgpu::Trace::Off,
@@ -60,7 +67,17 @@ impl WgpuContext {
         // SAFETY: data comes from a previous wgpu call (get_data()) on the same platform/version.
         //         The version tag in the filename ensures we only load compatible data (REQ-2B-602).
         //         fallback: true means wgpu will create an empty cache if data is invalid (REQ-2B-604).
-        let wgpu_pipeline_cache: Option<wgpu::PipelineCache> = None;
+        let wgpu_pipeline_cache = if pipeline_cache_supported {
+            Some(unsafe {
+                device.create_pipeline_cache(&wgpu::PipelineCacheDescriptor {
+                    label: Some("vexart-pipeline-cache"),
+                    data: pipeline_cache_mgr.data(),
+                    fallback: true,
+                })
+            })
+        } else {
+            None
+        };
 
         // 2-binding image BGL — ported from bridge L2185-2205.
         let image_bind_group_layout =

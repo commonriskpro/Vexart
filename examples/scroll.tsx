@@ -1,5 +1,5 @@
 /**
- * TGE Scroll Demo — browser-style scroll containers.
+ * Vexart Scroll Demo — browser-style scroll containers.
  *
  * A fixed-height ScrollView containing more items than fit on screen.
  * Mouse wheel scrolls the list. Tab toggles between precise (1-line)
@@ -7,12 +7,12 @@
  *
  * Architecture (same as browsers):
  *   - ScrollView is its own compositing layer
- *   - Clay tracks scroll offset internally
+ *   - Rust/Taffy tracks scroll layout while Vexart manages scroll state
  *   - SCISSOR_START/END clip the rendered content
- *   - Content painted outside the layer buffer is bounds-checked by Zig
+ *   - Content painted outside the layer buffer is bounds-checked by the Rust/WGPU renderer
  *
  * Run:  bun run demo7 (requires Ghostty WITHOUT tmux)
- * Requires: bun zig:build && bun run clay:build
+ * Requires: bun install && cargo build
  */
 
 import { createSignal } from "solid-js"
@@ -80,7 +80,7 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
     >
       <Box layer>
         <Text color={colors.foreground} fontSize={16}>
-          TGE Scroll Demo — 30 items in a scroll container
+          Vexart Scroll Demo — 30 items in a scroll container
         </Text>
       </Box>
 

@@ -14,6 +14,7 @@ use atlas::AtlasRegistry;
 
 const BUILTIN_ADVANCE: f32 = 8.65;
 const BUILTIN_HEIGHT: f32 = 17.0;
+const BUILTIN_FONT_SIZE: f32 = 14.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WhiteSpaceMode {
@@ -35,19 +36,30 @@ struct FontMeasureMetrics<'a> {
     scale: f32,
 }
 
-fn resolve_font_metrics<'a>(atlases: Option<&'a AtlasRegistry>, font_id: u32, font_size: f32, line_height: f32) -> FontMeasureMetrics<'a> {
+fn resolve_font_metrics<'a>(
+    atlases: Option<&'a AtlasRegistry>,
+    font_id: u32,
+    font_size: f32,
+    line_height: f32,
+) -> FontMeasureMetrics<'a> {
     if font_id == 0 {
+        let scale = font_size.max(1.0) / BUILTIN_FONT_SIZE;
+        let height = (BUILTIN_HEIGHT * scale).ceil();
         return FontMeasureMetrics {
             atlas: None,
-            space_advance: BUILTIN_ADVANCE,
-            fallback_advance: BUILTIN_ADVANCE,
-            line_height: line_height.max(BUILTIN_HEIGHT),
-            scale: 1.0,
+            space_advance: BUILTIN_ADVANCE * scale,
+            fallback_advance: BUILTIN_ADVANCE * scale,
+            line_height: line_height.max(height),
+            scale,
         };
     }
 
     if let Some(atlas) = atlases.and_then(|registry| registry.get(font_id)) {
-        let scale = if atlas.ref_size > 0.0 { font_size / atlas.ref_size } else { 1.0 };
+        let scale = if atlas.ref_size > 0.0 {
+            font_size / atlas.ref_size
+        } else {
+            1.0
+        };
         let space_advance = atlas
             .glyphs
             .get(&' ')
@@ -63,8 +75,16 @@ fn resolve_font_metrics<'a>(atlases: Option<&'a AtlasRegistry>, font_id: u32, fo
         };
     }
 
-    let fallback_advance = if font_size > 0.0 { font_size * 0.6 } else { BUILTIN_ADVANCE };
-    let fallback_height = if font_size > 0.0 { font_size * 1.2 } else { BUILTIN_HEIGHT };
+    let fallback_advance = if font_size > 0.0 {
+        font_size * 0.6
+    } else {
+        BUILTIN_ADVANCE
+    };
+    let fallback_height = if font_size > 0.0 {
+        font_size * 1.2
+    } else {
+        BUILTIN_HEIGHT
+    };
     FontMeasureMetrics {
         atlas: None,
         space_advance: fallback_advance,
@@ -93,7 +113,11 @@ fn measure_string(metrics: &FontMeasureMetrics<'_>, text: &str) -> f32 {
     text.chars().map(|ch| measure_char(metrics, ch)).sum()
 }
 
-fn measure_unwrapped_lines(text: &str, metrics: &FontMeasureMetrics<'_>, white_space: WhiteSpaceMode) -> (f32, f32) {
+fn measure_unwrapped_lines(
+    text: &str,
+    metrics: &FontMeasureMetrics<'_>,
+    white_space: WhiteSpaceMode,
+) -> (f32, f32) {
     let mut max_width: f32 = 0.0;
     let mut line_count = 0u32;
 
@@ -113,7 +137,14 @@ fn measure_unwrapped_lines(text: &str, metrics: &FontMeasureMetrics<'_>, white_s
     (max_width, line_count as f32 * metrics.line_height)
 }
 
-fn wrap_long_word(word: &str, max_width: f32, metrics: &FontMeasureMetrics<'_>, current_width: &mut f32, max_line_width: &mut f32, line_count: &mut u32) {
+fn wrap_long_word(
+    word: &str,
+    max_width: f32,
+    metrics: &FontMeasureMetrics<'_>,
+    current_width: &mut f32,
+    max_line_width: &mut f32,
+    line_count: &mut u32,
+) {
     for ch in word.chars() {
         let width = measure_char(metrics, ch);
         if *current_width > 0.0 && *current_width + width > max_width {
@@ -125,7 +156,12 @@ fn wrap_long_word(word: &str, max_width: f32, metrics: &FontMeasureMetrics<'_>, 
     }
 }
 
-fn measure_wrapped_normal(text: &str, max_width: f32, metrics: &FontMeasureMetrics<'_>, word_break: WordBreakMode) -> (f32, f32) {
+fn measure_wrapped_normal(
+    text: &str,
+    max_width: f32,
+    metrics: &FontMeasureMetrics<'_>,
+    word_break: WordBreakMode,
+) -> (f32, f32) {
     let mut max_line_width: f32 = 0.0;
     let mut line_count = 0u32;
 
@@ -142,7 +178,14 @@ fn measure_wrapped_normal(text: &str, max_width: f32, metrics: &FontMeasureMetri
             let word_width = measure_string(metrics, word);
             if current_width == 0.0 {
                 if word_width > max_width && matches!(word_break, WordBreakMode::Normal) {
-                    wrap_long_word(word, max_width, metrics, &mut current_width, &mut max_line_width, &mut line_count);
+                    wrap_long_word(
+                        word,
+                        max_width,
+                        metrics,
+                        &mut current_width,
+                        &mut max_line_width,
+                        &mut line_count,
+                    );
                 } else {
                     current_width = word_width;
                 }
@@ -160,7 +203,14 @@ fn measure_wrapped_normal(text: &str, max_width: f32, metrics: &FontMeasureMetri
             current_width = 0.0;
 
             if word_width > max_width && matches!(word_break, WordBreakMode::Normal) {
-                wrap_long_word(word, max_width, metrics, &mut current_width, &mut max_line_width, &mut line_count);
+                wrap_long_word(
+                    word,
+                    max_width,
+                    metrics,
+                    &mut current_width,
+                    &mut max_line_width,
+                    &mut line_count,
+                );
             } else {
                 current_width = word_width;
             }
@@ -173,7 +223,12 @@ fn measure_wrapped_normal(text: &str, max_width: f32, metrics: &FontMeasureMetri
     (max_line_width, line_count as f32 * metrics.line_height)
 }
 
-fn measure_wrapped_pre_wrap(text: &str, max_width: f32, metrics: &FontMeasureMetrics<'_>, word_break: WordBreakMode) -> (f32, f32) {
+fn measure_wrapped_pre_wrap(
+    text: &str,
+    max_width: f32,
+    metrics: &FontMeasureMetrics<'_>,
+    word_break: WordBreakMode,
+) -> (f32, f32) {
     let mut max_line_width: f32 = 0.0;
     let mut current_width: f32 = 0.0;
     let mut line_count = 1u32;
@@ -241,7 +296,8 @@ pub(crate) fn measure_text_layout(
     }
 
     let metrics = resolve_font_metrics(atlases, font_id, font_size, line_height);
-    let measured = if let Some(limit) = max_width.filter(|width| width.is_finite() && *width > 0.0) {
+    let measured = if let Some(limit) = max_width.filter(|width| width.is_finite() && *width > 0.0)
+    {
         match white_space {
             WhiteSpaceMode::Normal => measure_wrapped_normal(text, limit, &metrics, word_break),
             WhiteSpaceMode::PreWrap => measure_wrapped_pre_wrap(text, limit, &metrics, word_break),
@@ -370,42 +426,43 @@ fn dispatch_glyph_instances(
     }
 
     // Resolve render target view.
-    let (render_view_ptr, use_active_encoder): (*const wgpu::TextureView, bool) =
-        if target != 0 {
-            if let Some(rec) = pctx.targets.get(target) {
-                let has_layer = rec.active_layer.is_some();
-                (&rec.view as *const wgpu::TextureView, has_layer)
-            } else {
-                (&pctx.target_view as *const wgpu::TextureView, false)
-            }
+    let (render_view_ptr, use_active_encoder): (*const wgpu::TextureView, bool) = if target != 0 {
+        if let Some(rec) = pctx.targets.get(target) {
+            let has_layer = rec.active_layer.is_some();
+            (&rec.view as *const wgpu::TextureView, has_layer)
         } else {
             (&pctx.target_view as *const wgpu::TextureView, false)
-        };
+        }
+    } else {
+        (&pctx.target_view as *const wgpu::TextureView, false)
+    };
 
     for (atlas_id, atlas_glyphs) in &by_atlas {
         // Look up atlas bind group (fallback to default if atlas not loaded yet).
-        let bind_group_ptr: *const wgpu::BindGroup = if let Some(atlas) = pctx.atlases.get(*atlas_id) {
-            &atlas.bind_group as *const _
-        } else {
-            &pctx.fallback_bind_group as *const _
-        };
+        let bind_group_ptr: *const wgpu::BindGroup =
+            if let Some(atlas) = pctx.atlases.get(*atlas_id) {
+                &atlas.bind_group as *const _
+            } else {
+                &pctx.fallback_bind_group as *const _
+            };
 
         let payload: &[u8] = bytemuck::cast_slice(atlas_glyphs.as_slice());
         let instance_count = atlas_glyphs.len() as u32;
 
         // SAFETY: device is disjoint from targets/atlases.
-        let vertex_buf = pctx.wgpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vexart-glyph-instance-buf"),
-            contents: payload,
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+        let vertex_buf = pctx
+            .wgpu
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("vexart-glyph-instance-buf"),
+                contents: payload,
+                usage: wgpu::BufferUsages::VERTEX,
+            });
 
         if use_active_encoder {
             // SAFETY: rec fields are stable; we access disjoint fields.
-            let rec_ptr: *mut crate::composite::target::TargetRecord = pctx
-                .targets
-                .get_mut(target)
-                .expect("target disappeared") as *mut _;
+            let rec_ptr: *mut crate::composite::target::TargetRecord =
+                pctx.targets.get_mut(target).expect("target disappeared") as *mut _;
 
             let view_ref: &wgpu::TextureView = unsafe { &(*rec_ptr).view };
             let layer: &mut crate::composite::target::ActiveLayerRecord = unsafe {
@@ -417,27 +474,39 @@ fn dispatch_glyph_instances(
 
             let load_op = if layer.first_pass {
                 layer.first_pass = false;
-                wgpu::LoadOp::Load
+                if layer.first_load_mode == 0 {
+                    let c = layer.clear_rgba;
+                    wgpu::LoadOp::Clear(wgpu::Color {
+                        r: ((c >> 24) & 0xff) as f64 / 255.0,
+                        g: ((c >> 16) & 0xff) as f64 / 255.0,
+                        b: ((c >> 8) & 0xff) as f64 / 255.0,
+                        a: (c & 0xff) as f64 / 255.0,
+                    })
+                } else {
+                    wgpu::LoadOp::Load
+                }
             } else {
                 wgpu::LoadOp::Load
             };
 
-            let mut pass = layer.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("vexart-glyph-render-pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: view_ref,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: load_op,
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
+            let mut pass = layer
+                .encoder
+                .begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("vexart-glyph-render-pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: view_ref,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: load_op,
+                            store: wgpu::StoreOp::Store,
+                        },
+                        depth_slice: None,
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
 
             pass.set_pipeline(&pctx.wgpu.pipelines.glyph);
             pass.set_vertex_buffer(0, vertex_buf.slice(..));
@@ -446,11 +515,12 @@ fn dispatch_glyph_instances(
             pass.draw(0..6, 0..instance_count);
         } else {
             let render_view: &wgpu::TextureView = unsafe { &*render_view_ptr };
-            let mut encoder = pctx.wgpu.device.create_command_encoder(
-                &wgpu::CommandEncoderDescriptor {
-                    label: Some("vexart-glyph-encoder"),
-                },
-            );
+            let mut encoder =
+                pctx.wgpu
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("vexart-glyph-encoder"),
+                    });
 
             {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

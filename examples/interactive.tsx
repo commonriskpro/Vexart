@@ -1,5 +1,5 @@
 /**
- * TGE Interactive Demo — Phase 5 milestone.
+ * Vexart Interactive Demo — Phase 5 milestone.
  *
  * Proves the full reactive pipeline:
  *   SolidJS signals → reconciler → dirty flag → render loop → pixels
@@ -12,7 +12,7 @@
  *   - Auto input: mount() handles terminal.onData → parser → dispatch
  *
  * Run: bun run examples/interactive.tsx
- * Requires: bun zig:build && bun run clay:build
+ * Requires: bun install && cargo build
  */
 
 import { createSignal } from "solid-js"
@@ -138,7 +138,7 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
       gap={space[4]}
     >
       <Text color={colors.foreground} fontSize={16}>
-        TGE Interactive Demo
+        Vexart Interactive Demo
       </Text>
 
       <Box direction="row" gap={space[4]}>
@@ -164,7 +164,7 @@ async function main() {
   const term = await createTerminal()
 
   // mount() now handles everything:
-  //   - Creates render loop (Clay + Zig + output)
+  //   - Creates render loop (Rust/Taffy + WGPU + output)
   //   - Mounts SolidJS component tree
   //   - Connects terminal stdin → input parser → event dispatch
   //   - Starts 30fps render loop with dirty-flag optimization

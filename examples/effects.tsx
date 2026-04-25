@@ -1,5 +1,5 @@
 /**
- * TGE Effects Demo — demo9.
+ * Vexart Effects Demo — demo9.
  *
  * Showcases shadow and glow effects on Box components:
  *   - Drop shadows (subtle, elevated, floating)
@@ -8,7 +8,7 @@
  *   - Interactive: focus changes glow intensity
  *
  * Run:  bun run demo9 (requires Ghostty WITHOUT tmux)
- * Requires: bun zig:build && bun run clay:build
+ * Requires: bun install && cargo build
  */
 
 import { createSignal } from "solid-js"
@@ -245,7 +245,7 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
       gap={space[8]}
     >
       <Text color={colors.foreground} fontSize={16}>
-        TGE Effects — Shadow and Glow
+        Vexart Effects — Shadow and Glow
       </Text>
 
       <ShadowSection />

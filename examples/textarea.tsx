@@ -1,5 +1,5 @@
 /**
- * TGE Textarea Demo — multiline text editor component.
+ * Vexart Textarea Demo — multiline text editor component.
  *
  * Demonstrates:
  *   - Multi-line editing with Up/Down/PgUp/PgDown
@@ -16,7 +16,7 @@
  *   - Esc: quit
  *
  * Run:  bun run demo14 (requires Ghostty WITHOUT tmux)
- * Requires: bun zig:build && bun run clay:build
+ * Requires: bun install && cargo build
  */
 
 import { createSignal } from "solid-js"
@@ -27,7 +27,7 @@ import type { TextareaHandle } from "@vexart/headless"
 import { createTerminal } from "@vexart/engine"
 
 function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
-  const [code, setCode] = createSignal("Hello TGE!\nThis is a multiline textarea.\n\nTry typing, arrows, Home/End, PgUp/PgDown.\nShift+arrows to select.\nCtrl+Enter to submit.")
+  const [code, setCode] = createSignal("Hello Vexart!\nThis is a multiline textarea.\n\nTry typing, arrows, Home/End, PgUp/PgDown.\nShift+arrows to select.\nCtrl+Enter to submit.")
   const [status, setStatus] = createSignal("Ready — Tab to focus, type to edit")
   let textareaRef: TextareaHandle | undefined
   const dims = useTerminalDimensions(props.terminal)

@@ -176,8 +176,9 @@ impl PaintContext {
         let mut offset = 16usize; // skip header
         let body_end = 16 + header.payload_bytes as usize;
 
-        // Accumulators per cmd_kind.
-        let mut batches: HashMap<u16, Vec<u8>> = HashMap::new();
+        // Preserve command order. Some effects (shadow/glow/gradient) rely on
+        // semantic paint ordering; grouping globally by kind would reorder them.
+        let mut batches: Vec<(u16, Vec<u8>)> = Vec::new();
 
         for _ in 0..header.cmd_count {
             if offset + 8 > graph.len() {
@@ -200,17 +201,14 @@ impl PaintContext {
             let payload = &graph[offset..payload_end];
             offset = payload_end;
 
-            // cmd_kind 11 is the legacy glyph slot (unused); 20+ are future — silently skip.
+            // cmd_kind 11 is the legacy glyph slot (unused); 21+ are future — silently skip.
             // cmd_kind 18 = MSDF glyph pipeline (Phase 2b Slice 4).
             // cmd_kind 19 = self-filter pipeline (Phase 2b Slice 5).
-            if cmd_kind == 11 || cmd_kind > 19 {
+            if cmd_kind == 11 || cmd_kind > 20 {
                 continue;
             }
 
-            batches
-                .entry(cmd_kind)
-                .or_default()
-                .extend_from_slice(payload);
+            batches.push((cmd_kind, payload.to_vec()));
         }
 
         if batches.is_empty() {
@@ -228,17 +226,17 @@ impl PaintContext {
         // split-borrow limitation. All raw pointers remain valid for the duration of this
         // function — the pointed-to values are owned by `self` which outlives the block.
         // Bun FFI is single-threaded; no concurrent mutation occurs.
-        let (render_view_ptr, use_active_encoder): (*const wgpu::TextureView, bool) =
-            if target != 0 {
-                if let Some(rec) = self.targets.get(target) {
-                    let has_layer = rec.active_layer.is_some();
-                    (&rec.view as *const wgpu::TextureView, has_layer)
-                } else {
-                    (&self.target_view as *const wgpu::TextureView, false)
-                }
+        let (render_view_ptr, use_active_encoder): (*const wgpu::TextureView, bool) = if target != 0
+        {
+            if let Some(rec) = self.targets.get(target) {
+                let has_layer = rec.active_layer.is_some();
+                (&rec.view as *const wgpu::TextureView, has_layer)
             } else {
                 (&self.target_view as *const wgpu::TextureView, false)
-            };
+            }
+        } else {
+            (&self.target_view as *const wgpu::TextureView, false)
+        };
 
         let t_gpu_start = Instant::now();
 
@@ -248,10 +246,8 @@ impl PaintContext {
             // SAFETY: rec is in self.targets which is stable for this call.
             // We split the borrow manually: view_ptr and encoder_ptr point to disjoint
             // fields of the same TargetRecord. They are not aliased during use.
-            let rec_ptr: *mut crate::composite::target::TargetRecord = self
-                .targets
-                .get_mut(target)
-                .expect("target disappeared") as *mut _;
+            let rec_ptr: *mut crate::composite::target::TargetRecord =
+                self.targets.get_mut(target).expect("target disappeared") as *mut _;
 
             // SAFETY: rec_ptr is valid; view and active_layer are disjoint fields.
             let view_ref: &wgpu::TextureView = unsafe { &(*rec_ptr).view };
@@ -262,30 +258,29 @@ impl PaintContext {
                     .expect("active layer disappeared")
             };
 
-            for &kind in &[
-                0u16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-                12, 13,
-                14, 15, 16, 17,
-                18, // Phase 2b Slice 4: MSDF glyph pipeline
-                19, // Phase 2b Slice 5: self-filter pipeline
-            ] {
-                let batch = match batches.get(&kind) {
-                    Some(b) if !b.is_empty() => b,
-                    _ => continue,
-                };
+            for (kind, batch) in batches.iter() {
+                let kind = *kind;
+                if batch.is_empty() {
+                    continue;
+                }
                 let instance_stride = instance_stride_for_kind(kind);
-                if instance_stride == 0 { continue; }
+                if instance_stride == 0 {
+                    continue;
+                }
                 let instance_count = (batch.len() / instance_stride) as u32;
-                if instance_count == 0 { continue; }
+                if instance_count == 0 {
+                    continue;
+                }
 
                 // SAFETY: self.wgpu.device is a disjoint field from self.targets.
-                let vertex_buf = self.wgpu.device.create_buffer_init(
-                    &wgpu::util::BufferInitDescriptor {
-                        label: Some("vexart-instance-buf"),
-                        contents: batch,
-                        usage: wgpu::BufferUsages::VERTEX,
-                    },
-                );
+                let vertex_buf =
+                    self.wgpu
+                        .device
+                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("vexart-instance-buf"),
+                            contents: batch,
+                            usage: wgpu::BufferUsages::VERTEX,
+                        });
 
                 let load_op = if layer.first_pass {
                     layer.first_pass = false;
@@ -304,22 +299,24 @@ impl PaintContext {
                     wgpu::LoadOp::Load
                 };
 
-                let mut pass = layer.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("vexart-layer-render-pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: view_ref,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: load_op,
-                            store: wgpu::StoreOp::Store,
-                        },
-                        depth_slice: None,
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                    multiview_mask: None,
-                });
+                let mut pass = layer
+                    .encoder
+                    .begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("vexart-layer-render-pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: view_ref,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: load_op,
+                                store: wgpu::StoreOp::Store,
+                            },
+                            depth_slice: None,
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                        multiview_mask: None,
+                    });
 
                 // SAFETY: self.wgpu.pipelines and self.fallback_bind_group are disjoint
                 // from self.targets; the references are valid for this pass scope.
@@ -329,7 +326,14 @@ impl PaintContext {
                 // Pipelines that sample a texture need bind group 0.
                 // cmd_kind 18 (glyph): use fallback for now (atlas bind group wired via
                 // text::dispatch_glyph_instances for the dedicated text::dispatch path).
-                if kind == 9 || kind == 10 || kind == 15 || kind == 16 || kind == 17 || kind == 18 || kind == 19 {
+                if kind == 9
+                    || kind == 10
+                    || kind == 15
+                    || kind == 16
+                    || kind == 17
+                    || kind == 18
+                    || kind == 19
+                {
                     pass.set_bind_group(0, &self.fallback_bind_group, &[]);
                 }
                 pass.draw(0..6, 0..instance_count);
@@ -339,27 +343,22 @@ impl PaintContext {
             // SAFETY: render_view_ptr was extracted from self above; it remains valid.
             let render_view: &wgpu::TextureView = unsafe { &*render_view_ptr };
             // No active layer: create standalone encoder, render, submit.
-            let mut encoder = self.wgpu.device.create_command_encoder(
-                &wgpu::CommandEncoderDescriptor {
-                    label: Some("vexart-frame-encoder"),
-                },
-            );
+            let mut encoder =
+                self.wgpu
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("vexart-frame-encoder"),
+                    });
 
             // We need a fresh render pass per pipeline (clearing on first, loading on rest).
             // Iterate over all known cmd_kinds in order (skipping 11 per legacy slot).
             // Slice 5a: 0-10, 12-13 | Slice 5b: 14-17 | Phase 2b Slice 4: 18 | Phase 2b Slice 5: 19
             let mut first_pass = true;
-            for &kind in &[
-                0u16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // Slice 5a first 11 pipelines
-                12, 13, // Slice 5a gradient pipelines (11 skipped)
-                14, 15, 16, 17, // Slice 5b NEW GPU pipelines
-                18, // Phase 2b Slice 4: MSDF glyph
-                19, // Phase 2b Slice 5: self-filter
-            ] {
-                let batch = match batches.get(&kind) {
-                    Some(b) if !b.is_empty() => b,
-                    _ => continue,
-                };
+            for (kind, batch) in batches.iter() {
+                let kind = *kind;
+                if batch.is_empty() {
+                    continue;
+                }
 
                 let instance_stride = instance_stride_for_kind(kind);
                 if instance_stride == 0 {
@@ -413,7 +412,14 @@ impl PaintContext {
                 // the fallback bind group in Slice 5b (real source wiring is Slice 9+ work).
                 // cmd_kind 18=glyph uses the fallback here; atlas bind group is set via
                 // text::dispatch_glyph_instances for the dedicated text::dispatch path.
-                if kind == 9 || kind == 10 || kind == 15 || kind == 16 || kind == 17 || kind == 18 || kind == 19 {
+                if kind == 9
+                    || kind == 10
+                    || kind == 15
+                    || kind == 16
+                    || kind == 17
+                    || kind == 18
+                    || kind == 19
+                {
                     pass.set_bind_group(0, &self.fallback_bind_group, &[]);
                 }
                 // 6 vertices per quad (2 triangles), instance_count instances.
@@ -431,8 +437,8 @@ impl PaintContext {
         if !stats_out.is_null() {
             let total_prims: u32 = batches
                 .iter()
-                .map(|(&kind, bytes)| {
-                    let stride = instance_stride_for_kind(kind);
+                .map(|(kind, bytes)| {
+                    let stride = instance_stride_for_kind(*kind);
                     if stride > 0 {
                         (bytes.len() / stride) as u32
                     } else {

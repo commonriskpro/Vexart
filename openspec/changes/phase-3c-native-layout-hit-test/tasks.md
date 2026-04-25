@@ -2,10 +2,10 @@
 
 ## 1. Native Layout
 
-- [ ] 1.1 Map scene nodes to retained Taffy nodes (SceneGraph→Taffy direct path landed with retained node reuse/pruning; broader retained ownership polish still pending).
+- [x] 1.1 Map scene nodes to retained Taffy nodes (SceneGraph→Taffy direct path landed with retained node reuse/pruning).
 - [x] 1.2 Add native layout rect storage and sync layout from the compatibility path as an intermediate step.
-- [ ] 1.3 Compute visual damage regions (layout-transition damage plus bounded visual prop/text damage landed; full retained damage ownership still pending).
-- [ ] 1.4 Add layout parity tests against existing fixtures (initial compat-vs-native fixture parity landed; broader fixture coverage still pending).
+- [x] 1.3 Compute visual damage regions (layout-transition damage plus bounded visual prop/text/interactive-style damage landed and is covered by tests).
+- [x] 1.4 Add layout parity tests against existing fixtures (compat-vs-native fixtures cover core layout, constraints, alignment, text containers, nested scroll, borders/padding, multiline text, and floating positioning).
 
 ## 2. Native Hit-Testing And Events
 

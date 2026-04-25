@@ -1,5 +1,5 @@
 /**
- * TGE Layer + Scroll Container Test — verifies layer compositing
+ * Vexart Layer + Scroll Container Test — verifies layer compositing
  * works correctly with scroll containers.
  *
  * Tests:

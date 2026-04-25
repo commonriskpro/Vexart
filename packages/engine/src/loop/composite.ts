@@ -158,7 +158,7 @@ export type CompositeFrameState = {
   textNodes: TGENode[]
   boxNodes: TGENode[]
   textMetas: TextMeta[]
-  textMetaMap: Map<string, TextMeta>
+  textMetaMap: Map<number, TextMeta>
   rectNodeById: Map<number, TGENode>
   nodePathById: Map<number, string>
   nodeRefById: Map<number, TGENode>

@@ -1,5 +1,5 @@
 /**
- * TGE Void Showcase — comprehensive visual test of all new features.
+ * Vexart Void Showcase — comprehensive visual test of all new features.
  *
  * Tests:
  *   1. Default direction=column (layout should stack vertically)
@@ -445,7 +445,7 @@ async function main() {
     experimental: {
     },
   })
-  const exitAfterMs = Number(process.env.TGE_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
+  const exitAfterMs = Number(process.env.VEXART_EXIT_AFTER_MS ?? process.env.TGE_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
 
   const shutdown = () => {
     cleanup.destroy()

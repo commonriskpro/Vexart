@@ -42,7 +42,10 @@ interface BoxProps {
   maxHeight?: number
   flexGrow?: number
   flexShrink?: number
-  // Margins (opentui compat — implemented as wrapper padding in migration)
+  // Margins
+  margin?: number
+  marginX?: number
+  marginY?: number
   marginTop?: number
   marginBottom?: number
   marginLeft?: number
@@ -448,6 +451,8 @@ export namespace JSX {
     box: BoxProps
     text: TextProps
     surface: CanvasProps
+    canvas: CanvasProps
+    image: ImgProps
     img: ImgProps
     textarea: TextareaProps
     input: InputProps
@@ -475,7 +480,7 @@ declare module "solid-js" {
   namespace JSX {
     interface IntrinsicElements {
       surface: {
-        onDraw?: (ctx: import("@tge/renderer").CanvasContext) => void
+        onDraw?: (ctx: import("@vexart/engine").CanvasContext) => void
         viewport?: { x: number; y: number; zoom: number }
         width?: number | string
         height?: number | string

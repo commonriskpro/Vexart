@@ -1,5 +1,5 @@
 /**
- * TGE Component Showcase — demo8.
+ * Vexart Component Showcase — demo8.
  *
  * Shows all new interactive components in action:
  *   - Button (solid, outline, ghost variants)
@@ -12,7 +12,7 @@
  * Each component demonstrates its keyboard interaction.
  *
  * Run:  bun run demo8 (requires Ghostty WITHOUT tmux)
- * Requires: bun zig:build && bun run clay:build
+ * Requires: bun install && cargo build
  */
 
 import { createSignal, onCleanup } from "solid-js"
@@ -413,7 +413,7 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
       gap={space[4]}
     >
       <Text color={colors.foreground} fontSize={16}>
-        TGE Component Showcase
+        Vexart Component Showcase
       </Text>
 
       {/* Row 1: Buttons + Progress */}
