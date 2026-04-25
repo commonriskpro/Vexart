@@ -28,6 +28,7 @@ const SCENES_DIR = join(__dirname, "scenes")
 const REFS_DIR = join(__dirname, "references")
 const UPDATE = process.argv.includes("--update")
 const NATIVE_RENDER_GRAPH_PARITY = process.argv.includes("--native-render-graph-parity")
+const SCENE_FILTER = process.argv.find((arg) => arg.startsWith("--scene="))?.slice("--scene=".length)
 
 // Diff threshold: percentage of pixels allowed to differ before FAIL
 const DIFF_THRESHOLD = 0.5
@@ -225,6 +226,7 @@ async function main() {
 
   const scenes = readdirSync(SCENES_DIR)
     .filter((f) => f.endsWith(".tsx"))
+    .filter((f) => !SCENE_FILTER || basename(f, ".tsx") === SCENE_FILTER)
     .map((f) => join(SCENES_DIR, f))
 
   if (scenes.length === 0) {

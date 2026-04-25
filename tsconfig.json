@@ -18,6 +18,7 @@
       "@vexart/primitives": ["./packages/primitives/src/index.ts"],
       "@vexart/headless": ["./packages/headless/src/index.ts"],
       "@vexart/styled": ["./packages/styled/src/index.ts"],
+      "@vexart/app": ["./packages/app/src/index.ts"],
       "@vexart/internal-devtools": ["./packages/internal-devtools/src/index.ts"]
     }
   },

@@ -1,0 +1,16 @@
+{
+  "name": "@vexart/app",
+  "version": "0.9.0-beta.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "bin": {
+    "vexart": "./src/cli/index.ts"
+  },
+  "dependencies": {
+    "@vexart/engine": "workspace:*",
+    "@vexart/headless": "workspace:*",
+    "@vexart/primitives": "workspace:*",
+    "@vexart/styled": "workspace:*"
+  }
+}

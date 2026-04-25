@@ -7,7 +7,8 @@
       "@vexart/engine": ["./.api-extractor-temp/packages/engine/src/index.d.ts"],
       "@vexart/primitives": ["./.api-extractor-temp/packages/primitives/src/index.d.ts"],
       "@vexart/headless": ["./.api-extractor-temp/packages/headless/src/index.d.ts"],
-      "@vexart/styled": ["./.api-extractor-temp/packages/styled/src/index.d.ts"]
+      "@vexart/styled": ["./.api-extractor-temp/packages/styled/src/index.d.ts"],
+      "@vexart/app": ["./.api-extractor-temp/packages/app/src/index.d.ts"]
     }
   },
   "include": [

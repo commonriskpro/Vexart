@@ -9,7 +9,7 @@
     "website"
   ],
   "scripts": {
-    "api:update": "rm -rf .api-extractor-temp && tsc -p tsconfig.api.json && bunx api-extractor run --local --config packages/engine/api-extractor.json && bunx api-extractor run --local --config packages/primitives/api-extractor.json && bunx api-extractor run --local --config packages/headless/api-extractor.json && bunx api-extractor run --local --config packages/styled/api-extractor.json",
+    "api:update": "rm -rf .api-extractor-temp && tsc -p tsconfig.api.json && bunx api-extractor run --local --config packages/engine/api-extractor.json && bunx api-extractor run --local --config packages/primitives/api-extractor.json && bunx api-extractor run --local --config packages/headless/api-extractor.json && bunx api-extractor run --local --config packages/styled/api-extractor.json && bunx api-extractor run --local --config packages/app/api-extractor.json",
     "api:check": "bun run api:update",
     "test": "bun test",
     "typecheck": "tsc --noEmit",

@@ -133,10 +133,13 @@ If a conflict emerges, the PRD wins at the policy layer; this document wins at t
                  └──────────┘
 ```
 
-### 2.2 Package layering (four public + internal)
+### 2.2 Package layering (app framework + four public engine packages + internal)
 
 ```
 PUBLIC PACKAGES (shipped to consumers)
+
+@vexart/app       depends on: styled, headless, primitives, engine
+  Bun-native app framework: router, className mapper, config, CLI helpers
 
 ┌───────────────────────────────────┐
 │  @vexart/styled                   │  depends on: headless, primitives, engine
@@ -172,7 +175,7 @@ INTERNAL PACKAGES (not shipped, for dev/build only)
 
 Vexart ships exactly **two runtime artifacts**:
 
-1. **TypeScript source (`.js`/`.d.ts`)** — the engine, primitives, headless, styled packages distributed via npm.
+1. **TypeScript source (`.js`/`.d.ts`)** — the app framework, engine, primitives, headless, styled packages distributed via npm.
 2. **Native binary (`libvexart`)** — one `.dylib`/`.so`/`.dll` per supported platform, embedded inside `@vexart/engine/native/{platform}/`.
 
 No other binaries exist. No other languages. If a task proposes adding a third runtime artifact, it requires a PRD amendment.
@@ -181,7 +184,7 @@ No other binaries exist. No other languages. If a task proposes adding a third r
 
 | Layer | Language | Why |
 |---|---|---|
-| Styled, Headless, Primitives | TypeScript (with JSX) | Developer-facing API surface. Leverages SolidJS reactivity. |
+| App, Styled, Headless, Primitives | TypeScript (with JSX) | Developer-facing API surface. Leverages SolidJS reactivity and Bun-native tooling. |
 | Engine | TypeScript | Public JS/JSX shell: reconciliation adapter, hooks, callback registry, handles, feature flags, compatibility fallback. Bun runtime. |
 | libvexart | Rust (cdylib) | Retained scene graph, layout, damage, hit-testing, layer registry, render graph, frame orchestration, resources, paint, composite, Kitty encoding. Zero-overhead, cross-platform. |
 | Shaders | WGSL | One shader language, runs on Metal, Vulkan, DX12 via WGPU. |
@@ -433,7 +436,35 @@ packages/styled/
 - Users can override styling by passing their own `renderX` to the styled component.
 - Tokens are theme-scoped. Components read via `useTheme()`.
 
-### 3.5 Internal tooling packages
+### 3.5 `@vexart/app`
+
+`@vexart/app` is the Bun-native application framework layer. It gives users a single public entrypoint while keeping internals separated so router/styles can be extracted later if adoption demands it.
+
+```
+packages/app/
+|-- package.json
+`-- src/
+    |-- public.ts              — explicit public exports (see API-POLICY)
+    |-- index.ts               — re-exports public.ts (compatibility)
+    |
+    |-- router/                — route matching, filesystem manifest, outlet/provider
+    |-- styles/                — Tailwind-like className -> Vexart props mapper
+    |-- cli/                   — vexart create/dev/build/routes/doctor
+    |-- config/                — defineConfig() and defaults
+    |-- components/            — app-level primitive wrappers with className
+    `-- runtime/               — Page, mountApp, app lifecycle helpers
+```
+
+**Contract for app framework**:
+
+- Runtime is Bun-native: Next-like DX, Bun runtime, Vexart renderer.
+- `@vexart/app` is the only public app-framework package during alpha/beta.
+- Internal modules may be extracted later, but user docs should import from `@vexart/app`.
+- The framework must not depend on Next.js, DOM, CSSOM, hydration, or React DOM.
+- Filesystem routing discovers `app/**/page.tsx`, `layout.tsx`, `loading.tsx`, `error.tsx`, and `not-found.tsx`; route groups are omitted from URL paths and private folders (`_name`) are skipped.
+- `vexart dev` generates `.vexart/routes.ts` plus `.vexart/dev.tsx` when no explicit entrypoint exists, then runs Bun with watch mode by default.
+
+### 3.6 Internal tooling packages
 
 Not published to npm. Live in the monorepo for development.
 

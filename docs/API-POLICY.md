@@ -757,6 +757,32 @@ This appendix enumerates the complete expected public API surface at v0.9 releas
 **Typography**
 - `H1`, `H2`, `H3`, `H4`, `P`, `Lead`, `Large`, `Small`, `Muted` `@public`
 
+### A.5 `@vexart/app`
+
+`@vexart/app` ships during the `0.9.0-beta` line. Symbols below are public entrypoints, but the app-framework compatibility contract is beta-level until Vexart 1.0: names are tracked by API reports, while behavior can still change with changelog notes as filesystem routing, dev mode, and className coverage mature.
+
+**Runtime**
+- `Page`, `mountApp` `@public`
+- `PageProps`, `MountAppOptions` (types) `@public`
+
+**Components**
+- `Box`, `Text` app-framework wrappers with `className` support `@public`
+- `AppBoxProps`, `AppTextProps`, `ClassNameProps` (types) `@public`
+
+**Styling**
+- `resolveClassName`, `mergeClassNameProps`, `CLASS_NAME_UNKNOWN_BEHAVIOR` `@public`
+- `ClassNameResolveOptions`, `ClassNameResolveResult`, `ClassNameDiagnostic`, `VexartStyleProps` (types) `@public`
+
+**Router**
+- `createAppRouter`, `matchRoute`, `normalizePath`, `RouterProvider`, `RouteOutlet`, `useRouter`, `ROUTE_FOCUS_ID` `@public`
+- `discoverAppRoutes`, `routeFilePathToRoutePath`, `writeRouteManifestModule`, `ROUTE_FILE_KIND` `@public`
+- `AppRouteDefinition`, `AppRouter`, `AppRouterState`, `RouteParams`, `RouteComponent`, `RouteLayoutComponent`, `RouteErrorComponent` (types) `@public`
+- `CreateAppRouterOptions`, `AppRouterFocusRestorer`, `FileSystemRouteManifest`, `FileSystemRoute`, `FileSystemRouteFile`, `RouteManifestOptions`, `WriteRouteManifestOptions` (types) `@public`
+
+**Config / CLI**
+- `defineConfig`, `mergeConfig`, `runCli` `@public`
+- `CliResult`, `VexartAppConfig` and nested config types `@public`
+
 ---
 
 **END OF API-POLICY v0.1**
