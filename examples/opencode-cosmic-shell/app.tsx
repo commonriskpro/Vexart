@@ -586,14 +586,16 @@ function CodeEditor(props: { width: number; height: number; activeFile: number; 
       </Box>
       <Box width="grow" height="grow" direction="column" scrollY backgroundColor={0x081225d9}>
         <For each={lines()}>{(line, index) => <CodeLine index={index()} line={line} />}</For>
-        <Box width="grow" minHeight={22} direction="row">
-          <Box width={48} alignX="right" paddingRight={10} borderRight={1} borderColor={0xffffff0d} backgroundColor={color.panelDeep}>
-            <Text color={color.faint} fontSize={11} fontFamily="monospace">{String(lines().length + 1)}</Text>
+        <Show when={props.typingLine}>
+          <Box width="grow" minHeight={22} direction="row">
+            <Box width={48} alignX="right" paddingRight={10} borderRight={1} borderColor={0xffffff0d} backgroundColor={color.panelDeep}>
+              <Text color={color.faint} fontSize={11} fontFamily="monospace">{String(lines().length + 1)}</Text>
+            </Box>
+            <Box width="grow" direction="row" paddingLeft={14}>
+              <Text color={color.textSoft} fontSize={14} fontFamily="monospace">{props.typingLine!() ?? "|"}</Text>
+            </Box>
           </Box>
-          <Box width="grow" direction="row" paddingLeft={14}>
-            <Text color={color.textSoft} fontSize={14} fontFamily="monospace">{props.typingLine ? props.typingLine() ?? "|" : "|"}</Text>
-          </Box>
-        </Box>
+        </Show>
       </Box>
       <Box width="grow" height={36} direction="row" alignY="center" paddingX={18} borderTop={1} borderColor={color.borderSoft} backgroundColor={0x081225e6}>
         <Text color={color.textSoft} fontSize={11}>{active().kind}</Text>

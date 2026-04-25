@@ -83,6 +83,10 @@ export type NodeOpenState = {
   minW: number; minH: number
   maxW: number; maxH: number
   flexGrow: number; flexShrink: number
+  /** Original sizing type for width (FIT=0, GROW=1, PERCENT=2, FIXED=3) */
+  origSizeWType: number
+  /** Original sizing type for height (FIT=0, GROW=1, PERCENT=2, FIXED=3) */
+  origSizeHType: number
   justifyContent: number; alignItems: number; alignContent: number
   padTop: number; padRight: number; padBottom: number; padLeft: number
   borderTop: number; borderRight: number; borderBottom: number; borderLeft: number
@@ -99,7 +103,7 @@ export type NodeOpenState = {
 export const _defaultOpen = (): NodeOpenState => ({
   nodeId: 0, parentNodeId: 0, flags: 0,
   flexDir: 1 /* column */, posKind: 0, sizeWKind: 0, sizeHKind: 0, sizeW: 0, sizeH: 0,
-  minW: 0, minH: 0, maxW: 0, maxH: 0, flexGrow: 0, flexShrink: 1,
+  minW: 0, minH: 0, maxW: 0, maxH: 0, flexGrow: 0, flexShrink: 1, origSizeWType: 0, origSizeHType: 0,
   // 255 = None → Taffy uses its default (Stretch for align_items, Start for justify_content).
   // Clay used implicit stretch; Taffy needs 255 (None) to activate the same default behavior.
   justifyContent: 255, alignItems: 255, alignContent: 255,
@@ -209,10 +213,15 @@ export function createVexartLayoutCtx() {
       }
       function measure(state: NodeOpenState, parentW: number, parentH: number): { width: number; height: number } {
         const children = childrenByParent.get(state.nodeId) ?? []
+        // Compute this node's own dimensions first so children can reference them
+        const rootW = state.flags & FLAG_IS_ROOT ? _viewportW : parentW
+        const rootH = state.flags & FLAG_IS_ROOT ? _viewportH : parentH
+        const selfW = sizeValue(state.sizeWKind, state.sizeW, rootW, parentW)
+        const selfH = sizeValue(state.sizeHKind, state.sizeH, rootH, parentH)
         let innerW = 0
         let innerH = 0
         for (const child of children) {
-          const childSize = measure(child, parentW, parentH)
+          const childSize = measure(child, selfW, selfH)
           if (state.flexDir === 0) {
             innerW += childSize.width
             innerH = Math.max(innerH, childSize.height)
@@ -224,8 +233,6 @@ export function createVexartLayoutCtx() {
         const gap = Math.max(0, children.length - 1) * state.gapRow
         if (state.flexDir === 0) innerW += gap
         else innerH += gap
-        const rootW = state.flags & FLAG_IS_ROOT ? _viewportW : parentW
-        const rootH = state.flags & FLAG_IS_ROOT ? _viewportH : parentH
         const fallbackW = innerW + state.padLeft + state.padRight + state.borderLeft + state.borderRight
         const fallbackH = innerH + state.padTop + state.padBottom + state.borderTop + state.borderBottom
         const width = Math.max(state.minW || 0, Math.min(state.maxW || Infinity, sizeValue(state.sizeWKind, state.sizeW, rootW, (state.flags & FLAG_IS_ROOT) ? _viewportW : fallbackW)))
@@ -247,8 +254,17 @@ export function createVexartLayoutCtx() {
         for (const child of children) {
           if (child.posKind === 1) continue
           const childSize = measured.get(child.nodeId) ?? { width: 0, height: 0 }
-          const childW = child.flexGrow > 0 && state.flexDir === 0 ? contentW : childSize.width
-          const childH = child.flexGrow > 0 && state.flexDir !== 0 ? contentH : childSize.height
+          const isRow = state.flexDir === 0
+          const wGrow = child.origSizeWType === 1 /* GROW */
+          const hGrow = child.origSizeHType === 1 /* GROW */
+          // Main-axis: grow children fill remaining space
+          // Cross-axis: grow children stretch to parent content dimension
+          const childW = (wGrow && isRow) ? contentW   // main-axis grow in row
+            : (wGrow && !isRow) ? contentW              // cross-axis stretch in column
+            : childSize.width
+          const childH = (hGrow && !isRow) ? contentH   // main-axis grow in column
+            : (hGrow && isRow) ? contentH                // cross-axis stretch in row
+            : childSize.height
           place(child, state.flexDir === 0 ? cursor : contentX, state.flexDir === 0 ? contentY : cursor, childW, childH)
           cursor += (state.flexDir === 0 ? childW : childH) + state.gapRow
         }
@@ -460,7 +476,9 @@ export function createVexartLayoutCtx() {
       s.sizeW = wVal
       s.sizeHKind = _vxSizeKind(hType)
       s.sizeH = hVal
-      if (wType === 1 /* GROW */) s.flexGrow = 1.0
+      s.origSizeWType = wType
+      s.origSizeHType = hType
+      if (wType === 1 /* GROW */ || hType === 1 /* GROW */) s.flexGrow = 1.0
     },
 
     configureSizingMinMax(wType: number, wVal: number, minW: number, maxW: number, hType: number, hVal: number, minH: number, maxH: number) {
@@ -469,8 +487,10 @@ export function createVexartLayoutCtx() {
       s.sizeW = wVal
       s.sizeHKind = _vxSizeKind(hType)
       s.sizeH = hVal
+      s.origSizeWType = wType
+      s.origSizeHType = hType
       s.minW = minW; s.maxW = maxW; s.minH = minH; s.maxH = maxH
-      if (wType === 1 /* GROW */) s.flexGrow = 1.0
+      if (wType === 1 /* GROW */ || hType === 1 /* GROW */) s.flexGrow = 1.0
     },
 
     configureRectangle(color: number, radius: number) {
