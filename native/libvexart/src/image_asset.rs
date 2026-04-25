@@ -19,7 +19,10 @@ pub struct ImageAssetRegistry {
 
 impl ImageAssetRegistry {
     pub fn new() -> Self {
-        Self { by_key: HashMap::new(), assets: HashMap::new() }
+        Self {
+            by_key: HashMap::new(),
+            assets: HashMap::new(),
+        }
     }
 
     pub fn register(
@@ -41,15 +44,36 @@ impl ImageAssetRegistry {
                 asset.height = height;
                 asset.bytes.clear();
                 asset.bytes.extend_from_slice(rgba);
-                resources.register(handle, ResourceKind::ImageSprite, rgba.len() as u64, 0, WgpuHandle::Id(handle));
+                resources.register(
+                    handle,
+                    ResourceKind::ImageSprite,
+                    rgba.len() as u64,
+                    0,
+                    WgpuHandle::Id(handle),
+                );
                 return Some(handle);
             }
         }
 
         let handle = paint::alloc_image_handle();
         self.by_key.insert(key.clone(), handle);
-        self.assets.insert(handle, ImageAsset { handle, key, width, height, bytes: rgba.to_vec() });
-        resources.register(handle, ResourceKind::ImageSprite, rgba.len() as u64, 0, WgpuHandle::Id(handle));
+        self.assets.insert(
+            handle,
+            ImageAsset {
+                handle,
+                key,
+                width,
+                height,
+                bytes: rgba.to_vec(),
+            },
+        );
+        resources.register(
+            handle,
+            ResourceKind::ImageSprite,
+            rgba.len() as u64,
+            0,
+            WgpuHandle::Id(handle),
+        );
         Some(handle)
     }
 
@@ -85,8 +109,12 @@ mod tests {
         let mut resources = ResourceManager::new();
         let bytes = vec![255u8; 2 * 2 * 4];
 
-        let first = registry.register("logo.png".to_string(), &bytes, 2, 2, &mut resources).unwrap();
-        let second = registry.register("logo.png".to_string(), &bytes, 2, 2, &mut resources).unwrap();
+        let first = registry
+            .register("logo.png".to_string(), &bytes, 2, 2, &mut resources)
+            .unwrap();
+        let second = registry
+            .register("logo.png".to_string(), &bytes, 2, 2, &mut resources)
+            .unwrap();
 
         assert_eq!(first, second);
         assert_eq!(registry.get(first).unwrap().bytes.len(), bytes.len());
@@ -98,7 +126,9 @@ mod tests {
         let mut resources = ResourceManager::new();
         let bytes = vec![128u8; 4 * 4 * 4];
 
-        let handle = registry.register("sprite.png".to_string(), &bytes, 4, 4, &mut resources).unwrap();
+        let handle = registry
+            .register("sprite.png".to_string(), &bytes, 4, 4, &mut resources)
+            .unwrap();
 
         assert_eq!(resources.resource_count(), 1);
         assert_eq!(resources.current_usage_bytes(), bytes.len() as u64);

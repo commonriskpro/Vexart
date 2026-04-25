@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import type { NativeRenderGraphSnapshot, NativeRenderOpKind, NativeRenderOpSnapshot } from "../ffi/native-render-graph"
-import { analyzeNativeRenderGraphCoverage } from "../ffi/native-render-graph"
-import { CMD, type RenderCommand } from "../ffi/render-graph"
-import { canUseNativeRenderGraphForLayer } from "./paint"
+import { createLayerStore, type Layer } from "../ffi/layers"
+import { CMD, createRenderGraphQueues, type RenderCommand } from "../ffi/render-graph"
+import { createNode } from "../ffi/node"
+import { canUseRegionalRepaint, collectLayerCommands, hasDirtySubtreeTransforms, paintFrame, selectLayerDirtyRect, selectLayerRepaintRect, type PaintFrameState, type PreparedLayerSlot } from "./paint"
+import type { LayerPlan } from "./types"
 
 function command(type: number, nodeId: number): RenderCommand {
   return {
@@ -19,94 +20,203 @@ function command(type: number, nodeId: number): RenderCommand {
   }
 }
 
-function op(kind: NativeRenderOpKind, nodeId: number): NativeRenderOpSnapshot {
+function createPaintFrameState(): PaintFrameState {
+  const store = createLayerStore()
+  const layerCache = new Map<string, Layer>()
+  const root = createNode("root")
+
   return {
-    kind,
-    nodeId,
-    x: 0,
-    y: 0,
-    width: 10,
-    height: 10,
-    color: 0xffffffff,
-    cornerRadius: 0,
-    borderWidth: 0,
-    opacity: 1,
-    text: kind === "text" ? "hello" : "",
-    fontSize: 12,
-    fontId: 0,
-    materialKey: `pipeline:${kind}`,
-    effectKey: "",
-    imageSource: "",
-    hasGradient: false,
-    hasShadow: false,
-    hasGlow: false,
-    hasFilter: false,
-    hasBackdrop: false,
-    hasTransform: false,
-    hasOpacity: false,
-    gradientJson: "",
-    shadowJson: "",
-    glowJson: "",
-    filterJson: "",
-    transformJson: "",
-    backdropBlur: null,
-    backdropBrightness: null,
-    backdropContrast: null,
-    backdropSaturate: null,
-    backdropGrayscale: null,
-    backdropInvert: null,
-    backdropSepia: null,
-    backdropHueRotate: null,
+    viewportWidth: 320,
+    viewportHeight: 180,
+    transmissionMode: "direct" as const,
+    useLayerCompositing: true,
+    forceLayerRepaint: false,
+    expFrameBudgetMs: 0,
+    debugCadence: false,
+    debugDragRepro: false,
+    getOrCreateLayer(key: string, z: number) {
+      const existing = layerCache.get(key)
+      if (existing) { existing.z = z; return existing }
+      const layer = store.createLayer(z)
+      layerCache.set(key, layer)
+      return layer
+    },
+    getPreviousLayerRect: store.getPreviousLayerRect,
+    updateLayerGeometry: store.updateLayerGeometry,
+    markLayerDamaged: store.markLayerDamaged,
+    markLayerClean: store.markLayerClean,
+    imageIdForLayer: store.imageIdForLayer,
+    removeLayer: store.removeLayer,
+    layerCount: store.layerCount,
+    layerCache,
+    activeSlotKeys: new Set<string>(),
+    frameDirtyRects: [],
+    pendingNodeDamageRects: [],
+    nodeRefById: new Map([[root.id, root]]),
+    renderGraphQueues: createRenderGraphQueues(),
+    textMetaMap: new Map(),
+    layerComposer: null,
+    backendOverride: undefined,
+    lastPresentedInteractionSeq: { value: 0 },
+    lastPresentedInteractionLatencyMs: { value: 0 },
+    lastPresentedInteractionType: { value: null as string | null },
+    log() {},
+    renderDebug() {},
+    dragReproDebug() {},
   }
 }
 
-function snapshot(ops: NativeRenderOpSnapshot[]): NativeRenderGraphSnapshot {
-  return { ops, batches: [] }
+function layeredWindowPlan(commandCount: number): LayerPlan {
+  return {
+    bgSlot: { key: "bg", z: -1, cmdIndices: Array.from({ length: commandCount }, (_, index) => index) },
+    contentSlots: [],
+    slotBoundaryByKey: new Map(),
+    boundaries: [],
+  }
 }
 
-describe("canUseNativeRenderGraphForLayer", () => {
-  test("allows fully covered rect/text layers", () => {
-    const graph = snapshot([op("rect", 11), op("text", 12)])
-    const commands = [
-      command(CMD.RECTANGLE, 1),
-      command(CMD.TEXT, 2),
-    ]
-    const nativeToTs = new Map([[11, 1], [12, 2]])
+function windowCommands(activeWindowFirst: boolean): RenderCommand[] {
+  const desktop = { ...command(CMD.RECTANGLE, 1), x: 0, y: 0, width: 320, height: 180, color: [12, 14, 20, 255] as [number, number, number, number] }
+  const leftWindow = { ...command(CMD.RECTANGLE, 2), x: 48, y: 36, width: 150, height: 96, color: [40, 70, 120, 245] as [number, number, number, number] }
+  const rightWindow = { ...command(CMD.RECTANGLE, 3), x: 112, y: 58, width: 150, height: 96, color: [120, 74, 36, 245] as [number, number, number, number] }
+  const leftTitle = { ...command(CMD.RECTANGLE, 4), x: 48, y: 36, width: 150, height: 22, color: [80, 130, 220, 255] as [number, number, number, number] }
+  const rightTitle = { ...command(CMD.RECTANGLE, 5), x: 112, y: 58, width: 150, height: 22, color: [220, 150, 70, 255] as [number, number, number, number] }
+  const left = [leftWindow, leftTitle]
+  const right = [rightWindow, rightTitle]
+  return activeWindowFirst ? [desktop, rightWindow, rightTitle, leftWindow, leftTitle] : [desktop, ...left, ...right]
+}
 
-    expect(canUseNativeRenderGraphForLayer(graph, commands, nativeToTs)).toBe(true)
-    expect(analyzeNativeRenderGraphCoverage(graph, commands, nativeToTs)).toEqual({
-      renderableCommands: 2,
-      coveredCommands: 2,
-      fullyCovered: true,
-    })
+describe("collectLayerCommands", () => {
+  test("keeps the full semantic command stream for regional layer repaint", () => {
+    const surface = { ...command(CMD.RECTANGLE, 1), x: 0, y: 0, width: 200, height: 160 }
+    const titlebar = { ...command(CMD.RECTANGLE, 2), x: 0, y: 0, width: 200, height: 32 }
+    const content = { ...command(CMD.TEXT, 3), x: 16, y: 72, width: 80, height: 16 }
+
+    expect(collectLayerCommands([surface, titlebar, content], [0, 1, 2])).toEqual([
+      surface,
+      titlebar,
+      content,
+    ])
+  })
+})
+
+describe("canUseRegionalRepaint", () => {
+  test("disables regional repaint for monolithic background layers", () => {
+    expect(canUseRegionalRepaint(null, false, true)).toBe(false)
+  })
+})
+
+describe("selectLayerRepaintRect", () => {
+  test("does not forward damage rect to backend when regional repaint is disabled", () => {
+    const damage = { x: 10, y: 20, width: 30, height: 40 }
+
+    expect(selectLayerRepaintRect(false, damage)).toBeNull()
   })
 
-  test("allows partially covered layers but marks them as not fully covered", () => {
-    const graph = snapshot([op("rect", 11)])
-    const commands = [
-      command(CMD.RECTANGLE, 1),
-      command(CMD.TEXT, 2),
-    ]
-    const nativeToTs = new Map([[11, 1]])
+  test("forwards clipped damage only when regional repaint is enabled", () => {
+    const damage = { x: 10, y: 20, width: 30, height: 40 }
 
-    expect(canUseNativeRenderGraphForLayer(graph, commands, nativeToTs)).toBe(true)
-    expect(analyzeNativeRenderGraphCoverage(graph, commands, nativeToTs)).toEqual({
-      renderableCommands: 2,
-      coveredCommands: 1,
-      fullyCovered: false,
-    })
+    expect(selectLayerRepaintRect(true, damage)).toBe(damage)
+  })
+})
+
+describe("selectLayerDirtyRect", () => {
+  test("treats dirty layer without scoped damage as full layer repaint", () => {
+    const bounds = { x: 0, y: 0, width: 320, height: 180 }
+
+    expect(selectLayerDirtyRect(true, null, bounds)).toBe(bounds)
   })
 
-  test("allows covered effect image and canvas layers", () => {
-    const graph = snapshot([op("effect", 21), op("image", 22), op("canvas", 23)])
-    const commands = [
-      command(CMD.RECTANGLE, 3),
-      command(CMD.RECTANGLE, 4),
-      command(CMD.RECTANGLE, 5),
-    ]
-    const nativeToTs = new Map([[21, 3], [22, 4], [23, 5]])
+  test("preserves scoped damage when available", () => {
+    const bounds = { x: 0, y: 0, width: 320, height: 180 }
+    const damage = { x: 16, y: 24, width: 80, height: 32 }
 
-    expect(canUseNativeRenderGraphForLayer(graph, commands, nativeToTs)).toBe(true)
-    expect(analyzeNativeRenderGraphCoverage(graph, commands, nativeToTs).fullyCovered).toBe(true)
+    expect(selectLayerDirtyRect(true, damage, bounds)).toBe(damage)
+    expect(selectLayerDirtyRect(false, damage, bounds)).toBe(damage)
+  })
+
+  test("returns null for clean layers without damage", () => {
+    const bounds = { x: 0, y: 0, width: 320, height: 180 }
+
+    expect(selectLayerDirtyRect(false, null, bounds)).toBeNull()
+  })
+})
+
+describe("hasDirtySubtreeTransforms", () => {
+  function prepared(dirtyRect: PreparedLayerSlot["dirtyRect"], transformed: boolean): PreparedLayerSlot {
+    return {
+      slot: { key: "layer", z: 0, cmdIndices: [] },
+      layer: createLayerStore().createLayer(0),
+      debugName: "layer",
+      bounds: { x: 0, y: 0, width: 100, height: 100 },
+      dirtyRect,
+      clippedDamage: dirtyRect,
+      isBackground: false,
+      subtreeTransform: transformed
+        ? {
+            p0: { x: 0, y: 0 },
+            p1: { x: 100, y: 0 },
+            p2: { x: 100, y: 100 },
+            p3: { x: 0, y: 100 },
+          }
+        : null,
+      allowRegionalRepaint: false,
+      useRegionalRepaint: false,
+      freezeWhileInteracting: false,
+    }
+  }
+
+  test("ignores clean retained transform layers for frame strategy selection", () => {
+    expect(hasDirtySubtreeTransforms([prepared(null, true)], false)).toBe(false)
+  })
+
+  test("keeps dirty transform layers on the conservative final-frame path", () => {
+    expect(hasDirtySubtreeTransforms([prepared({ x: 0, y: 0, width: 10, height: 10 }, true)], false)).toBe(true)
+  })
+})
+
+describe("paintFrame monolithic overlapping windows", () => {
+  test("repaints a dirty bg layer without scoped damage instead of skipping presentation", () => {
+    const state = createPaintFrameState()
+    const observed = {
+      dirtyLayerCount: 0,
+      dirtyPixelArea: 0,
+      paintCalls: 0,
+      repaintRect: undefined as unknown,
+      commandCounts: [] as number[],
+    }
+    state.backendOverride = {
+      name: "paint-frame-test",
+      beginFrame(ctx) {
+        observed.dirtyLayerCount = ctx.dirtyLayerCount
+        observed.dirtyPixelArea = ctx.dirtyPixelArea
+        return { strategy: ctx.dirtyLayerCount === 0 ? "skip-present" : "layered-dirty" }
+      },
+      paint(ctx) {
+        observed.paintCalls += 1
+        observed.repaintRect = ctx.layer?.repaintRect
+        observed.commandCounts.push(ctx.commands.length)
+        return { output: "native-presented", strategy: "layered-dirty" }
+      },
+      endFrame() {
+        return { output: "none", strategy: "layered-dirty" }
+      },
+    }
+
+    const initial = windowCommands(false)
+    paintFrame(layeredWindowPlan(initial.length), initial, 8, 16, state)
+
+    const bg = state.layerCache.get("bg")!
+    bg.dirty = true
+    bg.damageRect = null
+
+    const reordered = windowCommands(true)
+    paintFrame(layeredWindowPlan(reordered.length), reordered, 8, 16, state)
+
+    expect(observed.dirtyLayerCount).toBe(1)
+    expect(observed.dirtyPixelArea).toBe(320 * 180)
+    expect(observed.paintCalls).toBe(2)
+    expect(observed.repaintRect).toBeNull()
+    expect(observed.commandCounts.at(-1)).toBe(reordered.length)
   })
 })

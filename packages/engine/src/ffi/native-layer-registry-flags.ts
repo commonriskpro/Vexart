@@ -1,5 +1,3 @@
-import { isNativeRetainedForcedOff, nativeRetainedFallbackReason } from "./native-retained-flags"
-
 /**
  * native-layer-registry-flags.ts
  * Feature flag for Phase 2c Native Layer Registry.
@@ -9,11 +7,10 @@ let enabled = true
 let fallbackReason: string | null = null
 
 export function isNativeLayerRegistryForcedOff() {
-  return isNativeRetainedForcedOff() || process.env.VEXART_NATIVE_LAYER_REGISTRY === "0"
+  return process.env.VEXART_NATIVE_LAYER_REGISTRY === "0"
 }
 
 export function nativeLayerRegistryForcedOffReason() {
-  if (isNativeRetainedForcedOff()) return nativeRetainedFallbackReason()
   if (process.env.VEXART_NATIVE_LAYER_REGISTRY === "0") return "VEXART_NATIVE_LAYER_REGISTRY=0 (env override)"
   return null
 }

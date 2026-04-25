@@ -41,40 +41,8 @@ export const VEXART_SYMBOLS = {
   vexart_context_destroy:   { args: [FFIType.u64],                             returns: FFIType.i32  },
   vexart_context_resize:    { args: [FFIType.u64, FFIType.u32, FFIType.u32],   returns: FFIType.i32  },
 
-  // §5.1b Scene graph (Phase 3b)
-  vexart_scene_create:      { args: [FFIType.u64, FFIType.ptr],                returns: FFIType.i32  },
-  vexart_scene_destroy:     { args: [FFIType.u64, FFIType.u64],                returns: FFIType.i32  },
-  vexart_scene_clear:       { args: [FFIType.u64, FFIType.u64],                returns: FFIType.i32  },
-  vexart_node_create:       { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  vexart_node_destroy:      { args: [FFIType.u64, FFIType.u64, FFIType.u64],   returns: FFIType.i32  },
-  vexart_node_insert:       { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.u64, FFIType.u64], returns: FFIType.i32 },
-  vexart_node_remove:       { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.u64], returns: FFIType.i32 },
-  vexart_node_set_props:    { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32], returns: FFIType.i32 },
-  vexart_text_set_content:  { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32], returns: FFIType.i32 },
-  vexart_node_set_layout:   { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.f32, FFIType.f32, FFIType.f32, FFIType.f32], returns: FFIType.i32 },
-  vexart_scene_set_cell_size: { args: [FFIType.u64, FFIType.u64, FFIType.f32, FFIType.f32], returns: FFIType.i32 },
-  vexart_scene_snapshot:    { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  vexart_scene_layout_compute: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  vexart_scene_render_graph_snapshot: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  vexart_frame_choose_strategy: { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  vexart_scene_hit_test:    { args: [FFIType.u64, FFIType.u64, FFIType.f32, FFIType.f32, FFIType.ptr], returns: FFIType.i32 },
-  vexart_input_pointer:     { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  vexart_input_interaction_frame: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  vexart_input_set_pointer_capture: { args: [FFIType.u64, FFIType.u64, FFIType.u64], returns: FFIType.i32 },
-  vexart_input_release_pointer_capture: { args: [FFIType.u64, FFIType.u64, FFIType.u64], returns: FFIType.i32 },
-  vexart_input_press_chain:  { args: [FFIType.u64, FFIType.u64, FFIType.f32, FFIType.f32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  vexart_events_read:       { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  vexart_scene_focus_next:  { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.ptr], returns: FFIType.i32 },
-  vexart_scene_focus_prev:  { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.ptr], returns: FFIType.i32 },
-
-  // §5.2 Layout
-  vexart_layout_compute:    { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  vexart_layout_measure:    { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.f32, FFIType.ptr, FFIType.ptr],         returns: FFIType.i32 },
-  vexart_layout_writeback:  { args: [FFIType.u64, FFIType.ptr, FFIType.u32],   returns: FFIType.i32  },
-
   // §5.3 Paint
   vexart_paint_dispatch:      { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  vexart_scene_paint_dispatch:{ args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_paint_upload_image:  { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr],       returns: FFIType.i32 },
   vexart_paint_remove_image:  { args: [FFIType.u64, FFIType.u64],              returns: FFIType.i32  },
 

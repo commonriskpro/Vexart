@@ -90,6 +90,37 @@ describe("insertChild", () => {
     insertChild(parent, b, notChild) // notChild isn't in parent
     expect(parent.children).toEqual([a, b])
   })
+
+  test("moves existing child before anchor without duplicating it", () => {
+    const parent = createNode("box")
+    const a = createNode("box")
+    const b = createNode("box")
+    const c = createNode("box")
+    insertChild(parent, a)
+    insertChild(parent, b)
+    insertChild(parent, c)
+
+    insertChild(parent, c, a)
+
+    expect(parent.children).toEqual([c, a, b])
+    expect(parent.children.filter((child) => child === c)).toHaveLength(1)
+    expect(c.parent).toBe(parent)
+    expect(c.destroyed).toBe(false)
+  })
+
+  test("reparents existing child without marking it destroyed", () => {
+    const first = createNode("box")
+    const second = createNode("box")
+    const child = createNode("box")
+    insertChild(first, child)
+
+    insertChild(second, child)
+
+    expect(first.children).toEqual([])
+    expect(second.children).toEqual([child])
+    expect(child.parent).toBe(second)
+    expect(child.destroyed).toBe(false)
+  })
 })
 
 describe("removeChild", () => {

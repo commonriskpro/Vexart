@@ -68,26 +68,35 @@ impl NativeFramePlanInput {
         Some(Self {
             dirty_layer_count: u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
             dirty_pixel_area: u64::from_le_bytes([
-                bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15],
+                bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14],
+                bytes[15],
             ]),
             total_pixel_area: u64::from_le_bytes([
-                bytes[16], bytes[17], bytes[18], bytes[19], bytes[20], bytes[21], bytes[22], bytes[23],
+                bytes[16], bytes[17], bytes[18], bytes[19], bytes[20], bytes[21], bytes[22],
+                bytes[23],
             ]),
             overlap_pixel_area: u64::from_le_bytes([
-                bytes[24], bytes[25], bytes[26], bytes[27], bytes[28], bytes[29], bytes[30], bytes[31],
+                bytes[24], bytes[25], bytes[26], bytes[27], bytes[28], bytes[29], bytes[30],
+                bytes[31],
             ]),
             overlap_ratio: f32::from_le_bytes([bytes[32], bytes[33], bytes[34], bytes[35]]),
             full_repaint: u32::from_le_bytes([bytes[36], bytes[37], bytes[38], bytes[39]]) != 0,
-            has_subtree_transforms: u32::from_le_bytes([bytes[40], bytes[41], bytes[42], bytes[43]]) != 0,
-            has_active_interaction: u32::from_le_bytes([bytes[44], bytes[45], bytes[46], bytes[47]]) != 0,
+            has_subtree_transforms: u32::from_le_bytes([
+                bytes[40], bytes[41], bytes[42], bytes[43],
+            ]) != 0,
+            has_active_interaction: u32::from_le_bytes([
+                bytes[44], bytes[45], bytes[46], bytes[47],
+            ]) != 0,
             transmission_mode: u32::from_le_bytes([bytes[48], bytes[49], bytes[50], bytes[51]]),
             last_strategy: u32::from_le_bytes([bytes[52], bytes[53], bytes[54], bytes[55]]),
             frames_since_change: u32::from_le_bytes([bytes[56], bytes[57], bytes[58], bytes[59]]),
             estimated_layered_bytes: u64::from_le_bytes([
-                bytes[60], bytes[61], bytes[62], bytes[63], bytes[64], bytes[65], bytes[66], bytes[67],
+                bytes[60], bytes[61], bytes[62], bytes[63], bytes[64], bytes[65], bytes[66],
+                bytes[67],
             ]),
             estimated_final_bytes: u64::from_le_bytes([
-                bytes[68], bytes[69], bytes[70], bytes[71], bytes[72], bytes[73], bytes[74], bytes[75],
+                bytes[68], bytes[69], bytes[70], bytes[71], bytes[72], bytes[73], bytes[74],
+                bytes[75],
             ]),
         })
     }
@@ -167,7 +176,8 @@ pub fn choose_frame_strategy(input: NativeFramePlanInput) -> NativeFramePlan {
     {
         preferred = NativeFrameStrategy::LayeredRegion;
         reason_flags |= NativeFramePlan::REASON_REGION_CANDIDATE;
-    } else if (input.transmission_mode == NativeFramePlanInput::TRANSPORT_DIRECT && output_ratio < 0.45)
+    } else if (input.transmission_mode == NativeFramePlanInput::TRANSPORT_DIRECT
+        && output_ratio < 0.45)
         || (input.dirty_layer_count <= 1 && dirty_ratio < 0.45 && input.overlap_pixel_area == 0)
         || (input.dirty_layer_count <= 2 && dirty_ratio < 0.3 && input.overlap_ratio < 0.08)
         || (dirty_ratio < 0.18 && input.overlap_ratio < 0.04)
@@ -200,7 +210,10 @@ pub fn choose_frame_strategy(input: NativeFramePlanInput) -> NativeFramePlan {
                 reason_flags,
             };
         }
-        if preferred == NativeFrameStrategy::LayeredRegion && dirty_ratio < 0.22 && input.overlap_ratio < 0.05 {
+        if preferred == NativeFrameStrategy::LayeredRegion
+            && dirty_ratio < 0.22
+            && input.overlap_ratio < 0.05
+        {
             return NativeFramePlan {
                 strategy: preferred,
                 reason_flags,
@@ -259,7 +272,9 @@ pub fn choose_frame_strategy(input: NativeFramePlanInput) -> NativeFramePlan {
 
 #[cfg(test)]
 mod tests {
-    use super::{choose_frame_strategy, NativeFramePlan, NativeFramePlanInput, NativeFrameStrategy};
+    use super::{
+        choose_frame_strategy, NativeFramePlan, NativeFramePlanInput, NativeFrameStrategy,
+    };
 
     fn input() -> NativeFramePlanInput {
         NativeFramePlanInput {
@@ -301,7 +316,10 @@ mod tests {
     fn chooses_layered_region_for_small_shm_damage() {
         let plan = choose_frame_strategy(input());
         assert_eq!(plan.strategy, NativeFrameStrategy::LayeredRegion);
-        assert_ne!(plan.reason_flags & NativeFramePlan::REASON_REGION_CANDIDATE, 0);
+        assert_ne!(
+            plan.reason_flags & NativeFramePlan::REASON_REGION_CANDIDATE,
+            0
+        );
     }
 
     #[test]
@@ -314,6 +332,9 @@ mod tests {
         next.frames_since_change = 1;
         let plan = choose_frame_strategy(next);
         assert_eq!(plan.strategy, NativeFrameStrategy::LayeredRegion);
-        assert_ne!(plan.reason_flags & NativeFramePlan::REASON_HYSTERESIS_HELD, 0);
+        assert_ne!(
+            plan.reason_flags & NativeFramePlan::REASON_HYSTERESIS_HELD,
+            0
+        );
     }
 }

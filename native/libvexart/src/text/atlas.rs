@@ -64,9 +64,7 @@ impl AtlasRegistry {
         metrics_json: &str,
     ) -> Result<(), String> {
         if font_id == 0 || font_id > 15 {
-            return Err(format!(
-                "font_id {font_id} out of range; must be 1-15"
-            ));
+            return Err(format!("font_id {font_id} out of range; must be 1-15"));
         }
 
         if self.records.contains_key(&font_id) {
@@ -204,14 +202,20 @@ fn decode_png(png_bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
     }
 
     if bit_depth != 8 {
-        return Err(format!("PNG bit depth {bit_depth} not supported (expected 8)"));
+        return Err(format!(
+            "PNG bit depth {bit_depth} not supported (expected 8)"
+        ));
     }
 
     // color_type: 2 = RGB, 6 = RGBA.
     let channels: u32 = match color_type {
         2 => 3,
         6 => 4,
-        _ => return Err(format!("PNG color type {color_type} not supported (expected RGB=2 or RGBA=6)")),
+        _ => {
+            return Err(format!(
+                "PNG color type {color_type} not supported (expected RGB=2 or RGBA=6)"
+            ))
+        }
     };
 
     // Collect all IDAT chunk data.
@@ -268,8 +272,14 @@ fn decode_png(png_bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
         let src = &raw[raw_row_start + 1..raw_row_start + 1 + stride];
 
         let mut decoded_row = vec![0u8; stride];
-        apply_png_filter(filter_type, src, &prev_row, &mut decoded_row, channels as usize)
-            .map_err(|e| format!("PNG filter error at row {row}: {e}"))?;
+        apply_png_filter(
+            filter_type,
+            src,
+            &prev_row,
+            &mut decoded_row,
+            channels as usize,
+        )
+        .map_err(|e| format!("PNG filter error at row {row}: {e}"))?;
 
         // Convert to RGBA.
         let out_row = &mut rgba[row * width as usize * 4..(row + 1) * width as usize * 4];
@@ -320,7 +330,11 @@ fn apply_png_filter(
         3 => {
             // Average
             for i in 0..src.len() {
-                let a = if i >= channels { dst[i - channels] as u16 } else { 0 };
+                let a = if i >= channels {
+                    dst[i - channels] as u16
+                } else {
+                    0
+                };
                 let b = prev[i] as u16;
                 dst[i] = src[i].wrapping_add(((a + b) / 2) as u8);
             }
@@ -371,7 +385,7 @@ mod tests {
             0x54, 0x08, 0xd7, 0x63, 0x60, 0x60, 0x60, 0x60, // IDAT data
             0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0xa5, 0xf6, // IDAT cont.
             0x45, 0x40, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, // IDAT CRC, IEND
-            0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,             // IEND CRC
+            0x4e, 0x44, 0xae, 0x42, 0x60, 0x82, // IEND CRC
         ]
     }
 

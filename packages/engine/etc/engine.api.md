@@ -37,14 +37,6 @@ export const ALIGN_Y: {
     readonly SPACE_BETWEEN: 3;
 };
 
-// @public @deprecated (undocumented)
-export function applyCommandLayout(node: TGENode, cmd: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-}): void;
-
 // @public (undocumented)
 export function assertBridgeVersion(actual: number, expected?: number): void;
 
@@ -148,9 +140,6 @@ export type BorderRenderOp = {
 };
 
 // @public (undocumented)
-export function buildNativeFrameExecutionStats(input: NativeFrameExecutionStatsInput): NativeFrameExecutionStats;
-
-// @public (undocumented)
 export function buildNodeMouseEvent(node: TGENode, pointerX: number, pointerY: number): NodeMouseEvent;
 
 // @public (undocumented)
@@ -216,6 +205,7 @@ export type CanvasPaintConfig = {
     renderObjectId?: number;
     color: number;
     onDraw: (ctx: CanvasContext) => void;
+    displayListCommands?: DrawCmd[];
     viewport?: {
         x: number;
         y: number;
@@ -251,6 +241,8 @@ export type Capabilities = {
     transmissionMode: "shm" | "file" | "direct";
 };
 
+// Warning: (ae-forgotten-export) The symbol "NativeFramePlan" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export function chooseGpuLayerStrategy(input: GpuLayerStrategyInput, nativePlanOverride?: NativeFramePlan | null): GpuLayerStrategyMode;
 
@@ -448,7 +440,7 @@ export const debugState: {
     readonly nativePresentationFallbackReason: string | null;
     readonly nativeStats: NativePresentationStats | null;
     readonly nativeFrameReasonFlags: number | null;
-    readonly nativeFrameStats: NativeFrameExecutionStats | null;
+    readonly nativeFrameStats: NativeFrameExecutionStatsInput | null;
     readonly ffiCallCount: number;
 };
 
@@ -801,9 +793,6 @@ export type FontDescriptor = {
 };
 
 export { For }
-
-// @public (undocumented)
-export function formatNativeFrameReasonFlags(reasonFlags: number): string;
 
 // @public (undocumented)
 export type FrameSchedulerBoosts = {
@@ -1345,10 +1334,6 @@ export type MountOptions = {
         forceLayerRepaint?: boolean;
         nativePresentation?: boolean;
         nativeLayerRegistry?: boolean;
-        nativeSceneGraph?: boolean;
-        nativeEventDispatch?: boolean;
-        nativeSceneLayout?: boolean;
-        nativeRenderGraph?: boolean;
     };
 };
 
@@ -1404,173 +1389,6 @@ export type MutationResult<T, V> = {
     mutate: (variables: V) => Promise<T | undefined>;
     reset: () => void;
 };
-
-// @public (undocumented)
-export const NATIVE_FRAME_REASON: {
-    readonly NO_DAMAGE: number;
-    readonly TRANSFORMS: number;
-    readonly FULL_REPAINT: number;
-    readonly ACTIVE_INTERACTION: number;
-    readonly REGION_CANDIDATE: number;
-    readonly LAYERED_CANDIDATE: number;
-    readonly BYTES_FAVOR_LAYERED: number;
-    readonly HYSTERESIS_HELD: number;
-};
-
-// @public (undocumented)
-export const NATIVE_FRAME_STRATEGY: {
-    readonly SKIP_PRESENT: "skip-present";
-    readonly LAYERED_DIRTY: "layered-dirty";
-    readonly LAYERED_REGION: "layered-region";
-    readonly FINAL_FRAME: "final-frame";
-};
-
-// @public (undocumented)
-export const NATIVE_FRAME_TRANSPORT: {
-    readonly DIRECT: 0;
-    readonly FILE: 1;
-    readonly SHM: 2;
-};
-
-// @public (undocumented)
-export function nativeChooseFrameStrategy(input: NativeFramePlanInput): NativeFramePlan | null;
-
-// @public (undocumented)
-export interface NativeFrameExecutionStats {
-    // (undocumented)
-    dirtyLayerCount: number;
-    // (undocumented)
-    dirtyPixelArea: number;
-    // (undocumented)
-    estimatedFinalBytes: number;
-    // (undocumented)
-    estimatedLayeredBytes: number;
-    // (undocumented)
-    ffiCallCount: number;
-    // (undocumented)
-    ffiCallsBySymbol: Record<string, number>;
-    // (undocumented)
-    fullRepaint: boolean;
-    // (undocumented)
-    gpuResourceBytes: number;
-    // (undocumented)
-    moveFallbackCount: number;
-    // (undocumented)
-    moveOnlyCount: number;
-    // (undocumented)
-    nativePresentationStats: NativePresentationStats | null;
-    // (undocumented)
-    overlapPixelArea: number;
-    // (undocumented)
-    overlapRatio: number;
-    // (undocumented)
-    reasonFlags: number | null;
-    // (undocumented)
-    rendererOutput: string | null;
-    // (undocumented)
-    repaintedCount: number;
-    // (undocumented)
-    resourceBytes: number;
-    // (undocumented)
-    resourceEntries: number;
-    // (undocumented)
-    stableReuseCount: number;
-    // (undocumented)
-    strategy: NativeFrameStrategy | null;
-    // (undocumented)
-    totalPixelArea: number;
-    // (undocumented)
-    transmissionMode: "direct" | "file" | "shm" | null;
-}
-
-// @public (undocumented)
-export interface NativeFrameExecutionStatsInput {
-    // (undocumented)
-    dirtyLayerCount: number;
-    // (undocumented)
-    dirtyPixelArea: number;
-    // (undocumented)
-    estimatedFinalBytes: number;
-    // (undocumented)
-    estimatedLayeredBytes: number;
-    // (undocumented)
-    ffiCallCount: number;
-    // (undocumented)
-    ffiCallsBySymbol: Record<string, number>;
-    // (undocumented)
-    fullRepaint: boolean;
-    // (undocumented)
-    gpuResourceBytes: number;
-    // (undocumented)
-    moveFallbackCount: number;
-    // (undocumented)
-    moveOnlyCount: number;
-    // (undocumented)
-    nativePresentationStats: NativePresentationStats | null;
-    // (undocumented)
-    overlapPixelArea: number;
-    // (undocumented)
-    overlapRatio: number;
-    // (undocumented)
-    reasonFlags: number | null;
-    // (undocumented)
-    rendererOutput: string | null;
-    // (undocumented)
-    repaintedCount: number;
-    // (undocumented)
-    resourceBytes: number;
-    // (undocumented)
-    resourceEntries: number;
-    // (undocumented)
-    stableReuseCount: number;
-    // (undocumented)
-    strategy: NativeFrameStrategy | null;
-    // (undocumented)
-    totalPixelArea: number;
-    // (undocumented)
-    transmissionMode: "direct" | "file" | "shm" | null;
-}
-
-// @public (undocumented)
-export interface NativeFramePlan {
-    // (undocumented)
-    reasonFlags: number;
-    // (undocumented)
-    strategy: NativeFrameStrategy;
-}
-
-// @public (undocumented)
-export interface NativeFramePlanInput {
-    // (undocumented)
-    dirtyLayerCount: number;
-    // (undocumented)
-    dirtyPixelArea: number;
-    // (undocumented)
-    estimatedFinalBytes: number;
-    // (undocumented)
-    estimatedLayeredBytes: number;
-    // (undocumented)
-    framesSinceChange: number;
-    // (undocumented)
-    fullRepaint: boolean;
-    // (undocumented)
-    hasActiveInteraction: boolean;
-    // (undocumented)
-    hasSubtreeTransforms: boolean;
-    // (undocumented)
-    lastStrategy: NativeFrameStrategy | null;
-    // (undocumented)
-    overlapPixelArea: number;
-    // (undocumented)
-    overlapRatio: number;
-    // (undocumented)
-    totalPixelArea: number;
-    // (undocumented)
-    transmissionMode: number;
-}
-
-// @public (undocumented)
-export type NativeFrameStrategy = (typeof NATIVE_FRAME_STRATEGY)[keyof typeof NATIVE_FRAME_STRATEGY];
 
 // @public (undocumented)
 export interface NativeKittyShmHandle {
@@ -1700,9 +1518,6 @@ export function parseDirection(value: string | undefined): number;
 // @public
 export function parseKey(data: string): [KeyEvent, number] | null;
 
-// @public (undocumented)
-export function parseLayoutOutput(outBuf: ArrayBuffer, usedBytes: number): Map<bigint, PositionedCommand>;
-
 // @public
 export function parseMouse(data: string): [MouseEvent_2, number] | null;
 
@@ -1783,22 +1598,6 @@ export type PolygonCmd = {
     fill?: number;
     stroke?: number;
     strokeWidth: number;
-};
-
-// @public
-export const POSITIONED_CMD_STRIDE = 40;
-
-// @public
-export type PositionedCommand = {
-    nodeId: bigint;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    contentX: number;
-    contentY: number;
-    contentW: number;
-    contentH: number;
 };
 
 // @public (undocumented)
@@ -2190,10 +1989,6 @@ export type RenderLoopOptions = {
         forceLayerRepaint?: boolean;
         nativePresentation?: boolean;
         nativeLayerRegistry?: boolean;
-        nativeSceneGraph?: boolean;
-        nativeEventDispatch?: boolean;
-        nativeSceneLayout?: boolean;
-        nativeRenderGraph?: boolean;
     };
 };
 
@@ -2233,7 +2028,7 @@ export type ResizeEvent = {
 export type ResizeHandler = (size: TerminalSize) => void;
 
 // @public (undocumented)
-export function resolveKittyTransportMode(requestedMode: TransmissionMode): "shm" | "file" | "direct";
+export function resolveKittyTransportMode(requestedMode: TransmissionMode): "direct" | "file" | "shm";
 
 // @public (undocumented)
 export function resolveProps(node: TGENode): TGEProps;
@@ -2617,6 +2412,8 @@ export type TGENode = {
     _nativeImageHandle: bigint | null;
     _nativeCanvasDisplayListHandle: bigint | null;
     _canvasDisplayListHash: string | null;
+    _canvasDrawCacheKey: string | null;
+    _canvasDisplayListCommands: DrawCmd[] | null;
     _imageState: "idle" | "loading" | "loaded" | "error";
     _widthSizing: SizingInfo | null;
     _heightSizing: SizingInfo | null;
@@ -2781,6 +2578,7 @@ export type TGEProps = {
     src?: string;
     objectFit?: "contain" | "cover" | "fill" | "none";
     onDraw?: (ctx: CanvasContext) => void;
+    drawCacheKey?: string | number;
     viewport?: {
         x: number;
         y: number;
@@ -2980,120 +2778,8 @@ export const VEXART_SYMBOLS: {
         readonly args: [FFIType.uint64_t, FFIType.uint32_t, FFIType.uint32_t];
         readonly returns: FFIType.int32_t;
     };
-    readonly vexart_scene_create: {
-        readonly args: [FFIType.uint64_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_scene_destroy: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_scene_clear: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_node_create: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_node_destroy: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_node_insert: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_node_remove: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_node_set_props: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_text_set_content: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_node_set_layout: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.float, FFIType.float, FFIType.float, FFIType.float];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_scene_set_cell_size: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.float, FFIType.float];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_scene_snapshot: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_scene_layout_compute: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_scene_render_graph_snapshot: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_frame_choose_strategy: {
-        readonly args: [FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_scene_hit_test: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.float, FFIType.float, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_input_pointer: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_input_interaction_frame: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_input_set_pointer_capture: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_input_release_pointer_capture: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_input_press_chain: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.float, FFIType.float, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_events_read: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_scene_focus_next: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_scene_focus_prev: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_layout_compute: {
-        readonly args: [FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_layout_measure: {
-        readonly args: [FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.uint32_t, FFIType.float, FFIType.ptr, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_layout_writeback: {
-        readonly args: [FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t];
-        readonly returns: FFIType.int32_t;
-    };
     readonly vexart_paint_dispatch: {
         readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_scene_paint_dispatch: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_paint_upload_image: {
@@ -3300,11 +2986,10 @@ export function wrapPassthrough(raw: string): string;
 // @public
 export function writeHeader(view: DataView, cmdCount: number, payloadBytes: number): void;
 
-// @public (undocumented)
-export function writeLayoutFromPositionedCommands(nodes: TGENode[], layoutMap: Map<bigint, PositionedCommand>): void;
-
 // Warnings were encountered during analysis:
 //
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/loop/debug.d.ts:89:5 - (ae-forgotten-export) The symbol "NativeFrameExecutionStats" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/loop/debug.d.ts:172:5 - (ae-forgotten-export) The symbol "NativeFrameExecutionStatsInput" needs to be exported by the entry point index.d.ts
 // /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/reconciler/router.d.ts:41:5 - (ae-forgotten-export) The symbol "NavigationParams" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)

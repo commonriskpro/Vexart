@@ -25,10 +25,10 @@ fn main() {
     for i in 0..width * height {
         let idx = i as usize * 4;
         // Simulate UI: dark background with occasional bright elements.
-        rgba[idx] = (i % 31) as u8;          // R
-        rgba[idx + 1] = (i % 17) as u8;      // G
-        rgba[idx + 2] = 0x1e;                 // B (near-constant = good compression)
-        rgba[idx + 3] = 0xff;                 // A
+        rgba[idx] = (i % 31) as u8; // R
+        rgba[idx + 1] = (i % 17) as u8; // G
+        rgba[idx + 2] = 0x1e; // B (near-constant = good compression)
+        rgba[idx + 3] = 0xff; // A
     }
 
     // Warm-up (not measured).

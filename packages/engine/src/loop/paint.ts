@@ -27,28 +27,18 @@ import {
   type RendererBackendPaintResult,
 } from "../ffi/renderer-backend"
 import { buildRenderGraphFrame } from "../ffi/render-graph"
-import { analyzeNativeRenderGraphCoverage, getNativeRenderGraphFrameStats, nativeRenderGraphSnapshot, nativeScenePaintRefsForCommands, translateNativeRenderGraphSnapshot } from "../ffi/native-render-graph"
-import { nativeSceneHandle } from "../ffi/native-scene"
 import { summarizeRendererResourceStats } from "../ffi/resource-stats"
 import { getLatestInteractionTrace } from "./input"
 import { shouldFreezeInteractionLayer } from "../reconciler/interaction"
 import { multiply, translate, transformPoint } from "../ffi/matrix"
 import { debugUpdateStats, isDebugEnabled } from "./debug"
-import { resolveNodeByPath } from "./assign-layers"
-import type { LayerSlot, LayerPlan, PaintResult } from "./types"
+import type { LayerBoundary, LayerSlot, LayerPlan, PaintResult } from "./types"
 import type { TGENode } from "../ffi/node"
 import type { GpuFrameComposer } from "../output/gpu-frame-composer"
 import { isNativePresentationCapable } from "../ffi/native-presentation-flags"
 import { nativeLayerRemove } from "../ffi/native-layer-registry"
 import { nativeDeleteLayer, nativeEmitLayer } from "../ffi/native-presentation-ops"
 import type { NativePresentationStats } from "../ffi/native-presentation-stats"
-
-type NativeScenePaintBackend = RendererBackend & {
-  paintNativeScene?: (ctx: Parameters<RendererBackend["paint"]>[0] & {
-    scene: bigint
-    refs: NonNullable<ReturnType<typeof nativeScenePaintRefsForCommands>>
-  }) => RendererBackendPaintResult | void
-}
 
 let lastNativeRenderGraphLayerCount = 0
 let lastNativeRenderGraphOpCount = 0
@@ -128,7 +118,6 @@ export type PaintFrameState = {
   // Frame compositing flags
   useLayerCompositing: boolean
   forceLayerRepaint: boolean
-  useNativeRenderGraph: boolean
   expFrameBudgetMs: number
 
   // Debug flags
@@ -154,8 +143,7 @@ export type PaintFrameState = {
   frameDirtyRects: DamageRect[]
   pendingNodeDamageRects: Array<{ nodeId: number; rect: DamageRect }>
 
-  // Root node — needed to resolve boundary paths
-  root: TGENode
+  nodeRefById: Map<number, TGENode>
 
   // Render graph queues — for buildRenderGraphFrame
   renderGraphQueues: ReturnType<typeof import("../ffi/render-graph").createRenderGraphQueues>
@@ -180,17 +168,49 @@ export type PaintFrameState = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-function commandIntersectsRect(cmd: RenderCommand, rect: { x: number; y: number; width: number; height: number }): boolean {
-  const left = cmd.x
-  const top = cmd.y
-  const right = cmd.x + cmd.width
-  const bottom = cmd.y + cmd.height
-  return left < rect.x + rect.width && right > rect.x && top < rect.y + rect.height && bottom > rect.y
+export function collectLayerCommands(commands: RenderCommand[], cmdIndices: number[]) {
+  const layerCommands: RenderCommand[] = []
+  for (const idx of cmdIndices) {
+    const cmd = commands[idx]
+    if (!cmd) continue
+    layerCommands.push(cmd)
+  }
+  return layerCommands
 }
 
-function canUseRegionalRepaint(boundaryNode: TGENode | null, hasScissor: boolean, isBg: boolean): boolean {
+export function selectLayerRepaintRect(
+  effectiveUseRegionalRepaint: boolean,
+  clippedDamage: { x: number; y: number; width: number; height: number } | null,
+) {
+  return effectiveUseRegionalRepaint ? clippedDamage : null
+}
+
+export function selectLayerDirtyRect(
+  layerDirty: boolean,
+  damageRect: DamageRect | null,
+  bounds: DamageRect,
+) {
+  if (damageRect) return damageRect
+  return layerDirty ? bounds : null
+}
+
+export function hasDirtySubtreeTransforms(preparedSlots: PreparedLayerSlot[], forceLayerRepaint: boolean) {
+  return preparedSlots.some((prepared) => {
+    if (!prepared.subtreeTransform) return false
+    if (forceLayerRepaint) return true
+    return !!prepared.dirtyRect
+  })
+}
+
+export function canUseRegionalRepaint(boundaryNode: TGENode | null, hasScissor: boolean, isBg: boolean): boolean {
   if (hasScissor) return false
-  if (isBg) return true
+  // The background slot is a monolithic layer containing all non-layered UI.
+  // Regional repaint is unsafe here because a small dirty rect (for example a
+  // focused titlebar) can still require re-presenting other overlapping window
+  // content after z-order/focus changes. Until background commands are clipped
+  // to the repaint rect or app windows become separate layer boundaries, repaint
+  // and present the full bg layer for correctness.
+  if (isBg) return false
   if (!boundaryNode || boundaryNode.kind === "text") return true
   if (boundaryNode.props.viewportClip === false) return false
   if (hasTransformInSubtree(boundaryNode)) return false
@@ -271,23 +291,25 @@ function applyPendingNodeDamage(
   }
 }
 
-function buildNativeToTsNodeIdMap(root: TGENode) {
-  const map = new Map<number, number>()
-  const stack: TGENode[] = [root]
-  while (stack.length > 0) {
-    const node = stack.pop()!
-    if (node._nativeId) map.set(Number(node._nativeId), node.id)
-    for (const child of node.children) stack.push(child)
-  }
-  return map
-}
-
-export function canUseNativeRenderGraphForLayer(
-  snapshot: ReturnType<typeof nativeRenderGraphSnapshot>,
-  commands: RenderCommand[],
-  nativeToTsNodeId: Map<number, number>,
+function updateLayerStabilityCounters(
+  preparedSlots: PreparedLayerSlot[],
+  slotBoundaryByKey: Map<string, LayerBoundary>,
+  nodeRefById: Map<number, TGENode>,
 ) {
-  return analyzeNativeRenderGraphCoverage(snapshot, commands, nativeToTsNodeId).coveredCommands > 0
+  for (const prepared of preparedSlots) {
+    if (prepared.isBackground) continue
+    const boundary = slotBoundaryByKey.get(prepared.slot.key)
+    if (!boundary) continue
+    const node = nodeRefById.get(boundary.nodeId)
+    if (!node) continue
+    if (prepared.dirtyRect) {
+      node._unstableFrameCount++
+      node._stableFrameCount = 0
+    } else {
+      node._stableFrameCount++
+      node._unstableFrameCount = 0
+    }
+  }
 }
 
 // ── paintFrame ────────────────────────────────────────────────────────────
@@ -347,7 +369,6 @@ export function paintFrame(
     activeSlotKeys,
     frameDirtyRects,
     pendingNodeDamageRects,
-    root,
     renderGraphQueues,
     textMetaMap,
     layerComposer,
@@ -362,10 +383,6 @@ export function paintFrame(
 
   const allSlots: LayerSlot[] = [plan.bgSlot, ...plan.contentSlots]
   const slotBoundaryByKey = plan.slotBoundaryByKey
-  const nativeSnapshotStart = profile ? performance.now() : 0
-  const nativeSnapshot = state.useNativeRenderGraph ? nativeRenderGraphSnapshot() : null
-  const nativeToTsNodeId = nativeSnapshot ? buildNativeToTsNodeIdMap(root) : null
-  if (profile) profile.paintNativeSnapshotMs += performance.now() - nativeSnapshotStart
   lastNativeRenderGraphLayerCount = 0
   lastNativeRenderGraphOpCount = 0
   lastNativeRenderGraphFullyCoveredLayerCount = 0
@@ -385,7 +402,7 @@ export function paintFrame(
     if (expFrameBudgetMs > 0 && !frameBudgetExceeded && slot.z >= 0) {
       const elapsed = performance.now() - frameStart
       if (elapsed > expFrameBudgetMs) {
-        log(`  [FRAME BUDGET] ${elapsed.toFixed(1)}ms > ${expFrameBudgetMs}ms — deferring remaining layers`)
+        if (debugCadence) log(`  [FRAME BUDGET] ${elapsed.toFixed(1)}ms > ${expFrameBudgetMs}ms — deferring remaining layers`)
         frameBudgetExceeded = true
       }
     }
@@ -407,10 +424,11 @@ export function paintFrame(
     let scissorR = 0
     let scissorB = 0
 
+    const pendingBounds: RenderCommand[] = []
     for (const idx of slot.cmdIndices) {
       const cmd = commands[idx]
       if (!cmd) continue
-      if (cmd.type === CMD.SCISSOR_START) {
+      if (cmd.type === CMD.SCISSOR_START && !hasScissor) {
         scissorX = cmd.x
         scissorY = cmd.y
         scissorR = cmd.x + cmd.width
@@ -420,14 +438,22 @@ export function paintFrame(
         maxX = scissorR
         maxY = scissorB
         hasScissor = true
-        break
+        for (const pending of pendingBounds) {
+          const cx = Math.round(pending.x)
+          const cy = Math.round(pending.y)
+          const cr = Math.round(pending.x + pending.width)
+          const cb = Math.round(pending.y + pending.height)
+          const overlapX = Math.abs(cx - scissorX) < 4 || Math.abs(cr - scissorR) < 4
+          const overlapY = Math.abs(cy - scissorY) < 4 || Math.abs(cb - scissorB) < 4
+          if (!overlapX || !overlapY) continue
+          minX = Math.min(minX, cx)
+          minY = Math.min(minY, cy)
+          maxX = Math.max(maxX, cr)
+          maxY = Math.max(maxY, cb)
+        }
+        continue
       }
-    }
-
-    if (hasScissor) {
-      for (const idx of slot.cmdIndices) {
-        const cmd = commands[idx]
-        if (!cmd) continue
+      if (hasScissor) {
         if (cmd.type !== CMD.RECTANGLE && cmd.type !== CMD.BORDER) continue
         const cx = Math.round(cmd.x)
         const cy = Math.round(cmd.y)
@@ -440,15 +466,12 @@ export function paintFrame(
         minY = Math.min(minY, cy)
         maxX = Math.max(maxX, cr)
         maxY = Math.max(maxY, cb)
-      }
-    } else {
-      for (const idx of slot.cmdIndices) {
-        const cmd = commands[idx]
-        if (!cmd) continue
+      } else {
         minX = Math.min(minX, cmd.x)
         minY = Math.min(minY, cmd.y)
         maxX = Math.max(maxX, cmd.x + cmd.width)
         maxY = Math.max(maxY, cmd.y + cmd.height)
+        if (cmd.type === CMD.RECTANGLE || cmd.type === CMD.BORDER) pendingBounds.push(cmd)
       }
     }
 
@@ -459,7 +482,7 @@ export function paintFrame(
     let lh = isBg ? viewportHeight : (Math.ceil(maxY) - ly)
 
     const boundary = slotBoundaryByKey.get(slot.key)
-    const boundaryNode = boundary ? resolveNodeByPath(root, boundary.path) : null
+    const boundaryNode = boundary ? state.nodeRefById.get(boundary.nodeId) ?? null : null
     const freezeWhileInteracting = useLayerCompositing && shouldFreezeInteractionLayer(boundaryNode)
     const debugName = boundaryNode?.props.debugName ?? slot.key
     const shouldViewportClip = freezeWhileInteracting ? false : (boundaryNode?.props.viewportClip ?? true)
@@ -532,27 +555,30 @@ export function paintFrame(
     layerOrder.push(layer)
 
     const bounds = { x: lx, y: ly, width: lw, height: lh }
-    const clippedDamage = layer.damageRect ? intersectRect(layer.damageRect, bounds) : null
+    const dirtyRect = selectLayerDirtyRect(layer.dirty, layer.damageRect, bounds)
+    const clippedDamage = dirtyRect ? intersectRect(dirtyRect, bounds) : null
     const layerArea = lw * lh
     const damageArea = rectArea(clippedDamage)
     const useRegionalRepaint = !!(
-      allowRegionalRepaint
+      !forceLayerRepaint
+      && allowRegionalRepaint
+      && layer.damageRect
       && clippedDamage
       && damageArea > 0
-      && damageArea < layerArea * 0.4
+      && damageArea < layerArea * 0.5
     )
-    if (layer.damageRect) {
+    if (dirtyRect) {
       const damageMsg = clippedDamage
         ? `damage=${clippedDamage.width}x${clippedDamage.height}@(${clippedDamage.x},${clippedDamage.y}) area=${damageArea}/${layerArea}`
         : `damage=none area=0/${layerArea}`
-      log(`  [${slot.key}|${debugName}] DAMAGE allow=${allowRegionalRepaint} ${damageMsg}`)
+      if (debugCadence) log(`  [${slot.key}|${debugName}] DAMAGE allow=${allowRegionalRepaint} ${damageMsg}`)
     }
     preparedSlots.push({
       slot,
       layer,
       debugName,
       bounds,
-      dirtyRect: layer.damageRect,
+      dirtyRect,
       clippedDamage,
       isBackground: isBg,
       subtreeTransform: boundary?.hasSubtreeTransform && boundaryNode ? computeSubtreeTransformQuad(boundaryNode) : null,
@@ -571,7 +597,7 @@ export function paintFrame(
   for (const prepared of preparedSlots) {
     const dirtyRect = forceLayerRepaint
       ? prepared.bounds
-      : (prepared.useRegionalRepaint && prepared.clippedDamage ? prepared.clippedDamage : prepared.layer.damageRect)
+      : (prepared.useRegionalRepaint && prepared.clippedDamage ? prepared.clippedDamage : prepared.dirtyRect)
     const area = rectArea(dirtyRect)
     if (area <= 0 || !dirtyRect) continue
     frameDirtyRects.push(dirtyRect)
@@ -597,7 +623,7 @@ export function paintFrame(
     overlapRatio: totalPixelArea > 0 ? overlapPixelArea / totalPixelArea : 0,
     fullRepaint,
     useLayerCompositing,
-    hasSubtreeTransforms: preparedSlots.some((prepared) => !!prepared.subtreeTransform),
+    hasSubtreeTransforms: hasDirtySubtreeTransforms(preparedSlots, forceLayerRepaint),
     hasActiveInteraction: preparedSlots.some((prepared) => prepared.freezeWhileInteracting),
     transmissionMode: state.transmissionMode,
     estimatedLayeredBytes,
@@ -633,6 +659,7 @@ export function paintFrame(
       layerCache.delete(key)
     }
     if (profile) profile.paintLayerCleanupMs += performance.now() - cleanupStart
+    updateLayerStabilityCounters(preparedSlots, slotBoundaryByKey, state.nodeRefById)
     const backendEndStart = profile ? performance.now() : 0
     const frameResult = backend.endFrame?.(frameCtx)
     if (profile) profile.paintBackendEndMs += performance.now() - backendEndStart
@@ -677,8 +704,8 @@ export function paintFrame(
         subtreeTransform: prepared.subtreeTransform,
         isBackground: prepared.isBackground,
         bounds: prepared.bounds,
-        dirtyRect: prepared.layer.damageRect,
-        repaintRect: effectiveUseRegionalRepaint ? clippedDamage : prepared.layer.damageRect,
+        dirtyRect: prepared.dirtyRect,
+        repaintRect: selectLayerRepaintRect(effectiveUseRegionalRepaint, clippedDamage),
         allowRegionalRepaint: prepared.allowRegionalRepaint,
         retainedDuringInteraction: freezeWhileInteracting,
       }
@@ -688,7 +715,7 @@ export function paintFrame(
         const damage = prepared.layer.damageRect
           ? `${prepared.layer.damageRect.width}x${prepared.layer.damageRect.height}@(${prepared.layer.damageRect.x},${prepared.layer.damageRect.y})`
           : "none"
-        log(`  [${slot.key}|${prepared.debugName}] DRAG-BLOCK reuse=${canReuseStableLayer ? 1 : 0} strategy=${framePlan?.strategy ?? "none"} force=${forceLayerRepaint ? 1 : 0} regional=${useRegionalRepaint ? 1 : 0} dirty=${layer.dirty ? 1 : 0} damage=${damage} prev=(${layer.prevX},${layer.prevY},${layer.prevW}x${layer.prevH}) next=(${layer.x},${layer.y},${layer.width}x${layer.height}) z=${layer.prevZ}->${layer.z}`)
+        if (debugCadence) log(`  [${slot.key}|${prepared.debugName}] DRAG-BLOCK reuse=${canReuseStableLayer ? 1 : 0} strategy=${framePlan?.strategy ?? "none"} force=${forceLayerRepaint ? 1 : 0} regional=${useRegionalRepaint ? 1 : 0} dirty=${layer.dirty ? 1 : 0} damage=${damage} prev=(${layer.prevX},${layer.prevY},${layer.prevW}x${layer.prevH}) next=(${layer.x},${layer.y},${layer.width}x${layer.height}) z=${layer.prevZ}->${layer.z}`)
       }
 
       if (canReuseStableLayer) {
@@ -696,21 +723,21 @@ export function paintFrame(
         const renderZ = layer.z
         const needsPlacementRefresh = false
         if (freezeWhileInteracting) {
-          log(`  [${slot.key}|${prepared.debugName}] DRAG-CHECK geometry=${geometryChanged ? 1 : 0} strategy=${framePlan?.strategy ?? "none"} placement=${needsPlacementRefresh ? 1 : 0} prev=(${layer.prevX},${layer.prevY}) next=(${layer.x},${layer.y}) z=${layer.prevZ}->${layer.z}`)
+          if (debugCadence) log(`  [${slot.key}|${prepared.debugName}] DRAG-CHECK geometry=${geometryChanged ? 1 : 0} strategy=${framePlan?.strategy ?? "none"} placement=${needsPlacementRefresh ? 1 : 0} prev=(${layer.prevX},${layer.prevY}) next=(${layer.x},${layer.y}) z=${layer.prevZ}->${layer.z}`)
         }
         if (needsPlacementRefresh) {
           const moved = layerComposer?.placeLayer(imageIdForLayer(layer), lx, ly, renderZ, cellW, cellH) === true
           if (moved) {
             rendererOutput = "layered-raw"
             moveOnlyCount++
-            log(`  [${slot.key}|${prepared.debugName}] MOVE-ONLY ${lw}x${lh} at (${lx},${ly}) z=${renderZ} interaction=drag`)
+            if (debugCadence) log(`  [${slot.key}|${prepared.debugName}] MOVE-ONLY ${lw}x${lh} at (${lx},${ly}) z=${renderZ} interaction=drag`)
             markLayerClean(layer)
             continue
           }
         }
         if (needsPlacementRefresh) {
           moveFallbackCount++
-          log(`  [${slot.key}|${prepared.debugName}] MOVE-FALLBACK repaint establish layered placement`)
+          if (debugCadence) log(`  [${slot.key}|${prepared.debugName}] MOVE-FALLBACK repaint establish layered placement`)
         } else {
           const reuseStart = profile ? performance.now() : 0
           const reused = backend.reuseLayer?.({
@@ -722,25 +749,24 @@ export function paintFrame(
             stableReuseCount++
             if (framePlan?.strategy === "final-frame") rendererOutput = "final-frame-raw"
             else if (framePlan?.strategy === "layered-dirty" || framePlan?.strategy === "layered-region") rendererOutput = "layered-raw"
-            log(`  [${slot.key}|${prepared.debugName}] REUSE (stable layer)`)
+            if (debugCadence) log(`  [${slot.key}|${prepared.debugName}] REUSE (stable layer)`)
             markLayerClean(layer)
             continue
           }
         }
       }
 
-      const layerCommands: RenderCommand[] = []
-      for (const idx of slot.cmdIndices) {
-        const cmd = commands[idx]
-          if (!cmd) continue
-          if (effectiveUseRegionalRepaint && clippedDamage && !commandIntersectsRect(cmd, clippedDamage)) continue
-          layerCommands.push(cmd)
-        }
+      // IMPORTANT: Regional presentation may transmit only `clippedDamage`, but
+      // the retained GPU layer target must still be repainted with the FULL
+      // layer command stream. Filtering commands by damage rect is incorrect
+      // unless every backend paint op is clipped to that rect. Otherwise a
+      // large background/surface command that intersects a small titlebar damage
+      // can repaint over previously retained child content without repainting
+      // that child content — exactly the Lightcode "window content disappears"
+      // failure mode. Keep regional optimization at the readback/emit boundary,
+      // not at semantic command selection.
+      const layerCommands = collectLayerCommands(commands, slot.cmdIndices)
 
-      const nativePaintRefs = nativeSnapshot && nativeToTsNodeId
-        ? nativeScenePaintRefsForCommands(nativeSnapshot, layerCommands, nativeToTsNodeId)
-        : null
-      const nativePaintBackend = backend as NativeScenePaintBackend
       const basePaintCtx = {
         targetWidth: lw,
         targetHeight: lh,
@@ -754,48 +780,15 @@ export function paintFrame(
         frame: frameCtx,
         layer: layerCtx,
       }
-      let paintResult: RendererBackendPaintResult | undefined
-      let usedNativeScenePaint = false
-      if (nativePaintRefs && nativePaintBackend.paintNativeScene) {
-        const backendPaintStart = profile ? performance.now() : 0
-        paintResult = nativePaintBackend.paintNativeScene({
-          ...basePaintCtx,
-          graph: { ops: [] },
-          scene: nativeSceneHandle(),
-          refs: nativePaintRefs,
-        }) ?? undefined
-        if (profile) profile.paintBackendPaintMs += performance.now() - backendPaintStart
-        usedNativeScenePaint = !!paintResult
-        if (usedNativeScenePaint) {
-          lastNativeRenderGraphLayerCount++
-          lastNativeRenderGraphOpCount += nativePaintRefs.length
-          lastNativeRenderGraphFullyCoveredLayerCount++
-        }
-      }
-
-      if (!paintResult) {
-        // Build render graph and invoke backend.
-        // All commands carry nodeId (set by layout-adapter.endLayout()).
-        const renderGraphStart = profile ? performance.now() : 0
-        const useNativeGraphForLayer = !!(nativeSnapshot && nativeToTsNodeId && canUseNativeRenderGraphForLayer(nativeSnapshot, layerCommands, nativeToTsNodeId))
-        const graph = useNativeGraphForLayer
-          ? translateNativeRenderGraphSnapshot(nativeSnapshot!, layerCommands, renderGraphQueues, textMetaMap, nativeToTsNodeId ?? undefined)
-          : buildRenderGraphFrame(layerCommands, renderGraphQueues, textMetaMap)
-        if (profile) profile.paintRenderGraphMs += performance.now() - renderGraphStart
-        if (useNativeGraphForLayer) {
-          const nativeFrameStats = getNativeRenderGraphFrameStats(graph)
-          lastNativeRenderGraphLayerCount++
-          lastNativeRenderGraphOpCount += graph.ops.length
-          if (nativeFrameStats?.fullyCovered) lastNativeRenderGraphFullyCoveredLayerCount++
-          lastNativeRenderGraphFallbackOpCount += nativeFrameStats?.fallbackCommands ?? 0
-        }
-        const backendPaintStart = profile ? performance.now() : 0
-        paintResult = backend.paint({
-          ...basePaintCtx,
-          graph,
-        }) ?? undefined
-        if (profile) profile.paintBackendPaintMs += performance.now() - backendPaintStart
-      }
+      const renderGraphStart = profile ? performance.now() : 0
+      const graph = buildRenderGraphFrame(layerCommands, renderGraphQueues, textMetaMap)
+      if (profile) profile.paintRenderGraphMs += performance.now() - renderGraphStart
+      const backendPaintStart = profile ? performance.now() : 0
+      const paintResult = backend.paint({
+        ...basePaintCtx,
+        graph,
+      }) ?? undefined
+      if (profile) profile.paintBackendPaintMs += performance.now() - backendPaintStart
 
       if (!paintResult) throw new Error(`GPU-only renderer backend did not return a layer payload for ${slot.key}`)
       if (paintResult.output === "skip-present") rendererOutput = paintResult.strategy ?? framePlan?.strategy ?? "skip-present"
@@ -815,9 +808,9 @@ export function paintFrame(
         repaintedThisFrame++
         const renderZ = layer.z
         if (effectiveUseRegionalRepaint && clippedDamage) {
-          log(`  [${slot.key}] NATIVE-REGION ${clippedDamage.width}x${clippedDamage.height} at (${clippedDamage.x},${clippedDamage.y}) within ${lw}x${lh} z=${renderZ}`)
+          if (debugCadence) log(`  [${slot.key}] NATIVE-REGION ${clippedDamage.width}x${clippedDamage.height} at (${clippedDamage.x},${clippedDamage.y}) within ${lw}x${lh} z=${renderZ}`)
         } else {
-          log(`  [${slot.key}] NATIVE-REPAINT ${lw}x${lh} at (${lx},${ly}) z=${renderZ} cmds=${slot.cmdIndices.length}${usedNativeScenePaint ? " graph=scene" : ""}`)
+          if (debugCadence) log(`  [${slot.key}] NATIVE-REPAINT ${lw}x${lh} at (${lx},${ly}) z=${renderZ} cmds=${slot.cmdIndices.length}`)
         }
         markLayerClean(layer)
         continue
@@ -843,9 +836,9 @@ export function paintFrame(
             nativePresentationStats = nativeStats
             // Native emit succeeded — skip TS layer composer path.
             if (effectiveUseRegionalRepaint && clippedDamage) {
-              log(`  [${slot.key}] NATIVE-LAYER-REGION ${clippedDamage.width}x${clippedDamage.height} at (${clippedDamage.x},${clippedDamage.y}) within ${pw}x${ph} z=${renderZ}`)
+              if (debugCadence) log(`  [${slot.key}] NATIVE-LAYER-REGION ${clippedDamage.width}x${clippedDamage.height} at (${clippedDamage.x},${clippedDamage.y}) within ${pw}x${ph} z=${renderZ}`)
             } else {
-              log(`  [${slot.key}] NATIVE-LAYER ${pw}x${ph} at (${lx},${ly}) z=${renderZ} cmds=${slot.cmdIndices.length}`)
+              if (debugCadence) log(`  [${slot.key}] NATIVE-LAYER ${pw}x${ph} at (${lx},${ly}) z=${renderZ} cmds=${slot.cmdIndices.length}`)
             }
             markLayerClean(layer)
             continue
@@ -854,9 +847,9 @@ export function paintFrame(
         }
 
         if (effectiveUseRegionalRepaint && clippedDamage) {
-          log(`  [${slot.key}] REPAINT-REGION ${clippedDamage.width}x${clippedDamage.height} at (${clippedDamage.x},${clippedDamage.y}) within ${lw}x${lh} z=${renderZ}`)
+          if (debugCadence) log(`  [${slot.key}] REPAINT-REGION ${clippedDamage.width}x${clippedDamage.height} at (${clippedDamage.x},${clippedDamage.y}) within ${lw}x${lh} z=${renderZ}`)
         } else {
-          log(`  [${slot.key}] REPAINT ${lw}x${lh} at (${lx},${ly}) z=${renderZ} (${(lw * lh * 4 / 1024).toFixed(0)}KB) cmds=${slot.cmdIndices.length}`)
+          if (debugCadence) log(`  [${slot.key}] REPAINT ${lw}x${lh} at (${lx},${ly}) z=${renderZ} (${(lw * lh * 4 / 1024).toFixed(0)}KB) cmds=${slot.cmdIndices.length}`)
         }
         const ioStart = debugCadence ? performance.now() : 0
         const presentationStart = profile ? performance.now() : 0
@@ -898,13 +891,22 @@ export function paintFrame(
     }
   }
   if (profile) profile.paintLayerCleanupMs += performance.now() - cleanupStart
+  updateLayerStabilityCounters(preparedSlots, slotBoundaryByKey, state.nodeRefById)
 
   // ── Step 5: Final-frame strategy ──
+  // When all dirty layers were already emitted per-layer via native presentation
+  // (layered-dirty / layered-region strategy), skip the final-frame compose+readback.
+  // The terminal retains previously emitted clean layer images — no need to recompose.
+  const allLayersNativePresented = rendererOutput === "native-presented" && repaintedThisFrame > 0
+  const skipFinalCompose = allLayersNativePresented && framePlan?.strategy !== "final-frame"
   const backendEndStart = profile ? performance.now() : 0
-  const frameResult = backend.endFrame?.(frameCtx)
+  const frameResult = skipFinalCompose ? null : backend.endFrame?.(frameCtx)
   if (profile) profile.paintBackendEndMs += performance.now() - backendEndStart
   applyBackendProfile(profile, backend)
-  if (frameResult?.output === "native-presented") {
+  if (skipFinalCompose) {
+    // Per-layer native presentation already completed — no final-frame needed.
+    rendererOutput = "native-presented"
+  } else if (frameResult?.output === "native-presented") {
     // Native path: Rust already emitted the full frame — nothing to do in JS.
     rendererOutput = "native-presented"
   } else if (frameResult?.output === "final-frame-raw" && frameResult.finalFrame) {

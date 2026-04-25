@@ -1,18 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { CanvasContext, hashCanvasDisplayList, serializeCanvasDisplayList } from "./canvas"
-import { destroyNativeScene } from "./native-scene"
 import { nativeCanvasDisplayListRelease, nativeCanvasDisplayListTouch, nativeCanvasDisplayListUpdate } from "./native-canvas-display-list"
-import { disableNativeSceneGraph, enableNativeSceneGraph } from "./native-scene-graph-flags"
 import { getNativeResourceStats } from "./resource-stats"
-
-beforeEach(() => {
-  enableNativeSceneGraph()
-})
-
-afterEach(() => {
-  destroyNativeScene()
-  disableNativeSceneGraph()
-})
 
 describe("native canvas display lists", () => {
   test("serializes canvas commands deterministically", () => {

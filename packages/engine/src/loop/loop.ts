@@ -30,7 +30,8 @@ import {
   hasRecentInteraction as schedulerHasRecentInteraction,
   type InteractionKind,
 } from "./frame-scheduler"
-import { compositeFrame, type CompositeFrameState, type FrameProfile } from "./composite"
+import { bindLayerDirtyStore, compositeFrame, type CompositeFrameState, type FrameProfile } from "./composite"
+import type { LayerBoundary } from "./types"
 import { createFrameScheduler } from "../scheduler/index"
 import {
   disableNativeLayerRegistry,
@@ -39,12 +40,6 @@ import {
   isNativeLayerRegistryForcedOff,
 } from "../ffi/native-layer-registry-flags"
 import { clearNativeLayerRegistryMirror } from "../ffi/native-layer-registry"
-import { disableNativeEventDispatch, enableNativeEventDispatch, isNativeEventDispatchEnabled } from "../ffi/native-event-dispatch-flags"
-import { disableNativeRenderGraph, enableNativeRenderGraph, isNativeRenderGraphEnabled } from "../ffi/native-render-graph-flags"
-import { disableNativeSceneLayout, enableNativeSceneLayout, isNativeSceneLayoutEnabled } from "../ffi/native-scene-layout-flags"
-import { destroyNativeScene, nativeSceneCreateNode, nativeSceneSetCellSize } from "../ffi/native-scene"
-import { nativeReleasePointerCapture, nativeSetPointerCapture } from "../ffi/native-scene-events"
-import { disableNativeSceneGraph, enableNativeSceneGraph, isNativeSceneGraphEnabled } from "../ffi/native-scene-graph-flags"
 import { disableNativePresentation, enableNativePresentation, isNativePresentationEnabled, isNativePresentationForcedOff, nativePresentationForcedOffReason } from "../ffi/native-presentation-flags"
 import { getVexartFfiCallCount, getVexartFfiCallCountsBySymbol, resetVexartFfiCallCounts } from "../ffi/vexart-bridge"
 
@@ -71,13 +66,6 @@ export function setFrameProfileSink(sink: FrameProfileSink | null) {
   frameProfileSink = sink
 }
 
-function countNodes(node: TGENode): number {
-  if (node.kind === "text") return 1
-  let total = 1
-  for (const child of node.children) total += countNodes(child)
-  return total
-}
-
 function hasPointerReactiveNodes(node: TGENode): boolean {
   if (node.kind === "text") return false
   if (node.props.onMouseDown || node.props.onMouseUp || node.props.onMouseMove || node.props.onMouseOver || node.props.onMouseOut) return true
@@ -102,10 +90,6 @@ export type RenderLoopOptions = {
     forceLayerRepaint?: boolean
     nativePresentation?: boolean
     nativeLayerRegistry?: boolean
-    nativeSceneGraph?: boolean
-    nativeEventDispatch?: boolean
-    nativeSceneLayout?: boolean
-    nativeRenderGraph?: boolean
   }
 }
 
@@ -169,48 +153,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     disableNativeLayerRegistry("nativeLayerRegistry requires native presentation with SHM transport")
   }
 
-  const retainedDefaultRequested = isNativePresentationEnabled()
-  const nativeSceneGraphRequested = opts?.experimental?.nativeSceneGraph ?? retainedDefaultRequested
-  if (!nativeSceneGraphRequested) {
-    const reason = opts?.experimental?.nativeSceneGraph === false
-      ? "nativeSceneGraph disabled by render loop option"
-        : "nativeSceneGraph default requires native presentation with SHM transport"
-    disableNativeSceneGraph(reason)
-  }
-  else enableNativeSceneGraph()
-
-  const nativeEventDispatchRequested = opts?.experimental?.nativeEventDispatch ?? retainedDefaultRequested
-  if (!nativeEventDispatchRequested) {
-    const reason = opts?.experimental?.nativeEventDispatch === false
-      ? "nativeEventDispatch disabled by render loop option"
-        : "nativeEventDispatch default requires native presentation with SHM transport"
-    disableNativeEventDispatch(reason)
-  }
-  else enableNativeEventDispatch()
-
-  const nativeSceneLayoutRequested = opts?.experimental?.nativeSceneLayout ?? retainedDefaultRequested
-  if (!nativeSceneLayoutRequested) {
-    const reason = opts?.experimental?.nativeSceneLayout === false
-      ? "nativeSceneLayout disabled by render loop option"
-        : "nativeSceneLayout default requires native presentation with SHM transport"
-    disableNativeSceneLayout(reason)
-  }
-  else enableNativeSceneLayout()
-
-  const nativeRenderGraphRequested = opts?.experimental?.nativeRenderGraph ?? retainedDefaultRequested
-  if (!nativeRenderGraphRequested) {
-    const reason = opts?.experimental?.nativeRenderGraph === false
-      ? "nativeRenderGraph disabled by render loop option"
-        : "nativeRenderGraph default requires native presentation with SHM transport"
-    disableNativeRenderGraph(reason)
-  }
-  else enableNativeRenderGraph()
-
   const root = createNode("root")
-  if (isNativeSceneGraphEnabled()) {
-    root._nativeId = nativeSceneCreateNode("root")
-    nativeSceneSetCellSize(term.size.cellWidth || 8, term.size.cellHeight || 16)
-  }
   let viewportWidth = term.size.pixelWidth || term.size.cols * (term.size.cellWidth || 8)
   let viewportHeight = term.size.pixelHeight || term.size.rows * (term.size.cellHeight || 16)
   root.props = { width: viewportWidth, height: viewportHeight }
@@ -226,9 +169,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   const idleMaxFps = opts?.experimental?.idleMaxFps ?? Math.min(maxFps, 60)
   const interactionMaxFps = opts?.experimental?.interactionMaxFps ?? Math.min(maxFps, 60)
   const forceLayerRepaint = opts?.experimental?.forceLayerRepaint === true
-  const useNativePressDispatch = isNativeEventDispatchEnabled() && isNativeSceneGraphEnabled()
-  const useNativeSceneLayout = isNativeSceneLayoutEnabled() && isNativeSceneGraphEnabled()
-  const useNativeRenderGraph = isNativeRenderGraphEnabled() && isNativeSceneGraphEnabled()
   const idleFps = Math.max(1, Math.min(idleMaxFps, maxFps))
   const interactionFps = Math.max(1, Math.min(interactionMaxFps, maxFps))
   const idleInterval = Math.max(Math.round(1000 / idleFps), 8)
@@ -261,7 +201,11 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   const nodePathById = new Map<number, string>()
   const nodeRefById = new Map<number, TGENode>()
   const rectNodeById = new Map<number, TGENode>()
+  const layerBoundaries: LayerBoundary[] = []
+  const scrollContainers: TGENode[] = []
+  const nodeCountValue = { value: 0 }
   const layerCache = new Map<string, Layer>()
+  bindLayerDirtyStore(layerCache)
   const postScrollCallbacks: (() => void)[] = []
   const lastPresentedInteractionSeq = { value: 0 }
   const lastPresentedInteractionLatencyMs = { value: 0 }
@@ -408,6 +352,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     walkCounters,
     rectNodes, textNodes, boxNodes, textMetas,
     textMetaMap, rectNodeById, nodePathById, nodeRefById,
+    layerBoundaries, scrollContainers, nodeCountValue,
     renderGraphQueues,
     layerCache, activeSlotKeys, frameDirtyRects, pendingNodeDamageRects,
     getOrCreateLayer,
@@ -417,9 +362,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     backendOverride: getActiveBackend(),
     useLayerCompositing: true,
     forceLayerRepaint,
-    useNativePressDispatch,
-    useNativeSceneLayout,
-    useNativeRenderGraph,
     expFrameBudgetMs,
     transmissionMode: term.caps.transmissionMode,
     debugCadence: DEBUG_CADENCE || !!frameProfileSink,
@@ -428,7 +370,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     lastPresentedInteractionLatencyMs,
     lastPresentedInteractionType,
     lastFrameTime,
-    nodeCount: () => countNodes(root),
     log,
     renderDebug,
     dragReproDebug,
@@ -479,7 +420,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     const newH = size.pixelHeight || size.rows * (size.cellHeight || 16)
     resizeDebug(`handler cols=${size.cols} rows=${size.rows} pw=${size.pixelWidth} ph=${size.pixelHeight} cw=${size.cellWidth} ch=${size.cellHeight} newW=${newW} newH=${newH} timer=${timer ? 1 : 0} suspended=${isSuspended ? 1 : 0}`)
     viewportWidth = newW; viewportHeight = newH
-    if (isNativeSceneGraphEnabled()) nativeSceneSetCellSize(size.cellWidth || 8, size.cellHeight || 16)
     layoutAdapter.setDimensions(newW, newH)
     root.props.width = newW; root.props.height = newH
     root._widthSizing = parseSizing(newW); root._heightSizing = parseSizing(newH)
@@ -506,13 +446,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     },
     setPointerCapture(nodeId: number) {
       pointer.capturedNodeId = nodeId
-      const nativeId = nodeRefById.get(nodeId)?._nativeId
-      if (nativeId) nativeSetPointerCapture(nativeId)
     },
     releasePointerCapture(nodeId: number) {
       if (pointer.capturedNodeId === nodeId) pointer.capturedNodeId = 0
-      const nativeId = nodeRefById.get(nodeId)?._nativeId
-      if (nativeId) nativeReleasePointerCapture(nativeId)
     },
     onPostScroll(cb: () => void) {
       postScrollCallbacks.push(cb)
@@ -524,12 +460,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     markNodeLayerDamaged(nodeId: number, rect?: DamageRect) {
       const node = nodeRefById.get(nodeId)
       if (!node) return
-      let target: TGENode | null = node
-      while (target) { if (target.props.layer === true) break; target = target.parent }
-      const layer = layerCache.get(target ? `layer:${target.id}` : "bg")
+      const layer = layerCache.get(node._layerKey ?? "bg")
       if (!layer) return
       if (rect) markLayerDamaged(layer, rect); else layer.dirty = true
-      markDirty()
+      markDirty({ kind: DIRTY_KIND.NODE_VISUAL, nodeId, rect })
     },
     suspend() {
       if (isSuspended) return
@@ -554,7 +488,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       scheduledDelayMs = 0; nextFrameDeadlineMs = 0
       unsubResize()
       clearNativeLayerRegistryMirror()
-      destroyNativeScene()
       layerComposer?.destroy()
       resetLayers(); layerCache.clear()
       layoutAdapter.destroy()

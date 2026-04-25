@@ -1,9 +1,8 @@
 import type { RenderCommand } from "./render-graph"
 import type { DamageRect } from "./damage"
-import type { GpuLayerStrategyMode } from "./gpu-layer-strategy"
+import type { GpuLayerStrategyMode, NativeFramePlan } from "./gpu-layer-strategy"
 import type { RenderGraphFrame } from "./render-graph"
 import type { NativePresentationStats } from "./native-presentation-stats"
-import type { NativeFramePlan } from "./native-frame-orchestrator"
 
 /** @public */
 export type RendererBackendLayerBacking = {

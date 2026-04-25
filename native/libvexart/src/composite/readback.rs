@@ -214,7 +214,7 @@ mod tests {
         // This is a pure logic test — no wgpu needed.
         let needed_bytes = 100u32 * 100u32 * 4;
         let dst_cap = 100u32; // too small
-        // Simulate the guard: needed > dst_cap.
+                              // Simulate the guard: needed > dst_cap.
         assert!(dst_cap < needed_bytes, "buffer too small guard should fire");
     }
 

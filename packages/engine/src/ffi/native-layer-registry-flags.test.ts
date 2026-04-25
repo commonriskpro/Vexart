@@ -7,13 +7,10 @@ import {
 } from "./native-layer-registry-flags"
 
 const originalEnv = process.env.VEXART_NATIVE_LAYER_REGISTRY
-const originalRetainedEnv = process.env.VEXART_RETAINED
 
 afterEach(() => {
   if (originalEnv === undefined) delete process.env.VEXART_NATIVE_LAYER_REGISTRY
   else process.env.VEXART_NATIVE_LAYER_REGISTRY = originalEnv
-  if (originalRetainedEnv === undefined) delete process.env.VEXART_RETAINED
-  else process.env.VEXART_RETAINED = originalRetainedEnv
   enableNativeLayerRegistry()
 })
 
@@ -31,13 +28,5 @@ describe("native layer registry flags", () => {
 
     expect(isNativeLayerRegistryEnabled()).toBe(false)
     expect(nativeLayerRegistryFallbackReason()).toBe("VEXART_NATIVE_LAYER_REGISTRY=0 (env override)")
-  })
-
-  test("global retained override forces disable", () => {
-    process.env.VEXART_RETAINED = "0"
-    enableNativeLayerRegistry()
-
-    expect(isNativeLayerRegistryEnabled()).toBe(false)
-    expect(nativeLayerRegistryFallbackReason()).toBe("VEXART_RETAINED=0 (env override)")
   })
 })

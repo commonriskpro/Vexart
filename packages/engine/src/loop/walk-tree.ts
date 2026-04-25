@@ -23,6 +23,8 @@ import {
   parseAlignX,
   parseAlignY,
   resolveProps,
+  ensureImageExtra,
+  ensureCanvasExtra,
 } from "../ffi/node"
 import { measureForClay } from "../ffi/text-layout"
 import { CanvasContext, hashCanvasDisplayList, serializeCanvasDisplayList } from "../ffi/canvas"
@@ -30,6 +32,9 @@ import { nativeCanvasDisplayListTouch, nativeCanvasDisplayListUpdate, syncNative
 import { decodeImageForNode } from "./image"
 import { ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, type createVexartLayoutCtx } from "./layout-adapter"
 import type { EffectConfig, TextMeta, ImagePaintConfig, CanvasPaintConfig } from "../ffi/render-graph"
+import { shouldPromoteInteractionLayer } from "../reconciler/interaction"
+import { isDebugEnabled } from "./debug"
+import type { LayerBoundary } from "./types"
 
 // ── State bag ─────────────────────────────────────────────────────────────
 
@@ -42,21 +47,24 @@ export type WalkTreeState = {
   scrollIdCounter: { value: number }
   textMeasureIndex: { value: number }
   scrollSpeedCap: { value: number }
+  nodeCount: { value: number }
 
   // Accumulator arrays — cleared before each walk, populated during walk
   rectNodes: TGENode[]
   textNodes: TGENode[]
   boxNodes: TGENode[]
   textMetas: TextMeta[]
+  layerBoundaries: LayerBoundary[]
+  scrollContainers: TGENode[]
 
   // Lookup maps populated during walk
   nodePathById: Map<number, string>
   nodeRefById: Map<number, TGENode>
 
   // Effect / image / canvas queues
-  effectsQueue: EffectConfig[]
-  imageQueue: ImagePaintConfig[]
-  canvasQueue: CanvasPaintConfig[]
+  effectsQueue: Map<number, EffectConfig>
+  imageQueue: Map<number, ImagePaintConfig>
+  canvasQueue: Map<number, CanvasPaintConfig>
 
   // Text metadata map (keyed by content) — used during paint for multi-line layout
   textMetaMap: Map<number, TextMeta>
@@ -87,6 +95,59 @@ export type WalkTreeState = {
    * Wrapped as { value } so callers can read the final count after walkTree.
    */
   culledCount?: { value: number }
+}
+
+const VALID_WILL_CHANGE_VALUES = new Set(["transform", "opacity", "filter", "scroll"])
+const AUTO_LAYER_BUDGET = 8
+const AUTO_LAYER_MIN_AREA = 64 * 64
+
+const effectPool: EffectConfig[] = []
+let effectPoolIdx = 0
+let autoLayerCount = 0
+
+function hasBackdropEffect(node: TGENode) {
+  return !!(
+    node.props.backdropBlur ||
+    node.props.backdropBrightness !== undefined ||
+    node.props.backdropContrast !== undefined ||
+    node.props.backdropSaturate !== undefined ||
+    node.props.backdropGrayscale !== undefined ||
+    node.props.backdropInvert !== undefined ||
+    node.props.backdropSepia !== undefined ||
+    node.props.backdropHueRotate !== undefined
+  )
+}
+
+function hasPromotableArea(node: TGENode) {
+  return node.layout.width * node.layout.height >= AUTO_LAYER_MIN_AREA
+}
+
+function claimEffect(): EffectConfig {
+  const effect = effectPool[effectPoolIdx] ?? { color: 0, cornerRadius: 0 }
+  effectPool[effectPoolIdx++] = effect
+  effect.renderObjectId = undefined
+  effect.color = 0
+  effect.cornerRadius = 0
+  effect.shadow = undefined
+  effect.glow = undefined
+  effect.gradient = undefined
+  effect.backdropBlur = undefined
+  effect.backdropBrightness = undefined
+  effect.backdropContrast = undefined
+  effect.backdropSaturate = undefined
+  effect.backdropGrayscale = undefined
+  effect.backdropInvert = undefined
+  effect.backdropSepia = undefined
+  effect.backdropHueRotate = undefined
+  effect.opacity = undefined
+  effect.cornerRadii = undefined
+  effect.transform = undefined
+  effect.transformInverse = undefined
+  effect.transformBounds = undefined
+  effect.filter = undefined
+  effect._node = undefined
+  effect._stateHash = undefined
+  return effect
 }
 
 // ── collectText ───────────────────────────────────────────────────────────
@@ -137,22 +198,80 @@ export function walkTree(
   state: WalkTreeState,
   parentDir?: number,
   insideTransform?: boolean,
-  path = "r",
+  scrollContainerId = 0,
+  insideScroll = false,
 ) {
   const { clay } = state
-  state.nodePathById.set(node.id, path)
+  const dfsIndex = state.nodeCount.value++
+  if (dfsIndex === 0) {
+    effectPoolIdx = 0
+    autoLayerCount = 0
+  }
+  node._dfsIndex = dfsIndex
+  node._scrollContainerId = scrollContainerId
+  if (isDebugEnabled()) state.nodePathById.set(node.id, String(dfsIndex))
   state.nodeRefById.set(node.id, node)
 
+  if (node.kind !== "text") {
+    const props = resolveProps(node)
+    const isScroll = !!(props.scrollX || props.scrollY)
+    if (isScroll) state.scrollContainers.push(node)
+    const willChange = props.willChange
+    const willChangeValues = willChange ? (Array.isArray(willChange) ? willChange : [willChange]) : []
+    const hasValidWillChange = willChangeValues.some(v => VALID_WILL_CHANGE_VALUES.has(v))
+    const hasSubtreeTransform = !!(props.transform && node.children.length > 0)
+    const isInteractionLayer = shouldPromoteInteractionLayer(node)
+    const hasBackdrop = hasBackdropEffect(node)
+    let shouldBoundary = false
+    if (props.layer === true) {
+      node._autoLayer = false
+      shouldBoundary = true
+    } else if (isInteractionLayer || hasSubtreeTransform || hasValidWillChange) {
+      node._autoLayer = false
+      shouldBoundary = true
+    } else if (hasBackdrop && autoLayerCount < AUTO_LAYER_BUDGET) {
+      node._autoLayer = true
+      autoLayerCount++
+      shouldBoundary = true
+    } else if (node._autoLayer === true && node._unstableFrameCount >= 3) {
+      node._autoLayer = false
+      node._stableFrameCount = 0
+      node._unstableFrameCount = 0
+    } else if (node._stableFrameCount >= 3 && hasPromotableArea(node) && autoLayerCount < AUTO_LAYER_BUDGET) {
+      node._autoLayer = true
+      autoLayerCount++
+      shouldBoundary = true
+    }
+    if (shouldBoundary) {
+      state.layerBoundaries.push({
+        path: "",
+        nodeId: node.id,
+        z: state.layerBoundaries.length,
+        isScroll,
+        hasBg: props.backgroundColor !== undefined,
+        insideScroll,
+        hasSubtreeTransform,
+      })
+    }
+  }
+
   if (node.kind === "text") {
+    const props = resolveProps(node)
     const content = node.text || collectText(node)
     if (!content) return
-    const color = (node.props.color as number) || 0xe0e0e0ff
-    const fontSize = node.props.fontSize ?? 14
-    const fontId = node.props.fontId ?? 0
-    const lineHeight = node.props.lineHeight ?? Math.ceil(fontSize * 1.2)
+    const color = (props.color as number) || 0xe0e0e0ff
+    const fontSize = props.fontSize ?? 14
+    const fontId = props.fontId ?? 0
+    const lineHeight = props.lineHeight ?? Math.ceil(fontSize * 1.2)
 
     // Pre-measure text dimensions for layout (passed directly to clay.text)
-    const measurement = measureForClay(content, fontId, fontSize)
+    const measurement = node._lastMeasuredText === content && node._lastMeasuredFontId === fontId && node._lastMeasuredFontSize === fontSize && node._lastMeasurement
+      ? node._lastMeasurement
+      : measureForClay(content, fontId, fontSize)
+    node._lastMeasuredText = content
+    node._lastMeasuredFontId = fontId
+    node._lastMeasuredFontSize = fontSize
+    node._lastMeasurement = measurement
     state.textMeasureIndex.value++
 
     // Track metadata for multi-line paint
@@ -167,8 +286,10 @@ export function walkTree(
 
   // ── <img> intrinsic — leaf node that paints decoded image pixels ──
   if (node.kind === "img") {
+    const props = resolveProps(node)
+    const extra = ensureImageExtra(node)
     // Trigger async decode if not started
-    if (node._imageState === "idle" && node.props.src) {
+    if (extra.state === "idle" && props.src) {
       decodeImageForNode(node)
     }
 
@@ -178,25 +299,25 @@ export function walkTree(
     clay.setCurrentNodeId(node.id)
 
     // Sizing: use pre-parsed if explicit, else image intrinsic size, else fit
-    const imgBuf = node._imageBuffer
+    const imgBuf = extra.buffer
     const ws = node._widthSizing ?? (imgBuf ? { type: SIZING.FIXED, value: imgBuf.width } : { type: SIZING.FIT, value: 0 })
     const hs = node._heightSizing ?? (imgBuf ? { type: SIZING.FIXED, value: imgBuf.height } : { type: SIZING.FIT, value: 0 })
     clay.configureSizing(ws.type, ws.value, hs.type, hs.value)
 
     // Use a placeholder RECT so Clay emits a RECTANGLE command for painting
     const placeholderColor = 0x00000001 // near-transparent
-    clay.configureRectangle(placeholderColor, node.props.cornerRadius ?? 0)
+    clay.configureRectangle(placeholderColor, props.cornerRadius ?? 0)
     registerRectNode(node, state)
 
     // Queue image data for paintCommand
     if (imgBuf) {
-      state.imageQueue.push({
+      state.imageQueue.set(node.id, {
         renderObjectId: node.id,
         color: placeholderColor,
-        cornerRadius: node.props.cornerRadius ?? 0,
+        cornerRadius: props.cornerRadius ?? 0,
         imageBuffer: imgBuf,
-        nativeImageHandle: node._nativeImageHandle,
-        objectFit: node.props.objectFit ?? "contain",
+        nativeImageHandle: extra.nativeHandle,
+        objectFit: props.objectFit ?? "contain",
       })
     }
 
@@ -206,10 +327,12 @@ export function walkTree(
 
   // ── <canvas> intrinsic — imperative drawing surface ──
   if (node.kind === "canvas") {
+    const props = resolveProps(node)
+    const extra = ensureCanvasExtra(node)
     state.boxNodes.push(node)
 
-    const hasMouseProps = node.props.onMouseDown || node.props.onMouseUp || node.props.onMouseMove || node.props.onMouseOver || node.props.onMouseOut
-    const isInteractive = node.props.focusable || node.props.hoverStyle || node.props.activeStyle || node.props.focusStyle || node.props.onPress || hasMouseProps
+    const hasMouseProps = props.onMouseDown || props.onMouseUp || props.onMouseMove || props.onMouseOver || props.onMouseOut
+    const isInteractive = props.focusable || props.hoverStyle || props.activeStyle || props.focusStyle || props.onPress || hasMouseProps
     if (isInteractive) {
       clay.setId(`tge-node-${node.id}`)
     } else {
@@ -229,24 +352,38 @@ export function walkTree(
     registerRectNode(node, state)
 
     // Queue canvas config for paintCommand
-    if (node.props.onDraw) {
-      const ctx = new CanvasContext(node.props.viewport)
-      node.props.onDraw(ctx)
-      const bytes = serializeCanvasDisplayList(ctx._commands)
-      const hash = hashCanvasDisplayList(bytes)
-      if (node._nativeCanvasDisplayListHandle && node._canvasDisplayListHash === hash) {
-        nativeCanvasDisplayListTouch(node._nativeCanvasDisplayListHandle)
+    if (props.onDraw) {
+      const viewportKey = props.viewport ? `${props.viewport.x},${props.viewport.y},${props.viewport.zoom}` : "default"
+      const drawCacheKey = props.drawCacheKey === undefined ? null : `${props.drawCacheKey}:${viewportKey}`
+      const canReuseCommands = drawCacheKey !== null && extra.drawCacheKey === drawCacheKey && extra.displayListCommands !== null && extra.displayListHash !== null
+      let commands = extra.displayListCommands
+      let hash = extra.displayListHash
+
+      if (!canReuseCommands) {
+        const ctx = new CanvasContext(props.viewport)
+        props.onDraw(ctx)
+        commands = ctx._commands
+        const bytes = serializeCanvasDisplayList(commands)
+        hash = hashCanvasDisplayList(bytes)
+        extra.drawCacheKey = drawCacheKey
+        extra.displayListCommands = commands
+      }
+
+      if (extra.nativeHandle && extra.displayListHash === hash) {
+        nativeCanvasDisplayListTouch(extra.nativeHandle)
       } else {
+        const bytes = serializeCanvasDisplayList(commands ?? [])
         const handle = nativeCanvasDisplayListUpdate({ key: `canvas:${node.id}`, bytes })
         if (handle) syncNativeCanvasDisplayListHandle(node, handle, hash)
       }
-      state.canvasQueue.push({
+      state.canvasQueue.set(node.id, {
         renderObjectId: node.id,
         color: placeholderColor,
-        onDraw: node.props.onDraw,
-        viewport: node.props.viewport,
-        nativeDisplayListHandle: node._nativeCanvasDisplayListHandle,
-        displayListHash: node._canvasDisplayListHash,
+        onDraw: props.onDraw,
+        displayListCommands: commands ?? undefined,
+        viewport: props.viewport,
+        nativeDisplayListHandle: extra.nativeHandle,
+        displayListHash: extra.displayListHash,
       })
     }
 
@@ -255,24 +392,26 @@ export function walkTree(
   }
 
   state.boxNodes.push(node)
+  const props = resolveProps(node)
 
   // Assign Clay element ID for:
   // 1. Scroll containers — for scroll offset tracking
   // 2. Interactive nodes — for reliable layout readback (hit-testing)
-  const hasMouseProps = node.props.onMouseDown || node.props.onMouseUp || node.props.onMouseMove || node.props.onMouseOver || node.props.onMouseOut
-  const isInteractive = node.props.focusable || node.props.hoverStyle || node.props.activeStyle || node.props.focusStyle || node.props.onPress || hasMouseProps
+  const hasMouseProps = props.onMouseDown || props.onMouseUp || props.onMouseMove || props.onMouseOver || props.onMouseOut
+  const isInteractive = props.focusable || props.hoverStyle || props.activeStyle || props.focusStyle || props.onPress || hasMouseProps
   // willChange pre-promotes to own layer — needs a stable layout ID for layer key (REQ-2B-501)
-  const hasWillChange = node.props.willChange !== undefined
-  const needsLayoutId = isInteractive || node.props.layer === true || hasWillChange
-  if (node.props.scrollX || node.props.scrollY) {
+  const hasWillChange = props.willChange !== undefined
+  const isScrollContainer = !!(props.scrollX || props.scrollY)
+  const needsLayoutId = isInteractive || props.layer === true || hasWillChange
+  if (isScrollContainer) {
     // Use node.id for a stable scroll ID that survives frame resets.
     // Fallback to user-provided scrollId for programmatic scroll handles.
-    const sid = node.props.scrollId ?? `tge-scroll-${node.id}`
+    const sid = props.scrollId ?? `tge-scroll-${node.id}`
     clay.setId(sid)
     // Track counter for legacy compat (still incremented but not used for ID)
     state.scrollIdCounter.value++
-    if (node.props.scrollSpeed) {
-      state.scrollSpeedCap.value = node.props.scrollSpeed
+    if (props.scrollSpeed) {
+      state.scrollSpeedCap.value = props.scrollSpeed
     }
   } else if (needsLayoutId) {
     clay.setId(`tge-node-${node.id}`)
@@ -282,25 +421,25 @@ export function walkTree(
   clay.setCurrentNodeId(node.id)
 
   // Layout — resolve aliases, then use per-side padding if set
-  const dir = parseDirection(node.props.direction ?? node.props.flexDirection)
-  const gap = node.props.gap ?? 0
-  const ax = parseAlignX(node.props.alignX ?? node.props.justifyContent)
-  const ay = parseAlignY(node.props.alignY ?? node.props.alignItems)
+  const dir = parseDirection(props.direction ?? props.flexDirection)
+  const gap = props.gap ?? 0
+  const ax = parseAlignX(props.alignX ?? props.justifyContent)
+  const ay = parseAlignY(props.alignY ?? props.alignItems)
 
-  const hasPerSidePadding = node.props.paddingLeft !== undefined || node.props.paddingRight !== undefined ||
-                            node.props.paddingTop !== undefined || node.props.paddingBottom !== undefined
+  const hasPerSidePadding = props.paddingLeft !== undefined || props.paddingRight !== undefined ||
+                            props.paddingTop !== undefined || props.paddingBottom !== undefined
   if (hasPerSidePadding) {
-    const basePx = node.props.paddingX ?? node.props.padding ?? 0
-    const basePy = node.props.paddingY ?? node.props.padding ?? 0
+    const basePx = props.paddingX ?? props.padding ?? 0
+    const basePy = props.paddingY ?? props.padding ?? 0
     clay.configureLayoutFull(dir,
-      node.props.paddingLeft ?? basePx,
-      node.props.paddingRight ?? basePx,
-      node.props.paddingTop ?? basePy,
-      node.props.paddingBottom ?? basePy,
+      props.paddingLeft ?? basePx,
+      props.paddingRight ?? basePx,
+      props.paddingTop ?? basePy,
+      props.paddingBottom ?? basePy,
       gap, ax, ay)
   } else {
-    const px = node.props.paddingX ?? node.props.padding ?? 0
-    const py = node.props.paddingY ?? node.props.padding ?? 0
+    const px = props.paddingX ?? props.padding ?? 0
+    const py = props.paddingY ?? props.padding ?? 0
     clay.configureLayout(dir, px, py, gap, ax, ay)
   }
 
@@ -309,33 +448,33 @@ export function walkTree(
   // (activated via alignItems=255/None in _defaultOpen). No manual stretch
   // emulation needed — removed the stretchW/stretchH hack that incorrectly
   // used flexGrow (main-axis only) for cross-axis stretching.
-  const hasFlexGrowAlias = node.props.flexGrow !== undefined && node.props.width === undefined
+  const hasFlexGrowAlias = props.flexGrow !== undefined && props.width === undefined
   const FIT_DEFAULT: SizingInfo = { type: SIZING.FIT, value: 0 }
   const GROW_DEFAULT: SizingInfo = { type: SIZING.GROW, value: 0 }
   const ws = hasFlexGrowAlias
     ? GROW_DEFAULT
     : (node._widthSizing ?? FIT_DEFAULT)
   const hs = node._heightSizing ?? FIT_DEFAULT
-  const hasMinMax = node.props.minWidth !== undefined || node.props.maxWidth !== undefined ||
-                    node.props.minHeight !== undefined || node.props.maxHeight !== undefined
+  const hasMinMax = props.minWidth !== undefined || props.maxWidth !== undefined ||
+                    props.minHeight !== undefined || props.maxHeight !== undefined
   if (hasMinMax) {
     clay.configureSizingMinMax(
-      ws.type, ws.value, node.props.minWidth ?? 0, node.props.maxWidth ?? 100000,
-      hs.type, hs.value, node.props.minHeight ?? 0, node.props.maxHeight ?? 100000,
+      ws.type, ws.value, props.minWidth ?? 0, props.maxWidth ?? 100000,
+      hs.type, hs.value, props.minHeight ?? 0, props.maxHeight ?? 100000,
     )
   } else {
     clay.configureSizing(ws.type, ws.value, hs.type, hs.value)
   }
 
   // Floating / absolute positioning
-  if (node.props.floating) {
-    const f = node.props.floating
-    const ox = node.props.floatOffset?.x ?? 0
-    const oy = node.props.floatOffset?.y ?? 0
-    const z = node.props.zIndex ?? 0
-    const ape = node.props.floatAttach?.element ?? ATTACH_POINT.LEFT_TOP
-    const app = node.props.floatAttach?.parent ?? ATTACH_POINT.LEFT_TOP
-    const pc = node.props.pointerPassthrough ? POINTER_CAPTURE.PASSTHROUGH : POINTER_CAPTURE.CAPTURE
+  if (props.floating) {
+    const f = props.floating
+    const ox = props.floatOffset?.x ?? 0
+    const oy = props.floatOffset?.y ?? 0
+    const z = props.zIndex ?? 0
+    const ape = props.floatAttach?.element ?? ATTACH_POINT.LEFT_TOP
+    const app = props.floatAttach?.parent ?? ATTACH_POINT.LEFT_TOP
+    const pc = props.pointerPassthrough ? POINTER_CAPTURE.PASSTHROUGH : POINTER_CAPTURE.CAPTURE
 
     if (f === "parent") {
       clay.configureFloating(ATTACH_TO.PARENT, ox, oy, z, ape, app, pc, 0)
@@ -348,7 +487,7 @@ export function walkTree(
   }
 
   // Resolve visual props — merges hoverStyle/activeStyle when the node is hovered/active
-  const vp = resolveProps(node)
+  const vp = props
 
   // Inject a RECT command from Clay when needed for:
   // 1. Visual effects (gradient, backdrop filter, opacity)
@@ -371,7 +510,11 @@ export function walkTree(
 
     // Record effects for this RECT — matched during paint
     if (vp.shadow || vp.glow || vp.gradient || hasBackdropFilter || vp.cornerRadii || vp.opacity !== undefined || hasTransform || vp.filter) {
-      const effect: EffectConfig = { renderObjectId: node.id, color: bgColor, cornerRadius: cr, _node: node }
+      const effect = claimEffect()
+      effect.renderObjectId = node.id
+      effect.color = bgColor
+      effect.cornerRadius = cr
+      effect._node = node
       if (vp.shadow) {
         effect.shadow = vp.shadow
       }
@@ -407,15 +550,15 @@ export function walkTree(
           effect.transform = new Float64Array(9)
         }
       }
-      state.effectsQueue.push(effect)
+      state.effectsQueue.set(node.id, effect)
     }
   }
 
   // Borders — per-side or uniform (uses resolved visual props)
   const maxInteractiveBorder = Math.max(
-    node.props.focusStyle?.borderWidth ?? 0,
-    node.props.hoverStyle?.borderWidth ?? 0,
-    node.props.activeStyle?.borderWidth ?? 0,
+    props.focusStyle?.borderWidth ?? 0,
+    props.hoverStyle?.borderWidth ?? 0,
+    props.activeStyle?.borderWidth ?? 0,
   )
   const effectiveBorderWidth = Math.max(vp.borderWidth ?? 0, maxInteractiveBorder)
 
@@ -438,10 +581,10 @@ export function walkTree(
   // Scroll / clip container.
   // Scroll offsets are applied TS-side in applyScrollOffsets() after layout —
   // the offset params here were Clay-era no-ops and have been removed.
-  if (node.props.scrollX || node.props.scrollY) {
+  if (props.scrollX || props.scrollY) {
     clay.configureClip(
-      node.props.scrollX ?? false,
-      node.props.scrollY ?? false,
+      props.scrollX ?? false,
+      props.scrollY ?? false,
       0,
       0,
     )
@@ -452,7 +595,6 @@ export function walkTree(
   // Scroll containers are exempt — their children may scroll into view.
   // We still open/close the element for the current node (Clay needs balance),
   // but we skip all children — reducing Clay commands and paint work.
-  const isScrollContainer = !!(node.props.scrollX || node.props.scrollY)
   if (
     state.cullingEnabled
     && !isScrollContainer
@@ -477,9 +619,11 @@ export function walkTree(
 
   // Propagate transform ancestry to children
   const childInsideXform = insideTransform || hasTransform
+  const childScrollContainerId = isScrollContainer ? node.id : scrollContainerId
+  const childInsideScroll = insideScroll || isScrollContainer
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i]
-    walkTree(child, state, dir, childInsideXform, `${path}.${i}`)
+    walkTree(child, state, dir, childInsideXform, childScrollContainerId, childInsideScroll)
   }
 
   clay.closeElement()

@@ -12,7 +12,6 @@ import { markDirty } from "./reconciler/dirty"
 import { resetFocus } from "./reconciler/focus"
 import { resetSelection } from "./reconciler/selection"
 import { bindLoop, unbindLoop } from "./reconciler/pointer"
-import { destroyNativeScene } from "./ffi/native-scene"
 import type { Terminal } from "./terminal/index"
 
 // ── Mouse button constants ──
@@ -131,10 +130,6 @@ export type MountOptions = {
     forceLayerRepaint?: boolean
     nativePresentation?: boolean
     nativeLayerRegistry?: boolean
-    nativeSceneGraph?: boolean
-    nativeEventDispatch?: boolean
-    nativeSceneLayout?: boolean
-    nativeRenderGraph?: boolean
   }
 }
 
@@ -217,7 +212,6 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
       resetFocus()
       resetSelection()
       dispose()
-      destroyNativeScene()
       loop.destroy()
     },
   }

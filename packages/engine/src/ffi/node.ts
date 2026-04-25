@@ -2,11 +2,11 @@
  * TGENode — the bridge between SolidJS reconciler and Taffy/vexart layout.
  *
  * SolidJS creates/manipulates TGENodes via createRenderer methods.
- * Each frame, we walk the TGENode tree and emit layout commands into
- * the vexart_layout_compute packed buffer per design §8.
+ * Each frame, we walk the TGENode tree and emit commands into the
+ * TypeScript layout adapter per design §8.
  *
  * TGENode is a simple retained tree. Taffy is stateless from TS's perspective
- * (layout tree is rebuilt each frame via the flat command buffer).
+ * (layout tree is rebuilt each frame from TS state).
  *
  * Phase 2 migration: removed Clay FFI dependency. Constants are now
  * local to this module, matching the same numeric values for backward
@@ -14,8 +14,8 @@
  */
 
 // ── Layout constants (previously from clay.ts) ──
-// Numeric values preserved for backward compat; semantics map to Taffy via
-// vexart_layout_compute's command buffer parser in native/libvexart/src/layout/tree.rs.
+// Numeric values preserved for backward compat; semantics map through
+// packages/engine/src/loop/layout-adapter.ts.
 
 /** @public Sizing type enum that preserves the legacy clay sizing values. */
 export const SIZING = {
@@ -42,6 +42,19 @@ export type TGENodeKind = "box" | "text" | "img" | "canvas" | "root"
 
 /** @public */
 export type InteractionMode = "none" | "drag"
+
+export type NodeImageExtra = {
+  buffer: { data: Uint8Array; width: number; height: number } | null
+  state: "idle" | "loading" | "loaded" | "error"
+  nativeHandle: bigint | null
+}
+
+export type NodeCanvasExtra = {
+  displayListCommands: import("./canvas").DrawCmd[] | null
+  displayListHash: string | null
+  drawCacheKey: string | null
+  nativeHandle: bigint | null
+}
 
 /** @public Event passed to onPress handlers. Supports stopPropagation like DOM events. */
 export type PressEvent = {
@@ -306,6 +319,8 @@ export type TGEProps = {
   // Canvas (<canvas> intrinsic)
   /** Imperative draw callback — compat/lab canvas API, called each frame with a CanvasContext. */
   onDraw?: (ctx: import("./canvas").CanvasContext) => void
+  /** Optional cache key for static canvas draw lists. Change it when onDraw output changes. */
+  drawCacheKey?: string | number
   /** Viewport transform for pan and zoom. */
   viewport?: { x: number; y: number; zoom: number }
 
@@ -340,16 +355,10 @@ export type TGENode = {
   _hovered: boolean
   _active: boolean
   _focused: boolean
-  /** Decoded image RGBA data — set by image decode pipeline, read by paintCommand */
-  _imageBuffer: { data: Uint8Array; width: number; height: number } | null
-  /** Native image asset handle for Rust-owned image resource identity. */
-  _nativeImageHandle: bigint | null
-  /** Native canvas display-list handle for Rust-owned canvas command storage. */
-  _nativeCanvasDisplayListHandle: bigint | null
-  /** Hash of the last uploaded canvas display list. */
-  _canvasDisplayListHash: string | null
-  /** Image decode state — prevents re-triggering decode */
-  _imageState: "idle" | "loading" | "loaded" | "error"
+  /** Image-only retained data, allocated lazily for img nodes. */
+  _imageExtra: NodeImageExtra | null
+  /** Canvas-only retained data, allocated lazily for canvas nodes. */
+  _canvasExtra: NodeCanvasExtra | null
   /** Pre-parsed width sizing — resolved once in setProperty, read every frame */
   _widthSizing: SizingInfo | null
   /** Pre-parsed height sizing — resolved once in setProperty, read every frame */
@@ -364,6 +373,33 @@ export type TGENode = {
   _accTransformInverse: Float64Array | null
   /** Transient engine-managed interaction mode for compositor optimizations. */
   _interactionMode: InteractionMode
+  /** Cached effective visual props from resolveProps(). */
+  _vp: TGEProps | null
+  /** True when cached effective visual props must be recomputed. */
+  _vpDirty: boolean
+  /** Sibling position maintained by insert/remove for O(1) next-sibling lookup. */
+  _siblingIndex: number
+  /** Count of focusable nodes in this subtree, including self. */
+  _focusableCount: number
+  /** Pre-order index assigned by walkTree for paint-order comparisons. */
+  _dfsIndex: number
+  /** Nearest scroll-container ancestor id, or 0 when none. */
+  _scrollContainerId: number
+  /** Consecutive frames where this node's layer/subtree stayed clean. */
+  _stableFrameCount: number
+  /** Consecutive frames where this node's layer/subtree changed. */
+  _unstableFrameCount: number
+  /** True when this node was promoted by automatic compositor heuristics. */
+  _autoLayer: boolean
+  /** Key of the owning compositor layer, or "bg" for the default layer. */
+  _layerKey: string | null
+  /** Monotonic mutation generation bumped by setProperty. */
+  _generation: number
+  /** Last text measurement cache key and result for per-node frame reuse. */
+  _lastMeasuredText: string | null
+  _lastMeasuredFontId: number
+  _lastMeasuredFontSize: number
+  _lastMeasurement: { width: number; height: number } | null
 }
 
 /** @public Computed layout geometry written each frame after layout. */
@@ -391,11 +427,8 @@ export function createNode(kind: TGENodeKind): TGENode {
     _hovered: false,
     _active: false,
     _focused: false,
-    _imageBuffer: null,
-    _nativeImageHandle: null,
-    _nativeCanvasDisplayListHandle: null,
-    _canvasDisplayListHash: null,
-    _imageState: "idle",
+    _imageExtra: kind === "img" ? { buffer: null, state: "idle", nativeHandle: null } : null,
+    _canvasExtra: kind === "canvas" ? { displayListCommands: null, displayListHash: null, drawCacheKey: null, nativeHandle: null } : null,
     _widthSizing: null,
     _heightSizing: null,
     _transform: null,
@@ -403,7 +436,32 @@ export function createNode(kind: TGENodeKind): TGENode {
     _accTransform: null,
     _accTransformInverse: null,
     _interactionMode: "none",
+    _vp: null,
+    _vpDirty: true,
+    _siblingIndex: 0,
+    _focusableCount: 0,
+    _dfsIndex: 0,
+    _scrollContainerId: 0,
+    _stableFrameCount: 0,
+    _unstableFrameCount: 0,
+    _autoLayer: false,
+    _layerKey: null,
+    _generation: 0,
+    _lastMeasuredText: null,
+    _lastMeasuredFontId: -1,
+    _lastMeasuredFontSize: -1,
+    _lastMeasurement: null,
   }
+}
+
+export function ensureImageExtra(node: TGENode): NodeImageExtra {
+  if (!node._imageExtra) node._imageExtra = { buffer: null, state: "idle", nativeHandle: null }
+  return node._imageExtra
+}
+
+export function ensureCanvasExtra(node: TGENode): NodeCanvasExtra {
+  if (!node._canvasExtra) node._canvasExtra = { displayListCommands: null, displayListHash: null, drawCacheKey: null, nativeHandle: null }
+  return node._canvasExtra
 }
 
 /**
@@ -415,6 +473,7 @@ export function createNode(kind: TGENodeKind): TGENode {
  */
 /** @public */
 export function resolveProps(node: TGENode): TGEProps {
+  if (node._vp && !node._vpDirty) return node._vp
   let base = node.props
 
   // 1. Merge style prop (direct props override style)
@@ -432,8 +491,11 @@ export function resolveProps(node: TGENode): TGEProps {
 
   // 3. Merge interactive states
   const needsInteractive = node._hovered || node._active || node._focused
-  if (!needsInteractive) return base
-  if (!base.hoverStyle && !base.activeStyle && !base.focusStyle) return base
+  if (!needsInteractive || (!base.hoverStyle && !base.activeStyle && !base.focusStyle)) {
+    node._vp = base
+    node._vpDirty = false
+    return base
+  }
 
   let resolved = base
   if (node._hovered && base.hoverStyle) {
@@ -445,6 +507,8 @@ export function resolveProps(node: TGENode): TGEProps {
   if (node._active && base.activeStyle) {
     resolved = { ...resolved, ...base.activeStyle }
   }
+  node._vp = resolved
+  node._vpDirty = false
   return resolved
 }
 
@@ -456,36 +520,82 @@ export function createTextNode(text: string): TGENode {
 
 /** @public */
 export function insertChild(parent: TGENode, child: TGENode, anchor?: TGENode) {
+  if (child.parent === parent && anchor === child) return
+
+  const previousParent = child.parent
+  if (previousParent) {
+    const previousIndex = previousParent.children.indexOf(child)
+    if (previousIndex >= 0) {
+      previousParent.children.splice(previousIndex, 1)
+      updateSiblingIndices(previousParent, previousIndex)
+      adjustFocusableAncestors(previousParent, -child._focusableCount)
+    }
+  }
+
   child.parent = parent
+  child.destroyed = false
+  let insertIndex = parent.children.length
   if (anchor) {
     const idx = parent.children.indexOf(anchor)
     if (idx >= 0) {
       parent.children.splice(idx, 0, child)
+      insertIndex = idx
+      updateSiblingIndices(parent, insertIndex)
+      adjustFocusableAncestors(parent, child._focusableCount)
       return
     }
   }
   parent.children.push(child)
+  child._siblingIndex = insertIndex
+  adjustFocusableAncestors(parent, child._focusableCount)
 }
 
 /** @public */
 export function removeChild(parent: TGENode, child: TGENode) {
   const idx = parent.children.indexOf(child)
-  if (idx >= 0) parent.children.splice(idx, 1)
+  if (idx >= 0) {
+    parent.children.splice(idx, 1)
+    updateSiblingIndices(parent, idx)
+    adjustFocusableAncestors(parent, -child._focusableCount)
+  }
   child.parent = null
   child.destroyed = true
 }
 
+function updateSiblingIndices(parent: TGENode, start: number) {
+  for (let i = start; i < parent.children.length; i++) {
+    parent.children[i]._siblingIndex = i
+  }
+}
+
+export function adjustFocusableAncestors(node: TGENode | null, delta: number) {
+  if (delta === 0) return
+  let current = node
+  while (current) {
+    current._focusableCount = Math.max(0, current._focusableCount + delta)
+    current = current.parent
+  }
+}
+
 // ── Color parsing ──
+
+const _colorCache = new Map<string, number>()
 
 /** @public */
 export function parseColor(value: string | number | undefined): number {
   if (value === undefined) return 0
-  if (typeof value === "number") return value
+  if (typeof value === "number") return value >>> 0
+  const cached = _colorCache.get(value)
+  if (cached !== undefined) return cached
   // "#rrggbb" or "#rrggbbaa"
   const hex = value.startsWith("#") ? value.slice(1) : value
-  if (hex.length === 6) return (parseInt(hex, 16) << 8 | 0xff) >>> 0
-  if (hex.length === 8) return parseInt(hex, 16) >>> 0
-  return 0
+  const result = hex.length === 6
+    ? (parseInt(hex, 16) << 8 | 0xff) >>> 0
+    : hex.length === 8
+      ? parseInt(hex, 16) >>> 0
+      : 0
+  _colorCache.set(value, result)
+  return result
 }
 
 // ── Sizing parsing ──

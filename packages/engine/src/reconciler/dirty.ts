@@ -7,6 +7,7 @@ import type { DamageRect } from "../ffi/damage"
 
 const DIRTY_DEBUG_LOG = "/tmp/tge-dirty.log"
 const DIRTY_LOG_LIMIT = 200
+const DIRTY_DEBUG = process.env.TGE_DEBUG_DIRTY === "1"
 
 /** @public */
 export const DIRTY_KIND = {
@@ -43,7 +44,7 @@ export function createDirtyTracker(): DirtyTracker {
     markDirty() {
       dirty = true
       version += 1
-      if (process.env.TGE_DEBUG_DIRTY === "1" && dirtyLogCount < DIRTY_LOG_LIMIT) {
+      if (DIRTY_DEBUG && dirtyLogCount < DIRTY_LOG_LIMIT) {
         dirtyLogCount++
         const stack = new Error().stack
           ?.split("\n")

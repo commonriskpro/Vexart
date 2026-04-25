@@ -15,21 +15,14 @@ import {
   removeChild,
   parseColor,
   parseSizing,
+  adjustFocusableAncestors,
 } from "../ffi/node"
-import { markDirty } from "./dirty"
+import { DIRTY_KIND, markDirty } from "./dirty"
 import { createHandle } from "./handle"
 import { markLayerBacked, onNodePropertyChanged, onSubtreeChanged, unmarkLayerBacked } from "../animation/compositor-path"
 import { registerNodeFocusable, unregisterNodeFocusable, updateNodeFocusEntry } from "./focus"
 import { markNodeLayerDamaged } from "./pointer"
-import {
-  nativeSceneCreateNode,
-  nativeSceneDestroyNode,
-  nativeSceneInsert,
-  nativeSceneRemove,
-  nativeSceneSetProp,
-  nativeSceneSetText,
-} from "../ffi/native-scene"
-import { isNativeSceneGraphEnabled } from "../ffi/native-scene-graph-flags"
+import { markLayerDirtyByKey } from "../loop/composite"
 
 // ── Color props that need pre-parsing ──
 // These are resolved from string → u32 ONCE in setProperty,
@@ -87,6 +80,16 @@ const VISUAL_DAMAGE_PROPS = new Set([
   "viewport",
 ])
 
+const FLAG_VISUAL_DAMAGE = 1
+const FLAG_COLOR = 2
+const FLAG_STYLE_SUB_COLOR = 4
+const FLAG_COMPOSITOR = 8
+const PROP_FLAGS: Record<string, number> = {}
+for (const prop of VISUAL_DAMAGE_PROPS) PROP_FLAGS[prop] = (PROP_FLAGS[prop] ?? 0) | FLAG_VISUAL_DAMAGE
+for (const prop of COLOR_PROPS) PROP_FLAGS[prop] = (PROP_FLAGS[prop] ?? 0) | FLAG_COLOR
+for (const prop of STYLE_SUB_COLOR_PROPS) PROP_FLAGS[prop] = (PROP_FLAGS[prop] ?? 0) | FLAG_STYLE_SUB_COLOR
+for (const prop of ["layer", "willChange", "transform", "transformOrigin", "opacity", "filter"]) PROP_FLAGS[prop] = (PROP_FLAGS[prop] ?? 0) | FLAG_COMPOSITOR
+
 function markNodeVisualDamage(node: TGENode) {
   if (node.layout.width > 0 && node.layout.height > 0) {
     markNodeLayerDamaged(node.id, {
@@ -122,7 +125,8 @@ function resolveGlow(glow: unknown): unknown {
 function resolveInteractiveStyle(style: unknown): unknown {
   if (!style || typeof style !== "object") return style
   const resolved: Record<string, unknown> = { ...(style as Record<string, unknown>) }
-  for (const key of STYLE_SUB_COLOR_PROPS) {
+  for (const key of Object.keys(resolved)) {
+    if ((PROP_FLAGS[key] & FLAG_STYLE_SUB_COLOR) === 0) continue
     if (key in resolved) {
       resolved[key] = resolveColor(resolved[key])
     }
@@ -139,11 +143,34 @@ function resolveInteractiveStyle(style: unknown): unknown {
  * only recurses into children that are focusable or have their own children.
  */
 function unregisterSubtree(node: TGENode) {
+  if (node._focusableCount === 0) return
   if (node.props.focusable) unregisterNodeFocusable(node)
   for (const child of node.children) {
-    if (child.props.focusable || child.children.length > 0) {
+    if (child._focusableCount > 0) {
       unregisterSubtree(child)
     }
+  }
+}
+
+function markPropsDirty(node: TGENode) {
+  node._vpDirty = true
+}
+
+function bumpNodeMutation(node: TGENode) {
+  node._generation++
+  let current: TGENode | null = node
+  while (current) {
+    current._stableFrameCount = 0
+    current._unstableFrameCount = Math.max(1, current._unstableFrameCount)
+    current = current.parent
+  }
+}
+
+function markNodeDirty(node: TGENode) {
+  bumpNodeMutation(node)
+  markDirty({ kind: DIRTY_KIND.NODE_VISUAL, nodeId: node.id })
+  if (node._layerKey) {
+    markLayerDirtyByKey(node._layerKey)
   }
 }
 
@@ -163,6 +190,10 @@ function syncCompositorLayerBacking(node: TGENode) {
   unmarkLayerBacked(node.id)
 }
 
+function maybeNotifyCompositor(node: TGENode, name: string) {
+  if (((PROP_FLAGS[name] ?? 0) & FLAG_COMPOSITOR) !== 0) onNodePropertyChanged(node.id, name)
+}
+
 function unmarkSubtreeLayerBacking(node: TGENode) {
   unmarkLayerBacked(node.id)
   for (const child of node.children) {
@@ -173,30 +204,23 @@ function unmarkSubtreeLayerBacking(node: TGENode) {
 const renderer = createRenderer<TGENode>({
   createElement(type: string): TGENode {
     const kind = type === "text" ? "text" : type === "img" || type === "image" ? "img" : type === "canvas" || type === "surface" ? "canvas" : "box"
-    const node = createNode(kind)
-    if (isNativeSceneGraphEnabled()) {
-      node._nativeId = nativeSceneCreateNode(kind)
-    }
-    return node
+    return createNode(kind)
   },
 
   createTextNode(value: string): TGENode {
-    const node = createTextNode(String(value))
-    if (isNativeSceneGraphEnabled()) {
-      node._nativeId = nativeSceneCreateNode("text")
-      nativeSceneSetText(node._nativeId, node.text)
-    }
-    return node
+    return createTextNode(String(value))
   },
 
   replaceText(node: TGENode, value: string) {
     node.text = String(value)
-    nativeSceneSetText(node._nativeId, node.text)
     markNodeVisualDamage(node)
-    markDirty()
+    markNodeDirty(node)
   },
 
   setProperty(node: TGENode, name: string, value: unknown) {
+    const currentProps = node.props as Record<string, unknown>
+    if (currentProps[name] === value) return
+
     // ref callback — pass a NodeHandle to the user
     if (name === "ref" && typeof value === "function") {
       (value as (handle: ReturnType<typeof createHandle>) => void)(createHandle(node))
@@ -205,6 +229,7 @@ const renderer = createRenderer<TGENode>({
 
     // Padding shorthand: [Y, X] or [T, R, B, L] → expand to per-side props
     if (name === "padding" && Array.isArray(value)) {
+      markPropsDirty(node)
       const p = value as number[]
       if (p.length === 2) {
         // [Y, X]
@@ -215,37 +240,28 @@ const renderer = createRenderer<TGENode>({
         node.props.paddingTop = p[0]; node.props.paddingRight = p[1]
         node.props.paddingBottom = p[2]; node.props.paddingLeft = p[3]
       }
-      nativeSceneSetProp(node._nativeId, "padding", value)
-      markDirty()
+      markNodeDirty(node)
       return
     }
 
     // Margin shorthand: [Y, X] or [T, R, B, L] → expand to per-side props.
     if (name === "margin" && Array.isArray(value)) {
+      markPropsDirty(node)
       const p = value as number[]
       if (p.length === 2) {
         node.props.marginTop = p[0]; node.props.marginBottom = p[0]
         node.props.marginLeft = p[1]; node.props.marginRight = p[1]
-        nativeSceneSetProp(node._nativeId, "marginTop", p[0])
-        nativeSceneSetProp(node._nativeId, "marginBottom", p[0])
-        nativeSceneSetProp(node._nativeId, "marginLeft", p[1])
-        nativeSceneSetProp(node._nativeId, "marginRight", p[1])
       } else if (p.length === 4) {
         node.props.marginTop = p[0]; node.props.marginRight = p[1]
         node.props.marginBottom = p[2]; node.props.marginLeft = p[3]
-        nativeSceneSetProp(node._nativeId, "marginTop", p[0])
-        nativeSceneSetProp(node._nativeId, "marginRight", p[1])
-        nativeSceneSetProp(node._nativeId, "marginBottom", p[2])
-        nativeSceneSetProp(node._nativeId, "marginLeft", p[3])
-      } else {
-        nativeSceneSetProp(node._nativeId, "margin", value)
       }
-      markDirty()
+      markNodeDirty(node)
       return
     }
 
     // style prop — merge: direct props override style
     if (name === "style" && typeof value === "object" && value !== null) {
+      markPropsDirty(node)
       const style = value as Record<string, unknown>
       for (const key of Object.keys(style)) {
         // Only set if NOT already set as a direct prop
@@ -253,91 +269,98 @@ const renderer = createRenderer<TGENode>({
           (node.props as Record<string, unknown>)[key] = style[key]
         }
       }
-      nativeSceneSetProp(node._nativeId, "style", style)
-      markDirty()
+      markNodeDirty(node)
       return
     }
 
     // ── Pre-parse colors: string → u32 once, not every frame ──
-    if (COLOR_PROPS.has(name)) {
-      (node.props as Record<string, unknown>)[name] = resolveColor(value)
-      nativeSceneSetProp(node._nativeId, name, (node.props as Record<string, unknown>)[name])
+    const flags = PROP_FLAGS[name] ?? 0
+
+    if ((flags & FLAG_COLOR) !== 0) {
+      markPropsDirty(node)
+      ;(node.props as Record<string, unknown>)[name] = resolveColor(value)
       markNodeVisualDamage(node)
-      markDirty()
+      markNodeDirty(node)
       return
     }
 
     // ── Pre-parse sizing: string → SizingInfo once, not every frame ──
     if (name === "width") {
-      (node.props as Record<string, unknown>)[name] = value
+      markPropsDirty(node)
+      ;(node.props as Record<string, unknown>)[name] = value
       node._widthSizing = parseSizing(value as number | string | undefined)
-      nativeSceneSetProp(node._nativeId, name, value)
-      markDirty()
+      markNodeDirty(node)
       return
     }
     if (name === "height") {
-      (node.props as Record<string, unknown>)[name] = value
+      markPropsDirty(node)
+      ;(node.props as Record<string, unknown>)[name] = value
       node._heightSizing = parseSizing(value as number | string | undefined)
-      nativeSceneSetProp(node._nativeId, name, value)
-      markDirty()
+      markNodeDirty(node)
       return
     }
 
     // Pre-parse glow.color
     if (name === "glow") {
-      (node.props as Record<string, unknown>)[name] = resolveGlow(value)
-      nativeSceneSetProp(node._nativeId, name, (node.props as Record<string, unknown>)[name])
+      markPropsDirty(node)
+      ;(node.props as Record<string, unknown>)[name] = resolveGlow(value)
       markNodeVisualDamage(node)
-      markDirty()
+      markNodeDirty(node)
       return
     }
 
     // Pre-parse interactive style color fields
     if (name === "hoverStyle" || name === "activeStyle" || name === "focusStyle") {
-      (node.props as Record<string, unknown>)[name] = resolveInteractiveStyle(value)
-      nativeSceneSetProp(node._nativeId, name, (node.props as Record<string, unknown>)[name])
+      markPropsDirty(node)
+      ;(node.props as Record<string, unknown>)[name] = resolveInteractiveStyle(value)
       markNodeVisualDamage(node)
-      markDirty()
+      markNodeDirty(node)
       return
     }
 
     // focusable prop — auto-register/unregister in focus system
     if (name === "focusable") {
-      (node.props as Record<string, unknown>)[name] = value
+      markPropsDirty(node)
+      const wasFocusable = !!node.props.focusable
+      const isFocusable = !!value
+      ;(node.props as Record<string, unknown>)[name] = value
+      if (wasFocusable !== isFocusable) {
+        const delta = isFocusable ? 1 : -1
+        node._focusableCount = Math.max(0, node._focusableCount + delta)
+        adjustFocusableAncestors(node.parent, delta)
+      }
       if (value) {
         registerNodeFocusable(node)
       } else {
         unregisterNodeFocusable(node)
       }
-      nativeSceneSetProp(node._nativeId, name, value)
-      onNodePropertyChanged(node.id, name)
-      markDirty()
+      maybeNotifyCompositor(node, name)
+      markNodeDirty(node)
       return
     }
 
     // onKeyDown / onPress on a focusable node — update the focus entry
     if (name === "onKeyDown" || name === "onPress") {
-      (node.props as Record<string, unknown>)[name] = value
+      markPropsDirty(node)
+      ;(node.props as Record<string, unknown>)[name] = value
       updateNodeFocusEntry(node)
-      nativeSceneSetProp(node._nativeId, name, value)
-      onNodePropertyChanged(node.id, name)
-      markDirty()
+      maybeNotifyCompositor(node, name)
+      markNodeDirty(node)
       return
     }
 
-    (node.props as Record<string, unknown>)[name] = value
+    markPropsDirty(node)
+    ;(node.props as Record<string, unknown>)[name] = value
     if (name === "layer" || name === "willChange") syncCompositorLayerBacking(node)
-    nativeSceneSetProp(node._nativeId, name, value)
-    onNodePropertyChanged(node.id, name)
-    if (VISUAL_DAMAGE_PROPS.has(name)) markNodeVisualDamage(node)
-    markDirty()
+    maybeNotifyCompositor(node, name)
+    if ((flags & FLAG_VISUAL_DAMAGE) !== 0) markNodeVisualDamage(node)
+    markNodeDirty(node)
   },
 
   insertNode(parent: TGENode, node: TGENode, anchor?: TGENode) {
     insertChild(parent, node, anchor)
     syncCompositorLayerBacking(node)
     onSubtreeChanged(parent.id)
-    nativeSceneInsert(parent._nativeId, node._nativeId, anchor?._nativeId)
     markDirty()
   },
 
@@ -352,8 +375,6 @@ const renderer = createRenderer<TGENode>({
     unregisterSubtree(node)
     unmarkSubtreeLayerBacking(node)
     onSubtreeChanged(parent.id)
-    nativeSceneRemove(parent._nativeId, node._nativeId)
-    nativeSceneDestroyNode(node._nativeId)
     removeChild(parent, node)
     markDirty()
   },
@@ -368,8 +389,7 @@ const renderer = createRenderer<TGENode>({
 
   getNextSibling(node: TGENode): TGENode | undefined {
     if (!node.parent) return undefined
-    const idx = node.parent.children.indexOf(node)
-    return node.parent.children[idx + 1]
+    return node.parent.children[node._siblingIndex + 1]
   },
 })
 

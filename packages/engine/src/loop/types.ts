@@ -10,7 +10,7 @@
 import type { TGENode } from "../ffi/node"
 import type { RenderCommand } from "../ffi/render-graph"
 import type { EffectConfig, TextMeta, ImagePaintConfig, CanvasPaintConfig } from "../ffi/render-graph"
-import type { PositionedCommand } from "../ffi/layout-writeback"
+import type { PositionedCommand } from "./layout-adapter"
 import type { DamageRect } from "../ffi/damage"
 import type { Layer } from "../ffi/layers"
 import type { Terminal } from "../terminal/index"
@@ -64,9 +64,9 @@ export type WalkResult = {
   textNodes: TGENode[]
   boxNodes: TGENode[]
   textMetas: TextMeta[]
-  effectsQueue: EffectConfig[]
-  imageQueue: ImagePaintConfig[]
-  canvasQueue: CanvasPaintConfig[]
+  effectsQueue: Map<number, EffectConfig>
+  imageQueue: Map<number, ImagePaintConfig>
+  canvasQueue: Map<number, CanvasPaintConfig>
   nodePathById: Map<number, string>
   nodeRefById: Map<number, TGENode>
   /** Tier 2: count of nodes skipped by AABB viewport cull (Phase 3.3). */
@@ -74,14 +74,14 @@ export type WalkResult = {
 }
 
 /**
- * layout-adapter → layout-writeback
+ * layout-adapter → layout map
  *
- * Produced after vexart_layout_compute: flat RenderCommand array and
- * per-node positioned layout keyed by bigint node id.
+ * Produced after layout-adapter: flat RenderCommand array and
+ * per-node positioned layout keyed by numeric node id.
  */
 export type LayoutResult = {
   commands: RenderCommand[]
-  layoutMap: Map<bigint, PositionedCommand>
+  layoutMap: Map<number, PositionedCommand>
 }
 
 /**
@@ -102,7 +102,7 @@ export type LayerSlot = {
  * Records the node's path, z-order, and scroll/transform metadata.
  */
 export type LayerBoundary = {
-  path: string
+  path?: string
   nodeId: number
   z: number
   /** True if this node is a scroll container. */

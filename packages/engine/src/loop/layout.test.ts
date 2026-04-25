@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { createNode } from "../ffi/node"
-import { NATIVE_EVENT_KIND, type NativePointerEventRecord } from "../ffi/native-scene-events"
+import { createNode, insertChild } from "../ffi/node"
 import { CMD, type RenderCommand } from "../ffi/render-graph"
-import { damageRectForLayoutTransition, dispatchNativeInteractionFrame, updateCommandsToLayoutMap, type InteractiveStatesBag } from "./layout"
+import { damageRectForLayoutTransition, sortNodesByStackingPaintOrder, updateCommandsToLayoutMap } from "./layout"
 
 describe("updateCommandsToLayoutMap", () => {
   test("realigns regular and scissor commands by nodeId", () => {
@@ -13,8 +12,8 @@ describe("updateCommandsToLayoutMap", () => {
     ]
 
     const layoutMap = new Map([
-      [10n, { nodeId: 10n, x: 100, y: 200, width: 300, height: 400, contentX: 0, contentY: 0, contentW: 0, contentH: 0 }],
-      [20n, { nodeId: 20n, x: 50, y: 60, width: 70, height: 80, contentX: 0, contentY: 0, contentW: 0, contentH: 0 }],
+      [10, { nodeId: 10, x: 100, y: 200, width: 300, height: 400, contentX: 0, contentY: 0, contentW: 0, contentH: 0 }],
+      [20, { nodeId: 20, x: 50, y: 60, width: 70, height: 80, contentX: 0, contentY: 0, contentW: 0, contentH: 0 }],
     ])
 
     updateCommandsToLayoutMap(commands, layoutMap)
@@ -45,45 +44,28 @@ describe("damageRectForLayoutTransition", () => {
   })
 })
 
-describe("dispatchNativeInteractionFrame", () => {
-  test("clears pointer capture after native mouse-up callbacks run", () => {
-    const node = createNode("box")
-    node._nativeId = 7n
-    let captureDuringMouseUp = -1
-    const bag: InteractiveStatesBag = {
-      rectNodes: [node],
-      rectNodeById: new Map([[node.id, node]]),
-      pointerX: 10,
-      pointerY: 10,
-      pointerDown: false,
-      pointerDirty: false,
-      pendingPress: false,
-      pendingRelease: true,
-      capturedNodeId: node.id,
-      pressOriginSet: true,
-      prevActiveNode: node,
-      cellWidth: 8,
-      cellHeight: 16,
-      onChanged: () => {},
-    }
-    node.props.onMouseUp = () => {
-      captureDuringMouseUp = bag.capturedNodeId
-    }
+describe("sortNodesByStackingPaintOrder", () => {
+  test("keeps descendant z-index scoped to its parent context", () => {
+    const root = createNode("box")
+    const upper = createNode("box")
+    const upperChild = createNode("box")
+    const lower = createNode("box")
+    const escapingChild = createNode("box")
 
-    dispatchNativeInteractionFrame(bag, () => [{
-      nodeId: 7n,
-      eventKind: NATIVE_EVENT_KIND.MOUSE_UP,
-      flags: 0,
-      x: 10,
-      y: 10,
-      nodeX: 1,
-      nodeY: 1,
-      width: 20,
-      height: 20,
-    } satisfies NativePointerEventRecord])
+    upper.props = { floating: "parent", zIndex: 20 }
+    lower.props = { floating: "parent", zIndex: 10 }
+    escapingChild.props = { floating: "parent", zIndex: 999 }
 
-    expect(captureDuringMouseUp).toBe(node.id)
-    expect(bag.capturedNodeId).toBe(0)
-    expect(bag.pressOriginSet).toBe(false)
+    insertChild(root, upper)
+    insertChild(root, lower)
+    insertChild(upper, upperChild)
+    insertChild(lower, escapingChild)
+
+    expect(sortNodesByStackingPaintOrder([upperChild, escapingChild, upper, lower])).toEqual([
+      lower,
+      escapingChild,
+      upper,
+      upperChild,
+    ])
   })
 })

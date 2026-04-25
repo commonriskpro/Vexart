@@ -1,331 +1,453 @@
 import { createSignal } from "solid-js"
 
-export const LIGHTCODE_WINDOW_STATUS = {
+export const LIGHTCODE_OS_WINDOW_STATE = {
   NORMAL: "normal",
   MINIMIZED: "minimized",
   MAXIMIZED: "maximized",
   CLOSED: "closed",
 } as const
 
-export type LightcodeWindowStatus = (typeof LIGHTCODE_WINDOW_STATUS)[keyof typeof LIGHTCODE_WINDOW_STATUS]
-
-export const LIGHTCODE_RESIZE_EDGE = {
+export const LIGHTCODE_OS_RESIZE_EDGE = {
   RIGHT: "right",
   BOTTOM: "bottom",
-  CORNER: "corner",
+  BOTTOM_RIGHT: "bottom-right",
 } as const
 
-export type LightcodeResizeEdge = (typeof LIGHTCODE_RESIZE_EDGE)[keyof typeof LIGHTCODE_RESIZE_EDGE]
+export const LIGHTCODE_OS_WINDOW_KIND = {
+  EDITOR: "editor",
+  DIFF: "diff",
+  MEMORY: "memory",
+  AGENT: "agent",
+  RUNNER: "runner",
+} as const
 
-export interface LightcodeWindowRect {
+export const LIGHTCODE_OS_SURFACE_KIND = {
+  DESKTOP: "desktop",
+  WINDOW: "window",
+  DIALOG: "dialog",
+  MENU: "menu",
+  TOOLTIP: "tooltip",
+  DOCK: "dock",
+  NOTIFICATION: "notification",
+  DRAG: "drag",
+} as const
+
+export const LIGHTCODE_OS_SURFACE_LAYER = {
+  BACKGROUND: "background",
+  DESKTOP: "desktop",
+  BELOW: "below",
+  WINDOW: "window",
+  ABOVE: "above",
+  DOCK: "dock",
+  MODAL: "modal",
+  POPUP: "popup",
+  TOOLTIP: "tooltip",
+  DRAG: "drag",
+  OVERLAY: "overlay",
+  SYSTEM: "system",
+} as const
+
+export const LIGHTCODE_OS_KEYBOARD_MODE = {
+  NONE: "none",
+  ON_DEMAND: "on-demand",
+  EXCLUSIVE: "exclusive",
+} as const
+
+export const LIGHTCODE_OS_POINTER_MODE = {
+  AUTO: "auto",
+  NONE: "none",
+  PASSTHROUGH: "passthrough",
+} as const
+
+export type LightcodeOsWindowState = (typeof LIGHTCODE_OS_WINDOW_STATE)[keyof typeof LIGHTCODE_OS_WINDOW_STATE]
+export type LightcodeOsResizeEdge = (typeof LIGHTCODE_OS_RESIZE_EDGE)[keyof typeof LIGHTCODE_OS_RESIZE_EDGE]
+export type LightcodeOsWindowKind = (typeof LIGHTCODE_OS_WINDOW_KIND)[keyof typeof LIGHTCODE_OS_WINDOW_KIND]
+export type LightcodeOsSurfaceKind = (typeof LIGHTCODE_OS_SURFACE_KIND)[keyof typeof LIGHTCODE_OS_SURFACE_KIND]
+export type LightcodeOsSurfaceLayer = (typeof LIGHTCODE_OS_SURFACE_LAYER)[keyof typeof LIGHTCODE_OS_SURFACE_LAYER]
+export type LightcodeOsKeyboardMode = (typeof LIGHTCODE_OS_KEYBOARD_MODE)[keyof typeof LIGHTCODE_OS_KEYBOARD_MODE]
+export type LightcodeOsPointerMode = (typeof LIGHTCODE_OS_POINTER_MODE)[keyof typeof LIGHTCODE_OS_POINTER_MODE]
+
+export interface LightcodeOsRect {
   x: number
   y: number
   width: number
   height: number
 }
 
-export interface LightcodeDesktopRect {
+export interface LightcodeOsDesktopRect {
   width: number
   height: number
-  inset: number
+  topbarHeight: number
+  dockHeight: number
 }
 
-export interface LightcodeWindowInput {
-  id: string
-  title: string
-  subtitle?: string
-  rect: LightcodeWindowRect
-  minWidth?: number
-  minHeight?: number
-  status?: LightcodeWindowStatus
-  zIndex?: number
-}
-
-export interface LightcodeWindowSnapshot {
+export interface LightcodeOsWindowInput {
   id: string
   title: string
   subtitle: string
-  rect: LightcodeWindowRect
-  restoreRect: LightcodeWindowRect
-  minWidth: number
-  minHeight: number
-  status: LightcodeWindowStatus
-  zIndex: number
-  active: boolean
+  kind: LightcodeOsWindowKind
+  surfaceKind?: LightcodeOsSurfaceKind
+  layer?: LightcodeOsSurfaceLayer
+  ownerId?: string
+  modalFor?: string
+  focusable?: boolean
+  keyboardMode?: LightcodeOsKeyboardMode
+  pointerMode?: LightcodeOsPointerMode
+  rect: LightcodeOsRect
+  minWidth?: number
+  minHeight?: number
+  state?: LightcodeOsWindowState
 }
 
-export interface LightcodeWindowManagerOptions {
-  windows: LightcodeWindowInput[]
-  desktop: LightcodeDesktopRect
+export interface LightcodeOsWindowSnapshot extends LightcodeOsWindowInput {
+  rect: LightcodeOsRect
+  restoreRect: LightcodeOsRect
+  minWidth: number
+  minHeight: number
+  state: LightcodeOsWindowState
+  surfaceKind: LightcodeOsSurfaceKind
+  layer: LightcodeOsSurfaceLayer
+  focusable: boolean
+  keyboardMode: LightcodeOsKeyboardMode
+  pointerMode: LightcodeOsPointerMode
+  stackIndex: number
+  zIndex: number
+  active: boolean
+  main: boolean
+  keyboard: boolean
+}
+
+export interface LightcodeOsWindowManagerOptions {
+  windows: LightcodeOsWindowInput[]
+  desktop: LightcodeOsDesktopRect
   baseZIndex?: number
 }
 
-export interface LightcodeWindowManager {
-  windows: () => readonly LightcodeWindowSnapshot[]
-  visibleWindows: () => readonly LightcodeWindowSnapshot[]
-  minimizedWindows: () => readonly LightcodeWindowSnapshot[]
+export interface LightcodeOsWindowManager {
+  windows: () => readonly LightcodeOsWindowSnapshot[]
+  visibleWindows: () => readonly LightcodeOsWindowSnapshot[]
+  paintWindows: () => readonly LightcodeOsWindowSnapshot[]
+  hitWindows: () => readonly LightcodeOsWindowSnapshot[]
+  minimizedWindows: () => readonly LightcodeOsWindowSnapshot[]
   activeId: () => string | null
+  mainId: () => string | null
+  keyboardId: () => string | null
+  layerZIndex: (layer: LightcodeOsSurfaceLayer) => number
   focus: (id: string) => void
-  move: (id: string, rect: LightcodeWindowRect) => void
-  moveBy: (id: string, deltaX: number, deltaY: number) => void
-  resize: (id: string, rect: LightcodeWindowRect) => void
-  resizeBy: (id: string, edge: LightcodeResizeEdge, deltaX: number, deltaY: number) => void
+  raise: (id: string) => void
+  moveTo: (id: string, rect: LightcodeOsRect) => void
+  resizeTo: (id: string, rect: LightcodeOsRect) => void
+  resizeBy: (id: string, edge: LightcodeOsResizeEdge, deltaX: number, deltaY: number) => void
   minimize: (id: string) => void
-  maximize: (id: string) => void
   restore: (id: string) => void
   toggleMaximize: (id: string) => void
   close: (id: string) => void
   reopen: (id: string) => void
 }
 
-const DEFAULT_MIN_WIDTH = 220
-const DEFAULT_MIN_HEIGHT = 120
-const DEFAULT_BASE_Z_INDEX = 100
-const MAX_WINDOW_Z_INDEX = 8_999
+function cloneRect(rect: LightcodeOsRect): LightcodeOsRect {
+  return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+}
 
-function cloneRect(rect: LightcodeWindowRect): LightcodeWindowRect {
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max)
+}
+
+function workArea(desktop: LightcodeOsDesktopRect) {
   return {
-    x: rect.x,
-    y: rect.y,
-    width: rect.width,
-    height: rect.height,
+    x: 12,
+    y: desktop.topbarHeight + 10,
+    width: Math.max(180, desktop.width - 24),
+    height: Math.max(120, desktop.height - desktop.topbarHeight - desktop.dockHeight - 20),
   }
 }
 
-function clampRect(rect: LightcodeWindowRect, minWidth: number, minHeight: number): LightcodeWindowRect {
+const LIGHTCODE_OS_LAYER_ORDER: Record<LightcodeOsSurfaceLayer, number> = {
+  [LIGHTCODE_OS_SURFACE_LAYER.BACKGROUND]: 0,
+  [LIGHTCODE_OS_SURFACE_LAYER.DESKTOP]: 1,
+  [LIGHTCODE_OS_SURFACE_LAYER.BELOW]: 2,
+  [LIGHTCODE_OS_SURFACE_LAYER.WINDOW]: 3,
+  [LIGHTCODE_OS_SURFACE_LAYER.ABOVE]: 4,
+  [LIGHTCODE_OS_SURFACE_LAYER.DOCK]: 5,
+  [LIGHTCODE_OS_SURFACE_LAYER.MODAL]: 6,
+  [LIGHTCODE_OS_SURFACE_LAYER.POPUP]: 7,
+  [LIGHTCODE_OS_SURFACE_LAYER.TOOLTIP]: 8,
+  [LIGHTCODE_OS_SURFACE_LAYER.DRAG]: 9,
+  [LIGHTCODE_OS_SURFACE_LAYER.OVERLAY]: 10,
+  [LIGHTCODE_OS_SURFACE_LAYER.SYSTEM]: 11,
+}
+
+const LIGHTCODE_OS_LAYER_STRIDE = 1_000
+
+function layerOrder(layer: LightcodeOsSurfaceLayer) {
+  return LIGHTCODE_OS_LAYER_ORDER[layer]
+}
+
+export function lightcodeOsLayerZIndex(layer: LightcodeOsSurfaceLayer, baseZIndex = 100) {
+  return baseZIndex + layerOrder(layer) * LIGHTCODE_OS_LAYER_STRIDE
+}
+
+function defaultLayer(surfaceKind: LightcodeOsSurfaceKind): LightcodeOsSurfaceLayer {
+  if (surfaceKind === LIGHTCODE_OS_SURFACE_KIND.DESKTOP) return LIGHTCODE_OS_SURFACE_LAYER.DESKTOP
+  if (surfaceKind === LIGHTCODE_OS_SURFACE_KIND.DOCK) return LIGHTCODE_OS_SURFACE_LAYER.DOCK
+  if (surfaceKind === LIGHTCODE_OS_SURFACE_KIND.DIALOG) return LIGHTCODE_OS_SURFACE_LAYER.MODAL
+  if (surfaceKind === LIGHTCODE_OS_SURFACE_KIND.MENU) return LIGHTCODE_OS_SURFACE_LAYER.POPUP
+  if (surfaceKind === LIGHTCODE_OS_SURFACE_KIND.TOOLTIP) return LIGHTCODE_OS_SURFACE_LAYER.TOOLTIP
+  if (surfaceKind === LIGHTCODE_OS_SURFACE_KIND.NOTIFICATION) return LIGHTCODE_OS_SURFACE_LAYER.OVERLAY
+  if (surfaceKind === LIGHTCODE_OS_SURFACE_KIND.DRAG) return LIGHTCODE_OS_SURFACE_LAYER.DRAG
+  return LIGHTCODE_OS_SURFACE_LAYER.WINDOW
+}
+
+function defaultFocusable(surfaceKind: LightcodeOsSurfaceKind) {
+  return surfaceKind === LIGHTCODE_OS_SURFACE_KIND.WINDOW || surfaceKind === LIGHTCODE_OS_SURFACE_KIND.DIALOG || surfaceKind === LIGHTCODE_OS_SURFACE_KIND.MENU
+}
+
+function defaultKeyboardMode(surfaceKind: LightcodeOsSurfaceKind): LightcodeOsKeyboardMode {
+  if (surfaceKind === LIGHTCODE_OS_SURFACE_KIND.DIALOG || surfaceKind === LIGHTCODE_OS_SURFACE_KIND.MENU) return LIGHTCODE_OS_KEYBOARD_MODE.EXCLUSIVE
+  if (surfaceKind === LIGHTCODE_OS_SURFACE_KIND.WINDOW) return LIGHTCODE_OS_KEYBOARD_MODE.ON_DEMAND
+  return LIGHTCODE_OS_KEYBOARD_MODE.NONE
+}
+
+function defaultPointerMode(surfaceKind: LightcodeOsSurfaceKind): LightcodeOsPointerMode {
+  if (surfaceKind === LIGHTCODE_OS_SURFACE_KIND.DESKTOP || surfaceKind === LIGHTCODE_OS_SURFACE_KIND.TOOLTIP) return LIGHTCODE_OS_POINTER_MODE.PASSTHROUGH
+  return LIGHTCODE_OS_POINTER_MODE.AUTO
+}
+
+function maximizedRect(desktop: LightcodeOsDesktopRect): LightcodeOsRect {
+  const area = workArea(desktop)
+  return { x: area.x, y: area.y, width: area.width, height: area.height }
+}
+
+function clampRect(rect: LightcodeOsRect, desktop: LightcodeOsDesktopRect, minWidth: number, minHeight: number): LightcodeOsRect {
+  const area = workArea(desktop)
+  const width = Math.min(Math.max(rect.width, minWidth), area.width)
+  const height = Math.min(Math.max(rect.height, minHeight), area.height)
+  const maxX = area.x + Math.max(0, area.width - Math.min(88, width))
+  const maxY = area.y + Math.max(0, area.height - Math.min(42, height))
+
   return {
-    x: Math.round(rect.x),
-    y: Math.round(rect.y),
-    width: Math.max(minWidth, Math.round(rect.width)),
-    height: Math.max(minHeight, Math.round(rect.height)),
+    x: clampNumber(rect.x, area.x - width + 88, maxX),
+    y: clampNumber(rect.y, area.y, maxY),
+    width,
+    height,
   }
 }
 
-function maximizedRect(desktop: LightcodeDesktopRect): LightcodeWindowRect {
-  const inset = desktop.inset
-  return {
-    x: inset,
-    y: inset,
-    width: Math.max(0, desktop.width - inset * 2),
-    height: Math.max(0, desktop.height - inset * 2),
-  }
-}
-
-function createSnapshot(input: LightcodeWindowInput, index: number, baseZIndex: number, desktop: LightcodeDesktopRect): LightcodeWindowSnapshot {
-  const status = input.status ?? LIGHTCODE_WINDOW_STATUS.NORMAL
-  const rect = status === LIGHTCODE_WINDOW_STATUS.MAXIMIZED
-    ? maximizedRect(desktop)
-    : cloneRect(input.rect)
-  return {
-    id: input.id,
-    title: input.title,
-    subtitle: input.subtitle ?? "",
-    rect,
-    restoreRect: cloneRect(input.rect),
-    minWidth: input.minWidth ?? DEFAULT_MIN_WIDTH,
-    minHeight: input.minHeight ?? DEFAULT_MIN_HEIGHT,
-    status,
-    zIndex: input.zIndex ?? baseZIndex + index,
-    active: false,
-  }
-}
-
-function sortByZIndex(windows: readonly LightcodeWindowSnapshot[]): LightcodeWindowSnapshot[] {
+function sortByPaintOrder(windows: readonly LightcodeOsWindowSnapshot[]) {
   return [...windows].sort((a, b) => a.zIndex - b.zIndex)
 }
 
-function canActivate(window: LightcodeWindowSnapshot): boolean {
-  if (window.status === LIGHTCODE_WINDOW_STATUS.CLOSED) return false
-  if (window.status === LIGHTCODE_WINDOW_STATUS.MINIMIZED) return false
-  return true
+function canActivate(window: LightcodeOsWindowSnapshot) {
+  return window.focusable && window.state !== LIGHTCODE_OS_WINDOW_STATE.CLOSED && window.state !== LIGHTCODE_OS_WINDOW_STATE.MINIMIZED
 }
 
-function renormalizeZIndexes(items: readonly LightcodeWindowSnapshot[], active: string, baseZIndex: number): LightcodeWindowSnapshot[] {
-  const ordered = sortByZIndex(items.filter((window) => window.id !== active))
-  let zIndex = baseZIndex
-  const zById = new Map<string, number>()
-  for (const window of ordered) {
-    zById.set(window.id, zIndex)
-    zIndex = Math.min(zIndex + 1, MAX_WINDOW_Z_INDEX - 1)
-  }
-  zById.set(active, Math.min(Math.max(zIndex, baseZIndex + 1), MAX_WINDOW_Z_INDEX))
-  return items.map((window) => ({ ...window, zIndex: zById.get(window.id) ?? window.zIndex }))
+function canReceiveKeyboard(window: LightcodeOsWindowSnapshot) {
+  return canActivate(window) && window.keyboardMode !== LIGHTCODE_OS_KEYBOARD_MODE.NONE
 }
 
-function activateTopmost(items: readonly LightcodeWindowSnapshot[]): { activeId: string | null; windows: LightcodeWindowSnapshot[] } {
-  const active = sortByZIndex(items.filter(canActivate)).at(-1)
+function visible(window: LightcodeOsWindowSnapshot) {
+  return window.state !== LIGHTCODE_OS_WINDOW_STATE.CLOSED && window.state !== LIGHTCODE_OS_WINDOW_STATE.MINIMIZED
+}
+
+function computeZIndex(window: LightcodeOsWindowSnapshot, baseZIndex: number) {
+  return lightcodeOsLayerZIndex(window.layer, baseZIndex) + window.stackIndex
+}
+
+function normalizeZ(windows: readonly LightcodeOsWindowSnapshot[], activeId: string | null, mainId: string | null, keyboardId: string | null, baseZIndex: number) {
+  return windows.map((window) => ({
+    ...window,
+    zIndex: computeZIndex(window, baseZIndex),
+    active: activeId === window.id && canActivate(window),
+    main: mainId === window.id && canActivate(window),
+    keyboard: keyboardId === window.id && canReceiveKeyboard(window),
+  }))
+}
+
+function activateTopmost(windows: readonly LightcodeOsWindowSnapshot[]) {
+  const active = sortByPaintOrder(windows).reverse().find(canActivate)
+  return active?.id ?? null
+}
+
+function keyboardTopmost(windows: readonly LightcodeOsWindowSnapshot[]) {
+  const keyboard = sortByPaintOrder(windows).reverse().find(canReceiveKeyboard)
+  return keyboard?.id ?? null
+}
+
+function nextStackIndex(windows: readonly LightcodeOsWindowSnapshot[], layer: LightcodeOsSurfaceLayer) {
+  const stack = windows.filter((window) => window.layer === layer).map((window) => window.stackIndex)
+  return stack.length === 0 ? 0 : Math.max(...stack) + 1
+}
+
+function raiseFamily(windows: readonly LightcodeOsWindowSnapshot[], id: string) {
+  const target = windows.find((window) => window.id === id)
+  if (!target || !visible(target)) return windows
+  const owned = windows.filter((window) => window.ownerId === id && visible(window))
+  const targetIndex = nextStackIndex(windows, target.layer)
+  const targetRaised = windows.map((window) => window.id === id ? { ...window, stackIndex: targetIndex } : window)
+  return owned.reduce((current, child) => {
+    const childIndex = nextStackIndex(current, child.layer)
+    return current.map((window) => window.id === child.id ? { ...window, stackIndex: childIndex } : window)
+  }, targetRaised)
+}
+
+function snapshot(input: LightcodeOsWindowInput, index: number, desktop: LightcodeOsDesktopRect, baseZIndex: number): LightcodeOsWindowSnapshot {
+  const state = input.state ?? LIGHTCODE_OS_WINDOW_STATE.NORMAL
+  const minWidth = input.minWidth ?? 240
+  const minHeight = input.minHeight ?? 150
+  const surfaceKind = input.surfaceKind ?? LIGHTCODE_OS_SURFACE_KIND.WINDOW
+  const layer = input.layer ?? defaultLayer(surfaceKind)
+  const focusable = input.focusable ?? defaultFocusable(surfaceKind)
+  const keyboardMode = input.keyboardMode ?? defaultKeyboardMode(surfaceKind)
+  const pointerMode = input.pointerMode ?? defaultPointerMode(surfaceKind)
+  const rect = state === LIGHTCODE_OS_WINDOW_STATE.MAXIMIZED
+    ? maximizedRect(desktop)
+    : clampRect(input.rect, desktop, minWidth, minHeight)
+  const stackIndex = index
+
   return {
-    activeId: active?.id ?? null,
-    windows: items.map((window) => ({ ...window, active: active?.id === window.id })),
+    ...input,
+    rect,
+    restoreRect: cloneRect(input.rect),
+    minWidth,
+    minHeight,
+    state,
+    surfaceKind,
+    layer,
+    focusable,
+    keyboardMode,
+    pointerMode,
+    stackIndex,
+    zIndex: lightcodeOsLayerZIndex(layer, baseZIndex) + stackIndex,
+    active: false,
+    main: false,
+    keyboard: false,
   }
 }
 
-/**
- * Application-local Lightcode window manager.
- *
- * This is intentionally not a public Vexart package yet. The API can harden in
- * Lightcode first, then graduate to `@vexart/windowing` once proven.
- */
-export function createWindowManager(options: LightcodeWindowManagerOptions): LightcodeWindowManager {
-  const baseZIndex = options.baseZIndex ?? DEFAULT_BASE_Z_INDEX
-  const initial = options.windows.map((window, index) => createSnapshot(window, index, baseZIndex, options.desktop))
-  const firstOpen = initial.find((window) => window.status !== LIGHTCODE_WINDOW_STATUS.CLOSED)
-  const [windows, setWindows] = createSignal<readonly LightcodeWindowSnapshot[]>(initial)
-  const [activeId, setActiveId] = createSignal<string | null>(firstOpen?.id ?? null)
+export function createLightcodeOsWindowManager(options: LightcodeOsWindowManagerOptions): LightcodeOsWindowManager {
+  const baseZIndex = options.baseZIndex ?? 100
+  const initial = options.windows.map((window, index) => snapshot(window, index, options.desktop, baseZIndex))
+  const firstActive = activateTopmost(initial)
+  const firstKeyboard = keyboardTopmost(initial)
+  const [windows, setWindows] = createSignal<readonly LightcodeOsWindowSnapshot[]>(normalizeZ(initial, firstActive, firstActive, firstKeyboard, baseZIndex))
 
-  if (firstOpen) {
-    const id = firstOpen.id
-    setWindows((current) => current.map((window) => ({ ...window, active: window.id === id })))
+  function update(updateFn: (window: LightcodeOsWindowSnapshot, list: readonly LightcodeOsWindowSnapshot[]) => LightcodeOsWindowSnapshot) {
+    setWindows((current) => {
+      const next = current.map((window) => updateFn(window, current))
+      const active = next.find((window) => window.active && canActivate(window))?.id ?? activateTopmost(next)
+      const main = next.find((window) => window.main && canActivate(window))?.id ?? active
+      const keyboard = next.find((window) => window.keyboard && canReceiveKeyboard(window))?.id ?? keyboardTopmost(next)
+      return normalizeZ(next, active, main, keyboard, baseZIndex)
+    })
   }
 
-  function updateWindow(id: string, update: (window: LightcodeWindowSnapshot, current: readonly LightcodeWindowSnapshot[]) => LightcodeWindowSnapshot) {
-    setWindows((current) => current.map((window) => (window.id === id ? update(window, current) : window)))
+  function raise(id: string) {
+    setWindows((current) => {
+      const raised = raiseFamily(current, id)
+      const active = current.find((window) => window.active && canActivate(window))?.id ?? activateTopmost(raised)
+      const main = current.find((window) => window.main && canActivate(window))?.id ?? active
+      const keyboard = current.find((window) => window.keyboard && canReceiveKeyboard(window))?.id ?? keyboardTopmost(raised)
+      return normalizeZ(raised, active, main, keyboard, baseZIndex)
+    })
   }
 
   function focus(id: string) {
-    const current = windows()
-    const target = current.find((window) => window.id === id)
-    if (!target) return
-    if (target.status === LIGHTCODE_WINDOW_STATUS.CLOSED) return
-
-    setActiveId(id)
-    setWindows((items) => renormalizeZIndexes(items.map((window) => {
-      if (window.id !== id) return { ...window, active: false }
-      if (window.status !== LIGHTCODE_WINDOW_STATUS.MINIMIZED) return { ...window, active: true }
-      return {
-        ...window,
-        active: true,
-        rect: cloneRect(window.restoreRect),
-        status: LIGHTCODE_WINDOW_STATUS.NORMAL,
-      }
-    }), id, baseZIndex))
-  }
-
-  function move(id: string, rect: LightcodeWindowRect) {
-    updateWindow(id, (window) => {
-      if (window.status !== LIGHTCODE_WINDOW_STATUS.NORMAL) return window
-      const next = clampRect(rect, window.minWidth, window.minHeight)
-      return { ...window, rect: next, restoreRect: cloneRect(next) }
+    setWindows((current) => {
+      const target = current.find((window) => window.id === id)
+      if (!target || !canActivate(target)) return current
+      const raised = raiseFamily(current, id)
+      const keyboard = target.keyboardMode === LIGHTCODE_OS_KEYBOARD_MODE.NONE ? keyboardTopmost(raised) : id
+      return normalizeZ(raised, id, id, keyboard, baseZIndex)
     })
   }
 
-  function moveBy(id: string, deltaX: number, deltaY: number) {
+  function moveTo(id: string, rect: LightcodeOsRect) {
+    update((window) => {
+      if (window.id !== id || window.state !== LIGHTCODE_OS_WINDOW_STATE.NORMAL) return window
+      const next = clampRect({ ...window.rect, x: rect.x, y: rect.y }, options.desktop, window.minWidth, window.minHeight)
+      return { ...window, rect: next, restoreRect: cloneRect(next), active: true }
+    })
+    focus(id)
+  }
+
+  function resizeTo(id: string, rect: LightcodeOsRect) {
+    update((window) => {
+      if (window.id !== id || window.state !== LIGHTCODE_OS_WINDOW_STATE.NORMAL) return window
+      const next = clampRect(rect, options.desktop, window.minWidth, window.minHeight)
+      return { ...window, rect: next, restoreRect: cloneRect(next), active: true }
+    })
+    focus(id)
+  }
+
+  function resizeBy(id: string, edge: LightcodeOsResizeEdge, deltaX: number, deltaY: number) {
     const target = windows().find((window) => window.id === id)
     if (!target) return
-    move(id, {
-      x: target.rect.x + deltaX,
-      y: target.rect.y + deltaY,
-      width: target.rect.width,
-      height: target.rect.height,
-    })
-  }
-
-  function resize(id: string, rect: LightcodeWindowRect) {
-    updateWindow(id, (window) => {
-      if (window.status !== LIGHTCODE_WINDOW_STATUS.NORMAL) return window
-      const next = clampRect(rect, window.minWidth, window.minHeight)
-      return { ...window, rect: next, restoreRect: cloneRect(next) }
-    })
-  }
-
-  function resizeBy(id: string, edge: LightcodeResizeEdge, deltaX: number, deltaY: number) {
-    const target = windows().find((window) => window.id === id)
-    if (!target) return
-    const width = edge === LIGHTCODE_RESIZE_EDGE.BOTTOM ? target.rect.width : target.rect.width + deltaX
-    const height = edge === LIGHTCODE_RESIZE_EDGE.RIGHT ? target.rect.height : target.rect.height + deltaY
-    resize(id, {
-      x: target.rect.x,
-      y: target.rect.y,
-      width,
-      height,
-    })
+    const width = edge === LIGHTCODE_OS_RESIZE_EDGE.BOTTOM ? target.rect.width : target.rect.width + deltaX
+    const height = edge === LIGHTCODE_OS_RESIZE_EDGE.RIGHT ? target.rect.height : target.rect.height + deltaY
+    resizeTo(id, { ...target.rect, width, height })
   }
 
   function minimize(id: string) {
-    setWindows((current) => {
-      const changed = current.map((window) => {
-        if (window.id !== id) return window
-        if (window.status === LIGHTCODE_WINDOW_STATUS.CLOSED) return window
-        if (window.status === LIGHTCODE_WINDOW_STATUS.MAXIMIZED) {
-          return { ...window, active: false, rect: cloneRect(window.restoreRect), status: LIGHTCODE_WINDOW_STATUS.MINIMIZED }
-        }
-        return { ...window, active: false, status: LIGHTCODE_WINDOW_STATUS.MINIMIZED }
-      })
-      const next = activeId() === id ? activateTopmost(changed) : { activeId: activeId(), windows: changed.map((window) => ({ ...window, active: window.id === activeId() })) }
-      setActiveId(next.activeId)
-      return next.windows
+    update((window) => {
+      if (window.id !== id || window.state === LIGHTCODE_OS_WINDOW_STATE.CLOSED) return window
+      return { ...window, state: LIGHTCODE_OS_WINDOW_STATE.MINIMIZED, active: false }
     })
-  }
-
-  function maximize(id: string) {
-    focus(id)
-    updateWindow(id, (window) => {
-      if (window.status === LIGHTCODE_WINDOW_STATUS.CLOSED) return window
-      if (window.status === LIGHTCODE_WINDOW_STATUS.MAXIMIZED) return window
-      return {
-        ...window,
-        rect: maximizedRect(options.desktop),
-        restoreRect: cloneRect(window.rect),
-        status: LIGHTCODE_WINDOW_STATUS.MAXIMIZED,
-      }
-    })
+    update((window) => window.ownerId === id && window.state !== LIGHTCODE_OS_WINDOW_STATE.CLOSED ? { ...window, state: LIGHTCODE_OS_WINDOW_STATE.MINIMIZED, active: false } : window)
   }
 
   function restore(id: string) {
-    focus(id)
-    updateWindow(id, (window) => {
-      if (window.status === LIGHTCODE_WINDOW_STATUS.CLOSED) return window
-      return {
-        ...window,
-        rect: cloneRect(window.restoreRect),
-        status: LIGHTCODE_WINDOW_STATUS.NORMAL,
-      }
+    update((window) => {
+      if (window.id !== id || window.state === LIGHTCODE_OS_WINDOW_STATE.CLOSED) return window
+      const rect = clampRect(window.restoreRect, options.desktop, window.minWidth, window.minHeight)
+      return { ...window, rect, state: LIGHTCODE_OS_WINDOW_STATE.NORMAL, active: true }
     })
+    update((window) => {
+      if (window.ownerId !== id || window.state === LIGHTCODE_OS_WINDOW_STATE.CLOSED) return window
+      return { ...window, state: LIGHTCODE_OS_WINDOW_STATE.NORMAL }
+    })
+    focus(id)
   }
 
   function toggleMaximize(id: string) {
-    const target = windows().find((window) => window.id === id)
-    if (!target) return
-    if (target.status === LIGHTCODE_WINDOW_STATUS.MAXIMIZED) {
-      restore(id)
-      return
-    }
-    maximize(id)
+    update((window) => {
+      if (window.id !== id || window.state === LIGHTCODE_OS_WINDOW_STATE.CLOSED || window.state === LIGHTCODE_OS_WINDOW_STATE.MINIMIZED) return window
+      if (window.state === LIGHTCODE_OS_WINDOW_STATE.MAXIMIZED) {
+        return { ...window, rect: clampRect(window.restoreRect, options.desktop, window.minWidth, window.minHeight), state: LIGHTCODE_OS_WINDOW_STATE.NORMAL, active: true }
+      }
+      return { ...window, restoreRect: cloneRect(window.rect), rect: maximizedRect(options.desktop), state: LIGHTCODE_OS_WINDOW_STATE.MAXIMIZED, active: true }
+    })
+    focus(id)
   }
 
   function close(id: string) {
-    setWindows((current) => {
-      const changed = current.map((window) => (window.id === id ? { ...window, active: false, status: LIGHTCODE_WINDOW_STATUS.CLOSED } : window))
-      const next = activeId() === id ? activateTopmost(changed) : { activeId: activeId(), windows: changed.map((window) => ({ ...window, active: window.id === activeId() })) }
-      setActiveId(next.activeId)
-      return next.windows
-    })
+    update((window) => window.id === id ? { ...window, state: LIGHTCODE_OS_WINDOW_STATE.CLOSED, active: false } : window)
+    update((window) => window.ownerId === id ? { ...window, state: LIGHTCODE_OS_WINDOW_STATE.CLOSED, active: false } : window)
   }
 
   function reopen(id: string) {
-    updateWindow(id, (window) => {
-      if (window.status !== LIGHTCODE_WINDOW_STATUS.CLOSED) return window
-      return { ...window, status: LIGHTCODE_WINDOW_STATUS.NORMAL }
+    update((window) => {
+      if (window.id !== id) return window
+      return { ...window, state: LIGHTCODE_OS_WINDOW_STATE.NORMAL, rect: clampRect(window.restoreRect, options.desktop, window.minWidth, window.minHeight), active: true }
     })
     focus(id)
   }
 
   return {
     windows,
-    visibleWindows: () => sortByZIndex(windows().filter((window) => {
-      if (window.status === LIGHTCODE_WINDOW_STATUS.CLOSED) return false
-      if (window.status === LIGHTCODE_WINDOW_STATUS.MINIMIZED) return false
-      return true
-    })),
-    minimizedWindows: () => sortByZIndex(windows().filter((window) => window.status === LIGHTCODE_WINDOW_STATUS.MINIMIZED)),
-    activeId,
+    visibleWindows: () => sortByPaintOrder(windows().filter(visible)),
+    paintWindows: () => sortByPaintOrder(windows().filter(visible)),
+    hitWindows: () => sortByPaintOrder(windows().filter((window) => visible(window) && window.pointerMode !== LIGHTCODE_OS_POINTER_MODE.NONE)).reverse(),
+    minimizedWindows: () => sortByPaintOrder(windows().filter((window) => window.state === LIGHTCODE_OS_WINDOW_STATE.MINIMIZED)),
+    activeId: () => windows().find((window) => window.active)?.id ?? null,
+    mainId: () => windows().find((window) => window.main)?.id ?? null,
+    keyboardId: () => windows().find((window) => window.keyboard)?.id ?? null,
+    layerZIndex: (layer) => lightcodeOsLayerZIndex(layer, baseZIndex),
     focus,
-    move,
-    moveBy,
-    resize,
+    raise,
+    moveTo,
+    resizeTo,
     resizeBy,
     minimize,
-    maximize,
     restore,
     toggleMaximize,
     close,

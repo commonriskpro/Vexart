@@ -21,17 +21,8 @@ import { render as solidRender } from "../reconciler/reconciler"
 import type { TGENode } from "../ffi/node"
 import { insertChild, removeChild } from "../ffi/node"
 import { createRenderLoop } from "../loop/loop"
-import { getLastNativeRenderGraphUsage } from "../loop/paint"
 import { markDirty } from "../reconciler/dirty"
 import { dispatchInput } from "../loop/input"
-import {
-  nativeSceneCreateNode,
-  nativeSceneDestroyNode,
-  nativeSceneInsert,
-  nativeSceneRemove,
-  nativeSceneSetProp,
-  nativeSceneSetText,
-} from "../ffi/native-scene"
 import { setRendererBackend, getRendererBackend } from "../ffi/renderer-backend"
 import { createGpuRendererBackend } from "../ffi/gpu-renderer-backend"
 import { bindLoop, unbindLoop } from "../reconciler/pointer"
@@ -44,13 +35,9 @@ export type RenderToBufferResult = {
   pixels: Uint8Array
   width: number
   height: number
-  nativeRenderGraphLayerCount: number
-  nativeRenderGraphOpCount: number
 }
 
 export interface RenderToBufferOptions {
-  nativeRenderGraph?: boolean
-  nativeSceneLayout?: boolean
 }
 
 type LoopInstance = ReturnType<typeof createRenderLoop>
@@ -60,31 +47,6 @@ export type RenderLoopInteractionHelpers = {
   pointerMove: (x: number, y: number) => Promise<void>
   keyPress: (key: string, char?: string) => Promise<void>
   frame: () => Promise<void>
-}
-
-function nativeKindForNode(node: TGENode) {
-  if (node.kind === "root") return "root"
-  if (node.kind === "text") return "text"
-  if (node.kind === "img") return "img"
-  if (node.kind === "canvas") return "canvas"
-  return "box"
-}
-
-function mirrorNodeToNative(node: TGENode, parentNativeId?: bigint | null) {
-  node._nativeId = nativeSceneCreateNode(nativeKindForNode(node))
-  if (parentNativeId && node._nativeId) nativeSceneInsert(parentNativeId, node._nativeId)
-  for (const [key, value] of Object.entries(node.props)) {
-    if (value !== undefined) nativeSceneSetProp(node._nativeId, key, value)
-  }
-  if (node.kind === "text") nativeSceneSetText(node._nativeId, node.text)
-  for (const child of node.children) mirrorNodeToNative(child, node._nativeId)
-}
-
-function unmirrorNodeFromNative(node: TGENode, parentNativeId?: bigint | null) {
-  for (const child of node.children) unmirrorNodeFromNative(child, node._nativeId)
-  if (parentNativeId && node._nativeId) nativeSceneRemove(parentNativeId, node._nativeId)
-  if (node._nativeId) nativeSceneDestroyNode(node._nativeId)
-  node._nativeId = null
 }
 
 // ── Mock terminal ────────────────────────────────────────────────────────────
@@ -328,10 +290,8 @@ export async function renderNodeToBuffer(
   options: RenderToBufferOptions = {},
 ): Promise<RenderToBufferResult> {
   return captureToBuffer(width, height, frames, (loop) => {
-    if (loop.root._nativeId) mirrorNodeToNative(node, loop.root._nativeId)
     insertChild(loop.root, node)
     return () => {
-      if (loop.root._nativeId) unmirrorNodeFromNative(node, loop.root._nativeId)
       removeChild(loop.root, node)
     }
   }, undefined, options)
@@ -346,10 +306,8 @@ export async function renderNodeToBufferAfterInteractions(
   options: RenderToBufferOptions = {},
 ): Promise<RenderToBufferResult> {
   return captureToBuffer(width, height, frames, (loop) => {
-    if (loop.root._nativeId) mirrorNodeToNative(node, loop.root._nativeId)
     insertChild(loop.root, node)
     return () => {
-      if (loop.root._nativeId) unmirrorNodeFromNative(node, loop.root._nativeId)
       removeChild(loop.root, node)
     }
   }, async (loop) => {
@@ -409,10 +367,6 @@ async function captureToBuffer(
       // runtime terminal presentation path.
       nativePresentation: false,
       nativeLayerRegistry: false,
-      nativeSceneGraph: true,
-      nativeEventDispatch: true,
-      nativeSceneLayout: options.nativeSceneLayout ?? true,
-      nativeRenderGraph: options.nativeRenderGraph ?? false,
     },
   })
 
@@ -434,8 +388,6 @@ async function captureToBuffer(
     loop.frame()
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
   }
-
-  const nativeRenderGraphUsage = getLastNativeRenderGraphUsage()
 
   // Tear down
   unbindLoop()
@@ -465,7 +417,5 @@ async function captureToBuffer(
     pixels,
     width: capturedWidth(),
     height: capturedHeight(),
-    nativeRenderGraphLayerCount: nativeRenderGraphUsage.layerCount,
-    nativeRenderGraphOpCount: nativeRenderGraphUsage.opCount,
   }
 }

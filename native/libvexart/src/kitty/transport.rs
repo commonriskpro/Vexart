@@ -42,7 +42,9 @@ fn shm_compression_enabled() -> bool {
 
 fn shm_compression_enabled_value(value: Option<String>) -> bool {
     match value {
-        Some(value) => value == "1" || value.to_lowercase() == "true" || value.to_lowercase() == "on",
+        Some(value) => {
+            value == "1" || value.to_lowercase() == "true" || value.to_lowercase() == "on"
+        }
         None => false,
     }
 }
@@ -179,8 +181,9 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
 
     // 5. Build Kitty SHM escape and write to stdout.
     let name_b64 = B64.encode(shm_name.as_bytes());
-    let escape =
-        format!("\x1b_Ga=T,f=32,s={width},v={height},i={image_id},C=1,t=s,o=z,q=2;{name_b64}\x1b\\");
+    let escape = format!(
+        "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},C=1,t=s,o=z,q=2;{name_b64}\x1b\\"
+    );
     let write_result = write_to_stdout(escape.as_bytes());
 
     // 6. Schedule SHM cleanup (TTL: the terminal reads it and unlinks it per spec).
@@ -687,7 +690,12 @@ fn emit_shm_rgba(rgba: &[u8], width: u32, height: u32, image_id: u32) -> i32 {
     emit_shm_rgba_at(rgba, width, height, image_id, 0, 0, 0)
 }
 
-fn emit_shm_rgba_with_stats(rgba: &[u8], width: u32, height: u32, image_id: u32) -> (i32, ShmTransferStats) {
+fn emit_shm_rgba_with_stats(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    image_id: u32,
+) -> (i32, ShmTransferStats) {
     emit_shm_rgba_at_with_stats(rgba, width, height, image_id, 0, 0, 0)
 }
 
@@ -849,7 +857,8 @@ fn emit_region_rgba_with_stats(
         payload = rgba;
         compression_param = "";
     }
-    let meta = format!("a=f,i={image_id},r=1,x={rx},y={ry},s={rw},v={rh},f=32,X=1{compression_param},q=2");
+    let meta =
+        format!("a=f,i={image_id},r=1,x={rx},y={ry},s={rw},v={rh},f=32,X=1{compression_param},q=2");
 
     let escape = if mode == 2 {
         // SHM mode for region patch

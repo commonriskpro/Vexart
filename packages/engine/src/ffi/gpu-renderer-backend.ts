@@ -8,6 +8,7 @@
 import { appendFileSync } from "node:fs"
 import { ptr } from "bun:ffi"
 import { CanvasContext } from "./canvas"
+import { rasterizeCanvas, rasterizeCanvasCommands } from "./canvas-rasterizer"
 import { getAtlas, loadFontAtlas, ATLAS_RANGES } from "./font-atlas"
 import { transformBounds, transformPoint } from "./matrix"
 import type { BackdropRenderMetadata, EffectRenderOp, ImageRenderOp, RectangleRenderOp, RenderGraphOp, TextRenderOp, BorderRenderOp } from "./render-graph"
@@ -20,8 +21,7 @@ import type {
   RendererBackendPaintContext,
   RendererBackendRetainedLayer,
 } from "./renderer-backend"
-import { chooseGpuLayerStrategy, type GpuLayerStrategyMode } from "./gpu-layer-strategy"
-import { nativeChooseFrameStrategy, NATIVE_FRAME_STRATEGY, NATIVE_FRAME_TRANSPORT, type NativeFramePlan } from "./native-frame-orchestrator"
+import { chooseGpuLayerStrategy, nativeChooseFrameStrategy, NATIVE_FRAME_STRATEGY, NATIVE_FRAME_TRANSPORT, type GpuLayerStrategyMode, type NativeFramePlan } from "./gpu-layer-strategy"
 import { builtinFontScale, getFont, layoutText } from "./text-layout"
 import { openVexartLibrary } from "./vexart-bridge"
 import {
@@ -43,7 +43,7 @@ import {
   nativeLayerUpsert,
 } from "./native-layer-registry"
 import { ensureNativeKittyTransport, nativeEmitLayerTarget, nativeEmitRegionTarget } from "./native-presentation-ops"
-import type { NativeScenePaintOpRef } from "./native-render-graph"
+import type { DamageRect } from "./damage"
 // Phase 2b: All paint + composite ops route through libvexart.
 // Paint primitives: vexart_paint_dispatch cmd_kinds 0-20.
 // Target lifecycle: vexart_composite_target_create/destroy/begin_layer/end_layer.
@@ -55,9 +55,63 @@ import type { NativeScenePaintOpRef } from "./native-render-graph"
 // Images: vexart_paint_upload_image / vexart_paint_remove_image.
 // Glyphs: DEC-011 no-op.
 
+// Pre-allocated scratch buffers for pack functions — avoids per-call ArrayBuffer/DataView allocations.
+const PACK_MAX = 256
+const PROFILE_ENABLED = process.env.TGE_PROFILE !== "0"
+const _packBuf = new ArrayBuffer(PACK_MAX)
+const _packView = new DataView(_packBuf)
+const _packU8 = new Uint8Array(_packBuf)
+const _flushStatsBuf = new Uint8Array(32)
+
+let _batchBuf: ArrayBuffer | null = null
+let _batchView: DataView | null = null
+let _batchU8: Uint8Array | null = null
+
+function ensureBatchBuf(size: number) {
+  if (!_batchBuf || _batchBuf.byteLength < size) {
+    _batchBuf = new ArrayBuffer(Math.max(size, 1024))
+    _batchView = new DataView(_batchBuf)
+    _batchU8 = new Uint8Array(_batchBuf)
+  }
+  return { view: _batchView!, u8: _batchU8! }
+}
+
+let _readbackBuf: Uint8Array | null = null
+let _readbackSize = 0
+let _glyphBuf: ArrayBuffer | null = null
+let _glyphF32: Float32Array | null = null
+let _glyphU32: Uint32Array | null = null
+let _glyphU8: Uint8Array | null = null
+
+function ensureGlyphBuf(size: number) {
+  if (!_glyphBuf || _glyphBuf.byteLength < size) {
+    let capacity = _glyphBuf?.byteLength ?? 4096
+    while (capacity < size) capacity *= 2
+    _glyphBuf = new ArrayBuffer(capacity)
+    _glyphF32 = new Float32Array(_glyphBuf)
+    _glyphU32 = new Uint32Array(_glyphBuf)
+    _glyphU8 = new Uint8Array(_glyphBuf)
+  }
+  return { f32: _glyphF32!, u32: _glyphU32!, u8: _glyphU8! }
+}
+
 // ── Handle types (bigint u64 — same shape as bridge was) ─────────────────────
 type VexartTargetHandle = bigint
 type VexartImageHandle = bigint
+
+export function targetLocalRepaintRegion(
+  repaint: DamageRect | null,
+  bounds: DamageRect,
+  target: { width: number; height: number },
+): DamageRect | null {
+  if (!repaint) return null
+  const left = Math.max(0, Math.floor(repaint.x - bounds.x))
+  const top = Math.max(0, Math.floor(repaint.y - bounds.y))
+  const right = Math.min(target.width, Math.ceil(repaint.x + repaint.width - bounds.x))
+  const bottom = Math.min(target.height, Math.ceil(repaint.y + repaint.height - bounds.y))
+  if (right <= left || bottom <= top) return null
+  return { x: left, y: top, width: right - left, height: bottom - top }
+}
 
 // ── Vexart composite helpers ─────────────────────────────────────────────────
 // Inline wrappers for new Phase 2b composite FFI exports.
@@ -161,11 +215,13 @@ function vexartCompositeImageMaskRoundedRect(
 /** Full readback from a vexart target. Returns Uint8Array or null. */
 function vexartCompositeReadbackRgba(vctx: bigint, target: bigint, byteLength: number): Uint8Array | null {
   const { symbols } = openVexartLibrary()
-  const data = new Uint8Array(byteLength)
-  const statsOut = new Uint8Array(32)
-  const result = symbols.vexart_composite_readback_rgba(vctx, target, ptr(data), byteLength, ptr(statsOut)) as number
+  if (!_readbackBuf || _readbackSize < byteLength) {
+    _readbackBuf = new Uint8Array(byteLength)
+    _readbackSize = byteLength
+  }
+  const result = symbols.vexart_composite_readback_rgba(vctx, target, ptr(_readbackBuf), byteLength, ptr(_flushStatsBuf)) as number
   if (result !== 0) return null
-  return data
+  return _readbackBuf.byteLength === byteLength ? _readbackBuf : _readbackBuf.subarray(0, byteLength)
 }
 
 /** Region readback from a vexart target. Region is target-local pixels. */
@@ -317,9 +373,8 @@ function vexartReadbackRgba(ctx: bigint, width: number, height: number): Uint8Ar
   const { symbols } = openVexartLibrary()
   const size = width * height * 4
   const dst = new Uint8Array(size)
-  const statsPtr = null as unknown as Uint8Array  // null ptr
   const result = symbols.vexart_composite_readback_rgba(
-    ctx, 0n /* target=0: context default */, ptr(dst), size, ptr(new Uint8Array(32))
+    ctx, 0n /* target=0: context default */, ptr(dst), size, ptr(_flushStatsBuf)
   ) as number
   if (result !== 0) return null
   return dst
@@ -337,8 +392,7 @@ function flushVexartBatch(ctx: bigint, cmdKind: number, instanceData: Uint8Array
   const PREFIX = 8
   const HEADER = 16
   const total = HEADER + PREFIX + instanceData.byteLength
-  const buf = new ArrayBuffer(total)
-  const view = new DataView(buf)
+  const { view, u8 } = ensureBatchBuf(total)
   // Header
   vu32(view, 0, GRAPH_MAGIC)
   vu32(view, 4, GRAPH_VERSION)
@@ -349,9 +403,8 @@ function flushVexartBatch(ctx: bigint, cmdKind: number, instanceData: Uint8Array
   vu16(view, 18, 0)  // flags = 0
   vu32(view, 20, instanceData.byteLength)
   // Instance data
-  new Uint8Array(buf).set(instanceData, HEADER + PREFIX)
-  const statsOut = new Uint8Array(32)
-  symbols.vexart_paint_dispatch(ctx, target, ptr(new Uint8Array(buf)), total, ptr(statsOut))
+  u8.set(instanceData, HEADER + PREFIX)
+  symbols.vexart_paint_dispatch(ctx, target, ptr(u8), total, ptr(_flushStatsBuf))
 }
 
 /**
@@ -360,46 +413,6 @@ function flushVexartBatch(ctx: bigint, cmdKind: number, instanceData: Uint8Array
  */
 function flushVexartBatchToTarget(ctx: bigint, target: bigint, cmdKind: number, instanceData: Uint8Array): void {
   flushVexartBatch(ctx, cmdKind, instanceData, target)
-}
-
-function dispatchNativeScenePaint(
-  ctx: bigint,
-  scene: bigint,
-  target: bigint,
-  targetWidth: number,
-  targetHeight: number,
-  offsetX: number,
-  offsetY: number,
-  refs: NativeScenePaintOpRef[],
-) {
-  if (!scene || refs.length === 0) return null
-  const { symbols } = openVexartLibrary()
-  const HEADER = 24
-  const REF = 16
-  const config = new Uint8Array(HEADER + refs.length * REF)
-  const view = new DataView(config.buffer)
-  view.setUint32(0, Math.max(0, Math.round(targetWidth)), true)
-  view.setUint32(4, Math.max(0, Math.round(targetHeight)), true)
-  view.setFloat32(8, offsetX, true)
-  view.setFloat32(12, offsetY, true)
-  view.setUint32(16, refs.length, true)
-  view.setUint32(20, 0, true)
-  for (let i = 0; i < refs.length; i++) {
-    const off = HEADER + i * REF
-    view.setBigUint64(off, refs[i].nodeId, true)
-    view.setUint32(off + 8, refs[i].kind, true)
-    view.setUint32(off + 12, 0, true)
-  }
-  const statsOut = new Uint8Array(32)
-  const rc = symbols.vexart_scene_paint_dispatch(ctx, scene, target, ptr(config), config.byteLength, ptr(statsOut)) as number
-  if (rc !== 0) return null
-  const stats = new DataView(statsOut.buffer, statsOut.byteOffset, statsOut.byteLength)
-  return {
-    gpuTimeUs: Number(stats.getBigUint64(0, true)),
-    cpuTimeUs: Number(stats.getBigUint64(8, true)),
-    drawCalls: stats.getUint32(16, true),
-    primitives: stats.getUint32(20, true),
-  }
 }
 
 function compositeTargetUniformToTarget(ctx: bigint, target: bigint, sourceTarget: bigint, instanceData: Uint8Array): boolean {
@@ -413,8 +426,7 @@ function compositeTargetUniformToTarget(ctx: bigint, target: bigint, sourceTarge
  * radius + strokeWidth + hasFill + hasStroke + sizeX + sizeY + pad*2) for cmd_kind=1.
  */
 function packShapeRectInstance(x: number, y: number, w: number, h: number, boxW: number, boxH: number, radius: number, fill: number, stroke: number, strokeWidth: number): Uint8Array {
-  const buf = new ArrayBuffer(80)
-  const v = new DataView(buf)
+  const v = _packView
   const fr = ((fill >>> 24) & 0xff) / 255; const fg = ((fill >>> 16) & 0xff) / 255; const fb = ((fill >>> 8) & 0xff) / 255; const fa = (fill & 0xff) / 255
   const sr = ((stroke >>> 24) & 0xff) / 255; const sg = ((stroke >>> 16) & 0xff) / 255; const sb = ((stroke >>> 8) & 0xff) / 255; const sa = (stroke & 0xff) / 255
   const hasFill = (fill & 0xff) > 0 ? 1.0 : 0.0
@@ -424,15 +436,14 @@ function packShapeRectInstance(x: number, y: number, w: number, h: number, boxW:
   vf32(v, 32, sr); vf32(v, 36, sg); vf32(v, 40, sb); vf32(v, 44, sa)
   vf32(v, 48, radius); vf32(v, 52, strokeWidth); vf32(v, 56, hasFill); vf32(v, 60, hasStroke)
   vf32(v, 64, boxW); vf32(v, 68, boxH); vf32(v, 72, 0); vf32(v, 76, 0)
-  return new Uint8Array(buf)
+  return _packU8.slice(0, 80)
 }
 
 /**
  * Pack BridgeShapeRectCornersInstance (24 floats) for cmd_kind=2.
  */
 function packShapeRectCornersInstance(x: number, y: number, w: number, h: number, boxW: number, boxH: number, radii: { tl: number; tr: number; br: number; bl: number }, fill: number, stroke: number, strokeWidth: number): Uint8Array {
-  const buf = new ArrayBuffer(96)
-  const v = new DataView(buf)
+  const v = _packView
   const fr = ((fill >>> 24) & 0xff) / 255; const fg = ((fill >>> 16) & 0xff) / 255; const fb = ((fill >>> 8) & 0xff) / 255; const fa = (fill & 0xff) / 255
   const sr = ((stroke >>> 24) & 0xff) / 255; const sg = ((stroke >>> 16) & 0xff) / 255; const sb = ((stroke >>> 8) & 0xff) / 255; const sa = (stroke & 0xff) / 255
   const hasFill = (fill & 0xff) > 0 ? 1.0 : 0.0
@@ -443,20 +454,19 @@ function packShapeRectCornersInstance(x: number, y: number, w: number, h: number
   vf32(v, 48, radii.tl); vf32(v, 52, radii.tr); vf32(v, 56, radii.br); vf32(v, 60, radii.bl)
   vf32(v, 64, strokeWidth); vf32(v, 68, hasFill); vf32(v, 72, hasStroke); vf32(v, 76, boxW)
   vf32(v, 80, boxH); vf32(v, 84, 0); vf32(v, 88, 0); vf32(v, 92, 0)
-  return new Uint8Array(buf)
+  return _packU8.slice(0, 96)
 }
 
 /**
  * Pack BridgeGlowInstance (12 floats: x,y,w,h + r,g,b,a + intensity + pad*3) for cmd_kind=6.
  */
 function packGlowInstance(x: number, y: number, w: number, h: number, color: number, intensity: number): Uint8Array {
-  const buf = new ArrayBuffer(48)
-  const v = new DataView(buf)
+  const v = _packView
   const r = ((color >>> 24) & 0xff) / 255; const g = ((color >>> 16) & 0xff) / 255; const b = ((color >>> 8) & 0xff) / 255; const a = (color & 0xff) / 255
   vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
   vf32(v, 16, r); vf32(v, 20, g); vf32(v, 24, b); vf32(v, 28, a)
   vf32(v, 32, intensity); vf32(v, 36, 0); vf32(v, 40, 0); vf32(v, 44, 0)
-  return new Uint8Array(buf)
+  return _packU8.slice(0, 48)
 }
 
 /**
@@ -475,23 +485,21 @@ function packShadowInstance(
   offsetY: number,
   blur: number,
 ): Uint8Array {
-  const buf = new ArrayBuffer(80)
-  const v = new DataView(buf)
+  const v = _packView
   const r = ((color >>> 24) & 0xff) / 255; const g = ((color >>> 16) & 0xff) / 255; const b = ((color >>> 8) & 0xff) / 255; const a = (color & 0xff) / 255
   vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
   vf32(v, 16, r); vf32(v, 20, g); vf32(v, 24, b); vf32(v, 28, a)
   vf32(v, 32, radii.tl); vf32(v, 36, radii.tr); vf32(v, 40, radii.br); vf32(v, 44, radii.bl)
   vf32(v, 48, boxW); vf32(v, 52, boxH); vf32(v, 56, offsetX); vf32(v, 60, offsetY)
   vf32(v, 64, blur); vf32(v, 68, 0); vf32(v, 72, 0); vf32(v, 76, 0)
-  return new Uint8Array(buf)
+  return _packU8.slice(0, 80)
 }
 
 /**
  * Pack BridgeLinearGradientInstance (20 floats) for cmd_kind=12.
  */
 function packLinearGradientInstance(x: number, y: number, w: number, h: number, boxW: number, boxH: number, radius: number, from: number, to: number, dirX: number, dirY: number): Uint8Array {
-  const buf = new ArrayBuffer(80)
-  const v = new DataView(buf)
+  const v = _packView
   const fr = ((from >>> 24) & 0xff) / 255; const fg = ((from >>> 16) & 0xff) / 255; const fb = ((from >>> 8) & 0xff) / 255; const fa = (from & 0xff) / 255
   const tr = ((to >>> 24) & 0xff) / 255; const tg = ((to >>> 16) & 0xff) / 255; const tb = ((to >>> 8) & 0xff) / 255; const ta = (to & 0xff) / 255
   vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
@@ -499,15 +507,14 @@ function packLinearGradientInstance(x: number, y: number, w: number, h: number, 
   vf32(v, 32, fr); vf32(v, 36, fg); vf32(v, 40, fb); vf32(v, 44, fa)
   vf32(v, 48, tr); vf32(v, 52, tg); vf32(v, 56, tb); vf32(v, 60, ta)
   vf32(v, 64, dirX); vf32(v, 68, dirY); vf32(v, 72, 0); vf32(v, 76, 0)
-  return new Uint8Array(buf)
+  return _packU8.slice(0, 80)
 }
 
 /**
  * Pack BridgeRadialGradientInstance (20 floats) for cmd_kind=13.
  */
 function packRadialGradientInstance(x: number, y: number, w: number, h: number, boxW: number, boxH: number, radius: number, from: number, to: number): Uint8Array {
-  const buf = new ArrayBuffer(80)
-  const v = new DataView(buf)
+  const v = _packView
   const fr = ((from >>> 24) & 0xff) / 255; const fg = ((from >>> 16) & 0xff) / 255; const fb = ((from >>> 8) & 0xff) / 255; const fa = (from & 0xff) / 255
   const tr = ((to >>> 24) & 0xff) / 255; const tg = ((to >>> 16) & 0xff) / 255; const tb = ((to >>> 8) & 0xff) / 255; const ta = (to & 0xff) / 255
   vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
@@ -515,7 +522,7 @@ function packRadialGradientInstance(x: number, y: number, w: number, h: number, 
   vf32(v, 32, fr); vf32(v, 36, fg); vf32(v, 40, fb); vf32(v, 44, fa)
   vf32(v, 48, tr); vf32(v, 52, tg); vf32(v, 56, tb); vf32(v, 60, ta)
   vf32(v, 64, 0); vf32(v, 68, 0); vf32(v, 72, 0); vf32(v, 76, 0)
-  return new Uint8Array(buf)
+  return _packU8.slice(0, 80)
 }
 
 /**
@@ -524,11 +531,10 @@ function packRadialGradientInstance(x: number, y: number, w: number, h: number, 
  * Byte size: 8 × 4 = 32 bytes.
  */
 function packImageInstance(x: number, y: number, w: number, h: number, opacity: number): Uint8Array {
-  const buf = new ArrayBuffer(32)
-  const v = new DataView(buf)
+  const v = _packView
   vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
   vf32(v, 16, opacity); vf32(v, 20, 0); vf32(v, 24, 0); vf32(v, 28, 0)
-  return new Uint8Array(buf)
+  return _packU8.slice(0, 32)
 }
 
 /**
@@ -541,27 +547,19 @@ function packImageTransformInstance(
   p2x: number, p2y: number, p3x: number, p3y: number,
   opacity: number,
 ): Uint8Array {
-  const buf = new ArrayBuffer(48)
-  const v = new DataView(buf)
+  const v = _packView
   vf32(v, 0,  p0x); vf32(v, 4,  p0y)
   vf32(v, 8,  p1x); vf32(v, 12, p1y)
   vf32(v, 16, p2x); vf32(v, 20, p2y)
   vf32(v, 24, p3x); vf32(v, 28, p3y)
   vf32(v, 32, opacity); vf32(v, 36, 0); vf32(v, 40, 0); vf32(v, 44, 0)
-  return new Uint8Array(buf)
+  return _packU8.slice(0, 48)
 }
 
 /** @public */
 export type GpuRendererBackend = RendererBackend & {
   getLastStrategy: () => GpuLayerStrategyMode | null
 }
-
-type NativeScenePaintContext = Omit<RendererBackendPaintContext, "graph"> & {
-  scene: bigint
-  refs: NativeScenePaintOpRef[]
-}
-
-type NativeScenePaintBackendResult = ReturnType<RendererBackend["paint"]>
 
 /** @public */
 export type GpuRendererBackendCacheStats = {
@@ -584,6 +582,7 @@ export type GpuRendererBackendCacheStats = {
 }
 
 const MAX_GPU_GLYPH_ATLASES = 32
+const MAX_GPU_CANVAS_SPRITES = 64
 const MAX_GPU_TRANSFORM_SPRITES = 64
 
 let gpuRendererBackendStatsProvider: (() => GpuRendererBackendCacheStats) | null = null
@@ -695,6 +694,14 @@ type TransformSpriteRecord = {
   handle: VexartImageHandle
   width: number
   height: number
+}
+
+type CanvasSpriteRecord = {
+  key: string
+  handle: VexartImageHandle
+  width: number
+  height: number
+  data: Uint8Array
 }
 
 type BackdropSourceRecord = {
@@ -929,6 +936,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   const layerTargets = new Map<string, TargetRecord>()
   const glyphAtlases = new Map<string, GlyphAtlasRecord>()
   const imageCache = new WeakMap<Uint8Array, ImageRecord>()
+  const canvasSpriteCache = new Map<string, CanvasSpriteRecord>()
   const transformSpriteCache = new Map<string, TransformSpriteRecord>()
   const backdropSourceCache = new Map<string, BackdropSourceRecord>()
   const backdropSpriteCache = new Map<string, BackdropSpriteRecord>()
@@ -966,6 +974,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     backendProfile.uniformUpdateMs = 0
   }
   const addBackendProfile = (key: keyof RendererBackendProfile, start: number) => {
+    if (!PROFILE_ENABLED) return
     backendProfile[key] += performance.now() - start
   }
   const addNativeStatsProfile = (stats: NativePresentationStats | null) => {
@@ -1023,6 +1032,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
 
   const layerTargetBytes = (record: TargetRecord) => record.width * record.height * 4
   const glyphAtlasBytes = (record: GlyphAtlasRecord) => record.cellWidth * record.columns * record.cellHeight * record.rows * 4
+  const canvasSpriteBytes = (record: CanvasSpriteRecord) => record.width * record.height * 4
   const transformSpriteBytes = (record: TransformSpriteRecord) => record.width * record.height * 4
   const backdropSourceBytes = (record: BackdropSourceRecord) => (record.bounds.right - record.bounds.left) * (record.bounds.bottom - record.bounds.top) * 4
   const backdropSpriteBytes = (record: BackdropSpriteRecord) => record.width * record.height * 4
@@ -1065,6 +1075,32 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     cacheStats.glyphAtlasCount -= 1
     cacheStats.glyphAtlasBytes -= glyphAtlasBytes(existing)
     return existing
+  }
+
+  const setCanvasSpriteRecord = (key: string, record: CanvasSpriteRecord) => {
+    const existing = canvasSpriteCache.get(key)
+    if (existing) {
+      cacheStats.canvasSpriteCount -= 1
+      cacheStats.canvasSpriteBytes -= canvasSpriteBytes(existing)
+    }
+    canvasSpriteCache.set(key, record)
+    cacheStats.canvasSpriteCount += 1
+    cacheStats.canvasSpriteBytes += canvasSpriteBytes(record)
+  }
+
+  const deleteCanvasSpriteRecord = (key: string) => {
+    const existing = canvasSpriteCache.get(key)
+    if (!existing) return null
+    canvasSpriteCache.delete(key)
+    cacheStats.canvasSpriteCount -= 1
+    cacheStats.canvasSpriteBytes -= canvasSpriteBytes(existing)
+    return existing
+  }
+
+  const clearCanvasSpriteRecords = () => {
+    canvasSpriteCache.clear()
+    cacheStats.canvasSpriteCount = 0
+    cacheStats.canvasSpriteBytes = 0
   }
 
   const setTransformSpriteRecord = (key: string, record: TransformSpriteRecord) => {
@@ -1165,6 +1201,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     for (const record of transformSpriteCache.values()) {
       vexartRemoveImage(vctx, record.handle)
     }
+    for (const record of canvasSpriteCache.values()) {
+      vexartRemoveImage(vctx, record.handle)
+    }
+    clearCanvasSpriteRecords()
     clearTransformSpriteRecords()
     for (const record of backdropSourceCache.values()) {
       vexartRemoveImage(vctx, record.handle)
@@ -1261,6 +1301,17 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     }
   }
 
+  const trimCanvasSpriteCache = () => {
+    const vctx = getVexartCtx()
+    while (canvasSpriteCache.size > MAX_GPU_CANVAS_SPRITES) {
+      const first = canvasSpriteCache.keys().next().value
+      if (!first) break
+      const record = canvasSpriteCache.get(first)
+      if (record) vexartRemoveImage(vctx, record.handle)
+      deleteCanvasSpriteRecord(first)
+    }
+  }
+
   gpuRendererBackendStatsProvider = () => cacheStats
 
   const getImage = (rgba: Uint8Array, width: number, height: number): bigint | null => {
@@ -1344,12 +1395,26 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     return id
   }
 
-  const getCanvasSprite = (_op: Extract<RenderGraphOp, { kind: "canvas" }>) => {
-    // Phase 8: TS canvas sprite orchestration is removed. Canvas display-list
-    // handles are registered natively; full native command replay belongs to a
-    // later rendering slice. Until then, canvas ops that require replay fail
-    // loudly instead of reviving a hidden TS-owned sprite cache.
-    return null
+  const getCanvasSprite = (op: Extract<RenderGraphOp, { kind: "canvas" }>) => {
+    const width = Math.max(1, Math.round(op.command.width))
+    const height = Math.max(1, Math.round(op.command.height))
+    const functionId = getCanvasFunctionId(op.canvas.onDraw)
+    const viewportKey = op.canvas.viewport ? `${op.canvas.viewport.x},${op.canvas.viewport.y},${op.canvas.viewport.zoom}` : "default"
+    const key = `${op.canvas.displayListHash ?? `fn:${functionId}`}:${width}:${height}:${viewportKey}`
+    const cached = canvasSpriteCache.get(key)
+    if (cached) {
+      touchMapEntry(canvasSpriteCache, key, cached)
+      return cached.handle
+    }
+    const raster = op.canvas.displayListCommands
+      ? rasterizeCanvasCommands(op.canvas.displayListCommands, width, height)
+      : rasterizeCanvas(op.canvas.onDraw, width, height, op.canvas.viewport)
+    if (!raster) return null
+    const handle = getImage(raster.data, raster.width, raster.height)
+    if (!handle) return null
+    setCanvasSpriteRecord(key, { key, handle, width: raster.width, height: raster.height, data: raster.data })
+    trimCanvasSpriteCache()
+    return handle
   }
 
   const getTransformSprite = (op: Extract<RenderGraphOp, { kind: "effect" }>) => {
@@ -1582,37 +1647,36 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       if (totalGlyphs === 0) { glyphGroups.clear(); return }
 
       const STRIDE = 64 // MsdfGlyphInstance: 12 f32 + 4 u32 = 64 bytes
-      const buf = new ArrayBuffer(totalGlyphs * STRIDE)
-      const view = new DataView(buf)
-      let off = 0
+      const byteLength = totalGlyphs * STRIDE
+      const glyphBuf = ensureGlyphBuf(byteLength)
+      let idx = 0
       for (const group of glyphGroups.values()) {
         // Determine rustAtlasId from the group. The group key is the image handle
         // from getGlyphAtlas — but we need the Rust atlas_id (1-15).
         // For now, all glyphs use the default font → rustAtlasId = 1.
         const rustAtlasId = 1
         for (const g of group.instances) {
-          view.setFloat32(off + 0, g.x, true)    // NDC x
-          view.setFloat32(off + 4, g.y, true)    // NDC y
-          view.setFloat32(off + 8, g.w, true)    // NDC w
-          view.setFloat32(off + 12, g.h, true)   // NDC h
-          view.setFloat32(off + 16, g.u, true)   // UV x
-          view.setFloat32(off + 20, g.v, true)   // UV y
-          view.setFloat32(off + 24, g.uw, true)  // UV w
-          view.setFloat32(off + 28, g.vh, true)  // UV h
-          view.setFloat32(off + 32, g.r, true)   // color R
-          view.setFloat32(off + 36, g.g, true)   // color G
-          view.setFloat32(off + 40, g.b, true)   // color B
-          view.setFloat32(off + 44, g.a * (g.opacity ?? 1), true) // color A
-          view.setUint32(off + 48, rustAtlasId, true) // atlas_id
-          view.setUint32(off + 52, 0, true)      // _pad0
-          view.setUint32(off + 56, 0, true)      // _pad1
-          view.setUint32(off + 60, 0, true)      // _pad2
-          off += STRIDE
+          glyphBuf.f32[idx] = g.x
+          glyphBuf.f32[idx + 1] = g.y
+          glyphBuf.f32[idx + 2] = g.w
+          glyphBuf.f32[idx + 3] = g.h
+          glyphBuf.f32[idx + 4] = g.u
+          glyphBuf.f32[idx + 5] = g.v
+          glyphBuf.f32[idx + 6] = g.uw
+          glyphBuf.f32[idx + 7] = g.vh
+          glyphBuf.f32[idx + 8] = g.r
+          glyphBuf.f32[idx + 9] = g.g
+          glyphBuf.f32[idx + 10] = g.b
+          glyphBuf.f32[idx + 11] = g.a * (g.opacity ?? 1)
+          glyphBuf.u32[idx + 12] = rustAtlasId
+          glyphBuf.u32[idx + 13] = 0
+          glyphBuf.u32[idx + 14] = 0
+          glyphBuf.u32[idx + 15] = 0
+          idx += STRIDE / 4
         }
       }
-      const glyphU8 = new Uint8Array(buf)
-      const statsU8 = new Uint8Array(32) // FrameStats output (unused for now)
-      symbols.vexart_text_dispatch(vctx, targetHandle, ptr(glyphU8), glyphU8.byteLength, ptr(statsU8))
+      const glyphU8 = glyphBuf.u8.subarray(0, byteLength)
+      symbols.vexart_text_dispatch(vctx, targetHandle, ptr(glyphU8), byteLength, ptr(_flushStatsBuf))
       first = false
       targetMutationVersion += 1
       glyphGroups.clear()
@@ -2267,7 +2331,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       return { ok: true as const, rawLayer: null }
     }
     if (readbackRegion && readbackRegion.width > 0 && readbackRegion.height > 0) {
-      const readbackStart = performance.now()
+      const readbackStart = PROFILE_ENABLED ? performance.now() : 0
       const rgba = vexartCompositeReadbackRegionRgba(vctx, targetHandle, readbackRegion)
       addBackendProfile("readbackMs", readbackStart)
       for (const handle of transientFullFrameImages) vexartRemoveImage(vctx, handle)
@@ -2283,61 +2347,13 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       }
     }
     // Phase 2b: readback from the specific vexart target (not context default).
-    const readbackStart = performance.now()
+    const readbackStart = PROFILE_ENABLED ? performance.now() : 0
     const rgba = vexartCompositeReadbackRgba(vctx, targetHandle, ctx.targetWidth * ctx.targetHeight * 4)
     addBackendProfile("readbackMs", readbackStart)
     for (const handle of transientFullFrameImages) vexartRemoveImage(vctx, handle)
     if (!rgba) return { ok: false, rawLayer: null }
     return {
       ok: true as const,
-      rawLayer: {
-        data: rgba,
-        width: ctx.targetWidth,
-        height: ctx.targetHeight,
-      },
-    }
-  }
-
-  const renderNativeSceneFrame = (
-    ctx: NativeScenePaintContext,
-    targetHandle: VexartTargetHandle,
-    readbackMode: "auto" | "none" = "auto",
-    readbackRegion?: { x: number; y: number; width: number; height: number } | null,
-  ): { ok: boolean; rawLayer: { data: Uint8Array; width: number; height: number; region?: { x: number; y: number; width: number; height: number } } | null } => {
-    const vctx = getVexartCtx()
-    const stats = dispatchNativeScenePaint(
-      vctx,
-      ctx.scene,
-      targetHandle,
-      ctx.target.width,
-      ctx.target.height,
-      ctx.offsetX,
-      ctx.offsetY,
-      ctx.refs,
-    )
-    if (!stats) return { ok: false, rawLayer: null }
-    if (readbackMode === "none") return { ok: true, rawLayer: null }
-    if (readbackRegion && readbackRegion.width > 0 && readbackRegion.height > 0) {
-      const readbackStart = performance.now()
-      const rgba = vexartCompositeReadbackRegionRgba(vctx, targetHandle, readbackRegion)
-      addBackendProfile("readbackMs", readbackStart)
-      if (!rgba) return { ok: false, rawLayer: null }
-      return {
-        ok: true,
-        rawLayer: {
-          data: rgba,
-          width: readbackRegion.width,
-          height: readbackRegion.height,
-          region: readbackRegion,
-        },
-      }
-    }
-    const readbackStart = performance.now()
-    const rgba = vexartCompositeReadbackRgba(vctx, targetHandle, ctx.targetWidth * ctx.targetHeight * 4)
-    addBackendProfile("readbackMs", readbackStart)
-    if (!rgba) return { ok: false, rawLayer: null }
-    return {
-      ok: true,
       rawLayer: {
         data: rgba,
         width: ctx.targetWidth,
@@ -2355,7 +2371,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     const targetHandle = getFinalFrameTarget(frame.viewportWidth, frame.viewportHeight)
     if (!targetHandle) return null
     const orderedLayers = layers.slice().sort((a, b) => a.z - b.z)
-    const compositeStart = performance.now()
+    const compositeStart = PROFILE_ENABLED ? performance.now() : 0
     vexartCompositeTargetBeginLayer(vctx, targetHandle, 0, 0x00000000)
     addBackendProfile("compositeMs", compositeStart)
     try {
@@ -2377,7 +2393,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           1 - (quad.p3.y / frame.viewportHeight) * 2,
           layer.opacity,
         )
-        const uniformStart = performance.now()
+        const uniformStart = PROFILE_ENABLED ? performance.now() : 0
         const uniformUpdated = compositeTargetUniformToTarget(vctx, targetHandle, layer.handle, inst)
         addBackendProfile("uniformUpdateMs", uniformStart)
         if (!uniformUpdated) {
@@ -2385,7 +2401,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         }
       }
     } finally {
-      const compositeEndStart = performance.now()
+      const compositeEndStart = PROFILE_ENABLED ? performance.now() : 0
       vexartCompositeTargetEndLayer(vctx, targetHandle)
       addBackendProfile("compositeMs", compositeEndStart)
     }
@@ -2399,7 +2415,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       try {
         const { symbols } = openVexartLibrary()
         ensureNativeKittyTransport(frame.transmissionMode)
-        const nativeEmitStart = performance.now()
+        const nativeEmitStart = PROFILE_ENABLED ? performance.now() : 0
         const rc = symbols.vexart_kitty_emit_frame_with_stats(
           vctx,
           targetHandle,
@@ -2423,7 +2439,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
 
     // ── TS fallback: readback RGBA and return raw payload ──
     // Used when native presentation is disabled or unsupported.
-    const readbackStart = performance.now()
+    const readbackStart = PROFILE_ENABLED ? performance.now() : 0
     const readbackData = vexartCompositeReadbackRgba(vctx, targetHandle, frame.viewportWidth * frame.viewportHeight * 4)
     addBackendProfile("readbackMs", readbackStart)
     if (!readbackData) return null
@@ -2569,106 +2585,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       }
       return { strategy: lastStrategy, nativePlan: lastNativeFramePlan }
     },
-    paintNativeScene(ctx: NativeScenePaintContext): NativeScenePaintBackendResult {
-      if (!gpuAvailable) return undefined
-      const frameCtx = ctx.frame
-      const layerCtx = ctx.layer
-      const delegatedFrame = !!(currentFrame && frameCtx && currentFrame === frameCtx)
-      if (delegatedFrame && frameCtx.useLayerCompositing && layerCtx) {
-        const layerTarget = getLayerTarget(layerCtx.key, ctx.target.width, ctx.target.height)
-        if (!layerTarget) return undefined
-        activeLayerKeys.add(layerCtx.key)
-        if (lastStrategy === "skip-present") return { output: "skip-present", strategy: lastStrategy }
-        const useNativeLayerPresentation = lastStrategy !== "final-frame"
-          && isNativePresentationCapable(frameCtx.transmissionMode)
-        const nativeLayer = useNativeLayerPresentation
-          ? nativeLayerUpsert(layerCtx.key, {
-              target: layerTarget,
-              x: layerCtx.bounds.x,
-              y: layerCtx.bounds.y,
-              width: layerCtx.bounds.width,
-              height: layerCtx.bounds.height,
-              z: layerCtx.z,
-            })
-          : null
-        const nativeImageId = nativeLayer?.imageId ?? 0
-        const readbackMode = lastStrategy === "final-frame" || useNativeLayerPresentation ? "none" : "auto"
-        const repaint = layerCtx.repaintRect
-        const region = repaint
-          ? {
-              x: Math.max(0, Math.floor(repaint.x - layerCtx.bounds.x)),
-              y: Math.max(0, Math.floor(repaint.y - layerCtx.bounds.y)),
-              width: Math.min(ctx.target.width, Math.ceil(repaint.width)),
-              height: Math.min(ctx.target.height, Math.ceil(repaint.height)),
-            }
-          : null
-        const shouldReadbackRegion = !useNativeLayerPresentation
-          && lastStrategy !== "final-frame"
-          && !!region
-          && region.width > 0
-          && region.height > 0
-          && region.width * region.height < ctx.target.width * ctx.target.height
-        const result = renderNativeSceneFrame(ctx, layerTarget, readbackMode, shouldReadbackRegion ? region : null)
-        if (!result.ok) return undefined
-        if (lastStrategy === "final-frame") {
-          recordCurrentFrameLayer({
-            key: layerCtx.key,
-            z: layerCtx.z,
-            x: layerCtx.bounds.x,
-            y: layerCtx.bounds.y,
-            width: layerCtx.bounds.width,
-            height: layerCtx.bounds.height,
-            handle: layerTarget,
-            isBackground: layerCtx.isBackground,
-            subtreeTransform: layerCtx.subtreeTransform,
-            opacity: 1,
-          })
-          return { output: "skip-present", strategy: lastStrategy }
-        }
-        if (useNativeLayerPresentation && nativeImageId > 0) {
-          const shouldPresentRegion = lastStrategy === "layered-region"
-            && !!region
-            && region.width > 0
-            && region.height > 0
-            && region.width * region.height < ctx.target.width * ctx.target.height
-          const regionEmitStart = shouldPresentRegion ? performance.now() : 0
-          const regionStats = shouldPresentRegion
-            ? nativeEmitRegionTarget(layerTarget, nativeImageId, region.x, region.y, region.width, region.height, frameCtx.transmissionMode)
-            : null
-          if (shouldPresentRegion) addBackendProfile("nativeEmitMs", regionEmitStart)
-          if (regionStats !== null) {
-            addNativeStatsProfile(regionStats)
-            nativeLayerPresentDirty(layerCtx.key)
-            return { output: "native-presented", strategy: lastStrategy, stats: regionStats }
-          }
-          const col = Math.floor(layerCtx.bounds.x / Math.max(1, ctx.cellWidth ?? 1))
-          const row = Math.floor(layerCtx.bounds.y / Math.max(1, ctx.cellHeight ?? 1))
-          const nativeEmitStart = performance.now()
-          const stats = nativeEmitLayerTarget(layerTarget, nativeImageId, col, row, layerCtx.z, frameCtx.transmissionMode)
-          addBackendProfile("nativeEmitMs", nativeEmitStart)
-          if (stats !== null) {
-            addNativeStatsProfile(stats)
-            nativeLayerPresentDirty(layerCtx.key)
-            return { output: "native-presented", strategy: lastStrategy, stats }
-          }
-          const readbackStart = performance.now()
-          const rgba = vexartCompositeReadbackRgba(getVexartCtx(), layerTarget, ctx.target.width * ctx.target.height * 4)
-          addBackendProfile("readbackMs", readbackStart)
-          return {
-            output: "kitty-payload",
-            strategy: lastStrategy,
-            kittyPayload: rgba ? { data: rgba, width: ctx.target.width, height: ctx.target.height } : undefined,
-          }
-        }
-        return { output: "kitty-payload", strategy: lastStrategy, kittyPayload: result.rawLayer ?? undefined }
-      }
-
-      const standaloneHandle = getStandaloneTarget(ctx.target.width, ctx.target.height)
-      if (!standaloneHandle) return undefined
-      const result = renderNativeSceneFrame(ctx, standaloneHandle)
-      if (!result.ok) return undefined
-      return { output: "kitty-payload", strategy: lastStrategy, kittyPayload: result.rawLayer ?? undefined }
-    },
     paint(ctx) {
       if (!gpuAvailable) {
         failGpuOnly("GPU backend unavailable; CPU fallback was removed")
@@ -2711,15 +2627,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           : null
         const nativeImageId = nativeLayer?.imageId ?? 0
         const readbackMode = lastStrategy === "final-frame" || useNativeLayerPresentation ? "none" : "auto"
-        const repaint = layerCtx.repaintRect
-        const region = repaint
-          ? {
-              x: Math.max(0, Math.floor(repaint.x - layerCtx.bounds.x)),
-              y: Math.max(0, Math.floor(repaint.y - layerCtx.bounds.y)),
-              width: Math.min(ctx.target.width, Math.ceil(repaint.width)),
-              height: Math.min(ctx.target.height, Math.ceil(repaint.height)),
-            }
-          : null
+        const region = targetLocalRepaintRegion(layerCtx.repaintRect, layerCtx.bounds, ctx.target)
         const shouldReadbackRegion = !useNativeLayerPresentation
           && lastStrategy !== "final-frame"
           && !!region
@@ -2752,7 +2660,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             && region.width > 0
             && region.height > 0
             && region.width * region.height < ctx.target.width * ctx.target.height
-          const regionEmitStart = shouldPresentRegion ? performance.now() : 0
+          const regionEmitStart = shouldPresentRegion && PROFILE_ENABLED ? performance.now() : 0
           const regionStats = shouldPresentRegion
             ? nativeEmitRegionTarget(layerTarget, nativeImageId, region.x, region.y, region.width, region.height, frameCtx.transmissionMode)
             : null
@@ -2764,7 +2672,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           }
           const col = Math.floor(layerCtx.bounds.x / Math.max(1, ctx.cellWidth ?? 1))
           const row = Math.floor(layerCtx.bounds.y / Math.max(1, ctx.cellHeight ?? 1))
-          const nativeEmitStart = performance.now()
+          const nativeEmitStart = PROFILE_ENABLED ? performance.now() : 0
           const stats = nativeEmitLayerTarget(layerTarget, nativeImageId, col, row, layerCtx.z, frameCtx.transmissionMode)
           addBackendProfile("nativeEmitMs", nativeEmitStart)
           if (stats !== null) {
@@ -2772,7 +2680,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             nativeLayerPresentDirty(layerCtx.key)
             return { output: "native-presented", strategy: lastStrategy, stats }
           }
-          const readbackStart = performance.now()
+          const readbackStart = PROFILE_ENABLED ? performance.now() : 0
           const rgba = vexartCompositeReadbackRgba(getVexartCtx(), layerTarget, ctx.target.width * ctx.target.height * 4)
           addBackendProfile("readbackMs", readbackStart)
           return {
@@ -2830,6 +2738,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         pruneLayerTargets()
         return { output: "none", strategy: lastStrategy }
       }
+      if (ctx.dirtyLayerCount === 0 || ctx.dirtyPixelArea === 0) {
+        pruneLayerTargets()
+        return { output: "none", strategy: lastStrategy }
+      }
       if (lastStrategy === "skip-present") {
         pruneLayerTargets()
         return { output: "none", strategy: lastStrategy }
@@ -2848,5 +2760,5 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       resetBackendProfile()
       return profile
     },
-  } as GpuRendererBackend & { paintNativeScene: (ctx: NativeScenePaintContext) => NativeScenePaintBackendResult }
+  } as GpuRendererBackend
 }

@@ -385,8 +385,8 @@ export const theme: {
         readonly semibold: 600;
         readonly bold: 700;
     };
-    readonly shadows: Record<"md" | "xs" | "sm" | "lg" | "xl", Shadow[]>;
-    readonly glows: Record<"success" | "ring" | "destructive", Glow>;
+    readonly shadows: Record<"xs" | "sm" | "md" | "lg" | "xl", Shadow[]>;
+    readonly glows: Record<"ring" | "destructive" | "success", Glow>;
 };
 
 // @public (undocumented)

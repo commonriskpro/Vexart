@@ -27,13 +27,9 @@
 import { createSignal } from "solid-js"
 import type { NodeHandle } from "../reconciler/handle"
 import type { TGENode } from "../ffi/node"
-import { buildNativeFrameExecutionStats, formatNativeFrameReasonFlags, type NativeFrameExecutionStats, type NativeFrameStrategy } from "../ffi/native-frame-orchestrator"
+import { buildNativeFrameExecutionStats, formatNativeFrameReasonFlags, type NativeFrameExecutionStats, type NativeFrameStrategy } from "../ffi/gpu-layer-strategy"
 import { getNativePresentationFallbackReason, isNativePresentationEnabled } from "../ffi/native-presentation-flags"
 import { formatNativeStats, type NativePresentationStats } from "../ffi/native-presentation-stats"
-import { getNativeSceneGraphFallbackReason, isNativeSceneGraphEnabled } from "../ffi/native-scene-graph-flags"
-import { getNativeEventDispatchFallbackReason, isNativeEventDispatchEnabled } from "../ffi/native-event-dispatch-flags"
-import { getNativeSceneLayoutFallbackReason, isNativeSceneLayoutEnabled } from "../ffi/native-scene-layout-flags"
-import { getNativeRenderGraphFallbackReason, isNativeRenderGraphEnabled } from "../ffi/native-render-graph-flags"
 import { isNativeLayerRegistryEnabled, nativeLayerRegistryFallbackReason } from "../ffi/native-layer-registry-flags"
 
 // ── Debug state ──
@@ -332,10 +328,6 @@ export function debugStatsLine(): string {
 
 function getRetainedModeSnapshot(): { mode: "default" | "fallback"; reason: string | null } {
   const disabled = [
-    ["scene", isNativeSceneGraphEnabled(), getNativeSceneGraphFallbackReason()],
-    ["events", isNativeEventDispatchEnabled(), getNativeEventDispatchFallbackReason()],
-    ["layout", isNativeSceneLayoutEnabled(), getNativeSceneLayoutFallbackReason()],
-    ["render", isNativeRenderGraphEnabled(), getNativeRenderGraphFallbackReason()],
     ["presentation", isNativePresentationEnabled(), getNativePresentationFallbackReason()],
     ["layers", isNativeLayerRegistryEnabled(), nativeLayerRegistryFallbackReason()],
   ].flatMap(([name, enabled, reason]) => enabled ? [] : [`${name}: ${reason ?? "disabled"}`])

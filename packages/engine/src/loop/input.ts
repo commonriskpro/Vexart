@@ -2,13 +2,13 @@
  * Input → SolidJS signals bridge.
  */
 
-import { createSignal } from "solid-js"
+import { createSignal, onCleanup } from "solid-js"
 import type { KeyEvent, MouseEvent as TGEMouseEvent, InputEvent } from "../input/types"
 
 /** @public */
 export type InputSubscriber = (event: InputEvent) => void
 
-const subscribers: InputSubscriber[] = []
+const subscribers = new Set<InputSubscriber>()
 
 /** @public */
 export type InteractionTrace = {
@@ -22,11 +22,12 @@ let latestInteraction: InteractionTrace = { seq: 0, at: 0, kind: null }
 
 /** @public */
 export function onInput(handler: InputSubscriber): () => void {
-  subscribers.push(handler)
-  return () => {
-    const idx = subscribers.indexOf(handler)
-    if (idx >= 0) subscribers.splice(idx, 1)
-  }
+  subscribers.add(handler)
+  return () => subscribers.delete(handler)
+}
+
+function cleanupOnOwner(unsub: () => void) {
+  try { onCleanup(unsub) } catch {}
 }
 
 /** @public */
@@ -55,9 +56,10 @@ export type KeyboardState = {
 /** @public */
 export function useKeyboard(): KeyboardState {
   const [key, setKey] = createSignal<KeyEvent | null>(null)
-  onInput((event) => {
+  const unsub = onInput((event) => {
     if (event.type === "key") setKey(event)
   })
+  cleanupOnOwner(unsub)
   return {
     key,
     pressed: (name: string) => key()?.key === name,
@@ -73,9 +75,10 @@ export type MouseState = {
 /** @public */
 export function useMouse(): MouseState {
   const [mouse, setMouse] = createSignal<TGEMouseEvent | null>(null)
-  onInput((event) => {
+  const unsub = onInput((event) => {
     if (event.type === "mouse") setMouse(event)
   })
+  cleanupOnOwner(unsub)
   return {
     mouse,
     pos: () => {
@@ -88,6 +91,7 @@ export function useMouse(): MouseState {
 /** @public */
 export function useInput(): () => InputEvent | null {
   const [event, setEvent] = createSignal<InputEvent | null>(null)
-  onInput((e) => setEvent(e))
+  const unsub = onInput((e) => setEvent(e))
+  cleanupOnOwner(unsub)
   return event
 }

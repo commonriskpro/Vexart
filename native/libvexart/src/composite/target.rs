@@ -145,11 +145,7 @@ impl TargetRegistry {
 
     /// End a layer: submit the encoder to `queue` and return the target to rested state.
     /// Returns Err if the handle is invalid or no layer is active.
-    pub fn end_layer(
-        &mut self,
-        queue: &wgpu::Queue,
-        handle: u64,
-    ) -> Result<(), i32> {
+    pub fn end_layer(&mut self, queue: &wgpu::Queue, handle: u64) -> Result<(), i32> {
         use crate::ffi::panic::{ERR_INVALID_ARG, ERR_INVALID_HANDLE};
         let rec = self.targets.get_mut(&handle).ok_or(ERR_INVALID_HANDLE)?;
         let layer = rec.active_layer.take().ok_or(ERR_INVALID_ARG)?; // no active layer
@@ -204,17 +200,16 @@ mod tests {
             force_fallback_adapter: false,
         }))
         .expect("no adapter");
-        let (device, _queue) = pollster::block_on(adapter.request_device(
-            &wgpu::DeviceDescriptor {
+        let (device, _queue) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
                 label: Some("test"),
                 required_features: wgpu::Features::empty(),
                 required_limits: wgpu::Limits::downlevel_defaults(),
                 memory_hints: wgpu::MemoryHints::Performance,
                 trace: wgpu::Trace::Off,
                 experimental_features: Default::default(),
-            },
-        ))
-        .expect("device");
+            }))
+            .expect("device");
 
         let mut reg = TargetRegistry::new();
         let mut handle = 0u64;
@@ -246,16 +241,14 @@ mod tests {
             force_fallback_adapter: false,
         }))
         .expect("no adapter");
-        let (device, queue) = pollster::block_on(adapter.request_device(
-            &wgpu::DeviceDescriptor {
-                label: Some("test"),
-                required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::downlevel_defaults(),
-                memory_hints: wgpu::MemoryHints::Performance,
-                trace: wgpu::Trace::Off,
-                experimental_features: Default::default(),
-            },
-        ))
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            label: Some("test"),
+            required_features: wgpu::Features::empty(),
+            required_limits: wgpu::Limits::downlevel_defaults(),
+            memory_hints: wgpu::MemoryHints::Performance,
+            trace: wgpu::Trace::Off,
+            experimental_features: Default::default(),
+        }))
         .expect("device");
 
         let mut reg = TargetRegistry::new();
@@ -290,16 +283,14 @@ mod tests {
             force_fallback_adapter: false,
         }))
         .expect("no adapter");
-        let (device, queue) = pollster::block_on(adapter.request_device(
-            &wgpu::DeviceDescriptor {
-                label: Some("test"),
-                required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::downlevel_defaults(),
-                memory_hints: wgpu::MemoryHints::Performance,
-                trace: wgpu::Trace::Off,
-                experimental_features: Default::default(),
-            },
-        ))
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            label: Some("test"),
+            required_features: wgpu::Features::empty(),
+            required_limits: wgpu::Limits::downlevel_defaults(),
+            memory_hints: wgpu::MemoryHints::Performance,
+            trace: wgpu::Trace::Off,
+            experimental_features: Default::default(),
+        }))
         .expect("device");
 
         let mut reg = TargetRegistry::new();

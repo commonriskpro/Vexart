@@ -1,10 +1,16 @@
 # Vexart App Framework - Product Requirements Document
 
-**Version**: 0.1
-**Status**: Draft - founder review
+**Version**: 0.2
+**Status**: Closed - Phase 11 implemented and archived
 **Owner**: Founder
-**Last updated**: April 2026
+**Last updated**: April 25, 2026
 **Companion to**: [PRD](./PRD.md), [ARCHITECTURE](./ARCHITECTURE.md), [API-POLICY](./API-POLICY.md), [PRD-RUST-RETAINED-ENGINE](./PRD-RUST-RETAINED-ENGINE.md)
+
+**Implementation evidence**:
+
+- Implemented in commit `8cdd9ec feat(app): add Bun-native app framework`.
+- Source-of-truth spec: [`openspec/specs/app-framework/spec.md`](../openspec/specs/app-framework/spec.md).
+- Archived change: [`openspec/changes/archive/2026-04-25-phase-11-vexart-app-framework/`](../openspec/changes/archive/2026-04-25-phase-11-vexart-app-framework/).
 
 ---
 

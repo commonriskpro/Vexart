@@ -15,6 +15,49 @@ import type { TGENode } from "../ffi/node"
 import { shouldPromoteInteractionLayer } from "../reconciler/interaction"
 import type { LayerBoundary, LayerSlot, LayerPlan } from "./types"
 
+const VALID_WILL_CHANGE_VALUES = new Set(["transform", "opacity", "filter", "scroll"])
+const AUTO_LAYER_BUDGET = 8
+const AUTO_LAYER_MIN_AREA = 64 * 64
+
+let autoLayerCount = 0
+
+export function hasBackdropEffect(node: TGENode) {
+  return !!(
+    node.props.backdropBlur ||
+    node.props.backdropBrightness !== undefined ||
+    node.props.backdropContrast !== undefined ||
+    node.props.backdropSaturate !== undefined ||
+    node.props.backdropGrayscale !== undefined ||
+    node.props.backdropInvert !== undefined ||
+    node.props.backdropSepia !== undefined ||
+    node.props.backdropHueRotate !== undefined
+  )
+}
+
+function hasPromotableArea(node: TGENode) {
+  return node.layout.width * node.layout.height >= AUTO_LAYER_MIN_AREA
+}
+
+function pushBoundary(
+  node: TGENode,
+  path: string,
+  result: LayerBoundary[],
+  nextZ: { value: number },
+  isScroll: boolean,
+  insideScroll: boolean,
+  hasSubtreeTransform: boolean,
+) {
+  result.push({
+    path,
+    nodeId: node.id,
+    z: nextZ.value++,
+    isScroll,
+    hasBg: node.props.backgroundColor !== undefined,
+    insideScroll,
+    hasSubtreeTransform,
+  })
+}
+
 // ── Layer boundary discovery ──────────────────────────────────────────────
 
 /**
@@ -36,30 +79,39 @@ export function findLayerBoundaries(
   nextZ: { value: number },
   insideScroll = false,
 ) {
+  if (path === "r") autoLayerCount = 0
   if (node.kind === "text") return
   const isScroll = !!(node.props.scrollX || node.props.scrollY)
   const isInteractionLayer = shouldPromoteInteractionLayer(node)
   const hasSubtreeTransform = !!(node.props.transform && node.children.length > 0)
+  const hasBackdrop = hasBackdropEffect(node)
   // willChange pre-promotes the node to its own layer (REQ-2B-501).
   const willChange = node.props.willChange
-  const validWillChangeValues = new Set(["transform", "opacity", "filter", "scroll"])
   const willChangeValues = willChange ? (Array.isArray(willChange) ? willChange : [willChange]) : []
-  const hasValidWillChange = willChangeValues.some(v => validWillChangeValues.has(v))
-  if (hasValidWillChange && !willChangeValues.every(v => validWillChangeValues.has(v))) {
+  const hasValidWillChange = willChangeValues.some(v => VALID_WILL_CHANGE_VALUES.has(v))
+  if (hasValidWillChange && !willChangeValues.every(v => VALID_WILL_CHANGE_VALUES.has(v))) {
     if (process.env.TGE_DEBUG) {
-      console.warn(`[TGE] willChange contains unrecognized value(s): ${willChangeValues.filter(v => !validWillChangeValues.has(v)).join(", ")}`)
+      console.warn(`[TGE] willChange contains unrecognized value(s): ${willChangeValues.filter(v => !VALID_WILL_CHANGE_VALUES.has(v)).join(", ")}`)
     }
   }
-  if (node.props.layer === true || isInteractionLayer || hasSubtreeTransform || hasValidWillChange) {
-    result.push({
-      path,
-      nodeId: node.id,
-      z: nextZ.value++,
-      isScroll,
-      hasBg: node.props.backgroundColor !== undefined,
-      insideScroll,
-      hasSubtreeTransform,
-    })
+  if (node.props.layer === true) {
+    node._autoLayer = false
+    pushBoundary(node, path, result, nextZ, isScroll, insideScroll, hasSubtreeTransform)
+  } else if (isInteractionLayer || hasSubtreeTransform || hasValidWillChange) {
+    node._autoLayer = false
+    pushBoundary(node, path, result, nextZ, isScroll, insideScroll, hasSubtreeTransform)
+  } else if (hasBackdrop && autoLayerCount < AUTO_LAYER_BUDGET) {
+    node._autoLayer = true
+    autoLayerCount++
+    pushBoundary(node, path, result, nextZ, isScroll, insideScroll, hasSubtreeTransform)
+  } else if (node._autoLayer === true && node._unstableFrameCount >= 3) {
+    node._autoLayer = false
+    node._stableFrameCount = 0
+    node._unstableFrameCount = 0
+  } else if (node._stableFrameCount >= 3 && hasPromotableArea(node) && autoLayerCount < AUTO_LAYER_BUDGET) {
+    node._autoLayer = true
+    autoLayerCount++
+    pushBoundary(node, path, result, nextZ, isScroll, insideScroll, hasSubtreeTransform)
   }
   const childInsideScroll = insideScroll || isScroll
   for (let i = 0; i < node.children.length; i++) {
@@ -115,6 +167,16 @@ type LayerBounds = {
   boundary: LayerBoundary
 }
 
+type ColorCommand = { index: number; cmd: RenderCommand }
+
+function packedColor(cmd: RenderCommand) {
+  return (((cmd.color[0] & 0xff) << 24) | ((cmd.color[1] & 0xff) << 16) | ((cmd.color[2] & 0xff) << 8) | (cmd.color[3] & 0xff)) >>> 0
+}
+
+function boundsKey(cmd: RenderCommand) {
+  return `${Math.round(cmd.x)}:${Math.round(cmd.y)}:${Math.round(cmd.x + cmd.width)}:${Math.round(cmd.y + cmd.height)}`
+}
+
 
 /**
  * State bag for assignLayersSpatial.
@@ -125,6 +187,37 @@ export type AssignLayersState = {
   root: TGENode
   /** Text collector — resolves text content from a node (mirrors collectText in walkTree). */
   collectText: (node: TGENode) => string
+  /** O(1) node lookup populated during walkTree. */
+  nodeRefById?: Map<number, TGENode>
+  /** Scroll containers collected in walkTree order. */
+  scrollContainers?: TGENode[]
+}
+
+let nodeIdToLayerIdx = new Int32Array(8192)
+
+function ensureLayerMapSize(maxNodeId: number) {
+  if (maxNodeId < nodeIdToLayerIdx.length) return
+  let size = nodeIdToLayerIdx.length
+  while (size <= maxNodeId) size *= 2
+  nodeIdToLayerIdx = new Int32Array(size)
+}
+
+function nodeForBoundary(state: AssignLayersState, boundary: LayerBoundary) {
+  return state.nodeRefById?.get(boundary.nodeId) ?? (boundary.path ? resolveNodeByPath(state.root, boundary.path) : null)
+}
+
+function setSubtreeLayerKey(node: TGENode, key: string) {
+  node._layerKey = key
+  for (const child of node.children) setSubtreeLayerKey(child, key)
+}
+
+function assignNodeLayerKeys(root: TGENode, bounds: LayerBounds[], state: AssignLayersState) {
+  setSubtreeLayerKey(root, "bg")
+  const ordered = [...bounds].sort((a, b) => a.slot.z - b.slot.z)
+  for (const lb of ordered) {
+    const node = nodeForBoundary(state, lb.boundary)
+    if (node) setSubtreeLayerKey(node, lb.slot.key)
+  }
 }
 
 /**
@@ -142,10 +235,11 @@ export function assignLayersSpatial(
   boundaries: LayerBoundary[],
   state: AssignLayersState,
 ): LayerPlan {
-  const { root, collectText } = state
+  const { root } = state
   const bgSlot: LayerSlot = { key: "bg", z: -1, cmdIndices: [] }
 
   if (boundaries.length === 0) {
+    setSubtreeLayerKey(root, "bg")
     for (let i = 0; i < commands.length; i++) {
       bgSlot.cmdIndices.push(i)
     }
@@ -186,35 +280,38 @@ export function assignLayersSpatial(
 
   // ── Build layer slots with bounds ──
   const layerBounds: LayerBounds[] = []
+  const rectCommandsByColor = new Map<number, ColorCommand[]>()
+  for (let i = 0; i < commands.length; i++) {
+    const cmd = commands[i]
+    if (cmd.type !== CMD.RECTANGLE) continue
+    const color = packedColor(cmd)
+    let entries = rectCommandsByColor.get(color)
+    if (!entries) {
+      entries = []
+      rectCommandsByColor.set(color, entries)
+    }
+    entries.push({ index: i, cmd })
+  }
+  const claimedBounds = new Set<string>()
 
   // Collect ALL scroll container nodes in walkTree order (to map scissors to layers)
-  const scrollNodes: { path: string; isLayer: boolean }[] = []
-  function findScrollNodes(node: TGENode, path: string) {
-    if (node.kind === "text") return
-    if (node.props.scrollX || node.props.scrollY) {
-      scrollNodes.push({ path, isLayer: node.props.layer === true })
-    }
-    for (let i = 0; i < node.children.length; i++) {
-      findScrollNodes(node.children[i], `${path}.${i}`)
-    }
-  }
-  findScrollNodes(root, "r")
+  const scrollNodes = state.scrollContainers ?? []
 
-  // Map: scroll node path → scissor pair index
-  const scrollPathToScissor = new Map<string, number>()
+  // Map: scroll node id → scissor pair index
+  const scrollNodeToScissor = new Map<number, number>()
   for (let si = 0; si < scrollNodes.length && si < scissorPairs.length; si++) {
-    scrollPathToScissor.set(scrollNodes[si].path, si)
+    scrollNodeToScissor.set(scrollNodes[si].id, si)
   }
 
   for (const b of boundaries) {
-    const node = resolveNodeByPath(root, b.path)
+    const node = nodeForBoundary(state, b)
     if (!node) continue
 
     const slot: LayerSlot = { key: `layer:${b.nodeId}`, z: b.z, cmdIndices: [] }
     let scissor: ScissorPair | null = null
 
     if (b.isScroll) {
-      const si = scrollPathToScissor.get(b.path)
+      const si = scrollNodeToScissor.get(b.nodeId)
       if (si !== undefined && si < scissorPairs.length) {
         scissor = scissorPairs[si]
       }
@@ -249,18 +346,14 @@ export function assignLayersSpatial(
       })
     } else if (b.hasBg) {
       const targetColor = (node.props.backgroundColor as number) || 0
-      const [tr, tg, tb, ta] = [(targetColor >>> 24) & 0xff, (targetColor >>> 16) & 0xff, (targetColor >>> 8) & 0xff, targetColor & 0xff]
 
       let found = false
-      for (let i = 0; i < commands.length; i++) {
-        const cmd = commands[i]
-        if (cmd.type !== CMD.RECTANGLE) continue
-        if (cmd.color[0] === tr && cmd.color[1] === tg && cmd.color[2] === tb && cmd.color[3] === ta) {
-          const alreadyClaimed = layerBounds.some(lb =>
-            lb.x === Math.round(cmd.x) && lb.y === Math.round(cmd.y) &&
-            lb.right === Math.round(cmd.x + cmd.width) && lb.bottom === Math.round(cmd.y + cmd.height)
-          )
-          if (!alreadyClaimed) {
+      const candidates = rectCommandsByColor.get(targetColor >>> 0) ?? []
+      for (const candidate of candidates) {
+        const cmd = candidate.cmd
+        const key = boundsKey(cmd)
+        if (!claimedBounds.has(key)) {
+            claimedBounds.add(key)
             layerBounds.push({
               slot,
               x: Math.round(cmd.x),
@@ -272,7 +365,6 @@ export function assignLayersSpatial(
             })
             found = true
             break
-          }
         }
       }
       if (!found) {
@@ -294,6 +386,7 @@ export function assignLayersSpatial(
   // ── Phase 3: Assign commands to layers ──
   const contentSlots: LayerSlot[] = layerBounds.map(lb => lb.slot)
   const slotBoundaryByKey = new Map(layerBounds.map((lb) => [lb.slot.key, lb.boundary]))
+  assignNodeLayerKeys(root, layerBounds, state)
 
   const claimedByScissor = new Set<number>()
   const scissorLayers = layerBounds.filter(lb => lb.scissor).sort((a, b) => b.slot.z - a.slot.z)
@@ -305,7 +398,7 @@ export function assignLayersSpatial(
       lb.slot.cmdIndices.push(i)
     }
     if (lb.boundary.hasBg) {
-      const node = resolveNodeByPath(root, lb.boundary.path)
+      const node = nodeForBoundary(state, lb.boundary)
       if (node) {
         const targetColor = (node.props.backgroundColor as number) || 0
         const [tr, tg, tb, ta] = [(targetColor >>> 24) & 0xff, (targetColor >>> 16) & 0xff, (targetColor >>> 8) & 0xff, targetColor & 0xff]
@@ -350,29 +443,31 @@ export function assignLayersSpatial(
   // focused element with larger border could produce commands that spatially
   // overlapped other layers, stealing their commands.
 
-  // Build nodeId → layer mapping. Inner layers (higher z) take priority.
-  // Pre-collect descendant sets for each layer boundary node.
-  const layerDescendants = new Map<number, Set<number>>()
-  for (const lb of layerBounds) {
-    if (lb.scissor) continue // scissor layers handled above
-    const node = resolveNodeByPath(root, lb.boundary.path)
-    if (!node) continue
-    const ids = new Set<number>()
-    ids.add(node.id)
-    function collectIds(n: TGENode) {
-      for (const child of n.children) {
-        ids.add(child.id)
-        collectIds(child)
-      }
-    }
-    collectIds(node)
-    layerDescendants.set(lb.boundary.nodeId, ids)
-  }
-
   // Sort layers by z descending so inner layers claim commands first
   const sortedBounds = [...layerBounds]
     .filter(lb => !lb.scissor)
     .sort((a, b) => b.slot.z - a.slot.z)
+
+  let maxNodeId = root.id
+  for (const cmd of commands) {
+    if (cmd.nodeId !== undefined && cmd.nodeId > maxNodeId) maxNodeId = cmd.nodeId
+  }
+  for (const lb of sortedBounds) {
+    if (lb.boundary.nodeId > maxNodeId) maxNodeId = lb.boundary.nodeId
+  }
+  ensureLayerMapSize(maxNodeId)
+  nodeIdToLayerIdx.fill(-1, 0, maxNodeId + 1)
+
+  for (let layerIdx = 0; layerIdx < sortedBounds.length; layerIdx++) {
+    const node = nodeForBoundary(state, sortedBounds[layerIdx].boundary)
+    if (!node) continue
+    const mark = (current: TGENode) => {
+      if (current.id >= nodeIdToLayerIdx.length) ensureLayerMapSize(current.id)
+      if (nodeIdToLayerIdx[current.id] === -1) nodeIdToLayerIdx[current.id] = layerIdx
+      for (const child of current.children) mark(child)
+    }
+    mark(node)
+  }
 
   for (let i = 0; i < commands.length; i++) {
     if (claimedByScissor.has(i)) continue
@@ -386,16 +481,10 @@ export function assignLayersSpatial(
 
     let assigned = false
     if (cmd.nodeId !== undefined) {
-      // Match by nodeId ancestry — find the innermost layer that contains this node.
-      // ALL commands now carry nodeId (set by layout-adapter.endLayout()).
-      // Commands that don't match any layer fall through to bgSlot.
-      for (const lb of sortedBounds) {
-        const descendants = layerDescendants.get(lb.boundary.nodeId)
-        if (descendants && descendants.has(cmd.nodeId)) {
-          lb.slot.cmdIndices.push(i)
-          assigned = true
-          break
-        }
+      const layerIdx = cmd.nodeId < nodeIdToLayerIdx.length ? nodeIdToLayerIdx[cmd.nodeId] : -1
+      if (layerIdx >= 0) {
+        sortedBounds[layerIdx].slot.cmdIndices.push(i)
+        assigned = true
       }
     }
 

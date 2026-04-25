@@ -32,7 +32,9 @@ pub fn target_create(
     // SAFETY: out_handle is non-null (checked above) and valid (caller contract).
     let handle_ref = unsafe { &mut *out_handle };
     // SAFETY: device_ptr is valid — it points to pctx.wgpu.device which is alive.
-    let rec = pctx.targets.create(unsafe { &*device_ptr }, width, height, handle_ref);
+    let rec = pctx
+        .targets
+        .create(unsafe { &*device_ptr }, width, height, handle_ref);
     let handle = *handle_ref;
     pctx.targets.insert(handle, rec);
     OK
@@ -63,7 +65,10 @@ pub fn target_begin_layer(
     // Extract device pointer before borrowing pctx.targets.
     // SAFETY: pctx.wgpu.device is stable; the raw pointer is valid for this call.
     let device_ptr: *const wgpu::Device = &pctx.wgpu.device as *const wgpu::Device;
-    match pctx.targets.begin_layer(unsafe { &*device_ptr }, handle, load_mode, clear_rgba) {
+    match pctx
+        .targets
+        .begin_layer(unsafe { &*device_ptr }, handle, load_mode, clear_rgba)
+    {
         Ok(()) => OK,
         Err(code) => code,
     }
@@ -189,22 +194,24 @@ pub fn composite_render_image_layer(
             wgpu::LoadOp::Load
         };
 
-        let mut pass = layer.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("vexart-composite-pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: view_ref,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: clear_op,
-                    store: wgpu::StoreOp::Store,
-                },
-                depth_slice: None,
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
+        let mut pass = layer
+            .encoder
+            .begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("vexart-composite-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: view_ref,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: clear_op,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
 
         pass.set_pipeline(&pctx.wgpu.pipelines.image);
         pass.set_vertex_buffer(0, vertex_buf.slice(..));
@@ -334,34 +341,36 @@ pub fn composite_render_image_transform_layer(
             wgpu::LoadOp::Load
         };
 
-        let mut pass = layer.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("vexart-composite-transform-pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: view_ref,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: clear_op,
-                    store: wgpu::StoreOp::Store,
-                },
-                depth_slice: None,
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
+        let mut pass = layer
+            .encoder
+            .begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("vexart-composite-transform-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: view_ref,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: clear_op,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
 
         pass.set_pipeline(&pctx.wgpu.pipelines.image_transform);
         pass.set_vertex_buffer(0, vertex_buf.slice(..));
         pass.set_bind_group(0, unsafe { &*bind_group }, &[]);
         pass.draw(0..6, 0..1);
     } else {
-        let mut encoder = pctx
-            .wgpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("vexart-composite-transform-encoder"),
-            });
+        let mut encoder =
+            pctx.wgpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("vexart-composite-transform-encoder"),
+                });
 
         let c = clear_rgba;
         let clear_op = wgpu::LoadOp::Clear(wgpu::Color {
@@ -437,20 +446,22 @@ pub fn composite_update_uniform(
             mipmap_filter: wgpu::MipmapFilterMode::Nearest,
             ..Default::default()
         });
-        pctx.wgpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("vexart-composite-uniform-bind-group"),
-            layout: &pctx.wgpu.image_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&source_rec.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ],
-        })
+        pctx.wgpu
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("vexart-composite-uniform-bind-group"),
+                layout: &pctx.wgpu.image_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&source_rec.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&sampler),
+                    },
+                ],
+            })
     };
 
     let instance = bytemuck::pod_read_unaligned::<BridgeImageTransformInstance>(
@@ -502,34 +513,36 @@ pub fn composite_update_uniform(
             wgpu::LoadOp::Load
         };
 
-        let mut pass = layer.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("vexart-composite-uniform-pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: view_ref,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: clear_op,
-                    store: wgpu::StoreOp::Store,
-                },
-                depth_slice: None,
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
+        let mut pass = layer
+            .encoder
+            .begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("vexart-composite-uniform-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: view_ref,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: clear_op,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
 
         pass.set_pipeline(&pctx.wgpu.pipelines.image_transform);
         pass.set_vertex_buffer(0, vertex_buf.slice(..));
         pass.set_bind_group(0, &bind_group, &[]);
         pass.draw(0..6, 0..1);
     } else {
-        let mut encoder = pctx
-            .wgpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("vexart-composite-uniform-encoder"),
-            });
+        let mut encoder =
+            pctx.wgpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("vexart-composite-uniform-encoder"),
+                });
 
         let c = clear_rgba;
         let clear_op = wgpu::LoadOp::Clear(wgpu::Color {
@@ -653,9 +666,7 @@ pub fn copy_region_to_image(
         },
     );
 
-    pctx.wgpu
-        .queue
-        .submit(std::iter::once(encoder.finish()));
+    pctx.wgpu.queue.submit(std::iter::once(encoder.finish()));
 
     // Create view + sampler + bind group and register as image.
     let view = dst_texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -901,20 +912,23 @@ fn register_effect_output(
         mipmap_filter: wgpu::MipmapFilterMode::Nearest,
         ..Default::default()
     });
-    let bind_group = pctx.wgpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some(label),
-        layout: &pctx.wgpu.image_bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::Sampler(&sampler),
-            },
-        ],
-    });
+    let bind_group = pctx
+        .wgpu
+        .device
+        .create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(label),
+            layout: &pctx.wgpu.image_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
 
     let handle = crate::paint::alloc_image_handle();
     pctx.images.insert(
@@ -932,11 +946,7 @@ fn remove_temp_image(pctx: &mut PaintContext, handle: u64) {
     let _ = pctx.images.remove(&handle);
 }
 
-fn render_blur_image(
-    pctx: &mut PaintContext,
-    image: u64,
-    blur_radius: f32,
-) -> Result<u64, i32> {
+fn render_blur_image(pctx: &mut PaintContext, image: u64, blur_radius: f32) -> Result<u64, i32> {
     use crate::paint::instances::BackdropBlurInstance;
     use bytemuck::bytes_of;
     use wgpu::util::DeviceExt;
@@ -955,20 +965,26 @@ fn render_blur_image(
         _pad2: 0.0,
     };
 
-    let vertex_buf = pctx.wgpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("vexart-blur-instance-buf"),
-        contents: bytes_of(&instance),
-        usage: wgpu::BufferUsages::VERTEX,
-    });
+    let vertex_buf = pctx
+        .wgpu
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("vexart-blur-instance-buf"),
+            contents: bytes_of(&instance),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
 
     let src_bg_ptr: *const wgpu::BindGroup = {
         let img = pctx.images.get(&image).unwrap();
         &img.bind_group as *const wgpu::BindGroup
     };
 
-    let mut encoder = pctx.wgpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("vexart-blur-encoder"),
-    });
+    let mut encoder = pctx
+        .wgpu
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("vexart-blur-encoder"),
+        });
 
     {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -995,7 +1011,12 @@ fn render_blur_image(
     }
 
     pctx.wgpu.queue.submit(std::iter::once(encoder.finish()));
-    Ok(register_effect_output(pctx, "vexart-blur-bind-group", dst_texture, dst_view))
+    Ok(register_effect_output(
+        pctx,
+        "vexart-blur-bind-group",
+        dst_texture,
+        dst_view,
+    ))
 }
 
 fn render_color_filter_image(
@@ -1014,7 +1035,8 @@ fn render_color_filter_image(
     use wgpu::util::DeviceExt;
 
     let (src_w, src_h) = source_image_size(pctx, image)?;
-    let (dst_texture, dst_view) = create_effect_destination(pctx, "vexart-filter-dst", src_w, src_h);
+    let (dst_texture, dst_view) =
+        create_effect_destination(pctx, "vexart-filter-dst", src_w, src_h);
 
     let instance = BackdropFilterInstance {
         x: -1.0,
@@ -1031,20 +1053,26 @@ fn render_color_filter_image(
         _pad: 0.0,
     };
 
-    let vertex_buf = pctx.wgpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("vexart-filter-instance-buf"),
-        contents: bytes_of(&instance),
-        usage: wgpu::BufferUsages::VERTEX,
-    });
+    let vertex_buf = pctx
+        .wgpu
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("vexart-filter-instance-buf"),
+            contents: bytes_of(&instance),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
 
     let src_bg_ptr: *const wgpu::BindGroup = {
         let img = pctx.images.get(&image).unwrap();
         &img.bind_group as *const wgpu::BindGroup
     };
 
-    let mut encoder = pctx.wgpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("vexart-filter-encoder"),
-    });
+    let mut encoder = pctx
+        .wgpu
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("vexart-filter-encoder"),
+        });
 
     {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -1071,7 +1099,12 @@ fn render_color_filter_image(
     }
 
     pctx.wgpu.queue.submit(std::iter::once(encoder.finish()));
-    Ok(register_effect_output(pctx, "vexart-filter-bind-group", dst_texture, dst_view))
+    Ok(register_effect_output(
+        pctx,
+        "vexart-filter-bind-group",
+        dst_texture,
+        dst_view,
+    ))
 }
 
 /// Apply backdrop blur + color filter chain to an image, producing a new image handle.
@@ -1098,9 +1131,7 @@ pub fn image_filter_backdrop(
 
     // Read 8 filter params.
     // SAFETY: caller guarantees params_ptr is valid for params_len bytes.
-    let params: &[f32] = unsafe {
-        std::slice::from_raw_parts(params_ptr as *const f32, 8)
-    };
+    let params: &[f32] = unsafe { std::slice::from_raw_parts(params_ptr as *const f32, 8) };
     let blur_raw = params[0];
     let brightness_raw = params[1];
     let contrast_raw = params[2];
@@ -1110,14 +1141,38 @@ pub fn image_filter_backdrop(
     let sepia_raw = params[6];
     let hue_rotate_deg_raw = params[7];
 
-    let blur = if blur_raw.is_nan() { 0.0 } else { blur_raw.max(0.0) };
-    let brightness = if brightness_raw.is_nan() { 100.0 } else { brightness_raw };
-    let contrast = if contrast_raw.is_nan() { 100.0 } else { contrast_raw };
-    let saturate = if saturate_raw.is_nan() { 100.0 } else { saturate_raw };
-    let grayscale = if grayscale_raw.is_nan() { 0.0 } else { grayscale_raw };
+    let blur = if blur_raw.is_nan() {
+        0.0
+    } else {
+        blur_raw.max(0.0)
+    };
+    let brightness = if brightness_raw.is_nan() {
+        100.0
+    } else {
+        brightness_raw
+    };
+    let contrast = if contrast_raw.is_nan() {
+        100.0
+    } else {
+        contrast_raw
+    };
+    let saturate = if saturate_raw.is_nan() {
+        100.0
+    } else {
+        saturate_raw
+    };
+    let grayscale = if grayscale_raw.is_nan() {
+        0.0
+    } else {
+        grayscale_raw
+    };
     let invert = if invert_raw.is_nan() { 0.0 } else { invert_raw };
     let sepia = if sepia_raw.is_nan() { 0.0 } else { sepia_raw };
-    let hue_rotate_deg = if hue_rotate_deg_raw.is_nan() { 0.0 } else { hue_rotate_deg_raw };
+    let hue_rotate_deg = if hue_rotate_deg_raw.is_nan() {
+        0.0
+    } else {
+        hue_rotate_deg_raw
+    };
 
     let has_blur = blur > 0.0;
     let has_color = (brightness - 100.0).abs() > f32::EPSILON
@@ -1204,9 +1259,7 @@ pub fn image_mask_rounded_rect(
 
     // Read 6 f32 params: radius_uniform, tl, tr, br, bl, mode.
     // SAFETY: caller guarantees rect_ptr is valid for 24 bytes.
-    let params: &[f32] = unsafe {
-        std::slice::from_raw_parts(rect_ptr as *const f32, 6)
-    };
+    let params: &[f32] = unsafe { std::slice::from_raw_parts(rect_ptr as *const f32, 6) };
     let radius_uniform = params[0];
     let radius_tl = params[1];
     let radius_tr = params[2];
@@ -1262,11 +1315,14 @@ pub fn image_mask_rounded_rect(
         _pad1: 0.0,
     };
 
-    let vertex_buf = pctx.wgpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("vexart-mask-instance-buf"),
-        contents: bytes_of(&instance),
-        usage: wgpu::BufferUsages::VERTEX,
-    });
+    let vertex_buf = pctx
+        .wgpu
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("vexart-mask-instance-buf"),
+            contents: bytes_of(&instance),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
 
     // Extract source bind group before mutable ops.
     let src_bg_ptr: *const wgpu::BindGroup = {
@@ -1274,9 +1330,12 @@ pub fn image_mask_rounded_rect(
         &img.bind_group as *const wgpu::BindGroup
     };
 
-    let mut encoder = pctx.wgpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("vexart-mask-encoder"),
-    });
+    let mut encoder = pctx
+        .wgpu
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("vexart-mask-encoder"),
+        });
 
     {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -1316,20 +1375,23 @@ pub fn image_mask_rounded_rect(
         mipmap_filter: wgpu::MipmapFilterMode::Nearest,
         ..Default::default()
     });
-    let dst_bind_group = pctx.wgpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("vexart-mask-bind-group"),
-        layout: &pctx.wgpu.image_bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&dst_view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::Sampler(&sampler),
-            },
-        ],
-    });
+    let dst_bind_group = pctx
+        .wgpu
+        .device
+        .create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("vexart-mask-bind-group"),
+            layout: &pctx.wgpu.image_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&dst_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
 
     let handle = crate::paint::alloc_image_handle();
     pctx.images.insert(

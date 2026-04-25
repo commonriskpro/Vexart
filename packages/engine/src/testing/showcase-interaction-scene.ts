@@ -1,5 +1,4 @@
 import { createNode, createTextNode, insertChild, parseSizing, type TGENode, type TGEProps } from "../ffi/node"
-import { nativeSceneSetProp, nativeSceneSetText } from "../ffi/native-scene"
 
 export const SHOWCASE_INTERACTION_W = 360
 export const SHOWCASE_INTERACTION_H = 140
@@ -23,13 +22,6 @@ export function createShowcaseInteractionScene() {
   const panel = box({ width: 120, height: 40, backgroundColor: 0x223047ff, cornerRadius: 10 })
   const label = text("VISUAL", { color: 0xffffffff, fontSize: 14 })
 
-  const syncNative = () => {
-    nativeSceneSetProp(panel._nativeId, "backgroundColor", panel.props.backgroundColor)
-    nativeSceneSetProp(panel._nativeId, "width", panel.props.width)
-    nativeSceneSetProp(panel._nativeId, "height", panel.props.height)
-    nativeSceneSetText(label._nativeId, label.text)
-  }
-
   const activate = () => {
     panel.props.backgroundColor = 0xdc2626ff
     panel.props.width = 180
@@ -37,7 +29,6 @@ export function createShowcaseInteractionScene() {
     panel._widthSizing = parseSizing(180)
     panel._heightSizing = parseSizing(40)
     label.text = "ACTIVE"
-    syncNative()
   }
 
   const actionButton = box({

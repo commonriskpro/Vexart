@@ -8,7 +8,7 @@
 
 import { createSignal, For, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import { useFocus, createScrollHandle, onPostScroll, markDirty } from "@vexart/engine"
+import { useFocus, createScrollHandle, releaseScrollHandle, onPostScroll, markDirty } from "@vexart/engine"
 
 // ── Types ──
 
@@ -149,7 +149,10 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     setScrollTick(t => t + 1)
     markDirty()
   })
-  onCleanup(() => unsubPostScroll())
+  onCleanup(() => {
+    unsubPostScroll()
+    releaseScrollHandle(scrollId)
+  })
 
   return (
     <box

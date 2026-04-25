@@ -26,12 +26,10 @@ import { fromConfig, isIdentity, multiply, transformPoint, translate } from "../
 import { debugFrameStart, debugUpdateStats, isDebugEnabled } from "./debug"
 import {
   writeLayoutBack as _writeLayoutBack,
-  updateCommandsToLayoutMap as _updateCommandsToLayoutMap,
   updateInteractiveStates as _updateInteractiveStates,
   type InteractiveStatesBag,
 } from "./layout"
 import {
-  findLayerBoundaries as _findLayerBoundaries,
   assignLayersSpatial as _assignLayersSpatial,
   type AssignLayersState,
 } from "./assign-layers"
@@ -48,14 +46,34 @@ import {
 import type { createVexartLayoutCtx } from "./layout-adapter"
 import { summarizeRendererResourceStats } from "../ffi/resource-stats"
 import { hasCompositorAnimations, isCompositorOnlyFrame, resetFrameTracking } from "../animation/compositor-path"
-import type { DamageRect } from "../ffi/damage"
+import { unionRect, type DamageRect } from "../ffi/damage"
 import type { Layer } from "../ffi/layers"
 import type { RendererBackend } from "../ffi/renderer-backend"
 import type { GpuFrameComposer } from "../output/gpu-frame-composer"
 import { createScrollHandle, updateScrollContainerGeometry } from "./scroll"
-import { nativeSceneComputeLayout } from "../ffi/native-scene"
-import type { PositionedCommand } from "../ffi/layout-writeback"
 import { DIRTY_KIND, type DirtyScope } from "../reconciler/dirty"
+
+let layerDirtyStore: Map<string, Layer> | null = null
+
+export function bindLayerDirtyStore(store: Map<string, Layer>): void {
+  layerDirtyStore = store
+}
+
+export function markLayerDirtyByKey(key: string): void {
+  const layer = layerDirtyStore?.get(key)
+  if (!layer) return
+  layer.dirty = true
+  if (layer.width > 0 && layer.height > 0) {
+    layer.damageRect = { x: layer.x, y: layer.y, width: layer.width, height: layer.height }
+  }
+}
+
+export function markLayerDamageByKey(key: string, rect: DamageRect): void {
+  const layer = layerDirtyStore?.get(key)
+  if (!layer) return
+  layer.dirty = true
+  layer.damageRect = layer.damageRect ? unionRect(layer.damageRect, rect) : rect
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -162,6 +180,9 @@ export type CompositeFrameState = {
   rectNodeById: Map<number, TGENode>
   nodePathById: Map<number, string>
   nodeRefById: Map<number, TGENode>
+  layerBoundaries: LayerBoundary[]
+  scrollContainers: TGENode[]
+  nodeCountValue: { value: number }
 
   // Render graph queues
   renderGraphQueues: ReturnType<typeof import("../ffi/render-graph").createRenderGraphQueues>
@@ -198,9 +219,6 @@ export type CompositeFrameState = {
   // Frame config flags
   useLayerCompositing: boolean
   forceLayerRepaint: boolean
-  useNativePressDispatch: boolean
-  useNativeSceneLayout: boolean
-  useNativeRenderGraph: boolean
   expFrameBudgetMs: number
   transmissionMode: "direct" | "file" | "shm"
 
@@ -212,9 +230,6 @@ export type CompositeFrameState = {
   lastPresentedInteractionSeq: { value: number }
   lastPresentedInteractionLatencyMs: { value: number }
   lastPresentedInteractionType: { value: string | null }
-
-  // Node count (for debug stats)
-  nodeCount: () => number
 
   // Frame timing (mutable — updated at start of each frame for dt calculation)
   lastFrameTime: { value: number }
@@ -232,10 +247,13 @@ function buildWalkState(s: CompositeFrameState): WalkTreeState {
     scrollIdCounter: { value: s.walkCounters.scrollIdCounter },
     textMeasureIndex: { value: s.walkCounters.textMeasureIndex },
     scrollSpeedCap: { value: s.walkCounters.scrollSpeedCap },
+    nodeCount: s.nodeCountValue,
     rectNodes: s.rectNodes,
     textNodes: s.textNodes,
     boxNodes: s.boxNodes,
     textMetas: s.textMetas,
+    layerBoundaries: s.layerBoundaries,
+    scrollContainers: s.scrollContainers,
     nodePathById: s.nodePathById,
     nodeRefById: s.nodeRefById,
     effectsQueue: s.renderGraphQueues.effects,
@@ -265,36 +283,21 @@ function resetWalkAccumulators(s: CompositeFrameState) {
   s.rectNodeById.clear()
   s.textNodes.length = 0
   s.boxNodes.length = 0
+  s.layerBoundaries.length = 0
+  s.scrollContainers.length = 0
+  s.nodeCountValue.value = 0
+  s.nodePathById.clear()
+  s.nodeRefById.clear()
 }
 
 function writeLayoutBack(s: CompositeFrameState) {
-  const layoutMap = s.useNativeSceneLayout
-    ? nativeSceneComputeLayout()
-    : s.layoutAdapter.getLastLayoutMap()
-  const nodeLayoutMap = s.useNativeSceneLayout
-    ? mapNativeLayoutToNodeIds(layoutMap, s)
-    : layoutMap
-  _writeLayoutBack(nodeLayoutMap, {
+  const layoutMap = s.layoutAdapter.getLastLayoutMap()
+  _writeLayoutBack(layoutMap, {
     rectNodes: s.rectNodes,
     textNodes: s.textNodes,
     boxNodes: s.boxNodes,
     pendingNodeDamageRects: s.pendingNodeDamageRects,
-    syncNativeLayout: !s.useNativeSceneLayout,
   })
-  return nodeLayoutMap
-}
-
-function mapNativeLayoutToNodeIds(layoutMap: Map<bigint, PositionedCommand> | null, s: CompositeFrameState) {
-  if (!layoutMap || layoutMap.size === 0) return layoutMap
-  const mapped = new Map<bigint, PositionedCommand>()
-  const nodes = [...s.boxNodes, ...s.textNodes]
-  for (const node of nodes) {
-    const pos = (node._nativeId ? layoutMap.get(node._nativeId) : undefined)
-      ?? layoutMap.get(BigInt(node.id))
-    if (!pos) continue
-    mapped.set(BigInt(node.id), { ...pos, nodeId: BigInt(node.id) })
-  }
-  return mapped
 }
 
 /**
@@ -309,8 +312,8 @@ function mapNativeLayoutToNodeIds(layoutMap: Map<bigint, PositionedCommand> | nu
  * the scroll container's viewport bounds (not the scrolled content position).
  */
 function applyScrollOffsets(commands: RenderCommand[], s: CompositeFrameState) {
-  for (const node of s.boxNodes) {
-    if (!node.props.scrollX && !node.props.scrollY) continue
+  const offsets = new Map<number, { x: number; y: number }>()
+  for (const node of s.scrollContainers) {
 
     // Determine stable scroll id (must match what walkTree used)
     const sid = node.props.scrollId ?? `tge-scroll-${node.id}`
@@ -339,36 +342,21 @@ function applyScrollOffsets(commands: RenderCommand[], s: CompositeFrameState) {
 
     const ox = node.props.scrollX ? handle.scrollX : 0
     const oy = node.props.scrollY ? handle.scrollY : 0
-    if (ox === 0 && oy === 0) continue
-
-    // Collect all descendant node IDs for command offset (skip nested scroll containers)
-    const descendantIds = new Set<number>()
-    collectDescendantIds(node, descendantIds)
-
-    // Offset render commands for descendants (not SCISSOR commands — they use viewport coords)
-    for (const cmd of commands) {
-      if (cmd.type === CMD.SCISSOR_START || cmd.type === CMD.SCISSOR_END) continue
-      // Match by nodeId ancestry: check if the command belongs to a descendant node.
-      // cmd.nodeId is set by layout-adapter.endLayout() for every RECT and TEXT command.
-      // This is reliable — it doesn't depend on positional overlap heuristics.
-      if (cmd.nodeId !== undefined && descendantIds.has(cmd.nodeId)) {
-        cmd.x += ox
-        cmd.y += oy
-      }
-    }
+    if (ox !== 0 || oy !== 0) offsets.set(node.id, { x: ox, y: oy })
 
     // Offset all descendant node layout rects for hit-testing
     applyOffsetToDescendants(node, ox, oy)
   }
-}
 
-/** Collect nodeIds of all descendants, stopping at nested scroll containers. */
-function collectDescendantIds(container: TGENode, ids: Set<number>) {
-  for (const child of container.children) {
-    ids.add(child.id)
-    if (!child.props.scrollX && !child.props.scrollY) {
-      collectDescendantIds(child, ids)
-    }
+  if (offsets.size === 0) return
+  for (const cmd of commands) {
+    if (cmd.type === CMD.SCISSOR_START || cmd.type === CMD.SCISSOR_END || cmd.nodeId === undefined) continue
+    const node = s.nodeRefById.get(cmd.nodeId)
+    if (!node || node._scrollContainerId === 0) continue
+    const offset = offsets.get(node._scrollContainerId)
+    if (!offset) continue
+    cmd.x += offset.x
+    cmd.y += offset.y
   }
 }
 
@@ -383,16 +371,6 @@ function applyOffsetToDescendants(container: TGENode, ox: number, oy: number) {
       applyOffsetToDescendants(child, ox, oy)
     }
   }
-}
-
-function resolveNodeById(root: TGENode, id: number): TGENode | null {
-  if (root.id === id) return root
-  if (root.kind === "text") return null
-  for (const child of root.children) {
-    const resolved = resolveNodeById(child, id)
-    if (resolved) return resolved
-  }
-  return null
 }
 
 function computeNodeLocalTransform(node: TGENode) {
@@ -456,7 +434,7 @@ function buildRetainedCompositorLayers(s: CompositeFrameState) {
     }
     if (!key.startsWith("layer:")) continue
     const nodeId = Number(key.slice(6))
-    const node = s.nodeRefById.get(nodeId) ?? resolveNodeById(s.root, nodeId)
+    const node = s.nodeRefById.get(nodeId) ?? null
     const vp = node ? resolveProps(node) : null
     layers.push({
       key,
@@ -512,16 +490,19 @@ function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; c
       for (const nodeId of visualNodeIds) s.markDirty({ kind: DIRTY_KIND.NODE_VISUAL, nodeId })
     },
     onNodeVisualChanged: queueNodeVisualDamage,
-    useNativePressDispatch: s.useNativePressDispatch,
-    useNativeInteractionDispatch: s.useNativePressDispatch,
   }
+  const captureBefore = s.pointer.capturedNodeId
   const hadClick = _updateInteractiveStates(bag)
   // Write back mutable fields
   s.pointer.pendingPress = bag.pendingPress
   s.pointer.pendingRelease = bag.pendingRelease
   s.pointer.pressOriginSet = bag.pressOriginSet
   s.pointer.prevActiveNode = bag.prevActiveNode
-  s.pointer.capturedNodeId = bag.capturedNodeId
+  // Pointer callbacks may call setPointerCapture()/releasePointerCapture(),
+  // which mutate s.pointer directly through the active loop boundary. Do not
+  // overwrite that external mutation with the stale bag value captured before
+  // callbacks ran.
+  if (s.pointer.capturedNodeId === captureBefore) s.pointer.capturedNodeId = bag.capturedNodeId
   s.pointer.dirty = bag.pointerDirty
   return { hadClick, changed }
 }
@@ -668,7 +649,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
       moveOnlyCount: 0,
       moveFallbackCount: 0,
       stableReuseCount: retainedLayers.length,
-      nodeCount: s.nodeCount(),
+      nodeCount: s.nodeCountValue.value,
       repaintedCount: 0,
       rendererStrategy: frameResult?.strategy ?? "final-frame",
       rendererOutput: frameResult?.output ?? "none",
@@ -696,7 +677,6 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
 
   // ── Step 2: Walk tree → Clay layout ──
   resetWalkAccumulators(s)
-  s.pendingNodeDamageRects.length = 0
   s.layoutAdapter.beginLayout()
   const walkStart = profile ? performance.now() : 0
   walkTreeOnce(s)
@@ -705,8 +685,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   let commands = s.layoutAdapter.endLayout()
   if (profile) profile.layoutComputeMs = performance.now() - layoutComputeStart
   const layoutWritebackStart = profile ? performance.now() : 0
-  let layoutMap = writeLayoutBack(s)
-  if (s.useNativeSceneLayout) _updateCommandsToLayoutMap(commands, layoutMap)
+  writeLayoutBack(s)
 
   // ── Step 3: Write layout back + interaction states ──
   applyScrollOffsets(commands, s)
@@ -725,8 +704,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     s.layoutAdapter.beginLayout()
     walkTreeOnce(s)
     commands = s.layoutAdapter.endLayout()
-    layoutMap = writeLayoutBack(s)
-    if (s.useNativeSceneLayout) _updateCommandsToLayoutMap(commands, layoutMap)
+    writeLayoutBack(s)
     applyScrollOffsets(commands, s)
     if (profile) profile.relayoutMs = performance.now() - relayoutStart
   }
@@ -742,10 +720,10 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   const layerAssignStart = profile ? performance.now() : 0
 
   // ── Step 4: Layer boundary + slot assignment ──
-  const nextZCounter = { value: 0 }
-  const boundaries: LayerBoundary[] = []
-  _findLayerBoundaries(s.root, "r", boundaries, nextZCounter)
-  const assignState: AssignLayersState = { root: s.root, collectText }
+  const boundaries = s.forceLayerRepaint
+    ? s.layerBoundaries.filter((boundary) => s.nodeRefById.get(boundary.nodeId)?._autoLayer !== true)
+    : s.layerBoundaries
+  const assignState: AssignLayersState = { root: s.root, collectText, nodeRefById: s.nodeRefById, scrollContainers: s.scrollContainers }
   const { bgSlot, contentSlots, slotBoundaryByKey } = _assignLayersSpatial(commands, boundaries, assignState)
 
   if (contentSlots.length === 0 && commands.length > bgSlot.cmdIndices.length) {
@@ -781,7 +759,6 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     transmissionMode: s.transmissionMode,
     useLayerCompositing: s.useLayerCompositing,
     forceLayerRepaint: s.forceLayerRepaint,
-    useNativeRenderGraph: s.useNativeRenderGraph,
     expFrameBudgetMs: s.expFrameBudgetMs,
     debugCadence: s.debugCadence,
     debugDragRepro: s.debugDragRepro,
@@ -797,7 +774,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     activeSlotKeys: s.activeSlotKeys,
     frameDirtyRects: s.frameDirtyRects,
     pendingNodeDamageRects: s.pendingNodeDamageRects,
-    root: s.root,
+    nodeRefById: s.nodeRefById,
     renderGraphQueues: s.renderGraphQueues,
     textMetaMap: s.textMetaMap,
     layerComposer: s.layerComposer,
@@ -812,6 +789,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   }
   const layerPlan = { bgSlot, contentSlots, slotBoundaryByKey, boundaries }
   const paintResult = _paintFrame(layerPlan, commands, cellW, cellH, paintState)
+  s.pendingNodeDamageRects.length = 0
 
   // Write back interaction latency from paint state bag
   s.lastPresentedInteractionSeq.value = paintState.lastPresentedInteractionSeq.value
@@ -829,7 +807,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     moveOnlyCount: paintResult.moveOnlyCount,
     moveFallbackCount: paintResult.moveFallbackCount,
     stableReuseCount: paintResult.stableReuseCount,
-    nodeCount: s.nodeCount(),
+    nodeCount: s.nodeCountValue.value,
     repaintedCount: paintResult.repaintedThisFrame,
     rendererStrategy: paintResult.frameResult?.strategy ?? null,
     rendererOutput: paintResult.rendererOutput,

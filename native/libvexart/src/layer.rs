@@ -52,7 +52,9 @@ impl LayerDescriptor {
     }
 
     pub fn bytes(&self) -> u64 {
-        (self.width as u64).saturating_mul(self.height as u64).saturating_mul(4)
+        (self.width as u64)
+            .saturating_mul(self.height as u64)
+            .saturating_mul(4)
     }
 }
 
@@ -198,14 +200,24 @@ impl LayerRegistry {
         false
     }
 
-    pub fn reuse(&mut self, handle: u64, frame: u64, resources: &mut ResourceManager) -> Option<u32> {
+    pub fn reuse(
+        &mut self,
+        handle: u64,
+        frame: u64,
+        resources: &mut ResourceManager,
+    ) -> Option<u32> {
         let record = self.records.get_mut(&handle)?;
         record.last_used_frame = frame;
         touch_layer_resources(resources, handle, frame);
         Some(record.terminal_image_id)
     }
 
-    pub fn mark_presented(&mut self, handle: u64, frame: u64, resources: &mut ResourceManager) -> Option<u32> {
+    pub fn mark_presented(
+        &mut self,
+        handle: u64,
+        frame: u64,
+        resources: &mut ResourceManager,
+    ) -> Option<u32> {
         let record = self.records.get_mut(&handle)?;
         record.dirty = false;
         record.last_used_frame = frame;
@@ -299,11 +311,18 @@ mod tests {
         let mut registry = LayerRegistry::new();
         let mut resources = ResourceManager::new();
 
-        let result = registry.upsert(LayerKey::from_bytes(b"layer:a"), desc(10, 20), &mut resources);
+        let result = registry.upsert(
+            LayerKey::from_bytes(b"layer:a"),
+            desc(10, 20),
+            &mut resources,
+        );
 
         assert_eq!(result.handle, 1);
         assert_eq!(result.terminal_image_id, FIRST_TERMINAL_IMAGE_ID);
-        assert_eq!(result.flags & LayerUpsertResult::FLAG_CREATED, LayerUpsertResult::FLAG_CREATED);
+        assert_eq!(
+            result.flags & LayerUpsertResult::FLAG_CREATED,
+            LayerUpsertResult::FLAG_CREATED
+        );
         assert_eq!(registry.len(), 1);
         assert_eq!(resources.resource_count(), 2);
     }
@@ -312,8 +331,16 @@ mod tests {
     fn upsert_reuses_existing_layer_for_same_key() {
         let mut registry = LayerRegistry::new();
         let mut resources = ResourceManager::new();
-        let first = registry.upsert(LayerKey::from_bytes(b"layer:a"), desc(10, 20), &mut resources);
-        let second = registry.upsert(LayerKey::from_bytes(b"layer:a"), desc(10, 20), &mut resources);
+        let first = registry.upsert(
+            LayerKey::from_bytes(b"layer:a"),
+            desc(10, 20),
+            &mut resources,
+        );
+        let second = registry.upsert(
+            LayerKey::from_bytes(b"layer:a"),
+            desc(10, 20),
+            &mut resources,
+        );
 
         assert_eq!(first.handle, second.handle);
         assert_eq!(first.terminal_image_id, second.terminal_image_id);
@@ -325,11 +352,22 @@ mod tests {
     fn resized_layer_marks_dirty_and_updates_resource_size() {
         let mut registry = LayerRegistry::new();
         let mut resources = ResourceManager::new();
-        let first = registry.upsert(LayerKey::from_bytes(b"layer:a"), desc(10, 20), &mut resources);
+        let first = registry.upsert(
+            LayerKey::from_bytes(b"layer:a"),
+            desc(10, 20),
+            &mut resources,
+        );
         registry.mark_presented(first.handle, 1, &mut resources);
-        let second = registry.upsert(LayerKey::from_bytes(b"layer:a"), desc(20, 20), &mut resources);
+        let second = registry.upsert(
+            LayerKey::from_bytes(b"layer:a"),
+            desc(20, 20),
+            &mut resources,
+        );
 
-        assert_eq!(second.flags & LayerUpsertResult::FLAG_RESIZED, LayerUpsertResult::FLAG_RESIZED);
+        assert_eq!(
+            second.flags & LayerUpsertResult::FLAG_RESIZED,
+            LayerUpsertResult::FLAG_RESIZED
+        );
         assert_eq!(registry.get(first.handle).unwrap().dirty, true);
         assert_eq!(registry.get(first.handle).unwrap().bytes, 20 * 20 * 4);
     }
@@ -338,7 +376,11 @@ mod tests {
     fn remove_deletes_layer_and_resources() {
         let mut registry = LayerRegistry::new();
         let mut resources = ResourceManager::new();
-        let result = registry.upsert(LayerKey::from_bytes(b"layer:a"), desc(10, 20), &mut resources);
+        let result = registry.upsert(
+            LayerKey::from_bytes(b"layer:a"),
+            desc(10, 20),
+            &mut resources,
+        );
 
         let image_id = registry.remove(result.handle, &mut resources);
 

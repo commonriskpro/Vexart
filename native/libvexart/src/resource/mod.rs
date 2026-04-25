@@ -315,7 +315,11 @@ mod tests {
         reg(&mut mgr, 1, ResourceKind::LayerTarget, 40, 10);
         // Ensure it's Visible by touching it at the current frame.
         mgr.touch(1, 10);
-        assert_eq!(mgr.resources[&1].priority, Priority::Visible, "key 1 must be Visible");
+        assert_eq!(
+            mgr.resources[&1].priority,
+            Priority::Visible,
+            "key 1 must be Visible"
+        );
 
         // Register Cold 10MB resource directly.
         reg(&mut mgr, 2, ResourceKind::ImageSprite, 10, 0);
@@ -326,7 +330,10 @@ mod tests {
         match result {
             Ok(evicted) | Err(evicted) => {
                 // Visible resource (key 1) must NEVER be in the evicted list.
-                assert!(!evicted.contains(&1), "Visible resource must NOT be evicted");
+                assert!(
+                    !evicted.contains(&1),
+                    "Visible resource must NOT be evicted"
+                );
             }
         }
     }
@@ -373,11 +380,17 @@ mod tests {
     fn test_high_water_mark_tracked() {
         let mut mgr = ResourceManager::new();
         reg(&mut mgr, 1, ResourceKind::FontAtlas, 50, 0);
-        assert_eq!(mgr.high_water_mark.load(Ordering::Relaxed), 50 * 1024 * 1024);
+        assert_eq!(
+            mgr.high_water_mark.load(Ordering::Relaxed),
+            50 * 1024 * 1024
+        );
 
         mgr.remove(1);
         // Usage dropped but high_water_mark should still be 50MB.
-        assert_eq!(mgr.high_water_mark.load(Ordering::Relaxed), 50 * 1024 * 1024);
+        assert_eq!(
+            mgr.high_water_mark.load(Ordering::Relaxed),
+            50 * 1024 * 1024
+        );
     }
 
     #[test]
@@ -416,6 +429,9 @@ mod tests {
         reg(&mut mgr, 2, ResourceKind::ImageSprite, 60, 0);
         mgr.resources.get_mut(&2).unwrap().priority = Priority::Cold;
         let _ = mgr.try_allocate(60 * 1024 * 1024);
-        assert!(mgr.evictions_total > total_after_first, "evictions_total should grow");
+        assert!(
+            mgr.evictions_total > total_after_first,
+            "evictions_total should grow"
+        );
     }
 }

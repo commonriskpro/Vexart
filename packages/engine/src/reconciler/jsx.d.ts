@@ -97,6 +97,7 @@ type ImgIntrinsicProps = {
 type CanvasIntrinsicProps = TGEProps & {
   ref?: RefCallback
   onDraw?: TGEProps["onDraw"]
+  drawCacheKey?: string | number
   viewport?: TGEProps["viewport"]
   children?: Children
 }

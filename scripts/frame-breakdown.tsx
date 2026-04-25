@@ -2,6 +2,8 @@ import { existsSync } from "node:fs"
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { OpenCodeCosmicShellApp } from "../examples/opencode-cosmic-shell/app"
+import type { TGENode } from "../packages/engine/src/ffi/node"
 
 process.env.TGE_DEBUG_CADENCE = "1"
 
@@ -11,6 +13,9 @@ const SCENARIO = {
   NOOP_RETAINED: "noop-retained",
   DIRTY_REGION: "dirty-region",
   COMPOSITOR_ONLY: "compositor-only",
+  COSMIC_SHELL_1080P: "cosmic-shell-1080p",
+  COSMIC_TYPING: "cosmic-typing-1080p",
+  COSMIC_IDLE: "cosmic-idle-1080p",
 } as const
 
 const CADENCE_LOG = "/tmp/tge-cadence.log"
@@ -27,6 +32,7 @@ interface CliOptions {
   output: string
   transport: TransmissionMode
   nativePresentation: boolean
+  scenarioFilter: string | null
 }
 
 interface Size {
@@ -196,6 +202,7 @@ interface BenchmarkReport {
   warmup: number
   transport: TransmissionMode
   nativePresentation: boolean
+  deprecatedMetrics: string[]
   scenarios: ScenarioReport[]
 }
 
@@ -204,6 +211,7 @@ interface EngineModules {
   setFrameProfileSink: typeof import("../packages/engine/src/loop/loop").setFrameProfileSink
   solidRender: typeof import("../packages/engine/src/reconciler/reconciler").render
   markDirty: typeof import("../packages/engine/src/reconciler/dirty").markDirty
+  markLayerDamageByKey: typeof import("../packages/engine/src/loop/composite").markLayerDamageByKey
   resetFocus: typeof import("../packages/engine/src/reconciler/focus").resetFocus
   resetSelection: typeof import("../packages/engine/src/reconciler/selection").resetSelection
   bindLoop: typeof import("../packages/engine/src/reconciler/pointer").bindLoop
@@ -222,6 +230,7 @@ function parseCli(): CliOptions {
   let output = REPORT_PATH
   let transport: TransmissionMode = "shm"
   let nativePresentation = false
+  let scenarioFilter: string | null = null
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
     if (arg === "--frames") frames = Number(args[++i] ?? frames)
@@ -244,6 +253,8 @@ function parseCli(): CliOptions {
       const value = arg.slice("--native-presentation=".length)
       nativePresentation = value === "1" || value === "true" || value === "yes"
     }
+    else if (arg === "--scenarios") scenarioFilter = args[++i] ?? null
+    else if (arg.startsWith("--scenarios=")) scenarioFilter = arg.slice("--scenarios=".length)
   }
   return {
     frames: Number.isFinite(frames) && frames > 0 ? Math.floor(frames) : DEFAULT_FRAMES,
@@ -251,6 +262,7 @@ function parseCli(): CliOptions {
     output,
     transport,
     nativePresentation,
+    scenarioFilter,
   }
 }
 
@@ -363,6 +375,7 @@ async function loadEngine(): Promise<EngineModules> {
   const loop = await import("../packages/engine/src/loop/loop")
   const reconciler = await import("../packages/engine/src/reconciler/reconciler")
   const dirty = await import("../packages/engine/src/reconciler/dirty")
+  const composite = await import("../packages/engine/src/loop/composite")
   const focus = await import("../packages/engine/src/reconciler/focus")
   const selection = await import("../packages/engine/src/reconciler/selection")
   const pointer = await import("../packages/engine/src/reconciler/pointer")
@@ -374,6 +387,7 @@ async function loadEngine(): Promise<EngineModules> {
     setFrameProfileSink: loop.setFrameProfileSink,
     solidRender: reconciler.render,
     markDirty: dirty.markDirty,
+    markLayerDamageByKey: composite.markLayerDamageByKey,
     resetFocus: focus.resetFocus,
     resetSelection: selection.resetSelection,
     bindLoop: pointer.bindLoop,
@@ -525,6 +539,69 @@ function topStageP95(summary: StageSummary) {
     .slice(0, 6)
 }
 
+function findEditorTextNode(node: TGENode, size: Size): TGENode | null {
+  const candidates: TGENode[] = []
+  collectEditorTextNodes(node, size, candidates)
+  if (candidates.length === 0) return null
+
+  const totalArea = size.width * size.height
+  const scored = candidates.map((candidate) => {
+    const owner = findLayerOwner(node, candidate._layerKey)
+    const area = owner ? owner.layout.width * owner.layout.height : totalArea
+    const contained = area > 0 && area < totalArea * 0.85
+    return { candidate, area, contained }
+  })
+  scored.sort((a, b) => {
+    if (a.contained !== b.contained) return a.contained ? -1 : 1
+    return b.area - a.area
+  })
+  return scored[0]?.candidate ?? null
+}
+
+function collectEditorTextNodes(node: TGENode, size: Size, result: TGENode[]) {
+  if (node.kind === "text" && node.text.trim().length > 0) {
+    const inEditorX = node.layout.x > size.width * 0.17 && node.layout.x < size.width * 0.78
+    const inEditorY = node.layout.y > size.height * 0.14 && node.layout.y < size.height * 0.9
+    if (inEditorX && inEditorY) result.push(node)
+  }
+  for (const child of node.children) {
+    collectEditorTextNodes(child, size, result)
+  }
+}
+
+function findLayerOwner(root: TGENode, key: string | null): TGENode | null {
+  if (!key?.startsWith("layer:")) return null
+  const id = Number(key.slice("layer:".length))
+  if (!Number.isFinite(id)) return null
+  return findNodeById(root, id)
+}
+
+function findNodeById(node: TGENode, id: number): TGENode | null {
+  if (node.id === id) return node
+  for (const child of node.children) {
+    const found = findNodeById(child, id)
+    if (found) return found
+  }
+  return null
+}
+
+function findFirstTextNode(node: TGENode): TGENode | null {
+  if (node.kind === "text" && node.text.trim().length > 0) return node
+  for (const child of node.children) {
+    const found = findFirstTextNode(child)
+    if (found) return found
+  }
+  return null
+}
+
+function toggleTypingNode(node: TGENode, index: number) {
+  const base = node.text.length > 0 ? node.text : "code"
+  const marker = index % 2 === 0 ? "." : ","
+  node.text = `${base.slice(0, -1)}${marker}`
+  node._vpDirty = true
+  node._generation++
+}
+
 async function runScenario(engine: EngineModules, name: ScenarioName, size: Size, frames: number, warmup: number, transport: TransmissionMode, nativePresentation: boolean): Promise<ScenarioReport> {
   await clearCadenceLog()
   engine.resetVexartFfiCallCounts()
@@ -577,16 +654,12 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
     probe: { shm: transport === "shm", file: transport === "file" || transport === "shm" },
   })
   const term = createMockTerminal(size.width, size.height, transport)
-  const forceLayerRepaint = name === SCENARIO.DASHBOARD_SMOKE || name === SCENARIO.DASHBOARD_1080P
+  const forceLayerRepaint = name === SCENARIO.DASHBOARD_SMOKE || name === SCENARIO.DASHBOARD_1080P || name === SCENARIO.COSMIC_SHELL_1080P
   const loop = engine.createRenderLoop(term as never, {
     experimental: {
       forceLayerRepaint,
       nativePresentation,
       nativeLayerRegistry: nativePresentation,
-      nativeSceneGraph: true,
-      nativeEventDispatch: true,
-      nativeSceneLayout: true,
-      nativeRenderGraph: true,
     },
   })
   engine.bindLoop(loop)
@@ -602,6 +675,20 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
         loop.frame()
       }
       await tick()
+    }
+
+    if (name === SCENARIO.COSMIC_IDLE || name === SCENARIO.COSMIC_TYPING) {
+      engine.markDirty({
+        kind: "node-visual",
+        nodeId: loop.root.id,
+        rect: { x: 0, y: 0, width: 1, height: 1 },
+      })
+      loop.frame()
+      await tick()
+    }
+
+    if (name === SCENARIO.COSMIC_IDLE) {
+      await new Promise((resolve) => setTimeout(resolve, 200))
     }
 
     await clearCadenceLog()
@@ -630,6 +717,22 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
           })
         }
         engine.markDirty()
+        loop.frame()
+      } else if (name === SCENARIO.COSMIC_TYPING) {
+        const target = findEditorTextNode(loop.root, size) ?? findFirstTextNode(loop.root)
+        if (target) {
+          const rect = {
+            x: target.layout.x - 32,
+            y: target.layout.y - 32,
+            width: target.layout.width + 64,
+            height: target.layout.height + 64,
+          }
+          toggleTypingNode(target, i)
+          if (target._layerKey) engine.markLayerDamageByKey(target._layerKey, rect)
+          engine.markDirty({ kind: "node-visual", nodeId: target.id, rect })
+        }
+        loop.frame()
+      } else if (name === SCENARIO.COSMIC_IDLE) {
         loop.frame()
       } else {
         engine.markDirty()
@@ -682,7 +785,7 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
     }
 
     const parsed = capturedProfiles.length > 0 ? capturedProfiles : await readCadenceFrames()
-    const framesMeasured = name === SCENARIO.NOOP_RETAINED
+    const framesMeasured = name === SCENARIO.NOOP_RETAINED || (name === SCENARIO.COSMIC_IDLE && parsed.length === 0)
       ? manualFrames
       : parsed.slice(-frames).map((frame, index) => ({ ...frame, ffiCallCount: manualFrames[index]?.ffiCallCount ?? 0 }))
     return {
@@ -708,6 +811,7 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
 function renderScenario(name: ScenarioName, size: Size) {
   if (name === SCENARIO.DIRTY_REGION) return <DirtyRegionScene width={size.width} height={size.height} />
   if (name === SCENARIO.COMPOSITOR_ONLY) return <CompositorScene width={size.width} height={size.height} />
+  if (name === SCENARIO.COSMIC_SHELL_1080P || name === SCENARIO.COSMIC_TYPING || name === SCENARIO.COSMIC_IDLE) return <OpenCodeCosmicShellApp width={size.width} height={size.height} />
   return <DashboardScene width={size.width} height={size.height} />
 }
 
@@ -747,11 +851,17 @@ async function main() {
     { name: SCENARIO.NOOP_RETAINED, size: { width: 1920, height: 1080 } },
     { name: SCENARIO.DIRTY_REGION, size: { width: 1920, height: 1080 } },
     { name: SCENARIO.COMPOSITOR_ONLY, size: { width: 1920, height: 1080 } },
+    { name: SCENARIO.COSMIC_SHELL_1080P, size: { width: 1920, height: 1080 } },
+    { name: SCENARIO.COSMIC_TYPING, size: { width: 1920, height: 1080 } },
+    { name: SCENARIO.COSMIC_IDLE, size: { width: 1920, height: 1080 } },
   ]
 
   console.log(`\n🔬 Vexart frame breakdown — frames=${options.frames} warmup=${options.warmup} transport=${options.transport} nativePresentation=${options.nativePresentation ? "on" : "off"}\n`)
+  const filtered = options.scenarioFilter
+    ? scenarios.filter((s) => options.scenarioFilter!.split(",").map((x) => x.trim()).includes(s.name))
+    : scenarios
   const reports: ScenarioReport[] = []
-  for (const scenario of scenarios) {
+  for (const scenario of filtered) {
     const report = await runScenario(engine, scenario.name, scenario.size, options.frames, options.warmup, options.transport, options.nativePresentation)
     reports.push(report)
     printScenario(report)
@@ -767,6 +877,7 @@ async function main() {
     warmup: options.warmup,
     transport: options.transport,
     nativePresentation: options.nativePresentation,
+    deprecatedMetrics: ["paintNativeSnapshotMs"],
     scenarios: reports,
   }
   await mkdir(dirname(options.output), { recursive: true })

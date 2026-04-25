@@ -7,7 +7,7 @@
  * Pipeline:
  *   <img src="./logo.png" />
  *     → Bun reads file → decode to RGBA ArrayBuffer
- *     → store as _imageBuffer on TGENode
+ *     → store in the node's lazy image extra bag
  *     → paintCommand copies pixels to layer buffer
  *
  * Supports: PNG, JPEG, BMP, TIFF, GIF, ICO (anything Bun's native image decode handles).
@@ -16,7 +16,7 @@
  * Images are cached by src path — same path = same decoded buffer.
  */
 
-import type { TGENode } from "../ffi/node"
+import { ensureImageExtra, type TGENode } from "../ffi/node"
 import { nativeImageAssetRegister, nativeImageAssetTouch, syncNativeImageHandle } from "../ffi/native-image-assets"
 import { markDirty } from "../reconciler/dirty"
 
@@ -79,37 +79,38 @@ export function createScaledImageCache(): ScaledImageCache {
 }
 
 /**
- * Trigger image decode for a node. Non-blocking — sets _imageBuffer when done.
- * Called during walkTree when we encounter an img node with _imageState === "idle".
+ * Trigger image decode for a node. Non-blocking — sets the image extra buffer when done.
+ * Called during walkTree when we encounter an img node with image state === "idle".
  */
 /** @public */
 export function decodeImageForNode(node: TGENode) {
   const src = node.props.src
   if (!src) return
+  const extra = ensureImageExtra(node)
 
   // Check cache first
   const cached = imageCache.get(src)
   if (cached) {
     touchCacheEntry(imageCache, src, cached)
-    node._imageBuffer = cached
+    extra.buffer = cached
     if (cached.nativeHandle) {
       nativeImageAssetTouch(cached.nativeHandle)
       syncNativeImageHandle(node, cached.nativeHandle)
     }
-    node._imageState = "loaded"
+    extra.state = "loaded"
     return
   }
 
   // Already loading this src
   if (pendingDecodes.has(src)) {
-    node._imageState = "loading"
+    extra.state = "loading"
     pendingDecodes.get(src)!.then((result) => {
       if (result) {
-        node._imageBuffer = result
+        extra.buffer = result
         ensureNativeImageAsset(node, src, result)
-        node._imageState = "loaded"
+        extra.state = "loaded"
       } else {
-        node._imageState = "error"
+        extra.state = "error"
       }
       markDirty()
     })
@@ -117,7 +118,7 @@ export function decodeImageForNode(node: TGENode) {
   }
 
   // Start decode
-  node._imageState = "loading"
+  extra.state = "loading"
   const promise = decodeImage(src)
   pendingDecodes.set(src, promise)
 
@@ -129,11 +130,11 @@ export function decodeImageForNode(node: TGENode) {
         if (first) imageCache.delete(first)
       }
       imageCache.set(src, result)
-      node._imageBuffer = result
+      extra.buffer = result
       ensureNativeImageAsset(node, src, result)
-      node._imageState = "loaded"
+      extra.state = "loaded"
     } else {
-      node._imageState = "error"
+      extra.state = "error"
     }
     markDirty() // trigger re-render with image data
   })

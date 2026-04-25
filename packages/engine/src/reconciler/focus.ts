@@ -4,8 +4,6 @@ import { createSignal } from "solid-js"
 import { onInput } from "../loop/input"
 import type { InputEvent, KeyEvent } from "../input/types"
 import type { TGENode, PressEvent } from "../ffi/node"
-import { isNativeEventDispatchEnabled } from "../ffi/native-event-dispatch-flags"
-import { nativeFocusNext, nativeFocusPrev } from "../ffi/native-scene-events"
 
 /** @public */
 export type FocusEntry = {
@@ -26,10 +24,6 @@ function activeScope(): FocusScope { return scopes[scopes.length - 1] }
 function activeRegistry(): FocusEntry[] { return activeScope().entries }
 
 const [focusedIdSignal, setFocusedIdSignal] = createSignal<string | null>(null)
-
-// JS-CALLBACK-SHELL: Rust owns retained focus traversal order, but the focused
-// id remains a Solid signal because user components read it reactively and JS
-// owns `onKeyDown` / `onPress` callback invocation.
 
 /** @public */
 export const focusedId = focusedIdSignal
@@ -67,24 +61,6 @@ function focusPrev() {
   const idx = reg.findIndex((e) => e.id === current)
   const prev = idx <= 0 ? reg.length - 1 : idx - 1
   setFocusedId(reg[prev].id)
-}
-
-function setFocusByNativeNodeId(nodeId: bigint) {
-  if (!nodeId) return false
-  for (const scope of scopes) {
-    const entry = scope.entries.find((candidate) => candidate.node?._nativeId === nodeId)
-    if (!entry) continue
-    setFocusedId(entry.id)
-    return true
-  }
-  return false
-}
-
-function focusNative(direction: "next" | "prev") {
-  const current = getFocusedEntry()?.node?._nativeId
-  const next = direction === "next" ? nativeFocusNext(current) : nativeFocusPrev(current)
-  if (!next) return false
-  return setFocusByNativeNodeId(next)
 }
 
 /** @public */
@@ -135,13 +111,8 @@ function ensureFocusInput() {
 export function dispatchFocusInput(event: InputEvent) {
   if (event.type !== "key") return
   if (event.key === "tab") {
-    const handledByNative = isNativeEventDispatchEnabled()
-      ? (event.mods.shift ? focusNative("prev") : focusNative("next"))
-      : false
-    if (!handledByNative) {
-      if (event.mods.shift) focusPrev()
-      else focusNext()
-    }
+    if (event.mods.shift) focusPrev()
+    else focusNext()
     return
   }
   if (event.key === "enter" || event.key === " ") {

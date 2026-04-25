@@ -22,15 +22,6 @@ export type {
 export { createGpuRendererBackend, getGpuRendererBackendCacheStats } from "./gpu-renderer-backend"
 export { createGpuFrameComposer } from "../output/gpu-frame-composer"
 export { chooseGpuLayerStrategy } from "./gpu-layer-strategy"
-export {
-  nativeChooseFrameStrategy,
-  buildNativeFrameExecutionStats,
-  formatNativeFrameReasonFlags,
-  NATIVE_FRAME_STRATEGY,
-  NATIVE_FRAME_TRANSPORT,
-  NATIVE_FRAME_REASON,
-} from "./native-frame-orchestrator"
-export type { NativeFramePlanInput, NativeFramePlan, NativeFrameStrategy, NativeFrameExecutionStats, NativeFrameExecutionStatsInput } from "./native-frame-orchestrator"
 
 export {
   BACKDROP_FILTER_KIND,
@@ -97,7 +88,6 @@ export type { ParticleConfig, ParticleSystem } from "./particles"
 
 export * from "./layers"
 // NOTE: deleted experimental GPU modules are no longer exported from the engine.
-export * from "./layout-writeback"
 // NOTE: pixel-buffer, paint-bridge, clay.ts deleted in Phase 2 Slice 11.
 export * from "./node"
 
@@ -143,20 +133,6 @@ export type {
   NativeLayerDescriptor,
   NativeLayerUpsertResult,
 } from "./native-layer-registry"
-export {
-  isNativeSceneGraphEnabled,
-  enableNativeSceneGraph,
-  disableNativeSceneGraph,
-} from "./native-scene-graph-flags"
-export {
-  nativeSceneCreateNode,
-  nativeSceneInsert,
-  nativeSceneRemove,
-  nativeSceneDestroyNode,
-  nativeSceneSetProp,
-  nativeSceneSetText,
-  destroyNativeScene,
-} from "./native-scene"
 export {
   nativeImageAssetRegister,
   nativeImageAssetTouch,

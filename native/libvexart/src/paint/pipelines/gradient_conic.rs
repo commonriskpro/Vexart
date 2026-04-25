@@ -5,7 +5,11 @@
 
 use wgpu::{Device, RenderPipeline, TextureFormat};
 
-pub fn create(device: &Device, format: TextureFormat, cache: Option<&wgpu::PipelineCache>) -> RenderPipeline {
+pub fn create(
+    device: &Device,
+    format: TextureFormat,
+    cache: Option<&wgpu::PipelineCache>,
+) -> RenderPipeline {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("vexart-gradient-conic-shader"),
         source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/gradient_conic.wgsl").into()),

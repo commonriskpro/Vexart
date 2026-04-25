@@ -1,9 +1,15 @@
 # Vexart — Product Requirements Document
 
-**Version**: 0.6
+**Version**: 0.7
 **Status**: Closed — v0.9 performance contract locked
 **Owner**: Founder (solo developer)
 **Last updated**: April 2026
+
+**Changelog from v0.6**:
+- DEC-014 added: Rust retained scene graph / render graph / layout / event dispatch reverted based on cosmic-shell-1080p bench evidence (TS path 4.8× faster, 15.84 ms p95 vs 75.42 ms p95). TS retains scene graph, reactivity, layout (Taffy in TS), event dispatch. Rust retains paint pipelines (WGPU), composite, Kitty encoding, SHM/file/direct transport, image assets, canvas display lists. DEC-012 partially superseded — only paint/composite/transport portion stands.
+- Section 6 updated to reflect new TS/Rust boundary.
+- Section 11 phase overlay updated: phases 3b-3g, 4a, 4b, 13 marked as reverted with evidence.
+- Four public experimental flags removed from mount() API: `nativeSceneGraph`, `nativeSceneLayout`, `nativeRenderGraph`, `nativeEventDispatch`.
 
 **Changelog from v0.5**:
 - DEC-013 added: 120fps / 5ms performance program adopted as an aspirational v0.9+ execution track, with hard gates for no-op, dirty-region, compositor-only, and full-dashboard frame categories.
@@ -85,7 +91,7 @@ Modern terminals (Kitty, WezTerm, Ghostty) have supported graphics protocols for
 
 ### 2.2 The solution
 
-Vexart bridges JSX + SolidJS reactivity to a Rust-native GPU rendering pipeline using the Kitty graphics protocol. Developers write the UI the way they write React web apps. Vexart handles layout (Taffy), paint (WGPU), and composition (Kitty protocol) natively.
+Vexart bridges JSX + SolidJS reactivity to a Rust-native GPU rendering pipeline using the Kitty graphics protocol. Developers write the UI the way they write React web apps. TypeScript owns scene graph, reactivity, layout (Taffy), render graph generation, and event dispatch; Rust owns paint (WGPU), composite, Kitty encoding, transport, image assets, and canvas display lists.
 
 The result:
 
@@ -513,40 +519,40 @@ Every headless component exposes its render API via a **render prop with context
 - `ctx.*Props` objects are stable contracts. Adding a field is minor (0.x.+1). Removing or renaming is breaking (0.+1.0).
 - Styled components wrap headless components and supply their own renderers with token-based styling.
 
-### 6.7 Rust-retained engine migration target
+### 6.7 TS/Rust paint-forward engine boundary
 
-The v0.9 engine migration follows the retained Rust roadmap in [`PRD-RUST-RETAINED-ENGINE.md`](./PRD-RUST-RETAINED-ENGINE.md) and [`ROADMAP-RUST-RETAINED-ENGINE.md`](./ROADMAP-RUST-RETAINED-ENGINE.md).
+DEC-014 supersedes the retained scene/layout/render/event portions of the Rust-retained roadmap in [`PRD-RUST-RETAINED-ENGINE.md`](./PRD-RUST-RETAINED-ENGINE.md) and [`ROADMAP-RUST-RETAINED-ENGINE.md`](./ROADMAP-RUST-RETAINED-ENGINE.md). Those documents are historical record for the reverted plan; only the paint/composite/transport portions remain current.
 
 The target ownership model is:
 
 ```txt
-JS/Solid public API
-  -> thin Bun FFI binding
-  -> Rust-retained scene graph
-  -> Rust layout + damage + hit-testing + layer assignment
-  -> Rust render graph + WGPU paint
-  -> Rust composite + dirty-region readback
-  -> Rust Kitty encoding + stdout
+JSX (SolidJS createRenderer)
+  -> reconciler (TS): scene graph + reactivity
+    -> walk-tree (TS): visual props, text measurement, interaction metadata
+      -> layout (Taffy in TS): flexbox, sizing, positioned commands
+        -> render graph (TS): ordered paint commands and layer plan
+          ===== FFI boundary: paint-forward only =====
+          -> paint pipelines (Rust/WGPU)
+            -> composite (Rust)
+              -> Kitty encoding (Rust)
+                -> SHM / file / direct transport (Rust)
 ```
 
-TypeScript remains responsible for:
+TypeScript owns:
 
-- SolidJS custom renderer adapter.
-- Public package APIs, types, hooks, components, and callback registry.
-- Encoding node mutations and prop updates into compact FFI payloads.
-- Terminal lifecycle and compatibility fallback while the migration is in flight.
-- Dispatching JS callbacks returned by Rust event records.
+- SolidJS custom renderer adapter, scene graph, and reactivity.
+- `walk-tree`, layout via Taffy in TS, render graph generation, layer plan, event dispatch, interaction, focus, hit-testing, and callback registry.
+- Public package APIs, types, hooks, components, terminal lifecycle, and explicit fallback/test/offscreen APIs.
 
-Rust becomes responsible for the frame-critical hot path:
+Rust owns:
 
-- Retained scene graph and native node IDs.
-- Layout, damage computation, layer assignment, hit-testing, scroll clipping, and pointer capture metadata.
-- Render graph generation, pipeline batching, paint, composite, resources, Kitty output, and frame strategy.
-- Native stats for frame cost, output strategy, emitted bytes, readback bytes, resource usage, and event counts.
+- WGPU paint pipelines, effect shaders, text paint, and paint command dispatch.
+- Composite, layer registry targets, dirty-region readback needed by presentation, Kitty encoding, and SHM/file/direct transport.
+- Image assets, canvas display lists, GPU resources, pipeline cache, and native stats for paint/composite/presentation cost.
 
 Normal terminal presentation MUST NOT return raw RGBA buffers to JavaScript. RGBA readback into JS is allowed only for explicit screenshot, debug, test, or offscreen APIs.
 
-This section supersedes older wording that implies TypeScript permanently owns `walk-tree`, layer assignment, render graph generation, or terminal presentation. During migration, the old TypeScript path may remain behind feature flags and emergency fallback, but it is not the target architecture.
+This section supersedes older wording that assigns scene graph, layout, render graph generation, event dispatch, or frame orchestration ownership to Rust. The four public retained-native flags (`nativeSceneGraph`, `nativeSceneLayout`, `nativeRenderGraph`, `nativeEventDispatch`) have been removed from `mount()`.
 
 ---
 
@@ -935,36 +941,36 @@ Timeline assumes 8 hours/day of focused coding, solo, with bi-weekly reviews. To
 
 **Exit criteria**: all v0.9 release criteria from Section 9.1 met. Announcement published.
 
-### Rust-retained engine migration overlay
+### Rust-retained engine migration overlay — reverted by DEC-014
 
-The roadmap above remains the product roadmap, but the engine internals now follow the retained Rust migration overlay below. This overlay is the execution sequence for moving ownership out of TypeScript without breaking the public JS/JSX API.
+The roadmap above remains the product roadmap, but the retained scene/layout/render/event overlay below has been reverted by DEC-014 after cosmic-shell-1080p bench evidence showed the TS path is 4.8× faster at p95 (15.84 ms vs 75.42 ms). The overlay is preserved as historical record. TS now owns scene graph, reactivity, layout (Taffy), render graph, event dispatch, and interaction; Rust owns paint pipelines, composite, Kitty encoding, SHM/file/direct transport, image assets, and canvas display lists.
 
 Source documents:
 
 - [`docs/PRD-RUST-RETAINED-ENGINE.md`](./PRD-RUST-RETAINED-ENGINE.md)
 - [`docs/ROADMAP-RUST-RETAINED-ENGINE.md`](./ROADMAP-RUST-RETAINED-ENGINE.md)
-- Active SDD changes under `openspec/changes/phase-2b-native-presentation` and later retained-engine phases.
+- Active SDD cleanup: `openspec/changes/phase-14-rust-retained-cleanup`.
 
 | Retained phase | Name | Outcome | Status gate |
 |---|---|---|---|
 | R0 | Approval and baseline | Founder-approved roadmap, baseline metrics, feature flags | No retained implementation starts without baseline evidence. |
 | R1 | Native Presentation | Rust emits normal terminal output; JS receives stats/status only | `rgbaBytesRead === 0` for normal presentation; visual parity verified. |
 | R2 | Native Layer Registry | Rust owns layer targets, terminal image IDs, lifecycle, and resource accounting | TS no longer owns presentation GPU target handles. |
-| R3 | Native Scene Graph Skeleton | Solid mutations mirror into a Rust-retained tree behind flag | Native scene snapshot matches TS tree fixtures. |
-| R4 | Native Layout, Damage, and Hit-Testing | Rust computes layout, damage, layers, hit-test, and event records | Interaction parity passes for focus, scroll, pointer capture, bubbling. |
-| R5 | Native Render Graph | Rust generates and batches render operations from native scene data | Showcase renders without TS render graph generation on native path. |
-| R6 | Native Frame Orchestrator | Rust chooses frame strategy and owns native frame lifecycle | Dirty/no-op/frame stats meet FFI and latency targets. |
-| R7 | Default Cutover | Native retained path is default; old TS path emergency-only | API extractor shows no unapproved public break; goldens pass. |
-| R8 | Cleanup | Delete or isolate dead TS hot-path ownership | TS renderer internals are a thin binding shell. |
+| R3 | Native Scene Graph Skeleton | **Reverted** (phase-3b archived as `reverted-phase-3b-native-scene-graph`) | DEC-014: native snapshot/writeback overhead made Rust retained path slower. |
+| R4 | Native Layout, Damage, and Hit-Testing | **Reverted** (phase-3c, phase-4a, phase-4b archived with `reverted-` prefix) | DEC-014: layout/writeback p95 20.09 ms; TS Taffy path remains. |
+| R5 | Native Render Graph | **Reverted** (phase-3d archived as `reverted-phase-3d-native-render-graph`) | DEC-014: TS render graph stays source of ordered paint commands. |
+| R6 | Native Frame Orchestrator | **Reverted** (phase-3e archived as `reverted-phase-3e-native-frame-orchestrator`) | DEC-014: Rust frame strategy did not offset FFI overhead. |
+| R7 | Default Cutover | **Reverted** (phase-3f archived as `reverted-phase-3f-native-default-cutover`) | DEC-014: TS path is default and only scene/layout/event path. |
+| R8 | Cleanup | **Reverted** (phase-3g and phase-13 archived with `reverted-` prefix) | DEC-014: cleanup removes retained-native scene/layout/render/event code instead. |
 
 Rules for this overlay:
 
 - Public JS/JSX behavior MUST remain stable throughout the migration.
-- Every retained phase MUST have OpenSpec proposal, spec, design, tasks, and verify report before implementation is considered complete.
-- Fallback stays available for one compatibility window, but each phase must make the fallback boundary smaller.
-- Old TS render graph, layer target cache, and raw presentation payload paths are deleted or test-only after native cutover.
+- Reverted retained phases remain archived as historical record with `REVERTED.md` notes.
+- No new phase may move scene graph, layout, render graph, or event dispatch ownership to Rust without new benchmark evidence and a new DEC entry.
+- The paint-forward Rust boundary from §6.7 is the current target.
 
-This overlay supersedes any phase text that treats TypeScript ownership of frame preparation or presentation as permanent.
+This overlay no longer supersedes TS ownership of frame preparation. DEC-014 supersedes the retained scene/layout/render/event portions of DEC-012.
 
 ### Phase 6 — Buffer (built-in)
 
@@ -1213,6 +1219,21 @@ Every architectural or product decision is logged here with date, context, and r
 - Future SDD changes for performance must cite this decision and update the companion plan when targets or baselines change.
 
 **Non-reversal clause**: The program can adjust thresholds based on profiling evidence, but Vexart must keep explicit per-category performance budgets. Dropping the 120fps-class track requires founder approval and a new dated decision.
+
+### DEC-014 — Rust retained scene graph reverted (April 2026)
+
+**Context**: Phases 3b through 4b implemented a Rust retained source-of-truth for scene graph, layout, render graph, and event dispatch, with the goal of amortizing per-frame work in native code. Bench evidence on the target workload (`cosmic-shell-1080p`) showed the opposite result.
+
+**Evidence**: cosmic-shell-1080p at 1920×1080, SHM transport, 60 frames + 15 warmup:
+- Rust retained path: 75.42 ms p95 (~13 fps). Bottleneck: `paintNativeSnapshotMs` 39.21 ms, `layoutWritebackMs` 20.09 ms.
+- TS path: 15.84 ms p95 (~63 fps). Paint backend identical (~7.8 ms p95).
+- TS path is 4.8× faster at p95, 5.4× at p50.
+
+**Decision**: Revert retained scene graph / render graph / layout / event dispatch. TS owns scene graph, reactivity, layout (Taffy), event dispatch. Rust owns paint (WGPU pipelines), composite, Kitty encoding, transport (SHM/file/direct), image assets, canvas display lists.
+
+**Partially supersedes**: DEC-012 (Rust retained engine roadmap). Only the paint/composite/transport portion of DEC-012 stands.
+
+**Reverted phases**: 3b (native scene graph), 3c (native layout hit-test), 3d (native render graph), 3e (native frame orchestrator), 3f (native default cutover), 3g (native cleanup), 4a (native layout hit-test cutover), 4b (native transform hit-test), 13 (Rust retained mutation protocol).
 
 ---
 

@@ -84,7 +84,9 @@ pub fn glyph_ndc(
 
     let new_pen_x = pen_x + glyph.x_advance as f32 * scale;
 
-    (x_ndc, y_ndc, w_ndc, h_ndc, uv_x, uv_y, uv_w, uv_h, new_pen_x)
+    (
+        x_ndc, y_ndc, w_ndc, h_ndc, uv_x, uv_y, uv_w, uv_h, new_pen_x,
+    )
 }
 
 #[cfg(test)]
@@ -148,7 +150,10 @@ mod tests {
         let expected_glyph_y = -44.0 * scale;
         // y_ndc = 1 - (glyph_px_y / 64) * 2
         let expected_y_ndc = 1.0 - (expected_glyph_y / 64.0) * 2.0;
-        assert!((y - expected_y_ndc).abs() < 0.001, "y_ndc mismatch: {y} vs {expected_y_ndc}");
+        assert!(
+            (y - expected_y_ndc).abs() < 0.001,
+            "y_ndc mismatch: {y} vs {expected_y_ndc}"
+        );
         // uv_x = 0/1024 = 0
         assert_eq!(uv_x, 0.0);
         // uv_y = 0/1024 = 0

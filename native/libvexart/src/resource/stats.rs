@@ -110,8 +110,8 @@ mod tests {
     #[test]
     fn test_resource_stats_to_json() {
         let mut stats = ResourceStats {
-            budget_bytes: 134_217_728, // 128MB
-            current_usage: 36_700_160, // 35MB
+            budget_bytes: 134_217_728,    // 128MB
+            current_usage: 36_700_160,    // 35MB
             high_water_mark: 104_857_600, // 100MB
             resources_by_kind: HashMap::new(),
             evictions_last_frame: 2,
@@ -119,21 +119,45 @@ mod tests {
         };
         stats.resources_by_kind.insert(
             "FontAtlas".to_string(),
-            KindStats { count: 3, bytes: 15_728_640 },
+            KindStats {
+                count: 3,
+                bytes: 15_728_640,
+            },
         );
         stats.resources_by_kind.insert(
             "ImageSprite".to_string(),
-            KindStats { count: 5, bytes: 20_971_520 },
+            KindStats {
+                count: 5,
+                bytes: 20_971_520,
+            },
         );
 
         let json = stats.to_json();
         // Verify key fields are present in the JSON.
-        assert!(json.contains("\"budgetBytes\":134217728"), "budget_bytes in JSON: {json}");
-        assert!(json.contains("\"currentUsage\":36700160"), "current_usage in JSON: {json}");
-        assert!(json.contains("\"highWaterMark\":104857600"), "high_water_mark in JSON: {json}");
-        assert!(json.contains("\"evictionsLastFrame\":2"), "evictions_last_frame in JSON: {json}");
-        assert!(json.contains("\"evictionsTotal\":15"), "evictions_total in JSON: {json}");
+        assert!(
+            json.contains("\"budgetBytes\":134217728"),
+            "budget_bytes in JSON: {json}"
+        );
+        assert!(
+            json.contains("\"currentUsage\":36700160"),
+            "current_usage in JSON: {json}"
+        );
+        assert!(
+            json.contains("\"highWaterMark\":104857600"),
+            "high_water_mark in JSON: {json}"
+        );
+        assert!(
+            json.contains("\"evictionsLastFrame\":2"),
+            "evictions_last_frame in JSON: {json}"
+        );
+        assert!(
+            json.contains("\"evictionsTotal\":15"),
+            "evictions_total in JSON: {json}"
+        );
         assert!(json.contains("\"FontAtlas\""), "FontAtlas in JSON: {json}");
-        assert!(json.contains("\"ImageSprite\""), "ImageSprite in JSON: {json}");
+        assert!(
+            json.contains("\"ImageSprite\""),
+            "ImageSprite in JSON: {json}"
+        );
     }
 }

@@ -1,3 +1,5 @@
+> **⚠️ SUPERSEDED** (April 2026) — The retained scene graph / render graph / layout / event dispatch portions of this plan have been reverted by DEC-014 in PRD v0.7. See `openspec/changes/phase-14-rust-retained-cleanup/proposal.md` for bench evidence. Rust still owns paint, composite, encoding, transport, image assets, canvas display lists. This document is preserved as historical record.
+
 # Vexart — Rust-Retained Engine PRD
 
 **Version**: 0.1  

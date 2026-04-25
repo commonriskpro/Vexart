@@ -56,14 +56,6 @@ function measureCounts(transmissionMode: "direct" | "file" | "shm") {
       forceLayerRepaint: true,
       nativePresentation: transmissionMode === "shm",
       nativeLayerRegistry: transmissionMode === "shm",
-      // This benchmark isolates the Phase 3e frame-orchestrator budget.
-      // Phase 3f can default the retained scene/layout/render stack on SHM,
-      // but those extra retained FFI calls are validated by broader perf gates,
-      // not by the frame-orchestrator's original <=6-call target.
-      nativeSceneGraph: false,
-      nativeEventDispatch: false,
-      nativeSceneLayout: false,
-      nativeRenderGraph: false,
     },
   })
   const box = createNode("box")

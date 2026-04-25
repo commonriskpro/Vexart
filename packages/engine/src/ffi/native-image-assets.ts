@@ -1,7 +1,6 @@
 import { ptr } from "bun:ffi"
-import { nativeSceneHandle, nativeSceneSetProp } from "./native-scene"
 import { openVexartLibrary } from "./vexart-bridge"
-import type { TGENode } from "./node"
+import { ensureImageExtra, type TGENode } from "./node"
 
 const encoder = new TextEncoder()
 
@@ -15,8 +14,7 @@ export type NativeImageAssetInput = {
 
 /** @public */
 export function nativeImageAssetRegister(input: NativeImageAssetInput): bigint | null {
-  const scene = nativeSceneHandle()
-  if (!scene || input.key.length === 0 || input.width <= 0 || input.height <= 0 || input.data.byteLength === 0) return null
+  if (input.key.length === 0 || input.width <= 0 || input.height <= 0 || input.data.byteLength === 0) return null
   try {
     const key = encoder.encode(input.key)
     const meta = new Uint8Array(8)
@@ -27,7 +25,7 @@ export function nativeImageAssetRegister(input: NativeImageAssetInput): bigint |
     const { symbols } = openVexartLibrary()
     const code = symbols.vexart_image_asset_register(
       1n,
-      scene,
+      0n,
       ptr(key),
       key.byteLength,
       ptr(input.data),
@@ -44,11 +42,10 @@ export function nativeImageAssetRegister(input: NativeImageAssetInput): bigint |
 
 /** @public */
 export function nativeImageAssetTouch(handle: bigint): boolean {
-  const scene = nativeSceneHandle()
-  if (!scene || handle === 0n) return false
+  if (handle === 0n) return false
   try {
     const { symbols } = openVexartLibrary()
-    return (symbols.vexart_image_asset_touch(1n, scene, handle) as number) === 0
+    return (symbols.vexart_image_asset_touch(1n, 0n, handle) as number) === 0
   } catch {
     return false
   }
@@ -56,17 +53,15 @@ export function nativeImageAssetTouch(handle: bigint): boolean {
 
 /** @public */
 export function nativeImageAssetRelease(handle: bigint): boolean {
-  const scene = nativeSceneHandle()
-  if (!scene || handle === 0n) return false
+  if (handle === 0n) return false
   try {
     const { symbols } = openVexartLibrary()
-    return (symbols.vexart_image_asset_release(1n, scene, handle) as number) === 0
+    return (symbols.vexart_image_asset_release(1n, 0n, handle) as number) === 0
   } catch {
     return false
   }
 }
 
 export function syncNativeImageHandle(node: TGENode, handle: bigint | null) {
-  node._nativeImageHandle = handle
-  if (handle && node._nativeId) nativeSceneSetProp(node._nativeId, "__imageHandle", handle.toString())
+  ensureImageExtra(node).nativeHandle = handle
 }

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { deregisterAllDescriptors, allDescriptors, resetFrameTracking, unmarkLayerBacked } from "../animation/compositor-path"
 import { createNode, insertChild } from "../ffi/node"
 import { setNativeResourceBudget, getNativeResourceStats } from "../ffi/resource-stats"
-import { getVexartFfiCallCount, getVexartFfiCallCountsBySymbol, resetVexartFfiCallCounts } from "../ffi/vexart-bridge"
+import { getVexartFfiCallCount, resetVexartFfiCallCounts } from "../ffi/vexart-bridge"
 import { createRenderLoop } from "./loop"
 import { markDirty } from "../reconciler/dirty"
 
@@ -113,13 +113,10 @@ describe("Phase 3e frame orchestrator", () => {
     markDirty()
     loop.start()
 
-    resetVexartFfiCallCounts()
     mock.emitResize(320, 180)
-    const counts = Object.fromEntries(getVexartFfiCallCountsBySymbol())
 
     expect(loop.root.props.width).toBe(320)
     expect(loop.root.props.height).toBe(180)
-    expect((counts["vexart_layout_compute"] ?? 0) > 0).toBe(true)
     loop.stop()
     loop.destroy()
   })

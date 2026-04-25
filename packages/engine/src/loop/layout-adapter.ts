@@ -2,8 +2,8 @@
  * layout-adapter.ts — VexartLayoutCtx factory + layout buffer helpers.
  *
  * Drop-in replacement for the legacy clay object. Builds a flat layout
- * command buffer during walkTree, then calls vexart_layout_compute.
- * Returns synthetic RenderCommand[] from the Taffy PositionedCommand output.
+ * command tree during walkTree, then computes layout in TypeScript.
+ * Returns synthetic RenderCommand[] from the positioned layout output.
  *
  * Extracted from loop.ts lines ~49–568 as part of Phase 3 Slice 1.2.
  * Design ref: openspec/changes/phase-3-loop-decomposition/design.md §File Changes
@@ -11,11 +11,6 @@
 
 import type { RenderCommand } from "../ffi/render-graph"
 import { CMD as _CMD_RG } from "../ffi/render-graph"
-import { openVexartLibrary } from "../ffi/vexart-bridge"
-import { GRAPH_MAGIC, GRAPH_VERSION } from "../ffi/vexart-buffer"
-import { parseLayoutOutput } from "../ffi/layout-writeback"
-import type { PositionedCommand } from "../ffi/layout-writeback"
-import { ptr } from "bun:ffi"
 
 // ── Local constants previously from clay.ts ───────────────────────────────
 
@@ -62,13 +57,17 @@ const FLAG_FLOATING_ABS = 1 << 1
 const FLAG_SCROLL_X = 1 << 2
 const FLAG_SCROLL_Y = 1 << 3
 
-// Layout buffer — 256KB, re-used each frame (no allocations on hot path).
-const _layoutBuf = new ArrayBuffer(256 * 1024)
-const _layoutView = new DataView(_layoutBuf)
-const _layoutU8 = new Uint8Array(_layoutBuf)
-const _outBuf = new ArrayBuffer(256 * 1024)
-const _outU8 = new Uint8Array(_outBuf)
-const _outUsedBuf = new Uint32Array(1)
+export type PositionedCommand = {
+  nodeId: number
+  x: number
+  y: number
+  width: number
+  height: number
+  contentX: number
+  contentY: number
+  contentW: number
+  contentH: number
+}
 
 // Per-node accumulated state for building OPEN payload
 export type NodeOpenState = {
@@ -89,6 +88,7 @@ export type NodeOpenState = {
   borderTop: number; borderRight: number; borderBottom: number; borderLeft: number
   gapRow: number; gapCol: number
   insetTop: number; insetRight: number; insetBottom: number; insetLeft: number
+  zIndex: number
   // Synthetic render command data
   bgColor: number
   cornerRadius: number
@@ -108,19 +108,9 @@ export const _defaultOpen = (): NodeOpenState => ({
   _openWritten: false,
   gapRow: 0, gapCol: 0,
   insetTop: 0, insetRight: 0, insetBottom: 0, insetLeft: 0,
+  zIndex: 0,
   bgColor: 0, cornerRadius: 0,
 })
-
-/** Write f32 at offset in the layout buffer (little-endian). */
-function _lf32(off: number, v: number) { _layoutView.setFloat32(off, v, true) }
-/** Write u8 at offset. */
-function _lu8(off: number, v: number) { _layoutView.setUint8(off, v) }
-/** Write u16 at offset (little-endian). */
-function _lu16(off: number, v: number) { _layoutView.setUint16(off, v, true) }
-/** Write u32 at offset (little-endian). */
-function _lu32(off: number, v: number) { _layoutView.setUint32(off, v, true) }
-/** Write u64 at offset (little-endian) as number (safe for id < 2^53). */
-function _lu64(off: number, v: number) { _layoutView.setBigUint64(off, BigInt(v), true) }
 
 /** Vexart size kind enum (matches layout/tree.rs: 0=Auto,1=Length,2=Percent) */
 export function _vxSizeKind(k: number): number {
@@ -150,13 +140,12 @@ export function _vxAlign(v: number): number {
 }
 
 /**
- * VexartLayoutCtx — Clay-compatible layout context backed by vexart_layout_compute.
+ * VexartLayoutCtx — Clay-compatible layout context backed by TypeScript layout.
  * Methods mirror the legacy `clay` object API for drop-in use in loop.ts.
  */
 export function createVexartLayoutCtx() {
-  let _vxCtx: bigint = 0n
-  let _cmdCount = 0
-  let _offset = 0
+  let _viewportW = 0
+  let _viewportH = 0
   let _parentStack: NodeOpenState[] = []
   let _current: NodeOpenState = _defaultOpen()
   let _allOpenStates: NodeOpenState[] = []  // order matches OPEN commands
@@ -167,79 +156,15 @@ export function createVexartLayoutCtx() {
   let _scrollOffsets = new Map<string, { x: number; y: number }>()
   let _scrollDataCache = new Map<string, { scrollX: number; scrollY: number; contentWidth: number; contentHeight: number; viewportWidth: number; viewportHeight: number; found: boolean }>()
 
-  function _initCtx() {
-    if (_vxCtx !== 0n) return
-    const { symbols } = openVexartLibrary()
-    const ctxBuf = new BigUint64Array(1)
-    // opts_ptr: pass a 1-byte dummy buffer (Bun FFI rejects zero-length ArrayBufferView).
-    // Rust side ignores opts_ptr when opts_len == 0.
-    symbols.vexart_context_create(ptr(new Uint8Array(1)), 0, ptr(ctxBuf))
-    _vxCtx = ctxBuf[0]
-  }
-
   function _writeOpenCommand(state: NodeOpenState) {
-    const off = _offset
-    // 8-byte prefix
-    _lu16(off, LAYOUT_CMD_OPEN)
-    _lu16(off + 2, state.flags)
-    _lu32(off + 4, OPEN_PAYLOAD_BYTES)
-    const pOff = off + 8
-    // Payload (112 bytes)
-    _lu64(pOff, state.nodeId)
-    _lu64(pOff + 8, state.parentNodeId)
-    _lu8(pOff + 16, state.flexDir)
-    _lu8(pOff + 17, state.posKind)
-    _lu8(pOff + 18, state.sizeWKind)
-    _lu8(pOff + 19, state.sizeHKind)
-    _lf32(pOff + 20, state.sizeW)
-    _lf32(pOff + 24, state.sizeH)
-    _lf32(pOff + 28, state.minW)
-    _lf32(pOff + 32, state.minH)
-    _lf32(pOff + 36, state.maxW)
-    _lf32(pOff + 40, state.maxH)
-    _lf32(pOff + 44, state.flexGrow)
-    _lf32(pOff + 48, state.flexShrink)
-    _lu8(pOff + 52, _vxAlign(state.justifyContent))
-    _lu8(pOff + 53, _vxAlign(state.alignItems))
-    _lu8(pOff + 54, _vxAlign(state.alignContent))
-    _lu8(pOff + 55, 0) // _pad
-    _lf32(pOff + 56, state.padTop)
-    _lf32(pOff + 60, state.padRight)
-    _lf32(pOff + 64, state.padBottom)
-    _lf32(pOff + 68, state.padLeft)
-    _lf32(pOff + 72, state.borderTop)
-    _lf32(pOff + 76, state.borderRight)
-    _lf32(pOff + 80, state.borderBottom)
-    _lf32(pOff + 84, state.borderLeft)
-    _lf32(pOff + 88, state.gapRow)
-    _lf32(pOff + 92, state.gapCol)
-    _lf32(pOff + 96, state.insetTop)
-    _lf32(pOff + 100, state.insetRight)
-    _lf32(pOff + 104, state.insetBottom)
-    _lf32(pOff + 108, state.insetLeft)
-    _offset += 8 + OPEN_PAYLOAD_BYTES
-    _cmdCount++
     _allOpenStates.push(state)
   }
 
   function _writeCloseCommand() {
-    const off = _offset
-    _lu16(off, LAYOUT_CMD_CLOSE)
-    _lu16(off + 2, 0)
-    _lu32(off + 4, 0)
-    _offset += 8
-    _cmdCount++
-  }
-
-  function _finalizeHeader() {
-    _lu32(0, GRAPH_MAGIC)
-    _lu32(4, GRAPH_VERSION)
-    _lu32(8, _cmdCount)
-    _lu32(12, _offset)
   }
 
   // Last layout result — used by writeLayoutBack to update ALL nodes
-  let _lastLayoutMap: Map<bigint, PositionedCommand> | null = null
+  let _lastLayoutMap: Map<number, PositionedCommand> | null = null
   function getLastLayoutMap() { return _lastLayoutMap }
 
   return {
@@ -247,29 +172,20 @@ export function createVexartLayoutCtx() {
     getLastLayoutMap,
 
     init(width: number, height: number): boolean {
-      _initCtx()
-      if (_vxCtx === 0n) return false
-      const { symbols } = openVexartLibrary()
-      return symbols.vexart_context_resize(_vxCtx, width, height) === 0
+      _viewportW = width
+      _viewportH = height
+      return true
     },
 
     setDimensions(width: number, height: number) {
-      _initCtx()
-      if (_vxCtx === 0n) return
-      const { symbols } = openVexartLibrary()
-      symbols.vexart_context_resize(_vxCtx, width, height)
+      _viewportW = width
+      _viewportH = height
     },
 
     destroy() {
-      if (_vxCtx === 0n) return
-      const { symbols } = openVexartLibrary()
-      symbols.vexart_context_destroy(_vxCtx)
-      _vxCtx = 0n
     },
 
     beginLayout() {
-      _offset = 16  // reserve header space
-      _cmdCount = 0
       _parentStack = []
       _allOpenStates = []
       _textEntries = []
@@ -278,47 +194,90 @@ export function createVexartLayoutCtx() {
     },
 
      endLayout(): RenderCommand[] {
-      // Finalize + call vexart_layout_compute
-      _finalizeHeader()
-      _initCtx()
-      if (_vxCtx === 0n) return []
-      const { symbols } = openVexartLibrary()
-      _outUsedBuf[0] = 0
-      const bufBytes = _offset
-      const result = symbols.vexart_layout_compute(
-        _vxCtx,
-        ptr(_layoutU8),
-        bufBytes,
-        ptr(_outU8),
-        _outBuf.byteLength,
-        ptr(_outUsedBuf),
-      ) as number
-      if (result !== 0) return []
-      const used = _outUsedBuf[0]
-      // Parse PositionedCommands and synthesize RenderCommand[]
-      const layoutMap = parseLayoutOutput(_outBuf, used)
+      const childrenByParent = new Map<number, NodeOpenState[]>()
+      for (const state of _allOpenStates) {
+        const children = childrenByParent.get(state.parentNodeId) ?? []
+        children.push(state)
+        childrenByParent.set(state.parentNodeId, children)
+      }
+
+      const measured = new Map<number, { width: number; height: number }>()
+      function sizeValue(kind: number, value: number, parent: number, fallback: number) {
+        if (kind === 1) return value
+        if (kind === 2) return parent * value
+        return fallback
+      }
+      function measure(state: NodeOpenState, parentW: number, parentH: number): { width: number; height: number } {
+        const children = childrenByParent.get(state.nodeId) ?? []
+        let innerW = 0
+        let innerH = 0
+        for (const child of children) {
+          const childSize = measure(child, parentW, parentH)
+          if (state.flexDir === 0) {
+            innerW += childSize.width
+            innerH = Math.max(innerH, childSize.height)
+          } else {
+            innerW = Math.max(innerW, childSize.width)
+            innerH += childSize.height
+          }
+        }
+        const gap = Math.max(0, children.length - 1) * state.gapRow
+        if (state.flexDir === 0) innerW += gap
+        else innerH += gap
+        const rootW = state.flags & FLAG_IS_ROOT ? _viewportW : parentW
+        const rootH = state.flags & FLAG_IS_ROOT ? _viewportH : parentH
+        const fallbackW = innerW + state.padLeft + state.padRight + state.borderLeft + state.borderRight
+        const fallbackH = innerH + state.padTop + state.padBottom + state.borderTop + state.borderBottom
+        const width = Math.max(state.minW || 0, Math.min(state.maxW || Infinity, sizeValue(state.sizeWKind, state.sizeW, rootW, (state.flags & FLAG_IS_ROOT) ? _viewportW : fallbackW)))
+        const height = Math.max(state.minH || 0, Math.min(state.maxH || Infinity, sizeValue(state.sizeHKind, state.sizeH, rootH, (state.flags & FLAG_IS_ROOT) ? _viewportH : fallbackH)))
+        const result = { width, height }
+        measured.set(state.nodeId, result)
+        return result
+      }
+
+      const layoutMap = new Map<number, PositionedCommand>()
+      function place(state: NodeOpenState, x: number, y: number, width: number, height: number) {
+        const contentX = x + state.padLeft + state.borderLeft
+        const contentY = y + state.padTop + state.borderTop
+        const contentW = Math.max(0, width - state.padLeft - state.padRight - state.borderLeft - state.borderRight)
+        const contentH = Math.max(0, height - state.padTop - state.padBottom - state.borderTop - state.borderBottom)
+        layoutMap.set(state.nodeId, { nodeId: state.nodeId, x, y, width, height, contentX, contentY, contentW, contentH })
+        const children = childrenByParent.get(state.nodeId) ?? []
+        let cursor = state.flexDir === 0 ? contentX : contentY
+        for (const child of children) {
+          if (child.posKind === 1) continue
+          const childSize = measured.get(child.nodeId) ?? { width: 0, height: 0 }
+          const childW = child.flexGrow > 0 && state.flexDir === 0 ? contentW : childSize.width
+          const childH = child.flexGrow > 0 && state.flexDir !== 0 ? contentH : childSize.height
+          place(child, state.flexDir === 0 ? cursor : contentX, state.flexDir === 0 ? contentY : cursor, childW, childH)
+          cursor += (state.flexDir === 0 ? childW : childH) + state.gapRow
+        }
+        for (const child of children) {
+          if (child.posKind !== 1) continue
+          const childSize = measured.get(child.nodeId) ?? { width: 0, height: 0 }
+          place(child, contentX + child.insetLeft, contentY + child.insetTop, childSize.width, childSize.height)
+        }
+      }
+
+      for (const root of childrenByParent.get(0) ?? []) {
+        const size = measure(root, _viewportW, _viewportH)
+        place(root, 0, 0, size.width, size.height)
+      }
       _lastLayoutMap = layoutMap
 
-      // ── Unified DFS command emission with SCISSOR bracketing ──
+      // ── Stacking-context command emission ─────────────────────────────────
       //
-      // _allOpenStates is in DFS (tree) order — same order nodes were opened.
-      // Each entry has nodeId, parentNodeId, and flags (including FLAG_SCROLL_X/Y).
-      // _textEntries are also in DFS order, but interleaved with box states.
+      // _allOpenStates is captured in DFS order, but rendering cannot be a raw
+      // global DFS once floating zIndex enters the picture. Browsers and OS
+      // compositors treat a positioned/z-ordered subtree atomically: children are
+      // ordered inside their parent context and cannot escape above a sibling
+      // context. We mirror that here by rebuilding the node tree from
+      // parentNodeId, sorting siblings by their local floating zIndex, and then
+      // emitting each subtree as a unit.
       //
-      // We need to emit: RECT commands for box nodes, TEXT commands for text
-      // nodes — all in DFS order, with SCISSOR_START/END around descendants
-      // of scroll containers.
-      //
-      // Strategy:
-      //   1. Build a unified DFS sequence (box states + text entries) ordered
-      //      by their position in the tree walk (i.e. DFS index).
-      //   2. Track a scroll ancestor stack. When entering a scroll container,
-      //      push SCISSOR_START. When we exit (next sibling/ancestor outside),
-      //      push SCISSOR_END.
-      //
-      // Since _allOpenStates doesn't carry DFS indices for text entries
-      // (text entries were interleaved during the walk), we use parentNodeId
-      // to assign text entries to their parent's position in the sequence.
+      // This intentionally makes zIndex local to the parent stacking context,
+      // not one global number across the whole frame. A child with zIndex=999
+      // remains inside its parent window/context.
 
       // Build nodeId → DFS index map from _allOpenStates
       const dfsIndex = new Map<number, number>()
@@ -326,24 +285,11 @@ export function createVexartLayoutCtx() {
         dfsIndex.set(_allOpenStates[i].nodeId, i)
       }
 
-      // Assign each text entry a DFS position: parent's index + 0.5
-      // (appears after parent's RECT, before any box children that come after)
-      // Use parentNodeId from the text state to place it correctly.
       type TextEntry = { nodeId: number; content: string; color: number; fontId: number; fontSize: number }
-      type DFSItem =
-        | { kind: 'box'; state: NodeOpenState; idx: number }
-        | { kind: 'text'; entry: TextEntry; idx: number }
-
-      const items: DFSItem[] = []
-      for (const state of _allOpenStates) {
-        items.push({ kind: 'box', state, idx: dfsIndex.get(state.nodeId) ?? 0 })
-      }
+      const textById = new Map<number, TextEntry>()
       for (const te of _textEntries) {
-        // Text node's own DFS index (it appears in _allOpenStates as a leaf node)
-        const textIdx = dfsIndex.get(te.nodeId) ?? 0
-        items.push({ kind: 'text', entry: te, idx: textIdx })
+        textById.set(te.nodeId, te)
       }
-      items.sort((a, b) => a.idx - b.idx)
 
       // Build scroll container set
       const scrollContainerIds = new Set<number>()
@@ -353,38 +299,7 @@ export function createVexartLayoutCtx() {
         }
       }
 
-      // Build parent map for ancestor traversal
-      const parentById = new Map<number, number>()
-      for (const state of _allOpenStates) {
-        parentById.set(state.nodeId, state.parentNodeId)
-      }
-
-      function findScrollAncestor(nodeId: number): number | null {
-        let pid = parentById.get(nodeId) ?? 0
-        while (pid !== 0) {
-          if (scrollContainerIds.has(pid)) return pid
-          pid = parentById.get(pid) ?? 0
-        }
-        return null
-      }
-
-      // Emit commands in unified DFS order
       const cmds: RenderCommand[] = []
-      // Track which scroll containers have an open scissor
-      // When a node's scroll ancestor changes (we leave a scissor region),
-      // we need to emit SCISSOR_END for that container.
-      // We track this via a stack of currently open scissor node IDs.
-      const scissorStack: number[] = []
-
-      function closeScissorsUntil(targetAncestor: number | null) {
-        // Pop scissor entries until the stack matches targetAncestor
-        while (scissorStack.length > 0) {
-          const top = scissorStack[scissorStack.length - 1]
-          if (top === targetAncestor) break
-          scissorStack.pop()
-          cmds.push({ type: CMD.SCISSOR_END, x: 0, y: 0, width: 0, height: 0, color: [0, 0, 0, 0] as [number,number,number,number], cornerRadius: 0, extra1: 0, extra2: 0 })
-        }
-      }
 
       function makeRect(pos: { x: number; y: number; width: number; height: number }, state: NodeOpenState): RenderCommand {
         return {
@@ -397,52 +312,60 @@ export function createVexartLayoutCtx() {
         }
       }
 
-      for (const item of items) {
-        if (item.kind === 'box') {
-          const { state } = item
-          const pos = layoutMap.get(BigInt(state.nodeId))
-          if (!pos) continue
+      function localZ(state: NodeOpenState) {
+        return (state.flags & FLAG_FLOATING_ABS) ? state.zIndex : 0
+      }
 
-          if (scrollContainerIds.has(state.nodeId)) {
-            // Scroll container: close any inner scissors, emit own RECT, open scissor
-            const myAncestor = findScrollAncestor(state.nodeId)
-            closeScissorsUntil(myAncestor)
-            // Emit container's own RECT (background of the scroll viewport)
-            if (state.bgColor !== 0 || state.cornerRadius !== 0) {
-              cmds.push(makeRect(pos, state))
-            }
-            // Open scissor for this container's children
-            cmds.push({ type: CMD.SCISSOR_START, x: pos.x, y: pos.y, width: pos.width, height: pos.height, color: [0, 0, 0, 0] as [number,number,number,number], cornerRadius: 0, extra1: 0, extra2: 0, nodeId: state.nodeId })
-            scissorStack.push(state.nodeId)
-          } else {
-            // Normal box: ensure correct scissor context then emit RECT
-            const myAncestor = findScrollAncestor(state.nodeId)
-            closeScissorsUntil(myAncestor)
-            // Emit RECT if needed
-            if (state.bgColor !== 0 || state.cornerRadius !== 0) {
-              cmds.push(makeRect(pos, state))
-            }
-          }
-        } else {
-          // Text entry
-          const te = item.entry
-          const pos = layoutMap.get(BigInt(te.nodeId))
-          if (!pos) continue
+      function sortedChildren(parentId: number) {
+        const children = childrenByParent.get(parentId) ?? []
+        if (!children.some((child) => child.posKind === 1)) return children
+        return [...children].sort((a, b) => {
+          const z = localZ(a) - localZ(b)
+          if (z !== 0) return z
+          return (dfsIndex.get(a.nodeId) ?? 0) - (dfsIndex.get(b.nodeId) ?? 0)
+        })
+      }
 
-          const myAncestor = findScrollAncestor(te.nodeId)
-          closeScissorsUntil(myAncestor)
-          cmds.push({
+      function emitText(te: TextEntry) {
+        const pos = layoutMap.get(te.nodeId)
+        if (!pos) return
+        cmds.push({
             type: CMD.TEXT,
             x: pos.x, y: pos.y, width: pos.width, height: pos.height,
             color: [(te.color >>> 24) & 0xff, (te.color >>> 16) & 0xff, (te.color >>> 8) & 0xff, te.color & 0xff] as [number,number,number,number],
             cornerRadius: 0, extra1: te.fontSize, extra2: te.fontId, text: te.content,
             nodeId: te.nodeId,
-          })
+        })
+      }
+
+      function emitNode(state: NodeOpenState) {
+        const pos = layoutMap.get(state.nodeId)
+        if (!pos) return
+
+        if (state.bgColor !== 0 || state.cornerRadius !== 0) {
+          cmds.push(makeRect(pos, state))
+        }
+
+        const text = textById.get(state.nodeId)
+        if (text) emitText(text)
+
+        const isScrollContainer = scrollContainerIds.has(state.nodeId)
+        if (isScrollContainer) {
+          cmds.push({ type: CMD.SCISSOR_START, x: pos.x, y: pos.y, width: pos.width, height: pos.height, color: [0, 0, 0, 0] as [number,number,number,number], cornerRadius: 0, extra1: 0, extra2: 0, nodeId: state.nodeId })
+        }
+
+        for (const child of sortedChildren(state.nodeId)) {
+          emitNode(child)
+        }
+
+        if (isScrollContainer) {
+          cmds.push({ type: CMD.SCISSOR_END, x: 0, y: 0, width: 0, height: 0, color: [0, 0, 0, 0] as [number,number,number,number], cornerRadius: 0, extra1: 0, extra2: 0 })
         }
       }
 
-      // Close any remaining open scissors
-      closeScissorsUntil(null)
+      for (const root of sortedChildren(0)) {
+        emitNode(root)
+      }
 
       return cmds
     },
@@ -587,7 +510,8 @@ export function createVexartLayoutCtx() {
      *   - attachPoints (ape/app — 3×3 grid anchor) — not available in Taffy.
      *   - pointerPassthrough (_pc) — must be implemented at the hit-test layer (TS-side).
      *   - elementId (_pid) — "attach to element" mode is not supported; use ox/oy directly.
-     *   - zIndex (_z) — z-ordering is handled via the layer system, not Taffy.
+      *   - zIndex (_z) — Taffy ignores paint order; endLayout() applies it when
+      *     emitting subtree-atomic stacking context commands.
      *
      * The correct Taffy mapping for floating is absolute position + insets.
      * Callers that need attach-point semantics must compute ox/oy themselves.
@@ -597,6 +521,7 @@ export function createVexartLayoutCtx() {
       s.flags |= FLAG_FLOATING_ABS
       s.posKind = 1  // Absolute
       s.insetLeft = ox; s.insetTop = oy
+      s.zIndex = _z
     },
 
     /**

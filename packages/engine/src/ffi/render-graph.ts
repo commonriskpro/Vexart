@@ -1,4 +1,4 @@
-import type { CanvasContext } from "./canvas"
+import type { CanvasContext, DrawCmd } from "./canvas"
 import type { TGENode } from "./node"
 
 // ── RenderCommand type ──
@@ -69,6 +69,7 @@ export type EffectConfig = {
   /** Self-filter applied to this element's own paint output (REQ-2B-401/402). */
   filter?: import("./node").FilterConfig
   _node?: TGENode
+  _stateHash?: number
 }
 
 /** @public */
@@ -110,9 +111,9 @@ export interface BackdropRenderMetadata {
   sampleBounds: RenderBounds
   outputBounds: RenderBounds
   clipBounds: RenderBounds
-  transformStateId: string
-  clipStateId: string
-  effectStateId: string
+  transformStateId: number
+  clipStateId: number
+  effectStateId: number
 }
 
 /** @public */
@@ -130,6 +131,7 @@ export type CanvasPaintConfig = {
   renderObjectId?: number
   color: number
   onDraw: (ctx: CanvasContext) => void
+  displayListCommands?: DrawCmd[]
   viewport?: { x: number; y: number; zoom: number }
   nativeDisplayListHandle?: bigint | null
   displayListHash?: string | null
@@ -137,9 +139,9 @@ export type CanvasPaintConfig = {
 
 /** @public */
 export type RenderGraphQueues = {
-  effects: EffectConfig[]
-  images: ImagePaintConfig[]
-  canvases: CanvasPaintConfig[]
+  effects: Map<number, EffectConfig>
+  images: Map<number, ImagePaintConfig>
+  canvases: Map<number, CanvasPaintConfig>
 }
 
 /** @public */
@@ -217,9 +219,9 @@ export type EffectRenderOp = {
   rect: RectangleRenderOp
   effect: EffectConfig
   backdrop: BackdropRenderMetadata | null
-  transformStateId: string
-  clipStateId: string
-  effectStateId: string
+  transformStateId: number
+  clipStateId: number
+  effectStateId: number
 }
 
 /** @public */
@@ -255,28 +257,28 @@ export type RenderGraphFrame = {
 
 type ClipStackEntry = {
   bounds: RenderBounds
-  id: string
+  id: number
 }
 
 /** @public */
 export function createRenderGraphQueues(): RenderGraphQueues {
   return {
-    effects: [],
-    images: [],
-    canvases: [],
+    effects: new Map(),
+    images: new Map(),
+    canvases: new Map(),
   }
 }
 
 /** @public */
 export function resetRenderGraphQueues(queues: RenderGraphQueues) {
-  queues.effects.length = 0
-  queues.images.length = 0
-  queues.canvases.length = 0
+  queues.effects.clear()
+  queues.images.clear()
+  queues.canvases.clear()
 }
 
 /** @public */
 export function cloneRenderGraphQueues(queues: RenderGraphQueues): RenderGraphQueues {
-  // buildRenderGraphFrame no longer mutates queue arrays, so callers can reuse
+  // buildRenderGraphFrame no longer mutates queues, so callers can reuse
   // the original queue references without paying 3x slice() allocations.
   return {
     effects: queues.effects,
@@ -290,15 +292,15 @@ export function getRectangleRenderInputs(cmd: RenderCommand, queues: RenderGraph
   const color = packColor(cmd.color[0], cmd.color[1], cmd.color[2], cmd.color[3])
 
   const image = renderObjectId !== null
-    ? queues.images.find((entry) => entry.renderObjectId === renderObjectId) ?? null
+    ? queues.images.get(renderObjectId) ?? null
     : null
 
   const canvas = renderObjectId !== null
-    ? queues.canvases.find((entry) => entry.renderObjectId === renderObjectId) ?? null
+    ? queues.canvases.get(renderObjectId) ?? null
     : null
 
   const effect = renderObjectId !== null
-    ? queues.effects.find((entry) => entry.renderObjectId === renderObjectId) ?? null
+    ? queues.effects.get(renderObjectId) ?? null
     : null
 
   return { renderObjectId, color, radius, image, canvas, effect }
@@ -308,11 +310,12 @@ export function getBorderRenderInputs(cmd: RenderCommand, queues: RenderGraphQue
   const radius = Math.round(cmd.cornerRadius)
   const width = Math.round(cmd.extra1) || 1
   let effect: EffectConfig | null = null
-  for (let i = state.borderEffectIndex; i < queues.effects.length; i++) {
-    const entry = queues.effects[i]
+  let i = 0
+  for (const entry of queues.effects.values()) {
+    if (i++ < state.borderEffectIndex) continue
     if (entry.cornerRadii === undefined) continue
     effect = entry
-    state.borderEffectIndex = i + 1
+    state.borderEffectIndex = i
     break
   }
   return {
@@ -418,8 +421,19 @@ function getBackdropFilterKind(params: BackdropFilterParams): BackdropFilterKind
   return BACKDROP_FILTER_KIND.COLOR
 }
 
-function serializeMatrixValue(value: number) {
-  return Number.isFinite(value) ? Number(value.toFixed(4)) : 0
+const transformHashF64 = new Float64Array(9)
+const transformHashU8 = new Uint8Array(transformHashF64.buffer)
+const effectHashBuf = new ArrayBuffer(512)
+const effectHashView = new DataView(effectHashBuf)
+const effectHashU8 = new Uint8Array(effectHashBuf)
+
+function fnv1a(data: ArrayLike<number>): number {
+  let h = 0x811c9dc5
+  for (let i = 0; i < data.length; i++) {
+    h ^= data[i]
+    h = Math.imul(h, 0x01000193)
+  }
+  return h >>> 0
 }
 
 function getTransformMatrix(effect: EffectConfig) {
@@ -432,48 +446,79 @@ function getTransformMatrix(effect: EffectConfig) {
 
 function getTransformStateId(effect: EffectConfig) {
   const matrix = getTransformMatrix(effect)
-  if (!matrix) return "transform:none"
-  let id = "transform:"
-  for (let i = 0; i < matrix.length; i++) {
-    if (i > 0) id += ","
-    id += serializeMatrixValue(matrix[i])
-  }
-  return id
+  if (!matrix) return 0
+  for (let i = 0; i < 9; i++) transformHashF64[i] = Number.isFinite(matrix[i]) ? matrix[i] : 0
+  return fnv1a(transformHashU8)
 }
 
 function getEffectStateId(effect: EffectConfig) {
-  let shadow = "none"
+  if (effect._stateHash !== undefined && effect._node?._vpDirty === false) return effect._stateHash
+  let offset = 0
+  const writeU32 = (value: number) => { effectHashView.setUint32(offset, value >>> 0, true); offset += 4 }
+  const writeF64 = (value: number) => { effectHashView.setFloat64(offset, Number.isFinite(value) ? value : 0, true); offset += 8 }
+  writeU32(effect.color)
+  writeF64(effect.cornerRadius)
   if (Array.isArray(effect.shadow)) {
-    shadow = ""
     for (let i = 0; i < effect.shadow.length; i++) {
       const entry = effect.shadow[i]
-      if (i > 0) shadow += "|"
-      shadow += `${entry.x}:${entry.y}:${entry.blur}:${entry.color}`
+      writeF64(entry.x)
+      writeF64(entry.y)
+      writeF64(entry.blur)
+      writeU32(entry.color)
     }
   } else if (effect.shadow) {
-    shadow = `${effect.shadow.x}:${effect.shadow.y}:${effect.shadow.blur}:${effect.shadow.color}`
+    writeF64(effect.shadow.x)
+    writeF64(effect.shadow.y)
+    writeF64(effect.shadow.blur)
+    writeU32(effect.shadow.color)
   }
-  const glow = effect.glow ? `${effect.glow.radius}:${effect.glow.color}:${effect.glow.intensity}` : "none"
-  const gradient = effect.gradient
-    ? effect.gradient.type === "linear"
-      ? `linear:${effect.gradient.from}:${effect.gradient.to}:${effect.gradient.angle}`
-      : `radial:${effect.gradient.from}:${effect.gradient.to}`
-    : "none"
+  if (effect.glow) {
+    writeF64(effect.glow.radius)
+    writeU32(effect.glow.color)
+    writeF64(effect.glow.intensity)
+  }
+  if (effect.gradient) {
+    writeU32(effect.gradient.type === "linear" ? 1 : 2)
+    writeU32(effect.gradient.from)
+    writeU32(effect.gradient.to)
+    writeF64(effect.gradient.type === "linear" ? effect.gradient.angle : 0)
+  }
   const params = getBackdropFilterParams(effect)
-  return `color:${effect.color};radius:${effect.cornerRadius};shadow:${shadow};glow:${glow};gradient:${gradient};blur:${params.blur ?? "none"};brightness:${params.brightness ?? "none"};contrast:${params.contrast ?? "none"};saturate:${params.saturate ?? "none"};grayscale:${params.grayscale ?? "none"};invert:${params.invert ?? "none"};sepia:${params.sepia ?? "none"};hueRotate:${params.hueRotate ?? "none"};opacity:${effect.opacity ?? "none"}`
+  writeF64(params.blur ?? -1)
+  writeF64(params.brightness ?? -1)
+  writeF64(params.contrast ?? -1)
+  writeF64(params.saturate ?? -1)
+  writeF64(params.grayscale ?? -1)
+  writeF64(params.invert ?? -1)
+  writeF64(params.sepia ?? -1)
+  writeF64(params.hueRotate ?? -1)
+  writeF64(effect.opacity ?? -1)
+  if (effect.cornerRadii) {
+    writeF64(effect.cornerRadii.tl)
+    writeF64(effect.cornerRadii.tr)
+    writeF64(effect.cornerRadii.br)
+    writeF64(effect.cornerRadii.bl)
+  }
+  const hash = fnv1a(effectHashU8.subarray(0, offset))
+  effect._stateHash = hash
+  return hash
 }
 
 function createClipStateId(stack: ClipStackEntry[]) {
-  if (stack.length === 0) return "clip:none"
-  let id = "clip:"
+  if (stack.length === 0) return 0
+  let h = 0x811c9dc5
   for (let i = 0; i < stack.length; i++) {
-    if (i > 0) id += ">"
-    id += stack[i].id
+    let value = stack[i].id >>> 0
+    for (let b = 0; b < 4; b++) {
+      h ^= value & 0xff
+      h = Math.imul(h, 0x01000193)
+      value >>>= 8
+    }
   }
-  return id
+  return h >>> 0
 }
 
-function createBackdropSourceKey(effect: EffectConfig, clipStateId: string, transformStateId: string) {
+function createBackdropSourceKey(effect: EffectConfig, clipStateId: number, transformStateId: number) {
   const node = effect._node
   const parentId = node?.parent?.id ?? 0
   const layerId = node?.props.layer ? node.id : parentId
@@ -508,10 +553,25 @@ function createBackdropMetadata(effect: EffectConfig, command: RenderCommand, cl
 
 function createClipStackEntry(cmd: RenderCommand, depth: number): ClipStackEntry {
   const bounds = boundsFromCommand(cmd)
+  const id = hashU32Scratch(depth, bounds.x, bounds.y, bounds.width, bounds.height)
   return {
     bounds,
-    id: `${depth}:${bounds.x},${bounds.y},${bounds.width},${bounds.height}`,
+    id,
   }
+}
+
+function hashU32Scratch(a: number, b: number, c: number, d: number, e: number) {
+  let h = 0x811c9dc5
+  const mix = (input: number) => {
+    let value = input >>> 0
+    for (let i = 0; i < 4; i++) {
+      h ^= value & 0xff
+      h = Math.imul(h, 0x01000193)
+      value >>>= 8
+    }
+  }
+  mix(a); mix(b); mix(c); mix(d); mix(e)
+  return h >>> 0
 }
 
 /** @public */

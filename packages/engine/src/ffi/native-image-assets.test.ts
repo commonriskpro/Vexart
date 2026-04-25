@@ -1,17 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { destroyNativeScene } from "./native-scene"
-import { enableNativeSceneGraph, disableNativeSceneGraph } from "./native-scene-graph-flags"
+import { describe, expect, test } from "bun:test"
 import { nativeImageAssetRegister, nativeImageAssetRelease, nativeImageAssetTouch } from "./native-image-assets"
 import { getNativeResourceStats } from "./resource-stats"
-
-beforeEach(() => {
-  enableNativeSceneGraph()
-})
-
-afterEach(() => {
-  destroyNativeScene()
-  disableNativeSceneGraph()
-})
 
 describe("native image assets", () => {
   test("register reuses stable handles for the same key", () => {

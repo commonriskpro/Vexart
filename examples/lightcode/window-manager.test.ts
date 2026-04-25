@@ -1,204 +1,181 @@
 import { describe, expect, test } from "bun:test"
-import { createWindowManager, LIGHTCODE_RESIZE_EDGE, LIGHTCODE_WINDOW_STATUS, type LightcodeWindowInput } from "./window-manager"
+import {
+  createLightcodeOsWindowManager,
+  LIGHTCODE_OS_KEYBOARD_MODE,
+  LIGHTCODE_OS_POINTER_MODE,
+  LIGHTCODE_OS_RESIZE_EDGE,
+  LIGHTCODE_OS_SURFACE_KIND,
+  LIGHTCODE_OS_SURFACE_LAYER,
+  LIGHTCODE_OS_WINDOW_STATE,
+  type LightcodeOsWindowInput,
+} from "./window-manager"
 
-const desktop = { width: 1200, height: 800, inset: 16 }
-
-function windows(): LightcodeWindowInput[] {
+function fixture(): LightcodeOsWindowInput[] {
   return [
-    {
-      id: "memory",
-      title: "Memory",
-      rect: { x: 60, y: 420, width: 320, height: 180 },
-      zIndex: 100,
-    },
-    {
-      id: "editor",
-      title: "Compute Shader Pipeline",
-      rect: { x: 520, y: 180, width: 520, height: 300 },
-      zIndex: 101,
-    },
+    { id: "a", title: "Editor", subtitle: "main", kind: "editor", rect: { x: 40, y: 70, width: 320, height: 220 } },
+    { id: "b", title: "Diff", subtitle: "changes", kind: "diff", rect: { x: 260, y: 110, width: 260, height: 190 } },
+    { id: "c", title: "Agent", subtitle: "running", kind: "agent", rect: { x: 420, y: 280, width: 260, height: 190 }, state: LIGHTCODE_OS_WINDOW_STATE.MINIMIZED },
   ]
 }
 
-describe("createWindowManager", () => {
-  test("focus raises the selected window and marks it active", () => {
-    const manager = createWindowManager({ windows: windows(), desktop })
+function manager() {
+  return createLightcodeOsWindowManager({
+    desktop: { width: 900, height: 600, topbarHeight: 56, dockHeight: 56 },
+    windows: fixture(),
+  })
+}
 
-    manager.focus("memory")
-
-    const memory = manager.windows().find((window) => window.id === "memory")
-    const editor = manager.windows().find((window) => window.id === "editor")
-
-    expect(manager.activeId()).toBe("memory")
-    expect(memory?.active).toBe(true)
-    expect(editor?.active).toBe(false)
-    expect(memory!.zIndex).toBeGreaterThan(editor!.zIndex)
+describe("Lightcode OS window manager", () => {
+  test("starts with topmost visible window active", () => {
+    const os = manager()
+    expect(os.activeId()).toBe("b")
+    expect(os.visibleWindows().map((window) => window.id)).toEqual(["a", "b"])
+    expect(os.minimizedWindows().map((window) => window.id)).toEqual(["c"])
   })
 
-  test("close removes a window from visible desktop snapshots", () => {
-    const manager = createWindowManager({ windows: windows(), desktop })
-
-    manager.close("editor")
-
-    const editor = manager.windows().find((window) => window.id === "editor")
-
-    expect(editor?.status).toBe(LIGHTCODE_WINDOW_STATUS.CLOSED)
-    expect(manager.visibleWindows().map((window) => window.id)).toEqual(["memory"])
+  test("focus raises a window without changing visible membership", () => {
+    const os = manager()
+    os.focus("a")
+    expect(os.activeId()).toBe("a")
+    expect(os.visibleWindows().at(-1)?.id).toBe("a")
   })
 
-  test("minimize hides a window but preserves restore rect", () => {
-    const manager = createWindowManager({ windows: windows(), desktop })
-    const before = manager.windows().find((window) => window.id === "editor")!.restoreRect
-
-    manager.minimize("editor")
-
-    const editor = manager.windows().find((window) => window.id === "editor")!
-
-    expect(editor.status).toBe(LIGHTCODE_WINDOW_STATUS.MINIMIZED)
-    expect(editor.restoreRect).toEqual(before)
-    expect(manager.visibleWindows().map((window) => window.id)).toEqual(["memory"])
-    expect(manager.minimizedWindows().map((window) => window.id)).toEqual(["editor"])
+  test("move clamps normal windows to the desktop work area", () => {
+    const os = manager()
+    os.moveTo("a", { x: -999, y: -999, width: 320, height: 220 })
+    const win = os.windows().find((window) => window.id === "a")!
+    expect(win.rect.x).toBeGreaterThanOrEqual(12 - win.rect.width + 88)
+    expect(win.rect.y).toBe(66)
   })
 
-  test("focus restores a minimized window from the dock", () => {
-    const manager = createWindowManager({ windows: windows(), desktop })
-
-    manager.minimize("editor")
-    manager.focus("editor")
-    const editor = manager.windows().find((window) => window.id === "editor")!
-
-    expect(editor.status).toBe(LIGHTCODE_WINDOW_STATUS.NORMAL)
-    expect(editor.active).toBe(true)
-    expect(manager.visibleWindows().map((window) => window.id)).toEqual(["memory", "editor"])
-    expect(manager.minimizedWindows()).toEqual([])
+  test("resize respects minimum dimensions", () => {
+    const os = manager()
+    os.resizeTo("a", { x: 40, y: 70, width: 10, height: 10 })
+    const win = os.windows().find((window) => window.id === "a")!
+    expect(win.rect.width).toBe(240)
+    expect(win.rect.height).toBe(150)
   })
 
-  test("minimize active window focuses the next topmost visible window", () => {
-    const manager = createWindowManager({ windows: windows(), desktop })
+  test("resizeBy updates only the requested axis", () => {
+    const os = manager()
+    os.resizeBy("a", LIGHTCODE_OS_RESIZE_EDGE.RIGHT, 50, 900)
+    let win = os.windows().find((window) => window.id === "a")!
+    expect(win.rect.width).toBe(370)
+    expect(win.rect.height).toBe(220)
 
-    manager.focus("editor")
-    manager.minimize("editor")
-
-    expect(manager.activeId()).toBe("memory")
-    expect(manager.windows().find((window) => window.id === "memory")?.active).toBe(true)
+    os.resizeBy("a", LIGHTCODE_OS_RESIZE_EDGE.BOTTOM, 900, 30)
+    win = os.windows().find((window) => window.id === "a")!
+    expect(win.rect.width).toBe(370)
+    expect(win.rect.height).toBe(250)
   })
 
-  test("close active window focuses the next topmost visible window", () => {
-    const manager = createWindowManager({ windows: windows(), desktop })
+  test("minimize hides a window and restore brings it back active", () => {
+    const os = manager()
+    os.minimize("b")
+    expect(os.visibleWindows().map((window) => window.id)).toEqual(["a"])
+    expect(os.minimizedWindows().map((window) => window.id)).toEqual(["b", "c"])
 
-    manager.focus("editor")
-    manager.close("editor")
-
-    expect(manager.activeId()).toBe("memory")
-    expect(manager.windows().find((window) => window.id === "memory")?.active).toBe(true)
+    os.restore("b")
+    expect(os.activeId()).toBe("b")
+    expect(os.visibleWindows().at(-1)?.id).toBe("b")
   })
 
-  test("dock restore of maximized window returns to normal bounds", () => {
-    const manager = createWindowManager({ windows: windows(), desktop })
-    const before = manager.windows().find((window) => window.id === "editor")!.rect
+  test("normal move updates the restore geometry used after minimize", () => {
+    const os = manager()
+    os.moveTo("a", { x: 160, y: 150, width: 320, height: 220 })
+    const moved = os.windows().find((window) => window.id === "a")!.rect
 
-    manager.maximize("editor")
-    manager.minimize("editor")
-    manager.focus("editor")
-    const editor = manager.windows().find((window) => window.id === "editor")!
+    os.minimize("a")
+    os.restore("a")
 
-    expect(editor.status).toBe(LIGHTCODE_WINDOW_STATUS.NORMAL)
-    expect(editor.rect).toEqual(before)
+    expect(os.windows().find((window) => window.id === "a")?.rect).toEqual(moved)
   })
 
-  test("maximize and restore preserve previous bounds", () => {
-    const manager = createWindowManager({ windows: windows(), desktop })
-    const before = manager.windows().find((window) => window.id === "editor")!.rect
+  test("maximize stores restore rect and toggle restores it", () => {
+    const os = manager()
+    const before = os.windows().find((window) => window.id === "a")!.rect
+    os.toggleMaximize("a")
+    let win = os.windows().find((window) => window.id === "a")!
+    expect(win.state).toBe(LIGHTCODE_OS_WINDOW_STATE.MAXIMIZED)
+    expect(win.rect.width).toBe(876)
 
-    manager.maximize("editor")
-    const maximized = manager.windows().find((window) => window.id === "editor")!
-
-    expect(maximized.status).toBe(LIGHTCODE_WINDOW_STATUS.MAXIMIZED)
-    expect(maximized.rect).toEqual({ x: 16, y: 16, width: 1168, height: 768 })
-
-    manager.restore("editor")
-    const restored = manager.windows().find((window) => window.id === "editor")!
-
-    expect(restored.status).toBe(LIGHTCODE_WINDOW_STATUS.NORMAL)
-    expect(restored.rect).toEqual(before)
+    os.toggleMaximize("a")
+    win = os.windows().find((window) => window.id === "a")!
+    expect(win.state).toBe(LIGHTCODE_OS_WINDOW_STATE.NORMAL)
+    expect(win.rect).toEqual(before)
   })
 
-  test("move updates normal rect and clamps minimum size", () => {
-    const manager = createWindowManager({ windows: windows(), desktop })
-
-    manager.move("memory", { x: 10.4, y: 20.6, width: 10, height: 12 })
-    const memory = manager.windows().find((window) => window.id === "memory")!
-
-    expect(memory.rect).toEqual({ x: 10, y: 21, width: 220, height: 120 })
-    expect(memory.restoreRect).toEqual(memory.rect)
+  test("close removes a window from visible and minimized lists", () => {
+    const os = manager()
+    os.close("b")
+    expect(os.visibleWindows().map((window) => window.id)).toEqual(["a"])
+    expect(os.minimizedWindows().map((window) => window.id)).toEqual(["c"])
+    expect(os.windows().find((window) => window.id === "b")?.state).toBe(LIGHTCODE_OS_WINDOW_STATE.CLOSED)
   })
 
-  test("resize updates dimensions and clamps minimum size", () => {
-    const manager = createWindowManager({ windows: windows(), desktop })
-
-    manager.resize("memory", { x: 60, y: 420, width: 180, height: 90 })
-    const memory = manager.windows().find((window) => window.id === "memory")!
-
-    expect(memory.rect).toEqual({ x: 60, y: 420, width: 220, height: 120 })
-    expect(memory.restoreRect).toEqual(memory.rect)
-  })
-
-  test("resizeBy applies edge-specific deltas", () => {
-    const manager = createWindowManager({ windows: windows(), desktop })
-
-    manager.resizeBy("editor", LIGHTCODE_RESIZE_EDGE.RIGHT, 40, 90)
-    manager.resizeBy("editor", LIGHTCODE_RESIZE_EDGE.BOTTOM, 30, 50)
-    manager.resizeBy("editor", LIGHTCODE_RESIZE_EDGE.CORNER, 10, 20)
-    const editor = manager.windows().find((window) => window.id === "editor")!
-
-    expect(editor.rect).toEqual({ x: 520, y: 180, width: 570, height: 370 })
-  })
-
-  test("resize ignores maximized windows", () => {
-    const manager = createWindowManager({ windows: windows(), desktop })
-
-    manager.maximize("editor")
-    manager.resizeBy("editor", LIGHTCODE_RESIZE_EDGE.CORNER, -900, -900)
-    const editor = manager.windows().find((window) => window.id === "editor")!
-
-    expect(editor.rect).toEqual({ x: 16, y: 16, width: 1168, height: 768 })
-  })
-
-  test("move and resize ignore minimized windows", () => {
-    const manager = createWindowManager({ windows: windows(), desktop })
-    const before = manager.windows().find((window) => window.id === "editor")!.rect
-
-    manager.minimize("editor")
-    manager.move("editor", { x: 0, y: 0, width: 999, height: 999 })
-    manager.resize("editor", { x: 0, y: 0, width: 999, height: 999 })
-    manager.focus("editor")
-
-    expect(manager.windows().find((window) => window.id === "editor")?.rect).toEqual(before)
-  })
-
-  test("initial maximized windows compute desktop bounds and restore input bounds", () => {
-    const manager = createWindowManager({
-      desktop,
-      windows: [{
-        id: "editor",
-        title: "Editor",
-        rect: { x: 20, y: 30, width: 400, height: 240 },
-        status: LIGHTCODE_WINDOW_STATUS.MAXIMIZED,
-      }],
+  test("orders surfaces by semantic layer before local stack index", () => {
+    const os = createLightcodeOsWindowManager({
+      desktop: { width: 900, height: 600, topbarHeight: 56, dockHeight: 56 },
+      windows: [
+        { id: "win", title: "Window", subtitle: "main", kind: "editor", rect: { x: 40, y: 70, width: 320, height: 220 } },
+        { id: "dialog", title: "Dialog", subtitle: "modal", kind: "agent", surfaceKind: LIGHTCODE_OS_SURFACE_KIND.DIALOG, ownerId: "win", rect: { x: 90, y: 120, width: 260, height: 180 } },
+      ],
     })
-    const editor = manager.windows()[0]!
 
-    expect(editor.rect).toEqual({ x: 16, y: 16, width: 1168, height: 768 })
-    manager.restore("editor")
-    expect(manager.windows()[0]?.rect).toEqual({ x: 20, y: 30, width: 400, height: 240 })
+    os.focus("win")
+
+    expect(os.paintWindows().map((window) => window.id)).toEqual(["win", "dialog"])
+    expect(os.windows().find((window) => window.id === "dialog")?.layer).toBe(LIGHTCODE_OS_SURFACE_LAYER.MODAL)
+    expect(os.windows().find((window) => window.id === "dialog")!.zIndex).toBeGreaterThan(os.windows().find((window) => window.id === "win")!.zIndex)
   })
 
-  test("focus keeps window z-index below chrome band after repeated activation", () => {
-    const manager = createWindowManager({ windows: windows(), desktop })
+  test("hit order is reverse paint order and skips pointer-disabled surfaces", () => {
+    const os = createLightcodeOsWindowManager({
+      desktop: { width: 900, height: 600, topbarHeight: 56, dockHeight: 56 },
+      windows: [
+        { id: "win", title: "Window", subtitle: "main", kind: "editor", rect: { x: 40, y: 70, width: 320, height: 220 } },
+        { id: "tip", title: "Tip", subtitle: "help", kind: "memory", surfaceKind: LIGHTCODE_OS_SURFACE_KIND.TOOLTIP, pointerMode: LIGHTCODE_OS_POINTER_MODE.NONE, rect: { x: 90, y: 120, width: 260, height: 180 } },
+      ],
+    })
 
-    for (let i = 0; i < 10_000; i++) manager.focus(i % 2 === 0 ? "editor" : "memory")
+    expect(os.paintWindows().map((window) => window.id)).toEqual(["win", "tip"])
+    expect(os.hitWindows().map((window) => window.id)).toEqual(["win"])
+  })
 
-    const maxZ = Math.max(...manager.windows().map((window) => window.zIndex))
-    expect(maxZ).toBeLessThan(9_500)
+  test("minimize and close cascade to owned surfaces", () => {
+    const os = createLightcodeOsWindowManager({
+      desktop: { width: 900, height: 600, topbarHeight: 56, dockHeight: 56 },
+      windows: [
+        { id: "owner", title: "Owner", subtitle: "main", kind: "editor", rect: { x: 40, y: 70, width: 320, height: 220 } },
+        { id: "child", title: "Child", subtitle: "dialog", kind: "agent", surfaceKind: LIGHTCODE_OS_SURFACE_KIND.DIALOG, ownerId: "owner", rect: { x: 90, y: 120, width: 260, height: 180 } },
+      ],
+    })
+
+    os.minimize("owner")
+    expect(os.minimizedWindows().map((window) => window.id)).toEqual(["owner", "child"])
+
+    os.restore("owner")
+    expect(os.visibleWindows().map((window) => window.id)).toEqual(["owner", "child"])
+
+    os.close("owner")
+    expect(os.windows().find((window) => window.id === "child")?.state).toBe(LIGHTCODE_OS_WINDOW_STATE.CLOSED)
+  })
+
+  test("tracks active main and keyboard targets separately", () => {
+    const os = createLightcodeOsWindowManager({
+      desktop: { width: 900, height: 600, topbarHeight: 56, dockHeight: 56 },
+      windows: [
+        { id: "win", title: "Window", subtitle: "main", kind: "editor", rect: { x: 40, y: 70, width: 320, height: 220 } },
+        { id: "hud", title: "Hud", subtitle: "read only", kind: "memory", surfaceKind: LIGHTCODE_OS_SURFACE_KIND.NOTIFICATION, focusable: true, keyboardMode: LIGHTCODE_OS_KEYBOARD_MODE.NONE, rect: { x: 90, y: 120, width: 260, height: 180 } },
+      ],
+    })
+
+    os.focus("win")
+    expect(os.keyboardId()).toBe("win")
+
+    os.focus("hud")
+    expect(os.activeId()).toBe("hud")
+    expect(os.mainId()).toBe("hud")
+    expect(os.keyboardId()).toBe("win")
   })
 })

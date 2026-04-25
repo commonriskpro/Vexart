@@ -135,12 +135,18 @@ mod tests {
     #[test]
     fn test_visible_resources_never_evicted() {
         let mut map = HashMap::new();
-        map.insert(1u64, make_resource(Priority::Visible, 100, 100 * 1024 * 1024));
+        map.insert(
+            1u64,
+            make_resource(Priority::Visible, 100, 100 * 1024 * 1024),
+        );
         map.insert(2u64, make_resource(Priority::Cold, 0, 1 * 1024 * 1024));
 
         // Budget exceeded — only Cold should be evicted, not Visible.
         let result = select_eviction_targets(&map, 200 * 1024 * 1024, 128 * 1024 * 1024);
-        assert!(!result.evicted.contains(&1u64), "Visible must not be evicted");
+        assert!(
+            !result.evicted.contains(&1u64),
+            "Visible must not be evicted"
+        );
         assert!(result.evicted.contains(&2u64), "Cold should be evicted");
     }
 

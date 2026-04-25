@@ -40,14 +40,8 @@ pub fn parse_metrics_bundle(json: &str) -> Result<ParsedMetrics, String> {
     let root: serde_json::Value =
         serde_json::from_str(json).map_err(|e| format!("metrics JSON parse error: {e}"))?;
 
-    let ref_size = root
-        .get("refSize")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(48.0) as f32;
-    let cell_width = root
-        .get("cellWidth")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(64) as u32;
+    let ref_size = root.get("refSize").and_then(|v| v.as_f64()).unwrap_or(48.0) as f32;
+    let cell_width = root.get("cellWidth").and_then(|v| v.as_u64()).unwrap_or(64) as u32;
     let cell_height = root
         .get("cellHeight")
         .and_then(|v| v.as_u64())
@@ -102,7 +96,8 @@ pub fn parse_metrics(json: &str) -> Result<GlyphTable, String> {
         let codepoint = glyph
             .get("codepoint")
             .and_then(|v| v.as_u64())
-            .ok_or_else(|| format!("glyph[{idx}] missing 'codepoint'"))? as u32;
+            .ok_or_else(|| format!("glyph[{idx}] missing 'codepoint'"))?
+            as u32;
 
         let char_str = glyph
             .get("char")
@@ -137,17 +132,20 @@ pub fn parse_metrics(json: &str) -> Result<GlyphTable, String> {
         let x_offset = glyph
             .get("xOffset")
             .and_then(|v| v.as_i64())
-            .ok_or_else(|| format!("glyph[{idx}] missing 'xOffset'"))? as i32;
+            .ok_or_else(|| format!("glyph[{idx}] missing 'xOffset'"))?
+            as i32;
 
         let y_offset = glyph
             .get("yOffset")
             .and_then(|v| v.as_i64())
-            .ok_or_else(|| format!("glyph[{idx}] missing 'yOffset'"))? as i32;
+            .ok_or_else(|| format!("glyph[{idx}] missing 'yOffset'"))?
+            as i32;
 
         let x_advance = glyph
             .get("xAdvance")
             .and_then(|v| v.as_i64())
-            .ok_or_else(|| format!("glyph[{idx}] missing 'xAdvance'"))? as i32;
+            .ok_or_else(|| format!("glyph[{idx}] missing 'xAdvance'"))?
+            as i32;
 
         table.insert(
             ch,

@@ -1,21 +1,22 @@
 # Retained Runtime Cleanup Boundaries
 
-Vexart's retained runtime owner is Rust. TypeScript remains the JSX/public API shell,
-native binding layer, JS callback dispatcher, and explicit compatibility/test fallback.
+> **Phase-14 completed cleanup** (April 2026): the Rust retained scene graph / render graph / layout / event dispatch path has been removed. TypeScript owns scene graph, reactivity, walk-tree, Taffy layout, render graph, event dispatch, and interaction. Rust owns WGPU paint pipelines, composite, Kitty encoding, SHM/file/direct transport, image assets, and canvas display lists. This document is historical unless a section explicitly matches the DEC-014 boundary.
+
+Vexart's scene/layout/event runtime owner is TypeScript. Rust remains the paint/composite/transport owner and native binding target for paint-forward work.
 
 ## Path Classification
 
 | Path | Classification | Notes |
 | --- | --- | --- |
-| `native/libvexart/src/render_graph/` | native-owned | Builds retained render ops from the native scene and layout state. |
+| `native/libvexart/src/render_graph/` | deleted/reverted | Historical retained render graph path removed by phase-14. |
 | `native/libvexart/src/image_asset.rs` | native-owned | Stores image asset identity and resource accounting. |
 | `native/libvexart/src/canvas_display_list.rs` | native-owned | Stores canvas display-list bytes and resource accounting. |
-| `packages/engine/src/ffi/native-render-graph.ts` | binding-shell | Reads native snapshots and translates them for the backend/test bridge. |
+| `packages/engine/src/ffi/native-render-graph.ts` | deleted/reverted | Historical retained snapshot bridge removed by phase-14. |
 | `packages/engine/src/ffi/native-image-assets.ts` | binding-shell | Registers decoded image bytes and syncs handles to scene nodes. |
 | `packages/engine/src/ffi/native-canvas-display-list.ts` | binding-shell | Registers deterministic canvas display-list bytes and syncs handles. |
-| `packages/engine/src/loop/walk-tree.ts` | binding-shell + callback shell | Reconciles JSX nodes, captures JS callbacks, and syncs native scene metadata. |
-| `packages/engine/src/loop/layout.ts` | binding-shell + compat-fallback | Native interaction frames are default; TS hit-test loop remains explicit fallback/test path. |
-| `packages/engine/src/loop/paint.ts` | binding-shell + compat-fallback | Prefers native render graph snapshots; TS graph build remains fallback/test/offscreen path. |
+| `packages/engine/src/loop/walk-tree.ts` | TS-owned | Reconciles JSX nodes, captures JS callbacks, and prepares layout/interaction metadata. |
+| `packages/engine/src/loop/layout.ts` | TS-owned | Taffy layout runs in TS; no native layout writeback path remains. |
+| `packages/engine/src/loop/paint.ts` | paint-forward binding | Builds TS render graph paint commands and dispatches paint/composite work to Rust. |
 | `packages/engine/src/ffi/gpu-renderer-backend.ts` | binding-shell + explicit readback | Dispatches batches through native FFI and keeps explicit readback for screenshots/offscreen/fallback. |
 | `packages/engine/src/testing/render-to-buffer.ts` | test/offscreen | Intentional raw readback helper for tests and screenshots. |
 

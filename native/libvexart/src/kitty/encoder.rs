@@ -8,10 +8,10 @@
 //   Last chunk:   \x1b_Gm=0;{b64}\x1b\\
 //   Single chunk: \x1b_Ga=T,f=32,s={w},v={h},i={id},C=1,o=z,m=0;{b64}\x1b\\
 
-use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
-use flate2::Compression;
+use base64::Engine as _;
 use flate2::write::ZlibEncoder;
+use flate2::Compression;
 use std::io::Write;
 
 const CHUNK_SIZE: usize = 4096;
@@ -51,9 +51,7 @@ pub fn encode_frame_direct(rgba: &[u8], width: u32, height: u32, image_id: u32) 
 
     if chunks.is_empty() {
         // Empty frame — emit a minimal escape with m=0 and no data.
-        let header = format!(
-            "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},C=1,o=z,m=0;\x1b\\"
-        );
+        let header = format!("\x1b_Ga=T,f=32,s={width},v={height},i={image_id},C=1,o=z,m=0;\x1b\\");
         out.extend_from_slice(header.as_bytes());
         return out;
     }
@@ -144,27 +142,18 @@ mod tests {
         let mut rgba = vec![0u8; 64 * 64 * 4];
         // Fill with solid red.
         for i in 0..64 * 64 {
-            rgba[i * 4] = 0xff;     // R
+            rgba[i * 4] = 0xff; // R
             rgba[i * 4 + 1] = 0x00; // G
             rgba[i * 4 + 2] = 0x00; // B
             rgba[i * 4 + 3] = 0xff; // A
         }
 
         let out = encode_frame_direct(&rgba, 64, 64, 1);
-        assert!(
-            !out.is_empty(),
-            "encode output must not be empty"
-        );
+        assert!(!out.is_empty(), "encode output must not be empty");
         // Must start with Kitty APC introducer.
-        assert!(
-            out.starts_with(b"\x1b_G"),
-            "output must start with \\x1b_G"
-        );
+        assert!(out.starts_with(b"\x1b_G"), "output must start with \\x1b_G");
         // Must end with ST terminator.
-        assert!(
-            out.ends_with(b"\x1b\\"),
-            "output must end with \\x1b\\"
-        );
+        assert!(out.ends_with(b"\x1b\\"), "output must end with \\x1b\\");
         // Must contain base64 characters.
         let text = std::str::from_utf8(&out).expect("output must be valid utf8");
         assert!(
@@ -183,14 +172,8 @@ mod tests {
             text.contains("C=1"),
             "output must include C=1 to prevent terminal cursor movement/scroll"
         );
-        assert!(
-            text.contains("s=64"),
-            "output must include s=64 (width)"
-        );
-        assert!(
-            text.contains("v=64"),
-            "output must include v=64 (height)"
-        );
+        assert!(text.contains("s=64"), "output must include s=64 (width)");
+        assert!(text.contains("v=64"), "output must include v=64 (height)");
     }
 
     #[test]

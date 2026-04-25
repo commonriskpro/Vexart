@@ -162,10 +162,10 @@ server.registerTool(
     title: "Launch TGE Demo",
     description:
       "Launch a TGE demo script in a new kitty tab. " +
-      "Pass the script path relative to the vexart project root (e.g. 'examples/lightcode.tsx'). " +
+      "Pass the script path relative to the vexart project root (e.g. 'examples/hello.tsx'). " +
       "Returns the demo name for use with other tools.",
     inputSchema: z.object({
-      script: z.string().describe("Path to the TGE script (e.g. 'examples/lightcode.tsx')"),
+      script: z.string().describe("Path to the TGE script (e.g. 'examples/hello.tsx')"),
       name: z.string().optional().describe("Name for this demo instance (default: script basename)"),
       env: z.record(z.string(), z.string()).optional().describe("Extra environment variables"),
     }),

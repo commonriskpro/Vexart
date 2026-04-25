@@ -1,7 +1,7 @@
 # Vexart — Architecture Reference
 
 **Version**: 0.2
-**Status**: Target architecture — describes the state of the codebase after the Rust-retained engine cutover in the v0.9 roadmap.
+**Status**: Target architecture — describes the paint-forward TS/Rust boundary after DEC-014 reverted the retained scene/layout/render/event cutover.
 **Owner**: Founder (solo developer)
 **Companion to**: [PRD](./PRD.md), [API-POLICY](./API-POLICY.md)
 
@@ -9,7 +9,7 @@
 
 ## ⚠️ How to read this document
 
-This document describes the **target architecture** — how Vexart is organized after all v0.9 phases and the Rust-retained engine cutover complete. It is **not** a description of temporary migration scaffolding.
+This document describes the **target architecture** — how Vexart is organized after all v0.9 phases and DEC-014's paint-forward TS/Rust boundary. It is **not** a description of temporary migration scaffolding.
 
 **When reading this as an AI agent**: treat this as the source of truth for code organization. Any file layout, module boundary, data-flow contract, or convention described here is the authoritative answer. If your task contradicts this document, the document wins — flag the contradiction and stop.
 
@@ -109,19 +109,19 @@ If a conflict emerges, the PRD wins at the policy layer; this document wins at t
 └──────────────────────┬─────────────────────────────┘
                        ▼
 ┌────────────────────────────────────────────────────┐
-│  @vexart/engine — SolidJS shell + FFI binding      │
-│  1. Reconciler sends node mutations to Rust        │
-│  2. JS stores callback registry + public handles   │
-│  3. JS forwards input and dispatches native events │
+│  @vexart/engine — TS scene/layout/event owner      │
+│  1. Solid reconciler owns scene graph/reactivity   │
+│  2. Walk-tree + Taffy layout produce paint cmds    │
+│  3. TS dispatches input, focus, and interactions   │
 └──────────────────────┬─────────────────────────────┘
-                       │  FFI (packed ArrayBuffer, ≤8 params)
+                       │  paint-forward FFI (packed ArrayBuffer, ≤8 params)
                        ▼
 ┌────────────────────────────────────────────────────┐
 │  libvexart.{dylib,so,dll} — Rust cdylib            │
-│  Modules: scene / layout (Taffy) / damage /        │
-│  hit-test / layer registry / render graph /        │
-│  paint (WGPU) / composite / resource / text        │
-│  (MSDF) / kitty encoder / frame orchestrator       │
+│  Modules: paint (WGPU) / composite / layer         │
+│  registry / resource / image assets / canvas       │
+│  display lists / text (MSDF) / Kitty encoder /     │
+│  SHM-file-direct transport                         │
 └──────────────────────┬─────────────────────────────┘
                        │  bytes to stdout (Kitty protocol)
                        ▼
@@ -185,29 +185,31 @@ No other binaries exist. No other languages. If a task proposes adding a third r
 | Layer | Language | Why |
 |---|---|---|
 | App, Styled, Headless, Primitives | TypeScript (with JSX) | Developer-facing API surface. Leverages SolidJS reactivity and Bun-native tooling. |
-| Engine | TypeScript | Public JS/JSX shell: reconciliation adapter, hooks, callback registry, handles, feature flags, compatibility fallback. Bun runtime. |
-| libvexart | Rust (cdylib) | Retained scene graph, layout, damage, hit-testing, layer registry, render graph, frame orchestration, resources, paint, composite, Kitty encoding. Zero-overhead, cross-platform. |
+| Engine | TypeScript | Public JS/JSX shell plus scene graph, Solid reactivity, walk-tree, Taffy layout, render graph generation, event dispatch, interaction, hooks, callback registry, handles, and compatibility/test/offscreen fallbacks. Bun runtime. |
+| libvexart | Rust (cdylib) | Paint pipelines (WGPU), composite, Kitty encoding, SHM/file/direct transport, layer target lifecycle, image assets, canvas display lists, resources, and native stats. Cross-platform. |
 | Shaders | WGSL | One shader language, runs on Metal, Vulkan, DX12 via WGPU. |
 
-### 2.5 Retained ownership rule
+### 2.5 Paint-forward ownership rule
 
-After the retained-engine cutover, Rust is the single implementation owner for frame-critical behavior. TypeScript may request a frame, forward events, and dispatch callbacks, but it must not own ordinary layout state, render graph generation, layer target lifetime, terminal image IDs, or raw terminal presentation payloads.
+After DEC-014, TypeScript is the implementation owner for scene graph, Solid reactivity, layout (Taffy), render graph generation, event dispatch, focus, hit-testing, and interaction. Rust is the implementation owner for paint and presentation below the paint-command boundary.
 
 Allowed TypeScript hot-path responsibilities:
 
-- Encode SolidJS create/update/remove mutations into native scene FFI calls.
-- Keep JS callback closures in a registry keyed by native node IDs.
-- Forward keyboard/pointer input to Rust and invoke returned callback records.
-- Maintain public handles as lightweight wrappers over native IDs.
+- Maintain the SolidJS scene graph and callback registry.
+- Walk the tree, compute Taffy layout in TS, generate render graph / paint commands, and assign layer plans.
+- Parse and dispatch keyboard/pointer input, focus, pointer capture, bubbling, and interaction state.
 - Keep explicit readback APIs for screenshot, debug, test, or offscreen rendering.
 
-Forbidden as target-state responsibilities:
+Allowed Rust hot-path responsibilities:
 
-- Rebuilding the layout tree per frame in TypeScript.
-- Generating ordinary paint/render graph command batches in TypeScript.
-- Owning GPU layer target handles or terminal image IDs in TypeScript.
-- Returning full-frame or layer RGBA buffers to TypeScript for normal terminal presentation.
-- Making final frame strategy decisions in TypeScript.
+- Execute WGPU paint pipelines, effect shaders, text paint, and paint-command dispatch.
+- Composite layer targets and own Kitty encoding plus SHM/file/direct terminal transport.
+- Store image assets, canvas display lists, GPU resources, pipeline caches, and native presentation stats.
+
+Forbidden target-state responsibilities:
+
+- Rust must not own scene graph source-of-truth, layout writeback, render graph generation, or event dispatch without a new PRD decision superseding DEC-014.
+- TypeScript must not receive full-frame or layer RGBA buffers for normal terminal presentation.
 
 ---
 
@@ -486,12 +488,6 @@ native/libvexart/
 ├── src/
 │   ├── lib.rs                 — FFI exports (vexart_* functions)
 │   │
-│   ├── layout/                — Taffy integration
-│   │   ├── mod.rs
-│   │   ├── tree.rs            — TGENode-equivalent → Taffy tree
-│   │   ├── writeback.rs       — Taffy computed layout → FFI buffer
-│   │   └── measure.rs         — text measurement callback for Taffy
-│   │
 │   ├── paint/                 — WGPU rendering
 │   │   ├── mod.rs             — paint() entry point, pipeline dispatch
 │   │   ├── context.rs         — WGPU device/queue/surface lifetime
@@ -693,7 +689,7 @@ This phase is asynchronous relative to the frame loop — SolidJS mutates the tr
 
 #### 5.2.3 Layout
 
-- **Location**: `engine/src/loop/layout.ts` (TS orchestration) + `native/libvexart/src/layout/` (Taffy integration).
+- **Location**: `engine/src/loop/layout.ts` (Taffy integration in TS).
 - **Signature**:
   ```ts
   runLayout(walk: WalkResult, size: TerminalSize): LayoutFrame
@@ -707,9 +703,9 @@ This phase is asynchronous relative to the frame loop — SolidJS mutates the tr
   }
   ```
 - **Responsibilities**:
-  - Send layout commands to Taffy via FFI (`vexart_layout_compute`).
-  - Taffy computes box positions, dimensions, text wrap.
-  - Read back computed positions into `PositionedCommand[]`.
+  - Compute layout in TypeScript using Taffy.
+  - Produce box positions, dimensions, and text wrap data without native layout writeback FFI.
+  - Build `PositionedCommand[]` for TS-owned render graph generation.
   - Diff against previous frame's layout → produce damage rects.
 
 #### 5.2.4 Assign layers
@@ -1041,20 +1037,20 @@ type ResourceStats = {
 
 | Thread | Owner | What runs there |
 |---|---|---|
-| **JS event loop** | Bun | Solid reconciler adapter, hooks, callback registry, input byte parsing, event dispatch, compatibility fallback |
-| **Rust sync thread** | Rust main | FFI calls from JS execute here; retained scene mutation, layout, damage, hit-testing, layer registry, render graph generation, frame orchestration, paint dispatch, composite, Kitty encode/present |
+| **JS event loop** | Bun | Solid reconciler adapter, scene graph, reactivity, walk-tree, Taffy layout, render graph generation, hooks, callback registry, input byte parsing, event dispatch, compatibility/test/offscreen fallback |
+| **Rust sync thread** | Rust main | Paint-forward FFI calls from JS execute here; paint dispatch, composite, layer registry targets, image assets, canvas display lists, Kitty encode/present, SHM/file/direct transport |
 | **WGPU submission** | WGPU internal | Command buffer submission to GPU driver (Metal/Vulkan/DX12) |
 | **WGPU GPU callbacks** | WGPU internal | GPU fence callbacks, readback completion |
 | **Kitty writer** | Rust-owned | Buffered stdout writes from the Kitty encoder |
 
-**There is no worker thread in JavaScript**. Bun's event loop is the single JS thread. All TS code is synchronous or `async`-over-microtasks. Compositor-fast-path work is native-owned; JavaScript does not run a separate render worker.
+**There is no worker thread in JavaScript**. Bun's event loop is the single JS thread. All TS scene/layout/event work is synchronous or `async`-over-microtasks. Paint/composite/presentation work is native-owned; JavaScript does not run a separate render worker.
 
 **There is no `tokio` or `rayon` in the Rust main path** for v0.9. Parallelism is deferred to v1.x per DEC-010's non-goal list.
 
 ### 9.2 Thread safety contract
 
 - FFI calls from JS to Rust are synchronous. TS awaits completion.
-- Rust internal state is not accessed concurrently. Every FFI call takes a context/scene handle and mutates it in-thread.
+- Rust internal paint/composite/presentation state is not accessed concurrently. Every FFI call takes an engine/context handle and mutates it in-thread.
 - WGPU handles concurrency internally — user code does not interact with GPU threads directly.
 - The Kitty writer is a buffered `std::io::BufWriter` over stdout; writes are serialized at the OS level.
 
@@ -1064,7 +1060,7 @@ type ResourceStats = {
 - Terminal UIs have small node counts (50-500 typical). Parallelism overhead > gain.
 - Input latency is already below perception threshold with the adaptive loop + boost windows.
 
-If profiling in v1.x shows the JS thread saturated, the solution is to move additional control-plane work into the native event/frame boundary or split JS user-visible tasks across frames — not to reintroduce JS frame ownership.
+If profiling in v1.x shows the JS thread saturated, the solution is to optimize TS scene/layout/event work or split JS user-visible tasks across frames. Moving scene/layout/render/event ownership back to Rust requires new benchmark evidence and a new PRD decision superseding DEC-014.
 
 ---
 
@@ -1487,7 +1483,7 @@ This section documents deviations between the current v0.1 codebase and the targ
 | Package names `@tge/*` | `@vexart/*` | Phase 1 |
 | Relative imports across packages (`../../otro-paquete/src/...`) | Workspace imports (`@vexart/*`), CI-enforced | Phase 1 |
 | Packages have no declared `dependencies` | Explicit `workspace:*` dependencies | Phase 1 |
-| Clay (C) layout engine + `vendor/clay*` | Taffy (Rust) inside `libvexart` | Phase 2 |
+| Clay (C) layout engine + `vendor/clay*` | Taffy in TypeScript; no native layout writeback FFI | Phase 2 + DEC-014 |
 | Zig CPU paint path (`zig/` + `@tge/pixel`) | Deleted; GPU-only via WGPU | Phase 2 |
 | `output-placeholder` + `output-halfblock` backends | Deleted; Kitty-only | Phase 2 |
 | `gpu-frame-composer.ts` with CPU/GPU switch | Deleted; no CPU mode | Phase 2 |
@@ -1512,11 +1508,9 @@ This section documents deviations between the current v0.1 codebase and the targ
 | `starfield` / `nebula` Zig primitives | Moved to `examples/` or deleted | Phase 2 |
 | Runtime font atlases limited to 15 ids | Unlimited (governed by `ResourceManager` budget) | Phase 2b |
 | TS owns layer GPU target handles and terminal image IDs | Rust `LayerRegistry` owns target/image lifecycle and resource accounting | Retained R2 |
-| TS `TGENode` tree is the only retained scene state | Rust-retained scene graph is the default runtime on SHM-capable terminals; fallback remains available via `VEXART_RETAINED=0` during the compatibility window | Retained R3-R7 |
-| TS computes layout, damage, hit-testing, and event target traversal | Rust computes layout/damage/hit-test and returns event records to JS | Retained R4 |
-| TS generates ordinary render graph / paint command batches | Rust generates and batches render ops from native scene data | Retained R5 |
-| TS chooses frame strategy and coordinates presentation lifecycle | Rust frame orchestrator chooses `skip-present`, `layered-dirty`, `layered-region`, or `final-frame` | Retained R6 |
-| Old TS render graph and raw presentation path remain compatibility code | Native retained path is default; old path emergency/test-only, then deleted or isolated | Retained R7-R8 |
+| Rust-retained scene graph / layout / render graph / event dispatch plan | Reverted; TS retains scene graph, reactivity, Taffy layout, render graph, and event dispatch | DEC-014 / Phase 14 |
+| Retained experimental flags (`nativeSceneGraph`, `nativeSceneLayout`, `nativeRenderGraph`, `nativeEventDispatch`) | Removed from public `mount()` API | DEC-014 / Phase 14 |
+| Paint/composite/transport in TS hot path | Rust owns WGPU paint, composite, Kitty encoding, SHM/file/direct transport, image assets, and canvas display lists | DEC-014 / Phase 14 |
 
 ---
 
@@ -1549,7 +1543,6 @@ vexart_input_pointer / key / events_read
 vexart_frame_request / render / present
 vexart_layer_upsert / mark_dirty / reuse / remove / present_dirty
 vexart_target_create / destroy
-vexart_layout_compute              // compatibility/offscreen fallback path
 vexart_paint_dispatch              // explicit offscreen / emergency fallback path after 3g cleanup
 vexart_composite_merge             // explicit offscreen / emergency fallback path after 3g cleanup
 vexart_resource_stats / evict / set_budget

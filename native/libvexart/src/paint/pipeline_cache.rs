@@ -50,11 +50,7 @@ fn cache_path() -> Option<PathBuf> {
     let mut p = PathBuf::from(home);
     p.push(".cache");
     p.push("vexart");
-    p.push(format!(
-        "pipeline.{}-{}.bin",
-        platform_tag(),
-        version_tag()
-    ));
+    p.push(format!("pipeline.{}-{}.bin", platform_tag(), version_tag()));
     Some(p)
 }
 
@@ -127,9 +123,7 @@ impl PipelineCacheManager {
             return;
         }
         if let Err(e) = std::fs::rename(&tmp_path, path) {
-            eprintln!(
-                "vexart: pipeline cache: failed to rename temp file: {e}"
-            );
+            eprintln!("vexart: pipeline cache: failed to rename temp file: {e}");
             // Clean up the stray temp file.
             let _ = std::fs::remove_file(&tmp_path);
         }
@@ -207,7 +201,11 @@ mod tests {
     /// Uses a thread-local counter to give each test a unique sub-directory.
     fn tmp_cache_path(test_id: &str) -> PathBuf {
         let mut p = std::env::temp_dir();
-        p.push(format!("vexart_cache_test_{}_{}", std::process::id(), test_id));
+        p.push(format!(
+            "vexart_cache_test_{}_{}",
+            std::process::id(),
+            test_id
+        ));
         p.push("pipeline.test-0.0.0.bin");
         p
     }
@@ -270,7 +268,10 @@ mod tests {
 
         let result = PipelineCacheManager::load_from_disk(&path);
         assert!(result.is_none(), "corrupted file should return None");
-        assert!(!path.exists(), "corrupted file should be deleted after load");
+        assert!(
+            !path.exists(),
+            "corrupted file should be deleted after load"
+        );
 
         // Cleanup.
         if let Some(parent) = path.parent() {

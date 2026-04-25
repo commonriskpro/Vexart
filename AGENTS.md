@@ -24,11 +24,14 @@ Pixel-native terminal rendering engine. Developers write JSX (SolidJS), TGE rend
 
 ```
 JSX (SolidJS createRenderer)
-  → Clay layout (C via FFI, microsecond perf)
-    → Pixel paint (Zig via FFI, SDF primitives)
-      → Output backend (Kitty/placeholder/halfblock)
-        → Terminal
+  → TS scene graph + reactivity (Solid reconciler)
+    → TS walk-tree + layout (Taffy) + render graph + event dispatch
+      → Rust paint pipelines (WGPU) + image assets + canvas display lists
+        → Rust composite + Kitty encoding + SHM/file/direct transport
+          → Terminal
 ```
+
+Current ownership boundary: TypeScript owns scene graph, reactivity, walk-tree, layout (Taffy), render graph, event dispatch, and interaction. Rust owns paint pipelines (WGPU), composite, Kitty encoding, SHM/file/direct transport, image assets, and canvas display lists. The reverted Rust-retained/native scene graph path is historical only.
 
 ## Modules
 

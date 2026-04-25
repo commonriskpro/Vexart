@@ -1,5 +1,3 @@
-import { isNativeRetainedForcedOff, nativeRetainedFallbackReason } from "./native-retained-flags"
-
 /**
  * native-presentation-flags.ts
  * Feature flag and env override for Phase 2b native presentation.
@@ -33,9 +31,6 @@ if (_envOverride === "0") {
 } else if (_envOverride === "1") {
   _nativePresentationEnabled = true
   _fallbackReason = null
-} else if (isNativeRetainedForcedOff()) {
-  _nativePresentationEnabled = false
-  _fallbackReason = nativeRetainedFallbackReason()
 }
 // No env override: mount/capability probing enables native presentation when
 // supported; explicit compatibility fallback remains behind env/runtime flags.
@@ -56,7 +51,7 @@ export function isNativePresentationEnabled(): boolean {
 
 /** True when the emergency env override forbids enabling native presentation. */
 export function isNativePresentationForcedOff(): boolean {
-  return isNativeRetainedForcedOff() || _envOverride === "0"
+  return _envOverride === "0"
 }
 
 /**
@@ -101,7 +96,6 @@ export function getNativePresentationFallbackReason(): string | null {
 }
 
 export function nativePresentationForcedOffReason(): string | null {
-  if (isNativeRetainedForcedOff()) return nativeRetainedFallbackReason()
   if (_envOverride === "0") return "VEXART_NATIVE_PRESENTATION=0 (env override)"
   return null
 }

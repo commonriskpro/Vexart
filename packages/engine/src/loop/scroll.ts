@@ -114,6 +114,12 @@ export function createScrollHandle(clayId: string): ScrollHandle {
   return handle
 }
 
+/** @public Release scroll state for an unmounted scroll container. */
+export function releaseScrollHandle(clayId: string) {
+  scrollHandles.delete(clayId)
+  scrollStates.delete(clayId)
+}
+
 /** @public */
 export function resetScrollHandles() {
   scrollHandles.clear()

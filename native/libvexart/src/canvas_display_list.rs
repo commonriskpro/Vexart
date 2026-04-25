@@ -18,7 +18,10 @@ pub struct CanvasDisplayListRegistry {
 
 impl CanvasDisplayListRegistry {
     pub fn new() -> Self {
-        Self { by_key: HashMap::new(), lists: HashMap::new() }
+        Self {
+            by_key: HashMap::new(),
+            lists: HashMap::new(),
+        }
     }
 
     pub fn update(
@@ -38,7 +41,13 @@ impl CanvasDisplayListRegistry {
                     list.bytes.clear();
                     list.bytes.extend_from_slice(bytes);
                     list.hash = hash;
-                    resources.register(handle, ResourceKind::CanvasDisplayList, bytes.len() as u64, 0, WgpuHandle::Id(handle));
+                    resources.register(
+                        handle,
+                        ResourceKind::CanvasDisplayList,
+                        bytes.len() as u64,
+                        0,
+                        WgpuHandle::Id(handle),
+                    );
                 } else {
                     resources.touch(handle, 0);
                 }
@@ -48,8 +57,22 @@ impl CanvasDisplayListRegistry {
 
         let handle = paint::alloc_image_handle();
         self.by_key.insert(key.clone(), handle);
-        self.lists.insert(handle, CanvasDisplayList { handle, key, bytes: bytes.to_vec(), hash });
-        resources.register(handle, ResourceKind::CanvasDisplayList, bytes.len() as u64, 0, WgpuHandle::Id(handle));
+        self.lists.insert(
+            handle,
+            CanvasDisplayList {
+                handle,
+                key,
+                bytes: bytes.to_vec(),
+                hash,
+            },
+        );
+        resources.register(
+            handle,
+            ResourceKind::CanvasDisplayList,
+            bytes.len() as u64,
+            0,
+            WgpuHandle::Id(handle),
+        );
         Some(handle)
     }
 
@@ -92,8 +115,22 @@ mod tests {
     fn update_reuses_handle_for_same_key() {
         let mut registry = CanvasDisplayListRegistry::new();
         let mut resources = ResourceManager::new();
-        let first = registry.update("canvas:1".to_string(), br#"{"commands":[]}"#, "a".to_string(), &mut resources).unwrap();
-        let second = registry.update("canvas:1".to_string(), br#"{"commands":[]}"#, "a".to_string(), &mut resources).unwrap();
+        let first = registry
+            .update(
+                "canvas:1".to_string(),
+                br#"{"commands":[]}"#,
+                "a".to_string(),
+                &mut resources,
+            )
+            .unwrap();
+        let second = registry
+            .update(
+                "canvas:1".to_string(),
+                br#"{"commands":[]}"#,
+                "a".to_string(),
+                &mut resources,
+            )
+            .unwrap();
 
         assert_eq!(first, second);
         assert_eq!(registry.get(first).unwrap().hash, "a");
@@ -105,7 +142,14 @@ mod tests {
         let mut resources = ResourceManager::new();
         let bytes = br#"{"version":1,"commands":[{"kind":"line"}]}"#;
 
-        let handle = registry.update("canvas:2".to_string(), bytes, "b".to_string(), &mut resources).unwrap();
+        let handle = registry
+            .update(
+                "canvas:2".to_string(),
+                bytes,
+                "b".to_string(),
+                &mut resources,
+            )
+            .unwrap();
 
         assert_eq!(resources.resource_count(), 1);
         assert_eq!(resources.current_usage_bytes(), bytes.len() as u64);

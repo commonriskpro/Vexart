@@ -14,9 +14,7 @@ import { resolveProps, createPressEvent } from "../ffi/node"
 import type { DamageRect } from "../ffi/damage"
 import { unionRect } from "../ffi/damage"
 import { CMD, type RenderCommand } from "../ffi/render-graph"
-import type { NativeInteractionFrameInput, NativePointerEventRecord } from "../ffi/native-scene-events"
-import { NATIVE_EVENT_FLAG, NATIVE_EVENT_KIND, nativeInteractionFrame, nativePressChain } from "../ffi/native-scene-events"
-import type { PositionedCommand } from "../ffi/layout-writeback"
+import type { PositionedCommand } from "./layout-adapter"
 import {
   fromConfig,
   identity,
@@ -25,19 +23,8 @@ import {
   translate,
   isIdentity,
 } from "../ffi/matrix"
-import { nativeSceneSetLayout, nativeSceneSetProp } from "../ffi/native-scene"
 import { focusedId, setFocusedId, getNodeFocusId } from "../reconciler/focus"
 import { buildNodeMouseEvent, isFullyOutsideScrollViewport } from "../reconciler/hit-test"
-
-function syncNativeInteractiveState(node: TGENode) {
-  nativeSceneSetProp(node._nativeId, "__hovered", node._hovered)
-  nativeSceneSetProp(node._nativeId, "__active", node._active)
-  nativeSceneSetProp(node._nativeId, "__focused", node._focused)
-}
-
-function syncNativeFocusState(node: TGENode) {
-  nativeSceneSetProp(node._nativeId, "__focused", node._focused)
-}
 
 // ── Layout writeback ──────────────────────────────────────────────────────
 
@@ -50,7 +37,6 @@ export type WriteLayoutBackState = {
   textNodes: TGENode[]
   boxNodes: TGENode[]
   pendingNodeDamageRects?: Array<{ nodeId: number; rect: DamageRect }>
-  syncNativeLayout?: boolean
 }
 
 function isNonEmptyLayoutRect(rect: { width: number; height: number }) {
@@ -76,24 +62,22 @@ export function damageRectForLayoutTransition(
 /**
  * After layout compute, write geometry back to TGENodes.
  *
- * Uses the vexart layout map (from vexart_layout_compute / Taffy) to write
+ * Uses the layout map from the TypeScript layout adapter to write
  * exact position+size into every box and text node's .layout field.
  *
  * @param layoutMap  Vexart per-node positioned layout (from layout-adapter.getLastLayoutMap())
  * @param state      Mutable node lists (mutated in-place)
  */
 export function writeLayoutBack(
-  layoutMap: Map<bigint, PositionedCommand> | null,
+  layoutMap: Map<number, PositionedCommand> | null,
   state: WriteLayoutBackState,
 ) {
   const { rectNodes, textNodes, boxNodes, pendingNodeDamageRects } = state
-  const syncNativeLayout = state.syncNativeLayout ?? true
 
-  // Use vexart layout map directly for all box and text nodes.
-  // The map is always populated by vexart_layout_compute (Taffy).
+  // Use layout map directly for all box and text nodes.
   if (layoutMap && layoutMap.size > 0) {
     for (const node of boxNodes) {
-      const pos = layoutMap.get(BigInt(node.id))
+      const pos = layoutMap.get(node.id)
       if (pos) {
         const prev = { x: node.layout.x, y: node.layout.y, width: node.layout.width, height: node.layout.height }
         node.layout.x = pos.x
@@ -102,11 +86,10 @@ export function writeLayoutBack(
         node.layout.height = pos.height
         const damage = damageRectForLayoutTransition(prev, node.layout)
         if (damage && pendingNodeDamageRects) pendingNodeDamageRects.push({ nodeId: node.id, rect: damage })
-        if (syncNativeLayout) nativeSceneSetLayout(node._nativeId, pos.x, pos.y, pos.width, pos.height)
       }
     }
     for (const node of textNodes) {
-      const pos = layoutMap.get(BigInt(node.id))
+      const pos = layoutMap.get(node.id)
       if (pos) {
         const prev = { x: node.layout.x, y: node.layout.y, width: node.layout.width, height: node.layout.height }
         node.layout.x = pos.x
@@ -115,7 +98,6 @@ export function writeLayoutBack(
         node.layout.height = pos.height
         const damage = damageRectForLayoutTransition(prev, node.layout)
         if (damage && pendingNodeDamageRects) pendingNodeDamageRects.push({ nodeId: node.id, rect: damage })
-        if (syncNativeLayout) nativeSceneSetLayout(node._nativeId, pos.x, pos.y, pos.width, pos.height)
       }
     }
   }
@@ -232,19 +214,68 @@ export function writeLayoutBack(
 
 export function updateCommandsToLayoutMap(
   commands: RenderCommand[],
-  layoutMap: Map<bigint, PositionedCommand> | null,
+  layoutMap: Map<number, PositionedCommand> | null,
 ) {
   if (!layoutMap || layoutMap.size === 0) return
 
   for (const command of commands) {
     if (command.type === CMD.SCISSOR_END || command.nodeId === undefined) continue
-    const pos = layoutMap.get(BigInt(command.nodeId))
+    const pos = layoutMap.get(command.nodeId)
     if (!pos) continue
     command.x = pos.x
     command.y = pos.y
     command.width = pos.width
     command.height = pos.height
   }
+}
+
+function localStackingZ(node: TGENode) {
+  return node.props.floating ? (node.props.zIndex ?? 0) : 0
+}
+
+function depth(node: TGENode) {
+  let total = 0
+  let current: TGENode | null = node
+  while (current) {
+    total++
+    current = current.parent
+  }
+  return total
+}
+
+export function compareStackingPaintOrder(a: TGENode, b: TGENode) {
+  if (a === b) return 0
+
+  let left = a
+  let right = b
+  let leftDepth = depth(left)
+  let rightDepth = depth(right)
+
+  while (leftDepth > rightDepth && left.parent) {
+    left = left.parent
+    leftDepth--
+  }
+  while (rightDepth > leftDepth && right.parent) {
+    right = right.parent
+    rightDepth--
+  }
+
+  if (left === right) return depth(a) - depth(b)
+
+  while (left.parent && right.parent && left.parent !== right.parent) {
+    left = left.parent
+    right = right.parent
+  }
+
+  const z = localStackingZ(left) - localStackingZ(right)
+  if (z !== 0) return z
+  return left._siblingIndex - right._siblingIndex
+}
+
+export function sortNodesByStackingPaintOrder(nodes: TGENode[]) {
+  const needsSort = nodes.some((node) => !!node.props.floating && (node.props.zIndex ?? 0) !== 0)
+  if (!needsSort) return nodes
+  return [...nodes].sort(compareStackingPaintOrder)
 }
 
 // ── Interactive state (hover/active/focus) ────────────────────────────────
@@ -272,174 +303,6 @@ export type InteractiveStatesBag = {
   onChanged: () => void
   /** Called when a specific node had visual-only interaction state changes. */
   onNodeVisualChanged?: (node: TGENode) => void
-  /** Dispatch click callbacks from the native retained scene chain. */
-  useNativePressDispatch?: boolean
-  /** Dispatch hover/active/mouse callbacks from native retained scene records. */
-  useNativeInteractionDispatch?: boolean
-}
-
-export type NativePressChainReader = (x: number, y: number) => NativePointerEventRecord[]
-
-export function dispatchNativePressChain(
-  nodes: TGENode[],
-  x: number,
-  y: number,
-  readChain: NativePressChainReader = nativePressChain,
-) {
-  const chain = readChain(x, y)
-  if (chain.length === 0) return false
-
-  const nodeByNativeId = new Map<bigint, TGENode>()
-  for (const node of nodes) {
-    if (node._nativeId) nodeByNativeId.set(node._nativeId, node)
-  }
-
-  const event = createPressEvent()
-  let dispatched = false
-
-  for (const record of chain) {
-    if (event.propagationStopped) break
-    const node = nodeByNativeId.get(record.nodeId)
-    if (!node) continue
-
-    if ((record.flags & NATIVE_EVENT_FLAG.FOCUSABLE) === NATIVE_EVENT_FLAG.FOCUSABLE && node.props.focusable) {
-      const fid = getNodeFocusId(node)
-      if (fid) setFocusedId(fid)
-      dispatched = true
-    }
-
-    if ((record.flags & NATIVE_EVENT_FLAG.ON_PRESS) === NATIVE_EVENT_FLAG.ON_PRESS && node.props.onPress) {
-      node.props.onPress(event)
-      dispatched = true
-    }
-  }
-
-  return dispatched
-}
-
-export type NativeInteractionFrameReader = (input: NativeInteractionFrameInput) => NativePointerEventRecord[]
-
-function eventFromNativeRecord(record: NativePointerEventRecord): NodeMouseEvent {
-  return {
-    x: record.x,
-    y: record.y,
-    nodeX: record.nodeX,
-    nodeY: record.nodeY,
-    width: record.width,
-    height: record.height,
-  }
-}
-
-export function dispatchNativeInteractionFrame(
-  bag: InteractiveStatesBag,
-  readFrame: NativeInteractionFrameReader = nativeInteractionFrame,
-) {
-  // JS-CALLBACK-SHELL: Rust owns retained hit-testing and interactive state;
-  // this function only mirrors native records into JS node caches and invokes
-  // user callbacks stored on TGENode props.
-  const records = readFrame({
-    x: bag.pointerX,
-    y: bag.pointerY,
-    pointerDown: bag.pointerDown,
-    pointerDirty: bag.pointerDirty,
-    pendingPress: bag.pendingPress,
-    pendingRelease: bag.pendingRelease,
-  })
-
-  const justReleased = bag.pendingRelease
-  bag.pendingPress = false
-  bag.pendingRelease = false
-  bag.pointerDirty = false
-
-  const nodeByNativeId = new Map<bigint, TGENode>()
-  for (const node of bag.rectNodes) {
-    if (node._nativeId) nodeByNativeId.set(node._nativeId, node)
-  }
-
-  const currentFocusId = focusedId()
-  const event = createPressEvent()
-  let changed = false
-  let hadClick = false
-
-  for (const record of records) {
-    const node = nodeByNativeId.get(record.nodeId)
-    if (!node) continue
-    const mouse = eventFromNativeRecord(record)
-
-    if (record.eventKind === NATIVE_EVENT_KIND.MOUSE_OVER) {
-      if (!node._hovered) { node._hovered = true; changed = true; bag.onNodeVisualChanged?.(node) }
-      if (node.props.onMouseOver) node.props.onMouseOver(mouse)
-      continue
-    }
-
-    if (record.eventKind === NATIVE_EVENT_KIND.MOUSE_OUT) {
-      if (node._hovered) { node._hovered = false; changed = true; bag.onNodeVisualChanged?.(node) }
-      if (node.props.onMouseOut) node.props.onMouseOut(mouse)
-      continue
-    }
-
-    if (record.eventKind === NATIVE_EVENT_KIND.MOUSE_DOWN) {
-      bag.pressOriginSet = true
-      if (!node._active) { node._active = true; changed = true; bag.onNodeVisualChanged?.(node) }
-      bag.prevActiveNode = node
-      if (node.props.onMouseDown) node.props.onMouseDown(mouse)
-      continue
-    }
-
-    if (record.eventKind === NATIVE_EVENT_KIND.MOUSE_UP) {
-      if (node._active) { node._active = false; changed = true; bag.onNodeVisualChanged?.(node) }
-      if (node.props.onMouseUp) node.props.onMouseUp(mouse)
-      continue
-    }
-
-    if (record.eventKind === NATIVE_EVENT_KIND.ACTIVE_END) {
-      if (node._active) { node._active = false; changed = true; bag.onNodeVisualChanged?.(node) }
-      continue
-    }
-
-    if (record.eventKind === NATIVE_EVENT_KIND.MOUSE_MOVE) {
-      if (node.props.onMouseMove) node.props.onMouseMove(mouse)
-      continue
-    }
-
-    if (record.eventKind === NATIVE_EVENT_KIND.PRESS_CANDIDATE) {
-      if (event.propagationStopped) continue
-      if ((record.flags & NATIVE_EVENT_FLAG.FOCUSABLE) === NATIVE_EVENT_FLAG.FOCUSABLE && node.props.focusable) {
-        const fid = getNodeFocusId(node)
-        if (fid) setFocusedId(fid)
-        hadClick = true
-        changed = true
-      }
-      if ((record.flags & NATIVE_EVENT_FLAG.ON_PRESS) === NATIVE_EVENT_FLAG.ON_PRESS && node.props.onPress) {
-        node.props.onPress(event)
-        hadClick = true
-        changed = true
-      }
-    }
-  }
-
-  if (justReleased) {
-    bag.pressOriginSet = false
-    bag.capturedNodeId = 0
-  }
-
-  const newFocusId = focusedId()
-  if (newFocusId !== currentFocusId) {
-    for (const node of bag.rectNodes) {
-      if (!node.props.focusable) continue
-      const nodeFocusId = getNodeFocusId(node)
-      const isFocused = nodeFocusId !== undefined && nodeFocusId === newFocusId
-      if (node._focused !== isFocused) {
-        node._focused = isFocused
-        syncNativeFocusState(node)
-        bag.onNodeVisualChanged?.(node)
-        changed = true
-      }
-    }
-  }
-
-  if (changed) bag.onChanged()
-  return { hadClick, changed }
 }
 
 /**
@@ -452,13 +315,6 @@ export function dispatchNativeInteractionFrame(
  * Returns true if a click was dispatched (focus/onPress fired).
  */
 export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
-  if (bag.useNativeInteractionDispatch) {
-    return dispatchNativeInteractionFrame(bag).hadClick
-  }
-
-  // COMPAT-FALLBACK: Full TS hit-test/hover/active loop. Retained native
-  // frames bypass this branch unless native interaction dispatch is disabled
-  // by runtime flags or tests explicitly exercise the compatibility path.
   let changed = false
   const currentFocusId = focusedId()
 
@@ -477,12 +333,18 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
     return buildNodeMouseEvent(node, bag.pointerX, bag.pointerY)
   }
 
-  // Walk all rect nodes (they have layout) and check hover/active/focus
+  // Walk all rect nodes in paint order. The last overlapping interactive node
+  // wins click/active targeting, matching reverse paint-order hit-testing while
+  // still updating hover/active visual state for every overlapping node.
+  const paintOrderedRectNodes = sortNodesByStackingPaintOrder(bag.rectNodes)
   let newActiveNode: TGENode | null = null
   let pressedThisFrame: TGENode | null = null  // Node hit during justPressed (for fast-click detection)
   let hoveredPressTarget: TGENode | null = null
-  for (const node of bag.rectNodes) {
-    const hasInteractiveStyle = node.props.hoverStyle || node.props.activeStyle || node.props.focusStyle
+  for (const node of paintOrderedRectNodes) {
+    const hasHoverStyle = !!node.props.hoverStyle
+    const hasActiveStyle = !!node.props.activeStyle
+    const hasFocusStyle = !!node.props.focusStyle
+    const hasInteractiveStyle = hasHoverStyle || hasActiveStyle || hasFocusStyle
     const isFocusable = node.props.focusable
     const hasOnPress = node.props.onPress
     const hasMouseCb = node.props.onMouseDown || node.props.onMouseUp || node.props.onMouseMove || node.props.onMouseOver || node.props.onMouseOut
@@ -502,10 +364,19 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
       while (scrollParent) {
         if (scrollParent.props.scrollX || scrollParent.props.scrollY) {
           if (fullyOutsideViewport) {
-            let stateChanged = false
-            if (node._hovered) { node._hovered = false; changed = true; stateChanged = true; bag.onNodeVisualChanged?.(node) }
-            if (node._active) { node._active = false; changed = true; stateChanged = true; bag.onNodeVisualChanged?.(node) }
-            if (stateChanged) syncNativeInteractiveState(node)
+              let stateChanged = false
+              if (node._hovered) {
+                node._hovered = false
+                node._vpDirty = true
+                stateChanged = true
+                if (hasHoverStyle) { changed = true; bag.onNodeVisualChanged?.(node) }
+              }
+              if (node._active) {
+                node._active = false
+                node._vpDirty = true
+                stateChanged = true
+                if (hasActiveStyle) { changed = true; bag.onNodeVisualChanged?.(node) }
+              }
           }
           break
         }
@@ -559,7 +430,7 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
                bag.pointerY >= hitY && bag.pointerY < hitY + hitH
     }
     const isDown = isOver && bag.pointerDown
-    if (!hoveredPressTarget && isOver && (node.props.onPress || node.props.focusable)) {
+    if (isOver && (node.props.onPress || node.props.focusable)) {
       hoveredPressTarget = node
     }
 
@@ -568,9 +439,11 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
       if (isOver && node.props.onMouseOver) node.props.onMouseOver(makeMouseEvent(node))
       if (!isOver && node.props.onMouseOut) node.props.onMouseOut(makeMouseEvent(node))
       node._hovered = isOver
-      syncNativeInteractiveState(node)
-      bag.onNodeVisualChanged?.(node)
-      changed = true
+      node._vpDirty = true
+      if (hasHoverStyle) {
+        bag.onNodeVisualChanged?.(node)
+        changed = true
+      }
     }
 
     // Dispatch mousedown/mouseup on edges
@@ -586,9 +459,11 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
 
     if (node._active !== isDown) {
       node._active = isDown
-      syncNativeInteractiveState(node)
-      bag.onNodeVisualChanged?.(node)
-      changed = true
+      node._vpDirty = true
+      if (hasActiveStyle) {
+        bag.onNodeVisualChanged?.(node)
+        changed = true
+      }
     }
     if (isDown) newActiveNode = node
 
@@ -596,11 +471,13 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
     if (isFocusable) {
       const nodeFocusId = getNodeFocusId(node)
       const isFocused = nodeFocusId !== undefined && nodeFocusId === currentFocusId
-      if (node._focused !== isFocused) {
-        node._focused = isFocused
-        syncNativeInteractiveState(node)
-        bag.onNodeVisualChanged?.(node)
-        changed = true
+        if (node._focused !== isFocused) {
+          node._focused = isFocused
+          node._vpDirty = true
+          if (hasFocusStyle) {
+          bag.onNodeVisualChanged?.(node)
+          changed = true
+        }
       }
     }
   }
@@ -628,25 +505,20 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
     // Bubbles up the tree like DOM events. Each node with onPress/focusable
     // gets a chance to handle the event. Call event.stopPropagation() in an
     // onPress handler to prevent further bubbling.
-    changed = true // Focus/press change — needs repaint
-    if (bag.useNativePressDispatch) {
-      dispatchNativePressChain(bag.rectNodes, bag.pointerX, bag.pointerY)
-    } else {
-      const event = createPressEvent()
-      let target: TGENode | null = clickTarget
+    const event = createPressEvent()
+    let target: TGENode | null = clickTarget
 
-      while (target && !event.propagationStopped) {
-        // Focus: first focusable ancestor wins (like browser)
-        if (target.props.focusable && !event.propagationStopped) {
-          const fid = getNodeFocusId(target)
-          if (fid) setFocusedId(fid)
-        }
-        // Dispatch onPress if present
-        if (target.props.onPress) {
-          target.props.onPress(event)
-        }
-        target = target.parent
+    while (target && !event.propagationStopped) {
+      // Focus: first focusable ancestor wins (like browser)
+      if (target.props.focusable && !event.propagationStopped) {
+        const fid = getNodeFocusId(target)
+        if (fid) setFocusedId(fid)
       }
+      // Dispatch onPress if present
+      if (target.props.onPress) {
+        target.props.onPress(event)
+      }
+      target = target.parent
     }
   }
   // After click dispatch, focus may have changed — update _focused on all
@@ -660,8 +532,11 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
         const isFocused = nodeFocusId !== undefined && nodeFocusId === newFocusId
         if (node._focused !== isFocused) {
           node._focused = isFocused
-          syncNativeInteractiveState(node)
-          bag.onNodeVisualChanged?.(node)
+          node._vpDirty = true
+          if (node.props.focusStyle) {
+            bag.onNodeVisualChanged?.(node)
+            changed = true
+          }
         }
       }
     }

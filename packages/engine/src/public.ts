@@ -26,15 +26,6 @@ export { chooseGpuLayerStrategy } from "./ffi/gpu-layer-strategy"
 export type { GpuFrameComposer } from "./output/gpu-frame-composer"
 export type { GpuLayerStrategyInput, GpuLayerStrategyMode } from "./ffi/gpu-layer-strategy"
 export type { GpuRendererBackend, GpuRendererBackendCacheStats } from "./ffi/gpu-renderer-backend"
-export {
-  nativeChooseFrameStrategy,
-  buildNativeFrameExecutionStats,
-  formatNativeFrameReasonFlags,
-  NATIVE_FRAME_STRATEGY,
-  NATIVE_FRAME_TRANSPORT,
-  NATIVE_FRAME_REASON,
-} from "./ffi/native-frame-orchestrator"
-export type { NativeFramePlanInput, NativeFramePlan, NativeFrameStrategy, NativeFrameExecutionStats, NativeFrameExecutionStatsInput } from "./ffi/native-frame-orchestrator"
 
 export {
   BACKDROP_FILTER_KIND,
@@ -144,14 +135,6 @@ export {
 export type { Layer, LayerStore } from "./ffi/layers"
 
 export {
-  parseLayoutOutput,
-  writeLayoutFromPositionedCommands,
-  applyCommandLayout,
-  POSITIONED_CMD_STRIDE,
-} from "./ffi/layout-writeback"
-export type { PositionedCommand } from "./ffi/layout-writeback"
-
-export {
   SIZING,
   DIRECTION,
   ALIGN_X,
@@ -218,6 +201,11 @@ export {
   isDirty,
   clearDirty,
 } from "./reconciler/dirty"
+
+export {
+  markLayerDirtyByKey,
+  markLayerDamageByKey,
+} from "./loop/composite"
 export type { DirtyKind, DirtyScope, DirtyTracker } from "./reconciler/dirty"
 
 export {
@@ -376,6 +364,7 @@ export type {
 export {
   updateScrollContainerGeometry,
   createScrollHandle,
+  releaseScrollHandle,
   resetScrollHandles,
 } from "./loop/scroll"
 export type { ScrollHandle } from "./loop/scroll"
