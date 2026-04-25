@@ -105,6 +105,9 @@ interface ButtonShellProps {
 interface ShellProps {
   width: number
   height: number
+  /** Benchmark hook: when set, overrides the cursor line text in the editor.
+   *  Returns the setter so the bench can drive reactive typing. */
+  onTypingReady?: (tick: (index: number) => void) => void
 }
 
 interface SurfaceProps extends Pick<AppBoxProps, "width" | "height" | "children" | "floating" | "floatOffset" | "zIndex"> {
@@ -563,7 +566,7 @@ function FileTab(props: { file: FileItem; index: Accessor<number>; activeFile: n
   )
 }
 
-function CodeEditor(props: { width: number; height: number; activeFile: number; setActiveFile: (index: number) => void }) {
+function CodeEditor(props: { width: number; height: number; activeFile: number; setActiveFile: (index: number) => void; typingLine?: Accessor<string | null> }) {
   const active = () => files[safeFileIndex(props.activeFile)]
   const lines = () => active().content.split("\n")
   return (
@@ -583,6 +586,14 @@ function CodeEditor(props: { width: number; height: number; activeFile: number; 
       </Box>
       <Box width="grow" height="grow" direction="column" scrollY backgroundColor={0x081225d9}>
         <For each={lines()}>{(line, index) => <CodeLine index={index()} line={line} />}</For>
+        <Box width="grow" minHeight={22} direction="row">
+          <Box width={48} alignX="right" paddingRight={10} borderRight={1} borderColor={0xffffff0d} backgroundColor={color.panelDeep}>
+            <Text color={color.faint} fontSize={11} fontFamily="monospace">{String(lines().length + 1)}</Text>
+          </Box>
+          <Box width="grow" direction="row" paddingLeft={14}>
+            <Text color={color.textSoft} fontSize={14} fontFamily="monospace">{props.typingLine ? props.typingLine() ?? "|" : "|"}</Text>
+          </Box>
+        </Box>
       </Box>
       <Box width="grow" height={36} direction="row" alignY="center" paddingX={18} borderTop={1} borderColor={color.borderSoft} backgroundColor={0x081225e6}>
         <Text color={color.textSoft} fontSize={11}>{active().kind}</Text>
@@ -762,6 +773,14 @@ export function OpenCodeCosmicShellApp(props: ShellProps) {
   const [activeApp, setActiveApp] = createSignal<AppKey>(APP_KEY.EDITOR)
   const [activeFile, setActiveFile] = createSignal(0)
   const [drawerOpen, setDrawerOpen] = createSignal(true)
+  const [typingLine, setTypingLine] = createSignal<string | null>(null)
+  if (props.onTypingReady) {
+    const baseLine = files[0].content.split("\n").at(-1) ?? "}"
+    props.onTypingReady((index: number) => {
+      const marker = index % 2 === 0 ? "." : ","
+      setTypingLine(`${baseLine.slice(0, -1)}${marker}`)
+    })
+  }
   const wide = () => props.width >= 1280
   const showRail = () => drawerOpen() && props.width >= 860
   const manager = createOpenCodeWindowManager(() => createOpenCodeShellWindows({
@@ -800,7 +819,7 @@ export function OpenCodeCosmicShellApp(props: ShellProps) {
           <CodeEditor width={window().rect.width} height={window().rect.height} activeFile={activeFile()} setActiveFile={(index) => {
             manager.focus(OPENCODE_WINDOW_ID.EDITOR)
             setActiveFile(index)
-          }} />
+          }} typingLine={typingLine} />
         </WindowLayer>
       )}</Show>
       <Show when={win(OPENCODE_WINDOW_ID.OVERLAY)}>{(window) => (

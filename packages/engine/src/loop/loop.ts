@@ -312,8 +312,18 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   }
 
   onGlobalDirty((scope) => {
-    if (scope.kind === DIRTY_KIND.FULL) markAllDirty()
-    else if (scope.kind === DIRTY_KIND.NODE_VISUAL && !queueScopedNodeDamage(scope)) markAllDirty()
+    if (scope.kind === DIRTY_KIND.FULL) {
+      markAllDirty()
+    } else if (scope.kind === DIRTY_KIND.NODE_VISUAL) {
+      // Try scoped layer damage via the walk-tree node ref. If the node isn't
+      // in nodeRefById (new node from reconciliation, or text child that walkTree
+      // doesn't track individually), skip the markAllDirty fallback — the global
+      // dirty flag is already set by the caller, so the frame loop will run
+      // walkTree which discovers the new node and paints its layer.
+      // markAllDirty for unresolved NODE_VISUAL was defeating layer caching
+      // because every reactive update that inserts/removes nodes triggered it.
+      queueScopedNodeDamage(scope)
+    }
     wakeForDirty("pointer")
   })
 

@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { OpenCodeCosmicShellApp } from "../examples/opencode-cosmic-shell/app"
-import type { TGENode } from "../packages/engine/src/ffi/node"
+
 
 process.env.TGE_DEBUG_CADENCE = "1"
 
@@ -211,7 +211,6 @@ interface EngineModules {
   setFrameProfileSink: typeof import("../packages/engine/src/loop/loop").setFrameProfileSink
   solidRender: typeof import("../packages/engine/src/reconciler/reconciler").render
   markDirty: typeof import("../packages/engine/src/reconciler/dirty").markDirty
-  markLayerDamageByKey: typeof import("../packages/engine/src/loop/composite").markLayerDamageByKey
   resetFocus: typeof import("../packages/engine/src/reconciler/focus").resetFocus
   resetSelection: typeof import("../packages/engine/src/reconciler/selection").resetSelection
   bindLoop: typeof import("../packages/engine/src/reconciler/pointer").bindLoop
@@ -375,7 +374,6 @@ async function loadEngine(): Promise<EngineModules> {
   const loop = await import("../packages/engine/src/loop/loop")
   const reconciler = await import("../packages/engine/src/reconciler/reconciler")
   const dirty = await import("../packages/engine/src/reconciler/dirty")
-  const composite = await import("../packages/engine/src/loop/composite")
   const focus = await import("../packages/engine/src/reconciler/focus")
   const selection = await import("../packages/engine/src/reconciler/selection")
   const pointer = await import("../packages/engine/src/reconciler/pointer")
@@ -387,7 +385,6 @@ async function loadEngine(): Promise<EngineModules> {
     setFrameProfileSink: loop.setFrameProfileSink,
     solidRender: reconciler.render,
     markDirty: dirty.markDirty,
-    markLayerDamageByKey: composite.markLayerDamageByKey,
     resetFocus: focus.resetFocus,
     resetSelection: selection.resetSelection,
     bindLoop: pointer.bindLoop,
@@ -539,68 +536,7 @@ function topStageP95(summary: StageSummary) {
     .slice(0, 6)
 }
 
-function findEditorTextNode(node: TGENode, size: Size): TGENode | null {
-  const candidates: TGENode[] = []
-  collectEditorTextNodes(node, size, candidates)
-  if (candidates.length === 0) return null
 
-  const totalArea = size.width * size.height
-  const scored = candidates.map((candidate) => {
-    const owner = findLayerOwner(node, candidate._layerKey)
-    const area = owner ? owner.layout.width * owner.layout.height : totalArea
-    const contained = area > 0 && area < totalArea * 0.85
-    return { candidate, area, contained }
-  })
-  scored.sort((a, b) => {
-    if (a.contained !== b.contained) return a.contained ? -1 : 1
-    return b.area - a.area
-  })
-  return scored[0]?.candidate ?? null
-}
-
-function collectEditorTextNodes(node: TGENode, size: Size, result: TGENode[]) {
-  if (node.kind === "text" && node.text.trim().length > 0) {
-    const inEditorX = node.layout.x > size.width * 0.17 && node.layout.x < size.width * 0.78
-    const inEditorY = node.layout.y > size.height * 0.14 && node.layout.y < size.height * 0.9
-    if (inEditorX && inEditorY) result.push(node)
-  }
-  for (const child of node.children) {
-    collectEditorTextNodes(child, size, result)
-  }
-}
-
-function findLayerOwner(root: TGENode, key: string | null): TGENode | null {
-  if (!key?.startsWith("layer:")) return null
-  const id = Number(key.slice("layer:".length))
-  if (!Number.isFinite(id)) return null
-  return findNodeById(root, id)
-}
-
-function findNodeById(node: TGENode, id: number): TGENode | null {
-  if (node.id === id) return node
-  for (const child of node.children) {
-    const found = findNodeById(child, id)
-    if (found) return found
-  }
-  return null
-}
-
-function findFirstTextNode(node: TGENode): TGENode | null {
-  if (node.kind === "text" && node.text.trim().length > 0) return node
-  for (const child of node.children) {
-    const found = findFirstTextNode(child)
-    if (found) return found
-  }
-  return null
-}
-
-function toggleTypingNode(node: TGENode, index: number) {
-  const base = node.text.length > 0 ? node.text : "code"
-  const marker = index % 2 === 0 ? "." : ","
-  node.text = `${base.slice(0, -1)}${marker}`
-  node._vpDirty = true
-  node._generation++
-}
 
 async function runScenario(engine: EngineModules, name: ScenarioName, size: Size, frames: number, warmup: number, transport: TransmissionMode, nativePresentation: boolean): Promise<ScenarioReport> {
   await clearCadenceLog()
@@ -663,7 +599,11 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
     },
   })
   engine.bindLoop(loop)
-  const dispose = engine.solidRender(() => renderScenario(name, size) as never, loop.root)
+  let typingTick: ((index: number) => void) | null = null
+  const hooks = name === SCENARIO.COSMIC_TYPING
+    ? { onTypingReady: (tick: (index: number) => void) => { typingTick = tick } }
+    : undefined
+  const dispose = engine.solidRender(() => renderScenario(name, size, hooks) as never, loop.root)
 
   try {
     engine.markDirty()
@@ -719,17 +659,8 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
         engine.markDirty()
         loop.frame()
       } else if (name === SCENARIO.COSMIC_TYPING) {
-        const target = findEditorTextNode(loop.root, size) ?? findFirstTextNode(loop.root)
-        if (target) {
-          const rect = {
-            x: target.layout.x - 32,
-            y: target.layout.y - 32,
-            width: target.layout.width + 64,
-            height: target.layout.height + 64,
-          }
-          toggleTypingNode(target, i)
-          if (target._layerKey) engine.markLayerDamageByKey(target._layerKey, rect)
-          engine.markDirty({ kind: "node-visual", nodeId: target.id, rect })
+        if (typingTick) {
+          typingTick(i)
         }
         loop.frame()
       } else if (name === SCENARIO.COSMIC_IDLE) {
@@ -808,10 +739,10 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
   }
 }
 
-function renderScenario(name: ScenarioName, size: Size) {
+function renderScenario(name: ScenarioName, size: Size, hooks?: { onTypingReady?: (tick: (index: number) => void) => void }) {
   if (name === SCENARIO.DIRTY_REGION) return <DirtyRegionScene width={size.width} height={size.height} />
   if (name === SCENARIO.COMPOSITOR_ONLY) return <CompositorScene width={size.width} height={size.height} />
-  if (name === SCENARIO.COSMIC_SHELL_1080P || name === SCENARIO.COSMIC_TYPING || name === SCENARIO.COSMIC_IDLE) return <OpenCodeCosmicShellApp width={size.width} height={size.height} />
+  if (name === SCENARIO.COSMIC_SHELL_1080P || name === SCENARIO.COSMIC_TYPING || name === SCENARIO.COSMIC_IDLE) return <OpenCodeCosmicShellApp width={size.width} height={size.height} onTypingReady={hooks?.onTypingReady} />
   return <DashboardScene width={size.width} height={size.height} />
 }
 

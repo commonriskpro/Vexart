@@ -56,6 +56,8 @@ export function damageRectForLayoutTransition(
   if (!prevRect && !nextRect) return null
   if (!prevRect) return nextRect
   if (!nextRect) return prevRect
+  // No damage if layout is unchanged
+  if (prev.x === next.x && prev.y === next.y && prev.width === next.width && prev.height === next.height) return null
   return unionRect(prevRect, nextRect)
 }
 

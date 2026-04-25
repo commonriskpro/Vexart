@@ -599,6 +599,7 @@ export function paintFrame(
       ? prepared.bounds
       : (prepared.useRegionalRepaint && prepared.clippedDamage ? prepared.clippedDamage : prepared.dirtyRect)
     const area = rectArea(dirtyRect)
+
     if (area <= 0 || !dirtyRect) continue
     frameDirtyRects.push(dirtyRect)
     dirtyLayerCountForFrame += 1

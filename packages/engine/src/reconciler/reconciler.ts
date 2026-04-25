@@ -213,8 +213,13 @@ const renderer = createRenderer<TGENode>({
 
   replaceText(node: TGENode, value: string) {
     node.text = String(value)
-    markNodeVisualDamage(node)
-    markNodeDirty(node)
+    // Raw text children (created by createTextNode) are never walked by walkTree —
+    // the parent <text> element is the unit tracked by nodeRefById & layer cache.
+    // Mark the parent dirty so scoped dirty tracking resolves correctly instead
+    // of falling back to markAllDirty().
+    const target = node.parent?.kind === "text" ? node.parent : node
+    markNodeVisualDamage(target)
+    markNodeDirty(target)
   },
 
   setProperty(node: TGENode, name: string, value: unknown) {
