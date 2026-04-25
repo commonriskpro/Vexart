@@ -462,17 +462,19 @@ export function createVexartLayoutCtx() {
       const node = _currentNode
 
       // SIZING: FIT=0, GROW=1, PERCENT=2, FIXED=3
+      // NOTE: Vexart stores PERCENT as a 0-1 ratio (e.g. 1.0 = 100%).
+      // Flexily expects 0-100 (e.g. 100 = 100%). Multiply by 100.
       switch (wType) {
         case 0: /* FIT */ break
         case 1: /* GROW */ node.setFlexGrow(1); break
-        case 2: /* PERCENT */ node.setWidthPercent(wVal); break
+        case 2: /* PERCENT */ node.setWidthPercent(wVal * 100); break
         case 3: /* FIXED */ node.setWidth(wVal); break
       }
 
       switch (hType) {
         case 0: /* FIT */ break
         case 1: /* GROW */ node.setFlexGrow(1); break
-        case 2: /* PERCENT */ node.setHeightPercent(hVal); break
+        case 2: /* PERCENT */ node.setHeightPercent(hVal * 100); break
         case 3: /* FIXED */ node.setHeight(hVal); break
       }
     },
