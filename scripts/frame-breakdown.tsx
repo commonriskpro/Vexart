@@ -2,9 +2,6 @@ import { existsSync } from "node:fs"
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { OpenCodeCosmicShellApp } from "../examples/opencode-cosmic-shell/app"
-
-
 process.env.VEXART_DEBUG_CADENCE = "1"
 
 const SCENARIO = {
@@ -13,9 +10,6 @@ const SCENARIO = {
   NOOP_RETAINED: "noop-retained",
   DIRTY_REGION: "dirty-region",
   COMPOSITOR_ONLY: "compositor-only",
-  COSMIC_SHELL_1080P: "cosmic-shell-1080p",
-  COSMIC_TYPING: "cosmic-typing-1080p",
-  COSMIC_IDLE: "cosmic-idle-1080p",
 } as const
 
 const CADENCE_LOG = "/tmp/tge-cadence.log"
@@ -590,7 +584,7 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
     probe: { shm: transport === "shm", file: transport === "file" || transport === "shm" },
   })
   const term = createMockTerminal(size.width, size.height, transport)
-  const forceLayerRepaint = name === SCENARIO.DASHBOARD_SMOKE || name === SCENARIO.DASHBOARD_1080P || name === SCENARIO.COSMIC_SHELL_1080P
+  const forceLayerRepaint = name === SCENARIO.DASHBOARD_SMOKE || name === SCENARIO.DASHBOARD_1080P
   const loop = engine.createRenderLoop(term as never, {
     experimental: {
       forceLayerRepaint,
@@ -599,11 +593,7 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
     },
   })
   engine.bindLoop(loop)
-  let typingTick: ((index: number) => void) | null = null
-  const hooks = name === SCENARIO.COSMIC_TYPING
-    ? { onTypingReady: (tick: (index: number) => void) => { typingTick = tick } }
-    : undefined
-  const dispose = engine.solidRender(() => renderScenario(name, size, hooks) as never, loop.root)
+  const dispose = engine.solidRender(() => renderScenario(name, size) as never, loop.root)
 
   try {
     engine.markDirty()
@@ -615,20 +605,6 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
         loop.frame()
       }
       await tick()
-    }
-
-    if (name === SCENARIO.COSMIC_IDLE || name === SCENARIO.COSMIC_TYPING) {
-      engine.markDirty({
-        kind: "node-visual",
-        nodeId: loop.root.id,
-        rect: { x: 0, y: 0, width: 1, height: 1 },
-      })
-      loop.frame()
-      await tick()
-    }
-
-    if (name === SCENARIO.COSMIC_IDLE) {
-      await new Promise((resolve) => setTimeout(resolve, 200))
     }
 
     await clearCadenceLog()
@@ -657,13 +633,6 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
           })
         }
         engine.markDirty()
-        loop.frame()
-      } else if (name === SCENARIO.COSMIC_TYPING) {
-        if (typingTick) {
-          typingTick(i)
-        }
-        loop.frame()
-      } else if (name === SCENARIO.COSMIC_IDLE) {
         loop.frame()
       } else {
         engine.markDirty()
@@ -716,7 +685,7 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
     }
 
     const parsed = capturedProfiles.length > 0 ? capturedProfiles : await readCadenceFrames()
-    const framesMeasured = name === SCENARIO.NOOP_RETAINED || (name === SCENARIO.COSMIC_IDLE && parsed.length === 0)
+    const framesMeasured = name === SCENARIO.NOOP_RETAINED
       ? manualFrames
       : parsed.slice(-frames).map((frame, index) => ({ ...frame, ffiCallCount: manualFrames[index]?.ffiCallCount ?? 0 }))
     return {
@@ -739,10 +708,9 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
   }
 }
 
-function renderScenario(name: ScenarioName, size: Size, hooks?: { onTypingReady?: (tick: (index: number) => void) => void }) {
+function renderScenario(name: ScenarioName, size: Size) {
   if (name === SCENARIO.DIRTY_REGION) return <DirtyRegionScene width={size.width} height={size.height} />
   if (name === SCENARIO.COMPOSITOR_ONLY) return <CompositorScene width={size.width} height={size.height} />
-  if (name === SCENARIO.COSMIC_SHELL_1080P || name === SCENARIO.COSMIC_TYPING || name === SCENARIO.COSMIC_IDLE) return <OpenCodeCosmicShellApp width={size.width} height={size.height} onTypingReady={hooks?.onTypingReady} />
   return <DashboardScene width={size.width} height={size.height} />
 }
 
@@ -782,9 +750,6 @@ async function main() {
     { name: SCENARIO.NOOP_RETAINED, size: { width: 1920, height: 1080 } },
     { name: SCENARIO.DIRTY_REGION, size: { width: 1920, height: 1080 } },
     { name: SCENARIO.COMPOSITOR_ONLY, size: { width: 1920, height: 1080 } },
-    { name: SCENARIO.COSMIC_SHELL_1080P, size: { width: 1920, height: 1080 } },
-    { name: SCENARIO.COSMIC_TYPING, size: { width: 1920, height: 1080 } },
-    { name: SCENARIO.COSMIC_IDLE, size: { width: 1920, height: 1080 } },
   ]
 
   console.log(`\n🔬 Vexart frame breakdown — frames=${options.frames} warmup=${options.warmup} transport=${options.transport} nativePresentation=${options.nativePresentation ? "on" : "off"}\n`)

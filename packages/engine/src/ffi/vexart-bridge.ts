@@ -119,24 +119,42 @@ export const VEXART_SYMBOLS = {
 
 // ── Library path resolution ─────────────────────────────────────────────────
 
+/** Resolve the platform package name for the current OS/arch. */
+function platformPackageName(): string {
+  const arch = process.arch
+  const os = process.platform
+  if (os === "darwin") return arch === "arm64" ? "@vxrt/darwin-arm64" : "@vxrt/darwin-x64"
+  if (os === "linux") return arch === "arm64" ? "@vxrt/linux-arm64" : "@vxrt/linux-x64"
+  return "@vxrt/win32-x64"
+}
+
 /** Ordered list of candidate paths to try when loading libvexart. */
 function candidateLibPaths(): string[] {
   const ext = suffix // "dylib" on macOS, "so" on Linux, "dll" on Windows
   const libName = `libvexart.${ext}`
   const cwd = process.cwd()
 
-  // Dev build: target/debug/ (cargo build without --release)
+  // 1. Platform package in node_modules (npm/bun install)
+  const pkgName = platformPackageName()
+  const nmPaths = [
+    join(cwd, "node_modules", pkgName, libName),
+    join(import.meta.dir, "../../../../node_modules", pkgName, libName),
+  ]
+
+  // 2. Dev build: target/debug/ (cargo build without --release)
   const devPath = join(import.meta.dir, "../../../../target/debug", libName)
   const cwdDevPath = join(cwd, "target/debug", libName)
 
-  // Dist build: native/${platform}/libvexart.{dylib,so,dll}
-  const platform = process.platform === "darwin" ? "arm64-darwin"
-    : process.platform === "linux"  ? "x86_64-linux"
-    : "x86_64-win"
-  const prodPath = join(import.meta.dir, "../../../../native", platform, libName)
-  const cwdProdPath = join(cwd, "native", platform, libName)
+  // 3. Dev build: native/libvexart/target/release (cargo build --release)
+  const releasePath = join(import.meta.dir, "../../../../native/libvexart/target/release", libName)
 
-  const candidates = [devPath, cwdDevPath, prodPath, cwdProdPath]
+  // 4. Legacy dist build: vendor/vexart/${platform}/libvexart.{dylib,so,dll}
+  const arch = process.arch === "arm64" ? "arm64" : "x64"
+  const vendorPlatform = `${arch}-${process.platform}`
+  const vendorPath = join(import.meta.dir, "../../../vendor/vexart", vendorPlatform, libName)
+  const cwdVendorPath = join(cwd, "vendor/vexart", vendorPlatform, libName)
+
+  const candidates = [...nmPaths, devPath, cwdDevPath, releasePath, vendorPath, cwdVendorPath]
   const seen = new Set<string>()
   const existing: string[] = []
   const missing: string[] = []

@@ -12,8 +12,8 @@ guidance conflicts with anything described below, **the master documents win**.
 
 Every change is executed through the SDD workflow under `openspec/` (see
 `openspec/README.md`). Legacy pre-PRD documents (`TGE-*`, `MIGRATION-ANALYSIS.md`,
-`docs.md`) have been archived to `docs/archive/` and MUST NOT be used as a reference
-for new work.
+`docs.md`) and superseded companion PRDs have been deleted. See git history for
+originals if needed.
 
 ## What is Vexart
 

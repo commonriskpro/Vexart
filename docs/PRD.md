@@ -14,10 +14,10 @@
 **Changelog from v0.5**:
 - DEC-013 added: 120fps / 5ms performance program adopted as an aspirational v0.9+ execution track, with hard gates for no-op, dirty-region, compositor-only, and full-dashboard frame categories.
 - Section 7.3 extended with explicit 120fps-class frame budgets. The release performance contract targets a 1080p (`1920×1080`) dashboard workload; the current `14.23 ms/frame` 800×600 offscreen measurement remains only a temporary dev baseline until the 1080p benchmark lands.
-- `docs/PERFORMANCE-120FPS-PLAN.md` added as the execution plan for profiling, optimization phases, and CI gates.
+- Performance execution plan added for profiling, optimization phases, and CI gates (historical doc removed).
 
 **Changelog from v0.4**:
-- DEC-012 added: Rust-retained engine roadmap adopted as the execution path for the remaining engine migration. `docs/PRD-RUST-RETAINED-ENGINE.md` and `docs/ROADMAP-RUST-RETAINED-ENGINE.md` are now companion source-of-truth documents for native ownership sequencing.
+- DEC-012 added: Rust-retained engine roadmap adopted as the execution path for the remaining engine migration (companion docs removed after DEC-014 revert).
 - Section 6 extended with the retained-engine target: Rust owns scene graph, layout, damage, layer registry, render graph, frame orchestration, resources, paint, composite, hit-testing, and Kitty presentation; TypeScript remains the Solid/JSX shell, public API, hooks, callback registry, and compatibility fallback.
 - Section 11 extended with a Rust-retained migration overlay that supersedes older TS-owned frame-pipeline assumptions after Native Presentation.
 
@@ -598,7 +598,7 @@ Measured on Apple M1 Pro, Kitty 0.41+, 2560×1600 retina:
 | GPU memory per font (MSDF) | ≤ 4 MB | One 1024×1024 RGBA8 atlas. |
 | **GPU memory total (configurable budget)** | Default 128 MB | Unified resource manager enforces cap; exceeds trigger LRU eviction. |
 
-CI runs `bench:showcase` on every PR and fails if any metric regresses by >10% from `main`. Specific optimization regressions (cold-start-warm, Kitty encoding, viewport culling savings, retained no-op, dirty-region, compositor-only, and dashboard frame categories) have dedicated micro-benchmarks in `bench:optimizations` or `docs/PERFORMANCE-120FPS-PLAN.md` follow-up tasks.
+CI runs `bench:showcase` on every PR and fails if any metric regresses by >10% from `main`. Specific optimization regressions (cold-start-warm, Kitty encoding, viewport culling savings, retained no-op, dirty-region, compositor-only, and dashboard frame categories) have dedicated micro-benchmarks in `bench:optimizations`.
 
 ### 7.4 Supported terminals (v0.9)
 
@@ -945,11 +945,7 @@ Timeline assumes 8 hours/day of focused coding, solo, with bi-weekly reviews. To
 
 The roadmap above remains the product roadmap, but the retained scene/layout/render/event overlay below has been reverted by DEC-014 after cosmic-shell-1080p bench evidence showed the TS path is 4.8× faster at p95 (15.84 ms vs 75.42 ms). The overlay is preserved as historical record. TS now owns scene graph, reactivity, layout (Flexily), render graph, event dispatch, and interaction; Rust owns paint pipelines, composite, Kitty encoding, SHM/file/direct transport, image assets, and canvas display lists.
 
-Source documents:
-
-- [`docs/PRD-RUST-RETAINED-ENGINE.md`](./PRD-RUST-RETAINED-ENGINE.md)
-- [`docs/ROADMAP-RUST-RETAINED-ENGINE.md`](./ROADMAP-RUST-RETAINED-ENGINE.md)
-- Active SDD cleanup: `openspec/changes/phase-14-rust-retained-cleanup`.
+Source documents (removed — retained plan was reverted by DEC-014; see git history for originals).
 
 | Retained phase | Name | Outcome | Status gate |
 |---|---|---|---|
@@ -1165,9 +1161,7 @@ Every architectural or product decision is logged here with date, context, and r
 
 **Decision**: Adopt the Rust-retained engine roadmap as the execution path for the remaining engine migration. The public JS/JSX API remains stable, but frame-critical ownership moves progressively into `libvexart`: native presentation first, then layer registry, scene graph, layout/damage/hit-testing, render graph, frame orchestration, default cutover, and cleanup.
 
-**Companion documents**:
-- [`docs/PRD-RUST-RETAINED-ENGINE.md`](./PRD-RUST-RETAINED-ENGINE.md)
-- [`docs/ROADMAP-RUST-RETAINED-ENGINE.md`](./ROADMAP-RUST-RETAINED-ENGINE.md)
+**Companion documents**: Removed after DEC-014 revert (see git history for originals).
 
 **Alternatives considered**:
 - Keep the decomposed TypeScript frame pipeline as the long-term architecture. Rejected: it leaves JS allocations, duplicated resource ownership, render graph drift, and raw presentation payload risk in the hot path.
@@ -1189,8 +1183,7 @@ Every architectural or product decision is logged here with date, context, and r
 
 **Decision**: Vexart adopts a 120fps-class performance program for the retained Rust runtime. The program does **not** claim that every full scene will render at 120fps today. It commits the product to profiling and optimizing the retained path until no-op, dirty-region, and compositor-only frames meet 120fps-class budgets, while full-dashboard frames are measured and gated at 1080p (`1920×1080`) because that is the normal desktop terminal workload.
 
-**Companion document**:
-- [`docs/PERFORMANCE-120FPS-PLAN.md`](./PERFORMANCE-120FPS-PLAN.md)
+**Companion document**: Removed (execution plan completed; see git history for original).
 
 **Targets**:
 - No-op retained frame: `<1 ms p99`.
