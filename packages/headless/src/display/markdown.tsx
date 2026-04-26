@@ -148,7 +148,7 @@ function resolveLanguage(lang: string | undefined): string {
   if (!lang) return "plaintext"
   const aliases: Record<string, string> = {
     ts: "typescript", tsx: "typescriptreact", js: "javascript", jsx: "javascriptreact",
-    md: "markdown", py: "python", rb: "ruby", sh: "bash", yml: "yaml", json: "javascript",
+    md: "markdown", py: "python", rb: "ruby", sh: "bash", yml: "yaml", json: "json",
   }
   return aliases[lang.toLowerCase()] ?? lang.toLowerCase()
 }

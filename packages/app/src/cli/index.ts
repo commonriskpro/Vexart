@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { existsSync, mkdirSync } from "node:fs"
+import { existsSync, mkdirSync, watch } from "node:fs"
 import { dirname, join } from "node:path"
 import { discoverAppRoutes, writeRouteManifestModule } from "../router/manifest"
 
@@ -202,12 +202,23 @@ async function dev(argv: string[]): Promise<CliResult> {
   if (!hasFlag(argv, "--no-watch")) args.push("--watch")
   args.push("--conditions=browser", "run", entry.output)
   if (hasFlag(argv, "--dry-run")) return { code: 0, output: args.join(" ") }
+  const cwd = process.cwd()
+  const appDir = join(cwd, "app")
+  const watcher = existsSync(appDir)
+    ? watch(appDir, { recursive: true }, async (_event, filename) => {
+      const file = filename?.toString()
+      if (!file?.match(/\.(ts|tsx)$/)) return
+      await writeRouteManifestModule({ root: cwd })
+    })
+    : undefined
+  process.on("exit", () => watcher?.close())
   const proc = Bun.spawn(args, {
     stdout: "inherit",
     stderr: "inherit",
     stdin: "inherit",
   })
   const code = await proc.exited
+  watcher?.close()
   return { code, output: "" }
 }
 

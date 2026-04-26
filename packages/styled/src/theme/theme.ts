@@ -19,7 +19,8 @@
  *   setTheme(light)  // → all subscribed components update
  */
 
-import { createSignal, createContext, useContext } from "solid-js"
+import { createSignal, createContext, useContext, createComponent } from "solid-js"
+import type { JSX } from "solid-js"
 import { colors as defaultColors, radius, space, font, weight, shadows } from "../tokens/tokens"
 
 // ── Types ──
@@ -72,6 +73,7 @@ export const lightTheme = createTheme({
     border: "#00000020",
     input: "#00000026",
     ring: "#0a0a0a",
+    ringSubtle: "#0a0a0a80",
     transparent: "#00000000",
   },
 })
@@ -153,18 +155,18 @@ const ThemeContext = createContext<{
 /** @public */
 export function ThemeProvider(props: {
   theme?: Required<ThemeDefinition>
-  children?: any
+  children?: JSX.Element
 }) {
   if (props.theme) {
     setTheme(props.theme)
   }
 
-  return ThemeContext.Provider({
+  return createComponent(ThemeContext.Provider, {
     value: {
       colors: themeColors,
       setTheme,
     },
-    children: props.children,
+    get children() { return props.children },
   })
 }
 

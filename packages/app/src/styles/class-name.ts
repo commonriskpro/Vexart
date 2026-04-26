@@ -100,6 +100,14 @@ const WEIGHT_ALIASES: Record<string, number> = {
   bold: weight.bold,
 }
 
+const BORDER_WIDTH_MAP: Record<string, number> = {
+  "0": 0,
+  "1": 1,
+  "2": 2,
+  "4": 4,
+  "8": 8,
+}
+
 function spacingValue(value: string) {
   if (value === "0") return 0
   if (value === "px") return space.px
@@ -177,7 +185,7 @@ function resolveToken(props: MutableStyleProps, target: StyleTarget, token: stri
   if (token.startsWith("border-")) {
     const value = token.slice(7)
     const color = getColorAlias(value)
-    const width = spacingValue(value)
+    const width = BORDER_WIDTH_MAP[value]
     if (color !== undefined) { applyToTarget(props, target, { borderColor: color }); return null }
     if (width !== undefined) { applyToTarget(props, target, { borderWidth: width }); return null }
   }

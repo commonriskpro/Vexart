@@ -15,11 +15,13 @@
  */
 
 import { build } from "esbuild"
-import { cpSync, mkdirSync, writeFileSync, existsSync } from "fs"
+import { cpSync, mkdirSync, writeFileSync, existsSync, readFileSync } from "fs"
 import { resolve } from "path"
 
 const ROOT = resolve(import.meta.dir, "..")
 const DIST = resolve(ROOT, "dist")
+const rootPkg = JSON.parse(readFileSync(resolve(ROOT, "package.json"), "utf-8")) as { version: string }
+const VERSION = rootPkg.version
 
 // ── Clean ──
 console.log("🧹 Cleaning dist/...")
@@ -137,12 +139,18 @@ if (existsSync(vexartLib)) {
   cpSync(vexartLib, resolve(platformDir, vexartName))
   console.log(`  ✅ ${vexartName} → platform/${platformTag}/`)
 } else {
-  console.log(`  ⚠️ libvexart not found at ${vexartLib}`)
+  if (process.env.VEXART_ALLOW_NO_NATIVE !== "1") {
+    console.error(`ERROR: libvexart not found at ${vexartLib}`)
+    console.error("Build the native library first: cargo build --release")
+    console.error("Or set VEXART_ALLOW_NO_NATIVE=1 to skip")
+    process.exit(1)
+  }
+  console.log(`  ⚠️ libvexart not found at ${vexartLib} (allowed by VEXART_ALLOW_NO_NATIVE=1)`)
 }
 
 const platformPkg = {
   name: platformPkgName,
-  version: "0.9.0-beta.4",
+  version: VERSION,
   description: `Vexart native binary for ${platformTag}`,
   type: "module",
   os: [process.platform],
@@ -180,6 +188,11 @@ cpSync(resolve(ROOT, "types/engine.d.ts"), resolve(DIST, "engine.d.ts"))
 if (existsSync(resolve(ROOT, "types/vexart.d.ts"))) {
   cpSync(resolve(ROOT, "types/vexart.d.ts"), resolve(DIST, "vexart.d.ts"))
 }
+const vexartDts = resolve(DIST, "vexart.d.ts")
+if (!existsSync(vexartDts)) {
+  console.error("ERROR: vexart.d.ts not found in dist — types will be broken for consumers")
+  console.error("Run 'bun run api:update' to generate it, or check types/ directory")
+}
 cpSync(resolve(ROOT, "types/jsx-runtime.d.ts"), resolve(DIST, "jsx-runtime.d.ts"))
 console.log(`  ✅ engine.d.ts + vexart.d.ts + jsx-runtime.d.ts`)
 
@@ -188,7 +201,7 @@ console.log("📋 Creating package.json...")
 
 const pkg = {
   name: "@vxrt/core",
-  version: "0.9.0-beta.4",
+  version: VERSION,
   description: "Vexart GPU-accelerated terminal UI engine. Write JSX, get browser-quality UI in your terminal.",
   type: "module",
   main: "vexart.js",
@@ -218,7 +231,7 @@ const pkg = {
     "tree-sitter/",
   ],
   optionalDependencies: {
-    [platformPkgName]: "0.9.0-beta.4",
+    [platformPkgName]: VERSION,
   },
   peerDependencies: {
     "solid-js": "^1.9.0",
@@ -250,5 +263,5 @@ console.log("To test locally:")
 console.log(`  cd dist/platform/${platformTag} && bun pack`)
 console.log("  cd dist && bun pack")
 console.log("  # In another project:")
-console.log("  bun add ../vexart/dist/vxrt-core-0.9.0-beta.4.tgz")
-console.log(`  bun add ../vexart/dist/platform/${platformTag}/vexart-${platformTag}-0.9.0-beta.4.tgz`)
+console.log(`  bun add ../vexart/dist/vxrt-core-${VERSION}.tgz`)
+console.log(`  bun add ../vexart/dist/platform/${platformTag}/vexart-${platformTag}-${VERSION}.tgz`)

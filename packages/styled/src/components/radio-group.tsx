@@ -32,7 +32,7 @@ export function VoidRadioGroup(props: VoidRadioGroupProps) {
       disabled={props.disabled}
       focusId={props.focusId}
       renderOption={(opt: RadioOption, ctx: RadioOptionContext) => (
-        <box {...ctx.optionProps} direction="row" gap={space[2]} alignY="center">
+        <box {...ctx.optionProps} focusable direction="row" gap={space[2]} alignY="center">
           <box
             width={INDICATOR_SIZE}
             height={INDICATOR_SIZE}

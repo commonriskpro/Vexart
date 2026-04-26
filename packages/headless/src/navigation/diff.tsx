@@ -6,15 +6,7 @@
  * @public
  */
 
-import { createSignal, createEffect, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import {
-  getTreeSitterClient,
-  highlightsToTokens,
-  type SyntaxStyle,
-  type Token,
-} from "@vexart/engine"
-import { markDirty } from "@vexart/engine"
 
 const LINE_HEIGHT = 17
 const CHAR_WIDTH = 9
@@ -75,11 +67,8 @@ const DIFF_DEFAULTS: DiffTheme = {
 /** @public */
 export type DiffProps = {
   diff: string
-  syntaxStyle?: SyntaxStyle
-  filetype?: string
   showLineNumbers?: boolean
   width?: number | string
-  streaming?: boolean
   /** Visual theme — all styling comes from here. */
   theme?: Partial<DiffTheme>
 }

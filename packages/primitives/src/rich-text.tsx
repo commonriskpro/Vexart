@@ -1,13 +1,9 @@
 /**
- * RichText — inline text flow component for Vexart.
+ * RichText — container for styled text spans.
  *
- * Concatenates all child Span text into a single text element
- * that flows inline and wraps naturally. Uses the first Span's
- * color as the display color.
- *
- * For per-fragment coloring, use a row of <Text> elements instead.
- * True rich inline rendering (mixed colors in one paragraph) is
- * planned for a future release.
+ * Renders children in a horizontal row. Use <Span> children for
+ * per-segment color/weight styling. Does NOT concatenate text
+ * into a single element — each Span renders independently.
  *
  * Usage:
  *   <RichText color={text.primary}>
@@ -20,7 +16,7 @@
 import type { JSX } from "solid-js"
 
 // ── Span ──
-// A Span holds text content. RichText concatenates all Spans.
+// A Span holds text content. RichText renders each Span independently.
 
 /** @public */
 export type SpanProps = {
@@ -57,7 +53,7 @@ export function Span(props: SpanProps) {
 export type RichTextProps = {
   maxWidth?: number
   lineHeight?: number
-  color?: string | number    // Primary color for the concatenated text
+  color?: string | number    // Reserved for future single-element rich text support.
   fontSize?: number
   children?: JSX.Element
 }

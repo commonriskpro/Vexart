@@ -45,6 +45,7 @@ export function VoidTabs(props: VoidTabsProps) {
       renderTab={(tab: TabItem, ctx: TabRenderContext) => (
         <box
           {...ctx.tabProps}
+          focusable
           direction="row"
           alignX="center"
           alignY="center"

@@ -44,7 +44,7 @@ const variantGetters: Record<BadgeVariant, VariantColors> = {
   outline: {
     bg: () => themeColors.transparent,
     fg: () => themeColors.foreground,
-    border: () => "#ffffff38",
+    border: () => themeColors.border,
     borderWidth: 1,
   },
   destructive: {

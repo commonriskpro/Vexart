@@ -38,23 +38,6 @@ export type RouteComponentProps = {
 
 /** @public */
 export function Router(props: RouterProps) {
-  // Extract route definitions from children
-  // Children are <Route> elements — they register themselves via context
-  const routes: RouteComponentProps[] = []
-
-  // Parse children to collect route defs
-  function collectRoutes(children: any) {
-    if (!children) return
-    if (Array.isArray(children)) {
-      children.forEach(collectRoutes)
-      return
-    }
-    // Route components pass their definition via a special prop
-    if (children && typeof children === "object" && children.__routeDef) {
-      routes.push(children.__routeDef)
-    }
-  }
-
   // We'll use a different approach — Route components render themselves
   // only when they match the current path. The Router provides context.
 

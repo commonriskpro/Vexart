@@ -38,11 +38,13 @@ import { themeColors } from "../theme/theme"
 
 type DropdownCtx = {
   open: () => boolean
+  toggle: () => void
   close: () => void
 }
 
 const DropdownContext = createContext<DropdownCtx>({
   open: () => false,
+  toggle: () => {},
   close: () => {},
 })
 
@@ -52,12 +54,13 @@ const DropdownContext = createContext<DropdownCtx>({
 export type VoidDropdownMenuProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  children?: any
+  children?: JSX.Element
 }
 
 function VoidDropdownMenuRoot(props: VoidDropdownMenuProps) {
   const ctx: DropdownCtx = {
     open: () => props.open,
+    toggle: () => props.onOpenChange(!props.open),
     close: () => props.onOpenChange(false),
   }
 
@@ -79,15 +82,15 @@ export type VoidDropdownMenuTriggerProps = {
 
 /** @public */
 export function VoidDropdownMenuTrigger(props: VoidDropdownMenuTriggerProps) {
-  // Trigger is just a passthrough — the consumer wraps it in <box onPress> or similar
-  return <>{props.children}</>
+  const ctx = useContext(DropdownContext)
+  return <box onPress={() => ctx.toggle()}>{props.children}</box>
 }
 
 // ── Content ──
 
 /** @public */
 export type VoidDropdownMenuContentProps = {
-  children?: any
+  children?: JSX.Element
   width?: number | string
   minWidth?: number
   maxHeight?: number
@@ -130,7 +133,7 @@ export type VoidDropdownMenuItemProps = {
   variant?: "default" | "destructive"
   disabled?: boolean
   inset?: boolean
-  children?: any
+  children?: JSX.Element
 }
 
 /** @public */
@@ -142,6 +145,7 @@ export function VoidDropdownMenuItem(props: VoidDropdownMenuItemProps) {
     : themeColors.foreground
 
   const hoverBg = () => props.variant === "destructive"
+    // TODO: add semantic destructive subtle background token.
     ? "#dc262618"
     : themeColors.accent
 
@@ -191,7 +195,7 @@ export function VoidDropdownMenuSeparator() {
 
 /** @public */
 export type VoidDropdownMenuLabelProps = {
-  children?: any
+  children?: JSX.Element
   inset?: boolean
 }
 

@@ -16,7 +16,7 @@ export function isFullyOutsideScrollViewport(node: TGENode) {
   while (scrollParent) {
     if (scrollParent.props.scrollX || scrollParent.props.scrollY) {
       const sl = scrollParent.layout
-      if (sl.width <= 0 || sl.height <= 0) return false
+      if (sl.width <= 0 || sl.height <= 0) return true
       return l.y + l.height <= sl.y || l.y >= sl.y + sl.height || l.x + l.width <= sl.x || l.x >= sl.x + sl.width
     }
     scrollParent = scrollParent.parent

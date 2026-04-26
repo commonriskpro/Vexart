@@ -20,15 +20,18 @@ export type VoidToasterOptions = {
 // ── Variant color getters (lazy — read themeColors inside effects) ──
 
 type VariantColors = {
-  accent: () => string
-  border: () => string
+  accent: () => string | number
+  border: () => string | number
 }
 
 const variantGetters: Record<string, VariantColors> = {
   default: { accent: () => themeColors.foreground, border: () => themeColors.border },
+  // TODO: add semantic success toast tokens.
   success: { accent: () => "#22c55e",              border: () => "#22c55e40" },
-  error:   { accent: () => themeColors.destructive, border: () => "#dc262640" },
+  error:   { accent: () => themeColors.destructive, border: () => themeColors.destructive },
+  // TODO: add semantic warning toast tokens.
   warning: { accent: () => "#f59e0b",              border: () => "#f59e0b40" },
+  // TODO: add semantic info toast tokens.
   info:    { accent: () => "#3b82f6",              border: () => "#3b82f640" },
 }
 

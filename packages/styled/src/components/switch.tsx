@@ -58,8 +58,8 @@ export function VoidSwitch(props: VoidSwitchProps) {
                 height={THUMB_SIZE}
                 backgroundColor={themeColors.foreground}
                 cornerRadius={THUMB_SIZE / 2}
-                paddingLeft={thumbLeft}
-                paddingTop={THUMB_OFFSET}
+                marginLeft={thumbLeft}
+                marginTop={THUMB_OFFSET}
               />
             </box>
             {props.label ? (

@@ -11,6 +11,7 @@
  */
 
 import type { JSX } from "solid-js"
+import type { TGEProps } from "@vexart/engine"
 
 /** @public */
 export type ShadowConfig = {
@@ -28,71 +29,14 @@ export type GlowConfig = {
 }
 
 /** @public */
-export type BoxProps = {
-  // Layout
-  direction?: "row" | "column"
-  padding?: number
-  paddingX?: number
-  paddingY?: number
-  gap?: number
-  alignX?: "left" | "right" | "center"
-  alignY?: "top" | "bottom" | "center"
-
-  // Sizing
-  width?: number | string
-  height?: number | string
-
-  // Visual
-  backgroundColor?: string | number
-  cornerRadius?: number
-  borderColor?: string | number
-  borderWidth?: number
-
-  // Effects — applied in the pixel paint stage, outside layout.
-  // Shadow: single or multiple drop shadows beneath the box.
-  shadow?: ShadowConfig | ShadowConfig[]
-  // Glow: radial halo around the box.
-  glow?: GlowConfig
-
-  // Compositing — promotes this Box to its own rendering layer.
-  // Only dirty layers retransmit — unchanged layers stay in GPU VRAM.
-  layer?: boolean
-
-  // Scrolling — enables scroll clipping on this axis.
-  // Content that overflows is clipped and scrollable via mouse wheel.
-  scrollX?: boolean
-  scrollY?: boolean
-  scrollSpeed?: number  // Lines per scroll tick. Omit for natural speed.
-
-  // Children
-  children?: JSX.Element
-}
+export type BoxProps = TGEProps & { children?: JSX.Element }
 
 /** @public */
 export function Box(props: BoxProps) {
+  const { children, ...rest } = props
   return (
-    <box
-      direction={props.direction}
-      padding={props.padding}
-      paddingX={props.paddingX}
-      paddingY={props.paddingY}
-      gap={props.gap}
-      alignX={props.alignX}
-      alignY={props.alignY}
-      width={props.width}
-      height={props.height}
-      backgroundColor={props.backgroundColor}
-      cornerRadius={props.cornerRadius}
-      borderColor={props.borderColor}
-      borderWidth={props.borderWidth}
-      shadow={props.shadow}
-      glow={props.glow}
-      layer={props.layer}
-      scrollX={props.scrollX}
-      scrollY={props.scrollY}
-      scrollSpeed={props.scrollSpeed}
-    >
-      {props.children}
+    <box {...rest}>
+      {children}
     </box>
   )
 }

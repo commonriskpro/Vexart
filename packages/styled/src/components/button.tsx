@@ -73,8 +73,8 @@ const variantGetters: Record<ButtonVariant, VariantColors> = {
     border:      () => undefined,
     borderWidth: undefined,
     shadow:      shadows.xs,
-    hoverBg:     () => "#d4d4d4ff",
-    activeBg:    () => "#bababaff",
+    hoverBg:     () => themeColors.accent,
+    activeBg:    () => themeColors.accent,
     focusBorder: () => themeColors.ring,
   },
   secondary: {
@@ -83,8 +83,8 @@ const variantGetters: Record<ButtonVariant, VariantColors> = {
     border:      () => undefined,
     borderWidth: undefined,
     shadow:      undefined,
-    hoverBg:     () => "#2e2e2eff",
-    activeBg:    () => "#3d3d3dff",
+    hoverBg:     () => themeColors.accent,
+    activeBg:    () => themeColors.accent,
     focusBorder: () => themeColors.ring,
   },
   outline: {
@@ -94,7 +94,7 @@ const variantGetters: Record<ButtonVariant, VariantColors> = {
     borderWidth: 1,
     shadow:      shadows.xs,
     hoverBg:     () => themeColors.accent,
-    activeBg:    () => "#333333ff",
+    activeBg:    () => themeColors.accent,
     focusBorder: () => themeColors.ring,
   },
   ghost: {
@@ -104,7 +104,7 @@ const variantGetters: Record<ButtonVariant, VariantColors> = {
     borderWidth: undefined,
     shadow:      undefined,
     hoverBg:     () => themeColors.accent,
-    activeBg:    () => "#333333ff",
+    activeBg:    () => themeColors.accent,
     focusBorder: () => themeColors.ring,
   },
   destructive: {
@@ -113,7 +113,9 @@ const variantGetters: Record<ButtonVariant, VariantColors> = {
     border:      () => undefined,
     borderWidth: undefined,
     shadow:      shadows.xs,
+    // TODO: add semantic destructive hover token.
     hoverBg:     () => "#c72222ff",
+    // TODO: add semantic destructive active token.
     activeBg:    () => "#b01e1eff",
     focusBorder: () => themeColors.destructive,
   },
