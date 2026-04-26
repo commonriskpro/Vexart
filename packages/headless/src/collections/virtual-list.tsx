@@ -8,7 +8,8 @@
 
 import { createSignal, For, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import { useFocus, createScrollHandle, releaseScrollHandle, onPostScroll, markDirty } from "@vexart/engine"
+import { useFocus, onPostScroll, markDirty } from "@vexart/engine"
+import { useScrollHandle } from "../helpers/use-scroll"
 
 // ── Types ──
 
@@ -59,7 +60,7 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   const viewportItems = () => Math.ceil(props.height / props.itemHeight)
 
   const scrollId = `vlist-${Math.random().toString(36).slice(2, 8)}`
-  const scrollHandle = createScrollHandle(scrollId)
+  const scrollHandle = useScrollHandle(scrollId)
 
   // Read scroll position reactively
   const scrollPos = () => {
@@ -151,7 +152,6 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   })
   onCleanup(() => {
     unsubPostScroll()
-    releaseScrollHandle(scrollId)
   })
 
   return (

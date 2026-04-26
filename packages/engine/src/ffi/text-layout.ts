@@ -50,6 +50,7 @@ import {
   type RichInlineItem,
   type RichInlineLine,
 } from "@chenglou/pretext/rich-inline"
+import { createLRUCache } from "./lru-cache"
 
 // ── Font registry ──
 // Maps fontId → font descriptor string (CSS font shorthand).
@@ -94,15 +95,10 @@ export function fontToCSS(desc: FontDescriptor): string {
 // Cache prepared text to avoid re-measuring on every frame.
 // Key: text + font CSS string. Invalidated when text or font changes.
 
-const preparedCache = new Map<string, PreparedTextWithSegments>()
-const MAX_CACHE = 500
-const layoutCache = new Map<string, { lines: LayoutLine[]; height: number; lineCount: number }>()
+const MAX_CACHE = 501
 const MAX_LAYOUT_CACHE = 1000
-
-function touchTextCacheEntry<K, V>(cache: Map<K, V>, key: K, value: V) {
-  cache.delete(key)
-  cache.set(key, value)
-}
+const preparedCache = createLRUCache<string, PreparedTextWithSegments>(MAX_CACHE)
+const layoutCache = createLRUCache<string, { lines: LayoutLine[]; height: number; lineCount: number }>(MAX_LAYOUT_CACHE)
 
 function cacheKey(text: string, font: string): string {
   return `${font}\0${text}`
@@ -110,22 +106,6 @@ function cacheKey(text: string, font: string): string {
 
 function layoutCacheKey(text: string, fontId: number, fontSize: number, maxWidth: number, lineHeight: number) {
   return `${fontId}\0${fontSize}\0${maxWidth}\0${lineHeight}\0${text}`
-}
-
-function getCachedLayout(text: string, fontId: number, fontSize: number, maxWidth: number, lineHeight: number) {
-  const key = layoutCacheKey(text, fontId, fontSize, maxWidth, lineHeight)
-  const cached = layoutCache.get(key)
-  if (cached) touchTextCacheEntry(layoutCache, key, cached)
-  return cached
-}
-
-function setCachedLayout(text: string, fontId: number, fontSize: number, maxWidth: number, lineHeight: number, value: { lines: LayoutLine[]; height: number; lineCount: number }) {
-  if (layoutCache.size >= MAX_LAYOUT_CACHE) {
-    const first = layoutCache.keys().next().value
-    if (first) layoutCache.delete(first)
-  }
-  layoutCache.set(layoutCacheKey(text, fontId, fontSize, maxWidth, lineHeight), value)
-  return value
 }
 
 /** Prepare text for layout (cached). */
@@ -137,19 +117,7 @@ export function prepareText(
   const desc = getFont(fontId)
   const css = fontToCSS(desc)
   const key = cacheKey(text, css)
-  let prepared = preparedCache.get(key)
-  if (!prepared) {
-    if (preparedCache.size > MAX_CACHE) {
-      // Evict oldest entries (simple FIFO)
-      const first = preparedCache.keys().next().value!
-      preparedCache.delete(first)
-    }
-    prepared = prepareWithSegments(text, css, options)
-    preparedCache.set(key, prepared)
-  } else {
-    touchTextCacheEntry(preparedCache, key, prepared)
-  }
-  return prepared
+  return preparedCache.get(key, () => prepareWithSegments(text, css, options))
 }
 
 /** Measure text width for a single line (no wrapping). */
@@ -183,16 +151,16 @@ export function layoutText(
   fontSize = getFont(fontId).size,
   options?: PrepareOptions,
 ): { lines: LayoutLine[]; height: number; lineCount: number } {
-  const cached = getCachedLayout(text, fontId, fontSize, maxWidth, lineHeight)
-  if (cached) return cached
-
-  if (fontId === 0) {
-    return setCachedLayout(text, fontId, fontSize, maxWidth, lineHeight, layoutBuiltinFont(text, maxWidth, lineHeight, fontSize))
-  }
-  const desc = getFont(fontId)
-  const effectiveDesc = desc.size === fontSize ? desc : { ...desc, size: fontSize }
-  const prepared = prepareWithSegments(text, fontToCSS(effectiveDesc), options)
-  return setCachedLayout(text, fontId, fontSize, maxWidth, lineHeight, layoutWithLines(prepared, maxWidth, lineHeight))
+  const key = layoutCacheKey(text, fontId, fontSize, maxWidth, lineHeight)
+  return layoutCache.get(key, () => {
+    if (fontId === 0) {
+      return layoutBuiltinFont(text, maxWidth, lineHeight, fontSize)
+    }
+    const desc = getFont(fontId)
+    const effectiveDesc = desc.size === fontSize ? desc : { ...desc, size: fontSize }
+    const prepared = prepareWithSegments(text, fontToCSS(effectiveDesc), options)
+    return layoutWithLines(prepared, maxWidth, lineHeight)
+  })
 }
 
 /** Word-wrap for built-in bitmap font using exact atlas advance width. */
@@ -322,18 +290,7 @@ export function measureForLayout(
   const effectiveDesc = desc.size === fontSize ? desc : { ...desc, size: fontSize }
   const css = fontToCSS(effectiveDesc)
   const key = cacheKey(text, css)
-
-  let prepared = preparedCache.get(key)
-  if (!prepared) {
-    if (preparedCache.size > MAX_CACHE) {
-      const first = preparedCache.keys().next().value!
-      preparedCache.delete(first)
-    }
-    prepared = prepareWithSegments(text, css)
-    preparedCache.set(key, prepared)
-  } else {
-    touchTextCacheEntry(preparedCache, key, prepared)
-  }
+  const prepared = preparedCache.get(key, () => prepareWithSegments(text, css))
 
   const width = measureNaturalWidth(prepared)
   const height = Math.ceil(fontSize * 1.2)

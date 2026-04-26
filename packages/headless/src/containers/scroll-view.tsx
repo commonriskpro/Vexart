@@ -27,8 +27,9 @@
  *   scrollRef.viewportHeight
  */
 
-import { onCleanup, type JSX } from "solid-js"
-import { createScrollHandle, releaseScrollHandle, type ScrollHandle } from "@vexart/engine"
+import type { JSX } from "solid-js"
+import type { ScrollHandle } from "@vexart/engine"
+import { useScrollHandle } from "../helpers/use-scroll"
 
 let scrollViewCounter = 0
 
@@ -142,8 +143,7 @@ export function ScrollView(props: ScrollViewProps) {
   const showScrollbar = props.showScrollbar ?? true
 
   // Create scroll handle
-  const handle = createScrollHandle(scrollId)
-  onCleanup(() => releaseScrollHandle(scrollId))
+  const handle = useScrollHandle(scrollId)
 
   // If ref callback provided, pass the ScrollHandle
   if (props.ref) {

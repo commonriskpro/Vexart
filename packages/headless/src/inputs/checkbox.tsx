@@ -7,7 +7,7 @@
  */
 
 import type { JSX } from "solid-js"
-import { useFocus } from "@vexart/engine"
+import { createToggle } from "../helpers/create-toggle"
 
 // ── Types ──
 
@@ -39,33 +39,20 @@ export type CheckboxProps = {
 
 /** @public */
 export function Checkbox(props: CheckboxProps) {
-  const disabled = () => props.disabled ?? false
-
-  const { focused } = useFocus({
-    id: props.focusId,
-    onKeyDown(e) {
-      if (disabled()) return
-      if (e.key === "enter" || e.key === " ") {
-        props.onChange?.(!props.checked)
-      }
-    },
+  const toggle = createToggle({
+    checked: () => props.checked,
+    disabled: () => props.disabled ?? false,
+    onChange: (checked) => props.onChange?.(checked),
+    focusId: props.focusId,
   })
-
-  function handleToggle() {
-    if (disabled()) return
-    props.onChange?.(!props.checked)
-  }
 
   return (
     <>
       {() => props.renderCheckbox({
-        checked: props.checked,
-        focused: focused(),
-        disabled: disabled(),
-        toggleProps: {
-          focusable: true,
-          onPress: handleToggle,
-        },
+        checked: toggle.checked(),
+        focused: toggle.focused(),
+        disabled: toggle.disabled(),
+        toggleProps: toggle.toggleProps,
       })}
     </>
   )
