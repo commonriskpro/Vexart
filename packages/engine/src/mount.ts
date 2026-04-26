@@ -156,12 +156,21 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
   bindLoop(loop)
   const dispose = solidRender(component, loop.root)
 
-  const cellW = terminal.size.cellWidth || 8
-  const cellH = terminal.size.cellHeight || 16
-  const pixW = terminal.size.pixelWidth || terminal.size.cols * cellW
-  const pixH = terminal.size.pixelHeight || terminal.size.rows * cellH
-  const cellWf = pixW / terminal.size.cols
-  const cellHf = pixH / terminal.size.rows
+  let cellW = terminal.size.cellWidth || 8
+  let cellH = terminal.size.cellHeight || 16
+  let pixW = terminal.size.pixelWidth || terminal.size.cols * cellW
+  let pixH = terminal.size.pixelHeight || terminal.size.rows * cellH
+  let cellWf = pixW / terminal.size.cols
+  let cellHf = pixH / terminal.size.rows
+
+  const unsubResize = terminal.onResize((size) => {
+    cellW = size.cellWidth || 8
+    cellH = size.cellHeight || 16
+    pixW = size.pixelWidth || size.cols * cellW
+    pixH = size.pixelHeight || size.rows * cellH
+    cellWf = pixW / size.cols
+    cellHf = pixH / size.rows
+  })
 
   let isButtonDown = false
 
@@ -207,6 +216,7 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
     suspended: () => loop.suspended(),
     destroy: () => {
       unsubData()
+      unsubResize()
       parser.destroy()
       unbindLoop()
       resetFocus()

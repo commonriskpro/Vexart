@@ -1,5 +1,5 @@
 import type { TGENode, LayoutRect } from "../ffi/node"
-import { setFocus, focusedId } from "./focus"
+import { setFocus, focusedId, setFocusedId } from "./focus"
 
 /** @public */
 export type NodeHandle = {
@@ -30,7 +30,7 @@ export function createHandle(node: TGENode): NodeHandle {
     get layout() { return node.layout },
     get isDestroyed() { return node.destroyed },
     focus() { setFocus(focusId) },
-    blur() { if (focusedId() === focusId) setFocus("") },
+    blur() { if (focusedId() === focusId) setFocusedId(null) },
     get isFocused() { return focusedId() === focusId },
     get children() { return node.children.map(createHandle) },
     get parent() { return node.parent ? createHandle(node.parent) : null },

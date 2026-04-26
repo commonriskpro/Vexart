@@ -572,10 +572,18 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
         if (!scrollTarget) {
           scrollTarget = node
         } else {
+          let isDescendant = false
           let p = node.parent
           while (p) {
-            if (p === scrollTarget) { scrollTarget = node; break }
+            if (p === scrollTarget) { isDescendant = true; break }
             p = p.parent
+          }
+          if (isDescendant) {
+            scrollTarget = node
+          } else {
+            const existingArea = scrollTarget.layout.width * scrollTarget.layout.height
+            const newArea = l.width * l.height
+            if (newArea < existingArea) scrollTarget = node
           }
         }
       }

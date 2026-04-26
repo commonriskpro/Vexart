@@ -121,7 +121,7 @@ function cleanupOrphanLayers(
       const nativeImageId = nativeLayerRemove(key)
       nativeDeleteLayer(nativeImageId ?? imageId)
     } else {
-      layerComposer!.removeLayer(imageId)
+      layerComposer?.removeLayer(imageId)
     }
     if (debugCadence) ioMs += performance.now() - ioStart
     removeLayer(layer)
@@ -546,7 +546,7 @@ export function paintFrame(
             const nativeImageId = nativeLayerRemove(slot.key)
             nativeDeleteLayer(nativeImageId ?? imageId)
           } else {
-            layerComposer!.removeLayer(imageId)
+            layerComposer?.removeLayer(imageId)
           }
         }
         layer.dirty = false
@@ -852,9 +852,9 @@ export function paintFrame(
         const presentationStart = profile ? performance.now() : 0
         const region = paintResult.kittyPayload.region
         if (region) {
-          layerComposer!.patchLayer(paintResult.kittyPayload.data, imageId, region.x, region.y, region.width, region.height)
+          layerComposer?.patchLayer(paintResult.kittyPayload.data, imageId, region.x, region.y, region.width, region.height)
         } else {
-          layerComposer!.renderLayerRaw(paintResult.kittyPayload.data, paintResult.kittyPayload.width, paintResult.kittyPayload.height, imageId, lx, ly, renderZ, cellW, cellH)
+          layerComposer?.renderLayerRaw(paintResult.kittyPayload.data, paintResult.kittyPayload.width, paintResult.kittyPayload.height, imageId, lx, ly, renderZ, cellW, cellH)
         }
         if (profile) profile.paintPresentationMs += performance.now() - presentationStart
         if (debugCadence) ioMs += performance.now() - ioStart
@@ -892,7 +892,7 @@ export function paintFrame(
     rendererOutput = "final-frame-raw"
     const ioStart = debugCadence ? performance.now() : 0
     const presentationStart = profile ? performance.now() : 0
-    layerComposer!.renderFinalFrameRaw(
+    layerComposer?.renderFinalFrameRaw(
       frameResult.finalFrame.data,
       frameResult.finalFrame.width,
       frameResult.finalFrame.height,

@@ -178,6 +178,7 @@ export type RendererBackend = {
   compositeRetainedFrame?: (ctx: { frame: RendererBackendFrameContext; layers: RendererBackendRetainedLayer[] }) => RendererBackendFrameResult | null | void
   endFrame?: (ctx: RendererBackendFrameContext) => RendererBackendFrameResult | null | void
   drainProfile?: () => RendererBackendProfile
+  destroy?: () => void
 }
 
 let activeRendererBackend: RendererBackend | null = null

@@ -43,6 +43,7 @@ import { clearNativeLayerRegistryMirror } from "../ffi/native-layer-registry"
 import { disableNativePresentation, enableNativePresentation, isNativePresentationEnabled, isNativePresentationForcedOff, nativePresentationForcedOffReason } from "../ffi/native-presentation-flags"
 import { getVexartFfiCallCount, getVexartFfiCallCountsBySymbol, resetVexartFfiCallCounts } from "../ffi/vexart-bridge"
 
+const LAYER_LOG_ENABLED = process.env.VEXART_DEBUG_LAYERS === "1"
 const LOG = "/tmp/tge-layers.log"
 const RENDER_DEBUG_LOG = "/tmp/tge-render-debug.log"
 const CADENCE_LOG = "/tmp/tge-cadence.log"
@@ -52,7 +53,7 @@ const DEBUG_CADENCE = process.env.VEXART_DEBUG_CADENCE === "1"
 const DEBUG_RESIZE = process.env.VEXART_DEBUG_RESIZE === "1"
 const DEBUG_DRAG_REPRO = process.env.VEXART_DEBUG_DRAG_REPRO === "1"
 
-function log(msg: string) { appendFileSync(LOG, msg + "\n") }
+function log(msg: string) { if (!LAYER_LOG_ENABLED) return; appendFileSync(LOG, msg + "\n") }
 function renderDebug(msg: string) { appendFileSync(RENDER_DEBUG_LOG, msg + "\n") }
 function cadenceDebug(msg: string) { if (!DEBUG_CADENCE) return; appendFileSync(CADENCE_LOG, msg + "\n") }
 function resizeDebug(msg: string) { if (!DEBUG_RESIZE) return; appendFileSync(RESIZE_DEBUG_LOG, `[renderer:loop] ${msg}\n`) }
@@ -240,6 +241,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   }
 
   function scheduleNextFrame() {
+    if (isSuspended || !loopStarted) return
+    if (timer !== null) { clearTimeout(timer); timer = null }
+    if (!isDirty() && !hasActiveAnimations()) return
     const interval = (hasActiveAnimations() || hasRecentInteraction()) ? activeInterval : idleInterval
     const now = performance.now()
     if (nextFrameDeadlineMs === 0 || scheduledIntervalMs !== interval) {
@@ -251,7 +255,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     scheduledIntervalMs = interval
     scheduledAtMs = now
     scheduledDelayMs = Math.max(0, nextFrameDeadlineMs - now)
-    timer = setTimeout(() => { try { if (isDirty()) frame() } catch (e) { console.error("[vexart] frame error:", e) } scheduleNextFrame() }, scheduledDelayMs)
+    timer = setTimeout(() => { timer = null; try { if (isDirty() || hasActiveAnimations()) frame() } catch (e) { console.error("[vexart] frame error:", e) } scheduleNextFrame() }, scheduledDelayMs)
   }
 
   function nudgeInteraction(kind: InteractionKind) {
@@ -311,7 +315,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     return true
   }
 
-  onGlobalDirty((scope) => {
+  const unsubGlobalDirty = onGlobalDirty((scope) => {
     if (scope.kind === DIRTY_KIND.FULL) {
       markAllDirty()
       log(`[DIRTY:FULL]`)
@@ -442,10 +446,14 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     layerComposer?.clear(); resetLayers(); layerCache.clear()
     markDirty(); markAllDirty(); markInteractionActive()
     resizeDebug(`dirty marked newW=${newW} newH=${newH}`)
-    if (isSuspended || timer === null) { resizeDebug(`skip immediate frame suspended=${isSuspended ? 1 : 0} timer=${timer ? 1 : 0}`); return }
-    clearTimeout(timer); timer = null; scheduledDelayMs = 0; nextFrameDeadlineMs = 0
+    if (isSuspended) { resizeDebug(`skip immediate frame suspended=${isSuspended ? 1 : 0} timer=${timer ? 1 : 0}`); return }
+    if (timer !== null) { clearTimeout(timer); timer = null }
+    scheduledDelayMs = 0; nextFrameDeadlineMs = 0
     resizeDebug(`forcing immediate frame newW=${newW} newH=${newH}`)
-    frame(); scheduleNextFrame()
+    if (!isRenderingFrame) {
+      frame()
+    }
+    if (timer === null) scheduleNextFrame()
     resizeDebug(`rescheduled after resize interval=${scheduledIntervalMs} delay=${scheduledDelayMs}`)
   })
 
@@ -501,9 +509,11 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     destroy() {
       if (timer) clearTimeout(timer)
       scheduledDelayMs = 0; nextFrameDeadlineMs = 0
+      unsubGlobalDirty()
       unsubResize()
       clearNativeLayerRegistryMirror()
       layerComposer?.destroy()
+      getActiveBackend().destroy?.()
       resetLayers(); layerCache.clear()
       layoutAdapter.destroy()
     },

@@ -22,6 +22,19 @@ import {
 import { disableNativePresentation, logNativePresentationFallback } from "./native-presentation-flags"
 
 let currentTransportMode: number | null = null
+let consecutiveFailures = 0
+const MAX_CONSECUTIVE_FAILURES = 3
+
+function recordNativePresentationSuccess() {
+  consecutiveFailures = 0
+}
+
+function recordNativePresentationFailure(reason: string) {
+  consecutiveFailures++
+  if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+    disableNativePresentation(`${consecutiveFailures} consecutive failures: ${reason}`)
+  }
+}
 
 function toNativeTransportMode(mode: TransmissionMode | number) {
   if (typeof mode === "number") return mode
@@ -82,12 +95,15 @@ export function nativeEmitLayer(
       layerBuf.byteLength,
       ptr(statsBuf),
     ) as number
-    if (rc === 0) return decodeNativePresentationStats(statsBuf)
-    disableNativePresentation(`vexart_kitty_emit_layer returned ${rc}`)
+    if (rc === 0) {
+      recordNativePresentationSuccess()
+      return decodeNativePresentationStats(statsBuf)
+    }
+    recordNativePresentationFailure(`vexart_kitty_emit_layer returned ${rc}`)
     logNativePresentationFallback(`layer emit failed (imageId=${imageId})`)
     return null
   } catch (e) {
-    disableNativePresentation(`vexart_kitty_emit_layer threw: ${e}`)
+    recordNativePresentationFailure(`vexart_kitty_emit_layer threw: ${e}`)
     logNativePresentationFallback(`layer emit threw (imageId=${imageId})`)
     return null
   }
@@ -123,12 +139,15 @@ export function nativeEmitLayerTarget(
       layerBuf.byteLength,
       ptr(statsBuf),
     ) as number
-    if (rc === 0) return decodeNativePresentationStats(statsBuf)
-    disableNativePresentation(`vexart_kitty_emit_layer_target returned ${rc}`)
+    if (rc === 0) {
+      recordNativePresentationSuccess()
+      return decodeNativePresentationStats(statsBuf)
+    }
+    recordNativePresentationFailure(`vexart_kitty_emit_layer_target returned ${rc}`)
     logNativePresentationFallback(`target layer emit failed (imageId=${imageId})`)
     return null
   } catch (e) {
-    disableNativePresentation(`vexart_kitty_emit_layer_target threw: ${e}`)
+    recordNativePresentationFailure(`vexart_kitty_emit_layer_target threw: ${e}`)
     logNativePresentationFallback(`target layer emit threw (imageId=${imageId})`)
     return null
   }
@@ -164,12 +183,15 @@ export function nativeEmitRegionTarget(
       regionBuf.byteLength,
       ptr(statsBuf),
     ) as number
-    if (rc === 0) return decodeNativePresentationStats(statsBuf)
-    disableNativePresentation(`vexart_kitty_emit_region_target returned ${rc}`)
+    if (rc === 0) {
+      recordNativePresentationSuccess()
+      return decodeNativePresentationStats(statsBuf)
+    }
+    recordNativePresentationFailure(`vexart_kitty_emit_region_target returned ${rc}`)
     logNativePresentationFallback(`target region emit failed (imageId=${imageId})`)
     return null
   } catch (e) {
-    disableNativePresentation(`vexart_kitty_emit_region_target threw: ${e}`)
+    recordNativePresentationFailure(`vexart_kitty_emit_region_target threw: ${e}`)
     logNativePresentationFallback(`target region emit threw (imageId=${imageId})`)
     return null
   }

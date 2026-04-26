@@ -216,7 +216,11 @@ export function generateAtlas(fontId: number, desc: FontDescriptor): AtlasInfo {
 
   if (atlasCache.size >= MAX_FONT_ATLAS_CACHE) {
     const first = atlasCache.keys().next().value
-    if (first !== undefined) atlasCache.delete(first)
+    if (first !== undefined) {
+      // TODO: Add vexart_text_unload_atlas to the native API so JS LRU eviction
+      // can release the matching Rust/WGPU atlas. For now this is JS-side only.
+      atlasCache.delete(first)
+    }
   }
   atlasCache.set(fontId, info)
   return info

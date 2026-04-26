@@ -3,7 +3,7 @@
 import { createSignal, onCleanup } from "solid-js"
 import { onInput } from "../loop/input"
 import type { InputEvent, KeyEvent } from "../input/types"
-import type { TGENode, PressEvent } from "../ffi/node"
+import { createPressEvent, type TGENode, type PressEvent } from "../ffi/node"
 
 /** @public */
 export type FocusEntry = {
@@ -37,10 +37,17 @@ function registerFocusable(entry: FocusEntry): () => void {
   if (scope.entries.length === 1 && !focusedId()) setFocusedId(entry.id)
   return () => {
     const idx = scope.entries.indexOf(entry)
-    if (idx >= 0) scope.entries.splice(idx, 1)
-    if (focusedId() === entry.id) {
-      const reg = activeRegistry()
-      setFocusedId(reg.length > 0 ? reg[0].id : null)
+    if (idx >= 0) {
+      scope.entries.splice(idx, 1)
+      if (focusedId() === entry.id) {
+        const reg = activeRegistry()
+        if (reg.length > 0) {
+          const nextIdx = Math.min(idx, reg.length - 1)
+          setFocusedId(reg[nextIdx].id)
+        } else {
+          setFocusedId(null)
+        }
+      }
     }
   }
 }
@@ -119,7 +126,7 @@ export function dispatchFocusInput(event: InputEvent) {
   if (event.key === "enter" || event.key === " ") {
     const entry = getFocusedEntry()
     if (entry?.onPress) {
-      entry.onPress()
+      entry.onPress(createPressEvent())
       return
     }
   }
@@ -180,7 +187,12 @@ export function unregisterNodeFocusable(node: TGENode) {
       scope.entries.splice(idx, 1)
       if (focusedId() === focusId) {
         const reg = activeRegistry()
-        setFocusedId(reg.length > 0 ? reg[0].id : null)
+        if (reg.length > 0) {
+          const nextIdx = Math.min(idx, reg.length - 1)
+          setFocusedId(reg[nextIdx].id)
+        } else {
+          setFocusedId(null)
+        }
       }
       return
     }

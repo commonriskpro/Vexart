@@ -41,6 +41,8 @@ export function createParser(handler: InputHandler): InputParser {
   let buffer = ""
   let pasting = false
   let pasteContent = ""
+  const decoder = new TextDecoder("utf-8", { fatal: false })
+  let escapeTimer: ReturnType<typeof setTimeout> | null = null
 
   function process() {
     while (buffer.length > 0) {
@@ -96,18 +98,22 @@ export function createParser(handler: InputHandler): InputParser {
       // ── Keyboard ──
       // If we have an escape but the sequence might be incomplete, wait for more data
       if (buffer[0] === "\x1b" && buffer.length === 1) {
-        // Could be standalone Escape or start of a sequence.
-        // Use a timeout approach: emit Escape if nothing follows.
-        // For simplicity in Phase 1, emit immediately as Escape.
-        const keyResult = parseKey(buffer)
-        if (keyResult) {
-          handler(keyResult[0])
-          buffer = buffer.slice(keyResult[1])
-        } else {
-          buffer = buffer.slice(1) // discard unknown
-        }
-        continue
+        if (escapeTimer) return
+        escapeTimer = setTimeout(() => {
+          escapeTimer = null
+          if (buffer.length > 0 && buffer[0] === "\x1b" && buffer.length === 1) {
+            const keyResult = parseKey(buffer)
+            if (keyResult) {
+              handler(keyResult[0])
+              buffer = buffer.slice(keyResult[1])
+            }
+          }
+          process()
+        }, 20)
+        return
       }
+
+      if (escapeTimer) { clearTimeout(escapeTimer); escapeTimer = null }
 
       if (buffer[0] === "\x1b" && buffer.length >= 2) {
         // Have at least 2 bytes starting with escape — try parsing
@@ -144,11 +150,12 @@ export function createParser(handler: InputHandler): InputParser {
 
   return {
     feed(data: Buffer) {
-      buffer += data.toString("utf-8")
+      buffer += decoder.decode(data, { stream: true })
       process()
     },
 
     destroy() {
+      if (escapeTimer) { clearTimeout(escapeTimer); escapeTimer = null }
       buffer = ""
       pasting = false
       pasteContent = ""

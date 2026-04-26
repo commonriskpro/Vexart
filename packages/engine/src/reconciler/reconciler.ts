@@ -8,7 +8,6 @@ import { createRenderer } from "solid-js/universal"
 import {
   type TGENode,
   type TGEProps,
-  type SizingInfo,
   createNode,
   createTextNode,
   insertChild,
@@ -39,6 +38,21 @@ const COLOR_PROPS = new Set([
 const STYLE_SUB_COLOR_PROPS = new Set([
   "backgroundColor",
   "borderColor",
+])
+
+const OBJECT_PROPS = new Set([
+  "shadow",
+  "boxShadow",
+  "glow",
+  "gradient",
+  "cornerRadii",
+  "transform",
+  "hoverStyle",
+  "activeStyle",
+  "focusStyle",
+  "filter",
+  "floatOffset",
+  "floatAttach",
 ])
 
 const VISUAL_DAMAGE_PROPS = new Set([
@@ -101,6 +115,21 @@ function markNodeVisualDamage(node: TGENode) {
     return
   }
   markNodeLayerDamaged(node.id)
+}
+
+function shallowEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false
+  if (Array.isArray(a) !== Array.isArray(b)) return false
+  const left = a as Record<string, unknown>
+  const right = b as Record<string, unknown>
+  const keysA = Object.keys(left)
+  const keysB = Object.keys(right)
+  if (keysA.length !== keysB.length) return false
+  for (const key of keysA) {
+    if (left[key] !== right[key]) return false
+  }
+  return true
 }
 
 /** Resolve a color value (string or number) to u32. Called once per prop change, not per frame. */
@@ -224,6 +253,7 @@ const renderer = createRenderer<TGENode>({
   setProperty(node: TGENode, name: string, value: unknown) {
     const currentProps = node.props as Record<string, unknown>
     if (currentProps[name] === value) return
+    if (OBJECT_PROPS.has(name) && shallowEqual(currentProps[name], value)) return
 
     // ref callback — pass a NodeHandle to the user
     if (name === "ref" && typeof value === "function") {
@@ -267,10 +297,29 @@ const renderer = createRenderer<TGENode>({
     if (name === "style" && typeof value === "object" && value !== null) {
       markPropsDirty(node)
       const style = value as Record<string, unknown>
-      for (const key of Object.keys(style)) {
+      const newKeys = new Set(Object.keys(style))
+      const prevStyleKeys = node._styleKeys
+      if (prevStyleKeys) {
+        for (const key of prevStyleKeys) {
+          if (!newKeys.has(key)) {
+            delete (node.props as Record<string, unknown>)[key]
+          }
+        }
+      }
+      node._styleKeys = newKeys
+      for (const key of newKeys) {
         // Only set if NOT already set as a direct prop
         if ((node.props as Record<string, unknown>)[key] === undefined) {
-          (node.props as Record<string, unknown>)[key] = style[key]
+          let val = style[key]
+          const flags = PROP_FLAGS[key] ?? 0
+          if ((flags & FLAG_COLOR) !== 0) val = resolveColor(val)
+          if (key === "width" || key === "height") {
+            ;(node.props as Record<string, unknown>)[key] = val
+            if (key === "width") node._widthSizing = parseSizing(val as number | string | undefined)
+            else node._heightSizing = parseSizing(val as number | string | undefined)
+            continue
+          }
+          ;(node.props as Record<string, unknown>)[key] = val
         }
       }
       markNodeDirty(node)

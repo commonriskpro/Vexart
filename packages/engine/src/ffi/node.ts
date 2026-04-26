@@ -360,6 +360,8 @@ export type TGENode = {
   _widthSizing: SizingInfo | null
   /** Pre-parsed height sizing — resolved once in setProperty, read every frame */
   _heightSizing: SizingInfo | null
+  /** Prop keys applied from the JSX style object during the previous style merge. */
+  _styleKeys?: Set<string>
   /** Computed LOCAL transform matrix — set after layout if node has transform prop */
   _transform: Float64Array | null
   /** Inverse LOCAL transform matrix — for local-space calculations */

@@ -329,7 +329,10 @@ function vf32(view: DataView, offset: number, val: number) { view.setFloat32(off
 
 // Image upload registry: WeakMap<Uint8Array, u64 handle> for vexart_paint_upload_image.
 // Handles are stored as BigInt since FFI u64 may exceed safe integer range.
+// WeakMap eviction is passive (GC-driven) and cannot call vexart_paint_remove_image,
+// so active handles are tracked explicitly for native lifecycle cleanup.
 const _vexartImageHandles = new WeakMap<Uint8Array, bigint>()
+const activeImageHandles = new Set<bigint>()
 
 /** Upload an RGBA image via vexart_paint_upload_image. Returns u64 handle or 0n on failure. */
 function vexartUploadImage(ctx: bigint, data: Uint8Array, width: number, height: number): bigint {
@@ -344,6 +347,7 @@ function vexartUploadImage(ctx: bigint, data: Uint8Array, width: number, height:
   if (result !== 0) return 0n
   const handle = handleBuf[0]
   _vexartImageHandles.set(data, handle)
+  activeImageHandles.add(handle)
   return handle
 }
 
@@ -356,6 +360,7 @@ function vexartRemoveImage(ctx: bigint, handle: bigint) {
     const err = vexartGetLastError()
     console.error(`[vexart] paint_remove_image failed (${rc}): ${err}`)
   }
+  activeImageHandles.delete(handle)
 }
 
 /**
@@ -2671,6 +2676,27 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       const profile = { ...backendProfile }
       resetBackendProfile()
       return profile
+    },
+    destroy() {
+      if (_vexartCtx !== null) {
+        for (const handle of activeImageHandles) {
+          vexartRemoveImage(_vexartCtx, handle)
+        }
+        activeImageHandles.clear()
+        destroyTargetRecord(standaloneTarget)
+        standaloneTarget = null
+        destroyTargetRecord(finalFrameTarget)
+        finalFrameTarget = null
+        for (const record of layerTargets.values()) {
+          vexartCompositeTargetDestroy(_vexartCtx, record.handle)
+        }
+        layerTargets.clear()
+        cacheStats.layerTargetCount = 0
+        cacheStats.layerTargetBytes = 0
+        const { symbols } = openVexartLibrary()
+        symbols.vexart_context_destroy(_vexartCtx)
+        _vexartCtx = null
+      }
     },
   } as GpuRendererBackend
 }

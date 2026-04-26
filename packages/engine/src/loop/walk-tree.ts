@@ -110,6 +110,13 @@ function hasPromotableArea(node: TGENode) {
   return node.layout.width * node.layout.height >= AUTO_LAYER_MIN_AREA
 }
 
+function registerCulledSubtree(node: TGENode, state: WalkTreeState) {
+  state.nodeRefById.set(node.id, node)
+  for (const child of node.children) {
+    registerCulledSubtree(child, state)
+  }
+}
+
 function claimEffect(): EffectConfig {
   const effect = effectPool[effectPoolIdx] ?? { color: 0, cornerRadius: 0 }
   effectPool[effectPoolIdx++] = effect
@@ -608,6 +615,7 @@ export function walkTree(
       const fullyBelow = l.y >= state.viewportHeight
       if (fullyLeft || fullyRight || fullyAbove || fullyBelow) {
         if (state.culledCount) state.culledCount.value++
+        registerCulledSubtree(node, state)
         layout.closeElement()
         return
       }

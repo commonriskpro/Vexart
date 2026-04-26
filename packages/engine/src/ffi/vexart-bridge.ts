@@ -175,6 +175,7 @@ let _lib: ReturnType<typeof dlopen<typeof VEXART_SYMBOLS>> | null = null
 let _rawLib: ReturnType<typeof dlopen<typeof VEXART_SYMBOLS>> | null = null
 let ffiCallCount = 0
 const ffiCallCountsBySymbol = new Map<string, number>()
+const FFI_DEBUG = process.env.VEXART_DEBUG_FFI === "1"
 
 function instrumentSymbols(symbols: ReturnType<typeof dlopen<typeof VEXART_SYMBOLS>>["symbols"]) {
   const wrapped: Record<string, unknown> = {}
@@ -213,10 +214,14 @@ export function openVexartLibrary(): ReturnType<typeof dlopen<typeof VEXART_SYMB
   for (const path of candidateLibPaths()) {
     try {
       _rawLib = dlopen(path, VEXART_SYMBOLS)
-      _lib = {
-        symbols: instrumentSymbols(_rawLib.symbols),
-        close: () => _rawLib?.close(),
-      } as ReturnType<typeof dlopen<typeof VEXART_SYMBOLS>>
+      if (FFI_DEBUG) {
+        _lib = {
+          symbols: instrumentSymbols(_rawLib.symbols),
+          close: () => _rawLib?.close(),
+        } as ReturnType<typeof dlopen<typeof VEXART_SYMBOLS>>
+      } else {
+        _lib = _rawLib
+      }
       return _lib
     } catch (e) {
       attempts.push(`${path} => ${(e as Error).message}`)
