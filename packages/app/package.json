@@ -7,7 +7,7 @@
   "bin": {
     "vexart": "./src/cli/index.ts"
   },
-  "dependencies": {
+  "peerDependencies": {
     "@vexart/engine": "workspace:*",
     "@vexart/headless": "workspace:*",
     "@vexart/primitives": "workspace:*",

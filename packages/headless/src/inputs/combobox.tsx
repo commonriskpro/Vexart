@@ -9,6 +9,7 @@
 import { createSignal } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus } from "@vexart/engine"
+import { useDisabled } from "../helpers/disabled"
 
 // ── Types ──
 
@@ -77,7 +78,7 @@ export function Combobox(props: ComboboxProps) {
   const [query, setQuery] = createSignal("")
   const [highlightedIndex, setHighlightedIndex] = createSignal(0)
 
-  const disabled = () => props.disabled ?? false
+  const disabled = useDisabled(props)
 
   const defaultFilter = (opt: ComboboxOption, q: string) =>
     opt.label.toLowerCase().includes(q.toLowerCase())

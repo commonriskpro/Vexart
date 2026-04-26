@@ -9,6 +9,10 @@
  *     → walkTree → layout → assignLayers → paint → composite
  */
 
+// NOTE: All console.log/warn/error calls in production code paths should be
+// gated behind env vars (VEXART_DEBUG_*, VEXART_LOG_*). Ungated logging at
+// 60fps causes measurable I/O overhead.
+
 import type { Terminal } from "../terminal/index"
 import { createLayerComposer } from "../output/layer-composer"
 import { type TGENode, createNode, parseSizing } from "../ffi/node"

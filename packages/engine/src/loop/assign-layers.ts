@@ -15,9 +15,8 @@ import type { TGENode } from "../ffi/node"
 import { shouldPromoteInteractionLayer } from "../reconciler/interaction"
 import type { LayerBoundary, LayerSlot, LayerPlan } from "./types"
 import { hasBackdropEffect } from "./predicates"
+import { AUTO_LAYER_BUDGET, shouldPromoteToLayer } from "./layer-boundary"
 
-const VALID_WILL_CHANGE_VALUES = new Set(["transform", "opacity", "filter", "scroll"])
-const AUTO_LAYER_BUDGET = 8
 const AUTO_LAYER_MIN_AREA = 64 * 64
 
 let autoLayerCount = 0
@@ -73,19 +72,10 @@ export function findLayerBoundaries(
   const isInteractionLayer = shouldPromoteInteractionLayer(node)
   const hasSubtreeTransform = !!(node.props.transform && node.children.length > 0)
   const hasBackdrop = hasBackdropEffect(node.props)
-  // willChange pre-promotes the node to its own layer (REQ-2B-501).
-  const willChange = node.props.willChange
-  const willChangeValues = willChange ? (Array.isArray(willChange) ? willChange : [willChange]) : []
-  const hasValidWillChange = willChangeValues.some(v => VALID_WILL_CHANGE_VALUES.has(v))
-  if (hasValidWillChange && !willChangeValues.every(v => VALID_WILL_CHANGE_VALUES.has(v))) {
-    if (process.env.VEXART_DEBUG) {
-      console.warn(`[vexart] willChange contains unrecognized value(s): ${willChangeValues.filter(v => !VALID_WILL_CHANGE_VALUES.has(v)).join(", ")}`)
-    }
-  }
-  if (node.props.layer === true) {
+  if (shouldPromoteToLayer(node)) {
     node._autoLayer = false
     pushBoundary(node, path, result, nextZ, isScroll, insideScroll, hasSubtreeTransform)
-  } else if (isInteractionLayer || hasSubtreeTransform || hasValidWillChange) {
+  } else if (isInteractionLayer || hasSubtreeTransform) {
     node._autoLayer = false
     pushBoundary(node, path, result, nextZ, isScroll, insideScroll, hasSubtreeTransform)
   } else if (hasBackdrop && autoLayerCount < AUTO_LAYER_BUDGET) {

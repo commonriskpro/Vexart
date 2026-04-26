@@ -18,6 +18,7 @@ type FocusScope = {
   previousFocusId: string | null
 }
 
+// WARNING: Module-level singleton — prevents multi-loop usage.
 const scopes: FocusScope[] = [{ entries: [], previousFocusId: null }]
 
 function activeScope(): FocusScope { return scopes[scopes.length - 1] }
@@ -152,6 +153,7 @@ export function useFocus(opts: { id?: string; onKeyDown?: (event: KeyEvent) => v
   return { focused: () => focusedId() === id, focus: () => setFocusedId(id), id }
 }
 
+// WARNING: Module-level singleton — prevents multi-loop usage.
 const nodeFocusMap = new Map<number, string>()
 
 /** @public */

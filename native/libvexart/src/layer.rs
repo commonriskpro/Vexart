@@ -165,7 +165,7 @@ impl LayerRegistry {
         let handle = self.next_handle;
         self.next_handle += 1;
         let terminal_image_id = self.next_terminal_image_id;
-        self.next_terminal_image_id += 1;
+        self.next_terminal_image_id = self.next_terminal_image_id.checked_add(1).unwrap_or(1000);
         let record = LayerRecord {
             key: key.clone(),
             handle,

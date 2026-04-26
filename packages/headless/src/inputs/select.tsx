@@ -9,6 +9,7 @@
 import { createSignal, createContext, createEffect, onCleanup, onMount, useContext } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus } from "@vexart/engine"
+import { useDisabled } from "../helpers/disabled"
 
 // ── Types ──
 
@@ -114,7 +115,7 @@ function SelectRoot(props: SelectProps) {
   const [highlightedIndex, setHighlightedIndex] = createSignal(0)
   const [registeredOptions, setRegisteredOptions] = createSignal<SelectOption[]>([])
 
-  const disabled = () => props.disabled ?? false
+  const disabled = useDisabled(props)
   const options = () => props.options ?? registeredOptions()
 
   const registerOption = (opt: SelectOption) => {
@@ -282,7 +283,7 @@ export function SelectContent(props: SelectContentProps) {
 /** @public */
 export function SelectItem(props: SelectItemProps) {
   const ctx = useSelectContext()
-  const disabled = () => props.disabled ?? false
+  const disabled = useDisabled(props)
   const label = typeof props.children === "string" ? props.children : props.value
 
   onMount(() => {

@@ -54,7 +54,7 @@ pub fn compute_end_frame_priority(
 ) -> Priority {
     match current {
         Priority::Visible => {
-            if last_used_frame + FRAMES_BEFORE_RECENT > current_frame {
+            if last_used_frame.saturating_add(FRAMES_BEFORE_RECENT) > current_frame {
                 // Used this frame — stay Visible.
                 Priority::Visible
             } else {

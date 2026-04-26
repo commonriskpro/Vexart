@@ -171,7 +171,9 @@ function candidateLibPaths(): string[] {
 
 // ── Lazy singleton ──────────────────────────────────────────────────────────
 
+// WARNING: Module-level singleton — prevents multi-loop usage.
 let _lib: ReturnType<typeof dlopen<typeof VEXART_SYMBOLS>> | null = null
+// WARNING: Module-level singleton — prevents multi-loop usage.
 let _rawLib: ReturnType<typeof dlopen<typeof VEXART_SYMBOLS>> | null = null
 let ffiCallCount = 0
 const ffiCallCountsBySymbol = new Map<string, number>()

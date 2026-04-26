@@ -9,6 +9,9 @@
 //   - Corrupted cache (wrong magic/size) is detected, deleted, and restarted (REQ-2B-604).
 //   - If cache dir is not writable, fall back to in-memory only (REQ-2B-603).
 
+// TODO: Add SHA-256/Blake3 hash verification to the pipeline cache header
+// to prevent loading corrupted or tampered cache files.
+
 use std::path::PathBuf;
 
 /// Magic bytes at the start of every vexart pipeline cache file.

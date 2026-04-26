@@ -67,6 +67,7 @@ export function createDirtyTracker(): DirtyTracker {
   }
 }
 
+// WARNING: Module-level singleton — prevents multi-loop usage.
 const defaultDirtyTracker = createDirtyTracker()
 
 /** Callbacks invoked whenever markDirty() is called.

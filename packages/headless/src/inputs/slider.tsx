@@ -8,6 +8,7 @@
 
 import type { JSX } from "solid-js"
 import { useFocus, useDrag, type NodeMouseEvent } from "@vexart/engine"
+import { useDisabled } from "../helpers/disabled"
 
 // ── Types ──
 
@@ -68,7 +69,7 @@ export function Slider(props: SliderProps) {
   const max = () => props.max ?? 100
   const step = () => props.step ?? 1
   const largeStep = () => props.largeStep ?? step() * 10
-  const disabled = () => props.disabled ?? false
+  const disabled = useDisabled(props)
 
   const clamp = (v: number) => Math.min(max(), Math.max(min(), v))
   const snap = (v: number) => {

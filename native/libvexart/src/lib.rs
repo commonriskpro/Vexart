@@ -178,6 +178,14 @@ fn get_or_init_layer_registry() -> &'static Mutex<layer::LayerRegistry> {
     &SHARED_LAYER_REGISTRY
 }
 
+fn validate_kitty_image_id(image_id: u32) -> i32 {
+    if image_id != 0 {
+        return OK;
+    }
+    ffi::error::set_last_error("image_id 0 is invalid (reserved by Kitty protocol)");
+    ERR_INVALID_ARG
+}
+
 // ─── §5.1 Version & lifecycle ─────────────────────────────────────────────
 
 /// Returns the Phase 2b version constant (0x00020B00).
@@ -747,6 +755,9 @@ pub unsafe extern "C" fn vexart_text_measure(
 #[no_mangle]
 pub extern "C" fn vexart_kitty_emit_frame(_ctx: u64, target: u64, image_id: u32) -> i32 {
     ffi_guard!({
+        if validate_kitty_image_id(image_id) != OK {
+            return ERR_INVALID_ARG;
+        }
         let mut guard = get_or_init_paint();
         let pctx = match guard.as_mut() {
             Some(c) => c,
@@ -772,6 +783,9 @@ pub unsafe extern "C" fn vexart_kitty_emit_frame_with_stats(
     stats_out: *mut types::NativePresentationStats,
 ) -> i32 {
     ffi_guard!({
+        if validate_kitty_image_id(image_id) != OK {
+            return ERR_INVALID_ARG;
+        }
         let mut guard = get_or_init_paint();
         let pctx = match guard.as_mut() {
             Some(c) => c,
@@ -801,6 +815,9 @@ pub unsafe extern "C" fn vexart_kitty_emit_layer(
     stats_out: *mut types::NativePresentationStats,
 ) -> i32 {
     ffi_guard!({
+        if validate_kitty_image_id(image_id) != OK {
+            return ERR_INVALID_ARG;
+        }
         if layer_ptr.is_null() || layer_len < 20 {
             return ffi::panic::ERR_INVALID_ARG;
         }
@@ -833,6 +850,9 @@ pub unsafe extern "C" fn vexart_kitty_emit_layer_target(
     stats_out: *mut types::NativePresentationStats,
 ) -> i32 {
     ffi_guard!({
+        if validate_kitty_image_id(image_id) != OK {
+            return ERR_INVALID_ARG;
+        }
         if layer_ptr.is_null() || layer_len < 12 {
             return ffi::panic::ERR_INVALID_ARG;
         }
@@ -875,6 +895,9 @@ pub unsafe extern "C" fn vexart_kitty_emit_region(
     stats_out: *mut types::NativePresentationStats,
 ) -> i32 {
     ffi_guard!({
+        if validate_kitty_image_id(image_id) != OK {
+            return ERR_INVALID_ARG;
+        }
         if region_ptr.is_null() || region_len < 16 {
             return ffi::panic::ERR_INVALID_ARG;
         }
@@ -907,6 +930,9 @@ pub unsafe extern "C" fn vexart_kitty_emit_region_target(
     stats_out: *mut types::NativePresentationStats,
 ) -> i32 {
     ffi_guard!({
+        if validate_kitty_image_id(image_id) != OK {
+            return ERR_INVALID_ARG;
+        }
         if region_ptr.is_null() || region_len < 16 {
             return ffi::panic::ERR_INVALID_ARG;
         }
@@ -937,7 +963,12 @@ pub unsafe extern "C" fn vexart_kitty_delete_layer(
     image_id: u32,
     stats_out: *mut types::NativePresentationStats,
 ) -> i32 {
-    ffi_guard!({ kitty::transport::delete_layer_native(image_id, stats_out) })
+    ffi_guard!({
+        if validate_kitty_image_id(image_id) != OK {
+            return ERR_INVALID_ARG;
+        }
+        kitty::transport::delete_layer_native(image_id, stats_out)
+    })
 }
 
 // ─── Phase 2c Native Layer Registry ───────────────────────────────────────
@@ -1235,8 +1266,14 @@ pub unsafe extern "C" fn vexart_image_asset_register(
         let mut resources_guard = lock_or_recover(resources);
         let registry = get_or_init_image_assets();
         let mut registry_guard = lock_or_recover(registry);
-        let Some(handle) = registry_guard.register(key, rgba, width, height, current_frame, &mut resources_guard)
-        else {
+        let Some(handle) = registry_guard.register(
+            key,
+            rgba,
+            width,
+            height,
+            current_frame,
+            &mut resources_guard,
+        ) else {
             return ERR_INVALID_ARG;
         };
         upload_image_record(pctx, handle, rgba, width, height);
@@ -1246,7 +1283,12 @@ pub unsafe extern "C" fn vexart_image_asset_register(
 }
 
 #[no_mangle]
-pub extern "C" fn vexart_image_asset_touch(_ctx: u64, _scene: u64, current_frame: u64, handle: u64) -> i32 {
+pub extern "C" fn vexart_image_asset_touch(
+    _ctx: u64,
+    _scene: u64,
+    current_frame: u64,
+    handle: u64,
+) -> i32 {
     ffi_guard!({
         let resources = get_or_init_resource();
         let mut resources_guard = lock_or_recover(resources);
@@ -1312,7 +1354,9 @@ pub unsafe extern "C" fn vexart_canvas_display_list_update(
         let mut resources_guard = lock_or_recover(resources);
         let registry = get_or_init_canvas_display_lists();
         let mut registry_guard = lock_or_recover(registry);
-        let Some(handle) = registry_guard.update(key, bytes, hash, current_frame, &mut resources_guard) else {
+        let Some(handle) =
+            registry_guard.update(key, bytes, hash, current_frame, &mut resources_guard)
+        else {
             return ERR_INVALID_ARG;
         };
         *out_handle = handle;
@@ -1321,7 +1365,12 @@ pub unsafe extern "C" fn vexart_canvas_display_list_update(
 }
 
 #[no_mangle]
-pub extern "C" fn vexart_canvas_display_list_touch(_ctx: u64, _scene: u64, current_frame: u64, handle: u64) -> i32 {
+pub extern "C" fn vexart_canvas_display_list_touch(
+    _ctx: u64,
+    _scene: u64,
+    current_frame: u64,
+    handle: u64,
+) -> i32 {
     ffi_guard!({
         let resources = get_or_init_resource();
         let mut resources_guard = lock_or_recover(resources);

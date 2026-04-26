@@ -3,6 +3,7 @@
 import type { RenderLoop } from "../loop/loop"
 import type { DamageRect } from "../ffi/damage"
 
+// WARNING: Module-level singleton — prevents multi-loop usage.
 let activeLoop: RenderLoop | null = null
 
 /** @public */

@@ -51,6 +51,7 @@ import {
   highlightsToTokens,
 } from "@vexart/engine"
 import type { KeyEvent } from "@vexart/engine"
+import { useDisabled } from "../helpers/disabled"
 
 // ── Theme type ──
 
@@ -325,7 +326,7 @@ export function Textarea(props: TextareaProps) {
 
   const th = () => ({ ...TEXTAREA_DEFAULTS, ...props.theme })
   const color = () => cursorColorSignal() || props.color || th().accent
-  const disabled = () => props.disabled ?? false
+  const disabled = useDisabled(props)
   const inputWidth = () => props.width ?? 400
   const inputHeight = () => props.height ?? 200
   const visibleLines = () => {

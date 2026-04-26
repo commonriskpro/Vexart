@@ -12,6 +12,7 @@
 // Thread-local transport mode so each FFI call context is independent.
 
 use std::cell::Cell;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use super::encoder::encode_frame_direct;
@@ -25,6 +26,8 @@ use crate::types::NativePresentationStats;
 thread_local! {
     static TRANSPORT_MODE: Cell<u32> = const { Cell::new(0) };
 }
+
+static SHM_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Copy, Debug, Default)]
 struct ShmTransferStats {
@@ -168,7 +171,13 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
     };
 
     // 4. Create SHM segment with compressed data.
-    let shm_name = format!("/vexart-kitty-{}-{}", std::process::id(), image_id);
+    let counter = SHM_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let shm_name = format!(
+        "/vexart-kitty-{}-{}-{}",
+        std::process::id(),
+        image_id,
+        counter
+    );
     let mut handle: u64 = 0;
     let rc = unsafe {
         shm_prepare(
@@ -762,7 +771,13 @@ fn emit_shm_rgba_at_with_stats(
         payload = rgba;
         compression_param = "";
     }
-    let shm_name = format!("/vexart-kitty-{}-{}", std::process::id(), image_id);
+    let counter = SHM_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let shm_name = format!(
+        "/vexart-kitty-{}-{}-{}",
+        std::process::id(),
+        image_id,
+        counter
+    );
     let mut handle: u64 = 0;
     let t_shm = Instant::now();
     let rc = unsafe {
@@ -810,12 +825,12 @@ fn emit_direct_rgba_at(
     let escaped = encode_frame_direct(rgba, width, height, image_id);
     let row = row.max(0) + 1;
     let col = col.max(0) + 1;
-    let positioned = format!(
-        "\x1b7\x1b[{row};{col}H{}\x1b8",
-        String::from_utf8_lossy(&escaped)
-    );
+    let mut positioned = Vec::with_capacity(escaped.len() + 32);
+    positioned.extend_from_slice(format!("\x1b7\x1b[{row};{col}H").as_bytes());
+    positioned.extend_from_slice(&escaped);
+    positioned.extend_from_slice(b"\x1b8");
     let _ = z;
-    match write_to_stdout(positioned.as_bytes()) {
+    match write_to_stdout(&positioned) {
         Ok(()) => OK,
         Err(e) => {
             set_last_error(format!("emit_direct_rgba_at: stdout write failed: {e}"));
@@ -883,7 +898,13 @@ fn emit_region_rgba_with_stats(
 
     let escape = if mode == 2 {
         // SHM mode for region patch
-        let shm_name = format!("/vexart-kitty-r-{}-{}", std::process::id(), image_id);
+        let counter = SHM_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let shm_name = format!(
+            "/vexart-kitty-r-{}-{}-{}",
+            std::process::id(),
+            image_id,
+            counter
+        );
         let mut handle: u64 = 0;
         let t_shm = Instant::now();
         let rc = unsafe {

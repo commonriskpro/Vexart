@@ -57,8 +57,6 @@ export function writeHeader(cmdCount: number, payloadBytes: number): void {
  *   [2..4] flags        (u16) — bit0=hasTransform, bit1=hasScissor, bit2=layerOverride
  *   [4..8] payloadBytes (u32) — body length following this 8-byte prefix
  *
- * TODO(Slice 9): per-command body writers (Rect, Gradient, Shadow, etc.)
- *
  * @param offset      byte offset in graphView where prefix starts
  * @param cmdKind     command kind enum value
  * @param flags       bit flags
@@ -73,46 +71,4 @@ export function writeCommandPrefix(
   graphView.setUint16(offset,     cmdKind,      true)
   graphView.setUint16(offset + 2, flags,        true)
   graphView.setUint32(offset + 4, payloadBytes, true)
-}
-
-// ── Per-command body stubs (Slice 9) ────────────────────────────────────────
-
-/**
- * Write a Rect command body at the given offset.
- * TODO(Slice 9): implement body serialization matching RectInstance layout.
- *
- * Body layout (48 bytes):
- *   [0..16]  rect         (f32×4: x, y, w, h)
- *   [16..32] cornerRadii  (f32×4: tl, tr, br, bl)
- *   [32..36] color        (u32: RGBA8888)
- *   [36..40] borderColor  (u32)
- *   [40..44] borderWidth  (f32)
- *   [44..48] scissorId    (u32)
- */
-export function writeRectBody(
-  _offset: number,
-  _x: number, _y: number, _w: number, _h: number,
-  _tl: number, _tr: number, _br: number, _bl: number,
-  _color: number,
-  _borderColor: number,
-  _borderWidth: number,
-  _scissorId: number,
-): void {
-  // TODO(Slice 9): serialize Rect command body into graphView at offset
-}
-
-/**
- * Write a GradientLinear command body stub.
- * TODO(Slice 9): implement.
- */
-export function writeGradientBody(_offset: number, ..._args: number[]): void {
-  // TODO(Slice 9)
-}
-
-/**
- * Write a Shadow command body stub.
- * TODO(Slice 9): implement.
- */
-export function writeShadowBody(_offset: number, ..._args: number[]): void {
-  // TODO(Slice 9)
 }

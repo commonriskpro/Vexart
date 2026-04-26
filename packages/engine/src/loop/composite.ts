@@ -377,6 +377,9 @@ function applyScrollOffsets(commands: RenderCommand[], s: CompositeFrameState) {
 }
 
 
+// TODO(perf): Store scroll offset on container and apply during paint/hit-test
+// instead of mutating all descendant layout positions. Current approach is O(N)
+// per scroll event for large subtrees.
 function applyOffsetToDescendants(container: TGENode, ox: number, oy: number) {
   for (const child of container.children) {
     child.layout.x += ox

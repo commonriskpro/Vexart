@@ -160,6 +160,8 @@ export function writeLayoutBack(
   // rebase(M, offset) = T(-offset) × M × T(offset)
   // This shifts M's origin from its own center to N's local space.
 
+  // TODO(perf): Cache _anyAncestorHasTransform flag during walkTree to skip
+  // this O(depth) ancestor walk when no transforms exist in the subtree.
   function computeAccTransform(node: TGENode): void {
     // Collect all ancestors with transforms, from outermost to innermost
     const chain: TGENode[] = []

@@ -36,6 +36,10 @@ pub fn compress_rgba(rgba: &[u8]) -> Result<Vec<u8>, String> {
 /// * `height`   — frame height in pixels
 /// * `image_id` — Kitty image ID (must be > 0)
 pub fn encode_frame_direct(rgba: &[u8], width: u32, height: u32, image_id: u32) -> Vec<u8> {
+    if rgba.is_empty() {
+        return Vec::new();
+    }
+
     // 1. zlib compress.
     let compressed = compress_rgba(rgba).unwrap_or_default();
 

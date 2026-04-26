@@ -255,6 +255,8 @@ export function createVexartLayoutCtx() {
         root.calculateLayout(_viewportW, _viewportH, DIRECTION_LTR)
       }
 
+      // TODO(perf): Merge position collection into walkTree postorder to eliminate
+      // this third full tree traversal. Currently: walkTree → calculateLayout → collectPositions.
       // Collect absolute positions by walking the Flexily tree
       const layoutMap = new Map<number, PositionedCommand>()
 

@@ -94,6 +94,10 @@ pub fn composite_render_image_layer(
     use bytemuck::bytes_of;
     use wgpu::util::DeviceExt;
 
+    // TODO: Z-ordering currently depends on FFI call order, not the z parameter.
+    // To implement proper z-ordering, collect all render_image_layer calls,
+    // sort by z before submitting render passes.
+
     if target == 0 {
         return ERR_INVALID_ARG;
     }
@@ -151,8 +155,12 @@ pub fn composite_render_image_layer(
         .unwrap_or(false);
     if has_layer {
         // Render into existing layer encoder.
-        let Some(rec) = targets.get_mut(target) else { return ERR_INVALID_HANDLE; };
-        let Some(layer) = rec.active_layer.as_mut() else { return ERR_INVALID_ARG; };
+        let Some(rec) = targets.get_mut(target) else {
+            return ERR_INVALID_HANDLE;
+        };
+        let Some(layer) = rec.active_layer.as_mut() else {
+            return ERR_INVALID_ARG;
+        };
         let view_ref = &rec.view;
 
         let clear_op = if layer.first_pass {
@@ -197,9 +205,11 @@ pub fn composite_render_image_layer(
         pass.draw(0..6, 0..1);
     } else {
         // No active layer: standalone encoder.
-        let mut encoder = wgpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("vexart-composite-encoder"),
-        });
+        let mut encoder = wgpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("vexart-composite-encoder"),
+            });
 
         let c = clear_rgba;
         let clear_op = wgpu::LoadOp::Clear(wgpu::Color {
@@ -210,7 +220,9 @@ pub fn composite_render_image_layer(
         });
 
         // SAFETY: target_view_ptr was extracted above; target still in registry.
-        let Some(view_ref) = targets.get(target).map(|rec| &rec.view) else { return ERR_INVALID_HANDLE; };
+        let Some(view_ref) = targets.get(target).map(|rec| &rec.view) else {
+            return ERR_INVALID_HANDLE;
+        };
 
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("vexart-composite-pass"),
@@ -294,8 +306,12 @@ pub fn composite_render_image_transform_layer(
         .map(|rec| rec.active_layer.is_some())
         .unwrap_or(false);
     if has_layer {
-        let Some(rec) = targets.get_mut(target) else { return ERR_INVALID_HANDLE; };
-        let Some(layer) = rec.active_layer.as_mut() else { return ERR_INVALID_ARG; };
+        let Some(rec) = targets.get_mut(target) else {
+            return ERR_INVALID_HANDLE;
+        };
+        let Some(layer) = rec.active_layer.as_mut() else {
+            return ERR_INVALID_ARG;
+        };
         let view_ref = &rec.view;
 
         let clear_op = if layer.first_pass {
@@ -339,9 +355,11 @@ pub fn composite_render_image_transform_layer(
         pass.set_bind_group(0, bind_group, &[]);
         pass.draw(0..6, 0..1);
     } else {
-        let mut encoder = wgpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("vexart-composite-transform-encoder"),
-        });
+        let mut encoder = wgpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("vexart-composite-transform-encoder"),
+            });
 
         let c = clear_rgba;
         let clear_op = wgpu::LoadOp::Clear(wgpu::Color {
@@ -351,7 +369,9 @@ pub fn composite_render_image_transform_layer(
             a: (c & 0xff) as f64 / 255.0,
         });
 
-        let Some(view_ref) = targets.get(target).map(|rec| &rec.view) else { return ERR_INVALID_HANDLE; };
+        let Some(view_ref) = targets.get(target).map(|rec| &rec.view) else {
+            return ERR_INVALID_HANDLE;
+        };
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("vexart-composite-transform-pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -401,6 +421,12 @@ pub fn composite_update_uniform(
     {
         return ERR_INVALID_ARG;
     }
+    if source_target == target {
+        crate::ffi::error::set_last_error(
+            "composite_update_uniform: source_target == target (self-reference)",
+        );
+        return ERR_INVALID_ARG;
+    }
 
     let (wgpu, targets, _, _, _, _) = pctx.split();
     let bind_group = {
@@ -408,22 +434,20 @@ pub fn composite_update_uniform(
             Some(r) => r,
             None => return ERR_INVALID_HANDLE,
         };
-        wgpu
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("vexart-composite-uniform-bind-group"),
-                layout: &wgpu.image_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&source_rec.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&wgpu.cached_sampler),
-                    },
-                ],
-            })
+        wgpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("vexart-composite-uniform-bind-group"),
+            layout: &wgpu.image_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&source_rec.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&wgpu.cached_sampler),
+                },
+            ],
+        })
     };
 
     let instance = bytemuck::pod_read_unaligned::<BridgeImageTransformInstance>(
@@ -448,8 +472,12 @@ pub fn composite_update_uniform(
         .unwrap_or(false);
 
     if has_layer {
-        let Some(rec) = targets.get_mut(target) else { return ERR_INVALID_HANDLE; };
-        let Some(layer) = rec.active_layer.as_mut() else { return ERR_INVALID_ARG; };
+        let Some(rec) = targets.get_mut(target) else {
+            return ERR_INVALID_HANDLE;
+        };
+        let Some(layer) = rec.active_layer.as_mut() else {
+            return ERR_INVALID_ARG;
+        };
         let view_ref = &rec.view;
 
         let clear_op = if layer.first_pass {
@@ -493,9 +521,11 @@ pub fn composite_update_uniform(
         pass.set_bind_group(0, &bind_group, &[]);
         pass.draw(0..6, 0..1);
     } else {
-        let mut encoder = wgpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("vexart-composite-uniform-encoder"),
-        });
+        let mut encoder = wgpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("vexart-composite-uniform-encoder"),
+            });
 
         let c = clear_rgba;
         let clear_op = wgpu::LoadOp::Clear(wgpu::Color {
@@ -505,7 +535,9 @@ pub fn composite_update_uniform(
             a: (c & 0xff) as f64 / 255.0,
         });
 
-        let Some(view_ref) = targets.get(target).map(|rec| &rec.view) else { return ERR_INVALID_HANDLE; };
+        let Some(view_ref) = targets.get(target).map(|rec| &rec.view) else {
+            return ERR_INVALID_HANDLE;
+        };
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("vexart-composite-uniform-pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -598,7 +630,9 @@ pub fn copy_region_to_image(
             label: Some("vexart-copy-region-encoder"),
         });
 
-    let Some(src_rec) = targets.get(target) else { return ERR_INVALID_HANDLE; };
+    let Some(src_rec) = targets.get(target) else {
+        return ERR_INVALID_HANDLE;
+    };
     encoder.copy_texture_to_texture(
         wgpu::TexelCopyTextureInfo {
             texture: &src_rec.texture,
@@ -623,22 +657,20 @@ pub fn copy_region_to_image(
 
     // Create view + sampler + bind group and register as image.
     let view = dst_texture.create_view(&wgpu::TextureViewDescriptor::default());
-    let bind_group = wgpu
-        .device
-        .create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("vexart-region-bind-group"),
-            layout: &wgpu.image_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&wgpu.cached_sampler),
-                },
-            ],
-        });
+    let bind_group = wgpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("vexart-region-bind-group"),
+        layout: &wgpu.image_bind_group_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&wgpu.cached_sampler),
+            },
+        ],
+    });
 
     let handle = crate::paint::alloc_image_handle();
     images.insert(
@@ -655,7 +687,7 @@ pub fn copy_region_to_image(
     OK
 }
 
-/// Legacy composite merge — returns handle 0 (no-op).
+/// Legacy composite merge — not implemented.
 ///
 /// The active composite path uses `composite_target_*` + `render_image_layer`
 /// for per-layer composition, making this z-order merge path unnecessary.
@@ -666,19 +698,9 @@ pub fn composite_merge(
     out_target: *mut u64,
     stats_out: *mut FrameStats,
 ) -> i32 {
-    if !out_target.is_null() {
-        // SAFETY: caller guarantees valid pointer.
-        unsafe {
-            *out_target = 0;
-        }
-    }
-    if !stats_out.is_null() {
-        // SAFETY: caller guarantees valid pointer.
-        unsafe {
-            *stats_out = FrameStats::default();
-        }
-    }
-    OK
+    let _ = (out_target, stats_out);
+    crate::ffi::error::set_last_error("composite_merge is not implemented");
+    ERR_INVALID_ARG
 }
 
 /// Real full-target GPU→CPU readback.

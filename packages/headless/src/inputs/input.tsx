@@ -9,6 +9,7 @@
 import { createSignal, createEffect, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus, onInput } from "@vexart/engine"
+import { useDisabled } from "../helpers/disabled"
 
 // ── Types ──
 
@@ -56,7 +57,7 @@ export function Input(props: InputProps) {
   const [selEnd, setSelEnd] = createSignal(-1)
   const [blink, setBlink] = createSignal(true)
 
-  const disabled = () => props.disabled ?? false
+  const disabled = useDisabled(props)
 
   createEffect(() => {
     const len = props.value.length

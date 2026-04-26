@@ -108,6 +108,10 @@ pub unsafe fn shm_prepare(
         set_last_error("invalid arguments: null or zero-length pointer");
         return ERR_INVALID_ARG;
     }
+    if name_len > 255 {
+        set_last_error("SHM name exceeds POSIX NAME_MAX (255)");
+        return ERR_INVALID_ARG;
+    }
 
     // 2. Build CString from name bytes; reject embedded NUL bytes.
     let name_bytes = unsafe { std::slice::from_raw_parts(name_ptr, name_len as usize) };
@@ -229,11 +233,11 @@ pub fn shm_release(handle: u64, unlink_flag: u32) -> i32 {
 
     let _ = unlink_flag;
     if let Err(e) = shm_unlink(entry.name.as_c_str()) {
-            // ENOENT is acceptable (already gone); any other error is reported.
-            if e != nix::errno::Errno::ENOENT {
-                set_last_error(format!("shm_unlink failed: {e}"));
-                return ERR_KITTY_TRANSPORT;
-            }
+        // ENOENT is acceptable (already gone); any other error is reported.
+        if e != nix::errno::Errno::ENOENT {
+            set_last_error(format!("shm_unlink failed: {e}"));
+            return ERR_KITTY_TRANSPORT;
+        }
     }
     lock_or_recover(&STALE_SHM_SEGMENTS).retain(|(name, _)| name != &entry.name);
 

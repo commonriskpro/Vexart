@@ -197,6 +197,10 @@ fn decode_png(png_bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
     let bit_depth = png_bytes[24];
     let color_type = png_bytes[25];
 
+    if png_bytes.len() > 28 && png_bytes[28] != 0 {
+        return Err("interlaced PNGs not supported".into());
+    }
+
     if width == 0 || height == 0 {
         return Err(format!("PNG has zero dimension: {width}×{height}"));
     }
@@ -228,6 +232,9 @@ fn decode_png(png_bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
             png_bytes[pos + 2],
             png_bytes[pos + 3],
         ]) as usize;
+        if chunk_len > png_bytes.len() {
+            return Err("PNG chunk length exceeds file size".into());
+        }
         let chunk_type = &png_bytes[pos + 4..pos + 8];
         let data_start = pos + 8;
         let data_end = data_start + chunk_len;
@@ -309,6 +316,9 @@ fn apply_png_filter(
     dst: &mut [u8],
     channels: usize,
 ) -> Result<(), String> {
+    if src.len() != dst.len() {
+        return Err("filter src/dst length mismatch".into());
+    }
     match filter {
         0 => {
             // None

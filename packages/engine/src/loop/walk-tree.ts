@@ -36,6 +36,7 @@ import { shouldPromoteInteractionLayer } from "../reconciler/interaction"
 import { isDebugEnabled } from "./debug"
 import type { LayerBoundary } from "./types"
 import { hasBackdropEffect, isInteractiveNode } from "./predicates"
+import { AUTO_LAYER_BUDGET, shouldPromoteToLayer } from "./layer-boundary"
 
 // ── State bag ─────────────────────────────────────────────────────────────
 
@@ -98,12 +99,13 @@ export type WalkTreeState = {
   culledCount?: { value: number }
 }
 
-const VALID_WILL_CHANGE_VALUES = new Set(["transform", "opacity", "filter", "scroll"])
-const AUTO_LAYER_BUDGET = 8
 const AUTO_LAYER_MIN_AREA = 64 * 64
 
+// WARNING: Module-level singleton — prevents multi-loop usage.
 const effectPool: EffectConfig[] = []
+// WARNING: Module-level singleton — prevents multi-loop usage.
 let effectPoolIdx = 0
+// WARNING: Module-level singleton — prevents multi-loop usage.
 let autoLayerCount = 0
 
 function hasPromotableArea(node: TGENode) {
@@ -211,17 +213,14 @@ export function walkTree(
     const props = resolveProps(node)
     const isScroll = !!(props.scrollX || props.scrollY)
     if (isScroll) state.scrollContainers.push(node)
-    const willChange = props.willChange
-    const willChangeValues = willChange ? (Array.isArray(willChange) ? willChange : [willChange]) : []
-    const hasValidWillChange = willChangeValues.some(v => VALID_WILL_CHANGE_VALUES.has(v))
     const hasSubtreeTransform = !!(props.transform && node.children.length > 0)
     const isInteractionLayer = shouldPromoteInteractionLayer(node)
     const hasBackdrop = hasBackdropEffect(props)
     let shouldBoundary = false
-    if (props.layer === true) {
+    if (shouldPromoteToLayer(node)) {
       node._autoLayer = false
       shouldBoundary = true
-    } else if (isInteractionLayer || hasSubtreeTransform || hasValidWillChange) {
+    } else if (isInteractionLayer || hasSubtreeTransform) {
       node._autoLayer = false
       shouldBoundary = true
     } else if (hasBackdrop && autoLayerCount < AUTO_LAYER_BUDGET) {
