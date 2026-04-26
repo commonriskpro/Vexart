@@ -25,7 +25,9 @@ describe("animation compositor integration", () => {
     setTarget(1)
     expect(allDescriptors().some((descriptor) => descriptor.nodeId === 42 && descriptor.property === "opacity")).toBe(true)
 
-    await new Promise<void>((resolve) => setTimeout(resolve, 10))
+    // Animation ticks use setTimeout(16) for frame-aligned timing,
+    // so wait enough for the 1ms duration transition to complete.
+    await new Promise<void>((resolve) => setTimeout(resolve, 50))
     expect(allDescriptors().some((descriptor) => descriptor.nodeId === 42)).toBe(false)
   })
 

@@ -233,22 +233,28 @@ export function useRouter() {
 /** @public */
 export function RouteOutlet(props: RouteOutletProps) {
   const contextRouter = props.router ?? useRouter()
-  const match = contextRouter.match()
-  if (!match) {
-    const NotFound = props.notFound
-    return NotFound ? NotFound({ params: {} }) : null
-  }
-  const Component = match.route.component
-  try {
-    let element = Component({ params: match.params })
-    const layouts = match.route.layouts ?? []
-    for (const Layout of layouts.slice().reverse()) {
-      element = Layout({ children: element, params: match.params })
+
+  // match() is a derived signal — reading it inside this returned function
+  // makes SolidJS track it reactively. When router.push() updates the
+  // underlying history/cursor signals, this re-evaluates automatically.
+  return () => {
+    const match = contextRouter.match()
+    if (!match) {
+      const NotFound = props.notFound
+      return NotFound ? NotFound({ params: {} }) : null
     }
-    return element
-  } catch (error) {
-    const ErrorComponent = match.route.error
-    if (ErrorComponent) return ErrorComponent({ error, params: match.params })
-    throw error
+    const Component = match.route.component
+    try {
+      let element = Component({ params: match.params })
+      const layouts = match.route.layouts ?? []
+      for (const Layout of layouts.slice().reverse()) {
+        element = Layout({ children: element, params: match.params })
+      }
+      return element
+    } catch (error) {
+      const ErrorComponent = match.route.error
+      if (ErrorComponent) return ErrorComponent({ error, params: match.params })
+      throw error
+    }
   }
 }

@@ -11,6 +11,8 @@
  * (not in intermediate objects) so SolidJS wraps them in tracked effects.
  */
 
+import type { PressEvent } from "@vexart/engine"
+import { Button as HeadlessButton } from "@vexart/headless"
 import { radius, space, font, weight, shadows, glows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
@@ -24,6 +26,8 @@ export interface ButtonProps {
   variant?: ButtonVariant
   size?: ButtonSize
   disabled?: boolean
+  onPress?: (event?: PressEvent) => void
+  focusId?: string
   children?: any
 }
 
@@ -134,38 +138,46 @@ export function Button(props: ButtonProps) {
   const isLink = v === "link"
 
   return (
-    <box
-      direction="row"
-      alignX="center"
-      alignY="center"
-      gap={ss.gap}
-      height={ss.height}
-      width={ss.width}
-      paddingLeft={ss.paddingX}
-      paddingRight={ss.paddingX}
-      paddingTop={ss.paddingY}
-      paddingBottom={ss.paddingY}
-      backgroundColor={vg.bg()}
-      cornerRadius={ss.cornerRadius}
-      borderColor={vg.border()}
-      borderWidth={vg.borderWidth}
-      shadow={vg.shadow}
-      opacity={props.disabled ? 0.5 : 1}
-      hoverStyle={{ backgroundColor: vg.hoverBg() }}
-      activeStyle={{ backgroundColor: vg.activeBg() }}
-      focusStyle={{
-        borderColor: vg.focusBorder(),
-        borderWidth: 2,
-        glow: isLink ? undefined : glows.ring,
-      }}
-    >
-      <text
-        color={vg.fg()}
-        fontSize={ss.fontSize}
-        fontWeight={isLink ? weight.normal : weight.medium}
-      >
-        {props.children}
-      </text>
-    </box>
+    <HeadlessButton
+      onPress={props.onPress}
+      disabled={props.disabled}
+      focusId={props.focusId}
+      renderButton={(ctx) => (
+        <box
+          {...ctx.buttonProps}
+          direction="row"
+          alignX="center"
+          alignY="center"
+          gap={ss.gap}
+          height={ss.height}
+          width={ss.width}
+          paddingLeft={ss.paddingX}
+          paddingRight={ss.paddingX}
+          paddingTop={ss.paddingY}
+          paddingBottom={ss.paddingY}
+          backgroundColor={vg.bg()}
+          cornerRadius={ss.cornerRadius}
+          borderColor={vg.border()}
+          borderWidth={vg.borderWidth}
+          shadow={vg.shadow}
+          opacity={props.disabled ? 0.5 : 1}
+          hoverStyle={{ backgroundColor: vg.hoverBg() }}
+          activeStyle={{ backgroundColor: vg.activeBg() }}
+          focusStyle={{
+            borderColor: vg.focusBorder(),
+            borderWidth: 2,
+            glow: isLink ? undefined : glows.ring,
+          }}
+        >
+          <text
+            color={vg.fg()}
+            fontSize={ss.fontSize}
+            fontWeight={isLink ? weight.normal : weight.medium}
+          >
+            {props.children}
+          </text>
+        </box>
+      )}
+    />
   )
 }

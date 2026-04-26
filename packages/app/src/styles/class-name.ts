@@ -1,5 +1,5 @@
 import type { InteractiveStyleProps } from "@vexart/engine"
-import { colors, font, radius, shadows, space, weight } from "@vexart/styled"
+import { themeColors, font, radius, shadows, space, weight } from "@vexart/styled"
 
 /** @public */
 export const CLASS_NAME_UNKNOWN_BEHAVIOR = {
@@ -41,29 +41,35 @@ type MutableStyleProps = VexartStyleProps & {
 
 type StyleTarget = "base" | "hover" | "active" | "focus"
 
-const COLOR_ALIASES: Record<string, string | number> = {
-  background: colors.background,
-  foreground: colors.foreground,
-  card: colors.card,
-  "card-foreground": colors.cardForeground,
-  popover: colors.popover,
-  "popover-foreground": colors.popoverForeground,
-  primary: colors.primary,
-  "primary-foreground": colors.primaryForeground,
-  secondary: colors.secondary,
-  "secondary-foreground": colors.secondaryForeground,
-  muted: colors.muted,
-  "muted-foreground": colors.mutedForeground,
-  accent: colors.accent,
-  "accent-foreground": colors.accentForeground,
-  destructive: colors.destructive,
-  "destructive-foreground": colors.destructiveForeground,
-  border: colors.border,
-  input: colors.input,
-  ring: colors.ring,
-  transparent: colors.transparent,
-  black: "#000000",
-  white: "#ffffff",
+// COLOR_ALIASES reads themeColors lazily so theme switching is reactive.
+// Built as a function so SolidJS tracks the signal reads when resolveClassName
+// is called inside a reactive scope (JSX props).
+function getColorAlias(name: string): string | number | undefined {
+  switch (name) {
+    case "background": return themeColors.background
+    case "foreground": return themeColors.foreground
+    case "card": return themeColors.card
+    case "card-foreground": return themeColors.cardForeground
+    case "popover": return themeColors.popover
+    case "popover-foreground": return themeColors.popoverForeground
+    case "primary": return themeColors.primary
+    case "primary-foreground": return themeColors.primaryForeground
+    case "secondary": return themeColors.secondary
+    case "secondary-foreground": return themeColors.secondaryForeground
+    case "muted": return themeColors.muted
+    case "muted-foreground": return themeColors.mutedForeground
+    case "accent": return themeColors.accent
+    case "accent-foreground": return themeColors.accentForeground
+    case "destructive": return themeColors.destructive
+    case "destructive-foreground": return themeColors.destructiveForeground
+    case "border": return themeColors.border
+    case "input": return themeColors.input
+    case "ring": return themeColors.ring
+    case "transparent": return themeColors.transparent
+    case "black": return "#000000"
+    case "white": return "#ffffff"
+    default: return undefined
+  }
 }
 
 const FONT_ALIASES: Record<string, number> = {
@@ -165,12 +171,12 @@ function resolveToken(props: MutableStyleProps, target: StyleTarget, token: stri
     if (resolved !== undefined) { applyToTarget(props, target, { cornerRadius: resolved }); return null }
   }
   if (token.startsWith("bg-")) {
-    const color = COLOR_ALIASES[token.slice(3)]
+    const color = getColorAlias(token.slice(3))
     if (color !== undefined) { applyToTarget(props, target, { backgroundColor: color }); return null }
   }
   if (token.startsWith("border-")) {
     const value = token.slice(7)
-    const color = COLOR_ALIASES[value]
+    const color = getColorAlias(value)
     const width = spacingValue(value)
     if (color !== undefined) { applyToTarget(props, target, { borderColor: color }); return null }
     if (width !== undefined) { applyToTarget(props, target, { borderWidth: width }); return null }
@@ -178,7 +184,7 @@ function resolveToken(props: MutableStyleProps, target: StyleTarget, token: stri
   if (token.startsWith("text-")) {
     const value = token.slice(5)
     const size = FONT_ALIASES[value]
-    const color = COLOR_ALIASES[value]
+    const color = getColorAlias(value)
     if (size !== undefined) { props.fontSize = size; return null }
     if (color !== undefined) { props.color = color; return null }
   }

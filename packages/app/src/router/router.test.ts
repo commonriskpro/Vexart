@@ -53,7 +53,9 @@ describe("app router", () => {
       { path: "/projects/[id]", component: (props) => `project:${props.params.id}` },
     ], "/projects/abc")
 
-    expect(RouteOutlet({ router })).toBe("project:abc")
+    // RouteOutlet returns a reactive function — invoke it to get the rendered value
+    const outlet = RouteOutlet({ router }) as unknown as () => unknown
+    expect(outlet()).toBe("project:abc")
 
     dispose()
   }))
@@ -70,7 +72,8 @@ describe("app router", () => {
       },
     ])
 
-    expect(RouteOutlet({ router })).toBe("outer:inner:content")
+    const outlet = RouteOutlet({ router }) as unknown as () => unknown
+    expect(outlet()).toBe("outer:inner:content")
 
     dispose()
   }))
@@ -84,7 +87,8 @@ describe("app router", () => {
       },
     ])
 
-    expect(RouteOutlet({ router })).toBe("boom")
+    const outlet = RouteOutlet({ router }) as unknown as () => unknown
+    expect(outlet()).toBe("boom")
 
     dispose()
   }))

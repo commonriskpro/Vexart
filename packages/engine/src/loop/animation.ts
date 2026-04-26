@@ -106,7 +106,9 @@ export function createTransition(initial: number, config?: TransitionConfig): [(
     const t = ease(elapsed / duration)
     setValue(from + (to - from) * t)
     markDirty()
-    timer = setTimeout(tick, 0)
+    // Use setTimeout(tick, 16) to approximate 60fps frame alignment instead of
+    // setTimeout(0) which creates a CPU-bound tight loop monopolizing the event loop.
+    timer = setTimeout(tick, 16)
   }
   function setTarget(target: number) {
     if (target === to && animating) return
@@ -183,7 +185,9 @@ export function createSpring(initial: number, config?: SpringConfig): [() => num
     }
     setValue(current)
     markDirty()
-    timer = setTimeout(tick, 0)
+    // Use setTimeout(tick, 16) to approximate 60fps frame alignment instead of
+    // setTimeout(0) which creates a CPU-bound tight loop monopolizing the event loop.
+    timer = setTimeout(tick, 16)
   }
   function setTarget(t: number) {
     if (t === target && animating) return

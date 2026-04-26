@@ -1,6 +1,6 @@
 /** Focus runtime system. */
 
-import { createSignal } from "solid-js"
+import { createSignal, onCleanup } from "solid-js"
 import { onInput } from "../loop/input"
 import type { InputEvent, KeyEvent } from "../input/types"
 import type { TGENode, PressEvent } from "../ffi/node"
@@ -101,11 +101,12 @@ export function getFocusedEntry(): FocusEntry | undefined {
 }
 
 let focusInputConnected = false
+let focusInputUnsub: (() => void) | null = null
 
 function ensureFocusInput() {
   if (focusInputConnected) return
   focusInputConnected = true
-  onInput(dispatchFocusInput)
+  focusInputUnsub = onInput(dispatchFocusInput)
 }
 
 export function dispatchFocusInput(event: InputEvent) {
@@ -139,7 +140,8 @@ let nextId = 0
 export function useFocus(opts: { id?: string; onKeyDown?: (event: KeyEvent) => void; onPress?: () => void } = {}): FocusHandle {
   ensureFocusInput()
   const id = opts.id ?? `focus-${nextId++}`
-  registerFocusable({ id, onKeyDown: opts.onKeyDown, onPress: opts.onPress })
+  const unregister = registerFocusable({ id, onKeyDown: opts.onKeyDown, onPress: opts.onPress })
+  onCleanup(unregister)
   return { focused: () => focusedId() === id, focus: () => setFocusedId(id), id }
 }
 
@@ -196,6 +198,12 @@ export function resetFocus() {
   scopes[0].entries.length = 0
   scopes[0].previousFocusId = null
   setFocusedId(null)
+  // Unsubscribe the existing input handler before resetting the flag,
+  // otherwise the next ensureFocusInput() adds a SECOND subscriber.
+  if (focusInputUnsub) {
+    focusInputUnsub()
+    focusInputUnsub = null
+  }
   focusInputConnected = false
   nextId = 0
   nodeFocusMap.clear()

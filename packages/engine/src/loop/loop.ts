@@ -251,7 +251,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     scheduledIntervalMs = interval
     scheduledAtMs = now
     scheduledDelayMs = Math.max(0, nextFrameDeadlineMs - now)
-    timer = setTimeout(() => { if (isDirty()) frame(); scheduleNextFrame() }, scheduledDelayMs)
+    timer = setTimeout(() => { try { if (isDirty()) frame() } catch (e) { console.error("[vexart] frame error:", e) } scheduleNextFrame() }, scheduledDelayMs)
   }
 
   function nudgeInteraction(kind: InteractionKind) {
@@ -266,7 +266,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     scheduledDelayMs = targetDelay
     scheduledAtMs = now
     nextFrameDeadlineMs = now + targetDelay
-    timer = setTimeout(() => { if (isDirty()) frame(); scheduleNextFrame() }, targetDelay)
+    timer = setTimeout(() => { try { if (isDirty()) frame() } catch (e) { console.error("[vexart] frame error:", e) } scheduleNextFrame() }, targetDelay)
   }
 
   function requestInteractionFrame(kind: InteractionKind) {
@@ -287,7 +287,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       scheduledDelayMs = 0
       scheduledAtMs = performance.now()
       nextFrameDeadlineMs = scheduledAtMs
-      timer = setTimeout(() => { if (isDirty()) frame(); scheduleNextFrame() }, 0)
+      timer = setTimeout(() => { try { if (isDirty()) frame() } catch (e) { console.error("[vexart] frame error:", e) } scheduleNextFrame() }, 0)
       return
     }
     nudgeInteraction(kind)
