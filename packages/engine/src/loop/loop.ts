@@ -314,6 +314,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   onGlobalDirty((scope) => {
     if (scope.kind === DIRTY_KIND.FULL) {
       markAllDirty()
+      log(`[DIRTY:FULL]`)
     } else if (scope.kind === DIRTY_KIND.NODE_VISUAL) {
       // Try scoped layer damage via the walk-tree node ref. If the node isn't
       // in nodeRefById (new node from reconciliation, or text child that walkTree
@@ -323,6 +324,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       // markAllDirty for unresolved NODE_VISUAL was defeating layer caching
       // because every reactive update that inserts/removes nodes triggered it.
       queueScopedNodeDamage(scope)
+      const node = scope.nodeId !== undefined ? nodeRefById.get(scope.nodeId) : undefined
+      log(`[DIRTY:NODE_VISUAL] id=${scope.nodeId} key=${node?._layerKey ?? "null"} queued=${!!node}`)
+    } else {
+      log(`[DIRTY:${scope.kind}]`)
     }
     wakeForDirty("pointer")
   })

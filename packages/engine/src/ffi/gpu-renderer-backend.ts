@@ -1474,6 +1474,8 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       for (let i = 0; i < items.length; i++) {
         instances.set(pack(items[i]), i * stride)
       }
+      _dispatchCount++
+      _dispatchKinds.push(`k${cmdKind}:${items.length}`)
       flushVexartBatch(vctx, cmdKind, instances, targetHandle)
       items.length = 0
       first = false
@@ -1602,6 +1604,8 @@ export function createGpuRendererBackend(): GpuRendererBackend {
 
     let dirtyBounds: IntBounds | null = null
     let layerOpen = false
+    let _dispatchCount = 0
+    let _dispatchKinds: string[] = []
 
     frameGeneration += 1
     pruneBackdropCaches(frameGeneration)
@@ -1615,6 +1619,13 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       vexartCompositeTargetBeginLayer(vctx, targetHandle, 1, 0x00000000)
       layerOpen = true
     }
+
+    // Always open a layer with clear-to-transparent so that ALL dispatches
+    // within this renderFrame share the same GPU encoder. Without this,
+    // each flushVexartBatch creates a standalone encoder that clears the
+    // target on its first render pass — erasing content from prior dispatches.
+    vexartCompositeTargetBeginLayer(vctx, targetHandle, 0, 0x00000000)
+    layerOpen = true
 
     const stripBackdropEffectOp = (op: EffectRenderOp): EffectRenderOp => ({
       ...op,
@@ -2208,6 +2219,11 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       flushAll()
     } finally {
       if (layerOpen) vexartCompositeTargetEndLayer(vctx, targetHandle)
+    }
+
+    // DEBUG: Log dispatch count per renderFrame
+    if (_dispatchCount > 0) {
+      appendFileSync("/tmp/tge-layers.log", `[renderFrame] dispatches=${_dispatchCount} layerOpen=${layerOpen} ops=${ctx.graph.ops.length} kinds=[${_dispatchKinds.join(",")}]\n`)
     }
 
     if (first) return { ok: true as const, rawLayer: null }

@@ -498,7 +498,11 @@ function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; c
     cellHeight: s.term.size.cellHeight || 16,
     onChanged: () => {
       changed = true
-      if (visualNodeIds.size === 0) {
+      // When multiple visual nodes changed (e.g. focus lost + focus gained),
+      // mark all layers dirty to ensure full repaint. A per-node damageRect
+      // would only cover one node and leave siblings un-repainted after the
+      // layer clear — causing the "disappearing siblings" bug.
+      if (visualNodeIds.size === 0 || visualNodeIds.size > 1) {
         s.markDirty()
         s.markAllDirty()
         return

@@ -142,7 +142,7 @@ if (existsSync(vexartLib)) {
 
 const platformPkg = {
   name: platformPkgName,
-  version: "0.9.0-beta.0",
+  version: "0.9.0-beta.4",
   description: `Vexart native binary for ${platformTag}`,
   type: "module",
   os: [process.platform],
@@ -188,7 +188,7 @@ console.log("📋 Creating package.json...")
 
 const pkg = {
   name: "@vxrt/core",
-  version: "0.9.0-beta.0",
+  version: "0.9.0-beta.4",
   description: "Vexart GPU-accelerated terminal UI engine. Write JSX, get browser-quality UI in your terminal.",
   type: "module",
   main: "vexart.js",
@@ -218,7 +218,7 @@ const pkg = {
     "tree-sitter/",
   ],
   optionalDependencies: {
-    [platformPkgName]: "0.9.0-beta.0",
+    [platformPkgName]: "0.9.0-beta.4",
   },
   peerDependencies: {
     "solid-js": "^1.9.0",
@@ -250,5 +250,5 @@ console.log("To test locally:")
 console.log(`  cd dist/platform/${platformTag} && bun pack`)
 console.log("  cd dist && bun pack")
 console.log("  # In another project:")
-console.log("  bun add ../vexart/dist/vxrt-core-0.9.0-beta.0.tgz")
-console.log(`  bun add ../vexart/dist/platform/${platformTag}/vexart-${platformTag}-0.9.0-beta.0.tgz`)
+console.log("  bun add ../vexart/dist/vxrt-core-0.9.0-beta.4.tgz")
+console.log(`  bun add ../vexart/dist/platform/${platformTag}/vexart-${platformTag}-0.9.0-beta.4.tgz`)

@@ -121,6 +121,15 @@ export function createLayerStore(): LayerStore {
   const markAllDirty = () => {
     for (const layer of layers.values()) {
       layer.dirty = true
+      // Set damageRect to full layer bounds so that later
+      // applyPendingNodeDamage (which unions small per-node rects)
+      // cannot narrow the damage to a partial area. Without this,
+      // selectLayerDirtyRect returns the small damageRect instead
+      // of full bounds — causing siblings outside the rect to stay
+      // black after the layer is cleared and only partially repainted.
+      if (layer.width > 0 && layer.height > 0) {
+        layer.damageRect = { x: layer.x, y: layer.y, width: layer.width, height: layer.height }
+      }
     }
   }
 

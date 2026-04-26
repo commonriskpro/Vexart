@@ -175,6 +175,38 @@ describe("hasDirtySubtreeTransforms", () => {
   })
 })
 
+describe("markAllDirty preserves full damage after node-scoped damage", () => {
+  test("full damageRect survives applyPendingNodeDamage union", () => {
+    // Simulates focus change between two sibling buttons:
+    // 1. markAllDirty() sets layer.dirty=true + damageRect=full bounds
+    // 2. applyPendingNodeDamage adds small per-node rects
+    // The layer's damageRect must remain the full bounds (not shrink to the
+    // union of the two small rects), so selectLayerDirtyRect returns the
+    // full layer area — preventing siblings from disappearing.
+    const store = createLayerStore()
+    const layer = store.createLayer(-1)
+    store.updateLayerGeometry(layer, 0, 0, 320, 180, { moveOnly: false })
+    store.markLayerClean(layer)
+
+    // Step 1: markAllDirty — should set full damageRect
+    store.markAllDirty()
+    expect(layer.dirty).toBe(true)
+    expect(layer.damageRect).toEqual({ x: 0, y: 0, width: 320, height: 180 })
+
+    // Step 2: applyPendingNodeDamage would call markLayerDamaged with small rects
+    store.markLayerDamaged(layer, { x: 10, y: 20, width: 40, height: 30 })
+    store.markLayerDamaged(layer, { x: 10, y: 80, width: 40, height: 30 })
+
+    // The damageRect must still cover the full layer, not just the small rects
+    expect(layer.damageRect).toEqual({ x: 0, y: 0, width: 320, height: 180 })
+
+    // selectLayerDirtyRect should return the full bounds
+    const bounds = { x: 0, y: 0, width: 320, height: 180 }
+    const dirtyRect = selectLayerDirtyRect(layer.dirty, layer.damageRect, bounds)
+    expect(dirtyRect).toEqual(bounds)
+  })
+})
+
 describe("paintFrame monolithic overlapping windows", () => {
   test("repaints a dirty bg layer without scoped damage instead of skipping presentation", () => {
     const state = createPaintFrameState()

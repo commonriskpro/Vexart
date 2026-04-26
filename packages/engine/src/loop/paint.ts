@@ -671,6 +671,12 @@ export function paintFrame(
   let repaintedThisFrame = 0
   let nativePresentationStats: NativePresentationStats | null = null
 
+  // Trace paint decisions for damage debugging
+  if (dirtyLayerCountForFrame > 0) {
+    const ps = preparedSlots.map(p => `${p.slot.key}(d=${p.layer.dirty?1:0},dm=${p.layer.damageRect?`${Math.round(p.layer.damageRect.width)}x${Math.round(p.layer.damageRect.height)}`:"0"},r=${p.useRegionalRepaint?1:0})`).join(" ")
+    log(`[paint] strat=${framePlan?.strategy} dLayers=${dirtyLayerCountForFrame} dPx=${dirtyPixelArea} tPx=${totalPixelArea} full=${fullRepaint?1:0} pend=${pendingNodeDamageRects.length} ${ps}`)
+  }
+
   if (framePlan?.strategy === "skip-present") {
     const cleanupStart = profile ? performance.now() : 0
     ioMs += cleanupOrphanLayers(preparedSlots, layerCache, activeSlotKeys, state.transmissionMode, layerComposer, imageIdForLayer, removeLayer, debugCadence)

@@ -8,6 +8,7 @@
 - [Quick Start](#quick-start)
   - [Installation](#installation)
   - [Requirements](#requirements)
+  - [Import Model](#import-model)
   - [Minimal App](#minimal-app)
   - [The `--conditions=browser` Flag](#the---conditionsbrowser-flag)
 - [Core Concepts](#core-concepts)
@@ -41,11 +42,11 @@
   - [useMutation](#usemutationmutator-options)
   - [useTerminalDimensions](#useterminaldimensionsterminal)
   - [markDirty](#markdirty)
-- [Components (`@vexart/headless`)](#components-vexartheadless)
+- [Components (Headless)](#components-headless)
   - [Component Architecture](#component-architecture)
   - [Complete Component Reference](#complete-component-reference)
   - [createForm — Form Validation](#createform--form-validation)
-- [Design System (`@vexart/styled`)](#design-system-vexartstyled)
+- [Design System (Styled)](#design-system-styled)
   - [Tokens](#tokens)
   - [Theming](#theming)
   - [Void Components](#void-components)
@@ -59,9 +60,8 @@
   - [Global Keyboard Shortcuts](#global-keyboard-shortcuts)
   - [Animated Transitions](#animated-transitions)
 - [API Quick Reference](#api-quick-reference)
-  - [`@vexart/engine` (engine)](#vexart-engine)
-  - [`@vexart/headless`](#vexartheadless-1)
-  - [`@vexart/styled`](#vexartstyled-1)
+  - [`@vxrt/core`](#vxrt-core)
+  - [`@vxrt/core/engine`](#vxrt-core-engine)
 
 ---
 
@@ -70,8 +70,40 @@
 ### Installation
 
 ```bash
-bun add vexart
+bun add @vxrt/core@beta solid-js
+bun add -d @babel/core @babel/preset-typescript babel-preset-solid
 ```
+
+### JSX Setup
+
+Vexart uses SolidJS, which requires a custom JSX transform (different from React's).
+You need two configuration files in your project root:
+
+**`bunfig.toml`** — tells Bun to preload the Solid JSX plugin before running `.tsx` files:
+
+```toml
+preload = ["@vxrt/core/solid-plugin"]
+```
+
+**`tsconfig.json`** — tells TypeScript to use Vexart's JSX types:
+
+```json
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "jsxImportSource": "@vxrt/core",
+    "strict": true,
+    "noEmit": true
+  }
+}
+```
+
+Without `bunfig.toml`, Bun interprets JSX as React and you get
+`Cannot find module "react/jsx-dev-runtime"`. Without the preload,
+SolidJS reactivity breaks — components render once but never update.
 
 ### Requirements
 
@@ -79,10 +111,27 @@ bun add vexart
 - **Terminal with Kitty graphics protocol** — Kitty, Ghostty, or WezTerm. The Kitty protocol transmits pixel data directly to the terminal GPU. Standard terminals (iTerm2, Terminal.app, Windows Terminal) are not supported.
 - **macOS ARM64** — The shipped native binary (`libvexart.dylib`) is currently ARM64 Darwin only. Linux and x86 builds are planned.
 
+### Import Model
+
+Vexart uses a two-tier import structure:
+
+| Import | What it provides |
+|--------|-----------------|
+| `@vxrt/core` | Everything for app development — components, design tokens, hooks, SolidJS primitives (`createSignal`, `For`, `Show`, etc.), headless components, styled components. This is the only import most apps need. |
+| `@vxrt/core/engine` | Low-level engine access — FFI bridge, render loop, terminal management, focus system internals, pointer capture, debug utilities, tree-sitter, font registration. Only needed for advanced use cases. |
+
+```tsx
+// App-level imports — covers 95% of use cases
+import { createSignal, For, Show, createApp, Button, Input, colors } from "@vxrt/core"
+
+// Low-level engine access — only when needed
+import { useFocus, setFocus, toggleDebug, registerFont } from "@vxrt/core/engine"
+```
+
 ### Minimal App
 
 ```tsx
-import { createApp } from "@vexart/app"
+import { createApp } from "@vxrt/core"
 
 function App() {
   return (
@@ -141,6 +190,90 @@ For convenience, add a script to your `package.json`:
 }
 ```
 
+### Complete Project Setup (copy-paste)
+
+Here is the full setup sequence for a new Vexart project:
+
+```bash
+mkdir my-app && cd my-app
+bun init -y
+bun add @vxrt/core@beta solid-js
+bun add -d @babel/core @babel/preset-typescript babel-preset-solid
+```
+
+Create `bunfig.toml`:
+
+```toml
+preload = ["@vxrt/core/solid-plugin"]
+```
+
+Create `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "jsxImportSource": "@vxrt/core",
+    "strict": true,
+    "noEmit": true
+  }
+}
+```
+
+Add to `package.json`:
+
+```json
+{
+  "scripts": {
+    "dev": "bun --conditions=browser run src/app.tsx"
+  }
+}
+```
+
+Create `src/app.tsx`:
+
+```tsx
+import { createApp, Box, Text, colors, radius, space } from "@vxrt/core"
+
+function App() {
+  return (
+    <Box
+      width="100%"
+      height="100%"
+      backgroundColor={colors.background}
+      alignX="center"
+      alignY="center"
+    >
+      <Box
+        backgroundColor={colors.card}
+        cornerRadius={radius.xl}
+        padding={space[6]}
+        direction="column"
+        gap={space[2]}
+      >
+        <Text color={colors.foreground} fontSize={16}>
+          Hello from Vexart
+        </Text>
+        <Text color={colors.mutedForeground} fontSize={12}>
+          Press Ctrl+C to exit
+        </Text>
+      </Box>
+    </Box>
+  )
+}
+
+await createApp(() => <App />)
+```
+
+Run:
+
+```bash
+bun run dev
+```
+
 ---
 
 ## Core Concepts
@@ -185,8 +318,7 @@ Vexart uses **SolidJS**, not React. The key differences:
 - **No `useMemo`/`useCallback`.** Fine-grained reactivity makes them unnecessary.
 
 ```tsx
-import { createSignal } from "solid-js"
-import { Show, For } from "@vexart/engine"
+import { createSignal, Show, For } from "@vxrt/core"
 
 function Counter() {
   const [count, setCount] = createSignal(0)
@@ -216,7 +348,7 @@ function Counter() {
 **Control flow** uses components, not ternaries:
 
 ```tsx
-import { Show, For } from "@vexart/engine"
+import { Show, For } from "@vxrt/core"
 
 // Conditional rendering
 <Show when={isVisible()}>
@@ -258,7 +390,6 @@ Use `direction="row"` explicitly for horizontal layout:
 ```
 
 The terminal window resizes automatically. When the terminal is resized, Vexart detects the new dimensions, re-runs Flexily layout, and re-paints. Your layout adapts if you use relative sizing (`width="100%"`, `width="grow"`).
-
 ---
 
 ## `<box>` — Complete Prop Reference
@@ -651,7 +782,7 @@ Vexart provides declarative hover/active/focus styles. No manual signal boilerpl
 </box>
 
 // Programmatic scroll
-import { createScrollHandle } from "@vexart/engine"
+import { createScrollHandle } from "@vxrt/core/engine"
 
 const handle = createScrollHandle("my-list")
 handle.scrollTo(0)       // scroll to top
@@ -851,7 +982,7 @@ Colors are parsed **once** when the prop is set (during reconciliation), not per
 **Reactive theme colors:**
 
 ```tsx
-import { themeColors } from "@vexart/styled"
+import { themeColors } from "@vxrt/core"
 
 // themeColors properties are reactive getters — they update when the theme changes
 <box backgroundColor={themeColors.primary} />
@@ -861,7 +992,7 @@ import { themeColors } from "@vexart/styled"
 **The RGBA class:**
 
 ```tsx
-import { RGBA } from "@vexart/engine"
+import { RGBA } from "@vxrt/core"
 
 const red = new RGBA(255, 0, 0, 255)
 const blue = RGBA.fromHex("#0000ff")
@@ -885,7 +1016,7 @@ Shadow colors **must** be u32 numbers. They bypass the color parser and go direc
 ### Void design tokens (quick reference)
 
 ```tsx
-import { colors, radius, space, font, weight, shadows } from "@vexart/styled"
+import { colors, radius, space, font, weight, shadows } from "@vxrt/core"
 
 colors.background       // 0x141414ff — app background
 colors.foreground       // 0xfafafaff — default text
@@ -934,7 +1065,6 @@ shadows.xl   // dramatic elevation
 ```
 
 ---
-
 ## Hooks & Signals
 
 Vexart hooks return SolidJS signals -- reactive getters that automatically re-render your component when the value changes. If you know React hooks, these work similarly but without the rules-of-hooks constraints.
@@ -942,7 +1072,7 @@ Vexart hooks return SolidJS signals -- reactive getters that automatically re-re
 ### useFocus(opts?)
 
 ```typescript
-import { useFocus } from "@vexart/engine"
+import { useFocus } from "@vxrt/core/engine"
 
 type FocusHandle = {
   focused: () => boolean    // reactive signal -- true when this element has focus
@@ -969,7 +1099,8 @@ function useFocus(opts?: {
 **Custom interactive component:**
 
 ```tsx
-import { useFocus, Show } from "@vexart/engine"
+import { useFocus } from "@vxrt/core/engine"
+import { Show } from "@vxrt/core"
 
 function ToggleCard(props: { label: string; active: boolean; onToggle: () => void }) {
   const { focused } = useFocus({
@@ -999,7 +1130,7 @@ function ToggleCard(props: { label: string; active: boolean; onToggle: () => voi
 Subscribe to all keyboard events as a reactive signal.
 
 ```typescript
-import { useKeyboard } from "@vexart/engine"
+import { useKeyboard } from "@vxrt/core"
 
 type KeyboardState = {
   key: () => KeyEvent | null     // last key event
@@ -1033,7 +1164,7 @@ function StatusBar() {
 Subscribe to mouse events as a reactive signal.
 
 ```typescript
-import { useMouse } from "@vexart/engine"
+import { useMouse } from "@vxrt/core"
 
 type MouseState = {
   mouse: () => MouseEvent | null              // last mouse event
@@ -1059,7 +1190,7 @@ type MouseEvent = {
 Low-level hook -- subscribe to ALL input events (key, mouse, paste, focus).
 
 ```typescript
-import { useInput } from "@vexart/engine"
+import { useInput } from "@vxrt/core"
 
 function DebugInput() {
   const event = useInput()
@@ -1076,7 +1207,7 @@ Returns `() => InputEvent | null` where `InputEvent` is `KeyEvent | MouseEvent |
 Global event bus -- not a hook, not reactive. Registers a callback for all input events. Returns an unsubscribe function.
 
 ```typescript
-import { onInput } from "@vexart/engine"
+import { onInput } from "@vxrt/core"
 
 const unsub = onInput((event) => {
   if (event.type === "key" && event.key === "q" && event.mods.ctrl) {
@@ -1102,7 +1233,7 @@ const unsub = onInput((event) => {
 Creates a focus trap -- `Tab`/`Shift+Tab` only cycles within the scope. Used internally by `Dialog`. Returns a cleanup function.
 
 ```typescript
-import { pushFocusScope } from "@vexart/engine"
+import { pushFocusScope } from "@vxrt/core/engine"
 
 // Inside a component:
 const popScope = pushFocusScope()
@@ -1122,7 +1253,7 @@ onCleanup(popScope) // restore previous scope
 Animate numeric values with easing. Returns `[getter, setter]`.
 
 ```typescript
-import { createTransition, easing } from "@vexart/engine"
+import { createTransition, easing } from "@vxrt/core"
 
 type TransitionConfig = {
   duration?: number    // ms, default 300
@@ -1158,7 +1289,7 @@ setWidth(300) // animates from 100 → 300 over 300ms
 Physics-based spring animation. Returns `[getter, setter]`.
 
 ```typescript
-import { createSpring } from "@vexart/engine"
+import { createSpring } from "@vxrt/core"
 
 type SpringConfig = {
   stiffness?: number    // default 170
@@ -1182,7 +1313,7 @@ setY(-100) // spring toward -100
 Reactive data fetching.
 
 ```typescript
-import { useQuery } from "@vexart/engine"
+import { useQuery } from "@vxrt/core"
 
 type QueryResult<T> = {
   data: () => T | undefined
@@ -1201,6 +1332,9 @@ type QueryOptions = {
 ```
 
 ```tsx
+import { useQuery } from "@vxrt/core"
+import { Show, For } from "@vxrt/core"
+
 function UserList() {
   const users = useQuery(
     () => fetch("https://api.example.com/users").then(r => r.json()),
@@ -1232,7 +1366,7 @@ function UserList() {
 Reactive data mutation with optimistic updates.
 
 ```typescript
-import { useMutation } from "@vexart/engine"
+import { useMutation } from "@vxrt/core"
 
 type MutationResult<T, V> = {
   data: () => T | undefined
@@ -1276,7 +1410,7 @@ const deleteUser = useMutation(
 Reactive terminal size that updates on resize.
 
 ```typescript
-import { useTerminalDimensions } from "@vexart/engine"
+import { useTerminalDimensions } from "@vxrt/core"
 
 const dims = useTerminalDimensions(terminal)
 
@@ -1295,7 +1429,7 @@ dims.cellHeight()  // pixel height per cell
 Force a repaint on the next frame. Normally Vexart repaints automatically when signals change. Use this when you mutate external state that Vexart can't track.
 
 ```typescript
-import { markDirty } from "@vexart/engine"
+import { markDirty } from "@vxrt/core/engine"
 
 externalStore.update(newData)
 markDirty() // tell Vexart to repaint
@@ -1308,7 +1442,7 @@ markDirty() // tell Vexart to repaint
 Encapsulates drag interactions — pointer capture, `isDragging` flag, and mouse event wiring. Returns `dragProps` to spread on the drag target.
 
 ```typescript
-import { useDrag } from "@vexart/engine"
+import { useDrag } from "@vxrt/core/engine"
 
 type DragOptions = {
   onDragStart?: (event: NodeMouseEvent) => void
@@ -1324,6 +1458,8 @@ type DragState = {
 ```
 
 ```tsx
+import { useDrag } from "@vxrt/core/engine"
+
 function Scrubber(props: { value: number; onChange: (v: number) => void }) {
   const { dragging, dragProps } = useDrag({
     onDragStart: (e) => props.onChange(Math.round((e.nodeX / e.width) * 100)),
@@ -1347,7 +1483,7 @@ The Slider component uses `useDrag` internally.
 Encapsulates hover detection with configurable enter/leave delays. Returns `hovered` signal and `hoverProps` to spread on the target.
 
 ```typescript
-import { useHover } from "@vexart/engine"
+import { useHover } from "@vxrt/core/engine"
 
 type HoverOptions = {
   delay?: number          // ms before onEnter (default: 0)
@@ -1363,6 +1499,8 @@ type HoverState = {
 ```
 
 ```tsx
+import { useHover } from "@vxrt/core/engine"
+
 function HoverCard(props: { children: any }) {
   const { hovered, hoverProps } = useHover({
     delay: 300,
@@ -1378,17 +1516,14 @@ function HoverCard(props: { children: any }) {
 ```
 
 The Tooltip component uses `useHover` internally for delayed show/hide.
-
----
-
-## Components (`@vexart/headless`)
+## Components (`@vxrt/core`)
 
 ### Component Architecture
 
 Vexart components follow a **headless** pattern inspired by Radix UI and Headless UI:
 
-- `@vexart/headless` = **behavior only**, zero visual output
-- `@vexart/styled` = **pre-styled** versions using Void design tokens
+- `@vxrt/core` headless components = **behavior only**, zero visual output
+- `@vxrt/core` styled components = **pre-styled** versions using Void design tokens
 
 There are two headless patterns:
 
@@ -1415,7 +1550,7 @@ There are two headless patterns:
 />
 ```
 
-**Web analogy:** `@vexart/headless` is Radix Primitives. `@vexart/styled` is shadcn/ui.
+**Web analogy:** Headless components in `@vxrt/core` are like Radix Primitives. Styled components in `@vxrt/core` are like shadcn/ui.
 
 ---
 
@@ -1426,7 +1561,7 @@ There are two headless patterns:
 Layout container. Thin wrapper over the `<box>` intrinsic with typed props.
 
 ```typescript
-import { Box } from "@vexart/primitives"
+import { Box } from "@vxrt/core"
 
 type BoxProps = {
   direction?: "row" | "column"      // default: "column"
@@ -1460,7 +1595,7 @@ type BoxProps = {
 Text display with color and font settings.
 
 ```typescript
-import { Text } from "@vexart/primitives"
+import { Text } from "@vxrt/core"
 
 type TextProps = {
   color?: string | number
@@ -1487,8 +1622,8 @@ type TextProps = {
 Scrollable container with visual scrollbar. Content that overflows is clipped.
 
 ```typescript
-import { ScrollView } from "@vexart/headless"
-import type { ScrollHandle } from "@vexart/headless"
+import { ScrollView } from "@vxrt/core"
+import type { ScrollHandle } from "@vxrt/core/engine"
 
 type ScrollViewProps = {
   ref?: (handle: ScrollHandle) => void
@@ -1528,7 +1663,7 @@ let scrollRef: ScrollHandle
 Headless interactive button. Focus-aware with Enter/Space activation.
 
 ```typescript
-import { Button } from "@vexart/headless"
+import { Button } from "@vxrt/core"
 
 type ButtonRenderContext = {
   focused: boolean
@@ -1569,7 +1704,7 @@ type ButtonProps = {
 Headless single-line text input. Controlled component.
 
 ```typescript
-import { Input } from "@vexart/headless"
+import { Input } from "@vxrt/core"
 
 type InputRenderContext = {
   value: string
@@ -1619,8 +1754,8 @@ const [name, setName] = createSignal("")
 Multi-line text editor with 2D cursor, syntax highlighting, extmarks, and configurable key bindings.
 
 ```typescript
-import { Textarea } from "@vexart/headless"
-import type { TextareaHandle, TextareaTheme } from "@vexart/headless"
+import { Textarea } from "@vxrt/core"
+import type { TextareaHandle, TextareaTheme } from "@vxrt/core"
 
 type TextareaTheme = {
   accent: string | number
@@ -1694,7 +1829,7 @@ let ref: TextareaHandle
 Headless toggleable checkbox. Controlled component.
 
 ```typescript
-import { Checkbox } from "@vexart/headless"
+import { Checkbox } from "@vxrt/core"
 
 type CheckboxRenderContext = {
   checked: boolean
@@ -1733,31 +1868,33 @@ type CheckboxProps = {
 
 ---
 
-#### 8. Switch
+#### 8. ToggleSwitch
 
 Headless toggle switch. Controlled component.
 
-```typescript
-import { Switch } from "@vexart/headless"
+> **Note:** Exported as `ToggleSwitch` (not `Switch`) to avoid collision with the SolidJS `Switch` control flow component.
 
-type SwitchRenderContext = {
+```typescript
+import { ToggleSwitch } from "@vxrt/core"
+
+type ToggleSwitchRenderContext = {
   checked: boolean
   focused: boolean
   disabled: boolean
   toggleProps: { focusable: true; onPress: (event?: PressEvent) => void }  // spread on root element
 }
 
-type SwitchProps = {
+type ToggleSwitchProps = {
   checked: boolean
   onChange?: (checked: boolean) => void
   disabled?: boolean
   focusId?: string
-  renderSwitch: (ctx: SwitchRenderContext) => JSX.Element  // REQUIRED
+  renderSwitch: (ctx: ToggleSwitchRenderContext) => JSX.Element  // REQUIRED
 }
 ```
 
 ```tsx
-<Switch
+<ToggleSwitch
   checked={darkMode()}
   onChange={setDarkMode}
   renderSwitch={({ checked, focused }) => (
@@ -1783,7 +1920,7 @@ type SwitchProps = {
 Headless radio button group. Controlled component with Up/Down navigation.
 
 ```typescript
-import { RadioGroup } from "@vexart/headless"
+import { RadioGroup } from "@vxrt/core"
 
 type RadioOption = { value: string; label: string; disabled?: boolean }
 
@@ -1836,7 +1973,7 @@ type RadioGroupProps = {
 Headless dropdown select. Controlled component with keyboard navigation.
 
 ```typescript
-import { Select } from "@vexart/headless"
+import { Select } from "@vxrt/core"
 
 type SelectOption = { value: string; label: string; disabled?: boolean }
 
@@ -1903,7 +2040,7 @@ type SelectProps = {
 Headless autocomplete with text filtering. Controlled component.
 
 ```typescript
-import { Combobox } from "@vexart/headless"
+import { Combobox } from "@vxrt/core"
 
 type ComboboxOption = { value: string; label: string; disabled?: boolean }
 
@@ -1968,7 +2105,7 @@ type ComboboxProps = {
 Headless numeric range input. Controlled component.
 
 ```typescript
-import { Slider } from "@vexart/headless"
+import { Slider } from "@vxrt/core"
 
 type SliderRenderContext = {
   value: number
@@ -2037,7 +2174,7 @@ type SliderProps = {
 Headless tab switcher. Controlled component.
 
 ```typescript
-import { Tabs } from "@vexart/headless"
+import { Tabs } from "@vxrt/core"
 
 type TabItem = { label: string; content: () => JSX.Element }
 type TabRenderContext = { active: boolean; focused: boolean; index: number; tabProps: { onPress: (event?: PressEvent) => void } }
@@ -2079,7 +2216,7 @@ type TabsProps = {
 Headless selectable list with Up/Down navigation.
 
 ```typescript
-import { List } from "@vexart/headless"
+import { List } from "@vxrt/core"
 
 type ListItemContext = { selected: boolean; focused: boolean; index: number; itemProps: { onPress: (event?: PressEvent) => void } }
 
@@ -2118,7 +2255,7 @@ type ListProps = {
 Headless data table with row selection.
 
 ```typescript
-import { Table } from "@vexart/headless"
+import { Table } from "@vxrt/core"
 
 type TableColumn = { key: string; header: string; width?: number | "grow"; align?: "left" | "center" | "right" }
 type TableCellContext = { selected: boolean; focused: boolean; rowIndex: number; rowProps: { onPress: (event?: PressEvent) => void } }
@@ -2164,7 +2301,7 @@ type TableProps = {
 Headless progress indicator. Pure visual, no focus.
 
 ```typescript
-import { ProgressBar } from "@vexart/headless"
+import { ProgressBar } from "@vxrt/core"
 
 type ProgressBarRenderContext = {
   ratio: number          // 0-1
@@ -2204,7 +2341,7 @@ type ProgressBarProps = {
 Headless modal dialog. Compound component with focus trap.
 
 ```typescript
-import { Dialog } from "@vexart/headless"
+import { Dialog } from "@vxrt/core"
 
 type DialogProps = { children?: any; onClose?: () => void }
 type DialogOverlayProps = { backgroundColor?: string | number; backdropBlur?: number }
@@ -2251,7 +2388,7 @@ type DialogCloseProps = { children?: any }
 Headless tooltip on hover.
 
 ```typescript
-import { Tooltip } from "@vexart/headless"
+import { Tooltip } from "@vxrt/core"
 
 type TooltipProps = {
   content: string
@@ -2285,7 +2422,7 @@ type TooltipProps = {
 Headless popover panel. Controlled open/close.
 
 ```typescript
-import { Popover } from "@vexart/headless"
+import { Popover } from "@vxrt/core"
 
 type PopoverTriggerContext = { open: boolean; toggle: () => void }
 
@@ -2325,7 +2462,7 @@ type PopoverProps = {
 Imperative toast notification system.
 
 ```typescript
-import { createToaster } from "@vexart/headless"
+import { createToaster } from "@vxrt/core"
 
 type ToastData = { id: number; message: string; variant: ToastVariant; duration: number; description?: string }
 type ToastVariant = "default" | "success" | "error" | "warning" | "info"
@@ -2376,7 +2513,7 @@ Two navigation models for terminal apps.
 **Flat routing** (dashboard-style):
 
 ```tsx
-import { Router, Route, useRouterContext } from "@vexart/headless"
+import { Router, Route, useRouterContext } from "@vxrt/core"
 
 <Router initial="home">
   <Route path="home" component={HomeScreen} />
@@ -2401,7 +2538,7 @@ function HomeScreen(props: RouteProps) {
 **Stack routing** (wizard/drill-down):
 
 ```tsx
-import { NavigationStack, useStack } from "@vexart/headless"
+import { NavigationStack, useStack } from "@vxrt/core"
 
 <NavigationStack initial={HomeScreen}>
   {(screen) => <box width="100%" height="100%">{screen()}</box>}
@@ -2450,7 +2587,7 @@ function DetailScreen(props: ScreenProps) {
 Virtualized list for large datasets. Only renders visible items.
 
 ```typescript
-import { VirtualList } from "@vexart/headless"
+import { VirtualList } from "@vxrt/core"
 
 type VirtualListItemContext = {
   selected: boolean
@@ -2500,7 +2637,7 @@ type VirtualListProps<T> = {
 Renders children above all content in a separate compositing layer.
 
 ```typescript
-import { Portal } from "@vexart/headless"
+import { Portal } from "@vxrt/core"
 
 type PortalProps = { children?: JSX.Element }
 ```
@@ -2524,7 +2661,7 @@ type PortalProps = { children?: JSX.Element }
 Syntax-highlighted code block with tree-sitter tokenization.
 
 ```typescript
-import { Code } from "@vexart/headless"
+import { Code } from "@vxrt/core"
 
 type CodeTheme = { bg: string | number; lineNumberFg: string | number; radius: number; padding: number }
 
@@ -2539,7 +2676,7 @@ type CodeProps = {
 ```
 
 ```tsx
-import { ONE_DARK } from "@vexart/engine"
+import { ONE_DARK } from "@vxrt/core/engine"
 
 <Code
   content={`const x = 42;\nconsole.log(x);`}
@@ -2557,7 +2694,7 @@ import { ONE_DARK } from "@vexart/engine"
 Markdown renderer with inline styling. Uses `marked` lexer internally.
 
 ```typescript
-import { Markdown } from "@vexart/headless"
+import { Markdown } from "@vxrt/core"
 
 type MarkdownTheme = {
   fg: string | number; muted: string | number; heading: string | number
@@ -2593,7 +2730,7 @@ type MarkdownProps = {
 Unified diff viewer with per-line coloring and syntax highlighting.
 
 ```typescript
-import { Diff } from "@vexart/headless"
+import { Diff } from "@vxrt/core"
 
 type DiffTheme = {
   fg: string | number; muted: string | number; bg: string | number; radius: number
@@ -2629,7 +2766,7 @@ type DiffProps = {
 Multi-span inline text.
 
 ```typescript
-import { RichText, Span } from "@vexart/primitives"
+import { RichText, Span } from "@vxrt/core"
 
 type RichTextProps = { color?: string | number; children?: JSX.Element }
 type SpanProps = { color?: string | number; fontSize?: number; fontWeight?: number; fontStyle?: "normal" | "italic"; children?: JSX.Element }
@@ -2650,7 +2787,7 @@ type SpanProps = { color?: string | number; fontSize?: number; fontWeight?: numb
 Flex-wrap workaround for Flexily (which doesn't support `flexWrap`).
 
 ```typescript
-import { WrapRow } from "@vexart/primitives"
+import { WrapRow } from "@vxrt/core"
 
 type WrapRowProps = {
   width: number          // total available width
@@ -2680,7 +2817,7 @@ type WrapRowProps = {
 Factory function that creates reactive form state with validation.
 
 ```typescript
-import { createForm } from "@vexart/headless"
+import { createForm } from "@vxrt/core"
 
 type FormOptions<T> = {
   initialValues: T
@@ -2710,9 +2847,9 @@ type FormHandle<T> = {
 **Full form example:**
 
 ```tsx
-import { createForm } from "@vexart/headless"
-import { Input, Button } from "@vexart/headless"
-import { Show, createSignal } from "@vexart/engine"
+import { createForm } from "@vxrt/core"
+import { Input, Button } from "@vxrt/core"
+import { Show, createSignal } from "@vxrt/core"
 
 function SignupForm() {
   const form = createForm({
@@ -2782,19 +2919,16 @@ function SignupForm() {
   )
 }
 ```
-
----
-
-## Design System (`@vexart/styled`)
+## Design System
 
 ### Tokens
 
-All token exports from `@vexart/styled`:
+All design tokens are exported from `@vxrt/core`:
 
 #### colors
 
 ```typescript
-import { colors } from "@vexart/styled"
+import { colors } from "@vxrt/core"
 
 colors.background           // "#0a0a0a"    — app background (near-OLED black)
 colors.foreground           // "#fafafa"    — default text
@@ -2821,7 +2955,7 @@ colors.transparent          // "#00000000"  — transparent
 #### radius
 
 ```typescript
-import { radius } from "@vexart/styled"
+import { radius } from "@vxrt/core"
 
 radius.sm    // 6
 radius.md    // 8
@@ -2834,7 +2968,7 @@ radius.full  // 9999 (pill)
 #### space
 
 ```typescript
-import { space } from "@vexart/styled"
+import { space } from "@vxrt/core"
 
 space.px     // 1
 space[0.5]   // 2
@@ -2856,7 +2990,7 @@ space[10]    // 40
 #### font
 
 ```typescript
-import { font } from "@vexart/styled"
+import { font } from "@vxrt/core"
 
 font.xs      // 10
 font.sm      // 12
@@ -2871,7 +3005,7 @@ font["4xl"]  // 36
 #### weight
 
 ```typescript
-import { weight } from "@vexart/styled"
+import { weight } from "@vxrt/core"
 
 weight.normal    // 400
 weight.medium    // 500
@@ -2882,7 +3016,7 @@ weight.bold      // 700
 #### shadows
 
 ```typescript
-import { shadows } from "@vexart/styled"
+import { shadows } from "@vxrt/core"
 
 // Each preset is an array of ShadowConfig objects (multi-shadow for depth)
 shadows.sm   // subtle lift
@@ -2917,7 +3051,7 @@ Use `themeColors` in JSX props. Use `colors` for static config or conditions.
 Create a theme definition by merging overrides with default tokens:
 
 ```typescript
-import { createTheme } from "@vexart/styled"
+import { createTheme } from "@vxrt/core"
 
 const myTheme = createTheme({
   colors: {
@@ -2933,7 +3067,7 @@ const myTheme = createTheme({
 Switch theme at runtime. Only components reading `themeColors` re-render:
 
 ```typescript
-import { setTheme, darkTheme, lightTheme, createTheme } from "@vexart/styled"
+import { setTheme, darkTheme, lightTheme, createTheme } from "@vxrt/core"
 
 setTheme(lightTheme)    // built-in light theme
 setTheme(darkTheme)     // built-in dark theme (default)
@@ -2952,7 +3086,7 @@ setTheme(myTheme)       // custom theme
 Component wrapper for nested themes. For most apps, global `setTheme()` is sufficient:
 
 ```tsx
-import { ThemeProvider } from "@vexart/styled"
+import { ThemeProvider } from "@vxrt/core"
 
 <ThemeProvider theme={myTheme}>
   {/* children use myTheme */}
@@ -2962,9 +3096,8 @@ import { ThemeProvider } from "@vexart/styled"
 #### Theme switching example
 
 ```tsx
-import { createTheme, setTheme, darkTheme, lightTheme, themeColors } from "@vexart/styled"
-import { Switch } from "@vexart/headless"
-import { createSignal } from "@vexart/engine"
+import { createTheme, setTheme, darkTheme, lightTheme, themeColors } from "@vxrt/core"
+import { ToggleSwitch, createSignal } from "@vxrt/core"
 
 const catppuccin = createTheme({
   colors: {
@@ -3001,25 +3134,27 @@ function ThemeSwitcher() {
 
 Pre-styled components using Void design tokens. Drop-in replacements for headless components.
 
-| Component | Variants | Sizes | Import |
-| --------- | -------- | ----- | ------ |
-| `Button` | default, secondary, outline, ghost, destructive | xs, sm, default, lg | `@vexart/styled` |
-| `Card` | default, sm | -- | `@vexart/styled` |
-| `CardHeader` | -- | -- | `@vexart/styled` |
-| `CardTitle` | -- | -- | `@vexart/styled` |
-| `CardDescription` | -- | -- | `@vexart/styled` |
-| `CardContent` | -- | -- | `@vexart/styled` |
-| `CardFooter` | -- | -- | `@vexart/styled` |
-| `Badge` | default, secondary, outline, destructive | -- | `@vexart/styled` |
-| `Separator` | horizontal, vertical | -- | `@vexart/styled` |
-| `Avatar` | -- | sm, default, lg | `@vexart/styled` |
-| `Skeleton` | -- | -- | `@vexart/styled` |
-| `VoidDialog` | -- | -- | `@vexart/styled` |
-| `VoidSelect` | -- | -- | `@vexart/styled` |
-| `VoidSwitch` | -- | -- | `@vexart/styled` |
-| `VoidRadioGroup` | -- | -- | `@vexart/styled` |
-| `VoidTable` | -- | -- | `@vexart/styled` |
-| `createVoidToaster` | -- | -- | `@vexart/styled` |
+| Component | Variants | Sizes |
+| --------- | -------- | ----- |
+| `Button` | default, secondary, outline, ghost, destructive | xs, sm, default, lg |
+| `Card` | default, sm | -- |
+| `CardHeader` | -- | -- |
+| `CardTitle` | -- | -- |
+| `CardDescription` | -- | -- |
+| `CardContent` | -- | -- |
+| `CardFooter` | -- | -- |
+| `Badge` | default, secondary, outline, destructive | -- |
+| `Separator` | horizontal, vertical | -- |
+| `Avatar` | -- | sm, default, lg |
+| `Skeleton` | -- | -- |
+| `VoidDialog` | -- | -- |
+| `VoidSelect` | -- | -- |
+| `VoidSwitch` | -- | -- |
+| `VoidRadioGroup` | -- | -- |
+| `VoidTable` | -- | -- |
+| `createVoidToaster` | -- | -- |
+
+All imported from `@vxrt/core`.
 
 **Typography components:**
 
@@ -3036,7 +3171,7 @@ Pre-styled components using Void design tokens. Drop-in replacements for headles
 | `Muted` | 14px | normal | mutedForeground |
 
 ```tsx
-import { Button, Card, CardHeader, CardTitle, CardContent, Badge, H2, P, Muted } from "@vexart/styled"
+import { Button, Card, CardHeader, CardTitle, CardContent, Badge, H2, P, Muted } from "@vxrt/core"
 
 <Card>
   <CardHeader>
@@ -3086,8 +3221,7 @@ See [`manual/creating-theme-packages.md`](./creating-theme-packages.md) for a gu
 ### Form with Validation
 
 ```tsx
-import { createForm, Input, Button } from "@vexart/headless"
-import { Show } from "@vexart/engine"
+import { createForm, Input, Button, Show } from "@vxrt/core"
 
 const form = createForm({
   initialValues: { email: "" },
@@ -3126,8 +3260,8 @@ const form = createForm({
 ### Multi-Screen App with Router
 
 ```tsx
-import { Router, Route, useRouterContext } from "@vexart/headless"
-import type { RouteProps } from "@vexart/engine"
+import { Router, Route, useRouterContext } from "@vxrt/core"
+import type { RouteProps } from "@vxrt/core/engine"
 
 function App() {
   return (
@@ -3184,8 +3318,7 @@ function About(props: RouteProps) {
 ### Modal Dialog
 
 ```tsx
-import { Dialog, Button } from "@vexart/headless"
-import { Show, createSignal } from "@vexart/engine"
+import { Dialog, Button, Show, createSignal } from "@vxrt/core"
 
 const [open, setOpen] = createSignal(false)
 
@@ -3231,7 +3364,7 @@ const [open, setOpen] = createSignal(false)
 ### Virtualized Data Table
 
 ```tsx
-import { VirtualList } from "@vexart/headless"
+import { VirtualList, createSignal } from "@vxrt/core"
 
 // Generate 10K items
 const items = Array.from({ length: 10_000 }, (_, i) => ({
@@ -3266,7 +3399,7 @@ const [selected, setSelected] = createSignal(-1)
 ### Global Keyboard Shortcuts
 
 ```tsx
-import { onInput } from "@vexart/engine"
+import { onInput } from "@vxrt/core"
 
 onInput((event) => {
   if (event.type !== "key") return
@@ -3293,7 +3426,7 @@ onInput((event) => {
 ### Animated Transitions
 
 ```tsx
-import { createTransition, createSpring, easing, createSignal } from "@vexart/engine"
+import { createTransition, createSpring, easing, createSignal } from "@vxrt/core"
 
 function AnimatedPanel() {
   const [expanded, setExpanded] = createSignal(false)
@@ -3337,146 +3470,338 @@ function AnimatedPanel() {
 
 ---
 
+## Best Practices
+
+### Project structure
+
+Organize application code by concern. A recommended layout for a Vexart app:
+
+```
+src/
+  layout/          — shell, sidebar, status bar, top-level containers
+  views/           — route-level screens (each maps to a Router path)
+  components/      — reusable UI pieces shared across views
+  lib/             — non-UI helpers: data fetching, formatting, constants
+  main.tsx         — entry point (mount + router setup)
+```
+
+Keep files small. One component per file. Co-locate a component's types and helpers in the same file unless they are shared elsewhere.
+
+### Component composition
+
+Choose the right abstraction level for the job:
+
+1. **Styled components first** (`Button`, `Card`, `Badge`, etc. from `@vxrt/core`). These cover 80% of UI needs with zero configuration.
+2. **Headless components** when you need full visual control. Drop to `Input`, `Dialog`, `Tabs`, `VirtualList`, etc. with a `render*` prop to supply your own layout.
+3. **Raw `<box>` / `<text>`** for one-off layouts or highly custom visuals that don't warrant a reusable component.
+
+Avoid wrapping styled components in another component just to rename them. Use them directly and let the variant/size props handle visual variation.
+
+### Performance
+
+- **Use `layer` on independently-updating widgets.** A node with `layer` gets its own GPU compositing target. The engine can repaint it without redrawing siblings. Good candidates: animated panels, clocks, progress indicators, status bars.
+- **Use `VirtualList` for large datasets.** Rendering 10K items into the tree is slow no matter the framework. `VirtualList` only materializes visible rows plus an `overscan` buffer.
+- **Avoid deep nesting.** Every `<box>` is a Flexily layout node. Flatten where you can — use `direction="row"` with `gap` instead of wrapping each child in its own container.
+- **Use `willChange` sparingly.** It pre-promotes a node to its own compositing layer. Only set it on elements that will actually animate (`"transform"`, `"opacity"`).
+
+### Theme
+
+- **Create a custom theme early.** Call `createTheme()` with your brand colors at app startup. Changing tokens later means updating every hardcoded hex.
+- **Use `themeColors` (reactive) in JSX props.** This is the only way to get automatic re-rendering on theme switch. Reserve static `colors` for conditions and config.
+- **Keep custom tokens minimal.** Override only the colors you need. The defaults are designed for OLED contrast and accessibility.
+
+### State management
+
+- **Keep signals flat.** A `createSignal<string>()` is better than a `createSignal<{ value: string }>()`. Flat signals trigger fine-grained updates.
+- **Avoid deep nesting.** Nested objects inside signals force the entire subtree to re-render when any field changes.
+- **Co-locate state with the component that owns it.** If only one component reads a signal, define it inside that component. Lift state up only when siblings need to share it.
+- **Use `createForm` for form state.** It handles validation, touched tracking, and async submission out of the box.
+
+### When to use `@vxrt/core/engine`
+
+Most apps only need `@vxrt/core`. Reach for `@vxrt/core/engine` when you need:
+
+- **Direct focus control** — `useFocus`, `setFocus`, `focusedId`, `pushFocusScope`
+- **Custom render loops** — `createRenderLoop`, `createTerminal`, `markDirty`
+- **Debug tools** — `toggleDebug`, `setDebug`, `debugState`, `debugDumpTree`
+- **Tree-sitter integration** — `TreeSitterClient`, `addDefaultParsers`, syntax themes
+- **Low-level input** — `useKeyboard`, `useMouse`, `useInput` (signal-based)
+- **Selection API** — `getSelection`, `setSelection`, `getSelectedText`
+- **Font/image management** — `registerFont`, `clearTextCache`, `clearImageCache`
+- **Plugin system** — `createSlotRegistry`, `createSlot`
+- **FFI bridge** — `VEXART_SYMBOLS`, `openVexartLibrary`, `vexartVersion`
+
+If you find yourself importing more than two or three things from `@vxrt/core/engine`, you are likely building infrastructure (an editor, a devtool, a custom compositor) rather than an application — which is fine, just be aware of the boundary.
+
+---
+
 ## API Quick Reference
 
-### `@vexart/engine` (engine)
+### `@vxrt/core` — Application API
 
-| Export | Category | Description |
-| ------ | -------- | ----------- |
-| `mount` | Core | Mount JSX tree onto terminal |
-| `createTerminal` | Core | Create terminal instance |
-| `createRenderLoop` | Core | Manual render loop (advanced) |
-| `useFocus` | Focus | Make component focusable |
-| `setFocus` | Focus | Focus element by ID |
-| `focusedId` | Focus | Current focused ID (signal) |
-| `setFocusedId` | Focus | Set focused ID directly |
-| `pushFocusScope` | Focus | Create focus trap |
-| `setPointerCapture` | Input | Lock mouse events to a node (for drag) |
-| `releasePointerCapture` | Input | Unlock pointer capture |
-| `useDrag` | Input | Drag interaction hook (pointer capture + isDragging) |
-| `useHover` | Input | Hover detection hook (with delays) |
-| `useKeyboard` | Input | Reactive keyboard signal |
-| `useMouse` | Input | Reactive mouse signal |
-| `useInput` | Input | All input events as signal |
-| `onInput` | Input | Global input event bus |
-| `useQuery` | Data | Reactive data fetching |
-| `useMutation` | Data | Reactive data mutation |
-| `createTransition` | Animation | Tween animation |
-| `createSpring` | Animation | Spring animation |
-| `easing` | Animation | Easing presets |
-| `createTheme` | Theme | Create theme from overrides |
-| `setTheme` | Theme | Switch active theme |
-| `ThemeProvider` | Theme | Theme context provider |
-| `markDirty` | Rendering | Force repaint |
-| `createHandle` | Refs | Create node handle |
-| `createScrollHandle` | Scroll | Programmatic scroll control |
-| `useTerminalDimensions` | Terminal | Reactive terminal size |
-| `RGBA` | Color | Color utility class |
-| `MouseButton` | Constants | Mouse button enum |
-| `For` | Control | SolidJS list iteration |
-| `Show` | Control | SolidJS conditional |
-| `Switch` / `Match` | Control | SolidJS switch/match |
-| `Index` | Control | SolidJS keyed index |
-| `ErrorBoundary` | Control | SolidJS error boundary |
-| `createComponent` | Reconciler | SolidJS component creation |
-| `createElement` | Reconciler | SolidJS element creation |
-| `effect` | Reactivity | SolidJS effect |
-| `memo` | Reactivity | SolidJS memo |
-| `mergeProps` | Reactivity | SolidJS props merge |
-| `createContext` / `useContext` | Context | SolidJS dependency injection |
-| `SIZING` | Constants | Layout sizing enum |
-| `DIRECTION` | Constants | Layout direction enum |
-| `ALIGN_X` / `ALIGN_Y` | Constants | Alignment enums |
-| `ATTACH_TO` / `ATTACH_POINT` | Constants | Float attachment |
-| `registerFont` | Fonts | Load runtime font atlas |
-| `getFont` | Fonts | Get font descriptor |
-| `clearTextCache` | Fonts | Clear text measurement cache |
-| `clearImageCache` | Images | Clear image cache |
-| `toggleDebug` / `setDebug` | Debug | Debug overlay |
-| `isDebugEnabled` | Debug | Check debug state |
-| `debugState` / `debugStatsLine` | Debug | Debug info accessors |
-| `createRouter` | Router | Create flat router |
-| `createNavigationStack` | Router | Create stack router |
-| `useRouter` | Router | Access router context |
-| `createSlotRegistry` / `createSlot` | Plugins | Plugin slot system |
-| `ExtmarkManager` | Editor | Extmark management |
-| `TreeSitterClient` | Syntax | Tree-sitter integration |
-| `getTreeSitterClient` | Syntax | Get parser client |
-| `addDefaultParsers` | Syntax | Register default grammars |
-| `SyntaxStyle` | Syntax | Style definition type |
-| `ONE_DARK` / `KANAGAWA` | Syntax | Built-in syntax themes |
-| `highlightsToTokens` | Syntax | Convert highlights to tokens |
-| `getSelection` / `setSelection` | Selection | Text selection API |
-| `getSelectedText` / `clearSelection` | Selection | Selection utilities |
-| `selectionSignal` | Selection | Reactive selection |
-| `decodePasteBytes` | Input | Decode paste data |
-| `resetScrollHandles` | Scroll | Clear scroll handles |
+Everything app developers use: components, tokens, hooks, SolidJS primitives, and animations.
 
-### `@vexart/headless`
+#### SolidJS Primitives
 
-| Export | Category |
-| ------ | -------- |
-| `Box` | Layout |
-| `Text` | Layout |
-| `ScrollView` | Layout |
-| `Button` | Interactive |
-| `Input` | Interactive |
-| `Textarea` | Interactive |
-| `Checkbox` | Interactive |
-| `Switch` | Interactive |
-| `RadioGroup` | Interactive |
-| `Select` | Interactive |
-| `Combobox` | Interactive |
-| `Slider` | Interactive |
-| `Tabs` | Interactive |
-| `List` | Interactive |
-| `Table` | Interactive |
-| `ProgressBar` | Visual |
-| `Dialog` | Overlay |
-| `Tooltip` | Overlay |
-| `Popover` | Overlay |
-| `createToaster` | Overlay |
-| `Router` / `Route` | Navigation |
-| `NavigationStack` | Navigation |
-| `useRouterContext` / `useStack` | Navigation |
-| `VirtualList` | Performance |
-| `Portal` | Rendering |
-| `Code` | Content |
-| `Markdown` | Content |
-| `Diff` | Content |
-| `RichText` / `Span` | Content |
-| `WrapRow` | Layout |
-| `createForm` | Forms |
+| Export | Description |
+| ------ | ----------- |
+| `createSignal` | Reactive signal |
+| `createComponent` | SolidJS component creation |
+| `createElement` | SolidJS element creation |
+| `effect` | SolidJS effect |
+| `memo` | SolidJS memo |
+| `mergeProps` | SolidJS props merge |
+| `createContext` / `useContext` | Dependency injection |
+| `For` | List iteration |
+| `Show` | Conditional rendering |
+| `Switch` / `Match` | Switch/match rendering |
+| `Index` | Keyed index iteration |
+| `ErrorBoundary` | Error boundary |
 
-### `@vexart/styled`
+#### Design Tokens
 
-| Export | Category |
-| ------ | -------- |
-| `colors` | Tokens (static) |
-| `themeColors` | Tokens (reactive) |
-| `radius` | Tokens |
-| `space` | Tokens |
-| `font` | Tokens |
-| `weight` | Tokens |
-| `shadows` | Tokens |
-| `createTheme` | Theming |
-| `setTheme` | Theming |
-| `getTheme` | Theming |
-| `darkTheme` | Theming |
-| `lightTheme` | Theming |
-| `ThemeProvider` | Theming |
-| `useTheme` | Theming |
-| `Button` | Component |
-| `Card` / `CardHeader` / `CardTitle` / `CardDescription` / `CardContent` / `CardFooter` | Component |
-| `Badge` | Component |
-| `Separator` | Component |
-| `Avatar` | Component |
-| `Skeleton` | Component |
-| `VoidDialog` | Component |
-| `VoidSelect` | Component |
-| `VoidSwitch` | Component |
-| `VoidRadioGroup` | Component |
-| `VoidTable` | Component |
-| `createVoidToaster` | Component |
-| `H1` / `H2` / `H3` / `H4` | Typography |
-| `P` / `Lead` / `Large` / `Small` / `Muted` | Typography |
+| Export | Description |
+| ------ | ----------- |
+| `colors` | Static color tokens |
+| `themeColors` | Reactive color tokens (signals) |
+| `radius` | Border radius presets |
+| `space` | Spacing scale |
+| `font` | Font size scale |
+| `weight` | Font weight presets |
+| `shadows` | Shadow presets (sm/md/lg/xl) |
+
+#### Theming
+
+| Export | Description |
+| ------ | ----------- |
+| `createTheme` | Create theme from overrides |
+| `setTheme` | Switch active theme |
+| `getTheme` | Get current theme |
+| `darkTheme` | Built-in dark theme |
+| `lightTheme` | Built-in light theme |
+| `ThemeProvider` | Theme context provider |
+| `useTheme` | Read theme in component |
+
+#### Styled Components
+
+| Export | Description |
+| ------ | ----------- |
+| `Button` | Styled button (variants: default/secondary/outline/ghost/destructive) |
+| `Card` / `CardHeader` / `CardTitle` / `CardDescription` / `CardContent` / `CardFooter` / `CardAction` | Card layout |
+| `Badge` | Status/label badge |
+| `Separator` | Horizontal/vertical divider |
+| `Avatar` | User avatar |
+| `Skeleton` | Loading placeholder |
+| `VoidDialog` / `VoidDialogTitle` / `VoidDialogDescription` / `VoidDialogFooter` | Styled dialog |
+| `VoidCombobox` | Styled combobox |
+| `VoidDropdownMenu` / `VoidDropdownMenuTrigger` / `VoidDropdownMenuContent` / `VoidDropdownMenuItem` / `VoidDropdownMenuSeparator` / `VoidDropdownMenuLabel` | Styled dropdown |
+| `VoidInput` | Styled input |
+| `VoidPopover` | Styled popover |
+| `VoidProgress` | Styled progress bar |
+| `VoidRadioGroup` | Styled radio group |
+| `VoidSelect` | Styled select |
+| `VoidSlider` | Styled slider |
+| `VoidSwitch` | Styled switch |
+| `VoidTable` | Styled table |
+| `VoidTabs` | Styled tabs |
+| `VoidTooltip` | Styled tooltip |
+| `createVoidToaster` | Imperative toast notifications |
+
+#### Typography
+
+| Export | Description |
+| ------ | ----------- |
+| `H1` / `H2` / `H3` / `H4` | Heading components |
+| `P` / `Lead` / `Large` / `Small` / `Muted` | Body text components |
+
+#### Layout Primitives
+
+| Export | Description |
+| ------ | ----------- |
+| `Box` | Layout container wrapper |
+| `Text` | Text display wrapper |
+| `RichText` / `Span` | Multi-span inline text |
+| `WrapRow` | Flex-wrap workaround |
+| `ScrollView` | Scrollable container with visual scrollbar |
+| `Portal` | Render at root/overlay level |
+
+#### Headless Components
+
+| Export | Description |
+| ------ | ----------- |
+| `Button` (headless) | Interactive button with `renderButton` prop |
+| `Input` | Single-line text input |
+| `Textarea` | Multi-line editor |
+| `Checkbox` | Toggle checkbox |
+| `ToggleSwitch` | Toggle switch (renamed from `Switch` to avoid collision) |
+| `RadioGroup` | Radio option group |
+| `Select` / `SelectTrigger` / `SelectContent` / `SelectItem` | Dropdown select |
+| `Combobox` | Autocomplete with filtering |
+| `Slider` | Numeric range input |
+| `Tabs` | Tab switcher |
+| `List` | Scrollable list with selection |
+| `Table` | Data table with row selection |
+| `VirtualList` | Virtualized list (keyboard + mouse) |
+| `Dialog` / `Dialog.Overlay` / `Dialog.Content` | Modal dialog |
+| `Tooltip` | Delayed tooltip |
+| `Popover` | Controlled popover panel |
+| `ProgressBar` | Progress indicator |
+| `Code` | Syntax-highlighted code block |
+| `Markdown` | Markdown renderer |
+| `Diff` | Unified diff viewer |
+| `OverlayRoot` | Overlay container root |
+| `createToaster` | Imperative toast factory |
+| `createForm` | Form validation factory |
+
+#### Navigation
+
+| Export | Description |
+| ------ | ----------- |
+| `Router` / `Route` | Declarative routing |
+| `NavigationStack` | Stack-based navigation |
+| `useRouterContext` / `useStack` | Router context hooks |
+
+#### Input & Interaction
+
+| Export | Description |
+| ------ | ----------- |
+| `onInput` | Global input event bus |
+| `useDrag` | Drag interaction hook |
+| `useHover` | Hover detection hook |
+| `setPointerCapture` / `releasePointerCapture` | Pointer lock for drag |
+
+#### Animation
+
+| Export | Description |
+| ------ | ----------- |
+| `createTransition` | Tween animation |
+| `createSpring` | Spring animation |
+| `easing` | Easing function presets |
+
+#### Data
+
+| Export | Description |
+| ------ | ----------- |
+| `useQuery` | Reactive data fetching |
+| `useMutation` | Reactive data mutation |
+
+#### Utilities
+
+| Export | Description |
+| ------ | ----------- |
+| `RGBA` | Color utility class |
+| `MouseButton` | Mouse button enum |
+| `useTerminalDimensions` | Reactive terminal size |
+| `createHandle` | Create node handle (ref) |
+| `createScrollHandle` / `releaseScrollHandle` | Programmatic scroll control |
+| `SIZING` / `DIRECTION` / `ALIGN_X` / `ALIGN_Y` | Layout enums |
+
+---
+
+### `@vxrt/core/engine` — Low-Level Engine API
+
+Internals for custom render loops, focus management, debug tools, tree-sitter, and FFI.
+
+#### Core
+
+| Export | Description |
+| ------ | ----------- |
+| `mount` | Mount JSX tree onto terminal |
+| `createTerminal` | Create terminal instance |
+| `createRenderLoop` | Manual render loop (advanced) |
+| `markDirty` / `isDirty` / `clearDirty` | Force/check repaint |
+
+#### Focus
+
+| Export | Description |
+| ------ | ----------- |
+| `useFocus` | Make component focusable |
+| `setFocus` | Focus element by ID |
+| `focusedId` / `setFocusedId` | Current focused ID (signal) |
+| `pushFocusScope` / `resetFocus` | Focus traps and reset |
+
+#### Input (signal-based)
+
+| Export | Description |
+| ------ | ----------- |
+| `useKeyboard` | Reactive keyboard signal |
+| `useMouse` | Reactive mouse signal |
+| `useInput` / `dispatchInput` | All input as signal / dispatch |
+| `decodePasteBytes` | Decode paste data |
+
+#### Renderer / Native Bridge
+
+| Export | Description |
+| ------ | ----------- |
+| `setRendererBackend` / `getRendererBackend` / `getRendererBackendName` | Backend control |
+| `createGpuRendererBackend` / `getGpuRendererBackendCacheStats` | GPU backend |
+| `createGpuFrameComposer` / `chooseGpuLayerStrategy` | Frame composition |
+| `VEXART_SYMBOLS` / `EXPECTED_BRIDGE_VERSION` | FFI symbols |
+| `openVexartLibrary` / `closeVexartLibrary` | Library lifecycle |
+| `vexartVersion` / `assertBridgeVersion` / `vexartGetLastError` | Version/error |
+| `getRendererResourceStats` | Resource stats |
+
+#### Router (low-level)
+
+| Export | Description |
+| ------ | ----------- |
+| `createRouter` | Create flat router |
+| `createNavigationStack` | Create stack router |
+| `useRouter` | Access router context |
+
+#### Fonts & Images
+
+| Export | Description |
+| ------ | ----------- |
+| `registerFont` / `getFont` | Load/get font atlas |
+| `clearTextCache` / `getTextLayoutCacheStats` / `getFontAtlasCacheStats` | Font cache |
+| `clearImageCache` / `getImageCacheStats` | Image cache |
+
+#### Rendering Utilities
+
+| Export | Description |
+| ------ | ----------- |
+| `createScrollHandle` / `resetScrollHandles` | Scroll handle management |
+| `CanvasContext` | Canvas draw context |
+| `createParticleSystem` | Particle effects |
+| `createLayerStore` | Layer management |
+
+#### Selection
+
+| Export | Description |
+| ------ | ----------- |
+| `getSelection` / `setSelection` / `clearSelection` | Selection API |
+| `getSelectedText` | Get selected text |
+| `selectionSignal` / `resetSelection` | Reactive selection |
+
+#### Debug
+
+| Export | Description |
+| ------ | ----------- |
+| `toggleDebug` / `setDebug` / `isDebugEnabled` | Debug overlay |
+| `debugState` / `debugStatsLine` | Debug info |
+| `debugFrameStart` / `debugUpdateStats` | Frame debug |
+| `debugDumpTree` / `debugDumpCulledNodes` | Tree inspection |
+
+#### Syntax Highlighting
+
+| Export | Description |
+| ------ | ----------- |
+| `ExtmarkManager` | Extmark management |
+| `TreeSitterClient` / `getTreeSitterClient` | Tree-sitter parser |
+| `addDefaultParsers` | Register default grammars |
+| `SyntaxStyle` | Style definition type |
+| `ONE_DARK` / `KANAGAWA` | Built-in syntax themes |
+| `highlightsToTokens` | Convert highlights to tokens |
+
+#### Plugins
+
+| Export | Description |
+| ------ | ----------- |
+| `createSlotRegistry` / `createSlot` | Plugin slot system |
+
+#### Constants
+
+| Export | Description |
+| ------ | ----------- |
+| `ATTACH_TO` / `ATTACH_POINT` | Float attachment points |
