@@ -35,10 +35,10 @@ import { createCanvas } from "@napi-rs/canvas"
 import type { FontDescriptor } from "./text-layout"
 import { openVexartLibrary } from "./vexart-bridge"
 
-// ── Phase 2 DEC-011 note ─────────────────────────────────────────────────────
-// loadFontAtlas() calls vexart_text_load_atlas which is a success no-op in Phase 2.
-// The atlas data is generated here for future use in Phase 2b when MSDF text lands.
-// Per design §11, §5.5, REQ-NB-005.
+// ── Native text atlas upload ─────────────────────────────────────────────────
+// loadFontAtlas() generates runtime bitmap atlas data and uploads it through
+// vexart_text_load_atlas() so the native text renderer can measure and dispatch
+// glyphs from the active GPU atlas. Per design §11, §5.5, REQ-NB-005.
 
 // ── Glyph range definition ────────────────────────────────────────────────
 

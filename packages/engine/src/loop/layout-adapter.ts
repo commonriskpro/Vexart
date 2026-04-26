@@ -457,6 +457,16 @@ export function createVexartLayoutCtx() {
       }
     },
 
+    configureMargin(left: number, right: number, top: number, bottom: number) {
+      if (!_currentNode) return
+      const node = _currentNode
+
+      if (left > 0) node.setMargin(EDGE_LEFT, left)
+      if (right > 0) node.setMargin(EDGE_RIGHT, right)
+      if (top > 0) node.setMargin(EDGE_TOP, top)
+      if (bottom > 0) node.setMargin(EDGE_BOTTOM, bottom)
+    },
+
     configureSizing(wType: number, wVal: number, hType: number, hVal: number) {
       if (!_currentNode) return
       const node = _currentNode

@@ -170,10 +170,16 @@ pub extern "C" fn vexart_version() -> u32 {
     0x00020B00
 }
 
-/// Allocates PaintContext + LayoutContext; returns opaque handle in `out_ctx`.
+/// Creates a Vexart rendering context.
+///
+/// The context handle is an opaque identifier for API symmetry. Actual GPU
+/// state is managed internally via a lazy-initialized singleton (`SHARED_PAINT`)
+/// because the WGPU device must persist across all paint/composite/text calls.
+/// The handle exists so the API can evolve toward per-context isolation in the
+/// future without breaking the FFI contract.
 ///
 /// # Safety
-/// `opts_ptr` must be valid for `opts_len` bytes; `out_ctx` must be a valid mutable pointer.
+/// `out_ctx` must be a valid mutable pointer.
 #[no_mangle]
 pub unsafe extern "C" fn vexart_context_create(
     opts_ptr: *const u8,
@@ -185,13 +191,17 @@ pub unsafe extern "C" fn vexart_context_create(
         if out_ctx.is_null() {
             return ERR_INVALID_ARG;
         }
-        // Phase 2 stub: return a dummy non-zero handle.
+        // Ensure the GPU singleton is initialized eagerly (fail fast on GPU errors).
+        let _guard = get_or_init_paint();
         *out_ctx = 1;
         OK
     })
 }
 
-/// Drops all GPU resources + Taffy tree associated with `ctx`.
+/// Releases a Vexart rendering context.
+///
+/// Currently a no-op because GPU state is singleton-managed. The context handle
+/// exists for forward-compatibility with per-context isolation.
 #[no_mangle]
 pub extern "C" fn vexart_context_destroy(ctx: u64) -> i32 {
     ffi_guard!({
@@ -200,7 +210,11 @@ pub extern "C" fn vexart_context_destroy(ctx: u64) -> i32 {
     })
 }
 
-/// Resizes surface + invalidates size-dependent resources.
+/// Notifies the context of a terminal resize.
+///
+/// Currently a no-op because composite targets are created per-size and the
+/// GPU device handles any resolution. The engine's TS layer manages target
+/// lifecycle via `vexart_composite_target_create` / `_destroy`.
 #[no_mangle]
 pub extern "C" fn vexart_context_resize(ctx: u64, width: u32, height: u32) -> i32 {
     ffi_guard!({

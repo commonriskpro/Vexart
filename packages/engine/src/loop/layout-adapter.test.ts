@@ -13,7 +13,7 @@ function box(props: TGEProps, children: TGENode[] = []) {
   return node
 }
 
-function layoutCommands(root: TGENode) {
+function layoutState(root: TGENode) {
   const layout = createVexartLayoutCtx()
   layout.init(300, 200)
   layout.beginLayout()
@@ -41,8 +41,13 @@ function layoutCommands(root: TGENode) {
   })
 
   const commands = layout.endLayout()
+  const map = layout.getLastLayoutMap()
   layout.destroy()
-  return commands
+  return { commands, map }
+}
+
+function layoutCommands(root: TGENode) {
+  return layoutState(root).commands
 }
 
 function rectOrder(commands: RenderCommand[]) {
@@ -52,6 +57,49 @@ function rectOrder(commands: RenderCommand[]) {
 }
 
 describe("layout adapter stacking contexts", () => {
+  test("margin adds spacing between elements", () => {
+    const layout = createVexartLayoutCtx()
+    layout.init(300, 200)
+    layout.beginLayout()
+
+    layout.openElement()
+    layout.setCurrentNodeId(1)
+    layout.configureSizing(3, 300, 3, 200)
+    layout.configureLayout(1, 0, 0, 0, 0, 0)
+
+    layout.openElement()
+    layout.setCurrentNodeId(2)
+    layout.configureSizing(3, 100, 3, 50)
+    layout.closeElement()
+
+    layout.openElement()
+    layout.setCurrentNodeId(3)
+    layout.configureSizing(3, 100, 3, 50)
+    layout.configureMargin(0, 0, 20, 0)
+    layout.closeElement()
+
+    layout.closeElement()
+
+    layout.endLayout()
+    const map = layout.getLastLayoutMap()
+
+    expect(map?.get(2)?.y).toBe(0)
+    expect(map?.get(3)?.y).toBe(70)
+
+    layout.destroy()
+  })
+
+  test("walkTree applies margin props", () => {
+    const first = box({ width: 100, height: 50 })
+    const second = box({ width: 100, height: 50, marginTop: 20 })
+    const root = box({ width: 300, height: 200 }, [first, second])
+
+    const state = layoutState(root)
+
+    expect(state.map?.get(first.id)?.y).toBe(0)
+    expect(state.map?.get(second.id)?.y).toBe(70)
+  })
+
   test("keeps high-z descendants inside their parent context", () => {
     const escapingChild = box({
       width: 40,

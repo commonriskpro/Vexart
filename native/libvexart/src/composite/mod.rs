@@ -713,7 +713,11 @@ pub fn copy_region_to_image(
     OK
 }
 
-/// Phase 2 legacy stub: z-order merge. Returns handle=0.
+/// Legacy composite merge — returns handle 0 (no-op).
+///
+/// The active composite path uses `composite_target_*` + `render_image_layer`
+/// for per-layer composition, making this z-order merge path unnecessary.
+/// Retained for FFI contract stability; will be removed in the next ABI bump.
 pub fn composite_merge(
     _ctx: u64,
     _composite: &[u8],

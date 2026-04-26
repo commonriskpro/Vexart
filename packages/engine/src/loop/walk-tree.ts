@@ -443,6 +443,24 @@ export function walkTree(
     layout.configureLayout(dir, px, py, gap, ax, ay)
   }
 
+  // Margin — resolve axis aliases first, then per-side overrides.
+  // Flexily's computed left/top already include margin, so layout map collection
+  // can keep using getComputedLeft()/getComputedTop() directly.
+  const hasPerSideMargin = props.marginLeft !== undefined || props.marginRight !== undefined ||
+                            props.marginTop !== undefined || props.marginBottom !== undefined
+  const hasAnyMargin = hasPerSideMargin || props.margin !== undefined ||
+                        props.marginX !== undefined || props.marginY !== undefined
+  if (hasAnyMargin) {
+    const baseMx = props.marginX ?? props.margin ?? 0
+    const baseMy = props.marginY ?? props.margin ?? 0
+    layout.configureMargin(
+      props.marginLeft ?? baseMx,
+      props.marginRight ?? baseMx,
+      props.marginTop ?? baseMy,
+      props.marginBottom ?? baseMy,
+    )
+  }
+
   // Sizing — use pre-parsed values, fallback to FIT (Auto in Flexily).
   // Cross-axis stretching is handled by Flexily's default align_items: Stretch
   // (activated via alignItems=255/None in _defaultOpen). No manual stretch
