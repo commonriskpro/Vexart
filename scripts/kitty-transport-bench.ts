@@ -1,5 +1,5 @@
 /**
- * Benchmark TGE Kitty transport cost on the client side.
+ * Benchmark Vexart Kitty transport cost on the client side.
  *
  * Measures the real production `kitty.transmit()` path for:
  *   - file  → persistent mmap-backed `t=f,S,O`
@@ -11,7 +11,7 @@
  *
  * Usage:
  *   bun scripts/kitty-transport-bench.ts
- *   TGE_BENCH_W=640 TGE_BENCH_H=360 TGE_BENCH_FRAMES=60 bun scripts/kitty-transport-bench.ts
+ *   VEXART_BENCH_W=640 VEXART_BENCH_H=360 VEXART_BENCH_FRAMES=60 bun scripts/kitty-transport-bench.ts
  */
 
 import { transmit, type TransmissionMode } from "@vexart/engine"
@@ -93,9 +93,9 @@ function runMode(mode: TransmissionMode, width: number, height: number, frames: 
 }
 
 function main() {
-  const width = Number(process.env.TGE_BENCH_W ?? 640)
-  const height = Number(process.env.TGE_BENCH_H ?? 360)
-  const frames = Number(process.env.TGE_BENCH_FRAMES ?? 60)
+  const width = Number(process.env.VEXART_BENCH_W ?? 640)
+  const height = Number(process.env.VEXART_BENCH_H ?? 360)
+  const frames = Number(process.env.VEXART_BENCH_FRAMES ?? 60)
 
   console.error("[kitty-transport-bench] config", {
     frames,

@@ -58,8 +58,7 @@ export const VEXART_SYMBOLS = {
   vexart_composite_copy_region_to_image:{ args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_composite_image_filter_backdrop:{ args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_composite_image_mask_rounded_rect:{ args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.ptr],           returns: FFIType.i32 },
-  // §5.4 Composite — readback + legacy merge
-  vexart_composite_merge:               { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
+  // §5.4 Composite — readback
   vexart_composite_readback_rgba:       { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_composite_readback_region_rgba:{ args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.ptr, FFIType.u32, FFIType.ptr],          returns: FFIType.i32 },
 

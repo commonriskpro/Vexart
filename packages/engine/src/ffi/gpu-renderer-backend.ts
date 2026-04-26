@@ -57,7 +57,7 @@ import type { DamageRect } from "./damage"
 
 // Pre-allocated scratch buffers for pack functions — avoids per-call ArrayBuffer/DataView allocations.
 const PACK_MAX = 256
-const PROFILE_ENABLED = process.env.TGE_PROFILE !== "0"
+const PROFILE_ENABLED = process.env.VEXART_PROFILE !== "0"
 const _packBuf = new ArrayBuffer(PACK_MAX)
 const _packView = new DataView(_packBuf)
 const _packU8 = new Uint8Array(_packBuf)
@@ -614,11 +614,11 @@ export function getGpuRendererBackendCacheStats(): GpuRendererBackendCacheStats 
   }
 }
 
-const GPU_RENDERER_DEBUG = process.env.TGE_DEBUG_GPU_RENDERER === "1"
+const GPU_RENDERER_DEBUG = process.env.VEXART_DEBUG_GPU_RENDERER === "1"
 const GPU_RENDERER_DEBUG_LOG = "/tmp/tge-gpu-renderer.log"
-const RESIZE_DEBUG = process.env.TGE_DEBUG_RESIZE === "1"
+const RESIZE_DEBUG = process.env.VEXART_DEBUG_RESIZE === "1"
 function getForcedLayerStrategy(): GpuLayerStrategyMode | null {
-  const forcedStrategyValue = process.env.TGE_GPU_FORCE_LAYER_STRATEGY
+  const forcedStrategyValue = process.env.VEXART_GPU_FORCE_LAYER_STRATEGY
   if (forcedStrategyValue === "skip-present") return "skip-present"
   if (forcedStrategyValue === "layered-dirty" || forcedStrategyValue === "layered-raw") return "layered-dirty"
   if (forcedStrategyValue === "layered-region") return "layered-region"

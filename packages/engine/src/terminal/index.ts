@@ -22,8 +22,8 @@ import { inferCaps, probeKittyGraphics, queryColors, type Capabilities } from ".
 import { getSize, queryPixelSize, onResize, type TerminalSize, type ResizeHandler } from "./size"
 import { enter, leave, beginSync, endSync, installExitHandlers, type LifecycleState } from "./lifecycle"
 
-const DEBUG_KITTY_PROBE = process.env.TGE_DEBUG_KITTY === "1" || process.env.TGE_DEBUG_KITTY_SHM === "1"
-const DEBUG_RESIZE = process.env.TGE_DEBUG_RESIZE === "1"
+const DEBUG_KITTY_PROBE = process.env.VEXART_DEBUG_KITTY === "1" || process.env.VEXART_DEBUG_KITTY_SHM === "1"
+const DEBUG_RESIZE = process.env.VEXART_DEBUG_RESIZE === "1"
 const RESIZE_DEBUG_LOG = "/tmp/tge-resize.log"
 
 function logTerminalResize(message: string) {
@@ -155,7 +155,7 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
     }
   }
 
-  const forcedTransmissionMode = process.env.TGE_FORCE_TRANSMISSION_MODE
+  const forcedTransmissionMode = process.env.VEXART_FORCE_TRANSMISSION_MODE
   const { configureKittyTransportManager, resolveKittyTransportMode } = await import("../output/transport-manager")
   if (forcedTransmissionMode === "direct" || forcedTransmissionMode === "file" || forcedTransmissionMode === "shm") {
     configureKittyTransportManager({

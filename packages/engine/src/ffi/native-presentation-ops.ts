@@ -92,56 +92,6 @@ export function nativeEmitLayer(
   }
 }
 
-// ── Native region patch emission ──────────────────────────────────────────
-
-/**
- * Emit a region patch natively via vexart_kitty_emit_region.
- *
- * @param imageId  — Kitty image ID
- * @param rgba     — raw RGBA pixel data for the dirty region (rw × rh × 4)
- * @param rx, ry   — offset within the image
- * @param rw, rh   — region dimensions
- * @returns decoded stats, or null if the call failed
- */
-export function nativeEmitRegion(
-  imageId: number,
-  rgba: Uint8Array,
-  rx: number,
-  ry: number,
-  rw: number,
-  rh: number,
-  transmissionMode: TransmissionMode = "direct",
-): NativePresentationStats | null {
-  const statsBuf = allocNativeStatsBuf()
-  // Pack region as 4×u32 LE buffer [rx, ry, rw, rh]
-  const regionBuf = new Uint8Array(16)
-  const regionView = new DataView(regionBuf.buffer)
-  regionView.setUint32(0, rx, true)
-  regionView.setUint32(4, ry, true)
-  regionView.setUint32(8, rw, true)
-  regionView.setUint32(12, rh, true)
-  try {
-    const { symbols } = openVexartLibrary()
-    ensureNativeKittyTransport(transmissionMode)
-    const rc = symbols.vexart_kitty_emit_region(
-      1n,
-      imageId,
-      ptr(rgba),
-      rgba.byteLength,
-      ptr(regionBuf),
-      ptr(statsBuf),
-    ) as number
-    if (rc === 0) return decodeNativePresentationStats(statsBuf)
-    disableNativePresentation(`vexart_kitty_emit_region returned ${rc}`)
-    logNativePresentationFallback(`region emit failed (imageId=${imageId})`)
-    return null
-  } catch (e) {
-    disableNativePresentation(`vexart_kitty_emit_region threw: ${e}`)
-    logNativePresentationFallback(`region emit threw (imageId=${imageId})`)
-    return null
-  }
-}
-
 // ── Native target-backed layer emission ─────────────────────────────────────
 
 /**

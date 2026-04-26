@@ -17,7 +17,6 @@ type PixelBuffer = { data: Uint8Array; width: number; height: number; stride: nu
 import { deflateSync } from "node:zlib"
 import { type TransmissionMode, reportKittyTransportFailure, reportKittyTransportSuccess, resolveKittyTransportMode, TRANSPORT_FAILURE_REASON } from "./transport-manager"
 import { prepareNativeKittyShm, releaseNativeKittyShm } from "./kitty-shm-native"
-import { openVexartLibrary } from "../ffi/vexart-bridge"
 
 /** @public */
 export type RawImageData = {
@@ -36,7 +35,7 @@ export type KittyTransportStats = {
 }
 
 const CHUNK_SIZE = 4096
-const DEBUG_KITTY_PROBE = process.env.TGE_DEBUG_KITTY === "1" || process.env.TGE_DEBUG_KITTY_SHM === "1"
+const DEBUG_KITTY_PROBE = process.env.VEXART_DEBUG_KITTY === "1" || process.env.VEXART_DEBUG_KITTY_SHM === "1"
 
 const kittyTransportStats: KittyTransportStats = {
   transmitCalls: 0,
@@ -465,27 +464,6 @@ function transmitDirect(
 // ── Public API ──
 
 /**
- * Transmit a frame via the native Rust Kitty encoder (preferred path).
- *
- * Single FFI call: GPU readback → zlib compress → base64 → Kitty escape → stdout.
- * No data passes through JavaScript — per REQ-2B-101.
- *
- * @param ctx     — vexart context handle (bigint)
- * @param target  — offscreen render target handle (bigint)
- * @param imageId — Kitty image ID to assign to this frame
- * @returns true on success, false if the native call fails (caller should fall back to TS path)
- */
-export function transmitFrameNative(ctx: bigint, target: bigint, imageId: number): boolean {
-  try {
-    const { symbols } = openVexartLibrary()
-    const result = symbols.vexart_kitty_emit_frame(ctx, target, imageId) as number
-    return result === 0
-  } catch {
-    return false
-  }
-}
-
-/**
  * Transmit a pixel buffer as a Kitty graphics image.
  *
  * Routes to the optimal transmission path based on mode:
@@ -590,24 +568,6 @@ export function place(
   if (p !== undefined) params += `,p=${p}`
   write(`\x1b[${row + 1};${col + 1}H`)
   write(`\x1b_G${params};AAAA\x1b\\`)
-}
-
-/**
- * Transmit + place in one operation. Moves cursor, transmits at position.
- * With z-index support for layer compositing.
- */
-export function transmitAt(
-  write: (data: string) => void,
-  buf: PixelBuffer,
-  id: number,
-  col: number,
-  row: number,
-  opts?: { z?: number; placementId?: number; mode?: TransmissionMode; compress?: CompressMode },
-) {
-  write(`\x1b7`) // save cursor
-  write(`\x1b[${row + 1};${col + 1}H`) // move cursor
-  transmit(write, buf, id, { action: "T", z: opts?.z, placementId: opts?.placementId, mode: opts?.mode, compress: opts?.compress })
-  write(`\x1b8`) // restore cursor
 }
 
 /** Transmit + place raw RGBA/RGB bytes without a PixelBuffer intermediary. */

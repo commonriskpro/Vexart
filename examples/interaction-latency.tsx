@@ -6,8 +6,8 @@ import { mount, useDrag, markDirty, debugState, setDebug, type NodeMouseEvent, u
 import { appendFileSync } from "node:fs"
 
 const LOG = "/tmp/interaction-latency.log"
-const EXIT_AFTER_MS = Number(process.env.VEXART_EXIT_AFTER_MS ?? process.env.TGE_EXIT_AFTER_MS ?? 0)
-const LOG_FPS = process.env.VEXART_LOG_FPS === "1" || process.env.TGE_LOG_FPS === "1"
+const EXIT_AFTER_MS = Number(process.env.VEXART_EXIT_AFTER_MS ?? 0)
+const LOG_FPS = process.env.VEXART_LOG_FPS === "1"
 
 function useDraggable(initialX: number, initialY: number) {
   const [x, setX] = createSignal(initialX)

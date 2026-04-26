@@ -24,11 +24,11 @@ The transport manager SHALL prefer `shm` as its default policy, fallback to `fil
 
 ### Requirement: No implicit final-frame forcing
 
-The frame breakdown benchmark SHALL NOT force `final-frame-raw` unless the caller explicitly sets `TGE_GPU_FORCE_LAYER_STRATEGY`.
+The frame breakdown benchmark SHALL NOT force `final-frame-raw` unless the caller explicitly sets `VEXART_GPU_FORCE_LAYER_STRATEGY`.
 
 #### Scenario: Default benchmark strategy
 
-- **WHEN** the benchmark is run without `TGE_GPU_FORCE_LAYER_STRATEGY`
+- **WHEN** the benchmark is run without `VEXART_GPU_FORCE_LAYER_STRATEGY`
 - **THEN** the renderer backend strategy chooser selects the frame strategy.
 
 ### Requirement: Regional retained presentation

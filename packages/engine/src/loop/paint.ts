@@ -634,7 +634,7 @@ export function paintFrame(
   const backendBeginStart = profile ? performance.now() : 0
   const framePlan = backend.beginFrame?.(frameCtx)
   if (profile) profile.paintBackendBeginMs += performance.now() - backendBeginStart
-  let rendererOutput: string | null = useLayerCompositing ? "buffer" : "buffer"
+  let rendererOutput: string | null = "buffer"
   let moveOnlyCount = 0
   let moveFallbackCount = 0
   let stableReuseCount = 0
@@ -720,40 +720,19 @@ export function paintFrame(
       }
 
       if (canReuseStableLayer) {
-        const geometryChanged = layer.x !== layer.prevX || layer.y !== layer.prevY || layer.z !== layer.prevZ
-        const renderZ = layer.z
-        const needsPlacementRefresh = false
-        if (freezeWhileInteracting) {
-          if (debugCadence) log(`  [${slot.key}|${prepared.debugName}] DRAG-CHECK geometry=${geometryChanged ? 1 : 0} strategy=${framePlan?.strategy ?? "none"} placement=${needsPlacementRefresh ? 1 : 0} prev=(${layer.prevX},${layer.prevY}) next=(${layer.x},${layer.y}) z=${layer.prevZ}->${layer.z}`)
-        }
-        if (needsPlacementRefresh) {
-          const moved = layerComposer?.placeLayer(imageIdForLayer(layer), lx, ly, renderZ, cellW, cellH) === true
-          if (moved) {
-            rendererOutput = "layered-raw"
-            moveOnlyCount++
-            if (debugCadence) log(`  [${slot.key}|${prepared.debugName}] MOVE-ONLY ${lw}x${lh} at (${lx},${ly}) z=${renderZ} interaction=drag`)
-            markLayerClean(layer)
-            continue
-          }
-        }
-        if (needsPlacementRefresh) {
-          moveFallbackCount++
-          if (debugCadence) log(`  [${slot.key}|${prepared.debugName}] MOVE-FALLBACK repaint establish layered placement`)
-        } else {
-          const reuseStart = profile ? performance.now() : 0
-          const reused = backend.reuseLayer?.({
-            frame: frameCtx,
-            layer: layerCtx,
-          }) === true
-          if (profile) profile.paintReuseMs += performance.now() - reuseStart
-          if (reused) {
-            stableReuseCount++
-            if (framePlan?.strategy === "final-frame") rendererOutput = "final-frame-raw"
-            else if (framePlan?.strategy === "layered-dirty" || framePlan?.strategy === "layered-region") rendererOutput = "layered-raw"
-            if (debugCadence) log(`  [${slot.key}|${prepared.debugName}] REUSE (stable layer)`)
-            markLayerClean(layer)
-            continue
-          }
+        const reuseStart = profile ? performance.now() : 0
+        const reused = backend.reuseLayer?.({
+          frame: frameCtx,
+          layer: layerCtx,
+        }) === true
+        if (profile) profile.paintReuseMs += performance.now() - reuseStart
+        if (reused) {
+          stableReuseCount++
+          if (framePlan?.strategy === "final-frame") rendererOutput = "final-frame-raw"
+          else if (framePlan?.strategy === "layered-dirty" || framePlan?.strategy === "layered-region") rendererOutput = "layered-raw"
+          if (debugCadence) log(`  [${slot.key}|${prepared.debugName}] REUSE (stable layer)`)
+          markLayerClean(layer)
+          continue
         }
       }
 

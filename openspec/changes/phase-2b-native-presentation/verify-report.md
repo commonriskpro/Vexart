@@ -37,7 +37,7 @@
 Command attempted:
 
 ```sh
-TGE_DEBUG_KITTY=1 VEXART_DEBUG_NATIVE_PRESENTATION=1 TGE_EXIT_AFTER_MS=3000 bun --conditions=browser run examples/showcase.tsx
+VEXART_DEBUG_KITTY=1 VEXART_DEBUG_NATIVE_PRESENTATION=1 VEXART_EXIT_AFTER_MS=3000 bun --conditions=browser run examples/showcase.tsx
 ```
 
 Observed result:

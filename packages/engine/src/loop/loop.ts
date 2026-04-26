@@ -48,9 +48,9 @@ const RENDER_DEBUG_LOG = "/tmp/tge-render-debug.log"
 const CADENCE_LOG = "/tmp/tge-cadence.log"
 const RESIZE_DEBUG_LOG = "/tmp/tge-resize.log"
 const DRAG_REPRO_LOG = "/tmp/tge-drag-repro.log"
-const DEBUG_CADENCE = process.env.TGE_DEBUG_CADENCE === "1"
-const DEBUG_RESIZE = process.env.TGE_DEBUG_RESIZE === "1"
-const DEBUG_DRAG_REPRO = process.env.TGE_DEBUG_DRAG_REPRO === "1"
+const DEBUG_CADENCE = process.env.VEXART_DEBUG_CADENCE === "1"
+const DEBUG_RESIZE = process.env.VEXART_DEBUG_RESIZE === "1"
+const DEBUG_DRAG_REPRO = process.env.VEXART_DEBUG_DRAG_REPRO === "1"
 
 function log(msg: string) { appendFileSync(LOG, msg + "\n") }
 function renderDebug(msg: string) { appendFileSync(RENDER_DEBUG_LOG, msg + "\n") }

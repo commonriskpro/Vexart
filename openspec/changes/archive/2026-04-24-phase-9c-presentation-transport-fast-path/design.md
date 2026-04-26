@@ -35,7 +35,7 @@ If no transport is passed, the benchmark defaults to `shm` to match the intended
 
 ## Strategy forcing
 
-The benchmark no longer sets `TGE_GPU_FORCE_LAYER_STRATEGY=final-frame-raw` by default. If a forced strategy is required, callers must pass the environment variable explicitly.
+The benchmark no longer sets `VEXART_GPU_FORCE_LAYER_STRATEGY=final-frame-raw` by default. If a forced strategy is required, callers must pass the environment variable explicitly.
 
 ## Regional TS fallback
 

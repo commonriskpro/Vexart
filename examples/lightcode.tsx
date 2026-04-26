@@ -16,7 +16,7 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
 }
 
 async function main() {
-  process.env.TGE_GPU_FORCE_LAYER_STRATEGY = "final-frame"
+  process.env.VEXART_GPU_FORCE_LAYER_STRATEGY = "final-frame"
   const terminal = await createTerminal()
   const cleanup = await mountApp(() => <App terminal={terminal} />, {
     terminal,

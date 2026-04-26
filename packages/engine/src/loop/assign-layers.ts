@@ -90,7 +90,7 @@ export function findLayerBoundaries(
   const willChangeValues = willChange ? (Array.isArray(willChange) ? willChange : [willChange]) : []
   const hasValidWillChange = willChangeValues.some(v => VALID_WILL_CHANGE_VALUES.has(v))
   if (hasValidWillChange && !willChangeValues.every(v => VALID_WILL_CHANGE_VALUES.has(v))) {
-    if (process.env.TGE_DEBUG) {
+    if (process.env.VEXART_DEBUG) {
       console.warn(`[vexart] willChange contains unrecognized value(s): ${willChangeValues.filter(v => !VALID_WILL_CHANGE_VALUES.has(v)).join(", ")}`)
     }
   }

@@ -2,11 +2,11 @@
 
 ## Measurement approach
 
-The render loop already supports structured cadence profiling when `TGE_DEBUG_CADENCE=1`. Phase 9a reuses that instrumentation instead of adding another runtime profiling subsystem.
+The render loop already supports structured cadence profiling when `VEXART_DEBUG_CADENCE=1`. Phase 9a reuses that instrumentation instead of adding another runtime profiling subsystem.
 
 The benchmark runner:
 
-1. enables `TGE_DEBUG_CADENCE=1` before dynamically importing engine modules;
+1. enables `VEXART_DEBUG_CADENCE=1` before dynamically importing engine modules;
 2. clears `/tmp/tge-cadence.log` per scenario;
 3. mounts a scene into a mock terminal;
 4. runs warmup frames;

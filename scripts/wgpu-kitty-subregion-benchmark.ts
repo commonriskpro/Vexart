@@ -12,11 +12,11 @@ import {
   renderWgpuCanvasTargetClear,
 } from "@vexart/engine"
 
-const WIDTH = Number(process.env.TGE_WGPU_SUBREGION_WIDTH ?? 320)
-const HEIGHT = Number(process.env.TGE_WGPU_SUBREGION_HEIGHT ?? 180)
-const PATCH = Number(process.env.TGE_WGPU_SUBREGION_PATCH ?? 64)
-const ITERATIONS = Number(process.env.TGE_WGPU_SUBREGION_ITERS ?? 12)
-const OUTPUT_PATH = process.env.TGE_WGPU_SUBREGION_OUT ?? "/tmp/tge-wgpu-subregion-benchmark.json"
+const WIDTH = Number(process.env.VEXART_WGPU_SUBREGION_WIDTH ?? 320)
+const HEIGHT = Number(process.env.VEXART_WGPU_SUBREGION_HEIGHT ?? 180)
+const PATCH = Number(process.env.VEXART_WGPU_SUBREGION_PATCH ?? 64)
+const ITERATIONS = Number(process.env.VEXART_WGPU_SUBREGION_ITERS ?? 12)
+const OUTPUT_PATH = process.env.VEXART_WGPU_SUBREGION_OUT ?? "/tmp/tge-wgpu-subregion-benchmark.json"
 
 function avg(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1)

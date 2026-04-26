@@ -161,8 +161,8 @@ export function parseColor(value: string | number): number {
 ### B1-07: Cache process.env in dirty.ts
 
 **File**: `packages/engine/src/reconciler/dirty.ts:43-55`
-**Waste**: `process.env.TGE_DEBUG_DIRTY === "1"` read on every `markDirty()` call. Env vars are static.
-**Fix**: `const DIRTY_DEBUG = process.env.TGE_DEBUG_DIRTY === "1"` at module top.
+**Waste**: `process.env.VEXART_DEBUG_DIRTY === "1"` read on every `markDirty()` call. Env vars are static.
+**Fix**: `const DIRTY_DEBUG = process.env.VEXART_DEBUG_DIRTY === "1"` at module top.
 **Impact**: trivial (but compounds with B1-02 on every setProperty)
 **Effort**: 2 min
 
@@ -316,7 +316,7 @@ export function parseColor(value: string | number): number {
 
 **Files**: `paint.ts` (39 calls), `composite.ts` (32 calls), `gpu-renderer-backend.ts` (11 calls), `loop.ts` (8 calls)
 **Waste**: 90 `performance.now()` calls per frame. Each ~200ns = ~18us overhead. Always runs, even in production.
-**Fix**: Gate behind a module-level `const PROFILE = process.env.TGE_PROFILE === "1"`. When off, profiling functions become no-ops.
+**Fix**: Gate behind a module-level `const PROFILE = process.env.VEXART_PROFILE === "1"`. When off, profiling functions become no-ops.
 **Impact**: ~0.02 ms + cleaner hot path for CPU branch prediction
 **Effort**: 30 min
 

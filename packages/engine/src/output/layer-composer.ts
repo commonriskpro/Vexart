@@ -3,7 +3,7 @@
  *
  * Single native composite path via Kitty protocol.
  * CPU/GPU switch removed per design §11 (REQ-NB-002, DEC-005).
- * vexart_composite_merge handles GPU-side layer merging.
+ * GPU presentation handles layer merging.
  *
  * Browser-style compositing: each layer is a separate Kitty image
  * with its own ID and z-order. The terminal's GPU composites them.
@@ -114,13 +114,9 @@ export function createLayerComposer(
         kitty.remove(write, imageId)
       }
 
-      if (z < 0) {
-        // Raw path currently assumes the caller already prepared the final bytes.
-        // Keep behavior explicit: no extra alpha compositing here.
-         kitty.transmitRawAt(write, { data, width, height }, imageId, col, row, { z, placementId: placementIdForLayer(imageId), mode: effectiveMode, compress, format: 32 })
-      } else {
-         kitty.transmitRawAt(write, { data, width, height }, imageId, col, row, { z, placementId: placementIdForLayer(imageId), mode: effectiveMode, compress, format: 32 })
-      }
+      // Raw path currently assumes the caller already prepared the final bytes.
+      // Keep behavior explicit: no extra alpha compositing here.
+      kitty.transmitRawAt(write, { data, width, height }, imageId, col, row, { z, placementId: placementIdForLayer(imageId), mode: effectiveMode, compress, format: 32 })
       activeIds.add(imageId)
     },
 

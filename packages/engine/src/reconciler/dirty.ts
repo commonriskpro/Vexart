@@ -7,7 +7,7 @@ import type { DamageRect } from "../ffi/damage"
 
 const DIRTY_DEBUG_LOG = "/tmp/tge-dirty.log"
 const DIRTY_LOG_LIMIT = 200
-const DIRTY_DEBUG = process.env.TGE_DEBUG_DIRTY === "1"
+const DIRTY_DEBUG = process.env.VEXART_DEBUG_DIRTY === "1"
 
 /** @public */
 export const DIRTY_KIND = {

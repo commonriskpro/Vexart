@@ -249,7 +249,7 @@ function measureManual(name: string, frames: number, run: () => void) {
   return printResult(name, times)
 }
 
-const transmissionMode = resolveTransmissionMode(process.env.OPENCODE_PERF_TRANSMISSION_MODE ?? process.env.TGE_FORCE_TRANSMISSION_MODE)
+const transmissionMode = resolveTransmissionMode(process.env.OPENCODE_PERF_TRANSMISSION_MODE ?? process.env.VEXART_FORCE_TRANSMISSION_MODE)
 const terminal = createMockTerminal(WIDTH, HEIGHT, transmissionMode)
 const loop = createRenderLoop(terminal, {
   experimental: {

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url"
 import { OpenCodeCosmicShellApp } from "../examples/opencode-cosmic-shell/app"
 
 
-process.env.TGE_DEBUG_CADENCE = "1"
+process.env.VEXART_DEBUG_CADENCE = "1"
 
 const SCENARIO = {
   DASHBOARD_SMOKE: "dashboard-800x600",

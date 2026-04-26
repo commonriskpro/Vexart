@@ -347,8 +347,8 @@ async function captureToBuffer(
 ): Promise<RenderToBufferResult> {
   // Force final-frame-raw so the GPU backend composites all layers into a
   // single RGBA buffer that endFrame can return to us.
-  const prevStrategy = process.env["TGE_GPU_FORCE_LAYER_STRATEGY"]
-  process.env["TGE_GPU_FORCE_LAYER_STRATEGY"] = "final-frame-raw"
+  const prevStrategy = process.env["VEXART_GPU_FORCE_LAYER_STRATEGY"]
+  process.env["VEXART_GPU_FORCE_LAYER_STRATEGY"] = "final-frame-raw"
 
   const term = createMockTerminal(width, height)
 
@@ -399,9 +399,9 @@ async function captureToBuffer(
   // Restore backend + env
   setRendererBackend(prevBackend)
   if (prevStrategy === undefined) {
-    delete process.env["TGE_GPU_FORCE_LAYER_STRATEGY"]
+    delete process.env["VEXART_GPU_FORCE_LAYER_STRATEGY"]
   } else {
-    process.env["TGE_GPU_FORCE_LAYER_STRATEGY"] = prevStrategy
+    process.env["VEXART_GPU_FORCE_LAYER_STRATEGY"] = prevStrategy
   }
 
   const pixels = getCaptured()

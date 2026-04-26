@@ -112,7 +112,7 @@ export function queryPixelSize(
 /** @public */
 export type ResizeHandler = (size: TerminalSize) => void
 
-const RESIZE_DEBUG = process.env.TGE_DEBUG_RESIZE === "1"
+const RESIZE_DEBUG = process.env.VEXART_DEBUG_RESIZE === "1"
 const RESIZE_DEBUG_LOG = "/tmp/tge-resize.log"
 
 function logResize(message: string) {
