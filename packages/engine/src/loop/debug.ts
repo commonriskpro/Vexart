@@ -28,9 +28,8 @@ import { createSignal } from "solid-js"
 import type { NodeHandle } from "../reconciler/handle"
 import type { TGENode } from "../ffi/node"
 import { buildNativeFrameExecutionStats, formatNativeFrameReasonFlags, type NativeFrameExecutionStats, type NativeFrameStrategy } from "../ffi/gpu-layer-strategy"
-import { getNativePresentationFallbackReason, isNativePresentationEnabled } from "../ffi/native-presentation-flags"
+import { getNativePresentationFallbackReason } from "../ffi/native-presentation-flags"
 import { formatNativeStats, type NativePresentationStats } from "../ffi/native-presentation-stats"
-import { isNativeLayerRegistryEnabled, nativeLayerRegistryFallbackReason } from "../ffi/native-layer-registry-flags"
 
 // ── Debug state ──
 
@@ -56,7 +55,7 @@ export type DebugStats = {
   repaintedCount: number
   /** Total TGENode count in the tree */
   nodeCount: number
-  /** Total render commands from Clay */
+  /** Total render commands from the layout adapter */
   commandCount: number
   /** Selected renderer strategy for the current frame */
   rendererStrategy: string | null
@@ -82,10 +81,6 @@ export type DebugStats = {
   presentedInteractionSeq: number
   /** Whether native presentation is active for this frame */
   nativePresentationActive: boolean
-  /** Whether the retained runtime is in default or fallback mode */
-  retainedMode: "default" | "fallback"
-  /** Aggregate reason when the retained runtime fell back */
-  retainedFallbackReason: string | null
   /** Fallback reason if native presentation was disabled */
   nativePresentationFallbackReason: string | null
   /** Last native presentation stats (if available) */
@@ -121,8 +116,6 @@ const [interactionLatencyMs, setInteractionLatencyMs] = createSignal(0)
 const [interactionType, setInteractionType] = createSignal<string | null>(null)
 const [presentedInteractionSeq, setPresentedInteractionSeq] = createSignal(0)
 const [nativePresentationActive, setNativePresentationActive] = createSignal(false)
-const [retainedMode, setRetainedMode] = createSignal<"default" | "fallback">("fallback")
-const [retainedFallbackReason, setRetainedFallbackReason] = createSignal<string | null>(null)
 const [nativePresentationFallbackReason, setNativePresentationFallbackReason] = createSignal<string | null>(null)
 const [nativeStats, setNativeStats] = createSignal<NativePresentationStats | null>(null)
 const [nativeFrameReasonFlags, setNativeFrameReasonFlags] = createSignal<number | null>(null)
@@ -206,7 +199,6 @@ export function debugUpdateStats(stats: {
   ffiCallsBySymbol?: Record<string, number>
 }) {
   if (!debugEnabled()) return
-  const retained = getRetainedModeSnapshot()
   setLayerCount(stats.layerCount)
   setMoveOnlyCount(stats.moveOnlyCount ?? 0)
   setMoveFallbackCount(stats.moveFallbackCount ?? 0)
@@ -229,8 +221,6 @@ export function debugUpdateStats(stats: {
   // Native presentation stats (Phase 2b)
   const isNative = stats.rendererOutput === "native-presented"
   setNativePresentationActive(isNative)
-  setRetainedMode(retained.mode)
-  setRetainedFallbackReason(retained.reason)
   setNativePresentationFallbackReason(getNativePresentationFallbackReason())
   setNativeStats(stats.nativeStats ?? null)
   const nextReasonFlags = stats.nativeFrameReasonFlags ?? null
@@ -300,8 +290,6 @@ export const debugState = {
   get interactionType() { return interactionType() },
   get presentedInteractionSeq() { return presentedInteractionSeq() },
   get nativePresentationActive() { return nativePresentationActive() },
-  get retainedMode() { return retainedMode() },
-  get retainedFallbackReason() { return retainedFallbackReason() },
   get nativePresentationFallbackReason() { return nativePresentationFallbackReason() },
   get nativeStats() { return nativeStats() },
   get nativeFrameReasonFlags() { return nativeFrameReasonFlags() },
@@ -318,22 +306,10 @@ export function debugStatsLine(): string {
   if (!debugEnabled()) return ""
   const native = nativePresentationActive() ? "on" : "off"
   const fallback = nativePresentationFallbackReason() ? ` [${nativePresentationFallbackReason()}]` : ""
-  const retained = retainedMode()
-  const retainedFallback = retainedFallbackReason() ? ` [${retainedFallbackReason()}]` : ""
   const nStatsStr = nativeStats() ? ` | ${formatNativeStats(nativeStats()!)}` : ""
   const frameReason = nativeFrameReasonFlags()
   const frameReasonStr = frameReason !== null && frameReason !== 0 ? ` reasons=${formatNativeFrameReasonFlags(frameReason)}` : ""
-  return `${fps()} FPS | ${frameTimeMs()}ms | ${layerCount()} layers | move=${moveOnlyCount()}/${moveFallbackCount()}/${stableReuseCount()} | ${dirtyBeforeCount()} dirty before | ${repaintedCount()} repainted | ${nodeCount()} nodes | ${commandCount()} cmds | ffi=${ffiCallCount()} | strategy=${rendererStrategy() ?? "none"}${frameReasonStr} | output=${rendererOutput() ?? "none"} | tx=${transmissionMode() ?? "none"} | est=${estimatedLayeredBytes()}/${estimatedFinalBytes()}B | input=${interactionType() ?? "none"}@${interactionLatencyMs()}ms | res=${resourceEntries()}@${resourceBytes()}B gpu=${gpuResourceBytes()}B | retained=${retained}${retainedFallback} | native=${native}${fallback}${nStatsStr}`
-}
-
-function getRetainedModeSnapshot(): { mode: "default" | "fallback"; reason: string | null } {
-  const disabled = [
-    ["presentation", isNativePresentationEnabled(), getNativePresentationFallbackReason()],
-    ["layers", isNativeLayerRegistryEnabled(), nativeLayerRegistryFallbackReason()],
-  ].flatMap(([name, enabled, reason]) => enabled ? [] : [`${name}: ${reason ?? "disabled"}`])
-
-  if (disabled.length === 0) return { mode: "default", reason: null }
-  return { mode: "fallback", reason: disabled.join("; ") }
+  return `${fps()} FPS | ${frameTimeMs()}ms | ${layerCount()} layers | move=${moveOnlyCount()}/${moveFallbackCount()}/${stableReuseCount()} | ${dirtyBeforeCount()} dirty before | ${repaintedCount()} repainted | ${nodeCount()} nodes | ${commandCount()} cmds | ffi=${ffiCallCount()} | strategy=${rendererStrategy() ?? "none"}${frameReasonStr} | output=${rendererOutput() ?? "none"} | tx=${transmissionMode() ?? "none"} | est=${estimatedLayeredBytes()}/${estimatedFinalBytes()}B | input=${interactionType() ?? "none"}@${interactionLatencyMs()}ms | res=${resourceEntries()}@${resourceBytes()}B gpu=${gpuResourceBytes()}B | native=${native}${fallback}${nStatsStr}`
 }
 
 function describeNode(node: TGENode, depth: number): string {

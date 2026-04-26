@@ -1,5 +1,5 @@
 /**
- * Input event types for @tge/input.
+ * Input event types for @vexart/engine.
  *
  * All parsed input is normalized to one of these event types.
  * The parser transforms raw stdin bytes → typed events.

@@ -1,12 +1,12 @@
 /**
- * @tge/output — Kitty-first output transport and layer composition.
+ * @vexart/engine output — Kitty-first output transport and layer composition.
  */
 
 // Layer compositor (multi-image, browser-style)
 export { createLayerComposer } from "./layer-composer"
 export type { LayerComposer } from "./layer-composer"
 
-// Transmission mode probing (used by @tge/terminal during init)
+// Transmission mode probing (used by @vexart/engine output during init)
 export { probeShm, probeFile, patchRegion, transmitRaw, transmitRawAt, getKittyTransportStats, resetKittyTransportStats } from "./kitty"
 export type { TransmissionMode, CompressMode } from "./kitty"
 export {

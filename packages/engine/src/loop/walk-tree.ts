@@ -1,5 +1,5 @@
 /**
- * walk-tree.ts — TGENode tree walking + Clay layout feeding.
+ * walk-tree.ts — TGENode tree walking + Flexily layout feeding.
  *
  * Extracted from loop.ts as part of Phase 3 Slice 2.2.
  * AABB viewport culling added in Phase 3 Slice 3.3.
@@ -26,7 +26,7 @@ import {
   ensureImageExtra,
   ensureCanvasExtra,
 } from "../ffi/node"
-import { measureForClay } from "../ffi/text-layout"
+import { measureForLayout } from "../ffi/text-layout"
 import { CanvasContext, hashCanvasDisplayList, serializeCanvasDisplayList } from "../ffi/canvas"
 import { nativeCanvasDisplayListTouch, nativeCanvasDisplayListUpdate, syncNativeCanvasDisplayListHandle } from "../ffi/native-canvas-display-list"
 import { decodeImageForNode } from "./image"
@@ -72,8 +72,8 @@ export type WalkTreeState = {
   // Rect node lookup (by id) — used by interaction state
   rectNodeById: Map<number, TGENode>
 
-  // Clay adapter — the layout engine interface
-  clay: ReturnType<typeof createVexartLayoutCtx>
+  // Layout adapter — the layout engine interface
+  layout: ReturnType<typeof createVexartLayoutCtx>
 
   // ── Viewport culling (Slice 3.3) ──
 
@@ -170,7 +170,7 @@ export function collectText(node: TGENode): string {
 
 /**
  * Register a node as a RECT-emitting node.
- * Called whenever Clay is configured to emit a RECTANGLE command for a node.
+ * Called whenever the layout adapter is configured to emit a RECTANGLE command for a node.
  */
 export function registerRectNode(node: TGENode, state: WalkTreeState) {
   state.rectNodes.push(node)
@@ -180,11 +180,11 @@ export function registerRectNode(node: TGENode, state: WalkTreeState) {
 // ── walkTree ──────────────────────────────────────────────────────────────
 
 /**
- * Walk TGENode tree and replay into Clay (immediate mode).
- * This is the FIRST pass — it only feeds Clay, no layer assignment.
+ * Walk TGENode tree and replay into the Flexily layout adapter.
+ * This is the FIRST pass — it only feeds layout, no layer assignment.
  *
- * Text measurement: Before calling clay.text(), we pre-measure
- * the text with Pretext and register the measurement so Clay's
+ * Text measurement: Before calling layout.text(), we pre-measure
+ * the text with Pretext and register the measurement so the layout adapter's
  * callback can read accurate width/height.
  *
  * @param node            - Current node to process
@@ -201,7 +201,7 @@ export function walkTree(
   scrollContainerId = 0,
   insideScroll = false,
 ) {
-  const { clay } = state
+  const { layout } = state
   const dfsIndex = state.nodeCount.value++
   if (dfsIndex === 0) {
     effectPoolIdx = 0
@@ -264,10 +264,10 @@ export function walkTree(
     const fontId = props.fontId ?? 0
     const lineHeight = props.lineHeight ?? Math.ceil(fontSize * 1.2)
 
-    // Pre-measure text dimensions for layout (passed directly to clay.text)
+    // Pre-measure text dimensions for layout (passed directly to layout.text)
     const measurement = node._lastMeasuredText === content && node._lastMeasuredFontId === fontId && node._lastMeasuredFontSize === fontSize && node._lastMeasurement
       ? node._lastMeasurement
-      : measureForClay(content, fontId, fontSize)
+      : measureForLayout(content, fontId, fontSize)
     node._lastMeasuredText = content
     node._lastMeasuredFontId = fontId
     node._lastMeasuredFontSize = fontSize
@@ -279,7 +279,7 @@ export function walkTree(
     state.textMetas.push(meta)
     state.textMetaMap.set(node.id, meta)
 
-    clay.text(content, color, fontId, fontSize, node.id, measurement.width, measurement.height)
+    layout.text(content, color, fontId, fontSize, node.id, measurement.width, measurement.height)
     state.textNodes.push(node)
     return
   }
@@ -295,18 +295,18 @@ export function walkTree(
 
     // Emit a layout element for this image node
     state.boxNodes.push(node)
-    clay.openElement()
-    clay.setCurrentNodeId(node.id)
+    layout.openElement()
+    layout.setCurrentNodeId(node.id)
 
     // Sizing: use pre-parsed if explicit, else image intrinsic size, else fit
     const imgBuf = extra.buffer
     const ws = node._widthSizing ?? (imgBuf ? { type: SIZING.FIXED, value: imgBuf.width } : { type: SIZING.FIT, value: 0 })
     const hs = node._heightSizing ?? (imgBuf ? { type: SIZING.FIXED, value: imgBuf.height } : { type: SIZING.FIT, value: 0 })
-    clay.configureSizing(ws.type, ws.value, hs.type, hs.value)
+    layout.configureSizing(ws.type, ws.value, hs.type, hs.value)
 
-    // Use a placeholder RECT so Clay emits a RECTANGLE command for painting
+    // Use a placeholder RECT so the layout adapter emits a RECTANGLE command for painting
     const placeholderColor = 0x00000001 // near-transparent
-    clay.configureRectangle(placeholderColor, props.cornerRadius ?? 0)
+    layout.configureRectangle(placeholderColor, props.cornerRadius ?? 0)
     registerRectNode(node, state)
 
     // Queue image data for paintCommand
@@ -321,7 +321,7 @@ export function walkTree(
       })
     }
 
-    clay.closeElement()
+    layout.closeElement()
     return
   }
 
@@ -334,21 +334,21 @@ export function walkTree(
     const hasMouseProps = props.onMouseDown || props.onMouseUp || props.onMouseMove || props.onMouseOver || props.onMouseOut
     const isInteractive = props.focusable || props.hoverStyle || props.activeStyle || props.focusStyle || props.onPress || hasMouseProps
     if (isInteractive) {
-      clay.setId(`tge-node-${node.id}`)
+      layout.setId(`tge-node-${node.id}`)
     } else {
-      clay.openElement()
+      layout.openElement()
     }
-    clay.setCurrentNodeId(node.id)
+    layout.setCurrentNodeId(node.id)
 
     // Sizing: use pre-parsed or default to grow
     const ws = node._widthSizing ?? { type: SIZING.GROW, value: 0 }
     const hs = node._heightSizing ?? { type: SIZING.GROW, value: 0 }
-    clay.configureSizing(ws.type, ws.value, hs.type, hs.value)
+    layout.configureSizing(ws.type, ws.value, hs.type, hs.value)
 
     // Use a UNIQUE placeholder RECT so Canvas emits a RECTANGLE command for painting.
     // Pack node.id into RGB, keep alpha near-transparent.
     const placeholderColor = (((node.id & 0x00ffffff) << 8) | 0x02) >>> 0
-    clay.configureRectangle(placeholderColor, 0)
+    layout.configureRectangle(placeholderColor, 0)
     registerRectNode(node, state)
 
     // Queue canvas config for paintCommand
@@ -387,14 +387,14 @@ export function walkTree(
       })
     }
 
-    clay.closeElement()
+    layout.closeElement()
     return
   }
 
   state.boxNodes.push(node)
   const props = resolveProps(node)
 
-  // Assign Clay element ID for:
+  // Assign layout element ID for:
   // 1. Scroll containers — for scroll offset tracking
   // 2. Interactive nodes — for reliable layout readback (hit-testing)
   const hasMouseProps = props.onMouseDown || props.onMouseUp || props.onMouseMove || props.onMouseOver || props.onMouseOut
@@ -407,18 +407,18 @@ export function walkTree(
     // Use node.id for a stable scroll ID that survives frame resets.
     // Fallback to user-provided scrollId for programmatic scroll handles.
     const sid = props.scrollId ?? `tge-scroll-${node.id}`
-    clay.setId(sid)
+    layout.setId(sid)
     // Track counter for legacy compat (still incremented but not used for ID)
     state.scrollIdCounter.value++
     if (props.scrollSpeed) {
       state.scrollSpeedCap.value = props.scrollSpeed
     }
   } else if (needsLayoutId) {
-    clay.setId(`tge-node-${node.id}`)
+    layout.setId(`tge-node-${node.id}`)
   } else {
-    clay.openElement()
+    layout.openElement()
   }
-  clay.setCurrentNodeId(node.id)
+  layout.setCurrentNodeId(node.id)
 
   // Layout — resolve aliases, then use per-side padding if set
   const dir = parseDirection(props.direction ?? props.flexDirection)
@@ -431,7 +431,7 @@ export function walkTree(
   if (hasPerSidePadding) {
     const basePx = props.paddingX ?? props.padding ?? 0
     const basePy = props.paddingY ?? props.padding ?? 0
-    clay.configureLayoutFull(dir,
+    layout.configureLayoutFull(dir,
       props.paddingLeft ?? basePx,
       props.paddingRight ?? basePx,
       props.paddingTop ?? basePy,
@@ -440,11 +440,11 @@ export function walkTree(
   } else {
     const px = props.paddingX ?? props.padding ?? 0
     const py = props.paddingY ?? props.padding ?? 0
-    clay.configureLayout(dir, px, py, gap, ax, ay)
+    layout.configureLayout(dir, px, py, gap, ax, ay)
   }
 
-  // Sizing — use pre-parsed values, fallback to FIT (Auto in Taffy).
-  // Cross-axis stretching is handled by Taffy's default align_items: Stretch
+  // Sizing — use pre-parsed values, fallback to FIT (Auto in Flexily).
+  // Cross-axis stretching is handled by Flexily's default align_items: Stretch
   // (activated via alignItems=255/None in _defaultOpen). No manual stretch
   // emulation needed — removed the stretchW/stretchH hack that incorrectly
   // used flexGrow (main-axis only) for cross-axis stretching.
@@ -458,12 +458,12 @@ export function walkTree(
   const hasMinMax = props.minWidth !== undefined || props.maxWidth !== undefined ||
                     props.minHeight !== undefined || props.maxHeight !== undefined
   if (hasMinMax) {
-    clay.configureSizingMinMax(
+    layout.configureSizingMinMax(
       ws.type, ws.value, props.minWidth ?? 0, props.maxWidth ?? 100000,
       hs.type, hs.value, props.minHeight ?? 0, props.maxHeight ?? 100000,
     )
   } else {
-    clay.configureSizing(ws.type, ws.value, hs.type, hs.value)
+    layout.configureSizing(ws.type, ws.value, hs.type, hs.value)
   }
 
   // Floating / absolute positioning
@@ -477,19 +477,19 @@ export function walkTree(
     const pc = props.pointerPassthrough ? POINTER_CAPTURE.PASSTHROUGH : POINTER_CAPTURE.CAPTURE
 
     if (f === "parent") {
-      clay.configureFloating(ATTACH_TO.PARENT, ox, oy, z, ape, app, pc, 0)
+      layout.configureFloating(ATTACH_TO.PARENT, ox, oy, z, ape, app, pc, 0)
     } else if (f === "root") {
-      clay.configureFloating(ATTACH_TO.ROOT, ox, oy, z, ape, app, pc, 0)
+      layout.configureFloating(ATTACH_TO.ROOT, ox, oy, z, ape, app, pc, 0)
     } else if (typeof f === "object" && f.attachTo) {
-      const pid = clay.hashString(f.attachTo)
-      clay.configureFloating(ATTACH_TO.ELEMENT, ox, oy, z, ape, app, pc, pid)
+      const pid = layout.hashString(f.attachTo)
+      layout.configureFloating(ATTACH_TO.ELEMENT, ox, oy, z, ape, app, pc, pid)
     }
   }
 
   // Resolve visual props — merges hoverStyle/activeStyle when the node is hovered/active
   const vp = props
 
-  // Inject a RECT command from Clay when needed for:
+  // Inject a RECT command from the layout adapter when needed for:
   // 1. Visual effects (gradient, backdrop filter, opacity)
   // 2. Interactive nodes (onPress, focusable, hoverStyle, mouse callbacks)
   //    Without a RECT, the node doesn't enter rectNodes → no hit-testing → mouse events never fire.
@@ -505,7 +505,7 @@ export function walkTree(
   if (needsRect) {
     const bgColor = vp.backgroundColor !== undefined ? (vp.backgroundColor as number) : 0x00000001
     const cr = vp.cornerRadius ?? 0
-    clay.configureRectangle(bgColor, cr)
+    layout.configureRectangle(bgColor, cr)
     registerRectNode(node, state)
 
     // Record effects for this RECT — matched during paint
@@ -567,7 +567,7 @@ export function walkTree(
                            vp.borderBetweenChildren !== undefined
   if (hasPerSideBorder && vp.borderColor !== undefined) {
     const borderColor = vp.borderColor as number
-    clay.configureBorderSides(borderColor,
+    layout.configureBorderSides(borderColor,
       vp.borderLeft ?? 0,
       vp.borderRight ?? 0,
       vp.borderTop ?? 0,
@@ -575,14 +575,14 @@ export function walkTree(
       vp.borderBetweenChildren ?? 0)
   } else if (effectiveBorderWidth > 0) {
     const borderColor = (vp.borderColor !== undefined ? vp.borderColor : 0x00000000) as number
-    clay.configureBorder(borderColor, effectiveBorderWidth)
+    layout.configureBorder(borderColor, effectiveBorderWidth)
   }
 
   // Scroll / clip container.
   // Scroll offsets are applied TS-side in applyScrollOffsets() after layout —
-  // the offset params here were Clay-era no-ops and have been removed.
+  // the offset params here were layout-adapter no-ops and have been removed.
   if (props.scrollX || props.scrollY) {
-    clay.configureClip(
+    layout.configureClip(
       props.scrollX ?? false,
       props.scrollY ?? false,
       0,
@@ -593,8 +593,8 @@ export function walkTree(
   // ── AABB viewport culling (Slice 3.3) ──
   // Use previous-frame layout to decide whether to descend into children.
   // Scroll containers are exempt — their children may scroll into view.
-  // We still open/close the element for the current node (Clay needs balance),
-  // but we skip all children — reducing Clay commands and paint work.
+  // We still open/close the element for the current node (Flexily needs balance),
+  // but we skip all children — reducing layout commands and paint work.
   if (
     state.cullingEnabled
     && !isScrollContainer
@@ -611,7 +611,7 @@ export function walkTree(
       const fullyBelow = l.y >= state.viewportHeight
       if (fullyLeft || fullyRight || fullyAbove || fullyBelow) {
         if (state.culledCount) state.culledCount.value++
-        clay.closeElement()
+        layout.closeElement()
         return
       }
     }
@@ -626,5 +626,5 @@ export function walkTree(
     walkTree(child, state, dir, childInsideXform, childScrollContainerId, childInsideScroll)
   }
 
-  clay.closeElement()
+  layout.closeElement()
 }

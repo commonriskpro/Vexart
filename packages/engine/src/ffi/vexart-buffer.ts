@@ -15,7 +15,7 @@ export const GRAPH_BUFFER_BYTES = 64 * 1024
 /** Graph buffer magic: "VXAR" in little-endian u32 = 0x56584152. */
 export const GRAPH_MAGIC = 0x56584152 as const
 
-/** Graph buffer version: Phase 2.0 = 0x00020000. */
+/** Graph buffer version. */
 export const GRAPH_VERSION = 0x00020000 as const
 
 // ── Shared graph buffer (reused every frame) ────────────────────────────────

@@ -1,4 +1,4 @@
-// transport-manager.ts — Phase 2 native path
+// transport-manager.ts — Kitty native transport path
 // Placeholder and halfblock transport branches removed per DEC-005 / REQ-NB-002.
 // Only Kitty (shm, file, direct) transport remains. Per design §11.
 

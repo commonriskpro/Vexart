@@ -1,6 +1,6 @@
 /**
  * vexart-bridge.ts
- * bun:ffi loader for libvexart.{dylib,so,dll} — all 20 Phase 2 FFI exports.
+ * bun:ffi loader for libvexart.{dylib,so,dll} FFI exports.
  * Per design §5, §12, REQ-NB-003.
  *
  * Loaded lazily (on first access) so import does not crash if the dylib is missing.

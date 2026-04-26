@@ -1,23 +1,22 @@
 /**
- * TGENode — the bridge between SolidJS reconciler and Taffy/vexart layout.
+ * TGENode — the bridge between SolidJS reconciler and Vexart layout.
  *
  * SolidJS creates/manipulates TGENodes via createRenderer methods.
  * Each frame, we walk the TGENode tree and emit commands into the
  * TypeScript layout adapter per design §8.
  *
- * TGENode is a simple retained tree. Taffy is stateless from TS's perspective
- * (layout tree is rebuilt each frame from TS state).
+ * TGENode is a simple TypeScript-owned tree. Flexily layout state is rebuilt
+ * each frame from TS state.
  *
- * Phase 2 migration: removed Clay FFI dependency. Constants are now
- * local to this module, matching the same numeric values for backward
+ * Layout constants are local to this module, matching the same numeric values for backward
  * compatibility with any callers that read them.
  */
 
-// ── Layout constants (previously from clay.ts) ──
+// ── Layout constants ──
 // Numeric values preserved for backward compat; semantics map through
 // packages/engine/src/loop/layout-adapter.ts.
 
-/** @public Sizing type enum that preserves the legacy clay sizing values. */
+/** @public Sizing type enum for layout adapter sizing values. */
 export const SIZING = {
   FIT: 0,
   GROW: 1,
@@ -25,16 +24,16 @@ export const SIZING = {
   FIXED: 3,
 } as const
 
-/** @public Flex direction enum that preserves the legacy clay direction values. */
+/** @public Flex direction enum for layout adapter direction values. */
 export const DIRECTION = {
   LEFT_TO_RIGHT: 0,
   TOP_TO_BOTTOM: 1,
 } as const
 
-/** @public Horizontal alignment enum that preserves the legacy clay horizontal alignment values. */
+/** @public Horizontal alignment enum for layout adapter alignment values. */
 export const ALIGN_X = { LEFT: 0, RIGHT: 1, CENTER: 2, SPACE_BETWEEN: 3 } as const
 
-/** @public Vertical alignment enum that preserves the legacy clay vertical alignment values. */
+/** @public Vertical alignment enum for layout adapter alignment values. */
 export const ALIGN_Y = { TOP: 0, BOTTOM: 1, CENTER: 2, SPACE_BETWEEN: 3 } as const
 
 /** @public */
@@ -137,7 +136,7 @@ export type TGEProps = {
   height?: number | string
   /** When set, width behaves as "grow" (opentui compat) */
   flexGrow?: number
-  /** Accepted for compat, Clay shrinks implicitly */
+  /** Accepted for compatibility; layout shrinking is handled by the adapter */
   flexShrink?: number
 
   // Visual
@@ -153,7 +152,7 @@ export type TGEProps = {
 
   // Compositing
   layer?: boolean  // Opt-in: this node becomes its own compositing layer
-  /** Declarative interaction state used by engine-level retained drag/compositor policies. */
+  /** Declarative interaction state used by engine-level drag/compositor policies. */
   interactionMode?: InteractionMode
   debugName?: string
 
@@ -161,7 +160,7 @@ export type TGEProps = {
   scrollX?: boolean  // Enable horizontal scroll clipping
   scrollY?: boolean  // Enable vertical scroll clipping
   scrollSpeed?: number  // Lines per scroll tick (default: natural accumulation)
-  scrollId?: string  // Stable Clay ID for scroll container (set by ScrollView for programmatic control)
+  scrollId?: string  // Stable scroll container ID (set by ScrollView for programmatic control)
 
   // Floating / Absolute positioning
   floating?: "parent" | "root" | { attachTo: string }  // Enable floating: relative to parent, root, or named element
@@ -345,19 +344,17 @@ export type TGENode = {
   parent: TGENode | null
   /** Stable unique identifier for this node */
   id: number
-  /** Native scene node ID used by the Rust-retained scene graph skeleton. */
-  _nativeId: bigint | null
   /** Whether this node has been removed from the tree */
   destroyed: boolean
-  /** Computed layout rect — written after Clay layout pass */
+  /** Computed layout rect — written after the layout pass */
   layout: LayoutRect
   /** Interactive state — managed by render loop hit-testing */
   _hovered: boolean
   _active: boolean
   _focused: boolean
-  /** Image-only retained data, allocated lazily for img nodes. */
+  /** Image-only extra data, allocated lazily for img nodes. */
   _imageExtra: NodeImageExtra | null
-  /** Canvas-only retained data, allocated lazily for canvas nodes. */
+  /** Canvas-only extra data, allocated lazily for canvas nodes. */
   _canvasExtra: NodeCanvasExtra | null
   /** Pre-parsed width sizing — resolved once in setProperty, read every frame */
   _widthSizing: SizingInfo | null
@@ -421,7 +418,6 @@ export function createNode(kind: TGENodeKind): TGENode {
     children: [],
     parent: null,
     id: nextNodeId++,
-    _nativeId: null,
     destroyed: false,
     layout: { x: 0, y: 0, width: 0, height: 0 },
     _hovered: false,

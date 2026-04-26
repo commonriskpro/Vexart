@@ -3,15 +3,14 @@ schema: spec-driven
 context: |
   Project: Vexart — GPU-accelerated UI engine for modern terminals (Kitty graphics protocol).
   Stack (target v0.9): TypeScript (Bun runtime) + Rust (single cdylib libvexart).
-  Stack (current v0.1): TS + Rust (wgpu-canvas-bridge) + Zig + C (Clay) — migration in phases.
+  Stack: TS (Bun) + Rust (libvexart: WGPU paint + composite + Kitty encoding). Layout: Flexily (pure JS).
   Architecture: 4-layer public packages (@vexart/engine → primitives → headless → styled) + libvexart native.
   Testing: bun test (unit), tsc --noEmit (typecheck), cargo test (native), golden image suite (Phase 4).
   Style: see docs/PRD.md (product), docs/ARCHITECTURE.md (target structure), docs/API-POLICY.md (API rules).
 
 strict_tdd: false
-# Rationale: Phases 0-1 are cleanup/migration (deletes, renames, boundary lint) where TDD
-# does not apply. Activate via PR to this config when Phase 2b (advanced rendering) starts —
-# there TDD around MSDF pipeline, compositor-thread path, and ResourceManager pays off.
+# Rationale: strict TDD is disabled for cleanup/documentation phases. Phase 2b is complete;
+# re-enable via PR only for future implementation work where RED-GREEN-REFACTOR adds value.
 
 testing:
   test_runner:
@@ -29,7 +28,6 @@ testing:
     formatter: null                    # not configured yet
   native:
     rust: "cargo test"
-    zig: "cd zig && zig build test --summary all"   # deleted in Phase 2
 
 rules:
   proposal:

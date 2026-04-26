@@ -14,9 +14,9 @@ function box(props: TGEProps, children: TGENode[] = []) {
 }
 
 function layoutCommands(root: TGENode) {
-  const clay = createVexartLayoutCtx()
-  clay.init(300, 200)
-  clay.beginLayout()
+  const layout = createVexartLayoutCtx()
+  layout.init(300, 200)
+  layout.beginLayout()
 
   const textMetas: TextMeta[] = []
   walkTree(root, {
@@ -37,11 +37,11 @@ function layoutCommands(root: TGENode) {
     canvasQueue: new Map(),
     textMetaMap: new Map(),
     rectNodeById: new Map(),
-    clay,
+    layout,
   })
 
-  const commands = clay.endLayout()
-  clay.destroy()
+  const commands = layout.endLayout()
+  layout.destroy()
   return commands
 }
 

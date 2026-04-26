@@ -1,8 +1,6 @@
 import type { TGENode, NodeMouseEvent } from "../ffi/node"
 
-// COMPAT-FALLBACK / TEST-PATH: retained native interaction frames compute
-// hit-testing in Rust. These helpers remain for native-disabled fallback,
-// transform fallback, and focused unit tests.
+// Hit-testing helpers for interaction, transform fallback, and focused unit tests.
 
 /** @public */
 export function buildNodeMouseEvent(node: TGENode, pointerX: number, pointerY: number): NodeMouseEvent {

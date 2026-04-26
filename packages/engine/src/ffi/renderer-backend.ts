@@ -166,7 +166,7 @@ export type RendererBackendPaintContext = {
  * Hooks are intentionally split by phase:
  * - beginFrame: inspect frame-wide heuristics and choose a strategy
  * - paint: render one layer or standalone target
- * - reuseLayer: opt into retained-layer reuse without repainting
+ * - reuseLayer: opt into cached-layer reuse without repainting
  * - endFrame: finalize frame-wide presentation work
  */
 /** @public */

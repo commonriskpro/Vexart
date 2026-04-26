@@ -146,7 +146,7 @@ export type CompositeFrameState = {
   // Terminal (for beginSync/endSync, cell size)
   term: Terminal
 
-  // Layout adapter (Taffy-backed, drop-in replacement for the legacy Clay object)
+  // Layout adapter (Flexily-backed)
   layoutAdapter: ReturnType<typeof createVexartLayoutCtx>
 
   // Accumulated scroll deltas (reset to 0 after consumption)
@@ -165,7 +165,7 @@ export type CompositeFrameState = {
     prevActiveNode: TGENode | null
   }
 
-  // Post-scroll hooks (fire after Clay scroll update, before walkTree)
+  // Post-scroll hooks (fire after scroll state updates, before walkTree)
   postScrollCallbacks: (() => void)[]
 
   // Walk counters — read at start, written back at end
@@ -261,7 +261,7 @@ function buildWalkState(s: CompositeFrameState): WalkTreeState {
     canvasQueue: s.renderGraphQueues.canvases,
     textMetaMap: s.textMetaMap,
     rectNodeById: s.rectNodeById,
-    clay: s.layoutAdapter,
+    layout: s.layoutAdapter,
   }
 }
 
@@ -513,7 +513,7 @@ function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; c
  * Render one complete frame through the full pipeline.
  *
  * Called by the coordinator's frame() each tick.
- * Returns early (without clearing dirty) if Clay emits no commands.
+  * Returns early (without clearing dirty) if the layout adapter emits no commands.
  */
 export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   const dirtyVersionAtFrameStart = s.dirtyVersion()
@@ -521,13 +521,13 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   const layoutStart = s.debugCadence ? performance.now() : 0
   const scrollStart = profile ? performance.now() : 0
 
-  // ── Step 1: Feed scroll + pointer to Clay ──
+  // ── Step 1: Feed scroll + pointer state ──
   const now = Date.now()
   const dt = Math.min((now - s.lastFrameTime.value) / 1000, 0.1)
   s.lastFrameTime.value = now
 
   // Note: pointer handling is done TS-side in updateInteractiveStates.
-  // setPointer()/updateScroll() were Clay-era no-ops and have been removed.
+  // setPointer()/updateScroll() were layout-adapter no-ops and have been removed.
 
   let sdx = s.scroll.x
   let sdy = s.scroll.y
@@ -675,7 +675,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     return
   }
 
-  // ── Step 2: Walk tree → Clay layout ──
+  // ── Step 2: Walk tree → Flexily layout ──
   resetWalkAccumulators(s)
   s.layoutAdapter.beginLayout()
   const walkStart = profile ? performance.now() : 0

@@ -1,12 +1,10 @@
 /**
- * kitty-shm-native.ts — Phase 2 native path
+ * kitty-shm-native.ts — native Kitty shared-memory path
  *
  * Rewired from libkitty-shm-helper to libvexart's vexart_kitty_shm_* exports.
  * Per design §11, §5.6 (Translation 4), REQ-NB-006.
  *
- * Signature differences from legacy tge_kitty_shm_prepare:
- *   BEFORE: (name_ptr: *const char, data_ptr: *const u8, data_len: u64, mode: u32) → u64
- *   AFTER:  (name_ptr: *const u8, name_len: u32, data_ptr: *const u8, data_len: u32, mode: u32, out_handle: *mut u64) → i32
+ * Signature uses explicit name/data lengths plus an out handle for ARM64-safe FFI.
  *
  * Returns i32 (0=OK, negative=error); handle via out_handle pointer.
  */
@@ -73,7 +71,7 @@ export function releaseNativeKittyShm(handle: number, unlinkName: boolean) {
   }
 }
 
-/** Phase 2: returns vexart version as proxy for kitty shm helper version. */
+/** Returns vexart version as proxy for kitty shm helper version. */
 /** @public */
 export function getNativeKittyShmHelperVersion(): number {
   const { symbols } = openVexartLibrary()

@@ -64,7 +64,7 @@ export type RichTextProps = {
 
 /**
  * RichText — wraps children <Span> elements in a horizontal row.
- * Clay will lay them out left-to-right within the container width.
+ * Flexily will lay them out left-to-right within the container width.
  */
 /** @public */
 export function RichText(props: RichTextProps) {

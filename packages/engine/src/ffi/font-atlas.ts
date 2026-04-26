@@ -1,9 +1,8 @@
 /**
  * Runtime font atlas generator — creates bitmap atlases on demand.
  *
- * Instead of pre-generating Zig source files at build time, this module
- * creates font atlases at runtime using @napi-rs/canvas and uploads
- * them to the Zig paint engine via FFI.
+ * This module creates font atlases at runtime using @napi-rs/canvas and uploads
+ * them to the native text renderer via FFI.
  *
  * Each font (family + size + weight + style) gets its own atlas.
  * Atlas data is grayscale alpha values for all glyphs in ATLAS_RANGES.

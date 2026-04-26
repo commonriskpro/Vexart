@@ -2,7 +2,7 @@
  * assign-layers.test.ts — Unit tests for layer boundary + spatial assignment.
  *
  * Tests pure tree-traversal and spatial logic only.
- * No FFI, no GPU, no Clay calls required.
+ * No FFI, no GPU, no layout adapter calls required.
  */
 
 import { describe, test, expect } from "bun:test"

@@ -362,7 +362,7 @@ async function captureToBuffer(
   const loop = createRenderLoop(term, {
     experimental: {
       forceLayerRepaint: true,
-      // Offscreen visual tests need a deterministic retained render path, but
+      // Offscreen visual tests need a deterministic render path, but
       // screenshots intentionally capture explicit raw readback instead of the
       // runtime terminal presentation path.
       nativePresentation: false,

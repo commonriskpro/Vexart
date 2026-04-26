@@ -6,7 +6,7 @@
 **Last updated**: April 2026
 
 **Changelog from v0.6**:
-- DEC-014 added: Rust retained scene graph / render graph / layout / event dispatch reverted based on cosmic-shell-1080p bench evidence (TS path 4.8× faster, 15.84 ms p95 vs 75.42 ms p95). TS retains scene graph, reactivity, layout (Taffy in TS), event dispatch. Rust retains paint pipelines (WGPU), composite, Kitty encoding, SHM/file/direct transport, image assets, canvas display lists. DEC-012 partially superseded — only paint/composite/transport portion stands.
+- DEC-014 added: Rust retained scene graph / render graph / layout / event dispatch reverted based on cosmic-shell-1080p bench evidence (TS path 4.8× faster, 15.84 ms p95 vs 75.42 ms p95). TS retains scene graph, reactivity, layout (Flexily in TS), event dispatch. Rust retains paint pipelines (WGPU), composite, Kitty encoding, SHM/file/direct transport, image assets, canvas display lists. DEC-012 partially superseded — only paint/composite/transport portion stands.
 - Section 6 updated to reflect new TS/Rust boundary.
 - Section 11 phase overlay updated: phases 3b-3g, 4a, 4b, 13 marked as reverted with evidence.
 - Four public experimental flags removed from mount() API: `nativeSceneGraph`, `nativeSceneLayout`, `nativeRenderGraph`, `nativeEventDispatch`.
@@ -91,7 +91,7 @@ Modern terminals (Kitty, WezTerm, Ghostty) have supported graphics protocols for
 
 ### 2.2 The solution
 
-Vexart bridges JSX + SolidJS reactivity to a Rust-native GPU rendering pipeline using the Kitty graphics protocol. Developers write the UI the way they write React web apps. TypeScript owns scene graph, reactivity, layout (Taffy), render graph generation, and event dispatch; Rust owns paint (WGPU), composite, Kitty encoding, transport, image assets, and canvas display lists.
+Vexart bridges JSX + SolidJS reactivity to a Rust-native GPU rendering pipeline using the Kitty graphics protocol. Developers write the UI the way they write React web apps. TypeScript owns scene graph, reactivity, layout (Flexily), render graph generation, and event dispatch; Rust owns paint (WGPU), composite, Kitty encoding, transport, image assets, and canvas display lists.
 
 The result:
 
@@ -343,7 +343,7 @@ Single opinionated theme ("void" — dark, shadcn-inspired) with:
 - Extmarks: virtual text / virtual lines for editors.
 - Selection: text selection across nodes.
 - Font atlas: runtime font loading (up to 15 atlases).
-- Single native library: `libvexart.{dylib,so,dll}` (Rust: taffy + wgpu + kitty encoder).
+- Single native library: `libvexart.{dylib,so,dll}` (Rust: wgpu + composite + kitty encoder).
 
 #### Quality
 
@@ -431,7 +431,7 @@ Vexart is organized as four strictly-layered packages. Each layer depends only o
 ┌───────────────────────────────────────────────┐
 │   @vexart/engine                              │
 │   — SolidJS reconciler                        │
-│   — Render loop (walk, layout, paint, output) │
+│   — Render loop (walk, Flexily layout, paint)  │
 │   — Hooks (useFocus, useKeyboard, useMouse)   │
 │   — FFI bridge to libvexart                   │
 │   — Terminal lifecycle, input parsing         │
@@ -439,9 +439,9 @@ Vexart is organized as four strictly-layered packages. Each layer depends only o
                        ▼
 ┌───────────────────────────────────────────────┐
 │   libvexart.{dylib,so,dll} (Rust cdylib)      │
-│   — Taffy (layout: flexbox, grid-ready)       │
 │   — WGPU (paint: SDF, gradients, effects)     │
 │   — Kitty graphics protocol encoder           │
+│   — Composite, transport, GPU resources       │
 └──────────────────────┬────────────────────────┘
                        ▼
                   Terminal
@@ -470,7 +470,7 @@ Final language stack for Vexart v0.9:
 |---|---|---|---|
 | User-facing API | TypeScript/TSX | Bun | JSX is the product's surface; SolidJS is the reconciler; Bun offers the best FFI perf. |
 | Engine orchestration | TypeScript | Bun | Reconciler, loop, signals, hooks. |
-| Native core | Rust | Compiled to cdylib | Taffy (layout) + WGPU (paint) + Kitty protocol encoder in one binary. |
+| Native core | Rust | Compiled to cdylib | WGPU (paint pipelines) + composite + Kitty protocol encoder + GPU resources in one binary. Layout is TS-side via Flexily. |
 
 **Rejected alternatives**:
 - C (Clay) — replaced by Taffy (Rust, performance parity, richer features, unified binary).
@@ -480,7 +480,7 @@ Final language stack for Vexart v0.9:
 
 **Benefits of 2-language stack**:
 - One native binary (`libvexart`), one FFI boundary, one build command (`cargo build --release`).
-- Layout and paint share memory within Rust — zero FFI between them.
+- Layout stays TypeScript-side via Flexily, while Rust owns paint/presentation behind one paint-forward FFI boundary.
 - Cross-compilation trivial via `cargo` (macOS + Linux for v0.9, Windows in v1.x).
 
 ### 6.4 Native FFI contract
@@ -529,7 +529,7 @@ The target ownership model is:
 JSX (SolidJS createRenderer)
   -> reconciler (TS): scene graph + reactivity
     -> walk-tree (TS): visual props, text measurement, interaction metadata
-      -> layout (Taffy in TS): flexbox, sizing, positioned commands
+      -> layout (Flexily in TS): flexbox, sizing, positioned commands
         -> render graph (TS): ordered paint commands and layer plan
           ===== FFI boundary: paint-forward only =====
           -> paint pipelines (Rust/WGPU)
@@ -541,7 +541,7 @@ JSX (SolidJS createRenderer)
 TypeScript owns:
 
 - SolidJS custom renderer adapter, scene graph, and reactivity.
-- `walk-tree`, layout via Taffy in TS, render graph generation, layer plan, event dispatch, interaction, focus, hit-testing, and callback registry.
+- `walk-tree`, layout via Flexily in TS, render graph generation, layer plan, event dispatch, interaction, focus, hit-testing, and callback registry.
 - Public package APIs, types, hooks, components, terminal lifecycle, and explicit fallback/test/offscreen APIs.
 
 Rust owns:
@@ -720,7 +720,7 @@ Year 3:
 - Vexart is **not** accessibility-first for screen readers. Terminal accessibility is a known gap and not prioritized for v0.9 or v1.0.
 - Vexart does **not** support server-side rendering or static HTML output.
 - Vexart does **not** ship its own reactive runtime — it uses SolidJS.
-- Vexart does **not** ship its own layout engine — it uses Taffy.
+- Vexart does **not** ship its own layout engine — it uses Flexily (pure JavaScript, Yoga-compatible API).
 
 ### 10.2 Hard technical constraints
 
@@ -943,7 +943,7 @@ Timeline assumes 8 hours/day of focused coding, solo, with bi-weekly reviews. To
 
 ### Rust-retained engine migration overlay — reverted by DEC-014
 
-The roadmap above remains the product roadmap, but the retained scene/layout/render/event overlay below has been reverted by DEC-014 after cosmic-shell-1080p bench evidence showed the TS path is 4.8× faster at p95 (15.84 ms vs 75.42 ms). The overlay is preserved as historical record. TS now owns scene graph, reactivity, layout (Taffy), render graph, event dispatch, and interaction; Rust owns paint pipelines, composite, Kitty encoding, SHM/file/direct transport, image assets, and canvas display lists.
+The roadmap above remains the product roadmap, but the retained scene/layout/render/event overlay below has been reverted by DEC-014 after cosmic-shell-1080p bench evidence showed the TS path is 4.8× faster at p95 (15.84 ms vs 75.42 ms). The overlay is preserved as historical record. TS now owns scene graph, reactivity, layout (Flexily), render graph, event dispatch, and interaction; Rust owns paint pipelines, composite, Kitty encoding, SHM/file/direct transport, image assets, and canvas display lists.
 
 Source documents:
 
@@ -957,7 +957,7 @@ Source documents:
 | R1 | Native Presentation | Rust emits normal terminal output; JS receives stats/status only | `rgbaBytesRead === 0` for normal presentation; visual parity verified. |
 | R2 | Native Layer Registry | Rust owns layer targets, terminal image IDs, lifecycle, and resource accounting | TS no longer owns presentation GPU target handles. |
 | R3 | Native Scene Graph Skeleton | **Reverted** (phase-3b archived as `reverted-phase-3b-native-scene-graph`) | DEC-014: native snapshot/writeback overhead made Rust retained path slower. |
-| R4 | Native Layout, Damage, and Hit-Testing | **Reverted** (phase-3c, phase-4a, phase-4b archived with `reverted-` prefix) | DEC-014: layout/writeback p95 20.09 ms; TS Taffy path remains. |
+| R4 | Native Layout, Damage, and Hit-Testing | **Reverted** (phase-3c, phase-4a, phase-4b archived with `reverted-` prefix) | DEC-014: layout/writeback p95 20.09 ms; TS Flexily path remains. |
 | R5 | Native Render Graph | **Reverted** (phase-3d archived as `reverted-phase-3d-native-render-graph`) | DEC-014: TS render graph stays source of ordered paint commands. |
 | R6 | Native Frame Orchestrator | **Reverted** (phase-3e archived as `reverted-phase-3e-native-frame-orchestrator`) | DEC-014: Rust frame strategy did not offset FFI overhead. |
 | R7 | Default Cutover | **Reverted** (phase-3f archived as `reverted-phase-3f-native-default-cutover`) | DEC-014: TS path is default and only scene/layout/event path. |
@@ -977,7 +977,7 @@ This overlay no longer supersedes TS ownership of frame preparation. DEC-014 sup
 **Goal**: absorb the overruns that will happen.
 
 Plan includes ~2 weeks of buffer across phases for:
-- Unexpected Taffy behaviors.
+- Unexpected Flexily behaviors.
 - WGPU regressions on specific terminals.
 - Scope adjustments based on beta feedback.
 - Personal health / rest days.
@@ -1237,18 +1237,37 @@ Every architectural or product decision is logged here with date, context, and r
 
 ---
 
+### 2026-04-25 — DEC-015: Flexily replaces Taffy for TypeScript-side layout
+
+**Decision**: The TypeScript-side layout engine is **Flexily** (pure JavaScript, zero dependencies, Yoga-compatible API). Flexily replaced the custom ~610-line TS mini-flexbox in `layout-adapter.ts` which itself had replaced Clay (C FFI, deleted Phase 2). Taffy remains a Cargo.toml dependency of `libvexart` but is NOT used by the TypeScript walk-tree/layout path after DEC-014 reverted native layout ownership to TypeScript.
+
+**Alternatives considered**:
+- Taffy in TS (via FFI to Rust): rejected — DEC-014 proved that FFI overhead for layout exceeded the benefit. TS-side layout is 4.8× faster.
+- Yoga (C++/WASM): rejected — adds native dependency, Flexily offers API-compatible pure JS alternative with zero-alloc hot path.
+- Custom mini-flexbox (previous implementation): rejected — had 3 known bugs (no cross-axis stretch, broken grow, measure propagation errors).
+
+**Rationale**: Flexily is pure JS with zero dependencies, has a Yoga-compatible API making migration trivial, offers zero-allocation hot path for 60fps layout, and eliminates all native FFI for layout computation. The layout-adapter.ts went from ~610 lines of buggy custom code to ~500 lines of clean Flexily integration.
+
+**Implications**:
+- All "Taffy" references in TS code, comments, and docs that describe the TS-side layout engine should say "Flexily".
+- Taffy in libvexart/Cargo.toml remains as a Rust-side dependency but is vestigial for the current architecture.
+- Future layout work should target Flexily's API, not Taffy's.
+
+---
+
 ## 13. Glossary
 
 - **Adaptive render loop**: frame scheduler that varies FPS based on activity (idle 8fps, active up to 60fps).
 - **120fps-class frame**: a frame category whose engine-side work fits within `8.33 ms` at p95/p99 depending on the metric. Vexart uses `5 ms` as the aggressive fast-path target for small dirty-region work to preserve terminal/I/O headroom.
 - **Backdrop filter**: CSS-style filter applied to content *behind* an element (e.g. glassmorphism blur).
-- **Clay**: C-based layout engine currently in use. Being replaced by Taffy in Phase 2.
+- **Clay**: C-based layout engine formerly used in Vexart pre-Phase 2. Deleted and replaced first by a custom TS mini-flexbox, then by Flexily.
 - **Closed source (in this PRD)**: source code is not publicly available, but binaries are distributed with a license agreement.
 - **Compositor-thread animation**: animation whose per-frame update touches only GPU uniforms (transform matrix, opacity) without regenerating paint commands or invalidating layout. Stays at 60fps even when the main thread is blocked.
 - **`contain` prop**: declarative hint (mirrors CSS `contain`) telling the engine that a subtree is isolated from outer layout/paint invalidation.
 - **DEC-XXX**: numbered entry in the Decisions Log (Section 12). Every architectural or product commitment receives one.
 - **Effect**: visual transformation applied during paint — shadow, glow, gradient, filter, transform.
 - **FFI**: Foreign Function Interface. The boundary between TypeScript (Bun) and Rust (`libvexart`).
+- **Flexily**: Pure JavaScript layout engine with a Yoga-compatible API and zero dependencies. Used from packages/engine/src/loop/layout-adapter.ts for TypeScript-side flexbox layout. Replaced the custom mini-flexbox (which had replaced Clay) per DEC-015.
 - **Golden image test**: rendered output compared against a reference PNG with a pixel diff threshold.
 - **Headless component**: component providing logic/state/accessibility with no visual styling. Consumer supplies the rendering.
 - **Hysteresis**: stability window that prevents oscillation between strategies (Vexart uses 5-frame hysteresis for GPU layer strategy).
@@ -1265,7 +1284,7 @@ Every architectural or product decision is logged here with date, context, and r
 - **SDF**: Signed Distance Field. Mathematical representation of shapes that enables GPU-accelerated anti-aliased rendering.
 - **Styled component**: themed component built on top of a headless component with opinionated tokens.
 - **Task priority lane**: a bucket in Vexart's frame budget scheduler. Three lanes: `user-blocking` (input, focus — never skipped), `user-visible` (layer repaint — may split across frames), `background` (cache warming, telemetry — idle-only). Mirrors web platform's `scheduler.postTask` semantics.
-- **Taffy**: Rust-native layout engine implementing Flexbox, CSS Grid, and Block. Replaces Clay in Phase 2.
+- **Taffy**: Rust-native layout engine implementing Flexbox, CSS Grid, and Block. Present as a dependency in libvexart/Cargo.toml but NOT used for TypeScript-side layout after DEC-014 and DEC-015. The active TS layout engine is Flexily.
 - **Tier 1 optimization**: the three performance-critical items from DEC-010 bundled into Phase 2b. Non-negotiable for v0.9 release. Cover native Kitty encoding, WGPU pipeline cache, and unified GPU budget.
 - **Tier 2 optimization**: the two performance-for-scale items from DEC-010 bundled into Phase 3. Cover viewport culling and frame budget scheduler. May be descoped only via explicit founder decision recorded in the log.
 - **Viewport culling**: skip layout and paint for subtrees whose bounding box is fully outside the visible terminal area. Vexart's automatic equivalent of CSS `content-visibility: auto`. Activates during `walk-tree`.

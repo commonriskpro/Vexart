@@ -1,10 +1,9 @@
-# TGE — Terminal Graphics Engine
+# Vexart — GPU-Accelerated Terminal UI Engine
 
 ## Authoritative documents
 
 Vexart's source of truth lives in three master documents under `docs/`. When their
-guidance conflicts with anything described below, **the master documents win** and
-the content below is treated as legacy TGE reference pending Phase 1 rewrite.
+guidance conflicts with anything described below, **the master documents win**.
 
 - [`docs/PRD.md`](docs/PRD.md) — product requirements, phased roadmap, decision log.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — target layered package structure and
@@ -16,86 +15,108 @@ Every change is executed through the SDD workflow under `openspec/` (see
 `docs.md`) have been archived to `docs/archive/` and MUST NOT be used as a reference
 for new work.
 
-## What is TGE
+## What is Vexart
 
-Pixel-native terminal rendering engine. Developers write JSX (SolidJS), TGE renders browser-quality UI in the terminal with anti-aliased corners, shadows (single + multi), gradients (linear + radial), glow effects, backdrop blur (glassmorphism), and per-corner radius.
+Vexart is a pixel-native, GPU-accelerated terminal UI engine. Developers write JSX
+with SolidJS reconciliation; Vexart renders browser-quality UI in the terminal with
+anti-aliased corners, shadows (single + multi), gradients (linear + radial), glow
+effects, backdrop blur (glassmorphism), image/canvas support, retained layers, and
+per-corner radius.
 
 ## Architecture
 
 ```
 JSX (SolidJS createRenderer)
-  → TS scene graph + reactivity (Solid reconciler)
-    → TS walk-tree + layout (Taffy) + render graph + event dispatch
-      → Rust paint pipelines (WGPU) + image assets + canvas display lists
+  → TypeScript scene graph + reactivity (Solid reconciler)
+    → TypeScript walk-tree + Flexily layout + render graph + event dispatch
+      → Rust libvexart (WGPU paint pipelines + text + image/canvas resources)
         → Rust composite + Kitty encoding + SHM/file/direct transport
           → Terminal
 ```
 
-Current ownership boundary: TypeScript owns scene graph, reactivity, walk-tree, layout (Taffy), render graph, event dispatch, and interaction. Rust owns paint pipelines (WGPU), composite, Kitty encoding, SHM/file/direct transport, image assets, and canvas display lists. The reverted Rust-retained/native scene graph path is historical only.
+Current ownership boundary (DEC-014): TypeScript owns scene graph, reactivity,
+walk-tree, layout (Flexily), render graph construction, event dispatch, interaction,
+focus, and hit-testing. Rust owns WGPU paint pipelines, compositing, Kitty encoding,
+SHM/file/direct transport, image assets, canvas display lists, GPU resources, and
+native readback/presentation.
+
+The Rust-retained/native scene graph path is historical only. The active model is a
+TypeScript-owned scene graph with a Rust/WGPU native rendering boundary.
 
 ## Modules
 
-| Module          | Purpose                                           | Status    |
-| --------------- | ------------------------------------------------- | --------- |
-| @tge/terminal   | Terminal detection, caps, lifecycle, raw I/O      | ✅ Done   |
-| @tge/input      | Keyboard/mouse parsing, focus                     | ✅ Done   |
-| @tge/pixel      | Pixel buffer, SDF paint primitives                | ✅ Done   |
-| @tge/output     | Kitty, placeholder, sixel, halfblock backends     | ✅ Done   |
-| @tge/renderer   | SolidJS reconciler + Clay layout integration      | ✅ Done   |
-| @tge/components | Built-in JSX components (Box, Text, Scroll, etc.) | ✅ Done   |
-| @tge/void       | Design tokens, theming, shadcn-inspired components | ✅ Done   |
+| Package | Purpose | Status |
+| ------- | ------- | ------ |
+| `@vexart/engine` | SolidJS reconciler, render loop, hooks, FFI bridge to `libvexart`, terminal lifecycle, input parsing, focus, hit-testing, output transport | ✅ Active |
+| `@vexart/primitives` | Primitive JSX wrappers and intrinsic element helpers: `Box`, `Text`, `RichText`, `Span`, `WrapRow`; JSX intrinsic elements include `<box>`, `<text>`, `<image>`, `<canvas>` | ✅ Active |
+| `@vexart/headless` | 28 headless components: logic, keyboard/mouse interaction, accessibility contracts, no styling | ✅ Active |
+| `@vexart/styled` | Themed components and void theme tokens — dark, shadcn-inspired design system | ✅ Active |
+| `@vexart/app` | App framework: router, route manifest helpers, className mapper, app mounting, CLI helpers | ✅ Active |
+| `@vexart/internal-atlas-gen` | Internal font atlas generator | ✅ Internal |
+| `@vexart/internal-devtools` | Internal MCP devtools server | ✅ Internal |
 
 ## Key Dependencies
 
-- **Clay** (vendor/clay.h) — Layout engine. Single C header, renderer-agnostic, microsecond performance. Called via bun:ffi. Forked with space-between alignment extension.
-- **SolidJS** (solid-js/universal) — createRenderer for JSX reconciliation. 10 methods, no VDOM.
-- **Zig** (zig/) — Pixel painting shared library. 30+ FFI exports. All ≤8 params (packed buffer ARM64 safe). SDF primitives, blend, composite, gradients, blur, backdrop filters.
-- **Bun** — Runtime. FFI for native libs, TypeScript execution.
+- **Flexily** — Pure JavaScript layout engine with a Yoga-compatible API and zero
+  dependencies. Used from `packages/engine/src/loop/layout-adapter.ts`.
+- **SolidJS** (`solid-js/universal`) — `createRenderer` for JSX reconciliation; no VDOM.
+- **Rust/WGPU** (`native/libvexart`) — Single native `cdylib` (`libvexart`) for GPU paint
+  pipelines, compositing, Kitty encoding, transport, image assets, canvas display lists,
+  and GPU resource management.
+- **Pretext** (`@chenglou/pretext`) — Text measurement/layout support.
+- **Bun** — Runtime, package manager, tests, TypeScript execution, and `bun:ffi` native bridge.
 
-## Build Order
+## Current Build Shape
 
-1. **Phase 1**: terminal + input + pixel + output → "paint a rounded rect in the terminal"
-2. **Phase 2**: Clay FFI + SolidJS renderer → "write JSX and it renders"
-3. **Phase 3**: components + tokens → "reusable Box, Text, Scroll"
-4. **Phase 4**: input integration, scroll, focus → "interactive UI"
+1. **TypeScript front-end**: SolidJS reconciler creates a retained TS node tree.
+2. **Layout**: `walkTree` builds a Flexily tree and computes pixel layout in TS.
+3. **Render graph**: TS converts layout + resolved props into render graph queues.
+4. **Native rendering**: `@vexart/engine` calls `libvexart` via `bun:ffi`.
+5. **Presentation**: Rust/WGPU paints and composites targets, then emits Kitty frames,
+   layers, or dirty regions through direct/file/SHM transport.
 
 ## Style Guide
 
 ### General
 
-- Prefer single-word variable names
-- Use `const` over `let`
-- Early returns over `else`
-- Avoid `try/catch` where possible
-- Avoid `any` type
-- Prefer functional array methods over for loops
-- Use Bun APIs when possible
-
-### Zig
-
-- snake_case for all names
-- Minimize allocations — use arena/stack where possible
-- All FFI exports prefixed with `tge_`
-- Test every public function
+- Prefer single-word variable names.
+- Use `const` over `let`.
+- Prefer early returns over `else`.
+- Avoid `try/catch` where possible.
+- Avoid `any` type.
+- Prefer functional array methods over loops when it stays readable.
+- Use Bun APIs when possible.
 
 ### TypeScript
 
-- Prefer type inference over explicit annotations
-- Avoid destructuring — use dot notation
-- Avoid mocks in tests — test real implementations
+- Prefer type inference over explicit annotations.
+- Avoid destructuring unless it clearly improves readability.
+- Avoid mocks in tests — test real implementations.
+- Public APIs are explicit named exports; avoid broad `export *` from public surfaces.
+- Keep package boundaries aligned with `docs/API-POLICY.md`.
+
+### Rust
+
+- Native boundary lives under `native/libvexart`.
+- FFI exports are `#[no_mangle] extern "C"` functions prefixed with `vexart_`.
+- Wrap FFI bodies in panic guards and return error codes, not panics, across the boundary.
+- Keep packed-buffer FFI patterns where needed to satisfy ARM64 parameter limits.
 
 ## Commands
 
-- `bun install` — install deps
-- `cd zig && zig build test --summary all` — run Zig tests
-- `cd zig && zig build -Doptimize=ReleaseFast` — build Zig shared lib
-- `bun typecheck` — TypeScript type check
-- `bun --conditions=browser run examples/hello.tsx` — run example
-- `bun run showcase` — run comprehensive feature showcase (7 tabs)
+- `bun install` — install dependencies.
+- `bun typecheck` — TypeScript type check (`tsc --noEmit`).
+- `bun test` — run TypeScript tests.
+- `cd native/libvexart && cargo test` — run Rust tests.
+- `cd native/libvexart && cargo build --release` — build the Rust native library.
+- `bun --conditions=browser run examples/hello.tsx` — run the hello example.
+- `bun run showcase` — run comprehensive feature showcase (7 tabs).
+- `bun run build:dist` — build npm distribution.
 
-## Visual Effects (Zig → JSX)
+## Visual Effects (Rust/WGPU → JSX)
 
-All visual effects are implemented in Zig SDF primitives and exposed as JSX props.
+Visual effects are exposed as JSX props, converted into TypeScript render graph ops,
+and executed by the Rust/WGPU native rendering backend through `libvexart`.
 
 | Effect | Prop | Example |
 | ------ | ---- | ------- |
@@ -114,7 +135,9 @@ All visual effects are implemented in Zig SDF primitives and exposed as JSX prop
 | Backdrop hue-rotate | `backdropHueRotate={180}` | `backdropHueRotate={180}` — 0-360 degrees |
 | Element opacity | `opacity={0.5}` | `opacity={0.5}` — 0.0-1.0, multiplies alpha of entire element |
 | Per-corner radius | `cornerRadii={{ tl, tr, br, bl }}` | `cornerRadii={{ tl: 20, tr: 20, br: 0, bl: 0 }}` |
-| Uniform radius | `cornerRadius={n}` | `cornerRadius={16}` |
+| Uniform radius | `cornerRadius={n}` / `borderRadius={n}` | `cornerRadius={16}` |
+| Self filter | `filter={{ blur, brightness, contrast }}` | `filter={{ blur: 4, brightness: 120 }}` |
+| Transform | `transform={{ translateX, rotate, scale }}` | `transform={{ rotate: 8, scale: 1.05 }}` |
 
 ### Interactive states
 
@@ -131,16 +154,22 @@ Declarative hover/active/focus styles — no manual signal boilerplate needed:
 />
 ```
 
-Props available in `hoverStyle`/`activeStyle`/`focusStyle`: `backgroundColor`, `borderColor`, `borderWidth`, `cornerRadius`, `borderRadius`, `shadow`, `boxShadow`, `glow`, `gradient`, `backdropBlur`, `backdropBrightness`, `backdropContrast`, `backdropSaturate`, `backdropGrayscale`, `backdropInvert`, `backdropSepia`, `backdropHueRotate`, `opacity`.
+Props available in `hoverStyle`/`activeStyle`/`focusStyle`: `backgroundColor`,
+`borderColor`, `borderWidth`, `cornerRadius`, `borderRadius`, `shadow`, `boxShadow`,
+`glow`, `gradient`, `backdropBlur`, `backdropBrightness`, `backdropContrast`,
+`backdropSaturate`, `backdropGrayscale`, `backdropInvert`, `backdropSepia`,
+`backdropHueRotate`, `opacity`, `filter`.
 
 ### Event bubbling
 
-`onPress` events bubble up the parent node chain like DOM click events. If a child node doesn't have `onPress`, the event walks up to the nearest ancestor that does. Each handler receives a `PressEvent`:
+`onPress` events bubble up the parent node chain like DOM click events. If a child
+node does not have `onPress`, the event walks up to the nearest ancestor that does.
+Each handler receives a `PressEvent`:
 
 ```tsx
 // Parent handles click even though child has no onPress
 <box focusable onPress={() => handleAction()}>
-  <Button>Click me</Button>  {/* Button has no onPress — event bubbles to parent */}
+  <Button>Click me</Button>
 </box>
 
 // Child stops propagation — parent never fires
@@ -153,7 +182,8 @@ Props available in `hoverStyle`/`activeStyle`/`focusStyle`: `backgroundColor`, `
 
 ### Per-node mouse events
 
-Low-level mouse callbacks dispatched directly to the target node (no bubbling). Each receives a `NodeMouseEvent`:
+Low-level mouse callbacks dispatch directly to the target node (no bubbling). Each
+receives a `NodeMouseEvent`:
 
 ```tsx
 <box
@@ -163,11 +193,14 @@ Low-level mouse callbacks dispatched directly to the target node (no bubbling). 
 />
 ```
 
-`NodeMouseEvent`: `{ x, y, nodeX, nodeY, width, height }` — `x/y` are absolute pixels, `nodeX/nodeY` are relative to the node's layout origin. `width/height` are the node's layout dimensions (useful for ratio calculations like slider position).
+`NodeMouseEvent`: `{ x, y, nodeX, nodeY, width, height }` — `x/y` are absolute
+pixels; `nodeX/nodeY` are relative to the node's layout origin. `width/height` are
+the node's layout dimensions, useful for ratio calculations like slider position.
 
 ### Interaction props (headless components)
 
-Headless components provide interaction props in their render context. Spread them on the root element for automatic mouse+keyboard support:
+Headless components provide interaction props in their render context. Spread them on
+the root element for automatic mouse+keyboard support:
 
 | Component | Context Prop | Value | Purpose |
 | --------- | ------------ | ----- | ------- |
@@ -182,6 +215,8 @@ Headless components provide interaction props in their render context. Spread th
 | Dialog.Overlay | `onClick` prop | wired to `onPress` | Click overlay to close |
 
 ```tsx
+import { Button } from "@vexart/headless"
+
 <Button
   onPress={() => save()}
   renderButton={(ctx) => (
@@ -194,10 +229,11 @@ Headless components provide interaction props in their render context. Spread th
 
 ### Pointer capture
 
-Like `Element.setPointerCapture()` in the DOM. When a node captures the pointer, ALL mouse events route to it regardless of cursor position — essential for drag interactions.
+Like `Element.setPointerCapture()` in the DOM. When a node captures the pointer, ALL
+mouse events route to it regardless of cursor position — essential for drag interactions.
 
 ```typescript
-import { setPointerCapture, releasePointerCapture } from "@tge/runtime"
+import { setPointerCapture, releasePointerCapture } from "@vexart/engine"
 
 setPointerCapture(nodeId)     // Lock — all mouse events go to this node
 releasePointerCapture(nodeId) // Unlock — auto-released on button up
@@ -205,12 +241,19 @@ releasePointerCapture(nodeId) // Unlock — auto-released on button up
 
 ### Hit-area expansion
 
-Interactive elements have a minimum hit-area of one terminal cell (`cellW × cellH`, typically 7×13px). This is like mobile's 44px minimum touch target — ensures small elements (e.g. 12px slider track) are clickable. Only affects hit-testing, NOT visual rendering.
+Interactive elements have a minimum hit-area of one terminal cell (`cellW × cellH`,
+typically 7×13px). This is like mobile's 44px minimum touch target — ensures small
+elements (for example, a 12px slider track) are clickable. Only affects hit-testing,
+NOT visual rendering.
 
 ### Architecture note
 
 ```
-JSX prop → reconciler.ts setProperty (pre-parse color/sizing/glow ONCE) → loop.ts walkTree reads u32 (ns) → effectsQueue → paintCommand calls Zig FFI via shared packed buffer (μs)
+JSX prop
+  → reconciler setProperty / node prop resolution (pre-parse color/sizing/effects once)
+    → loop walkTree reads resolved values and Flexily layout output
+      → render graph queues
+        → vexart_* FFI calls into libvexart (Rust/WGPU)
 ```
 
 ```
@@ -229,43 +272,59 @@ onMouse* event flow (low-level, per-node):
       → pointer capture overrides hit-test (captured node always receives events)
 ```
 
-Effects are painted BEFORE the rect (shadow/glow) or INSTEAD of it (gradient). Backdrop blur reads the buffer region behind the element, blurs it in a temp buffer, then composites. All effects use isolated temp buffers to avoid corrupting neighboring pixels.
+Effects are painted before the rect (shadow/glow) or instead of a solid fill
+(gradient). Backdrop filters read the content behind the element, process it in a
+native target/image path, and composite the result without corrupting neighboring pixels.
 
 ### Scissor clipping (scroll containers)
 
 All paint primitives respect the active scissor (scroll container bounds):
-- Flat rects: `clipToScissor()` clips coordinates before `fillRect`
-- Rounded rects / per-corner radius: `paintWithScissorClip()` renders to temp buffer, copies visible portion
-- Borders (stroke): `paintWithScissorClip()` same approach
-- Text: temp buffer + copy visible pixels with alpha blending
-- Backdrop blur/filters: clip region to scissor before applying
-- Shadows / glow: `overScissored()` clips composite region
+
+- Flat rects and rounded rects are clipped to the active scroll viewport.
+- Borders and per-corner radius masks respect the active scissor.
+- Text is clipped to scroll bounds.
+- Backdrop blur/filters clip their sampled region before applying.
+- Shadows and glow clip their composite region.
 
 ### Interactive nodes auto-RECT
 
-Any node with `onPress`, `focusable`, `hoverStyle`, `activeStyle`, `focusStyle`, or mouse callbacks automatically gets a near-transparent RECT placeholder (`0x00000001`). This ensures the node enters `rectNodes` for hit-testing without requiring explicit `backgroundColor`. Developers don't need to add `backgroundColor` for interactive elements to be clickable.
+Any node with `onPress`, `focusable`, `hoverStyle`, `activeStyle`, `focusStyle`, or
+mouse callbacks automatically gets a near-transparent RECT placeholder (`0x00000001`).
+This ensures the node enters hit-testing without requiring explicit `backgroundColor`.
+Developers do not need to add a background for interactive elements to be clickable.
 
 ### Border space reservation
 
-If `focusStyle`, `hoverStyle`, or `activeStyle` define `borderWidth`, the engine reserves that space in Clay with a transparent border when inactive. This prevents layout jitter when interactive styles activate — equivalent to CSS `outline` behavior.
+If `focusStyle`, `hoverStyle`, or `activeStyle` define `borderWidth`, the engine
+reserves that space in Flexily with a transparent border when inactive. This prevents
+layout jitter when interactive styles activate — equivalent to CSS outline-like behavior.
 
 ### Click re-layout (instant feedback)
 
-When a click is dispatched (onPress or focus change), the engine re-runs walkTree + endLayout in the same frame. This eliminates the ~33ms visual delay that would otherwise occur because layout was computed before the click callback mutated the tree.
+When a click is dispatched (`onPress` or focus change), the engine re-runs walkTree +
+layout in the same frame. This eliminates the visual delay that would otherwise occur
+because layout was computed before the click callback mutated the tree.
 
 ### Scroll container hit-testing
 
-Nodes fully outside their scroll container ancestor viewport are skipped during hit-testing. This prevents off-screen items from receiving false hover/click events at overlapping screen coordinates. The scroll container itself is NOT skipped.
+Nodes fully outside their scroll container ancestor viewport are skipped during
+hit-testing. This prevents off-screen items from receiving false hover/click events at
+overlapping screen coordinates. The scroll container itself is NOT skipped.
 
 ## Layout defaults
 
-- Default `<box>` direction is **column** (TOP_TO_BOTTOM) — terminal-native vertical flow
-- Use `direction="row"` explicitly for horizontal layout
-- Responsive: terminal resize triggers automatic re-layout via `onResize` → Clay redimension
+- Default `<box>` direction is **column** (`TOP_TO_BOTTOM`) — terminal-native vertical flow.
+- Use `direction="row"` explicitly for horizontal layout.
+- Responsive: terminal resize triggers automatic re-layout via `onResize` → Flexily dimensions.
+- `width`/`height` support fixed numbers, `"grow"`, `"fit"`, and percentage strings.
 
-## TGEProps — Complete reference (55 props)
+## Element Props — Complete reference (`TGEProps`, legacy type name)
+
+The public TypeScript type is currently named `TGEProps` for compatibility, but it
+describes Vexart element props.
 
 ### Layout
+
 | Prop | Type | Default | Notes |
 | ---- | ---- | ------- | ----- |
 | `direction` | `"row" \| "column"` | `"column"` | Flex direction |
@@ -273,6 +332,9 @@ Nodes fully outside their scroll container ancestor viewport are skipped during 
 | `padding` | `number` | — | Uniform padding |
 | `paddingX` / `paddingY` | `number` | — | Axis padding |
 | `paddingLeft/Right/Top/Bottom` | `number` | — | Per-side padding |
+| `margin` | `number` | — | Uniform margin |
+| `marginX` / `marginY` | `number` | — | Axis margin |
+| `marginLeft/Right/Top/Bottom` | `number` | — | Per-side margin |
 | `gap` | `number` | — | Child gap |
 | `alignX` | `"left" \| "right" \| "center" \| "space-between"` | `"left"` | Horizontal alignment |
 | `alignY` | `"top" \| "bottom" \| "center" \| "space-between"` | `"top"` | Vertical alignment |
@@ -280,50 +342,60 @@ Nodes fully outside their scroll container ancestor viewport are skipped during 
 | `alignItems` | same as alignY + `"flex-start" \| "flex-end"` | — | Alias for alignY |
 
 ### Sizing
+
 | Prop | Type | Notes |
 | ---- | ---- | ----- |
 | `width` / `height` | `number \| string` | number=fixed, `"grow"`, `"fit"`, `"100%"` |
-| `flexGrow` | `number` | Makes width=grow (compat) |
-| `flexShrink` | `number` | Accepted for compat |
+| `flexGrow` | `number` | Makes width behave as grow for compatibility |
+| `flexShrink` | `number` | Accepted for compatibility |
 | `minWidth` / `maxWidth` | `number` | Constraints |
 | `minHeight` / `maxHeight` | `number` | Constraints |
 
 ### Visual
+
 | Prop | Type | Notes |
 | ---- | ---- | ----- |
 | `backgroundColor` | `string \| number` | `"#ff0000"` or `0xff0000ff` |
 | `cornerRadius` | `number` | Uniform radius |
+| `borderRadius` | `number` | CSS-friendly alias for cornerRadius |
 | `cornerRadii` | `{ tl, tr, br, bl }` | Per-corner radius |
 | `borderColor` | `string \| number` | — |
 | `borderWidth` | `number` | Uniform border |
 | `borderLeft/Right/Top/Bottom` | `number` | Per-side border |
 | `borderBetweenChildren` | `number` | Between children |
+| `opacity` | `number` | 0.0-1.0, element-level opacity |
+| `style` | `Partial<TGEProps>` | CSS-style prop merged under direct props |
 
 ### Effects
+
 | Prop | Type | Notes |
 | ---- | ---- | ----- |
 | `shadow` | `object \| array` | Drop shadow(s) |
+| `boxShadow` | same as `shadow` | CSS-friendly alias |
 | `glow` | `{ radius, color, intensity? }` | Outer glow |
 | `gradient` | linear or radial config | Gradient fill |
 | `backdropBlur` | `number` | Glassmorphism |
+| `filter` | `{ blur?, brightness?, contrast?, saturate?, grayscale?, invert?, sepia?, hueRotate? }` | Self-filter for element output |
 | `hoverStyle` | partial visual props | Merged on hover |
 | `activeStyle` | partial visual props | Merged on active |
+| `focusStyle` | partial visual props | Merged on focus |
 
 ### Interaction
+
 | Prop | Type | Notes |
 | ---- | ---- | ----- |
-| `focusable` | `boolean` | Auto-register in focus system (like HTML tabindex="0") |
+| `focusable` | `boolean` | Auto-register in focus system (like HTML `tabindex="0"`) |
 | `onPress` | `(event?: PressEvent) => void` | Fires on mouse click + Enter/Space when focused. Events bubble up parent chain; call `event.stopPropagation()` to stop. |
 | `onKeyDown` | `(event: any) => void` | Keyboard events when focused |
-| `focusStyle` | partial visual props | Merged on focus |
-| `opacity` | `number` | 0.0-1.0, element-level opacity |
+| `interactionMode` | `"none" \| "drag"` | Engine-managed hint for interaction/compositor policies |
 | `onMouseDown` | `(event: NodeMouseEvent) => void` | Per-node mouse button pressed |
 | `onMouseUp` | `(event: NodeMouseEvent) => void` | Per-node mouse button released |
-| `onMouseMove` | `(event: NodeMouseEvent) => void` | Per-node pointer move while hovered (or captured) |
+| `onMouseMove` | `(event: NodeMouseEvent) => void` | Per-node pointer move while hovered or captured |
 | `onMouseOver` | `(event: NodeMouseEvent) => void` | Pointer entered node bounds |
 | `onMouseOut` | `(event: NodeMouseEvent) => void` | Pointer left node bounds |
 
 ### Backdrop Filters
+
 | Prop | Type | Notes |
 | ---- | ---- | ----- |
 | `backdropBrightness` | `number` | 0=black, 100=unchanged, 200=2x bright |
@@ -335,14 +407,18 @@ Nodes fully outside their scroll container ancestor viewport are skipped during 
 | `backdropHueRotate` | `number` | 0-360 degrees |
 
 ### Compositing & Scroll
+
 | Prop | Type | Notes |
 | ---- | ---- | ----- |
 | `layer` | `boolean` | Own compositing layer |
+| `willChange` | `string \| string[]` | Pre-promote hints: `"transform"`, `"opacity"`, `"filter"`, `"scroll"` |
+| `contain` | `"none" \| "layout" \| "paint" \| "strict"` | Layout/paint containment hint |
 | `scrollX` / `scrollY` | `boolean` | Scroll clipping |
 | `scrollSpeed` | `number` | Scroll tick speed |
 | `scrollId` | `string` | Stable ID for programmatic scroll |
 
 ### Floating
+
 | Prop | Type | Notes |
 | ---- | ---- | ----- |
 | `floating` | `"parent" \| "root" \| { attachTo }` | Positioning mode |
@@ -350,8 +426,27 @@ Nodes fully outside their scroll container ancestor viewport are skipped during 
 | `zIndex` | `number` | Z-order |
 | `floatAttach` | `{ element?, parent? }` | Attach points (0-8 grid) |
 | `pointerPassthrough` | `boolean` | Pass-through clicks |
+| `viewportClip` | `boolean` | Browser-like viewport clipping for floating layers |
+
+### Transform
+
+| Prop | Type | Notes |
+| ---- | ---- | ----- |
+| `transform` | object | `translateX/Y`, `rotate`, `scale`, `scaleX/Y`, `skewX/Y`, `perspective`, `rotateX/Y` |
+| `transformOrigin` | `"center" \| "top-left" \| "top-right" \| "bottom-left" \| "bottom-right" \| { x, y }` | Transform origin |
+
+### Image and Canvas
+
+| Prop | Type | Notes |
+| ---- | ---- | ----- |
+| `src` | `string` | Image file path or URL for `<image>`/`<img>` intrinsic |
+| `objectFit` | `"contain" \| "cover" \| "fill" \| "none"` | Image fit mode |
+| `onDraw` | `(ctx: CanvasContext) => void` | Imperative draw callback for `<canvas>` |
+| `drawCacheKey` | `string \| number` | Optional cache key for static canvas draw lists |
+| `viewport` | `{ x, y, zoom }` | Canvas pan/zoom viewport |
 
 ### Text
+
 | Prop | Type | Notes |
 | ---- | ---- | ----- |
 | `color` | `string \| number` | Text color |
@@ -364,229 +459,320 @@ Nodes fully outside their scroll container ancestor viewport are skipped during 
 | `fontWeight` | `number` | 400/500/600/700 |
 | `fontStyle` | `"normal" \| "italic"` | — |
 
-## Zig FFI exports (30+ functions)
+## Rust FFI exports (`libvexart`)
+
+The native boundary is bound in `packages/engine/src/ffi/vexart-bridge.ts` and
+implemented under `native/libvexart/src`. Export names are prefixed with `vexart_`.
 
 | Function | Purpose |
 | -------- | ------- |
-| `tge_fill_rect` | Solid rectangle fill |
-| `tge_rounded_rect` | Rounded rectangle (SDF anti-aliased) |
-| `tge_stroke_rect` | Rounded rectangle stroke |
-| `tge_rounded_rect_corners` | Per-corner radius fill |
-| `tge_stroke_rect_corners` | Per-corner radius stroke |
-| `tge_filled_circle` | Ellipse fill |
-| `tge_stroked_circle` | Ellipse stroke |
-| `tge_line` | Anti-aliased line segment |
-| `tge_bezier` | Quadratic bezier curve |
-| `tge_blur` | Box blur (3-pass ≈ Gaussian) |
-| `tge_halo` | Radial glow with plateau+falloff |
-| `tge_linear_gradient` | Linear gradient fill |
-| `tge_radial_gradient` | Radial gradient fill |
-| `tge_draw_text` | Text with built-in font atlas |
-| `tge_measure_text` | Measure text width |
-| `tge_load_font_atlas` | Load runtime font (id 1-15) |
-| `tge_draw_text_font` | Text with specific font atlas |
-| `tge_inset_shadow` | Inset shadow (SDF, packed params) |
-| `tge_filter_brightness` | Backdrop brightness filter |
-| `tge_filter_contrast` | Backdrop contrast filter |
-| `tge_filter_saturate` | Backdrop saturation filter |
-| `tge_filter_grayscale` | Backdrop grayscale filter |
-| `tge_filter_invert` | Backdrop color invert filter |
-| `tge_filter_sepia` | Backdrop sepia filter |
-| `tge_filter_hue_rotate` | Backdrop hue rotation filter |
-| `tge_blend_mode` | CSS blend modes (16 modes) |
-| `tge_linear_gradient_multi` | Multi-stop linear gradient |
-| `tge_radial_gradient_multi` | Multi-stop radial gradient |
-| `tge_conic_gradient` | Conic/angular gradient |
-| `tge_gradient_stroke` | Gradient border stroke |
+| `vexart_version` | Return bridge/native ABI version |
+| `vexart_context_create` | Create native context handle |
+| `vexart_context_destroy` | Destroy native context handle |
+| `vexart_context_resize` | Resize context-dependent resources |
+| `vexart_paint_dispatch` | Execute packed paint graph into a target |
+| `vexart_paint_upload_image` | Upload RGBA image bytes to a GPU image handle |
+| `vexart_paint_remove_image` | Release a GPU image handle |
+| `vexart_composite_target_create` | Create offscreen composite target |
+| `vexart_composite_target_destroy` | Destroy composite target |
+| `vexart_composite_target_begin_layer` | Begin layer rendering on target |
+| `vexart_composite_target_end_layer` | End layer rendering and submit GPU work |
+| `vexart_composite_render_image_layer` | Composite image onto target with z-order |
+| `vexart_composite_render_image_transform_layer` | Composite transformed image layer |
+| `vexart_composite_update_uniform` | Update transform/opacity uniform for retained target composition |
+| `vexart_composite_copy_region_to_image` | Copy target region into a GPU image handle |
+| `vexart_composite_image_filter_backdrop` | Apply backdrop blur/filter chain to image |
+| `vexart_composite_image_mask_rounded_rect` | Apply rounded-rect mask to image |
+| `vexart_composite_merge` | Merge packed composite plan to final target |
+| `vexart_composite_readback_rgba` | Read back full target as RGBA |
+| `vexart_composite_readback_region_rgba` | Read back target region as RGBA |
+| `vexart_text_load_atlas` | Load MSDF atlas PNG + metrics into GPU memory |
+| `vexart_text_dispatch` | Dispatch packed MSDF glyph instances |
+| `vexart_text_measure` | Measure text with loaded atlas metrics |
+| `vexart_kitty_emit_frame` | Emit full Kitty frame |
+| `vexart_kitty_set_transport` | Select direct/file/SHM Kitty transport mode |
+| `vexart_kitty_shm_prepare` | Prepare POSIX SHM payload |
+| `vexart_kitty_shm_release` | Release POSIX SHM handle |
+| `vexart_kitty_emit_frame_with_stats` | Emit full frame with native presentation stats |
+| `vexart_kitty_emit_layer` | Emit raw RGBA layer natively |
+| `vexart_kitty_emit_layer_target` | Emit GPU target as positioned Kitty layer |
+| `vexart_kitty_emit_region` | Emit dirty region patch from RGBA bytes |
+| `vexart_kitty_emit_region_target` | Emit dirty region patch from GPU target |
+| `vexart_kitty_delete_layer` | Delete retained Kitty image/layer |
+| `vexart_layer_upsert` | Upsert native layer record by stable key |
+| `vexart_layer_mark_dirty` | Mark native layer dirty |
+| `vexart_layer_reuse` | Reuse clean native layer in a frame |
+| `vexart_layer_remove` | Remove native layer |
+| `vexart_layer_clear` | Clear all native layer records |
+| `vexart_layer_present_dirty` | Mark dirty layer presented and return terminal image ID |
+| `vexart_resource_get_stats` | Read ResourceManager stats as JSON |
+| `vexart_resource_set_budget` | Set ResourceManager memory budget |
+| `vexart_image_asset_register` | Register/update native image asset |
+| `vexart_image_asset_touch` | Touch native image asset for lifetime/resource tracking |
+| `vexart_image_asset_release` | Release native image asset |
+| `vexart_canvas_display_list_update` | Register/update native canvas display list |
+| `vexart_canvas_display_list_touch` | Touch native canvas display list |
+| `vexart_canvas_display_list_release` | Release native canvas display list |
+| `vexart_get_last_error_length` | Return last native error buffer length |
+| `vexart_copy_last_error` | Copy last native error into caller buffer |
 
-All FFI functions use ≤8 params (packed buffer pattern for ARM64 safety). Shared ArrayBuffer for zero allocations.
+FFI calls use Bun's `bun:ffi`; packed buffers are used where needed to keep ABI calls
+portable and ARM64-safe.
 
-## @tge/renderer exports (61 values, 38 types)
+## `@vexart/engine` exports
 
 ### Core
+
 - `createRenderLoop`, `mount`, `createTerminal`
 
+### Renderer backend / native bridge
+
+- `setRendererBackend`, `getRendererBackend`, `getRendererBackendName`
+- `createGpuRendererBackend`, `getGpuRendererBackendCacheStats`
+- `createGpuFrameComposer`, `chooseGpuLayerStrategy`
+- `VEXART_SYMBOLS`, `EXPECTED_BRIDGE_VERSION`, `openVexartLibrary`, `closeVexartLibrary`
+- `vexartVersion`, `assertBridgeVersion`, `vexartGetLastError`
+- `getRendererResourceStats`
+
 ### Reconciler (SolidJS)
-- `createComponent`, `createElement`, `createTextNode`, `insertNode`, `insert`, `spread`, `setProp`, `mergeProps`, `effect`, `memo`, `use`, `solidRender`
+
+- `createComponent`, `createElement`, `createTextNode`, `insertNode`, `insert`, `spread`,
+  `setProp`, `mergeProps`, `effect`, `memo`, `use`, `solidRender`
 
 ### Control Flow
+
 - `For`, `Show`, `Switch`, `Match`, `Index`, `ErrorBoundary`
 
-### Input
-- `useKeyboard`, `useMouse`, `useInput`, `onInput`
-- `useFocus`, `setFocus`, `focusedId`, `setFocusedId`
+### Input and interaction
+
+- `useKeyboard`, `useMouse`, `useInput`, `onInput`, `dispatchInput`
+- `useFocus`, `setFocus`, `focusedId`, `setFocusedId`, `pushFocusScope`, `resetFocus`
 - `setPointerCapture`, `releasePointerCapture`
 - `useDrag`, `useHover`
 
 ### Animation
-- `createTransition`, `createSpring`, easing presets
+
+- `createTransition`, `createSpring`, `easing`
 
 ### Context
+
 - `createContext`, `useContext`
 
 ### Utilities
-- `markDirty`, `createHandle`, `createScrollHandle`, `resetScrollHandles`
-- `registerFont`, `getFont`, `clearTextCache`
+
+- `markDirty`, `isDirty`, `clearDirty`, `createHandle`, `createScrollHandle`,
+  `releaseScrollHandle`, `resetScrollHandles`
+- `registerFont`, `getFont`, `clearTextCache`, `getTextLayoutCacheStats`,
+  `getFontAtlasCacheStats`
 - `useTerminalDimensions`, `decodePasteBytes`
-- `clearImageCache`
+- `clearImageCache`, `getImageCacheStats`
+- `CanvasContext`, `createParticleSystem`, `createLayerStore`
 
-### Focus
-- `pushFocusScope`
+### Router and data
 
-### Data
 - `useQuery`, `useMutation`
-
-### Router
 - `createRouter`, `createNavigationStack`, `useRouter`
 
 ### Selection
-- `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal`
+
+- `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal`,
+  `resetSelection`
 
 ### Debug
-- `toggleDebug`, `setDebug`, `isDebugEnabled`, `debugFrameStart`, `debugUpdateStats`, `debugState`, `debugStatsLine`
+
+- `toggleDebug`, `setDebug`, `isDebugEnabled`, `debugFrameStart`, `debugUpdateStats`,
+  `debugState`, `debugStatsLine`, `debugDumpTree`, `debugDumpCulledNodes`
 
 ### Plugins
+
 - `createSlotRegistry`, `createSlot`
 
 ### Syntax highlighting
+
 - `ExtmarkManager`, `TreeSitterClient`, `getTreeSitterClient`, `addDefaultParsers`
 - `SyntaxStyle`, `ONE_DARK`, `KANAGAWA`, `highlightsToTokens`
 
 ### Types
+
 - `PressEvent` — `{ stopPropagation: () => void; readonly propagationStopped: boolean }`
 - `NodeMouseEvent` — `{ x, y, nodeX, nodeY, width, height }`
-- `DragOptions`, `DragProps`, `DragState` — useDrag hook types
-- `HoverOptions`, `HoverProps`, `HoverState` — useHover hook types
+- `DragOptions`, `DragProps`, `DragState` — `useDrag` hook types
+- `HoverOptions`, `HoverProps`, `HoverState` — `useHover` hook types
+- `RendererBackend*`, `RenderGraph*`, `ResourceStats`, `CanvasDrawCommand`, `Matrix3`,
+  `DamageRect`, terminal/input/router/selection/debug types
 
-### Classes
+### Classes and constants
+
 - `RGBA` — `.fromHex()`, `.fromInts()`, `.fromValues()`, `.toU32()`, `.valueOf()`, `.toString()`
 - `MouseButton` — `{ LEFT, MIDDLE, RIGHT, RELEASE, SCROLL_UP, SCROLL_DOWN }`
+- `SIZING`, `DIRECTION`, `ALIGN_X`, `ALIGN_Y`
 
-### Constants
-- `ATTACH_TO`, `ATTACH_POINT`, `POINTER_CAPTURE`, `SIZING`, `DIRECTION`, `ALIGN_X`, `ALIGN_Y`
-
-## @tge/components (28 components)
+## `@vexart/primitives`
 
 | Component | Props | Purpose |
 | --------- | ----- | ------- |
-| `Box` | BoxProps | Layout container |
-| `Text` | TextProps | Text display |
-| `ScrollView` | ScrollViewProps | Scrollable container with visual scrollbar |
-| `Button` | ButtonProps | Interactive button (ctx.buttonProps for mouse+keyboard) |
-| `ProgressBar` | ProgressBarProps | Progress indicator |
-| `Checkbox` | CheckboxProps | Toggle checkbox (ctx.toggleProps for mouse+keyboard) |
-| `Tabs` | TabsProps | Tab switcher (ctx.tabProps for click) |
-| `List` | ListProps | Scrollable list (ctx.itemProps for click) |
-| `Input` | InputProps | Single-line text input |
-| `Textarea` | TextareaProps | Multi-line editor (2D cursor, syntax, keybindings) |
-| `RichText` | RichTextProps | Multi-span text |
-| `Span` | SpanProps | Inline text span |
-| `Portal` | PortalProps | Render at root level |
-| `Code` | CodeProps | Syntax-highlighted code block |
-| `Markdown` | MarkdownProps | Markdown renderer (inline styling) |
-| `WrapRow` | WrapRowProps | Flex-wrap workaround |
-| `Diff` | DiffProps | Unified diff viewer |
-| `Dialog` | DialogProps | Modal with focus trap + Escape |
-| `Select` | SelectProps | Dropdown select with keyboard nav + click selection |
-| `Switch` | SwitchProps | Toggle switch (ctx.toggleProps for mouse+keyboard) |
-| `RadioGroup` | RadioGroupProps | Radio option group (ctx.optionProps for click) |
-| `Table` | TableProps | Data table with row selection (ctx.rowProps for click) |
-| `Toast` | createToaster | Imperative toast notifications |
-| `Router` | RouterProps | Flat + stack navigation |
-| `Tooltip` | TooltipProps | Delayed tooltip on hover |
-| `Popover` | PopoverProps | Controlled popover panel |
-| `Combobox` | ComboboxProps | Autocomplete with filtering + click selection |
-| `Slider` | SliderProps | Numeric range input with click-to-position and drag |
-| `VirtualList` | VirtualListProps | Virtualized list (fixed height) with keyboard nav + mouse hover/click |
+| `Box` | `BoxProps` | Layout container wrapper around `<box>` |
+| `Text` | `TextProps` | Text display wrapper around `<text>` |
+| `RichText` | `RichTextProps` | Multi-span text |
+| `Span` | `SpanProps` | Inline text span |
+| `WrapRow` | `WrapRowProps` | Flex-wrap workaround |
 
-Also: `createForm` factory for form validation.
+JSX intrinsic elements include `<box>`, `<text>`, `<image>`/`<img>`, and `<canvas>`.
 
-## @tge/void — Design system (shadcn-compatible)
+## `@vexart/headless` components
 
-Import: `import { Button, Card, Badge, colors, space } from "tge/void"`
+| Component | Props | Purpose |
+| --------- | ----- | ------- |
+| `Button` | `ButtonProps` | Interactive button (`ctx.buttonProps` for mouse+keyboard) |
+| `Checkbox` | `CheckboxProps` | Toggle checkbox (`ctx.toggleProps` for mouse+keyboard) |
+| `Combobox` | `ComboboxProps` | Autocomplete with filtering and option selection |
+| `Input` | `InputProps` | Single-line text input |
+| `RadioGroup` | `RadioGroupProps` | Radio option group (`ctx.optionProps` for click) |
+| `Select`, `SelectTrigger`, `SelectContent`, `SelectItem` | select props | Dropdown select with keyboard nav + click selection |
+| `Slider` | `SliderProps` | Numeric range input with click-to-position and drag |
+| `Switch` | `SwitchProps` | Toggle switch (`ctx.toggleProps` for mouse+keyboard) |
+| `Textarea` | `TextareaProps` | Multi-line editor (2D cursor, syntax, keybindings) |
+| `Code` | `CodeProps` | Syntax-highlighted code block |
+| `Markdown` | `MarkdownProps` | Markdown renderer (inline styling) |
+| `ProgressBar` | `ProgressBarProps` | Progress indicator |
+| `OverlayRoot` | `OverlayRootProps` | Overlay container root |
+| `Portal` | `PortalProps` | Render at root/overlay level |
+| `ScrollView` | `ScrollViewProps` | Scrollable container with visual scrollbar |
+| `Tabs` | `TabsProps` | Tab switcher (`ctx.tabProps` for click) |
+| `List` | `ListProps` | Scrollable list (`ctx.itemProps` for click) |
+| `Table` | `TableProps` | Data table with row selection (`ctx.rowProps` for click) |
+| `VirtualList` | `VirtualListProps` | Virtualized list with keyboard nav + mouse hover/click |
+| `Dialog`, `DialogOverlay`, `DialogContent`, `DialogClose` | dialog props | Modal with focus trap + Escape |
+| `Tooltip`, `Popover` | overlay props | Delayed tooltip and controlled popover panel |
+| `Diff` | `DiffProps` | Unified diff viewer |
+| `Router`, `Route`, `NavigationStack` | router props | Headless navigation primitives |
+| `createToaster` | toaster options | Imperative toast notifications |
+| `createForm` | form options | Form validation factory |
+
+## `@vexart/styled` — Void design system (shadcn-compatible)
+
+Import:
+
+```typescript
+import { Button, Card, Badge, colors, space } from "@vexart/styled"
+```
 
 ### Tokens
 
 ```typescript
-colors.background     // 0x141414ff — app background
-colors.foreground     // 0xfafafaff — default text
-colors.card           // 0x262626ff — elevated surfaces
-colors.primary        // 0xe5e5e5ff — brand/actions
-colors.secondary      // 0x333333ff — secondary actions
-colors.muted          // 0x333333ff — subtle surfaces
+colors.background      // 0x141414ff — app background
+colors.foreground      // 0xfafafaff — default text
+colors.card            // 0x262626ff — elevated surfaces
+colors.primary         // 0xe5e5e5ff — brand/actions
+colors.secondary       // 0x333333ff — secondary actions
+colors.muted           // 0x333333ff — subtle surfaces
 colors.mutedForeground // 0xa3a3a3ff — low-emphasis text
-colors.accent         // 0x333333ff — hover/focus
-colors.destructive    // 0xdc2626ff — errors
-colors.border         // 0xffffff1a — borders (white 10%)
-colors.input          // 0xffffff26 — input borders (white 15%)
-colors.ring           // 0x737373ff — focus rings
+colors.accent          // 0x333333ff — hover/focus
+colors.destructive     // 0xdc2626ff — errors
+colors.border          // 0xffffff1a — borders (white 10%)
+colors.input           // 0xffffff26 — input borders (white 15%)
+colors.ring            // 0x737373ff — focus rings
 
-radius.sm/md/lg/xl/xxl/full   // 6/8/10/14/18/9999
-space[1]..space[10]            // 4..40px
-font.xs/sm/base/lg/xl/2xl/3xl/4xl  // 10..36px
-weight.normal/medium/semibold/bold  // 400..700
-shadows.sm/md/lg/xl           // preset shadow configs
+radius.sm/md/lg/xl/xxl/full      // 6/8/10/14/18/9999
+space[1]..space[10]              // 4..40px
+font.xs/sm/base/lg/xl/2xl/3xl/4xl // 10..36px
+weight.normal/medium/semibold/bold // 400..700
+shadows.sm/md/lg/xl              // preset shadow configs
+glows                            // preset glow configs
 ```
+
+### Theme
+
+- `createTheme`, `darkTheme`, `lightTheme`, `themeColors`
+- `setTheme`, `getTheme`, `ThemeProvider`, `useTheme`
 
 ### Components
 
 | Component | Variants | Sizes |
 | --------- | -------- | ----- |
 | `Button` | default, secondary, outline, ghost, destructive | xs, sm, default, lg |
-| `Card` | default, sm | — |
-| `CardHeader` | — | — |
-| `CardTitle` | — | — |
-| `CardDescription` | — | — |
-| `CardContent` | — | — |
-| `CardFooter` | — | — |
+| `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter`, `CardAction` | default, sm | — |
 | `Badge` | default, secondary, outline, destructive | — |
 | `Separator` | horizontal, vertical | — |
 | `Avatar` | — | sm, default, lg |
 | `Skeleton` | — | — |
-| `VoidDialog` | — | — |
+| `VoidCheckbox` | — | — |
+| `VoidCombobox` | — | — |
+| `VoidDialog`, `VoidDialogTitle`, `VoidDialogDescription`, `VoidDialogFooter` | — | — |
+| `VoidDropdownMenu`, `VoidDropdownMenuTrigger`, `VoidDropdownMenuContent`, `VoidDropdownMenuItem`, `VoidDropdownMenuSeparator`, `VoidDropdownMenuLabel` | — | — |
+| `VoidInput` | — | — |
+| `VoidPopover` | — | — |
+| `VoidProgress` | — | — |
+| `VoidRadioGroup` | — | — |
 | `VoidSelect` | — | — |
+| `VoidSlider` | — | — |
 | `VoidSwitch` | — | — |
+| `VoidTable` | — | — |
+| `VoidTabs` | default variants | — |
+| `VoidTooltip` | — | — |
+| `createVoidToaster` | — | — |
 
 ### Typography
 
 `H1`, `H2`, `H3`, `H4`, `P`, `Lead`, `Large`, `Small`, `Muted`
 
+## `@vexart/app`
+
+| Export | Purpose |
+| ------ | ------- |
+| `Page` | App page primitive |
+| `Box`, `Text` | App-layer primitive wrappers with className support |
+| `resolveClassName`, `mergeClassNameProps`, `CLASS_NAME_UNKNOWN_BEHAVIOR` | className mapper helpers |
+| `createAppRouter`, `RouterProvider`, `RouteOutlet`, `useRouter` | App router runtime |
+| `discoverAppRoutes`, `routeFilePathToRoutePath`, `writeRouteManifestModule` | File-route manifest helpers |
+| `defineConfig`, `mergeConfig` | App config helpers |
+| `mountApp` | App lifecycle/mount helper |
+| `runCli` | CLI entry helper |
+
 ## npm package structure (dist/)
 
-```
-tge-0.0.1.tgz (440KB)
-├── tge.js              — engine bundle (64KB minified)
-├── tge.d.ts            — engine types
-├── components.js       — UI components bundle (55KB)
-├── components.d.ts     — component types
-├── void.js             — design system bundle (11KB)
-├── void.d.ts           — design system types
-├── jsx-runtime.d.ts    — JSX intrinsic elements (50 props)
-├── solid-plugin.ts     — Babel JSX transform (moduleName: "tge")
-├── vendor/
-│   ├── tge/arm64-darwin/libtge.dylib   — Zig shared lib (85KB)
-│   └── clay/arm64-darwin/libclay.dylib — Clay shared lib (188KB)
+The distribution is built with `bun run build:dist`. Current public package naming is
+`@vexart/*` in the monorepo; dist artifacts should reflect the Vexart package boundary
+and include the single Rust native library.
+
+```text
+dist/
+├── package.json
+├── engine.js / engine.d.ts              — @vexart/engine bundle + types
+├── primitives.js / primitives.d.ts      — @vexart/primitives bundle + types
+├── headless.js / headless.d.ts          — @vexart/headless bundle + types
+├── styled.js / styled.d.ts              — @vexart/styled bundle + types
+├── app.js / app.d.ts                    — @vexart/app bundle + types
+├── jsx-runtime.d.ts                     — JSX intrinsic elements
+├── solid-plugin.ts                      — Solid JSX transform helper
+├── native/
+│   └── <platform>/libvexart.{dylib,so,dll}
 ├── tree-sitter/
 │   ├── parser.worker.ts
-│   └── assets/         — .wasm grammars + .scm highlights
-└── package.json
+│   └── assets/                          — .wasm grammars + .scm highlights
+└── fonts/                               — generated atlas assets when packaged separately
 ```
 
-### Exports map
+### Expected exports map
 
 ```json
 {
-  ".":            { "types": "./tge.d.ts",        "default": "./tge.js" },
-  "./components": { "types": "./components.d.ts", "default": "./components.js" },
-  "./void":       { "types": "./void.d.ts",       "default": "./void.js" },
+  ".": { "types": "./engine.d.ts", "default": "./engine.js" },
+  "./engine": { "types": "./engine.d.ts", "default": "./engine.js" },
+  "./primitives": { "types": "./primitives.d.ts", "default": "./primitives.js" },
+  "./headless": { "types": "./headless.d.ts", "default": "./headless.js" },
+  "./styled": { "types": "./styled.d.ts", "default": "./styled.js" },
+  "./app": { "types": "./app.d.ts", "default": "./app.js" },
   "./jsx-runtime": { "types": "./jsx-runtime.d.ts" },
-  "./solid-plugin": "./solid-plugin.ts"
+  "./solid-plugin": "./solid-plugin.ts",
+  "./tree-sitter/parser.worker.ts": "./tree-sitter/parser.worker.ts"
 }
 ```
 
 ## Reference
 
-- Clay docs: https://github.com/nicbarker/clay
 - SolidJS universal: https://github.com/solidjs/solid/tree/main/packages/solid/universal
+- Flexily package: https://www.npmjs.com/package/flexily
+- WGPU: https://wgpu.rs/
 - Kitty graphics protocol: https://sw.kovidgoyal.net/kitty/graphics-protocol/
-- LightCode TGE (origin): /Users/dev/lightcodev2-identity/packages/opencode/src/tge/
+- Bun FFI: https://bun.sh/docs/api/ffi

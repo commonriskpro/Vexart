@@ -10,7 +10,7 @@ import {
   parseAlignX,
   parseAlignY,
 } from "../ffi/node"
-// Constants inlined from former clay.ts (deleted in Phase 2 Slice 11A per DEC-004)
+// Constants mirror layout adapter values for parser compatibility.
 const SIZING = { FIT: 0, GROW: 1, PERCENT: 2, FIXED: 3 } as const
 const DIRECTION = { LEFT_TO_RIGHT: 0, TOP_TO_BOTTOM: 1 } as const
 const ALIGN_X = { LEFT: 0, RIGHT: 1, CENTER: 2, SPACE_BETWEEN: 3 } as const

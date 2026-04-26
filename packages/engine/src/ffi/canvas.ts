@@ -3,8 +3,8 @@
  * Draw commands are buffered during onDraw and consumed by the GPU renderer.
  */
 
-// Canvas commands are serialized into native display lists when the retained
-// runtime is available. The callback API remains as the authoring/fallback shell.
+// Canvas commands are serialized into native display lists. The callback API
+// remains as the authoring shell.
 
 // ── Draw command types ──
 

@@ -1,7 +1,7 @@
 /**
  * walk-tree.test.ts — Unit tests for viewport culling logic in walk-tree.ts.
  *
- * walkTree() itself cannot be tested without the Clay FFI adapter.
+ * walkTree() itself needs the layout adapter.
  * This file tests the AABB culling *decision* — the same logic that
  * walk-tree.ts applies inside the walkTree loop to determine whether a
  * node's subtree should be skipped.
@@ -193,7 +193,7 @@ describe("collectText", () => {
 describe("WalkTreeState shape", () => {
   test("WalkTreeState fields are accessible with correct types", () => {
     // Construct a minimal WalkTreeState to verify the type compiles correctly.
-    // We pass `clay: null as any` since the Clay adapter requires FFI.
+    // We pass a placeholder layout adapter because the adapter itself is not tested here.
     const state: WalkTreeState = {
       scrollIdCounter: { value: 0 },
       textMeasureIndex: { value: 0 },
@@ -212,7 +212,7 @@ describe("WalkTreeState shape", () => {
       canvasQueue: new Map(),
       textMetaMap: new Map(),
       rectNodeById: new Map(),
-      clay: null as any, // FFI-backed — not tested here
+      layout: null as unknown as ReturnType<typeof import("./layout-adapter").createVexartLayoutCtx>, // not tested here
       cullingEnabled: false,
       viewportWidth: 1000,
       viewportHeight: 800,

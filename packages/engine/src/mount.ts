@@ -1,6 +1,6 @@
 /**
  * @vexart/engine — mount entry point and utility exports.
- * Previously lived in @tge/renderer-solid/src/index.ts.
+ * Previously lived in @vexart/engine's renderer entry point.
  */
 
 import { createSignal, onCleanup } from "solid-js"

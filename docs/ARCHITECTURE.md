@@ -9,7 +9,7 @@
 
 ## ⚠️ How to read this document
 
-This document describes the **target architecture** — how Vexart is organized after all v0.9 phases and DEC-014's paint-forward TS/Rust boundary. It is **not** a description of temporary migration scaffolding.
+This document describes the **target architecture** — how Vexart is organized after all v0.9 phases and DEC-014's paint-forward TS/Rust boundary. It is **not** a description of temporary migration scaffolding. Some directory trees below are target structures; when current code differs, follow the ownership boundaries first and update this document as phases land.
 
 **When reading this as an AI agent**: treat this as the source of truth for code organization. Any file layout, module boundary, data-flow contract, or convention described here is the authoritative answer. If your task contradicts this document, the document wins — flag the contradiction and stop.
 
@@ -111,7 +111,7 @@ If a conflict emerges, the PRD wins at the policy layer; this document wins at t
 ┌────────────────────────────────────────────────────┐
 │  @vexart/engine — TS scene/layout/event owner      │
 │  1. Solid reconciler owns scene graph/reactivity   │
-│  2. Walk-tree + Taffy layout produce paint cmds    │
+│  2. Walk-tree + Flexily layout produce paint cmds  │
 │  3. TS dispatches input, focus, and interactions   │
 └──────────────────────┬─────────────────────────────┘
                        │  paint-forward FFI (packed ArrayBuffer, ≤8 params)
@@ -168,7 +168,6 @@ PUBLIC PACKAGES (shipped to consumers)
 INTERNAL PACKAGES (not shipped, for dev/build only)
 
 @vexart/internal-atlas-gen    ← MSDF atlas generator CLI (dev tool)
-@vexart/internal-benchmarks   ← performance benchmarks harness
 ```
 
 ### 2.3 The two-binary rule
@@ -185,18 +184,18 @@ No other binaries exist. No other languages. If a task proposes adding a third r
 | Layer | Language | Why |
 |---|---|---|
 | App, Styled, Headless, Primitives | TypeScript (with JSX) | Developer-facing API surface. Leverages SolidJS reactivity and Bun-native tooling. |
-| Engine | TypeScript | Public JS/JSX shell plus scene graph, Solid reactivity, walk-tree, Taffy layout, render graph generation, event dispatch, interaction, hooks, callback registry, handles, and compatibility/test/offscreen fallbacks. Bun runtime. |
+| Engine | TypeScript | Public JS/JSX shell plus scene graph, Solid reactivity, walk-tree, Flexily layout, render graph generation, event dispatch, interaction, hooks, callback registry, handles, and compatibility/test/offscreen fallbacks. Bun runtime. |
 | libvexart | Rust (cdylib) | Paint pipelines (WGPU), composite, Kitty encoding, SHM/file/direct transport, layer target lifecycle, image assets, canvas display lists, resources, and native stats. Cross-platform. |
 | Shaders | WGSL | One shader language, runs on Metal, Vulkan, DX12 via WGPU. |
 
 ### 2.5 Paint-forward ownership rule
 
-After DEC-014, TypeScript is the implementation owner for scene graph, Solid reactivity, layout (Taffy), render graph generation, event dispatch, focus, hit-testing, and interaction. Rust is the implementation owner for paint and presentation below the paint-command boundary.
+After DEC-014 and DEC-015, TypeScript is the implementation owner for scene graph, Solid reactivity, layout (Flexily), render graph generation, event dispatch, focus, hit-testing, and interaction. Rust is the implementation owner for paint and presentation below the paint-command boundary.
 
 Allowed TypeScript hot-path responsibilities:
 
 - Maintain the SolidJS scene graph and callback registry.
-- Walk the tree, compute Taffy layout in TS, generate render graph / paint commands, and assign layer plans.
+- Walk the tree, compute Flexily layout in TS, generate render graph / paint commands, and assign layer plans.
 - Parse and dispatch keyboard/pointer input, focus, pointer capture, bubbling, and interaction state.
 - Keep explicit readback APIs for screenshot, debug, test, or offscreen rendering.
 
@@ -472,7 +471,6 @@ Not published to npm. Live in the monorepo for development.
 
 ```
 packages/internal-atlas-gen/    — CLI: TTF → MSDF atlas PNG + metrics JSON
-packages/internal-benchmarks/   — bench:showcase, bench:optimizations runners
 ```
 
 ---
@@ -615,7 +613,7 @@ A frame is triggered by the render loop when at least one of:
 ```
 ┌─────────────┐     ┌─────────────┐     ┌──────────────┐
 │ Reconciler  │────▶│  Walk tree  │────▶│   Layout     │
-│ (SolidJS)   │     │ (+ viewport │     │  (Taffy FFI) │
+│ (SolidJS)   │     │ (+ viewport │     │  (Flexily)   │
 │             │     │    cull)    │     │              │
 └─────────────┘     └─────────────┘     └──────┬───────┘
                                                 │
@@ -673,7 +671,7 @@ This phase is asynchronous relative to the frame loop — SolidJS mutates the tr
 - **Output type**:
   ```ts
   type WalkResult = {
-    clayCommands: ClayCommand[]      // flat list in tree order
+    layoutCommands: LayoutCommand[]  // flat list in tree order
     interactiveNodes: InteractiveNode[]
     transformSubtrees: TransformSubtree[]
     culledCount: number              // for debug / telemetry
@@ -683,13 +681,13 @@ This phase is asynchronous relative to the frame loop — SolidJS mutates the tr
   - Depth-first traversal of `TGENode` tree.
   - Compute axis-aligned bounding box per subtree (bottom-up).
   - Skip subtrees whose AABB is fully outside `viewport` (viewport culling, Tier 2).
-  - Emit layout commands for Taffy.
+  - Emit layout inputs for Flexily.
   - Collect interactive nodes (focusable, onPress, etc.).
   - Collect transform subtrees for the 3-pass paint pipeline.
 
 #### 5.2.3 Layout
 
-- **Location**: `engine/src/loop/layout.ts` (Taffy integration in TS).
+- **Location**: `packages/engine/src/loop/layout-adapter.ts` (Flexily integration in TS).
 - **Signature**:
   ```ts
   runLayout(walk: WalkResult, size: TerminalSize): LayoutFrame
@@ -703,7 +701,7 @@ This phase is asynchronous relative to the frame loop — SolidJS mutates the tr
   }
   ```
 - **Responsibilities**:
-  - Compute layout in TypeScript using Taffy.
+  - Compute layout in TypeScript using Flexily.
   - Produce box positions, dimensions, and text wrap data without native layout writeback FFI.
   - Build `PositionedCommand[]` for TS-owned render graph generation.
   - Diff against previous frame's layout → produce damage rects.
@@ -795,7 +793,7 @@ TGENode tree
    │
    │ walkTree()
    ▼
-WalkResult { clayCommands, interactiveNodes, transformSubtrees }
+WalkResult { layoutCommands, interactiveNodes, transformSubtrees }
    │
    │ runLayout()
    ▼
@@ -1037,7 +1035,7 @@ type ResourceStats = {
 
 | Thread | Owner | What runs there |
 |---|---|---|
-| **JS event loop** | Bun | Solid reconciler adapter, scene graph, reactivity, walk-tree, Taffy layout, render graph generation, hooks, callback registry, input byte parsing, event dispatch, compatibility/test/offscreen fallback |
+| **JS event loop** | Bun | Solid reconciler adapter, scene graph, reactivity, walk-tree, Flexily layout, render graph generation, hooks, callback registry, input byte parsing, event dispatch, compatibility/test/offscreen fallback |
 | **Rust sync thread** | Rust main | Paint-forward FFI calls from JS execute here; paint dispatch, composite, layer registry targets, image assets, canvas display lists, Kitty encode/present, SHM/file/direct transport |
 | **WGPU submission** | WGPU internal | Command buffer submission to GPU driver (Metal/Vulkan/DX12) |
 | **WGPU GPU callbacks** | WGPU internal | GPU fence callbacks, readback completion |
@@ -1076,7 +1074,7 @@ If profiling in v1.x shows the JS thread saturated, the solution is to optimize 
 | **GPU OOM** | Exceeded resource budget | `ResourceManager` evicts aggressively; if still fails, frame is skipped with warning |
 | **Terminal disconnected** | stdin EOF / SIGHUP | Engine unmounts cleanly; process exits 0 |
 | **Unsupported terminal** | Capability probe fails | Engine exits at startup with clear error message + doc URL |
-| **Layout impossible** | Taffy returns error | Log warning, fall back to zero-sized node, continue |
+| **Layout impossible** | Flexily layout fails in TS | Log warning, fall back to zero-sized node, continue |
 | **Animation target invalid** | Node destroyed mid-animation | Animation cancels silently |
 | **User handler throws** | `onPress` raises | Caught at dispatch boundary, logged, frame continues |
 
@@ -1116,7 +1114,7 @@ export class VexartTerminalError extends VexartError {
 | -2 | ERR_INVALID_HANDLE | Context or target handle invalid |
 | -3 | ERR_OUT_OF_BUDGET | GPU resource budget exhausted after eviction |
 | -4 | ERR_GPU_DEVICE_LOST | WGPU device lost |
-| -5 | ERR_LAYOUT_FAILED | Taffy returned error |
+| -5 | ERR_LAYOUT_FAILED | Reserved for legacy/native layout errors; current layout is TS-side via Flexily |
 | -6 | ERR_SHADER_COMPILE | Shader failed to compile (should not happen with pipeline cache) |
 | -7 | ERR_KITTY_TRANSPORT | Kitty encoding / stdout write failed |
 | -8 | ERR_INVALID_FONT | Font atlas corrupted or unsupported |
@@ -1197,7 +1195,7 @@ vexart/
 │   ├── headless/
 │   ├── styled/
 │   ├── internal-atlas-gen/
-│   └── internal-benchmarks/
+│   └── internal-devtools/
 ├── scripts/
 │   ├── build-native.ts       — cross-compile libvexart for all platforms
 │   ├── build-dist.ts         — assemble npm tarball
@@ -1309,7 +1307,7 @@ Not expected in v0.9. New primitives require PRD amendment because they are arch
 - Unit tests: colocated — `foo.ts` + `foo.test.ts`.
 - Integration tests: `packages/{pkg}/tests/integration/`.
 - Visual tests: `tests/visual/` (repo root). One PNG per scene.
-- Benchmarks: `native/libvexart/benches/` (Rust) or `packages/internal-benchmarks/` (TS).
+- Benchmarks: `native/libvexart/benches/` (Rust) or `scripts/bench*.ts` / `scripts/frame-breakdown.tsx` (TS).
 
 ### 13.9 Adding documentation
 
@@ -1483,7 +1481,7 @@ This section documents deviations between the current v0.1 codebase and the targ
 | Package names `@tge/*` | `@vexart/*` | Phase 1 |
 | Relative imports across packages (`../../otro-paquete/src/...`) | Workspace imports (`@vexart/*`), CI-enforced | Phase 1 |
 | Packages have no declared `dependencies` | Explicit `workspace:*` dependencies | Phase 1 |
-| Clay (C) layout engine + `vendor/clay*` | Taffy in TypeScript; no native layout writeback FFI | Phase 2 + DEC-014 |
+| Clay (C) layout engine + `vendor/clay*` | Clay → custom TS mini-flexbox → Flexily in TypeScript; no native layout writeback FFI | Phase 2 + DEC-014 + DEC-015 |
 | Zig CPU paint path (`zig/` + `@tge/pixel`) | Deleted; GPU-only via WGPU | Phase 2 |
 | `output-placeholder` + `output-halfblock` backends | Deleted; Kitty-only | Phase 2 |
 | `gpu-frame-composer.ts` with CPU/GPU switch | Deleted; no CPU mode | Phase 2 |
@@ -1508,7 +1506,7 @@ This section documents deviations between the current v0.1 codebase and the targ
 | `starfield` / `nebula` Zig primitives | Moved to `examples/` or deleted | Phase 2 |
 | Runtime font atlases limited to 15 ids | Unlimited (governed by `ResourceManager` budget) | Phase 2b |
 | TS owns layer GPU target handles and terminal image IDs | Rust `LayerRegistry` owns target/image lifecycle and resource accounting | Retained R2 |
-| Rust-retained scene graph / layout / render graph / event dispatch plan | Reverted; TS retains scene graph, reactivity, Taffy layout, render graph, and event dispatch | DEC-014 / Phase 14 |
+| Rust-retained scene graph / layout / render graph / event dispatch plan | Reverted; TS retains scene graph, reactivity, Flexily layout, render graph, and event dispatch | DEC-014 / Phase 14 |
 | Retained experimental flags (`nativeSceneGraph`, `nativeSceneLayout`, `nativeRenderGraph`, `nativeEventDispatch`) | Removed from public `mount()` API | DEC-014 / Phase 14 |
 | Paint/composite/transport in TS hot path | Rust owns WGPU paint, composite, Kitty encoding, SHM/file/direct transport, image assets, and canvas display lists | DEC-014 / Phase 14 |
 
@@ -1535,19 +1533,19 @@ Quick index of the type contracts that agents reference most.
 All exports prefixed `vexart_{module}_{action}`. Each has a matching stub in `packages/engine/src/ffi/functions.ts`. The current set:
 
 ```
-vexart_context_create / destroy
-vexart_scene_create / destroy / clear
-vexart_node_create / destroy / insert / remove / set_props
-vexart_text_set_content / load_atlas / dispatch
-vexart_input_pointer / key / events_read
-vexart_frame_request / render / present
-vexart_layer_upsert / mark_dirty / reuse / remove / present_dirty
-vexart_target_create / destroy
-vexart_paint_dispatch              // explicit offscreen / emergency fallback path after 3g cleanup
-vexart_composite_merge             // explicit offscreen / emergency fallback path after 3g cleanup
-vexart_resource_stats / evict / set_budget
-vexart_kitty_emit_frame / emit_layer_target / emit_region_target / delete_layer / set_transport
-vexart_pipeline_cache_load / save
+vexart_context_create / destroy / resize
+vexart_paint_dispatch / paint_upload_image / paint_remove_image
+vexart_composite_target_create / composite_target_destroy / composite_target_begin_layer / composite_target_end_layer
+vexart_composite_render_image_layer / composite_render_image_transform_layer / composite_update_uniform
+vexart_composite_copy_region_to_image / composite_image_filter_backdrop / composite_image_mask_rounded_rect / composite_merge
+vexart_composite_readback_rgba / composite_readback_region_rgba
+vexart_text_load_atlas / dispatch / measure
+vexart_kitty_emit_frame / kitty_emit_frame_with_stats / kitty_emit_layer / kitty_emit_layer_target / kitty_emit_region / kitty_emit_region_target
+vexart_kitty_set_transport / kitty_shm_prepare / kitty_shm_release / kitty_delete_layer
+vexart_layer_upsert / layer_mark_dirty / layer_reuse / layer_remove / layer_clear / layer_present_dirty
+vexart_resource_get_stats / resource_set_budget
+vexart_image_asset_register / image_asset_touch / image_asset_release
+vexart_canvas_display_list_update / canvas_display_list_touch / canvas_display_list_release
 vexart_get_last_error_length / copy_last_error
 vexart_version
 ```

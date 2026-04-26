@@ -19,7 +19,7 @@
  *
  * Layer lifecycle:
  *   1. frame() walks TGENode tree, assigns layer IDs to each subtree
- *   2. Clay computes layout for ALL elements (single pass)
+ *   2. Layout adapter (Flexily) computes layout for ALL elements (single pass)
  *   3. RenderCommands are grouped by layer ID
  *   4. Only dirty layers: render into GPU layer target → read back only for terminal presentation
  *   5. Clean layers: skip entirely (terminal still has the old image)

@@ -6,8 +6,8 @@
  *   - Dot-notation fallback: "function.method" → "function" if no exact match
  *   - getStyleId(name) returns a numeric ID for highlight integration
  *
- * Unlike opentui, this is TS-only (no Zig FFI) because TGE renders
- * per-token <text> elements with individual colors — no native text buffer.
+ * Unlike opentui, this is TS-only because Vexart renders per-token <text>
+ * elements with individual colors — no native text buffer.
  *
  * Usage:
  *   const style = SyntaxStyle.fromTheme([

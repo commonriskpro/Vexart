@@ -6,11 +6,11 @@ This directory holds all Vexart engineering artifacts produced by the SDD workfl
 
 These three live in `docs/` and are **immutable during phase execution**. Every change proposal in `openspec/changes/` MUST cite which sections of these it satisfies.
 
-- [`docs/PRD.md`](../docs/PRD.md) — what and why (v0.5).
+- [`docs/PRD.md`](../docs/PRD.md) — what and why (v0.7).
 - [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) — target code organization (v0.2).
 - [`docs/API-POLICY.md`](../docs/API-POLICY.md) — public vs. internal rules (v0.1).
-- [`docs/PRD-RUST-RETAINED-ENGINE.md`](../docs/PRD-RUST-RETAINED-ENGINE.md) — retained-engine migration contract.
-- [`docs/ROADMAP-RUST-RETAINED-ENGINE.md`](../docs/ROADMAP-RUST-RETAINED-ENGINE.md) — retained-engine phase sequencing.
+- [`docs/PRD-RUST-RETAINED-ENGINE.md`](../docs/PRD-RUST-RETAINED-ENGINE.md) — SUPERSEDED per DEC-014; historical record for the reverted retained scene/layout/render/event plan.
+- [`docs/ROADMAP-RUST-RETAINED-ENGINE.md`](../docs/ROADMAP-RUST-RETAINED-ENGINE.md) — SUPERSEDED per DEC-014; historical retained-engine phase sequencing only.
 
 ## Structure
 
@@ -55,4 +55,4 @@ Examples:
 
 ## Strict TDD
 
-Currently **disabled** (see `config.yaml`). Activate via config edit when Phase 2b starts — native rendering work benefits from RED-GREEN-REFACTOR.
+Currently **disabled** (see `config.yaml`). Phase 2b is complete; re-enable via config edit only for future implementation work where RED-GREEN-REFACTOR adds value.

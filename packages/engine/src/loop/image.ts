@@ -1,7 +1,7 @@
 /**
  * Image decode pipeline — loads and decodes images for <img> intrinsic.
  *
- * Decision 11: Image decode in Bun (not Zig).
+ * Decision 11: Image decode in Bun.
  * Decoding is ONE-TIME per image (not per-frame) — JS perf is sufficient.
  *
  * Pipeline:

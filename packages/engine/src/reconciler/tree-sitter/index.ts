@@ -1,5 +1,5 @@
 /**
- * @tge/renderer/tree-sitter — syntax highlighting system.
+ * @vexart/engine/tree-sitter — syntax highlighting system.
  *
  * Public API:
  *   - TreeSitterClient: worker-based parser (highlightOnce)

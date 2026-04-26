@@ -293,7 +293,7 @@ function createEmptyGpuImage(
   }
 }
 
-// ── Glyph instance type (retained for type-compatibility inside getGlyphAtlas) ─
+// ── Glyph instance type (kept for type-compatibility inside getGlyphAtlas) ─
 type WgpuCanvasGlyphInstance = {
   x: number; y: number; w: number; h: number
   u: number; v: number; uw: number; vh: number

@@ -1,5 +1,5 @@
 /**
- * Data fetching hooks for retained UI state.
+ * Data fetching hooks for UI state.
  * These helpers expose lightweight query and mutation primitives for Solid-based apps.
  */
 

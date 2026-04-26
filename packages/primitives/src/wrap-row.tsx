@@ -1,7 +1,7 @@
 /**
- * WrapRow — flexWrap workaround for Clay.
+ * WrapRow — flexWrap workaround for Flexily.
  *
- * Clay doesn't support flexWrap natively. This component simulates it
+ * Flexily doesn't support flexWrap natively. This component simulates it
  * by measuring children and splitting them into rows that fit within
  * the available width.
  *

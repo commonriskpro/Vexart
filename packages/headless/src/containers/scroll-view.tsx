@@ -8,7 +8,7 @@
  * Features:
  *   - Visual scrollbar track + thumb (auto-hides when content fits)
  *   - Compositing layer for efficient repainting
- *   - Clay-based scroll tracking + pixel-level clipping
+ *   - Flexily-backed scroll tracking + pixel-level clipping
  *   - Programmatic scrollTo/scrollBy/scrollIntoView
  *
  * Usage:
@@ -88,7 +88,7 @@ export type ScrollViewProps = {
  * Reads scroll state from the ScrollHandle every frame.
  */
 function Scrollbar(props: { handle: ScrollHandle; height: number | string }) {
-  // Read scroll state (reactive — reads Clay data each access)
+  // Read scroll state (reactive — reads handle data each access)
   const ratio = () => {
     const ch = props.handle.contentHeight
     const vh = props.handle.viewportHeight
@@ -138,12 +138,12 @@ function Scrollbar(props: { handle: ScrollHandle; height: number | string }) {
 
 /** @public */
 export function ScrollView(props: ScrollViewProps) {
-  const clayId = `tge-scrollview-${scrollViewCounter++}`
+  const scrollId = `tge-scrollview-${scrollViewCounter++}`
   const showScrollbar = props.showScrollbar ?? true
 
   // Create scroll handle
-  const handle = createScrollHandle(clayId)
-  onCleanup(() => releaseScrollHandle(clayId))
+  const handle = createScrollHandle(scrollId)
+  onCleanup(() => releaseScrollHandle(scrollId))
 
   // If ref callback provided, pass the ScrollHandle
   if (props.ref) {
@@ -164,7 +164,7 @@ export function ScrollView(props: ScrollViewProps) {
         scrollX={props.scrollX}
         scrollY={props.scrollY}
         scrollSpeed={props.scrollSpeed}
-        scrollId={clayId}
+        scrollId={scrollId}
         direction={props.direction ?? "column"}
         padding={props.padding}
         paddingX={props.paddingX}

@@ -325,7 +325,7 @@ function updateLayerStabilityCounters(
  *   5. Handle final-frame-raw backend strategy (full composite)
  *
  * @param plan     - LayerPlan from assignLayersSpatial
- * @param commands - Flat RenderCommand[] from Clay layout
+ * @param commands - Flat RenderCommand[] from Flexily layout
  * @param cellW    - Cell width in pixels (from terminal)
  * @param cellH    - Cell height in pixels (from terminal)
  * @param state    - All coordinator-owned dependencies

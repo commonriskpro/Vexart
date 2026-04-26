@@ -1,5 +1,5 @@
 /**
- * @tge/terminal — Terminal detection, capabilities, lifecycle, and raw I/O.
+ * @vexart/engine — Terminal detection, capabilities, lifecycle, and raw I/O.
  *
  * This is the lowest layer. It talks directly to the terminal:
  * - Detects which terminal emulator is running

@@ -591,7 +591,7 @@ export type ScrollHandle = {
     scrollTo: (y: number) => void;
     scrollBy: (dy: number) => void;
     scrollIntoView: (y: number, height: number) => void;
-    readonly _clayId: string;
+    readonly _scrollId: string;
 };
 
 // @public (undocumented)

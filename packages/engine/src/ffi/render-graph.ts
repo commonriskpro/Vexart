@@ -5,7 +5,7 @@ import type { TGENode } from "./node"
 // Commands are produced by layout-adapter.endLayout() and carry nodeId for
 // matching commands to effects, images, and layer assignments.
 
-/** Clay-compatible command type constants. */
+/** Layout adapter command type constants. */
 export const CMD = {
   NONE: 0,
   RECTANGLE: 1,

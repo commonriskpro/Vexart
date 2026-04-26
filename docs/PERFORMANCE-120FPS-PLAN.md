@@ -42,12 +42,10 @@ Before optimizing, add a profiler that reports every frame as a structured budge
 ```txt
 frame.total
 ├─ js.reconcile
-├─ js.walk_tree_shell
-├─ rust.scene_sync
-├─ rust.layout
-├─ rust.hit_test_interaction
-├─ rust.render_graph
-├─ js.translation_shell
+├─ ts.walk_tree
+├─ ts.layout                  // Flexily
+├─ ts.hit_test
+├─ ts.render_graph
 ├─ rust.paint_dispatch
 ├─ rust.composite
 ├─ rust.kitty_encode

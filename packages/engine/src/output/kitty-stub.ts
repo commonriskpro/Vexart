@@ -1,6 +1,6 @@
 /**
  * Temporary bridge stub — all symbols available from ./index
- * @tge/output-kitty folded into engine/src/output
+ * output-kitty module folded into engine/src/output
  */
 
 export { createLayerComposer } from "./layer-composer"

@@ -88,10 +88,10 @@ export type { ParticleConfig, ParticleSystem } from "./particles"
 
 export * from "./layers"
 // NOTE: deleted experimental GPU modules are no longer exported from the engine.
-// NOTE: pixel-buffer, paint-bridge, clay.ts deleted in Phase 2 Slice 11.
+// NOTE: legacy pixel-buffer, paint-bridge, and layout bridge modules are no longer exported.
 export * from "./node"
 
-// ── vexart native bridge (Phase 2) ──
+// ── vexart native bridge ──
 export * from "./vexart-bridge"
 export * from "./vexart-functions"
 

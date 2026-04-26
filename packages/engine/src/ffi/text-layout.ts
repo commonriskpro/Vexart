@@ -1,9 +1,9 @@
 /**
- * Text layout — Pretext integration for TGE.
+ * Text layout — Pretext integration for Vexart.
  *
- * Bridges @chenglou/pretext (text measurement & layout) with TGE's
- * Zig bitmap rendering. Pretext handles word wrap, line breaking,
- * BiDi, CJK — TGE handles pixel painting.
+ * Bridges @chenglou/pretext (text measurement & layout) with Vexart's
+ * text rendering. Pretext handles word wrap, line breaking,
+ * BiDi, CJK — Vexart handles pixel painting.
  *
  * Canvas polyfill: Pretext needs a CanvasRenderingContext2D for
  * measureText(). In Bun there's no DOM/OffscreenCanvas, so we
@@ -70,7 +70,7 @@ const fontRegistry = new Map<number, FontDescriptor>()
 // @napi-rs/canvas on macOS to resolve the real system font.
 fontRegistry.set(0, { family: ".SF NS", size: 14 })
 
-/** Register a font for use with TGE text rendering. */
+/** Register a font for use with Vexart text rendering. */
 /** @public */
 export function registerFont(id: number, desc: FontDescriptor) {
   fontRegistry.set(id, desc)
@@ -259,14 +259,14 @@ export function layoutRichText(
   return lines
 }
 
-// ── Clay integration ──
-// Pretext-based text measurement for Clay's callback.
+// ── Layout adapter integration ──
+// Pretext-based text measurement for the layout adapter.
 
 // ── Built-in atlas metrics ──
 // Font 0 = .SF NS Mono 14px bitmap atlas.
-// Zig advance: 8.65px per char (865 hundredths fixed-point).
+// Built-in advance: 8.65px per char (865 hundredths fixed-point).
 // Cell: 9px wide (glyph bounding box), 17px tall.
-// These MUST match zig/src/text.zig advance_hundredths and font_atlas.zig.
+// These MUST match the generated native font atlas metrics.
 const BUILTIN_ADVANCE = 8.65
 const BUILTIN_HEIGHT = 17
 const BUILTIN_FONT_SIZE = 14
@@ -284,10 +284,9 @@ export function builtinHeight(fontSize: number): number {
 }
 
 /**
- * Measure text for Taffy/vexart layout.
+ * Measure text for Vexart layout.
  *
- * Retained/native layout now performs real text measurement on the Rust side.
- * The compat walk-tree path still uses `measureForClay()` directly because it
+ * The walk-tree path uses `measureForLayout()` directly because it
  * pre-computes text box dimensions before emitting layout commands.
  */
 export function measureForVexart(
@@ -295,17 +294,17 @@ export function measureForVexart(
   _fontId: number,
   _fontSize: number,
 ): { width: number; height: number } {
-  return measureForClay(_text, _fontId, _fontSize)
+  return measureForLayout(_text, _fontId, _fontSize)
 }
 
 /**
- * Measure text width for Clay layout.
- * Phase 2+ compat path: this function remains the authoritative TS-side text
+ * Measure text width for Flexily layout.
+ * This function remains the authoritative TS-side text
  * measurement helper for the decomposed layout shell and offscreen fallbacks.
- * Font 0: uses exact atlas metrics (8.65px/char) to match Zig renderer.
+ * Font 0: uses exact atlas metrics (8.65px/char) to match native rendering.
  * Other fonts: uses Pretext/canvas for accurate measurement.
  */
-export function measureForClay(
+export function measureForLayout(
   text: string,
   fontId: number,
   fontSize: number,

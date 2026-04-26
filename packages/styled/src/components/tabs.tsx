@@ -1,7 +1,7 @@
 /**
  * VoidTabs — shadcn-compatible tab switcher using Void design tokens.
  *
- * Built on top of the headless @tge/components Tabs.
+ * Built on top of the headless @vexart/headless Tabs.
  * Variants: default (pill background), line (underline active indicator).
  *
  * Usage:

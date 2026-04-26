@@ -107,7 +107,7 @@ export function writeLayoutBack(
   // For box nodes that had backgroundColor, layout was already written via RECT.
   // For box nodes WITHOUT backgroundColor, attempt to inherit from their first
   // child's command position. This is an approximation — full accuracy would
-  // require Clay to expose per-element layout (which it doesn't via commands).
+  // require the layout adapter to expose per-element layout beyond commands.
   // NOTE: This is a best-effort. Nodes with no background and no children
   // will have layout { 0, 0, 0, 0 } until a more precise approach is added.
 

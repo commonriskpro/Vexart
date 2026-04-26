@@ -38,9 +38,9 @@ import {
   JUSTIFY_SPACE_BETWEEN,
 } from "flexily"
 
-// ── Local constants previously from clay.ts ───────────────────────────────
+// ── Layout constants ──────────────────────────────────────────────────────
 
-/** CMD constants — same values as in the legacy Clay bridge. */
+/** CMD constants for layout adapter render commands. */
 const CMD = {
   ..._CMD_RG,
 } as const
@@ -110,8 +110,8 @@ function mapAlign(v: number): number {
 }
 
 /**
- * VexartLayoutCtx — Clay-compatible layout context backed by Flexily.
- * Methods mirror the legacy `clay` object API for drop-in use in loop.ts.
+ * VexartLayoutCtx — layout context backed by Flexily.
+ * Methods provide the walk-tree adapter API used by the render loop.
  */
 export function createVexartLayoutCtx() {
   let _viewportW = 0

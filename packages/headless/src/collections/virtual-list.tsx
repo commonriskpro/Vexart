@@ -61,7 +61,7 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   const scrollId = `vlist-${Math.random().toString(36).slice(2, 8)}`
   const scrollHandle = createScrollHandle(scrollId)
 
-  // Read Clay scroll position reactively
+  // Read scroll position reactively
   const scrollPos = () => {
     scrollTick()
     return scrollHandle.scrollTop

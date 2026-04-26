@@ -48,7 +48,7 @@ export type BoxProps = {
   borderColor?: string | number
   borderWidth?: number
 
-  // Effects — applied in the pixel paint stage, outside Clay.
+  // Effects — applied in the pixel paint stage, outside layout.
   // Shadow: single or multiple drop shadows beneath the box.
   shadow?: ShadowConfig | ShadowConfig[]
   // Glow: radial halo around the box.

@@ -77,9 +77,9 @@ export interface BackdropRenderMetadata {
     // (undocumented)
     clipBounds: RenderBounds;
     // (undocumented)
-    clipStateId: string;
+    clipStateId: number;
     // (undocumented)
-    effectStateId: string;
+    effectStateId: number;
     // (undocumented)
     filterKind: BackdropFilterKind;
     // (undocumented)
@@ -91,7 +91,7 @@ export interface BackdropRenderMetadata {
     // (undocumented)
     sampleBounds: RenderBounds;
     // (undocumented)
-    transformStateId: string;
+    transformStateId: number;
 }
 
 // @public (undocumented)
@@ -361,7 +361,7 @@ export function createRouter(initialPath: string): {
 export function createScaledImageCache(): ScaledImageCache;
 
 // @public (undocumented)
-export function createScrollHandle(clayId: string): ScrollHandle;
+export function createScrollHandle(scrollId: string): ScrollHandle;
 
 // @public (undocumented)
 export function createSlot(slotName: string, registry: SlotRegistry): () => JSX.Element | null;
@@ -435,8 +435,6 @@ export const debugState: {
     readonly interactionType: string | null;
     readonly presentedInteractionSeq: number;
     readonly nativePresentationActive: boolean;
-    readonly retainedMode: "default" | "fallback";
-    readonly retainedFallbackReason: string | null;
     readonly nativePresentationFallbackReason: string | null;
     readonly nativeStats: NativePresentationStats | null;
     readonly nativeFrameReasonFlags: number | null;
@@ -469,8 +467,6 @@ export type DebugStats = {
     interactionType: string | null;
     presentedInteractionSeq: number;
     nativePresentationActive: boolean;
-    retainedMode: "default" | "fallback";
-    retainedFallbackReason: string | null;
     nativePresentationFallbackReason: string | null;
     nativeStats: NativePresentationStats | null;
     nativeFrameReasonFlags: number | null;
@@ -662,6 +658,7 @@ export type EffectConfig = {
     };
     filter?: FilterConfig;
     _node?: TGENode;
+    _stateHash?: number;
 };
 
 // @public (undocumented)
@@ -672,9 +669,9 @@ export type EffectRenderOp = {
     rect: RectangleRenderOp;
     effect: EffectConfig;
     backdrop: BackdropRenderMetadata | null;
-    transformStateId: string;
-    clipStateId: string;
-    effectStateId: string;
+    transformStateId: number;
+    clipStateId: number;
+    effectStateId: number;
 };
 
 // @public (undocumented)
@@ -1292,6 +1289,12 @@ export type LineCmd = {
 export function markDirty(scope?: DirtyScope): void;
 
 // @public (undocumented)
+export function markLayerDamageByKey(key: string, rect: DamageRect): void;
+
+// @public (undocumented)
+export function markLayerDirtyByKey(key: string): void;
+
+// @public (undocumented)
 export function markNodeLayerDamaged(nodeId: number, rect?: DamageRect): void;
 
 export { Match }
@@ -1728,6 +1731,9 @@ export function releaseNativeKittyShm(handle: number, unlinkName: boolean): void
 // @public (undocumented)
 export function releasePointerCapture(nodeId: number): void;
 
+// @public
+export function releaseScrollHandle(scrollId: string): void;
+
 // @public (undocumented)
 export function removeChild(parent: TGENode, child: TGENode): void;
 
@@ -1947,9 +1953,9 @@ export type RenderGraphOp = RectangleRenderOp | ImageRenderOp | CanvasRenderOp |
 
 // @public (undocumented)
 export type RenderGraphQueues = {
-    effects: EffectConfig[];
-    images: ImagePaintConfig[];
-    canvases: CanvasPaintConfig[];
+    effects: Map<number, EffectConfig>;
+    images: Map<number, ImagePaintConfig>;
+    canvases: Map<number, CanvasPaintConfig>;
 };
 
 // @public (undocumented)
@@ -2149,7 +2155,7 @@ export type ScrollHandle = {
     scrollTo: (y: number) => void;
     scrollBy: (dy: number) => void;
     scrollIntoView: (y: number, height: number) => void;
-    readonly _clayId: string;
+    readonly _scrollId: string;
 };
 
 // @public (undocumented)
@@ -2398,23 +2404,13 @@ export type TGENode = {
     children: TGENode[];
     parent: TGENode | null;
     id: number;
-    _nativeId: bigint | null;
     destroyed: boolean;
     layout: LayoutRect;
     _hovered: boolean;
     _active: boolean;
     _focused: boolean;
-    _imageBuffer: {
-        data: Uint8Array;
-        width: number;
-        height: number;
-    } | null;
-    _nativeImageHandle: bigint | null;
-    _nativeCanvasDisplayListHandle: bigint | null;
-    _canvasDisplayListHash: string | null;
-    _canvasDrawCacheKey: string | null;
-    _canvasDisplayListCommands: DrawCmd[] | null;
-    _imageState: "idle" | "loading" | "loaded" | "error";
+    _imageExtra: NodeImageExtra | null;
+    _canvasExtra: NodeCanvasExtra | null;
     _widthSizing: SizingInfo | null;
     _heightSizing: SizingInfo | null;
     _transform: Float64Array | null;
@@ -2422,6 +2418,24 @@ export type TGENode = {
     _accTransform: Float64Array | null;
     _accTransformInverse: Float64Array | null;
     _interactionMode: InteractionMode;
+    _vp: TGEProps | null;
+    _vpDirty: boolean;
+    _siblingIndex: number;
+    _focusableCount: number;
+    _dfsIndex: number;
+    _scrollContainerId: number;
+    _stableFrameCount: number;
+    _unstableFrameCount: number;
+    _autoLayer: boolean;
+    _layerKey: string | null;
+    _generation: number;
+    _lastMeasuredText: string | null;
+    _lastMeasuredFontId: number;
+    _lastMeasuredFontSize: number;
+    _lastMeasurement: {
+        width: number;
+        height: number;
+    } | null;
 };
 
 // @public (undocumented)
@@ -2709,7 +2723,7 @@ export function unregisterNodeFocusable(node: TGENode): void;
 export function updateNodeFocusEntry(node: TGENode): void;
 
 // @public
-export function updateScrollContainerGeometry(clayId: string, viewportWidth: number, viewportHeight: number, contentWidth: number, contentHeight: number): void;
+export function updateScrollContainerGeometry(scrollId: string, viewportWidth: number, viewportHeight: number, contentWidth: number, contentHeight: number): void;
 
 // @public (undocumented)
 export const use: <A, T>(fn: (element: TGENode, arg: A) => T, element: TGENode, arg: A) => T;
@@ -2988,8 +3002,10 @@ export function writeHeader(view: DataView, cmdCount: number, payloadBytes: numb
 
 // Warnings were encountered during analysis:
 //
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/loop/debug.d.ts:89:5 - (ae-forgotten-export) The symbol "NativeFrameExecutionStats" needs to be exported by the entry point index.d.ts
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/loop/debug.d.ts:172:5 - (ae-forgotten-export) The symbol "NativeFrameExecutionStatsInput" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node.d.ts:327:5 - (ae-forgotten-export) The symbol "NodeImageExtra" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node.d.ts:329:5 - (ae-forgotten-export) The symbol "NodeCanvasExtra" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/loop/debug.d.ts:85:5 - (ae-forgotten-export) The symbol "NativeFrameExecutionStats" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/loop/debug.d.ts:166:5 - (ae-forgotten-export) The symbol "NativeFrameExecutionStatsInput" needs to be exported by the entry point index.d.ts
 // /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/reconciler/router.d.ts:41:5 - (ae-forgotten-export) The symbol "NavigationParams" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)

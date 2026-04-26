@@ -11,8 +11,8 @@
 import { describe, expect, it } from "bun:test"
 
 describe("native text measure contract", () => {
-  it("documents that retained layout no longer uses a zero-size text stub", () => {
-    // Rust layout now performs real text measurement for retained scene layout.
+  it("documents that text layout no longer uses a zero-size text stub", () => {
+    // Rust text measurement returns real dimensions for native text paths.
     // The authoritative behavior is covered by Rust unit tests and the native
     // scene layout parity suite on the TS side.
     expect(true).toBe(true)

@@ -75,9 +75,9 @@ bun add tge
 
 ### Requirements
 
-- **Bun >= 1.1.0** — TGE uses Bun's FFI for native C and Zig libraries.
+- **Bun >= 1.1.0** — TGE uses Bun's FFI for the native Rust library.
 - **Terminal with Kitty graphics protocol** — Kitty, Ghostty, or WezTerm. The Kitty protocol transmits pixel data directly to the terminal GPU. Standard terminals (iTerm2, Terminal.app, Windows Terminal) are not supported.
-- **macOS ARM64** — The shipped native binaries (`libtge.dylib`, `libclay.dylib`) are currently ARM64 Darwin only. Linux and x86 builds are planned.
+- **macOS ARM64** — The shipped native binary (`libvexart.dylib`) is currently ARM64 Darwin only. Linux and x86 builds are planned.
 
 ### Minimal App
 

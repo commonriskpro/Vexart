@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { layoutText, measureForClay } from "./text-layout"
+import { layoutText, measureForLayout } from "./text-layout"
 
 describe("text layout metrics", () => {
   test("built-in font measurement scales with fontSize", () => {
-    const small = measureForClay("Lightcode", 0, 10)
-    const large = measureForClay("Lightcode", 0, 20)
+    const small = measureForLayout("Lightcode", 0, 10)
+    const large = measureForLayout("Lightcode", 0, 20)
 
     expect(large.width).toBeGreaterThan(small.width)
     expect(large.height).toBeGreaterThan(small.height)

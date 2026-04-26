@@ -2,14 +2,12 @@
  * Build script — creates a distributable npm package.
  *
  * Output: dist/
- *   tge.js              ← single minified bundle (all @vexart/* packages)
- *   tge.d.ts            ← public API type declarations (TODO)
+ *   engine.js           ← @vexart/engine bundle
+ *   engine.d.ts         ← public API type declarations
  *   solid-plugin.js     ← babel preload for JSX transform
  *   vendor/
- *     tge/
- *       arm64-darwin/libtge.dylib
- *     clay/
- *       arm64-darwin/libclay.dylib
+ *     vexart/
+ *       arm64-darwin/libvexart.dylib
  *   tree-sitter/
  *     assets/            ← grammar .wasm + .scm files
  *   package.json
@@ -151,38 +149,16 @@ const target = `${arch}-${platform}`
 
 const vendorDir = resolve(DIST, "vendor")
 
-// Zig shared lib
-const zigDir = resolve(vendorDir, "tge", target)
-mkdirSync(zigDir, { recursive: true })
-const zigLib = resolve(ROOT, "zig/zig-out/lib", process.platform === "darwin" ? "libtge.dylib" : "libtge.so")
-if (existsSync(zigLib)) {
-  cpSync(zigLib, resolve(zigDir, process.platform === "darwin" ? "libtge.dylib" : "libtge.so"))
-  console.log(`  ✅ libtge → vendor/tge/${target}/`)
+// libvexart shared lib
+const vexartDir = resolve(vendorDir, "vexart", target)
+mkdirSync(vexartDir, { recursive: true })
+const vexartName = process.platform === "darwin" ? "libvexart.dylib" : process.platform === "win32" ? "vexart.dll" : "libvexart.so"
+const vexartLib = resolve(ROOT, "native/libvexart/target/release", vexartName)
+if (existsSync(vexartLib)) {
+  cpSync(vexartLib, resolve(vexartDir, vexartName))
+  console.log(`  ✅ libvexart → vendor/vexart/${target}/`)
 } else {
-  console.log(`  ⚠️ libtge not found at ${zigLib}`)
-}
-
-// Clay shared lib
-const clayDir = resolve(vendorDir, "clay", target)
-mkdirSync(clayDir, { recursive: true })
-const clayLib = resolve(ROOT, "vendor/libclay.dylib")
-if (existsSync(clayLib)) {
-  cpSync(clayLib, resolve(clayDir, process.platform === "darwin" ? "libclay.dylib" : "libclay.so"))
-  console.log(`  ✅ libclay → vendor/clay/${target}/`)
-} else {
-  console.log(`  ⚠️ libclay not found at ${clayLib}`)
-}
-
-// Kitty SHM helper shared lib
-const kittyShmDir = resolve(vendorDir, "kitty-shm", target)
-mkdirSync(kittyShmDir, { recursive: true })
-const kittyShmName = process.platform === "darwin" ? "libtge_kitty_shm_helper.dylib" : "libtge_kitty_shm_helper.so"
-const kittyShmLib = resolve(ROOT, "native/kitty-shm-helper/build", kittyShmName)
-if (existsSync(kittyShmLib)) {
-  cpSync(kittyShmLib, resolve(kittyShmDir, kittyShmName))
-  console.log(`  ✅ kitty shm helper → vendor/kitty-shm/${target}/`)
-} else {
-  console.log(`  ⚠️ kitty shm helper not found at ${kittyShmLib}`)
+  console.log(`  ⚠️ libvexart not found at ${vexartLib}`)
 }
 
 // ── 4. Copy tree-sitter assets ──
@@ -221,8 +197,8 @@ const distFontDir = resolve(DIST, "fonts")
 mkdirSync(distFontDir, { recursive: true })
 const atlasFile = resolve(atlasDir, "font_atlas.zig")
 if (existsSync(atlasFile)) {
-  // The atlas is compiled into libtge — no separate file needed
-  console.log(`  ℹ️ Font atlas is compiled into libtge (no copy needed)`)
+  // The atlas is compiled into libvexart — no separate file needed
+  console.log(`  ℹ️ Font atlas is compiled into libvexart (no copy needed)`)
 }
 
 // ── 8. Create package.json ──
