@@ -781,8 +781,6 @@ export function paintFrame(
         continue
       }
 
-      // ── native-presented: Rust already emitted the layer to the terminal ──
-      // No RGBA payload arrives in JS — just record the repaint and move on.
       if (paintResult.output === "native-presented") {
         nativePresentationStats = paintResult.stats ?? nativePresentationStats
         repaintedThisFrame++
@@ -814,7 +812,6 @@ export function paintFrame(
           if (profile) profile.paintPresentationMs += performance.now() - presentationStart
           if (nativeStats !== null) {
             nativePresentationStats = nativeStats
-            // Native emit succeeded — skip TS layer composer path.
             if (effectiveUseRegionalRepaint && clippedDamage) {
               if (debugCadence) log(`  [${slot.key}] NATIVE-LAYER-REGION ${clippedDamage.width}x${clippedDamage.height} at (${clippedDamage.x},${clippedDamage.y}) within ${pw}x${ph} z=${renderZ}`)
             } else {
@@ -823,7 +820,6 @@ export function paintFrame(
             markLayerClean(layer)
             continue
           }
-          // Native emit failed — fall through to TS path.
         }
 
         if (effectiveUseRegionalRepaint && clippedDamage) {
@@ -917,7 +913,6 @@ export function paintFrame(
   const resourceSummary = isDebugEnabled()
     ? summarizeRendererResourceStats()
     : { totalBytes: 0, gpuBytes: 0, cacheEntries: 0 }
-  // Extract native stats from frame result when native-presented.
   const nativeFrameStats = frameResult?.output === "native-presented" ? (frameResult.stats ?? null) : nativePresentationStats
   debugUpdateStats({
     commandCount: commands.length,

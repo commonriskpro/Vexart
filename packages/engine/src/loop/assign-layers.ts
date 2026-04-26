@@ -14,25 +14,13 @@ import type { RenderCommand } from "../ffi/render-graph"
 import type { TGENode } from "../ffi/node"
 import { shouldPromoteInteractionLayer } from "../reconciler/interaction"
 import type { LayerBoundary, LayerSlot, LayerPlan } from "./types"
+import { hasBackdropEffect } from "./predicates"
 
 const VALID_WILL_CHANGE_VALUES = new Set(["transform", "opacity", "filter", "scroll"])
 const AUTO_LAYER_BUDGET = 8
 const AUTO_LAYER_MIN_AREA = 64 * 64
 
 let autoLayerCount = 0
-
-export function hasBackdropEffect(node: TGENode) {
-  return !!(
-    node.props.backdropBlur ||
-    node.props.backdropBrightness !== undefined ||
-    node.props.backdropContrast !== undefined ||
-    node.props.backdropSaturate !== undefined ||
-    node.props.backdropGrayscale !== undefined ||
-    node.props.backdropInvert !== undefined ||
-    node.props.backdropSepia !== undefined ||
-    node.props.backdropHueRotate !== undefined
-  )
-}
 
 function hasPromotableArea(node: TGENode) {
   return node.layout.width * node.layout.height >= AUTO_LAYER_MIN_AREA
@@ -84,7 +72,7 @@ export function findLayerBoundaries(
   const isScroll = !!(node.props.scrollX || node.props.scrollY)
   const isInteractionLayer = shouldPromoteInteractionLayer(node)
   const hasSubtreeTransform = !!(node.props.transform && node.children.length > 0)
-  const hasBackdrop = hasBackdropEffect(node)
+  const hasBackdrop = hasBackdropEffect(node.props)
   // willChange pre-promotes the node to its own layer (REQ-2B-501).
   const willChange = node.props.willChange
   const willChangeValues = willChange ? (Array.isArray(willChange) ? willChange : [willChange]) : []
@@ -131,21 +119,6 @@ export function resolveNodeByPath(fromRoot: TGENode, path: string): TGENode | nu
     node = node.children[idx]
   }
   return node
-}
-
-/** Collect all text strings from a node's subtree. */
-function collectAllTexts(node: TGENode, collectText: (n: TGENode) => string): string[] {
-  const result: string[] = []
-  const walk = (current: TGENode) => {
-    if (current.kind === "text") {
-      const text = current.text || collectText(current)
-      if (text) result.push(text)
-      return
-    }
-    for (const child of current.children) walk(child)
-  }
-  walk(node)
-  return result
 }
 
 type ScissorPair = {

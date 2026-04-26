@@ -25,6 +25,7 @@ import {
 } from "../ffi/matrix"
 import { focusedId, setFocusedId, getNodeFocusId } from "../reconciler/focus"
 import { buildNodeMouseEvent, isFullyOutsideScrollViewport } from "../reconciler/hit-test"
+import { isInteractiveNode } from "./predicates"
 
 // ── Layout writeback ──────────────────────────────────────────────────────
 
@@ -346,13 +347,10 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
     const hasHoverStyle = !!node.props.hoverStyle
     const hasActiveStyle = !!node.props.activeStyle
     const hasFocusStyle = !!node.props.focusStyle
-    const hasInteractiveStyle = hasHoverStyle || hasActiveStyle || hasFocusStyle
     const isFocusable = node.props.focusable
-    const hasOnPress = node.props.onPress
-    const hasMouseCb = node.props.onMouseDown || node.props.onMouseUp || node.props.onMouseMove || node.props.onMouseOver || node.props.onMouseOut
 
     // Skip nodes that have no interactive behavior at all
-    if (!hasInteractiveStyle && !isFocusable && !hasOnPress && !hasMouseCb) continue
+    if (!isInteractiveNode(node.props)) continue
 
     const l = node.layout
 

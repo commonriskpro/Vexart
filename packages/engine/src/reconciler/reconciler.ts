@@ -157,7 +157,6 @@ function markPropsDirty(node: TGENode) {
 }
 
 function bumpNodeMutation(node: TGENode) {
-  node._generation++
   let current: TGENode | null = node
   while (current) {
     current._stableFrameCount = 0

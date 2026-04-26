@@ -11,7 +11,7 @@ import { CanvasContext } from "./canvas"
 import { rasterizeCanvas, rasterizeCanvasCommands } from "./canvas-rasterizer"
 import { getAtlas, loadFontAtlas, ATLAS_RANGES } from "./font-atlas"
 import { transformBounds, transformPoint } from "./matrix"
-import type { BackdropRenderMetadata, EffectRenderOp, ImageRenderOp, RectangleRenderOp, RenderGraphOp, TextRenderOp, BorderRenderOp } from "./render-graph"
+import type { BackdropRenderMetadata, EffectRenderOp, RectangleRenderOp, RenderGraphOp } from "./render-graph"
 import type {
   RendererBackend,
   RendererBackendFrameContext,
@@ -820,28 +820,16 @@ function isSupportedRectangle(op: RectangleRenderOp) {
   return !op.inputs.image && !op.inputs.canvas && !op.inputs.effect
 }
 
-function isSupportedEffect(op: EffectRenderOp) {
-  return true
-}
-
-function isSupportedBorder(_op: BorderRenderOp) {
-  return true
-}
-
-function isSupportedText(_op: TextRenderOp) {
-  return true
-}
-
-function isSupportedImage(_op: ImageRenderOp) {
+function isSupportedEffect(_op: EffectRenderOp) {
   return true
 }
 
 function isSupportedOp(op: RenderGraphOp) {
   if (op.kind === "rectangle") return isSupportedRectangle(op)
   if (op.kind === "effect") return isSupportedEffect(op)
-  if (op.kind === "border") return isSupportedBorder(op)
-  if (op.kind === "text") return isSupportedText(op)
-  if (op.kind === "image") return isSupportedImage(op)
+  if (op.kind === "border") return true
+  if (op.kind === "text") return true
+  if (op.kind === "image") return true
   if (op.kind === "canvas") return true
   return false
 }

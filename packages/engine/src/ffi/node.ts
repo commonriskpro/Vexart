@@ -136,7 +136,7 @@ export type TGEProps = {
   height?: number | string
   /** When set, width behaves as "grow" (opentui compat) */
   flexGrow?: number
-  /** Accepted for compatibility; layout shrinking is handled by the adapter */
+  /** Accepted for CSS compatibility. Flexily handles shrinking automatically. */
   flexShrink?: number
 
   // Visual
@@ -390,8 +390,6 @@ export type TGENode = {
   _autoLayer: boolean
   /** Key of the owning compositor layer, or "bg" for the default layer. */
   _layerKey: string | null
-  /** Monotonic mutation generation bumped by setProperty. */
-  _generation: number
   /** Last text measurement cache key and result for per-node frame reuse. */
   _lastMeasuredText: string | null
   _lastMeasuredFontId: number
@@ -442,7 +440,6 @@ export function createNode(kind: TGENodeKind): TGENode {
     _unstableFrameCount: 0,
     _autoLayer: false,
     _layerKey: null,
-    _generation: 0,
     _lastMeasuredText: null,
     _lastMeasuredFontId: -1,
     _lastMeasuredFontSize: -1,

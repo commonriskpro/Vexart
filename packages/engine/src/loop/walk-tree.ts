@@ -35,6 +35,7 @@ import type { EffectConfig, TextMeta, ImagePaintConfig, CanvasPaintConfig } from
 import { shouldPromoteInteractionLayer } from "../reconciler/interaction"
 import { isDebugEnabled } from "./debug"
 import type { LayerBoundary } from "./types"
+import { hasBackdropEffect, isInteractiveNode } from "./predicates"
 
 // ── State bag ─────────────────────────────────────────────────────────────
 
@@ -104,19 +105,6 @@ const AUTO_LAYER_MIN_AREA = 64 * 64
 const effectPool: EffectConfig[] = []
 let effectPoolIdx = 0
 let autoLayerCount = 0
-
-function hasBackdropEffect(node: TGENode) {
-  return !!(
-    node.props.backdropBlur ||
-    node.props.backdropBrightness !== undefined ||
-    node.props.backdropContrast !== undefined ||
-    node.props.backdropSaturate !== undefined ||
-    node.props.backdropGrayscale !== undefined ||
-    node.props.backdropInvert !== undefined ||
-    node.props.backdropSepia !== undefined ||
-    node.props.backdropHueRotate !== undefined
-  )
-}
 
 function hasPromotableArea(node: TGENode) {
   return node.layout.width * node.layout.height >= AUTO_LAYER_MIN_AREA
@@ -221,7 +209,7 @@ export function walkTree(
     const hasValidWillChange = willChangeValues.some(v => VALID_WILL_CHANGE_VALUES.has(v))
     const hasSubtreeTransform = !!(props.transform && node.children.length > 0)
     const isInteractionLayer = shouldPromoteInteractionLayer(node)
-    const hasBackdrop = hasBackdropEffect(node)
+    const hasBackdrop = hasBackdropEffect(props)
     let shouldBoundary = false
     if (props.layer === true) {
       node._autoLayer = false
@@ -331,9 +319,7 @@ export function walkTree(
     const extra = ensureCanvasExtra(node)
     state.boxNodes.push(node)
 
-    const hasMouseProps = props.onMouseDown || props.onMouseUp || props.onMouseMove || props.onMouseOver || props.onMouseOut
-    const isInteractive = props.focusable || props.hoverStyle || props.activeStyle || props.focusStyle || props.onPress || hasMouseProps
-    if (isInteractive) {
+    if (isInteractiveNode(props)) {
       layout.setId(`tge-node-${node.id}`)
     } else {
       layout.openElement()
@@ -397,12 +383,10 @@ export function walkTree(
   // Assign layout element ID for:
   // 1. Scroll containers — for scroll offset tracking
   // 2. Interactive nodes — for reliable layout readback (hit-testing)
-  const hasMouseProps = props.onMouseDown || props.onMouseUp || props.onMouseMove || props.onMouseOver || props.onMouseOut
-  const isInteractive = props.focusable || props.hoverStyle || props.activeStyle || props.focusStyle || props.onPress || hasMouseProps
   // willChange pre-promotes to own layer — needs a stable layout ID for layer key (REQ-2B-501)
   const hasWillChange = props.willChange !== undefined
   const isScrollContainer = !!(props.scrollX || props.scrollY)
-  const needsLayoutId = isInteractive || props.layer === true || hasWillChange
+  const needsLayoutId = isInteractiveNode(props) || props.layer === true || hasWillChange
   if (isScrollContainer) {
     // Use node.id for a stable scroll ID that survives frame resets.
     // Fallback to user-provided scrollId for programmatic scroll handles.
@@ -511,15 +495,10 @@ export function walkTree(
   // 1. Visual effects (gradient, backdrop filter, opacity)
   // 2. Interactive nodes (onPress, focusable, hoverStyle, mouse callbacks)
   //    Without a RECT, the node doesn't enter rectNodes → no hit-testing → mouse events never fire.
-  const hasBackdropFilter = vp.backdropBlur !== undefined || vp.backdropBrightness !== undefined ||
-    vp.backdropContrast !== undefined || vp.backdropSaturate !== undefined ||
-    vp.backdropGrayscale !== undefined || vp.backdropInvert !== undefined ||
-    vp.backdropSepia !== undefined || vp.backdropHueRotate !== undefined
-  const hasMouseCallbacks = vp.onMouseDown || vp.onMouseUp || vp.onMouseMove || vp.onMouseOver || vp.onMouseOut
-  const isInteractiveNode = vp.onPress || vp.focusable || vp.hoverStyle || vp.activeStyle || vp.focusStyle || hasMouseCallbacks
+  const hasBackdropFilter = hasBackdropEffect(vp)
   const hasTransform = vp.transform !== undefined
   const hasSelfFilter = vp.filter !== undefined
-  const needsRect = vp.backgroundColor !== undefined || vp.gradient !== undefined || hasBackdropFilter || vp.opacity !== undefined || isInteractiveNode || hasTransform || hasSelfFilter
+  const needsRect = vp.backgroundColor !== undefined || vp.gradient !== undefined || hasBackdropFilter || vp.opacity !== undefined || isInteractiveNode(vp) || hasTransform || hasSelfFilter
   if (needsRect) {
     const bgColor = vp.backgroundColor !== undefined ? (vp.backgroundColor as number) : 0x00000001
     const cr = vp.cornerRadius ?? 0

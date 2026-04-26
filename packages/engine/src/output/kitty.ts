@@ -12,7 +12,6 @@
  * @see https://sw.kovidgoyal.net/kitty/graphics-protocol/
  */
 
-// PixelBuffer type inlined from former paint-legacy/buffer.ts.
 type PixelBuffer = { data: Uint8Array; width: number; height: number; stride: number }
 import { deflateSync } from "node:zlib"
 import { type TransmissionMode, reportKittyTransportFailure, reportKittyTransportSuccess, resolveKittyTransportMode, TRANSPORT_FAILURE_REASON } from "./transport-manager"
@@ -616,8 +615,6 @@ export function patchRegion(
   const compress = resolveCompression(mode, regionData.length, opts?.compress ?? COMPRESS_MODE.AUTO)
   const payload = compress ? deflateSync(regionData) : regionData
 
-  // Build metadata: a=f (frame data), r=1 (edit frame 1 = root frame),
-  // x,y = offset in image, s,v = region dimensions, X=1 (replace, not blend)
   let meta = `a=f,i=${id},r=1,x=${rx},y=${ry},s=${rw},v=${rh},f=32,X=1,q=2`
   if (compress) meta += `,o=z`
 
@@ -753,7 +750,6 @@ export function probeShm(
       probeHandle = prepared.handle
       probeDebug("probeShm:prepared", { handle: prepared.handle, name, size })
 
-      // Send query — terminal will try to read from shm, respond OK or error
       // Terminal will shm_unlink after reading (per spec)
       const nameB64 = Buffer.from(name).toString("base64")
       probeDebug("probeShm:query-sent", { name, nameB64 })
