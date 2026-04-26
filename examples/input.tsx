@@ -13,18 +13,18 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, onInput, useTerminalDimensions } from "@vexart/engine"
-import { Box, Text } from "@vexart/primitives"
+import { useTerminalDimensions } from "@vexart/engine"
+import { createApp, useAppTerminal, Box, Text } from "@vexart/app"
 import { Input, Button } from "@vexart/headless"
-import { createTerminal } from "@vexart/engine"
 import { colors, radius, space, shadows } from "@vexart/styled"
 
-function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
+function App() {
   const [name, setName] = createSignal("")
   const [email, setEmail] = createSignal("")
   const [message, setMessage] = createSignal("")
   const [submitted, setSubmitted] = createSignal(false)
-  const dims = useTerminalDimensions(props.terminal)
+  const terminal = useAppTerminal()
+  const dims = useTerminalDimensions(terminal)
 
   function handleSubmit() {
     if (name() && email()) setSubmitted(true)
@@ -201,27 +201,9 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   )
 }
 
-// ── Main ──
-
-async function main() {
-  const term = await createTerminal()
-  const cleanup = mount(() => <App terminal={term} />, term, {
+await createApp(() => <App />, {
+  mount: {
     experimental: {
     },
-  })
-
-  onInput((event) => {
-    if (event.type === "key") {
-      if ((event.key === "c" && event.mods.ctrl)) {
-        cleanup.destroy()
-        term.destroy()
-        process.exit(0)
-      }
-    }
-  })
-}
-
-main().catch((err) => {
-  console.error(err)
-  process.exit(1)
+  },
 })

@@ -19,10 +19,9 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, onInput, type ScrollHandle, useTerminalDimensions } from "@vexart/engine"
-import { Box, Text } from "@vexart/primitives"
+import { onInput, type ScrollHandle, useTerminalDimensions } from "@vexart/engine"
+import { createApp, useAppTerminal } from "@vexart/app"
 import { ScrollView } from "@vexart/headless"
-import { createTerminal } from "@vexart/engine"
 
 // ── Generate sample items ──
 
@@ -43,15 +42,14 @@ function hslToHex(h: number): number {
 
 // ── App ──
 
-function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
+function App() {
   let scrollRef: ScrollHandle | undefined
   const [info, setInfo] = createSignal("Scroll with mouse wheel, T=top, B=bottom, Up/Down=50px")
-  const dims = useTerminalDimensions(props.terminal)
+  const terminal = useAppTerminal()
+  const dims = useTerminalDimensions(terminal)
 
   onInput((event) => {
     if (event.type !== "key") return
-    if (event.key === "q" || event.key === "escape") process.exit(0)
-
     if (!scrollRef) return
 
     if (event.key === "t") {
@@ -111,15 +109,10 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   )
 }
 
-// ── Main ──
-
-const terminal = await createTerminal()
-const handle = mount(() => <App terminal={terminal} />, terminal, {
-  experimental: {
+await createApp(() => <App />, {
+  quit: ["q", "escape", "ctrl+c"],
+  mount: {
+    experimental: {
+    },
   },
-})
-
-process.on("SIGINT", () => {
-  handle.destroy()
-  process.exit(0)
 })

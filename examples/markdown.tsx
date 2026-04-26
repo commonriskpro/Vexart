@@ -16,10 +16,9 @@
  * Requires: bun install && cargo build
  */
 
-import { mount, onInput, SyntaxStyle, KANAGAWA, useTerminalDimensions } from "@vexart/engine"
-import { Box, Text } from "@vexart/primitives"
+import { SyntaxStyle, KANAGAWA, useTerminalDimensions } from "@vexart/engine"
+import { createApp, useAppTerminal } from "@vexart/app"
 import { Markdown, ScrollView } from "@vexart/headless"
-import { createTerminal } from "@vexart/engine"
 
 const MD_CONTENT = `# Welcome to Vexart
 
@@ -37,9 +36,7 @@ Vexart is a **pixel-native terminal rendering engine**. Write JSX, get browser-q
 Install Vexart and create your first app:
 
 \`\`\`typescript
-import { mount } from "tge"
-import { Box, Text } from "tge/components"
-import { createTerminal } from "tge/terminal"
+import { createApp, Box, Text } from "@vexart/app"
 
 function App() {
   return (
@@ -49,32 +46,27 @@ function App() {
   )
 }
 
-const terminal = await createTerminal()
-mount(() => <App />, terminal)
+await createApp(() => <App />)
 \`\`\`
 
 ## Architecture
 
-> Vexart uses Rust/Taffy for layout, WGPU for pixel painting, and SolidJS for JSX reconciliation.
+> Vexart uses Flexily for layout, Rust/WGPU for pixel painting, and SolidJS for JSX reconciliation.
 
 1. JSX components declare the UI
-2. Taffy computes the layout
-3. WGPU paints pixels
-4. Output backend sends to terminal
+2. Flexily computes the layout
+3. Rust/WGPU paints pixels
+4. Kitty protocol sends to terminal
 
 ---
 
 That's it. **Happy hacking!**
 `
 
-function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
+function App() {
   const style = SyntaxStyle.fromTheme(KANAGAWA)
-  const dims = useTerminalDimensions(props.terminal)
-
-  onInput((event) => {
-    if (event.type !== "key") return
-    if (event.key === "escape" || event.key === "q") process.exit(0)
-  })
+  const terminal = useAppTerminal()
+  const dims = useTerminalDimensions(terminal)
 
   return (
     <box direction="column" width={dims.width()} height={dims.height()} backgroundColor="#0a0a14" padding={20} gap={8}>
@@ -87,13 +79,10 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   )
 }
 
-const terminal = await createTerminal()
-const handle = mount(() => <App terminal={terminal} />, terminal, {
-  experimental: {
+await createApp(() => <App />, {
+  quit: ["q", "escape", "ctrl+c"],
+  mount: {
+    experimental: {
+    },
   },
-})
-
-process.on("SIGINT", () => {
-  handle.destroy()
-  process.exit(0)
 })

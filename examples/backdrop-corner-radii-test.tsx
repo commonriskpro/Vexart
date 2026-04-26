@@ -9,8 +9,8 @@
  *   Vexart_RENDERER_BACKEND=gpu bun --conditions=browser run examples/backdrop-corner-radii-test.tsx
  */
 
-import { mount, onInput, useTerminalDimensions } from "@vexart/engine"
-import { createTerminal } from "@vexart/engine"
+import { useTerminalDimensions } from "@vexart/engine"
+import { createApp, useAppTerminal } from "@vexart/app"
 import { font, space } from "@vexart/styled"
 
 function CornerCard(props: {
@@ -42,8 +42,9 @@ function CornerCard(props: {
   )
 }
 
-function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
-  const dims = useTerminalDimensions(props.terminal)
+function App() {
+  const terminal = useAppTerminal()
+  const dims = useTerminalDimensions(terminal)
 
   return (
     <box width={dims.width()} height={dims.height()} backgroundColor={0x0a0a0aff} padding={space[5]} gap={space[5]}>
@@ -102,33 +103,18 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   )
 }
 
-async function main() {
-  const term = await createTerminal()
-  const cleanup = mount(() => <App terminal={term} />, term, {
+const app = await createApp(() => <App />, {
+  quit: ["q", "ctrl+c"],
+  mount: {
     experimental: {
     },
-  })
-  const exitAfterMs = Number(process.env.VEXART_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
-
-  const shutdown = () => {
-    cleanup.destroy()
-    term.destroy()
-    process.exit(0)
-  }
-
-  onInput((event) => {
-    if (event.type !== "key") return
-    if (event.key === "q" || (event.key === "c" && event.mods.ctrl)) {
-      shutdown()
-    }
-  })
-
-  if (Number.isFinite(exitAfterMs) && exitAfterMs > 0) {
-    setTimeout(shutdown, exitAfterMs)
-  }
-}
-
-main().catch((err) => {
-  console.error(err)
-  process.exit(1)
+  },
 })
+const exitAfterMs = Number(process.env.VEXART_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
+
+if (Number.isFinite(exitAfterMs) && exitAfterMs > 0) {
+  setTimeout(() => {
+    app.destroy()
+    process.exit(0)
+  }, exitAfterMs)
+}

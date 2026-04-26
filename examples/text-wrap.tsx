@@ -14,18 +14,14 @@
  * Run: bun --conditions=browser run examples/text-wrap.tsx
  */
 
-import { mount, onInput, useTerminalDimensions } from "@vexart/engine"
+import { useTerminalDimensions } from "@vexart/engine"
+import { createApp, useAppTerminal } from "@vexart/app"
 import { Box, Text, RichText, Span } from "@vexart/primitives"
 import { colors, radius, space, shadows } from "@vexart/styled"
-import { createTerminal } from "@vexart/engine"
-import { onCleanup } from "solid-js"
 
-function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
-  const dims = useTerminalDimensions(props.terminal)
-  const unsub = onInput((e) => {
-    if (e.type === "key" && (e.key === "q" || e.key === "escape")) process.exit(0)
-  })
-  onCleanup(unsub)
+function App() {
+  const terminal = useAppTerminal()
+  const dims = useTerminalDimensions(terminal)
 
   return (
     <Box
@@ -138,8 +134,10 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   )
 }
 
-const terminal = await createTerminal()
-mount(() => <App terminal={terminal} />, terminal, {
-  experimental: {
+await createApp(() => <App />, {
+  quit: ["q", "escape", "ctrl+c"],
+  mount: {
+    experimental: {
+    },
   },
 })

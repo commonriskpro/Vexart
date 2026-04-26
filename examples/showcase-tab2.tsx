@@ -15,8 +15,8 @@
  *   q or Ctrl+C
  */
 
-import { mount, onInput, useTerminalDimensions } from "@vexart/engine"
-import { createTerminal } from "@vexart/engine"
+import { useTerminalDimensions } from "@vexart/engine"
+import { createApp, useAppTerminal } from "@vexart/app"
 import { font, radius, space, themeColors, weight } from "@vexart/styled"
 
 function SectionTitle(props: { children: unknown }) {
@@ -33,8 +33,9 @@ function SectionBox(props: { title: string; children: unknown }) {
   )
 }
 
-export function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
-  const dims = useTerminalDimensions(props.terminal)
+export function App() {
+  const terminal = useAppTerminal()
+  const dims = useTerminalDimensions(terminal)
 
   return (
     <box width={dims.width()} height={dims.height()} backgroundColor={themeColors.background} padding={space[4]}>
@@ -155,35 +156,18 @@ export function App(props: { terminal: Parameters<typeof useTerminalDimensions>[
   )
 }
 
-async function main() {
-  const term = await createTerminal()
-  const app = mount(() => <App terminal={term} />, term, {
+const app = await createApp(() => <App />, {
+  quit: ["q", "ctrl+c"],
+  mount: {
     experimental: {
     },
-  })
-  const exitAfterMs = Number(process.env.VEXART_EXIT_AFTER_MS ?? 0)
+  },
+})
+const exitAfterMs = Number(process.env.VEXART_EXIT_AFTER_MS ?? 0)
 
-  const shutdown = () => {
+if (Number.isFinite(exitAfterMs) && exitAfterMs > 0) {
+  setTimeout(() => {
     app.destroy()
-    term.destroy()
     process.exit(0)
-  }
-
-  onInput((event) => {
-    if (event.type !== "key") return
-    if (event.key === "q" || (event.key === "c" && event.mods.ctrl)) {
-      shutdown()
-    }
-  })
-
-  if (Number.isFinite(exitAfterMs) && exitAfterMs > 0) {
-    setTimeout(shutdown, exitAfterMs)
-  }
-}
-
-if (import.meta.main) {
-  main().catch((err) => {
-    console.error(err)
-    process.exit(1)
-  })
+  }, exitAfterMs)
 }

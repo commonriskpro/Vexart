@@ -1,8 +1,7 @@
 import { createSignal, For } from "solid-js"
 import { createEffect } from "solid-js"
-import { createTerminal } from "@vexart/engine"
-import { createParser } from "@vexart/engine"
-import { mount, useDrag, markDirty, debugState, setDebug, type NodeMouseEvent, useTerminalDimensions } from "@vexart/engine"
+import { useDrag, markDirty, debugState, setDebug, type KeyEvent, type NodeMouseEvent, useTerminalDimensions } from "@vexart/engine"
+import { createApp, useAppTerminal } from "@vexart/app"
 import { appendFileSync } from "node:fs"
 
 const LOG = "/tmp/interaction-latency.log"
@@ -28,14 +27,15 @@ function useDraggable(initialX: number, initialY: number) {
   return { x, y, dragProps }
 }
 
-function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
+function App() {
   const drag = useDraggable(40, 40)
   const [selected, setSelected] = createSignal("focus-a")
   const [textValue, setTextValue] = createSignal("")
   const rows = Array.from({ length: 40 }, (_, i) => `Scroll row ${i + 1}`)
-  const dims = useTerminalDimensions(props.terminal)
+  const terminal = useAppTerminal()
+  const dims = useTerminalDimensions(terminal)
 
-  const handleTyping = (event: any) => {
+  const handleTyping = (event: KeyEvent) => {
     if (event.key === "backspace") {
       setTextValue((value) => value.slice(0, -1))
       return
@@ -96,52 +96,34 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   )
 }
 
-async function main() {
-  appendFileSync(LOG, "\n--- interaction latency lab ---\n")
-  const term = await createTerminal()
-  setDebug(true)
-  appendFileSync(LOG, `[main] terminal kitty=${term.caps.kittyGraphics} mode=${term.caps.transmissionMode}\n`)
-  const cleanup = mount(() => <App terminal={term} />, term, {
+appendFileSync(LOG, "\n--- interaction latency lab ---\n")
+setDebug(true)
+
+const app = await createApp(() => <App />, {
+  quit: ["q", "ctrl+c"],
+  mount: {
     maxFps: 60,
     experimental: {
       idleMaxFps: 60,
       forceLayerRepaint: false,
     },
-  })
+  },
+  onReady(ctx) {
+    appendFileSync(LOG, `[main] terminal kitty=${ctx.terminal.caps.kittyGraphics} mode=${ctx.terminal.caps.transmissionMode}\n`)
+  },
+})
 
-  let perfTimer: ReturnType<typeof setInterval> | null = null
-  let exitTimer: ReturnType<typeof setTimeout> | null = null
-  if (LOG_FPS) {
-    perfTimer = setInterval(() => {
-      appendFileSync(LOG, `fps=${debugState.fps} ms=${debugState.frameTimeMs} strategy=${debugState.rendererStrategy ?? "none"} output=${debugState.rendererOutput ?? "none"} tx=${debugState.transmissionMode ?? "none"} input=${debugState.interactionType ?? "none"} latency=${debugState.interactionLatencyMs} resBytes=${debugState.resourceBytes} gpuBytes=${debugState.gpuResourceBytes} entries=${debugState.resourceEntries}\n`)
-    }, 300)
-  }
-
-  const parser = createParser((event) => {
-    if (event.type === "key" && (event.key === "q" || (event.key === "c" && event.mods.ctrl))) {
-      parser.destroy()
-      if (perfTimer) clearInterval(perfTimer)
-      if (exitTimer) clearTimeout(exitTimer)
-      cleanup.destroy()
-      term.destroy()
-      process.exit(0)
-    }
-  })
-
-  term.onData((data) => parser.feed(data))
-
-  if (EXIT_AFTER_MS > 0) {
-    exitTimer = setTimeout(() => {
-      parser.destroy()
-      if (perfTimer) clearInterval(perfTimer)
-      cleanup.destroy()
-      term.destroy()
-      process.exit(0)
-    }, EXIT_AFTER_MS)
-  }
+let perfTimer: ReturnType<typeof setInterval> | null = null
+if (LOG_FPS) {
+  perfTimer = setInterval(() => {
+    appendFileSync(LOG, `fps=${debugState.fps} ms=${debugState.frameTimeMs} strategy=${debugState.rendererStrategy ?? "none"} output=${debugState.rendererOutput ?? "none"} tx=${debugState.transmissionMode ?? "none"} input=${debugState.interactionType ?? "none"} latency=${debugState.interactionLatencyMs} resBytes=${debugState.resourceBytes} gpuBytes=${debugState.gpuResourceBytes} entries=${debugState.resourceEntries}\n`)
+  }, 300)
 }
 
-main().catch((err) => {
-  appendFileSync(LOG, `[fatal] ${String((err as Error)?.stack || err)}\n`)
-  process.exit(1)
-})
+if (EXIT_AFTER_MS > 0) {
+  setTimeout(() => {
+    if (perfTimer) clearInterval(perfTimer)
+    app.destroy()
+    process.exit(0)
+  }, EXIT_AFTER_MS)
+}

@@ -16,10 +16,9 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, onInput, useTerminalDimensions } from "@vexart/engine"
-import { Box, Text } from "@vexart/primitives"
+import { onInput, useTerminalDimensions } from "@vexart/engine"
+import { createApp, useAppTerminal, Box, Text } from "@vexart/app"
 import { ScrollView } from "@vexart/headless"
-import { createTerminal } from "@vexart/engine"
 import { colors, radius, space } from "@vexart/styled"
 
 // ── Generate sample items ──
@@ -58,9 +57,10 @@ function ItemRow(props: { label: string; color: string; index: number }) {
 
 // ── App ──
 
-function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
+function App() {
   const [precise, setPrecise] = createSignal(true)
-  const dims = useTerminalDimensions(props.terminal)
+  const terminal = useAppTerminal()
+  const dims = useTerminalDimensions(terminal)
 
   onInput((event) => {
     if (event.type === "key" && event.key === "tab") {
@@ -113,27 +113,10 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   )
 }
 
-// ── Main ──
-
-async function main() {
-  const term = await createTerminal()
-  const cleanup = mount(() => <App terminal={term} />, term, {
+await createApp(() => <App />, {
+  quit: ["q", "ctrl+c"],
+  mount: {
     experimental: {
     },
-  })
-
-  onInput((event) => {
-    if (event.type === "key") {
-      if (event.key === "q" || (event.key === "c" && event.mods.ctrl)) {
-        cleanup.destroy()
-        term.destroy()
-        process.exit(0)
-      }
-    }
-  })
-}
-
-main().catch((err) => {
-  console.error(err)
-  process.exit(1)
+  },
 })

@@ -16,9 +16,8 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, useFocus, onInput, useTerminalDimensions } from "@vexart/engine"
-import { Box, Text } from "@vexart/primitives"
-import { createTerminal } from "@vexart/engine"
+import { useFocus, useTerminalDimensions } from "@vexart/engine"
+import { createApp, useAppTerminal, Box, Text } from "@vexart/app"
 import { colors, radius, space } from "@vexart/styled"
 
 // ── Color options for the picker ──
@@ -122,10 +121,11 @@ function ColorPicker(props: {
 
 // ── App ──
 
-function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
+function App() {
   const [colorIndex, setColorIndex] = createSignal(0)
   const accentColor = () => accentColors[colorIndex()].value
-  const dims = useTerminalDimensions(props.terminal)
+  const terminal = useAppTerminal()
+  const dims = useTerminalDimensions(terminal)
 
   return (
     <Box
@@ -158,34 +158,10 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   )
 }
 
-// ── Main ──
-
-async function main() {
-  const term = await createTerminal()
-
-  // mount() now handles everything:
-  //   - Creates render loop (Rust/Taffy + WGPU + output)
-  //   - Mounts SolidJS component tree
-  //   - Connects terminal stdin → input parser → event dispatch
-  //   - Starts 30fps render loop with dirty-flag optimization
-  const cleanup = mount(() => <App terminal={term} />, term, {
+await createApp(() => <App />, {
+  quit: ["q", "ctrl+c"],
+  mount: {
     experimental: {
     },
-  })
-
-  // Only thing left: global quit handler (not part of component tree)
-  onInput((event) => {
-    if (event.type === "key") {
-      if (event.key === "q" || (event.key === "c" && event.mods.ctrl)) {
-        cleanup.destroy()
-        term.destroy()
-        process.exit(0)
-      }
-    }
-  })
-}
-
-main().catch((err) => {
-  console.error(err)
-  process.exit(1)
+  },
 })

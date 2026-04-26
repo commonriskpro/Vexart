@@ -23,8 +23,8 @@
  * Run:  bun run examples/void-showcase.tsx
  */
 
-import { mount, onInput, useTerminalDimensions } from "@vexart/engine"
-import { createTerminal } from "@vexart/engine"
+import { useTerminalDimensions } from "@vexart/engine"
+import { createApp, useAppTerminal } from "@vexart/app"
 import {
   Button,
   Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter,
@@ -381,8 +381,9 @@ function TypographyShowcase() {
 
 // ── App ──
 
-function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
-  const dims = useTerminalDimensions(props.terminal)
+function App() {
+  const terminal = useAppTerminal()
+  const dims = useTerminalDimensions(terminal)
   const paneHeight = () => Math.max(160, dims.height() - space[6] * 2 - 44)
 
   return (
@@ -437,36 +438,18 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   )
 }
 
-// ── Main ──
-
-async function main() {
-  const term = await createTerminal()
-  const cleanup = mount(() => <App terminal={term} />, term, {
+const app = await createApp(() => <App />, {
+  quit: ["q", "ctrl+c"],
+  mount: {
     experimental: {
     },
-  })
-  const exitAfterMs = Number(process.env.VEXART_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
-
-  const shutdown = () => {
-    cleanup.destroy()
-    term.destroy()
-    process.exit(0)
-  }
-
-  onInput((event) => {
-    if (event.type === "key") {
-      if (event.key === "q" || (event.key === "c" && event.mods.ctrl)) {
-        shutdown()
-      }
-    }
-  })
-
-  if (Number.isFinite(exitAfterMs) && exitAfterMs > 0) {
-    setTimeout(shutdown, exitAfterMs)
-  }
-}
-
-main().catch((err) => {
-  console.error(err)
-  process.exit(1)
+  },
 })
+const exitAfterMs = Number(process.env.VEXART_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
+
+if (Number.isFinite(exitAfterMs) && exitAfterMs > 0) {
+  setTimeout(() => {
+    app.destroy()
+    process.exit(0)
+  }, exitAfterMs)
+}

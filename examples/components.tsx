@@ -16,10 +16,9 @@
  */
 
 import { createSignal, onCleanup } from "solid-js"
-import { mount, onInput, useTerminalDimensions } from "@vexart/engine"
-import { Box, Text } from "@vexart/primitives"
+import { useTerminalDimensions } from "@vexart/engine"
+import { createApp, useAppTerminal, Box, Text } from "@vexart/app"
 import { Button, ProgressBar, Checkbox, Tabs, List } from "@vexart/headless"
-import { createTerminal } from "@vexart/engine"
 import { colors, radius, space } from "@vexart/styled"
 
 // ── Button showcase ──
@@ -399,8 +398,9 @@ function ListSection() {
 
 // ── App ──
 
-function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
-  const dims = useTerminalDimensions(props.terminal)
+function App() {
+  const terminal = useAppTerminal()
+  const dims = useTerminalDimensions(terminal)
 
   return (
     <Box
@@ -441,27 +441,10 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   )
 }
 
-// ── Main ──
-
-async function main() {
-  const term = await createTerminal()
-  const cleanup = mount(() => <App terminal={term} />, term, {
+await createApp(() => <App />, {
+  quit: ["q", "ctrl+c"],
+  mount: {
     experimental: {
     },
-  })
-
-  onInput((event) => {
-    if (event.type === "key") {
-      if (event.key === "q" || (event.key === "c" && event.mods.ctrl)) {
-        cleanup.destroy()
-        term.destroy()
-        process.exit(0)
-      }
-    }
-  })
-}
-
-main().catch((err) => {
-  console.error(err)
-  process.exit(1)
+  },
 })

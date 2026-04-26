@@ -5,16 +5,16 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, markDirty, useTerminalDimensions } from "@vexart/engine"
-import { createTerminal } from "@vexart/engine"
-import { createParser } from "@vexart/engine"
+import { markDirty, useTerminalDimensions } from "@vexart/engine"
+import { createApp, useAppTerminal } from "@vexart/app"
 import { colors, radius, space, font } from "@vexart/styled"
 
-function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
+function App() {
   const [angle, setAngle] = createSignal(0)
   const [clicks, setClicks] = createSignal(0)
   const [lastClicked, setLastClicked] = createSignal("")
-  const dims = useTerminalDimensions(props.terminal)
+  const terminal = useAppTerminal()
+  const dims = useTerminalDimensions(terminal)
 
   // Animate rotation
   const interval = setInterval(() => {
@@ -214,37 +214,18 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   )
 }
 
-// ── Bootstrap ──
-
-async function main() {
-  const term = await createTerminal()
-  const cleanup = mount(() => <App terminal={term} />, term, {
+const app = await createApp(() => <App />, {
+  quit: ["q", "ctrl+c"],
+  mount: {
     experimental: {
     },
-  })
-  const exitAfterMs = Number(process.env.VEXART_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
-
-  const shutdown = () => {
-    parser.destroy()
-    cleanup.destroy()
-    term.destroy()
-    process.exit(0)
-  }
-
-  const parser = createParser((event) => {
-    if (event.type === "key" && (event.key === "q" || (event.key === "c" && event.mods.ctrl))) {
-      shutdown()
-    }
-  })
-
-  term.onData((data) => parser.feed(data))
-
-  if (Number.isFinite(exitAfterMs) && exitAfterMs > 0) {
-    setTimeout(shutdown, exitAfterMs)
-  }
-}
-
-main().catch((err) => {
-  console.error(err)
-  process.exit(1)
+  },
 })
+const exitAfterMs = Number(process.env.VEXART_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
+
+if (Number.isFinite(exitAfterMs) && exitAfterMs > 0) {
+  setTimeout(() => {
+    app.destroy()
+    process.exit(0)
+  }, exitAfterMs)
+}

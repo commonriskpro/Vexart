@@ -16,10 +16,9 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, onInput, SyntaxStyle, ONE_DARK, KANAGAWA, useTerminalDimensions } from "@vexart/engine"
-import { Box, Text } from "@vexart/primitives"
+import { onInput, SyntaxStyle, ONE_DARK, KANAGAWA, useTerminalDimensions } from "@vexart/engine"
+import { createApp, useAppTerminal } from "@vexart/app"
 import { Code } from "@vexart/headless"
-import { createTerminal } from "@vexart/engine"
 
 const TS_CODE = `import { createSignal } from "solid-js"
 
@@ -49,14 +48,14 @@ app.listen(3000, () => {
   console.log("Server running on port 3000")
 })`
 
-function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
+function App() {
   const [theme, setTheme] = createSignal<"onedark" | "kanagawa">("kanagawa")
   const style = () => SyntaxStyle.fromTheme(theme() === "onedark" ? ONE_DARK : KANAGAWA)
-  const dims = useTerminalDimensions(props.terminal)
+  const terminal = useAppTerminal()
+  const dims = useTerminalDimensions(terminal)
 
   onInput((event) => {
     if (event.type !== "key") return
-    if (event.key === "escape" || event.key === "q") process.exit(0)
     if (event.key === "t") {
       setTheme((t) => t === "onedark" ? "kanagawa" : "onedark")
     }
@@ -100,13 +99,10 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   )
 }
 
-const terminal = await createTerminal()
-const handle = mount(() => <App terminal={terminal} />, terminal, {
-  experimental: {
+await createApp(() => <App />, {
+  quit: ["q", "escape", "ctrl+c"],
+  mount: {
+    experimental: {
+    },
   },
-})
-
-process.on("SIGINT", () => {
-  handle.destroy()
-  process.exit(0)
 })

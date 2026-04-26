@@ -12,15 +12,15 @@
  */
 
 import { createSignal } from "solid-js"
-import { mount, markDirty, useTerminalDimensions } from "@vexart/engine"
-import { createTerminal } from "@vexart/engine"
-import { createParser } from "@vexart/engine"
+import { markDirty, useTerminalDimensions } from "@vexart/engine"
+import { createApp, useAppTerminal } from "@vexart/app"
 // import { colors, radius, space, font } from "@vexart/styled"
 
-function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
+function App() {
   const [angle, setAngle] = createSignal(0)
   const [clicks, setClicks] = createSignal<string[]>([])
-  const dims = useTerminalDimensions(props.terminal)
+  const terminal = useAppTerminal()
+  const dims = useTerminalDimensions(terminal)
 
   // Animate rotation
   setInterval(() => {
@@ -224,26 +224,10 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   )
 }
 
-async function main() {
-  const term = await createTerminal()
-  const cleanup = mount(() => <App terminal={term} />, term, {
+await createApp(() => <App />, {
+  quit: ["q", "ctrl+c"],
+  mount: {
     experimental: {
     },
-  })
-
-  const parser = createParser((event) => {
-    if (event.type === "key" && (event.key === "q" || (event.key === "c" && event.mods.ctrl))) {
-      parser.destroy()
-      cleanup.destroy()
-      term.destroy()
-      process.exit(0)
-    }
-  })
-
-  term.onData((data) => parser.feed(data))
-}
-
-main().catch((err) => {
-  console.error(err)
-  process.exit(1)
+  },
 })

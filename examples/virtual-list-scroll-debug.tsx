@@ -1,9 +1,8 @@
 import { createSignal, onCleanup } from "solid-js"
-import { mount, onInput, onPostScroll, createParser, useTerminalDimensions } from "@vexart/engine"
-import { Box, Text } from "@vexart/primitives"
+import { onInput, onPostScroll, useTerminalDimensions } from "@vexart/engine"
+import { createApp, useAppTerminal, Box, Text } from "@vexart/app"
 import { ScrollView, VirtualList } from "@vexart/headless"
 import { colors, radius, space } from "@vexart/styled"
-import { createTerminal } from "@vexart/engine"
 import { appendFileSync, writeFileSync } from "node:fs"
 
 const ROW_H = 28
@@ -23,12 +22,13 @@ const items = Array.from({ length: 300 }, (_, index) => ({
 
 const baselineItems = items.slice(0, 80)
 
-function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
+function App() {
   const [selected, setSelected] = createSignal(-1)
   const [wheelCount, setWheelCount] = createSignal(0)
   const [postScrollCount, setPostScrollCount] = createSignal(0)
   const [lastWheel, setLastWheel] = createSignal("none")
-  const dims = useTerminalDimensions(props.terminal)
+  const terminal = useAppTerminal()
+  const dims = useTerminalDimensions(terminal)
 
   const unsubInput = onInput((event) => {
     if (event.type !== "mouse") return
@@ -194,41 +194,22 @@ function Row(props: {
   )
 }
 
-async function main() {
-  writeFileSync(LOG, "")
-  log(`start TERM=${process.env.TERM ?? "none"} TMUX=${process.env.TMUX ?? "none"} KITTY_WINDOW_ID=${process.env.KITTY_WINDOW_ID ?? "none"}`)
-  log(`demo rows virtual=${String(items.length)} baseline=${String(baselineItems.length)}`)
+writeFileSync(LOG, "")
+log(`start TERM=${process.env.TERM ?? "none"} TMUX=${process.env.TMUX ?? "none"} KITTY_WINDOW_ID=${process.env.KITTY_WINDOW_ID ?? "none"}`)
+log(`demo rows virtual=${String(items.length)} baseline=${String(baselineItems.length)}`)
 
-  const terminal = await createTerminal()
-  log(`terminal caps kind=${terminal.caps.kind} kittyGraphics=${String(terminal.caps.kittyGraphics)} kittyPlaceholder=${String(terminal.caps.kittyPlaceholder)} tmux=${String(terminal.caps.tmux)}`)
-
-  const handle = mount(() => <App terminal={terminal} />, terminal, {
+await createApp(() => <App />, {
+  quit: ["q", "escape", "ctrl+c"],
+  mount: {
     experimental: {
     },
-  })
-  log("mount ok")
-
-  const parser = createParser((event) => {
-    if (event.type !== "key") return
-    if (event.key !== "q" && event.key !== "escape") return
-    log(`quit key=${event.key}`)
-    parser.destroy()
-    handle.destroy()
-    terminal.destroy()
-    process.exit(0)
-  })
-
-  const unsubData = terminal.onData((data) => parser.feed(data))
-
-  process.on("SIGINT", () => {
-    log("SIGINT")
-    unsubData()
-    parser.destroy()
-    handle.destroy()
-    terminal.destroy()
-    process.exit(0)
-  })
-}
+  },
+  onReady(ctx) {
+    const terminal = ctx.terminal
+    log(`terminal caps kind=${terminal.caps.kind} kittyGraphics=${String(terminal.caps.kittyGraphics)} kittyPlaceholder=${String(terminal.caps.kittyPlaceholder)} tmux=${String(terminal.caps.tmux)}`)
+    log("mount ok")
+  },
+})
 
 process.on("uncaughtException", (error) => {
   log(`uncaughtException ${(error as Error).stack ?? String(error)}`)
@@ -240,11 +221,5 @@ process.on("unhandledRejection", (reason) => {
   const message = reason instanceof Error ? reason.stack ?? reason.message : String(reason)
   log(`unhandledRejection ${message}`)
   console.error(reason)
-  process.exit(1)
-})
-
-main().catch((error) => {
-  log(`main catch ${(error as Error).stack ?? String(error)}`)
-  console.error(error)
   process.exit(1)
 })

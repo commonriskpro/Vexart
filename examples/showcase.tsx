@@ -19,9 +19,6 @@
 
 import { createEffect, createSignal, onCleanup } from "solid-js"
 import {
-  mount,
-  createTerminal,
-  onInput,
   useFocus,
   useQuery,
   useTerminalDimensions,
@@ -31,6 +28,7 @@ import {
   For,
   Show,
 } from "@vexart/engine"
+import { createApp, useAppTerminal } from "@vexart/app"
 import {
   Slider,
   Combobox,
@@ -1526,9 +1524,10 @@ const TABS = [
   { num: "7", name: "Events",       key: "events" },
 ]
 
-function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
+function App() {
   const [activeTab, setActiveTab] = createSignal(0)
-  const dims = useTerminalDimensions(props.terminal)
+  const terminal = useAppTerminal()
+  const dims = useTerminalDimensions(terminal)
 
   createEffect(() => {
     const id = `showcase-tab-${activeTab()}`
@@ -1636,36 +1635,18 @@ function App(props: { terminal: Parameters<typeof useTerminalDimensions>[0] }) {
   )
 }
 
-// ── Main ──
-
-async function main() {
-  const term = await createTerminal()
-  const app = mount(() => <App terminal={term} />, term, {
+const app = await createApp(() => <App />, {
+  quit: ["q", "ctrl+c"],
+  mount: {
     experimental: {
     },
-  })
-  const exitAfterMs = Number(process.env.VEXART_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
-
-  const shutdown = () => {
-    app.destroy()
-    term.destroy()
-    process.exit(0)
-  }
-
-  onInput((event) => {
-    if (event.type === "key") {
-      if (event.key === "q" || (event.key === "c" && event.mods.ctrl)) {
-        shutdown()
-      }
-    }
-  })
-
-  if (Number.isFinite(exitAfterMs) && exitAfterMs > 0) {
-    setTimeout(shutdown, exitAfterMs)
-  }
-}
-
-main().catch((err) => {
-  console.error(err)
-  process.exit(1)
+  },
 })
+const exitAfterMs = Number(process.env.VEXART_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
+
+if (Number.isFinite(exitAfterMs) && exitAfterMs > 0) {
+  setTimeout(() => {
+    app.destroy()
+    process.exit(0)
+  }, exitAfterMs)
+}
