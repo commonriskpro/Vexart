@@ -84,6 +84,9 @@ export type {
 
 // -- App Lifecycle ------------------------------------------------------------
 
+export { createApp } from "./runtime/create-app"
+export type { CreateAppOptions, AppContext } from "./runtime/create-app"
+export { useAppTerminal } from "./runtime/terminal-context"
 export { mountApp } from "./runtime/mount-app"
 export type { MountAppOptions } from "./runtime/mount-app"
 
