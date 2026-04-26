@@ -1,5 +1,5 @@
 /**
- * TGE Components — type declarations.
+ * Vexart Components — type declarations.
  */
 
 import type { JSX } from "solid-js"
@@ -11,7 +11,7 @@ import type {
   ExtmarkManager,
   ColorValue,
   RGBA,
-} from "./tge"
+} from "./engine"
 
 // ── Box ──
 

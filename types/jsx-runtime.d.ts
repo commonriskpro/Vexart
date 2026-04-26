@@ -1,12 +1,12 @@
 /**
- * TGE JSX runtime type declarations.
+ * Vexart JSX runtime type declarations.
  *
- * When tsconfig has jsxImportSource: "tge", TypeScript resolves
- * JSX types from tge/jsx-runtime. This file declares the JSX
- * namespace with TGE's intrinsic elements.
+ * When tsconfig has jsxImportSource: "vexart", TypeScript resolves
+ * JSX types from vexart/jsx-runtime. This file declares the JSX
+ * namespace with Vexart's intrinsic elements.
  */
 
-import type { RGBA, SyntaxStyle, ExtmarkManager, KeyEvent, ScrollHandle } from "./tge"
+import type { RGBA, SyntaxStyle, ExtmarkManager, KeyEvent, ScrollHandle } from "./engine"
 
 type Children = any
 type ColorValue = string | number | RGBA
@@ -171,7 +171,7 @@ interface BoxProps {
   }
   // Interaction
   focusable?: boolean
-  onPress?: (event?: import("@tge/renderer").PressEvent) => void
+  onPress?: (event?: import("@vexart/engine").PressEvent) => void
   onKeyDown?: (event: any) => void
   // Mouse events
   onMouseDown?: (evt: any) => void
@@ -382,7 +382,7 @@ interface LineNumberProps {
 
 interface CanvasProps {
   /** Imperative draw callback — called each frame with a CanvasContext. */
-  onDraw?: (ctx: import("@tge/renderer").CanvasContext) => void
+  onDraw?: (ctx: import("@vexart/engine").CanvasContext) => void
   /** Viewport transform for pan/zoom. */
   viewport?: { x: number; y: number; zoom: number }
   /** Width — number (fixed px), "grow", "fit", "100%". */
@@ -474,7 +474,7 @@ export function jsxs(type: any, props: any): any
 export function jsxDEV(type: any, props: any): any
 
 // ── SolidJS JSX augmentation ──
-// Adds TGE-specific intrinsic elements to SolidJS's JSX namespace.
+// Adds Vexart-specific intrinsic elements to SolidJS's JSX namespace.
 // This ensures <surface> works in any .tsx file without per-file declarations.
 declare module "solid-js" {
   namespace JSX {

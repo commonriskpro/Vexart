@@ -161,7 +161,7 @@ async function decodeImage(src: string): Promise<DecodedImage | null> {
     const file = Bun.file(src)
     const exists = await file.exists()
     if (!exists) {
-      console.error(`[TGE Image] File not found: ${src}`)
+      console.error(`[vexart image] File not found: ${src}`)
       return null
     }
 
@@ -176,7 +176,7 @@ async function decodeImage(src: string): Promise<DecodedImage | null> {
     // otherwise fall back to manual PNG decode for the common case.
     return await decodeWithSharp(arrayBuffer, src)
   } catch (err) {
-    console.error(`[TGE Image] Decode failed for ${src}:`, err)
+    console.error(`[vexart image] Decode failed for ${src}:`, err)
     return null
   }
 }
@@ -221,10 +221,10 @@ async function decodePNG(buffer: ArrayBuffer, src: string): Promise<DecodedImage
       // Fall through to error for now
     }
 
-    console.error(`[TGE Image] No image decoder available for ${src}. Install 'sharp' for image support: bun add sharp`)
+    console.error(`[vexart image] No image decoder available for ${src}. Install 'sharp' for image support: bun add sharp`)
     return null
   } catch {
-    console.error(`[TGE Image] No image decoder available for ${src}. Install 'sharp' for image support: bun add sharp`)
+    console.error(`[vexart image] No image decoder available for ${src}. Install 'sharp' for image support: bun add sharp`)
     return null
   }
 }

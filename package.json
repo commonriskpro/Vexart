@@ -15,7 +15,6 @@
     "typecheck": "tsc --noEmit",
     "rust:build": "cargo build --release",
     "rust:test": "cargo test",
-    "font:gen": "bun run scripts/gen-font-atlas.ts",
     "build:dist": "bun run scripts/build-dist.ts",
     "bench:interaction-latency": "TGE_LOG_FPS=1 bun --conditions=browser run examples/interaction-latency.tsx",
     "pack": "bun run build:dist && cd dist && bun pack",

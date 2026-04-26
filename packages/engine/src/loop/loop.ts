@@ -130,7 +130,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   const markDirty = globalMarkDirty
   const expFrameBudgetMs = opts?.experimental?.frameBudgetMs ?? 0
 
-  if (!term.caps.kittyGraphics) throw new Error("TGE GPU-only renderer requires a terminal with Kitty graphics support")
+  if (!term.caps.kittyGraphics) throw new Error("Vexart GPU-only renderer requires a terminal with Kitty graphics support")
   const nativePresentationRequested = opts?.experimental?.nativePresentation !== false
   if (!nativePresentationRequested) {
     disableNativePresentation("nativePresentation disabled by render loop option")

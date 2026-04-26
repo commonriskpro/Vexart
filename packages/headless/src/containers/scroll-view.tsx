@@ -1,5 +1,5 @@
 /**
- * ScrollView — scrollable container for TGE.
+ * ScrollView — scrollable container for Vexart.
  *
  * Wraps content in a fixed-size box with scroll clipping.
  * Content that overflows the container is clipped and can

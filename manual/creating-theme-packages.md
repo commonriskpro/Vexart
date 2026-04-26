@@ -1,14 +1,14 @@
-# Creating Theme Packages for TGE
+# Creating Theme Packages for Vexart
 
-This guide explains how to build a custom design system (theme package) for TGE.
+This guide explains how to build a custom design system (theme package) for Vexart.
 If Void is shadcn, your package is your own Material, Catppuccin, Nord, or Dracula.
 
 ## Architecture
 
-TGE has a two-layer component system:
+Vexart has a two-layer component system:
 
 ```
-@tge/components  (headless)    — behavior only: focus, keyboard, state
+@vexart/headless  (headless)    — behavior only: focus, keyboard, state
 your-theme       (styled)      — visual only: colors, spacing, shadows, render functions
 ```
 
@@ -24,7 +24,7 @@ There are two patterns depending on the component type:
 
 ## Step 1: Define your tokens
 
-Create a tokens file with your design language. TGE accepts colors as hex strings
+Create a tokens file with your design language. Vexart accepts colors as hex strings
 (`"#rrggbb"` or `"#rrggbbaa"`) or packed u32 RGBA (`0xRRGGBBAAff`).
 
 ```typescript
@@ -62,7 +62,7 @@ export const font = {
   xs: 10, sm: 12, base: 14, lg: 16, xl: 20,
 } as const
 
-// Shadows — color MUST be u32 (packed RGBA) because the Zig paint engine
+// Shadows — color MUST be u32 (packed RGBA) because the Rust/WGPU paint engine
 // operates on raw pixel data. Use a helper to convert:
 function hexToU32(h: string): number {
   const raw = h.startsWith("#") ? h.slice(1) : h
@@ -83,9 +83,9 @@ export const shadows: Record<string, Shadow[]> = {
 ```
 
 > **Why hex strings for colors but u32 for shadows?**
-> TGE's `parseColor()` in the render loop converts hex strings to u32 automatically
+> Vexart's `parseColor()` in the render loop converts hex strings to u32 automatically
 > for backgroundColor, borderColor, text color, and glow color.
-> But shadow colors bypass parseColor and go directly to the Zig paint engine,
+> But shadow colors bypass parseColor and go directly to the Rust/WGPU paint engine,
 > which expects raw u32 RGBA values.
 
 ## Step 2: Wrap interactive components (render prop pattern)
@@ -114,8 +114,8 @@ Each headless component passes a typed context to your render function:
 
 ```typescript
 // packages/nord/src/button.tsx
-import { Button } from "@tge/components"
-import type { ButtonRenderContext } from "@tge/components"
+import { Button } from "@vexart/headless"
+import type { ButtonRenderContext } from "@vexart/headless"
 import { colors, space, radius, font } from "./tokens"
 
 export type NordButtonProps = {
@@ -174,8 +174,8 @@ export function NordButton(props: NordButtonProps) {
 
 ```typescript
 // packages/nord/src/switch.tsx
-import { Switch } from "@tge/components"
-import type { SwitchRenderContext } from "@tge/components"
+import { Switch } from "@vexart/headless"
+import type { SwitchRenderContext } from "@vexart/headless"
 import { colors, space, font } from "./tokens"
 
 export function NordSwitch(props: {
@@ -222,8 +222,8 @@ export function NordSwitch(props: {
 
 ```typescript
 // packages/nord/src/list.tsx
-import { List } from "@tge/components"
-import type { ListItemContext } from "@tge/components"
+import { List } from "@vexart/headless"
+import type { ListItemContext } from "@vexart/headless"
 import { colors, space, font } from "./tokens"
 
 export function NordList(props: {
@@ -282,9 +282,9 @@ All fields in a theme type are **required in the type** but **optional in the pr
 
 ```typescript
 // packages/nord/src/code.tsx
-import { Code } from "@tge/components"
-import type { CodeTheme } from "@tge/components"
-import type { SyntaxStyle } from "@tge/renderer-solid"
+import { Code } from "@vexart/headless"
+import type { CodeTheme } from "@vexart/headless"
+import type { SyntaxStyle } from "@vexart/engine"
 import { colors, radius, space } from "./tokens"
 
 const nordCodeTheme: CodeTheme = {
@@ -316,9 +316,9 @@ export function NordCode(props: {
 
 ```typescript
 // packages/nord/src/markdown.tsx
-import { Markdown } from "@tge/components"
-import type { MarkdownTheme } from "@tge/components"
-import type { SyntaxStyle } from "@tge/renderer-solid"
+import { Markdown } from "@vexart/headless"
+import type { MarkdownTheme } from "@vexart/headless"
+import type { SyntaxStyle } from "@vexart/engine"
 import { colors } from "./tokens"
 
 const nordMarkdownTheme: MarkdownTheme = {
@@ -362,8 +362,8 @@ and a `<Toaster>` component. Your theme provides `renderToast`:
 
 ```typescript
 // packages/nord/src/toast.tsx
-import { createToaster } from "@tge/components"
-import type { ToastData, ToasterHandle } from "@tge/components"
+import { createToaster } from "@vexart/headless"
+import type { ToastData, ToasterHandle } from "@vexart/headless"
 import { colors, radius, space, font, shadows } from "./tokens"
 
 export function createNordToaster(): ToasterHandle {
@@ -427,8 +427,8 @@ export { createNordToaster } from "./toast"
 ## Step 6: Use it
 
 ```typescript
-import { mount, createTerminal } from "@tge/renderer-solid"
-import { NordButton, NordSwitch, NordList, colors } from "@nord/tge-theme"
+import { mount, createTerminal } from "@vexart/engine"
+import { NordButton, NordSwitch, NordList, colors } from "@nord/vexart-theme"
 
 function App() {
   return (
@@ -476,10 +476,10 @@ main()
 
 ## Rules
 
-1. **Never import from `@tge/void`** in your theme package. Void is a sibling, not a dependency.
+1. **Never import from `@vexart/styled`** in your theme package. Void is a sibling, not a dependency.
 2. **Shadow colors must be u32** — use `hexToU32()` helper. All other colors can be hex strings.
 3. **Theme prop fields are all optional** — the headless component has sensible dark defaults. Override only what you need.
 4. **Render props receive immutable context** — read state, return JSX. Never mutate the context.
-5. **Use `<box>` and `<text>` intrinsics** — these are the only two visual building blocks (plus `<img>` for images). All TGE rendering goes through them.
+5. **Use `<box>` and `<text>` intrinsics** — these are the only two visual building blocks (plus `<img>` for images). All Vexart rendering goes through them.
 6. **For Phase 3 components** — Tooltip, Popover, Combobox, Slider, and VirtualList all follow the render prop pattern. Wrap them exactly like Button/Checkbox/Switch.
 7. **createForm is framework-level** — don't wrap it in your theme. It's consumed directly. Theme packages only need to style the individual Input, Button, etc. components that form consumers use.

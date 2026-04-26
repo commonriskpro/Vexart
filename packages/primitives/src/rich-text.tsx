@@ -1,5 +1,5 @@
 /**
- * RichText — inline text flow component for TGE.
+ * RichText — inline text flow component for Vexart.
  *
  * Concatenates all child Span text into a single text element
  * that flows inline and wraps naturally. Uses the first Span's
@@ -13,7 +13,7 @@
  *   <RichText color={text.primary}>
  *     <Span>Hello </Span>
  *     <Span>world </Span>
- *     <Span>from TGE</Span>
+ *     <Span>from Vexart</Span>
  *   </RichText>
  */
 

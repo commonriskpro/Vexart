@@ -1,5 +1,5 @@
 /**
- * tge/void — shadcn-inspired design system for TGE.
+ * vexart/void — shadcn-inspired design system for Vexart.
  * Type declarations.
  */
 

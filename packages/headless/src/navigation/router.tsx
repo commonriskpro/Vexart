@@ -1,5 +1,5 @@
 /**
- * Router components — JSX wrappers for TGE navigation.
+ * Router components — JSX wrappers for Vexart navigation.
  *
  * Supports both flat route maps and stack navigation.
  *

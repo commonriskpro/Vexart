@@ -1,9 +1,9 @@
 /**
- * Void Design Tokens — shadcn-compatible semantic token system for TGE.
+ * Void Design Tokens — shadcn-compatible semantic token system for Vexart.
  *
  * Tokens follow the shadcn convention: surface + foreground pairs.
  * Colors are hex strings ("#rrggbb" or "#rrggbbaa") per Decision 2.
- * TGE's parseColor handles strings natively — no conversion needed.
+ * Vexart's parseColor handles strings natively — no conversion needed.
  *
  * Based on shadcn/ui neutral dark theme (oklch → hex).
  * Recalibrated for OLED terminal rendering where contrast is critical.

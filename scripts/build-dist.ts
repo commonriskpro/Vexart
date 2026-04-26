@@ -16,8 +16,8 @@
  */
 
 import { build } from "esbuild"
-import { cpSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "fs"
-import { resolve, join } from "path"
+import { cpSync, mkdirSync, writeFileSync, existsSync } from "fs"
+import { resolve } from "path"
 
 const ROOT = resolve(import.meta.dir, "..")
 const DIST = resolve(ROOT, "dist")
@@ -37,7 +37,7 @@ await build({
   platform: "node",
   target: "esnext",
   minify: true,
-  outfile: resolve(DIST, "tge.js"),
+  outfile: resolve(DIST, "engine.js"),
   external: [
     "bun:ffi",
     "solid-js",
@@ -56,10 +56,10 @@ await build({
   },
   // Inject FFI path override — tell the bundle to look in vendor/ next to itself
   define: {
-    "process.env.TGE_DIST": '"true"',
+    "process.env.VEXART_DIST": '"true"',
   },
   banner: {
-    js: `/* TGE — Terminal Graphics Engine | Closed Source | (c) ${new Date().getFullYear()} */`,
+    js: `/* Vexart — GPU-Accelerated Terminal UI Engine | Closed Source | (c) ${new Date().getFullYear()} */`,
   },
 })
 
@@ -77,7 +77,7 @@ const solidPlugin = {
       const result = transformSync(source, {
         filename: args.path,
         presets: [
-          ["babel-preset-solid", { generate: "universal", moduleName: "tge" }],
+          ["babel-preset-solid", { generate: "universal", moduleName: "@vexart/engine" }],
           ["@babel/preset-typescript", { onlyRemoveTypeImports: true }],
         ],
       })
@@ -103,7 +103,7 @@ await build({
     "@napi-rs/canvas",
     "@chenglou/pretext",
     "opentype.js",
-    "tge",
+    "@vexart/engine",
   ],
   alias: {
     "@vexart/engine": resolve(ROOT, "packages/engine/src/index.ts"),
@@ -129,7 +129,7 @@ await build({
     "solid-js",
     "solid-js/universal",
     "@napi-rs/canvas",
-    "tge",
+    "@vexart/engine",
   ],
   alias: {
     "@vexart/engine": resolve(ROOT, "packages/engine/src/index.ts"),
@@ -177,44 +177,33 @@ cpSync(
 )
 console.log(`  ✅ parser.worker.ts → tree-sitter/`)
 
-// ── 6. Copy solid plugin (dist version with moduleName: "tge") ──
+// ── 6. Copy solid plugin (dist version with moduleName: "@vexart/engine") ──
 console.log("🔌 Copying solid plugin...")
 cpSync(resolve(ROOT, "scripts/solid-plugin-dist.ts"), resolve(DIST, "solid-plugin.ts"))
-console.log(`  ✅ solid-plugin.ts (moduleName: "tge")`)
+console.log(`  ✅ solid-plugin.ts (moduleName: "@vexart/engine")`)
 
 // ── 7. Copy type declarations ──
 console.log("📝 Copying type declarations...")
-cpSync(resolve(ROOT, "types/tge.d.ts"), resolve(DIST, "tge.d.ts"))
+cpSync(resolve(ROOT, "types/engine.d.ts"), resolve(DIST, "engine.d.ts"))
 cpSync(resolve(ROOT, "types/components.d.ts"), resolve(DIST, "components.d.ts"))
 cpSync(resolve(ROOT, "types/jsx-runtime.d.ts"), resolve(DIST, "jsx-runtime.d.ts"))
 cpSync(resolve(ROOT, "types/void.d.ts"), resolve(DIST, "void.d.ts"))
-console.log(`  ✅ tge.d.ts + components.d.ts + jsx-runtime.d.ts + void.d.ts`)
-
-// ── 8. Copy font atlas ──
-console.log("🔤 Copying font atlas...")
-const atlasDir = resolve(ROOT, "zig/src")
-const distFontDir = resolve(DIST, "fonts")
-mkdirSync(distFontDir, { recursive: true })
-const atlasFile = resolve(atlasDir, "font_atlas.zig")
-if (existsSync(atlasFile)) {
-  // The atlas is compiled into libvexart — no separate file needed
-  console.log(`  ℹ️ Font atlas is compiled into libvexart (no copy needed)`)
-}
+console.log(`  ✅ engine.d.ts + components.d.ts + jsx-runtime.d.ts + void.d.ts`)
 
 // ── 8. Create package.json ──
 console.log("📋 Creating package.json...")
 
 const pkg = {
-  name: "tge",
-  version: "0.0.1",
-  description: "Pixel-native terminal rendering engine. Write JSX, get browser-quality UI in your terminal.",
+  name: "vexart",
+  version: "0.9.0-beta.0",
+  description: "Vexart GPU-accelerated terminal UI engine. Write JSX, get browser-quality UI in your terminal.",
   type: "module",
-  main: "tge.js",
-  types: "tge.d.ts",
+  main: "engine.js",
+  types: "engine.d.ts",
   exports: {
     ".": {
-      types: "./tge.d.ts",
-      default: "./tge.js",
+      types: "./engine.d.ts",
+      default: "./engine.js",
     },
     "./components": {
       types: "./components.d.ts",
@@ -231,8 +220,8 @@ const pkg = {
     "./tree-sitter/parser.worker.ts": "./tree-sitter/parser.worker.ts",
   },
   files: [
-    "tge.js",
-    "tge.d.ts",
+    "engine.js",
+    "engine.d.ts",
     "components.js",
     "components.d.ts",
     "void.js",
@@ -241,7 +230,6 @@ const pkg = {
     "solid-plugin.ts",
     "vendor/",
     "tree-sitter/",
-    "fonts/",
   ],
   peerDependencies: {
     "solid-js": "^1.9.0",
@@ -271,4 +259,4 @@ console.log("")
 console.log("To test locally:")
 console.log("  cd dist && bun pack")
 console.log("  # In another project:")
-console.log("  bun add ../tge/dist/tge-0.0.1.tgz")
+console.log("  bun add ../vexart/dist/vexart-0.9.0-beta.0.tgz")

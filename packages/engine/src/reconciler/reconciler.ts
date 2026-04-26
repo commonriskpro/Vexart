@@ -1,5 +1,5 @@
 /**
- * SolidJS custom renderer for TGE.
+ * SolidJS custom renderer for Vexart.
  *
  * @public
  */

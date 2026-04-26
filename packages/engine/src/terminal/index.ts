@@ -65,9 +65,9 @@ export type Terminal = {
   setTitle: (title: string) => void
   /** Write text to system clipboard via OSC 52 */
   writeClipboard: (text: string) => void
-  /** Suspend TGE mode — restore terminal for external process ($EDITOR). Call resume() to re-enter. */
+  /** Suspend Vexart mode — restore terminal for external process ($EDITOR). Call resume() to re-enter. */
   suspend: () => void
-  /** Resume TGE mode after suspend — re-enter raw mode, alt screen, mouse, etc. */
+  /** Resume Vexart mode after suspend — re-enter raw mode, alt screen, mouse, etc. */
   resume: () => void
   /** Destroy the terminal — restore original state, remove handlers */
   destroy: () => void
@@ -220,7 +220,7 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
     ? (0.299 * bgColor[0] + 0.587 * bgColor[1] + 0.114 * bgColor[2]) / 255 < 0.5
     : true // assume dark
 
-  // Step 6: enter TGE mode
+  // Step 6: enter Vexart mode
   const lifecycleState = enter(stdin, rawWrite, caps)
 
   // Step 7: install exit handlers
@@ -279,7 +279,7 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
       leave(stdin, rawWrite, caps, lifecycleState)
     },
     resume: () => {
-      // Re-enter TGE mode (enter() is safe to call — just re-sends escape sequences)
+      // Re-enter Vexart mode (enter() is safe to call — just re-sends escape sequences)
       const newState = enter(stdin, rawWrite, caps)
       lifecycleState.active = newState.active
     },

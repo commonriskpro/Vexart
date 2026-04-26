@@ -1,7 +1,7 @@
 /**
- * JSX type declarations for TGE — SolidJS module augmentation.
+ * JSX type declarations for Vexart — SolidJS module augmentation.
  *
- * This file augments solid-js's JSX namespace with TGE's intrinsic elements.
+ * This file augments solid-js's JSX namespace with Vexart's intrinsic elements.
  * The canonical prop types live in types/jsx-runtime.d.ts.
  *
  * We import them here to avoid duplicate/conflicting declarations.
@@ -31,7 +31,7 @@ type BoxIntrinsicProps = TGEProps & {
   scrollId?: string
   shadow?: ShadowDef | ShadowDef[]
   glow?: { radius: number; color: ColorValue; intensity?: number }
-  // Mouse events (focusable, onPress, onKeyDown inherited from TGEProps)
+  // Mouse events (focusable, onPress, onKeyDown inherited from VexartProps)
   onMouseDown?: (evt: NodeMouseEvent) => void
   onMouseUp?: (evt: NodeMouseEvent) => void
   onMouseOver?: (evt: NodeMouseEvent) => void

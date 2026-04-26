@@ -1,5 +1,5 @@
 /**
- * Textarea — multiline text editor for TGE.
+ * Textarea — multiline text editor for Vexart.
  *
  * Focus-aware with full keyboard editing:
  *   - Printable chars: insert at cursor

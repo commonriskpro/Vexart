@@ -1,5 +1,5 @@
 /**
- * TGE — Terminal Graphics Engine
+ * Vexart — GPU-Accelerated Terminal UI Engine
  * Type declarations for the npm package.
  */
 
@@ -208,11 +208,11 @@ export interface ScrollHandle {
   scrollTo(y: number): void
   scrollBy(dy: number): void
   scrollIntoView(elementId: string): void
-  /** Get child node handles (opentui compat). Returns empty array — TGE children are in JSX tree. */
+  /** Get child node handles (opentui compat). Returns empty array — Vexart children are in JSX tree. */
   getChildren(): NodeHandle[]
 }
 
-export function createScrollHandle(clayId: string): ScrollHandle
+export function createScrollHandle(scrollId: string): ScrollHandle
 export function resetScrollHandles(): void
 
 // ── Debug ──
@@ -413,7 +413,7 @@ export function useTerminalDimensions(terminal: Terminal): {
   cellHeight: () => number
 }
 
-// ── Clay constants ──
+// ── Layout constants ──
 
 export declare const SIZING: { readonly FIT: 0; readonly GROW: 1; readonly PERCENT: 2; readonly FIXED: 3 }
 export declare const DIRECTION: { readonly LEFT_TO_RIGHT: 0; readonly TOP_TO_BOTTOM: 1 }

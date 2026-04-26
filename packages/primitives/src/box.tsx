@@ -1,5 +1,5 @@
 /**
- * Box — primary layout container for TGE.
+ * Box — primary layout container for Vexart.
  *
  * Renders a `<box>` intrinsic element with layout, background, border, and shadow.
  * This is a thin wrapper that provides typed props and sensible defaults.

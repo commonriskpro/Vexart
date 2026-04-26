@@ -1,11 +1,11 @@
 /**
- * Text — text display component for TGE.
+ * Text — text display component for Vexart.
  *
  * Renders a `<text>` intrinsic element with color and font settings.
  * Supports multi-line word wrapping via Pretext layout engine.
  *
  * Usage:
- *   <Text color="#e0e0e0" fontSize={16}>Hello TGE</Text>
+ *   <Text color="#e0e0e0" fontSize={16}>Hello Vexart</Text>
  *   <Text color={palette.thread}>Status: OK</Text>
  *   <Text color={text.primary} lineHeight={20} wordBreak="normal">
  *     This text will wrap automatically within its container.

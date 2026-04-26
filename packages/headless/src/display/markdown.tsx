@@ -1,7 +1,7 @@
 /**
- * Markdown — renders markdown content as TGE components.
+ * Markdown — renders markdown content as Vexart components.
  *
- * Tokenizes markdown and maps it to headless TGE primitives.
+ * Tokenizes markdown and maps it to headless Vexart primitives.
  *
  * @public
  */

@@ -1,5 +1,5 @@
 /**
- * Code — syntax-highlighted code block for TGE.
+ * Code — syntax-highlighted code block for Vexart.
  *
  * Renders source code with tree-sitter token coloring.
  *

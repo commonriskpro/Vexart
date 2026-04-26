@@ -1,17 +1,17 @@
 # Theming
 
-> Expanded guide for TGE's design tokens and theme system. For the quick-reference version, see [developer-guide.md](./developer-guide.md#theming). For building custom theme packages, see [creating-theme-packages.md](./creating-theme-packages.md).
+> Expanded guide for Vexart's design tokens and theme system. For the quick-reference version, see [developer-guide.md](./developer-guide.md#theming). For building custom theme packages, see [creating-theme-packages.md](./creating-theme-packages.md).
 
-TGE's design system (`tge/void`) provides static tokens, a reactive theme system, and pre-styled components. This guide covers how tokens work, the critical difference between static and reactive colors, theme switching, and the reactivity gotcha that catches every new user.
+Vexart's design system (`@vexart/styled`) provides static tokens, a reactive theme system, and pre-styled components. This guide covers how tokens work, the critical difference between static and reactive colors, theme switching, and the reactivity gotcha that catches every new user.
 
 ---
 
 ## Static Tokens
 
-Static tokens are plain JavaScript objects. They never change at runtime. Import them from `tge/void`:
+Static tokens are plain JavaScript objects. They never change at runtime. Import them from `@vexart/styled`:
 
 ```typescript
-import { colors, radius, space, font, weight, shadows } from "tge/void"
+import { colors, radius, space, font, weight, shadows } from "@vexart/styled"
 ```
 
 ### colors
@@ -104,7 +104,7 @@ Shadow presets are arrays of `{ x, y, blur, color }` objects. Colors are already
 
 ## Static vs Reactive: colors vs themeColors
 
-This is the most important concept in TGE theming. There are TWO ways to access colors:
+This is the most important concept in Vexart theming. There are TWO ways to access colors:
 
 | Import | Type | Reactivity | Use when |
 |--------|------|-----------|----------|
@@ -112,7 +112,7 @@ This is the most important concept in TGE theming. There are TWO ways to access 
 | `themeColors` | Object with signal getters | Reactive — updates on `setTheme()` | JSX props that should respond to theme changes |
 
 ```tsx
-import { colors, themeColors } from "tge/void"
+import { colors, themeColors } from "@vexart/styled"
 
 // STATIC — won't update if you call setTheme()
 <box backgroundColor={colors.background} />
@@ -127,14 +127,14 @@ import { colors, themeColors } from "tge/void"
 
 ## The themeColors Reactivity Gotcha
 
-**This is the #1 mistake new TGE users make.**
+**This is the #1 mistake new Vexart users make.**
 
 SolidJS components run their body ONCE. Only JSX expressions are reactive. If you capture a `themeColors` value in a const, it becomes a static snapshot.
 
 ### The problem
 
 ```tsx
-import { themeColors } from "tge/void"
+import { themeColors } from "@vexart/styled"
 
 function BadCard() {
   // BUG: This captures the current value ONCE
@@ -251,7 +251,7 @@ function ThemedButton(props: {
 ### Creating a custom theme
 
 ```typescript
-import { createTheme } from "tge/void"
+import { createTheme } from "@vexart/styled"
 
 const catppuccin = createTheme({
   colors: {
@@ -276,7 +276,7 @@ const catppuccin = createTheme({
 ### Switching themes at runtime
 
 ```typescript
-import { setTheme, darkTheme, lightTheme } from "tge/void"
+import { setTheme, darkTheme, lightTheme } from "@vexart/styled"
 
 setTheme(darkTheme)       // built-in dark (default)
 setTheme(lightTheme)      // built-in light
@@ -300,7 +300,7 @@ When you call `setTheme()`, all SolidJS signals behind `themeColors` update. Any
 import {
   createTheme, setTheme, darkTheme, lightTheme,
   themeColors, colors, radius, space, font
-} from "tge/void"
+} from "@vexart/styled"
 import { createSignal } from "solid-js"
 
 const nord = createTheme({
@@ -382,7 +382,7 @@ function ThemeSwitcher() {
 For nested themes (rare), wrap a subtree in `<ThemeProvider>`:
 
 ```tsx
-import { ThemeProvider } from "tge/void"
+import { ThemeProvider } from "@vexart/styled"
 
 <ThemeProvider theme={customTheme}>
   {/* Children here read the custom theme */}
@@ -395,10 +395,10 @@ For most apps, global `setTheme()` is sufficient.
 
 ## Void Components and Theming
 
-Void components (from `tge/void`) read `themeColors` internally. They react to `setTheme()` automatically:
+Void components (from `@vexart/styled`) read `themeColors` internally. They react to `setTheme()` automatically:
 
 ```tsx
-import { Button, Card, CardHeader, CardTitle, CardContent, Badge } from "tge/void"
+import { Button, Card, CardHeader, CardTitle, CardContent, Badge } from "@vexart/styled"
 
 // These all use themeColors internally — no color props needed
 <Card>
@@ -421,7 +421,7 @@ Switch theme with `setTheme()` and every Void component updates.
 When building your own components, use tokens for consistency:
 
 ```tsx
-import { colors, themeColors, radius, space, font, weight, shadows } from "tge/void"
+import { colors, themeColors, radius, space, font, weight, shadows } from "@vexart/styled"
 
 function CustomCard(props: { title: string; children: any }) {
   return (

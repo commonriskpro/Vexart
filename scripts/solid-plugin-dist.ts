@@ -1,17 +1,17 @@
 /**
- * Bun preload plugin for TGE consumers.
+ * Bun preload plugin for Vexart consumers.
  *
  * Transforms .tsx/.jsx files through babel-preset-solid with
- * { generate: "universal", moduleName: "tge" }.
+ * { generate: "universal", moduleName: "@vexart/engine" }.
  *
  * Setup in your bunfig.toml:
- *   preload = ["tge/solid-plugin.ts"]
+ *   preload = ["vexart/solid-plugin.ts"]
  */
 
 import { plugin } from "bun"
 
 plugin({
-  name: "tge-solid-jsx",
+  name: "vexart-solid-jsx",
   setup(build) {
     const { transformSync } = require("@babel/core")
 
@@ -25,7 +25,7 @@ plugin({
             "babel-preset-solid",
             {
               generate: "universal",
-              moduleName: "tge",
+              moduleName: "@vexart/engine",
             },
           ],
           ["@babel/preset-typescript", { onlyRemoveTypeImports: true }],

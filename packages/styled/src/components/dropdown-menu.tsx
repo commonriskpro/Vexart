@@ -1,5 +1,5 @@
 /**
- * VoidDropdownMenu — shadcn DropdownMenu-compatible component for TGE.
+ * VoidDropdownMenu — shadcn DropdownMenu-compatible component for Vexart.
  *
  * Composable parts:
  *   VoidDropdownMenu          — root (controls open state)

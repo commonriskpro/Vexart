@@ -1,5 +1,5 @@
 /**
- * Layer system — browser-style compositing for TGE.
+ * Layer system — browser-style compositing for Vexart.
  *
  * Instead of one giant raw buffer for the entire screen, each visual
  * element group gets its own retained layer identity. The official path now

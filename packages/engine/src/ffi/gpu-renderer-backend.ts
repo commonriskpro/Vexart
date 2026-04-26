@@ -637,7 +637,7 @@ function logGpuResize(message: string) {
 }
 
 function failGpuOnly(message: string): never {
-  throw new Error(`TGE GPU-only renderer: ${message}`)
+  throw new Error(`Vexart GPU-only renderer: ${message}`)
 }
 
 type TargetRecord = {

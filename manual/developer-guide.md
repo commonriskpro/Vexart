@@ -1,7 +1,7 @@
-# TGE Developer Guide
+# Vexart Developer Guide
 
-> Complete API reference for building terminal applications with TGE.
-> TGE renders browser-quality pixel UI in the terminal using JSX (SolidJS).
+> Complete API reference for building terminal applications with Vexart.
+> Vexart renders browser-quality pixel UI in the terminal using JSX (SolidJS).
 
 ## Table of Contents
 
@@ -41,11 +41,11 @@
   - [useMutation](#usemutationmutator-options)
   - [useTerminalDimensions](#useterminaldimensionsterminal)
   - [markDirty](#markdirty)
-- [Components (`tge/components`)](#components-tgecomponents)
+- [Components (`@vexart/headless`)](#components-tgecomponents)
   - [Component Architecture](#component-architecture)
   - [Complete Component Reference](#complete-component-reference)
   - [createForm — Form Validation](#createform--form-validation)
-- [Design System (`tge/void`)](#design-system-tgevoid)
+- [Design System (`@vexart/styled`)](#design-system-tgevoid)
   - [Tokens](#tokens)
   - [Theming](#theming)
   - [Void Components](#void-components)
@@ -59,9 +59,9 @@
   - [Global Keyboard Shortcuts](#global-keyboard-shortcuts)
   - [Animated Transitions](#animated-transitions)
 - [API Quick Reference](#api-quick-reference)
-  - [`tge` (engine)](#tge-engine)
-  - [`tge/components`](#tgecomponents-1)
-  - [`tge/void`](#tgevoid-1)
+  - [`@vexart/engine` (engine)](#vexart-engine)
+  - [`@vexart/headless`](#vexartheadless-1)
+  - [`@vexart/styled`](#vexartstyled-1)
 
 ---
 
@@ -70,19 +70,19 @@
 ### Installation
 
 ```bash
-bun add tge
+bun add vexart
 ```
 
 ### Requirements
 
-- **Bun >= 1.1.0** — TGE uses Bun's FFI for the native Rust library.
+- **Bun >= 1.1.0** — Vexart uses Bun's FFI for the native Rust library.
 - **Terminal with Kitty graphics protocol** — Kitty, Ghostty, or WezTerm. The Kitty protocol transmits pixel data directly to the terminal GPU. Standard terminals (iTerm2, Terminal.app, Windows Terminal) are not supported.
 - **macOS ARM64** — The shipped native binary (`libvexart.dylib`) is currently ARM64 Darwin only. Linux and x86 builds are planned.
 
 ### Minimal App
 
 ```tsx
-import { mount, createTerminal, onInput } from "tge"
+import { mount, createTerminal, onInput } from "@vexart/engine"
 
 function App() {
   return (
@@ -94,7 +94,7 @@ function App() {
       alignY="center"
     >
       <text color={0xfafafaff} fontSize={16}>
-        Hello from TGE
+        Hello from Vexart
       </text>
     </box>
   )
@@ -119,7 +119,7 @@ main()
 **What happens:**
 
 1. `createTerminal()` — detects terminal capabilities, enters raw mode, enables Kitty graphics and mouse tracking.
-2. `mount()` — creates the SolidJS reactive root, initializes the Clay layout engine, starts the 30fps render loop with dirty-flag optimization, and connects stdin to the input parser.
+2. `mount()` — creates the SolidJS reactive root, initializes the Flexily layout engine, starts the 30fps render loop with dirty-flag optimization, and connects stdin to the input parser.
 3. Your JSX renders. When signals change, only affected nodes re-layout and re-paint.
 
 Run it:
@@ -130,9 +130,9 @@ bun --conditions=browser run app.tsx
 
 ### The `--conditions=browser` Flag
 
-SolidJS ships separate entry points for server (`solid-js/universal`) and browser environments. TGE uses `solid-js/universal` with the `createRenderer` API, which is resolved through the `"browser"` export condition.
+SolidJS ships separate entry points for server (`solid-js/universal`) and browser environments. Vexart uses `solid-js/universal` with the `createRenderer` API, which is resolved through the `"browser"` export condition.
 
-You **must** pass `--conditions=browser` when running any TGE app:
+You **must** pass `--conditions=browser` when running any Vexart app:
 
 ```bash
 bun --conditions=browser run app.tsx
@@ -157,20 +157,20 @@ For convenience, add a script to your `package.json`:
 ### The Rendering Pipeline
 
 ```
-JSX → SolidJS reactive signals → Clay layout (C FFI) → Zig pixel paint (SDF) → Kitty protocol → Terminal
+JSX → SolidJS reactive signals → Flexily layout (TypeScript) → Rust/WGPU paint → Kitty protocol → Terminal
 ```
 
 | Stage | What happens |
 |-------|-------------|
 | **JSX** | You write `<box>` and `<text>` elements. SolidJS compiles them into fine-grained reactive nodes — no virtual DOM. |
 | **SolidJS signals** | When a signal changes, only the specific DOM operation (e.g., set background color) fires. No diffing, no re-render. |
-| **Clay layout** | A C layout engine (called via Bun FFI) computes the position and size of every element in microseconds. Same algorithm as CSS flexbox. |
-| **Zig pixel paint** | A Zig shared library paints each element into a pixel buffer using SDF (Signed Distance Field) primitives — anti-aliased corners, gradients, shadows, blur. |
+| **Flexily layout** | A C layout engine (called via Bun FFI) computes the position and size of every element in microseconds. Same algorithm as CSS flexbox. |
+| **Rust/WGPU paint** | A Rust/WGPU native library paints each element into a pixel buffer using SDF (Signed Distance Field) primitives — anti-aliased corners, gradients, shadows, blur. |
 | **Kitty protocol** | The pixel buffer is transmitted to the terminal via the Kitty graphics protocol. The terminal composites it on its GPU. Only dirty regions are retransmitted. |
 
 ### Three Intrinsic Elements
 
-TGE has exactly **three** built-in JSX elements. Everything else (Button, ScrollView, Dialog, etc.) is a component built from these primitives.
+Vexart has exactly **three** built-in JSX elements. Everything else (Button, ScrollView, Dialog, etc.) is a component built from these primitives.
 
 | Element | HTML Equivalent | Purpose |
 |---------|----------------|---------|
@@ -187,7 +187,7 @@ TGE has exactly **three** built-in JSX elements. Everything else (Button, Scroll
 
 ### SolidJS Reactivity (Not React)
 
-TGE uses **SolidJS**, not React. The key differences:
+Vexart uses **SolidJS**, not React. The key differences:
 
 - **Signals, not state.** `createSignal` returns a getter and setter. The getter is a function call.
 - **No VDOM.** Components run once. Only signal reads inside JSX are tracked and updated.
@@ -195,7 +195,7 @@ TGE uses **SolidJS**, not React. The key differences:
 
 ```tsx
 import { createSignal } from "solid-js"
-import { Show, For } from "tge"
+import { Show, For } from "@vexart/engine"
 
 function Counter() {
   const [count, setCount] = createSignal(0)
@@ -225,7 +225,7 @@ function Counter() {
 **Control flow** uses components, not ternaries:
 
 ```tsx
-import { Show, For } from "tge"
+import { Show, For } from "@vexart/engine"
 
 // Conditional rendering
 <Show when={isVisible()}>
@@ -266,7 +266,7 @@ Use `direction="row"` explicitly for horizontal layout:
 </box>
 ```
 
-The terminal window resizes automatically. When the terminal is resized, TGE detects the new dimensions, re-runs Clay layout, and re-paints. Your layout adapts if you use relative sizing (`width="100%"`, `width="grow"`).
+The terminal window resizes automatically. When the terminal is resized, Vexart detects the new dimensions, re-runs Flexily layout, and re-paints. Your layout adapts if you use relative sizing (`width="100%"`, `width="grow"`).
 
 ---
 
@@ -401,7 +401,7 @@ The `<box>` element is the universal building block. It handles layout, visual s
 }
 ```
 
-> **Important:** Shadow `color` MUST be a u32 number (e.g., `0x00000060`). Hex strings are NOT supported for shadow colors — they bypass the color parser and go directly to the Zig paint engine.
+> **Important:** Shadow `color` MUST be a u32 number (e.g., `0x00000060`). Hex strings are NOT supported for shadow colors — they bypass the color parser and go directly to the Rust/WGPU paint engine.
 
 ```tsx
 // Single subtle shadow
@@ -553,7 +553,7 @@ Backdrop filters read the pixel buffer region behind the element, apply the filt
 
 ### Interactive States
 
-TGE provides declarative hover/active/focus styles. No manual signal boilerplate needed — the engine tracks pointer and focus state internally and merges style overrides automatically.
+Vexart provides declarative hover/active/focus styles. No manual signal boilerplate needed — the engine tracks pointer and focus state internally and merges style overrides automatically.
 
 | Prop | Type | Description |
 |------|------|-------------|
@@ -660,7 +660,7 @@ TGE provides declarative hover/active/focus styles. No manual signal boilerplate
 </box>
 
 // Programmatic scroll
-import { createScrollHandle } from "tge"
+import { createScrollHandle } from "@vexart/engine"
 
 const handle = createScrollHandle("my-list")
 handle.scrollTo(0)       // scroll to top
@@ -860,7 +860,7 @@ Colors are parsed **once** when the prop is set (during reconciliation), not per
 **Reactive theme colors:**
 
 ```tsx
-import { themeColors } from "tge/void"
+import { themeColors } from "@vexart/styled"
 
 // themeColors properties are reactive getters — they update when the theme changes
 <box backgroundColor={themeColors.primary} />
@@ -870,7 +870,7 @@ import { themeColors } from "tge/void"
 **The RGBA class:**
 
 ```tsx
-import { RGBA } from "tge"
+import { RGBA } from "@vexart/engine"
 
 const red = new RGBA(255, 0, 0, 255)
 const blue = RGBA.fromHex("#0000ff")
@@ -881,7 +881,7 @@ const green = RGBA.fromInts(0, 255, 0)
 
 ### Shadow color exception
 
-Shadow colors **must** be u32 numbers. They bypass the color parser and go directly to the Zig paint engine:
+Shadow colors **must** be u32 numbers. They bypass the color parser and go directly to the Rust/WGPU paint engine:
 
 ```tsx
 // Correct
@@ -894,7 +894,7 @@ Shadow colors **must** be u32 numbers. They bypass the color parser and go direc
 ### Void design tokens (quick reference)
 
 ```tsx
-import { colors, radius, space, font, weight, shadows } from "tge/void"
+import { colors, radius, space, font, weight, shadows } from "@vexart/styled"
 
 colors.background       // 0x141414ff — app background
 colors.foreground       // 0xfafafaff — default text
@@ -946,12 +946,12 @@ shadows.xl   // dramatic elevation
 
 ## Hooks & Signals
 
-TGE hooks return SolidJS signals -- reactive getters that automatically re-render your component when the value changes. If you know React hooks, these work similarly but without the rules-of-hooks constraints.
+Vexart hooks return SolidJS signals -- reactive getters that automatically re-render your component when the value changes. If you know React hooks, these work similarly but without the rules-of-hooks constraints.
 
 ### useFocus(opts?)
 
 ```typescript
-import { useFocus } from "tge"
+import { useFocus } from "@vexart/engine"
 
 type FocusHandle = {
   focused: () => boolean    // reactive signal -- true when this element has focus
@@ -978,7 +978,7 @@ function useFocus(opts?: {
 **Custom interactive component:**
 
 ```tsx
-import { useFocus, Show } from "tge"
+import { useFocus, Show } from "@vexart/engine"
 
 function ToggleCard(props: { label: string; active: boolean; onToggle: () => void }) {
   const { focused } = useFocus({
@@ -1008,7 +1008,7 @@ function ToggleCard(props: { label: string; active: boolean; onToggle: () => voi
 Subscribe to all keyboard events as a reactive signal.
 
 ```typescript
-import { useKeyboard } from "tge"
+import { useKeyboard } from "@vexart/engine"
 
 type KeyboardState = {
   key: () => KeyEvent | null     // last key event
@@ -1042,7 +1042,7 @@ function StatusBar() {
 Subscribe to mouse events as a reactive signal.
 
 ```typescript
-import { useMouse } from "tge"
+import { useMouse } from "@vexart/engine"
 
 type MouseState = {
   mouse: () => MouseEvent | null              // last mouse event
@@ -1068,7 +1068,7 @@ type MouseEvent = {
 Low-level hook -- subscribe to ALL input events (key, mouse, paste, focus).
 
 ```typescript
-import { useInput } from "tge"
+import { useInput } from "@vexart/engine"
 
 function DebugInput() {
   const event = useInput()
@@ -1085,7 +1085,7 @@ Returns `() => InputEvent | null` where `InputEvent` is `KeyEvent | MouseEvent |
 Global event bus -- not a hook, not reactive. Registers a callback for all input events. Returns an unsubscribe function.
 
 ```typescript
-import { onInput } from "tge"
+import { onInput } from "@vexart/engine"
 
 const unsub = onInput((event) => {
   if (event.type === "key" && event.key === "q" && event.mods.ctrl) {
@@ -1111,7 +1111,7 @@ const unsub = onInput((event) => {
 Creates a focus trap -- `Tab`/`Shift+Tab` only cycles within the scope. Used internally by `Dialog`. Returns a cleanup function.
 
 ```typescript
-import { pushFocusScope } from "tge"
+import { pushFocusScope } from "@vexart/engine"
 
 // Inside a component:
 const popScope = pushFocusScope()
@@ -1131,7 +1131,7 @@ onCleanup(popScope) // restore previous scope
 Animate numeric values with easing. Returns `[getter, setter]`.
 
 ```typescript
-import { createTransition, easing } from "tge"
+import { createTransition, easing } from "@vexart/engine"
 
 type TransitionConfig = {
   duration?: number    // ms, default 300
@@ -1167,7 +1167,7 @@ setWidth(300) // animates from 100 → 300 over 300ms
 Physics-based spring animation. Returns `[getter, setter]`.
 
 ```typescript
-import { createSpring } from "tge"
+import { createSpring } from "@vexart/engine"
 
 type SpringConfig = {
   stiffness?: number    // default 170
@@ -1191,7 +1191,7 @@ setY(-100) // spring toward -100
 Reactive data fetching.
 
 ```typescript
-import { useQuery } from "tge"
+import { useQuery } from "@vexart/engine"
 
 type QueryResult<T> = {
   data: () => T | undefined
@@ -1241,7 +1241,7 @@ function UserList() {
 Reactive data mutation with optimistic updates.
 
 ```typescript
-import { useMutation } from "tge"
+import { useMutation } from "@vexart/engine"
 
 type MutationResult<T, V> = {
   data: () => T | undefined
@@ -1285,7 +1285,7 @@ const deleteUser = useMutation(
 Reactive terminal size that updates on resize.
 
 ```typescript
-import { useTerminalDimensions } from "tge"
+import { useTerminalDimensions } from "@vexart/engine"
 
 const dims = useTerminalDimensions(terminal)
 
@@ -1301,13 +1301,13 @@ dims.cellHeight()  // pixel height per cell
 
 ### markDirty()
 
-Force a repaint on the next frame. Normally TGE repaints automatically when signals change. Use this when you mutate external state that TGE can't track.
+Force a repaint on the next frame. Normally Vexart repaints automatically when signals change. Use this when you mutate external state that Vexart can't track.
 
 ```typescript
-import { markDirty } from "tge"
+import { markDirty } from "@vexart/engine"
 
 externalStore.update(newData)
-markDirty() // tell TGE to repaint
+markDirty() // tell Vexart to repaint
 ```
 
 ---
@@ -1317,7 +1317,7 @@ markDirty() // tell TGE to repaint
 Encapsulates drag interactions — pointer capture, `isDragging` flag, and mouse event wiring. Returns `dragProps` to spread on the drag target.
 
 ```typescript
-import { useDrag } from "tge"
+import { useDrag } from "@vexart/engine"
 
 type DragOptions = {
   onDragStart?: (event: NodeMouseEvent) => void
@@ -1356,7 +1356,7 @@ The Slider component uses `useDrag` internally.
 Encapsulates hover detection with configurable enter/leave delays. Returns `hovered` signal and `hoverProps` to spread on the target.
 
 ```typescript
-import { useHover } from "tge"
+import { useHover } from "@vexart/engine"
 
 type HoverOptions = {
   delay?: number          // ms before onEnter (default: 0)
@@ -1390,14 +1390,14 @@ The Tooltip component uses `useHover` internally for delayed show/hide.
 
 ---
 
-## Components (`tge/components`)
+## Components (`@vexart/headless`)
 
 ### Component Architecture
 
-TGE components follow a **headless** pattern inspired by Radix UI and Headless UI:
+Vexart components follow a **headless** pattern inspired by Radix UI and Headless UI:
 
-- `tge/components` = **behavior only**, zero visual output
-- `tge/void` = **pre-styled** versions using Void design tokens
+- `@vexart/headless` = **behavior only**, zero visual output
+- `@vexart/styled` = **pre-styled** versions using Void design tokens
 
 There are two headless patterns:
 
@@ -1424,7 +1424,7 @@ There are two headless patterns:
 />
 ```
 
-**Web analogy:** `tge/components` is Radix Primitives. `tge/void` is shadcn/ui.
+**Web analogy:** `@vexart/headless` is Radix Primitives. `@vexart/styled` is shadcn/ui.
 
 ---
 
@@ -1435,7 +1435,7 @@ There are two headless patterns:
 Layout container. Thin wrapper over the `<box>` intrinsic with typed props.
 
 ```typescript
-import { Box } from "tge/components"
+import { Box } from "@vexart/primitives"
 
 type BoxProps = {
   direction?: "row" | "column"      // default: "column"
@@ -1458,7 +1458,7 @@ type BoxProps = {
 
 ```tsx
 <Box padding={16} backgroundColor="#1a1a2e" cornerRadius={12} gap={8}>
-  <Text color="#e0e0e0">Hello TGE</Text>
+  <Text color="#e0e0e0">Hello Vexart</Text>
 </Box>
 ```
 
@@ -1469,7 +1469,7 @@ type BoxProps = {
 Text display with color and font settings.
 
 ```typescript
-import { Text } from "tge/components"
+import { Text } from "@vexart/primitives"
 
 type TextProps = {
   color?: string | number
@@ -1496,8 +1496,8 @@ type TextProps = {
 Scrollable container with visual scrollbar. Content that overflows is clipped.
 
 ```typescript
-import { ScrollView } from "tge/components"
-import type { ScrollHandle } from "tge/components"
+import { ScrollView } from "@vexart/headless"
+import type { ScrollHandle } from "@vexart/headless"
 
 type ScrollViewProps = {
   ref?: (handle: ScrollHandle) => void
@@ -1537,7 +1537,7 @@ let scrollRef: ScrollHandle
 Headless interactive button. Focus-aware with Enter/Space activation.
 
 ```typescript
-import { Button } from "tge/components"
+import { Button } from "@vexart/headless"
 
 type ButtonRenderContext = {
   focused: boolean
@@ -1578,7 +1578,7 @@ type ButtonProps = {
 Headless single-line text input. Controlled component.
 
 ```typescript
-import { Input } from "tge/components"
+import { Input } from "@vexart/headless"
 
 type InputRenderContext = {
   value: string
@@ -1628,8 +1628,8 @@ const [name, setName] = createSignal("")
 Multi-line text editor with 2D cursor, syntax highlighting, extmarks, and configurable key bindings.
 
 ```typescript
-import { Textarea } from "tge/components"
-import type { TextareaHandle, TextareaTheme } from "tge/components"
+import { Textarea } from "@vexart/headless"
+import type { TextareaHandle, TextareaTheme } from "@vexart/headless"
 
 type TextareaTheme = {
   accent: string | number
@@ -1703,7 +1703,7 @@ let ref: TextareaHandle
 Headless toggleable checkbox. Controlled component.
 
 ```typescript
-import { Checkbox } from "tge/components"
+import { Checkbox } from "@vexart/headless"
 
 type CheckboxRenderContext = {
   checked: boolean
@@ -1747,7 +1747,7 @@ type CheckboxProps = {
 Headless toggle switch. Controlled component.
 
 ```typescript
-import { Switch } from "tge/components"
+import { Switch } from "@vexart/headless"
 
 type SwitchRenderContext = {
   checked: boolean
@@ -1792,7 +1792,7 @@ type SwitchProps = {
 Headless radio button group. Controlled component with Up/Down navigation.
 
 ```typescript
-import { RadioGroup } from "tge/components"
+import { RadioGroup } from "@vexart/headless"
 
 type RadioOption = { value: string; label: string; disabled?: boolean }
 
@@ -1845,7 +1845,7 @@ type RadioGroupProps = {
 Headless dropdown select. Controlled component with keyboard navigation.
 
 ```typescript
-import { Select } from "tge/components"
+import { Select } from "@vexart/headless"
 
 type SelectOption = { value: string; label: string; disabled?: boolean }
 
@@ -1912,7 +1912,7 @@ type SelectProps = {
 Headless autocomplete with text filtering. Controlled component.
 
 ```typescript
-import { Combobox } from "tge/components"
+import { Combobox } from "@vexart/headless"
 
 type ComboboxOption = { value: string; label: string; disabled?: boolean }
 
@@ -1977,7 +1977,7 @@ type ComboboxProps = {
 Headless numeric range input. Controlled component.
 
 ```typescript
-import { Slider } from "tge/components"
+import { Slider } from "@vexart/headless"
 
 type SliderRenderContext = {
   value: number
@@ -2046,7 +2046,7 @@ type SliderProps = {
 Headless tab switcher. Controlled component.
 
 ```typescript
-import { Tabs } from "tge/components"
+import { Tabs } from "@vexart/headless"
 
 type TabItem = { label: string; content: () => JSX.Element }
 type TabRenderContext = { active: boolean; focused: boolean; index: number; tabProps: { onPress: (event?: PressEvent) => void } }
@@ -2088,7 +2088,7 @@ type TabsProps = {
 Headless selectable list with Up/Down navigation.
 
 ```typescript
-import { List } from "tge/components"
+import { List } from "@vexart/headless"
 
 type ListItemContext = { selected: boolean; focused: boolean; index: number; itemProps: { onPress: (event?: PressEvent) => void } }
 
@@ -2127,7 +2127,7 @@ type ListProps = {
 Headless data table with row selection.
 
 ```typescript
-import { Table } from "tge/components"
+import { Table } from "@vexart/headless"
 
 type TableColumn = { key: string; header: string; width?: number | "grow"; align?: "left" | "center" | "right" }
 type TableCellContext = { selected: boolean; focused: boolean; rowIndex: number; rowProps: { onPress: (event?: PressEvent) => void } }
@@ -2173,7 +2173,7 @@ type TableProps = {
 Headless progress indicator. Pure visual, no focus.
 
 ```typescript
-import { ProgressBar } from "tge/components"
+import { ProgressBar } from "@vexart/headless"
 
 type ProgressBarRenderContext = {
   ratio: number          // 0-1
@@ -2213,7 +2213,7 @@ type ProgressBarProps = {
 Headless modal dialog. Compound component with focus trap.
 
 ```typescript
-import { Dialog } from "tge/components"
+import { Dialog } from "@vexart/headless"
 
 type DialogProps = { children?: any; onClose?: () => void }
 type DialogOverlayProps = { backgroundColor?: string | number; backdropBlur?: number }
@@ -2260,7 +2260,7 @@ type DialogCloseProps = { children?: any }
 Headless tooltip on hover.
 
 ```typescript
-import { Tooltip } from "tge/components"
+import { Tooltip } from "@vexart/headless"
 
 type TooltipProps = {
   content: string
@@ -2294,7 +2294,7 @@ type TooltipProps = {
 Headless popover panel. Controlled open/close.
 
 ```typescript
-import { Popover } from "tge/components"
+import { Popover } from "@vexart/headless"
 
 type PopoverTriggerContext = { open: boolean; toggle: () => void }
 
@@ -2334,7 +2334,7 @@ type PopoverProps = {
 Imperative toast notification system.
 
 ```typescript
-import { createToaster } from "tge/components"
+import { createToaster } from "@vexart/headless"
 
 type ToastData = { id: number; message: string; variant: ToastVariant; duration: number; description?: string }
 type ToastVariant = "default" | "success" | "error" | "warning" | "info"
@@ -2385,7 +2385,7 @@ Two navigation models for terminal apps.
 **Flat routing** (dashboard-style):
 
 ```tsx
-import { Router, Route, useRouterContext } from "tge/components"
+import { Router, Route, useRouterContext } from "@vexart/headless"
 
 <Router initial="home">
   <Route path="home" component={HomeScreen} />
@@ -2410,7 +2410,7 @@ function HomeScreen(props: RouteProps) {
 **Stack routing** (wizard/drill-down):
 
 ```tsx
-import { NavigationStack, useStack } from "tge/components"
+import { NavigationStack, useStack } from "@vexart/headless"
 
 <NavigationStack initial={HomeScreen}>
   {(screen) => <box width="100%" height="100%">{screen()}</box>}
@@ -2459,7 +2459,7 @@ function DetailScreen(props: ScreenProps) {
 Virtualized list for large datasets. Only renders visible items.
 
 ```typescript
-import { VirtualList } from "tge/components"
+import { VirtualList } from "@vexart/headless"
 
 type VirtualListItemContext = {
   selected: boolean
@@ -2509,7 +2509,7 @@ type VirtualListProps<T> = {
 Renders children above all content in a separate compositing layer.
 
 ```typescript
-import { Portal } from "tge/components"
+import { Portal } from "@vexart/headless"
 
 type PortalProps = { children?: JSX.Element }
 ```
@@ -2533,7 +2533,7 @@ type PortalProps = { children?: JSX.Element }
 Syntax-highlighted code block with tree-sitter tokenization.
 
 ```typescript
-import { Code } from "tge/components"
+import { Code } from "@vexart/headless"
 
 type CodeTheme = { bg: string | number; lineNumberFg: string | number; radius: number; padding: number }
 
@@ -2548,7 +2548,7 @@ type CodeProps = {
 ```
 
 ```tsx
-import { ONE_DARK } from "tge"
+import { ONE_DARK } from "@vexart/engine"
 
 <Code
   content={`const x = 42;\nconsole.log(x);`}
@@ -2566,7 +2566,7 @@ import { ONE_DARK } from "tge"
 Markdown renderer with inline styling. Uses `marked` lexer internally.
 
 ```typescript
-import { Markdown } from "tge/components"
+import { Markdown } from "@vexart/headless"
 
 type MarkdownTheme = {
   fg: string | number; muted: string | number; heading: string | number
@@ -2602,7 +2602,7 @@ type MarkdownProps = {
 Unified diff viewer with per-line coloring and syntax highlighting.
 
 ```typescript
-import { Diff } from "tge/components"
+import { Diff } from "@vexart/headless"
 
 type DiffTheme = {
   fg: string | number; muted: string | number; bg: string | number; radius: number
@@ -2638,7 +2638,7 @@ type DiffProps = {
 Multi-span inline text.
 
 ```typescript
-import { RichText, Span } from "tge/components"
+import { RichText, Span } from "@vexart/primitives"
 
 type RichTextProps = { color?: string | number; children?: JSX.Element }
 type SpanProps = { color?: string | number; fontSize?: number; fontWeight?: number; fontStyle?: "normal" | "italic"; children?: JSX.Element }
@@ -2648,7 +2648,7 @@ type SpanProps = { color?: string | number; fontSize?: number; fontWeight?: numb
 <RichText color="#e0e0e0">
   <Span>Hello </Span>
   <Span color="#4488cc" fontWeight={700}>world</Span>
-  <Span> from TGE</Span>
+  <Span> from Vexart</Span>
 </RichText>
 ```
 
@@ -2656,10 +2656,10 @@ type SpanProps = { color?: string | number; fontSize?: number; fontWeight?: numb
 
 #### 28. WrapRow
 
-Flex-wrap workaround for Clay (which doesn't support `flexWrap`).
+Flex-wrap workaround for Flexily (which doesn't support `flexWrap`).
 
 ```typescript
-import { WrapRow } from "tge/components"
+import { WrapRow } from "@vexart/primitives"
 
 type WrapRowProps = {
   width: number          // total available width
@@ -2689,7 +2689,7 @@ type WrapRowProps = {
 Factory function that creates reactive form state with validation.
 
 ```typescript
-import { createForm } from "tge/components"
+import { createForm } from "@vexart/headless"
 
 type FormOptions<T> = {
   initialValues: T
@@ -2719,9 +2719,9 @@ type FormHandle<T> = {
 **Full form example:**
 
 ```tsx
-import { createForm } from "tge/components"
-import { Input, Button } from "tge/components"
-import { Show, createSignal } from "tge"
+import { createForm } from "@vexart/headless"
+import { Input, Button } from "@vexart/headless"
+import { Show, createSignal } from "@vexart/engine"
 
 function SignupForm() {
   const form = createForm({
@@ -2794,16 +2794,16 @@ function SignupForm() {
 
 ---
 
-## Design System (`tge/void`)
+## Design System (`@vexart/styled`)
 
 ### Tokens
 
-All token exports from `tge/void`:
+All token exports from `@vexart/styled`:
 
 #### colors
 
 ```typescript
-import { colors } from "tge/void"
+import { colors } from "@vexart/styled"
 
 colors.background           // "#0a0a0a"    — app background (near-OLED black)
 colors.foreground           // "#fafafa"    — default text
@@ -2830,7 +2830,7 @@ colors.transparent          // "#00000000"  — transparent
 #### radius
 
 ```typescript
-import { radius } from "tge/void"
+import { radius } from "@vexart/styled"
 
 radius.sm    // 6
 radius.md    // 8
@@ -2843,7 +2843,7 @@ radius.full  // 9999 (pill)
 #### space
 
 ```typescript
-import { space } from "tge/void"
+import { space } from "@vexart/styled"
 
 space.px     // 1
 space[0.5]   // 2
@@ -2865,7 +2865,7 @@ space[10]    // 40
 #### font
 
 ```typescript
-import { font } from "tge/void"
+import { font } from "@vexart/styled"
 
 font.xs      // 10
 font.sm      // 12
@@ -2880,7 +2880,7 @@ font["4xl"]  // 36
 #### weight
 
 ```typescript
-import { weight } from "tge/void"
+import { weight } from "@vexart/styled"
 
 weight.normal    // 400
 weight.medium    // 500
@@ -2891,7 +2891,7 @@ weight.bold      // 700
 #### shadows
 
 ```typescript
-import { shadows } from "tge/void"
+import { shadows } from "@vexart/styled"
 
 // Each preset is an array of ShadowConfig objects (multi-shadow for depth)
 shadows.sm   // subtle lift
@@ -2926,7 +2926,7 @@ Use `themeColors` in JSX props. Use `colors` for static config or conditions.
 Create a theme definition by merging overrides with default tokens:
 
 ```typescript
-import { createTheme } from "tge/void"
+import { createTheme } from "@vexart/styled"
 
 const myTheme = createTheme({
   colors: {
@@ -2942,7 +2942,7 @@ const myTheme = createTheme({
 Switch theme at runtime. Only components reading `themeColors` re-render:
 
 ```typescript
-import { setTheme, darkTheme, lightTheme, createTheme } from "tge/void"
+import { setTheme, darkTheme, lightTheme, createTheme } from "@vexart/styled"
 
 setTheme(lightTheme)    // built-in light theme
 setTheme(darkTheme)     // built-in dark theme (default)
@@ -2961,7 +2961,7 @@ setTheme(myTheme)       // custom theme
 Component wrapper for nested themes. For most apps, global `setTheme()` is sufficient:
 
 ```tsx
-import { ThemeProvider } from "tge/void"
+import { ThemeProvider } from "@vexart/styled"
 
 <ThemeProvider theme={myTheme}>
   {/* children use myTheme */}
@@ -2971,9 +2971,9 @@ import { ThemeProvider } from "tge/void"
 #### Theme switching example
 
 ```tsx
-import { createTheme, setTheme, darkTheme, lightTheme, themeColors } from "tge/void"
-import { Switch } from "tge/components"
-import { createSignal } from "tge"
+import { createTheme, setTheme, darkTheme, lightTheme, themeColors } from "@vexart/styled"
+import { Switch } from "@vexart/headless"
+import { createSignal } from "@vexart/engine"
 
 const catppuccin = createTheme({
   colors: {
@@ -3012,23 +3012,23 @@ Pre-styled components using Void design tokens. Drop-in replacements for headles
 
 | Component | Variants | Sizes | Import |
 | --------- | -------- | ----- | ------ |
-| `Button` | default, secondary, outline, ghost, destructive | xs, sm, default, lg | `tge/void` |
-| `Card` | default, sm | -- | `tge/void` |
-| `CardHeader` | -- | -- | `tge/void` |
-| `CardTitle` | -- | -- | `tge/void` |
-| `CardDescription` | -- | -- | `tge/void` |
-| `CardContent` | -- | -- | `tge/void` |
-| `CardFooter` | -- | -- | `tge/void` |
-| `Badge` | default, secondary, outline, destructive | -- | `tge/void` |
-| `Separator` | horizontal, vertical | -- | `tge/void` |
-| `Avatar` | -- | sm, default, lg | `tge/void` |
-| `Skeleton` | -- | -- | `tge/void` |
-| `VoidDialog` | -- | -- | `tge/void` |
-| `VoidSelect` | -- | -- | `tge/void` |
-| `VoidSwitch` | -- | -- | `tge/void` |
-| `VoidRadioGroup` | -- | -- | `tge/void` |
-| `VoidTable` | -- | -- | `tge/void` |
-| `createVoidToaster` | -- | -- | `tge/void` |
+| `Button` | default, secondary, outline, ghost, destructive | xs, sm, default, lg | `@vexart/styled` |
+| `Card` | default, sm | -- | `@vexart/styled` |
+| `CardHeader` | -- | -- | `@vexart/styled` |
+| `CardTitle` | -- | -- | `@vexart/styled` |
+| `CardDescription` | -- | -- | `@vexart/styled` |
+| `CardContent` | -- | -- | `@vexart/styled` |
+| `CardFooter` | -- | -- | `@vexart/styled` |
+| `Badge` | default, secondary, outline, destructive | -- | `@vexart/styled` |
+| `Separator` | horizontal, vertical | -- | `@vexart/styled` |
+| `Avatar` | -- | sm, default, lg | `@vexart/styled` |
+| `Skeleton` | -- | -- | `@vexart/styled` |
+| `VoidDialog` | -- | -- | `@vexart/styled` |
+| `VoidSelect` | -- | -- | `@vexart/styled` |
+| `VoidSwitch` | -- | -- | `@vexart/styled` |
+| `VoidRadioGroup` | -- | -- | `@vexart/styled` |
+| `VoidTable` | -- | -- | `@vexart/styled` |
+| `createVoidToaster` | -- | -- | `@vexart/styled` |
 
 **Typography components:**
 
@@ -3045,7 +3045,7 @@ Pre-styled components using Void design tokens. Drop-in replacements for headles
 | `Muted` | 14px | normal | mutedForeground |
 
 ```tsx
-import { Button, Card, CardHeader, CardTitle, CardContent, Badge, H2, P, Muted } from "tge/void"
+import { Button, Card, CardHeader, CardTitle, CardContent, Badge, H2, P, Muted } from "@vexart/styled"
 
 <Card>
   <CardHeader>
@@ -3066,7 +3066,7 @@ import { Button, Card, CardHeader, CardTitle, CardContent, Badge, H2, P, Muted }
 
 ### Creating Custom Theme Packages
 
-See [`manual/creating-theme-packages.md`](./creating-theme-packages.md) for a guide on building and distributing your own TGE theme package.
+See [`manual/creating-theme-packages.md`](./creating-theme-packages.md) for a guide on building and distributing your own Vexart theme package.
 
 ---
 
@@ -3095,8 +3095,8 @@ See [`manual/creating-theme-packages.md`](./creating-theme-packages.md) for a gu
 ### Form with Validation
 
 ```tsx
-import { createForm, Input, Button } from "tge/components"
-import { Show } from "tge"
+import { createForm, Input, Button } from "@vexart/headless"
+import { Show } from "@vexart/engine"
 
 const form = createForm({
   initialValues: { email: "" },
@@ -3135,8 +3135,8 @@ const form = createForm({
 ### Multi-Screen App with Router
 
 ```tsx
-import { Router, Route, useRouterContext } from "tge/components"
-import type { RouteProps } from "tge"
+import { Router, Route, useRouterContext } from "@vexart/headless"
+import type { RouteProps } from "@vexart/engine"
 
 function App() {
   return (
@@ -3193,8 +3193,8 @@ function About(props: RouteProps) {
 ### Modal Dialog
 
 ```tsx
-import { Dialog, Button } from "tge/components"
-import { Show, createSignal } from "tge"
+import { Dialog, Button } from "@vexart/headless"
+import { Show, createSignal } from "@vexart/engine"
 
 const [open, setOpen] = createSignal(false)
 
@@ -3240,7 +3240,7 @@ const [open, setOpen] = createSignal(false)
 ### Virtualized Data Table
 
 ```tsx
-import { VirtualList } from "tge/components"
+import { VirtualList } from "@vexart/headless"
 
 // Generate 10K items
 const items = Array.from({ length: 10_000 }, (_, i) => ({
@@ -3275,7 +3275,7 @@ const [selected, setSelected] = createSignal(-1)
 ### Global Keyboard Shortcuts
 
 ```tsx
-import { onInput } from "tge"
+import { onInput } from "@vexart/engine"
 
 onInput((event) => {
   if (event.type !== "key") return
@@ -3302,7 +3302,7 @@ onInput((event) => {
 ### Animated Transitions
 
 ```tsx
-import { createTransition, createSpring, easing, createSignal } from "tge"
+import { createTransition, createSpring, easing, createSignal } from "@vexart/engine"
 
 function AnimatedPanel() {
   const [expanded, setExpanded] = createSignal(false)
@@ -3348,7 +3348,7 @@ function AnimatedPanel() {
 
 ## API Quick Reference
 
-### `tge` (engine)
+### `@vexart/engine` (engine)
 
 | Export | Category | Description |
 | ------ | -------- | ----------- |
@@ -3421,7 +3421,7 @@ function AnimatedPanel() {
 | `decodePasteBytes` | Input | Decode paste data |
 | `resetScrollHandles` | Scroll | Clear scroll handles |
 
-### `tge/components`
+### `@vexart/headless`
 
 | Export | Category |
 | ------ | -------- |
@@ -3457,7 +3457,7 @@ function AnimatedPanel() {
 | `WrapRow` | Layout |
 | `createForm` | Forms |
 
-### `tge/void`
+### `@vexart/styled`
 
 | Export | Category |
 | ------ | -------- |

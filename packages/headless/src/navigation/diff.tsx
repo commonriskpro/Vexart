@@ -1,5 +1,5 @@
 /**
- * Diff — unified diff viewer for TGE.
+ * Diff — unified diff viewer for Vexart.
  *
  * Renders a unified diff with per-line coloring.
  *

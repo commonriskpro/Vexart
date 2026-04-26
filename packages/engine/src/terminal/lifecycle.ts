@@ -1,7 +1,7 @@
 /**
  * Terminal lifecycle management.
  *
- * Handles entering and exiting "TGE mode":
+ * Handles entering and exiting "Vexart mode":
  *   - Raw mode (no line buffering, no echo)
  *   - Alternate screen buffer (preserves user's scrollback)
  *   - Mouse tracking (SGR extended mode)

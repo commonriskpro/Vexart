@@ -1,5 +1,5 @@
 /**
- * Debug overlay system — development tools for TGE apps.
+ * Debug overlay system — development tools for Vexart apps.
  *
  * Provides:
  *   - FPS counter (frames per second, frame time ms)

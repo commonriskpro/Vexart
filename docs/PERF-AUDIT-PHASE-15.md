@@ -25,11 +25,11 @@ Stage                                p50 ms    p95 ms    % of frame
 ──────────────────────────────────────────────────────────────────
 paintBackendNativeReadbackMs         2.96      4.26      45%    (Rust GPU→CPU)
 paintBackendPaintMs                  1.97      2.17      23%    (GPU dispatch)
-layoutMs                             1.11      1.31      14%    (Taffy + writeback)
+layoutMs                             1.11      1.31      14%    (Flexily + writeback)
 paintBackendNativeShmPrepareMs       0.63      0.71       8%    (SHM transport)
 walkTreeMs                           0.40      0.53       6%    (tree walk)
 paintLayerPrepMs                     0.42      0.49       5%    (layer prep)
-layoutComputeMs                      0.37      0.45       5%    (Taffy compute)
+layoutComputeMs                      0.37      0.45       5%    (Flexily compute)
 prepMs                               0.32      0.41       4%    (prep pass)
 layerAssignMs                        0.32      0.41       4%    (layer assign)
 ──────────────────────────────────────────────────────────────────
@@ -267,8 +267,8 @@ export function parseColor(value: string | number): number {
 ### B3-02: scrollHandles Map leak
 
 **File**: `packages/engine/src/loop/scroll.ts:45-46`
-**Waste**: `createScrollHandle(clayId)` adds entries, nothing removes on ScrollView unmount. Only `resetScrollHandles()` clears globally.
-**Fix**: Add `releaseScrollHandle(clayId)` called from ScrollView's `onCleanup`.
+**Waste**: `createScrollHandle(scrollId)` adds entries, nothing removes on ScrollView unmount. Only `resetScrollHandles()` clears globally.
+**Fix**: Add `releaseScrollHandle(scrollId)` called from ScrollView's `onCleanup`.
 **Impact**: Memory leak — bounded by unique scrollIds
 **Effort**: 10 min
 
@@ -379,7 +379,7 @@ export function parseColor(value: string | number): number {
 ### B3-16: Text measurement cache hit verification
 
 **File**: `packages/engine/src/loop/walk-tree.ts:155`
-**Waste**: `measureForClay(content, fontId, fontSize)` called per text node every frame.
+**Waste**: `measureForLayout(content, fontId, fontSize)` called per text node every frame.
 **Fix**: Verify text-layout has LRU cache. If text content/size unchanged since last frame, skip call entirely by stashing last measurement on node.
 **Impact**: 0.05 ms on text-heavy frames
 **Effort**: 10 min

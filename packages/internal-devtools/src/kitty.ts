@@ -37,7 +37,7 @@ export type KittyOSWindow = {
 
 // ── Socket discovery ──
 
-const PREFERRED_SOCKET = "/tmp/kitty-tge"
+const PREFERRED_SOCKET = "/tmp/kitty-vexart"
 
 /** Find the kitty remote control socket. Pattern: /tmp/kitty-{PID} */
 export async function findKittySocket(): Promise<string | null> {
@@ -352,7 +352,7 @@ export async function sendMouseClick(
   const press = `\x1b[<${button};${col};${row}M`
   const release = `\x1b[<${button};${col};${row}m`
   await sendText(socket, windowId, press)
-  // Small delay for TGE to process the press
+  // Small delay for Vexart to process the press
   await Bun.sleep(50)
   await sendText(socket, windowId, release)
 }

@@ -1,8 +1,8 @@
 # Layout and Sizing
 
-> Expanded guide for TGE's layout system. For the quick-reference version, see [developer-guide.md](./developer-guide.md#layout-props).
+> Expanded guide for Vexart's layout system. For the quick-reference version, see [developer-guide.md](./developer-guide.md#layout-props).
 
-TGE uses [Clay](https://github.com/nicbarker/clay), a C layout engine called via Bun FFI, to compute the position and size of every element. Clay implements a subset of CSS flexbox with microsecond performance. This guide covers every layout and sizing concept in depth, with web analogies where helpful.
+Vexart uses Flexily, a pure JavaScript layout engine with a Yoga-compatible API, to compute the position and size of every element. Flexily implements a subset of CSS flexbox with microsecond performance. This guide covers every layout and sizing concept in depth, with web analogies where helpful.
 
 ---
 
@@ -13,9 +13,9 @@ The single most important difference from CSS flexbox:
 | Framework | Default direction |
 |-----------|------------------|
 | CSS       | `row` (horizontal) |
-| TGE       | `column` (vertical) |
+| Vexart       | `column` (vertical) |
 
-Terminals are vertical by nature — logs, menus, forms all stack top-to-bottom. TGE follows that convention.
+Terminals are vertical by nature — logs, menus, forms all stack top-to-bottom. Vexart follows that convention.
 
 ```tsx
 // These are identical — column is the default
@@ -54,20 +54,20 @@ Use `direction="row"` for horizontal layout:
 
 ## Alignment: alignX and alignY
 
-TGE uses `alignX` (horizontal) and `alignY` (vertical) instead of CSS's `justify-content` / `align-items`. The mapping depends on direction.
+Vexart uses `alignX` (horizontal) and `alignY` (vertical) instead of CSS's `justify-content` / `align-items`. The mapping depends on direction.
 
 ### How alignX/alignY map to CSS
 
 In a **column** layout (default):
 
-| TGE prop | CSS equivalent | What it controls |
+| Vexart prop | CSS equivalent | What it controls |
 |----------|---------------|-----------------|
 | `alignX` | `align-items` | Cross-axis (horizontal placement of children) |
 | `alignY` | `justify-content` | Main-axis (vertical distribution of children) |
 
 In a **row** layout:
 
-| TGE prop | CSS equivalent | What it controls |
+| Vexart prop | CSS equivalent | What it controls |
 |----------|---------------|-----------------|
 | `alignX` | `justify-content` | Main-axis (horizontal distribution) |
 | `alignY` | `align-items` | Cross-axis (vertical placement) |
@@ -192,7 +192,7 @@ Specific props override general ones. `paddingLeft` takes precedence over `paddi
 
 ## Sizing Modes
 
-TGE has four sizing modes, controlled via the `width` and `height` props.
+Vexart has four sizing modes, controlled via the `width` and `height` props.
 
 ### Fixed (number)
 
@@ -278,7 +278,7 @@ Relative to the parent's size on that axis.
 <box flexGrow={1} />
 ```
 
-`flexShrink` is accepted for CSS compatibility but rarely needed — Clay handles shrinking automatically when content overflows.
+`flexShrink` is accepted for CSS compatibility but rarely needed — Flexily handles shrinking automatically when content overflows.
 
 ---
 
@@ -309,9 +309,9 @@ Constrain sizing without fixing it.
 
 ## Stretch Emulation
 
-CSS flexbox has `align-items: stretch` — children expand to fill the cross-axis by default. Clay does NOT have stretch. TGE emulates it:
+CSS flexbox has `align-items: stretch` — children expand to fill the cross-axis by default. Flexily does NOT have stretch. Vexart emulates it:
 
-When a child has **no explicit size** on the cross-axis, TGE converts it to `GROW` on that axis. This means children fill the cross-axis automatically, matching the behavior web developers expect.
+When a child has **no explicit size** on the cross-axis, Vexart converts it to `GROW` on that axis. This means children fill the cross-axis automatically, matching the behavior web developers expect.
 
 ```tsx
 // In a row, children with no explicit height stretch to fill the parent height
@@ -341,10 +341,10 @@ If you DON'T want stretch behavior, set an explicit size or use `height="fit"`:
 
 ## Responsive Layout with useTerminalDimensions
 
-Terminal windows resize. TGE automatically re-layouts on resize, but you can also read dimensions reactively:
+Terminal windows resize. Vexart automatically re-layouts on resize, but you can also read dimensions reactively:
 
 ```tsx
-import { useTerminalDimensions, createTerminal, mount } from "tge"
+import { useTerminalDimensions, createTerminal, mount } from "@vexart/engine"
 
 function ResponsiveApp() {
   // Assume terminal is available via context or prop

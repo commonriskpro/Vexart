@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 /**
- * TGE DevTools MCP Server
+ * Vexart DevTools MCP Server
  *
- * An MCP server that gives AI agents direct control over TGE demos:
+ * An MCP server that gives AI agents direct control over Vexart demos:
  * - Launch demos in Kitty terminal windows
  * - Capture screenshots and return them as images
  * - Send keyboard/mouse inputs (clicks, drags, scrolls)
@@ -77,7 +77,7 @@ async function getSocket(): Promise<string> {
     throw new Error(
       `Could not auto-launch kitty: ${e.message}\n` +
       "Launch kitty manually with:\n" +
-      "  kitty --override allow_remote_control=yes --override 'listen_on=unix:/tmp/kitty-tge'"
+      "  kitty --override allow_remote_control=yes --override 'listen_on=unix:/tmp/kitty-vexart'"
     )
   }
 }
@@ -85,20 +85,20 @@ async function getSocket(): Promise<string> {
 // ── MCP Server ──
 
 const server = new McpServer(
-  { name: "tge-devtools", version: "0.0.1" },
+  { name: "vexart-devtools", version: "0.0.1" },
   {
     capabilities: { logging: {} },
     instructions: [
-      "TGE DevTools — control TGE terminal demos from the AI agent.",
+      "Vexart DevTools — control Vexart terminal demos from the AI agent.",
       "",
       "Workflow:",
-      "1. tge_launch — start a demo in a new kitty tab",
-      "2. tge_screenshot — see what's on screen (returns image)",
-      "3. tge_send_key / tge_click / tge_drag / tge_scroll — interact",
-      "4. tge_inspect — get layout tree from running demo (requires IPC)",
-      "5. tge_stop — kill the demo",
+      "1. vexart_launch — start a demo in a new kitty tab",
+      "2. vexart_screenshot — see what's on screen (returns image)",
+      "3. vexart_send_key / vexart_click / vexart_drag / vexart_scroll — interact",
+      "4. vexart_inspect — get layout tree from running demo (requires IPC)",
+      "5. vexart_stop — kill the demo",
       "",
-      "The tge_status tool shows all running demos and kitty connection info.",
+      "The vexart_status tool shows all running demos and kitty connection info.",
       "",
       "Mouse coordinates are in TERMINAL CELLS (col, row), not pixels.",
       "To find where to click, take a screenshot and estimate cell position.",
@@ -107,12 +107,12 @@ const server = new McpServer(
   }
 )
 
-// ── Tool: tge_status ──
+// ── Tool: vexart_status ──
 
 server.registerTool(
-  "tge_status",
+  "vexart_status",
   {
-    title: "TGE Status",
+    title: "Vexart Status",
     description: "Show kitty connection status, running demos, and available windows",
     inputSchema: z.object({}),
   },
@@ -154,18 +154,18 @@ server.registerTool(
   }
 )
 
-// ── Tool: tge_launch ──
+// ── Tool: vexart_launch ──
 
 server.registerTool(
-  "tge_launch",
+  "vexart_launch",
   {
-    title: "Launch TGE Demo",
+    title: "Launch Vexart Demo",
     description:
-      "Launch a TGE demo script in a new kitty tab. " +
+      "Launch a Vexart demo script in a new kitty tab. " +
       "Pass the script path relative to the vexart project root (e.g. 'examples/hello.tsx'). " +
       "Returns the demo name for use with other tools.",
     inputSchema: z.object({
-      script: z.string().describe("Path to the TGE script (e.g. 'examples/hello.tsx')"),
+      script: z.string().describe("Path to the Vexart script (e.g. 'examples/hello.tsx')"),
       name: z.string().optional().describe("Name for this demo instance (default: script basename)"),
       env: z.record(z.string(), z.string()).optional().describe("Extra environment variables"),
     }),
@@ -173,7 +173,7 @@ server.registerTool(
   async ({ script, name, env }) => {
     try {
       const socket = await getSocket()
-      const projectRoot = process.env.TGE_PROJECT_ROOT || "/Users/dev/vexart"
+      const projectRoot = process.env.VEXART_PROJECT_ROOT || "/Users/dev/vexart"
 
       // Resolve script path
       const scriptPath = script.startsWith("/") ? script : `${projectRoot}/${script}`
@@ -198,7 +198,7 @@ server.registerTool(
       const cmd = ["bun", "--conditions=browser", "run", scriptPath]
 
       const windowId = await launchTab(socket, {
-        title: `TGE: ${demoName}`,
+        title: `Vexart: ${demoName}`,
         cwd: projectRoot,
         cmd,
         env,
@@ -238,8 +238,8 @@ server.registerTool(
             `Script: ${script}`,
             `PID: ${pid}`,
             ``,
-            `Use tge_screenshot to see the output.`,
-            `Use tge_stop with name="${demoName}" to kill it.`,
+            `Use vexart_screenshot to see the output.`,
+            `Use vexart_stop with name="${demoName}" to kill it.`,
           ].join("\n"),
         }],
       }
@@ -249,18 +249,18 @@ server.registerTool(
   }
 )
 
-// ── Tool: tge_screenshot ──
+// ── Tool: vexart_screenshot ──
 
 server.registerTool(
-  "tge_screenshot",
+  "vexart_screenshot",
   {
-    title: "Screenshot TGE Demo",
+    title: "Screenshot Vexart Demo",
     description:
-      "Capture a screenshot of the kitty window running a TGE demo. " +
+      "Capture a screenshot of the kitty window running a Vexart demo. " +
       "Returns the image directly so you can see what's on screen. " +
       "If no demo name given, captures the most recently launched demo.",
     inputSchema: z.object({
-      name: z.string().optional().describe("Demo name (from tge_launch). If omitted, captures the active kitty window."),
+      name: z.string().optional().describe("Demo name (from vexart_launch). If omitted, captures the active kitty window."),
       delay: z.number().optional().describe("Delay in ms before capturing (default: 200, useful for animations)"),
     }),
   },
@@ -279,7 +279,7 @@ server.registerTool(
 
       // Find the CGWindowID for the kitty OS window
       const cgId = await findCGWindowId({
-        title: name ? `TGE: ${name}` : undefined,
+        title: name ? `Vexart: ${name}` : undefined,
       })
 
       if (!cgId) {
@@ -289,7 +289,7 @@ server.registerTool(
         }
       }
 
-      const outPath = `/tmp/tge-screenshot-${Date.now()}.png`
+      const outPath = `/tmp/vexart-screenshot-${Date.now()}.png`
       await screenshot(cgId, outPath)
 
       // Read and return as base64 image
@@ -315,19 +315,19 @@ server.registerTool(
   }
 )
 
-// ── Tool: tge_send_key ──
+// ── Tool: vexart_send_key ──
 
 server.registerTool(
-  "tge_send_key",
+  "vexart_send_key",
   {
-    title: "Send Key to TGE Demo",
+    title: "Send Key to Vexart Demo",
     description:
-      "Send keyboard input to a running TGE demo. " +
+      "Send keyboard input to a running Vexart demo. " +
       "Accepts kitty key names: 'escape', 'enter', 'tab', 'backspace', 'up', 'down', 'left', 'right', " +
       "'a'-'z', '0'-'9', 'f1'-'f12', 'ctrl+c', 'ctrl+d', etc. " +
-      "For plain text, use tge_send_text instead.",
+      "For plain text, use vexart_send_text instead.",
     inputSchema: z.object({
-      name: z.string().describe("Demo name (from tge_launch)"),
+      name: z.string().describe("Demo name (from vexart_launch)"),
       key: z.string().describe("Key to send (e.g. 'escape', 'enter', 'tab', 'ctrl+c')"),
     }),
   },
@@ -336,7 +336,7 @@ server.registerTool(
       const demo = demos.get(name)
       if (!demo) {
         return {
-          content: [{ type: "text" as const, text: `No demo named "${name}". Use tge_status to see running demos.` }],
+          content: [{ type: "text" as const, text: `No demo named "${name}". Use vexart_status to see running demos.` }],
           isError: true,
         }
       }
@@ -348,13 +348,13 @@ server.registerTool(
   }
 )
 
-// ── Tool: tge_send_text ──
+// ── Tool: vexart_send_text ──
 
 server.registerTool(
-  "tge_send_text",
+  "vexart_send_text",
   {
-    title: "Send Text to TGE Demo",
-    description: "Send raw text to a running TGE demo (as if typed).",
+    title: "Send Text to Vexart Demo",
+    description: "Send raw text to a running Vexart demo (as if typed).",
     inputSchema: z.object({
       name: z.string().describe("Demo name"),
       text: z.string().describe("Text to send (use \\n for newline)"),
@@ -377,12 +377,12 @@ server.registerTool(
   }
 )
 
-// ── Tool: tge_click ──
+// ── Tool: vexart_click ──
 
 server.registerTool(
-  "tge_click",
+  "vexart_click",
   {
-    title: "Click in TGE Demo",
+    title: "Click in Vexart Demo",
     description:
       "Send a mouse click at terminal cell coordinates (col, row). " +
       "Col 1 and Row 1 are the top-left corner. " +
@@ -412,12 +412,12 @@ server.registerTool(
   }
 )
 
-// ── Tool: tge_drag ──
+// ── Tool: vexart_drag ──
 
 server.registerTool(
-  "tge_drag",
+  "vexart_drag",
   {
-    title: "Drag in TGE Demo",
+    title: "Drag in Vexart Demo",
     description:
       "Send a mouse drag from (startCol, startRow) to (endCol, endRow). " +
       "Generates press → motion → release events. Useful for dragging panels, sliders, etc.",
@@ -452,12 +452,12 @@ server.registerTool(
   }
 )
 
-// ── Tool: tge_scroll ──
+// ── Tool: vexart_scroll ──
 
 server.registerTool(
-  "tge_scroll",
+  "vexart_scroll",
   {
-    title: "Scroll in TGE Demo",
+    title: "Scroll in Vexart Demo",
     description: "Send mouse scroll events at the given position.",
     inputSchema: z.object({
       name: z.string().describe("Demo name"),
@@ -484,13 +484,13 @@ server.registerTool(
   }
 )
 
-// ── Tool: tge_stop ──
+// ── Tool: vexart_stop ──
 
 server.registerTool(
-  "tge_stop",
+  "vexart_stop",
   {
-    title: "Stop TGE Demo",
-    description: "Stop a running TGE demo by closing its kitty window.",
+    title: "Stop Vexart Demo",
+    description: "Stop a running Vexart demo by closing its kitty window.",
     inputSchema: z.object({
       name: z.string().describe("Demo name to stop"),
     }),
@@ -519,10 +519,10 @@ server.registerTool(
   }
 )
 
-// ── Tool: tge_get_text ──
+// ── Tool: vexart_get_text ──
 
 server.registerTool(
-  "tge_get_text",
+  "vexart_get_text",
   {
     title: "Get Terminal Text",
     description: "Get the text content visible in the demo's terminal window (for reading logs/errors).",
@@ -547,10 +547,10 @@ server.registerTool(
   }
 )
 
-// ── Tool: tge_resize ──
+// ── Tool: vexart_resize ──
 
 server.registerTool(
-  "tge_resize",
+  "vexart_resize",
   {
     title: "Resize Kitty Window",
     description: "Resize the kitty OS window for consistent screenshot dimensions.",
@@ -576,8 +576,8 @@ server.registerTool(
 async function main() {
   const transport = new StdioServerTransport()
   await server.connect(transport)
-  console.error("TGE DevTools MCP server running on stdio")
-  console.error(`Project root: ${process.env.TGE_PROJECT_ROOT || "/Users/dev/vexart"}`)
+  console.error("Vexart DevTools MCP server running on stdio")
+  console.error(`Project root: ${process.env.VEXART_PROJECT_ROOT || "/Users/dev/vexart"}`)
 
   // Ensure kitty is running at startup
   try {

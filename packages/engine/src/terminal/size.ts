@@ -2,7 +2,7 @@
  * Terminal size detection and resize handling.
  *
  * Provides terminal dimensions in both cells and pixels.
- * Pixel dimensions are essential for TGE — they determine
+ * Pixel dimensions are essential for Vexart — they determine
  * the resolution of the pixel buffer.
  *
  * Cell pixel size (cellWidth, cellHeight) is derived from:

@@ -1,5 +1,5 @@
 /**
- * Plugin slot system — extensibility for TGE applications.
+ * Plugin slot system — extensibility for Vexart applications.
  *
  * Plugins can register components to render in named "slots" throughout the UI.
  * The host app declares slots, and plugins fill them.

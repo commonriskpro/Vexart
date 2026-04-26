@@ -9,7 +9,7 @@
  *
  * ## Glyph ranges covered
  *
- * Range selection principle: cover everything TGE UI components actually
+ * Range selection principle: cover everything Vexart UI components actually
  * render — Latin text, punctuation, UI symbols, geometric shapes, arrows,
  * dingbats — without blowing up the GPU texture budget.
  *
