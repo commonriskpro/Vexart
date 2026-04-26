@@ -1,5 +1,6 @@
 import type { CanvasContext, DrawCmd } from "./canvas"
 import type { TGENode } from "./node"
+import { hasBackdropEffect } from "../loop/predicates"
 
 // ── RenderCommand type ──
 // Commands are produced by layout-adapter.endLayout() and carry nodeId for
@@ -343,16 +344,12 @@ export function getTextRenderInputs(cmd: RenderCommand, textMetaMap: Map<number,
   }
 }
 
-function roundBoundsValue(value: number) {
-  return Math.round(value)
-}
-
 function createRenderBounds(x: number, y: number, width: number, height: number): RenderBounds {
   return {
-    x: roundBoundsValue(x),
-    y: roundBoundsValue(y),
-    width: Math.max(0, roundBoundsValue(width)),
-    height: Math.max(0, roundBoundsValue(height)),
+    x: Math.round(x),
+    y: Math.round(y),
+    width: Math.max(0, Math.round(width)),
+    height: Math.max(0, Math.round(height)),
   }
 }
 
@@ -381,17 +378,6 @@ function getCurrentClipBounds(stack: ClipStackEntry[]) {
     if (!bounds) return null
   }
   return bounds
-}
-
-function hasBackdropEffect(effect: EffectConfig) {
-  return effect.backdropBlur !== undefined ||
-    effect.backdropBrightness !== undefined ||
-    effect.backdropContrast !== undefined ||
-    effect.backdropSaturate !== undefined ||
-    effect.backdropGrayscale !== undefined ||
-    effect.backdropInvert !== undefined ||
-    effect.backdropSepia !== undefined ||
-    effect.backdropHueRotate !== undefined
 }
 
 function getBackdropFilterParams(effect: EffectConfig): BackdropFilterParams {

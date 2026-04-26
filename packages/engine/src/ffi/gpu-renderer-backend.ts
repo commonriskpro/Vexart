@@ -278,21 +278,6 @@ function copyGpuTargetRegionToImage(
   return { handle, width: region.width, height: region.height }
 }
 
-function createEmptyGpuImage(
-  vctx: bigint,
-  width: number,
-  height: number,
-): GpuRasterImage {
-  const target = vexartCompositeTargetCreate(vctx, width, height)
-  try {
-    vexartCompositeTargetBeginLayer(vctx, target, 0, 0x00000000)
-    vexartCompositeTargetEndLayer(vctx, target)
-    return copyGpuTargetRegionToImage(vctx, target, { x: 0, y: 0, width, height })
-  } finally {
-    vexartCompositeTargetDestroy(vctx, target)
-  }
-}
-
 // ── Glyph instance type (kept for type-compatibility inside getGlyphAtlas) ─
 type WgpuCanvasGlyphInstance = {
   x: number; y: number; w: number; h: number
@@ -366,18 +351,6 @@ function vexartRemoveImage(ctx: bigint, handle: bigint) {
   if (!handle) return
   const { symbols } = openVexartLibrary()
   symbols.vexart_paint_remove_image(ctx, handle)
-}
-
-/** Readback RGBA from vexart context default target. Returns Uint8Array or null. */
-function vexartReadbackRgba(ctx: bigint, width: number, height: number): Uint8Array | null {
-  const { symbols } = openVexartLibrary()
-  const size = width * height * 4
-  const dst = new Uint8Array(size)
-  const result = symbols.vexart_composite_readback_rgba(
-    ctx, 0n /* target=0: context default */, ptr(dst), size, ptr(_flushStatsBuf)
-  ) as number
-  if (result !== 0) return null
-  return dst
 }
 
 /**
@@ -893,9 +866,6 @@ function opBounds(op: RenderGraphOp, width: number, height: number) {
 
 /** @public */
 export function createGpuRendererBackend(): GpuRendererBackend {
-  // Phase 2b: GPU is always available via libvexart — no bridge probe needed.
-  const gpuAvailable = true
-
   // vexart context handle — allocated on first use.
   // Phase 2b: used for all vexart_paint_dispatch + vexart_composite_* calls.
   let _vexartCtx: bigint | null = null
@@ -1025,148 +995,111 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   const backdropSourceBytes = (record: BackdropSourceRecord) => (record.bounds.right - record.bounds.left) * (record.bounds.bottom - record.bounds.top) * 4
   const backdropSpriteBytes = (record: BackdropSpriteRecord) => record.width * record.height * 4
 
-  const setLayerTargetRecord = (key: string, record: TargetRecord) => {
-    const existing = layerTargets.get(key)
+  const upsertCacheRecord = <K, R>(
+    cache: Map<K, R>,
+    key: K,
+    record: R,
+    countKey: keyof GpuRendererBackendCacheStats,
+    bytesKey: keyof GpuRendererBackendCacheStats,
+    bytesOf: (record: R) => number,
+  ) => {
+    const existing = cache.get(key)
     if (existing) {
-      cacheStats.layerTargetCount -= 1
-      cacheStats.layerTargetBytes -= layerTargetBytes(existing)
+      cacheStats[countKey] -= 1
+      cacheStats[bytesKey] -= bytesOf(existing)
     }
-    layerTargets.set(key, record)
-    cacheStats.layerTargetCount += 1
-    cacheStats.layerTargetBytes += layerTargetBytes(record)
+    cache.set(key, record)
+    cacheStats[countKey] += 1
+    cacheStats[bytesKey] += bytesOf(record)
+  }
+
+  const deleteCacheRecord = <K, R>(
+    cache: Map<K, R>,
+    key: K,
+    countKey: keyof GpuRendererBackendCacheStats,
+    bytesKey: keyof GpuRendererBackendCacheStats,
+    bytesOf: (record: R) => number,
+  ) => {
+    const existing = cache.get(key)
+    if (!existing) return null
+    cache.delete(key)
+    cacheStats[countKey] -= 1
+    cacheStats[bytesKey] -= bytesOf(existing)
+    return existing
+  }
+
+  const clearCacheRecords = <K, R>(
+    cache: Map<K, R>,
+    countKey: keyof GpuRendererBackendCacheStats,
+    bytesKey: keyof GpuRendererBackendCacheStats,
+  ) => {
+    cache.clear()
+    cacheStats[countKey] = 0
+    cacheStats[bytesKey] = 0
+  }
+
+  const setLayerTargetRecord = (key: string, record: TargetRecord) => {
+    upsertCacheRecord(layerTargets, key, record, "layerTargetCount", "layerTargetBytes", layerTargetBytes)
   }
 
   const deleteLayerTargetRecord = (key: string) => {
-    const existing = layerTargets.get(key)
-    if (!existing) return null
-    layerTargets.delete(key)
-    cacheStats.layerTargetCount -= 1
-    cacheStats.layerTargetBytes -= layerTargetBytes(existing)
-    return existing
+    return deleteCacheRecord(layerTargets, key, "layerTargetCount", "layerTargetBytes", layerTargetBytes)
   }
 
   const setGlyphAtlasRecord = (key: string, record: GlyphAtlasRecord) => {
-    const existing = glyphAtlases.get(key)
-    if (existing) {
-      cacheStats.glyphAtlasCount -= 1
-      cacheStats.glyphAtlasBytes -= glyphAtlasBytes(existing)
-    }
-    glyphAtlases.set(key, record)
-    cacheStats.glyphAtlasCount += 1
-    cacheStats.glyphAtlasBytes += glyphAtlasBytes(record)
+    upsertCacheRecord(glyphAtlases, key, record, "glyphAtlasCount", "glyphAtlasBytes", glyphAtlasBytes)
   }
 
   const deleteGlyphAtlasRecord = (key: string) => {
-    const existing = glyphAtlases.get(key)
-    if (!existing) return null
-    glyphAtlases.delete(key)
-    cacheStats.glyphAtlasCount -= 1
-    cacheStats.glyphAtlasBytes -= glyphAtlasBytes(existing)
-    return existing
+    return deleteCacheRecord(glyphAtlases, key, "glyphAtlasCount", "glyphAtlasBytes", glyphAtlasBytes)
   }
 
   const setCanvasSpriteRecord = (key: string, record: CanvasSpriteRecord) => {
-    const existing = canvasSpriteCache.get(key)
-    if (existing) {
-      cacheStats.canvasSpriteCount -= 1
-      cacheStats.canvasSpriteBytes -= canvasSpriteBytes(existing)
-    }
-    canvasSpriteCache.set(key, record)
-    cacheStats.canvasSpriteCount += 1
-    cacheStats.canvasSpriteBytes += canvasSpriteBytes(record)
+    upsertCacheRecord(canvasSpriteCache, key, record, "canvasSpriteCount", "canvasSpriteBytes", canvasSpriteBytes)
   }
 
   const deleteCanvasSpriteRecord = (key: string) => {
-    const existing = canvasSpriteCache.get(key)
-    if (!existing) return null
-    canvasSpriteCache.delete(key)
-    cacheStats.canvasSpriteCount -= 1
-    cacheStats.canvasSpriteBytes -= canvasSpriteBytes(existing)
-    return existing
+    return deleteCacheRecord(canvasSpriteCache, key, "canvasSpriteCount", "canvasSpriteBytes", canvasSpriteBytes)
   }
 
   const clearCanvasSpriteRecords = () => {
-    canvasSpriteCache.clear()
-    cacheStats.canvasSpriteCount = 0
-    cacheStats.canvasSpriteBytes = 0
+    clearCacheRecords(canvasSpriteCache, "canvasSpriteCount", "canvasSpriteBytes")
   }
 
   const setTransformSpriteRecord = (key: string, record: TransformSpriteRecord) => {
-    const existing = transformSpriteCache.get(key)
-    if (existing) {
-      cacheStats.transformSpriteCount -= 1
-      cacheStats.transformSpriteBytes -= transformSpriteBytes(existing)
-    }
-    transformSpriteCache.set(key, record)
-    cacheStats.transformSpriteCount += 1
-    cacheStats.transformSpriteBytes += transformSpriteBytes(record)
+    upsertCacheRecord(transformSpriteCache, key, record, "transformSpriteCount", "transformSpriteBytes", transformSpriteBytes)
   }
 
   const deleteTransformSpriteRecord = (key: string) => {
-    const existing = transformSpriteCache.get(key)
-    if (!existing) return null
-    transformSpriteCache.delete(key)
-    cacheStats.transformSpriteCount -= 1
-    cacheStats.transformSpriteBytes -= transformSpriteBytes(existing)
-    return existing
+    return deleteCacheRecord(transformSpriteCache, key, "transformSpriteCount", "transformSpriteBytes", transformSpriteBytes)
   }
 
   const clearTransformSpriteRecords = () => {
-    transformSpriteCache.clear()
-    cacheStats.transformSpriteCount = 0
-    cacheStats.transformSpriteBytes = 0
+    clearCacheRecords(transformSpriteCache, "transformSpriteCount", "transformSpriteBytes")
   }
 
   const setBackdropSourceRecord = (key: string, record: BackdropSourceRecord) => {
-    const existing = backdropSourceCache.get(key)
-    if (existing) {
-      cacheStats.backdropSourceCount -= 1
-      cacheStats.backdropSourceBytes -= backdropSourceBytes(existing)
-    }
-    backdropSourceCache.set(key, record)
-    cacheStats.backdropSourceCount += 1
-    cacheStats.backdropSourceBytes += backdropSourceBytes(record)
+    upsertCacheRecord(backdropSourceCache, key, record, "backdropSourceCount", "backdropSourceBytes", backdropSourceBytes)
   }
 
   const deleteBackdropSourceRecord = (key: string) => {
-    const existing = backdropSourceCache.get(key)
-    if (!existing) return null
-    backdropSourceCache.delete(key)
-    cacheStats.backdropSourceCount -= 1
-    cacheStats.backdropSourceBytes -= backdropSourceBytes(existing)
-    return existing
+    return deleteCacheRecord(backdropSourceCache, key, "backdropSourceCount", "backdropSourceBytes", backdropSourceBytes)
   }
 
   const clearBackdropSourceRecords = () => {
-    backdropSourceCache.clear()
-    cacheStats.backdropSourceCount = 0
-    cacheStats.backdropSourceBytes = 0
+    clearCacheRecords(backdropSourceCache, "backdropSourceCount", "backdropSourceBytes")
   }
 
   const setBackdropSpriteRecord = (key: string, record: BackdropSpriteRecord) => {
-    const existing = backdropSpriteCache.get(key)
-    if (existing) {
-      cacheStats.backdropSpriteCount -= 1
-      cacheStats.backdropSpriteBytes -= backdropSpriteBytes(existing)
-    }
-    backdropSpriteCache.set(key, record)
-    cacheStats.backdropSpriteCount += 1
-    cacheStats.backdropSpriteBytes += backdropSpriteBytes(record)
+    upsertCacheRecord(backdropSpriteCache, key, record, "backdropSpriteCount", "backdropSpriteBytes", backdropSpriteBytes)
   }
 
   const deleteBackdropSpriteRecord = (key: string) => {
-    const existing = backdropSpriteCache.get(key)
-    if (!existing) return null
-    backdropSpriteCache.delete(key)
-    cacheStats.backdropSpriteCount -= 1
-    cacheStats.backdropSpriteBytes -= backdropSpriteBytes(existing)
-    return existing
+    return deleteCacheRecord(backdropSpriteCache, key, "backdropSpriteCount", "backdropSpriteBytes", backdropSpriteBytes)
   }
 
   const clearBackdropSpriteRecords = () => {
-    backdropSpriteCache.clear()
-    cacheStats.backdropSpriteCount = 0
-    cacheStats.backdropSpriteBytes = 0
+    clearCacheRecords(backdropSpriteCache, "backdropSpriteCount", "backdropSpriteBytes")
   }
 
   const recordCurrentFrameLayer = (layer: RenderedLayerRecord) => {
@@ -1530,83 +1463,47 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     // a graph buffer per cmd_kind, then calls vexart_paint_dispatch once.
     const vctx = getVexartCtx()
 
-    const flushShapeRects = () => {
-      if (shapeRects.length === 0) return
-      // Dispatch via vexart_paint_dispatch (cmd_kind=1: BridgeShapeRectInstance)
-      const instances = new Uint8Array(shapeRects.length * 80)
-      for (let i = 0; i < shapeRects.length; i++) {
-        const r = shapeRects[i]
-        instances.set(packShapeRectInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.fill ?? 0, r.stroke ?? 0, r.strokeWidth), i * 80)
+    const flushInstances = <T>(
+      items: T[],
+      cmdKind: number,
+      stride: number,
+      pack: (item: T) => Uint8Array,
+    ) => {
+      if (items.length === 0) return false
+      const instances = new Uint8Array(items.length * stride)
+      for (let i = 0; i < items.length; i++) {
+        instances.set(pack(items[i]), i * stride)
       }
-      flushVexartBatch(vctx, 1, instances, targetHandle)
-      shapeRects.length = 0
+      flushVexartBatch(vctx, cmdKind, instances, targetHandle)
+      items.length = 0
       first = false
       targetMutationVersion += 1
+      return true
+    }
+
+    const flushShapeRects = () => {
+      // Dispatch via vexart_paint_dispatch (cmd_kind=1: BridgeShapeRectInstance)
+      flushInstances(shapeRects, 1, 80, (r) => packShapeRectInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.fill ?? 0, r.stroke ?? 0, r.strokeWidth))
     }
     const flushShapeRectCorners = () => {
-      if (shapeRectCorners.length === 0) return
       // Dispatch via vexart_paint_dispatch (cmd_kind=2: BridgeShapeRectCornersInstance)
-      const instances = new Uint8Array(shapeRectCorners.length * 96)
-      for (let i = 0; i < shapeRectCorners.length; i++) {
-        const r = shapeRectCorners[i]
-        instances.set(packShapeRectCornersInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radii, r.fill ?? 0, r.stroke ?? 0, r.strokeWidth), i * 96)
-      }
-      flushVexartBatch(vctx, 2, instances, targetHandle)
-      shapeRectCorners.length = 0
-      first = false
-      targetMutationVersion += 1
+      flushInstances(shapeRectCorners, 2, 96, (r) => packShapeRectCornersInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radii, r.fill ?? 0, r.stroke ?? 0, r.strokeWidth))
     }
     const flushLinearGradients = () => {
-      if (linearGradients.length === 0) return
       // Dispatch via vexart_paint_dispatch (cmd_kind=12: BridgeLinearGradientInstance)
-      const instances = new Uint8Array(linearGradients.length * 80)
-      for (let i = 0; i < linearGradients.length; i++) {
-        const r = linearGradients[i]
-        instances.set(packLinearGradientInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.from, r.to, r.dirX, r.dirY), i * 80)
-      }
-      flushVexartBatch(vctx, 12, instances, targetHandle)
-      linearGradients.length = 0
-      first = false
-      targetMutationVersion += 1
+      flushInstances(linearGradients, 12, 80, (r) => packLinearGradientInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.from, r.to, r.dirX, r.dirY))
     }
     const flushRadialGradients = () => {
-      if (radialGradients.length === 0) return
       // Dispatch via vexart_paint_dispatch (cmd_kind=13: BridgeRadialGradientInstance)
-      const instances = new Uint8Array(radialGradients.length * 80)
-      for (let i = 0; i < radialGradients.length; i++) {
-        const r = radialGradients[i]
-        instances.set(packRadialGradientInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.from, r.to), i * 80)
-      }
-      flushVexartBatch(vctx, 13, instances, targetHandle)
-      radialGradients.length = 0
-      first = false
-      targetMutationVersion += 1
+      flushInstances(radialGradients, 13, 80, (r) => packRadialGradientInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.from, r.to))
     }
     const flushGlows = () => {
-      if (glows.length === 0) return
       // Dispatch via vexart_paint_dispatch (cmd_kind=6: BridgeGlowInstance)
-      const instances = new Uint8Array(glows.length * 48)
-      for (let i = 0; i < glows.length; i++) {
-        const g = glows[i]
-        instances.set(packGlowInstance(g.x, g.y, g.w, g.h, g.color, g.intensity ?? 80), i * 48)
-      }
-      flushVexartBatch(vctx, 6, instances, targetHandle)
-      glows.length = 0
-      first = false
-      targetMutationVersion += 1
+      flushInstances(glows, 6, 48, (g) => packGlowInstance(g.x, g.y, g.w, g.h, g.color, g.intensity ?? 80))
     }
     const flushShadows = () => {
-      if (shadows.length === 0) return
       // Dispatch via vexart_paint_dispatch (cmd_kind=20: BridgeShadowInstance)
-      const instances = new Uint8Array(shadows.length * 80)
-      for (let i = 0; i < shadows.length; i++) {
-        const s = shadows[i]
-        instances.set(packShadowInstance(s.x, s.y, s.w, s.h, s.color, s.radii, s.boxW, s.boxH, s.offsetX, s.offsetY, s.blur), i * 80)
-      }
-      flushVexartBatch(vctx, 20, instances, targetHandle)
-      shadows.length = 0
-      first = false
-      targetMutationVersion += 1
+      flushInstances(shadows, 20, 80, (s) => packShadowInstance(s.x, s.y, s.w, s.h, s.color, s.radii, s.boxW, s.boxH, s.offsetX, s.offsetY, s.blur))
     }
     const flushImages = () => {
       if (imageGroups.size === 0) return
@@ -2500,7 +2397,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       currentFrameLayers = []
       activeLayerKeys.clear()
       suppressFinalPresentation = false
-      if (!gpuAvailable || !ctx.useLayerCompositing) {
+      if (!ctx.useLayerCompositing) {
         lastStrategy = null
         lastNativeFramePlan = null
         framesSinceStrategyChange = 0
@@ -2574,10 +2471,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       return { strategy: lastStrategy, nativePlan: lastNativeFramePlan }
     },
     paint(ctx) {
-      if (!gpuAvailable) {
-        failGpuOnly("GPU backend unavailable; CPU fallback was removed")
-      }
-
       const unsupported = getUnsupportedGpuOps(ctx.graph.ops)
       if (unsupported.length > 0) {
         const counts = new Map<string, number>()
@@ -2694,7 +2587,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       return { output: "kitty-payload", strategy: lastStrategy, kittyPayload: result.rawLayer ?? undefined }
     },
     reuseLayer(ctx) {
-      if (!gpuAvailable) return false
       const record = layerTargets.get(ctx.layer.key)
       if (!record) return false
       activeLayerKeys.add(ctx.layer.key)
@@ -2721,7 +2613,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     },
     endFrame(ctx) {
       currentFrame = null
-      if (!gpuAvailable || !ctx.useLayerCompositing) return { output: "none", strategy: lastStrategy }
+      if (!ctx.useLayerCompositing) return { output: "none", strategy: lastStrategy }
       if (suppressFinalPresentation) {
         pruneLayerTargets()
         return { output: "none", strategy: lastStrategy }

@@ -300,6 +300,22 @@ function writeLayoutBack(s: CompositeFrameState) {
   })
 }
 
+function runLayoutPass(s: CompositeFrameState, profile?: FrameProfile) {
+  resetWalkAccumulators(s)
+  s.layoutAdapter.beginLayout()
+  const walkStart = profile ? performance.now() : 0
+  walkTreeOnce(s)
+  if (profile) profile.walkTreeMs = performance.now() - walkStart
+  const layoutComputeStart = profile ? performance.now() : 0
+  const commands = s.layoutAdapter.endLayout()
+  if (profile) profile.layoutComputeMs = performance.now() - layoutComputeStart
+  const layoutWritebackStart = profile ? performance.now() : 0
+  writeLayoutBack(s)
+  applyScrollOffsets(commands, s)
+  if (profile) profile.layoutWritebackMs = performance.now() - layoutWritebackStart
+  return commands
+}
+
 /**
  * After layout writeback, apply TS-side scroll offsets to:
  *   1. Render commands (so GPU renderer draws at scrolled positions)
@@ -676,20 +692,9 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   }
 
   // ── Step 2: Walk tree → Flexily layout ──
-  resetWalkAccumulators(s)
-  s.layoutAdapter.beginLayout()
-  const walkStart = profile ? performance.now() : 0
-  walkTreeOnce(s)
-  if (profile) profile.walkTreeMs = performance.now() - walkStart
-  const layoutComputeStart = profile ? performance.now() : 0
-  let commands = s.layoutAdapter.endLayout()
-  if (profile) profile.layoutComputeMs = performance.now() - layoutComputeStart
-  const layoutWritebackStart = profile ? performance.now() : 0
-  writeLayoutBack(s)
+  let commands = runLayoutPass(s, profile)
 
-  // ── Step 3: Write layout back + interaction states ──
-  applyScrollOffsets(commands, s)
-  if (profile) profile.layoutWritebackMs = performance.now() - layoutWritebackStart
+  // ── Step 3: Interaction states ──
   const interactionStart = profile ? performance.now() : 0
   const interaction = updateInteractiveStates(s)
   if (profile) profile.interactionMs = performance.now() - interactionStart
@@ -700,12 +705,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   // appears on an unrelated repaint (for example terminal resize).
   if (interaction.changed || interaction.hadClick) {
     const relayoutStart = profile ? performance.now() : 0
-    resetWalkAccumulators(s)
-    s.layoutAdapter.beginLayout()
-    walkTreeOnce(s)
-    commands = s.layoutAdapter.endLayout()
-    writeLayoutBack(s)
-    applyScrollOffsets(commands, s)
+    commands = runLayoutPass(s)
     if (profile) profile.relayoutMs = performance.now() - relayoutStart
   }
 

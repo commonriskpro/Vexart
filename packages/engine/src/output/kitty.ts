@@ -424,6 +424,35 @@ function transmitFile(
 
 // ── Direct Transmission (t=d) — existing chunked base64 ──
 
+function writeDirectChunks(
+  write: (data: string) => void,
+  meta: string,
+  payload: Uint8Array,
+  sourceBytes: number,
+  kind: "transmit" | "patch",
+  middleMeta: string,
+  finalMeta: string,
+) {
+  const b64 = Buffer.from(payload).toString("base64")
+  const chunks = chunk(b64)
+  if (chunks.length === 0) return
+
+  if (chunks.length === 1) {
+    recordKittyStats("direct", kind, sourceBytes, meta.length + chunks[0].length + 16)
+    write(`\x1b_G${meta};${chunks[0]}\x1b\\`)
+    return
+  }
+
+  recordKittyStats("direct", kind, sourceBytes, meta.length + b64.length + chunks.length * 12)
+  write(`\x1b_G${meta},m=1;${chunks[0]}\x1b\\`)
+  for (let i = 1; i < chunks.length - 1; i++) {
+    const continuation = middleMeta ? `${middleMeta},m=1` : "m=1"
+    write(`\x1b_G${continuation};${chunks[i]}\x1b\\`)
+  }
+  const final = finalMeta ? `${finalMeta},m=0` : "m=0"
+  write(`\x1b_G${final};${chunks[chunks.length - 1]}\x1b\\`)
+}
+
 function transmitDirect(
   write: (data: string) => void,
   buf: PixelBuffer,
@@ -436,28 +465,42 @@ function transmitDirect(
   compress: boolean,
 ) {
   const payload = compress ? deflateSync(data) : data
-  const b64 = Buffer.from(payload).toString("base64")
-  const chunks = chunk(b64)
-  if (chunks.length === 0) return
-
   let meta = `a=${action},f=${format},i=${id},s=${buf.width},v=${buf.height},q=2`
   if (action === "T") meta += `,C=1`
   if (compress) meta += `,o=z`
   if (z !== undefined) meta += `,z=${z}`
   if (placementId !== undefined) meta += `,p=${placementId}`
+  writeDirectChunks(write, meta, payload, data.length, "transmit", "", "")
+}
 
-  if (chunks.length === 1) {
-    recordKittyStats("direct", "transmit", data.length, meta.length + chunks[0].length + 16)
-    write(`\x1b_G${meta};${chunks[0]}\x1b\\`)
-    return
+function transmitBuffer(
+  write: (data: string) => void,
+  buf: PixelBuffer,
+  id: number,
+  action: "t" | "T" | "p",
+  format: 24 | 32,
+  z: number | undefined,
+  placementId: number | undefined,
+  mode: TransmissionMode,
+  data: Uint8Array,
+  compress: boolean,
+) {
+  while (true) {
+    switch (mode) {
+      case "shm":
+        if (transmitShm(write, buf, id, action, format, z, placementId, data, compress)) return
+        mode = resolveKittyTransportMode("shm")
+        continue
+      case "file":
+        if (transmitFile(write, buf, id, action, format, z, placementId, data, compress)) return
+        mode = resolveKittyTransportMode("file")
+        continue
+      case "direct":
+        transmitDirect(write, buf, id, action, format, z, placementId, data, compress)
+        reportKittyTransportSuccess("direct")
+        return
+    }
   }
-
-  recordKittyStats("direct", "transmit", data.length, meta.length + b64.length + chunks.length * 12)
-  write(`\x1b_G${meta},m=1;${chunks[0]}\x1b\\`)
-  for (let i = 1; i < chunks.length - 1; i++) {
-    write(`\x1b_Gm=1;${chunks[i]}\x1b\\`)
-  }
-  write(`\x1b_Gm=0;${chunks[chunks.length - 1]}\x1b\\`)
 }
 
 // ── Public API ──
@@ -488,26 +531,10 @@ export function transmit(
   const format = opts?.format ?? 32
   const z = opts?.z
   const requestedMode = opts?.mode ?? "direct"
-  let mode: TransmissionMode = resolveKittyTransportMode(requestedMode)
+  const mode = resolveKittyTransportMode(requestedMode)
   const data = format === 32 ? buf.data : stripAlpha(buf.data, buf.width * buf.height)
   const compress = resolveCompression(mode, data.length, opts?.compress ?? COMPRESS_MODE.AUTO)
-
-  while (true) {
-    switch (mode) {
-      case "shm":
-        if (transmitShm(write, buf, id, action, format, z, opts?.placementId, data, compress)) return
-        mode = resolveKittyTransportMode("shm")
-        continue
-      case "file":
-        if (transmitFile(write, buf, id, action, format, z, opts?.placementId, data, compress)) return
-        mode = resolveKittyTransportMode("file")
-        continue
-      case "direct":
-        transmitDirect(write, buf, id, action, format, z, opts?.placementId, data, compress)
-        reportKittyTransportSuccess("direct")
-        return
-    }
-  }
+  transmitBuffer(write, buf, id, action, format, z, opts?.placementId, mode, data, compress)
 }
 
 /** Transmit raw RGBA/RGB bytes without constructing a PixelBuffer wrapper upstream. */
@@ -529,27 +556,11 @@ export function transmitRaw(
   const format = opts?.format ?? 32
   const z = opts?.z
   const requestedMode = opts?.mode ?? "direct"
-  let mode: TransmissionMode = resolveKittyTransportMode(requestedMode)
+  const mode = resolveKittyTransportMode(requestedMode)
   const payload = format === 32 ? image.data : stripAlpha(image.data, image.width * image.height)
   const compress = resolveCompression(mode, payload.length, opts?.compress ?? COMPRESS_MODE.AUTO)
   const buf = { data: image.data, width: image.width, height: image.height, stride: image.width * 4 } satisfies PixelBuffer
-
-  while (true) {
-    switch (mode) {
-      case "shm":
-        if (transmitShm(write, buf, id, action, format, z, opts?.placementId, payload, compress)) return
-        mode = resolveKittyTransportMode("shm")
-        continue
-      case "file":
-        if (transmitFile(write, buf, id, action, format, z, opts?.placementId, payload, compress)) return
-        mode = resolveKittyTransportMode("file")
-        continue
-      case "direct":
-        transmitDirect(write, buf, id, action, format, z, opts?.placementId, payload, compress)
-        reportKittyTransportSuccess("direct")
-        return
-    }
-  }
+  transmitBuffer(write, buf, id, action, format, z, opts?.placementId, mode, payload, compress)
 }
 
 /** Place an already-transmitted image at a cell position. */
@@ -658,21 +669,7 @@ export function patchRegion(
 }
 
 function patchRegionDirect(write: (data: string) => void, meta: string, payload: Uint8Array) {
-  const b64 = Buffer.from(payload).toString("base64")
-  const chunks = chunk(b64)
-  if (chunks.length === 0) return
-
-  if (chunks.length === 1) {
-    recordKittyStats("direct", "patch", payload.length, meta.length + chunks[0].length + 16)
-    write(`\x1b_G${meta};${chunks[0]}\x1b\\`)
-    return
-  }
-  recordKittyStats("direct", "patch", payload.length, meta.length + b64.length + chunks.length * 12)
-  write(`\x1b_G${meta},m=1;${chunks[0]}\x1b\\`)
-  for (let i = 1; i < chunks.length - 1; i++) {
-    write(`\x1b_Ga=f,m=1;${chunks[i]}\x1b\\`)
-  }
-  write(`\x1b_Ga=f,m=0;${chunks[chunks.length - 1]}\x1b\\`)
+  writeDirectChunks(write, meta, payload, payload.length, "patch", "a=f", "a=f")
 }
 
 /** Delete an image by ID. */
@@ -694,71 +691,82 @@ export function clearAll(write: (data: string) => void) {
  * and checks if terminal responds with OK.
  */
 /** @public */
-export function probeShm(
-  write: (data: string) => void,
+function probeTransport(
   onData: (handler: (data: Buffer) => void) => void,
   offData: (handler: (data: Buffer) => void) => void,
-  timeout = 2000,
-): Promise<boolean> {
-  return new Promise((resolve) => {
+  timeout: number,
+  label: string,
+  responseId: number,
+  sendQuery: (setCleanup: (cleanup: () => void) => void) => void,
+) {
+  return new Promise<boolean>((resolve) => {
     let done = false
-    let probeHandle = 0
+    let cleanupResource: (() => void) | void
 
-    probeDebug("probeShm:start", { timeout })
+    probeDebug(`${label}:start`, { timeout })
 
     const cleanup = () => {
       if (done) return
       done = true
       offData(handler)
       clearTimeout(timer)
-      if (probeHandle) {
-        try { releaseNativeKittyShm(probeHandle, true) } catch {}
-      }
+      cleanupResource?.()
     }
 
     const handler = (data: Buffer) => {
       const str = data.toString()
-      probeDebug("probeShm:reply", { raw: JSON.stringify(str) })
-      if (str.includes("_Gi=32;OK")) {
-        probeDebug("probeShm:success")
+      probeDebug(`${label}:reply`, { raw: JSON.stringify(str) })
+      if (str.includes(`_Gi=${responseId};OK`)) {
+        probeDebug(`${label}:success`)
         cleanup()
         resolve(true)
-      } else if (str.includes("_Gi=32;")) {
-        probeDebug("probeShm:negative-reply")
+      } else if (str.includes(`_Gi=${responseId};`)) {
+        probeDebug(`${label}:negative-reply`)
         cleanup()
         resolve(false)
       }
     }
 
     const timer = setTimeout(() => {
-      probeDebug("probeShm:timeout")
+      probeDebug(`${label}:timeout`)
       cleanup()
       resolve(false)
     }, timeout)
 
     onData(handler)
 
-    // Create a 1x1 RGBA shm segment for probing
     try {
-      const name = createKittyShmName("probe")
-      const size = 64 * 64 * 4
-
-      // Write a non-trivial payload so the probe is closer to real transport.
-      const pixel = new Uint8Array(size)
-      pixel.fill(0xff)
-      const prepared = prepareNativeKittyShm(name, pixel, 0o666)
-      probeHandle = prepared.handle
-      probeDebug("probeShm:prepared", { handle: prepared.handle, name, size })
-
-      // Terminal will shm_unlink after reading (per spec)
-      const nameB64 = Buffer.from(name).toString("base64")
-      probeDebug("probeShm:query-sent", { name, nameB64 })
-      write(`\x1b_Gi=32,s=64,v=64,a=q,t=s,f=32;${nameB64}\x1b\\`)
+      sendQuery((cleanup) => { cleanupResource = cleanup })
     } catch (error) {
-      probeDebug("probeShm:exception", error)
+      probeDebug(`${label}:exception`, error)
       cleanup()
       resolve(false)
     }
+  })
+}
+
+export function probeShm(
+  write: (data: string) => void,
+  onData: (handler: (data: Buffer) => void) => void,
+  offData: (handler: (data: Buffer) => void) => void,
+  timeout = 2000,
+): Promise<boolean> {
+  return probeTransport(onData, offData, timeout, "probeShm", 32, (setCleanup) => {
+    // Create a 1x1 RGBA shm segment for probing
+    const name = createKittyShmName("probe")
+    const size = 64 * 64 * 4
+
+    // Write a non-trivial payload so the probe is closer to real transport.
+    const pixel = new Uint8Array(size)
+    pixel.fill(0xff)
+    const prepared = prepareNativeKittyShm(name, pixel, 0o666)
+    setCleanup(() => { try { releaseNativeKittyShm(prepared.handle, true) } catch {} })
+    probeDebug("probeShm:prepared", { handle: prepared.handle, name, size })
+
+    // Terminal will shm_unlink after reading (per spec)
+    const nameB64 = Buffer.from(name).toString("base64")
+    probeDebug("probeShm:query-sent", { name, nameB64 })
+    write(`\x1b_Gi=32,s=64,v=64,a=q,t=s,f=32;${nameB64}\x1b\\`)
   })
 }
 
@@ -775,57 +783,18 @@ export function probeFile(
   offData: (handler: (data: Buffer) => void) => void,
   timeout = 2000,
 ): Promise<boolean> {
-  return new Promise((resolve) => {
-    let done = false
+  return probeTransport(onData, offData, timeout, "probeFile", 33, () => {
+    const os = require("os")
+    const path = require("path")
+    const fs = require("fs")
 
-    probeDebug("probeFile:start", { timeout })
+    const filePath = path.join(os.tmpdir(), `tty-graphics-protocol-probe-${process.pid}`)
+    const pixel = new Uint8Array([0, 0, 0, 0])
+    fs.writeFileSync(filePath, pixel)
 
-    const cleanup = () => {
-      if (done) return
-      done = true
-      offData(handler)
-      clearTimeout(timer)
-    }
-
-    const handler = (data: Buffer) => {
-      const str = data.toString()
-      probeDebug("probeFile:reply", { raw: JSON.stringify(str) })
-      if (str.includes("_Gi=33;OK")) {
-        probeDebug("probeFile:success")
-        cleanup()
-        resolve(true)
-      } else if (str.includes("_Gi=33;")) {
-        probeDebug("probeFile:negative-reply")
-        cleanup()
-        resolve(false)
-      }
-    }
-
-    const timer = setTimeout(() => {
-      probeDebug("probeFile:timeout")
-      cleanup()
-      resolve(false)
-    }, timeout)
-
-    onData(handler)
-
-    try {
-      const os = require("os")
-      const path = require("path")
-      const fs = require("fs")
-
-      const filePath = path.join(os.tmpdir(), `tty-graphics-protocol-probe-${process.pid}`)
-      const pixel = new Uint8Array([0, 0, 0, 0])
-      fs.writeFileSync(filePath, pixel)
-
-      const pathB64 = Buffer.from(filePath).toString("base64")
-      probeDebug("probeFile:query-sent", { filePath, pathB64 })
-      write(`\x1b_Gi=33,s=1,v=1,a=q,t=t,f=32;${pathB64}\x1b\\`)
-    } catch (error) {
-      probeDebug("probeFile:exception", error)
-      cleanup()
-      resolve(false)
-    }
+    const pathB64 = Buffer.from(filePath).toString("base64")
+    probeDebug("probeFile:query-sent", { filePath, pathB64 })
+    write(`\x1b_Gi=33,s=1,v=1,a=q,t=t,f=32;${pathB64}\x1b\\`)
   })
 }
 

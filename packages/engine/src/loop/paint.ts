@@ -100,6 +100,36 @@ export type PaintProfiler = {
   paintInteractionStatsMs: number
 }
 
+function cleanupOrphanLayers(
+  preparedSlots: PreparedLayerSlot[],
+  layerCache: Map<string, Layer>,
+  activeSlotKeys: Set<string>,
+  transmissionMode: "direct" | "file" | "shm",
+  layerComposer: GpuFrameComposer | null,
+  imageIdForLayer: (layer: Layer) => number,
+  removeLayer: (layer: Layer) => void,
+  debugCadence: boolean,
+) {
+  let ioMs = 0
+  activeSlotKeys.clear()
+  for (const prepared of preparedSlots) activeSlotKeys.add(prepared.slot.key)
+  for (const [key, layer] of layerCache) {
+    if (activeSlotKeys.has(key)) continue
+    const ioStart = debugCadence ? performance.now() : 0
+    const imageId = imageIdForLayer(layer)
+    if (isNativePresentationCapable(transmissionMode)) {
+      const nativeImageId = nativeLayerRemove(key)
+      nativeDeleteLayer(nativeImageId ?? imageId)
+    } else {
+      layerComposer!.removeLayer(imageId)
+    }
+    if (debugCadence) ioMs += performance.now() - ioStart
+    removeLayer(layer)
+    layerCache.delete(key)
+  }
+  return ioMs
+}
+
 // ── PaintFrameState ───────────────────────────────────────────────────────
 
 /**
@@ -643,22 +673,7 @@ export function paintFrame(
 
   if (framePlan?.strategy === "skip-present") {
     const cleanupStart = profile ? performance.now() : 0
-    activeSlotKeys.clear()
-    for (const prepared of preparedSlots) activeSlotKeys.add(prepared.slot.key)
-    for (const [key, layer] of layerCache) {
-      if (activeSlotKeys.has(key)) continue
-      const ioStart = debugCadence ? performance.now() : 0
-      const imageId = imageIdForLayer(layer)
-      if (isNativePresentationCapable(state.transmissionMode)) {
-        const nativeImageId = nativeLayerRemove(key)
-        nativeDeleteLayer(nativeImageId ?? imageId)
-      } else {
-        layerComposer!.removeLayer(imageId)
-      }
-      if (debugCadence) ioMs += performance.now() - ioStart
-      removeLayer(layer)
-      layerCache.delete(key)
-    }
+    ioMs += cleanupOrphanLayers(preparedSlots, layerCache, activeSlotKeys, state.transmissionMode, layerComposer, imageIdForLayer, removeLayer, debugCadence)
     if (profile) profile.paintLayerCleanupMs += performance.now() - cleanupStart
     updateLayerStabilityCounters(preparedSlots, slotBoundaryByKey, state.nodeRefById)
     const backendEndStart = profile ? performance.now() : 0
@@ -847,25 +862,7 @@ export function paintFrame(
 
   // ── Step 4: Clean up orphan layers ──
   const cleanupStart = profile ? performance.now() : 0
-  activeSlotKeys.clear()
-  for (const prepared of preparedSlots) activeSlotKeys.add(prepared.slot.key)
-  for (const [key, layer] of layerCache) {
-    if (!activeSlotKeys.has(key)) {
-      const ioStart = debugCadence ? performance.now() : 0
-      const imageId = imageIdForLayer(layer)
-      // Route layer deletion through native path when native presentation is active.
-      // This avoids JS-side Kitty delete escape generation.
-      if (isNativePresentationCapable(state.transmissionMode)) {
-        const nativeImageId = nativeLayerRemove(key)
-        nativeDeleteLayer(nativeImageId ?? imageId)
-      } else {
-        layerComposer!.removeLayer(imageId)
-      }
-      if (debugCadence) ioMs += performance.now() - ioStart
-      removeLayer(layer)
-      layerCache.delete(key)
-    }
-  }
+  ioMs += cleanupOrphanLayers(preparedSlots, layerCache, activeSlotKeys, state.transmissionMode, layerComposer, imageIdForLayer, removeLayer, debugCadence)
   if (profile) profile.paintLayerCleanupMs += performance.now() - cleanupStart
   updateLayerStabilityCounters(preparedSlots, slotBoundaryByKey, state.nodeRefById)
 

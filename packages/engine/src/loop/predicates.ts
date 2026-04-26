@@ -1,7 +1,18 @@
 import type { TGEProps } from "../ffi/node"
 
+type BackdropEffectProps = Pick<TGEProps,
+  "backdropBlur" |
+  "backdropBrightness" |
+  "backdropContrast" |
+  "backdropSaturate" |
+  "backdropGrayscale" |
+  "backdropInvert" |
+  "backdropSepia" |
+  "backdropHueRotate"
+>
+
 /** Check if a node has any backdrop filter effect. */
-export function hasBackdropEffect(props: TGEProps): boolean {
+export function hasBackdropEffect(props: BackdropEffectProps): boolean {
   return props.backdropBlur !== undefined ||
     props.backdropBrightness !== undefined ||
     props.backdropContrast !== undefined ||
