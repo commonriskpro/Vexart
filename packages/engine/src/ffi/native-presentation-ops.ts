@@ -79,6 +79,7 @@ export function nativeEmitLayer(
       ptr(rgba),
       rgba.byteLength,
       ptr(layerBuf),
+      layerBuf.byteLength,
       ptr(statsBuf),
     ) as number
     if (rc === 0) return decodeNativePresentationStats(statsBuf)
@@ -119,6 +120,7 @@ export function nativeEmitLayerTarget(
       target,
       imageId,
       ptr(layerBuf),
+      layerBuf.byteLength,
       ptr(statsBuf),
     ) as number
     if (rc === 0) return decodeNativePresentationStats(statsBuf)
@@ -159,6 +161,7 @@ export function nativeEmitRegionTarget(
       target,
       imageId,
       ptr(regionBuf),
+      regionBuf.byteLength,
       ptr(statsBuf),
     ) as number
     if (rc === 0) return decodeNativePresentationStats(statsBuf)

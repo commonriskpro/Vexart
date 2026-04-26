@@ -69,7 +69,7 @@ export function nativeLayerUpsert(key: string, desc: NativeLayerDescriptor): Nat
   const outBuf = new Uint8Array(24)
   try {
     const { symbols } = openVexartLibrary()
-    const rc = symbols.vexart_layer_upsert(1n, ptr(keyBuf), keyBuf.byteLength, ptr(descBuf), ptr(outBuf)) as number
+    const rc = symbols.vexart_layer_upsert(1n, ptr(keyBuf), keyBuf.byteLength, ptr(descBuf), descBuf.byteLength, ptr(outBuf)) as number
     if (rc !== 0) {
       disableNativeLayerRegistry(`vexart_layer_upsert returned ${rc}`)
       return null

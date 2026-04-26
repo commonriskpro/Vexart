@@ -8,6 +8,7 @@ const encoder = new TextEncoder()
 export type NativeCanvasDisplayListInput = {
   key: string
   bytes: Uint8Array
+  currentFrame?: bigint
 }
 
 /** @public */
@@ -20,6 +21,7 @@ export function nativeCanvasDisplayListUpdate(input: NativeCanvasDisplayListInpu
     const code = symbols.vexart_canvas_display_list_update(
       1n,
       0n,
+      input.currentFrame ?? 0n,
       ptr(key),
       key.byteLength,
       ptr(input.bytes),
@@ -34,11 +36,11 @@ export function nativeCanvasDisplayListUpdate(input: NativeCanvasDisplayListInpu
 }
 
 /** @public */
-export function nativeCanvasDisplayListTouch(handle: bigint): boolean {
+export function nativeCanvasDisplayListTouch(handle: bigint, currentFrame: bigint = 0n): boolean {
   if (handle === 0n) return false
   try {
     const { symbols } = openVexartLibrary()
-    return (symbols.vexart_canvas_display_list_touch(1n, 0n, handle) as number) === 0
+    return (symbols.vexart_canvas_display_list_touch(1n, 0n, currentFrame, handle) as number) === 0
   } catch {
     return false
   }

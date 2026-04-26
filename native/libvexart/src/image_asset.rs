@@ -31,6 +31,7 @@ impl ImageAssetRegistry {
         rgba: &[u8],
         width: u32,
         height: u32,
+        current_frame: u64,
         resources: &mut ResourceManager,
     ) -> Option<u64> {
         let expected_len = width.checked_mul(height)?.checked_mul(4)? as usize;
@@ -48,7 +49,7 @@ impl ImageAssetRegistry {
                     handle,
                     ResourceKind::ImageSprite,
                     rgba.len() as u64,
-                    0,
+                    current_frame,
                     WgpuHandle::Id(handle),
                 );
                 return Some(handle);
@@ -71,17 +72,17 @@ impl ImageAssetRegistry {
             handle,
             ResourceKind::ImageSprite,
             rgba.len() as u64,
-            0,
+            current_frame,
             WgpuHandle::Id(handle),
         );
         Some(handle)
     }
 
-    pub fn touch(&self, handle: u64, resources: &mut ResourceManager) -> bool {
+    pub fn touch(&self, handle: u64, current_frame: u64, resources: &mut ResourceManager) -> bool {
         if !self.assets.contains_key(&handle) {
             return false;
         }
-        resources.touch(handle, 0);
+        resources.touch(handle, current_frame);
         true
     }
 
@@ -110,10 +111,10 @@ mod tests {
         let bytes = vec![255u8; 2 * 2 * 4];
 
         let first = registry
-            .register("logo.png".to_string(), &bytes, 2, 2, &mut resources)
+            .register("logo.png".to_string(), &bytes, 2, 2, 0, &mut resources)
             .unwrap();
         let second = registry
-            .register("logo.png".to_string(), &bytes, 2, 2, &mut resources)
+            .register("logo.png".to_string(), &bytes, 2, 2, 0, &mut resources)
             .unwrap();
 
         assert_eq!(first, second);
@@ -127,12 +128,12 @@ mod tests {
         let bytes = vec![128u8; 4 * 4 * 4];
 
         let handle = registry
-            .register("sprite.png".to_string(), &bytes, 4, 4, &mut resources)
+            .register("sprite.png".to_string(), &bytes, 4, 4, 0, &mut resources)
             .unwrap();
 
         assert_eq!(resources.resource_count(), 1);
         assert_eq!(resources.current_usage_bytes(), bytes.len() as u64);
-        assert!(registry.touch(handle, &mut resources));
+        assert!(registry.touch(handle, 1, &mut resources));
         assert!(registry.release(handle, &mut resources));
         assert_eq!(resources.current_usage_bytes(), 0);
     }

@@ -10,6 +10,7 @@ export type NativeImageAssetInput = {
   data: Uint8Array
   width: number
   height: number
+  currentFrame?: bigint
 }
 
 /** @public */
@@ -26,6 +27,7 @@ export function nativeImageAssetRegister(input: NativeImageAssetInput): bigint |
     const code = symbols.vexart_image_asset_register(
       1n,
       0n,
+      input.currentFrame ?? 0n,
       ptr(key),
       key.byteLength,
       ptr(input.data),
@@ -41,11 +43,11 @@ export function nativeImageAssetRegister(input: NativeImageAssetInput): bigint |
 }
 
 /** @public */
-export function nativeImageAssetTouch(handle: bigint): boolean {
+export function nativeImageAssetTouch(handle: bigint, currentFrame: bigint = 0n): boolean {
   if (handle === 0n) return false
   try {
     const { symbols } = openVexartLibrary()
-    return (symbols.vexart_image_asset_touch(1n, 0n, handle) as number) === 0
+    return (symbols.vexart_image_asset_touch(1n, 0n, currentFrame, handle) as number) === 0
   } catch {
     return false
   }

@@ -63,13 +63,19 @@ pub fn readback_full(
     slice.map_async(wgpu::MapMode::Read, move |result| {
         let _ = tx.send(result);
     });
-    device
+    if device
         .poll(wgpu::PollType::Wait {
             submission_index: None,
             timeout: None,
         })
-        .expect("device poll failed");
-    if rx.recv().expect("map_async channel").is_err() {
+        .is_err()
+    {
+        return 0;
+    }
+    let Ok(result) = rx.recv() else {
+        return 0;
+    };
+    if result.is_err() {
         return 0;
     }
 
@@ -174,13 +180,19 @@ pub fn readback_region(
     slice.map_async(wgpu::MapMode::Read, move |result| {
         let _ = tx.send(result);
     });
-    device
+    if device
         .poll(wgpu::PollType::Wait {
             submission_index: None,
             timeout: None,
         })
-        .expect("device poll failed");
-    if rx_ch.recv().expect("map_async channel").is_err() {
+        .is_err()
+    {
+        return 0;
+    }
+    let Ok(result) = rx_ch.recv() else {
+        return 0;
+    };
+    if result.is_err() {
         return 0;
     }
 

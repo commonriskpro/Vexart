@@ -77,20 +77,20 @@ export const VEXART_SYMBOLS = {
   // emit_frame_with_stats: ctx, target, image_id, stats_out → i32
   vexart_kitty_emit_frame_with_stats: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   // emit_layer: ctx, image_id, rgba_ptr, rgba_len, layer_ptr (width,height,col,row,z), stats_out → i32
-  vexart_kitty_emit_layer: { args: [FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
+  vexart_kitty_emit_layer: { args: [FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   // emit_layer_target: ctx, target, image_id, layer_ptr (col,row,z), stats_out → i32
-  vexart_kitty_emit_layer_target: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
+  vexart_kitty_emit_layer_target: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   // emit_region: ctx, image_id, rgba_ptr, rgba_len, region_ptr (4×u32: rx,ry,rw,rh), stats_out → i32
   // region_ptr is a 16-byte packed buffer [rx,ry,rw,rh] as u32 LE — satisfies ≤8 param ARM64 rule.
-  vexart_kitty_emit_region: { args: [FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
+  vexart_kitty_emit_region: { args: [FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   // emit_region_target: ctx, target, image_id, region_ptr (4×u32: rx,ry,rw,rh), stats_out → i32
-  vexart_kitty_emit_region_target: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
+  vexart_kitty_emit_region_target: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   // delete_layer: ctx, image_id, stats_out → i32
   vexart_kitty_delete_layer: { args: [FFIType.u64, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
 
   // §5.7 Native layer registry (Phase 2c)
   // upsert: ctx, key_ptr, key_len, desc_ptr, out_ptr → i32
-  vexart_layer_upsert: { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
+  vexart_layer_upsert: { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   // mark_dirty: ctx, layer_handle → i32
   vexart_layer_mark_dirty: { args: [FFIType.u64, FFIType.u64], returns: FFIType.i32 },
   // reuse: ctx, layer_handle, frame, out_image_id → i32
@@ -105,11 +105,11 @@ export const VEXART_SYMBOLS = {
   // §5.8 Resource manager (Phase 2b Slice 6)
   vexart_resource_get_stats:  { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_resource_set_budget: { args: [FFIType.u64, FFIType.u32],                          returns: FFIType.i32 },
-  vexart_image_asset_register: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
-  vexart_image_asset_touch: { args: [FFIType.u64, FFIType.u64, FFIType.u64], returns: FFIType.i32 },
+  vexart_image_asset_register: { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
+  vexart_image_asset_touch: { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.u64], returns: FFIType.i32 },
   vexart_image_asset_release: { args: [FFIType.u64, FFIType.u64, FFIType.u64], returns: FFIType.i32 },
-  vexart_canvas_display_list_update: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  vexart_canvas_display_list_touch: { args: [FFIType.u64, FFIType.u64, FFIType.u64], returns: FFIType.i32 },
+  vexart_canvas_display_list_update: { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
+  vexart_canvas_display_list_touch: { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.u64], returns: FFIType.i32 },
   vexart_canvas_display_list_release: { args: [FFIType.u64, FFIType.u64, FFIType.u64], returns: FFIType.i32 },
 
   // §5.7 Error retrieval

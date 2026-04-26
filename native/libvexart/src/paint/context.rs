@@ -13,6 +13,8 @@ pub struct WgpuContext {
     /// 2-binding BGL (texture @ 0, sampler @ 1, both fragment-visible).
     /// Ported from bridge L2185-2205.
     pub image_bind_group_layout: wgpu::BindGroupLayout,
+    /// Shared filtering sampler for composite/image bind groups.
+    pub cached_sampler: wgpu::Sampler,
     /// All render pipelines.
     pub pipelines: PipelineRegistry,
     /// Pipeline cache manager for fast warm-start persistence (REQ-2B-601).
@@ -23,9 +25,8 @@ impl WgpuContext {
     /// Initialize WGPU: request adapter → request device → load pipeline cache →
     /// build image BGL → create all pipelines (with cache) → save cache to disk.
     ///
-    /// Blocks on the async calls via pollster. Panics if no suitable adapter is found
-    /// (caller's ffi_guard! converts that to ERR_PANIC with a descriptive message).
-    pub fn new() -> Self {
+    /// Blocks on the async calls via pollster. Returns an error if GPU initialization fails.
+    pub fn new() -> Result<Self, &'static str> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             flags: wgpu::InstanceFlags::empty(),
@@ -34,12 +35,13 @@ impl WgpuContext {
             display: Default::default(),
         });
 
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        let Ok(adapter) = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::default(),
             compatible_surface: None,
             force_fallback_adapter: false,
-        }))
-        .expect("no suitable WGPU adapter found");
+        })) else {
+            return Err("no suitable WGPU adapter found");
+        };
 
         let pipeline_cache_supported = adapter.features().contains(wgpu::Features::PIPELINE_CACHE);
         let required_features = if pipeline_cache_supported {
@@ -48,15 +50,16 @@ impl WgpuContext {
             wgpu::Features::empty()
         };
 
-        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+        let Ok((device, queue)) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("vexart-device"),
             required_features,
             required_limits: wgpu::Limits::downlevel_defaults(),
             memory_hints: wgpu::MemoryHints::Performance,
             trace: wgpu::Trace::Off,
             experimental_features: Default::default(),
-        }))
-        .expect("failed to create WGPU device");
+        })) else {
+            return Err("failed to create WGPU device");
+        };
 
         // Load persisted pipeline cache from disk (REQ-2B-601).
         // On first run / cold start: cached_data is None.
@@ -103,6 +106,17 @@ impl WgpuContext {
                 ],
             });
 
+        let cached_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("vexart-cached-sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+            ..Default::default()
+        });
+
         let pipelines = PipelineRegistry::new(
             &device,
             wgpu::TextureFormat::Rgba8Unorm,
@@ -118,12 +132,13 @@ impl WgpuContext {
             }
         }
 
-        Self {
+        Ok(Self {
             device,
             queue,
             image_bind_group_layout,
+            cached_sampler,
             pipelines,
             pipeline_cache_mgr,
-        }
+        })
     }
 }

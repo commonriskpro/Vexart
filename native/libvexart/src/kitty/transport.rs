@@ -159,7 +159,13 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
     }
 
     // 3. zlib compress.
-    let compressed = compress_rgba(&rgba[..written as usize]);
+    let compressed = match compress_rgba(&rgba[..written as usize]) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            set_last_error(err);
+            return ERR_KITTY_TRANSPORT;
+        }
+    };
 
     // 4. Create SHM segment with compressed data.
     let shm_name = format!("/vexart-kitty-{}-{}", std::process::id(), image_id);
@@ -550,8 +556,9 @@ pub unsafe fn emit_region_target_with_stats(
         return ERR_KITTY_TRANSPORT;
     }
     let mode = TRANSPORT_MODE.with(|c| c.get());
-    let (width, height, texture_ptr) = match pctx.targets.get(target) {
-        Some(rec) => (rec.width, rec.height, &rec.texture as *const wgpu::Texture),
+    let (wgpu, targets, _, _, _, _) = pctx.split();
+    let rec = match targets.get(target) {
+        Some(rec) => rec,
         None => {
             set_last_error(format!(
                 "emit_region_target_with_stats: invalid target handle {target}"
@@ -559,6 +566,8 @@ pub unsafe fn emit_region_target_with_stats(
             return ERR_KITTY_TRANSPORT;
         }
     };
+    let width = rec.width;
+    let height = rec.height;
     let x = rx.min(width);
     let y = ry.min(height);
     let w = rw.min(width.saturating_sub(x));
@@ -571,9 +580,9 @@ pub unsafe fn emit_region_target_with_stats(
     let t_rb = Instant::now();
     let mut rgba = vec![0u8; (w as usize) * (h as usize) * 4];
     let written = crate::composite::readback::readback_region(
-        &pctx.wgpu.device,
-        &pctx.wgpu.queue,
-        unsafe { &*texture_ptr },
+        &wgpu.device,
+        &wgpu.queue,
+        &rec.texture,
         width,
         height,
         x,
@@ -736,7 +745,13 @@ fn emit_shm_rgba_at_with_stats(
     let compression_param;
     if compression {
         let t_compress = Instant::now();
-        compressed_storage = compress_rgba(rgba);
+        compressed_storage = match compress_rgba(rgba) {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                set_last_error(err);
+                return (ERR_KITTY_TRANSPORT, stats);
+            }
+        };
         stats.compress_us = t_compress.elapsed().as_micros() as u64;
         stats.compressed = true;
         stats.payload_bytes = compressed_storage.len() as u64;
@@ -846,7 +861,13 @@ fn emit_region_rgba_with_stats(
     let compression_param;
     if compression {
         let t_compress = Instant::now();
-        compressed_storage = compress_rgba(rgba);
+        compressed_storage = match compress_rgba(rgba) {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                set_last_error(err);
+                return (ERR_KITTY_TRANSPORT, stats);
+            }
+        };
         stats.compress_us = t_compress.elapsed().as_micros() as u64;
         stats.compressed = true;
         stats.payload_bytes = compressed_storage.len() as u64;

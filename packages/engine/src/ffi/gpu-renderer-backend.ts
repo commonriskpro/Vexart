@@ -23,7 +23,8 @@ import type {
 } from "./renderer-backend"
 import { chooseGpuLayerStrategy, nativeChooseFrameStrategy, NATIVE_FRAME_STRATEGY, NATIVE_FRAME_TRANSPORT, type GpuLayerStrategyMode, type NativeFramePlan } from "./gpu-layer-strategy"
 import { builtinFontScale, getFont, layoutText } from "./text-layout"
-import { openVexartLibrary } from "./vexart-bridge"
+import { openVexartLibrary, VexartNativeError } from "./vexart-bridge"
+import { vexartGetLastError } from "./vexart-functions"
 import {
   GRAPH_MAGIC, GRAPH_VERSION,
 } from "./vexart-buffer"
@@ -350,7 +351,11 @@ function vexartUploadImage(ctx: bigint, data: Uint8Array, width: number, height:
 function vexartRemoveImage(ctx: bigint, handle: bigint) {
   if (!handle) return
   const { symbols } = openVexartLibrary()
-  symbols.vexart_paint_remove_image(ctx, handle)
+  const rc = symbols.vexart_paint_remove_image(ctx, handle) as number
+  if (rc !== 0) {
+    const err = vexartGetLastError()
+    console.error(`[vexart] paint_remove_image failed (${rc}): ${err}`)
+  }
 }
 
 /**
@@ -377,7 +382,11 @@ function flushVexartBatch(ctx: bigint, cmdKind: number, instanceData: Uint8Array
   vu32(view, 20, instanceData.byteLength)
   // Instance data
   u8.set(instanceData, HEADER + PREFIX)
-  symbols.vexart_paint_dispatch(ctx, target, ptr(u8), total, ptr(_flushStatsBuf))
+  const rc = symbols.vexart_paint_dispatch(ctx, target, ptr(u8), total, ptr(_flushStatsBuf)) as number
+  if (rc !== 0) {
+    const err = vexartGetLastError()
+    console.error(`[vexart] paint_dispatch failed (${rc}): ${err}`)
+  }
 }
 
 /**
@@ -877,7 +886,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     // Bun FFI rejects zero-length ArrayBufferView for ptr(); use 1-byte dummy.
     const optsPtr = ptr(new Uint8Array(1))
     const result = symbols.vexart_context_create(optsPtr, 0, ptr(ctxBuf)) as number
-    if (result !== 0) return 0n
+    if (result !== 0) {
+      const err = vexartGetLastError()
+      throw new VexartNativeError(result, `GPU context creation failed: ${err}`)
+    }
     _vexartCtx = ctxBuf[0]
     // Load default font atlas (fontId=0) into the Rust GPU text pipeline.
     if (!_defaultAtlasLoaded) {
@@ -1563,7 +1575,11 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         }
       }
       const glyphU8 = glyphBuf.u8.subarray(0, byteLength)
-      symbols.vexart_text_dispatch(vctx, targetHandle, ptr(glyphU8), byteLength, ptr(_flushStatsBuf))
+      const rc = symbols.vexart_text_dispatch(vctx, targetHandle, ptr(glyphU8), byteLength, ptr(_flushStatsBuf)) as number
+      if (rc !== 0) {
+        const err = vexartGetLastError()
+        console.error(`[vexart] text_dispatch failed (${rc}): ${err}`)
+      }
       first = false
       targetMutationVersion += 1
       glyphGroups.clear()
