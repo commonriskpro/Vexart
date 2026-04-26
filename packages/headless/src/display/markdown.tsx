@@ -6,12 +6,14 @@
  * @public
  */
 
+import { createMemo } from "solid-js"
 import type { JSX } from "solid-js"
 import { Lexer, type MarkedToken, type Tokens } from "marked"
 import { type SyntaxStyle } from "@vexart/engine"
 import { Code } from "./code"
 
 const LINE_HEIGHT = 17
+const CHAR_WIDTH = 9
 
 // ── Theme ──
 
@@ -239,22 +241,34 @@ function renderToken(token: MarkedToken, props: MarkdownProps, th: MarkdownTheme
         </box>
       )
 
-    case "table":
+    case "table": {
+      const header = token.header
+      const rows = token.rows
+      const colCount = header.length
+      const colWidths = Array(colCount).fill(0) as number[]
+      for (let c = 0; c < colCount; c++) {
+        const headerText = inlineToText(header[c]?.tokens as MarkedToken[] | undefined)
+        colWidths[c] = Math.max(colWidths[c], headerText.length)
+        for (const row of rows) {
+          const cellText = inlineToText(row[c]?.tokens as MarkedToken[] | undefined)
+          colWidths[c] = Math.max(colWidths[c], cellText.length)
+        }
+      }
       return (
         <box width="100%" direction="column" gap={1} paddingY={4}>
           <box width="100%" backgroundColor={th.tableBg} padding={4}>
-            {token.header.map((cell: Tokens.TableCell) => (
-              <box width="fit" paddingX={8}>
+            {header.map((cell: Tokens.TableCell, c: number) => (
+              <box width="fit" minWidth={colWidths[c] * CHAR_WIDTH} paddingX={8}>
                 <text color={th.tableHeader} fontSize={14}>
                   {inlineToText(cell.tokens as MarkedToken[])}
                 </text>
               </box>
             ))}
           </box>
-          {token.rows.map((row: Tokens.TableCell[]) => (
+          {rows.map((row: Tokens.TableCell[]) => (
             <box width="100%" padding={4}>
-              {row.map((cell: Tokens.TableCell) => (
-                <box width="fit" paddingX={8}>
+              {row.map((cell: Tokens.TableCell, c: number) => (
+                <box width="fit" minWidth={colWidths[c] * CHAR_WIDTH} paddingX={8}>
                   <text color={fg} fontSize={14}>
                     {inlineToText(cell.tokens as MarkedToken[])}
                   </text>
@@ -264,6 +278,7 @@ function renderToken(token: MarkedToken, props: MarkdownProps, th: MarkdownTheme
           ))}
         </box>
       )
+    }
 
     default: {
       if ("text" in token) {
@@ -284,13 +299,13 @@ function renderToken(token: MarkedToken, props: MarkdownProps, th: MarkdownTheme
 export function Markdown(props: MarkdownProps) {
   const th = () => ({ ...MD_DEFAULTS, ...props.theme })
 
-  const tokens = () => {
+  const tokens = createMemo(() => {
     try {
       return Lexer.lex(props.content, { gfm: true }) as MarkedToken[]
     } catch {
       return []
     }
-  }
+  })
 
   return (
     <box width={props.width ?? "100%"} direction="column" gap={6}>

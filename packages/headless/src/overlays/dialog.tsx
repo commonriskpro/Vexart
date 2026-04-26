@@ -6,8 +6,8 @@
  * @public
  */
 
-import { onCleanup } from "solid-js"
-import { pushFocusScope, useFocus } from "@vexart/engine"
+import { createContext, onCleanup, useContext } from "solid-js"
+import { focusedId, pushFocusScope, setFocusedId, useFocus } from "@vexart/engine"
 import { Portal } from "../containers/portal"
 
 // ── Types ──
@@ -55,7 +55,10 @@ export type DialogCloseProps = {
 
 // ── Dialog Root ──
 
+const DialogCloseContext = createContext<(() => void) | undefined>()
+
 function DialogRoot(props: DialogProps) {
+  const savedFocusId = focusedId()
   // Push a focus scope — Tab will only cycle within the dialog
   const popScope = pushFocusScope()
 
@@ -69,14 +72,19 @@ function DialogRoot(props: DialogProps) {
   })
 
   // Cleanup: pop the scope when dialog unmounts, restoring previous focus
-  onCleanup(popScope)
+  onCleanup(() => {
+    popScope()
+    if (savedFocusId) setFocusedId(savedFocusId)
+  })
 
   return (
-    <Portal>
-      <box width="100%" height="100%" alignX="center" alignY="center">
-        {props.children}
-      </box>
-    </Portal>
+    <DialogCloseContext.Provider value={props.onClose}>
+      <Portal>
+        <box width="100%" height="100%" alignX="center" alignY="center">
+          {props.children}
+        </box>
+      </Portal>
+    </DialogCloseContext.Provider>
   )
 }
 
@@ -84,13 +92,14 @@ function DialogRoot(props: DialogProps) {
 
 /** @public */
 export function DialogOverlay(props: DialogOverlayProps) {
+  const onClose = useContext(DialogCloseContext)
   return (
     <box
       width="100%"
       height="100%"
       backgroundColor={props.backgroundColor}
       backdropBlur={props.backdropBlur}
-      onPress={() => props.onClick?.()}
+      onPress={() => props.onClick ? props.onClick() : onClose?.()}
     >
       {props.children}
     </box>
@@ -108,6 +117,7 @@ export function DialogContent(props: DialogContentProps) {
       padding={props.padding}
       cornerRadius={props.cornerRadius}
       backgroundColor={props.backgroundColor}
+      onPress={(e) => e?.stopPropagation()}
     >
       {props.children}
     </box>
@@ -118,7 +128,12 @@ export function DialogContent(props: DialogContentProps) {
 
 /** @public Wrapper for a child element that closes the dialog when activated. */
 export function DialogClose(props: DialogCloseProps) {
-  return <>{props.children}</>
+  const onClose = useContext(DialogCloseContext)
+  return (
+    <box onPress={() => onClose?.()}>
+      {props.children}
+    </box>
+  )
 }
 
 // ── Attach sub-components ──

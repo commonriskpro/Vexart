@@ -117,12 +117,12 @@ export function NavigationStack(props: NavigationStackProps) {
   return (
     <StackCtx.Provider value={nav}>
       <box width="100%" height="100%">
-        {(() => {
+        {() => {
           const entry = nav.current()
           if (!entry) return null
           const Comp = entry.component
           return <Comp params={entry.params} goBack={() => nav.pop()} />
-        })()}
+        }}
       </box>
       {props.children}
     </StackCtx.Provider>

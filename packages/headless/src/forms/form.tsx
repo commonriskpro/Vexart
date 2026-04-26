@@ -101,7 +101,15 @@ export function createForm<T extends Record<string, any>>(options: FormOptions<T
     values[field] = valueSignals[field][0] as () => T[typeof field]
     errors[field] = errorSignals[field][0]
     touched[field] = touchedSignals[field][0]
-    dirty[field] = () => valueSignals[field][0]() !== options.initialValues[field]
+    dirty[field] = () => {
+      const current = valueSignals[field][0]()
+      const initial = options.initialValues[field]
+      if (current === initial) return false
+      if (typeof current === "object" && typeof initial === "object" && current !== null && initial !== null) {
+        return JSON.stringify(current) !== JSON.stringify(initial)
+      }
+      return true
+    }
   }
 
   const validateField = (field: keyof T) => {
@@ -116,27 +124,29 @@ export function createForm<T extends Record<string, any>>(options: FormOptions<T
     let valid = true
     const allValues = getValues()
 
-    for (const field of fields) {
-      const validator = options.validate?.[field]
-      if (validator) {
-        const error = validator(valueSignals[field][0]() as T[typeof field], allValues)
-        errorSignals[field][1](error ?? undefined)
-        if (error) valid = false
+    batch(() => {
+      for (const field of fields) {
+        const validator = options.validate?.[field]
+        if (validator) {
+          const error = validator(valueSignals[field][0]() as T[typeof field], allValues)
+          errorSignals[field][1](error ?? undefined)
+          if (error) valid = false
+        }
       }
-    }
 
-    // Form-level validation
-    if (options.validateForm) {
-      const formErrors = options.validateForm(allValues)
-      if (formErrors) {
-        for (const [key, msg] of Object.entries(formErrors)) {
-          if (key in errorSignals) {
-            errorSignals[key as keyof T][1](msg)
-            valid = false
+      // Form-level validation
+      if (options.validateForm) {
+        const formErrors = options.validateForm(allValues)
+        if (formErrors) {
+          for (const [key, msg] of Object.entries(formErrors)) {
+            if (key in errorSignals) {
+              errorSignals[key as keyof T][1](msg)
+              valid = false
+            }
           }
         }
       }
-    }
+    })
 
     return valid
   }

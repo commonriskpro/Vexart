@@ -68,12 +68,16 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     return scrollHandle.scrollTop
   }
 
+  const startIndex = () => Math.max(0, Math.floor(scrollPos() / props.itemHeight) - overscan())
+
   const endIndex = () => {
     const raw = Math.floor(scrollPos() / props.itemHeight) + viewportItems()
     return Math.min(props.items.length, raw + overscan())
   }
 
-  const visibleItems = () => props.items.slice(0, endIndex())
+  const visibleItems = () => props.items.slice(startIndex(), endIndex())
+
+  const topPad = () => startIndex() * props.itemHeight
 
   // Bottom spacer
   const bottomPad = () => Math.max(0, totalHeight() - endIndex() * props.itemHeight)
@@ -183,23 +187,24 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
         }
       }}
     >
+      {() => {
+        const tp = topPad()
+        return tp > 0 ? <box height={tp} /> : null
+      }}
       <For each={visibleItems()}>
         {(item, idx) => {
-          const index = idx()
-          const render = () => {
-            const ctx: VirtualListItemContext = {
-              selected: props.selectedIndex === index,
-              highlighted: highlightedIndex() === index,
-              hovered: hoveredIndex() === index,
-              index,
-            }
-            return (
-              <box height={props.itemHeight} width="100%">
-                {props.renderItem(item, index, ctx)}
-              </box>
-            )
-          }
-          return render as unknown as JSX.Element
+          const absIndex = () => startIndex() + idx()
+          const ctx = (): VirtualListItemContext => ({
+            selected: props.selectedIndex === absIndex(),
+            highlighted: highlightedIndex() === absIndex(),
+            hovered: hoveredIndex() === absIndex(),
+            index: absIndex(),
+          })
+          return (
+            <box height={props.itemHeight} width="100%">
+              {props.renderItem(item, absIndex(), ctx())}
+            </box>
+          )
         }}
       </For>
       {() => {

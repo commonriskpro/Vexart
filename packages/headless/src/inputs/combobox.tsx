@@ -89,7 +89,20 @@ export function Combobox(props: ComboboxProps) {
     return props.options.filter(opt => filterFn(opt, q))
   }
 
+  const filteredFor = (q: string) => {
+    if (!q) return props.options
+    const filterFn = props.filter ?? defaultFilter
+    return props.options.filter(opt => filterFn(opt, q))
+  }
+
   const selectedLabel = () => props.options.find(o => o.value === props.value)?.label
+
+  function firstNonDisabledIndex(opts: ComboboxOption[]): number {
+    for (let i = 0; i < opts.length; i++) {
+      if (!opts[i].disabled) return i
+    }
+    return 0
+  }
 
   const selectOption = (value: string) => {
     const opt = props.options.find(o => o.value === value)
@@ -105,10 +118,11 @@ export function Combobox(props: ComboboxProps) {
       if (disabled()) return
 
       // Typing — update query and open dropdown
-      if (e.key.length === 1 && !e.mods.ctrl && !e.mods.alt) {
-        setQuery(prev => prev + e.key)
+      if (e.char && !e.mods.ctrl && !e.mods.alt && !e.mods.meta) {
+        const nextQuery = query() + e.char
+        setQuery(nextQuery)
         setOpen(true)
-        setHighlightedIndex(0)
+        setHighlightedIndex(firstNonDisabledIndex(filteredFor(nextQuery)))
         return
       }
 
@@ -136,7 +150,7 @@ export function Combobox(props: ComboboxProps) {
           }
         } else {
           setOpen(true)
-          setHighlightedIndex(0)
+          setHighlightedIndex(firstNonDisabledIndex(filtered()))
         }
         return
       }
@@ -144,7 +158,7 @@ export function Combobox(props: ComboboxProps) {
       if (e.key === "down" || e.key === "j") {
         if (!open()) {
           setOpen(true)
-          setHighlightedIndex(0)
+          setHighlightedIndex(firstNonDisabledIndex(filtered()))
           return
         }
         const opts = filtered()

@@ -6,7 +6,7 @@
  * @public
  */
 
-import { createSignal, onCleanup } from "solid-js"
+import { createSignal, createEffect, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus, onInput } from "@vexart/engine"
 
@@ -57,6 +57,11 @@ export function Input(props: InputProps) {
   const [blink, setBlink] = createSignal(true)
 
   const disabled = () => props.disabled ?? false
+
+  createEffect(() => {
+    const len = props.value.length
+    if (cursor() > len) setCursor(len)
+  })
 
   // ── Blink ──
 
@@ -167,7 +172,7 @@ export function Input(props: InputProps) {
       }
 
       // Printable character
-      if (e.char && e.char.length === 1 && !e.mods.ctrl && !e.mods.alt && !e.mods.meta) {
+      if (e.char && !e.mods.ctrl && !e.mods.alt && !e.mods.meta) {
         let base = val
         let insertAt = pos
         if (hasSelection()) { base = deleteSelection(); insertAt = cursor() }
@@ -188,7 +193,7 @@ export function Input(props: InputProps) {
     let base = props.value
     let insertAt = cursor()
     if (hasSelection()) { base = deleteSelection(); insertAt = cursor() }
-    const text = event.text.replace(/\n/g, " ")
+    const text = event.text.replace(/[\r\n\t]/g, " ")
     const next = base.slice(0, insertAt) + text + base.slice(insertAt)
     setCursor(insertAt + text.length)
     clearSelection()

@@ -73,11 +73,14 @@ export function Slider(props: SliderProps) {
   const clamp = (v: number) => Math.min(max(), Math.max(min(), v))
   const snap = (v: number) => {
     const s = step()
-    return Math.round(v / s) * s
+    const result = Math.round(v / s) * s
+    const decimals = (s.toString().split(".")[1] || "").length
+    return Number(result.toFixed(decimals))
   }
 
   /** Convert a mouse event's X position to a value within [min, max]. */
   function valueFromMouse(evt: NodeMouseEvent): number {
+    if (evt.width <= 0) return min()
     const ratio = Math.max(0, Math.min(1, evt.nodeX / evt.width))
     return clamp(snap(min() + ratio * (max() - min())))
   }

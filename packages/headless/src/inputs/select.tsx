@@ -6,7 +6,7 @@
  * @public
  */
 
-import { createSignal, createContext, useContext } from "solid-js"
+import { createSignal, createContext, createEffect, onCleanup, onMount, useContext } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus } from "@vexart/engine"
 
@@ -93,6 +93,7 @@ type SelectContextValue = {
   highlightedIndex: () => number
   options: () => SelectOption[]
   registerOption: (opt: SelectOption) => void
+  unregisterOption: (value: string) => void
   selectValue: (value: string) => void
   focused: () => boolean
   disabled: () => boolean
@@ -122,6 +123,17 @@ function SelectRoot(props: SelectProps) {
       return [...prev, opt]
     })
   }
+
+  const unregisterOption = (value: string) => {
+    setRegisteredOptions((prev) => prev.filter((o) => o.value !== value))
+  }
+
+  createEffect(() => {
+    const opts = options()
+    if (opts.length > 0 && highlightedIndex() >= opts.length) {
+      setHighlightedIndex(Math.max(0, opts.length - 1))
+    }
+  })
 
   const selectValue = (value: string) => {
     const opt = options().find((o) => o.value === value)
@@ -234,6 +246,7 @@ function SelectRoot(props: SelectProps) {
     highlightedIndex: () => highlightedIndex(),
     options,
     registerOption,
+    unregisterOption,
     selectValue,
     focused,
     disabled,
@@ -252,7 +265,12 @@ function SelectRoot(props: SelectProps) {
 
 /** @public */
 export function SelectTrigger(props: SelectTriggerProps) {
-  return <>{props.children}</>
+  const ctx = useSelectContext()
+  return (
+    <box onPress={() => { if (!ctx.disabled()) ctx.setOpen(!ctx.open()) }}>
+      {props.children}
+    </box>
+  )
 }
 
 /** @public */
@@ -266,8 +284,19 @@ export function SelectItem(props: SelectItemProps) {
   const ctx = useSelectContext()
   const disabled = () => props.disabled ?? false
   const label = typeof props.children === "string" ? props.children : props.value
-  ctx.registerOption({ value: props.value, label, disabled: disabled() })
-  return <>{props.children ?? <text>{props.value}</text>}</>
+
+  onMount(() => {
+    ctx.registerOption({ value: props.value, label, disabled: disabled() })
+  })
+  onCleanup(() => {
+    ctx.unregisterOption(props.value)
+  })
+
+  return (
+    <box onPress={() => { if (!disabled()) ctx.selectValue(props.value) }}>
+      {props.children ?? <text>{props.value}</text>}
+    </box>
+  )
 }
 
 // ── Attach sub-components ──

@@ -6,7 +6,7 @@
  * @public
  */
 
-import { createSignal } from "solid-js"
+import { createSignal, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus } from "@vexart/engine"
 
@@ -40,6 +40,22 @@ export type ButtonProps = {
 export function Button(props: ButtonProps) {
   const [pressed, setPressed] = createSignal(false)
   const disabled = () => props.disabled ?? false
+  let pressTimer: ReturnType<typeof setTimeout> | null = null
+
+  function clearPressTimer() {
+    if (pressTimer) clearTimeout(pressTimer)
+    pressTimer = null
+  }
+
+  function schedulePressReset() {
+    clearPressTimer()
+    pressTimer = setTimeout(() => {
+      setPressed(false)
+      pressTimer = null
+    }, 100)
+  }
+
+  onCleanup(() => clearPressTimer())
 
   const { focused } = useFocus({
     id: props.focusId,
@@ -48,7 +64,7 @@ export function Button(props: ButtonProps) {
       if (e.key === "enter" || e.key === " ") {
         setPressed(true)
         props.onPress?.()
-        setTimeout(() => setPressed(false), 100)
+        schedulePressReset()
       }
     },
   })
@@ -57,7 +73,7 @@ export function Button(props: ButtonProps) {
     if (disabled()) return
     setPressed(true)
     props.onPress?.()
-    setTimeout(() => setPressed(false), 100)
+    schedulePressReset()
   }
 
   return (

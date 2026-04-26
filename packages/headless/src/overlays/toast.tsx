@@ -6,7 +6,7 @@
  * @public
  */
 
-import { createSignal, For } from "solid-js"
+import { createSignal, For, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
 import { Portal } from "../containers/portal"
 
@@ -143,6 +143,11 @@ export function createToaster(options: ToasterOptions): ToasterHandle {
   }
 
   function Toaster() {
+    onCleanup(() => {
+      for (const timer of timers.values()) clearTimeout(timer)
+      timers.clear()
+    })
+
     const align = getAlignment()
     return (
       <Portal>

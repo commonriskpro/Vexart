@@ -64,6 +64,7 @@ export function RadioGroup(props: RadioGroupProps) {
     onKeyDown(e) {
       if (disabled()) return
       const opts = props.options
+      if (opts.length === 0) return
       const current = selectedIndex()
 
       if (e.key === "down" || e.key === "right" || e.key === "j") {

@@ -135,14 +135,14 @@ const DEFAULT_KEY_BINDINGS: KeyBinding[] = [
   { key: "backspace", action: KEY_BINDING_ACTION.DELETE_BACK },
   { key: "delete", action: KEY_BINDING_ACTION.DELETE_FORWARD },
   { key: "a", ctrl: true, action: KEY_BINDING_ACTION.SELECT_ALL },
-  { key: "enter", action: KEY_BINDING_ACTION.NEWLINE },
   { key: "enter", ctrl: true, action: KEY_BINDING_ACTION.SUBMIT },
+  { key: "enter", action: KEY_BINDING_ACTION.NEWLINE },
 ]
 
 function matchesBinding(e: KeyEvent, b: KeyBinding): boolean {
   if (e.key !== b.key) return false
   if (b.ctrl && !e.mods.ctrl) return false
-  if (!b.ctrl && e.mods.ctrl && b.key !== "enter") return false
+  if (!b.ctrl && e.mods.ctrl) return false
   if (b.shift && !e.mods.shift) return false
   if (b.alt && !e.mods.alt) return false
   if (b.meta && !e.mods.meta) return false
@@ -321,12 +321,17 @@ export function Textarea(props: TextareaProps) {
   const [blink, setBlink] = createSignal(true)
   const [cursorColorSignal, setCursorColorSignal] = createSignal<string | number>(0)
   const [syntaxTokens, setSyntaxTokens] = createSignal<Token[][]>([])
+  const [viewportRow, setViewportRow] = createSignal(0)
 
   const th = () => ({ ...TEXTAREA_DEFAULTS, ...props.theme })
   const color = () => cursorColorSignal() || props.color || th().accent
   const disabled = () => props.disabled ?? false
   const inputWidth = () => props.width ?? 400
   const inputHeight = () => props.height ?? 200
+  const visibleLines = () => {
+    const h = inputHeight() - th().padding * 2
+    return Math.floor(h / LINE_HEIGHT)
+  }
 
   // Extmarks manager — one per textarea instance
   const extmarkMgr = new ExtmarkManager()
@@ -340,6 +345,17 @@ export function Textarea(props: TextareaProps) {
   // Derived line state
   const lines = () => textToLines(props.value)
   const cursorPos = () => offsetToRowCol(lines(), cursor())
+
+  function ensureCursorVisible() {
+    const rc = offsetToRowCol(lines(), cursor())
+    const vr = viewportRow()
+    const vl = visibleLines()
+    if (rc.row < vr) {
+      setViewportRow(rc.row)
+      return
+    }
+    if (rc.row >= vr + vl) setViewportRow(rc.row - vl + 1)
+  }
 
   // ── Syntax highlighting ──
 
@@ -424,6 +440,7 @@ export function Textarea(props: TextareaProps) {
     }
     stickyCol = -1
     props.onCursorChange?.(cursorPos().row, cursorPos().col)
+    ensureCursorVisible()
     markDirty()
   }
 
@@ -448,6 +465,7 @@ export function Textarea(props: TextareaProps) {
       clearSelection()
     }
     props.onCursorChange?.(targetRow, targetCol)
+    ensureCursorVisible()
     markDirty()
   }
 
@@ -536,12 +554,13 @@ export function Textarea(props: TextareaProps) {
       for (const binding of activeBindings) {
         if (matchesBinding(e, binding)) {
           executeAction(binding.action, e)
+          ensureCursorVisible()
           return
         }
       }
 
       // Printable character → insert
-      if (e.char && e.char.length === 1 && !e.mods.ctrl && !e.mods.alt && !e.mods.meta) {
+      if (e.char && !e.mods.ctrl && !e.mods.alt && !e.mods.meta) {
         let base = props.value
         let insertAt = cursor()
         if (hasSelection()) { base = deleteSelection(); insertAt = cursor() }
@@ -565,9 +584,10 @@ export function Textarea(props: TextareaProps) {
     let base = props.value
     let insertAt = cursor()
     if (hasSelection()) { base = deleteSelection(); insertAt = cursor() }
-    const text = event.text
+    const text = event.text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
     const next = base.slice(0, insertAt) + text + base.slice(insertAt)
     moveCursor(insertAt + text.length)
+    ensureCursorVisible()
     props.onChange?.(next)
   })
   onCleanup(() => unsubPaste())
@@ -780,11 +800,6 @@ export function Textarea(props: TextareaProps) {
 
   // ── Render ──
 
-  const visibleLines = () => {
-    const h = inputHeight() - th().padding * 2
-    return Math.floor(h / LINE_HEIGHT)
-  }
-
   return (
     <box
       width={inputWidth()}
@@ -796,16 +811,20 @@ export function Textarea(props: TextareaProps) {
       padding={th().padding}
       direction="column"
     >
-      {(() => {
+      {() => {
         const ls = lines()
+        const start = viewportRow()
         let offset = 0
+        for (let i = 0; i < start; i++) {
+          offset += ls[i].length + 1
+        }
         const result: JSX.Element[] = []
-        for (let i = 0; i < Math.min(ls.length, visibleLines()); i++) {
+        for (let i = start; i < Math.min(ls.length, start + visibleLines()); i++) {
           result.push(renderLine(ls[i], i, offset))
           offset += ls[i].length + 1 // +1 for newline
         }
         return result
-      })()}
+      }}
     </box>
   )
 }

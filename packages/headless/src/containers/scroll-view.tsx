@@ -89,6 +89,9 @@ export type ScrollViewProps = {
  * Reads scroll state from the ScrollHandle every frame.
  */
 function Scrollbar(props: { handle: ScrollHandle; height: number | string }) {
+  const viewportHeight = () =>
+    typeof props.height === "number" ? props.height : (props.handle.viewportHeight || 200)
+
   // Read scroll state (reactive — reads handle data each access)
   const ratio = () => {
     const ch = props.handle.contentHeight
@@ -98,7 +101,7 @@ function Scrollbar(props: { handle: ScrollHandle; height: number | string }) {
   }
 
   const thumbHeight = () =>
-    Math.max(SCROLLBAR.minThumbHeight, Math.floor(ratio() * (typeof props.height === "number" ? props.height : 200)))
+    Math.max(SCROLLBAR.minThumbHeight, Math.floor(ratio() * viewportHeight()))
 
   const thumbOffset = () => {
     const ch = props.handle.contentHeight
@@ -106,7 +109,7 @@ function Scrollbar(props: { handle: ScrollHandle; height: number | string }) {
     if (ch <= vh) return 0
     const scrollable = ch - vh
     const scrollPos = -props.handle.scrollY // scrollY is negative
-    const trackHeight = (typeof props.height === "number" ? props.height : 200) - thumbHeight()
+    const trackHeight = viewportHeight() - thumbHeight()
     return Math.floor((scrollPos / scrollable) * trackHeight)
   }
 

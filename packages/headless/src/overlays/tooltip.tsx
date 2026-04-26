@@ -7,7 +7,7 @@
  * @public
  */
 
-import { createSignal } from "solid-js"
+import { createSignal, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
 import { Portal } from "../containers/portal"
 
@@ -39,6 +39,11 @@ export function Tooltip(props: TooltipProps) {
   let showTimer: ReturnType<typeof setTimeout> | null = null
   let hideTimer: ReturnType<typeof setTimeout> | null = null
 
+  onCleanup(() => {
+    if (showTimer) clearTimeout(showTimer)
+    if (hideTimer) clearTimeout(hideTimer)
+  })
+
   const show = () => {
     if (props.disabled) return
     if (hideTimer) { clearTimeout(hideTimer); hideTimer = null }
@@ -69,7 +74,7 @@ export function Tooltip(props: TooltipProps) {
         <Portal>
           <box
             floating="root"
-            floatOffset={{ x: 0, y: -(props.offset ?? 4) }}
+            floatOffset={placementOffset(props.placement, props.offset ?? 4)}
             zIndex={9999}
             pointerPassthrough
           >
@@ -79,6 +84,16 @@ export function Tooltip(props: TooltipProps) {
       ) : null}
     </box>
   )
+}
+
+function placementOffset(placement: string | undefined, offset: number): { x: number; y: number } {
+  switch (placement) {
+    case "bottom": return { x: 0, y: offset }
+    case "left": return { x: -offset, y: 0 }
+    case "right": return { x: offset, y: 0 }
+    case "top":
+    default: return { x: 0, y: -offset }
+  }
 }
 
 /**
@@ -126,7 +141,7 @@ export function Popover(props: PopoverProps) {
       {props.open ? (
         <box
           floating="parent"
-          floatOffset={{ x: 0, y: props.offset ?? 4 }}
+          floatOffset={placementOffset(props.placement ?? "bottom", props.offset ?? 4)}
           zIndex={9998}
         >
           {props.renderContent()}
