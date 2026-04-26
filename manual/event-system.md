@@ -1,8 +1,8 @@
 # Event System
 
-> Expanded guide for TGE's event handling: press events, bubbling, keyboard, and mouse input. For the quick-reference version, see [developer-guide.md](./developer-guide.md#interaction-props).
+> Expanded guide for Vexart's event handling: press events, bubbling, keyboard, and mouse input. For the quick-reference version, see [developer-guide.md](./developer-guide.md#interaction-props).
 
-TGE has a multi-layered event system. At the lowest level, raw terminal input is parsed into typed events. These events flow through the focus system, trigger interactive state changes, and bubble up the component tree like DOM events. This guide covers the complete event flow.
+Vexart has a multi-layered event system. At the lowest level, raw terminal input is parsed into typed events. These events flow through the focus system, trigger interactive state changes, and bubble up the component tree like DOM events. This guide covers the complete event flow.
 
 ---
 
@@ -41,7 +41,7 @@ The event parameter is optional — you can write `onPress={() => doSomething()}
 
 ## Per-Node Mouse Events
 
-TGE provides low-level mouse event callbacks that dispatch directly to the target node. Unlike `onPress`, these do **NOT bubble** — they fire only on the specific node the pointer is interacting with.
+Vexart provides low-level mouse event callbacks that dispatch directly to the target node. Unlike `onPress`, these do **NOT bubble** — they fire only on the specific node the pointer is interacting with.
 
 | Prop | Fires when | Notes |
 |------|-----------|-------|
@@ -90,7 +90,7 @@ type NodeMouseEvent = {
 Like `Element.setPointerCapture()` in the DOM. When a node captures the pointer, ALL mouse events (`onMouseMove`, `onMouseUp`, etc.) route to it regardless of cursor position — essential for drag interactions.
 
 ```typescript
-import { setPointerCapture, releasePointerCapture } from "tge"
+import { setPointerCapture, releasePointerCapture } from "@vexart/engine"
 
 setPointerCapture(nodeId)     // Lock — all mouse events go to this node
 releasePointerCapture(nodeId) // Unlock — auto-released on button up
@@ -99,7 +99,7 @@ releasePointerCapture(nodeId) // Unlock — auto-released on button up
 ### Drag example
 
 ```tsx
-import { setPointerCapture, releasePointerCapture } from "tge"
+import { setPointerCapture, releasePointerCapture } from "@vexart/engine"
 import { createSignal } from "solid-js"
 
 function DraggableHandle(props: { nodeId: string }) {
@@ -148,7 +148,7 @@ Interactive elements have a minimum hit-area of one terminal cell (`cellW x cell
 
 ## Event Bubbling
 
-`onPress` events bubble up the parent chain, exactly like DOM click events. When an element is pressed, TGE walks up the tree from the pressed node to the root, calling `onPress` on each ancestor that has one.
+`onPress` events bubble up the parent chain, exactly like DOM click events. When an element is pressed, Vexart walks up the tree from the pressed node to the root, calling `onPress` on each ancestor that has one.
 
 ### The Bubbling Flow
 
@@ -235,12 +235,12 @@ Call `event.stopPropagation()` to prevent the event from reaching ancestors:
 
 ## Void Button and Bubbling
 
-An important detail: The Void `Button` component (from `tge/void`) is a **purely visual** component. It does NOT handle `onPress` internally. To make it interactive, either:
+An important detail: The Void `Button` component (from `@vexart/styled`) is a **purely visual** component. It does NOT handle `onPress` internally. To make it interactive, either:
 
 **Option 1: Pass onPress to Void Button (if supported by your version)**
 
 ```tsx
-import { Button } from "tge/void"
+import { Button } from "@vexart/styled"
 
 <Button variant="default" onPress={() => save()}>
   Save
@@ -250,17 +250,17 @@ import { Button } from "tge/void"
 **Option 2: Wrap in a focusable box (event bubbles through Button)**
 
 ```tsx
-import { Button } from "tge/void"
+import { Button } from "@vexart/styled"
 
 <box focusable onPress={() => save()}>
   <Button variant="default">Save</Button>
 </box>
 ```
 
-The headless `Button` from `tge/components` is different — it manages focus and calls your `onPress`:
+The headless `Button` from `@vexart/headless` is different — it manages focus and calls your `onPress`:
 
 ```tsx
-import { Button } from "tge/components"
+import { Button } from "@vexart/headless"
 
 <Button
   onPress={() => save()}
@@ -328,14 +328,14 @@ type KeyEvent = {
 
 ## Global Input Hooks
 
-TGE provides several hooks for listening to input events at different levels.
+Vexart provides several hooks for listening to input events at different levels.
 
 ### onInput(handler) — Global Event Bus
 
 Not a hook, not reactive. Registers a callback for ALL input events. Good for global hotkeys and side effects.
 
 ```tsx
-import { onInput } from "tge"
+import { onInput } from "@vexart/engine"
 
 const unsub = onInput((event) => {
   if (event.type === "key" && event.key === "q" && event.mods.ctrl) {
@@ -353,7 +353,7 @@ const unsub = onInput((event) => {
 Returns a reactive signal that updates on every keypress.
 
 ```tsx
-import { useKeyboard } from "tge"
+import { useKeyboard } from "@vexart/engine"
 
 function StatusBar() {
   const kb = useKeyboard()
@@ -381,7 +381,7 @@ type KeyboardState = {
 ### useMouse() — Reactive Mouse Signal
 
 ```tsx
-import { useMouse } from "tge"
+import { useMouse } from "@vexart/engine"
 
 function CursorPosition() {
   const mouse = useMouse()
@@ -421,7 +421,7 @@ type MouseEvent = {
 Returns a signal for ALL input events (key, mouse, paste, focus).
 
 ```tsx
-import { useInput } from "tge"
+import { useInput } from "@vexart/engine"
 
 function DebugInput() {
   const event = useInput()
@@ -452,7 +452,7 @@ The complete flow of an input event:
 
 ```
 Terminal stdin
-  → Raw bytes parsed by @tge/input
+  → Raw bytes parsed by @vexart/engine input parser
     → Typed event (KeyEvent | MouseEvent | PasteEvent | FocusEvent)
       → onInput() global callbacks fire (all subscribers)
         → useInput() / useKeyboard() / useMouse() signals update
@@ -484,7 +484,7 @@ Terminal stdin
 
 ## Interaction Props (Headless Components)
 
-Headless components from `tge/components` provide interaction props in their render context. Instead of manually wiring `focusable` and `onPress` on every element, spread the provided props object on the root element:
+Headless components from `@vexart/headless` provide interaction props in their render context. Instead of manually wiring `focusable` and `onPress` on every element, spread the provided props object on the root element:
 
 | Component | Context Prop | Value | Purpose |
 |-----------|-------------|-------|---------|
@@ -520,7 +520,7 @@ The naming convention: props are named for what they go ON (`buttonProps`, `togg
 Encapsulates drag interactions — ref management, `setPointerCapture`, and an `isDragging` flag. Returns `dragProps` to spread on the drag target.
 
 ```typescript
-import { useDrag } from "tge"
+import { useDrag } from "@vexart/engine"
 
 const { dragging, dragProps } = useDrag({
   onDragStart: (evt) => { /* jump to position */ },
@@ -562,7 +562,7 @@ The Slider component uses `useDrag` internally — its `trackProps` are built on
 Encapsulates hover detection with configurable enter/leave delays. Returns `hovered` signal and `hoverProps` to spread on the target.
 
 ```typescript
-import { useHover } from "tge"
+import { useHover } from "@vexart/engine"
 
 const { hovered, hoverProps } = useHover({
   delay: 500,       // ms before onEnter fires
@@ -638,13 +638,15 @@ function KeyboardList(props: { items: string[] }) {
 ### Global Ctrl+Q quit handler
 
 ```tsx
-import { onInput } from "tge"
+import { createApp } from "@vexart/app"
+import { onInput } from "@vexart/engine"
 
-// In your main() function, after mount:
+// In your main() function, after createApp:
+const app = await createApp(() => <App />, { quit: [] })
+
 onInput((event) => {
   if (event.type === "key" && event.key === "q" && event.mods.ctrl) {
     app.destroy()
-    term.destroy()
     process.exit(0)
   }
 })
@@ -673,7 +675,7 @@ onInput((event) => {
 ### Drag with pointer capture
 
 ```tsx
-import { setPointerCapture, releasePointerCapture } from "tge"
+import { setPointerCapture, releasePointerCapture } from "@vexart/engine"
 import { createSignal } from "solid-js"
 
 function Slider(props: { value: number; onChange: (v: number) => void; nodeId: string }) {

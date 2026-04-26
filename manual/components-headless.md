@@ -1,23 +1,23 @@
 # Components (Headless Architecture)
 
-> Expanded guide for TGE's component system. For the quick-reference version, see [developer-guide.md](./developer-guide.md#components-tgecomponents). For building custom theme packages, see [creating-theme-packages.md](./creating-theme-packages.md).
+> Expanded guide for Vexart's component system. For the quick-reference version, see [developer-guide.md](./developer-guide.md#components-vexartheadless). For building custom theme packages, see [creating-theme-packages.md](./creating-theme-packages.md).
 
-TGE separates behavior from presentation using a headless architecture inspired by Radix UI and Headless UI. This guide explains the two patterns (render props and theme props), lists all 28 components with their APIs, and shows how to use them.
+Vexart separates behavior from presentation using a headless architecture inspired by Radix UI and Headless UI. This guide explains the two patterns (render props and theme props), lists all 28 components with their APIs, and shows how to use them.
 
 ---
 
 ## The Two-Layer Architecture
 
 ```
-tge/components  →  Behavior only (focus, keyboard, state, ARIA-like semantics)
-tge/void        →  Pre-styled using Void design tokens
+@vexart/headless  →  Behavior only (focus, keyboard, state, ARIA-like semantics)
+@vexart/styled    →  Pre-styled using Void design tokens
 ```
 
 **Web analogy:**
-- `tge/components` = Radix Primitives / Headless UI
-- `tge/void` = shadcn/ui
+- `@vexart/headless` = Radix Primitives / Headless UI
+- `@vexart/styled` = shadcn/ui
 
-You can use `tge/void` for quick development, or use `tge/components` directly for full visual control. You can also build your own theme package (see [creating-theme-packages.md](./creating-theme-packages.md)).
+You can use `@vexart/styled` for quick development, or use `@vexart/headless` directly for full visual control. You can also build your own theme package (see [creating-theme-packages.md](./creating-theme-packages.md)).
 
 ---
 
@@ -28,7 +28,7 @@ You can use `tge/void` for quick development, or use `tge/components` directly f
 For components with simple visual output (Button, Checkbox, Switch, List, etc.), the headless component manages state and focus, and you provide a render function that receives the state.
 
 ```tsx
-import { Button } from "tge/components"
+import { Button } from "@vexart/headless"
 
 <Button
   onPress={() => save()}
@@ -53,8 +53,8 @@ The component gives you state booleans. You return JSX. You control every pixel.
 For complex content components (Code, Markdown, Diff, Textarea), there are too many visual elements for individual render props. Instead, they accept a `theme` object with typed color/spacing configuration.
 
 ```tsx
-import { Code } from "tge/components"
-import { ONE_DARK } from "tge"
+import { Code } from "@vexart/headless"
+import { ONE_DARK } from "@vexart/engine"
 
 <Code
   content={`const x = 42;\nconsole.log(x);`}
@@ -80,7 +80,7 @@ All theme fields are optional — sensible dark defaults are used for any field 
 Layout container. Thin typed wrapper over the `<box>` intrinsic.
 
 ```tsx
-import { Box } from "tge/components"
+import { Box } from "@vexart/primitives"
 
 <Box padding={16} backgroundColor="#1a1a2e" cornerRadius={12} gap={8}>
   <Text color="#e0e0e0">Hello</Text>
@@ -92,7 +92,7 @@ import { Box } from "tge/components"
 Text display with typed props.
 
 ```tsx
-import { Text } from "tge/components"
+import { Text } from "@vexart/primitives"
 
 <Text color="#e0e0e0" fontSize={16} fontWeight={700}>Heading</Text>
 ```
@@ -102,7 +102,7 @@ import { Text } from "tge/components"
 Scrollable container with visual scrollbar. Content that overflows is clipped.
 
 ```tsx
-import { ScrollView } from "tge/components"
+import { ScrollView } from "@vexart/headless"
 
 let scrollRef
 
@@ -131,7 +131,7 @@ Headless interactive button with focus and Enter/Space activation.
 Spread `ctx.buttonProps` on the root element for automatic mouse click + keyboard support:
 
 ```tsx
-import { Button } from "tge/components"
+import { Button } from "@vexart/headless"
 
 <Button
   onPress={() => doAction()}
@@ -157,7 +157,7 @@ Headless single-line text input. Controlled component.
 **Render context:** `{ value, displayText, showPlaceholder, cursor, blink, focused, disabled, selection }`
 
 ```tsx
-import { Input } from "tge/components"
+import { Input } from "@vexart/headless"
 import { createSignal } from "solid-js"
 
 const [text, setText] = createSignal("")
@@ -185,8 +185,8 @@ Multi-line text editor with 2D cursor, syntax highlighting, extmarks, and key bi
 **Pattern:** Theme prop
 
 ```tsx
-import { Textarea } from "tge/components"
-import { ONE_DARK } from "tge"
+import { Textarea } from "@vexart/headless"
+import { ONE_DARK } from "@vexart/engine"
 
 const [code, setCode] = createSignal("")
 
@@ -214,7 +214,7 @@ Headless toggleable checkbox. Controlled.
 Spread `ctx.toggleProps` on the root element for click-to-toggle support:
 
 ```tsx
-import { Checkbox } from "tge/components"
+import { Checkbox } from "@vexart/headless"
 
 <Checkbox
   checked={agreed()}
@@ -243,7 +243,7 @@ Headless toggle switch. Controlled.
 Spread `ctx.toggleProps` on the root element for click-to-toggle support:
 
 ```tsx
-import { Switch } from "tge/components"
+import { Switch } from "@vexart/headless"
 
 <Switch
   checked={darkMode()}
@@ -273,7 +273,7 @@ Headless radio button group with arrow key navigation.
 Spread `ctx.optionProps` on each option element for click-to-select support:
 
 ```tsx
-import { RadioGroup } from "tge/components"
+import { RadioGroup } from "@vexart/headless"
 
 <RadioGroup
   value={size()}
@@ -305,7 +305,7 @@ Headless dropdown select with keyboard navigation.
 **Option context:** `{ highlighted, selected, disabled }`
 
 ```tsx
-import { Select } from "tge/components"
+import { Select } from "@vexart/headless"
 
 <Select
   value={fruit()}
@@ -342,7 +342,7 @@ Headless autocomplete with text filtering.
 **Option context:** `{ highlighted, selected, disabled }`
 
 ```tsx
-import { Combobox } from "tge/components"
+import { Combobox } from "@vexart/headless"
 
 <Combobox
   value={country()}
@@ -374,7 +374,7 @@ Headless numeric range input.
 **Render context:** `{ value, min, max, percentage, focused, disabled, trackProps, dragging }`
 
 ```tsx
-import { Slider } from "tge/components"
+import { Slider } from "@vexart/headless"
 
 <Slider
   value={volume()}
@@ -420,7 +420,7 @@ Headless tab switcher.
 Spread `ctx.tabProps` on each tab element for click-to-switch support:
 
 ```tsx
-import { Tabs } from "tge/components"
+import { Tabs } from "@vexart/headless"
 
 <Tabs
   activeTab={tab()}
@@ -448,7 +448,7 @@ Headless selectable list with Up/Down navigation.
 Spread `ctx.itemProps` on each item element for click-to-select support:
 
 ```tsx
-import { List } from "tge/components"
+import { List } from "@vexart/headless"
 
 <List
   items={["Alpha", "Beta", "Gamma"]}
@@ -474,7 +474,7 @@ Headless data table with row selection.
 Spread `ctx.rowProps` on each row element for click-to-select support:
 
 ```tsx
-import { Table } from "tge/components"
+import { Table } from "@vexart/headless"
 
 <Table
   columns={[
@@ -500,7 +500,7 @@ Headless progress indicator. No focus (pure visual).
 **Render context:** `{ ratio, fillWidth, width, height, value, max }`
 
 ```tsx
-import { ProgressBar } from "tge/components"
+import { ProgressBar } from "@vexart/headless"
 
 <ProgressBar
   value={progress()} max={100} width={300}
@@ -517,8 +517,9 @@ import { ProgressBar } from "tge/components"
 Headless modal. Compound component with built-in focus trap.
 
 ```tsx
-import { Dialog, Button } from "tge/components"
-import { Show, createSignal } from "tge"
+import { Dialog, Button } from "@vexart/headless"
+import { Show } from "@vexart/engine"
+import { createSignal } from "solid-js"
 
 const [open, setOpen] = createSignal(false)
 
@@ -555,7 +556,7 @@ const [open, setOpen] = createSignal(false)
 Headless delayed tooltip on hover.
 
 ```tsx
-import { Tooltip } from "tge/components"
+import { Tooltip } from "@vexart/headless"
 
 <Tooltip
   content="Save your work (Ctrl+S)"
@@ -577,7 +578,7 @@ Headless controlled popover panel.
 **Trigger context:** `{ open: boolean, toggle: () => void }`
 
 ```tsx
-import { Popover } from "tge/components"
+import { Popover } from "@vexart/headless"
 
 <Popover
   open={menuOpen()}
@@ -602,7 +603,7 @@ import { Popover } from "tge/components"
 Imperative toast notification system. Factory pattern.
 
 ```tsx
-import { createToaster } from "tge/components"
+import { createToaster } from "@vexart/headless"
 
 const { toast, Toaster } = createToaster({
   position: "bottom-right",
@@ -630,7 +631,7 @@ Two navigation models.
 **Flat routing** (dashboard-style):
 
 ```tsx
-import { Router, Route, useRouterContext } from "tge/components"
+import { Router, Route, useRouterContext } from "@vexart/headless"
 
 <Router initial="home">
   <Route path="home" component={HomeScreen} />
@@ -643,7 +644,7 @@ import { Router, Route, useRouterContext } from "tge/components"
 **Stack routing** (wizard/drill-down):
 
 ```tsx
-import { NavigationStack, useStack } from "tge/components"
+import { NavigationStack, useStack } from "@vexart/headless"
 
 <NavigationStack initial={HomeScreen}>
   {(screen) => <box width="100%" height="100%">{screen()}</box>}
@@ -659,7 +660,7 @@ Virtualized list for large datasets. Only renders visible items. Supports keyboa
 **Render context:** `{ selected: boolean, highlighted: boolean, hovered: boolean, index: number }`
 
 ```tsx
-import { VirtualList } from "tge/components"
+import { VirtualList } from "@vexart/headless"
 
 <VirtualList
   items={allUsers}           // 100K+ items
@@ -686,7 +687,7 @@ import { VirtualList } from "tge/components"
 Renders children in a separate compositing layer above everything.
 
 ```tsx
-import { Portal } from "tge/components"
+import { Portal } from "@vexart/headless"
 
 <Portal>
   <box width="100%" height="100%" backgroundColor="#000000aa"
@@ -705,8 +706,8 @@ Syntax-highlighted code block with tree-sitter tokenization.
 **Pattern:** Theme prop
 
 ```tsx
-import { Code } from "tge/components"
-import { ONE_DARK } from "tge"
+import { Code } from "@vexart/headless"
+import { ONE_DARK } from "@vexart/engine"
 
 <Code
   content={sourceCode}
@@ -724,8 +725,8 @@ Markdown renderer with inline styling.
 **Pattern:** Theme prop
 
 ```tsx
-import { Markdown } from "tge/components"
-import { ONE_DARK } from "tge"
+import { Markdown } from "@vexart/headless"
+import { ONE_DARK } from "@vexart/engine"
 
 <Markdown
   content={readmeText}
@@ -742,7 +743,7 @@ Unified diff viewer with per-line coloring and syntax highlighting.
 **Pattern:** Theme prop
 
 ```tsx
-import { Diff } from "tge/components"
+import { Diff } from "@vexart/headless"
 
 <Diff
   diff={unifiedDiff}
@@ -758,21 +759,21 @@ import { Diff } from "tge/components"
 Multi-span inline text for mixed styling.
 
 ```tsx
-import { RichText, Span } from "tge/components"
+import { RichText, Span } from "@vexart/primitives"
 
 <RichText color="#e0e0e0">
   <Span>Hello </Span>
   <Span color="#4488cc" fontWeight={700}>world</Span>
-  <Span> from TGE</Span>
+  <Span> from Vexart</Span>
 </RichText>
 ```
 
 ### 28. WrapRow
 
-Flex-wrap workaround (Clay doesn't support flexWrap). Manually computes row breaks.
+Flex-wrap workaround (Flexily doesn't support `flexWrap`). Manually computes row breaks.
 
 ```tsx
-import { WrapRow } from "tge/components"
+import { WrapRow } from "@vexart/primitives"
 
 <WrapRow width={400} itemWidth={80} gap={8}>
   {tags.map((tag) => (
@@ -790,8 +791,8 @@ import { WrapRow } from "tge/components"
 Factory function for reactive form state with validation. NOT a component — it returns a handle.
 
 ```tsx
-import { createForm, Input, Button } from "tge/components"
-import { Show } from "tge"
+import { createForm, Input, Button } from "@vexart/headless"
+import { Show } from "@vexart/engine"
 
 const form = createForm({
   initialValues: { name: "", email: "" },
@@ -852,4 +853,4 @@ const form = createForm({
 - [creating-theme-packages.md](./creating-theme-packages.md) — build your own theme on top of headless components
 - [Event System](./event-system.md) — onPress, PressEvent, keyboard events
 - [Interactivity and Focus](./interactivity-and-focus.md) — focus system used by all interactive components
-- [developer-guide.md](./developer-guide.md#components-tgecomponents) — quick reference
+- [developer-guide.md](./developer-guide.md#components-vexartheadless) — quick reference

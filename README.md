@@ -5,11 +5,9 @@
 Anti-aliased corners. Drop shadows. Linear & radial gradients. Glow effects. Backdrop blur (glassmorphism). Element opacity. Per-corner radius. All rendered as real GPU pixels — not ASCII boxes.
 
 ```tsx
-import { mount, createTerminal } from "@vexart/engine"
-import { Box, Text } from "@vexart/primitives"
+import { createApp, Box, Text } from "@vexart/app"
 
-const term = await createTerminal()
-mount(() => (
+await createApp(() => (
   <Box
     width="100%"
     height="100%"
@@ -19,7 +17,7 @@ mount(() => (
   >
     <Text color={0xfafafaff} fontSize={16}>Hello from Vexart!</Text>
   </Box>
-), term)
+))
 ```
 
 ---
@@ -29,7 +27,7 @@ mount(() => (
 - **GPU-accelerated rendering** — WGPU (Metal/Vulkan/DX12) via a single Rust cdylib
 - **Pixel-perfect shapes** — SDF anti-aliased rounded rects, circles, lines, Bezier curves
 - **JSX components** — SolidJS `createRenderer`; fine-grained reactive updates, no VDOM
-- **CSS-grade layout** — Taffy flexbox in Rust; microsecond layout times
+- **CSS-grade layout** — Flexily flexbox in pure JavaScript; no native layout FFI
 - **Design tokens** — shadcn-compatible dark theme with semantic color, spacing, radius, shadows
 - **28 headless components** — Button, Input, Select, Dialog, Combobox, Slider, VirtualList, and more
 - **Focus management** — Tab/Shift-Tab cycling, per-node keyboard handlers, focus scoping
@@ -57,20 +55,6 @@ mount(() => (
 
 > Vexart requires a terminal that supports the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). It exits with a clear error on unsupported terminals.
 
-### Retained runtime default
-
-- The Rust-retained runtime is now the **default path** on SHM-capable Kitty terminals.
-- If SHM is unavailable, Vexart falls back to the compatibility path automatically.
-- Emergency fallback for the full retained stack:
-
-```bash
-VEXART_RETAINED=0 bun run showcase
-```
-
-- Narrow per-feature overrides still exist for debugging, but `VEXART_RETAINED=0` is the compatibility-window kill switch.
-
----
-
 ## Quick Start
 
 ```bash
@@ -85,8 +69,8 @@ import { vexartSolidPlugin } from "vexart/solid-plugin"
 ```
 
 ```tsx
-import { mount, createTerminal, createParser } from "@vexart/engine"
-import { Box, Text, Button } from "@vexart/primitives"
+import { createApp, Box, Text } from "@vexart/app"
+import { Button } from "@vexart/headless"
 import { colors, radius, space } from "@vexart/styled"
 
 function App() {
@@ -110,24 +94,22 @@ function App() {
         <Text color={colors.foreground} fontSize={16}>Hello from Vexart</Text>
         <Text color={colors.mutedForeground} fontSize={12}>Browser-quality UI in your terminal</Text>
       </Box>
-      <Button onPress={() => process.exit(0)}>
-        {(ctx) => (
+      <Button
+        onPress={() => process.exit(0)}
+        renderButton={(ctx) => (
           <Box {...ctx.buttonProps} backgroundColor={colors.primary} cornerRadius={radius.md} padding={space[3]}>
             <Text color={colors.background}>Quit</Text>
           </Box>
         )}
-      </Button>
+      />
     </Box>
   )
 }
 
-const term = await createTerminal()
-const app = mount(() => <App />, term)
-const parser = createParser((e) => {
-  if (e.type === "key" && e.key === "q") process.exit(0)
-})
-term.onData((d) => parser.feed(d))
+await createApp(() => <App />)
 ```
+
+`createApp()` is the managed entry point. For advanced integrations, `mountApp()` exposes the async app lifecycle and `mount()` remains the low-level engine alternative when you need to provide your own terminal and input plumbing.
 
 ---
 
@@ -135,10 +117,11 @@ term.onData((d) => parser.feed(d))
 
 ```
 JSX (SolidJS createRenderer)
-  → Taffy layout (Rust via FFI — microsecond perf)
-    → WGPU paint (Rust GPU — SDF primitives, compositor)
-      → Kitty graphics protocol
-        → Terminal
+  → TypeScript scene graph + walk-tree
+    → Flexily layout (pure JavaScript)
+      → WGPU paint (Rust GPU — SDF primitives, compositor)
+        → Kitty graphics protocol
+          → Terminal
 ```
 
 Vexart is **not** a cell-based TUI framework. It renders actual pixels using the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) — the result looks like a browser running inside your terminal.
@@ -157,9 +140,9 @@ Dependencies flow one way: `engine → primitives → headless → styled`. You 
 ### Native binary — libvexart
 
 A single Rust cdylib (`native/target/release/libvexart.dylib`) handles all GPU work:
-- **Layout** — Taffy flexbox (CSS Grid / Flex)
 - **Paint** — WGPU shaders: SDF rounded rects, shadows, gradients, blur, compositor
 - **MSDF text** — Multi-channel signed-distance-field font rendering; sharp at any size
+- **Presentation** — Kitty encoding and direct/file/SHM transport
 
 Built with:
 ```bash
@@ -176,7 +159,7 @@ cargo build --release
 | `Text` | Primitives | Text display with font, color, size |
 | `RichText` | Primitives | Multi-span inline text |
 | `Span` | Primitives | Inline text span within RichText |
-| `WrapRow` | Primitives | Flex-wrap row (Clay compat) |
+| `WrapRow` | Primitives | Flex-wrap row helper |
 | `ScrollView` | Containers | Scrollable container with visual scrollbar |
 | `Portal` | Containers | Render subtree at root level |
 | `Button` | Inputs | Clickable element (headless render context) |
@@ -271,7 +254,7 @@ bun run showcase             # Run comprehensive feature showcase (7 tabs)
 bun run test:visual          # Run 40-scene golden image visual suite
 bun run test:visual:update   # Regenerate visual test references
 bun run perf:baseline        # Run perf baseline + save to scripts/perf-baseline.json
-bun run build:dist           # Build distributable tge-0.0.1.tgz
+bun run build:dist           # Build distributable Vexart npm package
 ```
 
 ---
@@ -301,7 +284,7 @@ bun run showcase       # Comprehensive 7-tab feature showcase
 - [Examples](examples/) — working demos for every feature
 - [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/)
 - [WGPU](https://wgpu.rs/) — GPU abstraction (Metal / Vulkan / DX12)
-- [Taffy](https://github.com/DioxusLabs/taffy) — Rust layout engine (CSS Flex + Grid)
+- [Flexily](https://www.npmjs.com/package/flexily) — pure JavaScript layout engine
 - [SolidJS Universal](https://github.com/solidjs/solid/tree/main/packages/solid/universal) — JSX reconciler
 
 ---

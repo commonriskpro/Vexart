@@ -1,8 +1,8 @@
 # Interactivity and Focus
 
-> Expanded guide for TGE's focus system and interactive styles. For the quick-reference version, see [developer-guide.md](./developer-guide.md#interactive-states).
+> Expanded guide for Vexart's focus system and interactive styles. For the quick-reference version, see [developer-guide.md](./developer-guide.md#interactive-states).
 
-TGE has a built-in focus management system that works like the browser's tabindex and :focus/:hover/:active pseudo-classes. This guide covers the focusable prop, interactive styles, Tab cycling, the useFocus hook, focus scopes (traps), and how focus interacts with mouse input.
+Vexart has a built-in focus management system that works like the browser's tabindex and :focus/:hover/:active pseudo-classes. This guide covers the focusable prop, interactive styles, Tab cycling, the useFocus hook, focus scopes (traps), and how focus interacts with mouse input.
 
 ---
 
@@ -35,7 +35,7 @@ What `focusable` does:
 
 ## Declarative Interactive Styles
 
-TGE provides three style override props that merge visual properties based on interaction state. No signals or manual tracking needed — the engine handles hover, active, and focus detection internally.
+Vexart provides three style override props that merge visual properties based on interaction state. No signals or manual tracking needed — the engine handles hover, active, and focus detection internally.
 
 | Prop | When active | Web equivalent |
 |------|------------|----------------|
@@ -195,7 +195,7 @@ In addition to setting focus, per-node mouse events (`onMouseDown`, `onMouseUp`)
 
 ## `useFocus()` Hook vs `focusable` Prop
 
-TGE provides two ways to make things focusable. Use the right one for the right job.
+Vexart provides two ways to make things focusable. Use the right one for the right job.
 
 ### When to use `focusable` (simple cases)
 
@@ -225,7 +225,7 @@ Use the `useFocus()` hook when:
 - You need the focus ID for external reference
 
 ```tsx
-import { useFocus, Show } from "tge"
+import { useFocus, Show } from "@vexart/engine"
 
 function SearchInput(props: { onSearch: (q: string) => void }) {
   const { focused, focus, id } = useFocus({
@@ -278,7 +278,7 @@ useFocus({
 `pushFocusScope()` creates a focus trap — Tab/Shift+Tab only cycles within the scope. Previous focus state is saved and restored when the scope is popped.
 
 ```tsx
-import { pushFocusScope } from "tge"
+import { pushFocusScope } from "@vexart/engine"
 import { onCleanup } from "solid-js"
 
 function Modal(props: { children: any; onClose: () => void }) {
@@ -316,7 +316,7 @@ function Modal(props: { children: any; onClose: () => void }) {
 
 ## Focus Cleanup
 
-When a focusable element unmounts (component cleanup), TGE automatically:
+When a focusable element unmounts (component cleanup), Vexart automatically:
 1. Unregisters it from the focus ring
 2. If it was focused, moves focus to the next element
 3. Cleans up any subtree focus registrations (via `removeNode` → `unregisterSubtree`)
@@ -377,7 +377,7 @@ function ActionButton(props: { label: string; onPress: () => void; variant?: "pr
 For external focus control, use `setFocus()` and `focusedId()`:
 
 ```tsx
-import { setFocus, focusedId } from "tge"
+import { setFocus, focusedId } from "@vexart/engine"
 
 // Focus a specific element by ID
 setFocus("save-button")
@@ -389,7 +389,7 @@ const currentFocus = focusedId()
 To set a stable focus ID, use the `useFocus` hook with a custom ID or the `focusId` prop on headless components:
 
 ```tsx
-import { Button } from "tge/components"
+import { Button } from "@vexart/headless"
 
 <Button
   focusId="save-button"
@@ -409,7 +409,7 @@ import { Button } from "tge/components"
 Use `focusedId()` to display which element has focus:
 
 ```tsx
-import { focusedId } from "tge"
+import { focusedId } from "@vexart/engine"
 
 function DebugBar() {
   return (
@@ -460,7 +460,7 @@ See [Event System](./event-system.md#interaction-props-headless-components) and 
 
 ## Engine-Level Interactivity Guarantees
 
-TGE's engine provides several guarantees that make interactive components work correctly by default:
+Vexart's engine provides several guarantees that make interactive components work correctly by default:
 
 ### 1. Auto-RECT for interactive nodes
 

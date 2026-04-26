@@ -7,7 +7,7 @@ This guide walks you through installing Vexart, building the Rust native runtime
 | Tool | Version | Purpose |
 |------|---------|---------|
 | [Bun](https://bun.sh/) | >= 1.1.0 | TypeScript runtime, FFI, package scripts, test runner |
-| [Rust](https://www.rust-lang.org/tools/install) | stable | Builds `libvexart`, the native WGPU/Taffy runtime |
+| [Rust](https://www.rust-lang.org/tools/install) | stable | Builds `libvexart`, the native WGPU paint/presentation runtime |
 | **Terminal with Kitty graphics** | — | Required: Kitty, Ghostty, or WezTerm |
 
 > Vexart is GPU/Kitty-protocol first. Plain ANSI terminals are not a v0.9 target.
@@ -26,41 +26,37 @@ cargo build
 Create `my-app.tsx`:
 
 ```tsx
-import { createTerminal, mount, useTerminalDimensions } from "@vexart/engine"
+import { createApp, Box, Text, useAppTerminal } from "@vexart/app"
+import { useTerminalDimensions } from "@vexart/engine"
 import { colors, radius } from "@vexart/styled"
 
-async function main() {
-  const terminal = await createTerminal()
+function App() {
+  const terminal = useAppTerminal()
+  const dims = useTerminalDimensions(terminal)
 
-  function App() {
-    const dims = useTerminalDimensions(terminal)
-
-    return (
-      <box
-        width={dims.width()}
-        height={dims.height()}
-        backgroundColor={colors.background}
-        alignX="center"
-        alignY="center"
+  return (
+    <Box
+      width={dims.width()}
+      height={dims.height()}
+      backgroundColor={colors.background}
+      alignX="center"
+      alignY="center"
+    >
+      <Box
+        padding={20}
+        backgroundColor={colors.card}
+        cornerRadius={radius.xl}
+        direction="column"
+        gap={8}
       >
-        <box
-          padding={20}
-          backgroundColor={colors.card}
-          cornerRadius={radius.xl}
-          direction="column"
-          gap={8}
-        >
-          <text color={colors.foreground}>Welcome to Vexart</text>
-          <text color={colors.mutedForeground}>Pixel-native terminal rendering</text>
-        </box>
-      </box>
-    )
-  }
-
-  mount(App, terminal)
+        <Text color={colors.foreground}>Welcome to Vexart</Text>
+        <Text color={colors.mutedForeground}>Pixel-native terminal rendering</Text>
+      </Box>
+    </Box>
+  )
 }
 
-main()
+await createApp(() => <App />)
 ```
 
 Run it:
@@ -73,20 +69,23 @@ bun --conditions=browser run my-app.tsx
 
 ## Runtime pipeline
 
-When you call `mount(App, terminal)`, Vexart:
+When you call `createApp(() => <App />)`, Vexart:
 
 1. Evaluates JSX with SolidJS.
-2. Mirrors retained nodes into the Rust scene graph.
-3. Computes layout with Taffy inside `libvexart`.
-4. Paints supported retained primitives/effects with WGPU.
-5. Presents through Kitty graphics, using native SHM on supported terminals.
+2. Creates and manages the terminal lifecycle.
+3. Walks the TypeScript-owned scene graph and computes layout with Flexily in pure JavaScript.
+4. Builds a TypeScript render graph and dispatches paint commands to `libvexart`.
+5. Presents through Kitty graphics, using native direct/file/SHM transport as appropriate.
 
-TypeScript remains the JSX/Solid shell and callback boundary. Rust owns the retained scene, layout, render graph, paint, resource, and presentation fast paths.
+TypeScript owns scene graph, reactivity, walk-tree, Flexily layout, render graph generation, event dispatch, focus, and hit-testing. Rust owns WGPU paint, compositing, Kitty encoding, transport, image assets, canvas display lists, and GPU resources.
 
 ## Package map
 
 ```ts
-// Core renderer/runtime
+// Managed app framework — preferred entry point
+import { createApp, Box, Text, useAppTerminal } from "@vexart/app"
+
+// Low-level engine/runtime for advanced integrations
 import { createTerminal, mount, useTerminalDimensions } from "@vexart/engine"
 
 // Intrinsic component wrappers

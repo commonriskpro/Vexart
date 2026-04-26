@@ -427,7 +427,7 @@ export { createNordToaster } from "./toast"
 ## Step 6: Use it
 
 ```typescript
-import { mount, createTerminal } from "@vexart/engine"
+import { createApp } from "@vexart/app"
 import { NordButton, NordSwitch, NordList, colors } from "@nord/vexart-theme"
 
 function App() {
@@ -440,8 +440,7 @@ function App() {
 }
 
 async function main() {
-  const term = await createTerminal()
-  mount(() => <App />, term)
+  await createApp(() => <App />)
 }
 
 main()

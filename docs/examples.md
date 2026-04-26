@@ -9,8 +9,7 @@ bun --conditions=browser run examples/hello.tsx
 ## Package imports
 
 ```tsx
-import { createTerminal, mount, onInput } from "@vexart/engine"
-import { Box, Text } from "@vexart/primitives"
+import { createApp, Box, Text } from "@vexart/app"
 import { Button, Input, ScrollView, VirtualList } from "@vexart/headless"
 import { colors, radius, space } from "@vexart/styled"
 ```
@@ -18,7 +17,7 @@ import { colors, radius, space } from "@vexart/styled"
 ## Minimal app
 
 ```tsx
-import { createTerminal, mount } from "@vexart/engine"
+import { createApp } from "@vexart/app"
 
 function App() {
   return (
@@ -28,14 +27,13 @@ function App() {
   )
 }
 
-const terminal = await createTerminal()
-mount(App, terminal)
+await createApp(() => <App />)
 ```
 
 ## Counter
 
 ```tsx
-import { createTerminal, mount } from "@vexart/engine"
+import { createApp } from "@vexart/app"
 import { Button } from "@vexart/headless"
 import { colors, space } from "@vexart/styled"
 import { createSignal } from "solid-js"
@@ -46,19 +44,25 @@ function App() {
   return (
     <box width="100%" height="100%" padding={space[6]} backgroundColor={colors.background} direction="column" gap={space[4]} alignX="center" alignY="center">
       <text color={colors.foreground}>Count: {count()}</text>
-      <Button onPress={() => setCount((value) => value + 1)}>Increment</Button>
+      <Button
+        onPress={() => setCount((value) => value + 1)}
+        renderButton={(ctx) => (
+          <box {...ctx.buttonProps} backgroundColor={colors.primary} cornerRadius={6} padding={8}>
+            <text color={colors.background}>Increment</text>
+          </box>
+        )}
+      />
     </box>
   )
 }
 
-const terminal = await createTerminal()
-mount(App, terminal)
+await createApp(() => <App />)
 ```
 
 ## Form
 
 ```tsx
-import { createTerminal, mount } from "@vexart/engine"
+import { createApp } from "@vexart/app"
 import { Button, Input } from "@vexart/headless"
 import { colors, radius, space } from "@vexart/styled"
 import { createSignal } from "solid-js"
@@ -71,15 +75,23 @@ function App() {
       <box padding={space[6]} backgroundColor={colors.card} cornerRadius={radius.xl} direction="column" gap={space[4]} width={420}>
         <text color={colors.foreground}>Contact</text>
         <Input value={name()} onChange={setName} placeholder="Your name..." />
-        <Button onPress={() => console.log(name())}>Submit</Button>
+        <Button
+          onPress={() => console.log(name())}
+          renderButton={(ctx) => (
+            <box {...ctx.buttonProps} backgroundColor={colors.primary} cornerRadius={radius.md} padding={space[3]}>
+              <text color={colors.background}>Submit</text>
+            </box>
+          )}
+        />
       </box>
     </box>
   )
 }
 
-const terminal = await createTerminal()
-mount(App, terminal)
+await createApp(() => <App />)
 ```
+
+`createApp()` is the default examples pattern. Use `mountApp()` when you need custom app bootstrapping, or `mount()` from `@vexart/engine` only for low-level integrations that manage terminal creation manually.
 
 ## Image and canvas intrinsics
 
@@ -119,7 +131,7 @@ The v0.9 release checklist validates at least these 15 runnable examples:
 Run smoke validation with:
 
 ```bash
-bun test packages/engine/src/testing/showcase-retained-smoke.test.tsx
+bun test packages/engine/src/testing/showcase-tab2.test.tsx
 ```
 
 Use real terminal validation before release:

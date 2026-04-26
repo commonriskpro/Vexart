@@ -1,8 +1,8 @@
 # Data Fetching
 
-> Expanded guide for TGE's data fetching and mutation system. For the quick-reference version, see [developer-guide.md](./developer-guide.md#usequeryfetcher-options).
+> Expanded guide for Vexart's data fetching and mutation system. For the quick-reference version, see [developer-guide.md](./developer-guide.md#usequeryfetcher-options).
 
-TGE provides `useQuery` and `useMutation` — reactive data primitives that integrate with SolidJS signals. These are not a full caching library like TanStack Query, but they cover the core patterns: fetching, refetching, retry, loading states, optimistic updates, and rollback.
+Vexart provides `useQuery` and `useMutation` — reactive data primitives that integrate with SolidJS signals. These are not a full caching library like TanStack Query, but they cover the core patterns: fetching, refetching, retry, loading states, optimistic updates, and rollback.
 
 ---
 
@@ -13,7 +13,7 @@ TGE provides `useQuery` and `useMutation` — reactive data primitives that inte
 ### Signature
 
 ```typescript
-import { useQuery } from "tge"
+import { useQuery } from "@vexart/engine"
 
 type QueryResult<T> = {
   data: () => T | undefined          // reactive — the fetched data
@@ -39,8 +39,7 @@ const result = useQuery<T>(
 ### Basic example
 
 ```tsx
-import { useQuery } from "tge"
-import { Show, For } from "tge"
+import { useQuery, Show, For } from "@vexart/engine"
 
 function UserList() {
   const users = useQuery(
@@ -193,7 +192,7 @@ users.mutate(freshData)
 ### Signature
 
 ```typescript
-import { useMutation } from "tge"
+import { useMutation } from "@vexart/engine"
 
 type MutationResult<T, V> = {
   data: () => T | undefined           // reactive — last successful result
@@ -219,7 +218,7 @@ const mutation = useMutation<T, V>(
 ### Basic example
 
 ```tsx
-import { useMutation } from "tge"
+import { useMutation } from "@vexart/engine"
 
 function DeleteButton(props: { userId: string }) {
   const del = useMutation(
@@ -312,9 +311,9 @@ submit.reset()
 The typical CRUD pattern:
 
 ```tsx
-import { useQuery, useMutation } from "tge"
-import { Show, For, createSignal } from "tge"
-import { Button, Input } from "tge/components"
+import { useQuery, useMutation, Show, For } from "@vexart/engine"
+import { Button, Input } from "@vexart/headless"
+import { createSignal } from "solid-js"
 
 function TodoApp() {
   const [newTodo, setNewTodo] = createSignal("")
@@ -403,7 +402,7 @@ function TodoApp() {
 ### Loading skeleton
 
 ```tsx
-import { Skeleton } from "tge/void"
+import { Skeleton } from "@vexart/styled"
 
 function UserCard() {
   const user = useQuery(() => fetchUser())
@@ -452,7 +451,7 @@ function DataSection(props: { query: QueryResult<any>; children: any }) {
 ### Mutation with toast feedback
 
 ```tsx
-import { createToaster } from "tge/components"
+import { createToaster } from "@vexart/headless"
 
 const { toast, Toaster } = createToaster({ /* ... */ })
 

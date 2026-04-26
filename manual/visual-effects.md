@@ -1,8 +1,8 @@
 # Visual Effects
 
-> Expanded guide for TGE's visual effects system. For the quick-reference version, see [developer-guide.md](./developer-guide.md#shadow--glow).
+> Expanded guide for Vexart's visual effects system. For the quick-reference version, see [developer-guide.md](./developer-guide.md#shadow--glow).
 
-TGE renders browser-quality visual effects in the terminal using SDF (Signed Distance Field) primitives in Zig. Every effect described here runs at the pixel level — not character-cell approximations. This guide covers shadows, glow, gradients, backdrop filters, opacity, and per-corner radius.
+Vexart renders browser-quality visual effects in the terminal using Rust/WGPU paint pipelines in `libvexart`. Every effect described here runs at the pixel level — not character-cell approximations. This guide covers shadows, glow, gradients, backdrop filters, opacity, and per-corner radius.
 
 ---
 
@@ -50,7 +50,7 @@ Drop shadows are painted behind the element using SDF blur. They create depth an
 | `blur` | `number` | Blur radius. Larger = softer, more spread. |
 | `color` | `number` | **MUST be u32 RGBA** (e.g., `0x00000060`). |
 
-**CRITICAL: Shadow colors must be u32 numbers.** They bypass the color parser and go directly to the Zig paint engine. Hex strings will NOT work:
+**CRITICAL: Shadow colors must be u32 numbers.** They bypass the color parser and go directly to the Rust/WGPU paint engine. Hex strings will NOT work:
 
 ```tsx
 // CORRECT
@@ -79,7 +79,7 @@ Pass an array to create layered shadows. Shadows paint in array order (first = b
 </box>
 ```
 
-**Web analogy:** CSS `box-shadow` accepts comma-separated shadows. TGE uses an array.
+**Web analogy:** CSS `box-shadow` accepts comma-separated shadows. Vexart uses an array.
 
 ### Colored Shadows
 
@@ -287,7 +287,7 @@ Gradients combine naturally with shadows, glow, and borders:
 
 Backdrop filters process the pixels BEHIND the element before compositing. This is how you create glassmorphism, desaturation overlays, and other effects that interact with the content beneath.
 
-**How it works internally:** The Zig paint engine reads the pixel buffer region behind the element, copies it to a temporary buffer, applies the filter, then composites the element on top. Each filter runs independently — you can stack multiple filters on one element.
+**How it works internally:** The Rust/WGPU paint engine reads the pixel buffer region behind the element, copies it to a temporary buffer, applies the filter, then composites the element on top. Each filter runs independently — you can stack multiple filters on one element.
 
 ### Backdrop Blur (Glassmorphism)
 
@@ -429,7 +429,7 @@ You can apply multiple backdrop filters to a single element:
 </box>
 
 // Animated fade
-import { createTransition } from "tge"
+import { createTransition } from "@vexart/engine"
 
 const [fade, setFade] = createTransition(0, { duration: 300 })
 setFade(1)  // fade in
@@ -541,5 +541,5 @@ This means you can freely use any visual effect on elements inside `scrollY`/`sc
 - [Layout and Sizing](./layout-and-sizing.md) — positioning and dimensions
 - [Interactivity and Focus](./interactivity-and-focus.md) — hover/active/focus styles change effects dynamically
 - [Animations](./animations.md) — animate opacity, shadow, glow over time
-- [Theming](./theming.md) — shadow presets from tge/void
+- [Theming](./theming.md) — shadow presets from `@vexart/styled`
 - [developer-guide.md](./developer-guide.md#shadow--glow) — quick reference

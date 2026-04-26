@@ -113,6 +113,8 @@ import { internalThing } from "@vexart/engine/src/internal/foo"
 
 If a user needs access to an internal for legitimate reasons, they open a feature request. We evaluate and either promote the symbol to public (with tests and docs) or propose an alternative.
 
+For application code, the recommended public entry point is `@vexart/app` and its managed `createApp()` API. `@vexart/engine` remains public for low-level integrations.
+
 ---
 
 ## 3. The `public.ts` contract
@@ -208,6 +210,7 @@ vexart/
 ├── packages/primitives/etc/primitives.api.md
 ├── packages/headless/etc/headless.api.md
 ├── packages/styled/etc/styled.api.md
+├── packages/app/etc/app.api.md
 ```
 
 Each `.api.md` is committed to git.
@@ -572,23 +575,22 @@ Every public symbol must have documentation. This is enforced via JSDoc.
 
 ```ts
 /**
- * Mount a Solid component into a terminal and start the render loop.
+ * Create a managed Vexart app and start the render loop.
  *
  * @param component - Root component function.
- * @param terminal - Terminal handle from {@link createTerminal}.
- * @returns A handle with `unmount()` method.
+ * @param options - Optional app and terminal configuration.
+ * @returns A handle with lifecycle controls.
  *
  * @example
  * ```tsx
- * const term = await createTerminal()
- * const handle = mount(() => <App />, term)
+ * const handle = await createApp(() => <App />)
  * // ... later
  * handle.unmount()
  * ```
  *
  * @public
  */
-export function mount(component: () => TGENode, terminal: Terminal): MountHandle {
+export async function createApp(component: () => JSX.Element, options?: CreateAppOptions): Promise<AppContext> {
   // ...
 }
 ```
@@ -762,8 +764,8 @@ This appendix enumerates the complete expected public API surface at v0.9 releas
 `@vexart/app` ships during the `0.9.0-beta` line. Symbols below are public entrypoints, but the app-framework compatibility contract is beta-level until Vexart 1.0: names are tracked by API reports, while behavior can still change with changelog notes as filesystem routing, dev mode, and className coverage mature.
 
 **Runtime**
-- `Page`, `mountApp` `@public`
-- `PageProps`, `MountAppOptions` (types) `@public`
+- `Page`, `createApp`, `mountApp`, `useAppTerminal` `@public`
+- `PageProps`, `CreateAppOptions`, `AppContext`, `MountAppOptions` (types) `@public`
 
 **Components**
 - `Box`, `Text` app-framework wrappers with `className` support `@public`

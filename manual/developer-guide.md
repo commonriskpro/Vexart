@@ -41,11 +41,11 @@
   - [useMutation](#usemutationmutator-options)
   - [useTerminalDimensions](#useterminaldimensionsterminal)
   - [markDirty](#markdirty)
-- [Components (`@vexart/headless`)](#components-tgecomponents)
+- [Components (`@vexart/headless`)](#components-vexartheadless)
   - [Component Architecture](#component-architecture)
   - [Complete Component Reference](#complete-component-reference)
   - [createForm — Form Validation](#createform--form-validation)
-- [Design System (`@vexart/styled`)](#design-system-tgevoid)
+- [Design System (`@vexart/styled`)](#design-system-vexartstyled)
   - [Tokens](#tokens)
   - [Theming](#theming)
   - [Void Components](#void-components)
@@ -82,7 +82,7 @@ bun add vexart
 ### Minimal App
 
 ```tsx
-import { mount, createTerminal, onInput } from "@vexart/engine"
+import { createApp } from "@vexart/app"
 
 function App() {
   return (
@@ -101,16 +101,7 @@ function App() {
 }
 
 async function main() {
-  const term = await createTerminal()
-  const app = mount(() => <App />, term)
-
-  onInput((event) => {
-    if (event.type === "key" && event.key === "q") {
-      app.destroy()
-      term.destroy()
-      process.exit(0)
-    }
-  })
+  await createApp(() => <App />, { quit: ["q", "ctrl+c"] })
 }
 
 main()
@@ -118,8 +109,8 @@ main()
 
 **What happens:**
 
-1. `createTerminal()` — detects terminal capabilities, enters raw mode, enables Kitty graphics and mouse tracking.
-2. `mount()` — creates the SolidJS reactive root, initializes the Flexily layout engine, starts the 30fps render loop with dirty-flag optimization, and connects stdin to the input parser.
+1. `createApp()` — creates the terminal, detects capabilities, enters raw mode, enables Kitty graphics and mouse tracking, and mounts your JSX tree.
+2. Vexart creates the SolidJS reactive root, initializes the Flexily layout engine, starts the 30fps render loop with dirty-flag optimization, and connects stdin to the input parser.
 3. Your JSX renders. When signals change, only affected nodes re-layout and re-paint.
 
 Run it:
@@ -164,7 +155,7 @@ JSX → SolidJS reactive signals → Flexily layout (TypeScript) → Rust/WGPU p
 |-------|-------------|
 | **JSX** | You write `<box>` and `<text>` elements. SolidJS compiles them into fine-grained reactive nodes — no virtual DOM. |
 | **SolidJS signals** | When a signal changes, only the specific DOM operation (e.g., set background color) fires. No diffing, no re-render. |
-| **Flexily layout** | A C layout engine (called via Bun FFI) computes the position and size of every element in microseconds. Same algorithm as CSS flexbox. |
+| **Flexily layout** | A pure JavaScript layout engine computes the position and size of every element in microseconds. Same model as CSS flexbox. |
 | **Rust/WGPU paint** | A Rust/WGPU native library paints each element into a pixel buffer using SDF (Signed Distance Field) primitives — anti-aliased corners, gradients, shadows, blur. |
 | **Kitty protocol** | The pixel buffer is transmitted to the terminal via the Kitty graphics protocol. The terminal composites it on its GPU. Only dirty regions are retransmitted. |
 

@@ -1,7 +1,7 @@
 # Vexart — Architecture Reference
 
 **Version**: 0.2
-**Status**: Target architecture — describes the paint-forward TS/Rust boundary after DEC-014 reverted the retained scene/layout/render/event cutover.
+**Status**: Target architecture — describes the paint-forward TS/Rust boundary after DEC-014 restored TypeScript ownership of scene, layout, render graph, and event dispatch.
 **Owner**: Founder (solo developer)
 **Companion to**: [PRD](./PRD.md), [API-POLICY](./API-POLICY.md)
 
@@ -453,12 +453,16 @@ packages/app/
     |-- cli/                   — vexart create/dev/build/routes/doctor
     |-- config/                — defineConfig() and defaults
     |-- components/            — app-level primitive wrappers with className
-    `-- runtime/               — Page, mountApp, app lifecycle helpers
+    `-- runtime/               — Page, createApp, mountApp, app lifecycle helpers
 ```
 
 **Contract for app framework**:
 
 - Runtime is Bun-native: Next-like DX, Bun runtime, Vexart renderer.
+- `createApp()` is the canonical managed entry point for user documentation.
+- `mountApp()` is the lower-level async app lifecycle helper for custom bootstrapping.
+- `mount()` from `@vexart/engine` remains the manual, low-level alternative for advanced integrations that manage terminal and input plumbing directly.
+- `useAppTerminal()` exposes the managed terminal from `createApp()` / `mountApp()` context.
 - `@vexart/app` is the only public app-framework package during alpha/beta.
 - Internal modules may be extracted later, but user docs should import from `@vexart/app`.
 - The framework must not depend on Next.js, DOM, CSSOM, hydration, or React DOM.
@@ -927,13 +931,13 @@ Animation descriptor registered:
   { nodeId, property: 'transform', from, to, easing, startTime }
          │
          ▼ (qualifying compositor-only frame)
-Compositor path reuses retained layer target and applies transform/opacity update
+Compositor path reuses cached layer targets and applies transform/opacity update
          │
          ▼
 vexart_composite_update_uniform(target, sourceTarget, transformQuad+opacity)
          │
          ▼
-WGPU updates retained composition without walk/layout/assign/paint
+WGPU updates cached composition without walk/layout/assign/paint
          │
          ▼
 Composite + Kitty emit as normal
@@ -941,8 +945,8 @@ Composite + Kitty emit as normal
 
 ### 7.3 Why this bypasses the main thread
 
-- Production today already skips walk-tree, layout, assign-layers, and paint for qualifying compositor-only retained frames.
-- The frame loop reuses retained layer targets and runs only compositor composition + output for those frames.
+- Production today already skips walk-tree, layout, assign-layers, and paint for qualifying compositor-only frames.
+- The frame loop reuses cached layer targets and runs only compositor composition + output for those frames.
 - The remaining gap is FULL JS-bypass ownership: Solid/reconciler updates may still happen before the compositor-only frame is selected.
 - Target remains: 60fps maintained even if the main thread is busy with unrelated work.
 
@@ -1190,6 +1194,7 @@ vexart/
 ├── native/
 │   └── libvexart/            — the one and only Rust cdylib
 ├── packages/
+│   ├── app/
 │   ├── engine/
 │   ├── primitives/
 │   ├── headless/
@@ -1478,15 +1483,15 @@ This section documents deviations between the current v0.1 codebase and the targ
 | Current state (v0.1) | Target | Resolved in |
 |---|---|---|
 | 16 packages with ghost / stub ones (`compat-*`, `compositor`, `output-compat`, `render-graph`, `scene`, `text`, `layout-clay`, `platform-terminal`, `gpu`, `output-kitty`) | 4 public packages (`engine`, `primitives`, `headless`, `styled`) + 2 internal | Phase 1 |
-| Package names `@tge/*` | `@vexart/*` | Phase 1 |
+| Legacy package namespace | `@vexart/*` | Phase 1 |
 | Relative imports across packages (`../../otro-paquete/src/...`) | Workspace imports (`@vexart/*`), CI-enforced | Phase 1 |
 | Packages have no declared `dependencies` | Explicit `workspace:*` dependencies | Phase 1 |
-| Clay (C) layout engine + `vendor/clay*` | Clay → custom TS mini-flexbox → Flexily in TypeScript; no native layout writeback FFI | Phase 2 + DEC-014 + DEC-015 |
-| Zig CPU paint path (`zig/` + `@tge/pixel`) | Deleted; GPU-only via WGPU | Phase 2 |
+| Former C layout engine and vendored layout sources | Flexily in TypeScript; no native layout writeback FFI | Phase 2 + DEC-014 + DEC-015 |
+| Former CPU paint path | Deleted; GPU-only via WGPU | Phase 2 |
 | `output-placeholder` + `output-halfblock` backends | Deleted; Kitty-only | Phase 2 |
 | `gpu-frame-composer.ts` with CPU/GPU switch | Deleted; no CPU mode | Phase 2 |
-| Three native binaries (`libclay`, `libtge` Zig, `libwgpu_bridge`) | One native binary (`libvexart`) | Phase 2 |
-| Kitty encoding / normal presentation in TypeScript (`Buffer.from(...).toString('base64')` and raw RGBA payloads) | Native Rust presentation; JS receives stats/status only | Retained R1 / Phase 2b Native Presentation |
+| Multiple legacy native binaries | One native binary (`libvexart`) | Phase 2 |
+| Kitty encoding / normal presentation in TypeScript (`Buffer.from(...).toString('base64')` and raw RGBA payloads) | Native Rust presentation; JS receives stats/status only | Native Presentation |
 | `cache: None` in all WGPU pipelines (`native/wgpu-canvas-bridge/src/lib.rs` lines 676, 771, 882, 999, 1109, 1228, 1377, 1484, 1568, 1660) | Shared persistent `PipelineCache` on disk | Phase 2b |
 | 5 independent caches with `MAX_*` constants (text-layout, font-atlas, image, etc.) | Unified `ResourceManager` with 128 MB default budget | Phase 2b |
 | 89-glyph ASCII bitmap font atlas | MSDF atlas (1024×1024) per runtime-loaded font | Phase 2b |
@@ -1503,11 +1508,11 @@ This section documents deviations between the current v0.1 codebase and the targ
 | No golden image tests | 40+ golden tests in CI | Phase 4 |
 | No API surface snapshot | `api-extractor` `.api.md` files locked by CI | Phase 4 |
 | No `bench:optimizations` benchmark suite | Per-optimization micro-benchmarks | Phase 2b + Phase 3 |
-| `starfield` / `nebula` Zig primitives | Moved to `examples/` or deleted | Phase 2 |
+| `starfield` / `nebula` experimental primitives | Moved to `examples/` or deleted | Phase 2 |
 | Runtime font atlases limited to 15 ids | Unlimited (governed by `ResourceManager` budget) | Phase 2b |
-| TS owns layer GPU target handles and terminal image IDs | Rust `LayerRegistry` owns target/image lifecycle and resource accounting | Retained R2 |
-| Rust-retained scene graph / layout / render graph / event dispatch plan | Reverted; TS retains scene graph, reactivity, Flexily layout, render graph, and event dispatch | DEC-014 / Phase 14 |
-| Retained experimental flags (`nativeSceneGraph`, `nativeSceneLayout`, `nativeRenderGraph`, `nativeEventDispatch`) | Removed from public `mount()` API | DEC-014 / Phase 14 |
+| TS owns layer GPU target handles and terminal image IDs | Rust `LayerRegistry` owns target/image lifecycle and resource accounting | Native layer registry |
+| Native ownership plan for scene graph / layout / render graph / event dispatch | Reverted; TS owns scene graph, reactivity, Flexily layout, render graph, and event dispatch | DEC-014 / Phase 14 |
+| Native scene/layout/render/event experimental flags | Removed from public `mount()` API | DEC-014 / Phase 14 |
 | Paint/composite/transport in TS hot path | Rust owns WGPU paint, composite, Kitty encoding, SHM/file/direct transport, image assets, and canvas display lists | DEC-014 / Phase 14 |
 
 ---
@@ -1520,7 +1525,7 @@ Quick index of the type contracts that agents reference most.
 
 | Type | Location | Purpose |
 |---|---|---|
-| `TGENode` | `reconciler/node.ts` | Retained tree node |
+| `TGENode` | `reconciler/node.ts` | TypeScript scene tree node |
 | `TGEProps` | `types.ts` | Prop contract for all primitives |
 | `PressEvent` | `reconciler/node.ts` | Event for `onPress` bubbling |
 | `NodeMouseEvent` | `reconciler/node.ts` | Event for `onMouse*` per-node |
@@ -1533,21 +1538,55 @@ Quick index of the type contracts that agents reference most.
 All exports prefixed `vexart_{module}_{action}`. Each has a matching stub in `packages/engine/src/ffi/functions.ts`. The current set:
 
 ```
-vexart_context_create / destroy / resize
-vexart_paint_dispatch / paint_upload_image / paint_remove_image
-vexart_composite_target_create / composite_target_destroy / composite_target_begin_layer / composite_target_end_layer
-vexart_composite_render_image_layer / composite_render_image_transform_layer / composite_update_uniform
-vexart_composite_copy_region_to_image / composite_image_filter_backdrop / composite_image_mask_rounded_rect / composite_merge
-vexart_composite_readback_rgba / composite_readback_region_rgba
-vexart_text_load_atlas / dispatch / measure
-vexart_kitty_emit_frame / kitty_emit_frame_with_stats / kitty_emit_layer / kitty_emit_layer_target / kitty_emit_region / kitty_emit_region_target
-vexart_kitty_set_transport / kitty_shm_prepare / kitty_shm_release / kitty_delete_layer
-vexart_layer_upsert / layer_mark_dirty / layer_reuse / layer_remove / layer_clear / layer_present_dirty
-vexart_resource_get_stats / resource_set_budget
-vexart_image_asset_register / image_asset_touch / image_asset_release
-vexart_canvas_display_list_update / canvas_display_list_touch / canvas_display_list_release
-vexart_get_last_error_length / copy_last_error
 vexart_version
+vexart_context_create
+vexart_context_destroy
+vexart_context_resize
+vexart_paint_dispatch
+vexart_paint_upload_image
+vexart_paint_remove_image
+vexart_composite_target_create
+vexart_composite_target_destroy
+vexart_composite_target_begin_layer
+vexart_composite_target_end_layer
+vexart_composite_render_image_layer
+vexart_composite_render_image_transform_layer
+vexart_composite_update_uniform
+vexart_composite_copy_region_to_image
+vexart_composite_image_filter_backdrop
+vexart_composite_image_mask_rounded_rect
+vexart_composite_merge
+vexart_composite_readback_rgba
+vexart_composite_readback_region_rgba
+vexart_text_load_atlas
+vexart_text_dispatch
+vexart_text_measure
+vexart_kitty_emit_frame
+vexart_kitty_set_transport
+vexart_kitty_shm_prepare
+vexart_kitty_shm_release
+vexart_kitty_emit_frame_with_stats
+vexart_kitty_emit_layer
+vexart_kitty_emit_layer_target
+vexart_kitty_emit_region
+vexart_kitty_emit_region_target
+vexart_kitty_delete_layer
+vexart_layer_upsert
+vexart_layer_mark_dirty
+vexart_layer_reuse
+vexart_layer_remove
+vexart_layer_clear
+vexart_layer_present_dirty
+vexart_resource_get_stats
+vexart_resource_set_budget
+vexart_image_asset_register
+vexart_image_asset_touch
+vexart_image_asset_release
+vexart_canvas_display_list_update
+vexart_canvas_display_list_touch
+vexart_canvas_display_list_release
+vexart_get_last_error_length
+vexart_copy_last_error
 ```
 
 The exact list is maintained in `native/libvexart/src/lib.rs` and mirrored in `packages/engine/src/ffi/functions.ts`. These two files must stay in sync; CI checks this.

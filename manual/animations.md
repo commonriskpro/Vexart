@@ -1,8 +1,8 @@
 # Animations
 
-> Expanded guide for TGE's animation system. For the quick-reference version, see [developer-guide.md](./developer-guide.md#createtransitionsignal-options).
+> Expanded guide for Vexart's animation system. For the quick-reference version, see [developer-guide.md](./developer-guide.md#createtransitionsignal-options).
 
-TGE provides two animation primitives: `createTransition` (eased/tween) and `createSpring` (physics-based). Both return reactive `[getter, setter]` tuples that integrate naturally with SolidJS JSX. This guide covers both in depth, along with easing functions and the adaptive framerate system.
+Vexart provides two animation primitives: `createTransition` (eased/tween) and `createSpring` (physics-based). Both return reactive `[getter, setter]` tuples that integrate naturally with SolidJS JSX. This guide covers both in depth, along with easing functions and the adaptive framerate system.
 
 ---
 
@@ -13,7 +13,7 @@ TGE provides two animation primitives: `createTransition` (eased/tween) and `cre
 ### Signature
 
 ```typescript
-import { createTransition, easing } from "tge"
+import { createTransition, easing } from "@vexart/engine"
 
 const [value, setValue] = createTransition(initialValue: number, options?: {
   duration?: number,    // ms, default: 300
@@ -30,7 +30,7 @@ const [value, setValue] = createTransition(initialValue: number, options?: {
 ### Basic example
 
 ```tsx
-import { createTransition } from "tge"
+import { createTransition } from "@vexart/engine"
 
 function ExpandPanel() {
   const [width, setWidth] = createTransition(100, { duration: 300 })
@@ -92,10 +92,10 @@ setA(1); setB(1); setC(1)
 
 ## Easing Presets
 
-Easing functions control the acceleration curve of the animation. TGE provides 9 built-in presets.
+Easing functions control the acceleration curve of the animation. Vexart provides 9 built-in presets.
 
 ```typescript
-import { easing } from "tge"
+import { easing } from "@vexart/engine"
 ```
 
 | Easing | Behavior | Use for |
@@ -153,7 +153,7 @@ const [v, setV] = createTransition(0, {
 ### Signature
 
 ```typescript
-import { createSpring } from "tge"
+import { createSpring } from "@vexart/engine"
 
 const [value, setValue] = createSpring(initialValue: number, options?: {
   stiffness?: number,    // default: 170 (spring tension)
@@ -168,7 +168,7 @@ const [value, setValue] = createSpring(initialValue: number, options?: {
 ### Basic example
 
 ```tsx
-import { createSpring } from "tge"
+import { createSpring } from "@vexart/engine"
 
 function SpringButton() {
   const [y, setY] = createSpring(0, { stiffness: 200, damping: 20 })
@@ -238,7 +238,7 @@ createSpring(0, { stiffness: 400, damping: 10 })
 
 ## Adaptive Framerate
 
-TGE optimizes rendering with an adaptive framerate system:
+Vexart optimizes rendering with an adaptive framerate system:
 
 | State | FPS | When |
 |-------|-----|------|
@@ -248,13 +248,13 @@ TGE optimizes rendering with an adaptive framerate system:
 
 This means:
 - Your animations run at smooth 60fps automatically
-- When nothing moves, TGE drops to 30fps to save CPU
+- When nothing moves, Vexart drops to 30fps to save CPU
 - The transition is invisible — framerate ramps up the moment you call `setValue()`
 
 You can check if animations are active:
 
 ```tsx
-import { hasActiveAnimations } from "tge"
+import { hasActiveAnimations } from "@vexart/engine"
 
 // Returns true if any transition or spring is in progress
 const isAnimating = hasActiveAnimations()
@@ -267,7 +267,7 @@ const isAnimating = hasActiveAnimations()
 ### Fade in on mount
 
 ```tsx
-import { createTransition, easing } from "tge"
+import { createTransition, easing } from "@vexart/engine"
 
 function FadeIn(props: { children: any }) {
   const [opacity, setOpacity] = createTransition(0, {
@@ -375,7 +375,7 @@ function AnimatedCounter(props: { value: number }) {
 ### Staggered list entrance
 
 ```tsx
-import { For } from "tge"
+import { For } from "@vexart/engine"
 
 function StaggeredList(props: { items: string[] }) {
   return (
