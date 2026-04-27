@@ -110,7 +110,7 @@ mod tests {
             color_b: 1.0,
             color_a: 1.0,
             atlas_id,
-            _pad0: 0,
+            msdf_flag: 0,
             _pad1: 0,
             _pad2: 0,
         }
