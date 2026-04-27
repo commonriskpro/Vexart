@@ -53,8 +53,6 @@ export function Span(props: SpanProps) {
 export type RichTextProps = {
   maxWidth?: number
   lineHeight?: number
-  color?: string | number    // Reserved for future single-element rich text support.
-  fontSize?: number
   children?: JSX.Element
 }
 
