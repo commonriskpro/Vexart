@@ -1677,14 +1677,23 @@ pub unsafe extern "C" fn vexart_font_render_text(
             }
         }
 
-        // Upload dirty atlas pages to GPU as images.
+        // Upload dirty MSDF atlas pages to the Rust atlas registry (NOT the image registry).
+        // The glyph pipeline dispatches using atlas_id to look up bind_groups from pctx.atlases.
+        // We use atlas_id 2+ for MSDF pages (id 1 is the bitmap atlas loaded by TS).
         let page_size = atlas_mgr.page_size();
         for (page_idx, page) in atlas_mgr.pages.iter_mut().enumerate() {
             if page.dirty {
-                // Upload the atlas page as a GPU image.
-                // Use a stable handle based on page index (offset from a high range to avoid collision).
-                let atlas_handle = 0xFFFE_0000_0000_0000u64 | (page_idx as u64);
-                upload_image_record(pctx, atlas_handle, &page.rgba, page_size, page_size);
+                let msdf_atlas_id = (page_idx as u32) + 2; // 2, 3, 4, ... (1 is bitmap)
+                if msdf_atlas_id <= 15 {
+                    let device = &pctx.wgpu.device;
+                    let queue = &pctx.wgpu.queue;
+                    let bgl = &pctx.wgpu.image_bind_group_layout;
+                    let _ = pctx.atlases.load_atlas_raw(
+                        device, queue, bgl,
+                        msdf_atlas_id,
+                        &page.rgba, page_size, page_size,
+                    );
+                }
                 page.dirty = false;
             }
         }
@@ -1695,17 +1704,13 @@ pub unsafe extern "C" fn vexart_font_render_text(
             return OK;
         }
 
-        // For now, all glyphs use atlas page 0 → atlas_id maps to the image handle.
-        let _atlas_handle = 0xFFFE_0000_0000_0000u64;
+        // Set atlas_id on all instances to point at the correct MSDF atlas page.
         for inst in instances.iter_mut() {
-            // Override atlas_id with the image handle's low bits won't work since atlas_id is u32.
-            // Instead, we use the existing glyph pipeline with the uploaded image.
-            inst.atlas_id = 1; // Rust atlas registry ID
+            // page 0 → atlas_id 2, page 1 → atlas_id 3, etc.
+            // For now all glyphs are on page 0 → atlas_id 2.
+            inst.atlas_id = 2;
         }
 
-        // Load the MSDF atlas into Rust's atlas registry if not already done.
-        // We need to upload via the atlas system so the glyph pipeline's bind_group works.
-        // For now, dispatch directly with the uploaded image handle.
         drop(atlas_mgr);
 
         let code = text::dispatch_glyph_instances(pctx, target, &instances);
