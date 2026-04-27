@@ -978,10 +978,10 @@ fn render_blur_image(pctx: &mut PaintContext, image: u64, blur_radius: f32) -> R
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-    let src_bg_ptr: *const wgpu::BindGroup = {
-        let img = pctx.images.get(&image).unwrap();
-        &img.bind_group as *const wgpu::BindGroup
+    let Some(src_img) = pctx.images.get(&image) else {
+        return Err(ERR_INVALID_HANDLE);
     };
+    let src_bg_ptr: *const wgpu::BindGroup = &src_img.bind_group as *const wgpu::BindGroup;
 
     let mut encoder = pctx
         .wgpu
@@ -1066,10 +1066,10 @@ fn render_color_filter_image(
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-    let src_bg_ptr: *const wgpu::BindGroup = {
-        let img = pctx.images.get(&image).unwrap();
-        &img.bind_group as *const wgpu::BindGroup
+    let Some(src_img) = pctx.images.get(&image) else {
+        return Err(ERR_INVALID_HANDLE);
     };
+    let src_bg_ptr: *const wgpu::BindGroup = &src_img.bind_group as *const wgpu::BindGroup;
 
     let mut encoder = pctx
         .wgpu
@@ -1329,10 +1329,10 @@ pub fn image_mask_rounded_rect(
         });
 
     // Extract source bind group before mutable ops.
-    let src_bg_ptr: *const wgpu::BindGroup = {
-        let img = pctx.images.get(&image).unwrap();
-        &img.bind_group as *const wgpu::BindGroup
+    let Some(src_img) = pctx.images.get(&image) else {
+        return ERR_INVALID_HANDLE;
     };
+    let src_bg_ptr: *const wgpu::BindGroup = &src_img.bind_group as *const wgpu::BindGroup;
 
     let mut encoder = pctx
         .wgpu

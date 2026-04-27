@@ -18,6 +18,13 @@ pub mod types;
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use ffi::panic::{ERR_GPU_DEVICE_LOST, ERR_INVALID_ARG, OK};
+
+/// Lock a mutex, recovering from poison instead of panicking.
+/// If a previous panic poisoned the mutex, the guard is recovered
+/// so the renderer can continue operating instead of permanently failing.
+fn lock_or_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 use types::FrameStats;
 
 // ─── Single shared PaintContext (lazy-initialized, persisted across all FFI calls) ──
@@ -35,7 +42,7 @@ static SHARED_PAINT: LazyLock<Mutex<Option<paint::PaintContext>>> =
     LazyLock::new(|| Mutex::new(None));
 
 fn get_or_init_paint() -> MutexGuard<'static, Option<paint::PaintContext>> {
-    let mut guard = SHARED_PAINT.lock().unwrap();
+    let mut guard = lock_or_recover(&SHARED_PAINT);
     if guard.is_none() {
         *guard = Some(paint::PaintContext::new());
     }
@@ -934,9 +941,9 @@ pub unsafe extern "C" fn vexart_layer_upsert(
         };
         let key = layer::LayerKey::from_bytes(key_bytes);
         let resources = get_or_init_resource();
-        let mut resources_guard = resources.lock().unwrap();
+        let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
         let registry = get_or_init_layer_registry();
-        let mut registry_guard = registry.lock().unwrap();
+        let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
         let result = registry_guard.upsert(key, desc, &mut resources_guard);
         let out = std::slice::from_raw_parts_mut(out_ptr, layer::LayerUpsertResult::BYTE_LEN);
         if !result.write_to(out) {
@@ -951,7 +958,7 @@ pub unsafe extern "C" fn vexart_layer_upsert(
 pub extern "C" fn vexart_layer_mark_dirty(_ctx: u64, layer_handle: u64) -> i32 {
     ffi_guard!({
         let registry = get_or_init_layer_registry();
-        let mut registry_guard = registry.lock().unwrap();
+        let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
         if registry_guard.mark_dirty(layer_handle) {
             OK
         } else {
@@ -976,9 +983,9 @@ pub unsafe extern "C" fn vexart_layer_reuse(
             return ERR_INVALID_ARG;
         }
         let resources = get_or_init_resource();
-        let mut resources_guard = resources.lock().unwrap();
+        let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
         let registry = get_or_init_layer_registry();
-        let mut registry_guard = registry.lock().unwrap();
+        let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
         let Some(image_id) = registry_guard.reuse(layer_handle, frame, &mut resources_guard) else {
             return ERR_INVALID_ARG;
         };
@@ -1002,9 +1009,9 @@ pub unsafe extern "C" fn vexart_layer_remove(
             return ERR_INVALID_ARG;
         }
         let resources = get_or_init_resource();
-        let mut resources_guard = resources.lock().unwrap();
+        let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
         let registry = get_or_init_layer_registry();
-        let mut registry_guard = registry.lock().unwrap();
+        let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
         let Some(image_id) = registry_guard.remove(layer_handle, &mut resources_guard) else {
             return ERR_INVALID_ARG;
         };
@@ -1018,9 +1025,9 @@ pub unsafe extern "C" fn vexart_layer_remove(
 pub extern "C" fn vexart_layer_clear(_ctx: u64) -> i32 {
     ffi_guard!({
         let resources = get_or_init_resource();
-        let mut resources_guard = resources.lock().unwrap();
+        let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
         let registry = get_or_init_layer_registry();
-        let mut registry_guard = registry.lock().unwrap();
+        let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
         registry_guard.clear(&mut resources_guard);
         OK
     })
@@ -1042,9 +1049,9 @@ pub unsafe extern "C" fn vexart_layer_present_dirty(
             return ERR_INVALID_ARG;
         }
         let resources = get_or_init_resource();
-        let mut resources_guard = resources.lock().unwrap();
+        let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
         let registry = get_or_init_layer_registry();
-        let mut registry_guard = registry.lock().unwrap();
+        let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
         let Some(image_id) =
             registry_guard.mark_presented(layer_handle, frame, &mut resources_guard)
         else {
@@ -1119,7 +1126,7 @@ pub unsafe extern "C" fn vexart_resource_get_stats(
         // Phase 2b: ResourceManager is a static singleton (lazy-initialized).
         // Statistics are collected from the global manager on every call.
         let guard = get_or_init_resource();
-        let mgr = guard.lock().unwrap();
+        let mgr = guard.lock().unwrap_or_else(|e| e.into_inner());
         let stats = resource::stats::collect_stats(&mgr);
         let json = stats.to_json();
         let bytes = json.as_bytes();
@@ -1141,7 +1148,7 @@ pub extern "C" fn vexart_resource_set_budget(_ctx: u64, budget_mb: u32) -> i32 {
     ffi_guard!({
         let budget_bytes = (budget_mb as u64) * 1024 * 1024;
         let guard = get_or_init_resource();
-        let mut mgr = guard.lock().unwrap();
+        let mut mgr = guard.lock().unwrap_or_else(|e| e.into_inner());
         mgr.set_budget(budget_bytes);
         OK
     })
@@ -1184,9 +1191,9 @@ pub unsafe extern "C" fn vexart_image_asset_register(
         let height = u32::from_le_bytes(meta[4..8].try_into().unwrap_or([0; 4]));
 
         let resources = get_or_init_resource();
-        let mut resources_guard = resources.lock().unwrap();
+        let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
         let registry = get_or_init_image_assets();
-        let mut registry_guard = registry.lock().unwrap();
+        let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
         let Some(handle) = registry_guard.register(key, rgba, width, height, current_frame, &mut resources_guard)
         else {
             return ERR_INVALID_ARG;
@@ -1206,9 +1213,9 @@ pub unsafe extern "C" fn vexart_image_asset_register(
 pub extern "C" fn vexart_image_asset_touch(_ctx: u64, _scene: u64, current_frame: u64, handle: u64) -> i32 {
     ffi_guard!({
         let resources = get_or_init_resource();
-        let mut resources_guard = resources.lock().unwrap();
+        let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
         let registry = get_or_init_image_assets();
-        let registry_guard = registry.lock().unwrap();
+        let registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
         if registry_guard.touch(handle, current_frame, &mut resources_guard) {
             OK
         } else {
@@ -1221,9 +1228,9 @@ pub extern "C" fn vexart_image_asset_touch(_ctx: u64, _scene: u64, current_frame
 pub extern "C" fn vexart_image_asset_release(_ctx: u64, _scene: u64, handle: u64) -> i32 {
     ffi_guard!({
         let resources = get_or_init_resource();
-        let mut resources_guard = resources.lock().unwrap();
+        let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
         let registry = get_or_init_image_assets();
-        let mut registry_guard = registry.lock().unwrap();
+        let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
         if registry_guard.release(handle, &mut resources_guard) {
             let mut paint_guard = get_or_init_paint();
             if let Some(pctx) = paint_guard.as_mut() {
@@ -1266,9 +1273,9 @@ pub unsafe extern "C" fn vexart_canvas_display_list_update(
         let hash = canvas_display_list::hash_display_list(bytes);
 
         let resources = get_or_init_resource();
-        let mut resources_guard = resources.lock().unwrap();
+        let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
         let registry = get_or_init_canvas_display_lists();
-        let mut registry_guard = registry.lock().unwrap();
+        let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
         let Some(handle) = registry_guard.update(key, bytes, hash, current_frame, &mut resources_guard) else {
             return ERR_INVALID_ARG;
         };
@@ -1281,9 +1288,9 @@ pub unsafe extern "C" fn vexart_canvas_display_list_update(
 pub extern "C" fn vexart_canvas_display_list_touch(_ctx: u64, _scene: u64, current_frame: u64, handle: u64) -> i32 {
     ffi_guard!({
         let resources = get_or_init_resource();
-        let mut resources_guard = resources.lock().unwrap();
+        let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
         let registry = get_or_init_canvas_display_lists();
-        let registry_guard = registry.lock().unwrap();
+        let registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
         if registry_guard.touch(handle, current_frame, &mut resources_guard) {
             OK
         } else {
@@ -1296,9 +1303,9 @@ pub extern "C" fn vexart_canvas_display_list_touch(_ctx: u64, _scene: u64, curre
 pub extern "C" fn vexart_canvas_display_list_release(_ctx: u64, _scene: u64, handle: u64) -> i32 {
     ffi_guard!({
         let resources = get_or_init_resource();
-        let mut resources_guard = resources.lock().unwrap();
+        let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
         let registry = get_or_init_canvas_display_lists();
-        let mut registry_guard = registry.lock().unwrap();
+        let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
         if registry_guard.release(handle, &mut resources_guard) {
             OK
         } else {
