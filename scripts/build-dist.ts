@@ -196,6 +196,7 @@ const vexartDts = resolve(DIST, "vexart.d.ts")
 if (!existsSync(vexartDts)) {
   console.error("ERROR: vexart.d.ts not found in dist — types will be broken for consumers")
   console.error("Run 'bun run api:update' to generate it, or check types/ directory")
+  process.exit(1)
 }
 cpSync(resolve(ROOT, "types/jsx-runtime.d.ts"), resolve(DIST, "jsx-runtime.d.ts"))
 console.log(`  ✅ engine.d.ts + vexart.d.ts + jsx-runtime.d.ts`)
