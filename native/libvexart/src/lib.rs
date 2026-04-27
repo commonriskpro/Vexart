@@ -1500,11 +1500,23 @@ pub unsafe extern "C" fn vexart_font_render_text(
                 let advance = entry.advance * scale;
 
                 if entry.bbox_w > 0.0 && entry.bbox_h > 0.0 {
+                    // The MSDF atlas cell is GLYPH_SIZE×GLYPH_SIZE texels and represents
+                    // the glyph scaled to fill that cell. The quad size should match
+                    // the visual size the glyph occupies at the requested font_size.
+                    //
+                    // The advance is already in font units, scaled by `scale`.
+                    // For the quad, we use the advance width as the horizontal extent
+                    // and font_size as the vertical extent (matching line height).
+                    let glyph_w = advance.max(font_size * 0.3); // at least 30% of font size
+                    let glyph_h = font_size;
+                    let glyph_x = pen_x;
+                    let glyph_y = pen_y;
+
                     instances.push(paint::instances::MsdfGlyphInstance {
-                        x: (pen_x / target_w) * 2.0 - 1.0,
-                        y: 1.0 - (pen_y / target_h) * 2.0,
-                        w: (font_size / target_w) * 2.0,
-                        h: -((font_size / target_h) * 2.0),
+                        x: (glyph_x / target_w) * 2.0 - 1.0,
+                        y: 1.0 - (glyph_y / target_h) * 2.0,
+                        w: (glyph_w / target_w) * 2.0,
+                        h: -((glyph_h / target_h) * 2.0),
                         uv_x: entry.uv_x(),
                         uv_y: entry.uv_y(),
                         uv_w: entry.uv_w(),

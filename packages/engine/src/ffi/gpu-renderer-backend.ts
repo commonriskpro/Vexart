@@ -23,7 +23,7 @@ import type {
 } from "./renderer-backend"
 import { chooseGpuLayerStrategy, nativeChooseFrameStrategy, NATIVE_FRAME_STRATEGY, NATIVE_FRAME_TRANSPORT, type GpuLayerStrategyMode, type NativeFramePlan } from "./gpu-layer-strategy"
 import { builtinFontScale, getFont, layoutText } from "./text-layout"
-import { openVexartLibrary, VexartNativeError } from "./vexart-bridge"
+import { openVexartLibrary, openMsdfFontSymbols, VexartNativeError } from "./vexart-bridge"
 import { vexartGetLastError } from "./vexart-functions"
 import {
   GRAPH_MAGIC, GRAPH_VERSION,
@@ -59,6 +59,7 @@ import type { DamageRect } from "./damage"
 // Pre-allocated scratch buffers for pack functions — avoids per-call ArrayBuffer/DataView allocations.
 const PACK_MAX = 256
 const PROFILE_ENABLED = process.env.VEXART_PROFILE !== "0"
+const MSDF_TEXT_ENABLED = process.env.VEXART_MSDF === "1"
 const _packBuf = new ArrayBuffer(PACK_MAX)
 const _packView = new DataView(_packBuf)
 const _packU8 = new Uint8Array(_packBuf)
@@ -904,6 +905,67 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     }
     return _vexartCtx
   }
+  // ── MSDF text rendering ────────────────────────────────────────────────
+  let _msdfSymbols: ReturnType<typeof openMsdfFontSymbols> = undefined as any
+  let _msdfInitDone = false
+  const _msdfEncoder = new TextEncoder()
+  const _msdfStatsBuf = new Uint8Array(32)
+
+  function getMsdfSymbols() {
+    if (_msdfSymbols !== undefined) return _msdfSymbols
+    _msdfSymbols = openMsdfFontSymbols()
+    if (_msdfSymbols && !_msdfInitDone) {
+      _msdfInitDone = true
+      _msdfSymbols.vexart_font_init()
+    }
+    return _msdfSymbols
+  }
+
+  /** Try to render a text op via the MSDF pipeline. Returns true on success. */
+  function tryMsdfText(
+    vctx: bigint,
+    targetHandle: bigint,
+    text: string,
+    x: number,
+    y: number,
+    fontSize: number,
+    lineHeight: number,
+    maxWidth: number,
+    colorRgba: number,
+    targetWidth: number,
+    targetHeight: number,
+  ): boolean {
+    const sym = getMsdfSymbols()
+    if (!sym) return false
+
+    const textBuf = _msdfEncoder.encode(text)
+    if (textBuf.byteLength === 0) return true
+
+    // Pack params: f32 x,y,fontSize,lineHeight,maxWidth + u32 color + u16 weight + u16 flags + JSON families
+    const familiesJson = _msdfEncoder.encode('["sans-serif"]')
+    const headerSize = 28
+    const paramsBuf = new Uint8Array(headerSize + familiesJson.byteLength)
+    const view = new DataView(paramsBuf.buffer)
+    view.setFloat32(0, x, true)
+    view.setFloat32(4, y, true)
+    view.setFloat32(8, fontSize, true)
+    view.setFloat32(12, lineHeight, true)
+    view.setFloat32(16, maxWidth, true)
+    view.setUint32(20, colorRgba >>> 0, true)
+    view.setUint16(24, 400, true) // weight
+    view.setUint16(26, 0, true)   // flags
+    paramsBuf.set(familiesJson, headerSize)
+
+    const rc = sym.vexart_font_render_text(
+      vctx, targetHandle,
+      ptr(textBuf), textBuf.byteLength,
+      ptr(paramsBuf), paramsBuf.byteLength,
+      ptr(_msdfStatsBuf),
+    ) as number
+
+    return rc === 0
+  }
+
   let lastStrategy: GpuLayerStrategyMode | null = null
   let lastNativeFramePlan: NativeFramePlan | null = null
   let standaloneTarget: TargetRecord | null = null
@@ -986,6 +1048,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   const transientFullFrameImages: VexartImageHandle[] = []
   const tempGlyphs: WgpuCanvasGlyphInstance[] = []
   const dirtyRects: DirtyBoundsRect[] = []
+  const deferredMsdfOps: { text: string; x: number; y: number; fontSize: number; lineHeight: number; maxWidth: number; colorRgba: number }[] = []
   const cacheStats: GpuRendererBackendCacheStats = {
     layerTargetCount: 0,
     layerTargetBytes: 0,
@@ -2165,7 +2228,25 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           continue
         }
         if (op.kind === "text") {
-          // Bitmap atlas path with replacement glyph fallback for missing codepoints.
+          // ── MSDF path: opt-in via VEXART_MSDF=1, deferred until after flushAll ──
+          if (MSDF_TEXT_ENABLED && getMsdfSymbols()) {
+            deferredMsdfOps.push({
+              text: op.inputs.text,
+              x: Math.round(op.command.x) - ctx.offsetX,
+              y: Math.round(op.command.y) - ctx.offsetY,
+              fontSize: op.inputs.fontSize,
+              lineHeight: op.inputs.lineHeight,
+              maxWidth: op.inputs.maxWidth,
+              colorRgba: ((op.command.color[0] & 0xff) << 24)
+                | ((op.command.color[1] & 0xff) << 16)
+                | ((op.command.color[2] & 0xff) << 8)
+                | (op.command.color[3] & 0xff),
+            })
+            const bounds = opBounds(op, ctx.target.width, ctx.target.height)
+            if (bounds) markDirty(bounds.left, bounds.top, bounds.right, bounds.bottom)
+            continue
+          }
+          // ── Bitmap atlas path (default) ──
           let usedGlyphPath = false
           {
             const layout = layoutText(op.inputs.text, op.inputs.fontId, op.inputs.maxWidth, op.inputs.lineHeight, op.inputs.fontSize)
@@ -2250,6 +2331,17 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         failGpuOnly(`unsupported render op kind=${op.kind}`)
       }
       flushAll()
+      // ── Deferred MSDF text: render AFTER all rects/shapes/images so text appears on top ──
+      for (const msdfOp of deferredMsdfOps) {
+        tryMsdfText(
+          vctx, targetHandle,
+          msdfOp.text, msdfOp.x, msdfOp.y,
+          msdfOp.fontSize, msdfOp.lineHeight, msdfOp.maxWidth,
+          msdfOp.colorRgba,
+          ctx.target.width, ctx.target.height,
+        )
+      }
+      deferredMsdfOps.length = 0
     } finally {
       if (layerOpen) vexartCompositeTargetEndLayer(vctx, targetHandle)
     }
