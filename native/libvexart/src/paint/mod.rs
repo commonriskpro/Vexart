@@ -180,8 +180,10 @@ impl PaintContext {
         // semantic paint ordering; grouping globally by kind would reorder them.
         let mut batches: Vec<(u16, Vec<u8>)> = Vec::new();
 
+        let mut truncated = false;
         for _ in 0..header.cmd_count {
             if offset + 8 > graph.len() {
+                truncated = true;
                 break;
             }
             let cmd_kind = u16::from_le_bytes([graph[offset], graph[offset + 1]]);
@@ -196,6 +198,7 @@ impl PaintContext {
 
             let payload_end = offset + payload_bytes;
             if payload_end > graph.len() || payload_end > body_end {
+                truncated = true;
                 break;
             }
             let payload = &graph[offset..payload_end];
@@ -209,6 +212,10 @@ impl PaintContext {
             }
 
             batches.push((cmd_kind, payload.to_vec()));
+        }
+
+        if truncated {
+            crate::ffi::error::set_last_error("paint_dispatch: graph buffer truncated, partial commands skipped");
         }
 
         if batches.is_empty() {
