@@ -410,7 +410,7 @@ pub unsafe fn dispatch(
 
 /// Dispatch glyph instances through the glyph pipeline.
 /// Groups by atlas_id and issues one draw call per atlas.
-pub(crate) fn dispatch_glyph_instances(
+fn dispatch_glyph_instances(
     pctx: &mut PaintContext,
     target: u64,
     glyphs: &[crate::paint::instances::MsdfGlyphInstance],
@@ -425,26 +425,33 @@ pub(crate) fn dispatch_glyph_instances(
         by_atlas.entry(g.atlas_id).or_default().push(*g);
     }
 
-    let (wgpu, targets, _, atlases, default_view, fallback_bg) = pctx.split();
-    let use_active_encoder = target != 0
-        && targets
-            .get(target)
-            .map(|rec| rec.active_layer.is_some())
-            .unwrap_or(false);
+    // Resolve render target view.
+    let (render_view_ptr, use_active_encoder): (*const wgpu::TextureView, bool) = if target != 0 {
+        if let Some(rec) = pctx.targets.get(target) {
+            let has_layer = rec.active_layer.is_some();
+            (&rec.view as *const wgpu::TextureView, has_layer)
+        } else {
+            (&pctx.target_view as *const wgpu::TextureView, false)
+        }
+    } else {
+        (&pctx.target_view as *const wgpu::TextureView, false)
+    };
 
     for (atlas_id, atlas_glyphs) in &by_atlas {
         // Look up atlas bind group (fallback to default if atlas not loaded yet).
-        let bind_group = if let Some(atlas) = atlases.get(*atlas_id) {
-            &atlas.bind_group
-        } else {
-            fallback_bg
-        };
+        let bind_group_ptr: *const wgpu::BindGroup =
+            if let Some(atlas) = pctx.atlases.get(*atlas_id) {
+                &atlas.bind_group as *const _
+            } else {
+                &pctx.fallback_bind_group as *const _
+            };
 
         let payload: &[u8] = bytemuck::cast_slice(atlas_glyphs.as_slice());
         let instance_count = atlas_glyphs.len() as u32;
 
         // SAFETY: device is disjoint from targets/atlases.
-        let vertex_buf = wgpu
+        let vertex_buf = pctx
+            .wgpu
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("vexart-glyph-instance-buf"),
@@ -453,9 +460,17 @@ pub(crate) fn dispatch_glyph_instances(
             });
 
         if use_active_encoder {
-            let Some(rec) = targets.get_mut(target) else { return ERR_INVALID_ARG; };
-            let Some(layer) = rec.active_layer.as_mut() else { return ERR_INVALID_ARG; };
-            let view_ref = &rec.view;
+            // SAFETY: rec fields are stable; we access disjoint fields.
+            let rec_ptr: *mut crate::composite::target::TargetRecord =
+                pctx.targets.get_mut(target).expect("target disappeared") as *mut _;
+
+            let view_ref: &wgpu::TextureView = unsafe { &(*rec_ptr).view };
+            let layer: &mut crate::composite::target::ActiveLayerRecord = unsafe {
+                (*rec_ptr)
+                    .active_layer
+                    .as_mut()
+                    .expect("active layer disappeared")
+            };
 
             let load_op = if layer.first_pass {
                 layer.first_pass = false;
@@ -493,19 +508,19 @@ pub(crate) fn dispatch_glyph_instances(
                     multiview_mask: None,
                 });
 
-            pass.set_pipeline(&wgpu.pipelines.glyph);
+            pass.set_pipeline(&pctx.wgpu.pipelines.glyph);
             pass.set_vertex_buffer(0, vertex_buf.slice(..));
-            pass.set_bind_group(0, bind_group, &[]);
+            // SAFETY: bind_group_ptr is valid for this frame.
+            pass.set_bind_group(0, unsafe { &*bind_group_ptr }, &[]);
             pass.draw(0..6, 0..instance_count);
         } else {
-            let render_view = if target != 0 {
-                targets.get(target).map(|rec| &rec.view).unwrap_or(default_view)
-            } else {
-                default_view
-            };
-            let mut encoder = wgpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("vexart-glyph-encoder"),
-            });
+            let render_view: &wgpu::TextureView = unsafe { &*render_view_ptr };
+            let mut encoder =
+                pctx.wgpu
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("vexart-glyph-encoder"),
+                    });
 
             {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -525,13 +540,13 @@ pub(crate) fn dispatch_glyph_instances(
                     multiview_mask: None,
                 });
 
-                pass.set_pipeline(&wgpu.pipelines.glyph);
+                pass.set_pipeline(&pctx.wgpu.pipelines.glyph);
                 pass.set_vertex_buffer(0, vertex_buf.slice(..));
-                pass.set_bind_group(0, bind_group, &[]);
+                pass.set_bind_group(0, unsafe { &*bind_group_ptr }, &[]);
                 pass.draw(0..6, 0..instance_count);
             }
 
-            wgpu.queue.submit(std::iter::once(encoder.finish()));
+            pctx.wgpu.queue.submit(std::iter::once(encoder.finish()));
         }
     }
 

@@ -12,7 +12,6 @@ use std::os::fd::OwnedFd;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{LazyLock, Mutex};
-use std::time::{Duration, Instant};
 
 use nix::fcntl::OFlag;
 use nix::sys::mman::{mmap, msync, munmap, shm_open, shm_unlink, MapFlags, MsFlags, ProtFlags};
@@ -36,27 +35,6 @@ struct KittyShmHandle {
 static NEXT_KITTY_HANDLE: AtomicU64 = AtomicU64::new(1);
 static KITTY_SHM_HANDLES: LazyLock<Mutex<HashMap<u64, KittyShmHandle>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
-static STALE_SHM_SEGMENTS: LazyLock<Mutex<Vec<(CString, Instant)>>> =
-    LazyLock::new(|| Mutex::new(Vec::new()));
-
-fn lock_or_recover<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poisoned| {
-        eprintln!("[vexart] recovering from poisoned mutex");
-        poisoned.into_inner()
-    })
-}
-
-pub fn cleanup_stale_shm_segments() {
-    let now = Instant::now();
-    let mut stale = lock_or_recover(&STALE_SHM_SEGMENTS);
-    stale.retain(|(name, created)| {
-        if now.duration_since(*created) <= Duration::from_secs(1) {
-            return true;
-        }
-        let _ = shm_unlink(name.as_c_str());
-        false
-    });
-}
 
 // ─── Cleanup helper ───────────────────────────────────────────────────────
 
@@ -97,7 +75,6 @@ pub unsafe fn shm_prepare(
     mode: u32,
     out_handle: *mut u64,
 ) -> i32 {
-    cleanup_stale_shm_segments();
     // 1. Validate inputs.
     if name_ptr.is_null()
         || name_len == 0
@@ -106,10 +83,6 @@ pub unsafe fn shm_prepare(
         || out_handle.is_null()
     {
         set_last_error("invalid arguments: null or zero-length pointer");
-        return ERR_INVALID_ARG;
-    }
-    if name_len > 255 {
-        set_last_error("SHM name exceeds POSIX NAME_MAX (255)");
         return ERR_INVALID_ARG;
     }
 
@@ -200,11 +173,8 @@ pub unsafe fn shm_prepare(
     let handle_id = NEXT_KITTY_HANDLE.fetch_add(1, Ordering::Relaxed);
     KITTY_SHM_HANDLES
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .unwrap()
         .insert(handle_id, KittyShmHandle { fd, name });
-    if let Some(entry) = lock_or_recover(&KITTY_SHM_HANDLES).get(&handle_id) {
-        lock_or_recover(&STALE_SHM_SEGMENTS).push((entry.name.clone(), Instant::now()));
-    }
 
     // 11. Return the handle to the caller.
     unsafe { *out_handle = handle_id };
@@ -224,22 +194,23 @@ pub fn shm_release(handle: u64, unlink_flag: u32) -> i32 {
     }
 
     // Remove from registry; if unknown, soft-fail.
-    let entry = match lock_or_recover(&KITTY_SHM_HANDLES).remove(&handle) {
+    let entry = match KITTY_SHM_HANDLES.lock().unwrap().remove(&handle) {
         Some(e) => e,
         None => return OK,
     };
 
     // `entry.fd` is dropped here → auto-close(). No manual close() needed.
 
-    let _ = unlink_flag;
-    if let Err(e) = shm_unlink(entry.name.as_c_str()) {
-        // ENOENT is acceptable (already gone); any other error is reported.
-        if e != nix::errno::Errno::ENOENT {
-            set_last_error(format!("shm_unlink failed: {e}"));
-            return ERR_KITTY_TRANSPORT;
+    // Optional unlink.
+    if unlink_flag != 0 {
+        if let Err(e) = shm_unlink(entry.name.as_c_str()) {
+            // ENOENT is acceptable (already gone); any other error is reported.
+            if e != nix::errno::Errno::ENOENT {
+                set_last_error(format!("shm_unlink failed: {e}"));
+                return ERR_KITTY_TRANSPORT;
+            }
         }
     }
-    lock_or_recover(&STALE_SHM_SEGMENTS).retain(|(name, _)| name != &entry.name);
 
     OK
 }

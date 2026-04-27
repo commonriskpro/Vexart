@@ -13,24 +13,16 @@ use std::time::Instant;
 
 use wgpu::util::DeviceExt;
 
-use crate::ffi::error::set_last_error;
-use crate::ffi::panic::{ERR_GPU_DEVICE_LOST, ERR_INVALID_ARG, OK};
+use crate::ffi::panic::{ERR_INVALID_ARG, OK};
 use crate::types::FrameStats;
 
 /// Monotonic image handle allocator. Shared between paint (upload_image) and
 /// composite (copy_region_to_image / filter / mask operations).
 pub static NEXT_IMAGE_HANDLE: AtomicU64 = AtomicU64::new(1);
-pub const IMAGE_TAG: u64 = 0x1_0000_0000_0000;
-pub const CANVAS_TAG: u64 = 0x2_0000_0000_0000;
-pub const TARGET_TAG: u64 = 0x3_0000_0000_0000;
 
 /// Allocate the next image handle.
 pub fn alloc_image_handle() -> u64 {
-    NEXT_IMAGE_HANDLE.fetch_add(1, Ordering::Relaxed) | IMAGE_TAG
-}
-
-pub fn alloc_canvas_handle() -> u64 {
-    NEXT_IMAGE_HANDLE.fetch_add(1, Ordering::Relaxed) | CANVAS_TAG
+    NEXT_IMAGE_HANDLE.fetch_add(1, Ordering::Relaxed)
 }
 
 /// Holds a GPU texture + view + bind group for one uploaded image.
@@ -60,8 +52,8 @@ pub struct PaintContext {
 }
 
 impl PaintContext {
-    pub fn new() -> Result<Self, &'static str> {
-        let wgpu = context::WgpuContext::new()?;
+    pub fn new() -> Self {
+        let wgpu = context::WgpuContext::new();
 
         // Create a minimal 64×64 offscreen target for smoke-test dispatch.
         let target_texture = wgpu.device.create_texture(&wgpu::TextureDescriptor {
@@ -126,7 +118,7 @@ impl PaintContext {
             ],
         });
 
-        Ok(Self {
+        Self {
             wgpu,
             images: HashMap::new(),
             targets: crate::composite::target::TargetRegistry::new(),
@@ -134,47 +126,7 @@ impl PaintContext {
             target_texture,
             target_view,
             fallback_bind_group,
-        })
-    }
-
-    pub fn split(
-        &mut self,
-    ) -> (
-        &context::WgpuContext,
-        &mut crate::composite::target::TargetRegistry,
-        &HashMap<u64, ImageRecord>,
-        &crate::text::atlas::AtlasRegistry,
-        &wgpu::TextureView,
-        &wgpu::BindGroup,
-    ) {
-        (
-            &self.wgpu,
-            &mut self.targets,
-            &self.images,
-            &self.atlases,
-            &self.target_view,
-            &self.fallback_bind_group,
-        )
-    }
-
-    pub fn split_with_images(
-        &mut self,
-    ) -> (
-        &context::WgpuContext,
-        &mut crate::composite::target::TargetRegistry,
-        &mut HashMap<u64, ImageRecord>,
-        &crate::text::atlas::AtlasRegistry,
-        &wgpu::TextureView,
-        &wgpu::BindGroup,
-    ) {
-        (
-            &self.wgpu,
-            &mut self.targets,
-            &mut self.images,
-            &self.atlases,
-            &self.target_view,
-            &self.fallback_bind_group,
-        )
+        }
     }
 
     /// Parse the graph buffer per design §8 and dispatch render commands.
@@ -230,8 +182,7 @@ impl PaintContext {
 
         for _ in 0..header.cmd_count {
             if offset + 8 > graph.len() {
-                set_last_error("paint_dispatch: graph truncated before command header");
-                return ERR_INVALID_ARG;
+                break;
             }
             let cmd_kind = u16::from_le_bytes([graph[offset], graph[offset + 1]]);
             // flags at offset+2..+4 (reserved for Slice 5b)
@@ -245,8 +196,7 @@ impl PaintContext {
 
             let payload_end = offset + payload_bytes;
             if payload_end > graph.len() || payload_end > body_end {
-                set_last_error("paint_dispatch: graph truncated before command payload");
-                return ERR_INVALID_ARG;
+                break;
             }
             let payload = &graph[offset..payload_end];
             offset = payload_end;
@@ -268,24 +218,45 @@ impl PaintContext {
             return OK;
         }
 
+        // Step 3: Resolve the render target view.
+        // Phase 2b: real target handles are looked up from the TargetRegistry.
+        // If target=0 or unknown, fall back to the PaintContext default offscreen texture.
+        //
+        // SAFETY: We extract raw pointers to fields inside `self` to work around Rust's
+        // split-borrow limitation. All raw pointers remain valid for the duration of this
+        // function — the pointed-to values are owned by `self` which outlives the block.
+        // Bun FFI is single-threaded; no concurrent mutation occurs.
+        let (render_view_ptr, use_active_encoder): (*const wgpu::TextureView, bool) = if target != 0
+        {
+            if let Some(rec) = self.targets.get(target) {
+                let has_layer = rec.active_layer.is_some();
+                (&rec.view as *const wgpu::TextureView, has_layer)
+            } else {
+                (&self.target_view as *const wgpu::TextureView, false)
+            }
+        } else {
+            (&self.target_view as *const wgpu::TextureView, false)
+        };
+
         let t_gpu_start = Instant::now();
-        let (wgpu, targets, _images, _atlases, default_view, fallback_bg) = self.split();
-        let use_active_encoder = target != 0
-            && targets
-                .get(target)
-                .map(|rec| rec.active_layer.is_some())
-                .unwrap_or(false);
 
         // When a target has an active layer, we add render passes to its encoder.
         // Otherwise we create a standalone encoder and submit it.
         if use_active_encoder {
-            let Some(rec) = targets.get_mut(target) else {
-                return ERR_INVALID_ARG;
+            // SAFETY: rec is in self.targets which is stable for this call.
+            // We split the borrow manually: view_ptr and encoder_ptr point to disjoint
+            // fields of the same TargetRecord. They are not aliased during use.
+            let rec_ptr: *mut crate::composite::target::TargetRecord =
+                self.targets.get_mut(target).expect("target disappeared") as *mut _;
+
+            // SAFETY: rec_ptr is valid; view and active_layer are disjoint fields.
+            let view_ref: &wgpu::TextureView = unsafe { &(*rec_ptr).view };
+            let layer: &mut crate::composite::target::ActiveLayerRecord = unsafe {
+                (*rec_ptr)
+                    .active_layer
+                    .as_mut()
+                    .expect("active layer disappeared")
             };
-            let Some(layer) = rec.active_layer.as_mut() else {
-                return ERR_GPU_DEVICE_LOST;
-            };
-            let view_ref = &rec.view;
 
             for (kind, batch) in batches.iter() {
                 let kind = *kind;
@@ -303,7 +274,7 @@ impl PaintContext {
 
                 // SAFETY: self.wgpu.device is a disjoint field from self.targets.
                 let vertex_buf =
-                    wgpu
+                    self.wgpu
                         .device
                         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                             label: Some("vexart-instance-buf"),
@@ -349,7 +320,7 @@ impl PaintContext {
 
                 // SAFETY: self.wgpu.pipelines and self.fallback_bind_group are disjoint
                 // from self.targets; the references are valid for this pass scope.
-                let pipeline = pipeline_for_kind(kind, &wgpu.pipelines);
+                let pipeline = pipeline_for_kind(kind, &self.wgpu.pipelines);
                 pass.set_pipeline(pipeline);
                 pass.set_vertex_buffer(0, vertex_buf.slice(..));
                 // Pipelines that sample a texture need bind group 0.
@@ -363,20 +334,17 @@ impl PaintContext {
                     || kind == 18
                     || kind == 19
                 {
-                    pass.set_bind_group(0, fallback_bg, &[]);
+                    pass.set_bind_group(0, &self.fallback_bind_group, &[]);
                 }
                 pass.draw(0..6, 0..instance_count);
             }
             // Do NOT submit — that happens in end_layer.
         } else {
-            let render_view = if target != 0 {
-                targets.get(target).map(|rec| &rec.view).unwrap_or(default_view)
-            } else {
-                default_view
-            };
+            // SAFETY: render_view_ptr was extracted from self above; it remains valid.
+            let render_view: &wgpu::TextureView = unsafe { &*render_view_ptr };
             // No active layer: create standalone encoder, render, submit.
             let mut encoder =
-                wgpu
+                self.wgpu
                     .device
                     .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                         label: Some("vexart-frame-encoder"),
@@ -402,7 +370,7 @@ impl PaintContext {
                 }
 
                 let vertex_buf =
-                    wgpu
+                    self.wgpu
                         .device
                         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                             label: Some("vexart-instance-buf"),
@@ -434,7 +402,7 @@ impl PaintContext {
                     multiview_mask: None,
                 });
 
-                let pipeline = pipeline_for_kind(kind, &wgpu.pipelines);
+                let pipeline = pipeline_for_kind(kind, &self.wgpu.pipelines);
                 pass.set_pipeline(pipeline);
                 pass.set_vertex_buffer(0, vertex_buf.slice(..));
                 // Pipelines that sample a texture need bind group 0 set.
@@ -452,14 +420,14 @@ impl PaintContext {
                     || kind == 18
                     || kind == 19
                 {
-                    pass.set_bind_group(0, fallback_bg, &[]);
+                    pass.set_bind_group(0, &self.fallback_bind_group, &[]);
                 }
                 // 6 vertices per quad (2 triangles), instance_count instances.
                 pass.draw(0..6, 0..instance_count);
             }
 
             let cmd = encoder.finish();
-            wgpu.queue.submit(std::iter::once(cmd));
+            self.wgpu.queue.submit(std::iter::once(cmd));
         }
 
         let gpu_us = t_gpu_start.elapsed().as_micros() as u64;
@@ -556,7 +524,7 @@ fn pipeline_for_kind<'a>(
         19 => &reg.self_filter,
         // Phase 4+ — analytic box-shadow pipeline
         20 => &reg.shadow,
-        _ => &reg.rect,
+        _ => panic!("pipeline_for_kind called with unsupported kind {kind}"),
     }
 }
 

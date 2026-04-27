@@ -124,93 +124,48 @@ impl LayerRegistry {
         resources: &mut ResourceManager,
     ) -> LayerUpsertResult {
         if let Some(handle) = self.by_key.get(&key).copied() {
-            // Defensive: if `by_key` has a stale entry whose `records` row was
-            // already evicted (e.g. by ResourceManager memory pressure), drop
-            // the orphan and fall through to fresh-allocate. Previously this
-            // branch panicked via expect("layer handle missing"), causing
-            // SIGTRAP under sidebar-toggle stress in consumer apps.
-            //
-            // TS-side mirror (`packages/engine/src/ffi/native-layer-registry.ts`)
-            // is keyed by string `key`, and the render loop dispatches Kitty
-            // frames with whatever `terminal_image_id` we return — so allocating
-            // a fresh ID here is safe; FLAG_CREATED tells downstream this is
-            // a new layer.
-            if self.records.contains_key(&handle) {
-                return self.update_existing(handle, desc, resources);
+            let record = self.records.get_mut(&handle).expect("layer handle missing");
+            let old_bytes = record.bytes;
+            let resized = record.width != desc.width || record.height != desc.height;
+            let target_changed = record.target != desc.target;
+            let moved = record.x != desc.x || record.y != desc.y || record.z != desc.z;
+            record.target = desc.target;
+            record.x = desc.x;
+            record.y = desc.y;
+            record.width = desc.width;
+            record.height = desc.height;
+            record.z = desc.z;
+            record.last_used_frame = desc.frame;
+            record.bytes = desc.bytes();
+            if resized || target_changed || moved {
+                record.dirty = true;
             }
-            #[cfg(debug_assertions)]
-            eprintln!(
-                "[vexart::layer] self-healing stale by_key entry: key={:?} stale_handle={} records_len={} by_key_len={}",
-                key,
+
+            if resized || old_bytes != record.bytes || target_changed {
+                register_layer_resources(resources, record);
+            } else {
+                touch_layer_resources(resources, record.handle, desc.frame);
+            }
+
+            let mut flags = 0;
+            if record.dirty {
+                flags |= LayerUpsertResult::FLAG_DIRTY;
+            }
+            if resized {
+                flags |= LayerUpsertResult::FLAG_RESIZED;
+            }
+            return LayerUpsertResult {
                 handle,
-                self.records.len(),
-                self.by_key.len(),
-            );
-            self.by_key.remove(&key);
-            // Fall through to fresh-allocate below.
+                terminal_image_id: record.terminal_image_id,
+                flags,
+                bytes: record.bytes,
+            };
         }
 
-        self.create_fresh(key, desc, resources)
-    }
-
-    fn update_existing(
-        &mut self,
-        handle: u64,
-        desc: LayerDescriptor,
-        resources: &mut ResourceManager,
-    ) -> LayerUpsertResult {
-        // SAFETY: caller guarantees `records.contains_key(&handle)`.
-        let record = self
-            .records
-            .get_mut(&handle)
-            .expect("update_existing called without contains_key check");
-        let old_bytes = record.bytes;
-        let resized = record.width != desc.width || record.height != desc.height;
-        let target_changed = record.target != desc.target;
-        let moved = record.x != desc.x || record.y != desc.y || record.z != desc.z;
-        record.target = desc.target;
-        record.x = desc.x;
-        record.y = desc.y;
-        record.width = desc.width;
-        record.height = desc.height;
-        record.z = desc.z;
-        record.last_used_frame = desc.frame;
-        record.bytes = desc.bytes();
-        if resized || target_changed || moved {
-            record.dirty = true;
-        }
-
-        if resized || old_bytes != record.bytes || target_changed {
-            register_layer_resources(resources, record);
-        } else {
-            touch_layer_resources(resources, record.handle, desc.frame);
-        }
-
-        let mut flags = 0;
-        if record.dirty {
-            flags |= LayerUpsertResult::FLAG_DIRTY;
-        }
-        if resized {
-            flags |= LayerUpsertResult::FLAG_RESIZED;
-        }
-        LayerUpsertResult {
-            handle,
-            terminal_image_id: record.terminal_image_id,
-            flags,
-            bytes: record.bytes,
-        }
-    }
-
-    fn create_fresh(
-        &mut self,
-        key: LayerKey,
-        desc: LayerDescriptor,
-        resources: &mut ResourceManager,
-    ) -> LayerUpsertResult {
         let handle = self.next_handle;
         self.next_handle += 1;
         let terminal_image_id = self.next_terminal_image_id;
-        self.next_terminal_image_id = self.next_terminal_image_id.checked_add(1).unwrap_or(1000);
+        self.next_terminal_image_id += 1;
         let record = LayerRecord {
             key: key.clone(),
             handle,
@@ -415,41 +370,6 @@ mod tests {
         );
         assert_eq!(registry.get(first.handle).unwrap().dirty, true);
         assert_eq!(registry.get(first.handle).unwrap().bytes, 20 * 20 * 4);
-    }
-
-    #[test]
-    fn upsert_self_heals_orphan_by_key_entry() {
-        // Regression: previously panicked via expect("layer handle missing")
-        // when ResourceManager eviction or any external mutation removed the
-        // record but left the by_key entry. Reproduces the SIGTRAP path that
-        // affected consumer apps (nova) under sidebar-toggle stress.
-        let mut registry = LayerRegistry::new();
-        let mut resources = ResourceManager::new();
-
-        let first = registry.upsert(
-            LayerKey::from_bytes(b"layer:sidebar"),
-            desc(10, 20),
-            &mut resources,
-        );
-        // Simulate external desync: drop the record but leave by_key intact.
-        registry.records.remove(&first.handle);
-        assert_eq!(registry.records.len(), 0);
-        assert_eq!(registry.by_key.len(), 1);
-
-        // Must NOT panic. Must allocate a fresh layer with FLAG_CREATED.
-        let healed = registry.upsert(
-            LayerKey::from_bytes(b"layer:sidebar"),
-            desc(10, 20),
-            &mut resources,
-        );
-
-        assert_ne!(healed.handle, first.handle, "fresh handle expected");
-        assert_eq!(
-            healed.flags & LayerUpsertResult::FLAG_CREATED,
-            LayerUpsertResult::FLAG_CREATED
-        );
-        assert_eq!(registry.records.len(), 1);
-        assert_eq!(registry.by_key.len(), 1);
     }
 
     #[test]

@@ -5,8 +5,6 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::paint::TARGET_TAG;
-
 /// Holds one offscreen GPU target: texture + view + MAP_READ readback buffer.
 pub struct TargetRecord {
     pub texture: wgpu::Texture,
@@ -85,7 +83,7 @@ impl TargetRegistry {
             mapped_at_creation: false,
         });
 
-        let handle = self.next_handle.fetch_add(1, Ordering::Relaxed) | TARGET_TAG;
+        let handle = self.next_handle.fetch_add(1, Ordering::Relaxed);
         *out_handle = handle;
 
         TargetRecord {

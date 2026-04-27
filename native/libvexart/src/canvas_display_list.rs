@@ -29,7 +29,6 @@ impl CanvasDisplayListRegistry {
         key: String,
         bytes: &[u8],
         hash: String,
-        current_frame: u64,
         resources: &mut ResourceManager,
     ) -> Option<u64> {
         if key.is_empty() || bytes.is_empty() {
@@ -46,17 +45,17 @@ impl CanvasDisplayListRegistry {
                         handle,
                         ResourceKind::CanvasDisplayList,
                         bytes.len() as u64,
-                        current_frame,
+                        0,
                         WgpuHandle::Id(handle),
                     );
                 } else {
-                    resources.touch(handle, current_frame);
+                    resources.touch(handle, 0);
                 }
                 return Some(handle);
             }
         }
 
-        let handle = paint::alloc_canvas_handle();
+        let handle = paint::alloc_image_handle();
         self.by_key.insert(key.clone(), handle);
         self.lists.insert(
             handle,
@@ -71,17 +70,17 @@ impl CanvasDisplayListRegistry {
             handle,
             ResourceKind::CanvasDisplayList,
             bytes.len() as u64,
-            current_frame,
+            0,
             WgpuHandle::Id(handle),
         );
         Some(handle)
     }
 
-    pub fn touch(&self, handle: u64, current_frame: u64, resources: &mut ResourceManager) -> bool {
+    pub fn touch(&self, handle: u64, resources: &mut ResourceManager) -> bool {
         if !self.lists.contains_key(&handle) {
             return false;
         }
-        resources.touch(handle, current_frame);
+        resources.touch(handle, 0);
         true
     }
 
@@ -121,7 +120,6 @@ mod tests {
                 "canvas:1".to_string(),
                 br#"{"commands":[]}"#,
                 "a".to_string(),
-                0,
                 &mut resources,
             )
             .unwrap();
@@ -130,7 +128,6 @@ mod tests {
                 "canvas:1".to_string(),
                 br#"{"commands":[]}"#,
                 "a".to_string(),
-                0,
                 &mut resources,
             )
             .unwrap();
@@ -150,7 +147,6 @@ mod tests {
                 "canvas:2".to_string(),
                 bytes,
                 "b".to_string(),
-                0,
                 &mut resources,
             )
             .unwrap();

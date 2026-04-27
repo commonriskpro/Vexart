@@ -13,8 +13,6 @@ crate-type = ["cdylib", "rlib"] # cdylib for FFI; rlib so Rust integration tests
 
 [dependencies]
 taffy  = "0.10.1"   # layout engine — direct Clay replacement (DEC-004)
-# TODO: trim wgpu features with default-features = false, features = ["metal", "vulkan"]
-# Currently pulls all backends including dx12 which isn't needed.
 wgpu   = "29.0.1"   # GPU rendering — upgrade from bridge's pinned 26
 pollster = "0.4"    # minimal sync executor to block on wgpu async — kept from old bridge
 bytemuck = { version = "1.25", features = ["derive"] } # Pod/Zeroable for instance buffers
@@ -23,14 +21,7 @@ nix    = { version = "0.29", default-features = false, features = ["mman", "fs"]
 base64 = "0.22"       # Kitty protocol encoding — Phase 2b Tier 1 / DEC-010
 flate2 = "1.1"        # zlib deflate for Kitty o=z — Phase 2b Tier 1 / DEC-010
 serde_json = "1"      # metrics JSON parsing — Phase 2b MSDF text / DEC-008
-
-# ── MSDF text pipeline (Phase 2b / DEC-008) ──────────────────────────────
-fontdb         = "0.23"     # System font discovery — CSS-like queries, macOS/Linux/Windows
-ttf-parser     = "0.25"     # Font file parsing (also transitive via fontdb)
-fdsm           = "0.8"      # Pure-Rust MSDF generation from glyph outlines
-fdsm-ttf-parser = "0.2"     # Bridge: ttf-parser outlines → fdsm MSDF shapes
-image          = { version = "0.25", default-features = false }  # Image buffers for MSDF output (fdsm dep)
-nalgebra       = "0.34"     # Affine transforms for MSDF glyph scaling (fdsm dep)
+# fdsm   = "0.8.0"    # MSDF atlas generator — Phase 2b / DEC-008
 
 [dev-dependencies]
 # Integration-test helpers land here when tests/ is populated.

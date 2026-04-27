@@ -12,7 +12,6 @@
 // Thread-local transport mode so each FFI call context is independent.
 
 use std::cell::Cell;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use super::encoder::encode_frame_direct;
@@ -26,8 +25,6 @@ use crate::types::NativePresentationStats;
 thread_local! {
     static TRANSPORT_MODE: Cell<u32> = const { Cell::new(0) };
 }
-
-static SHM_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Copy, Debug, Default)]
 struct ShmTransferStats {
@@ -162,22 +159,10 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
     }
 
     // 3. zlib compress.
-    let compressed = match compress_rgba(&rgba[..written as usize]) {
-        Ok(bytes) => bytes,
-        Err(err) => {
-            set_last_error(err);
-            return ERR_KITTY_TRANSPORT;
-        }
-    };
+    let compressed = compress_rgba(&rgba[..written as usize]);
 
     // 4. Create SHM segment with compressed data.
-    let counter = SHM_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let shm_name = format!(
-        "/vexart-kitty-{}-{}-{}",
-        std::process::id(),
-        image_id,
-        counter
-    );
+    let shm_name = format!("/vexart-kitty-{}-{}", std::process::id(), image_id);
     let mut handle: u64 = 0;
     let rc = unsafe {
         shm_prepare(
@@ -565,9 +550,8 @@ pub unsafe fn emit_region_target_with_stats(
         return ERR_KITTY_TRANSPORT;
     }
     let mode = TRANSPORT_MODE.with(|c| c.get());
-    let (wgpu, targets, _, _, _, _) = pctx.split();
-    let rec = match targets.get(target) {
-        Some(rec) => rec,
+    let (width, height, texture_ptr) = match pctx.targets.get(target) {
+        Some(rec) => (rec.width, rec.height, &rec.texture as *const wgpu::Texture),
         None => {
             set_last_error(format!(
                 "emit_region_target_with_stats: invalid target handle {target}"
@@ -575,8 +559,6 @@ pub unsafe fn emit_region_target_with_stats(
             return ERR_KITTY_TRANSPORT;
         }
     };
-    let width = rec.width;
-    let height = rec.height;
     let x = rx.min(width);
     let y = ry.min(height);
     let w = rw.min(width.saturating_sub(x));
@@ -589,9 +571,9 @@ pub unsafe fn emit_region_target_with_stats(
     let t_rb = Instant::now();
     let mut rgba = vec![0u8; (w as usize) * (h as usize) * 4];
     let written = crate::composite::readback::readback_region(
-        &wgpu.device,
-        &wgpu.queue,
-        &rec.texture,
+        &pctx.wgpu.device,
+        &pctx.wgpu.queue,
+        unsafe { &*texture_ptr },
         width,
         height,
         x,
@@ -754,13 +736,7 @@ fn emit_shm_rgba_at_with_stats(
     let compression_param;
     if compression {
         let t_compress = Instant::now();
-        compressed_storage = match compress_rgba(rgba) {
-            Ok(bytes) => bytes,
-            Err(err) => {
-                set_last_error(err);
-                return (ERR_KITTY_TRANSPORT, stats);
-            }
-        };
+        compressed_storage = compress_rgba(rgba);
         stats.compress_us = t_compress.elapsed().as_micros() as u64;
         stats.compressed = true;
         stats.payload_bytes = compressed_storage.len() as u64;
@@ -771,13 +747,7 @@ fn emit_shm_rgba_at_with_stats(
         payload = rgba;
         compression_param = "";
     }
-    let counter = SHM_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let shm_name = format!(
-        "/vexart-kitty-{}-{}-{}",
-        std::process::id(),
-        image_id,
-        counter
-    );
+    let shm_name = format!("/vexart-kitty-{}-{}", std::process::id(), image_id);
     let mut handle: u64 = 0;
     let t_shm = Instant::now();
     let rc = unsafe {
@@ -825,12 +795,12 @@ fn emit_direct_rgba_at(
     let escaped = encode_frame_direct(rgba, width, height, image_id);
     let row = row.max(0) + 1;
     let col = col.max(0) + 1;
-    let mut positioned = Vec::with_capacity(escaped.len() + 32);
-    positioned.extend_from_slice(format!("\x1b7\x1b[{row};{col}H").as_bytes());
-    positioned.extend_from_slice(&escaped);
-    positioned.extend_from_slice(b"\x1b8");
+    let positioned = format!(
+        "\x1b7\x1b[{row};{col}H{}\x1b8",
+        String::from_utf8_lossy(&escaped)
+    );
     let _ = z;
-    match write_to_stdout(&positioned) {
+    match write_to_stdout(positioned.as_bytes()) {
         Ok(()) => OK,
         Err(e) => {
             set_last_error(format!("emit_direct_rgba_at: stdout write failed: {e}"));
@@ -876,13 +846,7 @@ fn emit_region_rgba_with_stats(
     let compression_param;
     if compression {
         let t_compress = Instant::now();
-        compressed_storage = match compress_rgba(rgba) {
-            Ok(bytes) => bytes,
-            Err(err) => {
-                set_last_error(err);
-                return (ERR_KITTY_TRANSPORT, stats);
-            }
-        };
+        compressed_storage = compress_rgba(rgba);
         stats.compress_us = t_compress.elapsed().as_micros() as u64;
         stats.compressed = true;
         stats.payload_bytes = compressed_storage.len() as u64;
@@ -898,13 +862,7 @@ fn emit_region_rgba_with_stats(
 
     let escape = if mode == 2 {
         // SHM mode for region patch
-        let counter = SHM_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let shm_name = format!(
-            "/vexart-kitty-r-{}-{}-{}",
-            std::process::id(),
-            image_id,
-            counter
-        );
+        let shm_name = format!("/vexart-kitty-r-{}-{}", std::process::id(), image_id);
         let mut handle: u64 = 0;
         let t_shm = Instant::now();
         let rc = unsafe {

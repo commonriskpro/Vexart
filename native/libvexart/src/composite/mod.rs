@@ -25,11 +25,18 @@ pub fn target_create(
         return ERR_INVALID_ARG;
     }
 
-    let (wgpu, targets, _, _, _, _) = pctx.split();
+    // Extract device pointer before borrowing pctx.targets mutably.
+    // SAFETY: device is owned by pctx.wgpu which is stable for the duration of this call.
+    let device_ptr: *const wgpu::Device = &pctx.wgpu.device as *const wgpu::Device;
+
+    // SAFETY: out_handle is non-null (checked above) and valid (caller contract).
     let handle_ref = unsafe { &mut *out_handle };
-    let rec = targets.create(&wgpu.device, width, height, handle_ref);
+    // SAFETY: device_ptr is valid — it points to pctx.wgpu.device which is alive.
+    let rec = pctx
+        .targets
+        .create(unsafe { &*device_ptr }, width, height, handle_ref);
     let handle = *handle_ref;
-    targets.insert(handle, rec);
+    pctx.targets.insert(handle, rec);
     OK
 }
 
@@ -55,8 +62,13 @@ pub fn target_begin_layer(
     if handle == 0 {
         return ERR_INVALID_ARG;
     }
-    let (wgpu, targets, _, _, _, _) = pctx.split();
-    match targets.begin_layer(&wgpu.device, handle, load_mode, clear_rgba) {
+    // Extract device pointer before borrowing pctx.targets.
+    // SAFETY: pctx.wgpu.device is stable; the raw pointer is valid for this call.
+    let device_ptr: *const wgpu::Device = &pctx.wgpu.device as *const wgpu::Device;
+    match pctx
+        .targets
+        .begin_layer(unsafe { &*device_ptr }, handle, load_mode, clear_rgba)
+    {
         Ok(()) => OK,
         Err(code) => code,
     }
@@ -67,8 +79,10 @@ pub fn target_end_layer(pctx: &mut PaintContext, handle: u64) -> i32 {
     if handle == 0 {
         return ERR_INVALID_ARG;
     }
-    let (wgpu, targets, _, _, _, _) = pctx.split();
-    match targets.end_layer(&wgpu.queue, handle) {
+    // Extract queue pointer before borrowing pctx.targets.
+    // SAFETY: pctx.wgpu.queue is stable; the raw pointer is valid for this call.
+    let queue_ptr: *const wgpu::Queue = &pctx.wgpu.queue as *const wgpu::Queue;
+    match pctx.targets.end_layer(unsafe { &*queue_ptr }, handle) {
         Ok(()) => OK,
         Err(code) => code,
     }
@@ -94,16 +108,12 @@ pub fn composite_render_image_layer(
     use bytemuck::bytes_of;
     use wgpu::util::DeviceExt;
 
-    // TODO: Z-ordering currently depends on FFI call order, not the z parameter.
-    // To implement proper z-ordering, collect all render_image_layer calls,
-    // sort by z before submitting render passes.
-
     if target == 0 {
         return ERR_INVALID_ARG;
     }
 
-    let (wgpu, targets, images, _, _, fallback_bg) = pctx.split();
-    let target_rec = match targets.get(target) {
+    // Look up target and image.
+    let target_rec = match pctx.targets.get(target) {
         Some(r) => r,
         None => return ERR_INVALID_HANDLE,
     };
@@ -132,14 +142,15 @@ pub fn composite_render_image_layer(
     let instance_bytes = bytes_of(&instance);
 
     // Get bind group for the source image (fall back to transparent if missing).
-    let bind_group = if let Some(img) = images.get(&image) {
-        &img.bind_group
+    let bind_group: *const wgpu::BindGroup = if let Some(img) = pctx.images.get(&image) {
+        &img.bind_group as *const wgpu::BindGroup
     } else {
-        fallback_bg
+        &pctx.fallback_bind_group as *const wgpu::BindGroup
     };
 
     // Build vertex buffer.
-    let vertex_buf = wgpu
+    let vertex_buf = pctx
+        .wgpu
         .device
         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("vexart-composite-image-buf"),
@@ -149,19 +160,22 @@ pub fn composite_render_image_layer(
 
     // Encode render pass into the target's active layer encoder if present,
     // or create a new standalone encoder.
-    let has_layer = targets
-        .get(target)
-        .map(|rec| rec.active_layer.is_some())
-        .unwrap_or(false);
-    if has_layer {
+    let target_view_ptr: *const wgpu::TextureView = {
+        let r = pctx.targets.get(target).unwrap();
+        &r.view as *const wgpu::TextureView
+    };
+
+    if pctx.targets.get(target).unwrap().active_layer.is_some() {
         // Render into existing layer encoder.
-        let Some(rec) = targets.get_mut(target) else {
-            return ERR_INVALID_HANDLE;
+        let rec_ptr: *mut target::TargetRecord = pctx.targets.get_mut(target).unwrap();
+        // SAFETY: view and active_layer are disjoint fields of the same TargetRecord.
+        let view_ref: &wgpu::TextureView = unsafe { &(*rec_ptr).view };
+        let layer = unsafe {
+            (*rec_ptr)
+                .active_layer
+                .as_mut()
+                .expect("active layer disappeared")
         };
-        let Some(layer) = rec.active_layer.as_mut() else {
-            return ERR_INVALID_ARG;
-        };
-        let view_ref = &rec.view;
 
         let clear_op = if layer.first_pass {
             layer.first_pass = false;
@@ -199,17 +213,19 @@ pub fn composite_render_image_layer(
                 multiview_mask: None,
             });
 
-        pass.set_pipeline(&wgpu.pipelines.image);
+        pass.set_pipeline(&pctx.wgpu.pipelines.image);
         pass.set_vertex_buffer(0, vertex_buf.slice(..));
-        pass.set_bind_group(0, bind_group, &[]);
+        // SAFETY: bind_group extracted before mutable borrow; still valid.
+        pass.set_bind_group(0, unsafe { &*bind_group }, &[]);
         pass.draw(0..6, 0..1);
     } else {
         // No active layer: standalone encoder.
-        let mut encoder = wgpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("vexart-composite-encoder"),
-            });
+        let mut encoder =
+            pctx.wgpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("vexart-composite-encoder"),
+                });
 
         let c = clear_rgba;
         let clear_op = wgpu::LoadOp::Clear(wgpu::Color {
@@ -220,9 +236,7 @@ pub fn composite_render_image_layer(
         });
 
         // SAFETY: target_view_ptr was extracted above; target still in registry.
-        let Some(view_ref) = targets.get(target).map(|rec| &rec.view) else {
-            return ERR_INVALID_HANDLE;
-        };
+        let view_ref: &wgpu::TextureView = unsafe { &*target_view_ptr };
 
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("vexart-composite-pass"),
@@ -241,15 +255,15 @@ pub fn composite_render_image_layer(
             multiview_mask: None,
         });
 
-        pass.set_pipeline(&wgpu.pipelines.image);
+        pass.set_pipeline(&pctx.wgpu.pipelines.image);
         pass.set_vertex_buffer(0, vertex_buf.slice(..));
         // SAFETY: bind_group extracted before any mutable ops; still valid.
-        pass.set_bind_group(0, bind_group, &[]);
+        pass.set_bind_group(0, unsafe { &*bind_group }, &[]);
         pass.draw(0..6, 0..1);
         drop(pass);
 
         let cmd = encoder.finish();
-        wgpu.queue.submit(std::iter::once(cmd));
+        pctx.wgpu.queue.submit(std::iter::once(cmd));
     }
 
     OK
@@ -273,16 +287,15 @@ pub fn composite_render_image_transform_layer(
         return ERR_INVALID_ARG;
     }
 
-    let (wgpu, targets, images, _, _, fallback_bg) = pctx.split();
-    let target_rec = match targets.get(target) {
+    let target_rec = match pctx.targets.get(target) {
         Some(r) => r,
         None => return ERR_INVALID_HANDLE,
     };
 
-    let bind_group = if let Some(img) = images.get(&image) {
-        &img.bind_group
+    let bind_group: *const wgpu::BindGroup = if let Some(img) = pctx.images.get(&image) {
+        &img.bind_group as *const wgpu::BindGroup
     } else {
-        fallback_bg
+        &pctx.fallback_bind_group as *const wgpu::BindGroup
     };
 
     let instance = bytemuck::pod_read_unaligned::<BridgeImageTransformInstance>(
@@ -290,7 +303,8 @@ pub fn composite_render_image_transform_layer(
     );
     let instance_bytes = bytes_of(&instance);
 
-    let vertex_buf = wgpu
+    let vertex_buf = pctx
+        .wgpu
         .device
         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("vexart-composite-image-transform-buf"),
@@ -298,21 +312,17 @@ pub fn composite_render_image_transform_layer(
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-    let target_width = target_rec.width;
-    let _ = target_width;
+    let target_view_ptr: *const wgpu::TextureView = &target_rec.view as *const wgpu::TextureView;
 
-    let has_layer = targets
-        .get(target)
-        .map(|rec| rec.active_layer.is_some())
-        .unwrap_or(false);
-    if has_layer {
-        let Some(rec) = targets.get_mut(target) else {
-            return ERR_INVALID_HANDLE;
+    if pctx.targets.get(target).unwrap().active_layer.is_some() {
+        let rec_ptr: *mut target::TargetRecord = pctx.targets.get_mut(target).unwrap();
+        let view_ref: &wgpu::TextureView = unsafe { &(*rec_ptr).view };
+        let layer = unsafe {
+            (*rec_ptr)
+                .active_layer
+                .as_mut()
+                .expect("active layer disappeared")
         };
-        let Some(layer) = rec.active_layer.as_mut() else {
-            return ERR_INVALID_ARG;
-        };
-        let view_ref = &rec.view;
 
         let clear_op = if layer.first_pass {
             layer.first_pass = false;
@@ -350,16 +360,17 @@ pub fn composite_render_image_transform_layer(
                 multiview_mask: None,
             });
 
-        pass.set_pipeline(&wgpu.pipelines.image_transform);
+        pass.set_pipeline(&pctx.wgpu.pipelines.image_transform);
         pass.set_vertex_buffer(0, vertex_buf.slice(..));
-        pass.set_bind_group(0, bind_group, &[]);
+        pass.set_bind_group(0, unsafe { &*bind_group }, &[]);
         pass.draw(0..6, 0..1);
     } else {
-        let mut encoder = wgpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("vexart-composite-transform-encoder"),
-            });
+        let mut encoder =
+            pctx.wgpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("vexart-composite-transform-encoder"),
+                });
 
         let c = clear_rgba;
         let clear_op = wgpu::LoadOp::Clear(wgpu::Color {
@@ -369,9 +380,7 @@ pub fn composite_render_image_transform_layer(
             a: (c & 0xff) as f64 / 255.0,
         });
 
-        let Some(view_ref) = targets.get(target).map(|rec| &rec.view) else {
-            return ERR_INVALID_HANDLE;
-        };
+        let view_ref: &wgpu::TextureView = unsafe { &*target_view_ptr };
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("vexart-composite-transform-pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -389,14 +398,14 @@ pub fn composite_render_image_transform_layer(
             multiview_mask: None,
         });
 
-        pass.set_pipeline(&wgpu.pipelines.image_transform);
+        pass.set_pipeline(&pctx.wgpu.pipelines.image_transform);
         pass.set_vertex_buffer(0, vertex_buf.slice(..));
-        pass.set_bind_group(0, bind_group, &[]);
+        pass.set_bind_group(0, unsafe { &*bind_group }, &[]);
         pass.draw(0..6, 0..1);
         drop(pass);
 
         let cmd = encoder.finish();
-        wgpu.queue.submit(std::iter::once(cmd));
+        pctx.wgpu.queue.submit(std::iter::once(cmd));
     }
 
     OK
@@ -421,33 +430,38 @@ pub fn composite_update_uniform(
     {
         return ERR_INVALID_ARG;
     }
-    if source_target == target {
-        crate::ffi::error::set_last_error(
-            "composite_update_uniform: source_target == target (self-reference)",
-        );
-        return ERR_INVALID_ARG;
-    }
 
-    let (wgpu, targets, _, _, _, _) = pctx.split();
     let bind_group = {
-        let source_rec = match targets.get(source_target) {
+        let source_rec = match pctx.targets.get(source_target) {
             Some(r) => r,
             None => return ERR_INVALID_HANDLE,
         };
-        wgpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("vexart-composite-uniform-bind-group"),
-            layout: &wgpu.image_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&source_rec.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&wgpu.cached_sampler),
-                },
-            ],
-        })
+        let sampler = pctx.wgpu.device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("vexart-composite-uniform-sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+            ..Default::default()
+        });
+        pctx.wgpu
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("vexart-composite-uniform-bind-group"),
+                layout: &pctx.wgpu.image_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&source_rec.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&sampler),
+                    },
+                ],
+            })
     };
 
     let instance = bytemuck::pod_read_unaligned::<BridgeImageTransformInstance>(
@@ -455,7 +469,8 @@ pub fn composite_update_uniform(
     );
     let instance_bytes = bytes_of(&instance);
 
-    let vertex_buf = wgpu
+    let vertex_buf = pctx
+        .wgpu
         .device
         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("vexart-composite-uniform-buf"),
@@ -463,22 +478,23 @@ pub fn composite_update_uniform(
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-    if targets.get(target).is_none() {
-        return ERR_INVALID_HANDLE;
-    }
-    let has_layer = targets
-        .get(target)
-        .map(|rec| rec.active_layer.is_some())
-        .unwrap_or(false);
+    let target_view_ptr: *const wgpu::TextureView = {
+        let target_rec = match pctx.targets.get(target) {
+            Some(r) => r,
+            None => return ERR_INVALID_HANDLE,
+        };
+        &target_rec.view as *const wgpu::TextureView
+    };
 
-    if has_layer {
-        let Some(rec) = targets.get_mut(target) else {
-            return ERR_INVALID_HANDLE;
+    if pctx.targets.get(target).unwrap().active_layer.is_some() {
+        let rec_ptr: *mut target::TargetRecord = pctx.targets.get_mut(target).unwrap();
+        let view_ref: &wgpu::TextureView = unsafe { &(*rec_ptr).view };
+        let layer = unsafe {
+            (*rec_ptr)
+                .active_layer
+                .as_mut()
+                .expect("active layer disappeared")
         };
-        let Some(layer) = rec.active_layer.as_mut() else {
-            return ERR_INVALID_ARG;
-        };
-        let view_ref = &rec.view;
 
         let clear_op = if layer.first_pass {
             layer.first_pass = false;
@@ -516,16 +532,17 @@ pub fn composite_update_uniform(
                 multiview_mask: None,
             });
 
-        pass.set_pipeline(&wgpu.pipelines.image_transform);
+        pass.set_pipeline(&pctx.wgpu.pipelines.image_transform);
         pass.set_vertex_buffer(0, vertex_buf.slice(..));
         pass.set_bind_group(0, &bind_group, &[]);
         pass.draw(0..6, 0..1);
     } else {
-        let mut encoder = wgpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("vexart-composite-uniform-encoder"),
-            });
+        let mut encoder =
+            pctx.wgpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("vexart-composite-uniform-encoder"),
+                });
 
         let c = clear_rgba;
         let clear_op = wgpu::LoadOp::Clear(wgpu::Color {
@@ -535,9 +552,7 @@ pub fn composite_update_uniform(
             a: (c & 0xff) as f64 / 255.0,
         });
 
-        let Some(view_ref) = targets.get(target).map(|rec| &rec.view) else {
-            return ERR_INVALID_HANDLE;
-        };
+        let view_ref: &wgpu::TextureView = unsafe { &*target_view_ptr };
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("vexart-composite-uniform-pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -555,14 +570,14 @@ pub fn composite_update_uniform(
             multiview_mask: None,
         });
 
-        pass.set_pipeline(&wgpu.pipelines.image_transform);
+        pass.set_pipeline(&pctx.wgpu.pipelines.image_transform);
         pass.set_vertex_buffer(0, vertex_buf.slice(..));
         pass.set_bind_group(0, &bind_group, &[]);
         pass.draw(0..6, 0..1);
         drop(pass);
 
         let cmd = encoder.finish();
-        wgpu.queue.submit(std::iter::once(cmd));
+        pctx.wgpu.queue.submit(std::iter::once(cmd));
     }
 
     OK
@@ -586,13 +601,12 @@ pub fn copy_region_to_image(
         return ERR_INVALID_ARG;
     }
 
-    let (wgpu, targets, images, _, _, _) = pctx.split_with_images();
-    let (tw, th) = {
-        let rec = match targets.get(target) {
+    let (src_texture_ptr, tw, th) = {
+        let rec = match pctx.targets.get(target) {
             Some(r) => r,
             None => return ERR_INVALID_HANDLE,
         };
-        (rec.width, rec.height)
+        (&rec.texture as *const wgpu::Texture, rec.width, rec.height)
     };
 
     // Clamp region to target bounds.
@@ -606,7 +620,7 @@ pub fn copy_region_to_image(
     }
 
     // Create destination texture.
-    let dst_texture = wgpu.device.create_texture(&wgpu::TextureDescriptor {
+    let dst_texture = pctx.wgpu.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("vexart-region-copy-texture"),
         size: wgpu::Extent3d {
             width: cw,
@@ -624,18 +638,17 @@ pub fn copy_region_to_image(
     });
 
     // Copy from target texture region to dst.
-    let mut encoder = wgpu
+    let mut encoder = pctx
+        .wgpu
         .device
         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("vexart-copy-region-encoder"),
         });
 
-    let Some(src_rec) = targets.get(target) else {
-        return ERR_INVALID_HANDLE;
-    };
+    // SAFETY: src_texture_ptr extracted from pctx.targets before any mutation.
     encoder.copy_texture_to_texture(
         wgpu::TexelCopyTextureInfo {
-            texture: &src_rec.texture,
+            texture: unsafe { &*src_texture_ptr },
             mip_level: 0,
             origin: wgpu::Origin3d { x: cx, y: cy, z: 0 },
             aspect: wgpu::TextureAspect::All,
@@ -653,27 +666,40 @@ pub fn copy_region_to_image(
         },
     );
 
-    wgpu.queue.submit(std::iter::once(encoder.finish()));
+    pctx.wgpu.queue.submit(std::iter::once(encoder.finish()));
 
     // Create view + sampler + bind group and register as image.
     let view = dst_texture.create_view(&wgpu::TextureViewDescriptor::default());
-    let bind_group = wgpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("vexart-region-bind-group"),
-        layout: &wgpu.image_bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::Sampler(&wgpu.cached_sampler),
-            },
-        ],
+    let sampler = pctx.wgpu.device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("vexart-region-sampler"),
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        address_mode_w: wgpu::AddressMode::ClampToEdge,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+        ..Default::default()
     });
+    let bind_group = pctx
+        .wgpu
+        .device
+        .create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("vexart-region-bind-group"),
+            layout: &pctx.wgpu.image_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
 
     let handle = crate::paint::alloc_image_handle();
-    images.insert(
+    pctx.images.insert(
         handle,
         crate::paint::ImageRecord {
             texture: dst_texture,
@@ -687,7 +713,7 @@ pub fn copy_region_to_image(
     OK
 }
 
-/// Legacy composite merge — not implemented.
+/// Legacy composite merge — returns handle 0 (no-op).
 ///
 /// The active composite path uses `composite_target_*` + `render_image_layer`
 /// for per-layer composition, making this z-order merge path unnecessary.
@@ -698,9 +724,19 @@ pub fn composite_merge(
     out_target: *mut u64,
     stats_out: *mut FrameStats,
 ) -> i32 {
-    let _ = (out_target, stats_out);
-    crate::ffi::error::set_last_error("composite_merge is not implemented");
-    ERR_INVALID_ARG
+    if !out_target.is_null() {
+        // SAFETY: caller guarantees valid pointer.
+        unsafe {
+            *out_target = 0;
+        }
+    }
+    if !stats_out.is_null() {
+        // SAFETY: caller guarantees valid pointer.
+        unsafe {
+            *stats_out = FrameStats::default();
+        }
+    }
+    OK
 }
 
 /// Real full-target GPU→CPU readback.
@@ -718,8 +754,7 @@ pub fn readback_rgba(
         return ERR_INVALID_ARG;
     }
 
-    let (wgpu, targets, _, _, _, _) = pctx.split();
-    let rec = match targets.get(target) {
+    let rec = match pctx.targets.get(target) {
         Some(r) => r,
         None => return ERR_INVALID_HANDLE,
     };
@@ -733,14 +768,19 @@ pub fn readback_rgba(
     let w = rec.width;
     let h = rec.height;
     let padded = rec.padded_bytes_per_row;
+    let texture_ptr: *const wgpu::Texture = &rec.texture;
+    let readback_ptr: *const wgpu::Buffer = &rec.readback_buffer;
+
+    // SAFETY: texture_ptr and readback_ptr point into the TargetRecord in pctx.targets,
+    // which is a stable heap allocation. pctx.wgpu (device/queue) is a disjoint field.
     let written = readback::readback_full(
-        &wgpu.device,
-        &wgpu.queue,
-        &rec.texture,
+        &pctx.wgpu.device,
+        &pctx.wgpu.queue,
+        unsafe { &*texture_ptr },
         w,
         h,
         padded,
-        &rec.readback_buffer,
+        unsafe { &*readback_ptr },
         dst,
         dst_cap,
     );
@@ -784,18 +824,20 @@ pub fn readback_region_rgba(
     let rw = u32::from_le_bytes([rect[8], rect[9], rect[10], rect[11]]);
     let rh = u32::from_le_bytes([rect[12], rect[13], rect[14], rect[15]]);
 
-    let (wgpu, targets, _, _, _, _) = pctx.split();
-    let rec = match targets.get(target) {
+    let rec = match pctx.targets.get(target) {
         Some(r) => r,
         None => return ERR_INVALID_HANDLE,
     };
 
     let tw = rec.width;
     let th = rec.height;
+    let texture_ptr: *const wgpu::Texture = &rec.texture;
+
     let written = readback::readback_region(
-        &wgpu.device,
-        &wgpu.queue,
-        &rec.texture,
+        &pctx.wgpu.device,
+        &pctx.wgpu.queue,
+        // SAFETY: texture_ptr stable in pctx.targets; device/queue are disjoint fields.
+        unsafe { &*texture_ptr },
         tw,
         th,
         rx,
@@ -864,6 +906,16 @@ fn register_effect_output(
     texture: wgpu::Texture,
     view: wgpu::TextureView,
 ) -> u64 {
+    let sampler = pctx.wgpu.device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some(label),
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        address_mode_w: wgpu::AddressMode::ClampToEdge,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+        ..Default::default()
+    });
     let bind_group = pctx
         .wgpu
         .device
@@ -877,7 +929,7 @@ fn register_effect_output(
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&pctx.wgpu.cached_sampler),
+                    resource: wgpu::BindingResource::Sampler(&sampler),
                 },
             ],
         });
@@ -926,8 +978,9 @@ fn render_blur_image(pctx: &mut PaintContext, image: u64, blur_radius: f32) -> R
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-    let Some(src_bg) = pctx.images.get(&image).map(|img| &img.bind_group) else {
-        return Err(ERR_INVALID_HANDLE);
+    let src_bg_ptr: *const wgpu::BindGroup = {
+        let img = pctx.images.get(&image).unwrap();
+        &img.bind_group as *const wgpu::BindGroup
     };
 
     let mut encoder = pctx
@@ -957,7 +1010,7 @@ fn render_blur_image(pctx: &mut PaintContext, image: u64, blur_radius: f32) -> R
 
         pass.set_pipeline(&pctx.wgpu.pipelines.backdrop_blur);
         pass.set_vertex_buffer(0, vertex_buf.slice(..));
-        pass.set_bind_group(0, src_bg, &[]);
+        pass.set_bind_group(0, unsafe { &*src_bg_ptr }, &[]);
         pass.draw(0..6, 0..1);
     }
 
@@ -1013,8 +1066,9 @@ fn render_color_filter_image(
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-    let Some(src_bg) = pctx.images.get(&image).map(|img| &img.bind_group) else {
-        return Err(ERR_INVALID_HANDLE);
+    let src_bg_ptr: *const wgpu::BindGroup = {
+        let img = pctx.images.get(&image).unwrap();
+        &img.bind_group as *const wgpu::BindGroup
     };
 
     let mut encoder = pctx
@@ -1044,7 +1098,7 @@ fn render_color_filter_image(
 
         pass.set_pipeline(&pctx.wgpu.pipelines.backdrop_filter);
         pass.set_vertex_buffer(0, vertex_buf.slice(..));
-        pass.set_bind_group(0, src_bg, &[]);
+        pass.set_bind_group(0, unsafe { &*src_bg_ptr }, &[]);
         pass.draw(0..6, 0..1);
     }
 
@@ -1274,8 +1328,10 @@ pub fn image_mask_rounded_rect(
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-    let Some(src_bg) = pctx.images.get(&image).map(|img| &img.bind_group) else {
-        return ERR_INVALID_HANDLE;
+    // Extract source bind group before mutable ops.
+    let src_bg_ptr: *const wgpu::BindGroup = {
+        let img = pctx.images.get(&image).unwrap();
+        &img.bind_group as *const wgpu::BindGroup
     };
 
     let mut encoder = pctx
@@ -1305,13 +1361,24 @@ pub fn image_mask_rounded_rect(
 
         pass.set_pipeline(&pctx.wgpu.pipelines.image_mask);
         pass.set_vertex_buffer(0, vertex_buf.slice(..));
-        pass.set_bind_group(0, src_bg, &[]);
+        // SAFETY: src_bg_ptr is stable — image is in pctx.images (heap map).
+        pass.set_bind_group(0, unsafe { &*src_bg_ptr }, &[]);
         pass.draw(0..6, 0..1);
     }
 
     pctx.wgpu.queue.submit(std::iter::once(encoder.finish()));
 
     // Register new image.
+    let sampler = pctx.wgpu.device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("vexart-mask-sampler"),
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        address_mode_w: wgpu::AddressMode::ClampToEdge,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+        ..Default::default()
+    });
     let dst_bind_group = pctx
         .wgpu
         .device
@@ -1325,7 +1392,7 @@ pub fn image_mask_rounded_rect(
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&pctx.wgpu.cached_sampler),
+                    resource: wgpu::BindingResource::Sampler(&sampler),
                 },
             ],
         });

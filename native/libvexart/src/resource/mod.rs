@@ -195,9 +195,6 @@ impl ResourceManager {
     pub fn end_frame(&mut self, current_frame: u64) {
         let elapsed = self.startup.elapsed().as_secs_f64();
         for r in self.resources.values_mut() {
-            // TODO: Track real timestamps (Instant) per resource instead of deriving
-            // seconds from frame counter. Frame-to-time conversion loses f64 precision
-            // past frame 2^53 and is wrong when frame rate varies.
             let secs = elapsed - (r.last_used_frame as f64 * 0.016); // approx 16ms/frame
             r.seconds_since_last_use = secs.max(0.0);
             r.priority = priority::compute_end_frame_priority(
