@@ -1464,16 +1464,22 @@ pub unsafe extern "C" fn vexart_font_render_text(
         let units_per_em = face.units_per_em() as f32;
         let scale = font_size / units_per_em;
 
+        // Ascender in font units → pixels. This is the baseline offset from line top.
+        let ascender = face.ascender() as f32;
+
         let text_layout = font::layout::layout_text(
             text, &face_data, face_index,
             font_size, line_height, max_width,
         );
 
+
+
         let mut atlas_mgr = lock_or_recover(&SHARED_MSDF_ATLAS);
         let mut instances: Vec<paint::instances::MsdfGlyphInstance> = Vec::new();
 
         for (line_idx, line) in text_layout.lines.iter().enumerate() {
-            let pen_y = y + line_idx as f32 * line_height;
+            // pen_y is the TOP of the line box. The baseline sits at ascender below.
+            let baseline_y = y + line_idx as f32 * line_height + ascender * scale;
             let mut pen_x = x;
 
             for ch in line.text.chars() {
@@ -1500,17 +1506,12 @@ pub unsafe extern "C" fn vexart_font_render_text(
                 let advance = entry.advance * scale;
 
                 if entry.bbox_w > 0.0 && entry.bbox_h > 0.0 {
-                    // The MSDF atlas cell is GLYPH_SIZE×GLYPH_SIZE texels and represents
-                    // the glyph scaled to fill that cell. The quad size should match
-                    // the visual size the glyph occupies at the requested font_size.
-                    //
-                    // The advance is already in font units, scaled by `scale`.
-                    // For the quad, we use the advance width as the horizontal extent
-                    // and font_size as the vertical extent (matching line height).
-                    let glyph_w = advance.max(font_size * 0.3); // at least 30% of font size
-                    let glyph_h = font_size;
-                    let glyph_x = pen_x;
-                    let glyph_y = pen_y;
+                    let glyph_w = entry.quad_w(scale);
+                    let glyph_h = entry.quad_h(scale);
+                    let glyph_x = pen_x + entry.quad_offset_x(scale);
+                    let glyph_y = baseline_y + entry.quad_offset_y(scale);
+
+
 
                     instances.push(paint::instances::MsdfGlyphInstance {
                         x: (glyph_x / target_w) * 2.0 - 1.0,

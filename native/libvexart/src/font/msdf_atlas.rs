@@ -68,6 +68,11 @@ pub struct MsdfGlyphEntry {
     pub bbox_w: f32,
     /// Glyph bounding box height in font units.
     pub bbox_h: f32,
+    /// Actual texel width the glyph content + SDF padding occupies in the cell.
+    /// With uniform scale, one axis = GLYPH_SIZE, the other ≤ GLYPH_SIZE.
+    pub texel_w: f32,
+    /// Actual texel height the glyph content + SDF padding occupies in the cell.
+    pub texel_h: f32,
 }
 
 impl MsdfGlyphEntry {
@@ -81,14 +86,55 @@ impl MsdfGlyphEntry {
         (self.row * CELL_SIZE + GLYPH_PAD) as f32 / PAGE_SIZE as f32
     }
 
-    /// UV width in normalized atlas coordinates.
+    /// UV width — actual content region, not full cell.
     pub fn uv_w(&self) -> f32 {
-        GLYPH_SIZE as f32 / PAGE_SIZE as f32
+        self.texel_w / PAGE_SIZE as f32
     }
 
-    /// UV height in normalized atlas coordinates.
+    /// UV height — actual content region, not full cell.
     pub fn uv_h(&self) -> f32 {
-        GLYPH_SIZE as f32 / PAGE_SIZE as f32
+        self.texel_h / PAGE_SIZE as f32
+    }
+
+    /// Quad width in display pixels at a given display scale.
+    /// The texel region maps to (texel_w / atlas_scale) font units, then × display_scale.
+    /// Simplified: texel_w / atlas_scale * display_scale = bbox_w * display_scale + bleed.
+    /// But easier: texel_w * display_scale / atlas_scale, where atlas_scale = (GLYPH_SIZE-2*pad)/max(bbox_w,bbox_h).
+    /// Actually simplest: the texel region covers bbox + 2*pad/scale in font units.
+    /// That's bbox + 2 * SDF_RANGE / atlas_scale font units.
+    /// At display: (bbox + 2 * SDF_RANGE / atlas_scale) * display_scale
+    pub fn quad_w(&self, display_scale: f32) -> f32 {
+        if self.bbox_w <= 0.0 || self.texel_w <= 0.0 { return 0.0; }
+        // texel_w texels at atlas_scale texels/font_unit → texel_w / atlas_scale font units
+        // atlas_scale = min(scale_x, scale_y) = (GLYPH_SIZE - 2*SDF_RANGE) / max(bbox_w, bbox_h)
+        // But we stored texel_w directly, so: texel_w / atlas_scale = texel_w * max(bbox_w,bbox_h) / (GLYPH_SIZE - 2*SDF_RANGE)
+        let content_texels = GLYPH_SIZE as f32 - 2.0 * SDF_RANGE as f32;
+        let dominant = self.bbox_w.max(self.bbox_h);
+        self.texel_w * dominant / content_texels * display_scale
+    }
+
+    /// Quad height in display pixels at a given display scale.
+    pub fn quad_h(&self, display_scale: f32) -> f32 {
+        if self.bbox_h <= 0.0 || self.texel_h <= 0.0 { return 0.0; }
+        let content_texels = GLYPH_SIZE as f32 - 2.0 * SDF_RANGE as f32;
+        let dominant = self.bbox_w.max(self.bbox_h);
+        self.texel_h * dominant / content_texels * display_scale
+    }
+
+    /// Quad X offset from pen position (bearing_x adjusted for SDF padding).
+    pub fn quad_offset_x(&self, display_scale: f32) -> f32 {
+        let content_texels = GLYPH_SIZE as f32 - 2.0 * SDF_RANGE as f32;
+        let dominant = self.bbox_w.max(self.bbox_h);
+        let sdf_pad_fu = SDF_RANGE as f32 * dominant / content_texels;
+        (self.bearing_x - sdf_pad_fu) * display_scale
+    }
+
+    /// Quad Y offset from baseline (bearing_y adjusted for SDF padding, flipped for screen Y-down).
+    pub fn quad_offset_y(&self, display_scale: f32) -> f32 {
+        let content_texels = GLYPH_SIZE as f32 - 2.0 * SDF_RANGE as f32;
+        let dominant = self.bbox_w.max(self.bbox_h);
+        let sdf_pad_fu = SDF_RANGE as f32 * dominant / content_texels;
+        -(self.bearing_y + sdf_pad_fu) * display_scale
     }
 }
 
@@ -231,9 +277,7 @@ impl MsdfAtlasManager {
 
         if has_contours {
             if let Some(shape) = shape {
-                // Generate MSDF.
-                let msdf_image = generate_msdf_for_glyph(shape, bbox_w, bbox_h, bearing_x, bearing_y);
-                if let Some(img) = msdf_image {
+                if let Some(img) = generate_msdf_for_glyph(shape, bbox_w, bbox_h, bearing_x, bearing_y) {
                     page.write_glyph(col, row, &img);
                 }
             }
@@ -241,6 +285,17 @@ impl MsdfAtlasManager {
         // Even space/empty glyphs get a slot (renders transparent, but advance works).
 
         page.count += 1;
+
+        // Compute texel dimensions: with uniform scale = min(scale_x, scale_y),
+        // the glyph content + SDF padding occupies a specific texel region.
+        let sdf_pad = SDF_RANGE as f32;
+        let content_texels = GLYPH_SIZE as f32 - 2.0 * sdf_pad;
+        let atlas_scale_x = if bbox_w > 0.0 { content_texels / bbox_w } else { 1.0 };
+        let atlas_scale_y = if bbox_h > 0.0 { content_texels / bbox_h } else { 1.0 };
+        let atlas_scale = atlas_scale_x.min(atlas_scale_y);
+        // Texel region = bbox * atlas_scale + 2 * SDF_RANGE, capped at GLYPH_SIZE.
+        let texel_w = (bbox_w * atlas_scale + 2.0 * sdf_pad).min(GLYPH_SIZE as f32);
+        let texel_h = (bbox_h * atlas_scale + 2.0 * sdf_pad).min(GLYPH_SIZE as f32);
 
         let entry = MsdfGlyphEntry {
             page: page_idx as u32,
@@ -251,6 +306,8 @@ impl MsdfAtlasManager {
             bearing_y,
             bbox_w,
             bbox_h,
+            texel_w,
+            texel_h,
         };
 
         self.glyphs.insert(key, entry);
@@ -314,7 +371,7 @@ fn generate_msdf_for_glyph(
 ) -> Option<image::RgbImage> {
     // Color the edges (required for multi-channel SDF).
     let colored = Shape::<ColoredContour>::edge_coloring_simple(shape, 3.0, 0);
-    let prepared = colored.prepare();
+    let _prepared = colored.prepare();
 
     // Create the output image.
     let mut msdf = image::ImageBuffer::<Rgb<f32>, Vec<f32>>::new(GLYPH_SIZE, GLYPH_SIZE);
@@ -347,11 +404,11 @@ fn generate_msdf_for_glyph(
     } else {
         1.0
     };
-    let scale = scale_x.min(scale_y); // Uniform scale to preserve aspect ratio.
+    // Uniform scale preserves the SDF distance field correctness.
+    let scale = scale_x.min(scale_y);
 
     // Translate: glyph origin (bearing_x, bearing_y) maps to padded top-left.
     let translate_x = pad - bearing_x as f64 * scale;
-    let _translate_y = pad - (bearing_y as f64 - bbox_h as f64) as f64 * scale;
     // TTF has Y-up, but our atlas is Y-down. Flip Y.
     let translate_y_flipped = pad + bearing_y as f64 * scale;
 
@@ -435,6 +492,8 @@ mod tests {
             bearing_y: 700.0,
             bbox_w: 500.0,
             bbox_h: 700.0,
+            texel_w: 25.1,
+            texel_h: 32.0,
         };
         // UV should be within [0, 1].
         assert!(entry.uv_x() >= 0.0 && entry.uv_x() < 1.0);
@@ -488,6 +547,58 @@ mod tests {
         let mut mgr = MsdfAtlasManager::new();
         let entry = mgr.get_or_generate(&resolved.data, resolved.face_index, ' ');
         assert!(entry.is_some(), "space should get a slot even without outlines");
-        assert!(entry.unwrap().advance > 0.0);
+        let e = entry.unwrap();
+        assert!(e.advance > 0.0);
+    }
+
+    #[test]
+    fn test_glyph_quad_sizing() {
+        // With bearing-based quad sizing, the quad at display font_size should be
+        // proportional to the glyph bbox, NOT the full atlas cell.
+        let mut system = crate::font::system::FontSystem::new();
+        let resolved = system.query_face(&["sans-serif"], 400, false);
+        if resolved.is_none() { return; }
+        let resolved = resolved.unwrap();
+
+        let face = ttf_parser::Face::parse(&resolved.data, resolved.face_index).unwrap();
+        let units_per_em = face.units_per_em();
+
+        let mut mgr = MsdfAtlasManager::new();
+
+        for ch in ['A', 'i', 'W', 'g', 'j'] {
+            let entry = mgr.get_or_generate(&resolved.data, resolved.face_index, ch);
+            let entry = match entry {
+                Some(e) => e,
+                None => continue,
+            };
+
+            if entry.bbox_w > 0.0 && entry.bbox_h > 0.0 {
+                let display_scale = 20.0 / units_per_em as f32;
+                let quad_w = entry.quad_w(display_scale);
+                let quad_h = entry.quad_h(display_scale);
+                let advance_px = entry.advance * display_scale;
+
+                eprintln!(
+                    "glyph '{}': quad={:.1}x{:.1} advance={:.1}",
+                    ch, quad_w, quad_h, advance_px
+                );
+
+                // Quad width should be reasonable relative to advance.
+                // For most glyphs, bbox_w ≤ advance (sidebearings).
+                // For wide glyphs like 'W', bbox_w may slightly exceed advance.
+                assert!(
+                    quad_w < advance_px * 2.5,
+                    "glyph '{}': quad_w ({:.1}) should not be much larger than advance ({:.1})",
+                    ch, quad_w, advance_px
+                );
+                // Quad height should be roughly font_size (not 2x or 3x).
+                // With SDF padding it can be ~20-30% larger than bbox.
+                assert!(
+                    quad_h < 20.0 * 1.5,
+                    "glyph '{}': quad_h ({:.1}) should not exceed ~1.5x font_size",
+                    ch, quad_h
+                );
+            }
+        }
     }
 }

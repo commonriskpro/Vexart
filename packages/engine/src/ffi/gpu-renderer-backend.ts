@@ -2229,19 +2229,28 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         }
         if (op.kind === "text") {
           // ── MSDF path: opt-in via VEXART_MSDF=1, deferred until after flushAll ──
-          if (MSDF_TEXT_ENABLED && getMsdfSymbols()) {
-            deferredMsdfOps.push({
-              text: op.inputs.text,
-              x: Math.round(op.command.x) - ctx.offsetX,
-              y: Math.round(op.command.y) - ctx.offsetY,
-              fontSize: op.inputs.fontSize,
-              lineHeight: op.inputs.lineHeight,
-              maxWidth: op.inputs.maxWidth,
-              colorRgba: ((op.command.color[0] & 0xff) << 24)
-                | ((op.command.color[1] & 0xff) << 16)
-                | ((op.command.color[2] & 0xff) << 8)
-                | (op.command.color[3] & 0xff),
-            })
+           if (MSDF_TEXT_ENABLED && getMsdfSymbols()) {
+            // Use the SAME TS layout engine as the bitmap path so line breaks match.
+            const layout = layoutText(op.inputs.text, op.inputs.fontId, op.inputs.maxWidth, op.inputs.lineHeight, op.inputs.fontSize)
+            const textX = Math.round(op.command.x) - ctx.offsetX
+            const textY = Math.round(op.command.y) - ctx.offsetY
+            const colorRgba = ((op.command.color[0] & 0xff) << 24)
+              | ((op.command.color[1] & 0xff) << 16)
+              | ((op.command.color[2] & 0xff) << 8)
+              | (op.command.color[3] & 0xff)
+            for (let li = 0; li < layout.lines.length; li++) {
+              const lineText = Array.isArray(layout.lines[li].text) ? layout.lines[li].text.join("") : layout.lines[li].text
+              if (!lineText) continue
+              deferredMsdfOps.push({
+                text: lineText,
+                x: textX,
+                y: textY + li * op.inputs.lineHeight,
+                fontSize: op.inputs.fontSize,
+                lineHeight: op.inputs.lineHeight,
+                maxWidth: 999999, // no wrap — already laid out by TS
+                colorRgba,
+              })
+            }
             const bounds = opBounds(op, ctx.target.width, ctx.target.height)
             if (bounds) markDirty(bounds.left, bounds.top, bounds.right, bounds.bottom)
             continue
