@@ -31,7 +31,7 @@ pub fn create(
     //   offset  0: pos_size  [f32; 4]  = x, y, w, h        (NDC quad)
     //   offset 16: uv_rect   [f32; 4]  = uv_x, uv_y, uv_w, uv_h
     //   offset 32: color     [f32; 4]  = r, g, b, a
-    //   offset 48: atlas_id  u32       + _pad0 u32 + _pad1 u32 + _pad2 u32  (= 4 u32 = 16 bytes)
+    //   offset 48: atlas_id  u32       + msdf_flag u32 + _pad1 u32 + _pad2 u32  (= 4 u32 = 16 bytes)
     //
     // Shader @location(3) uses vec4<u32> for the ids block.
     let stride = std::mem::size_of::<crate::paint::instances::MsdfGlyphInstance>() as u64;

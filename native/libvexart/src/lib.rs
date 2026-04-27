@@ -6,6 +6,7 @@
 pub mod canvas_display_list;
 pub mod composite;
 pub mod ffi;
+pub mod font;
 pub mod frame;
 pub mod image_asset;
 pub mod kitty;
@@ -168,6 +169,16 @@ fn get_or_init_canvas_display_lists(
 ) -> &'static Mutex<canvas_display_list::CanvasDisplayListRegistry> {
     &SHARED_CANVAS_DISPLAY_LISTS
 }
+
+// ─── Font system + MSDF atlas (Phase 2b — DEC-008) ─────────────────────────
+// FontSystem discovers system fonts on init. MsdfAtlasManager generates MSDF
+// glyphs on demand. Both are lazy-initialized on first vexart_font_* call.
+
+static SHARED_FONT_SYSTEM: LazyLock<Mutex<font::system::FontSystem>> =
+    LazyLock::new(|| Mutex::new(font::system::FontSystem::new()));
+
+static SHARED_MSDF_ATLAS: LazyLock<Mutex<font::msdf_atlas::MsdfAtlasManager>> =
+    LazyLock::new(|| Mutex::new(font::msdf_atlas::MsdfAtlasManager::new()));
 
 // ─── Single shared LayerRegistry (Phase 2c native layer ownership) ──────────
 
@@ -1396,6 +1407,397 @@ pub extern "C" fn vexart_canvas_display_list_release(_ctx: u64, _scene: u64, han
         } else {
             ERR_INVALID_ARG
         }
+    })
+}
+
+// ─── §5.9 Font system — MSDF text pipeline (Phase 2b / DEC-008) ─────────
+
+/// Initialize the font system by scanning system fonts.
+/// This is lazy — calling any vexart_font_* function will auto-init.
+/// Returns the number of font faces discovered, or negative on error.
+///
+/// # Safety
+/// No pointer args — safe to call from any thread.
+#[no_mangle]
+pub extern "C" fn vexart_font_init() -> i32 {
+    ffi_guard!({
+        let guard = lock_or_recover(&SHARED_FONT_SYSTEM);
+        guard.face_count() as i32
+    })
+}
+
+/// Query a font face by family name and return an opaque font handle.
+/// The handle is used in subsequent vexart_font_render_text calls.
+///
+/// `families_ptr` / `families_len`: UTF-8 JSON array of family names,
+///   e.g. `["JetBrains Mono", "monospace"]`.
+/// `weight`: CSS font-weight (100-900, default 400).
+/// `italic`: 0 = normal, 1 = italic.
+/// `out_handle`: receives the opaque font handle (u64).
+///
+/// Returns 0 on success, negative on error.
+///
+/// # Safety
+/// `families_ptr` must be valid for `families_len` bytes.
+/// `out_handle` must be a valid mutable u64 pointer.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_font_query(
+    families_ptr: *const u8,
+    families_len: u32,
+    weight: u16,
+    italic: u32,
+    out_handle: *mut u64,
+) -> i32 {
+    ffi_guard!({
+        if families_ptr.is_null() || families_len == 0 || out_handle.is_null() {
+            return ERR_INVALID_ARG;
+        }
+
+        let json_bytes = std::slice::from_raw_parts(families_ptr, families_len as usize);
+        let json_str = match std::str::from_utf8(json_bytes) {
+            Ok(s) => s,
+            Err(_) => return ERR_INVALID_ARG,
+        };
+
+        // Parse JSON array of strings.
+        let families: Vec<String> = match serde_json::from_str(json_str) {
+            Ok(v) => v,
+            Err(_) => return ERR_INVALID_ARG,
+        };
+
+        let family_refs: Vec<&str> = families.iter().map(|s| s.as_str()).collect();
+        let mut system = lock_or_recover(&SHARED_FONT_SYSTEM);
+        let face = match system.query_face(&family_refs, weight, italic != 0) {
+            Some(f) => f,
+            None => {
+                ffi::error::set_last_error(format!(
+                    "no font found for families={json_str} weight={weight}"
+                ));
+                return ffi::panic::ERR_INVALID_FONT;
+            }
+        };
+
+        // Use the Arc pointer as an opaque handle — stable as long as face_cache keeps it alive.
+        let handle = std::sync::Arc::as_ptr(&face.data) as u64;
+        *out_handle = handle;
+        OK
+    })
+}
+
+/// Render text using the MSDF pipeline.
+///
+/// This is the high-level text rendering FFI: given a text string, font params,
+/// position, and target — it resolves the font, generates MSDF glyphs on demand,
+/// uploads atlas pages to GPU, builds the glyph instance buffer, and dispatches.
+///
+/// Parameters (packed in a struct to stay within ARM64 8-param limit):
+/// `text_ptr` / `text_len`: UTF-8 text string.
+/// `params_ptr`: pointer to a TextRenderParams packed struct (see below).
+/// `target`: composite target handle (0 = default).
+/// `stats_out`: receives FrameStats.
+///
+/// TextRenderParams layout (40 bytes, all LE):
+///   f32 x, y          — pen position in pixels (top-left of text block)
+///   f32 font_size      — requested font size in pixels
+///   f32 line_height    — line height in pixels
+///   f32 max_width      — max text width for wrapping (0 = no wrap)
+///   u32 color_rgba     — text color as packed RGBA (0xRRGGBBAA)
+///   u8[8] families_hash — first 8 bytes of family string (for font lookup)
+///   u16 weight         — CSS font-weight
+///   u16 flags          — bit 0: italic, bits 1-15: reserved
+///
+/// Returns 0 on success, negative on error.
+///
+/// # Safety
+/// All pointer args must be valid for their respective lengths.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_font_render_text(
+    _ctx: u64,
+    target: u64,
+    text_ptr: *const u8,
+    text_len: u32,
+    params_ptr: *const u8,
+    params_len: u32,
+    stats_out: *mut FrameStats,
+) -> i32 {
+    ffi_guard!({
+        use font::msdf_atlas::MsdfGlyphEntry;
+
+        if text_ptr.is_null() || text_len == 0 || params_ptr.is_null() || params_len < 28 {
+            if !stats_out.is_null() { *stats_out = FrameStats::default(); }
+            return OK; // empty text = no-op
+        }
+
+        let text_bytes = std::slice::from_raw_parts(text_ptr, text_len as usize);
+        let text = match std::str::from_utf8(text_bytes) {
+            Ok(s) => s,
+            Err(_) => return ERR_INVALID_ARG,
+        };
+
+        // Parse params.
+        let params = std::slice::from_raw_parts(params_ptr, params_len as usize);
+        let x = f32::from_le_bytes([params[0], params[1], params[2], params[3]]);
+        let y = f32::from_le_bytes([params[4], params[5], params[6], params[7]]);
+        let font_size = f32::from_le_bytes([params[8], params[9], params[10], params[11]]);
+        let _line_height = f32::from_le_bytes([params[12], params[13], params[14], params[15]]);
+        let _max_width = f32::from_le_bytes([params[16], params[17], params[18], params[19]]);
+        let color_rgba = u32::from_le_bytes([params[20], params[21], params[22], params[23]]);
+        let weight = u16::from_le_bytes([params[24], params[25]]);
+        let flags = u16::from_le_bytes([params[26], params[27]]);
+        let italic = (flags & 1) != 0;
+
+        // Parse font families from remaining params bytes (JSON string after fixed header).
+        let families: Vec<String> = if params_len > 28 {
+            let json_bytes = &params[28..params_len as usize];
+            match std::str::from_utf8(json_bytes).ok().and_then(|s| serde_json::from_str(s).ok()) {
+                Some(v) => v,
+                None => vec!["sans-serif".to_string()],
+            }
+        } else {
+            vec!["sans-serif".to_string()]
+        };
+
+        let color_r = ((color_rgba >> 24) & 0xFF) as f32 / 255.0;
+        let color_g = ((color_rgba >> 16) & 0xFF) as f32 / 255.0;
+        let color_b = ((color_rgba >> 8) & 0xFF) as f32 / 255.0;
+        let color_a = (color_rgba & 0xFF) as f32 / 255.0;
+
+        // Resolve font.
+        let family_refs: Vec<&str> = families.iter().map(|s| s.as_str()).collect();
+        let mut font_system = lock_or_recover(&SHARED_FONT_SYSTEM);
+        let resolved = match font_system.query_face(&family_refs, weight, italic) {
+            Some(f) => f,
+            None => {
+                if !stats_out.is_null() { *stats_out = FrameStats::default(); }
+                return OK; // No font → skip text silently.
+            }
+        };
+
+        // Get the target dimensions for NDC conversion.
+        let mut pctx_guard = get_or_init_paint();
+        let pctx = match pctx_guard.as_mut() {
+            Some(p) => p,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+
+        let (target_w, target_h) = if target != 0 {
+            pctx.targets.get(target)
+                .map(|t| (t.width as f32, t.height as f32))
+                .unwrap_or((1920.0, 1080.0))
+        } else {
+            (1920.0, 1080.0) // fallback — shouldn't happen in real usage
+        };
+
+        // Get the font face for MSDF generation.
+        let face_data = resolved.data.clone();
+        let face_index = resolved.face_index;
+        let face = match resolved.parse() {
+            Some(f) => f,
+            None => return ERR_INVALID_ARG,
+        };
+
+        // Get units_per_em for scale computation.
+        let units_per_em = face.units_per_em() as f32;
+        let scale = font_size / units_per_em;
+
+        // Generate MSDF glyphs and build instance buffer.
+        let mut atlas_mgr = lock_or_recover(&SHARED_MSDF_ATLAS);
+        let mut instances: Vec<paint::instances::MsdfGlyphInstance> = Vec::new();
+        let mut pen_x = x;
+        let pen_y = y;
+
+        for ch in text.chars() {
+            if ch == '\n' {
+                // TODO: line breaking
+                continue;
+            }
+
+            // Try to generate/lookup the MSDF glyph.
+            let entry: Option<MsdfGlyphEntry> = atlas_mgr.get_or_generate(&face_data, face_index, ch);
+
+            // If primary font doesn't have it, try fallback.
+            let (entry, _used_fallback) = if entry.is_some() {
+                (entry, false)
+            } else {
+                // Drop atlas_mgr to avoid deadlock, then search fallback.
+                drop(atlas_mgr);
+                let fallback_face = font_system.find_face_for_codepoint(ch, weight, !italic);
+                atlas_mgr = lock_or_recover(&SHARED_MSDF_ATLAS);
+                if let Some(fb) = fallback_face {
+                    (atlas_mgr.get_or_generate(&fb.data, fb.face_index, ch), true)
+                } else {
+                    (None, false)
+                }
+            };
+
+            let entry = match entry {
+                Some(e) => e,
+                None => {
+                    // No glyph in any font — skip (tofu would go here).
+                    pen_x += font_size * 0.5; // approximate advance for missing glyph
+                    continue;
+                }
+            };
+
+            let advance = entry.advance * scale;
+
+            // Skip invisible glyphs (space etc) — they have advance but no visual.
+            if entry.bbox_w > 0.0 && entry.bbox_h > 0.0 {
+                // Compute NDC position.
+                let glyph_w = font_size; // MSDF cell represents the full em square
+                let glyph_h = font_size;
+                let glyph_x = pen_x;
+                let glyph_y = pen_y;
+
+                instances.push(paint::instances::MsdfGlyphInstance {
+                    x: (glyph_x / target_w) * 2.0 - 1.0,
+                    y: 1.0 - (glyph_y / target_h) * 2.0,
+                    w: (glyph_w / target_w) * 2.0,
+                    h: -((glyph_h / target_h) * 2.0),
+                    uv_x: entry.uv_x(),
+                    uv_y: entry.uv_y(),
+                    uv_w: entry.uv_w(),
+                    uv_h: entry.uv_h(),
+                    color_r,
+                    color_g,
+                    color_b,
+                    color_a,
+                    atlas_id: 1, // Will be replaced with atlas page-based ID
+                    msdf_flag: 1, // MSDF mode
+                    _pad1: 0,
+                    _pad2: 0,
+                });
+            }
+
+            pen_x += advance;
+        }
+
+        // Upload dirty atlas pages to GPU as images.
+        let page_size = atlas_mgr.page_size();
+        for (page_idx, page) in atlas_mgr.pages.iter_mut().enumerate() {
+            if page.dirty {
+                // Upload the atlas page as a GPU image.
+                // Use a stable handle based on page index (offset from a high range to avoid collision).
+                let atlas_handle = 0xFFFE_0000_0000_0000u64 | (page_idx as u64);
+                upload_image_record(pctx, atlas_handle, &page.rgba, page_size, page_size);
+                page.dirty = false;
+            }
+        }
+
+        // Now dispatch via the existing text dispatch path.
+        if instances.is_empty() {
+            if !stats_out.is_null() { *stats_out = FrameStats::default(); }
+            return OK;
+        }
+
+        // For now, all glyphs use atlas page 0 → atlas_id maps to the image handle.
+        let _atlas_handle = 0xFFFE_0000_0000_0000u64;
+        for inst in instances.iter_mut() {
+            // Override atlas_id with the image handle's low bits won't work since atlas_id is u32.
+            // Instead, we use the existing glyph pipeline with the uploaded image.
+            inst.atlas_id = 1; // Rust atlas registry ID
+        }
+
+        // Load the MSDF atlas into Rust's atlas registry if not already done.
+        // We need to upload via the atlas system so the glyph pipeline's bind_group works.
+        // For now, dispatch directly with the uploaded image handle.
+        drop(atlas_mgr);
+
+        let code = text::dispatch_glyph_instances(pctx, target, &instances);
+
+        if !stats_out.is_null() {
+            (*stats_out).primitives = instances.len() as u32;
+            (*stats_out).draw_calls = 1;
+        }
+
+        code
+    })
+}
+
+/// Measure text width and height using the MSDF font system metrics.
+///
+/// `text_ptr` / `text_len`: UTF-8 text string.
+/// `families_ptr` / `families_len`: UTF-8 JSON array of font families.
+/// `font_size`: requested font size in pixels.
+/// `out_w`, `out_h`: receives measured width and height.
+///
+/// Returns 0 on success.
+///
+/// # Safety
+/// All pointer args must be valid.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_font_measure(
+    text_ptr: *const u8,
+    text_len: u32,
+    families_ptr: *const u8,
+    families_len: u32,
+    font_size: f32,
+    weight: u16,
+    italic: u32,
+    out_w: *mut f32,
+    out_h: *mut f32,
+) -> i32 {
+    ffi_guard!({
+        if out_w.is_null() || out_h.is_null() {
+            return ERR_INVALID_ARG;
+        }
+
+        if text_ptr.is_null() || text_len == 0 {
+            *out_w = 0.0;
+            *out_h = 0.0;
+            return OK;
+        }
+
+        let text = match std::str::from_utf8(std::slice::from_raw_parts(text_ptr, text_len as usize)) {
+            Ok(s) => s,
+            Err(_) => { *out_w = 0.0; *out_h = 0.0; return OK; }
+        };
+
+        let families: Vec<String> = if !families_ptr.is_null() && families_len > 0 {
+            let json_bytes = std::slice::from_raw_parts(families_ptr, families_len as usize);
+            std::str::from_utf8(json_bytes)
+                .ok()
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_else(|| vec!["sans-serif".to_string()])
+        } else {
+            vec!["sans-serif".to_string()]
+        };
+
+        let family_refs: Vec<&str> = families.iter().map(|s| s.as_str()).collect();
+        let mut system = lock_or_recover(&SHARED_FONT_SYSTEM);
+        let resolved = match system.query_face(&family_refs, weight, italic != 0) {
+            Some(f) => f,
+            None => { *out_w = 0.0; *out_h = 0.0; return OK; }
+        };
+
+        let face = match resolved.parse() {
+            Some(f) => f,
+            None => { *out_w = 0.0; *out_h = 0.0; return OK; }
+        };
+
+        let units_per_em = face.units_per_em() as f32;
+        let scale = font_size / units_per_em;
+
+        // Measure by summing horizontal advances.
+        let mut width = 0.0f32;
+        let mut lines = 1u32;
+
+        for ch in text.chars() {
+            if ch == '\n' {
+                lines += 1;
+                continue;
+            }
+            if let Some(glyph_id) = face.glyph_index(ch) {
+                let adv = face.glyph_hor_advance(glyph_id).unwrap_or(0) as f32;
+                width += adv * scale;
+            } else {
+                width += font_size * 0.5; // fallback advance
+            }
+        }
+
+        *out_w = width;
+        *out_h = lines as f32 * font_size * 1.2; // line height estimate
+        OK
     })
 }
 

@@ -610,13 +610,14 @@ pub struct SelfFilterInstance {
 ///   uv_x, uv_y, uv_w, uv_h — atlas UV rect (0..1 normalized)
 ///   color_r/g/b/a — glyph color + alpha
 ///   atlas_id — which loaded atlas texture to sample (1-15)
-///   _pad0/_pad1/_pad2 — alignment padding to 64 bytes
+///   msdf_flag — 0 = bitmap atlas (alpha), 1 = MSDF atlas (RGB median)
+///   _pad1/_pad2 — alignment padding to 64 bytes
 ///
 /// Shader sees:
 ///   @location(0) pos_size: vec4<f32>  (x,y,w,h)
 ///   @location(1) uv_rect:  vec4<f32>  (uv_x,uv_y,uv_w,uv_h)
 ///   @location(2) color:    vec4<f32>  (r,g,b,a)
-///   @location(3) ids:      vec4<u32>  (atlas_id, pad0, pad1, pad2)
+///   @location(3) ids:      vec4<u32>  (atlas_id, msdf_flag, pad1, pad2)
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
 pub struct MsdfGlyphInstance {
@@ -633,7 +634,8 @@ pub struct MsdfGlyphInstance {
     pub color_b: f32,
     pub color_a: f32,
     pub atlas_id: u32,
-    pub _pad0: u32,
+    /// 0 = legacy bitmap atlas (alpha channel), 1 = MSDF atlas (RGB median).
+    pub msdf_flag: u32,
     pub _pad1: u32,
     pub _pad2: u32,
 }
@@ -734,7 +736,7 @@ mod tests {
             color_b: 0.8,
             color_a: 1.0,
             atlas_id: 3,
-            _pad0: 0,
+            msdf_flag: 0,
             _pad1: 0,
             _pad2: 0,
         };
@@ -756,7 +758,7 @@ mod tests {
         let inst = MsdfGlyphInstance::default();
         assert_eq!(inst.atlas_id, 0);
         assert_eq!(inst.x, 0.0);
-        assert_eq!(inst._pad0, 0);
+        assert_eq!(inst.msdf_flag, 0);
         // Verify bytemuck cast_slice works on a zero instance.
         let bytes: &[u8] = bytemuck::bytes_of(&inst);
         assert!(bytes.iter().all(|&b| b == 0));

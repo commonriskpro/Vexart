@@ -410,7 +410,7 @@ pub unsafe fn dispatch(
 
 /// Dispatch glyph instances through the glyph pipeline.
 /// Groups by atlas_id and issues one draw call per atlas.
-fn dispatch_glyph_instances(
+pub(crate) fn dispatch_glyph_instances(
     pctx: &mut PaintContext,
     target: u64,
     glyphs: &[crate::paint::instances::MsdfGlyphInstance],

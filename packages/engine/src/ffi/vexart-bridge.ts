@@ -112,6 +112,12 @@ export const VEXART_SYMBOLS = {
   vexart_canvas_display_list_touch: { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.u64], returns: FFIType.i32 },
   vexart_canvas_display_list_release: { args: [FFIType.u64, FFIType.u64, FFIType.u64], returns: FFIType.i32 },
 
+  // §5.9 Font system — MSDF text pipeline (Phase 2b / DEC-008)
+  vexart_font_init:          { args: [],                                                                                              returns: FFIType.i32 },
+  vexart_font_query:         { args: [FFIType.ptr, FFIType.u32, FFIType.u16, FFIType.u32, FFIType.ptr],                               returns: FFIType.i32 },
+  vexart_font_render_text:   { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr],     returns: FFIType.i32 },
+  vexart_font_measure:       { args: [FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.f32, FFIType.u16, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
+
   // §5.7 Error retrieval
   vexart_get_last_error_length: { args: [],                     returns: FFIType.u32 },
   vexart_copy_last_error:       { args: [FFIType.ptr, FFIType.u32], returns: FFIType.u32 },
