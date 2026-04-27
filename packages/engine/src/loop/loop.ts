@@ -58,7 +58,8 @@ const DEBUG_RESIZE = process.env.VEXART_DEBUG_RESIZE === "1"
 const DEBUG_DRAG_REPRO = process.env.VEXART_DEBUG_DRAG_REPRO === "1"
 
 function log(msg: string) { if (!LAYER_LOG_ENABLED) return; appendFileSync(LOG, msg + "\n") }
-function renderDebug(msg: string) { appendFileSync(RENDER_DEBUG_LOG, msg + "\n") }
+const DEBUG_RENDER = process.env.VEXART_DEBUG_RENDER === "1"
+function renderDebug(msg: string) { if (!DEBUG_RENDER) return; appendFileSync(RENDER_DEBUG_LOG, msg + "\n") }
 function cadenceDebug(msg: string) { if (!DEBUG_CADENCE) return; appendFileSync(CADENCE_LOG, msg + "\n") }
 function resizeDebug(msg: string) { if (!DEBUG_RESIZE) return; appendFileSync(RESIZE_DEBUG_LOG, `[renderer:loop] ${msg}\n`) }
 function dragReproDebug(msg: string) { if (!DEBUG_DRAG_REPRO) return; appendFileSync(DRAG_REPRO_LOG, msg + "\n") }
