@@ -59,7 +59,8 @@ import type { DamageRect } from "./damage"
 // Pre-allocated scratch buffers for pack functions — avoids per-call ArrayBuffer/DataView allocations.
 const PACK_MAX = 256
 const PROFILE_ENABLED = process.env.VEXART_PROFILE !== "0"
-const MSDF_TEXT_ENABLED = process.env.VEXART_MSDF === "1"
+/** MSDF text is the default. Set VEXART_MSDF=0 to fall back to bitmap atlas. */
+const MSDF_TEXT_ENABLED = process.env.VEXART_MSDF !== "0"
 const _packBuf = new ArrayBuffer(PACK_MAX)
 const _packView = new DataView(_packBuf)
 const _packU8 = new Uint8Array(_packBuf)
@@ -2228,7 +2229,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           continue
         }
         if (op.kind === "text") {
-          // ── MSDF path: opt-in via VEXART_MSDF=1, deferred until after flushAll ──
+          // ── MSDF path (default): deferred until after flushAll. Set VEXART_MSDF=0 for bitmap fallback ──
            if (MSDF_TEXT_ENABLED && getMsdfSymbols()) {
             // Use the SAME TS layout engine as the bitmap path so line breaks match.
             const layout = layoutText(op.inputs.text, op.inputs.fontId, op.inputs.maxWidth, op.inputs.lineHeight, op.inputs.fontSize)
@@ -2239,7 +2240,8 @@ export function createGpuRendererBackend(): GpuRendererBackend {
               | ((op.command.color[2] & 0xff) << 8)
               | (op.command.color[3] & 0xff)
             for (let li = 0; li < layout.lines.length; li++) {
-              const lineText = Array.isArray(layout.lines[li].text) ? layout.lines[li].text.join("") : layout.lines[li].text
+              const rawText = layout.lines[li].text
+              const lineText = typeof rawText === "string" ? rawText : String(rawText)
               if (!lineText) continue
               deferredMsdfOps.push({
                 text: lineText,

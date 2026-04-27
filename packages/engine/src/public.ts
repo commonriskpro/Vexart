@@ -130,11 +130,10 @@ export { getFontAtlasCacheStats } from "./ffi/font-atlas"
 export {
   msdfFontInit,
   msdfFontQuery,
-  msdfRenderText,
   msdfMeasureText,
   isMsdfFontAvailable,
 } from "./ffi/msdf-font"
-export type { MsdfRenderTextParams, MsdfTextMeasurement } from "./ffi/msdf-font"
+export type { MsdfTextMeasurement } from "./ffi/msdf-font"
 
 export { createParticleSystem } from "./ffi/particles"
 export type { ParticleConfig, ParticleSystem } from "./ffi/particles"

@@ -87,11 +87,10 @@ export { getFontAtlasCacheStats } from "./font-atlas"
 export {
   msdfFontInit,
   msdfFontQuery,
-  msdfRenderText,
   msdfMeasureText,
   isMsdfFontAvailable,
 } from "./msdf-font"
-export type { MsdfRenderTextParams, MsdfTextMeasurement } from "./msdf-font"
+export type { MsdfTextMeasurement } from "./msdf-font"
 
 export { createParticleSystem } from "./particles"
 export type { ParticleConfig, ParticleSystem } from "./particles"

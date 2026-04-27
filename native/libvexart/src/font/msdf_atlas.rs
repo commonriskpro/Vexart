@@ -335,29 +335,6 @@ impl MsdfAtlasManager {
         PAGE_SIZE
     }
 
-    /// Glyph cell size.
-    pub fn glyph_cell_size(&self) -> u32 {
-        GLYPH_SIZE
-    }
-
-    /// SDF range (needed by the shader for proper anti-aliasing).
-    pub fn sdf_range(&self) -> f64 {
-        SDF_RANGE
-    }
-
-    /// Look up a cached glyph without generating.
-    pub fn lookup(
-        &self,
-        face_data: &Arc<Vec<u8>>,
-        codepoint: char,
-    ) -> Option<MsdfGlyphEntry> {
-        let font_hash = Arc::as_ptr(face_data) as u64;
-        let key = GlyphKey {
-            font_hash,
-            codepoint: codepoint as u32,
-        };
-        self.glyphs.get(&key).copied()
-    }
 }
 
 /// Generate an MSDF image for a single glyph.
@@ -371,7 +348,6 @@ fn generate_msdf_for_glyph(
 ) -> Option<image::RgbImage> {
     // Color the edges (required for multi-channel SDF).
     let colored = Shape::<ColoredContour>::edge_coloring_simple(shape, 3.0, 0);
-    let _prepared = colored.prepare();
 
     // Create the output image.
     let mut msdf = image::ImageBuffer::<Rgb<f32>, Vec<f32>>::new(GLYPH_SIZE, GLYPH_SIZE);
