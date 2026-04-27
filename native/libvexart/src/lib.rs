@@ -1539,8 +1539,8 @@ pub unsafe extern "C" fn vexart_font_render_text(
         let x = f32::from_le_bytes([params[0], params[1], params[2], params[3]]);
         let y = f32::from_le_bytes([params[4], params[5], params[6], params[7]]);
         let font_size = f32::from_le_bytes([params[8], params[9], params[10], params[11]]);
-        let _line_height = f32::from_le_bytes([params[12], params[13], params[14], params[15]]);
-        let _max_width = f32::from_le_bytes([params[16], params[17], params[18], params[19]]);
+        let line_height_param = f32::from_le_bytes([params[12], params[13], params[14], params[15]]);
+        let max_width_param = f32::from_le_bytes([params[16], params[17], params[18], params[19]]);
         let color_rgba = u32::from_le_bytes([params[20], params[21], params[22], params[23]]);
         let weight = u16::from_le_bytes([params[24], params[25]]);
         let flags = u16::from_le_bytes([params[26], params[27]]);
@@ -1599,77 +1599,82 @@ pub unsafe extern "C" fn vexart_font_render_text(
         // Get units_per_em for scale computation.
         let units_per_em = face.units_per_em() as f32;
         let scale = font_size / units_per_em;
+        let line_height = line_height_param;
+        let max_width = max_width_param;
 
-        // Generate MSDF glyphs and build instance buffer.
+        // ── Text layout: greedy word-wrapping with hard break support ──
+        let text_layout = font::layout::layout_text(
+            text, &face_data, face_index,
+            font_size, line_height, max_width,
+        );
+
+        // Generate MSDF glyphs and build instance buffer from laid-out lines.
         let mut atlas_mgr = lock_or_recover(&SHARED_MSDF_ATLAS);
         let mut instances: Vec<paint::instances::MsdfGlyphInstance> = Vec::new();
-        let mut pen_x = x;
-        let pen_y = y;
 
-        for ch in text.chars() {
-            if ch == '\n' {
-                // TODO: line breaking
-                continue;
-            }
+        for (line_idx, line) in text_layout.lines.iter().enumerate() {
+            let mut pen_x = x;
+            let pen_y = y + line_idx as f32 * line_height;
 
-            // Try to generate/lookup the MSDF glyph.
-            let entry: Option<MsdfGlyphEntry> = atlas_mgr.get_or_generate(&face_data, face_index, ch);
+            for ch in line.text.chars() {
+                // Try to generate/lookup the MSDF glyph.
+                let entry: Option<MsdfGlyphEntry> = atlas_mgr.get_or_generate(&face_data, face_index, ch);
 
-            // If primary font doesn't have it, try fallback.
-            let (entry, _used_fallback) = if entry.is_some() {
-                (entry, false)
-            } else {
-                // Drop atlas_mgr to avoid deadlock, then search fallback.
-                drop(atlas_mgr);
-                let fallback_face = font_system.find_face_for_codepoint(ch, weight, !italic);
-                atlas_mgr = lock_or_recover(&SHARED_MSDF_ATLAS);
-                if let Some(fb) = fallback_face {
-                    (atlas_mgr.get_or_generate(&fb.data, fb.face_index, ch), true)
+                // If primary font doesn't have it, try fallback.
+                let (entry, _used_fallback) = if entry.is_some() {
+                    (entry, false)
                 } else {
-                    (None, false)
+                    // Drop atlas_mgr to avoid deadlock, then search fallback.
+                    drop(atlas_mgr);
+                    let fallback_face = font_system.find_face_for_codepoint(ch, weight, !italic);
+                    atlas_mgr = lock_or_recover(&SHARED_MSDF_ATLAS);
+                    if let Some(fb) = fallback_face {
+                        (atlas_mgr.get_or_generate(&fb.data, fb.face_index, ch), true)
+                    } else {
+                        (None, false)
+                    }
+                };
+
+                let entry = match entry {
+                    Some(e) => e,
+                    None => {
+                        // No glyph in any font — skip.
+                        pen_x += font_size * 0.5;
+                        continue;
+                    }
+                };
+
+                let advance = entry.advance * scale;
+
+                // Skip invisible glyphs (space etc) — they have advance but no visual.
+                if entry.bbox_w > 0.0 && entry.bbox_h > 0.0 {
+                    let glyph_w = font_size;
+                    let glyph_h = font_size;
+                    let glyph_x = pen_x;
+                    let glyph_y = pen_y;
+
+                    instances.push(paint::instances::MsdfGlyphInstance {
+                        x: (glyph_x / target_w) * 2.0 - 1.0,
+                        y: 1.0 - (glyph_y / target_h) * 2.0,
+                        w: (glyph_w / target_w) * 2.0,
+                        h: -((glyph_h / target_h) * 2.0),
+                        uv_x: entry.uv_x(),
+                        uv_y: entry.uv_y(),
+                        uv_w: entry.uv_w(),
+                        uv_h: entry.uv_h(),
+                        color_r,
+                        color_g,
+                        color_b,
+                        color_a,
+                        atlas_id: 1,
+                        msdf_flag: 1, // MSDF mode
+                        _pad1: 0,
+                        _pad2: 0,
+                    });
                 }
-            };
 
-            let entry = match entry {
-                Some(e) => e,
-                None => {
-                    // No glyph in any font — skip (tofu would go here).
-                    pen_x += font_size * 0.5; // approximate advance for missing glyph
-                    continue;
-                }
-            };
-
-            let advance = entry.advance * scale;
-
-            // Skip invisible glyphs (space etc) — they have advance but no visual.
-            if entry.bbox_w > 0.0 && entry.bbox_h > 0.0 {
-                // Compute NDC position.
-                let glyph_w = font_size; // MSDF cell represents the full em square
-                let glyph_h = font_size;
-                let glyph_x = pen_x;
-                let glyph_y = pen_y;
-
-                instances.push(paint::instances::MsdfGlyphInstance {
-                    x: (glyph_x / target_w) * 2.0 - 1.0,
-                    y: 1.0 - (glyph_y / target_h) * 2.0,
-                    w: (glyph_w / target_w) * 2.0,
-                    h: -((glyph_h / target_h) * 2.0),
-                    uv_x: entry.uv_x(),
-                    uv_y: entry.uv_y(),
-                    uv_w: entry.uv_w(),
-                    uv_h: entry.uv_h(),
-                    color_r,
-                    color_g,
-                    color_b,
-                    color_a,
-                    atlas_id: 1, // Will be replaced with atlas page-based ID
-                    msdf_flag: 1, // MSDF mode
-                    _pad1: 0,
-                    _pad2: 0,
-                });
+                pen_x += advance;
             }
-
-            pen_x += advance;
         }
 
         // Upload dirty atlas pages to GPU as images.
