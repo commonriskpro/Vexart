@@ -436,16 +436,6 @@ pub fn composite_update_uniform(
             Some(r) => r,
             None => return ERR_INVALID_HANDLE,
         };
-        let sampler = pctx.wgpu.device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("vexart-composite-uniform-sampler"),
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
-            ..Default::default()
-        });
         pctx.wgpu
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
@@ -458,7 +448,7 @@ pub fn composite_update_uniform(
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&sampler),
+                        resource: wgpu::BindingResource::Sampler(&pctx.wgpu.cached_sampler),
                     },
                 ],
             })

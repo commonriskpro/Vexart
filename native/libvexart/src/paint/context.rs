@@ -13,6 +13,9 @@ pub struct WgpuContext {
     /// 2-binding BGL (texture @ 0, sampler @ 1, both fragment-visible).
     /// Ported from bridge L2185-2205.
     pub image_bind_group_layout: wgpu::BindGroupLayout,
+    /// Shared sampler for all composite/image bind groups (ClampToEdge, Linear).
+    /// Avoids creating a new sampler per frame per layer.
+    pub cached_sampler: wgpu::Sampler,
     /// All render pipelines.
     pub pipelines: PipelineRegistry,
     /// Pipeline cache manager for fast warm-start persistence (REQ-2B-601).
@@ -103,6 +106,17 @@ impl WgpuContext {
                 ],
             });
 
+        let cached_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("vexart-cached-sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+            ..Default::default()
+        });
+
         let pipelines = PipelineRegistry::new(
             &device,
             wgpu::TextureFormat::Rgba8Unorm,
@@ -122,6 +136,7 @@ impl WgpuContext {
             device,
             queue,
             image_bind_group_layout,
+            cached_sampler,
             pipelines,
             pipeline_cache_mgr,
         }
