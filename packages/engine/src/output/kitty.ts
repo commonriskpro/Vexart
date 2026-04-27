@@ -215,8 +215,14 @@ function loadShmLib(): ShmLib {
     shm_unlink: (name: Uint8Array) => raw.shm_unlink(ptr(name)),
     ftruncate: raw.ftruncate,
     close: raw.close,
-    mmap: (addr: null, size: number, prot: number, flags: number, fd: number, offset: number) =>
-      Number(raw.mmap(null, size, prot, flags, fd, offset)),
+    mmap: (addr: null, size: number, prot: number, flags: number, fd: number, offset: number) => {
+      const result = raw.mmap(null, size, prot, flags, fd, offset)
+      // MAP_FAILED = (void*)-1; Bun FFI returns ptr as number which truncates
+      // 0xFFFFFFFFFFFFFFFF. Check both -1 and the truncated value.
+      const n = Number(result)
+      if (n === -1 || n === 0 || n === 0xFFFFFFFF || !Number.isFinite(n)) return -1
+      return n
+    },
     msync: (addr: number, size: number, flags: number) => raw.msync(addr, size, flags),
     munmap: (addr: number, size: number) => raw.munmap(addr, size),
     memcpy: (dst: number, src: number, n: number) => Number(raw.memcpy(dst, src, n)),
