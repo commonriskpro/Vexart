@@ -19,11 +19,14 @@ import {
   decodeNativePresentationStats,
   type NativePresentationStats,
 } from "./native-presentation-stats"
-import { disableNativePresentation, logNativePresentationFallback } from "./native-presentation-flags"
+import { disableNativePresentation, enableNativePresentation, logNativePresentationFallback } from "./native-presentation-flags"
 
 let currentTransportMode: number | null = null
 let consecutiveFailures = 0
+let disabledUntilFrame = 0
+let currentFrameCounter = 0
 const MAX_CONSECUTIVE_FAILURES = 3
+const RETRY_COOLDOWN_FRAMES = 300 // ~5 seconds at 60fps
 
 function recordNativePresentationSuccess() {
   consecutiveFailures = 0
@@ -32,7 +35,19 @@ function recordNativePresentationSuccess() {
 function recordNativePresentationFailure(reason: string) {
   consecutiveFailures++
   if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-    disableNativePresentation(`${consecutiveFailures} consecutive failures: ${reason}`)
+    // Temporarily disable with a cooldown instead of permanently
+    disabledUntilFrame = currentFrameCounter + RETRY_COOLDOWN_FRAMES
+    disableNativePresentation(`${consecutiveFailures} consecutive failures: ${reason} (retry after ${RETRY_COOLDOWN_FRAMES} frames)`)
+  }
+}
+
+/** Call once per frame to allow recovery from transient native presentation failures. */
+export function tickNativePresentationRecovery() {
+  currentFrameCounter++
+  if (disabledUntilFrame > 0 && currentFrameCounter >= disabledUntilFrame) {
+    disabledUntilFrame = 0
+    consecutiveFailures = 0
+    enableNativePresentation("auto-retry after cooldown")
   }
 }
 
