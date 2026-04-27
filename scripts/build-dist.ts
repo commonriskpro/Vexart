@@ -191,12 +191,23 @@ console.log("📝 Copying type declarations...")
 cpSync(resolve(ROOT, "types/engine.d.ts"), resolve(DIST, "engine.d.ts"))
 if (existsSync(resolve(ROOT, "types/vexart.d.ts"))) {
   cpSync(resolve(ROOT, "types/vexart.d.ts"), resolve(DIST, "vexart.d.ts"))
-}
-const vexartDts = resolve(DIST, "vexart.d.ts")
-if (!existsSync(vexartDts)) {
-  console.error("ERROR: vexart.d.ts not found in dist — types will be broken for consumers")
-  console.error("Run 'bun run api:update' to generate it, or check types/ directory")
-  process.exit(1)
+} else {
+  // Generate vexart.d.ts as a barrel re-exporting from the hand-written .d.ts files.
+  const parts: string[] = [
+    '/** Vexart unified public API — auto-generated type barrel. */',
+  ]
+  for (const name of ["components", "void"] as const) {
+    const src = resolve(ROOT, `types/${name}.d.ts`)
+    if (existsSync(src)) {
+      cpSync(src, resolve(DIST, `${name}.d.ts`))
+      parts.push(`export * from "./${name}"`)
+    }
+  }
+  // Re-export user-facing engine types.
+  parts.push('export * from "./engine"')
+  parts.push('')
+  writeFileSync(resolve(DIST, "vexart.d.ts"), parts.join("\n"))
+  console.log("  ✅ vexart.d.ts (generated barrel)")
 }
 cpSync(resolve(ROOT, "types/jsx-runtime.d.ts"), resolve(DIST, "jsx-runtime.d.ts"))
 console.log(`  ✅ engine.d.ts + vexart.d.ts + jsx-runtime.d.ts`)
