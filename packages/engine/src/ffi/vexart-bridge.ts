@@ -245,4 +245,44 @@ export function closeVexartLibrary(): void {
     _lib = null
     _rawLib = null
   }
+  _msdfLib = null
+}
+
+// ── MSDF Font symbols (lazy-loaded for backward compatibility) ──────────────
+
+/** @public */
+export const MSDF_FONT_SYMBOLS = {
+  // font_init: () → i32 (face count or negative on error)
+  vexart_font_init: { args: [], returns: FFIType.i32 },
+  // font_query: families_ptr, families_len, weight, italic, out_handle → i32
+  vexart_font_query: { args: [FFIType.ptr, FFIType.u32, FFIType.u16, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
+  // font_render_text: ctx, target, text_ptr, text_len, params_ptr, params_len, stats_out → i32
+  vexart_font_render_text: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
+  // font_measure: text_ptr, text_len, families_ptr, families_len, font_size, weight, italic, out_w, out_h → i32
+  vexart_font_measure: { args: [FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.f32, FFIType.u16, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
+} as const satisfies Record<string, { args: FFIType[]; returns: FFIType }>
+
+let _msdfLib: ReturnType<typeof dlopen<typeof MSDF_FONT_SYMBOLS>> | null = null
+
+/**
+ * Try to open MSDF font symbols from the already-loaded libvexart.
+ * Returns null if the dylib doesn't export them (backward compat).
+ *
+ * @public
+ */
+export function openMsdfFontSymbols(): ReturnType<typeof dlopen<typeof MSDF_FONT_SYMBOLS>>["symbols"] | null {
+  if (_msdfLib) return _msdfLib.symbols
+  // The main library must be opened first to get the path.
+  const mainLib = openVexartLibrary()
+  if (!mainLib) return null
+  // Re-dlopen the same dylib with just the font symbols.
+  for (const path of candidateLibPaths()) {
+    try {
+      _msdfLib = dlopen(path, MSDF_FONT_SYMBOLS)
+      return _msdfLib.symbols
+    } catch {
+      // This dylib doesn't have font symbols — try next or give up.
+    }
+  }
+  return null
 }
