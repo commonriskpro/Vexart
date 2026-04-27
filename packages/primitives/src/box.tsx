@@ -11,6 +11,7 @@
  */
 
 import type { JSX } from "solid-js"
+import { splitProps } from "solid-js"
 import type { TGEProps } from "@vexart/engine"
 
 /** @public */
@@ -33,10 +34,10 @@ export type BoxProps = TGEProps & { children?: JSX.Element }
 
 /** @public */
 export function Box(props: BoxProps) {
-  const { children, ...rest } = props
-  return (
-    <box {...rest}>
-      {children}
-    </box>
-  )
+  // splitProps preserves Solid's reactivity proxy (unlike destructuring) and
+  // separates children from the rest so <box> receives them as JSX children
+  // instead of as a prop in the spread — preventing circular node insertion
+  // that causes walkTree stack overflow when <Show> recreates subtrees.
+  const [local, rest] = splitProps(props, ["children"])
+  return <box {...rest}>{local.children}</box>
 }
