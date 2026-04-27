@@ -127,7 +127,11 @@ await build({
 console.log("🔧 Building platform package...")
 
 const vexartName = process.platform === "darwin" ? "libvexart.dylib" : process.platform === "win32" ? "vexart.dll" : "libvexart.so"
-const vexartLib = resolve(ROOT, "native/libvexart/target/release", vexartName)
+// Workspace root target dir is the canonical location (cargo builds there).
+// The per-crate path native/libvexart/target/release/ may contain stale builds.
+const vexartLibWorkspace = resolve(ROOT, "target/release", vexartName)
+const vexartLibCrate = resolve(ROOT, "native/libvexart/target/release", vexartName)
+const vexartLib = existsSync(vexartLibWorkspace) ? vexartLibWorkspace : vexartLibCrate
 const arch = process.arch === "arm64" ? "arm64" : "x64"
 const platformTag = `${process.platform}-${arch}`
 const platformPkgName = `@vxrt/${platformTag}`
