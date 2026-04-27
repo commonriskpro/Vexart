@@ -1665,7 +1665,15 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     })
 
     const getBackdropWorkBounds = (op: EffectRenderOp, metadata: BackdropRenderMetadata) => {
-      return clampBackdropBounds(metadata.outputBounds, ctx.target.width, ctx.target.height)
+      // Convert absolute screen-space bounds to layer-local coordinates
+      // (same transform that clipRect applies to all other ops)
+      const localBounds = {
+        x: metadata.outputBounds.x - ctx.offsetX,
+        y: metadata.outputBounds.y - ctx.offsetY,
+        width: metadata.outputBounds.width,
+        height: metadata.outputBounds.height,
+      }
+      return clampBackdropBounds(localBounds, ctx.target.width, ctx.target.height)
     }
 
     const getBackdropSource = (op: EffectRenderOp, metadata: BackdropRenderMetadata) => {
@@ -1685,6 +1693,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         width,
         height,
       })
+      // handle may be 0n if copy failed — downstream getBackdropSprite will handle null
       const record: BackdropSourceRecord = {
         key: sourceKey,
         frameId: frameGeneration,
@@ -1699,6 +1708,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       if (!op.backdrop) return null
       const source = getBackdropSource(op, op.backdrop)
       if (!source) return null
+      if (!source.handle || source.handle === 0n) return null
       const spriteKey = `${source.key}:${op.effectStateId}:${op.clipStateId}:${op.transformStateId}`
       const cached = backdropSpriteCache.get(spriteKey)
       if (cached && cached.frameId === frameGeneration) {
