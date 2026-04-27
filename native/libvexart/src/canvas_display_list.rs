@@ -29,6 +29,7 @@ impl CanvasDisplayListRegistry {
         key: String,
         bytes: &[u8],
         hash: String,
+        current_frame: u64,
         resources: &mut ResourceManager,
     ) -> Option<u64> {
         if key.is_empty() || bytes.is_empty() {
@@ -45,11 +46,11 @@ impl CanvasDisplayListRegistry {
                         handle,
                         ResourceKind::CanvasDisplayList,
                         bytes.len() as u64,
-                        0,
+                        current_frame,
                         WgpuHandle::Id(handle),
                     );
                 } else {
-                    resources.touch(handle, 0);
+                    resources.touch(handle, current_frame);
                 }
                 return Some(handle);
             }
@@ -70,17 +71,17 @@ impl CanvasDisplayListRegistry {
             handle,
             ResourceKind::CanvasDisplayList,
             bytes.len() as u64,
-            0,
+            current_frame,
             WgpuHandle::Id(handle),
         );
         Some(handle)
     }
 
-    pub fn touch(&self, handle: u64, resources: &mut ResourceManager) -> bool {
+    pub fn touch(&self, handle: u64, current_frame: u64, resources: &mut ResourceManager) -> bool {
         if !self.lists.contains_key(&handle) {
             return false;
         }
-        resources.touch(handle, 0);
+        resources.touch(handle, current_frame);
         true
     }
 
@@ -120,6 +121,7 @@ mod tests {
                 "canvas:1".to_string(),
                 br#"{"commands":[]}"#,
                 "a".to_string(),
+                1,
                 &mut resources,
             )
             .unwrap();
@@ -128,6 +130,7 @@ mod tests {
                 "canvas:1".to_string(),
                 br#"{"commands":[]}"#,
                 "a".to_string(),
+                2,
                 &mut resources,
             )
             .unwrap();
@@ -147,6 +150,7 @@ mod tests {
                 "canvas:2".to_string(),
                 bytes,
                 "b".to_string(),
+                1,
                 &mut resources,
             )
             .unwrap();

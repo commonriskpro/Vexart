@@ -1158,6 +1158,7 @@ pub extern "C" fn vexart_resource_set_budget(_ctx: u64, budget_mb: u32) -> i32 {
 pub unsafe extern "C" fn vexart_image_asset_register(
     _ctx: u64,
     _scene: u64,
+    current_frame: u64,
     key_ptr: *const u8,
     key_len: u32,
     rgba_ptr: *const u8,
@@ -1186,7 +1187,7 @@ pub unsafe extern "C" fn vexart_image_asset_register(
         let mut resources_guard = resources.lock().unwrap();
         let registry = get_or_init_image_assets();
         let mut registry_guard = registry.lock().unwrap();
-        let Some(handle) = registry_guard.register(key, rgba, width, height, &mut resources_guard)
+        let Some(handle) = registry_guard.register(key, rgba, width, height, current_frame, &mut resources_guard)
         else {
             return ERR_INVALID_ARG;
         };
@@ -1202,13 +1203,13 @@ pub unsafe extern "C" fn vexart_image_asset_register(
 }
 
 #[no_mangle]
-pub extern "C" fn vexart_image_asset_touch(_ctx: u64, _scene: u64, handle: u64) -> i32 {
+pub extern "C" fn vexart_image_asset_touch(_ctx: u64, _scene: u64, current_frame: u64, handle: u64) -> i32 {
     ffi_guard!({
         let resources = get_or_init_resource();
         let mut resources_guard = resources.lock().unwrap();
         let registry = get_or_init_image_assets();
         let registry_guard = registry.lock().unwrap();
-        if registry_guard.touch(handle, &mut resources_guard) {
+        if registry_guard.touch(handle, current_frame, &mut resources_guard) {
             OK
         } else {
             ERR_INVALID_ARG
@@ -1243,6 +1244,7 @@ pub extern "C" fn vexart_image_asset_release(_ctx: u64, _scene: u64, handle: u64
 pub unsafe extern "C" fn vexart_canvas_display_list_update(
     _ctx: u64,
     _scene: u64,
+    current_frame: u64,
     key_ptr: *const u8,
     key_len: u32,
     bytes_ptr: *const u8,
@@ -1267,7 +1269,7 @@ pub unsafe extern "C" fn vexart_canvas_display_list_update(
         let mut resources_guard = resources.lock().unwrap();
         let registry = get_or_init_canvas_display_lists();
         let mut registry_guard = registry.lock().unwrap();
-        let Some(handle) = registry_guard.update(key, bytes, hash, &mut resources_guard) else {
+        let Some(handle) = registry_guard.update(key, bytes, hash, current_frame, &mut resources_guard) else {
             return ERR_INVALID_ARG;
         };
         *out_handle = handle;
@@ -1276,13 +1278,13 @@ pub unsafe extern "C" fn vexart_canvas_display_list_update(
 }
 
 #[no_mangle]
-pub extern "C" fn vexart_canvas_display_list_touch(_ctx: u64, _scene: u64, handle: u64) -> i32 {
+pub extern "C" fn vexart_canvas_display_list_touch(_ctx: u64, _scene: u64, current_frame: u64, handle: u64) -> i32 {
     ffi_guard!({
         let resources = get_or_init_resource();
         let mut resources_guard = resources.lock().unwrap();
         let registry = get_or_init_canvas_display_lists();
         let registry_guard = registry.lock().unwrap();
-        if registry_guard.touch(handle, &mut resources_guard) {
+        if registry_guard.touch(handle, current_frame, &mut resources_guard) {
             OK
         } else {
             ERR_INVALID_ARG
