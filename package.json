@@ -1,6 +1,6 @@
 {
   "name": "vexart",
-  "version": "0.9.0-beta.5",
+  "version": "0.9.0-beta.6",
   "description": "Pixel-native terminal rendering engine. Write JSX, get browser-quality UI in your terminal.",
   "type": "module",
   "private": true,
