@@ -9,7 +9,6 @@
 // it instead of regenerating MSDF. On new glyphs, we append to the atlas
 // and overwrite the cache file.
 
-use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::PathBuf;

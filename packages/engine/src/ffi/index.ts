@@ -83,6 +83,15 @@ export {
 export type { FontDescriptor } from "./text-layout"
 export { getFontAtlasCacheStats } from "./font-atlas"
 
+// MSDF font system (Phase 2b / DEC-008)
+export {
+  msdfFontInit,
+  msdfFontQuery,
+  msdfMeasureText,
+  isMsdfFontAvailable,
+} from "./msdf-font"
+export type { MsdfTextMeasurement } from "./msdf-font"
+
 export { createParticleSystem } from "./particles"
 export type { ParticleConfig, ParticleSystem } from "./particles"
 

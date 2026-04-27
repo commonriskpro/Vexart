@@ -126,6 +126,15 @@ export {
 export type { FontDescriptor } from "./ffi/text-layout"
 export { getFontAtlasCacheStats } from "./ffi/font-atlas"
 
+// MSDF font system (Phase 2b / DEC-008)
+export {
+  msdfFontInit,
+  msdfFontQuery,
+  msdfMeasureText,
+  isMsdfFontAvailable,
+} from "./ffi/msdf-font"
+export type { MsdfTextMeasurement } from "./ffi/msdf-font"
+
 export { createParticleSystem } from "./ffi/particles"
 export type { ParticleConfig, ParticleSystem } from "./ffi/particles"
 
