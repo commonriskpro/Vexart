@@ -27,8 +27,10 @@
  *   scrollRef.viewportHeight
  */
 
+import { createSignal, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
 import type { ScrollHandle } from "@vexart/engine"
+import { Show, onPostScroll, markDirty } from "@vexart/engine"
 import { useScrollHandle } from "../helpers/use-scroll"
 
 let scrollViewCounter = 0
@@ -86,14 +88,27 @@ export type ScrollViewProps = {
 
 /**
  * Scrollbar — renders a vertical scrollbar track + thumb.
- * Reads scroll state from the ScrollHandle every frame.
+ *
+ * Uses a scrollTick signal driven by onPostScroll to force
+ * reactive re-evaluation every frame — the ScrollHandle itself
+ * is NOT a SolidJS signal, so we need an explicit trigger.
  */
 function Scrollbar(props: { handle: ScrollHandle; height: number | string }) {
-  const viewportHeight = () =>
-    typeof props.height === "number" ? props.height : (props.handle.viewportHeight || 200)
+  const [scrollTick, setScrollTick] = createSignal(0)
 
-  // Read scroll state (reactive — reads handle data each access)
+  const unsubPostScroll = onPostScroll(() => {
+    setScrollTick(t => t + 1)
+    markDirty()
+  })
+  onCleanup(() => { unsubPostScroll() })
+
+  const viewportHeight = () => {
+    scrollTick()
+    return typeof props.height === "number" ? props.height : (props.handle.viewportHeight || 200)
+  }
+
   const ratio = () => {
+    scrollTick()
     const ch = props.handle.contentHeight
     const vh = props.handle.viewportHeight
     if (ch <= vh || ch === 0) return 1
@@ -104,39 +119,43 @@ function Scrollbar(props: { handle: ScrollHandle; height: number | string }) {
     Math.max(SCROLLBAR.minThumbHeight, Math.floor(ratio() * viewportHeight()))
 
   const thumbOffset = () => {
+    scrollTick()
     const ch = props.handle.contentHeight
     const vh = props.handle.viewportHeight
     if (ch <= vh) return 0
     const scrollable = ch - vh
-    const scrollPos = -props.handle.scrollY // scrollY is negative
+    if (scrollable <= 0) return 0
+    const scrollPos = -props.handle.scrollY
     const trackHeight = viewportHeight() - thumbHeight()
-    return Math.floor((scrollPos / scrollable) * trackHeight)
+    if (trackHeight <= 0) return 0
+    const raw = Math.floor((scrollPos / scrollable) * trackHeight)
+    return Math.max(0, Math.min(raw, trackHeight))
   }
 
   const shouldShow = () => ratio() < 1
 
-  if (!shouldShow()) return null
-
   return (
-    <box
-      width={SCROLLBAR.width + SCROLLBAR.padding * 2}
-      height={props.height}
-      direction="column"
-      paddingX={SCROLLBAR.padding}
-    >
-      {/* Track */}
-      <box width={SCROLLBAR.width} height="100%" backgroundColor={SCROLLBAR.trackColor} cornerRadius={SCROLLBAR.thumbRadius}>
-        {/* Spacer above thumb */}
-        <box height={thumbOffset()} width={SCROLLBAR.width} />
-        {/* Thumb */}
-        <box
-          width={SCROLLBAR.width}
-          height={thumbHeight()}
-          backgroundColor={SCROLLBAR.thumbColor}
-          cornerRadius={SCROLLBAR.thumbRadius}
-        />
+    <Show when={shouldShow()}>
+      <box
+        width={SCROLLBAR.width + SCROLLBAR.padding * 2}
+        height={props.height}
+        direction="column"
+        paddingX={SCROLLBAR.padding}
+      >
+        {/* Track */}
+        <box width={SCROLLBAR.width} height="100%" backgroundColor={SCROLLBAR.trackColor} cornerRadius={SCROLLBAR.thumbRadius}>
+          {/* Spacer above thumb */}
+          <box height={thumbOffset()} width={SCROLLBAR.width} />
+          {/* Thumb */}
+          <box
+            width={SCROLLBAR.width}
+            height={thumbHeight()}
+            backgroundColor={SCROLLBAR.thumbColor}
+            cornerRadius={SCROLLBAR.thumbRadius}
+          />
+        </box>
       </box>
-    </box>
+    </Show>
   )
 }
 

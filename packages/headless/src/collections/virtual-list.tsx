@@ -31,8 +31,14 @@ export type VirtualListProps<T> = {
   items: T[]
   /** Fixed height per item in pixels. */
   itemHeight: number
-  /** Visible viewport height in pixels. */
-  height: number
+  /**
+   * Visible viewport height.
+   * - `number` — fixed pixel height.
+   * - `"grow"` / `"100%"` / other string — fills available space.
+   *   The actual pixel height is read from the scroll handle's
+   *   viewportHeight after the first layout pass.
+   */
+  height: number | string
   /** Width. Default: "grow". */
   width?: number | string
   /** Extra items to render above/below viewport. Default: 5. */
@@ -57,10 +63,28 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
 
   const overscan = () => props.overscan ?? 5
   const totalHeight = () => props.items.length * props.itemHeight
-  const viewportItems = () => Math.ceil(props.height / props.itemHeight)
 
   const scrollId = `vlist-${Math.random().toString(36).slice(2, 8)}`
   const scrollHandle = useScrollHandle(scrollId)
+
+  /**
+   * Resolved viewport height in pixels.
+   * When props.height is a number, uses it directly.
+   * When props.height is a string ("grow", "100%", etc.), reads the
+   * actual rendered viewport height from the scroll handle — updated
+   * every frame via onPostScroll/scrollTick.
+   */
+  const viewportPx = (): number => {
+    scrollTick()
+    if (typeof props.height === "number") return props.height
+    return scrollHandle.viewportHeight || 0
+  }
+
+  const viewportItems = () => {
+    const vh = viewportPx()
+    if (vh <= 0 || props.itemHeight <= 0) return 0
+    return Math.ceil(vh / props.itemHeight)
+  }
 
   // Read scroll position reactively
   const scrollPos = () => {
@@ -89,12 +113,14 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   }
 
   function scrollToIndex(index: number) {
+    const vh = viewportPx()
+    if (vh <= 0) return
     const itemTop = index * props.itemHeight
     const itemBottom = itemTop + props.itemHeight
     const viewTop = scrollPos()
-    const viewBottom = viewTop + props.height
+    const viewBottom = viewTop + vh
     if (itemTop < viewTop) scrollHandle.scrollTo(-itemTop)
-    else if (itemBottom > viewBottom) scrollHandle.scrollTo(-(itemBottom - props.height))
+    else if (itemBottom > viewBottom) scrollHandle.scrollTo(-(itemBottom - vh))
     setScrollTick(t => t + 1)
   }
 
