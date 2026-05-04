@@ -7,9 +7,11 @@
  *   solid-plugin.ts     ← babel preload for JSX transform
  *   jsx-runtime.d.ts    ← JSX intrinsic elements
  *   tree-sitter/        ← grammar .wasm + .scm files
- *   package.json        ← optionalDependencies: { "@vxrt/darwin-arm64": "..." }
+ *   package.json        ← optionalDependencies for all supported platforms
  *   platform/
  *     darwin-arm64/     ← @vxrt/darwin-arm64 package (libvexart.dylib + package.json)
+ *     linux-x64/        ← @vxrt/linux-x64 package (libvexart.so + package.json)
+ *     (other platforms built via CI: see .github/workflows/build-native.yml)
  *
  * Run: bun run scripts/build-dist.ts
  */
@@ -243,7 +245,10 @@ const pkg = {
     "tree-sitter/",
   ],
   optionalDependencies: {
-    [platformPkgName]: VERSION,
+    "@vxrt/darwin-arm64": VERSION,
+    "@vxrt/darwin-x64": VERSION,
+    "@vxrt/linux-x64": VERSION,
+    "@vxrt/linux-arm64": VERSION,
   },
   peerDependencies: {
     "solid-js": "^1.9.0",
