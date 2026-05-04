@@ -34,7 +34,7 @@ colors.accentForeground     // "#fafafa"    — text on accent
 colors.destructive          // "#dc2626"    — errors/danger
 colors.destructiveForeground // "#fafafa"   — text on destructive
 colors.border               // "#ffffff25"  — borders
-colors.input                // "#ffffff26"  — input borders
+colors.input                // "#ffffff40"  — input borders (~25% white)
 colors.ring                 // "#737373"    — focus rings
 colors.transparent          // "#00000000"  — transparent
 ```

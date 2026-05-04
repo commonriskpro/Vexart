@@ -49,7 +49,7 @@ TypeScript-owned scene graph with a Rust/WGPU native rendering boundary.
 | ------- | ------- | ------ |
 | `@vexart/engine` | SolidJS reconciler, render loop, hooks, FFI bridge to `libvexart`, terminal lifecycle, input parsing, focus, hit-testing, output transport | ✅ Active |
 | `@vexart/primitives` | Primitive JSX wrappers and intrinsic element helpers: `Box`, `Text`, `RichText`, `Span`, `WrapRow`; JSX intrinsic elements include `<box>`, `<text>`, `<image>`, `<canvas>` | ✅ Active |
-| `@vexart/headless` | 28 headless components: logic, keyboard/mouse interaction, accessibility contracts, no styling | ✅ Active |
+| `@vexart/headless` | 26 headless components: logic, keyboard/mouse interaction, accessibility contracts, no styling | ✅ Active |
 | `@vexart/styled` | Themed components and void theme tokens — dark, shadcn-inspired design system | ✅ Active |
 | `@vexart/app` | App framework: router, route manifest helpers, className mapper, app mounting, CLI helpers | ✅ Active |
 | `@vexart/internal-atlas-gen` | Internal font atlas generator | ✅ Internal |
@@ -109,7 +109,7 @@ TypeScript-owned scene graph with a Rust/WGPU native rendering boundary.
 - `bun test` — run TypeScript tests.
 - `cd native/libvexart && cargo test` — run Rust tests.
 - `cd native/libvexart && cargo build --release` — build the Rust native library.
-- `bun --conditions=browser run examples/hello.tsx` — run the hello example.
+- `bun --conditions=browser run examples/hello-app.tsx` — run the hello example.
 - `bun run showcase` — run comprehensive feature showcase (7 tabs).
 - `bun run build:dist` — build npm distribution.
 
@@ -513,6 +513,10 @@ implemented under `native/libvexart/src`. Export names are prefixed with `vexart
 | `vexart_canvas_display_list_update` | Register/update native canvas display list |
 | `vexart_canvas_display_list_touch` | Touch native canvas display list |
 | `vexart_canvas_display_list_release` | Release native canvas display list |
+| `vexart_font_init` | Initialize native font system |
+| `vexart_font_query` | Query font face availability |
+| `vexart_font_render_text` | Render MSDF text glyphs |
+| `vexart_font_measure` | Measure text with native font metrics |
 | `vexart_get_last_error_length` | Return last native error buffer length |
 | `vexart_copy_last_error` | Copy last native error into caller buffer |
 
@@ -660,24 +664,24 @@ import { Button, Card, Badge, colors, space } from "@vexart/styled"
 ### Tokens
 
 ```typescript
-colors.background      // 0x141414ff — app background
-colors.foreground      // 0xfafafaff — default text
-colors.card            // 0x262626ff — elevated surfaces
-colors.primary         // 0xe5e5e5ff — brand/actions
-colors.secondary       // 0x333333ff — secondary actions
-colors.muted           // 0x333333ff — subtle surfaces
-colors.mutedForeground // 0xa3a3a3ff — low-emphasis text
-colors.accent          // 0x333333ff — hover/focus
-colors.destructive     // 0xdc2626ff — errors
-colors.border          // 0xffffff1a — borders (white 10%)
-colors.input           // 0xffffff26 — input borders (white 15%)
-colors.ring            // 0x737373ff — focus rings
+colors.background      // "#0a0a0a" — app background (near-OLED black)
+colors.foreground      // "#fafafa" — default text
+colors.card            // "#171717" — elevated surfaces
+colors.primary         // "#e5e5e5" — brand/actions
+colors.secondary       // "#262626" — secondary actions
+colors.muted           // "#262626" — subtle surfaces
+colors.mutedForeground // "#a3a3a3" — low-emphasis text
+colors.accent          // "#262626" — hover/focus
+colors.destructive     // "#dc2626" — errors
+colors.border          // "#ffffff25" — borders (~14.5% white)
+colors.input           // "#ffffff40" — input borders (~25% white)
+colors.ring            // "#737373" — focus rings
 
 radius.sm/md/lg/xl/xxl/full      // 6/8/10/14/18/9999
 space[1]..space[10]              // 4..40px
 font.xs/sm/base/lg/xl/2xl/3xl/4xl // 10..36px
 weight.normal/medium/semibold/bold // 400..700
-shadows.sm/md/lg/xl              // preset shadow configs
+shadows.xs/sm/md/lg/xl           // preset shadow configs
 glows                            // preset glow configs
 ```
 

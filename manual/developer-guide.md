@@ -138,11 +138,11 @@ function App() {
     <box
       width="100%"
       height="100%"
-      backgroundColor={0x141414ff}
+      backgroundColor="#0a0a0a"
       alignX="center"
       alignY="center"
     >
-      <text color={0xfafafaff} fontSize={16}>
+      <text color="#fafafa" fontSize={16}>
         Hello from Vexart
       </text>
     </box>
@@ -1018,18 +1018,18 @@ Shadow colors **must** be u32 numbers. They bypass the color parser and go direc
 ```tsx
 import { colors, radius, space, font, weight, shadows } from "@vxrt/core"
 
-colors.background       // 0x141414ff — app background
-colors.foreground       // 0xfafafaff — default text
-colors.card             // 0x262626ff — elevated surfaces
-colors.primary          // 0xe5e5e5ff — brand/actions
-colors.secondary        // 0x333333ff — secondary actions
-colors.muted            // 0x333333ff — subtle surfaces
-colors.mutedForeground  // 0xa3a3a3ff — low-emphasis text
-colors.accent           // 0x333333ff — hover/focus
-colors.destructive      // 0xdc2626ff — errors
-colors.border           // 0xffffff1a — borders (white 10%)
-colors.input            // 0xffffff26 — input borders (white 15%)
-colors.ring             // 0x737373ff — focus rings
+colors.background       // "#0a0a0a" — app background (near-OLED black)
+colors.foreground       // "#fafafa" — default text
+colors.card             // "#171717" — elevated surfaces
+colors.primary          // "#e5e5e5" — brand/actions
+colors.secondary        // "#262626" — secondary actions
+colors.muted            // "#262626" — subtle surfaces
+colors.mutedForeground  // "#a3a3a3" — low-emphasis text
+colors.accent           // "#262626" — hover/focus
+colors.destructive      // "#dc2626" — errors
+colors.border           // "#ffffff25" — borders (~14.5% white)
+colors.input            // "#ffffff40" — input borders (~25% white)
+colors.ring             // "#737373" — focus rings
 
 radius.sm    // 6
 radius.md    // 8
@@ -2947,7 +2947,7 @@ colors.accentForeground     // "#fafafa"    — text on accent
 colors.destructive          // "#dc2626"    — errors/danger
 colors.destructiveForeground // "#fafafa"   — text on destructive
 colors.border               // "#ffffff25"  — borders (~14.5% white)
-colors.input                // "#ffffff26"  — input borders (~15% white)
+colors.input                // "#ffffff40"  — input borders (~25% white)
 colors.ring                 // "#737373"    — focus rings
 colors.transparent          // "#00000000"  — transparent
 ```

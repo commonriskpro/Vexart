@@ -3,7 +3,7 @@
 Practical patterns for building Vexart applications. Repository examples are runnable with Bun and the Solid browser condition:
 
 ```bash
-bun --conditions=browser run examples/hello.tsx
+bun --conditions=browser run examples/hello-app.tsx
 ```
 
 ## Package imports
@@ -112,7 +112,7 @@ await createApp(() => <App />)
 
 The v0.9 release checklist validates at least these 15 runnable examples:
 
-1. `examples/hello.tsx`
+1. `examples/hello-app.tsx`
 2. `examples/interactive.tsx`
 3. `examples/layers.tsx`
 4. `examples/dashboard.tsx`
@@ -126,7 +126,7 @@ The v0.9 release checklist validates at least these 15 runnable examples:
 12. `examples/syntax.tsx`
 13. `examples/markdown.tsx`
 14. `examples/showcase.tsx`
-15. `examples/gpu-verify.tsx`
+15. `examples/void-showcase.tsx`
 
 Run smoke validation with:
 

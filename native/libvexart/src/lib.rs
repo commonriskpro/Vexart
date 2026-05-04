@@ -1,5 +1,5 @@
 // native/libvexart/src/lib.rs
-// All 20 #[no_mangle] pub extern "C" FFI exports for libvexart.
+// All #[no_mangle] pub extern "C" FFI exports for libvexart (53 functions).
 // Every export wraps its body in ffi_guard! for panic safety.
 // Per design §5, REQ-NB-003.
 
