@@ -6,16 +6,17 @@ Anti-aliased corners. Drop shadows. Linear & radial gradients. Glow effects. Bac
 
 ```tsx
 import { createApp, Box, Text } from "@vexart/app"
+import { colors } from "@vexart/styled"
 
 await createApp(() => (
   <Box
     width="100%"
     height="100%"
-    backgroundColor={0x141414ff}
+    backgroundColor={colors.background}
     alignX="center"
     alignY="center"
   >
-    <Text color={0xfafafaff} fontSize={16}>Hello from Vexart!</Text>
+    <Text color={colors.foreground} fontSize={16}>Hello from Vexart!</Text>
   </Box>
 ))
 ```
@@ -29,7 +30,7 @@ await createApp(() => (
 - **JSX components** — SolidJS `createRenderer`; fine-grained reactive updates, no VDOM
 - **CSS-grade layout** — Flexily flexbox in pure JavaScript; no native layout FFI
 - **Design tokens** — shadcn-compatible dark theme with semantic color, spacing, radius, shadows
-- **28 headless components** — Button, Input, Select, Dialog, Combobox, Slider, VirtualList, and more
+- **26 headless components** — Button, Input, Select, Dialog, Combobox, Slider, VirtualList, and more
 - **Focus management** — Tab/Shift-Tab cycling, per-node keyboard handlers, focus scoping
 - **Drop shadows & glow** — declarative `shadow` and `glow` props, rendered via GPU
 - **Gradients** — linear and radial, multi-stop
@@ -130,12 +131,13 @@ Vexart is **not** a cell-based TUI framework. It renders actual pixels using the
 
 | Package | Purpose | Layer |
 |---------|---------|-------|
-| `@vexart/engine` | Core engine: render loop, GPU backend, SolidJS reconciler, input, focus, animation, data fetching | Foundation |
-| `@vexart/primitives` | Low-level JSX nodes: `Box`, `Text`, `RichText`, `Span`, `WrapRow` | Primitives |
-| `@vexart/headless` | Behaviour-only components: Button, Input, Dialog, Select, Tabs, List, Table, VirtualList, etc. | Headless |
+| `@vexart/app` | Managed app framework: router, className mapper, config, CLI helpers | App |
 | `@vexart/styled` | Design tokens + styled components (shadcn-compatible): `colors`, `radius`, `space`, `font`, `shadows` | Styled |
+| `@vexart/headless` | Behaviour-only components: Button, Input, Dialog, Select, Tabs, List, Table, VirtualList, etc. | Headless |
+| `@vexart/primitives` | Low-level JSX nodes: `Box`, `Text`, `RichText`, `Span`, `WrapRow` | Primitives |
+| `@vexart/engine` | Core engine: render loop, GPU backend, SolidJS reconciler, input, focus, animation, data fetching | Foundation |
 
-Dependencies flow one way: `engine → primitives → headless → styled`. You can use any layer independently.
+Dependencies flow downward: `app → styled → headless → primitives → engine`. You can use any layer independently.
 
 ### Native binary — libvexart
 
@@ -151,7 +153,7 @@ cargo build --release
 
 ---
 
-## Components (28)
+## Components
 
 | Component | Category | Description |
 |-----------|----------|-------------|
@@ -231,11 +233,10 @@ All effects are JSX props — no imperative API needed:
 
 | Terminal | Protocol | Quality |
 |----------|----------|---------|
-| Kitty | Kitty direct | ✅ Best — native pixel rendering |
+| Kitty 0.41+ | Kitty direct + SHM | ✅ Best — native pixel rendering |
 | Ghostty | Kitty direct | ✅ Best — native pixel rendering |
-| WezTerm | Kitty direct | ✅ Best |
-| tmux (inside Kitty/Ghostty) | Kitty placeholder | ✅ Good |
-| Other | — | ❌ Exits with clear error message |
+| WezTerm 2025.04+ | Kitty direct | ✅ Best |
+| tmux, Alacritty, iTerm2, Windows Terminal | — | ❌ Unsupported — exits with clear error |
 
 ---
 
@@ -269,7 +270,7 @@ Quick-start examples:
 bun run example        # Hello World — first JSX render
 bun run demo4          # Interactive — focus, signals, keyboard
 bun run demo7          # Scroll containers
-bun run demo8          # Component showcase (all 28 components)
+bun run demo8          # Component showcase
 bun run demo9          # Shadow & glow effects
 bun run showcase       # Comprehensive 7-tab feature showcase
 ```
