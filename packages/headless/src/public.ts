@@ -20,7 +20,7 @@ export type {
 } from "./inputs/combobox"
 
 export { Input } from "./inputs/input"
-export type { InputRenderContext, InputProps } from "./inputs/input"
+export type { InputRenderContext, InputProps, InputTheme } from "./inputs/input"
 
 export { RadioGroup } from "./inputs/radio-group"
 export type { RadioOption, RadioOptionContext, RadioGroupProps } from "./inputs/radio-group"

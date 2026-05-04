@@ -1,12 +1,14 @@
 /**
  * VoidInput — styled single-line text input using Void design tokens.
  *
+ * Uses Input's self-rendering mode with a Void theme for built-in
+ * cursor rendering (no manual renderInput needed).
+ *
  * @public
  */
 
 import { Input } from "@vexart/headless"
-import type { InputRenderContext } from "@vexart/headless"
-import { radius, space, font, shadows, glows } from "../tokens/tokens"
+import { radius, space, font } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
 /** @public */
@@ -30,34 +32,18 @@ export function VoidInput(props: VoidInputProps) {
       placeholder={props.placeholder}
       disabled={props.disabled}
       focusId={props.focusId}
-      renderInput={(ctx: InputRenderContext) => (
-        <box
-          {...ctx.inputProps}
-          direction="row"
-          alignY="center"
-          width={props.width ?? "grow"}
-          height={36}
-          paddingLeft={space[3]}
-          paddingRight={space[3]}
-          backgroundColor={themeColors.card}
-          cornerRadius={radius.md}
-          borderColor={ctx.focused ? themeColors.ring : themeColors.input}
-          borderWidth={1}
-          shadow={shadows.xs}
-          opacity={ctx.disabled ? 0.5 : 1}
-          focusStyle={{
-            borderColor: themeColors.ring,
-            glow: glows.ring,
-          }}
-        >
-          <text
-            color={ctx.showPlaceholder ? themeColors.mutedForeground : themeColors.foreground}
-            fontSize={font.sm}
-          >
-            {ctx.displayText}{ctx.focused && ctx.blink ? "│" : ""}
-          </text>
-        </box>
-      )}
+      width={props.width}
+      theme={{
+        accent: themeColors.ring,
+        fg: themeColors.foreground,
+        muted: themeColors.mutedForeground,
+        bg: themeColors.card,
+        border: themeColors.input,
+        radius: radius.md,
+        paddingX: space[3],
+        paddingY: 8,
+        fontSize: font.sm,
+      }}
     />
   )
 }

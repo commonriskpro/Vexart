@@ -1,7 +1,11 @@
 /**
- * Input — truly headless single-line text input.
+ * Input — single-line text input with built-in cursor rendering.
  *
- * Handles editing, selection, paste, focus, and caret state while visuals are supplied by `renderInput`.
+ * Two modes:
+ *   1. **Self-rendering** (default): renders its own visual with a native
+ *      block cursor, styled via `theme`. Same pattern as Textarea.
+ *   2. **Headless**: pass `renderInput` to take full control of visuals.
+ *      The cursor/blink state is exposed in the render context.
  *
  * @public
  */
@@ -10,6 +14,47 @@ import { createSignal, createEffect, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus, onInput } from "@vexart/engine"
 import { useDisabled } from "../helpers/disabled"
+
+// ── Constants ──
+
+const LINE_HEIGHT = 17
+const FONT_SIZE = 14
+
+// ── Theme ──
+
+/** @public */
+export type InputTheme = {
+  /** Cursor / focused border accent color. */
+  accent: string | number
+  /** Primary text color. */
+  fg: string | number
+  /** Placeholder / muted text color. */
+  muted: string | number
+  /** Background color. */
+  bg: string | number
+  /** Border color when unfocused. */
+  border: string | number
+  /** Corner radius. */
+  radius: number
+  /** Inner padding (horizontal). */
+  paddingX: number
+  /** Inner padding (vertical). */
+  paddingY: number
+  /** Font size. */
+  fontSize: number
+}
+
+const INPUT_DEFAULTS: InputTheme = {
+  accent: 0x56d4c8ff,
+  fg: 0xe0e0e0ff,
+  muted: 0x666680ff,
+  bg: 0x1a1a2eff,
+  border: 0xffffff33,
+  radius: 6,
+  paddingX: 10,
+  paddingY: 6,
+  fontSize: FONT_SIZE,
+}
 
 // ── Types ──
 
@@ -46,8 +91,18 @@ export type InputProps = {
   placeholder?: string
   disabled?: boolean
   focusId?: string
-  /** Render function — receives state, returns visual. */
-  renderInput: (ctx: InputRenderContext) => JSX.Element
+  /** Width. Default: "grow". */
+  width?: number | string
+  /** Height. Default: auto from theme padding + line height. */
+  height?: number
+  /** Visual theme for self-rendering mode. Ignored when renderInput is set. */
+  theme?: Partial<InputTheme>
+  /**
+   * Optional render function for fully headless mode.
+   * When provided, the Input delegates ALL visuals to this function
+   * and ignores the theme prop.
+   */
+  renderInput?: (ctx: InputRenderContext) => JSX.Element
 }
 
 /** @public */
@@ -218,22 +273,75 @@ export function Input(props: InputProps) {
 
   const showPlaceholder = () => props.value.length === 0 && !focused()
 
+  // Headless mode — delegate to consumer's renderInput
+  if (props.renderInput) {
+    const renderFn = props.renderInput
+    return (
+      <>
+        {() => renderFn({
+          value: props.value,
+          displayText: showPlaceholder() ? (props.placeholder ?? "") : props.value,
+          showPlaceholder: showPlaceholder(),
+          cursor: cursor(),
+          blink: blink(),
+          focused: checkFocus(),
+          disabled: disabled(),
+          selection: hasSelection() ? selRange() : null,
+          inputProps: {
+            focusable: true,
+            onPress: () => { if (!disabled()) focus() },
+          },
+        })}
+      </>
+    )
+  }
+
+  // ── Self-rendering mode — built-in cursor (same pattern as Textarea) ──
+
+  const th = () => ({ ...INPUT_DEFAULTS, ...props.theme })
+  const cursorColor = () => th().accent
+  const lineHeight = () => Math.ceil(th().fontSize * 1.2)
+  const inputHeight = () => props.height ?? (lineHeight() + th().paddingY * 2 + 2)
+
   return (
-    <>
-      {() => props.renderInput({
-        value: props.value,
-        displayText: showPlaceholder() ? (props.placeholder ?? "") : props.value,
-        showPlaceholder: showPlaceholder(),
-        cursor: cursor(),
-        blink: blink(),
-        focused: checkFocus(),
-        disabled: disabled(),
-        selection: hasSelection() ? selRange() : null,
-        inputProps: {
-          focusable: true,
-          onPress: () => { if (!disabled()) focus() },
-        },
-      })}
-    </>
+    <box
+      onPress={() => { if (!disabled()) focus() }}
+      width={props.width ?? "grow"}
+      height={inputHeight()}
+      backgroundColor={th().bg}
+      cornerRadius={th().radius}
+      borderColor={checkFocus() ? cursorColor() : th().border}
+      borderWidth={1}
+      paddingLeft={th().paddingX}
+      paddingRight={th().paddingX}
+      paddingTop={th().paddingY}
+      paddingBottom={th().paddingY}
+      focusStyle={{
+        borderColor: cursorColor(),
+      }}
+    >
+      {() => {
+        const isFocused = checkFocus()
+        const val = props.value
+        const pos = cursor()
+        const ph = showPlaceholder()
+
+        if (ph) {
+          return (
+            <box height={lineHeight()} width="100%">
+              <text color={th().muted} fontSize={th().fontSize}>{props.placeholder ?? ""}</text>
+            </box>
+          )
+        }
+
+        return (
+          <box height={lineHeight()} width="100%">
+            <text color={th().fg} fontSize={th().fontSize}>
+              {val.slice(0, pos) + (isFocused ? (blink() ? "│" : " ") : "") + val.slice(pos)}
+            </text>
+          </box>
+        )
+      }}
+    </box>
   )
 }
