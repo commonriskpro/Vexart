@@ -178,9 +178,9 @@ export function Input(props: InputProps) {
         let insertAt = pos
         if (hasSelection()) { base = deleteSelection(); insertAt = cursor() }
         const next = base.slice(0, insertAt) + e.char + base.slice(insertAt)
-        setCursor(insertAt + 1)
         clearSelection()
         props.onChange?.(next)
+        setCursor(insertAt + 1)
         return
       }
     },
@@ -196,9 +196,9 @@ export function Input(props: InputProps) {
     if (hasSelection()) { base = deleteSelection(); insertAt = cursor() }
     const text = event.text.replace(/[\r\n\t]/g, " ")
     const next = base.slice(0, insertAt) + text + base.slice(insertAt)
-    setCursor(insertAt + text.length)
     clearSelection()
     props.onChange?.(next)
+    setCursor(insertAt + text.length)
   })
   onCleanup(() => unsubPaste())
 
