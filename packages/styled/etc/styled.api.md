@@ -7,7 +7,7 @@
 import { JSX } from 'solid-js';
 
 // @public (undocumented)
-export function Avatar(props: AvatarProps): JSX.Element;
+export function Avatar(props: AvatarProps): JSX;
 
 // @public (undocumented)
 export interface AvatarProps {
@@ -23,7 +23,7 @@ export interface AvatarProps {
 export type AvatarSize = "sm" | "default" | "lg";
 
 // @public (undocumented)
-export function Badge(props: BadgeProps): JSX.Element;
+export function Badge(props: BadgeProps): JSX;
 
 // @public (undocumented)
 export interface BadgeProps {
@@ -37,7 +37,7 @@ export interface BadgeProps {
 export type BadgeVariant = "default" | "secondary" | "outline" | "destructive";
 
 // @public (undocumented)
-export function Button(props: ButtonProps): JSX.Element;
+export function Button(props: ButtonProps): JSX;
 
 // @public (undocumented)
 export interface ButtonProps {
@@ -45,6 +45,12 @@ export interface ButtonProps {
     children?: any;
     // (undocumented)
     disabled?: boolean;
+    // (undocumented)
+    focusId?: string;
+    // Warning: (ae-forgotten-export) The symbol "PressEvent" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    onPress?: (event?: PressEvent) => void;
     // (undocumented)
     size?: ButtonSize;
     // (undocumented)
@@ -58,10 +64,10 @@ export type ButtonSize = "xs" | "sm" | "default" | "lg" | "icon" | "icon-sm" | "
 export type ButtonVariant = "default" | "secondary" | "outline" | "ghost" | "destructive" | "link";
 
 // @public (undocumented)
-export function Card(props: CardProps): JSX.Element;
+export function Card(props: CardProps): JSX;
 
 // @public (undocumented)
-export function CardAction(props: CardActionProps): JSX.Element;
+export function CardAction(props: CardActionProps): JSX;
 
 // @public (undocumented)
 export interface CardActionProps {
@@ -70,7 +76,7 @@ export interface CardActionProps {
 }
 
 // @public (undocumented)
-export function CardContent(props: CardContentProps): JSX.Element;
+export function CardContent(props: CardContentProps): JSX;
 
 // @public (undocumented)
 export interface CardContentProps {
@@ -79,7 +85,7 @@ export interface CardContentProps {
 }
 
 // @public (undocumented)
-export function CardDescription(props: CardDescriptionProps): JSX.Element;
+export function CardDescription(props: CardDescriptionProps): JSX;
 
 // @public (undocumented)
 export interface CardDescriptionProps {
@@ -88,7 +94,7 @@ export interface CardDescriptionProps {
 }
 
 // @public (undocumented)
-export function CardFooter(props: CardFooterProps): JSX.Element;
+export function CardFooter(props: CardFooterProps): JSX;
 
 // @public (undocumented)
 export interface CardFooterProps {
@@ -97,7 +103,7 @@ export interface CardFooterProps {
 }
 
 // @public (undocumented)
-export function CardHeader(props: CardHeaderProps): JSX.Element;
+export function CardHeader(props: CardHeaderProps): JSX;
 
 // @public (undocumented)
 export interface CardHeaderProps {
@@ -114,7 +120,7 @@ export interface CardProps {
 }
 
 // @public (undocumented)
-export function CardTitle(props: CardTitleProps): JSX.Element;
+export function CardTitle(props: CardTitleProps): JSX;
 
 // @public (undocumented)
 export interface CardTitleProps {
@@ -194,31 +200,31 @@ export type Glow = {
 export const glows: Record<"ring" | "destructive" | "success", Glow>;
 
 // @public (undocumented)
-export function H1(props: TypographyProps): JSX.Element;
+export function H1(props: TypographyProps): JSX;
 
 // @public (undocumented)
-export function H2(props: TypographyProps): JSX.Element;
+export function H2(props: TypographyProps): JSX;
 
 // @public (undocumented)
-export function H3(props: TypographyProps): JSX.Element;
+export function H3(props: TypographyProps): JSX;
 
 // @public (undocumented)
-export function H4(props: TypographyProps): JSX.Element;
+export function H4(props: TypographyProps): JSX;
 
 // @public (undocumented)
-export function Large(props: TypographyProps): JSX.Element;
+export function Large(props: TypographyProps): JSX;
 
 // @public (undocumented)
-export function Lead(props: TypographyProps): JSX.Element;
+export function Lead(props: TypographyProps): JSX;
 
 // @public (undocumented)
 export const lightTheme: Required<ThemeDefinition>;
 
 // @public (undocumented)
-export function Muted(props: TypographyProps): JSX.Element;
+export function Muted(props: TypographyProps): JSX;
 
 // @public (undocumented)
-export function P(props: TypographyProps): JSX.Element;
+export function P(props: TypographyProps): JSX;
 
 // @public (undocumented)
 export type RadioOption = {
@@ -245,7 +251,7 @@ export type SelectOption = {
 };
 
 // @public (undocumented)
-export function Separator(props: SeparatorProps): JSX.Element;
+export function Separator(props: SeparatorProps): JSX;
 
 // @public (undocumented)
 export interface SeparatorProps {
@@ -268,7 +274,7 @@ export type Shadow = {
 export const shadows: Record<"xs" | "sm" | "md" | "lg" | "xl", Shadow[]>;
 
 // @public (undocumented)
-export function Skeleton(props: SkeletonProps): JSX.Element;
+export function Skeleton(props: SkeletonProps): JSX;
 
 // @public (undocumented)
 export interface SkeletonProps {
@@ -281,7 +287,7 @@ export interface SkeletonProps {
 }
 
 // @public (undocumented)
-export function Small(props: TypographyProps): JSX.Element;
+export function Small(props: TypographyProps): JSX;
 
 // @public (undocumented)
 export const space: {
@@ -400,7 +406,7 @@ export type ThemeDefinition = {
 // @public (undocumented)
 export function ThemeProvider(props: {
     theme?: Required<ThemeDefinition>;
-    children?: any;
+    children?: JSX.Element;
 }): JSX.Element;
 
 // @public (undocumented)
@@ -437,7 +443,7 @@ export function useTheme(): {
 };
 
 // @public (undocumented)
-export function VoidCheckbox(props: VoidCheckboxProps): JSX.Element;
+export function VoidCheckbox(props: VoidCheckboxProps): JSX;
 
 // @public (undocumented)
 export type VoidCheckboxProps = {
@@ -449,7 +455,7 @@ export type VoidCheckboxProps = {
 };
 
 // @public (undocumented)
-export function VoidCombobox(props: VoidComboboxProps): JSX.Element;
+export function VoidCombobox(props: VoidComboboxProps): JSX;
 
 // @public (undocumented)
 export type VoidComboboxProps = {
@@ -473,7 +479,7 @@ export const VoidDialog: typeof VoidDialogRoot & {
 };
 
 // @public (undocumented)
-export function VoidDialogDescription(props: VoidDialogDescriptionProps): JSX.Element;
+export function VoidDialogDescription(props: VoidDialogDescriptionProps): JSX;
 
 // @public (undocumented)
 export type VoidDialogDescriptionProps = {
@@ -481,7 +487,7 @@ export type VoidDialogDescriptionProps = {
 };
 
 // @public (undocumented)
-export function VoidDialogFooter(props: VoidDialogFooterProps): JSX.Element;
+export function VoidDialogFooter(props: VoidDialogFooterProps): JSX;
 
 // @public (undocumented)
 export type VoidDialogFooterProps = {
@@ -497,7 +503,7 @@ export type VoidDialogProps = {
 };
 
 // @public (undocumented)
-export function VoidDialogTitle(props: VoidDialogTitleProps): JSX.Element;
+export function VoidDialogTitle(props: VoidDialogTitleProps): JSX;
 
 // @public (undocumented)
 export type VoidDialogTitleProps = {
@@ -520,7 +526,7 @@ export function VoidDropdownMenuContent(props: VoidDropdownMenuContentProps): JS
 
 // @public (undocumented)
 export type VoidDropdownMenuContentProps = {
-    children?: any;
+    children?: JSX.Element;
     width?: number | string;
     minWidth?: number;
     maxHeight?: number;
@@ -536,7 +542,7 @@ export type VoidDropdownMenuItemProps = {
     variant?: "default" | "destructive";
     disabled?: boolean;
     inset?: boolean;
-    children?: any;
+    children?: JSX.Element;
 };
 
 // @public (undocumented)
@@ -544,7 +550,7 @@ export function VoidDropdownMenuLabel(props: VoidDropdownMenuLabelProps): JSX.El
 
 // @public (undocumented)
 export type VoidDropdownMenuLabelProps = {
-    children?: any;
+    children?: JSX.Element;
     inset?: boolean;
 };
 
@@ -552,7 +558,7 @@ export type VoidDropdownMenuLabelProps = {
 export type VoidDropdownMenuProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    children?: any;
+    children?: JSX.Element;
 };
 
 // @public (undocumented)
@@ -567,7 +573,7 @@ export type VoidDropdownMenuTriggerProps = {
 };
 
 // @public (undocumented)
-export function VoidInput(props: VoidInputProps): JSX.Element;
+export function VoidInput(props: VoidInputProps): JSX;
 
 // @public (undocumented)
 export type VoidInputProps = {
@@ -595,7 +601,7 @@ export type VoidPopoverProps = {
 };
 
 // @public (undocumented)
-export function VoidProgress(props: VoidProgressProps): JSX.Element;
+export function VoidProgress(props: VoidProgressProps): JSX;
 
 // @public (undocumented)
 export type VoidProgressProps = {
@@ -606,7 +612,7 @@ export type VoidProgressProps = {
 };
 
 // @public (undocumented)
-export function VoidRadioGroup(props: VoidRadioGroupProps): JSX.Element;
+export function VoidRadioGroup(props: VoidRadioGroupProps): JSX;
 
 // @public (undocumented)
 export type VoidRadioGroupProps = {
@@ -619,7 +625,7 @@ export type VoidRadioGroupProps = {
 };
 
 // @public (undocumented)
-export function VoidSelect(props: VoidSelectProps): JSX.Element;
+export function VoidSelect(props: VoidSelectProps): JSX;
 
 // @public (undocumented)
 export type VoidSelectProps = {
@@ -634,7 +640,7 @@ export type VoidSelectProps = {
 };
 
 // @public (undocumented)
-export function VoidSlider(props: VoidSliderProps): JSX.Element;
+export function VoidSlider(props: VoidSliderProps): JSX;
 
 // @public (undocumented)
 export type VoidSliderProps = {
@@ -651,7 +657,7 @@ export type VoidSliderProps = {
 };
 
 // @public (undocumented)
-export function VoidSwitch(props: VoidSwitchProps): JSX.Element;
+export function VoidSwitch(props: VoidSwitchProps): JSX;
 
 // @public (undocumented)
 export type VoidSwitchProps = {
@@ -679,7 +685,7 @@ export type VoidTableProps = {
 };
 
 // @public (undocumented)
-export function VoidTabs(props: VoidTabsProps): JSX.Element;
+export function VoidTabs(props: VoidTabsProps): JSX;
 
 // @public (undocumented)
 export type VoidTabsProps = {

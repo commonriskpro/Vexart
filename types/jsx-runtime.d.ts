@@ -171,7 +171,7 @@ interface BoxProps {
   }
   // Interaction
   focusable?: boolean
-  onPress?: (event?: import("@vexart/engine").PressEvent) => void
+  onPress?: (event?: import("./engine").PressEvent) => void
   onKeyDown?: (event: any) => void
   // Mouse events
   onMouseDown?: (evt: any) => void
@@ -382,7 +382,7 @@ interface LineNumberProps {
 
 interface CanvasProps {
   /** Imperative draw callback — called each frame with a CanvasContext. */
-  onDraw?: (ctx: import("@vexart/engine").CanvasContext) => void
+  onDraw?: (ctx: import("./engine").CanvasContext) => void
   /** Viewport transform for pan/zoom. */
   viewport?: { x: number; y: number; zoom: number }
   /** Width — number (fixed px), "grow", "fit", "100%". */
@@ -480,7 +480,7 @@ declare module "solid-js" {
   namespace JSX {
     interface IntrinsicElements {
       surface: {
-        onDraw?: (ctx: import("@vexart/engine").CanvasContext) => void
+        onDraw?: (ctx: import("./engine").CanvasContext) => void
         viewport?: { x: number; y: number; zoom: number }
         width?: number | string
         height?: number | string

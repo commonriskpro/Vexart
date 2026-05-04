@@ -1132,6 +1132,9 @@ export function isFullyOutsideScrollViewport(node: TGENode): boolean;
 // @public (undocumented)
 export function isIdentity(m: Matrix3): boolean;
 
+// @public
+export function isMsdfFontAvailable(): boolean;
+
 // @public (undocumented)
 export const KANAGAWA: ThemeTokenStyle[];
 
@@ -1373,6 +1376,21 @@ export type MouseState = {
     };
 };
 
+// @public
+export function msdfFontInit(): number;
+
+// @public
+export function msdfFontQuery(families: string[], weight?: number, italic?: boolean): bigint | null;
+
+// @public
+export function msdfMeasureText(text: string, families?: string[], fontSize?: number, weight?: number, italic?: boolean): MsdfTextMeasurement | null;
+
+// @public (undocumented)
+export type MsdfTextMeasurement = {
+    width: number;
+    height: number;
+};
+
 // @public (undocumented)
 export function multiply(a: Matrix3, b: Matrix3): Matrix3;
 
@@ -1489,7 +1507,7 @@ export type NodeMouseEvent = {
 export const ONE_DARK: ThemeTokenStyle[];
 
 // @public (undocumented)
-export function onGlobalDirty(cb: (scope: DirtyScope) => void): void;
+export function onGlobalDirty(cb: (scope: DirtyScope) => void): () => void;
 
 // @public (undocumented)
 export function onInput(handler: InputSubscriber): () => void;
@@ -1779,6 +1797,7 @@ export type RendererBackend = {
     }) => RendererBackendFrameResult | null | void;
     endFrame?: (ctx: RendererBackendFrameContext) => RendererBackendFrameResult | null | void;
     drainProfile?: () => RendererBackendProfile;
+    destroy?: () => void;
 };
 
 // @public (undocumented)
@@ -2413,6 +2432,7 @@ export type TGENode = {
     _canvasExtra: NodeCanvasExtra | null;
     _widthSizing: SizingInfo | null;
     _heightSizing: SizingInfo | null;
+    _styleKeys?: Set<string>;
     _transform: Float64Array | null;
     _transformInverse: Float64Array | null;
     _accTransform: Float64Array | null;
@@ -2428,7 +2448,6 @@ export type TGENode = {
     _unstableFrameCount: number;
     _autoLayer: boolean;
     _layerKey: string | null;
-    _generation: number;
     _lastMeasuredText: string | null;
     _lastMeasuredFontId: number;
     _lastMeasuredFontSize: number;
@@ -2844,10 +2863,6 @@ export const VEXART_SYMBOLS: {
         readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.ptr];
         readonly returns: FFIType.int32_t;
     };
-    readonly vexart_composite_merge: {
-        readonly args: [FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
     readonly vexart_composite_readback_rgba: {
         readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
         readonly returns: FFIType.int32_t;
@@ -2889,19 +2904,19 @@ export const VEXART_SYMBOLS: {
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_kitty_emit_layer: {
-        readonly args: [FFIType.uint64_t, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.ptr];
+        readonly args: [FFIType.uint64_t, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_kitty_emit_layer_target: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint32_t, FFIType.ptr, FFIType.ptr];
+        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_kitty_emit_region: {
-        readonly args: [FFIType.uint64_t, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.ptr];
+        readonly args: [FFIType.uint64_t, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_kitty_emit_region_target: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint32_t, FFIType.ptr, FFIType.ptr];
+        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_kitty_delete_layer: {
@@ -2909,7 +2924,7 @@ export const VEXART_SYMBOLS: {
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_layer_upsert: {
-        readonly args: [FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.ptr];
+        readonly args: [FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_layer_mark_dirty: {
@@ -2941,11 +2956,11 @@ export const VEXART_SYMBOLS: {
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_image_asset_register: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.ptr];
+        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.ptr];
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_image_asset_touch: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t];
+        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t];
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_image_asset_release: {
@@ -2953,11 +2968,11 @@ export const VEXART_SYMBOLS: {
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_canvas_display_list_update: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
+        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_canvas_display_list_touch: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t];
+        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t];
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_canvas_display_list_release: {

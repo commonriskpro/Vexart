@@ -95,6 +95,15 @@ export function decodePasteBytes(bytes: Uint8Array | string): string
 // ── Mount ──
 
 export interface MountOptions {
+  maxFps?: number
+  experimental?: {
+    idleMaxFps?: number
+    interactionMaxFps?: number
+    frameBudgetMs?: number
+    forceLayerRepaint?: boolean
+    nativePresentation?: boolean
+    nativeLayerRegistry?: boolean
+  }
 }
 
 export interface MountHandle {
@@ -119,6 +128,7 @@ export function setFocus(id: string): void
 export function focusedId(): string | null
 export function setFocusedId(id: string | null): void
 export function pushFocusScope(): () => void
+export function resetFocus(): void
 
 // ── Input hooks ──
 
@@ -134,6 +144,21 @@ export function useKeyboard(handler: (event: KeyEvent) => void): void
 export function useMouse(handler: (event: TgeMouseEvent) => void): void
 export function useInput(handler: (event: InputEvent) => void): void
 export function onInput(handler: (event: InputEvent) => void): () => void
+export function dispatchInput(event: InputEvent): void
+
+// ── Renderer backend ──
+
+export interface RendererBackend {
+  name: string
+  paint: (ctx: any) => any
+  beginFrame?: (ctx: any) => any
+  endFrame?: (ctx: any) => any
+  destroy?: () => void
+}
+
+export function setRendererBackend(backend: RendererBackend): void
+export function getRendererBackend(): RendererBackend | null
+export function getRendererBackendName(): string
 
 // ── Selection ──
 
@@ -149,6 +174,7 @@ export function getSelectedText(): string
 export function setSelection(sel: TextSelection): void
 export function clearSelection(): void
 export function selectionSignal(): TextSelection | null
+export function resetSelection(): void
 
 // ── RGBA ──
 
@@ -171,6 +197,151 @@ export class RGBA {
  * RGBA.valueOf() returns number at runtime, but TypeScript needs the union.
  */
 export type ColorValue = string | number | RGBA
+
+// ── Interaction types ──
+
+export interface PressEvent {
+  stopPropagation: () => void
+  readonly propagationStopped: boolean
+}
+
+export interface NodeMouseEvent {
+  x: number
+  y: number
+  nodeX: number
+  nodeY: number
+  width: number
+  height: number
+}
+
+// ── Animation ──
+
+export type EasingFn = (t: number) => number
+
+export interface TransitionConfig {
+  duration?: number
+  easing?: EasingFn
+  delay?: number
+}
+
+export interface SpringConfig {
+  stiffness?: number
+  damping?: number
+  mass?: number
+  precision?: number
+}
+
+export function createTransition(initial: number, config?: TransitionConfig): [() => number, (target: number) => void]
+export function createSpring(initial: number, config?: SpringConfig): [() => number, (target: number) => void]
+
+export declare const easing: {
+  readonly linear: EasingFn
+  readonly easeIn: EasingFn
+  readonly easeOut: EasingFn
+  readonly easeInOut: EasingFn
+  readonly easeInCubic: EasingFn
+  readonly easeOutCubic: EasingFn
+  readonly easeInOutCubic: EasingFn
+  readonly easeInQuart: EasingFn
+  readonly easeOutQuart: EasingFn
+  readonly easeInOutQuart: EasingFn
+  readonly easeOutBack: EasingFn
+  readonly easeOutElastic: EasingFn
+  readonly cubicBezier: (x1: number, y1: number, x2: number, y2: number) => EasingFn
+}
+
+// ── Drag / Hover hooks ──
+
+export interface DragOptions {
+  onDragStart?: (evt: NodeMouseEvent) => boolean | void
+  onDrag: (evt: NodeMouseEvent) => void
+  onDragEnd?: (evt: NodeMouseEvent) => void
+  disabled?: () => boolean
+}
+
+export interface DragProps {
+  ref: (handle: NodeHandle) => void
+  onMouseDown: (evt: NodeMouseEvent) => void
+  onMouseMove: (evt: NodeMouseEvent) => void
+  onMouseUp: (evt: NodeMouseEvent) => void
+}
+
+export interface DragState {
+  dragging: () => boolean
+  dragProps: DragProps
+}
+
+export function useDrag(opts: DragOptions): DragState
+
+export interface HoverOptions {
+  onEnter?: () => void
+  onLeave?: () => void
+  delay?: number
+  leaveDelay?: number
+  disabled?: () => boolean
+}
+
+export interface HoverProps {
+  onMouseOver: (evt: NodeMouseEvent) => void
+  onMouseOut: (evt: NodeMouseEvent) => void
+}
+
+export interface HoverState {
+  hovered: () => boolean
+  hoverProps: HoverProps
+}
+
+export function useHover(opts?: HoverOptions): HoverState
+
+// ── Pointer capture ──
+
+export function setPointerCapture(nodeId: number): void
+export function releasePointerCapture(nodeId: number): void
+
+// ── Canvas ──
+
+export interface StrokeStyle { color: number; width?: number }
+export interface ShapeStyle { fill?: number; stroke?: number; strokeWidth?: number; glow?: { color: number; radius: number; intensity?: number } }
+
+export class CanvasContext {
+  line(x0: number, y0: number, x1: number, y1: number, style: StrokeStyle): void
+  bezier(x0: number, y0: number, cx: number, cy: number, x1: number, y1: number, style: StrokeStyle): void
+  circle(cx: number, cy: number, radius: number, style?: ShapeStyle): void
+  ellipse(cx: number, cy: number, rx: number, ry: number, style?: ShapeStyle): void
+  polygon(cx: number, cy: number, radius: number, sides: number, style?: ShapeStyle & { rotation?: number }): void
+  rect(x: number, y: number, w: number, h: number, style?: ShapeStyle & { radius?: number }): void
+  text(x: number, y: number, text: string, color: number): void
+  glow(cx: number, cy: number, rx: number, ry: number, color: number, intensity?: number): void
+  drawImage(x: number, y: number, w: number, h: number, data: Uint8Array, imgW: number, imgH: number, opacity?: number, opaque?: boolean): void
+  radialGradient(cx: number, cy: number, radius: number, from: number, to: number): void
+  linearGradient(x: number, y: number, w: number, h: number, from: number, to: number, angle?: number): void
+}
+
+// ── Context (SolidJS re-exports) ──
+
+export function createContext<T>(defaultValue?: T): { id: symbol; Provider: (props: { value: T; children: any }) => any; defaultValue: T }
+export function useContext<T>(context: { id: symbol; Provider: (props: { value: T; children: any }) => any; defaultValue: T }): T
+
+// ── Resource stats ──
+
+export interface ResourceStats {
+  budgetBytes: number
+  currentUsage: number
+  highWaterMark: number
+  resourcesByKind: Record<string, { count: number; bytes: number }>
+  evictionsLastFrame: number
+  evictionsTotal: number
+}
+
+export function getRendererResourceStats(): ResourceStats
+
+// ── Errors ──
+
+export class VexartNativeError extends Error {
+  readonly code: number
+  constructor(code: number, message: string)
+  readonly name: "VexartNativeError"
+}
 
 // ── Dirty flag ──
 
@@ -232,6 +403,8 @@ export function debugFrameStart(): void
 export function debugUpdateStats(stats: Partial<DebugStats>): void
 export function debugState(): DebugStats
 export function debugStatsLine(): string
+export function debugDumpTree(): void
+export function debugDumpCulledNodes(): void
 
 // ── Plugins ──
 
@@ -243,11 +416,6 @@ export type TgePluginApi<Context = {}> = {
 export interface TgePlugin<Context = {}> {
   name: string
   setup: (api: TgePluginApi<Context>) => void | (() => void)
-}
-
-export declare const SlotMode: {
-  readonly SINGLE_WINNER: "single_winner"
-  readonly ALL: "all"
 }
 
 export interface SlotComponent {
@@ -366,6 +534,9 @@ export function registerFont(desc: FontDescriptor, atlasData: Uint8Array, widths
 export function getFont(id: number): FontDescriptor | undefined
 export function clearTextCache(): void
 export function clearImageCache(): void
+export function getTextLayoutCacheStats(): { hits: number; misses: number; size: number }
+export function getFontAtlasCacheStats(): { count: number; totalBytes: number }
+export function getImageCacheStats(): { count: number; totalBytes: number }
 
 // ── Data fetching hooks ──
 
@@ -419,13 +590,7 @@ export declare const SIZING: { readonly FIT: 0; readonly GROW: 1; readonly PERCE
 export declare const DIRECTION: { readonly LEFT_TO_RIGHT: 0; readonly TOP_TO_BOTTOM: 1 }
 export declare const ALIGN_X: { readonly LEFT: 0; readonly RIGHT: 1; readonly CENTER: 2; readonly SPACE_BETWEEN: 3 }
 export declare const ALIGN_Y: { readonly TOP: 0; readonly BOTTOM: 1; readonly CENTER: 2; readonly SPACE_BETWEEN: 3 }
-export declare const ATTACH_TO: { readonly NONE: 0; readonly PARENT: 1; readonly ELEMENT: 2; readonly ROOT: 3 }
-export declare const ATTACH_POINT: {
-  readonly LEFT_TOP: 0; readonly LEFT_CENTER: 1; readonly LEFT_BOTTOM: 2
-  readonly CENTER_TOP: 3; readonly CENTER_CENTER: 4; readonly CENTER_BOTTOM: 5
-  readonly RIGHT_TOP: 6; readonly RIGHT_CENTER: 7; readonly RIGHT_BOTTOM: 8
-}
-export declare const POINTER_CAPTURE: { readonly CAPTURE: 0; readonly PASSTHROUGH: 1 }
+
 
 // ── Render loop (advanced) ──
 
@@ -466,7 +631,7 @@ export declare const Match: any
 export declare const Index: any
 export declare const ErrorBoundary: any
 
-export { render as solidRender } from "solid-js/universal"
+export declare function solidRender(code: () => any, element: any): () => void
 
 // ── Router (Decision 10: Dual Router) ──
 

@@ -181,11 +181,8 @@ export function Diff(props: DiffProps): JSX.Element;
 // @public (undocumented)
 export type DiffProps = {
     diff: string;
-    syntaxStyle?: SyntaxStyle;
-    filetype?: string;
     showLineNumbers?: boolean;
     width?: number | string;
-    streaming?: boolean;
     theme?: Partial<DiffTheme>;
 };
 

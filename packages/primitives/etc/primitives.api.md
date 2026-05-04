@@ -9,27 +9,10 @@ import type { JSX } from 'solid-js';
 // @public (undocumented)
 export function Box(props: BoxProps): JSX.Element;
 
+// Warning: (ae-forgotten-export) The symbol "TGEProps" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export type BoxProps = {
-    direction?: "row" | "column";
-    padding?: number;
-    paddingX?: number;
-    paddingY?: number;
-    gap?: number;
-    alignX?: "left" | "right" | "center";
-    alignY?: "top" | "bottom" | "center";
-    width?: number | string;
-    height?: number | string;
-    backgroundColor?: string | number;
-    cornerRadius?: number;
-    borderColor?: string | number;
-    borderWidth?: number;
-    shadow?: ShadowConfig | ShadowConfig[];
-    glow?: GlowConfig;
-    layer?: boolean;
-    scrollX?: boolean;
-    scrollY?: boolean;
-    scrollSpeed?: number;
+export type BoxProps = TGEProps & {
     children?: JSX.Element;
 };
 
@@ -47,8 +30,6 @@ export function RichText(props: RichTextProps): JSX.Element;
 export type RichTextProps = {
     maxWidth?: number;
     lineHeight?: number;
-    color?: string | number;
-    fontSize?: number;
     children?: JSX.Element;
 };
 

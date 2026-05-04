@@ -10,6 +10,13 @@ import type { JSX } from 'solid-js';
 export type AppBoxProps = TGEProps & ClassNameProps;
 
 // @public (undocumented)
+export type AppContext = {
+    terminal: Terminal;
+    handle: MountHandle;
+    destroy: () => void;
+};
+
+// @public (undocumented)
 export type AppRouteDefinition = {
     path: string;
     component: RouteComponent;
@@ -101,6 +108,17 @@ export type ClassNameUnknownBehavior = (typeof CLASS_NAME_UNKNOWN_BEHAVIOR)[keyo
 export type CliResult = {
     code: number;
     output: string;
+};
+
+// @public (undocumented)
+export function createApp(component: () => JSX.Element, options?: CreateAppOptions): Promise<AppContext>;
+
+// @public (undocumented)
+export type CreateAppOptions = {
+    quit?: string[];
+    mount?: MountOptions;
+    onReady?: (ctx: AppContext) => void;
+    onError?: (error: Error) => void;
 };
 
 // @public (undocumented)
@@ -225,7 +243,7 @@ export type RouteManifestOptions = {
 };
 
 // @public (undocumented)
-export function RouteOutlet(props: RouteOutletProps): JSX.Element;
+export function RouteOutlet(props: RouteOutletProps): () => JSX.Element;
 
 // @public (undocumented)
 export type RouteOutletProps = {
@@ -245,6 +263,9 @@ export function runCli(argv?: string[]): Promise<CliResult>;
 // @public (undocumented)
 function Text_2(props: AppTextProps): JSX.Element;
 export { Text_2 as Text }
+
+// @public (undocumented)
+export function useAppTerminal(): Terminal;
 
 // @public (undocumented)
 export function useRouter(): AppRouter;
