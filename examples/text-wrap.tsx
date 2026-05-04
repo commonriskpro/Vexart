@@ -7,9 +7,8 @@
  * - Two-column layout with short text
  * - SF Pro font rendering quality
  *
- * NOTE: Automatic text wrapping within fixed-width containers is not yet
- * supported — Taffy computes layout before text measurement, so long text
- * renders as a single line. Use short text or manual line breaks for now.
+ * Text wrapping is automatic — Flexily's measure function computes
+ * word-wrapped height when the parent constrains width.
  *
  * Run: bun --conditions=browser run examples/text-wrap.tsx
  */

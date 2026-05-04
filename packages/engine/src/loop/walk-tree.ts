@@ -26,7 +26,7 @@ import {
   ensureImageExtra,
   ensureCanvasExtra,
 } from "../ffi/node"
-import { measureForLayout } from "../ffi/text-layout"
+// measureForLayout is now called inside Flexily's setMeasureFunc (layout-adapter.ts)
 import { CanvasContext, hashCanvasDisplayList, serializeCanvasDisplayList } from "../ffi/canvas"
 import { nativeCanvasDisplayListTouch, nativeCanvasDisplayListUpdate, syncNativeCanvasDisplayListHandle } from "../ffi/native-canvas-display-list"
 import { decodeImageForNode } from "./image"
@@ -258,14 +258,6 @@ export function walkTree(
     const fontId = props.fontId ?? 0
     const lineHeight = props.lineHeight ?? Math.ceil(fontSize * 1.2)
 
-    // Pre-measure text dimensions for layout (passed directly to layout.text)
-    const measurement = node._lastMeasuredText === content && node._lastMeasuredFontId === fontId && node._lastMeasuredFontSize === fontSize && node._lastMeasurement
-      ? node._lastMeasurement
-      : measureForLayout(content, fontId, fontSize)
-    node._lastMeasuredText = content
-    node._lastMeasuredFontId = fontId
-    node._lastMeasuredFontSize = fontSize
-    node._lastMeasurement = measurement
     state.textMeasureIndex.value++
 
     // Track metadata for multi-line paint
@@ -273,7 +265,9 @@ export function walkTree(
     state.textMetas.push(meta)
     state.textMetaMap.set(node.id, meta)
 
-    layout.text(content, color, fontId, fontSize, node.id, measurement.width, measurement.height)
+    // Text dimensions are computed by Flexily's measure function in the
+    // layout adapter — no pre-measurement needed here.
+    layout.text(content, color, fontId, fontSize, node.id)
     state.textNodes.push(node)
     return
   }

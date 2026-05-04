@@ -297,6 +297,52 @@ export function measureForLayout(
   return { width, height }
 }
 
+/**
+ * Measure text with a width constraint — computes word-wrapped height.
+ * Used by Flexily's setMeasureFunc to get correct multi-line text dimensions.
+ *
+ * @param text - The text content
+ * @param fontId - Font ID (0 = builtin monospace)
+ * @param fontSize - Font size in px
+ * @param maxWidth - Available width for word wrapping
+ * @returns { width, height } — natural width (capped at maxWidth) and wrapped height
+ */
+export function measureTextConstrained(
+  text: string,
+  fontId: number,
+  fontSize: number,
+  maxWidth: number,
+): { width: number; height: number } {
+  if (maxWidth <= 0) return measureForLayout(text, fontId, fontSize)
+
+  const lineHeight = Math.ceil(fontSize * 1.2)
+
+  // Fast heuristic for builtin font: if char count * advance fits, skip layoutText
+  if (fontId === 0) {
+    const advance = builtinAdvance(fontSize)
+    const naturalW = text.length * advance
+    if (naturalW <= maxWidth) {
+      return { width: Math.ceil(naturalW), height: builtinHeight(fontSize) }
+    }
+  } else {
+    // For runtime fonts, check single-line width
+    const natural = measureForLayout(text, fontId, fontSize)
+    if (natural.width <= maxWidth) return natural
+  }
+
+  // Multi-line: compute wrapped layout (cached by layoutText LRU)
+  const result = layoutText(text, fontId, maxWidth, lineHeight, fontSize)
+  // Width: widest line (capped at maxWidth)
+  let widest = 0
+  for (const line of result.lines) {
+    if (line.width > widest) widest = line.width
+  }
+  return {
+    width: Math.min(Math.ceil(widest), Math.ceil(maxWidth)),
+    height: result.height,
+  }
+}
+
 /** Clear all prepared text caches. */
 /** @public */
 export function clearTextCache() {

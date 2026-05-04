@@ -36,7 +36,11 @@ import {
   JUSTIFY_FLEX_END,
   JUSTIFY_CENTER,
   JUSTIFY_SPACE_BETWEEN,
+  MEASURE_MODE_UNDEFINED,
+  MEASURE_MODE_AT_MOST,
+  MEASURE_MODE_EXACTLY,
 } from "flexily"
+import { measureTextConstrained, measureForLayout } from "../ffi/text-layout"
 
 // ── Layout constants ──────────────────────────────────────────────────────
 
@@ -558,10 +562,20 @@ export function createVexartLayoutCtx() {
         _roots.push(node)
       }
 
-      if (measuredW !== undefined && measuredH !== undefined && measuredW > 0 && measuredH > 0) {
-        node.setWidth(measuredW)
-        node.setHeight(measuredH)
-      }
+      // Use Flexily measure function for text nodes so word-wrapped height
+      // is computed correctly when the parent constrains width.
+      const content = _content
+      const fontId = _fontId
+      const fontSize = _fontSize
+      node.setMeasureFunc((width, widthMode, _height, _heightMode) => {
+        const maxW = widthMode === MEASURE_MODE_UNDEFINED ? Infinity : width
+        if (maxW === Infinity || maxW <= 0) {
+          // No width constraint — return natural (single-line) dimensions
+          const natural = measureForLayout(content, fontId, fontSize)
+          return { width: natural.width, height: natural.height }
+        }
+        return measureTextConstrained(content, fontId, fontSize, maxW)
+      })
     },
 
     hashString(s: string): number {
