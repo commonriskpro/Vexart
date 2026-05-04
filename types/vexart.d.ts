@@ -16,7 +16,7 @@ export * from "./engine"
 // ── SolidJS re-exports ──
 // barrel.ts line 370: export { createSignal, createEffect, ... } from "solid-js"
 
-export { createSignal, createEffect, createMemo, onCleanup, onMount, batch, untrack } from "solid-js"
+export { createSignal, createEffect, createMemo, createContext, useContext, onCleanup, onMount, batch, untrack } from "solid-js"
 
 // ── App lifecycle ──
 

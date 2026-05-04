@@ -720,49 +720,52 @@ glows                            // preset glow configs
 
 | Export | Purpose |
 | ------ | ------- |
+| `createApp`, `mountApp`, `useAppTerminal` | App lifecycle/mount helpers |
 | `Page` | App page primitive |
 | `Box`, `Text` | App-layer primitive wrappers with className support |
 | `resolveClassName`, `mergeClassNameProps`, `CLASS_NAME_UNKNOWN_BEHAVIOR` | className mapper helpers |
-| `createAppRouter`, `RouterProvider`, `RouteOutlet`, `useRouter` | App router runtime |
-| `discoverAppRoutes`, `routeFilePathToRoutePath`, `writeRouteManifestModule` | File-route manifest helpers |
+| `createAppRouter`, `RouterProvider`, `RouteOutlet`, `useRouter`, `matchRoute`, `normalizePath`, `ROUTE_FOCUS_ID` | App router runtime |
+| `discoverAppRoutes`, `routeFilePathToRoutePath`, `writeRouteManifestModule`, `ROUTE_FILE_KIND` | File-route manifest helpers |
 | `defineConfig`, `mergeConfig` | App config helpers |
-| `mountApp` | App lifecycle/mount helper |
 | `runCli` | CLI entry helper |
 
 ## npm package structure (dist/)
 
-The distribution is built with `bun run build:dist`. Current public package naming is
-`@vexart/*` in the monorepo; dist artifacts should reflect the Vexart package boundary
-and include the single Rust native library.
+The distribution is built with `bun run build:dist`. Published as `@vxrt/core` on npm.
+Internal monorepo packages (`@vexart/*`) are bundled into two files — the barrel and
+the engine. Native binaries ship as optional platform packages (`@vxrt/darwin-arm64`).
 
 ```text
 dist/
-├── package.json
-├── engine.js / engine.d.ts              — @vexart/engine bundle + types
-├── primitives.js / primitives.d.ts      — @vexart/primitives bundle + types
-├── headless.js / headless.d.ts          — @vexart/headless bundle + types
-├── styled.js / styled.d.ts              — @vexart/styled bundle + types
-├── app.js / app.d.ts                    — @vexart/app bundle + types
+├── package.json                         — @vxrt/core
+├── vexart.js / vexart.d.ts              — unified barrel (app + styled + headless + engine hooks)
+├── engine.js / engine.d.ts              — full engine bundle (power users)
+├── components.d.ts                      — headless component type declarations
+├── void.d.ts                            — styled/void component type declarations
 ├── jsx-runtime.d.ts                     — JSX intrinsic elements
-├── solid-plugin.ts                      — Solid JSX transform helper
-├── native/
-│   └── <platform>/libvexart.{dylib,so,dll}
+├── solid-plugin.ts                      — Bun preload for consumer JSX transform
 ├── tree-sitter/
 │   ├── parser.worker.ts
 │   └── assets/                          — .wasm grammars + .scm highlights
-└── fonts/                               — generated atlas assets when packaged separately
+└── platform/
+    └── darwin-arm64/                    — @vxrt/darwin-arm64 (libvexart.dylib)
 ```
 
-### Expected exports map
+Consumer imports:
+- `import { Box, Input, createSignal, useFocus } from "@vxrt/core"` — app developers
+- `import { createElement, insert, createRenderLoop } from "@vxrt/core/engine"` — power users
+
+The barrel (`vexart.js`) imports from `./engine.js` as an external dependency — both
+share the same reconciler instance. The consumer's solid-plugin compiles JSX with
+`moduleName: "@vxrt/core/engine"` to ensure all createElement/insert calls resolve
+to the same engine module.
+
+### Exports map
 
 ```json
 {
-  ".": { "types": "./engine.d.ts", "default": "./engine.js" },
+  ".": { "types": "./vexart.d.ts", "default": "./vexart.js" },
   "./engine": { "types": "./engine.d.ts", "default": "./engine.js" },
-  "./primitives": { "types": "./primitives.d.ts", "default": "./primitives.js" },
-  "./headless": { "types": "./headless.d.ts", "default": "./headless.js" },
-  "./styled": { "types": "./styled.d.ts", "default": "./styled.js" },
-  "./app": { "types": "./app.d.ts", "default": "./app.js" },
   "./jsx-runtime": { "types": "./jsx-runtime.d.ts" },
   "./solid-plugin": "./solid-plugin.ts",
   "./tree-sitter/parser.worker.ts": "./tree-sitter/parser.worker.ts"

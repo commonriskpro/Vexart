@@ -485,8 +485,11 @@ export type StyleDefinition = {
 export declare const ONE_DARK: StyleDefinition
 export declare const KANAGAWA: StyleDefinition
 
+export type SimpleThemeRules = Record<string, string | number>
+
 export class SyntaxStyle {
   static fromTheme(theme: StyleDefinition | StyleDefinitionEntry[]): SyntaxStyle
+  static fromSimple(rules: SimpleThemeRules, defaultColor?: string | number): SyntaxStyle
   getDefaultColor(): number
   getStyleId(name: string): number
 }

@@ -305,8 +305,9 @@ export function Input(props: InputProps) {
 
   return (
     <box
+      focusable
       onPress={() => { if (!disabled()) focus() }}
-      width={props.width ?? "grow"}
+      width={props.width ?? "100%"}
       height={inputHeight()}
       backgroundColor={th().bg}
       cornerRadius={th().radius}

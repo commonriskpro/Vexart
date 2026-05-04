@@ -17,7 +17,9 @@
  * Collision resolution:
  *   - Box/Text: @vexart/app wins (className support)
  *   - Button/ButtonProps: @vexart/styled wins (themed)
- *   - useRouter: @vexart/app wins (app-level router)
+ *   - Switch (headless): renamed to ToggleSwitch to avoid SolidJS Switch
+ *   - useRouter: @vexart/app wins (app-level file-based router).
+ *     The headless useRouter lives in @vexart/engine for power users.
  */
 
 // ── App lifecycle & framework ────────────────────────────────────────────────
@@ -331,6 +333,26 @@ export {
   onInput,
   // Paste
   decodePasteBytes,
+  // Focus
+  useFocus,
+  setFocus,
+  focusedId,
+  // Interaction
+  useDrag,
+  useHover,
+  setPointerCapture,
+  releasePointerCapture,
+  MouseButton,
+  // Scroll
+  createScrollHandle,
+  // Node handle
+  createHandle,
+  // Syntax highlighting themes (needed by Code, Markdown, Textarea)
+  SyntaxStyle,
+  ONE_DARK,
+  KANAGAWA,
+  // Dirty flagging
+  markDirty,
 } from "@vexart/engine"
 
 export type {
@@ -350,6 +372,20 @@ export type {
   MouseState,
   NodeMouseEvent,
   PressEvent,
+  // Focus
+  FocusHandle,
+  // Interaction
+  DragOptions,
+  DragProps,
+  DragState,
+  HoverOptions,
+  HoverProps,
+  HoverState,
+  // Node handle
+  NodeHandle,
+  // Syntax highlighting
+  StyleDefinition,
+  SimpleThemeRules,
 } from "@vexart/engine"
 
 // ── SolidJS re-exports ───────────────────────────────────────────────────────
@@ -367,4 +403,4 @@ export {
   memo,
 } from "@vexart/engine"
 
-export { createSignal, createEffect, createMemo, onCleanup, onMount, batch, untrack } from "solid-js"
+export { createSignal, createEffect, createMemo, createContext, useContext, onCleanup, onMount, batch, untrack } from "solid-js"
