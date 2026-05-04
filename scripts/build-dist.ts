@@ -106,9 +106,15 @@ await build({
     "@napi-rs/canvas",
     "@chenglou/pretext",
     "opentype.js",
+    // Engine is NOT inlined — imported from ./engine.js so vexart.js
+    // and consumer JSX share the same reconciler instance.
+    "./engine.js",
   ],
   alias: {
-    "@vexart/engine": resolve(ROOT, "packages/engine/src/index.ts"),
+    // Rewrite @vexart/engine → ./engine.js (co-located dist bundle).
+    // This prevents a duplicate reconciler that breaks intrinsic elements
+    // rendered inside pre-compiled components (Input self-rendering, etc.).
+    "@vexart/engine": "./engine.js",
     "@vexart/primitives": resolve(ROOT, "packages/primitives/src/index.ts"),
     "@vexart/headless": resolve(ROOT, "packages/headless/src/index.ts"),
     "@vexart/styled": resolve(ROOT, "packages/styled/src/index.ts"),
