@@ -189,28 +189,16 @@ console.log(`  ✅ solid-plugin.ts (moduleName: "@vexart/engine")`)
 // ── 8. Copy type declarations ──
 console.log("📝 Copying type declarations...")
 cpSync(resolve(ROOT, "types/engine.d.ts"), resolve(DIST, "engine.d.ts"))
-if (existsSync(resolve(ROOT, "types/vexart.d.ts"))) {
-  cpSync(resolve(ROOT, "types/vexart.d.ts"), resolve(DIST, "vexart.d.ts"))
-} else {
-  // Generate vexart.d.ts as a barrel re-exporting from the hand-written .d.ts files.
-  const parts: string[] = [
-    '/** Vexart unified public API — auto-generated type barrel. */',
-  ]
-  for (const name of ["components", "void"] as const) {
-    const src = resolve(ROOT, `types/${name}.d.ts`)
-    if (existsSync(src)) {
-      cpSync(src, resolve(DIST, `${name}.d.ts`))
-      parts.push(`export * from "./${name}"`)
-    }
+cpSync(resolve(ROOT, "types/vexart.d.ts"), resolve(DIST, "vexart.d.ts"))
+// Copy sub-module type declarations referenced by vexart.d.ts
+for (const name of ["components", "void"] as const) {
+  const src = resolve(ROOT, `types/${name}.d.ts`)
+  if (existsSync(src)) {
+    cpSync(src, resolve(DIST, `${name}.d.ts`))
   }
-  // Re-export user-facing engine types.
-  parts.push('export * from "./engine"')
-  parts.push('')
-  writeFileSync(resolve(DIST, "vexart.d.ts"), parts.join("\n"))
-  console.log("  ✅ vexart.d.ts (generated barrel)")
 }
 cpSync(resolve(ROOT, "types/jsx-runtime.d.ts"), resolve(DIST, "jsx-runtime.d.ts"))
-console.log(`  ✅ engine.d.ts + vexart.d.ts + jsx-runtime.d.ts`)
+console.log(`  ✅ engine.d.ts + vexart.d.ts + components.d.ts + void.d.ts + jsx-runtime.d.ts`)
 
 // ── 9. Create package.json ──
 console.log("📋 Creating package.json...")
@@ -240,6 +228,8 @@ const pkg = {
   files: [
     "vexart.js",
     "vexart.d.ts",
+    "components.d.ts",
+    "void.d.ts",
     "engine.js",
     "engine.d.ts",
     "jsx-runtime.d.ts",
