@@ -119,11 +119,10 @@ function registerCulledSubtree(node: TGENode, state: WalkTreeState) {
 }
 
 function claimEffect(): EffectConfig {
-  const effect = effectPool[effectPoolIdx] ?? { color: 0, cornerRadius: 0 }
+  const effect = effectPool[effectPoolIdx] ?? { color: 0 }
   effectPool[effectPoolIdx++] = effect
   effect.renderObjectId = undefined
   effect.color = 0
-  effect.cornerRadius = 0
   effect.shadow = undefined
   effect.glow = undefined
   effect.gradient = undefined
@@ -508,15 +507,14 @@ export function walkTree(
     registerRectNode(node, state)
 
     // Record effects for this RECT — matched during paint.
-    // NOTE: effect.color and effect.cornerRadius duplicate the RenderCommand values.
-    // They exist because the gpu-renderer reads from EffectConfig for effect nodes,
-    // while plain rects read from RenderCommand. Unifying would require changing
-    // how buildRenderOp dispatches — tracked as a future simplification.
+    // NOTE: effect.color duplicates the RenderCommand color value.
+    // It exists because the gpu-renderer reads from EffectConfig for effect nodes,
+    // while plain rects read from RenderCommand. cornerRadius was removed from
+    // EffectConfig — it now lives only on RectangleRenderInputs.radius.
     if (vp.shadow || vp.glow || vp.gradient || hasBackdropFilter || vp.cornerRadii || vp.opacity !== undefined || hasTransform || vp.filter) {
       const effect = claimEffect()
       effect.renderObjectId = node.id
       effect.color = bgColor
-      effect.cornerRadius = cr
       effect._node = node
       if (vp.shadow) {
         // Colors already resolved to u32 by reconciler (resolveShadow)

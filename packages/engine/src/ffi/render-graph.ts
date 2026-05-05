@@ -53,7 +53,6 @@ export type ShadowDef = {
 export type EffectConfig = {
   renderObjectId?: number
   color: number
-  cornerRadius: number
   shadow?: ShadowDef | ShadowDef[]
   glow?: { radius: number; color: number; intensity: number }
   gradient?: { type: "linear"; from: number; to: number; angle: number } | { type: "radial"; from: number; to: number }
@@ -449,13 +448,13 @@ function getTransformStateId(effect: EffectConfig) {
   return fnv1a(transformHashU8)
 }
 
-function getEffectStateId(effect: EffectConfig) {
+function getEffectStateId(effect: EffectConfig, radius = 0) {
   if (effect._stateHash !== undefined && effect._node?._vpDirty === false) return effect._stateHash
   let offset = 0
   const writeU32 = (value: number) => { effectHashView.setUint32(offset, value >>> 0, true); offset += 4 }
   const writeF64 = (value: number) => { effectHashView.setFloat64(offset, Number.isFinite(value) ? value : 0, true); offset += 8 }
   writeU32(effect.color)
-  writeF64(effect.cornerRadius)
+  writeF64(radius)
   if (Array.isArray(effect.shadow)) {
     for (let i = 0; i < effect.shadow.length; i++) {
       const entry = effect.shadow[i]
@@ -534,7 +533,7 @@ function createBackdropMetadata(effect: EffectConfig, command: RenderCommand, cl
   const filterParams = getBackdropFilterParams(effect)
   const transformStateId = getTransformStateId(effect)
   const clipStateId = createClipStateId(clipStack)
-  const effectStateId = getEffectStateId(effect)
+  const effectStateId = getEffectStateId(effect, Math.round(command.cornerRadius))
   return {
     backdropSourceKey: createBackdropSourceKey(effect, clipStateId, transformStateId),
     filterKind: getBackdropFilterKind(filterParams),
@@ -603,7 +602,7 @@ export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, que
     if (rect.inputs.effect) {
       const transformStateId = getTransformStateId(rect.inputs.effect)
       const clipStateId = createClipStateId([])
-      const effectStateId = getEffectStateId(rect.inputs.effect)
+      const effectStateId = getEffectStateId(rect.inputs.effect, rect.inputs.radius)
       return {
         kind: "effect",
         renderObjectId,
@@ -684,7 +683,7 @@ export function buildRenderGraphFrame(
         backdrop,
         transformStateId: backdrop?.transformStateId ?? getTransformStateId(op.effect),
         clipStateId: backdrop?.clipStateId ?? createClipStateId(clipStack),
-        effectStateId: backdrop?.effectStateId ?? getEffectStateId(op.effect),
+        effectStateId: backdrop?.effectStateId ?? getEffectStateId(op.effect, Math.round(op.command.cornerRadius)),
       })
     } else if (op) {
       ops.push(op)
