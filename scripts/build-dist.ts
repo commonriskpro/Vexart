@@ -274,8 +274,6 @@ const pkg = {
   dependencies: {
     "web-tree-sitter": "^0.26.8",
     "marked": "^18.0.0",
-    "@chenglou/pretext": "^0.0.5",
-    "@napi-rs/canvas": "^0.1.97",
     "@babel/core": "^7.26.0",
     "@babel/preset-typescript": "^7.26.0",
     "babel-preset-solid": "^1.9.0",
