@@ -899,9 +899,11 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     }
     _vexartCtx = ctxBuf[0]
     // Load default font atlas (fontId=0) into the Rust GPU text pipeline.
-    if (!_defaultAtlasLoaded) {
+    // Only needed for the bitmap atlas fallback path (VEXART_MSDF=0).
+    // The MSDF path (default) renders glyphs on-the-fly via vexart_font_render_text.
+    if (!_defaultAtlasLoaded && !MSDF_TEXT_ENABLED) {
       _defaultAtlasLoaded = true
-      const defaultDesc = getFont(0) // { family: "monospace", size: 14, weight: 400 }
+      const defaultDesc = getFont(0)
       loadFontAtlas(_vexartCtx, 0, defaultDesc)
     }
     return _vexartCtx
@@ -2231,28 +2233,23 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         if (op.kind === "text") {
           // ── MSDF path (default): deferred until after flushAll. Set VEXART_MSDF=0 for bitmap fallback ──
            if (MSDF_TEXT_ENABLED && getMsdfSymbols()) {
-            // Use the SAME TS layout engine as the bitmap path so line breaks match.
-            const layout = layoutText(op.inputs.text, op.inputs.fontId, op.inputs.maxWidth, op.inputs.lineHeight, op.inputs.fontSize)
+            // Let Rust do BOTH layout and rendering with the same font metrics.
+            // This avoids the TS monospace measurement ↔ Rust proportional rendering mismatch.
             const textX = Math.round(op.command.x) - ctx.offsetX
             const textY = Math.round(op.command.y) - ctx.offsetY
             const colorRgba = ((op.command.color[0] & 0xff) << 24)
               | ((op.command.color[1] & 0xff) << 16)
               | ((op.command.color[2] & 0xff) << 8)
               | (op.command.color[3] & 0xff)
-            for (let li = 0; li < layout.lines.length; li++) {
-              const rawText = layout.lines[li].text
-              const lineText = typeof rawText === "string" ? rawText : String(rawText)
-              if (!lineText) continue
-              deferredMsdfOps.push({
-                text: lineText,
-                x: textX,
-                y: textY + li * op.inputs.lineHeight,
-                fontSize: op.inputs.fontSize,
-                lineHeight: op.inputs.lineHeight,
-                maxWidth: 999999, // no wrap — already laid out by TS
-                colorRgba,
-              })
-            }
+            deferredMsdfOps.push({
+              text: op.inputs.text,
+              x: textX,
+              y: textY,
+              fontSize: op.inputs.fontSize,
+              lineHeight: op.inputs.lineHeight,
+              maxWidth: op.inputs.maxWidth > 0 ? op.inputs.maxWidth : 999999,
+              colorRgba,
+            })
             const bounds = opBounds(op, ctx.target.width, ctx.target.height)
             if (bounds) markDirty(bounds.left, bounds.top, bounds.right, bounds.bottom)
             continue

@@ -31,7 +31,19 @@
  * Total: ~1146 glyphs. At 14px, atlas texture is ~448×728px ≈ 1.3MB RGBA.
  */
 
-import { createCanvas } from "@napi-rs/canvas"
+// @napi-rs/canvas is only needed for the legacy bitmap atlas path (VEXART_MSDF=0).
+// Lazy-loaded to avoid crashing when the package is not installed (MSDF is the default).
+let _createCanvas: typeof import("@napi-rs/canvas").createCanvas | null = null
+function createCanvas(w: number, h: number) {
+  if (!_createCanvas) {
+    try {
+      _createCanvas = require("@napi-rs/canvas").createCanvas
+    } catch {
+      throw new Error("@napi-rs/canvas is required for bitmap font atlas generation (VEXART_MSDF=0 fallback). Install it with: bun add @napi-rs/canvas")
+    }
+  }
+  return _createCanvas!(w, h)
+}
 import type { FontDescriptor } from "./text-layout"
 import { openVexartLibrary } from "./vexart-bridge"
 
