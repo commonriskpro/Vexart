@@ -218,6 +218,10 @@ export function walkTree(
     } else if (isInteractionLayer || hasSubtreeTransform) {
       node._autoLayer = false
       shouldBoundary = true
+    } else if (hasBackdrop && autoLayerCount < AUTO_LAYER_BUDGET) {
+      node._autoLayer = true
+      autoLayerCount++
+      shouldBoundary = true
     } else if (node._autoLayer === true && node._unstableFrameCount >= 3) {
       node._autoLayer = false
       node._stableFrameCount = 0

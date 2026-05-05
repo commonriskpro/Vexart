@@ -929,6 +929,9 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   let framesSinceStrategyChange = 0
   let currentFrame: RendererBackendFrameContext | null = null
   let currentFrameLayers: RenderedLayerRecord[] = []
+  // Backdrop pre-composite: layers rendered so far, composited into the
+  // backdrop layer's target before it reads "content behind".
+  const _renderedLayerStack: RenderedLayerRecord[] = []
   let renderOpToImage: ((op: RenderGraphOp, width: number, height: number, offsetX: number, offsetY: number) => VexartImageHandle | null) | null = null
   const activeLayerKeys = new Set<string>()
   let suppressFinalPresentation = false
@@ -1644,9 +1647,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
 
            if (effectOp.backdrop && !cornerRadii) {
             // Force a clear render pass before backdrop reads from the target.
-            // beginLayer(loadMode=0) sets LoadOp::Clear on the FIRST render pass,
-            // but if no shapes were dispatched yet, no render pass exists and the
-            // target retains stale content from the previous frame (text bleeds).
             if (first) {
               shapeRects.push({ x: 0, y: 0, w: 0, h: 0, boxW: 0, boxH: 0, radius: 0, strokeWidth: 0, fill: 0 })
               flushShapeRects()
@@ -1656,6 +1656,37 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             if (layerOpen) {
               vexartCompositeTargetEndLayer(vctx, targetHandle)
               layerOpen = false
+            }
+            // ── Backdrop pre-composite: blit lower-z layers into this target ──
+            // When this element is on its own layer (auto-promoted), the target
+            // is empty. Compose previously-rendered layers so getBackdropSource
+            // reads actual "content behind" instead of transparent pixels.
+            if (_renderedLayerStack.length > 0 && currentFrame) {
+              const vw = currentFrame.viewportWidth
+              const vh = currentFrame.viewportHeight
+              vexartCompositeTargetBeginLayer(vctx, targetHandle, 1, 0x00000000)
+              for (const layer of _renderedLayerStack) {
+                const quad = layer.subtreeTransform ?? {
+                  p0: { x: layer.x, y: layer.y },
+                  p1: { x: layer.x + layer.width, y: layer.y },
+                  p2: { x: layer.x, y: layer.y + layer.height },
+                  p3: { x: layer.x + layer.width, y: layer.y + layer.height },
+                }
+                // Map absolute viewport coords to the layer's local target coords
+                const ox = ctx.offsetX
+                const oy = ctx.offsetY
+                const tw = ctx.target.width
+                const th = ctx.target.height
+                const inst = packImageTransformInstance(
+                  ((quad.p0.x - ox) / tw) * 2 - 1, 1 - ((quad.p0.y - oy) / th) * 2,
+                  ((quad.p1.x - ox) / tw) * 2 - 1, 1 - ((quad.p1.y - oy) / th) * 2,
+                  ((quad.p2.x - ox) / tw) * 2 - 1, 1 - ((quad.p2.y - oy) / th) * 2,
+                  ((quad.p3.x - ox) / tw) * 2 - 1, 1 - ((quad.p3.y - oy) / th) * 2,
+                  layer.opacity,
+                )
+                compositeTargetUniformToTarget(vctx, targetHandle, layer.handle, inst)
+              }
+              vexartCompositeTargetEndLayer(vctx, targetHandle)
             }
             const sprite = getBackdropSprite(effectOp)
             if (!sprite) return { ok: false, rawLayer: null }
@@ -1711,6 +1742,33 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             if (layerOpen) {
               vexartCompositeTargetEndLayer(vctx, targetHandle)
               layerOpen = false
+            }
+            // Pre-composite lower layers (same as !cornerRadii path above)
+            if (_renderedLayerStack.length > 0 && currentFrame) {
+              const vw = currentFrame.viewportWidth
+              const vh = currentFrame.viewportHeight
+              vexartCompositeTargetBeginLayer(vctx, targetHandle, 1, 0x00000000)
+              for (const layer of _renderedLayerStack) {
+                const quad = layer.subtreeTransform ?? {
+                  p0: { x: layer.x, y: layer.y },
+                  p1: { x: layer.x + layer.width, y: layer.y },
+                  p2: { x: layer.x, y: layer.y + layer.height },
+                  p3: { x: layer.x + layer.width, y: layer.y + layer.height },
+                }
+                const ox = ctx.offsetX
+                const oy = ctx.offsetY
+                const tw = ctx.target.width
+                const th = ctx.target.height
+                const inst = packImageTransformInstance(
+                  ((quad.p0.x - ox) / tw) * 2 - 1, 1 - ((quad.p0.y - oy) / th) * 2,
+                  ((quad.p1.x - ox) / tw) * 2 - 1, 1 - ((quad.p1.y - oy) / th) * 2,
+                  ((quad.p2.x - ox) / tw) * 2 - 1, 1 - ((quad.p2.y - oy) / th) * 2,
+                  ((quad.p3.x - ox) / tw) * 2 - 1, 1 - ((quad.p3.y - oy) / th) * 2,
+                  layer.opacity,
+                )
+                compositeTargetUniformToTarget(vctx, targetHandle, layer.handle, inst)
+              }
+              vexartCompositeTargetEndLayer(vctx, targetHandle)
             }
             const sprite = getBackdropSprite(effectOp)
             if (!sprite) return { ok: false, rawLayer: null }
@@ -2286,6 +2344,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       resetBackendProfile()
       currentFrame = ctx
       currentFrameLayers = []
+      _renderedLayerStack.length = 0
       activeLayerKeys.clear()
       suppressFinalPresentation = false
       if (!ctx.useLayerCompositing) {
@@ -2375,6 +2434,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       const frameCtx = ctx.frame
       const layerCtx = ctx.layer
       const delegatedFrame = !!(currentFrame && frameCtx && currentFrame === frameCtx)
+
       if (delegatedFrame && frameCtx.useLayerCompositing && layerCtx) {
         const layerTarget = getLayerTarget(layerCtx.key, ctx.target.width, ctx.target.height)
         if (!layerTarget) {
@@ -2407,10 +2467,26 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           && region.height > 0
           && region.width * region.height < ctx.target.width * ctx.target.height
         const result = renderFrame(ctx, layerTarget, readbackMode, shouldReadbackRegion ? region : null)
+
         if (!result.ok) {
           suppressFinalPresentation = true
           failGpuOnly(`GPU layer render failed for ${layerCtx.key}`)
         }
+
+        // Track rendered layer for backdrop pre-composite of subsequent layers
+        _renderedLayerStack.push({
+          key: layerCtx.key,
+          z: layerCtx.z,
+          x: layerCtx.bounds.x,
+          y: layerCtx.bounds.y,
+          width: layerCtx.bounds.width,
+          height: layerCtx.bounds.height,
+          handle: layerTarget,
+          isBackground: layerCtx.isBackground,
+          subtreeTransform: layerCtx.subtreeTransform,
+          opacity: 1,
+        })
+
         if (lastStrategy === "final-frame") {
           recordCurrentFrameLayer({
             key: layerCtx.key,
