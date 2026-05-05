@@ -17,7 +17,7 @@ import type {
 
 // ── Button ──
 // Note: The styled Button in void.d.ts wins in the unified barrel.
-// The headless Button is available via "vxrt/engine" or direct headless import.
+// The headless Button is available via "vexart/engine" or direct headless import.
 // We export the render context type here since it's not colliding.
 
 export type ButtonRenderContext = {
@@ -31,7 +31,7 @@ export type ButtonRenderContext = {
 }
 
 // Headless ButtonProps — not exported from barrel (styled ButtonProps wins).
-// Available via "vxrt/engine" for advanced use.
+// Available via "vexart/engine" for advanced use.
 export type HeadlessButtonProps = {
   onPress?: () => void
   disabled?: boolean

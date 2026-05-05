@@ -212,7 +212,7 @@ console.log(`  ✅ engine.d.ts + vexart.d.ts + components.d.ts + void.d.ts + jsx
 console.log("📋 Creating package.json...")
 
 const pkg = {
-  name: "vxrt",
+  name: "vexart",
   version: VERSION,
   description: "Vexart GPU-accelerated terminal UI engine. Write JSX, get browser-quality UI in your terminal.",
   type: "module",

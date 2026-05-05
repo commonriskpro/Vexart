@@ -60,7 +60,7 @@ await createApp(() => (
 
 ```bash
 # 1. Install
-bun add vxrt
+bun add vexart
 
 # 2. Configure JSX transform (babel.config.js or similar)
 import { vexartSolidPlugin } from "vexart/solid-plugin"

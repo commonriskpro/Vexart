@@ -124,10 +124,10 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish vxrt
+      - name: Publish vexart
         run: |
           cd dist
-          npm publish --access public --tag latest || echo "⚠️ Failed to publish vxrt (may already exist)"
+          npm publish --access public --tag latest || echo "⚠️ Failed to publish vexart (may already exist)"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

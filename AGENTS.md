@@ -735,7 +735,7 @@ glows                            // preset glow configs
 
 ## npm package structure (dist/)
 
-The distribution is built with `bun run build:dist`. Published as `vxrt` on npm.
+The distribution is built with `bun run build:dist`. Published as `vexart` on npm.
 Internal monorepo packages (`@vexart/*`) are bundled into two files — the barrel and
 the engine. Native binaries ship as optional platform packages (`@vxrt/darwin-arm64`).
 
@@ -756,12 +756,12 @@ dist/
 ```
 
 Consumer imports:
-- `import { Box, Input, createSignal, useFocus } from "vxrt"` — app developers
-- `import { createElement, insert, createRenderLoop } from "vxrt/engine"` — power users
+- `import { Box, Input, createSignal, useFocus } from "vexart"` — app developers
+- `import { createElement, insert, createRenderLoop } from "vexart/engine"` — power users
 
 The barrel (`vexart.js`) imports from `./engine.js` as an external dependency — both
 share the same reconciler instance. The consumer's solid-plugin compiles JSX with
-`moduleName: "vxrt/engine"` to ensure all createElement/insert calls resolve
+`moduleName: "vexart/engine"` to ensure all createElement/insert calls resolve
 to the same engine module.
 
 ### Exports map

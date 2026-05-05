@@ -55,10 +55,10 @@ cd dist && npm publish
 
 ```tsx
 // 90% of developers — app development
-import { createApp, Box, Text, Button, colors, createSignal } from "vxrt"
+import { createApp, Box, Text, Button, colors, createSignal } from "vexart"
 
 // Power users — custom renderers, low-level control
-import { createRenderLoop, useFocus, setRendererBackend } from "vxrt/engine"
+import { createRenderLoop, useFocus, setRendererBackend } from "vexart/engine"
 ```
 
 The unified barrel (`"vexart"`) re-exports everything from `@vexart/app`,
