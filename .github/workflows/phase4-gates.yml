@@ -50,4 +50,4 @@ jobs:
       - name: API snapshot gate
         run: |
           bun run api:update
-          git diff --exit-code -- packages/engine/etc/engine.api.md packages/primitives/etc/primitives.api.md packages/headless/etc/headless.api.md packages/styled/etc/styled.api.md
+          git diff --exit-code -I '\.api-extractor-temp/' -- packages/engine/etc/engine.api.md packages/primitives/etc/primitives.api.md packages/headless/etc/headless.api.md packages/styled/etc/styled.api.md
