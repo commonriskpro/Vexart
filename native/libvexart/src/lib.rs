@@ -772,10 +772,11 @@ pub unsafe extern "C" fn vexart_kitty_emit_layer(
     rgba_ptr: *const u8,
     rgba_len: u32,
     layer_ptr: *const u8,
+    layer_len: u32,
     stats_out: *mut types::NativePresentationStats,
 ) -> i32 {
     ffi_guard!({
-        if layer_ptr.is_null() {
+        if layer_ptr.is_null() || (layer_len as usize) < 20 {
             return ffi::panic::ERR_INVALID_ARG;
         }
         let bytes = std::slice::from_raw_parts(layer_ptr, 20);
@@ -803,10 +804,11 @@ pub unsafe extern "C" fn vexart_kitty_emit_layer_target(
     target: u64,
     image_id: u32,
     layer_ptr: *const u8,
+    layer_len: u32,
     stats_out: *mut types::NativePresentationStats,
 ) -> i32 {
     ffi_guard!({
-        if layer_ptr.is_null() {
+        if layer_ptr.is_null() || (layer_len as usize) < 12 {
             return ffi::panic::ERR_INVALID_ARG;
         }
         let bytes = std::slice::from_raw_parts(layer_ptr, 12);
@@ -844,10 +846,11 @@ pub unsafe extern "C" fn vexart_kitty_emit_region(
     rgba_ptr: *const u8,
     rgba_len: u32,
     region_ptr: *const u8,
+    region_len: u32,
     stats_out: *mut types::NativePresentationStats,
 ) -> i32 {
     ffi_guard!({
-        if region_ptr.is_null() {
+        if region_ptr.is_null() || (region_len as usize) < 16 {
             return ffi::panic::ERR_INVALID_ARG;
         }
         // Read 4 × u32 LE from potentially unaligned byte pointer.
@@ -875,10 +878,11 @@ pub unsafe extern "C" fn vexart_kitty_emit_region_target(
     target: u64,
     image_id: u32,
     region_ptr: *const u8,
+    region_len: u32,
     stats_out: *mut types::NativePresentationStats,
 ) -> i32 {
     ffi_guard!({
-        if region_ptr.is_null() {
+        if region_ptr.is_null() || (region_len as usize) < 16 {
             return ffi::panic::ERR_INVALID_ARG;
         }
         let bytes = std::slice::from_raw_parts(region_ptr, 16);
@@ -929,10 +933,14 @@ pub unsafe extern "C" fn vexart_layer_upsert(
     key_ptr: *const u8,
     key_len: u32,
     desc_ptr: *const u8,
+    desc_len: u32,
     out_ptr: *mut u8,
 ) -> i32 {
     ffi_guard!({
         if key_ptr.is_null() || key_len == 0 || desc_ptr.is_null() || out_ptr.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        if (desc_len as usize) < layer::LayerDescriptor::BYTE_LEN {
             return ERR_INVALID_ARG;
         }
         let key_bytes = std::slice::from_raw_parts(key_ptr, key_len as usize);
