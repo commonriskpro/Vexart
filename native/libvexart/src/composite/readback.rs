@@ -72,7 +72,6 @@ pub fn readback_full(
     if rx.recv().expect("map_async channel").is_err() {
         return 0;
     }
-
     // Copy from mapped buffer to dst, stripping padding per row.
     {
         let mapped = slice.get_mapped_range();
