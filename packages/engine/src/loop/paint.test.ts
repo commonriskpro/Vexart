@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createLayerStore, type Layer } from "../ffi/layers"
-import { CMD, createRenderGraphQueues, type RenderCommand } from "../ffi/render-graph"
+import { CMD, type RenderCommand } from "../ffi/render-graph"
 import { createNode } from "../ffi/node"
 import { canUseRegionalRepaint, collectLayerCommands, hasDirtySubtreeTransforms, paintFrame, selectLayerDirtyRect, selectLayerRepaintRect, type PaintFrameState, type PreparedLayerSlot } from "./paint"
 import type { LayerPlan } from "./types"
@@ -53,7 +53,6 @@ function createPaintFrameState(): PaintFrameState {
     frameDirtyRects: [],
     pendingNodeDamageRects: [],
     nodeRefById: new Map([[root.id, root]]),
-    renderGraphQueues: createRenderGraphQueues(),
     textMetaMap: new Map(),
     layerComposer: null,
     backendOverride: undefined,

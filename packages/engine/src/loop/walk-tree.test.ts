@@ -206,9 +206,6 @@ describe("WalkTreeState shape", () => {
       scrollContainers: [],
       nodePathById: new Map(),
       nodeRefById: new Map(),
-      effectsQueue: new Map(),
-      imageQueue: new Map(),
-      canvasQueue: new Map(),
       textMetaMap: new Map(),
       rectNodeById: new Map(),
       layout: null as unknown as ReturnType<typeof import("./layout-adapter").createVexartLayoutCtx>, // not tested here

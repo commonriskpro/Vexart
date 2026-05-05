@@ -43,7 +43,7 @@ export type {
   CanvasPaintConfig,
   RenderGraphQueues,
   TextMeta,
-  RenderGraphQueueState,
+
   RectangleRenderInputs,
   BorderRenderInputs,
   TextRenderInputs,

@@ -175,8 +175,6 @@ export type PaintFrameState = {
 
   nodeRefById: Map<number, TGENode>
 
-  // Render graph queues — for buildRenderGraphFrame
-  renderGraphQueues: ReturnType<typeof import("../ffi/render-graph").createRenderGraphQueues>
   textMetaMap: Map<number, import("../ffi/render-graph").TextMeta>
 
   // GPU layer composer (Kitty output)
@@ -399,7 +397,6 @@ export function paintFrame(
     activeSlotKeys,
     frameDirtyRects,
     pendingNodeDamageRects,
-    renderGraphQueues,
     textMetaMap,
     layerComposer,
     lastPresentedInteractionSeq,
@@ -782,7 +779,7 @@ export function paintFrame(
         layer: layerCtx,
       }
       const renderGraphStart = profile ? performance.now() : 0
-      const graph = buildRenderGraphFrame(layerCommands, renderGraphQueues, textMetaMap)
+      const graph = buildRenderGraphFrame(layerCommands, textMetaMap)
       if (profile) profile.paintRenderGraphMs += performance.now() - renderGraphStart
       const backendPaintStart = profile ? performance.now() : 0
       const paintResult = backend.paint({

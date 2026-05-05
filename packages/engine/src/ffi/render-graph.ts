@@ -37,6 +37,12 @@ export type RenderCommand = {
   text?: string
   /** Stable node ID for matching render ops to effects/images. */
   nodeId?: number
+  /** Effect config attached directly — eliminates Map.get lookup in render graph. */
+  effect?: EffectConfig
+  /** Image paint config attached directly. */
+  image?: ImagePaintConfig
+  /** Canvas paint config attached directly. */
+  canvas?: CanvasPaintConfig
 }
 
 // Color is now stored as packed u32 on RenderCommand — no packColor needed.
@@ -147,10 +153,6 @@ export type RenderGraphQueues = {
   canvases: Map<number, CanvasPaintConfig>
 }
 
-/** @public */
-export type RenderGraphQueueState = {
-  borderEffectIndex: number
-}
 
 /** @public */
 export type TextMeta = {
@@ -296,41 +298,27 @@ export function cloneRenderGraphQueues(queues: RenderGraphQueues): RenderGraphQu
   }
 }
 
-export function getRectangleRenderInputs(cmd: RenderCommand, queues: RenderGraphQueues, renderObjectId: number | null): RectangleRenderInputs {
+export function getRectangleRenderInputs(cmd: RenderCommand, renderObjectId: number | null): RectangleRenderInputs {
   const radius = Math.round(cmd.cornerRadius)
   const color = cmd.color >>> 0
 
-  const image = renderObjectId !== null
-    ? queues.images.get(renderObjectId) ?? null
-    : null
-
-  const canvas = renderObjectId !== null
-    ? queues.canvases.get(renderObjectId) ?? null
-    : null
-
-  const effect = renderObjectId !== null
-    ? queues.effects.get(renderObjectId) ?? null
-    : null
-
-  return { renderObjectId, color, radius, image, canvas, effect }
+  return {
+    renderObjectId,
+    color,
+    radius,
+    image: cmd.image ?? null,
+    canvas: cmd.canvas ?? null,
+    effect: cmd.effect ?? null,
+  }
 }
 
-export function getBorderRenderInputs(cmd: RenderCommand, queues: RenderGraphQueues, state: RenderGraphQueueState): BorderRenderInputs {
+export function getBorderRenderInputs(cmd: RenderCommand): BorderRenderInputs {
   const radius = Math.round(cmd.cornerRadius)
   const width = Math.round(cmd.extra1) || 1
-  let effect: EffectConfig | null = null
-  let i = 0
-  for (const entry of queues.effects.values()) {
-    if (i++ < state.borderEffectIndex) continue
-    if (entry.cornerRadii === undefined) continue
-    effect = entry
-    state.borderEffectIndex = i
-    break
-  }
   return {
     radius,
     width,
-    cornerRadii: effect?.cornerRadii ?? null,
+    cornerRadii: cmd.effect?.cornerRadii ?? null,
   }
 }
 
@@ -572,14 +560,14 @@ function hashU32Scratch(a: number, b: number, c: number, d: number, e: number) {
 }
 
 /** @public */
-export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, queueState: RenderGraphQueueState, textMetaMap: Map<number, TextMeta>, ownerIds?: { rect: number | null; text: number | null }): RenderGraphOp | null {
+export function buildRenderOp(cmd: RenderCommand, textMetaMap: Map<number, TextMeta>, ownerIds?: { rect: number | null; text: number | null }): RenderGraphOp | null {
   if (cmd.type === CMD.RECTANGLE) {
     const renderObjectId = ownerIds?.rect ?? null
     const rect: RectangleRenderOp = {
       kind: "rectangle",
       renderObjectId,
       command: cmd,
-      inputs: getRectangleRenderInputs(cmd, queues, renderObjectId),
+      inputs: getRectangleRenderInputs(cmd, renderObjectId),
     }
     if (rect.inputs.image) {
       return {
@@ -622,7 +610,7 @@ export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, que
       kind: "border",
       renderObjectId: null,
       command: cmd,
-      inputs: getBorderRenderInputs(cmd, queues, queueState),
+      inputs: getBorderRenderInputs(cmd),
     }
   }
   if (cmd.type === CMD.TEXT) {
@@ -651,12 +639,10 @@ export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, que
 /** @public */
 export function buildRenderGraphFrame(
   commands: RenderCommand[],
-  queues: RenderGraphQueues,
   textMetaMap: Map<number, TextMeta>,
 ): RenderGraphFrame {
   const ops: RenderGraphOp[] = []
   const clipStack: ClipStackEntry[] = []
-  const queueState: RenderGraphQueueState = { borderEffectIndex: 0 }
   for (const cmd of commands) {
     // Process SCISSOR commands for clipStack before building render ops
     if (cmd.type === CMD.SCISSOR_START) {
@@ -672,7 +658,7 @@ export function buildRenderGraphFrame(
     // All commands carry nodeId — the legacy counter-based fallback has been removed.
     const rectId = cmd.nodeId ?? null
     const textId = cmd.nodeId ?? null
-    const op = buildRenderOp(cmd, queues, queueState, textMetaMap, {
+    const op = buildRenderOp(cmd, textMetaMap, {
       rect: cmd.type === CMD.RECTANGLE ? rectId : null,
       text: cmd.type === CMD.TEXT ? textId : null,
     })

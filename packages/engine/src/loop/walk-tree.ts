@@ -31,7 +31,7 @@ import { CanvasContext, hashCanvasDisplayList, serializeCanvasDisplayList } from
 import { nativeCanvasDisplayListTouch, nativeCanvasDisplayListUpdate, syncNativeCanvasDisplayListHandle } from "../ffi/native-canvas-display-list"
 import { decodeImageForNode } from "./image"
 import { ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, type createVexartLayoutCtx } from "./layout-adapter"
-import type { EffectConfig, TextMeta, ImagePaintConfig, CanvasPaintConfig } from "../ffi/render-graph"
+import type { EffectConfig, TextMeta } from "../ffi/render-graph"
 import { shouldPromoteInteractionLayer } from "../reconciler/interaction"
 import { isDebugEnabled } from "./debug"
 import type { LayerBoundary } from "./types"
@@ -61,11 +61,6 @@ export type WalkTreeState = {
   // Lookup maps populated during walk
   nodePathById: Map<number, string>
   nodeRefById: Map<number, TGENode>
-
-  // Effect / image / canvas queues
-  effectsQueue: Map<number, EffectConfig>
-  imageQueue: Map<number, ImagePaintConfig>
-  canvasQueue: Map<number, CanvasPaintConfig>
 
   // Text metadata map (keyed by content) — used during paint for multi-line layout
   textMetaMap: Map<number, TextMeta>
@@ -297,9 +292,9 @@ export function walkTree(
     layout.configureRectangle(placeholderColor, props.cornerRadius ?? 0)
     registerRectNode(node, state)
 
-    // Queue image data for paintCommand
+    // Attach image data directly to layout command (no Map intermediary)
     if (imgBuf) {
-      state.imageQueue.set(node.id, {
+      layout.setImage({
         renderObjectId: node.id,
         color: placeholderColor,
         cornerRadius: props.cornerRadius ?? 0,
@@ -315,7 +310,6 @@ export function walkTree(
 
   // ── <canvas> intrinsic — imperative drawing surface ──
   if (node.kind === "canvas") {
-    const props = resolveProps(node)
     const extra = ensureCanvasExtra(node)
     state.boxNodes.push(node)
 
@@ -364,7 +358,7 @@ export function walkTree(
         const handle = nativeCanvasDisplayListUpdate({ key: `canvas:${node.id}`, bytes })
         if (handle) syncNativeCanvasDisplayListHandle(node, handle, hash)
       }
-      state.canvasQueue.set(node.id, {
+      layout.setCanvas({
         renderObjectId: node.id,
         color: placeholderColor,
         onDraw: props.onDraw,
@@ -552,7 +546,7 @@ export function walkTree(
           effect.transform = new Float64Array(9)
         }
       }
-      state.effectsQueue.set(node.id, effect)
+      layout.setEffect(effect)
     }
   }
 

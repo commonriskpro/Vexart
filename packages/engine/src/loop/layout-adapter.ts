@@ -12,7 +12,7 @@
  * and a node pool to minimize GC churn across frames.
  */
 
-import type { RenderCommand } from "../ffi/render-graph"
+import type { RenderCommand, EffectConfig, ImagePaintConfig, CanvasPaintConfig } from "../ffi/render-graph"
 import { CMD as _CMD_RG } from "../ffi/render-graph"
 import {
   Node,
@@ -139,6 +139,10 @@ export function createVexartLayoutCtx() {
   let _textColors: number[] = []
   let _textFontIds: number[] = []
   let _textFontSizes: number[] = []
+  // Effect/image/canvas — attached directly to RenderCommand (eliminates Map.get in render-graph)
+  let _effects: (EffectConfig | null)[] = []
+  let _images: (ImagePaintConfig | null)[] = []
+  let _canvases: (CanvasPaintConfig | null)[] = []
 
   // Quick lookup: Flexily Node → array index
   const _nodeToIndex = new Map<Node, number>()
@@ -176,6 +180,9 @@ export function createVexartLayoutCtx() {
       _textColors.push(0)
       _textFontIds.push(0)
       _textFontSizes.push(0)
+      _effects.push(null)
+      _images.push(null)
+      _canvases.push(null)
     } else {
       // Reuse slot
       _allNodes[idx] = node
@@ -193,6 +200,9 @@ export function createVexartLayoutCtx() {
       _textColors[idx] = 0
       _textFontIds[idx] = 0
       _textFontSizes[idx] = 0
+      _effects[idx] = null
+      _images[idx] = null
+      _canvases[idx] = null
     }
     _nodeToIndex.set(node, idx)
     return idx
@@ -329,14 +339,18 @@ export function createVexartLayoutCtx() {
 
         const bgColor = _bgColors[idx]
         if (bgColor !== 0 || _cornerRadii[idx] !== 0) {
-          cmds.push({
+          const cmd: RenderCommand = {
             type: CMD.RECTANGLE,
             x: absX, y: absY, width, height,
             color: bgColor >>> 0,
             cornerRadius: _cornerRadii[idx],
             extra1: 0, extra2: 0,
             nodeId,
-          })
+          }
+          if (_effects[idx]) cmd.effect = _effects[idx]!
+          if (_images[idx]) cmd.image = _images[idx]!
+          if (_canvases[idx]) cmd.canvas = _canvases[idx]!
+          cmds.push(cmd)
         }
 
         const textIdx = textByNodeId.get(nodeId)
@@ -491,6 +505,18 @@ export function createVexartLayoutCtx() {
         _bgColors[_currentIdx] = color
         _cornerRadii[_currentIdx] = radius
       }
+    },
+
+    setEffect(effect: EffectConfig) {
+      if (_currentIdx >= 0) _effects[_currentIdx] = effect
+    },
+
+    setImage(image: ImagePaintConfig) {
+      if (_currentIdx >= 0) _images[_currentIdx] = image
+    },
+
+    setCanvas(canvas: CanvasPaintConfig) {
+      if (_currentIdx >= 0) _canvases[_currentIdx] = canvas
     },
 
     configureBorder(_width: number) {
