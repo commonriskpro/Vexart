@@ -2545,12 +2545,12 @@ export type TGEProps = {
         x: number;
         y: number;
         blur: number;
-        color: number;
+        color: string | number;
     } | Array<{
         x: number;
         y: number;
         blur: number;
-        color: number;
+        color: string | number;
     }>;
     boxShadow?: TGEProps["shadow"];
     glow?: {
@@ -2560,13 +2560,13 @@ export type TGEProps = {
     };
     gradient?: {
         type: "linear";
-        from: number;
-        to: number;
+        from: string | number;
+        to: string | number;
         angle?: number;
     } | {
         type: "radial";
-        from: number;
-        to: number;
+        from: string | number;
+        to: string | number;
     };
     backdropBlur?: number;
     backdropBrightness?: number;

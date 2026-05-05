@@ -38,7 +38,7 @@ export type ShadowConfig = {
     x: number;
     y: number;
     blur: number;
-    color: number;
+    color: string | number;
 };
 
 // @public (undocumented)
