@@ -5,8 +5,7 @@
 Anti-aliased corners. Drop shadows. Linear & radial gradients. Glow effects. Backdrop blur (glassmorphism). Element opacity. Per-corner radius. All rendered as real GPU pixels — not ASCII boxes.
 
 ```tsx
-import { createApp, Box, Text } from "@vexart/app"
-import { colors } from "@vexart/styled"
+import { createApp, Box, Text, colors } from "vexart"
 
 await createApp(() => (
   <Box
@@ -70,9 +69,7 @@ import { vexartSolidPlugin } from "vexart/solid-plugin"
 ```
 
 ```tsx
-import { createApp, Box, Text } from "@vexart/app"
-import { Button } from "@vexart/headless"
-import { colors, radius, space } from "@vexart/styled"
+import { createApp, Box, Text, Button, colors, radius, space } from "vexart"
 
 function App() {
   return (
