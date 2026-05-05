@@ -147,14 +147,6 @@ function layoutWithNativeMeasure(
   return { lines, lineCount: lines.length, height: lines.length * lineHeight }
 }
 
-// ── Built-in monospace atlas metrics (bitmap fallback path only) ──
-// Used by the legacy bitmap glyph renderer (VEXART_MSDF=0).
-const BUILTIN_FONT_SIZE = 14
-
-export function builtinFontScale(fontSize: number): number {
-  return Math.max(1, fontSize) / BUILTIN_FONT_SIZE
-}
-
 // ── Native font measurement (Rust FFI) ──
 // Uses vexart_font_measure for accurate proportional metrics.
 // Cached to avoid FFI overhead on repeated measurements.

@@ -9,7 +9,7 @@ import { appendFileSync } from "node:fs"
 import { ptr } from "bun:ffi"
 import { CanvasContext } from "./canvas"
 import { rasterizeCanvas, rasterizeCanvasCommands } from "./canvas-rasterizer"
-import { getAtlas, loadFontAtlas, ATLAS_RANGES } from "./font-atlas"
+
 import { transformBounds, transformPoint } from "./matrix"
 import type { BackdropRenderMetadata, EffectRenderOp, RectangleRenderOp, RenderGraphOp } from "./render-graph"
 import type {
@@ -22,7 +22,6 @@ import type {
   RendererBackendRetainedLayer,
 } from "./renderer-backend"
 import { chooseGpuLayerStrategy, nativeChooseFrameStrategy, NATIVE_FRAME_STRATEGY, NATIVE_FRAME_TRANSPORT, type GpuLayerStrategyMode, type NativeFramePlan } from "./gpu-layer-strategy"
-import { builtinFontScale, getFont, layoutText } from "./text-layout"
 import { openVexartLibrary, openMsdfFontSymbols, VexartNativeError } from "./vexart-bridge"
 import { vexartGetLastError } from "./vexart-functions"
 import {
@@ -59,8 +58,7 @@ import type { DamageRect } from "./damage"
 // Pre-allocated scratch buffers for pack functions — avoids per-call ArrayBuffer/DataView allocations.
 const PACK_MAX = 256
 const PROFILE_ENABLED = process.env.VEXART_PROFILE !== "0"
-/** MSDF text is the default. Set VEXART_MSDF=0 to fall back to bitmap atlas. */
-const MSDF_TEXT_ENABLED = process.env.VEXART_MSDF !== "0"
+
 const _packBuf = new ArrayBuffer(PACK_MAX)
 const _packView = new DataView(_packBuf)
 const _packU8 = new Uint8Array(_packBuf)
@@ -81,22 +79,6 @@ function ensureBatchBuf(size: number) {
 
 let _readbackBuf: Uint8Array | null = null
 let _readbackSize = 0
-let _glyphBuf: ArrayBuffer | null = null
-let _glyphF32: Float32Array | null = null
-let _glyphU32: Uint32Array | null = null
-let _glyphU8: Uint8Array | null = null
-
-function ensureGlyphBuf(size: number) {
-  if (!_glyphBuf || _glyphBuf.byteLength < size) {
-    let capacity = _glyphBuf?.byteLength ?? 4096
-    while (capacity < size) capacity *= 2
-    _glyphBuf = new ArrayBuffer(capacity)
-    _glyphF32 = new Float32Array(_glyphBuf)
-    _glyphU32 = new Uint32Array(_glyphBuf)
-    _glyphU8 = new Uint8Array(_glyphBuf)
-  }
-  return { f32: _glyphF32!, u32: _glyphU32!, u8: _glyphU8! }
-}
 
 // ── Handle types (bigint u64 — same shape as bridge was) ─────────────────────
 type VexartTargetHandle = bigint
@@ -279,14 +261,6 @@ function copyGpuTargetRegionToImage(
 ): GpuRasterImage {
   const handle = vexartCompositeCopyRegionToImage(vctx, target, region.x, region.y, region.width, region.height)
   return { handle, width: region.width, height: region.height }
-}
-
-// ── Glyph instance type (kept for type-compatibility inside getGlyphAtlas) ─
-type WgpuCanvasGlyphInstance = {
-  x: number; y: number; w: number; h: number
-  u: number; v: number; uw: number; vh: number
-  r: number; g: number; b: number; a: number
-  opacity: number
 }
 
 // ── ShapeRect / ShapeRectCorners types (used by push arrays) ─────────────────
@@ -562,8 +536,6 @@ export type GpuRendererBackendCacheStats = {
   layerTargetBytes: number
   textImageCount: number
   textImageBytes: number
-  glyphAtlasCount: number
-  glyphAtlasBytes: number
   canvasSpriteCount: number
   canvasSpriteBytes: number
   transformSpriteCount: number
@@ -576,7 +548,6 @@ export type GpuRendererBackendCacheStats = {
   backdropSpriteBytes: number
 }
 
-const MAX_GPU_GLYPH_ATLASES = 32
 const MAX_GPU_CANVAS_SPRITES = 64
 const MAX_GPU_TRANSFORM_SPRITES = 64
 
@@ -594,8 +565,6 @@ export function getGpuRendererBackendCacheStats(): GpuRendererBackendCacheStats 
     layerTargetBytes: 0,
     textImageCount: 0,
     textImageBytes: 0,
-    glyphAtlasCount: 0,
-    glyphAtlasBytes: 0,
     canvasSpriteCount: 0,
     canvasSpriteBytes: 0,
     transformSpriteCount: 0,
@@ -668,22 +637,6 @@ type ImageRecord = {
   height: number
 }
 
-type GlyphAtlasRecord = {
-  handle: VexartImageHandle
-  /** Atlas texture cell dimensions (supersampled, for UV calculation). */
-  cellWidth: number
-  cellHeight: number
-  /** Display cell dimensions (original size, for quad sizing). */
-  displayCellWidth: number
-  displayCellHeight: number
-  columns: number
-  rows: number
-  glyphWidths: Float32Array
-  ascender: number
-  /** Returns glyphIndex for a codepoint, or -1 if not in atlas. */
-  indexFor: (cp: number) => number
-}
-
 type TransformSpriteRecord = {
   key: string
   handle: VexartImageHandle
@@ -736,21 +689,9 @@ type ImageGroup = {
   instances: ImageInstance[]
 }
 
-type GlyphGroup = {
-  handle: VexartImageHandle
-  instances: WgpuCanvasGlyphInstance[]
-}
-
 type TransformedImageGroup = {
   handle: VexartImageHandle
   instances: TransformedImageInstance[]
-}
-
-type DirtyBoundsRect = {
-  left: number
-  top: number
-  right: number
-  bottom: number
 }
 
 type IntBounds = {
@@ -891,7 +832,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   // vexart context handle — allocated on first use.
   // Phase 2b: used for all vexart_paint_dispatch + vexart_composite_* calls.
   let _vexartCtx: bigint | null = null
-  let _defaultAtlasLoaded = false
   function getVexartCtx(): bigint {
     if (_vexartCtx !== null) return _vexartCtx
     const { symbols } = openVexartLibrary()
@@ -904,14 +844,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       throw new VexartNativeError(result, `GPU context creation failed: ${err}`)
     }
     _vexartCtx = ctxBuf[0]
-    // Load default font atlas (fontId=0) into the Rust GPU text pipeline.
-    // Only needed for the bitmap atlas fallback path (VEXART_MSDF=0).
-    // The MSDF path (default) renders glyphs on-the-fly via vexart_font_render_text.
-    if (!_defaultAtlasLoaded && !MSDF_TEXT_ENABLED) {
-      _defaultAtlasLoaded = true
-      const defaultDesc = getFont(0)
-      loadFontAtlas(_vexartCtx, 0, defaultDesc)
-    }
     return _vexartCtx
   }
   // ── MSDF text rendering ────────────────────────────────────────────────
@@ -986,7 +918,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   let standaloneTarget: TargetRecord | null = null
   let finalFrameTarget: TargetRecord | null = null
   const layerTargets = new Map<string, TargetRecord>()
-  const glyphAtlases = new Map<string, GlyphAtlasRecord>()
   const imageCache = new WeakMap<Uint8Array, ImageRecord>()
   const canvasSpriteCache = new Map<string, CanvasSpriteRecord>()
   const transformSpriteCache = new Map<string, TransformSpriteRecord>()
@@ -1058,19 +989,14 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   const shadows: WgpuCanvasShadow[] = []
   const glows: WgpuCanvasGlow[] = []
   const imageGroups = new Map<bigint, ImageGroup>()
-  const glyphGroups = new Map<bigint, GlyphGroup>()
   const transformedImageGroups = new Map<bigint, TransformedImageGroup>()
   const transientFullFrameImages: VexartImageHandle[] = []
-  const tempGlyphs: WgpuCanvasGlyphInstance[] = []
-  const dirtyRects: DirtyBoundsRect[] = []
   const deferredMsdfOps: { text: string; x: number; y: number; fontSize: number; lineHeight: number; maxWidth: number; colorRgba: number; fontFamily?: string; fontWeight?: number; fontStyle?: string }[] = []
   const cacheStats: GpuRendererBackendCacheStats = {
     layerTargetCount: 0,
     layerTargetBytes: 0,
     textImageCount: 0,
     textImageBytes: 0,
-    glyphAtlasCount: 0,
-    glyphAtlasBytes: 0,
     canvasSpriteCount: 0,
     canvasSpriteBytes: 0,
     transformSpriteCount: 0,
@@ -1084,7 +1010,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   }
 
   const layerTargetBytes = (record: TargetRecord) => record.width * record.height * 4
-  const glyphAtlasBytes = (record: GlyphAtlasRecord) => record.cellWidth * record.columns * record.cellHeight * record.rows * 4
   const canvasSpriteBytes = (record: CanvasSpriteRecord) => record.width * record.height * 4
   const transformSpriteBytes = (record: TransformSpriteRecord) => record.width * record.height * 4
   const backdropSourceBytes = (record: BackdropSourceRecord) => (record.bounds.right - record.bounds.left) * (record.bounds.bottom - record.bounds.top) * 4
@@ -1139,14 +1064,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
 
   const deleteLayerTargetRecord = (key: string) => {
     return deleteCacheRecord(layerTargets, key, "layerTargetCount", "layerTargetBytes", layerTargetBytes)
-  }
-
-  const setGlyphAtlasRecord = (key: string, record: GlyphAtlasRecord) => {
-    upsertCacheRecord(glyphAtlases, key, record, "glyphAtlasCount", "glyphAtlasBytes", glyphAtlasBytes)
-  }
-
-  const deleteGlyphAtlasRecord = (key: string) => {
-    return deleteCacheRecord(glyphAtlases, key, "glyphAtlasCount", "glyphAtlasBytes", glyphAtlasBytes)
   }
 
   const setCanvasSpriteRecord = (key: string, record: CanvasSpriteRecord) => {
@@ -1208,12 +1125,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
 
   const clearSpriteCaches = () => {
     const vctx = getVexartCtx()
-    for (const record of glyphAtlases.values()) {
-      vexartRemoveImage(vctx, record.handle)
-    }
-    glyphAtlases.clear()
-    cacheStats.glyphAtlasCount = 0
-    cacheStats.glyphAtlasBytes = 0
     for (const record of transformSpriteCache.values()) {
       vexartRemoveImage(vctx, record.handle)
     }
@@ -1341,66 +1252,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       imageCache.set(rgba, { handle, width, height })
     }
     return handle
-  }
-
-  const getGlyphAtlas = (fontId: number) => {
-    const vctx = getVexartCtx()
-    const key = `${fontId}`
-    const cached = glyphAtlases.get(key)
-    if (cached) {
-      touchMapEntry(glyphAtlases, key, cached)
-      return cached
-    }
-    const font = getFont(fontId)
-    const atlas = getAtlas(fontId, font)
-    const glyphCount = atlas.glyphCount
-    const columns = 32
-    const rows = Math.ceil(glyphCount / columns)
-    const width = atlas.cellWidth * columns
-    const height = atlas.cellHeight * rows
-    const rgba = new Uint8Array(width * height * 4)
-    for (let glyphIndex = 0; glyphIndex < glyphCount; glyphIndex++) {
-      const col = glyphIndex % columns
-      const row = Math.floor(glyphIndex / columns)
-      const srcOffset = glyphIndex * atlas.cellWidth * atlas.cellHeight
-      for (let py = 0; py < atlas.cellHeight; py++) {
-        for (let px = 0; px < atlas.cellWidth; px++) {
-          const srcIndex = srcOffset + py * atlas.cellWidth + px
-          const alpha = atlas.data[srcIndex]
-          const dx = col * atlas.cellWidth + px
-          const dy = row * atlas.cellHeight + py
-          const di = (dy * width + dx) * 4
-          rgba[di] = 255
-          rgba[di + 1] = 255
-          rgba[di + 2] = 255
-          rgba[di + 3] = alpha
-        }
-      }
-    }
-    const handle = vexartUploadImage(vctx, rgba, width, height)
-    if (!handle) return null
-    const record: GlyphAtlasRecord = {
-      handle,
-      cellWidth: atlas.cellWidth,
-      cellHeight: atlas.cellHeight,
-      displayCellWidth: atlas.displayCellWidth,
-      displayCellHeight: atlas.displayCellHeight,
-      columns,
-      rows,
-      glyphWidths: atlas.glyphWidths,
-      ascender: atlas.ascender,
-      indexFor: atlas.indexFor,
-    }
-    if (glyphAtlases.size >= MAX_GPU_GLYPH_ATLASES) {
-      const first = glyphAtlases.keys().next().value
-      if (first) {
-        const stale = glyphAtlases.get(first)
-        if (stale) vexartRemoveImage(vctx, stale.handle)
-        deleteGlyphAtlasRecord(first)
-      }
-    }
-    setGlyphAtlasRecord(key, record)
-    return record
   }
 
   const getCanvasFunctionId = (fn: Function) => {
@@ -1546,11 +1397,8 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     radialGradients.length = 0
     glows.length = 0
     imageGroups.clear()
-    glyphGroups.clear()
     transformedImageGroups.clear()
     transientFullFrameImages.length = 0
-    tempGlyphs.length = 0
-    dirtyRects.length = 0
     let targetMutationVersion = 0
 
     // ── vexart_paint_dispatch flush helpers ───────────────────────────────
@@ -1619,54 +1467,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       }
       imageGroups.clear()
     }
-    const flushGlyphs = () => {
-      if (glyphGroups.size === 0) return
-      const { symbols } = openVexartLibrary()
-      // Pack all glyph instances as MsdfGlyphInstance (64 bytes each).
-      // fontId 0 → rustFontId 1 (Rust atlas registry is 1-15).
-      let totalGlyphs = 0
-      for (const group of glyphGroups.values()) totalGlyphs += group.instances.length
-      if (totalGlyphs === 0) { glyphGroups.clear(); return }
-
-      const STRIDE = 64 // MsdfGlyphInstance: 12 f32 + 4 u32 = 64 bytes
-      const byteLength = totalGlyphs * STRIDE
-      const glyphBuf = ensureGlyphBuf(byteLength)
-      let idx = 0
-      for (const group of glyphGroups.values()) {
-        // Determine rustAtlasId from the group. The group key is the image handle
-        // from getGlyphAtlas — but we need the Rust atlas_id (1-15).
-        // For now, all glyphs use the default font → rustAtlasId = 1.
-        const rustAtlasId = 1
-        for (const g of group.instances) {
-          glyphBuf.f32[idx] = g.x
-          glyphBuf.f32[idx + 1] = g.y
-          glyphBuf.f32[idx + 2] = g.w
-          glyphBuf.f32[idx + 3] = g.h
-          glyphBuf.f32[idx + 4] = g.u
-          glyphBuf.f32[idx + 5] = g.v
-          glyphBuf.f32[idx + 6] = g.uw
-          glyphBuf.f32[idx + 7] = g.vh
-          glyphBuf.f32[idx + 8] = g.r
-          glyphBuf.f32[idx + 9] = g.g
-          glyphBuf.f32[idx + 10] = g.b
-          glyphBuf.f32[idx + 11] = g.a * (g.opacity ?? 1)
-          glyphBuf.u32[idx + 12] = rustAtlasId
-          glyphBuf.u32[idx + 13] = 0
-          glyphBuf.u32[idx + 14] = 0
-          glyphBuf.u32[idx + 15] = 0
-          idx += STRIDE / 4
-        }
-      }
-      const glyphU8 = glyphBuf.u8.subarray(0, byteLength)
-      const rc = symbols.vexart_text_dispatch(vctx, targetHandle, ptr(glyphU8), byteLength, ptr(_flushStatsBuf)) as number
-      if (rc !== 0) {
-        const err = vexartGetLastError()
-        console.error(`[vexart] text_dispatch failed (${rc}): ${err}`)
-      }
-      first = false
-      targetMutationVersion += 1
-      glyphGroups.clear()
-    }
     const flushTransformedImages = () => {
       if (transformedImageGroups.size === 0) return
       // 9.3c: Transformed images dispatched via vexart_paint_dispatch cmd_kind=10 (BridgeImageTransformInstance).
@@ -1697,7 +1497,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       flushShadows()
       flushGlows()
       flushImages()
-      flushGlyphs()
       flushTransformedImages()
     }
 
@@ -2243,112 +2042,25 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           continue
         }
         if (op.kind === "text") {
-          // ── MSDF path (default): deferred until after flushAll. Set VEXART_MSDF=0 for bitmap fallback ──
-           if (MSDF_TEXT_ENABLED && getMsdfSymbols()) {
-            // Let Rust do BOTH layout and rendering with the same font metrics.
-            // This avoids the TS monospace measurement ↔ Rust proportional rendering mismatch.
-            const textX = Math.round(op.command.x) - ctx.offsetX
-            const textY = Math.round(op.command.y) - ctx.offsetY
-            const colorRgba = op.command.color >>> 0
-            deferredMsdfOps.push({
-              text: op.inputs.text,
-              x: textX,
-              y: textY,
-              fontSize: op.inputs.fontSize,
-              lineHeight: op.inputs.lineHeight,
-              maxWidth: op.inputs.maxWidth > 0 ? op.inputs.maxWidth : 999999,
-              colorRgba,
-              fontFamily: op.inputs.fontFamily,
-              fontWeight: op.inputs.fontWeight,
-              fontStyle: op.inputs.fontStyle,
-            })
-            const bounds = opBounds(op, ctx.target.width, ctx.target.height)
-            if (bounds) markDirty(bounds.left, bounds.top, bounds.right, bounds.bottom)
-            continue
-          }
-          // ── Bitmap atlas path (fallback when MSDF unavailable) ──
-          // NOTE: layoutText() here re-computes word wrap, but the LRU cache in
-          // text-layout.ts ensures the FFI cost is not repeated. If bitmap becomes
-          // a hot path again, store LayoutLine[] on TextRenderInputs to skip entirely.
-          let usedGlyphPath = false
-          {
-            const layout = layoutText(op.inputs.text, op.inputs.fontId, op.inputs.maxWidth, op.inputs.lineHeight, op.inputs.fontSize)
-            const textX = Math.round(op.command.x) - ctx.offsetX
-            const textY = Math.round(op.command.y) - ctx.offsetY
-            const atlasRecord = getGlyphAtlas(op.inputs.fontId)
-            const scale = op.inputs.fontId === 0
-              ? builtinFontScale(op.inputs.fontSize)
-              : op.inputs.fontSize / getFont(op.inputs.fontId).size
-            usedGlyphPath = !!atlasRecord
-            if (atlasRecord) {
-              tempGlyphs.length = 0
-              dirtyRects.length = 0
-              for (let li = 0; li < layout.lines.length; li++) {
-                const line = layout.lines[li]
-                let cursorX = textX
-                const cursorY = textY + li * op.inputs.lineHeight
-                const REPLACEMENT_CP = 0x25A1
-                const replacementIndex = atlasRecord.indexFor(REPLACEMENT_CP)
-                for (const glyph of line.text) {
-                  const code = glyph.codePointAt(0)
-                  if (code === undefined) continue
-                  let glyphIndex = atlasRecord.indexFor(code)
-                  if (glyphIndex < 0) {
-                    glyphIndex = replacementIndex >= 0 ? replacementIndex : -1
-                    if (glyphIndex < 0) continue
-                  }
-                  const advance = (atlasRecord.glyphWidths[glyphIndex] || atlasRecord.displayCellWidth) * scale
-                  if (glyph === " ") {
-                    cursorX += advance
-                    continue
-                  }
-                  const glyphLeft = Math.round(cursorX)
-                  const glyphTop = Math.round(cursorY)
-                  const displayCellWidth = atlasRecord.displayCellWidth * scale
-                  const displayCellHeight = atlasRecord.displayCellHeight * scale
-                  const glyphRight = glyphLeft + displayCellWidth
-                  const glyphBottom = glyphTop + displayCellHeight
-                  if (glyphRight > 0 && glyphBottom > 0 && glyphLeft < ctx.target.width && glyphTop < ctx.target.height) {
-                    const col = glyphIndex % atlasRecord.columns
-                    const row = Math.floor(glyphIndex / atlasRecord.columns)
-                    tempGlyphs.push({
-                      x: (glyphLeft / ctx.target.width) * 2 - 1,
-                      y: 1 - (glyphTop / ctx.target.height) * 2,
-                      w: (displayCellWidth / ctx.target.width) * 2,
-                      h: -((displayCellHeight / ctx.target.height) * 2),
-                      u: (col * atlasRecord.cellWidth) / (atlasRecord.cellWidth * atlasRecord.columns),
-                      v: (row * atlasRecord.cellHeight) / (atlasRecord.cellHeight * atlasRecord.rows),
-                      uw: atlasRecord.cellWidth / (atlasRecord.cellWidth * atlasRecord.columns),
-                      vh: atlasRecord.cellHeight / (atlasRecord.cellHeight * atlasRecord.rows),
-                      r: ((op.command.color >>> 24) & 0xff) / 255,
-                      g: ((op.command.color >>> 16) & 0xff) / 255,
-                      b: ((op.command.color >>> 8) & 0xff) / 255,
-                      a: (op.command.color & 0xff) / 255,
-                      opacity: 1,
-                    })
-                    dirtyRects.push({
-                      left: Math.max(0, glyphLeft),
-                      top: Math.max(0, glyphTop),
-                      right: Math.min(ctx.target.width, glyphRight),
-                      bottom: Math.min(ctx.target.height, glyphBottom),
-                    })
-                  }
-                  cursorX += advance
-                }
-                if (!usedGlyphPath) break
-              }
-              if (usedGlyphPath && tempGlyphs.length > 0) {
-                const group = glyphGroups.get(atlasRecord.handle) ?? { handle: atlasRecord.handle, instances: [] }
-                group.instances.push(...tempGlyphs)
-                glyphGroups.set(atlasRecord.handle, group)
-                for (const rect of dirtyRects) markDirty(rect.left, rect.top, rect.right, rect.bottom)
-              }
-            }
-          }
-          if (!usedGlyphPath) {
-            // Both MSDF and bitmap paths failed — skip gracefully.
-            continue
-          }
+          const sym = getMsdfSymbols()
+          if (!sym) continue
+          const textX = Math.round(op.command.x) - ctx.offsetX
+          const textY = Math.round(op.command.y) - ctx.offsetY
+          const colorRgba = op.command.color >>> 0
+          deferredMsdfOps.push({
+            text: op.inputs.text,
+            x: textX,
+            y: textY,
+            fontSize: op.inputs.fontSize,
+            lineHeight: op.inputs.lineHeight,
+            maxWidth: op.inputs.maxWidth > 0 ? op.inputs.maxWidth : 999999,
+            colorRgba,
+            fontFamily: op.inputs.fontFamily,
+            fontWeight: op.inputs.fontWeight,
+            fontStyle: op.inputs.fontStyle,
+          })
+          const bounds = opBounds(op, ctx.target.width, ctx.target.height)
+          if (bounds) markDirty(bounds.left, bounds.top, bounds.right, bounds.bottom)
           continue
         }
         failGpuOnly(`unsupported render op kind=${op.kind}`)

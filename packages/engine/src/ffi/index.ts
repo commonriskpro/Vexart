@@ -81,8 +81,6 @@ export {
   getTextLayoutCacheStats,
 } from "./text-layout"
 export type { FontDescriptor } from "./text-layout"
-export { getFontAtlasCacheStats } from "./font-atlas"
-
 // MSDF font system (Phase 2b / DEC-008)
 export {
   msdfFontInit,

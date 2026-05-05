@@ -1,4 +1,3 @@
-import { getFontAtlasCacheStats } from "./font-atlas"
 import { getGpuRendererBackendCacheStats } from "./gpu-renderer-backend"
 import { getImageCacheStats } from "../loop/image"
 import { getTextLayoutCacheStats } from "./text-layout"
@@ -63,7 +62,6 @@ export function getRendererResourceStats() {
   return {
     image: getImageCacheStats(),
     textLayout: getTextLayoutCacheStats(),
-    fontAtlas: getFontAtlasCacheStats(),
     gpuRenderer: getGpuRendererBackendCacheStats(),
     // Native resource manager stats (Phase 2b Slice 6 — REQ-2B-704).
     // Returns null if native library is not yet loaded; TS callers check for null.
@@ -76,21 +74,18 @@ export function summarizeRendererResourceStats() {
   const totalBytes =
     stats.image.decodedBytes +
     stats.image.scaledBytes +
-    stats.fontAtlas.bytes +
     stats.gpuRenderer.layerTargetBytes +
-    stats.gpuRenderer.textImageBytes +
-    stats.gpuRenderer.glyphAtlasBytes +
-    stats.gpuRenderer.canvasSpriteBytes +
-    stats.gpuRenderer.transformSpriteBytes +
-    stats.gpuRenderer.fallbackSpriteBytes +
-    stats.gpuRenderer.backdropSourceBytes +
-    stats.gpuRenderer.backdropSpriteBytes
+      stats.gpuRenderer.textImageBytes +
+      stats.gpuRenderer.canvasSpriteBytes +
+      stats.gpuRenderer.transformSpriteBytes +
+      stats.gpuRenderer.fallbackSpriteBytes +
+      stats.gpuRenderer.backdropSourceBytes +
+      stats.gpuRenderer.backdropSpriteBytes
   return {
     totalBytes,
     gpuBytes:
       stats.gpuRenderer.layerTargetBytes +
       stats.gpuRenderer.textImageBytes +
-      stats.gpuRenderer.glyphAtlasBytes +
       stats.gpuRenderer.canvasSpriteBytes +
       stats.gpuRenderer.transformSpriteBytes +
       stats.gpuRenderer.fallbackSpriteBytes +
@@ -101,9 +96,7 @@ export function summarizeRendererResourceStats() {
       stats.image.scaledEntries +
       stats.textLayout.preparedCount +
       stats.textLayout.layoutCount +
-      stats.fontAtlas.atlasCount +
       stats.gpuRenderer.textImageCount +
-      stats.gpuRenderer.glyphAtlasCount +
       stats.gpuRenderer.canvasSpriteCount +
       stats.gpuRenderer.transformSpriteCount +
       stats.gpuRenderer.fallbackSpriteCount +
