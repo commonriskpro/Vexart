@@ -1,56 +1,17 @@
 /**
- * Text layout — Pretext integration for Vexart.
+ * Text layout — native Rust font measurement for Vexart.
  *
- * Bridges @chenglou/pretext (text measurement & layout) with Vexart's
- * text rendering. Pretext handles word wrap, line breaking,
- * BiDi, CJK — Vexart handles pixel painting.
+ * All text measurement uses vexart_font_measure (Rust/ttf-parser) via FFI.
+ * This ensures measurement and MSDF rendering use identical font metrics.
  *
- * Canvas polyfill: Pretext needs a CanvasRenderingContext2D for
- * measureText(). In Bun there's no DOM/OffscreenCanvas, so we
- * polyfill with @napi-rs/canvas before first use.
+ * Word wrapping is implemented in TS with greedy word-wrap using
+ * native per-word measurements — same algorithm as Rust's font::layout.
+ *
+ * Replaces the former Pretext + @napi-rs/canvas (Skia polyfill) path.
  */
 
-import { createCanvas, type Canvas as NapiCanvas } from "@napi-rs/canvas"
-
-// ── Canvas polyfill for Pretext ──
-// Must be set BEFORE importing Pretext, because it calls
-// getMeasureContext() on first prepare().
-if (typeof globalThis.OffscreenCanvas === "undefined") {
-  // Polyfill OffscreenCanvas for Pretext in Bun (no DOM/Web APIs).
-  // The class only needs to implement getContext("2d") — the subset Pretext uses.
-  // Cast is required because the Bun type declaration expects the full DOM interface.
-  globalThis.OffscreenCanvas = class OffscreenCanvasPolyfill {
-    private _canvas: NapiCanvas
-    constructor(w: number, h: number) {
-      this._canvas = createCanvas(w, h)
-    }
-    getContext(type: "2d") {
-      return this._canvas.getContext(type)
-    }
-  } as unknown as typeof OffscreenCanvas
-}
-
-// Now safe to import Pretext
-import {
-  prepareWithSegments,
-  layoutWithLines,
-  layout,
-  measureLineStats,
-  measureNaturalWidth,
-  clearCache,
-  type PreparedTextWithSegments,
-  type LayoutLine,
-  type PrepareOptions,
-} from "@chenglou/pretext"
-
-import {
-  prepareRichInline,
-  walkRichInlineLineRanges,
-  materializeRichInlineLineRange,
-  type RichInlineItem,
-  type RichInlineLine,
-} from "@chenglou/pretext/rich-inline"
 import { createLRUCache } from "./lru-cache"
+import { msdfMeasureText, isMsdfFontAvailable } from "./msdf-font"
 
 // ── Font registry ──
 // Maps fontId → font descriptor string (CSS font shorthand).
@@ -75,7 +36,7 @@ fontRegistry.set(0, { family: ".SF NS", size: 14 })
 /** @public */
 export function registerFont(id: number, desc: FontDescriptor) {
   fontRegistry.set(id, desc)
-  clearCache()
+  clearTextCache()
 }
 
 /** Get font descriptor by ID. Falls back to default. */
@@ -95,46 +56,36 @@ export function fontToCSS(desc: FontDescriptor): string {
 // Cache prepared text to avoid re-measuring on every frame.
 // Key: text + font CSS string. Invalidated when text or font changes.
 
+/** Layout line — compatible with the former Pretext LayoutLine type. */
+export type LayoutLine = {
+  text: string
+  width: number
+  start: { segmentIndex: number; graphemeIndex: number }
+  end: { segmentIndex: number; graphemeIndex: number }
+}
+
 const MAX_CACHE = 501
 const MAX_LAYOUT_CACHE = 1000
-const preparedCache = createLRUCache<string, PreparedTextWithSegments>(MAX_CACHE)
 const layoutCache = createLRUCache<string, { lines: LayoutLine[]; height: number; lineCount: number }>(MAX_LAYOUT_CACHE)
-
-function cacheKey(text: string, font: string): string {
-  return `${font}\0${text}`
-}
 
 function layoutCacheKey(text: string, fontId: number, fontSize: number, maxWidth: number, lineHeight: number) {
   return `${fontId}\0${fontSize}\0${maxWidth}\0${lineHeight}\0${text}`
 }
 
-/** Prepare text for layout (cached). */
-export function prepareText(
-  text: string,
-  fontId: number,
-  options?: PrepareOptions,
-): PreparedTextWithSegments {
-  const desc = getFont(fontId)
-  const css = fontToCSS(desc)
-  const key = cacheKey(text, css)
-  return preparedCache.get(key, () => prepareWithSegments(text, css, options))
-}
-
-/** Measure text width for a single line (no wrapping). */
+/** Measure text width for a single line (no wrapping). Uses native Rust FFI. */
 export function measureTextWidth(text: string, fontId: number): number {
-  const prepared = prepareText(text, fontId)
-  return measureNaturalWidth(prepared)
+  const desc = getFont(fontId)
+  return measureForLayout(text, fontId, desc.size).width
 }
 
-/** Get the height of text within a container width. */
+/** Get the height of text within a container width. Uses native Rust FFI. */
 export function measureTextHeight(
   text: string,
   fontId: number,
   maxWidth: number,
   lineHeight: number,
 ): number {
-  const prepared = prepareText(text, fontId)
-  const result = layout(prepared, maxWidth, lineHeight)
+  const result = layoutText(text, fontId, maxWidth, lineHeight)
   return result.height
 }
 
@@ -149,86 +100,78 @@ export function layoutText(
   maxWidth: number,
   lineHeight: number,
   fontSize = getFont(fontId).size,
-  options?: PrepareOptions,
+  _options?: unknown,
 ): { lines: LayoutLine[]; height: number; lineCount: number } {
   const key = layoutCacheKey(text, fontId, fontSize, maxWidth, lineHeight)
   return layoutCache.get(key, () => {
-    if (fontId === 0) {
-      return layoutBuiltinFont(text, maxWidth, lineHeight, fontSize)
-    }
-    const desc = getFont(fontId)
-    const effectiveDesc = desc.size === fontSize ? desc : { ...desc, size: fontSize }
-    const prepared = prepareWithSegments(text, fontToCSS(effectiveDesc), options)
-    return layoutWithLines(prepared, maxWidth, lineHeight)
+    return layoutWithNativeMeasure(text, fontId, maxWidth, lineHeight, fontSize)
   })
 }
 
-/** Word-wrap for built-in bitmap font using exact atlas advance width. */
-function layoutBuiltinFont(
+/** Word-wrap using native Rust font measurement for accurate proportional metrics. */
+function layoutWithNativeMeasure(
   text: string,
+  fontId: number,
   maxWidth: number,
   lineHeight: number,
   fontSize: number,
 ): { lines: LayoutLine[]; height: number; lineCount: number } {
-  const advance = builtinAdvance(fontSize)
-  const charsPerLine = Math.max(1, Math.floor(maxWidth / advance))
-  const words = text.split(" ")
-  const lines: LayoutLine[] = []
-  let current = ""
+  const desc = getFont(fontId)
+  const families = fontId === 0 ? ["sans-serif"] : [desc.family]
+  const weight = desc.weight ?? 400
+  const italic = desc.style === "italic"
 
-  for (const word of words) {
-    const candidate = current ? current + " " + word : word
-    if (candidate.length > charsPerLine && current) {
-      lines.push({
-        text: current,
-        width: Math.ceil(current.length * advance),
-        start: { segmentIndex: 0, graphemeIndex: 0 },
-        end: { segmentIndex: 0, graphemeIndex: 0 },
-      })
-      current = word
-    } else {
-      current = candidate
+  // Measure each word with native font metrics for accurate wrapping.
+  const measureWord = (w: string) => {
+    const m = nativeMeasure(w, fontSize, families, weight, italic)
+    return m ? m.width : Math.ceil(w.length * builtinAdvance(fontSize))
+  }
+  const spaceWidth = measureWord(" ")
+
+  const paragraphs = text.split("\n")
+  const lines: LayoutLine[] = []
+
+  for (const para of paragraphs) {
+    const words = para.split(" ").filter(w => w.length > 0)
+    if (words.length === 0) {
+      lines.push({ text: "", width: 0, start: { segmentIndex: 0, graphemeIndex: 0 }, end: { segmentIndex: 0, graphemeIndex: 0 } })
+      continue
+    }
+
+    let current = ""
+    let currentWidth = 0
+
+    for (const word of words) {
+      const wordWidth = measureWord(word)
+      if (current === "") {
+        current = word
+        currentWidth = wordWidth
+      } else {
+        const candidateWidth = currentWidth + spaceWidth + wordWidth
+        if (candidateWidth <= maxWidth) {
+          current += " " + word
+          currentWidth = candidateWidth
+        } else {
+          lines.push({ text: current, width: Math.ceil(currentWidth), start: { segmentIndex: 0, graphemeIndex: 0 }, end: { segmentIndex: 0, graphemeIndex: 0 } })
+          current = word
+          currentWidth = wordWidth
+        }
+      }
+    }
+    if (current) {
+      lines.push({ text: current, width: Math.ceil(currentWidth), start: { segmentIndex: 0, graphemeIndex: 0 }, end: { segmentIndex: 0, graphemeIndex: 0 } })
     }
   }
-  if (current) {
-    lines.push({
-      text: current,
-      width: Math.ceil(current.length * advance),
-      start: { segmentIndex: 0, graphemeIndex: 0 },
-      end: { segmentIndex: 0, graphemeIndex: 0 },
-    })
-  }
+
   if (lines.length === 0) {
-    lines.push({
-      text: "",
-      width: 0,
-      start: { segmentIndex: 0, graphemeIndex: 0 },
-      end: { segmentIndex: 0, graphemeIndex: 0 },
-    })
+    lines.push({ text: "", width: 0, start: { segmentIndex: 0, graphemeIndex: 0 }, end: { segmentIndex: 0, graphemeIndex: 0 } })
   }
 
   return { lines, lineCount: lines.length, height: lines.length * lineHeight }
 }
 
-/**
- * Lay out rich inline text (mixed fonts/styles) into lines.
- * Each item can have a different font.
- */
-export function layoutRichText(
-  items: RichInlineItem[],
-  maxWidth: number,
-  lineHeight: number,
-): RichInlineLine[] {
-  const prepared = prepareRichInline(items)
-  const lines: RichInlineLine[] = []
-  walkRichInlineLineRanges(prepared, maxWidth, (range) => {
-    lines.push(materializeRichInlineLineRange(prepared, range))
-  })
-  return lines
-}
-
 // ── Layout adapter integration ──
-// Pretext-based text measurement for the layout adapter.
+// Native Rust-based text measurement for Flexily layout.
 
 // ── Built-in atlas metrics ──
 // Font 0 = .SF NS Mono 14px bitmap atlas.
@@ -265,11 +208,32 @@ export function measureForVexart(
   return measureForLayout(_text, _fontId, _fontSize)
 }
 
+// ── Native font measurement (Rust FFI) ──
+// Uses vexart_font_measure for accurate proportional metrics.
+// Cached to avoid FFI overhead on repeated measurements.
+const nativeMeasureCache = createLRUCache<string, { width: number; height: number }>(MAX_CACHE)
+let _nativeAvailable: boolean | null = null
+
+function nativeMeasure(text: string, fontSize: number, families: string[] = ["sans-serif"], weight = 400, italic = false): { width: number; height: number } | null {
+  if (_nativeAvailable === null) _nativeAvailable = isMsdfFontAvailable()
+  if (!_nativeAvailable) return null
+
+  const key = `native\0${fontSize}\0${weight}\0${italic ? 1 : 0}\0${families.join(",")}\0${text}`
+  return nativeMeasureCache.get(key, () => {
+    const result = msdfMeasureText(text, families, fontSize, weight, italic)
+    if (!result) return { width: Math.ceil(text.length * builtinAdvance(fontSize)), height: builtinHeight(fontSize) }
+    return { width: Math.ceil(result.width), height: Math.max(Math.ceil(result.height), Math.ceil(fontSize * 1.2)) }
+  })
+}
+
 /**
  * Measure text width for Flexily layout.
  * This function remains the authoritative TS-side text
  * measurement helper for the decomposed layout shell and offscreen fallbacks.
- * Font 0: uses exact atlas metrics (8.65px/char) to match native rendering.
+ *
+ * Font 0 + MSDF available: uses vexart_font_measure (Rust/ttf-parser) for
+ * accurate proportional metrics that match the MSDF rendering pipeline.
+ * Font 0 fallback: monospace 8.65px/char heuristic.
  * Other fonts: uses Pretext/canvas for accurate measurement.
  */
 export function measureForLayout(
@@ -277,24 +241,23 @@ export function measureForLayout(
   fontId: number,
   fontSize: number,
 ): { width: number; height: number } {
-  // Built-in atlas: use known metrics (JS string length = char count)
-  if (fontId === 0) {
-    return {
-      width: Math.ceil(text.length * builtinAdvance(fontSize)),
-      height: builtinHeight(fontSize),
-    }
-  }
-
-  // Runtime fonts: measure with Pretext/canvas
   const desc = getFont(fontId)
-  const effectiveDesc = desc.size === fontSize ? desc : { ...desc, size: fontSize }
-  const css = fontToCSS(effectiveDesc)
-  const key = cacheKey(text, css)
-  const prepared = preparedCache.get(key, () => prepareWithSegments(text, css))
+  // fontId 0 renders via MSDF as "sans-serif" — must measure with the same family.
+  // Other fontIds use their registered family name.
+  const families = fontId === 0 ? ["sans-serif"] : [desc.family]
+  const weight = desc.weight ?? 400
+  const italic = desc.style === "italic"
+  const effectiveSize = fontSize || desc.size
 
-  const width = measureNaturalWidth(prepared)
-  const height = Math.ceil(fontSize * 1.2)
-  return { width, height }
+  // Try Rust native measurement (same metrics as MSDF rendering pipeline)
+  const native = nativeMeasure(text, effectiveSize, families, weight, italic)
+  if (native && native.width > 0) return native
+
+  // Fallback: monospace heuristic (only when native FFI unavailable)
+  return {
+    width: Math.ceil(text.length * builtinAdvance(effectiveSize)),
+    height: builtinHeight(effectiveSize),
+  }
 }
 
 /**
@@ -317,18 +280,9 @@ export function measureTextConstrained(
 
   const lineHeight = Math.ceil(fontSize * 1.2)
 
-  // Fast heuristic for builtin font: if char count * advance fits, skip layoutText
-  if (fontId === 0) {
-    const advance = builtinAdvance(fontSize)
-    const naturalW = text.length * advance
-    if (naturalW <= maxWidth) {
-      return { width: Math.ceil(naturalW), height: builtinHeight(fontSize) }
-    }
-  } else {
-    // For runtime fonts, check single-line width
-    const natural = measureForLayout(text, fontId, fontSize)
-    if (natural.width <= maxWidth) return natural
-  }
+  // Fast path: if natural width fits, no wrapping needed
+  const natural = measureForLayout(text, fontId, fontSize)
+  if (natural.width <= maxWidth) return natural
 
   // Multi-line: compute wrapped layout (cached by layoutText LRU)
   const result = layoutText(text, fontId, maxWidth, lineHeight, fontSize)
@@ -343,21 +297,21 @@ export function measureTextConstrained(
   }
 }
 
-/** Clear all prepared text caches. */
+/** Clear all text measurement and layout caches. */
 /** @public */
 export function clearTextCache() {
-  preparedCache.clear()
   layoutCache.clear()
-  clearCache()
+  nativeMeasureCache.clear()
 }
 
 /** @public */
 export function getTextLayoutCacheStats() {
   return {
-    preparedCount: preparedCache.size,
+    preparedCount: nativeMeasureCache.size,
     layoutCount: layoutCache.size,
   }
 }
 
-// Re-export types
-export type { LayoutLine, PreparedTextWithSegments, PrepareOptions, RichInlineItem, RichInlineLine }
+// Re-export types (LayoutLine is defined above; Pretext types removed)
+// PreparedTextWithSegments, PrepareOptions, RichInlineItem, RichInlineLine
+// were Pretext types — no longer available after native measurement migration.
