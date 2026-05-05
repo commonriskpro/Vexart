@@ -34,15 +34,18 @@ jobs:
         run: bun run typecheck
 
       - name: Unit tests (excluding GPU-dependent tests)
-        run: >
-          bun test
-          --ignore '**/frame-orchestrator.test*'
-          --ignore '**/showcase-tab2.test*'
-          --ignore '**/native-image-assets.test*'
-          --ignore '**/native-canvas-display-list.test*'
-          --ignore '**/native-presentation-stats.test*'
-          --ignore '**/native-layer-registry-flags.test*'
-          --ignore '**/bridge.test*'
+        run: |
+          # GPU-dependent tests need real GPU (texture limits > 2048px).
+          # They run locally; CI uses software Vulkan (lavapipe) which is too limited.
+          find packages -name '*.test.ts' -o -name '*.test.tsx' \
+            | grep -v 'frame-orchestrator\.test' \
+            | grep -v 'showcase-tab2\.test' \
+            | grep -v 'native-image-assets\.test' \
+            | grep -v 'native-canvas-display-list\.test' \
+            | grep -v 'native-presentation-stats\.test' \
+            | grep -v 'native-layer-registry-flags\.test' \
+            | grep -v 'bridge\.test' \
+            | xargs bun test
 
       - name: API snapshot gate
         run: |
