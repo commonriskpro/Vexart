@@ -208,13 +208,24 @@ for (const name of ["components", "void"] as const) {
 cpSync(resolve(ROOT, "types/jsx-runtime.d.ts"), resolve(DIST, "jsx-runtime.d.ts"))
 console.log(`  ✅ engine.d.ts + vexart.d.ts + components.d.ts + void.d.ts + jsx-runtime.d.ts`)
 
-// ── 9. Create package.json ──
+// ── 9. Copy README + LICENSE ──
+console.log("📄 Copying README and LICENSE...")
+cpSync(resolve(ROOT, "README.md"), resolve(DIST, "README.md"))
+if (existsSync(resolve(ROOT, "LICENSE"))) {
+  cpSync(resolve(ROOT, "LICENSE"), resolve(DIST, "LICENSE"))
+}
+console.log(`  ✅ README.md + LICENSE`)
+
+// ── 10. Create package.json ──
 console.log("📋 Creating package.json...")
 
 const pkg = {
   name: "vexart",
   version: VERSION,
-  description: "Vexart GPU-accelerated terminal UI engine. Write JSX, get browser-quality UI in your terminal.",
+  description: "GPU-accelerated terminal UI engine. Write JSX, get browser-quality UI in your terminal. Anti-aliased corners, shadows, gradients, glow, backdrop blur — real pixels, not ASCII.",
+  keywords: ["terminal", "tui", "gpu", "wgpu", "jsx", "solidjs", "kitty", "ui", "rendering", "pixel", "cli", "components", "headless", "design-system"],
+  repository: { type: "git", url: "https://github.com/commonriskpro/Vexart" },
+  homepage: "https://github.com/commonriskpro/Vexart",
   type: "module",
   main: "vexart.js",
   types: "vexart.d.ts",
