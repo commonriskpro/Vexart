@@ -294,7 +294,10 @@ export type InputProps = {
     placeholder?: string;
     disabled?: boolean;
     focusId?: string;
-    renderInput: (ctx: InputRenderContext) => JSX.Element;
+    width?: number | string;
+    height?: number;
+    theme?: Partial<InputTheme>;
+    renderInput?: (ctx: InputRenderContext) => JSX.Element;
 };
 
 // @public (undocumented)
@@ -311,6 +314,19 @@ export type InputRenderContext = {
         focusable: true;
         onPress: () => void;
     };
+};
+
+// @public (undocumented)
+export type InputTheme = {
+    accent: string | number;
+    fg: string | number;
+    muted: string | number;
+    bg: string | number;
+    border: string | number;
+    radius: number;
+    paddingX: number;
+    paddingY: number;
+    fontSize: number;
 };
 
 // @public (undocumented)
@@ -986,7 +1002,7 @@ export type VirtualListItemContext = {
 export type VirtualListProps<T> = {
     items: T[];
     itemHeight: number;
-    height: number;
+    height: number | string;
     width?: number | string;
     overscan?: number;
     renderItem: (item: T, index: number, ctx: VirtualListItemContext) => JSX.Element;
