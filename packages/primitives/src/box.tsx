@@ -16,10 +16,10 @@ import type { TGEProps } from "@vexart/engine"
 
 /** @public */
 export type ShadowConfig = {
-  x: number      // Horizontal offset (px)
-  y: number      // Vertical offset (px)
-  blur: number   // Blur radius (px)
-  color: number  // Shadow color (packed RGBA u32)
+  x: number              // Horizontal offset (px)
+  y: number              // Vertical offset (px)
+  blur: number           // Blur radius (px)
+  color: string | number // Shadow color (hex string or packed RGBA u32)
 }
 
 /** @public */

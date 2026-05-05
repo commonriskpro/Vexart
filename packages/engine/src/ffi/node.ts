@@ -200,12 +200,12 @@ export type TGEProps = {
     x: number          // Horizontal offset (px)
     y: number          // Vertical offset (px)
     blur: number       // Blur radius (px)
-    color: number      // Shadow color (packed RGBA u32)
+    color: string | number  // Shadow color (hex string or packed RGBA u32)
   } | Array<{          // Multiple shadows — painted in order
     x: number
     y: number
     blur: number
-    color: number
+    color: string | number
   }>
   /** CSS-friendly alias for shadow (Decision 1) */
   boxShadow?: TGEProps["shadow"]
@@ -216,13 +216,13 @@ export type TGEProps = {
   }
   gradient?: {         // Gradient fill — painted INSTEAD of solid backgroundColor
     type: "linear"
-    from: number       // Start color (packed RGBA u32)
-    to: number         // End color (packed RGBA u32)
+    from: string | number  // Start color (hex string or packed RGBA u32)
+    to: string | number    // End color (hex string or packed RGBA u32)
     angle?: number     // Degrees: 0=left→right, 90=top→bottom (default 90)
   } | {
     type: "radial"
-    from: number       // Center color (packed RGBA u32)
-    to: number         // Edge color (packed RGBA u32)
+    from: string | number  // Center color (hex string or packed RGBA u32)
+    to: string | number    // Edge color (hex string or packed RGBA u32)
   }
   backdropBlur?: number  // Blur radius for content behind this element (glassmorphism)
   /** Backdrop brightness filter. 0=black, 100=unchanged, 200=2x bright. */

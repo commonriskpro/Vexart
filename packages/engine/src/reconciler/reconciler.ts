@@ -150,6 +150,33 @@ function resolveGlow(glow: unknown): unknown {
   }
 }
 
+/** Pre-parse color fields inside a shadow object (or array of shadows). */
+function resolveShadow(shadow: unknown): unknown {
+  if (!shadow) return shadow
+  if (Array.isArray(shadow)) {
+    return shadow.map((s) => {
+      if (!s || typeof s !== "object") return s
+      const candidate = s as { x?: unknown; y?: unknown; blur?: unknown; color?: unknown }
+      return { x: candidate.x, y: candidate.y, blur: candidate.blur, color: resolveColor(candidate.color) }
+    })
+  }
+  if (typeof shadow !== "object") return shadow
+  const candidate = shadow as { x?: unknown; y?: unknown; blur?: unknown; color?: unknown }
+  return { x: candidate.x, y: candidate.y, blur: candidate.blur, color: resolveColor(candidate.color) }
+}
+
+/** Pre-parse color fields inside a gradient object. */
+function resolveGradient(gradient: unknown): unknown {
+  if (!gradient || typeof gradient !== "object") return gradient
+  const candidate = gradient as { type?: unknown; from?: unknown; to?: unknown; angle?: unknown }
+  return {
+    type: candidate.type,
+    from: resolveColor(candidate.from),
+    to: resolveColor(candidate.to),
+    angle: candidate.angle,
+  }
+}
+
 /** Pre-parse color fields inside an interactive style object (hoverStyle/activeStyle/focusStyle). */
 function resolveInteractiveStyle(style: unknown): unknown {
   if (!style || typeof style !== "object") return style
@@ -162,6 +189,12 @@ function resolveInteractiveStyle(style: unknown): unknown {
   }
   if (resolved.glow) {
     resolved.glow = resolveGlow(resolved.glow)
+  }
+  if (resolved.shadow || resolved.boxShadow) {
+    resolved.shadow = resolveShadow(resolved.shadow ?? resolved.boxShadow)
+  }
+  if (resolved.gradient) {
+    resolved.gradient = resolveGradient(resolved.gradient)
   }
   return resolved
 }
@@ -357,6 +390,24 @@ const renderer = createRenderer<TGENode>({
     if (name === "glow") {
       markPropsDirty(node)
       ;(node.props as Record<string, unknown>)[name] = resolveGlow(value)
+      markNodeVisualDamage(node)
+      markNodeDirty(node)
+      return
+    }
+
+    // Pre-parse shadow colors (string → u32)
+    if (name === "shadow" || name === "boxShadow") {
+      markPropsDirty(node)
+      ;(node.props as Record<string, unknown>)[name] = resolveShadow(value)
+      markNodeVisualDamage(node)
+      markNodeDirty(node)
+      return
+    }
+
+    // Pre-parse gradient colors (string → u32)
+    if (name === "gradient") {
+      markPropsDirty(node)
+      ;(node.props as Record<string, unknown>)[name] = resolveGradient(value)
       markNodeVisualDamage(node)
       markNodeDirty(node)
       return

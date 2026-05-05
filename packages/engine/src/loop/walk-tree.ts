@@ -513,7 +513,8 @@ export function walkTree(
       effect.cornerRadius = cr
       effect._node = node
       if (vp.shadow) {
-        effect.shadow = vp.shadow
+        // Colors already resolved to u32 by reconciler (resolveShadow)
+        effect.shadow = vp.shadow as typeof effect.shadow
       }
       if (vp.glow) {
         effect.glow = {
@@ -525,9 +526,9 @@ export function walkTree(
       if (vp.gradient) {
         const g = vp.gradient
         if (g.type === "linear") {
-          effect.gradient = { type: "linear", from: g.from, to: g.to, angle: g.angle ?? 90 }
+          effect.gradient = { type: "linear", from: g.from as number, to: g.to as number, angle: g.angle ?? 90 }
         } else {
-          effect.gradient = { type: "radial", from: g.from, to: g.to }
+          effect.gradient = { type: "radial", from: g.from as number, to: g.to as number }
         }
       }
       if (vp.backdropBlur) effect.backdropBlur = vp.backdropBlur

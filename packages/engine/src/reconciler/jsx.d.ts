@@ -20,7 +20,7 @@ import type { NodeHandle } from "./handle"
 type Children = JSX.Element | JSX.Element[] | string | number | boolean | null | undefined
 type RefCallback = (handle: NodeHandle) => void
 type ColorValue = string | number
-type ShadowDef = { x: number; y: number; blur: number; color: number }
+type ShadowDef = { x: number; y: number; blur: number; color: ColorValue }
 
 type BoxIntrinsicProps = TGEProps & {
   ref?: RefCallback
@@ -44,7 +44,7 @@ type BoxIntrinsicProps = TGEProps & {
     cornerRadius?: number
     shadow?: ShadowDef | ShadowDef[]
     glow?: { radius: number; color: ColorValue; intensity?: number }
-    gradient?: { type: "linear"; from: number; to: number; angle?: number } | { type: "radial"; from: number; to: number }
+    gradient?: { type: "linear"; from: ColorValue; to: ColorValue; angle?: number } | { type: "radial"; from: ColorValue; to: ColorValue }
     backdropBlur?: number
     opacity?: number
   }
