@@ -5,6 +5,11 @@ import { hasBackdropEffect } from "../loop/predicates"
 // ── RenderCommand type ──
 // Commands are produced by layout-adapter.endLayout() and carry nodeId for
 // matching commands to effects, images, and layer assignments.
+//
+// TODO(arch): RenderCommand is a generic intermediary — effect/image/canvas data
+// takes a detour through effectsQueue (walk-tree) → RenderCommand (layout-adapter)
+// → Map.get by nodeId (buildRenderOp). Consider merging effects directly into
+// a unified RenderGraphOp during endLayout() to eliminate the intermediary.
 
 /** Layout adapter command type constants. */
 export const CMD = {
@@ -24,7 +29,8 @@ export type RenderCommand = {
   y: number
   width: number
   height: number
-  color: [number, number, number, number] // r,g,b,a 0-255
+  /** Packed RGBA u32 (0xRRGGBBAA). Avoids array allocation per command. */
+  color: number
   cornerRadius: number
   extra1: number // border width, font size
   extra2: number // text length, font id
@@ -33,10 +39,7 @@ export type RenderCommand = {
   nodeId?: number
 }
 
-// ── Color packing (inlined, formerly from paint-bridge.ts) ──
-function packColor(r: number, g: number, b: number, a: number): number {
-  return (((r & 0xff) << 24) | ((g & 0xff) << 16) | ((b & 0xff) << 8) | (a & 0xff)) >>> 0
-}
+// Color is now stored as packed u32 on RenderCommand — no packColor needed.
 
 /** @public */
 export type ShadowDef = {
@@ -296,7 +299,7 @@ export function cloneRenderGraphQueues(queues: RenderGraphQueues): RenderGraphQu
 
 export function getRectangleRenderInputs(cmd: RenderCommand, queues: RenderGraphQueues, renderObjectId: number | null): RectangleRenderInputs {
   const radius = Math.round(cmd.cornerRadius)
-  const color = packColor(cmd.color[0], cmd.color[1], cmd.color[2], cmd.color[3])
+  const color = cmd.color >>> 0
 
   const image = renderObjectId !== null
     ? queues.images.get(renderObjectId) ?? null

@@ -6,9 +6,9 @@ import { damageRectForLayoutTransition, sortNodesByStackingPaintOrder, updateCom
 describe("updateCommandsToLayoutMap", () => {
   test("realigns regular and scissor commands by nodeId", () => {
     const commands: RenderCommand[] = [
-      { type: CMD.RECTANGLE, x: 1, y: 2, width: 3, height: 4, color: [0, 0, 0, 0], cornerRadius: 0, extra1: 0, extra2: 0, nodeId: 10 },
-      { type: CMD.SCISSOR_START, x: 5, y: 6, width: 7, height: 8, color: [0, 0, 0, 0], cornerRadius: 0, extra1: 0, extra2: 0, nodeId: 20 },
-      { type: CMD.SCISSOR_END, x: 9, y: 10, width: 11, height: 12, color: [0, 0, 0, 0], cornerRadius: 0, extra1: 0, extra2: 0 },
+      { type: CMD.RECTANGLE, x: 1, y: 2, width: 3, height: 4, color: 0, cornerRadius: 0, extra1: 0, extra2: 0, nodeId: 10 },
+      { type: CMD.SCISSOR_START, x: 5, y: 6, width: 7, height: 8, color: 0, cornerRadius: 0, extra1: 0, extra2: 0, nodeId: 20 },
+      { type: CMD.SCISSOR_END, x: 9, y: 10, width: 11, height: 12, color: 0, cornerRadius: 0, extra1: 0, extra2: 0 },
     ]
 
     const layoutMap = new Map([

@@ -133,7 +133,7 @@ type LayerBounds = {
 type ColorCommand = { index: number; cmd: RenderCommand }
 
 function packedColor(cmd: RenderCommand) {
-  return (((cmd.color[0] & 0xff) << 24) | ((cmd.color[1] & 0xff) << 16) | ((cmd.color[2] & 0xff) << 8) | (cmd.color[3] & 0xff)) >>> 0
+  return cmd.color >>> 0
 }
 
 function boundsKey(cmd: RenderCommand) {
@@ -363,12 +363,10 @@ export function assignLayersSpatial(
     if (lb.boundary.hasBg) {
       const node = nodeForBoundary(state, lb.boundary)
       if (node) {
-        const targetColor = (node.props.backgroundColor as number) || 0
-        const [tr, tg, tb, ta] = [(targetColor >>> 24) & 0xff, (targetColor >>> 16) & 0xff, (targetColor >>> 8) & 0xff, targetColor & 0xff]
+        const targetColor = ((node.props.backgroundColor as number) || 0) >>> 0
         for (let i = lb.scissor.startIdx - 1; i >= 0; i--) {
           const cmd = commands[i]
-          if (cmd.type === CMD.RECTANGLE &&
-              cmd.color[0] === tr && cmd.color[1] === tg && cmd.color[2] === tb && cmd.color[3] === ta) {
+          if (cmd.type === CMD.RECTANGLE && (cmd.color >>> 0) === targetColor) {
             if (!claimedByScissor.has(i)) {
               claimedByScissor.add(i)
               lb.slot.cmdIndices.push(i)

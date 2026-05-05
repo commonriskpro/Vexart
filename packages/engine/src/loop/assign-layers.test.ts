@@ -18,7 +18,7 @@ function makeRect(x: number, y: number, w: number, h: number): RenderCommand {
   return {
     type: CMD.RECTANGLE,
     x, y, width: w, height: h,
-    color: [0, 0, 0, 255],
+    color: 0x000000ff,
     cornerRadius: 0,
     extra1: 0,
     extra2: 0,
@@ -213,7 +213,7 @@ describe("assignLayersSpatial", () => {
     ]
 
     const rect = makeRect(0, 0, 100, 100)
-    rect.color = [255, 0, 0, 255] // matches 0xff0000ff bg color
+    rect.color = 0xff0000ff // matches bg color
 
     const plan = assignLayersSpatial([rect], boundaries, { root, collectText: () => "" })
     expect(plan.contentSlots).toHaveLength(1)

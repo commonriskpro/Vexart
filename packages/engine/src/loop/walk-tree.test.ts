@@ -202,7 +202,6 @@ describe("WalkTreeState shape", () => {
       rectNodes: [],
       textNodes: [],
       boxNodes: [],
-      textMetas: [],
       layerBoundaries: [],
       scrollContainers: [],
       nodePathById: new Map(),

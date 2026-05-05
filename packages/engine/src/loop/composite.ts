@@ -175,7 +175,6 @@ export type CompositeFrameState = {
   rectNodes: TGENode[]
   textNodes: TGENode[]
   boxNodes: TGENode[]
-  textMetas: TextMeta[]
   textMetaMap: Map<number, TextMeta>
   rectNodeById: Map<number, TGENode>
   nodePathById: Map<number, string>
@@ -251,7 +250,6 @@ function buildWalkState(s: CompositeFrameState): WalkTreeState {
     rectNodes: s.rectNodes,
     textNodes: s.textNodes,
     boxNodes: s.boxNodes,
-    textMetas: s.textMetas,
     layerBoundaries: s.layerBoundaries,
     scrollContainers: s.scrollContainers,
     nodePathById: s.nodePathById,
@@ -277,7 +275,6 @@ function resetWalkAccumulators(s: CompositeFrameState) {
   s.walkCounters.scrollSpeedCap = 0
   resetRenderGraphQueues(s.renderGraphQueues)
   s.walkCounters.textMeasureIndex = 0
-  s.textMetas.length = 0
   s.textMetaMap.clear()
   s.rectNodes.length = 0
   s.rectNodeById.clear()

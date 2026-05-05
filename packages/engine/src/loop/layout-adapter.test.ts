@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createNode, insertChild, parseSizing, type TGENode, type TGEProps } from "../ffi/node"
-import { CMD, type RenderCommand, type TextMeta } from "../ffi/render-graph"
+import { CMD, type RenderCommand } from "../ffi/render-graph"
 import { createVexartLayoutCtx } from "./layout-adapter"
 import { walkTree } from "./walk-tree"
 
@@ -18,7 +18,6 @@ function layoutState(root: TGENode) {
   layout.init(300, 200)
   layout.beginLayout()
 
-  const textMetas: TextMeta[] = []
   walkTree(root, {
     scrollIdCounter: { value: 0 },
     textMeasureIndex: { value: 0 },
@@ -27,7 +26,6 @@ function layoutState(root: TGENode) {
     rectNodes: [],
     textNodes: [],
     boxNodes: [],
-    textMetas,
     layerBoundaries: [],
     scrollContainers: [],
     nodePathById: new Map(),

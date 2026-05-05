@@ -333,6 +333,12 @@ function vf32(view: DataView, offset: number, val: number) { view.setFloat32(off
 // Handles are stored as BigInt since FFI u64 may exceed safe integer range.
 // WeakMap eviction is passive (GC-driven) and cannot call vexart_paint_remove_image,
 // so active handles are tracked explicitly for native lifecycle cleanup.
+//
+// TODO(perf): Image handles are tracked in 4 places: image.ts imageCache,
+// _vexartImageHandles WeakMap, imageCache WeakMap (inside closure), and
+// activeImageHandles Set. When nativeImageHandle is populated by
+// ensureNativeImageAsset, the upload-on-render path is bypassed entirely.
+// Consider unifying around nativeImageHandle as the authoritative path.
 const _vexartImageHandles = new WeakMap<Uint8Array, bigint>()
 const activeImageHandles = new Set<bigint>()
 
@@ -1431,7 +1437,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     const vctx = getVexartCtx()
     const width = Math.max(1, Math.round(op.command.width))
     const height = Math.max(1, Math.round(op.command.height))
-    const key = `${op.kind}:${op.command.type}:${op.command.x}:${op.command.y}:${op.command.width}:${op.command.height}:${op.command.color[0]}:${op.command.color[1]}:${op.command.color[2]}:${op.command.color[3]}:${op.command.cornerRadius}:${op.command.extra1}:${op.command.extra2}:${op.command.text ?? ""}:${width}:${height}:${hashMatrix(op.effect.transform)}:${op.effect.opacity ?? 1}`
+    const key = `${op.kind}:${op.command.type}:${op.command.x}:${op.command.y}:${op.command.width}:${op.command.height}:${op.command.color}:${op.command.cornerRadius}:${op.command.extra1}:${op.command.extra2}:${op.command.text ?? ""}:${width}:${height}:${hashMatrix(op.effect.transform)}:${op.effect.opacity ?? 1}`
     const cached = transformSpriteCache.get(key)
     if (cached && cached.width === width && cached.height === height) {
       touchMapEntry(transformSpriteCache, key, cached)
@@ -1951,7 +1957,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             continue
           }
 
-          const baseFillRaw = ((effectOp.command.color[0] << 24) | (effectOp.command.color[1] << 16) | (effectOp.command.color[2] << 8) | effectOp.command.color[3]) >>> 0
+          const baseFillRaw = effectOp.command.color >>> 0
           const baseFill = effectOpacity < 1 ? applyOpacityToColor(baseFillRaw, effectOpacity) : baseFillRaw
           const boxW = clip.right - clip.left
           const boxH = clip.bottom - clip.top
@@ -1990,7 +1996,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             continue
           }
 
-          if (!effectOp.effect.gradient && (effectOp.command.color[3] ?? 0) > 1) {
+          if (!effectOp.effect.gradient && (effectOp.command.color & 0xff) > 1) {
             if (cornerRadii) {
               shapeRectCorners.push({
                 x: (clip.left / ctx.target.width) * 2 - 1,
@@ -2032,7 +2038,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
                 strokeWidth: 0,
                 fill: baseFill,
               })
-            } else if ((effectOp.command.color[3] ?? 0) > 1) {
+            } else if ((effectOp.command.color & 0xff) > 1) {
               shapeRectCorners.push({
                 x: (clip.left / ctx.target.width) * 2 - 1,
                 y: 1 - (clip.top / ctx.target.height) * 2,
@@ -2185,7 +2191,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
               boxH,
               radii: op.inputs.cornerRadii,
               strokeWidth: op.inputs.width,
-              stroke: ((op.command.color[0] << 24) | (op.command.color[1] << 16) | (op.command.color[2] << 8) | op.command.color[3]) >>> 0,
+              stroke: op.command.color >>> 0,
             })
             markDirty(clip.left, clip.top, clip.right, clip.bottom)
             continue
@@ -2199,7 +2205,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             boxH,
             radius: clampShapeRadius(op.inputs.radius, boxW, boxH),
             strokeWidth: op.inputs.width,
-            stroke: ((op.command.color[0] << 24) | (op.command.color[1] << 16) | (op.command.color[2] << 8) | op.command.color[3]) >>> 0,
+            stroke: op.command.color >>> 0,
           })
           markDirty(clip.left, clip.top, clip.right, clip.bottom)
           continue
@@ -2243,10 +2249,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             // This avoids the TS monospace measurement ↔ Rust proportional rendering mismatch.
             const textX = Math.round(op.command.x) - ctx.offsetX
             const textY = Math.round(op.command.y) - ctx.offsetY
-            const colorRgba = ((op.command.color[0] & 0xff) << 24)
-              | ((op.command.color[1] & 0xff) << 16)
-              | ((op.command.color[2] & 0xff) << 8)
-              | (op.command.color[3] & 0xff)
+            const colorRgba = op.command.color >>> 0
             deferredMsdfOps.push({
               text: op.inputs.text,
               x: textX,
@@ -2263,7 +2266,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             if (bounds) markDirty(bounds.left, bounds.top, bounds.right, bounds.bottom)
             continue
           }
-          // ── Bitmap atlas path (default) ──
+          // ── Bitmap atlas path (fallback when MSDF unavailable) ──
+          // NOTE: layoutText() here re-computes word wrap, but the LRU cache in
+          // text-layout.ts ensures the FFI cost is not repeated. If bitmap becomes
+          // a hot path again, store LayoutLine[] on TextRenderInputs to skip entirely.
           let usedGlyphPath = false
           {
             const layout = layoutText(op.inputs.text, op.inputs.fontId, op.inputs.maxWidth, op.inputs.lineHeight, op.inputs.fontSize)
@@ -2314,10 +2320,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
                       v: (row * atlasRecord.cellHeight) / (atlasRecord.cellHeight * atlasRecord.rows),
                       uw: atlasRecord.cellWidth / (atlasRecord.cellWidth * atlasRecord.columns),
                       vh: atlasRecord.cellHeight / (atlasRecord.cellHeight * atlasRecord.rows),
-                      r: op.command.color[0] / 255,
-                      g: op.command.color[1] / 255,
-                      b: op.command.color[2] / 255,
-                      a: op.command.color[3] / 255,
+                      r: ((op.command.color >>> 24) & 0xff) / 255,
+                      g: ((op.command.color >>> 16) & 0xff) / 255,
+                      b: ((op.command.color >>> 8) & 0xff) / 255,
+                      a: (op.command.color & 0xff) / 255,
                       opacity: 1,
                     })
                     dirtyRects.push({

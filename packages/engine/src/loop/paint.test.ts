@@ -13,7 +13,7 @@ function command(type: number, nodeId: number): RenderCommand {
     y: 0,
     width: 10,
     height: 10,
-    color: [255, 255, 255, 255],
+    color: 0xffffffff,
     cornerRadius: 0,
     extra1: 0,
     extra2: 0,
@@ -76,11 +76,11 @@ function layeredWindowPlan(commandCount: number): LayerPlan {
 }
 
 function windowCommands(activeWindowFirst: boolean): RenderCommand[] {
-  const desktop = { ...command(CMD.RECTANGLE, 1), x: 0, y: 0, width: 320, height: 180, color: [12, 14, 20, 255] as [number, number, number, number] }
-  const leftWindow = { ...command(CMD.RECTANGLE, 2), x: 48, y: 36, width: 150, height: 96, color: [40, 70, 120, 245] as [number, number, number, number] }
-  const rightWindow = { ...command(CMD.RECTANGLE, 3), x: 112, y: 58, width: 150, height: 96, color: [120, 74, 36, 245] as [number, number, number, number] }
-  const leftTitle = { ...command(CMD.RECTANGLE, 4), x: 48, y: 36, width: 150, height: 22, color: [80, 130, 220, 255] as [number, number, number, number] }
-  const rightTitle = { ...command(CMD.RECTANGLE, 5), x: 112, y: 58, width: 150, height: 22, color: [220, 150, 70, 255] as [number, number, number, number] }
+  const desktop = { ...command(CMD.RECTANGLE, 1), x: 0, y: 0, width: 320, height: 180, color: 0x0c0e14ff }
+  const leftWindow = { ...command(CMD.RECTANGLE, 2), x: 48, y: 36, width: 150, height: 96, color: 0x284678f5 }
+  const rightWindow = { ...command(CMD.RECTANGLE, 3), x: 112, y: 58, width: 150, height: 96, color: 0x784a24f5 }
+  const leftTitle = { ...command(CMD.RECTANGLE, 4), x: 48, y: 36, width: 150, height: 22, color: 0x5082dcff }
+  const rightTitle = { ...command(CMD.RECTANGLE, 5), x: 112, y: 58, width: 150, height: 22, color: 0xdc9646ff }
   const left = [leftWindow, leftTitle]
   const right = [rightWindow, rightTitle]
   return activeWindowFirst ? [desktop, rightWindow, rightTitle, leftWindow, leftTitle] : [desktop, ...left, ...right]

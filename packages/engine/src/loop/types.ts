@@ -63,7 +63,6 @@ export type WalkResult = {
   rectNodes: TGENode[]
   textNodes: TGENode[]
   boxNodes: TGENode[]
-  textMetas: TextMeta[]
   effectsQueue: Map<number, EffectConfig>
   imageQueue: Map<number, ImagePaintConfig>
   canvasQueue: Map<number, CanvasPaintConfig>

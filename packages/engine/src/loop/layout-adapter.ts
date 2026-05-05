@@ -259,55 +259,11 @@ export function createVexartLayoutCtx() {
         root.calculateLayout(_viewportW, _viewportH, DIRECTION_LTR)
       }
 
-      // TODO(perf): Merge position collection into walkTree postorder to eliminate
-      // this third full tree traversal. Currently: walkTree → calculateLayout → collectPositions.
-      // Collect absolute positions by walking the Flexily tree
+      // ── Stacking-context command emission ─────────────────────────────────
+      // Position computation is merged into emitNode to eliminate a separate
+      // collectPositions traversal (was the third full tree walk per frame).
       const layoutMap = new Map<number, PositionedCommand>()
 
-      const collectPositions = (node: Node, parentAbsX: number, parentAbsY: number) => {
-        const idx = _nodeToIndex.get(node)
-        if (idx === undefined) return
-
-        const left = node.getComputedLeft()
-        const top = node.getComputedTop()
-        const width = node.getComputedWidth()
-        const height = node.getComputedHeight()
-
-        const absX = parentAbsX + left
-        const absY = parentAbsY + top
-
-        const padL = node.getComputedPadding(EDGE_LEFT)
-        const padR = node.getComputedPadding(EDGE_RIGHT)
-        const padT = node.getComputedPadding(EDGE_TOP)
-        const padB = node.getComputedPadding(EDGE_BOTTOM)
-        const borL = node.getComputedBorder(EDGE_LEFT)
-        const borR = node.getComputedBorder(EDGE_RIGHT)
-        const borT = node.getComputedBorder(EDGE_TOP)
-        const borB = node.getComputedBorder(EDGE_BOTTOM)
-
-        layoutMap.set(_nodeIds[idx], {
-          nodeId: _nodeIds[idx],
-          x: absX, y: absY, width, height,
-          contentX: absX + padL + borL,
-          contentY: absY + padT + borT,
-          contentW: Math.max(0, width - padL - padR - borL - borR),
-          contentH: Math.max(0, height - padT - padB - borT - borB),
-        })
-
-        const childCount = node.getChildCount()
-        for (let i = 0; i < childCount; i++) {
-          const child = node.getChild(i)
-          if (child) collectPositions(child, absX, absY)
-        }
-      }
-
-      for (const root of _roots) {
-        collectPositions(root, 0, 0)
-      }
-
-      _lastLayoutMap = layoutMap
-
-      // ── Stacking-context command emission ─────────────────────────────────
       // Build children-by-nodeId and scroll/text lookups in one pass
       const childrenByParent = new Map<number, number[]>()  // parentNodeId → child indices
       const scrollContainerIds = new Set<number>()
@@ -342,17 +298,41 @@ export function createVexartLayoutCtx() {
         })
       }
 
-      const emitNode = (idx: number) => {
+      const emitNode = (idx: number, parentAbsX: number, parentAbsY: number) => {
         const nodeId = _nodeIds[idx]
-        const pos = layoutMap.get(nodeId)
-        if (!pos) return
+        const node = _allNodes[idx]
+
+        // Compute absolute position on-the-fly (merged from former collectPositions)
+        const absX = parentAbsX + node.getComputedLeft()
+        const absY = parentAbsY + node.getComputedTop()
+        const width = node.getComputedWidth()
+        const height = node.getComputedHeight()
+
+        const padL = node.getComputedPadding(EDGE_LEFT)
+        const padR = node.getComputedPadding(EDGE_RIGHT)
+        const padT = node.getComputedPadding(EDGE_TOP)
+        const padB = node.getComputedPadding(EDGE_BOTTOM)
+        const borL = node.getComputedBorder(EDGE_LEFT)
+        const borR = node.getComputedBorder(EDGE_RIGHT)
+        const borT = node.getComputedBorder(EDGE_TOP)
+        const borB = node.getComputedBorder(EDGE_BOTTOM)
+
+        // Store in layoutMap for writeLayoutBack and downstream consumers
+        layoutMap.set(nodeId, {
+          nodeId,
+          x: absX, y: absY, width, height,
+          contentX: absX + padL + borL,
+          contentY: absY + padT + borT,
+          contentW: Math.max(0, width - padL - padR - borL - borR),
+          contentH: Math.max(0, height - padT - padB - borT - borB),
+        })
 
         const bgColor = _bgColors[idx]
         if (bgColor !== 0 || _cornerRadii[idx] !== 0) {
           cmds.push({
             type: CMD.RECTANGLE,
-            x: pos.x, y: pos.y, width: pos.width, height: pos.height,
-            color: [(bgColor >>> 24) & 0xff, (bgColor >>> 16) & 0xff, (bgColor >>> 8) & 0xff, bgColor & 0xff] as [number, number, number, number],
+            x: absX, y: absY, width, height,
+            color: bgColor >>> 0,
             cornerRadius: _cornerRadii[idx],
             extra1: 0, extra2: 0,
             nodeId,
@@ -361,11 +341,10 @@ export function createVexartLayoutCtx() {
 
         const textIdx = textByNodeId.get(nodeId)
         if (textIdx !== undefined) {
-          const tc = _textColors[textIdx]
           cmds.push({
             type: CMD.TEXT,
-            x: pos.x, y: pos.y, width: pos.width, height: pos.height,
-            color: [(tc >>> 24) & 0xff, (tc >>> 16) & 0xff, (tc >>> 8) & 0xff, tc & 0xff] as [number, number, number, number],
+            x: absX, y: absY, width, height,
+            color: _textColors[textIdx] >>> 0,
             cornerRadius: 0, extra1: _textFontSizes[textIdx], extra2: _textFontIds[textIdx],
             text: _textContents[textIdx],
             nodeId,
@@ -374,22 +353,23 @@ export function createVexartLayoutCtx() {
 
         const isScroll = scrollContainerIds.has(nodeId)
         if (isScroll) {
-          cmds.push({ type: CMD.SCISSOR_START, x: pos.x, y: pos.y, width: pos.width, height: pos.height, color: [0, 0, 0, 0] as [number, number, number, number], cornerRadius: 0, extra1: 0, extra2: 0, nodeId })
+          cmds.push({ type: CMD.SCISSOR_START, x: absX, y: absY, width, height, color: 0, cornerRadius: 0, extra1: 0, extra2: 0, nodeId })
         }
 
         for (const childIdx of sortedChildIndices(nodeId)) {
-          emitNode(childIdx)
+          emitNode(childIdx, absX, absY)
         }
 
         if (isScroll) {
-          cmds.push({ type: CMD.SCISSOR_END, x: 0, y: 0, width: 0, height: 0, color: [0, 0, 0, 0] as [number, number, number, number], cornerRadius: 0, extra1: 0, extra2: 0 })
+          cmds.push({ type: CMD.SCISSOR_END, x: 0, y: 0, width: 0, height: 0, color: 0, cornerRadius: 0, extra1: 0, extra2: 0 })
         }
       }
 
       for (const childIdx of sortedChildIndices(0)) {
-        emitNode(childIdx)
+        emitNode(childIdx, 0, 0)
       }
 
+      _lastLayoutMap = layoutMap
       return cmds
     },
 
@@ -513,12 +493,12 @@ export function createVexartLayoutCtx() {
       }
     },
 
-    configureBorder(_color: number, _width: number) {
+    configureBorder(_width: number) {
       if (!_currentNode) return
       _currentNode.setBorder(EDGE_ALL, _width)
     },
 
-    configureBorderSides(_color: number, _l: number, _r: number, _t: number, _b: number, _btw: number) {
+    configureBorderSides(_l: number, _r: number, _t: number, _b: number, _btw: number) {
       if (!_currentNode) return
       const node = _currentNode
       if (_l > 0) node.setBorder(EDGE_LEFT, _l)

@@ -55,7 +55,6 @@ export type WalkTreeState = {
   rectNodes: TGENode[]
   textNodes: TGENode[]
   boxNodes: TGENode[]
-  textMetas: TextMeta[]
   layerBoundaries: LayerBoundary[]
   scrollContainers: TGENode[]
 
@@ -209,8 +208,10 @@ export function walkTree(
   if (isDebugEnabled()) state.nodePathById.set(node.id, String(dfsIndex))
   state.nodeRefById.set(node.id, node)
 
+  // Resolve props once per node — used by all code paths below
+  const props = resolveProps(node)
+
   if (node.kind !== "text") {
-    const props = resolveProps(node)
     const isScroll = !!(props.scrollX || props.scrollY)
     if (isScroll) state.scrollContainers.push(node)
     const hasSubtreeTransform = !!(props.transform && node.children.length > 0)
@@ -250,7 +251,6 @@ export function walkTree(
   }
 
   if (node.kind === "text") {
-    const props = resolveProps(node)
     const content = node.text || collectText(node)
     if (!content) return
     const color = (props.color as number) || 0xe0e0e0ff
@@ -263,9 +263,8 @@ export function walkTree(
 
     state.textMeasureIndex.value++
 
-    // Track metadata for multi-line paint
+    // Track metadata for multi-line paint (only textMetaMap is consumed downstream)
     const meta: TextMeta = { nodeId: node.id, content, fontId, fontSize, lineHeight, fontFamily, fontWeight, fontStyle }
-    state.textMetas.push(meta)
     state.textMetaMap.set(node.id, meta)
 
     // Text dimensions are computed by Flexily's measure function in the
@@ -277,7 +276,6 @@ export function walkTree(
 
   // ── <img> intrinsic — leaf node that paints decoded image pixels ──
   if (node.kind === "img") {
-    const props = resolveProps(node)
     const extra = ensureImageExtra(node)
     // Trigger async decode if not started
     if (extra.state === "idle" && props.src) {
@@ -348,12 +346,13 @@ export function walkTree(
       let commands = extra.displayListCommands
       let hash = extra.displayListHash
 
+      let serializedBytes: Uint8Array | null = null
       if (!canReuseCommands) {
         const ctx = new CanvasContext(props.viewport)
         props.onDraw(ctx)
         commands = ctx._commands
-        const bytes = serializeCanvasDisplayList(commands)
-        hash = hashCanvasDisplayList(bytes)
+        serializedBytes = serializeCanvasDisplayList(commands)
+        hash = hashCanvasDisplayList(serializedBytes)
         extra.drawCacheKey = drawCacheKey
         extra.displayListCommands = commands
       }
@@ -361,7 +360,8 @@ export function walkTree(
       if (extra.nativeHandle && extra.displayListHash === hash) {
         nativeCanvasDisplayListTouch(extra.nativeHandle)
       } else {
-        const bytes = serializeCanvasDisplayList(commands ?? [])
+        // Reuse bytes from above if available, otherwise serialize once
+        const bytes = serializedBytes ?? serializeCanvasDisplayList(commands ?? [])
         const handle = nativeCanvasDisplayListUpdate({ key: `canvas:${node.id}`, bytes })
         if (handle) syncNativeCanvasDisplayListHandle(node, handle, hash)
       }
@@ -381,7 +381,6 @@ export function walkTree(
   }
 
   state.boxNodes.push(node)
-  const props = resolveProps(node)
 
   // Assign layout element ID for:
   // 1. Scroll containers — for scroll offset tracking
@@ -508,7 +507,11 @@ export function walkTree(
     layout.configureRectangle(bgColor, cr)
     registerRectNode(node, state)
 
-    // Record effects for this RECT — matched during paint
+    // Record effects for this RECT — matched during paint.
+    // NOTE: effect.color and effect.cornerRadius duplicate the RenderCommand values.
+    // They exist because the gpu-renderer reads from EffectConfig for effect nodes,
+    // while plain rects read from RenderCommand. Unifying would require changing
+    // how buildRenderOp dispatches — tracked as a future simplification.
     if (vp.shadow || vp.glow || vp.gradient || hasBackdropFilter || vp.cornerRadii || vp.opacity !== undefined || hasTransform || vp.filter) {
       const effect = claimEffect()
       effect.renderObjectId = node.id
@@ -567,16 +570,14 @@ export function walkTree(
                            vp.borderTop !== undefined || vp.borderBottom !== undefined ||
                            vp.borderBetweenChildren !== undefined
   if (hasPerSideBorder && vp.borderColor !== undefined) {
-    const borderColor = vp.borderColor as number
-    layout.configureBorderSides(borderColor,
+    layout.configureBorderSides(
       vp.borderLeft ?? 0,
       vp.borderRight ?? 0,
       vp.borderTop ?? 0,
       vp.borderBottom ?? 0,
       vp.borderBetweenChildren ?? 0)
   } else if (effectiveBorderWidth > 0) {
-    const borderColor = (vp.borderColor !== undefined ? vp.borderColor : 0x00000000) as number
-    layout.configureBorder(borderColor, effectiveBorderWidth)
+    layout.configureBorder(effectiveBorderWidth)
   }
 
   // Scroll / clip container.

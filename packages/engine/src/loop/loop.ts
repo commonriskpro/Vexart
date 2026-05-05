@@ -203,7 +203,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   const rectNodes: TGENode[] = []
   const textNodes: TGENode[] = []
   const boxNodes: TGENode[] = []
-  const textMetas: TextMeta[] = []
   const nodePathById = new Map<number, string>()
   const nodeRefById = new Map<number, TGENode>()
   const rectNodeById = new Map<number, TGENode>()
@@ -374,7 +373,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     pointer,
     postScrollCallbacks,
     walkCounters,
-    rectNodes, textNodes, boxNodes, textMetas,
+    rectNodes, textNodes, boxNodes,
     textMetaMap, rectNodeById, nodePathById, nodeRefById,
     layerBoundaries, scrollContainers, nodeCountValue,
     renderGraphQueues,
