@@ -246,7 +246,6 @@ const pkg = {
   ],
   optionalDependencies: {
     "@vxrt/darwin-arm64": VERSION,
-    "@vxrt/darwin-x64": VERSION,
     "@vxrt/linux-x64": VERSION,
     "@vxrt/linux-arm64": VERSION,
   },

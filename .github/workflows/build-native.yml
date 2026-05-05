@@ -19,12 +19,6 @@ jobs:
             lib-name: libvexart.dylib
             npm-os: darwin
             npm-cpu: arm64
-          - os: macos-13
-            target: x86_64-apple-darwin
-            platform-tag: darwin-x64
-            lib-name: libvexart.dylib
-            npm-os: darwin
-            npm-cpu: x64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             platform-tag: linux-x64
@@ -114,14 +108,14 @@ jobs:
 
       - name: Place native binaries into dist
         run: |
-          for platform in darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
+          for platform in darwin-arm64 linux-x64 linux-arm64; do
             mkdir -p dist/platform/$platform
             cp native-artifacts/native-$platform/* dist/platform/$platform/
           done
 
       - name: Publish platform packages
         run: |
-          for platform in darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
+          for platform in darwin-arm64 linux-x64 linux-arm64; do
             echo "Publishing @vxrt/$platform..."
             cd dist/platform/$platform
             npm publish --access public --tag latest || echo "⚠️ Failed to publish @vxrt/$platform (may already exist)"
@@ -142,7 +136,6 @@ jobs:
         with:
           files: |
             native-artifacts/native-darwin-arm64/libvexart.dylib
-            native-artifacts/native-darwin-x64/libvexart.dylib
             native-artifacts/native-linux-x64/libvexart.so
             native-artifacts/native-linux-arm64/libvexart.so
           generate_release_notes: true
