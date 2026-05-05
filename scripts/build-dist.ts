@@ -39,7 +39,7 @@ await build({
   format: "esm",
   platform: "node",
   target: "esnext",
-  minify: true,
+  minify: process.env.VEXART_DEBUG_BUNDLE !== "1",
   outfile: resolve(DIST, "engine.js"),
   external: [
     "bun:ffi",
@@ -97,7 +97,7 @@ await build({
   format: "esm",
   platform: "node",
   target: "esnext",
-  minify: true,
+  minify: process.env.VEXART_DEBUG_BUNDLE !== "1",
   outfile: resolve(DIST, "vexart.js"),
   external: [
     "bun:ffi",
@@ -113,14 +113,22 @@ await build({
     "./engine.js",
   ],
   alias: {
-    // Rewrite @vexart-native/engine → ./engine.js (co-located dist bundle).
-    // This prevents a duplicate reconciler that breaks intrinsic elements
-    // rendered inside pre-compiled components (Input self-rendering, etc.).
+    // ALL engine references → ./engine.js (external, co-located dist bundle).
+    // Both @vexart/engine (workspace) and @vexart-native/engine (solid JSX moduleName)
+    // MUST resolve to the same external ./engine.js to prevent a duplicate reconciler
+    // that creates circular node trees and stack overflows.
     "@vexart-native/engine": "./engine.js",
+    "@vexart/engine": "./engine.js",
+    // Workspace packages → source (bundled inline, but their engine imports
+    // resolve to ./engine.js via the aliases above)
     "@vexart-native/primitives": resolve(ROOT, "packages/primitives/src/index.ts"),
     "@vexart-native/headless": resolve(ROOT, "packages/headless/src/index.ts"),
     "@vexart-native/styled": resolve(ROOT, "packages/styled/src/index.ts"),
     "@vexart-native/app": resolve(ROOT, "packages/app/src/index.ts"),
+    "@vexart/primitives": resolve(ROOT, "packages/primitives/src/index.ts"),
+    "@vexart/headless": resolve(ROOT, "packages/headless/src/index.ts"),
+    "@vexart/styled": resolve(ROOT, "packages/styled/src/index.ts"),
+    "@vexart/app": resolve(ROOT, "packages/app/src/index.ts"),
   },
   plugins: [solidPlugin],
   define: {

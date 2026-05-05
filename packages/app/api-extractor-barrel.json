@@ -1,18 +1,16 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
-  "mainEntryPointFilePath": "<projectFolder>/../../.api-extractor-temp/packages/engine/src/index.d.ts",
+  "projectFolder": ".",
+  "mainEntryPointFilePath": "<projectFolder>/../../.api-extractor-temp/packages/app/src/barrel.d.ts",
   "apiReport": {
-    "enabled": true,
-    "reportFolder": "<projectFolder>/etc",
-    "reportTempFolder": "<projectFolder>/etc/.temp",
-    "reportFileName": "engine.api.md"
+    "enabled": false
   },
   "docModel": {
     "enabled": false
   },
   "dtsRollup": {
     "enabled": true,
-    "untrimmedFilePath": "<projectFolder>/../../types/engine.d.ts"
+    "untrimmedFilePath": "<projectFolder>/../../types/vexart.d.ts"
   },
   "tsdocMetadata": {
     "enabled": false
@@ -29,6 +27,14 @@
     "extractorMessageReporting": {
       "default": {
         "logLevel": "warning"
+      },
+      "ae-forgotten-export": {
+        "logLevel": "none",
+        "addToApiReportFile": false
+      },
+      "ae-missing-release-tag": {
+        "logLevel": "none",
+        "addToApiReportFile": false
       }
     },
     "tsdocMessageReporting": {

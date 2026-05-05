@@ -11,6 +11,7 @@
   "scripts": {
     "api:update": "rm -rf .api-extractor-temp && tsc -p tsconfig.api.json && bunx api-extractor run --local --config packages/engine/api-extractor.json && bunx api-extractor run --local --config packages/primitives/api-extractor.json && bunx api-extractor run --local --config packages/headless/api-extractor.json && bunx api-extractor run --local --config packages/styled/api-extractor.json && bunx api-extractor run --local --config packages/app/api-extractor.json",
     "api:check": "bun run api:update",
+    "gen:types": "rm -rf .api-extractor-temp && bun run scripts/gen-types.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "rust:build": "cargo build --release",
