@@ -429,7 +429,7 @@ You can apply multiple backdrop filters to a single element:
 </box>
 
 // Animated fade
-import { createTransition } from "@vexart/engine"
+import { createTransition } from "vexart/engine"
 
 const [fade, setFade] = createTransition(0, { duration: 300 })
 setFade(1)  // fade in

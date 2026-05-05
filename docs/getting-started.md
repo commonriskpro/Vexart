@@ -26,9 +26,8 @@ cargo build
 Create `my-app.tsx`:
 
 ```tsx
-import { createApp, Box, Text, useAppTerminal } from "@vexart/app"
-import { useTerminalDimensions } from "@vexart/engine"
-import { colors, radius } from "@vexart/styled"
+import { createApp, Box, Text, useAppTerminal, colors, radius } from "vexart"
+import { useTerminalDimensions } from "vexart/engine"
 
 function App() {
   const terminal = useAppTerminal()
@@ -82,20 +81,13 @@ TypeScript owns scene graph, reactivity, walk-tree, Flexily layout, render graph
 ## Package map
 
 ```ts
-// Managed app framework — preferred entry point
-import { createApp, Box, Text, useAppTerminal } from "@vexart/app"
+// Everything in one barrel — app framework, headless, primitives, styled
+import { createApp, Box, Text, useAppTerminal, RichText, Span, WrapRow,
+         Button, Input, Textarea, Checkbox, Dialog,
+         colors, radius, space, Button as StyledButton } from "vexart"
 
 // Low-level engine/runtime for advanced integrations
-import { createTerminal, mount, useTerminalDimensions } from "@vexart/engine"
-
-// Intrinsic component wrappers
-import { Box, Text, RichText, Span, WrapRow } from "@vexart/primitives"
-
-// Headless behavior components
-import { Button, Input, Textarea, Checkbox, Dialog } from "@vexart/headless"
-
-// Styled components and design tokens
-import { colors, radius, space, Button as StyledButton } from "@vexart/styled"
+import { createTerminal, mount, useTerminalDimensions } from "vexart/engine"
 ```
 
 ## Validation commands

@@ -105,7 +105,7 @@ Users importing from paths like `@vexart/engine/src/internal/foo` are **unsuppor
 
 ```ts
 // ✅ Supported
-import { mount } from "@vexart/engine"
+import { mount } from "vexart/engine"
 
 // ❌ Unsupported — breaks at any release
 import { internalThing } from "@vexart/engine/src/internal/foo"

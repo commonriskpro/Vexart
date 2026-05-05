@@ -13,7 +13,7 @@ Vexart provides `useQuery` and `useMutation` — reactive data primitives that i
 ### Signature
 
 ```typescript
-import { useQuery } from "@vexart/engine"
+import { useQuery } from "vexart/engine"
 
 type QueryResult<T> = {
   data: () => T | undefined          // reactive — the fetched data
@@ -39,7 +39,7 @@ const result = useQuery<T>(
 ### Basic example
 
 ```tsx
-import { useQuery, Show, For } from "@vexart/engine"
+import { useQuery, Show, For } from "vexart/engine"
 
 function UserList() {
   const users = useQuery(
@@ -192,7 +192,7 @@ users.mutate(freshData)
 ### Signature
 
 ```typescript
-import { useMutation } from "@vexart/engine"
+import { useMutation } from "vexart/engine"
 
 type MutationResult<T, V> = {
   data: () => T | undefined           // reactive — last successful result
@@ -218,7 +218,7 @@ const mutation = useMutation<T, V>(
 ### Basic example
 
 ```tsx
-import { useMutation } from "@vexart/engine"
+import { useMutation } from "vexart/engine"
 
 function DeleteButton(props: { userId: string }) {
   const del = useMutation(
@@ -311,8 +311,8 @@ submit.reset()
 The typical CRUD pattern:
 
 ```tsx
-import { useQuery, useMutation, Show, For } from "@vexart/engine"
-import { Button, Input } from "@vexart/headless"
+import { useQuery, useMutation, Show, For } from "vexart/engine"
+import { Button, Input } from "vexart"
 import { createSignal } from "solid-js"
 
 function TodoApp() {
@@ -402,7 +402,7 @@ function TodoApp() {
 ### Loading skeleton
 
 ```tsx
-import { Skeleton } from "@vexart/styled"
+import { Skeleton } from "vexart"
 
 function UserCard() {
   const user = useQuery(() => fetchUser())
@@ -451,7 +451,7 @@ function DataSection(props: { query: QueryResult<any>; children: any }) {
 ### Mutation with toast feedback
 
 ```tsx
-import { createToaster } from "@vexart/headless"
+import { createToaster } from "vexart"
 
 const { toast, Toaster } = createToaster({ /* ... */ })
 

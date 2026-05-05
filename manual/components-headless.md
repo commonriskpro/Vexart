@@ -28,7 +28,7 @@ You can use `@vexart/styled` for quick development, or use `@vexart/headless` di
 For components with simple visual output (Button, Checkbox, Switch, List, etc.), the headless component manages state and focus, and you provide a render function that receives the state.
 
 ```tsx
-import { Button } from "@vexart/headless"
+import { Button } from "vexart"
 
 <Button
   onPress={() => save()}
@@ -53,8 +53,8 @@ The component gives you state booleans. You return JSX. You control every pixel.
 For complex content components (Code, Markdown, Diff, Textarea), there are too many visual elements for individual render props. Instead, they accept a `theme` object with typed color/spacing configuration.
 
 ```tsx
-import { Code } from "@vexart/headless"
-import { ONE_DARK } from "@vexart/engine"
+import { Code } from "vexart"
+import { ONE_DARK } from "vexart/engine"
 
 <Code
   content={`const x = 42;\nconsole.log(x);`}
@@ -80,7 +80,7 @@ All theme fields are optional — sensible dark defaults are used for any field 
 Layout container. Thin typed wrapper over the `<box>` intrinsic.
 
 ```tsx
-import { Box } from "@vexart/primitives"
+import { Box } from "vexart"
 
 <Box padding={16} backgroundColor="#1a1a2e" cornerRadius={12} gap={8}>
   <Text color="#e0e0e0">Hello</Text>
@@ -92,7 +92,7 @@ import { Box } from "@vexart/primitives"
 Text display with typed props.
 
 ```tsx
-import { Text } from "@vexart/primitives"
+import { Text } from "vexart"
 
 <Text color="#e0e0e0" fontSize={16} fontWeight={700}>Heading</Text>
 ```
@@ -102,7 +102,7 @@ import { Text } from "@vexart/primitives"
 Scrollable container with visual scrollbar. Content that overflows is clipped.
 
 ```tsx
-import { ScrollView } from "@vexart/headless"
+import { ScrollView } from "vexart"
 
 let scrollRef
 
@@ -131,7 +131,7 @@ Headless interactive button with focus and Enter/Space activation.
 Spread `ctx.buttonProps` on the root element for automatic mouse click + keyboard support:
 
 ```tsx
-import { Button } from "@vexart/headless"
+import { Button } from "vexart"
 
 <Button
   onPress={() => doAction()}
@@ -157,7 +157,7 @@ Headless single-line text input. Controlled component.
 **Render context:** `{ value, displayText, showPlaceholder, cursor, blink, focused, disabled, selection }`
 
 ```tsx
-import { Input } from "@vexart/headless"
+import { Input } from "vexart"
 import { createSignal } from "solid-js"
 
 const [text, setText] = createSignal("")
@@ -185,8 +185,8 @@ Multi-line text editor with 2D cursor, syntax highlighting, extmarks, and key bi
 **Pattern:** Theme prop
 
 ```tsx
-import { Textarea } from "@vexart/headless"
-import { ONE_DARK } from "@vexart/engine"
+import { Textarea } from "vexart"
+import { ONE_DARK } from "vexart/engine"
 
 const [code, setCode] = createSignal("")
 
@@ -214,7 +214,7 @@ Headless toggleable checkbox. Controlled.
 Spread `ctx.toggleProps` on the root element for click-to-toggle support:
 
 ```tsx
-import { Checkbox } from "@vexart/headless"
+import { Checkbox } from "vexart"
 
 <Checkbox
   checked={agreed()}
@@ -243,7 +243,7 @@ Headless toggle switch. Controlled.
 Spread `ctx.toggleProps` on the root element for click-to-toggle support:
 
 ```tsx
-import { Switch } from "@vexart/headless"
+import { Switch } from "vexart"
 
 <Switch
   checked={darkMode()}
@@ -273,7 +273,7 @@ Headless radio button group with arrow key navigation.
 Spread `ctx.optionProps` on each option element for click-to-select support:
 
 ```tsx
-import { RadioGroup } from "@vexart/headless"
+import { RadioGroup } from "vexart"
 
 <RadioGroup
   value={size()}
@@ -305,7 +305,7 @@ Headless dropdown select with keyboard navigation.
 **Option context:** `{ highlighted, selected, disabled }`
 
 ```tsx
-import { Select } from "@vexart/headless"
+import { Select } from "vexart"
 
 <Select
   value={fruit()}
@@ -342,7 +342,7 @@ Headless autocomplete with text filtering.
 **Option context:** `{ highlighted, selected, disabled }`
 
 ```tsx
-import { Combobox } from "@vexart/headless"
+import { Combobox } from "vexart"
 
 <Combobox
   value={country()}
@@ -374,7 +374,7 @@ Headless numeric range input.
 **Render context:** `{ value, min, max, percentage, focused, disabled, trackProps, dragging }`
 
 ```tsx
-import { Slider } from "@vexart/headless"
+import { Slider } from "vexart"
 
 <Slider
   value={volume()}
@@ -420,7 +420,7 @@ Headless tab switcher.
 Spread `ctx.tabProps` on each tab element for click-to-switch support:
 
 ```tsx
-import { Tabs } from "@vexart/headless"
+import { Tabs } from "vexart"
 
 <Tabs
   activeTab={tab()}
@@ -448,7 +448,7 @@ Headless selectable list with Up/Down navigation.
 Spread `ctx.itemProps` on each item element for click-to-select support:
 
 ```tsx
-import { List } from "@vexart/headless"
+import { List } from "vexart"
 
 <List
   items={["Alpha", "Beta", "Gamma"]}
@@ -474,7 +474,7 @@ Headless data table with row selection.
 Spread `ctx.rowProps` on each row element for click-to-select support:
 
 ```tsx
-import { Table } from "@vexart/headless"
+import { Table } from "vexart"
 
 <Table
   columns={[
@@ -500,7 +500,7 @@ Headless progress indicator. No focus (pure visual).
 **Render context:** `{ ratio, fillWidth, width, height, value, max }`
 
 ```tsx
-import { ProgressBar } from "@vexart/headless"
+import { ProgressBar } from "vexart"
 
 <ProgressBar
   value={progress()} max={100} width={300}
@@ -517,8 +517,8 @@ import { ProgressBar } from "@vexart/headless"
 Headless modal. Compound component with built-in focus trap.
 
 ```tsx
-import { Dialog, Button } from "@vexart/headless"
-import { Show } from "@vexart/engine"
+import { Dialog, Button } from "vexart"
+import { Show } from "vexart/engine"
 import { createSignal } from "solid-js"
 
 const [open, setOpen] = createSignal(false)
@@ -556,7 +556,7 @@ const [open, setOpen] = createSignal(false)
 Headless delayed tooltip on hover.
 
 ```tsx
-import { Tooltip } from "@vexart/headless"
+import { Tooltip } from "vexart"
 
 <Tooltip
   content="Save your work (Ctrl+S)"
@@ -578,7 +578,7 @@ Headless controlled popover panel.
 **Trigger context:** `{ open: boolean, toggle: () => void }`
 
 ```tsx
-import { Popover } from "@vexart/headless"
+import { Popover } from "vexart"
 
 <Popover
   open={menuOpen()}
@@ -603,7 +603,7 @@ import { Popover } from "@vexart/headless"
 Imperative toast notification system. Factory pattern.
 
 ```tsx
-import { createToaster } from "@vexart/headless"
+import { createToaster } from "vexart"
 
 const { toast, Toaster } = createToaster({
   position: "bottom-right",
@@ -631,7 +631,7 @@ Two navigation models.
 **Flat routing** (dashboard-style):
 
 ```tsx
-import { Router, Route, useRouterContext } from "@vexart/headless"
+import { Router, Route, useRouterContext } from "vexart"
 
 <Router initial="home">
   <Route path="home" component={HomeScreen} />
@@ -644,7 +644,7 @@ import { Router, Route, useRouterContext } from "@vexart/headless"
 **Stack routing** (wizard/drill-down):
 
 ```tsx
-import { NavigationStack, useStack } from "@vexart/headless"
+import { NavigationStack, useStack } from "vexart"
 
 <NavigationStack initial={HomeScreen}>
   {(screen) => <box width="100%" height="100%">{screen()}</box>}
@@ -660,7 +660,7 @@ Virtualized list for large datasets. Only renders visible items. Supports keyboa
 **Render context:** `{ selected: boolean, highlighted: boolean, hovered: boolean, index: number }`
 
 ```tsx
-import { VirtualList } from "@vexart/headless"
+import { VirtualList } from "vexart"
 
 <VirtualList
   items={allUsers}           // 100K+ items
@@ -687,7 +687,7 @@ import { VirtualList } from "@vexart/headless"
 Renders children in a separate compositing layer above everything.
 
 ```tsx
-import { Portal } from "@vexart/headless"
+import { Portal } from "vexart"
 
 <Portal>
   <box width="100%" height="100%" backgroundColor="#000000aa"
@@ -706,8 +706,8 @@ Syntax-highlighted code block with tree-sitter tokenization.
 **Pattern:** Theme prop
 
 ```tsx
-import { Code } from "@vexart/headless"
-import { ONE_DARK } from "@vexart/engine"
+import { Code } from "vexart"
+import { ONE_DARK } from "vexart/engine"
 
 <Code
   content={sourceCode}
@@ -725,8 +725,8 @@ Markdown renderer with inline styling.
 **Pattern:** Theme prop
 
 ```tsx
-import { Markdown } from "@vexart/headless"
-import { ONE_DARK } from "@vexart/engine"
+import { Markdown } from "vexart"
+import { ONE_DARK } from "vexart/engine"
 
 <Markdown
   content={readmeText}
@@ -743,7 +743,7 @@ Unified diff viewer with per-line coloring and syntax highlighting.
 **Pattern:** Theme prop
 
 ```tsx
-import { Diff } from "@vexart/headless"
+import { Diff } from "vexart"
 
 <Diff
   diff={unifiedDiff}
@@ -759,7 +759,7 @@ import { Diff } from "@vexart/headless"
 Multi-span inline text for mixed styling.
 
 ```tsx
-import { RichText, Span } from "@vexart/primitives"
+import { RichText, Span } from "vexart"
 
 <RichText color="#e0e0e0">
   <Span>Hello </Span>
@@ -773,7 +773,7 @@ import { RichText, Span } from "@vexart/primitives"
 Flex-wrap workaround (Flexily doesn't support `flexWrap`). Manually computes row breaks.
 
 ```tsx
-import { WrapRow } from "@vexart/primitives"
+import { WrapRow } from "vexart"
 
 <WrapRow width={400} itemWidth={80} gap={8}>
   {tags.map((tag) => (
@@ -791,8 +791,8 @@ import { WrapRow } from "@vexart/primitives"
 Factory function for reactive form state with validation. NOT a component — it returns a handle.
 
 ```tsx
-import { createForm, Input, Button } from "@vexart/headless"
-import { Show } from "@vexart/engine"
+import { createForm, Input, Button } from "vexart"
+import { Show } from "vexart/engine"
 
 const form = createForm({
   initialValues: { name: "", email: "" },

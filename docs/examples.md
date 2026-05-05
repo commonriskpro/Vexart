@@ -9,15 +9,13 @@ bun --conditions=browser run examples/hello-app.tsx
 ## Package imports
 
 ```tsx
-import { createApp, Box, Text } from "@vexart/app"
-import { Button, Input, ScrollView, VirtualList } from "@vexart/headless"
-import { colors, radius, space } from "@vexart/styled"
+import { createApp, Box, Text, Button, Input, ScrollView, VirtualList, colors, radius, space } from "vexart"
 ```
 
 ## Minimal app
 
 ```tsx
-import { createApp } from "@vexart/app"
+import { createApp } from "vexart"
 
 function App() {
   return (
@@ -33,9 +31,7 @@ await createApp(() => <App />)
 ## Counter
 
 ```tsx
-import { createApp } from "@vexart/app"
-import { Button } from "@vexart/headless"
-import { colors, space } from "@vexart/styled"
+import { createApp, Button, colors, space } from "vexart"
 import { createSignal } from "solid-js"
 
 function App() {
@@ -62,9 +58,7 @@ await createApp(() => <App />)
 ## Form
 
 ```tsx
-import { createApp } from "@vexart/app"
-import { Button, Input } from "@vexart/headless"
-import { colors, radius, space } from "@vexart/styled"
+import { createApp, Button, Input, colors, radius, space } from "vexart"
 import { createSignal } from "solid-js"
 
 function App() {
@@ -91,7 +85,7 @@ function App() {
 await createApp(() => <App />)
 ```
 
-`createApp()` is the default examples pattern. Use `mountApp()` when you need custom app bootstrapping, or `mount()` from `@vexart/engine` only for low-level integrations that manage terminal creation manually.
+`createApp()` is the default examples pattern. Use `mountApp()` when you need custom app bootstrapping, or `mount()` from `@vexart/engine` (via `"vexart/engine"`) only for low-level integrations that manage terminal creation manually.
 
 ## Image and canvas intrinsics
 

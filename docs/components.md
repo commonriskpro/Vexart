@@ -7,11 +7,10 @@ Vexart provides built-in components across three public packages.
 - **`@vexart/styled`** — styled design system built on top of the headless layer.
 
 ```typescript
-import { Box, Text } from "@vexart/primitives"
-import { Button, Input, Checkbox, Tabs, List, ProgressBar, ScrollView,
+import { Box, Text, Button, Input, Checkbox, Tabs, List, ProgressBar, ScrollView,
          Dialog, Select, Switch, RadioGroup, Table, createToaster, Router, Route, NavigationStack,
-         Tooltip, Popover, Combobox, Slider, VirtualList, createForm } from "@vexart/headless"
-import { colors, radius, space } from "@vexart/styled"
+         Tooltip, Popover, Combobox, Slider, VirtualList, createForm,
+         colors, radius, space } from "vexart"
 ```
 
 ---

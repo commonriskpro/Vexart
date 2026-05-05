@@ -17,7 +17,7 @@ import {
   pushFocusScope,
   createTransition,
   createSpring,
-} from "@vexart/engine"
+} from "vexart/engine"
 ```
 
 ## Terminal dimensions

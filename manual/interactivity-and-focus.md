@@ -225,7 +225,7 @@ Use the `useFocus()` hook when:
 - You need the focus ID for external reference
 
 ```tsx
-import { useFocus, Show } from "@vexart/engine"
+import { useFocus, Show } from "vexart/engine"
 
 function SearchInput(props: { onSearch: (q: string) => void }) {
   const { focused, focus, id } = useFocus({
@@ -278,7 +278,7 @@ useFocus({
 `pushFocusScope()` creates a focus trap — Tab/Shift+Tab only cycles within the scope. Previous focus state is saved and restored when the scope is popped.
 
 ```tsx
-import { pushFocusScope } from "@vexart/engine"
+import { pushFocusScope } from "vexart/engine"
 import { onCleanup } from "solid-js"
 
 function Modal(props: { children: any; onClose: () => void }) {
@@ -377,7 +377,7 @@ function ActionButton(props: { label: string; onPress: () => void; variant?: "pr
 For external focus control, use `setFocus()` and `focusedId()`:
 
 ```tsx
-import { setFocus, focusedId } from "@vexart/engine"
+import { setFocus, focusedId } from "vexart/engine"
 
 // Focus a specific element by ID
 setFocus("save-button")
@@ -389,7 +389,7 @@ const currentFocus = focusedId()
 To set a stable focus ID, use the `useFocus` hook with a custom ID or the `focusId` prop on headless components:
 
 ```tsx
-import { Button } from "@vexart/headless"
+import { Button } from "vexart"
 
 <Button
   focusId="save-button"
@@ -409,7 +409,7 @@ import { Button } from "@vexart/headless"
 Use `focusedId()` to display which element has focus:
 
 ```tsx
-import { focusedId } from "@vexart/engine"
+import { focusedId } from "vexart/engine"
 
 function DebugBar() {
   return (

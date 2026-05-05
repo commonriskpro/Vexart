@@ -11,7 +11,7 @@ Use the highest-level API that matches your integration needs:
 3. **`mount()` from `@vexart/engine`** — low-level alternative for advanced use when you manage terminal creation and input plumbing yourself.
 
 ```tsx
-import { createApp, Box, Text } from "@vexart/app"
+import { createApp, Box, Text } from "vexart"
 
 await createApp(() => (
   <Box width="100%" height="100%" alignX="center" alignY="center">
@@ -30,7 +30,7 @@ Managed application framework package:
 - route manifest helpers and CLI/config helpers
 
 ```ts
-import { createApp, mountApp, useAppTerminal, Box, Text } from "@vexart/app"
+import { createApp, mountApp, useAppTerminal, Box, Text } from "vexart"
 ```
 
 ## `@vexart/engine`
@@ -46,7 +46,7 @@ Core renderer/runtime package:
 - resource/debug/stat APIs
 
 ```ts
-import { createTerminal, mount, useTerminalDimensions, onInput } from "@vexart/engine"
+import { createTerminal, mount, useTerminalDimensions, onInput } from "vexart/engine"
 ```
 
 `mount()` is intentionally still public, but it is the low-level alternative for advanced use. Application docs should prefer `createApp()` unless they explicitly need manual terminal control.
@@ -76,7 +76,7 @@ Primitive component wrappers over JSX intrinsics:
 - `WrapRow`
 
 ```ts
-import { Box, Text } from "@vexart/primitives"
+import { Box, Text } from "vexart"
 ```
 
 ## `@vexart/headless`
@@ -90,7 +90,7 @@ Behavior-only components with render props/context props:
 - forms: `createForm`
 
 ```ts
-import { Button, Input, Dialog } from "@vexart/headless"
+import { Button, Input, Dialog } from "vexart"
 ```
 
 ## `@vexart/styled`
@@ -103,7 +103,7 @@ Opinionated design system and styled components:
 - styled controls: `Button`, `Card`, `Badge`, `VoidInput`, `VoidSelect`, `VoidDialog`, etc.
 
 ```ts
-import { colors, Button, Card } from "@vexart/styled"
+import { colors, Button, Card } from "vexart"
 ```
 
 ## JSX intrinsics

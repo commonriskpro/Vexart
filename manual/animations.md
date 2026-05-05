@@ -13,7 +13,7 @@ Vexart provides two animation primitives: `createTransition` (eased/tween) and `
 ### Signature
 
 ```typescript
-import { createTransition, easing } from "@vexart/engine"
+import { createTransition, easing } from "vexart/engine"
 
 const [value, setValue] = createTransition(initialValue: number, options?: {
   duration?: number,    // ms, default: 300
@@ -30,7 +30,7 @@ const [value, setValue] = createTransition(initialValue: number, options?: {
 ### Basic example
 
 ```tsx
-import { createTransition } from "@vexart/engine"
+import { createTransition } from "vexart/engine"
 
 function ExpandPanel() {
   const [width, setWidth] = createTransition(100, { duration: 300 })
@@ -95,7 +95,7 @@ setA(1); setB(1); setC(1)
 Easing functions control the acceleration curve of the animation. Vexart provides 9 built-in presets.
 
 ```typescript
-import { easing } from "@vexart/engine"
+import { easing } from "vexart/engine"
 ```
 
 | Easing | Behavior | Use for |
@@ -153,7 +153,7 @@ const [v, setV] = createTransition(0, {
 ### Signature
 
 ```typescript
-import { createSpring } from "@vexart/engine"
+import { createSpring } from "vexart/engine"
 
 const [value, setValue] = createSpring(initialValue: number, options?: {
   stiffness?: number,    // default: 170 (spring tension)
@@ -168,7 +168,7 @@ const [value, setValue] = createSpring(initialValue: number, options?: {
 ### Basic example
 
 ```tsx
-import { createSpring } from "@vexart/engine"
+import { createSpring } from "vexart/engine"
 
 function SpringButton() {
   const [y, setY] = createSpring(0, { stiffness: 200, damping: 20 })
@@ -254,7 +254,7 @@ This means:
 You can check if animations are active:
 
 ```tsx
-import { hasActiveAnimations } from "@vexart/engine"
+import { hasActiveAnimations } from "vexart/engine"
 
 // Returns true if any transition or spring is in progress
 const isAnimating = hasActiveAnimations()
@@ -267,7 +267,7 @@ const isAnimating = hasActiveAnimations()
 ### Fade in on mount
 
 ```tsx
-import { createTransition, easing } from "@vexart/engine"
+import { createTransition, easing } from "vexart/engine"
 
 function FadeIn(props: { children: any }) {
   const [opacity, setOpacity] = createTransition(0, {
@@ -375,7 +375,7 @@ function AnimatedCounter(props: { value: number }) {
 ### Staggered list entrance
 
 ```tsx
-import { For } from "@vexart/engine"
+import { For } from "vexart/engine"
 
 function StaggeredList(props: { items: string[] }) {
   return (

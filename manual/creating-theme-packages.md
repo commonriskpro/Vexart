@@ -114,8 +114,8 @@ Each headless component passes a typed context to your render function:
 
 ```typescript
 // packages/nord/src/button.tsx
-import { Button } from "@vexart/headless"
-import type { ButtonRenderContext } from "@vexart/headless"
+import { Button } from "vexart"
+import type { ButtonRenderContext } from "vexart"
 import { colors, space, radius, font } from "./tokens"
 
 export type NordButtonProps = {
@@ -174,8 +174,8 @@ export function NordButton(props: NordButtonProps) {
 
 ```typescript
 // packages/nord/src/switch.tsx
-import { Switch } from "@vexart/headless"
-import type { SwitchRenderContext } from "@vexart/headless"
+import { Switch } from "vexart"
+import type { SwitchRenderContext } from "vexart"
 import { colors, space, font } from "./tokens"
 
 export function NordSwitch(props: {
@@ -222,8 +222,8 @@ export function NordSwitch(props: {
 
 ```typescript
 // packages/nord/src/list.tsx
-import { List } from "@vexart/headless"
-import type { ListItemContext } from "@vexart/headless"
+import { List } from "vexart"
+import type { ListItemContext } from "vexart"
 import { colors, space, font } from "./tokens"
 
 export function NordList(props: {
@@ -282,9 +282,9 @@ All fields in a theme type are **required in the type** but **optional in the pr
 
 ```typescript
 // packages/nord/src/code.tsx
-import { Code } from "@vexart/headless"
-import type { CodeTheme } from "@vexart/headless"
-import type { SyntaxStyle } from "@vexart/engine"
+import { Code } from "vexart"
+import type { CodeTheme } from "vexart"
+import type { SyntaxStyle } from "vexart/engine"
 import { colors, radius, space } from "./tokens"
 
 const nordCodeTheme: CodeTheme = {
@@ -316,9 +316,9 @@ export function NordCode(props: {
 
 ```typescript
 // packages/nord/src/markdown.tsx
-import { Markdown } from "@vexart/headless"
-import type { MarkdownTheme } from "@vexart/headless"
-import type { SyntaxStyle } from "@vexart/engine"
+import { Markdown } from "vexart"
+import type { MarkdownTheme } from "vexart"
+import type { SyntaxStyle } from "vexart/engine"
 import { colors } from "./tokens"
 
 const nordMarkdownTheme: MarkdownTheme = {
@@ -362,8 +362,8 @@ and a `<Toaster>` component. Your theme provides `renderToast`:
 
 ```typescript
 // packages/nord/src/toast.tsx
-import { createToaster } from "@vexart/headless"
-import type { ToastData, ToasterHandle } from "@vexart/headless"
+import { createToaster } from "vexart"
+import type { ToastData, ToasterHandle } from "vexart"
 import { colors, radius, space, font, shadows } from "./tokens"
 
 export function createNordToaster(): ToasterHandle {
@@ -427,7 +427,7 @@ export { createNordToaster } from "./toast"
 ## Step 6: Use it
 
 ```typescript
-import { createApp } from "@vexart/app"
+import { createApp } from "vexart"
 import { NordButton, NordSwitch, NordList, colors } from "@nord/vexart-theme"
 
 function App() {

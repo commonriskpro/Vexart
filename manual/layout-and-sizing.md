@@ -344,8 +344,8 @@ If you DON'T want stretch behavior, set an explicit size or use `height="fit"`:
 Terminal windows resize. Vexart automatically re-layouts on resize, but you can also read dimensions reactively:
 
 ```tsx
-import { useTerminalDimensions } from "@vexart/engine"
-import { useAppTerminal } from "@vexart/app"
+import { useAppTerminal } from "vexart"
+import { useTerminalDimensions } from "vexart/engine"
 
 function ResponsiveApp() {
   const terminal = useAppTerminal()

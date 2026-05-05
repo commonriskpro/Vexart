@@ -90,7 +90,7 @@ type NodeMouseEvent = {
 Like `Element.setPointerCapture()` in the DOM. When a node captures the pointer, ALL mouse events (`onMouseMove`, `onMouseUp`, etc.) route to it regardless of cursor position — essential for drag interactions.
 
 ```typescript
-import { setPointerCapture, releasePointerCapture } from "@vexart/engine"
+import { setPointerCapture, releasePointerCapture } from "vexart/engine"
 
 setPointerCapture(nodeId)     // Lock — all mouse events go to this node
 releasePointerCapture(nodeId) // Unlock — auto-released on button up
@@ -99,7 +99,7 @@ releasePointerCapture(nodeId) // Unlock — auto-released on button up
 ### Drag example
 
 ```tsx
-import { setPointerCapture, releasePointerCapture } from "@vexart/engine"
+import { setPointerCapture, releasePointerCapture } from "vexart/engine"
 import { createSignal } from "solid-js"
 
 function DraggableHandle(props: { nodeId: string }) {
@@ -240,7 +240,7 @@ An important detail: The Void `Button` component (from `@vexart/styled`) is a **
 **Option 1: Pass onPress to Void Button (if supported by your version)**
 
 ```tsx
-import { Button } from "@vexart/styled"
+import { Button } from "vexart"
 
 <Button variant="default" onPress={() => save()}>
   Save
@@ -250,7 +250,7 @@ import { Button } from "@vexart/styled"
 **Option 2: Wrap in a focusable box (event bubbles through Button)**
 
 ```tsx
-import { Button } from "@vexart/styled"
+import { Button } from "vexart"
 
 <box focusable onPress={() => save()}>
   <Button variant="default">Save</Button>
@@ -260,7 +260,7 @@ import { Button } from "@vexart/styled"
 The headless `Button` from `@vexart/headless` is different — it manages focus and calls your `onPress`:
 
 ```tsx
-import { Button } from "@vexart/headless"
+import { Button } from "vexart"
 
 <Button
   onPress={() => save()}
@@ -335,7 +335,7 @@ Vexart provides several hooks for listening to input events at different levels.
 Not a hook, not reactive. Registers a callback for ALL input events. Good for global hotkeys and side effects.
 
 ```tsx
-import { onInput } from "@vexart/engine"
+import { onInput } from "vexart/engine"
 
 const unsub = onInput((event) => {
   if (event.type === "key" && event.key === "q" && event.mods.ctrl) {
@@ -353,7 +353,7 @@ const unsub = onInput((event) => {
 Returns a reactive signal that updates on every keypress.
 
 ```tsx
-import { useKeyboard } from "@vexart/engine"
+import { useKeyboard } from "vexart/engine"
 
 function StatusBar() {
   const kb = useKeyboard()
@@ -381,7 +381,7 @@ type KeyboardState = {
 ### useMouse() — Reactive Mouse Signal
 
 ```tsx
-import { useMouse } from "@vexart/engine"
+import { useMouse } from "vexart/engine"
 
 function CursorPosition() {
   const mouse = useMouse()
@@ -421,7 +421,7 @@ type MouseEvent = {
 Returns a signal for ALL input events (key, mouse, paste, focus).
 
 ```tsx
-import { useInput } from "@vexart/engine"
+import { useInput } from "vexart/engine"
 
 function DebugInput() {
   const event = useInput()
@@ -520,7 +520,7 @@ The naming convention: props are named for what they go ON (`buttonProps`, `togg
 Encapsulates drag interactions — ref management, `setPointerCapture`, and an `isDragging` flag. Returns `dragProps` to spread on the drag target.
 
 ```typescript
-import { useDrag } from "@vexart/engine"
+import { useDrag } from "vexart/engine"
 
 const { dragging, dragProps } = useDrag({
   onDragStart: (evt) => { /* jump to position */ },
@@ -562,7 +562,7 @@ The Slider component uses `useDrag` internally — its `trackProps` are built on
 Encapsulates hover detection with configurable enter/leave delays. Returns `hovered` signal and `hoverProps` to spread on the target.
 
 ```typescript
-import { useHover } from "@vexart/engine"
+import { useHover } from "vexart/engine"
 
 const { hovered, hoverProps } = useHover({
   delay: 500,       // ms before onEnter fires
@@ -638,8 +638,8 @@ function KeyboardList(props: { items: string[] }) {
 ### Global Ctrl+Q quit handler
 
 ```tsx
-import { createApp } from "@vexart/app"
-import { onInput } from "@vexart/engine"
+import { createApp } from "vexart"
+import { onInput } from "vexart/engine"
 
 // In your main() function, after createApp:
 const app = await createApp(() => <App />, { quit: [] })
@@ -675,7 +675,7 @@ onInput((event) => {
 ### Drag with pointer capture
 
 ```tsx
-import { setPointerCapture, releasePointerCapture } from "@vexart/engine"
+import { setPointerCapture, releasePointerCapture } from "vexart/engine"
 import { createSignal } from "solid-js"
 
 function Slider(props: { value: number; onChange: (v: number) => void; nodeId: string }) {
