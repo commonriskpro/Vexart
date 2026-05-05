@@ -186,13 +186,17 @@ export function measureForLayout(
   text: string,
   fontId: number,
   fontSize: number,
+  overrideFontFamily?: string,
+  overrideFontWeight?: number,
+  overrideFontStyle?: string,
 ): { width: number; height: number } {
   const desc = getFont(fontId)
   // fontId 0 renders via MSDF as "sans-serif" — must measure with the same family.
   // Other fontIds use their registered family name.
-  const families = fontId === 0 ? ["sans-serif"] : [desc.family]
-  const weight = desc.weight ?? 400
-  const italic = desc.style === "italic"
+  // Explicit fontFamily/fontWeight/fontStyle props override the fontId descriptor.
+  const families = overrideFontFamily ? [overrideFontFamily] : (fontId === 0 ? ["sans-serif"] : [desc.family])
+  const weight = overrideFontWeight ?? desc.weight ?? 400
+  const italic = overrideFontStyle === "italic" ? true : (overrideFontStyle !== undefined ? false : desc.style === "italic")
   const effectiveSize = fontSize || desc.size
 
   return nativeMeasure(text, effectiveSize, families, weight, italic)
@@ -213,13 +217,16 @@ export function measureTextConstrained(
   fontId: number,
   fontSize: number,
   maxWidth: number,
+  overrideFontFamily?: string,
+  overrideFontWeight?: number,
+  overrideFontStyle?: string,
 ): { width: number; height: number } {
-  if (maxWidth <= 0) return measureForLayout(text, fontId, fontSize)
+  if (maxWidth <= 0) return measureForLayout(text, fontId, fontSize, overrideFontFamily, overrideFontWeight, overrideFontStyle)
 
   const lineHeight = Math.ceil(fontSize * 1.2)
 
   // Fast path: if natural width fits, no wrapping needed
-  const natural = measureForLayout(text, fontId, fontSize)
+  const natural = measureForLayout(text, fontId, fontSize, overrideFontFamily, overrideFontWeight, overrideFontStyle)
   if (natural.width <= maxWidth) return natural
 
   // Multi-line: compute wrapped layout (cached by layoutText LRU)

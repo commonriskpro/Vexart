@@ -937,6 +937,9 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     colorRgba: number,
     targetWidth: number,
     targetHeight: number,
+    fontFamily?: string,
+    fontWeight?: number,
+    fontStyle?: string,
   ): boolean {
     const sym = getMsdfSymbols()
     if (!sym) return false
@@ -945,7 +948,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     if (textBuf.byteLength === 0) return true
 
     // Pack params: f32 x,y,fontSize,lineHeight,maxWidth + u32 color + u16 weight + u16 flags + JSON families
-    const familiesJson = _msdfEncoder.encode('["sans-serif"]')
+    const family = fontFamily || "sans-serif"
+    const familiesJson = _msdfEncoder.encode(JSON.stringify([family]))
+    const weight = fontWeight ?? 400
+    const flags = fontStyle === "italic" ? 1 : 0
     const headerSize = 28
     const paramsBuf = new Uint8Array(headerSize + familiesJson.byteLength)
     const view = new DataView(paramsBuf.buffer)
@@ -955,8 +961,8 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     view.setFloat32(12, lineHeight, true)
     view.setFloat32(16, maxWidth, true)
     view.setUint32(20, colorRgba >>> 0, true)
-    view.setUint16(24, 400, true) // weight
-    view.setUint16(26, 0, true)   // flags
+    view.setUint16(24, weight, true)
+    view.setUint16(26, flags, true)
     paramsBuf.set(familiesJson, headerSize)
 
     const rc = sym.vexart_font_render_text(
@@ -1051,7 +1057,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   const transientFullFrameImages: VexartImageHandle[] = []
   const tempGlyphs: WgpuCanvasGlyphInstance[] = []
   const dirtyRects: DirtyBoundsRect[] = []
-  const deferredMsdfOps: { text: string; x: number; y: number; fontSize: number; lineHeight: number; maxWidth: number; colorRgba: number }[] = []
+  const deferredMsdfOps: { text: string; x: number; y: number; fontSize: number; lineHeight: number; maxWidth: number; colorRgba: number; fontFamily?: string; fontWeight?: number; fontStyle?: string }[] = []
   const cacheStats: GpuRendererBackendCacheStats = {
     layerTargetCount: 0,
     layerTargetBytes: 0,
@@ -2249,6 +2255,9 @@ export function createGpuRendererBackend(): GpuRendererBackend {
               lineHeight: op.inputs.lineHeight,
               maxWidth: op.inputs.maxWidth > 0 ? op.inputs.maxWidth : 999999,
               colorRgba,
+              fontFamily: op.inputs.fontFamily,
+              fontWeight: op.inputs.fontWeight,
+              fontStyle: op.inputs.fontStyle,
             })
             const bounds = opBounds(op, ctx.target.width, ctx.target.height)
             if (bounds) markDirty(bounds.left, bounds.top, bounds.right, bounds.bottom)
@@ -2347,6 +2356,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           msdfOp.fontSize, msdfOp.lineHeight, msdfOp.maxWidth,
           msdfOp.colorRgba,
           ctx.target.width, ctx.target.height,
+          msdfOp.fontFamily, msdfOp.fontWeight, msdfOp.fontStyle,
         )
       }
       deferredMsdfOps.length = 0

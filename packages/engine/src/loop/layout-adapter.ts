@@ -543,7 +543,7 @@ export function createVexartLayoutCtx() {
       if (_sx || _sy) _currentNode.setOverflow(OVERFLOW_SCROLL)
     },
 
-    text(_content: string, _color: number, _fontId: number, _fontSize: number, nodeId?: number, measuredW?: number, measuredH?: number) {
+    text(_content: string, _color: number, _fontId: number, _fontSize: number, nodeId?: number, measuredW?: number, measuredH?: number, _fontFamily?: string, _fontWeight?: number, _fontStyle?: string) {
       const node = Node.create()
       const parentId = _nodeStack.length > 0 ? _nodeIds[_nodeToIndex.get(_nodeStack[_nodeStack.length - 1])!] : 0
       const idx = _addNode(node, parentId, _nodeStack.length === 0)
@@ -567,14 +567,17 @@ export function createVexartLayoutCtx() {
       const content = _content
       const fontId = _fontId
       const fontSize = _fontSize
+      const fontFamily = _fontFamily
+      const fontWeight = _fontWeight
+      const fontStyle = _fontStyle
       node.setMeasureFunc((width, widthMode, _height, _heightMode) => {
         const maxW = widthMode === MEASURE_MODE_UNDEFINED ? Infinity : width
         if (maxW === Infinity || maxW <= 0) {
           // No width constraint — return natural (single-line) dimensions
-          const natural = measureForLayout(content, fontId, fontSize)
+          const natural = measureForLayout(content, fontId, fontSize, fontFamily, fontWeight, fontStyle)
           return { width: natural.width, height: natural.height }
         }
-        return measureTextConstrained(content, fontId, fontSize, maxW)
+        return measureTextConstrained(content, fontId, fontSize, maxW, fontFamily, fontWeight, fontStyle)
       })
     },
 

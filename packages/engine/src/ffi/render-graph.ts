@@ -157,6 +157,9 @@ export type TextMeta = {
   fontId: number
   fontSize: number
   lineHeight: number
+  fontFamily?: string
+  fontWeight?: number
+  fontStyle?: string
 }
 
 /** @public */
@@ -184,6 +187,9 @@ export type TextRenderInputs = {
   lineHeight: number
   maxWidth: number
   textHeight: number
+  fontFamily?: string
+  fontWeight?: number
+  fontStyle?: string
 }
 
 /** @public */
@@ -341,6 +347,9 @@ export function getTextRenderInputs(cmd: RenderCommand, textMetaMap: Map<number,
     lineHeight,
     maxWidth,
     textHeight,
+    fontFamily: meta?.fontFamily,
+    fontWeight: meta?.fontWeight,
+    fontStyle: meta?.fontStyle,
   }
 }
 

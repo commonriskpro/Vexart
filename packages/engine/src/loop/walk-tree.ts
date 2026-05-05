@@ -257,17 +257,20 @@ export function walkTree(
     const fontSize = props.fontSize ?? 14
     const fontId = props.fontId ?? 0
     const lineHeight = props.lineHeight ?? Math.ceil(fontSize * 1.2)
+    const fontFamily = props.fontFamily as string | undefined
+    const fontWeight = props.fontWeight as number | undefined
+    const fontStyle = props.fontStyle as string | undefined
 
     state.textMeasureIndex.value++
 
     // Track metadata for multi-line paint
-    const meta: TextMeta = { nodeId: node.id, content, fontId, fontSize, lineHeight }
+    const meta: TextMeta = { nodeId: node.id, content, fontId, fontSize, lineHeight, fontFamily, fontWeight, fontStyle }
     state.textMetas.push(meta)
     state.textMetaMap.set(node.id, meta)
 
     // Text dimensions are computed by Flexily's measure function in the
     // layout adapter — no pre-measurement needed here.
-    layout.text(content, color, fontId, fontSize, node.id)
+    layout.text(content, color, fontId, fontSize, node.id, undefined, undefined, fontFamily, fontWeight, fontStyle)
     state.textNodes.push(node)
     return
   }
