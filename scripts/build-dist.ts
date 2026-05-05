@@ -3,14 +3,14 @@
  *
  * Output: dist/
  *   vexart.js           ← unified barrel: app + styled + headless + user-facing engine hooks
- *   engine.js           ← @vexart/engine full bundle (power users)
+ *   engine.js           ← @vexart-native/engine full bundle (power users)
  *   solid-plugin.ts     ← babel preload for JSX transform
  *   jsx-runtime.d.ts    ← JSX intrinsic elements
  *   tree-sitter/        ← grammar .wasm + .scm files
  *   package.json        ← optionalDependencies for all supported platforms
  *   platform/
- *     darwin-arm64/     ← @vexart/darwin-arm64 package (libvexart.dylib + package.json)
- *     linux-x64/        ← @vexart/linux-x64 package (libvexart.so + package.json)
+ *     darwin-arm64/     ← @vexart-native/darwin-arm64 package (libvexart.dylib + package.json)
+ *     linux-x64/        ← @vexart-native/linux-x64 package (libvexart.so + package.json)
  *     (other platforms built via CI: see .github/workflows/build-native.yml)
  *
  * Run: bun run scripts/build-dist.ts
@@ -55,7 +55,7 @@ await build({
   ],
   // Replace monorepo workspace imports with relative paths
   alias: {
-    "@vexart/engine": resolve(ROOT, "packages/engine/src/index.ts"),
+    "@vexart-native/engine": resolve(ROOT, "packages/engine/src/index.ts"),
   },
   // Inject FFI path override — tell the bundle to look in vendor/ next to itself
   define: {
@@ -79,7 +79,7 @@ const solidPlugin = {
       const result = transformSync(source, {
         filename: args.path,
         presets: [
-          ["babel-preset-solid", { generate: "universal", moduleName: "@vexart/engine" }],
+          ["babel-preset-solid", { generate: "universal", moduleName: "@vexart-native/engine" }],
           ["@babel/preset-typescript", { onlyRemoveTypeImports: true }],
         ],
       })
@@ -113,14 +113,14 @@ await build({
     "./engine.js",
   ],
   alias: {
-    // Rewrite @vexart/engine → ./engine.js (co-located dist bundle).
+    // Rewrite @vexart-native/engine → ./engine.js (co-located dist bundle).
     // This prevents a duplicate reconciler that breaks intrinsic elements
     // rendered inside pre-compiled components (Input self-rendering, etc.).
-    "@vexart/engine": "./engine.js",
-    "@vexart/primitives": resolve(ROOT, "packages/primitives/src/index.ts"),
-    "@vexart/headless": resolve(ROOT, "packages/headless/src/index.ts"),
-    "@vexart/styled": resolve(ROOT, "packages/styled/src/index.ts"),
-    "@vexart/app": resolve(ROOT, "packages/app/src/index.ts"),
+    "@vexart-native/engine": "./engine.js",
+    "@vexart-native/primitives": resolve(ROOT, "packages/primitives/src/index.ts"),
+    "@vexart-native/headless": resolve(ROOT, "packages/headless/src/index.ts"),
+    "@vexart-native/styled": resolve(ROOT, "packages/styled/src/index.ts"),
+    "@vexart-native/app": resolve(ROOT, "packages/app/src/index.ts"),
   },
   plugins: [solidPlugin],
   define: {
@@ -131,7 +131,7 @@ await build({
   },
 })
 
-// ── 4. Build platform package (@vexart/darwin-arm64) ──
+// ── 4. Build platform package (@vexart-native/darwin-arm64) ──
 console.log("🔧 Building platform package...")
 
 const vexartName = process.platform === "darwin" ? "libvexart.dylib" : process.platform === "win32" ? "vexart.dll" : "libvexart.so"
@@ -142,7 +142,7 @@ const vexartLibCrate = resolve(ROOT, "native/libvexart/target/release", vexartNa
 const vexartLib = existsSync(vexartLibWorkspace) ? vexartLibWorkspace : vexartLibCrate
 const arch = process.arch === "arm64" ? "arm64" : "x64"
 const platformTag = `${process.platform}-${arch}`
-const platformPkgName = `@vexart/${platformTag}`
+const platformPkgName = `@vexart-native/${platformTag}`
 const platformDir = resolve(DIST, "platform", platformTag)
 
 mkdirSync(platformDir, { recursive: true })
@@ -189,10 +189,10 @@ cpSync(
 )
 console.log(`  ✅ parser.worker.ts → tree-sitter/`)
 
-// ── 7. Copy solid plugin (dist version with moduleName: "@vexart/engine") ──
+// ── 7. Copy solid plugin (dist version with moduleName: "@vexart-native/engine") ──
 console.log("🔌 Copying solid plugin...")
 cpSync(resolve(ROOT, "scripts/solid-plugin-dist.ts"), resolve(DIST, "solid-plugin.ts"))
-console.log(`  ✅ solid-plugin.ts (moduleName: "@vexart/engine")`)
+console.log(`  ✅ solid-plugin.ts (moduleName: "@vexart-native/engine")`)
 
 // ── 8. Copy type declarations ──
 console.log("📝 Copying type declarations...")
@@ -245,9 +245,9 @@ const pkg = {
     "tree-sitter/",
   ],
   optionalDependencies: {
-    "@vexart/darwin-arm64": VERSION,
-    "@vexart/linux-x64": VERSION,
-    "@vexart/linux-arm64": VERSION,
+    "@vexart-native/darwin-arm64": VERSION,
+    "@vexart-native/linux-x64": VERSION,
+    "@vexart-native/linux-arm64": VERSION,
   },
   peerDependencies: {
     "solid-js": "^1.9.0",

@@ -128,9 +128,9 @@ export const VEXART_SYMBOLS = {
 function platformPackageName(): string {
   const arch = process.arch
   const os = process.platform
-  if (os === "darwin") return arch === "arm64" ? "@vexart/darwin-arm64" : "@vexart/darwin-x64"
-  if (os === "linux") return arch === "arm64" ? "@vexart/linux-arm64" : "@vexart/linux-x64"
-  return "@vexart/win32-x64"
+  if (os === "darwin") return arch === "arm64" ? "@vexart-native/darwin-arm64" : "@vexart-native/darwin-x64"
+  if (os === "linux") return arch === "arm64" ? "@vexart-native/linux-arm64" : "@vexart-native/linux-x64"
+  return "@vexart-native/win32-x64"
 }
 
 /** Ordered list of candidate paths to try when loading libvexart. */

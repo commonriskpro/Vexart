@@ -53,7 +53,7 @@ jobs:
           cp target/${{ matrix.target }}/release/${{ matrix.lib-name }} artifact/
           cat > artifact/package.json << 'PKGJSON'
           {
-            "name": "@vexart/${{ matrix.platform-tag }}",
+            "name": "@vexart-native/${{ matrix.platform-tag }}",
             "version": "${VERSION}",
             "description": "Vexart native binary for ${{ matrix.platform-tag }}",
             "type": "module",
@@ -116,9 +116,9 @@ jobs:
       - name: Publish platform packages
         run: |
           for platform in darwin-arm64 linux-x64 linux-arm64; do
-            echo "Publishing @vexart/$platform..."
+            echo "Publishing @vexart-native/$platform..."
             cd dist/platform/$platform
-            npm publish --access public --tag latest || echo "⚠️ Failed to publish @vexart/$platform (may already exist)"
+            npm publish --access public --tag latest || echo "⚠️ Failed to publish @vexart-native/$platform (may already exist)"
             cd -
           done
         env:
