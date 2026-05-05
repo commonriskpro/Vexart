@@ -77,6 +77,14 @@ impl AtlasRegistry {
         // Decode PNG to raw RGBA bytes.
         let (rgba_pixels, width, height) = decode_png(png_bytes)?;
 
+        // Clamp to device max texture dimension (lavapipe/software GPUs may be 2048).
+        let max_dim = device.limits().max_texture_dimension_2d;
+        if width > max_dim || height > max_dim {
+            return Err(format!(
+                "atlas {font_id} ({width}×{height}) exceeds device max texture dimension ({max_dim})"
+            ));
+        }
+
         // Upload to GPU texture.
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some(&format!("vexart-atlas-{font_id}")),
