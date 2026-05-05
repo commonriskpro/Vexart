@@ -687,7 +687,7 @@ Specific list lives in tasks.md once we `rg` through the test suite.
 
 ```bash
 git tag -a pre-phase-2 -m "Phase 2 baseline — pre-consolidation"
-git push origin pre-phase-2   # optional; repo is closed-source, local tag is sufficient
+git push origin pre-phase-2
 ```
 
 **Safe slices** (independently revertable with normal `git revert <sha>`):

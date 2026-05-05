@@ -639,7 +639,7 @@ Vexart is **source-available** (not open-source) under the following model:
 
 ### 8.2 Distribution model
 
-- Source code is **closed** until v0.9 is shipped. No public repository.
+- Source code is **public** on GitHub under a source-available license.
 - Binaries distributed via npm (pre-compiled native lib per platform).
 - License verification is **honor-based** (no DRM). Enterprise customers sign MSA.
 
@@ -734,7 +734,7 @@ Year 3:
 ### 10.3 Process constraints
 
 - **Solo development**: founder is the only developer for v0.9. No outside contributors.
-- **Closed source until v0.9 ships**: no public repository, no public issues, no public PRs.
+- **Public repository**: source-available on GitHub. Community contributions welcome via PRs and issues.
 - **8 hours of focused coding per day, 5-6 days per week**: sustainability over sprint.
 - **Bi-weekly architectural reviews**: founder reviews progress with external senior advisor every 2 weeks.
 - **Spec-Driven Development (SDD)**: every change to the code follows the SDD workflow (propose → spec → design → tasks → apply → verify → archive). AI agents execute tasks; founder verifies.
@@ -1008,7 +1008,7 @@ Every architectural or product decision is logged here with date, context, and r
 
 **Alternatives considered**: Open source (Apache 2.0), fully closed source with per-seat licensing, freemium with feature gates.
 
-**Rationale**: Dual licensing with revenue threshold is proven by Elastic, MongoDB, Redis Labs, Mapbox. It captures commercial value without alienating hobbyists or OSS community. Aligns with founder's closed-source-until-mature constraint.
+**Rationale**: Dual licensing with revenue threshold is proven by Elastic, MongoDB, Redis Labs, Mapbox. It captures commercial value without alienating hobbyists or OSS community. Repository is public on GitHub.
 
 **Implications**: License verification is honor-based. Written license agreement required for $1M+ entities. No DRM.
 
@@ -1086,7 +1086,7 @@ Every architectural or product decision is logged here with date, context, and r
 2. **Performance**: theoretical overhead of WGPU vs native is 2-8% on GPU-bound workloads. Vexart is NOT GPU-bound — the frame-time dominator is Kitty protocol encoding and terminal I/O. WGPU overhead is <1% of Vexart's frame budget and invisible in practice.
 3. **Industry alignment**: WebGPU is the emerging standard. Chrome, Firefox, and Safari have shipped it. Apple, Google, and Microsoft are committed. Native GPU APIs continue to fragment.
 4. **Validation**: Bevy, Zed, Veloren, Firefox compositor, Servo, Blender (future), and Figma (migration in progress) all use WGPU or equivalent abstractions. The industry precedent is overwhelming.
-5. **Future optionality**: WGPU code compiles to WASM + WebGPU in the browser. If Vexart ever wants a web playground (a strong marketing asset for closed-source distribution), WGPU enables it for free. Native renderers would foreclose it.
+5. **Future optionality**: WGPU code compiles to WASM + WebGPU in the browser. If Vexart ever wants a web playground (a strong marketing asset), WGPU enables it for free. Native renderers would foreclose it.
 6. **Platform-specific tuning still possible**: WGPU exposes `Features` and `Limits` flags. Platform-exclusive optimizations (Metal argument buffers, Vulkan subgroup operations, DX12 bindless) remain accessible when profiling identifies a specific bottleneck.
 
 **Implications**:
@@ -1254,7 +1254,7 @@ Every architectural or product decision is logged here with date, context, and r
 - **120fps-class frame**: a frame category whose engine-side work fits within `8.33 ms` at p95/p99 depending on the metric. Vexart uses `5 ms` as the aggressive fast-path target for small dirty-region work to preserve terminal/I/O headroom.
 - **Backdrop filter**: CSS-style filter applied to content *behind* an element (e.g. glassmorphism blur).
 - **Clay**: C-based layout engine formerly used in Vexart pre-Phase 2. Deleted and replaced first by a custom TS mini-flexbox, then by Flexily.
-- **Closed source (in this PRD)**: source code is not publicly available, but binaries are distributed with a license agreement.
+- **Source-available**: source code is publicly available on GitHub under a dual license (free below revenue threshold, paid above).
 - **Compositor-thread animation**: animation whose per-frame update touches only GPU uniforms (transform matrix, opacity) without regenerating paint commands or invalidating layout. Stays at 60fps even when the main thread is blocked.
 - **`contain` prop**: declarative hint (mirrors CSS `contain`) telling the engine that a subtree is isolated from outer layout/paint invalidation.
 - **DEC-XXX**: numbered entry in the Decisions Log (Section 12). Every architectural or product commitment receives one.

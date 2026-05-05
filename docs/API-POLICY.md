@@ -43,7 +43,7 @@ This document defines **what is public and what is internal** in Vexart's codeba
 
 ## 1. Purpose
 
-Vexart ships closed-source binaries under a commercial license. Users depend on the API surface that we expose. A change that seems internal to us can be a 5-hour migration for a paying customer. This policy exists to:
+Vexart ships source-available binaries under a dual license. Users depend on the API surface that we expose. A change that seems internal to us can be a 5-hour migration for a paying customer. This policy exists to:
 
 1. Make the distinction between **public** and **internal** explicit and enforceable.
 2. Prevent accidental leakage of internals through `export *` or unreviewed exports.
