@@ -146,20 +146,24 @@ function candidateLibPaths(): string[] {
     join(import.meta.dir, "../../../../node_modules", pkgName, libName),
   ]
 
-  // 2. Dev build: target/debug/ (cargo build without --release)
+  // 2. Workspace release build: target/release/ (cargo build --release)
+  const wsReleasePath = join(import.meta.dir, "../../../../target/release", libName)
+  const cwdReleasePath = join(cwd, "target/release", libName)
+
+  // 3. Dev build: target/debug/ (cargo build without --release)
   const devPath = join(import.meta.dir, "../../../../target/debug", libName)
   const cwdDevPath = join(cwd, "target/debug", libName)
 
-  // 3. Dev build: native/libvexart/target/release (cargo build --release)
-  const releasePath = join(import.meta.dir, "../../../../native/libvexart/target/release", libName)
+  // 4. Per-crate release build: native/libvexart/target/release/
+  const crateReleasePath = join(import.meta.dir, "../../../../native/libvexart/target/release", libName)
 
-  // 4. Legacy dist build: vendor/vexart/${platform}/libvexart.{dylib,so,dll}
+  // 5. Legacy dist build: vendor/vexart/${platform}/libvexart.{dylib,so,dll}
   const arch = process.arch === "arm64" ? "arm64" : "x64"
   const vendorPlatform = `${arch}-${process.platform}`
   const vendorPath = join(import.meta.dir, "../../../vendor/vexart", vendorPlatform, libName)
   const cwdVendorPath = join(cwd, "vendor/vexart", vendorPlatform, libName)
 
-  const candidates = [...nmPaths, devPath, cwdDevPath, releasePath, vendorPath, cwdVendorPath]
+  const candidates = [...nmPaths, wsReleasePath, cwdReleasePath, devPath, cwdDevPath, crateReleasePath, vendorPath, cwdVendorPath]
   const seen = new Set<string>()
   const existing: string[] = []
   const missing: string[] = []
