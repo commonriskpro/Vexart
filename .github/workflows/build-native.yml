@@ -17,18 +17,26 @@ jobs:
             target: aarch64-apple-darwin
             platform-tag: darwin-arm64
             lib-name: libvexart.dylib
+            npm-os: darwin
+            npm-cpu: arm64
           - os: macos-13
             target: x86_64-apple-darwin
             platform-tag: darwin-x64
             lib-name: libvexart.dylib
+            npm-os: darwin
+            npm-cpu: x64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             platform-tag: linux-x64
             lib-name: libvexart.so
+            npm-os: linux
+            npm-cpu: x64
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             platform-tag: linux-arm64
             lib-name: libvexart.so
+            npm-os: linux
+            npm-cpu: arm64
 
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.platform-tag }}
@@ -45,11 +53,25 @@ jobs:
       - name: Build libvexart (release)
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Package artifact
+      - name: Package platform artifact
         run: |
           mkdir -p artifact
           cp target/${{ matrix.target }}/release/${{ matrix.lib-name }} artifact/
-          echo '{"name":"@vxrt/${{ matrix.platform-tag }}","version":"0.0.0","os":["${{ matrix.os == 'macos-14' && 'darwin' || matrix.os == 'macos-13' && 'darwin' || 'linux' }}"],"cpu":["${{ contains(matrix.platform-tag, 'arm64') && 'arm64' || 'x64' }}"],"files":["${{ matrix.lib-name }}"],"license":"SEE LICENSE IN LICENSE.md"}' > artifact/package.json
+          cat > artifact/package.json << 'PKGJSON'
+          {
+            "name": "@vxrt/${{ matrix.platform-tag }}",
+            "version": "${VERSION}",
+            "description": "Vexart native binary for ${{ matrix.platform-tag }}",
+            "type": "module",
+            "os": ["${{ matrix.npm-os }}"],
+            "cpu": ["${{ matrix.npm-cpu }}"],
+            "files": ["${{ matrix.lib-name }}"],
+            "license": "SEE LICENSE IN LICENSE.md"
+          }
+          PKGJSON
+          # Inject version from tag
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed -i.bak "s/\${VERSION}/$VERSION/" artifact/package.json && rm -f artifact/package.json.bak
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -57,23 +79,70 @@ jobs:
           name: native-${{ matrix.platform-tag }}
           path: artifact/
 
-  release:
+  publish:
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
-      - name: Download all artifacts
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node (for npm publish)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org/
+
+      - name: Install JS deps
+        run: bun install --frozen-lockfile
+
+      - name: Download all native artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts/
+          path: native-artifacts/
 
-      - name: Create release
+      - name: Build dist
+        run: VEXART_ALLOW_NO_NATIVE=1 bun run build:dist
+        env:
+          VEXART_ALLOW_NO_NATIVE: "1"
+
+      - name: Place native binaries into dist
+        run: |
+          for platform in darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
+            mkdir -p dist/platform/$platform
+            cp native-artifacts/native-$platform/* dist/platform/$platform/
+          done
+
+      - name: Publish platform packages
+        run: |
+          for platform in darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
+            echo "Publishing @vxrt/$platform..."
+            cd dist/platform/$platform
+            npm publish --access public || echo "⚠️ Failed to publish @vxrt/$platform (may already exist)"
+            cd -
+          done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @vxrt/core
+        run: |
+          cd dist
+          npm publish --access public || echo "⚠️ Failed to publish @vxrt/core (may already exist)"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/native-darwin-arm64/libvexart.dylib
-            artifacts/native-darwin-x64/libvexart.dylib
-            artifacts/native-linux-x64/libvexart.so
-            artifacts/native-linux-arm64/libvexart.so
+            native-artifacts/native-darwin-arm64/libvexart.dylib
+            native-artifacts/native-darwin-x64/libvexart.dylib
+            native-artifacts/native-linux-x64/libvexart.so
+            native-artifacts/native-linux-arm64/libvexart.so
           generate_release_notes: true
