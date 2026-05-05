@@ -1642,8 +1642,17 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           const effectOpacity = effectOp.effect.opacity ?? 1
           const cornerRadii = effectOp.effect.cornerRadii
 
-          if (effectOp.backdrop && !cornerRadii) {
-            flushAll()
+           if (effectOp.backdrop && !cornerRadii) {
+            // Force a clear render pass before backdrop reads from the target.
+            // beginLayer(loadMode=0) sets LoadOp::Clear on the FIRST render pass,
+            // but if no shapes were dispatched yet, no render pass exists and the
+            // target retains stale content from the previous frame (text bleeds).
+            if (first) {
+              shapeRects.push({ x: 0, y: 0, w: 0, h: 0, boxW: 0, boxH: 0, radius: 0, strokeWidth: 0, fill: 0 })
+              flushShapeRects()
+            } else {
+              flushAll()
+            }
             if (layerOpen) {
               vexartCompositeTargetEndLayer(vctx, targetHandle)
               layerOpen = false
@@ -1692,8 +1701,13 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             effectOp = stripBackdropEffectOp(effectOp)
           }
 
-          if (effectOp.backdrop && cornerRadii) {
-            flushAll()
+           if (effectOp.backdrop && cornerRadii) {
+            if (first) {
+              shapeRects.push({ x: 0, y: 0, w: 0, h: 0, boxW: 0, boxH: 0, radius: 0, strokeWidth: 0, fill: 0 })
+              flushShapeRects()
+            } else {
+              flushAll()
+            }
             if (layerOpen) {
               vexartCompositeTargetEndLayer(vctx, targetHandle)
               layerOpen = false
