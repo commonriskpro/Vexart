@@ -495,16 +495,26 @@ function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; c
     cellHeight: s.term.size.cellHeight || 16,
     onChanged: () => {
       changed = true
-      // When multiple visual nodes changed (e.g. focus lost + focus gained),
-      // mark all layers dirty to ensure full repaint. A per-node damageRect
-      // would only cover one node and leave siblings un-repainted after the
-      // layer clear — causing the "disappearing siblings" bug.
-      if (visualNodeIds.size === 0 || visualNodeIds.size > 1) {
+      if (visualNodeIds.size === 0) {
+        // No visual nodes tracked but something changed (e.g. mouseDown dispatch)
+        // — defensively mark all layers dirty.
         s.markDirty()
         s.markAllDirty()
         return
       }
-      for (const nodeId of visualNodeIds) s.markDirty({ kind: DIRTY_KIND.NODE_VISUAL, nodeId })
+      // Mark only the layers that CONTAIN the changed nodes dirty (with
+      // full-bounds damage to avoid the "disappearing siblings" bug within
+      // each layer). Layers without changed nodes stay clean and are reused.
+      const markedKeys = new Set<string>()
+      for (const nodeId of visualNodeIds) {
+        const node = s.nodeRefById.get(nodeId)
+        const key = node?._layerKey ?? "bg"
+        if (!markedKeys.has(key)) {
+          markedKeys.add(key)
+          markLayerDirtyByKey(key)
+        }
+        s.markDirty({ kind: DIRTY_KIND.NODE_VISUAL, nodeId })
+      }
     },
     onNodeVisualChanged: queueNodeVisualDamage,
   }
