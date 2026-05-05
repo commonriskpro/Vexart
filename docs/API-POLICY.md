@@ -785,15 +785,15 @@ This appendix enumerates the complete expected public API surface at v0.9 releas
 - `defineConfig`, `mergeConfig`, `runCli` `@public`
 - `CliResult`, `VexartAppConfig` and nested config types `@public`
 
-### A.6 `@vxrt/core` (dist barrel)
+### A.6 `vxrt` (dist barrel)
 
-The published npm package `@vxrt/core` bundles all internal packages into two entry
+The published npm package `vxrt` bundles all internal packages into two entry
 points. The barrel (`vexart.js`) re-exports a curated subset from all packages so app
 developers need a single import. The engine (`engine.js`) provides the full low-level
 surface for power users.
 
 **Barrel rule**: if a consumer needs an import to use any component in the barrel, that
-import must also be in the barrel. Forced mixed imports (`@vxrt/core` + `@vxrt/core/engine`)
+import must also be in the barrel. Forced mixed imports (`vxrt` + `vxrt/engine`)
 for common use cases are considered an API surface bug.
 
 **Collision resolution** (documented in `packages/app/src/barrel.ts`):

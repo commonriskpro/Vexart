@@ -124,16 +124,16 @@ jobs:
           for platform in darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
             echo "Publishing @vxrt/$platform..."
             cd dist/platform/$platform
-            npm publish --access public || echo "⚠️ Failed to publish @vxrt/$platform (may already exist)"
+            npm publish --access public --tag latest || echo "⚠️ Failed to publish @vxrt/$platform (may already exist)"
             cd -
           done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish @vxrt/core
+      - name: Publish vxrt
         run: |
           cd dist
-          npm publish --access public || echo "⚠️ Failed to publish @vxrt/core (may already exist)"
+          npm publish --access public --tag latest || echo "⚠️ Failed to publish vxrt (may already exist)"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

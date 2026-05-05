@@ -2,7 +2,7 @@
  * Vexart unified public API — type declarations.
  * Matches packages/app/src/barrel.ts runtime exports.
  *
- * Consumer import: import { ... } from "@vxrt/core"
+ * Consumer import: import { ... } from "vxrt"
  */
 
 import type { JSX } from "solid-js"
