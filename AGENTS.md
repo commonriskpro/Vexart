@@ -737,11 +737,11 @@ glows                            // preset glow configs
 
 The distribution is built with `bun run build:dist`. Published as `vexart` on npm.
 Internal monorepo packages (`@vexart/*`) are bundled into two files — the barrel and
-the engine. Native binaries ship as optional platform packages (`@vxrt/darwin-arm64`).
+the engine. Native binaries ship as optional platform packages (`@vexart/darwin-arm64`).
 
 ```text
 dist/
-├── package.json                         — vxrt
+├── package.json                         — vexart
 ├── vexart.js / vexart.d.ts              — unified barrel (app + styled + headless + engine hooks)
 ├── engine.js / engine.d.ts              — full engine bundle (power users)
 ├── components.d.ts                      — headless component type declarations
@@ -752,7 +752,7 @@ dist/
 │   ├── parser.worker.ts
 │   └── assets/                          — .wasm grammars + .scm highlights
 └── platform/
-    └── darwin-arm64/                    — @vxrt/darwin-arm64 (libvexart.dylib)
+    └── darwin-arm64/                    — @vexart/darwin-arm64 (libvexart.dylib)
 ```
 
 Consumer imports:

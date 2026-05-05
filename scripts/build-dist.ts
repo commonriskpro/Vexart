@@ -9,8 +9,8 @@
  *   tree-sitter/        ← grammar .wasm + .scm files
  *   package.json        ← optionalDependencies for all supported platforms
  *   platform/
- *     darwin-arm64/     ← @vxrt/darwin-arm64 package (libvexart.dylib + package.json)
- *     linux-x64/        ← @vxrt/linux-x64 package (libvexart.so + package.json)
+ *     darwin-arm64/     ← @vexart/darwin-arm64 package (libvexart.dylib + package.json)
+ *     linux-x64/        ← @vexart/linux-x64 package (libvexart.so + package.json)
  *     (other platforms built via CI: see .github/workflows/build-native.yml)
  *
  * Run: bun run scripts/build-dist.ts
@@ -131,7 +131,7 @@ await build({
   },
 })
 
-// ── 4. Build platform package (@vxrt/darwin-arm64) ──
+// ── 4. Build platform package (@vexart/darwin-arm64) ──
 console.log("🔧 Building platform package...")
 
 const vexartName = process.platform === "darwin" ? "libvexart.dylib" : process.platform === "win32" ? "vexart.dll" : "libvexart.so"
@@ -142,7 +142,7 @@ const vexartLibCrate = resolve(ROOT, "native/libvexart/target/release", vexartNa
 const vexartLib = existsSync(vexartLibWorkspace) ? vexartLibWorkspace : vexartLibCrate
 const arch = process.arch === "arm64" ? "arm64" : "x64"
 const platformTag = `${process.platform}-${arch}`
-const platformPkgName = `@vxrt/${platformTag}`
+const platformPkgName = `@vexart/${platformTag}`
 const platformDir = resolve(DIST, "platform", platformTag)
 
 mkdirSync(platformDir, { recursive: true })
@@ -245,9 +245,9 @@ const pkg = {
     "tree-sitter/",
   ],
   optionalDependencies: {
-    "@vxrt/darwin-arm64": VERSION,
-    "@vxrt/linux-x64": VERSION,
-    "@vxrt/linux-arm64": VERSION,
+    "@vexart/darwin-arm64": VERSION,
+    "@vexart/linux-x64": VERSION,
+    "@vexart/linux-arm64": VERSION,
   },
   peerDependencies: {
     "solid-js": "^1.9.0",
@@ -279,5 +279,5 @@ console.log("To test locally:")
 console.log(`  cd dist/platform/${platformTag} && bun pack`)
 console.log("  cd dist && bun pack")
 console.log("  # In another project:")
-console.log(`  bun add ../vexart/dist/vxrt-core-${VERSION}.tgz`)
+console.log(`  bun add ../vexart/dist/vexart-${VERSION}.tgz`)
 console.log(`  bun add ../vexart/dist/platform/${platformTag}/vexart-${platformTag}-${VERSION}.tgz`)

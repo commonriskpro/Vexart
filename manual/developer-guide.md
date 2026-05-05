@@ -60,8 +60,8 @@
   - [Global Keyboard Shortcuts](#global-keyboard-shortcuts)
   - [Animated Transitions](#animated-transitions)
 - [API Quick Reference](#api-quick-reference)
-  - [`vxrt`](#vxrt-core)
-  - [`vxrt/engine`](#vxrt-core-engine)
+  - [`vexart`](#vexart)
+  - [`vexart/engine`](#vexart-engine)
 
 ---
 
@@ -70,7 +70,7 @@
 ### Installation
 
 ```bash
-bun add vxrt@beta solid-js
+bun add vexart solid-js
 bun add -d @babel/core @babel/preset-typescript babel-preset-solid
 ```
 
@@ -117,8 +117,8 @@ Vexart uses a two-tier import structure:
 
 | Import | What it provides |
 |--------|-----------------|
-| `vxrt` | Everything for app development — components, design tokens, hooks, SolidJS primitives (`createSignal`, `For`, `Show`, etc.), headless components, styled components. This is the only import most apps need. |
-| `vxrt/engine` | Low-level engine access — FFI bridge, render loop, terminal management, focus system internals, pointer capture, debug utilities, tree-sitter, font registration. Only needed for advanced use cases. |
+| `vexart` | Everything for app development — components, design tokens, hooks, SolidJS primitives (`createSignal`, `For`, `Show`, etc.), headless components, styled components. This is the only import most apps need. |
+| `vexart/engine` | Low-level engine access — FFI bridge, render loop, terminal management, focus system internals, pointer capture, debug utilities, tree-sitter, font registration. Only needed for advanced use cases. |
 
 ```tsx
 // App-level imports — covers 95% of use cases
@@ -197,7 +197,7 @@ Here is the full setup sequence for a new Vexart project:
 ```bash
 mkdir my-app && cd my-app
 bun init -y
-bun add vxrt@beta solid-js
+bun add vexart solid-js
 bun add -d @babel/core @babel/preset-typescript babel-preset-solid
 ```
 
@@ -1516,14 +1516,14 @@ function HoverCard(props: { children: any }) {
 ```
 
 The Tooltip component uses `useHover` internally for delayed show/hide.
-## Components (`vxrt`)
+## Components (`vexart`)
 
 ### Component Architecture
 
 Vexart components follow a **headless** pattern inspired by Radix UI and Headless UI:
 
-- `vxrt` headless components = **behavior only**, zero visual output
-- `vxrt` styled components = **pre-styled** versions using Void design tokens
+- `vexart` headless components = **behavior only**, zero visual output
+- `vexart` styled components = **pre-styled** versions using Void design tokens
 
 There are two headless patterns:
 
@@ -1550,7 +1550,7 @@ There are two headless patterns:
 />
 ```
 
-**Web analogy:** Headless components in `vxrt` are like Radix Primitives. Styled components in `vxrt` are like shadcn/ui.
+**Web analogy:** Headless components in `vexart` are like Radix Primitives. Styled components in `vexart` are like shadcn/ui.
 
 ---
 
@@ -2923,7 +2923,7 @@ function SignupForm() {
 
 ### Tokens
 
-All design tokens are exported from `vxrt`:
+All design tokens are exported from `vexart`:
 
 #### colors
 
@@ -3154,7 +3154,7 @@ Pre-styled components using Void design tokens. Drop-in replacements for headles
 | `VoidTable` | -- | -- |
 | `createVoidToaster` | -- | -- |
 
-All imported from `vxrt`.
+All imported from `vexart`.
 
 **Typography components:**
 
@@ -3491,7 +3491,7 @@ Keep files small. One component per file. Co-locate a component's types and help
 
 Choose the right abstraction level for the job:
 
-1. **Styled components first** (`Button`, `Card`, `Badge`, etc. from `vxrt`). These cover 80% of UI needs with zero configuration.
+1. **Styled components first** (`Button`, `Card`, `Badge`, etc. from `vexart`). These cover 80% of UI needs with zero configuration.
 2. **Headless components** when you need full visual control. Drop to `Input`, `Dialog`, `Tabs`, `VirtualList`, etc. with a `render*` prop to supply your own layout.
 3. **Raw `<box>` / `<text>`** for one-off layouts or highly custom visuals that don't warrant a reusable component.
 
@@ -3517,9 +3517,9 @@ Avoid wrapping styled components in another component just to rename them. Use t
 - **Co-locate state with the component that owns it.** If only one component reads a signal, define it inside that component. Lift state up only when siblings need to share it.
 - **Use `createForm` for form state.** It handles validation, touched tracking, and async submission out of the box.
 
-### When to use `vxrt/engine`
+### When to use `vexart/engine`
 
-Most apps only need `vxrt`. Reach for `vxrt/engine` when you need:
+Most apps only need `vexart`. Reach for `vexart/engine` when you need:
 
 - **Direct focus control** — `useFocus`, `setFocus`, `focusedId`, `pushFocusScope`
 - **Custom render loops** — `createRenderLoop`, `createTerminal`, `markDirty`
@@ -3531,13 +3531,13 @@ Most apps only need `vxrt`. Reach for `vxrt/engine` when you need:
 - **Plugin system** — `createSlotRegistry`, `createSlot`
 - **FFI bridge** — `VEXART_SYMBOLS`, `openVexartLibrary`, `vexartVersion`
 
-If you find yourself importing more than two or three things from `vxrt/engine`, you are likely building infrastructure (an editor, a devtool, a custom compositor) rather than an application — which is fine, just be aware of the boundary.
+If you find yourself importing more than two or three things from `vexart/engine`, you are likely building infrastructure (an editor, a devtool, a custom compositor) rather than an application — which is fine, just be aware of the boundary.
 
 ---
 
 ## API Quick Reference
 
-### `vxrt` — Application API
+### `vexart` — Application API
 
 Everything app developers use: components, tokens, hooks, SolidJS primitives, and animations.
 
@@ -3698,7 +3698,7 @@ Everything app developers use: components, tokens, hooks, SolidJS primitives, an
 
 ---
 
-### `vxrt/engine` — Low-Level Engine API
+### `vexart/engine` — Low-Level Engine API
 
 Internals for custom render loops, focus management, debug tools, tree-sitter, and FFI.
 
