@@ -34,7 +34,7 @@ import { multiply, translate, transformPoint } from "../ffi/matrix"
 import { debugUpdateStats, isDebugEnabled } from "./debug"
 import type { LayerBoundary, LayerSlot, LayerPlan, PaintResult } from "./types"
 import type { TGENode } from "../ffi/node"
-import type { GpuFrameComposer } from "../output/gpu-frame-composer"
+
 import { isNativePresentationCapable } from "../ffi/native-presentation-flags"
 import { nativeLayerRemove } from "../ffi/native-layer-registry"
 import { nativeDeleteLayer, nativeEmitLayer } from "../ffi/native-presentation-ops"
@@ -105,7 +105,6 @@ function cleanupOrphanLayers(
   layerCache: Map<string, Layer>,
   activeSlotKeys: Set<string>,
   transmissionMode: "direct" | "file" | "shm",
-  layerComposer: GpuFrameComposer | null,
   imageIdForLayer: (layer: Layer) => number,
   removeLayer: (layer: Layer) => void,
   debugCadence: boolean,
@@ -117,12 +116,8 @@ function cleanupOrphanLayers(
     if (activeSlotKeys.has(key)) continue
     const ioStart = debugCadence ? performance.now() : 0
     const imageId = imageIdForLayer(layer)
-    if (isNativePresentationCapable(transmissionMode)) {
-      const nativeImageId = nativeLayerRemove(key)
-      nativeDeleteLayer(nativeImageId ?? imageId)
-    } else {
-      layerComposer?.removeLayer(imageId)
-    }
+    const nativeImageId = nativeLayerRemove(key)
+    nativeDeleteLayer(nativeImageId ?? imageId)
     if (debugCadence) ioMs += performance.now() - ioStart
     removeLayer(layer)
     layerCache.delete(key)
@@ -178,7 +173,7 @@ export type PaintFrameState = {
   textMetaMap: Map<number, import("../ffi/render-graph").TextMeta>
 
   // GPU layer composer (Kitty output)
-  layerComposer: GpuFrameComposer | null
+
 
   // Renderer backend (injected override or global)
   backendOverride?: RendererBackend
@@ -398,7 +393,6 @@ export function paintFrame(
     frameDirtyRects,
     pendingNodeDamageRects,
     textMetaMap,
-    layerComposer,
     lastPresentedInteractionSeq,
     lastPresentedInteractionLatencyMs,
     lastPresentedInteractionType,
@@ -539,12 +533,8 @@ export function paintFrame(
         renderDebug(`[clip:skip] slot=${slot.key} z=${slot.z} x=${lx} y=${ly} w=${lw} h=${lh}`)
         if (slot.z >= 0) {
           const imageId = imageIdForLayer(layer)
-          if (isNativePresentationCapable(state.transmissionMode)) {
-            const nativeImageId = nativeLayerRemove(slot.key)
-            nativeDeleteLayer(nativeImageId ?? imageId)
-          } else {
-            layerComposer?.removeLayer(imageId)
-          }
+          const nativeImageId = nativeLayerRemove(slot.key)
+          nativeDeleteLayer(nativeImageId ?? imageId)
         }
         layer.dirty = false
         continue
@@ -676,7 +666,7 @@ export function paintFrame(
 
   if (framePlan?.strategy === "skip-present") {
     const cleanupStart = profile ? performance.now() : 0
-    ioMs += cleanupOrphanLayers(preparedSlots, layerCache, activeSlotKeys, state.transmissionMode, layerComposer, imageIdForLayer, removeLayer, debugCadence)
+    ioMs += cleanupOrphanLayers(preparedSlots, layerCache, activeSlotKeys, state.transmissionMode, imageIdForLayer, removeLayer, debugCadence)
     if (profile) profile.paintLayerCleanupMs += performance.now() - cleanupStart
     updateLayerStabilityCounters(preparedSlots, slotBoundaryByKey, state.nodeRefById)
     const backendEndStart = profile ? performance.now() : 0
@@ -711,7 +701,7 @@ export function paintFrame(
     const useRegionalRepaint = prepared.useRegionalRepaint
     const imageId = imageIdForLayer(layer)
     const nativePresentationCapable = isNativePresentationCapable(state.transmissionMode)
-    const canPatchRegionalLayer = nativePresentationCapable || layerComposer?.hasLayer(imageId) === true
+    const canPatchRegionalLayer = nativePresentationCapable
     const effectiveUseRegionalRepaint = useRegionalRepaint && canPatchRegionalLayer
     const freezeWhileInteracting = prepared.freezeWhileInteracting
 
@@ -820,43 +810,24 @@ export function paintFrame(
           dragReproDebug(`[present] slot=${slot.key} changed=1 z=${renderZ} pos=(${lx},${ly}) size=${lw}x${lh} raw=1`)
         }
 
-        // Fallback-only bridge path for non-default backends that still return raw RGBA while native mode is active.
-        if (nativePresentationCapable) {
-          const { data, width: pw, height: ph } = paintResult.kittyPayload
-          const col = Math.floor(lx / cellW)
-          const row = Math.floor(ly / cellH)
-          const presentationStart = profile ? performance.now() : 0
-          const nativeStats = nativeEmitLayer(imageId, data, pw, ph, col, row, renderZ, state.transmissionMode)
-          if (profile) profile.paintPresentationMs += performance.now() - presentationStart
-          if (nativeStats !== null) {
-            nativePresentationStats = nativeStats
-            if (effectiveUseRegionalRepaint && clippedDamage) {
-              if (debugCadence) log(`  [${slot.key}] NATIVE-LAYER-REGION ${clippedDamage.width}x${clippedDamage.height} at (${clippedDamage.x},${clippedDamage.y}) within ${pw}x${ph} z=${renderZ}`)
-            } else {
-              if (debugCadence) log(`  [${slot.key}] NATIVE-LAYER ${pw}x${ph} at (${lx},${ly}) z=${renderZ} cmds=${slot.cmdIndices.length}`)
-            }
-            markLayerClean(layer)
-            continue
-          }
-        }
-
-        if (effectiveUseRegionalRepaint && clippedDamage) {
-          if (debugCadence) log(`  [${slot.key}] REPAINT-REGION ${clippedDamage.width}x${clippedDamage.height} at (${clippedDamage.x},${clippedDamage.y}) within ${lw}x${lh} z=${renderZ}`)
-        } else {
-          if (debugCadence) log(`  [${slot.key}] REPAINT ${lw}x${lh} at (${lx},${ly}) z=${renderZ} (${(lw * lh * 4 / 1024).toFixed(0)}KB) cmds=${slot.cmdIndices.length}`)
-        }
-        const ioStart = debugCadence ? performance.now() : 0
+        // Emit layer natively via Rust (all transport modes).
+        const { data, width: pw, height: ph } = paintResult.kittyPayload
+        const col = Math.floor(lx / cellW)
+        const row = Math.floor(ly / cellH)
         const presentationStart = profile ? performance.now() : 0
-        const region = paintResult.kittyPayload.region
-        if (region) {
-          layerComposer?.patchLayer(paintResult.kittyPayload.data, imageId, region.x, region.y, region.width, region.height)
-        } else {
-          layerComposer?.renderLayerRaw(paintResult.kittyPayload.data, paintResult.kittyPayload.width, paintResult.kittyPayload.height, imageId, lx, ly, renderZ, cellW, cellH)
-        }
+        const nativeStats = nativeEmitLayer(imageId, data, pw, ph, col, row, renderZ, state.transmissionMode)
         if (profile) profile.paintPresentationMs += performance.now() - presentationStart
-        if (debugCadence) ioMs += performance.now() - ioStart
-        markLayerClean(layer)
-        continue
+        if (nativeStats !== null) {
+          nativePresentationStats = nativeStats
+          if (effectiveUseRegionalRepaint && clippedDamage) {
+            if (debugCadence) log(`  [${slot.key}] NATIVE-LAYER-REGION ${clippedDamage.width}x${clippedDamage.height} at (${clippedDamage.x},${clippedDamage.y}) within ${pw}x${ph} z=${renderZ}`)
+          } else {
+            if (debugCadence) log(`  [${slot.key}] NATIVE-LAYER ${pw}x${ph} at (${lx},${ly}) z=${renderZ} cmds=${slot.cmdIndices.length}`)
+          }
+          markLayerClean(layer)
+          continue
+        }
+        throw new Error(`[vexart] native layer emit failed for ${slot.key}`)
       }
 
       throw new Error(`GPU-only renderer backend did not return a layer payload for ${slot.key}`)
@@ -865,7 +836,7 @@ export function paintFrame(
 
   // ── Step 4: Clean up orphan layers ──
   const cleanupStart = profile ? performance.now() : 0
-  ioMs += cleanupOrphanLayers(preparedSlots, layerCache, activeSlotKeys, state.transmissionMode, layerComposer, imageIdForLayer, removeLayer, debugCadence)
+  ioMs += cleanupOrphanLayers(preparedSlots, layerCache, activeSlotKeys, state.transmissionMode, imageIdForLayer, removeLayer, debugCadence)
   if (profile) profile.paintLayerCleanupMs += performance.now() - cleanupStart
   updateLayerStabilityCounters(preparedSlots, slotBoundaryByKey, state.nodeRefById)
 
@@ -885,20 +856,6 @@ export function paintFrame(
   } else if (frameResult?.output === "native-presented") {
     // Native path: Rust already emitted the full frame — nothing to do in JS.
     rendererOutput = "native-presented"
-  } else if (frameResult?.output === "final-frame-raw" && frameResult.finalFrame) {
-    rendererOutput = "final-frame-raw"
-    const ioStart = debugCadence ? performance.now() : 0
-    const presentationStart = profile ? performance.now() : 0
-    layerComposer?.renderFinalFrameRaw(
-      frameResult.finalFrame.data,
-      frameResult.finalFrame.width,
-      frameResult.finalFrame.height,
-      0,
-      cellW,
-      cellH,
-    )
-    if (profile) profile.paintPresentationMs += performance.now() - presentationStart
-    if (debugCadence) ioMs += performance.now() - ioStart
   }
 
   // ── Step 6: Interaction latency tracking + debug stats ──

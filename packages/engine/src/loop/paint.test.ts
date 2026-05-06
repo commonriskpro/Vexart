@@ -54,7 +54,7 @@ function createPaintFrameState(): PaintFrameState {
     pendingNodeDamageRects: [],
     nodeRefById: new Map([[root.id, root]]),
     textMetaMap: new Map(),
-    layerComposer: null,
+
     backendOverride: undefined,
     lastPresentedInteractionSeq: { value: 0 },
     lastPresentedInteractionLatencyMs: { value: 0 },

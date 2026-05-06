@@ -107,7 +107,7 @@ describe("compositeFrame compositor fast path", () => {
       clearDirty() { cleared++ },
       dirtyVersion: () => 1,
       dirtyCount: () => 1,
-      layerComposer: null,
+
       backendOverride: {
         name: "test-backend",
         paint() {

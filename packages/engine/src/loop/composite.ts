@@ -29,6 +29,7 @@ import {
   updateInteractiveStates as _updateInteractiveStates,
   type InteractiveStatesBag,
 } from "./layout"
+import { setActiveScrollOffsets } from "../reconciler/hit-test"
 import {
   assignLayersSpatial as _assignLayersSpatial,
   type AssignLayersState,
@@ -49,7 +50,7 @@ import { hasCompositorAnimations, isCompositorOnlyFrame, resetFrameTracking } fr
 import { unionRect, type DamageRect } from "../ffi/damage"
 import type { Layer } from "../ffi/layers"
 import type { RendererBackend } from "../ffi/renderer-backend"
-import type { GpuFrameComposer } from "../output/gpu-frame-composer"
+
 import { createScrollHandle, updateScrollContainerGeometry } from "./scroll"
 import { DIRTY_KIND, type DirtyScope } from "../reconciler/dirty"
 
@@ -191,6 +192,8 @@ export type CompositeFrameState = {
   activeSlotKeys: Set<string>
   frameDirtyRects: DamageRect[]
   pendingNodeDamageRects: Array<{ nodeId: number; rect: DamageRect }>
+  /** HP-6: Scroll offsets per container ID — used for lazy hit-testing. */
+  scrollOffsets: Map<number, { x: number; y: number }>
 
   // Layer store methods (coordinator owns the store)
   getOrCreateLayer: (key: string, z: number) => Layer
@@ -210,7 +213,7 @@ export type CompositeFrameState = {
   dirtyCount: () => number
 
   // Layer composer (Kitty output)
-  layerComposer: GpuFrameComposer | null
+
 
   // Renderer backend
   backendOverride?: RendererBackend
@@ -301,7 +304,7 @@ function runLayoutPass(s: CompositeFrameState, profile?: FrameProfile) {
   walkTreeOnce(s)
   if (profile) profile.walkTreeMs = performance.now() - walkStart
   const layoutComputeStart = profile ? performance.now() : 0
-  const commands = s.layoutAdapter.endLayout()
+  const commands = s.layoutAdapter.endLayout(s.root._flexNode)
   if (profile) profile.layoutComputeMs = performance.now() - layoutComputeStart
   const layoutWritebackStart = profile ? performance.now() : 0
   writeLayoutBack(s)
@@ -322,7 +325,8 @@ function runLayoutPass(s: CompositeFrameState, profile?: FrameProfile) {
  * the scroll container's viewport bounds (not the scrolled content position).
  */
 function applyScrollOffsets(commands: RenderCommand[], s: CompositeFrameState) {
-  const offsets = new Map<number, { x: number; y: number }>()
+  s.scrollOffsets.clear()
+  const offsets = s.scrollOffsets
   for (const node of s.scrollContainers) {
 
     // Determine stable scroll id (must match what walkTree used)
@@ -352,10 +356,14 @@ function applyScrollOffsets(commands: RenderCommand[], s: CompositeFrameState) {
 
     const ox = node.props.scrollX ? handle.scrollX : 0
     const oy = node.props.scrollY ? handle.scrollY : 0
-    if (ox !== 0 || oy !== 0) offsets.set(node.id, { x: ox, y: oy })
-
-    // Offset all descendant node layout rects for hit-testing
-    applyOffsetToDescendants(node, ox, oy)
+    if (ox !== 0 || oy !== 0) {
+      offsets.set(node.id, { x: ox, y: oy })
+      // HP-6: Since we no longer mutate descendant layout positions,
+      // the damage system won't detect scroll position changes automatically.
+      // Explicitly mark the scroll container's layer dirty so content repaints.
+      const layerKey = node._layerKey ?? "bg"
+      markLayerDirtyByKey(layerKey)
+    }
   }
 
   if (offsets.size === 0) return
@@ -371,20 +379,10 @@ function applyScrollOffsets(commands: RenderCommand[], s: CompositeFrameState) {
 }
 
 
-// TODO(perf): Store scroll offset on container and apply during paint/hit-test
-// instead of mutating all descendant layout positions. Current approach is O(N)
-// per scroll event for large subtrees.
-function applyOffsetToDescendants(container: TGENode, ox: number, oy: number) {
-  for (const child of container.children) {
-    child.layout.x += ox
-    child.layout.y += oy
-    // Recurse into children that are NOT themselves scroll containers
-    // (nested scroll containers will apply their own offset separately)
-    if (!child.props.scrollX && !child.props.scrollY) {
-      applyOffsetToDescendants(child, ox, oy)
-    }
-  }
-}
+// HP-6: applyOffsetToDescendants removed. Scroll offsets are now applied lazily:
+// - Render commands: offset in the `for (const cmd of commands)` loop below
+// - Hit-testing: offset via scrollOffsets map passed to InteractiveStatesBag
+// - isFullyOutsideScrollViewport: offset via setActiveScrollOffsets()
 
 function computeNodeLocalTransform(node: TGENode) {
   const vp = resolveProps(node)
@@ -462,11 +460,33 @@ function buildRetainedCompositorLayers(s: CompositeFrameState) {
   return layers
 }
 
-function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; changed: boolean } {
+/**
+ * Check whether an interactive style contains any layout-affecting props.
+ * Only `borderWidth` affects layout among InteractiveStyleProps — all others
+ * (backgroundColor, shadow, glow, gradient, opacity, etc.) are visual-only.
+ */
+function interactiveStyleAffectsLayout(style: import("../ffi/node").InteractiveStyleProps | undefined): boolean {
+  if (!style) return false
+  return style.borderWidth !== undefined
+}
+
+function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; changed: boolean; needsRelayout: boolean } {
   let changed = false
+  let needsRelayout = false
   const visualNodeIds = new Set<number>()
   const queueNodeVisualDamage = (node: TGENode) => {
     visualNodeIds.add(node.id)
+    // HP-5: Track if any changed node has layout-affecting interactive styles
+    if (!needsRelayout) {
+      const props = node.props
+      if (
+        interactiveStyleAffectsLayout(props.hoverStyle) ||
+        interactiveStyleAffectsLayout(props.activeStyle) ||
+        interactiveStyleAffectsLayout(props.focusStyle)
+      ) {
+        needsRelayout = true
+      }
+    }
     if (node.layout.width <= 0 || node.layout.height <= 0) return
     const padding = 32
     s.pendingNodeDamageRects.push({
@@ -479,6 +499,8 @@ function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; c
       },
     })
   }
+  // HP-6: Set active scroll offsets for hit-testing helpers (buildNodeMouseEvent, isFullyOutsideScrollViewport)
+  setActiveScrollOffsets(s.scrollOffsets)
   const bag: InteractiveStatesBag = {
     rectNodes: s.rectNodes,
     rectNodeById: s.rectNodeById,
@@ -493,6 +515,7 @@ function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; c
     prevActiveNode: s.pointer.prevActiveNode,
     cellWidth: s.term.size.cellWidth || 8,
     cellHeight: s.term.size.cellHeight || 16,
+    scrollOffsets: s.scrollOffsets,
     onChanged: () => {
       changed = true
       if (visualNodeIds.size === 0) {
@@ -531,7 +554,7 @@ function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; c
   // callbacks ran.
   if (s.pointer.capturedNodeId === captureBefore) s.pointer.capturedNodeId = bag.capturedNodeId
   s.pointer.dirty = bag.pointerDirty
-  return { hadClick, changed }
+  return { hadClick, changed, needsRelayout }
 }
 
 // ── compositeFrame ────────────────────────────────────────────────────────
@@ -718,11 +741,11 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   const interaction = updateInteractiveStates(s)
   if (profile) profile.interactionMs = performance.now() - interactionStart
 
-  // Re-layout on any interactive state change for instant visual feedback (same frame).
-  // Hover/active/focus styles mutate node state after the first layout pass; if we only
-  // relayout on click, that dirty mark gets cleared at frame end and visual state only
-  // appears on an unrelated repaint (for example terminal resize).
-  if (interaction.changed || interaction.hadClick) {
+  // Re-layout on interactive state changes that affect layout (HP-5 optimization).
+  // Only borderWidth among InteractiveStyleProps affects layout — all others
+  // (backgroundColor, shadow, opacity, etc.) are visual-only and only need repaint.
+  // Clicks always trigger re-layout because onPress handlers may mutate state.
+  if (interaction.hadClick || interaction.needsRelayout) {
     const relayoutStart = profile ? performance.now() : 0
     commands = runLayoutPass(s)
     if (profile) profile.relayoutMs = performance.now() - relayoutStart
@@ -795,7 +818,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     pendingNodeDamageRects: s.pendingNodeDamageRects,
     nodeRefById: s.nodeRefById,
     textMetaMap: s.textMetaMap,
-    layerComposer: s.layerComposer,
+
     backendOverride: s.backendOverride,
     lastPresentedInteractionSeq: s.lastPresentedInteractionSeq,
     lastPresentedInteractionLatencyMs: s.lastPresentedInteractionLatencyMs,

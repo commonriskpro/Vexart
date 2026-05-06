@@ -14,8 +14,8 @@
 // 60fps causes measurable I/O overhead.
 
 import type { Terminal } from "../terminal/index"
-import { createLayerComposer } from "../output/layer-composer"
 import { type TGENode, createNode, parseSizing } from "../ffi/node"
+import { syncAllLayoutProps, syncLayoutProp } from "../ffi/flex-sync"
 import { createVexartLayoutCtx } from "./layout-adapter"
 
 const layoutAdapter = createVexartLayoutCtx()
@@ -26,7 +26,7 @@ import { debugFrameStart, debugRecordFfiCounts } from "./debug"
 import { type Layer, createLayerStore } from "../ffi/layers"
 import { type DamageRect } from "../ffi/damage"
 import { createGpuRendererBackend } from "../ffi/gpu-renderer-backend"
-import { createGpuFrameComposer } from "../output/gpu-frame-composer"
+
 import { createRenderGraphQueues, type TextMeta } from "../ffi/render-graph"
 import { getRendererBackend, setRendererBackend, type RendererBackend } from "../ffi/renderer-backend"
 import {
@@ -79,11 +79,20 @@ function hasPointerReactiveNodes(node: TGENode): boolean {
   return node.children.some((child) => hasPointerReactiveNodes(child))
 }
 
+function freeFlexTree(node: TGENode): void {
+  if (node._flexNode) {
+    node._flexNode.free()
+    node._flexNode = null
+  }
+  for (const child of node.children) freeFlexTree(child)
+}
+
 // ── Module-level shared state ──
 const textMetaMap = new Map<number, TextMeta>()
   const renderGraphQueues = createRenderGraphQueues()
   const frameDirtyRects: DamageRect[] = []
   const pendingNodeDamageRects: Array<{ nodeId: number; rect: DamageRect }> = []
+  const scrollOffsets = new Map<number, { x: number; y: number }>()
   const activeSlotKeys = new Set<string>()
 
 /** @public */
@@ -142,10 +151,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     disableNativePresentation("nativePresentation disabled by render loop option")
   } else if (isNativePresentationForcedOff()) {
     disableNativePresentation(nativePresentationForcedOffReason() ?? "native presentation forced off")
-  } else if (term.caps.transmissionMode === "shm") {
-    enableNativePresentation("terminal probe selected SHM transport")
   } else {
-    disableNativePresentation(`native presentation requires SHM transport, got ${term.caps.transmissionMode}`)
+    // All transport modes (direct/file/shm) are handled natively by Rust.
+    // Rust does readback+compress+emit internally — no TS readback needed.
+    enableNativePresentation(`native presentation for ${term.caps.transmissionMode} transport`)
   }
 
   const nativeLayerRegistryRequested = opts?.experimental?.nativeLayerRegistry !== false
@@ -153,10 +162,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     disableNativeLayerRegistry("nativeLayerRegistry disabled by render loop option")
   } else if (isNativeLayerRegistryForcedOff()) {
     disableNativeLayerRegistry(nativeLayerRegistryForcedOffReason() ?? "nativeLayerRegistry forced off")
-  } else if (nativePresentationRequested && term.caps.transmissionMode === "shm") {
+  } else if (nativePresentationRequested) {
     enableNativeLayerRegistry()
   } else {
-    disableNativeLayerRegistry("nativeLayerRegistry requires native presentation with SHM transport")
+    disableNativeLayerRegistry("nativeLayerRegistry requires native presentation")
   }
 
   const root = createNode("root")
@@ -165,11 +174,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   root.props = { width: viewportWidth, height: viewportHeight }
   root._widthSizing = parseSizing(viewportWidth)
   root._heightSizing = parseSizing(viewportHeight)
+  syncAllLayoutProps(root)
   layoutAdapter.init(viewportWidth, viewportHeight)
 
-  const layerComposer = isNativePresentationEnabled()
-    ? null
-    : createGpuFrameComposer(createLayerComposer(term.write, term.rawWrite, term.caps.transmissionMode, "auto"))
+
   let timer: ReturnType<typeof setTimeout> | null = null
   const maxFps = opts?.experimental?.maxFps ?? 60
   const idleMaxFps = opts?.experimental?.idleMaxFps ?? Math.min(maxFps, 60)
@@ -377,11 +385,11 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     textMetaMap, rectNodeById, nodePathById, nodeRefById,
     layerBoundaries, scrollContainers, nodeCountValue,
     renderGraphQueues,
-    layerCache, activeSlotKeys, frameDirtyRects, pendingNodeDamageRects,
+    layerCache, activeSlotKeys, frameDirtyRects, pendingNodeDamageRects, scrollOffsets,
     getOrCreateLayer,
     getPreviousLayerRect, updateLayerGeometry, markLayerDamaged, markLayerClean, imageIdForLayer, removeLayer, layerCount,
     markDirty, markAllDirty, clearDirty, dirtyVersion: globalDirtyVersion, dirtyCount,
-    layerComposer,
+
     backendOverride: getActiveBackend(),
     useLayerCompositing: true,
     forceLayerRepaint,
@@ -446,8 +454,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     layoutAdapter.setDimensions(newW, newH)
     root.props.width = newW; root.props.height = newH
     root._widthSizing = parseSizing(newW); root._heightSizing = parseSizing(newH)
+    syncLayoutProp(root, "width", newW); syncLayoutProp(root, "height", newH)
     clearNativeLayerRegistryMirror()
-    layerComposer?.clear(); resetLayers(); layerCache.clear()
+    resetLayers(); layerCache.clear()
     markDirty(); markAllDirty(); markInteractionActive()
     resizeDebug(`dirty marked newW=${newW} newH=${newH}`)
     if (isSuspended) { resizeDebug(`skip immediate frame suspended=${isSuspended ? 1 : 0} timer=${timer ? 1 : 0}`); return }
@@ -516,10 +525,11 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       unsubGlobalDirty()
       unsubResize()
       clearNativeLayerRegistryMirror()
-      layerComposer?.destroy()
+
       getActiveBackend().destroy?.()
       resetLayers(); layerCache.clear()
       layoutAdapter.destroy()
+      freeFlexTree(root)
     },
   }
 }
