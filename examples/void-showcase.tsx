@@ -1,381 +1,570 @@
 /**
- * Vexart Void Showcase — comprehensive visual test of all new features.
+ * Vexart Void Showcase — every styled component in one app.
  *
- * Tests:
- *   1. Default direction=column (layout should stack vertically)
- *   2. Linear gradient
- *   3. Radial gradient
- *   4. Multi-shadow (array of shadows)
- *   5. Backdrop blur (glassmorphism)
- *   6. Per-corner radius (cornerRadii)
- *   7. Hover states (hoverStyle)
- *   8. Active states (activeStyle)
- *   9. Backdrop blur + gradient fused (no banding)
- *  10. void/Button — 5 variants
- *  11. void/Card composition
- *  12. void/Badge — 4 variants
- *  13. void/Separator
- *  14. void/Avatar — 3 sizes
- *  15. void/Skeleton
- *  16. void/Typography — 9 presets
- *  17. void/Tokens (colors used throughout)
+ * Organized by tabs: Inputs, Display, Collections, Overlays, Typography, New.
+ * Uses ONLY the public styled API — no raw primitives.
  *
- * Run:  bun run examples/void-showcase.tsx
+ * Run: bun --conditions=browser run examples/void-showcase.tsx
  */
-
-import { useTerminalDimensions } from "@vexart/engine"
-import { createApp, useAppTerminal } from "@vexart/app"
+import { createSignal, Show } from "solid-js"
+import { useTerminalDimensions, SyntaxStyle, ONE_DARK } from "@vexart/engine"
+import { createApp, useAppTerminal, Box, Text } from "@vexart/app"
 import {
+  // Tokens
+  colors, radius, space, font, weight, shadows,
+  // Theme
+  themeColors, darkTheme, lightTheme, setTheme,
+  // Typography
+  H1, H2, H3, H4, P, Lead, Large, Small, Muted,
+  // Components
   Button,
   Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter,
   Badge,
-  Separator,
   Avatar,
+  Separator,
   Skeleton,
-  H1, H2, H3, H4, P, Lead, Large, Small, Muted,
-  colors, radius, space, font, weight, shadows,
+  VoidInput,
+  VoidTextarea,
+  VoidCheckbox,
+  VoidSwitch,
+  VoidRadioGroup,
+  VoidSelect,
+  VoidCombobox,
+  VoidSlider,
+  VoidProgress,
+  VoidTabs,
+  VoidTable,
+  VoidDialog, VoidDialogTitle, VoidDialogDescription, VoidDialogFooter,
+  VoidTooltip,
+  VoidCode,
+  VoidMarkdown,
+  VoidList,
+  VoidScrollView,
+  VoidDiff,
+  createVoidToaster,
 } from "@vexart/styled"
 
-// ── Section wrapper ──
+const syntaxStyle = SyntaxStyle.fromTheme(ONE_DARK)
 
-function Section(props: { title: string; children?: any }) {
+// ── Inputs Tab ──
+
+function InputsTab() {
+  const [text, setText] = createSignal("")
+  const [area, setArea] = createSignal("Hello\nWorld")
+  const [checked, setChecked] = createSignal(true)
+  const [switched, setSwitched] = createSignal(false)
+  const [radio, setRadio] = createSignal("a")
+  const [selected, setSelected] = createSignal("ts")
+  const [combo, setCombo] = createSignal("")
+  const [slider, setSlider] = createSignal(42)
+
   return (
-    <box direction="column" gap={space[2]} paddingBottom={space[4]}>
-      <text color={colors.mutedForeground} fontSize={font.xs} fontWeight={weight.semibold}>{props.title}</text>
-      <Separator />
-      <box paddingTop={space[2]}>
-        {props.children}
-      </box>
-    </box>
+    <Box direction="row" gap={space[4]} alignY="top">
+      {/* Column 1 */}
+      <Box direction="column" gap={space[4]} width="grow">
+        <Card>
+          <CardHeader>
+            <CardTitle>Text Inputs</CardTitle>
+            <CardDescription>Single-line and multi-line editors</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Box direction="column" gap={space[4]}>
+              <Box direction="column" gap={space[1]}>
+                <Small>VoidInput</Small>
+                <VoidInput value={text()} onChange={setText} placeholder="Type here..." />
+              </Box>
+              <Box direction="column" gap={space[1]}>
+                <Small>VoidTextarea</Small>
+                <VoidTextarea value={area()} onChange={setArea} width={300} height={100} />
+              </Box>
+            </Box>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Selection</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Box direction="column" gap={space[4]}>
+              <Box direction="column" gap={space[1]}>
+                <Small>VoidSelect</Small>
+                <VoidSelect
+                  value={selected()}
+                  onChange={setSelected}
+                  options={[
+                    { value: "ts", label: "TypeScript" },
+                    { value: "rs", label: "Rust" },
+                    { value: "go", label: "Go" },
+                    { value: "py", label: "Python" },
+                  ]}
+                />
+              </Box>
+              <Box direction="column" gap={space[1]}>
+                <Small>VoidCombobox</Small>
+                <VoidCombobox
+                  value={combo()}
+                  onChange={setCombo}
+                  options={[
+                    { value: "vexart", label: "Vexart" },
+                    { value: "ink", label: "Ink" },
+                    { value: "bubbletea", label: "Bubbletea" },
+                    { value: "textual", label: "Textual" },
+                  ]}
+                  placeholder="Search frameworks..."
+                />
+              </Box>
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
+
+      {/* Column 2 */}
+      <Box direction="column" gap={space[4]} width="grow">
+        <Card>
+          <CardHeader>
+            <CardTitle>Toggles</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Box direction="column" gap={space[3]}>
+              <VoidCheckbox checked={checked()} onChange={setChecked} label="Enable notifications" />
+              <VoidCheckbox checked={false} label="Marketing emails" />
+              <Separator />
+              <VoidSwitch checked={switched()} onChange={setSwitched} label="Dark mode" />
+              <VoidSwitch checked={true} label="Auto-save" />
+            </Box>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Radio & Slider</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Box direction="column" gap={space[4]}>
+              <VoidRadioGroup
+                value={radio()}
+                onChange={setRadio}
+                options={[
+                  { value: "a", label: "Option A" },
+                  { value: "b", label: "Option B" },
+                  { value: "c", label: "Option C" },
+                ]}
+              />
+              <Separator />
+              <Box direction="column" gap={space[1]}>
+                <Small>VoidSlider: {slider()}</Small>
+                <VoidSlider value={slider()} onChange={setSlider} min={0} max={100} />
+              </Box>
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
+    </Box>
   )
 }
 
-// ── 1. Engine features ──
+// ── Display Tab ──
 
-function EngineFeatures() {
+function DisplayTab() {
   return (
-    <box direction="column" gap={space[4]}>
-      {/* 2. Linear gradient */}
-      <Section title="LINEAR GRADIENT">
-        <box direction="row" gap={space[3]}>
-          <box
-            width={120} height={60}
-            cornerRadius={radius.lg}
-            gradient={{ type: "linear", from: 0x1a1a2eff, to: 0x3a1a5eff, angle: 90 }}
-            padding={space[2]}
-          >
-            <text color={colors.foreground} fontSize={font.xs}>angle: 90</text>
-          </box>
-          <box
-            width={120} height={60}
-            cornerRadius={radius.lg}
-            gradient={{ type: "linear", from: 0x56d4c8ff, to: 0x5090d0ff, angle: 0 }}
-            padding={space[2]}
-          >
-            <text color={0x000000ff} fontSize={font.xs}>angle: 0</text>
-          </box>
-          <box
-            width={120} height={60}
-            cornerRadius={radius.lg}
-            gradient={{ type: "linear", from: 0xdc2626ff, to: 0xf59e0bff, angle: 45 }}
-            padding={space[2]}
-          >
-            <text color={0x000000ff} fontSize={font.xs}>angle: 45</text>
-          </box>
-        </box>
-      </Section>
+    <Box direction="row" gap={space[4]} alignY="top">
+      <Box direction="column" gap={space[4]} width="grow">
+        <Card>
+          <CardHeader>
+            <CardTitle>Buttons</CardTitle>
+            <CardDescription>All variants and sizes</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Box direction="column" gap={space[3]}>
+              <Box direction="row" gap={space[2]} alignY="center">
+                <Button variant="default" onPress={() => {}}>Default</Button>
+                <Button variant="secondary" onPress={() => {}}>Secondary</Button>
+                <Button variant="outline" onPress={() => {}}>Outline</Button>
+                <Button variant="ghost" onPress={() => {}}>Ghost</Button>
+                <Button variant="destructive" onPress={() => {}}>Destructive</Button>
+              </Box>
+              <Box direction="row" gap={space[2]} alignY="center">
+                <Button size="xs" onPress={() => {}}>XS</Button>
+                <Button size="sm" onPress={() => {}}>SM</Button>
+                <Button onPress={() => {}}>Default</Button>
+                <Button size="lg" onPress={() => {}}>LG</Button>
+              </Box>
+            </Box>
+          </CardContent>
+        </Card>
 
-      {/* 3. Radial gradient */}
-      <Section title="RADIAL GRADIENT">
-        <box direction="row" gap={space[3]}>
-          <box
-            width={120} height={80}
-            cornerRadius={radius.lg}
-            gradient={{ type: "radial", from: 0x56d4c8ff, to: 0x00000000 }}
-            padding={space[2]}
-          >
-            <text color={colors.foreground} fontSize={font.xs}>cyan → transparent</text>
-          </box>
-          <box
-            width={120} height={80}
-            cornerRadius={radius.lg}
-            gradient={{ type: "radial", from: 0xffffff40, to: 0x00000000 }}
-            padding={space[2]}
-          >
-            <text color={colors.foreground} fontSize={font.xs}>white glow</text>
-          </box>
-        </box>
-      </Section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Badges</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Box direction="row" gap={space[2]}>
+              <Badge>Default</Badge>
+              <Badge variant="secondary">Secondary</Badge>
+              <Badge variant="outline">Outline</Badge>
+              <Badge variant="destructive">Destructive</Badge>
+            </Box>
+          </CardContent>
+        </Card>
 
-      {/* 4. Multi-shadow */}
-      <Section title="MULTI-SHADOW">
-        <box direction="row" gap={space[6]}>
-          {(() => {
-            const s2 = [
-              { x: 0, y: 2, blur: 4, color: 0x00000040 },
-              { x: 0, y: 8, blur: 24, color: 0x00000030 },
-            ]
-            return (
-              <box
-                width={120} height={60}
-                backgroundColor={colors.card}
-                cornerRadius={radius.lg}
-                shadow={s2}
-                alignX="center" alignY="center"
-              >
-                <text color={colors.foreground} fontSize={font.xs}>2 shadows</text>
-              </box>
-            )
-          })()}
-          {(() => {
-            const s3 = [
-              { x: 0, y: 1, blur: 2, color: 0x00000060 },
-              { x: 0, y: 4, blur: 8, color: 0x00000040 },
-              { x: 0, y: 16, blur: 32, color: 0x00000020 },
-            ]
-            return (
-              <box
-                width={120} height={60}
-                backgroundColor={colors.card}
-                cornerRadius={radius.lg}
-                shadow={s3}
-                alignX="center" alignY="center"
-              >
-                <text color={colors.foreground} fontSize={font.xs}>3 shadows</text>
-              </box>
-            )
-          })()}
-        </box>
-      </Section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Avatar</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Box direction="row" gap={space[3]} alignY="center">
+              <Avatar name="Sarah Chen" size="sm" />
+              <Avatar name="Alex Rivera" />
+              <Avatar name="Jordan Kim" size="lg" />
+              <Avatar name="Custom" color="#56d4c8" />
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
 
-      {/* 5. Backdrop blur */}
-      <Section title="BACKDROP BLUR (glassmorphism)">
-        {/* Single solid gradient background — no gaps possible */}
-        <box
-          width={350} height={120}
-          gradient={{ type: "linear", from: 0x56d4c8ff, to: 0xdc2626ff, angle: 0 }}
-        >
-          {/* Text labels to show blur effect on sharp content */}
-          <box direction="row" gap={40} paddingTop={10} paddingLeft={20}>
-            <text color={0x000000ff} fontSize={24} fontWeight={700}>BLUR</text>
-            <text color={0xffffffff} fontSize={24} fontWeight={700}>TEST</text>
-            <text color={0x000000ff} fontSize={24} fontWeight={700}>OK?</text>
-          </box>
-          {/* Glass card */}
-          <box
-            width={280} height={60}
-            backgroundColor={0xffffff20}
-            backdropBlur={12}
-            cornerRadius={radius.xl}
-            borderWidth={1}
-            borderColor={0xffffff30}
-            alignX="center" alignY="center"
-            floating="parent"
-            floatOffset={{ x: 35, y: 40 }}
-          >
-            <text color={colors.foreground} fontSize={font.sm}>glass over content</text>
-          </box>
-        </box>
-      </Section>
+      <Box direction="column" gap={space[4]} width="grow">
+        <Card>
+          <CardHeader>
+            <CardTitle>Card Anatomy</CardTitle>
+            <CardDescription>Every Card sub-component</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <P>This is the CardContent area. It holds the main content of the card.</P>
+          </CardContent>
+          <CardFooter>
+            <Button variant="outline" size="sm" onPress={() => {}}>Cancel</Button>
+            <Button size="sm" onPress={() => {}}>Save</Button>
+          </CardFooter>
+        </Card>
 
-      {/* 6. Per-corner radius */}
-      <Section title="PER-CORNER RADIUS">
-        <box direction="row" gap={space[3]}>
-          <box
-            width={80} height={60}
-            backgroundColor={colors.primary}
-            cornerRadii={{ tl: 20, tr: 0, br: 20, bl: 0 }}
-            alignX="center" alignY="center"
-          >
-            <text color={colors.primaryForeground} fontSize={font.xs}>TL+BR</text>
-          </box>
-          <box
-            width={80} height={60}
-            backgroundColor={colors.destructive}
-            cornerRadii={{ tl: 0, tr: 20, br: 0, bl: 20 }}
-            alignX="center" alignY="center"
-          >
-            <text color={colors.foreground} fontSize={font.xs}>TR+BL</text>
-          </box>
-          <box
-            width={80} height={60}
-            backgroundColor={colors.secondary}
-            cornerRadii={{ tl: 20, tr: 20, br: 0, bl: 0 }}
-            alignX="center" alignY="center"
-          >
-            <text color={colors.foreground} fontSize={font.xs}>top only</text>
-          </box>
-        </box>
-      </Section>
-
-      {/* 7+8. Hover + Active states */}
-      <Section title="HOVER + ACTIVE (move mouse over boxes)">
-        <box direction="row" gap={space[3]}>
-          <box
-            width={120} height={50}
-            backgroundColor={colors.secondary}
-            cornerRadius={radius.md}
-            alignX="center" alignY="center"
-            hoverStyle={{ backgroundColor: colors.accent }}
-            activeStyle={{ backgroundColor: colors.primary }}
-          >
-            <text color={colors.foreground} fontSize={font.xs}>hover me</text>
-          </box>
-          <box
-            width={120} height={50}
-            backgroundColor={colors.card}
-            cornerRadius={radius.md}
-            borderWidth={1}
-            borderColor={colors.border}
-            alignX="center" alignY="center"
-            hoverStyle={{ backgroundColor: 0x56d4c820, borderColor: 0x56d4c860 }}
-            activeStyle={{ backgroundColor: 0x56d4c840 }}
-          >
-            <text color={colors.foreground} fontSize={font.xs}>glow border</text>
-          </box>
-          <box
-            width={120} height={50}
-            backgroundColor={colors.destructive}
-            cornerRadius={radius.md}
-            alignX="center" alignY="center"
-            hoverStyle={{ backgroundColor: 0xef4444ff }}
-            activeStyle={{ backgroundColor: 0xb91c1cff }}
-          >
-            <text color={colors.foreground} fontSize={font.xs}>destructive</text>
-          </box>
-        </box>
-      </Section>
-
-      {/* 9. Backdrop blur + gradient fused */}
-      <Section title="BACKDROP BLUR + GRADIENT (fused — no banding)">
-        <box width={300} height={100}>
-          {/* Background pattern */}
-          <box
-            width={300} height={100}
-            gradient={{ type: "linear", from: 0x22c55eff, to: 0x3b82f6ff, angle: 0 }}
-          >
-            <box
-              width={220} height={70}
-              backdropBlur={12}
-              gradient={{ type: "linear", from: 0xffffff08, to: 0xffffff20, angle: 180 }}
-              cornerRadius={radius.xl}
-              borderWidth={1}
-              borderColor={0xffffff15}
-              alignX="center" alignY="center"
-              floating="parent"
-              floatOffset={{ x: 40, y: 15 }}
-            >
-              <text color={colors.foreground} fontSize={font.xs}>blur + gradient fused</text>
-            </box>
-          </box>
-        </box>
-      </Section>
-    </box>
+        <Card>
+          <CardHeader>
+            <CardTitle>Progress & Skeleton</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Box direction="column" gap={space[3]}>
+              <Box direction="column" gap={space[1]}>
+                <Small>VoidProgress</Small>
+                <VoidProgress value={72} max={100} />
+              </Box>
+              <Separator />
+              <Box direction="column" gap={space[1]}>
+                <Small>Skeleton</Small>
+                <Skeleton width={200} height={12} />
+                <Skeleton width={160} height={12} />
+                <Skeleton width={120} height={12} />
+              </Box>
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
+    </Box>
   )
 }
 
-// ── 2. Void Components ──
+// ── Collections Tab ──
 
-function VoidComponents() {
+function CollectionsTab() {
+  const [listIdx, setListIdx] = createSignal(0)
+  const [tableRow, setTableRow] = createSignal(0)
+
+  const tableData = [
+    { name: "vexart", version: "0.9.0", downloads: "1,247" },
+    { name: "solid-js", version: "1.9.0", downloads: "892,341" },
+    { name: "flexily", version: "0.6.0", downloads: "3,128" },
+    { name: "wgpu", version: "29.0", downloads: "—" },
+    { name: "marked", version: "18.0", downloads: "45,000,000" },
+  ]
+
   return (
-    <box direction="column" gap={space[4]}>
-      {/* 10. Buttons */}
-      <Section title="BUTTON VARIANTS + SIZES">
-        <box direction="column" gap={space[3]}>
-          <box direction="row" gap={space[2]}>
-            <Button>Default</Button>
-            <Button variant="secondary">Secondary</Button>
-            <Button variant="outline">Outline</Button>
-            <Button variant="ghost">Ghost</Button>
-            <Button variant="destructive">Destructive</Button>
-          </box>
-          <box direction="row" gap={space[2]} alignY="center">
-            <Button size="xs">XS</Button>
-            <Button size="sm">SM</Button>
-            <Button size="default">Default</Button>
-            <Button size="lg">LG</Button>
-          </box>
-        </box>
-      </Section>
+    <Box direction="row" gap={space[4]} alignY="top">
+      <Box direction="column" gap={space[4]} width="grow">
+        <Card>
+          <CardHeader>
+            <CardTitle>VoidList</CardTitle>
+            <CardDescription>Keyboard navigable list</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <VoidList
+              items={["Dashboard", "Settings", "Profile", "Notifications", "Billing", "Help"]}
+              selectedIndex={listIdx()}
+              onSelectedChange={setListIdx}
+              width={280}
+              height={200}
+            />
+          </CardContent>
+        </Card>
 
-      {/* 11. Card */}
-      <Section title="CARD COMPOSITION">
-        <box direction="row" gap={space[3]}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Card Title</CardTitle>
-              <CardDescription>Description text here</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <P>Card content goes here. This is a full card composition.</P>
-            </CardContent>
-            <CardFooter>
-              <Button size="sm">Action</Button>
-            </CardFooter>
-          </Card>
-          <Card size="sm">
-            <CardHeader>
-              <CardTitle>Small Card</CardTitle>
-              <CardDescription>Compact variant</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Muted>Less padding, tighter gaps.</Muted>
-            </CardContent>
-          </Card>
-        </box>
-      </Section>
+        <Card>
+          <CardHeader>
+            <CardTitle>VoidScrollView</CardTitle>
+            <CardDescription>Themed scrollable container</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <VoidScrollView width={280} height={120} padding={space[3]} gap={space[2]}>
+              <P>Line 1: Vexart is a GPU-accelerated terminal UI engine.</P>
+              <P>Line 2: Write JSX with SolidJS reconciliation.</P>
+              <P>Line 3: Get browser-quality visuals in the terminal.</P>
+              <P>Line 4: Shadows, gradients, glow, backdrop blur.</P>
+              <P>Line 5: MSDF text rendering for crisp fonts.</P>
+              <P>Line 6: 26 headless components out of the box.</P>
+              <P>Line 7: Void design system with dark theme.</P>
+              <P>Line 8: Supports Kitty, Ghostty, and WezTerm.</P>
+            </VoidScrollView>
+          </CardContent>
+        </Card>
+      </Box>
 
-      {/* 12. Badges */}
-      <Section title="BADGE VARIANTS">
-        <box direction="row" gap={space[2]}>
-          <Badge>Default</Badge>
-          <Badge variant="secondary">Secondary</Badge>
-          <Badge variant="outline">Outline</Badge>
-          <Badge variant="destructive">Destructive</Badge>
-        </box>
-      </Section>
-
-      {/* 13. Separator already shown in Section headers */}
-
-      {/* 14. Avatar */}
-      <Section title="AVATAR SIZES">
-        <box direction="row" gap={space[3]} alignY="center">
-          <Avatar name="Alice" size="sm" />
-          <Avatar name="Bob" />
-          <Avatar name="Charlie" size="lg" />
-          <Avatar name="Diana" size="lg" color={0x56d4c840} />
-        </box>
-      </Section>
-
-      {/* 15. Skeleton */}
-      <Section title="SKELETON LOADING">
-        <box direction="column" gap={space[2]} width={250}>
-          <Skeleton height={12} />
-          <Skeleton height={12} width={180} />
-          <Skeleton height={40} cornerRadius={radius.lg} />
-        </box>
-      </Section>
-    </box>
+      <Box direction="column" gap={space[4]} width="grow">
+        <Card>
+          <CardHeader>
+            <CardTitle>VoidTable</CardTitle>
+            <CardDescription>Striped data table with selection</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <VoidTable
+              columns={[
+                { key: "name", header: "Package", width: 120 },
+                { key: "version", header: "Version", width: 80 },
+                { key: "downloads", header: "Downloads", width: 120 },
+              ]}
+              data={tableData}
+              selectedRow={tableRow()}
+              onSelectedRowChange={setTableRow}
+            />
+          </CardContent>
+        </Card>
+      </Box>
+    </Box>
   )
 }
 
-// ── 3. Typography ──
+// ── Code & Markdown Tab ──
 
-function TypographyShowcase() {
+function CodeTab() {
+  const sampleCode = `import { createApp, Box, Text } from "vexart"
+import { Button, Card, colors } from "vexart"
+
+function App() {
   return (
-    <Section title="TYPOGRAPHY PRESETS">
-      <box direction="column" gap={space[1.5]}>
-        <H1>H1 — Display (36px bold)</H1>
-        <H2>H2 — Title (30px semibold)</H2>
-        <H3>H3 — Subtitle (20px semibold)</H3>
-        <H4>H4 — Section (16px semibold)</H4>
-        <P>P — Body text (14px regular)</P>
-        <Lead>Lead — Emphasis (20px muted)</Lead>
-        <Large>Large — Large body (16px semibold)</Large>
-        <Small>Small — Caption (12px medium)</Small>
-        <Muted>Muted — Helper text (12px muted)</Muted>
-      </box>
-    </Section>
+    <Card>
+      <Button onPress={() => save()}>
+        Save Changes
+      </Button>
+    </Card>
+  )
+}
+
+await createApp(() => <App />)`
+
+  const sampleMarkdown = `# Vexart
+
+The **first** GPU-accelerated UI engine for the terminal.
+
+## Features
+
+- Pixel-perfect rendering
+- JSX + SolidJS reactivity
+- 26 headless components
+- Void design system
+
+## Quick Start
+
+\`\`\`typescript
+import { createApp } from "vexart"
+await createApp(() => <App />)
+\`\`\`
+
+> Built with Rust and WGPU.`
+
+  const sampleDiff = `--- a/package.json
++++ b/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "@vxrt/core",
++  "name": "vexart",
+   "version": "0.9.0-beta.19",
+-  "description": "Terminal rendering engine",
++  "description": "GPU-accelerated terminal UI engine",
+   "type": "module"
+ }`
+
+  return (
+    <Box direction="row" gap={space[4]} alignY="top">
+      <Box direction="column" gap={space[4]} width="grow">
+        <Card>
+          <CardHeader>
+            <CardTitle>VoidCode</CardTitle>
+            <CardDescription>Syntax-highlighted code block</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <VoidCode
+              content={sampleCode}
+              language="typescript"
+              syntaxStyle={syntaxStyle}
+              width={360}
+              lineNumbers
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>VoidDiff</CardTitle>
+            <CardDescription>Unified diff viewer</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <VoidDiff diff={sampleDiff} showLineNumbers width={360} />
+          </CardContent>
+        </Card>
+      </Box>
+
+      <Box direction="column" gap={space[4]} width="grow">
+        <Card>
+          <CardHeader>
+            <CardTitle>VoidMarkdown</CardTitle>
+            <CardDescription>Rendered markdown content</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <VoidMarkdown
+              content={sampleMarkdown}
+              syntaxStyle={syntaxStyle}
+              width={360}
+            />
+          </CardContent>
+        </Card>
+      </Box>
+    </Box>
+  )
+}
+
+// ── Overlays Tab ──
+
+function OverlaysTab() {
+  const [dialogOpen, setDialogOpen] = createSignal(false)
+  const toaster = createVoidToaster({ position: "bottom-right" })
+
+  return (
+    <Box direction="row" gap={space[4]} alignY="top">
+      <Box direction="column" gap={space[4]} width="grow">
+        <Card>
+          <CardHeader>
+            <CardTitle>Dialog</CardTitle>
+            <CardDescription>Modal with backdrop blur</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onPress={() => setDialogOpen(true)}>Open Dialog</Button>
+          </CardContent>
+        </Card>
+
+        <Show when={dialogOpen()}>
+          <VoidDialog onClose={() => setDialogOpen(false)} width={360}>
+            <VoidDialogTitle>Confirm Action</VoidDialogTitle>
+            <VoidDialogDescription>
+              Are you sure you want to proceed? This action cannot be undone.
+            </VoidDialogDescription>
+            <VoidDialogFooter>
+              <Button variant="outline" onPress={() => setDialogOpen(false)}>Cancel</Button>
+              <Button variant="destructive" onPress={() => setDialogOpen(false)}>Delete</Button>
+            </VoidDialogFooter>
+          </VoidDialog>
+        </Show>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Toasts</CardTitle>
+            <CardDescription>Notification system</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Box direction="row" gap={space[2]}>
+              <Button size="sm" onPress={() => toaster.toast({ message: "Saved successfully", variant: "success" })}>
+                Success
+              </Button>
+              <Button size="sm" variant="destructive" onPress={() => toaster.toast({ message: "Something went wrong", variant: "error" })}>
+                Error
+              </Button>
+              <Button size="sm" variant="outline" onPress={() => toaster.toast({ message: "New update available", variant: "info" })}>
+                Info
+              </Button>
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
+
+      <Box direction="column" gap={space[4]} width="grow">
+        <Card>
+          <CardHeader>
+            <CardTitle>Tooltip</CardTitle>
+            <CardDescription>Hover for details</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Box direction="row" gap={space[3]}>
+              <VoidTooltip content="This is a tooltip">
+                <Button variant="outline" size="sm" onPress={() => {}}>Hover me</Button>
+              </VoidTooltip>
+              <VoidTooltip content="Another tooltip with longer text">
+                <Badge>Info</Badge>
+              </VoidTooltip>
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
+    </Box>
+  )
+}
+
+// ── Typography Tab ──
+
+function TypographyTab() {
+  return (
+    <Box direction="row" gap={space[4]} alignY="top">
+      <Box direction="column" gap={space[4]} width="grow">
+        <Card>
+          <CardHeader>
+            <CardTitle>Heading Scale</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Box direction="column" gap={space[3]}>
+              <H1>Heading 1</H1>
+              <H2>Heading 2</H2>
+              <H3>Heading 3</H3>
+              <H4>Heading 4</H4>
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
+
+      <Box direction="column" gap={space[4]} width="grow">
+        <Card>
+          <CardHeader>
+            <CardTitle>Body Text</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Box direction="column" gap={space[3]}>
+              <Lead>Lead — introductory text that stands out.</Lead>
+              <P>Paragraph — standard body text for content areas.</P>
+              <Large>Large — emphasized text for callouts.</Large>
+              <Small>Small — captions, labels, and metadata.</Small>
+              <Muted>Muted — secondary information, less important.</Muted>
+            </Box>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Separator</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Box direction="column" gap={space[2]}>
+              <P>Content above</P>
+              <Separator />
+              <P>Content below</P>
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
+    </Box>
   )
 }
 
@@ -384,72 +573,63 @@ function TypographyShowcase() {
 function App() {
   const terminal = useAppTerminal()
   const dims = useTerminalDimensions(terminal)
-  const paneHeight = () => Math.max(160, dims.height() - space[6] * 2 - 44)
+  const [tab, setTab] = createSignal(0)
 
   return (
-    <box
+    <Box
       width={dims.width()}
       height={dims.height()}
       backgroundColor={colors.background}
-      direction="row"
-      padding={space[6]}
-      gap={space[6]}
+      direction="column"
     >
-      {/* Left column: Engine features */}
-      <box direction="column" width="grow" height="grow" gap={space[3]}>
-        <H3>Engine Features</H3>
-        <box
-          layer
-          scrollY
-          height={paneHeight()}
-          scrollId="void-showcase-engine"
-          direction="column"
-          paddingTop={space[3]}
-          paddingRight={space[2]}
-          gap={space[2]}
-        >
-          <EngineFeatures />
-        </box>
-      </box>
+      {/* Header */}
+      <Box
+        paddingX={space[6]}
+        paddingY={space[3]}
+        direction="row"
+        alignY="center"
+        borderColor={colors.border}
+        borderBottom={1}
+      >
+        <Box direction="column" gap={space[0.5]} width="grow">
+          <Text color={colors.foreground} fontSize={font.lg} fontWeight={weight.bold}>
+            Void Component Showcase
+          </Text>
+          <Muted>Every styled component in the Vexart design system</Muted>
+        </Box>
+        <Badge variant="outline">v0.9</Badge>
+      </Box>
 
-      {/* Vertical separator */}
-      <Separator orientation="vertical" />
+      {/* Tabs */}
+      <Box paddingX={space[6]} paddingTop={space[3]}>
+        <VoidTabs
+          activeTab={tab()}
+          onTabChange={setTab}
+          tabs={[
+            { label: "Inputs", content: () => <InputsTab /> },
+            { label: "Display", content: () => <DisplayTab /> },
+            { label: "Collections", content: () => <CollectionsTab /> },
+            { label: "Code & Docs", content: () => <CodeTab /> },
+            { label: "Overlays", content: () => <OverlaysTab /> },
+            { label: "Typography", content: () => <TypographyTab /> },
+          ]}
+        />
+      </Box>
 
-      {/* Right column: Void components + Typography */}
-      <box direction="column" width="grow" height="grow" gap={space[3]}>
-        <H3>Void Components</H3>
-        <box
-          layer
-          scrollY
-          height={paneHeight()}
-          scrollId="void-showcase-components"
-          direction="column"
-          paddingTop={space[3]}
-          paddingRight={space[2]}
-          gap={space[2]}
-        >
-          <VoidComponents />
-          <box paddingTop={space[4]}>
-            <TypographyShowcase />
-          </box>
-        </box>
-      </box>
-    </box>
+      {/* Footer */}
+      <Box width="grow" />
+      <Box
+        paddingX={space[6]}
+        paddingY={space[2]}
+        borderColor={colors.border}
+        borderTop={1}
+      >
+        <Muted>Tab: navigate  Space/Enter: interact  q: exit</Muted>
+      </Box>
+    </Box>
   )
 }
 
-const app = await createApp(() => <App />, {
+await createApp(() => <App />, {
   quit: ["q", "ctrl+c"],
-  mount: {
-    experimental: {
-    },
-  },
 })
-const exitAfterMs = Number(process.env.VEXART_EXIT_AFTER_MS ?? process.env.LIGHTCODE_EXIT_AFTER_MS ?? 0)
-
-if (Number.isFinite(exitAfterMs) && exitAfterMs > 0) {
-  setTimeout(() => {
-    app.destroy()
-    process.exit(0)
-  }, exitAfterMs)
-}
