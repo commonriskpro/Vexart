@@ -239,6 +239,8 @@ function localStackingZ(node: TGENode) {
 }
 
 function depth(node: TGENode) {
+  // Use cached _depth from walkTree when available (O(1) vs O(d) parent walk)
+  if (node._depth > 0) return node._depth
   let total = 0
   let current: TGENode | null = node
   while (current) {
@@ -304,6 +306,8 @@ export type InteractiveStatesBag = {
   /** Terminal cell dimensions for minimum hit-area expansion. */
   cellWidth: number
   cellHeight: number
+  /** Scroll offsets keyed by scroll container nodeId. Used for hit-testing without mutating node.layout. */
+  scrollOffsets: Map<number, { x: number; y: number }>
   /** Called when any interaction state changes (triggers repaint). */
   onChanged: () => void
   /** Called when a specific node had visual-only interaction state changes. */
@@ -396,6 +400,13 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
     const ch = bag.cellHeight
     const isCaptured = captureNode === node
 
+    // HP-6: Compute effective screen position by adding scroll offset.
+    // node.layout.x/y are in parent-relative coordinates; scroll containers
+    // shift children without mutating their layout positions.
+    const scrollOffset = node._scrollContainerId !== 0 ? bag.scrollOffsets.get(node._scrollContainerId) : undefined
+    const effectiveX = l.x + (scrollOffset?.x ?? 0)
+    const effectiveY = l.y + (scrollOffset?.y ?? 0)
+
     // Hit-test: if the node has a transform (own or inherited from parent),
     // use the ACCUMULATED inverse matrix to map pointer coords into the
     // node's local coordinate space. This handles the full transform hierarchy.
@@ -406,9 +417,9 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
     } else if (hitInverse) {
       // Transform pointer from screen space to node-local space
       const inv = hitInverse
-      // Pointer relative to node's layout origin
-      const relX = bag.pointerX - l.x
-      const relY = bag.pointerY - l.y
+      // Pointer relative to node's layout origin (using effective scrolled position)
+      const relX = bag.pointerX - effectiveX
+      const relY = bag.pointerY - effectiveY
       // Apply inverse matrix
       const w = inv[6] * relX + inv[7] * relY + inv[8]
       if (Math.abs(w) > 1e-12) {
@@ -423,11 +434,11 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
                  localY >= hitY && localY < hitY + hitH
       }
     } else {
-      // Standard axis-aligned hit-test (no transform)
+      // Standard axis-aligned hit-test (no transform) — uses effective scrolled position
       const hitW = Math.max(l.width, cw)
       const hitH = Math.max(l.height, ch)
-      const hitX = l.x - (hitW - l.width) / 2
-      const hitY = l.y - (hitH - l.height) / 2
+      const hitX = effectiveX - (hitW - l.width) / 2
+      const hitY = effectiveY - (hitH - l.height) / 2
       isOver = bag.pointerX >= hitX && bag.pointerX < hitX + hitW &&
                bag.pointerY >= hitY && bag.pointerY < hitY + hitH
     }

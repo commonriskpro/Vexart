@@ -52,38 +52,6 @@ function rectOrder(commands: RenderCommand[]) {
 }
 
 describe("layout adapter stacking contexts", () => {
-  test("margin adds spacing between elements", () => {
-    const layout = createVexartLayoutCtx()
-    layout.init(300, 200)
-    layout.beginLayout()
-
-    layout.openElement()
-    layout.setCurrentNodeId(1)
-    layout.configureSizing(3, 300, 3, 200)
-    layout.configureLayout(1, 0, 0, 0, 0, 0)
-
-    layout.openElement()
-    layout.setCurrentNodeId(2)
-    layout.configureSizing(3, 100, 3, 50)
-    layout.closeElement()
-
-    layout.openElement()
-    layout.setCurrentNodeId(3)
-    layout.configureSizing(3, 100, 3, 50)
-    layout.configureMargin(0, 0, 20, 0)
-    layout.closeElement()
-
-    layout.closeElement()
-
-    layout.endLayout()
-    const map = layout.getLastLayoutMap()
-
-    expect(map?.get(2)?.y).toBe(0)
-    expect(map?.get(3)?.y).toBe(70)
-
-    layout.destroy()
-  })
-
   test("walkTree applies margin props", () => {
     const first = box({ width: 100, height: 50 })
     const second = box({ width: 100, height: 50, marginTop: 20 })

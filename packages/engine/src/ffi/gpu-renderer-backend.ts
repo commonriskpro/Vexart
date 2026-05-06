@@ -84,50 +84,43 @@ let _readbackSize = 0
 type VexartTargetHandle = bigint
 type VexartImageHandle = bigint
 
-export function targetLocalRepaintRegion(
-  repaint: DamageRect | null,
-  bounds: DamageRect,
-  target: { width: number; height: number },
-): DamageRect | null {
-  if (!repaint) return null
-  const left = Math.max(0, Math.floor(repaint.x - bounds.x))
-  const top = Math.max(0, Math.floor(repaint.y - bounds.y))
-  const right = Math.min(target.width, Math.ceil(repaint.x + repaint.width - bounds.x))
-  const bottom = Math.min(target.height, Math.ceil(repaint.y + repaint.height - bounds.y))
-  if (right <= left || bottom <= top) return null
-  return { x: left, y: top, width: right - left, height: bottom - top }
-}
-
 // ── Vexart composite helpers ─────────────────────────────────────────────────
 // Inline wrappers for new Phase 2b composite FFI exports.
+// HP-9/10/12: Pre-allocated buffers and cached symbols to avoid per-call allocs.
+const _handleOut = new BigUint64Array(1)
+const _backdropParamBuf = new Float32Array(8)
+const _backdropParamU8 = new Uint8Array(_backdropParamBuf.buffer)
+let _cachedSymbols: ReturnType<typeof openVexartLibrary>["symbols"] | null = null
+function getSymbols() {
+  if (_cachedSymbols) return _cachedSymbols
+  _cachedSymbols = openVexartLibrary().symbols
+  return _cachedSymbols
+}
 
 /** Create an offscreen RGBA8 render target. Returns bigint handle or 0n on failure. */
 function vexartCompositeTargetCreate(vctx: bigint, width: number, height: number): bigint {
-  const { symbols } = openVexartLibrary()
-  const out = new BigUint64Array(1)
-  const result = symbols.vexart_composite_target_create(vctx, width, height, ptr(out)) as number
+  const sym = getSymbols()
+  _handleOut[0] = 0n
+  const result = sym.vexart_composite_target_create(vctx, width, height, ptr(_handleOut)) as number
   if (result !== 0) return 0n
-  return out[0]
+  return _handleOut[0]
 }
 
 /** Destroy an offscreen render target. */
 function vexartCompositeTargetDestroy(vctx: bigint, target: bigint): void {
   if (!target) return
-  const { symbols } = openVexartLibrary()
-  symbols.vexart_composite_target_destroy(vctx, target)
+  getSymbols().vexart_composite_target_destroy(vctx, target)
 }
 
 /** Begin a render layer on the target. loadMode=0 clears to clearRgba. */
 function vexartCompositeTargetBeginLayer(vctx: bigint, target: bigint, loadMode: 0 | 1, clearRgba: number): void {
-  const { symbols } = openVexartLibrary()
-  const result = symbols.vexart_composite_target_begin_layer(vctx, target, loadMode, clearRgba >>> 0) as number
+  const result = getSymbols().vexart_composite_target_begin_layer(vctx, target, loadMode, clearRgba >>> 0) as number
   if (result !== 0) throw new Error(`vexart_composite_target_begin_layer failed: ${result}`)
 }
 
 /** End the active render layer and submit GPU work. */
 function vexartCompositeTargetEndLayer(vctx: bigint, target: bigint): void {
-  const { symbols } = openVexartLibrary()
-  const result = symbols.vexart_composite_target_end_layer(vctx, target) as number
+  const result = getSymbols().vexart_composite_target_end_layer(vctx, target) as number
   if (result !== 0) throw new Error(`vexart_composite_target_end_layer failed: ${result}`)
 }
 
@@ -140,8 +133,7 @@ function vexartCompositeRenderImageLayer(
   z: number,
   clearRgba: number,
 ): void {
-  const { symbols } = openVexartLibrary()
-  const result = symbols.vexart_composite_render_image_layer(vctx, target, image, x, y, w, h, z, clearRgba >>> 0) as number
+  const result = getSymbols().vexart_composite_render_image_layer(vctx, target, image, x, y, w, h, z, clearRgba >>> 0) as number
   if (result !== 0) throw new Error(`vexart_composite_render_image_layer failed: ${result}`)
 }
 
@@ -151,11 +143,10 @@ function vexartCompositeCopyRegionToImage(
   target: bigint,
   x: number, y: number, w: number, h: number,
 ): bigint {
-  const { symbols } = openVexartLibrary()
-  const out = new BigUint64Array(1)
-  const result = symbols.vexart_composite_copy_region_to_image(vctx, target, x, y, w, h, ptr(out)) as number
+  _handleOut[0] = 0n
+  const result = getSymbols().vexart_composite_copy_region_to_image(vctx, target, x, y, w, h, ptr(_handleOut)) as number
   if (result !== 0) return 0n
-  return out[0]
+  return _handleOut[0]
 }
 
 /** Apply backdrop filter params to an image. params: float32 array [blur, brightness, contrast, saturate, grayscale, invert, sepia, hueRotate]. NaN means "not requested". Returns 0n on failure. */
@@ -164,22 +155,20 @@ function vexartCompositeImageFilterBackdrop(
   image: bigint,
   params: WgpuBackdropFilterParams,
 ): bigint {
-  const { symbols } = openVexartLibrary()
-  const paramBuf = new Float32Array(8)
-  paramBuf[0] = params.blur ?? Number.NaN
-  paramBuf[1] = params.brightness ?? Number.NaN
-  paramBuf[2] = params.contrast ?? Number.NaN
-  paramBuf[3] = params.saturate ?? Number.NaN
-  paramBuf[4] = params.grayscale ?? Number.NaN
-  paramBuf[5] = params.invert ?? Number.NaN
-  paramBuf[6] = params.sepia ?? Number.NaN
-  paramBuf[7] = params.hueRotate ?? Number.NaN
-  const out = new BigUint64Array(1)
-  const result = symbols.vexart_composite_image_filter_backdrop(
-    vctx, image, ptr(new Uint8Array(paramBuf.buffer)), paramBuf.byteLength, ptr(out)
+  _backdropParamBuf[0] = params.blur ?? Number.NaN
+  _backdropParamBuf[1] = params.brightness ?? Number.NaN
+  _backdropParamBuf[2] = params.contrast ?? Number.NaN
+  _backdropParamBuf[3] = params.saturate ?? Number.NaN
+  _backdropParamBuf[4] = params.grayscale ?? Number.NaN
+  _backdropParamBuf[5] = params.invert ?? Number.NaN
+  _backdropParamBuf[6] = params.sepia ?? Number.NaN
+  _backdropParamBuf[7] = params.hueRotate ?? Number.NaN
+  _handleOut[0] = 0n
+  const result = getSymbols().vexart_composite_image_filter_backdrop(
+    vctx, image, ptr(_backdropParamU8), _backdropParamBuf.byteLength, ptr(_handleOut)
   ) as number
   if (result !== 0) return 0n
-  return out[0]
+  return _handleOut[0]
 }
 
 /** Apply rounded-rect mask. rectBuf = 6×f32: radius_uniform, tl, tr, br, bl, mode (0=uniform 1=per-corner). Returns 0n on failure. */
@@ -188,52 +177,23 @@ function vexartCompositeImageMaskRoundedRect(
   image: bigint,
   rectBuf: Float32Array,
 ): bigint {
-  const { symbols } = openVexartLibrary()
-  const out = new BigUint64Array(1)
-  const result = symbols.vexart_composite_image_mask_rounded_rect(
-    vctx, image, ptr(new Uint8Array(rectBuf.buffer)), ptr(out)
+  _handleOut[0] = 0n
+  const result = getSymbols().vexart_composite_image_mask_rounded_rect(
+    vctx, image, ptr(new Uint8Array(rectBuf.buffer)), ptr(_handleOut)
   ) as number
   if (result !== 0) return 0n
-  return out[0]
+  return _handleOut[0]
 }
 
 /** Full readback from a vexart target. Returns Uint8Array or null. */
 function vexartCompositeReadbackRgba(vctx: bigint, target: bigint, byteLength: number): Uint8Array | null {
-  const { symbols } = openVexartLibrary()
   if (!_readbackBuf || _readbackSize < byteLength) {
     _readbackBuf = new Uint8Array(byteLength)
     _readbackSize = byteLength
   }
-  const result = symbols.vexart_composite_readback_rgba(vctx, target, ptr(_readbackBuf), byteLength, ptr(_flushStatsBuf)) as number
+  const result = getSymbols().vexart_composite_readback_rgba(vctx, target, ptr(_readbackBuf), byteLength, ptr(_flushStatsBuf)) as number
   if (result !== 0) return null
   return _readbackBuf.byteLength === byteLength ? _readbackBuf : _readbackBuf.subarray(0, byteLength)
-}
-
-/** Region readback from a vexart target. Region is target-local pixels. */
-function vexartCompositeReadbackRegionRgba(
-  vctx: bigint,
-  target: bigint,
-  region: { x: number; y: number; width: number; height: number },
-): Uint8Array | null {
-  const { symbols } = openVexartLibrary()
-  const data = new Uint8Array(region.width * region.height * 4)
-  const rect = new Uint8Array(16)
-  const view = new DataView(rect.buffer)
-  view.setUint32(0, region.x, true)
-  view.setUint32(4, region.y, true)
-  view.setUint32(8, region.width, true)
-  view.setUint32(12, region.height, true)
-  const statsOut = new Uint8Array(32)
-  const result = symbols.vexart_composite_readback_region_rgba(
-    vctx,
-    target,
-    ptr(rect),
-    ptr(data),
-    data.byteLength,
-    ptr(statsOut),
-  ) as number
-  if (result !== 0) return null
-  return data
 }
 
 // ── Backdrop filter params type (mirror of WgpuBackdropFilterParams) ─────────
@@ -320,14 +280,12 @@ const activeImageHandles = new Set<bigint>()
 function vexartUploadImage(ctx: bigint, data: Uint8Array, width: number, height: number): bigint {
   const cached = _vexartImageHandles.get(data)
   if (cached !== undefined) return cached
-  const { symbols } = openVexartLibrary()
-  const handleBuf = new BigUint64Array(1)
-  const handlePtr = ptr(handleBuf)
-  const result = symbols.vexart_paint_upload_image(
-    ctx, ptr(data), data.byteLength, width, height, 0 /* format=RGBA */, handlePtr
+  _handleOut[0] = 0n
+  const result = getSymbols().vexart_paint_upload_image(
+    ctx, ptr(data), data.byteLength, width, height, 0 /* format=RGBA */, ptr(_handleOut)
   ) as number
   if (result !== 0) return 0n
-  const handle = handleBuf[0]
+  const handle = _handleOut[0]
   _vexartImageHandles.set(data, handle)
   activeImageHandles.add(handle)
   return handle
@@ -336,8 +294,7 @@ function vexartUploadImage(ctx: bigint, data: Uint8Array, width: number, height:
 /** Release a vexart image handle. */
 function vexartRemoveImage(ctx: bigint, handle: bigint) {
   if (!handle) return
-  const { symbols } = openVexartLibrary()
-  const rc = symbols.vexart_paint_remove_image(ctx, handle) as number
+  const rc = getSymbols().vexart_paint_remove_image(ctx, handle) as number
   if (rc !== 0) {
     const err = vexartGetLastError()
     console.error(`[vexart] paint_remove_image failed (${rc}): ${err}`)
@@ -353,7 +310,6 @@ function vexartRemoveImage(ctx: bigint, handle: bigint) {
  */
 function flushVexartBatch(ctx: bigint, cmdKind: number, instanceData: Uint8Array, target: bigint = 0n): void {
   if (instanceData.byteLength === 0) return
-  const { symbols } = openVexartLibrary()
   const PREFIX = 8
   const HEADER = 16
   const total = HEADER + PREFIX + instanceData.byteLength
@@ -369,7 +325,7 @@ function flushVexartBatch(ctx: bigint, cmdKind: number, instanceData: Uint8Array
   vu32(view, 20, instanceData.byteLength)
   // Instance data
   u8.set(instanceData, HEADER + PREFIX)
-  const rc = symbols.vexart_paint_dispatch(ctx, target, ptr(u8), total, ptr(_flushStatsBuf)) as number
+  const rc = getSymbols().vexart_paint_dispatch(ctx, target, ptr(u8), total, ptr(_flushStatsBuf)) as number
   if (rc !== 0) {
     const err = vexartGetLastError()
     console.error(`[vexart] paint_dispatch failed (${rc}): ${err}`)
@@ -405,7 +361,7 @@ function packShapeRectInstance(x: number, y: number, w: number, h: number, boxW:
   vf32(v, 32, sr); vf32(v, 36, sg); vf32(v, 40, sb); vf32(v, 44, sa)
   vf32(v, 48, radius); vf32(v, 52, strokeWidth); vf32(v, 56, hasFill); vf32(v, 60, hasStroke)
   vf32(v, 64, boxW); vf32(v, 68, boxH); vf32(v, 72, 0); vf32(v, 76, 0)
-  return _packU8.slice(0, 80)
+  return _packU8.subarray(0, 80)
 }
 
 /**
@@ -423,7 +379,7 @@ function packShapeRectCornersInstance(x: number, y: number, w: number, h: number
   vf32(v, 48, radii.tl); vf32(v, 52, radii.tr); vf32(v, 56, radii.br); vf32(v, 60, radii.bl)
   vf32(v, 64, strokeWidth); vf32(v, 68, hasFill); vf32(v, 72, hasStroke); vf32(v, 76, boxW)
   vf32(v, 80, boxH); vf32(v, 84, 0); vf32(v, 88, 0); vf32(v, 92, 0)
-  return _packU8.slice(0, 96)
+  return _packU8.subarray(0, 96)
 }
 
 /**
@@ -435,7 +391,7 @@ function packGlowInstance(x: number, y: number, w: number, h: number, color: num
   vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
   vf32(v, 16, r); vf32(v, 20, g); vf32(v, 24, b); vf32(v, 28, a)
   vf32(v, 32, intensity); vf32(v, 36, 0); vf32(v, 40, 0); vf32(v, 44, 0)
-  return _packU8.slice(0, 48)
+  return _packU8.subarray(0, 48)
 }
 
 /**
@@ -461,7 +417,7 @@ function packShadowInstance(
   vf32(v, 32, radii.tl); vf32(v, 36, radii.tr); vf32(v, 40, radii.br); vf32(v, 44, radii.bl)
   vf32(v, 48, boxW); vf32(v, 52, boxH); vf32(v, 56, offsetX); vf32(v, 60, offsetY)
   vf32(v, 64, blur); vf32(v, 68, 0); vf32(v, 72, 0); vf32(v, 76, 0)
-  return _packU8.slice(0, 80)
+  return _packU8.subarray(0, 80)
 }
 
 /**
@@ -476,7 +432,7 @@ function packLinearGradientInstance(x: number, y: number, w: number, h: number, 
   vf32(v, 32, fr); vf32(v, 36, fg); vf32(v, 40, fb); vf32(v, 44, fa)
   vf32(v, 48, tr); vf32(v, 52, tg); vf32(v, 56, tb); vf32(v, 60, ta)
   vf32(v, 64, dirX); vf32(v, 68, dirY); vf32(v, 72, 0); vf32(v, 76, 0)
-  return _packU8.slice(0, 80)
+  return _packU8.subarray(0, 80)
 }
 
 /**
@@ -491,7 +447,7 @@ function packRadialGradientInstance(x: number, y: number, w: number, h: number, 
   vf32(v, 32, fr); vf32(v, 36, fg); vf32(v, 40, fb); vf32(v, 44, fa)
   vf32(v, 48, tr); vf32(v, 52, tg); vf32(v, 56, tb); vf32(v, 60, ta)
   vf32(v, 64, 0); vf32(v, 68, 0); vf32(v, 72, 0); vf32(v, 76, 0)
-  return _packU8.slice(0, 80)
+  return _packU8.subarray(0, 80)
 }
 
 /**
@@ -503,7 +459,7 @@ function packImageInstance(x: number, y: number, w: number, h: number, opacity: 
   const v = _packView
   vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
   vf32(v, 16, opacity); vf32(v, 20, 0); vf32(v, 24, 0); vf32(v, 28, 0)
-  return _packU8.slice(0, 32)
+  return _packU8.subarray(0, 32)
 }
 
 /**
@@ -522,12 +478,14 @@ function packImageTransformInstance(
   vf32(v, 16, p2x); vf32(v, 20, p2y)
   vf32(v, 24, p3x); vf32(v, 28, p3y)
   vf32(v, 32, opacity); vf32(v, 36, 0); vf32(v, 40, 0); vf32(v, 44, 0)
-  return _packU8.slice(0, 48)
+  return _packU8.subarray(0, 48)
 }
 
 /** @public */
 export type GpuRendererBackend = RendererBackend & {
   getLastStrategy: () => GpuLayerStrategyMode | null
+  /** TEST-ONLY: Read back the active target as RGBA pixels for golden tests. */
+  readbackForTest: (width: number, height: number) => Uint8Array | null
 }
 
 /** @public */
@@ -851,6 +809,11 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   let _msdfInitDone = false
   const _msdfEncoder = new TextEncoder()
   const _msdfStatsBuf = new Uint8Array(32)
+  // HP-4: Pre-allocated buffers for tryMsdfText — avoids per-call allocations.
+  const _msdfFamilyCache = new Map<string, Uint8Array>()
+  let _msdfTextBuf = new Uint8Array(4096)
+  let _msdfParamsBuf = new Uint8Array(4096)
+  const _msdfParamsView = new DataView(_msdfParamsBuf.buffer)
 
   function getMsdfSymbols() {
     if (_msdfSymbols !== undefined) return _msdfSymbols
@@ -881,32 +844,48 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   ): boolean {
     const sym = getMsdfSymbols()
     if (!sym) return false
+    if (text.length === 0) return true
 
-    const textBuf = _msdfEncoder.encode(text)
-    if (textBuf.byteLength === 0) return true
+    // Encode text into reusable buffer (HP-4: avoid per-call Uint8Array alloc)
+    const maxBytes = text.length * 3 // UTF-8 worst case
+    if (maxBytes > _msdfTextBuf.byteLength) {
+      _msdfTextBuf = new Uint8Array(Math.max(maxBytes, _msdfTextBuf.byteLength * 2))
+    }
+    const { written: textLen } = _msdfEncoder.encodeInto(text, _msdfTextBuf)
+    if (textLen === 0) return true
 
-    // Pack params: f32 x,y,fontSize,lineHeight,maxWidth + u32 color + u16 weight + u16 flags + JSON families
+    // Cache family JSON encoding (HP-4: 99% of calls use same family)
     const family = fontFamily || "sans-serif"
-    const familiesJson = _msdfEncoder.encode(JSON.stringify([family]))
+    let familiesEncoded = _msdfFamilyCache.get(family)
+    if (!familiesEncoded) {
+      familiesEncoded = _msdfEncoder.encode(JSON.stringify([family]))
+      _msdfFamilyCache.set(family, familiesEncoded)
+    }
+
+    // Pack params into reusable buffer (HP-4: no per-call allocation)
+    const headerSize = 28
+    const totalParamsSize = headerSize + familiesEncoded.byteLength
+    if (totalParamsSize > _msdfParamsBuf.byteLength) {
+      _msdfParamsBuf = new Uint8Array(Math.max(totalParamsSize, _msdfParamsBuf.byteLength * 2))
+      // Note: DataView must be recreated when buffer changes
+    }
+    const pView = new DataView(_msdfParamsBuf.buffer)
     const weight = fontWeight ?? 400
     const flags = fontStyle === "italic" ? 1 : 0
-    const headerSize = 28
-    const paramsBuf = new Uint8Array(headerSize + familiesJson.byteLength)
-    const view = new DataView(paramsBuf.buffer)
-    view.setFloat32(0, x, true)
-    view.setFloat32(4, y, true)
-    view.setFloat32(8, fontSize, true)
-    view.setFloat32(12, lineHeight, true)
-    view.setFloat32(16, maxWidth, true)
-    view.setUint32(20, colorRgba >>> 0, true)
-    view.setUint16(24, weight, true)
-    view.setUint16(26, flags, true)
-    paramsBuf.set(familiesJson, headerSize)
+    pView.setFloat32(0, x, true)
+    pView.setFloat32(4, y, true)
+    pView.setFloat32(8, fontSize, true)
+    pView.setFloat32(12, lineHeight, true)
+    pView.setFloat32(16, maxWidth, true)
+    pView.setUint32(20, colorRgba >>> 0, true)
+    pView.setUint16(24, weight, true)
+    pView.setUint16(26, flags, true)
+    _msdfParamsBuf.set(familiesEncoded, headerSize)
 
     const rc = sym.vexart_font_render_text(
       vctx, targetHandle,
-      ptr(textBuf), textBuf.byteLength,
-      ptr(paramsBuf), paramsBuf.byteLength,
+      ptr(_msdfTextBuf), textLen,
+      ptr(_msdfParamsBuf), totalParamsSize,
       ptr(_msdfStatsBuf),
     ) as number
 
@@ -1390,8 +1369,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   const renderFrame = (
     ctx: RendererBackendPaintContext,
     targetHandle: VexartTargetHandle,
-    readbackMode: "auto" | "none" = "auto",
-    readbackRegion?: { x: number; y: number; width: number; height: number } | null,
   ): { ok: boolean; rawLayer: { data: Uint8Array; width: number; height: number; region?: { x: number; y: number; width: number; height: number } } | null } => {
     let first = true
     shapeRects.length = 0
@@ -1413,12 +1390,15 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       items: T[],
       cmdKind: number,
       stride: number,
-      pack: (item: T) => Uint8Array,
+      pack: (item: T) => void,
     ) => {
       if (items.length === 0) return false
       const instances = new Uint8Array(items.length * stride)
       for (let i = 0; i < items.length; i++) {
-        instances.set(pack(items[i]), i * stride)
+        pack(items[i])
+        // HP-3: Copy directly from shared _packU8 buffer — no .slice() allocation.
+        // pack() already wrote stride bytes into _packView[0..stride].
+        for (let b = 0; b < stride; b++) instances[i * stride + b] = _packU8[b]
       }
       _dispatchCount++
       _dispatchKinds.push(`k${cmdKind}:${items.length}`)
@@ -1431,27 +1411,27 @@ export function createGpuRendererBackend(): GpuRendererBackend {
 
     const flushShapeRects = () => {
       // Dispatch via vexart_paint_dispatch (cmd_kind=1: BridgeShapeRectInstance)
-      flushInstances(shapeRects, 1, 80, (r) => packShapeRectInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.fill ?? 0, r.stroke ?? 0, r.strokeWidth))
+      flushInstances(shapeRects, 1, 80, (r) => { packShapeRectInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.fill ?? 0, r.stroke ?? 0, r.strokeWidth) })
     }
     const flushShapeRectCorners = () => {
       // Dispatch via vexart_paint_dispatch (cmd_kind=2: BridgeShapeRectCornersInstance)
-      flushInstances(shapeRectCorners, 2, 96, (r) => packShapeRectCornersInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radii, r.fill ?? 0, r.stroke ?? 0, r.strokeWidth))
+      flushInstances(shapeRectCorners, 2, 96, (r) => { packShapeRectCornersInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radii, r.fill ?? 0, r.stroke ?? 0, r.strokeWidth) })
     }
     const flushLinearGradients = () => {
       // Dispatch via vexart_paint_dispatch (cmd_kind=12: BridgeLinearGradientInstance)
-      flushInstances(linearGradients, 12, 80, (r) => packLinearGradientInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.from, r.to, r.dirX, r.dirY))
+      flushInstances(linearGradients, 12, 80, (r) => { packLinearGradientInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.from, r.to, r.dirX, r.dirY) })
     }
     const flushRadialGradients = () => {
       // Dispatch via vexart_paint_dispatch (cmd_kind=13: BridgeRadialGradientInstance)
-      flushInstances(radialGradients, 13, 80, (r) => packRadialGradientInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.from, r.to))
+      flushInstances(radialGradients, 13, 80, (r) => { packRadialGradientInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.from, r.to) })
     }
     const flushGlows = () => {
       // Dispatch via vexart_paint_dispatch (cmd_kind=6: BridgeGlowInstance)
-      flushInstances(glows, 6, 48, (g) => packGlowInstance(g.x, g.y, g.w, g.h, g.color, g.intensity ?? 80))
+      flushInstances(glows, 6, 48, (g) => { packGlowInstance(g.x, g.y, g.w, g.h, g.color, g.intensity ?? 80) })
     }
     const flushShadows = () => {
       // Dispatch via vexart_paint_dispatch (cmd_kind=20: BridgeShadowInstance)
-      flushInstances(shadows, 20, 80, (s) => packShadowInstance(s.x, s.y, s.w, s.h, s.color, s.radii, s.boxW, s.boxH, s.offsetX, s.offsetY, s.blur))
+      flushInstances(shadows, 20, 80, (s) => { packShadowInstance(s.x, s.y, s.w, s.h, s.color, s.radii, s.boxW, s.boxH, s.offsetX, s.offsetY, s.blur) })
     }
     const flushImages = () => {
       if (imageGroups.size === 0) return
@@ -1462,7 +1442,8 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         const instances = new Uint8Array(group.instances.length * 32)
         for (let i = 0; i < group.instances.length; i++) {
           const inst = group.instances[i]
-          instances.set(packImageInstance(inst.x, inst.y, inst.w, inst.h, inst.opacity), i * 32)
+          packImageInstance(inst.x, inst.y, inst.w, inst.h, inst.opacity)
+          for (let b = 0; b < 32; b++) instances[i * 32 + b] = _packU8[b]
         }
         flushVexartBatch(vctx, 9, instances, targetHandle)
         first = false
@@ -1478,13 +1459,14 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         const instances = new Uint8Array(group.instances.length * 48)
         for (let i = 0; i < group.instances.length; i++) {
           const inst = group.instances[i]
-          instances.set(packImageTransformInstance(
+          packImageTransformInstance(
             inst.p0.x, inst.p0.y,
             inst.p1.x, inst.p1.y,
             inst.p2.x, inst.p2.y,
             inst.p3.x, inst.p3.y,
             inst.opacity,
-          ), i * 48)
+          )
+          for (let b = 0; b < 48; b++) instances[i * 48 + b] = _packU8[b]
         }
         flushVexartBatch(vctx, 10, instances, targetHandle)
         first = false
@@ -2160,40 +2142,9 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     }
 
     if (first) return { ok: true as const, rawLayer: null }
-    if (readbackMode === "none") {
-      for (const handle of transientFullFrameImages) vexartRemoveImage(vctx, handle)
-      return { ok: true as const, rawLayer: null }
-    }
-    if (readbackRegion && readbackRegion.width > 0 && readbackRegion.height > 0) {
-      const readbackStart = PROFILE_ENABLED ? performance.now() : 0
-      const rgba = vexartCompositeReadbackRegionRgba(vctx, targetHandle, readbackRegion)
-      addBackendProfile("readbackMs", readbackStart)
-      for (const handle of transientFullFrameImages) vexartRemoveImage(vctx, handle)
-      if (!rgba) return { ok: false, rawLayer: null }
-      return {
-        ok: true as const,
-        rawLayer: {
-          data: rgba,
-          width: readbackRegion.width,
-          height: readbackRegion.height,
-          region: readbackRegion,
-        },
-      }
-    }
-    // Phase 2b: readback from the specific vexart target (not context default).
-    const readbackStart = PROFILE_ENABLED ? performance.now() : 0
-    const rgba = vexartCompositeReadbackRgba(vctx, targetHandle, ctx.targetWidth * ctx.targetHeight * 4)
-    addBackendProfile("readbackMs", readbackStart)
+    // Native presentation handles all readback in Rust — no TS readback path.
     for (const handle of transientFullFrameImages) vexartRemoveImage(vctx, handle)
-    if (!rgba) return { ok: false, rawLayer: null }
-    return {
-      ok: true as const,
-      rawLayer: {
-        data: rgba,
-        width: ctx.targetWidth,
-        height: ctx.targetHeight,
-      },
-    }
+    return { ok: true as const, rawLayer: null }
   }
 
   const composeLayersToFrame = (frame: RendererBackendFrameContext, layers: RenderedLayerRecord[]): RendererBackendFrameResult | null => {
@@ -2241,51 +2192,27 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     }
     pruneLayerTargets()
 
-    // ── Native final-frame presentation path ──
-    // When native presentation is enabled, emit the frame directly from Rust
-    // using the active Kitty transport without returning RGBA to JS.
-    if (isNativePresentationCapable(frame.transmissionMode)) {
-      const statsBuf = allocNativeStatsBuf()
-      try {
-        const { symbols } = openVexartLibrary()
-        ensureNativeKittyTransport(frame.transmissionMode)
-        const nativeEmitStart = PROFILE_ENABLED ? performance.now() : 0
-        const rc = symbols.vexart_kitty_emit_frame_with_stats(
-          vctx,
-          targetHandle,
-          3, // FINAL_FRAME_IMAGE_ID — same as gpu-frame-composer
-          ptr(statsBuf),
-        ) as number
-        addBackendProfile("nativeEmitMs", nativeEmitStart)
-        if (rc === 0) {
-          const stats = decodeNativePresentationStats(statsBuf)
-          addNativeStatsProfile(stats)
-          return { output: "native-presented", strategy: lastStrategy, stats }
-        }
-        // Native emission failed — fall through to TS raw path.
-        disableNativePresentation("vexart_kitty_emit_frame_with_stats returned non-zero")
-        logNativePresentationFallback("final-frame native emit failed, reverting to explicit readback path")
-      } catch (e) {
-        disableNativePresentation(`vexart_kitty_emit_frame_with_stats threw: ${e}`)
-        logNativePresentationFallback("final-frame native emit threw, reverting to explicit readback path")
-      }
+    // ── Native final-frame presentation ──
+    // All transport modes (direct/file/shm) are handled by Rust natively.
+    // Rust does GPU readback + compress + Kitty emit internally.
+    // No RGBA bytes are returned to JS — zero TS readback.
+    const statsBuf = allocNativeStatsBuf()
+    ensureNativeKittyTransport(frame.transmissionMode)
+    const nativeEmitStart = PROFILE_ENABLED ? performance.now() : 0
+    const rc = getSymbols().vexart_kitty_emit_frame_with_stats(
+      vctx,
+      targetHandle,
+      3, // FINAL_FRAME_IMAGE_ID
+      ptr(statsBuf),
+    ) as number
+    addBackendProfile("nativeEmitMs", nativeEmitStart)
+    if (rc !== 0) {
+      const err = vexartGetLastError()
+      throw new Error(`[vexart] native frame presentation failed (${rc}): ${err}`)
     }
-
-    // ── TS fallback: readback RGBA and return raw payload ──
-    // Used when native presentation is disabled or unsupported.
-    const readbackStart = PROFILE_ENABLED ? performance.now() : 0
-    const readbackData = vexartCompositeReadbackRgba(vctx, targetHandle, frame.viewportWidth * frame.viewportHeight * 4)
-    addBackendProfile("readbackMs", readbackStart)
-    if (!readbackData) return null
-    return {
-      output: "final-frame-raw",
-      strategy: lastStrategy,
-      finalFrame: {
-        data: readbackData,
-        width: frame.viewportWidth,
-        height: frame.viewportHeight,
-      },
-    }
+    const stats = decodeNativePresentationStats(statsBuf)
+    addNativeStatsProfile(stats)
+    return { output: "native-presented", strategy: lastStrategy, stats }
   }
 
   const composeFinalFrame = (frame: RendererBackendFrameContext): RendererBackendFrameResult | null => {
@@ -2458,15 +2385,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             })
           : null
         const nativeImageId = nativeLayer?.imageId ?? 0
-        const readbackMode = lastStrategy === "final-frame" || useNativeLayerPresentation ? "none" : "auto"
-        const region = targetLocalRepaintRegion(layerCtx.repaintRect, layerCtx.bounds, ctx.target)
-        const shouldReadbackRegion = !useNativeLayerPresentation
-          && lastStrategy !== "final-frame"
-          && !!region
-          && region.width > 0
-          && region.height > 0
-          && region.width * region.height < ctx.target.width * ctx.target.height
-        const result = renderFrame(ctx, layerTarget, readbackMode, shouldReadbackRegion ? region : null)
+        const result = renderFrame(ctx, layerTarget)
 
         if (!result.ok) {
           suppressFinalPresentation = true
@@ -2528,14 +2447,8 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             nativeLayerPresentDirty(layerCtx.key)
             return { output: "native-presented", strategy: lastStrategy, stats }
           }
-          const readbackStart = PROFILE_ENABLED ? performance.now() : 0
-          const rgba = vexartCompositeReadbackRgba(getVexartCtx(), layerTarget, ctx.target.width * ctx.target.height * 4)
-          addBackendProfile("readbackMs", readbackStart)
-          return {
-            output: "kitty-payload",
-            strategy: lastStrategy,
-            kittyPayload: rgba ? { data: rgba, width: ctx.target.width, height: ctx.target.height } : undefined,
-          }
+          // Native layer emit failed — no TS readback fallback.
+          throw new Error(`[vexart] native layer presentation failed for ${layerCtx.key}`)
         }
         // Return kitty payload — paint.ts will route to native or TS path based on nativePresentation flag.
         return { output: "kitty-payload", strategy: lastStrategy, kittyPayload: result.rawLayer ?? undefined }
@@ -2627,6 +2540,17 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         symbols.vexart_context_destroy(_vexartCtx)
         _vexartCtx = null
       }
+    },
+    /**
+     * TEST-ONLY: Read back the final frame target as RGBA pixels.
+     * This is NOT part of the production render path — used exclusively by
+     * render-to-buffer.ts for visual golden tests.
+     */
+    readbackForTest(width: number, height: number): Uint8Array | null {
+      if (!_vexartCtx) return null
+      const target = finalFrameTarget?.handle ?? standaloneTarget?.handle
+      if (!target) return null
+      return vexartCompositeReadbackRgba(_vexartCtx, target, width * height * 4)
     },
   } as GpuRendererBackend
 }

@@ -5,12 +5,15 @@
  * Each frame, we walk the TGENode tree and emit commands into the
  * TypeScript layout adapter per design §8.
  *
- * TGENode is a simple TypeScript-owned tree. Flexily layout state is rebuilt
- * each frame from TS state.
+ * TGENode is a TypeScript-owned tree. Flexily layout nodes are retained on
+ * TGENode instances and updated reactively from reconciler mutations.
  *
  * Layout constants are local to this module, matching the same numeric values for backward
  * compatibility with any callers that read them.
  */
+
+import { Node, FLEX_DIRECTION_COLUMN } from "flexily"
+import { syncAllLayoutProps } from "./flex-sync"
 
 // ── Layout constants ──
 // Numeric values preserved for backward compat; semantics map through
@@ -348,6 +351,8 @@ export type TGENode = {
   destroyed: boolean
   /** Computed layout rect — written after the layout pass */
   layout: LayoutRect
+  /** Persistent Flexily layout node. Text nodes attach one lazily with measureFunc. */
+  _flexNode: Node | null
   /** Interactive state — managed by render loop hit-testing */
   _hovered: boolean
   _active: boolean
@@ -382,6 +387,8 @@ export type TGENode = {
   _focusableCount: number
   /** Pre-order index assigned by walkTree for paint-order comparisons. */
   _dfsIndex: number
+  /** Tree depth assigned by walkTree — root=0. Used by stacking sort. */
+  _depth: number
   /** Nearest scroll-container ancestor id, or 0 when none. */
   _scrollContainerId: number
   /** Consecutive frames where this node's layer/subtree stayed clean. */
@@ -411,6 +418,8 @@ let nextNodeId = 1
 
 /** @public */
 export function createNode(kind: TGENodeKind): TGENode {
+  const flex = kind === "text" ? null : Node.create()
+  flex?.setFlexDirection(FLEX_DIRECTION_COLUMN)
   return {
     kind,
     props: {},
@@ -420,6 +429,7 @@ export function createNode(kind: TGENodeKind): TGENode {
     id: nextNodeId++,
     destroyed: false,
     layout: { x: 0, y: 0, width: 0, height: 0 },
+    _flexNode: flex,
     _hovered: false,
     _active: false,
     _focused: false,
@@ -437,6 +447,7 @@ export function createNode(kind: TGENodeKind): TGENode {
     _siblingIndex: 0,
     _focusableCount: 0,
     _dfsIndex: 0,
+    _depth: 0,
     _scrollContainerId: 0,
     _stableFrameCount: 0,
     _unstableFrameCount: 0,
@@ -521,6 +532,9 @@ export function insertChild(parent: TGENode, child: TGENode, anchor?: TGENode) {
   if (previousParent) {
     const previousIndex = previousParent.children.indexOf(child)
     if (previousIndex >= 0) {
+      if (previousParent._flexNode && child._flexNode) {
+        previousParent._flexNode.removeChild(child._flexNode)
+      }
       previousParent.children.splice(previousIndex, 1)
       updateSiblingIndices(previousParent, previousIndex)
       adjustFocusableAncestors(previousParent, -child._focusableCount)
@@ -535,6 +549,10 @@ export function insertChild(parent: TGENode, child: TGENode, anchor?: TGENode) {
     if (idx >= 0) {
       parent.children.splice(idx, 0, child)
       insertIndex = idx
+      if (parent._flexNode && child._flexNode) {
+        parent._flexNode.insertChild(child._flexNode, insertIndex)
+        syncAllLayoutProps(child)
+      }
       updateSiblingIndices(parent, insertIndex)
       adjustFocusableAncestors(parent, child._focusableCount)
       return
@@ -542,6 +560,10 @@ export function insertChild(parent: TGENode, child: TGENode, anchor?: TGENode) {
   }
   parent.children.push(child)
   child._siblingIndex = insertIndex
+  if (parent._flexNode && child._flexNode) {
+    parent._flexNode.insertChild(child._flexNode, insertIndex)
+    syncAllLayoutProps(child)
+  }
   adjustFocusableAncestors(parent, child._focusableCount)
 }
 
@@ -549,12 +571,24 @@ export function insertChild(parent: TGENode, child: TGENode, anchor?: TGENode) {
 export function removeChild(parent: TGENode, child: TGENode) {
   const idx = parent.children.indexOf(child)
   if (idx >= 0) {
+    if (parent._flexNode && child._flexNode) {
+      parent._flexNode.removeChild(child._flexNode)
+    }
     parent.children.splice(idx, 1)
     updateSiblingIndices(parent, idx)
     adjustFocusableAncestors(parent, -child._focusableCount)
   }
+  freeFlexSubtree(child)
   child.parent = null
   child.destroyed = true
+}
+
+function freeFlexSubtree(node: TGENode) {
+  if (node._flexNode) {
+    node._flexNode.free()
+    node._flexNode = null
+  }
+  for (const child of node.children) freeFlexSubtree(child)
 }
 
 function updateSiblingIndices(parent: TGENode, start: number) {

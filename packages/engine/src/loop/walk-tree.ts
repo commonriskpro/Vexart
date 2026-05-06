@@ -12,13 +12,7 @@
  */
 
 import {
-  SIZING,
-  DIRECTION,
-  ALIGN_X,
-  ALIGN_Y,
   type TGENode,
-  type SizingInfo,
-  parseSizing,
   parseDirection,
   parseAlignX,
   parseAlignY,
@@ -26,7 +20,8 @@ import {
   ensureImageExtra,
   ensureCanvasExtra,
 } from "../ffi/node"
-// measureForLayout is now called inside Flexily's setMeasureFunc (layout-adapter.ts)
+import { createTextFlexNode } from "../ffi/flex-sync"
+// measureForLayout is called inside the retained text Flexily measureFunc (flex-sync.ts)
 import { CanvasContext, hashCanvasDisplayList, serializeCanvasDisplayList } from "../ffi/canvas"
 import { nativeCanvasDisplayListTouch, nativeCanvasDisplayListUpdate, syncNativeCanvasDisplayListHandle } from "../ffi/native-canvas-display-list"
 import { decodeImageForNode } from "./image"
@@ -190,6 +185,7 @@ export function walkTree(
   insideTransform?: boolean,
   scrollContainerId = 0,
   insideScroll = false,
+  depth = 0,
 ) {
   const { layout } = state
   const dfsIndex = state.nodeCount.value++
@@ -198,6 +194,7 @@ export function walkTree(
     autoLayerCount = 0
   }
   node._dfsIndex = dfsIndex
+  node._depth = depth
   node._scrollContainerId = scrollContainerId
   if (isDebugEnabled()) state.nodePathById.set(node.id, String(dfsIndex))
   state.nodeRefById.set(node.id, node)
@@ -263,6 +260,8 @@ export function walkTree(
 
     // Text dimensions are computed by Flexily's measure function in the
     // layout adapter — no pre-measurement needed here.
+    createTextFlexNode(node)
+    layout.setCurrentFlexNode(node._flexNode)
     layout.text(content, color, fontId, fontSize, node.id, undefined, undefined, fontFamily, fontWeight, fontStyle)
     state.textNodes.push(node)
     return
@@ -278,16 +277,14 @@ export function walkTree(
 
     // Emit a layout element for this image node
     state.boxNodes.push(node)
+    layout.setCurrentFlexNode(node._flexNode)
     layout.openElement()
     layout.setCurrentNodeId(node.id)
 
-    // Sizing: use pre-parsed if explicit, else image intrinsic size, else fit
-    const imgBuf = extra.buffer
-    const ws = node._widthSizing ?? (imgBuf ? { type: SIZING.FIXED, value: imgBuf.width } : { type: SIZING.FIT, value: 0 })
-    const hs = node._heightSizing ?? (imgBuf ? { type: SIZING.FIXED, value: imgBuf.height } : { type: SIZING.FIT, value: 0 })
-    layout.configureSizing(ws.type, ws.value, hs.type, hs.value)
-
     // Use a placeholder RECT so the layout adapter emits a RECTANGLE command for painting
+    const imgBuf = extra.buffer
+    if (imgBuf && !node._widthSizing) node._flexNode?.setWidth(imgBuf.width)
+    if (imgBuf && !node._heightSizing) node._flexNode?.setHeight(imgBuf.height)
     const placeholderColor = 0x00000001 // near-transparent
     layout.configureRectangle(placeholderColor, props.cornerRadius ?? 0)
     registerRectNode(node, state)
@@ -314,16 +311,14 @@ export function walkTree(
     state.boxNodes.push(node)
 
     if (isInteractiveNode(props)) {
+      layout.setCurrentFlexNode(node._flexNode)
       layout.setId(`tge-node-${node.id}`)
     } else {
+      layout.setCurrentFlexNode(node._flexNode)
       layout.openElement()
     }
     layout.setCurrentNodeId(node.id)
-
-    // Sizing: use pre-parsed or default to grow
-    const ws = node._widthSizing ?? { type: SIZING.GROW, value: 0 }
-    const hs = node._heightSizing ?? { type: SIZING.GROW, value: 0 }
-    layout.configureSizing(ws.type, ws.value, hs.type, hs.value)
+    if (!node._widthSizing && !node._heightSizing) node._flexNode?.setFlexGrow(1)
 
     // Use a UNIQUE placeholder RECT so Canvas emits a RECTANGLE command for painting.
     // Pack node.id into RGB, keep alpha near-transparent.
@@ -386,6 +381,7 @@ export function walkTree(
     // Use node.id for a stable scroll ID that survives frame resets.
     // Fallback to user-provided scrollId for programmatic scroll handles.
     const sid = props.scrollId ?? `tge-scroll-${node.id}`
+    layout.setCurrentFlexNode(node._flexNode)
     layout.setId(sid)
     // Track counter for legacy compat (still incremented but not used for ID)
     state.scrollIdCounter.value++
@@ -393,75 +389,18 @@ export function walkTree(
       state.scrollSpeedCap.value = props.scrollSpeed
     }
   } else if (needsLayoutId) {
+    layout.setCurrentFlexNode(node._flexNode)
     layout.setId(`tge-node-${node.id}`)
   } else {
+    layout.setCurrentFlexNode(node._flexNode)
     layout.openElement()
   }
   layout.setCurrentNodeId(node.id)
 
   // Layout — resolve aliases, then use per-side padding if set
   const dir = parseDirection(props.direction ?? props.flexDirection)
-  const gap = props.gap ?? 0
   const ax = parseAlignX(props.alignX ?? props.justifyContent)
   const ay = parseAlignY(props.alignY ?? props.alignItems)
-
-  const hasPerSidePadding = props.paddingLeft !== undefined || props.paddingRight !== undefined ||
-                            props.paddingTop !== undefined || props.paddingBottom !== undefined
-  if (hasPerSidePadding) {
-    const basePx = props.paddingX ?? props.padding ?? 0
-    const basePy = props.paddingY ?? props.padding ?? 0
-    layout.configureLayoutFull(dir,
-      props.paddingLeft ?? basePx,
-      props.paddingRight ?? basePx,
-      props.paddingTop ?? basePy,
-      props.paddingBottom ?? basePy,
-      gap, ax, ay)
-  } else {
-    const px = props.paddingX ?? props.padding ?? 0
-    const py = props.paddingY ?? props.padding ?? 0
-    layout.configureLayout(dir, px, py, gap, ax, ay)
-  }
-
-  // Margin — resolve axis aliases first, then per-side overrides.
-  // Flexily's computed left/top already include margin, so layout map collection
-  // can keep using getComputedLeft()/getComputedTop() directly.
-  const hasPerSideMargin = props.marginLeft !== undefined || props.marginRight !== undefined ||
-                            props.marginTop !== undefined || props.marginBottom !== undefined
-  const hasAnyMargin = hasPerSideMargin || props.margin !== undefined ||
-                        props.marginX !== undefined || props.marginY !== undefined
-  if (hasAnyMargin) {
-    const baseMx = props.marginX ?? props.margin ?? 0
-    const baseMy = props.marginY ?? props.margin ?? 0
-    layout.configureMargin(
-      props.marginLeft ?? baseMx,
-      props.marginRight ?? baseMx,
-      props.marginTop ?? baseMy,
-      props.marginBottom ?? baseMy,
-    )
-  }
-
-  // Sizing — use pre-parsed values, fallback to FIT (Auto in Flexily).
-  // Cross-axis stretching is handled by Flexily's default align_items: Stretch
-  // (activated via alignItems=255/None in _defaultOpen). No manual stretch
-  // emulation needed — removed the stretchW/stretchH hack that incorrectly
-  // used flexGrow (main-axis only) for cross-axis stretching.
-  const hasFlexGrowAlias = props.flexGrow !== undefined && props.width === undefined
-  const FIT_DEFAULT: SizingInfo = { type: SIZING.FIT, value: 0 }
-  const GROW_DEFAULT: SizingInfo = { type: SIZING.GROW, value: 0 }
-  const ws = hasFlexGrowAlias
-    ? GROW_DEFAULT
-    : (node._widthSizing ?? FIT_DEFAULT)
-  const hs = node._heightSizing ?? FIT_DEFAULT
-  const hasMinMax = props.minWidth !== undefined || props.maxWidth !== undefined ||
-                    props.minHeight !== undefined || props.maxHeight !== undefined
-  if (hasMinMax) {
-    layout.configureSizingMinMax(
-      ws.type, ws.value, props.minWidth ?? 0, props.maxWidth ?? 100000,
-      hs.type, hs.value, props.minHeight ?? 0, props.maxHeight ?? 100000,
-    )
-  } else {
-    layout.configureSizing(ws.type, ws.value, hs.type, hs.value)
-  }
 
   // Floating / absolute positioning
   if (props.floating) {
@@ -618,7 +557,7 @@ export function walkTree(
   const childInsideScroll = insideScroll || isScrollContainer
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i]
-    walkTree(child, state, dir, childInsideXform, childScrollContainerId, childInsideScroll)
+    walkTree(child, state, dir, childInsideXform, childScrollContainerId, childInsideScroll, depth + 1)
   }
 
   layout.closeElement()

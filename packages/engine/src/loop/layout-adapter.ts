@@ -1,9 +1,9 @@
 /**
  * layout-adapter.ts — VexartLayoutCtx factory backed by Flexily.
  *
- * Drop-in replacement for the legacy custom layout engine. Builds a
- * Flexily node tree during walkTree open/close/configure calls, then
- * computes layout via Flexily's calculateLayout() in endLayout().
+ * Drop-in replacement for the legacy custom layout engine. The Flexily node
+ * tree is retained on TGENode instances; this adapter only records per-frame
+ * render metadata and reads computed layout from persistent nodes.
  * Returns synthetic RenderCommand[] from the positioned layout output.
  *
  * Flexily: pure JS, zero deps, zero-alloc hot path, Yoga-compatible API.
@@ -40,7 +40,6 @@ import {
   MEASURE_MODE_AT_MOST,
   MEASURE_MODE_EXACTLY,
 } from "flexily"
-import { measureTextConstrained, measureForLayout } from "../ffi/text-layout"
 
 // ── Layout constants ──────────────────────────────────────────────────────
 
@@ -149,15 +148,19 @@ export function createVexartLayoutCtx() {
 
   let _nodeStack: Node[] = []
   let _currentNode: Node | null = null
+  let _pendingFlexNode: Node | null = null
   let _currentIdx = -1
   let _roots: Node[] = []
+  const _ownedNodes = new Set<Node>()
   let _dfsCounter = 0
   let _nodeCount = 0
 
-  // Scroll data cache (legacy compat)
-  const _scrollDataCache = new Map<string, { scrollX: number; scrollY: number; contentWidth: number; contentHeight: number; viewportWidth: number; viewportHeight: number; found: boolean }>()
-
-  // Last layout result
+  // Last layout result — pre-allocated, cleared each endLayout()
+  const _layoutMap = new Map<number, PositionedCommand>()
+  const _childrenByParent = new Map<number, number[]>()
+  const _scrollContainerIds = new Set<number>()
+  const _textByNodeId = new Map<number, number>()
+  const _cmds: RenderCommand[] = []
   let _lastLayoutMap: Map<number, PositionedCommand> | null = null
   function getLastLayoutMap() { return _lastLayoutMap }
 
@@ -210,17 +213,19 @@ export function createVexartLayoutCtx() {
 
   function _pushNode(node: Node, parentId: number) {
     const idx = _addNode(node, parentId, _nodeStack.length === 0)
-
-    if (_nodeStack.length > 0) {
-      const parent = _nodeStack[_nodeStack.length - 1]
-      parent.insertChild(node, parent.getChildCount())
-    } else {
+    if (_nodeStack.length === 0) {
       _roots.push(node)
+    } else if (_ownedNodes.has(node)) {
+      const parent = _nodeStack[_nodeStack.length - 1]
+      if (_ownedNodes.has(parent)) parent.insertChild(node, parent.getChildCount())
     }
-
     _nodeStack.push(node)
     _currentNode = node
     _currentIdx = idx
+  }
+
+  function isOwnedCurrent(): boolean {
+    return _currentNode !== null && _ownedNodes.has(_currentNode)
   }
 
   return {
@@ -238,61 +243,55 @@ export function createVexartLayoutCtx() {
     },
 
     destroy() {
-      for (let i = 0; i < _nodeCount; i++) {
-        _allNodes[i].free()
-      }
+      for (const node of _ownedNodes) node.free()
+      _ownedNodes.clear()
       _nodeCount = 0
       _roots.length = 0
       _nodeStack.length = 0
       _currentNode = null
+      _pendingFlexNode = null
       _currentIdx = -1
       _nodeToIndex.clear()
     },
 
     beginLayout() {
-      // Free previous tree nodes
-      for (let i = 0; i < _nodeCount; i++) {
-        _allNodes[i].free()
-      }
       _nodeCount = 0
       _nodeStack.length = 0
       _roots.length = 0
       _currentNode = null
+      _pendingFlexNode = null
       _currentIdx = -1
       _dfsCounter = 0
       _nodeToIndex.clear()
     },
 
-    endLayout(): RenderCommand[] {
-      // Compute layout for each root
-      for (const root of _roots) {
-        root.calculateLayout(_viewportW, _viewportH, DIRECTION_LTR)
-      }
+    endLayout(rootNode?: Node | null): RenderCommand[] {
+      const root = rootNode ?? _roots[0]
+      if (root) root.calculateLayout(_viewportW, _viewportH, DIRECTION_LTR)
 
       // ── Stacking-context command emission ─────────────────────────────────
       // Position computation is merged into emitNode to eliminate a separate
       // collectPositions traversal (was the third full tree walk per frame).
-      const layoutMap = new Map<number, PositionedCommand>()
+      // Pre-allocated maps are cleared and reused (HP-2: avoid per-frame allocs).
+      _layoutMap.clear()
+      _childrenByParent.clear()
+      _scrollContainerIds.clear()
+      _textByNodeId.clear()
+      _cmds.length = 0
 
       // Build children-by-nodeId and scroll/text lookups in one pass
-      const childrenByParent = new Map<number, number[]>()  // parentNodeId → child indices
-      const scrollContainerIds = new Set<number>()
-      const textByNodeId = new Map<number, number>()  // nodeId → index
-
       for (let i = 0; i < _nodeCount; i++) {
         const pid = _parentNodeIds[i]
-        const arr = childrenByParent.get(pid)
+        const arr = _childrenByParent.get(pid)
         if (arr) arr.push(i)
-        else childrenByParent.set(pid, [i])
+        else _childrenByParent.set(pid, [i])
 
-        if (_isScrollX[i] || _isScrollY[i]) scrollContainerIds.add(_nodeIds[i])
-        if (_isText[i]) textByNodeId.set(_nodeIds[i], i)
+        if (_isScrollX[i] || _isScrollY[i]) _scrollContainerIds.add(_nodeIds[i])
+        if (_isText[i]) _textByNodeId.set(_nodeIds[i], i)
       }
 
-      const cmds: RenderCommand[] = []
-
       const sortedChildIndices = (parentId: number): number[] => {
-        const children = childrenByParent.get(parentId)
+        const children = _childrenByParent.get(parentId)
         if (!children) return []
         let hasFloating = false
         for (let i = 0; i < children.length; i++) {
@@ -327,8 +326,8 @@ export function createVexartLayoutCtx() {
         const borT = node.getComputedBorder(EDGE_TOP)
         const borB = node.getComputedBorder(EDGE_BOTTOM)
 
-        // Store in layoutMap for writeLayoutBack and downstream consumers
-        layoutMap.set(nodeId, {
+        // Store in _layoutMap for writeLayoutBack and downstream consumers
+        _layoutMap.set(nodeId, {
           nodeId,
           x: absX, y: absY, width, height,
           contentX: absX + padL + borL,
@@ -350,12 +349,12 @@ export function createVexartLayoutCtx() {
           if (_effects[idx]) cmd.effect = _effects[idx]!
           if (_images[idx]) cmd.image = _images[idx]!
           if (_canvases[idx]) cmd.canvas = _canvases[idx]!
-          cmds.push(cmd)
+          _cmds.push(cmd)
         }
 
-        const textIdx = textByNodeId.get(nodeId)
+        const textIdx = _textByNodeId.get(nodeId)
         if (textIdx !== undefined) {
-          cmds.push({
+          _cmds.push({
             type: CMD.TEXT,
             x: absX, y: absY, width, height,
             color: _textColors[textIdx] >>> 0,
@@ -365,9 +364,9 @@ export function createVexartLayoutCtx() {
           })
         }
 
-        const isScroll = scrollContainerIds.has(nodeId)
+        const isScroll = _scrollContainerIds.has(nodeId)
         if (isScroll) {
-          cmds.push({ type: CMD.SCISSOR_START, x: absX, y: absY, width, height, color: 0, cornerRadius: 0, extra1: 0, extra2: 0, nodeId })
+          _cmds.push({ type: CMD.SCISSOR_START, x: absX, y: absY, width, height, color: 0, cornerRadius: 0, extra1: 0, extra2: 0, nodeId })
         }
 
         for (const childIdx of sortedChildIndices(nodeId)) {
@@ -375,7 +374,7 @@ export function createVexartLayoutCtx() {
         }
 
         if (isScroll) {
-          cmds.push({ type: CMD.SCISSOR_END, x: 0, y: 0, width: 0, height: 0, color: 0, cornerRadius: 0, extra1: 0, extra2: 0 })
+          _cmds.push({ type: CMD.SCISSOR_END, x: 0, y: 0, width: 0, height: 0, color: 0, cornerRadius: 0, extra1: 0, extra2: 0 })
         }
       }
 
@@ -383,16 +382,22 @@ export function createVexartLayoutCtx() {
         emitNode(childIdx, 0, 0)
       }
 
-      _lastLayoutMap = layoutMap
-      return cmds
+      _lastLayoutMap = _layoutMap
+      return _cmds
     },
 
     setCurrentNodeId(nodeId: number) {
       if (_currentIdx >= 0) _nodeIds[_currentIdx] = nodeId
     },
 
+    setCurrentFlexNode(node: Node | null) {
+      _pendingFlexNode = node
+    },
+
     openElement() {
-      const node = Node.create()
+      const node = _pendingFlexNode ?? Node.create()
+      if (!_pendingFlexNode) _ownedNodes.add(node)
+      _pendingFlexNode = null
       const parentId = _nodeStack.length > 0 ? _nodeIds[_nodeToIndex.get(_nodeStack[_nodeStack.length - 1])!] : 0
       _pushNode(node, parentId)
     },
@@ -411,93 +416,6 @@ export function createVexartLayoutCtx() {
 
     setId(_id: string) {
       this.openElement()
-    },
-
-    configureLayout(dir: number, px: number, py: number, gap: number, ax: number, ay: number) {
-      if (!_currentNode) return
-      const node = _currentNode
-
-      node.setFlexDirection(dir === 0 ? FLEX_DIRECTION_ROW : FLEX_DIRECTION_COLUMN)
-
-      node.setPadding(EDGE_LEFT, px)
-      node.setPadding(EDGE_RIGHT, px)
-      node.setPadding(EDGE_TOP, py)
-      node.setPadding(EDGE_BOTTOM, py)
-
-      if (gap > 0) node.setGap(GUTTER_ALL, gap)
-
-      if (dir === 1) {
-        node.setJustifyContent(mapJustify(ay))
-        node.setAlignItems(mapAlign(ax))
-      } else {
-        node.setJustifyContent(mapJustify(ax))
-        node.setAlignItems(mapAlign(ay))
-      }
-    },
-
-    configureLayoutFull(dir: number, padL: number, padR: number, padT: number, padB: number, gap: number, ax: number, ay: number) {
-      if (!_currentNode) return
-      const node = _currentNode
-
-      node.setFlexDirection(dir === 0 ? FLEX_DIRECTION_ROW : FLEX_DIRECTION_COLUMN)
-
-      node.setPadding(EDGE_LEFT, padL)
-      node.setPadding(EDGE_RIGHT, padR)
-      node.setPadding(EDGE_TOP, padT)
-      node.setPadding(EDGE_BOTTOM, padB)
-
-      if (gap > 0) node.setGap(GUTTER_ALL, gap)
-
-      if (dir === 1 || dir === 3) {
-        node.setJustifyContent(mapJustify(ay))
-        node.setAlignItems(mapAlign(ax))
-      } else {
-        node.setJustifyContent(mapJustify(ax))
-        node.setAlignItems(mapAlign(ay))
-      }
-    },
-
-    configureMargin(left: number, right: number, top: number, bottom: number) {
-      if (!_currentNode) return
-      const node = _currentNode
-
-      if (left > 0) node.setMargin(EDGE_LEFT, left)
-      if (right > 0) node.setMargin(EDGE_RIGHT, right)
-      if (top > 0) node.setMargin(EDGE_TOP, top)
-      if (bottom > 0) node.setMargin(EDGE_BOTTOM, bottom)
-    },
-
-    configureSizing(wType: number, wVal: number, hType: number, hVal: number) {
-      if (!_currentNode) return
-      const node = _currentNode
-
-      // SIZING: FIT=0, GROW=1, PERCENT=2, FIXED=3
-      // NOTE: Vexart stores PERCENT as a 0-1 ratio (e.g. 1.0 = 100%).
-      // Flexily expects 0-100 (e.g. 100 = 100%). Multiply by 100.
-      switch (wType) {
-        case 0: /* FIT */ break
-        case 1: /* GROW */ node.setFlexGrow(1); break
-        case 2: /* PERCENT */ node.setWidthPercent(wVal * 100); break
-        case 3: /* FIXED */ node.setWidth(wVal); break
-      }
-
-      switch (hType) {
-        case 0: /* FIT */ break
-        case 1: /* GROW */ node.setFlexGrow(1); break
-        case 2: /* PERCENT */ node.setHeightPercent(hVal * 100); break
-        case 3: /* FIXED */ node.setHeight(hVal); break
-      }
-    },
-
-    configureSizingMinMax(wType: number, wVal: number, minW: number, maxW: number, hType: number, hVal: number, minH: number, maxH: number) {
-      if (!_currentNode) return
-      this.configureSizing(wType, wVal, hType, hVal)
-
-      const node = _currentNode
-      if (minW > 0) node.setMinWidth(minW)
-      if (maxW < 100000) node.setMaxWidth(maxW)
-      if (minH > 0) node.setMinHeight(minH)
-      if (maxH < 100000) node.setMaxHeight(maxH)
     },
 
     configureRectangle(color: number, radius: number) {
@@ -520,13 +438,13 @@ export function createVexartLayoutCtx() {
     },
 
     configureBorder(_width: number) {
-      if (!_currentNode) return
-      _currentNode.setBorder(EDGE_ALL, _width)
+      if (!isOwnedCurrent()) { void _width; return }
+      _currentNode!.setBorder(EDGE_ALL, _width)
     },
 
     configureBorderSides(_l: number, _r: number, _t: number, _b: number, _btw: number) {
-      if (!_currentNode) return
-      const node = _currentNode
+      if (!isOwnedCurrent()) { void _l; void _r; void _t; void _b; void _btw; return }
+      const node = _currentNode!
       if (_l > 0) node.setBorder(EDGE_LEFT, _l)
       if (_r > 0) node.setBorder(EDGE_RIGHT, _r)
       if (_t > 0) node.setBorder(EDGE_TOP, _t)
@@ -535,8 +453,10 @@ export function createVexartLayoutCtx() {
 
     configureFloating(attachTo: number, ox: number, oy: number, _z: number, _ape: number, _app: number, _pc: number, _pid: number) {
       if (!_currentNode || _currentIdx < 0) return
+      void attachTo; void ox; void oy; void _ape; void _app; void _pc; void _pid
       _isFloating[_currentIdx] = true
       _zIndexes[_currentIdx] = _z
+      if (!isOwnedCurrent()) return
       _currentNode.setPositionType(POSITION_TYPE_ABSOLUTE)
       if (ox !== 0) _currentNode.setPosition(EDGE_LEFT, ox)
       if (oy !== 0) _currentNode.setPosition(EDGE_TOP, oy)
@@ -544,13 +464,17 @@ export function createVexartLayoutCtx() {
 
     configureClip(_sx: boolean, _sy: boolean, _ox: number, _oy: number) {
       if (!_currentNode || _currentIdx < 0) return
+      void _ox; void _oy
       if (_sx) _isScrollX[_currentIdx] = true
       if (_sy) _isScrollY[_currentIdx] = true
-      if (_sx || _sy) _currentNode.setOverflow(OVERFLOW_SCROLL)
+      if (isOwnedCurrent() && (_sx || _sy)) _currentNode.setOverflow(OVERFLOW_SCROLL)
     },
 
     text(_content: string, _color: number, _fontId: number, _fontSize: number, nodeId?: number, measuredW?: number, measuredH?: number, _fontFamily?: string, _fontWeight?: number, _fontStyle?: string) {
-      const node = Node.create()
+      void measuredW; void measuredH; void _fontFamily; void _fontWeight; void _fontStyle
+      const node = _pendingFlexNode ?? Node.create()
+      if (!_pendingFlexNode) _ownedNodes.add(node)
+      _pendingFlexNode = null
       const parentId = _nodeStack.length > 0 ? _nodeIds[_nodeToIndex.get(_nodeStack[_nodeStack.length - 1])!] : 0
       const idx = _addNode(node, parentId, _nodeStack.length === 0)
 
@@ -561,30 +485,9 @@ export function createVexartLayoutCtx() {
       _textFontIds[idx] = _fontId
       _textFontSizes[idx] = _fontSize
 
-      if (_nodeStack.length > 0) {
-        const parent = _nodeStack[_nodeStack.length - 1]
-        parent.insertChild(node, parent.getChildCount())
-      } else {
+      if (_nodeStack.length === 0) {
         _roots.push(node)
       }
-
-      // Use Flexily measure function for text nodes so word-wrapped height
-      // is computed correctly when the parent constrains width.
-      const content = _content
-      const fontId = _fontId
-      const fontSize = _fontSize
-      const fontFamily = _fontFamily
-      const fontWeight = _fontWeight
-      const fontStyle = _fontStyle
-      node.setMeasureFunc((width, widthMode, _height, _heightMode) => {
-        const maxW = widthMode === MEASURE_MODE_UNDEFINED ? Infinity : width
-        if (maxW === Infinity || maxW <= 0) {
-          // No width constraint — return natural (single-line) dimensions
-          const natural = measureForLayout(content, fontId, fontSize, fontFamily, fontWeight, fontStyle)
-          return { width: natural.width, height: natural.height }
-        }
-        return measureTextConstrained(content, fontId, fontSize, maxW, fontFamily, fontWeight, fontStyle)
-      })
     },
 
     hashString(s: string): number {
@@ -596,17 +499,5 @@ export function createVexartLayoutCtx() {
       return h >>> 0
     },
 
-    getScrollContainerData(id: string): { scrollX: number; scrollY: number; contentWidth: number; contentHeight: number; viewportWidth: number; viewportHeight: number; found: boolean } {
-      return _scrollDataCache.get(id) ?? { scrollX: 0, scrollY: 0, contentWidth: 0, contentHeight: 0, viewportWidth: 0, viewportHeight: 0, found: false }
-    },
-
-    setScrollPosition(id: string, x: number, y: number) {
-      const d = _scrollDataCache.get(id)
-      if (d) { d.scrollX = x; d.scrollY = y }
-    },
-
-    getElementData(label: string): { found: boolean; x: number; y: number; width: number; height: number } {
-      return { found: false, x: 0, y: 0, width: 0, height: 0 }
-    },
   }
 }
