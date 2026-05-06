@@ -27,7 +27,7 @@ await createApp(() => (
 - **GPU-accelerated rendering** — WGPU (Metal/Vulkan/DX12) via a single Rust cdylib
 - **Pixel-perfect shapes** — SDF anti-aliased rounded rects, circles, lines, Bezier curves
 - **JSX components** — SolidJS `createRenderer`; fine-grained reactive updates, no VDOM
-- **CSS-grade layout** — Flexily flexbox in pure JavaScript; no native layout FFI
+- **Incremental layout** — Flexily flexbox (pure JS), reactive tree synced from reconciler; only dirty subtrees recompute
 - **Design tokens** — shadcn-compatible dark theme with semantic color, spacing, radius, shadows
 - **26 headless components** — Button, Input, Select, Dialog, Combobox, Slider, VirtualList, and more
 - **Focus management** — Tab/Shift-Tab cycling, per-node keyboard handlers, focus scoping
@@ -115,12 +115,13 @@ await createApp(() => <App />)
 
 ```
 JSX (SolidJS createRenderer)
-  → TypeScript scene graph + walk-tree
-    → Flexily layout (pure JavaScript)
-      → WGPU paint (Rust GPU — SDF primitives, compositor)
-        → Kitty graphics protocol
-          → Terminal
+  → Reconciler syncs reactive Flexily tree (incremental layout)
+    → TypeScript walk-tree (render metadata collection)
+      → Rust libvexart (WGPU paint + composite + readback + Kitty emit)
+        → Terminal
 ```
+
+The Flexily layout tree is **persistent and reactive** — props and tree structure sync from the SolidJS reconciler. `calculateLayout()` only recomputes dirty subtrees. Rust owns the entire output path: GPU paint → readback → compress → Kitty encoding → terminal write. Zero bytes cross the FFI boundary for presentation.
 
 Vexart is **not** a cell-based TUI framework. It renders actual pixels using the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) — the result looks like a browser running inside your terminal.
 
@@ -138,10 +139,10 @@ Dependencies flow downward: `app → styled → headless → primitives → engi
 
 ### Native binary — libvexart
 
-A single Rust cdylib (`native/target/release/libvexart.dylib`) handles all GPU work:
+A single Rust cdylib (`target/release/libvexart.dylib`) handles all GPU and presentation work:
 - **Paint** — WGPU shaders: SDF rounded rects, shadows, gradients, blur, compositor
-- **MSDF text** — Multi-channel signed-distance-field font rendering; sharp at any size
-- **Presentation** — Kitty encoding and direct/file/SHM transport
+- **MSDF text** — Multi-channel signed-distance-field font rendering + measurement; sharp at any size
+- **Presentation** — GPU readback → zlib compress → Kitty encoding → direct/file/SHM transport write. The entire output path lives in Rust — no pixel data crosses back to JS.
 
 Built with:
 ```bash
@@ -251,8 +252,15 @@ bun run example              # Run hello world example
 bun run showcase             # Run comprehensive feature showcase (7 tabs)
 bun run test:visual          # Run 40-scene golden image visual suite
 bun run test:visual:update   # Regenerate visual test references
-bun run perf:baseline        # Run perf baseline + save to scripts/perf-baseline.json
 bun run build:dist           # Build distributable Vexart npm package
+
+# Performance
+bun run perf:baseline        # Save avg frame time baseline
+bun run perf:check           # Compare current vs saved baseline (exits 1 on regression)
+bun run perf:snapshot        # Full frame breakdown (7 scenarios, per-stage timing)
+bun run perf:compare         # Diff current vs pre-optimization baseline
+bun run test:golden          # Save visual golden snapshot
+bun run test:golden:check    # Compare render output vs golden (pixel-perfect)
 ```
 
 ---
