@@ -21,3 +21,4 @@ packages/*/etc/.temp/
 scripts/frame-breakdown-report.json
 scripts/terminal-transport-report.json
 package/
+__pycache__/
