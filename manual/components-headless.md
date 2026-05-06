@@ -2,7 +2,7 @@
 
 > Expanded guide for Vexart's component system. For the quick-reference version, see [developer-guide.md](./developer-guide.md#components-vexartheadless). For building custom theme packages, see [creating-theme-packages.md](./creating-theme-packages.md).
 
-Vexart separates behavior from presentation using a headless architecture inspired by Radix UI and Headless UI. This guide explains the two patterns (render props and theme props), lists all 28 components with their APIs, and shows how to use them.
+Vexart separates behavior from presentation using a headless architecture inspired by Radix UI and Headless UI. This guide explains the two patterns (render props and theme props), lists all headless and styled components with their APIs, and shows how to use them.
 
 ---
 

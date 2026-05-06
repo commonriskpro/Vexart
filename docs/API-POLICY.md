@@ -635,73 +635,112 @@ This appendix enumerates the complete expected public API surface at v0.9 releas
 ### A.1 `@vexart/engine`
 
 **Mount & lifecycle**
-- `mount(component, terminal, options?): MountHandle` `@public`
-- `unmount(handle): void` `@public`
-- `createTerminal(options?): Promise<Terminal>` `@public`
-- `Terminal`, `Capabilities`, `TerminalSize` (types) `@public`
+- `mount`, `createRenderLoop`, `createTerminal` `@public`
+- `MouseButton`, `RGBA`, `useTerminalDimensions`, `decodePasteBytes` `@public`
+- `MountOptions`, `MountHandle` (types) `@public`
 
 **Core types**
-- `TGEProps` (type) `@public`
-- `PressEvent`, `NodeMouseEvent`, `InteractionMode` (types) `@public`
+- `TGEProps`, `TGENode`, `TGENodeKind` (types) `@public`
+- `PressEvent`, `NodeMouseEvent`, `InteractionMode`, `FilterConfig`, `InteractiveStyleProps` (types) `@public`
+- `LayoutRect`, `SizingInfo` (types) `@public`
 
 **Handles**
-- `createHandle(node): NodeHandle` `@public`
+- `createHandle` `@public`
 - `NodeHandle` (type) `@public`
 
-**Hooks**
-- `useFocus`, `setFocus`, `focusedId`, `setFocusedId`, `pushFocusScope` `@public`
-- `useKeyboard`, `useMouse`, `useInput`, `onInput` `@public`
+**Hooks / Interaction**
+- `useFocus`, `setFocus`, `focusedId`, `setFocusedId`, `pushFocusScope`, `resetFocus` `@public`
+- `getFocusedEntry`, `registerNodeFocusable`, `updateNodeFocusEntry`, `unregisterNodeFocusable`, `getNodeFocusId` `@public`
+- `useKeyboard`, `useMouse`, `useInput`, `onInput`, `dispatchInput`, `getLatestInteractionTrace` `@public`
 - `useDrag`, `useHover` `@public`
 - `useQuery`, `useMutation` `@public`
+- `setPointerCapture`, `releasePointerCapture` `@public`
+- `bindLoop`, `unbindLoop`, `onPostScroll`, `markNodeLayerDamaged`, `requestInteractionFrame` `@public`
+- `beginNodeInteraction`, `endNodeInteraction`, `hasActiveNodeInteraction`, `hasInteractionInSubtree`, `shouldPromoteInteractionLayer`, `shouldFreezeInteractionLayer`, `useInteractionLayer` `@public`
+- `buildNodeMouseEvent`, `isFullyOutsideScrollViewport` `@public`
 
 **Animation**
 - `createTransition`, `createSpring`, `easing` `@public`
-- `TransitionConfig`, `SpringConfig`, `EasingFn` (types) `@public`
+- `hasActiveAnimations` `@public`
+- `boostWindowFor`, `hasRecentInteraction` `@public`
+- `TransitionConfig`, `SpringConfig`, `EasingFn`, `CompositorProperty` (types) `@public`
 
-**Pointer capture**
-- `setPointerCapture(nodeId): void` `@public`
-- `releasePointerCapture(nodeId): void` `@public`
+**Render graph**
+- `BACKDROP_FILTER_KIND`, `createRenderGraphQueues`, `resetRenderGraphQueues`, `cloneRenderGraphQueues`, `buildRenderOp`, `buildRenderGraphFrame` `@public`
+- `RenderCommand`, `ShadowDef`, `EffectConfig`, `RenderGraphQueues`, `RenderGraphOp`, `RenderGraphFrame` (types) `@public`
 
-**Router (data hook only; components in @vexart/headless)**
+**Context**
+- `createContext`, `useContext` (re-exported from `solid-js`) `@public`
+
+**Dirty tracking**
+- `DIRTY_KIND`, `createDirtyTracker`, `onGlobalDirty`, `markDirty`, `isDirty`, `clearDirty` `@public`
+- `markLayerDirtyByKey`, `markLayerDamageByKey` `@public`
+- `DirtyKind`, `DirtyScope`, `DirtyTracker` (types) `@public`
+
+**Router**
 - `createRouter`, `createNavigationStack`, `useRouter` `@public`
+- `NavigationEntry`, `RouteDefinition`, `RouteProps`, `RouterContextValue` (types) `@public`
 
 **Selection**
-- `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal` `@public`
+- `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal`, `resetSelection` `@public`
 - `TextSelection` (type) `@public`
-
-**Animation helpers**
-- `hasActiveAnimations()` `@public`
 
 **Resource observability**
 - `getRendererResourceStats()` `@public`
-- `getFontAtlasCacheStats()`, `getTextLayoutCacheStats()`, `getImageCacheStats()` `@public`
+- `getTextLayoutCacheStats()`, `getImageCacheStats()` `@public`
 - `ResourceStats` (type) `@public`
 
 **Font registration**
 - `registerFont`, `getFont`, `clearTextCache` `@public`
-- `FontDescriptor` (type) `@public`
+- `msdfFontInit`, `msdfFontQuery`, `msdfMeasureText`, `isMsdfFontAvailable` `@public`
+- `FontDescriptor`, `MsdfTextMeasurement` (types) `@public`
+
+**Node utilities**
+- `SIZING`, `DIRECTION`, `ALIGN_X`, `ALIGN_Y` `@public`
+- `createNode`, `insertChild`, `removeChild` `@public`
+- `parseColor`, `parseSizing`, `parseDirection`, `parseAlignX`, `parseAlignY` `@public`
+- `createPressEvent`, `resolveProps` `@public`
+
+**Scroll**
+- `createScrollHandle`, `releaseScrollHandle`, `resetScrollHandles`, `updateScrollContainerGeometry` `@public`
+- `ScrollHandle` (type) `@public`
+
+**Image**
+- `clearImageCache`, `createScaledImageCache`, `decodeImageForNode`, `scaleImage` `@public`
+- `RawImage`, `ScaledImageCache`, `DecodedImage` (types) `@public`
+
+**Matrix / Damage utilities**
+- `identity`, `translate`, `rotate`, `scale`, `scaleXY`, `skew`, `perspective`, `multiply`, `invert`, `transformPoint`, `transformBounds`, `fromConfig`, `isIdentity` `@public`
+- `intersectRect`, `unionRect`, `expandRect`, `translateRect`, `damageRectArea`, `damageSumOverlapArea`, `rectRight`, `rectBottom`, `isEmptyRect` `@public`
+- `Matrix3`, `DamageRect` (types) `@public`
+
+**Canvas / Particles / Layers**
+- `CanvasContext`, `createParticleSystem`, `createLayerStore` `@public`
+- `CanvasDrawCommand`, `ParticleConfig`, `ParticleSystem`, `Layer`, `LayerStore` (types) `@public`
 
 **Debug**
 - `toggleDebug`, `setDebug`, `isDebugEnabled` `@public`
 - `debugFrameStart`, `debugUpdateStats`, `debugState`, `debugStatsLine`, `debugDumpTree`, `debugDumpCulledNodes` `@public`
-- `DebugStats` (type) `@public`
+- `DebugStats`, `NativePresentationStats` (types) `@public`
 
-**Extension points**
+**Renderer backend / Extension points**
 - `setRendererBackend`, `getRendererBackend`, `getRendererBackendName` `@public`
-- `RendererBackend`, `RendererBackendFrameContext`, `RendererBackendPaintContext`, `RendererBackendPaintResult`, `RendererBackendFramePlan`, `RendererBackendFrameResult`, `RendererBackendLayerBacking`, `RendererBackendLayerContext` (types) `@public`
+- `createGpuRendererBackend`, `getGpuRendererBackendCacheStats`, `chooseGpuLayerStrategy` `@public`
+- `RendererBackend`, `RendererBackendFrameContext`, `RendererBackendPaintContext`, `RendererBackendPaintResult`, `RendererBackendFramePlan`, `RendererBackendFrameResult`, `RendererBackendProfile`, `RendererBackendLayerBacking`, `RendererBackendLayerContext`, `RendererBackendRetainedLayer` (types) `@public`
+- `GpuLayerStrategyInput`, `GpuLayerStrategyMode`, `GpuRendererBackend`, `GpuRendererBackendCacheStats` (types) `@public`
 - `createSlotRegistry`, `createSlot` `@public`
 
-**Errors**
-- `VexartError`, `VexartNativeError`, `VexartTerminalError` (classes) `@public`
+**Native bridge**
+- `VEXART_SYMBOLS`, `EXPECTED_BRIDGE_VERSION`, `openVexartLibrary`, `closeVexartLibrary` `@public`
+- `VexartNativeError` `@public`
+- `GRAPH_MAGIC`, `GRAPH_VERSION`, `vexartVersion`, `assertBridgeVersion`, `vexartGetLastError`, `writeHeader` `@public`
 
-**Constants & enums**
-- `RGBA` (class) `@public`
-- `MouseButton` (enum) `@public`
-- `ATTACH_TO`, `ATTACH_POINT`, `POINTER_CAPTURE`, `SIZING`, `DIRECTION`, `ALIGN_X`, `ALIGN_Y` (constants) `@public`
+**Reconciler (SolidJS)**
+- `createComponent`, `createElement`, `createTextNode`, `insertNode`, `insert`, `spread`, `setProp`, `mergeProps`, `effect`, `memo`, `use`, `solidRender` `@public`
+- `For`, `Show`, `Switch`, `Match`, `Index`, `ErrorBoundary` `@public`
 
-**Scroll handles**
-- `createScrollHandle`, `resetScrollHandles` `@public`
-- `ScrollHandle` (type) `@public`
+**Plugins**
+- `createSlotRegistry`, `createSlot` `@public`
 
 **Extmarks (for editor-like UI)**
 - `ExtmarkManager` (class) `@public`
@@ -711,50 +750,92 @@ This appendix enumerates the complete expected public API surface at v0.9 releas
 - `TreeSitterClient`, `getTreeSitterClient`, `addDefaultParsers` `@public`
 - `SyntaxStyle`, `ONE_DARK`, `KANAGAWA` `@public`
 - `highlightsToTokens` `@public`
-- `Token`, `SimpleHighlight`, `FiletypeParserConfig`, `StyleDefinition`, `ThemeTokenStyle` (types) `@public`
+- `StyleDefinition`, `ThemeTokenStyle`, `SimpleThemeRules`, `Token`, `SimpleHighlight`, `FiletypeParserConfig` (types) `@public`
+
+**Terminal**
+- `createTerminal`, `detect` `@public`
+- `inferCaps`, `probeKittyGraphics`, `queryColors` `@public`
+- `getSize`, `queryPixelSize`, `onResize` `@public`
+- `enter`, `leave`, `beginSync`, `endSync` `@public`
+- `inTmux`, `parentTerminal`, `passthroughSupported`, `createWriter`, `wrapPassthrough` `@public`
+- `Terminal`, `TerminalOptions`, `TerminalKind`, `Capabilities`, `TerminalSize`, `ResizeHandler`, `LifecycleState` (types) `@public`
+
+**Input parsing**
+- `createParser`, `parseKey`, `parseMouse` `@public`
+- `NO_MODS`, `decodeMods` `@public`
+- `InputHandler`, `InputParser`, `Modifiers`, `KeyEvent`, `MouseAction`, `MouseEvent`, `FocusEvent`, `PasteEvent`, `ResizeEvent`, `InputEvent` (types) `@public`
+
+**Output / Kitty transport**
+- `probeShm`, `probeFile`, `patchRegion`, `transmitRaw`, `transmitRawAt`, `getKittyTransportStats`, `resetKittyTransportStats`, `COMPRESS_MODE` `@public`
+- `configureKittyTransportManager`, `getKittyTransportManagerState`, `reportKittyTransportFailure`, `reportKittyTransportSuccess`, `resetKittyTransportManager`, `resolveKittyTransportMode` `@public`
+- `getNativeKittyShmHelperVersion`, `prepareNativeKittyShm`, `releaseNativeKittyShm` `@public`
+- `TRANSPORT_FAILURE_REASON`, `TRANSPORT_HEALTH` `@public`
+- `KittyTransportStats`, `RawImageData`, `CompressMode`, `TransmissionMode`, `KittyTransportManagerState`, `NativeKittyShmHandle` (types) `@public`
 
 ### A.2 `@vexart/primitives`
 
-- `Box`, `Text`, `Image`, `Canvas`, `Span`, `RichText` (components) `@public`
-- `BoxProps`, `TextProps`, `ImageProps`, `CanvasProps`, `SpanProps`, `RichTextProps` (types) `@public`
+- `Box`, `Text`, `RichText`, `Span`, `WrapRow` (components) `@public`
+- `BoxProps`, `TextProps`, `SpanProps`, `RichTextProps`, `WrapRowProps` (types) `@public`
+- `ShadowConfig`, `GlowConfig` (types) `@public`
+
+Note: `<image>`/`<img>` and `<canvas>` are JSX intrinsic elements used directly;
+there are no exported wrapper components for these.
 
 ### A.3 `@vexart/headless`
 
 **Inputs**
-- `Button`, `Checkbox`, `Switch`, `RadioGroup`, `Input`, `Textarea`, `Slider`, `Select`, `Combobox` (components) `@public`
+- `Button`, `Checkbox`, `Switch`, `RadioGroup`, `Input`, `Textarea`, `Slider`, `Select` (`SelectTrigger`, `SelectContent`, `SelectItem`), `Combobox` (components) `@public`
 - Corresponding props types and render-context types `@public`
 
 **Display**
-- `ProgressBar`, `Badge`, `Avatar`, `Skeleton`, `Separator`, `Code`, `Markdown` (components) `@public`
+- `Code`, `Markdown`, `ProgressBar` (components) `@public`
 
 **Containers**
-- `ScrollView`, `Tabs`, `Card`, `Portal` (components) `@public`
+- `OverlayRoot`, `Portal`, `ScrollView`, `Tabs` (components) `@public`
 
 **Collections**
 - `List`, `VirtualList`, `Table` (components) `@public`
 
 **Overlays**
-- `Dialog`, `Tooltip`, `Popover`, `Toast`, `createToaster` `@public`
+- `Dialog` (`DialogOverlay`, `DialogContent`, `DialogClose`), `Tooltip`, `Popover`, `createToaster` `@public`
 
 **Navigation**
-- `Router`, `Diff` (components) `@public`
+- `Router`, `Route`, `NavigationStack`, `Diff` (components) `@public`
+- `useRouterContext`, `useStack` (hooks) `@public`
 
 **Forms**
 - `createForm` factory `@public`
 
+**Re-exports**
+- `ExtmarkManager` (from `@vexart/engine`) `@public`
+
+Note: Badge, Avatar, Skeleton, Separator, and Card are styled-only components
+in `@vexart/styled`; they are NOT part of the headless package.
+
 ### A.4 `@vexart/styled`
 
 **Theme system**
-- `ThemeProvider`, `createTheme`, `useTheme`, `setTheme` `@public`
-- `Theme`, `ThemeOverrides` (types) `@public`
+- `createTheme`, `darkTheme`, `lightTheme`, `themeColors` `@public`
+- `setTheme`, `getTheme`, `ThemeProvider`, `useTheme` `@public`
+- `VoidTheme`, `ThemeDefinition`, `ColorTokens` (types) `@public`
 
 **Tokens**
-- `colors`, `radius`, `space`, `shadows`, `font`, `weight` (named constants) `@public`
+- `colors`, `radius`, `space`, `font`, `weight`, `shadows`, `glows`, `theme` (named constants) `@public`
+- `Shadow`, `Glow` (types) `@public`
 
 **Styled components** (void theme)
-- `Button`, `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter` `@public`
-- `Badge`, `Separator`, `Avatar`, `Skeleton` `@public`
-- `VoidDialog`, `VoidSelect`, `VoidSwitch` `@public`
+- `Button` (variants: default, secondary, outline, ghost, destructive; sizes: xs, sm, default, lg) `@public`
+- `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter`, `CardAction` `@public`
+- `Badge` (variants: default, secondary, outline, destructive) `@public`
+- `Separator` (horizontal, vertical) `@public`
+- `Avatar` (sizes: sm, default, lg) `@public`
+- `Skeleton` `@public`
+- `VoidCheckbox`, `VoidCombobox` `@public`
+- `VoidDialog`, `VoidDialogTitle`, `VoidDialogDescription`, `VoidDialogFooter` `@public`
+- `VoidDropdownMenu`, `VoidDropdownMenuTrigger`, `VoidDropdownMenuContent`, `VoidDropdownMenuItem`, `VoidDropdownMenuSeparator`, `VoidDropdownMenuLabel` `@public`
+- `VoidInput`, `VoidPopover`, `VoidProgress`, `VoidRadioGroup`, `VoidSelect` `@public`
+- `VoidSlider`, `VoidSwitch`, `VoidTable`, `VoidTabs`, `VoidTooltip` `@public`
+- `createVoidToaster` `@public`
 
 **Typography**
 - `H1`, `H2`, `H3`, `H4`, `P`, `Lead`, `Large`, `Small`, `Muted` `@public`

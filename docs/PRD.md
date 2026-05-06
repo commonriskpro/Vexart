@@ -313,14 +313,17 @@ These optimizations are shipped at v0.9 because they are **10× more expensive t
 
 #### Headless components (`@vexart/headless`)
 
-Ship 28 components with render-prop pattern (context props for mouse/keyboard integration):
+Ship 26 headless component concepts with render-prop pattern (context props for mouse/keyboard integration):
 
-- **Inputs**: Button, Checkbox, Switch, RadioGroup, Input, Textarea, Slider, Select, Combobox.
-- **Display**: Text, RichText, Span, Code, Markdown, ProgressBar, Badge, Avatar, Skeleton, Separator.
-- **Containers**: Box, ScrollView, Tabs, Card, Portal.
+- **Inputs**: Button, Checkbox, Switch, RadioGroup, Input, Textarea, Slider, Select (SelectTrigger, SelectContent, SelectItem), Combobox.
+- **Display**: Code, Markdown, ProgressBar.
+- **Containers**: OverlayRoot, Portal, ScrollView, Tabs.
 - **Collections**: List, VirtualList, Table.
-- **Overlays**: Dialog, Tooltip, Popover, Toast.
-- **Navigation**: Router (flat + stack), Diff viewer.
+- **Overlays**: Dialog (DialogOverlay, DialogContent, DialogClose), Tooltip, Popover, createToaster.
+- **Navigation**: Router, Route, NavigationStack (useRouterContext, useStack), Diff viewer.
+- **Forms**: createForm factory.
+
+Note: Text, RichText, Span, Box are in `@vexart/primitives`. Badge, Avatar, Skeleton, Separator, Card are styled-only in `@vexart/styled`.
 
 #### Styled components (`@vexart/styled`)
 

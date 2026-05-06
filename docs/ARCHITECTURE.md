@@ -168,6 +168,7 @@ PUBLIC PACKAGES (shipped to consumers)
 INTERNAL PACKAGES (not shipped, for dev/build only)
 
 @vexart/internal-atlas-gen    ← MSDF atlas generator CLI (dev tool)
+@vexart/internal-devtools     ← MCP devtools server (inspector)
 ```
 
 ### 2.3 The two-binary rule
@@ -222,89 +223,113 @@ Each public package has a fixed internal layout. New files go into existing dire
 packages/engine/
 ├── package.json
 ├── src/
-│   ├── public.ts              — explicit public exports (see API-POLICY)
+│   ├── public.ts              — explicit public exports (512+ lines, see API-POLICY)
 │   ├── index.ts               — re-exports public.ts (compatibility)
-│   ├── mount.ts               — createTerminal(), mount(), unmount()
+│   ├── mount.ts               — mount(), RGBA, MouseButton, useTerminalDimensions
 │   │
-│   ├── reconciler/            — SolidJS universal reconciler integration
-│   │   ├── index.ts           — createRenderer<TGENode>() instance
-│   │   ├── node.ts            — TGENode type definition
-│   │   ├── props.ts           — prop normalization (color parsing, sizing, effects)
-│   │   ├── focus.ts           — focusable registration lifecycle
-│   │   └── handle.ts          — createHandle, NodeHandle interface
+│   ├── reconciler/            — SolidJS universal reconciler + interaction
+│   │   ├── index.ts           — internal reconciler barrel
+│   │   ├── reconciler.ts      — SolidJS createRenderer<TGENode>() instance
+│   │   ├── data.ts            — useQuery, useMutation
+│   │   ├── dirty.ts           — dirty tracking via signals
+│   │   ├── drag.ts            — useDrag hook
+│   │   ├── extmarks.ts        — ExtmarkManager (virtual text/lines)
+│   │   ├── focus.ts           — focus system (registration, Tab nav, scopes)
+│   │   ├── handle.ts          — createHandle, NodeHandle
+│   │   ├── hit-test.ts        — hit testing + scroll viewport clipping
+│   │   ├── hover.ts           — useHover hook
+│   │   ├── interaction.ts     — interaction layer management
+│   │   ├── jsx.d.ts           — JSX intrinsic element types
+│   │   ├── plugins.ts         — slot registry for plugins
+│   │   ├── pointer.ts         — pointer capture, loop binding
+│   │   ├── router.ts          — createRouter, createNavigationStack
+│   │   ├── selection.ts       — text selection across nodes
+│   │   └── tree-sitter/       — syntax highlighting (client, parsers, styles)
 │   │
-│   ├── loop/                  — thin compatibility shell (index.ts ≤ 400 lines)
-│   │   ├── index.ts           — createRenderLoop(): request native frames, dispatch callbacks
-│   │   ├── fallback/          — legacy TS-owned path, test/emergency only after cutover
-│   │   └── stats.ts           — decode native frame/presentation stats
-│   │
-│   ├── hooks/                 — SolidJS hooks for user code
-│   │   ├── use-focus.ts
-│   │   ├── use-keyboard.ts
-│   │   ├── use-mouse.ts
-│   │   ├── use-input.ts
-│   │   ├── use-drag.ts
-│   │   ├── use-hover.ts
-│   │   └── use-query.ts       — data hooks (query, mutation)
-│   │
-│   ├── input/                 — terminal input pipeline and native-event bridge
-│   │   ├── parser.ts          — ANSI/SGR/URXVT escape sequence decoder
-│   │   ├── dispatch.ts        — parsed events → native input FFI → JS callback dispatch
-│   │   ├── event-decoder.ts   — native event records → PressEvent / NodeMouseEvent wrappers
-│   │   ├── pointer-capture.ts — setPointerCapture / releasePointerCapture
-│   │   └── bracketed-paste.ts — paste event decoding
+│   ├── loop/                  — render loop + pipeline phases
+│   │   ├── loop.ts            — createRenderLoop
+│   │   ├── walk-tree.ts       — depth-first traversal + layout input
+│   │   ├── layout-adapter.ts  — Flexily integration (persistent nodes)
+│   │   ├── layout.ts          — layout helpers
+│   │   ├── paint.ts           — paint command dispatch
+│   │   ├── composite.ts       — layer compositing
+│   │   ├── assign-layers.ts   — 3-phase layer assignment
+│   │   ├── layer-boundary.ts  — layer boundary detection
+│   │   ├── frame-scheduler.ts — adaptive frame rate + boost windows
+│   │   ├── input.ts           — input dispatch (keyboard, mouse, useInput)
+│   │   ├── scroll.ts          — scroll handles + geometry
+│   │   ├── image.ts           — image decoding + scaled cache
+│   │   ├── animation.ts       — createTransition, createSpring, easing
+│   │   ├── debug.ts           — debug overlay + tree dump
+│   │   ├── predicates.ts      — node predicates
+│   │   └── types.ts           — loop-internal types
 │   │
 │   ├── animation/
-│   │   ├── transition.ts      — createTransition (tween)
-│   │   ├── spring.ts          — createSpring (physics)
-│   │   ├── easing.ts          — easing presets
 │   │   └── compositor-path.ts — compositor-thread fast path for transform/opacity
 │   │
-│   ├── scheduler/             — JS-side user timing / compatibility scheduler
+│   ├── scheduler/             — JS-side priority scheduler
 │   │   ├── index.ts           — scheduleTask(priority, fn)
 │   │   ├── priority.ts        — user-blocking / user-visible / background queues
 │   │   └── budget.ts          — per-frame budget accounting
 │   │
-│   ├── ffi/                   — bridge to libvexart
-│   │   ├── bridge.ts          — bun:ffi loader, dylib resolution
-│   │   ├── buffer.ts          — packed ArrayBuffer(64) pattern
-│   │   ├── types.ts           — TS mirrors of Rust FFI types
-│   │   ├── scene.ts           — scene/node mutation wrappers
-│   │   ├── props.ts           — prop encoder + generated prop IDs
-│   │   ├── native-events.ts   — event record decoder
-│   │   └── functions.ts       — stub signatures for every vexart_* export
+│   ├── ffi/                   — bridge to libvexart + render graph + node system
+│   │   ├── vexart-bridge.ts   — bun:ffi dlopen + VEXART_SYMBOLS + MSDF_FONT_SYMBOLS
+│   │   ├── vexart-functions.ts — high-level wrappers (version, error, writeHeader)
+│   │   ├── vexart-buffer.ts   — packed ArrayBuffer pattern
+│   │   ├── renderer-backend.ts — RendererBackend interface
+│   │   ├── gpu-renderer-backend.ts — GPU renderer backend implementation
+│   │   ├── gpu-layer-strategy.ts — layer strategy selection
+│   │   ├── render-graph.ts    — render graph queues and ops
+│   │   ├── resource-stats.ts  — getRendererResourceStats()
+│   │   ├── matrix.ts          — 3x3 matrix transforms
+│   │   ├── damage.ts          — damage rect utilities
+│   │   ├── canvas.ts          — CanvasContext and draw commands
+│   │   ├── canvas-rasterizer.ts — canvas software rasterizer
+│   │   ├── text-layout.ts     — font registration and text cache
+│   │   ├── msdf-font.ts       — native MSDF font system wrappers
+│   │   ├── particles.ts       — particle system
+│   │   ├── layers.ts          — layer store
+│   │   ├── lru-cache.ts       — generic LRU cache
+│   │   ├── node.ts            — TGENode, props, constants, parsers
+│   │   ├── flex-sync.ts       — Flexily prop sync
+│   │   ├── native-presentation-*.ts — native presentation flags/ops/stats
+│   │   ├── native-layer-registry*.ts — native layer registry + flags
+│   │   ├── native-image-assets.ts    — native image asset management
+│   │   └── native-canvas-display-list.ts — native canvas display list
 │   │
-│   ├── resources/             — TS-side observers of libvexart's ResourceManager
-│   │   ├── stats.ts           — getRendererResourceStats()
-│   │   └── budget.ts          — setGpuBudgetMb()
+│   ├── input/                 — terminal input parsing
+│   │   ├── parser.ts          — ANSI/SGR/URXVT escape sequence decoder
+│   │   ├── keyboard.ts        — keyboard event parsing
+│   │   ├── mouse.ts           — mouse event parsing
+│   │   └── types.ts           — InputEvent, KeyEvent, MouseEvent types
+│   │
+│   ├── output/                — Kitty graphics protocol output
+│   │   ├── kitty.ts           — Kitty transport (probe, transmit, patch)
+│   │   ├── kitty-shm-native.ts — native SHM helpers
+│   │   └── transport-manager.ts — transport mode management + failover
 │   │
 │   ├── terminal/              — terminal lifecycle
-│   │   ├── detect.ts          — capability detection (Kitty / WezTerm / Ghostty)
-│   │   ├── raw-mode.ts        — enter/exit raw mode
-│   │   ├── signals.ts         — SIGWINCH (resize), SIGINT, exit cleanup
-│   │   └── caps.ts            — Capabilities type
+│   │   ├── index.ts           — createTerminal
+│   │   ├── detect.ts          — terminal kind detection
+│   │   ├── caps.ts            — capability probing (Kitty graphics, colors)
+│   │   ├── lifecycle.ts       — enter/leave raw mode, sync mode
+│   │   ├── platform.ts        — platform detection
+│   │   ├── size.ts            — terminal size + pixel size + resize
+│   │   └── tmux.ts            — tmux detection + passthrough
 │   │
-│   ├── debug/
-│   │   ├── toggle.ts          — toggleDebug(), setDebug()
-│   │   ├── stats-overlay.ts   — terminal-rendered FPS / strategy / stats
-│   │   └── dump.ts            — debugDumpTree(), debugDumpCulledNodes()
-│   │
-│   └── types.ts               — TGEProps (the prop contract)
+│   └── testing/               — test helpers (not public)
+│       ├── render-to-buffer.ts
+│       └── showcase-*.ts      — showcase test scenes
 │
-├── native/                    — prebuilt libvexart binaries
-│   ├── aarch64-darwin/libvexart.dylib
-│   ├── x86_64-darwin/libvexart.dylib
-│   ├── aarch64-linux/libvexart.so
-│   └── x86_64-linux/libvexart.so
-│
-└── jsx-runtime.d.ts           — auto-generated from TGEProps
+└── etc/                       — api-extractor output
+    └── engine.api.md
 ```
 
 **Key rules for engine**:
 
-- `loop/index.ts` orchestrates only — never contains layout / paint / composite logic directly. Those live in their respective files.
-- Every `vexart_*` Rust export has a TypeScript stub in `ffi/functions.ts`. No ad-hoc FFI calls.
-- Hooks never import from `loop/`. Loop never imports from `hooks/`. They communicate via signals declared in `input/dispatch.ts` and focus state in `reconciler/focus.ts`.
+- `loop/loop.ts` orchestrates only — never contains layout / paint / composite logic directly. Those live in their respective files.
+- Every `vexart_*` Rust export is bound in `ffi/vexart-bridge.ts`. High-level wrappers live in `ffi/vexart-functions.ts`.
+- The reconciler owns interaction hooks (drag, hover, focus, pointer) and dispatches via the loop input system.
 
 ### 3.2 `@vexart/primitives`
 
@@ -316,13 +341,17 @@ packages/primitives/
     ├── index.ts
     ├── box.tsx               — <Box> primitive wrapper (optional sugar)
     ├── text.tsx              — <Text> primitive wrapper
-    ├── image.tsx             — <Image> primitive wrapper
-    ├── canvas.tsx            — <Canvas> primitive wrapper
-    ├── span.tsx              — <Span> inline text
-    └── rich-text.tsx         — <RichText> multi-span text
+    ├── rich-text.tsx         — <RichText> + <Span> multi-span text
+    └── wrap-row.tsx          — <WrapRow> flex-wrap workaround
 ```
 
-**Purpose**: thin typed wrappers around the JSX intrinsics (`<box>`, `<text>`, etc.) that provide prop validation and convenience APIs. Consumers can use intrinsics directly or these wrappers; both are supported.
+**Purpose**: thin typed wrappers around the JSX intrinsics (`<box>`, `<text>`, etc.)
+that provide prop validation and convenience APIs. Consumers can use intrinsics
+directly or these wrappers; both are supported. Images and canvas elements are used
+via JSX intrinsics (`<image>`, `<canvas>`) directly — there are no wrapper
+components for these.
+
+**Exported components**: `Box`, `Text`, `RichText`, `Span`, `WrapRow`.
 
 **Rule**: Primitives never contain state, effects, or event handlers beyond pass-through. If logic is needed, it belongs in headless.
 
@@ -343,23 +372,19 @@ packages/headless/
     │   ├── input.tsx         — single-line text input
     │   ├── textarea.tsx      — multi-line editor
     │   ├── slider.tsx
-    │   ├── select.tsx
+    │   ├── select.tsx        — Select, SelectTrigger, SelectContent, SelectItem
     │   └── combobox.tsx
     │
     ├── display/
     │   ├── progress-bar.tsx
-    │   ├── badge.tsx
-    │   ├── avatar.tsx
-    │   ├── skeleton.tsx
-    │   ├── separator.tsx
     │   ├── code.tsx          — syntax-highlighted code block
     │   └── markdown.tsx
     │
     ├── containers/
+    │   ├── overlay-root.tsx  — OverlayRoot container
+    │   ├── portal.tsx
     │   ├── scroll-view.tsx
-    │   ├── tabs.tsx
-    │   ├── card.tsx
-    │   └── portal.tsx
+    │   └── tabs.tsx
     │
     ├── collections/
     │   ├── list.tsx
@@ -367,18 +392,21 @@ packages/headless/
     │   └── table.tsx
     │
     ├── overlays/
-    │   ├── dialog.tsx
-    │   ├── tooltip.tsx
-    │   ├── popover.tsx
-    │   └── toast.tsx
+    │   ├── dialog.tsx        — Dialog, DialogOverlay, DialogContent, DialogClose
+    │   ├── tooltip.tsx       — Tooltip, Popover
+    │   └── toast.tsx         — createToaster
     │
     ├── navigation/
-    │   ├── router.tsx        — flat + stack
+    │   ├── router.tsx        — Router, Route, NavigationStack, useRouterContext, useStack
     │   └── diff.tsx
     │
     └── forms/
-        └── create-form.ts    — createForm() factory
+        └── form.ts           — createForm() factory
 ```
+
+Note: Badge, Avatar, Skeleton, Separator, and Card are styled-only components
+in `@vexart/styled`, not headless. Headless contains only logic/interaction
+components with no visual opinions.
 
 **Contract for headless components**:
 
@@ -396,39 +424,39 @@ packages/styled/
     ├── index.ts
     │
     ├── tokens/
-    │   ├── colors.ts         — void theme palette
-    │   ├── radius.ts
-    │   ├── space.ts
-    │   ├── typography.ts
-    │   └── shadows.ts
+    │   └── tokens.ts         — colors, radius, space, font, weight, shadows, glows, theme
     │
     ├── theme/
-    │   ├── create-theme.ts   — createTheme(overrides)
-    │   ├── provider.tsx      — ThemeProvider
-    │   └── use-theme.ts      — useTheme() hook
+    │   └── theme.ts          — createTheme, darkTheme, lightTheme, themeColors,
+    │                            setTheme, getTheme, ThemeProvider, useTheme
     │
-    ├── components/           — styled wrappers around headless
-    │   ├── button.tsx        — uses @vexart/headless Button + tokens
-    │   ├── card.tsx
-    │   ├── badge.tsx
+    ├── components/           — styled wrappers (30+ components)
     │   ├── avatar.tsx
-    │   ├── skeleton.tsx
-    │   ├── separator.tsx
-    │   ├── dialog.tsx
-    │   ├── select.tsx
-    │   ├── switch.tsx
-    │   └── (etc.)
+    │   ├── badge.tsx
+    │   ├── button.tsx
+    │   ├── card.tsx          — Card, CardHeader, CardTitle, CardDescription,
+    │   │                        CardContent, CardFooter, CardAction
+    │   ├── checkbox.tsx      — VoidCheckbox
+    │   ├── combobox.tsx      — VoidCombobox
+    │   ├── dialog.tsx        — VoidDialog, VoidDialogTitle, VoidDialogDescription,
+    │   │                        VoidDialogFooter
+    │   ├── dropdown-menu.tsx — VoidDropdownMenu + Trigger/Content/Item/Separator/Label
+    │   ├── input.tsx         — VoidInput
+    │   ├── popover.tsx       — VoidPopover
+    │   ├── progress.tsx      — VoidProgress
+    │   ├── radio-group.tsx   — VoidRadioGroup
+    │   ├── select.tsx        — VoidSelect
+    │   ├── separator.tsx     — Separator
+    │   ├── skeleton.tsx      — Skeleton
+    │   ├── slider.tsx        — VoidSlider
+    │   ├── switch.tsx        — VoidSwitch
+    │   ├── table.tsx         — VoidTable
+    │   ├── tabs.tsx          — VoidTabs
+    │   ├── toast.tsx         — createVoidToaster
+    │   └── tooltip.tsx       — VoidTooltip
     │
     └── typography/
-        ├── h1.tsx
-        ├── h2.tsx
-        ├── h3.tsx
-        ├── h4.tsx
-        ├── p.tsx
-        ├── lead.tsx
-        ├── large.tsx
-        ├── small.tsx
-        └── muted.tsx
+        └── typography.tsx    — H1, H2, H3, H4, P, Lead, Large, Small, Muted
 ```
 
 **Contract for styled components**:
@@ -436,6 +464,7 @@ packages/styled/
 - Every styled component is a wrapper around a headless component that supplies a default `renderX` using tokens.
 - Users can override styling by passing their own `renderX` to the styled component.
 - Tokens are theme-scoped. Components read via `useTheme()`.
+- Styled-only components (Avatar, Badge, Separator, Skeleton, Card) have no headless counterpart — they are visual-only with token-based styling.
 
 ### 3.5 `@vexart/app`
 
@@ -475,6 +504,7 @@ Not published to npm. Live in the monorepo for development.
 
 ```
 packages/internal-atlas-gen/    — CLI: TTF → MSDF atlas PNG + metrics JSON
+packages/internal-devtools/     — MCP devtools server for inspector integration
 ```
 
 ---
@@ -485,82 +515,62 @@ packages/internal-atlas-gen/    — CLI: TTF → MSDF atlas PNG + metrics JSON
 
 ```
 native/libvexart/
-├── Cargo.toml
-├── build.rs                   — embeds WGSL shaders, pipeline cache init
+├── Cargo.toml                 — cdylib + rlib; wgpu, bytemuck, nix, base64, flate2,
+│                                 fontdb, ttf-parser, fdsm, nalgebra, serde_json
 ├── src/
-│   ├── lib.rs                 — FFI exports (vexart_* functions)
+│   ├── lib.rs                 — all 53 #[no_mangle] FFI exports
+│   ├── types.rs               — FrameStats, NativePresentationStats, shared types
+│   ├── frame.rs               — frame types
+│   ├── layer.rs               — native layer registry (Phase 2c)
+│   ├── image_asset.rs         — image asset registry
+│   ├── canvas_display_list.rs — canvas display list registry
 │   │
 │   ├── paint/                 — WGPU rendering
-│   │   ├── mod.rs             — paint() entry point, pipeline dispatch
-│   │   ├── context.rs         — WGPU device/queue/surface lifetime
-│   │   ├── pipelines/         — pipeline state objects
-│   │   │   ├── mod.rs
-│   │   │   ├── rect.rs
-│   │   │   ├── circle.rs
-│   │   │   ├── gradient.rs    — linear / radial / conic / multi-stop
-│   │   │   ├── image.rs
-│   │   │   ├── glyph.rs       — MSDF text
-│   │   │   ├── glow.rs
-│   │   │   ├── shadow.rs
-│   │   │   ├── backdrop.rs    — backdrop filter chain
-│   │   │   ├── filter.rs      — self filters
-│   │   │   └── blend.rs       — CSS blend modes
-│   │   ├── shaders/           — WGSL sources (compiled into binary)
-│   │   │   ├── sdf_rect.wgsl
-│   │   │   ├── msdf_text.wgsl
-│   │   │   ├── linear_gradient.wgsl
-│   │   │   ├── radial_gradient.wgsl
-│   │   │   ├── conic_gradient.wgsl
-│   │   │   ├── glow.wgsl
-│   │   │   ├── shadow.wgsl
-│   │   │   ├── backdrop_filter.wgsl
-│   │   │   ├── self_filter.wgsl
-│   │   │   └── blend_mode.wgsl
-│   │   ├── instances.rs       — #[repr(C)] instance structs
-│   │   ├── pipeline_cache.rs  — disk-persisted WGPU PipelineCache (Tier 1)
-│   │   └── culling.rs         — viewport culling helpers (Tier 2)
+│   │   ├── mod.rs             — paint dispatch entry point
+│   │   ├── context.rs         — PaintContext (WGPU device, queues, pipelines)
+│   │   ├── instances.rs       — #[repr(C)] instance structs (BridgeImageTransformInstance, MsdfGlyphInstance)
+│   │   ├── pipeline_cache.rs  — pipeline caching
+│   │   ├── pipelines/         — WGPU render pipeline definitions
+│   │   └── shaders/           — WGSL shader source files
 │   │
 │   ├── composite/             — layer compositing
-│   │   ├── mod.rs             — composite() entry point
-│   │   ├── target.rs          — offscreen render targets
-│   │   ├── readback.rs        — GPU → CPU buffer for final output
-│   │   └── damage.rs          — damage rect intersection / union
+│   │   ├── mod.rs             — compositing ops dispatch
+│   │   ├── target.rs          — render target lifecycle
+│   │   └── readback.rs        — GPU → CPU readback
 │   │
-│   ├── resource/              — unified GPU memory budget (Tier 1)
+│   ├── resource/              — unified GPU memory budget
 │   │   ├── mod.rs             — ResourceManager
-│   │   ├── priority.rs        — Visible / Recent / Cold tiers
-│   │   ├── eviction.rs        — LRU walk + free
-│   │   └── stats.rs           — stats export for observability
+│   │   ├── priority.rs        — resource priority tiers
+│   │   ├── eviction.rs        — LRU eviction
+│   │   └── stats.rs           — stats collection / JSON output
 │   │
-│   ├── text/                  — MSDF text pipeline (DEC-008)
+│   ├── text/                  — MSDF text pipeline (atlas-based)
 │   │   ├── mod.rs
-│   │   ├── atlas.rs           — runtime atlas loading + caching
-│   │   ├── glyph_info.rs      — metrics, kerning (basic)
-│   │   └── render.rs          — MSDF shader dispatch
+│   │   ├── atlas.rs           — MSDF atlas loading / management
+│   │   ├── glyph_info.rs      — glyph metric info
+│   │   └── render.rs          — MSDF text rendering dispatch
 │   │
-│   ├── kitty/                 — Kitty protocol encoder (Tier 1, native Rust)
-│   │   ├── mod.rs             — public kitty_emit_frame()
-│   │   ├── encoder.rs         — base64 + compression + escape sequences
-│   │   ├── transport.rs       — direct / file / shared-memory transport modes
+│   ├── font/                  — native font system (fontdb + fdsm MSDF)
+│   │   ├── mod.rs
+│   │   ├── cache.rs           — font cache
+│   │   ├── layout.rs          — text layout (line breaking)
+│   │   ├── msdf_atlas.rs      — MSDF atlas page generation
+│   │   └── system.rs          — FontSystem (fontdb-backed discovery)
+│   │
+│   ├── kitty/                 — Kitty protocol encoder (native Rust)
+│   │   ├── mod.rs
+│   │   ├── encoder.rs         — base64 + zlib compression + escape sequences
+│   │   ├── shm.rs             — POSIX SHM prepare / release
+│   │   ├── transport.rs       — frame / layer / region emission
 │   │   └── writer.rs          — buffered stdout writer
 │   │
-│   ├── scheduler/             — work coordination within Rust (not public)
-│   │   ├── mod.rs
-│   │   └── task.rs
-│   │
-│   ├── ffi/                   — FFI decoders and safety helpers
-│   │   ├── mod.rs
-│   │   ├── buffer.rs          — packed ArrayBuffer decoder
-│   │   ├── error.rs           — error codes, last_error storage
-│   │   └── panic.rs           — catch_unwind wrapper for every export
-│   │
-│   └── types.rs               — shared Rust types (Color, Rect, TransformMatrix)
+│   └── ffi/                   — FFI safety helpers
+│       ├── mod.rs
+│       ├── buffer.rs          — packed ArrayBuffer helpers
+│       ├── error.rs           — thread-local last_error + 2 FFI exports
+│       └── panic.rs           — ffi_guard! macro + error codes
 │
-├── benches/
-│   └── bench_optimizations.rs — Kitty encoding, ResourceManager, MSDF, pipeline cache
-└── tests/
-    ├── integration/
-    └── unit/
+└── tests/                     — integration and unit tests
 ```
 
 ### 4.2 FFI contract

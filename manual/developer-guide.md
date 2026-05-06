@@ -292,20 +292,22 @@ JSX → SolidJS reactive signals → Flexily layout (TypeScript) → Rust/WGPU p
 | **Rust/WGPU paint** | A Rust/WGPU native library paints each element into a pixel buffer using SDF (Signed Distance Field) primitives — anti-aliased corners, gradients, shadows, blur. |
 | **Kitty protocol** | The pixel buffer is transmitted to the terminal via the Kitty graphics protocol. The terminal composites it on its GPU. Only dirty regions are retransmitted. |
 
-### Three Intrinsic Elements
+### Four Intrinsic Elements
 
-Vexart has exactly **three** built-in JSX elements. Everything else (Button, ScrollView, Dialog, etc.) is a component built from these primitives.
+Vexart has exactly **four** built-in JSX elements. Everything else (Button, ScrollView, Dialog, etc.) is a component built from these primitives.
 
 | Element | HTML Equivalent | Purpose |
 |---------|----------------|---------|
 | `<box>` | `<div>` | Layout container. Flexbox, visual styling, effects, interaction. |
 | `<text>` | `<span>` | Text display. Color, size, weight, wrapping. |
-| `<img>` | `<img>` | Image display. Loads from file path, supports object-fit and rounded corners. |
+| `<image>` / `<img>` | `<img>` | Image display. Loads from file path, supports object-fit and rounded corners. |
+| `<canvas>` | `<canvas>` | Imperative drawing surface. `onDraw` callback receives a `CanvasContext`. |
 
 ```tsx
 <box direction="row" gap={8} padding={16} backgroundColor={0x1e1e2eff}>
   <text color={0xfafafaff} fontSize={14}>Hello</text>
   <img src="./logo.png" width={32} height={32} cornerRadius={8} />
+  <canvas width={100} height={100} onDraw={(ctx) => ctx.circle(50, 50, 40, { fill: 0xff0000ff })} />
 </box>
 ```
 

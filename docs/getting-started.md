@@ -18,7 +18,7 @@ This guide walks you through installing Vexart, building the Rust native runtime
 git clone https://github.com/commonriskpro/Vexart.git vexart
 cd vexart
 bun install
-cargo build
+cd native/libvexart && cargo build --release && cd ../..
 ```
 
 ## Your first app

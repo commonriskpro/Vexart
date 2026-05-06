@@ -63,8 +63,10 @@ TypeScript-owned scene graph with a Rust/WGPU native rendering boundary.
 - **Rust/WGPU** (`native/libvexart`) — Single native `cdylib` (`libvexart`) for GPU paint
   pipelines, compositing, Kitty encoding, transport, image assets, canvas display lists,
   and GPU resource management.
-- **Pretext** (`@chenglou/pretext`) — Text measurement/layout support.
 - **Bun** — Runtime, package manager, tests, TypeScript execution, and `bun:ffi` native bridge.
+- **marked** — Markdown parsing for the `Markdown` headless component.
+- **web-tree-sitter** — Tree-sitter WASM runtime for syntax highlighting.
+- **Zod** (`zod@4`) — Schema validation.
 
 ## Current Build Shape
 
@@ -528,15 +530,22 @@ portable and ARM64-safe.
 ### Core
 
 - `createRenderLoop`, `mount`, `createTerminal`
+- `MouseButton`, `RGBA`, `useTerminalDimensions`, `decodePasteBytes`
 
 ### Renderer backend / native bridge
 
 - `setRendererBackend`, `getRendererBackend`, `getRendererBackendName`
 - `createGpuRendererBackend`, `getGpuRendererBackendCacheStats`
-- `createGpuFrameComposer`, `chooseGpuLayerStrategy`
+- `chooseGpuLayerStrategy`
 - `VEXART_SYMBOLS`, `EXPECTED_BRIDGE_VERSION`, `openVexartLibrary`, `closeVexartLibrary`
-- `vexartVersion`, `assertBridgeVersion`, `vexartGetLastError`
+- `VexartNativeError`
+- `GRAPH_MAGIC`, `GRAPH_VERSION`, `vexartVersion`, `assertBridgeVersion`, `vexartGetLastError`, `writeHeader`
 - `getRendererResourceStats`
+
+### Render graph
+
+- `BACKDROP_FILTER_KIND`, `createRenderGraphQueues`, `resetRenderGraphQueues`,
+  `cloneRenderGraphQueues`, `buildRenderOp`, `buildRenderGraphFrame`
 
 ### Reconciler (SolidJS)
 
@@ -550,27 +559,57 @@ portable and ARM64-safe.
 ### Input and interaction
 
 - `useKeyboard`, `useMouse`, `useInput`, `onInput`, `dispatchInput`
+- `getLatestInteractionTrace`
 - `useFocus`, `setFocus`, `focusedId`, `setFocusedId`, `pushFocusScope`, `resetFocus`
+- `getFocusedEntry`, `registerNodeFocusable`, `updateNodeFocusEntry`,
+  `unregisterNodeFocusable`, `getNodeFocusId`
 - `setPointerCapture`, `releasePointerCapture`
+- `bindLoop`, `unbindLoop`, `onPostScroll`, `markNodeLayerDamaged`, `requestInteractionFrame`
 - `useDrag`, `useHover`
+- `beginNodeInteraction`, `endNodeInteraction`, `hasActiveNodeInteraction`,
+  `hasInteractionInSubtree`, `shouldPromoteInteractionLayer`,
+  `shouldFreezeInteractionLayer`, `useInteractionLayer`
+- `buildNodeMouseEvent`, `isFullyOutsideScrollViewport`
 
 ### Animation
 
 - `createTransition`, `createSpring`, `easing`
+- `hasActiveAnimations`
+- `boostWindowFor`, `hasRecentInteraction`
 
 ### Context
 
 - `createContext`, `useContext`
 
+### Dirty tracking
+
+- `DIRTY_KIND`, `createDirtyTracker`, `onGlobalDirty`, `markDirty`, `isDirty`, `clearDirty`
+- `markLayerDirtyByKey`, `markLayerDamageByKey`
+
 ### Utilities
 
-- `markDirty`, `isDirty`, `clearDirty`, `createHandle`, `createScrollHandle`,
-  `releaseScrollHandle`, `resetScrollHandles`
-- `registerFont`, `getFont`, `clearTextCache`, `getTextLayoutCacheStats`,
-  `getFontAtlasCacheStats`
+- `createHandle`, `createScrollHandle`, `releaseScrollHandle`, `resetScrollHandles`,
+  `updateScrollContainerGeometry`
+- `registerFont`, `getFont`, `clearTextCache`, `getTextLayoutCacheStats`
+- `msdfFontInit`, `msdfFontQuery`, `msdfMeasureText`, `isMsdfFontAvailable`
 - `useTerminalDimensions`, `decodePasteBytes`
-- `clearImageCache`, `getImageCacheStats`
+- `clearImageCache`, `getImageCacheStats`, `createScaledImageCache`, `decodeImageForNode`,
+  `scaleImage`
 - `CanvasContext`, `createParticleSystem`, `createLayerStore`
+
+### Node utilities
+
+- `SIZING`, `DIRECTION`, `ALIGN_X`, `ALIGN_Y`
+- `createNode`, `insertChild`, `removeChild`
+- `parseColor`, `parseSizing`, `parseDirection`, `parseAlignX`, `parseAlignY`
+- `createPressEvent`, `resolveProps`
+
+### Matrix and damage utilities
+
+- `identity`, `translate`, `rotate`, `scale`, `scaleXY`, `skew`, `perspective`,
+  `multiply`, `invert`, `transformPoint`, `transformBounds`, `fromConfig`, `isIdentity`
+- `intersectRect`, `unionRect`, `expandRect`, `translateRect`, `damageRectArea`,
+  `damageSumOverlapArea`, `rectRight`, `rectBottom`, `isEmptyRect`
 
 ### Router and data
 
@@ -581,6 +620,28 @@ portable and ARM64-safe.
 
 - `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal`,
   `resetSelection`
+
+### Terminal
+
+- `createTerminal`, `detect`
+- `inferCaps`, `probeKittyGraphics`, `queryColors`
+- `getSize`, `queryPixelSize`, `onResize`
+- `enter`, `leave`, `beginSync`, `endSync`
+- `inTmux`, `parentTerminal`, `passthroughSupported`, `createWriter`, `wrapPassthrough`
+
+### Output / Kitty transport
+
+- `probeShm`, `probeFile`, `patchRegion`, `transmitRaw`, `transmitRawAt`,
+  `getKittyTransportStats`, `resetKittyTransportStats`, `COMPRESS_MODE`
+- `configureKittyTransportManager`, `getKittyTransportManagerState`,
+  `reportKittyTransportFailure`, `reportKittyTransportSuccess`,
+  `resetKittyTransportManager`, `resolveKittyTransportMode`
+- `getNativeKittyShmHelperVersion`, `prepareNativeKittyShm`, `releaseNativeKittyShm`
+
+### Input parsing
+
+- `createParser`, `parseKey`, `parseMouse`
+- `NO_MODS`, `decodeMods`
 
 ### Debug
 
@@ -600,16 +661,44 @@ portable and ARM64-safe.
 
 - `PressEvent` — `{ stopPropagation: () => void; readonly propagationStopped: boolean }`
 - `NodeMouseEvent` — `{ x, y, nodeX, nodeY, width, height }`
+- `TGENodeKind`, `InteractionMode`, `FilterConfig`, `InteractiveStyleProps`,
+  `TGEProps`, `TGENode`, `LayoutRect`, `SizingInfo`
 - `DragOptions`, `DragProps`, `DragState` — `useDrag` hook types
 - `HoverOptions`, `HoverProps`, `HoverState` — `useHover` hook types
-- `RendererBackend*`, `RenderGraph*`, `ResourceStats`, `CanvasDrawCommand`, `Matrix3`,
-  `DamageRect`, terminal/input/router/selection/debug types
+- `InteractionLayerState`, `InteractionBinding` — interaction layer types
+- `RendererBackend`, `RendererBackendFrameContext`, `RendererBackendLayerContext`,
+  `RendererBackendPaintContext`, `RendererBackendPaintResult`,
+  `RendererBackendFramePlan`, `RendererBackendFrameResult`,
+  `RendererBackendProfile`, `RendererBackendLayerBacking`, `RendererBackendRetainedLayer`
+- `GpuLayerStrategyInput`, `GpuLayerStrategyMode`, `GpuRendererBackend`,
+  `GpuRendererBackendCacheStats`
+- `RenderCommand`, `ShadowDef`, `EffectConfig`, `ImagePaintConfig`, `CanvasPaintConfig`,
+  `RenderGraphQueues`, `TextMeta`, `RenderBounds`, `BackdropFilterKind`,
+  `BackdropFilterParams`, `BackdropRenderMetadata`, `RenderGraphOp`, `RenderGraphFrame`
+- `ResourceStats`, `CanvasDrawCommand`, `Matrix3`, `DamageRect`
+- `RenderLoop`, `RenderLoopOptions`, `ScrollHandle`, `RawImage`, `ScaledImageCache`,
+  `DecodedImage`, `InteractionKind`, `FrameSchedulerBoosts`
+- `EasingFn`, `TransitionConfig`, `SpringConfig`, `CompositorProperty`
+- `FontDescriptor`, `MsdfTextMeasurement`, `ParticleConfig`, `ParticleSystem`,
+  `Layer`, `LayerStore`
+- `Terminal`, `TerminalOptions`, `TerminalKind`, `Capabilities`, `TerminalSize`,
+  `ResizeHandler`, `LifecycleState`
+- `InputHandler`, `InputParser`, `Modifiers`, `KeyEvent`, `MouseAction`, `MouseEvent`,
+  `FocusEvent`, `PasteEvent`, `ResizeEvent`, `InputEvent`
+- `QueryResult`, `QueryOptions`, `MutationResult`, `MutationOptions`
+- `DirtyKind`, `DirtyScope`, `DirtyTracker`
+- `Extmark`, `CreateExtmarkOptions`, `FocusEntry`, `FocusHandle`, `NodeHandle`
+- `NavigationEntry`, `RouteDefinition`, `RouteProps`, `RouterContextValue`
+- `TextSelection`, `DebugStats`, `NativePresentationStats`
+- `KittyTransportStats`, `RawImageData`, `CompressMode`, `TransmissionMode`,
+  `KittyTransportManagerState`, `NativeKittyShmHandle`
+- `MountOptions`, `MountHandle`
 
 ### Classes and constants
 
 - `RGBA` — `.fromHex()`, `.fromInts()`, `.fromValues()`, `.toU32()`, `.valueOf()`, `.toString()`
 - `MouseButton` — `{ LEFT, MIDDLE, RIGHT, RELEASE, SCROLL_UP, SCROLL_DOWN }`
-- `SIZING`, `DIRECTION`, `ALIGN_X`, `ALIGN_Y`
+- `TRANSPORT_FAILURE_REASON`, `TRANSPORT_HEALTH`
 
 ## `@vexart/primitives`
 
@@ -650,8 +739,10 @@ JSX intrinsic elements include `<box>`, `<text>`, `<image>`/`<img>`, and `<canva
 | `Tooltip`, `Popover` | overlay props | Delayed tooltip and controlled popover panel |
 | `Diff` | `DiffProps` | Unified diff viewer |
 | `Router`, `Route`, `NavigationStack` | router props | Headless navigation primitives |
+| `useRouterContext`, `useStack` | — | Router/stack context hooks |
 | `createToaster` | toaster options | Imperative toast notifications |
 | `createForm` | form options | Form validation factory |
+| `ExtmarkManager` | — | Re-exported from `@vexart/engine` for editor integration |
 
 ## `@vexart/styled` — Void design system (shadcn-compatible)
 
