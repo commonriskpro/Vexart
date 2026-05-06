@@ -25,9 +25,6 @@ import { chooseGpuLayerStrategy, nativeChooseFrameStrategy, NATIVE_FRAME_STRATEG
 import { openVexartLibrary, openMsdfFontSymbols, VexartNativeError } from "./vexart-bridge"
 import { vexartGetLastError } from "./vexart-functions"
 import {
-  GRAPH_MAGIC, GRAPH_VERSION,
-} from "./vexart-buffer"
-import {
   allocNativeStatsBuf,
   decodeNativePresentationStats,
   type NativePresentationStats,
@@ -44,266 +41,36 @@ import {
 } from "./native-layer-registry"
 import { ensureNativeKittyTransport, nativeEmitLayerTarget, nativeEmitRegionTarget } from "./native-presentation-ops"
 import type { DamageRect, TransformQuad } from "./damage"
-// Phase 2b: All paint + composite ops route through libvexart.
-// Paint primitives: vexart_paint_dispatch cmd_kinds 0-20.
-// Target lifecycle: vexart_composite_target_create/destroy/begin_layer/end_layer.
-// Compositing: vexart_composite_render_image_layer.
-// Copy region: vexart_composite_copy_region_to_image.
-// Backdrop filter: vexart_composite_image_filter_backdrop.
-// Mask: vexart_composite_image_mask_rounded_rect.
-// Readback: vexart_composite_readback_rgba.
-// Images: vexart_paint_upload_image / vexart_paint_remove_image.
-// Glyphs: DEC-011 no-op.
 
 const PROFILE_ENABLED = process.env.VEXART_PROFILE !== "0"
 
-// Pack functions and buffer helpers extracted to gpu-pack.ts
+// Pack functions (gpu-pack.ts) and FFI composite wrappers (gpu-composite-ops.ts)
 import {
-  vu16, vu32, vf32, _packU8,
+  vf32, _packU8,
   packShapeRectInstance, packShapeRectCornersInstance, packGlowInstance,
   packShadowInstance, packLinearGradientInstance, packRadialGradientInstance,
   packImageInstance, packImageTransformInstance,
   type WgpuCanvasShapeRect, type WgpuCanvasShapeRectCorners,
   type WgpuCanvasCornerRadii, type WgpuCanvasGlow, type WgpuCanvasShadow,
 } from "./gpu-pack"
-const _flushStatsBuf = new Uint8Array(32)
-
-let _batchBuf: ArrayBuffer | null = null
-let _batchView: DataView | null = null
-let _batchU8: Uint8Array | null = null
-
-function ensureBatchBuf(size: number) {
-  if (!_batchBuf || _batchBuf.byteLength < size) {
-    _batchBuf = new ArrayBuffer(Math.max(size, 1024))
-    _batchView = new DataView(_batchBuf)
-    _batchU8 = new Uint8Array(_batchBuf)
-  }
-  return { view: _batchView!, u8: _batchU8! }
-}
-
-let _readbackBuf: Uint8Array | null = null
-let _readbackSize = 0
-
-// ── Handle types (bigint u64 — same shape as bridge was) ─────────────────────
-type VexartTargetHandle = bigint
-type VexartImageHandle = bigint
-
-// ── Vexart composite helpers ─────────────────────────────────────────────────
-// Inline wrappers for new Phase 2b composite FFI exports.
-// HP-9/10/12: Pre-allocated buffers and cached symbols to avoid per-call allocs.
-const _handleOut = new BigUint64Array(1)
-const _backdropParamBuf = new Float32Array(8)
-const _backdropParamU8 = new Uint8Array(_backdropParamBuf.buffer)
-let _cachedSymbols: ReturnType<typeof openVexartLibrary>["symbols"] | null = null
-function getSymbols() {
-  if (_cachedSymbols) return _cachedSymbols
-  _cachedSymbols = openVexartLibrary().symbols
-  return _cachedSymbols
-}
-
-/** Create an offscreen RGBA8 render target. Returns bigint handle or 0n on failure. */
-function vexartCompositeTargetCreate(vctx: bigint, width: number, height: number): bigint {
-  const sym = getSymbols()
-  _handleOut[0] = 0n
-  const result = sym.vexart_composite_target_create(vctx, width, height, ptr(_handleOut)) as number
-  if (result !== 0) return 0n
-  return _handleOut[0]
-}
-
-/** Destroy an offscreen render target. */
-function vexartCompositeTargetDestroy(vctx: bigint, target: bigint): void {
-  if (!target) return
-  getSymbols().vexart_composite_target_destroy(vctx, target)
-}
-
-/** Begin a render layer on the target. loadMode=0 clears to clearRgba. */
-function vexartCompositeTargetBeginLayer(vctx: bigint, target: bigint, loadMode: 0 | 1, clearRgba: number): void {
-  const result = getSymbols().vexart_composite_target_begin_layer(vctx, target, loadMode, clearRgba >>> 0) as number
-  if (result !== 0) throw new Error(`vexart_composite_target_begin_layer failed: ${result}`)
-}
-
-/** End the active render layer and submit GPU work. */
-function vexartCompositeTargetEndLayer(vctx: bigint, target: bigint): void {
-  const result = getSymbols().vexart_composite_target_end_layer(vctx, target) as number
-  if (result !== 0) throw new Error(`vexart_composite_target_end_layer failed: ${result}`)
-}
-
-/** Composite an image onto a target. x/y/w/h are pixel coordinates. */
-function vexartCompositeRenderImageLayer(
-  vctx: bigint,
-  target: bigint,
-  image: bigint,
-  x: number, y: number, w: number, h: number,
-  z: number,
-  clearRgba: number,
-): void {
-  const result = getSymbols().vexart_composite_render_image_layer(vctx, target, image, x, y, w, h, z, clearRgba >>> 0) as number
-  if (result !== 0) throw new Error(`vexart_composite_render_image_layer failed: ${result}`)
-}
-
-/** Extract a rectangular region from a target into a new image handle. Returns 0n on failure. */
-function vexartCompositeCopyRegionToImage(
-  vctx: bigint,
-  target: bigint,
-  x: number, y: number, w: number, h: number,
-): bigint {
-  _handleOut[0] = 0n
-  const result = getSymbols().vexart_composite_copy_region_to_image(vctx, target, x, y, w, h, ptr(_handleOut)) as number
-  if (result !== 0) return 0n
-  return _handleOut[0]
-}
-
-/** Apply backdrop filter params to an image. params: float32 array [blur, brightness, contrast, saturate, grayscale, invert, sepia, hueRotate]. NaN means "not requested". Returns 0n on failure. */
-function vexartCompositeImageFilterBackdrop(
-  vctx: bigint,
-  image: bigint,
-  params: BackdropFilterParams,
-): bigint {
-  _backdropParamBuf[0] = params.blur ?? Number.NaN
-  _backdropParamBuf[1] = params.brightness ?? Number.NaN
-  _backdropParamBuf[2] = params.contrast ?? Number.NaN
-  _backdropParamBuf[3] = params.saturate ?? Number.NaN
-  _backdropParamBuf[4] = params.grayscale ?? Number.NaN
-  _backdropParamBuf[5] = params.invert ?? Number.NaN
-  _backdropParamBuf[6] = params.sepia ?? Number.NaN
-  _backdropParamBuf[7] = params.hueRotate ?? Number.NaN
-  _handleOut[0] = 0n
-  const result = getSymbols().vexart_composite_image_filter_backdrop(
-    vctx, image, ptr(_backdropParamU8), _backdropParamBuf.byteLength, ptr(_handleOut)
-  ) as number
-  if (result !== 0) return 0n
-  return _handleOut[0]
-}
-
-/** Apply rounded-rect mask. rectBuf = 6×f32: radius_uniform, tl, tr, br, bl, mode (0=uniform 1=per-corner). Returns 0n on failure. */
-function vexartCompositeImageMaskRoundedRect(
-  vctx: bigint,
-  image: bigint,
-  rectBuf: Float32Array,
-): bigint {
-  _handleOut[0] = 0n
-  const result = getSymbols().vexart_composite_image_mask_rounded_rect(
-    vctx, image, ptr(new Uint8Array(rectBuf.buffer)), ptr(_handleOut)
-  ) as number
-  if (result !== 0) return 0n
-  return _handleOut[0]
-}
-
-/** Full readback from a vexart target. Returns Uint8Array or null. */
-function vexartCompositeReadbackRgba(vctx: bigint, target: bigint, byteLength: number): Uint8Array | null {
-  if (!_readbackBuf || _readbackSize < byteLength) {
-    _readbackBuf = new Uint8Array(byteLength)
-    _readbackSize = byteLength
-  }
-  const result = getSymbols().vexart_composite_readback_rgba(vctx, target, ptr(_readbackBuf), byteLength, ptr(_flushStatsBuf)) as number
-  if (result !== 0) return null
-  return _readbackBuf.byteLength === byteLength ? _readbackBuf : _readbackBuf.subarray(0, byteLength)
-}
-
-// Use canonical BackdropFilterParams from render-graph (was duplicated as WgpuBackdropFilterParams)
-import type { BackdropFilterParams } from "./render-graph"
-
-// ── Native GPU image helpers ────────────────────────────────────────────────
-// These helpers copy regions between native composite targets and native image
-// handles. They are binding-shell utilities, not a separate TS raster pipeline.
-
-type GpuRasterImage = { handle: VexartImageHandle; width: number; height: number }
-
-function copyGpuTargetRegionToImage(
-  vctx: bigint,
-  target: VexartTargetHandle,
-  region: { x: number; y: number; width: number; height: number },
-): GpuRasterImage {
-  const handle = vexartCompositeCopyRegionToImage(vctx, target, region.x, region.y, region.width, region.height)
-  return { handle, width: region.width, height: region.height }
-}
+import {
+  type VexartTargetHandle, type VexartImageHandle, type GpuRasterImage,
+  getSymbols,
+  vexartCompositeTargetCreate, vexartCompositeTargetDestroy,
+  vexartCompositeTargetBeginLayer, vexartCompositeTargetEndLayer,
+  vexartCompositeRenderImageLayer, vexartCompositeCopyRegionToImage,
+  vexartCompositeImageFilterBackdrop, vexartCompositeImageMaskRoundedRect,
+  vexartCompositeReadbackRgba,
+  copyGpuTargetRegionToImage,
+  vexartUploadImage, vexartRemoveImage,
+  flushVexartBatch, flushVexartBatchToTarget, compositeTargetUniformToTarget,
+  _vexartImageHandles, activeImageHandles,
+} from "./gpu-composite-ops"
 
 
 
 
 
-// Image upload registry: WeakMap<Uint8Array, u64 handle> for vexart_paint_upload_image.
-// Handles are stored as BigInt since FFI u64 may exceed safe integer range.
-// WeakMap eviction is passive (GC-driven) and cannot call vexart_paint_remove_image,
-// so active handles are tracked explicitly for native lifecycle cleanup.
-//
-// TODO(perf): Image handles are tracked in 4 places: image.ts imageCache,
-// _vexartImageHandles WeakMap, imageCache WeakMap (inside closure), and
-// activeImageHandles Set. When nativeImageHandle is populated by
-// ensureNativeImageAsset, the upload-on-render path is bypassed entirely.
-// Consider unifying around nativeImageHandle as the authoritative path.
-const _vexartImageHandles = new WeakMap<Uint8Array, bigint>()
-const activeImageHandles = new Set<bigint>()
-
-/** Upload an RGBA image via vexart_paint_upload_image. Returns u64 handle or 0n on failure. */
-function vexartUploadImage(ctx: bigint, data: Uint8Array, width: number, height: number): bigint {
-  const cached = _vexartImageHandles.get(data)
-  if (cached !== undefined) return cached
-  _handleOut[0] = 0n
-  const result = getSymbols().vexart_paint_upload_image(
-    ctx, ptr(data), data.byteLength, width, height, 0 /* format=RGBA */, ptr(_handleOut)
-  ) as number
-  if (result !== 0) return 0n
-  const handle = _handleOut[0]
-  _vexartImageHandles.set(data, handle)
-  activeImageHandles.add(handle)
-  return handle
-}
-
-/** Release a vexart image handle. */
-function vexartRemoveImage(ctx: bigint, handle: bigint) {
-  if (!handle) return
-  const rc = getSymbols().vexart_paint_remove_image(ctx, handle) as number
-  if (rc !== 0) {
-    const err = vexartGetLastError()
-    console.error(`[vexart] paint_remove_image failed (${rc}): ${err}`)
-  }
-  activeImageHandles.delete(handle)
-}
-
-/**
- * Build a §8 graph buffer containing the given instances and call vexart_paint_dispatch.
- * instanceData: flat packed bytes for all instances of this cmd_kind.
- * cmd_kind: one of 0-20 per §8.2.
- * target: 0n = default context target, non-zero = specific registry target.
- */
-function flushVexartBatch(ctx: bigint, cmdKind: number, instanceData: Uint8Array, target: bigint = 0n): void {
-  if (instanceData.byteLength === 0) return
-  const PREFIX = 8
-  const HEADER = 16
-  const total = HEADER + PREFIX + instanceData.byteLength
-  const { view, u8 } = ensureBatchBuf(total)
-  // Header
-  vu32(view, 0, GRAPH_MAGIC)
-  vu32(view, 4, GRAPH_VERSION)
-  vu32(view, 8, 1)   // cmd_count = 1
-  vu32(view, 12, PREFIX + instanceData.byteLength)  // payload_bytes
-  // Command prefix
-  vu16(view, 16, cmdKind)
-  vu16(view, 18, 0)  // flags = 0
-  vu32(view, 20, instanceData.byteLength)
-  // Instance data
-  u8.set(instanceData, HEADER + PREFIX)
-  const rc = getSymbols().vexart_paint_dispatch(ctx, target, ptr(u8), total, ptr(_flushStatsBuf)) as number
-  if (rc !== 0) {
-    const err = vexartGetLastError()
-    console.error(`[vexart] paint_dispatch failed (${rc}): ${err}`)
-  }
-}
-
-/**
- * Flush a single-instance batch to a specific vexart target handle.
- * Convenience wrapper over flushVexartBatch for sprite rendering.
- */
-function flushVexartBatchToTarget(ctx: bigint, target: bigint, cmdKind: number, instanceData: Uint8Array): void {
-  flushVexartBatch(ctx, cmdKind, instanceData, target)
-}
-
-function compositeTargetUniformToTarget(ctx: bigint, target: bigint, sourceTarget: bigint, instanceData: Uint8Array): boolean {
-  const { symbols } = openVexartLibrary()
-  const rc = symbols.vexart_composite_update_uniform(ctx, target, sourceTarget, ptr(instanceData), 0) as number
-  return rc === 0
-}
 
 
 
@@ -806,110 +573,40 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     backdropSpriteBytes: 0,
   }
 
-  const layerTargetBytes = (record: TargetRecord) => record.width * record.height * 4
-  const canvasSpriteBytes = (record: CanvasSpriteRecord) => record.width * record.height * 4
-  const transformSpriteBytes = (record: TransformSpriteRecord) => record.width * record.height * 4
-  const backdropSourceBytes = (record: BackdropSourceRecord) => (record.bounds.right - record.bounds.left) * (record.bounds.bottom - record.bounds.top) * 4
-  const backdropSpriteBytes = (record: BackdropSpriteRecord) => record.width * record.height * 4
-
-  const upsertCacheRecord = <K, R>(
+  // ── Stats-tracked cache factory ──
+  // Replaces 15 wrapper functions (set/delete/clear × 5 caches) with a single
+  // generic factory. Each slot tracks count + bytes in cacheStats automatically.
+  function createCacheSlot<K, R>(
     cache: Map<K, R>,
-    key: K,
-    record: R,
     countKey: keyof GpuRendererBackendCacheStats,
     bytesKey: keyof GpuRendererBackendCacheStats,
     bytesOf: (record: R) => number,
-  ) => {
-    const existing = cache.get(key)
-    if (existing) {
-      cacheStats[countKey] -= 1
-      cacheStats[bytesKey] -= bytesOf(existing)
+  ) {
+    return {
+      set(key: K, record: R) {
+        const existing = cache.get(key)
+        if (existing) { cacheStats[countKey] -= 1; cacheStats[bytesKey] -= bytesOf(existing) }
+        cache.set(key, record)
+        cacheStats[countKey] += 1; cacheStats[bytesKey] += bytesOf(record)
+      },
+      delete(key: K) {
+        const existing = cache.get(key)
+        if (!existing) return null
+        cache.delete(key)
+        cacheStats[countKey] -= 1; cacheStats[bytesKey] -= bytesOf(existing)
+        return existing
+      },
+      clear() { cache.clear(); cacheStats[countKey] = 0; cacheStats[bytesKey] = 0 },
     }
-    cache.set(key, record)
-    cacheStats[countKey] += 1
-    cacheStats[bytesKey] += bytesOf(record)
   }
 
-  const deleteCacheRecord = <K, R>(
-    cache: Map<K, R>,
-    key: K,
-    countKey: keyof GpuRendererBackendCacheStats,
-    bytesKey: keyof GpuRendererBackendCacheStats,
-    bytesOf: (record: R) => number,
-  ) => {
-    const existing = cache.get(key)
-    if (!existing) return null
-    cache.delete(key)
-    cacheStats[countKey] -= 1
-    cacheStats[bytesKey] -= bytesOf(existing)
-    return existing
-  }
-
-  const clearCacheRecords = <K, R>(
-    cache: Map<K, R>,
-    countKey: keyof GpuRendererBackendCacheStats,
-    bytesKey: keyof GpuRendererBackendCacheStats,
-  ) => {
-    cache.clear()
-    cacheStats[countKey] = 0
-    cacheStats[bytesKey] = 0
-  }
-
-  const setLayerTargetRecord = (key: string, record: TargetRecord) => {
-    upsertCacheRecord(layerTargets, key, record, "layerTargetCount", "layerTargetBytes", layerTargetBytes)
-  }
-
-  const deleteLayerTargetRecord = (key: string) => {
-    return deleteCacheRecord(layerTargets, key, "layerTargetCount", "layerTargetBytes", layerTargetBytes)
-  }
-
-  const setCanvasSpriteRecord = (key: string, record: CanvasSpriteRecord) => {
-    upsertCacheRecord(canvasSpriteCache, key, record, "canvasSpriteCount", "canvasSpriteBytes", canvasSpriteBytes)
-  }
-
-  const deleteCanvasSpriteRecord = (key: string) => {
-    return deleteCacheRecord(canvasSpriteCache, key, "canvasSpriteCount", "canvasSpriteBytes", canvasSpriteBytes)
-  }
-
-  const clearCanvasSpriteRecords = () => {
-    clearCacheRecords(canvasSpriteCache, "canvasSpriteCount", "canvasSpriteBytes")
-  }
-
-  const setTransformSpriteRecord = (key: string, record: TransformSpriteRecord) => {
-    upsertCacheRecord(transformSpriteCache, key, record, "transformSpriteCount", "transformSpriteBytes", transformSpriteBytes)
-  }
-
-  const deleteTransformSpriteRecord = (key: string) => {
-    return deleteCacheRecord(transformSpriteCache, key, "transformSpriteCount", "transformSpriteBytes", transformSpriteBytes)
-  }
-
-  const clearTransformSpriteRecords = () => {
-    clearCacheRecords(transformSpriteCache, "transformSpriteCount", "transformSpriteBytes")
-  }
-
-  const setBackdropSourceRecord = (key: string, record: BackdropSourceRecord) => {
-    upsertCacheRecord(backdropSourceCache, key, record, "backdropSourceCount", "backdropSourceBytes", backdropSourceBytes)
-  }
-
-  const deleteBackdropSourceRecord = (key: string) => {
-    return deleteCacheRecord(backdropSourceCache, key, "backdropSourceCount", "backdropSourceBytes", backdropSourceBytes)
-  }
-
-  const clearBackdropSourceRecords = () => {
-    clearCacheRecords(backdropSourceCache, "backdropSourceCount", "backdropSourceBytes")
-  }
-
-  const setBackdropSpriteRecord = (key: string, record: BackdropSpriteRecord) => {
-    upsertCacheRecord(backdropSpriteCache, key, record, "backdropSpriteCount", "backdropSpriteBytes", backdropSpriteBytes)
-  }
-
-  const deleteBackdropSpriteRecord = (key: string) => {
-    return deleteCacheRecord(backdropSpriteCache, key, "backdropSpriteCount", "backdropSpriteBytes", backdropSpriteBytes)
-  }
-
-  const clearBackdropSpriteRecords = () => {
-    clearCacheRecords(backdropSpriteCache, "backdropSpriteCount", "backdropSpriteBytes")
-  }
+  const wh4 = (r: { width: number; height: number }) => r.width * r.height * 4
+  const layerTargetSlot = createCacheSlot(layerTargets, "layerTargetCount", "layerTargetBytes", wh4)
+  const canvasSpriteSlot = createCacheSlot(canvasSpriteCache, "canvasSpriteCount", "canvasSpriteBytes", wh4)
+  const transformSpriteSlot = createCacheSlot(transformSpriteCache, "transformSpriteCount", "transformSpriteBytes", wh4)
+  const backdropSourceSlot = createCacheSlot(backdropSourceCache, "backdropSourceCount", "backdropSourceBytes",
+    (r: BackdropSourceRecord) => (r.bounds.right - r.bounds.left) * (r.bounds.bottom - r.bounds.top) * 4)
+  const backdropSpriteSlot = createCacheSlot(backdropSpriteCache, "backdropSpriteCount", "backdropSpriteBytes", wh4)
 
   const recordCurrentFrameLayer = (layer: RenderedLayerRecord) => {
     const existingIndex = currentFrameLayers.findIndex((entry) => entry.key === layer.key)
@@ -928,16 +625,16 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     for (const record of canvasSpriteCache.values()) {
       vexartRemoveImage(vctx, record.handle)
     }
-    clearCanvasSpriteRecords()
-    clearTransformSpriteRecords()
+    canvasSpriteSlot.clear()
+    transformSpriteSlot.clear()
     for (const record of backdropSourceCache.values()) {
       vexartRemoveImage(vctx, record.handle)
     }
-    clearBackdropSourceRecords()
+    backdropSourceSlot.clear()
     for (const record of backdropSpriteCache.values()) {
       vexartRemoveImage(vctx, record.handle)
     }
-    clearBackdropSpriteRecords()
+    backdropSpriteSlot.clear()
   }
 
   const pruneBackdropCaches = (activeFrameId: number) => {
@@ -945,12 +642,12 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     for (const [key, record] of backdropSourceCache) {
       if (record.frameId === activeFrameId) continue
       vexartRemoveImage(vctx, record.handle)
-      deleteBackdropSourceRecord(key)
+      backdropSourceSlot.delete(key)
     }
     for (const [key, record] of backdropSpriteCache) {
       if (record.frameId === activeFrameId) continue
       vexartRemoveImage(vctx, record.handle)
-      deleteBackdropSpriteRecord(key)
+      backdropSpriteSlot.delete(key)
     }
   }
 
@@ -1001,7 +698,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     if (existing) vexartCompositeTargetDestroy(vctx, existing.handle)
     const handle = vexartCompositeTargetCreate(vctx, width, height)
     if (!handle) return null
-    setLayerTargetRecord(key, { key, width, height, handle })
+    layerTargetSlot.set(key, { key, width, height, handle })
     return handle
   }
 
@@ -1010,7 +707,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     for (const [key, record] of layerTargets) {
       if (activeLayerKeys.has(key)) continue
       vexartCompositeTargetDestroy(vctx, record.handle)
-      deleteLayerTargetRecord(key)
+      layerTargetSlot.delete(key)
     }
   }
 
@@ -1021,7 +718,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       if (!first) break
       const record = transformSpriteCache.get(first)
       if (record) vexartRemoveImage(vctx, record.handle)
-      deleteTransformSpriteRecord(first)
+      transformSpriteSlot.delete(first)
     }
   }
 
@@ -1032,7 +729,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       if (!first) break
       const record = canvasSpriteCache.get(first)
       if (record) vexartRemoveImage(vctx, record.handle)
-      deleteCanvasSpriteRecord(first)
+      canvasSpriteSlot.delete(first)
     }
   }
 
@@ -1076,7 +773,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     if (!raster) return null
     const handle = getImage(raster.data, raster.width, raster.height)
     if (!handle) return null
-    setCanvasSpriteRecord(key, { key, handle, width: raster.width, height: raster.height, data: raster.data })
+    canvasSpriteSlot.set(key, { key, handle, width: raster.width, height: raster.height, data: raster.data })
     trimCanvasSpriteCache()
     return handle
   }
@@ -1107,7 +804,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       ? renderSprite(spriteOp, width, height, Math.round(op.command.x), Math.round(op.command.y))
       : null
     if (!handle) return null
-    setTransformSpriteRecord(key, { key, handle, width, height })
+    transformSpriteSlot.set(key, { key, handle, width, height })
     trimTransformSpriteCache()
     return handle
   }
@@ -1377,7 +1074,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         bounds: workBounds,
         handle: copied.handle,
       }
-      setBackdropSourceRecord(sourceKey, record)
+      backdropSourceSlot.set(sourceKey, record)
       return record
     }
 
@@ -1412,7 +1109,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         height: source.bounds.bottom - source.bounds.top,
       }
       if (cached) vexartRemoveImage(vctx, cached.handle)
-      setBackdropSpriteRecord(spriteKey, record)
+      backdropSpriteSlot.set(spriteKey, record)
       return record
     }
 
