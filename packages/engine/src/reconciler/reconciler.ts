@@ -16,6 +16,7 @@ import {
   parseSizing,
   adjustFocusableAncestors,
 } from "../ffi/node"
+import { isLayoutProp, isTextLayoutProp, syncLayoutProp } from "../ffi/flex-sync"
 import { DIRTY_KIND, markDirty } from "./dirty"
 import { createHandle } from "./handle"
 import { markLayerBacked, onNodePropertyChanged, onSubtreeChanged, unmarkLayerBacked } from "../animation/compositor-path"
@@ -235,6 +236,11 @@ function markNodeDirty(node: TGENode) {
   }
 }
 
+function syncChangedProp(node: TGENode, name: string) {
+  if (isLayoutProp(name)) syncLayoutProp(node, name, (node.props as Record<string, unknown>)[name])
+  if (node.kind === "text" && isTextLayoutProp(name)) node._flexNode?.markDirty()
+}
+
 function hasCompositorLayerBacking(node: TGENode) {
   if (node.props.layer === true) return true
   const willChange = node.props.willChange
@@ -279,6 +285,7 @@ const renderer = createRenderer<TGENode>({
     // Mark the parent dirty so scoped dirty tracking resolves correctly instead
     // of falling back to markAllDirty().
     const target = node.parent?.kind === "text" ? node.parent : node
+    target._flexNode?.markDirty()
     markNodeVisualDamage(target)
     markNodeDirty(target)
   },
@@ -307,6 +314,7 @@ const renderer = createRenderer<TGENode>({
         node.props.paddingTop = p[0]; node.props.paddingRight = p[1]
         node.props.paddingBottom = p[2]; node.props.paddingLeft = p[3]
       }
+      syncLayoutProp(node, "padding", node.props.padding)
       markNodeDirty(node)
       return
     }
@@ -322,6 +330,7 @@ const renderer = createRenderer<TGENode>({
         node.props.marginTop = p[0]; node.props.marginRight = p[1]
         node.props.marginBottom = p[2]; node.props.marginLeft = p[3]
       }
+      syncLayoutProp(node, "margin", node.props.margin)
       markNodeDirty(node)
       return
     }
@@ -336,6 +345,7 @@ const renderer = createRenderer<TGENode>({
         for (const key of prevStyleKeys) {
           if (!newKeys.has(key)) {
             delete (node.props as Record<string, unknown>)[key]
+            syncChangedProp(node, key)
           }
         }
       }
@@ -350,9 +360,11 @@ const renderer = createRenderer<TGENode>({
             ;(node.props as Record<string, unknown>)[key] = val
             if (key === "width") node._widthSizing = parseSizing(val as number | string | undefined)
             else node._heightSizing = parseSizing(val as number | string | undefined)
+            syncChangedProp(node, key)
             continue
           }
           ;(node.props as Record<string, unknown>)[key] = val
+          syncChangedProp(node, key)
         }
       }
       markNodeDirty(node)
@@ -365,6 +377,7 @@ const renderer = createRenderer<TGENode>({
     if ((flags & FLAG_COLOR) !== 0) {
       markPropsDirty(node)
       ;(node.props as Record<string, unknown>)[name] = resolveColor(value)
+      syncChangedProp(node, name)
       markNodeVisualDamage(node)
       markNodeDirty(node)
       return
@@ -375,6 +388,7 @@ const renderer = createRenderer<TGENode>({
       markPropsDirty(node)
       ;(node.props as Record<string, unknown>)[name] = value
       node._widthSizing = parseSizing(value as number | string | undefined)
+      syncLayoutProp(node, name, value)
       markNodeDirty(node)
       return
     }
@@ -382,6 +396,7 @@ const renderer = createRenderer<TGENode>({
       markPropsDirty(node)
       ;(node.props as Record<string, unknown>)[name] = value
       node._heightSizing = parseSizing(value as number | string | undefined)
+      syncLayoutProp(node, name, value)
       markNodeDirty(node)
       return
     }
@@ -390,6 +405,7 @@ const renderer = createRenderer<TGENode>({
     if (name === "glow") {
       markPropsDirty(node)
       ;(node.props as Record<string, unknown>)[name] = resolveGlow(value)
+      syncChangedProp(node, name)
       markNodeVisualDamage(node)
       markNodeDirty(node)
       return
@@ -399,6 +415,7 @@ const renderer = createRenderer<TGENode>({
     if (name === "shadow" || name === "boxShadow") {
       markPropsDirty(node)
       ;(node.props as Record<string, unknown>)[name] = resolveShadow(value)
+      syncChangedProp(node, name)
       markNodeVisualDamage(node)
       markNodeDirty(node)
       return
@@ -408,6 +425,7 @@ const renderer = createRenderer<TGENode>({
     if (name === "gradient") {
       markPropsDirty(node)
       ;(node.props as Record<string, unknown>)[name] = resolveGradient(value)
+      syncChangedProp(node, name)
       markNodeVisualDamage(node)
       markNodeDirty(node)
       return
@@ -417,6 +435,7 @@ const renderer = createRenderer<TGENode>({
     if (name === "hoverStyle" || name === "activeStyle" || name === "focusStyle") {
       markPropsDirty(node)
       ;(node.props as Record<string, unknown>)[name] = resolveInteractiveStyle(value)
+      syncChangedProp(node, name)
       markNodeVisualDamage(node)
       markNodeDirty(node)
       return
@@ -428,6 +447,7 @@ const renderer = createRenderer<TGENode>({
       const wasFocusable = !!node.props.focusable
       const isFocusable = !!value
       ;(node.props as Record<string, unknown>)[name] = value
+      syncChangedProp(node, name)
       if (wasFocusable !== isFocusable) {
         const delta = isFocusable ? 1 : -1
         node._focusableCount = Math.max(0, node._focusableCount + delta)
@@ -447,6 +467,7 @@ const renderer = createRenderer<TGENode>({
     if (name === "onKeyDown" || name === "onPress") {
       markPropsDirty(node)
       ;(node.props as Record<string, unknown>)[name] = value
+      syncChangedProp(node, name)
       updateNodeFocusEntry(node)
       maybeNotifyCompositor(node, name)
       markNodeDirty(node)
@@ -455,6 +476,7 @@ const renderer = createRenderer<TGENode>({
 
     markPropsDirty(node)
     ;(node.props as Record<string, unknown>)[name] = value
+    syncChangedProp(node, name)
     if (name === "layer" || name === "willChange") syncCompositorLayerBacking(node)
     maybeNotifyCompositor(node, name)
     if ((flags & FLAG_VISUAL_DAMAGE) !== 0) markNodeVisualDamage(node)
