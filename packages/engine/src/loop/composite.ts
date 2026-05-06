@@ -19,10 +19,10 @@
 
 import type { Terminal } from "../terminal/index"
 import type { RenderCommand } from "../ffi/render-graph"
-import { CMD } from "../ffi/render-graph"
+
 import type { TextMeta } from "../ffi/render-graph"
-import { resolveProps, type TGENode } from "../ffi/node"
-import { fromConfig, isIdentity, multiply, transformPoint, translate } from "../ffi/matrix"
+import type { TGENode } from "../ffi/node"
+
 import { debugFrameStart, debugUpdateStats, isDebugEnabled } from "./debug"
 import {
   writeLayoutBack as _writeLayoutBack,
@@ -51,8 +51,10 @@ import { unionRect, type DamageRect } from "../ffi/damage"
 import type { Layer, LayerStoreHandle } from "../ffi/layers"
 import type { RendererBackend } from "../ffi/renderer-backend"
 
-import { createScrollHandle, updateScrollContainerGeometry } from "./scroll"
+
 import { DIRTY_KIND } from "../reconciler/dirty"
+import { routeScrollDeltas, applyScrollOffsets } from "./composite-scroll"
+import { buildRetainedCompositorLayers } from "./composite-retained"
 
 let layerDirtyStore: Map<string, Layer> | null = null
 
@@ -301,152 +303,9 @@ function runLayoutPass(s: CompositeFrameState, profile?: FrameProfile) {
   return commands
 }
 
-/**
- * After layout writeback, apply TS-side scroll offsets to:
- *   1. Render commands (so GPU renderer draws at scrolled positions)
- *   2. Node layout rects (so hit-testing uses scrolled positions)
- *
- * Also updates scroll container geometry (viewport + content extents) in scroll.ts
- * so that clamping works correctly.
- *
- * SCISSOR commands are excluded from offset adjustment — they always reflect
- * the scroll container's viewport bounds (not the scrolled content position).
- */
-function applyScrollOffsets(commands: RenderCommand[], s: CompositeFrameState) {
-  s.scrollOffsets.clear()
-  const offsets = s.scrollOffsets
-  for (const node of s.scrollContainers) {
-
-    // Determine stable scroll id (must match what walkTree used)
-    const sid = node.props.scrollId ?? `tge-scroll-${node.id}`
-    const handle = createScrollHandle(sid)
-
-    // Step 4: Update scroll geometry from layout output.
-    // Viewport = the scroll container's own layout size.
-    // Content = the total extent of all children (computed from their layouts).
-    // The PositionedCommand's contentW/contentH is the container's content-box
-    // (size minus padding), NOT the total child extent. We compute the real
-    // content extent by walking children and finding the maximum bottom/right edge.
-    const vpW = node.layout.width
-    const vpH = node.layout.height
-    let maxChildBottom = 0
-    let maxChildRight = 0
-    for (const child of node.children) {
-      if (child.kind === "text") continue
-      const cb = child.layout.y - node.layout.y + child.layout.height
-      const cr = child.layout.x - node.layout.x + child.layout.width
-      if (cb > maxChildBottom) maxChildBottom = cb
-      if (cr > maxChildRight) maxChildRight = cr
-    }
-    const ctW = Math.max(maxChildRight, vpW)
-    const ctH = Math.max(maxChildBottom, vpH)
-    updateScrollContainerGeometry(sid, vpW, vpH, ctW, ctH)
-
-    const ox = node.props.scrollX ? handle.scrollX : 0
-    const oy = node.props.scrollY ? handle.scrollY : 0
-    if (ox !== 0 || oy !== 0) {
-      offsets.set(node.id, { x: ox, y: oy })
-      // HP-6: Since we no longer mutate descendant layout positions,
-      // the damage system won't detect scroll position changes automatically.
-      // Explicitly mark the scroll container's layer dirty so content repaints.
-      const layerKey = node._layerKey ?? "bg"
-      markLayerDirtyByKey(layerKey)
-    }
-  }
-
-  if (offsets.size === 0) return
-  for (const cmd of commands) {
-    if (cmd.type === CMD.SCISSOR_START || cmd.type === CMD.SCISSOR_END || cmd.nodeId === undefined) continue
-    const node = s.nodeRefById.get(cmd.nodeId)
-    if (!node || node._scrollContainerId === 0) continue
-    const offset = offsets.get(node._scrollContainerId)
-    if (!offset) continue
-    cmd.x += offset.x
-    cmd.y += offset.y
-  }
-}
+// HP-6: Scroll offsets applied lazily via composite-scroll.ts
 
 
-// HP-6: applyOffsetToDescendants removed. Scroll offsets are now applied lazily:
-// - Render commands: offset in the `for (const cmd of commands)` loop below
-// - Hit-testing: offset via scrollOffsets map passed to InteractiveStatesBag
-// - isFullyOutsideScrollViewport: offset via setActiveScrollOffsets()
-
-function computeNodeLocalTransform(node: TGENode) {
-  const vp = resolveProps(node)
-  if (!vp.transform) return null
-  const l = node.layout
-  const originProp = vp.transformOrigin
-  let ox = l.width / 2
-  let oy = l.height / 2
-  if (originProp === "top-left") { ox = 0; oy = 0 }
-  else if (originProp === "top-right") { ox = l.width; oy = 0 }
-  else if (originProp === "bottom-left") { ox = 0; oy = l.height }
-  else if (originProp === "bottom-right") { ox = l.width; oy = l.height }
-  else if (originProp && typeof originProp === "object") { ox = originProp.x * l.width; oy = originProp.y * l.height }
-  const matrix = fromConfig(vp.transform, ox, oy)
-  return isIdentity(matrix) ? null : matrix
-}
-
-function computeNodeSubtreeTransformQuad(node: TGENode) {
-  const chain: TGENode[] = []
-  let current: TGENode | null = node
-  while (current) {
-    const matrix = computeNodeLocalTransform(current)
-    if (matrix) chain.push(current)
-    current = current.parent
-  }
-  if (chain.length === 0) return null
-  chain.reverse()
-
-  const transformAbsolutePoint = (x: number, y: number) => {
-    let point = { x, y }
-    for (const target of chain) {
-      const matrix = computeNodeLocalTransform(target)
-      if (!matrix) continue
-      const l = target.layout
-      const absolute = multiply(multiply(translate(l.x, l.y), matrix), translate(-l.x, -l.y))
-      point = transformPoint(absolute, point.x, point.y)
-    }
-    return point
-  }
-
-  const x = node.layout.x
-  const y = node.layout.y
-  const w = node.layout.width
-  const h = node.layout.height
-  return {
-    p0: transformAbsolutePoint(x, y),
-    p1: transformAbsolutePoint(x + w, y),
-    p2: transformAbsolutePoint(x, y + h),
-    p3: transformAbsolutePoint(x + w, y + h),
-  }
-}
-
-function buildRetainedCompositorLayers(s: CompositeFrameState) {
-  const layers: import("../ffi/renderer-backend").RendererBackendRetainedLayer[] = []
-  for (const [key, layer] of s.layerCache) {
-    const bounds = { x: layer.x, y: layer.y, width: layer.width, height: layer.height }
-    if (key === "bg") {
-      layers.push({ key, z: layer.z, bounds, subtreeTransform: null, isBackground: true, opacity: 1 })
-      continue
-    }
-    if (!key.startsWith("layer:")) continue
-    const nodeId = Number(key.slice(6))
-    const node = s.nodeRefById.get(nodeId) ?? null
-    const vp = node ? resolveProps(node) : null
-    layers.push({
-      key,
-      z: layer.z,
-      bounds,
-      subtreeTransform: node ? computeNodeSubtreeTransformQuad(node) : null,
-      isBackground: false,
-      opacity: typeof vp?.opacity === "number" ? vp.opacity : 1,
-    })
-  }
-  layers.sort((a, b) => a.z - b.z)
-  return layers
-}
 
 /**
  * Check whether an interactive style contains any layout-affecting props.
@@ -564,9 +423,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   const dt = Math.min((now - s.lastFrameTime.value) / 1000, 0.1)
   s.lastFrameTime.value = now
 
-  // Note: pointer handling is done TS-side in updateInteractiveStates.
-  // setPointer()/updateScroll() were layout-adapter no-ops and have been removed.
-
+  // Route scroll deltas to the innermost scroll container at pointer position
   let sdx = s.scroll.x
   let sdy = s.scroll.y
   if (s.walkCounters.scrollSpeedCap > 0 && (sdx !== 0 || sdy !== 0)) {
@@ -575,44 +432,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     sdx = Math.max(-maxDelta, Math.min(maxDelta, sdx))
     sdy = Math.max(-maxDelta, Math.min(maxDelta, sdy))
   }
-  // Route scroll deltas to TS-side scroll state.
-  // Find the innermost scroll container whose layout bounds contain the pointer,
-  // using previous-frame node layout for hit detection.
-  if (sdx !== 0 || sdy !== 0) {
-    let scrollTarget: TGENode | null = null
-    const px = s.pointer.x
-    const py = s.pointer.y
-    for (const node of s.boxNodes) {
-      if (!node.props.scrollX && !node.props.scrollY) continue
-      const l = node.layout
-      if (l.width <= 0 || l.height <= 0) continue
-      if (px >= l.x && px < l.x + l.width && py >= l.y && py < l.y + l.height) {
-        if (!scrollTarget) {
-          scrollTarget = node
-        } else {
-          let isDescendant = false
-          let p = node.parent
-          while (p) {
-            if (p === scrollTarget) { isDescendant = true; break }
-            p = p.parent
-          }
-          if (isDescendant) {
-            scrollTarget = node
-          } else {
-            const existingArea = scrollTarget.layout.width * scrollTarget.layout.height
-            const newArea = l.width * l.height
-            if (newArea < existingArea) scrollTarget = node
-          }
-        }
-      }
-    }
-    if (scrollTarget) {
-      const sid = scrollTarget.props.scrollId ?? `tge-scroll-${scrollTarget.id}`
-      const handle = createScrollHandle(sid)
-      if (scrollTarget.props.scrollY && sdy !== 0) handle.scrollBy(sdy)
-      if (scrollTarget.props.scrollX && sdx !== 0) handle.scrollBy(-sdx)
-    }
-  }
+  routeScrollDeltas(s, sdx, sdy)
   s.scroll.x = 0
   s.scroll.y = 0
 
@@ -634,7 +454,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
 
   if (compositorOnlyFrame) {
     const retainedPrepStart = profile ? performance.now() : 0
-    const retainedLayers = buildRetainedCompositorLayers(s)
+    const retainedLayers = buildRetainedCompositorLayers(s.layerCache, s.nodeRefById)
     if (profile) profile.paintLayerPrepMs = performance.now() - retainedPrepStart
     const dirtyLayerCount = retainedLayers.filter((layer) => layer.opacity < 0.999 || !!layer.subtreeTransform).length
     const dirtyPixelArea = retainedLayers.reduce((sum, layer) => sum + layer.bounds.width * layer.bounds.height, 0)
