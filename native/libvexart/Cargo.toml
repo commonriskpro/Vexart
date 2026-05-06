@@ -12,7 +12,6 @@ name = "vexart"                 # produces libvexart.{dylib,so,dll}
 crate-type = ["cdylib", "rlib"] # cdylib for FFI; rlib so Rust integration tests can link
 
 [dependencies]
-taffy  = "0.10.1"   # layout engine — direct Clay replacement (DEC-004)
 wgpu   = "29.0.1"   # GPU rendering — upgrade from bridge's pinned 26
 pollster = "0.4"    # minimal sync executor to block on wgpu async — kept from old bridge
 bytemuck = { version = "1.25", features = ["derive"] } # Pod/Zeroable for instance buffers

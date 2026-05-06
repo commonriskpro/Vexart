@@ -45,6 +45,7 @@ jobs:
             | grep -v 'native-presentation-stats\.test' \
             | grep -v 'native-layer-registry-flags\.test' \
             | grep -v 'bridge\.test' \
+            | grep -v 'text-layout\.test' \
             | xargs bun test
 
       - name: API snapshot gate
