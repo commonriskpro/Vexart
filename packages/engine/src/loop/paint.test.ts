@@ -58,12 +58,12 @@ function createPaintFrameState(): PaintFrameState {
     textMetaMap: new Map(),
 
     backendOverride: undefined,
-    lastPresentedInteractionSeq: { value: 0 },
-    lastPresentedInteractionLatencyMs: { value: 0 },
-    lastPresentedInteractionType: { value: null as string | null },
-    log() {},
-    renderDebug() {},
-    dragReproDebug() {},
+    interaction: {
+      lastPresentedInteractionSeq: { value: 0 },
+      lastPresentedInteractionLatencyMs: { value: 0 },
+      lastPresentedInteractionType: { value: null as string | null },
+    },
+    debug: { log() {}, renderDebug() {}, dragReproDebug() {} },
   }
 }
 

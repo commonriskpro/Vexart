@@ -9,7 +9,7 @@
  * Design ref: openspec/changes/phase-3-loop-decomposition/design.md §Downstream-First
  */
 
-import type { TGENode, NodeMouseEvent } from "../ffi/node"
+import type { TGENode } from "../ffi/node"
 import { resolveProps, createPressEvent } from "../ffi/node"
 import type { DamageRect } from "../ffi/damage"
 import { unionRect } from "../ffi/damage"
@@ -314,6 +314,149 @@ export type InteractiveStatesBag = {
   onNodeVisualChanged?: (node: TGENode) => void
 }
 
+// ── Hit-testing helper ────────────────────────────────────────────────────
+
+function hitTestNode(
+  node: TGENode,
+  pointerX: number,
+  pointerY: number,
+  cellW: number,
+  cellH: number,
+  isCaptured: boolean,
+  scrollOffsets: Map<number, { x: number; y: number }>,
+): boolean {
+  if (isCaptured) return true
+  const l = node.layout
+
+  // HP-6: Compute effective screen position with scroll offset
+  const scrollOffset = node._scrollContainerId !== 0 ? scrollOffsets.get(node._scrollContainerId) : undefined
+  const effectiveX = l.x + (scrollOffset?.x ?? 0)
+  const effectiveY = l.y + (scrollOffset?.y ?? 0)
+
+  // Transform-aware hit-test: use accumulated inverse matrix if present
+  const hitInverse = node._accTransformInverse ?? node._transformInverse
+  if (hitInverse) {
+    const relX = pointerX - effectiveX
+    const relY = pointerY - effectiveY
+    const w = hitInverse[6] * relX + hitInverse[7] * relY + hitInverse[8]
+    if (Math.abs(w) <= 1e-12) return false
+    const localX = (hitInverse[0] * relX + hitInverse[1] * relY + hitInverse[2]) / w
+    const localY = (hitInverse[3] * relX + hitInverse[4] * relY + hitInverse[5]) / w
+    const hitW = Math.max(l.width, cellW)
+    const hitH = Math.max(l.height, cellH)
+    const hitX = -(hitW - l.width) / 2
+    const hitY = -(hitH - l.height) / 2
+    return localX >= hitX && localX < hitX + hitW && localY >= hitY && localY < hitY + hitH
+  }
+
+  // Standard axis-aligned hit-test
+  const hitW = Math.max(l.width, cellW)
+  const hitH = Math.max(l.height, cellH)
+  const hitX = effectiveX - (hitW - l.width) / 2
+  const hitY = effectiveY - (hitH - l.height) / 2
+  return pointerX >= hitX && pointerX < hitX + hitW && pointerY >= hitY && pointerY < hitY + hitH
+}
+
+// ── Scroll viewport culling ──────────────────────────────────────────────
+
+/** Returns true if node is outside its scroll viewport and should be skipped. */
+function clearOffscreenInteractiveState(
+  node: TGENode,
+  bag: InteractiveStatesBag,
+): { skip: boolean; changed: boolean } {
+  if (node.props.scrollX || node.props.scrollY) return { skip: false, changed: false }
+
+  const fullyOutsideViewport = isFullyOutsideScrollViewport(node)
+  let scrollParent = node.parent
+  while (scrollParent) {
+    if (scrollParent.props.scrollX || scrollParent.props.scrollY) {
+      if (fullyOutsideViewport) {
+        let changed = false
+        if (node._hovered) {
+          node._hovered = false
+          node._vpDirty = true
+          if (node.props.hoverStyle) { changed = true; bag.onNodeVisualChanged?.(node) }
+        }
+        if (node._active) {
+          node._active = false
+          node._vpDirty = true
+          if (node.props.activeStyle) { changed = true; bag.onNodeVisualChanged?.(node) }
+        }
+        return { skip: true, changed }
+      }
+      break
+    }
+    scrollParent = scrollParent.parent
+  }
+  return { skip: !!(scrollParent && fullyOutsideViewport), changed: false }
+}
+
+// ── Click target resolution ──────────────────────────────────────────────
+
+/**
+ * Resolve which node should receive onPress.
+ * Three scenarios:
+ *   A) Normal: was active, now released while still hovered
+ *   B) Fast click: press+release in same frame
+ *   C) Node recycled: use hovered node at release position
+ */
+function resolveClickTarget(
+  bag: InteractiveStatesBag,
+  justPressed: boolean,
+  justReleased: boolean,
+  pressedThisFrame: TGENode | null,
+  hoveredPressTarget: TGENode | null,
+): TGENode | null {
+  if (bag.prevActiveNode && !bag.prevActiveNode._active && bag.prevActiveNode._hovered) {
+    return bag.prevActiveNode // Scenario A
+  }
+  if (justPressed && justReleased) return pressedThisFrame // Scenario B
+  if (justReleased && bag.pressOriginSet) return hoveredPressTarget // Scenario C
+  return null
+}
+
+// ── onPress bubbling ─────────────────────────────────────────────────────
+
+function dispatchPress(clickTarget: TGENode) {
+  const event = createPressEvent()
+  let target: TGENode | null = clickTarget
+  while (target && !event.propagationStopped) {
+    if (target.props.focusable) {
+      const fid = getNodeFocusId(target)
+      if (fid) setFocusedId(fid)
+    }
+    if (target.props.onPress) target.props.onPress(event)
+    target = target.parent
+  }
+}
+
+// ── Post-click focus sync ────────────────────────────────────────────────
+
+function syncFocusStateAfterClick(
+  bag: InteractiveStatesBag,
+  previousFocusId: string | null | undefined,
+): boolean {
+  const newFocusId = focusedId()
+  if (newFocusId === previousFocusId) return false
+  let changed = false
+  for (const node of bag.rectNodes) {
+    if (!node.props.focusable) continue
+    const nodeFocusId = getNodeFocusId(node)
+    const isFocused = nodeFocusId !== undefined && nodeFocusId === newFocusId
+    if (node._focused !== isFocused) {
+      node._focused = isFocused
+      node._vpDirty = true
+      if (node.props.focusStyle) {
+        bag.onNodeVisualChanged?.(node)
+        changed = true
+      }
+    }
+  }
+  return changed
+}
+
+// ── Main orchestrator ────────────────────────────────────────────────────
+
 /**
  * Track nodes with interactive styles for hit-testing + focus bridging.
  * Also dispatches per-node mouse callbacks (onMouseDown/Up/Move/Over/Out).
@@ -327,246 +470,87 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
   let changed = false
   const currentFocusId = focusedId()
 
-  // Edge detection for button press/release — consume queued edges.
-  // These are accumulated between frames by feedPointer() so that
-  // press+release in the same onData chunk doesn't get lost.
+  // 1. Consume queued press/release edges
   const justPressed = bag.pendingPress
   const justReleased = bag.pendingRelease
   bag.pendingPress = false
   bag.pendingRelease = false
 
-  // Check if a node has pointer capture — if so, it receives all events
   const captureNode = bag.capturedNodeId !== 0 ? (bag.rectNodeById.get(bag.capturedNodeId) ?? null) : null
 
-  function makeMouseEvent(node: TGENode): NodeMouseEvent {
-    return buildNodeMouseEvent(node, bag.pointerX, bag.pointerY)
-  }
-
-  // Walk all rect nodes in paint order. The last overlapping interactive node
-  // wins click/active targeting, matching reverse paint-order hit-testing while
-  // still updating hover/active visual state for every overlapping node.
+  // 2. Walk all interactive nodes — hit-test, update hover/active, dispatch mouse events
   const paintOrderedRectNodes = sortNodesByStackingPaintOrder(bag.rectNodes)
   let newActiveNode: TGENode | null = null
-  let pressedThisFrame: TGENode | null = null  // Node hit during justPressed (for fast-click detection)
+  let pressedThisFrame: TGENode | null = null
   let hoveredPressTarget: TGENode | null = null
-  for (const node of paintOrderedRectNodes) {
-    const hasHoverStyle = !!node.props.hoverStyle
-    const hasActiveStyle = !!node.props.activeStyle
-    const hasFocusStyle = !!node.props.focusStyle
-    const isFocusable = node.props.focusable
 
-    // Skip nodes that have no interactive behavior at all
+  for (const node of paintOrderedRectNodes) {
     if (!isInteractiveNode(node.props)) continue
 
-    const l = node.layout
+    // Skip off-screen nodes inside scroll containers
+    const offscreen = clearOffscreenInteractiveState(node, bag)
+    if (offscreen.changed) changed = true
+    if (offscreen.skip) continue
 
-    // Skip nodes that are COMPLETELY outside their scroll container viewport.
-    // Without this, off-screen items (clipped by scissor) have layout coords
-    // that overlap other screen areas, causing false hover/click detection.
-    // Only applies to children of scroll containers, NOT the scroll container itself.
-    if (!(node.props.scrollX || node.props.scrollY)) {
-      const fullyOutsideViewport = isFullyOutsideScrollViewport(node)
-      let scrollParent = node.parent
-      while (scrollParent) {
-        if (scrollParent.props.scrollX || scrollParent.props.scrollY) {
-          if (fullyOutsideViewport) {
-              let stateChanged = false
-              if (node._hovered) {
-                node._hovered = false
-                node._vpDirty = true
-                stateChanged = true
-                if (hasHoverStyle) { changed = true; bag.onNodeVisualChanged?.(node) }
-              }
-              if (node._active) {
-                node._active = false
-                node._vpDirty = true
-                stateChanged = true
-                if (hasActiveStyle) { changed = true; bag.onNodeVisualChanged?.(node) }
-              }
-          }
-          break
-        }
-        scrollParent = scrollParent.parent
-      }
-      // If fully outside, skip hit-testing for this node
-      if (scrollParent && fullyOutsideViewport) continue
-    }
-
-    // If this node has pointer capture, it's "hovered" regardless of position.
-    // Expand hit-area to at least one cell in each dimension — terminal mouse
-    // resolution is per-cell, so elements smaller than a cell are hard to click.
-    // This is like mobile "minimum touch target" (44px) but for terminal cells.
-    const cw = bag.cellWidth
-    const ch = bag.cellHeight
     const isCaptured = captureNode === node
-
-    // HP-6: Compute effective screen position by adding scroll offset.
-    // node.layout.x/y are in parent-relative coordinates; scroll containers
-    // shift children without mutating their layout positions.
-    const scrollOffset = node._scrollContainerId !== 0 ? bag.scrollOffsets.get(node._scrollContainerId) : undefined
-    const effectiveX = l.x + (scrollOffset?.x ?? 0)
-    const effectiveY = l.y + (scrollOffset?.y ?? 0)
-
-    // Hit-test: if the node has a transform (own or inherited from parent),
-    // use the ACCUMULATED inverse matrix to map pointer coords into the
-    // node's local coordinate space. This handles the full transform hierarchy.
-    const hitInverse = node._accTransformInverse ?? node._transformInverse
-    let isOver = false
-    if (isCaptured) {
-      isOver = true
-    } else if (hitInverse) {
-      // Transform pointer from screen space to node-local space
-      const inv = hitInverse
-      // Pointer relative to node's layout origin (using effective scrolled position)
-      const relX = bag.pointerX - effectiveX
-      const relY = bag.pointerY - effectiveY
-      // Apply inverse matrix
-      const w = inv[6] * relX + inv[7] * relY + inv[8]
-      if (Math.abs(w) > 1e-12) {
-        const localX = (inv[0] * relX + inv[1] * relY + inv[2]) / w
-        const localY = (inv[3] * relX + inv[4] * relY + inv[5]) / w
-        // Hit-test against local bounding box with min cell-size expansion
-        const hitW = Math.max(l.width, cw)
-        const hitH = Math.max(l.height, ch)
-        const hitX = -(hitW - l.width) / 2
-        const hitY = -(hitH - l.height) / 2
-        isOver = localX >= hitX && localX < hitX + hitW &&
-                 localY >= hitY && localY < hitY + hitH
-      }
-    } else {
-      // Standard axis-aligned hit-test (no transform) — uses effective scrolled position
-      const hitW = Math.max(l.width, cw)
-      const hitH = Math.max(l.height, ch)
-      const hitX = effectiveX - (hitW - l.width) / 2
-      const hitY = effectiveY - (hitH - l.height) / 2
-      isOver = bag.pointerX >= hitX && bag.pointerX < hitX + hitW &&
-               bag.pointerY >= hitY && bag.pointerY < hitY + hitH
-    }
+    const isOver = hitTestNode(node, bag.pointerX, bag.pointerY, bag.cellWidth, bag.cellHeight, isCaptured, bag.scrollOffsets)
     const isDown = isOver && bag.pointerDown
-    if (isOver && (node.props.onPress || node.props.focusable)) {
-      hoveredPressTarget = node
-    }
+    if (isOver && (node.props.onPress || node.props.focusable)) hoveredPressTarget = node
 
     // Dispatch mouse enter/leave
     if (node._hovered !== isOver) {
-      if (isOver && node.props.onMouseOver) node.props.onMouseOver(makeMouseEvent(node))
-      if (!isOver && node.props.onMouseOut) node.props.onMouseOut(makeMouseEvent(node))
+      if (isOver && node.props.onMouseOver) node.props.onMouseOver(buildNodeMouseEvent(node, bag.pointerX, bag.pointerY))
+      if (!isOver && node.props.onMouseOut) node.props.onMouseOut(buildNodeMouseEvent(node, bag.pointerX, bag.pointerY))
       node._hovered = isOver
       node._vpDirty = true
-      if (hasHoverStyle) {
-        bag.onNodeVisualChanged?.(node)
-        changed = true
-      }
+      if (node.props.hoverStyle) { bag.onNodeVisualChanged?.(node); changed = true }
     }
 
     // Dispatch mousedown/mouseup on edges
     if (isOver && justPressed) {
       pressedThisFrame = node
       bag.pressOriginSet = true
-      if (node.props.onMouseDown) node.props.onMouseDown(makeMouseEvent(node))
+      if (node.props.onMouseDown) node.props.onMouseDown(buildNodeMouseEvent(node, bag.pointerX, bag.pointerY))
     }
-    if (isOver && justReleased && node.props.onMouseUp) node.props.onMouseUp(makeMouseEvent(node))
+    if (isOver && justReleased && node.props.onMouseUp) node.props.onMouseUp(buildNodeMouseEvent(node, bag.pointerX, bag.pointerY))
 
-    // Dispatch mousemove while hovered (only if pointer actually moved)
-    if (isOver && bag.pointerDirty && node.props.onMouseMove) node.props.onMouseMove(makeMouseEvent(node))
+    // Dispatch mousemove while hovered
+    if (isOver && bag.pointerDirty && node.props.onMouseMove) node.props.onMouseMove(buildNodeMouseEvent(node, bag.pointerX, bag.pointerY))
 
+    // Update active state
     if (node._active !== isDown) {
       node._active = isDown
       node._vpDirty = true
-      if (hasActiveStyle) {
-        bag.onNodeVisualChanged?.(node)
-        changed = true
-      }
+      if (node.props.activeStyle) { bag.onNodeVisualChanged?.(node); changed = true }
     }
     if (isDown) newActiveNode = node
 
-    // Bridge focus system → node._focused
-    if (isFocusable) {
+    // Bridge focus system
+    if (node.props.focusable) {
       const nodeFocusId = getNodeFocusId(node)
       const isFocused = nodeFocusId !== undefined && nodeFocusId === currentFocusId
-        if (node._focused !== isFocused) {
-          node._focused = isFocused
-          node._vpDirty = true
-          if (hasFocusStyle) {
-          bag.onNodeVisualChanged?.(node)
-          changed = true
-        }
+      if (node._focused !== isFocused) {
+        node._focused = isFocused
+        node._vpDirty = true
+        if (node.props.focusStyle) { bag.onNodeVisualChanged?.(node); changed = true }
       }
     }
   }
 
-  // onPress dispatch: detect click.
-  // Scenarios:
-  //   A) Normal: was active (prevActiveNode._active was true), now released while still hovered
-  //   B) Fast click: press+release in same chunk — justPressed AND justReleased both true
-  //   C) Node recycled: SolidJS recreated nodes between press/release frames.
-  //      The pressed node is gone. Use pressOrigin position to find the currently
-  //      hovered node at release time.
-  let clickTarget: TGENode | null = null
-  if (bag.prevActiveNode && !bag.prevActiveNode._active && bag.prevActiveNode._hovered) {
-    clickTarget = bag.prevActiveNode // Scenario A: classic release
-  } else if (justPressed && justReleased) {
-    clickTarget = pressedThisFrame // Scenario B: fast click
-  } else if (justReleased && bag.pressOriginSet) {
-    // Scenario C: find hovered node at release position
-    const hovered = hoveredPressTarget
-    if (hovered) clickTarget = hovered
-  }
+  // 3. Resolve click target and dispatch
+  const clickTarget = resolveClickTarget(bag, justPressed, justReleased, pressedThisFrame, hoveredPressTarget)
   if (justReleased) bag.pressOriginSet = false
 
   if (clickTarget) {
-    // Bubbles up the tree like DOM events. Each node with onPress/focusable
-    // gets a chance to handle the event. Call event.stopPropagation() in an
-    // onPress handler to prevent further bubbling.
-    const event = createPressEvent()
-    let target: TGENode | null = clickTarget
-
-    while (target && !event.propagationStopped) {
-      // Focus: first focusable ancestor wins (like browser)
-      if (target.props.focusable && !event.propagationStopped) {
-        const fid = getNodeFocusId(target)
-        if (fid) setFocusedId(fid)
-      }
-      // Dispatch onPress if present
-      if (target.props.onPress) {
-        target.props.onPress(event)
-      }
-      target = target.parent
-    }
-  }
-  // After click dispatch, focus may have changed — update _focused on all
-  // focusable nodes so the re-layout in the same frame sees the correct state.
-  if (clickTarget) {
-    const newFocusId = focusedId()
-    if (newFocusId !== currentFocusId) {
-      for (const node of bag.rectNodes) {
-        if (!node.props.focusable) continue
-        const nodeFocusId = getNodeFocusId(node)
-        const isFocused = nodeFocusId !== undefined && nodeFocusId === newFocusId
-        if (node._focused !== isFocused) {
-          node._focused = isFocused
-          node._vpDirty = true
-          if (node.props.focusStyle) {
-            bag.onNodeVisualChanged?.(node)
-            changed = true
-          }
-        }
-      }
-    }
+    dispatchPress(clickTarget)
+    if (syncFocusStateAfterClick(bag, currentFocusId)) changed = true
   }
 
+  // 4. Cleanup
   bag.prevActiveNode = newActiveNode
-
-  // Auto-release pointer capture on button release
-  if (justReleased && bag.capturedNodeId !== 0) {
-    bag.capturedNodeId = 0
-  }
-
+  if (justReleased && bag.capturedNodeId !== 0) bag.capturedNodeId = 0
   bag.pointerDirty = false
+  if (changed) bag.onChanged()
 
-  // If any state changed, notify coordinator to mark dirty + trigger repaint
-  if (changed) {
-    bag.onChanged()
-  }
   return !!clickTarget
 }

@@ -36,6 +36,31 @@ export type ScrollState = {
   speedCap: number
 }
 
+// ── Shared sub-interfaces (used by CompositeFrameState and PaintFrameState) ──
+
+/** Dirty tracking methods — coordinator owns the tracker, modules call through. */
+export type DirtyTrackingHandle = {
+  markDirty: (scope?: import("../reconciler/dirty").DirtyScope) => void
+  markAllDirty: () => void
+  clearDirty: (expectedVersion?: number) => void
+  dirtyVersion: () => number
+  dirtyCount: () => number
+}
+
+/** Interaction latency tracking — coordinator-owned mutable scalars. */
+export type InteractionLatencyTracking = {
+  lastPresentedInteractionSeq: { value: number }
+  lastPresentedInteractionLatencyMs: { value: number }
+  lastPresentedInteractionType: { value: string | null }
+}
+
+/** Debug log helpers threaded through pipeline state bags. */
+export type DebugLogHelpers = {
+  log: (msg: string) => void
+  renderDebug: (msg: string) => void
+  dragReproDebug: (msg: string) => void
+}
+
 // ── Per-frame immutable coordinator context ──
 
 /** Per-frame context built by the coordinator and threaded through the pipeline. */

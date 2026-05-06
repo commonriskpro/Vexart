@@ -33,7 +33,7 @@ import { getLatestInteractionTrace } from "./input"
 import { shouldFreezeInteractionLayer } from "../reconciler/interaction"
 import { multiply, translate, transformPoint } from "../ffi/matrix"
 import { debugUpdateStats, isDebugEnabled } from "./debug"
-import type { LayerBoundary, LayerSlot, LayerPlan, PaintResult } from "./types"
+import type { LayerBoundary, LayerSlot, LayerPlan, PaintResult, InteractionLatencyTracking, DebugLogHelpers } from "./types"
 import type { TGENode } from "../ffi/node"
 
 import { isNativePresentationCapable } from "../ffi/native-presentation-flags"
@@ -60,29 +60,17 @@ export type PreparedLayerSlot = {
   freezeWhileInteracting: boolean
 }
 
-export type PaintProfiler = {
-  paintNativeSnapshotMs: number
-  paintLayerPrepMs: number
-  paintFrameContextMs: number
-  paintBackendBeginMs: number
-  paintReuseMs: number
-  paintRenderGraphMs: number
-  paintBackendPaintMs: number
-  paintBackendCompositeMs: number
-  paintBackendReadbackMs: number
-  paintBackendNativeEmitMs: number
-  paintBackendNativeReadbackMs: number
-  paintBackendNativeCompressMs: number
-  paintBackendNativeShmPrepareMs: number
-  paintBackendNativeWriteMs: number
-  paintBackendNativeRawBytes: number
-  paintBackendNativePayloadBytes: number
-  paintBackendUniformMs: number
-  paintLayerCleanupMs: number
-  paintBackendEndMs: number
-  paintPresentationMs: number
-  paintInteractionStatsMs: number
-}
+export type PaintProfiler = Pick<import("./composite").FrameProfile,
+  | "paintNativeSnapshotMs" | "paintLayerPrepMs" | "paintFrameContextMs"
+  | "paintBackendBeginMs" | "paintReuseMs" | "paintRenderGraphMs"
+  | "paintBackendPaintMs" | "paintBackendCompositeMs" | "paintBackendReadbackMs"
+  | "paintBackendNativeEmitMs" | "paintBackendNativeReadbackMs"
+  | "paintBackendNativeCompressMs" | "paintBackendNativeShmPrepareMs"
+  | "paintBackendNativeWriteMs" | "paintBackendNativeRawBytes"
+  | "paintBackendNativePayloadBytes" | "paintBackendUniformMs"
+  | "paintLayerCleanupMs" | "paintBackendEndMs" | "paintPresentationMs"
+  | "paintInteractionStatsMs"
+>
 
 function cleanupOrphanLayers(
   preparedSlots: PreparedLayerSlot[],
@@ -149,21 +137,14 @@ export type PaintFrameState = {
 
   textMetaMap: Map<number, import("../ffi/render-graph").TextMeta>
 
-  // GPU layer composer (Kitty output)
-
-
   // Renderer backend (injected override or global)
   backendOverride?: RendererBackend
 
-  // Interaction latency tracking (coordinator-owned scalars)
-  lastPresentedInteractionSeq: { value: number }
-  lastPresentedInteractionLatencyMs: { value: number }
-  lastPresentedInteractionType: { value: string | null }
+  // Interaction latency tracking
+  interaction: InteractionLatencyTracking
 
   // Debug log helpers
-  log: (msg: string) => void
-  renderDebug: (msg: string) => void
-  dragReproDebug: (msg: string) => void
+  debug: DebugLogHelpers
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -372,12 +353,12 @@ export function paintFrame(
     frameDirtyRects,
     pendingNodeDamageRects,
     textMetaMap,
-    lastPresentedInteractionSeq,
-    lastPresentedInteractionLatencyMs,
-    lastPresentedInteractionType,
-    log,
-    renderDebug,
-    dragReproDebug,
+    interaction: {
+      lastPresentedInteractionSeq,
+      lastPresentedInteractionLatencyMs,
+      lastPresentedInteractionType,
+    },
+    debug: { log, renderDebug, dragReproDebug },
   } = state
   const profile = state.profile
 

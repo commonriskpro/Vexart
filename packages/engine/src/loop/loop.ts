@@ -34,7 +34,7 @@ import {
   hasRecentInteraction as schedulerHasRecentInteraction,
   type InteractionKind,
 } from "./frame-scheduler"
-import { bindLayerDirtyStore, compositeFrame, type CompositeFrameState, type FrameProfile } from "./composite"
+import { bindLayerDirtyStore, compositeFrame, createFrameProfile, type CompositeFrameState, type FrameProfile } from "./composite"
 import type { LayerBoundary } from "./types"
 import { createFrameScheduler } from "../scheduler/index"
 import {
@@ -384,7 +384,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     layerBoundaries, scrollContainers, nodeCountValue,
     layerCache, activeSlotKeys, frameDirtyRects, pendingNodeDamageRects, scrollOffsets,
     layerStore: { getOrCreateLayer, getPreviousLayerRect, updateLayerGeometry, markLayerDamaged, markLayerClean, imageIdForLayer, removeLayer, layerCount },
-    markDirty, markAllDirty, clearDirty, dirtyVersion: globalDirtyVersion, dirtyCount,
+    dirty: { markDirty, markAllDirty, clearDirty, dirtyVersion: globalDirtyVersion, dirtyCount },
 
     backendOverride: getActiveBackend(),
     useLayerCompositing: true,
@@ -393,13 +393,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     transmissionMode: term.caps.transmissionMode,
     debugCadence: DEBUG_CADENCE || !!frameProfileSink,
     debugDragRepro: DEBUG_DRAG_REPRO,
-    lastPresentedInteractionSeq,
-    lastPresentedInteractionLatencyMs,
-    lastPresentedInteractionType,
+    interaction: { lastPresentedInteractionSeq, lastPresentedInteractionLatencyMs, lastPresentedInteractionType },
     lastFrameTime,
-    log,
-    renderDebug,
-    dragReproDebug,
+    debug: { log, renderDebug, dragReproDebug },
   }
 
   function frame() {
@@ -410,7 +406,12 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     if (hasRecentInteraction()) lastInteractionFrameAt = frameStartedAt
     try {
       const profile: FrameProfile | undefined = DEBUG_CADENCE || frameProfileSink
-        ? { scheduledIntervalMs, scheduledDelayMs, timerDelayMs: scheduledAtMs > 0 ? frameStartedAt - scheduledAtMs - scheduledDelayMs : 0, sincePrevFrameMs: lastFrameStartedAt > 0 ? frameStartedAt - lastFrameStartedAt : 0, scrollMs: 0, walkTreeMs: 0, layoutComputeMs: 0, layoutWritebackMs: 0, interactionMs: 0, relayoutMs: 0, layoutMs: 0, layerAssignMs: 0, prepMs: 0, paintNativeSnapshotMs: 0, paintLayerPrepMs: 0, paintFrameContextMs: 0, paintBackendBeginMs: 0, paintReuseMs: 0, paintRenderGraphMs: 0, paintBackendPaintMs: 0, paintBackendCompositeMs: 0, paintBackendReadbackMs: 0, paintBackendNativeEmitMs: 0, paintBackendNativeReadbackMs: 0, paintBackendNativeCompressMs: 0, paintBackendNativeShmPrepareMs: 0, paintBackendNativeWriteMs: 0, paintBackendNativeRawBytes: 0, paintBackendNativePayloadBytes: 0, paintBackendUniformMs: 0, paintLayerCleanupMs: 0, paintBackendEndMs: 0, paintPresentationMs: 0, paintInteractionStatsMs: 0, paintMs: 0, beginSyncMs: 0, ioMs: 0, endSyncMs: 0, totalMs: 0, commands: 0, repainted: 0, dirtyBefore: 0 }
+        ? createFrameProfile({
+            scheduledIntervalMs,
+            scheduledDelayMs,
+            timerDelayMs: scheduledAtMs > 0 ? frameStartedAt - scheduledAtMs - scheduledDelayMs : 0,
+            sincePrevFrameMs: lastFrameStartedAt > 0 ? frameStartedAt - lastFrameStartedAt : 0,
+          })
         : undefined
       lastFrameStartedAt = frameStartedAt
       // Update mutable viewport fields in cs (may change on resize)

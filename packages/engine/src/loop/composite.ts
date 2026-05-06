@@ -34,7 +34,7 @@ import {
   assignLayersSpatial as _assignLayersSpatial,
   type AssignLayersState,
 } from "./assign-layers"
-import type { LayerBoundary, LayerSlot } from "./types"
+import type { LayerBoundary, LayerSlot, DirtyTrackingHandle, InteractionLatencyTracking, DebugLogHelpers } from "./types"
 import {
   collectText,
   walkTree as _walkTree,
@@ -52,7 +52,7 @@ import type { Layer, LayerStoreHandle } from "../ffi/layers"
 import type { RendererBackend } from "../ffi/renderer-backend"
 
 import { createScrollHandle, updateScrollContainerGeometry } from "./scroll"
-import { DIRTY_KIND, type DirtyScope } from "../reconciler/dirty"
+import { DIRTY_KIND } from "../reconciler/dirty"
 
 let layerDirtyStore: Map<string, Layer> | null = null
 
@@ -129,6 +129,26 @@ export type FrameProfile = {
   dirtyBefore: number
 }
 
+/** Create a zero-initialized FrameProfile. Use to avoid 2000-char inline literals. */
+export function createFrameProfile(overrides?: Partial<FrameProfile>): FrameProfile {
+  return {
+    scheduledIntervalMs: 0, scheduledDelayMs: 0, timerDelayMs: 0, sincePrevFrameMs: 0,
+    scrollMs: 0, walkTreeMs: 0, layoutComputeMs: 0, layoutWritebackMs: 0,
+    interactionMs: 0, relayoutMs: 0, layoutMs: 0, layerAssignMs: 0, prepMs: 0,
+    paintNativeSnapshotMs: 0, paintLayerPrepMs: 0, paintFrameContextMs: 0,
+    paintBackendBeginMs: 0, paintReuseMs: 0, paintRenderGraphMs: 0,
+    paintBackendPaintMs: 0, paintBackendCompositeMs: 0, paintBackendReadbackMs: 0,
+    paintBackendNativeEmitMs: 0, paintBackendNativeReadbackMs: 0,
+    paintBackendNativeCompressMs: 0, paintBackendNativeShmPrepareMs: 0,
+    paintBackendNativeWriteMs: 0, paintBackendNativeRawBytes: 0,
+    paintBackendNativePayloadBytes: 0, paintBackendUniformMs: 0,
+    paintLayerCleanupMs: 0, paintBackendEndMs: 0, paintPresentationMs: 0,
+    paintInteractionStatsMs: 0, paintMs: 0, beginSyncMs: 0, ioMs: 0, endSyncMs: 0,
+    totalMs: 0, commands: 0, repainted: 0, dirtyBefore: 0,
+    ...overrides,
+  }
+}
+
 /**
  * All dependencies injected by the coordinator into compositeFrame.
  * The coordinator owns all mutable state; compositeFrame reads and writes
@@ -193,14 +213,7 @@ export type CompositeFrameState = {
   layerStore: LayerStoreHandle
 
   // Dirty tracking
-  markDirty: (scope?: DirtyScope) => void
-  markAllDirty: () => void
-  clearDirty: (expectedVersion?: number) => void
-  dirtyVersion: () => number
-  dirtyCount: () => number
-
-  // Layer composer (Kitty output)
-
+  dirty: DirtyTrackingHandle
 
   // Renderer backend
   backendOverride?: RendererBackend
@@ -216,17 +229,13 @@ export type CompositeFrameState = {
   debugDragRepro: boolean
 
   // Interaction latency tracking (coordinator-owned scalars)
-  lastPresentedInteractionSeq: { value: number }
-  lastPresentedInteractionLatencyMs: { value: number }
-  lastPresentedInteractionType: { value: string | null }
+  interaction: InteractionLatencyTracking
 
   // Frame timing (mutable — updated at start of each frame for dt calculation)
   lastFrameTime: { value: number }
 
   // Log helpers
-  log: (msg: string) => void
-  renderDebug: (msg: string) => void
-  dragReproDebug: (msg: string) => void
+  debug: DebugLogHelpers
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -500,8 +509,8 @@ function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; c
       if (visualNodeIds.size === 0) {
         // No visual nodes tracked but something changed (e.g. mouseDown dispatch)
         // — defensively mark all layers dirty.
-        s.markDirty()
-        s.markAllDirty()
+        s.dirty.markDirty()
+        s.dirty.markAllDirty()
         return
       }
       // Mark only the layers that CONTAIN the changed nodes dirty (with
@@ -515,7 +524,7 @@ function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; c
           markedKeys.add(key)
           markLayerDirtyByKey(key)
         }
-        s.markDirty({ kind: DIRTY_KIND.NODE_VISUAL, nodeId })
+        s.dirty.markDirty({ kind: DIRTY_KIND.NODE_VISUAL, nodeId })
       }
     },
     onNodeVisualChanged: queueNodeVisualDamage,
@@ -545,8 +554,8 @@ function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; c
   * Returns early (without clearing dirty) if the layout adapter emits no commands.
  */
 export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
-  const dirtyVersionAtFrameStart = s.dirtyVersion()
-  const dirtyBeforeFrame = s.dirtyCount()
+  const dirtyVersionAtFrameStart = s.dirty.dirtyVersion()
+  const dirtyBeforeFrame = s.dirty.dirtyCount()
   const layoutStart = s.debugCadence ? performance.now() : 0
   const scrollStart = profile ? performance.now() : 0
 
@@ -697,9 +706,9 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
       transmissionMode: frameCtx.transmissionMode,
       estimatedLayeredBytes: frameCtx.estimatedLayeredBytes,
       estimatedFinalBytes: frameCtx.estimatedFinalBytes,
-      interactionLatencyMs: s.lastPresentedInteractionLatencyMs.value,
-      interactionType: s.lastPresentedInteractionType.value,
-      presentedInteractionSeq: s.lastPresentedInteractionSeq.value,
+      interactionLatencyMs: s.interaction.lastPresentedInteractionLatencyMs.value,
+      interactionType: s.interaction.lastPresentedInteractionType.value,
+      presentedInteractionSeq: s.interaction.lastPresentedInteractionSeq.value,
       resourceBytes: resourceSummary.totalBytes,
       gpuResourceBytes: resourceSummary.gpuBytes,
       resourceEntries: resourceSummary.cacheEntries,
@@ -707,7 +716,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
       nativeFrameReasonFlags: null,
     })
     resetFrameTracking()
-    s.clearDirty(dirtyVersionAtFrameStart)
+    s.dirty.clearDirty(dirtyVersionAtFrameStart)
     return
   }
 
@@ -732,7 +741,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   if (profile) profile.layoutMs = performance.now() - layoutStart
 
   if (commands.length === 0) {
-    s.clearDirty(dirtyVersionAtFrameStart)
+    s.dirty.clearDirty(dirtyVersionAtFrameStart)
     return
   }
 
@@ -757,8 +766,8 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   const cellW = s.term.size.cellWidth || 8
   const cellH = s.term.size.cellHeight || 16
 
-  s.log(`[frame] cmds=${commands.length} layers=${1 + contentSlots.length} slots=[${[bgSlot, ...contentSlots].map(sl => `${sl.key}(${sl.cmdIndices.length})`).join(',')}]`)
-  s.renderDebug(`[frame:start] cmds=${commands.length} layers=${1 + contentSlots.length}`)
+  s.debug.log(`[frame] cmds=${commands.length} layers=${1 + contentSlots.length} slots=[${[bgSlot, ...contentSlots].map(sl => `${sl.key}(${sl.cmdIndices.length})`).join(',')}]`)
+  s.debug.renderDebug(`[frame:start] cmds=${commands.length} layers=${1 + contentSlots.length}`)
 
   if (profile) {
     profile.layerAssignMs = performance.now() - layerAssignStart
@@ -791,12 +800,8 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     textMetaMap: s.textMetaMap,
 
     backendOverride: s.backendOverride,
-    lastPresentedInteractionSeq: s.lastPresentedInteractionSeq,
-    lastPresentedInteractionLatencyMs: s.lastPresentedInteractionLatencyMs,
-    lastPresentedInteractionType: s.lastPresentedInteractionType,
-    log: s.log,
-    renderDebug: s.renderDebug,
-    dragReproDebug: s.dragReproDebug,
+    interaction: s.interaction,
+    debug: s.debug,
     profile,
   }
   const layerPlan = { bgSlot, contentSlots, slotBoundaryByKey, boundaries }
@@ -804,9 +809,9 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   s.pendingNodeDamageRects.length = 0
 
   // Write back interaction latency from paint state bag
-  s.lastPresentedInteractionSeq.value = paintState.lastPresentedInteractionSeq.value
-  s.lastPresentedInteractionLatencyMs.value = paintState.lastPresentedInteractionLatencyMs.value
-  s.lastPresentedInteractionType.value = paintState.lastPresentedInteractionType.value
+  s.interaction.lastPresentedInteractionSeq.value = paintState.interaction.lastPresentedInteractionSeq.value
+  s.interaction.lastPresentedInteractionLatencyMs.value = paintState.interaction.lastPresentedInteractionLatencyMs.value
+  s.interaction.lastPresentedInteractionType.value = paintState.interaction.lastPresentedInteractionType.value
 
   // Override debug stats with coordinator-owned values (nodeCount, dirtyBefore)
   const resourceSummary = isDebugEnabled()
@@ -831,9 +836,9 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     transmissionMode: paintResult.frameCtx.transmissionMode,
     estimatedLayeredBytes: paintResult.frameCtx.estimatedLayeredBytes,
     estimatedFinalBytes: paintResult.frameCtx.estimatedFinalBytes,
-    interactionLatencyMs: s.lastPresentedInteractionLatencyMs.value,
-    interactionType: s.lastPresentedInteractionType.value,
-    presentedInteractionSeq: s.lastPresentedInteractionSeq.value,
+    interactionLatencyMs: s.interaction.lastPresentedInteractionLatencyMs.value,
+    interactionType: s.interaction.lastPresentedInteractionType.value,
+    presentedInteractionSeq: s.interaction.lastPresentedInteractionSeq.value,
     resourceBytes: resourceSummary.totalBytes,
     gpuResourceBytes: resourceSummary.gpuBytes,
     resourceEntries: resourceSummary.cacheEntries,
@@ -853,6 +858,6 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     profile.repainted = paintResult.repaintedThisFrame
   }
 
-  s.clearDirty(dirtyVersionAtFrameStart)
+  s.dirty.clearDirty(dirtyVersionAtFrameStart)
   resetFrameTracking()
 }

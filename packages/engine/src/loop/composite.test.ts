@@ -102,11 +102,13 @@ describe("compositeFrame compositor fast path", () => {
         removeLayer() {},
         layerCount: () => layerCache.size,
       },
-      markDirty() {},
-      markAllDirty() {},
-      clearDirty() { cleared++ },
-      dirtyVersion: () => 1,
-      dirtyCount: () => 1,
+      dirty: {
+        markDirty() {},
+        markAllDirty() {},
+        clearDirty() { cleared++ },
+        dirtyVersion: () => 1,
+        dirtyCount: () => 1,
+      },
 
       backendOverride: {
         name: "test-backend",
@@ -132,13 +134,13 @@ describe("compositeFrame compositor fast path", () => {
       transmissionMode: "direct",
       debugCadence: false,
       debugDragRepro: false,
-      lastPresentedInteractionSeq: { value: 0 },
-      lastPresentedInteractionLatencyMs: { value: 0 },
-      lastPresentedInteractionType: { value: null },
+      interaction: {
+        lastPresentedInteractionSeq: { value: 0 },
+        lastPresentedInteractionLatencyMs: { value: 0 },
+        lastPresentedInteractionType: { value: null },
+      },
       lastFrameTime: { value: Date.now() },
-      log() {},
-      renderDebug() {},
-      dragReproDebug() {},
+      debug: { log() {}, renderDebug() {}, dragReproDebug() {} },
     }
 
     compositeFrame(state)
