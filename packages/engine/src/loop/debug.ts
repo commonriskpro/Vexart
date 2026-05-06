@@ -7,7 +7,7 @@
  *   - Toggle via hotkey or API
  *
  * Architecture:
- *   - DebugState is a reactive SolidJS store
+ *   - DebugState is a reactive SolidJS store (single store, per-property tracking)
  *   - The render loop updates stats every frame
  *   - Components can read debug state to show overlays
  *   - toggleDebug() / setDebug(enabled) control visibility
@@ -93,34 +93,68 @@ export type DebugStats = {
   ffiCallCount: number
 }
 
-const [debugEnabled, setDebugEnabled] = createSignal(false)
-const [fps, setFps] = createSignal(0)
-const [frameTimeMs, setFrameTimeMs] = createSignal(0)
-const [layerCount, setLayerCount] = createSignal(0)
-const [moveOnlyCount, setMoveOnlyCount] = createSignal(0)
-const [moveFallbackCount, setMoveFallbackCount] = createSignal(0)
-const [stableReuseCount, setStableReuseCount] = createSignal(0)
-const [dirtyBeforeCount, setDirtyBeforeCount] = createSignal(0)
-const [repaintedCount, setRepaintedCount] = createSignal(0)
-const [nodeCount, setNodeCount] = createSignal(0)
-const [commandCount, setCommandCount] = createSignal(0)
-const [rendererStrategy, setRendererStrategy] = createSignal<string | null>(null)
-const [rendererOutput, setRendererOutput] = createSignal<string | null>(null)
-const [resourceBytes, setResourceBytes] = createSignal(0)
-const [gpuResourceBytes, setGpuResourceBytes] = createSignal(0)
-const [resourceEntries, setResourceEntries] = createSignal(0)
-const [transmissionMode, setTransmissionMode] = createSignal<string | null>(null)
-const [estimatedLayeredBytes, setEstimatedLayeredBytes] = createSignal(0)
-const [estimatedFinalBytes, setEstimatedFinalBytes] = createSignal(0)
-const [interactionLatencyMs, setInteractionLatencyMs] = createSignal(0)
-const [interactionType, setInteractionType] = createSignal<string | null>(null)
-const [presentedInteractionSeq, setPresentedInteractionSeq] = createSignal(0)
-const [nativePresentationActive, setNativePresentationActive] = createSignal(false)
-const [nativePresentationFallbackReason, setNativePresentationFallbackReason] = createSignal<string | null>(null)
-const [nativeStats, setNativeStats] = createSignal<NativePresentationStats | null>(null)
-const [nativeFrameReasonFlags, setNativeFrameReasonFlags] = createSignal<number | null>(null)
-const [nativeFrameStats, setNativeFrameStats] = createSignal<NativeFrameExecutionStats | null>(null)
-const [ffiCallCount, setFfiCallCount] = createSignal(0)
+// ── Reactive store ──
+// One mutable store object + per-property signal tracking via getters.
+// Replaces 28 individual createSignal pairs with a single store.
+
+const _store: DebugStats = {
+  enabled: false,
+  fps: 0,
+  frameTimeMs: 0,
+  layerCount: 0,
+  moveOnlyCount: 0,
+  moveFallbackCount: 0,
+  stableReuseCount: 0,
+  dirtyBeforeCount: 0,
+  repaintedCount: 0,
+  nodeCount: 0,
+  commandCount: 0,
+  rendererStrategy: null,
+  rendererOutput: null,
+  resourceBytes: 0,
+  gpuResourceBytes: 0,
+  resourceEntries: 0,
+  transmissionMode: null,
+  estimatedLayeredBytes: 0,
+  estimatedFinalBytes: 0,
+  interactionLatencyMs: 0,
+  interactionType: null,
+  presentedInteractionSeq: 0,
+  nativePresentationActive: false,
+  nativePresentationFallbackReason: null,
+  nativeStats: null,
+  nativeFrameReasonFlags: null,
+  nativeFrameStats: null,
+  ffiCallCount: 0,
+}
+
+// Per-property signals for fine-grained reactivity (like createStore but no dependency).
+// Map from property name → [getter, setter] signal pair.
+const _signals = new Map<string, [() => unknown, (v: unknown) => void]>()
+
+function getSignal<K extends keyof DebugStats>(key: K): [() => DebugStats[K], (v: DebugStats[K]) => void] {
+  let entry = _signals.get(key)
+  if (!entry) {
+    const [get, set] = createSignal(_store[key] as never)
+    entry = [get as () => unknown, set as (v: unknown) => void]
+    _signals.set(key, entry)
+  }
+  return entry as [() => DebugStats[K], (v: DebugStats[K]) => void]
+}
+
+function setField<K extends keyof DebugStats>(key: K, value: DebugStats[K]) {
+  if (_store[key] === value) return
+  ;(_store as Record<string, unknown>)[key] = value
+  const entry = _signals.get(key)
+  if (entry) entry[1](value)
+}
+
+function readField<K extends keyof DebugStats>(key: K): DebugStats[K] {
+  const entry = _signals.get(key)
+  if (entry) return entry[0]() as DebugStats[K]
+  // Lazy init: create signal on first reactive read
+  return getSignal(key)[0]()
+}
 
 // FPS tracking
 let frameTimestamps: number[] = []
@@ -129,19 +163,19 @@ let lastFrameStart = 0
 /** Toggle debug overlay on/off. */
 /** @public */
 export function toggleDebug() {
-  setDebugEnabled((v) => !v)
+  setField("enabled", !_store.enabled)
 }
 
 /** Set debug overlay state explicitly. */
 /** @public */
 export function setDebug(enabled: boolean) {
-  setDebugEnabled(enabled)
+  setField("enabled", enabled)
 }
 
 /** Check if debug is enabled (reactive). */
 /** @public */
 export function isDebugEnabled(): boolean {
-  return debugEnabled()
+  return readField("enabled")
 }
 
 /**
@@ -150,25 +184,24 @@ export function isDebugEnabled(): boolean {
  */
 /** @public */
 export function debugFrameStart(): () => void {
-  if (!debugEnabled()) return () => {}
+  if (!_store.enabled) return () => {}
 
   lastFrameStart = performance.now()
 
   return () => {
     const elapsed = performance.now() - lastFrameStart
-    setFrameTimeMs(Math.round(elapsed * 100) / 100)
+    setField("frameTimeMs", Math.round(elapsed * 100) / 100)
 
     // Track FPS over a rolling 1-second window
     const now = performance.now()
     frameTimestamps.push(now)
     frameTimestamps = frameTimestamps.filter((t) => now - t < 1000)
-    setFps(frameTimestamps.length)
+    setField("fps", frameTimestamps.length)
   }
 }
 
-/** Update debug stats from the render loop. */
-/** @public */
-export function debugUpdateStats(stats: {
+/** Input type for debugUpdateStats — matches the inline parameter object. */
+export type DebugUpdateStatsInput = {
   layerCount: number
   moveOnlyCount?: number
   moveFallbackCount?: number
@@ -197,36 +230,40 @@ export function debugUpdateStats(stats: {
   nativeFrameReasonFlags?: number | null
   ffiCallCount?: number
   ffiCallsBySymbol?: Record<string, number>
-}) {
-  if (!debugEnabled()) return
-  setLayerCount(stats.layerCount)
-  setMoveOnlyCount(stats.moveOnlyCount ?? 0)
-  setMoveFallbackCount(stats.moveFallbackCount ?? 0)
-  setStableReuseCount(stats.stableReuseCount ?? 0)
-  setDirtyBeforeCount(stats.dirtyBeforeCount)
-  setRepaintedCount(stats.repaintedCount)
-  setNodeCount(stats.nodeCount)
-  setCommandCount(stats.commandCount)
-  setRendererStrategy(stats.rendererStrategy ?? null)
-  setRendererOutput(stats.rendererOutput ?? null)
-  setResourceBytes(stats.resourceBytes ?? 0)
-  setGpuResourceBytes(stats.gpuResourceBytes ?? 0)
-  setResourceEntries(stats.resourceEntries ?? 0)
-  setTransmissionMode(stats.transmissionMode ?? null)
-  setEstimatedLayeredBytes(stats.estimatedLayeredBytes ?? 0)
-  setEstimatedFinalBytes(stats.estimatedFinalBytes ?? 0)
-  setInteractionLatencyMs(stats.interactionLatencyMs ?? 0)
-  setInteractionType(stats.interactionType ?? null)
-  setPresentedInteractionSeq(stats.presentedInteractionSeq ?? 0)
+}
+
+/** Update debug stats from the render loop. */
+/** @public */
+export function debugUpdateStats(stats: DebugUpdateStatsInput) {
+  if (!_store.enabled) return
+  setField("layerCount", stats.layerCount)
+  setField("moveOnlyCount", stats.moveOnlyCount ?? 0)
+  setField("moveFallbackCount", stats.moveFallbackCount ?? 0)
+  setField("stableReuseCount", stats.stableReuseCount ?? 0)
+  setField("dirtyBeforeCount", stats.dirtyBeforeCount)
+  setField("repaintedCount", stats.repaintedCount)
+  setField("nodeCount", stats.nodeCount)
+  setField("commandCount", stats.commandCount)
+  setField("rendererStrategy", stats.rendererStrategy ?? null)
+  setField("rendererOutput", stats.rendererOutput ?? null)
+  setField("resourceBytes", stats.resourceBytes ?? 0)
+  setField("gpuResourceBytes", stats.gpuResourceBytes ?? 0)
+  setField("resourceEntries", stats.resourceEntries ?? 0)
+  setField("transmissionMode", stats.transmissionMode ?? null)
+  setField("estimatedLayeredBytes", stats.estimatedLayeredBytes ?? 0)
+  setField("estimatedFinalBytes", stats.estimatedFinalBytes ?? 0)
+  setField("interactionLatencyMs", stats.interactionLatencyMs ?? 0)
+  setField("interactionType", stats.interactionType ?? null)
+  setField("presentedInteractionSeq", stats.presentedInteractionSeq ?? 0)
   // Native presentation stats (Phase 2b)
   const isNative = stats.rendererOutput === "native-presented"
-  setNativePresentationActive(isNative)
-  setNativePresentationFallbackReason(getNativePresentationFallbackReason())
-  setNativeStats(stats.nativeStats ?? null)
+  setField("nativePresentationActive", isNative)
+  setField("nativePresentationFallbackReason", getNativePresentationFallbackReason())
+  setField("nativeStats", stats.nativeStats ?? null)
   const nextReasonFlags = stats.nativeFrameReasonFlags ?? null
-  setNativeFrameReasonFlags(nextReasonFlags)
-  setFfiCallCount(stats.ffiCallCount ?? 0)
-  setNativeFrameStats(buildNativeFrameExecutionStats({
+  setField("nativeFrameReasonFlags", nextReasonFlags)
+  setField("ffiCallCount", stats.ffiCallCount ?? 0)
+  setField("nativeFrameStats", buildNativeFrameExecutionStats({
     strategy: (stats.rendererStrategy as NativeFrameStrategy | null) ?? null,
     reasonFlags: nextReasonFlags,
     dirtyLayerCount: stats.dirtyBeforeCount,
@@ -253,49 +290,28 @@ export function debugUpdateStats(stats: {
 }
 
 export function debugRecordFfiCounts(count: number, callsBySymbol: Record<string, number>) {
-  if (!debugEnabled()) return
-  setFfiCallCount(count)
-  const current = nativeFrameStats()
+  if (!_store.enabled) return
+  setField("ffiCallCount", count)
+  const current = _store.nativeFrameStats
   if (!current) return
-  setNativeFrameStats({
+  setField("nativeFrameStats", {
     ...current,
     ffiCallCount: count,
     ffiCallsBySymbol: callsBySymbol,
   })
 }
 
-/** Reactive debug stats — read in SolidJS components. */
-/** @public */
-export const debugState = {
-  get enabled() { return debugEnabled() },
-  get fps() { return fps() },
-  get frameTimeMs() { return frameTimeMs() },
-  get layerCount() { return layerCount() },
-  get moveOnlyCount() { return moveOnlyCount() },
-  get moveFallbackCount() { return moveFallbackCount() },
-  get stableReuseCount() { return stableReuseCount() },
-  get dirtyBeforeCount() { return dirtyBeforeCount() },
-  get repaintedCount() { return repaintedCount() },
-  get nodeCount() { return nodeCount() },
-  get commandCount() { return commandCount() },
-  get rendererStrategy() { return rendererStrategy() },
-  get rendererOutput() { return rendererOutput() },
-  get resourceBytes() { return resourceBytes() },
-  get gpuResourceBytes() { return gpuResourceBytes() },
-  get resourceEntries() { return resourceEntries() },
-  get transmissionMode() { return transmissionMode() },
-  get estimatedLayeredBytes() { return estimatedLayeredBytes() },
-  get estimatedFinalBytes() { return estimatedFinalBytes() },
-  get interactionLatencyMs() { return interactionLatencyMs() },
-  get interactionType() { return interactionType() },
-  get presentedInteractionSeq() { return presentedInteractionSeq() },
-  get nativePresentationActive() { return nativePresentationActive() },
-  get nativePresentationFallbackReason() { return nativePresentationFallbackReason() },
-  get nativeStats() { return nativeStats() },
-  get nativeFrameReasonFlags() { return nativeFrameReasonFlags() },
-  get nativeFrameStats() { return nativeFrameStats() },
-  get ffiCallCount() { return ffiCallCount() },
-}
+/**
+ * Reactive debug stats — read in SolidJS components.
+ * Property access triggers fine-grained signal tracking.
+ * @public
+ */
+export const debugState: Readonly<DebugStats> = new Proxy(_store, {
+  get(_target, prop: string) {
+    if (prop in _store) return readField(prop as keyof DebugStats)
+    return undefined
+  },
+}) as Readonly<DebugStats>
 
 /**
  * Format debug stats as a single-line string.
@@ -303,13 +319,13 @@ export const debugState = {
  */
 /** @public */
 export function debugStatsLine(): string {
-  if (!debugEnabled()) return ""
-  const native = nativePresentationActive() ? "on" : "off"
-  const fallback = nativePresentationFallbackReason() ? ` [${nativePresentationFallbackReason()}]` : ""
-  const nStatsStr = nativeStats() ? ` | ${formatNativeStats(nativeStats()!)}` : ""
-  const frameReason = nativeFrameReasonFlags()
+  if (!_store.enabled) return ""
+  const native = _store.nativePresentationActive ? "on" : "off"
+  const fallback = _store.nativePresentationFallbackReason ? ` [${_store.nativePresentationFallbackReason}]` : ""
+  const nStatsStr = _store.nativeStats ? ` | ${formatNativeStats(_store.nativeStats)}` : ""
+  const frameReason = _store.nativeFrameReasonFlags
   const frameReasonStr = frameReason !== null && frameReason !== 0 ? ` reasons=${formatNativeFrameReasonFlags(frameReason)}` : ""
-  return `${fps()} FPS | ${frameTimeMs()}ms | ${layerCount()} layers | move=${moveOnlyCount()}/${moveFallbackCount()}/${stableReuseCount()} | ${dirtyBeforeCount()} dirty before | ${repaintedCount()} repainted | ${nodeCount()} nodes | ${commandCount()} cmds | ffi=${ffiCallCount()} | strategy=${rendererStrategy() ?? "none"}${frameReasonStr} | output=${rendererOutput() ?? "none"} | tx=${transmissionMode() ?? "none"} | est=${estimatedLayeredBytes()}/${estimatedFinalBytes()}B | input=${interactionType() ?? "none"}@${interactionLatencyMs()}ms | res=${resourceEntries()}@${resourceBytes()}B gpu=${gpuResourceBytes()}B | native=${native}${fallback}${nStatsStr}`
+  return `${_store.fps} FPS | ${_store.frameTimeMs}ms | ${_store.layerCount} layers | move=${_store.moveOnlyCount}/${_store.moveFallbackCount}/${_store.stableReuseCount} | ${_store.dirtyBeforeCount} dirty before | ${_store.repaintedCount} repainted | ${_store.nodeCount} nodes | ${_store.commandCount} cmds | ffi=${_store.ffiCallCount} | strategy=${_store.rendererStrategy ?? "none"}${frameReasonStr} | output=${_store.rendererOutput ?? "none"} | tx=${_store.transmissionMode ?? "none"} | est=${_store.estimatedLayeredBytes}/${_store.estimatedFinalBytes}B | input=${_store.interactionType ?? "none"}@${_store.interactionLatencyMs}ms | res=${_store.resourceEntries}@${_store.resourceBytes}B gpu=${_store.gpuResourceBytes}B | native=${native}${fallback}${nStatsStr}`
 }
 
 function describeNode(node: TGENode, depth: number): string {
