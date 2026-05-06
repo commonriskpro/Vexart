@@ -36,7 +36,7 @@ export function VoidRadioGroup(props: VoidRadioGroupProps) {
           <box
             width={INDICATOR_SIZE}
             height={INDICATOR_SIZE}
-            backgroundColor={themeColors.card}
+            backgroundColor={ctx.selected ? themeColors.primary : themeColors.secondary}
             cornerRadius={INDICATOR_SIZE / 2}
             borderColor={
               ctx.focused
@@ -45,9 +45,9 @@ export function VoidRadioGroup(props: VoidRadioGroupProps) {
                   ? themeColors.primary
                   : ctx.disabled
                     ? themeColors.muted
-                    : themeColors.border
+                    : themeColors.input
             }
-            borderWidth={ctx.focused ? 2 : 1}
+            borderWidth={ctx.selected ? 0 : 1}
             alignX="center"
             alignY="center"
           >
@@ -55,7 +55,7 @@ export function VoidRadioGroup(props: VoidRadioGroupProps) {
               <box
                 width={DOT_SIZE}
                 height={DOT_SIZE}
-                backgroundColor={ctx.disabled ? themeColors.mutedForeground : themeColors.primary}
+                backgroundColor={ctx.disabled ? themeColors.mutedForeground : themeColors.primaryForeground}
                 cornerRadius={DOT_SIZE / 2}
               />
             ) : null}

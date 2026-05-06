@@ -37,7 +37,7 @@ export function VoidSwitch(props: VoidSwitchProps) {
           ? themeColors.muted
           : ctx.checked
             ? themeColors.primary
-            : themeColors.secondary
+            : themeColors.accent
 
         const thumbLeft = ctx.checked
           ? THUMB_OFFSET + THUMB_TRAVEL
@@ -50,7 +50,7 @@ export function VoidSwitch(props: VoidSwitchProps) {
               height={TRACK_HEIGHT}
               backgroundColor={trackColor}
               cornerRadius={TRACK_HEIGHT / 2}
-              borderColor={ctx.focused ? themeColors.ring : themeColors.border}
+              borderColor={ctx.focused ? themeColors.ring : themeColors.input}
               borderWidth={ctx.focused ? 2 : 1}
             >
               <box
