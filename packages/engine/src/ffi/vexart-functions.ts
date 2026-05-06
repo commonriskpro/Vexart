@@ -89,6 +89,6 @@ export function writeHeader(view: DataView, cmdCount: number, payloadBytes: numb
 // TODO(Slice 5): vexartContextCreate, vexartContextDestroy, vexartContextResize
 // TODO(Slice 6): vexartLayoutCompute, vexartLayoutWriteback
 // TODO(Slice 5): vexartPaintDispatch, vexartPaintUploadImage, vexartPaintRemoveImage
-// TODO(Slice 5): vexartCompositeMerge, vexartCompositeReadbackRgba, vexartCompositeReadbackRegionRgba
+// TODO(Slice 5): vexartCompositeMerge, vexartCompositeReadbackRgba
 // TODO(Slice 7): vexartKittyShmPrepare, vexartKittyShmRelease
 // TODO(Slice 8): vexartTextLoadAtlas, vexartTextDispatch, vexartTextMeasure

@@ -9,6 +9,7 @@ import { For } from 'solid-js';
 import { Index } from 'solid-js';
 import { JSX } from 'solid-js';
 import { Match } from 'solid-js';
+import { Node as Node_2 } from 'flexily';
 import { onCleanup } from 'solid-js';
 import { onMount } from 'solid-js';
 import { Show } from 'solid-js';
@@ -2694,6 +2695,8 @@ declare type TGENode = {
     destroyed: boolean;
     /** Computed layout rect — written after the layout pass */
     layout: LayoutRect;
+    /** Persistent Flexily layout node. Text nodes attach one lazily with measureFunc. */
+    _flexNode: Node_2 | null;
     /** Interactive state — managed by render loop hit-testing */
     _hovered: boolean;
     _active: boolean;
@@ -2728,6 +2731,8 @@ declare type TGENode = {
     _focusableCount: number;
     /** Pre-order index assigned by walkTree for paint-order comparisons. */
     _dfsIndex: number;
+    /** Tree depth assigned by walkTree — root=0. Used by stacking sort. */
+    _depth: number;
     /** Nearest scroll-container ancestor id, or 0 when none. */
     _scrollContainerId: number;
     /** Consecutive frames where this node's layer/subtree stayed clean. */

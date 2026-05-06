@@ -94,6 +94,7 @@ describe("compositeFrame compositor fast path", () => {
       activeSlotKeys: new Set(),
       frameDirtyRects: [],
       pendingNodeDamageRects: [],
+      scrollOffsets: new Map(),
       getOrCreateLayer: () => layer,
       getPreviousLayerRect: () => null,
       updateLayerGeometry() {},

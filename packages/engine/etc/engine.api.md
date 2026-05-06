@@ -13,6 +13,7 @@ import { For } from 'solid-js';
 import { Index } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { Match } from 'solid-js';
+import { Node as Node_2 } from 'flexily';
 import { Setter } from 'solid-js';
 import { Show } from 'solid-js';
 import { Switch } from 'solid-js';
@@ -143,10 +144,10 @@ export type BorderRenderOp = {
 export function buildNodeMouseEvent(node: TGENode, pointerX: number, pointerY: number): NodeMouseEvent;
 
 // @public (undocumented)
-export function buildRenderGraphFrame(commands: RenderCommand[], queues: RenderGraphQueues, textMetaMap: Map<number, TextMeta>): RenderGraphFrame;
+export function buildRenderGraphFrame(commands: RenderCommand[], textMetaMap: Map<number, TextMeta>): RenderGraphFrame;
 
 // @public (undocumented)
-export function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, queueState: RenderGraphQueueState, textMetaMap: Map<number, TextMeta>, ownerIds?: {
+export function buildRenderOp(cmd: RenderCommand, textMetaMap: Map<number, TextMeta>, ownerIds?: {
     rect: number | null;
     text: number | null;
 }): RenderGraphOp | null;
@@ -313,16 +314,10 @@ export const createElement: (tag: string) => TGENode;
 export type CreateExtmarkOptions = Omit<Extmark, "id">;
 
 // @public (undocumented)
-export function createGpuFrameComposer(layerComposer: LayerComposer): GpuFrameComposer;
-
-// @public (undocumented)
 export function createGpuRendererBackend(): GpuRendererBackend;
 
 // @public (undocumented)
 export function createHandle(node: TGENode): NodeHandle;
-
-// @public (undocumented)
-export function createLayerComposer(write: (data: string) => void, rawWrite: (data: string) => void, mode?: TransmissionMode, compress?: CompressMode): LayerComposer;
 
 // @public (undocumented)
 export function createLayerStore(): LayerStore;
@@ -616,7 +611,6 @@ export const effect: <T>(fn: (prev?: T) => T, init?: T) => void;
 export type EffectConfig = {
     renderObjectId?: number;
     color: number;
-    cornerRadius: number;
     shadow?: ShadowDef | ShadowDef[];
     glow?: {
         radius: number;
@@ -820,12 +814,6 @@ export function getFocusedEntry(): FocusEntry | undefined;
 export function getFont(id: number): FontDescriptor;
 
 // @public (undocumented)
-export function getFontAtlasCacheStats(): {
-    atlasCount: number;
-    bytes: number;
-};
-
-// @public (undocumented)
 export function getGpuRendererBackendCacheStats(): GpuRendererBackendCacheStats;
 
 // @public (undocumented)
@@ -873,10 +861,6 @@ export function getRendererResourceStats(): {
         preparedCount: number;
         layoutCount: number;
     };
-    fontAtlas: {
-        atlasCount: number;
-        bytes: number;
-    };
     gpuRenderer: GpuRendererBackendCacheStats;
     native: ResourceStats | null;
 };
@@ -912,18 +896,6 @@ export type GlowCmd = {
 };
 
 // @public (undocumented)
-export type GpuFrameComposer = {
-    renderLayerRaw: (data: Uint8Array, width: number, height: number, imageId: number, pixelX: number, pixelY: number, z: number, cellW: number, cellH: number) => void;
-    renderFinalFrameRaw: (data: Uint8Array, width: number, height: number, z: number, cellW: number, cellH: number) => void;
-    patchLayer: (regionData: Uint8Array, imageId: number, rx: number, ry: number, rw: number, rh: number) => boolean;
-    placeLayer: (imageId: number, pixelX: number, pixelY: number, z: number, cellW: number, cellH: number) => boolean;
-    hasLayer: (imageId: number) => boolean;
-    removeLayer: (imageId: number) => void;
-    clear: () => void;
-    destroy: () => void;
-};
-
-// @public (undocumented)
 export type GpuLayerStrategyInput = {
     dirtyLayerCount: number;
     dirtyPixelArea: number;
@@ -946,6 +918,7 @@ export type GpuLayerStrategyMode = "skip-present" | "layered-dirty" | "layered-r
 // @public (undocumented)
 export type GpuRendererBackend = RendererBackend & {
     getLastStrategy: () => GpuLayerStrategyMode | null;
+    readbackForTest: (width: number, height: number) => Uint8Array | null;
 };
 
 // @public (undocumented)
@@ -954,8 +927,6 @@ export type GpuRendererBackendCacheStats = {
     layerTargetBytes: number;
     textImageCount: number;
     textImageBytes: number;
-    glyphAtlasCount: number;
-    glyphAtlasBytes: number;
     canvasSpriteCount: number;
     canvasSpriteBytes: number;
     transformSpriteCount: number;
@@ -1213,17 +1184,6 @@ export type Layer = {
     prevH: number;
     prevZ: number;
     damageRect: DamageRect | null;
-};
-
-// @public (undocumented)
-export type LayerComposer = {
-    renderLayerRaw: (data: Uint8Array, width: number, height: number, imageId: number, pixelX: number, pixelY: number, z: number, cellW: number, cellH: number) => void;
-    patchLayer: (regionData: Uint8Array, imageId: number, rx: number, ry: number, rw: number, rh: number) => boolean;
-    placeLayer: (imageId: number, pixelX: number, pixelY: number, z: number, cellW: number, cellH: number) => boolean;
-    hasLayer: (imageId: number) => boolean;
-    removeLayer: (imageId: number) => void;
-    clear: () => void;
-    destroy: () => void;
 };
 
 // @public (undocumented)
@@ -1774,12 +1734,15 @@ export type RenderCommand = {
     y: number;
     width: number;
     height: number;
-    color: [number, number, number, number];
+    color: number;
     cornerRadius: number;
     extra1: number;
     extra2: number;
     text?: string;
     nodeId?: number;
+    effect?: EffectConfig;
+    image?: ImagePaintConfig;
+    canvas?: CanvasPaintConfig;
 };
 
 // @public (undocumented)
@@ -1975,11 +1938,6 @@ export type RenderGraphQueues = {
     effects: Map<number, EffectConfig>;
     images: Map<number, ImagePaintConfig>;
     canvases: Map<number, CanvasPaintConfig>;
-};
-
-// @public (undocumented)
-export type RenderGraphQueueState = {
-    borderEffectIndex: number;
 };
 
 // @public (undocumented)
@@ -2387,6 +2345,9 @@ export type TextMeta = {
     fontId: number;
     fontSize: number;
     lineHeight: number;
+    fontFamily?: string;
+    fontWeight?: number;
+    fontStyle?: string;
 };
 
 // @public (undocumented)
@@ -2397,6 +2358,9 @@ export type TextRenderInputs = {
     lineHeight: number;
     maxWidth: number;
     textHeight: number;
+    fontFamily?: string;
+    fontWeight?: number;
+    fontStyle?: string;
 };
 
 // @public (undocumented)
@@ -2425,6 +2389,7 @@ export type TGENode = {
     id: number;
     destroyed: boolean;
     layout: LayoutRect;
+    _flexNode: Node_2 | null;
     _hovered: boolean;
     _active: boolean;
     _focused: boolean;
@@ -2443,6 +2408,7 @@ export type TGENode = {
     _siblingIndex: number;
     _focusableCount: number;
     _dfsIndex: number;
+    _depth: number;
     _scrollContainerId: number;
     _stableFrameCount: number;
     _unstableFrameCount: number;
@@ -3017,8 +2983,8 @@ export function writeHeader(view: DataView, cmdCount: number, payloadBytes: numb
 
 // Warnings were encountered during analysis:
 //
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node.d.ts:327:5 - (ae-forgotten-export) The symbol "NodeImageExtra" needs to be exported by the entry point index.d.ts
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node.d.ts:329:5 - (ae-forgotten-export) The symbol "NodeCanvasExtra" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node.d.ts:330:5 - (ae-forgotten-export) The symbol "NodeImageExtra" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node.d.ts:332:5 - (ae-forgotten-export) The symbol "NodeCanvasExtra" needs to be exported by the entry point index.d.ts
 // /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/loop/debug.d.ts:85:5 - (ae-forgotten-export) The symbol "NativeFrameExecutionStats" needs to be exported by the entry point index.d.ts
 // /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/loop/debug.d.ts:166:5 - (ae-forgotten-export) The symbol "NativeFrameExecutionStatsInput" needs to be exported by the entry point index.d.ts
 // /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/reconciler/router.d.ts:41:5 - (ae-forgotten-export) The symbol "NavigationParams" needs to be exported by the entry point index.d.ts

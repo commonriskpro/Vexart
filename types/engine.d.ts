@@ -7,6 +7,7 @@ import { For } from 'solid-js';
 import { Index } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { Match } from 'solid-js';
+import { Node as Node_2 } from 'flexily';
 import { Setter } from 'solid-js';
 import { Show } from 'solid-js';
 import { Switch } from 'solid-js';
@@ -131,10 +132,10 @@ export declare type BorderRenderOp = {
 export declare function buildNodeMouseEvent(node: TGENode, pointerX: number, pointerY: number): NodeMouseEvent;
 
 /** @public */
-export declare function buildRenderGraphFrame(commands: RenderCommand[], queues: RenderGraphQueues, textMetaMap: Map<number, TextMeta>): RenderGraphFrame;
+export declare function buildRenderGraphFrame(commands: RenderCommand[], textMetaMap: Map<number, TextMeta>): RenderGraphFrame;
 
 /** @public */
-export declare function buildRenderOp(cmd: RenderCommand, queues: RenderGraphQueues, queueState: RenderGraphQueueState, textMetaMap: Map<number, TextMeta>, ownerIds?: {
+export declare function buildRenderOp(cmd: RenderCommand, textMetaMap: Map<number, TextMeta>, ownerIds?: {
     rect: number | null;
     text: number | null;
 }): RenderGraphOp | null;
@@ -289,7 +290,7 @@ export declare function clearImageCache(): void;
 /** @public */
 export declare function clearSelection(): void;
 
-/** Clear all prepared text caches. */
+/** Clear all text measurement and layout caches. */
 /** @public */
 export declare function clearTextCache(): void;
 
@@ -353,23 +354,10 @@ export declare const createElement: (tag: string) => TGENode;
 export declare type CreateExtmarkOptions = Omit<Extmark, "id">;
 
 /** @public */
-export declare function createGpuFrameComposer(layerComposer: LayerComposer): GpuFrameComposer;
-
-/** @public */
 export declare function createGpuRendererBackend(): GpuRendererBackend;
 
 /** @public */
 export declare function createHandle(node: TGENode): NodeHandle;
-
-/**
- * Create a layer compositor for the kitty direct backend.
- *
- * @param write - Write function for Kitty graphics escapes.
- * @param rawWrite - Write function reserved for cursor positioning hooks.
- * @param mode - Transmission mode.
- */
-/** @public */
-export declare function createLayerComposer(write: (data: string) => void, rawWrite: (data: string) => void, mode?: TransmissionMode, compress?: CompressMode): LayerComposer;
 
 /** @public */
 export declare function createLayerStore(): LayerStore;
@@ -726,7 +714,6 @@ export declare const effect: <T>(fn: (prev?: T) => T, init?: T) => void;
 export declare type EffectConfig = {
     renderObjectId?: number;
     color: number;
-    cornerRadius: number;
     shadow?: ShadowDef | ShadowDef[];
     glow?: {
         radius: number;
@@ -967,6 +954,17 @@ export declare type FocusHandle = {
     id: string;
 };
 
+/**
+ * Text layout — native Rust font measurement for Vexart.
+ *
+ * All text measurement uses vexart_font_measure (Rust/ttf-parser) via FFI.
+ * This ensures measurement and MSDF rendering use identical font metrics.
+ *
+ * Word wrapping is implemented in TS with greedy word-wrap using
+ * native per-word measurements — same algorithm as Rust's font::layout.
+ *
+ * Replaces the former Pretext + @napi-rs/canvas (Skia polyfill) path.
+ */
 /** @public */
 export declare type FontDescriptor = {
     family: string;
@@ -1005,12 +1003,6 @@ export declare function getFocusedEntry(): FocusEntry | undefined;
 /** Get font descriptor by ID. Falls back to default. */
 /** @public */
 export declare function getFont(id: number): FontDescriptor;
-
-/** @public */
-export declare function getFontAtlasCacheStats(): {
-    atlasCount: number;
-    bytes: number;
-};
 
 /** @public */
 export declare function getGpuRendererBackendCacheStats(): GpuRendererBackendCacheStats;
@@ -1061,10 +1053,6 @@ export declare function getRendererResourceStats(): {
         preparedCount: number;
         layoutCount: number;
     };
-    fontAtlas: {
-        atlasCount: number;
-        bytes: number;
-    };
     gpuRenderer: GpuRendererBackendCacheStats;
     native: ResourceStats | null;
 };
@@ -1100,18 +1088,6 @@ export declare type GlowCmd = {
 };
 
 /** @public */
-export declare type GpuFrameComposer = {
-    renderLayerRaw: (data: Uint8Array, width: number, height: number, imageId: number, pixelX: number, pixelY: number, z: number, cellW: number, cellH: number) => void;
-    renderFinalFrameRaw: (data: Uint8Array, width: number, height: number, z: number, cellW: number, cellH: number) => void;
-    patchLayer: (regionData: Uint8Array, imageId: number, rx: number, ry: number, rw: number, rh: number) => boolean;
-    placeLayer: (imageId: number, pixelX: number, pixelY: number, z: number, cellW: number, cellH: number) => boolean;
-    hasLayer: (imageId: number) => boolean;
-    removeLayer: (imageId: number) => void;
-    clear: () => void;
-    destroy: () => void;
-};
-
-/** @public */
 export declare type GpuLayerStrategyInput = {
     dirtyLayerCount: number;
     dirtyPixelArea: number;
@@ -1134,6 +1110,8 @@ export declare type GpuLayerStrategyMode = "skip-present" | "layered-dirty" | "l
 /** @public */
 export declare type GpuRendererBackend = RendererBackend & {
     getLastStrategy: () => GpuLayerStrategyMode | null;
+    /** TEST-ONLY: Read back the active target as RGBA pixels for golden tests. */
+    readbackForTest: (width: number, height: number) => Uint8Array | null;
 };
 
 /** @public */
@@ -1142,8 +1120,6 @@ export declare type GpuRendererBackendCacheStats = {
     layerTargetBytes: number;
     textImageCount: number;
     textImageBytes: number;
-    glyphAtlasCount: number;
-    glyphAtlasBytes: number;
     canvasSpriteCount: number;
     canvasSpriteBytes: number;
     transformSpriteCount: number;
@@ -1412,28 +1388,6 @@ export declare type Layer = {
     prevZ: number;
     /** Accumulated global damage rect for this layer. */
     damageRect: DamageRect | null;
-};
-
-/** @public */
-export declare type LayerComposer = {
-    /** Render raw RGBA bytes directly, avoiding a PixelBuffer wrapper upstream. */
-    renderLayerRaw: (data: Uint8Array, width: number, height: number, imageId: number, pixelX: number, pixelY: number, z: number, cellW: number, cellH: number) => void;
-    /**
-     * [Experimental] Patch a dirty region of an existing layer.
-     * Uses Kitty animation frame protocol (a=f) to update only the changed pixels.
-     * Returns false if the image hasn't been transmitted yet (caller should use renderLayer).
-     */
-    patchLayer: (regionData: Uint8Array, imageId: number, rx: number, ry: number, rw: number, rh: number) => boolean;
-    /** Re-place an already transmitted image without re-uploading pixels. */
-    placeLayer: (imageId: number, pixelX: number, pixelY: number, z: number, cellW: number, cellH: number) => boolean;
-    /** Return whether an image has already been transmitted and can be patched/placed. */
-    hasLayer: (imageId: number) => boolean;
-    /** Remove a layer's image from the terminal. */
-    removeLayer: (imageId: number) => void;
-    /** Remove all layer images. */
-    clear: () => void;
-    /** Destroy — clean up all images. */
-    destroy: () => void;
 };
 
 /** @public */
@@ -2183,13 +2137,20 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      y: number;
      width: number;
      height: number;
-     color: [number, number, number, number];
+     /** Packed RGBA u32 (0xRRGGBBAA). Avoids array allocation per command. */
+     color: number;
      cornerRadius: number;
      extra1: number;
      extra2: number;
      text?: string;
      /** Stable node ID for matching render ops to effects/images. */
      nodeId?: number;
+     /** Effect config attached directly — eliminates Map.get lookup in render graph. */
+     effect?: EffectConfig;
+     /** Image paint config attached directly. */
+     image?: ImagePaintConfig;
+     /** Canvas paint config attached directly. */
+     canvas?: CanvasPaintConfig;
  };
 
  /**
@@ -2402,11 +2363,6 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      effects: Map<number, EffectConfig>;
      images: Map<number, ImagePaintConfig>;
      canvases: Map<number, CanvasPaintConfig>;
- };
-
- /** @public */
- export declare type RenderGraphQueueState = {
-     borderEffectIndex: number;
  };
 
  /** @public */
@@ -2931,6 +2887,9 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      fontId: number;
      fontSize: number;
      lineHeight: number;
+     fontFamily?: string;
+     fontWeight?: number;
+     fontStyle?: string;
  };
 
  /** @public */
@@ -2941,6 +2900,9 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      lineHeight: number;
      maxWidth: number;
      textHeight: number;
+     fontFamily?: string;
+     fontWeight?: number;
+     fontStyle?: string;
  };
 
  /** @public */
@@ -2972,6 +2934,8 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      destroyed: boolean;
      /** Computed layout rect — written after the layout pass */
      layout: LayoutRect;
+     /** Persistent Flexily layout node. Text nodes attach one lazily with measureFunc. */
+     _flexNode: Node_2 | null;
      /** Interactive state — managed by render loop hit-testing */
      _hovered: boolean;
      _active: boolean;
@@ -3006,6 +2970,8 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      _focusableCount: number;
      /** Pre-order index assigned by walkTree for paint-order comparisons. */
      _dfsIndex: number;
+     /** Tree depth assigned by walkTree — root=0. Used by stacking sort. */
+     _depth: number;
      /** Nearest scroll-container ancestor id, or 0 when none. */
      _scrollContainerId: number;
      /** Consecutive frames where this node's layer/subtree stayed clean. */

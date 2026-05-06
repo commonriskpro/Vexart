@@ -2257,7 +2257,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         frame: null,
         layer: null,
       }
-      const result = renderFrame(spriteCtx, target, "none")
+      const result = renderFrame(spriteCtx, target)
       if (!result.ok) return null
       return copyGpuTargetRegionToImage(vctx, target, { x: 0, y: 0, width, height }).handle
     } finally {
@@ -2422,21 +2422,6 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           return { output: "skip-present", strategy: lastStrategy }
         }
         if (useNativeLayerPresentation && nativeImageId > 0) {
-          const shouldPresentRegion = lastStrategy === "layered-region"
-            && !!region
-            && region.width > 0
-            && region.height > 0
-            && region.width * region.height < ctx.target.width * ctx.target.height
-          const regionEmitStart = shouldPresentRegion && PROFILE_ENABLED ? performance.now() : 0
-          const regionStats = shouldPresentRegion
-            ? nativeEmitRegionTarget(layerTarget, nativeImageId, region.x, region.y, region.width, region.height, frameCtx.transmissionMode)
-            : null
-          if (shouldPresentRegion) addBackendProfile("nativeEmitMs", regionEmitStart)
-          if (regionStats !== null) {
-            addNativeStatsProfile(regionStats)
-            nativeLayerPresentDirty(layerCtx.key)
-            return { output: "native-presented", strategy: lastStrategy, stats: regionStats }
-          }
           const col = Math.floor(layerCtx.bounds.x / Math.max(1, ctx.cellWidth ?? 1))
           const row = Math.floor(layerCtx.bounds.y / Math.max(1, ctx.cellHeight ?? 1))
           const nativeEmitStart = PROFILE_ENABLED ? performance.now() : 0
