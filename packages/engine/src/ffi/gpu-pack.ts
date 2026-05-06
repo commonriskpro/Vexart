@@ -37,7 +37,8 @@ export function writeColorF32(v: DataView, offset: number, color: number) {
 
 // ── Shape types ──────────────────────────────────────────────────────────
 
-export type WgpuCanvasCornerRadii = { tl: number; tr: number; br: number; bl: number }
+import type { CornerRadii } from "./node"
+export type WgpuCanvasCornerRadii = CornerRadii
 
 export type WgpuCanvasShapeRect = {
   x: number; y: number; w: number; h: number

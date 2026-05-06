@@ -17,7 +17,9 @@
  */
 
 /** @public Properties that can animate on the compositor thread. */
-export type CompositorProperty = "transform" | "opacity"
+export const COMPOSITOR_PROPERTY = { TRANSFORM: "transform", OPACITY: "opacity" } as const
+/** @public */
+export type CompositorProperty = (typeof COMPOSITOR_PROPERTY)[keyof typeof COMPOSITOR_PROPERTY]
 
 /** Easing or spring descriptor for the animation. */
 export type AnimationPhysics =

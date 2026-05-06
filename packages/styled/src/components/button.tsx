@@ -12,6 +12,7 @@
  */
 
 import type { PressEvent } from "@vexart/engine"
+import type { JSX } from "solid-js"
 import { Button as HeadlessButton } from "@vexart/headless"
 import { radius, space, font, weight, shadows, glows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
@@ -28,7 +29,7 @@ export interface ButtonProps {
   disabled?: boolean
   onPress?: (event?: PressEvent) => void
   focusId?: string
-  children?: any
+  children?: JSX.Element
 }
 
 // ── Size styles (static — no theme dependency) ──
@@ -60,7 +61,7 @@ type VariantColors = {
   fg: () => string | number
   border: () => string | number | undefined
   borderWidth: number | undefined
-  shadow: any
+  shadow: import("@vexart/engine").TGEProps["shadow"]
   hoverBg: () => string | number
   activeBg: () => string | number
   focusBorder: () => string | number

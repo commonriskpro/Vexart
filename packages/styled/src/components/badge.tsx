@@ -8,6 +8,7 @@
  */
 
 import { radius, space, font, weight } from "../tokens/tokens"
+import type { JSX } from "solid-js"
 import { themeColors } from "../theme/theme"
 
 /** @public */
@@ -16,7 +17,7 @@ export type BadgeVariant = "default" | "secondary" | "outline" | "destructive"
 /** @public */
 export interface BadgeProps {
   variant?: BadgeVariant
-  children?: any
+  children?: JSX.Element
 }
 
 // ── Variant color getters (lazy — read themeColors inside effects) ──

@@ -76,7 +76,9 @@ export type NativeFrameExecutionStatsInput = {
 export type NativeFrameExecutionStats = NativeFrameExecutionStatsInput
 
 /** @public */
-export type GpuLayerStrategyMode = "skip-present" | "layered-dirty" | "layered-region" | "final-frame"
+export const GPU_LAYER_STRATEGY_MODE = { SKIP_PRESENT: "skip-present", LAYERED_DIRTY: "layered-dirty", LAYERED_REGION: "layered-region", FINAL_FRAME: "final-frame" } as const
+/** @public */
+export type GpuLayerStrategyMode = (typeof GPU_LAYER_STRATEGY_MODE)[keyof typeof GPU_LAYER_STRATEGY_MODE]
 
 /** @public */
 export type GpuLayerStrategyInput = {

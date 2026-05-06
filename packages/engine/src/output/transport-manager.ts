@@ -3,7 +3,9 @@
 // Only Kitty (shm, file, direct) transport remains. Per design §11.
 
 /** @public */
-export type TransmissionMode = "shm" | "file" | "direct"
+export const TRANSMISSION_MODE = { SHM: "shm", FILE: "file", DIRECT: "direct" } as const
+/** @public */
+export type TransmissionMode = (typeof TRANSMISSION_MODE)[keyof typeof TRANSMISSION_MODE]
 
 /** @public */
 export const TRANSPORT_HEALTH = {

@@ -5,13 +5,14 @@
  */
 
 import { radius, space, font, weight, shadows } from "../tokens/tokens"
+import type { JSX } from "solid-js"
 import { themeColors } from "../theme/theme"
 
 // ── Card ──
 
 /** @public */
 export interface CardProps {
-  children?: any
+  children?: JSX.Element
   size?: "default" | "sm"
 }
 
@@ -39,7 +40,7 @@ export function Card(props: CardProps) {
 
 /** @public */
 export interface CardHeaderProps {
-  children?: any
+  children?: JSX.Element
 }
 
 /** @public */
@@ -60,7 +61,7 @@ export function CardHeader(props: CardHeaderProps) {
 
 /** @public */
 export interface CardTitleProps {
-  children?: any
+  children?: JSX.Element
 }
 
 /** @public */
@@ -81,7 +82,7 @@ export function CardTitle(props: CardTitleProps) {
 
 /** @public */
 export interface CardDescriptionProps {
-  children?: any
+  children?: JSX.Element
 }
 
 /** @public */
@@ -100,7 +101,7 @@ export function CardDescription(props: CardDescriptionProps) {
 
 /** @public */
 export interface CardContentProps {
-  children?: any
+  children?: JSX.Element
 }
 
 /** @public */
@@ -119,7 +120,7 @@ export function CardContent(props: CardContentProps) {
 
 /** @public */
 export interface CardFooterProps {
-  children?: any
+  children?: JSX.Element
 }
 
 /** @public */
@@ -142,7 +143,7 @@ export function CardFooter(props: CardFooterProps) {
 
 /** @public */
 export interface CardActionProps {
-  children?: any
+  children?: JSX.Element
 }
 
 /** @public */

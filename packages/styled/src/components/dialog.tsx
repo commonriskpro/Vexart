@@ -7,6 +7,7 @@
  */
 
 import { Dialog } from "@vexart/headless"
+import type { JSX } from "solid-js"
 import { radius, space, font, weight } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
@@ -20,22 +21,22 @@ export type VoidDialogProps = {
   width?: number
   /** Max width constraint. Default: 480. */
   maxWidth?: number
-  children?: any
+  children?: JSX.Element
 }
 
 /** @public */
 export type VoidDialogTitleProps = {
-  children?: any
+  children?: JSX.Element
 }
 
 /** @public */
 export type VoidDialogDescriptionProps = {
-  children?: any
+  children?: JSX.Element
 }
 
 /** @public */
 export type VoidDialogFooterProps = {
-  children?: any
+  children?: JSX.Element
 }
 
 // ── Styled Dialog ──

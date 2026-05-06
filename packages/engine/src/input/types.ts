@@ -42,7 +42,9 @@ export type KeyEvent = {
 // ── Mouse Event ──
 
 /** @public */
-export type MouseAction = "press" | "release" | "move" | "scroll"
+export const MOUSE_ACTION = { PRESS: "press", RELEASE: "release", MOVE: "move", SCROLL: "scroll" } as const
+/** @public */
+export type MouseAction = (typeof MOUSE_ACTION)[keyof typeof MOUSE_ACTION]
 
 /** @public */
 export type MouseEvent = {

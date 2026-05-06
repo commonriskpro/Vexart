@@ -71,7 +71,7 @@ export type EffectConfig = {
   backdropSepia?: number
   backdropHueRotate?: number
   opacity?: number
-  cornerRadii?: { tl: number; tr: number; br: number; bl: number }
+  cornerRadii?: import("./node").CornerRadii
   transform?: Float64Array
   transformInverse?: Float64Array
   transformBounds?: import("./damage").Rect
@@ -189,7 +189,7 @@ export type RectangleRenderInputs = {
 export type BorderRenderInputs = {
   radius: number
   width: number
-  cornerRadii: { tl: number; tr: number; br: number; bl: number } | null
+  cornerRadii: import("./node").CornerRadii | null
 }
 
 /** @public */

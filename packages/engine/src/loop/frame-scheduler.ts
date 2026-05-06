@@ -1,5 +1,7 @@
 /** @public */
-export type InteractionKind = "pointer" | "scroll" | "key"
+export const INTERACTION_KIND = { POINTER: "pointer", SCROLL: "scroll", KEY: "key" } as const
+/** @public */
+export type InteractionKind = (typeof INTERACTION_KIND)[keyof typeof INTERACTION_KIND]
 
 /** @public */
 export type FrameSchedulerBoosts = {

@@ -12,11 +12,11 @@ import { openMsdfFontSymbols } from "./vexart-bridge"
 
 const encoder = new TextEncoder()
 
-let _symbols: ReturnType<typeof openMsdfFontSymbols> = undefined as any
+let _symbols: ReturnType<typeof openMsdfFontSymbols> | null = null
 let _initAttempted = false
 
 function getSymbols() {
-  if (_symbols !== undefined) return _symbols
+  if (_symbols !== null) return _symbols
   _symbols = openMsdfFontSymbols()
   return _symbols
 }

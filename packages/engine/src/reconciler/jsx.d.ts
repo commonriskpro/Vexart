@@ -80,7 +80,7 @@ type ImgIntrinsicProps = {
   width?: number | string
   height?: number | string
   cornerRadius?: number
-  cornerRadii?: { tl: number; tr: number; br: number; bl: number }
+  cornerRadii?: import("../ffi/node").CornerRadii
   minWidth?: number
   maxWidth?: number
   minHeight?: number

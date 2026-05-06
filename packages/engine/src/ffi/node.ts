@@ -40,10 +40,14 @@ export const ALIGN_X = { LEFT: 0, RIGHT: 1, CENTER: 2, SPACE_BETWEEN: 3 } as con
 export const ALIGN_Y = { TOP: 0, BOTTOM: 1, CENTER: 2, SPACE_BETWEEN: 3 } as const
 
 /** @public */
-export type TGENodeKind = "box" | "text" | "img" | "canvas" | "root"
+export const TGE_NODE_KIND = { BOX: "box", TEXT: "text", IMG: "img", CANVAS: "canvas", ROOT: "root" } as const
+/** @public */
+export type TGENodeKind = (typeof TGE_NODE_KIND)[keyof typeof TGE_NODE_KIND]
 
 /** @public */
-export type InteractionMode = "none" | "drag"
+export const INTERACTION_MODE = { NONE: "none", DRAG: "drag" } as const
+/** @public */
+export type InteractionMode = (typeof INTERACTION_MODE)[keyof typeof INTERACTION_MODE]
 
 export type NodeImageExtra = {
   buffer: { data: Uint8Array; width: number; height: number } | null
@@ -90,6 +94,54 @@ export type NodeMouseEvent = {
   /** Node layout height. */
   height: number
 }
+
+/** @public Per-corner radius values. */
+export type CornerRadii = { tl: number; tr: number; br: number; bl: number }
+
+/** @public 2D transform configuration. */
+export type TransformConfig = {
+  translateX?: number
+  translateY?: number
+  rotate?: number
+  scale?: number
+  scaleX?: number
+  scaleY?: number
+  skewX?: number
+  skewY?: number
+  perspective?: number
+  rotateX?: number
+  rotateY?: number
+}
+
+/** @public Glow effect configuration (pre-parse, accepts string | number colors). */
+export type GlowConfig = {
+  radius: number
+  color: string | number
+  intensity?: number
+}
+
+/** @public Shadow definition (pre-parse, accepts string | number colors). */
+export type ShadowConfig = {
+  x: number
+  y: number
+  blur: number
+  color: string | number
+}
+
+/** @public Gradient configuration (pre-parse, accepts string | number colors). */
+export type GradientConfig = {
+  type: "linear"
+  from: string | number
+  to: string | number
+  angle?: number
+} | {
+  type: "radial"
+  from: string | number
+  to: string | number
+}
+
+/** @public Viewport transform for canvas pan/zoom. */
+export type ViewportConfig = { x: number; y: number; zoom: number }
 
 /** @public Self-filter configuration applied to the element's own paint output. */
 export type FilterConfig = {
@@ -147,7 +199,7 @@ export type TGEProps = {
   cornerRadius?: number
   /** CSS-friendly alias for cornerRadius (Decision 1) */
   borderRadius?: number
-  cornerRadii?: { tl: number; tr: number; br: number; bl: number }  // Per-corner radius
+  cornerRadii?: CornerRadii
   borderColor?: string | number
   borderWidth?: number
   /** Opacity: 0.0 = fully transparent, 1.0 = fully opaque. Multiplies alpha of entire element. */
@@ -199,34 +251,11 @@ export type TGEProps = {
   borderBetweenChildren?: number
 
   // Effects
-  shadow?: {           // Drop shadow — painted BEFORE the rect
-    x: number          // Horizontal offset (px)
-    y: number          // Vertical offset (px)
-    blur: number       // Blur radius (px)
-    color: string | number  // Shadow color (hex string or packed RGBA u32)
-  } | Array<{          // Multiple shadows — painted in order
-    x: number
-    y: number
-    blur: number
-    color: string | number
-  }>
+  shadow?: ShadowConfig | ShadowConfig[]
   /** CSS-friendly alias for shadow (Decision 1) */
   boxShadow?: TGEProps["shadow"]
-  glow?: {                     // Outer glow — painted BEFORE the rect
-    radius: number             // Glow spread radius (px)
-    color: string | number     // Glow color (hex string or packed RGBA u32)
-    intensity?: number         // 0-100, default 80
-  }
-  gradient?: {         // Gradient fill — painted INSTEAD of solid backgroundColor
-    type: "linear"
-    from: string | number  // Start color (hex string or packed RGBA u32)
-    to: string | number    // End color (hex string or packed RGBA u32)
-    angle?: number     // Degrees: 0=left→right, 90=top→bottom (default 90)
-  } | {
-    type: "radial"
-    from: string | number  // Center color (hex string or packed RGBA u32)
-    to: string | number    // Edge color (hex string or packed RGBA u32)
-  }
+  glow?: GlowConfig
+  gradient?: GradientConfig
   backdropBlur?: number  // Blur radius for content behind this element (glassmorphism)
   /** Backdrop brightness filter. 0=black, 100=unchanged, 200=2x bright. */
   backdropBrightness?: number
@@ -276,7 +305,7 @@ export type TGEProps = {
   /** Make this element focusable via Tab navigation. Like HTML tabindex="0". */
   focusable?: boolean
   /** Keyboard event handler — fires when this element is focused and a key is pressed. */
-  onKeyDown?: (event: any) => void
+  onKeyDown?: (event: import("../input/types").KeyEvent) => void
 
   // Mouse event callbacks — dispatched by updateInteractiveStates in the render loop.
   /** Fires when mouse button is pressed while over this node. */
@@ -292,19 +321,7 @@ export type TGEProps = {
 
   // Transforms — 2D affine + pseudo-perspective
   /** Transform configuration: translate, rotate, scale, skew, perspective. */
-  transform?: {
-    translateX?: number    // pixels
-    translateY?: number    // pixels
-    rotate?: number        // degrees
-    scale?: number         // uniform scale (1 = 100%)
-    scaleX?: number        // horizontal scale
-    scaleY?: number        // vertical scale
-    skewX?: number         // degrees
-    skewY?: number         // degrees
-    perspective?: number   // perspective distance (higher = subtler, 0 = off)
-    rotateX?: number       // tilt around X axis in degrees (vertical foreshortening)
-    rotateY?: number       // tilt around Y axis in degrees (horizontal foreshortening)
-  }
+  transform?: TransformConfig
   /** Transform origin point. Default: "center". */
   transformOrigin?: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | { x: number; y: number }
 
@@ -324,7 +341,7 @@ export type TGEProps = {
   /** Optional cache key for static canvas draw lists. Change it when onDraw output changes. */
   drawCacheKey?: string | number
   /** Viewport transform for pan and zoom. */
-  viewport?: { x: number; y: number; zoom: number }
+  viewport?: ViewportConfig
 
   // Text
   color?: string | number

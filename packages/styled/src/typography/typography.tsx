@@ -5,11 +5,12 @@
  */
 
 import { font, weight } from "../tokens/tokens"
+import type { JSX } from "solid-js"
 import { themeColors } from "../theme/theme"
 
 /** @public */
 export interface TypographyProps {
-  children?: any
+  children?: JSX.Element
   color?: string | number
 }
 

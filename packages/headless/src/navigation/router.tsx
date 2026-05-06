@@ -27,7 +27,7 @@ const RouterCtx = createContext<RouterContextValue>()
 export type RouterProps = {
   /** Initial route path. Defaults to first Route's path. */
   initial?: string
-  children?: any
+  children?: JSX.Element
 }
 
 /** @public */
@@ -90,7 +90,7 @@ const StackCtx = createContext<NavigationStackHandle>()
 export type NavigationStackProps = {
   /** Initial screen component. */
   initial?: (props: ScreenProps) => JSX.Element
-  children?: any
+  children?: JSX.Element
 }
 
 /** @public */

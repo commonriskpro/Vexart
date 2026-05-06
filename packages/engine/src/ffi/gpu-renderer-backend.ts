@@ -189,7 +189,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     return _vexartCtx
   }
   // ── MSDF text rendering ────────────────────────────────────────────────
-  let _msdfSymbols: ReturnType<typeof openMsdfFontSymbols> = undefined as any
+  let _msdfSymbols: ReturnType<typeof openMsdfFontSymbols> | null = null
   let _msdfInitDone = false
   const _msdfEncoder = new TextEncoder()
   const _msdfStatsBuf = new Uint8Array(32)
@@ -200,7 +200,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   const _msdfParamsView = new DataView(_msdfParamsBuf.buffer)
 
   function getMsdfSymbols() {
-    if (_msdfSymbols !== undefined) return _msdfSymbols
+    if (_msdfSymbols !== null) return _msdfSymbols
     _msdfSymbols = openMsdfFontSymbols()
     if (_msdfSymbols && !_msdfInitDone) {
       _msdfInitDone = true

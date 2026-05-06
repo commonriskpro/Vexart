@@ -6,7 +6,7 @@
  * @public
  */
 
-import { createContext, onCleanup, useContext } from "solid-js"
+import { createContext, onCleanup, useContext, type JSX } from "solid-js"
 import { focusedId, pushFocusScope, setFocusedId, useFocus } from "@vexart/engine"
 import { Portal } from "../containers/portal"
 
@@ -15,7 +15,7 @@ import { Portal } from "../containers/portal"
 /** @public */
 export type DialogProps = {
   /** Dialog content. Should contain Dialog.Overlay and/or Dialog.Content. */
-  children?: any
+  children?: JSX.Element
   /** Called when the dialog should close (Escape key or overlay click). */
   onClose?: () => void
 }
@@ -28,13 +28,13 @@ export type DialogOverlayProps = {
   backdropBlur?: number
   /** Called when the overlay is clicked. Default: calls Dialog's onClose. */
   onClick?: () => void
-  children?: any
+  children?: JSX.Element
 }
 
 /** @public */
 export type DialogContentProps = {
   /** Content of the dialog panel. */
-  children?: any
+  children?: JSX.Element
   /** Width of the dialog. Default: "fit" */
   width?: number | string
   /** Max width constraint. */
@@ -50,7 +50,7 @@ export type DialogContentProps = {
 /** @public */
 export type DialogCloseProps = {
   /** Element that closes the dialog when activated. */
-  children?: any
+  children?: JSX.Element
 }
 
 // ── Dialog Root ──
