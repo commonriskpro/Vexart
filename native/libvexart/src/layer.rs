@@ -124,7 +124,11 @@ impl LayerRegistry {
         resources: &mut ResourceManager,
     ) -> LayerUpsertResult {
         if let Some(handle) = self.by_key.get(&key).copied() {
-            let record = self.records.get_mut(&handle).expect("layer handle missing");
+            let Some(record) = self.records.get_mut(&handle) else {
+                // Stale key mapping — remove and fall through to fresh insert
+                self.by_key.remove(&key);
+                return self.upsert(key, desc, resources);
+            };
             let old_bytes = record.bytes;
             let resized = record.width != desc.width || record.height != desc.height;
             let target_changed = record.target != desc.target;

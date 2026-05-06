@@ -173,7 +173,7 @@ pub unsafe fn shm_prepare(
     let handle_id = NEXT_KITTY_HANDLE.fetch_add(1, Ordering::Relaxed);
     KITTY_SHM_HANDLES
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .insert(handle_id, KittyShmHandle { fd, name });
 
     // 11. Return the handle to the caller.
@@ -194,7 +194,7 @@ pub fn shm_release(handle: u64, unlink_flag: u32) -> i32 {
     }
 
     // Remove from registry; if unknown, soft-fail.
-    let entry = match KITTY_SHM_HANDLES.lock().unwrap().remove(&handle) {
+    let entry = match KITTY_SHM_HANDLES.lock().unwrap_or_else(|e| e.into_inner()).remove(&handle) {
         Some(e) => e,
         None => return OK,
     };

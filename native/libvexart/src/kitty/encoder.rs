@@ -17,10 +17,10 @@ use std::io::Write;
 const CHUNK_SIZE: usize = 4096;
 
 /// Compress RGBA bytes with zlib (deflate) and return the compressed bytes.
-pub fn compress_rgba(rgba: &[u8]) -> Vec<u8> {
+pub fn compress_rgba(rgba: &[u8]) -> Result<Vec<u8>, std::io::Error> {
     let mut enc = ZlibEncoder::new(Vec::new(), Compression::default());
-    enc.write_all(rgba).expect("zlib write failed");
-    enc.finish().expect("zlib finish failed")
+    enc.write_all(rgba)?;
+    enc.finish()
 }
 
 /// Encode a complete frame for direct Kitty transmission.
@@ -35,7 +35,7 @@ pub fn compress_rgba(rgba: &[u8]) -> Vec<u8> {
 /// * `image_id` — Kitty image ID (must be > 0)
 pub fn encode_frame_direct(rgba: &[u8], width: u32, height: u32, image_id: u32) -> Vec<u8> {
     // 1. zlib compress.
-    let compressed = compress_rgba(rgba);
+    let compressed = compress_rgba(rgba).unwrap_or_else(|_| rgba.to_vec());
 
     // 2. base64 encode.
     let b64 = B64.encode(&compressed);
@@ -107,7 +107,7 @@ mod tests {
     fn test_compress_roundtrip() {
         // REQ-2B-103: zlib compress+decompress matches original.
         let original: Vec<u8> = (0u8..=255).cycle().take(64 * 64 * 4).collect();
-        let compressed = compress_rgba(&original);
+        let compressed = compress_rgba(&original).unwrap();
         let decompressed = zlib_decompress(&compressed);
         assert_eq!(
             decompressed, original,
@@ -127,7 +127,7 @@ mod tests {
             rgba[i * 4 + 2] = 0x2e;
             rgba[i * 4 + 3] = 0xff;
         }
-        let compressed = compress_rgba(&rgba);
+        let compressed = compress_rgba(&rgba).unwrap();
         assert!(
             compressed.len() < rgba.len(),
             "compressed ({}) should be smaller than raw ({})",

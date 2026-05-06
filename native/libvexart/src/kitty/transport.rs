@@ -159,7 +159,8 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
     }
 
     // 3. zlib compress.
-    let compressed = compress_rgba(&rgba[..written as usize]);
+    let compressed = compress_rgba(&rgba[..written as usize])
+        .unwrap_or_else(|_| rgba[..written as usize].to_vec());
 
     // 4. Create SHM segment with compressed data.
     let shm_name = format!("/vexart-kitty-{}-{}", std::process::id(), image_id);
@@ -736,12 +737,12 @@ fn emit_shm_rgba_at_with_stats(
     let compression_param;
     if compression {
         let t_compress = Instant::now();
-        compressed_storage = compress_rgba(rgba);
+        compressed_storage = compress_rgba(rgba).unwrap_or_else(|_| rgba.to_vec());
         stats.compress_us = t_compress.elapsed().as_micros() as u64;
-        stats.compressed = true;
+        stats.compressed = compressed_storage.len() < rgba.len();
         stats.payload_bytes = compressed_storage.len() as u64;
         payload = &compressed_storage;
-        compression_param = ",o=z";
+        compression_param = if stats.compressed { ",o=z" } else { "" };
     } else {
         stats.payload_bytes = rgba.len() as u64;
         payload = rgba;
@@ -846,12 +847,12 @@ fn emit_region_rgba_with_stats(
     let compression_param;
     if compression {
         let t_compress = Instant::now();
-        compressed_storage = compress_rgba(rgba);
+        compressed_storage = compress_rgba(rgba).unwrap_or_else(|_| rgba.to_vec());
         stats.compress_us = t_compress.elapsed().as_micros() as u64;
-        stats.compressed = true;
+        stats.compressed = compressed_storage.len() < rgba.len();
         stats.payload_bytes = compressed_storage.len() as u64;
         payload = &compressed_storage;
-        compression_param = ",o=z";
+        compression_param = if stats.compressed { ",o=z" } else { "" };
     } else {
         stats.payload_bytes = rgba.len() as u64;
         payload = rgba;
