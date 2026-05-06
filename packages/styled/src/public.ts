@@ -140,3 +140,24 @@ export type { ToastInput, ToastPosition, ToasterHandle } from "@vexart/headless"
 
 export { VoidTooltip } from "./components/tooltip"
 export type { VoidTooltipProps } from "./components/tooltip"
+
+export { VoidTextarea } from "./components/textarea"
+export type { VoidTextareaProps } from "./components/textarea"
+
+export { VoidCode } from "./components/code"
+export type { VoidCodeProps } from "./components/code"
+
+export { VoidMarkdown } from "./components/markdown"
+export type { VoidMarkdownProps } from "./components/markdown"
+
+export { VoidList } from "./components/list"
+export type { VoidListProps } from "./components/list"
+
+export { VoidVirtualList } from "./components/virtual-list"
+export type { VoidVirtualListProps } from "./components/virtual-list"
+
+export { VoidScrollView } from "./components/scroll-view"
+export type { VoidScrollViewProps } from "./components/scroll-view"
+
+export { VoidDiff } from "./components/diff"
+export type { VoidDiffProps } from "./components/diff"
