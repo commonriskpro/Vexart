@@ -19,30 +19,34 @@ export interface AvatarProps {
     size?: AvatarSize;
 }
 
+// Warning: (ae-forgotten-export) The symbol "AVATAR_SIZE" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export type AvatarSize = "sm" | "default" | "lg";
+export type AvatarSize = (typeof AVATAR_SIZE)[keyof typeof AVATAR_SIZE];
 
 // @public (undocumented)
-export function Badge(props: BadgeProps): JSX;
+export function Badge(props: BadgeProps): JSX.Element;
 
 // @public (undocumented)
 export interface BadgeProps {
     // (undocumented)
-    children?: any;
+    children?: JSX.Element;
     // (undocumented)
     variant?: BadgeVariant;
 }
 
+// Warning: (ae-forgotten-export) The symbol "BADGE_VARIANT" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export type BadgeVariant = "default" | "secondary" | "outline" | "destructive";
+export type BadgeVariant = (typeof BADGE_VARIANT)[keyof typeof BADGE_VARIANT];
 
 // @public (undocumented)
-export function Button(props: ButtonProps): JSX;
+export function Button(props: ButtonProps): JSX.Element;
 
 // @public (undocumented)
 export interface ButtonProps {
     // (undocumented)
-    children?: any;
+    children?: JSX.Element;
     // (undocumented)
     disabled?: boolean;
     // (undocumented)
@@ -57,75 +61,79 @@ export interface ButtonProps {
     variant?: ButtonVariant;
 }
 
+// Warning: (ae-forgotten-export) The symbol "BUTTON_SIZE" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export type ButtonSize = "xs" | "sm" | "default" | "lg" | "icon" | "icon-sm" | "icon-lg";
+export type ButtonSize = (typeof BUTTON_SIZE)[keyof typeof BUTTON_SIZE];
+
+// Warning: (ae-forgotten-export) The symbol "BUTTON_VARIANT" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export type ButtonVariant = (typeof BUTTON_VARIANT)[keyof typeof BUTTON_VARIANT];
 
 // @public (undocumented)
-export type ButtonVariant = "default" | "secondary" | "outline" | "ghost" | "destructive" | "link";
+export function Card(props: CardProps): JSX.Element;
 
 // @public (undocumented)
-export function Card(props: CardProps): JSX;
-
-// @public (undocumented)
-export function CardAction(props: CardActionProps): JSX;
+export function CardAction(props: CardActionProps): JSX.Element;
 
 // @public (undocumented)
 export interface CardActionProps {
     // (undocumented)
-    children?: any;
+    children?: JSX.Element;
 }
 
 // @public (undocumented)
-export function CardContent(props: CardContentProps): JSX;
+export function CardContent(props: CardContentProps): JSX.Element;
 
 // @public (undocumented)
 export interface CardContentProps {
     // (undocumented)
-    children?: any;
+    children?: JSX.Element;
 }
 
 // @public (undocumented)
-export function CardDescription(props: CardDescriptionProps): JSX;
+export function CardDescription(props: CardDescriptionProps): JSX.Element;
 
 // @public (undocumented)
 export interface CardDescriptionProps {
     // (undocumented)
-    children?: any;
+    children?: JSX.Element;
 }
 
 // @public (undocumented)
-export function CardFooter(props: CardFooterProps): JSX;
+export function CardFooter(props: CardFooterProps): JSX.Element;
 
 // @public (undocumented)
 export interface CardFooterProps {
     // (undocumented)
-    children?: any;
+    children?: JSX.Element;
 }
 
 // @public (undocumented)
-export function CardHeader(props: CardHeaderProps): JSX;
+export function CardHeader(props: CardHeaderProps): JSX.Element;
 
 // @public (undocumented)
 export interface CardHeaderProps {
     // (undocumented)
-    children?: any;
+    children?: JSX.Element;
 }
 
 // @public (undocumented)
 export interface CardProps {
     // (undocumented)
-    children?: any;
+    children?: JSX.Element;
     // (undocumented)
     size?: "default" | "sm";
 }
 
 // @public (undocumented)
-export function CardTitle(props: CardTitleProps): JSX;
+export function CardTitle(props: CardTitleProps): JSX.Element;
 
 // @public (undocumented)
 export interface CardTitleProps {
     // (undocumented)
-    children?: any;
+    children?: JSX.Element;
 }
 
 // @public (undocumented)
@@ -200,31 +208,31 @@ export type Glow = {
 export const glows: Record<"ring" | "destructive" | "success", Glow>;
 
 // @public (undocumented)
-export function H1(props: TypographyProps): JSX;
+export function H1(props: TypographyProps): JSX.Element;
 
 // @public (undocumented)
-export function H2(props: TypographyProps): JSX;
+export function H2(props: TypographyProps): JSX.Element;
 
 // @public (undocumented)
-export function H3(props: TypographyProps): JSX;
+export function H3(props: TypographyProps): JSX.Element;
 
 // @public (undocumented)
-export function H4(props: TypographyProps): JSX;
+export function H4(props: TypographyProps): JSX.Element;
 
 // @public (undocumented)
-export function Large(props: TypographyProps): JSX;
+export function Large(props: TypographyProps): JSX.Element;
 
 // @public (undocumented)
-export function Lead(props: TypographyProps): JSX;
+export function Lead(props: TypographyProps): JSX.Element;
 
 // @public (undocumented)
 export const lightTheme: Required<ThemeDefinition>;
 
 // @public (undocumented)
-export function Muted(props: TypographyProps): JSX;
+export function Muted(props: TypographyProps): JSX.Element;
 
 // @public (undocumented)
-export function P(props: TypographyProps): JSX;
+export function P(props: TypographyProps): JSX.Element;
 
 // @public (undocumented)
 export type RadioOption = {
@@ -287,7 +295,7 @@ export interface SkeletonProps {
 }
 
 // @public (undocumented)
-export function Small(props: TypographyProps): JSX;
+export function Small(props: TypographyProps): JSX.Element;
 
 // @public (undocumented)
 export const space: {
@@ -322,8 +330,10 @@ export type TableColumn = {
     align?: "left" | "center" | "right";
 };
 
+// Warning: (ae-forgotten-export) The symbol "TABS_VARIANT" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export type TabsVariant = "default" | "line";
+export type TabsVariant = (typeof TABS_VARIANT)[keyof typeof TABS_VARIANT];
 
 // @public (undocumented)
 export const theme: {
@@ -431,7 +441,7 @@ export type ToastPosition = "top-right" | "top-left" | "bottom-right" | "bottom-
 // @public (undocumented)
 export interface TypographyProps {
     // (undocumented)
-    children?: any;
+    children?: JSX.Element;
     // (undocumented)
     color?: string | number;
 }
@@ -452,6 +462,20 @@ export type VoidCheckboxProps = {
     label?: string;
     disabled?: boolean;
     focusId?: string;
+};
+
+// @public (undocumented)
+export function VoidCode(props: VoidCodeProps): JSX;
+
+// @public (undocumented)
+export type VoidCodeProps = {
+    content: string;
+    language: string;
+    syntaxStyle: SyntaxStyle;
+    width?: number | string;
+    height?: number | string;
+    lineNumbers?: boolean;
+    streaming?: boolean;
 };
 
 // @public (undocumented)
@@ -479,19 +503,19 @@ export const VoidDialog: typeof VoidDialogRoot & {
 };
 
 // @public (undocumented)
-export function VoidDialogDescription(props: VoidDialogDescriptionProps): JSX;
+export function VoidDialogDescription(props: VoidDialogDescriptionProps): JSX.Element;
 
 // @public (undocumented)
 export type VoidDialogDescriptionProps = {
-    children?: any;
+    children?: JSX.Element;
 };
 
 // @public (undocumented)
-export function VoidDialogFooter(props: VoidDialogFooterProps): JSX;
+export function VoidDialogFooter(props: VoidDialogFooterProps): JSX.Element;
 
 // @public (undocumented)
 export type VoidDialogFooterProps = {
-    children?: any;
+    children?: JSX.Element;
 };
 
 // @public (undocumented)
@@ -499,15 +523,25 @@ export type VoidDialogProps = {
     onClose?: () => void;
     width?: number;
     maxWidth?: number;
-    children?: any;
+    children?: JSX.Element;
 };
 
 // @public (undocumented)
-export function VoidDialogTitle(props: VoidDialogTitleProps): JSX;
+export function VoidDialogTitle(props: VoidDialogTitleProps): JSX.Element;
 
 // @public (undocumented)
 export type VoidDialogTitleProps = {
-    children?: any;
+    children?: JSX.Element;
+};
+
+// @public (undocumented)
+export function VoidDiff(props: VoidDiffProps): JSX;
+
+// @public (undocumented)
+export type VoidDiffProps = {
+    diff: string;
+    showLineNumbers?: boolean;
+    width?: number | string;
 };
 
 // Warning: (ae-forgotten-export) The symbol "VoidDropdownMenuRoot" needs to be exported by the entry point index.d.ts
@@ -587,6 +621,32 @@ export type VoidInputProps = {
 };
 
 // @public (undocumented)
+export function VoidList(props: VoidListProps): JSX;
+
+// @public (undocumented)
+export type VoidListProps = {
+    items: string[];
+    selectedIndex: number;
+    onSelectedChange?: (index: number) => void;
+    onSelect?: (index: number) => void;
+    disabled?: boolean;
+    focusId?: string;
+    width?: number | string;
+    height?: number | string;
+};
+
+// @public (undocumented)
+export function VoidMarkdown(props: VoidMarkdownProps): JSX;
+
+// @public (undocumented)
+export type VoidMarkdownProps = {
+    content: string;
+    syntaxStyle: SyntaxStyle;
+    width?: number | string;
+    streaming?: boolean;
+};
+
+// @public (undocumented)
 export function VoidPopover(props: VoidPopoverProps): JSX.Element;
 
 // @public (undocumented)
@@ -625,7 +685,29 @@ export type VoidRadioGroupProps = {
 };
 
 // @public (undocumented)
-export function VoidSelect(props: VoidSelectProps): JSX;
+export function VoidScrollView(props: VoidScrollViewProps): JSX.Element;
+
+// @public (undocumented)
+export type VoidScrollViewProps = {
+    ref?: (handle: ScrollHandle) => void;
+    width?: number | string;
+    height?: number | string;
+    scrollX?: boolean;
+    scrollY?: boolean;
+    scrollSpeed?: number;
+    showScrollbar?: boolean;
+    direction?: "row" | "column";
+    padding?: number;
+    paddingX?: number;
+    paddingY?: number;
+    gap?: number;
+    alignX?: "left" | "right" | "center";
+    alignY?: "top" | "bottom" | "center";
+    children?: JSX.Element;
+};
+
+// @public (undocumented)
+export function VoidSelect(props: VoidSelectProps): JSX.Element;
 
 // @public (undocumented)
 export type VoidSelectProps = {
@@ -636,7 +718,7 @@ export type VoidSelectProps = {
     disabled?: boolean;
     focusId?: string;
     width?: number | string;
-    children?: any;
+    children?: JSX.Element;
 };
 
 // @public (undocumented)
@@ -697,6 +779,28 @@ export type VoidTabsProps = {
 };
 
 // @public (undocumented)
+export function VoidTextarea(props: VoidTextareaProps): JSX;
+
+// @public (undocumented)
+export type VoidTextareaProps = {
+    value: string;
+    onChange?: (value: string) => void;
+    onSubmit?: (value: string) => void;
+    onCursorChange?: (row: number, col: number) => void;
+    onKeyDown?: (event: KeyEvent) => void;
+    onPaste?: (text: string) => void;
+    placeholder?: string;
+    width?: number;
+    height?: number;
+    disabled?: boolean;
+    focusId?: string;
+    keyBindings?: KeyBinding[];
+    syntaxStyle?: SyntaxStyle;
+    language?: string;
+    ref?: (handle: TextareaHandle) => void;
+};
+
+// @public (undocumented)
 export type VoidTheme = typeof theme;
 
 // @public (undocumented)
@@ -721,6 +825,23 @@ export type VoidTooltipProps = {
 };
 
 // @public (undocumented)
+export function VoidVirtualList<T>(props: VoidVirtualListProps<T>): JSX.Element;
+
+// @public (undocumented)
+export type VoidVirtualListProps<T> = {
+    items: T[];
+    itemHeight: number;
+    height: number | string;
+    width?: number | string;
+    overscan?: number;
+    selectedIndex?: number;
+    onSelect?: (index: number) => void;
+    keyboard?: boolean;
+    focusId?: string;
+    renderItem: (item: T, index: number, ctx: VirtualListItemContext) => JSX.Element;
+};
+
+// @public (undocumented)
 export const weight: {
     readonly normal: 400;
     readonly medium: 500;
@@ -730,7 +851,13 @@ export const weight: {
 
 // Warnings were encountered during analysis:
 //
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/headless/src/overlays/toast.d.ts:24:5 - (ae-forgotten-export) The symbol "ToastVariant" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/headless/src/overlays/toast.d.ts:31:5 - (ae-forgotten-export) The symbol "ToastVariant" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/styled/src/components/code.d.ts:11:5 - (ae-forgotten-export) The symbol "SyntaxStyle" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/styled/src/components/scroll-view.d.ts:13:5 - (ae-forgotten-export) The symbol "ScrollHandle" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:16:5 - (ae-forgotten-export) The symbol "KeyEvent" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:23:5 - (ae-forgotten-export) The symbol "KeyBinding" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:26:5 - (ae-forgotten-export) The symbol "TextareaHandle" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/styled/src/components/virtual-list.d.ts:23:5 - (ae-forgotten-export) The symbol "VirtualListItemContext" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

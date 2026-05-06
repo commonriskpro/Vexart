@@ -124,12 +124,7 @@ export function boostWindowFor(kind: InteractionKind, boosts: FrameSchedulerBoos
 export type BorderRenderInputs = {
     radius: number;
     width: number;
-    cornerRadii: {
-        tl: number;
-        tr: number;
-        br: number;
-        bl: number;
-    } | null;
+    cornerRadii: CornerRadii | null;
 };
 
 // @public (undocumented)
@@ -272,13 +267,12 @@ export function clearSelection(): void;
 export function clearTextCache(): void;
 
 // @public (undocumented)
-export function cloneRenderGraphQueues(queues: RenderGraphQueues): RenderGraphQueues;
-
-// @public (undocumented)
 export function closeVexartLibrary(): void;
 
-// @public
-export type CompositorProperty = "transform" | "opacity";
+// Warning: (ae-forgotten-export) The symbol "COMPOSITOR_PROPERTY" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export type CompositorProperty = (typeof COMPOSITOR_PROPERTY)[keyof typeof COMPOSITOR_PROPERTY];
 
 // @public (undocumented)
 export const COMPRESS_MODE: {
@@ -298,6 +292,14 @@ export interface ConfigureKittyTransportManagerOptions {
     // (undocumented)
     probe: Record<Exclude<TransmissionMode, "direct">, boolean>;
 }
+
+// @public
+export type CornerRadii = {
+    tl: number;
+    tr: number;
+    br: number;
+    bl: number;
+};
 
 // @public (undocumented)
 export const createComponent: <T>(Comp: (props: T) => TGENode, props: T) => TGENode;
@@ -338,9 +340,6 @@ export function createParticleSystem(config: ParticleConfig): ParticleSystem;
 export function createPressEvent(): PressEvent;
 
 // @public (undocumented)
-export function createRenderGraphQueues(): RenderGraphQueues;
-
-// @public (undocumented)
 export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): RenderLoop;
 
 // @public (undocumented)
@@ -379,13 +378,8 @@ export function createTransition(initial: number, config?: TransitionConfig): [(
 // @public (undocumented)
 export function createWriter(write: (data: string) => void): (data: string) => void;
 
-// @public (undocumented)
-export type DamageRect = {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-};
+// @public
+export type DamageRect = Rect;
 
 // @public (undocumented)
 export function damageRectArea(rect: DamageRect | null | undefined): number;
@@ -405,37 +399,8 @@ export function debugDumpTree(target: NodeHandle | TGENode): string;
 // @public (undocumented)
 export function debugFrameStart(): () => void;
 
-// @public (undocumented)
-export const debugState: {
-    readonly enabled: boolean;
-    readonly fps: number;
-    readonly frameTimeMs: number;
-    readonly layerCount: number;
-    readonly moveOnlyCount: number;
-    readonly moveFallbackCount: number;
-    readonly stableReuseCount: number;
-    readonly dirtyBeforeCount: number;
-    readonly repaintedCount: number;
-    readonly nodeCount: number;
-    readonly commandCount: number;
-    readonly rendererStrategy: string | null;
-    readonly rendererOutput: string | null;
-    readonly resourceBytes: number;
-    readonly gpuResourceBytes: number;
-    readonly resourceEntries: number;
-    readonly transmissionMode: string | null;
-    readonly estimatedLayeredBytes: number;
-    readonly estimatedFinalBytes: number;
-    readonly interactionLatencyMs: number;
-    readonly interactionType: string | null;
-    readonly presentedInteractionSeq: number;
-    readonly nativePresentationActive: boolean;
-    readonly nativePresentationFallbackReason: string | null;
-    readonly nativeStats: NativePresentationStats | null;
-    readonly nativeFrameReasonFlags: number | null;
-    readonly nativeFrameStats: NativeFrameExecutionStatsInput | null;
-    readonly ffiCallCount: number;
-};
+// @public
+export const debugState: Readonly<DebugStats>;
 
 // @public (undocumented)
 export type DebugStats = {
@@ -472,37 +437,10 @@ export type DebugStats = {
 // @public (undocumented)
 export function debugStatsLine(): string;
 
+// Warning: (ae-forgotten-export) The symbol "DebugUpdateStatsInput" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export function debugUpdateStats(stats: {
-    layerCount: number;
-    moveOnlyCount?: number;
-    moveFallbackCount?: number;
-    stableReuseCount?: number;
-    dirtyBeforeCount: number;
-    repaintedCount: number;
-    nodeCount: number;
-    commandCount: number;
-    rendererStrategy?: string | null;
-    rendererOutput?: string | null;
-    dirtyPixelArea?: number;
-    totalPixelArea?: number;
-    overlapPixelArea?: number;
-    overlapRatio?: number;
-    fullRepaint?: boolean;
-    resourceBytes?: number;
-    gpuResourceBytes?: number;
-    resourceEntries?: number;
-    transmissionMode?: string | null;
-    estimatedLayeredBytes?: number;
-    estimatedFinalBytes?: number;
-    interactionLatencyMs?: number;
-    interactionType?: string | null;
-    presentedInteractionSeq?: number;
-    nativeStats?: NativePresentationStats | null;
-    nativeFrameReasonFlags?: number | null;
-    ffiCallCount?: number;
-    ffiCallsBySymbol?: Record<string, number>;
-}): void;
+export function debugUpdateStats(stats: DebugUpdateStatsInput): void;
 
 // @public (undocumented)
 export type DecodedImage = {
@@ -636,20 +574,10 @@ export type EffectConfig = {
     backdropSepia?: number;
     backdropHueRotate?: number;
     opacity?: number;
-    cornerRadii?: {
-        tl: number;
-        tr: number;
-        br: number;
-        bl: number;
-    };
+    cornerRadii?: CornerRadii;
     transform?: Float64Array;
     transformInverse?: Float64Array;
-    transformBounds?: {
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-    };
+    transformBounds?: Rect;
     filter?: FilterConfig;
     _node?: TGENode;
     _stateHash?: number;
@@ -895,6 +823,13 @@ export type GlowCmd = {
     intensity: number;
 };
 
+// @public
+export type GlowConfig = {
+    radius: number;
+    color: string | number;
+    intensity?: number;
+};
+
 // @public (undocumented)
 export type GpuLayerStrategyInput = {
     dirtyLayerCount: number;
@@ -912,8 +847,10 @@ export type GpuLayerStrategyInput = {
     framesSinceChange: number;
 };
 
+// Warning: (ae-forgotten-export) The symbol "GPU_LAYER_STRATEGY_MODE" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export type GpuLayerStrategyMode = "skip-present" | "layered-dirty" | "layered-region" | "final-frame";
+export type GpuLayerStrategyMode = (typeof GPU_LAYER_STRATEGY_MODE)[keyof typeof GPU_LAYER_STRATEGY_MODE];
 
 // @public (undocumented)
 export type GpuRendererBackend = RendererBackend & {
@@ -937,6 +874,18 @@ export type GpuRendererBackendCacheStats = {
     backdropSourceBytes: number;
     backdropSpriteCount: number;
     backdropSpriteBytes: number;
+};
+
+// @public
+export type GradientConfig = {
+    type: "linear";
+    from: string | number;
+    to: string | number;
+    angle?: number;
+} | {
+    type: "radial";
+    from: string | number;
+    to: string | number;
 };
 
 // @public (undocumented)
@@ -1052,10 +1001,18 @@ export function insertChild(parent: TGENode, child: TGENode, anchor?: TGENode): 
 export const insertNode: (parent: TGENode, node: TGENode, anchor?: TGENode | undefined) => void;
 
 // @public (undocumented)
-export type InteractionBinding = "auto" | "none" | InteractionLayerState;
+export const INTERACTION_MODE: {
+    readonly NONE: "none";
+    readonly DRAG: "drag";
+};
 
 // @public (undocumented)
-export type InteractionKind = "pointer" | "scroll" | "key";
+export type InteractionBinding = "auto" | "none" | InteractionLayerState;
+
+// Warning: (ae-forgotten-export) The symbol "INTERACTION_KIND" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export type InteractionKind = (typeof INTERACTION_KIND)[keyof typeof INTERACTION_KIND];
 
 // @public (undocumented)
 export type InteractionLayerState = {
@@ -1067,7 +1024,7 @@ export type InteractionLayerState = {
 };
 
 // @public (undocumented)
-export type InteractionMode = "none" | "drag";
+export type InteractionMode = (typeof INTERACTION_MODE)[keyof typeof INTERACTION_MODE];
 
 // @public (undocumented)
 export type InteractionTrace = {
@@ -1303,8 +1260,10 @@ export type MountOptions = {
     };
 };
 
+// Warning: (ae-forgotten-export) The symbol "MOUSE_ACTION" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export type MouseAction = "press" | "release" | "move" | "scroll";
+export type MouseAction = (typeof MOUSE_ACTION)[keyof typeof MOUSE_ACTION];
 
 // @public (undocumented)
 export const MouseButton: {
@@ -1560,13 +1519,13 @@ export type PasteEvent = {
 };
 
 // @public (undocumented)
-export function patchRegion(write: (data: string) => void, id: number, regionData: Uint8Array, rx: number, ry: number, rw: number, rh: number, opts?: {
-    mode?: TransmissionMode;
-    compress?: CompressMode;
-}): void;
-
-// @public (undocumented)
 export function perspective(distance: number, rotateX?: number, rotateY?: number): Matrix3;
+
+// @public
+export type Point2D = {
+    x: number;
+    y: number;
+};
 
 // @public (undocumented)
 export type PolygonCmd = {
@@ -1660,6 +1619,14 @@ export type RawImageData = {
     height: number;
 };
 
+// @public
+export type Rect = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+};
+
 // @public (undocumented)
 export type RectangleRenderInputs = {
     renderObjectId: number | null;
@@ -1715,17 +1682,8 @@ export function releaseScrollHandle(scrollId: string): void;
 // @public (undocumented)
 export function removeChild(parent: TGENode, child: TGENode): void;
 
-// @public (undocumented)
-export interface RenderBounds {
-    // (undocumented)
-    height: number;
-    // (undocumented)
-    width: number;
-    // (undocumented)
-    x: number;
-    // (undocumented)
-    y: number;
-}
+// @public
+export type RenderBounds = Rect;
 
 // @public (undocumented)
 export type RenderCommand = {
@@ -1820,24 +1778,7 @@ export type RendererBackendLayerContext = {
     key: string;
     z: number;
     backing: RendererBackendLayerBacking | null;
-    subtreeTransform: {
-        p0: {
-            x: number;
-            y: number;
-        };
-        p1: {
-            x: number;
-            y: number;
-        };
-        p2: {
-            x: number;
-            y: number;
-        };
-        p3: {
-            x: number;
-            y: number;
-        };
-    } | null;
+    subtreeTransform: TransformQuad | null;
     isBackground: boolean;
     bounds: DamageRect;
     dirtyRect: DamageRect | null;
@@ -1903,24 +1844,7 @@ export type RendererBackendRetainedLayer = {
     key: string;
     z: number;
     bounds: DamageRect;
-    subtreeTransform: {
-        p0: {
-            x: number;
-            y: number;
-        };
-        p1: {
-            x: number;
-            y: number;
-        };
-        p2: {
-            x: number;
-            y: number;
-        };
-        p3: {
-            x: number;
-            y: number;
-        };
-    } | null;
+    subtreeTransform: TransformQuad | null;
     isBackground: boolean;
     opacity: number;
 };
@@ -1932,13 +1856,6 @@ export type RenderGraphFrame = {
 
 // @public (undocumented)
 export type RenderGraphOp = RectangleRenderOp | ImageRenderOp | CanvasRenderOp | EffectRenderOp | BorderRenderOp | TextRenderOp | RawCommandRenderOp;
-
-// @public (undocumented)
-export type RenderGraphQueues = {
-    effects: Map<number, EffectConfig>;
-    images: Map<number, ImagePaintConfig>;
-    canvases: Map<number, CanvasPaintConfig>;
-};
 
 // @public (undocumented)
 export type RenderLoop = {
@@ -1992,9 +1909,6 @@ export function resetKittyTransportManager(): void;
 
 // @public (undocumented)
 export function resetKittyTransportStats(): void;
-
-// @public (undocumented)
-export function resetRenderGraphQueues(queues: RenderGraphQueues): void;
 
 // @public (undocumented)
 export function resetScrollHandles(): void;
@@ -2158,6 +2072,14 @@ export function setRendererBackend(backend: RendererBackend | null): void;
 
 // @public (undocumented)
 export function setSelection(sel: TextSelection | null): void;
+
+// @public
+export type ShadowConfig = {
+    x: number;
+    y: number;
+    blur: number;
+    color: string | number;
+};
 
 // @public (undocumented)
 export type ShadowDef = {
@@ -2380,6 +2302,15 @@ export type TextSelection = {
 };
 
 // @public (undocumented)
+export const TGE_NODE_KIND: {
+    readonly BOX: "box";
+    readonly TEXT: "text";
+    readonly IMG: "img";
+    readonly CANVAS: "canvas";
+    readonly ROOT: "root";
+};
+
+// @public (undocumented)
 export type TGENode = {
     kind: TGENodeKind;
     props: TGEProps;
@@ -2424,7 +2355,7 @@ export type TGENode = {
 };
 
 // @public (undocumented)
-export type TGENodeKind = "box" | "text" | "img" | "canvas" | "root";
+export type TGENodeKind = (typeof TGE_NODE_KIND)[keyof typeof TGE_NODE_KIND];
 
 // @public (undocumented)
 export type TgePlugin<Context = {}> = {
@@ -2460,12 +2391,7 @@ export type TGEProps = {
     backgroundColor?: string | number;
     cornerRadius?: number;
     borderRadius?: number;
-    cornerRadii?: {
-        tl: number;
-        tr: number;
-        br: number;
-        bl: number;
-    };
+    cornerRadii?: CornerRadii;
     borderColor?: string | number;
     borderWidth?: number;
     opacity?: number;
@@ -2507,33 +2433,10 @@ export type TGEProps = {
     borderTop?: number;
     borderBottom?: number;
     borderBetweenChildren?: number;
-    shadow?: {
-        x: number;
-        y: number;
-        blur: number;
-        color: string | number;
-    } | Array<{
-        x: number;
-        y: number;
-        blur: number;
-        color: string | number;
-    }>;
+    shadow?: ShadowConfig | ShadowConfig[];
     boxShadow?: TGEProps["shadow"];
-    glow?: {
-        radius: number;
-        color: string | number;
-        intensity?: number;
-    };
-    gradient?: {
-        type: "linear";
-        from: string | number;
-        to: string | number;
-        angle?: number;
-    } | {
-        type: "radial";
-        from: string | number;
-        to: string | number;
-    };
+    glow?: GlowConfig;
+    gradient?: GradientConfig;
     backdropBlur?: number;
     backdropBrightness?: number;
     backdropContrast?: number;
@@ -2550,25 +2453,13 @@ export type TGEProps = {
     focusStyle?: InteractiveStyleProps;
     onPress?: (event?: PressEvent) => void;
     focusable?: boolean;
-    onKeyDown?: (event: any) => void;
+    onKeyDown?: (event: KeyEvent) => void;
     onMouseDown?: (event: NodeMouseEvent) => void;
     onMouseUp?: (event: NodeMouseEvent) => void;
     onMouseMove?: (event: NodeMouseEvent) => void;
     onMouseOver?: (event: NodeMouseEvent) => void;
     onMouseOut?: (event: NodeMouseEvent) => void;
-    transform?: {
-        translateX?: number;
-        translateY?: number;
-        rotate?: number;
-        scale?: number;
-        scaleX?: number;
-        scaleY?: number;
-        skewX?: number;
-        skewY?: number;
-        perspective?: number;
-        rotateX?: number;
-        rotateY?: number;
-    };
+    transform?: TransformConfig;
     transformOrigin?: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | {
         x: number;
         y: number;
@@ -2578,11 +2469,7 @@ export type TGEProps = {
     objectFit?: "contain" | "cover" | "fill" | "none";
     onDraw?: (ctx: CanvasContext) => void;
     drawCacheKey?: string | number;
-    viewport?: {
-        x: number;
-        y: number;
-        zoom: number;
-    };
+    viewport?: ViewportConfig;
     color?: string | number;
     fontSize?: number;
     fontId?: number;
@@ -2623,10 +2510,33 @@ export function transformBounds(m: Matrix3, w: number, h: number): {
     height: number;
 };
 
+// @public
+export type TransformConfig = {
+    translateX?: number;
+    translateY?: number;
+    rotate?: number;
+    scale?: number;
+    scaleX?: number;
+    scaleY?: number;
+    skewX?: number;
+    skewY?: number;
+    perspective?: number;
+    rotateX?: number;
+    rotateY?: number;
+};
+
 // @public (undocumented)
 export function transformPoint(m: Matrix3, x: number, y: number): {
     x: number;
     y: number;
+};
+
+// @public
+export type TransformQuad = {
+    p0: Point2D;
+    p1: Point2D;
+    p2: Point2D;
+    p3: Point2D;
 };
 
 // @public (undocumented)
@@ -2646,27 +2556,10 @@ export function translate(tx: number, ty: number): Matrix3;
 // @public (undocumented)
 export function translateRect(rect: DamageRect, dx: number, dy: number): DamageRect;
 
+// Warning: (ae-forgotten-export) The symbol "TRANSMISSION_MODE" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export type TransmissionMode = "shm" | "file" | "direct";
-
-// @public (undocumented)
-export function transmitRaw(write: (data: string) => void, image: RawImageData, id: number, opts?: {
-    action?: "t" | "T" | "p";
-    format?: 24 | 32;
-    z?: number;
-    placementId?: number;
-    mode?: TransmissionMode;
-    compress?: CompressMode;
-}): void;
-
-// @public (undocumented)
-export function transmitRawAt(write: (data: string) => void, image: RawImageData, id: number, col: number, row: number, opts?: {
-    z?: number;
-    placementId?: number;
-    mode?: TransmissionMode;
-    compress?: CompressMode;
-    format?: 24 | 32;
-}): void;
+export type TransmissionMode = (typeof TRANSMISSION_MODE)[keyof typeof TRANSMISSION_MODE];
 
 // @public (undocumented)
 export const TRANSPORT_FAILURE_REASON: {
@@ -2975,6 +2868,13 @@ export type Viewport = {
     zoom: number;
 };
 
+// @public
+export type ViewportConfig = {
+    x: number;
+    y: number;
+    zoom: number;
+};
+
 // @public (undocumented)
 export function wrapPassthrough(raw: string): string;
 
@@ -2983,10 +2883,9 @@ export function writeHeader(view: DataView, cmdCount: number, payloadBytes: numb
 
 // Warnings were encountered during analysis:
 //
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node.d.ts:330:5 - (ae-forgotten-export) The symbol "NodeImageExtra" needs to be exported by the entry point index.d.ts
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node.d.ts:332:5 - (ae-forgotten-export) The symbol "NodeCanvasExtra" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node.d.ts:350:5 - (ae-forgotten-export) The symbol "NodeImageExtra" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node.d.ts:352:5 - (ae-forgotten-export) The symbol "NodeCanvasExtra" needs to be exported by the entry point index.d.ts
 // /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/loop/debug.d.ts:85:5 - (ae-forgotten-export) The symbol "NativeFrameExecutionStats" needs to be exported by the entry point index.d.ts
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/loop/debug.d.ts:166:5 - (ae-forgotten-export) The symbol "NativeFrameExecutionStatsInput" needs to be exported by the entry point index.d.ts
 // /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/reconciler/router.d.ts:41:5 - (ae-forgotten-export) The symbol "NavigationParams" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)

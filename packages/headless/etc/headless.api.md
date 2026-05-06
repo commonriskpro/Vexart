@@ -43,16 +43,10 @@ export type CheckboxProps = {
     renderCheckbox: (ctx: CheckboxRenderContext) => JSX.Element;
 };
 
+// Warning: (ae-forgotten-export) The symbol "ToggleRenderContext" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export type CheckboxRenderContext = {
-    checked: boolean;
-    focused: boolean;
-    disabled: boolean;
-    toggleProps: {
-        focusable: true;
-        onPress: () => void;
-    };
-};
+export type CheckboxRenderContext = ToggleRenderContext;
 
 // @public (undocumented)
 export function Code(props: CodeProps): JSX.Element;
@@ -138,19 +132,19 @@ export const Dialog: typeof DialogRoot & {
 };
 
 // @public
-export function DialogClose(props: DialogCloseProps): JSX;
+export function DialogClose(props: DialogCloseProps): JSX.Element;
 
 // @public (undocumented)
 export type DialogCloseProps = {
-    children?: any;
+    children?: JSX.Element;
 };
 
 // @public
-export function DialogContent(props: DialogContentProps): JSX;
+export function DialogContent(props: DialogContentProps): JSX.Element;
 
 // @public (undocumented)
 export type DialogContentProps = {
-    children?: any;
+    children?: JSX.Element;
     width?: number | string;
     maxWidth?: number;
     padding?: number;
@@ -159,19 +153,19 @@ export type DialogContentProps = {
 };
 
 // @public (undocumented)
-export function DialogOverlay(props: DialogOverlayProps): JSX;
+export function DialogOverlay(props: DialogOverlayProps): JSX.Element;
 
 // @public (undocumented)
 export type DialogOverlayProps = {
     backgroundColor?: string | number;
     backdropBlur?: number;
     onClick?: () => void;
-    children?: any;
+    children?: JSX.Element;
 };
 
 // @public (undocumented)
 export type DialogProps = {
-    children?: any;
+    children?: JSX.Element;
     onClose?: () => void;
 };
 
@@ -441,7 +435,7 @@ export type NavigationStackHandle = {
 // @public (undocumented)
 export type NavigationStackProps = {
     initial?: (props: ScreenProps) => JSX.Element;
-    children?: any;
+    children?: JSX.Element;
 };
 
 // @public
@@ -573,7 +567,7 @@ export type RouterContextValue = {
 // @public (undocumented)
 export type RouterProps = {
     initial?: string;
-    children?: any;
+    children?: JSX.Element;
 };
 
 // @public (undocumented)
@@ -767,15 +761,7 @@ export type SwitchProps = {
 };
 
 // @public (undocumented)
-export type SwitchRenderContext = {
-    checked: boolean;
-    focused: boolean;
-    disabled: boolean;
-    toggleProps: {
-        focusable: true;
-        onPress: () => void;
-    };
-};
+export type SwitchRenderContext = ToggleRenderContext;
 
 // @public (undocumented)
 export class SyntaxStyle {
@@ -963,8 +949,10 @@ export type ToastInput = string | {
 // @public (undocumented)
 export type ToastPosition = "top-right" | "top-left" | "bottom-right" | "bottom-left" | "top-center" | "bottom-center";
 
+// Warning: (ae-forgotten-export) The symbol "TOAST_VARIANT" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export type ToastVariant = "default" | "success" | "error" | "warning" | "info";
+export type ToastVariant = (typeof TOAST_VARIANT)[keyof typeof TOAST_VARIANT];
 
 // @public (undocumented)
 export function Tooltip(props: TooltipProps): JSX.Element;

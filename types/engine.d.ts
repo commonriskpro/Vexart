@@ -112,12 +112,7 @@ export declare function boostWindowFor(kind: InteractionKind, boosts: FrameSched
 export declare type BorderRenderInputs = {
     radius: number;
     width: number;
-    cornerRadii: {
-        tl: number;
-        tr: number;
-        br: number;
-        bl: number;
-    } | null;
+    cornerRadii: CornerRadii | null;
 };
 
 /** @public */
@@ -294,32 +289,18 @@ export declare function clearSelection(): void;
 /** @public */
 export declare function clearTextCache(): void;
 
-/** @public */
-export declare function cloneRenderGraphQueues(queues: RenderGraphQueues): RenderGraphQueues;
-
 /** Close the library (if open) and reset the singleton. */
 /** @public */
 export declare function closeVexartLibrary(): void;
 
-/**
- * Compositor-thread animation fast path (REQ-2B-301 through REQ-2B-305).
- *
- * When createTransition or createSpring targets 'transform' or 'opacity',
- * an AnimationDescriptor is registered here. The frame loop can then detect
- * when ONLY compositor-animated properties changed and skip the expensive
- * reconciler→walkTree→layout→paint pipeline.
- *
- * Phase 2b: Descriptor table + detection logic is in place.
- * The actual uniform-only GPU update falls back to full repaint initially;
- * the fast-path GPU plumbing lands in Phase 3.
- *
- * Architecture note:
- *   TS: createSpring/createTransition → registerAnimationDescriptor()
- *   Frame loop: isCompositorOnlyFrame() → if true, skip reconciler/paint
- *   GPU: (Phase 3) vexart_composite_update_uniform(target, nodeId, matrix)
- */
 /** @public Properties that can animate on the compositor thread. */
-export declare type CompositorProperty = "transform" | "opacity";
+declare const COMPOSITOR_PROPERTY: {
+    readonly TRANSFORM: "transform";
+    readonly OPACITY: "opacity";
+};
+
+/** @public */
+export declare type CompositorProperty = (typeof COMPOSITOR_PROPERTY)[keyof typeof COMPOSITOR_PROPERTY];
 
 /** @public */
 export declare const COMPRESS_MODE: {
@@ -337,6 +318,14 @@ export declare interface ConfigureKittyTransportManagerOptions {
     preferredMode: TransmissionMode;
     probe: Record<Exclude<TransmissionMode, "direct">, boolean>;
 }
+
+/** @public Per-corner radius values. */
+export declare type CornerRadii = {
+    tl: number;
+    tr: number;
+    br: number;
+    bl: number;
+};
 
 /** @public */
 export declare const createComponent: <T>(Comp: (props: T) => TGENode, props: T) => TGENode;
@@ -384,9 +373,6 @@ export declare function createParticleSystem(config: ParticleConfig): ParticleSy
 export declare function createPressEvent(): PressEvent;
 
 /** @public */
-export declare function createRenderGraphQueues(): RenderGraphQueues;
-
-/** @public */
 export declare function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): RenderLoop;
 
 /** @public */
@@ -430,13 +416,8 @@ export declare function createTransition(initial: number, config?: TransitionCon
 /** @public */
 export declare function createWriter(write: (data: string) => void): (data: string) => void;
 
-/** @public */
-export declare type DamageRect = {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-};
+/** @public Alias kept for API compat — prefer `Rect` in new code. */
+export declare type DamageRect = Rect;
 
 /** @public */
 export declare function damageRectArea(rect: DamageRect | null | undefined): number;
@@ -468,37 +449,12 @@ export declare function debugDumpTree(target: NodeHandle | TGENode): string;
 /** @public */
 export declare function debugFrameStart(): () => void;
 
-/** @public */
-export declare const debugState: {
-    readonly enabled: boolean;
-    readonly fps: number;
-    readonly frameTimeMs: number;
-    readonly layerCount: number;
-    readonly moveOnlyCount: number;
-    readonly moveFallbackCount: number;
-    readonly stableReuseCount: number;
-    readonly dirtyBeforeCount: number;
-    readonly repaintedCount: number;
-    readonly nodeCount: number;
-    readonly commandCount: number;
-    readonly rendererStrategy: string | null;
-    readonly rendererOutput: string | null;
-    readonly resourceBytes: number;
-    readonly gpuResourceBytes: number;
-    readonly resourceEntries: number;
-    readonly transmissionMode: string | null;
-    readonly estimatedLayeredBytes: number;
-    readonly estimatedFinalBytes: number;
-    readonly interactionLatencyMs: number;
-    readonly interactionType: string | null;
-    readonly presentedInteractionSeq: number;
-    readonly nativePresentationActive: boolean;
-    readonly nativePresentationFallbackReason: string | null;
-    readonly nativeStats: NativePresentationStats | null;
-    readonly nativeFrameReasonFlags: number | null;
-    readonly nativeFrameStats: NativeFrameExecutionStatsInput | null;
-    readonly ffiCallCount: number;
-};
+/**
+ * Reactive debug stats — read in SolidJS components.
+ * Property access triggers fine-grained signal tracking.
+ * @public
+ */
+export declare const debugState: Readonly<DebugStats>;
 
 /** @public */
 export declare type DebugStats = {
@@ -569,7 +525,10 @@ export declare function debugStatsLine(): string;
 
 /** Update debug stats from the render loop. */
 /** @public */
-export declare function debugUpdateStats(stats: {
+export declare function debugUpdateStats(stats: DebugUpdateStatsInput): void;
+
+/** Input type for debugUpdateStats — matches the inline parameter object. */
+declare type DebugUpdateStatsInput = {
     layerCount: number;
     moveOnlyCount?: number;
     moveFallbackCount?: number;
@@ -598,7 +557,7 @@ export declare function debugUpdateStats(stats: {
     nativeFrameReasonFlags?: number | null;
     ffiCallCount?: number;
     ffiCallsBySymbol?: Record<string, number>;
-}): void;
+};
 
 /** @public */
 export declare type DecodedImage = {
@@ -739,20 +698,10 @@ export declare type EffectConfig = {
     backdropSepia?: number;
     backdropHueRotate?: number;
     opacity?: number;
-    cornerRadii?: {
-        tl: number;
-        tr: number;
-        br: number;
-        bl: number;
-    };
+    cornerRadii?: CornerRadii;
     transform?: Float64Array;
     transformInverse?: Float64Array;
-    transformBounds?: {
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-    };
+    transformBounds?: Rect;
     /** Self-filter applied to this element's own paint output (REQ-2B-401/402). */
     filter?: FilterConfig;
     _node?: TGENode;
@@ -1087,6 +1036,21 @@ export declare type GlowCmd = {
     intensity: number;
 };
 
+/** @public Glow effect configuration (pre-parse, accepts string | number colors). */
+export declare type GlowConfig = {
+    radius: number;
+    color: string | number;
+    intensity?: number;
+};
+
+/** @public */
+declare const GPU_LAYER_STRATEGY_MODE: {
+    readonly SKIP_PRESENT: "skip-present";
+    readonly LAYERED_DIRTY: "layered-dirty";
+    readonly LAYERED_REGION: "layered-region";
+    readonly FINAL_FRAME: "final-frame";
+};
+
 /** @public */
 export declare type GpuLayerStrategyInput = {
     dirtyLayerCount: number;
@@ -1105,7 +1069,7 @@ export declare type GpuLayerStrategyInput = {
 };
 
 /** @public */
-export declare type GpuLayerStrategyMode = "skip-present" | "layered-dirty" | "layered-region" | "final-frame";
+export declare type GpuLayerStrategyMode = (typeof GPU_LAYER_STRATEGY_MODE)[keyof typeof GPU_LAYER_STRATEGY_MODE];
 
 /** @public */
 export declare type GpuRendererBackend = RendererBackend & {
@@ -1130,6 +1094,18 @@ export declare type GpuRendererBackendCacheStats = {
     backdropSourceBytes: number;
     backdropSpriteCount: number;
     backdropSpriteBytes: number;
+};
+
+/** @public Gradient configuration (pre-parse, accepts string | number colors). */
+export declare type GradientConfig = {
+    type: "linear";
+    from: string | number;
+    to: string | number;
+    angle?: number;
+} | {
+    type: "radial";
+    from: string | number;
+    to: string | number;
 };
 
 /** @public */
@@ -1255,10 +1231,23 @@ export declare function insertChild(parent: TGENode, child: TGENode, anchor?: TG
 export declare const insertNode: (parent: TGENode, node: TGENode, anchor?: TGENode | undefined) => void;
 
 /** @public */
+declare const INTERACTION_KIND: {
+    readonly POINTER: "pointer";
+    readonly SCROLL: "scroll";
+    readonly KEY: "key";
+};
+
+/** @public */
+export declare const INTERACTION_MODE: {
+    readonly NONE: "none";
+    readonly DRAG: "drag";
+};
+
+/** @public */
 export declare type InteractionBinding = "auto" | "none" | InteractionLayerState;
 
 /** @public */
-export declare type InteractionKind = "pointer" | "scroll" | "key";
+export declare type InteractionKind = (typeof INTERACTION_KIND)[keyof typeof INTERACTION_KIND];
 
 /** @public */
 export declare type InteractionLayerState = {
@@ -1270,7 +1259,7 @@ export declare type InteractionLayerState = {
 };
 
 /** @public */
-export declare type InteractionMode = "none" | "drag";
+export declare type InteractionMode = (typeof INTERACTION_MODE)[keyof typeof INTERACTION_MODE];
 
 /** @public */
 export declare type InteractionTrace = {
@@ -1516,7 +1505,15 @@ export declare type MountOptions = {
 };
 
 /** @public */
-export declare type MouseAction = "press" | "release" | "move" | "scroll";
+declare const MOUSE_ACTION: {
+    readonly PRESS: "press";
+    readonly RELEASE: "release";
+    readonly MOVE: "move";
+    readonly SCROLL: "scroll";
+};
+
+/** @public */
+export declare type MouseAction = (typeof MOUSE_ACTION)[keyof typeof MOUSE_ACTION];
 
 /** @public */
 export declare const MouseButton: {
@@ -1919,28 +1916,14 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      text: string;
  };
 
- /**
-  * Patch a region of an already-transmitted image using animation frame (a=f).
-  *
-  * Uses Kitty's animation frame protocol to update a sub-rectangle of an
-  * existing image. The terminal composites the new data over the existing frame.
-  *
-  * @param regionData - Raw RGBA pixel data for the dirty region only.
-  * @param rx - X offset within the image where the patch starts.
-  * @param ry - Y offset within the image where the patch starts.
-  * @param rw - Width of the patch region.
-  * @param rh - Height of the patch region.
-  *
-  * Experimental: requires the image to have been transmitted at least once.
-  */
- /** @public */
- export declare function patchRegion(write: (data: string) => void, id: number, regionData: Uint8Array, rx: number, ry: number, rw: number, rh: number, opts?: {
-     mode?: TransmissionMode;
-     compress?: CompressMode;
- }): void;
-
  /** @public */
  export declare function perspective(distance: number, rotateX?: number, rotateY?: number): Matrix3;
+
+ /** @public A 2D point. */
+ export declare type Point2D = {
+     x: number;
+     y: number;
+ };
 
  /** @public */
  export declare type PolygonCmd = {
@@ -1982,6 +1965,13 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
   */
  export declare function probeKittyGraphics(write: (data: string) => void, onData: (handler: (data: Buffer) => void) => void, offData: (handler: (data: Buffer) => void) => void, timeout?: number): Promise<boolean>;
 
+ /**
+  * Probe if the terminal supports shared memory transmission.
+  *
+  * Creates a tiny 64x64 shm segment, sends a query action (a=q),
+  * and checks if terminal responds with OK.
+  */
+ /** @public */
  export declare function probeShm(write: (data: string) => void, onData: (handler: (data: Buffer) => void) => void, offData: (handler: (data: Buffer) => void) => void, timeout?: number): Promise<boolean>;
 
  /** @public */
@@ -2066,6 +2056,14 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      height: number;
  };
 
+ /** @public Axis-aligned rectangle (origin + size). */
+ export declare type Rect = {
+     x: number;
+     y: number;
+     width: number;
+     height: number;
+ };
+
  /** @public */
  export declare type RectangleRenderInputs = {
      renderObjectId: number | null;
@@ -2122,13 +2120,8 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
  /** @public */
  export declare function removeChild(parent: TGENode, child: TGENode): void;
 
- /** @public */
- export declare interface RenderBounds {
-     x: number;
-     y: number;
-     width: number;
-     height: number;
- }
+ /** @public Alias for Rect — kept for API compat. */
+ export declare type RenderBounds = Rect;
 
  /** @public */
  export declare type RenderCommand = {
@@ -2243,24 +2236,7 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      key: string;
      z: number;
      backing: RendererBackendLayerBacking | null;
-     subtreeTransform: {
-         p0: {
-             x: number;
-             y: number;
-         };
-         p1: {
-             x: number;
-             y: number;
-         };
-         p2: {
-             x: number;
-             y: number;
-         };
-         p3: {
-             x: number;
-             y: number;
-         };
-     } | null;
+     subtreeTransform: TransformQuad | null;
      isBackground: boolean;
      bounds: DamageRect;
      dirtyRect: DamageRect | null;
@@ -2328,24 +2304,7 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      key: string;
      z: number;
      bounds: DamageRect;
-     subtreeTransform: {
-         p0: {
-             x: number;
-             y: number;
-         };
-         p1: {
-             x: number;
-             y: number;
-         };
-         p2: {
-             x: number;
-             y: number;
-         };
-         p3: {
-             x: number;
-             y: number;
-         };
-     } | null;
+     subtreeTransform: TransformQuad | null;
      isBackground: boolean;
      opacity: number;
  };
@@ -2357,13 +2316,6 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
 
  /** @public */
  export declare type RenderGraphOp = RectangleRenderOp | ImageRenderOp | CanvasRenderOp | EffectRenderOp | BorderRenderOp | TextRenderOp | RawCommandRenderOp;
-
- /** @public */
- export declare type RenderGraphQueues = {
-     effects: Map<number, EffectConfig>;
-     images: Map<number, ImagePaintConfig>;
-     canvases: Map<number, CanvasPaintConfig>;
- };
 
  /** @public */
  export declare type RenderLoop = {
@@ -2418,9 +2370,6 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
 
  /** @public */
  export declare function resetKittyTransportStats(): void;
-
- /** @public */
- export declare function resetRenderGraphQueues(queues: RenderGraphQueues): void;
 
  /** @public */
  export declare function resetScrollHandles(): void;
@@ -2599,6 +2548,14 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
 
  /** @public */
  export declare function setSelection(sel: TextSelection | null): void;
+
+ /** @public Shadow definition (pre-parse, accepts string | number colors). */
+ export declare type ShadowConfig = {
+     x: number;
+     y: number;
+     blur: number;
+     color: string | number;
+ };
 
  /** @public */
  export declare type ShadowDef = {
@@ -2922,6 +2879,15 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
  };
 
  /** @public */
+ export declare const TGE_NODE_KIND: {
+     readonly BOX: "box";
+     readonly TEXT: "text";
+     readonly IMG: "img";
+     readonly CANVAS: "canvas";
+     readonly ROOT: "root";
+ };
+
+ /** @public */
  export declare type TGENode = {
      kind: TGENodeKind;
      props: TGEProps;
@@ -2993,7 +2959,7 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
  };
 
  /** @public */
- export declare type TGENodeKind = "box" | "text" | "img" | "canvas" | "root";
+ export declare type TGENodeKind = (typeof TGE_NODE_KIND)[keyof typeof TGE_NODE_KIND];
 
  /** Plugin interface.
   *  @template Context — extra context the host app provides (theme, api, etc.) */
@@ -3044,12 +3010,7 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      cornerRadius?: number;
      /** CSS-friendly alias for cornerRadius (Decision 1) */
      borderRadius?: number;
-     cornerRadii?: {
-         tl: number;
-         tr: number;
-         br: number;
-         bl: number;
-     };
+     cornerRadii?: CornerRadii;
      borderColor?: string | number;
      borderWidth?: number;
      /** Opacity: 0.0 = fully transparent, 1.0 = fully opaque. Multiplies alpha of entire element. */
@@ -3093,34 +3054,11 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      borderTop?: number;
      borderBottom?: number;
      borderBetweenChildren?: number;
-     shadow?: {
-         x: number;
-         y: number;
-         blur: number;
-         color: string | number;
-     } | Array<{
-         x: number;
-         y: number;
-         blur: number;
-         color: string | number;
-     }>;
+     shadow?: ShadowConfig | ShadowConfig[];
      /** CSS-friendly alias for shadow (Decision 1) */
      boxShadow?: TGEProps["shadow"];
-     glow?: {
-         radius: number;
-         color: string | number;
-         intensity?: number;
-     };
-     gradient?: {
-         type: "linear";
-         from: string | number;
-         to: string | number;
-         angle?: number;
-     } | {
-         type: "radial";
-         from: string | number;
-         to: string | number;
-     };
+     glow?: GlowConfig;
+     gradient?: GradientConfig;
      backdropBlur?: number;
      /** Backdrop brightness filter. 0=black, 100=unchanged, 200=2x bright. */
      backdropBrightness?: number;
@@ -3165,7 +3103,7 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      /** Make this element focusable via Tab navigation. Like HTML tabindex="0". */
      focusable?: boolean;
      /** Keyboard event handler — fires when this element is focused and a key is pressed. */
-     onKeyDown?: (event: any) => void;
+     onKeyDown?: (event: KeyEvent) => void;
      /** Fires when mouse button is pressed while over this node. */
      onMouseDown?: (event: NodeMouseEvent) => void;
      /** Fires when mouse button is released while over this node. */
@@ -3177,19 +3115,7 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      /** Fires when pointer leaves this node's bounds. */
      onMouseOut?: (event: NodeMouseEvent) => void;
      /** Transform configuration: translate, rotate, scale, skew, perspective. */
-     transform?: {
-         translateX?: number;
-         translateY?: number;
-         rotate?: number;
-         scale?: number;
-         scaleX?: number;
-         scaleY?: number;
-         skewX?: number;
-         skewY?: number;
-         perspective?: number;
-         rotateX?: number;
-         rotateY?: number;
-     };
+     transform?: TransformConfig;
      /** Transform origin point. Default: "center". */
      transformOrigin?: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | {
          x: number;
@@ -3206,11 +3132,7 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      /** Optional cache key for static canvas draw lists. Change it when onDraw output changes. */
      drawCacheKey?: string | number;
      /** Viewport transform for pan and zoom. */
-     viewport?: {
-         x: number;
-         y: number;
-         zoom: number;
-     };
+     viewport?: ViewportConfig;
      color?: string | number;
      fontSize?: number;
      fontId?: number;
@@ -3252,10 +3174,33 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      height: number;
  };
 
+ /** @public 2D transform configuration. */
+ export declare type TransformConfig = {
+     translateX?: number;
+     translateY?: number;
+     rotate?: number;
+     scale?: number;
+     scaleX?: number;
+     scaleY?: number;
+     skewX?: number;
+     skewY?: number;
+     perspective?: number;
+     rotateX?: number;
+     rotateY?: number;
+ };
+
  /** @public */
  export declare function transformPoint(m: Matrix3, x: number, y: number): {
      x: number;
      y: number;
+ };
+
+ /** @public Four-corner quad produced by transforming a rect through a matrix chain. */
+ export declare type TransformQuad = {
+     p0: Point2D;
+     p1: Point2D;
+     p2: Point2D;
+     p3: Point2D;
  };
 
  /** @public */
@@ -3276,28 +3221,14 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
  export declare function translateRect(rect: DamageRect, dx: number, dy: number): DamageRect;
 
  /** @public */
- export declare type TransmissionMode = "shm" | "file" | "direct";
+ declare const TRANSMISSION_MODE: {
+     readonly SHM: "shm";
+     readonly FILE: "file";
+     readonly DIRECT: "direct";
+ };
 
- /** Transmit raw RGBA/RGB bytes without constructing a PixelBuffer wrapper upstream. */
  /** @public */
- export declare function transmitRaw(write: (data: string) => void, image: RawImageData, id: number, opts?: {
-     action?: "t" | "T" | "p";
-     format?: 24 | 32;
-     z?: number;
-     placementId?: number;
-     mode?: TransmissionMode;
-     compress?: CompressMode;
- }): void;
-
- /** Transmit + place raw RGBA/RGB bytes without a PixelBuffer intermediary. */
- /** @public */
- export declare function transmitRawAt(write: (data: string) => void, image: RawImageData, id: number, col: number, row: number, opts?: {
-     z?: number;
-     placementId?: number;
-     mode?: TransmissionMode;
-     compress?: CompressMode;
-     format?: 24 | 32;
- }): void;
+ export declare type TransmissionMode = (typeof TRANSMISSION_MODE)[keyof typeof TRANSMISSION_MODE];
 
  /** @public */
  export declare const TRANSPORT_FAILURE_REASON: {
@@ -3627,6 +3558,13 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
 
  /** @public */
  export declare type Viewport = {
+     x: number;
+     y: number;
+     zoom: number;
+ };
+
+ /** @public Viewport transform for canvas pan/zoom. */
+ export declare type ViewportConfig = {
      x: number;
      y: number;
      zoom: number;
