@@ -10,6 +10,8 @@ const SCENARIO = {
   NOOP_RETAINED: "noop-retained",
   DIRTY_REGION: "dirty-region",
   COMPOSITOR_ONLY: "compositor-only",
+  HOVER_TRANSITION: "hover-transition",
+  SCROLL_HEAVY: "scroll-heavy",
 } as const
 
 const CADENCE_LOG = "/tmp/tge-cadence.log"
@@ -364,6 +366,70 @@ function CompositorScene(size: Size) {
   )
 }
 
+/**
+ * Hover-transition scene: interactive buttons with hoverStyle.
+ * Measures the double-layout path (HP-5) when pointer moves between elements.
+ * Kept shallow (no nested .map()) to avoid SolidJS universal reconciler stack overflow.
+ */
+function HoverTransitionScene(size: Size) {
+  return (
+    <box width={size.width} height={size.height} backgroundColor={0x101014ff} padding={24} direction="column" gap={8}>
+      <box direction="row" gap={8} width="100%">
+        <box width="grow" height={48} focusable backgroundColor={0x1e1e2eff} cornerRadius={8} hoverStyle={{ backgroundColor: 0x3a3a4aff }} activeStyle={{ backgroundColor: 0x4a4a5aff }} padding={8}><text color={0xa3a3a3ff} fontSize={11}>Btn 1</text></box>
+        <box width="grow" height={48} focusable backgroundColor={0x1e1e2eff} cornerRadius={8} hoverStyle={{ backgroundColor: 0x3a3a4aff }} activeStyle={{ backgroundColor: 0x4a4a5aff }} padding={8}><text color={0xa3a3a3ff} fontSize={11}>Btn 2</text></box>
+        <box width="grow" height={48} focusable backgroundColor={0x1e1e2eff} cornerRadius={8} hoverStyle={{ backgroundColor: 0x3a3a4aff }} activeStyle={{ backgroundColor: 0x4a4a5aff }} padding={8}><text color={0xa3a3a3ff} fontSize={11}>Btn 3</text></box>
+        <box width="grow" height={48} focusable backgroundColor={0x1e1e2eff} cornerRadius={8} hoverStyle={{ backgroundColor: 0x3a3a4aff }} activeStyle={{ backgroundColor: 0x4a4a5aff }} padding={8}><text color={0xa3a3a3ff} fontSize={11}>Btn 4</text></box>
+      </box>
+      <box direction="row" gap={8} width="100%">
+        <box width="grow" height={48} focusable backgroundColor={0x1e1e2eff} cornerRadius={8} hoverStyle={{ backgroundColor: 0x3a3a4aff }} activeStyle={{ backgroundColor: 0x4a4a5aff }} padding={8}><text color={0xa3a3a3ff} fontSize={11}>Btn 5</text></box>
+        <box width="grow" height={48} focusable backgroundColor={0x1e1e2eff} cornerRadius={8} hoverStyle={{ backgroundColor: 0x3a3a4aff }} activeStyle={{ backgroundColor: 0x4a4a5aff }} padding={8}><text color={0xa3a3a3ff} fontSize={11}>Btn 6</text></box>
+        <box width="grow" height={48} focusable backgroundColor={0x1e1e2eff} cornerRadius={8} hoverStyle={{ backgroundColor: 0x3a3a4aff }} activeStyle={{ backgroundColor: 0x4a4a5aff }} padding={8}><text color={0xa3a3a3ff} fontSize={11}>Btn 7</text></box>
+        <box width="grow" height={48} focusable backgroundColor={0x1e1e2eff} cornerRadius={8} hoverStyle={{ backgroundColor: 0x3a3a4aff }} activeStyle={{ backgroundColor: 0x4a4a5aff }} padding={8}><text color={0xa3a3a3ff} fontSize={11}>Btn 8</text></box>
+      </box>
+      <box direction="row" gap={8} width="100%">
+        <box width="grow" height={48} focusable backgroundColor={0x1e1e2eff} cornerRadius={8} hoverStyle={{ backgroundColor: 0x3a3a4aff }} activeStyle={{ backgroundColor: 0x4a4a5aff }} padding={8}><text color={0xa3a3a3ff} fontSize={11}>Btn 9</text></box>
+        <box width="grow" height={48} focusable backgroundColor={0x1e1e2eff} cornerRadius={8} hoverStyle={{ backgroundColor: 0x3a3a4aff }} activeStyle={{ backgroundColor: 0x4a4a5aff }} padding={8}><text color={0xa3a3a3ff} fontSize={11}>Btn 10</text></box>
+        <box width="grow" height={48} focusable backgroundColor={0x1e1e2eff} cornerRadius={8} hoverStyle={{ backgroundColor: 0x3a3a4aff }} activeStyle={{ backgroundColor: 0x4a4a5aff }} padding={8}><text color={0xa3a3a3ff} fontSize={11}>Btn 11</text></box>
+        <box width="grow" height={48} focusable backgroundColor={0x1e1e2eff} cornerRadius={8} hoverStyle={{ backgroundColor: 0x3a3a4aff }} activeStyle={{ backgroundColor: 0x4a4a5aff }} padding={8}><text color={0xa3a3a3ff} fontSize={11}>Btn 12</text></box>
+      </box>
+    </box>
+  )
+}
+
+/**
+ * Scroll-heavy scene: content inside a scroll container.
+ * Measures applyOffsetToDescendants cost (HP-6).
+ * Kept to 20 items (shallow structure) for SolidJS universal reconciler compat.
+ */
+function ScrollHeavyScene(size: Size) {
+  return (
+    <box width={size.width} height={size.height} backgroundColor={0x101014ff} padding={24}>
+      <box width="100%" height="grow" scrollY direction="column" gap={4}>
+        <box width="100%" height={36} backgroundColor={0x1a1a2eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 1</text></box>
+        <box width="100%" height={36} backgroundColor={0x16161eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 2</text></box>
+        <box width="100%" height={36} backgroundColor={0x1a1a2eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 3</text></box>
+        <box width="100%" height={36} backgroundColor={0x16161eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 4</text></box>
+        <box width="100%" height={36} backgroundColor={0x1a1a2eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 5</text></box>
+        <box width="100%" height={36} backgroundColor={0x16161eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 6</text></box>
+        <box width="100%" height={36} backgroundColor={0x1a1a2eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 7</text></box>
+        <box width="100%" height={36} backgroundColor={0x16161eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 8</text></box>
+        <box width="100%" height={36} backgroundColor={0x1a1a2eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 9</text></box>
+        <box width="100%" height={36} backgroundColor={0x16161eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 10</text></box>
+        <box width="100%" height={36} backgroundColor={0x1a1a2eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 11</text></box>
+        <box width="100%" height={36} backgroundColor={0x16161eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 12</text></box>
+        <box width="100%" height={36} backgroundColor={0x1a1a2eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 13</text></box>
+        <box width="100%" height={36} backgroundColor={0x16161eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 14</text></box>
+        <box width="100%" height={36} backgroundColor={0x1a1a2eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 15</text></box>
+        <box width="100%" height={36} backgroundColor={0x16161eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 16</text></box>
+        <box width="100%" height={36} backgroundColor={0x1a1a2eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 17</text></box>
+        <box width="100%" height={36} backgroundColor={0x16161eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 18</text></box>
+        <box width="100%" height={36} backgroundColor={0x1a1a2eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 19</text></box>
+        <box width="100%" height={36} backgroundColor={0x16161eff} cornerRadius={4} padding={8}><text color={0xd4d4d4ff} fontSize={11}>Item 20</text></box>
+      </box>
+    </box>
+  )
+}
+
 async function loadEngine(): Promise<EngineModules> {
   const loop = await import("../packages/engine/src/loop/loop")
   const reconciler = await import("../packages/engine/src/reconciler/reconciler")
@@ -620,6 +686,21 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
         const x = i % 2 === 0 ? 80 : 420
         loop.feedPointer(x, 90, false)
         loop.frame()
+      } else if (name === SCENARIO.HOVER_TRANSITION) {
+        // Alternate pointer between button grid cells to trigger hover transitions.
+        // 3 rows × 4 cols of buttons. Stresses interaction + relayout (HP-5).
+        const col = i % 4
+        const row = Math.floor(i / 4) % 3
+        const x = 24 + col * (size.width - 48) / 4 + 60
+        const y = 24 + row * 56 + 24
+        loop.feedPointer(x, y, false)
+        loop.frame()
+      } else if (name === SCENARIO.SCROLL_HEAVY) {
+        // Feed scroll deltas to stress applyOffsetToDescendants (HP-6).
+        // Alternate direction every 20 frames to stay within content.
+        const direction = Math.floor(i / 20) % 2 === 0 ? 3 : -3
+        loop.feedScroll(0, direction)
+        loop.frame()
       } else if (name === SCENARIO.COMPOSITOR_ONLY) {
         const target = loop.root.children[0]?.children[0]
         if (target) {
@@ -711,6 +792,8 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
 function renderScenario(name: ScenarioName, size: Size) {
   if (name === SCENARIO.DIRTY_REGION) return <DirtyRegionScene width={size.width} height={size.height} />
   if (name === SCENARIO.COMPOSITOR_ONLY) return <CompositorScene width={size.width} height={size.height} />
+  if (name === SCENARIO.HOVER_TRANSITION) return <HoverTransitionScene width={size.width} height={size.height} />
+  if (name === SCENARIO.SCROLL_HEAVY) return <ScrollHeavyScene width={size.width} height={size.height} />
   return <DashboardScene width={size.width} height={size.height} />
 }
 
@@ -750,6 +833,8 @@ async function main() {
     { name: SCENARIO.NOOP_RETAINED, size: { width: 1920, height: 1080 } },
     { name: SCENARIO.DIRTY_REGION, size: { width: 1920, height: 1080 } },
     { name: SCENARIO.COMPOSITOR_ONLY, size: { width: 1920, height: 1080 } },
+    { name: SCENARIO.HOVER_TRANSITION, size: { width: 1920, height: 1080 } },
+    { name: SCENARIO.SCROLL_HEAVY, size: { width: 1920, height: 1080 } },
   ]
 
   console.log(`\n🔬 Vexart frame breakdown — frames=${options.frames} warmup=${options.warmup} transport=${options.transport} nativePresentation=${options.nativePresentation ? "on" : "off"}\n`)

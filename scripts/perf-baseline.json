@@ -1,9 +1,9 @@
 {
   "version": "0.9.0-preview",
-  "date": "2026-04-23T21:37:45.420Z",
+  "date": "2026-05-05T23:29:53.065Z",
   "scene": "dashboard-800x600",
   "frameCount": 5,
-  "avgFrameMs": 14.728583200000003,
-  "totalMs": 73.64291600000001,
-  "thresholdMs": 19.147158160000004
+  "avgFrameMs": 6.940291599999995,
+  "totalMs": 34.701457999999974,
+  "thresholdMs": 9.022379079999993
 }

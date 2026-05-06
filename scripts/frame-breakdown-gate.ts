@@ -19,11 +19,24 @@ type Transport = (typeof TRANSPORT)[keyof typeof TRANSPORT]
 type Scenario = (typeof SCENARIO)[keyof typeof SCENARIO]
 
 interface PercentileSummary {
+  p50: number
   p95: number
+  p99: number
+  avg: number
 }
 
 interface StageSummary {
   totalMs: PercentileSummary
+  walkTreeMs: PercentileSummary
+  layoutComputeMs: PercentileSummary
+  layoutWritebackMs: PercentileSummary
+  interactionMs: PercentileSummary
+  relayoutMs: PercentileSummary
+  layoutMs: PercentileSummary
+  paintRenderGraphMs: PercentileSummary
+  paintBackendPaintMs: PercentileSummary
+  paintMs: PercentileSummary
+  ffiCallCount: PercentileSummary
 }
 
 interface ScenarioReport {
@@ -36,9 +49,18 @@ interface BenchmarkReport {
   scenarios: ScenarioReport[]
 }
 
+type StageKey = keyof StageSummary
+
+interface StageGate {
+  stage: StageKey
+  p95MaxMs: number
+}
+
 interface ScenarioGate {
   scenario: Scenario
   totalP95MaxMs: number
+  /** Per-stage p95 gates — if ANY stage exceeds its threshold, the gate fails. */
+  stages?: StageGate[]
 }
 
 interface TransportGate {
@@ -52,8 +74,27 @@ const GATES: TransportGate[] = [
   {
     transport: TRANSPORT.SHM,
     gates: [
-      { scenario: SCENARIO.DASHBOARD_1080P, totalP95MaxMs: 9.0 },
-      { scenario: SCENARIO.DIRTY_REGION, totalP95MaxMs: 5.0 },
+      {
+        scenario: SCENARIO.DASHBOARD_1080P,
+        totalP95MaxMs: 9.0,
+        stages: [
+          { stage: "layoutMs", p95MaxMs: 2.0 },
+          { stage: "walkTreeMs", p95MaxMs: 1.0 },
+          { stage: "layoutComputeMs", p95MaxMs: 1.0 },
+          { stage: "relayoutMs", p95MaxMs: 1.5 },
+          { stage: "paintRenderGraphMs", p95MaxMs: 1.0 },
+          { stage: "paintBackendPaintMs", p95MaxMs: 4.0 },
+        ],
+      },
+      {
+        scenario: SCENARIO.DIRTY_REGION,
+        totalP95MaxMs: 5.0,
+        stages: [
+          { stage: "layoutMs", p95MaxMs: 1.5 },
+          { stage: "relayoutMs", p95MaxMs: 1.0 },
+          { stage: "interactionMs", p95MaxMs: 0.5 },
+        ],
+      },
       { scenario: SCENARIO.COMPOSITOR_ONLY, totalP95MaxMs: 4.0 },
       { scenario: SCENARIO.NOOP_RETAINED, totalP95MaxMs: 1.0 },
     ],
@@ -61,8 +102,27 @@ const GATES: TransportGate[] = [
   {
     transport: TRANSPORT.FILE,
     gates: [
-      { scenario: SCENARIO.DASHBOARD_1080P, totalP95MaxMs: 10.0 },
-      { scenario: SCENARIO.DIRTY_REGION, totalP95MaxMs: 5.5 },
+      {
+        scenario: SCENARIO.DASHBOARD_1080P,
+        totalP95MaxMs: 10.0,
+        stages: [
+          { stage: "layoutMs", p95MaxMs: 2.0 },
+          { stage: "walkTreeMs", p95MaxMs: 1.0 },
+          { stage: "layoutComputeMs", p95MaxMs: 1.0 },
+          { stage: "relayoutMs", p95MaxMs: 1.5 },
+          { stage: "paintRenderGraphMs", p95MaxMs: 1.0 },
+          { stage: "paintBackendPaintMs", p95MaxMs: 4.0 },
+        ],
+      },
+      {
+        scenario: SCENARIO.DIRTY_REGION,
+        totalP95MaxMs: 5.5,
+        stages: [
+          { stage: "layoutMs", p95MaxMs: 1.5 },
+          { stage: "relayoutMs", p95MaxMs: 1.0 },
+          { stage: "interactionMs", p95MaxMs: 0.5 },
+        ],
+      },
       { scenario: SCENARIO.COMPOSITOR_ONLY, totalP95MaxMs: 4.0 },
       { scenario: SCENARIO.NOOP_RETAINED, totalP95MaxMs: 1.0 },
     ],
@@ -134,6 +194,20 @@ for (const item of gate.gates) {
   const status = ok ? "✅" : "❌"
   console.log(`  ${status} ${item.scenario.padEnd(18)} p95=${p95.toFixed(2)}ms threshold=${item.totalP95MaxMs.toFixed(2)}ms`)
   if (!ok) failed = true
+
+  // Per-stage gates
+  if (item.stages) {
+    for (const stageGate of item.stages) {
+      const stageSummary = (scenario.summary as Record<string, PercentileSummary>)[stageGate.stage]
+      if (!stageSummary) continue
+      const stageP95 = stageSummary.p95
+      const stageOk = stageP95 <= stageGate.p95MaxMs
+      if (!stageOk) {
+        console.log(`     ❌ ${stageGate.stage.padEnd(24)} p95=${stageP95.toFixed(2)}ms threshold=${stageGate.p95MaxMs.toFixed(2)}ms`)
+        failed = true
+      }
+    }
+  }
 }
 
 if (failed) {
