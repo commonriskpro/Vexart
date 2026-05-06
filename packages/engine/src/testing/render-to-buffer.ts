@@ -24,7 +24,7 @@ import { createRenderLoop } from "../loop/loop"
 import { markDirty } from "../reconciler/dirty"
 import { dispatchInput } from "../loop/input"
 import { setRendererBackend, getRendererBackend } from "../ffi/renderer-backend"
-import { createGpuRendererBackend } from "../ffi/gpu-renderer-backend"
+import { createGpuRendererBackend, type GpuRendererBackend } from "../ffi/gpu-renderer-backend"
 import { bindLoop, unbindLoop } from "../reconciler/pointer"
 import { resetFocus } from "../reconciler/focus"
 import { resetSelection } from "../reconciler/selection"
@@ -103,122 +103,36 @@ function createMockTerminal(width: number, height: number): Terminal {
 // ── Capturing backend ────────────────────────────────────────────────────────
 
 /**
- * Wraps the GPU backend to intercept endFrame and capture RGBA pixels.
- * Returns `{ output: "none" }` from endFrame to suppress Kitty I/O.
+ * Wraps the GPU backend to suppress Kitty output during test rendering.
+ * After all frames are rendered, use gpuBackend.readbackForTest() to
+ * capture the final composited pixels.
  */
-function createCapturingBackend(gpuBackend: RendererBackend): {
+function createCapturingBackend(gpuBackend: GpuRendererBackend): {
   backend: RendererBackend
-  getCaptured: () => Uint8Array | null
-  capturedWidth: () => number
-  capturedHeight: () => number
-  getLastFrameStrategy: () => string | null
-  getLastFrameOutput: () => string | null
+  readbackPixels: (width: number, height: number) => Uint8Array | null
 } {
-  let captured: Uint8Array | null = null
-  let capturedW = 0
-  let capturedH = 0
-  let layeredCapture: Uint8Array | null = null
-  let layeredW = 0
-  let layeredH = 0
-  let lastFrameStrategy: string | null = null
-  let lastFrameOutput: string | null = null
-
-  const compositeLayerIntoFrame = (
-    frame: Uint8Array,
-    frameWidth: number,
-    frameHeight: number,
-    layer: Uint8Array,
-    layerWidth: number,
-    layerHeight: number,
-    offsetX: number,
-    offsetY: number,
-  ) => {
-    for (let y = 0; y < layerHeight; y++) {
-      const dstY = offsetY + y
-      if (dstY < 0 || dstY >= frameHeight) continue
-      for (let x = 0; x < layerWidth; x++) {
-        const dstX = offsetX + x
-        if (dstX < 0 || dstX >= frameWidth) continue
-        const srcIndex = (y * layerWidth + x) * 4
-        const dstIndex = (dstY * frameWidth + dstX) * 4
-        const srcA = layer[srcIndex + 3] / 255
-        if (srcA <= 0) continue
-        const dstA = frame[dstIndex + 3] / 255
-        const outA = srcA + dstA * (1 - srcA)
-        if (outA <= 0) continue
-        const srcR = layer[srcIndex] / 255
-        const srcG = layer[srcIndex + 1] / 255
-        const srcB = layer[srcIndex + 2] / 255
-        const dstR = frame[dstIndex] / 255
-        const dstG = frame[dstIndex + 1] / 255
-        const dstB = frame[dstIndex + 2] / 255
-        const outR = (srcR * srcA + dstR * dstA * (1 - srcA)) / outA
-        const outG = (srcG * srcA + dstG * dstA * (1 - srcA)) / outA
-        const outB = (srcB * srcA + dstB * dstA * (1 - srcA)) / outA
-        frame[dstIndex] = Math.max(0, Math.min(255, Math.round(outR * 255)))
-        frame[dstIndex + 1] = Math.max(0, Math.min(255, Math.round(outG * 255)))
-        frame[dstIndex + 2] = Math.max(0, Math.min(255, Math.round(outB * 255)))
-        frame[dstIndex + 3] = Math.max(0, Math.min(255, Math.round(outA * 255)))
-      }
-    }
-  }
-
   const backend: RendererBackend = {
     name: "capturing",
     beginFrame(ctx) {
-      layeredW = ctx.viewportWidth
-      layeredH = ctx.viewportHeight
-      layeredCapture = new Uint8Array(layeredW * layeredH * 4)
-      const plan = gpuBackend.beginFrame?.(ctx)
-      lastFrameStrategy = plan?.strategy ?? null
-      return plan
+      return gpuBackend.beginFrame?.(ctx)
     },
     paint(ctx) {
-      const result = gpuBackend.paint(ctx)
-      if (result?.output === "kitty-payload" && result.kittyPayload && ctx.layer && layeredCapture) {
-        compositeLayerIntoFrame(
-          layeredCapture,
-          layeredW,
-          layeredH,
-          result.kittyPayload.data,
-          result.kittyPayload.width,
-          result.kittyPayload.height,
-          ctx.layer.bounds.x,
-          ctx.layer.bounds.y,
-        )
-      }
-      return result
+      return gpuBackend.paint(ctx)
     },
     reuseLayer: (ctx) => gpuBackend.reuseLayer?.(ctx),
     endFrame(ctx: RendererBackendFrameContext): RendererBackendFrameResult | null {
       const result = gpuBackend.endFrame?.(ctx)
-      lastFrameOutput = result?.output ?? null
-      if (result?.output === "final-frame-raw" && result.finalFrame) {
-        // Copy RGBA pixels — don't retain the backend's buffer reference
-        captured = new Uint8Array(result.finalFrame.data)
-        capturedW = result.finalFrame.width
-        capturedH = result.finalFrame.height
-        // Return none — suppress Kitty output
-        return { output: "none", strategy: result.strategy }
-      }
-      if (!captured && layeredCapture) {
-        captured = new Uint8Array(layeredCapture)
-        capturedW = layeredW
-        capturedH = layeredH
-      }
-      // Fallback: layered-raw strategy — no full-frame buffer available yet.
-      // The caller will retry with forceLayerRepaint or rely on layer kittyPayloads.
-      return result ?? null
+      // Suppress any native output that would write to stdout
+      return { output: "none", strategy: result?.strategy ?? null }
     },
   }
 
   return {
     backend,
-    getCaptured: () => captured,
-    capturedWidth: () => capturedW,
-    capturedHeight: () => capturedH,
-    getLastFrameStrategy: () => lastFrameStrategy,
-    getLastFrameOutput: () => lastFrameOutput,
+    readbackPixels: (width, height) => {
+      const raw = gpuBackend.readbackForTest(width, height)
+      return raw ? new Uint8Array(raw) : null
+    },
   }
 }
 
@@ -345,15 +259,15 @@ async function captureToBuffer(
   interact?: (loop: LoopInstance) => Promise<void> | void,
   options: RenderToBufferOptions = {},
 ): Promise<RenderToBufferResult> {
-  // Force final-frame-raw so the GPU backend composites all layers into a
-  // single RGBA buffer that endFrame can return to us.
+  // Force final-frame strategy so the GPU backend composites all layers
+  // into a single target that readbackForTest() can capture.
   const prevStrategy = process.env["VEXART_GPU_FORCE_LAYER_STRATEGY"]
-  process.env["VEXART_GPU_FORCE_LAYER_STRATEGY"] = "final-frame-raw"
+  process.env["VEXART_GPU_FORCE_LAYER_STRATEGY"] = "final-frame"
 
   const term = createMockTerminal(width, height)
 
   const gpuBackend = createGpuRendererBackend()
-  const { backend, getCaptured, capturedWidth, capturedHeight, getLastFrameStrategy, getLastFrameOutput } = createCapturingBackend(gpuBackend)
+  const { backend, readbackPixels } = createCapturingBackend(gpuBackend)
 
   // Save + replace the active backend
   const prevBackend = getRendererBackend()
@@ -362,11 +276,8 @@ async function captureToBuffer(
   const loop = createRenderLoop(term, {
     experimental: {
       forceLayerRepaint: true,
-      // Offscreen visual tests need a deterministic render path, but
-      // screenshots intentionally capture explicit raw readback instead of the
-      // runtime terminal presentation path.
-      nativePresentation: false,
-      nativeLayerRegistry: false,
+      // Native presentation is active but capturing backend suppresses output.
+      // After all frames, readbackForTest() extracts pixels directly from GPU.
     },
   })
 
@@ -389,6 +300,9 @@ async function captureToBuffer(
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
   }
 
+  // Capture pixels via test-only readback (not part of production path)
+  const pixels = readbackPixels(width, height)
+
   // Tear down
   unbindLoop()
   resetFocus()
@@ -404,18 +318,12 @@ async function captureToBuffer(
     process.env["VEXART_GPU_FORCE_LAYER_STRATEGY"] = prevStrategy
   }
 
-  const pixels = getCaptured()
   if (!pixels) {
     throw new Error(
       `renderToBuffer: no pixels captured after ${frames} frames. ` +
-      `Make sure libvexart is built (cargo build --release) and the scene has visible content. ` +
-      `lastStrategy=${getLastFrameStrategy() ?? "none"} lastOutput=${getLastFrameOutput() ?? "none"}`,
+      `Make sure libvexart is built (cargo build --release) and the scene has visible content.`,
     )
   }
 
-  return {
-    pixels,
-    width: capturedWidth(),
-    height: capturedHeight(),
-  }
+  return { pixels, width, height }
 }

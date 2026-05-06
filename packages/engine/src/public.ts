@@ -21,9 +21,9 @@ export type {
 } from "./ffi/renderer-backend"
 
 export { createGpuRendererBackend, getGpuRendererBackendCacheStats } from "./ffi/gpu-renderer-backend"
-export { createGpuFrameComposer } from "./output/gpu-frame-composer"
+
 export { chooseGpuLayerStrategy } from "./ffi/gpu-layer-strategy"
-export type { GpuFrameComposer } from "./output/gpu-frame-composer"
+
 export type { GpuLayerStrategyInput, GpuLayerStrategyMode } from "./ffi/gpu-layer-strategy"
 export type { GpuRendererBackend, GpuRendererBackendCacheStats } from "./ffi/gpu-renderer-backend"
 
@@ -459,8 +459,7 @@ export { inTmux, parentTerminal, passthroughSupported, createWriter, wrapPassthr
 
 // ── Output ────────────────────────────────────────────────────────────────────
 
-export { createLayerComposer } from "./output/layer-composer"
-export type { LayerComposer } from "./output/layer-composer"
+
 
 export {
   probeShm,

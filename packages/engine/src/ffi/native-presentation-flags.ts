@@ -103,11 +103,12 @@ export function nativePresentationForcedOffReason(): string | null {
 /**
  * Check if native presentation can use the current Kitty transport.
  *
- * Phase 2b/3f default cutover only treats SHM as native-presentation capable.
+ * All transport modes (direct/file/shm) are now handled natively by Rust
+ * via vexart_kitty_set_transport + vexart_kitty_emit_*. The TS readback
+ * fallback has been removed — Rust owns the full readback+encode+emit path.
  */
 export function isNativePresentationCapable(transmissionMode: "direct" | "file" | "shm"): boolean {
-  if (!_nativePresentationEnabled) return false
-  return transmissionMode === "shm"
+  return _nativePresentationEnabled
 }
 
 // ── Debug logging ─────────────────────────────────────────────────────────

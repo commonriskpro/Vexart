@@ -20,7 +20,7 @@ export type {
 } from "./renderer-backend"
 
 export { createGpuRendererBackend, getGpuRendererBackendCacheStats } from "./gpu-renderer-backend"
-export { createGpuFrameComposer } from "../output/gpu-frame-composer"
+
 export { chooseGpuLayerStrategy } from "./gpu-layer-strategy"
 
 export {

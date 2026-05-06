@@ -3,8 +3,7 @@
  */
 
 // Layer compositor (multi-image, browser-style)
-export { createLayerComposer } from "./layer-composer"
-export type { LayerComposer } from "./layer-composer"
+
 
 // Transmission mode probing (used by @vexart/engine output during init)
 export { probeShm, probeFile, patchRegion, transmitRaw, transmitRawAt, getKittyTransportStats, resetKittyTransportStats } from "./kitty"
