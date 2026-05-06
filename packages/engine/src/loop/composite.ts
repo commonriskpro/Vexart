@@ -19,7 +19,7 @@
 
 import type { Terminal } from "../terminal/index"
 import type { RenderCommand } from "../ffi/render-graph"
-import { resetRenderGraphQueues, CMD } from "../ffi/render-graph"
+import { CMD } from "../ffi/render-graph"
 import type { TextMeta } from "../ffi/render-graph"
 import { resolveProps, type TGENode } from "../ffi/node"
 import { fromConfig, isIdentity, multiply, transformPoint, translate } from "../ffi/matrix"
@@ -80,8 +80,6 @@ export function markLayerDamageByKey(key: string, rect: DamageRect): void {
 
 /** Mutable scalar counters for walk state writeback. */
 type WalkCounters = {
-  scrollIdCounter: number
-  textMeasureIndex: number
   scrollSpeedCap: number
 }
 
@@ -178,14 +176,10 @@ export type CompositeFrameState = {
   boxNodes: TGENode[]
   textMetaMap: Map<number, TextMeta>
   rectNodeById: Map<number, TGENode>
-  nodePathById: Map<number, string>
   nodeRefById: Map<number, TGENode>
   layerBoundaries: LayerBoundary[]
   scrollContainers: TGENode[]
   nodeCountValue: { value: number }
-
-  // Render graph queues
-  renderGraphQueues: ReturnType<typeof import("../ffi/render-graph").createRenderGraphQueues>
 
   // Layer cache + dirty rects
   layerCache: Map<string, Layer>
@@ -246,8 +240,6 @@ export type CompositeFrameState = {
 
 function buildWalkState(s: CompositeFrameState): WalkTreeState {
   return {
-    scrollIdCounter: { value: s.walkCounters.scrollIdCounter },
-    textMeasureIndex: { value: s.walkCounters.textMeasureIndex },
     scrollSpeedCap: { value: s.walkCounters.scrollSpeedCap },
     nodeCount: s.nodeCountValue,
     rectNodes: s.rectNodes,
@@ -255,7 +247,6 @@ function buildWalkState(s: CompositeFrameState): WalkTreeState {
     boxNodes: s.boxNodes,
     layerBoundaries: s.layerBoundaries,
     scrollContainers: s.scrollContainers,
-    nodePathById: s.nodePathById,
     nodeRefById: s.nodeRefById,
     textMetaMap: s.textMetaMap,
     rectNodeById: s.rectNodeById,
@@ -266,15 +257,11 @@ function buildWalkState(s: CompositeFrameState): WalkTreeState {
 function walkTreeOnce(s: CompositeFrameState) {
   const state = buildWalkState(s)
   _walkTree(s.root, state)
-  s.walkCounters.scrollIdCounter = state.scrollIdCounter.value
-  s.walkCounters.textMeasureIndex = state.textMeasureIndex.value
   s.walkCounters.scrollSpeedCap = state.scrollSpeedCap.value
 }
 
 function resetWalkAccumulators(s: CompositeFrameState) {
   s.walkCounters.scrollSpeedCap = 0
-  resetRenderGraphQueues(s.renderGraphQueues)
-  s.walkCounters.textMeasureIndex = 0
   s.textMetaMap.clear()
   s.rectNodes.length = 0
   s.rectNodeById.clear()
@@ -283,7 +270,6 @@ function resetWalkAccumulators(s: CompositeFrameState) {
   s.layerBoundaries.length = 0
   s.scrollContainers.length = 0
   s.nodeCountValue.value = 0
-  s.nodePathById.clear()
   s.nodeRefById.clear()
 }
 
@@ -627,7 +613,6 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   }
   s.scroll.x = 0
   s.scroll.y = 0
-  s.walkCounters.scrollIdCounter = 0
 
   // Post-scroll hooks
   for (const cb of s.postScrollCallbacks) cb()

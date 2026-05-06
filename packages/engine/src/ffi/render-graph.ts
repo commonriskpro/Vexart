@@ -146,12 +146,7 @@ export type CanvasPaintConfig = {
   displayListHash?: string | null
 }
 
-/** @public */
-export type RenderGraphQueues = {
-  effects: Map<number, EffectConfig>
-  images: Map<number, ImagePaintConfig>
-  canvases: Map<number, CanvasPaintConfig>
-}
+
 
 
 /** @public */
@@ -271,32 +266,7 @@ type ClipStackEntry = {
   id: number
 }
 
-/** @public */
-export function createRenderGraphQueues(): RenderGraphQueues {
-  return {
-    effects: new Map(),
-    images: new Map(),
-    canvases: new Map(),
-  }
-}
 
-/** @public */
-export function resetRenderGraphQueues(queues: RenderGraphQueues) {
-  queues.effects.clear()
-  queues.images.clear()
-  queues.canvases.clear()
-}
-
-/** @public */
-export function cloneRenderGraphQueues(queues: RenderGraphQueues): RenderGraphQueues {
-  // buildRenderGraphFrame no longer mutates queues, so callers can reuse
-  // the original queue references without paying 3x slice() allocations.
-  return {
-    effects: queues.effects,
-    images: queues.images,
-    canvases: queues.canvases,
-  }
-}
 
 export function getRectangleRenderInputs(cmd: RenderCommand, renderObjectId: number | null): RectangleRenderInputs {
   const radius = Math.round(cmd.cornerRadius)

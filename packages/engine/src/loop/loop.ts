@@ -27,7 +27,7 @@ import { type Layer, createLayerStore } from "../ffi/layers"
 import { type DamageRect } from "../ffi/damage"
 import { createGpuRendererBackend } from "../ffi/gpu-renderer-backend"
 
-import { createRenderGraphQueues, type TextMeta } from "../ffi/render-graph"
+import type { TextMeta } from "../ffi/render-graph"
 import { getRendererBackend, setRendererBackend, type RendererBackend } from "../ffi/renderer-backend"
 import {
   boostWindowFor as schedulerBoostWindowFor,
@@ -89,7 +89,6 @@ function freeFlexTree(node: TGENode): void {
 
 // ── Module-level shared state ──
 const textMetaMap = new Map<number, TextMeta>()
-  const renderGraphQueues = createRenderGraphQueues()
   const frameDirtyRects: DamageRect[] = []
   const pendingNodeDamageRects: Array<{ nodeId: number; rect: DamageRect }> = []
   const scrollOffsets = new Map<number, { x: number; y: number }>()
@@ -207,11 +206,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   // ── Stable state objects passed by reference into compositeFrame ──
   const scroll = { x: 0, y: 0 }
   const pointer = { x: viewportWidth / 2, y: viewportHeight / 2, down: false, dirty: true, pendingPress: false, pendingRelease: false, capturedNodeId: 0, pressOriginSet: false, prevActiveNode: null as TGENode | null }
-  const walkCounters = { scrollIdCounter: 0, textMeasureIndex: 0, scrollSpeedCap: 0 }
+  const walkCounters = { scrollSpeedCap: 0 }
   const rectNodes: TGENode[] = []
   const textNodes: TGENode[] = []
   const boxNodes: TGENode[] = []
-  const nodePathById = new Map<number, string>()
   const nodeRefById = new Map<number, TGENode>()
   const rectNodeById = new Map<number, TGENode>()
   const layerBoundaries: LayerBoundary[] = []
@@ -382,9 +380,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     postScrollCallbacks,
     walkCounters,
     rectNodes, textNodes, boxNodes,
-    textMetaMap, rectNodeById, nodePathById, nodeRefById,
+    textMetaMap, rectNodeById, nodeRefById,
     layerBoundaries, scrollContainers, nodeCountValue,
-    renderGraphQueues,
     layerCache, activeSlotKeys, frameDirtyRects, pendingNodeDamageRects, scrollOffsets,
     getOrCreateLayer,
     getPreviousLayerRect, updateLayerGeometry, markLayerDamaged, markLayerClean, imageIdForLayer, removeLayer, layerCount,

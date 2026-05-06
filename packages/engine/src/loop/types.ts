@@ -66,7 +66,6 @@ export type WalkResult = {
   effectsQueue: Map<number, EffectConfig>
   imageQueue: Map<number, ImagePaintConfig>
   canvasQueue: Map<number, CanvasPaintConfig>
-  nodePathById: Map<number, string>
   nodeRefById: Map<number, TGENode>
   /** Tier 2: count of nodes skipped by AABB viewport cull (Phase 3.3). */
   culledCount: number

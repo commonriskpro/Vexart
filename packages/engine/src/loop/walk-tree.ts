@@ -28,7 +28,6 @@ import { decodeImageForNode } from "./image"
 import { ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, type createVexartLayoutCtx } from "./layout-adapter"
 import type { EffectConfig, TextMeta } from "../ffi/render-graph"
 import { shouldPromoteInteractionLayer } from "../reconciler/interaction"
-import { isDebugEnabled } from "./debug"
 import type { LayerBoundary } from "./types"
 import { hasBackdropEffect, isInteractiveNode } from "./predicates"
 import { AUTO_LAYER_BUDGET, shouldPromoteToLayer } from "./layer-boundary"
@@ -41,8 +40,6 @@ import { AUTO_LAYER_BUDGET, shouldPromoteToLayer } from "./layer-boundary"
  */
 export type WalkTreeState = {
   // Counters (mutable scalars — wrap in object so they can be passed by ref)
-  scrollIdCounter: { value: number }
-  textMeasureIndex: { value: number }
   scrollSpeedCap: { value: number }
   nodeCount: { value: number }
 
@@ -54,7 +51,6 @@ export type WalkTreeState = {
   scrollContainers: TGENode[]
 
   // Lookup maps populated during walk
-  nodePathById: Map<number, string>
   nodeRefById: Map<number, TGENode>
 
   // Text metadata map (keyed by content) — used during paint for multi-line layout
@@ -196,7 +192,6 @@ export function walkTree(
   node._dfsIndex = dfsIndex
   node._depth = depth
   node._scrollContainerId = scrollContainerId
-  if (isDebugEnabled()) state.nodePathById.set(node.id, String(dfsIndex))
   state.nodeRefById.set(node.id, node)
 
   // Resolve props once per node — used by all code paths below
@@ -251,8 +246,6 @@ export function walkTree(
     const fontFamily = props.fontFamily as string | undefined
     const fontWeight = props.fontWeight as number | undefined
     const fontStyle = props.fontStyle as string | undefined
-
-    state.textMeasureIndex.value++
 
     // Track metadata for multi-line paint (only textMetaMap is consumed downstream)
     const meta: TextMeta = { nodeId: node.id, content, fontId, fontSize, lineHeight, fontFamily, fontWeight, fontStyle }
@@ -383,8 +376,6 @@ export function walkTree(
     const sid = props.scrollId ?? `tge-scroll-${node.id}`
     layout.setCurrentFlexNode(node._flexNode)
     layout.setId(sid)
-    // Track counter for legacy compat (still incremented but not used for ID)
-    state.scrollIdCounter.value++
     if (props.scrollSpeed) {
       state.scrollSpeedCap.value = props.scrollSpeed
     }

@@ -40,19 +40,7 @@ import { nativeLayerRemove } from "../ffi/native-layer-registry"
 import { nativeDeleteLayer, nativeEmitLayer } from "../ffi/native-presentation-ops"
 import type { NativePresentationStats } from "../ffi/native-presentation-stats"
 
-let lastNativeRenderGraphLayerCount = 0
-let lastNativeRenderGraphOpCount = 0
-let lastNativeRenderGraphFullyCoveredLayerCount = 0
-let lastNativeRenderGraphFallbackOpCount = 0
 
-export function getLastNativeRenderGraphUsage() {
-  return {
-    layerCount: lastNativeRenderGraphLayerCount,
-    opCount: lastNativeRenderGraphOpCount,
-    fullyCoveredLayerCount: lastNativeRenderGraphFullyCoveredLayerCount,
-    fallbackOpCount: lastNativeRenderGraphFallbackOpCount,
-  }
-}
 
 // ── PreparedLayerSlot ─────────────────────────────────────────────────────
 
@@ -404,10 +392,6 @@ export function paintFrame(
 
   const allSlots: LayerSlot[] = [plan.bgSlot, ...plan.contentSlots]
   const slotBoundaryByKey = plan.slotBoundaryByKey
-  lastNativeRenderGraphLayerCount = 0
-  lastNativeRenderGraphOpCount = 0
-  lastNativeRenderGraphFullyCoveredLayerCount = 0
-  lastNativeRenderGraphFallbackOpCount = 0
 
   const frameStart = expFrameBudgetMs > 0 ? performance.now() : 0
   let frameBudgetExceeded = false

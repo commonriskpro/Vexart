@@ -2,7 +2,6 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { registerAnimationDescriptor, markLayerBacked, deregisterAllDescriptors, allDescriptors, resetFrameTracking, unmarkLayerBacked } from "../animation/compositor-path"
 import { createLayerStore } from "../ffi/layers"
 import { createNode } from "../ffi/node"
-import { createRenderGraphQueues } from "../ffi/render-graph"
 import { compositeFrame, type CompositeFrameState } from "./composite"
 
 function cleanupCompositorState() {
@@ -78,18 +77,16 @@ describe("compositeFrame compositor fast path", () => {
       scroll: { x: 0, y: 0 },
       pointer: { x: 0, y: 0, down: false, dirty: false, pendingPress: false, pendingRelease: false, capturedNodeId: 0, pressOriginSet: false, prevActiveNode: null },
       postScrollCallbacks: [],
-      walkCounters: { scrollIdCounter: 0, textMeasureIndex: 0, scrollSpeedCap: 0 },
+      walkCounters: { scrollSpeedCap: 0 },
       rectNodes: [],
       textNodes: [],
       boxNodes: [],
       textMetaMap: new Map(),
       rectNodeById: new Map(),
-      nodePathById: new Map(),
       nodeRefById: new Map([[node.id, node]]),
       layerBoundaries: [],
       scrollContainers: [],
       nodeCountValue: { value: 2 },
-      renderGraphQueues: createRenderGraphQueues(),
       layerCache,
       activeSlotKeys: new Set(),
       frameDirtyRects: [],

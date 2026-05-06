@@ -19,8 +19,6 @@ function layoutState(root: TGENode) {
   layout.beginLayout()
 
   walkTree(root, {
-    scrollIdCounter: { value: 0 },
-    textMeasureIndex: { value: 0 },
     scrollSpeedCap: { value: 0 },
     nodeCount: { value: 0 },
     rectNodes: [],
@@ -28,7 +26,6 @@ function layoutState(root: TGENode) {
     boxNodes: [],
     layerBoundaries: [],
     scrollContainers: [],
-    nodePathById: new Map(),
     nodeRefById: new Map(),
     textMetaMap: new Map(),
     rectNodeById: new Map(),

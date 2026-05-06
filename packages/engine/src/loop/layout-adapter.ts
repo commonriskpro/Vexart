@@ -12,8 +12,8 @@
  * and a node pool to minimize GC churn across frames.
  */
 
+import { CMD } from "../ffi/render-graph"
 import type { RenderCommand, EffectConfig, ImagePaintConfig, CanvasPaintConfig } from "../ffi/render-graph"
-import { CMD as _CMD_RG } from "../ffi/render-graph"
 import {
   Node,
   FLEX_DIRECTION_COLUMN,
@@ -43,10 +43,7 @@ import {
 
 // ── Layout constants ──────────────────────────────────────────────────────
 
-/** CMD constants for layout adapter render commands. */
-const CMD = {
-  ..._CMD_RG,
-} as const
+
 
 /** Floating attach-to mode. */
 export const ATTACH_TO = {

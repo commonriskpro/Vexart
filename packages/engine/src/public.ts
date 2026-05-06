@@ -29,9 +29,6 @@ export type { GpuRendererBackend, GpuRendererBackendCacheStats } from "./ffi/gpu
 
 export {
   BACKDROP_FILTER_KIND,
-  createRenderGraphQueues,
-  resetRenderGraphQueues,
-  cloneRenderGraphQueues,
   buildRenderOp,
   buildRenderGraphFrame,
 } from "./ffi/render-graph"
@@ -41,7 +38,6 @@ export type {
   EffectConfig,
   ImagePaintConfig,
   CanvasPaintConfig,
-  RenderGraphQueues,
   TextMeta,
 
   RectangleRenderInputs,
@@ -464,9 +460,6 @@ export { inTmux, parentTerminal, passthroughSupported, createWriter, wrapPassthr
 export {
   probeShm,
   probeFile,
-  patchRegion,
-  transmitRaw,
-  transmitRawAt,
   getKittyTransportStats,
   resetKittyTransportStats,
 } from "./output/kitty"

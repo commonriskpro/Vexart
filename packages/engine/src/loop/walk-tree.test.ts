@@ -195,8 +195,6 @@ describe("WalkTreeState shape", () => {
     // Construct a minimal WalkTreeState to verify the type compiles correctly.
     // We pass a placeholder layout adapter because the adapter itself is not tested here.
     const state: WalkTreeState = {
-      scrollIdCounter: { value: 0 },
-      textMeasureIndex: { value: 0 },
       scrollSpeedCap: { value: 60 },
       nodeCount: { value: 0 },
       rectNodes: [],
@@ -204,7 +202,6 @@ describe("WalkTreeState shape", () => {
       boxNodes: [],
       layerBoundaries: [],
       scrollContainers: [],
-      nodePathById: new Map(),
       nodeRefById: new Map(),
       textMetaMap: new Map(),
       rectNodeById: new Map(),
@@ -220,6 +217,5 @@ describe("WalkTreeState shape", () => {
     expect(state.viewportHeight).toBe(800)
     expect(state.culledCount?.value).toBe(0)
     expect(state.rectNodes).toHaveLength(0)
-    expect(state.nodePathById.size).toBe(0)
   })
 })
