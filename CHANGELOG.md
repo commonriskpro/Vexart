@@ -7,6 +7,47 @@ Version scheme: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.9.0-beta.19] — 2026-05-06
+
+### Performance
+
+- **Native-only presentation** — eliminated TS readback entirely. All GPU readback + compress + Kitty emit now happens inside Rust. Direct/file/SHM transport all native. ~4ms/frame saved.
+- **Reactive Flexily tree** — Flexily layout nodes persist on TGENode and sync incrementally from the reconciler. No more full tree rebuild every frame (~40-60% layout time reduction).
+- **Lazy scroll offsets** — eliminated O(N) `applyOffsetToDescendants()` mutation. Scroll offsets applied lazily via map lookup during hit-testing.
+- **Skip re-layout on hover** — visual-only hover transitions no longer trigger full Flexily layout recomputation.
+- **Per-frame allocation reduction** — pre-allocated Maps, cached depth values, text buffer reuse, eliminated `.slice()` copies on the hot path.
+- Added hotpath audit infrastructure with per-stage p95 gates, visual correctness golden tests, and before/after comparison scripts.
+
+### Features
+
+- Wire `fontFamily`/`fontWeight`/`fontStyle` from JSX props to MSDF renderer — full font variant support.
+- Native Rust font measurement via FFI (`vexart_font_measure`) — replaces Pretext dependency.
+- Hex color support (`"#rrggbb"` / `"#rrggbbaa"`) in `shadow` and `gradient` props.
+- `gen:types` script for regenerating dist type declarations.
+- Babel JSX transform deps included in published dist package.
+
+### Bug Fixes
+
+- **Mouse-move flicker** — scoped dirty marking to only affected layers on hover state change (was marking ALL layers dirty).
+- **Backdrop filters** — fixed 3 issues: empty layer targets, text accumulation in filter layers, and incorrect sampling by pre-compositing lower layers before backdrop reads.
+- **FFI segfault** — added packed-buffer length params to 5 FFI exports that had argument count mismatch on ARM64.
+
+### Removed
+
+- Eliminated Pretext (`@chenglou/pretext`) dependency — replaced by native Rust font measurement.
+- Eliminated `@napi-rs/canvas` dependency.
+- Removed legacy bitmap text rendering path (MSDF is the only text pipeline).
+- Removed dead Taffy dependency from Cargo.toml.
+- Removed remaining legacy code (TS readback fallback, old allocation patterns).
+
+### Documentation
+
+- Comprehensive documentation audit — synced all docs (AGENTS.md, ARCHITECTURE.md, API-POLICY.md, PRD.md, README, developer guide) with actual code state.
+- Updated README to reflect reactive layout and native-only presentation architecture.
+- Replaced all internal `@vexart/*` import paths with consumer-facing paths in docs/examples.
+
+---
+
 ## [0.9.0-preview] — 2026-04-22
 
 First public developer preview. Five phases of migration from the TGE prototype
