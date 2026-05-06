@@ -9,12 +9,12 @@
  * Design ref: openspec/changes/phase-3-loop-decomposition/design.md §Priority Queue
  */
 
-/** Task priority lane identifier. */
-export type TaskPriority = "user-blocking" | "user-visible" | "background"
-
 /** Lane order constants — lower index = higher priority. */
-export const PRIORITY_LANES: readonly TaskPriority[] = [
+export const PRIORITY_LANES = [
   "user-blocking",
   "user-visible",
   "background",
 ] as const
+
+/** Task priority lane identifier — derived from PRIORITY_LANES. */
+export type TaskPriority = (typeof PRIORITY_LANES)[number]

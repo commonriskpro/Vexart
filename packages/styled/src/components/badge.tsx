@@ -12,7 +12,8 @@ import type { JSX } from "solid-js"
 import { themeColors } from "../theme/theme"
 
 /** @public */
-export type BadgeVariant = "default" | "secondary" | "outline" | "destructive"
+export const BADGE_VARIANT = { DEFAULT: "default", SECONDARY: "secondary", OUTLINE: "outline", DESTRUCTIVE: "destructive" } as const
+export type BadgeVariant = (typeof BADGE_VARIANT)[keyof typeof BADGE_VARIANT]
 
 /** @public */
 export interface BadgeProps {

@@ -21,7 +21,8 @@ import { radius, space, font, weight } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
 /** @public */
-export type TabsVariant = "default" | "line"
+export const TABS_VARIANT = { DEFAULT: "default", LINE: "line" } as const
+export type TabsVariant = (typeof TABS_VARIANT)[keyof typeof TABS_VARIANT]
 
 /** @public */
 export type VoidTabsProps = {

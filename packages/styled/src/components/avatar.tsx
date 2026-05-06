@@ -9,7 +9,8 @@ import { font, weight } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
 /** @public */
-export type AvatarSize = "sm" | "default" | "lg"
+export const AVATAR_SIZE = { SM: "sm", DEFAULT: "default", LG: "lg" } as const
+export type AvatarSize = (typeof AVATAR_SIZE)[keyof typeof AVATAR_SIZE]
 
 /** @public */
 export interface AvatarProps {

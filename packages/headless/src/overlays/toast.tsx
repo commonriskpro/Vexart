@@ -13,7 +13,8 @@ import { Portal } from "../containers/portal"
 // ── Types ──
 
 /** @public */
-export type ToastVariant = "default" | "success" | "error" | "warning" | "info"
+export const TOAST_VARIANT = { DEFAULT: "default", SUCCESS: "success", ERROR: "error", WARNING: "warning", INFO: "info" } as const
+export type ToastVariant = (typeof TOAST_VARIANT)[keyof typeof TOAST_VARIANT]
 
 /** @public */
 export type ToastPosition =
@@ -128,8 +129,10 @@ export function createToaster(options: ToasterOptions): ToasterHandle {
 
   // ── Position alignment ──
 
-  type AlignX = "left" | "right" | "center"
-  type AlignY = "top" | "bottom" | "center"
+  const ALIGN_X_TOAST = { LEFT: "left", RIGHT: "right", CENTER: "center" } as const
+  type AlignX = (typeof ALIGN_X_TOAST)[keyof typeof ALIGN_X_TOAST]
+  const ALIGN_Y_TOAST = { TOP: "top", BOTTOM: "bottom", CENTER: "center" } as const
+  type AlignY = (typeof ALIGN_Y_TOAST)[keyof typeof ALIGN_Y_TOAST]
   function getAlignment(): { alignX: AlignX; alignY: AlignY } {
     switch (position) {
       case "top-right":     return { alignX: "right",  alignY: "top" }

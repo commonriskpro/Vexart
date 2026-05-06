@@ -18,9 +18,11 @@ import { radius, space, font, weight, shadows, glows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
 /** @public */
-export type ButtonVariant = "default" | "secondary" | "outline" | "ghost" | "destructive" | "link"
+export const BUTTON_VARIANT = { DEFAULT: "default", SECONDARY: "secondary", OUTLINE: "outline", GHOST: "ghost", DESTRUCTIVE: "destructive", LINK: "link" } as const
+export type ButtonVariant = (typeof BUTTON_VARIANT)[keyof typeof BUTTON_VARIANT]
 /** @public */
-export type ButtonSize = "xs" | "sm" | "default" | "lg" | "icon" | "icon-sm" | "icon-lg"
+export const BUTTON_SIZE = { XS: "xs", SM: "sm", DEFAULT: "default", LG: "lg", ICON: "icon", ICON_SM: "icon-sm", ICON_LG: "icon-lg" } as const
+export type ButtonSize = (typeof BUTTON_SIZE)[keyof typeof BUTTON_SIZE]
 
 /** @public */
 export interface ButtonProps {
