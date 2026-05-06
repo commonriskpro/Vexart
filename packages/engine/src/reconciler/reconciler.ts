@@ -17,6 +17,7 @@ import {
   adjustFocusableAncestors,
 } from "../ffi/node"
 import { isLayoutProp, isTextLayoutProp, syncLayoutProp } from "../ffi/flex-sync"
+import { BACKDROP_FIELDS } from "../ffi/render-graph"
 import { DIRTY_KIND, markDirty } from "./dirty"
 import { createHandle } from "./handle"
 import { markLayerBacked, onNodePropertyChanged, onSubtreeChanged, unmarkLayerBacked } from "../animation/compositor-path"
@@ -71,14 +72,7 @@ const VISUAL_DAMAGE_PROPS = new Set([
   "boxShadow",
   "glow",
   "gradient",
-  "backdropBlur",
-  "backdropBrightness",
-  "backdropContrast",
-  "backdropSaturate",
-  "backdropGrayscale",
-  "backdropInvert",
-  "backdropSepia",
-  "backdropHueRotate",
+  ...BACKDROP_FIELDS,
   "opacity",
   "filter",
   "transform",

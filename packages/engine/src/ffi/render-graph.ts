@@ -94,6 +94,25 @@ export type BackdropFilterKind = (typeof BACKDROP_FILTER_KIND)[keyof typeof BACK
 /** @public Alias for Rect — kept for API compat. */
 export type RenderBounds = import("./damage").Rect
 
+/**
+ * Canonical list of backdrop filter field names.
+ * Single source of truth — used by predicates, walk-tree, and render-graph
+ * to avoid manually enumerating these 8 fields in 4+ locations.
+ */
+export const BACKDROP_FIELDS = [
+  "backdropBlur", "backdropBrightness", "backdropContrast", "backdropSaturate",
+  "backdropGrayscale", "backdropInvert", "backdropSepia", "backdropHueRotate",
+] as const
+
+/** The corresponding BackdropFilterParams keys (without "backdrop" prefix, lowercased). */
+export const BACKDROP_PARAM_KEYS = [
+  "blur", "brightness", "contrast", "saturate",
+  "grayscale", "invert", "sepia", "hueRotate",
+] as const
+
+/** @public */
+export type BackdropFieldName = (typeof BACKDROP_FIELDS)[number]
+
 /** @public */
 export interface BackdropFilterParams {
   blur: number | null
@@ -345,16 +364,11 @@ function getCurrentClipBounds(stack: ClipStackEntry[]) {
 }
 
 function getBackdropFilterParams(effect: EffectConfig): BackdropFilterParams {
-  return {
-    blur: effect.backdropBlur ?? null,
-    brightness: effect.backdropBrightness ?? null,
-    contrast: effect.backdropContrast ?? null,
-    saturate: effect.backdropSaturate ?? null,
-    grayscale: effect.backdropGrayscale ?? null,
-    invert: effect.backdropInvert ?? null,
-    sepia: effect.backdropSepia ?? null,
-    hueRotate: effect.backdropHueRotate ?? null,
+  const params = {} as BackdropFilterParams
+  for (let i = 0; i < BACKDROP_FIELDS.length; i++) {
+    params[BACKDROP_PARAM_KEYS[i]] = effect[BACKDROP_FIELDS[i]] ?? null
   }
+  return params
 }
 
 function getBackdropFilterKind(params: BackdropFilterParams): BackdropFilterKind {

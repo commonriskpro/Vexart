@@ -1,26 +1,14 @@
 import type { TGEProps } from "../ffi/node"
+import { BACKDROP_FIELDS, type BackdropFieldName } from "../ffi/render-graph"
 
-type BackdropEffectProps = Pick<TGEProps,
-  "backdropBlur" |
-  "backdropBrightness" |
-  "backdropContrast" |
-  "backdropSaturate" |
-  "backdropGrayscale" |
-  "backdropInvert" |
-  "backdropSepia" |
-  "backdropHueRotate"
->
+type BackdropEffectProps = Pick<TGEProps, BackdropFieldName>
 
 /** Check if a node has any backdrop filter effect. */
 export function hasBackdropEffect(props: BackdropEffectProps): boolean {
-  return props.backdropBlur !== undefined ||
-    props.backdropBrightness !== undefined ||
-    props.backdropContrast !== undefined ||
-    props.backdropSaturate !== undefined ||
-    props.backdropGrayscale !== undefined ||
-    props.backdropInvert !== undefined ||
-    props.backdropSepia !== undefined ||
-    props.backdropHueRotate !== undefined
+  for (const field of BACKDROP_FIELDS) {
+    if (props[field] !== undefined) return true
+  }
+  return false
 }
 
 /** Check if a node has interactive behavior (focus, hover, press, mouse). */

@@ -26,6 +26,7 @@ import { CanvasContext, hashCanvasDisplayList, serializeCanvasDisplayList } from
 import { nativeCanvasDisplayListTouch, nativeCanvasDisplayListUpdate, syncNativeCanvasDisplayListHandle } from "../ffi/native-canvas-display-list"
 import { decodeImageForNode } from "./image"
 import { ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, type createVexartLayoutCtx } from "./layout-adapter"
+import { BACKDROP_FIELDS } from "../ffi/render-graph"
 import type { EffectConfig, TextMeta } from "../ffi/render-graph"
 import { shouldPromoteInteractionLayer } from "../reconciler/interaction"
 import type { LayerBoundary } from "./types"
@@ -112,14 +113,7 @@ function claimEffect(): EffectConfig {
   effect.shadow = undefined
   effect.glow = undefined
   effect.gradient = undefined
-  effect.backdropBlur = undefined
-  effect.backdropBrightness = undefined
-  effect.backdropContrast = undefined
-  effect.backdropSaturate = undefined
-  effect.backdropGrayscale = undefined
-  effect.backdropInvert = undefined
-  effect.backdropSepia = undefined
-  effect.backdropHueRotate = undefined
+  for (const f of BACKDROP_FIELDS) effect[f] = undefined
   effect.opacity = undefined
   effect.cornerRadii = undefined
   effect.transform = undefined
@@ -459,14 +453,7 @@ export function walkTree(
           effect.gradient = { type: "radial", from: g.from as number, to: g.to as number }
         }
       }
-      if (vp.backdropBlur) effect.backdropBlur = vp.backdropBlur
-      if (vp.backdropBrightness !== undefined) effect.backdropBrightness = vp.backdropBrightness
-      if (vp.backdropContrast !== undefined) effect.backdropContrast = vp.backdropContrast
-      if (vp.backdropSaturate !== undefined) effect.backdropSaturate = vp.backdropSaturate
-      if (vp.backdropGrayscale !== undefined) effect.backdropGrayscale = vp.backdropGrayscale
-      if (vp.backdropInvert !== undefined) effect.backdropInvert = vp.backdropInvert
-      if (vp.backdropSepia !== undefined) effect.backdropSepia = vp.backdropSepia
-      if (vp.backdropHueRotate !== undefined) effect.backdropHueRotate = vp.backdropHueRotate
+      for (const f of BACKDROP_FIELDS) if (vp[f] !== undefined) effect[f] = vp[f]
       if (vp.opacity !== undefined) effect.opacity = vp.opacity
       if (vp.cornerRadii) effect.cornerRadii = vp.cornerRadii
       if (vp.filter) effect.filter = vp.filter

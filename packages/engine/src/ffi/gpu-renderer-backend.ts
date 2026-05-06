@@ -11,6 +11,7 @@ import { CanvasContext } from "./canvas"
 import { rasterizeCanvas, rasterizeCanvasCommands } from "./canvas-rasterizer"
 
 import { transformBounds, transformPoint } from "./matrix"
+import { BACKDROP_FIELDS } from "./render-graph"
 import type { BackdropRenderMetadata, EffectRenderOp, RectangleRenderOp, RenderGraphOp } from "./render-graph"
 import type {
   RendererBackend,
@@ -1022,21 +1023,11 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     vexartCompositeTargetBeginLayer(vctx, targetHandle, 0, 0x00000000)
     layerOpen = true
 
-    const stripBackdropEffectOp = (op: EffectRenderOp): EffectRenderOp => ({
-      ...op,
-      backdrop: null,
-      effect: {
-        ...op.effect,
-        backdropBlur: undefined,
-        backdropBrightness: undefined,
-        backdropContrast: undefined,
-        backdropSaturate: undefined,
-        backdropGrayscale: undefined,
-        backdropInvert: undefined,
-        backdropSepia: undefined,
-        backdropHueRotate: undefined,
-      },
-    })
+    const stripBackdropEffectOp = (op: EffectRenderOp): EffectRenderOp => {
+      const stripped = { ...op.effect }
+      for (const f of BACKDROP_FIELDS) stripped[f] = undefined
+      return { ...op, backdrop: null, effect: stripped }
+    }
 
     const getBackdropWorkBounds = (op: EffectRenderOp, metadata: BackdropRenderMetadata) => {
       // Convert absolute screen-space bounds to layer-local coordinates
