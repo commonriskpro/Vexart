@@ -34,20 +34,22 @@ function createPaintFrameState(): PaintFrameState {
     expFrameBudgetMs: 0,
     debugCadence: false,
     debugDragRepro: false,
-    getOrCreateLayer(key: string, z: number) {
-      const existing = layerCache.get(key)
-      if (existing) { existing.z = z; return existing }
-      const layer = store.createLayer(z)
-      layerCache.set(key, layer)
-      return layer
+    layerStore: {
+      getOrCreateLayer(key: string, z: number) {
+        const existing = layerCache.get(key)
+        if (existing) { existing.z = z; return existing }
+        const layer = store.createLayer(z)
+        layerCache.set(key, layer)
+        return layer
+      },
+      getPreviousLayerRect: store.getPreviousLayerRect,
+      updateLayerGeometry: store.updateLayerGeometry,
+      markLayerDamaged: store.markLayerDamaged,
+      markLayerClean: store.markLayerClean,
+      imageIdForLayer: store.imageIdForLayer,
+      removeLayer: store.removeLayer,
+      layerCount: store.layerCount,
     },
-    getPreviousLayerRect: store.getPreviousLayerRect,
-    updateLayerGeometry: store.updateLayerGeometry,
-    markLayerDamaged: store.markLayerDamaged,
-    markLayerClean: store.markLayerClean,
-    imageIdForLayer: store.imageIdForLayer,
-    removeLayer: store.removeLayer,
-    layerCount: store.layerCount,
     layerCache,
     activeSlotKeys: new Set<string>(),
     frameDirtyRects: [],

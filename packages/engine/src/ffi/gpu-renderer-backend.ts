@@ -43,7 +43,7 @@ import {
   nativeLayerUpsert,
 } from "./native-layer-registry"
 import { ensureNativeKittyTransport, nativeEmitLayerTarget, nativeEmitRegionTarget } from "./native-presentation-ops"
-import type { DamageRect } from "./damage"
+import type { DamageRect, TransformQuad } from "./damage"
 // Phase 2b: All paint + composite ops route through libvexart.
 // Paint primitives: vexart_paint_dispatch cmd_kinds 0-20.
 // Target lifecycle: vexart_composite_target_create/destroy/begin_layer/end_layer.
@@ -153,7 +153,7 @@ function vexartCompositeCopyRegionToImage(
 function vexartCompositeImageFilterBackdrop(
   vctx: bigint,
   image: bigint,
-  params: WgpuBackdropFilterParams,
+  params: BackdropFilterParams,
 ): bigint {
   _backdropParamBuf[0] = params.blur ?? Number.NaN
   _backdropParamBuf[1] = params.brightness ?? Number.NaN
@@ -196,17 +196,8 @@ function vexartCompositeReadbackRgba(vctx: bigint, target: bigint, byteLength: n
   return _readbackBuf.byteLength === byteLength ? _readbackBuf : _readbackBuf.subarray(0, byteLength)
 }
 
-// ── Backdrop filter params type (mirror of WgpuBackdropFilterParams) ─────────
-type WgpuBackdropFilterParams = {
-  blur: number | null
-  brightness: number | null
-  contrast: number | null
-  saturate: number | null
-  grayscale: number | null
-  invert: number | null
-  sepia: number | null
-  hueRotate: number | null
-}
+// Use canonical BackdropFilterParams from render-graph (was duplicated as WgpuBackdropFilterParams)
+import type { BackdropFilterParams } from "./render-graph"
 
 // ── Native GPU image helpers ────────────────────────────────────────────────
 // These helpers copy regions between native composite targets and native image
@@ -346,19 +337,25 @@ function compositeTargetUniformToTarget(ctx: bigint, target: bigint, sourceTarge
   return rc === 0
 }
 
+/** Write RGBA u32 as 4 floats at the given byte offset. */
+function writeColorF32(v: DataView, offset: number, color: number) {
+  vf32(v, offset, ((color >>> 24) & 0xff) / 255)
+  vf32(v, offset + 4, ((color >>> 16) & 0xff) / 255)
+  vf32(v, offset + 8, ((color >>> 8) & 0xff) / 255)
+  vf32(v, offset + 12, (color & 0xff) / 255)
+}
+
 /**
  * Pack BridgeShapeRectInstance (20 floats: x,y,w,h + fill rgba + stroke rgba +
  * radius + strokeWidth + hasFill + hasStroke + sizeX + sizeY + pad*2) for cmd_kind=1.
  */
 function packShapeRectInstance(x: number, y: number, w: number, h: number, boxW: number, boxH: number, radius: number, fill: number, stroke: number, strokeWidth: number): Uint8Array {
   const v = _packView
-  const fr = ((fill >>> 24) & 0xff) / 255; const fg = ((fill >>> 16) & 0xff) / 255; const fb = ((fill >>> 8) & 0xff) / 255; const fa = (fill & 0xff) / 255
-  const sr = ((stroke >>> 24) & 0xff) / 255; const sg = ((stroke >>> 16) & 0xff) / 255; const sb = ((stroke >>> 8) & 0xff) / 255; const sa = (stroke & 0xff) / 255
   const hasFill = (fill & 0xff) > 0 ? 1.0 : 0.0
   const hasStroke = strokeWidth > 0 && (stroke & 0xff) > 0 ? 1.0 : 0.0
   vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
-  vf32(v, 16, fr); vf32(v, 20, fg); vf32(v, 24, fb); vf32(v, 28, fa)
-  vf32(v, 32, sr); vf32(v, 36, sg); vf32(v, 40, sb); vf32(v, 44, sa)
+  writeColorF32(v, 16, fill)
+  writeColorF32(v, 32, stroke)
   vf32(v, 48, radius); vf32(v, 52, strokeWidth); vf32(v, 56, hasFill); vf32(v, 60, hasStroke)
   vf32(v, 64, boxW); vf32(v, 68, boxH); vf32(v, 72, 0); vf32(v, 76, 0)
   return _packU8.subarray(0, 80)
@@ -369,13 +366,11 @@ function packShapeRectInstance(x: number, y: number, w: number, h: number, boxW:
  */
 function packShapeRectCornersInstance(x: number, y: number, w: number, h: number, boxW: number, boxH: number, radii: { tl: number; tr: number; br: number; bl: number }, fill: number, stroke: number, strokeWidth: number): Uint8Array {
   const v = _packView
-  const fr = ((fill >>> 24) & 0xff) / 255; const fg = ((fill >>> 16) & 0xff) / 255; const fb = ((fill >>> 8) & 0xff) / 255; const fa = (fill & 0xff) / 255
-  const sr = ((stroke >>> 24) & 0xff) / 255; const sg = ((stroke >>> 16) & 0xff) / 255; const sb = ((stroke >>> 8) & 0xff) / 255; const sa = (stroke & 0xff) / 255
   const hasFill = (fill & 0xff) > 0 ? 1.0 : 0.0
   const hasStroke = strokeWidth > 0 && (stroke & 0xff) > 0 ? 1.0 : 0.0
   vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
-  vf32(v, 16, fr); vf32(v, 20, fg); vf32(v, 24, fb); vf32(v, 28, fa)
-  vf32(v, 32, sr); vf32(v, 36, sg); vf32(v, 40, sb); vf32(v, 44, sa)
+  writeColorF32(v, 16, fill)
+  writeColorF32(v, 32, stroke)
   vf32(v, 48, radii.tl); vf32(v, 52, radii.tr); vf32(v, 56, radii.br); vf32(v, 60, radii.bl)
   vf32(v, 64, strokeWidth); vf32(v, 68, hasFill); vf32(v, 72, hasStroke); vf32(v, 76, boxW)
   vf32(v, 80, boxH); vf32(v, 84, 0); vf32(v, 88, 0); vf32(v, 92, 0)
@@ -387,9 +382,8 @@ function packShapeRectCornersInstance(x: number, y: number, w: number, h: number
  */
 function packGlowInstance(x: number, y: number, w: number, h: number, color: number, intensity: number): Uint8Array {
   const v = _packView
-  const r = ((color >>> 24) & 0xff) / 255; const g = ((color >>> 16) & 0xff) / 255; const b = ((color >>> 8) & 0xff) / 255; const a = (color & 0xff) / 255
   vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
-  vf32(v, 16, r); vf32(v, 20, g); vf32(v, 24, b); vf32(v, 28, a)
+  writeColorF32(v, 16, color)
   vf32(v, 32, intensity); vf32(v, 36, 0); vf32(v, 40, 0); vf32(v, 44, 0)
   return _packU8.subarray(0, 48)
 }
@@ -411,9 +405,8 @@ function packShadowInstance(
   blur: number,
 ): Uint8Array {
   const v = _packView
-  const r = ((color >>> 24) & 0xff) / 255; const g = ((color >>> 16) & 0xff) / 255; const b = ((color >>> 8) & 0xff) / 255; const a = (color & 0xff) / 255
   vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
-  vf32(v, 16, r); vf32(v, 20, g); vf32(v, 24, b); vf32(v, 28, a)
+  writeColorF32(v, 16, color)
   vf32(v, 32, radii.tl); vf32(v, 36, radii.tr); vf32(v, 40, radii.br); vf32(v, 44, radii.bl)
   vf32(v, 48, boxW); vf32(v, 52, boxH); vf32(v, 56, offsetX); vf32(v, 60, offsetY)
   vf32(v, 64, blur); vf32(v, 68, 0); vf32(v, 72, 0); vf32(v, 76, 0)
@@ -425,12 +418,10 @@ function packShadowInstance(
  */
 function packLinearGradientInstance(x: number, y: number, w: number, h: number, boxW: number, boxH: number, radius: number, from: number, to: number, dirX: number, dirY: number): Uint8Array {
   const v = _packView
-  const fr = ((from >>> 24) & 0xff) / 255; const fg = ((from >>> 16) & 0xff) / 255; const fb = ((from >>> 8) & 0xff) / 255; const fa = (from & 0xff) / 255
-  const tr = ((to >>> 24) & 0xff) / 255; const tg = ((to >>> 16) & 0xff) / 255; const tb = ((to >>> 8) & 0xff) / 255; const ta = (to & 0xff) / 255
   vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
   vf32(v, 16, boxW); vf32(v, 20, boxH); vf32(v, 24, radius); vf32(v, 28, 0)
-  vf32(v, 32, fr); vf32(v, 36, fg); vf32(v, 40, fb); vf32(v, 44, fa)
-  vf32(v, 48, tr); vf32(v, 52, tg); vf32(v, 56, tb); vf32(v, 60, ta)
+  writeColorF32(v, 32, from)
+  writeColorF32(v, 48, to)
   vf32(v, 64, dirX); vf32(v, 68, dirY); vf32(v, 72, 0); vf32(v, 76, 0)
   return _packU8.subarray(0, 80)
 }
@@ -440,12 +431,10 @@ function packLinearGradientInstance(x: number, y: number, w: number, h: number, 
  */
 function packRadialGradientInstance(x: number, y: number, w: number, h: number, boxW: number, boxH: number, radius: number, from: number, to: number): Uint8Array {
   const v = _packView
-  const fr = ((from >>> 24) & 0xff) / 255; const fg = ((from >>> 16) & 0xff) / 255; const fb = ((from >>> 8) & 0xff) / 255; const fa = (from & 0xff) / 255
-  const tr = ((to >>> 24) & 0xff) / 255; const tg = ((to >>> 16) & 0xff) / 255; const tb = ((to >>> 8) & 0xff) / 255; const ta = (to & 0xff) / 255
   vf32(v, 0, x); vf32(v, 4, y); vf32(v, 8, w); vf32(v, 12, h)
   vf32(v, 16, boxW); vf32(v, 20, boxH); vf32(v, 24, radius); vf32(v, 28, 0)
-  vf32(v, 32, fr); vf32(v, 36, fg); vf32(v, 40, fb); vf32(v, 44, fa)
-  vf32(v, 48, tr); vf32(v, 52, tg); vf32(v, 56, tb); vf32(v, 60, ta)
+  writeColorF32(v, 32, from)
+  writeColorF32(v, 48, to)
   vf32(v, 64, 0); vf32(v, 68, 0); vf32(v, 72, 0); vf32(v, 76, 0)
   return _packU8.subarray(0, 80)
 }
@@ -578,14 +567,7 @@ type RenderedLayerRecord = {
   height: number
   handle: VexartTargetHandle
   isBackground: boolean
-  subtreeTransform:
-    | {
-        p0: { x: number; y: number }
-        p1: { x: number; y: number }
-        p2: { x: number; y: number }
-        p3: { x: number; y: number }
-      }
-    | null
+  subtreeTransform: TransformQuad | null
   opacity: number
 }
 
@@ -634,11 +616,7 @@ type ImageInstance = {
   opacity: number
 }
 
-type TransformedImageInstance = {
-  p0: { x: number; y: number }
-  p1: { x: number; y: number }
-  p2: { x: number; y: number }
-  p3: { x: number; y: number }
+type TransformedImageInstance = TransformQuad & {
   opacity: number
 }
 

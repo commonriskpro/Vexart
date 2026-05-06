@@ -74,7 +74,7 @@ export type EffectConfig = {
   cornerRadii?: { tl: number; tr: number; br: number; bl: number }
   transform?: Float64Array
   transformInverse?: Float64Array
-  transformBounds?: { x: number; y: number; width: number; height: number }
+  transformBounds?: import("./damage").Rect
   /** Self-filter applied to this element's own paint output (REQ-2B-401/402). */
   filter?: import("./node").FilterConfig
   _node?: TGENode
@@ -91,13 +91,8 @@ export const BACKDROP_FILTER_KIND = {
 /** @public */
 export type BackdropFilterKind = (typeof BACKDROP_FILTER_KIND)[keyof typeof BACKDROP_FILTER_KIND]
 
-/** @public */
-export interface RenderBounds {
-  x: number
-  y: number
-  width: number
-  height: number
-}
+/** @public Alias for Rect — kept for API compat. */
+export type RenderBounds = import("./damage").Rect
 
 /** @public */
 export interface BackdropFilterParams {

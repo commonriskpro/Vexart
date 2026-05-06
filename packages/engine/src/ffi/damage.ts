@@ -1,5 +1,14 @@
-/** @public */
-export type DamageRect = { x: number; y: number; width: number; height: number }
+/** @public A 2D point. */
+export type Point2D = { x: number; y: number }
+
+/** @public Axis-aligned rectangle (origin + size). */
+export type Rect = { x: number; y: number; width: number; height: number }
+
+/** @public Alias kept for API compat — prefer `Rect` in new code. */
+export type DamageRect = Rect
+
+/** @public Four-corner quad produced by transforming a rect through a matrix chain. */
+export type TransformQuad = { p0: Point2D; p1: Point2D; p2: Point2D; p3: Point2D }
 
 /** @public */
 export function rectRight(rect: DamageRect): number { return rect.x + rect.width }

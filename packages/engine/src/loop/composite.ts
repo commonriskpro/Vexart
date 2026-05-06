@@ -48,7 +48,7 @@ import type { createVexartLayoutCtx } from "./layout-adapter"
 import { summarizeRendererResourceStats } from "../ffi/resource-stats"
 import { hasCompositorAnimations, isCompositorOnlyFrame, resetFrameTracking } from "../animation/compositor-path"
 import { unionRect, type DamageRect } from "../ffi/damage"
-import type { Layer } from "../ffi/layers"
+import type { Layer, LayerStoreHandle } from "../ffi/layers"
 import type { RendererBackend } from "../ffi/renderer-backend"
 
 import { createScrollHandle, updateScrollContainerGeometry } from "./scroll"
@@ -190,14 +190,7 @@ export type CompositeFrameState = {
   scrollOffsets: Map<number, { x: number; y: number }>
 
   // Layer store methods (coordinator owns the store)
-  getOrCreateLayer: (key: string, z: number) => Layer
-  getPreviousLayerRect: (layer: Layer) => DamageRect | null
-  updateLayerGeometry: (layer: Layer, x: number, y: number, w: number, h: number, opts: { moveOnly: boolean }) => void
-  markLayerDamaged: (layer: Layer, rect: DamageRect) => void
-  markLayerClean: (layer: Layer) => void
-  imageIdForLayer: (layer: Layer) => number
-  removeLayer: (layer: Layer) => void
-  layerCount: () => number
+  layerStore: LayerStoreHandle
 
   // Dirty tracking
   markDirty: (scope?: DirtyScope) => void
@@ -688,7 +681,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     debugUpdateStats({
       commandCount: 0,
       dirtyBeforeCount: dirtyBeforeFrame,
-      layerCount: s.layerCount(),
+      layerCount: s.layerStore.layerCount(),
       moveOnlyCount: 0,
       moveFallbackCount: 0,
       stableReuseCount: retainedLayers.length,
@@ -789,14 +782,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     expFrameBudgetMs: s.expFrameBudgetMs,
     debugCadence: s.debugCadence,
     debugDragRepro: s.debugDragRepro,
-    getOrCreateLayer: s.getOrCreateLayer,
-    getPreviousLayerRect: s.getPreviousLayerRect,
-    updateLayerGeometry: s.updateLayerGeometry,
-    markLayerDamaged: s.markLayerDamaged,
-    markLayerClean: s.markLayerClean,
-    imageIdForLayer: s.imageIdForLayer,
-    removeLayer: s.removeLayer,
-    layerCount: s.layerCount,
+    layerStore: s.layerStore,
     layerCache: s.layerCache,
     activeSlotKeys: s.activeSlotKeys,
     frameDirtyRects: s.frameDirtyRects,
@@ -829,7 +815,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   debugUpdateStats({
     commandCount: paintResult.commandCount,
     dirtyBeforeCount: dirtyBeforeFrame,
-    layerCount: s.layerCount(),
+    layerCount: s.layerStore.layerCount(),
     moveOnlyCount: paintResult.moveOnlyCount,
     moveFallbackCount: paintResult.moveFallbackCount,
     stableReuseCount: paintResult.stableReuseCount,

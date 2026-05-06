@@ -89,7 +89,7 @@ export {
   rectBottom,
   isEmptyRect,
 } from "./ffi/damage"
-export type { DamageRect } from "./ffi/damage"
+export type { DamageRect, Rect, Point2D, TransformQuad } from "./ffi/damage"
 
 export { CanvasContext } from "./ffi/canvas"
 export type {

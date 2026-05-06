@@ -383,8 +383,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     textMetaMap, rectNodeById, nodeRefById,
     layerBoundaries, scrollContainers, nodeCountValue,
     layerCache, activeSlotKeys, frameDirtyRects, pendingNodeDamageRects, scrollOffsets,
-    getOrCreateLayer,
-    getPreviousLayerRect, updateLayerGeometry, markLayerDamaged, markLayerClean, imageIdForLayer, removeLayer, layerCount,
+    layerStore: { getOrCreateLayer, getPreviousLayerRect, updateLayerGeometry, markLayerDamaged, markLayerClean, imageIdForLayer, removeLayer, layerCount },
     markDirty, markAllDirty, clearDirty, dirtyVersion: globalDirtyVersion, dirtyCount,
 
     backendOverride: getActiveBackend(),

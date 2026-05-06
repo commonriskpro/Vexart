@@ -1,5 +1,5 @@
 import type { RenderCommand } from "./render-graph"
-import type { DamageRect } from "./damage"
+import type { DamageRect, TransformQuad } from "./damage"
 import type { GpuLayerStrategyMode, NativeFramePlan } from "./gpu-layer-strategy"
 import type { RenderGraphFrame } from "./render-graph"
 import type { NativePresentationStats } from "./native-presentation-stats"
@@ -37,14 +37,7 @@ export type RendererBackendLayerContext = {
   key: string
   z: number
   backing: RendererBackendLayerBacking | null
-  subtreeTransform:
-    | {
-        p0: { x: number; y: number }
-        p1: { x: number; y: number }
-        p2: { x: number; y: number }
-        p3: { x: number; y: number }
-      }
-    | null
+  subtreeTransform: TransformQuad | null
   isBackground: boolean
   bounds: DamageRect
   dirtyRect: DamageRect | null
@@ -58,14 +51,7 @@ export type RendererBackendRetainedLayer = {
   key: string
   z: number
   bounds: DamageRect
-  subtreeTransform:
-    | {
-        p0: { x: number; y: number }
-        p1: { x: number; y: number }
-        p2: { x: number; y: number }
-        p3: { x: number; y: number }
-      }
-    | null
+  subtreeTransform: TransformQuad | null
   isBackground: boolean
   opacity: number
 }

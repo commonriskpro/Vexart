@@ -7,21 +7,12 @@
  */
 
 import type { JSX } from "solid-js"
-import { createToggle } from "../helpers/create-toggle"
+import { createToggle, type ToggleRenderContext } from "../helpers/create-toggle"
 
 // ── Types ──
 
 /** @public */
-export type CheckboxRenderContext = {
-  checked: boolean
-  focused: boolean
-  disabled: boolean
-  /** Spread on the root element for click toggle + keyboard + focus. */
-  toggleProps: {
-    focusable: true
-    onPress: () => void
-  }
-}
+export type CheckboxRenderContext = ToggleRenderContext
 
 /** @public */
 export type CheckboxProps = {

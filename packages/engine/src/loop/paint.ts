@@ -12,12 +12,13 @@
 
 import { CMD } from "../ffi/render-graph"
 import type { RenderCommand } from "../ffi/render-graph"
-import type { Layer } from "../ffi/layers"
+import type { Layer, LayerStoreHandle } from "../ffi/layers"
 import {
   intersectRect,
   rectArea,
   sumOverlapArea,
   type DamageRect,
+  type TransformQuad,
 } from "../ffi/damage"
 import {
   getRendererBackend,
@@ -53,12 +54,7 @@ export type PreparedLayerSlot = {
   dirtyRect: DamageRect | null
   clippedDamage: DamageRect | null
   isBackground: boolean
-  subtreeTransform: {
-    p0: { x: number; y: number }
-    p1: { x: number; y: number }
-    p2: { x: number; y: number }
-    p3: { x: number; y: number }
-  } | null
+  subtreeTransform: TransformQuad | null
   allowRegionalRepaint: boolean
   useRegionalRepaint: boolean
   freezeWhileInteracting: boolean
@@ -138,15 +134,8 @@ export type PaintFrameState = {
   debugDragRepro: boolean
   profile?: PaintProfiler
 
-  // Layer store — injected methods (coordinator owns the store)
-  getOrCreateLayer: (key: string, z: number) => Layer
-  getPreviousLayerRect: (layer: Layer) => DamageRect | null
-  updateLayerGeometry: (layer: Layer, x: number, y: number, w: number, h: number, opts: { moveOnly: boolean }) => void
-  markLayerDamaged: (layer: Layer, rect: DamageRect) => void
-  markLayerClean: (layer: Layer) => void
-  imageIdForLayer: (layer: Layer) => number
-  removeLayer: (layer: Layer) => void
-  layerCount: () => number
+  // Layer store — injected handle (coordinator owns the store)
+  layerStore: LayerStoreHandle
 
   // Layer cache — coordinator-owned map
   layerCache: Map<string, Layer>
@@ -368,14 +357,16 @@ export function paintFrame(
     expFrameBudgetMs,
     debugCadence,
     debugDragRepro,
-    getOrCreateLayer,
-    getPreviousLayerRect,
-    updateLayerGeometry,
-    markLayerDamaged,
-    markLayerClean,
-    imageIdForLayer,
-    removeLayer,
-    layerCount,
+    layerStore: {
+      getOrCreateLayer,
+      getPreviousLayerRect,
+      updateLayerGeometry,
+      markLayerDamaged,
+      markLayerClean,
+      imageIdForLayer,
+      removeLayer,
+      layerCount,
+    },
     layerCache,
     activeSlotKeys,
     frameDirtyRects,

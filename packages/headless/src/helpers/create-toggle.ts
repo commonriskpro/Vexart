@@ -1,5 +1,17 @@
 import { useFocus } from "@vexart/engine"
 
+/** Shared render context for toggle-based components (Checkbox, Switch). @public */
+export type ToggleRenderContext = {
+  checked: boolean
+  focused: boolean
+  disabled: boolean
+  /** Spread on the root element for click toggle + keyboard + focus. */
+  toggleProps: {
+    focusable: true
+    onPress: () => void
+  }
+}
+
 export type ToggleOptions = {
   checked: () => boolean
   disabled?: () => boolean

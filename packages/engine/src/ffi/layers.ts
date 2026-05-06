@@ -59,6 +59,22 @@ export type Layer = {
 /** Image IDs 1-2 are reserved for legacy single-image paths. */
 const BASE_IMAGE_ID = 10
 
+/**
+ * Subset of LayerStore methods threaded through frame pipeline state bags.
+ * Avoids duplicating 8 method signatures across CompositeFrameState, PaintFrameState, etc.
+ * @public
+ */
+export type LayerStoreHandle = {
+  getOrCreateLayer: (key: string, z: number) => Layer
+  getPreviousLayerRect: (layer: Layer) => DamageRect | null
+  updateLayerGeometry: (layer: Layer, x: number, y: number, w: number, h: number, opts: { moveOnly: boolean }) => void
+  markLayerDamaged: (layer: Layer, rect: DamageRect) => void
+  markLayerClean: (layer: Layer) => void
+  imageIdForLayer: (layer: Layer) => number
+  removeLayer: (layer: Layer) => void
+  layerCount: () => number
+}
+
 /** @public */
 export type LayerStore = {
   createLayer: (z: number) => Layer
