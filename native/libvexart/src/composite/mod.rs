@@ -703,32 +703,6 @@ pub fn copy_region_to_image(
     OK
 }
 
-/// Legacy composite merge — returns handle 0 (no-op).
-///
-/// The active composite path uses `composite_target_*` + `render_image_layer`
-/// for per-layer composition, making this z-order merge path unnecessary.
-/// Retained for FFI contract stability; will be removed in the next ABI bump.
-pub fn composite_merge(
-    _ctx: u64,
-    _composite: &[u8],
-    out_target: *mut u64,
-    stats_out: *mut FrameStats,
-) -> i32 {
-    if !out_target.is_null() {
-        // SAFETY: caller guarantees valid pointer.
-        unsafe {
-            *out_target = 0;
-        }
-    }
-    if !stats_out.is_null() {
-        // SAFETY: caller guarantees valid pointer.
-        unsafe {
-            *stats_out = FrameStats::default();
-        }
-    }
-    OK
-}
-
 /// Real full-target GPU→CPU readback.
 pub fn readback_rgba(
     pctx: &mut PaintContext,

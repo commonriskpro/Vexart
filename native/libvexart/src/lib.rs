@@ -553,30 +553,6 @@ pub unsafe extern "C" fn vexart_composite_image_mask_rounded_rect(
     })
 }
 
-// ── Legacy composite stub ─────────────────────────────────────────────────
-
-/// Z-order layer merge to final target. Phase 2 stub.
-///
-/// # Safety
-/// `composite_ptr` must be valid for `composite_len` bytes.
-#[no_mangle]
-pub unsafe extern "C" fn vexart_composite_merge(
-    ctx: u64,
-    composite_ptr: *const u8,
-    composite_len: u32,
-    out_target: *mut u64,
-    stats_out: *mut FrameStats,
-) -> i32 {
-    ffi_guard!({
-        let composite = if composite_ptr.is_null() || composite_len == 0 {
-            &[][..]
-        } else {
-            std::slice::from_raw_parts(composite_ptr, composite_len as usize)
-        };
-        composite::composite_merge(ctx, composite, out_target, stats_out)
-    })
-}
-
 /// Blocking GPU→CPU readback of full target.
 ///
 /// # Safety
