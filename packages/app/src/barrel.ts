@@ -69,8 +69,7 @@ export type {
 
 // ── Layout helpers ───────────────────────────────────────────────────────────
 
-export { Span, RichText, WrapRow } from "./public"
-export type { SpanProps, RichTextProps, WrapRowProps } from "./public"
+
 export type { TGEProps as BoxProps, ShadowConfig, GlowConfig } from "@vexart/engine"
 
 // ── App router ───────────────────────────────────────────────────────────────

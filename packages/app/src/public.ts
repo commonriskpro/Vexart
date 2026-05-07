@@ -15,11 +15,7 @@ export type { AppBoxProps, AppTextProps, ClassNameProps } from "./components/pri
 
 // -- Layout helpers (formerly @vexart/primitives) ----------------------------
 
-export { Span, RichText } from "./components/rich-text"
-export type { SpanProps, RichTextProps } from "./components/rich-text"
 
-export { WrapRow } from "./components/wrap-row"
-export type { WrapRowProps } from "./components/wrap-row"
 
 // -- Styling -----------------------------------------------------------------
 
