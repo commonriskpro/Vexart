@@ -25,6 +25,8 @@ export type { WrapRowProps } from "./components/wrap-row"
 
 export {
   CLASS_NAME_UNKNOWN_BEHAVIOR,
+  clearClassNameCache,
+  createStyles,
   mergeClassNameProps,
   resolveClassName,
 } from "./styles/class-name"

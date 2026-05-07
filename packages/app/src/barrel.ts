@@ -55,6 +55,8 @@ export type { AppBoxProps, AppTextProps, ClassNameProps } from "./components/pri
 export {
   resolveClassName,
   mergeClassNameProps,
+  clearClassNameCache,
+  createStyles,
   CLASS_NAME_UNKNOWN_BEHAVIOR,
 } from "./styles/class-name"
 export type {

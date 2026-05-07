@@ -1,5 +1,5 @@
 import type { InteractiveStyleProps } from "@vexart/engine"
-import { themeColors, font, radius, shadows, space, weight } from "@vexart/styled"
+import { themeColors, font, radius, shadows, glows, space, weight } from "@vexart/styled"
 
 /** @public */
 export const CLASS_NAME_UNKNOWN_BEHAVIOR = {
@@ -32,6 +32,61 @@ export type ClassNameResolveResult = {
   props: VexartStyleProps
   diagnostics: ClassNameDiagnostic[]
 }
+
+// ── Cache ───────────────────────────────────────────────────────────────────
+
+const cache = new Map<string, ClassNameResolveResult>()
+
+/**
+ * Clear the className resolution cache.
+ * Call after `setTheme()` if your app switches themes at runtime.
+ * For apps that never switch themes (the common case), this is not needed.
+ * @public
+ */
+export function clearClassNameCache() {
+  cache.clear()
+}
+
+// ── Style Registry (createStyles) ───────────────────────────────────────────
+
+let styleId = 0
+const styleRegistry = new Map<string, VexartStyleProps>()
+
+/**
+ * Create named style definitions that resolve via className.
+ *
+ * Values are captured eagerly at call time. For reactive theme colors,
+ * prefer utility classes (`bg-card`) or inline props.
+ *
+ * @example
+ * ```ts
+ * const s = createStyles({
+ *   card: { padding: 24, backgroundColor: "#171717", cornerRadius: 14 },
+ *   title: { fontSize: 20, fontWeight: 700, color: "#fafafa" },
+ * })
+ *
+ * <Box className={s.card}>
+ *   <Text className={s.title}>Hello</Text>
+ * </Box>
+ *
+ * // Composable with utility classes:
+ * <Box className={`${s.card} hover:bg-accent`}>
+ * ```
+ * @public
+ */
+export function createStyles<T extends Record<string, VexartStyleProps>>(
+  definitions: T,
+): { [K in keyof T]: string } {
+  const result = {} as { [K in keyof T]: string }
+  for (const key in definitions) {
+    const id = `_vs_${key}_${++styleId}`
+    styleRegistry.set(id, definitions[key])
+    result[key] = id
+  }
+  return result
+}
+
+// ── Internal ────────────────────────────────────────────────────────────────
 
 type MutableStyleProps = VexartStyleProps & {
   hoverStyle?: InteractiveStyleProps
@@ -98,6 +153,17 @@ const WEIGHT_ALIASES: Record<string, number> = {
   medium: weight.medium,
   semibold: weight.semibold,
   bold: weight.bold,
+}
+
+const BACKDROP_BLUR_MAP: Record<string, number> = {
+  none: 0,
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  "2xl": 40,
+  "3xl": 64,
 }
 
 const BORDER_WIDTH_MAP: Record<string, number> = {
@@ -211,6 +277,74 @@ function resolveToken(props: MutableStyleProps, target: StyleTarget, token: stri
     if (resolved) { props.shadow = resolved; return null }
   }
 
+  // ── Glow (Vexart-specific) ──
+  if (token.startsWith("glow-")) {
+    const value = token.slice(5)
+    if (value === "none") { props.glow = undefined; return null }
+    const resolved = glows[value as keyof typeof glows]
+    if (resolved) { applyToTarget(props, target, { glow: resolved } as InteractiveStyleProps); return null }
+  }
+
+  // ── Backdrop filters (Tailwind v4 naming) ──
+  if (token.startsWith("backdrop-blur")) {
+    if (token === "backdrop-blur") { applyToTarget(props, target, { backdropBlur: 8 } as InteractiveStyleProps); return null }
+    const suffix = token.slice(14) // "backdrop-blur-" = 14 chars
+    const mapped = BACKDROP_BLUR_MAP[suffix]
+    if (mapped !== undefined) { applyToTarget(props, target, { backdropBlur: mapped } as InteractiveStyleProps); return null }
+  }
+  if (token.startsWith("backdrop-brightness-")) {
+    const value = Number(token.slice(20))
+    if (Number.isFinite(value)) { applyToTarget(props, target, { backdropBrightness: value } as InteractiveStyleProps); return null }
+  }
+  if (token.startsWith("backdrop-contrast-")) {
+    const value = Number(token.slice(18))
+    if (Number.isFinite(value)) { applyToTarget(props, target, { backdropContrast: value } as InteractiveStyleProps); return null }
+  }
+  if (token.startsWith("backdrop-saturate-")) {
+    const value = Number(token.slice(18))
+    if (Number.isFinite(value)) { applyToTarget(props, target, { backdropSaturate: value } as InteractiveStyleProps); return null }
+  }
+  if (token.startsWith("backdrop-grayscale")) {
+    const value = token === "backdrop-grayscale" ? 100 : Number(token.slice(19))
+    if (Number.isFinite(value)) { applyToTarget(props, target, { backdropGrayscale: value } as InteractiveStyleProps); return null }
+  }
+  if (token.startsWith("backdrop-invert")) {
+    const value = token === "backdrop-invert" ? 100 : Number(token.slice(16))
+    if (Number.isFinite(value)) { applyToTarget(props, target, { backdropInvert: value } as InteractiveStyleProps); return null }
+  }
+  if (token.startsWith("backdrop-sepia")) {
+    const value = token === "backdrop-sepia" ? 100 : Number(token.slice(15))
+    if (Number.isFinite(value)) { applyToTarget(props, target, { backdropSepia: value } as InteractiveStyleProps); return null }
+  }
+  if (token.startsWith("backdrop-hue-rotate-")) {
+    const value = Number(token.slice(20))
+    if (Number.isFinite(value)) { applyToTarget(props, target, { backdropHueRotate: value } as InteractiveStyleProps); return null }
+  }
+
+  // ── Flex grow/shrink ──
+  if (token === "grow") { props.flexGrow = 1; return null }
+  if (token === "grow-0") { props.flexGrow = 0; return null }
+  if (token === "shrink") { props.flexShrink = 1; return null }
+  if (token === "shrink-0") { props.flexShrink = 0; return null }
+
+  // ── Z-index ──
+  if (token.startsWith("z-")) {
+    const value = Number(token.slice(2))
+    if (Number.isFinite(value)) { props.zIndex = value; return null }
+  }
+
+  // ── Scroll / overflow ──
+  if (token === "overflow-x-scroll") { props.scrollX = true; return null }
+  if (token === "overflow-y-scroll") { props.scrollY = true; return null }
+  if (token === "overflow-scroll") { props.scrollX = true; props.scrollY = true; return null }
+
+  // ── Layer ──
+  if (token === "layer") { props.layer = true; return null }
+
+  // ── Style registry (createStyles) ──
+  const registered = styleRegistry.get(token)
+  if (registered) { Object.assign(props, registered); return null }
+
   return {
     className: token,
     reason: "Unsupported Vexart class",
@@ -220,9 +354,17 @@ function resolveToken(props: MutableStyleProps, target: StyleTarget, token: stri
 
 /** @public */
 export function resolveClassName(className: string | undefined | null, options: ClassNameResolveOptions = {}): ClassNameResolveResult {
+  if (!className) return { props: {}, diagnostics: [] }
+
+  // Cache lookup — skip when custom options are used (diagnostics callbacks)
+  const useCache = !options.onDiagnostic && !options.unknownClass
+  if (useCache) {
+    const cached = cache.get(className)
+    if (cached) return cached
+  }
+
   const props: MutableStyleProps = {}
   const diagnostics: ClassNameDiagnostic[] = []
-  if (!className) return { props, diagnostics }
 
   for (const raw of className.split(/\s+/).filter(Boolean)) {
     const parsed = parseToken(raw)
@@ -238,7 +380,9 @@ export function resolveClassName(className: string | undefined | null, options: 
     }
   }
 
-  return { props, diagnostics }
+  const result: ClassNameResolveResult = { props, diagnostics }
+  if (useCache) cache.set(className, result)
+  return result
 }
 
 /** @public */
