@@ -104,6 +104,9 @@ export type ClassNameResolveResult = {
 // @public (undocumented)
 export type ClassNameUnknownBehavior = (typeof CLASS_NAME_UNKNOWN_BEHAVIOR)[keyof typeof CLASS_NAME_UNKNOWN_BEHAVIOR];
 
+// @public
+export function clearClassNameCache(): void;
+
 // @public (undocumented)
 export type CliResult = {
     code: number;
@@ -129,6 +132,11 @@ export type CreateAppRouterOptions = {
     defaultFocusId?: string | null;
     restoreFocus?: boolean;
     onFocus?: AppRouterFocusRestorer;
+};
+
+// @public
+export function createStyles<T extends Record<string, VexartStyleProps>>(definitions: T): {
+    [K in keyof T]: string;
 };
 
 // @public (undocumented)
@@ -202,6 +210,16 @@ export type PageProps = AppBoxProps & {
 export function resolveClassName(className: string | undefined | null, options?: ClassNameResolveOptions): ClassNameResolveResult;
 
 // @public (undocumented)
+export function RichText(props: RichTextProps): JSX.Element;
+
+// @public (undocumented)
+export type RichTextProps = {
+    maxWidth?: number;
+    lineHeight?: number;
+    children?: JSX.Element;
+};
+
+// @public (undocumented)
 export const ROUTE_FILE_KIND: {
     readonly PAGE: "page";
     readonly LAYOUT: "layout";
@@ -261,6 +279,19 @@ export function RouterProvider(props: AppRouterProviderProps): JSX.Element;
 export function runCli(argv?: string[]): Promise<CliResult>;
 
 // @public (undocumented)
+export function Span(props: SpanProps): JSX.Element;
+
+// @public (undocumented)
+export type SpanProps = {
+    color?: string | number;
+    fontSize?: number;
+    fontId?: number;
+    fontWeight?: number;
+    fontStyle?: "normal" | "italic";
+    children?: JSX.Element;
+};
+
+// @public (undocumented)
 function Text_2(props: AppTextProps): JSX.Element;
 export { Text_2 as Text }
 
@@ -303,6 +334,18 @@ export type VexartAppConfigTheme = {
 
 // @public (undocumented)
 export type VexartStyleProps = Partial<TGEProps>;
+
+// @public (undocumented)
+export function WrapRow(props: WrapRowProps): JSX.Element;
+
+// @public (undocumented)
+export type WrapRowProps = {
+    width: number;
+    itemWidth: number;
+    gap?: number;
+    rowGap?: number;
+    children?: JSX.Element;
+};
 
 // @public (undocumented)
 export function writeRouteManifestModule(options?: WriteRouteManifestOptions): Promise<FileSystemRouteManifest>;
