@@ -1,6 +1,6 @@
-import { splitProps, mergeProps as solidMergeProps } from "solid-js"
+import { splitProps } from "solid-js"
 import type { JSX } from "solid-js"
-import type { TGEProps, InteractiveStyleProps } from "@vexart/engine"
+import type { InteractiveStyleProps } from "@vexart/engine"
 import { resolveClassName } from "../styles/class-name"
 
 /** @public */

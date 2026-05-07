@@ -56,8 +56,7 @@ await build({
   // Replace monorepo workspace imports with relative paths
   alias: {
     "@vexart-native/engine": resolve(ROOT, "packages/engine/src/index.ts"),
-    // primitives was merged into app — resolve to app for backward compat
-    "@vexart/primitives": resolve(ROOT, "packages/app/src/index.ts"),
+
   },
   // Inject FFI path override — tell the bundle to look in vendor/ next to itself
   define: {
@@ -123,11 +122,11 @@ await build({
     "@vexart/engine": "./engine.js",
     // Workspace packages → source (bundled inline, but their engine imports
     // resolve to ./engine.js via the aliases above)
-    "@vexart-native/primitives": resolve(ROOT, "packages/primitives/src/index.ts"),
+
     "@vexart-native/headless": resolve(ROOT, "packages/headless/src/index.ts"),
     "@vexart-native/styled": resolve(ROOT, "packages/styled/src/index.ts"),
     "@vexart-native/app": resolve(ROOT, "packages/app/src/index.ts"),
-    "@vexart/primitives": resolve(ROOT, "packages/primitives/src/index.ts"),
+
     "@vexart/headless": resolve(ROOT, "packages/headless/src/index.ts"),
     "@vexart/styled": resolve(ROOT, "packages/styled/src/index.ts"),
     "@vexart/app": resolve(ROOT, "packages/app/src/index.ts"),
