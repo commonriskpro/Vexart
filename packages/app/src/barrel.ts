@@ -68,7 +68,8 @@ export type {
 // ── Primitives (non-colliding) ───────────────────────────────────────────────
 
 export { Span, RichText, WrapRow } from "@vexart/primitives"
-export type { SpanProps, RichTextProps, WrapRowProps, ShadowConfig, GlowConfig, BoxProps } from "@vexart/primitives"
+export type { SpanProps, RichTextProps, WrapRowProps, ShadowConfig, GlowConfig } from "@vexart/primitives"
+export type { TGEProps as BoxProps } from "@vexart/engine"
 
 // ── App router ───────────────────────────────────────────────────────────────
 
@@ -157,6 +158,13 @@ export {
   VoidSwitch,
   VoidTable,
   VoidTabs,
+  VoidTextarea,
+  VoidCode,
+  VoidMarkdown,
+  VoidList,
+  VoidVirtualList,
+  VoidScrollView,
+  VoidDiff,
   createVoidToaster,
   VoidTooltip,
 } from "@vexart/styled"
@@ -206,6 +214,13 @@ export type {
   TabsVariant,
   VoidToasterOptions,
   VoidTooltipProps,
+  VoidTextareaProps,
+  VoidCodeProps,
+  VoidMarkdownProps,
+  VoidListProps,
+  VoidVirtualListProps,
+  VoidScrollViewProps,
+  VoidDiffProps,
 } from "@vexart/styled"
 
 // Use ButtonProps from styled (themed) — headless ButtonProps available via "vexart/engine"
