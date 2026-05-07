@@ -119,23 +119,13 @@ export type {
 export { Diff } from "./navigation/diff"
 export type { DiffTheme, DiffProps } from "./navigation/diff"
 
-export { Router, Route, useRouterContext, NavigationStack, useStack } from "./navigation/router"
-export type { RouterProps, RouteComponentProps, NavigationStackProps } from "./navigation/router"
-
 // ── Re-exported engine contracts referenced by headless public types ─────────
 
-export { ExtmarkManager } from "@vexart/engine"
 export type {
   CreateExtmarkOptions,
   Extmark,
-  NavigationStackHandle,
-  NavigationEntry,
   NodeMouseEvent,
   Modifiers,
-  RouteProps,
-  RouterContextValue,
-  ScreenEntry,
-  ScreenProps,
   ScrollHandle,
   SimpleThemeRules,
   StyleDefinition,
