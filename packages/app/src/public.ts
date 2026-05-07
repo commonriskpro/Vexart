@@ -13,6 +13,14 @@ export type { PageProps } from "./runtime/page"
 export { Box, Text } from "./components/primitives"
 export type { AppBoxProps, AppTextProps, ClassNameProps } from "./components/primitives"
 
+// -- Layout helpers (formerly @vexart/primitives) ----------------------------
+
+export { Span, RichText } from "./components/rich-text"
+export type { SpanProps, RichTextProps } from "./components/rich-text"
+
+export { WrapRow } from "./components/wrap-row"
+export type { WrapRowProps } from "./components/wrap-row"
+
 // -- Styling -----------------------------------------------------------------
 
 export {

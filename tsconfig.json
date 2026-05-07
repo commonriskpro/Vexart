@@ -15,7 +15,6 @@
     "isolatedModules": true,
     "paths": {
       "@vexart/engine": ["./packages/engine/src/index.ts"],
-      "@vexart/primitives": ["./packages/primitives/src/index.ts"],
       "@vexart/headless": ["./packages/headless/src/index.ts"],
       "@vexart/styled": ["./packages/styled/src/index.ts"],
       "@vexart/app": ["./packages/app/src/index.ts"],

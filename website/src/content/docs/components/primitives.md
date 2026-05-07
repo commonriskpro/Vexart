@@ -1,85 +1,65 @@
 ---
 title: Primitives
-description: The foundation elements — Box, Text, RichText, Span, WrapRow.
+description: JSX intrinsic elements and layout helpers.
 ---
 
-`@vexart/primitives` provides typed wrappers around JSX intrinsic elements.
+Vexart provides JSX intrinsic elements that map directly to the engine's node types. Use them like HTML elements — no imports needed.
 
-## Box
-
-Layout container — the terminal equivalent of `<div>`.
-
-```tsx
-import { Box } from "@vexart/primitives"
-
-<Box
-  direction="row"
-  gap={12}
-  padding={16}
-  backgroundColor={0x1e1e2eff}
-  cornerRadius={12}
-  shadow={{ x: 0, y: 4, blur: 12, color: 0x00000040 }}
->
-  {children}
-</Box>
-```
-
-Default direction is **column** (vertical). Use `direction="row"` for horizontal.
-
-## Text
-
-Text display — the terminal equivalent of `<span>`.
-
-```tsx
-import { Text } from "@vexart/primitives"
-
-<Text color={0xfafafaff} fontSize={16} fontWeight={600}>
-  Hello World
-</Text>
-```
-
-## RichText + Span
-
-Multi-style text within a single text node:
-
-```tsx
-import { RichText, Span } from "@vexart/primitives"
-
-<RichText>
-  <Span color={0x56d4c8ff} fontWeight={700}>Vexart</Span>
-  <Span color={0xa0a0b8ff}> — GPU-accelerated terminal UI</Span>
-</RichText>
-```
-
-## WrapRow
-
-Flex-wrap workaround for horizontal layouts that need wrapping:
-
-```tsx
-import { WrapRow } from "@vexart/primitives"
-
-<WrapRow gap={8}>
-  {tags.map(tag => <Badge>{tag}</Badge>)}
-</WrapRow>
-```
-
-## JSX Intrinsics
-
-You can also use the raw intrinsic elements directly:
+## Intrinsic Elements
 
 | Element | Purpose |
 |---------|---------|
-| `<box>` | Layout + visual container |
-| `<text>` | Text display |
-| `<image>` / `<img>` | Image from file path (`src` prop) |
-| `<canvas>` | Imperative drawing (`onDraw` callback) |
+| `<box>` | Layout container (like `<div>`) |
+| `<text>` | Text content (like `<span>`) |
+| `<image>` / `<img>` | Image display |
+| `<canvas>` | Imperative drawing surface |
 
 ```tsx
-<box direction="row" gap={8}>
-  <text color={0xfafafaff}>Label</text>
-  <img src="./icon.png" width={24} height={24} cornerRadius={4} />
-  <canvas width={100} height={50} onDraw={(ctx) => {
-    ctx.circle(25, 25, 20, { fill: 0xff0000ff })
-  }} />
+<box direction="row" gap={8} padding={16} backgroundColor="#171717" cornerRadius={10}>
+  <text color="#fafafa" fontSize={14}>Hello Vexart</text>
 </box>
+```
+
+## App-Level Wrappers
+
+`@vexart/app` provides `Box` and `Text` components that add `className` support on top of the intrinsics:
+
+```tsx
+import { Box, Text } from "@vexart/app"
+
+<Box className="card" padding={16}>
+  <Text>Content</Text>
+</Box>
+```
+
+## Layout Helpers
+
+These components compose intrinsics for common layout patterns:
+
+### Span / RichText
+
+Inline styled text segments:
+
+```tsx
+import { RichText, Span } from "@vexart/app"
+
+<RichText>
+  <Span color="#56d4c8">Hello </Span>
+  <Span color="#a78bfa" fontWeight={700}>World</Span>
+</RichText>
+```
+
+### WrapRow
+
+Flex-wrap workaround (Flexily doesn't support `flexWrap` natively):
+
+```tsx
+import { WrapRow } from "@vexart/app"
+
+<WrapRow width={300} itemWidth={80} gap={4}>
+  <Box width={80}><Text>Tag 1</Text></Box>
+  <Box width={80}><Text>Tag 2</Text></Box>
+  <Box width={80}><Text>Tag 3</Text></Box>
+  <Box width={80}><Text>Tag 4</Text></Box>
+</WrapRow>
 ```

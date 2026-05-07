@@ -65,11 +65,11 @@ export type {
   VexartStyleProps,
 } from "./styles/class-name"
 
-// ── Primitives (non-colliding) ───────────────────────────────────────────────
+// ── Layout helpers ───────────────────────────────────────────────────────────
 
-export { Span, RichText, WrapRow } from "@vexart/primitives"
-export type { SpanProps, RichTextProps, WrapRowProps, ShadowConfig, GlowConfig } from "@vexart/primitives"
-export type { TGEProps as BoxProps } from "@vexart/engine"
+export { Span, RichText, WrapRow } from "./public"
+export type { SpanProps, RichTextProps, WrapRowProps } from "./public"
+export type { TGEProps as BoxProps, ShadowConfig, GlowConfig } from "@vexart/engine"
 
 // ── App router ───────────────────────────────────────────────────────────────
 

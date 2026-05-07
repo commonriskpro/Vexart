@@ -132,7 +132,7 @@ Vexart is **not** a cell-based TUI framework. It renders actual pixels using the
 | `@vexart/app` | Managed app framework: router, className mapper, config, CLI helpers | App |
 | `@vexart/styled` | Design tokens + styled components (shadcn-compatible): `colors`, `radius`, `space`, `font`, `shadows` | Styled |
 | `@vexart/headless` | Behaviour-only components: Button, Input, Dialog, Select, Tabs, List, Table, VirtualList, etc. | Headless |
-| `@vexart/primitives` | Low-level JSX nodes: `Box`, `Text`, `RichText`, `Span`, `WrapRow` | Primitives |
+| `@vexart/primitives` | **Merged into `@vexart/app`**. Layout helpers (`Span`, `RichText`, `WrapRow`) now live in app. Use `<box>`, `<text>` intrinsics directly. | ❌ Removed |
 | `@vexart/engine` | Core engine: render loop, GPU backend, SolidJS reconciler, input, focus, animation, data fetching | Foundation |
 
 Dependencies flow downward: `app → styled → headless → primitives → engine`. You can use any layer independently.

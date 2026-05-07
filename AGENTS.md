@@ -48,7 +48,7 @@ TypeScript-owned scene graph with a Rust/WGPU native rendering boundary.
 | Package | Purpose | Status |
 | ------- | ------- | ------ |
 | `@vexart/engine` | SolidJS reconciler, render loop, hooks, FFI bridge to `libvexart`, terminal lifecycle, input parsing, focus, hit-testing, output transport | ✅ Active |
-| `@vexart/primitives` | Primitive JSX wrappers and intrinsic element helpers: `Box`, `Text`, `RichText`, `Span`, `WrapRow`; JSX intrinsic elements include `<box>`, `<text>`, `<image>`, `<canvas>` | ✅ Active |
+| `@vexart/primitives` | **Merged into `@vexart/app`**. Layout helpers (`Span`, `RichText`, `WrapRow`) now live in app. Use `<box>`, `<text>` intrinsics directly. | ❌ Removed |
 | `@vexart/headless` | 26 headless components: logic, keyboard/mouse interaction, accessibility contracts, no styling | ✅ Active |
 | `@vexart/styled` | Themed components and void theme tokens — dark, shadcn-inspired design system | ✅ Active |
 | `@vexart/app` | App framework: router, route manifest helpers, className mapper, app mounting, CLI helpers | ✅ Active |
@@ -699,16 +699,6 @@ portable and ARM64-safe.
 - `RGBA` — `.fromHex()`, `.fromInts()`, `.fromValues()`, `.toU32()`, `.valueOf()`, `.toString()`
 - `MouseButton` — `{ LEFT, MIDDLE, RIGHT, RELEASE, SCROLL_UP, SCROLL_DOWN }`
 - `TRANSPORT_FAILURE_REASON`, `TRANSPORT_HEALTH`
-
-## `@vexart/primitives`
-
-| Component | Props | Purpose |
-| --------- | ----- | ------- |
-| `Box` | `BoxProps` | Layout container wrapper around `<box>` |
-| `Text` | `TextProps` | Text display wrapper around `<text>` |
-| `RichText` | `RichTextProps` | Multi-span text |
-| `Span` | `SpanProps` | Inline text span |
-| `WrapRow` | `WrapRowProps` | Flex-wrap workaround |
 
 JSX intrinsic elements include `<box>`, `<text>`, `<image>`/`<img>`, and `<canvas>`.
 

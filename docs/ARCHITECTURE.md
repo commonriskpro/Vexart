@@ -104,8 +104,8 @@ If a conflict emerges, the PRD wins at the policy layer; this document wins at t
 └──────────────────────┬─────────────────────────────┘
                        ▼
 ┌────────────────────────────────────────────────────┐
-│  @vexart/primitives — JSX intrinsics               │
-│  (<box>, <text>, <image>, <canvas>)                │
+│  @vexart/app — framework + layout helpers            │
+│  (Box, Text, Span, RichText, WrapRow, router, CLI) │
 └──────────────────────┬─────────────────────────────┘
                        ▼
 ┌────────────────────────────────────────────────────┐
@@ -138,22 +138,17 @@ If a conflict emerges, the PRD wins at the policy layer; this document wins at t
 ```
 PUBLIC PACKAGES (shipped to consumers)
 
-@vexart/app       depends on: styled, headless, primitives, engine
-  Bun-native app framework: router, className mapper, config, CLI helpers
+@vexart/app       depends on: styled, headless, engine
+  App framework: Box, Text, layout helpers, router, className mapper, config, CLI
 
 ┌───────────────────────────────────┐
-│  @vexart/styled                   │  depends on: headless, primitives, engine
+│  @vexart/styled                   │  depends on: headless, engine
 │  — Opinionated themed components  │
 └──────────────┬────────────────────┘
                ▼
 ┌───────────────────────────────────┐
-│  @vexart/headless                 │  depends on: primitives, engine
+│  @vexart/headless                 │  depends on: engine
 │  — Behavior, keyboard, state      │
-└──────────────┬────────────────────┘
-               ▼
-┌───────────────────────────────────┐
-│  @vexart/primitives               │  depends on: engine
-│  — JSX intrinsics + prop types    │
 └──────────────┬────────────────────┘
                ▼
 ┌───────────────────────────────────┐
@@ -331,31 +326,7 @@ packages/engine/
 - Every `vexart_*` Rust export is bound in `ffi/vexart-bridge.ts`. High-level wrappers live in `ffi/vexart-functions.ts`.
 - The reconciler owns interaction hooks (drag, hover, focus, pointer) and dispatches via the loop input system.
 
-### 3.2 `@vexart/primitives`
-
-```
-packages/primitives/
-├── package.json
-└── src/
-    ├── public.ts
-    ├── index.ts
-    ├── box.tsx               — <Box> primitive wrapper (optional sugar)
-    ├── text.tsx              — <Text> primitive wrapper
-    ├── rich-text.tsx         — <RichText> + <Span> multi-span text
-    └── wrap-row.tsx          — <WrapRow> flex-wrap workaround
-```
-
-**Purpose**: thin typed wrappers around the JSX intrinsics (`<box>`, `<text>`, etc.)
-that provide prop validation and convenience APIs. Consumers can use intrinsics
-directly or these wrappers; both are supported. Images and canvas elements are used
-via JSX intrinsics (`<image>`, `<canvas>`) directly — there are no wrapper
-components for these.
-
-**Exported components**: `Box`, `Text`, `RichText`, `Span`, `WrapRow`.
-
-**Rule**: Primitives never contain state, effects, or event handlers beyond pass-through. If logic is needed, it belongs in headless.
-
-### 3.3 `@vexart/headless`
+### 3.2 `@vexart/headless`
 
 ```
 packages/headless/
