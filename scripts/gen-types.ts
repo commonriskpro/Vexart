@@ -44,35 +44,124 @@ await $`bunx api-extractor run --local --config packages/app/api-extractor-barre
 })
 console.log("  ✅ types/vexart.d.ts")
 
-// ── 4. Generate jsx-runtime.d.ts from source ──
+// ── 3b. Post-process .d.ts — clean up leaked internals ──
+console.log("🧹 Post-processing type declarations...")
+
+for (const name of ["engine.d.ts", "vexart.d.ts"] as const) {
+  const file = resolve(TYPES, name)
+  let content = readFileSync(file, "utf-8")
+
+  // Remove flexily import — _flexNode is an internal field that leaks through TGENode
+  content = content.replace(/^import \{ Node as Node_2 \} from 'flexily';\n?/m, "")
+  // Replace Node_2 references with opaque type
+  content = content.replace(/Node_2/g, "unknown")
+
+  // Fix JSX return types — api-extractor sometimes emits `: JSX` instead of `: JSX.Element`
+  content = content.replace(/\): JSX;/g, "): JSX.Element;")
+
+  // Fix leaked const-derived types — api-extractor excludes the const but leaves the type referencing it
+  content = content.replace(/declare type NativeFrameStrategy = \(typeof NATIVE_FRAME_STRATEGY\)\[keyof typeof NATIVE_FRAME_STRATEGY\];/g, "declare type NativeFrameStrategy = string;")
+
+  writeFileSync(file, content)
+}
+console.log("  ✅ Removed flexily leak, fixed JSX return types")
+
+// ── 4. Generate jsx-runtime.d.ts ──
 console.log("📝 Generating jsx-runtime.d.ts...")
 
-// Read the monorepo jsx.d.ts which has the intrinsic elements
-const jsxSource = readFileSync(resolve(ROOT, "packages/engine/src/reconciler/jsx.d.ts"), "utf-8")
-
-// Build the public jsx-runtime.d.ts
 const jsxRuntime = `/**
  * Vexart JSX runtime type declarations.
  * AUTO-GENERATED — do not edit manually.
- * Source: packages/engine/src/reconciler/jsx.d.ts
  *
  * When tsconfig has jsxImportSource: "vexart", TypeScript resolves
  * JSX types from vexart/jsx-runtime.
  */
 
-import type { CanvasContext, PressEvent, NodeMouseEvent, NodeHandle } from "./engine"
+import type { TGEProps, NodeMouseEvent, NodeHandle } from "./engine"
 
-type Children = any
+type Children = JSX.Element | JSX.Element[] | string | number | boolean | null | undefined
+type RefCallback = (handle: NodeHandle) => void
 type ColorValue = string | number
+type ShadowDef = { x: number; y: number; blur: number; color: ColorValue }
+type CornerRadii = { tl: number; tr: number; br: number; bl: number }
 
-${jsxSource
-  // Remove the original imports (they reference internal paths)
-  .replace(/^import.*$/gm, "")
-  // Remove the "export {}" at the end
-  .replace(/^export \{\}.*$/gm, "")
-  // Remove the "declare module" block (we'll add our own)
-  .replace(/declare module "solid-js"[\s\S]*$/m, "")
-  .trim()}
+type BoxIntrinsicProps = TGEProps & {
+  ref?: RefCallback
+  layer?: boolean
+  scrollX?: boolean
+  scrollY?: boolean
+  scrollSpeed?: number
+  scrollId?: string
+  shadow?: ShadowDef | ShadowDef[]
+  glow?: { radius: number; color: ColorValue; intensity?: number }
+  onMouseDown?: (evt: NodeMouseEvent) => void
+  onMouseUp?: (evt: NodeMouseEvent) => void
+  onMouseOver?: (evt: NodeMouseEvent) => void
+  onMouseOut?: (evt: NodeMouseEvent) => void
+  onMouseMove?: (evt: NodeMouseEvent) => void
+  focusStyle?: {
+    backgroundColor?: ColorValue
+    borderColor?: ColorValue
+    borderWidth?: number
+    cornerRadius?: number
+    shadow?: ShadowDef | ShadowDef[]
+    glow?: { radius: number; color: ColorValue; intensity?: number }
+    gradient?: { type: "linear"; from: ColorValue; to: ColorValue; angle?: number } | { type: "radial"; from: ColorValue; to: ColorValue }
+    backdropBlur?: number
+    opacity?: number
+  }
+  opacity?: number
+  backdropBrightness?: number
+  backdropContrast?: number
+  backdropSaturate?: number
+  backdropGrayscale?: number
+  backdropInvert?: number
+  backdropSepia?: number
+  backdropHueRotate?: number
+  children?: Children
+}
+
+type TextIntrinsicProps = {
+  ref?: RefCallback
+  color?: ColorValue
+  fontSize?: number
+  fontId?: number
+  lineHeight?: number
+  wordBreak?: "normal" | "keep-all"
+  whiteSpace?: "normal" | "pre-wrap"
+  fontFamily?: string
+  fontWeight?: number
+  fontStyle?: "normal" | "italic"
+  children?: Children
+}
+
+type ImgIntrinsicProps = {
+  src: string
+  objectFit?: "contain" | "cover" | "fill" | "none"
+  width?: number | string
+  height?: number | string
+  cornerRadius?: number
+  cornerRadii?: CornerRadii
+  minWidth?: number
+  maxWidth?: number
+  minHeight?: number
+  maxHeight?: number
+  flexGrow?: number
+  flexShrink?: number
+  floating?: "parent" | "root" | { attachTo: string }
+  floatOffset?: { x: number; y: number }
+  zIndex?: number
+  layer?: boolean
+  opacity?: number
+}
+
+type CanvasIntrinsicProps = TGEProps & {
+  ref?: RefCallback
+  onDraw?: TGEProps["onDraw"]
+  drawCacheKey?: string | number
+  viewport?: TGEProps["viewport"]
+  children?: Children
+}
 
 export namespace JSX {
   type Element = any

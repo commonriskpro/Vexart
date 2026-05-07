@@ -12,7 +12,8 @@
   },
   "dtsRollup": {
     "enabled": true,
-    "untrimmedFilePath": "<projectFolder>/../../types/engine.d.ts"
+    "untrimmedFilePath": "",
+    "publicTrimmedFilePath": "<projectFolder>/../../types/engine.d.ts"
   },
   "tsdocMetadata": {
     "enabled": false

@@ -48,61 +48,60 @@ export type TabsProps = {
 /** @public */
 export function Tabs(props: TabsProps) {
   const count = () => props.tabs.length
+
+  // Internal signal mirrors activeTab — guarantees reactivity even if
+  // props.activeTab loses tracking through component layers.
+  const [active, setActive] = createSignal(props.activeTab)
   const [focusedTabIdx, setFocusedTabIdx] = createSignal(props.activeTab)
 
   createEffect(() => {
+    setActive(props.activeTab)
     setFocusedTabIdx(props.activeTab)
   })
+
+  function switchTab(index: number) {
+    setActive(index)
+    setFocusedTabIdx(index)
+    props.onTabChange?.(index)
+  }
 
   const { focused } = useFocus({
     id: props.focusId,
     onKeyDown(e) {
       const total = count()
       if (total === 0) return
-      if (e.key === "left") {
-        const next = (focusedTabIdx() - 1 + total) % total
-        setFocusedTabIdx(next)
-        props.onTabChange?.(next)
-        return
-      }
-      if (e.key === "right") {
-        const next = (focusedTabIdx() + 1) % total
-        setFocusedTabIdx(next)
-        props.onTabChange?.(next)
-        return
-      }
-      if (e.key === "home") { setFocusedTabIdx(0); return }
-      if (e.key === "end") { setFocusedTabIdx(total - 1); return }
+      if (e.key === "left") { switchTab((active() - 1 + total) % total); return }
+      if (e.key === "right") { switchTab((active() + 1) % total); return }
+      if (e.key === "home") { switchTab(0); return }
+      if (e.key === "end") { switchTab(total - 1); return }
     },
   })
 
-  const activeContent = () => {
-    const tab = props.tabs[props.activeTab]
-    return tab ? tab.content() : null
-  }
-
-  const tabHeaders = () =>
-    props.tabs.map((tab, i) => {
-      const ctx: TabRenderContext = {
-        active: props.activeTab === i,
-        focused: focused() && focusedTabIdx() === i,
-        index: i,
-        tabProps: {
-          onPress: () => { setFocusedTabIdx(i); props.onTabChange?.(i) },
-        },
-      }
-      return props.renderTab(tab, ctx)
-    })
-
-  const tabBar = props.renderTabBar
-    ? props.renderTabBar(<>{tabHeaders()}</>)
-    : <box direction="row">{tabHeaders()}</box>
-
-  const panel = props.renderPanel
-    ? props.renderPanel(<>{activeContent()}</>)
-    : <>{activeContent()}</>
-
-  return props.renderContainer
-    ? <>{props.renderContainer(tabBar, panel)}</>
-    : <box direction="column">{tabBar}{panel}</box>
+  return (
+    <box direction="column">
+      {() => {
+        const current = active()
+        const headers = props.tabs.map((tab, i) => {
+          const ctx: TabRenderContext = {
+            active: current === i,
+            focused: focused() && focusedTabIdx() === i,
+            index: i,
+            tabProps: {
+              onPress: () => switchTab(i),
+            },
+          }
+          return props.renderTab(tab, ctx)
+        })
+        const bar = props.renderTabBar
+          ? props.renderTabBar(<>{headers}</>)
+          : <box direction="row">{headers}</box>
+        const tab = props.tabs[current]
+        const content = tab ? tab.content() : null
+        const panelEl = props.renderPanel
+          ? props.renderPanel(<>{content}</>)
+          : <>{content}</>
+        return <>{bar}{panelEl}</>
+      }}
+    </box>
+  )
 }

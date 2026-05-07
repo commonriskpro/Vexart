@@ -9,7 +9,7 @@ import { For } from 'solid-js';
 import { Index } from 'solid-js';
 import { JSX } from 'solid-js';
 import { Match } from 'solid-js';
-import { Node as Node_2 } from 'flexily';
+
 import { onCleanup } from 'solid-js';
 import { onMount } from 'solid-js';
 import { Show } from 'solid-js';
@@ -85,7 +85,14 @@ export declare type AppTextProps = TGEProps & ClassNameProps;
 export declare type AsyncFieldValidator<T> = (value: T, allValues: Record<string, any>) => Promise<string | undefined | null>;
 
 /** @public */
-export declare function Avatar(props: AvatarProps): JSX;
+export declare function Avatar(props: AvatarProps): JSX.Element;
+
+/** @public */
+declare const AVATAR_SIZE: {
+    readonly SM: "sm";
+    readonly DEFAULT: "default";
+    readonly LG: "lg";
+};
 
 /** @public */
 export declare interface AvatarProps {
@@ -94,34 +101,26 @@ export declare interface AvatarProps {
     color?: string | number;
 }
 
-/**
- * Avatar — shadcn-compatible avatar with fallback initial.
- *
- * Sizes: sm (24px), default (32px), lg (40px)
- * Shows a colored circle with the first character of the name.
- */
-/** @public */
-export declare type AvatarSize = "sm" | "default" | "lg";
+export declare type AvatarSize = (typeof AVATAR_SIZE)[keyof typeof AVATAR_SIZE];
 
 /** @public */
-export declare function Badge(props: BadgeProps): JSX;
+export declare function Badge(props: BadgeProps): JSX.Element;
+
+/** @public */
+declare const BADGE_VARIANT: {
+    readonly DEFAULT: "default";
+    readonly SECONDARY: "secondary";
+    readonly OUTLINE: "outline";
+    readonly DESTRUCTIVE: "destructive";
+};
 
 /** @public */
 export declare interface BadgeProps {
     variant?: BadgeVariant;
-    children?: any;
+    children?: JSX.Element;
 }
 
-/**
- * Badge — shadcn-compatible badge with semantic variants.
- *
- * Variants: default, secondary, outline, destructive
- *
- * Theme reactivity: variant colors use getter functions so themeColors
- * signals are read inside SolidJS effects (not captured eagerly).
- */
-/** @public */
-export declare type BadgeVariant = "default" | "secondary" | "outline" | "destructive";
+export declare type BadgeVariant = (typeof BADGE_VARIANT)[keyof typeof BADGE_VARIANT];
 
 export { batch }
 
@@ -147,7 +146,28 @@ export declare type BoxProps = TGEProps & {
 };
 
 /** @public */
-export declare function Button(props: ButtonProps): JSX;
+export declare function Button(props: ButtonProps): JSX.Element;
+
+/** @public */
+declare const BUTTON_SIZE: {
+    readonly XS: "xs";
+    readonly SM: "sm";
+    readonly DEFAULT: "default";
+    readonly LG: "lg";
+    readonly ICON: "icon";
+    readonly ICON_SM: "icon-sm";
+    readonly ICON_LG: "icon-lg";
+};
+
+/** @public */
+declare const BUTTON_VARIANT: {
+    readonly DEFAULT: "default";
+    readonly SECONDARY: "secondary";
+    readonly OUTLINE: "outline";
+    readonly GHOST: "ghost";
+    readonly DESTRUCTIVE: "destructive";
+    readonly LINK: "link";
+};
 
 /** @public */
 export declare interface ButtonProps {
@@ -156,19 +176,16 @@ export declare interface ButtonProps {
     disabled?: boolean;
     onPress?: (event?: PressEvent) => void;
     focusId?: string;
-    children?: any;
+    children?: JSX.Element;
 }
 
-/** @public */
-export declare type ButtonSize = "xs" | "sm" | "default" | "lg" | "icon" | "icon-sm" | "icon-lg";
+export declare type ButtonSize = (typeof BUTTON_SIZE)[keyof typeof BUTTON_SIZE];
 
-/** @public */
-export declare type ButtonVariant = "default" | "secondary" | "outline" | "ghost" | "destructive" | "link";
+export declare type ButtonVariant = (typeof BUTTON_VARIANT)[keyof typeof BUTTON_VARIANT];
 
 /** @public */
 declare class CanvasContext {
-    /** @internal draw command buffer — flushed by paintCanvasCommands */
-    _commands: DrawCmd[];
+    /* Excluded from this release type: _commands */
     /** Current viewport transform — set by the render loop from props */
     viewport: Viewport;
     constructor(viewport?: Viewport);
@@ -264,65 +281,60 @@ declare type Capabilities = {
 };
 
 /** @public */
-export declare function Card(props: CardProps): JSX;
+export declare function Card(props: CardProps): JSX.Element;
 
 /** @public */
-export declare function CardAction(props: CardActionProps): JSX;
+export declare function CardAction(props: CardActionProps): JSX.Element;
 
 /** @public */
 export declare interface CardActionProps {
-    children?: any;
+    children?: JSX.Element;
 }
 
 /** @public */
-export declare function CardContent(props: CardContentProps): JSX;
+export declare function CardContent(props: CardContentProps): JSX.Element;
 
 /** @public */
 export declare interface CardContentProps {
-    children?: any;
+    children?: JSX.Element;
 }
 
 /** @public */
-export declare function CardDescription(props: CardDescriptionProps): JSX;
+export declare function CardDescription(props: CardDescriptionProps): JSX.Element;
 
 /** @public */
 export declare interface CardDescriptionProps {
-    children?: any;
+    children?: JSX.Element;
 }
 
 /** @public */
-export declare function CardFooter(props: CardFooterProps): JSX;
+export declare function CardFooter(props: CardFooterProps): JSX.Element;
 
 /** @public */
 export declare interface CardFooterProps {
-    children?: any;
+    children?: JSX.Element;
 }
 
 /** @public */
-export declare function CardHeader(props: CardHeaderProps): JSX;
+export declare function CardHeader(props: CardHeaderProps): JSX.Element;
 
 /** @public */
 export declare interface CardHeaderProps {
-    children?: any;
+    children?: JSX.Element;
 }
 
-/**
- * Card — styled card composition using Void design tokens.
- *
- * @public
- */
 /** @public */
 export declare interface CardProps {
-    children?: any;
+    children?: JSX.Element;
     size?: "default" | "sm";
 }
 
 /** @public */
-export declare function CardTitle(props: CardTitleProps): JSX;
+export declare function CardTitle(props: CardTitleProps): JSX.Element;
 
 /** @public */
 export declare interface CardTitleProps {
-    children?: any;
+    children?: JSX.Element;
 }
 
 /** @public */
@@ -343,16 +355,7 @@ export declare type CheckboxProps = {
 };
 
 /** @public */
-export declare type CheckboxRenderContext = {
-    checked: boolean;
-    focused: boolean;
-    disabled: boolean;
-    /** Spread on the root element for click toggle + keyboard + focus. */
-    toggleProps: {
-        focusable: true;
-        onPress: () => void;
-    };
-};
+export declare type CheckboxRenderContext = ToggleRenderContext;
 
 /** @public */
 declare type CircleCmd = {
@@ -528,25 +531,22 @@ export declare type ComboboxProps = {
     renderEmpty?: () => JSX.Element;
 };
 
-/**
- * Compositor-thread animation fast path (REQ-2B-301 through REQ-2B-305).
- *
- * When createTransition or createSpring targets 'transform' or 'opacity',
- * an AnimationDescriptor is registered here. The frame loop can then detect
- * when ONLY compositor-animated properties changed and skip the expensive
- * reconciler→walkTree→layout→paint pipeline.
- *
- * Phase 2b: Descriptor table + detection logic is in place.
- * The actual uniform-only GPU update falls back to full repaint initially;
- * the fast-path GPU plumbing lands in Phase 3.
- *
- * Architecture note:
- *   TS: createSpring/createTransition → registerAnimationDescriptor()
- *   Frame loop: isCompositorOnlyFrame() → if true, skip reconciler/paint
- *   GPU: (Phase 3) vexart_composite_update_uniform(target, nodeId, matrix)
- */
 /** @public Properties that can animate on the compositor thread. */
-declare type CompositorProperty = "transform" | "opacity";
+declare const COMPOSITOR_PROPERTY: {
+    readonly TRANSFORM: "transform";
+    readonly OPACITY: "opacity";
+};
+
+/** @public */
+declare type CompositorProperty = (typeof COMPOSITOR_PROPERTY)[keyof typeof COMPOSITOR_PROPERTY];
+
+/** @public Per-corner radius values. */
+declare type CornerRadii = {
+    tl: number;
+    tr: number;
+    br: number;
+    bl: number;
+};
 
 /** @public */
 export declare function createApp(component: () => JSX.Element, options?: CreateAppOptions): Promise<AppContext>;
@@ -616,13 +616,8 @@ export declare function createTransition(initial: number, config?: TransitionCon
 /** @public */
 export declare function createVoidToaster(options?: VoidToasterOptions): ToasterHandle;
 
-/** @public */
-declare type DamageRect = {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-};
+/** @public Alias kept for API compat — prefer `Rect` in new code. */
+declare type DamageRect = Rect;
 
 /** @public */
 export declare const darkTheme: Required<ThemeDefinition>;
@@ -644,21 +639,21 @@ export declare const Dialog: typeof DialogRoot & {
 };
 
 /** @public Wrapper for a child element that closes the dialog when activated. */
-export declare function DialogClose(props: DialogCloseProps): JSX;
+export declare function DialogClose(props: DialogCloseProps): JSX.Element;
 
 /** @public */
 export declare type DialogCloseProps = {
     /** Element that closes the dialog when activated. */
-    children?: any;
+    children?: JSX.Element;
 };
 
 /** @public The dialog panel that contains the content. */
-export declare function DialogContent(props: DialogContentProps): JSX;
+export declare function DialogContent(props: DialogContentProps): JSX.Element;
 
 /** @public */
 export declare type DialogContentProps = {
     /** Content of the dialog panel. */
-    children?: any;
+    children?: JSX.Element;
     /** Width of the dialog. Default: "fit" */
     width?: number | string;
     /** Max width constraint. */
@@ -672,7 +667,7 @@ export declare type DialogContentProps = {
 };
 
 /** @public */
-export declare function DialogOverlay(props: DialogOverlayProps): JSX;
+export declare function DialogOverlay(props: DialogOverlayProps): JSX.Element;
 
 /** @public */
 export declare type DialogOverlayProps = {
@@ -682,25 +677,18 @@ export declare type DialogOverlayProps = {
     backdropBlur?: number;
     /** Called when the overlay is clicked. Default: calls Dialog's onClose. */
     onClick?: () => void;
-    children?: any;
+    children?: JSX.Element;
 };
 
-/**
- * Dialog — headless modal dialog primitive.
- *
- * Provides focus scoping, overlay/content composition, and close behavior.
- *
- * @public
- */
 /** @public */
 export declare type DialogProps = {
     /** Dialog content. Should contain Dialog.Overlay and/or Dialog.Content. */
-    children?: any;
+    children?: JSX.Element;
     /** Called when the dialog should close (Escape key or overlay click). */
     onClose?: () => void;
 };
 
-declare function DialogRoot(props: DialogProps): JSX;
+declare function DialogRoot(props: DialogProps): JSX.Element;
 
 /** @public */
 export declare function Diff(props: DiffProps): JSX.Element;
@@ -1099,20 +1087,39 @@ export declare type GlowConfig = {
     intensity?: number;
 };
 
+/** @public Glow effect configuration (pre-parse, accepts string | number colors). */
+declare type GlowConfig_2 = {
+    radius: number;
+    color: string | number;
+    intensity?: number;
+};
+
 /** @public */
 export declare const glows: Record<"ring" | "destructive" | "success", Glow>;
 
-/** @public */
-export declare function H1(props: TypographyProps): JSX;
+/** @public Gradient configuration (pre-parse, accepts string | number colors). */
+declare type GradientConfig = {
+    type: "linear";
+    from: string | number;
+    to: string | number;
+    angle?: number;
+} | {
+    type: "radial";
+    from: string | number;
+    to: string | number;
+};
 
 /** @public */
-export declare function H2(props: TypographyProps): JSX;
+export declare function H1(props: TypographyProps): JSX.Element;
 
 /** @public */
-export declare function H3(props: TypographyProps): JSX;
+export declare function H2(props: TypographyProps): JSX.Element;
 
 /** @public */
-export declare function H4(props: TypographyProps): JSX;
+export declare function H3(props: TypographyProps): JSX.Element;
+
+/** @public */
+export declare function H4(props: TypographyProps): JSX.Element;
 
 /** @public */
 export declare type HoverOptions = {
@@ -1230,6 +1237,12 @@ declare type InputTheme = {
 };
 
 /** @public */
+declare const INTERACTION_MODE: {
+    readonly NONE: "none";
+    readonly DRAG: "drag";
+};
+
+/** @public */
 declare type InteractionBinding = "auto" | "none" | InteractionLayerState;
 
 /** @public */
@@ -1242,7 +1255,7 @@ declare type InteractionLayerState = {
 };
 
 /** @public */
-declare type InteractionMode = "none" | "drag";
+declare type InteractionMode = (typeof INTERACTION_MODE)[keyof typeof INTERACTION_MODE];
 
 /** @public Interactive style props usable in hoverStyle, activeStyle, and focusStyle. */
 declare type InteractiveStyleProps = Partial<Pick<TGEProps, "backgroundColor" | "borderColor" | "borderWidth" | "cornerRadius" | "borderRadius" | "shadow" | "boxShadow" | "glow" | "gradient" | "backdropBlur" | "backdropBrightness" | "backdropContrast" | "backdropSaturate" | "backdropGrayscale" | "backdropInvert" | "backdropSepia" | "backdropHueRotate" | "opacity" | "filter">>;
@@ -1296,7 +1309,7 @@ export declare type KeyEvent = {
 };
 
 /** @public */
-export declare function Large(props: TypographyProps): JSX;
+export declare function Large(props: TypographyProps): JSX.Element;
 
 /** @public Computed layout geometry written each frame after layout. */
 declare type LayoutRect = {
@@ -1307,7 +1320,7 @@ declare type LayoutRect = {
 };
 
 /** @public */
-export declare function Lead(props: TypographyProps): JSX;
+export declare function Lead(props: TypographyProps): JSX.Element;
 
 /** @public */
 export declare const lightTheme: Required<ThemeDefinition>;
@@ -1478,7 +1491,15 @@ declare type MountOptions = {
 };
 
 /** @public */
-declare type MouseAction = "press" | "release" | "move" | "scroll";
+declare const MOUSE_ACTION: {
+    readonly PRESS: "press";
+    readonly RELEASE: "release";
+    readonly MOVE: "move";
+    readonly SCROLL: "scroll";
+};
+
+/** @public */
+declare type MouseAction = (typeof MOUSE_ACTION)[keyof typeof MOUSE_ACTION];
 
 /** @public */
 export declare const MouseButton: {
@@ -1536,7 +1557,7 @@ export declare type MutationResult<T, V> = {
 };
 
 /** @public */
-export declare function Muted(props: TypographyProps): JSX;
+export declare function Muted(props: TypographyProps): JSX.Element;
 
 /** @public */
 export declare type NavigationOptions = {
@@ -1639,7 +1660,7 @@ export declare type OverlayRootProps = {
 };
 
 /** @public */
-export declare function P(props: TypographyProps): JSX;
+export declare function P(props: TypographyProps): JSX.Element;
 
 /** @public */
 export declare function Page(props: PageProps): JSX.Element;
@@ -1837,6 +1858,14 @@ export declare const radius: {
     readonly xl: number;
     readonly xxl: number;
     readonly full: 9999;
+};
+
+/** @public Axis-aligned rectangle (origin + size). */
+declare type Rect = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
 };
 
 /** @public */
@@ -2104,7 +2133,7 @@ export declare type SelectTriggerProps = {
 };
 
 /** @public */
-export declare function Separator(props: SeparatorProps): JSX;
+export declare function Separator(props: SeparatorProps): JSX.Element;
 
 /**
  * Separator — styled visual divider.
@@ -2145,6 +2174,14 @@ export declare type ShadowConfig = {
     color: string | number;
 };
 
+/** @public Shadow definition (pre-parse, accepts string | number colors). */
+declare type ShadowConfig_2 = {
+    x: number;
+    y: number;
+    blur: number;
+    color: string | number;
+};
+
 /** @public */
 export declare const shadows: Record<"xs" | "sm" | "md" | "lg" | "xl", Shadow[]>;
 
@@ -2172,7 +2209,7 @@ declare type SizingInfo = {
 };
 
 /** @public */
-export declare function Skeleton(props: SkeletonProps): JSX;
+export declare function Skeleton(props: SkeletonProps): JSX.Element;
 
 /**
  * Skeleton — styled loading placeholder.
@@ -2241,7 +2278,7 @@ export declare type SliderTrackProps = {
 };
 
 /** @public */
-export declare function Small(props: TypographyProps): JSX;
+export declare function Small(props: TypographyProps): JSX.Element;
 
 /** @public */
 export declare const space: {
@@ -2359,16 +2396,7 @@ export declare type SwitchProps = {
 };
 
 /** @public */
-export declare type SwitchRenderContext = {
-    checked: boolean;
-    focused: boolean;
-    disabled: boolean;
-    /** Spread on the root element for click toggle + keyboard + focus. */
-    toggleProps: {
-        focusable: true;
-        onPress: () => void;
-    };
-};
+export declare type SwitchRenderContext = ToggleRenderContext;
 
 /** @public */
 export declare class SyntaxStyle {
@@ -2469,6 +2497,12 @@ export declare type TabRenderContext = {
 export declare function Tabs(props: TabsProps): JSX.Element;
 
 /** @public */
+declare const TABS_VARIANT: {
+    readonly DEFAULT: "default";
+    readonly LINE: "line";
+};
+
+/** @public */
 export declare type TabsProps = {
     activeTab: number;
     onTabChange?: (index: number) => void;
@@ -2484,8 +2518,7 @@ export declare type TabsProps = {
     renderContainer?: (tabBar: JSX.Element, panel: JSX.Element) => JSX.Element;
 };
 
-/** @public */
-export declare type TabsVariant = "default" | "line";
+export declare type TabsVariant = (typeof TABS_VARIANT)[keyof typeof TABS_VARIANT];
 
 /** @public */
 declare type Terminal = {
@@ -2683,6 +2716,15 @@ declare type TextCmd = {
 };
 
 /** @public */
+declare const TGE_NODE_KIND: {
+    readonly BOX: "box";
+    readonly TEXT: "text";
+    readonly IMG: "img";
+    readonly CANVAS: "canvas";
+    readonly ROOT: "root";
+};
+
+/** @public */
 declare type TGENode = {
     kind: TGENodeKind;
     props: TGEProps;
@@ -2695,8 +2737,7 @@ declare type TGENode = {
     destroyed: boolean;
     /** Computed layout rect — written after the layout pass */
     layout: LayoutRect;
-    /** Persistent Flexily layout node. Text nodes attach one lazily with measureFunc. */
-    _flexNode: Node_2 | null;
+    /* Excluded from this release type: _flexNode */
     /** Interactive state — managed by render loop hit-testing */
     _hovered: boolean;
     _active: boolean;
@@ -2754,7 +2795,7 @@ declare type TGENode = {
 };
 
 /** @public */
-declare type TGENodeKind = "box" | "text" | "img" | "canvas" | "root";
+declare type TGENodeKind = (typeof TGE_NODE_KIND)[keyof typeof TGE_NODE_KIND];
 
 /** @public */
 declare type TGEProps = {
@@ -2784,12 +2825,7 @@ declare type TGEProps = {
     cornerRadius?: number;
     /** CSS-friendly alias for cornerRadius (Decision 1) */
     borderRadius?: number;
-    cornerRadii?: {
-        tl: number;
-        tr: number;
-        br: number;
-        bl: number;
-    };
+    cornerRadii?: CornerRadii;
     borderColor?: string | number;
     borderWidth?: number;
     /** Opacity: 0.0 = fully transparent, 1.0 = fully opaque. Multiplies alpha of entire element. */
@@ -2833,34 +2869,11 @@ declare type TGEProps = {
     borderTop?: number;
     borderBottom?: number;
     borderBetweenChildren?: number;
-    shadow?: {
-        x: number;
-        y: number;
-        blur: number;
-        color: string | number;
-    } | Array<{
-        x: number;
-        y: number;
-        blur: number;
-        color: string | number;
-    }>;
+    shadow?: ShadowConfig_2 | ShadowConfig_2[];
     /** CSS-friendly alias for shadow (Decision 1) */
     boxShadow?: TGEProps["shadow"];
-    glow?: {
-        radius: number;
-        color: string | number;
-        intensity?: number;
-    };
-    gradient?: {
-        type: "linear";
-        from: string | number;
-        to: string | number;
-        angle?: number;
-    } | {
-        type: "radial";
-        from: string | number;
-        to: string | number;
-    };
+    glow?: GlowConfig_2;
+    gradient?: GradientConfig;
     backdropBlur?: number;
     /** Backdrop brightness filter. 0=black, 100=unchanged, 200=2x bright. */
     backdropBrightness?: number;
@@ -2905,7 +2918,7 @@ declare type TGEProps = {
     /** Make this element focusable via Tab navigation. Like HTML tabindex="0". */
     focusable?: boolean;
     /** Keyboard event handler — fires when this element is focused and a key is pressed. */
-    onKeyDown?: (event: any) => void;
+    onKeyDown?: (event: KeyEvent) => void;
     /** Fires when mouse button is pressed while over this node. */
     onMouseDown?: (event: NodeMouseEvent) => void;
     /** Fires when mouse button is released while over this node. */
@@ -2917,19 +2930,7 @@ declare type TGEProps = {
     /** Fires when pointer leaves this node's bounds. */
     onMouseOut?: (event: NodeMouseEvent) => void;
     /** Transform configuration: translate, rotate, scale, skew, perspective. */
-    transform?: {
-        translateX?: number;
-        translateY?: number;
-        rotate?: number;
-        scale?: number;
-        scaleX?: number;
-        scaleY?: number;
-        skewX?: number;
-        skewY?: number;
-        perspective?: number;
-        rotateX?: number;
-        rotateY?: number;
-    };
+    transform?: TransformConfig;
     /** Transform origin point. Default: "center". */
     transformOrigin?: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | {
         x: number;
@@ -2946,11 +2947,7 @@ declare type TGEProps = {
     /** Optional cache key for static canvas draw lists. Change it when onDraw output changes. */
     drawCacheKey?: string | number;
     /** Viewport transform for pan and zoom. */
-    viewport?: {
-        x: number;
-        y: number;
-        zoom: number;
-    };
+    viewport?: ViewportConfig;
     color?: string | number;
     fontSize?: number;
     fontId?: number;
@@ -3064,6 +3061,15 @@ declare type ThemeTokenStyle = {
 };
 
 /** @public */
+declare const TOAST_VARIANT: {
+    readonly DEFAULT: "default";
+    readonly SUCCESS: "success";
+    readonly ERROR: "error";
+    readonly WARNING: "warning";
+    readonly INFO: "info";
+};
+
+/** @public */
 export declare type ToastData = {
     id: number;
     message: string;
@@ -3107,8 +3113,19 @@ export declare type ToastInput = string | {
 /** @public */
 export declare type ToastPosition = "top-right" | "top-left" | "bottom-right" | "bottom-left" | "top-center" | "bottom-center";
 
-/** @public */
-export declare type ToastVariant = "default" | "success" | "error" | "warning" | "info";
+export declare type ToastVariant = (typeof TOAST_VARIANT)[keyof typeof TOAST_VARIANT];
+
+/** Shared render context for toggle-based components (Checkbox, Switch). @public */
+declare type ToggleRenderContext = {
+    checked: boolean;
+    focused: boolean;
+    disabled: boolean;
+    /** Spread on the root element for click toggle + keyboard + focus. */
+    toggleProps: {
+        focusable: true;
+        onPress: () => void;
+    };
+};
 
 /** @public */
 export declare function ToggleSwitch(props: SwitchProps): JSX.Element;
@@ -3136,6 +3153,21 @@ export declare type TooltipProps = {
     offset?: number;
 };
 
+/** @public 2D transform configuration. */
+declare type TransformConfig = {
+    translateX?: number;
+    translateY?: number;
+    rotate?: number;
+    scale?: number;
+    scaleX?: number;
+    scaleY?: number;
+    skewX?: number;
+    skewY?: number;
+    perspective?: number;
+    rotateX?: number;
+    rotateY?: number;
+};
+
 /** @public */
 export declare type TransitionConfig = {
     duration?: number;
@@ -3147,14 +3179,9 @@ export declare type TransitionConfig = {
     };
 };
 
-/**
- * Typography — shadcn-compatible text presets.
- *
- * H1, H2, H3, H4, P, Lead, Large, Small, Muted
- */
 /** @public */
 export declare interface TypographyProps {
-    children?: any;
+    children?: JSX.Element;
     color?: string | number;
 }
 
@@ -3256,6 +3283,13 @@ declare type Viewport = {
     zoom: number;
 };
 
+/** @public Viewport transform for canvas pan/zoom. */
+declare type ViewportConfig = {
+    x: number;
+    y: number;
+    zoom: number;
+};
+
 /** @public */
 export declare function VirtualList<T>(props: VirtualListProps<T>): JSX.Element;
 
@@ -3312,7 +3346,7 @@ export declare type VisualCursor = {
 };
 
 /** @public */
-export declare function VoidCheckbox(props: VoidCheckboxProps): JSX;
+export declare function VoidCheckbox(props: VoidCheckboxProps): JSX.Element;
 
 /**
  * VoidCheckbox — styled checkbox using Void design tokens.
@@ -3329,7 +3363,7 @@ export declare type VoidCheckboxProps = {
 };
 
 /** @public */
-export declare function VoidCombobox(props: VoidComboboxProps): JSX;
+export declare function VoidCombobox(props: VoidComboboxProps): JSX.Element;
 
 /** @public */
 export declare type VoidComboboxProps = {
@@ -3351,28 +3385,21 @@ export declare const VoidDialog: typeof VoidDialogRoot & {
 };
 
 /** @public */
-export declare function VoidDialogDescription(props: VoidDialogDescriptionProps): JSX;
+export declare function VoidDialogDescription(props: VoidDialogDescriptionProps): JSX.Element;
 
 /** @public */
 export declare type VoidDialogDescriptionProps = {
-    children?: any;
+    children?: JSX.Element;
 };
 
 /** @public */
-export declare function VoidDialogFooter(props: VoidDialogFooterProps): JSX;
+export declare function VoidDialogFooter(props: VoidDialogFooterProps): JSX.Element;
 
 /** @public */
 export declare type VoidDialogFooterProps = {
-    children?: any;
+    children?: JSX.Element;
 };
 
-/**
- * Dialog — styled modal dialog using Void design tokens.
- *
- * Built on top of the headless dialog primitive.
- *
- * @public
- */
 /** @public */
 export declare type VoidDialogProps = {
     /** Called when the dialog should close (Escape, overlay click). */
@@ -3381,17 +3408,17 @@ export declare type VoidDialogProps = {
     width?: number;
     /** Max width constraint. Default: 480. */
     maxWidth?: number;
-    children?: any;
+    children?: JSX.Element;
 };
 
-declare function VoidDialogRoot(props: VoidDialogProps): JSX;
+declare function VoidDialogRoot(props: VoidDialogProps): JSX.Element;
 
 /** @public */
-export declare function VoidDialogTitle(props: VoidDialogTitleProps): JSX;
+export declare function VoidDialogTitle(props: VoidDialogTitleProps): JSX.Element;
 
 /** @public */
 export declare type VoidDialogTitleProps = {
-    children?: any;
+    children?: JSX.Element;
 };
 
 /** @public */
@@ -3457,7 +3484,7 @@ export declare type VoidDropdownMenuTriggerProps = {
 };
 
 /** @public */
-export declare function VoidInput(props: VoidInputProps): JSX;
+export declare function VoidInput(props: VoidInputProps): JSX.Element;
 
 /**
  * VoidInput — styled single-line text input using Void design tokens.
@@ -3493,7 +3520,7 @@ export declare type VoidPopoverProps = {
 };
 
 /** @public */
-export declare function VoidProgress(props: VoidProgressProps): JSX;
+export declare function VoidProgress(props: VoidProgressProps): JSX.Element;
 
 /**
  * VoidProgress — styled progress bar using Void design tokens.
@@ -3509,7 +3536,7 @@ export declare type VoidProgressProps = {
 };
 
 /** @public */
-export declare function VoidRadioGroup(props: VoidRadioGroupProps): JSX;
+export declare function VoidRadioGroup(props: VoidRadioGroupProps): JSX.Element;
 
 /** @public */
 export declare type VoidRadioGroupProps = {
@@ -3522,7 +3549,7 @@ export declare type VoidRadioGroupProps = {
 };
 
 /** @public */
-export declare function VoidSelect(props: VoidSelectProps): JSX;
+export declare function VoidSelect(props: VoidSelectProps): JSX.Element;
 
 /** @public */
 export declare type VoidSelectProps = {
@@ -3533,11 +3560,11 @@ export declare type VoidSelectProps = {
     disabled?: boolean;
     focusId?: string;
     width?: number | string;
-    children?: any;
+    children?: JSX.Element;
 };
 
 /** @public */
-export declare function VoidSlider(props: VoidSliderProps): JSX;
+export declare function VoidSlider(props: VoidSliderProps): JSX.Element;
 
 /**
  * Slider — styled numeric range input using Void design tokens.
@@ -3559,7 +3586,7 @@ export declare type VoidSliderProps = {
 };
 
 /** @public */
-export declare function VoidSwitch(props: VoidSwitchProps): JSX;
+export declare function VoidSwitch(props: VoidSwitchProps): JSX.Element;
 
 /**
  * Switch — styled toggle switch using Void design tokens.
@@ -3592,7 +3619,7 @@ export declare type VoidTableProps = {
 };
 
 /** @public */
-export declare function VoidTabs(props: VoidTabsProps): JSX;
+export declare function VoidTabs(props: VoidTabsProps): JSX.Element;
 
 /** @public */
 export declare type VoidTabsProps = {

@@ -7,7 +7,7 @@ import { For } from 'solid-js';
 import { Index } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { Match } from 'solid-js';
-import { Node as Node_2 } from 'flexily';
+
 import { Setter } from 'solid-js';
 import { Show } from 'solid-js';
 import { Switch } from 'solid-js';
@@ -137,8 +137,7 @@ export declare function buildRenderOp(cmd: RenderCommand, textMetaMap: Map<numbe
 
 /** @public */
 export declare class CanvasContext {
-    /** @internal draw command buffer — flushed by paintCanvasCommands */
-    _commands: DrawCmd[];
+    /* Excluded from this release type: _commands */
     /** Current viewport transform — set by the render loop from props */
     viewport: Viewport;
     constructor(viewport?: Viewport);
@@ -1609,13 +1608,7 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      reset: () => void;
  };
 
- /** @internal */
- declare const NATIVE_FRAME_STRATEGY: {
-     readonly SKIP_PRESENT: 0;
-     readonly LAYERED_DIRTY: 1;
-     readonly LAYERED_REGION: 2;
-     readonly FINAL_FRAME: 3;
- };
+ /* Excluded from this release type: NATIVE_FRAME_STRATEGY */
 
  declare type NativeFrameExecutionStats = NativeFrameExecutionStatsInput;
 
@@ -1649,7 +1642,7 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      reasonFlags: number;
  };
 
- declare type NativeFrameStrategy = (typeof NATIVE_FRAME_STRATEGY)[keyof typeof NATIVE_FRAME_STRATEGY];
+ declare type NativeFrameStrategy = string;
 
  /**
   * kitty-shm-native.ts — native Kitty shared-memory path
@@ -2900,8 +2893,7 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      destroyed: boolean;
      /** Computed layout rect — written after the layout pass */
      layout: LayoutRect;
-     /** Persistent Flexily layout node. Text nodes attach one lazily with measureFunc. */
-     _flexNode: Node_2 | null;
+     /* Excluded from this release type: _flexNode */
      /** Interactive state — managed by render loop hit-testing */
      _hovered: boolean;
      _active: boolean;

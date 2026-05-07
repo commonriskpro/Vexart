@@ -10,7 +10,8 @@
   },
   "dtsRollup": {
     "enabled": true,
-    "untrimmedFilePath": "<projectFolder>/../../types/vexart.d.ts"
+    "untrimmedFilePath": "",
+    "publicTrimmedFilePath": "<projectFolder>/../../types/vexart.d.ts"
   },
   "tsdocMetadata": {
     "enabled": false

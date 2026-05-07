@@ -1,40 +1,18 @@
 /**
  * Vexart JSX runtime type declarations.
  * AUTO-GENERATED — do not edit manually.
- * Source: packages/engine/src/reconciler/jsx.d.ts
  *
  * When tsconfig has jsxImportSource: "vexart", TypeScript resolves
  * JSX types from vexart/jsx-runtime.
  */
 
-import type { CanvasContext, PressEvent, NodeMouseEvent, NodeHandle } from "./engine"
-
-type Children = any
-type ColorValue = string | number
-
-/**
- * JSX type declarations for Vexart — SolidJS module augmentation.
- *
- * This file augments solid-js's JSX namespace with Vexart's intrinsic elements.
- * The canonical prop types live in types/jsx-runtime.d.ts.
- *
- * We import them here to avoid duplicate/conflicting declarations.
- */
-
-// The actual IntrinsicElements are declared in types/jsx-runtime.d.ts
-// which is resolved via jsxImportSource or direct reference.
-// This file ensures SolidJS's module augmentation picks up our elements.
-
-
-
-
-// Re-declare using the SAME types as jsx-runtime.d.ts to avoid intersection conflicts.
-// Shadow accepts single object OR array.
+import type { TGEProps, NodeMouseEvent, NodeHandle } from "./engine"
 
 type Children = JSX.Element | JSX.Element[] | string | number | boolean | null | undefined
 type RefCallback = (handle: NodeHandle) => void
 type ColorValue = string | number
 type ShadowDef = { x: number; y: number; blur: number; color: ColorValue }
+type CornerRadii = { tl: number; tr: number; br: number; bl: number }
 
 type BoxIntrinsicProps = TGEProps & {
   ref?: RefCallback
@@ -45,7 +23,6 @@ type BoxIntrinsicProps = TGEProps & {
   scrollId?: string
   shadow?: ShadowDef | ShadowDef[]
   glow?: { radius: number; color: ColorValue; intensity?: number }
-  // Mouse events (focusable, onPress, onKeyDown inherited from VexartProps)
   onMouseDown?: (evt: NodeMouseEvent) => void
   onMouseUp?: (evt: NodeMouseEvent) => void
   onMouseOver?: (evt: NodeMouseEvent) => void
@@ -62,7 +39,6 @@ type BoxIntrinsicProps = TGEProps & {
     backdropBlur?: number
     opacity?: number
   }
-  // Effects
   opacity?: number
   backdropBrightness?: number
   backdropContrast?: number
@@ -94,7 +70,7 @@ type ImgIntrinsicProps = {
   width?: number | string
   height?: number | string
   cornerRadius?: number
-  cornerRadii?: { tl: number; tr: number; br: number; bl: number }
+  cornerRadii?: CornerRadii
   minWidth?: number
   maxWidth?: number
   minHeight?: number

@@ -368,7 +368,7 @@ export type TGENode = {
   destroyed: boolean
   /** Computed layout rect — written after the layout pass */
   layout: LayoutRect
-  /** Persistent Flexily layout node. Text nodes attach one lazily with measureFunc. */
+  /** Persistent Flexily layout node. Text nodes attach one lazily with measureFunc. @internal */
   _flexNode: Node | null
   /** Interactive state — managed by render loop hit-testing */
   _hovered: boolean

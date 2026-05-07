@@ -7,7 +7,7 @@
  * Run: bun --conditions=browser run examples/void-showcase.tsx
  */
 import { createSignal, Show } from "solid-js"
-import { useTerminalDimensions, SyntaxStyle, ONE_DARK } from "@vexart/engine"
+import { useTerminalDimensions, SyntaxStyle, ONE_DARK, setDebug, debugStatsLine, onInput } from "@vexart/engine"
 import { createApp, useAppTerminal, Box, Text } from "@vexart/app"
 import {
   // Tokens
@@ -574,6 +574,30 @@ function App() {
   const terminal = useAppTerminal()
   const dims = useTerminalDimensions(terminal)
   const [tab, setTab] = createSignal(0)
+  const [perfLine, setPerfLine] = createSignal("")
+
+  // Enable debug overlay for frame stats
+  setDebug(true)
+
+  // Instrument tab switches
+  function onTabSwitch(index: number) {
+    const t0 = performance.now()
+    setTab(index)
+    const t1 = performance.now()
+    const msg = `[tab-switch] setTab(${index}): ${(t1 - t0).toFixed(2)}ms`
+    setPerfLine(msg)
+    console.error(msg)
+  }
+
+  // Log frame stats after each input
+  onInput((e) => {
+    if (e.type === "key" || e.type === "mouse") {
+      queueMicrotask(() => {
+        const stats = debugStatsLine()
+        if (stats) console.error(`[frame] ${stats}`)
+      })
+    }
+  })
 
   return (
     <Box
@@ -597,14 +621,17 @@ function App() {
           </Text>
           <Muted>Every styled component in the Vexart design system</Muted>
         </Box>
-        <Badge variant="outline">v0.9</Badge>
+        <Box direction="row" gap={space[2]} alignY="center">
+          <Text color="#f59e0b" fontSize={font.xs}>{perfLine()}</Text>
+          <Badge variant="outline">v0.9</Badge>
+        </Box>
       </Box>
 
       {/* Tabs */}
       <Box paddingX={space[6]} paddingTop={space[3]}>
         <VoidTabs
           activeTab={tab()}
-          onTabChange={setTab}
+          onTabChange={onTabSwitch}
           tabs={[
             { label: "Inputs", content: () => <InputsTab /> },
             { label: "Display", content: () => <DisplayTab /> },
