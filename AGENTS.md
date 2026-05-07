@@ -112,7 +112,7 @@ TypeScript-owned scene graph with a Rust/WGPU native rendering boundary.
 - `cd native/libvexart && cargo test` — run Rust tests.
 - `cd native/libvexart && cargo build --release` — build the Rust native library.
 - `bun --conditions=browser run examples/hello-app.tsx` — run the hello example.
-- `bun run showcase` — run comprehensive feature showcase (7 tabs).
+- `bun run showcase` — run Void component showcase (6 tabs: Inputs, Display, Collections, Code & Docs, Overlays, Typography).
 - `bun run build:dist` — build npm distribution.
 
 ## Visual Effects (Rust/WGPU → JSX)
@@ -792,19 +792,26 @@ glows                            // preset glow configs
 | `Avatar` | — | sm, default, lg |
 | `Skeleton` | — | — |
 | `VoidCheckbox` | — | — |
+| `VoidCode` | — | — |
 | `VoidCombobox` | — | — |
 | `VoidDialog`, `VoidDialogTitle`, `VoidDialogDescription`, `VoidDialogFooter` | — | — |
+| `VoidDiff` | — | — |
 | `VoidDropdownMenu`, `VoidDropdownMenuTrigger`, `VoidDropdownMenuContent`, `VoidDropdownMenuItem`, `VoidDropdownMenuSeparator`, `VoidDropdownMenuLabel` | — | — |
 | `VoidInput` | — | — |
+| `VoidList` | — | — |
+| `VoidMarkdown` | — | — |
 | `VoidPopover` | — | — |
 | `VoidProgress` | — | — |
 | `VoidRadioGroup` | — | — |
+| `VoidScrollView` | — | — |
 | `VoidSelect` | — | — |
 | `VoidSlider` | — | — |
 | `VoidSwitch` | — | — |
 | `VoidTable` | — | — |
 | `VoidTabs` | default variants | — |
+| `VoidTextarea` | — | — |
 | `VoidTooltip` | — | — |
+| `VoidVirtualList` | — | — |
 | `createVoidToaster` | — | — |
 
 ### Typography

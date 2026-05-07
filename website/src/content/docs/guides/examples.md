@@ -3,37 +3,49 @@ title: Examples
 description: Runnable demos for every Vexart feature.
 ---
 
-## Running Examples
+## Void Component Showcase
 
-All examples live in the `examples/` directory and run with:
+The showcase demonstrates every styled component in a tabbed interface:
 
 ```bash
-bun --conditions=browser run examples/<name>.tsx
+bun run showcase
 ```
 
-## Quick Start
+Tabs:
 
-| Command | Description |
-|---------|-------------|
-| `bun run example` | Hello World — first JSX render |
-| `bun run showcase` | Comprehensive 7-tab feature showcase |
-| `bun run demo4` | Interactive — focus, signals, keyboard |
-| `bun run demo7` | Scroll containers |
-| `bun run demo8` | Component showcase |
-| `bun run demo9` | Shadow & glow effects |
-| `bun run demo10` | Input components |
-| `bun run demo14` | Textarea / code editor |
-| `bun run demo15` | Syntax highlighting |
-| `bun run demo16` | Markdown rendering |
+1. **Inputs** — VoidInput, VoidTextarea, VoidSelect, VoidCombobox, VoidCheckbox, VoidSwitch, VoidRadioGroup, VoidSlider
+2. **Display** — Button (5 variants × 4 sizes), Badge, Avatar, Card, VoidProgress, Skeleton, Separator
+3. **Collections** — VoidList, VoidTable, VoidScrollView
+4. **Code & Docs** — VoidCode, VoidMarkdown, VoidDiff
+5. **Overlays** — VoidDialog, Toast, VoidTooltip
+6. **Typography** — H1–H4, P, Lead, Large, Small, Muted
 
-## Feature Showcase
+## Writing Your Own App
 
-The showcase (`bun run showcase`) demonstrates all major features in a tabbed interface:
+```tsx
+import { createApp, Box, Text } from "@vexart/app"
+import { Button, Card, CardContent, colors, space } from "@vexart/styled"
 
-1. **Layout** — Flexbox, padding, gap, alignment, sizing
-2. **Effects** — Shadows, glow, gradients, backdrop blur
-3. **Components** — Buttons, inputs, dialogs, lists
-4. **Scroll** — Virtual lists, programmatic scroll
-5. **Animation** — Transitions, springs, easing
-6. **Interactive** — Focus, hover states, pointer capture
-7. **Text** — MSDF rendering, syntax highlighting, markdown
+function App() {
+  return (
+    <Box width="100%" height="100%" backgroundColor={colors.background}
+      alignX="center" alignY="center">
+      <Card>
+        <CardContent>
+          <Button onPress={() => console.log("clicked!")}>
+            Hello Vexart
+          </Button>
+        </CardContent>
+      </Card>
+    </Box>
+  )
+}
+
+await createApp(() => <App />)
+```
+
+Run with:
+
+```bash
+bun --conditions=browser run app.tsx
+```

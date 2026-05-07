@@ -52,6 +52,7 @@ Sizes: `xs`, `sm`, `default`, `lg`
 | `VoidCheckbox` | Headless Checkbox |
 | `VoidCombobox` | Headless Combobox |
 | `VoidInput` | Headless Input |
+| `VoidTextarea` | Headless Textarea (multi-line editor, syntax highlighting) |
 | `VoidRadioGroup` | Headless RadioGroup |
 | `VoidSelect` | Headless Select |
 | `VoidSlider` | Headless Slider |
@@ -67,13 +68,24 @@ Sizes: `xs`, `sm`, `default`, `lg`
 | `VoidTooltip` | Tooltip |
 | `createVoidToaster` | Toast notifications |
 
-## Data Components
+## Data & Collection Components
 
 | Component | Purpose |
 |-----------|---------|
 | `VoidTable` | Styled data table |
 | `VoidTabs` | Styled tab switcher |
 | `VoidProgress` | Styled progress bar |
+| `VoidList` | Styled selectable list with keyboard navigation |
+| `VoidVirtualList` | Styled virtualized list container |
+| `VoidScrollView` | Styled scrollable container |
+
+## Content Components
+
+| Component | Purpose |
+|-----------|---------|
+| `VoidCode` | Styled syntax-highlighted code block |
+| `VoidMarkdown` | Styled markdown renderer |
+| `VoidDiff` | Styled unified diff viewer |
 
 ## Typography
 
