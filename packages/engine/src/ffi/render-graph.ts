@@ -6,10 +6,11 @@ import { hasBackdropEffect } from "../loop/predicates"
 // Commands are produced by layout-adapter.endLayout() and carry nodeId for
 // matching commands to effects, images, and layer assignments.
 //
-// TODO(arch): RenderCommand is a generic intermediary — effect/image/canvas data
-// takes a detour through effectsQueue (walk-tree) → RenderCommand (layout-adapter)
-// → Map.get by nodeId (buildRenderOp). Consider merging effects directly into
-// a unified RenderGraphOp during endLayout() to eliminate the intermediary.
+// NOTE(arch): The old per-node metadata Map.get detours were eliminated —
+// effects, images, canvas data, and text metadata now attach directly to
+// RenderCommand in layout-adapter. Remaining overhead is RenderCommand →
+// RenderGraphOp structural wrapping per frame.
+// See item 11 in the simplification audit for a phased cleanup plan.
 
 /** Layout adapter command type constants. */
 export const CMD = {
@@ -35,6 +36,10 @@ export type RenderCommand = {
   extra1: number // border width, font size
   extra2: number // text length, font id
   text?: string
+  lineHeight?: number
+  fontFamily?: string
+  fontWeight?: number
+  fontStyle?: string
   /** Stable node ID for matching render ops to effects/images. */
   nodeId?: number
   /** Effect config attached directly — eliminates Map.get lookup in render graph. */
@@ -306,12 +311,11 @@ export function getBorderRenderInputs(cmd: RenderCommand): BorderRenderInputs {
   }
 }
 
-export function getTextRenderInputs(cmd: RenderCommand, textMetaMap: Map<number, TextMeta>): TextRenderInputs | null {
+export function getTextRenderInputs(cmd: RenderCommand): TextRenderInputs | null {
   if (!cmd.text) return null
-  const meta = cmd.nodeId === undefined ? undefined : textMetaMap.get(cmd.nodeId)
-  const fontId = meta?.fontId ?? 0
-  const fontSize = meta?.fontSize ?? (Math.round(cmd.extra1) || 14)
-  const lineHeight = meta?.lineHeight ?? Math.ceil(fontSize * 1.2)
+  const fontId = Math.round(cmd.extra2) || 0
+  const fontSize = Math.round(cmd.extra1) || 14
+  const lineHeight = cmd.lineHeight ?? Math.ceil(fontSize * 1.2)
   const maxWidth = Math.max(Math.round(cmd.width), 1)
   const textHeight = Math.round(cmd.height) > 0 ? Math.round(cmd.height) : lineHeight
   return {
@@ -321,9 +325,9 @@ export function getTextRenderInputs(cmd: RenderCommand, textMetaMap: Map<number,
     lineHeight,
     maxWidth,
     textHeight,
-    fontFamily: meta?.fontFamily,
-    fontWeight: meta?.fontWeight,
-    fontStyle: meta?.fontStyle,
+    fontFamily: cmd.fontFamily,
+    fontWeight: cmd.fontWeight,
+    fontStyle: cmd.fontStyle,
   }
 }
 
@@ -539,7 +543,7 @@ function hashU32Scratch(a: number, b: number, c: number, d: number, e: number) {
 }
 
 /** @public */
-export function buildRenderOp(cmd: RenderCommand, textMetaMap: Map<number, TextMeta>, ownerIds?: { rect: number | null; text: number | null }): RenderGraphOp | null {
+export function buildRenderOp(cmd: RenderCommand, ownerIds?: { rect: number | null; text: number | null }): RenderGraphOp | null {
   if (cmd.type === CMD.RECTANGLE) {
     const renderObjectId = ownerIds?.rect ?? null
     const rect: RectangleRenderOp = {
@@ -594,7 +598,7 @@ export function buildRenderOp(cmd: RenderCommand, textMetaMap: Map<number, TextM
   }
   if (cmd.type === CMD.TEXT) {
     const renderObjectId = ownerIds?.text ?? null
-    const inputs = getTextRenderInputs(cmd, textMetaMap)
+    const inputs = getTextRenderInputs(cmd)
     if (!inputs) return null
     return {
       kind: "text",
@@ -618,7 +622,6 @@ export function buildRenderOp(cmd: RenderCommand, textMetaMap: Map<number, TextM
 /** @public */
 export function buildRenderGraphFrame(
   commands: RenderCommand[],
-  textMetaMap: Map<number, TextMeta>,
 ): RenderGraphFrame {
   const ops: RenderGraphOp[] = []
   const clipStack: ClipStackEntry[] = []
@@ -637,7 +640,7 @@ export function buildRenderGraphFrame(
     // All commands carry nodeId — the legacy counter-based fallback has been removed.
     const rectId = cmd.nodeId ?? null
     const textId = cmd.nodeId ?? null
-    const op = buildRenderOp(cmd, textMetaMap, {
+    const op = buildRenderOp(cmd, {
       rect: cmd.type === CMD.RECTANGLE ? rectId : null,
       text: cmd.type === CMD.TEXT ? textId : null,
     })
