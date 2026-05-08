@@ -81,7 +81,6 @@ describe("compositeFrame compositor fast path", () => {
       rectNodes: [],
       textNodes: [],
       boxNodes: [],
-      textMetaMap: new Map(),
       rectNodeById: new Map(),
       nodeRefById: new Map([[node.id, node]]),
       layerBoundaries: [],

@@ -27,7 +27,6 @@ function layoutState(root: TGENode) {
     layerBoundaries: [],
     scrollContainers: [],
     nodeRefById: new Map(),
-    textMetaMap: new Map(),
     rectNodeById: new Map(),
     layout,
   })

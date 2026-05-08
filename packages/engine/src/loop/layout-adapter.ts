@@ -135,7 +135,11 @@ export function createVexartLayoutCtx() {
   let _textColors: number[] = []
   let _textFontIds: number[] = []
   let _textFontSizes: number[] = []
-  // Effect/image/canvas — attached directly to RenderCommand (eliminates Map.get in render-graph)
+  let _textLineHeights: number[] = []
+  let _textFontFamilies: (string | undefined)[] = []
+  let _textFontWeights: (number | undefined)[] = []
+  let _textFontStyles: (string | undefined)[] = []
+  // Effect/image/canvas/text metadata — attached directly to RenderCommand (eliminates Map.get in render-graph)
   let _effects: (EffectConfig | null)[] = []
   let _images: (ImagePaintConfig | null)[] = []
   let _canvases: (CanvasPaintConfig | null)[] = []
@@ -180,6 +184,10 @@ export function createVexartLayoutCtx() {
       _textColors.push(0)
       _textFontIds.push(0)
       _textFontSizes.push(0)
+      _textLineHeights.push(0)
+      _textFontFamilies.push(undefined)
+      _textFontWeights.push(undefined)
+      _textFontStyles.push(undefined)
       _effects.push(null)
       _images.push(null)
       _canvases.push(null)
@@ -200,6 +208,10 @@ export function createVexartLayoutCtx() {
       _textColors[idx] = 0
       _textFontIds[idx] = 0
       _textFontSizes[idx] = 0
+      _textLineHeights[idx] = 0
+      _textFontFamilies[idx] = undefined
+      _textFontWeights[idx] = undefined
+      _textFontStyles[idx] = undefined
       _effects[idx] = null
       _images[idx] = null
       _canvases[idx] = null
@@ -357,6 +369,10 @@ export function createVexartLayoutCtx() {
             color: _textColors[textIdx] >>> 0,
             cornerRadius: 0, extra1: _textFontSizes[textIdx], extra2: _textFontIds[textIdx],
             text: _textContents[textIdx],
+            lineHeight: _textLineHeights[textIdx],
+            fontFamily: _textFontFamilies[textIdx],
+            fontWeight: _textFontWeights[textIdx],
+            fontStyle: _textFontStyles[textIdx],
             nodeId,
           })
         }
@@ -467,8 +483,8 @@ export function createVexartLayoutCtx() {
       if (isOwnedCurrent() && (_sx || _sy)) _currentNode.setOverflow(OVERFLOW_SCROLL)
     },
 
-    text(_content: string, _color: number, _fontId: number, _fontSize: number, nodeId?: number, measuredW?: number, measuredH?: number, _fontFamily?: string, _fontWeight?: number, _fontStyle?: string) {
-      void measuredW; void measuredH; void _fontFamily; void _fontWeight; void _fontStyle
+    text(_content: string, _color: number, _fontId: number, _fontSize: number, nodeId?: number, measuredW?: number, measuredH?: number, _fontFamily?: string, _fontWeight?: number, _fontStyle?: string, _lineHeight?: number) {
+      void measuredW; void measuredH
       const node = _pendingFlexNode ?? Node.create()
       if (!_pendingFlexNode) _ownedNodes.add(node)
       _pendingFlexNode = null
@@ -481,6 +497,10 @@ export function createVexartLayoutCtx() {
       _textColors[idx] = _color
       _textFontIds[idx] = _fontId
       _textFontSizes[idx] = _fontSize
+      _textLineHeights[idx] = _lineHeight ?? Math.ceil(_fontSize * 1.2)
+      _textFontFamilies[idx] = _fontFamily
+      _textFontWeights[idx] = _fontWeight
+      _textFontStyles[idx] = _fontStyle
 
       if (_nodeStack.length === 0) {
         _roots.push(node)

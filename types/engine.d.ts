@@ -7,7 +7,7 @@ import { For } from 'solid-js';
 import { Index } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { Match } from 'solid-js';
-
+import { Node as Node_2 } from 'flexily';
 import { Setter } from 'solid-js';
 import { Show } from 'solid-js';
 import { Switch } from 'solid-js';
@@ -127,10 +127,10 @@ export declare type BorderRenderOp = {
 export declare function buildNodeMouseEvent(node: TGENode, pointerX: number, pointerY: number): NodeMouseEvent;
 
 /** @public */
-export declare function buildRenderGraphFrame(commands: RenderCommand[], textMetaMap: Map<number, TextMeta>): RenderGraphFrame;
+export declare function buildRenderGraphFrame(commands: RenderCommand[]): RenderGraphFrame;
 
 /** @public */
-export declare function buildRenderOp(cmd: RenderCommand, textMetaMap: Map<number, TextMeta>, ownerIds?: {
+export declare function buildRenderOp(cmd: RenderCommand, ownerIds?: {
     rect: number | null;
     text: number | null;
 }): RenderGraphOp | null;
@@ -1642,7 +1642,7 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      reasonFlags: number;
  };
 
- declare type NativeFrameStrategy = string;
+ declare type NativeFrameStrategy = (typeof NATIVE_FRAME_STRATEGY)[keyof typeof NATIVE_FRAME_STRATEGY];
 
  /**
   * kitty-shm-native.ts — native Kitty shared-memory path
@@ -2129,6 +2129,10 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      extra1: number;
      extra2: number;
      text?: string;
+     lineHeight?: number;
+     fontFamily?: string;
+     fontWeight?: number;
+     fontStyle?: string;
      /** Stable node ID for matching render ops to effects/images. */
      nodeId?: number;
      /** Effect config attached directly — eliminates Map.get lookup in render graph. */

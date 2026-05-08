@@ -27,7 +27,6 @@ import { type Layer, createLayerStore } from "../ffi/layers"
 import { type DamageRect } from "../ffi/damage"
 import { createGpuRendererBackend } from "../ffi/gpu-renderer-backend"
 
-import type { TextMeta } from "../ffi/render-graph"
 import { getRendererBackend, setRendererBackend, type RendererBackend } from "../ffi/renderer-backend"
 import {
   boostWindowFor as schedulerBoostWindowFor,
@@ -88,11 +87,10 @@ function freeFlexTree(node: TGENode): void {
 }
 
 // ── Module-level shared state ──
-const textMetaMap = new Map<number, TextMeta>()
-  const frameDirtyRects: DamageRect[] = []
-  const pendingNodeDamageRects: Array<{ nodeId: number; rect: DamageRect }> = []
-  const scrollOffsets = new Map<number, { x: number; y: number }>()
-  const activeSlotKeys = new Set<string>()
+const frameDirtyRects: DamageRect[] = []
+const pendingNodeDamageRects: Array<{ nodeId: number; rect: DamageRect }> = []
+const scrollOffsets = new Map<number, { x: number; y: number }>()
+const activeSlotKeys = new Set<string>()
 
 /** @public */
 export type RenderLoopOptions = {
@@ -380,7 +378,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     postScrollCallbacks,
     walkCounters,
     rectNodes, textNodes, boxNodes,
-    textMetaMap, rectNodeById, nodeRefById,
+    rectNodeById, nodeRefById,
     layerBoundaries, scrollContainers, nodeCountValue,
     layerCache, activeSlotKeys, frameDirtyRects, pendingNodeDamageRects, scrollOffsets,
     layerStore: { getOrCreateLayer, getPreviousLayerRect, updateLayerGeometry, markLayerDamaged, markLayerClean, imageIdForLayer, removeLayer, layerCount },

@@ -55,7 +55,6 @@ function createPaintFrameState(): PaintFrameState {
     frameDirtyRects: [],
     pendingNodeDamageRects: [],
     nodeRefById: new Map([[root.id, root]]),
-    textMetaMap: new Map(),
 
     backendOverride: undefined,
     interaction: {

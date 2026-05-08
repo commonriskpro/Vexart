@@ -27,7 +27,7 @@ import { nativeCanvasDisplayListTouch, nativeCanvasDisplayListUpdate, syncNative
 import { decodeImageForNode } from "./image"
 import { ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, type createVexartLayoutCtx } from "./layout-adapter"
 import { BACKDROP_FIELDS } from "../ffi/render-graph"
-import type { EffectConfig, TextMeta } from "../ffi/render-graph"
+import type { EffectConfig } from "../ffi/render-graph"
 import { shouldPromoteInteractionLayer } from "../reconciler/interaction"
 import type { LayerBoundary } from "./types"
 import { hasBackdropEffect, isInteractiveNode } from "./predicates"
@@ -53,9 +53,6 @@ export type WalkTreeState = {
 
   // Lookup maps populated during walk
   nodeRefById: Map<number, TGENode>
-
-  // Text metadata map (keyed by content) — used during paint for multi-line layout
-  textMetaMap: Map<number, TextMeta>
 
   // Rect node lookup (by id) — used by interaction state
   rectNodeById: Map<number, TGENode>
@@ -241,15 +238,11 @@ export function walkTree(
     const fontWeight = props.fontWeight as number | undefined
     const fontStyle = props.fontStyle as string | undefined
 
-    // Track metadata for multi-line paint (only textMetaMap is consumed downstream)
-    const meta: TextMeta = { nodeId: node.id, content, fontId, fontSize, lineHeight, fontFamily, fontWeight, fontStyle }
-    state.textMetaMap.set(node.id, meta)
-
     // Text dimensions are computed by Flexily's measure function in the
     // layout adapter — no pre-measurement needed here.
     createTextFlexNode(node)
     layout.setCurrentFlexNode(node._flexNode)
-    layout.text(content, color, fontId, fontSize, node.id, undefined, undefined, fontFamily, fontWeight, fontStyle)
+    layout.text(content, color, fontId, fontSize, node.id, undefined, undefined, fontFamily, fontWeight, fontStyle, lineHeight)
     state.textNodes.push(node)
     return
   }

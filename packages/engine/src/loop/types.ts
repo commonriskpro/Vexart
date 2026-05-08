@@ -9,7 +9,7 @@
 
 import type { TGENode } from "../ffi/node"
 import type { RenderCommand } from "../ffi/render-graph"
-import type { EffectConfig, TextMeta, ImagePaintConfig, CanvasPaintConfig } from "../ffi/render-graph"
+import type { EffectConfig, ImagePaintConfig, CanvasPaintConfig } from "../ffi/render-graph"
 import type { PositionedCommand } from "./layout-adapter"
 import type { DamageRect } from "../ffi/damage"
 import type { Layer } from "../ffi/layers"
@@ -82,7 +82,7 @@ export type FrameState = {
  * walk-tree → layout-adapter
  *
  * Produced during walkTree: all nodes sorted by type, queued effects,
- * image/canvas data, node lookup maps, and text metadata.
+ * image/canvas data, and node lookup maps.
  */
 export type WalkResult = {
   rectNodes: TGENode[]

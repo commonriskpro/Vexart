@@ -20,7 +20,6 @@
 import type { Terminal } from "../terminal/index"
 import type { RenderCommand } from "../ffi/render-graph"
 
-import type { TextMeta } from "../ffi/render-graph"
 import type { TGENode } from "../ffi/node"
 
 import { debugFrameStart, debugUpdateStats, isDebugEnabled } from "./debug"
@@ -196,7 +195,6 @@ export type CompositeFrameState = {
   rectNodes: TGENode[]
   textNodes: TGENode[]
   boxNodes: TGENode[]
-  textMetaMap: Map<number, TextMeta>
   rectNodeById: Map<number, TGENode>
   nodeRefById: Map<number, TGENode>
   layerBoundaries: LayerBoundary[]
@@ -252,7 +250,6 @@ function buildWalkState(s: CompositeFrameState): WalkTreeState {
     layerBoundaries: s.layerBoundaries,
     scrollContainers: s.scrollContainers,
     nodeRefById: s.nodeRefById,
-    textMetaMap: s.textMetaMap,
     rectNodeById: s.rectNodeById,
     layout: s.layoutAdapter,
   }
@@ -266,7 +263,6 @@ function walkTreeOnce(s: CompositeFrameState) {
 
 function resetWalkAccumulators(s: CompositeFrameState) {
   s.walkCounters.scrollSpeedCap = 0
-  s.textMetaMap.clear()
   s.rectNodes.length = 0
   s.rectNodeById.clear()
   s.textNodes.length = 0
@@ -617,7 +613,6 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     frameDirtyRects: s.frameDirtyRects,
     pendingNodeDamageRects: s.pendingNodeDamageRects,
     nodeRefById: s.nodeRefById,
-    textMetaMap: s.textMetaMap,
 
     backendOverride: s.backendOverride,
     interaction: s.interaction,

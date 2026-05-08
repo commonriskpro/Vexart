@@ -135,8 +135,6 @@ export type PaintFrameState = {
 
   nodeRefById: Map<number, TGENode>
 
-  textMetaMap: Map<number, import("../ffi/render-graph").TextMeta>
-
   // Renderer backend (injected override or global)
   backendOverride?: RendererBackend
 
@@ -352,7 +350,6 @@ export function paintFrame(
     activeSlotKeys,
     frameDirtyRects,
     pendingNodeDamageRects,
-    textMetaMap,
     interaction: {
       lastPresentedInteractionSeq,
       lastPresentedInteractionLatencyMs,
@@ -725,7 +722,7 @@ export function paintFrame(
         layer: layerCtx,
       }
       const renderGraphStart = profile ? performance.now() : 0
-      const graph = buildRenderGraphFrame(layerCommands, textMetaMap)
+      const graph = buildRenderGraphFrame(layerCommands)
       if (profile) profile.paintRenderGraphMs += performance.now() - renderGraphStart
       const backendPaintStart = profile ? performance.now() : 0
       const paintResult = backend.paint({
