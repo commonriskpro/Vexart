@@ -120,29 +120,24 @@ export function bindLoop(loop: RenderLoop): void;
 // @public (undocumented)
 export function boostWindowFor(kind: InteractionKind, boosts: FrameSchedulerBoosts): number;
 
-// @public (undocumented)
-export type BorderRenderInputs = {
-    radius: number;
-    width: number;
-    cornerRadii: CornerRadii | null;
-};
-
+// Warning: (ae-forgotten-export) The symbol "BaseRenderOpFields" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export type BorderRenderOp = {
     kind: "border";
-    renderObjectId: number | null;
-    command: RenderCommand;
-    inputs: BorderRenderInputs;
-};
+    radius: number;
+    borderWidth: number;
+    cornerRadii: CornerRadii | null;
+} & BaseRenderOpFields;
 
 // @public (undocumented)
 export function buildNodeMouseEvent(node: TGENode, pointerX: number, pointerY: number): NodeMouseEvent;
 
 // @public (undocumented)
-export function buildRenderGraphFrame(commands: RenderCommand[], textMetaMap: Map<number, TextMeta>): RenderGraphFrame;
+export function buildRenderGraphFrame(commands: RenderCommand[]): RenderGraphFrame;
 
 // @public (undocumented)
-export function buildRenderOp(cmd: RenderCommand, textMetaMap: Map<number, TextMeta>, ownerIds?: {
+export function buildRenderOp(cmd: RenderCommand, ownerIds?: {
     rect: number | null;
     text: number | null;
 }): RenderGraphOp | null;
@@ -214,11 +209,9 @@ export type CanvasPaintConfig = {
 // @public (undocumented)
 export type CanvasRenderOp = {
     kind: "canvas";
-    renderObjectId: number | null;
-    command: RenderCommand;
     rect: RectangleRenderOp;
     canvas: CanvasPaintConfig;
-};
+} & BaseRenderOpFields;
 
 // @public (undocumented)
 export type Capabilities = {
@@ -586,15 +579,13 @@ export type EffectConfig = {
 // @public (undocumented)
 export type EffectRenderOp = {
     kind: "effect";
-    renderObjectId: number | null;
-    command: RenderCommand;
     rect: RectangleRenderOp;
     effect: EffectConfig;
     backdrop: BackdropRenderMetadata | null;
     transformStateId: number;
     clipStateId: number;
     effectStateId: number;
-};
+} & BaseRenderOpFields;
 
 // @public (undocumented)
 export function endNodeInteraction(node: TGENode, mode?: Exclude<InteractionMode, "none">): void;
@@ -964,11 +955,9 @@ export type ImagePaintConfig = {
 // @public (undocumented)
 export type ImageRenderOp = {
     kind: "image";
-    renderObjectId: number | null;
-    command: RenderCommand;
     rect: RectangleRenderOp;
     image: ImagePaintConfig;
-};
+} & BaseRenderOpFields;
 
 export { Index }
 
@@ -1605,9 +1594,7 @@ export type RadialGradientCmd = {
 // @public (undocumented)
 export type RawCommandRenderOp = {
     kind: "raw-command";
-    renderObjectId: number | null;
-    command: RenderCommand;
-};
+} & BaseRenderOpFields;
 
 // @public (undocumented)
 export type RawImage = DecodedImage;
@@ -1628,22 +1615,13 @@ export type Rect = {
 };
 
 // @public (undocumented)
-export type RectangleRenderInputs = {
-    renderObjectId: number | null;
-    color: number;
+export type RectangleRenderOp = {
+    kind: "rectangle";
     radius: number;
     image: ImagePaintConfig | null;
     canvas: CanvasPaintConfig | null;
     effect: EffectConfig | null;
-};
-
-// @public (undocumented)
-export type RectangleRenderOp = {
-    kind: "rectangle";
-    renderObjectId: number | null;
-    command: RenderCommand;
-    inputs: RectangleRenderInputs;
-};
+} & BaseRenderOpFields;
 
 // @public (undocumented)
 export function rectBottom(rect: DamageRect): number;
@@ -1697,6 +1675,10 @@ export type RenderCommand = {
     extra1: number;
     extra2: number;
     text?: string;
+    lineHeight?: number;
+    fontFamily?: string;
+    fontWeight?: number;
+    fontStyle?: string;
     nodeId?: number;
     effect?: EffectConfig;
     image?: ImagePaintConfig;
@@ -2273,25 +2255,15 @@ export type TextMeta = {
 };
 
 // @public (undocumented)
-export type TextRenderInputs = {
+export type TextRenderOp = {
+    kind: "text";
     text: string;
     fontId: number;
     fontSize: number;
     lineHeight: number;
     maxWidth: number;
     textHeight: number;
-    fontFamily?: string;
-    fontWeight?: number;
-    fontStyle?: string;
-};
-
-// @public (undocumented)
-export type TextRenderOp = {
-    kind: "text";
-    renderObjectId: number | null;
-    command: RenderCommand;
-    inputs: TextRenderInputs;
-};
+} & BaseRenderOpFields;
 
 // @public (undocumented)
 export type TextSelection = {

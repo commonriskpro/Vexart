@@ -83,6 +83,25 @@ export declare interface BackdropRenderMetadata {
     effectStateId: number;
 }
 
+declare type BaseRenderOpFields = {
+    renderObjectId: number | null;
+    type: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    color: number;
+    cornerRadius: number;
+    extra1: number;
+    extra2: number;
+    text?: string;
+    lineHeight?: number;
+    fontFamily?: string;
+    fontWeight?: number;
+    fontStyle?: string;
+    nodeId?: number;
+};
+
 /** @public */
 export declare function beginNodeInteraction(node: TGENode, mode: Exclude<InteractionMode, "none">): void;
 
@@ -107,25 +126,6 @@ export declare function bindLoop(loop: RenderLoop): void;
 
 /** @public */
 export declare function boostWindowFor(kind: InteractionKind, boosts: FrameSchedulerBoosts): number;
-
-declare type BaseRenderOpFields = {
-    renderObjectId: number | null;
-    type: number;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    color: number;
-    cornerRadius: number;
-    extra1: number;
-    extra2: number;
-    text?: string;
-    lineHeight?: number;
-    fontFamily?: string;
-    fontWeight?: number;
-    fontStyle?: string;
-    nodeId?: number;
-};
 
 /** @public */
 export declare type BorderRenderOp = {
@@ -2038,10 +2038,10 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      to: number;
  };
 
-/** @public */
-export declare type RawCommandRenderOp = {
-    kind: "raw-command";
-} & BaseRenderOpFields;
+ /** @public */
+ export declare type RawCommandRenderOp = {
+     kind: "raw-command";
+ } & BaseRenderOpFields;
 
  /** @public */
  export declare type RawImage = DecodedImage;

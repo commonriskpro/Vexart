@@ -213,23 +213,6 @@ export type Extmark = {
 };
 
 // @public (undocumented)
-export class ExtmarkManager {
-    adjustForEdit(editStart: number, oldEnd: number, newEnd: number): void;
-    clear(): void;
-    clearType(typeId: number): void;
-    count(): number;
-    create(opts: CreateExtmarkOptions): number;
-    get(id: number): Extmark | undefined;
-    getAllForTypeId(typeId: number): Extmark[];
-    getForLine(lineStart: number, lineEnd: number): Extmark[];
-    getGhostTexts(): Extmark[];
-    getInRange(start: number, end: number): Extmark[];
-    getTypeId(name: string): number;
-    registerType(name: string): number;
-    remove(id: number): boolean;
-}
-
-// @public (undocumented)
 export type FieldState = {
     error: () => string | undefined;
     touched: () => boolean;
@@ -411,33 +394,6 @@ export type Modifiers = {
     meta: boolean;
 };
 
-// @public (undocumented)
-export type NavigationEntry = {
-    path: string;
-    params?: NavigationParams;
-};
-
-// @public (undocumented)
-export function NavigationStack(props: NavigationStackProps): JSX.Element;
-
-// @public (undocumented)
-export type NavigationStackHandle = {
-    push: (component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) => void;
-    pop: () => boolean;
-    goBack: () => boolean;
-    replace: (component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) => void;
-    reset: (component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) => void;
-    depth: () => number;
-    current: () => ScreenEntry | undefined;
-    stack: () => ScreenEntry[];
-};
-
-// @public (undocumented)
-export type NavigationStackProps = {
-    initial?: (props: ScreenProps) => JSX.Element;
-    children?: JSX.Element;
-};
-
 // @public
 export type NodeMouseEvent = {
     x: number;
@@ -536,51 +492,6 @@ export type RadioOptionContext = {
     optionProps: {
         onPress: () => void;
     };
-};
-
-// @public (undocumented)
-export function Route(props: RouteComponentProps): JSX.Element;
-
-// @public (undocumented)
-export type RouteComponentProps = {
-    path: string;
-    component: (props: RouteProps) => JSX.Element;
-};
-
-// @public (undocumented)
-export type RouteProps = {
-    params?: NavigationParams;
-};
-
-// @public (undocumented)
-export function Router(props: RouterProps): JSX.Element;
-
-// @public (undocumented)
-export type RouterContextValue = {
-    current: () => string;
-    navigate: (path: string, params?: NavigationParams) => void;
-    goBack: () => boolean;
-    params: () => NavigationParams | undefined;
-    history: () => NavigationEntry[];
-};
-
-// @public (undocumented)
-export type RouterProps = {
-    initial?: string;
-    children?: JSX.Element;
-};
-
-// @public (undocumented)
-export type ScreenEntry = {
-    key: string;
-    component: (props: ScreenProps) => JSX.Element;
-    params?: NavigationParams;
-};
-
-// @public (undocumented)
-export type ScreenProps = {
-    params?: NavigationParams;
-    goBack: () => void;
 };
 
 // @public (undocumented)
@@ -970,12 +881,6 @@ export type TooltipProps = {
 };
 
 // @public (undocumented)
-export function useRouterContext(): RouterContextValue;
-
-// @public (undocumented)
-export function useStack(): NavigationStackHandle;
-
-// @public (undocumented)
 export function VirtualList<T>(props: VirtualListProps<T>): JSX.Element;
 
 // @public (undocumented)
@@ -1009,7 +914,7 @@ export type VisualCursor = {
 
 // Warnings were encountered during analysis:
 //
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/reconciler/router.d.ts:7:5 - (ae-forgotten-export) The symbol "NavigationParams" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/headless/src/inputs/textarea.d.ts:129:5 - (ae-forgotten-export) The symbol "ExtmarkManager" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

@@ -210,16 +210,6 @@ export type PageProps = AppBoxProps & {
 export function resolveClassName(className: string | undefined | null, options?: ClassNameResolveOptions): ClassNameResolveResult;
 
 // @public (undocumented)
-export function RichText(props: RichTextProps): JSX.Element;
-
-// @public (undocumented)
-export type RichTextProps = {
-    maxWidth?: number;
-    lineHeight?: number;
-    children?: JSX.Element;
-};
-
-// @public (undocumented)
 export const ROUTE_FILE_KIND: {
     readonly PAGE: "page";
     readonly LAYOUT: "layout";
@@ -279,19 +269,6 @@ export function RouterProvider(props: AppRouterProviderProps): JSX.Element;
 export function runCli(argv?: string[]): Promise<CliResult>;
 
 // @public (undocumented)
-export function Span(props: SpanProps): JSX.Element;
-
-// @public (undocumented)
-export type SpanProps = {
-    color?: string | number;
-    fontSize?: number;
-    fontId?: number;
-    fontWeight?: number;
-    fontStyle?: "normal" | "italic";
-    children?: JSX.Element;
-};
-
-// @public (undocumented)
 function Text_2(props: AppTextProps): JSX.Element;
 export { Text_2 as Text }
 
@@ -334,18 +311,6 @@ export type VexartAppConfigTheme = {
 
 // @public (undocumented)
 export type VexartStyleProps = Partial<TGEProps>;
-
-// @public (undocumented)
-export function WrapRow(props: WrapRowProps): JSX.Element;
-
-// @public (undocumented)
-export type WrapRowProps = {
-    width: number;
-    itemWidth: number;
-    gap?: number;
-    rowGap?: number;
-    children?: JSX.Element;
-};
 
 // @public (undocumented)
 export function writeRouteManifestModule(options?: WriteRouteManifestOptions): Promise<FileSystemRouteManifest>;
