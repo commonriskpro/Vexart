@@ -421,7 +421,7 @@ export function walkTree(
     // NOTE: effect.color duplicates the RenderCommand color value.
     // It exists because the gpu-renderer reads from EffectConfig for effect nodes,
     // while plain rects read from RenderCommand. cornerRadius was removed from
-    // EffectConfig — it now lives only on RectangleRenderInputs.radius.
+    // EffectConfig — it now lives only on the flat RectangleRenderOp radius.
     if (vp.shadow || vp.glow || vp.gradient || hasBackdropFilter || vp.cornerRadii || vp.opacity !== undefined || hasTransform || vp.filter) {
       const effect = claimEffect()
       effect.renderObjectId = node.id

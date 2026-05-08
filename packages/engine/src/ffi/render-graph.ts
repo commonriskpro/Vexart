@@ -180,97 +180,82 @@ export type TextMeta = {
   fontStyle?: string
 }
 
-/** @public */
-export type RectangleRenderInputs = {
+type BaseRenderOpFields = {
   renderObjectId: number | null
-  color: number
-  radius: number
-  image: ImagePaintConfig | null
-  canvas: CanvasPaintConfig | null
-  effect: EffectConfig | null
-}
-
-/** @public */
-export type BorderRenderInputs = {
-  radius: number
+  type: number
+  x: number
+  y: number
   width: number
-  cornerRadii: import("./node").CornerRadii | null
-}
-
-/** @public */
-export type TextRenderInputs = {
-  text: string
-  fontId: number
-  fontSize: number
-  lineHeight: number
-  maxWidth: number
-  textHeight: number
+  height: number
+  color: number
+  cornerRadius: number
+  extra1: number
+  extra2: number
+  text?: string
+  lineHeight?: number
   fontFamily?: string
   fontWeight?: number
   fontStyle?: string
+  nodeId?: number
 }
 
 /** @public */
 export type RectangleRenderOp = {
   kind: "rectangle"
-  renderObjectId: number | null
-  command: RenderCommand
-  inputs: RectangleRenderInputs
-}
+  radius: number
+  image: ImagePaintConfig | null
+  canvas: CanvasPaintConfig | null
+  effect: EffectConfig | null
+} & BaseRenderOpFields
 
 /** @public */
 export type ImageRenderOp = {
   kind: "image"
-  renderObjectId: number | null
-  command: RenderCommand
   rect: RectangleRenderOp
   image: ImagePaintConfig
-}
+} & BaseRenderOpFields
 
 /** @public */
 export type CanvasRenderOp = {
   kind: "canvas"
-  renderObjectId: number | null
-  command: RenderCommand
   rect: RectangleRenderOp
   canvas: CanvasPaintConfig
-}
+} & BaseRenderOpFields
 
 /** @public */
 export type EffectRenderOp = {
   kind: "effect"
-  renderObjectId: number | null
-  command: RenderCommand
   rect: RectangleRenderOp
   effect: EffectConfig
   backdrop: BackdropRenderMetadata | null
   transformStateId: number
   clipStateId: number
   effectStateId: number
-}
+} & BaseRenderOpFields
 
 /** @public */
 export type BorderRenderOp = {
   kind: "border"
-  renderObjectId: number | null
-  command: RenderCommand
-  inputs: BorderRenderInputs
-}
+  radius: number
+  borderWidth: number
+  cornerRadii: import("./node").CornerRadii | null
+} & BaseRenderOpFields
 
 /** @public */
 export type TextRenderOp = {
   kind: "text"
-  renderObjectId: number | null
-  command: RenderCommand
-  inputs: TextRenderInputs
-}
+  text: string
+  fontId: number
+  fontSize: number
+  lineHeight: number
+  maxWidth: number
+  textHeight: number
+} & BaseRenderOpFields
 
 /** @public */
 export type RawCommandRenderOp = {
   kind: "raw-command"
-  renderObjectId: number | null
-  command: RenderCommand
-}
+} & BaseRenderOpFields
 
 /** @public */
 export type RenderGraphOp = RectangleRenderOp | ImageRenderOp | CanvasRenderOp | EffectRenderOp | BorderRenderOp | TextRenderOp | RawCommandRenderOp
@@ -287,13 +272,33 @@ type ClipStackEntry = {
 
 
 
-export function getRectangleRenderInputs(cmd: RenderCommand, renderObjectId: number | null): RectangleRenderInputs {
-  const radius = Math.round(cmd.cornerRadius)
-  const color = cmd.color >>> 0
-
+function createBaseRenderOpFields(cmd: RenderCommand, renderObjectId: number | null): BaseRenderOpFields {
   return {
     renderObjectId,
-    color,
+    type: cmd.type,
+    x: cmd.x,
+    y: cmd.y,
+    width: cmd.width,
+    height: cmd.height,
+    color: cmd.color >>> 0,
+    cornerRadius: cmd.cornerRadius,
+    extra1: cmd.extra1,
+    extra2: cmd.extra2,
+    text: cmd.text,
+    lineHeight: cmd.lineHeight,
+    fontFamily: cmd.fontFamily,
+    fontWeight: cmd.fontWeight,
+    fontStyle: cmd.fontStyle,
+    nodeId: cmd.nodeId,
+  }
+}
+
+export function createRectangleRenderOp(cmd: RenderCommand, renderObjectId: number | null): RectangleRenderOp {
+  const radius = Math.round(cmd.cornerRadius)
+
+  return {
+    kind: "rectangle",
+    ...createBaseRenderOpFields(cmd, renderObjectId),
     radius,
     image: cmd.image ?? null,
     canvas: cmd.canvas ?? null,
@@ -301,17 +306,19 @@ export function getRectangleRenderInputs(cmd: RenderCommand, renderObjectId: num
   }
 }
 
-export function getBorderRenderInputs(cmd: RenderCommand): BorderRenderInputs {
+function createBorderRenderOp(cmd: RenderCommand): BorderRenderOp {
   const radius = Math.round(cmd.cornerRadius)
-  const width = Math.round(cmd.extra1) || 1
+  const borderWidth = Math.round(cmd.extra1) || 1
   return {
+    kind: "border",
+    ...createBaseRenderOpFields(cmd, null),
     radius,
-    width,
+    borderWidth,
     cornerRadii: cmd.effect?.cornerRadii ?? null,
   }
 }
 
-export function getTextRenderInputs(cmd: RenderCommand): TextRenderInputs | null {
+function createTextRenderOp(cmd: RenderCommand, renderObjectId: number | null): TextRenderOp | null {
   if (!cmd.text) return null
   const fontId = Math.round(cmd.extra2) || 0
   const fontSize = Math.round(cmd.extra1) || 14
@@ -319,6 +326,8 @@ export function getTextRenderInputs(cmd: RenderCommand): TextRenderInputs | null
   const maxWidth = Math.max(Math.round(cmd.width), 1)
   const textHeight = Math.round(cmd.height) > 0 ? Math.round(cmd.height) : lineHeight
   return {
+    kind: "text",
+    ...createBaseRenderOpFields(cmd, renderObjectId),
     text: cmd.text,
     fontId,
     fontSize,
@@ -546,40 +555,32 @@ function hashU32Scratch(a: number, b: number, c: number, d: number, e: number) {
 export function buildRenderOp(cmd: RenderCommand, ownerIds?: { rect: number | null; text: number | null }): RenderGraphOp | null {
   if (cmd.type === CMD.RECTANGLE) {
     const renderObjectId = ownerIds?.rect ?? null
-    const rect: RectangleRenderOp = {
-      kind: "rectangle",
-      renderObjectId,
-      command: cmd,
-      inputs: getRectangleRenderInputs(cmd, renderObjectId),
-    }
-    if (rect.inputs.image) {
+    const rect = createRectangleRenderOp(cmd, renderObjectId)
+    if (rect.image) {
       return {
         kind: "image",
-        renderObjectId,
-        command: cmd,
+        ...createBaseRenderOpFields(cmd, renderObjectId),
         rect,
-        image: rect.inputs.image,
+        image: rect.image,
       }
     }
-    if (rect.inputs.canvas) {
+    if (rect.canvas) {
       return {
         kind: "canvas",
-        renderObjectId,
-        command: cmd,
+        ...createBaseRenderOpFields(cmd, renderObjectId),
         rect,
-        canvas: rect.inputs.canvas,
+        canvas: rect.canvas,
       }
     }
-    if (rect.inputs.effect) {
-      const transformStateId = getTransformStateId(rect.inputs.effect)
+    if (rect.effect) {
+      const transformStateId = getTransformStateId(rect.effect)
       const clipStateId = createClipStateId([])
-      const effectStateId = getEffectStateId(rect.inputs.effect, rect.inputs.radius)
+      const effectStateId = getEffectStateId(rect.effect, rect.radius)
       return {
         kind: "effect",
-        renderObjectId,
-        command: cmd,
+        ...createBaseRenderOpFields(cmd, renderObjectId),
         rect,
-        effect: rect.inputs.effect,
+        effect: rect.effect,
         backdrop: null,
         transformStateId,
         clipStateId,
@@ -589,23 +590,11 @@ export function buildRenderOp(cmd: RenderCommand, ownerIds?: { rect: number | nu
     return rect
   }
   if (cmd.type === CMD.BORDER) {
-    return {
-      kind: "border",
-      renderObjectId: null,
-      command: cmd,
-      inputs: getBorderRenderInputs(cmd),
-    }
+    return createBorderRenderOp(cmd)
   }
   if (cmd.type === CMD.TEXT) {
     const renderObjectId = ownerIds?.text ?? null
-    const inputs = getTextRenderInputs(cmd)
-    if (!inputs) return null
-    return {
-      kind: "text",
-      renderObjectId,
-      command: cmd,
-      inputs,
-    }
+    return createTextRenderOp(cmd, renderObjectId)
   }
   // SCISSOR_START/END are handled by the clipStack in buildRenderGraphFrame,
   // not as renderable ops. Skip them here.
@@ -614,8 +603,7 @@ export function buildRenderOp(cmd: RenderCommand, ownerIds?: { rect: number | nu
   }
   return {
     kind: "raw-command",
-    renderObjectId: null,
-    command: cmd,
+    ...createBaseRenderOpFields(cmd, null),
   }
 }
 
@@ -651,7 +639,7 @@ export function buildRenderGraphFrame(
         backdrop,
         transformStateId: backdrop?.transformStateId ?? getTransformStateId(op.effect),
         clipStateId: backdrop?.clipStateId ?? createClipStateId(clipStack),
-        effectStateId: backdrop?.effectStateId ?? getEffectStateId(op.effect, Math.round(op.command.cornerRadius)),
+        effectStateId: backdrop?.effectStateId ?? getEffectStateId(op.effect, Math.round(op.cornerRadius)),
       })
     } else if (op) {
       ops.push(op)

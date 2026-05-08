@@ -157,7 +157,7 @@ export function hashMatrix(matrix: Float64Array | undefined) {
 // ── Op support checks ────────────────────────────────────────────────────
 
 export function isSupportedRectangle(op: RectangleRenderOp) {
-  return !op.inputs.image && !op.inputs.canvas && !op.inputs.effect
+  return !op.image && !op.canvas && !op.effect
 }
 
 export function isSupportedEffect(_op: EffectRenderOp) {
@@ -179,17 +179,17 @@ export function getUnsupportedGpuOps(ops: RenderGraphOp[]) {
 }
 
 export function opBounds(op: RenderGraphOp, width: number, height: number) {
-  const x = Math.round(op.command.x)
-  const y = Math.round(op.command.y)
-  const w = Math.round(op.command.width)
-  const h = Math.round(op.command.height)
+  const x = Math.round(op.x)
+  const y = Math.round(op.y)
+  const w = Math.round(op.width)
+  const h = Math.round(op.height)
   let left = x
   let top = y
   let right = x + w
   let bottom = y + h
 
   if (op.kind === "border") {
-    const pad = Math.max(1, op.inputs.width)
+    const pad = Math.max(1, op.borderWidth)
     left -= pad
     top -= pad
     right += pad

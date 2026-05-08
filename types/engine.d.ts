@@ -108,20 +108,32 @@ export declare function bindLoop(loop: RenderLoop): void;
 /** @public */
 export declare function boostWindowFor(kind: InteractionKind, boosts: FrameSchedulerBoosts): number;
 
-/** @public */
-export declare type BorderRenderInputs = {
-    radius: number;
+declare type BaseRenderOpFields = {
+    renderObjectId: number | null;
+    type: number;
+    x: number;
+    y: number;
     width: number;
-    cornerRadii: CornerRadii | null;
+    height: number;
+    color: number;
+    cornerRadius: number;
+    extra1: number;
+    extra2: number;
+    text?: string;
+    lineHeight?: number;
+    fontFamily?: string;
+    fontWeight?: number;
+    fontStyle?: string;
+    nodeId?: number;
 };
 
 /** @public */
 export declare type BorderRenderOp = {
     kind: "border";
-    renderObjectId: number | null;
-    command: RenderCommand;
-    inputs: BorderRenderInputs;
-};
+    radius: number;
+    borderWidth: number;
+    cornerRadii: CornerRadii | null;
+} & BaseRenderOpFields;
 
 /** @public */
 export declare function buildNodeMouseEvent(node: TGENode, pointerX: number, pointerY: number): NodeMouseEvent;
@@ -216,11 +228,9 @@ export declare type CanvasPaintConfig = {
 /** @public */
 export declare type CanvasRenderOp = {
     kind: "canvas";
-    renderObjectId: number | null;
-    command: RenderCommand;
     rect: RectangleRenderOp;
     canvas: CanvasPaintConfig;
-};
+} & BaseRenderOpFields;
 
 /** @public */
 export declare type Capabilities = {
@@ -710,15 +720,13 @@ export declare type EffectConfig = {
 /** @public */
 export declare type EffectRenderOp = {
     kind: "effect";
-    renderObjectId: number | null;
-    command: RenderCommand;
     rect: RectangleRenderOp;
     effect: EffectConfig;
     backdrop: BackdropRenderMetadata | null;
     transformStateId: number;
     clipStateId: number;
     effectStateId: number;
-};
+} & BaseRenderOpFields;
 
 /** @public */
 export declare function endNodeInteraction(node: TGENode, mode?: Exclude<InteractionMode, "none">): void;
@@ -1191,11 +1199,9 @@ export declare type ImagePaintConfig = {
 /** @public */
 export declare type ImageRenderOp = {
     kind: "image";
-    renderObjectId: number | null;
-    command: RenderCommand;
     rect: RectangleRenderOp;
     image: ImagePaintConfig;
-};
+} & BaseRenderOpFields;
 
 export { Index }
 
@@ -2032,12 +2038,10 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      to: number;
  };
 
- /** @public */
- export declare type RawCommandRenderOp = {
-     kind: "raw-command";
-     renderObjectId: number | null;
-     command: RenderCommand;
- };
+/** @public */
+export declare type RawCommandRenderOp = {
+    kind: "raw-command";
+} & BaseRenderOpFields;
 
  /** @public */
  export declare type RawImage = DecodedImage;
@@ -2058,22 +2062,13 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
  };
 
  /** @public */
- export declare type RectangleRenderInputs = {
-     renderObjectId: number | null;
-     color: number;
+ export declare type RectangleRenderOp = {
+     kind: "rectangle";
      radius: number;
      image: ImagePaintConfig | null;
      canvas: CanvasPaintConfig | null;
      effect: EffectConfig | null;
- };
-
- /** @public */
- export declare type RectangleRenderOp = {
-     kind: "rectangle";
-     renderObjectId: number | null;
-     command: RenderCommand;
-     inputs: RectangleRenderInputs;
- };
+ } & BaseRenderOpFields;
 
  /** @public */
  export declare function rectBottom(rect: DamageRect): number;
@@ -2847,25 +2842,15 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
  };
 
  /** @public */
- export declare type TextRenderInputs = {
+ export declare type TextRenderOp = {
+     kind: "text";
      text: string;
      fontId: number;
      fontSize: number;
      lineHeight: number;
      maxWidth: number;
      textHeight: number;
-     fontFamily?: string;
-     fontWeight?: number;
-     fontStyle?: string;
- };
-
- /** @public */
- export declare type TextRenderOp = {
-     kind: "text";
-     renderObjectId: number | null;
-     command: RenderCommand;
-     inputs: TextRenderInputs;
- };
+ } & BaseRenderOpFields;
 
  /** @public */
  export declare type TextSelection = {

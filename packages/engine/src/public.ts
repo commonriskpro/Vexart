@@ -40,9 +40,6 @@ export type {
   CanvasPaintConfig,
   TextMeta,
 
-  RectangleRenderInputs,
-  BorderRenderInputs,
-  TextRenderInputs,
   RenderBounds,
   BackdropFilterKind,
   BackdropFilterParams,

@@ -559,8 +559,8 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   }
 
   const getCanvasSprite = (op: Extract<RenderGraphOp, { kind: "canvas" }>) => {
-    const width = Math.max(1, Math.round(op.command.width))
-    const height = Math.max(1, Math.round(op.command.height))
+    const width = Math.max(1, Math.round(op.width))
+    const height = Math.max(1, Math.round(op.height))
     const functionId = getCanvasFunctionId(op.canvas.onDraw)
     const viewportKey = op.canvas.viewport ? `${op.canvas.viewport.x},${op.canvas.viewport.y},${op.canvas.viewport.zoom}` : "default"
     const key = `${op.canvas.displayListHash ?? `fn:${functionId}`}:${width}:${height}:${viewportKey}`
@@ -582,9 +582,9 @@ export function createGpuRendererBackend(): GpuRendererBackend {
 
   const getTransformSprite = (op: Extract<RenderGraphOp, { kind: "effect" }>) => {
     const vctx = getVexartCtx()
-    const width = Math.max(1, Math.round(op.command.width))
-    const height = Math.max(1, Math.round(op.command.height))
-    const key = `${op.kind}:${op.command.type}:${op.command.x}:${op.command.y}:${op.command.width}:${op.command.height}:${op.command.color}:${op.command.cornerRadius}:${op.command.extra1}:${op.command.extra2}:${op.command.text ?? ""}:${width}:${height}:${hashMatrix(op.effect.transform)}:${op.effect.opacity ?? 1}`
+    const width = Math.max(1, Math.round(op.width))
+    const height = Math.max(1, Math.round(op.height))
+    const key = `${op.kind}:${op.type}:${op.x}:${op.y}:${op.width}:${op.height}:${op.color}:${op.cornerRadius}:${op.extra1}:${op.extra2}:${op.text ?? ""}:${width}:${height}:${hashMatrix(op.effect.transform)}:${op.effect.opacity ?? 1}`
     const cached = transformSpriteCache.get(key)
     if (cached && cached.width === width && cached.height === height) {
       touchMapEntry(transformSpriteCache, key, cached)
@@ -603,7 +603,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     }
     const renderSprite = renderOpToImage as ((op: RenderGraphOp, width: number, height: number, offsetX: number, offsetY: number) => VexartImageHandle | null) | null
     const handle = renderSprite
-      ? renderSprite(spriteOp, width, height, Math.round(op.command.x), Math.round(op.command.y))
+      ? renderSprite(spriteOp, width, height, Math.round(op.x), Math.round(op.y))
       : null
     if (!handle) return null
     transformSpriteSlot.set(key, { key, handle, width, height })
@@ -673,7 +673,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
   const batchBounds = (ctx: RendererBackendPaintContext, ops: RenderGraphOp[]) => {
     let bounds: IntBounds | null = null
     for (const op of ops) {
-      const clip = clipRect(op.command, ctx)
+      const clip = clipRect(op, ctx)
       if (!clip) continue
       bounds = unionBounds(bounds, { left: clip.left, top: clip.top, right: clip.right, bottom: clip.bottom })
     }
@@ -882,10 +882,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       }
       let handle = vexartCompositeImageFilterBackdrop(vctx, source.handle, op.backdrop.filterParams)
       if (!handle) return null
-      if (op.rect.inputs.radius > 0) {
+      if (op.rect.radius > 0) {
         // uniform radius mask
         const rectBuf = new Float32Array(6)
-        rectBuf[0] = op.rect.inputs.radius
+        rectBuf[0] = op.rect.radius
         rectBuf[1] = 0; rectBuf[2] = 0; rectBuf[3] = 0; rectBuf[4] = 0
         rectBuf[5] = 0  // mode=0 means uniform
         const masked = vexartCompositeImageMaskRoundedRect(vctx, handle, rectBuf)
@@ -907,7 +907,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
 
     try {
       for (const op of ctx.graph.ops) {
-        const clip = clipRect(op.command, ctx)
+        const clip = clipRect(op, ctx)
         if (!clip) continue
         if (op.kind === "rectangle") {
           const boxW = clip.right - clip.left
@@ -919,9 +919,9 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             h: -((boxH / ctx.target.height) * 2),
             boxW,
             boxH,
-            radius: clampShapeRadius(op.inputs.radius, boxW, boxH),
+            radius: clampShapeRadius(op.radius, boxW, boxH),
             strokeWidth: 0,
-            fill: op.inputs.color,
+            fill: op.color,
           })
           markDirty(clip.left, clip.top, clip.right, clip.bottom)
           continue
@@ -982,10 +982,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
               if (bounds) {
                 const group = transformedImageGroups.get(sprite.handle) ?? { handle: sprite.handle, instances: [] as TransformedImageInstance[] }
                 const matrix = effectOp.effect.transform
-                const width = Math.max(1, Math.round(effectOp.command.width))
-                const height = Math.max(1, Math.round(effectOp.command.height))
-                const baseX = Math.round(effectOp.command.x)
-                const baseY = Math.round(effectOp.command.y)
+                const width = Math.max(1, Math.round(effectOp.width))
+                const height = Math.max(1, Math.round(effectOp.height))
+                const baseX = Math.round(effectOp.x)
+                const baseY = Math.round(effectOp.y)
                 const p0 = transformPoint(matrix, 0, 0)
                 const p1 = transformPoint(matrix, width, 0)
                 const p2 = transformPoint(matrix, 0, height)
@@ -1093,10 +1093,10 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             if (!handle) return { ok: false, rawLayer: null }
             const group = transformedImageGroups.get(handle) ?? { handle, instances: [] as TransformedImageInstance[] }
             const matrix = effectOp.effect.transform
-            const width = Math.max(1, Math.round(effectOp.command.width))
-            const height = Math.max(1, Math.round(effectOp.command.height))
-            const baseX = Math.round(effectOp.command.x)
-            const baseY = Math.round(effectOp.command.y)
+            const width = Math.max(1, Math.round(effectOp.width))
+            const height = Math.max(1, Math.round(effectOp.height))
+            const baseX = Math.round(effectOp.x)
+            const baseY = Math.round(effectOp.y)
             const p0 = transformPoint(matrix, 0, 0)
             const p1 = transformPoint(matrix, width, 0)
             const p2 = transformPoint(matrix, 0, height)
@@ -1114,11 +1114,11 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             continue
           }
 
-          const baseFillRaw = effectOp.command.color >>> 0
+          const baseFillRaw = effectOp.color >>> 0
           const baseFill = effectOpacity < 1 ? applyOpacityToColor(baseFillRaw, effectOpacity) : baseFillRaw
           const boxW = clip.right - clip.left
           const boxH = clip.bottom - clip.top
-          const radius = clampShapeRadius(effectOp.rect.inputs.radius, boxW, boxH)
+          const radius = clampShapeRadius(effectOp.rect.radius, boxW, boxH)
 
           if (!effectOp.effect.gradient && !effectOp.effect.glow && !effectOp.effect.shadow) {
             if (cornerRadii) {
@@ -1153,7 +1153,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             continue
           }
 
-          if (!effectOp.effect.gradient && (effectOp.command.color & 0xff) > 1) {
+          if (!effectOp.effect.gradient && (effectOp.color & 0xff) > 1) {
             if (cornerRadii) {
               shapeRectCorners.push({
                 x: (clip.left / ctx.target.width) * 2 - 1,
@@ -1195,7 +1195,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
                 strokeWidth: 0,
                 fill: baseFill,
               })
-            } else if ((effectOp.command.color & 0xff) > 1) {
+            } else if ((effectOp.color & 0xff) > 1) {
               shapeRectCorners.push({
                 x: (clip.left / ctx.target.width) * 2 - 1,
                 y: 1 - (clip.top / ctx.target.height) * 2,
@@ -1338,7 +1338,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         if (op.kind === "border") {
           const boxW = clip.right - clip.left
           const boxH = clip.bottom - clip.top
-          if (op.inputs.cornerRadii) {
+          if (op.cornerRadii) {
             shapeRectCorners.push({
               x: (clip.left / ctx.target.width) * 2 - 1,
               y: 1 - (clip.top / ctx.target.height) * 2,
@@ -1346,9 +1346,9 @@ export function createGpuRendererBackend(): GpuRendererBackend {
               h: -((boxH / ctx.target.height) * 2),
               boxW,
               boxH,
-              radii: op.inputs.cornerRadii,
-              strokeWidth: op.inputs.width,
-              stroke: op.command.color >>> 0,
+              radii: op.cornerRadii,
+              strokeWidth: op.borderWidth,
+              stroke: op.color >>> 0,
             })
             markDirty(clip.left, clip.top, clip.right, clip.bottom)
             continue
@@ -1360,9 +1360,9 @@ export function createGpuRendererBackend(): GpuRendererBackend {
             h: -((boxH / ctx.target.height) * 2),
             boxW,
             boxH,
-            radius: clampShapeRadius(op.inputs.radius, boxW, boxH),
-            strokeWidth: op.inputs.width,
-            stroke: op.command.color >>> 0,
+            radius: clampShapeRadius(op.radius, boxW, boxH),
+            strokeWidth: op.borderWidth,
+            stroke: op.color >>> 0,
           })
           markDirty(clip.left, clip.top, clip.right, clip.bottom)
           continue
@@ -1402,20 +1402,20 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         if (op.kind === "text") {
           const sym = getMsdfSymbols()
           if (!sym) continue
-          const textX = Math.round(op.command.x) - ctx.offsetX
-          const textY = Math.round(op.command.y) - ctx.offsetY
-          const colorRgba = op.command.color >>> 0
+          const textX = Math.round(op.x) - ctx.offsetX
+          const textY = Math.round(op.y) - ctx.offsetY
+          const colorRgba = op.color >>> 0
           deferredMsdfOps.push({
-            text: op.inputs.text,
+            text: op.text,
             x: textX,
             y: textY,
-            fontSize: op.inputs.fontSize,
-            lineHeight: op.inputs.lineHeight,
-            maxWidth: op.inputs.maxWidth > 0 ? op.inputs.maxWidth : 999999,
+            fontSize: op.fontSize,
+            lineHeight: op.lineHeight,
+            maxWidth: op.maxWidth > 0 ? op.maxWidth : 999999,
             colorRgba,
-            fontFamily: op.inputs.fontFamily,
-            fontWeight: op.inputs.fontWeight,
-            fontStyle: op.inputs.fontStyle,
+            fontFamily: op.fontFamily,
+            fontWeight: op.fontWeight,
+            fontStyle: op.fontStyle,
           })
           const bounds = opBounds(op, ctx.target.width, ctx.target.height)
           if (bounds) markDirty(bounds.left, bounds.top, bounds.right, bounds.bottom)
@@ -1554,7 +1554,7 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         targetHeight: height,
         backing: null,
         target: { width, height },
-        commands: [op.command],
+        commands: [],
         graph: { ops: [op] },
         offsetX,
         offsetY,
