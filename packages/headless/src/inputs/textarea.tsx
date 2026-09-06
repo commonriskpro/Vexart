@@ -36,7 +36,7 @@
  *   />
  */
 
-import { createSignal, createEffect, onCleanup } from "solid-js"
+import { createMemo, createSignal, createEffect, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
 import {
   useFocus,
@@ -661,7 +661,7 @@ export function Textarea(props: TextareaProps) {
   // ── Focus tracking ──
 
   const wasFocused = { current: false }
-  const checkFocus = () => {
+  createEffect(() => {
     const f = focusHandle.focused()
     if (f && !wasFocused.current) {
       startBlink()
@@ -671,8 +671,23 @@ export function Textarea(props: TextareaProps) {
       clearSelection()
     }
     wasFocused.current = f
-    return f
-  }
+  })
+  const checkFocus = () => focusHandle.focused()
+
+  const renderedLines = createMemo(() => {
+    const ls = lines()
+    const start = viewportRow()
+    let offset = 0
+    for (let i = 0; i < start; i++) {
+      offset += ls[i].length + 1
+    }
+    const result: JSX.Element[] = []
+    for (let i = start; i < Math.min(ls.length, start + visibleLines()); i++) {
+      result.push(renderLine(ls[i], i, offset))
+      offset += ls[i].length + 1 // +1 for newline
+    }
+    return result
+  })
 
   // ── Line rendering with syntax + extmarks ──
 
@@ -812,20 +827,7 @@ export function Textarea(props: TextareaProps) {
       padding={th().padding}
       direction="column"
     >
-      {() => {
-        const ls = lines()
-        const start = viewportRow()
-        let offset = 0
-        for (let i = 0; i < start; i++) {
-          offset += ls[i].length + 1
-        }
-        const result: JSX.Element[] = []
-        for (let i = start; i < Math.min(ls.length, start + visibleLines()); i++) {
-          result.push(renderLine(ls[i], i, offset))
-          offset += ls[i].length + 1 // +1 for newline
-        }
-        return result
-      }}
+      {renderedLines}
     </box>
   )
 }

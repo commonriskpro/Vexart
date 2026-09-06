@@ -256,7 +256,7 @@ function renderToken(token: MarkedToken, props: MarkdownProps, th: MarkdownTheme
       }
       return (
         <box width="100%" direction="column" gap={1} paddingY={4}>
-          <box width="100%" backgroundColor={th.tableBg} padding={4}>
+          <box width="100%" direction="row" backgroundColor={th.tableBg} padding={4}>
             {header.map((cell: Tokens.TableCell, c: number) => (
               <box width="fit" minWidth={colWidths[c] * CHAR_WIDTH} paddingX={8}>
                 <text color={th.tableHeader} fontSize={14}>
@@ -266,7 +266,7 @@ function renderToken(token: MarkedToken, props: MarkdownProps, th: MarkdownTheme
             ))}
           </box>
           {rows.map((row: Tokens.TableCell[]) => (
-            <box width="100%" padding={4}>
+            <box width="100%" direction="row" padding={4}>
               {row.map((cell: Tokens.TableCell, c: number) => (
                 <box width="fit" minWidth={colWidths[c] * CHAR_WIDTH} paddingX={8}>
                   <text color={fg} fontSize={14}>

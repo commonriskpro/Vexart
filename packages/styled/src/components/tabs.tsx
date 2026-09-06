@@ -94,8 +94,14 @@ export function VoidTabs(props: VoidTabsProps) {
         </box>
       )}
       renderPanel={(content) => (
-        <box paddingTop={space[4]}>
+        <box width="100%" paddingTop={space[4]}>
           {content}
+        </box>
+      )}
+      renderContainer={(bar, panel) => (
+        <box direction="column" width="100%">
+          {bar}
+          {panel}
         </box>
       )}
     />

@@ -6,6 +6,7 @@
  * @public
  */
 
+import { createMemo } from "solid-js"
 import type { JSX } from "solid-js"
 import { createToggle, type ToggleRenderContext } from "../helpers/create-toggle"
 
@@ -37,14 +38,12 @@ export function Switch(props: SwitchProps) {
     focusId: props.focusId,
   })
 
-  return (
-    <>
-      {() => props.renderSwitch({
-        checked: toggle.checked(),
-        focused: toggle.focused(),
-        disabled: toggle.disabled(),
-        toggleProps: toggle.toggleProps,
-      })}
-    </>
-  )
+  const rendered = createMemo(() => props.renderSwitch({
+    checked: toggle.checked(),
+    focused: toggle.focused(),
+    disabled: toggle.disabled(),
+    toggleProps: toggle.toggleProps,
+  }))
+
+  return <box width="fit" height="fit">{rendered}</box>
 }

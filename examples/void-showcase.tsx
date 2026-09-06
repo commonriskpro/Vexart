@@ -7,6 +7,8 @@
  * Run: bun --conditions=browser run examples/void-showcase.tsx
  */
 import { createSignal, Show } from "solid-js"
+import { untrack } from "solid-js"
+import type { JSX } from "solid-js"
 import { useTerminalDimensions, SyntaxStyle, ONE_DARK, setDebug, debugStatsLine, onInput } from "@vexart/engine"
 import { createApp, useAppTerminal, Box, Text } from "@vexart/app"
 import {
@@ -18,7 +20,7 @@ import {
   H1, H2, H3, H4, P, Lead, Large, Small, Muted,
   // Components
   Button,
-  Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter,
+  Card as StyledCard, CardHeader, CardTitle, CardDescription, CardContent, CardFooter,
   Badge,
   Avatar,
   Separator,
@@ -46,6 +48,13 @@ import {
 
 const syntaxStyle = SyntaxStyle.fromTheme(ONE_DARK)
 
+type ShowcaseCardProps = { children?: JSX.Element }
+
+function Card(props: ShowcaseCardProps) {
+  const content = untrack(() => props.children)
+  return <StyledCard size="sm">{content}</StyledCard>
+}
+
 // ── Inputs Tab ──
 
 function InputsTab() {
@@ -59,7 +68,7 @@ function InputsTab() {
   const [slider, setSlider] = createSignal(42)
 
   return (
-    <Box direction="row" gap={space[4]} alignY="top">
+    <Box width="100%" direction="row" gap={space[4]} alignY="top">
       {/* Column 1 */}
       <Box direction="column" gap={space[4]} width="grow">
         <Card>
@@ -168,7 +177,7 @@ function InputsTab() {
 
 function DisplayTab() {
   return (
-    <Box direction="row" gap={space[4]} alignY="top">
+    <Box width="100%" direction="row" gap={space[4]} alignY="top">
       <Box direction="column" gap={space[4]} width="grow">
         <Card>
           <CardHeader>
@@ -278,7 +287,7 @@ function CollectionsTab() {
   ]
 
   return (
-    <Box direction="row" gap={space[4]} alignY="top">
+    <Box width="100%" direction="row" gap={space[4]} alignY="top">
       <Box direction="column" gap={space[4]} width="grow">
         <Card>
           <CardHeader>
@@ -344,8 +353,6 @@ function CollectionsTab() {
 
 function CodeTab() {
   const sampleCode = `import { createApp, Box, Text } from "vexart"
-import { Button, Card, colors } from "vexart"
-
 function App() {
   return (
     <Card>
@@ -355,7 +362,6 @@ function App() {
     </Card>
   )
 }
-
 await createApp(() => <App />)`
 
   const sampleMarkdown = `# Vexart
@@ -380,18 +386,13 @@ await createApp(() => <App />)
 
   const sampleDiff = `--- a/package.json
 +++ b/package.json
-@@ -1,5 +1,5 @@
- {
+@@ -1,3 +1,3 @@
 -  "name": "@vxrt/core",
 +  "name": "vexart",
-   "version": "0.9.0-beta.19",
--  "description": "Terminal rendering engine",
-+  "description": "GPU-accelerated terminal UI engine",
-   "type": "module"
- }`
+   "version": "0.9.0-beta.19"`
 
   return (
-    <Box direction="row" gap={space[4]} alignY="top">
+    <Box width="100%" direction="row" gap={space[4]} alignY="top">
       <Box direction="column" gap={space[4]} width="grow">
         <Card>
           <CardHeader>
@@ -446,7 +447,7 @@ function OverlaysTab() {
   const toaster = createVoidToaster({ position: "bottom-right" })
 
   return (
-    <Box direction="row" gap={space[4]} alignY="top">
+    <Box width="100%" direction="row" gap={space[4]} alignY="top">
       <Box direction="column" gap={space[4]} width="grow">
         <Card>
           <CardHeader>
@@ -518,7 +519,7 @@ function OverlaysTab() {
 
 function TypographyTab() {
   return (
-    <Box direction="row" gap={space[4]} alignY="top">
+    <Box width="100%" direction="row" gap={space[4]} alignY="top">
       <Box direction="column" gap={space[4]} width="grow">
         <Card>
           <CardHeader>
@@ -575,9 +576,11 @@ function App() {
   const dims = useTerminalDimensions(terminal)
   const [tab, setTab] = createSignal(0)
   const [perfLine, setPerfLine] = createSignal("")
+  const showcaseDebug = process.env.VEXART_DEBUG_SHOWCASE === "1"
 
-  // Enable debug overlay for frame stats
-  setDebug(true)
+  // Keep the default example graphics-only. Diagnostics are opt-in because
+  // stderr text can overwrite a Kitty graphics frame while it is displayed.
+  if (showcaseDebug) setDebug(true)
 
   // Instrument tab switches
   function onTabSwitch(index: number) {
@@ -585,19 +588,23 @@ function App() {
     setTab(index)
     const t1 = performance.now()
     const msg = `[tab-switch] setTab(${index}): ${(t1 - t0).toFixed(2)}ms`
-    setPerfLine(msg)
-    console.error(msg)
+    if (showcaseDebug) {
+      setPerfLine(msg)
+      console.error(msg)
+    }
   }
 
   // Log frame stats after each input
-  onInput((e) => {
-    if (e.type === "key" || e.type === "mouse") {
-      queueMicrotask(() => {
-        const stats = debugStatsLine()
-        if (stats) console.error(`[frame] ${stats}`)
-      })
-    }
-  })
+  if (showcaseDebug) {
+    onInput((e) => {
+      if (e.type === "key" || e.type === "mouse") {
+        queueMicrotask(() => {
+          const stats = debugStatsLine()
+          if (stats) console.error(`[frame] ${stats}`)
+        })
+      }
+    })
+  }
 
   return (
     <Box
@@ -606,20 +613,23 @@ function App() {
       backgroundColor={colors.background}
       direction="column"
     >
+      <Box width="100%" height={space[2]} />
       {/* Header */}
       <Box
+        width="100%"
         paddingX={space[6]}
-        paddingY={space[3]}
+        paddingTop={space[4]}
+        paddingBottom={space[2]}
         direction="row"
         alignY="center"
         borderColor={colors.border}
         borderBottom={1}
       >
         <Box direction="column" gap={space[0.5]} width="grow">
-          <Text color={colors.foreground} fontSize={font.lg} fontWeight={weight.bold}>
+          <Text color={colors.foreground} fontSize={font.lg} fontWeight={weight.bold} marginTop={space[1]}>
             Void Component Showcase
           </Text>
-          <Muted>Every styled component in the Vexart design system</Muted>
+          <Muted>Every styled component in the Vexart design system · Tab navigate · Space/Enter interact · q exit</Muted>
         </Box>
         <Box direction="row" gap={space[2]} alignY="center">
           <Text color="#f59e0b" fontSize={font.xs}>{perfLine()}</Text>
@@ -628,7 +638,7 @@ function App() {
       </Box>
 
       {/* Tabs */}
-      <Box paddingX={space[6]} paddingTop={space[3]}>
+      <Box width="100%" paddingX={space[6]} paddingTop={space[3]}>
         <VoidTabs
           activeTab={tab()}
           onTabChange={onTabSwitch}
@@ -643,16 +653,6 @@ function App() {
         />
       </Box>
 
-      {/* Footer */}
-      <Box width="grow" />
-      <Box
-        paddingX={space[6]}
-        paddingY={space[2]}
-        borderColor={colors.border}
-        borderTop={1}
-      >
-        <Muted>Tab: navigate  Space/Enter: interact  q: exit</Muted>
-      </Box>
     </Box>
   )
 }

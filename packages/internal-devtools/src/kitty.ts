@@ -156,7 +156,7 @@ export async function isSocketAlive(socket: string): Promise<boolean> {
 
   // Named socket — try a real command to confirm kitty responds
   try {
-    await $`kitty @ --to unix:${socket} ls`.quiet()
+    await kittyCmd(socket, "ls")
     return true
   } catch {
     return false
@@ -165,8 +165,11 @@ export async function isSocketAlive(socket: string): Promise<boolean> {
 
 // ── Remote control commands ──
 
-async function kittyCmd(socket: string, ...args: string[]): Promise<string> {
-  const result = await $`kitty @ --to unix:${socket} ${args}`.quiet()
+/** Run a Kitty remote-control command using the discovered app binary. */
+export async function kittyCmd(socket: string, ...args: string[]): Promise<string> {
+  const bin = findKittyBin()
+  if (!bin) throw new Error("kitty not found. Install with: brew install --cask kitty")
+  const result = await $`${bin} @ --to unix:${socket} ${args}`.quiet()
   return result.text()
 }
 

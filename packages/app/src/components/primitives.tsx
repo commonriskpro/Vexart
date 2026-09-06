@@ -1,4 +1,4 @@
-import { splitProps } from "solid-js"
+import { splitProps, untrack } from "solid-js"
 import type { JSX } from "solid-js"
 import type { InteractiveStyleProps } from "@vexart/engine"
 import { resolveClassName } from "../styles/class-name"
@@ -37,7 +37,8 @@ export function Box(props: AppBoxProps) {
     activeStyle: mergeInteractiveStyle(resolved.activeStyle as InteractiveStyleProps, rest.activeStyle),
     focusStyle: mergeInteractiveStyle(resolved.focusStyle as InteractiveStyleProps, rest.focusStyle),
   }
-  return <box {...merged}>{local.children}</box>
+  const content = untrack(() => local.children)
+  return <box {...merged}>{content}</box>
 }
 
 /** @public */
@@ -45,5 +46,6 @@ export function Text(props: AppTextProps) {
   const [local, rest] = splitProps(props, ["className", "children"])
   const resolved = resolveClassName(local.className).props
   const merged = { ...resolved, ...rest }
-  return <text {...merged}>{local.children}</text>
+  const content = untrack(() => local.children)
+  return <text {...merged}>{content}</text>
 }

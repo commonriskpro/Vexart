@@ -6,6 +6,7 @@
  * @public
  */
 
+import { createMemo } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus, useDrag, type NodeMouseEvent } from "@vexart/engine"
 import { useDisabled } from "../helpers/disabled"
@@ -138,9 +139,7 @@ export function Slider(props: SliderProps) {
     focusable: true,
   }
 
-  // Return a dynamic expression — SolidJS re-evaluates this when any
-  // reactive dependency changes (props.value, focused(), etc.)
-  return <>{() => props.renderSlider({
+  const rendered = createMemo(() => props.renderSlider({
     value: props.value,
     min: min(),
     max: max(),
@@ -149,5 +148,7 @@ export function Slider(props: SliderProps) {
     disabled: disabled(),
     dragging: dragging(),
     trackProps,
-  })}</>
+  }))
+
+  return <box width="fit" height="fit">{rendered}</box>
 }

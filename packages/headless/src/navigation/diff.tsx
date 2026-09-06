@@ -170,14 +170,14 @@ export function Diff(props: DiffProps) {
 
         if (line.type === LINE_TYPE.HEADER) {
           return (
-            <box height={LINE_HEIGHT} width="100%" backgroundColor={bg} paddingX={t.linePadding}>
+            <box height={LINE_HEIGHT} width="100%" direction="row" backgroundColor={bg} paddingX={t.linePadding}>
               <text color={t.headerFg} fontSize={14}>{line.content}</text>
             </box>
           )
         }
 
         return (
-          <box height={LINE_HEIGHT} width="100%" backgroundColor={bg}>
+          <box height={LINE_HEIGHT} width="100%" direction="row" backgroundColor={bg}>
             {showLineNumbers() ? (
               <box width={gutterWidth()} backgroundColor={t.lineNumberBg} paddingX={4}>
                 <text color={t.lineNumberFg} fontSize={14}>

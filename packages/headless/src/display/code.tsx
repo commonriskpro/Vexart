@@ -113,7 +113,7 @@ export function Code(props: CodeProps) {
       direction="column"
     >
       {tokens().map((lineTokens, lineIdx) => (
-        <box height={LINE_HEIGHT} width="100%">
+        <box height={LINE_HEIGHT} width="100%" direction="row">
           {showLineNumbers() ? (
             <box width={gutterWidth()}>
               <text color={t().lineNumberFg} fontSize={14}>

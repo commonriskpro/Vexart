@@ -24,7 +24,7 @@ import { createRenderLoop } from "../loop/loop"
 import { markDirty } from "../reconciler/dirty"
 import { dispatchInput } from "../loop/input"
 import { setRendererBackend, getRendererBackend } from "../ffi/renderer-backend"
-import { createGpuRendererBackend, type GpuRendererBackend } from "../ffi/gpu-renderer-backend"
+import { createGpuRendererBackendForTesting, type GpuRendererBackend } from "../ffi/gpu-renderer-backend"
 import { bindLoop, unbindLoop } from "../reconciler/pointer"
 import { resetFocus } from "../reconciler/focus"
 import { resetSelection } from "../reconciler/selection"
@@ -266,7 +266,7 @@ async function captureToBuffer(
 
   const term = createMockTerminal(width, height)
 
-  const gpuBackend = createGpuRendererBackend()
+  const gpuBackend = createGpuRendererBackendForTesting()
   const { backend, readbackPixels } = createCapturingBackend(gpuBackend)
 
   // Save + replace the active backend

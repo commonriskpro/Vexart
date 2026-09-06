@@ -6,7 +6,7 @@
  * @public
  */
 
-import { createSignal, onCleanup } from "solid-js"
+import { createMemo, createSignal, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus } from "@vexart/engine"
 
@@ -76,17 +76,18 @@ export function Button(props: ButtonProps) {
     schedulePressReset()
   }
 
-  return (
-    <>
-      {() => props.renderButton({
-        focused: focused(),
-        pressed: pressed(),
-        disabled: disabled(),
-        buttonProps: {
-          focusable: true,
-          onPress: handlePress,
-        },
-      })}
-    </>
-  )
+  const rendered = createMemo(() => props.renderButton({
+    focused: focused(),
+    pressed: pressed(),
+    disabled: disabled(),
+    buttonProps: {
+      focusable: true,
+      onPress: handlePress,
+    },
+  }))
+  // Keep a stable slot in the parent's child list. The render prop returns a
+  // fresh visual tree when focus/pressed state changes; placing it inside a
+  // fit wrapper prevents that replacement from moving the control after its
+  // siblings in the retained scene graph.
+  return <box width="fit" height="fit">{rendered}</box>
 }

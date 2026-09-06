@@ -6,7 +6,7 @@
  * @public
  */
 
-import { createEffect, createSignal } from "solid-js"
+import { createEffect, createSignal, untrack } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus } from "@vexart/engine"
 
@@ -77,31 +77,51 @@ export function Tabs(props: TabsProps) {
     },
   })
 
+  // Keep the header and active panel as separate reactive regions. Focus moves
+  // update only the tab headers; rebuilding the panel at the same time can
+  // recursively remount interactive children while Solid is dispatching the
+  // focus event (especially Lists and Markdown tables).
+  const headerContent = () => {
+    const current = active()
+    const isFocused = focused()
+    const focusedIndex = focusedTabIdx()
+    return untrack(() => {
+      const headers = props.tabs.map((tab, i) => {
+        const ctx: TabRenderContext = {
+          active: current === i,
+          focused: isFocused && focusedIndex === i,
+          index: i,
+          tabProps: {
+            onPress: () => switchTab(i),
+          },
+        }
+        return props.renderTab(tab, ctx)
+      })
+      return <>{headers}</>
+    })
+  }
+
+  const panelContent = () => {
+    const current = active()
+    return untrack(() => {
+      const tab = props.tabs[current]
+      const content = tab ? tab.content() : null
+      return <>{content}</>
+    })
+  }
+
+  const bar = props.renderTabBar
+    ? props.renderTabBar(<>{headerContent}</>)
+    : <box direction="row">{headerContent}</box>
+  const panel = props.renderPanel
+    ? props.renderPanel(<>{panelContent}</>)
+    : <>{panelContent}</>
+
   return (
-    <box direction="column">
-      {() => {
-        const current = active()
-        const headers = props.tabs.map((tab, i) => {
-          const ctx: TabRenderContext = {
-            active: current === i,
-            focused: focused() && focusedTabIdx() === i,
-            index: i,
-            tabProps: {
-              onPress: () => switchTab(i),
-            },
-          }
-          return props.renderTab(tab, ctx)
-        })
-        const bar = props.renderTabBar
-          ? props.renderTabBar(<>{headers}</>)
-          : <box direction="row">{headers}</box>
-        const tab = props.tabs[current]
-        const content = tab ? tab.content() : null
-        const panelEl = props.renderPanel
-          ? props.renderPanel(<>{content}</>)
-          : <>{content}</>
-        return <>{bar}{panelEl}</>
-      }}
+    <box direction="column" width="100%">
+      {props.renderContainer
+        ? props.renderContainer(bar, panel)
+        : <box direction="column">{bar}{panel}</box>}
     </box>
   )
 }

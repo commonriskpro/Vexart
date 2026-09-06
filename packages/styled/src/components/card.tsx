@@ -5,6 +5,7 @@
  */
 
 import { radius, space, font, weight, shadows } from "../tokens/tokens"
+import { untrack } from "solid-js"
 import type { JSX } from "solid-js"
 import { themeColors } from "../theme/theme"
 
@@ -19,6 +20,7 @@ export interface CardProps {
 /** @public */
 export function Card(props: CardProps) {
   const sm = props.size === "sm"
+  const content = untrack(() => props.children)
   return (
     <box
       direction="column"
@@ -31,7 +33,7 @@ export function Card(props: CardProps) {
       paddingBottom={sm ? space[4] : space[6]}
       shadow={shadows.md}
     >
-      {props.children}
+      {content}
     </box>
   )
 }
@@ -45,6 +47,7 @@ export interface CardHeaderProps {
 
 /** @public */
 export function CardHeader(props: CardHeaderProps) {
+  const content = untrack(() => props.children)
   return (
     <box
       direction="column"
@@ -52,7 +55,7 @@ export function CardHeader(props: CardHeaderProps) {
       paddingLeft={space[6]}
       paddingRight={space[6]}
     >
-      {props.children}
+      {content}
     </box>
   )
 }
@@ -66,6 +69,7 @@ export interface CardTitleProps {
 
 /** @public */
 export function CardTitle(props: CardTitleProps) {
+  const content = untrack(() => props.children)
   return (
     <text
       color={themeColors.cardForeground}
@@ -73,7 +77,7 @@ export function CardTitle(props: CardTitleProps) {
       fontWeight={weight.semibold}
       lineHeight={1}
     >
-      {props.children}
+      {content}
     </text>
   )
 }
@@ -87,12 +91,13 @@ export interface CardDescriptionProps {
 
 /** @public */
 export function CardDescription(props: CardDescriptionProps) {
+  const content = untrack(() => props.children)
   return (
     <text
       color={themeColors.mutedForeground}
       fontSize={font.sm}
     >
-      {props.children}
+      {content}
     </text>
   )
 }
@@ -106,12 +111,13 @@ export interface CardContentProps {
 
 /** @public */
 export function CardContent(props: CardContentProps) {
+  const content = untrack(() => props.children)
   return (
     <box
       paddingLeft={space[6]}
       paddingRight={space[6]}
     >
-      {props.children}
+      {content}
     </box>
   )
 }
@@ -125,6 +131,7 @@ export interface CardFooterProps {
 
 /** @public */
 export function CardFooter(props: CardFooterProps) {
+  const content = untrack(() => props.children)
   return (
     <box
       direction="row"
@@ -133,7 +140,7 @@ export function CardFooter(props: CardFooterProps) {
       paddingLeft={space[6]}
       paddingRight={space[6]}
     >
-      {props.children}
+      {content}
     </box>
   )
 }
@@ -148,9 +155,10 @@ export interface CardActionProps {
 
 /** @public */
 export function CardAction(props: CardActionProps) {
+  const content = untrack(() => props.children)
   return (
     <box alignX="right" alignY="top">
-      {props.children}
+      {content}
     </box>
   )
 }

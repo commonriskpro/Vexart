@@ -3,10 +3,14 @@
 // Phase 2b Slice 3, task 3.1. Per REQ-2B-101/103.
 //
 // Kitty direct-mode chunking (4096-byte base64 chunks):
-//   First chunk:  \x1b_Ga=T,f=32,s={w},v={h},i={id},C=1,o=z,m=1;{b64}\x1b\\
+//   First frame:   \x1b_Ga=T,f=32,s={w},v={h},i={id},p=1,C=1,o=z,m=1;{b64}\x1b\\
 //   Middle chunks: \x1b_Gm=1;{b64}\x1b\\
 //   Last chunk:   \x1b_Gm=0;{b64}\x1b\\
-//   Single chunk: \x1b_Ga=T,f=32,s={w},v={h},i={id},C=1,o=z,m=0;{b64}\x1b\\
+//   Updates use animation frames (`a=f` + `a=a`) so the visible frame stays
+//   on screen while a new payload is uploaded.
+//
+// The first frame is a complete transmit-and-place command. Subsequent updates
+// use the animation protocol so the previous frame remains visible during upload.
 
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine as _;
@@ -51,7 +55,8 @@ pub fn encode_frame_direct(rgba: &[u8], width: u32, height: u32, image_id: u32) 
 
     if chunks.is_empty() {
         // Empty frame — emit a minimal escape with m=0 and no data.
-        let header = format!("\x1b_Ga=T,f=32,s={width},v={height},i={image_id},C=1,o=z,m=0;\x1b\\");
+        let header =
+            format!("\x1b_Ga=T,f=32,s={width},v={height},i={image_id},p=1,C=1,o=z,m=0;\x1b\\");
         out.extend_from_slice(header.as_bytes());
         return out;
     }
@@ -59,7 +64,7 @@ pub fn encode_frame_direct(rgba: &[u8], width: u32, height: u32, image_id: u32) 
     if chunks.len() == 1 {
         // Single chunk: no continuation.
         let seq = format!(
-            "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},C=1,o=z,m=0;{}\x1b\\",
+            "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},p=1,C=1,o=z,m=0;{}\x1b\\",
             chunks[0]
         );
         out.extend_from_slice(seq.as_bytes());
@@ -69,7 +74,7 @@ pub fn encode_frame_direct(rgba: &[u8], width: u32, height: u32, image_id: u32) 
     // Multiple chunks.
     // First chunk: carries all metadata, m=1 (more follows).
     let first = format!(
-        "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},C=1,o=z,m=1;{}\x1b\\",
+        "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},p=1,C=1,o=z,m=1;{}\x1b\\",
         chunks[0]
     );
     out.extend_from_slice(first.as_bytes());
@@ -84,6 +89,59 @@ pub fn encode_frame_direct(rgba: &[u8], width: u32, height: u32, image_id: u32) 
     let last = format!("\x1b_Gm=0;{}\x1b\\", chunks[chunks.len() - 1]);
     out.extend_from_slice(last.as_bytes());
 
+    out
+}
+
+/// Encode a complete update as a Kitty animation frame. The current image
+/// placement remains visible while the frame payload is transferred; the
+/// trailing animation-control command switches to the new frame atomically.
+/// Each update uploads a fresh frame number on a canvas copied from the
+/// previous frame, then composes that new frame atomically.
+pub fn encode_animation_frame_direct(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    image_id: u32,
+    frame_id: u32,
+) -> Vec<u8> {
+    let compressed = compress_rgba(rgba).unwrap_or_else(|_| rgba.to_vec());
+    let b64 = B64.encode(&compressed);
+    let chunks: Vec<&str> = b64
+        .as_bytes()
+        .chunks(CHUNK_SIZE)
+        .map(|c| std::str::from_utf8(c).expect("base64 is always valid utf8"))
+        .collect();
+    let previous_frame = frame_id.saturating_sub(1);
+    let mut out = Vec::with_capacity(b64.len() + chunks.len() * 48 + 32);
+    if chunks.is_empty() {
+        out.extend_from_slice(
+            format!(
+                "\x1b_Ga=f,i={image_id},c={previous_frame},f=32,s={width},v={height},C=1,o=z,m=0;\x1b\\"
+            )
+            .as_bytes(),
+        );
+    } else if chunks.len() == 1 {
+        out.extend_from_slice(
+            format!(
+                "\x1b_Ga=f,i={image_id},c={previous_frame},f=32,s={width},v={height},C=1,o=z,m=0;{}\x1b\\",
+                chunks[0]
+            )
+            .as_bytes(),
+        );
+    } else {
+        out.extend_from_slice(
+            format!(
+                "\x1b_Ga=f,i={image_id},c={previous_frame},f=32,s={width},v={height},C=1,o=z,m=1;{}\x1b\\",
+                chunks[0]
+            )
+            .as_bytes(),
+        );
+        for chunk in &chunks[1..chunks.len() - 1] {
+            out.extend_from_slice(format!("\x1b_Gm=1;{chunk}\x1b\\").as_bytes());
+        }
+        out.extend_from_slice(format!("\x1b_Gm=0;{}\x1b\\", chunks[chunks.len() - 1]).as_bytes());
+    }
+    out.extend_from_slice(format!("\x1b_Ga=a,i={image_id},c={frame_id},q=2;\x1b\\").as_bytes());
     out
 }
 
@@ -166,7 +224,11 @@ mod tests {
         );
         assert!(
             text.contains("a=T"),
-            "output must include a=T (transmit+display)"
+            "output must include a=T (initial frame)"
+        );
+        assert!(
+            text.contains("p=1"),
+            "output must include an explicit placement"
         );
         assert!(
             text.contains("C=1"),
@@ -182,9 +244,12 @@ mod tests {
         let rgba = vec![0xffu8; 4 * 4 * 4];
         let out = encode_frame_direct(&rgba, 4, 4, 42);
         let text = std::str::from_utf8(&out).expect("valid utf8");
-        // Single-chunk: contains exactly one escape sequence.
+        // Single-chunk transmission includes the initial placement.
         let esc_count = text.matches("\x1b_G").count();
-        assert_eq!(esc_count, 1, "tiny frame should produce exactly 1 escape");
+        assert_eq!(
+            esc_count, 1,
+            "tiny frame should produce one complete command"
+        );
         assert!(text.contains("m=0"), "single chunk must use m=0");
         assert!(!text.contains("m=1"), "single chunk must NOT use m=1");
     }
@@ -199,7 +264,7 @@ mod tests {
             text.contains("m=1"),
             "large frame must use m=1 for continuation chunks"
         );
-        // Last escape must use m=0.
+        // The final transmission chunk must use m=0.
         let last_escape_idx = text.rfind("\x1b_G").expect("must have escape");
         let last_escape = &text[last_escape_idx..];
         assert!(

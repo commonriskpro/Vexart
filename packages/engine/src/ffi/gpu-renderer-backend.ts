@@ -170,7 +170,25 @@ function failGpuOnly(message: string): never {
 
 
 /** @public */
+type GpuRendererBackendOptions = {
+  /** Skip Kitty/native presentation while retaining the composited GPU target for readback. */
+  suppressPresentation?: boolean
+}
+
 export function createGpuRendererBackend(): GpuRendererBackend {
+  return createGpuRendererBackendInternal()
+}
+
+/**
+ * Internal offscreen factory used by render-to-buffer. It is intentionally not
+ * re-exported from the package public surface: visual tests need the native
+ * compositor and readback, but must not write Kitty escape sequences to stdout.
+ */
+export function createGpuRendererBackendForTesting(): GpuRendererBackend {
+  return createGpuRendererBackendInternal({ suppressPresentation: true })
+}
+
+function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {}): GpuRendererBackend {
   // vexart context handle — allocated on first use.
   // Phase 2b: used for all vexart_paint_dispatch + vexart_composite_* calls.
   let _vexartCtx: bigint | null = null
@@ -278,6 +296,11 @@ export function createGpuRendererBackend(): GpuRendererBackend {
 
   let lastStrategy: GpuLayerStrategyMode | null = null
   let lastNativeFramePlan: NativeFramePlan | null = null
+  // Kitty image IDs outlive the process that emitted them. Seed one stable
+  // final-frame image per process so Kitty can coalesce unchanged frames and
+  // update changed content through its animation protocol without replacing
+  // the visible root image on every render tick.
+  const finalFrameImageId = 0x40000000 + ((process.pid ?? 0) % 0x0fffffff)
   let standaloneTarget: TargetRecord | null = null
   let finalFrameTarget: TargetRecord | null = null
   const layerTargets = new Map<string, TargetRecord>()
@@ -1500,13 +1523,17 @@ export function createGpuRendererBackend(): GpuRendererBackend {
     // All transport modes (direct/file/shm) are handled by Rust natively.
     // Rust does GPU readback + compress + Kitty emit internally.
     // No RGBA bytes are returned to JS — zero TS readback.
+    if (options.suppressPresentation) {
+      return { output: "none", strategy: lastStrategy }
+    }
+
     const statsBuf = allocNativeStatsBuf()
     ensureNativeKittyTransport(frame.transmissionMode)
     const nativeEmitStart = PROFILE_ENABLED ? performance.now() : 0
     const rc = getSymbols().vexart_kitty_emit_frame_with_stats(
       vctx,
       targetHandle,
-      3, // FINAL_FRAME_IMAGE_ID
+      finalFrameImageId,
       ptr(statsBuf),
     ) as number
     addBackendProfile("nativeEmitMs", nativeEmitStart)
@@ -1710,19 +1737,19 @@ export function createGpuRendererBackend(): GpuRendererBackend {
           opacity: 1,
         })
 
+        recordCurrentFrameLayer({
+          key: layerCtx.key,
+          z: layerCtx.z,
+          x: layerCtx.bounds.x,
+          y: layerCtx.bounds.y,
+          width: layerCtx.bounds.width,
+          height: layerCtx.bounds.height,
+          handle: layerTarget,
+          isBackground: layerCtx.isBackground,
+          subtreeTransform: layerCtx.subtreeTransform,
+          opacity: 1,
+        })
         if (lastStrategy === "final-frame") {
-          recordCurrentFrameLayer({
-            key: layerCtx.key,
-            z: layerCtx.z,
-            x: layerCtx.bounds.x,
-            y: layerCtx.bounds.y,
-            width: layerCtx.bounds.width,
-            height: layerCtx.bounds.height,
-            handle: layerTarget,
-            isBackground: layerCtx.isBackground,
-            subtreeTransform: layerCtx.subtreeTransform,
-            opacity: 1,
-          })
           return { output: "skip-present", strategy: lastStrategy }
         }
         if (useNativeLayerPresentation && nativeImageId > 0) {
@@ -1760,20 +1787,18 @@ export function createGpuRendererBackend(): GpuRendererBackend {
       if (!record) return false
       activeLayerKeys.add(ctx.layer.key)
       nativeLayerReuse(ctx.layer.key)
-        if (lastStrategy === "final-frame") {
-          recordCurrentFrameLayer({
-            key: ctx.layer.key,
-          z: ctx.layer.z,
-          x: ctx.layer.bounds.x,
-          y: ctx.layer.bounds.y,
-          width: ctx.layer.bounds.width,
-          height: ctx.layer.bounds.height,
-            handle: record.handle,
-            isBackground: ctx.layer.isBackground,
-            subtreeTransform: ctx.layer.subtreeTransform,
-            opacity: 1,
-          })
-      }
+      recordCurrentFrameLayer({
+        key: ctx.layer.key,
+        z: ctx.layer.z,
+        x: ctx.layer.bounds.x,
+        y: ctx.layer.bounds.y,
+        width: ctx.layer.bounds.width,
+        height: ctx.layer.bounds.height,
+        handle: record.handle,
+        isBackground: ctx.layer.isBackground,
+        subtreeTransform: ctx.layer.subtreeTransform,
+        opacity: 1,
+      })
       return true
     },
     compositeRetainedFrame(ctx) {
@@ -1795,10 +1820,9 @@ export function createGpuRendererBackend(): GpuRendererBackend {
         pruneLayerTargets()
         return { output: "none", strategy: lastStrategy }
       }
-      if (lastStrategy !== "final-frame") {
-        pruneLayerTargets()
-        return { output: "none", strategy: lastStrategy }
-      }
+      // Native layer updates are useful for the fast path, but always finish
+      // with a complete frame. This keeps Kitty from exposing an empty canvas
+      // while a layer replacement is still being processed.
       return composeFinalFrame(ctx)
     },
     getLastStrategy() {

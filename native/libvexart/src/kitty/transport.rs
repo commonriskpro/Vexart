@@ -11,10 +11,11 @@
 //
 // Thread-local transport mode so each FFI call context is independent.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::time::Instant;
 
-use super::encoder::encode_frame_direct;
+use super::encoder::{encode_animation_frame_direct, encode_frame_direct};
 use super::writer::write_to_stdout;
 use crate::ffi::error::set_last_error;
 use crate::ffi::panic::{ERR_INVALID_ARG, ERR_KITTY_TRANSPORT, OK};
@@ -24,6 +25,79 @@ use crate::types::NativePresentationStats;
 // Active transport mode for the current thread. 0=direct (default), 1=file, 2=shm.
 thread_local! {
     static TRANSPORT_MODE: Cell<u32> = const { Cell::new(0) };
+    // Next animation frame number for each live Kitty image id. A missing
+    // entry means the image has not been transmitted by this process yet.
+    static IMAGE_FRAMES: RefCell<HashMap<u32, u32>> = RefCell::new(HashMap::new());
+    // Last direct-transport payload for each live Kitty image id. The render
+    // loop can revisit an unchanged target many times; avoid flooding stdout
+    // with identical animation frames while still allowing real pixels to
+    // update immediately.
+    static IMAGE_HASHES: RefCell<HashMap<u32, u64>> = RefCell::new(HashMap::new());
+}
+
+fn image_frame(image_id: u32) -> Option<u32> {
+    IMAGE_FRAMES.with(|frames| frames.borrow().get(&image_id).copied())
+}
+
+fn record_image_frame(image_id: u32, existing_frame: Option<u32>) {
+    IMAGE_FRAMES.with(|frames| {
+        let next = existing_frame.map_or(2, |frame| frame.saturating_add(1));
+        frames.borrow_mut().insert(image_id, next);
+    });
+}
+
+fn forget_image_frame(image_id: u32) {
+    IMAGE_FRAMES.with(|frames| {
+        frames.borrow_mut().remove(&image_id);
+    });
+    IMAGE_HASHES.with(|hashes| {
+        hashes.borrow_mut().remove(&image_id);
+    });
+}
+
+fn rgba_hash(rgba: &[u8]) -> u64 {
+    // FNV-1a is sufficient here: this is only a same-payload fast path, not
+    // an integrity or security check.
+    rgba.iter().fold(0xcbf29ce484222325, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+    })
+}
+
+fn payload_hash(rgba: &[u8], width: u32, height: u32, col: i32, row: i32, z: i32) -> u64 {
+    [
+        rgba_hash(rgba),
+        u64::from(width),
+        u64::from(height),
+        col as u64,
+        row as u64,
+        z as u64,
+    ]
+    .into_iter()
+    .fold(0xcbf29ce484222325, |hash, value| {
+        value.to_le_bytes().iter().fold(hash, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+        })
+    })
+}
+
+fn payload_unchanged(
+    image_id: u32,
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    col: i32,
+    row: i32,
+    z: i32,
+) -> bool {
+    let hash = payload_hash(rgba, width, height, col, row, z);
+    IMAGE_HASHES.with(|hashes| hashes.borrow().get(&image_id).copied() == Some(hash))
+}
+
+fn record_payload(image_id: u32, rgba: &[u8], width: u32, height: u32, col: i32, row: i32, z: i32) {
+    let hash = payload_hash(rgba, width, height, col, row, z);
+    IMAGE_HASHES.with(|hashes| {
+        hashes.borrow_mut().insert(image_id, hash);
+    });
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -120,17 +194,9 @@ fn emit_direct(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
         return ERR_KITTY_TRANSPORT;
     }
 
-    // 3. Encode to Kitty escape sequences.
-    let escaped = encode_frame_direct(&rgba[..written as usize], width, height, image_id);
-
-    // 4. Write to stdout.
-    match write_to_stdout(&escaped) {
-        Ok(()) => OK,
-        Err(e) => {
-            set_last_error(format!("emit_direct: stdout write failed: {e}"));
-            ERR_KITTY_TRANSPORT
-        }
-    }
+    // 3. Encode and write through the same animation-aware path used by the
+    // native stats variant. This also coalesces unchanged frames.
+    emit_direct_inner(&rgba[..written as usize], width, height, image_id)
 }
 
 /// SHM mode: readback → shm_prepare → Kitty SHM escape → stdout.
@@ -157,6 +223,12 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
         set_last_error("emit_shm: GPU readback returned 0 bytes");
         return ERR_KITTY_TRANSPORT;
     }
+    let existing_frame = image_frame(image_id);
+    if existing_frame.is_some()
+        && payload_unchanged(image_id, &rgba[..written as usize], width, height, 0, 0, 0)
+    {
+        return OK;
+    }
 
     // 3. zlib compress.
     let compressed = compress_rgba(&rgba[..written as usize])
@@ -182,9 +254,16 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
 
     // 5. Build Kitty SHM escape and write to stdout.
     let name_b64 = B64.encode(shm_name.as_bytes());
-    let escape = format!(
-        "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},C=1,t=s,o=z,q=2;{name_b64}\x1b\\"
-    );
+    let escape = if let Some(frame_id) = existing_frame {
+        let previous_frame = frame_id.saturating_sub(1);
+        format!(
+            "\x1b_Ga=f,i={image_id},c={previous_frame},f=32,s={width},v={height},C=1,t=s,o=z,q=2;{name_b64}\x1b\\\x1b_Ga=a,i={image_id},c={frame_id},q=2;\x1b\\"
+        )
+    } else {
+        format!(
+            "\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s,o=z,q=2;{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,q=2;\x1b\\"
+        )
+    };
     let write_result = write_to_stdout(escape.as_bytes());
 
     // 6. Schedule SHM cleanup (TTL: the terminal reads it and unlinks it per spec).
@@ -193,7 +272,11 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
     shm_release(handle, 0); // close fd, do not unlink (terminal does that)
 
     match write_result {
-        Ok(()) => OK,
+        Ok(()) => {
+            record_image_frame(image_id, existing_frame);
+            record_payload(image_id, &rgba[..written as usize], width, height, 0, 0, 0);
+            OK
+        }
         Err(e) => {
             set_last_error(format!("emit_shm: stdout write failed: {e}"));
             ERR_KITTY_TRANSPORT
@@ -621,6 +704,7 @@ pub unsafe fn emit_region_target_with_stats(
 /// `stats_out` must be valid if non-null.
 pub unsafe fn delete_layer_native(image_id: u32, stats_out: *mut NativePresentationStats) -> i32 {
     let t0 = Instant::now();
+    forget_image_frame(image_id);
     let escape = format!("\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\");
     let rc = match write_to_stdout(escape.as_bytes()) {
         Ok(()) => OK,
@@ -651,9 +735,29 @@ pub unsafe fn delete_layer_native(image_id: u32, stats_out: *mut NativePresentat
 
 /// Emit already-read RGBA data using direct mode (encode → stdout).
 fn emit_direct_inner(rgba: &[u8], width: u32, height: u32, image_id: u32) -> i32 {
-    let escaped = encode_frame_direct(rgba, width, height, image_id);
-    match write_to_stdout(&escaped) {
-        Ok(()) => OK,
+    let existing_frame = image_frame(image_id);
+    if existing_frame.is_some() && payload_unchanged(image_id, rgba, width, height, 0, 0, 0) {
+        return OK;
+    }
+    let escaped = existing_frame.map_or_else(
+        || encode_frame_direct(rgba, width, height, image_id),
+        |frame_id| encode_animation_frame_direct(rgba, width, height, image_id, frame_id),
+    );
+    let stale_delete = if existing_frame.is_none() {
+        format!("\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\")
+    } else {
+        String::new()
+    };
+    let positioned = format!(
+        "\x1b7\x1b[1;1H{stale_delete}{}\x1b8",
+        String::from_utf8_lossy(&escaped)
+    );
+    match write_to_stdout(positioned.as_bytes()) {
+        Ok(()) => {
+            record_image_frame(image_id, existing_frame);
+            record_payload(image_id, rgba, width, height, 0, 0, 0);
+            OK
+        }
         Err(e) => {
             set_last_error(format!("emit_direct_inner: stdout write failed: {e}"));
             ERR_KITTY_TRANSPORT
@@ -731,6 +835,12 @@ fn emit_shm_rgba_at_with_stats(
         raw_bytes: rgba.len() as u64,
         ..ShmTransferStats::default()
     };
+    let _ = z;
+    let existing_frame = image_frame(image_id);
+    if existing_frame.is_some() && payload_unchanged(image_id, rgba, width, height, col, row, z) {
+        stats.payload_bytes = rgba.len() as u64;
+        return (OK, stats);
+    }
     let compression = shm_compression_enabled();
     let compressed_storage;
     let payload: &[u8];
@@ -766,17 +876,30 @@ fn emit_shm_rgba_at_with_stats(
         return (ERR_KITTY_TRANSPORT, stats);
     }
     let name_b64 = B64.encode(shm_name.as_bytes());
-    let escape = format!(
-        "\x1b7\x1b[{};{}H\x1b_Ga=T,f=32,s={width},v={height},i={image_id},C=1,t=s{compression_param},z={z},p={image_id},q=2;{name_b64}\x1b\\\x1b8",
-        row.max(0) + 1,
-        col.max(0) + 1,
-    );
+    let escape = if let Some(frame_id) = existing_frame {
+        let previous_frame = frame_id.saturating_sub(1);
+        format!(
+            "\x1b7\x1b[{};{}H\x1b_Ga=f,i={image_id},c={previous_frame},f=32,s={width},v={height},C=1,t=s{compression_param},q=2;{name_b64}\x1b\\\x1b_Ga=a,i={image_id},c={frame_id},q=2;\x1b\\\x1b8",
+            row.max(0) + 1,
+            col.max(0) + 1,
+        )
+    } else {
+        format!(
+            "\x1b7\x1b[{};{}H\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s{compression_param},q=2;{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,q=2;\x1b\\\x1b8",
+            row.max(0) + 1,
+            col.max(0) + 1,
+        )
+    };
     let t_write = Instant::now();
     let write_result = write_to_stdout(escape.as_bytes());
     stats.write_us = t_write.elapsed().as_micros() as u64;
     shm_release(handle, 0);
     match write_result {
-        Ok(()) => (OK, stats),
+        Ok(()) => {
+            record_image_frame(image_id, existing_frame);
+            record_payload(image_id, rgba, width, height, col, row, z);
+            (OK, stats)
+        }
         Err(e) => {
             set_last_error(format!("emit_shm_rgba: stdout write failed: {e}"));
             (ERR_KITTY_TRANSPORT, stats)
@@ -793,16 +916,32 @@ fn emit_direct_rgba_at(
     row: i32,
     z: i32,
 ) -> i32 {
-    let escaped = encode_frame_direct(rgba, width, height, image_id);
+    let existing_frame = image_frame(image_id);
+    if existing_frame.is_some() && payload_unchanged(image_id, rgba, width, height, col, row, z) {
+        return OK;
+    }
+    let escaped = existing_frame.map_or_else(
+        || encode_frame_direct(rgba, width, height, image_id),
+        |frame_id| encode_animation_frame_direct(rgba, width, height, image_id, frame_id),
+    );
     let row = row.max(0) + 1;
     let col = col.max(0) + 1;
+    let stale_delete = if existing_frame.is_none() {
+        format!("\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\")
+    } else {
+        String::new()
+    };
     let positioned = format!(
-        "\x1b7\x1b[{row};{col}H{}\x1b8",
+        "\x1b7\x1b[{row};{col}H{stale_delete}{}\x1b8",
         String::from_utf8_lossy(&escaped)
     );
     let _ = z;
     match write_to_stdout(positioned.as_bytes()) {
-        Ok(()) => OK,
+        Ok(()) => {
+            record_image_frame(image_id, existing_frame);
+            record_payload(image_id, rgba, width, height, col, row, z);
+            OK
+        }
         Err(e) => {
             set_last_error(format!("emit_direct_rgba_at: stdout write failed: {e}"));
             ERR_KITTY_TRANSPORT
@@ -841,6 +980,8 @@ fn emit_region_rgba_with_stats(
         raw_bytes: rgba.len() as u64,
         ..ShmTransferStats::default()
     };
+    let existing_frame = image_frame(image_id);
+    let frame_id = existing_frame.unwrap_or(2);
     let compression = mode != 2 || shm_compression_enabled();
     let compressed_storage;
     let payload: &[u8];
@@ -858,8 +999,11 @@ fn emit_region_rgba_with_stats(
         payload = rgba;
         compression_param = "";
     }
-    let meta =
-        format!("a=f,i={image_id},r=1,x={rx},y={ry},s={rw},v={rh},f=32,X=1{compression_param},q=2");
+    let previous_frame = frame_id.saturating_sub(1);
+    let meta = format!(
+        "a=f,i={image_id},r={frame_id},c={previous_frame},x={rx},y={ry},s={rw},v={rh},f=32,X=1{compression_param},q=2"
+    );
+    let control = format!("\x1b_Ga=a,i={image_id},c={frame_id},q=2;\x1b\\");
 
     let escape = if mode == 2 {
         // SHM mode for region patch
@@ -884,16 +1028,27 @@ fn emit_region_rgba_with_stats(
             return (ERR_KITTY_TRANSPORT, stats);
         }
         let name_b64 = B64.encode(shm_name.as_bytes());
-        format!("\x1b_G{meta},t=s;{name_b64}\x1b\\")
+        let prefix = if existing_frame.is_none() {
+            format!("\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\")
+        } else {
+            String::new()
+        };
+        format!("{prefix}\x1b_G{meta},t=s;{name_b64}\x1b\\{control}")
     } else {
         // Direct mode
         let b64 = B64.encode(payload);
-        format!("\x1b_G{meta};{b64}\x1b\\")
+        let prefix = if existing_frame.is_none() {
+            format!("\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\")
+        } else {
+            String::new()
+        };
+        format!("{prefix}\x1b_G{meta};{b64}\x1b\\{control}")
     };
 
     let t_write = Instant::now();
     match write_to_stdout(escape.as_bytes()) {
         Ok(()) => {
+            record_image_frame(image_id, Some(frame_id));
             stats.write_us = t_write.elapsed().as_micros() as u64;
             (OK, stats)
         }

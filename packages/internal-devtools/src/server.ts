@@ -31,6 +31,7 @@ import {
   focusWindow,
   closeWindow,
   getText,
+  kittyCmd,
   findCGWindowId,
   screenshot,
   sendMouseClick,
@@ -562,8 +563,7 @@ server.registerTool(
   async ({ width, height }) => {
     try {
       const socket = await getSocket()
-      const { $ } = await import("bun")
-      await $`kitty @ --to unix:${socket} resize-os-window --width ${width} --height ${height} --unit pixels`.quiet()
+      await kittyCmd(socket, "resize-os-window", "--width", `${width}`, "--height", `${height}`, "--unit", "pixels")
       return { content: [{ type: "text" as const, text: `Resized kitty window to ${width}x${height}px` }] }
     } catch (e: any) {
       return { content: [{ type: "text" as const, text: `Resize failed: ${e.message}` }], isError: true }

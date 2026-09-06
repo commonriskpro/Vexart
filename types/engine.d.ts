@@ -351,7 +351,6 @@ export declare const createElement: (tag: string) => TGENode;
 /** @public */
 export declare type CreateExtmarkOptions = Omit<Extmark, "id">;
 
-/** @public */
 export declare function createGpuRendererBackend(): GpuRendererBackend;
 
 /** @public */

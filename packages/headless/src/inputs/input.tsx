@@ -10,7 +10,7 @@
  * @public
  */
 
-import { createSignal, createEffect, onCleanup } from "solid-js"
+import { createMemo, createSignal, createEffect, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus, onInput } from "@vexart/engine"
 import { useDisabled } from "../helpers/disabled"
@@ -260,14 +260,13 @@ export function Input(props: InputProps) {
   // ── Focus blink management ──
 
   const wasFocused = { current: false }
-
-  const checkFocus = () => {
+  createEffect(() => {
     const f = focused()
     if (f && !wasFocused.current) { startBlink(); setCursor(props.value.length) }
     else if (!f && wasFocused.current) { stopBlink(); clearSelection() }
     wasFocused.current = f
-    return f
-  }
+  })
+  const checkFocus = () => focused()
 
   // ── Render context ──
 
@@ -276,24 +275,21 @@ export function Input(props: InputProps) {
   // Headless mode — delegate to consumer's renderInput
   if (props.renderInput) {
     const renderFn = props.renderInput
-    return (
-      <>
-        {() => renderFn({
-          value: props.value,
-          displayText: showPlaceholder() ? (props.placeholder ?? "") : props.value,
-          showPlaceholder: showPlaceholder(),
-          cursor: cursor(),
-          blink: blink(),
-          focused: checkFocus(),
-          disabled: disabled(),
-          selection: hasSelection() ? selRange() : null,
-          inputProps: {
-            focusable: true,
-            onPress: () => { if (!disabled()) focus() },
-          },
-        })}
-      </>
-    )
+    const rendered = createMemo(() => renderFn({
+      value: props.value,
+      displayText: showPlaceholder() ? (props.placeholder ?? "") : props.value,
+      showPlaceholder: showPlaceholder(),
+      cursor: cursor(),
+      blink: blink(),
+      focused: checkFocus(),
+      disabled: disabled(),
+      selection: hasSelection() ? selRange() : null,
+      inputProps: {
+        focusable: true,
+        onPress: () => { if (!disabled()) focus() },
+      },
+    }))
+    return <>{rendered}</>
   }
 
   // ── Self-rendering mode — built-in cursor (same pattern as Textarea) ──
@@ -302,6 +298,29 @@ export function Input(props: InputProps) {
   const cursorColor = () => th().accent
   const lineHeight = () => Math.ceil(th().fontSize * 1.2)
   const inputHeight = () => props.height ?? (lineHeight() + th().paddingY * 2 + 2)
+
+  const rendered = createMemo(() => {
+    const isFocused = checkFocus()
+    const val = props.value
+    const pos = cursor()
+    const ph = showPlaceholder()
+
+    if (ph) {
+      return (
+        <box height={lineHeight()} width="100%">
+          <text color={th().muted} fontSize={th().fontSize}>{props.placeholder ?? ""}</text>
+        </box>
+      )
+    }
+
+    return (
+      <box height={lineHeight()} width="100%">
+        <text color={th().fg} fontSize={th().fontSize}>
+          {val.slice(0, pos) + (isFocused ? (blink() ? "│" : " ") : "") + val.slice(pos)}
+        </text>
+      </box>
+    )
+  })
 
   return (
     <box
@@ -321,28 +340,7 @@ export function Input(props: InputProps) {
         borderColor: cursorColor(),
       }}
     >
-      {() => {
-        const isFocused = checkFocus()
-        const val = props.value
-        const pos = cursor()
-        const ph = showPlaceholder()
-
-        if (ph) {
-          return (
-            <box height={lineHeight()} width="100%">
-              <text color={th().muted} fontSize={th().fontSize}>{props.placeholder ?? ""}</text>
-            </box>
-          )
-        }
-
-        return (
-          <box height={lineHeight()} width="100%">
-            <text color={th().fg} fontSize={th().fontSize}>
-              {val.slice(0, pos) + (isFocused ? (blink() ? "│" : " ") : "") + val.slice(pos)}
-            </text>
-          </box>
-        )
-      }}
+      {rendered}
     </box>
   )
 }

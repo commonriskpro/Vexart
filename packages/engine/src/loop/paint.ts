@@ -797,8 +797,10 @@ export function paintFrame(
   // When all dirty layers were already emitted per-layer via native presentation
   // (layered-dirty / layered-region strategy), skip the final-frame compose+readback.
   // The terminal retains previously emitted clean layer images — no need to recompose.
-  const allLayersNativePresented = rendererOutput === "native-presented" && repaintedThisFrame > 0
-  const skipFinalCompose = allLayersNativePresented && framePlan?.strategy !== "final-frame"
+  // Keep a complete final-frame present after native layer updates. Kitty
+  // animation frames arrive asynchronously; skipping this compose can expose
+  // a transient empty canvas while a layer replacement is in flight.
+  const skipFinalCompose = false
   const backendEndStart = profile ? performance.now() : 0
   const frameResult = skipFinalCompose ? null : backend.endFrame?.(frameCtx)
   if (profile) profile.paintBackendEndMs += performance.now() - backendEndStart
