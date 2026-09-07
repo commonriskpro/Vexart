@@ -49,6 +49,7 @@ await build({
     "babel-preset-solid",
     "web-tree-sitter",
     "marked",
+    "sharp",
     "@chenglou/pretext",
     "@napi-rs/canvas",
     "opentype.js",

@@ -61,7 +61,7 @@ import {
   vf32, _packU8,
   packShapeRectInstance, packShapeRectCornersInstance, packGlowInstance,
   packShadowInstance, packLinearGradientInstance, packRadialGradientInstance,
-  packImageInstance, packImageTransformInstance,
+  packImageTransformInstance,
   type WgpuCanvasShapeRect, type WgpuCanvasShapeRectCorners,
   type WgpuCanvasCornerRadii, type WgpuCanvasGlow, type WgpuCanvasShadow,
 } from "./gpu-pack"
@@ -943,19 +943,23 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     }
     const flushImages = () => {
       if (imageGroups.size === 0) return
-      // 9.3c: Images dispatched via vexart_paint_dispatch cmd_kind=9 (BridgeImageInstance).
-      // One dispatch call per image group (per uploaded texture handle).
-      // BridgeImageInstance: 8 floats (x, y, w, h, opacity, _pad×3) = 32 bytes per instance.
+      // cmd_kind=9 has no image-handle field, so paint_dispatch binds the
+      // transparent fallback texture. Composite each uploaded image directly
+      // through the source-bound image FFI instead.
       for (const group of imageGroups.values()) {
-        const instances = new Uint8Array(group.instances.length * 32)
-        for (let i = 0; i < group.instances.length; i++) {
-          const inst = group.instances[i]
-          packImageInstance(inst.x, inst.y, inst.w, inst.h, inst.opacity)
-          for (let b = 0; b < 32; b++) instances[i * 32 + b] = _packU8[b]
+        for (const instance of group.instances) {
+          const x = ((instance.x + 1) * 0.5) * ctx.target.width
+          const y = ((1 - instance.y) * 0.5) * ctx.target.height
+          const w = Math.abs(instance.w) * 0.5 * ctx.target.width
+          const h = Math.abs(instance.h) * 0.5 * ctx.target.height
+          vexartCompositeRenderImageLayer(
+            vctx, targetHandle, group.handle,
+            x, y, w, h,
+            0, 0x00000000,
+          )
+          first = false
+          targetMutationVersion += 1
         }
-        flushVexartBatch(vctx, 9, instances, targetHandle)
-        first = false
-        targetMutationVersion += 1
       }
       imageGroups.clear()
     }
@@ -981,6 +985,10 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
         }
       }
       transformedImageGroups.clear()
+    }
+    const flushRasterImages = () => {
+      flushImages()
+      flushTransformedImages()
     }
     const flushAll = () => {
       flushShapeRects()
@@ -1178,6 +1186,10 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
           continue
         }
         if (op.kind === "rectangle") {
+          // Images are composited directly from their source handles. Flush
+          // them before queuing a later shape so deferred image batches cannot
+          // paint over subsequent siblings.
+          flushRasterImages()
           const boxW = clip.right - clip.left
           const boxH = clip.bottom - clip.top
           shapeRects.push({
@@ -1195,6 +1207,9 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
           continue
         }
         if (op.kind === "effect") {
+          // Keep source-bound images in graph order relative to effect fills
+          // and backdrop snapshots (flushAll batches by command kind).
+          flushRasterImages()
           let effectOp = op
           const effectOpacity = effectOp.effect.opacity ?? 1
           const cornerRadii = effectOp.effect.cornerRadii
@@ -1340,10 +1355,11 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
             // Force a clear render pass before backdrop reads from the target.
             if (first) {
               shapeRects.push({ x: 0, y: 0, w: 0, h: 0, boxW: 0, boxH: 0, radius: 0, strokeWidth: 0, fill: 0 })
-              flushShapeRects()
-            } else {
-              flushAll()
             }
+            // Flush every pending kind before copying the backdrop source.
+            // In particular, image/canvas ops are source-bound composites
+            // and must be visible before the backdrop snapshot is captured.
+            flushAll()
             if (layerOpen) {
               vexartCompositeTargetEndLayer(vctx, targetHandle)
               layerOpen = false
@@ -1426,10 +1442,8 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
            if (effectOp.backdrop && cornerRadii) {
             if (first) {
               shapeRects.push({ x: 0, y: 0, w: 0, h: 0, boxW: 0, boxH: 0, radius: 0, strokeWidth: 0, fill: 0 })
-              flushShapeRects()
-            } else {
-              flushAll()
             }
+            flushAll()
             if (layerOpen) {
               vexartCompositeTargetEndLayer(vctx, targetHandle)
               layerOpen = false
@@ -1754,6 +1768,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
           continue
         }
         if (op.kind === "border") {
+          flushRasterImages()
           const boxW = clip.right - clip.left
           const boxH = clip.bottom - clip.top
           if (op.cornerRadii) {
@@ -1786,6 +1801,9 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
           continue
         }
         if (op.kind === "image") {
+          // Finish earlier shapes before queuing this image. The image FFI
+          // path is source-bound and cannot share cmd_kind=9's batch ABI.
+          flushAll()
           const imageHandle = op.image.nativeImageHandle && op.image.nativeImageHandle > 0n
             ? op.image.nativeImageHandle
             : getImage(op.image.imageBuffer.data, op.image.imageBuffer.width, op.image.imageBuffer.height)
@@ -1803,6 +1821,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
           continue
         }
         if (op.kind === "canvas") {
+          flushAll()
           const imageHandle = getCanvasSprite(op)
           if (!imageHandle) return { ok: false, rawLayer: null }
           const group = imageGroups.get(imageHandle) ?? { handle: imageHandle, instances: [] }
