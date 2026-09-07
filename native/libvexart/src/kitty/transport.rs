@@ -35,6 +35,11 @@ thread_local! {
     // with identical animation frames while still allowing real pixels to
     // update immediately.
     static IMAGE_HASHES: RefCell<HashMap<u32, u64>> = RefCell::new(HashMap::new());
+    // Dimensions of the root canvas last transmitted for each live Kitty image
+    // id. Kitty animation frames belong to that root canvas; a target resize
+    // therefore requires a fresh image transmit rather than an animation
+    // update with a different `s`/`v` pair.
+    static IMAGE_GEOMETRIES: RefCell<HashMap<u32, (u32, u32)>> = RefCell::new(HashMap::new());
     // Test-only counter used to prove a digest is scanned once per output
     // attempt even though the result is consumed by both cache operations.
     #[cfg(test)]
@@ -63,6 +68,23 @@ fn forget_image_frame(image_id: u32) {
     IMAGE_HASHES.with(|hashes| {
         hashes.borrow_mut().remove(&image_id);
     });
+    IMAGE_GEOMETRIES.with(|geometries| {
+        geometries.borrow_mut().remove(&image_id);
+    });
+}
+
+fn image_geometry(image_id: u32) -> Option<(u32, u32)> {
+    IMAGE_GEOMETRIES.with(|geometries| geometries.borrow().get(&image_id).copied())
+}
+
+fn record_image_geometry(image_id: u32, width: u32, height: u32) {
+    IMAGE_GEOMETRIES.with(|geometries| {
+        geometries.borrow_mut().insert(image_id, (width, height));
+    });
+}
+
+fn needs_full_transmit(image_id: u32, width: u32, height: u32) -> bool {
+    image_frame(image_id).is_none() || image_geometry(image_id) != Some((width, height))
 }
 
 fn rgba_hash(rgba: &[u8]) -> u64 {
@@ -235,8 +257,10 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
         return ERR_KITTY_TRANSPORT;
     }
     let existing_frame = image_frame(image_id);
+    let animation_frame = existing_frame.filter(|_| !needs_full_transmit(image_id, width, height));
+    let full_transmit = animation_frame.is_none();
     let digest = payload_hash(&rgba[..written as usize], width, height, 0, 0, 0);
-    if existing_frame.is_some() && payload_unchanged(image_id, digest) {
+    if !full_transmit && payload_unchanged(image_id, digest) {
         return OK;
     }
 
@@ -264,7 +288,7 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
 
     // 5. Build Kitty SHM escape and write to stdout.
     let name_b64 = B64.encode(shm_name.as_bytes());
-    let escape = if let Some(frame_id) = existing_frame {
+    let escape = if let Some(frame_id) = animation_frame {
         let previous_frame = frame_id.saturating_sub(1);
         format!(
             "\x1b_Ga=f,i={image_id},c={previous_frame},f=32,s={width},v={height},C=1,t=s,o=z,q=2;{name_b64}\x1b\\\x1b_Ga=a,i={image_id},c={frame_id},q=2;\x1b\\"
@@ -283,7 +307,8 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
 
     match write_result {
         Ok(()) => {
-            record_image_frame(image_id, existing_frame);
+            record_image_frame(image_id, animation_frame);
+            record_image_geometry(image_id, width, height);
             record_payload(image_id, digest);
             OK
         }
@@ -757,15 +782,17 @@ pub unsafe fn delete_layer_native(image_id: u32, stats_out: *mut NativePresentat
 /// Emit already-read RGBA data using direct mode (encode → stdout).
 fn emit_direct_inner(rgba: &[u8], width: u32, height: u32, image_id: u32) -> i32 {
     let existing_frame = image_frame(image_id);
+    let animation_frame = existing_frame.filter(|_| !needs_full_transmit(image_id, width, height));
+    let full_transmit = animation_frame.is_none();
     let digest = payload_hash(rgba, width, height, 0, 0, 0);
-    if existing_frame.is_some() && payload_unchanged(image_id, digest) {
+    if !full_transmit && payload_unchanged(image_id, digest) {
         return OK;
     }
-    let escaped = existing_frame.map_or_else(
+    let escaped = animation_frame.map_or_else(
         || encode_frame_direct(rgba, width, height, image_id),
         |frame_id| encode_animation_frame_direct(rgba, width, height, image_id, frame_id),
     );
-    let stale_delete = if existing_frame.is_none() {
+    let stale_delete = if full_transmit {
         format!("\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\")
     } else {
         String::new()
@@ -776,7 +803,8 @@ fn emit_direct_inner(rgba: &[u8], width: u32, height: u32, image_id: u32) -> i32
     );
     match write_transport(positioned.as_bytes()) {
         Ok(()) => {
-            record_image_frame(image_id, existing_frame);
+            record_image_frame(image_id, animation_frame);
+            record_image_geometry(image_id, width, height);
             record_payload(image_id, digest);
             OK
         }
@@ -847,8 +875,10 @@ fn emit_shm_rgba_at_with_stats(
         ..ShmTransferStats::default()
     };
     let existing_frame = image_frame(image_id);
+    let animation_frame = existing_frame.filter(|_| !needs_full_transmit(image_id, width, height));
+    let full_transmit = animation_frame.is_none();
     let digest = payload_hash(rgba, width, height, col, row, z);
-    if existing_frame.is_some() && payload_unchanged(image_id, digest) {
+    if !full_transmit && payload_unchanged(image_id, digest) {
         return (OK, stats);
     }
     let compression = shm_compression_enabled();
@@ -886,7 +916,7 @@ fn emit_shm_rgba_at_with_stats(
         return (ERR_KITTY_TRANSPORT, stats);
     }
     let name_b64 = B64.encode(shm_name.as_bytes());
-    let escape = if let Some(frame_id) = existing_frame {
+    let escape = if let Some(frame_id) = animation_frame {
         let previous_frame = frame_id.saturating_sub(1);
         format!(
             "\x1b7\x1b[{};{}H\x1b_Ga=f,i={image_id},c={previous_frame},f=32,s={width},v={height},C=1,t=s{compression_param},q=2;{name_b64}\x1b\\\x1b_Ga=a,i={image_id},c={frame_id},q=2;\x1b\\\x1b8",
@@ -906,7 +936,8 @@ fn emit_shm_rgba_at_with_stats(
     shm_release(handle, 0);
     match write_result {
         Ok(()) => {
-            record_image_frame(image_id, existing_frame);
+            record_image_frame(image_id, animation_frame);
+            record_image_geometry(image_id, width, height);
             record_payload(image_id, digest);
             (OK, stats)
         }
@@ -927,17 +958,19 @@ fn emit_direct_rgba_at(
     z: i32,
 ) -> i32 {
     let existing_frame = image_frame(image_id);
+    let animation_frame = existing_frame.filter(|_| !needs_full_transmit(image_id, width, height));
+    let full_transmit = animation_frame.is_none();
     let digest = payload_hash(rgba, width, height, col, row, z);
-    if existing_frame.is_some() && payload_unchanged(image_id, digest) {
+    if !full_transmit && payload_unchanged(image_id, digest) {
         return OK;
     }
-    let escaped = existing_frame.map_or_else(
+    let escaped = animation_frame.map_or_else(
         || encode_frame_direct(rgba, width, height, image_id),
         |frame_id| encode_animation_frame_direct(rgba, width, height, image_id, frame_id),
     );
     let row = row.max(0) + 1;
     let col = col.max(0) + 1;
-    let stale_delete = if existing_frame.is_none() {
+    let stale_delete = if full_transmit {
         format!("\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\")
     } else {
         String::new()
@@ -948,7 +981,8 @@ fn emit_direct_rgba_at(
     );
     match write_transport(positioned.as_bytes()) {
         Ok(()) => {
-            record_image_frame(image_id, existing_frame);
+            record_image_frame(image_id, animation_frame);
+            record_image_geometry(image_id, width, height);
             record_payload(image_id, digest);
             OK
         }
@@ -1141,6 +1175,7 @@ mod tests {
         let digest = payload_hash(&rgba, 1, 1, 2, 3, 4);
         force_write_failure(true);
         record_image_frame(image_id, None);
+        record_image_geometry(image_id, 1, 1);
         record_payload(image_id, digest);
 
         assert_eq!(emit_direct_rgba_at(&rgba, 1, 1, image_id, 2, 3, 4), OK);
@@ -1161,6 +1196,7 @@ mod tests {
         let previous_digest = payload_hash(&previous, 1, 1, 2, 3, 4);
         let changed_digest = payload_hash(&changed, 1, 1, 2, 3, 4);
         record_image_frame(image_id, None);
+        record_image_geometry(image_id, 1, 1);
         record_payload(image_id, previous_digest);
         force_write_failure(true);
 
@@ -1182,6 +1218,7 @@ mod tests {
         let previous_digest = payload_hash(&rgba, 1, 1, 2, 3, 4);
         let changed_digest = payload_hash(&rgba, 1, 1, 2, 4, 4);
         record_image_frame(image_id, None);
+        record_image_geometry(image_id, 1, 1);
         record_payload(image_id, previous_digest);
         force_write_failure(true);
 
@@ -1220,12 +1257,14 @@ mod tests {
         let rgba = [0x10, 0x20, 0x30, 0xff];
         let digest = payload_hash(&rgba, 1, 1, 0, 0, 0);
         record_image_frame(image_id, None);
+        record_image_geometry(image_id, 1, 1);
         record_payload(image_id, digest);
 
         forget_image_frame(image_id);
 
         assert!(image_frame(image_id).is_none());
         assert!(!payload_unchanged(image_id, digest));
+        assert!(image_geometry(image_id).is_none());
     }
 
     #[test]
@@ -1235,6 +1274,7 @@ mod tests {
         let changed = [0x11, 0x20, 0x30, 0xff];
         let previous_digest = payload_hash(&previous, 1, 1, 0, 0, 0);
         record_image_frame(image_id, None);
+        record_image_geometry(image_id, 1, 1);
         record_payload(image_id, previous_digest);
         reset_hash_scan_count();
         force_write_failure(false);
@@ -1247,6 +1287,63 @@ mod tests {
         assert_eq!(result.0, OK);
         assert_eq!(result.1.payload_bytes, 0);
         assert_eq!(hash_scan_count(), 1);
+
+        forget_image_frame(image_id);
+    }
+
+    #[test]
+    fn test_dimension_change_requires_full_transmit() {
+        let image_id = 40_007;
+        record_image_frame(image_id, None);
+        record_image_geometry(image_id, 200, 120);
+
+        assert!(!needs_full_transmit(image_id, 200, 120));
+        assert!(needs_full_transmit(image_id, 320, 180));
+
+        forget_image_frame(image_id);
+    }
+
+    #[test]
+    fn test_failed_resize_transmit_preserves_previous_geometry() {
+        let image_id = 40_008;
+        let previous = [0x10, 0x20, 0x30, 0xff];
+        let previous_digest = payload_hash(&previous, 1, 1, 0, 0, 0);
+        record_image_frame(image_id, None);
+        record_image_geometry(image_id, 1, 1);
+        record_payload(image_id, previous_digest);
+        force_write_failure(true);
+
+        assert_eq!(
+            emit_direct_rgba_at(
+                &[0x11, 0x20, 0x30, 0xff, 0x11, 0x20, 0x30, 0xff,],
+                2,
+                1,
+                image_id,
+                0,
+                0,
+                0,
+            ),
+            ERR_KITTY_TRANSPORT
+        );
+        assert_eq!(image_frame(image_id), Some(2));
+        assert_eq!(image_geometry(image_id), Some((1, 1)));
+        assert!(payload_unchanged(image_id, previous_digest));
+
+        force_write_failure(false);
+        forget_image_frame(image_id);
+    }
+
+    #[test]
+    fn test_region_patch_does_not_replace_root_geometry() {
+        let image_id = 40_009;
+        record_image_frame(image_id, None);
+        record_image_geometry(image_id, 200, 120);
+        force_write_failure(false);
+
+        let result =
+            emit_region_rgba_with_stats(&[0x10, 0x20, 0x30, 0xff], image_id, 8, 4, 1, 1, 0);
+        assert_eq!(result.0, OK);
+        assert_eq!(image_geometry(image_id), Some((200, 120)));
 
         forget_image_frame(image_id);
     }

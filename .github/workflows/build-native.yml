@@ -163,8 +163,9 @@ jobs:
           VEXART_VERSION: ${{ steps.release_version.outputs.version }}
         run: |
           set -euo pipefail
-          attempts=6
-          delay_seconds=10
+          # Keep propagation polling bounded to about ten minutes; never republish here.
+          attempts=20
+          delay_seconds=30
           for ((attempt=1; attempt<=attempts; attempt++)); do
             set +e
             node scripts/release-verification.mjs registry "$VEXART_VERSION"
@@ -185,12 +186,20 @@ jobs:
           echo "Registry propagation did not complete within the bounded verification window." >&2
           exit 1
 
+      - name: Prepare uniquely named GitHub release assets
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          cp native-artifacts/native-darwin-arm64/libvexart.dylib release-assets/libvexart-darwin-arm64.dylib
+          cp native-artifacts/native-linux-x64/libvexart.so release-assets/libvexart-linux-x64.so
+          cp native-artifacts/native-linux-arm64/libvexart.so release-assets/libvexart-linux-arm64.so
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            native-artifacts/native-darwin-arm64/libvexart.dylib
-            native-artifacts/native-linux-x64/libvexart.so
-            native-artifacts/native-linux-arm64/libvexart.so
+            release-assets/libvexart-darwin-arm64.dylib
+            release-assets/libvexart-linux-x64.so
+            release-assets/libvexart-linux-arm64.so
           generate_release_notes: true
           prerelease: ${{ contains(steps.release_version.outputs.version, '-') }}
