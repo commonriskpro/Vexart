@@ -1,5 +1,5 @@
 // native/libvexart/src/paint/pipelines/mod.rs
-// PipelineRegistry: holds all 20 GPU render pipelines (13 ported + 4 new from Slice 5b
+// PipelineRegistry: holds all GPU render pipelines (13 ported + 4 new from Slice 5b
 // + 1 MSDF text + 1 self-filter + 1 analytic shadow pipeline).
 // Per design §17.1, §17.6, tasks 5a.2–5a.15, 5b.1–5b.5, 4.3.
 
@@ -16,6 +16,7 @@ pub mod gradient_radial;
 pub mod image;
 pub mod image_mask;
 pub mod image_transform;
+pub mod image_unpremultiply;
 pub mod nebula;
 pub mod polygon;
 pub mod rect;
@@ -26,7 +27,7 @@ pub mod starfield;
 
 use wgpu::{BindGroupLayout, Device, RenderPipeline, TextureFormat};
 
-/// Holds all 20 render pipelines indexed by cmd_kind.
+/// Holds all render pipelines indexed by cmd_kind, plus internal image helpers.
 /// cmd_kind allocation per design §17.6 (as-deployed in Slice 5a + 5b + Phase 2b Slice 4 + 5):
 ///   Slice 5a (ported):
 ///     0 = rect, 1 = shape_rect, 2 = shape_rect_corners, 3 = circle,
@@ -55,6 +56,8 @@ pub struct PipelineRegistry {
     pub starfield: RenderPipeline,
     pub image: RenderPipeline,
     pub image_transform: RenderPipeline,
+    pub image_transform_premultiplied: RenderPipeline,
+    pub image_unpremultiply: RenderPipeline,
     pub gradient_linear: RenderPipeline,
     pub gradient_radial: RenderPipeline,
     // ── Slice 5b ──────────────────────────────────────────────────────────────
@@ -71,7 +74,7 @@ pub struct PipelineRegistry {
 }
 
 impl PipelineRegistry {
-    /// Create all 20 pipelines. Called once at WgpuContext init.
+    /// Create all pipelines and internal image helpers. Called once at WgpuContext init.
     ///
     /// `cache` — optional wgpu PipelineCache handle for fast warm-start (REQ-2B-601).
     /// On backends that don't support caching (Metal), cache is a no-op and ignored by wgpu.
@@ -94,6 +97,10 @@ impl PipelineRegistry {
             starfield: starfield::create(device, format, cache),
             image: image::create(device, format, image_bgl, cache),
             image_transform: image_transform::create(device, format, image_bgl, cache),
+            image_transform_premultiplied: image_transform::create_premultiplied(
+                device, format, image_bgl, cache,
+            ),
+            image_unpremultiply: image_unpremultiply::create(device, format, image_bgl, cache),
             gradient_linear: gradient_linear::create(device, format, cache),
             gradient_radial: gradient_radial::create(device, format, cache),
             // Slice 5b

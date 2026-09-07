@@ -11,19 +11,62 @@ pub fn create(
     image_bgl: &BindGroupLayout,
     cache: Option<&wgpu::PipelineCache>,
 ) -> RenderPipeline {
+    create_with_blend(
+        device,
+        format,
+        image_bgl,
+        cache,
+        wgpu::BlendState::ALPHA_BLENDING,
+        "vexart-image-transform-pipeline",
+        "vexart-image-transform-pipeline-layout",
+        "fs_main",
+    )
+}
+
+/// Create the target-to-target variant. Retained targets already store
+/// premultiplied RGBA, so their source factor must not multiply RGB by alpha a
+/// second time. Uploaded and copied images continue using `create` above.
+pub fn create_premultiplied(
+    device: &Device,
+    format: TextureFormat,
+    image_bgl: &BindGroupLayout,
+    cache: Option<&wgpu::PipelineCache>,
+) -> RenderPipeline {
+    create_with_blend(
+        device,
+        format,
+        image_bgl,
+        cache,
+        wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING,
+        "vexart-image-transform-premultiplied-pipeline",
+        "vexart-image-transform-premultiplied-pipeline-layout",
+        "fs_premultiplied",
+    )
+}
+
+fn create_with_blend(
+    device: &Device,
+    format: TextureFormat,
+    image_bgl: &BindGroupLayout,
+    cache: Option<&wgpu::PipelineCache>,
+    blend: wgpu::BlendState,
+    pipeline_label: &'static str,
+    layout_label: &'static str,
+    fragment_entry: &'static str,
+) -> RenderPipeline {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("vexart-image-transform-shader"),
         source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/image_transform.wgsl").into()),
     });
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("vexart-image-transform-pipeline-layout"),
+        label: Some(layout_label),
         bind_group_layouts: &[Some(image_bgl)],
         immediate_size: 0,
     });
 
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("vexart-image-transform-pipeline"),
+        label: Some(pipeline_label),
         layout: Some(&pipeline_layout),
         vertex: wgpu::VertexState {
             module: &shader,
@@ -58,11 +101,11 @@ pub fn create(
         },
         fragment: Some(wgpu::FragmentState {
             module: &shader,
-            entry_point: Some("fs_main"),
+            entry_point: Some(fragment_entry),
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             targets: &[Some(wgpu::ColorTargetState {
                 format,
-                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                blend: Some(blend),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
         }),

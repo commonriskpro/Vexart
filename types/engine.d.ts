@@ -1647,7 +1647,7 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      reasonFlags: number;
  };
 
- declare type NativeFrameStrategy = (typeof NATIVE_FRAME_STRATEGY)[keyof typeof NATIVE_FRAME_STRATEGY];
+ declare type NativeFrameStrategy = 0 | 1 | 2 | 3;
 
  /**
   * kitty-shm-native.ts — native Kitty shared-memory path

@@ -100,6 +100,9 @@ export function DialogOverlay(props: DialogOverlayProps) {
   const onClose = useContext(DialogCloseContext)
   return (
     <box
+      // Keep the backdrop out of the dialog's flex flow.  It still covers
+      // the portal plane, but must not push Content below the viewport.
+      floating="parent"
       width="100%"
       height="100%"
       backgroundColor={props.backgroundColor}

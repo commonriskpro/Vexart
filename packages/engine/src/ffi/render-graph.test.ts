@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { BACKDROP_FILTER_KIND, buildRenderGraphFrame, CMD, type CanvasPaintConfig, type EffectConfig, type ImagePaintConfig, type RenderCommand, type RenderGraphOp } from "./render-graph"
+import { createNode } from "./node"
 
 type CommandBacked = { command?: RenderCommand }
 type RectFields = {
@@ -167,6 +168,16 @@ describe("buildRenderGraphFrame", () => {
     expect(op.clipStateId).not.toBe(0)
   })
 
+  test("scissor bounds attach to every enclosed paint op", () => {
+    const frame = buildRenderGraphFrame([
+      cmd({ type: CMD.SCISSOR_START, x: 10, y: 12, width: 20, height: 16 }),
+      cmd({ x: 0, y: 0, width: 50, height: 50 }),
+      cmd({ type: CMD.SCISSOR_END }),
+    ])
+
+    expect(frame.ops[0].clipBounds).toEqual({ x: 10, y: 12, width: 20, height: 16 })
+  })
+
   test("multiple commands preserve render order", () => {
     const frame = buildRenderGraphFrame([
       cmd({ type: CMD.RECTANGLE }),
@@ -191,6 +202,34 @@ describe("buildRenderGraphFrame", () => {
 
     expect(op.kind).toBe("effect")
     expect(effectOp(op).transformStateId).not.toBe(0)
+  })
+
+  test("effect state identity includes self-filter channels", () => {
+    const brightness = graph(cmd({ effect: { color: 0xff0000ff, filter: { brightness: 150 } } }))
+    const grayscale = graph(cmd({ effect: { color: 0xff0000ff, filter: { grayscale: 100 } } }))
+
+    expect(effectOp(brightness).effectStateId).not.toBe(effectOp(grayscale).effectStateId)
+  })
+
+  test("hydrates a laid-out node transform into the effect op", () => {
+    const node = createNode("box")
+    const transform = new Float64Array([1, 0, 12, 0, 1, 24, 0, 0, 1])
+    node._transform = transform
+    node._transformInverse = transform
+    const effect: EffectConfig = { color: 0xff0000ff, transform: new Float64Array(9), _node: node }
+    const op = effectOp(graph(cmd({ effect })))
+
+    expect(op.effect.transform).toBe(transform)
+    expect(op.effect.transformInverse).toBe(transform)
+  })
+
+  test("removes the pre-layout placeholder when the laid-out transform is identity", () => {
+    const node = createNode("box")
+    const effect: EffectConfig = { color: 0xff0000ff, transform: new Float64Array(9), _node: node }
+    const op = effectOp(graph(cmd({ effect })))
+
+    expect(op.effect.transform).toBeUndefined()
+    expect(op.effect.transformInverse).toBeUndefined()
   })
 
   test("nested scissor clips affect clip stack depth and intersection", () => {

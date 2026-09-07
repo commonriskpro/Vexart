@@ -70,7 +70,8 @@ import {
   getSymbols,
   vexartCompositeTargetCreate, vexartCompositeTargetDestroy,
   vexartCompositeTargetBeginLayer, vexartCompositeTargetEndLayer,
-  vexartCompositeRenderImageLayer, vexartCompositeCopyRegionToImage,
+  vexartCompositeRenderImageLayer, vexartCompositeRenderImageTransformLayer,
+  vexartCompositeCopyRegionToImage,
   vexartCompositeImageFilterBackdrop, vexartCompositeImageMaskRoundedRect,
   vexartCompositeReadbackRgba,
   copyGpuTargetRegionToImage,
@@ -318,7 +319,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
   // Backdrop pre-composite: layers rendered so far, composited into the
   // backdrop layer's target before it reads "content behind".
   const _renderedLayerStack: RenderedLayerRecord[] = []
-  let renderOpToImage: ((op: RenderGraphOp, width: number, height: number, offsetX: number, offsetY: number) => VexartImageHandle | null) | null = null
+  let renderOpToImage: ((op: RenderGraphOp, width: number, height: number, offsetX: number, offsetY: number, ops?: RenderGraphOp[]) => VexartImageHandle | null) | null = null
   const activeLayerKeys = new Set<string>()
   let suppressFinalPresentation = false
   const backendProfile: RendererBackendProfile = {
@@ -607,7 +608,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     const vctx = getVexartCtx()
     const width = Math.max(1, Math.round(op.width))
     const height = Math.max(1, Math.round(op.height))
-    const key = `${op.kind}:${op.type}:${op.x}:${op.y}:${op.width}:${op.height}:${op.color}:${op.cornerRadius}:${op.extra1}:${op.extra2}:${op.text ?? ""}:${width}:${height}:${hashMatrix(op.effect.transform)}:${op.effect.opacity ?? 1}`
+    const key = `${op.kind}:${op.type}:${op.x}:${op.y}:${op.width}:${op.height}:${op.color}:${op.cornerRadius}:${op.extra1}:${op.extra2}:${op.text ?? ""}:${width}:${height}:${hashMatrix(op.effect.transform)}:effect${op.effectStateId}`
     const cached = transformSpriteCache.get(key)
     if (cached && cached.width === width && cached.height === height) {
       touchMapEntry(transformSpriteCache, key, cached)
@@ -624,7 +625,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
         opacity: undefined,
       },
     }
-    const renderSprite = renderOpToImage as ((op: RenderGraphOp, width: number, height: number, offsetX: number, offsetY: number) => VexartImageHandle | null) | null
+    const renderSprite = renderOpToImage as ((op: RenderGraphOp, width: number, height: number, offsetX: number, offsetY: number, ops?: RenderGraphOp[]) => VexartImageHandle | null) | null
     const handle = renderSprite
       ? renderSprite(spriteOp, width, height, Math.round(op.x), Math.round(op.y))
       : null
@@ -632,6 +633,172 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     transformSpriteSlot.set(key, { key, handle, width, height })
     trimTransformSpriteCache()
     return handle
+  }
+
+  const hasSelfFilter = (filter: NonNullable<EffectRenderOp["effect"]["filter"]>) => (
+    (filter.blur ?? 0) > 0
+    || (filter.brightness !== undefined && filter.brightness !== 100)
+    || (filter.contrast !== undefined && filter.contrast !== 100)
+    || (filter.saturate !== undefined && filter.saturate !== 100)
+    || (filter.grayscale ?? 0) !== 0
+    || (filter.invert ?? 0) !== 0
+    || (filter.sepia ?? 0) !== 0
+    || (filter.hueRotate ?? 0) !== 0
+  )
+
+  const getSubtreeCaptureBounds = (
+    op: Extract<RenderGraphOp, { kind: "effect" }>,
+    subtreeOps: RenderGraphOp[],
+    includeRootTransform = false,
+  ) => {
+    let left = Math.round(op.x)
+    let top = Math.round(op.y)
+    let right = left + Math.max(1, Math.round(op.width))
+    let bottom = top + Math.max(1, Math.round(op.height))
+    const include = (entry: RenderGraphOp, isRoot = false) => {
+      const x = Math.round(entry.x)
+      const y = Math.round(entry.y)
+      const width = Math.max(1, Math.round(entry.width))
+      const height = Math.max(1, Math.round(entry.height))
+      let entryLeft = x
+      let entryTop = y
+      let entryRight = x + width
+      let entryBottom = y + height
+      if (entry.kind === "effect") {
+        if (entry.effect.transform && (!isRoot || includeRootTransform)) {
+          const points = [
+            transformPoint(entry.effect.transform, 0, 0),
+            transformPoint(entry.effect.transform, width, 0),
+            transformPoint(entry.effect.transform, 0, height),
+            transformPoint(entry.effect.transform, width, height),
+          ]
+          entryLeft = Math.min(entryLeft, ...points.map((point) => x + point.x))
+          entryTop = Math.min(entryTop, ...points.map((point) => y + point.y))
+          entryRight = Math.max(entryRight, ...points.map((point) => x + point.x))
+          entryBottom = Math.max(entryBottom, ...points.map((point) => y + point.y))
+        }
+        if (entry.effect.glow) {
+          const pad = entry.effect.glow.radius * 2
+          entryLeft -= pad
+          entryTop -= pad
+          entryRight += pad
+          entryBottom += pad
+        }
+        if (entry.effect.shadow) {
+          const shadows = Array.isArray(entry.effect.shadow) ? entry.effect.shadow : [entry.effect.shadow]
+          for (const shadow of shadows) {
+            const pad = Math.ceil(Math.max(0, shadow.blur)) * 2
+            entryLeft = Math.min(entryLeft, x + Math.min(0, shadow.x) - pad)
+            entryTop = Math.min(entryTop, y + Math.min(0, shadow.y) - pad)
+            entryRight = Math.max(entryRight, x + width + Math.max(0, shadow.x) + pad)
+            entryBottom = Math.max(entryBottom, y + height + Math.max(0, shadow.y) + pad)
+          }
+        }
+        if (entry.effect.filter?.blur) {
+          const pad = entry.effect.filter.blur * 2
+          entryLeft -= pad
+          entryTop -= pad
+          entryRight += pad
+          entryBottom += pad
+        }
+      }
+      left = Math.min(left, entryLeft)
+      top = Math.min(top, entryTop)
+      right = Math.max(right, entryRight)
+      bottom = Math.max(bottom, entryBottom)
+    }
+    // Include the root's paint expansion (shadow, glow, and filter blur) but
+    // keep its transform out of the source capture. The root transform is
+    // applied when the isolated image is composited below.
+    include(op, true)
+    for (const entry of subtreeOps) include(entry)
+    return {
+      left: Math.floor(left),
+      top: Math.floor(top),
+      right: Math.ceil(right),
+      bottom: Math.ceil(bottom),
+    }
+  }
+
+  const getIsolatedSource = (
+    op: Extract<RenderGraphOp, { kind: "effect" }>,
+    subtreeOps: RenderGraphOp[],
+  ) => {
+    const capture = getSubtreeCaptureBounds(op, subtreeOps)
+    const width = Math.max(1, capture.right - capture.left)
+    const height = Math.max(1, capture.bottom - capture.top)
+    const sourceOp: Extract<RenderGraphOp, { kind: "effect" }> = {
+      ...op,
+      clipBounds: undefined,
+      effect: {
+        ...op.effect,
+        filter: undefined,
+        opacity: undefined,
+        // The isolated image is composited with the original transform below.
+        // Rendering the source untransformed also preserves the source UVs.
+        transform: undefined,
+        transformInverse: undefined,
+        transformBounds: undefined,
+      },
+    }
+    const renderSprite = renderOpToImage
+    if (!renderSprite) return null
+    const source = renderSprite(sourceOp, width, height, capture.left, capture.top, [sourceOp, ...subtreeOps])
+    if (!source) return null
+    return { handle: source, width, height, left: capture.left, top: capture.top }
+  }
+
+  /**
+   * Render an effect's complete subtree into an isolated image and apply its
+   * self-filter to that image. The existing composite filter entry point is
+   * source-bound (unlike paint cmd_kind=19, which currently uses the fallback
+   * texture), so this keeps the TS/native boundary correct without changing
+   * the native ABI.
+   */
+  const getSelfFilterSprite = (
+    op: Extract<RenderGraphOp, { kind: "effect" }>,
+    subtreeOps: RenderGraphOp[],
+  ) => {
+    const vctx = getVexartCtx()
+    const filter = op.effect.filter
+    if (!filter || !hasSelfFilter(filter)) return null
+    const source = getIsolatedSource(op, subtreeOps)
+    if (!source) return null
+    const filtered = vexartCompositeImageFilterBackdrop(vctx, source.handle, {
+      blur: filter.blur ?? null,
+      brightness: filter.brightness ?? null,
+      contrast: filter.contrast ?? null,
+      saturate: filter.saturate ?? null,
+      grayscale: filter.grayscale ?? null,
+      invert: filter.invert ?? null,
+      sepia: filter.sepia ?? null,
+      hueRotate: filter.hueRotate ?? null,
+    })
+    vexartRemoveImage(vctx, source.handle)
+    if (!filtered) return null
+    transientFullFrameImages.push(filtered)
+    return { ...source, handle: filtered }
+  }
+
+  /** Render a non-filtered effect subtree for group opacity composition. */
+  const getGroupOpacitySprite = (
+    op: Extract<RenderGraphOp, { kind: "effect" }>,
+    subtreeOps: RenderGraphOp[],
+  ) => {
+    const source = getIsolatedSource(op, subtreeOps)
+    if (!source) return null
+    transientFullFrameImages.push(source.handle)
+    return source
+  }
+
+  const getTransformedSubtreeSprite = (
+    op: Extract<RenderGraphOp, { kind: "effect" }>,
+    subtreeOps: RenderGraphOp[],
+  ) => {
+    const source = getIsolatedSource(op, subtreeOps)
+    if (!source) return null
+    transientFullFrameImages.push(source.handle)
+    return source
   }
 
   const renderGradientSprite = (
@@ -680,15 +847,19 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     }
   }
 
-  const clipRect = (cmd: { x: number; y: number; width: number; height: number }, ctx: RendererBackendPaintContext) => {
+  const clipRect = (cmd: { x: number; y: number; width: number; height: number; clipBounds?: { x: number; y: number; width: number; height: number } | null }, ctx: RendererBackendPaintContext) => {
     const x = Math.round(cmd.x) - ctx.offsetX
     const y = Math.round(cmd.y) - ctx.offsetY
     const w = Math.round(cmd.width)
     const h = Math.round(cmd.height)
-    const left = Math.max(0, x)
-    const top = Math.max(0, y)
-    const right = Math.min(ctx.target.width, x + w)
-    const bottom = Math.min(ctx.target.height, y + h)
+    const scissorLeft = cmd.clipBounds ? Math.round(cmd.clipBounds.x) - ctx.offsetX : 0
+    const scissorTop = cmd.clipBounds ? Math.round(cmd.clipBounds.y) - ctx.offsetY : 0
+    const scissorRight = cmd.clipBounds ? scissorLeft + Math.round(cmd.clipBounds.width) : ctx.target.width
+    const scissorBottom = cmd.clipBounds ? scissorTop + Math.round(cmd.clipBounds.height) : ctx.target.height
+    const left = Math.max(0, x, scissorLeft)
+    const top = Math.max(0, y, scissorTop)
+    const right = Math.min(ctx.target.width, x + w, scissorRight)
+    const bottom = Math.min(ctx.target.height, y + h, scissorBottom)
     if (right <= left || bottom <= top) return null
     return { x, y, w, h, left, top, right, bottom }
   }
@@ -790,24 +961,24 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     }
     const flushTransformedImages = () => {
       if (transformedImageGroups.size === 0) return
-      // 9.3c: Transformed images dispatched via vexart_paint_dispatch cmd_kind=10 (BridgeImageTransformInstance).
-      // BridgeImageTransformInstance: 12 floats (p0-p3 corners + opacity + _pad×3) = 48 bytes per instance.
+      // Transformed images must use the composite entry point so the native
+      // layer binds the actual source image. Paint dispatch cmd_kind=10 has no
+      // image handle in its packed ABI and therefore uses only the fallback
+      // texture bind group.
       for (const group of transformedImageGroups.values()) {
-        const instances = new Uint8Array(group.instances.length * 48)
         for (let i = 0; i < group.instances.length; i++) {
           const inst = group.instances[i]
-          packImageTransformInstance(
+          const instance = packImageTransformInstance(
             inst.p0.x, inst.p0.y,
             inst.p1.x, inst.p1.y,
             inst.p2.x, inst.p2.y,
             inst.p3.x, inst.p3.y,
             inst.opacity,
           )
-          for (let b = 0; b < 48; b++) instances[i * 48 + b] = _packU8[b]
+          vexartCompositeRenderImageTransformLayer(vctx, targetHandle, group.handle, instance)
+          first = false
+          targetMutationVersion += 1
         }
-        flushVexartBatch(vctx, 10, instances, targetHandle)
-        first = false
-        targetMutationVersion += 1
       }
       transformedImageGroups.clear()
     }
@@ -929,9 +1100,83 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     }
 
     try {
-      for (const op of ctx.graph.ops) {
+      const skippedSubtreeOps = new Set<number>()
+      for (let opIndex = 0; opIndex < ctx.graph.ops.length; opIndex++) {
+        if (skippedSubtreeOps.has(opIndex)) continue
+        const op = ctx.graph.ops[opIndex]
+        const haloCapture = op.kind === "effect" && (op.effect.shadow !== undefined || op.effect.glow !== undefined)
+          ? getSubtreeCaptureBounds(op, [])
+          : null
         const clip = clipRect(op, ctx)
+        const haloClip = haloCapture && op.kind === "effect" && op.clipBounds
+          ? {
+              left: Math.max(0, Math.round(op.clipBounds.x) - ctx.offsetX, haloCapture.left - ctx.offsetX),
+              top: Math.max(0, Math.round(op.clipBounds.y) - ctx.offsetY, haloCapture.top - ctx.offsetY),
+              right: Math.min(ctx.target.width, Math.round(op.clipBounds.x) - ctx.offsetX + Math.round(op.clipBounds.width), haloCapture.right - ctx.offsetX),
+              bottom: Math.min(ctx.target.height, Math.round(op.clipBounds.y) - ctx.offsetY + Math.round(op.clipBounds.height), haloCapture.bottom - ctx.offsetY),
+            }
+          : null
+        const haloNeedsCrop = !!(haloCapture && op.kind === "effect" && op.clipBounds && (
+          haloCapture.left < Math.round(op.clipBounds.x)
+          || haloCapture.top < Math.round(op.clipBounds.y)
+          || haloCapture.right > Math.round(op.clipBounds.x) + Math.round(op.clipBounds.width)
+          || haloCapture.bottom > Math.round(op.clipBounds.y) + Math.round(op.clipBounds.height)
+        ))
+        if (haloNeedsCrop && haloClip && op.kind === "effect" && (op.effect._node?.children.length ?? 0) === 0 && !op.backdrop) {
+          flushAll()
+          const clipped = renderClippedEffectOp(op, haloClip, ctx)
+          if (!clipped) return { ok: false, rawLayer: null }
+          ensureLoadedLayer()
+          const clippedInstance = packImageTransformInstance(
+            (haloClip.left / ctx.target.width) * 2 - 1,
+            1 - (haloClip.top / ctx.target.height) * 2,
+            (haloClip.right / ctx.target.width) * 2 - 1,
+            1 - (haloClip.top / ctx.target.height) * 2,
+            (haloClip.left / ctx.target.width) * 2 - 1,
+            1 - (haloClip.bottom / ctx.target.height) * 2,
+            (haloClip.right / ctx.target.width) * 2 - 1,
+            1 - (haloClip.bottom / ctx.target.height) * 2,
+            1,
+          )
+          vexartCompositeRenderImageTransformLayer(vctx, targetHandle, clipped.handle, clippedInstance)
+          vexartRemoveImage(vctx, clipped.handle)
+          first = false
+          targetMutationVersion += 1
+          markDirty(haloClip.left, haloClip.top, haloClip.right, haloClip.bottom)
+          continue
+        }
         if (!clip) continue
+        const ownLeft = Math.round(op.x) - ctx.offsetX
+        const ownTop = Math.round(op.y) - ctx.offsetY
+        const ownRight = ownLeft + Math.max(1, Math.round(op.width))
+        const ownBottom = ownTop + Math.max(1, Math.round(op.height))
+        const needsCrop = clip.left !== ownLeft || clip.top !== ownTop || clip.right !== ownRight || clip.bottom !== ownBottom
+        const canCropAsSingleOp = op.kind !== "effect"
+          || (op.effect._node?.children.length ?? 0) === 0
+          && !op.backdrop
+        if (needsCrop && canCropAsSingleOp) {
+          flushAll()
+          const clipped = renderClippedOp(op, clip, ctx)
+          if (!clipped) return { ok: false, rawLayer: null }
+          ensureLoadedLayer()
+          const clippedInstance = packImageTransformInstance(
+            (clip.left / ctx.target.width) * 2 - 1,
+            1 - (clip.top / ctx.target.height) * 2,
+            (clip.right / ctx.target.width) * 2 - 1,
+            1 - (clip.top / ctx.target.height) * 2,
+            (clip.left / ctx.target.width) * 2 - 1,
+            1 - (clip.bottom / ctx.target.height) * 2,
+            (clip.right / ctx.target.width) * 2 - 1,
+            1 - (clip.bottom / ctx.target.height) * 2,
+            1,
+          )
+          vexartCompositeRenderImageTransformLayer(vctx, targetHandle, clipped.handle, clippedInstance)
+          vexartRemoveImage(vctx, clipped.handle)
+          first = false
+          targetMutationVersion += 1
+          markDirty(clip.left, clip.top, clip.right, clip.bottom)
+          continue
+        }
         if (op.kind === "rectangle") {
           const boxW = clip.right - clip.left
           const boxH = clip.bottom - clip.top
@@ -953,6 +1198,143 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
           let effectOp = op
           const effectOpacity = effectOp.effect.opacity ?? 1
           const cornerRadii = effectOp.effect.cornerRadii
+          const haloShapeRectStart = shapeRects.length
+          const haloShapeCornerStart = shapeRectCorners.length
+
+          const hasFilteredOutput = !!(effectOp.effect.filter && hasSelfFilter(effectOp.effect.filter))
+          const hasGroupOpacity = effectOpacity < 1 && effectOp.effect._node !== undefined && effectOp.effect._node.children.length > 0
+          const hasTransformedSubtree = !!(effectOp.effect.transform && effectOp.effect._node !== undefined && effectOp.effect._node.children.length > 0)
+          if (hasFilteredOutput || hasGroupOpacity || hasTransformedSubtree) {
+            // A filter on a container applies to its complete paint output,
+            // not just the container's placeholder rect. Collect descendant
+            // commands into the isolated source target and skip them in the
+            // parent pass so they are not painted a second time.
+            const subtreeNodeIds = new Set<number>()
+            const collectNodeIds = (node: import("./node").TGENode | undefined) => {
+              if (!node || subtreeNodeIds.has(node.id)) return
+              subtreeNodeIds.add(node.id)
+              for (const child of node.children) collectNodeIds(child)
+            }
+            collectNodeIds(effectOp.effect._node)
+            const subtreeOps: RenderGraphOp[] = []
+            for (let descendantIndex = opIndex + 1; descendantIndex < ctx.graph.ops.length; descendantIndex++) {
+              const descendant = ctx.graph.ops[descendantIndex]
+              if (descendant.nodeId === undefined || !subtreeNodeIds.has(descendant.nodeId)) continue
+              subtreeOps.push(descendant)
+              skippedSubtreeOps.add(descendantIndex)
+            }
+
+            flushAll()
+            const sprite = hasFilteredOutput
+              ? getSelfFilterSprite(effectOp, subtreeOps)
+              : hasGroupOpacity
+                ? getGroupOpacitySprite(effectOp, subtreeOps)
+                : getTransformedSubtreeSprite(effectOp, subtreeOps)
+            if (!sprite) return { ok: false, rawLayer: null }
+            const bounds = opBounds(effectOp, ctx.target.width, ctx.target.height)
+            if (!bounds) continue
+            if (effectOp.effect.transform) {
+              const transformedSprite = {
+                handle: sprite.handle,
+                width: sprite.width,
+                height: sprite.height,
+                left: sprite.left,
+                top: sprite.top,
+              }
+              const clippedTransformed = renderTransformedSpriteClip(effectOp, transformedSprite, ctx, effectOpacity)
+              if (clippedTransformed) {
+                if (clippedTransformed.handle) {
+                  ensureLoadedLayer()
+                  const output = clippedTransformed.clip
+                  const imageInstance = packImageTransformInstance(
+                    (output.left / ctx.target.width) * 2 - 1,
+                    1 - (output.top / ctx.target.height) * 2,
+                    (output.right / ctx.target.width) * 2 - 1,
+                    1 - (output.top / ctx.target.height) * 2,
+                    (output.left / ctx.target.width) * 2 - 1,
+                    1 - (output.bottom / ctx.target.height) * 2,
+                    (output.right / ctx.target.width) * 2 - 1,
+                    1 - (output.bottom / ctx.target.height) * 2,
+                    1,
+                  )
+                  vexartCompositeRenderImageTransformLayer(vctx, targetHandle, clippedTransformed.handle, imageInstance)
+                  vexartRemoveImage(vctx, clippedTransformed.handle)
+                  first = false
+                  targetMutationVersion += 1
+                }
+                markDirty(clippedTransformed.clip.left, clippedTransformed.clip.top, clippedTransformed.clip.right, clippedTransformed.clip.bottom)
+                continue
+              }
+              const geometry = getTransformedImageGeometry(effectOp, transformedSprite, ctx, effectOpacity)
+              if (!geometry) continue
+              ensureLoadedLayer()
+              const group = transformedImageGroups.get(sprite.handle) ?? { handle: sprite.handle, instances: [] as TransformedImageInstance[] }
+              group.instances.push({
+                ...geometry.quad,
+                opacity: effectOpacity,
+              })
+              transformedImageGroups.set(sprite.handle, group)
+              markDirty(geometry.bounds.left, geometry.bounds.top, geometry.bounds.right, geometry.bounds.bottom)
+              flushAll()
+            } else {
+              ensureLoadedLayer()
+              let imageHandle = sprite.handle
+              let imageWidth = sprite.width
+              let imageHeight = sprite.height
+              let imageLeft = sprite.left - ctx.offsetX
+              let imageTop = sprite.top - ctx.offsetY
+              const spriteLeft = sprite.left - ctx.offsetX
+              const spriteTop = sprite.top - ctx.offsetY
+              const spriteRight = spriteLeft + sprite.width
+              const spriteBottom = spriteTop + sprite.height
+              const spriteNeedsCrop = !!(effectOp.clipBounds && (
+                spriteLeft < Math.round(effectOp.clipBounds.x) - ctx.offsetX
+                || spriteTop < Math.round(effectOp.clipBounds.y) - ctx.offsetY
+                || spriteRight > Math.round(effectOp.clipBounds.x) - ctx.offsetX + Math.round(effectOp.clipBounds.width)
+                || spriteBottom > Math.round(effectOp.clipBounds.y) - ctx.offsetY + Math.round(effectOp.clipBounds.height)
+              ))
+              const outputClip = spriteNeedsCrop && effectOp.clipBounds
+                ? {
+                    left: Math.max(0, Math.round(effectOp.clipBounds.x) - ctx.offsetX),
+                    top: Math.max(0, Math.round(effectOp.clipBounds.y) - ctx.offsetY),
+                    right: Math.min(ctx.target.width, Math.round(effectOp.clipBounds.x) - ctx.offsetX + Math.round(effectOp.clipBounds.width)),
+                    bottom: Math.min(ctx.target.height, Math.round(effectOp.clipBounds.y) - ctx.offsetY + Math.round(effectOp.clipBounds.height)),
+                  }
+                : clip
+              if (needsCrop || spriteNeedsCrop) {
+                const sourceLeft = sprite.left - ctx.offsetX
+                const sourceTop = sprite.top - ctx.offsetY
+                const cropX = outputClip.left - sourceLeft
+                const cropY = outputClip.top - sourceTop
+                const cropWidth = outputClip.right - outputClip.left
+                const cropHeight = outputClip.bottom - outputClip.top
+                const cropped = cropImage(sprite.handle, imageWidth, imageHeight, cropX, cropY, cropWidth, cropHeight)
+                if (!cropped) return { ok: false, rawLayer: null }
+                transientFullFrameImages.push(cropped)
+                imageHandle = cropped
+                imageWidth = cropWidth
+                imageHeight = cropHeight
+                imageLeft = outputClip.left
+                imageTop = outputClip.top
+              }
+              const imageInstance = packImageTransformInstance(
+                (imageLeft / ctx.target.width) * 2 - 1,
+                1 - (imageTop / ctx.target.height) * 2,
+                ((imageLeft + imageWidth) / ctx.target.width) * 2 - 1,
+                1 - (imageTop / ctx.target.height) * 2,
+                (imageLeft / ctx.target.width) * 2 - 1,
+                1 - ((imageTop + imageHeight) / ctx.target.height) * 2,
+                ((imageLeft + imageWidth) / ctx.target.width) * 2 - 1,
+                1 - ((imageTop + imageHeight) / ctx.target.height) * 2,
+                effectOpacity,
+              )
+              vexartCompositeRenderImageTransformLayer(vctx, targetHandle, imageHandle, imageInstance)
+              first = false
+              targetMutationVersion += 1
+              markDirty(bounds.left, bounds.top, bounds.right, bounds.bottom)
+            }
+            continue
+          }
 
            if (effectOp.backdrop && !cornerRadii) {
             // Force a clear render pass before backdrop reads from the target.
@@ -1007,8 +1389,8 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
                 const matrix = effectOp.effect.transform
                 const width = Math.max(1, Math.round(effectOp.width))
                 const height = Math.max(1, Math.round(effectOp.height))
-                const baseX = Math.round(effectOp.x)
-                const baseY = Math.round(effectOp.y)
+                const baseX = Math.round(effectOp.x) - ctx.offsetX
+                const baseY = Math.round(effectOp.y) - ctx.offsetY
                 const p0 = transformPoint(matrix, 0, 0)
                 const p1 = transformPoint(matrix, width, 0)
                 const p2 = transformPoint(matrix, 0, height)
@@ -1118,8 +1500,8 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
             const matrix = effectOp.effect.transform
             const width = Math.max(1, Math.round(effectOp.width))
             const height = Math.max(1, Math.round(effectOp.height))
-            const baseX = Math.round(effectOp.x)
-            const baseY = Math.round(effectOp.y)
+            const baseX = Math.round(effectOp.x) - ctx.offsetX
+            const baseY = Math.round(effectOp.y) - ctx.offsetY
             const p0 = transformPoint(matrix, 0, 0)
             const p1 = transformPoint(matrix, width, 0)
             const p2 = transformPoint(matrix, 0, height)
@@ -1234,6 +1616,17 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
             markDirty(clip.left, clip.top, clip.right, clip.bottom)
           }
 
+          if (effectOp.effect.shadow || effectOp.effect.glow) {
+            // Paint halos after the ancestor batches but before this node's
+            // own fill. Dispatching a halo after the fill can otherwise
+            // darken the source interior instead of remaining behind it.
+            const ownRects = shapeRects.splice(haloShapeRectStart)
+            const ownCorners = shapeRectCorners.splice(haloShapeCornerStart)
+            flushAll()
+            for (const rect of ownRects) shapeRects.push(rect)
+            for (const rect of ownCorners) shapeRectCorners.push(rect)
+          }
+
           if (effectOp.effect.shadow) {
             const shadowDefs = Array.isArray(effectOp.effect.shadow) ? effectOp.effect.shadow : [effectOp.effect.shadow]
             const shadowRadii = cornerRadii ?? { tl: radius, tr: radius, br: radius, bl: radius }
@@ -1260,6 +1653,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
               })
               markDirty(left, top, right, bottom)
             }
+            flushShadows()
           }
 
           if (effectOp.effect.glow) {
@@ -1277,6 +1671,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
               intensity: effectOp.effect.glow.intensity,
             })
             markDirty(left, top, right, bottom)
+            flushGlows()
           }
 
           if (effectOp.effect.gradient?.type === "linear") {
@@ -1571,10 +1966,16 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     return composeLayersToFrame(frame, retainedLayers)
   }
 
-  renderOpToImage = (op, width, height, offsetX, offsetY) => {
+  renderOpToImage = (op, width, height, offsetX, offsetY, ops) => {
     const vctx = getVexartCtx()
     const target = vexartCompositeTargetCreate(vctx, width, height)
     if (!target) return null
+    // A transformed effect is rasterized by recursively rendering a tiny
+    // sprite. Keep the parent frame's deferred text queue out of that nested
+    // target; otherwise text that was queued before the effect (for example
+    // the app header) is painted into the sprite and becomes a visible
+    // artifact after the transform.
+    const deferredText = deferredMsdfOps.splice(0)
     try {
       const spriteCtx: RendererBackendPaintContext = {
         targetWidth: width,
@@ -1582,7 +1983,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
         backing: null,
         target: { width, height },
         commands: [],
-        graph: { ops: [op] },
+        graph: { ops: ops ?? [op] },
         offsetX,
         offsetY,
         frame: null,
@@ -1592,7 +1993,195 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       if (!result.ok) return null
       return copyGpuTargetRegionToImage(vctx, target, { x: 0, y: 0, width, height }).handle
     } finally {
+      deferredMsdfOps.push(...deferredText)
       vexartCompositeTargetDestroy(vctx, target)
+    }
+  }
+
+  /** Crop an isolated operation without changing its source geometry. */
+  const cropImage = (
+    source: VexartImageHandle,
+    sourceWidth: number,
+    sourceHeight: number,
+    cropX: number,
+    cropY: number,
+    cropWidth: number,
+    cropHeight: number,
+  ) => {
+    const vctx = getVexartCtx()
+    const target = vexartCompositeTargetCreate(vctx, cropWidth, cropHeight)
+    if (!target) return null
+    try {
+      vexartCompositeTargetBeginLayer(vctx, target, 0, 0x00000000)
+      vexartCompositeRenderImageLayer(
+        vctx, target, source,
+        -cropX, -cropY, sourceWidth, sourceHeight,
+        0, 0x00000000,
+      )
+      vexartCompositeTargetEndLayer(vctx, target)
+      const copied = copyGpuTargetRegionToImage(vctx, target, {
+        x: 0,
+        y: 0,
+        width: cropWidth,
+        height: cropHeight,
+      })
+      return copied.handle || null
+    } finally {
+      vexartCompositeTargetDestroy(vctx, target)
+    }
+  }
+
+  const renderClippedOp = (
+    op: RenderGraphOp,
+    clip: { left: number; top: number; right: number; bottom: number },
+    ctx: RendererBackendPaintContext,
+  ) => {
+    const ownLeft = Math.round(op.x) - ctx.offsetX
+    const ownTop = Math.round(op.y) - ctx.offsetY
+    const bounds = {
+      left: ownLeft,
+      top: ownTop,
+      right: ownLeft + Math.max(1, Math.round(op.width)),
+      bottom: ownTop + Math.max(1, Math.round(op.height)),
+    }
+    const width = Math.max(1, bounds.right - bounds.left)
+    const height = Math.max(1, bounds.bottom - bounds.top)
+    const sourceLeft = bounds.left
+    const sourceTop = bounds.top
+    const cropX = clip.left - sourceLeft
+    const cropY = clip.top - sourceTop
+    const cropWidth = clip.right - clip.left
+    const cropHeight = clip.bottom - clip.top
+    if (cropX < 0 || cropY < 0 || cropX + cropWidth > width || cropY + cropHeight > height) return null
+    const sourceOp = { ...op, clipBounds: undefined }
+    const source = renderOpToImage?.(
+      sourceOp,
+      width,
+      height,
+      bounds.left + ctx.offsetX,
+      bounds.top + ctx.offsetY,
+      [sourceOp],
+    )
+    if (!source) return null
+    const cropped = cropImage(source, width, height, cropX, cropY, cropWidth, cropHeight)
+    vexartRemoveImage(getVexartCtx(), source)
+    return cropped ? { handle: cropped, width: cropWidth, height: cropHeight } : null
+  }
+
+  /** Capture a leaf effect's full paint expansion, then crop only its output.
+   * This keeps shadow/glow geometry and blur radii in source coordinates while
+   * enforcing the scroll scissor at the final composite boundary.
+   */
+  const renderClippedEffectOp = (
+    op: Extract<RenderGraphOp, { kind: "effect" }>,
+    clip: { left: number; top: number; right: number; bottom: number },
+    ctx: RendererBackendPaintContext,
+  ) => {
+    const capture = getSubtreeCaptureBounds(op, [])
+    const captureLeft = capture.left - ctx.offsetX
+    const captureTop = capture.top - ctx.offsetY
+    const width = Math.max(1, capture.right - capture.left)
+    const height = Math.max(1, capture.bottom - capture.top)
+    const cropX = clip.left - captureLeft
+    const cropY = clip.top - captureTop
+    const cropWidth = clip.right - clip.left
+    const cropHeight = clip.bottom - clip.top
+    if (cropX < 0 || cropY < 0 || cropX + cropWidth > width || cropY + cropHeight > height) return null
+    const source = renderOpToImage?.(
+      { ...op, clipBounds: undefined },
+      width,
+      height,
+      capture.left,
+      capture.top,
+      [{ ...op, clipBounds: undefined }],
+    )
+    if (!source) return null
+    const cropped = cropImage(source, width, height, cropX, cropY, cropWidth, cropHeight)
+    vexartRemoveImage(getVexartCtx(), source)
+    return cropped ? { handle: cropped, width: cropWidth, height: cropHeight } : null
+  }
+
+  const getTransformedImageGeometry = (
+    op: Extract<RenderGraphOp, { kind: "effect" }>,
+    sprite: { width: number; height: number; left: number; top: number },
+    ctx: RendererBackendPaintContext,
+    opacity: number,
+  ) => {
+    const matrix = op.effect.transform
+    if (!matrix) return null
+    const width = sprite.width
+    const height = sprite.height
+    const sourceX = sprite.left - Math.round(op.x)
+    const sourceY = sprite.top - Math.round(op.y)
+    const baseX = Math.round(op.x) - ctx.offsetX
+    const baseY = Math.round(op.y) - ctx.offsetY
+    const points = [
+      transformPoint(matrix, sourceX, sourceY),
+      transformPoint(matrix, sourceX + width, sourceY),
+      transformPoint(matrix, sourceX, sourceY + height),
+      transformPoint(matrix, sourceX + width, sourceY + height),
+    ].map((point) => ({ x: baseX + point.x, y: baseY + point.y }))
+    const quad = {
+      p0: { x: (points[0].x / ctx.target.width) * 2 - 1, y: 1 - (points[0].y / ctx.target.height) * 2 },
+      p1: { x: (points[1].x / ctx.target.width) * 2 - 1, y: 1 - (points[1].y / ctx.target.height) * 2 },
+      p2: { x: (points[2].x / ctx.target.width) * 2 - 1, y: 1 - (points[2].y / ctx.target.height) * 2 },
+      p3: { x: (points[3].x / ctx.target.width) * 2 - 1, y: 1 - (points[3].y / ctx.target.height) * 2 },
+    }
+    return {
+      instance: packImageTransformInstance(
+        quad.p0.x, quad.p0.y,
+        quad.p1.x, quad.p1.y,
+        quad.p2.x, quad.p2.y,
+        quad.p3.x, quad.p3.y,
+        opacity,
+      ),
+      quad,
+      bounds: {
+        left: Math.floor(Math.min(...points.map((point) => point.x))),
+        top: Math.floor(Math.min(...points.map((point) => point.y))),
+        right: Math.ceil(Math.max(...points.map((point) => point.x))),
+        bottom: Math.ceil(Math.max(...points.map((point) => point.y))),
+      },
+    }
+  }
+
+  const renderTransformedSpriteClip = (
+    op: Extract<RenderGraphOp, { kind: "effect" }>,
+    sprite: { handle: VexartImageHandle; width: number; height: number; left: number; top: number },
+    ctx: RendererBackendPaintContext,
+    opacity: number,
+  ) => {
+    if (!op.clipBounds) return null
+    const geometry = getTransformedImageGeometry(op, sprite, ctx, opacity)
+    if (!geometry) return null
+    const clip = {
+      left: Math.max(0, Math.round(op.clipBounds.x) - ctx.offsetX, geometry.bounds.left),
+      top: Math.max(0, Math.round(op.clipBounds.y) - ctx.offsetY, geometry.bounds.top),
+      right: Math.min(ctx.target.width, Math.round(op.clipBounds.x) - ctx.offsetX + Math.round(op.clipBounds.width), geometry.bounds.right),
+      bottom: Math.min(ctx.target.height, Math.round(op.clipBounds.y) - ctx.offsetY + Math.round(op.clipBounds.height), geometry.bounds.bottom),
+    }
+    const outside = geometry.bounds.left < Math.round(op.clipBounds.x) - ctx.offsetX
+      || geometry.bounds.top < Math.round(op.clipBounds.y) - ctx.offsetY
+      || geometry.bounds.right > Math.round(op.clipBounds.x) - ctx.offsetX + Math.round(op.clipBounds.width)
+      || geometry.bounds.bottom > Math.round(op.clipBounds.y) - ctx.offsetY + Math.round(op.clipBounds.height)
+    if (!outside) return null
+    if (clip.right <= clip.left || clip.bottom <= clip.top) return { handle: null, clip, geometry }
+    const vctx = getVexartCtx()
+    const temp = vexartCompositeTargetCreate(vctx, ctx.target.width, ctx.target.height)
+    if (!temp) return { handle: null, clip, geometry }
+    try {
+      vexartCompositeTargetBeginLayer(vctx, temp, 0, 0x00000000)
+      vexartCompositeRenderImageTransformLayer(vctx, temp, sprite.handle, geometry.instance)
+      vexartCompositeTargetEndLayer(vctx, temp)
+      const copied = copyGpuTargetRegionToImage(vctx, temp, {
+        x: clip.left,
+        y: clip.top,
+        width: clip.right - clip.left,
+        height: clip.bottom - clip.top,
+      })
+      return { handle: copied.handle || null, clip, geometry }
+    } finally {
+      vexartCompositeTargetDestroy(vctx, temp)
     }
   }
 

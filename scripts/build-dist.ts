@@ -140,6 +140,20 @@ await build({
   },
 })
 
+// ── 3. Bundle the published CLI ──
+console.log("🛠️  Bundling CLI...")
+
+await build({
+  entryPoints: [resolve(ROOT, "packages/app/src/cli/index.ts")],
+  bundle: true,
+  format: "esm",
+  platform: "node",
+  target: "esnext",
+  minify: process.env.VEXART_DEBUG_BUNDLE !== "1",
+  outfile: resolve(DIST, "cli.js"),
+  external: ["@babel/core", "@babel/preset-typescript", "babel-preset-solid"],
+})
+
 // ── 4. Build platform package (@vexart-native/darwin-arm64) ──
 console.log("🔧 Building platform package...")
 
@@ -176,9 +190,10 @@ const platformPkg = {
   type: "module",
   os: [process.platform],
   cpu: [process.arch],
-  files: [vexartName],
-  license: "SEE LICENSE IN LICENSE.md",
+  files: [vexartName, "LICENSE"],
+  license: "SEE LICENSE IN LICENSE",
 }
+if (existsSync(resolve(ROOT, "LICENSE"))) cpSync(resolve(ROOT, "LICENSE"), resolve(platformDir, "LICENSE"))
 writeFileSync(resolve(platformDir, "package.json"), JSON.stringify(platformPkg, null, 2))
 console.log(`  ✅ ${platformPkgName} package.json`)
 
@@ -198,10 +213,10 @@ cpSync(
 )
 console.log(`  ✅ parser.worker.ts → tree-sitter/`)
 
-// ── 7. Copy solid plugin (dist version with moduleName: "@vexart-native/engine") ──
+// ── 7. Copy solid plugin (dist version with moduleName: "vexart/engine") ──
 console.log("🔌 Copying solid plugin...")
 cpSync(resolve(ROOT, "scripts/solid-plugin-dist.ts"), resolve(DIST, "solid-plugin.ts"))
-console.log(`  ✅ solid-plugin.ts (moduleName: "@vexart-native/engine")`)
+console.log(`  ✅ solid-plugin.ts (moduleName: "vexart/engine")`)
 
 // ── 8. Copy type declarations ──
 console.log("📝 Copying type declarations...")
@@ -238,6 +253,9 @@ const pkg = {
   type: "module",
   main: "vexart.js",
   types: "vexart.d.ts",
+  bin: {
+    vexart: "./cli.js",
+  },
   exports: {
     ".": {
       types: "./vexart.d.ts",
@@ -260,6 +278,7 @@ const pkg = {
     "void.d.ts",
     "engine.js",
     "engine.d.ts",
+    "cli.js",
     "jsx-runtime.d.ts",
     "solid-plugin.ts",
     "tree-sitter/",
@@ -282,7 +301,7 @@ const pkg = {
   engines: {
     bun: ">=1.1.0",
   },
-  license: "SEE LICENSE IN LICENSE.md",
+  license: "SEE LICENSE IN LICENSE",
 }
 
 writeFileSync(resolve(DIST, "package.json"), JSON.stringify(pkg, null, 2))
@@ -297,8 +316,8 @@ console.log(`  cd dist/platform/${platformTag} && npm publish --access public`)
 console.log("  cd dist && npm publish")
 console.log("")
 console.log("To test locally:")
-console.log(`  cd dist/platform/${platformTag} && bun pack`)
-console.log("  cd dist && bun pack")
+console.log(`  cd dist/platform/${platformTag} && bun pm pack --ignore-scripts`)
+console.log("  cd dist && bun pm pack --ignore-scripts")
 console.log("  # In another project:")
 console.log(`  bun add ../vexart/dist/vexart-${VERSION}.tgz`)
 console.log(`  bun add ../vexart/dist/platform/${platformTag}/vexart-${platformTag}-${VERSION}.tgz`)

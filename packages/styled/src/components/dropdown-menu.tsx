@@ -28,9 +28,9 @@
  *   </VoidDropdownMenu>
  */
 
-import { createContext, useContext } from "solid-js"
+import { createContext, onCleanup, useContext } from "solid-js"
 import type { JSX } from "solid-js"
-import { Show } from "@vexart/engine"
+import { onInput, Show } from "@vexart/engine"
 import { radius, space, font, shadows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
@@ -64,9 +64,14 @@ function VoidDropdownMenuRoot(props: VoidDropdownMenuProps) {
     close: () => props.onOpenChange(false),
   }
 
+  const unsubscribe = onInput((event) => {
+    if (ctx.open() && event.type === "key" && event.key === "escape") ctx.close()
+  })
+  onCleanup(unsubscribe)
+
   return (
     <DropdownContext.Provider value={ctx}>
-      <box direction="column">
+      <box direction="column" width="fit" height="fit">
         {props.children}
       </box>
     </DropdownContext.Provider>
@@ -83,7 +88,7 @@ export type VoidDropdownMenuTriggerProps = {
 /** @public */
 export function VoidDropdownMenuTrigger(props: VoidDropdownMenuTriggerProps) {
   const ctx = useContext(DropdownContext)
-  return <box onPress={() => ctx.toggle()}>{props.children}</box>
+  return <box width="fit" height="fit" onPress={() => ctx.toggle()}>{props.children}</box>
 }
 
 // ── Content ──

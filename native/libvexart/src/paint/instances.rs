@@ -424,6 +424,22 @@ pub struct BridgeImageTransformInstance {
     pub _pad2: f32,
 }
 
+/// Region copy instance for converting a rendered target's premultiplied
+/// pixels into a straight-alpha image. The destination rect is NDC and the
+/// source UV rect is normalized to the source target.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub struct ImageCopyInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub source_u0: f32,
+    pub source_v0: f32,
+    pub source_u1: f32,
+    pub source_v1: f32,
+}
+
 /// Mirrors bridge LinearGradientInstance (20 floats).
 /// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
 #[repr(C)]
@@ -509,9 +525,8 @@ pub struct ConicGradientInstance {
 }
 
 /// Backdrop blur instance (cmd_kind = 15).
-/// 8 floats: NDC rect + blur_radius + 3 pad.
-/// Samples source texture and applies single-pass box blur.
-/// TODO(5b): upgrade to 2-pass separable Gaussian in Phase 2b (requires ping-pong textures).
+/// 8 floats: NDC rect + blur_radius + blur_axis + 2 pad.
+/// `blur_axis` is 0 for horizontal and 1 for vertical separable passes.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
 pub struct BackdropBlurInstance {

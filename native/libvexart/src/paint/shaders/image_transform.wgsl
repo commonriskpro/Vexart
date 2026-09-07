@@ -37,8 +37,40 @@ fn vs_main(
   return out;
 }
 
+fn edge_coverage(in: VSOut) -> f32 {
+  // A transformed quad is rasterized with one sample per pixel. Without an
+  // explicit coverage ramp, a rotated sprite has hard stair-stepped edges
+  // even though the source texture itself is linearly filtered. Keep exact
+  // coverage for axis-aligned quads: rasterization already gives those edges
+  // pixel-exact coverage, and fading UV boundaries would make opaque viewports
+  // visibly transparent at their perimeter.
+  let du_dx = dpdx(in.uv.x);
+  let du_dy = dpdy(in.uv.x);
+  let dv_dx = dpdx(in.uv.y);
+  let dv_dy = dpdy(in.uv.y);
+  let eps = 0.000001;
+  let axis_aligned =
+    abs(du_dy) + abs(dv_dx) <= eps ||
+    abs(du_dx) + abs(dv_dy) <= eps;
+  let edge_u = min(in.uv.x, 1.0 - in.uv.x);
+  let edge_v = min(in.uv.y, 1.0 - in.uv.y);
+  let coverage_u = smoothstep(0.0, max(fwidth(in.uv.x), 0.0001), edge_u);
+  let coverage_v = smoothstep(0.0, max(fwidth(in.uv.y), 0.0001), edge_v);
+  return select(coverage_u * coverage_v, 1.0, axis_aligned);
+}
+
 @fragment
 fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
   let color = textureSample(image_tex, image_sampler, in.uv);
-  return vec4<f32>(color.rgb, color.a * in.opacity);
+  let coverage = edge_coverage(in);
+  return vec4<f32>(color.rgb, color.a * in.opacity * coverage);
+}
+
+// Source targets already store premultiplied RGB. Scale both channels by the
+// transform opacity/coverage before using premultiplied blend factors.
+@fragment
+fn fs_premultiplied(in: VSOut) -> @location(0) vec4<f32> {
+  let color = textureSample(image_tex, image_sampler, in.uv);
+  let factor = in.opacity * edge_coverage(in);
+  return vec4<f32>(color.rgb * factor, color.a * factor);
 }

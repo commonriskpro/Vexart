@@ -200,20 +200,21 @@ Bundles code + Bun runtime into single executable; no dependencies needed.
 - **No type checking in bundler**: `bun build` does not type-check. Run `tsc --noEmit` separately for type validation.
 - **Peer dependencies installed by default**: Unlike npm, Bun installs peer dependencies automatically. Set `peer = false` in `bunfig.toml` to disable.
 
-## Verification Checklist
+## Scoped verification
 
-Before submitting work with Bun:
+Run the smallest existing project script that covers the changed scope. Inspect
+`package.json` before choosing a target; use `bun run <script>` for package
+scripts.
 
-- [ ] Run `bun install` to verify dependencies resolve without errors
-- [ ] Run `bun run <script>` to test main entry point
-- [ ] Run `bun test` and verify all tests pass
-- [ ] Run `bun build` and check output files exist in `outdir`
-- [ ] Verify `bun.lock` is committed to version control (not `.gitignore`d)
-- [ ] Check `bunfig.toml` for any environment-specific settings that should be removed
-- [ ] Confirm no `node_modules` folder is committed (should be in `.gitignore`)
-- [ ] Test with `--production` flag if building for deployment: `bun install --production`
-- [ ] Verify TypeScript files have no type errors: `bun run tsc --noEmit` (if tsc installed)
-- [ ] Check that `package.json` `"type": "module"` is set for ESM projects
+For this repository, prefer `bun run test`. Its `package.json` script expands
+to `bun --conditions=browser test --preload ./solid-plugin.ts`; `bunfig.toml`
+documents why the browser condition and Solid preload are required. Use
+narrower existing scripts such as `bun run typecheck`, `bun run rust:test`, or
+a package-specific test command when the change warrants them.
+
+Dependency installation, app/server launches, production builds, and commits are
+separate actions. Do not run them by default; run them only when explicitly
+requested or when the owned change specifically requires that check.
 
 ## Resources
 

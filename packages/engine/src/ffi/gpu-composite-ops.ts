@@ -91,6 +91,16 @@ export function vexartCompositeRenderImageLayer(
   if (result !== 0) throw new Error(`vexart_composite_render_image_layer failed: ${result}`)
 }
 
+export function vexartCompositeRenderImageTransformLayer(
+  vctx: bigint, target: bigint, image: bigint, instanceData: Uint8Array,
+  clearRgba = 0,
+): void {
+  const result = getSymbols().vexart_composite_render_image_transform_layer(
+    vctx, target, image, ptr(instanceData), clearRgba >>> 0,
+  ) as number
+  if (result !== 0) throw new Error(`vexart_composite_render_image_transform_layer failed: ${result}`)
+}
+
 export function vexartCompositeCopyRegionToImage(
   vctx: bigint, target: bigint,
   x: number, y: number, w: number, h: number,

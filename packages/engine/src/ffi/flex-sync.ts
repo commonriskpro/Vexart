@@ -13,6 +13,7 @@ import {
   ALIGN_FLEX_START,
   ALIGN_FLEX_END,
   ALIGN_CENTER,
+  ALIGN_AUTO,
   ALIGN_SPACE_BETWEEN,
   ALIGN_STRETCH,
   JUSTIFY_FLEX_START,
@@ -112,7 +113,14 @@ export function syncAllLayoutProps(node: TGENode): void {
   syncMargin(flex, props)
   syncGap(flex, props.gap)
   syncAlign(flex, props)
-  syncSizing(flex, node._widthSizing, node._heightSizing, props.flexGrow, props.flexShrink)
+  syncSizing(
+    flex,
+    node._widthSizing,
+    node._heightSizing,
+    props.flexGrow,
+    props.flexShrink,
+    parentDirection(node),
+  )
   syncMinMax(flex, props)
   syncBorder(flex, props)
   syncFloating(flex, props)
@@ -131,6 +139,7 @@ export function syncLayoutProp(node: TGENode, key: string, _value: unknown): voi
     case "direction":
     case "flexDirection":
       syncDirection(flex, props)
+      syncChildSizing(node)
       break
     case "padding":
     case "paddingX":
@@ -163,7 +172,14 @@ export function syncLayoutProp(node: TGENode, key: string, _value: unknown): voi
     case "height":
     case "flexGrow":
     case "flexShrink":
-      syncSizing(flex, node._widthSizing, node._heightSizing, props.flexGrow, props.flexShrink)
+      syncSizing(
+        flex,
+        node._widthSizing,
+        node._heightSizing,
+        props.flexGrow,
+        props.flexShrink,
+        parentDirection(node),
+      )
       break
     case "minWidth":
     case "maxWidth":
@@ -182,6 +198,16 @@ export function syncLayoutProp(node: TGENode, key: string, _value: unknown): voi
       syncBorder(flex, props)
       break
     case "floating":
+      syncFloating(flex, props)
+      syncSizing(
+        flex,
+        node._widthSizing,
+        node._heightSizing,
+        props.flexGrow,
+        props.flexShrink,
+        parentDirection(node),
+      )
+      break
     case "floatOffset":
     case "zIndex":
       syncFloating(flex, props)
@@ -231,6 +257,30 @@ function syncDirection(flex: Node, props: TGEProps): void {
   flex.setFlexDirection(dir === "row" ? FLEX_DIRECTION_ROW : FLEX_DIRECTION_COLUMN)
 }
 
+function parentDirection(node: TGENode): number {
+  const parent = node.parent
+  if (!parent) return FLEX_DIRECTION_COLUMN
+  return parseDir(parent.props.direction ?? parent.props.flexDirection) === 0
+    ? FLEX_DIRECTION_ROW
+    : FLEX_DIRECTION_COLUMN
+}
+
+function syncChildSizing(node: TGENode): void {
+  for (const child of node.children) {
+    const flex = child._flexNode
+    if (!flex || child.kind === "text") continue
+    const props = child.props
+    syncSizing(
+      flex,
+      child._widthSizing,
+      child._heightSizing,
+      props.flexGrow,
+      props.flexShrink,
+      parentDirection(child),
+    )
+  }
+}
+
 function syncPadding(flex: Node, props: TGEProps): void {
   const px = props.paddingX ?? props.padding ?? 0
   const py = props.paddingY ?? props.padding ?? 0
@@ -272,30 +322,43 @@ function syncSizing(
   hs: SizingInfo | null,
   flexGrow?: number,
   flexShrink?: number,
+  parentDir = FLEX_DIRECTION_COLUMN,
 ): void {
+  const widthMainGrow = ws?.type === SIZING.GROW && parentDir === FLEX_DIRECTION_ROW
+  const heightMainGrow = hs?.type === SIZING.GROW && parentDir === FLEX_DIRECTION_COLUMN
+  const crossGrow = (ws?.type === SIZING.GROW && parentDir === FLEX_DIRECTION_COLUMN)
+    || (hs?.type === SIZING.GROW && parentDir === FLEX_DIRECTION_ROW)
+
   if (ws) {
     syncWidthSizing(flex, ws)
-  } else if (flexGrow !== undefined) {
-    flex.setFlexGrow(flexGrow)
-  } else {
+  } else if (flexGrow === undefined) {
     // Auto-sized wrappers must clamp to the width offered by their parent.
     // Leaving them in the intrinsic AUTO mode lets a long text child expand
     // past a narrow responsive column before its measure function sees a
     // useful width constraint.
     setWidthFitContent(flex)
   }
-  if (ws?.type === SIZING.GROW || flexGrow !== undefined) {
-    flex.setFlexShrink(flexShrink ?? 1)
-  } else if (flexShrink !== undefined) {
-    flex.setFlexShrink(flexShrink)
-  }
   if (hs) syncHeightSizing(flex, hs)
+
+  const growsOnMainAxis = flexGrow !== undefined || widthMainGrow || heightMainGrow
+  flex.setFlexGrow(
+    flexGrow !== undefined
+      ? flexGrow
+      : growsOnMainAxis
+        ? 1
+        : 0,
+  )
+  flex.setFlexShrink(flexShrink ?? (growsOnMainAxis ? 1 : 0))
+  flex.setAlignSelf(crossGrow ? ALIGN_STRETCH : ALIGN_AUTO)
 }
 
 function syncWidthSizing(flex: Node, sizing: SizingInfo): void {
   switch (sizing.type) {
     case SIZING.GROW:
-      flex.setFlexGrow(1)
+      // Grow is resolved after both axes are known in syncSizing. Keep the
+      // width auto so row flex distribution and column cross-axis stretching
+      // both receive a definite, non-stale basis.
+      flex.setWidthAuto()
       break
     case SIZING.PERCENT:
       flex.setWidthPercent(sizing.value * 100)
@@ -304,7 +367,10 @@ function syncWidthSizing(flex: Node, sizing: SizingInfo): void {
       flex.setWidth(sizing.value)
       break
     case SIZING.FIT:
-      setWidthFitContent(flex)
+      // Explicit fit means shrink-wrap the node's intrinsic children. The
+      // AUTO unit lets Flexily measure nested boxes; omitted width still uses
+      // FIT_CONTENT below so responsive wrappers clamp long text.
+      flex.setWidthAuto()
       break
   }
 }
@@ -325,13 +391,17 @@ function setWidthFitContent(flex: Node): void {
 function syncHeightSizing(flex: Node, sizing: SizingInfo): void {
   switch (sizing.type) {
     case SIZING.GROW:
-      flex.setFlexGrow(1)
+      // Grow is resolved after both axes are known in syncSizing.
+      flex.setHeightAuto()
       break
     case SIZING.PERCENT:
       flex.setHeightPercent(sizing.value * 100)
       break
     case SIZING.FIXED:
       flex.setHeight(sizing.value)
+      break
+    case SIZING.FIT:
+      flex.setHeightAuto()
       break
   }
 }

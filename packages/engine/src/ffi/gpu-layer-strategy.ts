@@ -25,7 +25,10 @@ export const NATIVE_FRAME_REASON = {
   HYSTERESIS_HELD: 1 << 7,
 } as const
 
-export type NativeFrameStrategy = (typeof NATIVE_FRAME_STRATEGY)[keyof typeof NATIVE_FRAME_STRATEGY]
+// Keep the public declaration self-contained: the runtime constants above are
+// internal and are omitted by API Extractor, while this numeric contract is
+// part of the native frame plan that leaks through exported engine types.
+export type NativeFrameStrategy = 0 | 1 | 2 | 3
 
 export type NativeFramePlanInput = {
   dirtyLayerCount: number

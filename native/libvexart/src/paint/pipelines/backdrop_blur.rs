@@ -1,7 +1,7 @@
 // native/libvexart/src/paint/pipelines/backdrop_blur.rs
 // Backdrop blur pipeline — NEW GPU pipeline (Slice 5b, cmd_kind = 15).
 // Replaces apply_box_blur_rgba (bridge L2427-2480) with a GPU equivalent.
-// Shader: shaders/backdrop_blur.wgsl (single-pass box blur, see TODO for 2-pass Gaussian).
+// Shader: shaders/backdrop_blur.wgsl (separable Gaussian passes).
 // Uses image_bind_group_layout (texture + sampler at fragment stage).
 // Per design §17.2, §17.6, task 5b.2.
 
@@ -57,7 +57,11 @@ pub fn create(
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             targets: &[Some(wgpu::ColorTargetState {
                 format,
-                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                // Effect destinations are cleared before each pass. Replace
+                // is required here: alpha blending would premultiply each
+                // intermediate's RGB by its alpha and darken translucent blur
+                // edges on the following pass.
+                blend: None,
                 write_mask: wgpu::ColorWrites::ALL,
             })],
         }),

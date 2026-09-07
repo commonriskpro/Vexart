@@ -1,7 +1,10 @@
 # Vexart — Architecture Reference
 
 **Version**: 0.2
-**Status**: Target architecture — describes the paint-forward TS/Rust boundary after DEC-014 restored TypeScript ownership of scene, layout, render graph, and event dispatch.
+**Status**: Architecture reference — records the intended paint-forward TS/Rust
+boundary after DEC-014 restored TypeScript ownership of scene, layout, render
+graph, and event dispatch. Target and migration descriptions are historical
+context unless current code and focused checks confirm them.
 **Owner**: Founder (solo developer)
 **Companion to**: [PRD](./PRD.md), [API-POLICY](./API-POLICY.md)
 
@@ -9,16 +12,26 @@
 
 ## ⚠️ How to read this document
 
-This document describes the **target architecture** — how Vexart is organized after all v0.9 phases and DEC-014's paint-forward TS/Rust boundary. It is **not** a description of temporary migration scaffolding. Some directory trees below are target structures; when current code differs, follow the ownership boundaries first and update this document as phases land.
+This document records the intended architecture after all v0.9 phases and
+DEC-014's paint-forward TS/Rust boundary. Target directory trees and migration
+notes are historical context unless current code and focused checks confirm
+them. Preserve the active ownership boundary when using this reference.
 
-**When reading this as an AI agent**: treat this as the source of truth for code organization. Any file layout, module boundary, data-flow contract, or convention described here is the authoritative answer. If your task contradicts this document, the document wins — flag the contradiction and stop.
+**When reading this as an AI agent**: use it as design guidance for code
+organization, module boundaries, and data flow. If current code differs, inspect
+the discrepancy and preserve active ownership/API safeguards; do not treat a
+prose mismatch as an automatic stop.
 
-**When reading this as a human reviewer**: expect the current code to diverge from this document during Phases 1-5. Each phase migrates the codebase closer to this target. The `Appendix A` lists known deviations and which phase resolves each.
+**When reading this as a human reviewer**: some sections describe historical
+phase migrations and target structures. The `Appendix A` lists known deviations
+and the phase context that produced them.
 
-**Rules for changes to this document**:
-- Structural changes (package structure, data flow, threading model) require a PRD amendment with a Decisions Log entry.
-- Clarifications and refinements are appended directly, with a dated comment.
-- This document is versioned in lockstep with the PRD when architectural decisions shift.
+**Guidance for changes to this document**:
+- Update this reference intentionally when architecture decisions change; no
+  particular proposal workflow is required.
+- Clarifications and refinements can be appended with a dated comment when they
+  improve current understanding.
+- Keep version metadata aligned when architectural decisions shift.
 
 ---
 
@@ -78,7 +91,10 @@ The PRD answers **what** and **why**. This document answers **how**. When they o
 | FFI | Packed ArrayBuffer, ≤8 params | Buffer layout, offset table, decoder contract |
 | Performance targets | Numbers in §7.3 | How those numbers are achieved |
 
-If a conflict emerges, the PRD wins at the policy layer; this document wins at the implementation layer.
+Use both documents as references: the PRD frames product policy and intent,
+while this document records implementation guidance. Resolve discrepancies by
+checking current code and focused checks; neither prose mismatch is an automatic
+stop.
 
 ---
 
@@ -203,7 +219,8 @@ Allowed Rust hot-path responsibilities:
 
 Forbidden target-state responsibilities:
 
-- Rust must not own scene graph source-of-truth, layout writeback, render graph generation, or event dispatch without a new PRD decision superseding DEC-014.
+- Rust must not own scene graph state, layout writeback, render graph
+  generation, or event dispatch without a new PRD decision superseding DEC-014.
 - TypeScript must not receive full-frame or layer RGBA buffers for normal terminal presentation.
 
 ---
@@ -1298,7 +1315,9 @@ Not expected in v0.9. New primitives require PRD amendment because they are arch
 ### 13.9 Adding documentation
 
 - User docs: `docs/`.
-- Architecture notes: this file or derived design documents in `openspec/changes/*/design.md`.
+- Architecture notes: this file. Existing derived design documents in
+  `openspec/changes/*/design.md` are historical references, not a current
+  execution requirement.
 - API reference: auto-generated from `api-extractor` (`*.api.md` files in `etc/`).
 
 ### 13.10 Naming conventions

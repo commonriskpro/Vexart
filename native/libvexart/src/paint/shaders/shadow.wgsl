@@ -60,11 +60,12 @@ fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
   let p = in.uv * expanded - shadow_center;
   let half_size = size * 0.5;
   let sd = sd_round_rect_corners(p, half_size, in.radii);
-  let aa = 1.0;
   let sigma = max(blur * 0.5, 0.75);
   let dist = max(sd, 0.0);
-  let edge = smoothstep(-aa, 0.0, sd);
-  let alpha = exp(-(dist * dist) / (2.0 * sigma * sigma)) * edge;
+  // The Gaussian already provides the outside falloff. Do not multiply it
+  // by a boundary ramp that is zero for sd < 0: that turns the shifted shadow
+  // into a hollow outline and lets the source fill show through the band.
+  let alpha = exp(-(dist * dist) / (2.0 * sigma * sigma));
   if (alpha <= 0.001) {
     discard;
   }

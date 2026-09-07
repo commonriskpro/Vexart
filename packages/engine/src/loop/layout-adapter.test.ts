@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createNode, createTextNode, insertChild, parseSizing, type TGENode, type TGEProps } from "../ffi/node"
 import { CMD, type RenderCommand } from "../ffi/render-graph"
-import { syncAllLayoutProps } from "../ffi/flex-sync"
+import { syncAllLayoutProps, syncLayoutProp } from "../ffi/flex-sync"
 import { ATTACH_POINT, createVexartLayoutCtx } from "./layout-adapter"
 import { walkTree } from "./walk-tree"
 
@@ -12,6 +12,11 @@ function box(props: TGEProps, children: TGENode[] = []) {
   node._heightSizing = parseSizing(props.height)
   for (const child of children) insertChild(node, child)
   return node
+}
+
+function syncTree(node: TGENode) {
+  syncAllLayoutProps(node)
+  node.children.forEach(syncTree)
 }
 
 function layoutState(root: TGENode) {
@@ -49,6 +54,83 @@ function rectOrder(commands: RenderCommand[]) {
 }
 
 describe("layout adapter stacking contexts", () => {
+  test("resolves grow on the requested axis and stretches cross-axis children", () => {
+    const fixed = box({ width: 64, height: 48 })
+    const grow = box({ width: "grow", height: 48 })
+    const percent = box({ width: "25%", height: 48 })
+    const row = box({ width: "grow", height: "fit", direction: "row", gap: 8 }, [fixed, grow, percent])
+    const root = box({ width: 300, height: 200, direction: "column" }, [row])
+
+    syncTree(root)
+    const state = layoutState(root)
+    const rowLayout = state.map?.get(row.id)
+    const fixedLayout = state.map?.get(fixed.id)
+    const growLayout = state.map?.get(grow.id)
+    const percentLayout = state.map?.get(percent.id)
+
+    expect(rowLayout).toMatchObject({ width: 300, height: 48 })
+    expect(fixedLayout?.width).toBe(64)
+    expect(percentLayout?.width).toBe(75)
+    expect(growLayout?.width).toBe(145)
+  })
+
+  test("does not let width grow consume a column parent's height", () => {
+    const scroll = box({ width: "grow", height: 220, scrollY: true }, [
+      box({ width: "100%", height: 28 }),
+      box({ width: "100%", height: 28 }),
+    ])
+    const root = box({ width: 420, height: 320, direction: "column" }, [scroll])
+
+    syncTree(root)
+    const state = layoutState(root)
+
+    expect(state.map?.get(scroll.id)).toMatchObject({ width: 420, height: 220 })
+    expect(state.map?.get(scroll.children[0]!.id)?.width).toBe(420)
+  })
+
+  test("stretches height grow across a row without changing its fixed width", () => {
+    const column = box({ width: 100, height: "grow", direction: "column" }, [
+      box({ width: 100, height: 20 }),
+    ])
+    const root = box({ width: 300, height: 100, direction: "row" }, [column])
+
+    syncTree(root)
+    const state = layoutState(root)
+
+    expect(state.map?.get(column.id)).toMatchObject({ width: 100, height: 100 })
+  })
+
+  test("shrink-wraps explicit fit wrappers before cross-axis alignment", () => {
+    for (const [alignX, x] of [["center", 110], ["right", 220]] as const) {
+      const trigger = box({ width: 80, height: 20 })
+      const inner = box({ width: "fit", height: "fit" }, [trigger])
+      const wrapper = box({ width: "fit", height: "fit" }, [inner])
+      const root = box({ width: 300, height: 100, direction: "column", alignX }, [wrapper])
+
+      syncTree(root)
+      const state = layoutState(root)
+
+      expect(state.map?.get(wrapper.id)).toMatchObject({ x, width: 80, height: 20 })
+      expect(state.map?.get(inner.id)).toMatchObject({ x, width: 80, height: 20 })
+    }
+  })
+
+  test("clears stale main-axis grow when a parent direction changes", () => {
+    const grow = box({ width: "grow", height: 20 })
+    const fixed = box({ width: 50, height: 30 })
+    const root = box({ width: 300, height: 100, direction: "row" }, [grow, fixed])
+
+    syncTree(root)
+    expect(layoutState(root).map?.get(grow.id)).toMatchObject({ width: 250, height: 20 })
+
+    root.props.direction = "column"
+    syncLayoutProp(root, "direction", "column")
+    const state = layoutState(root)
+
+    expect(state.map?.get(grow.id)).toMatchObject({ width: 300, height: 20 })
+    expect(state.map?.get(fixed.id)).toMatchObject({ x: 0, y: 20, width: 50, height: 30 })
+  })
+
   test("walkTree applies margin props", () => {
     const first = box({ width: 100, height: 50 })
     const second = box({ width: 100, height: 50, marginTop: 20 })
@@ -154,6 +236,31 @@ describe("layout adapter stacking contexts", () => {
     const attachedLayout = state.map?.get(attached.id)
 
     expect(attachedLayout).toMatchObject({ x: 51, y: 27, width: 20, height: 10 })
+  })
+
+  test("measures floating fit wrappers from intrinsic children before attaching", () => {
+    const text = createTextNode("Tooltip content")
+    text.props = { fontSize: 14 }
+    const floating = box({
+      width: "fit",
+      height: "fit",
+      padding: 8,
+      floating: "parent",
+      floatAttach: {
+        element: ATTACH_POINT.LEFT_TOP,
+        parent: ATTACH_POINT.RIGHT_BOTTOM,
+      },
+      floatOffset: { x: 4, y: 5 },
+    }, [text])
+    const root = box({ width: 300, height: 200 }, [box({ width: 100, height: 30 }), floating])
+
+    syncTree(root)
+    const state = layoutState(root)
+    const floatingLayout = state.map?.get(floating.id)
+    const textLayout = state.map?.get(text.id)
+
+    expect(floatingLayout).toMatchObject({ x: 304, y: 205, width: 108, height: 33 })
+    expect(textLayout).toMatchObject({ x: 312, y: 213, width: 92, height: 17 })
   })
 
   test("wraps text inside a narrow responsive column", () => {

@@ -70,7 +70,9 @@ pub fn create(
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             targets: &[Some(wgpu::ColorTargetState {
                 format,
-                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                // Mask destinations are cleared and the shader emits straight
+                // RGBA with an adjusted alpha.
+                blend: None,
                 write_mask: wgpu::ColorWrites::ALL,
             })],
         }),

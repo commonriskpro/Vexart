@@ -26,6 +26,13 @@ function activeRegistry(): FocusEntry[] { return activeScope().entries }
 
 const [focusedIdSignal, setFocusedIdSignal] = createSignal<string | null>(null)
 
+// Solid disposes an old dynamic subtree before inserting its replacement. A
+// synchronous focus update from that cleanup can re-enter reconciliation and
+// recursively remount the same subtree. Keep registry removals synchronous,
+// but repair a removed focus after the current update has settled.
+let pendingFocusRepair: number | null = null
+let focusRepairQueued = false
+
 /** @public */
 export const focusedId = focusedIdSignal
 
@@ -42,12 +49,8 @@ function registerFocusable(entry: FocusEntry): () => void {
       scope.entries.splice(idx, 1)
       if (focusedId() === entry.id) {
         const reg = activeRegistry()
-        if (reg.length > 0) {
-          const nextIdx = Math.min(idx, reg.length - 1)
-          setFocusedId(reg[nextIdx].id)
-        } else {
-          setFocusedId(null)
-        }
+        if (reg.length > 0) queueFocusRepair(idx)
+        else setFocusedId(null)
       }
     }
   }
@@ -69,6 +72,33 @@ function focusPrev() {
   const idx = reg.findIndex((e) => e.id === current)
   const prev = idx <= 0 ? reg.length - 1 : idx - 1
   setFocusedId(reg[prev].id)
+}
+
+function repairFocus() {
+  const current = focusedId()
+  if (current && activeRegistry().some((entry) => entry.id === current)) {
+    pendingFocusRepair = null
+    return
+  }
+  const reg = activeRegistry()
+  if (reg.length === 0) {
+    setFocusedId(null)
+    pendingFocusRepair = null
+    return
+  }
+  const index = pendingFocusRepair === null ? 0 : Math.min(pendingFocusRepair, reg.length - 1)
+  pendingFocusRepair = null
+  setFocusedId(reg[index].id)
+}
+
+function queueFocusRepair(index: number) {
+  pendingFocusRepair = pendingFocusRepair === null ? index : Math.min(pendingFocusRepair, index)
+  if (focusRepairQueued) return
+  focusRepairQueued = true
+  queueMicrotask(() => {
+    focusRepairQueued = false
+    repairFocus()
+  })
 }
 
 /** @public */
@@ -119,6 +149,9 @@ function ensureFocusInput() {
 
 export function dispatchFocusInput(event: InputEvent) {
   if (event.type !== "key") return
+  // A second key in the same synchronous burst may arrive before the cleanup
+  // microtask; never dispatch it to an entry that was already removed.
+  repairFocus()
   if (event.key === "tab") {
     if (event.mods.shift) focusPrev()
     else focusNext()
@@ -189,12 +222,8 @@ export function unregisterNodeFocusable(node: TGENode) {
       scope.entries.splice(idx, 1)
       if (focusedId() === focusId) {
         const reg = activeRegistry()
-        if (reg.length > 0) {
-          const nextIdx = Math.min(idx, reg.length - 1)
-          setFocusedId(reg[nextIdx].id)
-        } else {
-          setFocusedId(null)
-        }
+        if (reg.length > 0) queueFocusRepair(idx)
+        else setFocusedId(null)
       }
       return
     }
@@ -221,4 +250,6 @@ export function resetFocus() {
   focusInputConnected = false
   nextId = 0
   nodeFocusMap.clear()
+  pendingFocusRepair = null
+  focusRepairQueued = false
 }

@@ -12,7 +12,9 @@
 // Thread-local transport mode so each FFI call context is independent.
 
 use std::cell::{Cell, RefCell};
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::hash::Hasher;
 use std::time::Instant;
 
 use super::encoder::{encode_animation_frame_direct, encode_frame_direct};
@@ -33,6 +35,14 @@ thread_local! {
     // with identical animation frames while still allowing real pixels to
     // update immediately.
     static IMAGE_HASHES: RefCell<HashMap<u32, u64>> = RefCell::new(HashMap::new());
+    // Test-only counter used to prove a digest is scanned once per output
+    // attempt even though the result is consumed by both cache operations.
+    #[cfg(test)]
+    static RGBA_HASH_SCANS: Cell<usize> = const { Cell::new(0) };
+    // Test-only failure injection keeps output-path retry tests independent of
+    // the process stdout used by the native transport.
+    #[cfg(test)]
+    static FORCE_WRITE_FAILURE: Cell<bool> = const { Cell::new(false) };
 }
 
 fn image_frame(image_id: u32) -> Option<u32> {
@@ -56,11 +66,13 @@ fn forget_image_frame(image_id: u32) {
 }
 
 fn rgba_hash(rgba: &[u8]) -> u64 {
-    // FNV-1a is sufficient here: this is only a same-payload fast path, not
-    // an integrity or security check.
-    rgba.iter().fold(0xcbf29ce484222325, |hash, byte| {
-        (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
-    })
+    // This digest is an ephemeral cache key, not an integrity or security
+    // check. It is intentionally not persisted or exposed through FFI.
+    #[cfg(test)]
+    RGBA_HASH_SCANS.with(|scans| scans.set(scans.get().saturating_add(1)));
+    let mut hasher = DefaultHasher::new();
+    hasher.write(rgba);
+    hasher.finish()
 }
 
 fn payload_hash(rgba: &[u8], width: u32, height: u32, col: i32, row: i32, z: i32) -> u64 {
@@ -80,24 +92,23 @@ fn payload_hash(rgba: &[u8], width: u32, height: u32, col: i32, row: i32, z: i32
     })
 }
 
-fn payload_unchanged(
-    image_id: u32,
-    rgba: &[u8],
-    width: u32,
-    height: u32,
-    col: i32,
-    row: i32,
-    z: i32,
-) -> bool {
-    let hash = payload_hash(rgba, width, height, col, row, z);
-    IMAGE_HASHES.with(|hashes| hashes.borrow().get(&image_id).copied() == Some(hash))
+fn payload_unchanged(image_id: u32, digest: u64) -> bool {
+    IMAGE_HASHES.with(|hashes| hashes.borrow().get(&image_id).copied() == Some(digest))
 }
 
-fn record_payload(image_id: u32, rgba: &[u8], width: u32, height: u32, col: i32, row: i32, z: i32) {
-    let hash = payload_hash(rgba, width, height, col, row, z);
+fn record_payload(image_id: u32, digest: u64) {
     IMAGE_HASHES.with(|hashes| {
-        hashes.borrow_mut().insert(image_id, hash);
+        hashes.borrow_mut().insert(image_id, digest);
     });
+}
+
+#[inline]
+fn write_transport(data: &[u8]) -> std::io::Result<()> {
+    #[cfg(test)]
+    if FORCE_WRITE_FAILURE.with(|failure| failure.get()) {
+        return Err(std::io::Error::other("forced transport write failure"));
+    }
+    write_to_stdout(data)
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -224,9 +235,8 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
         return ERR_KITTY_TRANSPORT;
     }
     let existing_frame = image_frame(image_id);
-    if existing_frame.is_some()
-        && payload_unchanged(image_id, &rgba[..written as usize], width, height, 0, 0, 0)
-    {
+    let digest = payload_hash(&rgba[..written as usize], width, height, 0, 0, 0);
+    if existing_frame.is_some() && payload_unchanged(image_id, digest) {
         return OK;
     }
 
@@ -264,7 +274,7 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
             "\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s,o=z,q=2;{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,q=2;\x1b\\"
         )
     };
-    let write_result = write_to_stdout(escape.as_bytes());
+    let write_result = write_transport(escape.as_bytes());
 
     // 6. Schedule SHM cleanup (TTL: the terminal reads it and unlinks it per spec).
     // We retain the handle; the terminal will unlink after reading.
@@ -274,7 +284,7 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
     match write_result {
         Ok(()) => {
             record_image_frame(image_id, existing_frame);
-            record_payload(image_id, &rgba[..written as usize], width, height, 0, 0, 0);
+            record_payload(image_id, digest);
             OK
         }
         Err(e) => {
@@ -344,6 +354,34 @@ fn do_readback(
     }
 }
 
+/// Read a full target and consume packed RGBA bytes while the GPU readback
+/// buffer is mapped. Aligned rows are borrowed directly; padded rows use the
+/// exact packed fallback in `readback_full_with`.
+fn do_readback_with<R, F>(
+    pctx: &mut PaintContext,
+    target: u64,
+    width: u32,
+    height: u32,
+    callback: F,
+) -> Option<R>
+where
+    F: FnOnce(&[u8]) -> R,
+{
+    use crate::composite::readback::readback_full_with;
+
+    let rec = pctx.targets.get(target)?;
+    readback_full_with(
+        &pctx.wgpu.device,
+        &pctx.wgpu.queue,
+        &rec.texture,
+        width,
+        height,
+        rec.padded_bytes_per_row,
+        &rec.readback_buffer,
+        callback,
+    )
+}
+
 // ─── Native Presentation exports (Phase 2b) ────────────────────────────────
 
 /// Emit a complete frame with native stats output.
@@ -375,35 +413,31 @@ pub unsafe fn emit_frame_with_stats(
     };
     let pixel_count = (width as usize) * (height as usize) * 4;
 
-    // GPU readback — timed.
+    // GPU readback — timed. The callback starts encode/hash timing only after
+    // the mapped bytes are ready, so readback_us stays independent.
     let t_rb = Instant::now();
-    let mut rgba = vec![0u8; pixel_count];
-    let written = do_readback(pctx, target, width, height, &mut rgba);
-    let readback_us = t_rb.elapsed().as_micros() as u64;
-    if written == 0 {
-        set_last_error("emit_frame_with_stats: GPU readback returned 0 bytes");
-        return ERR_KITTY_TRANSPORT;
-    }
-
-    // Encode + write — timed.
-    let t_enc = Instant::now();
-    let mut transfer = ShmTransferStats::default();
-    let rc = match mode {
-        2 => {
-            let result = emit_shm_inner_with_stats(
-                pctx,
-                target,
-                image_id,
-                &rgba[..written as usize],
-                width,
-                height,
-            );
-            transfer = result.1;
-            result.0
+    let mut readback_us = 0u64;
+    let mut encode_us = 0u64;
+    let result = do_readback_with(pctx, target, width, height, |rgba| {
+        readback_us = t_rb.elapsed().as_micros() as u64;
+        let t_enc = Instant::now();
+        let result = match mode {
+            2 => emit_shm_rgba_with_stats(rgba, width, height, image_id),
+            _ => (
+                emit_direct_inner(rgba, width, height, image_id),
+                ShmTransferStats::default(),
+            ),
+        };
+        encode_us = t_enc.elapsed().as_micros() as u64;
+        result
+    });
+    let (rc, transfer) = match result {
+        Some(result) => result,
+        None => {
+            set_last_error("emit_frame_with_stats: GPU readback returned 0 bytes");
+            return ERR_KITTY_TRANSPORT;
         }
-        _ => emit_direct_inner(&rgba[..written as usize], width, height, image_id),
     };
-    let encode_us = t_enc.elapsed().as_micros() as u64;
     let write_us = 0u64; // write is included in encode_us for now
     let total_us = t0.elapsed().as_micros() as u64;
     let kitty_bytes = pixel_count as u64; // approximation
@@ -512,41 +546,28 @@ pub unsafe fn emit_layer_target_with_stats(
     };
     let pixel_count = (width as usize) * (height as usize) * 4;
     let t_rb = Instant::now();
-    let mut rgba = vec![0u8; pixel_count];
-    let written = do_readback(pctx, target, width, height, &mut rgba);
-    let readback_us = t_rb.elapsed().as_micros() as u64;
-    if written == 0 {
-        set_last_error("emit_layer_target_with_stats: GPU readback returned 0 bytes");
-        return ERR_KITTY_TRANSPORT;
-    }
-
-    let t_enc = Instant::now();
-    let mut transfer = ShmTransferStats::default();
-    let rc = match mode {
-        2 => {
-            let result = emit_shm_rgba_at_with_stats(
-                &rgba[..written as usize],
-                width,
-                height,
-                image_id,
-                col,
-                row,
-                z,
-            );
-            transfer = result.1;
-            result.0
+    let mut readback_us = 0u64;
+    let mut encode_us = 0u64;
+    let result = do_readback_with(pctx, target, width, height, |rgba| {
+        readback_us = t_rb.elapsed().as_micros() as u64;
+        let t_enc = Instant::now();
+        let result = match mode {
+            2 => emit_shm_rgba_at_with_stats(rgba, width, height, image_id, col, row, z),
+            _ => (
+                emit_direct_rgba_at(rgba, width, height, image_id, col, row, z),
+                ShmTransferStats::default(),
+            ),
+        };
+        encode_us = t_enc.elapsed().as_micros() as u64;
+        result
+    });
+    let (rc, transfer) = match result {
+        Some(result) => result,
+        None => {
+            set_last_error("emit_layer_target_with_stats: GPU readback returned 0 bytes");
+            return ERR_KITTY_TRANSPORT;
         }
-        _ => emit_direct_rgba_at(
-            &rgba[..written as usize],
-            width,
-            height,
-            image_id,
-            col,
-            row,
-            z,
-        ),
     };
-    let encode_us = t_enc.elapsed().as_micros() as u64;
     let total_us = t0.elapsed().as_micros() as u64;
 
     if !stats_out.is_null() {
@@ -554,7 +575,7 @@ pub unsafe fn emit_layer_target_with_stats(
         stats.version = NativePresentationStats::VERSION;
         stats.mode = NativePresentationStats::MODE_LAYER;
         stats.rgba_bytes_read = 0;
-        stats.kitty_bytes_emitted = written as u64;
+        stats.kitty_bytes_emitted = pixel_count as u64;
         stats.readback_us = readback_us;
         stats.encode_us = encode_us;
         stats.write_us = 0;
@@ -736,7 +757,8 @@ pub unsafe fn delete_layer_native(image_id: u32, stats_out: *mut NativePresentat
 /// Emit already-read RGBA data using direct mode (encode → stdout).
 fn emit_direct_inner(rgba: &[u8], width: u32, height: u32, image_id: u32) -> i32 {
     let existing_frame = image_frame(image_id);
-    if existing_frame.is_some() && payload_unchanged(image_id, rgba, width, height, 0, 0, 0) {
+    let digest = payload_hash(rgba, width, height, 0, 0, 0);
+    if existing_frame.is_some() && payload_unchanged(image_id, digest) {
         return OK;
     }
     let escaped = existing_frame.map_or_else(
@@ -752,10 +774,10 @@ fn emit_direct_inner(rgba: &[u8], width: u32, height: u32, image_id: u32) -> i32
         "\x1b7\x1b[1;1H{stale_delete}{}\x1b8",
         String::from_utf8_lossy(&escaped)
     );
-    match write_to_stdout(positioned.as_bytes()) {
+    match write_transport(positioned.as_bytes()) {
         Ok(()) => {
             record_image_frame(image_id, existing_frame);
-            record_payload(image_id, rgba, width, height, 0, 0, 0);
+            record_payload(image_id, digest);
             OK
         }
         Err(e) => {
@@ -776,17 +798,6 @@ fn emit_shm_inner(
     height: u32,
 ) -> i32 {
     emit_shm_rgba(rgba, width, height, image_id)
-}
-
-fn emit_shm_inner_with_stats(
-    _pctx: &mut PaintContext,
-    _target: u64,
-    image_id: u32,
-    rgba: &[u8],
-    width: u32,
-    height: u32,
-) -> (i32, ShmTransferStats) {
-    emit_shm_rgba_with_stats(rgba, width, height, image_id)
 }
 
 /// Write RGBA layer to SHM and emit Kitty escape.
@@ -835,10 +846,9 @@ fn emit_shm_rgba_at_with_stats(
         raw_bytes: rgba.len() as u64,
         ..ShmTransferStats::default()
     };
-    let _ = z;
     let existing_frame = image_frame(image_id);
-    if existing_frame.is_some() && payload_unchanged(image_id, rgba, width, height, col, row, z) {
-        stats.payload_bytes = rgba.len() as u64;
+    let digest = payload_hash(rgba, width, height, col, row, z);
+    if existing_frame.is_some() && payload_unchanged(image_id, digest) {
         return (OK, stats);
     }
     let compression = shm_compression_enabled();
@@ -891,13 +901,13 @@ fn emit_shm_rgba_at_with_stats(
         )
     };
     let t_write = Instant::now();
-    let write_result = write_to_stdout(escape.as_bytes());
+    let write_result = write_transport(escape.as_bytes());
     stats.write_us = t_write.elapsed().as_micros() as u64;
     shm_release(handle, 0);
     match write_result {
         Ok(()) => {
             record_image_frame(image_id, existing_frame);
-            record_payload(image_id, rgba, width, height, col, row, z);
+            record_payload(image_id, digest);
             (OK, stats)
         }
         Err(e) => {
@@ -917,7 +927,8 @@ fn emit_direct_rgba_at(
     z: i32,
 ) -> i32 {
     let existing_frame = image_frame(image_id);
-    if existing_frame.is_some() && payload_unchanged(image_id, rgba, width, height, col, row, z) {
+    let digest = payload_hash(rgba, width, height, col, row, z);
+    if existing_frame.is_some() && payload_unchanged(image_id, digest) {
         return OK;
     }
     let escaped = existing_frame.map_or_else(
@@ -935,11 +946,10 @@ fn emit_direct_rgba_at(
         "\x1b7\x1b[{row};{col}H{stale_delete}{}\x1b8",
         String::from_utf8_lossy(&escaped)
     );
-    let _ = z;
-    match write_to_stdout(positioned.as_bytes()) {
+    match write_transport(positioned.as_bytes()) {
         Ok(()) => {
             record_image_frame(image_id, existing_frame);
-            record_payload(image_id, rgba, width, height, col, row, z);
+            record_payload(image_id, digest);
             OK
         }
         Err(e) => {
@@ -1065,7 +1075,20 @@ fn emit_region_rgba_with_stats(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::hint::black_box;
     use std::mem;
+
+    fn force_write_failure(value: bool) {
+        FORCE_WRITE_FAILURE.with(|failure| failure.set(value));
+    }
+
+    fn reset_hash_scan_count() {
+        RGBA_HASH_SCANS.with(|scans| scans.set(0));
+    }
+
+    fn hash_scan_count() -> usize {
+        RGBA_HASH_SCANS.with(|scans| scans.get())
+    }
 
     #[test]
     fn test_set_transport_mode_valid() {
@@ -1109,6 +1132,203 @@ mod tests {
         assert!(!shm_compression_enabled_value(Some("0".to_string())));
         assert!(!shm_compression_enabled_value(Some("false".to_string())));
         assert!(!shm_compression_enabled_value(Some("off".to_string())));
+    }
+
+    #[test]
+    fn test_identical_payload_skips_direct_and_shm_output() {
+        let image_id = 40_001;
+        let rgba = [0x10, 0x20, 0x30, 0xff];
+        let digest = payload_hash(&rgba, 1, 1, 2, 3, 4);
+        force_write_failure(true);
+        record_image_frame(image_id, None);
+        record_payload(image_id, digest);
+
+        assert_eq!(emit_direct_rgba_at(&rgba, 1, 1, image_id, 2, 3, 4), OK);
+        let result = emit_shm_rgba_at_with_stats(&rgba, 1, 1, image_id, 2, 3, 4);
+        assert_eq!(result.0, OK);
+        assert_eq!(result.1.raw_bytes, rgba.len() as u64);
+        assert_eq!(result.1.payload_bytes, 0);
+
+        force_write_failure(false);
+        forget_image_frame(image_id);
+    }
+
+    #[test]
+    fn test_changed_pixels_attempt_output_and_keep_previous_digest_on_failure() {
+        let image_id = 40_002;
+        let previous = [0x10, 0x20, 0x30, 0xff];
+        let changed = [0x11, 0x20, 0x30, 0xff];
+        let previous_digest = payload_hash(&previous, 1, 1, 2, 3, 4);
+        let changed_digest = payload_hash(&changed, 1, 1, 2, 3, 4);
+        record_image_frame(image_id, None);
+        record_payload(image_id, previous_digest);
+        force_write_failure(true);
+
+        assert_eq!(
+            emit_direct_rgba_at(&changed, 1, 1, image_id, 2, 3, 4),
+            ERR_KITTY_TRANSPORT
+        );
+        assert!(!payload_unchanged(image_id, changed_digest));
+        assert!(payload_unchanged(image_id, previous_digest));
+
+        force_write_failure(false);
+        forget_image_frame(image_id);
+    }
+
+    #[test]
+    fn test_changed_metadata_attempts_output() {
+        let image_id = 40_003;
+        let rgba = [0x10, 0x20, 0x30, 0xff];
+        let previous_digest = payload_hash(&rgba, 1, 1, 2, 3, 4);
+        let changed_digest = payload_hash(&rgba, 1, 1, 2, 4, 4);
+        record_image_frame(image_id, None);
+        record_payload(image_id, previous_digest);
+        force_write_failure(true);
+
+        assert_eq!(
+            emit_direct_rgba_at(&rgba, 1, 1, image_id, 2, 4, 4),
+            ERR_KITTY_TRANSPORT
+        );
+        assert!(!payload_unchanged(image_id, changed_digest));
+        assert!(payload_unchanged(image_id, previous_digest));
+
+        force_write_failure(false);
+        forget_image_frame(image_id);
+    }
+
+    #[test]
+    fn test_failed_output_does_not_commit_digest() {
+        let image_id = 40_004;
+        let rgba = [0x10, 0x20, 0x30, 0xff];
+        let digest = payload_hash(&rgba, 1, 1, 0, 0, 0);
+        force_write_failure(true);
+
+        assert_eq!(
+            emit_direct_rgba_at(&rgba, 1, 1, image_id, 0, 0, 0),
+            ERR_KITTY_TRANSPORT
+        );
+        assert!(!payload_unchanged(image_id, digest));
+        assert!(image_frame(image_id).is_none());
+
+        force_write_failure(false);
+        forget_image_frame(image_id);
+    }
+
+    #[test]
+    fn test_delete_clears_frame_and_payload_digest() {
+        let image_id = 40_005;
+        let rgba = [0x10, 0x20, 0x30, 0xff];
+        let digest = payload_hash(&rgba, 1, 1, 0, 0, 0);
+        record_image_frame(image_id, None);
+        record_payload(image_id, digest);
+
+        forget_image_frame(image_id);
+
+        assert!(image_frame(image_id).is_none());
+        assert!(!payload_unchanged(image_id, digest));
+    }
+
+    #[test]
+    fn test_payload_cache_consumes_one_rgba_scan_per_attempt() {
+        let image_id = 40_006;
+        let previous = [0x10, 0x20, 0x30, 0xff];
+        let changed = [0x11, 0x20, 0x30, 0xff];
+        let previous_digest = payload_hash(&previous, 1, 1, 0, 0, 0);
+        record_image_frame(image_id, None);
+        record_payload(image_id, previous_digest);
+        reset_hash_scan_count();
+        force_write_failure(false);
+
+        assert_eq!(emit_direct_rgba_at(&changed, 1, 1, image_id, 0, 0, 0), OK);
+        assert_eq!(hash_scan_count(), 1);
+
+        reset_hash_scan_count();
+        let result = emit_shm_rgba_at_with_stats(&changed, 1, 1, image_id, 0, 0, 0);
+        assert_eq!(result.0, OK);
+        assert_eq!(result.1.payload_bytes, 0);
+        assert_eq!(hash_scan_count(), 1);
+
+        forget_image_frame(image_id);
+    }
+
+    fn legacy_fnv_hash(rgba: &[u8]) -> u64 {
+        rgba.iter().fold(0xcbf29ce484222325, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+        })
+    }
+
+    fn ui_like_rgba(width: usize, height: usize) -> Vec<u8> {
+        let mut rgba = vec![0u8; width * height * 4];
+        for (pixel, chunk) in rgba.chunks_exact_mut(4).enumerate() {
+            let x = pixel % width;
+            let y = pixel / width;
+            let edge = x % 64 < 2 || y % 48 < 2;
+            chunk[0] = if edge {
+                0x56
+            } else {
+                ((x / 8 + y / 4) % 24) as u8
+            };
+            chunk[1] = if edge {
+                0xd4
+            } else {
+                ((x / 16 + y / 8) % 20) as u8
+            };
+            chunk[2] = if edge { 0xc8 } else { 0x1e };
+            chunk[3] = 0xff;
+        }
+        rgba
+    }
+
+    fn varied_rgba(width: usize, height: usize) -> Vec<u8> {
+        let mut state = 0x9e3779b9u32;
+        let mut rgba = vec![0u8; width * height * 4];
+        for byte in &mut rgba {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            *byte = (state >> 24) as u8;
+        }
+        rgba
+    }
+
+    fn benchmark_hash_case(name: &str, rgba: &[u8]) {
+        const WARMUP: usize = 4;
+        const ITERATIONS: usize = 30;
+
+        for _ in 0..WARMUP {
+            black_box(legacy_fnv_hash(black_box(rgba)));
+            black_box(rgba_hash(black_box(rgba)));
+        }
+
+        let start = Instant::now();
+        let mut legacy = 0u64;
+        for _ in 0..ITERATIONS {
+            legacy = legacy.wrapping_add(black_box(legacy_fnv_hash(black_box(rgba))));
+        }
+        let legacy_elapsed = start.elapsed();
+
+        let start = Instant::now();
+        let mut production = 0u64;
+        for _ in 0..ITERATIONS {
+            production = production.wrapping_add(black_box(rgba_hash(black_box(rgba))));
+        }
+        let production_elapsed = start.elapsed();
+
+        black_box((legacy, production));
+        println!(
+            "payload hash {name}: legacy FNV avg {} ns, production DefaultHasher avg {} ns",
+            legacy_elapsed.as_nanos() / ITERATIONS as u128,
+            production_elapsed.as_nanos() / ITERATIONS as u128,
+        );
+    }
+
+    /// Run with `cargo test --release -- --ignored --nocapture` to compare
+    /// the legacy FNV implementation against the production digest.
+    #[test]
+    #[ignore = "release-only transport hash benchmark"]
+    fn bench_payload_hash_1080p_fnv_vs_default_hasher() {
+        benchmark_hash_case("ui-like 1920x1080", &ui_like_rgba(1920, 1080));
+        benchmark_hash_case("varied 1920x1080", &varied_rgba(1920, 1080));
+        benchmark_hash_case("ui-like 220x80", &ui_like_rgba(220, 80));
+        benchmark_hash_case("varied 220x80", &varied_rgba(220, 80));
     }
 
     // ── NativePresentationStats struct tests (task 1.3) ────────────────────

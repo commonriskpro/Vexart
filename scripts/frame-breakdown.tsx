@@ -1,7 +1,16 @@
 import { existsSync } from "node:fs"
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
+import { dirname } from "node:path"
+import {
+  applyCompositorTransform,
+  compositorTransformValue,
+  FRAME_BREAKDOWN_REPORT_VERSION,
+  FULL_FRAME_PRESENTATION_PATH,
+  hasChangingCompositorTransforms,
+  MEASUREMENT_SCOPE,
+  parseFrameBreakdownOptions,
+  TRANSPORT_OBSERVATION,
+} from "./frame-breakdown-contract"
 process.env.VEXART_DEBUG_CADENCE = "1"
 
 const SCENARIO = {
@@ -15,10 +24,6 @@ const SCENARIO = {
 } as const
 
 const CADENCE_LOG = "/tmp/tge-cadence.log"
-const DEFAULT_FRAMES = 300
-const DEFAULT_WARMUP = 5
-const REPORT_PATH = join(dirname(fileURLToPath(import.meta.url)), "frame-breakdown-report.json")
-
 type ScenarioName = (typeof SCENARIO)[keyof typeof SCENARIO]
 type TransmissionMode = "direct" | "file" | "shm"
 
@@ -186,10 +191,12 @@ interface ScenarioReport {
   summary: StageSummary
   topFfiSymbols: SymbolCount[]
   frames: CadenceFrame[]
+  compositorTransformValues?: number[]
+  compositorTransformChanged?: boolean
 }
 
 interface BenchmarkReport {
-  version: 3
+  version: typeof FRAME_BREAKDOWN_REPORT_VERSION
   generatedAt: string
   runtime: string
   platform: string
@@ -198,6 +205,11 @@ interface BenchmarkReport {
   warmup: number
   transport: TransmissionMode
   nativePresentation: boolean
+  nativePresentationRequested: boolean
+  measurementScope: typeof MEASUREMENT_SCOPE
+  visibleTerminalLatencyMeasured: false
+  presentationPath: typeof FULL_FRAME_PRESENTATION_PATH
+  transportObservation: typeof TRANSPORT_OBSERVATION
   deprecatedMetrics: string[]
   scenarios: ScenarioReport[]
 }
@@ -206,6 +218,7 @@ interface EngineModules {
   createRenderLoop: typeof import("../packages/engine/src/loop/loop").createRenderLoop
   setFrameProfileSink: typeof import("../packages/engine/src/loop/loop").setFrameProfileSink
   solidRender: typeof import("../packages/engine/src/reconciler/reconciler").render
+  setProp: typeof import("../packages/engine/src/reconciler/reconciler").setProp
   markDirty: typeof import("../packages/engine/src/reconciler/dirty").markDirty
   resetFocus: typeof import("../packages/engine/src/reconciler/focus").resetFocus
   resetSelection: typeof import("../packages/engine/src/reconciler/selection").resetSelection
@@ -219,46 +232,7 @@ interface EngineModules {
 }
 
 function parseCli(): CliOptions {
-  const args = process.argv.slice(2)
-  let frames = DEFAULT_FRAMES
-  let warmup = DEFAULT_WARMUP
-  let output = REPORT_PATH
-  let transport: TransmissionMode = "shm"
-  let nativePresentation = false
-  let scenarioFilter: string | null = null
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i]
-    if (arg === "--frames") frames = Number(args[++i] ?? frames)
-    else if (arg.startsWith("--frames=")) frames = Number(arg.slice("--frames=".length))
-    else if (arg === "--warmup") warmup = Number(args[++i] ?? warmup)
-    else if (arg.startsWith("--warmup=")) warmup = Number(arg.slice("--warmup=".length))
-    else if (arg === "--output") output = args[++i] ?? output
-    else if (arg.startsWith("--output=")) output = arg.slice("--output=".length)
-    else if (arg === "--transport") {
-      const value = args[++i]
-      if (value === "direct" || value === "file" || value === "shm") transport = value
-    }
-    else if (arg.startsWith("--transport=")) {
-      const value = arg.slice("--transport=".length)
-      if (value === "direct" || value === "file" || value === "shm") transport = value
-    }
-    else if (arg === "--native-presentation") nativePresentation = true
-    else if (arg === "--no-native-presentation") nativePresentation = false
-    else if (arg.startsWith("--native-presentation=")) {
-      const value = arg.slice("--native-presentation=".length)
-      nativePresentation = value === "1" || value === "true" || value === "yes"
-    }
-    else if (arg === "--scenarios") scenarioFilter = args[++i] ?? null
-    else if (arg.startsWith("--scenarios=")) scenarioFilter = arg.slice("--scenarios=".length)
-  }
-  return {
-    frames: Number.isFinite(frames) && frames > 0 ? Math.floor(frames) : DEFAULT_FRAMES,
-    warmup: Number.isFinite(warmup) && warmup >= 0 ? Math.floor(warmup) : DEFAULT_WARMUP,
-    output,
-    transport,
-    nativePresentation,
-    scenarioFilter,
-  }
+  return parseFrameBreakdownOptions(process.argv.slice(2))
 }
 
 function createMockTerminal(width: number, height: number, transport: TransmissionMode): MockTerminal {
@@ -444,6 +418,7 @@ async function loadEngine(): Promise<EngineModules> {
     createRenderLoop: loop.createRenderLoop,
     setFrameProfileSink: loop.setFrameProfileSink,
     solidRender: reconciler.render,
+    setProp: reconciler.setProp,
     markDirty: dirty.markDirty,
     resetFocus: focus.resetFocus,
     resetSelection: selection.resetSelection,
@@ -660,10 +635,31 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
   })
   engine.bindLoop(loop)
   const dispose = engine.solidRender(() => renderScenario(name, size) as never, loop.root)
+  const compositorTarget = name === SCENARIO.COMPOSITOR_ONLY
+    ? loop.root.children[0]?.children[0]
+    : null
+  if (name === SCENARIO.COMPOSITOR_ONLY && !compositorTarget) {
+    throw new Error("compositor-only scenario did not create a target node")
+  }
+  if (compositorTarget) {
+    const registered = engine.registerAnimationDescriptor({
+      nodeId: compositorTarget.id,
+      property: "transform",
+      from: -8,
+      to: 8,
+      startTime: performance.now(),
+      physics: { kind: "transition", easing: (t: number) => t, duration: 1000 },
+    })
+    if (!registered) throw new Error("compositor-only target did not qualify for compositor path")
+  }
+  const compositorTransformValues: number[] = []
 
   try {
     engine.markDirty()
     for (let i = 0; i < warmup; i++) {
+      if (compositorTarget) {
+        applyCompositorTransform(compositorTarget, (node, prop, value) => engine.setProp(node, prop, value), i)
+      }
       if (name === SCENARIO.NOOP_RETAINED && i > 0) {
         loop.frame()
       } else {
@@ -702,17 +698,13 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
         loop.feedScroll(0, direction)
         loop.frame()
       } else if (name === SCENARIO.COMPOSITOR_ONLY) {
-        const target = loop.root.children[0]?.children[0]
-        if (target) {
-          engine.registerAnimationDescriptor({
-            nodeId: target.id,
-            property: "transform",
-            from: 0,
-            to: 1,
-            startTime: performance.now(),
-            physics: { kind: "transition", easing: (t: number) => t, duration: 1000 },
-          })
+        if (!compositorTarget) {
+          throw new Error("compositor-only scenario target disappeared")
         }
+        applyCompositorTransform(compositorTarget, (node, prop, value) => engine.setProp(node, prop, value), i)
+        const transformValue = compositorTransformValue(compositorTarget)
+        if (transformValue === null) throw new Error("compositor-only transform prop was not applied")
+        compositorTransformValues.push(transformValue)
         engine.markDirty()
         loop.frame()
       } else {
@@ -778,6 +770,12 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
       summary: summarizeFrames(framesMeasured),
       topFfiSymbols: topSymbols(engine.getVexartFfiCallCountsBySymbol()),
       frames: framesMeasured,
+      ...(name === SCENARIO.COMPOSITOR_ONLY
+        ? {
+            compositorTransformValues,
+            compositorTransformChanged: hasChangingCompositorTransforms(compositorTransformValues),
+          }
+        : {}),
     }
   } finally {
     engine.unbindLoop()
@@ -837,7 +835,7 @@ async function main() {
     { name: SCENARIO.SCROLL_HEAVY, size: { width: 1920, height: 1080 } },
   ]
 
-  console.log(`\n🔬 Vexart frame breakdown — frames=${options.frames} warmup=${options.warmup} transport=${options.transport} nativePresentation=${options.nativePresentation ? "on" : "off"}\n`)
+  console.log("\n🔬 Vexart frame breakdown — frames=" + String(options.frames) + " warmup=" + String(options.warmup) + " transport=" + options.transport + " transportObservation=requested-mode nativePresentationRequested=" + (options.nativePresentation ? "on" : "off") + " presentationPath=full-frame scope=internal-frame-timing visibleTerminalLatency=not-measured\n")
   const filtered = options.scenarioFilter
     ? scenarios.filter((s) => options.scenarioFilter!.split(",").map((x) => x.trim()).includes(s.name))
     : scenarios
@@ -849,7 +847,7 @@ async function main() {
   }
 
   const output: BenchmarkReport = {
-    version: 3,
+    version: FRAME_BREAKDOWN_REPORT_VERSION,
     generatedAt: new Date().toISOString(),
     runtime: `bun ${Bun.version}`,
     platform: process.platform,
@@ -858,6 +856,11 @@ async function main() {
     warmup: options.warmup,
     transport: options.transport,
     nativePresentation: options.nativePresentation,
+    nativePresentationRequested: options.nativePresentation,
+    measurementScope: MEASUREMENT_SCOPE,
+    visibleTerminalLatencyMeasured: false,
+    presentationPath: FULL_FRAME_PRESENTATION_PATH,
+    transportObservation: TRANSPORT_OBSERVATION,
     deprecatedMetrics: ["paintNativeSnapshotMs"],
     scenarios: reports,
   }

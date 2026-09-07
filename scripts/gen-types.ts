@@ -59,9 +59,6 @@ for (const name of ["engine.d.ts", "vexart.d.ts"] as const) {
   // Fix JSX return types — api-extractor sometimes emits `: JSX` instead of `: JSX.Element`
   content = content.replace(/\): JSX;/g, "): JSX.Element;")
 
-  // Fix leaked const-derived types — api-extractor excludes the const but leaves the type referencing it
-  content = content.replace(/declare type NativeFrameStrategy = \(typeof NATIVE_FRAME_STRATEGY\)\[keyof typeof NATIVE_FRAME_STRATEGY\];/g, "declare type NativeFrameStrategy = string;")
-
   writeFileSync(file, content)
 }
 console.log("  ✅ Removed flexily leak, fixed JSX return types")

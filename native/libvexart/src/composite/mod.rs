@@ -522,7 +522,10 @@ pub fn composite_update_uniform(
                 multiview_mask: None,
             });
 
-        pass.set_pipeline(&pctx.wgpu.pipelines.image_transform);
+        // The source is another render target, whose RGB is already
+        // premultiplied by alpha. Use the matching blend factors so this
+        // retained-compositor path does not premultiply it twice.
+        pass.set_pipeline(&pctx.wgpu.pipelines.image_transform_premultiplied);
         pass.set_vertex_buffer(0, vertex_buf.slice(..));
         pass.set_bind_group(0, &bind_group, &[]);
         pass.draw(0..6, 0..1);
@@ -560,7 +563,8 @@ pub fn composite_update_uniform(
             multiview_mask: None,
         });
 
-        pass.set_pipeline(&pctx.wgpu.pipelines.image_transform);
+        // See the active-layer path above: source targets are premultiplied.
+        pass.set_pipeline(&pctx.wgpu.pipelines.image_transform_premultiplied);
         pass.set_vertex_buffer(0, vertex_buf.slice(..));
         pass.set_bind_group(0, &bind_group, &[]);
         pass.draw(0..6, 0..1);
@@ -584,6 +588,10 @@ pub fn copy_region_to_image(
     h: u32,
     out_image: *mut u64,
 ) -> i32 {
+    use crate::paint::instances::ImageCopyInstance;
+    use bytemuck::bytes_of;
+    use wgpu::util::DeviceExt;
+
     if out_image.is_null() {
         return ERR_INVALID_ARG;
     }
@@ -627,7 +635,47 @@ pub fn copy_region_to_image(
         view_formats: &[],
     });
 
-    // Copy from target texture region to dst.
+    // Target render attachments use premultiplied storage after alpha
+    // blending. Convert the cropped region back to straight RGBA before
+    // registering it as an image: uploaded images use straight RGBA, and the
+    // normal image compositor applies alpha exactly once.
+    let source_view =
+        unsafe { (&*src_texture_ptr).create_view(&wgpu::TextureViewDescriptor::default()) };
+    let source_bind_group = pctx
+        .wgpu
+        .device
+        .create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("vexart-region-source-bind-group"),
+            layout: &pctx.wgpu.image_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&source_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&pctx.wgpu.cached_sampler),
+                },
+            ],
+        });
+    let instance = ImageCopyInstance {
+        x: -1.0,
+        y: 1.0,
+        w: 2.0,
+        h: -2.0,
+        source_u0: cx as f32 / tw as f32,
+        source_v0: cy as f32 / th as f32,
+        source_u1: (cx + cw) as f32 / tw as f32,
+        source_v1: (cy + ch) as f32 / th as f32,
+    };
+    let vertex_buf = pctx
+        .wgpu
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("vexart-region-copy-instance-buf"),
+            contents: bytes_of(&instance),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
     let mut encoder = pctx
         .wgpu
         .device
@@ -635,31 +683,34 @@ pub fn copy_region_to_image(
             label: Some("vexart-copy-region-encoder"),
         });
 
-    // SAFETY: src_texture_ptr extracted from pctx.targets before any mutation.
-    encoder.copy_texture_to_texture(
-        wgpu::TexelCopyTextureInfo {
-            texture: unsafe { &*src_texture_ptr },
-            mip_level: 0,
-            origin: wgpu::Origin3d { x: cx, y: cy, z: 0 },
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::TexelCopyTextureInfo {
-            texture: &dst_texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::Extent3d {
-            width: cw,
-            height: ch,
-            depth_or_array_layers: 1,
-        },
-    );
+    let dst_view = dst_texture.create_view(&wgpu::TextureViewDescriptor::default());
+    {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("vexart-region-copy-pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &dst_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&pctx.wgpu.pipelines.image_unpremultiply);
+        pass.set_vertex_buffer(0, vertex_buf.slice(..));
+        pass.set_bind_group(0, &source_bind_group, &[]);
+        pass.draw(0..6, 0..1);
+    }
 
     pctx.wgpu.queue.submit(std::iter::once(encoder.finish()));
 
     // Create view + sampler + bind group and register as image.
-    let view = dst_texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let view = dst_view;
     let sampler = pctx.wgpu.device.create_sampler(&wgpu::SamplerDescriptor {
         label: Some("vexart-region-sampler"),
         address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -920,9 +971,12 @@ fn render_blur_image(pctx: &mut PaintContext, image: u64, blur_radius: f32) -> R
     use wgpu::util::DeviceExt;
 
     let (src_w, src_h) = source_image_size(pctx, image)?;
-    let (dst_texture, dst_view) = create_effect_destination(pctx, "vexart-blur-dst", src_w, src_h);
+    let (_mid_texture, mid_view) =
+        create_effect_destination(pctx, "vexart-blur-horizontal", src_w, src_h);
+    let (dst_texture, dst_view) =
+        create_effect_destination(pctx, "vexart-blur-vertical", src_w, src_h);
 
-    let instance = BackdropBlurInstance {
+    let horizontal = BackdropBlurInstance {
         x: -1.0,
         y: -1.0,
         w: 2.0,
@@ -932,20 +986,77 @@ fn render_blur_image(pctx: &mut PaintContext, image: u64, blur_radius: f32) -> R
         _pad1: 0.0,
         _pad2: 0.0,
     };
+    let vertical = BackdropBlurInstance {
+        _pad0: 1.0,
+        ..horizontal
+    };
 
-    let vertex_buf = pctx
+    let horizontal_buf = pctx
         .wgpu
         .device
         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vexart-blur-instance-buf"),
-            contents: bytes_of(&instance),
+            label: Some("vexart-blur-horizontal-buf"),
+            contents: bytes_of(&horizontal),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+    let vertical_buf = pctx
+        .wgpu
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("vexart-blur-vertical-buf"),
+            contents: bytes_of(&vertical),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
     let Some(src_img) = pctx.images.get(&image) else {
         return Err(ERR_INVALID_HANDLE);
     };
-    let src_bg_ptr: *const wgpu::BindGroup = &src_img.bind_group as *const wgpu::BindGroup;
+    // Preserve nearest filtering for normal image presentation, but use a
+    // linear sampler here so a narrow impulse cannot disappear between taps.
+    let linear_sampler = pctx.wgpu.device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("vexart-blur-linear-sampler"),
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        address_mode_w: wgpu::AddressMode::ClampToEdge,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+        ..Default::default()
+    });
+    let source_bind_group = pctx
+        .wgpu
+        .device
+        .create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("vexart-blur-source-bind-group"),
+            layout: &pctx.wgpu.image_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&src_img.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&linear_sampler),
+                },
+            ],
+        });
+    let mid_bind_group = pctx
+        .wgpu
+        .device
+        .create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("vexart-blur-horizontal-bind-group"),
+            layout: &pctx.wgpu.image_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&mid_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&linear_sampler),
+                },
+            ],
+        });
 
     let mut encoder = pctx
         .wgpu
@@ -956,7 +1067,31 @@ fn render_blur_image(pctx: &mut PaintContext, image: u64, blur_radius: f32) -> R
 
     {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("vexart-blur-pass"),
+            label: Some("vexart-blur-horizontal-pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &mid_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+
+        pass.set_pipeline(&pctx.wgpu.pipelines.backdrop_blur);
+        pass.set_vertex_buffer(0, horizontal_buf.slice(..));
+        pass.set_bind_group(0, &source_bind_group, &[]);
+        pass.draw(0..6, 0..1);
+    }
+
+    {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("vexart-blur-vertical-pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &dst_view,
                 resolve_target: None,
@@ -973,8 +1108,8 @@ fn render_blur_image(pctx: &mut PaintContext, image: u64, blur_radius: f32) -> R
         });
 
         pass.set_pipeline(&pctx.wgpu.pipelines.backdrop_blur);
-        pass.set_vertex_buffer(0, vertex_buf.slice(..));
-        pass.set_bind_group(0, unsafe { &*src_bg_ptr }, &[]);
+        pass.set_vertex_buffer(0, vertical_buf.slice(..));
+        pass.set_bind_group(0, &mid_bind_group, &[]);
         pass.draw(0..6, 0..1);
     }
 

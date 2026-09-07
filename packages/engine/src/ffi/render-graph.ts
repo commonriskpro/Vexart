@@ -197,6 +197,8 @@ type BaseRenderOpFields = {
   fontWeight?: number
   fontStyle?: string
   nodeId?: number
+  /** @internal Active scroll/scissor viewport in absolute render coordinates. */
+  clipBounds?: RenderBounds | null
 }
 
 /** @public */
@@ -293,6 +295,23 @@ function createBaseRenderOpFields(cmd: RenderCommand, renderObjectId: number | n
   }
 }
 
+/**
+ * Resolve JSX transform props after layout has produced the node matrix.
+ *
+ * `walkTree` allocates an effect record before Flexily layout runs, so the
+ * record cannot contain the final matrix at that point. The render graph is
+ * built after layout; hydrate the effect here so native transform sprites
+ * receive the actual matrix instead of the zero-filled placeholder.
+ */
+function resolveEffectTransform(effect: EffectConfig): EffectConfig {
+  const node = effect._node
+  if (!node) return effect
+  const transform = node._transform ?? undefined
+  const transformInverse = node._transformInverse ?? undefined
+  if (effect.transform === transform && effect.transformInverse === transformInverse) return effect
+  return { ...effect, transform, transformInverse }
+}
+
 export function createRectangleRenderOp(cmd: RenderCommand, renderObjectId: number | null): RectangleRenderOp {
   const radius = Math.round(cmd.cornerRadius)
 
@@ -302,7 +321,7 @@ export function createRectangleRenderOp(cmd: RenderCommand, renderObjectId: numb
     radius,
     image: cmd.image ?? null,
     canvas: cmd.canvas ?? null,
-    effect: cmd.effect ?? null,
+    effect: cmd.effect ? resolveEffectTransform(cmd.effect) : null,
   }
 }
 
@@ -469,6 +488,18 @@ function getEffectStateId(effect: EffectConfig, radius = 0) {
   writeF64(params.invert ?? -1)
   writeF64(params.sepia ?? -1)
   writeF64(params.hueRotate ?? -1)
+  // Self-filter fields participate in the effect identity as well. This is
+  // consumed by transformed-sprite caches, so toggling a reactive filter (or
+  // changing one of the individual channels) cannot reuse stale pixels.
+  const selfFilter = effect.filter
+  writeF64(selfFilter?.blur ?? -1)
+  writeF64(selfFilter?.brightness ?? -1)
+  writeF64(selfFilter?.contrast ?? -1)
+  writeF64(selfFilter?.saturate ?? -1)
+  writeF64(selfFilter?.grayscale ?? -1)
+  writeF64(selfFilter?.invert ?? -1)
+  writeF64(selfFilter?.sepia ?? -1)
+  writeF64(selfFilter?.hueRotate ?? -1)
   writeF64(effect.opacity ?? -1)
   if (effect.cornerRadii) {
     writeF64(effect.cornerRadii.tl)
@@ -632,17 +663,19 @@ export function buildRenderGraphFrame(
       rect: cmd.type === CMD.RECTANGLE ? rectId : null,
       text: cmd.type === CMD.TEXT ? textId : null,
     })
+    const clipBounds = getCurrentClipBounds(clipStack)
     if (op?.kind === "effect") {
       const backdrop = createBackdropMetadata(op.effect, cmd, clipStack)
       ops.push({
         ...op,
+        clipBounds,
         backdrop,
         transformStateId: backdrop?.transformStateId ?? getTransformStateId(op.effect),
         clipStateId: backdrop?.clipStateId ?? createClipStateId(clipStack),
         effectStateId: backdrop?.effectStateId ?? getEffectStateId(op.effect, Math.round(op.cornerRadius)),
       })
     } else if (op) {
-      ops.push(op)
+      ops.push({ ...op, clipBounds })
     }
   }
   return { ops }

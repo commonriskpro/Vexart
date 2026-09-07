@@ -44,23 +44,23 @@
 
 ## ⚠️ How to use this document
 
-This PRD is the **master reference** for Vexart. It is read by:
+This PRD records Vexart's product requirements, roadmap, and decisions. Read it
+alongside the current code, tests, and
+[docs/ARCHITECTURE.md](./ARCHITECTURE.md).
 
-1. The founder, for decision-making alignment.
-2. AI agents (Claude sessions), for implementation context.
-3. Future contributors, mentors, and contractors.
+**Guidance for readers:**
 
-**Rules for readers:**
+- Use the requirements and decisions as product context and design intent.
+- The Decisions Log includes historical process and migration decisions; those
+  entries are labeled when they no longer govern current execution.
+- If prose and implementation differ, inspect the current behavior and
+  reconcile the smallest in-scope change rather than stopping automatically.
 
-- This document is **immutable during a phase's execution**. Proposed changes go to `CHANGELOG-PRD.md` and apply to the next phase.
-- When any tension appears between this PRD and code, **the PRD wins** until explicitly updated.
-- Every implementation task (see `/openspec/changes/*`) must cite which section of this PRD it satisfies.
+**Guidance for changes to this document:**
 
-**Rules for changes to this document:**
-
-- Only the founder approves PRD edits.
-- Every edit requires a dated entry in Section 12 (Decisions Log).
-- Renaming, scope changes, or monetization shifts require a full version bump (0.1 → 0.2).
+- Product scope or architecture changes should have founder approval and a dated
+  Decisions Log entry.
+- Renaming, scope changes, or monetization shifts should include a version bump.
 
 ---
 
@@ -524,7 +524,7 @@ Every headless component exposes its render API via a **render prop with context
 
 ### 6.7 TS/Rust paint-forward engine boundary
 
-DEC-014 supersedes the retained scene/layout/render/event portions of the Rust-retained roadmap in [`PRD-RUST-RETAINED-ENGINE.md`](./PRD-RUST-RETAINED-ENGINE.md) and [`ROADMAP-RUST-RETAINED-ENGINE.md`](./ROADMAP-RUST-RETAINED-ENGINE.md). Those documents are historical record for the reverted plan; only the paint/composite/transport portions remain current.
+DEC-014 supersedes the retained scene/layout/render/event portions of the historical Rust-retained roadmap documents (`PRD-RUST-RETAINED-ENGINE.md` and `ROADMAP-RUST-RETAINED-ENGINE.md`). Those documents were removed after the plan was reverted; only the paint/composite/transport portions remain current.
 
 The target ownership model is:
 
@@ -740,7 +740,9 @@ Year 3:
 - **Public repository**: source-available on GitHub. Community contributions welcome via PRs and issues.
 - **8 hours of focused coding per day, 5-6 days per week**: sustainability over sprint.
 - **Bi-weekly architectural reviews**: founder reviews progress with external senior advisor every 2 weeks.
-- **Spec-Driven Development (SDD)**: every change to the code follows the SDD workflow (propose → spec → design → tasks → apply → verify → archive). AI agents execute tasks; founder verifies.
+- **Historical process note**: Earlier v0.9 planning used Spec-Driven Development
+  (SDD: propose → spec → design → tasks → apply → verify → archive). This remains
+  historical context in the Decisions Log, not a current execution requirement.
 
 ---
 
@@ -752,7 +754,7 @@ Timeline assumes 8 hours/day of focused coding, solo, with bi-weekly reviews. To
 
 | Phase | Name | Duration | Output |
 |---|---|---|---|
-| 0 | Architectural alignment | 3 days | PRD + ARCHITECTURE + API-POLICY + SDD bootstrap |
+| 0 | Architectural alignment | 3 days | PRD + ARCHITECTURE + API-POLICY + historical SDD bootstrap |
 | 1 | Structural cleanup | 2 weeks | 4-package monorepo with enforced boundaries |
 | 2 | Native consolidation | 3 weeks | Single `libvexart` Rust binary (Taffy + WGPU, no Zig/Clay) |
 | 2b | Advanced rendering + Tier 1 optimizations | 5-6 weeks | MSDF text + compositor animations + self filters + hints + native Kitty encoding + pipeline cache + GPU memory budget |
@@ -768,7 +770,8 @@ Timeline assumes 8 hours/day of focused coding, solo, with bi-weekly reviews. To
 - [ ] `docs/ARCHITECTURE.md` with the 4-layer architecture and dependency rules.
 - [ ] `docs/API-POLICY.md` with the public/internal contract policy.
 - [ ] `docs/CHANGELOG-PRD.md` initialized.
-- [ ] SDD framework initialized in `/openspec/`.
+- [x] **Historical**: SDD framework was initialized in `/openspec/`; this is
+  retained for records and is not required for current changes.
 - [ ] Final package names confirmed: `@vexart/engine`, `@vexart/primitives`, `@vexart/headless`, `@vexart/styled`.
 - [ ] This PRD finalized and committed.
 
@@ -1047,7 +1050,10 @@ Every architectural or product decision is logged here with date, context, and r
 
 ### 2026-04-17 — DEC-007: SDD (Spec-Driven Development) as execution methodology
 
-**Decision**: All Vexart development follows the SDD workflow: Change Proposal → Spec → Design → Tasks → Apply → Verify → Archive.
+**Historical decision — not a current execution requirement.**
+
+**Decision**: Earlier Vexart development followed the SDD workflow: Change Proposal
+→ Spec → Design → Tasks → Apply → Verify → Archive.
 
 **Rationale**: Founder has limited programming experience and is solo. SDD compensates by making every implementation step atomic, verifiable, and agent-executable. Each task fits in a single Claude session.
 
@@ -1175,7 +1181,9 @@ Every architectural or product decision is logged here with date, context, and r
 
 **Implications**:
 - `docs/ARCHITECTURE.md` describes the post-cutover retained architecture, not the temporary hybrid state.
-- OpenSpec changes for retained phases are mandatory before implementation.
+- **Historical migration guidance**: OpenSpec changes for retained phases were
+  mandatory before implementation. This archived guidance is not a gate for
+  current implementation.
 - Normal terminal presentation must keep raw RGBA out of JS. JS readback remains explicit-only for tests, screenshots, debug, or offscreen APIs.
 - The retained runtime now defaults on for SHM-capable terminals; `VEXART_RETAINED=0` preserves the emergency compatibility-window fallback, and narrower per-feature flags remain available for debugging.
 - Existing loop decomposition remains valuable as a compatibility/fallback shell, but not as permanent rendering ownership.
@@ -1212,7 +1220,9 @@ Every architectural or product decision is logged here with date, context, and r
 **Implications**:
 - Performance work must start with a phase breakdown profiler; no optimization claim is accepted without per-stage numbers.
 - CI gates must distinguish no-op, dirty-region, compositor-only, and full-dashboard workloads.
-- Future SDD changes for performance must cite this decision and update the companion plan when targets or baselines change.
+- **Historical process guidance**: Future SDD performance changes were expected
+  to cite this decision and update the companion plan; this is not a current
+  execution requirement.
 
 **Non-reversal clause**: The program can adjust thresholds based on profiling evidence, but Vexart must keep explicit per-category performance budgets. Dropping the 120fps-class track requires founder approval and a new dated decision.
 
@@ -1276,7 +1286,9 @@ Every architectural or product decision is logged here with date, context, and r
 - **Reconciler**: component that translates JSX create/update/delete calls into internal tree mutations. Vexart uses SolidJS's `createRenderer` universal reconciler.
 - **Render graph**: intermediate representation between layout commands and paint calls. Enables GPU vs CPU routing (CPU removed in Phase 2) and effect composition.
 - **ResourceManager**: the unified GPU memory manager in `libvexart`. Holds all GPU-resident assets under a single budget (default 128 MB). Performs priority-based LRU eviction per frame. Replaces Vexart v0.1's five independent caches.
-- **SDD**: Spec-Driven Development. Execution methodology where every change goes through proposal → spec → design → tasks → apply → verify → archive.
+- **SDD (historical)**: Spec-Driven Development, the former proposal → spec →
+  design → tasks → apply → verify → archive workflow retained here as historical
+  context only.
 - **SDF**: Signed Distance Field. Mathematical representation of shapes that enables GPU-accelerated anti-aliased rendering.
 - **Styled component**: themed component built on top of a headless component with opinionated tokens.
 - **Task priority lane**: a bucket in Vexart's frame budget scheduler. Three lanes: `user-blocking` (input, focus — never skipped), `user-visible` (layer repaint — may split across frames), `background` (cache warming, telemetry — idle-only). Mirrors web platform's `scheduler.postTask` semantics.
@@ -1292,18 +1304,20 @@ Every architectural or product decision is logged here with date, context, and r
 
 ---
 
-## Appendix A — Source of Truth Ownership
+## Appendix A — Documentation Ownership
 
-Different aspects of Vexart are "owned" by different documents and processes. When two sources conflict, the owner below wins:
+These pointers identify where product, architecture, API, and implementation
+information is maintained. They are references for navigation, not execution
+gates; inspect current code and focused checks when resolving a discrepancy.
 
-| Aspect | Owner | Location |
+| Aspect | Reference | Location |
 |---|---|---|
 | Product vision, scope, quality bar | This PRD | `docs/PRD.md` |
 | Architecture principles | `docs/ARCHITECTURE.md` | (derived from this PRD) |
 | API surface policy | `docs/API-POLICY.md` | (derived from this PRD) |
-| Per-phase plans | SDD Change Proposals | `openspec/changes/*/proposal.md` |
-| Detailed behavior specs | SDD Specs | `openspec/changes/*/specs/*.md` |
-| Task decomposition | SDD Tasks | `openspec/changes/*/tasks.md` |
+| Historical phase plans | Historical SDD Change Proposals | `openspec/changes/*/proposal.md` |
+| Historical behavior specs | Historical SDD Specs | `openspec/changes/*/specs/*.md` |
+| Historical task decomposition | Historical SDD Tasks | `openspec/changes/*/tasks.md` |
 | Code implementation | The code itself | `packages/*/src/` |
 | Historical decisions | Decisions Log (§12 above) | `docs/PRD.md` |
 | In-flight PRD edits | `CHANGELOG-PRD.md` | `docs/CHANGELOG-PRD.md` |

@@ -174,6 +174,7 @@ export function walkTree(
   scrollContainerId = 0,
   insideScroll = false,
   depth = 0,
+  insideIsolation = false,
 ) {
   const { layout } = state
   const dfsIndex = state.nodeCount.value++
@@ -188,6 +189,10 @@ export function walkTree(
 
   // Resolve props once per node — used by all code paths below
   const props = resolveProps(node)
+  const isolatesSubtree = node.kind !== "text" && node.children.length > 0 && (
+    props.filter !== undefined
+    || (typeof props.opacity === "number" && props.opacity < 1)
+  )
 
   if (node.kind !== "text") {
     const isScroll = !!(props.scrollX || props.scrollY)
@@ -196,21 +201,21 @@ export function walkTree(
     const isInteractionLayer = shouldPromoteInteractionLayer(node)
     const hasBackdrop = hasBackdropEffect(props)
     let shouldBoundary = false
-    if (shouldPromoteToLayer(node)) {
+    if (!insideIsolation && shouldPromoteToLayer(node)) {
       node._autoLayer = false
       shouldBoundary = true
-    } else if (isInteractionLayer || hasSubtreeTransform) {
+    } else if (!insideIsolation && (isInteractionLayer || hasSubtreeTransform)) {
       node._autoLayer = false
       shouldBoundary = true
-    } else if (hasBackdrop && autoLayerCount < AUTO_LAYER_BUDGET) {
+    } else if (!insideIsolation && hasBackdrop && autoLayerCount < AUTO_LAYER_BUDGET) {
       node._autoLayer = true
       autoLayerCount++
       shouldBoundary = true
-    } else if (node._autoLayer === true && node._unstableFrameCount >= 3) {
+    } else if (!insideIsolation && node._autoLayer === true && node._unstableFrameCount >= 3) {
       node._autoLayer = false
       node._stableFrameCount = 0
       node._unstableFrameCount = 0
-    } else if (node._stableFrameCount >= 3 && hasPromotableArea(node) && autoLayerCount < AUTO_LAYER_BUDGET) {
+    } else if (!insideIsolation && node._stableFrameCount >= 3 && hasPromotableArea(node) && autoLayerCount < AUTO_LAYER_BUDGET) {
       node._autoLayer = true
       autoLayerCount++
       shouldBoundary = true
@@ -528,9 +533,10 @@ export function walkTree(
   const childInsideXform = insideTransform || hasTransform
   const childScrollContainerId = isScrollContainer ? node.id : scrollContainerId
   const childInsideScroll = insideScroll || isScrollContainer
+  const childInsideIsolation = insideIsolation || isolatesSubtree
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i]
-    walkTree(child, state, dir, childInsideXform, childScrollContainerId, childInsideScroll, depth + 1)
+    walkTree(child, state, dir, childInsideXform, childScrollContainerId, childInsideScroll, depth + 1, childInsideIsolation)
   }
 
   layout.closeElement()

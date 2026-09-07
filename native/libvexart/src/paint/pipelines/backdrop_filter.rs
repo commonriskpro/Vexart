@@ -63,7 +63,10 @@ pub fn create(
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             targets: &[Some(wgpu::ColorTargetState {
                 format,
-                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                // Filter destinations are cleared and the shader emits
+                // straight RGBA. Blending would premultiply generated images
+                // before they are composited by the normal image pipeline.
+                blend: None,
                 write_mask: wgpu::ColorWrites::ALL,
             })],
         }),

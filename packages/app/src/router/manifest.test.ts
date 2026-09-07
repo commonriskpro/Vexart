@@ -46,8 +46,10 @@ describe("filesystem route manifest", () => {
 
       expect(manifest.routes).toHaveLength(1)
       expect(existsSync(join(dir, ".vexart/routes.ts"))).toBe(true)
-      expect(await Bun.file(join(dir, ".vexart/routes.ts")).text()).toContain("export const routes")
-      expect(await Bun.file(join(dir, ".vexart/routes.ts")).text()).toContain("/[...notFound]")
+      const generated = await Bun.file(join(dir, ".vexart/routes.ts")).text()
+      expect(generated).toContain("export const routes")
+      expect(generated).toContain("/[...notFound]")
+      expect(generated).toContain('import type { AppRouteDefinition } from "vexart"')
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

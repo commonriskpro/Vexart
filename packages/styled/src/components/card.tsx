@@ -5,7 +5,7 @@
  */
 
 import { radius, space, font, weight, shadows } from "../tokens/tokens"
-import { untrack } from "solid-js"
+import { children as resolveChildren } from "solid-js"
 import type { JSX } from "solid-js"
 import { themeColors } from "../theme/theme"
 
@@ -20,7 +20,7 @@ export interface CardProps {
 /** @public */
 export function Card(props: CardProps) {
   const sm = props.size === "sm"
-  const content = untrack(() => props.children)
+  const content = resolveChildren(() => props.children)
   return (
     <box
       direction="column"
@@ -47,7 +47,7 @@ export interface CardHeaderProps {
 
 /** @public */
 export function CardHeader(props: CardHeaderProps) {
-  const content = untrack(() => props.children)
+  const content = resolveChildren(() => props.children)
   return (
     <box
       direction="column"
@@ -69,7 +69,7 @@ export interface CardTitleProps {
 
 /** @public */
 export function CardTitle(props: CardTitleProps) {
-  const content = untrack(() => props.children)
+  const content = resolveChildren(() => props.children)
   return (
     <text
       color={themeColors.cardForeground}
@@ -91,7 +91,7 @@ export interface CardDescriptionProps {
 
 /** @public */
 export function CardDescription(props: CardDescriptionProps) {
-  const content = untrack(() => props.children)
+  const content = resolveChildren(() => props.children)
   return (
     <text
       color={themeColors.mutedForeground}
@@ -111,7 +111,7 @@ export interface CardContentProps {
 
 /** @public */
 export function CardContent(props: CardContentProps) {
-  const content = untrack(() => props.children)
+  const content = resolveChildren(() => props.children)
   return (
     <box
       paddingLeft={space[6]}
@@ -131,7 +131,7 @@ export interface CardFooterProps {
 
 /** @public */
 export function CardFooter(props: CardFooterProps) {
-  const content = untrack(() => props.children)
+  const content = resolveChildren(() => props.children)
   return (
     <box
       direction="row"
@@ -155,7 +155,7 @@ export interface CardActionProps {
 
 /** @public */
 export function CardAction(props: CardActionProps) {
-  const content = untrack(() => props.children)
+  const content = resolveChildren(() => props.children)
   return (
     <box alignX="right" alignY="top">
       {content}

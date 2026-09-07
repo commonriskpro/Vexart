@@ -1,6 +1,6 @@
-import { splitProps, untrack } from "solid-js"
+import { children as resolveChildren, splitProps } from "solid-js"
 import type { JSX } from "solid-js"
-import type { InteractiveStyleProps } from "@vexart/engine"
+import type { InteractiveStyleProps, TGEProps } from "@vexart/engine"
 import { resolveClassName } from "../styles/class-name"
 
 /** @public */
@@ -24,28 +24,59 @@ function mergeInteractiveStyle(
   return { ...resolved, ...explicit }
 }
 
+function preserveRemovedProps(next: Record<string, unknown>, previous: Set<string>) {
+  for (const key of previous) {
+    if (!(key in next)) next[key] = undefined
+  }
+  for (const key of Object.keys(next)) previous.add(key)
+  return next
+}
+
+function resolvePrimitiveProps(
+  className: string | undefined,
+  style: Partial<TGEProps> | undefined,
+  rest: Record<string, unknown>,
+  hoverStyle: InteractiveStyleProps | undefined,
+  activeStyle: InteractiveStyleProps | undefined,
+  focusStyle: InteractiveStyleProps | undefined,
+  previous: Set<string>,
+) {
+  const resolved = resolveClassName(className).props
+  return preserveRemovedProps({
+    ...resolved,
+    ...(style ?? {}),
+    ...rest,
+    hoverStyle: mergeInteractiveStyle(
+      mergeInteractiveStyle(resolved.hoverStyle as InteractiveStyleProps, style?.hoverStyle as InteractiveStyleProps),
+      hoverStyle,
+    ),
+    activeStyle: mergeInteractiveStyle(
+      mergeInteractiveStyle(resolved.activeStyle as InteractiveStyleProps, style?.activeStyle as InteractiveStyleProps),
+      activeStyle,
+    ),
+    focusStyle: mergeInteractiveStyle(
+      mergeInteractiveStyle(resolved.focusStyle as InteractiveStyleProps, style?.focusStyle as InteractiveStyleProps),
+      focusStyle,
+    ),
+  }, previous)
+}
+
 /** @public */
 export function Box(props: AppBoxProps) {
-  // splitProps preserves SolidJS reactivity — no destructuring
-  const [local, rest] = splitProps(props, ["className", "children"])
-  const resolved = resolveClassName(local.className).props
-  // Deep-merge interactive styles instead of overwriting
-  const merged = {
-    ...resolved,
-    ...rest,
-    hoverStyle: mergeInteractiveStyle(resolved.hoverStyle as InteractiveStyleProps, rest.hoverStyle),
-    activeStyle: mergeInteractiveStyle(resolved.activeStyle as InteractiveStyleProps, rest.activeStyle),
-    focusStyle: mergeInteractiveStyle(resolved.focusStyle as InteractiveStyleProps, rest.focusStyle),
-  }
-  const content = untrack(() => local.children)
-  return <box {...merged}>{content}</box>
+  // Keep every prop read inside this accessor. Object-spreading a Solid props
+  // proxy in the component body eagerly snapshots signal-backed visuals.
+  const [local, rest] = splitProps(props, ["className", "children", "style", "hoverStyle", "activeStyle", "focusStyle"])
+  const content = resolveChildren(() => local.children)
+  const previous = new Set<string>()
+  const visual = () => resolvePrimitiveProps(local.className, local.style, rest as Record<string, unknown>, local.hoverStyle, local.activeStyle, local.focusStyle, previous)
+  return <box {...visual()}>{content}</box>
 }
 
 /** @public */
 export function Text(props: AppTextProps) {
-  const [local, rest] = splitProps(props, ["className", "children"])
-  const resolved = resolveClassName(local.className).props
-  const merged = { ...resolved, ...rest }
-  const content = untrack(() => local.children)
-  return <text {...merged}>{content}</text>
+  const [local, rest] = splitProps(props, ["className", "children", "style", "hoverStyle", "activeStyle", "focusStyle"])
+  const content = resolveChildren(() => local.children)
+  const previous = new Set<string>()
+  const visual = () => resolvePrimitiveProps(local.className, local.style, rest as Record<string, unknown>, local.hoverStyle, local.activeStyle, local.focusStyle, previous)
+  return <text {...visual()}>{content}</text>
 }

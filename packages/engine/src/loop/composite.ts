@@ -541,14 +541,23 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
 
   // ── Step 3: Interaction states ──
   const interactionStart = profile ? performance.now() : 0
+  const interactionDirtyVersion = s.dirty.dirtyVersion()
   const interaction = updateInteractiveStates(s)
   if (profile) profile.interactionMs = performance.now() - interactionStart
+
+  // Pointer callbacks may synchronously mutate Solid state (for example a
+  // tooltip becoming visible on first hover). Reconciliation inserts the new
+  // subtree after the initial walk, so its first layout is otherwise left at
+  // zero until the next frame. A dirty-version change is the narrow signal
+  // that the interaction callback changed the scene graph; re-run walk/layout
+  // before painting this frame.
+  const interactionMutatedTree = s.dirty.dirtyVersion() !== interactionDirtyVersion
 
   // Re-layout on interactive state changes that affect layout (HP-5 optimization).
   // Only borderWidth among InteractiveStyleProps affects layout — all others
   // (backgroundColor, shadow, opacity, etc.) are visual-only and only need repaint.
   // Clicks always trigger re-layout because onPress handlers may mutate state.
-  if (interaction.hadClick || interaction.needsRelayout) {
+  if (interaction.hadClick || interaction.needsRelayout || interactionMutatedTree) {
     const relayoutStart = profile ? performance.now() : 0
     commands = runLayoutPass(s)
     if (profile) profile.relayoutMs = performance.now() - relayoutStart

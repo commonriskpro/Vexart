@@ -60,12 +60,16 @@ await createApp(() => (
 ```bash
 # 1. Install
 bun add vexart
+```
 
-# 2. Configure JSX transform (babel.config.js or similar)
-import { vexartSolidPlugin } from "vexart/solid-plugin"
-# moduleName: "vexart/engine"
+```toml
+# 2. Configure the universal SolidJS JSX transform in bunfig.toml
+preload = ["vexart/solid-plugin"]
+```
 
-# 3. Write your app
+```bash
+# 3. Write your app and run it with the browser condition
+bun --conditions=browser run app.tsx
 ```
 
 ```tsx
@@ -249,7 +253,9 @@ bun typecheck                # TypeScript type check
 cargo test                   # Run Rust unit tests
 
 bun run example              # Run hello world example
-bun run showcase             # Run comprehensive feature showcase (7 tabs)
+bun run showcase             # Run the Void component showcase
+bun run effects-showcase     # Run the GPU visual-effects showcase in Kitty
+bun run showcase:legacy      # Review-only recovery of the 7-tab legacy showcase
 bun run test:visual          # Run 40-scene golden image visual suite
 bun run test:visual:update   # Regenerate visual test references
 bun run build:dist           # Build distributable Vexart npm package
@@ -277,7 +283,9 @@ bun run demo4          # Interactive — focus, signals, keyboard
 bun run demo7          # Scroll containers
 bun run demo8          # Component showcase
 bun run demo9          # Shadow & glow effects
-bun run showcase       # Comprehensive 7-tab feature showcase
+bun run showcase       # Void component showcase
+bun run effects-showcase # GPU visual-effects showcase
+bun run showcase:legacy # Review-only legacy showcase snapshot
 ```
 
 ---

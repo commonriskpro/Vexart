@@ -10,6 +10,7 @@
  */
 
 import { dlopen, FFIType, suffix } from "bun:ffi"
+import { createRequire } from "node:module"
 import { join } from "node:path"
 import { existsSync } from "node:fs"
 
@@ -133,6 +134,22 @@ function platformPackageName(): string {
   return "@vexart-native/win32-x64"
 }
 
+/**
+ * Resolve the platform package relative to this module, not process.cwd().
+ *
+ * A consumer can launch a package entrypoint by absolute path while its cwd is
+ * unrelated to the installed package. `createRequire(import.meta.url)` keeps
+ * Node and Bun's package resolution anchored to the engine bundle in that case.
+ */
+function resolvePlatformPackagePath(pkgName: string, libName: string): string | undefined {
+  try {
+    const resolved = createRequire(import.meta.url).resolve(`${pkgName}/${libName}`)
+    return existsSync(resolved) ? resolved : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** Ordered list of candidate paths to try when loading libvexart. */
 function candidateLibPaths(): string[] {
   const ext = suffix // "dylib" on macOS, "so" on Linux, "dll" on Windows
@@ -141,7 +158,9 @@ function candidateLibPaths(): string[] {
 
   // 1. Platform package in node_modules (npm/bun install)
   const pkgName = platformPackageName()
+  const resolvedPackagePath = resolvePlatformPackagePath(pkgName, libName)
   const nmPaths = [
+    ...(resolvedPackagePath ? [resolvedPackagePath] : []),
     join(cwd, "node_modules", pkgName, libName),
     join(import.meta.dir, "../../../../node_modules", pkgName, libName),
   ]

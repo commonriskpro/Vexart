@@ -1,258 +1,253 @@
 # Vexart — Kitty visual QA tracker
 
-> Documento vivo para no perder el hilo de la verificación visual. Se actualiza
-> después de cada bloque de pruebas. La evidencia visual se captura en Kitty;
-> una prueba headless no cuenta como prueba visual.
+> Documento vivo de evidencia, no una lista de deseos. Una captura demuestra
+> únicamente el estado que aparece en esa captura. Un test headless o un proceso
+> vivo no demuestra que un efecto o interacción se vea correctamente en Kitty.
 
-## Objetivo
+## Alcance y reglas
 
-Hacer que los ejemplos existentes de Vexart funcionen y se vean correctamente
-en Kitty, sin secuencias de escape visibles, pantallas vacías, crashes ni
-artefactos de layout.
+- Ejemplos mantenidos en el alcance: examples/effects-showcase.tsx y
+  examples/void-showcase.tsx.
+- examples/showcase-legacy.tsx es review-only/histórico: su inventario se
+  conserva para no perder cobertura, pero no es prueba de la API actual.
+- examples/facebook-app.tsx queda fuera de alcance por cancelación explícita del
+  usuario. No contar sus capturas, tests ni interacciones.
+- PASS requiere un caso identificable, evidencia atribuible a la OS window Kitty
+  correcta y proceso vivo/stderr vacío cuando aplique.
+- SMOKE significa que una vista o región se vio, pero no prueba todos los casos
+  contenidos.
+- BLOCKED significa que la captura o el input remoto no se puede atribuir con
+  seguridad; no convertirlo en PASS ni FAIL de producto.
+- OPEN significa evidencia de defecto o resultado aún no aislado.
+- HISTORICAL significa evidencia de una pasada anterior, válida para contexto
+  pero no para declarar el estado del run actual.
+- VISUAL ONLY significa que el control no tiene un cambio observable que
+  certifique su handler.
 
-## Entorno verificado
+Este update del tracker no lanza Kitty. Las rutas /tmp/... son evidencia recibida
+de pasadas anteriores o del run coordinado actual, no capturas producidas por
+este documento.
 
-- **Kitty:** `/Applications/kitty.app`, versión 0.48.2.
-- **Control remoto:** socket Unix `/tmp/vexart-kitty-3.sock`.
-- **Ventana de QA:** Kitty OS window independiente (platform window `8786`,
-  child window `18` durante la última pasada).
-- **Evidencia:** capturas de pantalla de Kitty con `screencapture` y control de
-  teclado con `kitten @ send-text`.
-- **Regla importante:** `kitten @ launch --type=window` crea un split dentro de
-  una OS window existente (shell + app) y produce capturas engañosas a la mitad.
-  La QA visual válida usa `kitten @ launch --type=os-window`, que abre la app
-  en una ventana de Kitty separada y completa.
-- **Nota histórica:** algunas capturas inactivas antiguas devolvieron un frame
-  negro cuando se capturó la pantalla completa. La captura dirigida al
-  `platform_window_id` de Kitty (`screencapture -x -l ...`) conserva la ventana
-  correcta sin traerla al frente; cualquier frame negro o de otra ventana se
-  descarta como evidencia inválida.
-- **Protocolo paralelo corregido (desde 2026-09-06):** cada agente conserva su
-  propia Kitty OS window en background, envía teclas/mouse con
-  `kitten @ ... send-text --match id:<child-window>` y captura únicamente su
-  `platform_window_id` con `screencapture -x -l <platform_window_id>`. No se
-  permite `osascript activate`, `focus-window` ni captura de pantalla completa;
-  si el PNG no se puede atribuir a esa ventana, la prueba queda `BLOCKED` y no
-  se cuenta como PASS/FAIL.
+## Protocolo Kitty
 
-## Cambios realizados
+La evidencia válida usa una Kitty OS window independiente. El control remoto
+envía teclas/mouse al child window y captura sólo su platform_window_id con
+screencapture -x -l <id>. No se permite activar la ventana, traerla al
+foreground ni usar captura de pantalla completa. Un PNG negro no se descarta
+por su color: si la OS window/child window no se puede atribuir, queda BLOCKED;
+si queda atribuido y un positive-control conocido sí renderiza en la misma
+superficie, queda FAIL/OPEN de producto aunque stderr esté vacío. Si también
+fallan el paquete Kitty rojo y kitten icat directos, el caso queda BLOCKED por
+la superficie Kitty/WindowServer, no se atribuye a Vexart. Una ráfaga sintética
+no sustituye navegación controlada; cada frame se clasifica por atribución,
+settlement y positive control observados.
 
-### Render y Kitty
+Metadatos históricos de la última pasada: Kitty 0.48.2,
+ /Applications/kitty.app, socket /tmp/vexart-kitty-3.sock. No asumen que ese
+estado siga vigente; la ventana y los IDs deben revalidarse en cada run.
 
-- `packages/engine/src/ffi/gpu-renderer-backend.ts`
-  - Añadido factory interno de backend sin presentación Kitty para render-to-buffer.
-  - El frame final usa un ID Kitty estable por proceso y el protocolo de frames
-    animados; así se evita reemplazar/borrar la imagen raíz en cada tick.
-  - Las capas retenidas se registran también durante reuse para que el compose
-    final siempre tenga una escena completa.
-- `packages/engine/src/loop/paint.ts`
-  - El compose final se completa después de updates nativos de capas; evita que
-    una actualización asíncrona deje visible un canvas incompleto.
-- `native/libvexart/src/kitty/encoder.rs`
-  - Transmisión inicial con placement explícito y updates `a=f`/`a=a`.
-- `native/libvexart/src/kitty/transport.rs`
-  - Coalescencia por hash de payload y tracking de frames por imagen.
-  - Transporte directo y SHM comparten la misma semántica de frame/placement.
-- `packages/engine/src/testing/render-to-buffer.ts`
-  - Los golden/headless tests ya no escriben escapes Kitty en stdout.
+## Evidencia automatizada y estado del run
 
-### Reactividad y componentes
-
-- `packages/headless/src/inputs/{button,checkbox,input,slider,switch,textarea}.tsx`
-  - Render props envueltos en `createMemo`; el tracking de focus/blink sale del
-    render para evitar recursión de SolidJS durante edición/focus.
-- `packages/headless/src/containers/tabs.tsx`
-  - El árbol de pestañas mantiene un contenedor estable y separa las regiones
-    reactivas de headers/panel; cambiar focus o contenido ya no remonta
-    subárboles interactivos ni recursa.
-- `packages/headless/src/inputs/{button,checkbox,slider,switch}.tsx`
-  - Cada render prop queda dentro de un wrapper `fit` estable; al cambiar focus,
-    pressed o checked el control conserva su slot y no se intercambia con su
-    hermano.
-- `packages/app/src/components/primitives.tsx` y
-  `packages/styled/src/components/card.tsx`
-  - Children capturados con `untrack` para evitar que cada señal de un control
-    reconstruya subárboles completos.
-
-### Visuales y tooling
-
-- `examples/void-showcase.tsx`
-  - Layout de seis pestañas con ancho completo, header legible y debug opt-in.
-  - La ayuda de teclado vive en el subtítulo del header; se retiró el footer
-    pegado al borde inferior porque Kitty puede recortar esa última fila.
-- `packages/styled/src/components/tabs.tsx` y componentes de texto/diff/markdown
-  - Dirección/anchos corregidos para que filas, paneles y columnas se pinten
-    horizontalmente como fueron diseñados.
-- `packages/internal-devtools/src/{kitty,server}.ts`
-  - El control remoto busca el binario instalado de Kitty (incluido `.app`).
-
-### Correcciones implementadas en esta pasada (2026-09-06)
-
-- `packages/engine/src/loop/composite-scroll.ts`
-  - El extent de un scroller recorre descendientes y textos directos, pero se
-    detiene en scrollers anidados. El wheel ya mueve el contenido del ejemplo.
-- `packages/engine/src/ffi/{flex-sync,text-layout}.ts` y `loop/walk-tree.ts`
-  - Wrapping responsive con `whiteSpace`/`wordBreak`, medición con opciones de
-    fuente, wrappers fit-content y `flexShrink` para columnas estrechas.
-- `packages/styled/src/components/button.tsx` y
-  `packages/headless/src/inputs/button.tsx`
-  - Enter/Space/mouse comparten activación, el foco se conserva y los estados
-    hover/active/focus tienen contraste. Los botones intrínsecos usan padding
-    simétrico en vez de una justificación centrada que podía pintar el texto
-    fuera del rectángulo durante la medición.
-- `packages/headless/src/{containers/tabs,collections/list,collections/table}.tsx`
-  - Headers, filas y celdas usan `<For>` estable; Tab/Down ya no desmonta el
-    panel ni termina el proceso Bun.
-- `packages/engine/src/loop/layout-adapter.ts` y
-  `packages/headless/src/overlays/dialog.tsx`
-  - Floating root se separa de su padre lógico, respeta ROOT/PARENT/ELEMENT,
-    attach points, offsets, viewport y z-order; Escape cierra sólo el dialog
-    superior aunque el foco esté en un hijo.
-
-## Evidencia automatizada
-
-| Prueba | Resultado | Evidencia |
+| Capa | Estado | Evidencia / interpretación |
 | --- | --- | --- |
-| TypeScript typecheck | ✅ 0 errores | `bun typecheck` |
-| Tests TypeScript | ✅ 358 pass / 0 fail / 4 skip / 765 expect | `bun test` |
-| Tests Rust | ✅ 146 pass / 0 fail | `cargo test` en `native/libvexart` |
-| Golden render | ✅ pass (800×600, pixel-perfect) | `bun run test:golden:check` |
-| Native release build | ✅ pass | `cargo build --release` |
-| Kitty socket/devtools | ✅ responde | `kitten @ ... ls` |
-| Regresiones enfocadas | ✅ 19 pass / 0 fail | `bun --conditions=browser test` (layout, text, scroll, Tabs/List/Table, Button, Dialog) |
+| TypeScript typecheck — final | AUTOMATED PASS (TS only) | /tmp/vexart-phase17-final-types.log: typecheck passed. No Kitty proof. |
+| TypeScript typecheck — prior verified | HISTORICAL | /tmp/vexart-phase17-type-verified.log: typecheck passed before the final frozen run. |
+| Rust/native tests — prior baseline | HISTORICAL | /tmp/vexart-phase17-native.log: 157 unit + 1 blur + 3 transform = 161 pass, 0 fail; release build completed. |
+| Rust/native tests — retry final | AUTOMATED PASS (native only) | Retry final reports 163 pass, 0 fail: 157 unit + alpha + blur + 3 AA + shadow. Target-premul opacity/AA and shadow tests pass; no Kitty proof. |
+| Rust/native tests — prior alpha correction | HISTORICAL | /tmp/vexart-phase17-final-native.log: 162 pass, 0 fail before the retry shadow verification; prior root 161/0 remains historical. |
+| Solid reactivity focused | AUTOMATED PASS (TS only) | /tmp/vexart-phase17-reactivity.log: compiler real con --conditions=browser --preload ./solid-plugin.ts, 5/5 tests, 36 assertions. Kitty pendiente. |
+| Void interaction smoke — final | AUTOMATED PASS (TS only) | /tmp/vexart-phase17-final-interaction.log: void smoke pass; no Kitty input/presentation proof. |
+| Production browser-unit run — retry final | AUTOMATED PASS (TS only) | /tmp/vexart-retry-final-unit.log: 389 pass, 0 fail, 924 assertions across 57 files. This is the latest automated gate; Kitty remains case-scoped. |
+| Production browser-unit run — prior final | HISTORICAL | /tmp/vexart-phase17-final-unit.log: 387 pass, 0 fail, 919 assertions; prior 384/0, 379/5, 364/5, and no-plugin 360/4 remain historical. |
+| Golden 800×600 — prior exact | HISTORICAL | /tmp/vexart-phase17-golden-aa.log: 480000/480000 pixels before retry shadow correction; the old 0.58% / 2,796-pixel mismatch history is preserved and no reference was mass-refreshed. |
+| Golden after native alpha — prior exact | HISTORICAL | /tmp/vexart-phase17-final-golden.log: 480000/480000 before retry shadow correction; do not treat as current after shadow changes. |
+| Golden after retry shadow correction | OPEN | /tmp/vexart-retry-final-golden.log: 3858/480000 pixels differ, max delta 78 (0.80%); no reference refresh. Current native/golden reconciliation remains open. |
+| Transform/native AA focused | AUTOMATED PASS (native only) | Focused native 3/3 in tests/image_transform.rs (identity/90°/45°); the old golden is historical after retry shadow correction. Kitty C1/C2 remains pending. |
+| Full visual suite — phase-start baseline | OPEN/HISTORICAL | /tmp/vexart-phase17-visual-before.log: 2 pass / 39 fail. Preservado como punto de comparación, no como estado actual. |
+| Full visual suite — after-AA intermediate | HISTORICAL | /tmp/vexart-phase17-visual-after-aa.log: 3 pass / 38 fail. Preservado para comparar; el run posterior siguió cambiando layout/filter. |
+| Full visual suite — prior frozen root | HISTORICAL | /tmp/vexart-phase17-final-visual.log: 2 pass / 39 fail before retry effects/shadow work. |
+| Full visual suite — retry final | OPEN | /tmp/vexart-retry-final-visual.log: 2 pass / 39 fail after retry fixes. Remaining failures are unreconciled reference/visual cases; no blanket stale-reference claim. |
+| Layout axis-aware FIT/grow | AUTOMATED PASS (TS only) | /tmp/vexart-phase17-layout-root.log: 12 pass, 29 assertions covering explicit FIT/grow fixes. Kitty resize/re-layout proof remains pending. |
+| Effects pixel contracts — prior run | AUTOMATED PASS (HISTORICAL native/TS only) | /tmp/vexart-phase17-effects-contracts.log: six groups passed (dense blur, 7 independent filters, rounded mask, solid-fill scissor, group opacity, opacity/gradients/shadow/glow/multishadow/corners). Crop-equivalence and halo clipping were still pending; no Kitty proof. |
+| Effects pixel contracts — interim mismatch | HISTORICAL | /tmp/vexart-phase17-effects-root.log recorded 7 pass / 1 fail; an intermediate report showed scrolled shadow color [118,42,63] versus no-scroll [40,66,99]. Superseded by the verified crop-equivalence run below. |
+| Effects pixel contracts — verified intermediate | HISTORICAL | /tmp/vexart-phase17-effects-verified.log: all 8 pass, including interior crop equivalence, outside-halo clipping, and positive controls. |
+| Effects pixel contracts — retry final | AUTOMATED PASS (native/TS only) | /tmp/vexart-retry-effects-contracts.log: all 8 groups pass, including strong halo, interior crop equivalence, outside-halo clipping, and positive controls. No golden/Kitty equivalence claim. |
+| Shadow focused tests — retry final | AUTOMATED PASS (native/TS only) | /tmp/vexart-retry-shadow-tests.log: 13 tests / 93 assertions pass. Current golden mismatch remains separate OPEN evidence. |
+| Shadow-band diagnosis | PASS (scoped retry; golden separate) | Native signed ±y tests are correct; pixel repro source green (120,82) changed [34,197,94] → [18,104,50] before the fix because the shader hollow shifted rect and TS `flushAll` painted source before shadow. Native solid-shadow interior/Gaussian-outside fix, tests/shadow.rs, and TS per-node paint order are verified by retry; current golden mismatch remains separate OPEN evidence. |
+| Reviewer-confirmed group defect — transformed container + nested filter | AUTOMATED PASS (automated only) | `/tmp/vexart-phase17-final-effects.log` plus exact reviewer rerun closes the transform-loss case; Kitty visual proof remains pending. |
+| Reviewer-confirmed group defect — overflow visible children | AUTOMATED PASS (automated only) | `/tmp/vexart-phase17-final-effects.log` plus exact reviewer rerun closes the parent-dimension clipping case; Kitty visual proof remains pending. |
+| Reviewer-confirmed group defect — transformed filtered output + scroll | AUTOMATED PASS (automated only) | `/tmp/vexart-phase17-final-effects.log` plus exact reviewer rerun closes the transformed-scissor leak case; Kitty visual proof remains pending. |
+| Kitty effects fresh capture | BLOCKED (Kitty surface control) | Las capturas effects (child 29/platform 10876) son negras, pero el paquete Kitty rojo sintético y kitten icat directos también fueron negros en ventanas nuevas 10912/10916. No es prueba de un fallo Vexart; repetir sólo en una ventana con positive control visible. |
+| Kitty legacy initial capture | SMOKE/HISTORICAL | /tmp/vexart-phase17-legacy-initial.png es atribuible y sirve para revisar la vista inicial, no para certificar todas sus pestañas. |
+| Kitty retry positive control | PASS (Kitty control only) | `/tmp/vexart-retry-positive-11082.png`, platform 11082, red packet rendered with background capture. This recovers the prior surface block but does not certify Vexart cases. |
+| Kitty retry effects/interaction | PASS (Kitty scoped) + PARTIAL overall | New window platform 11111/PID 51544: `/tmp/vexart-retry-effects-fixed.png` has no colored shadow bands and real outer glow behind source; `/tmp/vexart-retry-glass-scroll-{before,after}.png` plus wheel×3 exposes Sepia/Hue/Contract. Focus false initially and after Glass scroll, stderr empty. This closes E1/E2/E3/G7-G9 only; it does not certify the full sequence. |
+| Kitty void retry | SMOKE/PARTIAL | Void window platform 11097: `/tmp/vexart-phase17-void-retry-{inputs2,display2,collections2,code-docs2,overlays2,typography2}.png` shows six tabs. Dialog open is not verified; transient black captures after input recover in 2–3s and remain OPEN. |
+| Kitty final validation | PARTIAL/PENDING | Effects subset is scoped PASS, but void modal/black recovery and remaining cases are open. Legacy window 5 and current effects window 43 are retained; no lock settings changed. Automated final logs do not close presentation/input proof. |
+| Performance smoke — phase-start | OPEN/HISTORICAL | /tmp/vexart-phase17-perf-before.json: 1080p p95 15.37ms, dirty 20.12ms, compositor 10.69ms, hover 20.40ms, scroll 10.69ms, no-op 0.004ms. Muestra preliminar. |
+| Performance smoke — prior after corrections | HISTORICAL | /tmp/vexart-phase17-perf-after.json: 800×600 p95 6.85ms, 1080p 15.43ms, no-op 0.0022ms, dirty 20.70ms, compositor 10.53ms, hover 20.49ms, scroll 10.39ms. |
+| Performance smoke — final | OPEN (targets unmet) | /tmp/vexart-phase17-perf-final.json, 30 warm frames: 800×600 p95 7.43ms (before 6.58, +13%), 1080p 15.22ms (before 15.37), no-op 0.00258ms, dirty 19.97ms, compositor 10.37ms, hover 20.69ms, scroll 10.40ms. PRD targets remain unmet; profile the 800×600 regression; no overall optimization claim. |
 
-## Matriz visual actual
+## Matriz de ejemplos (estado honesto)
 
-### Ejemplos
+| Ejemplo | Captura atribuible | Qué demuestra | Qué no demuestra | Estado |
+| --- | --- | --- | --- | --- |
+| effects-showcase.tsx | Retry fixed effects/Glass subset; four tabs visible | `/tmp/vexart-retry-effects-fixed.png` and Glass scroll before/after show no colored shadow bands, outer glow behind source, and Sepia/Hue/Contract exposed after wheel×3 | Focus-safe scoped subset only; Composition/States and remaining exact interactions are not certified | PARTIAL KITTY + SCOPED PASS |
+| void-showcase.tsx | Retry six-tab smoke | `/tmp/vexart-phase17-void-retry-{inputs2,display2,collections2,code-docs2,overlays2,typography2}.png` shows all six tabs | Dialog open and transient black recovery remain unverified; no full interaction proof | SMOKE/PARTIAL KITTY |
+| showcase-legacy.tsx | vista inicial en /tmp/vexart-phase17-legacy-initial.png | El snapshot review-only puede arrancar y mostrar su vista inicial | No es contrato de la API actual ni certifica sus pestañas restantes | HISTORICAL |
+| facebook-app.tsx | ninguna | Nada | Todo | OUT OF SCOPE |
 
-| Ejemplo | Lanzado en Kitty | Se ve | stderr/crash | Estado |
-| --- | ---: | ---: | ---: | --- |
-| `examples/void-showcase.tsx` | ✅ | ✅ | ✅ vacío / proceso vivo | verificado |
-| `examples/facebook-app.tsx` | — | — | — | fuera de alcance; QA cancelada por el usuario |
+## Inventario finito: effects-showcase.tsx
 
-### Void Component Showcase
+Este inventario sale del JSX actual. La columna de estado no se infiere del
+nombre de la prop: requiere evidencia del caso indicado.
 
-Las seis vistas se visitaron con flecha derecha en Kitty y se capturaron en
-ventanas OS independientes con `screencapture -l` dirigido al target:
+| ID | Caso esperado | Estado actual | Nota |
+| --- | --- | --- | --- |
+| E1 | shadow de una capa | PASS (Kitty scoped) | `/tmp/vexart-retry-effects-fixed.png` shows no colored band above the single shadow after the native + TS per-node paint-order fix; focus false, stderr empty. Golden remains OPEN separately. |
+| E2 | shadow como array/multi-shadow | PASS (Kitty scoped) | Same fixed retry capture shows no colored band above multi-shadow; exact scoped Kitty proof only. |
+| E3 | glow exterior | PASS (Kitty scoped) | Fixed retry shows real outer glow behind source; no claim for remaining glow combinations. |
+| E4 | gradient linear con ángulo | SMOKE/HISTORICAL | Igual. |
+| E5 | gradient radial | SMOKE/HISTORICAL | Igual. |
+| E6 | cornerRadii por esquina + opacity | SMOKE/HISTORICAL | Igual. |
+| G1 | backdropBlur sobre fondo visible | SMOKE/HISTORICAL | La tarjeta fue corregida para dejar gradiente detrás; falta caso aislado actual. |
+| G2 | backdropBrightness | SMOKE/HISTORICAL | No declarar por una diferencia de color no cuantificada. |
+| G3 | backdropContrast | SMOKE/HISTORICAL | Swatch independiente en la galería; falta una aserción visual atribuible actual. |
+| G4 | backdropSaturate | SMOKE/HISTORICAL | Swatch independiente en la galería; falta una aserción visual atribuible actual. |
+| G5 | backdropGrayscale | SMOKE/HISTORICAL | Swatch independiente; falta una aserción visual atribuible al swatch. |
+| G6 | backdropInvert | SMOKE/HISTORICAL | Swatch independiente; se observó diferencia histórica, no run actual. |
+| G7 | backdropSepia | PASS (Kitty scoped) | `/tmp/vexart-retry-glass-scroll-{before,after}.png`; targeted wheel ×3 exposes Sepia after live `scrollY` gallery fix. |
+| G8 | backdropHueRotate | PASS (Kitty scoped) | Same live scroll retry exposes Hue; focus false after scroll and stderr empty. |
+| G9 | Filter contract card / stripe-backed swatches | PASS (Kitty scoped) | Same live scroll retry exposes Contract card; not an extra API filter and not a full gallery PASS. |
+| C1 | transform.rotate | AUTOMATED PASS (native only) | Native AA focused 3/3; reference regenerada previa no es la prueba. Kitty actual pendiente. |
+| C2 | transform.scale + translateY | AUTOMATED PASS (native only) | Native AA focused 3/3; reference regenerada previa no es la prueba. Kitty actual pendiente. |
+| C3 | self filter grayscale + contrast | AUTOMATED PASS (TS only) | /tmp/vexart-phase17-self-root.log: 11 tests / 88 assertions. Kitty visual proof remains pending; la captura naranja histórica no se convierte en Kitty PASS. |
+| C4 | retained layer + willChange + opacity/glow | SMOKE/HISTORICAL | Composition se vio; no hay prueba aislada de reuse/composite. |
+| S1 | Button default/outline: hover, active, focus | PARTIAL | States se vio; no hay matriz de los tres estados con input atribuible. |
+| S2 | Box focusable: hover, active, focusStyle | PARTIAL | El box alternó históricamente; cobertura de cada pseudoestado abierta. |
+| S3 | Press mouse dos veces y contador 0→2 | PASS (Kitty partial) | Retry states shows actual mouse press 0→1 in `/tmp/vexart-retry-states-press.png`; the second-press 0→2 sequence remains unverified. |
+| S4 | Arm comparte señal con Button y Box; re-layout same-frame | PASS (Kitty partial) | `/tmp/vexart-retry-states-arm.png` shows Arm→Armed and Box Enabled green; focus returned false for States, so full background-safe sequence remains pending. |
 
-| Vista | Visual | Navegación | Pendiente de interacción profunda |
-| --- | ---: | ---: | --- |
-| Inputs | ✅ | ✅ | Textarea: captura parcial PASS; suite cursor/delete/multilínea BLOCKED por foco inesperado |
-| Display | ✅ | ✅ | variantes y contraste de botones PASS (`/tmp/vexart-fix-scroll-display.png`); foco/teclado profundo pendiente |
-| Collections | ✅ | ✅ | List/Table y Tab+Down PASS; ScrollView directo PASS tras fix (`/tmp/vexart-fix-scroll-after.png`) |
-| Code & Docs | ✅ | ✅ | Code/Diff/Markdown PASS; scroll N/A (sin contenedor) |
-| Overlays | ✅ | ✅ | geometría cerrada y botón `Open Dialog` PASS (`/tmp/vexart-fix-final-overlays.png`); modal abierto queda BLOCKED por captura background-safe |
-| Typography | ✅ viewport normal | ✅ | wrapping responsive PASS en tests y viewport normal (`/tmp/vexart-fix-scroll-typography.png`); falta captura estrecha válida |
+Conclusión de la galería: 4/4 es sólo smoke de vistas históricas. No es 23/23
+efectos/estados. E1/E2/E3 y G7-G9 tienen PASS Kitty scoped en la retry window,
+pero C3 sólo tiene regresión automatizada (11/88), States/Composition y el
+resto de casos aún no tienen proof exacta; el retry no convierte la galería en
+PASS total ni resuelve el golden 0.80% mismatch.
 
-### Facebook clone
+## Inventario finito: void-showcase.tsx
 
-La revisión quedó cancelada por solicitud del usuario y está fuera de alcance.
-`examples/facebook-app.tsx` se conserva sin stagear ni modificar en el backup;
-no se ejecutarán más acciones sobre ese ejemplo.
+Los siguientes 25 casos se derivan de los handlers y controles presentes en el
+ejemplo.
 
-## Conteo honesto al último update
+| ID | Tab / caso | Estado actual | Evidencia o bloqueo |
+| --- | --- | --- | --- |
+| V1 | navegación a Inputs, Display, Collections, Code & Docs, Overlays, Typography | SMOKE (Kitty scoped) | Void retry captures show all 6 tabs; exact interaction cases remain separate. |
+| V2 | VoidInput: escribir texto | PASS (HISTORICAL) | xyz visible en captura dirigida. |
+| V3 | VoidTextarea: multilinea, cursor, delete/backspace | AUTOMATED SMOKE (TS only) | La secuencia automatizada cubre multilinea, cursor y delete/backspace; falta Kitty input/capture atribuible. |
+| V4 | Checkbox mutable Enable notifications | PASS (HISTORICAL) | Toggle visible en captura dirigida. |
+| V5 | Checkbox estático Marketing emails | VISUAL ONLY | No tiene onChange; no hay interacción esperada. |
+| V6 | Switch mutable Dark mode | PASS (HISTORICAL) | Toggle visible. |
+| V7 | Switch estático Auto-save | VISUAL ONLY | No tiene onChange; no hay interacción esperada. |
+| V8 | RadioGroup seleccionar Option B | PASS (HISTORICAL) | Selección visible. |
+| V9 | Select abrir menú y elegir Rust | PASS (HISTORICAL) | Secuencia dirigida visible. |
+| V10 | Combobox escribir filtro sin resultados | PASS (HISTORICAL) | Query sin resultados visible; elegir una opción queda abierto. |
+| V11 | Slider 42→86 | PASS (HISTORICAL) | Cambio visible en captura dirigida. |
+| V12 | Button variants default/secondary/outline/ghost/destructive | VISUAL ONLY | Handlers vacíos; sólo apariencia. |
+| V13 | Button sizes xs/sm/default/lg | VISUAL ONLY | Sólo apariencia. |
+| V14 | Card footer Cancel/Save | VISUAL ONLY | Handlers vacíos; sólo apariencia. |
+| V15 | List teclado: seleccionar Settings | PASS (HISTORICAL) | Captura dirigida. |
+| V16 | List mouse: seleccionar Notifications | PASS (HISTORICAL) | Captura dirigida. |
+| V17 | ScrollView wheel y scrollbar | PASS (HISTORICAL) | /tmp/vexart-fix-scroll-after.png. |
+| V18 | Table click row 5 | PASS (HISTORICAL) | Captura de click dirigida. |
+| V19 | Table Tab + Down | AUTOMATED PASS (TS only) | El gate retry final `/tmp/vexart-retry-final-unit.log` está 389/0; el conflicto de teclado Kitty histórico sigue sin captura atribuible. |
+| V20 | Code/Diff/Markdown render | PASS (HISTORICAL SMOKE) | Región visible; no es interacción. |
+| V21 | Open Dialog y mantener overlay cerrado | SMOKE/HISTORICAL | El botón Open Dialog es visible en /tmp/vexart-fix-final-overlays.png; no prueba abrir/interactuar con el modal. |
+| V22 | Dialog abierto; Cancel/Delete cierran | OPEN (Kitty; automated pass) | `/tmp/vexart-phase17-final-overlay.log` named dialog-layout/top-modal group passes, but retry did not verify the dialog open state; transient black captures after input recover in 2–3s and remain undismissed. |
+| V23 | Escape cierra el dialog superior | AUTOMATED PASS (TS only) | Final overlay groups include dropdown-items Escape/select; falta captura background-safe con modal abierto. |
+| V24 | Toast success/error/info | UNVERIFIED | Handlers existen; no hay captura atribuible de cada variante. |
+| V25 | Tooltip en Button y Badge por hover | AUTOMATED PASS (TS only) | Final overlay verification covers all 8 tooltip placement cases on the first frame, including popover anchor; Kitty hover/capture remains pending. |
 
-- **Ejemplos lanzados visualmente en esta pasada:** 1/1 dentro de alcance
-  (`void-showcase`; Facebook excluido).
-- **Vistas principales capturadas:** 6/6 Showcase.
-- **Smoke de navegación por teclado:** 6/6 pestañas Showcase.
-- **Funciones de interacción profunda verificadas visualmente:** 12/≈20.
-  `VoidInput` acepta texto (`xyz`), Checkbox cambia de estado, Radio selecciona
-  Option B, Switch conserva el orden al activarse, Select abre su menú y luego
-  selecciona `Rust` haciendo click sobre la opción, Combobox acepta una búsqueda
-  sin resultados, Slider cambia de 42 a 86 y VoidList selecciona `Settings` por
-  teclado y `Notifications` por click. Se suman wheel del ScrollView y la ruta
-  `Tab + Down` de Table; cada acción dejó el proceso vivo y stderr vacío en una
-  ventana Kitty independiente.
-- **Smoke de reactividad:** Tab + escritura después del arreglo de Tabs no
-  produce `RangeError` ni remount recursivo; la captura standalone conserva el
-  layout completo.
-- **QA visual corregida:** Code & Docs, Display, Collections (incluido wheel del
-  ScrollView), Typography normal y Overlays cerrado se capturaron en ventanas
-  Kitty independientes con PID vivo y stderr vacío. Table sobrevive `Tab + Down`
-  en `/tmp/vexart-qa-table-bg-final3.keyboard.png`.
-- **QA automatizada de regresión:** 19 pruebas enfocadas cubren layout floating,
-  wrapping, scroll, estabilidad de Tabs/List/Table, activación/contraste de
-  Button y Escape de Dialog; el golden sigue pixel-perfect.
-- **QA bloqueada, no fallo de producto:** Textarea sólo tiene escritura parcial
-  visible; la suite de cursor/delete/multilínea no se puede certificar porque el
-  foco Kitty cambió durante la captura. Resize cambió la geometría correctamente
-  (`166×49 ↔ 128×46`), pero las capturas posteriores quedaron negras sin activar
-  la ventana, así que el re-layout visual queda pendiente.
-- **Facebook clone:** la revisión adicional quedó cancelada y fuera de alcance
-  por solicitud del usuario; no se incluye en los pendientes actuales.
-- **Pendiente principal:** repetir Textarea y Resize con una captura background-safe
-  válida. La apertura visual del modal también queda BLOCKED porque el input
-  remoto pierde el frame al cambiar el foco; la geometría y Escape sí tienen
-  cobertura automatizada.
+Los tres registros de defectos de grupo en la tabla de evidencia son hallazgos
+confirmados por revisión, no tres API functions ni IDs adicionales del gate:
+ahora tienen una corrección automatizada, pero aún requieren Kitty proof.
 
-## Próximo bloque de trabajo
+## Casos globales de runtime
 
-1. Inputs: repetir edición/cursor profunda de Textarea sin perder el foco de la
-   ventana objetivo.
-2. Resize: repetir el ciclo `166×49 → 128×46 → 166×49` con captura dirigida
-   no-negra; la geometría ya cambia correctamente.
-3. Overlays: conseguir una captura válida con el modal abierto y verificar
-   Tooltip después de cerrar, sin activar otra ventana.
-4. Revisar `git diff` y eliminar únicamente los archivos QA temporales fuera del
-   repositorio.
+Los 48 rows anteriores son los casos source-derived de las dos galerías,
+incluido el Filter contract card de Glass. Estos dos casos globales completan el
+gate Phase 17 (50 case IDs en total); no son 50 API functions: son casos de
+evidencia, y algunos pueden ejercitar una misma familia de render o handler.
 
-## Capturas relevantes
+| ID | Caso global | Estado actual | Evidencia o bloqueo |
+| --- | --- | --- | --- |
+| R1 | Resize 166×49 → 128×46 → 166×49 y re-layout visual estable | BLOCKED | La geometría cambió en una prueba, pero capturas posteriores fueron negras sin atribución válida. |
+| N1 | Navegación rápida entre tabs sin frame negro, RangeError o stack overflow | AUTOMATED PASS (TS only) + BLOCKED Kitty | Root reports 100 right/tab cycles without stack overflow; current Kitty black frame remains BLOCKED by the red/icat positive-control surface failure. Keep the historical RangeError separate from the presentation block. |
 
-Las capturas son artefactos temporales fuera del repositorio; se conservan para
-comparar durante esta sesión:
+Hallazgos globales: R1 y N1 permanecen separados de los 48 rows source-derived.
+Resize 166×49 ↔ 128×46 cambió geometría en una prueba, pero las capturas
+posteriores fueron negras (BLOCKED); no certificar re-layout visual. Tab +
+escritura ya cubre 100 ciclos sin stack overflow en automatización, pero el
+frame negro actual sigue BLOCKED por el positive control físico Kitty y no se
+convierte en un FAIL de producto.
 
-- `/tmp/vexart-stable-inputs.png`
-- `/tmp/vexart-stable-right.png` (Display)
-- `/tmp/vexart-stable-next.png` (Collections)
-- `/tmp/vexart-final-code.png`
-- `/tmp/vexart-final-overlays.png`
-- `/tmp/vexart-final-typography.png`
-- `/tmp/vexart-facebook-full.png`
-- `/tmp/vexart-standalone-window.png` (OS window Kitty completa)
-- `/tmp/vexart-standalone-input-xyz.png` (edición + Tab sin crash)
-- `/tmp/vexart-wrapper-toggle.png` (Checkbox)
-- `/tmp/vexart-wrapper-radio.png` (Radio Option B)
-- `/tmp/vexart-wrapper-switch2.png` (Switch y orden estable)
-- `/tmp/vexart-wrapper-select-open.png` (Select abierto)
-- `/tmp/vexart-wrapper-combo.png` (Combobox sin resultados)
-- `/tmp/vexart-final-proof-clean.png` (pasada standalone final: xyz, toggles,
-  Radio B, Select Rust, Combobox rs y Slider 86; stderr vacío)
-- `/tmp/vexart-facebook-confirm.png` (Confirm friend request + feedback visual)
-- `/private/tmp/vexart-qa-typography-typography.png` (Typography normal)
-- `/private/tmp/vexart-qa-typography-narrow.png` (Typography estrecho: clipping)
-- `/private/tmp/vexart-qa-typography-code-narrow-before.png` y
-  `/private/tmp/vexart-qa-typography-code-narrow-after-pagedown.png`
-  (Code & Docs estrecho: clipping sin scroll)
-- `/tmp/vexart-qa-code-bg-before.png` y `/tmp/vexart-qa-code-bg-after.png`
-  (Code & Docs: captura dirigida en background, PASS)
-- `/tmp/vexart-qa-list-bg-collections2.png`,
-  `/tmp/vexart-qa-list-bg-list-keyboard2.png`,
-  `/tmp/vexart-qa-list-bg-list-click2.png`,
-  `/tmp/vexart-qa-list-bg-direct-scroll2b.png`
-  (List PASS; ScrollView directo FAIL, captura dirigida en background)
-- `/private/tmp/vexart-qa-typography-bg-normal.png` y
-  `/private/tmp/vexart-qa-typography-bg-narrow.png`
-  (Typography normal PASS; estrecho FAIL)
-- `/tmp/vexart-qa-display-bg3-mouse-default-hover.png`,
-  `/tmp/vexart-qa-display-bg3-mouse-outline-hover.png`,
-  `/tmp/vexart-qa-display-bg3-key-enter.png`
-  (Display: variantes/captura dirigida; contraste/foco pendiente)
-- `/tmp/vexart-qa-table-bg-collections-hover-after.png`,
-  `/tmp/vexart-qa-table-bg-click-row5-final.png`,
-  `/tmp/vexart-qa-table-bg-after-keyboard-current.png`
-  (Table: click PASS; keyboard termina el proceso)
-- `/tmp/vexart-qa-overlays-bg-detached-dialog-open.png`,
-  `/tmp/vexart-qa-overlays-bg-detached-dialog-focus-after-wait.png`,
-  `/tmp/vexart-qa-overlays-bg-detached-tooltip-closed-after-wait.png`
-  (Overlays: dialog/focus/tooltip FAIL)
-- `/tmp/vexart-fix-scroll-after.png` (ScrollView directo: wheel mueve Line 1–5
-  y el scrollbar cambia de posición).
-- `/tmp/vexart-fix-scroll-display.png` (Display: variantes y labels legibles).
-- `/tmp/vexart-fix-scroll-typography.png` (Typography: viewport normal).
-- `/tmp/vexart-fix-final-overlays.png` (Overlays cerrado: `Open Dialog` visible,
-  sin desplazamiento/ghosting).
-- `/tmp/vexart-fix-final-dialog-wait.png` (intento de input remoto; no se usa
-  como evidencia de modal abierto porque el frame perdió validez).
+## Inventario review-only: showcase-legacy.tsx
 
-_Última actualización: 2026-09-06; última pasada en OS window Kitty separada._
+El snapshot histórico tiene estas áreas fuente, todas HISTORICAL/SOURCE ONLY hasta
+que una prueba actual las aísle:
+
+1. Visual Effects: presets/custom/multi-shadow, cuatro glows, gradients
+   linear/radial, cuatro combinaciones de per-corner, shadow+glow combinado.
+2. Backdrop Filters: blur, brightness, contrast, grayscale, invert, sepia,
+   hue-rotate, combinación blur+brightness+saturate y cuatro niveles de opacity.
+3. Interactive: hover/active/focus, press counter/reset, dialog overlay y
+   botones de acción, transition y spring.
+4. Forms: input, combobox, slider y submit/reset de createForm.
+5. Data/Virtual: query/refetch, selección de VirtualList y tablas/listas.
+6. Void Theme: theme toggle, variantes/tamaños/disabled de Button, card,
+   upload/progress y skeleton.
+7. Event Bubbling: parent bubble, stopPropagation, bubble desde Button y clear log.
+
+Esto conserva la cobertura esperada sin presentar el snapshot como suite actual ni
+mezclarlo con la galería mantenida.
+
+## Bloqueos y criterios para cerrar
+
+1. Completar Kitty proof para C3 (self grayscale) después de su regresión TS
+   de 11 tests / 88 assertions; no elevarlo a visual PASS por automatización.
+2. El retry tiene positive control rojo PASS y cierra E1/E2/E3/G7-G9 en alcance
+   exacto; repetir effects/N1 restante sólo en una secuencia cuya focus
+   attribution sea uniformemente background-safe. N1 stack-overflow está cubierto
+   por 100 ciclos; su frame negro anterior queda separado del retry parcial.
+3. Repetir V3 Textarea, V19 Table keyboard, V22 modal, V24 toast, V25 tooltip y
+   resize con una sola OS window background-safe por caso; los 4 tabs visibles no
+   sustituyen esa atribución.
+4. Mantener el gate browser retry final 389/0 como automatizado y no convertirlo
+   en PASS Kitty; los runs previos 387/0, 384/0 y 379/5 quedan trazables y los casos visuales
+   de Tabs/List/Table aún requieren secuencias Kitty exactas.
+5. El golden exacto 480000/480000 es histórico tras el retry shadow correction:
+   `/tmp/vexart-retry-final-golden.log` queda OPEN en 3858 diferencias (0.80%),
+   sin refresco de referencia. Conservar ambas evidencias y completar Kitty C1/C2.
+6. Cambiar un estado a PASS sólo con evidencia del caso exacto; un screenshot de
+   una tab no cierra su inventario completo.
+7. El run final de visual suite queda OPEN en 2/39: reconciliar fallos y
+   referencias caso por caso, sin asumir que todos son stale.
+8. Performance queda OPEN: el smoke final pierde 13% en 800×600 y no cumple
+   los objetivos PRD; perfilar antes de cualquier claim de optimización.
+9. E1/E2/E3 y G7-G9 tienen PASS Kitty scoped tras la corrección nativa/TS y el
+   scroll live; conservar el alcance exacto y no convertirlo en PASS total de la
+   galería mientras el golden y los casos restantes estén abiertos.
+10. V22 dialog open sigue OPEN: la automatización pasa, pero Kitty no verificó
+    apertura/cierre y los frames negros post-input sólo recuperaron en 2–3s.
+
+## Evidencia y rollback
+
+Las capturas temporales viven fuera del repositorio. Las referencias versionadas
+de transform son scripts/visual-test/references/effects-transform-rotate.png y
+effects-transform-scale.png. No regenerar referencias masivamente ni borrar
+artefactos para mejorar porcentajes.
+
+Si una corrección del engine empeora Kitty, el rollback debe ser el cambio
+acotado que introdujo la regresión (o git revert del commit correspondiente),
+preservando referencias y capturas para comparar. Para cada rollback repetir
+typecheck, tests enfocados y una captura Kitty atribuible del caso afectado.
+
+Última actualización: 2026-09-07; inventario actualizado con baseline Phase 17.

@@ -9,7 +9,19 @@
 
 import { createSignal, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import { Portal } from "../containers/portal"
+
+// Floating attach points are intentionally kept internal to the engine.  The
+// 3x3 grid is stable in TGEProps (left/center/right × top/center/bottom).
+const ATTACH_POINT = {
+  LEFT_TOP: 0,
+  LEFT_CENTER: 1,
+  LEFT_BOTTOM: 2,
+  CENTER_TOP: 3,
+  CENTER_BOTTOM: 5,
+  RIGHT_TOP: 6,
+  RIGHT_CENTER: 7,
+  RIGHT_BOTTOM: 8,
+} as const
 
 // ── Types ──
 
@@ -66,31 +78,42 @@ export function Tooltip(props: TooltipProps) {
   }
 
   return (
-    <box direction="column">
-      <box onMouseOver={show} onMouseOut={hide}>
+    <box direction="column" width="fit" height="fit">
+      <box width="fit" height="fit" onMouseOver={show} onMouseOut={hide}>
         {props.children}
-      </box>
-      {visible() ? (
-        <Portal>
+        {visible() ? (
           <box
-            floating="root"
+            floating="parent"
+            width="fit"
+            height="fit"
+            floatAttach={placementAttach(props.placement)}
             floatOffset={placementOffset(props.placement, props.offset ?? 4)}
             zIndex={9999}
             pointerPassthrough
           >
             {props.renderTooltip(props.content)}
           </box>
-        </Portal>
-      ) : null}
+        ) : null}
+      </box>
     </box>
   )
 }
 
-function placementOffset(placement: string | undefined, offset: number): { x: number; y: number } {
+function placementAttach(placement: TooltipProps["placement"]): { element: number; parent: number } {
   switch (placement) {
-    case "bottom": return { x: 0, y: offset }
+    case "bottom": return { element: ATTACH_POINT.CENTER_TOP, parent: ATTACH_POINT.CENTER_BOTTOM }
+    case "left": return { element: ATTACH_POINT.RIGHT_CENTER, parent: ATTACH_POINT.LEFT_CENTER }
+    case "right": return { element: ATTACH_POINT.LEFT_CENTER, parent: ATTACH_POINT.RIGHT_CENTER }
+    case "top":
+    default: return { element: ATTACH_POINT.CENTER_BOTTOM, parent: ATTACH_POINT.CENTER_TOP }
+  }
+}
+
+function placementOffset(placement: TooltipProps["placement"], offset: number): { x: number; y: number } {
+  switch (placement) {
     case "left": return { x: -offset, y: 0 }
     case "right": return { x: offset, y: 0 }
+    case "bottom": return { x: 0, y: offset }
     case "top":
     default: return { x: 0, y: -offset }
   }
@@ -136,11 +159,14 @@ export function Popover(props: PopoverProps) {
   })
 
   return (
-    <box direction="column">
+    <box direction="column" width="fit" height="fit">
       {props.renderTrigger(triggerCtx())}
       {props.open ? (
         <box
           floating="parent"
+          width="fit"
+          height="fit"
+          floatAttach={popoverAttach(props.placement ?? "bottom")}
           floatOffset={placementOffset(props.placement ?? "bottom", props.offset ?? 4)}
           zIndex={9998}
         >
@@ -149,4 +175,14 @@ export function Popover(props: PopoverProps) {
       ) : null}
     </box>
   )
+}
+
+function popoverAttach(placement: PopoverProps["placement"]): { element: number; parent: number } {
+  switch (placement) {
+    case "top": return { element: ATTACH_POINT.LEFT_BOTTOM, parent: ATTACH_POINT.LEFT_TOP }
+    case "left": return { element: ATTACH_POINT.RIGHT_TOP, parent: ATTACH_POINT.LEFT_TOP }
+    case "right": return { element: ATTACH_POINT.LEFT_TOP, parent: ATTACH_POINT.RIGHT_TOP }
+    case "bottom":
+    default: return { element: ATTACH_POINT.LEFT_TOP, parent: ATTACH_POINT.LEFT_BOTTOM }
+  }
 }
