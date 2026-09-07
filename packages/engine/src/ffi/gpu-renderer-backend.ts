@@ -42,16 +42,13 @@ import {
   type NativePresentationStats,
 } from "./native-presentation-stats"
 import {
-  isNativePresentationCapable,
   disableNativePresentation,
   logNativePresentationFallback,
 } from "./native-presentation-flags"
 import {
-  nativeLayerPresentDirty,
-  nativeLayerReuse,
-  nativeLayerUpsert,
+  clearNativeLayerRegistryMirror,
 } from "./native-layer-registry"
-import { ensureNativeKittyTransport, nativeEmitLayerTarget, nativeEmitRegionTarget } from "./native-presentation-ops"
+import { ensureNativeKittyTransport } from "./native-presentation-ops"
 import type { DamageRect } from "./damage"
 
 const PROFILE_ENABLED = process.env.VEXART_PROFILE !== "0"
@@ -2263,6 +2260,9 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       }
       const forcedStrategy = getForcedLayerStrategy()
       if (forcedStrategy) {
+        if (forcedStrategy === "final-frame" && lastStrategy !== "final-frame") {
+          clearNativeLayerRegistryMirror()
+        }
         framesSinceStrategyChange = lastStrategy === forcedStrategy ? framesSinceStrategyChange + 1 : 0
         lastStrategy = forcedStrategy
         lastNativeFramePlan = null
@@ -2317,6 +2317,9 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
         lastStrategy: previousStrategy,
         framesSinceChange: framesSinceStrategyChange,
       }, lastNativeFramePlan)
+      if (chosen === "final-frame" && previousStrategy !== "final-frame") {
+        clearNativeLayerRegistryMirror()
+      }
       framesSinceStrategyChange = chosen === previousStrategy ? framesSinceStrategyChange + 1 : 0
       lastStrategy = chosen
       lastStrategyTelemetry = {
@@ -2352,19 +2355,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
         if (lastStrategy === "skip-present") {
           return { output: "skip-present", strategy: lastStrategy }
         }
-        const useNativeLayerPresentation = lastStrategy !== "final-frame"
-          && isNativePresentationCapable(frameCtx.transmissionMode)
-        const nativeLayer = useNativeLayerPresentation
-          ? nativeLayerUpsert(layerCtx.key, {
-              target: layerTarget,
-              x: layerCtx.bounds.x,
-              y: layerCtx.bounds.y,
-              width: layerCtx.bounds.width,
-              height: layerCtx.bounds.height,
-              z: layerCtx.z,
-            })
-          : null
-        const nativeImageId = nativeLayer?.imageId ?? 0
         const result = renderFrame(ctx, layerTarget)
 
         if (!result.ok) {
@@ -2398,25 +2388,13 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
           subtreeTransform: layerCtx.subtreeTransform,
           opacity: 1,
         })
-        if (lastStrategy === "final-frame") {
-          return { output: "skip-present", strategy: lastStrategy }
-        }
-        if (useNativeLayerPresentation && nativeImageId > 0) {
-          const col = Math.floor(layerCtx.bounds.x / Math.max(1, ctx.cellWidth ?? 1))
-          const row = Math.floor(layerCtx.bounds.y / Math.max(1, ctx.cellHeight ?? 1))
-          const nativeEmitStart = PROFILE_ENABLED ? performance.now() : 0
-          const stats = nativeEmitLayerTarget(layerTarget, nativeImageId, col, row, layerCtx.z, frameCtx.transmissionMode)
-          addBackendProfile("nativeEmitMs", nativeEmitStart)
-          if (stats !== null) {
-            addNativeStatsProfile(stats)
-            nativeLayerPresentDirty(layerCtx.key)
-            return { output: "native-presented", strategy: lastStrategy, stats }
-          }
-          // Native layer emit failed — no TS readback fallback.
-          throw new Error(`[vexart] native layer presentation failed for ${layerCtx.key}`)
-        }
-        // Return kitty payload — paint.ts will route to native or TS path based on nativePresentation flag.
-        return { output: "kitty-payload", strategy: lastStrategy, kittyPayload: result.rawLayer ?? undefined }
+        // Layer targets are retained for GPU compositing, but the frame
+        // presenter is the single visible output authority. Emitting a layer
+        // here and then composing the same layer again in endFrame() creates
+        // two Kitty placements; fractional pixel positions make the duplicate
+        // visible as a ghost. Keep the painted target and let endFrame emit
+        // the exact-pixel complete frame once.
+        return { output: "skip-present", strategy: lastStrategy }
       }
 
       const standaloneHandle = getStandaloneTarget(ctx.target.width, ctx.target.height)
@@ -2435,7 +2413,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       const record = layerTargets.get(ctx.layer.key)
       if (!record) return false
       activeLayerKeys.add(ctx.layer.key)
-      nativeLayerReuse(ctx.layer.key)
       recordCurrentFrameLayer({
         key: ctx.layer.key,
         z: ctx.layer.z,
@@ -2469,9 +2446,10 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
         pruneLayerTargets()
         return { output: "none", strategy: lastStrategy }
       }
-      // Native layer updates are useful for the fast path, but always finish
-      // with a complete frame. This keeps Kitty from exposing an empty canvas
-      // while a layer replacement is still being processed.
+      // Layer targets remain retained for the next frame, but presentation is
+      // intentionally single-authority: emit one complete frame after all
+      // layer targets have been painted. Mixing visible layer placements with
+      // this frame would duplicate fractional-position content in Kitty.
       return composeFinalFrame(ctx)
     },
     getLastStrategy() {

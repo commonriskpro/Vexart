@@ -6,9 +6,12 @@
 import { ptr } from "bun:ffi"
 import { openVexartLibrary } from "./vexart-bridge"
 import { disableNativeLayerRegistry, isNativeLayerRegistryEnabled } from "./native-layer-registry-flags"
+import { nativeDeleteLayer } from "./native-presentation-ops"
 
 const encoder = new TextEncoder()
 const handlesByKey = new Map<string, bigint>()
+const imageIdsByKey = new Map<string, number>()
+const descriptorsByKey = new Map<string, NativeLayerDescriptor>()
 let frame = 0n
 
 export type NativeLayerUpsertResult = {
@@ -64,6 +67,17 @@ export function nativeLayerUpsert(key: string, desc: NativeLayerDescriptor): Nat
   if (!isNativeLayerRegistryEnabled()) return null
   if (desc.width <= 0 || desc.height <= 0) return null
 
+  // Kitty animation frames update pixels but do not move an existing image
+  // placement. Invalidate a moved layer before its next emit so the normal
+  // full transmit recreates it at the new cursor position instead of leaving
+  // a stale copy at the old position.
+  const previous = descriptorsByKey.get(key)
+  const previousImageId = imageIdsByKey.get(key)
+  const moved = previous
+    && previousImageId !== undefined
+    && (previous.x !== desc.x || previous.y !== desc.y || previous.z !== desc.z)
+  if (moved) nativeDeleteLayer(previousImageId)
+
   const keyBuf = encoder.encode(key)
   const descBuf = writeDescriptor(desc, nextFrame())
   const outBuf = new Uint8Array(24)
@@ -76,6 +90,8 @@ export function nativeLayerUpsert(key: string, desc: NativeLayerDescriptor): Nat
     }
     const result = readUpsertResult(outBuf)
     handlesByKey.set(key, result.handle)
+    imageIdsByKey.set(key, result.imageId)
+    descriptorsByKey.set(key, { ...desc })
     return result
   } catch (e) {
     disableNativeLayerRegistry(`vexart_layer_upsert threw: ${e}`)
@@ -121,15 +137,26 @@ export function nativeLayerRemove(key: string): number | null {
     const { symbols } = openVexartLibrary()
     const rc = symbols.vexart_layer_remove(1n, handle, ptr(out)) as number
     handlesByKey.delete(key)
+    imageIdsByKey.delete(key)
+    descriptorsByKey.delete(key)
     if (rc !== 0) return null
     return readImageId(out)
   } catch {
     handlesByKey.delete(key)
+    imageIdsByKey.delete(key)
+    descriptorsByKey.delete(key)
     return null
   }
 }
 
 export function clearNativeLayerRegistryMirror() {
+  // `vexart_layer_clear` only drops the native registry metadata. Kitty image
+  // placements live in the terminal independently, so delete every image
+  // before clearing the mirror or a prior layered frame can remain visible
+  // above a subsequent full-frame presentation (notably after resize or a
+  // strategy transition).
+  const imageIds = new Set(imageIdsByKey.values())
+  for (const imageId of imageIds) nativeDeleteLayer(imageId)
   try {
     const { symbols } = openVexartLibrary()
     symbols.vexart_layer_clear(1n)
@@ -137,4 +164,6 @@ export function clearNativeLayerRegistryMirror() {
     // Best-effort cleanup — mirror still gets cleared locally.
   }
   handlesByKey.clear()
+  imageIdsByKey.clear()
+  descriptorsByKey.clear()
 }
