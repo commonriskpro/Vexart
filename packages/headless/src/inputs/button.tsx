@@ -57,20 +57,19 @@ export function Button(props: ButtonProps) {
 
   onCleanup(() => clearPressTimer())
 
-  const { focused } = useFocus({
+  const { focused, focus } = useFocus({
     id: props.focusId,
     onKeyDown(e) {
       if (disabled()) return
       if (e.key === "enter" || e.key === " ") {
-        setPressed(true)
-        props.onPress?.()
-        schedulePressReset()
+        activate()
       }
     },
   })
 
-  function handlePress() {
+  function activate() {
     if (disabled()) return
+    focus()
     setPressed(true)
     props.onPress?.()
     schedulePressReset()
@@ -82,7 +81,7 @@ export function Button(props: ButtonProps) {
     disabled: disabled(),
     buttonProps: {
       focusable: true,
-      onPress: handlePress,
+      onPress: activate,
     },
   }))
   // Keep a stable slot in the parent's child list. The render prop returns a

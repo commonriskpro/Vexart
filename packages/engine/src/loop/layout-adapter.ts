@@ -126,6 +126,13 @@ export function createVexartLayoutCtx() {
   let _isScrollX: boolean[] = []
   let _isScrollY: boolean[] = []
   let _zIndexes: number[] = []
+  let _floatingAttachTo: number[] = []
+  let _floatingOffsetsX: number[] = []
+  let _floatingOffsetsY: number[] = []
+  let _floatingElementPoints: number[] = []
+  let _floatingParentPoints: number[] = []
+  let _floatingTargetIds: number[] = []
+  let _elementKeys: (number | null)[] = []
   let _bgColors: number[] = []
   let _cornerRadii: number[] = []
   let _dfsIndexes: number[] = []
@@ -156,14 +163,39 @@ export function createVexartLayoutCtx() {
   let _dfsCounter = 0
   let _nodeCount = 0
 
+  type DetachedRoot = { node: Node; parent: Node; index: number }
+  const _detachedRoots: DetachedRoot[] = []
+
   // Last layout result — pre-allocated, cleared each endLayout()
   const _layoutMap = new Map<number, PositionedCommand>()
   const _childrenByParent = new Map<number, number[]>()
   const _scrollContainerIds = new Set<number>()
   const _textByNodeId = new Map<number, number>()
   const _cmds: RenderCommand[] = []
+  let _absoluteX = new Float64Array(0)
+  let _absoluteY = new Float64Array(0)
+  let _absoluteState = new Uint8Array(0)
   let _lastLayoutMap: Map<number, PositionedCommand> | null = null
   function getLastLayoutMap() { return _lastLayoutMap }
+
+  function restoreDetachedRoots() {
+    for (const detached of _detachedRoots) {
+      if (detached.node.getParent() === null) {
+        detached.parent.insertChild(detached.node, Math.min(detached.index, detached.parent.getChildCount()))
+      }
+    }
+    _detachedRoots.length = 0
+  }
+
+  function restoreDetachedRoot(node: Node) {
+    const index = _detachedRoots.findIndex((detached) => detached.node === node)
+    if (index < 0) return
+    const detached = _detachedRoots[index]
+    if (node.getParent() === null) {
+      detached.parent.insertChild(node, Math.min(detached.index, detached.parent.getChildCount()))
+    }
+    _detachedRoots.splice(index, 1)
+  }
 
   function _addNode(node: Node, parentId: number, isRoot: boolean): number {
     const idx = _nodeCount++
@@ -176,6 +208,13 @@ export function createVexartLayoutCtx() {
       _isScrollX.push(false)
       _isScrollY.push(false)
       _zIndexes.push(0)
+      _floatingAttachTo.push(ATTACH_TO.NONE)
+      _floatingOffsetsX.push(0)
+      _floatingOffsetsY.push(0)
+      _floatingElementPoints.push(ATTACH_POINT.LEFT_TOP)
+      _floatingParentPoints.push(ATTACH_POINT.LEFT_TOP)
+      _floatingTargetIds.push(0)
+      _elementKeys.push(null)
       _bgColors.push(0)
       _cornerRadii.push(0)
       _dfsIndexes.push(_dfsCounter++)
@@ -200,6 +239,13 @@ export function createVexartLayoutCtx() {
       _isScrollX[idx] = false
       _isScrollY[idx] = false
       _zIndexes[idx] = 0
+      _floatingAttachTo[idx] = ATTACH_TO.NONE
+      _floatingOffsetsX[idx] = 0
+      _floatingOffsetsY[idx] = 0
+      _floatingElementPoints[idx] = ATTACH_POINT.LEFT_TOP
+      _floatingParentPoints[idx] = ATTACH_POINT.LEFT_TOP
+      _floatingTargetIds[idx] = 0
+      _elementKeys[idx] = null
       _bgColors[idx] = 0
       _cornerRadii[idx] = 0
       _dfsIndexes[idx] = _dfsCounter++
@@ -221,6 +267,7 @@ export function createVexartLayoutCtx() {
   }
 
   function _pushNode(node: Node, parentId: number) {
+    restoreDetachedRoot(node)
     const idx = _addNode(node, parentId, _nodeStack.length === 0)
     if (_nodeStack.length === 0) {
       _roots.push(node)
@@ -252,6 +299,7 @@ export function createVexartLayoutCtx() {
     },
 
     destroy() {
+      restoreDetachedRoots()
       for (const node of _ownedNodes) node.free()
       _ownedNodes.clear()
       _nodeCount = 0
@@ -275,8 +323,10 @@ export function createVexartLayoutCtx() {
     },
 
     endLayout(rootNode?: Node | null): RenderCommand[] {
-      const root = rootNode ?? _roots[0]
-      if (root) root.calculateLayout(_viewportW, _viewportH, DIRECTION_LTR)
+      const roots = rootNode
+        ? [rootNode, ..._roots.filter((root) => root !== rootNode)]
+        : _roots
+      for (const root of roots) root.calculateLayout(_viewportW, _viewportH, DIRECTION_LTR)
 
       // ── Stacking-context command emission ─────────────────────────────────
       // Position computation is merged into emitNode to eliminate a separate
@@ -316,13 +366,87 @@ export function createVexartLayoutCtx() {
         })
       }
 
-      const emitNode = (idx: number, parentAbsX: number, parentAbsY: number) => {
+      const pointOnRect = (point: number, width: number, height: number) => {
+        // ATTACH_POINT is ordered by horizontal column (left, center, right)
+        // and then vertical row (top, center, bottom).
+        const col = Math.max(0, Math.min(2, Math.floor(point / 3)))
+        const row = Math.max(0, Math.min(2, point % 3))
+        return { x: width * (col / 2), y: height * (row / 2) }
+      }
+
+      if (_absoluteX.length < _nodeCount) {
+        _absoluteX = new Float64Array(_nodeCount)
+        _absoluteY = new Float64Array(_nodeCount)
+        _absoluteState = new Uint8Array(_nodeCount)
+      }
+      _absoluteState.fill(0, 0, _nodeCount)
+
+      const findTarget = (targetId: number) => {
+        if (!targetId) return -1
+        for (let i = 0; i < _nodeCount; i++) {
+          if (_nodeIds[i] === targetId || _elementKeys[i] === targetId) return i
+        }
+        return -1
+      }
+
+      const resolveAbsolute = (idx: number): { x: number; y: number } => {
+        if (_absoluteState[idx] === 2) return { x: _absoluteX[idx], y: _absoluteY[idx] }
+        if (_absoluteState[idx] === 1) return { x: 0, y: 0 }
+        _absoluteState[idx] = 1
+
+        const node = _allNodes[idx]
+        const parent = node.getParent()
+        const parentIdx = parent ? _nodeToIndex.get(parent) : undefined
+        const parentPosition = parentIdx === undefined ? { x: 0, y: 0 } : resolveAbsolute(parentIdx)
+        const width = node.getComputedWidth()
+        const height = node.getComputedHeight()
+        let x = parentPosition.x + node.getComputedLeft()
+        let y = parentPosition.y + node.getComputedTop()
+
+        if (_isFloating[idx]) {
+          const attachTo = _floatingAttachTo[idx]
+          let anchorX = parentPosition.x
+          let anchorY = parentPosition.y
+          let anchorWidth = parent?.getComputedWidth() ?? _viewportW
+          let anchorHeight = parent?.getComputedHeight() ?? _viewportH
+
+          if (attachTo === ATTACH_TO.ROOT) {
+            anchorX = 0
+            anchorY = 0
+            anchorWidth = _viewportW
+            anchorHeight = _viewportH
+          } else if (attachTo === ATTACH_TO.ELEMENT) {
+            const targetIdx = findTarget(_floatingTargetIds[idx])
+            if (targetIdx >= 0 && targetIdx !== idx) {
+              const targetPosition = resolveAbsolute(targetIdx)
+              const targetNode = _allNodes[targetIdx]
+              anchorX = targetPosition.x
+              anchorY = targetPosition.y
+              anchorWidth = targetNode.getComputedWidth()
+              anchorHeight = targetNode.getComputedHeight()
+            }
+          }
+
+          const parentPoint = pointOnRect(_floatingParentPoints[idx], anchorWidth, anchorHeight)
+          const elementPoint = pointOnRect(_floatingElementPoints[idx], width, height)
+          x = anchorX + parentPoint.x - elementPoint.x + _floatingOffsetsX[idx]
+          y = anchorY + parentPoint.y - elementPoint.y + _floatingOffsetsY[idx]
+        }
+
+        _absoluteX[idx] = x
+        _absoluteY[idx] = y
+        _absoluteState[idx] = 2
+        return { x, y }
+      }
+
+      const emitNode = (idx: number) => {
         const nodeId = _nodeIds[idx]
         const node = _allNodes[idx]
 
         // Compute absolute position on-the-fly (merged from former collectPositions)
-        const absX = parentAbsX + node.getComputedLeft()
-        const absY = parentAbsY + node.getComputedTop()
+        const absolute = resolveAbsolute(idx)
+        const absX = absolute.x
+        const absY = absolute.y
         const width = node.getComputedWidth()
         const height = node.getComputedHeight()
 
@@ -383,7 +507,7 @@ export function createVexartLayoutCtx() {
         }
 
         for (const childIdx of sortedChildIndices(nodeId)) {
-          emitNode(childIdx, absX, absY)
+          emitNode(childIdx)
         }
 
         if (isScroll) {
@@ -392,7 +516,7 @@ export function createVexartLayoutCtx() {
       }
 
       for (const childIdx of sortedChildIndices(0)) {
-        emitNode(childIdx, 0, 0)
+        emitNode(childIdx)
       }
 
       _lastLayoutMap = _layoutMap
@@ -400,7 +524,10 @@ export function createVexartLayoutCtx() {
     },
 
     setCurrentNodeId(nodeId: number) {
-      if (_currentIdx >= 0) _nodeIds[_currentIdx] = nodeId
+      if (_currentIdx >= 0) {
+        _nodeIds[_currentIdx] = nodeId
+        if (_elementKeys[_currentIdx] === null) _elementKeys[_currentIdx] = this.hashString(`tge-node-${nodeId}`)
+      }
     },
 
     setCurrentFlexNode(node: Node | null) {
@@ -429,6 +556,7 @@ export function createVexartLayoutCtx() {
 
     setId(_id: string) {
       this.openElement()
+      if (_currentIdx >= 0) _elementKeys[_currentIdx] = this.hashString(_id)
     },
 
     configureRectangle(color: number, radius: number) {
@@ -466,13 +594,32 @@ export function createVexartLayoutCtx() {
 
     configureFloating(attachTo: number, ox: number, oy: number, _z: number, _ape: number, _app: number, _pc: number, _pid: number) {
       if (!_currentNode || _currentIdx < 0) return
-      void attachTo; void ox; void oy; void _ape; void _app; void _pc; void _pid
       _isFloating[_currentIdx] = true
       _zIndexes[_currentIdx] = _z
-      if (!isOwnedCurrent()) return
+      _floatingAttachTo[_currentIdx] = attachTo
+      _floatingOffsetsX[_currentIdx] = ox
+      _floatingOffsetsY[_currentIdx] = oy
+      _floatingElementPoints[_currentIdx] = _ape
+      _floatingParentPoints[_currentIdx] = _app
+      _floatingTargetIds[_currentIdx] = _pid
+
       _currentNode.setPositionType(POSITION_TYPE_ABSOLUTE)
-      if (ox !== 0) _currentNode.setPosition(EDGE_LEFT, ox)
-      if (oy !== 0) _currentNode.setPosition(EDGE_TOP, oy)
+      // The adapter resolves attach points after layout. Keep Flexily's
+      // static position at the anchor origin so offsets are not applied twice.
+      _currentNode.setPosition(EDGE_LEFT, 0)
+      _currentNode.setPosition(EDGE_TOP, 0)
+
+      if (attachTo === ATTACH_TO.ROOT) {
+        const parent = _currentNode.getParent()
+        if (parent) {
+          const index = parent.children.indexOf(_currentNode)
+          parent.removeChild(_currentNode)
+          _currentNode.markDirty()
+          _parentNodeIds[_currentIdx] = 0
+          _detachedRoots.push({ node: _currentNode, parent, index: Math.max(0, index) })
+          _roots.push(_currentNode)
+        }
+      }
     },
 
     configureClip(_sx: boolean, _sy: boolean, _ox: number, _oy: number) {

@@ -80,13 +80,19 @@ export function applyScrollOffsets(commands: RenderCommand[], s: CompositeFrameS
     const vpH = node.layout.height
     let maxChildBottom = 0
     let maxChildRight = 0
-    for (const child of node.children) {
-      if (child.kind === "text") continue
+    const visit = (child: TGENode) => {
       const cb = child.layout.y - node.layout.y + child.layout.height
       const cr = child.layout.x - node.layout.x + child.layout.width
       if (cb > maxChildBottom) maxChildBottom = cb
       if (cr > maxChildRight) maxChildRight = cr
+
+      // A nested scroll container owns its descendants' overflow. Count the
+      // nested viewport in the parent, but leave its content extent to the
+      // nested handle so the parent cannot scroll through the inner content.
+      if (child.props.scrollX || child.props.scrollY) return
+      for (const descendant of child.children) visit(descendant)
     }
+    for (const child of node.children) visit(child)
     const ctW = Math.max(maxChildRight, vpW)
     const ctH = Math.max(maxChildBottom, vpH)
     updateScrollContainerGeometry(sid, vpW, vpH, ctW, ctH)

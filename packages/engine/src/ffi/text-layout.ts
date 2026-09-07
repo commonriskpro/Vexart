@@ -49,12 +49,28 @@ export type LayoutLine = {
   width: number
 }
 
+/** Options that affect text measurement and line breaking. */
+export type TextLayoutOptions = {
+  whiteSpace?: "normal" | "pre-wrap"
+  wordBreak?: "normal" | "keep-all"
+  fontFamily?: string
+  fontWeight?: number
+  fontStyle?: string
+}
+
 const MAX_CACHE = 501
 const MAX_LAYOUT_CACHE = 1000
 const layoutCache = createLRUCache<string, { lines: LayoutLine[]; height: number; lineCount: number }>(MAX_LAYOUT_CACHE)
 
-function layoutCacheKey(text: string, fontId: number, fontSize: number, maxWidth: number, lineHeight: number) {
-  return `${fontId}\0${fontSize}\0${maxWidth}\0${lineHeight}\0${text}`
+function layoutCacheKey(
+  text: string,
+  fontId: number,
+  fontSize: number,
+  maxWidth: number,
+  lineHeight: number,
+  options: TextLayoutOptions,
+) {
+  return `${fontId}\0${fontSize}\0${maxWidth}\0${lineHeight}\0${options.fontFamily ?? ""}\0${options.fontWeight ?? ""}\0${options.fontStyle ?? ""}\0${options.whiteSpace ?? "normal"}\0${options.wordBreak ?? "normal"}\0${text}`
 }
 
 /** Measure text width for a single line (no wrapping). Uses native Rust FFI. */
@@ -81,11 +97,11 @@ export function layoutText(
   maxWidth: number,
   lineHeight: number,
   fontSize = getFont(fontId).size,
-  _options?: unknown,
+  options: TextLayoutOptions = {},
 ): { lines: LayoutLine[]; height: number; lineCount: number } {
-  const key = layoutCacheKey(text, fontId, fontSize, maxWidth, lineHeight)
+  const key = layoutCacheKey(text, fontId, fontSize, maxWidth, lineHeight, options)
   return layoutCache.get(key, () => {
-    return layoutWithNativeMeasure(text, fontId, maxWidth, lineHeight, fontSize)
+    return layoutWithNativeMeasure(text, fontId, maxWidth, lineHeight, fontSize, options)
   })
 }
 
@@ -96,48 +112,125 @@ function layoutWithNativeMeasure(
   maxWidth: number,
   lineHeight: number,
   fontSize: number,
+  options: TextLayoutOptions,
 ): { lines: LayoutLine[]; height: number; lineCount: number } {
   const desc = getFont(fontId)
-  const families = fontId === 0 ? ["sans-serif"] : [desc.family]
-  const weight = desc.weight ?? 400
-  const italic = desc.style === "italic"
+  const families = options.fontFamily ? [options.fontFamily] : (fontId === 0 ? ["sans-serif"] : [desc.family])
+  const weight = options.fontWeight ?? desc.weight ?? 400
+  const italic = options.fontStyle === "italic" ? true : (options.fontStyle !== undefined ? false : desc.style === "italic")
+  const whiteSpace = options.whiteSpace ?? "normal"
+  const wordBreak = options.wordBreak ?? "normal"
+  const limit = maxWidth > 0 ? maxWidth : Infinity
 
   const measureWord = (w: string) => nativeMeasure(w, fontSize, families, weight, italic).width
   const spaceWidth = measureWord(" ")
 
-  const paragraphs = text.split("\n")
+  const source = normalizeTextForLayout(text, whiteSpace)
+  const paragraphs = source.split("\n")
   const lines: LayoutLine[] = []
 
-  for (const para of paragraphs) {
-    const words = para.split(" ").filter(w => w.length > 0)
+  const breakWord = (word: string): string[] => {
+    if (wordBreak === "keep-all" || limit === Infinity || measureWord(word) <= limit) return [word]
+    const parts: string[] = []
+    let part = ""
+    let partWidth = 0
+    for (const character of Array.from(word)) {
+      const characterWidth = measureWord(character)
+      if (part && partWidth + characterWidth > limit) {
+        parts.push(part)
+        part = ""
+        partWidth = 0
+      }
+      part += character
+      partWidth += characterWidth
+    }
+    if (part) parts.push(part)
+    return parts.length > 0 ? parts : [word]
+  }
+
+  const pushLine = (value: string) => {
+    lines.push({ text: value, width: Math.ceil(measureWord(value)) })
+  }
+
+  const wrapNormalParagraph = (para: string) => {
+    const words = para.split(" ").filter(word => word.length > 0)
     if (words.length === 0) {
       lines.push({ text: "", width: 0 })
-      continue
+      return
     }
 
     let current = ""
     let currentWidth = 0
 
     for (const word of words) {
+      const parts = breakWord(word)
+      if (parts.length > 1) {
+        if (current) pushLine(current)
+        for (let i = 0; i < parts.length - 1; i++) pushLine(parts[i])
+        current = parts[parts.length - 1]
+        currentWidth = measureWord(current)
+        continue
+      }
+
       const wordWidth = measureWord(word)
       if (current === "") {
         current = word
         currentWidth = wordWidth
       } else {
         const candidateWidth = currentWidth + spaceWidth + wordWidth
-        if (candidateWidth <= maxWidth) {
+        if (candidateWidth <= limit) {
           current += " " + word
           currentWidth = candidateWidth
         } else {
-          lines.push({ text: current, width: Math.ceil(currentWidth) })
+          pushLine(current)
           current = word
           currentWidth = wordWidth
         }
       }
     }
-    if (current) {
-      lines.push({ text: current, width: Math.ceil(currentWidth) })
+    if (current) pushLine(current)
+  }
+
+  const wrapPreformattedParagraph = (para: string) => {
+    if (para.length === 0) {
+      lines.push({ text: "", width: 0 })
+      return
     }
+
+    const tokens = para.match(/\s+|\S+/g) ?? []
+    let current = ""
+
+    for (const token of tokens) {
+      if (/^\s+$/.test(token)) {
+        const candidate = current + token
+        if (current === "" || measureWord(candidate) <= limit) {
+          current = candidate
+        } else {
+          pushLine(current)
+          current = token
+        }
+        continue
+      }
+
+      const parts = breakWord(token)
+      const candidate = current + parts[0]
+      if (current === "" || measureWord(candidate) <= limit) {
+        current = candidate
+      } else {
+        pushLine(current)
+        current = parts[0]
+      }
+      for (let i = 1; i < parts.length; i++) {
+        pushLine(current)
+        current = parts[i]
+      }
+    }
+    if (current !== "") pushLine(current)
+  }
+
+  for (const para of paragraphs) {
+    if (whiteSpace === "pre-wrap") wrapPreformattedParagraph(para)
+    else wrapNormalParagraph(para)
   }
 
   if (lines.length === 0) {
@@ -145,6 +238,11 @@ function layoutWithNativeMeasure(
   }
 
   return { lines, lineCount: lines.length, height: lines.length * lineHeight }
+}
+
+/** Normalize text before it is measured or sent to the native renderer. */
+export function normalizeTextForLayout(text: string, whiteSpace: "normal" | "pre-wrap" = "normal"): string {
+  return whiteSpace === "normal" ? text.replace(/\s+/g, " ").trim() : text
 }
 
 // ── Native font measurement (Rust FFI) ──
@@ -212,17 +310,26 @@ export function measureTextConstrained(
   overrideFontFamily?: string,
   overrideFontWeight?: number,
   overrideFontStyle?: string,
+  options: TextLayoutOptions = {},
 ): { width: number; height: number } {
-  if (maxWidth <= 0) return measureForLayout(text, fontId, fontSize, overrideFontFamily, overrideFontWeight, overrideFontStyle)
+  const effectiveOptions: TextLayoutOptions = {
+    ...options,
+    fontFamily: overrideFontFamily ?? options.fontFamily,
+    fontWeight: overrideFontWeight ?? options.fontWeight,
+    fontStyle: overrideFontStyle ?? options.fontStyle,
+  }
+  const source = normalizeTextForLayout(text, effectiveOptions.whiteSpace)
+  if (maxWidth <= 0) return measureForLayout(source, fontId, fontSize, overrideFontFamily, overrideFontWeight, overrideFontStyle)
 
   const lineHeight = Math.ceil(fontSize * 1.2)
 
   // Fast path: if natural width fits, no wrapping needed
-  const natural = measureForLayout(text, fontId, fontSize, overrideFontFamily, overrideFontWeight, overrideFontStyle)
-  if (natural.width <= maxWidth) return natural
+  const natural = measureForLayout(source, fontId, fontSize, overrideFontFamily, overrideFontWeight, overrideFontStyle)
+  const needsLineLayout = effectiveOptions.whiteSpace === "pre-wrap" || source.includes("\n")
+  if (!needsLineLayout && natural.width <= maxWidth) return natural
 
   // Multi-line: compute wrapped layout (cached by layoutText LRU)
-  const result = layoutText(text, fontId, maxWidth, lineHeight, fontSize)
+  const result = layoutText(source, fontId, maxWidth, lineHeight, fontSize, effectiveOptions)
   // Width: widest line (capped at maxWidth)
   let widest = 0
   for (const line of result.lines) {
@@ -248,5 +355,3 @@ export function getTextLayoutCacheStats() {
     layoutCount: layoutCache.size,
   }
 }
-
-

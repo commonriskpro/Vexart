@@ -21,6 +21,7 @@ import {
   ensureCanvasExtra,
 } from "../ffi/node"
 import { createTextFlexNode } from "../ffi/flex-sync"
+import { normalizeTextForLayout } from "../ffi/text-layout"
 // measureForLayout is called inside the retained text Flexily measureFunc (flex-sync.ts)
 import { CanvasContext, hashCanvasDisplayList, serializeCanvasDisplayList } from "../ffi/canvas"
 import { nativeCanvasDisplayListTouch, nativeCanvasDisplayListUpdate, syncNativeCanvasDisplayListHandle } from "../ffi/native-canvas-display-list"
@@ -230,6 +231,7 @@ export function walkTree(
   if (node.kind === "text") {
     const content = node.text || collectText(node)
     if (!content) return
+    const renderContent = normalizeTextForLayout(content, props.whiteSpace)
     const color = (props.color as number) || 0xe0e0e0ff
     const fontSize = props.fontSize ?? 14
     const fontId = props.fontId ?? 0
@@ -242,7 +244,7 @@ export function walkTree(
     // layout adapter — no pre-measurement needed here.
     createTextFlexNode(node)
     layout.setCurrentFlexNode(node._flexNode)
-    layout.text(content, color, fontId, fontSize, node.id, undefined, undefined, fontFamily, fontWeight, fontStyle, lineHeight)
+    layout.text(renderContent, color, fontId, fontSize, node.id, undefined, undefined, fontFamily, fontWeight, fontStyle, lineHeight)
     state.textNodes.push(node)
     return
   }

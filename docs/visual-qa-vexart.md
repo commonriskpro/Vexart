@@ -86,16 +86,40 @@ artefactos de layout.
 - `packages/internal-devtools/src/{kitty,server}.ts`
   - El control remoto busca el binario instalado de Kitty (incluido `.app`).
 
+### Correcciones implementadas en esta pasada (2026-09-06)
+
+- `packages/engine/src/loop/composite-scroll.ts`
+  - El extent de un scroller recorre descendientes y textos directos, pero se
+    detiene en scrollers anidados. El wheel ya mueve el contenido del ejemplo.
+- `packages/engine/src/ffi/{flex-sync,text-layout}.ts` y `loop/walk-tree.ts`
+  - Wrapping responsive con `whiteSpace`/`wordBreak`, medición con opciones de
+    fuente, wrappers fit-content y `flexShrink` para columnas estrechas.
+- `packages/styled/src/components/button.tsx` y
+  `packages/headless/src/inputs/button.tsx`
+  - Enter/Space/mouse comparten activación, el foco se conserva y los estados
+    hover/active/focus tienen contraste. Los botones intrínsecos usan padding
+    simétrico en vez de una justificación centrada que podía pintar el texto
+    fuera del rectángulo durante la medición.
+- `packages/headless/src/{containers/tabs,collections/list,collections/table}.tsx`
+  - Headers, filas y celdas usan `<For>` estable; Tab/Down ya no desmonta el
+    panel ni termina el proceso Bun.
+- `packages/engine/src/loop/layout-adapter.ts` y
+  `packages/headless/src/overlays/dialog.tsx`
+  - Floating root se separa de su padre lógico, respeta ROOT/PARENT/ELEMENT,
+    attach points, offsets, viewport y z-order; Escape cierra sólo el dialog
+    superior aunque el foco esté en un hijo.
+
 ## Evidencia automatizada
 
 | Prueba | Resultado | Evidencia |
 | --- | --- | --- |
 | TypeScript typecheck | ✅ 0 errores | `bun typecheck` |
-| Tests TypeScript | ✅ 349 pass / 0 fail / 733 expect | `bun test` |
+| Tests TypeScript | ✅ 358 pass / 0 fail / 4 skip / 765 expect | `bun test` |
 | Tests Rust | ✅ 146 pass / 0 fail | `cargo test` en `native/libvexart` |
 | Golden render | ✅ pass (800×600, pixel-perfect) | `bun run test:golden:check` |
 | Native release build | ✅ pass | `cargo build --release` |
 | Kitty socket/devtools | ✅ responde | `kitten @ ... ls` |
+| Regresiones enfocadas | ✅ 19 pass / 0 fail | `bun --conditions=browser test` (layout, text, scroll, Tabs/List/Table, Button, Dialog) |
 
 ## Matriz visual actual
 
@@ -104,56 +128,52 @@ artefactos de layout.
 | Ejemplo | Lanzado en Kitty | Se ve | stderr/crash | Estado |
 | --- | ---: | ---: | ---: | --- |
 | `examples/void-showcase.tsx` | ✅ | ✅ | ✅ vacío / proceso vivo | verificado |
-| `examples/facebook-app.tsx` | ✅ | ✅ | ✅ vacío / proceso vivo | verificado |
+| `examples/facebook-app.tsx` | — | — | — | fuera de alcance; QA cancelada por el usuario |
 
 ### Void Component Showcase
 
 Las seis vistas se visitaron con flecha derecha en Kitty y se capturaron en
-primer plano:
+ventanas OS independientes con `screencapture -l` dirigido al target:
 
 | Vista | Visual | Navegación | Pendiente de interacción profunda |
 | --- | ---: | ---: | --- |
 | Inputs | ✅ | ✅ | Textarea: captura parcial PASS; suite cursor/delete/multilínea BLOCKED por foco inesperado |
-| Display | ✅ | ✅ | variantes mouse PASS; **FAIL** contraste hover y foco/teclado sin delta visible |
-| Collections | ✅ | ✅ | List/VirtualList PASS; ScrollView directo FAIL; **Table FAIL** en navegación de teclado |
+| Display | ✅ | ✅ | variantes y contraste de botones PASS (`/tmp/vexart-fix-scroll-display.png`); foco/teclado profundo pendiente |
+| Collections | ✅ | ✅ | List/Table y Tab+Down PASS; ScrollView directo PASS tras fix (`/tmp/vexart-fix-scroll-after.png`) |
 | Code & Docs | ✅ | ✅ | Code/Diff/Markdown PASS; scroll N/A (sin contenedor) |
-| Overlays | ✅ | ✅ | **FAIL** dialog/composite/focus/cierre; tooltip clipping/stale; Popover no incluido |
-| Typography | ✅ viewport normal | ✅ | **FAIL responsive:** texto largo se recorta en viewport estrecho; wrapping/scroll pendiente |
+| Overlays | ✅ | ✅ | geometría cerrada y botón `Open Dialog` PASS (`/tmp/vexart-fix-final-overlays.png`); modal abierto queda BLOCKED por captura background-safe |
+| Typography | ✅ viewport normal | ✅ | wrapping responsive PASS en tests y viewport normal (`/tmp/vexart-fix-scroll-typography.png`); falta captura estrecha válida |
 
 ### Facebook clone
 
-La pantalla inicial se capturó sin artifacts y el proceso sobrevivió una
-secuencia de foco/teclas. `Confirm` en Friend requests también se verificó: la
-tarjeta desaparece, aparece `Request confirmed` y stderr queda vacío. **QA del
-Facebook clone pausada por solicitud del usuario; queda fuera de alcance y no
-se ejecutarán más acciones.**
+La revisión quedó cancelada por solicitud del usuario y está fuera de alcance.
+`examples/facebook-app.tsx` se conserva sin stagear ni modificar en el backup;
+no se ejecutarán más acciones sobre ese ejemplo.
 
 ## Conteo honesto al último update
 
-- **Ejemplos lanzados visualmente:** 2/2.
-- **Vistas principales capturadas:** 7/7 (6 Showcase + 1 Facebook).
+- **Ejemplos lanzados visualmente en esta pasada:** 1/1 dentro de alcance
+  (`void-showcase`; Facebook excluido).
+- **Vistas principales capturadas:** 6/6 Showcase.
 - **Smoke de navegación por teclado:** 6/6 pestañas Showcase.
-- **Funciones de interacción profunda verificadas visualmente:** 10/≈20.
+- **Funciones de interacción profunda verificadas visualmente:** 12/≈20.
   `VoidInput` acepta texto (`xyz`), Checkbox cambia de estado, Radio selecciona
   Option B, Switch conserva el orden al activarse, Select abre su menú y luego
   selecciona `Rust` haciendo click sobre la opción, Combobox acepta una búsqueda
   sin resultados, Slider cambia de 42 a 86 y VoidList selecciona `Settings` por
-  teclado y `Notifications` por click. Cada acción dejó el proceso vivo y
-  stderr vacío en la ventana Kitty independiente; Facebook `Confirm` elimina la
-  solicitud y muestra su confirmación.
+  teclado y `Notifications` por click. Se suman wheel del ScrollView y la ruta
+  `Tab + Down` de Table; cada acción dejó el proceso vivo y stderr vacío en una
+  ventana Kitty independiente.
 - **Smoke de reactividad:** Tab + escritura después del arreglo de Tabs no
   produce `RangeError` ni remount recursivo; la captura standalone conserva el
   layout completo.
-- **QA paralela (captura dirigida en background):** Code & Docs pasa; List pasa
-  por teclado/click; ScrollView directo falla al hacer wheel; Typography normal
-  pasa, pero el viewport estrecho recorta texto largo sin wrap. Todos los
-  procesos verificados quedaron vivos y con stderr vacío.
-- **QA adicional válida:** Display pinta todas las variantes y tamaños, pero el
-  texto del hover default queda casi ilegible y Space/Enter/Tab no muestran
-  foco/acción. Table acepta click, pero `Tab + Down` termina el proceso; hover
-  no tiene styling visible. Overlays muestra desplazamiento/ghosting negro del
-  dialog, foco que se escapa al tooltip, Escape/outside-click inconsistentes y
-  tooltip recortado/pegado tras salir.
+- **QA visual corregida:** Code & Docs, Display, Collections (incluido wheel del
+  ScrollView), Typography normal y Overlays cerrado se capturaron en ventanas
+  Kitty independientes con PID vivo y stderr vacío. Table sobrevive `Tab + Down`
+  en `/tmp/vexart-qa-table-bg-final3.keyboard.png`.
+- **QA automatizada de regresión:** 19 pruebas enfocadas cubren layout floating,
+  wrapping, scroll, estabilidad de Tabs/List/Table, activación/contraste de
+  Button y Escape de Dialog; el golden sigue pixel-perfect.
 - **QA bloqueada, no fallo de producto:** Textarea sólo tiene escritura parcial
   visible; la suite de cursor/delete/multilínea no se puede certificar porque el
   foco Kitty cambió durante la captura. Resize cambió la geometría correctamente
@@ -161,21 +181,21 @@ se ejecutarán más acciones.**
   la ventana, así que el re-layout visual queda pendiente.
 - **Facebook clone:** la revisión adicional quedó cancelada y fuera de alcance
   por solicitud del usuario; no se incluye en los pendientes actuales.
-- **Pendiente principal:** corregir los fallos compartidos de ScrollView,
-  Typography, Display, Table y Overlays; después repetir Textarea/Resize, que
-  quedaron bloqueados por la captura background-safe.
+- **Pendiente principal:** repetir Textarea y Resize con una captura background-safe
+  válida. La apertura visual del modal también queda BLOCKED porque el input
+  remoto pierde el frame al cambiar el foco; la geometría y Escape sí tienen
+  cobertura automatizada.
 
 ## Próximo bloque de trabajo
 
-1. Inputs: Textarea y edición/cursor profunda; probar también clicks en el área
-   vacía del popover (la selección ya funciona al pulsar el texto de la opción).
-2. Display/Collections: contraste/foco de botones, crash de Table y corregir el
-   extent de ScrollView para hijos directos de texto (List/VirtualList pasan).
-3. Overlays: composición/foco/cierre de Dialog y ciclo de vida de Tooltip.
-4. Corregir wrapping responsive de Typography, luego Resize/scroll en Kitty;
-   guardar capturas finales y actualizar este conteo.
-5. Revisar `git diff` y eliminar únicamente los archivos QA temporales no
-   pertenecientes al producto.
+1. Inputs: repetir edición/cursor profunda de Textarea sin perder el foco de la
+   ventana objetivo.
+2. Resize: repetir el ciclo `166×49 → 128×46 → 166×49` con captura dirigida
+   no-negra; la geometría ya cambia correctamente.
+3. Overlays: conseguir una captura válida con el modal abierto y verificar
+   Tooltip después de cerrar, sin activar otra ventana.
+4. Revisar `git diff` y eliminar únicamente los archivos QA temporales fuera del
+   repositorio.
 
 ## Capturas relevantes
 
@@ -226,5 +246,13 @@ comparar durante esta sesión:
   `/tmp/vexart-qa-overlays-bg-detached-dialog-focus-after-wait.png`,
   `/tmp/vexart-qa-overlays-bg-detached-tooltip-closed-after-wait.png`
   (Overlays: dialog/focus/tooltip FAIL)
+- `/tmp/vexart-fix-scroll-after.png` (ScrollView directo: wheel mueve Line 1–5
+  y el scrollbar cambia de posición).
+- `/tmp/vexart-fix-scroll-display.png` (Display: variantes y labels legibles).
+- `/tmp/vexart-fix-scroll-typography.png` (Typography: viewport normal).
+- `/tmp/vexart-fix-final-overlays.png` (Overlays cerrado: `Open Dialog` visible,
+  sin desplazamiento/ghosting).
+- `/tmp/vexart-fix-final-dialog-wait.png` (intento de input remoto; no se usa
+  como evidencia de modal abierto porque el frame perdió validez).
 
 _Última actualización: 2026-09-06; última pasada en OS window Kitty separada._

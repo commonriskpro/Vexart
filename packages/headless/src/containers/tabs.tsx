@@ -6,7 +6,7 @@
  * @public
  */
 
-import { createEffect, createSignal, untrack } from "solid-js"
+import { createEffect, createSignal, For, untrack } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus } from "@vexart/engine"
 
@@ -81,25 +81,26 @@ export function Tabs(props: TabsProps) {
   // update only the tab headers; rebuilding the panel at the same time can
   // recursively remount interactive children while Solid is dispatching the
   // focus event (especially Lists and Markdown tables).
-  const headerContent = () => {
-    const current = active()
-    const isFocused = focused()
-    const focusedIndex = focusedTabIdx()
-    return untrack(() => {
-      const headers = props.tabs.map((tab, i) => {
+  //
+  // Header renderers commonly create focusable nodes. Use a stable keyed list
+  // and reactive context getters so active/focused styling updates the
+  // existing nodes instead of removing and re-registering them.
+  const headerContent = () => (
+    <For each={props.tabs}>
+      {(tab, index) => {
+        const i = index()
         const ctx: TabRenderContext = {
-          active: current === i,
-          focused: isFocused && focusedIndex === i,
+          get active() { return active() === i },
+          get focused() { return focused() && focusedTabIdx() === i },
           index: i,
           tabProps: {
             onPress: () => switchTab(i),
           },
         }
         return props.renderTab(tab, ctx)
-      })
-      return <>{headers}</>
-    })
-  }
+      }}
+    </For>
+  )
 
   const panelContent = () => {
     const current = active()

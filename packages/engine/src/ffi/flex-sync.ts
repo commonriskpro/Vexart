@@ -23,7 +23,7 @@ import {
 } from "flexily"
 import type { TGENode, SizingInfo, TGEProps } from "./node"
 import { SIZING } from "./node"
-import { measureForLayout, measureTextConstrained } from "./text-layout"
+import { measureForLayout, measureTextConstrained, type TextLayoutOptions } from "./text-layout"
 
 export const LAYOUT_PROPS = new Set([
   "direction", "flexDirection", "padding", "paddingX", "paddingY",
@@ -112,7 +112,7 @@ export function syncAllLayoutProps(node: TGENode): void {
   syncMargin(flex, props)
   syncGap(flex, props.gap)
   syncAlign(flex, props)
-  syncSizing(flex, node._widthSizing, node._heightSizing, props.flexGrow)
+  syncSizing(flex, node._widthSizing, node._heightSizing, props.flexGrow, props.flexShrink)
   syncMinMax(flex, props)
   syncBorder(flex, props)
   syncFloating(flex, props)
@@ -163,7 +163,7 @@ export function syncLayoutProp(node: TGENode, key: string, _value: unknown): voi
     case "height":
     case "flexGrow":
     case "flexShrink":
-      syncSizing(flex, node._widthSizing, node._heightSizing, props.flexGrow)
+      syncSizing(flex, node._widthSizing, node._heightSizing, props.flexGrow, props.flexShrink)
       break
     case "minWidth":
     case "maxWidth":
@@ -197,6 +197,7 @@ export function createTextFlexNode(node: TGENode): void {
   if (node._flexNode) return
   const flex = Node.create()
   node._flexNode = flex
+  setWidthFitContent(flex)
   flex.setMeasureFunc((width, widthMode, _height, _heightMode) => {
     const content = collectText(node)
     if (!content) return { width: 0, height: 0 }
@@ -206,11 +207,18 @@ export function createTextFlexNode(node: TGENode): void {
     const fontFamily = props.fontFamily
     const fontWeight = props.fontWeight
     const fontStyle = props.fontStyle
+    const options: TextLayoutOptions = {
+      whiteSpace: props.whiteSpace,
+      wordBreak: props.wordBreak,
+      fontFamily,
+      fontWeight,
+      fontStyle,
+    }
     const maxW = widthMode === MEASURE_MODE_UNDEFINED ? Infinity : width
     if (maxW === Infinity || maxW <= 0) {
       return measureForLayout(content, fontId, fontSize, fontFamily, fontWeight, fontStyle)
     }
-    return measureTextConstrained(content, fontId, fontSize, maxW, fontFamily, fontWeight, fontStyle)
+    return measureTextConstrained(content, fontId, fontSize, maxW, fontFamily, fontWeight, fontStyle, options)
   })
   const parent = node.parent?._flexNode
   if (parent) {
@@ -258,11 +266,28 @@ function syncAlign(flex: Node, props: TGEProps): void {
   flex.setAlignItems(mapAlign(ay))
 }
 
-function syncSizing(flex: Node, ws: SizingInfo | null, hs: SizingInfo | null, flexGrow?: number): void {
-  if (flexGrow !== undefined && ws === null) {
-    flex.setFlexGrow(1)
-  } else if (ws) {
+function syncSizing(
+  flex: Node,
+  ws: SizingInfo | null,
+  hs: SizingInfo | null,
+  flexGrow?: number,
+  flexShrink?: number,
+): void {
+  if (ws) {
     syncWidthSizing(flex, ws)
+  } else if (flexGrow !== undefined) {
+    flex.setFlexGrow(flexGrow)
+  } else {
+    // Auto-sized wrappers must clamp to the width offered by their parent.
+    // Leaving them in the intrinsic AUTO mode lets a long text child expand
+    // past a narrow responsive column before its measure function sees a
+    // useful width constraint.
+    setWidthFitContent(flex)
+  }
+  if (ws?.type === SIZING.GROW || flexGrow !== undefined) {
+    flex.setFlexShrink(flexShrink ?? 1)
+  } else if (flexShrink !== undefined) {
+    flex.setFlexShrink(flexShrink)
   }
   if (hs) syncHeightSizing(flex, hs)
 }
@@ -278,7 +303,23 @@ function syncWidthSizing(flex: Node, sizing: SizingInfo): void {
     case SIZING.FIXED:
       flex.setWidth(sizing.value)
       break
+    case SIZING.FIT:
+      setWidthFitContent(flex)
+      break
   }
+}
+
+type FitContentNode = Node & { setWidthFitContent?: () => void }
+
+function setWidthFitContent(flex: Node): void {
+  const node = flex as FitContentNode
+  if (node.setWidthFitContent) {
+    node.setWidthFitContent()
+    return
+  }
+  // Older Flexily builds do not expose fit-content; AUTO is the closest
+  // fallback and keeps the bridge usable with those runtimes.
+  flex.setWidthAuto()
 }
 
 function syncHeightSizing(flex: Node, sizing: SizingInfo): void {

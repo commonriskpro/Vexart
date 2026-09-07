@@ -6,6 +6,7 @@
  * @public
  */
 
+import { For } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus } from "@vexart/engine"
 
@@ -55,22 +56,26 @@ export function List(props: ListProps) {
     },
   })
 
-  const children = () =>
-    props.items.map((item, i) => {
-      const ctx: ListItemContext = {
-        selected: props.selectedIndex === i,
-        focused: focused(),
-        index: i,
-        itemProps: {
-          onPress: () => {
-            if (disabled()) return
-            props.onSelectedChange?.(i)
-            props.onSelect?.(i)
+  const children = () => (
+    <For each={props.items}>
+      {(item, index) => {
+        const i = index()
+        const ctx: ListItemContext = {
+          selected: props.selectedIndex === i,
+          focused: focused(),
+          index: i,
+          itemProps: {
+            onPress: () => {
+              if (disabled()) return
+              props.onSelectedChange?.(i)
+              props.onSelect?.(i)
+            },
           },
-        },
-      }
-      return props.renderItem(item, ctx)
-    })
+        }
+        return props.renderItem(item, ctx)
+      }}
+    </For>
+  )
 
   return props.renderList
     ? <>{props.renderList(<>{children()}</>)}</>

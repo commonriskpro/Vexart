@@ -6,6 +6,7 @@
  * @public
  */
 
+import { For } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus } from "@vexart/engine"
 
@@ -88,11 +89,13 @@ export function Table(props: TableProps) {
     if (!showHeader()) return null
     return (
       <box direction="row">
-        {props.columns.map((col) => (
-          <box width={colWidth(col)}>
-            {props.renderHeader!(col)}
-          </box>
-        ))}
+        <For each={props.columns}>
+          {(col) => (
+            <box width={colWidth(col)}>
+              {props.renderHeader!(col)}
+            </box>
+          )}
+        </For>
       </box>
     )
   }
@@ -102,34 +105,39 @@ export function Table(props: TableProps) {
   function DataRows() {
     return (
       <>
-        {props.data.map((row, i) => {
-          const ctx: TableCellContext = {
-            selected: props.selectedRow === i,
-            focused: focused(),
-            rowIndex: i,
-            rowProps: {
-              onPress: () => {
-                if (disabled()) return
-                props.onSelectedRowChange?.(i)
-                props.onRowSelect?.(i, row)
+        <For each={props.data}>
+          {(row, index) => {
+            const i = index()
+            const ctx: TableCellContext = {
+              selected: props.selectedRow === i,
+              focused: focused(),
+              rowIndex: i,
+              rowProps: {
+                onPress: () => {
+                  if (disabled()) return
+                  props.onSelectedRowChange?.(i)
+                  props.onRowSelect?.(i, row)
+                },
               },
-            },
-          }
+            }
 
-          const cells = (
-            <>
-              {props.columns.map((col) => (
-                <box width={colWidth(col)}>
-                  {props.renderCell(row[col.key], col, i, ctx)}
-                </box>
-              ))}
-            </>
-          )
+            const cells = (
+              <>
+                <For each={props.columns}>
+                  {(col) => (
+                    <box width={colWidth(col)}>
+                      {props.renderCell(row[col.key], col, i, ctx)}
+                    </box>
+                  )}
+                </For>
+              </>
+            )
 
-          return props.renderRow
-            ? props.renderRow(cells, i, ctx)
-            : <box direction="row">{cells}</box>
-        })}
+            return props.renderRow
+              ? props.renderRow(cells, i, ctx)
+              : <box direction="row">{cells}</box>
+          }}
+        </For>
       </>
     )
   }

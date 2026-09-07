@@ -69,6 +69,12 @@ type VariantColors = {
   focusBorder: () => string | number
 }
 
+// The primary foreground is intentionally dark in the dark theme. Reusing the
+// shared accent token here makes the default hover state dark-on-dark, so keep
+// these states on the theme's high-contrast foreground scale instead.
+const primaryHover = () => themeColors.foreground
+const primaryActive = () => themeColors.mutedForeground
+
 const variantGetters: Record<ButtonVariant, VariantColors> = {
   default: {
     bg:          () => themeColors.primary,
@@ -76,8 +82,8 @@ const variantGetters: Record<ButtonVariant, VariantColors> = {
     border:      () => undefined,
     borderWidth: undefined,
     shadow:      shadows.xs,
-    hoverBg:     () => themeColors.accent,
-    activeBg:    () => themeColors.accent,
+    hoverBg:     primaryHover,
+    activeBg:    primaryActive,
     focusBorder: () => themeColors.ring,
   },
   secondary: {
@@ -151,7 +157,12 @@ export function Button(props: ButtonProps) {
         <box
           {...ctx.buttonProps}
           direction="row"
-          alignX="center"
+          // Intrinsic buttons already center their label through symmetric
+          // horizontal padding. Flexily's center justification can retain the
+          // offered parent width while an auto-sized button is measured, which
+          // paints the label outside the button. Fixed icon buttons still need
+          // true centering.
+          alignX={ss.width === undefined ? "left" : "center"}
           alignY="center"
           gap={ss.gap}
           height={ss.height}
@@ -160,11 +171,12 @@ export function Button(props: ButtonProps) {
           paddingRight={ss.paddingX}
           paddingTop={ss.paddingY}
           paddingBottom={ss.paddingY}
-          backgroundColor={vg.bg()}
+          backgroundColor={ctx.pressed ? vg.activeBg() : vg.bg()}
           cornerRadius={ss.cornerRadius}
-          borderColor={vg.border()}
-          borderWidth={vg.borderWidth}
+          borderColor={ctx.focused ? vg.focusBorder() : vg.border()}
+          borderWidth={ctx.focused ? 2 : vg.borderWidth}
           shadow={vg.shadow}
+          glow={ctx.focused && !isLink ? glows.ring : undefined}
           opacity={props.disabled ? 0.5 : 1}
           hoverStyle={{ backgroundColor: vg.hoverBg() }}
           activeStyle={{ backgroundColor: vg.activeBg() }}

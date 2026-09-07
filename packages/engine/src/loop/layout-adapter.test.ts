@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { createNode, insertChild, parseSizing, type TGENode, type TGEProps } from "../ffi/node"
+import { createNode, createTextNode, insertChild, parseSizing, type TGENode, type TGEProps } from "../ffi/node"
 import { CMD, type RenderCommand } from "../ffi/render-graph"
-import { createVexartLayoutCtx } from "./layout-adapter"
+import { syncAllLayoutProps } from "../ffi/flex-sync"
+import { ATTACH_POINT, createVexartLayoutCtx } from "./layout-adapter"
 import { walkTree } from "./walk-tree"
 
 function box(props: TGEProps, children: TGENode[] = []) {
@@ -102,5 +103,77 @@ describe("layout adapter stacking contexts", () => {
     const order = rectOrder(layoutCommands(root))
 
     expect(order.indexOf(first.id)).toBeLessThan(order.indexOf(second.id))
+  })
+
+  test("anchors root floating subtrees to the viewport, not their logical parent", () => {
+    const content = box({ width: 40, height: 20, backgroundColor: 0xffffffff })
+    const wrapper = box({
+      width: "100%",
+      height: "100%",
+      alignX: "center",
+      alignY: "center",
+    }, [content])
+    const overlay = box({
+      width: "100%",
+      height: "100%",
+      floating: "root",
+      floatOffset: { x: 4, y: 6 },
+      backgroundColor: 0x00000080,
+    }, [wrapper])
+    const logicalParent = box({ width: 120, height: 80 }, [overlay])
+    const root = box({ width: 300, height: 200 }, [logicalParent])
+
+    const state = layoutState(root)
+    const overlayLayout = state.map?.get(overlay.id)
+    const wrapperLayout = state.map?.get(wrapper.id)
+    const contentLayout = state.map?.get(content.id)
+
+    expect(overlayLayout).toMatchObject({ x: 4, y: 6, width: 300, height: 200 })
+    expect(wrapperLayout).toMatchObject({ x: 4, y: 6, width: 300, height: 200 })
+    expect(contentLayout).toMatchObject({ x: 134, y: 96, width: 40, height: 20 })
+  })
+
+  test("applies parent and element attach points with offsets", () => {
+    const anchor = box({ width: 50, height: 30, backgroundColor: 0xffffffff })
+    const anchorId = createVexartLayoutCtx().hashString("anchor")
+    anchor.id = anchorId
+    const attached = box({
+      width: 20,
+      height: 10,
+      floating: { attachTo: "anchor" },
+      floatAttach: {
+        element: ATTACH_POINT.LEFT_CENTER,
+        parent: ATTACH_POINT.RIGHT_BOTTOM,
+      },
+      floatOffset: { x: 1, y: 2 },
+      backgroundColor: 0xffffffff,
+    })
+    const root = box({ width: 300, height: 200 }, [anchor, attached])
+
+    const state = layoutState(root)
+    const attachedLayout = state.map?.get(attached.id)
+
+    expect(attachedLayout).toMatchObject({ x: 51, y: 27, width: 20, height: 10 })
+  })
+
+  test("wraps text inside a narrow responsive column", () => {
+    const text = createTextNode("A long Typography paragraph must wrap inside its responsive card instead of keeping its intrinsic width.")
+    text.props = { fontSize: 14 }
+    const content = box({}, [text])
+    const card = box({ padding: 8 }, [content])
+    const left = box({ width: "grow" }, [card])
+    const rightText = createTextNode("Short")
+    rightText.props = { fontSize: 14 }
+    const right = box({ width: 100 }, [box({ padding: 8 }, [rightText])])
+    const root = box({ width: 300, height: 200, direction: "row", gap: 16 }, [left, right])
+
+    syncAllLayoutProps(root)
+    const state = layoutState(root)
+    const textLayout = state.map?.get(text.id)
+    const textCommand = state.commands.find(command => command.nodeId === text.id && command.type === CMD.TEXT)
+
+    expect(textLayout?.width).toBeLessThan(200)
+    expect(textLayout?.height).toBeGreaterThan(Math.ceil(14 * 1.2))
+    expect(textCommand?.width).toBe(textLayout?.width)
   })
 })
