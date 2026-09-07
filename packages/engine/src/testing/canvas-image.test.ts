@@ -17,6 +17,14 @@ function pixel(frame: { pixels: Uint8Array; width: number }, x: number, y: numbe
   return frame.pixels.slice(offset, offset + 4)
 }
 
+function countColor(frame: { pixels: Uint8Array }, color: readonly number[]) {
+  let count = 0
+  for (let offset = 0; offset < frame.pixels.length; offset += 4) {
+    if (color.every((channel, index) => frame.pixels[offset + index] === channel)) count++
+  }
+  return count
+}
+
 function canvas(onDraw: (ctx: CanvasContext) => void, width = WIDTH, height = HEIGHT) {
   return prop(prop(prop(createNode("canvas"), "width", width), "height", height), "onDraw", onDraw)
 }
@@ -29,6 +37,115 @@ test("renders a public canvas rectangle through native readback", async () => {
   expect(frame.width).toBe(WIDTH)
   expect(frame.height).toBe(HEIGHT)
   expect(pixel(frame, WIDTH / 2, HEIGHT / 2)).toEqual(new Uint8Array([255, 0, 0, 255]))
+})
+
+test("renders a rounded Box border after its fill through native readback", async () => {
+  const node = prop(
+    prop(
+      prop(
+        prop(
+          prop(createNode("box"), "width", WIDTH),
+          "height", HEIGHT,
+        ),
+        "backgroundColor", 0x112233ff,
+      ),
+      "borderColor", 0xff0000ff,
+    ),
+    "borderWidth", 3,
+  )
+  prop(node, "cornerRadius", 10)
+
+  const frame = await renderNodeToBuffer(node, WIDTH, HEIGHT)
+
+  expect(countColor(frame, [255, 0, 0, 255])).toBeGreaterThan(0)
+  expect(pixel(frame, WIDTH / 2, 1)).toEqual(new Uint8Array([255, 0, 0, 255]))
+  expect(pixel(frame, 0, 0)[3]).toBe(0)
+  expect(pixel(frame, WIDTH / 2, HEIGHT / 2)).toEqual(new Uint8Array([17, 34, 51, 255]))
+})
+
+test("renders a rounded indicator border with a transparent outside corner", async () => {
+  const node = prop(
+    prop(
+      prop(
+        prop(
+          prop(createNode("box"), "width", 18),
+          "height", 18,
+        ),
+        "backgroundColor", 0x112233ff,
+      ),
+      "borderColor", 0xffffffff,
+    ),
+    "borderWidth", 1,
+  )
+  prop(node, "cornerRadius", 9)
+
+  const frame = await renderNodeToBuffer(node, 18, 18)
+
+  expect(pixel(frame, 9, 0)).toEqual(new Uint8Array([255, 255, 255, 255]))
+  expect(pixel(frame, 0, 0)[3]).toBe(0)
+  expect(pixel(frame, 9, 9)).toEqual(new Uint8Array([17, 34, 51, 255]))
+})
+
+test("renders non-uniform Box border sides with their resolved widths", async () => {
+  const node = prop(
+    prop(
+      prop(
+        prop(
+          prop(createNode("box"), "width", WIDTH),
+          "height", HEIGHT,
+        ),
+        "backgroundColor", 0x112233ff,
+      ),
+      "borderColor", 0xff0000ff,
+    ),
+    "borderTop", 3,
+  )
+  prop(node, "borderBottom", 2)
+
+  const frame = await renderNodeToBuffer(node, WIDTH, HEIGHT)
+
+  expect(pixel(frame, WIDTH / 2, 1)).toEqual(new Uint8Array([255, 0, 0, 255]))
+  expect(pixel(frame, WIDTH / 2, HEIGHT / 2)).toEqual(new Uint8Array([17, 34, 51, 255]))
+  expect(pixel(frame, 1, HEIGHT / 2)).toEqual(new Uint8Array([17, 34, 51, 255]))
+})
+
+test("keeps a translucent border visible over a backdrop-blurred surface", async () => {
+  const root = prop(
+    prop(
+      prop(createNode("box"), "width", WIDTH),
+      "height", HEIGHT,
+    ),
+    "backgroundColor", 0x204060ff,
+  )
+  const overlay = prop(
+    prop(
+      prop(
+        prop(
+          prop(
+            prop(createNode("box"), "width", WIDTH / 2),
+            "height", HEIGHT / 2,
+          ),
+          "backgroundColor", 0xffffff22,
+        ),
+        "backdropBlur", 4,
+      ),
+      "borderColor", 0xffffff80,
+    ),
+    "borderWidth", 1,
+  )
+  prop(overlay, "cornerRadius", 8)
+  prop(overlay, "floating", "parent")
+  prop(overlay, "floatOffset", { x: WIDTH / 4, y: HEIGHT / 4 })
+  insertChild(root, overlay)
+
+  const frame = await renderNodeToBuffer(root, WIDTH, HEIGHT)
+  const rim = pixel(frame, WIDTH / 2, HEIGHT / 4)
+  const interior = pixel(frame, WIDTH / 2, HEIGHT / 2)
+
+  expect(rim[0]).toBeGreaterThan(interior[0])
+  expect(rim[1]).toBeGreaterThan(interior[1])
+  expect(rim[2]).toBeGreaterThan(interior[2])
+  expect(rim[3]).toBe(255)
 })
 
 test("renders a pre-decoded canvas image at its requested size", async () => {

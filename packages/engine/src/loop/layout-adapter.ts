@@ -135,6 +135,11 @@ export function createVexartLayoutCtx() {
   let _elementKeys: (number | null)[] = []
   let _bgColors: number[] = []
   let _cornerRadii: number[] = []
+  let _borderColors: number[] = []
+  let _borderLeft: number[] = []
+  let _borderRight: number[] = []
+  let _borderTop: number[] = []
+  let _borderBottom: number[] = []
   let _dfsIndexes: number[] = []
   // Text meta — only for text nodes
   let _isText: boolean[] = []
@@ -217,6 +222,11 @@ export function createVexartLayoutCtx() {
       _elementKeys.push(null)
       _bgColors.push(0)
       _cornerRadii.push(0)
+      _borderColors.push(0)
+      _borderLeft.push(0)
+      _borderRight.push(0)
+      _borderTop.push(0)
+      _borderBottom.push(0)
       _dfsIndexes.push(_dfsCounter++)
       _isText.push(false)
       _textContents.push("")
@@ -248,6 +258,11 @@ export function createVexartLayoutCtx() {
       _elementKeys[idx] = null
       _bgColors[idx] = 0
       _cornerRadii[idx] = 0
+      _borderColors[idx] = 0
+      _borderLeft[idx] = 0
+      _borderRight[idx] = 0
+      _borderTop[idx] = 0
+      _borderBottom[idx] = 0
       _dfsIndexes[idx] = _dfsCounter++
       _isText[idx] = false
       _textContents[idx] = ""
@@ -513,6 +528,33 @@ export function createVexartLayoutCtx() {
         if (isScroll) {
           _cmds.push({ type: CMD.SCISSOR_END, x: 0, y: 0, width: 0, height: 0, color: 0, cornerRadius: 0, extra1: 0, extra2: 0 })
         }
+
+        // Paint the border after descendants so child content cannot cover the
+        // rim. Layout reservation is already handled by Flexily; these
+        // parallel arrays carry only the visual border metadata for this pass.
+        const borderColor = _borderColors[idx]
+        const left = _borderLeft[idx]
+        const right = _borderRight[idx]
+        const top = _borderTop[idx]
+        const bottom = _borderBottom[idx]
+        const hasBorder = (borderColor & 0xff) > 0 && Math.max(left, right, top, bottom) > 0
+        if (hasBorder) {
+          const uniform = left === right && right === top && top === bottom
+          const border: RenderCommand = {
+            type: CMD.BORDER,
+            x: absX, y: absY, width, height,
+            color: borderColor >>> 0,
+            cornerRadius: _cornerRadii[idx],
+            extra1: Math.max(left, right, top, bottom),
+            extra2: 0,
+            nodeId,
+          }
+          if (!uniform) border.borderWidths = { left, right, top, bottom }
+          // Border commands use this metadata only for per-corner geometry;
+          // they do not re-run the effect pipeline.
+          if (_effects[idx]?.cornerRadii) border.effect = _effects[idx]!
+          _cmds.push(border)
+        }
       }
 
       for (const childIdx of sortedChildIndices(0)) {
@@ -578,18 +620,36 @@ export function createVexartLayoutCtx() {
       if (_currentIdx >= 0) _canvases[_currentIdx] = canvas
     },
 
-    configureBorder(_width: number) {
-      if (!isOwnedCurrent()) { void _width; return }
-      _currentNode!.setBorder(EDGE_ALL, _width)
+    configureBorder(width: number, color = 0) {
+      if (_currentIdx < 0) return
+      _borderColors[_currentIdx] = color >>> 0
+      _borderLeft[_currentIdx] = width
+      _borderRight[_currentIdx] = width
+      _borderTop[_currentIdx] = width
+      _borderBottom[_currentIdx] = width
+      // Retain the adapter's direct-node fallback behavior. Normal TGE nodes
+      // have their Flexily border reservation synchronized by flex-sync.ts;
+      // only nodes owned by this adapter need the layout mutation here.
+      if (isOwnedCurrent()) _currentNode!.setBorder(EDGE_ALL, width)
     },
 
-    configureBorderSides(_l: number, _r: number, _t: number, _b: number, _btw: number) {
-      if (!isOwnedCurrent()) { void _l; void _r; void _t; void _b; void _btw; return }
-      const node = _currentNode!
-      if (_l > 0) node.setBorder(EDGE_LEFT, _l)
-      if (_r > 0) node.setBorder(EDGE_RIGHT, _r)
-      if (_t > 0) node.setBorder(EDGE_TOP, _t)
-      if (_b > 0) node.setBorder(EDGE_BOTTOM, _b)
+    configureBorderSides(left: number, right: number, top: number, bottom: number, _between: number, color = 0) {
+      if (_currentIdx < 0) return
+      _borderColors[_currentIdx] = color >>> 0
+      _borderLeft[_currentIdx] = left
+      _borderRight[_currentIdx] = right
+      _borderTop[_currentIdx] = top
+      _borderBottom[_currentIdx] = bottom
+      if (isOwnedCurrent()) {
+        const node = _currentNode!
+        // Clear the all-edge fallback before applying sides so a reused
+        // adapter-owned node cannot retain a stale border on a removed side.
+        node.setBorder(EDGE_ALL, 0)
+        if (left > 0) node.setBorder(EDGE_LEFT, left)
+        if (right > 0) node.setBorder(EDGE_RIGHT, right)
+        if (top > 0) node.setBorder(EDGE_TOP, top)
+        if (bottom > 0) node.setBorder(EDGE_BOTTOM, bottom)
+      }
     },
 
     configureFloating(attachTo: number, ox: number, oy: number, _z: number, _ape: number, _app: number, _pc: number, _pid: number) {

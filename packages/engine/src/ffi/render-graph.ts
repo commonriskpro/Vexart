@@ -42,6 +42,8 @@ export type RenderCommand = {
   fontStyle?: string
   /** Stable node ID for matching render ops to effects/images. */
   nodeId?: number
+  /** Per-side border widths when the border is not uniform. */
+  borderWidths?: { left: number; right: number; top: number; bottom: number }
   /** Effect config attached directly — eliminates Map.get lookup in render graph. */
   effect?: EffectConfig
   /** Image paint config attached directly. */
@@ -241,6 +243,7 @@ export type BorderRenderOp = {
   radius: number
   borderWidth: number
   cornerRadii: import("./node").CornerRadii | null
+  borderWidths?: RenderCommand["borderWidths"] | null
 } & BaseRenderOpFields
 
 /** @public */
@@ -334,6 +337,7 @@ function createBorderRenderOp(cmd: RenderCommand): BorderRenderOp {
     radius,
     borderWidth,
     cornerRadii: cmd.effect?.cornerRadii ?? null,
+    borderWidths: cmd.borderWidths ?? null,
   }
 }
 

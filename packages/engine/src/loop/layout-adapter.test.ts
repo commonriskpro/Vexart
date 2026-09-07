@@ -191,6 +191,74 @@ describe("layout adapter stacking contexts", () => {
     expect(order.indexOf(first.id)).toBeLessThan(order.indexOf(second.id))
   })
 
+  test("emits a uniform border after descendants with its resolved color", () => {
+    const child = box({ width: 40, height: 20, backgroundColor: 0x00ff00ff })
+    const root = box({
+      width: 100,
+      height: 60,
+      backgroundColor: 0x111111ff,
+      borderColor: 0xff0000ff,
+      borderWidth: 3,
+      cornerRadius: 8,
+    }, [child])
+
+    syncTree(root)
+    const commands = layoutCommands(root)
+    const borderIndex = commands.findIndex((command) => command.type === CMD.BORDER && command.nodeId === root.id)
+
+    expect(borderIndex).toBeGreaterThan(-1)
+    expect(commands[borderIndex]).toMatchObject({
+      type: CMD.BORDER,
+      color: 0xff0000ff,
+      cornerRadius: 8,
+      extra1: 3,
+      nodeId: root.id,
+    })
+    expect(commands.findIndex((command) => command.type === CMD.RECTANGLE && command.nodeId === child.id)).toBeLessThan(borderIndex)
+  })
+
+  test("emits existing per-side widths without collapsing them to the maximum", () => {
+    const root = box({
+      width: 100,
+      height: 60,
+      backgroundColor: 0x111111ff,
+      borderColor: 0xff0000ff,
+      borderLeft: 1,
+      borderRight: 3,
+      borderTop: 2,
+      borderBottom: 4,
+    })
+
+    syncTree(root)
+    const border = layoutCommands(root).find((command) => command.type === CMD.BORDER && command.nodeId === root.id)
+
+    expect(border).toMatchObject({
+      type: CMD.BORDER,
+      color: 0xff0000ff,
+      extra1: 4,
+      borderWidths: { left: 1, right: 3, top: 2, bottom: 4 },
+    })
+  })
+
+  test("keeps border reservation for adapter-owned fallback nodes", () => {
+    const layout = createVexartLayoutCtx()
+    layout.init(100, 80)
+    layout.beginLayout()
+    layout.openElement()
+    layout.setCurrentNodeId(1)
+    layout.configureBorder(4, 0xff0000ff)
+    layout.closeElement()
+    layout.endLayout()
+
+    expect(layout.getLastLayoutMap()?.get(1)).toMatchObject({
+      contentX: 4,
+      contentY: 4,
+      contentW: 92,
+      contentH: 72,
+    })
+    layout.destroy()
+  })
+
   test("anchors root floating subtrees to the viewport, not their logical parent", () => {
     const content = box({ width: 40, height: 20, backgroundColor: 0xffffffff })
     const wrapper = box({

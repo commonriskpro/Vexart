@@ -1769,6 +1769,47 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
         }
         if (op.kind === "border") {
           flushRasterImages()
+          if (op.borderWidths) {
+            // Flexily exposes per-side widths, while the native shape stroke
+            // accepts one uniform width. Paint the four sides as filled strips
+            // so existing borderLeft/Right/Top/Bottom props keep their exact
+            // widths without changing the native ABI.
+            const sides = op.borderWidths
+            const ownLeft = Math.round(op.x) - ctx.offsetX
+            const ownTop = Math.round(op.y) - ctx.offsetY
+            const ownWidth = Math.max(1, Math.round(op.width))
+            const ownHeight = Math.max(1, Math.round(op.height))
+            const pushStrip = (x: number, y: number, width: number, height: number) => {
+              const left = Math.max(clip.left, x)
+              const top = Math.max(clip.top, y)
+              const right = Math.min(clip.right, x + width)
+              const bottom = Math.min(clip.bottom, y + height)
+              if (right <= left || bottom <= top) return
+              const stripW = right - left
+              const stripH = bottom - top
+              shapeRects.push({
+                x: (left / ctx.target.width) * 2 - 1,
+                y: 1 - (top / ctx.target.height) * 2,
+                w: (stripW / ctx.target.width) * 2,
+                h: -((stripH / ctx.target.height) * 2),
+                boxW: stripW,
+                boxH: stripH,
+                radius: 0,
+                strokeWidth: 0,
+                fill: op.color >>> 0,
+              })
+            }
+            const top = Math.max(0, Math.round(sides.top))
+            const bottom = Math.max(0, Math.round(sides.bottom))
+            const left = Math.max(0, Math.round(sides.left))
+            const right = Math.max(0, Math.round(sides.right))
+            pushStrip(ownLeft, ownTop, ownWidth, top)
+            pushStrip(ownLeft, ownTop + ownHeight - bottom, ownWidth, bottom)
+            pushStrip(ownLeft, ownTop + top, left, ownHeight - top - bottom)
+            pushStrip(ownLeft + ownWidth - right, ownTop + top, right, ownHeight - top - bottom)
+            markDirty(clip.left, clip.top, clip.right, clip.bottom)
+            continue
+          }
           const boxW = clip.right - clip.left
           const boxH = clip.bottom - clip.top
           if (op.cornerRadii) {

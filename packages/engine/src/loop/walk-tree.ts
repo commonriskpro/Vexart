@@ -417,7 +417,15 @@ export function walkTree(
   const hasBackdropFilter = hasBackdropEffect(vp)
   const hasTransform = vp.transform !== undefined
   const hasSelfFilter = vp.filter !== undefined
-  const needsRect = vp.backgroundColor !== undefined || vp.gradient !== undefined || hasBackdropFilter || vp.opacity !== undefined || isInteractiveNode(vp) || hasTransform || hasSelfFilter
+  const hasVisualBorderWidth = Math.max(
+    vp.borderWidth ?? 0,
+    vp.borderLeft ?? 0,
+    vp.borderRight ?? 0,
+    vp.borderTop ?? 0,
+    vp.borderBottom ?? 0,
+  ) > 0
+  const needsBorderGeometry = hasVisualBorderWidth && (vp.cornerRadius !== undefined || vp.cornerRadii !== undefined)
+  const needsRect = vp.backgroundColor !== undefined || vp.gradient !== undefined || hasBackdropFilter || vp.opacity !== undefined || isInteractiveNode(vp) || hasTransform || hasSelfFilter || needsBorderGeometry
   if (needsRect) {
     const bgColor = vp.backgroundColor !== undefined ? (vp.backgroundColor as number) : 0x00000001
     const cr = vp.cornerRadius ?? 0
@@ -468,25 +476,25 @@ export function walkTree(
   }
 
   // Borders — per-side or uniform (uses resolved visual props)
-  const maxInteractiveBorder = Math.max(
-    props.focusStyle?.borderWidth ?? 0,
-    props.hoverStyle?.borderWidth ?? 0,
-    props.activeStyle?.borderWidth ?? 0,
-  )
-  const effectiveBorderWidth = Math.max(vp.borderWidth ?? 0, maxInteractiveBorder)
+  // Interactive styles reserve the maximum border space in Flexily (see
+  // flex-sync.ts), but only the currently-resolved visual props are painted.
+  const paintBorderWidth = vp.borderWidth ?? 0
+  const paintBorderColor = vp.borderColor as number | undefined
 
   const hasPerSideBorder = vp.borderLeft !== undefined || vp.borderRight !== undefined ||
                            vp.borderTop !== undefined || vp.borderBottom !== undefined ||
                            vp.borderBetweenChildren !== undefined
-  if (hasPerSideBorder && vp.borderColor !== undefined) {
+  if (hasPerSideBorder) {
+    const base = paintBorderWidth
     layout.configureBorderSides(
-      vp.borderLeft ?? 0,
-      vp.borderRight ?? 0,
-      vp.borderTop ?? 0,
-      vp.borderBottom ?? 0,
-      vp.borderBetweenChildren ?? 0)
-  } else if (effectiveBorderWidth > 0) {
-    layout.configureBorder(effectiveBorderWidth)
+      vp.borderLeft ?? base,
+      vp.borderRight ?? base,
+      vp.borderTop ?? base,
+      vp.borderBottom ?? base,
+      vp.borderBetweenChildren ?? 0,
+      paintBorderColor ?? 0)
+  } else if (paintBorderWidth > 0) {
+    layout.configureBorder(paintBorderWidth, paintBorderColor ?? 0)
   }
 
   // Scroll / clip container.

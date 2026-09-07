@@ -128,6 +128,7 @@ export type BorderRenderOp = {
     radius: number;
     borderWidth: number;
     cornerRadii: CornerRadii | null;
+    borderWidths?: RenderCommand["borderWidths"] | null;
 } & BaseRenderOpFields;
 
 // @public (undocumented)
@@ -1680,6 +1681,12 @@ export type RenderCommand = {
     fontWeight?: number;
     fontStyle?: string;
     nodeId?: number;
+    borderWidths?: {
+        left: number;
+        right: number;
+        top: number;
+        bottom: number;
+    };
     effect?: EffectConfig;
     image?: ImagePaintConfig;
     canvas?: CanvasPaintConfig;

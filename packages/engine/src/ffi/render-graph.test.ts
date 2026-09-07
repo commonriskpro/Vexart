@@ -15,6 +15,7 @@ type RectFields = {
   canvas?: CanvasPaintConfig | null
   effect?: EffectConfig | null
   borderWidth?: number
+  borderWidths?: { left: number; right: number; top: number; bottom: number }
   text?: string
   fontId?: number
   fontSize?: number
@@ -107,6 +108,15 @@ describe("buildRenderGraphFrame", () => {
     expect(field(op, "color")).toBe(0x00ff00ff)
     expect(field(op, "radius")).toBe(6)
     expect(field(op, "width")).toBe(2)
+    expect(op.borderWidths).toBeNull()
+  })
+
+  test("preserves non-uniform border widths in the border op", () => {
+    const widths = { left: 1, right: 3, top: 2, bottom: 4 }
+    const op = graph(cmd({ type: CMD.BORDER, extra1: 4, borderWidths: widths }))
+
+    expect(op.kind).toBe("border")
+    expect(op.borderWidths).toEqual(widths)
   })
 
   test("rectangle with shadow effect produces an effect op without backdrop", () => {

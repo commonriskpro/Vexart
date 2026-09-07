@@ -134,6 +134,7 @@ export declare type BorderRenderOp = {
     radius: number;
     borderWidth: number;
     cornerRadii: CornerRadii | null;
+    borderWidths?: RenderCommand["borderWidths"] | null;
 } & BaseRenderOpFields;
 
 /** @public */
@@ -2128,6 +2129,13 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      fontStyle?: string;
      /** Stable node ID for matching render ops to effects/images. */
      nodeId?: number;
+     /** Per-side border widths when the border is not uniform. */
+     borderWidths?: {
+         left: number;
+         right: number;
+         top: number;
+         bottom: number;
+     };
      /** Effect config attached directly — eliminates Map.get lookup in render graph. */
      effect?: EffectConfig;
      /** Image paint config attached directly. */
