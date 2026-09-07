@@ -53,6 +53,10 @@ function rectOrder(commands: RenderCommand[]) {
     .map((command) => command.nodeId)
 }
 
+// Ubuntu CI installs this real font explicitly. fontdb's generic sans-serif
+// defaults to Arial on Linux, which is not present on the runner.
+const layoutTestFontFamily = process.platform === "linux" ? "DejaVu Sans" : "sans-serif"
+
 describe("layout adapter stacking contexts", () => {
   test("resolves grow on the requested axis and stretches cross-axis children", () => {
     const fixed = box({ width: 64, height: 48 })
@@ -240,7 +244,7 @@ describe("layout adapter stacking contexts", () => {
 
   test("measures floating fit wrappers from intrinsic children before attaching", () => {
     const text = createTextNode("Tooltip content")
-    text.props = { fontSize: 14 }
+    text.props = { fontSize: 14, fontFamily: layoutTestFontFamily }
     const floating = box({
       width: "fit",
       height: "fit",
@@ -259,18 +263,21 @@ describe("layout adapter stacking contexts", () => {
     const floatingLayout = state.map?.get(floating.id)
     const textLayout = state.map?.get(text.id)
 
-    expect(floatingLayout).toMatchObject({ x: 304, y: 205, width: 108, height: 33 })
-    expect(textLayout).toMatchObject({ x: 312, y: 213, width: 92, height: 17 })
+    expect(floatingLayout).toMatchObject({ x: 304, y: 205, height: 33 })
+    expect(floatingLayout?.width).toBeGreaterThan(16)
+    expect(textLayout).toMatchObject({ x: 312, y: 213, height: 17 })
+    expect(textLayout?.width).toBeGreaterThan(0)
+    expect(floatingLayout?.width).toBe((textLayout?.width ?? 0) + 16)
   })
 
   test("wraps text inside a narrow responsive column", () => {
     const text = createTextNode("A long Typography paragraph must wrap inside its responsive card instead of keeping its intrinsic width.")
-    text.props = { fontSize: 14 }
+    text.props = { fontSize: 14, fontFamily: layoutTestFontFamily }
     const content = box({}, [text])
     const card = box({ padding: 8 }, [content])
     const left = box({ width: "grow" }, [card])
     const rightText = createTextNode("Short")
-    rightText.props = { fontSize: 14 }
+    rightText.props = { fontSize: 14, fontFamily: layoutTestFontFamily }
     const right = box({ width: 100 }, [box({ padding: 8 }, [rightText])])
     const root = box({ width: 300, height: 200, direction: "row", gap: 16 }, [left, right])
 

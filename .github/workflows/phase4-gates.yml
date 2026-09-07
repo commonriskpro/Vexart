@@ -21,8 +21,8 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install native deps (canvas + software Vulkan for headless GPU)
-        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev mesa-vulkan-drivers libvulkan1
+      - name: Install native deps (canvas + fonts + software Vulkan for headless GPU)
+        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev mesa-vulkan-drivers libvulkan1 fonts-dejavu-core
 
       - name: Install JS deps
         run: bun install --frozen-lockfile
@@ -46,7 +46,7 @@ jobs:
             | grep -v 'native-layer-registry-flags\.test' \
             | grep -v 'bridge\.test' \
             | grep -v 'text-layout\.test' \
-            | xargs bun test
+            | xargs bun --conditions=browser test --preload ./solid-plugin.ts
 
       - name: API snapshot gate
         run: |

@@ -39,6 +39,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Resolve release version
+        id: release_version
+        run: |
+          set -euo pipefail
+          version="$(node scripts/release-verification.mjs version)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Test release verification helpers
+        run: node --test scripts/release-verification.test.mjs
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -48,24 +58,25 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Package platform artifact
+        env:
+          VEXART_VERSION: ${{ steps.release_version.outputs.version }}
         run: |
+          set -euo pipefail
           mkdir -p artifact
           cp target/${{ matrix.target }}/release/${{ matrix.lib-name }} artifact/
-          cat > artifact/package.json << 'PKGJSON'
+          cp LICENSE artifact/LICENSE
+          cat > artifact/package.json << PKGJSON
           {
             "name": "@vexart-native/${{ matrix.platform-tag }}",
-            "version": "${VERSION}",
+            "version": "${VEXART_VERSION}",
             "description": "Vexart native binary for ${{ matrix.platform-tag }}",
             "type": "module",
             "os": ["${{ matrix.npm-os }}"],
             "cpu": ["${{ matrix.npm-cpu }}"],
-            "files": ["${{ matrix.lib-name }}"],
-            "license": "SEE LICENSE IN LICENSE.md"
+            "files": ["${{ matrix.lib-name }}", "LICENSE"],
+            "license": "SEE LICENSE IN LICENSE"
           }
           PKGJSON
-          # Inject version from tag
-          VERSION="${GITHUB_REF_NAME#v}"
-          sed -i.bak "s/\${VERSION}/$VERSION/" artifact/package.json && rm -f artifact/package.json.bak
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -81,6 +92,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Resolve release version
+        id: release_version
+        run: |
+          set -euo pipefail
+          version="$(node scripts/release-verification.mjs version)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -108,28 +126,64 @@ jobs:
 
       - name: Place native binaries into dist
         run: |
+          set -euo pipefail
           for platform in darwin-arm64 linux-x64 linux-arm64; do
             mkdir -p dist/platform/$platform
             cp native-artifacts/native-$platform/* dist/platform/$platform/
           done
 
+      - name: Validate release metadata and artifacts
+        env:
+          VEXART_VERSION: ${{ steps.release_version.outputs.version }}
+        run: |
+          set -euo pipefail
+          node scripts/release-verification.mjs artifacts "$VEXART_VERSION"
+
       - name: Publish platform packages
         run: |
+          set -euo pipefail
           for platform in darwin-arm64 linux-x64 linux-arm64; do
             echo "Publishing @vexart-native/$platform..."
-            cd dist/platform/$platform
-            npm publish --access public --tag latest || echo "⚠️ Failed to publish @vexart-native/$platform (may already exist)"
-            cd -
+            (cd "dist/platform/$platform" && npm publish --access public --tag latest)
           done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish vexart
         run: |
+          set -euo pipefail
           cd dist
-          npm publish --access public --tag latest || echo "⚠️ Failed to publish vexart (may already exist)"
+          npm publish --access public --tag latest
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Verify published package versions and dist-tags
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VEXART_VERSION: ${{ steps.release_version.outputs.version }}
+        run: |
+          set -euo pipefail
+          attempts=6
+          delay_seconds=10
+          for ((attempt=1; attempt<=attempts; attempt++)); do
+            set +e
+            node scripts/release-verification.mjs registry "$VEXART_VERSION"
+            status=$?
+            set -e
+            if [[ "$status" -eq 0 ]]; then
+              exit 0
+            fi
+            if [[ "$status" -ne 2 ]]; then
+              echo "Registry verification failed permanently; no republish will be attempted." >&2
+              exit "$status"
+            fi
+            if [[ "$attempt" -lt "$attempts" ]]; then
+              echo "Registry propagation pending (attempt $attempt/$attempts); waiting ${delay_seconds}s..."
+              sleep "$delay_seconds"
+            fi
+          done
+          echo "Registry propagation did not complete within the bounded verification window." >&2
+          exit 1
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -139,3 +193,4 @@ jobs:
             native-artifacts/native-linux-x64/libvexart.so
             native-artifacts/native-linux-arm64/libvexart.so
           generate_release_notes: true
+          prerelease: ${{ contains(steps.release_version.outputs.version, '-') }}

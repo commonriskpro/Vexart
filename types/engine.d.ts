@@ -100,6 +100,7 @@ declare type BaseRenderOpFields = {
     fontWeight?: number;
     fontStyle?: string;
     nodeId?: number;
+    /* Excluded from this release type: clipBounds */
 };
 
 /** @public */
@@ -1612,8 +1613,6 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      /** Reset state to idle. */
      reset: () => void;
  };
-
- /* Excluded from this release type: NATIVE_FRAME_STRATEGY */
 
  declare type NativeFrameExecutionStats = NativeFrameExecutionStatsInput;
 
