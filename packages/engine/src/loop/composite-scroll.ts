@@ -9,8 +9,14 @@
 import type { TGENode } from "../ffi/node"
 import { CMD, type RenderCommand } from "../ffi/render-graph"
 import { createScrollHandle, updateScrollContainerGeometry } from "./scroll"
-import { markLayerDirtyByKey } from "./composite"
-import type { CompositeFrameState } from "./composite"
+
+type ScrollFrameState = {
+  pointer: { x: number; y: number }
+  boxNodes: TGENode[]
+  scrollContainers: TGENode[]
+  scrollOffsets: Map<number, { x: number; y: number }>
+  nodeRefById: Map<number, TGENode>
+}
 
 // ── Scroll routing ───────────────────────────────────────────────────────
 
@@ -18,7 +24,7 @@ import type { CompositeFrameState } from "./composite"
  * Route scroll deltas to the innermost scroll container whose layout bounds
  * contain the pointer, using previous-frame node layout for hit detection.
  */
-export function routeScrollDeltas(s: CompositeFrameState, sdx: number, sdy: number) {
+export function routeScrollDeltas(s: ScrollFrameState, sdx: number, sdy: number) {
   if (sdx === 0 && sdy === 0) return
 
   let scrollTarget: TGENode | null = null
@@ -68,7 +74,7 @@ export function routeScrollDeltas(s: CompositeFrameState, sdx: number, sdy: numb
  * SCISSOR commands are excluded — they always reflect the scroll container's
  * viewport bounds (not the scrolled content position).
  */
-export function applyScrollOffsets(commands: RenderCommand[], s: CompositeFrameState) {
+export function applyScrollOffsets(commands: RenderCommand[], s: ScrollFrameState, markDirtyLayer: (key: string) => void) {
   s.scrollOffsets.clear()
   const offsets = s.scrollOffsets
   for (const node of s.scrollContainers) {
@@ -102,7 +108,7 @@ export function applyScrollOffsets(commands: RenderCommand[], s: CompositeFrameS
     if (ox !== 0 || oy !== 0) {
       offsets.set(node.id, { x: ox, y: oy })
       const layerKey = node._layerKey ?? "bg"
-      markLayerDirtyByKey(layerKey)
+      markDirtyLayer(layerKey)
     }
   }
 

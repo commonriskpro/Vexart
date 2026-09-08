@@ -34,6 +34,14 @@ import { onInput, Show } from "@vexart/engine"
 import { radius, space, font, shadows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
+// Floating attach points use the engine's stable 3x3 grid (left/top = 0,
+// left/bottom = 2). Keep the content's top-left attached to the trigger's
+// bottom-left so sideOffset is measured from the trigger edge.
+const ATTACH_POINT = {
+  LEFT_TOP: 0,
+  LEFT_BOTTOM: 2,
+} as const
+
 // ── Context ──
 
 type DropdownCtx = {
@@ -111,6 +119,7 @@ export function VoidDropdownMenuContent(props: VoidDropdownMenuContentProps) {
       <box
         floating="parent"
         zIndex={9999}
+        floatAttach={{ element: ATTACH_POINT.LEFT_TOP, parent: ATTACH_POINT.LEFT_BOTTOM }}
         floatOffset={{ x: 0, y: props.sideOffset ?? 4 }}
         direction="column"
         width={props.width}

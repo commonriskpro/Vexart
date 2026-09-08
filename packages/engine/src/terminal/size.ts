@@ -35,24 +35,73 @@ export function getSize(stdout: NodeJS.WriteStream): TerminalSize {
   const cols = stdout.columns || 80
   const rows = stdout.rows || 24
 
-  // Bun supports getWindowSize() which returns [width, height] in pixels
-  // on the third and fourth elements: [cols, rows, pixelWidth, pixelHeight]
-  // But Node/Bun stdout.getWindowSize() only returns [cols, rows]
-  // Pixel dimensions come from ioctl TIOCGWINSZ — available via Bun
-  let pixelWidth = 0
-  let pixelHeight = 0
-
-  // Try Bun's process.stdout.getWindowSize() — returns [cols, rows]
-  // Pixel size needs ioctl which we'll do via escape query
-  // For now, use common defaults and let queryPixelSize() refine later
-  const cellWidth = pixelWidth > 0 ? Math.floor(pixelWidth / cols) : 0
-  const cellHeight = pixelHeight > 0 ? Math.floor(pixelHeight / rows) : 0
+  // Bun/Node expose cell dimensions here, while pixel dimensions generally
+  // require a terminal query. queryPixelSize() fills those in at startup.
+  const pixelWidth = 0
+  const pixelHeight = 0
+  const cellWidth = 0
+  const cellHeight = 0
 
   return { cols, rows, pixelWidth, pixelHeight, cellWidth, cellHeight }
 }
 
+/** Parsed terminal reports used by CSI 14t (area) and CSI 16t (cell size). */
+type PixelReports = {
+  area: { width: number; height: number } | null
+  cell: { width: number; height: number } | null
+}
+
+/**
+ * Parse one or more xterm window-operation reports.
+ *
+ * CSI 14t reports the text area as `CSI 4;height;width t`. tmux emits this
+ * using the current pane dimensions. CSI 16t reports one cell as
+ * `CSI 6;cell-height;cell-width t`; tmux sources the values from the outer
+ * client's terminal cell size. Keeping this parser separate makes fragmented
+ * PTY replies straightforward to test without a terminal.
+ */
+export function parsePixelReports(data: string, reports: PixelReports = { area: null, cell: null }): PixelReports {
+  const pattern = /\x1b\[([46]);(\d+);(\d+)t/g
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(data)) !== null) {
+    const height = Number(match[2])
+    const width = Number(match[3])
+    if (height <= 0 || width <= 0) continue
+    if (match[1] === "4") reports.area = { width, height }
+    else reports.cell = { width, height }
+  }
+  return reports
+}
+
+function dimensions(
+  reports: PixelReports,
+  cols: number,
+  rows: number,
+): { pixelWidth: number; pixelHeight: number; cellWidth: number; cellHeight: number } {
+  const cellWidth = reports.cell?.width ?? (reports.area && cols > 0 ? Math.floor(reports.area.width / cols) : 0)
+  const cellHeight = reports.cell?.height ?? (reports.area && rows > 0 ? Math.floor(reports.area.height / rows) : 0)
+  const pixelWidth = reports.area?.width ?? (cellWidth > 0 ? cols * cellWidth : 0)
+  const pixelHeight = reports.area?.height ?? (cellHeight > 0 ? rows * cellHeight : 0)
+
+  if (pixelWidth > 0 && pixelHeight > 0 && cellWidth > 0 && cellHeight > 0) {
+    return { pixelWidth, pixelHeight, cellWidth, cellHeight }
+  }
+
+  // Keep the old fallback for terminals that do not answer either query.
+  return {
+    pixelWidth: pixelWidth || cols * 8,
+    pixelHeight: pixelHeight || rows * 16,
+    cellWidth: cellWidth || 8,
+    cellHeight: cellHeight || 16,
+  }
+}
+
 /**
  * Query terminal pixel dimensions.
+ *
+ * Prefer the explicit CSI 16t cell report when available and derive from the
+ * CSI 14t area report otherwise. Both reports are sent for every terminal;
+ * tmux's CSI 14t area is already pane-relative to the querying process.
  *
  * @public
  */
@@ -66,6 +115,8 @@ export function queryPixelSize(
 ): Promise<{ pixelWidth: number; pixelHeight: number; cellWidth: number; cellHeight: number }> {
   return new Promise((resolve) => {
     let done = false
+    let received = ""
+    const reports: PixelReports = { area: null, cell: null }
 
     const cleanup = () => {
       if (done) return
@@ -74,38 +125,27 @@ export function queryPixelSize(
       clearTimeout(timer)
     }
 
-    const handler = (data: Buffer) => {
-      const str = data.toString()
-      // Response: \x1b[4;{height};{width}t
-      const match = str.match(/\x1b\[4;(\d+);(\d+)t/)
-      if (match) {
-        const pixelHeight = parseInt(match[1], 10)
-        const pixelWidth = parseInt(match[2], 10)
-        cleanup()
-        resolve({
-          pixelWidth,
-          pixelHeight,
-          cellWidth: cols > 0 ? Math.floor(pixelWidth / cols) : 0,
-          cellHeight: rows > 0 ? Math.floor(pixelHeight / rows) : 0,
-        })
-      }
+    const finish = () => {
+      cleanup()
+      resolve(dimensions(reports, cols, rows))
     }
 
-    const timer = setTimeout(() => {
-      cleanup()
-      // Fallback: assume 8x16 cells (common default)
-      resolve({
-        pixelWidth: cols * 8,
-        pixelHeight: rows * 16,
-        cellWidth: 8,
-        cellHeight: 16,
-      })
-    }, timeout)
+    const handler = (data: Buffer) => {
+      // Responses can be split across multiple reads (especially through a
+      // tmux PTY). Retain enough trailing data for an incomplete CSI report.
+      received += data.toString()
+      if (received.length > 16 * 1024) received = received.slice(-16 * 1024)
+      parsePixelReports(received, reports)
+      if (reports.area && reports.cell) finish()
+    }
+
+    const timer = setTimeout(finish, timeout)
 
     onData(handler)
 
-    // CSI 14t — report text area size in pixels
-    write("\x1b[14t")
+    // CSI 16t: cell size; CSI 14t: pane/text-area size. tmux 3.6a responds
+    // with CSI 6;cellHeight;cellWidth t and CSI 4;paneHeight;paneWidth t.
+    write("\x1b[16t\x1b[14t")
   })
 }
 

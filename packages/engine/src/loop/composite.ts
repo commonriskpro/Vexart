@@ -33,7 +33,8 @@ import {
   assignLayersSpatial as _assignLayersSpatial,
   type AssignLayersState,
 } from "./assign-layers"
-import type { LayerBoundary, LayerSlot, DirtyTrackingHandle, InteractionLatencyTracking, DebugLogHelpers } from "./types"
+import type { FrameProfile, LayerBoundary, LayerSlot, DirtyTrackingHandle, InteractionLatencyTracking, DebugLogHelpers } from "./types"
+export type { FrameProfile } from "./types"
 import {
   collectText,
   walkTree as _walkTree,
@@ -82,52 +83,6 @@ export function markLayerDamageByKey(key: string, rect: DamageRect): void {
 /** Mutable scalar counters for walk state writeback. */
 type WalkCounters = {
   scrollSpeedCap: number
-}
-
-/** Per-frame profiling data (only populated when DEBUG_CADENCE=1). */
-export type FrameProfile = {
-  scheduledIntervalMs: number
-  scheduledDelayMs: number
-  timerDelayMs: number
-  sincePrevFrameMs: number
-  scrollMs: number
-  walkTreeMs: number
-  layoutComputeMs: number
-  layoutWritebackMs: number
-  interactionMs: number
-  relayoutMs: number
-  layoutMs: number
-  layerAssignMs: number
-  prepMs: number
-  paintNativeSnapshotMs: number
-  paintLayerPrepMs: number
-  paintFrameContextMs: number
-  paintBackendBeginMs: number
-  paintReuseMs: number
-  paintRenderGraphMs: number
-  paintBackendPaintMs: number
-  paintBackendCompositeMs: number
-  paintBackendReadbackMs: number
-  paintBackendNativeEmitMs: number
-  paintBackendNativeReadbackMs: number
-  paintBackendNativeCompressMs: number
-  paintBackendNativeShmPrepareMs: number
-  paintBackendNativeWriteMs: number
-  paintBackendNativeRawBytes: number
-  paintBackendNativePayloadBytes: number
-  paintBackendUniformMs: number
-  paintLayerCleanupMs: number
-  paintBackendEndMs: number
-  paintPresentationMs: number
-  paintInteractionStatsMs: number
-  paintMs: number
-  beginSyncMs: number
-  ioMs: number
-  endSyncMs: number
-  totalMs: number
-  commands: number
-  repainted: number
-  dirtyBefore: number
 }
 
 /** Create a zero-initialized FrameProfile. Use to avoid 2000-char inline literals. */
@@ -294,7 +249,7 @@ function runLayoutPass(s: CompositeFrameState, profile?: FrameProfile) {
   if (profile) profile.layoutComputeMs = performance.now() - layoutComputeStart
   const layoutWritebackStart = profile ? performance.now() : 0
   writeLayoutBack(s)
-  applyScrollOffsets(commands, s)
+  applyScrollOffsets(commands, s, markLayerDirtyByKey)
   if (profile) profile.layoutWritebackMs = performance.now() - layoutWritebackStart
   return commands
 }
@@ -619,6 +574,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     layerStore: s.layerStore,
     layerCache: s.layerCache,
     activeSlotKeys: s.activeSlotKeys,
+    suppressNativeLayerDeletes: s.term.caps.tmux && s.term.caps.kittyPlaceholder,
     frameDirtyRects: s.frameDirtyRects,
     pendingNodeDamageRects: s.pendingNodeDamageRects,
     nodeRefById: s.nodeRefById,

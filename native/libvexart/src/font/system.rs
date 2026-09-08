@@ -104,8 +104,12 @@ impl FontSystem {
             .faces()
             .filter(|fi| {
                 let w_diff = (fi.weight.0 as i32 - weight as i32).unsigned_abs();
-                if w_diff > 200 { return false; }
-                if italic && fi.style != Style::Italic { return false; }
+                if w_diff > 200 {
+                    return false;
+                }
+                if italic && fi.style != Style::Italic {
+                    return false;
+                }
                 true
             })
             .map(|fi| fi.id)
@@ -144,9 +148,9 @@ impl FontSystem {
         }
 
         // Load from fontdb (may memory-map the file).
-        let data = self.db.with_face_data(face_id, |bytes, _index| {
-            Arc::new(bytes.to_vec())
-        })?;
+        let data = self
+            .db
+            .with_face_data(face_id, |bytes, _index| Arc::new(bytes.to_vec()))?;
 
         self.face_cache.insert(face_id, Arc::clone(&data));
 
@@ -177,9 +181,15 @@ mod tests {
     fn test_query_sans_serif_returns_face() {
         let mut system = FontSystem::new();
         let face = system.query_face(&["sans-serif"], 400, false);
-        assert!(face.is_some(), "sans-serif query should match a system font");
+        assert!(
+            face.is_some(),
+            "sans-serif query should match a system font"
+        );
         let face = face.unwrap();
-        assert!(!face.family.is_empty(), "resolved face should have a family name");
+        assert!(
+            !face.family.is_empty(),
+            "resolved face should have a family name"
+        );
     }
 
     #[test]
@@ -194,7 +204,10 @@ mod tests {
         let mut system = FontSystem::new();
         let face = system.query_face(&["sans-serif"], 400, false).unwrap();
         let parsed = face.parse();
-        assert!(parsed.is_some(), "resolved face data should parse as a valid TTF");
+        assert!(
+            parsed.is_some(),
+            "resolved face data should parse as a valid TTF"
+        );
     }
 
     #[test]

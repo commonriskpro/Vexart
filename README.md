@@ -32,7 +32,7 @@ await createApp(() => (
 - **26 headless components** — Button, Input, Select, Dialog, Combobox, Slider, VirtualList, and more
 - **Focus management** — Tab/Shift-Tab cycling, per-node keyboard handlers, focus scoping
 - **Drop shadows & glow** — declarative `shadow` and `glow` props, rendered via GPU
-- **Gradients** — linear and radial, multi-stop
+- **Gradients** — two-stop linear and radial gradients (`from`/`to`)
 - **Backdrop filters** — blur, brightness, contrast, saturate, grayscale, invert, sepia, hue-rotate
 - **Element opacity** — per-element alpha with isolated compositing
 - **Scroll containers** — virtualized lists, programmatic scroll, smooth inertia
@@ -52,8 +52,11 @@ await createApp(() => (
 | [Bun](https://bun.sh/) | ≥ 1.1.0 | Runtime |
 | Rust toolchain | stable | For `cargo build` (native library) |
 | Kitty-compatible terminal | — | Kitty, Ghostty, or WezTerm |
+| tmux (optional) | ≥ 3.4 | Kitty passthrough from a Kitty/Ghostty outer terminal; see [`docs/tmux.md`](docs/tmux.md) |
 
 > Vexart requires a terminal that supports the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). It exits with a clear error on unsupported terminals.
+>
+> tmux support is experimental and requires user-applied `allow-passthrough all` in tmux. The approved full-frame SHM production code path passes through a real tmux PTY with a synthetic receiver. A user review accepted all six showcase tabs in Kitty directly and inside tmux; this is practical visual acceptance, not pixel-exact or visible-FPS measurement. A live fixture also passed internal runs for plain Kitty and Ghostty inside tmux; see [`docs/tmux-performance-report.md`](docs/tmux-performance-report.md). There is no automatic direct/file fallback or ASCII/cell-based fallback; see [`docs/tmux.md`](docs/tmux.md) for setup and limitations.
 
 ## Quick Start
 
@@ -96,14 +99,7 @@ function App() {
         <Text color={colors.foreground} fontSize={16}>Hello from Vexart</Text>
         <Text color={colors.mutedForeground} fontSize={12}>Browser-quality UI in your terminal</Text>
       </Box>
-      <Button
-        onPress={() => process.exit(0)}
-        renderButton={(ctx) => (
-          <Box {...ctx.buttonProps} backgroundColor={colors.primary} cornerRadius={radius.md} padding={space[3]}>
-            <Text color={colors.background}>Quit</Text>
-          </Box>
-        )}
-      />
+      <Button onPress={() => process.exit(0)}>Quit</Button>
     </Box>
   )
 }
@@ -125,7 +121,7 @@ JSX (SolidJS createRenderer)
         → Terminal
 ```
 
-The Flexily layout tree is **persistent and reactive** — props and tree structure sync from the SolidJS reconciler. `calculateLayout()` only recomputes dirty subtrees. Rust owns the entire output path: GPU paint → readback → compress → Kitty encoding → terminal write. Zero bytes cross the FFI boundary for presentation.
+The Flexily layout tree is **persistent and reactive** — props and tree structure sync from the SolidJS reconciler. `calculateLayout()` only recomputes dirty subtrees. Rust owns the entire output path: GPU paint → readback → compress → Kitty encoding → terminal write. Zero bytes cross the FFI boundary for presentation. Inside tmux, the same GPU-composited frame is sent through local SHM, Kitty Unicode placeholders, and per-sequence tmux passthrough wrappers. The production code path passes a PTY check with a synthetic receiver, not a physical-display or FPS check; the prior direct full-frame route is a comparison baseline, not an automatic fallback. `a=f` animation updates are not claimed for the Ghostty 1.3.1 target; see the versioned source note in [`docs/tmux.md`](docs/tmux.md).
 
 Vexart is **not** a cell-based TUI framework. It renders actual pixels using the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) — the result looks like a browser running inside your terminal.
 
@@ -139,7 +135,7 @@ Vexart is **not** a cell-based TUI framework. It renders actual pixels using the
 | `@vexart/primitives` | **Merged into `@vexart/app`**. Layout helpers (`Span`, `RichText`, `WrapRow`) now live in app. Use `<box>`, `<text>` intrinsics directly. | ❌ Removed |
 | `@vexart/engine` | Core engine: render loop, GPU backend, SolidJS reconciler, input, focus, animation, data fetching | Foundation |
 
-Dependencies flow downward: `app → styled → headless → primitives → engine`. You can use any layer independently.
+Dependencies flow downward across the active packages: `app → styled → headless → engine`. You can use any active layer independently.
 
 ### Native binary — libvexart
 
@@ -238,7 +234,16 @@ All effects are JSX props — no imperative API needed:
 | Kitty 0.41+ | Kitty direct + SHM | ✅ Best — native pixel rendering |
 | Ghostty | Kitty direct | ✅ Best — native pixel rendering |
 | WezTerm 2025.04+ | Kitty direct | ✅ Best |
-| tmux, Alacritty, iTerm2, Windows Terminal | — | ❌ Unsupported — exits with clear error |
+| tmux 3.4+ in Kitty/Ghostty | Kitty passthrough + Unicode placeholders + local SHM | 🧪 Experimental — same GPU effects, synthetic tmux-PTY SHM PASS; six-tab Kitty direct/tmux review accepted; live timing runs are internal, not visible FPS; [`docs/tmux.md`](docs/tmux.md) |
+| tmux in WezTerm, Alacritty, iTerm2, Windows Terminal | — | ❌ Unsupported or not claimed — exits with clear error |
+
+Direct Kitty, Ghostty, and WezTerm support is unchanged. WezTerm remains a
+supported direct target, but this release does not claim the Unicode-placeholder
+route through tmux for WezTerm. tmux support requires a recognized outer Kitty or
+Ghostty, tmux ≥ 3.4, effective `allow-passthrough all`, client `RGB` features,
+and successful runtime probes.
+The tmux SHM route conservatively requires exactly one attached client across
+the tmux server; Vexart does not edit the user's tmux configuration.
 
 ---
 
@@ -273,7 +278,7 @@ bun run test:golden:check    # Compare render output vs golden (pixel-perfect)
 
 ## Examples
 
-See [`examples/README.md`](examples/README.md) for a full list of examples with descriptions and run commands.
+See [`docs/examples.md`](docs/examples.md) for a full list of examples with descriptions and run commands.
 
 Quick-start examples:
 

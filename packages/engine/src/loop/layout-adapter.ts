@@ -151,6 +151,8 @@ export function createVexartLayoutCtx() {
   let _textFontFamilies: (string | undefined)[] = []
   let _textFontWeights: (number | undefined)[] = []
   let _textFontStyles: (string | undefined)[] = []
+  let _textWhiteSpaces: ("normal" | "pre-wrap" | undefined)[] = []
+  let _textWordBreaks: ("normal" | "keep-all" | undefined)[] = []
   // Effect/image/canvas/text metadata — attached directly to RenderCommand (eliminates Map.get in render-graph)
   let _effects: (EffectConfig | null)[] = []
   let _images: (ImagePaintConfig | null)[] = []
@@ -237,6 +239,8 @@ export function createVexartLayoutCtx() {
       _textFontFamilies.push(undefined)
       _textFontWeights.push(undefined)
       _textFontStyles.push(undefined)
+      _textWhiteSpaces.push(undefined)
+      _textWordBreaks.push(undefined)
       _effects.push(null)
       _images.push(null)
       _canvases.push(null)
@@ -273,6 +277,8 @@ export function createVexartLayoutCtx() {
       _textFontFamilies[idx] = undefined
       _textFontWeights[idx] = undefined
       _textFontStyles[idx] = undefined
+      _textWhiteSpaces[idx] = undefined
+      _textWordBreaks[idx] = undefined
       _effects[idx] = null
       _images[idx] = null
       _canvases[idx] = null
@@ -512,6 +518,8 @@ export function createVexartLayoutCtx() {
             fontFamily: _textFontFamilies[textIdx],
             fontWeight: _textFontWeights[textIdx],
             fontStyle: _textFontStyles[textIdx],
+            whiteSpace: _textWhiteSpaces[textIdx],
+            wordBreak: _textWordBreaks[textIdx],
             nodeId,
           })
         }
@@ -690,7 +698,7 @@ export function createVexartLayoutCtx() {
       if (isOwnedCurrent() && (_sx || _sy)) _currentNode.setOverflow(OVERFLOW_SCROLL)
     },
 
-    text(_content: string, _color: number, _fontId: number, _fontSize: number, nodeId?: number, measuredW?: number, measuredH?: number, _fontFamily?: string, _fontWeight?: number, _fontStyle?: string, _lineHeight?: number) {
+    text(_content: string, _color: number, _fontId: number, _fontSize: number, nodeId?: number, measuredW?: number, measuredH?: number, _fontFamily?: string, _fontWeight?: number, _fontStyle?: string, _lineHeight?: number, _whiteSpace?: "normal" | "pre-wrap", _wordBreak?: "normal" | "keep-all") {
       void measuredW; void measuredH
       const node = _pendingFlexNode ?? Node.create()
       if (!_pendingFlexNode) _ownedNodes.add(node)
@@ -708,6 +716,8 @@ export function createVexartLayoutCtx() {
       _textFontFamilies[idx] = _fontFamily
       _textFontWeights[idx] = _fontWeight
       _textFontStyles[idx] = _fontStyle
+      _textWhiteSpaces[idx] = _whiteSpace
+      _textWordBreaks[idx] = _wordBreak
 
       if (_nodeStack.length === 0) {
         _roots.push(node)

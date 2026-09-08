@@ -56,13 +56,18 @@ export function VoidTable(props: VoidTableProps) {
       )}
       renderRow={(children: JSX.Element, rowIndex: number, ctx: TableCellContext) => {
         const isEven = rowIndex % 2 === 0
-        const bg = ctx.selected
-          ? themeColors.accent
-          : striped() && !isEven
-            ? themeColors.secondary
-            : themeColors.card
         return (
-          <box {...ctx.rowProps} direction="row" backgroundColor={bg} borderBottom={1} borderColor={themeColors.border}>
+          <box
+            {...ctx.rowProps}
+            direction="row"
+            backgroundColor={ctx.selected
+              ? themeColors.accent
+              : striped() && !isEven
+                ? themeColors.secondary
+                : themeColors.card}
+            borderBottom={1}
+            borderColor={themeColors.border}
+          >
             {children}
           </box>
         )

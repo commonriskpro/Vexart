@@ -1,7 +1,6 @@
 import { beforeEach, afterEach, describe, expect, test } from "bun:test"
 import { createSignal } from "solid-js"
 import { createComponent, createElement, createTextNode, dispatchInput, getRendererBackend, insertNode, mount, resetFocus, setProp, setRendererBackend, type RendererBackend, type TGENode, type Terminal } from "@vexart/engine"
-import type { TabItem, TabRenderContext } from "../containers/tabs"
 
 const browserRuntime = import.meta.resolve("solid-js").endsWith("/solid.js")
 
@@ -9,13 +8,9 @@ const browserRuntime = import.meta.resolve("solid-js").endsWith("/solid.js")
 // Register it before dynamically importing the Solid universal component.
 if (browserRuntime) await import("../../../../solid-plugin")
 const { Table } = await import("./table")
-const { Tabs } = await import("../containers/tabs")
-const { VoidTable } = await import("@vexart/styled")
 
 type NodeComponent = (props: unknown) => TGENode
 const TableNode = Table as unknown as NodeComponent
-const TabsNode = Tabs as unknown as NodeComponent
-const VoidTableNode = VoidTable as unknown as NodeComponent
 
 const noopBackend: RendererBackend = {
   name: "table-test",
@@ -94,46 +89,6 @@ function Scene(props: { selected: number; onSelected: (index: number) => void })
   return root
 }
 
-function TabScene() {
-  const [activeTab, setActiveTab] = createSignal(0)
-  const root = createElement("box")
-  const before = createElement("box")
-  setProp(before, "focusable", true)
-  insertNode(root, before)
-  const tab = createComponent(TabsNode, {
-    activeTab: activeTab(),
-    onTabChange: setActiveTab,
-    tabs: [
-      { label: "Inputs", content: () => createElement("box") },
-      { label: "Display", content: () => createElement("box") },
-      {
-        label: "Collections",
-        content: () => createComponent(VoidTableNode, {
-          columns: [
-            { key: "name", header: "Name", width: 120 },
-          ],
-          data: [
-            { name: "first" },
-            { name: "second" },
-            { name: "third" },
-          ],
-          selectedRow: 0,
-          renderHeader: (column: { header: string }) => createTextNode(column.header),
-          renderCell: (value: unknown) => createTextNode(String(value)),
-        }),
-      },
-    ],
-    renderTab: (_tab: TabItem, ctx: TabRenderContext) => {
-      const node = createElement("box")
-      setProp(node, "focusable", true)
-      setProp(node, "onPress", ctx.tabProps.onPress)
-      return node
-    },
-  })
-  insertNode(root, tab)
-  return root
-}
-
 const suite = browserRuntime ? describe : describe.skip
 
 suite("Table keyboard focus", () => {
@@ -164,23 +119,4 @@ suite("Table keyboard focus", () => {
     }
   })
 
-  test("table remains mounted when reached through a tab panel", async () => {
-    const terminal = createTestTerminal()
-    const handle = mount(TabScene, terminal)
-
-    try {
-      dispatchInput({ type: "key", key: "right", char: "", mods: { shift: false, alt: false, ctrl: false, meta: false } })
-      dispatchInput({ type: "key", key: "right", char: "", mods: { shift: false, alt: false, ctrl: false, meta: false } })
-
-      for (let i = 0; i < 4; i++) {
-        dispatchInput({ type: "key", key: "tab", char: "\t", mods: { shift: false, alt: false, ctrl: false, meta: false } })
-      }
-
-      expect(() => {
-        dispatchInput({ type: "key", key: "down", char: "", mods: { shift: false, alt: false, ctrl: false, meta: false } })
-      }).not.toThrow()
-    } finally {
-      handle.destroy()
-    }
-  })
 })

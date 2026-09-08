@@ -162,7 +162,7 @@ export function createToaster(options: ToasterOptions): ToasterHandle {
           padding={edgePadding}
           pointerPassthrough
         >
-          <box direction="column" gap={gap} pointerPassthrough>
+          <box width="fit" direction="column" gap={gap} pointerPassthrough>
             <For each={toasts()}>
               {(t) => options.renderToast(t, () => dismiss(t.id))}
             </For>

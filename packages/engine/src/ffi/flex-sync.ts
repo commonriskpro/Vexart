@@ -22,8 +22,7 @@ import {
   JUSTIFY_SPACE_BETWEEN,
   MEASURE_MODE_UNDEFINED,
 } from "flexily"
-import type { TGENode, SizingInfo, TGEProps } from "./node"
-import { SIZING } from "./node"
+import { SIZING, type TGENode, type SizingInfo, type TGEProps } from "./node-types"
 import { measureForLayout, measureTextConstrained, type TextLayoutOptions } from "./text-layout"
 
 export const LAYOUT_PROPS = new Set([

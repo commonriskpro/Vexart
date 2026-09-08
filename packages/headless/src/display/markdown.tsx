@@ -136,11 +136,11 @@ function renderInlineSpans(spans: InlineSpan[]): JSX.Element {
     if (span.bg) {
       return (
         <box backgroundColor={span.bg} cornerRadius={3} paddingX={2}>
-          <text color={span.color} fontSize={14}>{span.text}</text>
+          <text color={span.color} fontSize={14} whiteSpace="pre-wrap">{span.text}</text>
         </box>
       )
     }
-    return <text color={span.color} fontSize={14}>{span.text}</text>
+    return <text color={span.color} fontSize={14} whiteSpace="pre-wrap">{span.text}</text>
   }) as unknown as JSX.Element
 }
 
@@ -169,11 +169,11 @@ function renderToken(token: MarkedToken, props: MarkdownProps, th: MarkdownTheme
             if (span.bg) {
               return (
                 <box backgroundColor={span.bg} cornerRadius={3} paddingX={2}>
-                  <text color={span.color} fontSize={fontSize}>{span.text}</text>
+                  <text color={span.color} fontSize={fontSize} whiteSpace="pre-wrap">{span.text}</text>
                 </box>
               )
             }
-            return <text color={span.color} fontSize={fontSize}>{span.text}</text>
+            return <text color={span.color} fontSize={fontSize} whiteSpace="pre-wrap">{span.text}</text>
           })}
         </box>
       )
@@ -219,7 +219,7 @@ function renderToken(token: MarkedToken, props: MarkdownProps, th: MarkdownTheme
             const spans = inlineToSpans(item.tokens as MarkedToken[], fg, th)
             return (
               <box width="100%" paddingX={8} direction="row">
-                <text color={th.listBullet} fontSize={14}>{prefix}</text>
+                <text color={th.listBullet} fontSize={14} whiteSpace="pre-wrap">{prefix}</text>
                 {renderInlineSpans(spans)}
               </box>
             )
@@ -237,7 +237,7 @@ function renderToken(token: MarkedToken, props: MarkdownProps, th: MarkdownTheme
     case "html":
       return (
         <box width="100%">
-          <text color={th.muted} fontSize={14}>{token.text}</text>
+          <text color={th.muted} fontSize={14} whiteSpace="pre-wrap">{token.text}</text>
         </box>
       )
 
@@ -259,7 +259,7 @@ function renderToken(token: MarkedToken, props: MarkdownProps, th: MarkdownTheme
           <box width="100%" direction="row" backgroundColor={th.tableBg} padding={4}>
             {header.map((cell: Tokens.TableCell, c: number) => (
               <box width="fit" minWidth={colWidths[c] * CHAR_WIDTH} paddingX={8}>
-                <text color={th.tableHeader} fontSize={14}>
+                <text color={th.tableHeader} fontSize={14} whiteSpace="pre-wrap">
                   {inlineToText(cell.tokens as MarkedToken[])}
                 </text>
               </box>
@@ -269,7 +269,7 @@ function renderToken(token: MarkedToken, props: MarkdownProps, th: MarkdownTheme
             <box width="100%" direction="row" padding={4}>
               {row.map((cell: Tokens.TableCell, c: number) => (
                 <box width="fit" minWidth={colWidths[c] * CHAR_WIDTH} paddingX={8}>
-                  <text color={fg} fontSize={14}>
+                  <text color={fg} fontSize={14} whiteSpace="pre-wrap">
                     {inlineToText(cell.tokens as MarkedToken[])}
                   </text>
                 </box>
@@ -284,7 +284,7 @@ function renderToken(token: MarkedToken, props: MarkdownProps, th: MarkdownTheme
       if ("text" in token) {
         return (
           <box width="100%">
-            <text color={fg} fontSize={14}>{(token as { text: string }).text}</text>
+            <text color={fg} fontSize={14} whiteSpace="pre-wrap">{(token as { text: string }).text}</text>
           </box>
         )
       }

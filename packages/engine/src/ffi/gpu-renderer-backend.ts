@@ -9,10 +9,14 @@ import { appendFileSync } from "node:fs"
 import { ptr } from "bun:ffi"
 import { CanvasContext } from "./canvas"
 import { rasterizeCanvas, rasterizeCanvasCommands } from "./canvas-rasterizer"
+import type { Terminal } from "../terminal"
+import { onTerminalTransportLifecycle } from "../terminal/transport-lifecycle"
+import { inTmux, queryTmuxClientState } from "../terminal/tmux"
 
 import { transformPoint } from "./matrix"
 import { BACKDROP_FIELDS } from "./render-graph"
 import type { BackdropRenderMetadata, EffectRenderOp, RenderGraphOp } from "./render-graph"
+import { layoutText } from "./text-layout"
 import {
   type TargetRecord, type RenderedLayerRecord, type ImageRecord,
   type TransformSpriteRecord, type CanvasSpriteRecord,
@@ -50,8 +54,23 @@ import {
 } from "./native-layer-registry"
 import { ensureNativeKittyTransport } from "./native-presentation-ops"
 import type { DamageRect } from "./damage"
+import { createTmuxShmPresentation, type TmuxShmPresentation } from "./tmux-shm-presentation"
 
 const PROFILE_ENABLED = process.env.VEXART_PROFILE !== "0"
+
+const tmuxPresentationDrainers = new WeakMap<object, () => Promise<void>>()
+
+/** Internal test hook; production backends intentionally expose no drain API. */
+export function waitForTmuxPresentationForTest(backend: object): Promise<void> {
+  return tmuxPresentationDrainers.get(backend)?.() ?? Promise.resolve()
+}
+
+// Test fixtures can inspect the native stats before the coordinator's final
+// debug-state update (which intentionally only exposes aggregate frame data).
+let lastNativePresentationStats: NativePresentationStats | null = null
+export function getLastNativePresentationStatsForTest(): NativePresentationStats | null {
+  return lastNativePresentationStats
+}
 
 // Pack functions (gpu-pack.ts) and FFI composite wrappers (gpu-composite-ops.ts)
 import {
@@ -171,9 +190,68 @@ function failGpuOnly(message: string): never {
 type GpuRendererBackendOptions = {
   /** Skip Kitty/native presentation while retaining the composited GPU target for readback. */
   suppressPresentation?: boolean
+  tmuxShm?: TmuxShmPresentation
+  tmuxShmSize?: () => { cols: number; rows: number }
 }
 
 export function createGpuRendererBackend(): GpuRendererBackend {
+  return createGpuRendererBackendInternal()
+}
+
+/**
+ * Internal terminal-bound factory used by the render loop. A terminal's
+ * capabilities are captured once, while its mutable size is read through the
+ * callback at each emission so resize updates reach the native presenter.
+ */
+export function createGpuRendererBackendForTerminal(term: Pick<Terminal, "caps" | "size" | "onData">): GpuRendererBackend {
+  if (term.caps.tmux) {
+    const recovery = inTmux()
+    const clientState = recovery ? queryTmuxClientState() : null
+    if (clientState?.kind === "unknown") {
+      throw new Error(`Vexart cannot verify the attached tmux client: ${clientState.reason}`)
+    }
+    if (clientState?.kind === "zero") {
+      throw new Error("Vexart requires one attached tmux client before creating the GPU renderer")
+    }
+    if (clientState?.kind === "multiple") {
+      throw new Error(`Vexart requires one attached tmux client before creating the GPU renderer (found ${clientState.count})`)
+    }
+    if (clientState && !clientState.client.passthroughAll) {
+      throw new Error("Vexart requires tmux allow-passthrough all before creating the GPU renderer")
+    }
+    if (clientState && !clientState.client.rgb) {
+      throw new Error("Vexart requires an RGB-capable tmux client before creating the GPU renderer")
+    }
+    const tmuxShm = createTmuxShmPresentation({
+      onData: term.onData,
+      ...(clientState?.kind === "single" ? {
+        expectedClient: clientState.client,
+        getClientState: queryTmuxClientState,
+      } : {}),
+    })
+    let removeLifecycle: (() => void) | null = null
+    removeLifecycle = onTerminalTransportLifecycle(term as Terminal, (event) => {
+      if (event === "suspend") tmuxShm.suspend()
+      else if (event === "resume") tmuxShm.resume()
+      else {
+        tmuxShm.destroy()
+        removeLifecycle?.()
+        removeLifecycle = null
+      }
+    })
+    const backend = createGpuRendererBackendInternal({
+      tmuxShm,
+      tmuxShmSize: () => ({ cols: term.size.cols, rows: term.size.rows }),
+    })
+    const originalDestroy = backend.destroy
+    backend.destroy = () => {
+      removeLifecycle?.()
+      removeLifecycle = null
+      tmuxShm.destroy()
+      originalDestroy?.()
+    }
+    return backend
+  }
   return createGpuRendererBackendInternal()
 }
 
@@ -355,6 +433,53 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     backendProfile.nativeWriteMs += stats.writeUs / 1000
     backendProfile.nativeRawBytes += stats.rawBytes
     backendProfile.nativePayloadBytes += stats.payloadBytes
+  }
+
+  const emitNativeFinalFrame = (
+    vctx: bigint,
+    targetHandle: bigint,
+    frame: RendererBackendFrameContext,
+  ): NativePresentationStats | null => {
+    const statsBuf = allocNativeStatsBuf()
+    const tmuxShm = options.tmuxShm
+    if (tmuxShm) {
+      if (frame.transmissionMode !== "shm") {
+        throw new Error(
+          `[vexart] tmux SHM presentation requires transmissionMode="shm" (received "${frame.transmissionMode}"); ` +
+          "refusing to fall back to direct/file transport",
+        )
+      }
+      const size = (options.tmuxShmSize ?? (() => ({ cols: 0, rows: 0 })))()
+      const nativeEmitStart = PROFILE_ENABLED ? performance.now() : 0
+      const stats = tmuxShm.present({
+        context: vctx,
+        target: targetHandle,
+        width: frame.viewportWidth,
+        height: frame.viewportHeight,
+        cols: size.cols,
+        rows: size.rows,
+        transmissionMode: frame.transmissionMode,
+      })
+      addBackendProfile("nativeEmitMs", nativeEmitStart)
+      return stats
+    }
+    ensureNativeKittyTransport(frame.transmissionMode)
+    const nativeEmitStart = PROFILE_ENABLED ? performance.now() : 0
+    const rc = getSymbols().vexart_kitty_emit_frame_with_stats(
+      vctx,
+      targetHandle,
+      finalFrameImageId,
+      ptr(statsBuf),
+    ) as number
+    addBackendProfile("nativeEmitMs", nativeEmitStart)
+    if (rc !== 0) {
+      const err = vexartGetLastError()
+      throw new Error(`[vexart] native frame presentation failed (${rc}): ${err}`)
+    }
+    const stats = decodeNativePresentationStats(statsBuf)
+    lastNativePresentationStats = stats
+    addNativeStatsProfile(stats)
+    return stats
   }
   let lastStrategyTelemetry: {
     preferred: GpuLayerStrategyMode | null
@@ -1880,13 +2005,23 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
           const textX = Math.round(op.x) - ctx.offsetX
           const textY = Math.round(op.y) - ctx.offsetY
           const colorRgba = op.color >>> 0
+          const preWrap = op.whiteSpace === "pre-wrap"
+          const text = preWrap
+            ? layoutText(op.text, op.fontId, op.maxWidth, op.lineHeight, op.fontSize, {
+                whiteSpace: "pre-wrap",
+                wordBreak: op.wordBreak,
+                fontFamily: op.fontFamily,
+                fontWeight: op.fontWeight,
+                fontStyle: op.fontStyle,
+              }).lines.map((line) => line.text).join("\n")
+            : op.text
           deferredMsdfOps.push({
-            text: op.text,
+            text,
             x: textX,
             y: textY,
             fontSize: op.fontSize,
             lineHeight: op.lineHeight,
-            maxWidth: op.maxWidth > 0 ? op.maxWidth : 999999,
+            maxWidth: preWrap ? 0 : (op.maxWidth > 0 ? op.maxWidth : 999999),
             colorRgba,
             fontFamily: op.fontFamily,
             fontWeight: op.fontWeight,
@@ -1979,22 +2114,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       return { output: "none", strategy: lastStrategy }
     }
 
-    const statsBuf = allocNativeStatsBuf()
-    ensureNativeKittyTransport(frame.transmissionMode)
-    const nativeEmitStart = PROFILE_ENABLED ? performance.now() : 0
-    const rc = getSymbols().vexart_kitty_emit_frame_with_stats(
-      vctx,
-      targetHandle,
-      finalFrameImageId,
-      ptr(statsBuf),
-    ) as number
-    addBackendProfile("nativeEmitMs", nativeEmitStart)
-    if (rc !== 0) {
-      const err = vexartGetLastError()
-      throw new Error(`[vexart] native frame presentation failed (${rc}): ${err}`)
-    }
-    const stats = decodeNativePresentationStats(statsBuf)
-    addNativeStatsProfile(stats)
+    const stats = emitNativeFinalFrame(vctx, targetHandle, frame)
     return { output: "native-presented", strategy: lastStrategy, stats }
   }
 
@@ -2242,7 +2362,13 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     }
   }
 
-  return {
+  options.tmuxShm?.setOnPresented((stats) => {
+    if (!stats) return
+    lastNativePresentationStats = stats
+    addNativeStatsProfile(stats)
+  })
+
+  const backend = {
     name: "gpu-render-graph",
     beginFrame(ctx): RendererBackendFramePlan {
       resetBackendProfile()
@@ -2261,7 +2387,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       const forcedStrategy = getForcedLayerStrategy()
       if (forcedStrategy) {
         if (forcedStrategy === "final-frame" && lastStrategy !== "final-frame") {
-          clearNativeLayerRegistryMirror()
+          clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: !!options.tmuxShm })
         }
         framesSinceStrategyChange = lastStrategy === forcedStrategy ? framesSinceStrategyChange + 1 : 0
         lastStrategy = forcedStrategy
@@ -2318,7 +2444,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
         framesSinceChange: framesSinceStrategyChange,
       }, lastNativeFramePlan)
       if (chosen === "final-frame" && previousStrategy !== "final-frame") {
-        clearNativeLayerRegistryMirror()
+        clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: !!options.tmuxShm })
       }
       framesSinceStrategyChange = chosen === previousStrategy ? framesSinceStrategyChange + 1 : 0
       lastStrategy = chosen
@@ -2493,4 +2619,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       return vexartCompositeReadbackRgba(_vexartCtx, target, width * height * 4)
     },
   } as GpuRendererBackend
+  if (options.tmuxShm) tmuxPresentationDrainers.set(backend, options.tmuxShm.waitForDrain)
+  return backend
 }

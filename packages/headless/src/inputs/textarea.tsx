@@ -52,6 +52,7 @@ import {
 } from "@vexart/engine"
 import type { KeyEvent } from "@vexart/engine"
 import { useDisabled } from "../helpers/disabled"
+import { nextCodePointOffset, previousCodePointOffset } from "./text-offset"
 
 // ── Theme type ──
 
@@ -520,20 +521,26 @@ export function Textarea(props: TextareaProps) {
         return
       case KEY_BINDING_ACTION.CURSOR_LEFT:
         if (!e.mods.shift && hasSelection()) { moveCursor(selRange()[0]) }
-        else if (pos > 0) { moveCursor(pos - 1, e.mods.shift) }
+        else if (pos > 0) { moveCursor(previousCodePointOffset(val, pos), e.mods.shift) }
         return
       case KEY_BINDING_ACTION.CURSOR_RIGHT:
         if (!e.mods.shift && hasSelection()) { moveCursor(selRange()[1]) }
-        else if (pos < val.length) { moveCursor(pos + 1, e.mods.shift) }
+        else if (pos < val.length) { moveCursor(nextCodePointOffset(val, pos), e.mods.shift) }
         return
       case KEY_BINDING_ACTION.DELETE_BACK:
         if (hasSelection()) { props.onChange?.(deleteSelection()) }
-        else if (pos > 0) { setCursor(pos - 1); props.onChange?.(val.slice(0, pos - 1) + val.slice(pos)) }
+        else if (pos > 0) {
+          const start = previousCodePointOffset(val, pos)
+          setCursor(start); props.onChange?.(val.slice(0, start) + val.slice(pos))
+        }
         clearSelection(); stickyCol = -1; markDirty()
         return
       case KEY_BINDING_ACTION.DELETE_FORWARD:
         if (hasSelection()) { props.onChange?.(deleteSelection()) }
-        else if (pos < val.length) { props.onChange?.(val.slice(0, pos) + val.slice(pos + 1)) }
+        else if (pos < val.length) {
+          const end = nextCodePointOffset(val, pos)
+          props.onChange?.(val.slice(0, pos) + val.slice(end))
+        }
         clearSelection(); stickyCol = -1; markDirty()
         return
     }
@@ -566,7 +573,7 @@ export function Textarea(props: TextareaProps) {
         let insertAt = cursor()
         if (hasSelection()) { base = deleteSelection(); insertAt = cursor() }
         const next = base.slice(0, insertAt) + e.char + base.slice(insertAt)
-        moveCursor(insertAt + 1)
+        moveCursor(insertAt + e.char.length)
         props.onChange?.(next)
         return
       }

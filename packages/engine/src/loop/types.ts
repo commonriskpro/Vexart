@@ -61,6 +61,52 @@ export type DebugLogHelpers = {
   dragReproDebug: (msg: string) => void
 }
 
+/** Per-frame profiling data (only populated when DEBUG_CADENCE=1). */
+export type FrameProfile = {
+  scheduledIntervalMs: number
+  scheduledDelayMs: number
+  timerDelayMs: number
+  sincePrevFrameMs: number
+  scrollMs: number
+  walkTreeMs: number
+  layoutComputeMs: number
+  layoutWritebackMs: number
+  interactionMs: number
+  relayoutMs: number
+  layoutMs: number
+  layerAssignMs: number
+  prepMs: number
+  paintNativeSnapshotMs: number
+  paintLayerPrepMs: number
+  paintFrameContextMs: number
+  paintBackendBeginMs: number
+  paintReuseMs: number
+  paintRenderGraphMs: number
+  paintBackendPaintMs: number
+  paintBackendCompositeMs: number
+  paintBackendReadbackMs: number
+  paintBackendNativeEmitMs: number
+  paintBackendNativeReadbackMs: number
+  paintBackendNativeCompressMs: number
+  paintBackendNativeShmPrepareMs: number
+  paintBackendNativeWriteMs: number
+  paintBackendNativeRawBytes: number
+  paintBackendNativePayloadBytes: number
+  paintBackendUniformMs: number
+  paintLayerCleanupMs: number
+  paintBackendEndMs: number
+  paintPresentationMs: number
+  paintInteractionStatsMs: number
+  paintMs: number
+  beginSyncMs: number
+  ioMs: number
+  endSyncMs: number
+  totalMs: number
+  commands: number
+  repainted: number
+  dirtyBefore: number
+}
+
 // ── Per-frame immutable coordinator context ──
 
 /** Per-frame context built by the coordinator and threaded through the pipeline. */

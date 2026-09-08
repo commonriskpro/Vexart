@@ -88,6 +88,10 @@ interface FrameBreakdownReport {
   scenarios: FrameBreakdownScenario[]
 }
 
+export function canCreateRenderLoop(caps: Pick<Capabilities, "tmux" | "kittyGraphics" | "kittyPlaceholder">) {
+  return caps.tmux ? caps.kittyPlaceholder : caps.kittyGraphics
+}
+
 function parseCli(): CliOptions {
   const args = process.argv.slice(2)
   let output = DEFAULT_REPORT
@@ -203,7 +207,7 @@ async function collectActiveReport(options: CliOptions): Promise<ValidationRepor
   })
   let afterLoopEnabled = beforeLoopEnabled
   try {
-    if (term.caps.kittyGraphics) {
+    if (canCreateRenderLoop(term.caps)) {
       const loop = createRenderLoop(term, { experimental: { nativePresentation: true } })
       afterLoopEnabled = isNativePresentationEnabled()
       loop.destroy()
@@ -274,9 +278,13 @@ function printReport(report: ValidationReport, output: string) {
   console.log(`\n✅ wrote ${output}`)
 }
 
-const options = parseCli()
-const canProbe = options.force || isInteractiveTty()
-const report = canProbe ? await collectActiveReport(options) : collectStaticReport(options)
-await mkdir(dirname(options.output), { recursive: true })
-await writeFile(options.output, JSON.stringify(report, null, 2) + "\n")
-printReport(report, options.output)
+async function main() {
+  const options = parseCli()
+  const canProbe = options.force || isInteractiveTty()
+  const report = canProbe ? await collectActiveReport(options) : collectStaticReport(options)
+  await mkdir(dirname(options.output), { recursive: true })
+  await writeFile(options.output, JSON.stringify(report, null, 2) + "\n")
+  printReport(report, options.output)
+}
+
+if (import.meta.main) await main()

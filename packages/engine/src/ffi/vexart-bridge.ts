@@ -203,6 +203,7 @@ function candidateLibPaths(): string[] {
 let _lib: ReturnType<typeof dlopen<typeof VEXART_SYMBOLS>> | null = null
 // WARNING: Module-level singleton — prevents multi-loop usage.
 let _rawLib: ReturnType<typeof dlopen<typeof VEXART_SYMBOLS>> | null = null
+let _libPath: string | null = null
 let ffiCallCount = 0
 const ffiCallCountsBySymbol = new Map<string, number>()
 const FFI_DEBUG = process.env.VEXART_DEBUG_FFI === "1"
@@ -244,6 +245,7 @@ export function openVexartLibrary(): ReturnType<typeof dlopen<typeof VEXART_SYMB
   for (const path of candidateLibPaths()) {
     try {
       _rawLib = dlopen(path, VEXART_SYMBOLS)
+      _libPath = path
       if (FFI_DEBUG) {
         _lib = {
           symbols: instrumentSymbols(_rawLib.symbols),
@@ -267,8 +269,13 @@ export function closeVexartLibrary(): void {
     _rawLib?.close()
     _lib = null
     _rawLib = null
+    _libPath = null
   }
   _msdfLib = null
+  _kittyPlaceholderLib?.close()
+  _kittyPlaceholderLib = null
+  _kittyShmLib?.close()
+  _kittyShmLib = null
 }
 
 // ── MSDF Font symbols (lazy-loaded for backward compatibility) ──────────────
@@ -305,6 +312,106 @@ export function openMsdfFontSymbols(): ReturnType<typeof dlopen<typeof MSDF_FONT
       return _msdfLib.symbols
     } catch {
       // This dylib doesn't have font symbols — try next or give up.
+    }
+  }
+  return null
+}
+
+// ── tmux Kitty placeholder symbols (lazy-loaded for backward compatibility) ─
+
+/**
+ * Native symbols for the tmux Kitty Unicode-placeholder presenter.
+ *
+ * These are deliberately kept out of VEXART_SYMBOLS. The mandatory symbol
+ * set is also used with older published libvexart binaries, while the
+ * placeholder ABI is only available in newer native builds.
+ */
+export const KITTY_PLACEHOLDER_SYMBOLS = {
+  // emit_placeholder_frame: ctx, target, image_id, cols, rows, stats_out → i32
+  vexart_kitty_emit_placeholder_frame: {
+    args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr],
+    returns: FFIType.i32,
+  },
+  // delete_placeholder: ctx, image_id → i32
+  vexart_kitty_delete_placeholder: {
+    args: [FFIType.u64, FFIType.u32],
+    returns: FFIType.i32,
+  },
+} as const satisfies Record<string, { args: FFIType[]; returns: FFIType }>
+
+let _kittyPlaceholderLib: ReturnType<typeof dlopen<typeof KITTY_PLACEHOLDER_SYMBOLS>> | null = null
+
+/**
+ * Try to open the tmux placeholder symbols from libvexart.
+ *
+ * Returns null when the loaded native library predates the placeholder ABI;
+ * callers that require the feature should report an actionable rebuild error.
+ */
+export function openKittyPlaceholderSymbols(): ReturnType<typeof dlopen<typeof KITTY_PLACEHOLDER_SYMBOLS>>["symbols"] | null {
+  if (_kittyPlaceholderLib) return _kittyPlaceholderLib.symbols
+  // Ensure the mandatory library is loaded first and, most importantly, that
+  // the placeholder handle resolves the same candidate selected for context
+  // creation. Loading a second candidate would make its symbols incompatible
+  // with the context owned by the mandatory handle.
+  openVexartLibrary()
+  const paths = _libPath ? [_libPath] : candidateLibPaths()
+  for (const path of paths) {
+    try {
+      _kittyPlaceholderLib = dlopen(path, KITTY_PLACEHOLDER_SYMBOLS)
+      return _kittyPlaceholderLib.symbols
+    } catch {
+      // Old libvexart builds simply do not export this optional ABI.
+    }
+  }
+  return null
+}
+
+// ── tmux Kitty SHM placeholder symbols (lazy-loaded) ───────────────────────
+
+/**
+ * Native symbols for the production tmux SHM placeholder presenter.
+ *
+ * This group is intentionally loaded separately from VEXART_SYMBOLS.  The
+ * regular library ABI remains usable with published binaries that predate
+ * the tmux SHM presenter; a tmux backend reports an actionable rebuild error
+ * when this optional group is unavailable.
+ */
+export const KITTY_SHM_SYMBOLS = {
+  // emit_placeholder_shm_frame: ctx, target, params(20 bytes), params_len,
+  // out_handle, stats_out → i32
+  vexart_kitty_emit_placeholder_shm_frame: {
+    args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.ptr],
+    returns: FFIType.i32,
+  },
+  // shm_is_consumed: 1=terminal read/unlinked, 0=still present, negative=error
+  vexart_kitty_shm_is_consumed: {
+    args: [FFIType.u64],
+    returns: FFIType.i32,
+  },
+  // shm_release: close the registry handle and optionally unlink the name.
+  vexart_kitty_shm_release: {
+    args: [FFIType.u64, FFIType.u32],
+    returns: FFIType.i32,
+  },
+} as const satisfies Record<string, { args: FFIType[]; returns: FFIType }>
+
+let _kittyShmLib: ReturnType<typeof dlopen<typeof KITTY_SHM_SYMBOLS>> | null = null
+
+/**
+ * Open the tmux SHM placeholder symbols from the same native library selected
+ * by openVexartLibrary(). Returns null for old native binaries.
+ */
+export function openKittyShmSymbols(): ReturnType<typeof dlopen<typeof KITTY_SHM_SYMBOLS>>["symbols"] | null {
+  if (_kittyShmLib) return _kittyShmLib.symbols
+  openVexartLibrary()
+  const paths = _libPath ? [_libPath] : candidateLibPaths()
+  for (const path of paths) {
+    try {
+      _kittyShmLib = dlopen(path, KITTY_SHM_SYMBOLS)
+      return _kittyShmLib.symbols
+    } catch {
+      // Published libraries without the SHM placeholder ABI are valid for
+      // non-tmux rendering; the caller decides whether this is fatal.
     }
   }
   return null

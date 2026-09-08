@@ -11,6 +11,23 @@ export const nativePackages = [
 
 export const publishedPackages = [...nativePackages.map(({ name }) => name), "vexart"]
 
+const SUPPORTED_RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/
+
+/** Resolve the npm dist-tag for the supported stable and beta channels. */
+export function resolveReleaseChannel(version) {
+  if (typeof version !== "string" || version.length === 0 || /\s/.test(version)) {
+    throw new Error("release version must be a non-empty semver string")
+  }
+
+  const match = SUPPORTED_RELEASE_VERSION.exec(version)
+  if (!match) throw new Error(`unsupported release version ${version}; expected X.Y.Z or X.Y.Z-beta[.N]`)
+
+  const prerelease = match[4]
+  if (!prerelease) return "latest"
+  if (prerelease === "beta" || /^beta\.(0|[1-9]\d*)$/.test(prerelease)) return "beta"
+  throw new Error(`unsupported prerelease channel ${prerelease}; only beta prereleases are supported`)
+}
+
 /** Resolve the version used by both native artifacts and the main package. */
 export function resolveReleaseVersion({ packageVersion, refType = "", refName = "" }) {
   if (typeof packageVersion !== "string" || packageVersion.length === 0 || /\s/.test(packageVersion)) {
@@ -107,30 +124,29 @@ function npmView(args, description) {
   return parseJsonOutput(result.stdout || "", description)
 }
 
-/**
- * Verify a captured registry response. The `latest` check preserves the
- * existing release policy: every published package is intentionally tagged
- * `latest`, and latest must point at this exact release.
- */
+/** Verify a captured registry response for the release's derived channel. */
 export function assertRegistryResponse({ expectedVersion, response }) {
+  const expectedChannel = resolveReleaseChannel(expectedVersion)
+
   for (const packageName of publishedPackages) {
     const entry = response?.[packageName]
     if (!entry) throw new RegistryPropagationError(`registry response is missing ${packageName}`)
     if (entry.version !== expectedVersion) {
       throw new RegistryVerificationError(`${packageName} resolved to ${entry.version || "<missing>"}; expected ${expectedVersion}`)
     }
-    if (entry.latest === undefined) throw new RegistryPropagationError(`registry has not propagated the latest dist-tag for ${packageName}`)
-    if (entry.latest !== expectedVersion) {
-      throw new RegistryVerificationError(`${packageName} latest dist-tag is ${entry.latest || "<missing>"}; expected ${expectedVersion}`)
+    if (entry[expectedChannel] === undefined) throw new RegistryPropagationError(`registry has not propagated the ${expectedChannel} dist-tag for ${packageName}`)
+    if (entry[expectedChannel] !== expectedVersion) {
+      throw new RegistryVerificationError(`${packageName} ${expectedChannel} dist-tag is ${entry[expectedChannel] || "<missing>"}; expected ${expectedVersion}`)
     }
   }
 }
 
 export function verifyRegistry(expectedVersion) {
+  const expectedChannel = resolveReleaseChannel(expectedVersion)
   const response = Object.fromEntries(publishedPackages.map((packageName) => {
     const version = npmView([`${packageName}@${expectedVersion}`, "version"], `${packageName}@${expectedVersion}`)
     const tags = npmView([packageName, "dist-tags"], `${packageName} dist-tags`)
-    return [packageName, { version, latest: tags?.latest }]
+    return [packageName, { version, [expectedChannel]: tags?.[expectedChannel] }]
   }))
   assertRegistryResponse({ expectedVersion, response })
 }
@@ -158,13 +174,19 @@ function main() {
     return
   }
 
-  if (command === "registry") {
-    verifyRegistry(value)
-    console.log(`registry versions and latest dist-tags verified for ${value}`)
+  if (command === "channel") {
+    console.log(resolveReleaseChannel(value ?? packageVersion(root)))
     return
   }
 
-  throw new Error("usage: release-verification.mjs <version|artifacts|registry> [version]")
+  if (command === "registry") {
+    const channel = resolveReleaseChannel(value)
+    verifyRegistry(value)
+    console.log(`registry versions and ${channel} dist-tags verified for ${value}`)
+    return
+  }
+
+  throw new Error("usage: release-verification.mjs <version|channel|artifacts|registry> [version]")
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -30,6 +30,16 @@ export type NativeLayerDescriptor = {
   z: number
 }
 
+/**
+ * Controls terminal-side cleanup when the caller owns a complete replacement
+ * frame. Native registry metadata is always cleared; this only suppresses the
+ * legacy per-layer Kitty delete, which is not meaningful for a placeholder
+ * image presentation.
+ */
+export type NativeLayerRegistryCleanupOptions = {
+  suppressTerminalImageDeletes?: boolean
+}
+
 function nextFrame() {
   frame += 1n
   return frame
@@ -149,14 +159,17 @@ export function nativeLayerRemove(key: string): number | null {
   }
 }
 
-export function clearNativeLayerRegistryMirror() {
-  // `vexart_layer_clear` only drops the native registry metadata. Kitty image
-  // placements live in the terminal independently, so delete every image
-  // before clearing the mirror or a prior layered frame can remain visible
-  // above a subsequent full-frame presentation (notably after resize or a
-  // strategy transition).
-  const imageIds = new Set(imageIdsByKey.values())
-  for (const imageId of imageIds) nativeDeleteLayer(imageId)
+export function clearNativeLayerRegistryMirror(options: NativeLayerRegistryCleanupOptions = {}) {
+  // `vexart_layer_clear` only drops native registry metadata. For the normal
+  // layered presenter, Kitty image placements live in the terminal
+  // independently, so delete every image before clearing the mirror or a
+  // prior layered frame can remain visible above a subsequent full-frame
+  // presentation. Placeholder presentation deliberately owns one complete
+  // image and opts out of these obsolete per-layer deletes.
+  if (!options.suppressTerminalImageDeletes) {
+    const imageIds = new Set(imageIdsByKey.values())
+    for (const imageId of imageIds) nativeDeleteLayer(imageId)
+  }
   try {
     const { symbols } = openVexartLibrary()
     symbols.vexart_layer_clear(1n)

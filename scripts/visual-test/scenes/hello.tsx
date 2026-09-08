@@ -17,6 +17,7 @@ export function Scene() {
       gap={12}
     >
       <box
+        width="fit"
         backgroundColor={0x262626ff}
         cornerRadius={8}
         padding={16}

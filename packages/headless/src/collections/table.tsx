@@ -109,8 +109,8 @@ export function Table(props: TableProps) {
           {(row, index) => {
             const i = index()
             const ctx: TableCellContext = {
-              selected: props.selectedRow === i,
-              focused: focused(),
+              get selected() { return props.selectedRow === i },
+              get focused() { return focused() },
               rowIndex: i,
               rowProps: {
                 onPress: () => {
@@ -120,7 +120,6 @@ export function Table(props: TableProps) {
                 },
               },
             }
-
             const cells = (
               <>
                 <For each={props.columns}>

@@ -25,7 +25,7 @@ import { appendFileSync } from "node:fs"
 import { debugFrameStart, debugRecordFfiCounts } from "./debug"
 import { type Layer, createLayerStore } from "../ffi/layers"
 import { type DamageRect } from "../ffi/damage"
-import { createGpuRendererBackend } from "../ffi/gpu-renderer-backend"
+import { createGpuRendererBackendForTerminal } from "../ffi/gpu-renderer-backend"
 
 import { getRendererBackend, setRendererBackend, type RendererBackend } from "../ffi/renderer-backend"
 import {
@@ -142,7 +142,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   const markDirty = globalMarkDirty
   const expFrameBudgetMs = opts?.experimental?.frameBudgetMs ?? 0
 
-  if (!term.caps.kittyGraphics) throw new Error("Vexart GPU-only renderer requires a terminal with Kitty graphics support")
+  if (term.caps.tmux ? !term.caps.kittyPlaceholder : !term.caps.kittyGraphics) {
+    throw new Error("Vexart GPU-only renderer requires a terminal with Kitty graphics support")
+  }
+  const isTmuxPlaceholderPresentation = term.caps.tmux && term.caps.kittyPlaceholder
   const nativePresentationRequested = opts?.experimental?.nativePresentation !== false
   if (!nativePresentationRequested) {
     disableNativePresentation("nativePresentation disabled by render loop option")
@@ -224,7 +227,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   // ── Frame budget scheduler (Slice 3.4) ──
   const scheduler = createFrameScheduler()
 
-  const defaultGpuRendererBackend = createGpuRendererBackend()
+  const defaultGpuRendererBackend = createGpuRendererBackendForTerminal(term)
   if (!getRendererBackend()) setRendererBackend(defaultGpuRendererBackend)
   const getActiveBackend = (): RendererBackend => getRendererBackend() ?? defaultGpuRendererBackend
 
@@ -450,7 +453,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     root.props.width = newW; root.props.height = newH
     root._widthSizing = parseSizing(newW); root._heightSizing = parseSizing(newH)
     syncLayoutProp(root, "width", newW); syncLayoutProp(root, "height", newH)
-    clearNativeLayerRegistryMirror()
+    clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: isTmuxPlaceholderPresentation })
     resetLayers(); layerCache.clear()
     markDirty(); markAllDirty(); markInteractionActive()
     resizeDebug(`dirty marked newW=${newW} newH=${newH}`)
@@ -507,7 +510,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       if (!isSuspended) return
       isSuspended = false
       term.resume()
-      clearNativeLayerRegistryMirror()
+      clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: isTmuxPlaceholderPresentation })
       markDirty(); markAllDirty()
       loopStarted = true
       frame(); nextFrameDeadlineMs = 0; scheduleNextFrame()
@@ -519,7 +522,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       scheduledDelayMs = 0; nextFrameDeadlineMs = 0
       unsubGlobalDirty()
       unsubResize()
-      clearNativeLayerRegistryMirror()
+      clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: isTmuxPlaceholderPresentation })
 
       getActiveBackend().destroy?.()
       resetLayers(); layerCache.clear()

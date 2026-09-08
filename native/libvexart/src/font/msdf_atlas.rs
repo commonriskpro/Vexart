@@ -104,7 +104,9 @@ impl MsdfGlyphEntry {
     /// That's bbox + 2 * SDF_RANGE / atlas_scale font units.
     /// At display: (bbox + 2 * SDF_RANGE / atlas_scale) * display_scale
     pub fn quad_w(&self, display_scale: f32) -> f32 {
-        if self.bbox_w <= 0.0 || self.texel_w <= 0.0 { return 0.0; }
+        if self.bbox_w <= 0.0 || self.texel_w <= 0.0 {
+            return 0.0;
+        }
         // texel_w texels at atlas_scale texels/font_unit → texel_w / atlas_scale font units
         // atlas_scale = min(scale_x, scale_y) = (GLYPH_SIZE - 2*SDF_RANGE) / max(bbox_w, bbox_h)
         // But we stored texel_w directly, so: texel_w / atlas_scale = texel_w * max(bbox_w,bbox_h) / (GLYPH_SIZE - 2*SDF_RANGE)
@@ -115,7 +117,9 @@ impl MsdfGlyphEntry {
 
     /// Quad height in display pixels at a given display scale.
     pub fn quad_h(&self, display_scale: f32) -> f32 {
-        if self.bbox_h <= 0.0 || self.texel_h <= 0.0 { return 0.0; }
+        if self.bbox_h <= 0.0 || self.texel_h <= 0.0 {
+            return 0.0;
+        }
         let content_texels = GLYPH_SIZE as f32 - 2.0 * SDF_RANGE as f32;
         let dominant = self.bbox_w.max(self.bbox_h);
         self.texel_h * dominant / content_texels * display_scale
@@ -244,9 +248,7 @@ impl MsdfAtlasManager {
         let glyph_id = face.glyph_index(codepoint)?;
 
         // Get glyph metrics.
-        let advance = face
-            .glyph_hor_advance(glyph_id)
-            .unwrap_or(0) as f32;
+        let advance = face.glyph_hor_advance(glyph_id).unwrap_or(0) as f32;
         let bbox = face.glyph_bounding_box(glyph_id);
         let (bearing_x, bearing_y, bbox_w, bbox_h) = if let Some(bb) = bbox {
             (
@@ -277,7 +279,9 @@ impl MsdfAtlasManager {
 
         if has_contours {
             if let Some(shape) = shape {
-                if let Some(img) = generate_msdf_for_glyph(shape, bbox_w, bbox_h, bearing_x, bearing_y) {
+                if let Some(img) =
+                    generate_msdf_for_glyph(shape, bbox_w, bbox_h, bearing_x, bearing_y)
+                {
                     page.write_glyph(col, row, &img);
                 }
             }
@@ -290,8 +294,16 @@ impl MsdfAtlasManager {
         // the glyph content + SDF padding occupies a specific texel region.
         let sdf_pad = SDF_RANGE as f32;
         let content_texels = GLYPH_SIZE as f32 - 2.0 * sdf_pad;
-        let atlas_scale_x = if bbox_w > 0.0 { content_texels / bbox_w } else { 1.0 };
-        let atlas_scale_y = if bbox_h > 0.0 { content_texels / bbox_h } else { 1.0 };
+        let atlas_scale_x = if bbox_w > 0.0 {
+            content_texels / bbox_w
+        } else {
+            1.0
+        };
+        let atlas_scale_y = if bbox_h > 0.0 {
+            content_texels / bbox_h
+        } else {
+            1.0
+        };
         let atlas_scale = atlas_scale_x.min(atlas_scale_y);
         // Texel region = bbox * atlas_scale + 2 * SDF_RANGE, capped at GLYPH_SIZE.
         let texel_w = (bbox_w * atlas_scale + 2.0 * sdf_pad).min(GLYPH_SIZE as f32);
@@ -334,7 +346,6 @@ impl MsdfAtlasManager {
     pub fn page_size(&self) -> u32 {
         PAGE_SIZE
     }
-
 }
 
 /// Generate an MSDF image for a single glyph.
@@ -394,9 +405,15 @@ fn generate_msdf_for_glyph(
     use nalgebra::{Affine2, Matrix3};
     let mut transformed = colored.clone();
     let affine = Affine2::from_matrix_unchecked(Matrix3::new(
-        scale,        0.0,    translate_x,
-        0.0,          -scale, translate_y_flipped,
-        0.0,          0.0,    1.0,
+        scale,
+        0.0,
+        translate_x,
+        0.0,
+        -scale,
+        translate_y_flipped,
+        0.0,
+        0.0,
+        1.0,
     ));
     transformed.transform(&affine);
     let prepared_transformed = transformed.prepare();
@@ -491,7 +508,10 @@ mod tests {
 
         let mut mgr = MsdfAtlasManager::new();
         let entry = mgr.get_or_generate(&resolved.data, resolved.face_index, 'A');
-        assert!(entry.is_some(), "should generate MSDF for 'A' from system font");
+        assert!(
+            entry.is_some(),
+            "should generate MSDF for 'A' from system font"
+        );
         let entry = entry.unwrap();
         assert!(entry.advance > 0.0, "glyph advance should be positive");
         assert_eq!(entry.page, 0);
@@ -517,12 +537,17 @@ mod tests {
         // Space character typically has no outlines but should still get a slot.
         let mut system = crate::font::system::FontSystem::new();
         let resolved = system.query_face(&["sans-serif"], 400, false);
-        if resolved.is_none() { return; }
+        if resolved.is_none() {
+            return;
+        }
         let resolved = resolved.unwrap();
 
         let mut mgr = MsdfAtlasManager::new();
         let entry = mgr.get_or_generate(&resolved.data, resolved.face_index, ' ');
-        assert!(entry.is_some(), "space should get a slot even without outlines");
+        assert!(
+            entry.is_some(),
+            "space should get a slot even without outlines"
+        );
         let e = entry.unwrap();
         assert!(e.advance > 0.0);
     }
@@ -533,7 +558,9 @@ mod tests {
         // proportional to the glyph bbox, NOT the full atlas cell.
         let mut system = crate::font::system::FontSystem::new();
         let resolved = system.query_face(&["sans-serif"], 400, false);
-        if resolved.is_none() { return; }
+        if resolved.is_none() {
+            return;
+        }
         let resolved = resolved.unwrap();
 
         let face = ttf_parser::Face::parse(&resolved.data, resolved.face_index).unwrap();
@@ -565,14 +592,17 @@ mod tests {
                 assert!(
                     quad_w < advance_px * 2.5,
                     "glyph '{}': quad_w ({:.1}) should not be much larger than advance ({:.1})",
-                    ch, quad_w, advance_px
+                    ch,
+                    quad_w,
+                    advance_px
                 );
                 // Quad height should be roughly font_size (not 2x or 3x).
                 // With SDF padding it can be ~20-30% larger than bbox.
                 assert!(
                     quad_h < 20.0 * 1.5,
                     "glyph '{}': quad_h ({:.1}) should not exceed ~1.5x font_size",
-                    ch, quad_h
+                    ch,
+                    quad_h
                 );
             }
         }

@@ -460,5 +460,11 @@ export function assignLayersSpatial(
     }
   }
 
+  // A scroll layer claims its scissor range first, then attaches the layer's
+  // background rectangle and border from outside that range.  Re-establish
+  // source order before paint collects the commands; otherwise the background
+  // can be replayed after the child rows and cover them.
+  for (const lb of scissorLayers) lb.slot.cmdIndices.sort((a, b) => a - b)
+
   return { bgSlot, contentSlots, slotBoundaryByKey, boundaries }
 }

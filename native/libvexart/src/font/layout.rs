@@ -53,7 +53,10 @@ pub fn layout_text(
         Err(_) => {
             // Can't parse font — return single line with approximate width.
             return TextLayout {
-                lines: vec![LayoutLine { text: text.to_string(), width: text.len() as f32 * font_size * 0.5 }],
+                lines: vec![LayoutLine {
+                    text: text.to_string(),
+                    width: text.len() as f32 * font_size * 0.5,
+                }],
                 height: line_height,
             };
         }
@@ -241,7 +244,10 @@ mod tests {
 
     #[test]
     fn test_layout_single_line_no_wrap() {
-        let (data, idx) = match get_test_font() { Some(f) => f, None => return };
+        let (data, idx) = match get_test_font() {
+            Some(f) => f,
+            None => return,
+        };
         let layout = layout_text("Hello world", &data, idx, 14.0, 17.0, 0.0);
         assert_eq!(layout.lines.len(), 1);
         assert_eq!(layout.lines[0].text, "Hello world");
@@ -250,7 +256,10 @@ mod tests {
 
     #[test]
     fn test_layout_hard_break() {
-        let (data, idx) = match get_test_font() { Some(f) => f, None => return };
+        let (data, idx) = match get_test_font() {
+            Some(f) => f,
+            None => return,
+        };
         let layout = layout_text("Hello\nworld", &data, idx, 14.0, 17.0, 0.0);
         assert_eq!(layout.lines.len(), 2);
         assert_eq!(layout.lines[0].text, "Hello");
@@ -260,32 +269,50 @@ mod tests {
 
     #[test]
     fn test_layout_word_wrap() {
-        let (data, idx) = match get_test_font() { Some(f) => f, None => return };
+        let (data, idx) = match get_test_font() {
+            Some(f) => f,
+            None => return,
+        };
         // Use a very small max_width to force wrapping.
         let layout = layout_text("Hello beautiful world", &data, idx, 14.0, 17.0, 60.0);
         // With a 60px width and 14px font, "Hello beautiful" likely won't fit.
-        assert!(layout.lines.len() >= 2, "should wrap into multiple lines, got {}", layout.lines.len());
+        assert!(
+            layout.lines.len() >= 2,
+            "should wrap into multiple lines, got {}",
+            layout.lines.len()
+        );
         // Each line should be within max_width.
         for line in &layout.lines {
             assert!(
                 line.width <= 60.0 + 1.0, // small tolerance for rounding
                 "line '{}' width {} exceeds max_width 60",
-                line.text, line.width
+                line.text,
+                line.width
             );
         }
     }
 
     #[test]
     fn test_layout_overflow_wrap() {
-        let (data, idx) = match get_test_font() { Some(f) => f, None => return };
+        let (data, idx) = match get_test_font() {
+            Some(f) => f,
+            None => return,
+        };
         // Long word with very narrow container → must break mid-word.
         let layout = layout_text("Superlongword", &data, idx, 14.0, 17.0, 40.0);
-        assert!(layout.lines.len() >= 2, "should char-break a long word, got {}", layout.lines.len());
+        assert!(
+            layout.lines.len() >= 2,
+            "should char-break a long word, got {}",
+            layout.lines.len()
+        );
     }
 
     #[test]
     fn test_layout_empty_text() {
-        let (data, idx) = match get_test_font() { Some(f) => f, None => return };
+        let (data, idx) = match get_test_font() {
+            Some(f) => f,
+            None => return,
+        };
         let layout = layout_text("", &data, idx, 14.0, 17.0, 200.0);
         assert_eq!(layout.lines.len(), 1);
         assert!(layout.lines[0].text.is_empty());
@@ -293,7 +320,10 @@ mod tests {
 
     #[test]
     fn test_layout_multiple_hard_breaks() {
-        let (data, idx) = match get_test_font() { Some(f) => f, None => return };
+        let (data, idx) = match get_test_font() {
+            Some(f) => f,
+            None => return,
+        };
         let layout = layout_text("a\n\nb\n", &data, idx, 14.0, 17.0, 200.0);
         // "a", "", "b", ""
         assert_eq!(layout.lines.len(), 4);

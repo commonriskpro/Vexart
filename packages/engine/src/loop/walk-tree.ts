@@ -249,7 +249,21 @@ export function walkTree(
     // layout adapter — no pre-measurement needed here.
     createTextFlexNode(node)
     layout.setCurrentFlexNode(node._flexNode)
-    layout.text(renderContent, color, fontId, fontSize, node.id, undefined, undefined, fontFamily, fontWeight, fontStyle, lineHeight)
+    layout.text(
+      renderContent,
+      color,
+      fontId,
+      fontSize,
+      node.id,
+      undefined,
+      undefined,
+      fontFamily,
+      fontWeight,
+      fontStyle,
+      lineHeight,
+      props.whiteSpace,
+      props.wordBreak,
+    )
     state.textNodes.push(node)
     return
   }

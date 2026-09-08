@@ -116,13 +116,13 @@ export function Code(props: CodeProps) {
         <box height={LINE_HEIGHT} width="100%" direction="row">
           {showLineNumbers() ? (
             <box width={gutterWidth()}>
-              <text color={t().lineNumberFg} fontSize={14}>
+              <text color={t().lineNumberFg} fontSize={14} whiteSpace="pre-wrap">
                 {String(lineIdx + 1).padStart(String(tokens().length).length)}
               </text>
             </box>
           ) : null}
           {lineTokens.map((tok) => (
-            <text color={tok.color} fontSize={14}>{tok.text}</text>
+            <text color={tok.color} fontSize={14} whiteSpace="pre-wrap">{tok.text}</text>
           ))}
         </box>
       ))}

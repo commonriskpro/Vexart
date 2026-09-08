@@ -33,7 +33,7 @@ import { getLatestInteractionTrace } from "./input"
 import { shouldFreezeInteractionLayer } from "../reconciler/interaction"
 import { multiply, translate, transformPoint } from "../ffi/matrix"
 import { debugUpdateStats, isDebugEnabled } from "./debug"
-import type { LayerBoundary, LayerSlot, LayerPlan, PaintResult, InteractionLatencyTracking, DebugLogHelpers } from "./types"
+import type { FrameProfile, LayerBoundary, LayerSlot, LayerPlan, PaintResult, InteractionLatencyTracking, DebugLogHelpers } from "./types"
 import type { TGENode } from "../ffi/node"
 
 import { isNativePresentationCapable } from "../ffi/native-presentation-flags"
@@ -60,7 +60,7 @@ export type PreparedLayerSlot = {
   freezeWhileInteracting: boolean
 }
 
-export type PaintProfiler = Pick<import("./composite").FrameProfile,
+export type PaintProfiler = Pick<FrameProfile,
   | "paintNativeSnapshotMs" | "paintLayerPrepMs" | "paintFrameContextMs"
   | "paintBackendBeginMs" | "paintReuseMs" | "paintRenderGraphMs"
   | "paintBackendPaintMs" | "paintBackendCompositeMs" | "paintBackendReadbackMs"
@@ -80,6 +80,7 @@ function cleanupOrphanLayers(
   imageIdForLayer: (layer: Layer) => number,
   removeLayer: (layer: Layer) => void,
   debugCadence: boolean,
+  suppressNativeLayerDeletes: boolean,
 ) {
   let ioMs = 0
   activeSlotKeys.clear()
@@ -89,7 +90,7 @@ function cleanupOrphanLayers(
     const ioStart = debugCadence ? performance.now() : 0
     const imageId = imageIdForLayer(layer)
     const nativeImageId = nativeLayerRemove(key)
-    nativeDeleteLayer(nativeImageId ?? imageId)
+    if (!suppressNativeLayerDeletes) nativeDeleteLayer(nativeImageId ?? imageId)
     if (debugCadence) ioMs += performance.now() - ioStart
     removeLayer(layer)
     layerCache.delete(key)
@@ -128,6 +129,10 @@ export type PaintFrameState = {
   // Layer cache — coordinator-owned map
   layerCache: Map<string, Layer>
   activeSlotKeys: Set<string>
+
+  // Placeholder presentation owns one complete terminal image. Keep native
+  // registry metadata cleanup, but do not emit obsolete per-layer deletes.
+  suppressNativeLayerDeletes?: boolean
 
   // Frame dirty rects accumulator (cleared and rebuilt each frame)
   frameDirtyRects: DamageRect[]
@@ -487,7 +492,7 @@ export function paintFrame(
         if (slot.z >= 0) {
           const imageId = imageIdForLayer(layer)
           const nativeImageId = nativeLayerRemove(slot.key)
-          nativeDeleteLayer(nativeImageId ?? imageId)
+          if (!state.suppressNativeLayerDeletes) nativeDeleteLayer(nativeImageId ?? imageId)
         }
         layer.dirty = false
         continue
@@ -619,7 +624,7 @@ export function paintFrame(
 
   if (framePlan?.strategy === "skip-present") {
     const cleanupStart = profile ? performance.now() : 0
-    ioMs += cleanupOrphanLayers(preparedSlots, layerCache, activeSlotKeys, state.transmissionMode, imageIdForLayer, removeLayer, debugCadence)
+    ioMs += cleanupOrphanLayers(preparedSlots, layerCache, activeSlotKeys, state.transmissionMode, imageIdForLayer, removeLayer, debugCadence, !!state.suppressNativeLayerDeletes)
     if (profile) profile.paintLayerCleanupMs += performance.now() - cleanupStart
     updateLayerStabilityCounters(preparedSlots, slotBoundaryByKey, state.nodeRefById)
     const backendEndStart = profile ? performance.now() : 0
@@ -789,7 +794,7 @@ export function paintFrame(
 
   // ── Step 4: Clean up orphan layers ──
   const cleanupStart = profile ? performance.now() : 0
-  ioMs += cleanupOrphanLayers(preparedSlots, layerCache, activeSlotKeys, state.transmissionMode, imageIdForLayer, removeLayer, debugCadence)
+  ioMs += cleanupOrphanLayers(preparedSlots, layerCache, activeSlotKeys, state.transmissionMode, imageIdForLayer, removeLayer, debugCadence, !!state.suppressNativeLayerDeletes)
   if (profile) profile.paintLayerCleanupMs += performance.now() - cleanupStart
   updateLayerStabilityCounters(preparedSlots, slotBoundaryByKey, state.nodeRefById)
 

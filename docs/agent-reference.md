@@ -520,6 +520,66 @@ portable and ARM64-safe.
 - `enter`, `leave`, `beginSync`, `endSync`
 - `inTmux`, `parentTerminal`, `passthroughSupported`, `createWriter`, `wrapPassthrough`
 
+### tmux transport and capability notes
+
+The tmux path is an experimental transport exception, not a second renderer.
+It requires tmux 3.4+, user-configured `allow-passthrough all`, a Kitty or
+Ghostty outer terminal, and successful runtime probes. The approved tmux target
+is full-frame local SHM; the production code path is PASS at the real-tmux-PTY
+level on tmux 3.6a with a synthetic receiver (3.4 is the conservative lower
+bound), while physical display and FPS remain unverified. WezTerm remains
+supported directly; this release does not claim the Unicode-placeholder route
+through tmux for WezTerm. See [`docs/tmux.md`](./tmux.md) for setup, diagnostics,
+the support matrix, and the pending physical-smoke checklist.
+
+`Capabilities` separates the pane and its outer terminal:
+
+- `tmux` identifies a tmux pane, and `parentKind` identifies the inherited outer
+  terminal. A pane's `screen-*`/`tmux-*` `TERM` is not sufficient to infer Kitty.
+- `kittyGraphics`/`kittyPlaceholder` are capability results, not a fallback
+  selection. Startup verifies passthrough and Kitty graphics before presenting.
+- The attached tmux client must advertise `RGB` for truecolor image IDs; mouse,
+  focus, and extended-key settings remain optional input capabilities.
+- The SHM route is local-only: sessions carrying `SSH_CONNECTION`, `SSH_CLIENT`,
+  or `SSH_TTY` are rejected; tmux over SSH is not claimed.
+- tmux presentation retains native one-frame composition and the same WGPU
+  layers. The approved route uses local SHM only; there is no automatic direct or
+  file fallback. The prior direct full-frame run is a comparison baseline, not
+  SHM validation. The integration bounds native ownership with `is_consumed`,
+  error, or timeout cleanup, and permits one in-flight upload plus the latest
+  pending frame rather than an unbounded queue or pool. Kitty `a=f` animation
+  updates are not used because the Ghostty 1.3.1 target reports the action
+  unimplemented.
+
+The tmux-specific probe and native presenter wiring are internal; this route
+does not add a new public renderer or terminal configuration API.
+
+The native presenter wraps each complete Kitty APC in tmux's DCS passthrough
+envelope, doubling `ESC` bytes inside the APC; `createWriter` provides the
+corresponding wrapper for TypeScript graphics probes. `rawWrite` remains
+unwrapped for ANSI mode control, cursor, mouse, focus, color, and size queries.
+Direct baseline APCs use Kitty `q=2` to suppress both success and error replies;
+the SHM upload uses `q=1` for optional errors. SHM completion is not driven by
+an ACK.
+The pane pixel area and cell dimensions are queried separately with CSI `14t` and
+CSI `16t`, so splits and resizes do not reuse the outer window geometry.
+The current Kitty row/column diacritic table bounds a placeholder grid to 1–297
+cells on each axis; larger grids are rejected instead of wrapping coordinates.
+
+The tmux SHM route requires one attached client across the tmux server. A real isolated tmux 3.6a check
+found that `allow-passthrough all` forwards a hidden-pane sequence while `on`
+drops it; a returned `ESC_G` ACK is delivered to the active pane, not the
+origin. This routing result does not prove physical rendering or reattach
+parity. Reattach through a different outer terminal requires stopping and
+restarting Vexart to reprobe; capabilities are not live-monitored.
+
+The input parser is stream-fragmentation safe: it retains incomplete UTF-8,
+CSI/SS3, mouse, focus, and bracketed-paste sequences across reads. tmux's mouse,
+focus, extended-key, key-table, and terminfo settings still determine which
+events reach the parser. In tmux copy mode the captured pane text contains the
+Unicode placeholder characters rather than rendered image pixels or semantic
+text.
+
 ### Output / Kitty transport
 
 - `probeShm`, `probeFile`, `patchRegion`, `transmitRaw`, `transmitRawAt`,

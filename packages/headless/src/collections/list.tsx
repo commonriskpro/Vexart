@@ -61,8 +61,8 @@ export function List(props: ListProps) {
       {(item, index) => {
         const i = index()
         const ctx: ListItemContext = {
-          selected: props.selectedIndex === i,
-          focused: focused(),
+          get selected() { return props.selectedIndex === i },
+          get focused() { return focused() },
           index: i,
           itemProps: {
             onPress: () => {

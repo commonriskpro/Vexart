@@ -4,13 +4,14 @@ This document defines how Vexart is packaged for the v0.9 developer preview.
 
 ## Deliverable
 
-Vexart ships as an npm tarball produced by:
+Vexart ships as an npm tarball produced by the repository's pack workflow:
 
 ```bash
-bun run build:dist
-cd dist
-bun pack
+bun run pack
 ```
+
+This runs `bun run build:dist`, then executes `bun pm pack --ignore-scripts`
+inside `dist/`.
 
 ## Package Contents
 
@@ -23,7 +24,7 @@ dist/
 ├── jsx-runtime.d.ts            — JSX intrinsic elements
 ├── solid-plugin.ts             — Babel JSX transform helper
 ├── tree-sitter/                — grammar .wasm + .scm + worker
-├── package.json                — optionalDependencies: @vexart-native/darwin-arm64
+├── package.json                — optionalDependencies: platform-native packages
 └── platform/
     └── darwin-arm64/           — @vexart-native/darwin-arm64 (libvexart.dylib)
 ```
@@ -37,18 +38,27 @@ esbuild/SWC pattern. The main `vexart` package declares them as
 | Package | Platform | Binary |
 |---|---|---|
 | `@vexart-native/darwin-arm64` | macOS Apple Silicon | `libvexart.dylib` |
+| `@vexart-native/linux-x64` | Linux x86_64 | `libvexart.so` |
+| `@vexart-native/linux-arm64` | Linux ARM64 | `libvexart.so` |
 
-Future platforms (when needed):
+`bun run build:dist` emits the native package for the host running the command;
+the local macOS Apple Silicon artifact is therefore `darwin-arm64`. The
+[GitHub Actions workflow](../.github/workflows/build-native.yml) defines a
+matrix for these three targets and publishes them on a tagged release; its CI
+execution was not validated in this session. Future targets outside that matrix
+include:
+
 - `@vexart-native/darwin-x64` — macOS Intel
-- `@vexart-native/linux-x64` — Linux x86_64
-- `@vexart-native/linux-arm64` — Linux ARM64
 - `@vexart-native/win32-x64` — Windows (v1.0)
 
-Publishing order: **platform package first**, then main package:
+Publishing order for the **beta preview** is platform package first, then main
+package. These commands are instructions only and were not run as part of this
+verification. The block shows the locally built `darwin-arm64` package; the
+tagged CI workflow publishes every matrix package before the main package:
 
 ```bash
-cd dist/platform/darwin-arm64 && npm publish --access public
-cd dist && npm publish
+(cd dist/platform/darwin-arm64 && npm publish --access public --tag beta)
+(cd dist && npm publish --access public --tag beta)
 ```
 
 ### Two-tier import model
@@ -62,7 +72,7 @@ import { createRenderLoop, useFocus, setRendererBackend } from "vexart/engine"
 ```
 
 The unified barrel (`"vexart"`) re-exports everything from `@vexart/app`,
-`@vexart/styled`, `@vexart/headless`, `@vexart/primitives`, and user-facing
+`@vexart/styled`, and `@vexart/headless`, plus user-facing
 engine hooks (animation, data, input). SolidJS control flow and reactivity
 primitives (`createSignal`, `For`, `Show`, etc.) are also re-exported so
 consumers do not need a separate `solid-js` import for basics.
@@ -76,7 +86,7 @@ Collision resolution:
 ## License Metadata
 
 - Root workspace `package.json` uses `SEE LICENSE IN LICENSE`
-- Built tarball `package.json` uses `SEE LICENSE IN LICENSE.md`
+- Built tarball `package.json` uses `SEE LICENSE IN LICENSE` and includes `LICENSE`
 - `/LICENSE` is the source-of-truth license text for the repository
 
 ## Build Verification Checklist
@@ -85,7 +95,7 @@ Run before a preview release:
 
 ```bash
 bun run typecheck
-bun test
+bun run test
 bun run api:update
 bun run test:visual
 bun run perf:check
@@ -104,7 +114,7 @@ bun run build:dist
 
 ## Local Consumer Test
 
-After `bun pack`:
+After `bun run pack`:
 
 ```bash
 bun add ../vexart/dist/*.tgz
@@ -121,4 +131,4 @@ These are intentionally deferred beyond this packaging baseline:
 
 - signed binaries
 - package provenance/attestations
-- automated multi-platform release publishing
+- additional native targets outside the current CI matrix

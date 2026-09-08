@@ -43,9 +43,13 @@ const ESC = {
   syncBegin: "\x1b[?2026h",
   syncEnd: "\x1b[?2026l",
 
-  // Kitty keyboard protocol
+  // Kitty keyboard protocol (direct terminal). tmux uses its xterm-style
+  // extended-key negotiation instead; it does not transparently forward
+  // Kitty's CSI >1u mode.
   kittyKbEnter: "\x1b[>1u",
   kittyKbLeave: "\x1b[<u",
+  tmuxExtendedKeysEnter: "\x1b[>4;1m",
+  tmuxExtendedKeysLeave: "\x1b[>4;0m",
 
   // Clear screen + move cursor home
   clear: "\x1b[2J\x1b[H",
@@ -100,8 +104,11 @@ export function enter(
     write(ESC.pasteEnter)
   }
 
-  // Enable Kitty keyboard protocol
-  if (caps.kittyKeyboard) {
+  // tmux has its own xterm-style extended-key mode. Keep this raw so tmux
+  // can negotiate it; only direct terminals use Kitty keyboard mode.
+  if (caps.tmux) {
+    write(ESC.tmuxExtendedKeysEnter)
+  } else if (caps.kittyKeyboard) {
     write(ESC.kittyKbEnter)
   }
 
@@ -118,8 +125,10 @@ export function leave(
   if (!state.active) return
   state.active = false
 
-  // Disable Kitty keyboard protocol
-  if (caps.kittyKeyboard) {
+  // Disable the keyboard mode negotiated on enter.
+  if (caps.tmux) {
+    write(ESC.tmuxExtendedKeysLeave)
+  } else if (caps.kittyKeyboard) {
     write(ESC.kittyKbLeave)
   }
 
@@ -166,37 +175,70 @@ export function endSync(write: (data: string) => void) {
 /**
  * Install process exit handlers that guarantee terminal cleanup.
  *
- * Catches: exit, SIGINT, SIGTERM, uncaughtException, unhandledRejection.
- * Each handler calls `leave()` exactly once, then re-raises.
+ * Catches: exit, SIGHUP, SIGINT, SIGTERM, uncaughtException, unhandledRejection.
+ * Each handler invokes the optional transport cleanup, then calls `leave()`
+ * exactly once.
  */
 export function installExitHandlers(
   stdin: NodeJS.ReadStream,
   write: (data: string) => void,
   caps: Capabilities,
   state: LifecycleState,
+  beforeLeave?: () => void,
 ): () => void {
-  const cleanup = () => leave(stdin, write, caps, state)
+  let cleaned = false
+  const cleanup = () => {
+    if (cleaned) return
+    cleaned = true
+    try {
+      beforeLeave?.()
+    } finally {
+      leave(stdin, write, caps, state)
+    }
+  }
 
   const onExit = () => cleanup()
-  const onSignal = () => {
-    cleanup()
-    process.exit(128 + 2)
+  const onSigint = () => {
+    try {
+      cleanup()
+    } finally {
+      process.exit(130)
+    }
+  }
+  const onSigterm = () => {
+    try {
+      cleanup()
+    } finally {
+      process.exit(143)
+    }
+  }
+  const onSighup = () => {
+    try {
+      cleanup()
+    } finally {
+      process.exit(129)
+    }
   }
   const onError = () => {
-    cleanup()
-    process.exit(1)
+    try {
+      cleanup()
+    } finally {
+      process.exit(1)
+    }
   }
 
   process.on("exit", onExit)
-  process.on("SIGINT", onSignal)
-  process.on("SIGTERM", onSignal)
+  process.on("SIGINT", onSigint)
+  process.on("SIGTERM", onSigterm)
+  process.on("SIGHUP", onSighup)
   process.on("uncaughtException", onError)
   process.on("unhandledRejection", onError)
 
   return () => {
     process.off("exit", onExit)
-    process.off("SIGINT", onSignal)
-    process.off("SIGTERM", onSignal)
+    process.off("SIGINT", onSigint)
+    process.off("SIGTERM", onSigterm)
+    process.off("SIGHUP", onSighup)
     process.off("uncaughtException", onError)
     process.off("unhandledRejection", onError)
   }

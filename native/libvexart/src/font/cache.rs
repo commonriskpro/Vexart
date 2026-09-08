@@ -133,11 +133,17 @@ pub fn load_page(key: &CacheKey) -> Option<(Vec<u8>, CachedPageMeta)> {
 
     // Read RGBA.
     let mut rgba = Vec::new();
-    fs::File::open(&rgba_path).ok()?.read_to_end(&mut rgba).ok()?;
+    fs::File::open(&rgba_path)
+        .ok()?
+        .read_to_end(&mut rgba)
+        .ok()?;
 
     // Read metadata.
     let mut meta_buf = Vec::new();
-    fs::File::open(&meta_path).ok()?.read_to_end(&mut meta_buf).ok()?;
+    fs::File::open(&meta_path)
+        .ok()?
+        .read_to_end(&mut meta_buf)
+        .ok()?;
 
     if meta_buf.len() < 8 {
         return None;
@@ -191,7 +197,10 @@ pub fn clear_cache() -> bool {
     if let Ok(entries) = fs::read_dir(&dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().map_or(false, |e| e == "bin" || e == "meta") {
+            if path
+                .extension()
+                .map_or(false, |e| e == "bin" || e == "meta")
+            {
                 let _ = fs::remove_file(&path);
             }
         }
@@ -209,7 +218,9 @@ pub fn font_cache_hash(family: &str, weight: u16, italic: bool) -> u64 {
     }
     hash ^= weight as u64;
     hash = hash.wrapping_mul(0x100000001b3);
-    if italic { hash ^= 1; }
+    if italic {
+        hash ^= 1;
+    }
     hash
 }
 
@@ -240,7 +251,10 @@ mod tests {
 
     #[test]
     fn test_save_and_load_page() {
-        let key = CacheKey { font_hash: 0xDEADBEEF, page_idx: 99 };
+        let key = CacheKey {
+            font_hash: 0xDEADBEEF,
+            page_idx: 99,
+        };
 
         // Create minimal test data (4×4 page = 64 bytes RGBA).
         let rgba = vec![128u8; 4 * 4 * 4]; // 4×4 RGBA
@@ -278,7 +292,10 @@ mod tests {
 
     #[test]
     fn test_load_nonexistent_returns_none() {
-        let key = CacheKey { font_hash: 0xFFFFFFFF_FFFFFFFF, page_idx: 999 };
+        let key = CacheKey {
+            font_hash: 0xFFFFFFFF_FFFFFFFF,
+            page_idx: 999,
+        };
         assert!(load_page(&key).is_none());
     }
 }

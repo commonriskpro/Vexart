@@ -171,7 +171,7 @@ export function Diff(props: DiffProps) {
         if (line.type === LINE_TYPE.HEADER) {
           return (
             <box height={LINE_HEIGHT} width="100%" direction="row" backgroundColor={bg} paddingX={t.linePadding}>
-              <text color={t.headerFg} fontSize={14}>{line.content}</text>
+              <text color={t.headerFg} fontSize={14} whiteSpace="pre-wrap">{line.content}</text>
             </box>
           )
         }
@@ -180,7 +180,7 @@ export function Diff(props: DiffProps) {
           <box height={LINE_HEIGHT} width="100%" direction="row" backgroundColor={bg}>
             {showLineNumbers() ? (
               <box width={gutterWidth()} backgroundColor={t.lineNumberBg} paddingX={4}>
-                <text color={t.lineNumberFg} fontSize={14}>
+                <text color={t.lineNumberFg} fontSize={14} whiteSpace="pre-wrap">
                   {(line.oldLineNum !== null ? String(line.oldLineNum).padStart(maxLineDigits) : " ".repeat(maxLineDigits)) +
                    " " +
                    (line.newLineNum !== null ? String(line.newLineNum).padStart(maxLineDigits) : " ".repeat(maxLineDigits))}
@@ -189,12 +189,12 @@ export function Diff(props: DiffProps) {
             ) : null}
             <box width={CHAR_WIDTH * 2} alignX="center">
               {sign ? (
-                <text color={sign.color} fontSize={14}>{sign.char}</text>
+                <text color={sign.color} fontSize={14} whiteSpace="pre-wrap">{sign.char}</text>
               ) : (
-                <text color={t.muted} fontSize={14}> </text>
+                <text color={t.muted} fontSize={14} whiteSpace="pre-wrap"> </text>
               )}
             </box>
-            <text color={t.fg} fontSize={14}>{line.content}</text>
+            <text color={t.fg} fontSize={14} whiteSpace="pre-wrap">{line.content}</text>
           </box>
         )
       })}

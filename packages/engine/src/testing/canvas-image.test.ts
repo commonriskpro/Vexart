@@ -86,6 +86,113 @@ test("renders a rounded indicator border with a transparent outside corner", asy
   expect(pixel(frame, 9, 9)).toEqual(new Uint8Array([17, 34, 51, 255]))
 })
 
+test("renders a uniform 1px border without painting into the fill", async () => {
+  const fill = new Uint8Array([17, 34, 51, 255])
+  const border = new Uint8Array([238, 238, 238, 255])
+  const width = 24
+  const height = 18
+  const node = prop(
+    prop(
+      prop(
+        prop(
+          prop(createNode("box"), "width", width),
+          "height", height,
+        ),
+        "backgroundColor", 0x112233ff,
+      ),
+      "borderColor", 0xeeeeeeff,
+    ),
+    "borderWidth", 1,
+  )
+
+  const frame = await renderNodeToBuffer(node, width, height)
+
+  expect(pixel(frame, width / 2, 0)).toEqual(border)
+  expect(pixel(frame, width / 2, 1)).toEqual(fill)
+  expect(pixel(frame, 0, height / 2)).toEqual(border)
+  expect(pixel(frame, 1, height / 2)).toEqual(fill)
+  expect(pixel(frame, width / 2, height - 1)).toEqual(border)
+  expect(pixel(frame, width / 2, height - 2)).toEqual(fill)
+  expect(pixel(frame, width - 1, height / 2)).toEqual(border)
+  expect(pixel(frame, width - 2, height / 2)).toEqual(fill)
+})
+
+test("renders a uniform border with exactly its requested width", async () => {
+  const fill = new Uint8Array([17, 34, 51, 255])
+  const border = new Uint8Array([238, 238, 238, 255])
+  const width = 24
+  const height = 18
+  const node = prop(
+    prop(
+      prop(
+        prop(
+          prop(createNode("box"), "width", width),
+          "height", height,
+        ),
+        "backgroundColor", 0x112233ff,
+      ),
+      "borderColor", 0xeeeeeeff,
+    ),
+    "borderWidth", 2,
+  )
+
+  const frame = await renderNodeToBuffer(node, width, height)
+
+  expect(pixel(frame, width / 2, 0)).toEqual(border)
+  expect(pixel(frame, width / 2, 1)).toEqual(border)
+  expect(pixel(frame, width / 2, 2)).toEqual(fill)
+  expect(pixel(frame, 0, height / 2)).toEqual(border)
+  expect(pixel(frame, 1, height / 2)).toEqual(border)
+  expect(pixel(frame, 2, height / 2)).toEqual(fill)
+  expect(pixel(frame, width / 2, height - 1)).toEqual(border)
+  expect(pixel(frame, width / 2, height - 2)).toEqual(border)
+  expect(pixel(frame, width / 2, height - 3)).toEqual(fill)
+  expect(pixel(frame, width - 1, height / 2)).toEqual(border)
+  expect(pixel(frame, width - 2, height / 2)).toEqual(border)
+  expect(pixel(frame, width - 3, height / 2)).toEqual(fill)
+})
+
+test("renders per-corner borders without painting into translucent themed fill", async () => {
+  const width = 32
+  const height = 24
+  // Native readback keeps translucent RGB premultiplied by alpha.
+  const fill = new Uint8Array([17, 34, 51, 217])
+  const fillReadback = new Uint8Array([14, 29, 43, 217])
+  const node = prop(
+    prop(
+      prop(
+        prop(
+          prop(createNode("box"), "width", width),
+          "height", height,
+        ),
+        "backgroundColor", 0x112233d9,
+      ),
+      "borderColor", 0xffffff80,
+    ),
+    "borderWidth", 1,
+  )
+  prop(node, "cornerRadii", { tl: 7, tr: 5, br: 8, bl: 6 })
+
+  const frame = await renderNodeToBuffer(node, width, height)
+  const fillTop = pixel(frame, width / 2, 1)
+  const fillLeft = pixel(frame, 1, height / 2)
+  const fillBottom = pixel(frame, width / 2, height - 2)
+  const fillRight = pixel(frame, width - 2, height / 2)
+
+  expect(pixel(frame, width / 2, 0)[3]).toBeGreaterThan(fill[3])
+  expect(pixel(frame, width / 2, height - 1)[3]).toBeGreaterThan(fill[3])
+  expect(pixel(frame, 0, height / 2)[3]).toBeGreaterThan(fill[3])
+  expect(pixel(frame, width - 1, height / 2)[3]).toBeGreaterThan(fill[3])
+  expect(fillTop).toEqual(fillReadback)
+  expect(fillLeft).toEqual(fillReadback)
+  expect(fillBottom).toEqual(fillReadback)
+  expect(fillRight).toEqual(fillReadback)
+  expect(pixel(frame, 0, 0)[3]).toBe(0)
+  expect(pixel(frame, width - 1, 0)[3]).toBe(0)
+  expect(pixel(frame, 0, height - 1)[3]).toBe(0)
+  expect(pixel(frame, width - 1, height - 1)[3]).toBe(0)
+})
+
 test("renders non-uniform Box border sides with their resolved widths", async () => {
   const node = prop(
     prop(

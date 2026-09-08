@@ -19,11 +19,13 @@
 import { build } from "esbuild"
 import { cpSync, mkdirSync, writeFileSync, existsSync, readFileSync } from "fs"
 import { resolve } from "path"
+import { resolveReleaseChannel } from "./release-verification.mjs"
 
 const ROOT = resolve(import.meta.dir, "..")
 const DIST = resolve(ROOT, "dist")
 const rootPkg = JSON.parse(readFileSync(resolve(ROOT, "package.json"), "utf-8")) as { version: string }
 const VERSION = rootPkg.version
+const channel = resolveReleaseChannel(VERSION)
 
 // ── Clean ──
 console.log("🧹 Cleaning dist/...")
@@ -313,8 +315,8 @@ console.log("")
 console.log("✅ Build complete! Output in dist/")
 console.log("")
 console.log("To publish:")
-console.log(`  cd dist/platform/${platformTag} && npm publish --access public`)
-console.log("  cd dist && npm publish")
+console.log(`  cd dist/platform/${platformTag} && npm publish --access public --tag ${channel}`)
+console.log(`  cd dist && npm publish --access public --tag ${channel}`)
 console.log("")
 console.log("To test locally:")
 console.log(`  cd dist/platform/${platformTag} && bun pm pack --ignore-scripts`)

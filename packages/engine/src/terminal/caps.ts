@@ -13,7 +13,7 @@
  */
 
 import type { TerminalKind } from "./detect"
-import { inTmux, passthroughSupported, createWriter } from "./tmux"
+import { inTmux, parentTerminal, parentSupportsKittyPlaceholder, passthroughSupported, createWriter } from "./tmux"
 
 /** @public */
 export type Capabilities = {
@@ -55,6 +55,11 @@ export type Capabilities = {
 /** @public */
 export function inferCaps(kind: TerminalKind): Capabilities {
   const tmux = inTmux()
+  const parent = tmux ? parentTerminal() : null
+  // In tmux the pane's TERM describes tmux, not the outer emulator. The
+  // native tmux path currently uses Kitty/Ghostty's U=1 virtual placement;
+  // regular absolute graphics are intentionally not inferred in a pane.
+  const capabilityKind = tmux ? parent : kind
 
   const caps: Capabilities = {
     kind,
@@ -68,7 +73,7 @@ export function inferCaps(kind: TerminalKind): Capabilities {
     bracketedPaste: true,
     syncOutput: true,
     tmux,
-    parentKind: null,
+    parentKind: parent,
     transmissionMode: "direct",
   }
 
@@ -78,28 +83,26 @@ export function inferCaps(kind: TerminalKind): Capabilities {
     caps.truecolor = true
   }
 
-  switch (kind) {
+  switch (capabilityKind) {
     case "ghostty":
-      caps.truecolor = true
-      caps.kittyGraphics = !tmux
-      caps.kittyPlaceholder = tmux && passthroughSupported()
-      caps.kittyKeyboard = true
-      caps.syncOutput = true
-      break
-
     case "kitty":
       caps.truecolor = true
       caps.kittyGraphics = !tmux
-      caps.kittyPlaceholder = tmux && passthroughSupported()
-      caps.kittyKeyboard = true
+      caps.kittyPlaceholder = tmux && parentSupportsKittyPlaceholder(parent) && passthroughSupported()
+      // tmux translates its own keyboard modes and does not transparently
+      // forward Kitty keyboard negotiation, so do not infer this in a pane.
+      caps.kittyKeyboard = !tmux
       caps.syncOutput = true
       break
 
     case "wezterm":
       caps.truecolor = true
+      // WezTerm passthrough can carry Kitty graphics, but it has no proven
+      // U=1 placeholder route in this engine. Do not claim either path in a
+      // tmux pane until a native backend and probe exist.
       caps.kittyGraphics = !tmux
-      caps.kittyPlaceholder = tmux && passthroughSupported()
-      caps.kittyKeyboard = true
+      caps.kittyPlaceholder = false
+      caps.kittyKeyboard = !tmux
       caps.sixel = true
       caps.syncOutput = true
       break
@@ -116,14 +119,14 @@ export function inferCaps(kind: TerminalKind): Capabilities {
     case "foot":
       caps.truecolor = true
       caps.kittyGraphics = !tmux
-      caps.kittyKeyboard = true
+      caps.kittyKeyboard = !tmux
       caps.sixel = true
       break
 
     case "contour":
       caps.truecolor = true
       caps.kittyGraphics = !tmux
-      caps.kittyKeyboard = true
+      caps.kittyKeyboard = !tmux
       caps.sixel = true
       break
 
@@ -146,6 +149,17 @@ export function inferCaps(kind: TerminalKind): Capabilities {
   return caps
 }
 
+/** Parse a complete Kitty response status; incomplete replies return null. */
+export function parseKittyProbeResponse(data: string, responseId = 31): boolean | null {
+  // A status is not complete until Kitty's string terminator arrives. This
+  // matters through tmux, where a PTY can split `_Gi=31;OK\x1b\\` into
+  // multiple reads; resolving on a partial status would turn a valid probe
+  // into a false negative.
+  const match = data.match(new RegExp(`_Gi=${responseId};([^\\x1b\\r\\n]*)\\x1b\\\\`))
+  if (!match) return null
+  return match[1].trim() === "OK"
+}
+
 /**
  * Probe for Kitty graphics protocol support.
  *
@@ -159,6 +173,7 @@ export function probeKittyGraphics(
 ): Promise<boolean> {
   return new Promise((resolve) => {
     let done = false
+    let received = ""
 
     const cleanup = () => {
       if (done) return
@@ -168,14 +183,14 @@ export function probeKittyGraphics(
     }
 
     const handler = (data: Buffer) => {
-      const str = data.toString()
-      if (str.includes("_Gi=31;OK")) {
-        cleanup()
-        resolve(true)
-      } else if (str.includes("_Gi=31;")) {
-        cleanup()
-        resolve(false)
-      }
+      // Kitty replies are ASCII, but the PTY may split a response at any byte
+      // boundary. Keep the incomplete sequence until a complete status arrives.
+      received += data.toString()
+      if (received.length > 16 * 1024) received = received.slice(-16 * 1024)
+      const supported = parseKittyProbeResponse(received)
+      if (supported === null) return
+      cleanup()
+      resolve(supported)
     }
 
     const timer = setTimeout(() => {
@@ -185,7 +200,10 @@ export function probeKittyGraphics(
 
     onData(handler)
 
-    // Send probe: 1x1 RGBA pixel, query action, suppress display
+    // Send probe: 1x1 RGBA pixel, query action, suppress display. This is a
+    // Kitty graphics protocol probe only; the native U=1 placeholder path is
+    // gated separately by the known Kitty/Ghostty parent capability. Graphics
+    // is the only payload wrapped for tmux; mode-control remains raw.
     const wrapped = createWriter(write)
     wrapped("\x1b_Gi=31,s=1,v=1,a=q,t=d,f=32;AAAAAA==\x1b\\")
   })
@@ -206,6 +224,7 @@ export function queryColors(
     let bg: [number, number, number] | null = null
     let fg: [number, number, number] | null = null
     let done = false
+    let received = ""
 
     const cleanup = () => {
       if (done) return
@@ -214,28 +233,22 @@ export function queryColors(
       clearTimeout(timer)
     }
 
+    const component = (value: string) => {
+      const max = 16 ** value.length - 1
+      return Math.round(parseInt(value, 16) * 255 / max)
+    }
+
     const handler = (data: Buffer) => {
-      const str = data.toString()
+      received += data.toString()
+      if (received.length > 16 * 1024) received = received.slice(-16 * 1024)
 
       // OSC 11 response: \x1b]11;rgb:RRRR/GGGG/BBBB
-      const bgMatch = str.match(/\x1b]11;rgb:([0-9a-f]+)\/([0-9a-f]+)\/([0-9a-f]+)/i)
-      if (bgMatch) {
-        bg = [
-          parseInt(bgMatch[1], 16) >> 8,
-          parseInt(bgMatch[2], 16) >> 8,
-          parseInt(bgMatch[3], 16) >> 8,
-        ]
-      }
+      const bgMatch = received.match(/\x1b]11;rgb:([0-9a-f]+)\/([0-9a-f]+)\/([0-9a-f]+)(?:\x07|\x1b\\)/i)
+      if (bgMatch) bg = [component(bgMatch[1]), component(bgMatch[2]), component(bgMatch[3])]
 
       // OSC 10 response: \x1b]10;rgb:RRRR/GGGG/BBBB
-      const fgMatch = str.match(/\x1b]10;rgb:([0-9a-f]+)\/([0-9a-f]+)\/([0-9a-f]+)/i)
-      if (fgMatch) {
-        fg = [
-          parseInt(fgMatch[1], 16) >> 8,
-          parseInt(fgMatch[2], 16) >> 8,
-          parseInt(fgMatch[3], 16) >> 8,
-        ]
-      }
+      const fgMatch = received.match(/\x1b]10;rgb:([0-9a-f]+)\/([0-9a-f]+)\/([0-9a-f]+)(?:\x07|\x1b\\)/i)
+      if (fgMatch) fg = [component(fgMatch[1]), component(fgMatch[2]), component(fgMatch[3])]
 
       if (bg && fg) {
         cleanup()

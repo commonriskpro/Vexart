@@ -1,9 +1,33 @@
 # Vexart — Product Requirements Document
 
-**Version**: 0.7
+**Version**: 0.8
 **Status**: Closed — v0.9 performance contract locked
 **Owner**: Founder (solo developer)
-**Last updated**: April 2026
+**Last updated**: September 2026
+
+**Changelog from v0.7 (historical snapshot, September 7, 2026)**:
+- Added an experimental tmux presentation route. tmux 3.4+ can carry Kitty
+  graphics through a configured Kitty or Ghostty outer terminal using native
+  full-frame composition, Kitty Unicode placeholders, and DCS passthrough.
+- This is a narrow transport exception to DEC-005, not a new renderer or a
+  character-art fallback. Direct Kitty/Ghostty/WezTerm support is unchanged;
+  Unicode-placeholder support through tmux is not claimed for WezTerm.
+- Added [`docs/tmux.md`](./tmux.md) with user-applied setup, read-only
+  diagnostics, limits, and a pending physical-smoke checklist.
+- Recorded the user-approved tmux target: one full composited frame through
+  local SHM only, with no automatic direct/file fallback. At that snapshot, the
+  production code path passed through a real tmux PTY with a synthetic receiver;
+  physical smoke remained pending and regions waited for later performance
+  measurement.
+
+**Current tmux status (September 8, 2026):** The requested Kitty parity gate is
+verified: the user reviewed all six showcase tabs in Kitty directly and inside
+tmux and found them visually consistent. This is qualitative practical
+acceptance, not pixel-exact, exhaustive interaction, Ghostty visual-parity, or
+FPS certification. Automated results are summarized in
+[`docs/tmux-parity-report.md`](./tmux-parity-report.md); internal live producer
+timings are reported separately in
+[`docs/tmux-performance-report.md`](./tmux-performance-report.md).
 
 **Changelog from v0.6**:
 - DEC-014 added: Rust retained scene graph / render graph / layout / event dispatch reverted based on cosmic-shell-1080p bench evidence (TS path 4.8× faster, 15.84 ms p95 vs 75.42 ms p95). TS retains scene graph, reactivity, layout (Flexily in TS), event dispatch. Rust retains paint pipelines (WGPU), composite, Kitty encoding, SHM/file/direct transport, image assets, canvas display lists. DEC-012 partially superseded — only paint/composite/transport portion stands.
@@ -66,7 +90,7 @@ alongside the current code, tests, and
 
 ## 1. Executive Summary
 
-**Vexart** is a GPU-accelerated UI engine for the modern terminal. Developers write JSX (SolidJS), and Vexart renders browser-quality interfaces — anti-aliased corners, drop shadows, gradients, glow effects, backdrop filters, transforms — as real pixels in terminals that support the Kitty graphics protocol (Kitty, WezTerm, Ghostty).
+**Vexart** is a GPU-accelerated UI engine for the modern terminal. Developers write JSX (SolidJS), and Vexart renders browser-quality interfaces — anti-aliased corners, drop shadows, gradients, glow effects, backdrop filters, transforms — as real pixels in terminals that support the Kitty graphics protocol (Kitty, WezTerm, Ghostty). An experimental tmux route carries the same Kitty pixels through a Kitty or Ghostty outer terminal when tmux passthrough is configured; it does not introduce a cell-art fallback.
 
 Unlike existing terminal UI libraries (Textual, Ratatui, Bubbletea, Ink, OpenTUI) which render ASCII-art UIs into character cells, Vexart renders **actual pixels**. The result looks like a web application rendered natively inside the terminal.
 
@@ -183,7 +207,7 @@ The result:
 | **Text rendering** | Cell fonts | Cell fonts | Cell fonts | Cell fonts | **MSDF (multi-channel signed distance field)** |
 | **Virtualization** | Yes | Manual | Manual | Manual | **Built-in** |
 | **GPU backend** | N/A (CPU) | N/A (CPU) | N/A (CPU) | N/A (CPU) | **WGPU (Metal / Vulkan / DirectX 12)** |
-| **Required terminal** | Any | Any | Any | Any | **Kitty / WezTerm / Ghostty** |
+| **Required terminal** | Any | Any | Any | Any | **Kitty / WezTerm / Ghostty** (or experimental tmux over Kitty/Ghostty) |
 
 **Core tradeoff we are making**: universal compatibility (ASCII works everywhere) in exchange for visual fidelity (pixels only work in modern terminals).
 
@@ -247,6 +271,40 @@ These features place Vexart at the cutting edge of graphics tech. All ship in v0
   - Single Rust codebase dispatching automatically to Metal (macOS), Vulkan (Linux), DirectX 12 (Windows, future).
   - WGSL shaders compiled once, run natively on every platform.
   - No per-platform renderer maintenance.
+
+#### tmux presentation (experimental)
+
+- tmux 3.4+ is supported as a narrow transport path when the outer terminal is
+  Kitty or Ghostty, effective `allow-passthrough all` is applied by the user,
+  the attached client advertises `RGB`, and runtime capability probes pass.
+  The lower bound is conservative; verified PTY evidence is tmux 3.6a and does
+  not measure every tmux version.
+- TypeScript retains scene graph, layout, render graph, interaction, focus, and
+  hit-testing ownership. Rust/WGPU paints and composites one complete frame,
+  then emits it through the existing local SHM transport using a `U=1` virtual
+  placement and the Kitty Unicode placeholder grid. The production code path
+  passes through a real tmux PTY with a synthetic receiver; prior direct
+  output is a comparison baseline only, not a physical-rendering or FPS result.
+- Each Kitty APC is wrapped in its own tmux DCS passthrough envelope. Images
+  and canvas content follow the same image-grid route; no ASCII or cell-art
+  fallback is permitted. Direct baseline APCs use Kitty `q=2` to suppress both
+  success and error replies; the SHM upload uses `q=1` for optional errors.
+  SHM completion is `is_consumed`-driven, not ACK-driven.
+- Retained GPU effects remain the same as the direct path. The approved tmux
+  route is SHM-only: exactly one attached client across the tmux server, one in-flight upload plus the latest
+  pending frame, and bounded cleanup on `is_consumed`, error, or timeout. It has
+  no automatic direct/file fallback or per-layer patch transport; regions wait
+  for later performance measurement. Kitty `a=f` animation updates are also not
+  used because the Ghostty 1.3.1 target reports the action unimplemented.
+- WezTerm remains a supported direct target, but Unicode-placeholder support
+  through tmux is not claimed for WezTerm. Reattaching a session through a
+  different outer terminal requires a fresh probe/restart.
+- The implementation remains experimental. The six-tab Kitty direct/tmux review
+  is user-confirmed qualitative acceptance; it does not establish pixel-exact,
+  exhaustive interaction, Ghostty visual parity, or FPS evidence. See
+  [`docs/tmux-parity-report.md`](./tmux-parity-report.md) and
+  [`docs/tmux-performance-report.md`](./tmux-performance-report.md); [`docs/tmux.md`](./tmux.md)
+  remains the canonical setup and checklist.
 
 #### Engine optimization (performance-critical)
 
@@ -377,7 +435,9 @@ Single opinionated theme ("void" — dark, shadcn-inspired) with:
 - SSH remote rendering optimization.
 - Windows support.
 - iTerm2, Alacritty, xterm backends.
-- tmux passthrough (the Kitty placeholder backend is out — we stay Kitty-direct in v0.9).
+- tmux with an unsupported outer terminal, tmux older than 3.4, or a disabled
+  `allow-passthrough` option; see the experimental Kitty/Ghostty route in
+  Section 5.1 and [`docs/tmux.md`](./tmux.md).
 - Plugin marketplace.
 - Accessibility / screen reader integration.
 - Server-side rendering / pre-render.
@@ -388,7 +448,10 @@ Single opinionated theme ("void" — dark, shadcn-inspired) with:
 During v0.9 development we are explicitly **deleting** the following assets. These are not deprecated for backward-compat — they are gone.
 
 - **Zig CPU paint path** (entire `zig/` directory and `@tge/pixel` package).
-- **Output backends other than Kitty**: `output-placeholder` (tmux braille), `output-halfblock` (ANSI fallback).
+- **Output backends other than Kitty**: the legacy `output-placeholder` and
+  `output-halfblock` (ANSI fallback) backends. The current tmux route uses
+  Kitty Unicode placeholders over passthrough and does not restore either
+  backend.
 - **Clay C layout engine** (replaced by Taffy).
 - **Bun/TypeScript "CPU mode" branches** in the render loop.
 - **Bitmap font atlas path** (replaced by MSDF atlas; the 89-glyph ASCII bitmap is removed once MSDF ships).
@@ -449,7 +512,14 @@ Vexart is organized as four strictly-layered packages. Each layer depends only o
                        ▼
                   Terminal
           (Kitty / WezTerm / Ghostty)
+        [experimental tmux passthrough
+          over Kitty / Ghostty]
 ```
+
+tmux is a transport/presentation boundary rather than a renderer: the pane's
+text stream carries Kitty Unicode placeholders and per-APC DCS passthrough
+wrappers to the outer Kitty or Ghostty terminal. It does not change the
+TypeScript/Rust ownership split or add an ASCII/cell-art backend.
 
 ### 6.2 Layer dependency rules (enforced by lint)
 
@@ -555,6 +625,16 @@ Rust owns:
 
 Normal terminal presentation MUST NOT return raw RGBA buffers to JavaScript. RGBA readback into JS is allowed only for explicit screenshot, debug, test, or offscreen APIs.
 
+The experimental tmux route preserves this boundary. Rust reads back and emits
+one complete composited frame through the approved local SHM path, followed by
+Kitty Unicode placeholder placement; TypeScript receives no presentation
+pixels. The production code path is PASS at the real-tmux-PTY level; the
+prior direct full-frame run is a comparison baseline, not an automatic
+fallback. tmux has no automatic direct or file fallback, and regions wait for a
+later performance measurement. Kitty
+`a=f` animation updates are not used because the Ghostty 1.3.1 target reports
+the action unimplemented.
+
 This section supersedes older wording that assigns scene graph, layout, render graph generation, event dispatch, or frame orchestration ownership to Rust. The four public retained-native flags (`nativeSceneGraph`, `nativeSceneLayout`, `nativeRenderGraph`, `nativeEventDispatch`) have been removed from `mount()`.
 
 ---
@@ -572,7 +652,7 @@ This section supersedes older wording that assigns scene graph, layout, render g
 - **Golden image suite**: 40+ scenes in `tests/visual/`, each with a reference PNG.
 - **Diff threshold**: 0.5% of pixels may differ before CI fails.
 - **Refresh command**: `bun run test:visual:update` regenerates references after human review.
-- **Backend coverage**: Kitty direct (primary). WezTerm and Ghostty in v0.9 via manual smoke checklist (automated matrix in v1.0).
+- **Backend coverage**: Kitty direct (primary). WezTerm and Ghostty in v0.9 via manual smoke checklist (automated matrix in v1.0). tmux over Kitty/Ghostty remains experimental; the six-tab Kitty direct/tmux review is user-confirmed qualitatively, not pixel-exact, exhaustive interaction, Ghostty visual-parity, or FPS evidence.
 
 ### 7.3 Performance
 
@@ -603,6 +683,14 @@ Measured on Apple M1 Pro, Kitty 0.41+, 2560×1600 retina:
 
 CI runs `bench:showcase` on every PR and fails if any metric regresses by >10% from `main`. Specific optimization regressions (cold-start-warm, Kitty encoding, viewport culling savings, retained no-op, dirty-region, compositor-only, and dashboard frame categories) have dedicated micro-benchmarks in `bench:optimizations`.
 
+The tmux route is not included in the direct-terminal performance targets above.
+Its approved target is one full composited frame through local SHM, with one
+attached client and bounded `is_consumed`/error/timeout cleanup. The prior direct
+full-frame run is a comparison baseline, not SHM validation. Measure bytes and
+latency before considering regions; no FPS or physical-presentation claim is
+made here. Kitty `a=f` animation updates are not used because the Ghostty 1.3.1
+target reports the action unimplemented.
+
 ### 7.4 Supported terminals (v0.9)
 
 | Terminal | Support level | Notes |
@@ -610,7 +698,8 @@ CI runs `bench:showcase` on every PR and fails if any metric regresses by >10% f
 | **Kitty** 0.41+ | **Primary** | Full feature set, all effects, SHM transport. |
 | **Ghostty** | **Primary** | Full feature set, direct transport. |
 | **WezTerm** 2025.04+ | Primary | Full feature set, direct transport. |
-| Alacritty, iTerm2, Windows Terminal, tmux | **Unsupported** | Engine exits with clear error on startup. |
+| **tmux** 3.4+ over Kitty/Ghostty | **Experimental** | User applies effective `allow-passthrough all`; native one-frame local-SHM route is synthetic tmux-PTY PASS; no automatic direct/file fallback. Six-tab Kitty direct/tmux review is user-confirmed qualitatively; live producer timings are internal, not visible FPS; Ghostty visual parity remains unverified. |
+| tmux over WezTerm; Alacritty, iTerm2, Windows Terminal | **Unsupported / not claimed** | No alternate pixel protocol; engine exits with clear error on startup. |
 
 ### 7.5 Platform support (v0.9)
 
@@ -1261,6 +1350,85 @@ Every architectural or product decision is logged here with date, context, and r
 
 ---
 
+### 2026-09-07 — Amendment to DEC-005: experimental tmux Kitty transport
+
+**Historical status:** this initial direct-transport amendment is preserved as
+written; the follow-up approval below supersedes its tmux transport choice.
+
+**Decision**: Preserve the Kitty-only rendering constraint and permit a narrow,
+experimental tmux route. tmux 3.4+ may carry Vexart through a Kitty or Ghostty
+outer terminal when the user enables `allow-passthrough` and the runtime probes
+pass. The native path paints and composites one complete GPU frame, transmits it
+with lossless Kitty direct transport, creates a `U=1` virtual placement, and
+emits the Kitty graphics APCs through per-APC tmux DCS passthrough wrappers,
+followed by the Unicode placeholder grid as normal pane text. It does not
+restore the deleted character-art backends.
+
+**Boundaries**:
+- Direct Kitty, Ghostty, and WezTerm support is unchanged.
+- WezTerm-over-tmux Unicode-placeholder support is not claimed in this release.
+- The current Vexart tmux implementation starts with direct full-frame
+  retransmit; it does not currently use SHM/file or per-layer patch transport.
+  This SHM choice is not a claim that a compatible outer terminal cannot
+  support SHM. Kitty `a=f` animation updates are not current tmux promises
+  because the current Ghostty target returns an unimplemented-action error for
+  Kitty animation actions.
+- The pane's pixel area and cell size are queried separately; input parsing
+  remains stream-fragmentation safe, while tmux mouse/focus/extended-key
+  settings can still change which events arrive.
+- A session reattached through a different outer terminal must be stopped and
+  restarted to reprobe. In tmux copy mode, captured pane text contains the
+  Unicode placeholder characters rather than rendered image pixels or semantic
+  text.
+
+**Historical status (September 7, 2026)**: Implementation was experimental and
+physical smoke verification was pending at that snapshot. [`docs/tmux.md`](./tmux.md) records setup, read-only diagnostics, the
+feature/performance matrix, and the smoke checklist. The protocol references
+are the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/)
+and [tmux passthrough documentation](https://github.com/tmux/tmux/wiki/FAQ).
+The current Ghostty animation-action limit is documented in
+[Ghostty 1.3.1's Kitty graphics actions](https://github.com/ghostty-org/ghostty/blob/v1.3.1/src/terminal/kitty/graphics_exec.zig).
+
+---
+
+### 2026-09-07 — Follow-up approval: tmux SHM-only presentation
+
+This dated note amends the preceding experimental transport note without
+rewriting DEC-005 or its history. The user approved the next tmux target:
+The historical DEC-005 phrase “placeholder (tmux braille)” refers to the
+deleted character-art backend; it does not describe Kitty Unicode placeholders.
+
+- Rust/WGPU retains the same scene, retained layers, and one full composited
+  frame; the presentation path uses the existing local SHM primitive only.
+- The route requires one attached tmux client across the tmux server and effective
+  `allow-passthrough all`, applied by the user, plus client `RGB` features for
+  truecolor image IDs. The SHM route is local-only: sessions carrying
+  `SSH_CONNECTION`, `SSH_CLIENT`, or `SSH_TTY` are rejected. Vexart does not edit
+  `tmux.conf` or automatically change session options.
+- Native ownership is bounded by `is_consumed` as primary completion, with
+  error/timeout cleanup, one in-flight upload, and only the latest pending frame.
+  There is no automatic direct/file fallback, queue/pool growth, or new public
+  renderer/API. Regions are deferred until real performance measurement.
+- The production code path is PASS at the real-tmux-PTY level with a synthetic
+  receiver. The 45-scene
+  direct batch and isolated synthetic SHM/PTY results remain separate evidence;
+  no physical Kitty/Ghostty rendering, reattach parity, or FPS claim is implied.
+
+The isolated tmux 3.6a routing result records that `allow-passthrough all`
+forwards a hidden-pane sequence while `on` drops it; an `ESC_G` ACK reaches the
+active pane rather than the origin. See the ephemeral
+`/tmp/vexart-tmux-ack-routing-result.json` and
+`/tmp/vexart-check-tmux-ack-routing.py` when reproducing this transport check.
+
+**Historical status (September 7, 2026):** approved target; the production code
+path passed through a synthetic tmux 3.6a PTY. The SHM batch was 47/48 and the
+corrected `theme-form` focused run completed 48 distinct scenes (without claiming
+a clean 48/48 batch). Physical Kitty/Ghostty smoke and performance measurement
+were pending at that snapshot. The Kitty protocol reference is the
+[Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/).
+
+---
+
 ## 13. Glossary
 
 - **Adaptive render loop**: frame scheduler that varies FPS based on activity (idle 8fps, active up to 60fps).
@@ -1293,6 +1461,8 @@ Every architectural or product decision is logged here with date, context, and r
 - **Styled component**: themed component built on top of a headless component with opinionated tokens.
 - **Task priority lane**: a bucket in Vexart's frame budget scheduler. Three lanes: `user-blocking` (input, focus — never skipped), `user-visible` (layer repaint — may split across frames), `background` (cache warming, telemetry — idle-only). Mirrors web platform's `scheduler.postTask` semantics.
 - **Taffy**: Rust-native layout engine implementing Flexbox, CSS Grid, and Block. Present as a dependency in libvexart/Cargo.toml but NOT used for TypeScript-side layout after DEC-014 and DEC-015. The active TS layout engine is Flexily.
+- **tmux passthrough**: tmux's DCS envelope for forwarding a complete terminal escape sequence to the outer terminal. Vexart doubles `ESC` bytes inside each Kitty APC and keeps APCs separate.
+- **Kitty Unicode placeholder**: Kitty's `U+10EEEE` cell character, paired with a virtual image placement (`U=1`), that lets a multiplexer move a pixel image with normal pane text.
 - **Tier 1 optimization**: the three performance-critical items from DEC-010 bundled into Phase 2b. Non-negotiable for v0.9 release. Cover native Kitty encoding, WGPU pipeline cache, and unified GPU budget.
 - **Tier 2 optimization**: the two performance-for-scale items from DEC-010 bundled into Phase 3. Cover viewport culling and frame budget scheduler. May be descoped only via explicit founder decision recorded in the log.
 - **Viewport culling**: skip layout and paint for subtrees whose bounding box is fully outside the visible terminal area. Vexart's automatic equivalent of CSS `content-visibility: auto`. Activates during `walk-tree`.
@@ -1320,11 +1490,12 @@ gates; inspect current code and focused checks when resolving a discrepancy.
 | Historical task decomposition | Historical SDD Tasks | `openspec/changes/*/tasks.md` |
 | Code implementation | The code itself | `packages/*/src/` |
 | Historical decisions | Decisions Log (§12 above) | `docs/PRD.md` |
+| tmux setup and transport limits | tmux support guide | `docs/tmux.md` |
 | In-flight PRD edits | `CHANGELOG-PRD.md` | `docs/CHANGELOG-PRD.md` |
 
 ---
 
-**END OF PRD v0.5**
+**END OF PRD v0.8**
 
 ### Issue: Real box-shadow shader (deferred to Phase 4+)
 

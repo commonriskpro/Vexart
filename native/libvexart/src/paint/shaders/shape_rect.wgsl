@@ -54,7 +54,7 @@ fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
   if (sd > aa) {
     discard;
   }
-  if (has_stroke > 0.5 && sd >= -stroke_width - aa) {
+  if (has_stroke > 0.5 && sd >= -stroke_width) {
     let alpha = select(1.0 - smoothstep(0.0, aa, sd), 1.0, sd <= 0.0);
     return vec4<f32>(in.stroke_color.rgb, in.stroke_color.a * alpha);
   }

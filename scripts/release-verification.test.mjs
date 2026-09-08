@@ -1,5 +1,6 @@
 import { strictEqual, throws } from "node:assert"
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import { spawnSync } from "node:child_process"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
@@ -11,6 +12,7 @@ import {
   publishedPackages,
   RegistryPropagationError,
   RegistryVerificationError,
+  resolveReleaseChannel,
   resolveReleaseVersion,
 } from "./release-verification.mjs"
 
@@ -54,6 +56,14 @@ test("tag releases must match the root package version", () => {
     }),
     /does not match root package\.json version/,
   )
+})
+
+test("release channel mapping supports stable and beta versions only", () => {
+  strictEqual(resolveReleaseChannel("0.9.0"), "latest")
+  strictEqual(resolveReleaseChannel("0.9.0-beta"), "beta")
+  strictEqual(resolveReleaseChannel("0.9.0-beta.26"), "beta")
+  throws(() => resolveReleaseChannel("0.9.0-alpha.1"), /only beta prereleases are supported/)
+  throws(() => resolveReleaseChannel("0.9"), /expected X\.Y\.Z/)
 })
 
 test("release artifact validation accepts a complete matching fixture", async () => {
@@ -116,10 +126,10 @@ test("release artifact validation rejects an optional dependency version mismatc
   }
 })
 
-test("registry validation rejects an exact-version or latest mismatch", () => {
+test("registry validation rejects an exact-version mismatch", () => {
   const response = Object.fromEntries(publishedPackages.map((name) => [name, {
     version: "0.9.0-beta.22",
-    latest: "0.9.0-beta.22",
+    beta: "0.9.0-beta.22",
   }]))
   response.vexart.version = "0.9.0-beta.21"
 
@@ -130,13 +140,13 @@ test("registry validation rejects an exact-version or latest mismatch", () => {
     return
   }
 
-  throw new Error("expected registry mismatch to fail")
+  throw new Error("expected exact-version mismatch to fail")
 })
 
-test("registry validation requires latest to point to the release", () => {
+test("registry validation requires beta to point to the prerelease", () => {
   const response = Object.fromEntries(publishedPackages.map((name) => [name, {
     version: "0.9.0-beta.22",
-    latest: "0.9.0-beta.21",
+    beta: "0.9.0-beta.21",
   }]))
 
   try {
@@ -146,21 +156,29 @@ test("registry validation requires latest to point to the release", () => {
     return
   }
 
-  throw new Error("expected latest dist-tag mismatch to fail")
+  throw new Error("expected beta dist-tag mismatch to fail")
 })
 
-test("registry validation accepts all exact versions and latest dist-tags", () => {
+test("registry validation accepts all exact versions and beta dist-tags", () => {
   const response = Object.fromEntries(publishedPackages.map((name) => [name, {
     version: "0.9.0-beta.22",
-    latest: "0.9.0-beta.22",
+    beta: "0.9.0-beta.22",
   }]))
   assertRegistryResponse({ expectedVersion: "0.9.0-beta.22", response })
+})
+
+test("registry validation accepts stable versions on latest", () => {
+  const response = Object.fromEntries(publishedPackages.map((name) => [name, {
+    version: "0.9.0",
+    latest: "0.9.0",
+  }]))
+  assertRegistryResponse({ expectedVersion: "0.9.0", response })
 })
 
 test("registry validation marks a missing package as propagation", () => {
   const response = Object.fromEntries(publishedPackages.map((name) => [name, {
     version: "0.9.0-beta.22",
-    latest: "0.9.0-beta.22",
+    beta: "0.9.0-beta.22",
   }]))
   delete response.vexart
 
@@ -172,4 +190,25 @@ test("registry validation marks a missing package as propagation", () => {
   }
 
   throw new Error("expected missing registry package to be retryable")
+})
+
+test("publish workflow uses the resolved release channel", async () => {
+  const workflow = await readFile(join(process.cwd(), ".github", "workflows", "build-native.yml"), "utf8")
+  const publishCommands = workflow.match(/npm publish --access public --tag [^\n]+/g) ?? []
+  strictEqual(publishCommands.length, 2)
+  strictEqual(publishCommands.every((command) => command.includes("steps.release_version.outputs.channel")), true)
+  strictEqual(workflow.includes('channel="$(node scripts/release-verification.mjs channel "$version")"'), true)
+  strictEqual(workflow.includes('registry "$VEXART_VERSION"'), true)
+  strictEqual(workflow.includes("VEXART_CHANNEL"), false)
+  strictEqual(workflow.includes("--tag latest"), false)
+})
+
+test("registry CLI rejects unsupported prerelease before registry access", () => {
+  const result = spawnSync(process.execPath, [join(process.cwd(), "scripts", "release-verification.mjs"), "registry", "0.9.0-alpha.1"], {
+    encoding: "utf8",
+    env: { ...process.env, PATH: "/nonexistent" },
+  })
+  strictEqual(result.status, 1)
+  strictEqual(result.stdout, "")
+  strictEqual(result.stderr.trim(), "unsupported prerelease channel alpha.1; only beta prereleases are supported")
 })

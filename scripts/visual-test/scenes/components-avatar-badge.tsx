@@ -16,11 +16,15 @@ export function Scene() {
           </box>
         </Panel>
         <Panel title="Badges" width={180}>
-          <box direction="row" gap={8}>
-            <Badge>Stable</Badge>
-            <Badge variant="secondary">Beta</Badge>
-            <Badge variant="outline">Docs</Badge>
-            <Badge variant="destructive">Alert</Badge>
+          <box direction="column" gap={8}>
+            <box direction="row" gap={8}>
+              <Badge>Stable</Badge>
+              <Badge variant="secondary">Beta</Badge>
+            </box>
+            <box direction="row" gap={8}>
+              <Badge variant="outline">Docs</Badge>
+              <Badge variant="destructive">Alert</Badge>
+            </box>
           </box>
         </Panel>
       </box>

@@ -13,7 +13,7 @@ import { For } from 'solid-js';
 import { Index } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { Match } from 'solid-js';
-import { Node as Node_2 } from 'flexily';
+import type { Node as Node_2 } from 'flexily';
 import { Setter } from 'solid-js';
 import { Show } from 'solid-js';
 import { Switch } from 'solid-js';
@@ -1680,6 +1680,8 @@ export type RenderCommand = {
     fontFamily?: string;
     fontWeight?: number;
     fontStyle?: string;
+    whiteSpace?: "normal" | "pre-wrap";
+    wordBreak?: "normal" | "keep-all";
     nodeId?: number;
     borderWidths?: {
         left: number;

@@ -7,7 +7,7 @@ import { For } from 'solid-js';
 import { Index } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { Match } from 'solid-js';
-import { Node as Node_2 } from 'flexily';
+import type { Node as Node_2 } from 'flexily';
 import { Setter } from 'solid-js';
 import { Show } from 'solid-js';
 import { Switch } from 'solid-js';
@@ -99,6 +99,8 @@ declare type BaseRenderOpFields = {
     fontFamily?: string;
     fontWeight?: number;
     fontStyle?: string;
+    /* Excluded from this release type: whiteSpace */
+    /* Excluded from this release type: wordBreak */
     nodeId?: number;
     /* Excluded from this release type: clipBounds */
 };
@@ -423,6 +425,12 @@ export declare const createTextNode: (value: string) => TGENode;
 /** @public */
 export declare function createTransition(initial: number, config?: TransitionConfig): [() => number, (target: number) => void];
 
+/**
+ * Create a write function that auto-wraps for tmux passthrough.
+ *
+ * This is for graphics and other payloads intended for the outer terminal.
+ * Mode-control ANSI must use the caller's raw writer instead.
+ */
 /** @public */
 export declare function createWriter(write: (data: string) => void): (data: string) => void;
 
@@ -1905,6 +1913,7 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      count: number;
  };
 
+ /** Check the static prerequisites for tmux passthrough wrapping. */
  /** @public */
  export declare function passthroughSupported(): boolean;
 
@@ -1999,6 +2008,10 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
 
  /**
   * Query terminal pixel dimensions.
+  *
+  * Prefer the explicit CSI 16t cell report when available and derive from the
+  * CSI 14t area report otherwise. Both reports are sent for every terminal;
+  * tmux's CSI 14t area is already pane-relative to the querying process.
   *
   * @public
   */
@@ -2127,6 +2140,8 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      fontFamily?: string;
      fontWeight?: number;
      fontStyle?: string;
+     /* Excluded from this release type: whiteSpace */
+     /* Excluded from this release type: wordBreak */
      /** Stable node ID for matching render ops to effects/images. */
      nodeId?: number;
      /** Per-side border widths when the border is not uniform. */
@@ -3557,6 +3572,14 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      zoom: number;
  };
 
+ /**
+  * Wrap a raw escape sequence for tmux DCS passthrough.
+  *
+  * Input:  "\x1b_G...;\x1b\\"
+  * Output: "\x1bPtmux;\x1b\x1b_G...;\x1b\x1b\\\x1b\\"
+  *
+  * Every \x1b inside the payload gets doubled.
+  */
  /** @public */
  export declare function wrapPassthrough(raw: string): string;
 

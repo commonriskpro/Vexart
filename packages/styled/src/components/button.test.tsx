@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { createNode, resetFocus, solidRender, type TGENode } from "@vexart/engine"
+import { createNode, resetFocus, setFocus, solidRender, type TGENode } from "@vexart/engine"
 import { Button, type ButtonProps } from "./button"
 
 const browserRuntime = import.meta.resolve("solid-js").endsWith("/solid.js")
@@ -61,9 +61,55 @@ suite("styled Button", () => {
 
       const pressed = firstChild(wrapper)
       const pressedActiveStyle = pressed.props.activeStyle as { backgroundColor: unknown }
-      expect(pressed).not.toBe(initial)
+      expect(pressed).toBe(initial)
       expect(pressedActiveStyle.backgroundColor).toBe(activeStyle.backgroundColor)
       expect(pressed.props.backgroundColor).not.toBe(initialBackground)
+    } finally {
+      dispose()
+    }
+  })
+
+  test("keeps mounted visuals stable across focus changes and press reset", async () => {
+    const root = createNode("root")
+    let presses = 0
+    const dispose = renderScene(root, () => (
+      <box>
+        <Button focusId="button-a" onPress={() => presses++}>A</Button>
+        <Button focusId="button-b">B</Button>
+      </box>
+    ))
+
+    try {
+      const container = first(root)
+      const firstWrapper = container.children[0]
+      const secondWrapper = container.children[1]
+      if (!firstWrapper || !secondWrapper) throw new Error("expected two rendered buttons")
+
+      const firstVisual = firstChild(firstWrapper)
+      const secondVisual = firstChild(secondWrapper)
+
+      setFocus("button-a")
+      expect(firstVisual.props.borderWidth).toBe(2)
+
+      setFocus("button-b")
+      expect(firstChild(firstWrapper)).toBe(firstVisual)
+      expect(firstVisual.props.borderWidth).toBeUndefined()
+      expect(secondVisual.props.borderWidth).toBe(2)
+
+      setFocus("button-a")
+      expect(firstChild(firstWrapper)).toBe(firstVisual)
+      expect(firstVisual.props.borderWidth).toBe(2)
+
+      const initialBackground = firstVisual.props.backgroundColor
+      const onPress = firstVisual.props.onPress as () => void
+      onPress()
+      expect(presses).toBe(1)
+      expect(firstChild(firstWrapper)).toBe(firstVisual)
+      expect(firstVisual.props.backgroundColor).not.toBe(initialBackground)
+
+      await new Promise((resolve) => setTimeout(resolve, 120))
+      expect(firstChild(firstWrapper)).toBe(firstVisual)
+      expect(firstVisual.props.backgroundColor).toBe(initialBackground)
     } finally {
       dispose()
     }

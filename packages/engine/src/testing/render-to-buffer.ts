@@ -24,7 +24,12 @@ import { createRenderLoop } from "../loop/loop"
 import { markDirty } from "../reconciler/dirty"
 import { dispatchInput } from "../loop/input"
 import { setRendererBackend, getRendererBackend } from "../ffi/renderer-backend"
-import { createGpuRendererBackendForTesting, type GpuRendererBackend } from "../ffi/gpu-renderer-backend"
+import {
+  createGpuRendererBackendForTerminal,
+  createGpuRendererBackendForTesting,
+  waitForTmuxPresentationForTest,
+  type GpuRendererBackend,
+} from "../ffi/gpu-renderer-backend"
 import { bindLoop, unbindLoop } from "../reconciler/pointer"
 import { resetFocus } from "../reconciler/focus"
 import { resetSelection } from "../reconciler/selection"
@@ -37,7 +42,15 @@ export type RenderToBufferResult = {
   height: number
 }
 
+/** Test-only choice of where the native presentation bytes are sent. */
+export type RenderToBufferPresentation = "offscreen" | "direct" | "tmux-shm"
+
 export interface RenderToBufferOptions {
+  /**
+   * Keep the default offscreen capture for existing golden tests. The two
+   * native choices are used only by the tmux packet/pixel parity harness.
+   */
+  presentation?: RenderToBufferPresentation
 }
 
 type LoopInstance = ReturnType<typeof createRenderLoop>
@@ -51,7 +64,7 @@ export type RenderLoopInteractionHelpers = {
 
 // ── Mock terminal ────────────────────────────────────────────────────────────
 
-function createMockTerminal(width: number, height: number): Terminal {
+function createMockTerminal(width: number, height: number, presentation: RenderToBufferPresentation): Terminal {
   const noop = () => {}
   const cellWidth = 8
   const cellHeight = 16
@@ -64,12 +77,13 @@ function createMockTerminal(width: number, height: number): Terminal {
     cellHeight,
   }
 
+  const tmux = presentation === "tmux-shm"
   return {
     kind: "kitty" as const,
     caps: {
       kind: "kitty" as const,
-      kittyGraphics: true,
-      kittyPlaceholder: false,
+      kittyGraphics: !tmux,
+      kittyPlaceholder: tmux,
       kittyKeyboard: false,
       sixel: false,
       truecolor: true,
@@ -77,9 +91,12 @@ function createMockTerminal(width: number, height: number): Terminal {
       focus: false,
       bracketedPaste: false,
       syncOutput: false,
-      tmux: false,
-      parentKind: null,
-      transmissionMode: "direct" as const,
+      tmux,
+      parentKind: tmux ? "kitty" as const : null,
+      // The tmux route is deliberately SHM-only.  Keeping the synthetic
+      // terminal's transport explicit prevents a test from accidentally
+      // validating a direct Kitty fallback while it is named tmux.
+      transmissionMode: tmux ? "shm" as const : "direct" as const,
     },
     size,
     write: noop,
@@ -103,9 +120,9 @@ function createMockTerminal(width: number, height: number): Terminal {
 // ── Capturing backend ────────────────────────────────────────────────────────
 
 /**
- * Wraps the GPU backend to suppress Kitty output during test rendering.
- * After all frames are rendered, use gpuBackend.readbackForTest() to
- * capture the final composited pixels.
+ * Wraps the GPU backend to suppress the presentation result during the normal
+ * offscreen test render. After all frames are rendered, use
+ * gpuBackend.readbackForTest() to capture the final composited pixels.
  */
 function createCapturingBackend(gpuBackend: GpuRendererBackend): {
   backend: RendererBackend
@@ -120,11 +137,13 @@ function createCapturingBackend(gpuBackend: GpuRendererBackend): {
       return gpuBackend.paint(ctx)
     },
     reuseLayer: (ctx) => gpuBackend.reuseLayer?.(ctx),
+    compositeRetainedFrame: (ctx) => gpuBackend.compositeRetainedFrame?.(ctx),
     endFrame(ctx: RendererBackendFrameContext): RendererBackendFrameResult | null {
       const result = gpuBackend.endFrame?.(ctx)
       // Suppress any native output that would write to stdout
       return { output: "none", strategy: result?.strategy ?? null }
     },
+    destroy: () => gpuBackend.destroy?.(),
   }
 
   return {
@@ -264,58 +283,96 @@ async function captureToBuffer(
   const prevStrategy = process.env["VEXART_GPU_FORCE_LAYER_STRATEGY"]
   process.env["VEXART_GPU_FORCE_LAYER_STRATEGY"] = "final-frame"
 
-  const term = createMockTerminal(width, height)
+  const presentation = options.presentation ?? "offscreen"
+  const term = createMockTerminal(width, height, presentation)
 
-  const gpuBackend = createGpuRendererBackendForTesting()
-  const { backend, readbackPixels } = createCapturingBackend(gpuBackend)
+  const gpuBackend = presentation === "offscreen"
+    ? createGpuRendererBackendForTesting()
+    : createGpuRendererBackendForTerminal(term)
+  const captured = presentation === "offscreen"
+    ? createCapturingBackend(gpuBackend)
+    : {
+        backend: gpuBackend as RendererBackend,
+        readbackPixels: (captureWidth: number, captureHeight: number) => {
+          const raw = gpuBackend.readbackForTest(captureWidth, captureHeight)
+          return raw ? new Uint8Array(raw) : null
+        },
+      }
+  const { backend, readbackPixels } = captured
 
   // Save + replace the active backend
   const prevBackend = getRendererBackend()
   setRendererBackend(backend)
 
-  const loop = createRenderLoop(term, {
-    experimental: {
-      forceLayerRepaint: true,
-      // Native presentation is active but capturing backend suppresses output.
-      // After all frames, readbackForTest() extracts pixels directly from GPU.
-    },
-  })
+  let loop: LoopInstance | null = null
+  let dispose: (() => void) | null = null
+  let pixels: Uint8Array | null = null
+  try {
+    try {
+      loop = createRenderLoop(term, {
+        experimental: {
+          forceLayerRepaint: true,
+          nativePresentation: presentation !== "offscreen" || undefined,
+        },
+      })
 
-  bindLoop(loop)
-  const dispose = mountScene(loop)
-  markDirty()
+      bindLoop(loop)
+      dispose = mountScene(loop)
+      markDirty()
 
-  // Run frames — first frame initialises layout, second stabilises
-  for (let i = 0; i < frames; i++) {
-    loop.frame()
-    // Give SolidJS effects a tick to settle between frames
-    await new Promise<void>((resolve) => setTimeout(resolve, 0))
-    markDirty()
-  }
+      // Run frames — first frame initialises layout, second stabilises
+      for (let i = 0; i < frames; i++) {
+        loop.frame()
+        // Give SolidJS effects a tick to settle between frames
+        await new Promise<void>((resolve) => setTimeout(resolve, 0))
+        markDirty()
+      }
 
-  if (interact) {
-    await interact(loop)
-    markDirty()
-    loop.frame()
-    await new Promise<void>((resolve) => setTimeout(resolve, 0))
-  }
+      if (interact) {
+        await interact(loop)
+        markDirty()
+        loop.frame()
+        await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      }
 
-  // Capture pixels via test-only readback (not part of production path)
-  const pixels = readbackPixels(width, height)
+      // The native tmux presenter owns a POSIX SHM segment until the streamed
+      // parity receiver consumes and unlinks it.  Do not read the sidecar or
+      // destroy the backend before that final upload has been observed.
+      if (presentation === "tmux-shm") await waitForTmuxPresentationForTest(gpuBackend)
 
-  // Tear down
-  unbindLoop()
-  resetFocus()
-  resetSelection()
-  dispose()
-  loop.destroy()
-
-  // Restore backend + env
-  setRendererBackend(prevBackend)
-  if (prevStrategy === undefined) {
-    delete process.env["VEXART_GPU_FORCE_LAYER_STRATEGY"]
-  } else {
-    process.env["VEXART_GPU_FORCE_LAYER_STRATEGY"] = prevStrategy
+      // Capture before destroy: destroying the backend releases the target.
+      pixels = readbackPixels(width, height)
+    } finally {
+      // Keep the active backend installed while loop.destroy() releases native
+      // targets and any placeholder image. Restore process-global state last.
+      if (loop) {
+        try {
+          unbindLoop()
+        } finally {
+          try {
+            resetFocus()
+            resetSelection()
+          } finally {
+            try {
+              dispose?.()
+            } finally {
+              loop.destroy()
+            }
+          }
+        }
+      } else {
+        // createRenderLoop can fail before it owns the backend. The factory is
+        // lazy, but explicitly releasing here also covers a future eager init.
+        backend.destroy?.()
+      }
+    }
+  } finally {
+    setRendererBackend(prevBackend)
+    if (prevStrategy === undefined) {
+      delete process.env["VEXART_GPU_FORCE_LAYER_STRATEGY"]
+    } else {
+      process.env["VEXART_GPU_FORCE_LAYER_STRATEGY"] = prevStrategy
+    }
   }
 
   if (!pixels) {

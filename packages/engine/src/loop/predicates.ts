@@ -1,5 +1,17 @@
 import type { TGEProps } from "../ffi/node"
-import { BACKDROP_FIELDS, type BackdropFieldName } from "../ffi/render-graph"
+
+/**
+ * Canonical list of backdrop filter field names.
+ * Single source of truth — used by predicates, walk-tree, and render-graph
+ * to avoid manually enumerating these 8 fields in 4+ locations.
+ */
+export const BACKDROP_FIELDS = [
+  "backdropBlur", "backdropBrightness", "backdropContrast", "backdropSaturate",
+  "backdropGrayscale", "backdropInvert", "backdropSepia", "backdropHueRotate",
+] as const
+
+/** @public */
+export type BackdropFieldName = (typeof BACKDROP_FIELDS)[number]
 
 type BackdropEffectProps = Pick<TGEProps, BackdropFieldName>
 

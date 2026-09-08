@@ -12,6 +12,7 @@ use std::os::fd::OwnedFd;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{LazyLock, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use nix::fcntl::OFlag;
 use nix::sys::mman::{mmap, msync, munmap, shm_open, shm_unlink, MapFlags, MsFlags, ProtFlags};
@@ -33,6 +34,12 @@ struct KittyShmHandle {
 }
 
 static NEXT_KITTY_HANDLE: AtomicU64 = AtomicU64::new(1);
+static NEXT_KITTY_SHM_NAME: LazyLock<AtomicU64> = LazyLock::new(|| {
+    let seed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_nanos() as u64);
+    AtomicU64::new(seed)
+});
 static KITTY_SHM_HANDLES: LazyLock<Mutex<HashMap<u64, KittyShmHandle>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -194,7 +201,11 @@ pub fn shm_release(handle: u64, unlink_flag: u32) -> i32 {
     }
 
     // Remove from registry; if unknown, soft-fail.
-    let entry = match KITTY_SHM_HANDLES.lock().unwrap_or_else(|e| e.into_inner()).remove(&handle) {
+    let entry = match KITTY_SHM_HANDLES
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(&handle)
+    {
         Some(e) => e,
         None => return OK,
     };
@@ -215,11 +226,94 @@ pub fn shm_release(handle: u64, unlink_flag: u32) -> i32 {
     OK
 }
 
+/// Prepare a native RGBA payload in a private, short-lived POSIX SHM object.
+///
+/// The returned handle keeps the descriptor alive until the caller observes
+/// consumption and releases it. The name is returned because Kitty's SHM
+/// protocol addresses the object by name, while the handle is intentionally
+/// opaque to FFI callers.
+pub fn shm_prepare_native(data: &[u8]) -> Result<(u64, CString), i32> {
+    if data.is_empty() {
+        set_last_error("native SHM payload must be non-empty");
+        return Err(ERR_INVALID_ARG);
+    }
+    if data.len() > u32::MAX as usize {
+        set_last_error("native SHM payload exceeds the u32 FFI length bound");
+        return Err(ERR_INVALID_ARG);
+    }
+
+    // `/vx-<pid>-<counter>` stays below the POSIX SHM name limit even on
+    // 64-bit hosts. The monotonic counter prevents concurrent frame calls
+    // from reusing an object name.
+    let counter = NEXT_KITTY_SHM_NAME.fetch_add(1, Ordering::Relaxed);
+    let name = CString::new(format!("/vx-{pid:x}-{counter:x}", pid = std::process::id())).map_err(
+        |_| {
+            set_last_error("native SHM name contains NUL");
+            ERR_INVALID_ARG
+        },
+    )?;
+    if name.as_bytes().len() > 31 {
+        set_last_error("native SHM name exceeds the 31-byte Kitty bound");
+        return Err(ERR_INVALID_ARG);
+    }
+
+    let mut handle = 0;
+    // SAFETY: `name` and `data` remain alive and immutable for the duration
+    // of the call, and `&mut handle` is valid writable storage.
+    let rc = unsafe {
+        shm_prepare(
+            name.as_ptr().cast(),
+            name.as_bytes().len() as u32,
+            data.as_ptr(),
+            data.len() as u32,
+            0o600,
+            &mut handle,
+        )
+    };
+    if rc != OK {
+        return Err(rc);
+    }
+    Ok((handle, name))
+}
+
+/// Return whether the terminal has unlinked a registered SHM object.
+///
+/// `0` means the name still exists, `1` means it has been consumed/unlinked,
+/// and a negative error code means the handle is unknown or probing failed.
+pub fn shm_is_consumed(handle: u64) -> i32 {
+    if handle == 0 {
+        set_last_error("invalid SHM handle");
+        return ERR_INVALID_ARG;
+    }
+    let name = {
+        let registry = KITTY_SHM_HANDLES.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(entry) = registry.get(&handle) else {
+            set_last_error(format!("unknown SHM handle {handle}"));
+            return ERR_INVALID_ARG;
+        };
+        entry.name.clone()
+    };
+
+    match shm_open(name.as_c_str(), OFlag::O_RDONLY, Mode::empty()) {
+        Ok(fd) => {
+            drop(fd);
+            0
+        }
+        Err(nix::errno::Errno::ENOENT) => 1,
+        Err(error) => {
+            set_last_error(format!("shm_open probe failed: {error}"));
+            ERR_KITTY_TRANSPORT
+        }
+    }
+}
+
 // ─── Unit tests ───────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nix::sys::stat::fstat;
+    use std::os::fd::AsRawFd;
 
     /// Unique name per test invocation using process ID + monotonic counter.
     fn unique_shm_name() -> String {
@@ -356,5 +450,48 @@ mod tests {
             r, ERR_INVALID_ARG,
             "name with embedded NUL should return ERR_INVALID_ARG"
         );
+    }
+
+    #[test]
+    fn native_prepare_uses_unique_private_payload_and_consumption_probe() {
+        let first = shm_prepare_native(&[1, 2, 3, 4]).unwrap();
+        let second = shm_prepare_native(&[5, 6, 7, 8]).unwrap();
+        assert_ne!(first.1, second.1);
+        assert!(first.1.as_bytes().len() <= 31);
+        assert!(second.1.as_bytes().len() <= 31);
+
+        let fd = shm_open(first.1.as_c_str(), OFlag::O_RDONLY, Mode::empty()).unwrap();
+        let metadata = fstat(fd.as_raw_fd()).unwrap();
+        assert_eq!(metadata.st_mode & 0o777, 0o600);
+        let mapped = unsafe {
+            mmap(
+                None,
+                NonZeroUsize::new(4).unwrap(),
+                ProtFlags::PROT_READ,
+                MapFlags::MAP_SHARED,
+                &fd,
+                0,
+            )
+            .unwrap()
+        };
+        // SAFETY: the mapping is valid for exactly four bytes until munmap.
+        let bytes = unsafe { std::slice::from_raw_parts(mapped.as_ptr().cast::<u8>(), 4) };
+        assert_eq!(bytes, [1, 2, 3, 4]);
+        unsafe { munmap(mapped, 4).unwrap() };
+        drop(fd);
+        assert_eq!(shm_is_consumed(first.0), 0);
+
+        // A terminal consumes the object by unlinking its name while the
+        // producer's descriptor remains registered and open.
+        shm_unlink(first.1.as_c_str()).unwrap();
+        assert_eq!(shm_is_consumed(first.0), 1);
+        assert_eq!(shm_release(first.0, 1), OK);
+        assert_eq!(shm_release(second.0, 1), OK);
+    }
+
+    #[test]
+    fn consumption_probe_rejects_unknown_handles() {
+        assert_eq!(shm_is_consumed(0), ERR_INVALID_ARG);
+        assert_eq!(shm_is_consumed(u64::MAX), ERR_INVALID_ARG);
     }
 }

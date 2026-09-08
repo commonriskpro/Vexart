@@ -44,7 +44,9 @@ jobs:
         run: |
           set -euo pipefail
           version="$(node scripts/release-verification.mjs version)"
+          channel="$(node scripts/release-verification.mjs channel "$version")"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
 
       - name: Test release verification helpers
         run: node --test scripts/release-verification.test.mjs
@@ -56,6 +58,22 @@ jobs:
 
       - name: Build libvexart (release)
         run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Smoke-test native ABI
+        run: |
+          python3 - <<'PY'
+          import ctypes
+          from pathlib import Path
+          target = "${{ matrix.target }}"
+          path = (Path("target") / target / "release" / "${{ matrix.lib-name }}").resolve()
+          version = ctypes.CDLL(str(path)).vexart_version
+          version.argtypes = []
+          version.restype = ctypes.c_uint32
+          value = version()
+          if value <= 0:
+              raise SystemExit(f"invalid vexart_version for {target}: {value}")
+          print(f"target={target} version={value}")
+          PY
 
       - name: Package platform artifact
         env:
@@ -98,7 +116,9 @@ jobs:
         run: |
           set -euo pipefail
           version="$(node scripts/release-verification.mjs version)"
+          channel="$(node scripts/release-verification.mjs channel "$version")"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -144,7 +164,7 @@ jobs:
           set -euo pipefail
           for platform in darwin-arm64 linux-x64 linux-arm64; do
             echo "Publishing @vexart-native/$platform..."
-            (cd "dist/platform/$platform" && npm publish --access public --tag latest)
+            (cd "dist/platform/$platform" && npm publish --access public --tag "${{ steps.release_version.outputs.channel }}")
           done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -153,7 +173,7 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
-          npm publish --access public --tag latest
+          npm publish --access public --tag "${{ steps.release_version.outputs.channel }}"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

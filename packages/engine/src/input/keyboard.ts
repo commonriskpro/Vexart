@@ -9,6 +9,7 @@
  *   - SS3 sequences: \x1bO{A-D} (arrow keys from some terminals)
  *   - CSI sequences: \x1b[... (arrows, function keys, modifiers)
  *   - Kitty keyboard: \x1b[{keycode}[;{mods}]u
+ *   - xterm modifyOtherKeys: \x1b[27;{mods};{keycode}~
  *   - Alt+key: \x1b{char} (meta prefix)
  */
 
@@ -75,6 +76,19 @@ const KITTY_KEYS: Record<number, string> = {
   57383: "f20",
 }
 
+function parseCodepoint(code: number, mods: Modifiers, consumed: number): [KeyEvent, number] | null {
+  // String.fromCodePoint throws for values outside the Unicode range. Reject
+  // malformed terminal input rather than letting it cross the parser boundary.
+  if (!Number.isSafeInteger(code) || code < 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)) return null
+  const name = KITTY_KEYS[code] ?? String.fromCodePoint(code)
+  // Kitty reserves the BMP private-use range for functional keys. C0/C1
+  // controls are key codes too, but neither class represents text to insert.
+  const privateUse = code >= 0xe000 && code <= 0xf8ff
+  const control = code < 0x20 || (code >= 0x7f && code <= 0x9f)
+  const char = !privateUse && !control ? String.fromCodePoint(code) : ""
+  return [{ type: "key", key: name.toLowerCase(), char, mods }, consumed]
+}
+
 /** @public Try to parse a keyboard event from the data. Returns the event and consumed byte count, or null. */
 export function parseKey(data: string): [KeyEvent, number] | null {
   if (data.length === 0) return null
@@ -84,9 +98,15 @@ export function parseKey(data: string): [KeyEvent, number] | null {
   if (kittyMatch) {
     const code = parseInt(kittyMatch[1], 10)
     const mods = kittyMatch[2] ? decodeMods(parseInt(kittyMatch[2], 10)) : NO_MODS
-    const name = KITTY_KEYS[code] ?? String.fromCodePoint(code)
-    const char = code >= 32 && code < 127 ? String.fromCodePoint(code) : ""
-    return [{ type: "key", key: name.toLowerCase(), char, mods }, kittyMatch[0].length]
+    return parseCodepoint(code, mods, kittyMatch[0].length)
+  }
+
+  // ── xterm modifyOtherKeys: \x1b[27;{mods};{codepoint}~ ──
+  const modifyOtherKeysMatch = data.match(/^\x1b\[27;(\d+);(\d+)~/)
+  if (modifyOtherKeysMatch) {
+    const mods = decodeMods(parseInt(modifyOtherKeysMatch[1], 10))
+    const code = parseInt(modifyOtherKeysMatch[2], 10)
+    return parseCodepoint(code, mods, modifyOtherKeysMatch[0].length)
   }
 
   // ── CSI sequences: \x1b[...{final} ──

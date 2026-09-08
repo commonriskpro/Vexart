@@ -24,7 +24,9 @@ use ffi::panic::{ERR_GPU_DEVICE_LOST, ERR_INVALID_ARG, OK};
 /// If a previous panic poisoned the mutex, the guard is recovered
 /// so the renderer can continue operating instead of permanently failing.
 fn lock_or_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 use types::FrameStats;
 
@@ -1081,6 +1083,57 @@ pub extern "C" fn vexart_kitty_shm_release(handle: u64, unlink_flag: u32) -> i32
     ffi_guard!({ kitty::shm::shm_release(handle, unlink_flag) })
 }
 
+/// Emit a full target through tmux using a native POSIX-SHM Kitty upload.
+/// `params_len` is measured in bytes and must be 20 (`image_id`,
+/// `placement_id`, `cols`, `rows`, `emit_grid`).
+///
+/// # Safety
+/// `params` must point to 20 readable bytes, `out_handle` must be writable,
+/// and `stats_out` must be writable when non-null.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_kitty_emit_placeholder_shm_frame(
+    ctx: u64,
+    target: u64,
+    params: *const u32,
+    params_len: u32,
+    out_handle: *mut u64,
+    stats_out: *mut types::NativePresentationStats,
+) -> i32 {
+    let _ = ctx;
+    let rc = ffi_guard!({
+        if !out_handle.is_null() {
+            // SAFETY: a non-null output pointer is required to be writable by
+            // this FFI contract.
+            *out_handle = 0;
+        }
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(context) => context,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        kitty::placeholder::emit_placeholder_shm_frame(
+            pctx,
+            target,
+            params,
+            params_len,
+            out_handle,
+            stats_out,
+        )
+    });
+    if rc != OK && !out_handle.is_null() {
+        // SAFETY: the pointer was checked above and remains part of the FFI
+        // contract on every non-null error path.
+        *out_handle = 0;
+    }
+    rc
+}
+
+/// Report whether the terminal has unlinked a native Kitty SHM object.
+#[no_mangle]
+pub extern "C" fn vexart_kitty_shm_is_consumed(handle: u64) -> i32 {
+    ffi_guard!({ kitty::shm::shm_is_consumed(handle) })
+}
+
 // ─── §5.8 Resource manager (Phase 2b Slice 6) ────────────────────────────
 
 /// Retrieve current ResourceManager statistics as a JSON-encoded UTF-8 buffer.
@@ -1179,8 +1232,14 @@ pub unsafe extern "C" fn vexart_image_asset_register(
         let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
         let registry = get_or_init_image_assets();
         let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
-        let Some(handle) = registry_guard.register(key, rgba, width, height, current_frame, &mut resources_guard)
-        else {
+        let Some(handle) = registry_guard.register(
+            key,
+            rgba,
+            width,
+            height,
+            current_frame,
+            &mut resources_guard,
+        ) else {
             return ERR_INVALID_ARG;
         };
         let mut paint_guard = get_or_init_paint();
@@ -1195,7 +1254,12 @@ pub unsafe extern "C" fn vexart_image_asset_register(
 }
 
 #[no_mangle]
-pub extern "C" fn vexart_image_asset_touch(_ctx: u64, _scene: u64, current_frame: u64, handle: u64) -> i32 {
+pub extern "C" fn vexart_image_asset_touch(
+    _ctx: u64,
+    _scene: u64,
+    current_frame: u64,
+    handle: u64,
+) -> i32 {
     ffi_guard!({
         let resources = get_or_init_resource();
         let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
@@ -1261,7 +1325,9 @@ pub unsafe extern "C" fn vexart_canvas_display_list_update(
         let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
         let registry = get_or_init_canvas_display_lists();
         let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
-        let Some(handle) = registry_guard.update(key, bytes, hash, current_frame, &mut resources_guard) else {
+        let Some(handle) =
+            registry_guard.update(key, bytes, hash, current_frame, &mut resources_guard)
+        else {
             return ERR_INVALID_ARG;
         };
         *out_handle = handle;
@@ -1270,7 +1336,12 @@ pub unsafe extern "C" fn vexart_canvas_display_list_update(
 }
 
 #[no_mangle]
-pub extern "C" fn vexart_canvas_display_list_touch(_ctx: u64, _scene: u64, current_frame: u64, handle: u64) -> i32 {
+pub extern "C" fn vexart_canvas_display_list_touch(
+    _ctx: u64,
+    _scene: u64,
+    current_frame: u64,
+    handle: u64,
+) -> i32 {
     ffi_guard!({
         let resources = get_or_init_resource();
         let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
@@ -1378,7 +1449,9 @@ pub unsafe extern "C" fn vexart_font_render_text(
         use font::msdf_atlas::MsdfGlyphEntry;
 
         if text_ptr.is_null() || text_len == 0 || params_ptr.is_null() || params_len < 28 {
-            if !stats_out.is_null() { *stats_out = FrameStats::default(); }
+            if !stats_out.is_null() {
+                *stats_out = FrameStats::default();
+            }
             return OK;
         }
 
@@ -1401,7 +1474,10 @@ pub unsafe extern "C" fn vexart_font_render_text(
 
         let families: Vec<String> = if params_len > 28 {
             let json_bytes = &params[28..params_len as usize];
-            match std::str::from_utf8(json_bytes).ok().and_then(|s| serde_json::from_str(s).ok()) {
+            match std::str::from_utf8(json_bytes)
+                .ok()
+                .and_then(|s| serde_json::from_str(s).ok())
+            {
                 Some(v) => v,
                 None => vec!["sans-serif".to_string()],
             }
@@ -1419,7 +1495,9 @@ pub unsafe extern "C" fn vexart_font_render_text(
         let resolved = match font_system.query_face(&family_refs, weight, italic) {
             Some(f) => f,
             None => {
-                if !stats_out.is_null() { *stats_out = FrameStats::default(); }
+                if !stats_out.is_null() {
+                    *stats_out = FrameStats::default();
+                }
                 return OK;
             }
         };
@@ -1431,7 +1509,8 @@ pub unsafe extern "C" fn vexart_font_render_text(
         };
 
         let (target_w, target_h) = if target != 0 {
-            pctx.targets.get(target)
+            pctx.targets
+                .get(target)
                 .map(|t| (t.width as f32, t.height as f32))
                 .unwrap_or((1920.0, 1080.0))
         } else {
@@ -1452,11 +1531,13 @@ pub unsafe extern "C" fn vexart_font_render_text(
         let ascender = face.ascender() as f32;
 
         let text_layout = font::layout::layout_text(
-            text, &face_data, face_index,
-            font_size, line_height, max_width,
+            text,
+            &face_data,
+            face_index,
+            font_size,
+            line_height,
+            max_width,
         );
-
-
 
         let mut atlas_mgr = lock_or_recover(&SHARED_MSDF_ATLAS);
         let mut instances: Vec<paint::instances::MsdfGlyphInstance> = Vec::new();
@@ -1467,7 +1548,8 @@ pub unsafe extern "C" fn vexart_font_render_text(
             let mut pen_x = x;
 
             for ch in line.text.chars() {
-                let entry: Option<MsdfGlyphEntry> = atlas_mgr.get_or_generate(&face_data, face_index, ch);
+                let entry: Option<MsdfGlyphEntry> =
+                    atlas_mgr.get_or_generate(&face_data, face_index, ch);
 
                 let (entry, _) = if entry.is_some() {
                     (entry, false)
@@ -1484,7 +1566,10 @@ pub unsafe extern "C" fn vexart_font_render_text(
 
                 let entry = match entry {
                     Some(e) => e,
-                    None => { pen_x += font_size * 0.5; continue; }
+                    None => {
+                        pen_x += font_size * 0.5;
+                        continue;
+                    }
                 };
 
                 let advance = entry.advance * scale;
@@ -1495,8 +1580,6 @@ pub unsafe extern "C" fn vexart_font_render_text(
                     let glyph_x = pen_x + entry.quad_offset_x(scale);
                     let glyph_y = baseline_y + entry.quad_offset_y(scale);
 
-
-
                     instances.push(paint::instances::MsdfGlyphInstance {
                         x: (glyph_x / target_w) * 2.0 - 1.0,
                         y: 1.0 - (glyph_y / target_h) * 2.0,
@@ -1506,7 +1589,10 @@ pub unsafe extern "C" fn vexart_font_render_text(
                         uv_y: entry.uv_y(),
                         uv_w: entry.uv_w(),
                         uv_h: entry.uv_h(),
-                        color_r, color_g, color_b, color_a,
+                        color_r,
+                        color_g,
+                        color_b,
+                        color_a,
                         atlas_id: 2,
                         msdf_flag: 1,
                         _pad1: 0,
@@ -1523,8 +1609,13 @@ pub unsafe extern "C" fn vexart_font_render_text(
                 let msdf_atlas_id = (page_idx as u32) + 2;
                 if msdf_atlas_id <= 15 {
                     let _ = pctx.atlases.load_atlas_raw(
-                        &pctx.wgpu.device, &pctx.wgpu.queue, &pctx.wgpu.image_bind_group_layout,
-                        msdf_atlas_id, &page.rgba, page_size, page_size,
+                        &pctx.wgpu.device,
+                        &pctx.wgpu.queue,
+                        &pctx.wgpu.image_bind_group_layout,
+                        msdf_atlas_id,
+                        &page.rgba,
+                        page_size,
+                        page_size,
                     );
                 }
                 page.dirty = false;
@@ -1532,7 +1623,9 @@ pub unsafe extern "C" fn vexart_font_render_text(
         }
 
         if instances.is_empty() {
-            if !stats_out.is_null() { *stats_out = FrameStats::default(); }
+            if !stats_out.is_null() {
+                *stats_out = FrameStats::default();
+            }
             return OK;
         }
 
@@ -1569,15 +1662,23 @@ pub unsafe extern "C" fn vexart_font_measure(
             return ERR_INVALID_ARG;
         }
         if text_ptr.is_null() || text_len == 0 {
-            *out_w = 0.0; *out_h = 0.0; return OK;
+            *out_w = 0.0;
+            *out_h = 0.0;
+            return OK;
         }
-        let text = match std::str::from_utf8(std::slice::from_raw_parts(text_ptr, text_len as usize)) {
-            Ok(s) => s,
-            Err(_) => { *out_w = 0.0; *out_h = 0.0; return OK; }
-        };
+        let text =
+            match std::str::from_utf8(std::slice::from_raw_parts(text_ptr, text_len as usize)) {
+                Ok(s) => s,
+                Err(_) => {
+                    *out_w = 0.0;
+                    *out_h = 0.0;
+                    return OK;
+                }
+            };
         let families: Vec<String> = if !families_ptr.is_null() && families_len > 0 {
             let json_bytes = std::slice::from_raw_parts(families_ptr, families_len as usize);
-            std::str::from_utf8(json_bytes).ok()
+            std::str::from_utf8(json_bytes)
+                .ok()
                 .and_then(|s| serde_json::from_str(s).ok())
                 .unwrap_or_else(|| vec!["sans-serif".to_string()])
         } else {
@@ -1587,18 +1688,29 @@ pub unsafe extern "C" fn vexart_font_measure(
         let mut system = lock_or_recover(&SHARED_FONT_SYSTEM);
         let resolved = match system.query_face(&family_refs, weight, italic != 0) {
             Some(f) => f,
-            None => { *out_w = 0.0; *out_h = 0.0; return OK; }
+            None => {
+                *out_w = 0.0;
+                *out_h = 0.0;
+                return OK;
+            }
         };
         let face = match resolved.parse() {
             Some(f) => f,
-            None => { *out_w = 0.0; *out_h = 0.0; return OK; }
+            None => {
+                *out_w = 0.0;
+                *out_h = 0.0;
+                return OK;
+            }
         };
         let units_per_em = face.units_per_em() as f32;
         let scale = font_size / units_per_em;
         let mut width = 0.0f32;
         let mut lines = 1u32;
         for ch in text.chars() {
-            if ch == '\n' { lines += 1; continue; }
+            if ch == '\n' {
+                lines += 1;
+                continue;
+            }
             if let Some(glyph_id) = face.glyph_index(ch) {
                 width += face.glyph_hor_advance(glyph_id).unwrap_or(0) as f32 * scale;
             } else {

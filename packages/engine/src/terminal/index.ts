@@ -17,10 +17,12 @@
 
 import { detect, type TerminalKind } from "./detect"
 import { appendFileSync } from "node:fs"
-import { inTmux, parentTerminal, passthroughSupported, createWriter, wrapPassthrough } from "./tmux"
+import { inTmux, parentTerminal, parentSupportsKittyPlaceholder, passthroughSupported, tmuxPassthroughState, tmuxPassthroughAllowsAll, tmuxHasSingleAttachedClient, tmuxClientSupportsRgb, createWriter } from "./tmux"
 import { inferCaps, probeKittyGraphics, queryColors, type Capabilities } from "./caps"
 import { getSize, queryPixelSize, onResize, type TerminalSize, type ResizeHandler } from "./size"
 import { enter, leave, beginSync, endSync, installExitHandlers, type LifecycleState } from "./lifecycle"
+import { probeTmuxShm } from "./tmux-shm"
+import { notifyTerminalTransportLifecycle } from "./transport-lifecycle"
 
 const DEBUG_KITTY_PROBE = process.env.VEXART_DEBUG_KITTY === "1" || process.env.VEXART_DEBUG_KITTY_SHM === "1"
 const DEBUG_RESIZE = process.env.VEXART_DEBUG_RESIZE === "1"
@@ -105,9 +107,32 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
   // Resolve tmux parent
   if (caps.tmux) {
     caps.parentKind = parentTerminal()
+    if (!parentSupportsKittyPlaceholder(caps.parentKind)) {
+      throw new Error(
+        `Vexart's tmux renderer currently supports Kitty and Ghostty parents only (detected ${caps.parentKind ?? "unknown"}).`,
+      )
+    }
+    const passthrough = tmuxPassthroughState()
+    if (passthrough !== "enabled") {
+      throw new Error(
+        passthrough === "disabled"
+          ? "Vexart cannot use Kitty graphics through tmux because allow-passthrough is off. Enable `allow-passthrough all` with `tmux set-option -g allow-passthrough all` and restart Vexart."
+          : "Vexart cannot verify Kitty graphics passthrough through tmux. Ensure tmux is available and `allow-passthrough` is set to all, then restart Vexart.",
+      )
+    }
+    if (!tmuxPassthroughAllowsAll()) {
+      throw new Error("Vexart requires tmux allow-passthrough all for graphics from the active pane. Set it with `tmux set-option -g allow-passthrough all` and restart Vexart.")
+    }
+    if (!tmuxHasSingleAttachedClient()) {
+      throw new Error("Vexart requires exactly one attached tmux client because multiple clients would compete for the same SHM object; detach other clients and restart Vexart.")
+    }
+    if (!tmuxClientSupportsRgb()) {
+      throw new Error("Vexart requires tmux RGB client features for 24-bit Kitty image colors; add `terminal-features ',*:RGB'` to tmux configuration and restart Vexart.")
+    }
   }
 
-  // Write function — handles tmux passthrough transparently
+  // Write function — handles tmux passthrough transparently. rawWrite is
+  // intentionally kept for ANSI mode control, mouse, colors, and sizing.
   const rawWrite = (data: string) => { stdout.write(data) }
   const write = createWriter(rawWrite)
 
@@ -125,87 +150,112 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
     stdin.setRawMode(true)
   }
 
-  // Step 3: probe kitty graphics (if not skipped)
-  if (!opts.skipProbe && (caps.kittyGraphics || caps.kittyPlaceholder)) {
-    const supported = await probeKittyGraphics(
+  const restoreStartupRaw = () => {
+    if (stdin.isTTY && !wasRaw && stdin.isRaw) stdin.setRawMode(false)
+  }
+  const forcedTransmissionMode = process.env.VEXART_FORCE_TRANSMISSION_MODE
+  let startupLifecycleState: LifecycleState | null = null
+  let startupRemoveExit: (() => void) | null = null
+  let startupUnsubResize: (() => void) | null = null
+
+  try {
+    // Step 3: probe direct Kitty graphics outside tmux. The tmux SHM query
+    // below is the sole graphics probe there, avoiding a direct-path probe.
+    if (!opts.skipProbe && !caps.tmux && caps.kittyGraphics) {
+      const supported = await probeKittyGraphics(
+        rawWrite,
+        addDataHandler,
+        removeDataHandler,
+        opts.probeTimeout ?? 2000,
+      )
+      if (!supported) {
+        caps.kittyGraphics = false
+        caps.kittyPlaceholder = false
+      }
+    }
+
+    // Step 3b: probe transmission mode. tmux is deliberately SHM-only: a
+    // failed SHM check is an actionable startup error, never a direct fallback.
+    let transportProbe = { shm: false, file: false }
+    if (caps.tmux) {
+      if (forcedTransmissionMode === "direct" || forcedTransmissionMode === "file") {
+        throw new Error(`Vexart requires tmux SHM transport; VEXART_FORCE_TRANSMISSION_MODE=${forcedTransmissionMode} is incompatible.`)
+      }
+      if (isRemoteConnection()) {
+        throw new Error("Vexart requires local Kitty SHM support through tmux; SSH connections cannot use the tmux SHM transport.")
+      }
+      if (!opts.skipProbe) {
+        if (!caps.kittyPlaceholder) {
+          throw new Error("Vexart requires a verified Kitty or Ghostty parent for tmux SHM graphics.")
+        }
+        await probeTmuxShm(rawWrite, addDataHandler, removeDataHandler, opts.probeTimeout ?? 2000)
+      }
+      caps.transmissionMode = "shm"
+      transportProbe.shm = true
+    } else if (!opts.skipProbe && caps.kittyGraphics && !isRemoteConnection()) {
+      const { probeShm, probeFile } = await import("../output/kitty")
+      const shmOk = await probeShm(write, addDataHandler, removeDataHandler, opts.probeTimeout ?? 2000)
+      transportProbe.shm = shmOk
+      const fileOk = await probeFile(write, addDataHandler, removeDataHandler, opts.probeTimeout ?? 2000)
+      transportProbe.file = fileOk
+      if (shmOk) {
+        caps.transmissionMode = "shm"
+      } else if (fileOk) {
+        caps.transmissionMode = "file"
+      }
+    }
+
+    const { configureKittyTransportManager, resolveKittyTransportMode } = await import("../output/transport-manager")
+    if (caps.tmux) {
+      configureKittyTransportManager({ preferredMode: "shm", probe: { shm: true, file: false } })
+      caps.transmissionMode = "shm"
+    } else if (forcedTransmissionMode === "direct" || forcedTransmissionMode === "file" || forcedTransmissionMode === "shm") {
+      configureKittyTransportManager({
+        preferredMode: forcedTransmissionMode,
+        probe: transportProbe,
+      })
+      caps.transmissionMode = resolveKittyTransportMode(forcedTransmissionMode)
+    } else {
+      configureKittyTransportManager({
+        preferredMode: caps.transmissionMode,
+        probe: transportProbe,
+      })
+      caps.transmissionMode = resolveKittyTransportMode(caps.transmissionMode)
+    }
+
+    if (DEBUG_KITTY_PROBE) {
+      console.error("[tge/terminal] transmission mode decision", {
+        kittyGraphics: caps.kittyGraphics,
+        kittyPlaceholder: caps.kittyPlaceholder,
+        tmux: caps.tmux,
+        transmissionMode: caps.transmissionMode,
+      })
+    }
+
+    // Step 4: query colors
+    let bgColor: [number, number, number] | null = null
+    let fgColor: [number, number, number] | null = null
+    if (!opts.skipColors) {
+      const colors = await queryColors(rawWrite, addDataHandler, removeDataHandler, 1000)
+      bgColor = colors.bg
+      fgColor = colors.fg
+    }
+
+    // Step 5: get size + query pixel dimensions
+    const baseSize = getSize(stdout)
+    const pixelInfo = await queryPixelSize(
       rawWrite,
       addDataHandler,
       removeDataHandler,
-      opts.probeTimeout ?? 2000,
+      baseSize.cols,
+      baseSize.rows,
+      1000,
     )
-    if (!supported) {
-      caps.kittyGraphics = false
-      caps.kittyPlaceholder = false
-    }
-  }
 
-  // Step 3b: probe transmission mode (shm → file → direct)
-  // Only for local connections with kitty graphics support
-  let transportProbe = { shm: false, file: false }
-  if (!opts.skipProbe && caps.kittyGraphics && !caps.tmux && !isRemoteConnection()) {
-    const { probeShm, probeFile } = await import("../output/kitty")
-    const shmOk = await probeShm(write, addDataHandler, removeDataHandler, opts.probeTimeout ?? 2000)
-    transportProbe.shm = shmOk
-    const fileOk = await probeFile(write, addDataHandler, removeDataHandler, opts.probeTimeout ?? 2000)
-    transportProbe.file = fileOk
-    if (shmOk) {
-      caps.transmissionMode = "shm"
-    } else if (fileOk) {
-      caps.transmissionMode = "file"
-    }
-  }
+    // Restore raw mode before we enter lifecycle
+    restoreStartupRaw()
 
-  const forcedTransmissionMode = process.env.VEXART_FORCE_TRANSMISSION_MODE
-  const { configureKittyTransportManager, resolveKittyTransportMode } = await import("../output/transport-manager")
-  if (forcedTransmissionMode === "direct" || forcedTransmissionMode === "file" || forcedTransmissionMode === "shm") {
-    configureKittyTransportManager({
-      preferredMode: forcedTransmissionMode,
-      probe: transportProbe,
-    })
-    caps.transmissionMode = resolveKittyTransportMode(forcedTransmissionMode)
-  } else {
-    configureKittyTransportManager({
-      preferredMode: caps.transmissionMode,
-      probe: transportProbe,
-    })
-    caps.transmissionMode = resolveKittyTransportMode(caps.transmissionMode)
-  }
-
-  if (DEBUG_KITTY_PROBE) {
-    console.error("[tge/terminal] transmission mode decision", {
-      kittyGraphics: caps.kittyGraphics,
-      kittyPlaceholder: caps.kittyPlaceholder,
-      tmux: caps.tmux,
-      transmissionMode: caps.transmissionMode,
-    })
-  }
-
-  // Step 4: query colors
-  let bgColor: [number, number, number] | null = null
-  let fgColor: [number, number, number] | null = null
-  if (!opts.skipColors) {
-    const colors = await queryColors(rawWrite, addDataHandler, removeDataHandler, 1000)
-    bgColor = colors.bg
-    fgColor = colors.fg
-  }
-
-  // Step 5: get size + query pixel dimensions
-  const baseSize = getSize(stdout)
-  const pixelInfo = await queryPixelSize(
-    rawWrite,
-    addDataHandler,
-    removeDataHandler,
-    baseSize.cols,
-    baseSize.rows,
-    1000,
-  )
-
-  // Restore raw mode before we enter lifecycle
-  if (stdin.isTTY && !wasRaw) {
-    stdin.setRawMode(false)
-  }
-
-  const size: TerminalSize = {
+    const size: TerminalSize = {
     cols: baseSize.cols,
     rows: baseSize.rows,
     pixelWidth: pixelInfo.pixelWidth,
@@ -213,21 +263,19 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
     cellWidth: pixelInfo.cellWidth,
     cellHeight: pixelInfo.cellHeight,
   }
-  const resizeHandlers = new Set<ResizeHandler>()
+    const resizeHandlers = new Set<ResizeHandler>()
 
   // Determine dark/light
-  const isDark = bgColor
+    const isDark = bgColor
     ? (0.299 * bgColor[0] + 0.587 * bgColor[1] + 0.114 * bgColor[2]) / 255 < 0.5
     : true // assume dark
 
-  // Step 6: enter Vexart mode
-  const lifecycleState = enter(stdin, rawWrite, caps)
+    // Step 6: enter Vexart mode
+    const lifecycleState = enter(stdin, rawWrite, caps)
+    startupLifecycleState = lifecycleState
 
-  // Step 7: install exit handlers
-  const removeExitHandlers = installExitHandlers(stdin, rawWrite, caps, lifecycleState)
-
-  // Resize tracking — keep size object updated
-  const unsubResize = onResize(stdout, (newSize) => {
+    // Resize tracking — keep size object updated
+    const unsubResize = onResize(stdout, (newSize) => {
     logTerminalResize(`source cols=${newSize.cols} rows=${newSize.rows} pw=${newSize.pixelWidth} ph=${newSize.pixelHeight} cw=${newSize.cellWidth} ch=${newSize.cellHeight}`)
     size.cols = newSize.cols
     size.rows = newSize.rows
@@ -244,50 +292,103 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
     for (const handler of resizeHandlers) {
       handler(size)
     }
-  })
+    })
+    startupUnsubResize = unsubResize
 
-  return {
-    kind,
-    caps,
-    size,
-    write,
-    rawWrite,
-    writeBytes: (data: Uint8Array) => { stdout.write(data) },
-    beginSync: () => beginSync(rawWrite),
-    endSync: () => endSync(rawWrite),
-    onResize: (handler: ResizeHandler) => {
-      resizeHandlers.add(handler)
-      logTerminalResize(`subscribe subscribers=${resizeHandlers.size}`)
-      return () => {
-        resizeHandlers.delete(handler)
-        logTerminalResize(`unsubscribe subscribers=${resizeHandlers.size}`)
+    let transportExitNotified = false
+    let terminalDestroyed = false
+    let removeExitHandlers = () => {}
+    const terminal: Terminal = {
+      kind,
+      caps,
+      size,
+      write,
+      rawWrite,
+      writeBytes: (data: Uint8Array) => { stdout.write(data) },
+      beginSync: () => beginSync(rawWrite),
+      endSync: () => endSync(rawWrite),
+      onResize: (handler: ResizeHandler) => {
+        resizeHandlers.add(handler)
+        logTerminalResize(`subscribe subscribers=${resizeHandlers.size}`)
+        return () => {
+          resizeHandlers.delete(handler)
+          logTerminalResize(`unsubscribe subscribers=${resizeHandlers.size}`)
+        }
+      },
+      onData: (handler: (data: Buffer) => void) => {
+        stdin.on("data", handler)
+        return () => { stdin.off("data", handler) }
+      },
+      bgColor,
+      fgColor,
+      isDark,
+      setTitle: (title: string) => { rawWrite(`\x1b]2;${title}\x07`) },
+      writeClipboard: (text: string) => {
+        const encoded = Buffer.from(text, "utf-8").toString("base64")
+        const sequence = `\x1b]52;c;${encoded}\x07`
+        // tmux's default `set-clipboard external` deliberately ignores OSC 52
+        // emitted by applications. Passthrough sends it to the outer terminal
+        // without changing that user setting; outside tmux this is unchanged.
+        if (caps.tmux && passthroughSupported()) write(sequence)
+        else rawWrite(sequence)
+      },
+      suspend: () => {
+        try {
+          notifyTerminalTransportLifecycle(terminal, "suspend")
+        } finally {
+          try {
+            leave(stdin, rawWrite, caps, lifecycleState)
+          } finally {
+            restoreStartupRaw()
+          }
+        }
+      },
+      resume: () => {
+        // Re-enter Vexart mode (enter() is safe to call — just re-sends escape sequences)
+        const newState = enter(stdin, rawWrite, caps)
+        lifecycleState.active = newState.active
+        notifyTerminalTransportLifecycle(terminal, "resume")
+      },
+      destroy: () => {
+        if (terminalDestroyed) return
+        terminalDestroyed = true
+        unsubResize()
+        removeExitHandlers()
+        try {
+          notifyTerminalTransportLifecycle(terminal, "destroy")
+        } finally {
+          try {
+            leave(stdin, rawWrite, caps, lifecycleState)
+          } finally {
+            restoreStartupRaw()
+          }
+        }
+      },
+    }
+    const onTransportExit = () => {
+      if (transportExitNotified) return
+      transportExitNotified = true
+      try {
+        notifyTerminalTransportLifecycle(terminal, "destroy")
+      } catch {
+        // The lifecycle module still restores terminal state in its finally.
       }
-    },
-    onData: (handler: (data: Buffer) => void) => {
-      stdin.on("data", handler)
-      return () => { stdin.off("data", handler) }
-    },
-    bgColor,
-    fgColor,
-    isDark,
-    setTitle: (title: string) => { rawWrite(`\x1b]2;${title}\x07`) },
-    writeClipboard: (text: string) => {
-      const encoded = Buffer.from(text, "utf-8").toString("base64")
-      rawWrite(`\x1b]52;c;${encoded}\x07`)
-    },
-    suspend: () => {
-      leave(stdin, rawWrite, caps, lifecycleState)
-    },
-    resume: () => {
-      // Re-enter Vexart mode (enter() is safe to call — just re-sends escape sequences)
-      const newState = enter(stdin, rawWrite, caps)
-      lifecycleState.active = newState.active
-    },
-    destroy: () => {
-      unsubResize()
-      removeExitHandlers()
-      leave(stdin, rawWrite, caps, lifecycleState)
-    },
+    }
+
+    // The internal callback runs before lifecycle leave on every process exit
+    // path (including signals), so SHM-owned resources are released first.
+    removeExitHandlers = installExitHandlers(stdin, rawWrite, caps, lifecycleState, onTransportExit)
+    startupRemoveExit = removeExitHandlers
+    return terminal
+  } catch (error) {
+    try {
+      startupUnsubResize?.()
+      startupRemoveExit?.()
+      if (startupLifecycleState) leave(stdin, rawWrite, caps, startupLifecycleState)
+    } finally {
+      restoreStartupRaw()
+    }
+    throw error
   }
 }
 

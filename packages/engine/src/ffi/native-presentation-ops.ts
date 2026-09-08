@@ -27,6 +27,7 @@ let disabledUntilFrame = 0
 let currentFrameCounter = 0
 const MAX_CONSECUTIVE_FAILURES = 3
 const RETRY_COOLDOWN_FRAMES = 300 // ~5 seconds at 60fps
+const publishedLayerImageIds = new Set<number>()
 
 function recordNativePresentationSuccess() {
   consecutiveFailures = 0
@@ -111,6 +112,7 @@ export function nativeEmitLayer(
       ptr(statsBuf),
     ) as number
     if (rc === 0) {
+      publishedLayerImageIds.add(imageId)
       recordNativePresentationSuccess()
       return decodeNativePresentationStats(statsBuf)
     }
@@ -155,6 +157,7 @@ export function nativeEmitLayerTarget(
       ptr(statsBuf),
     ) as number
     if (rc === 0) {
+      publishedLayerImageIds.add(imageId)
       recordNativePresentationSuccess()
       return decodeNativePresentationStats(statsBuf)
     }
@@ -217,17 +220,22 @@ export function nativeEmitRegionTarget(
 /**
  * Delete a Kitty image natively via vexart_kitty_delete_layer.
  *
+ * Only image IDs successfully emitted through a layer presentation operation
+ * are owned here.  Full-frame presentation uses a separate Rust image path,
+ * so it is intentionally not tracked by this set.
+ *
  * Falls back silently — does NOT disable native presentation on failure
  * since delete failures are non-critical (stale images are harmless).
  *
  * @param imageId — Kitty image ID to delete
  */
 export function nativeDeleteLayer(imageId: number): void {
+  if (!publishedLayerImageIds.has(imageId)) return
   const statsBuf = allocNativeStatsBuf()
   try {
     const { symbols } = openVexartLibrary()
-    symbols.vexart_kitty_delete_layer(1n, imageId, ptr(statsBuf))
-    // Ignoring return code for delete — stale images are benign.
+    const rc = symbols.vexart_kitty_delete_layer(1n, imageId, ptr(statsBuf)) as number
+    if (rc === 0) publishedLayerImageIds.delete(imageId)
   } catch {
     // Delete failure is non-critical — log only in debug mode.
     logNativePresentationFallback(`delete layer threw (imageId=${imageId}), using TS fallback`)

@@ -1,6 +1,12 @@
 import type { CanvasContext, DrawCmd } from "./canvas"
 import type { TGENode } from "./node"
-import { hasBackdropEffect } from "../loop/predicates"
+import {
+  BACKDROP_FIELDS,
+  hasBackdropEffect,
+  type BackdropFieldName,
+} from "../loop/predicates"
+export { BACKDROP_FIELDS } from "../loop/predicates"
+export type { BackdropFieldName } from "../loop/predicates"
 
 // ── RenderCommand type ──
 // Commands are produced by layout-adapter.endLayout() and carry nodeId for
@@ -40,6 +46,10 @@ export type RenderCommand = {
   fontFamily?: string
   fontWeight?: number
   fontStyle?: string
+  /** @internal Text layout mode forwarded from the TS layout pass. */
+  whiteSpace?: "normal" | "pre-wrap"
+  /** @internal Text word-breaking mode forwarded from the TS layout pass. */
+  wordBreak?: "normal" | "keep-all"
   /** Stable node ID for matching render ops to effects/images. */
   nodeId?: number
   /** Per-side border widths when the border is not uniform. */
@@ -101,24 +111,11 @@ export type BackdropFilterKind = (typeof BACKDROP_FILTER_KIND)[keyof typeof BACK
 /** @public Alias for Rect — kept for API compat. */
 export type RenderBounds = import("./damage").Rect
 
-/**
- * Canonical list of backdrop filter field names.
- * Single source of truth — used by predicates, walk-tree, and render-graph
- * to avoid manually enumerating these 8 fields in 4+ locations.
- */
-export const BACKDROP_FIELDS = [
-  "backdropBlur", "backdropBrightness", "backdropContrast", "backdropSaturate",
-  "backdropGrayscale", "backdropInvert", "backdropSepia", "backdropHueRotate",
-] as const
-
 /** The corresponding BackdropFilterParams keys (without "backdrop" prefix, lowercased). */
 export const BACKDROP_PARAM_KEYS = [
   "blur", "brightness", "contrast", "saturate",
   "grayscale", "invert", "sepia", "hueRotate",
 ] as const
-
-/** @public */
-export type BackdropFieldName = (typeof BACKDROP_FIELDS)[number]
 
 /** @public */
 export interface BackdropFilterParams {
@@ -198,6 +195,10 @@ type BaseRenderOpFields = {
   fontFamily?: string
   fontWeight?: number
   fontStyle?: string
+  /** @internal Text layout mode forwarded from the TS layout pass. */
+  whiteSpace?: "normal" | "pre-wrap"
+  /** @internal Text word-breaking mode forwarded from the TS layout pass. */
+  wordBreak?: "normal" | "keep-all"
   nodeId?: number
   /** @internal Active scroll/scissor viewport in absolute render coordinates. */
   clipBounds?: RenderBounds | null
@@ -294,6 +295,8 @@ function createBaseRenderOpFields(cmd: RenderCommand, renderObjectId: number | n
     fontFamily: cmd.fontFamily,
     fontWeight: cmd.fontWeight,
     fontStyle: cmd.fontStyle,
+    whiteSpace: cmd.whiteSpace,
+    wordBreak: cmd.wordBreak,
     nodeId: cmd.nodeId,
   }
 }

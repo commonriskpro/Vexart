@@ -215,7 +215,9 @@ impl PaintContext {
         }
 
         if truncated {
-            crate::ffi::error::set_last_error("paint_dispatch: graph buffer truncated, partial commands skipped");
+            crate::ffi::error::set_last_error(
+                "paint_dispatch: graph buffer truncated, partial commands skipped",
+            );
         }
 
         if batches.is_empty() {

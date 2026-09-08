@@ -14,6 +14,7 @@ import { createMemo, createSignal, createEffect, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus, onInput } from "@vexart/engine"
 import { useDisabled } from "../helpers/disabled"
+import { nextCodePointOffset, previousCodePointOffset } from "./text-offset"
 
 // ── Constants ──
 
@@ -185,11 +186,13 @@ export function Input(props: InputProps) {
       if (e.mods.shift) {
         if (e.key === "left" && pos > 0) {
           if (!hasSelection()) setSelStart(pos)
-          setCursor(pos - 1); setSelEnd(pos - 1); return
+          const next = previousCodePointOffset(val, pos)
+          setCursor(next); setSelEnd(next); return
         }
         if (e.key === "right" && pos < val.length) {
           if (!hasSelection()) setSelStart(pos)
-          setCursor(pos + 1); setSelEnd(pos + 1); return
+          const next = nextCodePointOffset(val, pos)
+          setCursor(next); setSelEnd(next); return
         }
         if (e.key === "home") {
           if (!hasSelection()) setSelStart(pos)
@@ -204,12 +207,12 @@ export function Input(props: InputProps) {
       // Navigation
       if (e.key === "left") {
         if (hasSelection()) { setCursor(selRange()[0]); clearSelection() }
-        else if (pos > 0) setCursor(pos - 1)
+        else if (pos > 0) setCursor(previousCodePointOffset(val, pos))
         return
       }
       if (e.key === "right") {
         if (hasSelection()) { setCursor(selRange()[1]); clearSelection() }
-        else if (pos < val.length) setCursor(pos + 1)
+        else if (pos < val.length) setCursor(nextCodePointOffset(val, pos))
         return
       }
       if (e.key === "home") { setCursor(0); clearSelection(); return }
@@ -218,12 +221,18 @@ export function Input(props: InputProps) {
       // Delete
       if (e.key === "backspace") {
         if (hasSelection()) { props.onChange?.(deleteSelection()) }
-        else if (pos > 0) { setCursor(pos - 1); props.onChange?.(val.slice(0, pos - 1) + val.slice(pos)) }
+        else if (pos > 0) {
+          const start = previousCodePointOffset(val, pos)
+          setCursor(start); props.onChange?.(val.slice(0, start) + val.slice(pos))
+        }
         clearSelection(); return
       }
       if (e.key === "delete") {
         if (hasSelection()) { props.onChange?.(deleteSelection()) }
-        else if (pos < val.length) { props.onChange?.(val.slice(0, pos) + val.slice(pos + 1)) }
+        else if (pos < val.length) {
+          const end = nextCodePointOffset(val, pos)
+          props.onChange?.(val.slice(0, pos) + val.slice(end))
+        }
         clearSelection(); return
       }
 
@@ -235,7 +244,7 @@ export function Input(props: InputProps) {
         const next = base.slice(0, insertAt) + e.char + base.slice(insertAt)
         clearSelection()
         props.onChange?.(next)
-        setCursor(insertAt + 1)
+        setCursor(insertAt + e.char.length)
         return
       }
     },

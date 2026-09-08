@@ -322,7 +322,7 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
 /// Resolve (width, height) from a target handle.
 ///
 /// Returns `None` if the handle is invalid (not in registry).
-fn resolve_target_dims(pctx: &PaintContext, target: u64) -> Option<(u32, u32)> {
+pub(super) fn resolve_target_dims(pctx: &PaintContext, target: u64) -> Option<(u32, u32)> {
     if target == 0 {
         // Default singleton target: use the wgpu surface size.
         // Phase 2b: return the singleton target's dimensions if available.
@@ -382,7 +382,7 @@ fn do_readback(
 /// Read a full target and consume packed RGBA bytes while the GPU readback
 /// buffer is mapped. Aligned rows are borrowed directly; padded rows use the
 /// exact packed fallback in `readback_full_with`.
-fn do_readback_with<R, F>(
+pub(super) fn do_readback_with<R, F>(
     pctx: &mut PaintContext,
     target: u64,
     width: u32,
