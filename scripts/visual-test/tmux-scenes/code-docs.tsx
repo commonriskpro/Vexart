@@ -29,7 +29,7 @@ function greet(name: string) {
 }`
 const MARKDOWN = `# Public Markdown
 
-The **headless** renderer keeps _semantic_ text visible.
+M **M** M _M_ M
 
 - headings and emphasis
 - links and inline code
@@ -278,13 +278,13 @@ export function verify(frame: RenderToBufferResult) {
   assert.ok(headlessIndentedCodeStart - headlessCodeStart >= 6, "headless code indentation space collapsed")
   assert.ok(styledIndentedCodeStart - styledCodeStart >= 6, "styled code indentation space collapsed")
 
-  // Inline Markdown spans must retain the spaces at token boundaries. The
-  // gap between `The` and the following bold span is larger than a glyph's
-  // natural antialiasing gap once its source space is preserved.
+  // Inline Markdown spans must retain the spaces at token boundaries. Use
+  // isolated wide glyph tokens so font-specific word shaping cannot merge
+  // the semantic runs we inspect below.
   for (const [x, label] of [[28, "headless"], [606, "styled"]] as const) {
     const runs = inkRuns(frame, x, 520, x + 350, 548, [17, 24, 39])
     assert.ok(runs.length >= 2, `${label} markdown paragraph did not render two token runs`)
-    assert.ok(runs.length >= 7, `${label} markdown paragraph token geometry is incomplete`)
+    assert.ok(runs.length >= 5, `${label} markdown paragraph token geometry is incomplete`)
     for (const [before, after, boundary] of ([[0, 1, "before bold"], [1, 2, "after bold"]] as const)) {
       assert.ok(runs[after][0] - runs[before][1] - 1 >= 4, `${label} markdown ${boundary} space collapsed`)
     }
