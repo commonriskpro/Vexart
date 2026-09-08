@@ -10,6 +10,22 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use ttf_parser::Face;
 
+// Keep the fallback list small and predictable. These are common family names,
+// and each candidate is checked against the loaded database before use.
+const SANS_SERIF_FALLBACKS: &[&str] = &["Arial", "DejaVu Sans", "Liberation Sans", "Noto Sans"];
+const SERIF_FALLBACKS: &[&str] = &[
+    "Times New Roman",
+    "DejaVu Serif",
+    "Liberation Serif",
+    "Noto Serif",
+];
+const MONOSPACE_FALLBACKS: &[&str] = &[
+    "Courier New",
+    "DejaVu Sans Mono",
+    "Liberation Mono",
+    "Noto Sans Mono",
+];
+
 /// A resolved font face with its raw data kept alive.
 pub struct ResolvedFace {
     /// fontdb face ID for lookups.
@@ -43,6 +59,7 @@ impl FontSystem {
     pub fn new() -> Self {
         let mut db = Database::new();
         db.load_system_fonts();
+        repair_generic_families(&mut db);
         Self {
             db,
             face_cache: HashMap::new(),
@@ -163,6 +180,43 @@ impl FontSystem {
     }
 }
 
+fn query_family(db: &Database, family: Family<'_>) -> bool {
+    let families = [family];
+    db.query(&Query {
+        families: &families,
+        weight: Weight(400),
+        stretch: fontdb::Stretch::Normal,
+        style: Style::Normal,
+    })
+    .is_some()
+}
+
+fn first_installed_family(db: &Database, candidates: &[&str]) -> Option<String> {
+    candidates
+        .iter()
+        .copied()
+        .find(|family| query_family(db, Family::Name(family)))
+        .map(str::to_owned)
+}
+
+fn repair_generic_families(db: &mut Database) {
+    if !query_family(db, Family::SansSerif) {
+        if let Some(family) = first_installed_family(db, SANS_SERIF_FALLBACKS) {
+            db.set_sans_serif_family(family);
+        }
+    }
+    if !query_family(db, Family::Serif) {
+        if let Some(family) = first_installed_family(db, SERIF_FALLBACKS) {
+            db.set_serif_family(family);
+        }
+    }
+    if !query_family(db, Family::Monospace) {
+        if let Some(family) = first_installed_family(db, MONOSPACE_FALLBACKS) {
+            db.set_monospace_family(family);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -228,5 +282,40 @@ mod tests {
         // 'A' should be in virtually every font.
         let face = system.find_face_for_codepoint('A', 400, false);
         assert!(face.is_some(), "fallback should find a font with 'A'");
+    }
+
+    #[test]
+    fn test_missing_generic_mapping_uses_installed_fallback() {
+        let mut system = FontSystem::new();
+        system
+            .db
+            .set_sans_serif_family("__vexart_missing_sans_serif__");
+
+        repair_generic_families(&mut system.db);
+
+        let mapped = system.db.family_name(&Family::SansSerif).to_string();
+        assert_ne!(mapped, "__vexart_missing_sans_serif__");
+        let face = system.query_face(&["sans-serif"], 400, false);
+        assert!(face.is_some(), "missing generic mapping should be repaired");
+        assert_eq!(face.unwrap().family, mapped);
+    }
+
+    #[test]
+    fn test_existing_generic_mapping_is_preserved() {
+        let mut system = FontSystem::new();
+        let configured = system
+            .db
+            .faces()
+            .find_map(|face| face.families.first().map(|(family, _)| family.clone()))
+            .expect("system font database should contain a family");
+        system.db.set_sans_serif_family(configured.clone());
+
+        repair_generic_families(&mut system.db);
+
+        assert_eq!(system.db.family_name(&Family::SansSerif), configured);
+        assert!(
+            system.query_face(&["sans-serif"], 400, false).is_some(),
+            "configured generic family should remain queryable"
+        );
     }
 }
