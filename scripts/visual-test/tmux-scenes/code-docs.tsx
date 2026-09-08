@@ -112,6 +112,28 @@ function countColor(frame: RenderToBufferResult, x0: number, y0: number, x1: num
   return count
 }
 
+function countAntialiasedColor(frame: RenderToBufferResult, x0: number, y0: number, x1: number, y1: number, foreground: [number, number, number], background: [number, number, number]) {
+  const direction = foreground.map((value, index) => value - background[index])
+  const directionLength = direction.reduce((sum, value) => sum + value * value, 0)
+  let count = 0
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const index = (y * frame.width + x) * 4
+      if (frame.pixels[index + 3] <= 150) continue
+      const delta = [
+        frame.pixels[index] - background[0],
+        frame.pixels[index + 1] - background[1],
+        frame.pixels[index + 2] - background[2],
+      ]
+      const coverage = delta.reduce((sum, value, channel) => sum + value * direction[channel], 0) / directionLength
+      if (coverage < 0.2 || coverage > 1.05) continue
+      const error = delta.reduce((sum, value, channel) => sum + Math.abs(value - coverage * direction[channel]), 0)
+      if (error <= 24) count++
+    }
+  }
+  return count
+}
+
 function assertSurface(frame: RenderToBufferResult, x: number, y: number, color: [number, number, number], label: string) {
   assert.ok(countColor(frame, x, y, x + 530, y + 120, color, 8) > 500, `${label} surface is missing`)
 }
@@ -233,10 +255,14 @@ export function verify(frame: RenderToBufferResult) {
   // Diff semantics have separate added/removed backgrounds and sign colors.
   assert.ok(countColor(frame, 28, 275, 570, 430, [26, 58, 26]) > 80, "headless added diff region missing")
   assert.ok(countColor(frame, 606, 275, 1148, 430, [58, 26, 26]) > 80, "styled removed diff region missing")
-  assert.ok(countColor(frame, 28, 275, 570, 430, [78, 201, 78], 10) > 2, "headless added sign color missing")
-  // Small glyphs are antialiased against the removed-line background; the
-  // strongest red samples are therefore below the source #e05050 value.
-  assert.ok(countColor(frame, 606, 275, 1148, 430, [182, 66, 66], 16) > 1, "styled removed sign color missing")
+  // The plus glyph lives in the fixed 18px sign slot (x=73..91, y=390..407).
+  // Linux's generic font can antialias every sample below the source RGB;
+  // classify only blends on the added-sign-to-background color ray so a
+  // blank background or a different hue cannot satisfy this check.
+  assert.ok(countAntialiasedColor(frame, 73, 390, 91, 407, [78, 201, 78], [26, 58, 26]) > 2, "headless added sign color missing")
+  // Small glyphs are antialiased against the removed-line background. Keep
+  // this to the fixed sign slot instead of matching unrelated red pixels.
+  assert.ok(countAntialiasedColor(frame, 651, 373, 669, 390, [224, 80, 80], [58, 26, 26]) > 2, "styled removed sign color missing")
 
   // Markdown headings use the headless cyan theme; VoidMarkdown maps heading
   // text to its foreground. These checks also catch a blank/overflow column.

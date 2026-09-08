@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { createNode, createTextNode, insertChild } from "../ffi/node"
+import { measureForLayout } from "../ffi/text-layout"
 import { setProp } from "../reconciler/reconciler"
 import { renderNodeToBuffer, renderNodeToBufferAfterInteractions } from "./render-to-buffer"
 
@@ -7,6 +8,8 @@ const WIDTH = 160
 const HEIGHT = 96
 const PANEL = 0x101827ff
 const INK = 0xffffffff
+// Fit the preformatted first pair while leaving the third word for line two.
+const WRAP_PANEL_WIDTH = Math.ceil(measureForLayout("one     two", 0, 18).width) + 16
 
 type Frame = { pixels: Uint8Array; width: number; height: number }
 
@@ -140,12 +143,12 @@ test("pre-wrap text remains clipped to a fixed-height scroll viewport", async ()
 
 test("pre-wrap uses the constrained width when preserving whitespace around wraps", async () => {
   const content = "one     two     three"
-  const normal = await renderNodeToBuffer(scene(content, "normal", HEIGHT, 100), WIDTH, HEIGHT)
-  const preWrap = await renderNodeToBuffer(scene(content, "pre-wrap", HEIGHT, 100), WIDTH, HEIGHT)
-  const normalFirst = brightBoundsIn(normal, 0, 100, 8, 30)
-  const normalSecond = brightBoundsIn(normal, 0, 100, 30, 52)
-  const preWrapFirst = brightBoundsIn(preWrap, 0, 100, 8, 30)
-  const preWrapSecond = brightBoundsIn(preWrap, 0, 100, 30, 52)
+  const normal = await renderNodeToBuffer(scene(content, "normal", HEIGHT, WRAP_PANEL_WIDTH), WIDTH, HEIGHT)
+  const preWrap = await renderNodeToBuffer(scene(content, "pre-wrap", HEIGHT, WRAP_PANEL_WIDTH), WIDTH, HEIGHT)
+  const normalFirst = brightBoundsIn(normal, 0, WRAP_PANEL_WIDTH, 8, 30)
+  const normalSecond = brightBoundsIn(normal, 0, WRAP_PANEL_WIDTH, 30, 52)
+  const preWrapFirst = brightBoundsIn(preWrap, 0, WRAP_PANEL_WIDTH, 8, 30)
+  const preWrapSecond = brightBoundsIn(preWrap, 0, WRAP_PANEL_WIDTH, 30, 52)
 
   expect(normalFirst).not.toBeNull()
   expect(normalSecond).not.toBeNull()
@@ -153,7 +156,7 @@ test("pre-wrap uses the constrained width when preserving whitespace around wrap
   expect(preWrapSecond).not.toBeNull()
   expect(preWrapFirst!.right).toBeGreaterThan(normalFirst!.right + 10)
   expect(preWrapSecond!.left).toBeGreaterThan(normalSecond!.left + 10)
-  expect(preWrapFirst!.right).toBeLessThan(100)
+  expect(preWrapFirst!.right).toBeLessThan(WRAP_PANEL_WIDTH)
 })
 
 test("pre-wrap honors keep-all word breaking through native readback", async () => {
