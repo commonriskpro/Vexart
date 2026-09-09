@@ -52,17 +52,17 @@ await createApp(() => (
 | [Bun](https://bun.sh/) | ≥ 1.1.0 | Runtime |
 | Rust toolchain | stable | For `cargo build` (native library) |
 | Kitty-compatible terminal | — | Kitty, Ghostty, or WezTerm |
-| tmux (optional) | ≥ 3.4 | Kitty passthrough from a Kitty/Ghostty outer terminal; see [`docs/tmux.md`](docs/tmux.md) |
+| tmux (optional) | ≥ 3.4 | Experimental Kitty passthrough from a Kitty/Ghostty outer terminal; see [`docs/tmux.md`](docs/tmux.md) |
 
 > Vexart requires a terminal that supports the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). It exits with a clear error on unsupported terminals.
 >
-> tmux support is experimental and requires user-applied `allow-passthrough all` in tmux. The approved full-frame SHM production code path passes through a real tmux PTY with a synthetic receiver. A user review accepted all six showcase tabs in Kitty directly and inside tmux; this is practical visual acceptance, not pixel-exact or visible-FPS measurement. A live fixture also passed internal runs for plain Kitty and Ghostty inside tmux; see [`docs/tmux-performance-report.md`](docs/tmux-performance-report.md). There is no automatic direct/file fallback or ASCII/cell-based fallback; see [`docs/tmux.md`](docs/tmux.md) for setup and limitations.
+> tmux support is experimental and requires user-applied `allow-passthrough all` in tmux. The G-037 physical gate covers Kitty direct and private tmux+SHM runs; offscreen checks are not physical terminal evidence. There is no automatic direct/file fallback or ASCII/cell-based fallback; see [`docs/tmux.md`](docs/tmux.md) for setup and limitations.
 
 ## Quick Start
 
 ```bash
-# 1. Install
-bun add vexart
+# 1. Install the beta
+bun add vexart@beta
 ```
 
 ```toml
@@ -121,7 +121,7 @@ JSX (SolidJS createRenderer)
         → Terminal
 ```
 
-The Flexily layout tree is **persistent and reactive** — props and tree structure sync from the SolidJS reconciler. `calculateLayout()` only recomputes dirty subtrees. Rust owns the entire output path: GPU paint → readback → compress → Kitty encoding → terminal write. Zero bytes cross the FFI boundary for presentation. Inside tmux, the same GPU-composited frame is sent through local SHM, Kitty Unicode placeholders, and per-sequence tmux passthrough wrappers. The production code path passes a PTY check with a synthetic receiver, not a physical-display or FPS check; the prior direct full-frame route is a comparison baseline, not an automatic fallback. `a=f` animation updates are not claimed for the Ghostty 1.3.1 target; see the versioned source note in [`docs/tmux.md`](docs/tmux.md).
+The Flexily layout tree is **persistent and reactive** — props and tree structure sync from the SolidJS reconciler. `calculateLayout()` only recomputes dirty subtrees. Rust owns the entire output path: GPU paint → readback → compress → Kitty encoding → terminal write. Zero bytes cross the FFI boundary for presentation. Inside tmux, the same GPU-composited frame is sent through local SHM, Kitty Unicode placeholders, and per-sequence tmux passthrough wrappers. The G-037 physical gate validates Kitty direct and private tmux+SHM presentation; offscreen checks do not establish physical terminal support. `a=f` animation updates are not claimed for the Ghostty 1.3.1 target; see the versioned source note in [`docs/tmux.md`](docs/tmux.md).
 
 Vexart is **not** a cell-based TUI framework. It renders actual pixels using the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) — the result looks like a browser running inside your terminal.
 
@@ -234,7 +234,7 @@ All effects are JSX props — no imperative API needed:
 | Kitty 0.41+ | Kitty direct + SHM | ✅ Best — native pixel rendering |
 | Ghostty | Kitty direct | ✅ Best — native pixel rendering |
 | WezTerm 2025.04+ | Kitty direct | ✅ Best |
-| tmux 3.4+ in Kitty/Ghostty | Kitty passthrough + Unicode placeholders + local SHM | 🧪 Experimental — same GPU effects, synthetic tmux-PTY SHM PASS; six-tab Kitty direct/tmux review accepted; live timing runs are internal, not visible FPS; [`docs/tmux.md`](docs/tmux.md) |
+| tmux 3.4+ in Kitty/Ghostty | Kitty passthrough + Unicode placeholders + local SHM | 🧪 Experimental — G-037 physical Kitty/tmux+SHM gate; no pixel-exact or FPS claim; [`docs/tmux.md`](docs/tmux.md) |
 | tmux in WezTerm, Alacritty, iTerm2, Windows Terminal | — | ❌ Unsupported or not claimed — exits with clear error |
 
 Direct Kitty, Ghostty, and WezTerm support is unchanged. WezTerm remains a

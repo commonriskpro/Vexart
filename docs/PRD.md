@@ -336,8 +336,8 @@ outside this profile. Unsupported values are rejected with deterministic error
 codes; there is no silent Flex fallback and no claim of full CSS/DOM
 compatibility. The evidence set is the fixture matrix, independent browser
 oracle, scene layout test, physical Kitty/tmux gate, API/build reports, and
-serial performance report. This remains an unreleased beta profile: no version
-bump or publication is implied.
+serial performance report. This beta profile is released as
+`0.10.0-beta.1`; full CSS/DOM compatibility is not implied.
 
 #### Engine optimization (performance-critical)
 

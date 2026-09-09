@@ -527,8 +527,8 @@ async function environmentReport(): Promise<EnvironmentReport> {
   }
 }
 
-function sumBaselineP95(report: BaselineReport | undefined, scenario: PerfScenario): number | null {
-  const result = report.results?.find((item) => item.nodeCount === NODE_COUNT && item.scenario === scenario)
+export function sumBaselineP95(report: BaselineReport | undefined, scenario: PerfScenario): number | null {
+  const result = report?.results?.find((item) => item.nodeCount === NODE_COUNT && item.scenario === scenario)
   const stages = result?.aggregate?.stages
   if (!stages) return null
   const values = STAGES.map((stage) => stages[stage]?.p95Ms)

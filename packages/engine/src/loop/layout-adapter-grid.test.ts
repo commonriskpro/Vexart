@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test"
+import { DISPLAY_NONE } from "flexily"
 import { CMD } from "../ffi/render-graph"
 import { createNode, insertChild, parseSizing, type TGENode, type TGEProps } from "../ffi/node"
 import { syncAllLayoutProps } from "../ffi/flex-sync"
 import { walkTree } from "./walk-tree"
-import { createVexartLayoutCtx, type PositionedCommand } from "./layout-adapter"
+import { ATTACH_POINT, createVexartLayoutCtx, type PositionedCommand } from "./layout-adapter"
 
 function box(props: TGEProps, children: TGENode[] = []): TGENode {
   const node = createNode("box")
@@ -117,5 +118,66 @@ describe("layout adapter Grid profile", () => {
 
     gridState.layout.destroy()
     flexState.layout.destroy()
+  })
+
+  test("ignores a stale error from a hidden Grid subtree", () => {
+    const child = box({
+      layout: "grid",
+      width: 100,
+      height: 20,
+      gridTemplateColumns: [{ percent: 101 }],
+      gridTemplateRows: [20],
+    })
+    const root = box({ width: 100, height: 20 }, [child])
+
+    syncTree(root)
+    const childFlex = child._flexNode!
+    expect(childFlex.calculateLayout(100, 20)).toMatchObject({ error: { code: "GRID_INVALID_VALUE" } })
+    childFlex.setDisplay(DISPLAY_NONE)
+
+    const state = layoutState(root, 100, 20)
+    expect(state.layout.getLastLayoutError()).toBeNull()
+    expect(rect(state.map, root)).toMatchObject({ x: 0, y: 0, width: 100, height: 20 })
+    state.layout.destroy()
+  })
+
+  test("excludes parent and element floating children from Grid placement", () => {
+    const anchor = box({ width: 50, height: 30 })
+    anchor.id = createVexartLayoutCtx().hashString("anchor")
+    anchor.props = {
+      ...anchor.props,
+      gridColumn: { start: 1, end: 2 },
+      gridRow: { start: 1, end: 2 },
+    }
+    const parentFloating = box({
+      width: 20,
+      height: 10,
+      floating: "parent",
+      floatAttach: { element: ATTACH_POINT.LEFT_TOP, parent: ATTACH_POINT.RIGHT_BOTTOM },
+      floatOffset: { x: 1, y: 2 },
+    })
+    const elementFloating = box({
+      width: 20,
+      height: 10,
+      floating: { attachTo: "anchor" },
+      floatAttach: { element: ATTACH_POINT.LEFT_TOP, parent: ATTACH_POINT.RIGHT_BOTTOM },
+      floatOffset: { x: 1, y: 2 },
+    })
+    const root = box({
+      layout: "grid",
+      width: 200,
+      height: 100,
+      gridTemplateColumns: [200],
+      gridTemplateRows: [100],
+      justifyItems: "start",
+      alignItems: "start",
+    }, [anchor, parentFloating, elementFloating])
+
+    const state = layoutState(root, 200, 100)
+    expect(state.layout.getLastLayoutError()).toBeNull()
+    expect(rect(state.map, anchor)).toMatchObject({ x: 0, y: 0, width: 50, height: 30 })
+    expect(rect(state.map, parentFloating)).toMatchObject({ x: 201, y: 102, width: 20, height: 10 })
+    expect(rect(state.map, elementFloating)).toMatchObject({ x: 51, y: 32, width: 20, height: 10 })
+    state.layout.destroy()
   })
 })

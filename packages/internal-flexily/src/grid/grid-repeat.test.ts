@@ -121,6 +121,20 @@ describe("Grid repeat expansion", () => {
     expect(result.columns.tracks).toHaveLength(3)
   })
 
+  it("includes every fixed-track gutter at the auto-repeat boundary", () => {
+    const columns: GridTrack[] = [100, 100, autoFitBase("auto-fill")]
+    const below = expandRepeats(snapshot({ columns }), 389)
+    const at = expandRepeats(snapshot({ columns }), 390)
+    expect(isGridLayoutError(below)).toBe(false)
+    expect(isGridLayoutError(at)).toBe(false)
+    if (isGridLayoutError(below) || isGridLayoutError(at)) return
+
+    // 100 + 100 + N*80 + (2 + N - 1)*10 <= width.  The second repeat fits
+    // exactly at 390px, but not one pixel below it.
+    expect(below.columns.tracks).toHaveLength(3)
+    expect(at.columns.tracks).toHaveLength(4)
+  })
+
   it("rejects zero, nested, multiple, and unsupported auto-repeat bases", () => {
     const cases = [
       snapshot({ columns: [{ repeat: { count: 0, tracks: [40] } }] }),

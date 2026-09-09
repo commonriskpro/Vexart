@@ -30,9 +30,9 @@ export function CTA() {
         {/* Install command */}
         <div className="inline-flex items-center gap-3 px-5 py-3 rounded-xl bg-vex-surface border border-vex-border font-mono text-sm mb-8">
           <span className="text-vex-muted">$</span>
-          <span className="text-vex-text">bun add vexart</span>
+          <span className="text-vex-text">bun add vexart@beta</span>
           <button
-            onClick={() => navigator.clipboard?.writeText('bun add vexart')}
+            onClick={() => navigator.clipboard?.writeText('bun add vexart@beta')}
             className="ml-2 text-vex-muted hover:text-vex-accent transition-colors"
             title="Copy"
           >

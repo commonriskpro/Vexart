@@ -72,6 +72,38 @@ describe("Grid row/column auto-placement", () => {
     expect(result.items[2]).toMatchObject({ rowStart: 1, rowEnd: 2, columnStart: 1, columnEnd: 2 })
   })
 
+  it("resets the column cursor for a row-fixed item after a column-fixed item", () => {
+    const result = place(snapshot({ rows: [40, 40, 40] }), [
+      { nodeId: 23, style: { column: { start: 3, end: 4 }, row: {} } },
+      { nodeId: 24, style: { row: { start: 2, end: 3 }, column: {} } },
+      { nodeId: 25, style: {} },
+    ], 3, 3)
+
+    expect(result.items).toMatchObject([
+      { nodeId: 23, rowStart: 0, rowEnd: 1, columnStart: 2, columnEnd: 3 },
+      { nodeId: 24, rowStart: 1, rowEnd: 2, columnStart: 0, columnEnd: 1 },
+      { nodeId: 25, rowStart: 1, rowEnd: 2, columnStart: 1, columnEnd: 2 },
+    ])
+    expect(result.rowCount).toBe(3)
+    expect(result.columnCount).toBe(3)
+  })
+
+  it("resets the row cursor for a column-fixed item after a row-fixed item", () => {
+    const result = place(snapshot({ autoFlow: "column", rows: [40, 40, 40] }), [
+      { nodeId: 26, style: { row: { start: 3, end: 4 }, column: {} } },
+      { nodeId: 27, style: { column: { start: 2, end: 3 }, row: {} } },
+      { nodeId: 28, style: {} },
+    ], 3, 3)
+
+    expect(result.items).toMatchObject([
+      { nodeId: 26, rowStart: 2, rowEnd: 3, columnStart: 0, columnEnd: 1 },
+      { nodeId: 27, rowStart: 0, rowEnd: 1, columnStart: 1, columnEnd: 2 },
+      { nodeId: 28, rowStart: 1, rowEnd: 2, columnStart: 1, columnEnd: 2 },
+    ])
+    expect(result.rowCount).toBe(3)
+    expect(result.columnCount).toBe(3)
+  })
+
   it("places an item with one definite axis while expanding the other axis", () => {
     const result = place(snapshot({ columns: [40], rows: [40] }), [
       { nodeId: 30, style: { column: { start: 1, end: 2 }, row: {} } },

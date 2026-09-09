@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, readFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { normalizeBaseline, normalizeOptions, PERF_FIXTURE_CONTRACT, runGridPerf } from "./perf"
+import { normalizeBaseline, normalizeOptions, PERF_FIXTURE_CONTRACT, runGridPerf, sumBaselineP95 } from "./perf"
 
 describe("G-039 serial Grid performance gate", () => {
   test("keeps the acceptance configuration explicit", () => {
@@ -33,6 +33,11 @@ describe("G-039 serial Grid performance gate", () => {
     expect(normalized.normalizedBaselineP95Ms).toBeCloseTo(0.425, 12)
     expect(normalized.status).toBe("PASS")
     expect(normalizeBaseline(0.17, null, 0.4).status).toBe("BLOCKED")
+  })
+
+  test("blocks cleanly when a historical baseline report is undefined", () => {
+    expect(sumBaselineP95(undefined, "leaf-dirty")).toBeNull()
+    expect(normalizeBaseline(sumBaselineP95(undefined, "leaf-dirty"), 0.16, 0.4).status).toBe("BLOCKED")
   })
 
   test("runs real Flex and Grid nodes serially and writes separated stages", async () => {

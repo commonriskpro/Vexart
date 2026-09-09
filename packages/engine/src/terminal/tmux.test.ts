@@ -51,28 +51,38 @@ test.skipIf(!Bun.which("tmux"))("reads effective inherited and pane-specific pas
   const socket = `/tmp/vexart-tmux-${process.pid}-${Date.now()}`
   const session = `vexart-${process.pid}-${Date.now()}`
   const run = (args: string[]) => Bun.spawnSync(["tmux", "-S", socket, ...args], { stdout: "pipe", stderr: "pipe" })
-  const env = {
-    ...process.env,
-    TMUX: `${socket},${process.pid},0`,
-    TMUX_PANE: "%0",
-    TERM: "screen-256color",
-  }
-  const child = (helper: "tmuxPassthroughState" | "tmuxPassthroughAllowsAll") => Bun.spawnSync(
-    [process.execPath, "-e", `import { ${helper} } from "./packages/engine/src/terminal/tmux.ts"; process.stdout.write(String(${helper}()))`],
-    { cwd: process.cwd(), env, stdout: "pipe", stderr: "pipe" },
-  )
 
   try {
     expect(run(["-f", "/dev/null", "new-session", "-d", "-s", session, "sleep 30"]).exitCode).toBe(0)
+    const serverPid = run(["display-message", "-p", "#{pid}"])
+    expect(serverPid.exitCode).toBe(0)
+    const pid = serverPid.stdout.toString().trim()
+    expect(pid).not.toBe("")
+    const paneId = run(["display-message", "-p", "#{pane_id}"])
+    expect(paneId.exitCode).toBe(0)
+    const pane = paneId.stdout.toString().trim()
+    expect(pane).not.toBe("")
+    const env = {
+      ...process.env,
+      TMUX: `${socket},${pid},0`,
+      TMUX_PANE: pane,
+      TERM: "screen-256color",
+    }
+    const child = (helper: "tmuxPassthroughState" | "tmuxPassthroughAllowsAll") => Bun.spawnSync(
+      [process.execPath, "-e", `import { ${helper} } from "./packages/engine/src/terminal/tmux.ts"; process.stdout.write(String(${helper}()))`],
+      { cwd: process.cwd(), env, stdout: "pipe", stderr: "pipe" },
+    )
     expect(run(["set-option", "-g", "allow-passthrough", "on"]).exitCode).toBe(0)
+    expect(run(["set-option", "-p", "-t", pane, "allow-passthrough", "on"]).exitCode).toBe(0)
     expect(child("tmuxPassthroughState").stdout.toString()).toBe("enabled")
     expect(child("tmuxPassthroughAllowsAll").stdout.toString()).toBe("false")
 
+    expect(run(["set-option", "-p", "-u", "-t", pane, "allow-passthrough"]).exitCode).toBe(0)
     expect(run(["set-option", "-g", "allow-passthrough", "all"]).exitCode).toBe(0)
     expect(child("tmuxPassthroughState").stdout.toString()).toBe("enabled")
     expect(child("tmuxPassthroughAllowsAll").stdout.toString()).toBe("true")
 
-    expect(run(["set-option", "-p", "-t", "%0", "allow-passthrough", "off"]).exitCode).toBe(0)
+    expect(run(["set-option", "-p", "-t", pane, "allow-passthrough", "off"]).exitCode).toBe(0)
     expect(child("tmuxPassthroughState").stdout.toString()).toBe("disabled")
     expect(child("tmuxPassthroughAllowsAll").stdout.toString()).toBe("false")
   } finally {

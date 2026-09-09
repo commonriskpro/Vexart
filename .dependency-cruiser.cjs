@@ -4,8 +4,11 @@ module.exports = {
     {
       name: "no-circular",
       severity: "error",
-      comment: "No circular dependencies allowed (REQ-PB-004)",
-      from: {},
+      // internal-flexily vendors upstream Flexily and retains intentional cycles
+      // within that implementation. Excluding only that source subtree keeps
+      // cycles involving any Vexart layer or package as errors.
+      comment: "No circular dependencies outside the vendored internal-flexily implementation (REQ-PB-004)",
+      from: { pathNot: "^packages/internal-flexily/src/" },
       to: { circular: true },
     },
     {

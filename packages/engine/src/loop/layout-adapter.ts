@@ -16,6 +16,7 @@ import { CMD } from "../ffi/render-graph"
 import type { RenderCommand, EffectConfig, ImagePaintConfig, CanvasPaintConfig } from "../ffi/render-graph"
 import {
   Node,
+  DISPLAY_NONE,
   FLEX_DIRECTION_COLUMN,
   FLEX_DIRECTION_ROW,
   POSITION_TYPE_ABSOLUTE,
@@ -216,6 +217,10 @@ export function createVexartLayoutCtx() {
     _gridErrorStack.push(root)
     while (_gridErrorStack.length > 0) {
       const node = _gridErrorStack.pop()!
+      // A hidden subtree is excluded from layout. Ignore retained Grid
+      // results from an earlier visible pass while looking for errors to
+      // publish for the current frame.
+      if (node.style.display === DISPLAY_NONE) continue
       if (node.isGridMode()) {
         const error = node.getGridResult()?.error
         if (error) {
@@ -225,7 +230,7 @@ export function createVexartLayoutCtx() {
       }
       for (let index = 0; index < node.getChildCount(); index++) {
         const child = node.getChild(index)
-        if (child) _gridErrorStack.push(child)
+        if (child && child.style.display !== DISPLAY_NONE) _gridErrorStack.push(child)
       }
     }
     return null

@@ -1028,6 +1028,10 @@ export class Node {
     const stack = [...this._children]
     while (stack.length > 0) {
       const current = stack.pop() as Node
+      // Hidden subtrees are not part of the current layout pass. Their
+      // retained Grid result may describe an earlier visible pass and must
+      // not poison an otherwise valid ancestor publication.
+      if (current._style.display === C.DISPLAY_NONE) continue
       if (current._gridError) return current._gridError
       if (current._hasGridDescendant) {
         for (const child of current._children) stack.push(child)

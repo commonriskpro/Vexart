@@ -52,6 +52,9 @@ export type AlignmentInput = ModelAlignmentInput & {
   readonly contentBox?: number | null
   readonly columnGap?: number
   readonly rowGap?: number
+  /** Zero-based tracks collapsed by auto-fit; their adjacent gutters vanish. */
+  readonly collapsedColumns?: readonly number[]
+  readonly collapsedRows?: readonly number[]
   readonly gap?: number
   readonly itemStyles?: readonly GridItemStyle[]
   readonly nodeId?: number
@@ -66,6 +69,8 @@ export type AxisAlignmentInput = {
   readonly contentBox?: number | null
   readonly gap?: number
   readonly alignment?: GridContentAlignment | string
+  /** Zero-based tracks collapsed by auto-fit; their adjacent gutters vanish. */
+  readonly collapsed?: readonly number[]
   readonly nodeId?: number
 }
 
@@ -226,6 +231,25 @@ function validAxis(
   return true
 }
 
+function collapsedSet(
+  value: readonly number[] | undefined,
+  count: number,
+  path: string,
+  nodeId: number,
+): ReadonlySet<number> | GridLayoutError {
+  if (value === undefined) return new Set()
+  if (!Array.isArray(value)) return error("GRID_INVALID_TRACK", `${path}.collapsed`, nodeId)
+  const result = new Set<number>()
+  for (let index = 0; index < value.length; index++) {
+    const track = value[index]
+    if (!Number.isInteger(track) || track < 0 || track >= count || result.has(track)) {
+      return error("GRID_INVALID_TRACK", `${path}.collapsed[${index}]`, nodeId)
+    }
+    result.add(track)
+  }
+  return result
+}
+
 function normalizedAlignment(value: unknown, path: string, nodeId: number): GridContentAlignment | GridLayoutError {
   if (value === undefined || value === "normal") return "stretch"
   if (value === "left" || value === "flex-start") return "start"
@@ -287,6 +311,8 @@ function axisAlignment(
     return error("GRID_INVALID_TRACK", axisPath, nodeId)
   }
   const sourceTracks = input.tracks.tracks
+  const collapsed = collapsedSet(input.collapsed, sourceTracks.length, axisPath, nodeId)
+  if (isGridLayoutError(collapsed)) return collapsed
   const gap = input.gap ?? 0
   if (!nonNegative(gap)) return error("GRID_INVALID_VALUE", `${axisPath}.gap`, nodeId)
   const alignmentPath = axisPath === "justifyContent" || axisPath === "alignContent"
@@ -301,7 +327,9 @@ function axisAlignment(
 
   const tracks: MutableTrack[] = sourceTracks.map((track) => ({ ...track }))
   const baseTotal = tracks.reduce((sum, track) => sum + track.base, 0)
-  const gutterTotal = Math.max(0, tracks.length - 1) * gap
+  const activeBoundaries = Array.from({ length: Math.max(0, tracks.length - 1) }, (_, index) => index)
+    .filter((index) => !collapsed.has(index) && !collapsed.has(index + 1))
+  const gutterTotal = activeBoundaries.length * gap
   if (!finite(baseTotal) || !finite(gutterTotal)) return error("GRID_INVALID_VALUE", axisPath, nodeId)
   const occupied = baseTotal + gutterTotal
   const definite = available?.kind === "definite" ? available.px : null
@@ -323,14 +351,15 @@ function axisAlignment(
   if (free !== null && free > GRID_ALIGNMENT_EPSILON) {
     if (alignment === "end") leading = free
     if (alignment === "center") leading = free / 2
-    if (alignment === "space-between" && count > 1) effectiveGap = gap + free / (count - 1)
-    if (alignment === "space-around" && count > 0) {
-      effectiveGap = gap + free / count
-      leading = free / (2 * count)
+    const activeCount = count - collapsed.size
+    if (alignment === "space-between" && activeBoundaries.length > 0) effectiveGap = gap + free / activeBoundaries.length
+    if (alignment === "space-around" && activeCount > 0) {
+      effectiveGap = gap + free / activeCount
+      leading = free / (2 * activeCount)
     }
-    if (alignment === "space-evenly" && count > 0) {
-      effectiveGap = gap + free / (count + 1)
-      leading = free / (count + 1)
+    if (alignment === "space-evenly" && activeCount > 0) {
+      effectiveGap = gap + free / (activeCount + 1)
+      leading = free / (activeCount + 1)
     }
   }
 
@@ -343,7 +372,7 @@ function axisAlignment(
     position += tracks[index].base
     if (!finite(position)) return error("GRID_INVALID_VALUE", axisPath, nodeId)
     lines.push(position)
-    if (index + 1 < tracks.length) position += effectiveGap
+    if (index + 1 < tracks.length && !collapsed.has(index) && !collapsed.has(index + 1)) position += effectiveGap
     if (!finite(position)) return error("GRID_INVALID_VALUE", axisPath, nodeId)
   }
 
@@ -485,6 +514,7 @@ export function align(input: AlignmentInput): Result {
     available: valueForAxis(input, "columns") as AlignmentAvailable | undefined,
     gap: columnGap,
     alignment: input.style.justifyContent,
+    collapsed: input.collapsedColumns,
     nodeId,
   }, "justifyContent")
   if (isGridLayoutError(columns)) return columns
@@ -494,6 +524,7 @@ export function align(input: AlignmentInput): Result {
     available: valueForAxis(input, "rows") as AlignmentAvailable | undefined,
     gap: rowGap,
     alignment: input.style.alignContent,
+    collapsed: input.collapsedRows,
     nodeId,
   }, "alignContent")
   if (isGridLayoutError(rows)) return rows

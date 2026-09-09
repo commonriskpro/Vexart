@@ -44,6 +44,22 @@ describe("Grid Node composition", () => {
     expect(getGridLayoutStats().layoutCalls).toBe(1)
   })
 
+  it("collapses auto-fit gutters before distributing the remaining fr space", () => {
+    const root = Node.create()
+    root.setLayoutMode("grid")
+    root.setGridStyle(style([{ repeat: { count: "auto-fit", tracks: [{ minmax: [80, { fr: 1 }] }] } }], [40], 10))
+    const first = Node.create()
+    const second = Node.create()
+    root.insertChild(first, 0)
+    root.insertChild(second, 1)
+
+    expect(root.calculateLayout(300, 40)).toMatchObject({ error: null })
+    expect(first.getComputedLeft()).toBe(0)
+    expect(first.getComputedWidth()).toBe(145)
+    expect(second.getComputedLeft()).toBe(155)
+    expect(second.getComputedWidth()).toBe(145)
+  })
+
   it("keeps Grid and Flex nesting on the same Node tree", () => {
     const outer = Node.create()
     outer.setLayoutMode("grid")

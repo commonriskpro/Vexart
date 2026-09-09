@@ -265,6 +265,7 @@ function orderFor(items: readonly PlacementInput[], placements: readonly GridRes
 
 function autoPlaceOne(
   flow: Axis,
+  dense: boolean,
   item: PlacementInput,
   placement: GridResolvedPlacement,
   index: number,
@@ -287,6 +288,13 @@ function autoPlaceOne(
   const columnSpan = columnExplicit ? Math.max(1, columnBounds.end - columnBounds.start) : columnSpanValue
   const fixedRow = fixedAxis(placement, "row", rowExplicit)
   const fixedColumn = fixedAxis(placement, "column", columnExplicit)
+  // A definite position on the non-flow axis starts its search at the first
+  // explicit line.  Otherwise a preceding item fixed on the flow axis can
+  // leave the cursor past the explicit grid and spuriously grow an implicit
+  // track before this item is placed. Dense placement has its own search
+  // implementation and keeps the legacy autoPlace compatibility behavior.
+  if (!dense && flow === "row" && fixedRow !== null) cursor.column = 0
+  if (!dense && flow === "column" && fixedColumn !== null) cursor.row = 0
   const path = `items[${index}]`
   const found = flow === "row"
     ? scanRow(cells, cursor, rowCount, columnCount, rowSpan, columnSpan, fixedRow, fixedColumn, path, nodeId)
@@ -335,6 +343,7 @@ export function autoPlace(
     if (rowExplicit && columnExplicit) continue
     const result = autoPlaceOne(
       flow.axis,
+      flow.dense,
       sourceItems[index],
       placements[index],
       index,

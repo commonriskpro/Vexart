@@ -9,10 +9,10 @@ members = [
 [workspace.package]
 edition = "2021"
 rust-version = "1.95.0"
-license = "SEE LICENSE IN LICENSE.md"   # dual-license: see docs/PRD.md §10.1 / DEC-003
+license-file = "LICENSE"                # dual-license: see docs/PRD.md §10.1 / DEC-003
 authors = ["Vexart Founder"]
 repository = "https://github.com/vexart/vexart"
-publish = false                          # crates.io publishing is out of scope for v0.9
+publish = false                          # native crates ship through npm platform packages
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"          # forces explicit unsafe blocks in unsafe fns — FFI safety

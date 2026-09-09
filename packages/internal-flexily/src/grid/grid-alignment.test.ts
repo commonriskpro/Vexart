@@ -85,6 +85,20 @@ describe("Grid track alignment", () => {
     expect(end.overflow).toBe(30)
   })
 
+  it("omits gutters adjacent to auto-fit collapsed tracks", () => {
+    const result = expectAxis(alignTracks({
+      axis: "columns",
+      tracks: axis([state(145, 145, 145), state(145, 145, 145), state(0, 0, 0)]),
+      available: 300,
+      gap: 10,
+      alignment: "start",
+      collapsed: [2],
+    }))
+
+    expect(result.lines).toEqual([0, 145, 155, 300, 300, 300])
+    expect(result.overflow).toBe(0)
+  })
+
   it("changes only effective gutters for space-* alignment", () => {
     const source = axis([state(50, 50, 50), state(50, 50, 50)])
     const between = expectAxis(alignTracks({ axis: "columns", tracks: source, available: 300, gap: 10, alignment: "space-between" }))

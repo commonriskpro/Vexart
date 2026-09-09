@@ -3,11 +3,14 @@ title: Installation
 description: Install Vexart and build the native GPU library.
 ---
 
-## From npm (consumers)
+## From npm (beta consumers)
 
 ```bash
-bun add vexart
+bun add vexart@beta
 ```
+
+The `@beta` dist-tag keeps consumers on the current beta release rather than
+resolving the stable `latest` channel.
 
 Configure JSX transform in your Bun preload:
 
@@ -58,3 +61,12 @@ printf '\e_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\e\\\e[c'
 ```
 
 If you see a response containing `OK`, your terminal is supported.
+
+## tmux (experimental)
+
+tmux 3.4+ is supported only inside Kitty or Ghostty with effective
+`allow-passthrough all` and the required RGB client features. The G-037 policy
+requires separate physical Kitty direct and private tmux+SHM validation;
+offscreen checks do not establish terminal support. Vexart does not edit your
+tmux configuration. See the [tmux support guide](https://github.com/commonriskpro/Vexart/blob/main/docs/tmux.md)
+for setup and limitations.

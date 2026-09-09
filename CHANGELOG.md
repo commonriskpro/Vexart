@@ -7,15 +7,25 @@ Version scheme: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+## [0.10.0-beta.1] — 2026-09-08
 
 ### Added
 
 - **Grid v1.x beta profile** — `layout="grid"` with typed tracks, placement,
   auto-flow, intrinsic text sizing, nested layouts, deterministic diagnostics,
   and atomic last-valid-layout retention. The real Kitty/tmux physical parity
-  gate and serial performance evidence are recorded without changing the
-  package version or publishing a release.
+  gate and serial performance evidence are included in the release evidence.
+
+### Fixed
+
+- Corrected Grid auto-placement for one-axis definite items, auto-repeat
+  gutter accounting, and `auto-fit` collapsed-track sizing.
+- Excluded absolute/floating children from normal Grid cell placement and
+  cleared stale nested Grid errors when invalid subtrees are hidden.
+- Made missing Grid performance baselines report `BLOCKED` instead of throwing,
+  and made the isolated tmux option test identify its actual server.
+- Documented the vendored Flexily cycle exception and reconciled release/license
+  metadata with the source-available license.
 
 ## [0.9.0-beta.19] — 2026-05-06
 

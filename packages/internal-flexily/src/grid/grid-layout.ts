@@ -180,6 +180,26 @@ function extent(axis: AxisSizingResult): number {
   return last.offset + last.base
 }
 
+/**
+ * Sizing stages consume one scalar gutter budget.  Auto-fit keeps its empty
+ * tracks for line addressing, but their adjacent gutters are collapsed; use
+ * the equivalent average gap for those stages and let alignment place the
+ * exact per-boundary geometry.
+ */
+function effectiveGap(
+  gap: number,
+  count: number,
+  collapsed: readonly number[],
+): number {
+  if (collapsed.length === 0 || count < 2) return gap
+  const set = new Set(collapsed)
+  let boundaries = 0
+  for (let index = 0; index + 1 < count; index++) {
+    if (!set.has(index) && !set.has(index + 1)) boundaries++
+  }
+  return gap * boundaries / (count - 1)
+}
+
 function zeroEdges(values: readonly { readonly value: number; readonly unit: number }[]): boolean {
   for (let index = 0; index < 4; index++) {
     const value = values[index]
@@ -426,7 +446,7 @@ function nodeItems(node: Node): { readonly nodes: readonly Node[]; readonly item
   const nodes: Node[] = []
   const items: { nodeId: number; style: GridItemStyle }[] = []
   for (const child of node.children) {
-    if (child.style.display === C.DISPLAY_NONE) continue
+    if (child.style.display === C.DISPLAY_NONE || child.style.positionType === C.POSITION_TYPE_ABSOLUTE) continue
     nodes.push(child)
     items.push({ nodeId: child.getGridNodeId(), style: styleFor(child) })
   }
@@ -487,6 +507,9 @@ function resolvePlan(node: Node, availableWidth: number, availableHeight: number
   const lines = expandImplicitLines(implicitLines, implicit)
   if (isGridLayoutError(lines)) return lines
 
+  const columnGap = effectiveGap(style.gap, implicit.columns.tracks.length, repeated.collapsedColumns)
+  const rowGap = effectiveGap(style.gap, implicit.rows.tracks.length, repeated.collapsedRows)
+
   const columnsInitial = initializeAxisTracks(implicit.columns, asSpace(nodeSpaceW))
   if (isGridLayoutError(columnsInitial)) return columnsInitial
   const rowsInitial = initializeAxisTracks(implicit.rows, asSpace(nodeSpaceH))
@@ -519,13 +542,13 @@ function resolvePlan(node: Node, availableWidth: number, availableHeight: number
   if (isGridLayoutError(limitedColumns)) return limitedColumns
   const limitedRows = applyTrackLimits({ axis: "rows", tracks: spanRows.tracks, available: asSpace(nodeSpaceH), contributions: cycle.rowContributions, gap: style.gap })
   if (isGridLayoutError(limitedRows)) return limitedRows
-  const maximizedColumns = maximizeTracks({ axis: "columns", tracks: limitedColumns.tracks, available: asSpace(nodeSpaceW), gap: style.gap })
+  const maximizedColumns = maximizeTracks({ axis: "columns", tracks: limitedColumns.tracks, available: asSpace(nodeSpaceW), gap: columnGap })
   if (isGridLayoutError(maximizedColumns)) return maximizedColumns
-  const maximizedRows = maximizeTracks({ axis: "rows", tracks: limitedRows.tracks, available: asSpace(nodeSpaceH), gap: style.gap })
+  const maximizedRows = maximizeTracks({ axis: "rows", tracks: limitedRows.tracks, available: asSpace(nodeSpaceH), gap: rowGap })
   if (isGridLayoutError(maximizedRows)) return maximizedRows
-  const flexibleColumns = resolveFlex({ axis: "columns", tracks: maximizedColumns.tracks, available: asSpace(nodeSpaceW), gap: style.gap, contributions: cycle.columnContributions })
+  const flexibleColumns = resolveFlex({ axis: "columns", tracks: maximizedColumns.tracks, available: asSpace(nodeSpaceW), gap: columnGap, contributions: cycle.columnContributions })
   if (isGridLayoutError(flexibleColumns)) return flexibleColumns
-  const flexibleRows = resolveFlex({ axis: "rows", tracks: maximizedRows.tracks, available: asSpace(nodeSpaceH), gap: style.gap, contributions: cycle.rowContributions })
+  const flexibleRows = resolveFlex({ axis: "rows", tracks: maximizedRows.tracks, available: asSpace(nodeSpaceH), gap: rowGap, contributions: cycle.rowContributions })
   if (isGridLayoutError(flexibleRows)) return flexibleRows
 
   const columnSizing = sizing(flexibleColumns.tracks, style.gap)
@@ -538,6 +561,12 @@ function resolvePlan(node: Node, availableWidth: number, availableHeight: number
     itemSizes: [],
     available: { columns: nodeSpaceW, rows: nodeSpaceH },
     gap: style.gap,
+    // Alignment needs the authored gap to place each surviving boundary;
+    // collapsed metadata removes the adjacent gutters individually.
+    columnGap: style.gap,
+    rowGap: style.gap,
+    collapsedColumns: repeated.collapsedColumns,
+    collapsedRows: repeated.collapsedRows,
     itemStyles: items.map(({ style: itemStyle }) => itemStyle),
     nodeId,
   })
@@ -649,6 +678,16 @@ function commit(node: Node, plan: Plan, availableWidth: number, availableHeight:
     child.layout.top = Math.round(childTop)
     child.layout.width = Math.max(0, Math.round(box.width))
     child.layout.height = Math.max(0, Math.round(box.height))
+  }
+  // Absolute children are not Grid items, but they still need their own
+  // dimensions and descendants laid out before the adapter resolves their
+  // floating attachment geometry. Use the Grid container as the containing
+  // block; floating attachment points replace the child's local position in
+  // the adapter while preserving the computed size.
+  for (const child of node.children) {
+    if (child.style.display === C.DISPLAY_NONE || child.style.positionType !== C.POSITION_TYPE_ABSOLUTE) continue
+    const childResult = layoutNode(child, plan.width, plan.height, 0, 0, absX, absY, direction)
+    if (childResult?.error) return childResult
   }
   const flex = node.flex
   flex.lastAvailW = availableWidth

@@ -172,6 +172,7 @@ function staticMinimum(value: GridTrack, available: number, path: string, nodeId
 function autoCount(
   base: GridTrack,
   fixedMinimum: number,
+  fixedTrackCount: number,
   available: { readonly definite: boolean; readonly px: number },
   gap: number,
   path: string,
@@ -184,7 +185,9 @@ function autoCount(
   if (denominator === 0) return error("GRID_TRACK_LIMIT", path, nodeId)
   // For N repeated tracks and F existing tracks:
   // Fmin + N*base + (F+N-1)*gap <= available.
-  const availableForRepeated = available.px - fixedMinimum + gap
+  // Keep F in the calculation: adding a second fixed track adds another
+  // inter-track gutter, even when the repeated portion itself is unchanged.
+  const availableForRepeated = available.px - fixedMinimum - Math.max(0, fixedTrackCount - 1) * gap
   const count = Math.max(1, Math.floor(availableForRepeated / denominator))
   if (count > GRID_REPEAT_TRACK_LIMIT) return error("GRID_TRACK_LIMIT", path, nodeId)
   return count
@@ -280,6 +283,7 @@ function expandAxis(
     const count = autoCount(
       autoRepeat.tracks[0],
       fixedMinimum,
+      fixedTrackCount,
       available,
       gap,
       `${axis}[${autoRepeatIndex}]`,

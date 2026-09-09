@@ -66,7 +66,7 @@ await build({
     "process.env.VEXART_DIST": '"true"',
   },
   banner: {
-    js: `/* Vexart — GPU-Accelerated Terminal UI Engine | Closed Source | (c) ${new Date().getFullYear()} */`,
+    js: `/* Vexart — GPU-Accelerated Terminal UI Engine | Source-Available | (c) ${new Date().getFullYear()} */`,
   },
 })
 
@@ -139,7 +139,7 @@ await build({
     "process.env.VEXART_DIST": '"true"',
   },
   banner: {
-    js: `/* Vexart — GPU-Accelerated Terminal UI Engine | Closed Source | (c) ${new Date().getFullYear()} */`,
+    js: `/* Vexart — GPU-Accelerated Terminal UI Engine | Source-Available | (c) ${new Date().getFullYear()} */`,
   },
 })
 
