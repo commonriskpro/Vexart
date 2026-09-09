@@ -914,7 +914,7 @@ export type VisualCursor = {
 
 // Warnings were encountered during analysis:
 //
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/headless/src/inputs/textarea.d.ts:129:5 - (ae-forgotten-export) The symbol "ExtmarkManager" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/headless/src/inputs/textarea.d.ts:129:5 - (ae-forgotten-export) The symbol "ExtmarkManager" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

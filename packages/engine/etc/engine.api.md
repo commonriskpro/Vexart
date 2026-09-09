@@ -2964,10 +2964,10 @@ export function writeHeader(view: DataView, cmdCount: number, payloadBytes: numb
 
 // Warnings were encountered during analysis:
 //
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node-types.d.ts:371:5 - (ae-forgotten-export) The symbol "NodeImageExtra" needs to be exported by the entry point index.d.ts
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node-types.d.ts:373:5 - (ae-forgotten-export) The symbol "NodeCanvasExtra" needs to be exported by the entry point index.d.ts
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/loop/debug.d.ts:85:5 - (ae-forgotten-export) The symbol "NativeFrameExecutionStats" needs to be exported by the entry point index.d.ts
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/reconciler/router.d.ts:41:5 - (ae-forgotten-export) The symbol "NavigationParams" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/engine/src/ffi/node-types.d.ts:371:5 - (ae-forgotten-export) The symbol "NodeImageExtra" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/engine/src/ffi/node-types.d.ts:373:5 - (ae-forgotten-export) The symbol "NodeCanvasExtra" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/engine/src/loop/debug.d.ts:85:5 - (ae-forgotten-export) The symbol "NativeFrameExecutionStats" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/engine/src/reconciler/router.d.ts:41:5 - (ae-forgotten-export) The symbol "NavigationParams" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

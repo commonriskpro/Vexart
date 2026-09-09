@@ -48,6 +48,7 @@ El test físico `scripts/visual-test/tmux-grid.test.ts` es deliberadamente estri
 | B-004 | P1 | Metadatos de release | La versión raíz sigue en beta.27 aunque el commit actual añade API Grid; la política de API exige bump minor en 0.x. También había banner “Closed Source”, ruta de licencia Cargo inexistente y comandos de instalación que resuelven `latest` en vez del canal beta. | Abierto |
 | B-005 | P2 | Evidencia Grid | El manifiesto de ejecución comprometido registra el commit histórico `9b839202` y apunta a evidencia no trackeada. No debe presentarse como evidencia del HEAD actual. | Abierto/documental |
 | B-006 | P2 | Gate físico | El runner sin Kitty/TTY no puede volver a ejecutar G-037. La política actual exige un gate físico real y no permite skip sintético. | Bloqueo ambiental (sin cambio de código) |
+| B-007 | P1 | API snapshot CI | Los warnings de API Extractor incluían rutas absolutas del checkout. El primer `phase4-gates` para `531eb2b` detectó ese prefijo distinto en CI aunque el contrato API era idéntico al local. | Descubierto al validar el commit de release |
 
 ## 3. Criterio de corrección
 
@@ -64,6 +65,11 @@ gates de código. El único resultado no verde es el gate físico G-037 cuando s
 ejecuta desde este proceso automatizado sin TTY/Kitty; la política exige
 mantenerlo bloqueado en ese entorno en vez de fabricar un `PASS`.
 
+Tras el primer push del release, el workflow `phase4-gates` (run
+`34305000182`) falló únicamente en el snapshot API por el prefijo absoluto del
+checkout del runner. Ese incidente añadió B-007; la corrección y su rerun se
+incluyen en las tablas siguientes.
+
 ## 5. Correcciones aplicadas
 
 | ID | Corrección | Regresión/gate de cierre |
@@ -74,6 +80,7 @@ mantenerlo bloqueado en ese entorno en vez de fabricar un `PASS`.
 | B-004 | La release usa `0.10.0-beta.1` (bump minor requerido por la política 0.x); se actualizaron changelog, instalación beta, sitio, banners y licencia Cargo. | `api:update`, `gen:types`, `gen:jsx-runtime`, `docs:build`, `build:dist`, `pack` y smoke de release PASS. |
 | B-005 | El manifiesto histórico `grid-v1x-20260908-215411` no se reescribió: queda identificado como evidencia del commit anterior y no se presenta como evidencia del HEAD. | Este informe conserva la trazabilidad y separa artefactos históricos de los gates actuales. |
 | B-006 | No se modifica el gate físico ni se añade un skip. La evidencia física previa sigue disponible y el runner actual informa el bloqueo ambiental con detalle. | La prueba completa conserva G-037 como `BLOCKED` fuera de Kitty/TTY. |
+| B-007 | `scripts/normalize-api-reports.ts` reemplaza el prefijo variable anterior a `.api-extractor-temp/` por `<repo>/` y conserva el formato de fin de línea canónico de cada snapshot después de `api:update`; así el snapshot sólo conserva el diagnóstico relevante. | `scripts/normalize-api-reports.test.ts`: 4/4 PASS; `bun run api:update` deja los cuatro snapshots sin drift local. |
 
 Además, la búsqueda de bugs encontró y corrigió tres defectos de Grid que no
 aparecían en la pasada inicial: el cursor de auto-placement con un eje
@@ -97,12 +104,13 @@ el commit de release incorpora este informe):
 | `bun --conditions=browser run scripts/grid/perf.ts --runs=5 --warmup=100 --frames=1000` | G-039 PASS: Flex 1.028x del baseline normalizado (límite 1.05x); Grid 0.328x de Flex (límite 2x). |
 | `bun run perf:check` | PASS; −46.9% frente al baseline de 800×600. |
 | `cd native/libvexart && cargo test` | 168 PASS, 1 ignored; `cargo build --release` PASS. |
-| `bun run api:update` / `gen:types` / `gen:jsx-runtime` | PASS (warnings TSDoc preexistentes, no bloqueantes). |
+| `bun run api:update` / `gen:types` / `gen:jsx-runtime` | PASS (warnings TSDoc preexistentes, no bloqueantes); snapshots normalizados para checkout estable. |
 | `bun run docs:build` | PASS, 22 páginas. |
 | `bun run build:dist` / `bun run pack` | PASS; paquete `vexart-0.10.0-beta.1.tgz`. |
 | `node --test scripts/release-verification.test.mjs` | 13 PASS / 0 FAIL. |
 | `bun run test:visual` | 41 PASS; `grid-dashboard` queda sin PNG por diseño G-036 (escena candidata, no golden). |
-| `git diff --check` | PASS. |
+| `git diff --check` (código y documentación) | PASS; los warnings `trailing whitespace` que Git muestra en las líneas nuevas de `headless.api.md`/`styled.api.md` son los `CR` de su formato CRLF ya existente. |
+| `phase4-gates` para `531eb2b` (`34305000182`) | FAIL sólo en API snapshot por B-007; follow-up con el normalizador pendiente al cierre de este informe. |
 
 La validación local de artefactos multiplataforma queda deliberadamente para
 el workflow matricial: el `dist/` Darwin local no contiene los binarios Linux.
@@ -115,5 +123,7 @@ No se publicó desde ese artefacto parcial.
 - **Ruta de publicación:** push del commit a `main`, espera de
   `phase4-gates`, tag anotado `v0.10.0-beta.1` y workflow `build-native` para
   compilar/publicar los tres paquetes nativos y `vexart`.
+- **Gate de snapshots:** los reportes API se normalizan a `<repo>/` para que el
+  resultado sea reproducible entre checkouts locales y CI.
 - **Limitación local:** `npm whoami` no está autenticado en este entorno; la
   publicación se realiza únicamente mediante el workflow con `NPM_TOKEN`.

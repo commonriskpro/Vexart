@@ -851,13 +851,13 @@ export const weight: {
 
 // Warnings were encountered during analysis:
 //
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/headless/src/overlays/toast.d.ts:31:5 - (ae-forgotten-export) The symbol "ToastVariant" needs to be exported by the entry point index.d.ts
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/styled/src/components/code.d.ts:11:5 - (ae-forgotten-export) The symbol "SyntaxStyle" needs to be exported by the entry point index.d.ts
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/styled/src/components/scroll-view.d.ts:13:5 - (ae-forgotten-export) The symbol "ScrollHandle" needs to be exported by the entry point index.d.ts
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:16:5 - (ae-forgotten-export) The symbol "KeyEvent" needs to be exported by the entry point index.d.ts
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:23:5 - (ae-forgotten-export) The symbol "KeyBinding" needs to be exported by the entry point index.d.ts
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:26:5 - (ae-forgotten-export) The symbol "TextareaHandle" needs to be exported by the entry point index.d.ts
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/styled/src/components/virtual-list.d.ts:23:5 - (ae-forgotten-export) The symbol "VirtualListItemContext" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/headless/src/overlays/toast.d.ts:31:5 - (ae-forgotten-export) The symbol "ToastVariant" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/styled/src/components/code.d.ts:11:5 - (ae-forgotten-export) The symbol "SyntaxStyle" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/styled/src/components/scroll-view.d.ts:13:5 - (ae-forgotten-export) The symbol "ScrollHandle" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:16:5 - (ae-forgotten-export) The symbol "KeyEvent" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:23:5 - (ae-forgotten-export) The symbol "KeyBinding" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:26:5 - (ae-forgotten-export) The symbol "TextareaHandle" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/styled/src/components/virtual-list.d.ts:23:5 - (ae-forgotten-export) The symbol "VirtualListItemContext" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
