@@ -110,7 +110,10 @@ el commit de release incorpora este informe):
 | `node --test scripts/release-verification.test.mjs` | 13 PASS / 0 FAIL. |
 | `bun run test:visual` | 41 PASS; `grid-dashboard` queda sin PNG por diseño G-036 (escena candidata, no golden). |
 | `git diff --check` (código y documentación) | PASS; los warnings `trailing whitespace` que Git muestra en las líneas nuevas de `headless.api.md`/`styled.api.md` son los `CR` de su formato CRLF ya existente. |
-| `phase4-gates` para `531eb2b` (`34305000182`) | FAIL sólo en API snapshot por B-007; follow-up con el normalizador pendiente al cierre de este informe. |
+| `phase4-gates` para `531eb2b` (`34305000182`) | FAIL sólo en API snapshot por B-007; quedó resuelto en el follow-up. |
+| `phase4-gates` para `3e3f724` (`34305767723`) | PASS; typecheck, suite de paquetes y API snapshot sin drift. |
+| `build-native` para `v0.10.0-beta.1` (`34305974478`) | PASS; matriz Darwin arm64/Linux x64/Linux arm64, publicación npm y GitHub prerelease completadas. |
+| Verificación de registry para `0.10.0-beta.1` | PASS; `vexart` y paquetes nativos disponibles, `beta` apunta a la versión nueva. |
 
 La validación local de artefactos multiplataforma queda deliberadamente para
 el workflow matricial: el `dist/` Darwin local no contiene los binarios Linux.
@@ -125,5 +128,12 @@ No se publicó desde ese artefacto parcial.
   compilar/publicar los tres paquetes nativos y `vexart`.
 - **Gate de snapshots:** los reportes API se normalizan a `<repo>/` para que el
   resultado sea reproducible entre checkouts locales y CI.
+- **CI de cierre:** `phase4-gates` follow-up `34305767723` pasó después de
+  corregir B-007; `build-native` `34305974478` publicó la release.
+- **Publicación verificada:** `vexart@0.10.0-beta.1` y los tres paquetes
+  nativos están en npm; `beta` apunta a `0.10.0-beta.1` y `latest` permanece
+  deliberadamente en `0.9.0-beta.26`.
+- **GitHub Release:** el tag `v0.10.0-beta.1` quedó publicado como prerelease
+  con los tres binarios nativos.
 - **Limitación local:** `npm whoami` no está autenticado en este entorno; la
   publicación se realiza únicamente mediante el workflow con `NPM_TOKEN`.
