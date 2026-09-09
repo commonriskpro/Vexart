@@ -5,6 +5,7 @@ import { createVexartLayoutCtx } from "../../packages/engine/src/loop/layout-ada
 import { walkTree } from "../../packages/engine/src/loop/walk-tree"
 import { Scene as AvatarBadgeScene } from "./scenes/components-avatar-badge"
 import { Scene as BackdropBlurScene } from "./scenes/effects-backdrop-blur"
+import { Scene as GridDashboardScene } from "./scenes/grid-dashboard"
 import { Scene as HelloScene } from "./scenes/hello"
 
 type Scene = () => unknown
@@ -137,6 +138,94 @@ suite("visual-test scene bounds", () => {
       const centeredX = canvasLayout.x + (canvasLayout.width - innerLayout.width) / 2
       expect(Math.abs(innerLayout.x - centeredX)).toBeLessThanOrEqual(1)
       expect(contains(innerLayout, labelLayout)).toBe(true)
+    })
+  })
+
+  test("lays out the grid dashboard composition and its interaction state", () => {
+    layoutScene(GridDashboardScene, 420, 320, (root, map) => {
+      const grids = findNodes(root, (node) => node.kind === "box" && node.props.layout === "grid")
+      expect(grids.length).toBeGreaterThanOrEqual(2)
+
+      const outer = grids.find((node) => node.props.gridTemplateAreas !== undefined)
+      const content = grids.find((node) => node.props.gridTemplateColumns !== undefined && node !== outer)
+      if (!outer || !content) throw new Error("grid dashboard containers did not mount")
+
+      const outerLayout = map.get(outer.id)
+      const contentLayout = map.get(content.id)
+      if (!outerLayout || !contentLayout) throw new Error("grid dashboard containers have no layout")
+      expect(outerLayout.width).toBe(420)
+      expect(outerLayout.height).toBe(320)
+      expect(Number.isFinite(outerLayout.x)).toBe(true)
+      expect(Number.isFinite(outerLayout.y)).toBe(true)
+      expect(contains(outerLayout, contentLayout)).toBe(true)
+
+      const areas = ["header", "sidebar", "content", "footer"]
+      const areaNodes = areas.map((area) => {
+        const node = findNodes(root, (candidate) => candidate.props.gridArea === area)[0]
+        if (!node) throw new Error(`missing grid area ${area}`)
+        const layout = map.get(node.id)
+        if (!layout) throw new Error(`missing layout for grid area ${area}`)
+        expect(layout.width).toBeGreaterThan(0)
+        expect(layout.height).toBeGreaterThan(0)
+        expect(contains(outerLayout, layout)).toBe(true)
+        return { node, layout }
+      })
+      expect(areaNodes).toHaveLength(4)
+      expect(new Set(areaNodes.map(({ layout }) => `${layout.x}:${layout.y}`)).size).toBe(4)
+
+      expect(content.props.gridTemplateColumns).toEqual([
+        { repeat: { count: "auto-fit", tracks: [{ minmax: [96, { fr: 1 }] }] } },
+      ])
+      expect(content.props.gridAutoRows).toBe(44)
+      expect(contains(map.get(areaNodes[2].node.id) ?? contentLayout, contentLayout)).toBe(true)
+
+      const spanningCards = findNodes(root, (node) => {
+        const placement = node.props.gridColumn
+        return node.kind === "box" && placement?.start === 1 && placement.end === 3
+      })
+      expect(spanningCards).toHaveLength(2)
+      for (const card of spanningCards) {
+        const cardLayout = map.get(card.id)
+        if (!cardLayout) throw new Error("spanning dashboard card has no layout")
+        expect(cardLayout.width).toBeGreaterThan(100)
+        expect(contains(contentLayout, cardLayout)).toBe(true)
+      }
+
+      const text = findNodes(root, (node) => node.kind === "text")
+      expect(text.some((node) => node.text === "Grid dashboard")).toBe(true)
+      expect(text.some((node) => node.text === "Requests")).toBe(true)
+
+      const interactive = findNodes(root, (node) => node.props.focusable === true)[0]
+      if (!interactive) throw new Error("grid dashboard interactive control did not mount")
+      const interactiveLayout = map.get(interactive.id)
+      if (!interactiveLayout) throw new Error("interactive dashboard control has no layout")
+      expect(interactive.props.hoverStyle).toBeDefined()
+      expect(interactive.props.activeStyle).toBeDefined()
+      expect(interactive.props.focusStyle).toBeDefined()
+      expect(interactiveLayout.width).toBeGreaterThan(0)
+      expect(interactiveLayout.height).toBeGreaterThan(0)
+      const controls = findNodes(root, (node) => node.props.focusable === true)
+      expect(controls.length).toBeGreaterThanOrEqual(3)
+      expect(text.some((node) => node.text === "Production")).toBe(true)
+      expect(text.some((node) => node.text === "Apply")).toBe(true)
+      for (const control of controls) {
+        const controlLayout = map.get(control.id)
+        if (!controlLayout) throw new Error("interactive dashboard control has no layout")
+        expect(controlLayout.width).toBeGreaterThan(0)
+        expect(controlLayout.height).toBeGreaterThan(0)
+      }
+
+      expect(outer.props.padding).toBe(16)
+      expect(areaNodes[0].node.props.borderWidth).toBe(1)
+      expect(areaNodes[0].node.props.padding).toBe(10)
+      for (const node of findNodes(root, (candidate) => candidate.kind === "box")) {
+        const layout = map.get(node.id)
+        if (!layout) continue
+        expect(Number.isFinite(layout.x)).toBe(true)
+        expect(Number.isFinite(layout.y)).toBe(true)
+        expect(Number.isFinite(layout.width)).toBe(true)
+        expect(Number.isFinite(layout.height)).toBe(true)
+      }
     })
   })
 })

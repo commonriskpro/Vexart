@@ -1,0 +1,303 @@
+{
+  "schemaVersion": 1,
+  "catalogTask": "G-034",
+  "normativeReference": {
+    "url": "https://www.w3.org/TR/2025/CRD-css-grid-1-20250326/",
+    "revision": "2025-03-26",
+    "sections": ["7", "8", "10", "11"]
+  },
+  "expectedPolicy": {
+    "solverTolerancePx": 0.000001,
+    "flexilyRounding": "Math.round absolute borders; text positions may use floor",
+    "nodeRectTolerancePx": 0,
+    "generatedFromCurrentSolver": false,
+    "origin": "manual-or-independent",
+    "incrementalIsOracle": false
+  },
+  "fixtures": [
+    {
+      "id": "F-01",
+      "title": "px, auto and gap",
+      "taskIds": ["G-018", "G-019", "G-034"],
+      "reference": "CR §11.1, §11.5",
+      "oracle": {"kind": "manual-cr", "source": "track bases and intrinsic auto contribution are precomputed"},
+      "tolerance": {"solverPx": 0.000001, "flexilyPx": 0, "nodePx": 0},
+      "status": "ready",
+      "input": {
+        "axis": "columns",
+        "contentWidth": 300,
+        "contentHeight": 50,
+        "gap": 10,
+        "tracks": [80, "auto", 100],
+        "autoContribution": {"minContent": 90, "maxContent": 90},
+        "justifyContent": "start"
+      },
+      "expected": {
+        "solver": {
+          "trackSizes": [80, 90, 100],
+          "lines": [0, 80, 90, 180, 190, 290],
+          "remainingSpace": 10,
+          "trackRects": [{"x":0,"width":80},{"x":90,"width":90},{"x":190,"width":100}]
+        },
+        "flexily": {
+          "trackRects": [{"x":0,"width":80},{"x":90,"width":90},{"x":190,"width":100}],
+          "lines": [0, 80, 90, 180, 190, 290]
+        },
+        "node": {
+          "trackRects": [{"x":0,"width":80},{"x":90,"width":90},{"x":190,"width":100}],
+          "contentWidth": 300,
+          "unusedEndSpace": 10
+        }
+      }
+    },
+    {
+      "id": "F-02",
+      "title": "one fr and two fr",
+      "taskIds": ["G-022", "G-034"],
+      "reference": "CR §11.6",
+      "oracle": {"kind": "manual-cr", "source": "free space 290 divided by flex factor sum 3"},
+      "tolerance": {"solverPx": 0.000001, "flexilyPx": 0, "nodePx": 0},
+      "status": "ready",
+      "input": {"axis":"columns","contentWidth":300,"gap":10,"tracks":[{"fr":1},{"fr":2}]},
+      "expected": {
+        "solver": {
+          "freeSpace": 290,
+          "trackSizes": [96.66666666666667, 193.33333333333334],
+          "lines": [0, 96.66666666666667, 106.66666666666667, 300]
+        },
+        "flexily": {
+          "trackRects": [{"x":0,"width":97},{"x":107,"width":193}],
+          "lines": [0, 97, 107, 300],
+          "rounding": "absolute starts/ends rounded independently"
+        },
+        "node": {
+          "trackRects": [{"x":0,"width":97},{"x":107,"width":193}],
+          "contentWidth": 300
+        }
+      }
+    },
+    {
+      "id": "F-03",
+      "title": "percentage tracks with padding and gap",
+      "taskIds": ["G-023", "G-034"],
+      "reference": "CR §11.1, §11.2",
+      "oracle": {"kind": "manual-cr", "source": "percentages resolve against the 300 px content box; gap is budgeted once"},
+      "tolerance": {"solverPx": 0.000001, "flexilyPx": 0, "nodePx": 0},
+      "status": "ready",
+      "input": {"axis":"columns","outerWidth":340,"paddingLeft":20,"paddingRight":20,"contentWidth":300,"gap":10,"tracks":[{"percent":50},{"percent":50}],"justifyContent":"start"},
+      "expected": {
+        "solver": {"trackSizes":[150,150],"lines":[20,170,180,330],"contentWidth":300,"overflowAfterTracksAndGap":10},
+        "flexily": {"trackRects":[{"x":20,"width":150},{"x":180,"width":150}],"lines":[20,170,180,330]},
+        "node": {"trackRects":[{"x":20,"width":150},{"x":180,"width":150}],"outerWidth":340,"overflowAfterTracksAndGap":10}
+      }
+    },
+    {
+      "id": "F-04",
+      "title": "percentage on an indefinite axis",
+      "taskIds": ["G-023", "G-016", "G-034"],
+      "reference": "CR §7.2.1, §11.2",
+      "oracle": {"kind": "manual-cr", "source": "max-content contribution of the only child is 120 px"},
+      "tolerance": {"solverPx": 0.000001, "flexilyPx": 0, "nodePx": 0},
+      "status": "ready",
+      "input": {"axis":"columns","available":{"kind":"indefinite","constraint":"max-content"},"gap":0,"tracks":[{"percent":50}],"children":[{"nodeId":1,"maxContent":120}]},
+      "expected": {
+        "solver": {"repeatCount":1,"trackSizes":[120],"lines":[0,120],"never":[0,"Infinity","NaN"]},
+        "flexily": {"trackRects":[{"x":0,"width":120}],"lines":[0,120]},
+        "node": {"trackRects":[{"x":0,"width":120}],"contentWidth":120}
+      }
+    },
+    {
+      "id": "F-05",
+      "title": "minmax with fr",
+      "taskIds": ["G-020", "G-021", "G-022", "G-034"],
+      "reference": "CR §11.5, §11.6",
+      "oracle": {"kind": "manual-cr", "source": "two 100 px bases receive the 30 px free space equally"},
+      "tolerance": {"solverPx": 0.000001, "flexilyPx": 0, "nodePx": 0},
+      "status": "ready",
+      "input": {"axis":"columns","contentWidth":240,"gap":10,"tracks":[{"minmax":[100,{"fr":1}]},{"minmax":[100,{"fr":1}]}]},
+      "expected": {
+        "solver": {"baseSizes":[100,100],"freeSpace":30,"trackSizes":[115,115],"lines":[0,115,125,240]},
+        "flexily": {"trackRects":[{"x":0,"width":115},{"x":125,"width":115}],"lines":[0,115,125,240]},
+        "node": {"trackRects":[{"x":0,"width":115},{"x":125,"width":115}],"contentWidth":240}
+      }
+    },
+    {
+      "id": "F-06",
+      "title": "fixed repeat",
+      "taskIds": ["G-017", "G-034"],
+      "reference": "CR §7.2.2",
+      "oracle": {"kind": "manual-cr", "source": "repeat count and 40 px track size are fixed inputs"},
+      "tolerance": {"solverPx": 0.000001, "flexilyPx": 0, "nodePx": 0},
+      "status": "ready",
+      "input": {"axis":"columns","contentWidth":145,"gap":5,"tracks":[{"repeat":{"count":3,"tracks":[40]}}],"justifyContent":"start"},
+      "expected": {
+        "solver": {"expandedTrackCount":3,"trackSizes":[40,40,40],"lines":[0,40,45,85,90,130],"remainingSpace":15},
+        "flexily": {"trackRects":[{"x":0,"width":40},{"x":45,"width":40},{"x":90,"width":40}],"lines":[0,40,45,85,90,130]},
+        "node": {"trackRects":[{"x":0,"width":40},{"x":45,"width":40},{"x":90,"width":40}],"unusedEndSpace":15}
+      }
+    },
+    {
+      "id": "F-07",
+      "title": "auto-fill versus auto-fit",
+      "taskIds": ["G-017", "G-022", "G-034"],
+      "reference": "CR §7.2.2, §11.2",
+      "oracle": {"kind": "browser-independent", "source": "independent Chromium verification is required by G-035; expected geometry is written here first"},
+      "tolerance": {"solverPx": 0.000001, "flexilyPx": 0, "nodePx": 0},
+      "status": "ready",
+      "input": {"axis":"columns","contentWidth":300,"gap":10,"tracks":[{"repeat":{"count":"auto-fill","tracks":[{"minmax":[80,{"fr":1}]}]}}],"placedItems":2,"comparison":"same input with auto-fill and auto-fit"},
+      "expected": {
+        "solver": {
+          "autoFill": {"expandedTrackCount":3,"trackSizes":[93.33333333333333,93.33333333333333,93.33333333333333],"lines":[0,93.33333333333333,103.33333333333333,196.66666666666666,206.66666666666666,300]},
+          "autoFit": {"expandedTrackCount":3,"collapsedTrackIndexes":[2],"trackSizes":[145,145,0],"collapsedGutters":[2],"lines":[0,145,155,300]}
+        },
+        "flexily": {
+          "autoFill": {"trackRects":[{"x":0,"width":93},{"x":103,"width":94},{"x":207,"width":93}],"lines":[0,93,103,197,207,300]},
+          "autoFit": {"trackRects":[{"x":0,"width":145},{"x":155,"width":145},{"x":300,"width":0}],"lines":[0,145,155,300],"collapsedGutters":[2]}
+        },
+        "node": {
+          "autoFill": {"trackRects":[{"x":0,"width":93},{"x":103,"width":94},{"x":207,"width":93}]},
+          "autoFit": {"trackRects":[{"x":0,"width":145},{"x":155,"width":145},{"x":300,"width":0}],"collapsedGutters":[2]}
+        }
+      }
+    },
+    {
+      "id": "F-08",
+      "title": "named axes, negative lines and span",
+      "taskIds": ["G-012", "G-013", "G-034"],
+      "reference": "CR §8.3",
+      "oracle": {"kind": "manual-cr", "source": "three explicit 50 px columns, gap 10; negative lines are resolved against the explicit grid"},
+      "tolerance": {"solverPx": 0.000001, "flexilyPx": 0, "nodePx": 0},
+      "status": "ready",
+      "input": {"axis":"columns","contentWidth":170,"gap":10,"tracks":[50,50,50],"items":[{"nodeId":1,"start":1,"end":{"span":2}},{"nodeId":2,"start":-2,"end":-1}]},
+      "expected": {
+        "solver": {"lineCount":4,"placements":[{"nodeId":1,"start":0,"end":2,"width":110},{"nodeId":2,"start":2,"end":3,"width":50}],"lines":[0,50,60,110,120,170]},
+        "flexily": {"placements":[{"nodeId":1,"x":0,"width":110},{"nodeId":2,"x":120,"width":50}]},
+        "node": {"itemRects":[{"nodeId":1,"x":0,"width":110},{"nodeId":2,"x":120,"width":50}]}
+      }
+    },
+    {
+      "id": "F-09",
+      "title": "named rectangular areas",
+      "taskIds": ["G-012", "G-013", "G-034"],
+      "reference": "CR §7.3, §8.3",
+      "oracle": {"kind": "browser-independent", "source": "area rectangles are independently checked against the named-area placement rules"},
+      "tolerance": {"solverPx": 0.000001, "flexilyPx": 0, "nodePx": 0},
+      "status": "ready",
+      "input": {"axis":"both","contentWidth":310,"contentHeight":75,"gap":5,"columns":[100,80,120],"rows":[30,40],"areas":[["header","header","header"],["nav",null,"content"]],"items":[{"nodeId":1,"area":"header"},{"nodeId":2,"area":"nav"},{"nodeId":3,"area":"content"}]},
+      "expected": {
+        "solver": {"placements":[{"nodeId":1,"rows":[0,1],"columns":[0,3]},{"nodeId":2,"rows":[1,2],"columns":[0,1]},{"nodeId":3,"rows":[1,2],"columns":[2,3]}],"rowLines":[0,30,35,75],"columnLines":[0,100,105,185,190,310]},
+        "flexily": {"itemRects":[{"nodeId":1,"x":0,"y":0,"width":310,"height":30},{"nodeId":2,"x":0,"y":35,"width":100,"height":40},{"nodeId":3,"x":190,"y":35,"width":120,"height":40}]},
+        "node": {"itemRects":[{"nodeId":1,"x":0,"y":0,"width":310,"height":30},{"nodeId":2,"x":0,"y":35,"width":100,"height":40},{"nodeId":3,"x":190,"y":35,"width":120,"height":40}]}
+      }
+    },
+    {
+      "id": "F-10",
+      "title": "row and column auto-placement with dense",
+      "taskIds": ["G-014", "G-015", "G-034"],
+      "reference": "CR §8.5",
+      "oracle": {"kind": "manual-cr", "source": "source order is fixed; dense only revisits an earlier hole"},
+      "tolerance": {"solverPx": 0.000001, "flexilyPx": 0, "nodePx": 0},
+      "status": "ready",
+      "input": {"axis":"both","columns":[50,50,50],"rows":[30,30],"gap":10,"items":[{"nodeId":"A","row":1,"column":1,"columnSpan":2},{"nodeId":"B","columnSpan":2},{"nodeId":"C","columnSpan":1}],"compare":["row","column","row-dense"]},
+      "expected": {
+        "solver": {
+          "row": {"placements":[{"nodeId":"A","rows":[0,1],"columns":[0,2]},{"nodeId":"B","rows":[1,2],"columns":[0,2]},{"nodeId":"C","rows":[1,2],"columns":[2,3]}],"sourceOrder":["A","B","C"]},
+          "column": {"placements":[{"nodeId":"A","rows":[0,1],"columns":[0,2]},{"nodeId":"B","rows":[0,2],"columns":[2,3]},{"nodeId":"C","rows":[1,2],"columns":[2,3]}],"sourceOrder":["A","B","C"]},
+          "rowDense": {"placements":[{"nodeId":"A","rows":[0,1],"columns":[0,2]},{"nodeId":"B","rows":[1,2],"columns":[0,2]},{"nodeId":"C","rows":[0,1],"columns":[2,3]}],"sourceOrder":["A","B","C"]}
+        },
+        "flexily": {"rowDenseRects":[{"nodeId":"A","x":0,"y":0,"width":110,"height":30},{"nodeId":"B","x":0,"y":40,"width":110,"height":30},{"nodeId":"C","x":120,"y":0,"width":50,"height":30}]},
+        "node": {"sourceOrder":["A","B","C"],"rowDenseRects":[{"nodeId":"A","x":0,"y":0,"width":110,"height":30},{"nodeId":"B","x":0,"y":40,"width":110,"height":30},{"nodeId":"C","x":120,"y":0,"width":50,"height":30}]}
+      }
+    },
+    {
+      "id": "F-11",
+      "title": "fit-content and intrinsic contributions",
+      "taskIds": ["G-019", "G-024", "G-034"],
+      "reference": "CR §11.5",
+      "oracle": {"kind": "manual-cr", "source": "independent item contributions are min/max pairs 40/40, 60/120, 60/60"},
+      "tolerance": {"solverPx": 0.000001, "flexilyPx": 0, "nodePx": 0},
+      "status": "ready",
+      "input": {"axis":"columns","contentWidth":300,"gap":10,"tracks":["min-content",{"fitContent":100},"max-content"],"contributions":[{"track":0,"minContent":40,"maxContent":40},{"track":1,"minContent":60,"maxContent":120},{"track":2,"minContent":60,"maxContent":60}]},
+      "expected": {
+        "solver": {"trackSizes":[40,100,60],"lines":[0,40,50,150,160,220],"totalTracksAndGutters":220,"remainingSpace":80,"minimumTrackTwo":60},
+        "flexily": {"trackRects":[{"x":0,"width":40},{"x":50,"width":100},{"x":160,"width":60}],"lines":[0,40,50,150,160,220]},
+        "node": {"trackRects":[{"x":0,"width":40},{"x":50,"width":100},{"x":160,"width":60}],"unusedEndSpace":80}
+      }
+    },
+    {
+      "id": "F-12",
+      "title": "restricted terminal text measurement",
+      "taskIds": ["G-010", "G-026", "G-034"],
+      "reference": "CR §11.5; Vexart terminal text profile",
+      "oracle": {"kind": "terminal-intrinsic-measure", "source": "real Flexily text measurer for solver advance 12; separate native run measures u"},
+      "tolerance": {"solverPx": 0.000001, "flexilyPx": 0, "nodePx": 0},
+      "status": "ready",
+      "input": {"axis":"columns-then-rows","text":"aaaaaa","font":"real monospace test font","solverAdvancePx":12,"columnWidthPx":36,"lineHeightPx":12,"callback":["axis","availableInlineWidth"]},
+      "expected": {
+        "solver": {"advancePx":12,"callbackWidthPx":36,"normal":{"lineWidths":[36,36],"lines":2,"height":24},"keepAll":{"unwrappedWidth":72,"lines":1,"height":12,"overflow":true}},
+        "flexily": {"normal":{"textLines":2,"height":24},"keepAll":{"textLines":1,"height":12,"overflowWidth":72},"callbackRowsWidthPx":36},
+        "node": {"normal":{"rect":{"x":0,"y":0,"width":36,"height":24},"textLines":2},"keepAll":{"rect":{"x":0,"y":0,"width":36,"height":12},"overflowWidth":72},"native":{"advance":"u measured from fixed source font","columnWidth":"3u","normalLines":2,"keepAllLines":1}}
+      }
+    },
+    {
+      "id": "F-13",
+      "title": "Flex/Grid nesting and retained integration",
+      "taskIds": ["G-028", "G-031", "G-032", "G-033", "G-034"],
+      "reference": "Vexart retained Node/layoutMap contract",
+      "oracle": {"kind": "node-real", "source": "one layoutMap and Node.layout readback; interaction cases are exercised by G-033"},
+      "tolerance": {"solverPx": 0.000001, "flexilyPx": 0, "nodePx": 0},
+      "status": "ready",
+      "input": {"outerWidth":300,"outerHeight":60,"columns":[{"fr":1},{"fr":1}],"rows":[60],"gap":10,"gridChild":{"column":[2,3],"layout":"grid","localWidth":145,"localX":0},"nestedFlexChild":{"direction":"row","grow":1},"kinds":["box","text","img","canvas"],"integration":["floating","scroll","clip","focus","hover","click","transform","damage"]},
+      "expected": {
+        "solver": {"outerTrackSizes":[145,145],"outerLines":[0,145,155,300],"gridChild":{"x":155,"width":145,"localX":0,"localWidth":145}},
+        "flexily": {"outerTrackRects":[{"x":0,"width":145},{"x":155,"width":145}],"gridChildRect":{"x":155,"y":0,"width":145,"height":60}},
+        "node": {"outerTrackRects":[{"x":0,"width":145},{"x":155,"width":145}],"gridChildRect":{"x":155,"y":0,"width":145,"height":60},"nestedChildUsesOneLayoutMap":true}
+      }
+    },
+    {
+      "id": "F-14",
+      "title": "center track alignment",
+      "taskIds": ["G-025", "G-034"],
+      "reference": "CR §10.5",
+      "oracle": {"kind": "browser-independent", "source": "base track sizes stay 50 px; alignment consumes 190 px free space"},
+      "tolerance": {"solverPx": 0.000001, "flexilyPx": 0, "nodePx": 0},
+      "status": "ready",
+      "input": {"axis":"columns","contentWidth":300,"gap":10,"tracks":[50,50],"justifyContent":"center"},
+      "expected": {
+        "solver": {"baseTrackSizes":[50,50],"gridWidth":110,"freeSpaceForAlignment":190,"startOffset":95,"lines":[95,145,155,205]},
+        "flexily": {"trackRects":[{"x":95,"width":50},{"x":155,"width":50}],"lines":[95,145,155,205]},
+        "node": {"trackRects":[{"x":95,"width":50},{"x":155,"width":50}],"contentWidth":300}
+      }
+    },
+    {
+      "id": "F-15",
+      "title": "invalid replacement and atomic geometry",
+      "taskIds": ["G-007", "G-008", "G-031", "G-034"],
+      "reference": "Vexart GridLayoutError contract",
+      "oracle": {"kind": "node-real", "source": "real setter/calculate/writeback path; previous rect is the independent baseline"},
+      "tolerance": {"solverPx": 0.000001, "flexilyPx": 0, "nodePx": 0},
+      "status": "ready",
+      "input": {"validFrame":{"rect":{"x":0,"y":0,"width":100,"height":20},"paddingPx":4,"borderPx":1,"marginPx":2},"replacement":{"gridTemplateColumns":[{"percent":101}]},"setterOrder":["areas","tracks","dimensions"],"mutationPolicy":"replacement-only"},
+      "expected": {
+        "solver": {"error":{"code":"GRID_INVALID_VALUE","path":"gridTemplateColumns[0].percent","nodeId":1}},
+        "flexily": {"writeback":"not called","framePublished":false},
+        "node": {"rectBefore":{"x":0,"y":0,"width":100,"height":20},"rectAfter":{"x":0,"y":0,"width":100,"height":20},"partialFrame":false}
+      }
+    },
+    {
+      "id": "F-16",
+      "title": "cache and no-op revisions",
+      "taskIds": ["G-005", "G-008", "G-039", "G-034"],
+      "reference": "Vexart revision and cache contract",
+      "oracle": {"kind": "cache-observation", "source": "counter assertions are cache checks only and never CSS conformance"},
+      "tolerance": {"solverPx": 0.000001, "flexilyPx": 0, "nodePx": 0},
+      "status": "ready",
+      "input": {"sameSnapshot":"same object and revision","equivalentReplacement":"new reference with equivalent values","resize": {"width":320,"height":200}},
+      "expected": {
+        "solver": {"first":{"parse":1,"cacheHit":false,"noOp":false},"sameReference":{"parse":0,"cacheHit":true,"noOp":true},"equivalentNewReference":{"parse":1,"cacheHit":false,"noOp":false,"geometryEquivalent":true},"resized":{"parse":0,"measurePass":1,"cacheHit":false,"noOp":false}},
+        "flexily": {"sameReference":{"layoutCalls":0,"cacheHit":true},"equivalentNewReference":{"layoutCalls":1},"resized":{"layoutCalls":1}},
+        "node": {"sameReference":{"rectUnchanged":true},"equivalentNewReference":{"rectUnchanged":true},"resized":{"rectRecomputed":true}}
+      }
+    }
+  ]
+}

@@ -151,7 +151,7 @@ function resolvePlatformPackagePath(pkgName: string, libName: string): string | 
 }
 
 /** Ordered list of candidate paths to try when loading libvexart. */
-function candidateLibPaths(): string[] {
+export function candidateLibPaths(): string[] {
   const ext = suffix // "dylib" on macOS, "so" on Linux, "dll" on Windows
   const libName = `libvexart.${ext}`
   const cwd = process.cwd()
@@ -182,19 +182,24 @@ function candidateLibPaths(): string[] {
   const vendorPath = join(import.meta.dir, "../../../vendor/vexart", vendorPlatform, libName)
   const cwdVendorPath = join(cwd, "vendor/vexart", vendorPlatform, libName)
 
-  const candidates = [...nmPaths, wsReleasePath, cwdReleasePath, devPath, cwdDevPath, crateReleasePath, vendorPath, cwdVendorPath]
+  const workspacePaths = [wsReleasePath, cwdReleasePath, devPath, cwdDevPath]
+  const fallbackPaths = [crateReleasePath, vendorPath, cwdVendorPath]
+  // A local build is the source of truth while developing the workspace. In
+  // particular, do not let a stale platform package in node_modules hide a
+  // freshly built target/release (or target/debug) dylib. Consumers installed
+  // from a package have no workspace artifact, so they retain package-first
+  // resolution and the same vendor fallback as before.
+  const candidates = workspacePaths.some((path) => existsSync(path))
+    ? [...workspacePaths, ...nmPaths, ...fallbackPaths]
+    : [...nmPaths, ...workspacePaths, ...fallbackPaths]
   const seen = new Set<string>()
-  const existing: string[] = []
-  const missing: string[] = []
+  const ordered: string[] = []
   for (const path of candidates) {
     if (seen.has(path)) continue
     seen.add(path)
-    if (existsSync(path)) existing.push(path)
-    else missing.push(path)
+    ordered.push(path)
   }
-
-  // Prefer all existing paths first, then missing ones for clearer final error.
-  return [...existing, ...missing]
+  return ordered
 }
 
 // ── Lazy singleton ──────────────────────────────────────────────────────────

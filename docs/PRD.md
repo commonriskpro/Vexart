@@ -13,18 +13,19 @@
   character-art fallback. Direct Kitty/Ghostty/WezTerm support is unchanged;
   Unicode-placeholder support through tmux is not claimed for WezTerm.
 - Added [`docs/tmux.md`](./tmux.md) with user-applied setup, read-only
-  diagnostics, limits, and a pending physical-smoke checklist.
+  diagnostics, limits, and the physical-smoke checklist.
 - Recorded the user-approved tmux target: one full composited frame through
-  local SHM only, with no automatic direct/file fallback. At that snapshot, the
-  production code path passed through a real tmux PTY with a synthetic receiver;
-  physical smoke remained pending and regions waited for later performance
-  measurement.
+  local SHM only, with no automatic direct/file fallback. The current physical
+  gate uses a real Kitty window and tmux 3.6a; it compares direct and tmux
+  viewport, rect, readback, SHM, and passthrough evidence. Regions still wait
+  for a later performance decision.
 
 **Current tmux status (September 8, 2026):** The requested Kitty parity gate is
-verified: the user reviewed all six showcase tabs in Kitty directly and inside
-tmux and found them visually consistent. This is qualitative practical
-acceptance, not pixel-exact, exhaustive interaction, Ghostty visual-parity, or
-FPS certification. Automated results are summarized in
+verified on a real Kitty window with tmux 3.6a: direct and tmux runs consume
+the native SHM path and agree on viewport, rect, bytes, SHM names, and
+passthrough routing. This is a physical transport gate, not pixel-exact
+cross-terminal coverage, exhaustive interaction, Ghostty visual-parity, or FPS
+certification. Automated results are summarized in
 [`docs/tmux-parity-report.md`](./tmux-parity-report.md); internal live producer
 timings are reported separately in
 [`docs/tmux-performance-report.md`](./tmux-performance-report.md).
@@ -228,7 +229,10 @@ The result:
 
 ### 5.1 In scope (must ship)
 
-#### Primitives (`@vexart/primitives`)
+#### Primitives (current exports in `@vexart/app`)
+
+The historical `@vexart/primitives` package name is retained in older roadmap
+entries; current layout helpers and intrinsic exports live in `@vexart/app`.
 
 - `<box>`, `<text>`, `<image>`, `<canvas>` intrinsic elements.
 - Layout: flexbox (row/column, gap, align, padding, sizing: fixed/grow/fit/percent).
@@ -282,9 +286,10 @@ These features place Vexart at the cutting edge of graphics tech. All ship in v0
 - TypeScript retains scene graph, layout, render graph, interaction, focus, and
   hit-testing ownership. Rust/WGPU paints and composites one complete frame,
   then emits it through the existing local SHM transport using a `U=1` virtual
-  placement and the Kitty Unicode placeholder grid. The production code path
-  passes through a real tmux PTY with a synthetic receiver; prior direct
-  output is a comparison baseline only, not a physical-rendering or FPS result.
+  placement and the Kitty Unicode placeholder grid. The physical gate passes
+  through a real Kitty window and tmux PTY; the producer and outer captures are
+  checked separately so tmux's consumed DCS wrapper is not mistaken for a
+  missing frame.
 - Each Kitty APC is wrapped in its own tmux DCS passthrough envelope. Images
   and canvas content follow the same image-grid route; no ASCII or cell-art
   fallback is permitted. Direct baseline APCs use Kitty `q=2` to suppress both
@@ -305,6 +310,34 @@ These features place Vexart at the cutting edge of graphics tech. All ship in v0
   [`docs/tmux-parity-report.md`](./tmux-parity-report.md) and
   [`docs/tmux-performance-report.md`](./tmux-performance-report.md); [`docs/tmux.md`](./tmux.md)
   remains the canonical setup and checklist.
+
+#### Grid layout (v1.x beta profile)
+
+`layout="grid"` is an explicit terminal subset implemented by the vendored
+`flexily` 0.6.0 workspace package. It is selected per container and shares the
+existing TypeScript scene graph, Flexily node lifetime, layout map, render graph,
+interaction, focus, hit-testing, transforms, scroll, floating, resize, and
+damage pipeline; Rust/WGPU remains responsible for paint, composition, Kitty,
+SHM/file/direct transport, and GPU resources. A failed calculation emits a
+structured `GridLayoutError` and keeps the last valid rectangles for the frame.
+
+The supported public profile includes explicit and implicit row/column tracks;
+px, percentages, `auto`, `min-content`, `max-content`, `fr`, `minmax()`,
+`fit-content()`, fixed `repeat()`, `auto-fill`, and `auto-fit`; named lines,
+named areas, numeric/negative line references, spans, row/column auto-flow and
+`dense`; numeric gaps, padding, borders and margins; intrinsic text measurement;
+and nested Flex → Grid, Grid → Flex, and Grid → Grid containers. Public props and
+types are documented in [`docs/agent-reference.md`](./agent-reference.md) and
+are exported explicitly from the engine barrel.
+
+Writing modes, subgrid, masonry, table/multicolumn layout, fragmentation,
+CSSOM/cascade/selectors, baseline or safe alignment, and CSS auto margins are
+outside this profile. Unsupported values are rejected with deterministic error
+codes; there is no silent Flex fallback and no claim of full CSS/DOM
+compatibility. The evidence set is the fixture matrix, independent browser
+oracle, scene layout test, physical Kitty/tmux gate, API/build reports, and
+serial performance report. This remains an unreleased beta profile: no version
+bump or publication is implied.
 
 #### Engine optimization (performance-critical)
 
@@ -381,7 +414,9 @@ Ship 26 headless component concepts with render-prop pattern (context props for 
 - **Navigation**: Router, Route, NavigationStack (useRouterContext, useStack), Diff viewer.
 - **Forms**: createForm factory.
 
-Note: Text, RichText, Span, Box are in `@vexart/primitives`. Badge, Avatar, Skeleton, Separator, Card are styled-only in `@vexart/styled`.
+Note: Text, RichText, Span, and Box are exported by `@vexart/app`; the old
+`@vexart/primitives` name is historical. Badge, Avatar, Skeleton, Separator,
+and Card are styled-only in `@vexart/styled`.
 
 #### Styled components (`@vexart/styled`)
 
@@ -420,7 +455,10 @@ Single opinionated theme ("void" — dark, shadcn-inspired) with:
 
 ### 5.2 Out of scope for v0.9 (deferred to v1.x)
 
-- CSS Grid layout (flexbox only in v0.9; Taffy supports it, we gate it behind v1.0).
+- Full CSS Grid/DOM compatibility remains out of scope. The supported terminal
+  Grid subset is documented above; writing modes, subgrid, masonry,
+  table/multicolumn layout, fragmentation, CSSOM/cascade, baseline/safe
+  alignment, and CSS auto margins remain excluded.
 - `text-decoration`, `letter-spacing`.
 - `transform-origin` as prop (defaults to center).
 - HarfBuzz shaping (complex scripts: Arabic, Hindi, CJK with advanced kerning).
@@ -474,6 +512,13 @@ Vexart is organized as four strictly-layered packages. Each layer depends only o
 └──────────────────────┬────────────────────────┘
                        ▼
 ┌───────────────────────────────────────────────┐
+│   @vexart/app                                  │
+│   — App framework + layout helpers             │
+│   — <box>, <text>, <image>, <canvas>           │
+│   — Router, CLI, and app lifecycle             │
+└──────────────────────┬────────────────────────┘
+                       ▼
+┌───────────────────────────────────────────────┐
 │   @vexart/styled                              │
 │   — Opinionated themed components             │
 │   — Tokens (colors, radius, spacing, shadows) │
@@ -485,13 +530,6 @@ Vexart is organized as four strictly-layered packages. Each layer depends only o
 │   — Logic, accessibility, keyboard, state     │
 │   — Render-prop components (ctx.*Props)       │
 │   — No visual opinions                        │
-└──────────────────────┬────────────────────────┘
-                       ▼
-┌───────────────────────────────────────────────┐
-│   @vexart/primitives                          │
-│   — <box>, <text>, <image>, <canvas>          │
-│   — Props contract (TGEProps-equivalent)      │
-│   — Typed JSX intrinsics                      │
 └──────────────────────┬────────────────────────┘
                        ▼
 ┌───────────────────────────────────────────────┐
@@ -516,6 +554,10 @@ Vexart is organized as four strictly-layered packages. Each layer depends only o
           over Kitty / Ghostty]
 ```
 
+`@vexart/app` depends on `styled`, `headless`, and `engine`; the vertical
+diagram shows the primary public path, while the direct engine/headless edges
+are listed below.
+
 tmux is a transport/presentation boundary rather than a renderer: the pane's
 text stream carries Kitty Unicode placeholders and per-APC DCS passthrough
 wrappers to the outer Kitty or Ghostty terminal. It does not change the
@@ -524,9 +566,9 @@ TypeScript/Rust ownership split or add an ASCII/cell-art backend.
 ### 6.2 Layer dependency rules (enforced by lint)
 
 - `@vexart/engine` depends on: nothing Vexart-internal (only `solid-js`, `bun:ffi`, `libvexart`).
-- `@vexart/primitives` depends on: `@vexart/engine`.
-- `@vexart/headless` depends on: `@vexart/primitives`, `@vexart/engine`.
-- `@vexart/styled` depends on: `@vexart/headless`, `@vexart/primitives`, `@vexart/engine`.
+- `@vexart/app` depends on: `@vexart/styled`, `@vexart/headless`, `@vexart/engine`.
+- `@vexart/headless` depends on: `@vexart/engine`.
+- `@vexart/styled` depends on: `@vexart/headless`, `@vexart/engine`.
 
 **Prohibited**:
 - Relative imports across packages (`../../otro-paquete/src/...`).
@@ -789,7 +831,8 @@ Year 3:
 ### 9.2 v1.0 release criteria (post-v0.9)
 
 - [ ] 90 days of v0.9 in the wild with <5 P0 bugs per month.
-- [ ] CSS Grid layout added.
+- [ ] Grid v1.x beta profile graduates to a versioned release (full CSS/DOM
+  compatibility is not a v1.0 requirement).
 - [ ] Declarative transition API shipped.
 - [ ] Filter-on-self effect.
 - [ ] Windows support.
@@ -861,7 +904,7 @@ Timeline assumes 8 hours/day of focused coding, solo, with bi-weekly reviews. To
 - [ ] `docs/CHANGELOG-PRD.md` initialized.
 - [x] **Historical**: SDD framework was initialized in `/openspec/`; this is
   retained for records and is not required for current changes.
-- [ ] Final package names confirmed: `@vexart/engine`, `@vexart/primitives`, `@vexart/headless`, `@vexart/styled`.
+- [ ] Final package names confirmed: `@vexart/engine`, `@vexart/app`, `@vexart/headless`, `@vexart/styled` (the old primitives layer is merged into app).
 - [ ] This PRD finalized and committed.
 
 **Exit criteria**: founder reviews all docs, commits them to `main`.
@@ -1131,6 +1174,10 @@ Every architectural or product decision is logged here with date, context, and r
 
 **Decision**: Vexart organizes into 4 public packages with strict directional dependencies: `@vexart/engine` → `@vexart/primitives` → `@vexart/headless` → `@vexart/styled`.
 
+**Current shape (2026-09)**: the historical primitives layer is merged into
+`@vexart/app`, which now owns the public intrinsic/layout helpers and depends on
+`engine`, `headless`, and `styled`; the original decision remains historical.
+
 **Alternatives considered**: Current 16-package structure, single monolithic package, 3-layer without primitives/engine split.
 
 **Rationale**: Mirrors Radix/shadcn pattern familiar to React devs. Three distinct user entry points (styled for turnkey, headless for custom styling, engine for full control) maximize addressable market. Strict layering prevents architectural rot.
@@ -1324,7 +1371,7 @@ Every architectural or product decision is logged here with date, context, and r
 - TS path: 15.84 ms p95 (~63 fps). Paint backend identical (~7.8 ms p95).
 - TS path is 4.8× faster at p95, 5.4× at p50.
 
-**Decision**: Revert retained scene graph / render graph / layout / event dispatch. TS owns scene graph, reactivity, layout (Taffy), event dispatch. Rust owns paint (WGPU pipelines), composite, Kitty encoding, transport (SHM/file/direct), image assets, canvas display lists.
+**Decision**: Revert retained scene graph / render graph / layout / event dispatch. TS owns scene graph, reactivity, layout (Flexily), event dispatch. Rust owns paint (WGPU pipelines), composite, Kitty encoding, transport (SHM/file/direct), image assets, canvas display lists.
 
 **Partially supersedes**: DEC-012 (Rust retained engine roadmap). Only the paint/composite/transport portion of DEC-012 stands.
 
@@ -1382,8 +1429,10 @@ restore the deleted character-art backends.
   text.
 
 **Historical status (September 7, 2026)**: Implementation was experimental and
-physical smoke verification was pending at that snapshot. [`docs/tmux.md`](./tmux.md) records setup, read-only diagnostics, the
-feature/performance matrix, and the smoke checklist. The protocol references
+physical smoke verification was pending at that snapshot; the current G-037
+gate supersedes that status. [`docs/tmux.md`](./tmux.md) records setup,
+read-only diagnostics, the feature/performance matrix, and the smoke checklist.
+The protocol references
 are the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/)
 and [tmux passthrough documentation](https://github.com/tmux/tmux/wiki/FAQ).
 The current Ghostty animation-action limit is documented in

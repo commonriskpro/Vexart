@@ -211,6 +211,32 @@ overlapping screen coordinates. The scroll container itself is NOT skipped.
 - Responsive: terminal resize triggers automatic re-layout via `onResize` → Flexily dimensions.
 - `width`/`height` support fixed numbers, `"grow"`, `"fit"`, and percentage strings.
 
+### Grid layout (v1.x beta profile)
+
+Set `layout="grid"` on a container to select the retained Grid profile. The
+public props are `gridTemplateColumns`, `gridTemplateRows`, `gridAutoColumns`,
+`gridAutoRows`, `gridAutoFlow`, `gridTemplateAreas`, `gridColumn`, `gridRow`,
+`gridArea`, `alignContent`, `justifyContent`, `justifyItems`, `alignItems`,
+`justifySelf`, and `alignSelf`. The typed contracts are exported explicitly by
+`@vexart/engine`: `GridTrack`, `GridTrackSize`, `GridPlacement`,
+`GridAreaPlacement`, `GridAutoFlow`, `GridContentAlignment`,
+`GridItemAlignment`, and `GridLayoutError`.
+
+Tracks accept px numbers, `{ percent }`, `auto`, `min-content`, `max-content`,
+`{ fr }`, `{ minmax: [min, max] }`, `{ fitContent }`, named-line wrappers,
+and fixed/`auto-fill`/`auto-fit` repeats. Placement accepts numeric or named
+lines, negative references, spans, named areas, and row/column dense
+auto-flow. Intrinsic text measurement is used for content tracks; Grid and Flex
+containers may be nested and share the same `Node.layout` rectangles and
+interaction pipeline.
+
+Alignment aliases normalize Flex-compatible `left`/`right`/`top`/`bottom` and
+`flex-start`/`flex-end` to Grid `start`/`end`. Baseline/safe alignment and CSS
+auto margins are not part of this terminal profile. Invalid values, tracks,
+areas, placements, measurements, or unsupported alignment return a deterministic
+`GridLayoutError` (`code`, `path`, `nodeId`) rather than silently falling back
+to Flex. A failed calculation is atomic: the last valid layout remains active.
+
 ## Element Props — Complete reference (`TGEProps`, legacy type name)
 
 The public TypeScript type is currently named `TGEProps` for compatibility, but it
@@ -525,12 +551,13 @@ portable and ARM64-safe.
 The tmux path is an experimental transport exception, not a second renderer.
 It requires tmux 3.4+, user-configured `allow-passthrough all`, a Kitty or
 Ghostty outer terminal, and successful runtime probes. The approved tmux target
-is full-frame local SHM; the production code path is PASS at the real-tmux-PTY
-level on tmux 3.6a with a synthetic receiver (3.4 is the conservative lower
-bound), while physical display and FPS remain unverified. WezTerm remains
-supported directly; this release does not claim the Unicode-placeholder route
-through tmux for WezTerm. See [`docs/tmux.md`](./tmux.md) for setup, diagnostics,
-the support matrix, and the pending physical-smoke checklist.
+is full-frame local SHM. The physical G-037 gate passes on a real Kitty window
+with tmux 3.6a: direct and tmux runs agree on viewport, rects, readback bytes,
+SHM names, and DCS passthrough routing. This does not certify every tmux or
+outer-terminal version, exhaustive interaction, reattach parity, or FPS. WezTerm
+remains supported directly; this release does not claim the Unicode-placeholder
+route through tmux for WezTerm. See [`docs/tmux.md`](./tmux.md) for setup,
+diagnostics, and the support matrix.
 
 `Capabilities` separates the pane and its outer terminal:
 
@@ -566,12 +593,13 @@ CSI `16t`, so splits and resizes do not reuse the outer window geometry.
 The current Kitty row/column diacritic table bounds a placeholder grid to 1–297
 cells on each axis; larger grids are rejected instead of wrapping coordinates.
 
-The tmux SHM route requires one attached client across the tmux server. A real isolated tmux 3.6a check
-found that `allow-passthrough all` forwards a hidden-pane sequence while `on`
-drops it; a returned `ESC_G` ACK is delivered to the active pane, not the
-origin. This routing result does not prove physical rendering or reattach
-parity. Reattach through a different outer terminal requires stopping and
-restarting Vexart to reprobe; capabilities are not live-monitored.
+The tmux SHM route requires one attached client across the tmux server. A real
+isolated tmux 3.6a check found that `allow-passthrough all` forwards a
+hidden-pane sequence while `on` drops it; a returned `ESC_G` ACK is delivered to
+the active pane, not the origin. The physical gate additionally consumes the
+native SHM upload in Kitty; it does not establish reattach parity. Reattach
+through a different outer terminal requires stopping and restarting Vexart to
+reprobe; capabilities are not live-monitored.
 
 The input parser is stream-fragmentation safe: it retains incomplete UTF-8,
 CSI/SS3, mouse, focus, and bracketed-paste sequences across reads. tmux's mouse,

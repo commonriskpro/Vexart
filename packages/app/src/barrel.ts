@@ -72,6 +72,27 @@ export type {
 
 export type { TGEProps as BoxProps, ShadowConfig, GlowConfig } from "@vexart/engine"
 
+/** @beta Grid value types accepted by the app Box props. */
+export type {
+  GridAreaPlacement,
+  GridAutoFlow,
+  GridBreadth,
+  GridContentAlignment,
+  GridErrorCode,
+  GridFitContent,
+  GridFr,
+  GridItemAlignment,
+  GridLineRef,
+  GridLayoutError,
+  GridMaxBreadth,
+  GridMinMax,
+  GridPercent,
+  GridPlacement,
+  GridRepeatCount,
+  GridTrack,
+  GridTrackSize,
+} from "@vexart/engine"
+
 // ── App router ───────────────────────────────────────────────────────────────
 
 export {

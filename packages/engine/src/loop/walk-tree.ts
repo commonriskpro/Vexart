@@ -284,8 +284,12 @@ export function walkTree(
 
     // Use a placeholder RECT so the layout adapter emits a RECTANGLE command for painting
     const imgBuf = extra.buffer
-    if (imgBuf && !node._widthSizing) node._flexNode?.setWidth(imgBuf.width)
-    if (imgBuf && !node._heightSizing) node._flexNode?.setHeight(imgBuf.height)
+    // A Grid item with omitted dimensions must remain auto so the Grid
+    // profile's default stretch can size it to its resolved area. Intrinsic
+    // image dimensions are only defaults in the Flex profile.
+    const isGridItem = node.parent?.props.layout === "grid"
+    if (imgBuf && !node._widthSizing && !isGridItem) node._flexNode?.setWidth(imgBuf.width)
+    if (imgBuf && !node._heightSizing && !isGridItem) node._flexNode?.setHeight(imgBuf.height)
     const placeholderColor = 0x00000001 // near-transparent
     layout.configureRectangle(placeholderColor, props.cornerRadius ?? 0)
     registerRectNode(node, state)
@@ -400,6 +404,10 @@ export function walkTree(
   const dir = parseDirection(props.direction ?? props.flexDirection)
   const ax = parseAlignX(props.alignX ?? props.justifyContent)
   const ay = parseAlignY(props.alignY ?? props.alignItems)
+  // Grid's inline axis is always horizontal LTR. Keep the inherited
+  // direction metadata consistent for nested Flex nodes without changing
+  // the retained Node tree or creating a second layout pass.
+  const childDir = props.layout === "grid" ? 0 : dir
 
   // Floating / absolute positioning
   if (props.floating) {
@@ -558,7 +566,7 @@ export function walkTree(
   const childInsideIsolation = insideIsolation || isolatesSubtree
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i]
-    walkTree(child, state, dir, childInsideXform, childScrollContainerId, childInsideScroll, depth + 1, childInsideIsolation)
+    walkTree(child, state, childDir, childInsideXform, childScrollContainerId, childInsideScroll, depth + 1, childInsideIsolation)
   }
 
   layout.closeElement()

@@ -9,7 +9,6 @@ import { For } from 'solid-js';
 import { Index } from 'solid-js';
 import { JSX } from 'solid-js';
 import { Match } from 'solid-js';
-
 import { onCleanup } from 'solid-js';
 import { onMount } from 'solid-js';
 import { Show } from 'solid-js';
@@ -18,7 +17,7 @@ import { untrack } from 'solid-js';
 import { useContext } from 'solid-js';
 
 /** @public */
-export declare type AppBoxProps = TGEProps & ClassNameProps;
+export declare type AppBoxProps = BoxProps & ClassNameProps;
 
 /** @public */
 export declare type AppContext = {
@@ -78,7 +77,7 @@ export declare type AppRouterState = {
 };
 
 /** @public */
-export declare type AppTextProps = TGEProps & ClassNameProps;
+export declare type AppTextProps = BoxProps & ClassNameProps;
 
 /** Async validator — same signature but returns a Promise. */
 /** @public */
@@ -141,8 +140,193 @@ declare type BezierCmd = {
 export declare function Box(props: AppBoxProps): JSX.Element;
 
 /** @public */
-export declare type BoxProps = TGEProps & {
-    children?: JSX.Element;
+export declare type BoxProps = {
+    /** @beta */
+    layout?: "flex" | "grid";
+    direction?: "row" | "column";
+    /** Alias for direction (opentui compat) */
+    flexDirection?: "row" | "column";
+    padding?: number;
+    paddingX?: number;
+    paddingY?: number;
+    margin?: number;
+    marginX?: number;
+    marginY?: number;
+    gap?: number;
+    alignX?: "left" | "right" | "center" | "space-between";
+    alignY?: "top" | "bottom" | "center" | "space-between";
+    /** @beta */
+    justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "space-around" | "space-evenly" | "stretch";
+    /** @beta */
+    alignItems?: "top" | "bottom" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "stretch";
+    /** @beta */
+    gridTemplateColumns?: readonly GridTrack[];
+    /** @beta */
+    gridTemplateRows?: readonly GridTrack[];
+    /** @beta */
+    gridAutoColumns?: GridTrackSize;
+    /** @beta */
+    gridAutoRows?: GridTrackSize;
+    /** @beta */
+    gridAutoFlow?: GridAutoFlow;
+    /** @beta */
+    gridTemplateAreas?: readonly (readonly (string | null)[])[];
+    /** @beta */
+    gridColumn?: GridPlacement;
+    /** @beta */
+    gridRow?: GridPlacement;
+    /** @beta */
+    gridArea?: GridAreaPlacement;
+    /** @beta */
+    alignContent?: GridContentAlignment;
+    /** @beta */
+    justifyItems?: GridItemAlignment;
+    /** @beta */
+    justifySelf?: GridItemAlignment;
+    /** @beta */
+    alignSelf?: GridItemAlignment;
+    width?: number | string;
+    height?: number | string;
+    /** When set, width behaves as "grow" (opentui compat) */
+    flexGrow?: number;
+    /** Accepted for CSS compatibility. Flexily handles shrinking automatically. */
+    flexShrink?: number;
+    backgroundColor?: string | number;
+    cornerRadius?: number;
+    /** CSS-friendly alias for cornerRadius (Decision 1) */
+    borderRadius?: number;
+    cornerRadii?: CornerRadii;
+    borderColor?: string | number;
+    borderWidth?: number;
+    /** Opacity: 0.0 = fully transparent, 1.0 = fully opaque. Multiplies alpha of entire element. */
+    opacity?: number;
+    layer?: boolean;
+    /** Declarative interaction state used by engine-level drag/compositor policies. */
+    interactionMode?: InteractionMode;
+    debugName?: string;
+    scrollX?: boolean;
+    scrollY?: boolean;
+    scrollSpeed?: number;
+    scrollId?: string;
+    floating?: "parent" | "root" | {
+        attachTo: string;
+    };
+    floatOffset?: {
+        x: number;
+        y: number;
+    };
+    zIndex?: number;
+    floatAttach?: {
+        element?: number;
+        parent?: number;
+    };
+    pointerPassthrough?: boolean;
+    viewportClip?: boolean;
+    minWidth?: number;
+    maxWidth?: number;
+    minHeight?: number;
+    maxHeight?: number;
+    paddingLeft?: number;
+    paddingRight?: number;
+    paddingTop?: number;
+    paddingBottom?: number;
+    marginLeft?: number;
+    marginRight?: number;
+    marginTop?: number;
+    marginBottom?: number;
+    borderLeft?: number;
+    borderRight?: number;
+    borderTop?: number;
+    borderBottom?: number;
+    borderBetweenChildren?: number;
+    shadow?: ShadowConfig | ShadowConfig[];
+    /** CSS-friendly alias for shadow (Decision 1) */
+    boxShadow?: BoxProps["shadow"];
+    glow?: GlowConfig;
+    gradient?: GradientConfig;
+    backdropBlur?: number;
+    /** Backdrop brightness filter. 0=black, 100=unchanged, 200=2x bright. */
+    backdropBrightness?: number;
+    /** Backdrop contrast filter. 0=grey, 100=unchanged, 200=high contrast. */
+    backdropContrast?: number;
+    /** Backdrop saturation filter. 0=grayscale, 100=unchanged, 200=hyper-saturated. */
+    backdropSaturate?: number;
+    /** Backdrop grayscale filter. 0=unchanged, 100=full grayscale. */
+    backdropGrayscale?: number;
+    /** Backdrop invert filter. 0=unchanged, 100=fully inverted. */
+    backdropInvert?: number;
+    /** Backdrop sepia filter. 0=unchanged, 100=full sepia. */
+    backdropSepia?: number;
+    /** Backdrop hue-rotate filter. 0-360 degrees, 0/360=unchanged. */
+    backdropHueRotate?: number;
+    /**
+     * Self-filter applied to this element's own paint output.
+     * Unlike backdropBlur/backdropFilter which affect content BEHIND the element,
+     * `filter` affects the element's own rendered pixels (REQ-2B-401).
+     */
+    filter?: FilterConfig;
+    /**
+     * Hint that this property will change soon — pre-promotes the node to its own
+     * GPU compositing layer to avoid runtime promotion cost (REQ-2B-501).
+     * Accepted values: "transform", "opacity", "filter", "scroll".
+     */
+    willChange?: string | string[];
+    /**
+     * Containment boundary hint (REQ-2B-502).
+     * - 'none': no containment (default).
+     * - 'layout': size changes inside do not re-lay out siblings.
+     * - 'paint': content clipped to bounds; no overflow visible.
+     * - 'strict': layout + paint combined.
+     */
+    contain?: 'none' | 'layout' | 'paint' | 'strict';
+    hoverStyle?: InteractiveStyleProps;
+    activeStyle?: InteractiveStyleProps;
+    /** Focus state — applied when element has focus (Decision 7) */
+    focusStyle?: InteractiveStyleProps;
+    /** Unified press handler — fires on mouse click + Enter/Space when focused (Decision 6) */
+    onPress?: (event?: PressEvent) => void;
+    /** Make this element focusable via Tab navigation. Like HTML tabindex="0". */
+    focusable?: boolean;
+    /** Keyboard event handler — fires when this element is focused and a key is pressed. */
+    onKeyDown?: (event: KeyEvent) => void;
+    /** Fires when mouse button is pressed while over this node. */
+    onMouseDown?: (event: NodeMouseEvent) => void;
+    /** Fires when mouse button is released while over this node. */
+    onMouseUp?: (event: NodeMouseEvent) => void;
+    /** Fires when pointer moves over this node (every frame while hovered). */
+    onMouseMove?: (event: NodeMouseEvent) => void;
+    /** Fires when pointer enters this node's bounds. */
+    onMouseOver?: (event: NodeMouseEvent) => void;
+    /** Fires when pointer leaves this node's bounds. */
+    onMouseOut?: (event: NodeMouseEvent) => void;
+    /** Transform configuration: translate, rotate, scale, skew, perspective. */
+    transform?: TransformConfig;
+    /** Transform origin point. Default: "center". */
+    transformOrigin?: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | {
+        x: number;
+        y: number;
+    };
+    /** CSS-style prop — merged with direct props (direct props win). Decision 3. */
+    style?: Partial<BoxProps>;
+    /** Image source — file path or URL. Decoded async on first render. */
+    src?: string;
+    /** How the image fits within its layout box. Default: "contain". */
+    objectFit?: "contain" | "cover" | "fill" | "none";
+    /** Imperative draw callback — compat/lab canvas API, called each frame with a CanvasContext. */
+    onDraw?: (ctx: CanvasContext) => void;
+    /** Optional cache key for static canvas draw lists. Change it when onDraw output changes. */
+    drawCacheKey?: string | number;
+    /** Viewport transform for pan and zoom. */
+    viewport?: ViewportConfig;
+    color?: string | number;
+    fontSize?: number;
+    fontId?: number;
+    lineHeight?: number;
+    wordBreak?: "normal" | "keep-all";
+    whiteSpace?: "normal" | "pre-wrap";
+    fontFamily?: string;
+    fontWeight?: number;
+    fontStyle?: "normal" | "italic";
 };
 
 /** @public */
@@ -404,6 +588,14 @@ export declare type ClassNameResolveResult = {
 /** @public */
 export declare type ClassNameUnknownBehavior = (typeof CLASS_NAME_UNKNOWN_BEHAVIOR)[keyof typeof CLASS_NAME_UNKNOWN_BEHAVIOR];
 
+/**
+ * Clear the className resolution cache.
+ * Call after `setTheme()` if your app switches themes at runtime.
+ * For apps that never switch themes (the common case), this is not needed.
+ * @public
+ */
+export declare function clearClassNameCache(): void;
+
 /** @public */
 export declare type CliResult = {
     code: number;
@@ -599,6 +791,32 @@ export { createSignal }
 
 /** @public */
 export declare function createSpring(initial: number, config?: SpringConfig): [() => number, (target: number) => void];
+
+/**
+ * Create named style definitions that resolve via className.
+ *
+ * Values are captured eagerly at call time. For reactive theme colors,
+ * prefer utility classes (`bg-card`) or inline props.
+ *
+ * @example
+ * ```ts
+ * const s = createStyles({
+ *   card: { padding: 24, backgroundColor: "#171717", cornerRadius: 14 },
+ *   title: { fontSize: 20, fontWeight: 700, color: "#fafafa" },
+ * })
+ *
+ * <Box className={s.card}>
+ *   <Text className={s.title}>Hello</Text>
+ * </Box>
+ *
+ * // Composable with utility classes:
+ * <Box className={`${s.card} hover:bg-accent`}>
+ * ```
+ * @public
+ */
+export declare function createStyles<T extends Record<string, VexartStyleProps>>(definitions: T): {
+    [K in keyof T]: string;
+};
 
 /**
  * Create a theme definition from partial overrides.
@@ -1080,15 +1298,8 @@ declare type GlowCmd = {
     intensity: number;
 };
 
-/** @public */
-export declare type GlowConfig = {
-    radius: number;
-    color: string | number;
-    intensity?: number;
-};
-
 /** @public Glow effect configuration (pre-parse, accepts string | number colors). */
-declare type GlowConfig_2 = {
+export declare type GlowConfig = {
     radius: number;
     color: string | number;
     intensity?: number;
@@ -1108,6 +1319,92 @@ declare type GradientConfig = {
     from: string | number;
     to: string | number;
 };
+
+/** @beta */
+export declare type GridAreaPlacement = string | {
+    readonly rowStart: GridLineRef | "auto";
+    readonly columnStart: GridLineRef | "auto";
+    readonly rowEnd: GridLineRef | "auto";
+    readonly columnEnd: GridLineRef | "auto";
+};
+
+/** @beta */
+export declare type GridAutoFlow = "row" | "column" | "row-dense" | "column-dense";
+
+/** @beta */
+export declare type GridBreadth = number | GridPercent | "auto" | "min-content" | "max-content";
+
+/** @beta */
+export declare type GridContentAlignment = "start" | "end" | "center" | "space-between" | "space-around" | "space-evenly" | "stretch";
+
+/** @beta */
+export declare type GridErrorCode = "GRID_INVALID_VALUE" | "GRID_INVALID_TRACK" | "GRID_INVALID_REPEAT" | "GRID_TRACK_LIMIT" | "GRID_INVALID_AREA" | "GRID_CONFLICTING_PLACEMENT" | "GRID_INVALID_PLACEMENT" | "GRID_LINE_UNRESOLVED" | "GRID_UNSUPPORTED_ALIGNMENT" | "GRID_MEASURE_INVALID";
+
+/** @beta */
+export declare type GridFitContent = {
+    readonly fitContent: number | GridPercent;
+};
+
+/** @beta */
+export declare type GridFr = {
+    readonly fr: number;
+};
+
+/** @beta */
+export declare type GridItemAlignment = "start" | "end" | "center" | "stretch";
+
+/** @beta */
+export declare type GridLayoutError = {
+    readonly code: GridErrorCode;
+    readonly path: string;
+    readonly nodeId: number;
+};
+
+/** @beta */
+export declare type GridLineRef = number | {
+    readonly name: string;
+    readonly occurrence?: number;
+} | {
+    readonly span: number;
+    readonly name?: string;
+};
+
+/** @beta */
+export declare type GridMaxBreadth = GridBreadth | GridFr;
+
+/** @beta */
+export declare type GridMinMax = {
+    readonly minmax: readonly [GridBreadth, GridMaxBreadth];
+};
+
+/** @beta */
+export declare type GridPercent = {
+    readonly percent: number;
+};
+
+/** @beta */
+export declare type GridPlacement = {
+    readonly start?: GridLineRef | "auto";
+    readonly end?: GridLineRef | "auto";
+};
+
+/** @beta */
+export declare type GridRepeatCount = number | "auto-fill" | "auto-fit";
+
+/** @beta */
+export declare type GridTrack = GridTrackSize | {
+    readonly size: GridTrackSize;
+    readonly before?: readonly string[];
+    readonly after?: readonly string[];
+} | {
+    readonly repeat: {
+        readonly count: GridRepeatCount;
+        readonly tracks: readonly GridTrack[];
+    };
+};
+
+/** @beta */
+export declare type GridTrackSize = GridBreadth | GridFr | GridMinMax | GridFitContent;
 
 /** @public */
 export declare function H1(props: TypographyProps): JSX.Element;
@@ -1258,7 +1555,7 @@ declare type InteractionLayerState = {
 declare type InteractionMode = (typeof INTERACTION_MODE)[keyof typeof INTERACTION_MODE];
 
 /** @public Interactive style props usable in hoverStyle, activeStyle, and focusStyle. */
-declare type InteractiveStyleProps = Partial<Pick<TGEProps, "backgroundColor" | "borderColor" | "borderWidth" | "cornerRadius" | "borderRadius" | "shadow" | "boxShadow" | "glow" | "gradient" | "backdropBlur" | "backdropBrightness" | "backdropContrast" | "backdropSaturate" | "backdropGrayscale" | "backdropInvert" | "backdropSepia" | "backdropHueRotate" | "opacity" | "filter">>;
+declare type InteractiveStyleProps = Partial<Pick<BoxProps, "backgroundColor" | "borderColor" | "borderWidth" | "cornerRadius" | "borderRadius" | "shadow" | "boxShadow" | "glow" | "gradient" | "backdropBlur" | "backdropBrightness" | "backdropContrast" | "backdropSaturate" | "backdropGrayscale" | "backdropInvert" | "backdropSepia" | "backdropHueRotate" | "opacity" | "filter">>;
 
 /** @public */
 export declare const KANAGAWA: ThemeTokenStyle[];
@@ -1910,20 +2207,6 @@ export declare class RGBA {
     toString(): string;
 }
 
-/**
- * RichText — wraps children <Span> elements in a horizontal row.
- * Flexily will lay them out left-to-right within the container width.
- */
-/** @public */
-export declare function RichText(props: RichTextProps): JSX.Element;
-
-/** @public */
-export declare type RichTextProps = {
-    maxWidth?: number;
-    lineHeight?: number;
-    children?: JSX.Element;
-};
-
 /** @public */
 export declare const ROUTE_FILE_KIND: {
     readonly PAGE: "page";
@@ -2166,16 +2449,8 @@ export declare type Shadow = {
     color: number;
 };
 
-/** @public */
-export declare type ShadowConfig = {
-    x: number;
-    y: number;
-    blur: number;
-    color: string | number;
-};
-
 /** @public Shadow definition (pre-parse, accepts string | number colors). */
-declare type ShadowConfig_2 = {
+export declare type ShadowConfig = {
     x: number;
     y: number;
     blur: number;
@@ -2297,23 +2572,6 @@ export declare const space: {
     readonly 8: 32;
     readonly 9: 36;
     readonly 10: 40;
-};
-
-/**
- * Span — inline text fragment. Rendered as a <text> node.
- * Can be used inside RichText or standalone.
- */
-/** @public */
-export declare function Span(props: SpanProps): JSX.Element;
-
-/** @public */
-export declare type SpanProps = {
-    color?: string | number;
-    fontSize?: number;
-    fontId?: number;
-    fontWeight?: number;
-    fontStyle?: "normal" | "italic";
-    children?: JSX.Element;
 };
 
 /** @public */
@@ -2727,7 +2985,7 @@ declare const TGE_NODE_KIND: {
 /** @public */
 declare type TGENode = {
     kind: TGENodeKind;
-    props: TGEProps;
+    props: BoxProps;
     text: string;
     children: TGENode[];
     parent: TGENode | null;
@@ -2763,7 +3021,7 @@ declare type TGENode = {
     /** Transient engine-managed interaction mode for compositor optimizations. */
     _interactionMode: InteractionMode;
     /** Cached effective visual props from resolveProps(). */
-    _vp: TGEProps | null;
+    _vp: BoxProps | null;
     /** True when cached effective visual props must be recomputed. */
     _vpDirty: boolean;
     /** Sibling position maintained by insert/remove for O(1) next-sibling lookup. */
@@ -2796,168 +3054,6 @@ declare type TGENode = {
 
 /** @public */
 declare type TGENodeKind = (typeof TGE_NODE_KIND)[keyof typeof TGE_NODE_KIND];
-
-/** @public */
-declare type TGEProps = {
-    direction?: "row" | "column";
-    /** Alias for direction (opentui compat) */
-    flexDirection?: "row" | "column";
-    padding?: number;
-    paddingX?: number;
-    paddingY?: number;
-    margin?: number;
-    marginX?: number;
-    marginY?: number;
-    gap?: number;
-    alignX?: "left" | "right" | "center" | "space-between";
-    alignY?: "top" | "bottom" | "center" | "space-between";
-    /** Alias for alignX (opentui compat) */
-    justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end";
-    /** Alias for alignY (opentui compat) */
-    alignItems?: "top" | "bottom" | "center" | "space-between" | "flex-start" | "flex-end";
-    width?: number | string;
-    height?: number | string;
-    /** When set, width behaves as "grow" (opentui compat) */
-    flexGrow?: number;
-    /** Accepted for CSS compatibility. Flexily handles shrinking automatically. */
-    flexShrink?: number;
-    backgroundColor?: string | number;
-    cornerRadius?: number;
-    /** CSS-friendly alias for cornerRadius (Decision 1) */
-    borderRadius?: number;
-    cornerRadii?: CornerRadii;
-    borderColor?: string | number;
-    borderWidth?: number;
-    /** Opacity: 0.0 = fully transparent, 1.0 = fully opaque. Multiplies alpha of entire element. */
-    opacity?: number;
-    layer?: boolean;
-    /** Declarative interaction state used by engine-level drag/compositor policies. */
-    interactionMode?: InteractionMode;
-    debugName?: string;
-    scrollX?: boolean;
-    scrollY?: boolean;
-    scrollSpeed?: number;
-    scrollId?: string;
-    floating?: "parent" | "root" | {
-        attachTo: string;
-    };
-    floatOffset?: {
-        x: number;
-        y: number;
-    };
-    zIndex?: number;
-    floatAttach?: {
-        element?: number;
-        parent?: number;
-    };
-    pointerPassthrough?: boolean;
-    viewportClip?: boolean;
-    minWidth?: number;
-    maxWidth?: number;
-    minHeight?: number;
-    maxHeight?: number;
-    paddingLeft?: number;
-    paddingRight?: number;
-    paddingTop?: number;
-    paddingBottom?: number;
-    marginLeft?: number;
-    marginRight?: number;
-    marginTop?: number;
-    marginBottom?: number;
-    borderLeft?: number;
-    borderRight?: number;
-    borderTop?: number;
-    borderBottom?: number;
-    borderBetweenChildren?: number;
-    shadow?: ShadowConfig_2 | ShadowConfig_2[];
-    /** CSS-friendly alias for shadow (Decision 1) */
-    boxShadow?: TGEProps["shadow"];
-    glow?: GlowConfig_2;
-    gradient?: GradientConfig;
-    backdropBlur?: number;
-    /** Backdrop brightness filter. 0=black, 100=unchanged, 200=2x bright. */
-    backdropBrightness?: number;
-    /** Backdrop contrast filter. 0=grey, 100=unchanged, 200=high contrast. */
-    backdropContrast?: number;
-    /** Backdrop saturation filter. 0=grayscale, 100=unchanged, 200=hyper-saturated. */
-    backdropSaturate?: number;
-    /** Backdrop grayscale filter. 0=unchanged, 100=full grayscale. */
-    backdropGrayscale?: number;
-    /** Backdrop invert filter. 0=unchanged, 100=fully inverted. */
-    backdropInvert?: number;
-    /** Backdrop sepia filter. 0=unchanged, 100=full sepia. */
-    backdropSepia?: number;
-    /** Backdrop hue-rotate filter. 0-360 degrees, 0/360=unchanged. */
-    backdropHueRotate?: number;
-    /**
-     * Self-filter applied to this element's own paint output.
-     * Unlike backdropBlur/backdropFilter which affect content BEHIND the element,
-     * `filter` affects the element's own rendered pixels (REQ-2B-401).
-     */
-    filter?: FilterConfig;
-    /**
-     * Hint that this property will change soon — pre-promotes the node to its own
-     * GPU compositing layer to avoid runtime promotion cost (REQ-2B-501).
-     * Accepted values: "transform", "opacity", "filter", "scroll".
-     */
-    willChange?: string | string[];
-    /**
-     * Containment boundary hint (REQ-2B-502).
-     * - 'none': no containment (default).
-     * - 'layout': size changes inside do not re-lay out siblings.
-     * - 'paint': content clipped to bounds; no overflow visible.
-     * - 'strict': layout + paint combined.
-     */
-    contain?: 'none' | 'layout' | 'paint' | 'strict';
-    hoverStyle?: InteractiveStyleProps;
-    activeStyle?: InteractiveStyleProps;
-    /** Focus state — applied when element has focus (Decision 7) */
-    focusStyle?: InteractiveStyleProps;
-    /** Unified press handler — fires on mouse click + Enter/Space when focused (Decision 6) */
-    onPress?: (event?: PressEvent) => void;
-    /** Make this element focusable via Tab navigation. Like HTML tabindex="0". */
-    focusable?: boolean;
-    /** Keyboard event handler — fires when this element is focused and a key is pressed. */
-    onKeyDown?: (event: KeyEvent) => void;
-    /** Fires when mouse button is pressed while over this node. */
-    onMouseDown?: (event: NodeMouseEvent) => void;
-    /** Fires when mouse button is released while over this node. */
-    onMouseUp?: (event: NodeMouseEvent) => void;
-    /** Fires when pointer moves over this node (every frame while hovered). */
-    onMouseMove?: (event: NodeMouseEvent) => void;
-    /** Fires when pointer enters this node's bounds. */
-    onMouseOver?: (event: NodeMouseEvent) => void;
-    /** Fires when pointer leaves this node's bounds. */
-    onMouseOut?: (event: NodeMouseEvent) => void;
-    /** Transform configuration: translate, rotate, scale, skew, perspective. */
-    transform?: TransformConfig;
-    /** Transform origin point. Default: "center". */
-    transformOrigin?: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | {
-        x: number;
-        y: number;
-    };
-    /** CSS-style prop — merged with direct props (direct props win). Decision 3. */
-    style?: Partial<TGEProps>;
-    /** Image source — file path or URL. Decoded async on first render. */
-    src?: string;
-    /** How the image fits within its layout box. Default: "contain". */
-    objectFit?: "contain" | "cover" | "fill" | "none";
-    /** Imperative draw callback — compat/lab canvas API, called each frame with a CanvasContext. */
-    onDraw?: (ctx: CanvasContext) => void;
-    /** Optional cache key for static canvas draw lists. Change it when onDraw output changes. */
-    drawCacheKey?: string | number;
-    /** Viewport transform for pan and zoom. */
-    viewport?: ViewportConfig;
-    color?: string | number;
-    fontSize?: number;
-    fontId?: number;
-    lineHeight?: number;
-    wordBreak?: "normal" | "keep-all";
-    whiteSpace?: "normal" | "pre-wrap";
-    fontFamily?: string;
-    fontWeight?: number;
-    fontStyle?: "normal" | "italic";
-};
 
 /** @public */
 export declare const theme: {
@@ -3274,7 +3370,7 @@ export declare type VexartAppConfigTheme = {
 };
 
 /** @public */
-export declare type VexartStyleProps = Partial<TGEProps>;
+export declare type VexartStyleProps = Partial<BoxProps>;
 
 /** @public */
 declare type Viewport = {
@@ -3363,6 +3459,20 @@ export declare type VoidCheckboxProps = {
 };
 
 /** @public */
+export declare function VoidCode(props: VoidCodeProps): JSX.Element;
+
+/** @public */
+export declare type VoidCodeProps = {
+    content: string;
+    language: string;
+    syntaxStyle: SyntaxStyle;
+    width?: number | string;
+    height?: number | string;
+    lineNumbers?: boolean;
+    streaming?: boolean;
+};
+
+/** @public */
 export declare function VoidCombobox(props: VoidComboboxProps): JSX.Element;
 
 /** @public */
@@ -3419,6 +3529,21 @@ export declare function VoidDialogTitle(props: VoidDialogTitleProps): JSX.Elemen
 /** @public */
 export declare type VoidDialogTitleProps = {
     children?: JSX.Element;
+};
+
+/** @public */
+export declare function VoidDiff(props: VoidDiffProps): JSX.Element;
+
+/**
+ * VoidDiff — styled unified diff viewer using Void design tokens.
+ *
+ * @public
+ */
+/** @public */
+export declare type VoidDiffProps = {
+    diff: string;
+    showLineNumbers?: boolean;
+    width?: number | string;
 };
 
 /** @public */
@@ -3506,6 +3631,40 @@ export declare type VoidInputProps = {
 };
 
 /** @public */
+export declare function VoidList(props: VoidListProps): JSX.Element;
+
+/**
+ * VoidList — styled selectable list using Void design tokens.
+ *
+ * Provides a default themed item renderer. For custom rendering,
+ * use the headless List directly.
+ *
+ * @public
+ */
+/** @public */
+export declare type VoidListProps = {
+    items: string[];
+    selectedIndex: number;
+    onSelectedChange?: (index: number) => void;
+    onSelect?: (index: number) => void;
+    disabled?: boolean;
+    focusId?: string;
+    width?: number | string;
+    height?: number | string;
+};
+
+/** @public */
+export declare function VoidMarkdown(props: VoidMarkdownProps): JSX.Element;
+
+/** @public */
+export declare type VoidMarkdownProps = {
+    content: string;
+    syntaxStyle: SyntaxStyle;
+    width?: number | string;
+    streaming?: boolean;
+};
+
+/** @public */
 export declare function VoidPopover(props: VoidPopoverProps): JSX.Element;
 
 /** @public */
@@ -3546,6 +3705,28 @@ export declare type VoidRadioGroupProps = {
     disabled?: boolean;
     focusId?: string;
     direction?: "column" | "row";
+};
+
+/** @public */
+export declare function VoidScrollView(props: VoidScrollViewProps): JSX.Element;
+
+/** @public */
+export declare type VoidScrollViewProps = {
+    ref?: (handle: ScrollHandle) => void;
+    width?: number | string;
+    height?: number | string;
+    scrollX?: boolean;
+    scrollY?: boolean;
+    scrollSpeed?: number;
+    showScrollbar?: boolean;
+    direction?: "row" | "column";
+    padding?: number;
+    paddingX?: number;
+    paddingY?: number;
+    gap?: number;
+    alignX?: "left" | "right" | "center";
+    alignY?: "top" | "bottom" | "center";
+    children?: JSX.Element;
 };
 
 /** @public */
@@ -3631,6 +3812,28 @@ export declare type VoidTabsProps = {
 };
 
 /** @public */
+export declare function VoidTextarea(props: VoidTextareaProps): JSX.Element;
+
+/** @public */
+export declare type VoidTextareaProps = {
+    value: string;
+    onChange?: (value: string) => void;
+    onSubmit?: (value: string) => void;
+    onCursorChange?: (row: number, col: number) => void;
+    onKeyDown?: (event: KeyEvent) => void;
+    onPaste?: (text: string) => void;
+    placeholder?: string;
+    width?: number;
+    height?: number;
+    disabled?: boolean;
+    focusId?: string;
+    keyBindings?: KeyBinding[];
+    syntaxStyle?: SyntaxStyle;
+    language?: string;
+    ref?: (handle: TextareaHandle) => void;
+};
+
+/** @public */
 export declare type VoidTheme = typeof theme;
 
 /** @public */
@@ -3655,28 +3858,29 @@ export declare type VoidTooltipProps = {
 };
 
 /** @public */
+export declare function VoidVirtualList<T>(props: VoidVirtualListProps<T>): JSX.Element;
+
+/** @public */
+export declare type VoidVirtualListProps<T> = {
+    items: T[];
+    itemHeight: number;
+    height: number | string;
+    width?: number | string;
+    overscan?: number;
+    selectedIndex?: number;
+    onSelect?: (index: number) => void;
+    keyboard?: boolean;
+    focusId?: string;
+    /** Render each item. Receives item, index, and context. */
+    renderItem: (item: T, index: number, ctx: VirtualListItemContext) => JSX.Element;
+};
+
+/** @public */
 export declare const weight: {
     readonly normal: 400;
     readonly medium: 500;
     readonly semibold: 600;
     readonly bold: 700;
-};
-
-/** @public */
-export declare function WrapRow(props: WrapRowProps): JSX.Element;
-
-/** @public */
-export declare type WrapRowProps = {
-    /** Total available width. */
-    width: number;
-    /** Width of each item (assumed uniform). For variable widths, set to the max. */
-    itemWidth: number;
-    /** Gap between items. Default: 0. */
-    gap?: number;
-    /** Gap between rows. Default: same as gap. */
-    rowGap?: number;
-    /** Children elements to wrap. */
-    children?: JSX.Element;
 };
 
 /** @public */

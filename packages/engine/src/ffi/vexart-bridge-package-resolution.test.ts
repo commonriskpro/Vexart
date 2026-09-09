@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
 import { suffix } from "bun:ffi"
+import { candidateLibPaths } from "./vexart-bridge"
 
 function platformPackageName(): string {
   const arch = process.arch
@@ -25,6 +26,22 @@ function nativeFixturePath(): string | undefined {
 }
 
 describe("vexart bridge native package resolution", () => {
+  test("prefers an existing workspace build over a stale platform package", () => {
+    const libName = `libvexart.${suffix}`
+    const release = join(import.meta.dir, "../../../../target/release", libName)
+    const debug = join(import.meta.dir, "../../../../target/debug", libName)
+    const localBuild = existsSync(release) ? release : existsSync(debug) ? debug : undefined
+    if (!localBuild) {
+      expect(localBuild).toBeUndefined()
+      return
+    }
+
+    const candidates = candidateLibPaths()
+    const platformPackage = candidates.findIndex((path) => path.includes(`/node_modules/${platformPackageName()}/`))
+    expect(candidates[0]).toBe(localBuild)
+    if (platformPackage >= 0) expect(platformPackage).toBeGreaterThan(candidates.indexOf(localBuild))
+  })
+
   test("loads a platform package beside the engine when cwd is unrelated", () => {
     const nativeFixture = nativeFixturePath()
     if (!nativeFixture) {

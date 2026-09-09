@@ -13,7 +13,7 @@
  */
 
 import { Node, FLEX_DIRECTION_COLUMN } from "flexily"
-import { syncAllLayoutProps } from "./flex-sync"
+import { createTextFlexNode, syncAllLayoutProps } from "./flex-sync"
 import {
   ALIGN_X,
   ALIGN_Y,
@@ -190,23 +190,136 @@ export function createTextNode(text: string): TGENode {
   return node
 }
 
+/**
+ * Return the latest Grid calculation error for a node, if its retained node
+ * is still using the Grid profile.  Keeping this read at the TGE boundary
+ * lets layout writeback reject an invalid calculation without reaching into
+ * Flexily's private state or treating a stale Flex result as a Grid error.
+ */
+export function getGridLayoutError(node: TGENode) {
+  const flex = node._flexNode
+  if (!flex?.isGridMode()) return null
+  return flex.getGridResult()?.error ?? null
+}
+
+/**
+ * Materialize the retained Flexily subtree after a detached TGE subtree is
+ * inserted again.  `removeChild` releases the native nodes recursively, but
+ * the TGE nodes are intentionally reusable (Solid may move a node before it
+ * is finally disposed).  Do this before linking the root into its new
+ * parent, so text-node materialization cannot accidentally attach to the old
+ * native parent.
+ */
+function ensureFlexSubtree(node: TGENode): void {
+  let recreated = false
+  if (!node._flexNode) {
+    if (node.kind === "text") {
+      // Keep the existing lazy text path for a newly-created node. A text
+      // node needs recreation here only when it was previously materialized
+      // and released by removeChild.
+      if (node.destroyed) {
+        recreated = true
+        createTextFlexNode(node)
+      }
+    } else {
+      recreated = true
+      const flex = Node.create()
+      flex.setFlexDirection(FLEX_DIRECTION_COLUMN)
+      node._flexNode = flex
+    }
+  }
+
+  const parentFlex = node._flexNode
+  if (!parentFlex) return
+  for (const child of node.children) {
+    ensureFlexSubtree(child)
+    const childFlex = child._flexNode
+    if (!childFlex || childFlex.getParent() === parentFlex) continue
+    parentFlex.insertChild(childFlex, child._siblingIndex)
+  }
+
+  // Re-apply the complete snapshot after recreation.  This includes Grid
+  // item placement, which depends on the current TGE parent profile.
+  syncAllLayoutProps(node)
+  // flex-sync caches item snapshots by TGE node. A removed node gets a new
+  // native Node, so restore the current item snapshot on that new instance
+  // instead of allowing the cache to skip the first write.
+  if (recreated) restoreGridItemStyle(node)
+}
+
+function setSubtreeDestroyed(node: TGENode, destroyed: boolean): void {
+  node.destroyed = destroyed
+  for (const child of node.children) setSubtreeDestroyed(child, destroyed)
+}
+
+function restoreGridItemStyle(node: TGENode): void {
+  const flex = node._flexNode as (Node & { setGridItemStyle?: (style: unknown) => void }) | null
+  if (!flex?.setGridItemStyle) return
+  const props = node.props
+  const item = {
+    ...(props.gridRow === undefined ? {} : { row: props.gridRow }),
+    ...(props.gridColumn === undefined ? {} : { column: props.gridColumn }),
+    ...(props.gridArea === undefined ? {} : { area: props.gridArea }),
+    ...(props.justifySelf === undefined ? {} : { justifySelf: props.justifySelf }),
+    ...(props.alignSelf === undefined ? {} : { alignSelf: props.alignSelf }),
+  }
+  if (Object.keys(item).length > 0) flex.setGridItemStyle(item)
+}
+
+function detachChild(parent: TGENode, child: TGENode): boolean {
+  // A remove call for a stale/wrong parent must not free a live node.  This is
+  // especially important while Solid is moving Grid items between parents.
+  if (child.parent !== parent) return false
+  const index = parent.children.indexOf(child)
+  if (index < 0) return false
+
+  const childFlex = child._flexNode
+  const nativeParent = childFlex?.getParent()
+  if (nativeParent && childFlex) nativeParent.removeChild(childFlex)
+  parent.children.splice(index, 1)
+  updateSiblingIndices(parent, index)
+  adjustFocusableAncestors(parent, -child._focusableCount)
+  child.parent = null
+  child._siblingIndex = 0
+  return true
+}
+
+function assertCanInsert(parent: TGENode, child: TGENode): void {
+  if (parent === child) throw new Error("Cannot insert a node as a child of itself")
+  let ancestor: TGENode | null = parent
+  while (ancestor) {
+    if (ancestor === child) {
+      throw new Error("Cannot insert an ancestor as a child (would create a cycle)")
+    }
+    ancestor = ancestor.parent
+  }
+}
+
+function insertFlexChild(parent: TGENode, child: TGENode, index: number): void {
+  const parentFlex = parent._flexNode
+  const childFlex = child._flexNode
+  if (!parentFlex || !childFlex) return
+  const nativeParent = childFlex.getParent()
+  if (nativeParent && nativeParent !== parentFlex) nativeParent.removeChild(childFlex)
+  parentFlex.insertChild(childFlex, index)
+  syncAllLayoutProps(child)
+}
+
 /** @public */
 export function insertChild(parent: TGENode, child: TGENode, anchor?: TGENode) {
+  assertCanInsert(parent, child)
   if (child.parent === parent && anchor === child) return
 
   const previousParent = child.parent
   if (previousParent) {
-    const previousIndex = previousParent.children.indexOf(child)
-    if (previousIndex >= 0) {
-      if (previousParent._flexNode && child._flexNode) {
-        previousParent._flexNode.removeChild(child._flexNode)
-      }
-      previousParent.children.splice(previousIndex, 1)
-      updateSiblingIndices(previousParent, previousIndex)
-      adjustFocusableAncestors(previousParent, -child._focusableCount)
-    }
+    // Reparenting is a move, not a destruction.  Detach the old TGE/native
+    // edge first; this leaves no stale parent while the new edge is built.
+    if (!detachChild(previousParent, child)) child.parent = null
   }
 
+  // A subtree removed earlier has no retained Flexily nodes.  Recreate the
+  // complete subtree before linking it to the destination parent.
+  ensureFlexSubtree(child)
   child.parent = parent
   child.destroyed = false
   let insertIndex = parent.children.length
@@ -215,38 +328,28 @@ export function insertChild(parent: TGENode, child: TGENode, anchor?: TGENode) {
     if (idx >= 0) {
       parent.children.splice(idx, 0, child)
       insertIndex = idx
-      if (parent._flexNode && child._flexNode) {
-        parent._flexNode.insertChild(child._flexNode, insertIndex)
-        syncAllLayoutProps(child)
-      }
+      insertFlexChild(parent, child, insertIndex)
       updateSiblingIndices(parent, insertIndex)
       adjustFocusableAncestors(parent, child._focusableCount)
+      setSubtreeDestroyed(child, false)
+      syncAllLayoutProps(parent)
       return
     }
   }
   parent.children.push(child)
   child._siblingIndex = insertIndex
-  if (parent._flexNode && child._flexNode) {
-    parent._flexNode.insertChild(child._flexNode, insertIndex)
-    syncAllLayoutProps(child)
-  }
+  insertFlexChild(parent, child, insertIndex)
   adjustFocusableAncestors(parent, child._focusableCount)
+  setSubtreeDestroyed(child, false)
+  syncAllLayoutProps(parent)
 }
 
 /** @public */
 export function removeChild(parent: TGENode, child: TGENode) {
-  const idx = parent.children.indexOf(child)
-  if (idx >= 0) {
-    if (parent._flexNode && child._flexNode) {
-      parent._flexNode.removeChild(child._flexNode)
-    }
-    parent.children.splice(idx, 1)
-    updateSiblingIndices(parent, idx)
-    adjustFocusableAncestors(parent, -child._focusableCount)
-  }
+  if (!detachChild(parent, child)) return
   freeFlexSubtree(child)
-  child.parent = null
-  child.destroyed = true
+  setSubtreeDestroyed(child, true)
+  syncAllLayoutProps(parent)
 }
 
 function freeFlexSubtree(node: TGENode) {

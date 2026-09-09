@@ -180,6 +180,7 @@ INTERNAL PACKAGES (not shipped, for dev/build only)
 
 @vexart/internal-atlas-gen    ← MSDF atlas generator CLI (dev tool)
 @vexart/internal-devtools     ← MCP devtools server (inspector)
+flexily (internal)             ← vendored Flexily 0.6.0 flex/grid solver
 ```
 
 ### 2.3 The two-binary rule
@@ -304,6 +305,8 @@ packages/engine/
 │   │   ├── lru-cache.ts       — generic LRU cache
 │   │   ├── node.ts            — TGENode, props, constants, parsers
 │   │   ├── flex-sync.ts       — Flexily prop sync
+│   │   ├── grid-types.ts       — public/internal Grid contracts and validation
+│   │   ├── grid-text-intrinsics.ts — intrinsic text measurement adapter
 │   │   ├── native-presentation-*.ts — native presentation flags/ops/stats
 │   │   ├── native-layer-registry*.ts — native layer registry + flags
 │   │   ├── native-image-assets.ts    — native image asset management
@@ -493,6 +496,7 @@ Not published to npm. Live in the monorepo for development.
 ```
 packages/internal-atlas-gen/    — CLI: TTF → MSDF atlas PNG + metrics JSON
 packages/internal-devtools/     — MCP devtools server for inspector integration
+packages/internal-flexily/      — vendored Flexily 0.6.0 flex/grid solver
 ```
 
 ---
@@ -707,6 +711,29 @@ This phase is asynchronous relative to the frame loop — SolidJS mutates the tr
   - Produce box positions, dimensions, and text wrap data without native layout writeback FFI.
   - Build `PositionedCommand[]` for TS-owned render graph generation.
   - Diff against previous frame's layout → produce damage rects.
+
+##### Grid layout profile (v1.x beta)
+
+When a container has `layout="grid"`, the same Flexily node seam is used with
+the vendored `packages/internal-flexily/` Grid modules. The TypeScript path
+normalizes the public snapshot, expands explicit/implicit tracks and repeats,
+resolves lines/areas and auto-placement, measures intrinsic text, sizes tracks,
+applies content/item alignment, and writes the resulting local rectangles back
+to the existing `layoutMap`. Flex and Grid nodes can be nested in either
+direction; no native layout FFI or parallel Grid map is introduced.
+
+The terminal profile supports px, percentages, `auto`, intrinsic
+`min-content`/`max-content`, `fr`, `minmax()`, `fit-content()`, fixed and
+`auto-fill`/`auto-fit` repeats, named lines/areas, spans, row/column dense
+auto-flow, numeric gaps/box metrics, and the existing text/image/canvas node
+contracts. Unsupported CSS concepts (writing modes, subgrid, masonry,
+table/multicolumn layout, fragmentation, CSSOM/cascade, baseline/safe
+alignment, and auto margins) are rejected rather than silently routed to Flex.
+
+Normalization and calculation return deterministic `GridLayoutError` codes.
+Diagnostics include intrinsic-pass count, cache hit, and no-op state. A failed
+Grid calculation aborts writeback/paint for that frame and retains the last
+valid rectangles, preserving damage and interaction consistency.
 
 #### 5.2.4 Assign layers
 
@@ -1194,11 +1221,11 @@ vexart/
 ├── packages/
 │   ├── app/
 │   ├── engine/
-│   ├── primitives/
 │   ├── headless/
 │   ├── styled/
 │   ├── internal-atlas-gen/
-│   └── internal-devtools/
+│   ├── internal-devtools/
+│   └── internal-flexily/
 ├── scripts/
 │   ├── build-native.ts       — cross-compile libvexart for all platforms
 │   ├── build-dist.ts         — assemble npm tarball

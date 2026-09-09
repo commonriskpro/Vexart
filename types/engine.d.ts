@@ -7,7 +7,6 @@ import { For } from 'solid-js';
 import { Index } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { Match } from 'solid-js';
-import type { Node as Node_2 } from 'flexily';
 import { Setter } from 'solid-js';
 import { Show } from 'solid-js';
 import { Switch } from 'solid-js';
@@ -1129,6 +1128,92 @@ export declare const GRAPH_MAGIC: 1448624466;
 
 /** @public */
 export declare const GRAPH_VERSION: 131072;
+
+/** @beta */
+export declare type GridAreaPlacement = string | {
+    readonly rowStart: GridLineRef | "auto";
+    readonly columnStart: GridLineRef | "auto";
+    readonly rowEnd: GridLineRef | "auto";
+    readonly columnEnd: GridLineRef | "auto";
+};
+
+/** @beta */
+export declare type GridAutoFlow = "row" | "column" | "row-dense" | "column-dense";
+
+/** @beta */
+export declare type GridBreadth = number | GridPercent | "auto" | "min-content" | "max-content";
+
+/** @beta */
+export declare type GridContentAlignment = "start" | "end" | "center" | "space-between" | "space-around" | "space-evenly" | "stretch";
+
+/** @beta */
+export declare type GridErrorCode = "GRID_INVALID_VALUE" | "GRID_INVALID_TRACK" | "GRID_INVALID_REPEAT" | "GRID_TRACK_LIMIT" | "GRID_INVALID_AREA" | "GRID_CONFLICTING_PLACEMENT" | "GRID_INVALID_PLACEMENT" | "GRID_LINE_UNRESOLVED" | "GRID_UNSUPPORTED_ALIGNMENT" | "GRID_MEASURE_INVALID";
+
+/** @beta */
+export declare type GridFitContent = {
+    readonly fitContent: number | GridPercent;
+};
+
+/** @beta */
+export declare type GridFr = {
+    readonly fr: number;
+};
+
+/** @beta */
+export declare type GridItemAlignment = "start" | "end" | "center" | "stretch";
+
+/** @beta */
+export declare type GridLayoutError = {
+    readonly code: GridErrorCode;
+    readonly path: string;
+    readonly nodeId: number;
+};
+
+/** @beta */
+export declare type GridLineRef = number | {
+    readonly name: string;
+    readonly occurrence?: number;
+} | {
+    readonly span: number;
+    readonly name?: string;
+};
+
+/** @beta */
+export declare type GridMaxBreadth = GridBreadth | GridFr;
+
+/** @beta */
+export declare type GridMinMax = {
+    readonly minmax: readonly [GridBreadth, GridMaxBreadth];
+};
+
+/** @beta */
+export declare type GridPercent = {
+    readonly percent: number;
+};
+
+/** @beta */
+export declare type GridPlacement = {
+    readonly start?: GridLineRef | "auto";
+    readonly end?: GridLineRef | "auto";
+};
+
+/** @beta */
+export declare type GridRepeatCount = number | "auto-fill" | "auto-fit";
+
+/** @beta */
+export declare type GridTrack = GridTrackSize | {
+    readonly size: GridTrackSize;
+    readonly before?: readonly string[];
+    readonly after?: readonly string[];
+} | {
+    readonly repeat: {
+        readonly count: GridRepeatCount;
+        readonly tracks: readonly GridTrack[];
+    };
+};
+
+/** @beta */
+export declare type GridTrackSize = GridBreadth | GridFr | GridMinMax | GridFitContent;
 
 /** @public */
 export declare function hasActiveAnimations(): boolean;
@@ -2986,6 +3071,8 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
 
  /** @public */
  export declare type TGEProps = {
+     /** @beta */
+     layout?: "flex" | "grid";
      direction?: "row" | "column";
      /** Alias for direction (opentui compat) */
      flexDirection?: "row" | "column";
@@ -2998,10 +3085,36 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      gap?: number;
      alignX?: "left" | "right" | "center" | "space-between";
      alignY?: "top" | "bottom" | "center" | "space-between";
-     /** Alias for alignX (opentui compat) */
-     justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end";
-     /** Alias for alignY (opentui compat) */
-     alignItems?: "top" | "bottom" | "center" | "space-between" | "flex-start" | "flex-end";
+     /** @beta */
+     justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "space-around" | "space-evenly" | "stretch";
+     /** @beta */
+     alignItems?: "top" | "bottom" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "stretch";
+     /** @beta */
+     gridTemplateColumns?: readonly GridTrack[];
+     /** @beta */
+     gridTemplateRows?: readonly GridTrack[];
+     /** @beta */
+     gridAutoColumns?: GridTrackSize;
+     /** @beta */
+     gridAutoRows?: GridTrackSize;
+     /** @beta */
+     gridAutoFlow?: GridAutoFlow;
+     /** @beta */
+     gridTemplateAreas?: readonly (readonly (string | null)[])[];
+     /** @beta */
+     gridColumn?: GridPlacement;
+     /** @beta */
+     gridRow?: GridPlacement;
+     /** @beta */
+     gridArea?: GridAreaPlacement;
+     /** @beta */
+     alignContent?: GridContentAlignment;
+     /** @beta */
+     justifyItems?: GridItemAlignment;
+     /** @beta */
+     justifySelf?: GridItemAlignment;
+     /** @beta */
+     alignSelf?: GridItemAlignment;
      width?: number | string;
      height?: number | string;
      /** When set, width behaves as "grow" (opentui compat) */

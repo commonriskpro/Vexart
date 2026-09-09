@@ -7,6 +7,15 @@
  */
 
 import type { Node } from "flexily"
+import type {
+  GridAreaPlacement,
+  GridAutoFlow,
+  GridContentAlignment,
+  GridItemAlignment,
+  GridPlacement,
+  GridTrack,
+  GridTrackSize,
+} from "./grid-types"
 
 // Numeric values preserved for backward compat; semantics map through
 // packages/engine/src/loop/layout-adapter.ts.
@@ -152,6 +161,8 @@ export type InteractiveStyleProps = Partial<Pick<TGEProps, "backgroundColor" | "
 /** @public */
 export type TGEProps = {
   // Layout
+  /** @beta Selects the retained Flex or Grid layout profile. Defaults to `flex`. */
+  layout?: "flex" | "grid"
   direction?: "row" | "column"
   /** Alias for direction (opentui compat) */
   flexDirection?: "row" | "column"
@@ -164,10 +175,36 @@ export type TGEProps = {
   gap?: number
   alignX?: "left" | "right" | "center" | "space-between"
   alignY?: "top" | "bottom" | "center" | "space-between"
-  /** Alias for alignX (opentui compat) */
-  justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end"
-  /** Alias for alignY (opentui compat) */
-  alignItems?: "top" | "bottom" | "center" | "space-between" | "flex-start" | "flex-end"
+  /** Alias for alignX in Flex; Grid content distribution in the inline axis. @beta */
+  justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "space-around" | "space-evenly" | "stretch"
+  /** Alias for alignY in Flex; Grid item alignment in the block axis. @beta */
+  alignItems?: "top" | "bottom" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "stretch"
+  /** @beta Grid tracks in the horizontal inline axis. Replace the array to invalidate it. */
+  gridTemplateColumns?: readonly GridTrack[]
+  /** @beta Grid tracks in the vertical block axis. Replace the array to invalidate it. */
+  gridTemplateRows?: readonly GridTrack[]
+  /** @beta Implicit column track size; repeat and line names are not accepted here. */
+  gridAutoColumns?: GridTrackSize
+  /** @beta Implicit row track size; repeat and line names are not accepted here. */
+  gridAutoRows?: GridTrackSize
+  /** @beta Automatic placement flow and optional dense cursor search. */
+  gridAutoFlow?: GridAutoFlow
+  /** @beta Rectangular template-area matrix; `null` denotes an empty cell. */
+  gridTemplateAreas?: readonly (readonly (string | null)[])[]
+  /** @beta Structured column placement shorthand. */
+  gridColumn?: GridPlacement
+  /** @beta Structured row placement shorthand. */
+  gridRow?: GridPlacement
+  /** @beta Named area or four-line area placement. */
+  gridArea?: GridAreaPlacement
+  /** @beta Grid content distribution in the block axis. */
+  alignContent?: GridContentAlignment
+  /** @beta Default alignment for Grid items in the inline axis. */
+  justifyItems?: GridItemAlignment
+  /** @beta Per-item inline-axis alignment override. */
+  justifySelf?: GridItemAlignment
+  /** @beta Per-item block-axis alignment override. */
+  alignSelf?: GridItemAlignment
 
   // Sizing
   width?: number | string    // number=fixed, "100%"=percent, "fit"=fit, "grow"=grow

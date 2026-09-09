@@ -10,7 +10,7 @@
  */
 
 import type { TGENode } from "../ffi/node"
-import { resolveProps, createPressEvent } from "../ffi/node"
+import { getGridLayoutError, resolveProps, createPressEvent } from "../ffi/node"
 import type { DamageRect } from "../ffi/damage"
 import { unionRect } from "../ffi/damage"
 import { CMD, type RenderCommand } from "../ffi/render-graph"
@@ -44,6 +44,14 @@ function isNonEmptyLayoutRect(rect: { width: number; height: number }) {
   return rect.width > 0 && rect.height > 0
 }
 
+function isFiniteLayoutPosition(pos: PositionedCommand | undefined): pos is PositionedCommand {
+  return !!pos
+    && Number.isFinite(pos.x)
+    && Number.isFinite(pos.y)
+    && Number.isFinite(pos.width)
+    && Number.isFinite(pos.height)
+}
+
 export function damageRectForLayoutTransition(
   prev: { x: number; y: number; width: number; height: number },
   next: { x: number; y: number; width: number; height: number },
@@ -74,43 +82,44 @@ export function damageRectForLayoutTransition(
 export function writeLayoutBack(
   layoutMap: Map<number, PositionedCommand> | null,
   state: WriteLayoutBackState,
-) {
+): boolean {
   const { rectNodes, textNodes, boxNodes, pendingNodeDamageRects } = state
 
-  // Use layout map directly for all box and text nodes.
-  if (layoutMap && layoutMap.size > 0) {
-    for (const node of boxNodes) {
-      const pos = layoutMap.get(node.id)
-      if (pos) {
-        const prev = { x: node.layout.x, y: node.layout.y, width: node.layout.width, height: node.layout.height }
-        node.layout.x = pos.x
-        node.layout.y = pos.y
-        node.layout.width = pos.width
-        node.layout.height = pos.height
-        const damage = damageRectForLayoutTransition(prev, node.layout)
-        if (damage && pendingNodeDamageRects) pendingNodeDamageRects.push({ nodeId: node.id, rect: damage })
-      }
-    }
-    for (const node of textNodes) {
-      const pos = layoutMap.get(node.id)
-      if (pos) {
-        const prev = { x: node.layout.x, y: node.layout.y, width: node.layout.width, height: node.layout.height }
-        node.layout.x = pos.x
-        node.layout.y = pos.y
-        node.layout.width = pos.width
-        node.layout.height = pos.height
-        const damage = damageRectForLayoutTransition(prev, node.layout)
-        if (damage && pendingNodeDamageRects) pendingNodeDamageRects.push({ nodeId: node.id, rect: damage })
-      }
-    }
+  // A missing map is not a layout pass. More importantly, Flexily keeps the
+  // prior Grid rects when calculation returns an error; the adapter may still
+  // expose those computed accessors for this frame. Do not publish a partial
+  // frame (or clear transforms/damage) until the complete map is validated.
+  if (!layoutMap || layoutMap.size === 0) return false
+  for (const node of boxNodes) {
+    if (!isFiniteLayoutPosition(layoutMap.get(node.id)) || getGridLayoutError(node)) return false
+  }
+  for (const node of textNodes) {
+    if (!isFiniteLayoutPosition(layoutMap.get(node.id)) || getGridLayoutError(node)) return false
   }
 
-  // For box nodes that had backgroundColor, layout was already written via RECT.
-  // For box nodes WITHOUT backgroundColor, attempt to inherit from their first
-  // child's command position. This is an approximation — full accuracy would
-  // require the layout adapter to expose per-element layout beyond commands.
-  // NOTE: This is a best-effort. Nodes with no background and no children
-  // will have layout { 0, 0, 0, 0 } until a more precise approach is added.
+  // Use the layout map directly for all box and text nodes. Validation above
+  // deliberately happens before the first write, making writeback atomic for
+  // Grid errors and malformed/partial maps alike.
+  for (const node of boxNodes) {
+    const pos = layoutMap.get(node.id)!
+    const prev = { x: node.layout.x, y: node.layout.y, width: node.layout.width, height: node.layout.height }
+    node.layout.x = pos.x
+    node.layout.y = pos.y
+    node.layout.width = pos.width
+    node.layout.height = pos.height
+    const damage = damageRectForLayoutTransition(prev, node.layout)
+    if (damage && pendingNodeDamageRects) pendingNodeDamageRects.push({ nodeId: node.id, rect: damage })
+  }
+  for (const node of textNodes) {
+    const pos = layoutMap.get(node.id)!
+    const prev = { x: node.layout.x, y: node.layout.y, width: node.layout.width, height: node.layout.height }
+    node.layout.x = pos.x
+    node.layout.y = pos.y
+    node.layout.width = pos.width
+    node.layout.height = pos.height
+    const damage = damageRectForLayoutTransition(prev, node.layout)
+    if (damage && pendingNodeDamageRects) pendingNodeDamageRects.push({ nodeId: node.id, rect: damage })
+  }
 
   // ── Transform hierarchy ──
   // Pass 1: Compute LOCAL transform matrices on rectNodes (nodes with RECT commands).
@@ -215,6 +224,7 @@ export function writeLayoutBack(
 
   for (const node of boxNodes) computeAccTransform(node)
   for (const node of textNodes) computeAccTransform(node)
+  return true
 }
 
 export function updateCommandsToLayoutMap(

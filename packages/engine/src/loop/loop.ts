@@ -86,6 +86,23 @@ function freeFlexTree(node: TGENode): void {
   for (const child of node.children) freeFlexTree(child)
 }
 
+/**
+ * A viewport change is a new constraint for every retained Grid node, not
+ * just for the root. Flexily propagates dirty state from a node to its
+ * ancestors, but it intentionally does not mark descendants dirty; visiting
+ * the Grid nodes here prevents a nested Grid from reusing a stale intrinsic
+ * snapshot after resize.
+ */
+function markGridTreeDirty(node: TGENode): number {
+  let count = 0
+  if (node.props.layout === "grid" && node._flexNode) {
+    node._flexNode.markDirty()
+    count++
+  }
+  for (const child of node.children) count += markGridTreeDirty(child)
+  return count
+}
+
 // ── Module-level shared state ──
 const frameDirtyRects: DamageRect[] = []
 const pendingNodeDamageRects: Array<{ nodeId: number; rect: DamageRect }> = []
@@ -453,10 +470,11 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     root.props.width = newW; root.props.height = newH
     root._widthSizing = parseSizing(newW); root._heightSizing = parseSizing(newH)
     syncLayoutProp(root, "width", newW); syncLayoutProp(root, "height", newH)
+    const dirtyGridCount = markGridTreeDirty(root)
     clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: isTmuxPlaceholderPresentation })
     resetLayers(); layerCache.clear()
     markDirty(); markAllDirty(); markInteractionActive()
-    resizeDebug(`dirty marked newW=${newW} newH=${newH}`)
+    resizeDebug(`dirty marked newW=${newW} newH=${newH} grids=${dirtyGridCount}`)
     if (isSuspended) { resizeDebug(`skip immediate frame suspended=${isSuspended ? 1 : 0} timer=${timer ? 1 : 0}`); return }
     if (timer !== null) { clearTimeout(timer); timer = null }
     scheduledDelayMs = 0; nextFrameDeadlineMs = 0

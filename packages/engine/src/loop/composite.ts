@@ -228,9 +228,9 @@ function resetWalkAccumulators(s: CompositeFrameState) {
   s.nodeRefById.clear()
 }
 
-function writeLayoutBack(s: CompositeFrameState) {
+function writeLayoutBack(s: CompositeFrameState): boolean {
   const layoutMap = s.layoutAdapter.getLastLayoutMap()
-  _writeLayoutBack(layoutMap, {
+  return _writeLayoutBack(layoutMap, {
     rectNodes: s.rectNodes,
     textNodes: s.textNodes,
     boxNodes: s.boxNodes,
@@ -238,7 +238,7 @@ function writeLayoutBack(s: CompositeFrameState) {
   })
 }
 
-function runLayoutPass(s: CompositeFrameState, profile?: FrameProfile) {
+function runLayoutPass(s: CompositeFrameState, profile?: FrameProfile): RenderCommand[] | null {
   resetWalkAccumulators(s)
   s.layoutAdapter.beginLayout()
   const walkStart = profile ? performance.now() : 0
@@ -247,8 +247,16 @@ function runLayoutPass(s: CompositeFrameState, profile?: FrameProfile) {
   const layoutComputeStart = profile ? performance.now() : 0
   const commands = s.layoutAdapter.endLayout(s.root._flexNode)
   if (profile) profile.layoutComputeMs = performance.now() - layoutComputeStart
+  const layoutError = s.layoutAdapter.getLastLayoutError()
+  if (layoutError) {
+    s.debug.log(`[layout] aborted Grid frame: ${layoutError.code}`)
+    return null
+  }
   const layoutWritebackStart = profile ? performance.now() : 0
-  writeLayoutBack(s)
+  if (!writeLayoutBack(s)) {
+    s.debug.log(`[layout] aborted frame during writeback`)
+    return null
+  }
   applyScrollOffsets(commands, s, markLayerDirtyByKey)
   if (profile) profile.layoutWritebackMs = performance.now() - layoutWritebackStart
   return commands
@@ -493,6 +501,12 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
 
   // ── Step 2: Walk tree → Flexily layout ──
   let commands = runLayoutPass(s, profile)
+  if (!commands) {
+    if (profile) profile.layoutMs = performance.now() - layoutStart
+    // Keep the dirty bit and pending damage: this frame was not presented and
+    // must be retried after the Grid snapshot is corrected.
+    return
+  }
 
   // ── Step 3: Interaction states ──
   const interactionStart = profile ? performance.now() : 0
@@ -514,7 +528,9 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   // Clicks always trigger re-layout because onPress handlers may mutate state.
   if (interaction.hadClick || interaction.needsRelayout || interactionMutatedTree) {
     const relayoutStart = profile ? performance.now() : 0
-    commands = runLayoutPass(s)
+    const relayoutCommands = runLayoutPass(s)
+    if (!relayoutCommands) return
+    commands = relayoutCommands
     if (profile) profile.relayoutMs = performance.now() - relayoutStart
   }
 

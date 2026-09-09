@@ -60,7 +60,7 @@ type BoxIntrinsicProps = TGEProps & {
   children?: Children
 }
 
-type TextIntrinsicProps = {
+type TextIntrinsicProps = TGEProps & {
   ref?: RefCallback
   color?: ColorValue
   fontSize?: number
@@ -74,7 +74,7 @@ type TextIntrinsicProps = {
   children?: Children
 }
 
-type ImgIntrinsicProps = {
+type ImgIntrinsicProps = TGEProps & {
   src: string
   objectFit?: "contain" | "cover" | "fill" | "none"
   width?: number | string

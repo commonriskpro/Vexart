@@ -23,7 +23,23 @@ function effectivePosition(node: TGENode): { x: number; y: number } {
 export function buildNodeMouseEvent(node: TGENode, pointerX: number, pointerY: number): NodeMouseEvent {
   const l = node.layout
   const pos = effectivePosition(node)
-  return { x: pointerX, y: pointerY, nodeX: pointerX - pos.x, nodeY: pointerY - pos.y, width: l.width, height: l.height }
+  const relX = pointerX - pos.x
+  const relY = pointerY - pos.y
+  const inverse = node._accTransformInverse ?? node._transformInverse
+  if (inverse) {
+    const w = inverse[6] * relX + inverse[7] * relY + inverse[8]
+    if (Math.abs(w) > 1e-12) {
+      return {
+        x: pointerX,
+        y: pointerY,
+        nodeX: (inverse[0] * relX + inverse[1] * relY + inverse[2]) / w,
+        nodeY: (inverse[3] * relX + inverse[4] * relY + inverse[5]) / w,
+        width: l.width,
+        height: l.height,
+      }
+    }
+  }
+  return { x: pointerX, y: pointerY, nodeX: relX, nodeY: relY, width: l.width, height: l.height }
 }
 
 /** @public */

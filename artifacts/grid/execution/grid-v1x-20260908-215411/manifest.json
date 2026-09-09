@@ -1,0 +1,293 @@
+{
+  "schemaVersion": "vexart/grid-execution@1",
+  "runId": "grid-v1x-20260908-215411",
+  "feature": "Grid v1.x beta profile",
+  "status": "PASS",
+  "closedAt": "2026-09-08T21:56:59-04:00",
+  "headCommit": "9b83920234b91973b5752877db638968ef01c13b",
+  "workingTreeDirty": true,
+  "environment": {
+    "os": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64",
+    "bun": "1.3.14",
+    "terminalGate": "Kitty + tmux 3.6a (physical)"
+  },
+  "tasks": [
+    {
+      "id": "G-001",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/package.json"
+    },
+    {
+      "id": "G-002",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/index.ts"
+    },
+    {
+      "id": "G-003",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/logger.ts"
+    },
+    {
+      "id": "G-004",
+      "status": "PASS",
+      "evidence": "package.json; bun.lock"
+    },
+    {
+      "id": "G-005",
+      "status": "PASS",
+      "evidence": "scripts/grid/baseline.ts; artifacts/perf/grid-baseline/grid-g005-acceptance/"
+    },
+    {
+      "id": "G-006",
+      "status": "PASS",
+      "evidence": "packages/engine/src/ffi/grid-types.ts"
+    },
+    {
+      "id": "G-007",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/grid/grid-normalize.ts; packages/engine/src/ffi/grid-flex-diagnostic.test.ts"
+    },
+    {
+      "id": "G-008",
+      "status": "PASS",
+      "evidence": "packages/engine/src/reconciler/reconciler.ts; packages/engine/src/ffi/flex-sync-grid.test.ts"
+    },
+    {
+      "id": "G-009",
+      "status": "PASS",
+      "evidence": "packages/engine/src/ffi/node-grid-lifecycle.test.ts"
+    },
+    {
+      "id": "G-010",
+      "status": "PASS",
+      "evidence": "packages/engine/src/ffi/grid-text-intrinsics.ts; packages/engine/src/ffi/grid-text-measure.test.ts"
+    },
+    {
+      "id": "G-011",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/grid/grid-model.ts"
+    },
+    {
+      "id": "G-012",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/grid/grid-lines.ts; packages/internal-flexily/src/grid/grid-areas.ts"
+    },
+    {
+      "id": "G-013",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/grid/grid-placement.ts"
+    },
+    {
+      "id": "G-014",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/grid/grid-auto-placement.ts"
+    },
+    {
+      "id": "G-015",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/grid/grid-dense.ts"
+    },
+    {
+      "id": "G-016",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/grid/grid-implicit.ts"
+    },
+    {
+      "id": "G-017",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/grid/grid-repeat.ts"
+    },
+    {
+      "id": "G-018",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/grid/grid-track-init.ts"
+    },
+    {
+      "id": "G-019",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/grid/grid-intrinsic.ts"
+    },
+    {
+      "id": "G-020",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/grid/grid-span-growth.ts"
+    },
+    {
+      "id": "G-021",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/grid/grid-maximize.ts"
+    },
+    {
+      "id": "G-022",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/grid/grid-track-init.ts; packages/internal-flexily/src/grid/grid-layout.ts"
+    },
+    {
+      "id": "G-023",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/grid/grid-available-space.ts"
+    },
+    {
+      "id": "G-024",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/grid/grid-track-init.ts; packages/internal-flexily/src/grid/grid-layout.ts"
+    },
+    {
+      "id": "G-025",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/grid/grid-alignment.ts"
+    },
+    {
+      "id": "G-026",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/grid/grid-item-size.ts"
+    },
+    {
+      "id": "G-027",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/grid/grid-intrinsic-cycle.ts"
+    },
+    {
+      "id": "G-028",
+      "status": "PASS",
+      "evidence": "packages/internal-flexily/src/grid/grid-layout.ts; packages/engine/src/ffi/flex-sync.ts"
+    },
+    {
+      "id": "G-029",
+      "status": "PASS",
+      "evidence": "packages/engine/src/ffi/flex-sync.ts; packages/engine/src/ffi/grid-flex-diagnostic.test.ts"
+    },
+    {
+      "id": "G-030",
+      "status": "PASS",
+      "evidence": "packages/engine/src/loop/layout-adapter.ts; packages/engine/src/loop/layout-adapter-grid.test.ts"
+    },
+    {
+      "id": "G-031",
+      "status": "PASS",
+      "evidence": "packages/engine/src/ffi/node.ts; packages/engine/src/loop/layout.ts; packages/engine/src/loop/layout-atomicity.test.ts"
+    },
+    {
+      "id": "G-032",
+      "status": "PASS",
+      "evidence": "packages/engine/src/loop/walk-tree.ts; packages/engine/src/loop/walk-grid.test.ts"
+    },
+    {
+      "id": "G-033",
+      "status": "PASS",
+      "evidence": "packages/engine/src/loop/grid-interaction.test.ts; packages/engine/src/reconciler/hit-test.ts"
+    },
+    {
+      "id": "G-034",
+      "status": "PASS",
+      "evidence": "scripts/grid/fixtures/feature-matrix.json; scripts/grid/fixtures/grid-contract-fixtures.json"
+    },
+    {
+      "id": "G-035",
+      "status": "PASS",
+      "evidence": "artifacts/grid/oracle/test-real-browser/report.json"
+    },
+    {
+      "id": "G-036",
+      "status": "PASS",
+      "evidence": "scripts/visual-test/scenes/grid-dashboard.tsx; scripts/visual-test/scene-layout.test.tsx"
+    },
+    {
+      "id": "G-037",
+      "status": "PASS",
+      "evidence": "artifacts/grid-parity/auto5-20260908-213404/report.json"
+    },
+    {
+      "id": "G-038",
+      "status": "PASS",
+      "evidence": "packages/engine/etc/engine.api.md; types/engine.d.ts; dist/"
+    },
+    {
+      "id": "G-039",
+      "status": "PASS",
+      "evidence": "artifacts/perf/grid/g039-acceptance-normalized-20260908b/report.json; scripts/consumer/dual-barrel.test.ts"
+    },
+    {
+      "id": "G-040",
+      "status": "PASS",
+      "evidence": "docs/PRD.md; docs/ARCHITECTURE.md; docs/agent-reference.md; CHANGELOG.md"
+    }
+  ],
+  "checks": [
+    {
+      "command": "bun run typecheck",
+      "status": "PASS"
+    },
+    {
+      "command": "bun --conditions=browser test --preload ./solid-plugin.ts <Grid/engine suite excluding physical gate>",
+      "status": "PASS",
+      "detail": "191 passed, 0 failed (internal Flexily + engine Grid + scene/consumer suite; physical gate recorded separately)"
+    },
+    {
+      "command": "bun run api:update",
+      "status": "PASS",
+      "detail": "API Extractor warnings only; no failures"
+    },
+    {
+      "command": "bun run gen:types",
+      "status": "PASS"
+    },
+    {
+      "command": "bun run gen:jsx-runtime",
+      "status": "PASS"
+    },
+    {
+      "command": "bun run build:dist",
+      "status": "PASS"
+    },
+    {
+      "command": "bun test scripts/release-verification.test.mjs",
+      "status": "PASS",
+      "detail": "13 passed, 0 failed"
+    },
+    {
+      "command": "cd native/libvexart && cargo test",
+      "status": "PASS",
+      "detail": "168 passed, 1 ignored"
+    },
+    {
+      "command": "bun test packages/engine/src/ffi/vexart-bridge-package-resolution.test.ts --preload ./solid-plugin.ts",
+      "status": "PASS",
+      "detail": "2 passed, 0 failed"
+    },
+    {
+      "command": "cargo build --release",
+      "status": "PASS"
+    },
+    {
+      "command": "docs local links + W3C Grid CRD HEAD",
+      "status": "PASS"
+    },
+    {
+      "command": "git diff --check",
+      "status": "PASS"
+    },
+    {
+      "command": "scripts/grid/oracle external browser",
+      "status": "PASS",
+      "evidence": "artifacts/grid/oracle/test-real-browser/report.json"
+    },
+    {
+      "command": "scripts/visual-test/tmux-parity.ts --scene=scenes/grid-dashboard (real Kitty)",
+      "status": "PASS",
+      "evidence": "artifacts/grid-parity/auto5-20260908-213404/report.json"
+    },
+    {
+      "command": "scripts/grid/perf.ts normalized acceptance",
+      "status": "PASS",
+      "evidence": "artifacts/perf/grid/g039-acceptance-normalized-20260908b/report.json"
+    }
+  ],
+  "notes": [
+    "G-037 is PASS only because the separately launched real Kitty/tmux run consumed native SHM and validated producer/outer captures; non-TTY invocations correctly return BLOCKED.",
+    "No package version was bumped, no npm publication was performed, and no visual golden was regenerated.",
+    "Full CSS/DOM Grid compatibility, other tmux outer terminals, reattach parity, and terminal-visible FPS are not claimed."
+  ]
+}

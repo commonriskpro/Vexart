@@ -14,7 +14,8 @@ type ColorValue = string | number
 type ShadowDef = { x: number; y: number; blur: number; color: ColorValue }
 type CornerRadii = { tl: number; tr: number; br: number; bl: number }
 
-type BoxIntrinsicProps = TGEProps & {
+/** All engine layout props, including the Grid beta contract, are inherited. */
+interface BoxProps extends TGEProps {
   ref?: RefCallback
   layer?: boolean
   scrollX?: boolean
@@ -50,7 +51,9 @@ type BoxIntrinsicProps = TGEProps & {
   children?: Children
 }
 
-type TextIntrinsicProps = {
+type BoxIntrinsicProps = BoxProps
+
+type TextIntrinsicProps = TGEProps & {
   ref?: RefCallback
   color?: ColorValue
   fontSize?: number
@@ -64,7 +67,7 @@ type TextIntrinsicProps = {
   children?: Children
 }
 
-type ImgIntrinsicProps = {
+type ImgIntrinsicProps = TGEProps & {
   src: string
   objectFit?: "contain" | "cover" | "fill" | "none"
   width?: number | string

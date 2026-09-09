@@ -57,6 +57,16 @@ const OBJECT_PROPS = new Set([
   "floatAttach",
 ])
 
+// Grid track and area lists deliberately use replacement semantics. Do not
+// run them through the shallow object comparison above: a new list is the
+// invalidation boundary even when its entries happen to be equal. In-place
+// mutation is outside the contract and is intentionally not observed.
+const GRID_REPLACEMENT_PROPS = new Set([
+  "gridTemplateColumns",
+  "gridTemplateRows",
+  "gridTemplateAreas",
+])
+
 const VISUAL_DAMAGE_PROPS = new Set([
   "backgroundColor",
   "borderColor",
@@ -287,7 +297,7 @@ const renderer = createRenderer<TGENode>({
   setProperty(node: TGENode, name: string, value: unknown) {
     const currentProps = node.props as Record<string, unknown>
     if (currentProps[name] === value) return
-    if (OBJECT_PROPS.has(name) && shallowEqual(currentProps[name], value)) return
+    if (!GRID_REPLACEMENT_PROPS.has(name) && OBJECT_PROPS.has(name) && shallowEqual(currentProps[name], value)) return
 
     // ref callback — pass a NodeHandle to the user
     if (name === "ref" && typeof value === "function") {

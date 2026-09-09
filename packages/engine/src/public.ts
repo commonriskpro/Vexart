@@ -171,6 +171,27 @@ export type {
   SizingInfo,
 } from "./ffi/node"
 
+// ── Grid beta API ────────────────────────────────────────────────────────────
+export type {
+  GridAreaPlacement,
+  GridAutoFlow,
+  GridBreadth,
+  GridContentAlignment,
+  GridErrorCode,
+  GridFitContent,
+  GridFr,
+  GridItemAlignment,
+  GridLineRef,
+  GridLayoutError,
+  GridMaxBreadth,
+  GridMinMax,
+  GridPercent,
+  GridPlacement,
+  GridRepeatCount,
+  GridTrack,
+  GridTrackSize,
+} from "./ffi/grid-types"
+
 export {
   EXPECTED_BRIDGE_VERSION,
   VEXART_SYMBOLS,

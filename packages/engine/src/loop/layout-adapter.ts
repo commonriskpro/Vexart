@@ -40,6 +40,7 @@ import {
   MEASURE_MODE_AT_MOST,
   MEASURE_MODE_EXACTLY,
 } from "flexily"
+import type { GridLayoutError } from "flexily"
 
 // ── Layout constants ──────────────────────────────────────────────────────
 
@@ -162,6 +163,7 @@ export function createVexartLayoutCtx() {
   const _nodeToIndex = new Map<Node, number>()
 
   let _nodeStack: Node[] = []
+  const _gridErrorStack: Node[] = []
   let _currentNode: Node | null = null
   let _pendingFlexNode: Node | null = null
   let _currentIdx = -1
@@ -173,7 +175,9 @@ export function createVexartLayoutCtx() {
   type DetachedRoot = { node: Node; parent: Node; index: number }
   const _detachedRoots: DetachedRoot[] = []
 
-  // Last layout result — pre-allocated, cleared each endLayout()
+  // Last layout result — pre-allocated and only replaced after a complete,
+  // successful calculate + command emission. An invalid Grid pass leaves
+  // these published values untouched so writeback can keep the prior frame.
   const _layoutMap = new Map<number, PositionedCommand>()
   const _childrenByParent = new Map<number, number[]>()
   const _scrollContainerIds = new Set<number>()
@@ -183,7 +187,9 @@ export function createVexartLayoutCtx() {
   let _absoluteY = new Float64Array(0)
   let _absoluteState = new Uint8Array(0)
   let _lastLayoutMap: Map<number, PositionedCommand> | null = null
+  let _lastLayoutError: GridLayoutError | null = null
   function getLastLayoutMap() { return _lastLayoutMap }
+  function getLastLayoutError() { return _lastLayoutError }
 
   function restoreDetachedRoots() {
     for (const detached of _detachedRoots) {
@@ -202,6 +208,46 @@ export function createVexartLayoutCtx() {
       detached.parent.insertChild(node, Math.min(detached.index, detached.parent.getChildCount()))
     }
     _detachedRoots.splice(index, 1)
+  }
+
+  /** Find an error on this retained root or any nested Grid node. */
+  function findGridError(root: Node): GridLayoutError | null {
+    _gridErrorStack.length = 0
+    _gridErrorStack.push(root)
+    while (_gridErrorStack.length > 0) {
+      const node = _gridErrorStack.pop()!
+      if (node.isGridMode()) {
+        const error = node.getGridResult()?.error
+        if (error) {
+          _gridErrorStack.length = 0
+          return error
+        }
+      }
+      for (let index = 0; index < node.getChildCount(); index++) {
+        const child = node.getChild(index)
+        if (child) _gridErrorStack.push(child)
+      }
+    }
+    return null
+  }
+
+  /**
+   * Calculate every retained root through Flexily's single entry point.
+   * Grid is a mode on the same Node, so this deliberately does not create a
+   * second solver call or a second geometry map; `endLayout` below reads the
+   * resulting local rects through the existing computed-layout accessors.
+   */
+  function calculateRoots(roots: readonly Node[]): GridLayoutError | null {
+    for (const root of roots) {
+      const result = root.calculateLayout(_viewportW, _viewportH, DIRECTION_LTR)
+      if (result?.error) return result.error
+      // Flexily's Flex dispatcher intentionally returns void even when a
+      // nested Grid returns an error. Inspect the same retained tree so the
+      // engine never publishes a parent layout around an invalid child.
+      const error = findGridError(root)
+      if (error) return error
+    }
+    return null
   }
 
   function _addNode(node: Node, parentId: number, isRoot: boolean): number {
@@ -307,6 +353,7 @@ export function createVexartLayoutCtx() {
 
   return {
     getLastLayoutMap,
+    getLastLayoutError,
 
     init(width: number, height: number): boolean {
       _viewportW = width
@@ -330,6 +377,8 @@ export function createVexartLayoutCtx() {
       _pendingFlexNode = null
       _currentIdx = -1
       _nodeToIndex.clear()
+      _lastLayoutMap = null
+      _lastLayoutError = null
     },
 
     beginLayout() {
@@ -347,7 +396,14 @@ export function createVexartLayoutCtx() {
       const roots = rootNode
         ? [rootNode, ..._roots.filter((root) => root !== rootNode)]
         : _roots
-      for (const root of roots) root.calculateLayout(_viewportW, _viewportH, DIRECTION_LTR)
+      const error = calculateRoots(roots)
+      if (error) {
+        _lastLayoutError = error
+        // The previous map and command list are the only published frame.
+        // Do not clear or rebuild either one for an invalid Grid pass.
+        return _cmds
+      }
+      _lastLayoutError = null
 
       // ── Stacking-context command emission ─────────────────────────────────
       // Position computation is merged into emitNode to eliminate a separate

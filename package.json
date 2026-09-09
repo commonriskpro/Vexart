@@ -67,7 +67,7 @@
   },
   "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
-    "flexily": "^0.6.0",
+    "flexily": "workspace:*",
     "marked": "^18.0.0",
     "web-tree-sitter": "^0.26.8",
     "zod": "^4.3.6"

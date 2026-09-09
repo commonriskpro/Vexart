@@ -886,6 +886,92 @@ export const GRAPH_MAGIC: 1448624466;
 // @public (undocumented)
 export const GRAPH_VERSION: 131072;
 
+// @beta
+export type GridAreaPlacement = string | {
+    readonly rowStart: GridLineRef | "auto";
+    readonly columnStart: GridLineRef | "auto";
+    readonly rowEnd: GridLineRef | "auto";
+    readonly columnEnd: GridLineRef | "auto";
+};
+
+// @beta
+export type GridAutoFlow = "row" | "column" | "row-dense" | "column-dense";
+
+// @beta
+export type GridBreadth = number | GridPercent | "auto" | "min-content" | "max-content";
+
+// @beta
+export type GridContentAlignment = "start" | "end" | "center" | "space-between" | "space-around" | "space-evenly" | "stretch";
+
+// @beta
+export type GridErrorCode = "GRID_INVALID_VALUE" | "GRID_INVALID_TRACK" | "GRID_INVALID_REPEAT" | "GRID_TRACK_LIMIT" | "GRID_INVALID_AREA" | "GRID_CONFLICTING_PLACEMENT" | "GRID_INVALID_PLACEMENT" | "GRID_LINE_UNRESOLVED" | "GRID_UNSUPPORTED_ALIGNMENT" | "GRID_MEASURE_INVALID";
+
+// @beta
+export type GridFitContent = {
+    readonly fitContent: number | GridPercent;
+};
+
+// @beta
+export type GridFr = {
+    readonly fr: number;
+};
+
+// @beta
+export type GridItemAlignment = "start" | "end" | "center" | "stretch";
+
+// @beta
+export type GridLayoutError = {
+    readonly code: GridErrorCode;
+    readonly path: string;
+    readonly nodeId: number;
+};
+
+// @beta
+export type GridLineRef = number | {
+    readonly name: string;
+    readonly occurrence?: number;
+} | {
+    readonly span: number;
+    readonly name?: string;
+};
+
+// @beta
+export type GridMaxBreadth = GridBreadth | GridFr;
+
+// @beta
+export type GridMinMax = {
+    readonly minmax: readonly [GridBreadth, GridMaxBreadth];
+};
+
+// @beta
+export type GridPercent = {
+    readonly percent: number;
+};
+
+// @beta
+export type GridPlacement = {
+    readonly start?: GridLineRef | "auto";
+    readonly end?: GridLineRef | "auto";
+};
+
+// @beta
+export type GridRepeatCount = number | "auto-fill" | "auto-fit";
+
+// @beta
+export type GridTrack = GridTrackSize | {
+    readonly size: GridTrackSize;
+    readonly before?: readonly string[];
+    readonly after?: readonly string[];
+} | {
+    readonly repeat: {
+        readonly count: GridRepeatCount;
+        readonly tracks: readonly GridTrack[];
+    };
+};
+
+// @beta
+export type GridTrackSize = GridBreadth | GridFr | GridMinMax | GridFitContent;
+
 // @public (undocumented)
 export function hasActiveAnimations(): boolean;
 
@@ -2352,6 +2438,7 @@ export type TgePluginApi<Context = {}> = {
 
 // @public (undocumented)
 export type TGEProps = {
+    layout?: "flex" | "grid";
     direction?: "row" | "column";
     flexDirection?: "row" | "column";
     padding?: number;
@@ -2363,8 +2450,21 @@ export type TGEProps = {
     gap?: number;
     alignX?: "left" | "right" | "center" | "space-between";
     alignY?: "top" | "bottom" | "center" | "space-between";
-    justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end";
-    alignItems?: "top" | "bottom" | "center" | "space-between" | "flex-start" | "flex-end";
+    justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "space-around" | "space-evenly" | "stretch";
+    alignItems?: "top" | "bottom" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "stretch";
+    gridTemplateColumns?: readonly GridTrack[];
+    gridTemplateRows?: readonly GridTrack[];
+    gridAutoColumns?: GridTrackSize;
+    gridAutoRows?: GridTrackSize;
+    gridAutoFlow?: GridAutoFlow;
+    gridTemplateAreas?: readonly (readonly (string | null)[])[];
+    gridColumn?: GridPlacement;
+    gridRow?: GridPlacement;
+    gridArea?: GridAreaPlacement;
+    alignContent?: GridContentAlignment;
+    justifyItems?: GridItemAlignment;
+    justifySelf?: GridItemAlignment;
+    alignSelf?: GridItemAlignment;
     width?: number | string;
     height?: number | string;
     flexGrow?: number;
@@ -2864,8 +2964,8 @@ export function writeHeader(view: DataView, cmdCount: number, payloadBytes: numb
 
 // Warnings were encountered during analysis:
 //
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node.d.ts:350:5 - (ae-forgotten-export) The symbol "NodeImageExtra" needs to be exported by the entry point index.d.ts
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node.d.ts:352:5 - (ae-forgotten-export) The symbol "NodeCanvasExtra" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node-types.d.ts:371:5 - (ae-forgotten-export) The symbol "NodeImageExtra" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node-types.d.ts:373:5 - (ae-forgotten-export) The symbol "NodeCanvasExtra" needs to be exported by the entry point index.d.ts
 // /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/loop/debug.d.ts:85:5 - (ae-forgotten-export) The symbol "NativeFrameExecutionStats" needs to be exported by the entry point index.d.ts
 // /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/reconciler/router.d.ts:41:5 - (ae-forgotten-export) The symbol "NavigationParams" needs to be exported by the entry point index.d.ts
 
