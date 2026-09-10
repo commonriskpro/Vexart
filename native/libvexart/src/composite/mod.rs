@@ -97,6 +97,39 @@ pub fn target_end_layer(pctx: &mut PaintContext, handle: u64) -> i32 {
     }
 }
 
+/// Set hardware scissor rectangle on an offscreen render target.
+pub fn target_set_scissor(
+    pctx: &mut PaintContext,
+    target: u64,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+) -> i32 {
+    if target == 0 {
+        return ERR_INVALID_ARG;
+    }
+    let rec = match pctx.targets.get_mut(target) {
+        Some(r) => r,
+        None => return ERR_INVALID_HANDLE,
+    };
+    rec.set_scissor(x, y, width, height);
+    OK
+}
+
+/// Reset/clear hardware scissor rectangle on an offscreen render target.
+pub fn target_reset_scissor(pctx: &mut PaintContext, target: u64) -> i32 {
+    if target == 0 {
+        return ERR_INVALID_ARG;
+    }
+    let rec = match pctx.targets.get_mut(target) {
+        Some(r) => r,
+        None => return ERR_INVALID_HANDLE,
+    };
+    rec.clear_scissor();
+    OK
+}
+
 // ─── Compositing ──────────────────────────────────────────────────────────
 
 /// Composite a source image onto a target at the given position.
@@ -127,8 +160,16 @@ pub fn composite_render_image_layer(
         None => return ERR_INVALID_HANDLE,
     };
 
-    let tw = target_rec.width as f32;
-    let th = target_rec.height as f32;
+    let tw_u32 = target_rec.width;
+    let th_u32 = target_rec.height;
+    let scissor = target_rec
+        .active_layer
+        .as_ref()
+        .and_then(|l| l.scissor)
+        .or(target_rec.scissor);
+
+    let tw = tw_u32 as f32;
+    let th = th_u32 as f32;
 
     // Convert pixel coords to NDC for the image instance.
     // NDC: x in [-1,1], y in [-1,1] (Y flipped).
@@ -226,7 +267,14 @@ pub fn composite_render_image_layer(
         pass.set_vertex_buffer(0, vertex_buf.slice(..));
         // SAFETY: bind_group extracted before mutable borrow; still valid.
         pass.set_bind_group(0, unsafe { &*bind_group }, &[]);
-        pass.draw(0..6, 0..1);
+        if let Some(s) = scissor {
+            if let Some([sx, sy, sw, sh]) = target::clamp_scissor(s, tw_u32, th_u32) {
+                pass.set_scissor_rect(sx, sy, sw, sh);
+                pass.draw(0..6, 0..1);
+            }
+        } else {
+            pass.draw(0..6, 0..1);
+        }
     } else {
         // No active layer: standalone encoder.
         let mut encoder =
@@ -268,7 +316,14 @@ pub fn composite_render_image_layer(
         pass.set_vertex_buffer(0, vertex_buf.slice(..));
         // SAFETY: bind_group extracted before any mutable ops; still valid.
         pass.set_bind_group(0, unsafe { &*bind_group }, &[]);
-        pass.draw(0..6, 0..1);
+        if let Some(s) = scissor {
+            if let Some([sx, sy, sw, sh]) = target::clamp_scissor(s, tw_u32, th_u32) {
+                pass.set_scissor_rect(sx, sy, sw, sh);
+                pass.draw(0..6, 0..1);
+            }
+        } else {
+            pass.draw(0..6, 0..1);
+        }
         drop(pass);
 
         let cmd = encoder.finish();
@@ -300,6 +355,14 @@ pub fn composite_render_image_transform_layer(
         Some(r) => r,
         None => return ERR_INVALID_HANDLE,
     };
+
+    let tw_u32 = target_rec.width;
+    let th_u32 = target_rec.height;
+    let scissor = target_rec
+        .active_layer
+        .as_ref()
+        .and_then(|l| l.scissor)
+        .or(target_rec.scissor);
 
     let bind_group: *const wgpu::BindGroup = if let Some(img) = pctx.images.get(&image) {
         &img.bind_group as *const wgpu::BindGroup
@@ -372,7 +435,14 @@ pub fn composite_render_image_transform_layer(
         pass.set_pipeline(&pctx.wgpu.pipelines.image_transform);
         pass.set_vertex_buffer(0, vertex_buf.slice(..));
         pass.set_bind_group(0, unsafe { &*bind_group }, &[]);
-        pass.draw(0..6, 0..1);
+        if let Some(s) = scissor {
+            if let Some([sx, sy, sw, sh]) = target::clamp_scissor(s, tw_u32, th_u32) {
+                pass.set_scissor_rect(sx, sy, sw, sh);
+                pass.draw(0..6, 0..1);
+            }
+        } else {
+            pass.draw(0..6, 0..1);
+        }
     } else {
         let mut encoder =
             pctx.wgpu
@@ -410,7 +480,14 @@ pub fn composite_render_image_transform_layer(
         pass.set_pipeline(&pctx.wgpu.pipelines.image_transform);
         pass.set_vertex_buffer(0, vertex_buf.slice(..));
         pass.set_bind_group(0, unsafe { &*bind_group }, &[]);
-        pass.draw(0..6, 0..1);
+        if let Some(s) = scissor {
+            if let Some([sx, sy, sw, sh]) = target::clamp_scissor(s, tw_u32, th_u32) {
+                pass.set_scissor_rect(sx, sy, sw, sh);
+                pass.draw(0..6, 0..1);
+            }
+        } else {
+            pass.draw(0..6, 0..1);
+        }
         drop(pass);
 
         let cmd = encoder.finish();
@@ -1350,18 +1427,15 @@ pub fn image_filter_backdrop(
     OK
 }
 
-/// Apply a rounded-rect SDF mask to an image, producing a new image handle.
-///
-/// `rect_ptr` points to a 24-byte buffer: 5 × f32:
-///   radius_uniform, radius_tl, radius_tr, radius_br, radius_bl, mode
-///   (mode: 0.0 = uniform, 1.0 = per-corner)
-///
-/// The mask is applied using the existing `image_mask` pipeline (cmd_kind=17).
-pub fn image_mask_rounded_rect(
+/// Shared rounded-rect image-mask implementation. `mask_rect` is optional so
+/// the original full-image FFI remains ABI-compatible while clipped callers
+/// can provide the original box in cropped-image NDC coordinates.
+fn image_mask_rounded_rect_impl(
     pctx: &mut PaintContext,
     image: u64,
     rect_ptr: *const u8,
     out_image: *mut u64,
+    mask_rect: Option<[f32; 4]>,
 ) -> i32 {
     use crate::paint::instances::ImageMaskInstance;
     use bytemuck::bytes_of;
@@ -1418,10 +1492,10 @@ pub fn image_mask_rounded_rect(
         y: -1.0,
         w: 2.0,
         h: 2.0,
-        mask_x: -1.0,
-        mask_y: -1.0,
-        mask_w: 2.0,
-        mask_h: 2.0,
+        mask_x: mask_rect.map(|rect| rect[0]).unwrap_or(-1.0),
+        mask_y: mask_rect.map(|rect| rect[1]).unwrap_or(-1.0),
+        mask_w: mask_rect.map(|rect| rect[2]).unwrap_or(2.0),
+        mask_h: mask_rect.map(|rect| rect[3]).unwrap_or(2.0),
         radius_uniform,
         radius_tl,
         radius_tr,
@@ -1525,8 +1599,68 @@ pub fn image_mask_rounded_rect(
     OK
 }
 
+/// Apply a rounded-rect SDF mask to an image, producing a new image handle.
+///
+/// `rect_ptr` points to a 24-byte buffer containing radius_uniform,
+/// radius_tl, radius_tr, radius_br, radius_bl, and mode.
+pub fn image_mask_rounded_rect(
+    pctx: &mut PaintContext,
+    image: u64,
+    rect_ptr: *const u8,
+    out_image: *mut u64,
+) -> i32 {
+    image_mask_rounded_rect_impl(pctx, image, rect_ptr, out_image, None)
+}
+
+/// Apply a rounded-rect mask while retaining the original box geometry for a
+/// cropped source image. The 40-byte buffer contains the six radius/mode
+/// values followed by mask_x, mask_y, mask_w, and mask_h in output NDC.
+pub fn image_mask_rounded_rect_region(
+    pctx: &mut PaintContext,
+    image: u64,
+    rect_ptr: *const u8,
+    out_image: *mut u64,
+) -> i32 {
+    if rect_ptr.is_null() {
+        return ERR_INVALID_ARG;
+    }
+    // SAFETY: this internal boundary requires the caller's 40-byte region
+    // buffer; the public six-float function above keeps its original contract.
+    let params: &[f32] = unsafe { std::slice::from_raw_parts(rect_ptr as *const f32, 10) };
+    let mask_rect = [params[6], params[7], params[8], params[9]];
+    image_mask_rounded_rect_impl(pctx, image, rect_ptr, out_image, Some(mask_rect))
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn test_target_set_reset_scissor_invalid_args() {
+        let mut pctx = PaintContext::new();
+        assert_eq!(target_set_scissor(&mut pctx, 0, 10, 10, 50, 50), ERR_INVALID_ARG);
+        assert_eq!(target_reset_scissor(&mut pctx, 0), ERR_INVALID_ARG);
+        assert_eq!(target_set_scissor(&mut pctx, 999999, 10, 10, 50, 50), ERR_INVALID_HANDLE);
+        assert_eq!(target_reset_scissor(&mut pctx, 999999), ERR_INVALID_HANDLE);
+    }
+
+    #[test]
+    fn test_target_set_reset_scissor_valid() {
+        let mut pctx = PaintContext::new();
+        let mut handle = 0u64;
+        let rc = target_create(&mut pctx, 64, 64, &mut handle);
+        assert_eq!(rc, OK);
+        assert_ne!(handle, 0);
+
+        assert_eq!(target_set_scissor(&mut pctx, handle, 5, 10, 20, 30), OK);
+        assert_eq!(pctx.targets.get(handle).unwrap().scissor, Some([5, 10, 20, 30]));
+
+        assert_eq!(target_reset_scissor(&mut pctx, handle), OK);
+        assert_eq!(pctx.targets.get(handle).unwrap().scissor, None);
+
+        assert_eq!(target_destroy(&mut pctx, handle), OK);
+    }
+
     #[test]
     fn test_rect_parse_from_bytes() {
         // Verify the 4×u32 rect parse in readback_region_rgba.

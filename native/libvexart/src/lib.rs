@@ -229,7 +229,7 @@ pub unsafe extern "C" fn vexart_context_create(
 pub extern "C" fn vexart_context_destroy(ctx: u64) -> i32 {
     ffi_guard!({
         let _ = ctx;
-        // 1. Drain SHARED_PAINT (releases WGPU device, queue, pipeline caches, render targets, images, atlases)
+        // 1. Drain SHARED_PAINT (releases WGPU device, queue, pipeline caches, render targets + scissor state, images, atlases)
         {
             let mut guard = lock_or_recover(&SHARED_PAINT);
             let _ = guard.take();
@@ -472,6 +472,39 @@ pub extern "C" fn vexart_composite_target_end_layer(_ctx: u64, target: u64) -> i
     })
 }
 
+/// Set hardware scissor rectangle on an offscreen render target.
+#[no_mangle]
+pub extern "C" fn vexart_composite_target_set_scissor(
+    _ctx: u64,
+    target: u64,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+) -> i32 {
+    ffi_guard!({
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        composite::target_set_scissor(pctx, target, x, y, width, height)
+    })
+}
+
+/// Reset/clear hardware scissor rectangle on an offscreen render target.
+#[no_mangle]
+pub extern "C" fn vexart_composite_target_reset_scissor(_ctx: u64, target: u64) -> i32 {
+    ffi_guard!({
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        composite::target_reset_scissor(pctx, target)
+    })
+}
+
 // ── Compositing (Phase 2b Slice 1) ────────────────────────────────────────
 
 /// Composite an image onto a target at (x,y,w,h) with the given z-order.
@@ -646,7 +679,66 @@ pub unsafe extern "C" fn vexart_composite_image_mask_rounded_rect(
             Some(c) => c,
             None => return ERR_GPU_DEVICE_LOST,
         };
-        composite::image_mask_rounded_rect(pctx, image, rect_ptr, out_image)
+        let rc = composite::image_mask_rounded_rect(pctx, image, rect_ptr, out_image);
+        if rc == OK {
+            let handle = *out_image;
+            if let Some(img) = pctx.images.get(&handle) {
+                let size = img.texture.size();
+                let bytes = (size.width as u64) * (size.height as u64) * 4;
+                let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
+                res_guard.register(
+                    handle,
+                    resource::ResourceKind::ImageSprite,
+                    bytes,
+                    0,
+                    resource::WgpuHandle::Id(handle),
+                );
+            }
+        }
+        rc
+    })
+}
+
+/// Apply a rounded-rect SDF mask with an explicit source-box region.
+/// `rect_ptr` = 10 × f32: six radius/mode values followed by mask_x, mask_y,
+/// mask_w, mask_h in output NDC. This internal companion keeps radius
+/// geometry in the original image box when the source has been cropped.
+///
+/// # Safety
+/// `rect_ptr` must be valid for 40 bytes; `out_image` must be valid.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_composite_image_mask_rounded_rect_region(
+    _ctx: u64,
+    image: u64,
+    rect_ptr: *const u8,
+    out_image: *mut u64,
+) -> i32 {
+    ffi_guard!({
+        if out_image.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        let rc = composite::image_mask_rounded_rect_region(pctx, image, rect_ptr, out_image);
+        if rc == OK {
+            let handle = *out_image;
+            if let Some(img) = pctx.images.get(&handle) {
+                let size = img.texture.size();
+                let bytes = (size.width as u64) * (size.height as u64) * 4;
+                let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
+                res_guard.register(
+                    handle,
+                    resource::ResourceKind::ImageSprite,
+                    bytes,
+                    0,
+                    resource::WgpuHandle::Id(handle),
+                );
+            }
+        }
+        rc
     })
 }
 
@@ -1227,6 +1319,15 @@ pub unsafe extern "C" fn vexart_kitty_emit_placeholder_shm_frame(
 #[no_mangle]
 pub extern "C" fn vexart_kitty_shm_is_consumed(handle: u64) -> i32 {
     ffi_guard!({ kitty::shm::shm_is_consumed(handle) })
+}
+
+/// Unlink all active Kitty SHM objects and close their descriptors.
+#[no_mangle]
+pub extern "C" fn vexart_kitty_shm_cleanup_all() -> i32 {
+    ffi_guard!({
+        kitty::transport::cleanup_shm_on_shutdown();
+        OK
+    })
 }
 
 // ─── §5.8 Resource manager (Phase 2b Slice 6) ────────────────────────────
@@ -1826,9 +1927,13 @@ pub unsafe extern "C" fn vexart_font_measure(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ffi::panic::ERR_INVALID_HANDLE;
+
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_context_destroy_cleans_all_registries() {
+        let _lock = lock_or_recover(&TEST_LOCK);
         // Register dummy entries in shared registries
         {
             let mut res = lock_or_recover(&SHARED_RESOURCE);
@@ -1871,6 +1976,15 @@ mod tests {
             let mut res = lock_or_recover(&SHARED_RESOURCE);
             cdl_reg.update("canvas_test".to_string(), b"commands", "h1".to_string(), 1, &mut res);
         }
+        // Create a target and set scissor to verify teardown drains it
+        {
+            let mut target = 0u64;
+            let rc = unsafe { vexart_composite_target_create(1, 32, 32, &mut target) };
+            assert_eq!(rc, OK);
+            assert_ne!(target, 0);
+            let rc = vexart_composite_target_set_scissor(1, target, 5, 5, 10, 10);
+            assert_eq!(rc, OK);
+        }
 
         // Destroy context
         let rc = vexart_context_destroy(1);
@@ -1900,5 +2014,100 @@ mod tests {
             let layer_reg = lock_or_recover(&SHARED_LAYER_REGISTRY);
             assert_eq!(layer_reg.len(), 0);
         }
+    }
+
+    #[test]
+    fn test_target_scissor_invalid_args() {
+        let _lock = lock_or_recover(&TEST_LOCK);
+        assert_eq!(
+            vexart_composite_target_set_scissor(1, 0, 10, 10, 50, 50),
+            ERR_INVALID_ARG
+        );
+        assert_eq!(
+            vexart_composite_target_reset_scissor(1, 0),
+            ERR_INVALID_ARG
+        );
+        assert_eq!(
+            vexart_composite_target_set_scissor(1, 999999, 10, 10, 50, 50),
+            ERR_INVALID_HANDLE
+        );
+        assert_eq!(
+            vexart_composite_target_reset_scissor(1, 999999),
+            ERR_INVALID_HANDLE
+        );
+    }
+
+    #[test]
+    fn test_target_scissor_lifecycle() {
+        let _lock = lock_or_recover(&TEST_LOCK);
+        let mut target = 0u64;
+        let rc = unsafe { vexart_composite_target_create(1, 100, 100, &mut target) };
+        assert_eq!(rc, OK);
+        assert_ne!(target, 0);
+
+        // Initial target has no scissor
+        {
+            let guard = lock_or_recover(&SHARED_PAINT);
+            let pctx = guard.as_ref().unwrap();
+            let rec = pctx.targets.get(target).unwrap();
+            assert_eq!(rec.scissor, None);
+        }
+
+        // Set scissor
+        let rc = vexart_composite_target_set_scissor(1, target, 10, 20, 30, 40);
+        assert_eq!(rc, OK);
+
+        {
+            let guard = lock_or_recover(&SHARED_PAINT);
+            let pctx = guard.as_ref().unwrap();
+            let rec = pctx.targets.get(target).unwrap();
+            assert_eq!(rec.scissor, Some([10, 20, 30, 40]));
+        }
+
+        // Begin layer — active layer inherits scissor
+        let rc = vexart_composite_target_begin_layer(1, target, 0, 0);
+        assert_eq!(rc, OK);
+
+        {
+            let guard = lock_or_recover(&SHARED_PAINT);
+            let pctx = guard.as_ref().unwrap();
+            let rec = pctx.targets.get(target).unwrap();
+            let layer = rec.active_layer.as_ref().unwrap();
+            assert_eq!(layer.scissor, Some([10, 20, 30, 40]));
+        }
+
+        // Update scissor while layer is active
+        let rc = vexart_composite_target_set_scissor(1, target, 5, 5, 50, 50);
+        assert_eq!(rc, OK);
+
+        {
+            let guard = lock_or_recover(&SHARED_PAINT);
+            let pctx = guard.as_ref().unwrap();
+            let rec = pctx.targets.get(target).unwrap();
+            assert_eq!(rec.scissor, Some([5, 5, 50, 50]));
+            let layer = rec.active_layer.as_ref().unwrap();
+            assert_eq!(layer.scissor, Some([5, 5, 50, 50]));
+        }
+
+        // Reset scissor while layer is active
+        let rc = vexart_composite_target_reset_scissor(1, target);
+        assert_eq!(rc, OK);
+
+        {
+            let guard = lock_or_recover(&SHARED_PAINT);
+            let pctx = guard.as_ref().unwrap();
+            let rec = pctx.targets.get(target).unwrap();
+            assert_eq!(rec.scissor, None);
+            let layer = rec.active_layer.as_ref().unwrap();
+            assert_eq!(layer.scissor, None);
+        }
+
+        // End layer
+        let rc = vexart_composite_target_end_layer(1, target);
+        assert_eq!(rc, OK);
+
+        // Destroy target
+        let rc = vexart_composite_target_destroy(1, target);
+        assert_eq!(rc, OK);
     }
 }

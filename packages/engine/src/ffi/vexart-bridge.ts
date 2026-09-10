@@ -52,6 +52,8 @@ export const VEXART_SYMBOLS = {
   vexart_composite_target_destroy:      { args: [FFIType.u64, FFIType.u64],                                        returns: FFIType.i32 },
   vexart_composite_target_begin_layer:  { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.u32],             returns: FFIType.i32 },
   vexart_composite_target_end_layer:    { args: [FFIType.u64, FFIType.u64],                                        returns: FFIType.i32 },
+  vexart_composite_target_set_scissor:  { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32], returns: FFIType.i32 },
+  vexart_composite_target_reset_scissor:{ args: [FFIType.u64, FFIType.u64],                                        returns: FFIType.i32 },
   // §5.4 Composite — image ops (Phase 2b)
   vexart_composite_render_image_layer:  { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.f32, FFIType.f32, FFIType.f32, FFIType.f32, FFIType.u32, FFIType.u32], returns: FFIType.i32 },
   vexart_composite_render_image_transform_layer: { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32], returns: FFIType.i32 },

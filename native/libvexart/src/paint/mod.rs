@@ -235,16 +235,40 @@ impl PaintContext {
         // split-borrow limitation. All raw pointers remain valid for the duration of this
         // function — the pointed-to values are owned by `self` which outlives the block.
         // Bun FFI is single-threaded; no concurrent mutation occurs.
-        let (render_view_ptr, use_active_encoder): (*const wgpu::TextureView, bool) = if target != 0
-        {
+        let (render_view_ptr, use_active_encoder, target_dims, target_scissor): (
+            *const wgpu::TextureView,
+            bool,
+            (u32, u32),
+            Option<[u32; 4]>,
+        ) = if target != 0 {
             if let Some(rec) = self.targets.get(target) {
                 let has_layer = rec.active_layer.is_some();
-                (&rec.view as *const wgpu::TextureView, has_layer)
+                let scissor = rec
+                    .active_layer
+                    .as_ref()
+                    .and_then(|l| l.scissor)
+                    .or(rec.scissor);
+                (
+                    &rec.view as *const wgpu::TextureView,
+                    has_layer,
+                    (rec.width, rec.height),
+                    scissor,
+                )
             } else {
-                (&self.target_view as *const wgpu::TextureView, false)
+                (
+                    &self.target_view as *const wgpu::TextureView,
+                    false,
+                    (self.target_texture.width(), self.target_texture.height()),
+                    None,
+                )
             }
         } else {
-            (&self.target_view as *const wgpu::TextureView, false)
+            (
+                &self.target_view as *const wgpu::TextureView,
+                false,
+                (self.target_texture.width(), self.target_texture.height()),
+                None,
+            )
         };
 
         let t_gpu_start = Instant::now();
@@ -345,7 +369,16 @@ impl PaintContext {
                 {
                     pass.set_bind_group(0, &self.fallback_bind_group, &[]);
                 }
-                pass.draw(0..6, 0..instance_count);
+                if let Some(s) = target_scissor {
+                    if let Some([sx, sy, sw, sh]) =
+                        crate::composite::target::clamp_scissor(s, target_dims.0, target_dims.1)
+                    {
+                        pass.set_scissor_rect(sx, sy, sw, sh);
+                        pass.draw(0..6, 0..instance_count);
+                    }
+                } else {
+                    pass.draw(0..6, 0..instance_count);
+                }
             }
             // Do NOT submit — that happens in end_layer.
         } else {
@@ -432,7 +465,16 @@ impl PaintContext {
                     pass.set_bind_group(0, &self.fallback_bind_group, &[]);
                 }
                 // 6 vertices per quad (2 triangles), instance_count instances.
-                pass.draw(0..6, 0..instance_count);
+                if let Some(s) = target_scissor {
+                    if let Some([sx, sy, sw, sh]) =
+                        crate::composite::target::clamp_scissor(s, target_dims.0, target_dims.1)
+                    {
+                        pass.set_scissor_rect(sx, sy, sw, sh);
+                        pass.draw(0..6, 0..instance_count);
+                    }
+                } else {
+                    pass.draw(0..6, 0..instance_count);
+                }
             }
 
             let cmd = encoder.finish();

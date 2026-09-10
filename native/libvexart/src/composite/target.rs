@@ -17,6 +17,7 @@ pub struct TargetRecord {
     pub padded_bytes_per_row: u32,
     /// Some(encoder) when a layer is active; None when rested.
     pub active_layer: Option<ActiveLayerRecord>,
+    pub scissor: Option<[u32; 4]>,
 }
 
 /// State held while a layer is open (between begin_layer and end_layer).
@@ -29,6 +30,83 @@ pub struct ActiveLayerRecord {
     pub first_load_mode: u32,
     /// RGBA8 packed clear color (used when first_load_mode == 0).
     pub clear_rgba: u32,
+    pub scissor: Option<[u32; 4]>,
+}
+
+impl TargetRecord {
+    pub fn new(
+        texture: wgpu::Texture,
+        view: wgpu::TextureView,
+        readback_buffer: wgpu::Buffer,
+        width: u32,
+        height: u32,
+        padded_bytes_per_row: u32,
+    ) -> Self {
+        Self {
+            texture,
+            view,
+            readback_buffer,
+            width,
+            height,
+            padded_bytes_per_row,
+            active_layer: None,
+            scissor: None,
+        }
+    }
+
+    pub fn set_scissor(&mut self, x: u32, y: u32, width: u32, height: u32) {
+        self.scissor = Some([x, y, width, height]);
+        if let Some(layer) = self.active_layer.as_mut() {
+            layer.set_scissor(x, y, width, height);
+        }
+    }
+
+    pub fn clear_scissor(&mut self) {
+        self.scissor = None;
+        if let Some(layer) = self.active_layer.as_mut() {
+            layer.clear_scissor();
+        }
+    }
+}
+
+impl ActiveLayerRecord {
+    pub fn new(
+        encoder: wgpu::CommandEncoder,
+        first_load_mode: u32,
+        clear_rgba: u32,
+        scissor: Option<[u32; 4]>,
+    ) -> Self {
+        Self {
+            encoder,
+            first_pass: true,
+            first_load_mode,
+            clear_rgba,
+            scissor,
+        }
+    }
+
+    pub fn set_scissor(&mut self, x: u32, y: u32, width: u32, height: u32) {
+        self.scissor = Some([x, y, width, height]);
+    }
+
+    pub fn clear_scissor(&mut self) {
+        self.scissor = None;
+    }
+}
+
+/// Clamps a scissor rectangle [x, y, width, height] to target dimensions [target_width, target_height].
+/// Returns None if the scissor rectangle is outside target bounds or has zero width or height.
+pub fn clamp_scissor(scissor: [u32; 4], target_width: u32, target_height: u32) -> Option<[u32; 4]> {
+    let [sx, sy, sw, sh] = scissor;
+    if sx >= target_width || sy >= target_height || sw == 0 || sh == 0 {
+        return None;
+    }
+    let clamped_w = sw.min(target_width - sx);
+    let clamped_h = sh.min(target_height - sy);
+    if clamped_w == 0 || clamped_h == 0 {
+        return None;
+    }
+    Some([sx, sy, clamped_w, clamped_h])
 }
 
 /// Registry that owns all TargetRecord values by opaque u64 handle.
@@ -91,15 +169,14 @@ impl TargetRegistry {
         let handle = self.next_handle.fetch_add(1, Ordering::Relaxed);
         *out_handle = handle;
 
-        Some(TargetRecord {
+        Some(TargetRecord::new(
             texture,
             view,
             readback_buffer,
             width,
             height,
             padded_bytes_per_row,
-            active_layer: None,
-        })
+        ))
     }
 
     /// Insert a TargetRecord that was created via `create()`.
@@ -139,12 +216,12 @@ impl TargetRegistry {
         let encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("vexart-layer-encoder"),
         });
-        rec.active_layer = Some(ActiveLayerRecord {
+        rec.active_layer = Some(ActiveLayerRecord::new(
             encoder,
-            first_pass: true,
-            first_load_mode: load_mode,
+            load_mode,
             clear_rgba,
-        });
+            rec.scissor,
+        ));
         Ok(())
     }
 
@@ -189,6 +266,42 @@ mod tests {
         assert_eq!((1920u32 * 4 + 255) & !255, 7680);
     }
 
+    #[test]
+    fn test_clamp_scissor() {
+        // Fully within bounds
+        assert_eq!(
+            clamp_scissor([10, 20, 30, 40], 100, 100),
+            Some([10, 20, 30, 40])
+        );
+        // Clamping right edge to target width
+        assert_eq!(
+            clamp_scissor([80, 20, 50, 40], 100, 100),
+            Some([80, 20, 20, 40])
+        );
+        // Clamping bottom edge to target height
+        assert_eq!(
+            clamp_scissor([10, 80, 30, 50], 100, 100),
+            Some([10, 80, 30, 20])
+        );
+        // Clamping both right and bottom edges
+        assert_eq!(
+            clamp_scissor([80, 80, 50, 50], 100, 100),
+            Some([80, 80, 20, 20])
+        );
+        // Scissor x exceeds or equals target width
+        assert_eq!(clamp_scissor([100, 20, 30, 40], 100, 100), None);
+        assert_eq!(clamp_scissor([110, 20, 30, 40], 100, 100), None);
+        // Scissor y exceeds or equals target height
+        assert_eq!(clamp_scissor([10, 100, 30, 40], 100, 100), None);
+        assert_eq!(clamp_scissor([10, 110, 30, 40], 100, 100), None);
+        // Zero width or zero height
+        assert_eq!(clamp_scissor([10, 20, 0, 40], 100, 100), None);
+        assert_eq!(clamp_scissor([10, 20, 30, 0], 100, 100), None);
+        assert_eq!(clamp_scissor([10, 20, 0, 0], 100, 100), None);
+        // Zero target dimensions
+        assert_eq!(clamp_scissor([0, 0, 10, 10], 0, 0), None);
+    }
+
     #[cfg(feature = "gpu-tests")]
     #[test]
     fn test_registry_create_real_target() {
@@ -224,8 +337,13 @@ mod tests {
         assert_eq!(rec.height, 64);
         assert_eq!(rec.padded_bytes_per_row, 256);
         assert!(rec.active_layer.is_none());
+        assert_eq!(rec.scissor, None);
         reg.insert(handle, rec);
-        assert!(reg.get(handle).is_some());
+        let rec_mut = reg.get_mut(handle).unwrap();
+        rec_mut.set_scissor(5, 6, 20, 30);
+        assert_eq!(rec_mut.scissor, Some([5, 6, 20, 30]));
+        rec_mut.clear_scissor();
+        assert_eq!(rec_mut.scissor, None);
         assert!(reg.destroy(handle));
         assert!(reg.get(handle).is_none());
     }

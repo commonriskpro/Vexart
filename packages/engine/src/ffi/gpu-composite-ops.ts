@@ -80,6 +80,25 @@ export function vexartCompositeTargetEndLayer(vctx: bigint, target: bigint): voi
   if (result !== 0) throw new Error(`vexart_composite_target_end_layer failed: ${result}`)
 }
 
+export function vexartCompositeTargetSetScissor(
+  vctx: bigint, target: bigint,
+  x: number, y: number, width: number, height: number,
+): void {
+  const result = getSymbols().vexart_composite_target_set_scissor(
+    vctx, target,
+    Math.max(0, Math.round(x)) >>> 0,
+    Math.max(0, Math.round(y)) >>> 0,
+    Math.max(0, Math.round(width)) >>> 0,
+    Math.max(0, Math.round(height)) >>> 0,
+  ) as number
+  if (result !== 0) throw new Error(`vexart_composite_target_set_scissor failed: ${result}`)
+}
+
+export function vexartCompositeTargetResetScissor(vctx: bigint, target: bigint): void {
+  const result = getSymbols().vexart_composite_target_reset_scissor(vctx, target) as number
+  if (result !== 0) throw new Error(`vexart_composite_target_reset_scissor failed: ${result}`)
+}
+
 // ── Compositing ──────────────────────────────────────────────────────────
 
 export function vexartCompositeRenderImageLayer(
@@ -137,6 +156,22 @@ export function vexartCompositeImageMaskRoundedRect(
 ): bigint {
   _handleOut[0] = 0n
   const result = getSymbols().vexart_composite_image_mask_rounded_rect(
+    vctx, image, ptr(new Uint8Array(rectBuf.buffer)), ptr(_handleOut)
+  ) as number
+  if (result !== 0) return 0n
+  return _handleOut[0]
+}
+
+/**
+ * Apply a rounded-rect mask whose box may extend beyond a cropped source
+ * image. `rectBuf` is six mask radii/mode floats followed by the mask box in
+ * NDC (mask_x, mask_y, mask_w, mask_h).
+ */
+export function vexartCompositeImageMaskRoundedRectRegion(
+  vctx: bigint, image: bigint, rectBuf: Float32Array,
+): bigint {
+  _handleOut[0] = 0n
+  const result = getSymbols().vexart_composite_image_mask_rounded_rect_region(
     vctx, image, ptr(new Uint8Array(rectBuf.buffer)), ptr(_handleOut)
   ) as number
   if (result !== 0) return 0n
