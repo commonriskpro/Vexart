@@ -7,6 +7,17 @@ Version scheme: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.10.0-beta.2] — 2026-09-10
+
+### Added
+
+- **Native Hardware Scissor Clipping** (`native/libvexart`): Direct hardware scissor rect support in WGPU render passes and composite pipelines, avoiding intermediate full-viewport FBO creation.
+
+### Fixed
+
+- **Kitty Graphics Protocol Double Buffering** (`native/libvexart`): Implemented Ping-Pong Double Buffering (`r=1` / `r=2` with `X=1`) to keep Kitty memory bounded to two frames (16.6 MB constant) and eliminate the 320 MB quota exhaustion freeze during rapid navigation.
+- **Direct Transform & Bounds Clipping** (`@vexart/engine`): Decoupled 2D transforms from flattening effects, eliminating oversized offscreen texture allocations (>2048px) and allowing arbitrarily wide scrolling rows to render seamlessly.
+
 ## [0.10.0-beta.1] — 2026-09-08
 
 ### Added
