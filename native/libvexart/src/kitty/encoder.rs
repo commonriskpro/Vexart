@@ -92,17 +92,19 @@ pub fn encode_frame_direct(rgba: &[u8], width: u32, height: u32, image_id: u32) 
     out
 }
 
-/// Encode a complete update as a Kitty animation frame. The current image
-/// placement remains visible while the frame payload is transferred; the
-/// trailing animation-control command switches to the new frame atomically.
-/// Each update uploads a fresh frame number on a canvas copied from the
-/// previous frame, then composes that new frame atomically.
+/// Encode a complete update as a Kitty animation frame using ping-pong double
+/// buffering. The visible frame remains displayed while the payload uploads to
+/// `target_frame` composed with `compose_frame`. If `is_replacement` is true,
+/// `r={target_frame}` replaces the target frame in-place.
+/// The trailing animation-control command atomically displays `target_frame`.
 pub fn encode_animation_frame_direct(
     rgba: &[u8],
     width: u32,
     height: u32,
     image_id: u32,
-    frame_id: u32,
+    target_frame: u32,
+    compose_frame: u32,
+    is_replacement: bool,
 ) -> Vec<u8> {
     let compressed = compress_rgba(rgba).unwrap_or_else(|_| rgba.to_vec());
     let b64 = B64.encode(&compressed);
@@ -111,19 +113,23 @@ pub fn encode_animation_frame_direct(
         .chunks(CHUNK_SIZE)
         .map(|c| std::str::from_utf8(c).expect("base64 is always valid utf8"))
         .collect();
-    let previous_frame = frame_id.saturating_sub(1);
+    let frame_params = if is_replacement {
+        format!("r={target_frame},c={compose_frame}")
+    } else {
+        format!("c={compose_frame}")
+    };
     let mut out = Vec::with_capacity(b64.len() + chunks.len() * 48 + 32);
     if chunks.is_empty() {
         out.extend_from_slice(
             format!(
-                "\x1b_Ga=f,i={image_id},c={previous_frame},f=32,s={width},v={height},C=1,o=z,m=0;\x1b\\"
+                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,o=z,m=0;\x1b\\"
             )
             .as_bytes(),
         );
     } else if chunks.len() == 1 {
         out.extend_from_slice(
             format!(
-                "\x1b_Ga=f,i={image_id},c={previous_frame},f=32,s={width},v={height},C=1,o=z,m=0;{}\x1b\\",
+                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,o=z,m=0;{}\x1b\\",
                 chunks[0]
             )
             .as_bytes(),
@@ -131,7 +137,7 @@ pub fn encode_animation_frame_direct(
     } else {
         out.extend_from_slice(
             format!(
-                "\x1b_Ga=f,i={image_id},c={previous_frame},f=32,s={width},v={height},C=1,o=z,m=1;{}\x1b\\",
+                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,o=z,m=1;{}\x1b\\",
                 chunks[0]
             )
             .as_bytes(),
@@ -141,7 +147,7 @@ pub fn encode_animation_frame_direct(
         }
         out.extend_from_slice(format!("\x1b_Gm=0;{}\x1b\\", chunks[chunks.len() - 1]).as_bytes());
     }
-    out.extend_from_slice(format!("\x1b_Ga=a,i={image_id},c={frame_id},q=2;\x1b\\").as_bytes());
+    out.extend_from_slice(format!("\x1b_Ga=a,i={image_id},c={target_frame},q=2;\x1b\\").as_bytes());
     out
 }
 
@@ -296,5 +302,48 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_encode_animation_frame_direct_initial_append() {
+        let rgba = [0xff, 0x00, 0x00, 0xff];
+        let out = encode_animation_frame_direct(&rgba, 1, 1, 42, 2, 1, false);
+        let text = std::str::from_utf8(&out).expect("valid utf8");
+        assert!(text.contains("c=1"), "must compose from frame 1");
+        assert!(!text.contains("r="), "initial append must not specify r=");
+        assert!(
+            text.contains("\x1b_Ga=a,i=42,c=2,q=2;\x1b\\"),
+            "must atomically switch to target frame 2"
+        );
+    }
+
+    #[test]
+    fn test_encode_animation_frame_direct_replacement_frame1() {
+        let rgba = [0x00, 0xff, 0x00, 0xff];
+        let out = encode_animation_frame_direct(&rgba, 1, 1, 42, 1, 2, true);
+        let text = std::str::from_utf8(&out).expect("valid utf8");
+        assert!(
+            text.contains("r=1,c=2"),
+            "replacement must specify r=1,c=2"
+        );
+        assert!(
+            text.contains("\x1b_Ga=a,i=42,c=1,q=2;\x1b\\"),
+            "must atomically switch to target frame 1"
+        );
+    }
+
+    #[test]
+    fn test_encode_animation_frame_direct_replacement_frame2() {
+        let rgba = [0x00, 0x00, 0xff, 0xff];
+        let out = encode_animation_frame_direct(&rgba, 1, 1, 42, 2, 1, true);
+        let text = std::str::from_utf8(&out).expect("valid utf8");
+        assert!(
+            text.contains("r=2,c=1"),
+            "replacement must specify r=2,c=1"
+        );
+        assert!(
+            text.contains("\x1b_Ga=a,i=42,c=2,q=2;\x1b\\"),
+            "must atomically switch to target frame 2"
+        );
     }
 }

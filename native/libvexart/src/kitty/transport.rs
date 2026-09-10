@@ -48,15 +48,34 @@ thread_local! {
     // the process stdout used by the native transport.
     #[cfg(test)]
     static FORCE_WRITE_FAILURE: Cell<bool> = const { Cell::new(false) };
+    // Test-only animation support override keeps transport tests independent of
+    // the host terminal environment.
+    #[cfg(test)]
+    static FORCE_ANIMATION_SUPPORT: Cell<Option<bool>> = const { Cell::new(Some(true)) };
 }
 
 fn image_frame(image_id: u32) -> Option<u32> {
     IMAGE_FRAMES.with(|frames| frames.borrow().get(&image_id).copied())
 }
 
-fn record_image_frame(image_id: u32, existing_frame: Option<u32>) {
+fn next_animation_frame(existing_frame: Option<u32>) -> (u32, u32, bool) {
+    // returns (target_frame, compose_frame, is_replacement)
+    match existing_frame {
+        None => (1, 1, false),
+        Some(1) => (2, 1, false), // Frame 2 is appended (first time)
+        Some(2) => (1, 2, true),  // Frame 1 is replaced (r=1)
+        Some(_) => (2, 1, true),  // Frame 2 is replaced (r=2)
+    }
+}
+
+fn record_image_frame(image_id: u32, target_frame: Option<u32>) {
     IMAGE_FRAMES.with(|frames| {
-        let next = existing_frame.map_or(2, |frame| frame.saturating_add(1));
+        let next = match target_frame {
+            Some(1) => 3,
+            Some(2) => 2,
+            Some(_) => 3,
+            None => 1,
+        };
         frames.borrow_mut().insert(image_id, next);
     });
 }
@@ -83,8 +102,39 @@ fn record_image_geometry(image_id: u32, width: u32, height: u32) {
     });
 }
 
+fn animation_supported() -> bool {
+    #[cfg(test)]
+    if let Some(forced) = FORCE_ANIMATION_SUPPORT.with(|c| c.get()) {
+        return forced;
+    }
+    animation_supported_from_env(
+        std::env::var("GHOSTTY_RESOURCES_DIR").is_ok(),
+        std::env::var("TERM_PROGRAM").as_deref().ok(),
+        std::env::var("VEXART_KITTY_ANIMATION").as_deref().ok(),
+    )
+}
+
+fn animation_supported_from_env(
+    ghostty_resources_dir: bool,
+    term_program: Option<&str>,
+    vexart_kitty_animation: Option<&str>,
+) -> bool {
+    if vexart_kitty_animation == Some("1") {
+        return true;
+    }
+    if vexart_kitty_animation == Some("0") {
+        return false;
+    }
+    if ghostty_resources_dir || term_program == Some("ghostty") {
+        return false;
+    }
+    true
+}
+
 fn needs_full_transmit(image_id: u32, width: u32, height: u32) -> bool {
-    image_frame(image_id).is_none() || image_geometry(image_id) != Some((width, height))
+    !animation_supported()
+        || image_frame(image_id).is_none()
+        || image_geometry(image_id) != Some((width, height))
 }
 
 fn rgba_hash(rgba: &[u8]) -> u64 {
@@ -296,14 +346,26 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
 
     // 5. Build Kitty SHM escape and write to stdout.
     let name_b64 = B64.encode(shm_name.as_bytes());
-    let escape = if let Some(frame_id) = animation_frame {
-        let previous_frame = frame_id.saturating_sub(1);
-        format!(
-            "\x1b_Ga=f,i={image_id},c={previous_frame},f=32,s={width},v={height},C=1,t=s,o=z,q=2;{name_b64}\x1b\\\x1b_Ga=a,i={image_id},c={frame_id},q=2;\x1b\\"
+    let (target_frame, escape) = if let Some(existing) = animation_frame {
+        let (target_frame, compose_frame, is_replacement) =
+            next_animation_frame(Some(existing));
+        let frame_params = if is_replacement {
+            format!("r={target_frame},c={compose_frame}")
+        } else {
+            format!("c={compose_frame}")
+        };
+        (
+            Some(target_frame),
+            format!(
+                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,t=s,o=z,q=2;{name_b64}\x1b\\\x1b_Ga=a,i={image_id},c={target_frame},q=2;\x1b\\"
+            ),
         )
     } else {
-        format!(
-            "\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s,o=z,q=2;{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,q=2;\x1b\\"
+        (
+            None,
+            format!(
+                "\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s,o=z,q=2;{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,q=2;\x1b\\"
+            ),
         )
     };
     let write_result = write_transport(escape.as_bytes());
@@ -315,7 +377,7 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
     match write_result {
         Ok(()) => {
             shm_release(handle, 0);
-            record_image_frame(image_id, animation_frame);
+            record_image_frame(image_id, target_frame);
             record_image_geometry(image_id, width, height);
             record_payload(image_id, digest);
             OK
@@ -797,10 +859,24 @@ fn emit_direct_inner(rgba: &[u8], width: u32, height: u32, image_id: u32) -> i32
     if !full_transmit && payload_unchanged(image_id, digest) {
         return OK;
     }
-    let escaped = animation_frame.map_or_else(
-        || encode_frame_direct(rgba, width, height, image_id),
-        |frame_id| encode_animation_frame_direct(rgba, width, height, image_id, frame_id),
-    );
+    let (target_frame, escaped) = if let Some(existing) = animation_frame {
+        let (target_frame, compose_frame, is_replacement) =
+            next_animation_frame(Some(existing));
+        (
+            Some(target_frame),
+            encode_animation_frame_direct(
+                rgba,
+                width,
+                height,
+                image_id,
+                target_frame,
+                compose_frame,
+                is_replacement,
+            ),
+        )
+    } else {
+        (None, encode_frame_direct(rgba, width, height, image_id))
+    };
     let stale_delete = if full_transmit {
         format!("\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\")
     } else {
@@ -812,7 +888,7 @@ fn emit_direct_inner(rgba: &[u8], width: u32, height: u32, image_id: u32) -> i32
     );
     match write_transport(positioned.as_bytes()) {
         Ok(()) => {
-            record_image_frame(image_id, animation_frame);
+            record_image_frame(image_id, target_frame);
             record_image_geometry(image_id, width, height);
             record_payload(image_id, digest);
             OK
@@ -925,18 +1001,30 @@ fn emit_shm_rgba_at_with_stats(
         return (ERR_KITTY_TRANSPORT, stats);
     }
     let name_b64 = B64.encode(shm_name.as_bytes());
-    let escape = if let Some(frame_id) = animation_frame {
-        let previous_frame = frame_id.saturating_sub(1);
-        format!(
-            "\x1b7\x1b[{};{}H\x1b_Ga=f,i={image_id},c={previous_frame},f=32,s={width},v={height},C=1,t=s{compression_param},q=2;{name_b64}\x1b\\\x1b_Ga=a,i={image_id},c={frame_id},q=2;\x1b\\\x1b8",
-            row.max(0) + 1,
-            col.max(0) + 1,
+    let (target_frame, escape) = if let Some(existing) = animation_frame {
+        let (target_frame, compose_frame, is_replacement) =
+            next_animation_frame(Some(existing));
+        let frame_params = if is_replacement {
+            format!("r={target_frame},c={compose_frame}")
+        } else {
+            format!("c={compose_frame}")
+        };
+        (
+            Some(target_frame),
+            format!(
+                "\x1b7\x1b[{};{}H\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,t=s{compression_param},q=2;{name_b64}\x1b\\\x1b_Ga=a,i={image_id},c={target_frame},q=2;\x1b\\\x1b8",
+                row.max(0) + 1,
+                col.max(0) + 1,
+            ),
         )
     } else {
-        format!(
-            "\x1b7\x1b[{};{}H\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s{compression_param},q=2;{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,q=2;\x1b\\\x1b8",
-            row.max(0) + 1,
-            col.max(0) + 1,
+        (
+            None,
+            format!(
+                "\x1b7\x1b[{};{}H\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s{compression_param},q=2;{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,q=2;\x1b\\\x1b8",
+                row.max(0) + 1,
+                col.max(0) + 1,
+            ),
         )
     };
     let t_write = Instant::now();
@@ -945,7 +1033,7 @@ fn emit_shm_rgba_at_with_stats(
     match write_result {
         Ok(()) => {
             shm_release(handle, 0);
-            record_image_frame(image_id, animation_frame);
+            record_image_frame(image_id, target_frame);
             record_image_geometry(image_id, width, height);
             record_payload(image_id, digest);
             (OK, stats)
@@ -974,10 +1062,24 @@ fn emit_direct_rgba_at(
     if !full_transmit && payload_unchanged(image_id, digest) {
         return OK;
     }
-    let escaped = animation_frame.map_or_else(
-        || encode_frame_direct(rgba, width, height, image_id),
-        |frame_id| encode_animation_frame_direct(rgba, width, height, image_id, frame_id),
-    );
+    let (target_frame, escaped) = if let Some(existing) = animation_frame {
+        let (target_frame, compose_frame, is_replacement) =
+            next_animation_frame(Some(existing));
+        (
+            Some(target_frame),
+            encode_animation_frame_direct(
+                rgba,
+                width,
+                height,
+                image_id,
+                target_frame,
+                compose_frame,
+                is_replacement,
+            ),
+        )
+    } else {
+        (None, encode_frame_direct(rgba, width, height, image_id))
+    };
     let row = row.max(0) + 1;
     let col = col.max(0) + 1;
     let stale_delete = if full_transmit {
@@ -991,7 +1093,7 @@ fn emit_direct_rgba_at(
     );
     match write_transport(positioned.as_bytes()) {
         Ok(()) => {
-            record_image_frame(image_id, animation_frame);
+            record_image_frame(image_id, target_frame);
             record_image_geometry(image_id, width, height);
             record_payload(image_id, digest);
             OK
@@ -1358,7 +1460,7 @@ mod tests {
             ),
             ERR_KITTY_TRANSPORT
         );
-        assert_eq!(image_frame(image_id), Some(2));
+        assert_eq!(image_frame(image_id), Some(1));
         assert_eq!(image_geometry(image_id), Some((1, 1)));
         assert!(payload_unchanged(image_id, previous_digest));
 
@@ -1553,5 +1655,55 @@ mod tests {
         let rc =
             unsafe { emit_region_native(1, std::ptr::null(), 0, 0, 0, 0, 0, std::ptr::null_mut()) };
         assert_eq!(rc, ERR_KITTY_TRANSPORT);
+    }
+
+    #[test]
+    fn test_next_animation_frame_and_ping_pong_cycle() {
+        assert_eq!(next_animation_frame(None), (1, 1, false));
+        assert_eq!(next_animation_frame(Some(1)), (2, 1, false));
+        assert_eq!(next_animation_frame(Some(2)), (1, 2, true));
+        assert_eq!(next_animation_frame(Some(3)), (2, 1, true));
+
+        let image_id = 99_001;
+        // 1. Initial full transmit records None -> frame 1
+        record_image_frame(image_id, None);
+        assert_eq!(image_frame(image_id), Some(1));
+
+        // 2. First update: existing=1 -> target=2, compose=1, is_replacement=false
+        let (target, compose, is_replacement) = next_animation_frame(image_frame(image_id));
+        assert_eq!((target, compose, is_replacement), (2, 1, false));
+        record_image_frame(image_id, Some(target));
+        assert_eq!(image_frame(image_id), Some(2));
+
+        // 3. Second update: existing=2 -> target=1, compose=2, is_replacement=true
+        let (target, compose, is_replacement) = next_animation_frame(image_frame(image_id));
+        assert_eq!((target, compose, is_replacement), (1, 2, true));
+        record_image_frame(image_id, Some(target));
+        assert_eq!(image_frame(image_id), Some(3));
+
+        // 4. Third update: existing=3 -> target=2, compose=1, is_replacement=true
+        let (target, compose, is_replacement) = next_animation_frame(image_frame(image_id));
+        assert_eq!((target, compose, is_replacement), (2, 1, true));
+        record_image_frame(image_id, Some(target));
+        assert_eq!(image_frame(image_id), Some(2));
+
+        // 5. Fourth update: existing=2 -> target=1, compose=2, is_replacement=true
+        let (target, compose, is_replacement) = next_animation_frame(image_frame(image_id));
+        assert_eq!((target, compose, is_replacement), (1, 2, true));
+        record_image_frame(image_id, Some(target));
+        assert_eq!(image_frame(image_id), Some(3));
+
+        forget_image_frame(image_id);
+    }
+
+    #[test]
+    fn test_animation_supported_detection() {
+        assert!(animation_supported_from_env(false, None, None));
+        assert!(!animation_supported_from_env(true, None, None));
+        assert!(!animation_supported_from_env(false, Some("ghostty"), None));
+        assert!(animation_supported_from_env(true, Some("ghostty"), Some("1")));
+        assert!(!animation_supported_from_env(false, Some("xterm-kitty"), Some("0")));
+        assert!(animation_supported_from_env(false, Some("xterm-kitty"), None));
+        assert!(animation_supported_from_env(false, Some("iTerm.app"), None));
     }
 }
