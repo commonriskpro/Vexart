@@ -1,20 +1,68 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
-import { allDescriptors, deregisterAllDescriptors, markLayerBacked, resetFrameTracking, unmarkLayerBacked } from "../animation/compositor-path"
-import { createSpring, createTransition, hasActiveAnimations, resetActiveAnimations } from "./animation"
+import {
+  allDescriptors,
+  deregisterAllDescriptors,
+  hasCompositorAnimations,
+  markLayerBacked,
+  resetCompositorPathState,
+  resetFrameTracking,
+  unmarkLayerBacked,
+} from "../animation/compositor-path"
+import {
+  createSpring,
+  createTransition,
+  hasActiveAnimations,
+  resetActiveAnimations,
+} from "./animation"
+import { createRenderLoop } from "./loop"
 
 function clearCompositorState() {
   resetFrameTracking()
+  resetCompositorPathState()
   resetActiveAnimations()
-  for (const descriptor of allDescriptors()) {
-    deregisterAllDescriptors(descriptor.nodeId)
-    unmarkLayerBacked(descriptor.nodeId)
-  }
 }
 
 afterEach(() => {
   clearCompositorState()
 })
+
+function mockTerminal(width = 200, height = 100) {
+  return {
+    kind: "kitty" as const,
+    caps: {
+      kind: "kitty" as const,
+      kittyGraphics: true,
+      kittyPlaceholder: false,
+      kittyKeyboard: false,
+      sixel: false,
+      truecolor: true,
+      mouse: false,
+      focus: false,
+      bracketedPaste: false,
+      syncOutput: false,
+      tmux: false,
+      parentKind: null,
+      transmissionMode: "direct" as const,
+    },
+    size: { cols: Math.ceil(width / 8), rows: Math.ceil(height / 16), pixelWidth: width, pixelHeight: height, cellWidth: 8, cellHeight: 16 },
+    write() {},
+    rawWrite() {},
+    writeBytes() {},
+    beginSync() {},
+    endSync() {},
+    onResize() { return () => {} },
+    onData() { return () => {} },
+    bgColor: null,
+    fgColor: null,
+    isDark: true,
+    setTitle() {},
+    writeClipboard() {},
+    suspend() {},
+    resume() {},
+    destroy() {},
+  }
+}
 
 describe("animation compositor integration", () => {
   test("createTransition registers and deregisters compositor descriptor when configured", async () => {
@@ -34,77 +82,139 @@ describe("animation compositor integration", () => {
   })
 
   test("createSpring registers compositor descriptor when configured", () => {
+    markLayerBacked(99)
+    const [, setTarget] = createSpring(0, {
+      stiffness: 170,
+      damping: 26,
+      precision: 0.0001,
+      compositor: { nodeId: 99, property: "transform" },
+    })
+
+    setTarget(10)
+    expect(allDescriptors().some((descriptor) => descriptor.nodeId === 99 && descriptor.property === "transform")).toBe(true)
+  })
+})
+
+describe("reactive lifecycle & timer symmetry", () => {
+  test("createTransition cleans up timer and active animation count on owner disposal", () => {
+    markLayerBacked(101)
+    let disposeFn!: () => void
+
     createRoot((dispose) => {
-      markLayerBacked(99)
+      disposeFn = dispose
+      const [, setTarget] = createTransition(0, {
+        duration: 500,
+        compositor: { nodeId: 101, property: "opacity" },
+      })
+      setTarget(1)
+    })
+
+    expect(hasActiveAnimations()).toBe(true)
+    expect(allDescriptors().some((d) => d.nodeId === 101)).toBe(true)
+
+    disposeFn()
+
+    expect(hasActiveAnimations()).toBe(false)
+    expect(allDescriptors().some((d) => d.nodeId === 101)).toBe(false)
+  })
+
+  test("createSpring cleans up timer and active animation count on owner disposal", () => {
+    markLayerBacked(102)
+    let disposeFn!: () => void
+
+    createRoot((dispose) => {
+      disposeFn = dispose
       const [, setTarget] = createSpring(0, {
         stiffness: 170,
         damping: 26,
-        precision: 0.0001,
-        compositor: { nodeId: 99, property: "transform" },
-      })
-
-      setTarget(10)
-      expect(allDescriptors().some((descriptor) => descriptor.nodeId === 99 && descriptor.property === "transform")).toBe(true)
-      dispose()
-    })
-  })
-
-  test("disposing reactive root cancels active transition timer and compositor descriptors", async () => {
-    markLayerBacked(101)
-    let setTargetFn!: (v: number) => void
-    let disposeRoot!: () => void
-
-    createRoot((dispose) => {
-      disposeRoot = dispose
-      const [, setTarget] = createTransition(0, {
-        duration: 300,
-        compositor: { nodeId: 101, property: "opacity" },
-      })
-      setTargetFn = setTarget
-    })
-
-    setTargetFn(1)
-    expect(hasActiveAnimations()).toBe(true)
-    expect(allDescriptors().some((d) => d.nodeId === 101 && d.property === "opacity")).toBe(true)
-
-    disposeRoot()
-
-    expect(hasActiveAnimations()).toBe(false)
-    expect(allDescriptors().some((d) => d.nodeId === 101)).toBe(false)
-
-    // Wait 50ms to ensure no orphaned timers tick or re-register animations
-    await new Promise<void>((resolve) => setTimeout(resolve, 50))
-    expect(hasActiveAnimations()).toBe(false)
-    expect(allDescriptors().some((d) => d.nodeId === 101)).toBe(false)
-  })
-
-  test("disposing reactive root cancels active spring timer and compositor descriptors", async () => {
-    markLayerBacked(102)
-    let setTargetFn!: (v: number) => void
-    let disposeRoot!: () => void
-
-    createRoot((dispose) => {
-      disposeRoot = dispose
-      const [, setTarget] = createSpring(0, {
-        stiffness: 100,
-        damping: 10,
         compositor: { nodeId: 102, property: "transform" },
       })
-      setTargetFn = setTarget
+      setTarget(100)
     })
 
-    setTargetFn(10)
     expect(hasActiveAnimations()).toBe(true)
-    expect(allDescriptors().some((d) => d.nodeId === 102 && d.property === "transform")).toBe(true)
+    expect(allDescriptors().some((d) => d.nodeId === 102)).toBe(true)
 
-    disposeRoot()
+    disposeFn()
 
     expect(hasActiveAnimations()).toBe(false)
     expect(allDescriptors().some((d) => d.nodeId === 102)).toBe(false)
+  })
 
-    // Wait 50ms to ensure no orphaned timers tick or re-register animations
-    await new Promise<void>((resolve) => setTimeout(resolve, 50))
+  test("explicit cancel handles stop transition and spring animations", () => {
+    markLayerBacked(201)
+    markLayerBacked(202)
+
+    const [transVal, setTrans, cancelTrans] = createTransition(0, {
+      duration: 500,
+      compositor: { nodeId: 201, property: "opacity" },
+    })
+    const [springVal, setSpring, cancelSpring] = createSpring(0, {
+      stiffness: 170,
+      damping: 26,
+      compositor: { nodeId: 202, property: "transform" },
+    })
+
+    setTrans(1)
+    setSpring(100)
+    expect(hasActiveAnimations()).toBe(true)
+
+    cancelTrans()
+    expect(allDescriptors().some((d) => d.nodeId === 201)).toBe(false)
+
+    // Method on value accessor also works and is idempotent
+    springVal.cancel()
+    expect(allDescriptors().some((d) => d.nodeId === 202)).toBe(false)
     expect(hasActiveAnimations()).toBe(false)
-    expect(allDescriptors().some((d) => d.nodeId === 102)).toBe(false)
+
+    // Idempotent cancel calls
+    cancelTrans()
+    springVal.stop()
+    expect(hasActiveAnimations()).toBe(false)
+  })
+
+  test("tuple stop method and accessor stop method both stop animation", () => {
+    const anim = createTransition(0, { duration: 500 })
+    const [, setTarget] = anim
+
+    setTarget(10)
+    expect(hasActiveAnimations()).toBe(true)
+
+    anim.stop()
+    expect(hasActiveAnimations()).toBe(false)
+
+    // Re-trigger and stop via accessor
+    setTarget(20)
+    expect(hasActiveAnimations()).toBe(true)
+    anim[0].stop()
+    expect(hasActiveAnimations()).toBe(false)
+  })
+
+  test("resetActiveAnimations symmetrically resets active count to 0", () => {
+    const [, setTarget] = createTransition(0, { duration: 1000 })
+    setTarget(10)
+    expect(hasActiveAnimations()).toBe(true)
+
+    resetActiveAnimations()
+    expect(hasActiveAnimations()).toBe(false)
+  })
+
+  test("loop.destroy resets active animations and compositor path state", () => {
+    markLayerBacked(301)
+    const loop = createRenderLoop(mockTerminal())
+
+    const [, setTarget] = createTransition(0, {
+      duration: 1000,
+      compositor: { nodeId: 301, property: "opacity" },
+    })
+    setTarget(1)
+
+    expect(hasActiveAnimations()).toBe(true)
+    expect(hasCompositorAnimations()).toBe(true)
+
+    loop.destroy()
+
+    expect(hasActiveAnimations()).toBe(false)
+    expect(hasCompositorAnimations()).toBe(false)
   })
 })

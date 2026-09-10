@@ -23,6 +23,7 @@ import {
   onNodePropertyChanged,
   onSubtreeChanged,
   resetFrameTracking,
+  resetCompositorPathState,
   fallbackNodes,
   allDescriptors,
 } from "./compositor-path"
@@ -32,13 +33,7 @@ let nextId = 1000
 function nodeId() { return nextId++ }
 
 beforeEach(() => {
-  // Clean up any state left by previous tests
-  resetFrameTracking()
-  // Deregister all descriptors: iterate known test nodes is fragile,
-  // so we clear via the allDescriptors snapshot.
-  for (const d of allDescriptors()) {
-    deregisterAllDescriptors(d.nodeId)
-  }
+  resetCompositorPathState()
 })
 
 // ── REQ-2B-301: Descriptor registration ────────────────────────────────────
@@ -340,5 +335,49 @@ describe("willChange and contain prop types", () => {
     expect(props.hoverStyle?.filter?.brightness).toBe(150)
     expect(props.activeStyle?.filter?.grayscale).toBe(100)
     expect(props.focusStyle?.filter?.invert).toBe(50)
+  })
+})
+
+// ── FLAW-07: resetCompositorPathState ──────────────────────────────────────
+
+describe("resetCompositorPathState", () => {
+  test("clears descriptors, layer backed nodes, and fallback tracking", () => {
+    const id1 = nodeId()
+    const id2 = nodeId()
+
+    markLayerBacked(id1)
+    markLayerBacked(id2)
+
+    registerAnimationDescriptor({
+      nodeId: id1,
+      property: "transform",
+      from: 0,
+      to: 100,
+      startTime: performance.now(),
+      physics: { kind: "spring", stiffness: 170, damping: 26, mass: 1 },
+    })
+
+    onNodePropertyChanged(id1, "width") // triggers fallbackNodes
+
+    expect(hasCompositorAnimations()).toBe(true)
+    expect(allDescriptors().length).toBe(1)
+    expect(fallbackNodes().size).toBe(1)
+
+    resetCompositorPathState()
+
+    expect(hasCompositorAnimations()).toBe(false)
+    expect(allDescriptors().length).toBe(0)
+    expect(fallbackNodes().size).toBe(0)
+
+    // id2 was marked layer backed before reset, but after reset it should not be layer backed anymore
+    const ok = registerAnimationDescriptor({
+      nodeId: id2,
+      property: "transform",
+      from: 0,
+      to: 100,
+      startTime: performance.now(),
+      physics: { kind: "spring", stiffness: 170, damping: 26, mass: 1 },
+    })
+    expect(ok).toBe(false)
   })
 })

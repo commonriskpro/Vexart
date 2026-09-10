@@ -9,7 +9,7 @@ export function hasActiveAnimations(): boolean {
   return activeCount > 0
 }
 
-/** @internal */
+/** @public */
 export function resetActiveAnimations(): void {
   activeCount = 0
 }
@@ -74,7 +74,23 @@ export type TransitionConfig = {
 }
 
 /** @public */
-export function createTransition(initial: number, config?: TransitionConfig): [() => number, (target: number) => void] {
+export type AnimationAccessor = (() => number) & {
+  stop: () => void
+  cancel: () => void
+}
+
+/** @public */
+export type AnimationSignal = [
+  AnimationAccessor,
+  (target: number) => void,
+  () => void
+] & {
+  stop: () => void
+  cancel: () => void
+}
+
+/** @public */
+export function createTransition(initial: number, config?: TransitionConfig): AnimationSignal {
   const duration = config?.duration ?? 300
   const ease = config?.easing ?? easing.easeInOut
   const delay = config?.delay ?? 0
@@ -84,20 +100,7 @@ export function createTransition(initial: number, config?: TransitionConfig): [(
   let startTime = 0
   let animating = false
   let timer: ReturnType<typeof setTimeout> | null = null
-  if (getOwner()) {
-    onCleanup(() => {
-      if (timer) {
-        clearTimeout(timer)
-        timer = null
-      }
-      if (animating) {
-        animating = false
-        unregisterAnimation()
-        const compositor = config?.compositor
-        if (compositor) deregisterAnimationDescriptor(compositor.nodeId, compositor.property)
-      }
-    })
-  }
+
   function syncDescriptor() {
     const compositor = config?.compositor
     if (!compositor || !animating) return
@@ -110,6 +113,24 @@ export function createTransition(initial: number, config?: TransitionConfig): [(
       physics: { kind: "transition", easing: ease, duration },
     })
   }
+
+  function stop() {
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
+    if (animating) {
+      animating = false
+      const compositor = config?.compositor
+      if (compositor) deregisterAnimationDescriptor(compositor.nodeId, compositor.property)
+      unregisterAnimation()
+    }
+  }
+
+  if (getOwner()) {
+    onCleanup(stop)
+  }
+
   function tick() {
     if (!animating) return
     const elapsed = performance.now() - startTime
@@ -120,6 +141,10 @@ export function createTransition(initial: number, config?: TransitionConfig): [(
       const compositor = config?.compositor
       if (compositor) deregisterAnimationDescriptor(compositor.nodeId, compositor.property)
       unregisterAnimation()
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
       return
     }
     const t = ease(elapsed / duration)
@@ -129,6 +154,7 @@ export function createTransition(initial: number, config?: TransitionConfig): [(
     // setTimeout(0) which creates a CPU-bound tight loop monopolizing the event loop.
     timer = setTimeout(tick, 16)
   }
+
   function setTarget(target: number) {
     if (target === to && animating) return
     if (target === value() && !animating) return
@@ -137,11 +163,19 @@ export function createTransition(initial: number, config?: TransitionConfig): [(
     startTime = performance.now() + delay
     if (!animating) { animating = true; registerAnimation() }
     syncDescriptor()
-    if (timer) clearTimeout(timer)
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
     if (delay > 0) timer = setTimeout(tick, delay)
     else tick()
   }
-  return [value, setTarget]
+
+  const accessor = Object.assign(value, { stop, cancel: stop })
+  const result = [accessor, setTarget, stop] as unknown as AnimationSignal
+  result.stop = stop
+  result.cancel = stop
+  return result
 }
 
 /** @public */
@@ -157,7 +191,7 @@ export type SpringConfig = {
 }
 
 /** @public */
-export function createSpring(initial: number, config?: SpringConfig): [() => number, (target: number) => void] {
+export function createSpring(initial: number, config?: SpringConfig): AnimationSignal {
   const stiffness = config?.stiffness ?? 170
   const damping = config?.damping ?? 26
   const mass = config?.mass ?? 1
@@ -169,20 +203,7 @@ export function createSpring(initial: number, config?: SpringConfig): [() => num
   let animating = false
   let lastTime = 0
   let timer: ReturnType<typeof setTimeout> | null = null
-  if (getOwner()) {
-    onCleanup(() => {
-      if (timer) {
-        clearTimeout(timer)
-        timer = null
-      }
-      if (animating) {
-        animating = false
-        unregisterAnimation()
-        const compositor = config?.compositor
-        if (compositor) deregisterAnimationDescriptor(compositor.nodeId, compositor.property)
-      }
-    })
-  }
+
   function syncDescriptor() {
     const compositor = config?.compositor
     if (!compositor || !animating) return
@@ -195,6 +216,24 @@ export function createSpring(initial: number, config?: SpringConfig): [() => num
       physics: { kind: "spring", stiffness, damping, mass },
     })
   }
+
+  function stop() {
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
+    if (animating) {
+      animating = false
+      const compositor = config?.compositor
+      if (compositor) deregisterAnimationDescriptor(compositor.nodeId, compositor.property)
+      unregisterAnimation()
+    }
+  }
+
+  if (getOwner()) {
+    onCleanup(stop)
+  }
+
   function tick() {
     if (!animating) return
     const now = performance.now()
@@ -214,6 +253,10 @@ export function createSpring(initial: number, config?: SpringConfig): [() => num
       const compositor = config?.compositor
       if (compositor) deregisterAnimationDescriptor(compositor.nodeId, compositor.property)
       unregisterAnimation()
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
       return
     }
     setValue(current)
@@ -222,13 +265,23 @@ export function createSpring(initial: number, config?: SpringConfig): [() => num
     // setTimeout(0) which creates a CPU-bound tight loop monopolizing the event loop.
     timer = setTimeout(tick, 16)
   }
+
   function setTarget(t: number) {
     if (t === target && animating) return
     target = t
     lastTime = performance.now()
     if (!animating) { animating = true; registerAnimation() }
     syncDescriptor()
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
     tick()
   }
-  return [value, setTarget]
+
+  const accessor = Object.assign(value, { stop, cancel: stop })
+  const result = [accessor, setTarget, stop] as unknown as AnimationSignal
+  result.stop = stop
+  result.cancel = stop
+  return result
 }

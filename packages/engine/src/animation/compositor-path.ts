@@ -211,6 +211,18 @@ export function resetFrameTracking(): void {
 }
 
 /**
+ * Reset all compositor path state.
+ * Called when unmounting an app or destroying a loop.
+ */
+/** @public */
+export function resetCompositorPathState(): void {
+  descriptors.clear()
+  layerBackedNodes.clear()
+  dirtyNonCompositorNodes.clear()
+  dirtyCompositorProps.clear()
+}
+
+/**
  * Return nodes that triggered compositor fallback this frame.
  * For diagnostics / test assertions.
  */

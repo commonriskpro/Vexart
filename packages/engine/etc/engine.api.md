@@ -39,6 +39,22 @@ export const ALIGN_Y: {
 };
 
 // @public (undocumented)
+export type AnimationAccessor = (() => number) & {
+    stop: () => void;
+    cancel: () => void;
+};
+
+// @public (undocumented)
+export type AnimationSignal = [
+AnimationAccessor,
+(target: number) => void,
+() => void
+] & {
+    stop: () => void;
+    cancel: () => void;
+};
+
+// @public (undocumented)
 export function assertBridgeVersion(actual: number, expected?: number): void;
 
 // @public (undocumented)
@@ -249,7 +265,7 @@ export type CircleCmd = {
 };
 
 // @public (undocumented)
-export function clearDirty(expectedVersion?: number): void;
+export function clearDirty(expectedVersion?: number, tracker?: DirtyTracker): void;
 
 // @public (undocumented)
 export function clearImageCache(): void;
@@ -358,7 +374,7 @@ export function createSlot(slotName: string, registry: SlotRegistry): () => JSX.
 export function createSlotRegistry(): SlotRegistry;
 
 // @public (undocumented)
-export function createSpring(initial: number, config?: SpringConfig): [() => number, (target: number) => void];
+export function createSpring(initial: number, config?: SpringConfig): AnimationSignal;
 
 // @public
 export function createTerminal(opts?: TerminalOptions): Promise<Terminal>;
@@ -367,7 +383,7 @@ export function createTerminal(opts?: TerminalOptions): Promise<Terminal>;
 export const createTextNode: (value: string) => TGENode;
 
 // @public (undocumented)
-export function createTransition(initial: number, config?: TransitionConfig): [() => number, (target: number) => void];
+export function createTransition(initial: number, config?: TransitionConfig): AnimationSignal;
 
 // @public (undocumented)
 export function createWriter(write: (data: string) => void): (data: string) => void;
@@ -1125,7 +1141,7 @@ export function invert(m: Matrix3): Matrix3 | null;
 export function isDebugEnabled(): boolean;
 
 // @public (undocumented)
-export function isDirty(): boolean;
+export function isDirty(tracker?: DirtyTracker): boolean;
 
 // @public (undocumented)
 export function isEmptyRect(rect: DamageRect | null | undefined): boolean;
@@ -1282,7 +1298,7 @@ export type LineCmd = {
 };
 
 // @public (undocumented)
-export function markDirty(scope?: DirtyScope): void;
+export function markDirty(scope?: DirtyScope, tracker?: DirtyTracker): void;
 
 // @public (undocumented)
 export function markLayerDamageByKey(key: string, rect: DamageRect): void;
@@ -1979,6 +1995,12 @@ export function reportKittyTransportSuccess(mode: TransmissionMode): void;
 export function requestInteractionFrame(kind: "pointer" | "scroll" | "key"): void;
 
 // @public (undocumented)
+export function resetActiveAnimations(): void;
+
+// @public (undocumented)
+export function resetCompositorPathState(): void;
+
+// @public (undocumented)
 export function resetFocus(): void;
 
 // @public (undocumented)
@@ -2419,6 +2441,7 @@ export type TGENode = {
         width: number;
         height: number;
     } | null;
+    _dirtyTracker?: DirtyTracker | null;
 };
 
 // @public (undocumented)
@@ -2670,7 +2693,7 @@ export class TreeSitterClient {
 }
 
 // @public (undocumented)
-export function unbindLoop(): void;
+export function unbindLoop(loop?: RenderLoop): void;
 
 // @public (undocumented)
 export function unionRect(a: DamageRect, b: DamageRect): DamageRect;

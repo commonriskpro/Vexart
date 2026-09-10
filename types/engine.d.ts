@@ -7,6 +7,7 @@ import { For } from 'solid-js';
 import { Index } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { Match } from 'solid-js';
+import type { Node as Node_2 } from 'flexily';
 import { Setter } from 'solid-js';
 import { Show } from 'solid-js';
 import { Switch } from 'solid-js';
@@ -33,6 +34,22 @@ export declare const ALIGN_Y: {
     readonly BOTTOM: 1;
     readonly CENTER: 2;
     readonly SPACE_BETWEEN: 3;
+};
+
+/** @public */
+export declare type AnimationAccessor = (() => number) & {
+    stop: () => void;
+    cancel: () => void;
+};
+
+/** @public */
+export declare type AnimationSignal = [
+AnimationAccessor,
+(target: number) => void,
+() => void
+] & {
+    stop: () => void;
+    cancel: () => void;
 };
 
 /**
@@ -288,7 +305,7 @@ export declare type CircleCmd = {
 };
 
 /** @public */
-export declare function clearDirty(expectedVersion?: number): void;
+export declare function clearDirty(expectedVersion?: number, tracker?: DirtyTracker): void;
 
 /** Clear the image cache (e.g., on hot reload). */
 /** @public */
@@ -409,7 +426,7 @@ export declare function createSlot(slotName: string, registry: SlotRegistry): ()
 export declare function createSlotRegistry(): SlotRegistry;
 
 /** @public */
-export declare function createSpring(initial: number, config?: SpringConfig): [() => number, (target: number) => void];
+export declare function createSpring(initial: number, config?: SpringConfig): AnimationSignal;
 
 /**
  * Create and initialize a terminal handle.
@@ -422,7 +439,7 @@ export declare function createTerminal(opts?: TerminalOptions): Promise<Terminal
 export declare const createTextNode: (value: string) => TGENode;
 
 /** @public */
-export declare function createTransition(initial: number, config?: TransitionConfig): [() => number, (target: number) => void];
+export declare function createTransition(initial: number, config?: TransitionConfig): AnimationSignal;
 
 /**
  * Create a write function that auto-wraps for tmux passthrough.
@@ -1129,91 +1146,39 @@ export declare const GRAPH_MAGIC: 1448624466;
 /** @public */
 export declare const GRAPH_VERSION: 131072;
 
-/** @beta */
-export declare type GridAreaPlacement = string | {
-    readonly rowStart: GridLineRef | "auto";
-    readonly columnStart: GridLineRef | "auto";
-    readonly rowEnd: GridLineRef | "auto";
-    readonly columnEnd: GridLineRef | "auto";
-};
+/* Excluded from this release type: GridAreaPlacement */
 
-/** @beta */
-export declare type GridAutoFlow = "row" | "column" | "row-dense" | "column-dense";
+/* Excluded from this release type: GridAutoFlow */
 
-/** @beta */
-export declare type GridBreadth = number | GridPercent | "auto" | "min-content" | "max-content";
+/* Excluded from this release type: GridBreadth */
 
-/** @beta */
-export declare type GridContentAlignment = "start" | "end" | "center" | "space-between" | "space-around" | "space-evenly" | "stretch";
+/* Excluded from this release type: GridContentAlignment */
 
-/** @beta */
-export declare type GridErrorCode = "GRID_INVALID_VALUE" | "GRID_INVALID_TRACK" | "GRID_INVALID_REPEAT" | "GRID_TRACK_LIMIT" | "GRID_INVALID_AREA" | "GRID_CONFLICTING_PLACEMENT" | "GRID_INVALID_PLACEMENT" | "GRID_LINE_UNRESOLVED" | "GRID_UNSUPPORTED_ALIGNMENT" | "GRID_MEASURE_INVALID";
+/* Excluded from this release type: GridErrorCode */
 
-/** @beta */
-export declare type GridFitContent = {
-    readonly fitContent: number | GridPercent;
-};
+/* Excluded from this release type: GridFitContent */
 
-/** @beta */
-export declare type GridFr = {
-    readonly fr: number;
-};
+/* Excluded from this release type: GridFr */
 
-/** @beta */
-export declare type GridItemAlignment = "start" | "end" | "center" | "stretch";
+/* Excluded from this release type: GridItemAlignment */
 
-/** @beta */
-export declare type GridLayoutError = {
-    readonly code: GridErrorCode;
-    readonly path: string;
-    readonly nodeId: number;
-};
+/* Excluded from this release type: GridLayoutError */
 
-/** @beta */
-export declare type GridLineRef = number | {
-    readonly name: string;
-    readonly occurrence?: number;
-} | {
-    readonly span: number;
-    readonly name?: string;
-};
+/* Excluded from this release type: GridLineRef */
 
-/** @beta */
-export declare type GridMaxBreadth = GridBreadth | GridFr;
+/* Excluded from this release type: GridMaxBreadth */
 
-/** @beta */
-export declare type GridMinMax = {
-    readonly minmax: readonly [GridBreadth, GridMaxBreadth];
-};
+/* Excluded from this release type: GridMinMax */
 
-/** @beta */
-export declare type GridPercent = {
-    readonly percent: number;
-};
+/* Excluded from this release type: GridPercent */
 
-/** @beta */
-export declare type GridPlacement = {
-    readonly start?: GridLineRef | "auto";
-    readonly end?: GridLineRef | "auto";
-};
+/* Excluded from this release type: GridPlacement */
 
-/** @beta */
-export declare type GridRepeatCount = number | "auto-fill" | "auto-fit";
+/* Excluded from this release type: GridRepeatCount */
 
-/** @beta */
-export declare type GridTrack = GridTrackSize | {
-    readonly size: GridTrackSize;
-    readonly before?: readonly string[];
-    readonly after?: readonly string[];
-} | {
-    readonly repeat: {
-        readonly count: GridRepeatCount;
-        readonly tracks: readonly GridTrack[];
-    };
-};
+/* Excluded from this release type: GridTrack */
 
-/** @beta */
-export declare type GridTrackSize = GridBreadth | GridFr | GridMinMax | GridFitContent;
+/* Excluded from this release type: GridTrackSize */
 
 /** @public */
 export declare function hasActiveAnimations(): boolean;
@@ -1384,7 +1349,7 @@ export declare function invert(m: Matrix3): Matrix3 | null;
 export declare function isDebugEnabled(): boolean;
 
 /** @public */
-export declare function isDirty(): boolean;
+export declare function isDirty(tracker?: DirtyTracker): boolean;
 
 /** @public */
 export declare function isEmptyRect(rect: DamageRect | null | undefined): boolean;
@@ -1545,7 +1510,7 @@ export declare type LineCmd = {
 };
 
 /** @public */
-export declare function markDirty(scope?: DirtyScope): void;
+export declare function markDirty(scope?: DirtyScope, tracker?: DirtyTracker): void;
 
 export declare function markLayerDamageByKey(key: string, rect: DamageRect): void;
 
@@ -2461,6 +2426,16 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
  export declare function requestInteractionFrame(kind: "pointer" | "scroll" | "key"): void;
 
  /** @public */
+ export declare function resetActiveAnimations(): void;
+
+ /**
+  * Reset all compositor path state.
+  * Called when unmounting an app or destroying a loop.
+  */
+ /** @public */
+ export declare function resetCompositorPathState(): void;
+
+ /** @public */
  export declare function resetFocus(): void;
 
  /** @public */
@@ -3043,6 +3018,8 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
          width: number;
          height: number;
      } | null;
+     /** Per-loop dirty tracker attached to root node. */
+     _dirtyTracker?: DirtyTracker | null;
  };
 
  /** @public */
@@ -3071,8 +3048,7 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
 
  /** @public */
  export declare type TGEProps = {
-     /** @beta */
-     layout?: "flex" | "grid";
+     /* Excluded from this release type: layout */
      direction?: "row" | "column";
      /** Alias for direction (opentui compat) */
      flexDirection?: "row" | "column";
@@ -3085,36 +3061,21 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      gap?: number;
      alignX?: "left" | "right" | "center" | "space-between";
      alignY?: "top" | "bottom" | "center" | "space-between";
-     /** @beta */
-     justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "space-around" | "space-evenly" | "stretch";
-     /** @beta */
-     alignItems?: "top" | "bottom" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "stretch";
-     /** @beta */
-     gridTemplateColumns?: readonly GridTrack[];
-     /** @beta */
-     gridTemplateRows?: readonly GridTrack[];
-     /** @beta */
-     gridAutoColumns?: GridTrackSize;
-     /** @beta */
-     gridAutoRows?: GridTrackSize;
-     /** @beta */
-     gridAutoFlow?: GridAutoFlow;
-     /** @beta */
-     gridTemplateAreas?: readonly (readonly (string | null)[])[];
-     /** @beta */
-     gridColumn?: GridPlacement;
-     /** @beta */
-     gridRow?: GridPlacement;
-     /** @beta */
-     gridArea?: GridAreaPlacement;
-     /** @beta */
-     alignContent?: GridContentAlignment;
-     /** @beta */
-     justifyItems?: GridItemAlignment;
-     /** @beta */
-     justifySelf?: GridItemAlignment;
-     /** @beta */
-     alignSelf?: GridItemAlignment;
+     /* Excluded from this release type: justifyContent */
+     /* Excluded from this release type: alignItems */
+     /* Excluded from this release type: gridTemplateColumns */
+     /* Excluded from this release type: gridTemplateRows */
+     /* Excluded from this release type: gridAutoColumns */
+     /* Excluded from this release type: gridAutoRows */
+     /* Excluded from this release type: gridAutoFlow */
+     /* Excluded from this release type: gridTemplateAreas */
+     /* Excluded from this release type: gridColumn */
+     /* Excluded from this release type: gridRow */
+     /* Excluded from this release type: gridArea */
+     /* Excluded from this release type: alignContent */
+     /* Excluded from this release type: justifyItems */
+     /* Excluded from this release type: justifySelf */
+     /* Excluded from this release type: alignSelf */
      width?: number | string;
      height?: number | string;
      /** When set, width behaves as "grow" (opentui compat) */
@@ -3391,7 +3352,7 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
  }
 
  /** @public */
- export declare function unbindLoop(): void;
+ export declare function unbindLoop(loop?: RenderLoop): void;
 
  /** @public */
  export declare function unionRect(a: DamageRect, b: DamageRect): DamageRect;

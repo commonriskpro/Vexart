@@ -112,8 +112,6 @@ export type {
 
 export {
   registerFont,
-  unregisterFont,
-  clearFontRegistry,
   getFont,
   clearTextCache,
   getTextLayoutCacheStats,
@@ -147,7 +145,6 @@ export {
   insertChild,
   removeChild,
   parseColor,
-  clearColorCache,
   parseSizing,
   parseDirection,
   parseAlignX,
@@ -305,7 +302,6 @@ export {
   unbindLoop,
   setPointerCapture,
   releasePointerCapture,
-  getCapturedNodeId,
   onPostScroll,
   markNodeLayerDamaged,
   requestInteractionFrame,
@@ -346,7 +342,6 @@ export {
   createElement,
   solidCreateTextNode as createTextNode,
   insertNode,
-  removeNode,
   insert,
   spread,
   setProp,
@@ -421,6 +416,7 @@ export type { InteractionKind, FrameSchedulerBoosts } from "./loop/frame-schedul
 
 export {
   hasActiveAnimations,
+  resetActiveAnimations,
   easing,
   createTransition,
   createSpring,
@@ -429,7 +425,10 @@ export type {
   EasingFn,
   TransitionConfig,
   SpringConfig,
+  AnimationAccessor,
+  AnimationSignal,
 } from "./loop/animation"
+export { resetCompositorPathState } from "./animation/compositor-path"
 export type { CompositorProperty } from "./animation/compositor-path"
 
 export {
