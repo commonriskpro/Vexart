@@ -12,6 +12,7 @@ import { markDirty } from "./reconciler/dirty"
 import { resetFocus } from "./reconciler/focus"
 import { resetSelection } from "./reconciler/selection"
 import { bindLoop, unbindLoop } from "./reconciler/pointer"
+import { resetCompositorPathState } from "./animation/compositor-path"
 import type { Terminal } from "./terminal/index"
 
 // ── Mouse button constants ──
@@ -206,9 +207,7 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
     markDirty()
     loop.requestInteractionFrame("key")
   })
-  const unsubData = terminal.onData((data) => {
-    parser.feed(data)
-  })
+  const unsubData = terminal.onData((data) => parser.feed(data))
 
   loop.start()
 
@@ -217,14 +216,39 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
     resume: () => loop.resume(),
     suspended: () => loop.suspended(),
     destroy: () => {
-      unsubData()
-      unsubResize()
-      parser.destroy()
-      dispose()
-      unbindLoop()
-      resetFocus()
-      resetSelection()
-      loop.destroy()
+      try {
+        unsubData()
+      } finally {
+        try {
+          unsubResize()
+        } finally {
+          try {
+            parser.destroy()
+          } finally {
+            try {
+              dispose()
+            } finally {
+              try {
+                resetFocus()
+              } finally {
+                try {
+                  resetSelection()
+                } finally {
+                  try {
+                    unbindLoop(loop)
+                  } finally {
+                    try {
+                      loop.destroy()
+                    } finally {
+                      resetCompositorPathState()
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     },
   }
 }

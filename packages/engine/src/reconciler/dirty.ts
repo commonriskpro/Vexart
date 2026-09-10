@@ -83,22 +83,25 @@ export function onGlobalDirty(cb: (scope: DirtyScope) => void): () => void {
 }
 
 /** @public */
-export function markDirty(scope?: DirtyScope) {
+export function markDirty(scope?: DirtyScope, tracker?: DirtyTracker) {
   defaultDirtyTracker.markDirty()
+  tracker?.markDirty()
   const s = scope ?? { kind: DIRTY_KIND.FULL }
   for (const cb of _onDirtyCallbacks) cb(s)
 }
 
 /** @public */
-export function isDirty(): boolean {
-  return defaultDirtyTracker.isDirty()
+export function isDirty(tracker?: DirtyTracker): boolean {
+  return tracker ? tracker.isDirty() : defaultDirtyTracker.isDirty()
 }
 
 /** @public */
-export function clearDirty(expectedVersion?: number) {
-  defaultDirtyTracker.clearDirty(expectedVersion)
+export function clearDirty(expectedVersion?: number, tracker?: DirtyTracker) {
+  if (tracker) tracker.clearDirty(expectedVersion)
+  else defaultDirtyTracker.clearDirty(expectedVersion)
 }
 
-export function dirtyVersion() {
-  return defaultDirtyTracker.dirtyVersion()
+/** @public */
+export function dirtyVersion(tracker?: DirtyTracker): number {
+  return tracker ? tracker.dirtyVersion() : defaultDirtyTracker.dirtyVersion()
 }

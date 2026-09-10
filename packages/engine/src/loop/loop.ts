@@ -17,10 +17,19 @@ import type { Terminal } from "../terminal/index"
 import { type TGENode, createNode, parseSizing } from "../ffi/node"
 import { syncAllLayoutProps, syncLayoutProp } from "../ffi/flex-sync"
 import { createVexartLayoutCtx } from "./layout-adapter"
-
-const layoutAdapter = createVexartLayoutCtx()
-import { DIRTY_KIND, markDirty as globalMarkDirty, isDirty as globalIsDirty, clearDirty as globalClearDirty, dirtyVersion as globalDirtyVersion, onGlobalDirty, type DirtyScope } from "../reconciler/dirty"
-import { hasActiveAnimations } from "./animation"
+import {
+  DIRTY_KIND,
+  createDirtyTracker,
+  markDirty as globalMarkDirty,
+  isDirty as globalIsDirty,
+  clearDirty as globalClearDirty,
+  dirtyVersion as globalDirtyVersion,
+  onGlobalDirty,
+  type DirtyScope,
+} from "../reconciler/dirty"
+import { unbindLoop } from "../reconciler/pointer"
+import { hasActiveAnimations, resetActiveAnimations } from "./animation"
+import { resetCompositorPathState } from "../animation/compositor-path"
 import { appendFileSync } from "node:fs"
 import { debugFrameStart, debugRecordFfiCounts } from "./debug"
 import { type Layer, createLayerStore } from "../ffi/layers"
@@ -33,8 +42,8 @@ import {
   hasRecentInteraction as schedulerHasRecentInteraction,
   type InteractionKind,
 } from "./frame-scheduler"
-import { bindLayerDirtyStore, compositeFrame, createFrameProfile, type CompositeFrameState, type FrameProfile } from "./composite"
-import type { LayerBoundary } from "./types"
+import { bindLayerDirtyStore, unbindLayerDirtyStore, compositeFrame, createFrameProfile, type CompositeFrameState, type FrameProfile } from "./composite"
+import type { LayerBoundary, RenderLoop } from "./types"
 import { createFrameScheduler } from "../scheduler/index"
 import {
   disableNativeLayerRegistry,
@@ -45,7 +54,6 @@ import {
 import { clearNativeLayerRegistryMirror } from "../ffi/native-layer-registry"
 import { disableNativePresentation, enableNativePresentation, isNativePresentationEnabled, isNativePresentationForcedOff, nativePresentationForcedOffReason } from "../ffi/native-presentation-flags"
 import { getVexartFfiCallCount, getVexartFfiCallCountsBySymbol, resetVexartFfiCallCounts } from "../ffi/vexart-bridge"
-import { clearImageCache } from "./image"
 
 const LAYER_LOG_ENABLED = process.env.VEXART_DEBUG_LAYERS === "1"
 const LOG = "/tmp/tge-layers.log"
@@ -104,12 +112,6 @@ function markGridTreeDirty(node: TGENode): number {
   return count
 }
 
-// ── Module-level shared state ──
-const frameDirtyRects: DamageRect[] = []
-const pendingNodeDamageRects: Array<{ nodeId: number; rect: DamageRect }> = []
-const scrollOffsets = new Map<number, { x: number; y: number }>()
-const activeSlotKeys = new Set<string>()
-
 /** @public */
 export type RenderLoopOptions = {
   experimental?: {
@@ -124,41 +126,27 @@ export type RenderLoopOptions = {
 }
 
 /** @public */
-export type RenderLoop = {
-  root: TGENode
-  start: () => void
-  stop: () => void
-  frame: () => void
-  feedScroll: (dx: number, dy: number) => void
-  feedPointer: (x: number, y: number, down: boolean) => void
-  nudgeInteraction: (kind: "pointer" | "scroll" | "key") => void
-  requestInteractionFrame: (kind: "pointer" | "scroll" | "key") => void
-  needsPointerRepaint: () => boolean
-  getCapturedNodeId: () => number
-  setPointerCapture: (nodeId: number) => void
-  releasePointerCapture: (nodeId: number) => void
-  onPostScroll: (cb: () => void) => () => void
-  markNodeLayerDamaged: (nodeId: number, rect?: DamageRect) => void
-  suspend: () => void
-  resume: () => void
-  suspended: () => boolean
-  /** Schedule a task to run during frame budget drain. Returns cancel function. */
-  scheduleTask: (priority: "user-blocking" | "user-visible" | "background", fn: () => void) => () => void
-  destroy: () => void
-}
+export type { RenderLoop }
 
 /** @public */
 export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): RenderLoop {
-  // Use the global dirty tracker shared with reconciler + mount.
-  // The reconciler calls markDirty() on every DOM change; mount calls it on input.
-  // Using a separate tracker would make the loop blind to those events.
-  const isDirty = globalIsDirty
-  const clearDirty = globalClearDirty
+  const layoutAdapter = createVexartLayoutCtx()
+  const dirtyTracker = createDirtyTracker()
+  const isDirty = () => dirtyTracker.isDirty() || globalIsDirty()
+  const clearDirty = (expectedVersion?: number) => {
+    dirtyTracker.clearDirty(expectedVersion)
+    if (!dirtyTracker.isDirty()) {
+      globalClearDirty()
+    }
+  }
+  const markDirty = (scope?: DirtyScope) => {
+    dirtyTracker.markDirty()
+    globalMarkDirty(scope, dirtyTracker)
+  }
   const layerStore = createLayerStore()
   const { createLayer, updateLayerGeometry, markLayerClean, imageIdForLayer, resetLayers, dirtyCount, layerCount, markLayerDamaged, getPreviousLayerRect, removeLayer } = layerStore
   const markAllDirty = layerStore.markAllDirty
 
-  const markDirty = globalMarkDirty
   const expFrameBudgetMs = opts?.experimental?.frameBudgetMs ?? 0
 
   if (term.caps.tmux ? !term.caps.kittyPlaceholder : !term.caps.kittyGraphics) {
@@ -188,6 +176,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   }
 
   const root = createNode("root")
+  root._dirtyTracker = dirtyTracker
   let viewportWidth = term.size.pixelWidth || term.size.cols * (term.size.cellWidth || 8)
   let viewportHeight = term.size.pixelHeight || term.size.rows * (term.size.cellHeight || 16)
   root.props = { width: viewportWidth, height: viewportHeight }
@@ -195,6 +184,14 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   root._heightSizing = parseSizing(viewportHeight)
   syncAllLayoutProps(root)
   layoutAdapter.init(viewportWidth, viewportHeight)
+
+  // ── Per-loop damage and layout state ──
+  const frameDirtyRects: DamageRect[] & { clear?: () => void } = []
+  frameDirtyRects.clear = () => { frameDirtyRects.length = 0 }
+  const pendingNodeDamageRects: Array<{ nodeId: number; rect: DamageRect }> & { clear?: () => void } = []
+  pendingNodeDamageRects.clear = () => { pendingNodeDamageRects.length = 0 }
+  const scrollOffsets = new Map<number, { x: number; y: number }>()
+  const activeSlotKeys = new Set<string>()
 
 
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -273,9 +270,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   function scheduleNextFrame() {
     if (isSuspended || !loopStarted) return
     if (timer !== null) { clearTimeout(timer); timer = null }
-    if (!isDirty() && !hasActiveAnimations()) {
-      return
-    }
+    if (!isDirty() && !hasActiveAnimations()) return
     const interval = (hasActiveAnimations() || hasRecentInteraction()) ? activeInterval : idleInterval
     const now = performance.now()
     if (nextFrameDeadlineMs === 0 || scheduledIntervalMs !== interval) {
@@ -287,16 +282,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     scheduledIntervalMs = interval
     scheduledAtMs = now
     scheduledDelayMs = Math.max(0, nextFrameDeadlineMs - now)
-    timer = setTimeout(() => {
-      timer = null
-      try {
-        if (isDirty() || hasActiveAnimations()) frame()
-      } catch (e) {
-        console.error("[vexart] frame error:", e)
-        clearDirty()
-      }
-      scheduleNextFrame()
-    }, scheduledDelayMs)
+    timer = setTimeout(() => { timer = null; try { if (isDirty() || hasActiveAnimations()) frame() } catch (e) { console.error("[vexart] frame error:", e) } scheduleNextFrame() }, scheduledDelayMs)
   }
 
   function nudgeInteraction(kind: InteractionKind) {
@@ -311,16 +297,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     scheduledDelayMs = targetDelay
     scheduledAtMs = now
     nextFrameDeadlineMs = now + targetDelay
-    timer = setTimeout(() => {
-      timer = null
-      try {
-        if (isDirty()) frame()
-      } catch (e) {
-        console.error("[vexart] frame error:", e)
-        clearDirty()
-      }
-      scheduleNextFrame()
-    }, targetDelay)
+    timer = setTimeout(() => { try { if (isDirty()) frame() } catch (e) { console.error("[vexart] frame error:", e) } scheduleNextFrame() }, targetDelay)
   }
 
   function requestInteractionFrame(kind: InteractionKind) {
@@ -341,16 +318,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       scheduledDelayMs = 0
       scheduledAtMs = performance.now()
       nextFrameDeadlineMs = scheduledAtMs
-      timer = setTimeout(() => {
-        timer = null
-        try {
-          if (isDirty()) frame()
-        } catch (e) {
-          console.error("[vexart] frame error:", e)
-          clearDirty()
-        }
-        scheduleNextFrame()
-      }, 0)
+      timer = setTimeout(() => { try { if (isDirty()) frame() } catch (e) { console.error("[vexart] frame error:", e) } scheduleNextFrame() }, 0)
       return
     }
     nudgeInteraction(kind)
@@ -375,6 +343,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   }
 
   const unsubGlobalDirty = onGlobalDirty((scope) => {
+    dirtyTracker.markDirty()
     if (scope.kind === DIRTY_KIND.FULL) {
       markAllDirty()
       log(`[DIRTY:FULL]`)
@@ -433,7 +402,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     layerBoundaries, scrollContainers, nodeCountValue,
     layerCache, activeSlotKeys, frameDirtyRects, pendingNodeDamageRects, scrollOffsets,
     layerStore: { getOrCreateLayer, getPreviousLayerRect, updateLayerGeometry, markLayerDamaged, markLayerClean, imageIdForLayer, removeLayer, layerCount },
-    dirty: { markDirty, markAllDirty, clearDirty, dirtyVersion: globalDirtyVersion, dirtyCount },
+    dirty: { markDirty, markAllDirty, clearDirty, dirtyVersion: () => dirtyTracker.dirtyVersion(), dirtyCount },
 
     backendOverride: getActiveBackend(),
     useLayerCompositing: true,
@@ -480,9 +449,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         cadenceDebug(`[frame] dt=${profile.sincePrevFrameMs.toFixed(2)}ms interval=${profile.scheduledIntervalMs.toFixed(2)}ms delay=${profile.scheduledDelayMs.toFixed(2)}ms timerDelay=${profile.timerDelayMs.toFixed(2)}ms total=${profile.totalMs.toFixed(2)}ms scroll=${profile.scrollMs.toFixed(2)}ms walk=${profile.walkTreeMs.toFixed(2)}ms layoutCompute=${profile.layoutComputeMs.toFixed(2)}ms layoutWriteback=${profile.layoutWritebackMs.toFixed(2)}ms interaction=${profile.interactionMs.toFixed(2)}ms relayout=${profile.relayoutMs.toFixed(2)}ms layout=${profile.layoutMs.toFixed(2)}ms layerAssign=${profile.layerAssignMs.toFixed(2)}ms prep=${profile.prepMs.toFixed(2)}ms nativeSnapshot=${profile.paintNativeSnapshotMs.toFixed(2)}ms layerPrep=${profile.paintLayerPrepMs.toFixed(2)}ms frameCtx=${profile.paintFrameContextMs.toFixed(2)}ms backendBegin=${profile.paintBackendBeginMs.toFixed(2)}ms reuse=${profile.paintReuseMs.toFixed(2)}ms renderGraph=${profile.paintRenderGraphMs.toFixed(2)}ms backendPaint=${profile.paintBackendPaintMs.toFixed(2)}ms backendComposite=${profile.paintBackendCompositeMs.toFixed(2)}ms backendReadback=${profile.paintBackendReadbackMs.toFixed(2)}ms backendNativeEmit=${profile.paintBackendNativeEmitMs.toFixed(2)}ms backendNativeReadback=${profile.paintBackendNativeReadbackMs.toFixed(2)}ms backendNativeCompress=${profile.paintBackendNativeCompressMs.toFixed(2)}ms backendNativeShmPrepare=${profile.paintBackendNativeShmPrepareMs.toFixed(2)}ms backendNativeWrite=${profile.paintBackendNativeWriteMs.toFixed(2)}ms backendNativeRawBytes=${profile.paintBackendNativeRawBytes.toFixed(0)} backendNativePayloadBytes=${profile.paintBackendNativePayloadBytes.toFixed(0)} backendUniform=${profile.paintBackendUniformMs.toFixed(2)}ms layerCleanup=${profile.paintLayerCleanupMs.toFixed(2)}ms backendEnd=${profile.paintBackendEndMs.toFixed(2)}ms presentation=${profile.paintPresentationMs.toFixed(2)}ms interactionStats=${profile.paintInteractionStatsMs.toFixed(2)}ms paint=${profile.paintMs.toFixed(2)}ms io=${profile.ioMs.toFixed(2)}ms beginSync=${profile.beginSyncMs.toFixed(2)}ms endSync=${profile.endSyncMs.toFixed(2)}ms dirty=${profile.dirtyBefore} repainted=${profile.repainted} cmds=${profile.commands}`)
         frameProfileSink?.({ ...profile })
       }
-    } catch (e) {
-      clearDirty()
-      throw e
     } finally {
       isRenderingFrame = false
       if (pendingInteractionFrameKind && !isSuspended && isDirty()) {
@@ -514,18 +480,13 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     scheduledDelayMs = 0; nextFrameDeadlineMs = 0
     resizeDebug(`forcing immediate frame newW=${newW} newH=${newH}`)
     if (!isRenderingFrame) {
-      try {
-        frame()
-      } catch (e) {
-        console.error("[vexart] frame error on resize:", e)
-        clearDirty()
-      }
+      frame()
     }
     if (timer === null) scheduleNextFrame()
     resizeDebug(`rescheduled after resize interval=${scheduledIntervalMs} delay=${scheduledDelayMs}`)
   })
 
-  return {
+  const renderLoop: RenderLoop = {
     root,
     feedScroll,
     feedPointer,
@@ -534,9 +495,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     needsPointerRepaint() {
       if (pointer.capturedNodeId !== 0) return true
       return hasPointerReactiveNodes(root)
-    },
-    getCapturedNodeId() {
-      return pointer.capturedNodeId
     },
     setPointerCapture(nodeId: number) {
       pointer.capturedNodeId = nodeId
@@ -548,17 +506,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       postScrollCallbacks.push(cb)
       return () => { const idx = postScrollCallbacks.indexOf(cb); if (idx >= 0) postScrollCallbacks.splice(idx, 1) }
     },
-    start() {
-      loopStarted = true
-      try {
-        frame()
-      } catch (e) {
-        console.error("[vexart] frame error on start:", e)
-        clearDirty()
-      }
-      nextFrameDeadlineMs = 0
-      scheduleNextFrame()
-    },
+    start() { loopStarted = true; frame(); nextFrameDeadlineMs = 0; scheduleNextFrame() },
     stop() { loopStarted = false; if (timer) { clearTimeout(timer); timer = null }; scheduledDelayMs = 0; nextFrameDeadlineMs = 0 },
     frame,
     markNodeLayerDamaged(nodeId: number, rect?: DamageRect) {
@@ -583,32 +531,46 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: isTmuxPlaceholderPresentation })
       markDirty(); markAllDirty()
       loopStarted = true
-      try {
-        frame()
-      } catch (e) {
-        console.error("[vexart] frame error on resume:", e)
-        clearDirty()
-      }
-      nextFrameDeadlineMs = 0
-      scheduleNextFrame()
+      frame(); nextFrameDeadlineMs = 0; scheduleNextFrame()
     },
     suspended() { return isSuspended },
     scheduleTask: scheduler.scheduleTask,
     destroy() {
-      if (timer) clearTimeout(timer)
-      scheduledDelayMs = 0; nextFrameDeadlineMs = 0
+      loopStarted = false
+      isSuspended = true
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
+      scheduledDelayMs = 0
+      nextFrameDeadlineMs = 0
       unsubGlobalDirty()
       unsubResize()
+      unbindLoop(renderLoop)
       clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: isTmuxPlaceholderPresentation })
 
-      pointer.prevActiveNode = null
-      pointer.capturedNodeId = 0
-
-      clearImageCache()
+      unbindLayerDirtyStore(layerCache)
       getActiveBackend().destroy?.()
-      resetLayers(); layerCache.clear()
+      setRendererBackend(null)
+
+      resetLayers()
+      layerCache.clear()
+      frameDirtyRects.clear?.()
+      frameDirtyRects.length = 0
+      pendingNodeDamageRects.clear?.()
+      pendingNodeDamageRects.length = 0
+      scrollOffsets.clear()
+      activeSlotKeys.clear()
+
+      resetActiveAnimations()
+      resetCompositorPathState()
+
       layoutAdapter.destroy()
       freeFlexTree(root)
+      root._dirtyTracker = null
+      dirtyTracker.clearDirty()
     },
   }
+
+  return renderLoop
 }

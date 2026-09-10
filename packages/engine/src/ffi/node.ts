@@ -123,6 +123,7 @@ export function createNode(kind: TGENodeKind): TGENode {
     _lastMeasuredFontId: -1,
     _lastMeasuredFontSize: -1,
     _lastMeasurement: null,
+    _dirtyTracker: null,
   }
 }
 
@@ -377,19 +378,7 @@ export function adjustFocusableAncestors(node: TGENode | null, delta: number) {
 
 // ── Color parsing ──
 
-const COLOR_CACHE_CAP = 1024
 const _colorCache = new Map<string, number>()
-
-/** Clear color parse cache. */
-/** @public */
-export function clearColorCache(): void {
-  _colorCache.clear()
-}
-
-/** Internal test hook to inspect cache size. */
-export function getColorCacheSizeForTest(): number {
-  return _colorCache.size
-}
 
 /** @public */
 export function parseColor(value: string | number | undefined): number {
@@ -404,10 +393,6 @@ export function parseColor(value: string | number | undefined): number {
     : hex.length === 8
       ? parseInt(hex, 16) >>> 0
       : 0
-  if (_colorCache.size >= COLOR_CACHE_CAP) {
-    const first = _colorCache.keys().next().value
-    if (first !== undefined) _colorCache.delete(first)
-  }
   _colorCache.set(value, result)
   return result
 }

@@ -220,3 +220,26 @@ export type PaintResult = {
   /** Whether any layer was dirty (triggers terminal I/O). */
   anyDirty: boolean
 }
+
+/** @public */
+export type RenderLoop = {
+  root: TGENode
+  start: () => void
+  stop: () => void
+  frame: () => void
+  feedScroll: (dx: number, dy: number) => void
+  feedPointer: (x: number, y: number, down: boolean) => void
+  nudgeInteraction: (kind: "pointer" | "scroll" | "key") => void
+  requestInteractionFrame: (kind: "pointer" | "scroll" | "key") => void
+  needsPointerRepaint: () => boolean
+  setPointerCapture: (nodeId: number) => void
+  releasePointerCapture: (nodeId: number) => void
+  onPostScroll: (cb: () => void) => () => void
+  markNodeLayerDamaged: (nodeId: number, rect?: DamageRect) => void
+  suspend: () => void
+  resume: () => void
+  suspended: () => boolean
+  /** Schedule a task to run during frame budget drain. Returns cancel function. */
+  scheduleTask: (priority: "user-blocking" | "user-visible" | "background", fn: () => void) => () => void
+  destroy: () => void
+}

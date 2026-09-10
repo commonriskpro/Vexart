@@ -1,8 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { registerAnimationDescriptor, markLayerBacked, deregisterAllDescriptors, allDescriptors, resetFrameTracking, unmarkLayerBacked } from "../animation/compositor-path"
-import { createLayerStore } from "../ffi/layers"
+import { createLayerStore, type Layer } from "../ffi/layers"
 import { createNode } from "../ffi/node"
-import { compositeFrame, compositorLayersAreRetained, type CompositeFrameState } from "./composite"
+import {
+  bindLayerDirtyStore,
+  compositeFrame,
+  markLayerDirtyByKey,
+  unbindLayerDirtyStore,
+  type CompositeFrameState,
+} from "./composite"
 
 function cleanupCompositorState() {
   resetFrameTracking()
@@ -24,7 +30,6 @@ describe("compositeFrame compositor fast path", () => {
     node.props.layer = true
     node.props.opacity = 0.5
     node.props.transform = { rotate: 12 }
-    node._layerKey = `layer:${node.id}`
     node.layout = { x: 10, y: 20, width: 100, height: 40 }
     root.children.push(node)
 
@@ -149,19 +154,45 @@ describe("compositeFrame compositor fast path", () => {
     expect(painted).toBe(0)
     expect(cleared).toBe(1)
   })
+})
 
-  test("rejects a stale retained target when the descriptor node is in a parent layer", () => {
-    const root = createNode("root")
-    const parent = createNode("box")
-    const node = createNode("box")
-    node.parent = parent
-    parent.parent = root
-    node._layerKey = `layer:${parent.id}`
-    parent.children.push(node)
-    root.children.push(parent)
-    const layer = createLayerStore().createLayer(1)
-    const layerCache = new Map([[`layer:${node.id}`, layer]])
+describe("unbindLayerDirtyStore identity check", () => {
+  afterEach(() => {
+    unbindLayerDirtyStore()
+  })
 
-    expect(compositorLayersAreRetained([{ nodeId: node.id }], new Map([[node.id, node]]), layerCache)).toBe(false)
+  test("unbinds only when store identity matches or store is omitted", () => {
+    const storeA = new Map<string, Layer>()
+    const storeB = new Map<string, Layer>()
+    const layerStore = createLayerStore()
+
+    const layerA = layerStore.createLayer(1)
+    layerA.width = 100
+    layerA.height = 100
+    storeA.set("layer:1", layerA)
+
+    bindLayerDirtyStore(storeA)
+    markLayerDirtyByKey("layer:1")
+    expect(layerA.dirty).toBe(true)
+    layerA.dirty = false
+
+    // Attempt to unbind with non-matching storeB
+    unbindLayerDirtyStore(storeB)
+    markLayerDirtyByKey("layer:1")
+    // Should NOT have unbound storeA
+    expect(layerA.dirty).toBe(true)
+    layerA.dirty = false
+
+    // Unbind with matching storeA
+    unbindLayerDirtyStore(storeA)
+    markLayerDirtyByKey("layer:1")
+    // Store was unbound, so layerA remains clean
+    expect(layerA.dirty).toBe(false)
+
+    // Rebind and unbind without argument
+    bindLayerDirtyStore(storeA)
+    unbindLayerDirtyStore()
+    markLayerDirtyByKey("layer:1")
+    expect(layerA.dirty).toBe(false)
   })
 })

@@ -32,6 +32,7 @@ const [focusedIdSignal, setFocusedIdSignal] = createSignal<string | null>(null)
 // but repair a removed focus after the current update has settled.
 let pendingFocusRepair: number | null = null
 let focusRepairQueued = false
+let focusResetGeneration = 0
 
 /** @public */
 export const focusedId = focusedIdSignal
@@ -95,7 +96,9 @@ function queueFocusRepair(index: number) {
   pendingFocusRepair = pendingFocusRepair === null ? index : Math.min(pendingFocusRepair, index)
   if (focusRepairQueued) return
   focusRepairQueued = true
+  const currentGen = focusResetGeneration
   queueMicrotask(() => {
+    if (currentGen !== focusResetGeneration) return
     focusRepairQueued = false
     repairFocus()
   })
@@ -119,17 +122,13 @@ export function pushFocusScope(): () => void {
   return () => {
     const idx = scopes.indexOf(scope)
     if (idx > 0) {
-      const wasActive = idx === scopes.length - 1
       scopes.splice(idx, 1)
-      if (wasActive) {
-        const reg = activeRegistry()
-        if (scope.previousFocusId && reg.some((e) => e.id === scope.previousFocusId)) {
-          setFocusedId(scope.previousFocusId)
-        } else if (reg.length > 0) {
-          setFocusedId(reg[0].id)
-        } else {
-          setFocusedId(null)
-        }
+      const prevId = scope.previousFocusId
+      const targetScope = activeScope()
+      if (prevId && targetScope.entries.some((e) => e.id === prevId)) {
+        setFocusedId(prevId)
+      } else {
+        setFocusedId(targetScope.entries[0]?.id ?? null)
       }
     }
   }
@@ -247,6 +246,11 @@ export function getNodeFocusId(node: TGENode): string | undefined {
 
 /** @public */
 export function resetFocus() {
+  focusResetGeneration++
+  for (const scope of scopes) {
+    scope.entries.length = 0
+    scope.previousFocusId = null
+  }
   scopes.length = 1
   scopes[0].entries.length = 0
   scopes[0].previousFocusId = null

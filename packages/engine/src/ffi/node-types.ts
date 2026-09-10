@@ -441,6 +441,8 @@ export type TGENode = {
   _lastMeasuredFontId: number
   _lastMeasuredFontSize: number
   _lastMeasurement: { width: number; height: number } | null
+  /** Per-loop dirty tracker attached to root node. */
+  _dirtyTracker?: import("../reconciler/dirty").DirtyTracker | null
 }
 
 /** @public */

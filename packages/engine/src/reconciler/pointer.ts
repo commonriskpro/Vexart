@@ -1,6 +1,6 @@
 /** Pointer capture runtime boundary. */
 
-import type { RenderLoop } from "../loop/loop"
+import type { RenderLoop } from "../loop/types"
 import type { DamageRect } from "../ffi/damage"
 
 // WARNING: Module-level singleton — prevents multi-loop usage.
@@ -12,8 +12,10 @@ export function bindLoop(loop: RenderLoop) {
 }
 
 /** @public */
-export function unbindLoop() {
-  activeLoop = null
+export function unbindLoop(loop?: RenderLoop) {
+  if (!loop || activeLoop === loop) {
+    activeLoop = null
+  }
 }
 
 /** @public */
@@ -24,11 +26,6 @@ export function setPointerCapture(nodeId: number): void {
 /** @public */
 export function releasePointerCapture(nodeId: number): void {
   activeLoop?.releasePointerCapture(nodeId)
-}
-
-/** @public */
-export function getCapturedNodeId(): number {
-  return activeLoop?.getCapturedNodeId?.() ?? 0
 }
 
 /** @public */
