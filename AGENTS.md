@@ -51,6 +51,11 @@ universal reconciler instance. Consumer JSX compiles with
 [docs/agent-reference.md](docs/agent-reference.md#npm-package-structure-dist)
 for the package-layout details.
 
+## Architectural Discipline: No Hotfixes, No Ad-Hoc Patches
+
+- **Root-Cause Architecture Only**: Symptom mitigations, band-aids (e.g. hardcoded caps, magic-number delays, null checks masking invariant violations, swallowing errors) are strictly prohibited. Every fix must address the root-cause architecture, preserve symmetrical lifecycle ownership (acquire/release balance), and establish robust invariants so future changes do not re-break it.
+- **Stop and Ask on Design Decisions**: If a fix requires an architectural trade-off, ownership redesign, or public API/contract change, STOP immediately, present the trade-offs clearly, and ask the user what to decide before writing code. Never guess or apply makeshift workarounds.
+
 ## Commands
 
 - `bun install` — install dependencies.
