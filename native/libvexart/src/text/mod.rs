@@ -381,6 +381,11 @@ pub unsafe fn dispatch(
         return OK;
     }
 
+    let align = std::mem::align_of::<crate::paint::instances::MsdfGlyphInstance>();
+    if (glyphs_ptr as usize) % align != 0 {
+        return ERR_INVALID_ARG;
+    }
+
     let stride = std::mem::size_of::<crate::paint::instances::MsdfGlyphInstance>();
     if (glyphs_len as usize) % stride != 0 {
         return ERR_INVALID_ARG;

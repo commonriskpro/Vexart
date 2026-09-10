@@ -22,3 +22,5 @@ scripts/frame-breakdown-report.json
 scripts/terminal-transport-report.json
 package/
 __pycache__/
+artifacts/grid-parity/
+artifacts/grid/oracle/

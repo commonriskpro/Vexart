@@ -192,10 +192,12 @@ function parseReport(stderr: string): FixtureReport {
 
 async function runFixture(tmux: boolean): Promise<{ output: ParsedOutput; report: FixtureReport; stdout: string; stderr: string }> {
   const fixture = join(import.meta.dir, "tmux-presentation-fixture.ts")
+  const childEnv = { ...process.env }
+  delete childEnv.TMUX
   const child = Bun.spawn([process.execPath, "--conditions=browser", fixture], {
     cwd: join(import.meta.dir, "../../../.."),
     env: {
-      ...process.env,
+      ...childEnv,
       VEXART_GPU_FORCE_LAYER_STRATEGY: "final-frame",
       VEXART_NATIVE_PRESENTATION: "1",
       VEXART_FIXTURE_TMUX: tmux ? "1" : "0",

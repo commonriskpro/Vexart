@@ -15,9 +15,8 @@ export type NativeImageAssetInput = {
 }
 
 /** @public */
-export function nativeImageAssetRegister(input: NativeImageAssetInput, ctx: bigint = 1n): bigint | null {
+export function nativeImageAssetRegister(input: NativeImageAssetInput, _ctx: bigint = 1n): bigint | null {
   if (input.key.length === 0 || input.width <= 0 || input.height <= 0 || input.data.byteLength === 0) return null
-  const vctx = input.ctx ?? ctx
   try {
     const key = encoder.encode(input.key)
     const meta = new Uint8Array(8)
@@ -27,8 +26,6 @@ export function nativeImageAssetRegister(input: NativeImageAssetInput, ctx: bigi
     const out = new BigUint64Array(1)
     const { symbols } = openVexartLibrary()
     const code = symbols.vexart_image_asset_register(
-      vctx,
-      0n,
       input.currentFrame ?? 0n,
       ptr(key),
       key.byteLength,

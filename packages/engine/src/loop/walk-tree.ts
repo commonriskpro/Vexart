@@ -566,6 +566,8 @@ export function walkTree(
   // but we skip all children — reducing layout commands and paint work.
   if (
     state.cullingEnabled
+    && !insideTransform
+    && !hasTransform
     && !isScrollContainer
     && node.children.length > 0
     && state.viewportWidth !== undefined

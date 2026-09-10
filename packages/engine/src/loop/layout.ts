@@ -38,6 +38,7 @@ export type WriteLayoutBackState = {
   textNodes: TGENode[]
   boxNodes: TGENode[]
   pendingNodeDamageRects?: Array<{ nodeId: number; rect: DamageRect }>
+  scrollOffsets?: Map<number, { x: number; y: number }>
 }
 
 function isNonEmptyLayoutRect(rect: { width: number; height: number }) {
@@ -122,9 +123,9 @@ export function writeLayoutBack(
   }
 
   // ── Transform hierarchy ──
-  // Pass 1: Compute LOCAL transform matrices on rectNodes (nodes with RECT commands).
+  // Pass 1: Compute LOCAL transform matrices on boxNodes.
   // This runs AFTER layout so we know w/h for transformOrigin.
-  for (const node of rectNodes) {
+  for (const node of boxNodes) {
     const vp = resolveProps(node)
     if (vp.transform) {
       const l = node.layout
@@ -149,6 +150,10 @@ export function writeLayoutBack(
       node._transformInverse = null
     }
   }
+  for (const node of textNodes) {
+    node._transform = null
+    node._transformInverse = null
+  }
 
   // Pass 2: Propagate transform hierarchy for hit-testing.
   //
@@ -172,6 +177,12 @@ export function writeLayoutBack(
   // TODO(perf): Cache _anyAncestorHasTransform flag during walkTree to skip
   // this O(depth) ancestor walk when no transforms exist in the subtree.
   function computeAccTransform(node: TGENode): void {
+    const vp = resolveProps(node)
+    if (!vp.transform) {
+      node._transform = null
+      node._transformInverse = null
+    }
+
     // Collect all ancestors with transforms, from outermost to innermost
     const chain: TGENode[] = []
     let pa = node.parent
@@ -200,14 +211,14 @@ export function writeLayoutBack(
       return
     }
 
-    const nl = node.layout
+    const nl = getEffectivePosition(node, state.scrollOffsets)
 
     // Compose forward matrix in ABSOLUTE coordinates.
     // Each _transform operates in its own local space (origin baked in via
     // fromConfig). Lift each to absolute: T(anc) × M × T(-anc).
     let absForward = identity()
     for (const anc of chain) {
-      const al = anc.layout
+      const al = getEffectivePosition(anc, state.scrollOffsets)
       absForward = multiply(absForward, multiply(multiply(translate(al.x, al.y), anc._transform!), translate(-al.x, -al.y)))
     }
     if (hasOwnTransform) {

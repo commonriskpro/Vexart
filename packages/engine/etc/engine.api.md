@@ -2919,7 +2919,7 @@ export const VEXART_SYMBOLS: {
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_image_asset_register: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.ptr];
+        readonly args: [FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.ptr];
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_image_asset_touch: {

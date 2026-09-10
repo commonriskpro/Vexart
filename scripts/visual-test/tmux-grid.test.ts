@@ -173,7 +173,12 @@ test("private tmux starts atomically with configured Kitty passthrough", async (
     expect(paneEnv.KITTY_WINDOW_ID).toBe("g037-test")
     const detectPath = join(root, "packages/engine/src/terminal/detect.ts")
     const capsPath = join(root, "packages/engine/src/terminal/caps.ts")
-    const probe = Bun.spawnSync([process.execPath, "--eval", `const { detect } = await import(${JSON.stringify(detectPath)}); const { inferCaps } = await import(${JSON.stringify(capsPath)}); const kind = detect(); console.log(JSON.stringify({ kind, caps: inferCaps(kind) }))`], { env: { ...process.env, ...paneEnv } })
+    const probeEnv = { ...process.env, ...paneEnv }
+    delete probeEnv.GHOSTTY_RESOURCES_DIR
+    if (probeEnv.TERM_PROGRAM?.toLowerCase() === "ghostty") {
+      delete probeEnv.TERM_PROGRAM
+    }
+    const probe = Bun.spawnSync([process.execPath, "--eval", `const { detect } = await import(${JSON.stringify(detectPath)}); const { inferCaps } = await import(${JSON.stringify(capsPath)}); const kind = detect(); console.log(JSON.stringify({ kind, caps: inferCaps(kind) }))`], { env: probeEnv })
     expect(probe.exitCode).toBe(0)
     const observed = JSON.parse(new TextDecoder().decode(probe.stdout)) as { kind: string; caps: { tmux: boolean; parentKind: string | null; kittyPlaceholder: boolean } }
     expect(observed.kind).toBe("kitty")

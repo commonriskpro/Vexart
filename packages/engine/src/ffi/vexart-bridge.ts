@@ -112,7 +112,7 @@ export const VEXART_SYMBOLS = {
   // §5.8 Resource manager (Phase 2b Slice 6)
   vexart_resource_get_stats:  { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_resource_set_budget: { args: [FFIType.u64, FFIType.u32],                          returns: FFIType.i32 },
-  vexart_image_asset_register: { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
+  vexart_image_asset_register: { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
   vexart_image_asset_touch: { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.u64], returns: FFIType.i32 },
   vexart_image_asset_release: { args: [FFIType.u64, FFIType.u64, FFIType.u64], returns: FFIType.i32 },
   vexart_canvas_display_list_update: { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },

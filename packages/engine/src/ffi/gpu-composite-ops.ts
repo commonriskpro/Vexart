@@ -156,7 +156,7 @@ export function vexartCompositeImageMaskRoundedRect(
 ): bigint {
   _handleOut[0] = 0n
   const result = getSymbols().vexart_composite_image_mask_rounded_rect(
-    vctx, image, ptr(new Uint8Array(rectBuf.buffer)), ptr(_handleOut)
+    vctx, image, ptr(new Uint8Array(rectBuf.buffer, rectBuf.byteOffset, rectBuf.byteLength)), ptr(_handleOut)
   ) as number
   if (result !== 0) return 0n
   return _handleOut[0]
@@ -172,7 +172,7 @@ export function vexartCompositeImageMaskRoundedRectRegion(
 ): bigint {
   _handleOut[0] = 0n
   const result = getSymbols().vexart_composite_image_mask_rounded_rect_region(
-    vctx, image, ptr(new Uint8Array(rectBuf.buffer)), ptr(_handleOut)
+    vctx, image, ptr(new Uint8Array(rectBuf.buffer, rectBuf.byteOffset, rectBuf.byteLength)), ptr(_handleOut)
   ) as number
   if (result !== 0) return 0n
   return _handleOut[0]

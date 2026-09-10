@@ -102,14 +102,16 @@ async function main() {
   recordRoot("grow")
 
   setProp(box, "backgroundColor", 0x669933ff)
-  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  markDirty()
+  loop.frame()
   recordRoot("grow-update")
 
   fixture.emitResize(120, 80)
   recordRoot("shrink")
 
   setProp(box, "backgroundColor", 0x993366ff)
-  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  markDirty()
+  loop.frame()
   recordRoot("shrink-update")
 
   loop.destroy()

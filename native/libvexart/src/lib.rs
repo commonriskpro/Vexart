@@ -1397,8 +1397,6 @@ pub extern "C" fn vexart_resource_set_budget(_ctx: u64, budget_mb: u32) -> i32 {
 /// All pointers must be valid for their documented lengths.
 #[no_mangle]
 pub unsafe extern "C" fn vexart_image_asset_register(
-    _ctx: u64,
-    _scene: u64,
     current_frame: u64,
     key_ptr: *const u8,
     key_len: u32,

@@ -22,7 +22,7 @@ import { DIRTY_KIND, markDirty } from "./dirty"
 import { createHandle } from "./handle"
 import { markLayerBacked, onNodePropertyChanged, onSubtreeChanged, unmarkLayerBacked } from "../animation/compositor-path"
 import { registerNodeFocusable, unregisterNodeFocusable, updateNodeFocusEntry } from "./focus"
-import { markNodeLayerDamaged } from "./pointer"
+import { markNodeLayerDamaged, getCapturedNodeId, releasePointerCapture } from "./pointer"
 import { markLayerDirtyByKey } from "../loop/composite"
 
 // ── Color props that need pre-parsing ──
@@ -40,6 +40,7 @@ const COLOR_PROPS = new Set([
 const STYLE_SUB_COLOR_PROPS = new Set([
   "backgroundColor",
   "borderColor",
+  "color",
 ])
 
 const OBJECT_PROPS = new Set([
@@ -499,6 +500,9 @@ const renderer = createRenderer<TGENode>({
   },
 
   removeNode(parent: TGENode, node: TGENode) {
+    if (node.id === getCapturedNodeId()) {
+      releasePointerCapture(node.id)
+    }
     // Recursively unregister all focusable nodes in the subtree.
     // Without this, destroyed children remain as ghost entries in the
     // focus ring and Tab key cycles through invisible elements.

@@ -502,6 +502,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     releasePointerCapture(nodeId: number) {
       if (pointer.capturedNodeId === nodeId) pointer.capturedNodeId = 0
     },
+    getCapturedNodeId() {
+      return pointer.capturedNodeId
+    },
     onPostScroll(cb: () => void) {
       postScrollCallbacks.push(cb)
       return () => { const idx = postScrollCallbacks.indexOf(cb); if (idx >= 0) postScrollCallbacks.splice(idx, 1) }

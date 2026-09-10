@@ -3,7 +3,7 @@
 import { createSignal } from "solid-js"
 import { type NodeMouseEvent } from "../ffi/node"
 import { type NodeHandle } from "./handle"
-import { setPointerCapture } from "./pointer"
+import { setPointerCapture, releasePointerCapture } from "./pointer"
 import { beginNodeInteraction, endNodeInteraction } from "./interaction"
 import type { InteractionBinding, InteractionLayerState } from "./interaction"
 
@@ -88,6 +88,7 @@ export function useDrag(opts: DragOptions): DragState {
     if (!dragging()) return
     setDragging(false)
     endInteraction()
+    if (nodeId) releasePointerCapture(nodeId)
     opts.onDragEnd?.(evt)
   }
 

@@ -1292,6 +1292,20 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       flushImages()
       flushTransformedImages()
     }
+    const flushText = () => {
+      if (deferredMsdfOps.length === 0) return
+      for (const msdfOp of deferredMsdfOps) {
+        tryMsdfText(
+          vctx, targetHandle,
+          msdfOp.text, msdfOp.x, msdfOp.y,
+          msdfOp.fontSize, msdfOp.lineHeight, msdfOp.maxWidth,
+          msdfOp.colorRgba,
+          ctx.target.width, ctx.target.height,
+          msdfOp.fontFamily, msdfOp.fontWeight, msdfOp.fontStyle,
+        )
+      }
+      deferredMsdfOps.length = 0
+    }
     const flushAll = () => {
       flushShapeRects()
       flushShapeRectCorners()
@@ -1301,6 +1315,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       flushGlows()
       flushImages()
       flushTransformedImages()
+      flushText()
     }
 
     let activeScissor: { x: number; y: number; width: number; height: number } | null = null
@@ -2325,18 +2340,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
         failGpuOnly(`unsupported render op kind=${op.kind}`)
       }
       flushAll()
-      // ── Deferred MSDF text: render AFTER all rects/shapes/images so text appears on top ──
-      for (const msdfOp of deferredMsdfOps) {
-        tryMsdfText(
-          vctx, targetHandle,
-          msdfOp.text, msdfOp.x, msdfOp.y,
-          msdfOp.fontSize, msdfOp.lineHeight, msdfOp.maxWidth,
-          msdfOp.colorRgba,
-          ctx.target.width, ctx.target.height,
-          msdfOp.fontFamily, msdfOp.fontWeight, msdfOp.fontStyle,
-        )
-      }
-      deferredMsdfOps.length = 0
     } finally {
       if (activeScissor !== null) {
         vexartCompositeTargetResetScissor(vctx, targetHandle)

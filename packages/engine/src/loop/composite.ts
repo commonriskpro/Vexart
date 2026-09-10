@@ -241,6 +241,7 @@ function writeLayoutBack(s: CompositeFrameState): boolean {
     textNodes: s.textNodes,
     boxNodes: s.boxNodes,
     pendingNodeDamageRects: s.pendingNodeDamageRects,
+    scrollOffsets: s.scrollOffsets,
   })
 }
 

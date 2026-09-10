@@ -21,9 +21,7 @@ export type TerminalKind =
   | "unknown"
 
 /** @public */
-export function detect(): TerminalKind {
-  const env = process.env
-
+export function detect(env: Readonly<Record<string, string | undefined>> = process.env): TerminalKind {
   // Ghostty sets GHOSTTY_RESOURCES_DIR
   if (env["GHOSTTY_RESOURCES_DIR"]) return "ghostty"
 

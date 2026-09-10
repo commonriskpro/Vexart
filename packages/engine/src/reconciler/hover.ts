@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js"
+import { createSignal, onCleanup } from "solid-js"
 import { type NodeMouseEvent } from "../ffi/node"
 
 /** @public */
@@ -32,6 +32,8 @@ export function useHover(opts?: HoverOptions): HoverState {
     if (enterTimer) { clearTimeout(enterTimer); enterTimer = null }
     if (leaveTimer) { clearTimeout(leaveTimer); leaveTimer = null }
   }
+
+  onCleanup(clearTimers)
 
   function handleMouseOver(_evt: NodeMouseEvent) {
     if (opts?.disabled?.()) return

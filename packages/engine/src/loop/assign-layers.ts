@@ -127,6 +127,7 @@ export function resolveNodeByPath(fromRoot: TGENode, path: string): TGENode | nu
 }
 
 type ScissorPair = {
+  nodeId?: number
   startIdx: number
   endIdx: number
   x: number
@@ -246,6 +247,7 @@ export function assignLayersSpatial(
     if (endIdx >= 0) {
       const startCmd = commands[startIdx]
       scissorPairs.push({
+        nodeId: startCmd.nodeId,
         startIdx,
         endIdx,
         x: Math.round(startCmd.x),
@@ -272,13 +274,16 @@ export function assignLayersSpatial(
   }
   const claimedBounds = new Set<string>()
 
-  // Collect ALL scroll container nodes in walkTree order (to map scissors to layers)
-  const scrollNodes = state.scrollContainers ?? []
-
-  // Map: scroll node id → scissor pair index
-  const scrollNodeToScissor = new Map<number, number>()
-  for (let si = 0; si < scrollNodes.length && si < scissorPairs.length; si++) {
-    scrollNodeToScissor.set(scrollNodes[si].id, si)
+  // Map: scroll node id → scissor pair using startCmd.nodeId with positional fallback
+  const scissorsByNodeId = new Map<number, ScissorPair>()
+  const scrollNodes = boundaries.filter((b) => b.isScroll)
+  for (let si = 0; si < scissorPairs.length; si++) {
+    const sp = scissorPairs[si]
+    if (sp.nodeId !== undefined) {
+      scissorsByNodeId.set(sp.nodeId, sp)
+    } else if (si < scrollNodes.length) {
+      scissorsByNodeId.set(scrollNodes[si].nodeId, sp)
+    }
   }
 
   for (const b of boundaries) {
@@ -289,10 +294,7 @@ export function assignLayersSpatial(
     let scissor: ScissorPair | null = null
 
     if (b.isScroll) {
-      const si = scrollNodeToScissor.get(b.nodeId)
-      if (si !== undefined && si < scissorPairs.length) {
-        scissor = scissorPairs[si]
-      }
+      scissor = scissorsByNodeId.get(b.nodeId) ?? null
     }
 
     const layoutX = Math.round(node.layout.x)

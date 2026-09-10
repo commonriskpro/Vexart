@@ -115,17 +115,14 @@ fn animation_supported() -> bool {
 }
 
 fn animation_supported_from_env(
-    ghostty_resources_dir: bool,
-    term_program: Option<&str>,
+    _ghostty_resources_dir: bool,
+    _term_program: Option<&str>,
     vexart_kitty_animation: Option<&str>,
 ) -> bool {
     if vexart_kitty_animation == Some("1") {
         return true;
     }
     if vexart_kitty_animation == Some("0") {
-        return false;
-    }
-    if ghostty_resources_dir || term_program == Some("ghostty") {
         return false;
     }
     true
@@ -1699,9 +1696,10 @@ mod tests {
     #[test]
     fn test_animation_supported_detection() {
         assert!(animation_supported_from_env(false, None, None));
-        assert!(!animation_supported_from_env(true, None, None));
-        assert!(!animation_supported_from_env(false, Some("ghostty"), None));
+        assert!(animation_supported_from_env(true, None, None));
+        assert!(animation_supported_from_env(false, Some("ghostty"), None));
         assert!(animation_supported_from_env(true, Some("ghostty"), Some("1")));
+        assert!(!animation_supported_from_env(false, Some("ghostty"), Some("0")));
         assert!(!animation_supported_from_env(false, Some("xterm-kitty"), Some("0")));
         assert!(animation_supported_from_env(false, Some("xterm-kitty"), None));
         assert!(animation_supported_from_env(false, Some("iTerm.app"), None));

@@ -234,6 +234,7 @@ export type RenderLoop = {
   needsPointerRepaint: () => boolean
   setPointerCapture: (nodeId: number) => void
   releasePointerCapture: (nodeId: number) => void
+  getCapturedNodeId?: () => number
   onPostScroll: (cb: () => void) => () => void
   markNodeLayerDamaged: (nodeId: number, rect?: DamageRect) => void
   suspend: () => void
