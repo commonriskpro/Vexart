@@ -13,39 +13,11 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::hash_map::DefaultHasher;
-use std::collections::{HashMap, VecDeque};
-use std::fs::OpenOptions;
+use std::collections::HashMap;
 use std::hash::Hasher;
-use std::io::Write;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{LazyLock, Mutex};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-
-fn log_native_emit(target: u64, image_id: u32, width: u32, height: u32, rc: i32) {
-    static DIAGNOSTIC_ENABLED: LazyLock<bool> = LazyLock::new(|| {
-        std::env::var("VEXART_DIAGNOSTIC").as_deref() == Ok("1")
-    });
-    if !*DIAGNOSTIC_ENABLED {
-        return;
-    }
-    let now_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
-    if let Ok(mut f) = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("/tmp/ps5-diagnostic.log")
-    {
-        let _ = writeln!(
-            f,
-            "[{now_ms}][native:emit] target={target} img={image_id} w={width} h={height} rc={rc}"
-        );
-    }
-}
+use std::time::Instant;
 
 use super::encoder::{encode_animation_frame_direct, encode_frame_direct};
-use super::shm::{shm_is_consumed, shm_prepare_native, shm_release};
 use super::writer::write_to_stdout;
 use crate::ffi::error::set_last_error;
 use crate::ffi::panic::{ERR_INVALID_ARG, ERR_KITTY_TRANSPORT, OK};
@@ -78,86 +50,13 @@ thread_local! {
     static FORCE_WRITE_FAILURE: Cell<bool> = const { Cell::new(false) };
 }
 
-#[derive(Debug)]
-struct PendingShm {
-    handle: u64,
-    created_at: Instant,
-    frame_idx: u64,
-}
-
-static SHM_FRAME_COUNTER: AtomicU64 = AtomicU64::new(0);
-static SHM_REAPER_QUEUE: LazyLock<Mutex<VecDeque<PendingShm>>> =
-    LazyLock::new(|| Mutex::new(VecDeque::new()));
-
-const SHM_REAPER_MAX_CAPACITY: usize = 128;
-const SHM_REAPER_MAX_AGE: Duration = Duration::from_secs(3);
-const SHM_REAPER_MAX_FRAMES: u64 = 120;
-
-fn reap_pending_shm(queue: &mut VecDeque<PendingShm>, current_frame: u64, now: Instant) {
-    queue.retain(|entry| {
-        let consumed_rc = shm_is_consumed(entry.handle);
-        let is_consumed = consumed_rc == 1 || consumed_rc < 0;
-        let is_expired_time = now.duration_since(entry.created_at) >= SHM_REAPER_MAX_AGE;
-        let is_expired_frames = current_frame.saturating_sub(entry.frame_idx) >= SHM_REAPER_MAX_FRAMES;
-
-        if is_consumed || is_expired_time || is_expired_frames {
-            shm_release(entry.handle, 1);
-            false
-        } else {
-            true
-        }
-    });
-
-    while queue.len() >= SHM_REAPER_MAX_CAPACITY {
-        if let Some(entry) = queue.pop_front() {
-            shm_release(entry.handle, 1);
-        }
-    }
-}
-
-fn track_and_reap_shm_handle(handle: u64) {
-    let current_frame = SHM_FRAME_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let now = Instant::now();
-    let mut queue = SHM_REAPER_QUEUE.lock().unwrap_or_else(|e| e.into_inner());
-    reap_pending_shm(&mut queue, current_frame, now);
-    queue.push_back(PendingShm {
-        handle,
-        created_at: now,
-        frame_idx: current_frame,
-    });
-}
-
-/// Drain pending SHM frames and clean up all registered SHM segments.
-pub fn transport_cleanup_shm() -> usize {
-    {
-        let mut queue = SHM_REAPER_QUEUE.lock().unwrap_or_else(|e| e.into_inner());
-        queue.clear();
-    }
-    super::shm::shm_cleanup_all()
-}
-
 fn image_frame(image_id: u32) -> Option<u32> {
     IMAGE_FRAMES.with(|frames| frames.borrow().get(&image_id).copied())
 }
 
-fn next_animation_frame(existing_frame: Option<u32>) -> (u32, u32, bool) {
-    // returns (target_frame, compose_frame, is_replacement)
-    match existing_frame {
-        None => (1, 1, false),
-        Some(1) => (2, 1, false), // Frame 2 is appended (first time)
-        Some(2) => (1, 2, true),  // Frame 1 is replaced (r=1)
-        Some(_) => (2, 1, true),  // Frame 2 is replaced (r=2)
-    }
-}
-
-fn record_image_frame(image_id: u32, target_frame: Option<u32>) {
+fn record_image_frame(image_id: u32, existing_frame: Option<u32>) {
     IMAGE_FRAMES.with(|frames| {
-        let next = match target_frame {
-            Some(1) => 3,
-            Some(2) => 2,
-            Some(_) => 3,
-            None => 1,
-        };
+        let next = existing_frame.map_or(2, |frame| frame.saturating_add(1));
         frames.borrow_mut().insert(image_id, next);
     });
 }
@@ -184,35 +83,8 @@ fn record_image_geometry(image_id: u32, width: u32, height: u32) {
     });
 }
 
-fn animation_supported() -> bool {
-    animation_supported_from_env(
-        std::env::var("GHOSTTY_RESOURCES_DIR").is_ok(),
-        std::env::var("TERM_PROGRAM").as_deref().ok(),
-        std::env::var("VEXART_KITTY_ANIMATION").as_deref().ok(),
-    )
-}
-
-fn animation_supported_from_env(
-    ghostty_resources_dir: bool,
-    term_program: Option<&str>,
-    vexart_kitty_animation: Option<&str>,
-) -> bool {
-    if vexart_kitty_animation == Some("1") {
-        return true;
-    }
-    if vexart_kitty_animation == Some("0") {
-        return false;
-    }
-    if ghostty_resources_dir || term_program == Some("ghostty") {
-        return false;
-    }
-    true
-}
-
 fn needs_full_transmit(image_id: u32, width: u32, height: u32) -> bool {
-    !animation_supported()
-        || image_frame(image_id).is_none()
-        || image_geometry(image_id) != Some((width, height))
+    image_frame(image_id).is_none() || image_geometry(image_id) != Some((width, height))
 }
 
 fn rgba_hash(rgba: &[u8]) -> u64 {
@@ -309,6 +181,14 @@ pub fn set_transport_mode(mode: u32) -> i32 {
     OK
 }
 
+/// Clean up any active SHM mappings on engine shutdown and reset transport caches.
+pub fn cleanup_shm_on_shutdown() {
+    crate::kitty::shm::cleanup_all_shm_handles();
+    IMAGE_FRAMES.with(|cell| cell.borrow_mut().clear());
+    IMAGE_HASHES.with(|cell| cell.borrow_mut().clear());
+    IMAGE_GEOMETRIES.with(|cell| cell.borrow_mut().clear());
+}
+
 /// Emit a complete frame to the terminal using the active transport mode.
 ///
 /// Reads back the GPU target, encodes, and writes to stdout. On error,
@@ -357,13 +237,12 @@ fn emit_direct(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
 
     // 3. Encode and write through the same animation-aware path used by the
     // native stats variant. This also coalesces unchanged frames.
-    let rc = emit_direct_inner(&rgba[..written as usize], width, height, image_id);
-    log_native_emit(target, image_id, width, height, rc);
-    rc
+    emit_direct_inner(&rgba[..written as usize], width, height, image_id)
 }
 
 /// SHM mode: readback → shm_prepare → Kitty SHM escape → stdout.
 fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
+    use super::shm::{shm_prepare, shm_release};
     use crate::kitty::encoder::compress_rgba;
     use base64::engine::general_purpose::STANDARD as B64;
     use base64::Engine as _;
@@ -386,60 +265,57 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
         return ERR_KITTY_TRANSPORT;
     }
     let existing_frame = image_frame(image_id);
-    let has_prior_frame =
-        existing_frame.is_some() && image_geometry(image_id) == Some((width, height));
+    let animation_frame = existing_frame.filter(|_| !needs_full_transmit(image_id, width, height));
+    let full_transmit = animation_frame.is_none();
     let digest = payload_hash(&rgba[..written as usize], width, height, 0, 0, 0);
-    if has_prior_frame && payload_unchanged(image_id, digest) {
-        log_native_emit(target, image_id, width, height, OK);
+    if !full_transmit && payload_unchanged(image_id, digest) {
         return OK;
     }
-    let animation_frame = existing_frame.filter(|_| !needs_full_transmit(image_id, width, height));
 
     // 3. zlib compress.
     let compressed = compress_rgba(&rgba[..written as usize])
         .unwrap_or_else(|_| rgba[..written as usize].to_vec());
 
-    // 4. Create a uniquely named SHM segment with compressed data. Reusing
-    // one name per image is racy: Kitty may still be opening the previous
-    // segment when the next frame unlinks/recreates that name, yielding an
-    // EBADF/ENOENT response and eventually a blank/stalled terminal.
-    let (handle, shm_name) = match shm_prepare_native(&compressed) {
-        Ok(prepared) => prepared,
-        Err(_) => {
-            log_native_emit(target, image_id, width, height, ERR_KITTY_TRANSPORT);
-            return ERR_KITTY_TRANSPORT;
-        }
+    // 4. Create SHM segment with compressed data.
+    let shm_name = super::shm::generate_shm_name();
+    let mut handle: u64 = 0;
+    let rc = unsafe {
+        shm_prepare(
+            shm_name.as_ptr(),
+            shm_name.len() as u32,
+            compressed.as_ptr(),
+            compressed.len() as u32,
+            0o600,
+            &mut handle,
+        )
     };
+    if rc != OK {
+        // shm_prepare already set last error.
+        return ERR_KITTY_TRANSPORT;
+    }
 
     // 5. Build Kitty SHM escape and write to stdout.
     let name_b64 = B64.encode(shm_name.as_bytes());
-    let (escape, target_record) = if let Some(existing) = animation_frame {
-        let (target_frame, compose_frame, is_replacement) = next_animation_frame(Some(existing));
-        let frame_params = if is_replacement {
-            format!("r={target_frame},c={compose_frame}")
-        } else {
-            format!("c={compose_frame}")
-        };
-        (
-            format!(
-                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,t=s,o=z,q=2;{name_b64}\x1b\\\x1b_Ga=a,i={image_id},c={target_frame},q=2;\x1b\\"
-            ),
-            Some(target_frame),
+    let escape = if let Some(frame_id) = animation_frame {
+        let previous_frame = frame_id.saturating_sub(1);
+        format!(
+            "\x1b_Ga=f,i={image_id},c={previous_frame},f=32,s={width},v={height},C=1,t=s,o=z,q=2;{name_b64}\x1b\\\x1b_Ga=a,i={image_id},c={frame_id},q=2;\x1b\\"
         )
     } else {
-        (
-            format!(
-                "\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s,o=z,q=2;{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,q=2;\x1b\\"
-            ),
-            None,
+        format!(
+            "\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s,o=z,q=2;{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,q=2;\x1b\\"
         )
     };
     let write_result = write_transport(escape.as_bytes());
 
-    let rc = match write_result {
+    // 6. Schedule SHM cleanup.
+    // If stdout write failed (e.g. broken pipe, terminal disconnected), fail-closed:
+    // unlink the segment immediately so it does not leak in /dev/shm.
+    // On success, close fd but do not unlink — terminal unlinks after reading per Kitty spec.
+    match write_result {
         Ok(()) => {
-            track_and_reap_shm_handle(handle);
-            record_image_frame(image_id, target_record);
+            shm_release(handle, 0);
+            record_image_frame(image_id, animation_frame);
             record_image_geometry(image_id, width, height);
             record_payload(image_id, digest);
             OK
@@ -449,9 +325,7 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
             set_last_error(format!("emit_shm: stdout write failed: {e}"));
             ERR_KITTY_TRANSPORT
         }
-    };
-    log_native_emit(target, image_id, width, height, rc);
-    rc
+    }
 }
 
 /// Resolve (width, height) from a target handle.
@@ -617,7 +491,6 @@ pub unsafe fn emit_frame_with_stats(
             NativePresentationStats::FLAG_NATIVE_USED | NativePresentationStats::FLAG_VALID;
         write_transfer_stats(stats, transfer);
     }
-    log_native_emit(target, image_id, width, height, rc);
     rc
 }
 
@@ -645,7 +518,6 @@ pub unsafe fn emit_layer_native(
     let t0 = Instant::now();
     if rgba_ptr.is_null() || rgba_len == 0 || width == 0 || height == 0 {
         set_last_error("emit_layer_native: invalid arguments");
-        log_native_emit(0, image_id, width, height, ERR_KITTY_TRANSPORT);
         return ERR_KITTY_TRANSPORT;
     }
     let rgba = std::slice::from_raw_parts(rgba_ptr, rgba_len as usize);
@@ -679,7 +551,6 @@ pub unsafe fn emit_layer_native(
             NativePresentationStats::FLAG_NATIVE_USED | NativePresentationStats::FLAG_VALID;
         write_transfer_stats(stats, transfer);
     }
-    log_native_emit(0, image_id, width, height, rc);
     rc
 }
 
@@ -704,7 +575,6 @@ pub unsafe fn emit_layer_target_with_stats(
             set_last_error(format!(
                 "emit_layer_target_with_stats: invalid target handle {target}"
             ));
-            log_native_emit(target, image_id, 0, 0, ERR_KITTY_TRANSPORT);
             return ERR_KITTY_TRANSPORT;
         }
     };
@@ -729,7 +599,6 @@ pub unsafe fn emit_layer_target_with_stats(
         Some(result) => result,
         None => {
             set_last_error("emit_layer_target_with_stats: GPU readback returned 0 bytes");
-            log_native_emit(target, image_id, width, height, ERR_KITTY_TRANSPORT);
             return ERR_KITTY_TRANSPORT;
         }
     };
@@ -750,7 +619,6 @@ pub unsafe fn emit_layer_target_with_stats(
             NativePresentationStats::FLAG_NATIVE_USED | NativePresentationStats::FLAG_VALID;
         write_transfer_stats(stats, transfer);
     }
-    log_native_emit(target, image_id, width, height, rc);
     rc
 }
 
@@ -923,31 +791,16 @@ pub unsafe fn delete_layer_native(image_id: u32, stats_out: *mut NativePresentat
 /// Emit already-read RGBA data using direct mode (encode → stdout).
 fn emit_direct_inner(rgba: &[u8], width: u32, height: u32, image_id: u32) -> i32 {
     let existing_frame = image_frame(image_id);
-    let has_prior_frame =
-        existing_frame.is_some() && image_geometry(image_id) == Some((width, height));
-    let digest = payload_hash(rgba, width, height, 0, 0, 0);
-    if has_prior_frame && payload_unchanged(image_id, digest) {
-        return OK;
-    }
     let animation_frame = existing_frame.filter(|_| !needs_full_transmit(image_id, width, height));
     let full_transmit = animation_frame.is_none();
-    let (escaped, target_record) = if let Some(existing) = animation_frame {
-        let (target_frame, compose_frame, is_replacement) = next_animation_frame(Some(existing));
-        (
-            encode_animation_frame_direct(
-                rgba,
-                width,
-                height,
-                image_id,
-                target_frame,
-                compose_frame,
-                is_replacement,
-            ),
-            Some(target_frame),
-        )
-    } else {
-        (encode_frame_direct(rgba, width, height, image_id), None)
-    };
+    let digest = payload_hash(rgba, width, height, 0, 0, 0);
+    if !full_transmit && payload_unchanged(image_id, digest) {
+        return OK;
+    }
+    let escaped = animation_frame.map_or_else(
+        || encode_frame_direct(rgba, width, height, image_id),
+        |frame_id| encode_animation_frame_direct(rgba, width, height, image_id, frame_id),
+    );
     let stale_delete = if full_transmit {
         format!("\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\")
     } else {
@@ -959,7 +812,7 @@ fn emit_direct_inner(rgba: &[u8], width: u32, height: u32, image_id: u32) -> i32
     );
     match write_transport(positioned.as_bytes()) {
         Ok(()) => {
-            record_image_frame(image_id, target_record);
+            record_image_frame(image_id, animation_frame);
             record_image_geometry(image_id, width, height);
             record_payload(image_id, digest);
             OK
@@ -1021,6 +874,7 @@ fn emit_shm_rgba_at_with_stats(
     row: i32,
     z: i32,
 ) -> (i32, ShmTransferStats) {
+    use super::shm::{shm_prepare, shm_release};
     use crate::kitty::encoder::compress_rgba;
     use base64::engine::general_purpose::STANDARD as B64;
     use base64::Engine as _;
@@ -1030,13 +884,12 @@ fn emit_shm_rgba_at_with_stats(
         ..ShmTransferStats::default()
     };
     let existing_frame = image_frame(image_id);
-    let has_prior_frame =
-        existing_frame.is_some() && image_geometry(image_id) == Some((width, height));
+    let animation_frame = existing_frame.filter(|_| !needs_full_transmit(image_id, width, height));
+    let full_transmit = animation_frame.is_none();
     let digest = payload_hash(rgba, width, height, col, row, z);
-    if has_prior_frame && payload_unchanged(image_id, digest) {
+    if !full_transmit && payload_unchanged(image_id, digest) {
         return (OK, stats);
     }
-    let animation_frame = existing_frame.filter(|_| !needs_full_transmit(image_id, width, height));
     let compression = shm_compression_enabled();
     let compressed_storage;
     let payload: &[u8];
@@ -1054,37 +907,36 @@ fn emit_shm_rgba_at_with_stats(
         payload = rgba;
         compression_param = "";
     }
+    let shm_name = super::shm::generate_shm_name();
+    let mut handle: u64 = 0;
     let t_shm = Instant::now();
-    let prepared = shm_prepare_native(payload);
-    stats.shm_prepare_us = t_shm.elapsed().as_micros() as u64;
-    let (handle, shm_name) = match prepared {
-        Ok(prepared) => prepared,
-        Err(_) => return (ERR_KITTY_TRANSPORT, stats),
+    let rc = unsafe {
+        shm_prepare(
+            shm_name.as_ptr(),
+            shm_name.len() as u32,
+            payload.as_ptr(),
+            payload.len() as u32,
+            0o600,
+            &mut handle,
+        )
     };
+    stats.shm_prepare_us = t_shm.elapsed().as_micros() as u64;
+    if rc != OK {
+        return (ERR_KITTY_TRANSPORT, stats);
+    }
     let name_b64 = B64.encode(shm_name.as_bytes());
-    let (escape, target_record) = if let Some(existing) = animation_frame {
-        let (target_frame, compose_frame, is_replacement) = next_animation_frame(Some(existing));
-        let frame_params = if is_replacement {
-            format!("r={target_frame},c={compose_frame}")
-        } else {
-            format!("c={compose_frame}")
-        };
-        (
-            format!(
-                "\x1b7\x1b[{};{}H\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,t=s{compression_param},q=2;{name_b64}\x1b\\\x1b_Ga=a,i={image_id},c={target_frame},q=2;\x1b\\\x1b8",
-                row.max(0) + 1,
-                col.max(0) + 1,
-            ),
-            Some(target_frame),
+    let escape = if let Some(frame_id) = animation_frame {
+        let previous_frame = frame_id.saturating_sub(1);
+        format!(
+            "\x1b7\x1b[{};{}H\x1b_Ga=f,i={image_id},c={previous_frame},f=32,s={width},v={height},C=1,t=s{compression_param},q=2;{name_b64}\x1b\\\x1b_Ga=a,i={image_id},c={frame_id},q=2;\x1b\\\x1b8",
+            row.max(0) + 1,
+            col.max(0) + 1,
         )
     } else {
-        (
-            format!(
-                "\x1b7\x1b[{};{}H\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s{compression_param},q=2;{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,q=2;\x1b\\\x1b8",
-                row.max(0) + 1,
-                col.max(0) + 1,
-            ),
-            None,
+        format!(
+            "\x1b7\x1b[{};{}H\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s{compression_param},q=2;{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,q=2;\x1b\\\x1b8",
+            row.max(0) + 1,
+            col.max(0) + 1,
         )
     };
     let t_write = Instant::now();
@@ -1092,8 +944,8 @@ fn emit_shm_rgba_at_with_stats(
     stats.write_us = t_write.elapsed().as_micros() as u64;
     match write_result {
         Ok(()) => {
-            track_and_reap_shm_handle(handle);
-            record_image_frame(image_id, target_record);
+            shm_release(handle, 0);
+            record_image_frame(image_id, animation_frame);
             record_image_geometry(image_id, width, height);
             record_payload(image_id, digest);
             (OK, stats)
@@ -1116,31 +968,16 @@ fn emit_direct_rgba_at(
     z: i32,
 ) -> i32 {
     let existing_frame = image_frame(image_id);
-    let has_prior_frame =
-        existing_frame.is_some() && image_geometry(image_id) == Some((width, height));
-    let digest = payload_hash(rgba, width, height, col, row, z);
-    if has_prior_frame && payload_unchanged(image_id, digest) {
-        return OK;
-    }
     let animation_frame = existing_frame.filter(|_| !needs_full_transmit(image_id, width, height));
     let full_transmit = animation_frame.is_none();
-    let (escaped, target_record) = if let Some(existing) = animation_frame {
-        let (target_frame, compose_frame, is_replacement) = next_animation_frame(Some(existing));
-        (
-            encode_animation_frame_direct(
-                rgba,
-                width,
-                height,
-                image_id,
-                target_frame,
-                compose_frame,
-                is_replacement,
-            ),
-            Some(target_frame),
-        )
-    } else {
-        (encode_frame_direct(rgba, width, height, image_id), None)
-    };
+    let digest = payload_hash(rgba, width, height, col, row, z);
+    if !full_transmit && payload_unchanged(image_id, digest) {
+        return OK;
+    }
+    let escaped = animation_frame.map_or_else(
+        || encode_frame_direct(rgba, width, height, image_id),
+        |frame_id| encode_animation_frame_direct(rgba, width, height, image_id, frame_id),
+    );
     let row = row.max(0) + 1;
     let col = col.max(0) + 1;
     let stale_delete = if full_transmit {
@@ -1154,7 +991,7 @@ fn emit_direct_rgba_at(
     );
     match write_transport(positioned.as_bytes()) {
         Ok(()) => {
-            record_image_frame(image_id, target_record);
+            record_image_frame(image_id, animation_frame);
             record_image_geometry(image_id, width, height);
             record_payload(image_id, digest);
             OK
@@ -1222,26 +1059,35 @@ fn emit_region_rgba_with_stats(
     );
     let control = format!("\x1b_Ga=a,i={image_id},c={frame_id},q=2;\x1b\\");
 
-    let mut shm_handle = None;
-    let escape = if mode == 2 {
-        // SHM mode for region patch. Use a unique object name for every
-        // payload so an in-flight Kitty read cannot be invalidated by the
-        // following patch.
+    let (escape, shm_handle) = if mode == 2 {
+        // SHM mode for region patch
+        let shm_name = super::shm::generate_shm_name();
+        let mut handle: u64 = 0;
         let t_shm = Instant::now();
-        let prepared = shm_prepare_native(payload);
-        stats.shm_prepare_us = t_shm.elapsed().as_micros() as u64;
-        let (handle, shm_name) = match prepared {
-            Ok(prepared) => prepared,
-            Err(_) => return (ERR_KITTY_TRANSPORT, stats),
+        let rc = unsafe {
+            super::shm::shm_prepare(
+                shm_name.as_ptr(),
+                shm_name.len() as u32,
+                payload.as_ptr(),
+                payload.len() as u32,
+                0o600,
+                &mut handle,
+            )
         };
-        shm_handle = Some(handle);
+        stats.shm_prepare_us = t_shm.elapsed().as_micros() as u64;
+        if rc != OK {
+            return (ERR_KITTY_TRANSPORT, stats);
+        }
         let name_b64 = B64.encode(shm_name.as_bytes());
         let prefix = if existing_frame.is_none() {
             format!("\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\")
         } else {
             String::new()
         };
-        format!("{prefix}\x1b_G{meta},t=s;{name_b64}\x1b\\{control}")
+        (
+            format!("{prefix}\x1b_G{meta},t=s;{name_b64}\x1b\\{control}"),
+            Some(handle),
+        )
     } else {
         // Direct mode
         let b64 = B64.encode(payload);
@@ -1250,14 +1096,14 @@ fn emit_region_rgba_with_stats(
         } else {
             String::new()
         };
-        format!("{prefix}\x1b_G{meta};{b64}\x1b\\{control}")
+        (format!("{prefix}\x1b_G{meta};{b64}\x1b\\{control}"), None)
     };
 
     let t_write = Instant::now();
-    match write_to_stdout(escape.as_bytes()) {
+    match write_transport(escape.as_bytes()) {
         Ok(()) => {
             if let Some(handle) = shm_handle {
-                track_and_reap_shm_handle(handle);
+                super::shm::shm_release(handle, 0);
             }
             record_image_frame(image_id, Some(frame_id));
             stats.write_us = t_write.elapsed().as_micros() as u64;
@@ -1265,7 +1111,7 @@ fn emit_region_rgba_with_stats(
         }
         Err(e) => {
             if let Some(handle) = shm_handle {
-                shm_release(handle, 1);
+                super::shm::shm_release(handle, 1);
             }
             stats.write_us = t_write.elapsed().as_micros() as u64;
             set_last_error(format!("emit_region_rgba: stdout write failed: {e}"));
@@ -1422,6 +1268,23 @@ mod tests {
     }
 
     #[test]
+    fn test_shm_write_failure_unlinks_segment_fail_closed() {
+        let image_id = 40_010;
+        let rgba = [0x10, 0x20, 0x30, 0xff];
+        force_write_failure(true);
+
+        let (rc, _) = emit_shm_rgba_at_with_stats(&rgba, 1, 1, image_id, 0, 0, 0);
+        assert_eq!(rc, ERR_KITTY_TRANSPORT);
+
+        // Region in SHM mode (mode 2)
+        let (rc_region, _) = emit_region_rgba_with_stats(&rgba, image_id, 0, 0, 1, 1, 2);
+        assert_eq!(rc_region, ERR_KITTY_TRANSPORT);
+
+        force_write_failure(false);
+        forget_image_frame(image_id);
+    }
+
+    #[test]
     fn test_delete_clears_frame_and_payload_digest() {
         let image_id = 40_005;
         let rgba = [0x10, 0x20, 0x30, 0xff];
@@ -1462,41 +1325,12 @@ mod tests {
     }
 
     #[test]
-    fn test_animation_supported_detection() {
-        assert!(animation_supported_from_env(false, None, None));
-        assert!(animation_supported_from_env(false, Some("kitty"), None));
-        assert!(animation_supported_from_env(false, Some("wezterm"), None));
-        assert!(animation_supported_from_env(false, Some("xterm-256color"), None));
-
-        // Ghostty detected via GHOSTTY_RESOURCES_DIR
-        assert!(!animation_supported_from_env(true, None, None));
-        assert!(!animation_supported_from_env(true, Some("kitty"), None));
-
-        // Ghostty detected via TERM_PROGRAM
-        assert!(!animation_supported_from_env(false, Some("ghostty"), None));
-
-        // Explicitly disabled via VEXART_KITTY_ANIMATION=0
-        assert!(!animation_supported_from_env(false, None, Some("0")));
-        assert!(!animation_supported_from_env(false, Some("kitty"), Some("0")));
-
-        // VEXART_KITTY_ANIMATION=1 allows manual override even on Ghostty
-        assert!(animation_supported_from_env(false, None, Some("1")));
-        assert!(animation_supported_from_env(true, None, Some("1")));
-        assert!(animation_supported_from_env(false, Some("ghostty"), Some("1")));
-        assert!(animation_supported_from_env(true, Some("ghostty"), Some("1")));
-    }
-
-    #[test]
     fn test_dimension_change_requires_full_transmit() {
         let image_id = 40_007;
         record_image_frame(image_id, None);
         record_image_geometry(image_id, 200, 120);
 
-        if animation_supported() {
-            assert!(!needs_full_transmit(image_id, 200, 120));
-        } else {
-            assert!(needs_full_transmit(image_id, 200, 120));
-        }
+        assert!(!needs_full_transmit(image_id, 200, 120));
         assert!(needs_full_transmit(image_id, 320, 180));
 
         forget_image_frame(image_id);
@@ -1524,51 +1358,11 @@ mod tests {
             ),
             ERR_KITTY_TRANSPORT
         );
-        assert_eq!(image_frame(image_id), Some(1));
+        assert_eq!(image_frame(image_id), Some(2));
         assert_eq!(image_geometry(image_id), Some((1, 1)));
         assert!(payload_unchanged(image_id, previous_digest));
 
         force_write_failure(false);
-        forget_image_frame(image_id);
-    }
-
-    #[test]
-    fn test_ping_pong_double_buffering_cycle() {
-        let image_id = 40_010;
-        // Initial transmit:
-        record_image_frame(image_id, None);
-        assert_eq!(image_frame(image_id), Some(1));
-
-        // Frame 2:
-        let (target, compose, is_repl) = next_animation_frame(image_frame(image_id));
-        assert_eq!((target, compose, is_repl), (2, 1, false));
-        record_image_frame(image_id, Some(target));
-        assert_eq!(image_frame(image_id), Some(2));
-
-        // Frame 3 (replaces frame 1):
-        let (target, compose, is_repl) = next_animation_frame(image_frame(image_id));
-        assert_eq!((target, compose, is_repl), (1, 2, true));
-        record_image_frame(image_id, Some(target));
-        assert_eq!(image_frame(image_id), Some(3));
-
-        // Frame 4 (replaces frame 2):
-        let (target, compose, is_repl) = next_animation_frame(image_frame(image_id));
-        assert_eq!((target, compose, is_repl), (2, 1, true));
-        record_image_frame(image_id, Some(target));
-        assert_eq!(image_frame(image_id), Some(2));
-
-        // Frame 5 (replaces frame 1):
-        let (target, compose, is_repl) = next_animation_frame(image_frame(image_id));
-        assert_eq!((target, compose, is_repl), (1, 2, true));
-        record_image_frame(image_id, Some(target));
-        assert_eq!(image_frame(image_id), Some(3));
-
-        // Frame 6 (replaces frame 2):
-        let (target, compose, is_repl) = next_animation_frame(image_frame(image_id));
-        assert_eq!((target, compose, is_repl), (2, 1, true));
-        record_image_frame(image_id, Some(target));
-        assert_eq!(image_frame(image_id), Some(2));
-
         forget_image_frame(image_id);
     }
 
@@ -1759,93 +1553,5 @@ mod tests {
         let rc =
             unsafe { emit_region_native(1, std::ptr::null(), 0, 0, 0, 0, 0, std::ptr::null_mut()) };
         assert_eq!(rc, ERR_KITTY_TRANSPORT);
-    }
-
-    #[test]
-    fn test_shm_reaper_cleans_up_consumed_handle() {
-        let _test_lock = crate::kitty::shm::TEST_SHM_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-        let (handle, name) = shm_prepare_native(&[1, 2, 3, 4]).unwrap();
-        track_and_reap_shm_handle(handle);
-        assert_eq!(shm_is_consumed(handle), 0);
-
-        // Simulate terminal consuming the SHM segment by unlinking it
-        nix::sys::mman::shm_unlink(name.as_c_str()).unwrap();
-        assert_eq!(shm_is_consumed(handle), 1);
-
-        // On next emit/reap, the consumed handle is cleaned up
-        let (handle2, _name2) = shm_prepare_native(&[5, 6, 7, 8]).unwrap();
-        track_and_reap_shm_handle(handle2);
-
-        // The first handle should have been released from registry
-        assert_eq!(shm_is_consumed(handle), ERR_INVALID_ARG);
-        // Clean up handle2
-        assert_eq!(shm_release(handle2, 1), OK);
-    }
-
-    #[test]
-    fn test_shm_reaper_cleans_up_aged_frames() {
-        let _test_lock = crate::kitty::shm::TEST_SHM_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-        let (first_handle, _name) = shm_prepare_native(&[1, 2, 3, 4]).unwrap();
-        track_and_reap_shm_handle(first_handle);
-
-        // Emit >= 120 more frames (matching SHM_REAPER_MAX_FRAMES = 120)
-        let mut subsequent = Vec::new();
-        for i in 0..120 {
-            let (h, _) = shm_prepare_native(&[(i % 250) as u8, 0, 0, 0]).unwrap();
-            track_and_reap_shm_handle(h);
-            subsequent.push(h);
-        }
-
-        // first_handle is now >= 120 frames old, so it was reaped
-        assert_eq!(shm_is_consumed(first_handle), ERR_INVALID_ARG);
-
-        // Clean up the rest
-        for h in subsequent {
-            let _ = shm_release(h, 1);
-        }
-    }
-
-    #[test]
-    fn test_shm_reaper_enforces_max_capacity() {
-        let _test_lock = crate::kitty::shm::TEST_SHM_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-        let mut queue = VecDeque::new();
-        let now = Instant::now();
-        let mut handles = Vec::new();
-        for i in 0..132 {
-            let (h, _) = shm_prepare_native(&[(i % 250) as u8, 1, 2, 3]).unwrap();
-            handles.push(h);
-            queue.push_back(PendingShm {
-                handle: h,
-                created_at: now,
-                frame_idx: 0,
-            });
-            reap_pending_shm(&mut queue, 0, now);
-        }
-
-        // Capacity is bounded at 128, so the oldest entries must have been reaped
-        assert_eq!(shm_is_consumed(handles[0]), ERR_INVALID_ARG);
-        assert_eq!(shm_is_consumed(handles[1]), ERR_INVALID_ARG);
-        assert_eq!(shm_is_consumed(handles[2]), ERR_INVALID_ARG);
-        assert_eq!(shm_is_consumed(handles[3]), ERR_INVALID_ARG);
-
-        // Clean up remaining
-        for entry in queue {
-            let _ = shm_release(entry.handle, 1);
-        }
-    }
-
-    #[test]
-    fn test_transport_cleanup_shm() {
-        let _test_lock = crate::kitty::shm::TEST_SHM_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-        let (h1, _) = shm_prepare_native(&[1, 2, 3, 4]).unwrap();
-        let (h2, _) = shm_prepare_native(&[5, 6, 7, 8]).unwrap();
-        track_and_reap_shm_handle(h1);
-        track_and_reap_shm_handle(h2);
-
-        let cleaned = transport_cleanup_shm();
-        assert!(cleaned >= 2);
-
-        assert_eq!(shm_is_consumed(h1), ERR_INVALID_ARG);
-        assert_eq!(shm_is_consumed(h2), ERR_INVALID_ARG);
     }
 }

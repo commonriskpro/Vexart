@@ -125,40 +125,36 @@ export function leave(
   if (!state.active) return
   state.active = false
 
-  let seq = ""
-
   // Disable the keyboard mode negotiated on enter.
   if (caps.tmux) {
-    seq += ESC.tmuxExtendedKeysLeave
+    write(ESC.tmuxExtendedKeysLeave)
   } else if (caps.kittyKeyboard) {
-    seq += ESC.kittyKbLeave
+    write(ESC.kittyKbLeave)
   }
 
   // Disable bracketed paste
   if (caps.bracketedPaste) {
-    seq += ESC.pasteLeave
+    write(ESC.pasteLeave)
   }
 
   // Disable focus events
   if (caps.focus) {
-    seq += ESC.focusLeave
+    write(ESC.focusLeave)
   }
 
   // Disable mouse tracking
   if (caps.mouse) {
-    seq += ESC.mouseLeave
+    write(ESC.mouseLeave)
   }
 
   // Reset attributes
-  seq += ESC.reset
+  write(ESC.reset)
 
   // Show cursor
-  seq += ESC.cursorShow
+  write(ESC.cursorShow)
 
   // Leave alternate screen — restores scrollback
-  seq += ESC.altScreenLeave
-
-  write(seq)
+  write(ESC.altScreenLeave)
 
   // Restore raw mode to original state
   if (stdin.isTTY && !state.rawModeWas) {
@@ -189,7 +185,6 @@ export function installExitHandlers(
   caps: Capabilities,
   state: LifecycleState,
   beforeLeave?: () => void,
-  syncWrite?: (data: string) => void,
 ): () => void {
   let cleaned = false
   const cleanup = () => {
@@ -198,7 +193,7 @@ export function installExitHandlers(
     try {
       beforeLeave?.()
     } finally {
-      leave(stdin, syncWrite ?? write, caps, state)
+      leave(stdin, write, caps, state)
     }
   }
 
@@ -224,7 +219,15 @@ export function installExitHandlers(
       process.exit(129)
     }
   }
-  const onError = () => {
+  const onError = (error: unknown) => {
+    try {
+      const message = error instanceof Error
+        ? (error.stack ?? error.message)
+        : String(error)
+      process.stderr.write(`${message}\n`)
+    } catch {
+      // Fail-safe: ignore stderr write failure to guarantee terminal restoration
+    }
     try {
       cleanup()
     } finally {

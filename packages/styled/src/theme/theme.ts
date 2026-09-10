@@ -19,7 +19,7 @@
  *   setTheme(light)  // → all subscribed components update
  */
 
-import { createSignal, createContext, useContext, createComponent, onCleanup } from "solid-js"
+import { createSignal, createContext, useContext, createComponent } from "solid-js"
 import type { JSX } from "solid-js"
 import { colors as defaultColors, radius, space, font, weight, shadows } from "../tokens/tokens"
 
@@ -116,8 +116,6 @@ export const themeColors: ColorTokens = Object.defineProperties(
   )
 )
 
-const themeChangeListeners = new Set<() => void>()
-
 /**
  * Switch the active theme at runtime.
  * Updates all reactive color signals — only subscribed components re-render.
@@ -128,21 +126,6 @@ export function setTheme(theme: Required<ThemeDefinition>) {
   for (const key of Object.keys(defaultColors) as (keyof ColorTokens)[]) {
     const value = theme.colors[key] ?? defaultColors[key]
     colorSignals[key][1](value)
-  }
-  for (const listener of themeChangeListeners) {
-    listener()
-  }
-}
-
-/**
- * Subscribe to theme changes.
- * Returns an unsubscribe function.
- * @public
- */
-export function onThemeChange(listener: () => void): () => void {
-  themeChangeListeners.add(listener)
-  return () => {
-    themeChangeListeners.delete(listener)
   }
 }
 
@@ -175,11 +158,7 @@ export function ThemeProvider(props: {
   children?: JSX.Element
 }) {
   if (props.theme) {
-    const previousTheme = getTheme()
     setTheme(props.theme)
-    onCleanup(() => {
-      setTheme(previousTheme)
-    })
   }
 
   return createComponent(ThemeContext.Provider, {

@@ -63,7 +63,6 @@ export type ToasterHandle = {
   toast: (input: ToastInput) => number
   dismiss: (id: number) => void
   dismissAll: () => void
-  destroy: () => void
   Toaster: () => JSX.Element
 }
 
@@ -92,10 +91,6 @@ export function createToaster(options: ToasterOptions): ToasterHandle {
     for (const timer of timers.values()) clearTimeout(timer)
     timers.clear()
     setToasts([])
-  }
-
-  function destroy() {
-    dismissAll()
   }
 
   function toast(input: ToastInput): number {
@@ -152,7 +147,8 @@ export function createToaster(options: ToasterOptions): ToasterHandle {
 
   function Toaster() {
     onCleanup(() => {
-      dismissAll()
+      for (const timer of timers.values()) clearTimeout(timer)
+      timers.clear()
     })
 
     const align = getAlignment()
@@ -176,5 +172,5 @@ export function createToaster(options: ToasterOptions): ToasterHandle {
     )
   }
 
-  return { toast, dismiss, dismissAll, destroy, Toaster }
+  return { toast, dismiss, dismissAll, Toaster }
 }

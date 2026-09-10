@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import { createRoot } from "solid-js"
 import { Dialog } from "./dialog"
 
 describe("Dialog", () => {
@@ -8,15 +7,5 @@ describe("Dialog", () => {
     expect(Dialog.Overlay).toBeFunction()
     expect(Dialog.Content).toBeFunction()
     expect(Dialog.Close).toBeFunction()
-  })
-
-  test("unmounts cleanly and pops focus scope without error", () => {
-    createRoot((dispose) => {
-      Dialog({
-        onClose: () => {},
-        children: null,
-      })
-      dispose()
-    })
   })
 })

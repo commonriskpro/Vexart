@@ -26,7 +26,6 @@ export {
   themeColors,
   setTheme,
   getTheme,
-  onThemeChange,
   ThemeProvider,
   useTheme,
 } from "./theme/theme"

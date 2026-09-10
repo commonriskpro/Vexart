@@ -1,4 +1,4 @@
-import { createComponent, createContext, createSignal, useContext } from "solid-js"
+import { createContext, createSignal, useContext } from "solid-js"
 import type { JSX } from "solid-js"
 import { setFocus } from "@vexart/engine"
 
@@ -178,21 +178,13 @@ export function createAppRouter(routes: AppRouteDefinition[], initialPath = "/",
       params: matched?.params ?? {},
       focusId: options.focusId ?? matched?.route.focusId ?? undefined,
     }
-    const MAX_HISTORY = 50
     if (options.replace) {
       setHistory((prev) => prev.map((entry, index) => index === cursor() ? next : entry))
       restoreFocus(next)
       return
     }
-    const currentCursor = cursor()
-    setHistory((prev) => {
-      const nextHistory = [...prev.slice(0, currentCursor + 1), next]
-      if (nextHistory.length > MAX_HISTORY) {
-        return nextHistory.slice(nextHistory.length - MAX_HISTORY)
-      }
-      return nextHistory
-    })
-    setCursor((value) => Math.min(value + 1, MAX_HISTORY - 1))
+    setHistory((prev) => [...prev.slice(0, cursor() + 1), next])
+    setCursor((value) => value + 1)
     restoreFocus(next)
   }
 
@@ -249,29 +241,19 @@ export function RouteOutlet(props: RouteOutletProps) {
     const match = contextRouter.match()
     if (!match) {
       const NotFound = props.notFound
-      return NotFound ? createComponent(NotFound, { params: {} }) : null
+      return NotFound ? NotFound({ params: {} }) : null
     }
     const Component = match.route.component
     try {
-      let element = createComponent(Component, {
-        get params() { return match.params },
-      })
+      let element = Component({ params: match.params })
       const layouts = match.route.layouts ?? []
       for (const Layout of layouts.slice().reverse()) {
-        element = createComponent(Layout, {
-          get children() { return element },
-          get params() { return match.params },
-        })
+        element = Layout({ children: element, params: match.params })
       }
       return element
     } catch (error) {
       const ErrorComponent = match.route.error
-      if (ErrorComponent) {
-        return createComponent(ErrorComponent, {
-          error,
-          get params() { return match.params },
-        })
-      }
+      if (ErrorComponent) return ErrorComponent({ error, params: match.params })
       throw error
     }
   }

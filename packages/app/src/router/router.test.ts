@@ -104,40 +104,4 @@ describe("app router", () => {
 
     expect(restored).toEqual(["projects-list"])
   })
-
-  test("bounds history to MAX_HISTORY of 50 items", () => createRoot((dispose) => {
-    const dynamicRoutes: AppRouteDefinition[] = [
-      { path: "/[...all]", component: Component },
-    ]
-    const router = createAppRouter(dynamicRoutes, "/page-0")
-
-    for (let i = 1; i <= 60; i++) {
-      router.push(`/page-${i}`)
-    }
-
-    const history = router.history()
-    expect(history.length).toBe(50)
-    expect(history[0].path).toBe("/page-11")
-    expect(history[49].path).toBe("/page-60")
-    expect(router.current().path).toBe("/page-60")
-
-    expect(router.back()).toBe(true)
-    expect(router.current().path).toBe("/page-59")
-
-    dispose()
-  }))
-
-  test("renders notFound component via createComponent when route does not match", () => createRoot((dispose) => {
-    const router = createAppRouter([
-      { path: "/home", component: () => "home" },
-    ], "/unmatched")
-
-    const outlet = RouteOutlet({
-      router,
-      notFound: () => "custom-not-found",
-    }) as unknown as () => unknown
-    expect(outlet()).toBe("custom-not-found")
-
-    dispose()
-  }))
 })

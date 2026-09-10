@@ -25,40 +25,22 @@ describe("terminal process cleanup", () => {
     }
   })
 
-  test("leave concatenates all escape sequences into a single write call", async () => {
-    const { leave } = await import("./lifecycle")
-    const { inferCaps } = await import("./caps")
-    const writes: string[] = []
-    const fakeStdin = { isTTY: false, isRaw: false, setRawMode: () => {} } as unknown as NodeJS.ReadStream
-    const state = { active: true, rawModeWas: false }
-    leave(fakeStdin, (data: string) => writes.push(data), inferCaps("xterm"), state)
-    expect(writes).toHaveLength(1)
-    expect(writes[0]).toContain("\x1b[?25h") // cursorShow
-    expect(writes[0]).toContain("\x1b[?1049l") // altScreenLeave
-    expect(writes[0]).toContain("\x1b[0m") // reset
-  })
-
-  test("installExitHandlers invokes syncWrite when provided during exit cleanup", () => {
+  test("writes error to stderr and cleans up on uncaught exception", () => {
     const path = `${import.meta.dir}/lifecycle.ts`
     const capsPath = `${import.meta.dir}/caps.ts`
     const script = `
       import { inferCaps } from "${capsPath.replaceAll('"', '\\"')}"
       import { installExitHandlers } from "${path.replaceAll('"', '\\"')}"
       const state = { active: true, rawModeWas: false }
-      installExitHandlers(
-        process.stdin,
-        () => process.stdout.write("async-write\\n"),
-        inferCaps("unknown"),
-        state,
-        () => {},
-        () => process.stdout.write("sync-write\\n"),
-      )
-      process.exit(0)
+      installExitHandlers(process.stdin, () => process.stdout.write("leave\\n"), inferCaps("unknown"), state, () => process.stdout.write("transport-cleanup\\n"))
+      throw new Error("fatal test crash")
     `
     const child = Bun.spawnSync([process.execPath, "-e", script], { stdout: "pipe", stderr: "pipe" })
-    expect(child.exitCode).toBe(0)
-    const out = child.stdout.toString()
-    expect(out).toContain("sync-write")
-    expect(out).not.toContain("async-write")
+    expect(child.exitCode).toBe(1)
+    const stderr = child.stderr.toString()
+    expect(stderr).toContain("fatal test crash")
+    const stdout = child.stdout.toString().trim().split("\n")
+    expect(stdout[0]).toBe("transport-cleanup")
+    expect(stdout.slice(1).every((line) => line === "leave")).toBe(true)
   })
 })

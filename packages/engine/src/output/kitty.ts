@@ -9,6 +9,10 @@
  * @see https://sw.kovidgoyal.net/kitty/graphics-protocol/
  */
 
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
+
 import type { TransmissionMode } from "./transport-manager"
 import { prepareNativeKittyShm, releaseNativeKittyShm } from "./kitty-shm-native"
 
@@ -195,17 +199,31 @@ export function probeFile(
   offData: (handler: (data: Buffer) => void) => void,
   timeout = 2000,
 ): Promise<boolean> {
-  return probeTransport(onData, offData, timeout, "probeFile", 33, () => {
-    const os = require("os")
-    const path = require("path")
-    const fs = require("fs")
-
+  return probeTransport(onData, offData, timeout, "probeFile", 33, (setCleanup) => {
     const filePath = path.join(os.tmpdir(), `tty-graphics-protocol-probe-${process.pid}`)
-    const pixel = new Uint8Array([0, 0, 0, 0])
-    fs.writeFileSync(filePath, pixel)
+    let fileWritten = false
 
-    const pathB64 = Buffer.from(filePath).toString("base64")
-    probeDebug("probeFile:query-sent", { filePath, pathB64 })
-    write(`\x1b_Gi=33,s=1,v=1,a=q,t=t,f=32;${pathB64}\x1b\\`)
+    const removeFile = () => {
+      if (!fileWritten) return
+      try {
+        fs.unlinkSync(filePath)
+      } catch {}
+      fileWritten = false
+    }
+
+    setCleanup(removeFile)
+
+    try {
+      const pixel = new Uint8Array([0, 0, 0, 0])
+      fs.writeFileSync(filePath, pixel)
+      fileWritten = true
+
+      const pathB64 = Buffer.from(filePath).toString("base64")
+      probeDebug("probeFile:query-sent", { filePath, pathB64 })
+      write(`\x1b_Gi=33,s=1,v=1,a=q,t=t,f=32;${pathB64}\x1b\\`)
+    } catch (error) {
+      removeFile()
+      throw error
+    }
   })
 }

@@ -6,7 +6,7 @@
  * @public
  */
 
-import { createComponent, createEffect, createSignal, For } from "solid-js"
+import { createEffect, createSignal, For, untrack } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus } from "@vexart/engine"
 
@@ -88,12 +88,13 @@ export function Tabs(props: TabsProps) {
   const headerContent = () => (
     <For each={props.tabs}>
       {(tab, index) => {
+        const i = index()
         const ctx: TabRenderContext = {
-          get active() { return active() === index() },
-          get focused() { return focused() && focusedTabIdx() === index() },
-          get index() { return index() },
+          get active() { return active() === i },
+          get focused() { return focused() && focusedTabIdx() === i },
+          index: i,
           tabProps: {
-            onPress: () => switchTab(index()),
+            onPress: () => switchTab(i),
           },
         }
         return props.renderTab(tab, ctx)
@@ -103,8 +104,11 @@ export function Tabs(props: TabsProps) {
 
   const panelContent = () => {
     const current = active()
-    const tab = props.tabs[current]
-    return tab ? createComponent(tab.content, {}) : null
+    return untrack(() => {
+      const tab = props.tabs[current]
+      const content = tab ? tab.content() : null
+      return <>{content}</>
+    })
   }
 
   const bar = props.renderTabBar

@@ -40,11 +40,57 @@ static NEXT_KITTY_SHM_NAME: LazyLock<AtomicU64> = LazyLock::new(|| {
         .map_or(0, |duration| duration.as_nanos() as u64);
     AtomicU64::new(seed)
 });
-static KITTY_SHM_HANDLES: LazyLock<Mutex<HashMap<u64, KittyShmHandle>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+static KITTY_SHM_HANDLES: LazyLock<Mutex<HashMap<u64, KittyShmHandle>>> = LazyLock::new(|| {
+    ensure_emergency_cleanup_registered();
+    Mutex::new(HashMap::new())
+});
 
-#[cfg(test)]
-pub(crate) static TEST_SHM_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+static EMERGENCY_CLEANUP_INIT: std::sync::Once = std::sync::Once::new();
+
+/// Emergency cleanup callback for C `libc::atexit`.
+extern "C" fn atexit_shm_cleanup() {
+    cleanup_all_shm_handles();
+}
+
+/// Ensures the emergency C atexit handler and Rust panic hook are registered.
+/// Thread-safe and executes exactly once per process.
+pub fn ensure_emergency_cleanup_registered() {
+    EMERGENCY_CLEANUP_INIT.call_once(|| {
+        // 1. Register C atexit handler so libc exit() / process.exit() cleans up.
+        unsafe {
+            nix::libc::atexit(atexit_shm_cleanup);
+        }
+
+        // 2. Register a panic hook (chaining to previous hook) so Rust panics clean up.
+        let prev_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            cleanup_all_shm_handles();
+            prev_hook(info);
+        }));
+    });
+}
+
+/// Unlink and release all active SHM handles remaining in `KITTY_SHM_HANDLES`.
+/// Safe to call at any time (e.g. at exit, panic hook, or manual teardown).
+/// Recovers cleanly even if the registry mutex was poisoned by a panicked thread.
+pub fn cleanup_all_shm_handles() {
+    let mut handles = match KITTY_SHM_HANDLES.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    for (_, handle) in handles.drain() {
+        let _ = shm_unlink(handle.name.as_c_str());
+        // handle.fd is automatically closed when dropped
+    }
+}
+
+/// Generate a unique monotonic POSIX SHM name for a frame or layer segment.
+/// Uses the pattern `/vx-{pid:x}-{counter:x}` which fits within the 31-byte
+/// POSIX and Kitty limits and eliminates collision races between frames.
+pub fn generate_shm_name() -> String {
+    let counter = NEXT_KITTY_SHM_NAME.fetch_add(1, Ordering::Relaxed);
+    format!("/vx-{pid:x}-{counter:x}", pid = std::process::id())
+}
 
 // ─── Cleanup helper ───────────────────────────────────────────────────────
 
@@ -85,7 +131,7 @@ pub unsafe fn shm_prepare(
     mode: u32,
     out_handle: *mut u64,
 ) -> i32 {
-    register_shm_atexit();
+    ensure_emergency_cleanup_registered();
 
     // 1. Validate inputs.
     if name_ptr.is_null()
@@ -231,36 +277,6 @@ pub fn shm_release(handle: u64, unlink_flag: u32) -> i32 {
     OK
 }
 
-// ─── Cleanup all / atexit ──────────────────────────────────────────────────
-
-extern "C" fn shm_atexit_cleanup() {
-    shm_cleanup_all();
-}
-
-static REGISTER_ATEXIT: std::sync::Once = std::sync::Once::new();
-
-pub fn register_shm_atexit() {
-    REGISTER_ATEXIT.call_once(|| {
-        unsafe {
-            nix::libc::atexit(shm_atexit_cleanup);
-        }
-    });
-}
-
-/// Unlink all active POSIX SHM segments and close their descriptors.
-/// Returns the number of segments cleaned up.
-pub fn shm_cleanup_all() -> usize {
-    let mut registry = KITTY_SHM_HANDLES
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    let mut count = 0;
-    for (_handle, entry) in registry.drain() {
-        let _ = shm_unlink(entry.name.as_c_str());
-        count += 1;
-    }
-    count
-}
-
 /// Prepare a native RGBA payload in a private, short-lived POSIX SHM object.
 ///
 /// The returned handle keeps the descriptor alive until the caller observes
@@ -268,8 +284,6 @@ pub fn shm_cleanup_all() -> usize {
 /// protocol addresses the object by name, while the handle is intentionally
 /// opaque to FFI callers.
 pub fn shm_prepare_native(data: &[u8]) -> Result<(u64, CString), i32> {
-    register_shm_atexit();
-
     if data.is_empty() {
         set_last_error("native SHM payload must be non-empty");
         return Err(ERR_INVALID_ARG);
@@ -282,13 +296,11 @@ pub fn shm_prepare_native(data: &[u8]) -> Result<(u64, CString), i32> {
     // `/vx-<pid>-<counter>` stays below the POSIX SHM name limit even on
     // 64-bit hosts. The monotonic counter prevents concurrent frame calls
     // from reusing an object name.
-    let counter = NEXT_KITTY_SHM_NAME.fetch_add(1, Ordering::Relaxed);
-    let name = CString::new(format!("/vx-{pid:x}-{counter:x}", pid = std::process::id())).map_err(
-        |_| {
-            set_last_error("native SHM name contains NUL");
-            ERR_INVALID_ARG
-        },
-    )?;
+    let name_str = generate_shm_name();
+    let name = CString::new(name_str).map_err(|_| {
+        set_last_error("native SHM name contains NUL");
+        ERR_INVALID_ARG
+    })?;
     if name.as_bytes().len() > 31 {
         set_last_error("native SHM name exceeds the 31-byte Kitty bound");
         return Err(ERR_INVALID_ARG);
@@ -414,7 +426,6 @@ mod tests {
 
     #[test]
     fn test_shm_prepare_release_roundtrip() {
-        let _test_lock = TEST_SHM_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let name_str = unique_shm_name();
         let _guard = ShmCleanup(CString::new(name_str.clone()).unwrap());
 
@@ -492,7 +503,6 @@ mod tests {
 
     #[test]
     fn native_prepare_uses_unique_private_payload_and_consumption_probe() {
-        let _test_lock = TEST_SHM_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let first = shm_prepare_native(&[1, 2, 3, 4]).unwrap();
         let second = shm_prepare_native(&[5, 6, 7, 8]).unwrap();
         assert_ne!(first.1, second.1);
@@ -535,22 +545,43 @@ mod tests {
     }
 
     #[test]
-    fn test_shm_cleanup_all() {
-        let _test_lock = TEST_SHM_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-        let first = shm_prepare_native(&[10, 20, 30, 40]).unwrap();
-        let second = shm_prepare_native(&[50, 60, 70, 80]).unwrap();
+    fn test_generate_shm_name_monotonic_and_bounded() {
+        let name1 = generate_shm_name();
+        let name2 = generate_shm_name();
+        assert_ne!(name1, name2);
+        assert!(name1.starts_with("/vx-"));
+        assert!(name2.starts_with("/vx-"));
+        assert!(name1.len() <= 31);
+        assert!(name2.len() <= 31);
+    }
 
-        assert_eq!(shm_is_consumed(first.0), 0);
-        assert_eq!(shm_is_consumed(second.0), 0);
+    #[test]
+    fn test_emergency_cleanup_unlinks_all_handles() {
+        let name_str = unique_shm_name();
+        let data = vec![0x5au8; 64];
+        let mut handle: u64 = 0;
 
-        let cleaned = shm_cleanup_all();
-        assert!(cleaned >= 2);
+        let r = unsafe {
+            shm_prepare(
+                name_str.as_ptr(),
+                name_str.len() as u32,
+                data.as_ptr(),
+                data.len() as u32,
+                0o600,
+                &mut handle,
+            )
+        };
+        assert_eq!(r, OK);
+        assert_ne!(handle, 0);
 
-        // Segments should be unlinked
-        assert!(shm_open(first.1.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_err());
-        assert!(shm_open(second.1.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_err());
+        let c_name = CString::new(name_str).unwrap();
+        let probe = shm_open(c_name.as_c_str(), OFlag::O_RDONLY, Mode::empty());
+        assert!(probe.is_ok());
+        drop(probe);
 
-        // Further cleanup returns 0
-        assert_eq!(shm_cleanup_all(), 0);
+        cleanup_all_shm_handles();
+
+        let probe_after = shm_open(c_name.as_c_str(), OFlag::O_RDONLY, Mode::empty());
+        assert!(matches!(probe_after, Err(nix::errno::Errno::ENOENT)));
     }
 }
