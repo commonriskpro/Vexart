@@ -73,7 +73,7 @@ function readImageId(buf: Uint32Array) {
   return buf[0]
 }
 
-export function nativeLayerUpsert(key: string, desc: NativeLayerDescriptor): NativeLayerUpsertResult | null {
+export function nativeLayerUpsert(key: string, desc: NativeLayerDescriptor, ctx: bigint = 1n): NativeLayerUpsertResult | null {
   if (!isNativeLayerRegistryEnabled()) return null
   if (desc.width <= 0 || desc.height <= 0) return null
 
@@ -93,7 +93,7 @@ export function nativeLayerUpsert(key: string, desc: NativeLayerDescriptor): Nat
   const outBuf = new Uint8Array(24)
   try {
     const { symbols } = openVexartLibrary()
-    const rc = symbols.vexart_layer_upsert(1n, ptr(keyBuf), keyBuf.byteLength, ptr(descBuf), descBuf.byteLength, ptr(outBuf)) as number
+    const rc = symbols.vexart_layer_upsert(ctx, ptr(keyBuf), keyBuf.byteLength, ptr(descBuf), descBuf.byteLength, ptr(outBuf)) as number
     if (rc !== 0) {
       disableNativeLayerRegistry(`vexart_layer_upsert returned ${rc}`)
       return null
@@ -109,14 +109,14 @@ export function nativeLayerUpsert(key: string, desc: NativeLayerDescriptor): Nat
   }
 }
 
-export function nativeLayerPresentDirty(key: string): number | null {
+export function nativeLayerPresentDirty(key: string, ctx: bigint = 1n): number | null {
   if (!isNativeLayerRegistryEnabled()) return null
   const handle = handlesByKey.get(key)
   if (!handle) return null
   const out = new Uint32Array(1)
   try {
     const { symbols } = openVexartLibrary()
-    const rc = symbols.vexart_layer_present_dirty(1n, handle, nextFrame(), ptr(out)) as number
+    const rc = symbols.vexart_layer_present_dirty(ctx, handle, nextFrame(), ptr(out)) as number
     if (rc !== 0) return null
     return readImageId(out)
   } catch {
@@ -124,14 +124,14 @@ export function nativeLayerPresentDirty(key: string): number | null {
   }
 }
 
-export function nativeLayerReuse(key: string): number | null {
+export function nativeLayerReuse(key: string, ctx: bigint = 1n): number | null {
   if (!isNativeLayerRegistryEnabled()) return null
   const handle = handlesByKey.get(key)
   if (!handle) return null
   const out = new Uint32Array(1)
   try {
     const { symbols } = openVexartLibrary()
-    const rc = symbols.vexart_layer_reuse(1n, handle, nextFrame(), ptr(out)) as number
+    const rc = symbols.vexart_layer_reuse(ctx, handle, nextFrame(), ptr(out)) as number
     if (rc !== 0) return null
     return readImageId(out)
   } catch {
@@ -139,13 +139,13 @@ export function nativeLayerReuse(key: string): number | null {
   }
 }
 
-export function nativeLayerRemove(key: string): number | null {
+export function nativeLayerRemove(key: string, ctx: bigint = 1n): number | null {
   const handle = handlesByKey.get(key)
   if (!handle) return null
   const out = new Uint32Array(1)
   try {
     const { symbols } = openVexartLibrary()
-    const rc = symbols.vexart_layer_remove(1n, handle, ptr(out)) as number
+    const rc = symbols.vexart_layer_remove(ctx, handle, ptr(out)) as number
     handlesByKey.delete(key)
     imageIdsByKey.delete(key)
     descriptorsByKey.delete(key)
@@ -159,7 +159,7 @@ export function nativeLayerRemove(key: string): number | null {
   }
 }
 
-export function clearNativeLayerRegistryMirror(options: NativeLayerRegistryCleanupOptions = {}) {
+export function clearNativeLayerRegistryMirror(options: NativeLayerRegistryCleanupOptions = {}, ctx: bigint = 1n) {
   // `vexart_layer_clear` only drops native registry metadata. For the normal
   // layered presenter, Kitty image placements live in the terminal
   // independently, so delete every image before clearing the mirror or a
@@ -172,7 +172,7 @@ export function clearNativeLayerRegistryMirror(options: NativeLayerRegistryClean
   }
   try {
     const { symbols } = openVexartLibrary()
-    symbols.vexart_layer_clear(1n)
+    symbols.vexart_layer_clear(ctx)
   } catch {
     // Best-effort cleanup — mirror still gets cleared locally.
   }

@@ -56,15 +56,6 @@ function ensureBatchBuf(size: number) {
 export const _vexartImageHandles = new WeakMap<Uint8Array, bigint>()
 export const activeImageHandles = new Set<bigint>()
 
-const _imageFinalizationRegistry =
-  typeof FinalizationRegistry !== "undefined"
-    ? new FinalizationRegistry<{ ctx: bigint; handle: bigint }>(({ ctx, handle }) => {
-        if (activeImageHandles.has(handle)) {
-          vexartRemoveImage(ctx, handle)
-        }
-      })
-    : null
-
 // ── Target lifecycle ─────────────────────────────────────────────────────
 
 export function vexartCompositeTargetCreate(vctx: bigint, width: number, height: number): bigint {
@@ -117,7 +108,9 @@ export function vexartCompositeCopyRegionToImage(
   _handleOut[0] = 0n
   const result = getSymbols().vexart_composite_copy_region_to_image(vctx, target, x, y, w, h, ptr(_handleOut)) as number
   if (result !== 0) return 0n
-  return _handleOut[0]
+  const handle = _handleOut[0]
+  activeImageHandles.add(handle)
+  return handle
 }
 
 export function vexartCompositeImageFilterBackdrop(
@@ -144,22 +137,6 @@ export function vexartCompositeImageMaskRoundedRect(
 ): bigint {
   _handleOut[0] = 0n
   const result = getSymbols().vexart_composite_image_mask_rounded_rect(
-    vctx, image, ptr(new Uint8Array(rectBuf.buffer)), ptr(_handleOut)
-  ) as number
-  if (result !== 0) return 0n
-  return _handleOut[0]
-}
-
-/**
- * Apply a rounded-rect mask whose box may extend beyond a cropped source
- * image. `rectBuf` is six mask radii/mode floats followed by the mask box in
- * NDC (mask_x, mask_y, mask_w, mask_h).
- */
-export function vexartCompositeImageMaskRoundedRectRegion(
-  vctx: bigint, image: bigint, rectBuf: Float32Array,
-): bigint {
-  _handleOut[0] = 0n
-  const result = getSymbols().vexart_composite_image_mask_rounded_rect_region(
     vctx, image, ptr(new Uint8Array(rectBuf.buffer)), ptr(_handleOut)
   ) as number
   if (result !== 0) return 0n
@@ -199,18 +176,17 @@ export function vexartUploadImage(ctx: bigint, data: Uint8Array, width: number, 
   const handle = _handleOut[0]
   _vexartImageHandles.set(data, handle)
   activeImageHandles.add(handle)
-  _imageFinalizationRegistry?.register(data, { ctx, handle })
   return handle
 }
 
 export function vexartRemoveImage(ctx: bigint, handle: bigint) {
-  if (!handle || !activeImageHandles.has(handle)) return
-  activeImageHandles.delete(handle)
+  if (!handle) return
   const rc = getSymbols().vexart_paint_remove_image(ctx, handle) as number
   if (rc !== 0) {
     const err = vexartGetLastError()
     console.error(`[vexart] paint_remove_image failed (${rc}): ${err}`)
   }
+  activeImageHandles.delete(handle)
 }
 
 // ── Paint dispatch ───────────────────────────────────────────────────────

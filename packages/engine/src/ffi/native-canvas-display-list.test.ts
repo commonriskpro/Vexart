@@ -35,6 +35,18 @@ describe("native canvas display lists", () => {
     expect(nativeCanvasDisplayListRelease(first!)).toBe(true)
   })
 
+  test("accepts dynamic context handle while preserving backward compatibility", () => {
+    const ctx = new CanvasContext()
+    ctx.rect(1, 2, 3, 4, { fill: 0x12345678 })
+    const bytes = serializeCanvasDisplayList(ctx._commands)
+    const key = `canvas-ctx-${Date.now()}-${Math.random()}`
+
+    const handle = nativeCanvasDisplayListUpdate({ key, bytes, ctx: 1n }, 1n)
+    expect(handle).not.toBeNull()
+    expect(nativeCanvasDisplayListTouch(handle!, 0n, 1n)).toBe(true)
+    expect(nativeCanvasDisplayListRelease(handle!, 1n)).toBe(true)
+  })
+
   test("registered display lists contribute to native resource stats", () => {
     const before = getNativeResourceStats()
     const beforeBytes = before?.resourcesByKind.CanvasDisplayList?.bytes ?? 0

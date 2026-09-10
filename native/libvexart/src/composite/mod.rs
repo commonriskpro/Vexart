@@ -25,6 +25,11 @@ pub fn target_create(
         return ERR_INVALID_ARG;
     }
 
+    let max_dim = pctx.wgpu.device.limits().max_texture_dimension_2d;
+    if width > max_dim || height > max_dim {
+        return ERR_INVALID_ARG;
+    }
+
     // Extract device pointer before borrowing pctx.targets mutably.
     // SAFETY: device is owned by pctx.wgpu which is stable for the duration of this call.
     let device_ptr: *const wgpu::Device = &pctx.wgpu.device as *const wgpu::Device;
@@ -36,8 +41,8 @@ pub fn target_create(
         .targets
         .create(unsafe { &*device_ptr }, width, height, handle_ref)
     {
-        Ok(rec) => rec,
-        Err(code) => return code,
+        Some(r) => r,
+        None => return ERR_INVALID_ARG,
     };
     let handle = *handle_ref;
     pctx.targets.insert(handle, rec);
@@ -618,6 +623,11 @@ pub fn copy_region_to_image(
     let ch = h.min(th.saturating_sub(cy));
 
     if cw == 0 || ch == 0 {
+        return ERR_INVALID_ARG;
+    }
+
+    let max_dim = pctx.wgpu.device.limits().max_texture_dimension_2d;
+    if cw > max_dim || ch > max_dim {
         return ERR_INVALID_ARG;
     }
 
@@ -1340,15 +1350,18 @@ pub fn image_filter_backdrop(
     OK
 }
 
-/// Shared rounded-rect image-mask implementation. `mask_rect` is optional so
-/// the original full-image FFI remains ABI-compatible while clipped callers
-/// can provide the original box in cropped-image NDC coordinates.
-fn image_mask_rounded_rect_impl(
+/// Apply a rounded-rect SDF mask to an image, producing a new image handle.
+///
+/// `rect_ptr` points to a 24-byte buffer: 5 × f32:
+///   radius_uniform, radius_tl, radius_tr, radius_br, radius_bl, mode
+///   (mode: 0.0 = uniform, 1.0 = per-corner)
+///
+/// The mask is applied using the existing `image_mask` pipeline (cmd_kind=17).
+pub fn image_mask_rounded_rect(
     pctx: &mut PaintContext,
     image: u64,
     rect_ptr: *const u8,
     out_image: *mut u64,
-    mask_rect: Option<[f32; 4]>,
 ) -> i32 {
     use crate::paint::instances::ImageMaskInstance;
     use bytemuck::bytes_of;
@@ -1405,10 +1418,10 @@ fn image_mask_rounded_rect_impl(
         y: -1.0,
         w: 2.0,
         h: 2.0,
-        mask_x: mask_rect.map(|rect| rect[0]).unwrap_or(-1.0),
-        mask_y: mask_rect.map(|rect| rect[1]).unwrap_or(-1.0),
-        mask_w: mask_rect.map(|rect| rect[2]).unwrap_or(2.0),
-        mask_h: mask_rect.map(|rect| rect[3]).unwrap_or(2.0),
+        mask_x: -1.0,
+        mask_y: -1.0,
+        mask_w: 2.0,
+        mask_h: 2.0,
         radius_uniform,
         radius_tl,
         radius_tr,
@@ -1510,38 +1523,6 @@ fn image_mask_rounded_rect_impl(
     // SAFETY: out_image is non-null (checked above).
     unsafe { *out_image = handle };
     OK
-}
-
-/// Apply a rounded-rect SDF mask to an image, producing a new image handle.
-///
-/// `rect_ptr` points to a 24-byte buffer containing radius_uniform,
-/// radius_tl, radius_tr, radius_br, radius_bl, and mode.
-pub fn image_mask_rounded_rect(
-    pctx: &mut PaintContext,
-    image: u64,
-    rect_ptr: *const u8,
-    out_image: *mut u64,
-) -> i32 {
-    image_mask_rounded_rect_impl(pctx, image, rect_ptr, out_image, None)
-}
-
-/// Apply a rounded-rect mask while retaining the original box geometry for a
-/// cropped source image. The 40-byte buffer contains the six radius/mode
-/// values followed by mask_x, mask_y, mask_w, and mask_h in output NDC.
-pub fn image_mask_rounded_rect_region(
-    pctx: &mut PaintContext,
-    image: u64,
-    rect_ptr: *const u8,
-    out_image: *mut u64,
-) -> i32 {
-    if rect_ptr.is_null() {
-        return ERR_INVALID_ARG;
-    }
-    // SAFETY: this internal boundary requires the caller's 40-byte region
-    // buffer; the public six-float function above keeps its original contract.
-    let params: &[f32] = unsafe { std::slice::from_raw_parts(rect_ptr as *const f32, 10) };
-    let mask_rect = [params[6], params[7], params[8], params[9]];
-    image_mask_rounded_rect_impl(pctx, image, rect_ptr, out_image, Some(mask_rect))
 }
 
 #[cfg(test)]
