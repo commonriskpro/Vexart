@@ -16,7 +16,7 @@
  */
 
 import { detect, type TerminalKind } from "./detect"
-import { appendFileSync, writeSync } from "node:fs"
+import { appendFileSync } from "node:fs"
 import { inTmux, parentTerminal, parentSupportsKittyPlaceholder, passthroughSupported, tmuxPassthroughState, tmuxPassthroughAllowsAll, tmuxHasSingleAttachedClient, tmuxClientSupportsRgb, createWriter } from "./tmux"
 import { inferCaps, probeKittyGraphics, queryColors, type Capabilities } from "./caps"
 import { getSize, queryPixelSize, onResize, type TerminalSize, type ResizeHandler } from "./size"
@@ -134,14 +134,6 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
   // Write function — handles tmux passthrough transparently. rawWrite is
   // intentionally kept for ANSI mode control, mouse, colors, and sizing.
   const rawWrite = (data: string) => { stdout.write(data) }
-  const syncWrite = (data: string) => {
-    try {
-      const fd = "fd" in stdout && typeof (stdout as { fd?: unknown }).fd === "number" ? (stdout as { fd: number }).fd : 1
-      writeSync(fd, data)
-    } catch {
-      stdout.write(data)
-    }
-  }
   const write = createWriter(rawWrite)
 
   // Stdin helpers — for probe and query functions
@@ -345,7 +337,7 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
           notifyTerminalTransportLifecycle(terminal, "suspend")
         } finally {
           try {
-            leave(stdin, syncWrite, caps, lifecycleState)
+            leave(stdin, rawWrite, caps, lifecycleState)
           } finally {
             restoreStartupRaw()
           }
@@ -366,7 +358,7 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
           notifyTerminalTransportLifecycle(terminal, "destroy")
         } finally {
           try {
-            leave(stdin, syncWrite, caps, lifecycleState)
+            leave(stdin, rawWrite, caps, lifecycleState)
           } finally {
             restoreStartupRaw()
           }
@@ -385,14 +377,14 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
 
     // The internal callback runs before lifecycle leave on every process exit
     // path (including signals), so SHM-owned resources are released first.
-    removeExitHandlers = installExitHandlers(stdin, rawWrite, caps, lifecycleState, onTransportExit, syncWrite)
+    removeExitHandlers = installExitHandlers(stdin, rawWrite, caps, lifecycleState, onTransportExit)
     startupRemoveExit = removeExitHandlers
     return terminal
   } catch (error) {
     try {
       startupUnsubResize?.()
       startupRemoveExit?.()
-      if (startupLifecycleState) leave(stdin, syncWrite, caps, startupLifecycleState)
+      if (startupLifecycleState) leave(stdin, rawWrite, caps, startupLifecycleState)
     } finally {
       restoreStartupRaw()
     }
