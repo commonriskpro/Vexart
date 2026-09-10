@@ -5,6 +5,32 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use crate::ffi::panic::{ERR_INVALID_ARG, ERR_OUT_OF_BUDGET};
+
+fn checked_readback_layout(width: u32, height: u32) -> Result<(u32, u64), i32> {
+    let bytes_per_row = width.checked_mul(4).ok_or(ERR_INVALID_ARG)?;
+    let padded_bytes_per_row = bytes_per_row.checked_add(255).ok_or(ERR_INVALID_ARG)? & !255;
+    let readback_size = u64::from(padded_bytes_per_row)
+        .checked_mul(u64::from(height))
+        .ok_or(ERR_INVALID_ARG)?;
+    Ok((padded_bytes_per_row, readback_size))
+}
+
+fn validate_dimensions(limits: &wgpu::Limits, width: u32, height: u32) -> Result<(u32, u64), i32> {
+    if width == 0 || height == 0 {
+        return Err(ERR_INVALID_ARG);
+    }
+    if width > limits.max_texture_dimension_2d || height > limits.max_texture_dimension_2d {
+        return Err(ERR_INVALID_ARG);
+    }
+
+    let layout = checked_readback_layout(width, height)?;
+    if layout.1 > limits.max_buffer_size {
+        return Err(ERR_OUT_OF_BUDGET);
+    }
+    Ok(layout)
+}
+
 /// Holds one offscreen GPU target: texture + view + MAP_READ readback buffer.
 pub struct TargetRecord {
     pub texture: wgpu::Texture,
@@ -53,9 +79,9 @@ impl TargetRegistry {
         width: u32,
         height: u32,
         out_handle: &mut u64,
-    ) -> TargetRecord {
-        let padded_bytes_per_row = (width * 4 + 255) & !255;
-        let readback_size = (padded_bytes_per_row as u64) * (height as u64);
+    ) -> Result<TargetRecord, i32> {
+        let (padded_bytes_per_row, readback_size) =
+            validate_dimensions(&device.limits(), width, height)?;
 
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("vexart-offscreen-target"),
@@ -86,7 +112,7 @@ impl TargetRegistry {
         let handle = self.next_handle.fetch_add(1, Ordering::Relaxed);
         *out_handle = handle;
 
-        TargetRecord {
+        Ok(TargetRecord {
             texture,
             view,
             readback_buffer,
@@ -94,7 +120,7 @@ impl TargetRegistry {
             height,
             padded_bytes_per_row,
             active_layer: None,
-        }
+        })
     }
 
     /// Insert a TargetRecord that was created via `create()`.
@@ -159,6 +185,12 @@ impl TargetRegistry {
 mod tests {
     use super::*;
 
+    fn limits(max_buffer_size: u64) -> wgpu::Limits {
+        let mut limits = wgpu::Limits::downlevel_defaults();
+        limits.max_buffer_size = max_buffer_size;
+        limits
+    }
+
     #[test]
     fn test_registry_create_destroy_no_gpu() {
         // Unit test: verify handle allocation and destroy returns correct bool.
@@ -182,6 +214,54 @@ mod tests {
         assert_eq!((100u32 * 4 + 255) & !255, 512);
         // width=1920 → 7680 → padded to 7680 (already multiple of 256).
         assert_eq!((1920u32 * 4 + 255) & !255, 7680);
+    }
+
+    #[test]
+    fn target_dimensions_reject_zero() {
+        let device_limits = limits(u64::MAX);
+        assert_eq!(
+            validate_dimensions(&device_limits, 0, 1),
+            Err(ERR_INVALID_ARG)
+        );
+        assert_eq!(
+            validate_dimensions(&device_limits, 1, 0),
+            Err(ERR_INVALID_ARG)
+        );
+    }
+
+    #[test]
+    fn target_dimensions_reject_texture_limit_overflow() {
+        let device_limits = limits(u64::MAX);
+        let max_dimension = device_limits.max_texture_dimension_2d;
+        assert_eq!(
+            validate_dimensions(&device_limits, max_dimension + 1, 1),
+            Err(ERR_INVALID_ARG)
+        );
+    }
+
+    #[test]
+    fn target_dimensions_accept_texture_limit_boundary() {
+        let device_limits = limits(u64::MAX);
+        let max_dimension = device_limits.max_texture_dimension_2d;
+        let (padded_bytes_per_row, readback_size) =
+            validate_dimensions(&device_limits, max_dimension, max_dimension)
+                .expect("device texture limit should be a valid target boundary");
+        assert_eq!(padded_bytes_per_row, (max_dimension * 4 + 255) & !255);
+        assert!(readback_size <= device_limits.max_buffer_size);
+    }
+
+    #[test]
+    fn target_dimensions_reject_readback_buffer_limit() {
+        let device_limits = limits(256);
+        assert_eq!(
+            validate_dimensions(&device_limits, 64, 2),
+            Err(ERR_OUT_OF_BUDGET)
+        );
+    }
+
+    #[test]
+    fn readback_layout_rejects_row_size_overflow() {
+        assert_eq!(checked_readback_layout(u32::MAX, 1), Err(ERR_INVALID_ARG));
     }
 
     #[cfg(feature = "gpu-tests")]
@@ -213,7 +293,9 @@ mod tests {
 
         let mut reg = TargetRegistry::new();
         let mut handle = 0u64;
-        let rec = reg.create(&device, 64, 64, &mut handle);
+        let rec = reg
+            .create(&device, 64, 64, &mut handle)
+            .expect("valid target dimensions");
         assert_ne!(handle, 0);
         assert_eq!(rec.width, 64);
         assert_eq!(rec.height, 64);
@@ -253,7 +335,9 @@ mod tests {
 
         let mut reg = TargetRegistry::new();
         let mut handle = 0u64;
-        let rec = reg.create(&device, 32, 32, &mut handle);
+        let rec = reg
+            .create(&device, 32, 32, &mut handle)
+            .expect("valid target dimensions");
         reg.insert(handle, rec);
 
         // First begin_layer must succeed.

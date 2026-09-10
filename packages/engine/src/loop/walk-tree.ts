@@ -198,24 +198,39 @@ export function walkTree(
     const isScroll = !!(props.scrollX || props.scrollY)
     if (isScroll) state.scrollContainers.push(node)
     const hasSubtreeTransform = !!(props.transform && node.children.length > 0)
+    const transformedInsideScroll = insideScroll && hasSubtreeTransform
+    // A transformed subtree that lives inside a scroll container must stay in
+    // that container's paint stream as one unit.  This applies to descendants
+    // as well as to the transformed node itself: promoting a descendant (for
+    // example an explicitly layered card) would detach it from the ancestor
+    // scissor and apply the ancestor transform only to the remaining stream.
+    const insideTransformedScrollSubtree = insideScroll && insideTransform
     const isInteractionLayer = shouldPromoteInteractionLayer(node)
     const hasBackdrop = hasBackdropEffect(props)
     let shouldBoundary = false
-    if (!insideIsolation && shouldPromoteToLayer(node)) {
+    if (transformedInsideScroll || insideTransformedScrollSubtree) node._autoLayer = false
+    if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && shouldPromoteToLayer(node)) {
       node._autoLayer = false
       shouldBoundary = true
-    } else if (!insideIsolation && (isInteractionLayer || hasSubtreeTransform)) {
+    } else if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && (isInteractionLayer || (hasSubtreeTransform && !insideScroll))) {
+      // A transformed child of a scroll container must remain in the
+      // container's paint stream. Promoting it to a separate layer would
+      // detach it from the ancestor scissor; the layer compositor has no
+      // public clip contract with which to carry that scissor across the
+      // transformed quad. The transform is still rendered by the parent
+      // stream exactly once, after which the existing render-graph clip is
+      // applied at the transformed output boundary.
       node._autoLayer = false
       shouldBoundary = true
-    } else if (!insideIsolation && hasBackdrop && autoLayerCount < AUTO_LAYER_BUDGET) {
+    } else if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && hasBackdrop && autoLayerCount < AUTO_LAYER_BUDGET) {
       node._autoLayer = true
       autoLayerCount++
       shouldBoundary = true
-    } else if (!insideIsolation && node._autoLayer === true && node._unstableFrameCount >= 3) {
+    } else if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && node._autoLayer === true && node._unstableFrameCount >= 3) {
       node._autoLayer = false
       node._stableFrameCount = 0
       node._unstableFrameCount = 0
-    } else if (!insideIsolation && node._stableFrameCount >= 3 && hasPromotableArea(node) && autoLayerCount < AUTO_LAYER_BUDGET) {
+    } else if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && node._stableFrameCount >= 3 && hasPromotableArea(node) && autoLayerCount < AUTO_LAYER_BUDGET) {
       node._autoLayer = true
       autoLayerCount++
       shouldBoundary = true
@@ -304,6 +319,19 @@ export function walkTree(
         nativeImageHandle: extra.nativeHandle,
         objectFit: props.objectFit ?? "contain",
       })
+    }
+
+    // Images are emitted as image ops rather than effect ops, so preserve an
+    // image node's own opacity on the attached rectangle metadata. The GPU
+    // image compositor consumes this internal effect value while keeping the
+    // public ImagePaintConfig shape unchanged.
+    if (typeof props.opacity === "number") {
+      const effect = claimEffect()
+      effect.renderObjectId = node.id
+      effect.color = placeholderColor
+      effect.opacity = props.opacity
+      effect._node = node
+      layout.setEffect(effect)
     }
 
     layout.closeElement()

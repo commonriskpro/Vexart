@@ -1,0 +1,24 @@
+{
+  "name": "@vexart/ps5-public-consumer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "demo:source": "bash ../../scripts/ps5-demo/run-app-source.sh",
+    "demo:stress": "bash ../../scripts/ps5-demo/run-app-source.sh tests/stress.tsx",
+    "demo:packaged": "bash ../../scripts/ps5-demo/run-app-packaged.sh",
+    "demo:packaged:verify": "bash ../../scripts/ps5-demo/run-app-packaged.sh verify",
+    "demo:packaged:test": "bash ../../scripts/ps5-demo/run-app-packaged.sh test",
+    "probe:consumer": "bun --conditions=browser run probes/packaged-consumer.tsx",
+    "probe:source": "bash ../../scripts/ps5-demo/run-source-public-qa.sh",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/preset-typescript": "^7.28.5",
+    "babel-preset-solid": "^1.9.0",
+    "sharp": "^0.34.5",
+    "solid-js": "^1.9.0",
+    "typescript": "^5.7.0",
+    "vexart": "file:../../dist"
+  }
+}

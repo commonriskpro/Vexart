@@ -75,6 +75,38 @@ describe("cache", () => {
 
     expect(a).not.toBe(b)
   })
+
+  test("automatically invalidates cache on setTheme via onThemeChange", () => {
+    const { setTheme, lightTheme, darkTheme } = require("@vexart/styled")
+    const a = resolveClassName("bg-card")
+    setTheme(lightTheme)
+    const b = resolveClassName("bg-card")
+    expect(a).not.toBe(b)
+    expect(b.props.backgroundColor).toBe("#f5f5f5")
+    setTheme(darkTheme)
+  })
+
+  test("enforces MAX_CACHE_SIZE of 1024 with LRU eviction and recency update", () => {
+    clearClassNameCache()
+    const item1 = resolveClassName("p-1")
+    for (let i = 2; i < 1024; i++) {
+      resolveClassName(`p-${i}`)
+    }
+    const item0 = resolveClassName("p-0")
+
+    // Cache is now full (1024 items), with p-1 as oldest and p-0 as newest.
+    // Access p-0 to ensure it is marked as most recently used
+    expect(resolveClassName("p-0")).toBe(item0)
+
+    // Insert a new item (1025th) to trigger eviction of LRU entry (p-1)
+    resolveClassName("p-99999")
+
+    // p-1 was least recently used, so it must have been evicted
+    expect(resolveClassName("p-1")).not.toBe(item1)
+
+    // p-0 was refreshed, so it remains in cache
+    expect(resolveClassName("p-0")).toBe(item0)
+  })
 })
 
 describe("backdrop filters", () => {

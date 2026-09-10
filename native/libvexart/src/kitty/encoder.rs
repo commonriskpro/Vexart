@@ -95,14 +95,16 @@ pub fn encode_frame_direct(rgba: &[u8], width: u32, height: u32, image_id: u32) 
 /// Encode a complete update as a Kitty animation frame. The current image
 /// placement remains visible while the frame payload is transferred; the
 /// trailing animation-control command switches to the new frame atomically.
-/// Each update uploads a fresh frame number on a canvas copied from the
-/// previous frame, then composes that new frame atomically.
+/// Uses ping-pong double buffering (r=1 and r=2) so Kitty only ever holds
+/// two frames in memory.
 pub fn encode_animation_frame_direct(
     rgba: &[u8],
     width: u32,
     height: u32,
     image_id: u32,
-    frame_id: u32,
+    target_frame: u32,
+    compose_frame: u32,
+    is_replacement: bool,
 ) -> Vec<u8> {
     let compressed = compress_rgba(rgba).unwrap_or_else(|_| rgba.to_vec());
     let b64 = B64.encode(&compressed);
@@ -111,19 +113,23 @@ pub fn encode_animation_frame_direct(
         .chunks(CHUNK_SIZE)
         .map(|c| std::str::from_utf8(c).expect("base64 is always valid utf8"))
         .collect();
-    let previous_frame = frame_id.saturating_sub(1);
+    let frame_params = if is_replacement {
+        format!("r={target_frame},c={compose_frame}")
+    } else {
+        format!("c={compose_frame}")
+    };
     let mut out = Vec::with_capacity(b64.len() + chunks.len() * 48 + 32);
     if chunks.is_empty() {
         out.extend_from_slice(
             format!(
-                "\x1b_Ga=f,i={image_id},c={previous_frame},f=32,s={width},v={height},C=1,o=z,m=0;\x1b\\"
+                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,o=z,m=0;\x1b\\"
             )
             .as_bytes(),
         );
     } else if chunks.len() == 1 {
         out.extend_from_slice(
             format!(
-                "\x1b_Ga=f,i={image_id},c={previous_frame},f=32,s={width},v={height},C=1,o=z,m=0;{}\x1b\\",
+                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,o=z,m=0;{}\x1b\\",
                 chunks[0]
             )
             .as_bytes(),
@@ -131,7 +137,7 @@ pub fn encode_animation_frame_direct(
     } else {
         out.extend_from_slice(
             format!(
-                "\x1b_Ga=f,i={image_id},c={previous_frame},f=32,s={width},v={height},C=1,o=z,m=1;{}\x1b\\",
+                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,o=z,m=1;{}\x1b\\",
                 chunks[0]
             )
             .as_bytes(),
@@ -141,7 +147,7 @@ pub fn encode_animation_frame_direct(
         }
         out.extend_from_slice(format!("\x1b_Gm=0;{}\x1b\\", chunks[chunks.len() - 1]).as_bytes());
     }
-    out.extend_from_slice(format!("\x1b_Ga=a,i={image_id},c={frame_id},q=2;\x1b\\").as_bytes());
+    out.extend_from_slice(format!("\x1b_Ga=a,i={image_id},c={target_frame},q=2;\x1b\\").as_bytes());
     out
 }
 
@@ -296,5 +302,28 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_encode_animation_frame_direct_append_and_replace() {
+        let rgba = vec![0xfeu8; 8 * 8 * 4];
+        // Frame 2: append (c=1, no r=)
+        let append_bytes = encode_animation_frame_direct(&rgba, 8, 8, 10, 2, 1, false);
+        let append_str = std::str::from_utf8(&append_bytes).unwrap();
+        assert!(append_str.contains("a=f,i=10,c=1,f=32"));
+        assert!(!append_str.contains("r="));
+        assert!(append_str.contains("\x1b_Ga=a,i=10,c=2,q=2;\x1b\\"));
+
+        // Frame 3: replace frame 1 (r=1,c=2)
+        let replace1_bytes = encode_animation_frame_direct(&rgba, 8, 8, 10, 1, 2, true);
+        let replace1_str = std::str::from_utf8(&replace1_bytes).unwrap();
+        assert!(replace1_str.contains("a=f,i=10,r=1,c=2,f=32"));
+        assert!(replace1_str.contains("\x1b_Ga=a,i=10,c=1,q=2;\x1b\\"));
+
+        // Frame 4: replace frame 2 (r=2,c=1)
+        let replace2_bytes = encode_animation_frame_direct(&rgba, 8, 8, 10, 2, 1, true);
+        let replace2_str = std::str::from_utf8(&replace2_bytes).unwrap();
+        assert!(replace2_str.contains("a=f,i=10,r=2,c=1,f=32"));
+        assert!(replace2_str.contains("\x1b_Ga=a,i=10,c=2,q=2;\x1b\\"));
     }
 }

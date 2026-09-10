@@ -27,6 +27,11 @@ export function releasePointerCapture(nodeId: number): void {
 }
 
 /** @public */
+export function getCapturedNodeId(): number {
+  return activeLoop?.getCapturedNodeId?.() ?? 0
+}
+
+/** @public */
 export function onPostScroll(cb: () => void): () => void {
   return activeLoop?.onPostScroll(cb) ?? (() => {})
 }

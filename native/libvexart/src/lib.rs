@@ -210,12 +210,18 @@ pub unsafe extern "C" fn vexart_context_create(
 
 /// Releases a Vexart rendering context.
 ///
-/// Currently a no-op because GPU state is singleton-managed. The context handle
-/// exists for forward-compatibility with per-context isolation.
+/// Drops the shared PaintContext singleton, tearing down GPU device,
+/// targets, buffers, and textures.
 #[no_mangle]
 pub extern "C" fn vexart_context_destroy(ctx: u64) -> i32 {
     ffi_guard!({
         let _ = ctx;
+        let mut guard = lock_or_recover(&SHARED_PAINT);
+        let _ = guard.take();
+        let mut atlas_mgr = lock_or_recover(&SHARED_MSDF_ATLAS);
+        for page in &mut atlas_mgr.pages {
+            page.dirty = true;
+        }
         OK
     })
 }
@@ -334,6 +340,9 @@ pub unsafe extern "C" fn vexart_composite_target_create(
         if out_target.is_null() {
             return ERR_INVALID_ARG;
         }
+        if width == 0 || height == 0 {
+            return ERR_INVALID_ARG;
+        }
         let mut guard = get_or_init_paint();
         let pctx = match guard.as_mut() {
             Some(c) => c,
@@ -341,6 +350,74 @@ pub unsafe extern "C" fn vexart_composite_target_create(
         };
         composite::target_create(pctx, width, height, out_target)
     })
+}
+
+#[cfg(test)]
+mod composite_target_tests {
+    use super::*;
+
+    #[test]
+    fn target_create_rejects_null_output() {
+        let code = unsafe { vexart_composite_target_create(0, 1, 1, std::ptr::null_mut()) };
+        assert_eq!(code, ERR_INVALID_ARG);
+    }
+
+    #[test]
+    fn target_create_rejects_zero_dimensions() {
+        let mut target = 0u64;
+        let code = unsafe { vexart_composite_target_create(0, 0, 1, &mut target) };
+        assert_eq!(code, ERR_INVALID_ARG);
+    }
+
+    #[test]
+    fn context_destroy_clears_shared_paint() {
+        let code = vexart_context_destroy(1);
+        assert_eq!(code, OK);
+        let guard = lock_or_recover(&SHARED_PAINT);
+        assert!(guard.is_none());
+    }
+
+    #[cfg(feature = "gpu-tests")]
+    #[test]
+    fn target_create_rejects_device_texture_limit_overflow() {
+        let guard = get_or_init_paint();
+        let max_dimension = guard
+            .as_ref()
+            .expect("paint context")
+            .wgpu
+            .device
+            .limits()
+            .max_texture_dimension_2d;
+        drop(guard);
+
+        let mut target = 0xA5A5_A5A5_A5A5_A5A5;
+        let code = unsafe {
+            vexart_composite_target_create(0, max_dimension.saturating_add(1), 1, &mut target)
+        };
+        assert_eq!(code, ERR_INVALID_ARG);
+        assert_eq!(target, 0xA5A5_A5A5_A5A5_A5A5);
+    }
+
+    #[cfg(feature = "gpu-tests")]
+    #[test]
+    fn target_create_accepts_device_texture_limit_boundary() {
+        let guard = get_or_init_paint();
+        let max_dimension = guard
+            .as_ref()
+            .expect("paint context")
+            .wgpu
+            .device
+            .limits()
+            .max_texture_dimension_2d;
+        drop(guard);
+
+        let mut target = 0u64;
+        let code = unsafe {
+            vexart_composite_target_create(0, max_dimension, max_dimension, &mut target)
+        };
+        assert_eq!(code, OK);
+        assert_eq!(vexart_composite_target_destroy(0, target), OK);
+    }
 }
 
 /// Destroy an offscreen render target and release GPU memory.
@@ -552,6 +629,33 @@ pub unsafe extern "C" fn vexart_composite_image_mask_rounded_rect(
             None => return ERR_GPU_DEVICE_LOST,
         };
         composite::image_mask_rounded_rect(pctx, image, rect_ptr, out_image)
+    })
+}
+
+/// Apply a rounded-rect SDF mask with an explicit source-box region.
+/// `rect_ptr` = 10 × f32: six radius/mode values followed by mask_x, mask_y,
+/// mask_w, mask_h in output NDC. This internal companion keeps radius
+/// geometry in the original image box when the source has been cropped.
+///
+/// # Safety
+/// `rect_ptr` must be valid for 40 bytes; `out_image` must be valid.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_composite_image_mask_rounded_rect_region(
+    _ctx: u64,
+    image: u64,
+    rect_ptr: *const u8,
+    out_image: *mut u64,
+) -> i32 {
+    ffi_guard!({
+        if out_image.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let mut guard = get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        composite::image_mask_rounded_rect_region(pctx, image, rect_ptr, out_image)
     })
 }
 
@@ -1132,6 +1236,16 @@ pub unsafe extern "C" fn vexart_kitty_emit_placeholder_shm_frame(
 #[no_mangle]
 pub extern "C" fn vexart_kitty_shm_is_consumed(handle: u64) -> i32 {
     ffi_guard!({ kitty::shm::shm_is_consumed(handle) })
+}
+
+/// Unlink all active Kitty SHM objects and close their descriptors.
+#[no_mangle]
+pub extern "C" fn vexart_kitty_shm_cleanup_all() -> i32 {
+    ffi_guard!({
+        kitty::transport::transport_cleanup_shm();
+        kitty::shm::shm_cleanup_all();
+        OK
+    })
 }
 
 // ─── §5.8 Resource manager (Phase 2b Slice 6) ────────────────────────────

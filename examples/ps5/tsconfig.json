@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "jsx": "preserve",
+    "jsxImportSource": "vexart",
+    "baseUrl": ".",
+    "paths": {
+      "vexart": ["../../packages/app/src/barrel.ts"],
+      "vexart/jsx-runtime": ["../../types/jsx-runtime.d.ts"],
+      "vexart/engine": ["../../packages/engine/src/index.ts"],
+      "@vexart/app": ["../../packages/app/src/index.ts"],
+      "@vexart/engine": ["../../packages/engine/src/index.ts"],
+      "@vexart/headless": ["../../packages/headless/src/index.ts"],
+      "@vexart/styled": ["../../packages/styled/src/index.ts"]
+    },
+    "types": ["bun"]
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "tests/**/*.ts",
+    "tests/**/*.tsx",
+    "probes/**/*.ts",
+    "probes/**/*.tsx"
+  ]
+}

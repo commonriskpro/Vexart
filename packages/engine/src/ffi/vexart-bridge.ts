@@ -59,6 +59,10 @@ export const VEXART_SYMBOLS = {
   vexart_composite_copy_region_to_image:{ args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_composite_image_filter_backdrop:{ args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_composite_image_mask_rounded_rect:{ args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.ptr],           returns: FFIType.i32 },
+  // Region variant: rect params + mask rect (10 × f32) for cropped source
+  // images. Kept internal so a clipped image can preserve its original box
+  // radius without allocating a full-width intermediate target.
+  vexart_composite_image_mask_rounded_rect_region:{ args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
   // §5.4 Composite — readback
   vexart_composite_readback_rgba:       { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_composite_readback_region_rgba:{ args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.ptr, FFIType.u32, FFIType.ptr],          returns: FFIType.i32 },
@@ -281,6 +285,8 @@ export function closeVexartLibrary(): void {
   _kittyPlaceholderLib = null
   _kittyShmLib?.close()
   _kittyShmLib = null
+  _kittyShmCleanupLib?.close()
+  _kittyShmCleanupLib = null
 }
 
 // ── MSDF Font symbols (lazy-loaded for backward compatibility) ──────────────
@@ -420,4 +426,57 @@ export function openKittyShmSymbols(): ReturnType<typeof dlopen<typeof KITTY_SHM
     }
   }
   return null
+}
+
+// ── Kitty SHM cleanup symbols (lazy-loaded) ─────────────────────────────────
+
+/** @public */
+export const KITTY_SHM_CLEANUP_SYMBOLS = {
+  vexart_kitty_shm_cleanup_all: {
+    args: [],
+    returns: FFIType.i32,
+  },
+} as const satisfies Record<string, { args: FFIType[]; returns: FFIType }>
+
+let _kittyShmCleanupLib: ReturnType<typeof dlopen<typeof KITTY_SHM_CLEANUP_SYMBOLS>> | null = null
+
+/**
+ * Open the Kitty SHM cleanup symbols from the same native library selected
+ * by openVexartLibrary(). Returns null for old native binaries.
+ *
+ * @public
+ */
+export function openKittyShmCleanupSymbols(): ReturnType<typeof dlopen<typeof KITTY_SHM_CLEANUP_SYMBOLS>>["symbols"] | null {
+  if (_kittyShmCleanupLib) return _kittyShmCleanupLib.symbols
+  try {
+    openVexartLibrary()
+  } catch {
+    return null
+  }
+  const paths = _libPath ? [_libPath] : candidateLibPaths()
+  for (const path of paths) {
+    try {
+      _kittyShmCleanupLib = dlopen(path, KITTY_SHM_CLEANUP_SYMBOLS)
+      return _kittyShmCleanupLib.symbols
+    } catch {
+      // Old libvexart builds without the SHM cleanup export.
+    }
+  }
+  return null
+}
+
+/**
+ * Clean up all POSIX SHM handles owned by the native layer.
+ * Returns the number of segments cleaned up, or 0 if unavailable.
+ *
+ * @public
+ */
+export function vexartKittyShmCleanupAll(): number {
+  try {
+    const symbols = openKittyShmCleanupSymbols()
+    if (!symbols) return 0
+    return symbols.vexart_kitty_shm_cleanup_all() as number
+  } catch {
+    return 0
+  }
 }

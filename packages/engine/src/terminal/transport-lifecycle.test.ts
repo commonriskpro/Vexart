@@ -42,4 +42,9 @@ describe("terminal transport lifecycle", () => {
     expect(() => notifyTerminalTransportLifecycle(term, "suspend")).toThrow("observer failed")
     expect(events).toEqual(["second"])
   })
+
+  test("invokes vexartKittyShmCleanupAll safely on destroy", () => {
+    const term = {} as Terminal
+    expect(() => notifyTerminalTransportLifecycle(term, "destroy")).not.toThrow()
+  })
 })

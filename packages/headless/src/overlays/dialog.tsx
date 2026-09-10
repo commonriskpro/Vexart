@@ -7,7 +7,7 @@
  */
 
 import { createContext, onCleanup, useContext, type JSX } from "solid-js"
-import { focusedId, onInput, pushFocusScope, setFocusedId } from "@vexart/engine"
+import { onInput, pushFocusScope } from "@vexart/engine"
 import { Portal } from "../containers/portal"
 
 // ── Types ──
@@ -59,7 +59,6 @@ const DialogCloseContext = createContext<(() => void) | undefined>()
 const openDialogs: Array<() => void> = []
 
 function DialogRoot(props: DialogProps) {
-  const savedFocusId = focusedId()
   // Push a focus scope — Tab will only cycle within the dialog
   const popScope = pushFocusScope()
 
@@ -79,7 +78,6 @@ function DialogRoot(props: DialogProps) {
     const index = openDialogs.indexOf(close)
     if (index >= 0) openDialogs.splice(index, 1)
     popScope()
-    if (savedFocusId) setFocusedId(savedFocusId)
   })
 
   return (

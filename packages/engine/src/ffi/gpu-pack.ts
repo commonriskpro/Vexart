@@ -171,12 +171,14 @@ export function packImageTransformInstance(
   p0x: number, p0y: number, p1x: number, p1y: number,
   p2x: number, p2y: number, p3x: number, p3y: number,
   opacity: number,
+  fitX = 0,
+  fitY = 0,
 ): Uint8Array {
   const v = _packView
   vf32(v, 0,  p0x); vf32(v, 4,  p0y)
   vf32(v, 8,  p1x); vf32(v, 12, p1y)
   vf32(v, 16, p2x); vf32(v, 20, p2y)
   vf32(v, 24, p3x); vf32(v, 28, p3y)
-  vf32(v, 32, opacity); vf32(v, 36, 0); vf32(v, 40, 0); vf32(v, 44, 0)
+  vf32(v, 32, opacity); vf32(v, 36, fitX); vf32(v, 40, fitY); vf32(v, 44, 0)
   return _packU8.subarray(0, 48)
 }

@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js"
+import { createSignal, getOwner, onCleanup } from "solid-js"
 import { deregisterAnimationDescriptor, registerAnimationDescriptor, type CompositorProperty } from "../animation/compositor-path"
 import { markDirty } from "../reconciler/dirty"
 
@@ -7,6 +7,11 @@ let activeCount = 0
 /** @public */
 export function hasActiveAnimations(): boolean {
   return activeCount > 0
+}
+
+/** @internal */
+export function resetActiveAnimations(): void {
+  activeCount = 0
 }
 
 function registerAnimation() { activeCount++ }
@@ -79,6 +84,20 @@ export function createTransition(initial: number, config?: TransitionConfig): [(
   let startTime = 0
   let animating = false
   let timer: ReturnType<typeof setTimeout> | null = null
+  if (getOwner()) {
+    onCleanup(() => {
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
+      if (animating) {
+        animating = false
+        unregisterAnimation()
+        const compositor = config?.compositor
+        if (compositor) deregisterAnimationDescriptor(compositor.nodeId, compositor.property)
+      }
+    })
+  }
   function syncDescriptor() {
     const compositor = config?.compositor
     if (!compositor || !animating) return
@@ -150,6 +169,20 @@ export function createSpring(initial: number, config?: SpringConfig): [() => num
   let animating = false
   let lastTime = 0
   let timer: ReturnType<typeof setTimeout> | null = null
+  if (getOwner()) {
+    onCleanup(() => {
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
+      if (animating) {
+        animating = false
+        unregisterAnimation()
+        const compositor = config?.compositor
+        if (compositor) deregisterAnimationDescriptor(compositor.nodeId, compositor.property)
+      }
+    })
+  }
   function syncDescriptor() {
     const compositor = config?.compositor
     if (!compositor || !animating) return

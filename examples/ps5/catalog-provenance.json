@@ -1,0 +1,1128 @@
+{
+  "manifestVersion": 1,
+  "preparedOn": "2026-09-08",
+  "pathRoot": "examples/ps5",
+  "catalogSchema": [
+    "id",
+    "title",
+    "subtitle",
+    "cover",
+    "hero",
+    "titleScreen",
+    "logo?",
+    "sizeGb",
+    "installed",
+    "genre",
+    "description",
+    "accent",
+    "progress",
+    "activities",
+    "trophies"
+  ],
+  "coverage": {
+    "games": 24,
+    "covers": 24,
+    "heroes": 24,
+    "titleScreens": 24,
+    "logos": 1,
+    "icons": 13,
+    "references": 10
+  },
+  "rightsNotice": "PlayStation and third-party game artwork is copyrighted. These files are locally cached source references for an unpushed demo only; public distribution, publishing, or asset redistribution requires a separate rights review. No permission is claimed or implied.",
+  "games": [
+    {
+      "id": "ghost-of-tsushima",
+      "title": "Ghost of Tsushima",
+      "sourcePage": "https://www.playstation.com/en-us/games/ghost-of-tsushima/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/ghost-of-tsushima.png",
+        "sourcePath": "docs/ps5-demo/references/approved-home-control-center.png",
+        "sourceType": "Internal generated mock reference crop",
+        "sourceCrop": {
+          "x": 169,
+          "y": 104,
+          "width": 136,
+          "height": 136,
+          "sourceDimensions": "1672x941"
+        },
+        "dimensions": "136x136",
+        "bytes": 37855,
+        "sha256": "d568b6d0c8e0f04cb05726d57086d969905b909f9a54382ef86aac9fe73d0d18",
+        "role": "square cover (approved mock crop)",
+        "licenseAvailability": "internal reference; no external license asserted",
+        "rights": "Internal generated visual reference crop; no external license asserted. Low-resolution screenshot crop; not an official source asset.",
+        "note": "Cropped from docs/ps5-demo/references/approved-home-control-center.png at source pixels x=169, y=104, width=136, height=136; selection border and surrounding UI excluded; retained without upscaling or invented artwork."
+      },
+      "hero": {
+        "local": "assets/heroes/ghost-of-tsushima.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/img/rnd/202010/0222/NMwFZ00J50ctQEHdRGGg7IBg.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/img/rnd/202010/0222/NMwFZ00J50ctQEHdRGGg7IBg.png?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 170992,
+        "sha256": "2b3df68661610e4561919d0858e85fb300acf415ea22af17c7f4573bf5d8b5bf",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/ghost-of-tsushima.png",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      },
+      "logo": {
+        "local": "assets/logos/ghost-of-tsushima.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202010/0222/DsM4uNe3BiXCTXoZOpi51PwU.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202010/0222/DsM4uNe3BiXCTXoZOpi51PwU.png?w=1024",
+        "dimensions": "1440x404",
+        "bytes": 80156,
+        "sha256": "1b3e9ab28c970a0fe89c0eec6b01eefecd96161c322762ca04a204b1815eb02d",
+        "role": "transparent game logo",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "visualSelectionNote": "Audited cinematic key art with visible characters; replaced generic gradient/background or framed source."
+    },
+    {
+      "id": "marvels-spider-man-2",
+      "title": "Marvel’s Spider-Man 2",
+      "sourcePage": "https://www.playstation.com/en-us/games/marvels-spider-man-2/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/marvels-spider-man-2.png",
+        "sourcePath": "docs/ps5-demo/references/approved-home-control-center.png",
+        "sourceType": "Internal generated mock reference crop",
+        "sourceCrop": {
+          "x": 324,
+          "y": 108,
+          "width": 109,
+          "height": 109,
+          "sourceDimensions": "1672x941"
+        },
+        "dimensions": "109x109",
+        "bytes": 23219,
+        "sha256": "adb4bb1e9d6bf7617175b0b6a015a354b2a41ec6870ee67229e9072e26a3d89f",
+        "role": "square cover (approved mock crop)",
+        "licenseAvailability": "internal reference; no external license asserted",
+        "rights": "Internal generated visual reference crop; no external license asserted. Low-resolution screenshot crop; not an official source asset.",
+        "note": "Cropped from docs/ps5-demo/references/approved-home-control-center.png at source pixels x=324, y=108, width=109, height=109; selection border and surrounding UI excluded; retained without upscaling or invented artwork."
+      },
+      "hero": {
+        "local": "assets/heroes/marvels-spider-man-2.jpg",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202306/1219/97e9f5fa6e50c185d249956c6f198a2652a9217e69a59ecd.jpg",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202306/1219/97e9f5fa6e50c185d249956c6f198a2652a9217e69a59ecd.jpg?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 89844,
+        "sha256": "f17712b2bef9ffbb662e9d4ecf4c570ccaa909787bb0820fc13ddc265352802e",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/marvels-spider-man-2.jpg",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      },
+      "visualSelectionNote": "Audited cinematic key art with visible characters; replaced generic gradient/background or framed source."
+    },
+    {
+      "id": "god-of-war-ragnarok",
+      "title": "God of War Ragnarök",
+      "sourcePage": "https://www.playstation.com/en-us/games/god-of-war-ragnarok/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/god-of-war-ragnarok.png",
+        "sourcePath": "docs/ps5-demo/references/approved-home-control-center.png",
+        "sourceType": "Internal generated mock reference crop",
+        "sourceCrop": {
+          "x": 452,
+          "y": 108,
+          "width": 109,
+          "height": 109,
+          "sourceDimensions": "1672x941"
+        },
+        "dimensions": "109x109",
+        "bytes": 24990,
+        "sha256": "f15358bc6a440cb9a6210c4f6f72af3dd5b528e725a9461827d02e79aa213620",
+        "role": "square cover (approved mock crop)",
+        "licenseAvailability": "internal reference; no external license asserted",
+        "rights": "Internal generated visual reference crop; no external license asserted. Low-resolution screenshot crop; not an official source asset.",
+        "note": "Cropped from docs/ps5-demo/references/approved-home-control-center.png at source pixels x=452, y=108, width=109, height=109; selection border and surrounding UI excluded; retained without upscaling or invented artwork."
+      },
+      "hero": {
+        "local": "assets/heroes/god-of-war-ragnarok.jpg",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202207/1117/mcqbWrEm1FqWa0781iB5GSu4.jpg",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202207/1117/mcqbWrEm1FqWa0781iB5GSu4.jpg?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 184703,
+        "sha256": "ab718634609adffa5ad421dd3205315521fc4e24b9a03c2750fa96573829dc93",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/god-of-war-ragnarok.jpg",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      },
+      "visualSelectionNote": "Audited cinematic key art with visible characters; replaced generic gradient/background or framed source."
+    },
+    {
+      "id": "returnal",
+      "title": "Returnal",
+      "sourcePage": "https://www.playstation.com/en-us/games/returnal/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/returnal.png",
+        "sourcePath": "docs/ps5-demo/references/approved-home-control-center.png",
+        "sourceType": "Internal generated mock reference crop",
+        "sourceCrop": {
+          "x": 579,
+          "y": 108,
+          "width": 109,
+          "height": 109,
+          "sourceDimensions": "1672x941"
+        },
+        "dimensions": "109x109",
+        "bytes": 24624,
+        "sha256": "24c9bf7145ab6b13602739eb122b33c521a33013874886bcb779ed910f91b8f2",
+        "role": "square cover (approved mock crop)",
+        "licenseAvailability": "internal reference; no external license asserted",
+        "rights": "Internal generated visual reference crop; no external license asserted. Low-resolution screenshot crop; not an official source asset.",
+        "note": "Cropped from docs/ps5-demo/references/approved-home-control-center.png at source pixels x=579, y=108, width=109, height=109; selection border and surrounding UI excluded; retained without upscaling or invented artwork."
+      },
+      "hero": {
+        "local": "assets/heroes/returnal.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202011/1621/oE5NHcrITZnKa1kYSCQtsoRE.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202011/1621/oE5NHcrITZnKa1kYSCQtsoRE.png?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 188855,
+        "sha256": "1c6eaddbdfc24ba590e391cb8692a49c01c5db5fe6f2e152ff3d0255ebe0b5be",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/returnal.png",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      },
+      "visualSelectionNote": "Visual audit replaced a background-only pick with official cinematic character key art."
+    },
+    {
+      "id": "ratchet-and-clank-rift-apart",
+      "title": "Ratchet & Clank: Una dimensión aparte",
+      "sourcePage": "https://www.playstation.com/en-us/games/ratchet-and-clank-rift-apart/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/ratchet-and-clank-rift-apart.png",
+        "sourcePath": "docs/ps5-demo/references/approved-home-control-center.png",
+        "sourceType": "Internal generated mock reference crop",
+        "sourceCrop": {
+          "x": 705,
+          "y": 108,
+          "width": 109,
+          "height": 109,
+          "sourceDimensions": "1672x941"
+        },
+        "dimensions": "109x109",
+        "bytes": 27630,
+        "sha256": "881b4634e499a4007a8b11e5bd78708217bbacd36c79a3060c15f76760c6c5fd",
+        "role": "square cover (approved mock crop)",
+        "licenseAvailability": "internal reference; no external license asserted",
+        "rights": "Internal generated visual reference crop; no external license asserted. Low-resolution screenshot crop; not an official source asset.",
+        "note": "Cropped from docs/ps5-demo/references/approved-home-control-center.png at source pixels x=705, y=108, width=109, height=109; selection border and surrounding UI excluded; retained without upscaling or invented artwork."
+      },
+      "hero": {
+        "local": "assets/heroes/ratchet-and-clank-rift-apart.jpg",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202101/2921/x64hEmgvhgxpXc9z9hpyLAyQ.jpg",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202101/2921/x64hEmgvhgxpXc9z9hpyLAyQ.jpg?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 226878,
+        "sha256": "bc2197aa329c2e8f25c31ba6007816ef6fedfd71c200361d69991dd1df31cff1",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/ratchet-and-clank-rift-apart.jpg",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      }
+    },
+    {
+      "id": "astro-bot",
+      "title": "ASTRO BOT",
+      "sourcePage": "https://www.playstation.com/en-us/games/astro-bot/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/astro-bot.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202406/0500/8f15268257b878597757fcc5f2c9545840867bc71fc863b1.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202406/0500/8f15268257b878597757fcc5f2c9545840867bc71fc863b1.png?w=1024",
+        "dimensions": "1024x1024",
+        "bytes": 178278,
+        "sha256": "19e37c8f055deef9c1dd418cd8e0bd178f33c988a8393d4d3cd58c25d03a4e15",
+        "role": "square cover",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "hero": {
+        "local": "assets/heroes/astro-bot.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202406/0500/ae5bd5dc2ab0e6a4f8c1d2510cc50bb642f20980fd53f676.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202406/0500/ae5bd5dc2ab0e6a4f8c1d2510cc50bb642f20980fd53f676.png?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 149235,
+        "sha256": "537213e074acd7c36ef2e8d127f6513c625ac78ddc971c12add5db9f6a713d7c",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/astro-bot.png",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      }
+    },
+    {
+      "id": "demons-souls",
+      "title": "Demon’s Souls",
+      "sourcePage": "https://www.playstation.com/en-us/games/demons-souls/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/demons-souls.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/img/rnd/202011/1717/GemRaOZaCMhGxQ9dRhnQQyT5.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/img/rnd/202011/1717/GemRaOZaCMhGxQ9dRhnQQyT5.png?w=1024",
+        "dimensions": "1024x1024",
+        "bytes": 210809,
+        "sha256": "594e1f6c04b60ae6e87c7f0ca217fd86f371376eaa09d5ca082f2c7f45e0ddc2",
+        "role": "square cover",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "hero": {
+        "local": "assets/heroes/demons-souls.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/img/rnd/202011/1717/ERyxTrhG8olx7M5a8QdNjNGy.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/img/rnd/202011/1717/ERyxTrhG8olx7M5a8QdNjNGy.png?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 210359,
+        "sha256": "f3d28bf01778f4b9b9263e6eb353cee911eb0c22a1f85157777799218cffa2c8",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/demons-souls.png",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      }
+    },
+    {
+      "id": "horizon-forbidden-west",
+      "title": "Horizon Forbidden West",
+      "sourcePage": "https://www.playstation.com/en-us/games/horizon-forbidden-west/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/horizon-forbidden-west.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202107/3100/HO8vkO9pfXhwbHi5WHECQJdN.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202107/3100/HO8vkO9pfXhwbHi5WHECQJdN.png?w=1024",
+        "dimensions": "1024x1024",
+        "bytes": 267970,
+        "sha256": "07bdeae4c908d2312f4b33733d52d5eb224559ca0e67c4519f3d1c542416b022",
+        "role": "square cover",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "hero": {
+        "local": "assets/heroes/horizon-forbidden-west.jpg",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202010/2915/MMOI6WwY3vOsQYzGcQNbEOzz.jpg",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202010/2915/MMOI6WwY3vOsQYzGcQNbEOzz.jpg?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 247859,
+        "sha256": "399902d73c9287457c1275f51851d582469e745501e7e40778d7342ffb022d92",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/horizon-forbidden-west.jpg",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      }
+    },
+    {
+      "id": "gran-turismo-7",
+      "title": "Gran Turismo 7",
+      "sourcePage": "https://www.playstation.com/en-us/games/gran-turismo-7/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/gran-turismo-7.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202511/0707/303f5701426596a09891f9f33fa93e49ae522d5295b26dce.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202511/0707/303f5701426596a09891f9f33fa93e49ae522d5295b26dce.png?w=1024",
+        "dimensions": "1024x1024",
+        "bytes": 203322,
+        "sha256": "0098f0a109b04b900abd455fc4023dfb75c7ac4548380a8bfd80028af5811018",
+        "role": "square cover",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "hero": {
+        "local": "assets/heroes/gran-turismo-7.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202109/1404/PN9uW6n3oBMhwEjsA5fye3P0.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202109/1404/PN9uW6n3oBMhwEjsA5fye3P0.png?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 163091,
+        "sha256": "18c445876accac0077a08a939db61e5df5f36428a601193eccee66746e1f5448",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/gran-turismo-7.png",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      }
+    },
+    {
+      "id": "the-last-of-us-part-i",
+      "title": "The Last of Us Parte I",
+      "sourcePage": "https://www.playstation.com/en-us/games/the-last-of-us-part-i/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/the-last-of-us-part-i.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202206/0720/eEczyEMDd2BLa3dtkGJVE9Id.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202206/0720/eEczyEMDd2BLa3dtkGJVE9Id.png?w=1024",
+        "dimensions": "1024x1024",
+        "bytes": 165209,
+        "sha256": "5aea272bb46b62bb155449e0c4dc0a6ae02a0398336866ce005b643cb70de9d9",
+        "role": "square cover",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "hero": {
+        "local": "assets/heroes/the-last-of-us-part-i.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202206/0722/uy8RtmawDXLROQQNi81PWB7Y.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202206/0722/uy8RtmawDXLROQQNi81PWB7Y.png?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 137382,
+        "sha256": "d64efe7c15ae4b17d71577623ea638d5de6c597bf70544acf1a36fee8288880c",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/the-last-of-us-part-i.png",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      }
+    },
+    {
+      "id": "marvels-spider-man-miles-morales",
+      "title": "Marvel’s Spider-Man: Miles Morales",
+      "sourcePage": "https://www.playstation.com/en-us/games/marvels-spider-man-miles-morales/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/marvels-spider-man-miles-morales.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202008/1020/T45iRN1bhiWcJUzST6UFGBvO.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202008/1020/T45iRN1bhiWcJUzST6UFGBvO.png?w=1024",
+        "dimensions": "1024x1024",
+        "bytes": 120692,
+        "sha256": "131db92f3754e91b16e2a5ef4075c0e9fa12a28bae1d3105f382f1ef6f876afc",
+        "role": "square cover",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "hero": {
+        "local": "assets/heroes/marvels-spider-man-miles-morales.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202008/1020/D2APa7eBrNew2zVipbfI0QXt.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202008/1020/D2APa7eBrNew2zVipbfI0QXt.png?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 70503,
+        "sha256": "c1b539ce76ff411ae5f6a4dbfb9f934b0876f79906083f98a1f8d7944efbedc6",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/marvels-spider-man-miles-morales.png",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      },
+      "visualSelectionNote": "Visual audit replaced a generic/background-only pick with official cinematic key art."
+    },
+    {
+      "id": "sackboy-a-big-adventure",
+      "title": "Sackboy: Una gran aventura",
+      "sourcePage": "https://www.playstation.com/en-us/games/sackboy-a-big-adventure/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/sackboy-a-big-adventure.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/img/rnd/202010/1614/TJiBEQMJ9qa93lWBu4sKScY9.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/img/rnd/202010/1614/TJiBEQMJ9qa93lWBu4sKScY9.png?w=1024",
+        "dimensions": "1024x1024",
+        "bytes": 358941,
+        "sha256": "ad76570d91629e35deb8829a898a44e8b2a9558eefa538a9b22acf640e38c3dc",
+        "role": "square cover",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "hero": {
+        "local": "assets/heroes/sackboy-a-big-adventure.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202011/0515/w5lUtRKCqZewjAvXlTMpgbdu.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202011/0515/w5lUtRKCqZewjAvXlTMpgbdu.png?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 307792,
+        "sha256": "754117c6e7201c6ba0f1836f0324fdf9a4fef6fc8a7d465a83e7396b952723b8",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/sackboy-a-big-adventure.png",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      }
+    },
+    {
+      "id": "kena-bridge-of-spirits",
+      "title": "Kena: Bridge of Spirits",
+      "sourcePage": "https://www.playstation.com/en-us/games/kena-bridge-of-spirits/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/kena-bridge-of-spirits.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202102/2307/kQzDCY5RCrSXCeeFjPGUzkGI.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202102/2307/kQzDCY5RCrSXCeeFjPGUzkGI.png?w=1024",
+        "dimensions": "1024x1024",
+        "bytes": 133017,
+        "sha256": "0ac4166b24f64a02d94ed1baae60252a63dae0fab910095cfc4ebcdbf2b374d3",
+        "role": "square cover",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "hero": {
+        "local": "assets/heroes/kena-bridge-of-spirits.jpg",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202102/2307/Ng7MQpIUKQo05cX4mGk8JwQS.jpg",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202102/2307/Ng7MQpIUKQo05cX4mGk8JwQS.jpg?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 105031,
+        "sha256": "f0060c646cae6eaf8dab9202874a9c71b3431246fa0d883c72711fd59c1b7d63",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/kena-bridge-of-spirits.jpg",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      }
+    },
+    {
+      "id": "death-stranding-directors-cut",
+      "title": "Death Stranding Director’s Cut",
+      "sourcePage": "https://www.playstation.com/en-us/games/death-stranding-directors-cut/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/death-stranding-directors-cut.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202106/2214/7aFAQ28D5avzogf7TFg11ryH.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202106/2214/7aFAQ28D5avzogf7TFg11ryH.png?w=1024",
+        "dimensions": "1024x1024",
+        "bytes": 149581,
+        "sha256": "4ebfc4a4cb4ade541f852b92be4b6a7644a6b789d70e975c5baf383c12371853",
+        "role": "square cover",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "hero": {
+        "local": "assets/heroes/death-stranding-directors-cut.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/img/rnd/202009/2921/v61ziXt5jfWEg1YqJYJP4CCG.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/img/rnd/202009/2921/v61ziXt5jfWEg1YqJYJP4CCG.png?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 91082,
+        "sha256": "fe44ceb3c58910aad49eac14375b1b479a2bbb8ff502217ec84c23f4b239c3ef",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/death-stranding-directors-cut.png",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      },
+      "visualSelectionNote": "Visual audit replaced a generic/background-only pick with official cinematic key art."
+    },
+    {
+      "id": "final-fantasy-vii-rebirth",
+      "title": "Final Fantasy VII Rebirth",
+      "sourcePage": "https://www.playstation.com/en-us/games/final-fantasy-vii-rebirth/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/final-fantasy-vii-rebirth.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202308/3005/6de6b1c4b0c475b5c28fd2011655ab8206ed846926fa1671.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202308/3005/6de6b1c4b0c475b5c28fd2011655ab8206ed846926fa1671.png?w=1024",
+        "dimensions": "1024x1024",
+        "bytes": 77524,
+        "sha256": "c088c6086582f3fefdcdf717942315532de41d589f6f8e0c33a36216a220300e",
+        "role": "square cover",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "hero": {
+        "local": "assets/heroes/final-fantasy-vii-rebirth.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202308/3005/4a13ce96b9aee645c5e513658e93d7a19da511e7ef3501d9.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202308/3005/4a13ce96b9aee645c5e513658e93d7a19da511e7ef3501d9.png?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 125018,
+        "sha256": "53ede1e96f61d1a006be80f39eb892acd851ad99009a938d8cbabae0deb349ed",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/final-fantasy-vii-rebirth.png",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      }
+    },
+    {
+      "id": "stellar-blade",
+      "title": "Stellar Blade",
+      "sourcePage": "https://www.playstation.com/en-us/games/stellar-blade/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/stellar-blade.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202401/2211/40e7cfd126a11fe5118310ebce6d9b3a23e7cabaca717217.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202401/2211/40e7cfd126a11fe5118310ebce6d9b3a23e7cabaca717217.png?w=1024",
+        "dimensions": "1024x1024",
+        "bytes": 210872,
+        "sha256": "17a83fedc341480c7ed3b97c55909946102302b2a7690f091fac318f01d1a385",
+        "role": "square cover",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "hero": {
+        "local": "assets/heroes/stellar-blade.jpg",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202401/2211/2937cd4563d2dc50f0632a1bcfbac1f1f7dee3d2984ea02c.jpg",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202401/2211/2937cd4563d2dc50f0632a1bcfbac1f1f7dee3d2984ea02c.jpg?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 155566,
+        "sha256": "9f3bdc72716c942416327df590ab108e21100b5d422bfa71a3b94ec390ba0b87",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/stellar-blade.jpg",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      },
+      "visualSelectionNote": "Visual audit replaced a generic/background-only pick with official cinematic key art."
+    },
+    {
+      "id": "helldivers-2",
+      "title": "Helldivers 2",
+      "sourcePage": "https://www.playstation.com/en-us/games/helldivers-2/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/helldivers-2.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202608/0517/6d1f643eec5087e543287e54a123277ec3bcda956d5d5158.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202608/0517/6d1f643eec5087e543287e54a123277ec3bcda956d5d5158.png?w=1024",
+        "dimensions": "1024x1024",
+        "bytes": 182682,
+        "sha256": "6321a320abf380d5b591c03f90cd3b26951c4a8aa49b0109b5a94e3c3ae84e66",
+        "role": "square cover",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "hero": {
+        "local": "assets/heroes/helldivers-2.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202608/1117/9a0de0ef5bc09fe85f2027cdd7db5f3a55ab22421ebb6f08.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202608/1117/9a0de0ef5bc09fe85f2027cdd7db5f3a55ab22421ebb6f08.png?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 188701,
+        "sha256": "44a8727c60bee1dd2dee9d39b42ce9369acede713f05f82980a503b8c0fba236",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/helldivers-2.png",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      }
+    },
+    {
+      "id": "baldurs-gate-3",
+      "title": "Baldur’s Gate 3",
+      "sourcePage": "https://www.playstation.com/en-us/games/baldurs-gate-3/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/baldurs-gate-3.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202302/2321/ba706e54d68d10a0eb6ab7c36cdad9178c58b7fb7bb03d28.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202302/2321/ba706e54d68d10a0eb6ab7c36cdad9178c58b7fb7bb03d28.png?w=1024",
+        "dimensions": "1024x1024",
+        "bytes": 229245,
+        "sha256": "6369e1b090a927753f82d576c0d4af68e2d3feabb10d41fbb390056349a13ad5",
+        "role": "square cover",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "hero": {
+        "local": "assets/heroes/baldurs-gate-3.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202308/1519/95cce955dc59d04e2ea5ab624a823ace14e9c5f7e24dfb8f.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202308/1519/95cce955dc59d04e2ea5ab624a823ace14e9c5f7e24dfb8f.png?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 212416,
+        "sha256": "f675bac7775c021537b87b04f48b01edb1e91197147d8fbba04ff2ff261dfaf4",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/baldurs-gate-3.png",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      }
+    },
+    {
+      "id": "resident-evil-4",
+      "title": "Resident Evil 4",
+      "sourcePage": "https://www.playstation.com/en-us/games/resident-evil-4/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/resident-evil-4.png",
+        "sourceUrl": "https://image.api.playstation.com/cdn/UP0102/CUSA04885_00/4kQ8Cjuf9p4tphsJJF1LoL6USKTblw5f.png",
+        "retrievalUrl": "https://image.api.playstation.com/cdn/UP0102/CUSA04885_00/4kQ8Cjuf9p4tphsJJF1LoL6USKTblw5f.png?w=1024",
+        "dimensions": "1024x1024",
+        "bytes": 142767,
+        "sha256": "cb657768abad9613317875101edcf46252466953a5b3a13e210dcdb96ab51904",
+        "role": "square cover",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "hero": {
+        "local": "assets/heroes/resident-evil-4.jpg",
+        "sourceUrl": "https://image.api.playstation.com/cdn/UP0102/CUSA04885_00/VRuMkRoVscMEAz4YNfVrAMdiSZpIGoLi.jpg",
+        "retrievalUrl": "https://image.api.playstation.com/cdn/UP0102/CUSA04885_00/VRuMkRoVscMEAz4YNfVrAMdiSZpIGoLi.jpg?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 171713,
+        "sha256": "c1e3cd8cd1f2ec836fada6620ff52d64400b2cfb8f159cb74755f5655a030b22",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/resident-evil-4.jpg",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      }
+    },
+    {
+      "id": "alan-wake-2",
+      "title": "Alan Wake 2",
+      "sourcePage": "https://www.playstation.com/en-us/games/alan-wake-2/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/alan-wake-2.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202305/2420/c3daf3037feb797d9e71b81618e3b5ff3ff1f9609db5a4a2.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202305/2420/c3daf3037feb797d9e71b81618e3b5ff3ff1f9609db5a4a2.png?w=1024",
+        "dimensions": "1024x1024",
+        "bytes": 231709,
+        "sha256": "53de32a3514b40d3fb7cb57e164e803af5c68b602885579f26ed2dae0c37e29e",
+        "role": "square cover",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "hero": {
+        "local": "assets/heroes/alan-wake-2.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202305/2420/0273d27b39938da5474bdb8c1c7daa285824f5c86e8fcacd.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202305/2420/0273d27b39938da5474bdb8c1c7daa285824f5c86e8fcacd.png?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 226527,
+        "sha256": "467aa8cce27fdd3db2dc6875528a2f3b6796b7151dc5bd4df3d4ff9e65ab27c7",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/alan-wake-2.png",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      }
+    },
+    {
+      "id": "cyberpunk-2077",
+      "title": "Cyberpunk 2077",
+      "sourcePage": "https://www.playstation.com/en-us/games/cyberpunk-2077/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/cyberpunk-2077.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202111/3013/cKZ4tKNFj9C00giTzYtH8PF1.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202111/3013/cKZ4tKNFj9C00giTzYtH8PF1.png?w=1024",
+        "dimensions": "1024x1024",
+        "bytes": 161318,
+        "sha256": "35102dcf167b801a7aff3c2c7d0c9359ee4413895d8f51e647fe1e7a5b7b39da",
+        "role": "square cover",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "hero": {
+        "local": "assets/heroes/cyberpunk-2077.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202202/1517/a1krxU0VRlOC3ULeUjeFGEcA.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202202/1517/a1krxU0VRlOC3ULeUjeFGEcA.png?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 121118,
+        "sha256": "451ea0292cc8d35ca0f59077f0fa545c9f3dfb6cdb243883278881130bad00f7",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/cyberpunk-2077.png",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      },
+      "visualSelectionNote": "Visual audit replaced a generic/background-only pick with official cinematic key art."
+    },
+    {
+      "id": "hogwarts-legacy",
+      "title": "Hogwarts Legacy",
+      "sourcePage": "https://www.playstation.com/en-us/games/hogwarts-legacy/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/hogwarts-legacy.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202503/2716/ce2e7f5896365b4e35a192b1f7592b590fee98827644ddb4.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202503/2716/ce2e7f5896365b4e35a192b1f7592b590fee98827644ddb4.png?w=1024",
+        "dimensions": "1024x1024",
+        "bytes": 185668,
+        "sha256": "011be15ebfd8dea462267929659ced93298e66cad910ed9f2b67e9c2683e0b2b",
+        "role": "square cover",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "hero": {
+        "local": "assets/heroes/hogwarts-legacy.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0216/853ef4060e3b07f73b288820c48a937655b147828bb48041.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0216/853ef4060e3b07f73b288820c48a937655b147828bb48041.png?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 143992,
+        "sha256": "f0906e442b1652437915f783cf4beaf36c0b9a5a6f9ff337776b272139d851d9",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/hogwarts-legacy.png",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      }
+    },
+    {
+      "id": "assassins-creed-shadows",
+      "title": "Assassin’s Creed Shadows",
+      "sourcePage": "https://www.playstation.com/en-us/games/assassins-creed-shadows/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/assassins-creed-shadows.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202412/2018/6d3fddf363563ef352c729c8f5077056ab342fd0a9daae9b.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202412/2018/6d3fddf363563ef352c729c8f5077056ab342fd0a9daae9b.png?w=1024",
+        "dimensions": "1024x1024",
+        "bytes": 175319,
+        "sha256": "7912f89e89204d79971055628cdd970d03ad1ac0d4425871a7dc0a0de445e9a0",
+        "role": "square cover",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "hero": {
+        "local": "assets/heroes/assassins-creed-shadows.jpg",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202502/2422/24a9ae73826a4d3aa7ae07f03e2d9e8f376a7bf7213aa869.jpg",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202502/2422/24a9ae73826a4d3aa7ae07f03e2d9e8f376a7bf7213aa869.jpg?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 111085,
+        "sha256": "4e04814720161d678d393e3f12473eb610beb0e0dff6b357bf2f30a3660218b5",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/assassins-creed-shadows.jpg",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      }
+    },
+    {
+      "id": "monster-hunter-wilds",
+      "title": "Monster Hunter Wilds",
+      "sourcePage": "https://www.playstation.com/en-us/games/monster-hunter-wilds/",
+      "sourceType": "Official PlayStation game page and its image.api.playstation.com CDN",
+      "cover": {
+        "local": "assets/covers/monster-hunter-wilds.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202409/0506/aa5c40ba185302dfcc88edc276a876fdc6c516c4db07ec9d.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202409/0506/aa5c40ba185302dfcc88edc276a876fdc6c516c4db07ec9d.png?w=1024",
+        "dimensions": "1024x1024",
+        "bytes": 248394,
+        "sha256": "0b157b4f10e67903ea8a23a09d993204c78841e6caf7ad37a149c5ab78f07b02",
+        "role": "square cover",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "hero": {
+        "local": "assets/heroes/monster-hunter-wilds.png",
+        "sourceUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202409/0506/22b81c7c1b280be4d2586529fc086646fd5d3912c95f74f8.png",
+        "retrievalUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202409/0506/22b81c7c1b280be4d2586529fc086646fd5d3912c95f74f8.png?w=1024",
+        "dimensions": "1440x810",
+        "bytes": 246869,
+        "sha256": "da23dda94dc1bb69436519a1a45e5e8431eed8347276db3cb9f828d6bdbcce36",
+        "role": "landscape hero/title artwork",
+        "licenseAvailability": "not established",
+        "rights": "Copyrighted PlayStation/publisher artwork; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+      },
+      "titleScreen": {
+        "local": "assets/heroes/monster-hunter-wilds.png",
+        "reusedBinaryFrom": "hero",
+        "note": "Catalog title-screen backdrop reuses the hero file; no duplicate binary downloaded."
+      }
+    }
+  ],
+  "icons": [
+    {
+      "name": "magnifying-glass",
+      "local": "assets/icons/magnifying-glass.svg",
+      "sourceUrl": "https://raw.githubusercontent.com/phosphor-icons/core/main/assets/regular/magnifying-glass.svg",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/phosphor-icons/core/blob/main/LICENSE",
+      "bytes": 243,
+      "sha256": "f9fa2561978a9a3291e8ae0ebfcb651104f5069fade8f84871627bca68889cde",
+      "rights": "Permissive MIT-licensed icon source; retain attribution/license review for distribution."
+    },
+    {
+      "name": "gear",
+      "local": "assets/icons/gear.svg",
+      "sourceUrl": "https://raw.githubusercontent.com/phosphor-icons/core/main/assets/regular/gear.svg",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/phosphor-icons/core/blob/main/LICENSE",
+      "bytes": 1977,
+      "sha256": "5c0cb3ba307c72babf78d952d9140c682ff30307fedc7fbb87c9a293c1e2fd64",
+      "rights": "Permissive MIT-licensed icon source; retain attribution/license review for distribution."
+    },
+    {
+      "name": "house",
+      "local": "assets/icons/house.svg",
+      "sourceUrl": "https://raw.githubusercontent.com/phosphor-icons/core/main/assets/regular/house.svg",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/phosphor-icons/core/blob/main/LICENSE",
+      "bytes": 356,
+      "sha256": "180e9259e99e23da197b59b19394d006d6a5d33e384cc2b9c8381cb0214a5716",
+      "rights": "Permissive MIT-licensed icon source; retain attribution/license review for distribution."
+    },
+    {
+      "name": "squares-four",
+      "local": "assets/icons/squares-four.svg",
+      "sourceUrl": "https://raw.githubusercontent.com/phosphor-icons/core/main/assets/regular/squares-four.svg",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/phosphor-icons/core/blob/main/LICENSE",
+      "bytes": 552,
+      "sha256": "f70d6b20e08e028ab5b1714077681910a2431092cf7a23b82366ddaec554ab87",
+      "rights": "Permissive MIT-licensed icon source; retain attribution/license review for distribution."
+    },
+    {
+      "name": "bell",
+      "local": "assets/icons/bell.svg",
+      "sourceUrl": "https://raw.githubusercontent.com/phosphor-icons/core/main/assets/regular/bell.svg",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/phosphor-icons/core/blob/main/LICENSE",
+      "bytes": 400,
+      "sha256": "439b02c746ff59945b6175c6d327113ca3f7a729a43d5bcafb278a0f11ee34b5",
+      "rights": "Permissive MIT-licensed icon source; retain attribution/license review for distribution."
+    },
+    {
+      "name": "users-three",
+      "local": "assets/icons/users-three.svg",
+      "sourceUrl": "https://raw.githubusercontent.com/phosphor-icons/core/main/assets/regular/users-three.svg",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/phosphor-icons/core/blob/main/LICENSE",
+      "bytes": 689,
+      "sha256": "0e326e4ef7d1ae16f9988791f68fde7bae513bdc8c06db437cfd55bf13670bcf",
+      "rights": "Permissive MIT-licensed icon source; retain attribution/license review for distribution."
+    },
+    {
+      "name": "music-note",
+      "local": "assets/icons/music-note.svg",
+      "sourceUrl": "https://raw.githubusercontent.com/phosphor-icons/core/main/assets/regular/music-note.svg",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/phosphor-icons/core/blob/main/LICENSE",
+      "bytes": 303,
+      "sha256": "433d99d789fa7f1f43fe9e75e68eb3c546ef7ea7a4c6545c73f2f48f32f376fa",
+      "rights": "Permissive MIT-licensed icon source; retain attribution/license review for distribution."
+    },
+    {
+      "name": "speaker-high",
+      "local": "assets/icons/speaker-high.svg",
+      "sourceUrl": "https://raw.githubusercontent.com/phosphor-icons/core/main/assets/regular/speaker-high.svg",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/phosphor-icons/core/blob/main/LICENSE",
+      "bytes": 514,
+      "sha256": "caca5fc1ee8489ac19232301d2c96f6d4048802491d75d761bbb89d5c98e459d",
+      "rights": "Permissive MIT-licensed icon source; retain attribution/license review for distribution."
+    },
+    {
+      "name": "microphone",
+      "local": "assets/icons/microphone.svg",
+      "sourceUrl": "https://raw.githubusercontent.com/phosphor-icons/core/main/assets/regular/microphone.svg",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/phosphor-icons/core/blob/main/LICENSE",
+      "bytes": 362,
+      "sha256": "b49dabfaf603e82594cef0c5e5784c747f4c098b7723d2973c92965745ca93a9",
+      "rights": "Permissive MIT-licensed icon source; retain attribution/license review for distribution."
+    },
+    {
+      "name": "game-controller",
+      "local": "assets/icons/game-controller.svg",
+      "sourceUrl": "https://raw.githubusercontent.com/phosphor-icons/core/main/assets/regular/game-controller.svg",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/phosphor-icons/core/blob/main/LICENSE",
+      "bytes": 789,
+      "sha256": "e4d7cff86ba6774845d3ef92628fd8ae95d817cc5cc0277306a057f493d6dca3",
+      "rights": "Permissive MIT-licensed icon source; retain attribution/license review for distribution."
+    },
+    {
+      "name": "power",
+      "local": "assets/icons/power.svg",
+      "sourceUrl": "https://raw.githubusercontent.com/phosphor-icons/core/main/assets/regular/power.svg",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/phosphor-icons/core/blob/main/LICENSE",
+      "bytes": 357,
+      "sha256": "7c493f7a807a08a5fcaadd33493fd4ad66cb0aa752a822c71a5f5cf5fd665b53",
+      "rights": "Permissive MIT-licensed icon source; retain attribution/license review for distribution."
+    },
+    {
+      "name": "trophy",
+      "local": "assets/icons/trophy.svg",
+      "sourceUrl": "https://raw.githubusercontent.com/phosphor-icons/core/main/assets/regular/trophy.svg",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/phosphor-icons/core/blob/main/LICENSE",
+      "bytes": 519,
+      "sha256": "45b065edc939de7246e5b5c114dd26b9bd6fb25f88013d6ab09e6cbbf76da9fa",
+      "rights": "Permissive MIT-licensed icon source; retain attribution/license review for distribution."
+    },
+    {
+      "name": "books",
+      "local": "assets/icons/books.svg",
+      "sourceUrl": "https://raw.githubusercontent.com/phosphor-icons/core/main/assets/regular/books.svg",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/phosphor-icons/core/blob/main/LICENSE",
+      "bytes": 676,
+      "sha256": "38560cd9dec996bc3f79c10675ced1d2b3bd2e5ef497f3966733e5d787af5e11",
+      "rights": "Permissive MIT-licensed icon source; retain attribution/license review for distribution."
+    }
+  ],
+  "references": [
+    {
+      "local": "docs/ps5-demo/references/approved-home-control-center.png",
+      "label": "Approved PS5 home/control-center visual reference (internal generated mock; not a rendered app background)",
+      "sourcePath": "/Users/saturno/.codex/generated_images/01a081a5-8919-7581-9022-95ec29b64afa/exec-b3cc8e0d-3074-42d3-8f96-a8f828d3372d.png",
+      "dimensions": "1672x941",
+      "bytes": 1949567,
+      "sha256": "ae3f2fb25c576a2bf3e5935a12aead02f1d2a246320959b423f020bd94fbba79",
+      "licenseAvailability": "internal reference; no external license asserted",
+      "rights": "Internal generated visual reference; no external license asserted."
+    },
+    {
+      "local": "docs/ps5-demo/references/ps5-settings-buttons.jpg",
+      "label": "PS5 Accessibility settings > Custom Button Assignments panel",
+      "sourcePage": "https://www.playstation.com/es-es/support/hardware/ps5-accessibility-settings/",
+      "sourceUrl": "https://gmedia.playstation.com/is/image/SIEPDC/ps5-accessibility-buttons-28feb22$es-es?$1600px$",
+      "dimensions": "1600x900",
+      "bytes": 408581,
+      "licenseAvailability": "not established",
+      "sha256": "461eab370cce07e866bee7ff26d5177267c8e7d62220e4c4f94dc206296bda80",
+      "rights": "Official PlayStation/PlayStation Blog reference image; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+    },
+    {
+      "local": "docs/ps5-demo/references/ps5-settings-display.jpg",
+      "label": "PS5 Accessibility settings > Display and Sound panel",
+      "sourcePage": "https://www.playstation.com/es-es/support/hardware/ps5-accessibility-settings/",
+      "sourceUrl": "https://gmedia.playstation.com/is/image/SIEPDC/ps5-accessibility-display-28feb22$es-es?$1600px$",
+      "dimensions": "1600x900",
+      "bytes": 440548,
+      "licenseAvailability": "not established",
+      "sha256": "a9bc3d7f8ce3f209b961fbef069a48ba0c68910c3b5ec471525f556f7c4bfb1d",
+      "rights": "Official PlayStation/PlayStation Blog reference image; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+    },
+    {
+      "local": "docs/ps5-demo/references/ps5-settings-reader.jpg",
+      "label": "PS5 Accessibility settings > Screen Reader panel",
+      "sourcePage": "https://www.playstation.com/es-es/support/hardware/ps5-accessibility-settings/",
+      "sourceUrl": "https://gmedia.playstation.com/is/image/SIEPDC/ps5-accessibility-reader-28feb22$es-es?$1600px$",
+      "dimensions": "1600x900",
+      "bytes": 440351,
+      "licenseAvailability": "not established",
+      "sha256": "1b8858c242a8f7bf234e6ac6d4b58a814475c5053f808e0766a9cf980d042f3f",
+      "rights": "Official PlayStation/PlayStation Blog reference image; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+    },
+    {
+      "local": "docs/ps5-demo/references/ps5-settings-captions.jpg",
+      "label": "PS5 Accessibility settings > Closed Captions panel",
+      "sourcePage": "https://www.playstation.com/es-es/support/hardware/ps5-accessibility-settings/",
+      "sourceUrl": "https://gmedia.playstation.com/is/image/SIEPDC/ps5-accessibility-captions-28feb22$es-es?$1600px$",
+      "dimensions": "1600x900",
+      "bytes": 417549,
+      "licenseAvailability": "not established",
+      "sha256": "ea5ee7fd7a1cac4bdb4d9e87349459ddd626679049faa017bc890b86e0dfb840",
+      "rights": "Official PlayStation/PlayStation Blog reference image; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+    },
+    {
+      "local": "docs/ps5-demo/references/ps5-settings-transcript.jpg",
+      "label": "PS5 Accessibility settings > Chat Transcription panel",
+      "sourcePage": "https://www.playstation.com/es-es/support/hardware/ps5-accessibility-settings/",
+      "sourceUrl": "https://gmedia.playstation.com/is/image/SIEPDC/ps5-accessibility-transcript-28feb22$es-es?$1600px$",
+      "dimensions": "1600x900",
+      "bytes": 463752,
+      "licenseAvailability": "not established",
+      "sha256": "c07fe11ca148be4fa86aa7c8f4738ae9b03cc5a2c79211140ec7f43e1cad72f1",
+      "rights": "Official PlayStation/PlayStation Blog reference image; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+    },
+    {
+      "local": "docs/ps5-demo/references/ps5-library-create-gamelist.jpg",
+      "label": "PS5 Create Gamelist icon only (not a full library screenshot)",
+      "sourcePage": "https://www.playstation.com/es-es/support/games/create-gamelist/",
+      "sourceUrl": "https://gmedia.playstation.com/is/image/SIEPDC/support-ps5-create-gamelist-06sep22$en?$1600px$",
+      "dimensions": "1600x1600",
+      "bytes": 326744,
+      "licenseAvailability": "not established",
+      "sha256": "2e2b2062d175d0a5e57a334adcf266df9654cdf07edbbe0c7ca96d9df0616d6a",
+      "rights": "Official PlayStation/PlayStation Blog reference image; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+    },
+    {
+      "local": "docs/ps5-demo/references/ps5-library-gamelist-view.jpg",
+      "label": "PS5 Game Library Gamelists/filter view (official blog screenshot)",
+      "sourcePage": "https://blog.playstation.com/2022/07/28/ps5-beta-introduces-1440p-support-gamelists-and-more/",
+      "sourceUrl": "https://blog.playstation.com/tachyon/2022/07/3b1a644099d4127e0bd97bc1484866d92c2a2e82-scaled.jpg?fit=1024%2C576",
+      "dimensions": "1024x576",
+      "bytes": 90477,
+      "licenseAvailability": "not established",
+      "sha256": "75697b8cd32fb604cc0c8eeb2000a6c80b338404cf4c866ec3c6e05e60f2ed50",
+      "rights": "Official PlayStation/PlayStation Blog reference image; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+    },
+    {
+      "local": "docs/ps5-demo/references/ps5-welcome-hub.jpg",
+      "label": "PS5 Welcome Hub reference (not a profile panel)",
+      "sourcePage": "https://www.playstation.com/en-us/support/account/welcome-hub/",
+      "sourceUrl": "https://gmedia.playstation.com/is/image/SIEPDC/support-welcome-hub-12mar25$en?$1600px$",
+      "dimensions": "1600x900",
+      "bytes": 572447,
+      "licenseAvailability": "not established",
+      "sha256": "aa6b9c6452dd6f38380819bcf47dbbbb127bf74b85ddec6c6ae7b76ef2eca603",
+      "rights": "Official PlayStation/PlayStation Blog reference image; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+    },
+    {
+      "local": "docs/ps5-demo/references/ps5-profile-friends-profile.jpg",
+      "label": "PS5 friend profile / Share Screen card overlay (not the user profile screen)",
+      "sourcePage": "https://blog.playstation.com/?p=374900",
+      "sourceUrl": "https://blog.playstation.com/tachyon/2023/02/16a2862a2b7f231549cb0d02275c6ae4aeda8e66.jpg?fit=1024%2C1024",
+      "dimensions": "1920x1080",
+      "bytes": 424383,
+      "licenseAvailability": "not established",
+      "sha256": "fcedf8491f82938170d0acd2294790b75f5c8f9681e383aff49f1effc8952918",
+      "rights": "Official PlayStation/PlayStation Blog reference image; source availability does not grant redistribution permission. Distribution review required; do not publish without clearance."
+    }
+  ]
+}

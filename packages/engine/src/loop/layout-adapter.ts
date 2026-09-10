@@ -378,15 +378,72 @@ export function createVexartLayoutCtx() {
       _nodeCount = 0
       _roots.length = 0
       _nodeStack.length = 0
+      _gridErrorStack.length = 0
+      _detachedRoots.length = 0
       _currentNode = null
       _pendingFlexNode = null
       _currentIdx = -1
       _nodeToIndex.clear()
       _lastLayoutMap = null
       _lastLayoutError = null
+
+      _allNodes.length = 0
+      _nodeIds.length = 0
+      _parentNodeIds.length = 0
+      _isFloating.length = 0
+      _isScrollX.length = 0
+      _isScrollY.length = 0
+      _zIndexes.length = 0
+      _floatingAttachTo.length = 0
+      _floatingOffsetsX.length = 0
+      _floatingOffsetsY.length = 0
+      _floatingElementPoints.length = 0
+      _floatingParentPoints.length = 0
+      _floatingTargetIds.length = 0
+      _elementKeys.length = 0
+      _bgColors.length = 0
+      _cornerRadii.length = 0
+      _borderColors.length = 0
+      _borderLeft.length = 0
+      _borderRight.length = 0
+      _borderTop.length = 0
+      _borderBottom.length = 0
+      _dfsIndexes.length = 0
+
+      _isText.length = 0
+      _textContents.length = 0
+      _textColors.length = 0
+      _textFontIds.length = 0
+      _textFontSizes.length = 0
+      _textLineHeights.length = 0
+      _textFontFamilies.length = 0
+      _textFontWeights.length = 0
+      _textFontStyles.length = 0
+      _textWhiteSpaces.length = 0
+      _textWordBreaks.length = 0
+
+      _effects.length = 0
+      _images.length = 0
+      _canvases.length = 0
+
+      _layoutMap.clear()
+      _childrenByParent.clear()
+      _scrollContainerIds.clear()
+      _textByNodeId.clear()
+      _cmds.length = 0
+
+      _absoluteX = new Float64Array(0)
+      _absoluteY = new Float64Array(0)
+      _absoluteState = new Uint8Array(0)
     },
 
     beginLayout() {
+      for (let i = _nodeCount; i < _allNodes.length; i++) {
+        _allNodes[i] = null as unknown as Node
+        _effects[i] = null
+        _images[i] = null
+        _canvases[i] = null
+      }
       _nodeCount = 0
       _nodeStack.length = 0
       _roots.length = 0
@@ -406,6 +463,12 @@ export function createVexartLayoutCtx() {
         _lastLayoutError = error
         // The previous map and command list are the only published frame.
         // Do not clear or rebuild either one for an invalid Grid pass.
+        for (let i = _nodeCount; i < _allNodes.length; i++) {
+          _allNodes[i] = null as unknown as Node
+          _effects[i] = null
+          _images[i] = null
+          _canvases[i] = null
+        }
         return _cmds
       }
       _lastLayoutError = null
@@ -628,6 +691,13 @@ export function createVexartLayoutCtx() {
 
       for (const childIdx of sortedChildIndices(0)) {
         emitNode(childIdx)
+      }
+
+      for (let i = _nodeCount; i < _allNodes.length; i++) {
+        _allNodes[i] = null as unknown as Node
+        _effects[i] = null
+        _images[i] = null
+        _canvases[i] = null
       }
 
       _lastLayoutMap = _layoutMap

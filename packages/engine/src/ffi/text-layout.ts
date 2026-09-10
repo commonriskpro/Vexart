@@ -37,6 +37,23 @@ export function registerFont(id: number, desc: FontDescriptor) {
   clearTextCache()
 }
 
+/** Unregister a font by ID. Returns false if id is 0 (default font cannot be unregistered). */
+/** @public */
+export function unregisterFont(id: number): boolean {
+  if (id === 0) return false
+  const deleted = fontRegistry.delete(id)
+  if (deleted) clearTextCache()
+  return deleted
+}
+
+/** Clear all registered fonts and restore default font (id 0). */
+/** @public */
+export function clearFontRegistry(): void {
+  fontRegistry.clear()
+  fontRegistry.set(0, { family: "sans-serif", size: 14 })
+  clearTextCache()
+}
+
 /** Get font descriptor by ID. Falls back to default. */
 /** @public */
 export function getFont(id: number): FontDescriptor {

@@ -7,6 +7,8 @@ import { TerminalContext } from "./terminal-context"
 export type CreateAppOptions = {
   /** Keys that trigger app exit. Default: ["ctrl+c"] */
   quit?: string[]
+  /** Optional pre-created terminal instance */
+  terminal?: Terminal
   /** Engine mount options (maxFps, experimental, etc.) */
   mount?: MountOptions
   /** Called when app is mounted and running */
@@ -37,7 +39,7 @@ export async function createApp(
 
   let terminal: Terminal
   try {
-    terminal = await createTerminal()
+    terminal = options.terminal ?? await createTerminal()
   } catch (err) {
     onError(toError(err))
     process.exit(1)
@@ -61,19 +63,40 @@ export async function createApp(
   }
 
   let closed = false
+  let stopInput: () => void = () => {}
+  const onSigint = () => {
+    ctx.destroy()
+    process.exit(130)
+  }
+  const onSigterm = () => {
+    ctx.destroy()
+    process.exit(143)
+  }
+  const onSighup = () => {
+    ctx.destroy()
+    process.exit(129)
+  }
+
+  process.prependListener("SIGINT", onSigint)
+  process.prependListener("SIGTERM", onSigterm)
+  process.prependListener("SIGHUP", onSighup)
+
   const ctx: AppContext = {
     terminal,
     handle,
     destroy: () => {
       if (closed) return
       closed = true
+      process.off("SIGINT", onSigint)
+      process.off("SIGTERM", onSigterm)
+      process.off("SIGHUP", onSighup)
       stopInput()
       handle.destroy()
       terminal.destroy()
     },
   }
 
-  const stopInput = onInput((event) => {
+  stopInput = onInput((event) => {
     if (event.type !== "key") return
     const key = normalizeInputKey(event)
     if (!quitSet.has(key)) return

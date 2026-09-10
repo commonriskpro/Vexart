@@ -119,8 +119,18 @@ export function pushFocusScope(): () => void {
   return () => {
     const idx = scopes.indexOf(scope)
     if (idx > 0) {
+      const wasActive = idx === scopes.length - 1
       scopes.splice(idx, 1)
-      setFocusedId(scope.previousFocusId)
+      if (wasActive) {
+        const reg = activeRegistry()
+        if (scope.previousFocusId && reg.some((e) => e.id === scope.previousFocusId)) {
+          setFocusedId(scope.previousFocusId)
+        } else if (reg.length > 0) {
+          setFocusedId(reg[0].id)
+        } else {
+          setFocusedId(null)
+        }
+      }
     }
   }
 }

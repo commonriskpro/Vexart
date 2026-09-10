@@ -46,7 +46,7 @@ import {
 } from "./paint"
 import type { createVexartLayoutCtx } from "./layout-adapter"
 import { summarizeRendererResourceStats } from "../ffi/resource-stats"
-import { hasCompositorAnimations, isCompositorOnlyFrame, resetFrameTracking } from "../animation/compositor-path"
+import { allDescriptors, hasCompositorAnimations, isCompositorOnlyFrame, resetFrameTracking } from "../animation/compositor-path"
 import { unionRect, type DamageRect } from "../ffi/damage"
 import type { Layer, LayerStoreHandle } from "../ffi/layers"
 import type { RendererBackend } from "../ffi/renderer-backend"
@@ -57,6 +57,19 @@ import { routeScrollDeltas, applyScrollOffsets } from "./composite-scroll"
 import { buildRetainedCompositorLayers } from "./composite-retained"
 
 let layerDirtyStore: Map<string, Layer> | null = null
+
+/** Internal compositor guard used before bypassing the normal paint pass. */
+export function compositorLayersAreRetained(
+  descriptors: ReadonlyArray<{ nodeId: number }>,
+  nodeRefById: Map<number, TGENode>,
+  layerCache: ReadonlyMap<string, Layer>,
+) {
+  return descriptors.every((descriptor) => {
+    const node = nodeRefById.get(descriptor.nodeId)
+    const key = `layer:${descriptor.nodeId}`
+    return node?._layerKey === key && layerCache.has(key)
+  })
+}
 
 export function bindLayerDirtyStore(store: Map<string, Layer>): void {
   layerDirtyStore = store
@@ -377,283 +390,314 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   const layoutStart = s.debugCadence ? performance.now() : 0
   const scrollStart = profile ? performance.now() : 0
 
-  // ── Step 1: Feed scroll + pointer state ──
-  const now = Date.now()
-  const dt = Math.min((now - s.lastFrameTime.value) / 1000, 0.1)
-  s.lastFrameTime.value = now
+  let inSync = false
+  let shouldClearDirtyOnError = true
 
-  // Route scroll deltas to the innermost scroll container at pointer position
-  let sdx = s.scroll.x
-  let sdy = s.scroll.y
-  if (s.walkCounters.scrollSpeedCap > 0 && (sdx !== 0 || sdy !== 0)) {
+  try {
+    // ── Step 1: Feed scroll + pointer state ──
+    const now = Date.now()
+    const dt = Math.min((now - s.lastFrameTime.value) / 1000, 0.1)
+    s.lastFrameTime.value = now
+
+    // Route scroll deltas to the innermost scroll container at pointer position
+    let sdx = s.scroll.x
+    let sdy = s.scroll.y
+    if (s.walkCounters.scrollSpeedCap > 0 && (sdx !== 0 || sdy !== 0)) {
+      const cellH = s.term.size.cellHeight || 16
+      const maxDelta = s.walkCounters.scrollSpeedCap * cellH
+      sdx = Math.max(-maxDelta, Math.min(maxDelta, sdx))
+      sdy = Math.max(-maxDelta, Math.min(maxDelta, sdy))
+    }
+    routeScrollDeltas(s, sdx, sdy)
+    s.scroll.x = 0
+    s.scroll.y = 0
+
+    // Post-scroll hooks
+    for (const cb of s.postScrollCallbacks) cb()
+    if (profile) profile.scrollMs = performance.now() - scrollStart
+
+    const backend = s.backendOverride!
+    // A node may be explicitly marked layer-backed for compositor animation,
+    // but layer discovery can intentionally keep a transformed descendant
+    // inside its scroll ancestor so the ancestor clip is not detached. In that
+    // case the retained layer cache does not own the animated node; repaint the
+    // normal tree instead of composing a stale/missing layer target.
+    const retainedLayersReady = compositorLayersAreRetained(allDescriptors(), s.nodeRefById, s.layerCache)
+    const compositorOnlyFrame = hasCompositorAnimations()
+      && isCompositorOnlyFrame()
+      && s.scroll.x === 0
+      && s.scroll.y === 0
+      && !s.pointer.pendingPress
+      && !s.pointer.pendingRelease
+      && !s.pointer.down
+      && !s.pointer.dirty
+      && !!backend.compositeRetainedFrame
+      && s.layerCache.size > 0
+      && retainedLayersReady
+
+    if (compositorOnlyFrame) {
+      const retainedPrepStart = profile ? performance.now() : 0
+      const retainedLayers = buildRetainedCompositorLayers(s.layerCache, s.nodeRefById)
+      if (profile) profile.paintLayerPrepMs = performance.now() - retainedPrepStart
+      const dirtyLayerCount = retainedLayers.filter((layer) => layer.opacity < 0.999 || !!layer.subtreeTransform).length
+      const dirtyPixelArea = retainedLayers.reduce((sum, layer) => sum + layer.bounds.width * layer.bounds.height, 0)
+      const totalPixelArea = Math.max(1, s.viewportWidth * s.viewportHeight)
+      const frameCtx = {
+        viewportWidth: s.viewportWidth,
+        viewportHeight: s.viewportHeight,
+        dirtyLayerCount,
+        layerCount: retainedLayers.length,
+        dirtyPixelArea,
+        totalPixelArea,
+        overlapPixelArea: 0,
+        overlapRatio: 0,
+        fullRepaint: false,
+        useLayerCompositing: s.useLayerCompositing,
+        hasSubtreeTransforms: retainedLayers.some((layer) => !!layer.subtreeTransform),
+        hasActiveInteraction: false,
+        transmissionMode: s.transmissionMode,
+        estimatedLayeredBytes: dirtyPixelArea * 4,
+        estimatedFinalBytes: totalPixelArea * 4,
+      } satisfies import("../ffi/renderer-backend").RendererBackendFrameContext
+      const beginSyncStart = profile ? performance.now() : 0
+      s.term.beginSync()
+      inSync = true
+      if (profile) profile.beginSyncMs = performance.now() - beginSyncStart
+      const retainedPaintStart = profile ? performance.now() : 0
+      const frameResult = backend.compositeRetainedFrame?.({ frame: frameCtx, layers: retainedLayers }) ?? null
+      if (profile) {
+        profile.paintBackendPaintMs = performance.now() - retainedPaintStart
+        const backendProfile = backend.drainProfile?.()
+        if (backendProfile) {
+          profile.paintBackendCompositeMs += backendProfile.compositeMs
+          profile.paintBackendReadbackMs += backendProfile.readbackMs
+          profile.paintBackendNativeEmitMs += backendProfile.nativeEmitMs
+          profile.paintBackendNativeReadbackMs += backendProfile.nativeReadbackMs
+          profile.paintBackendNativeCompressMs += backendProfile.nativeCompressMs
+          profile.paintBackendNativeShmPrepareMs += backendProfile.nativeShmPrepareMs
+          profile.paintBackendNativeWriteMs += backendProfile.nativeWriteMs
+          profile.paintBackendNativeRawBytes += backendProfile.nativeRawBytes
+          profile.paintBackendNativePayloadBytes += backendProfile.nativePayloadBytes
+          profile.paintBackendUniformMs += backendProfile.uniformUpdateMs
+        }
+        profile.paintMs = profile.paintBackendPaintMs
+        profile.commands = 0
+        profile.dirtyBefore = dirtyBeforeFrame
+        profile.repainted = 0
+      }
+      const endSyncStart = profile ? performance.now() : 0
+      s.term.endSync()
+      inSync = false
+      if (profile) profile.endSyncMs = performance.now() - endSyncStart
+      const resourceSummary = isDebugEnabled()
+        ? summarizeRendererResourceStats()
+        : { totalBytes: 0, gpuBytes: 0, cacheEntries: 0 }
+      debugUpdateStats({
+        commandCount: 0,
+        dirtyBeforeCount: dirtyBeforeFrame,
+        layerCount: s.layerStore.layerCount(),
+        moveOnlyCount: 0,
+        moveFallbackCount: 0,
+        stableReuseCount: retainedLayers.length,
+        nodeCount: s.nodeCountValue.value,
+        repaintedCount: 0,
+        rendererStrategy: frameResult?.strategy ?? "final-frame",
+        rendererOutput: frameResult?.output ?? "none",
+        dirtyPixelArea: frameCtx.dirtyPixelArea,
+        totalPixelArea: frameCtx.totalPixelArea,
+        overlapPixelArea: frameCtx.overlapPixelArea,
+        overlapRatio: frameCtx.overlapRatio,
+        fullRepaint: frameCtx.fullRepaint,
+        transmissionMode: frameCtx.transmissionMode,
+        estimatedLayeredBytes: frameCtx.estimatedLayeredBytes,
+        estimatedFinalBytes: frameCtx.estimatedFinalBytes,
+        interactionLatencyMs: s.interaction.lastPresentedInteractionLatencyMs.value,
+        interactionType: s.interaction.lastPresentedInteractionType.value,
+        presentedInteractionSeq: s.interaction.lastPresentedInteractionSeq.value,
+        resourceBytes: resourceSummary.totalBytes,
+        gpuResourceBytes: resourceSummary.gpuBytes,
+        resourceEntries: resourceSummary.cacheEntries,
+        nativeStats: frameResult?.output === "native-presented" ? (frameResult.stats ?? null) : null,
+        nativeFrameReasonFlags: null,
+      })
+      resetFrameTracking()
+      s.dirty.clearDirty(dirtyVersionAtFrameStart)
+      shouldClearDirtyOnError = false
+      return
+    }
+
+    // ── Step 2: Walk tree → Flexily layout ──
+    let commands = runLayoutPass(s, profile)
+    if (!commands) {
+      if (profile) profile.layoutMs = performance.now() - layoutStart
+      // Keep the dirty bit and pending damage: this frame was not presented and
+      // must be retried after the Grid snapshot is corrected.
+      shouldClearDirtyOnError = false
+      return
+    }
+
+    // ── Step 3: Interaction states ──
+    const interactionStart = profile ? performance.now() : 0
+    const interactionDirtyVersion = s.dirty.dirtyVersion()
+    const interaction = updateInteractiveStates(s)
+    if (profile) profile.interactionMs = performance.now() - interactionStart
+
+    // Pointer callbacks may synchronously mutate Solid state (for example a
+    // tooltip becoming visible on first hover). Reconciliation inserts the new
+    // subtree after the initial walk, so its first layout is otherwise left at
+    // zero until the next frame. A dirty-version change is the narrow signal
+    // that the interaction callback changed the scene graph; re-run walk/layout
+    // before painting this frame.
+    const interactionMutatedTree = s.dirty.dirtyVersion() !== interactionDirtyVersion
+
+    // Re-layout on interactive state changes that affect layout (HP-5 optimization).
+    // Only borderWidth among InteractiveStyleProps affects layout — all others
+    // (backgroundColor, shadow, opacity, etc.) are visual-only and only need repaint.
+    // Clicks always trigger re-layout because onPress handlers may mutate state.
+    if (interaction.hadClick || interaction.needsRelayout || interactionMutatedTree) {
+      const relayoutStart = profile ? performance.now() : 0
+      const relayoutCommands = runLayoutPass(s)
+      if (!relayoutCommands) {
+        shouldClearDirtyOnError = false
+        return
+      }
+      commands = relayoutCommands
+      if (profile) profile.relayoutMs = performance.now() - relayoutStart
+    }
+
+    if (profile) profile.layoutMs = performance.now() - layoutStart
+
+    if (commands.length === 0) {
+      s.dirty.clearDirty(dirtyVersionAtFrameStart)
+      shouldClearDirtyOnError = false
+      return
+    }
+
+    const prepStart = s.debugCadence ? performance.now() : 0
+    const layerAssignStart = profile ? performance.now() : 0
+
+    // ── Step 4: Layer boundary + slot assignment ──
+    const boundaries = s.forceLayerRepaint
+      ? s.layerBoundaries.filter((boundary) => s.nodeRefById.get(boundary.nodeId)?._autoLayer !== true)
+      : s.layerBoundaries
+    const assignState: AssignLayersState = { root: s.root, collectText, nodeRefById: s.nodeRefById, scrollContainers: s.scrollContainers }
+    const { bgSlot, contentSlots, slotBoundaryByKey } = _assignLayersSpatial(commands, boundaries, assignState)
+
+    if (contentSlots.length === 0 && commands.length > bgSlot.cmdIndices.length) {
+      const fallbackSlot: LayerSlot = { key: "layer:fallback", z: 0, cmdIndices: [] }
+      for (let i = 0; i < commands.length; i++) {
+        if (!bgSlot.cmdIndices.includes(i)) fallbackSlot.cmdIndices.push(i)
+      }
+      if (fallbackSlot.cmdIndices.length > 0) contentSlots.push(fallbackSlot)
+    }
+
+    const cellW = s.term.size.cellWidth || 8
     const cellH = s.term.size.cellHeight || 16
-    const maxDelta = s.walkCounters.scrollSpeedCap * cellH
-    sdx = Math.max(-maxDelta, Math.min(maxDelta, sdx))
-    sdy = Math.max(-maxDelta, Math.min(maxDelta, sdy))
-  }
-  routeScrollDeltas(s, sdx, sdy)
-  s.scroll.x = 0
-  s.scroll.y = 0
 
-  // Post-scroll hooks
-  for (const cb of s.postScrollCallbacks) cb()
-  if (profile) profile.scrollMs = performance.now() - scrollStart
+    s.debug.log(`[frame] cmds=${commands.length} layers=${1 + contentSlots.length} slots=[${[bgSlot, ...contentSlots].map(sl => `${sl.key}(${sl.cmdIndices.length})`).join(',')}]`)
+    s.debug.renderDebug(`[frame:start] cmds=${commands.length} layers=${1 + contentSlots.length}`)
 
-  const backend = s.backendOverride!
-  const compositorOnlyFrame = hasCompositorAnimations()
-    && isCompositorOnlyFrame()
-    && s.scroll.x === 0
-    && s.scroll.y === 0
-    && !s.pointer.pendingPress
-    && !s.pointer.pendingRelease
-    && !s.pointer.down
-    && !s.pointer.dirty
-    && !!backend.compositeRetainedFrame
-    && s.layerCache.size > 0
+    if (profile) {
+      profile.layerAssignMs = performance.now() - layerAssignStart
+      profile.prepMs = performance.now() - prepStart
+      profile.commands = commands.length
+      profile.dirtyBefore = dirtyBeforeFrame
+    }
 
-  if (compositorOnlyFrame) {
-    const retainedPrepStart = profile ? performance.now() : 0
-    const retainedLayers = buildRetainedCompositorLayers(s.layerCache, s.nodeRefById)
-    if (profile) profile.paintLayerPrepMs = performance.now() - retainedPrepStart
-    const dirtyLayerCount = retainedLayers.filter((layer) => layer.opacity < 0.999 || !!layer.subtreeTransform).length
-    const dirtyPixelArea = retainedLayers.reduce((sum, layer) => sum + layer.bounds.width * layer.bounds.height, 0)
-    const totalPixelArea = Math.max(1, s.viewportWidth * s.viewportHeight)
-    const frameCtx = {
+    // ── Step 5: beginSync → paint → endSync ──
+    const beginSyncStart = s.debugCadence ? performance.now() : 0
+    s.term.beginSync()
+    inSync = true
+    if (profile) profile.beginSyncMs = performance.now() - beginSyncStart
+
+    const paintStart = s.debugCadence ? performance.now() : 0
+    const paintState: PaintFrameState = {
       viewportWidth: s.viewportWidth,
       viewportHeight: s.viewportHeight,
-      dirtyLayerCount,
-      layerCount: retainedLayers.length,
-      dirtyPixelArea,
-      totalPixelArea,
-      overlapPixelArea: 0,
-      overlapRatio: 0,
-      fullRepaint: false,
-      useLayerCompositing: s.useLayerCompositing,
-      hasSubtreeTransforms: retainedLayers.some((layer) => !!layer.subtreeTransform),
-      hasActiveInteraction: false,
       transmissionMode: s.transmissionMode,
-      estimatedLayeredBytes: dirtyPixelArea * 4,
-      estimatedFinalBytes: totalPixelArea * 4,
-    } satisfies import("../ffi/renderer-backend").RendererBackendFrameContext
-    const beginSyncStart = profile ? performance.now() : 0
-    s.term.beginSync()
-    if (profile) profile.beginSyncMs = performance.now() - beginSyncStart
-    const retainedPaintStart = profile ? performance.now() : 0
-    const frameResult = backend.compositeRetainedFrame?.({ frame: frameCtx, layers: retainedLayers }) ?? null
-    if (profile) {
-      profile.paintBackendPaintMs = performance.now() - retainedPaintStart
-      const backendProfile = backend.drainProfile?.()
-      if (backendProfile) {
-        profile.paintBackendCompositeMs += backendProfile.compositeMs
-        profile.paintBackendReadbackMs += backendProfile.readbackMs
-        profile.paintBackendNativeEmitMs += backendProfile.nativeEmitMs
-        profile.paintBackendNativeReadbackMs += backendProfile.nativeReadbackMs
-        profile.paintBackendNativeCompressMs += backendProfile.nativeCompressMs
-        profile.paintBackendNativeShmPrepareMs += backendProfile.nativeShmPrepareMs
-        profile.paintBackendNativeWriteMs += backendProfile.nativeWriteMs
-        profile.paintBackendNativeRawBytes += backendProfile.nativeRawBytes
-        profile.paintBackendNativePayloadBytes += backendProfile.nativePayloadBytes
-        profile.paintBackendUniformMs += backendProfile.uniformUpdateMs
-      }
-      profile.paintMs = profile.paintBackendPaintMs
-      profile.commands = 0
-      profile.dirtyBefore = dirtyBeforeFrame
-      profile.repainted = 0
+      useLayerCompositing: s.useLayerCompositing,
+      forceLayerRepaint: s.forceLayerRepaint,
+      expFrameBudgetMs: s.expFrameBudgetMs,
+      debugCadence: s.debugCadence,
+      debugDragRepro: s.debugDragRepro,
+      layerStore: s.layerStore,
+      layerCache: s.layerCache,
+      activeSlotKeys: s.activeSlotKeys,
+      suppressNativeLayerDeletes: s.term.caps.tmux && s.term.caps.kittyPlaceholder,
+      frameDirtyRects: s.frameDirtyRects,
+      pendingNodeDamageRects: s.pendingNodeDamageRects,
+      nodeRefById: s.nodeRefById,
+
+      backendOverride: s.backendOverride,
+      interaction: s.interaction,
+      debug: s.debug,
+      profile,
     }
-    const endSyncStart = profile ? performance.now() : 0
-    s.term.endSync()
-    if (profile) profile.endSyncMs = performance.now() - endSyncStart
+    const layerPlan = { bgSlot, contentSlots, slotBoundaryByKey, boundaries }
+    const paintResult = _paintFrame(layerPlan, commands, cellW, cellH, paintState)
+    s.pendingNodeDamageRects.length = 0
+
+    // Write back interaction latency from paint state bag
+    s.interaction.lastPresentedInteractionSeq.value = paintState.interaction.lastPresentedInteractionSeq.value
+    s.interaction.lastPresentedInteractionLatencyMs.value = paintState.interaction.lastPresentedInteractionLatencyMs.value
+    s.interaction.lastPresentedInteractionType.value = paintState.interaction.lastPresentedInteractionType.value
+
+    // Override debug stats with coordinator-owned values (nodeCount, dirtyBefore)
     const resourceSummary = isDebugEnabled()
       ? summarizeRendererResourceStats()
       : { totalBytes: 0, gpuBytes: 0, cacheEntries: 0 }
     debugUpdateStats({
-      commandCount: 0,
+      commandCount: paintResult.commandCount,
       dirtyBeforeCount: dirtyBeforeFrame,
       layerCount: s.layerStore.layerCount(),
-      moveOnlyCount: 0,
-      moveFallbackCount: 0,
-      stableReuseCount: retainedLayers.length,
+      moveOnlyCount: paintResult.moveOnlyCount,
+      moveFallbackCount: paintResult.moveFallbackCount,
+      stableReuseCount: paintResult.stableReuseCount,
       nodeCount: s.nodeCountValue.value,
-      repaintedCount: 0,
-      rendererStrategy: frameResult?.strategy ?? "final-frame",
-      rendererOutput: frameResult?.output ?? "none",
-      dirtyPixelArea: frameCtx.dirtyPixelArea,
-      totalPixelArea: frameCtx.totalPixelArea,
-      overlapPixelArea: frameCtx.overlapPixelArea,
-      overlapRatio: frameCtx.overlapRatio,
-      fullRepaint: frameCtx.fullRepaint,
-      transmissionMode: frameCtx.transmissionMode,
-      estimatedLayeredBytes: frameCtx.estimatedLayeredBytes,
-      estimatedFinalBytes: frameCtx.estimatedFinalBytes,
+      repaintedCount: paintResult.repaintedThisFrame,
+      rendererStrategy: paintResult.frameResult?.strategy ?? null,
+      rendererOutput: paintResult.rendererOutput,
+      dirtyPixelArea: paintResult.frameCtx.dirtyPixelArea,
+      totalPixelArea: paintResult.frameCtx.totalPixelArea,
+      overlapPixelArea: paintResult.frameCtx.overlapPixelArea,
+      overlapRatio: paintResult.frameCtx.overlapRatio,
+      fullRepaint: paintResult.frameCtx.fullRepaint,
+      transmissionMode: paintResult.frameCtx.transmissionMode,
+      estimatedLayeredBytes: paintResult.frameCtx.estimatedLayeredBytes,
+      estimatedFinalBytes: paintResult.frameCtx.estimatedFinalBytes,
       interactionLatencyMs: s.interaction.lastPresentedInteractionLatencyMs.value,
       interactionType: s.interaction.lastPresentedInteractionType.value,
       presentedInteractionSeq: s.interaction.lastPresentedInteractionSeq.value,
       resourceBytes: resourceSummary.totalBytes,
       gpuResourceBytes: resourceSummary.gpuBytes,
       resourceEntries: resourceSummary.cacheEntries,
-      nativeStats: frameResult?.output === "native-presented" ? (frameResult.stats ?? null) : null,
-      nativeFrameReasonFlags: null,
+      nativeFrameReasonFlags: paintResult.framePlan?.nativePlan?.reasonFlags ?? null,
     })
-    resetFrameTracking()
-    s.dirty.clearDirty(dirtyVersionAtFrameStart)
-    return
-  }
 
-  // ── Step 2: Walk tree → Flexily layout ──
-  let commands = runLayoutPass(s, profile)
-  if (!commands) {
-    if (profile) profile.layoutMs = performance.now() - layoutStart
-    // Keep the dirty bit and pending damage: this frame was not presented and
-    // must be retried after the Grid snapshot is corrected.
-    return
-  }
-
-  // ── Step 3: Interaction states ──
-  const interactionStart = profile ? performance.now() : 0
-  const interactionDirtyVersion = s.dirty.dirtyVersion()
-  const interaction = updateInteractiveStates(s)
-  if (profile) profile.interactionMs = performance.now() - interactionStart
-
-  // Pointer callbacks may synchronously mutate Solid state (for example a
-  // tooltip becoming visible on first hover). Reconciliation inserts the new
-  // subtree after the initial walk, so its first layout is otherwise left at
-  // zero until the next frame. A dirty-version change is the narrow signal
-  // that the interaction callback changed the scene graph; re-run walk/layout
-  // before painting this frame.
-  const interactionMutatedTree = s.dirty.dirtyVersion() !== interactionDirtyVersion
-
-  // Re-layout on interactive state changes that affect layout (HP-5 optimization).
-  // Only borderWidth among InteractiveStyleProps affects layout — all others
-  // (backgroundColor, shadow, opacity, etc.) are visual-only and only need repaint.
-  // Clicks always trigger re-layout because onPress handlers may mutate state.
-  if (interaction.hadClick || interaction.needsRelayout || interactionMutatedTree) {
-    const relayoutStart = profile ? performance.now() : 0
-    const relayoutCommands = runLayoutPass(s)
-    if (!relayoutCommands) return
-    commands = relayoutCommands
-    if (profile) profile.relayoutMs = performance.now() - relayoutStart
-  }
-
-  if (profile) profile.layoutMs = performance.now() - layoutStart
-
-  if (commands.length === 0) {
-    s.dirty.clearDirty(dirtyVersionAtFrameStart)
-    return
-  }
-
-  const prepStart = s.debugCadence ? performance.now() : 0
-  const layerAssignStart = profile ? performance.now() : 0
-
-  // ── Step 4: Layer boundary + slot assignment ──
-  const boundaries = s.forceLayerRepaint
-    ? s.layerBoundaries.filter((boundary) => s.nodeRefById.get(boundary.nodeId)?._autoLayer !== true)
-    : s.layerBoundaries
-  const assignState: AssignLayersState = { root: s.root, collectText, nodeRefById: s.nodeRefById, scrollContainers: s.scrollContainers }
-  const { bgSlot, contentSlots, slotBoundaryByKey } = _assignLayersSpatial(commands, boundaries, assignState)
-
-  if (contentSlots.length === 0 && commands.length > bgSlot.cmdIndices.length) {
-    const fallbackSlot: LayerSlot = { key: "layer:fallback", z: 0, cmdIndices: [] }
-    for (let i = 0; i < commands.length; i++) {
-      if (!bgSlot.cmdIndices.includes(i)) fallbackSlot.cmdIndices.push(i)
+    if (profile) {
+      const totalPaintMs = performance.now() - paintStart
+      profile.ioMs = paintResult.ioMs
+      profile.paintMs = Math.max(0, totalPaintMs - paintResult.ioMs)
     }
-    if (fallbackSlot.cmdIndices.length > 0) contentSlots.push(fallbackSlot)
+
+    const endSyncStart = s.debugCadence ? performance.now() : 0
+    s.term.endSync()
+    inSync = false
+    if (profile) {
+      profile.endSyncMs = performance.now() - endSyncStart
+      profile.repainted = paintResult.repaintedThisFrame
+    }
+
+    s.dirty.clearDirty(dirtyVersionAtFrameStart)
+    resetFrameTracking()
+    shouldClearDirtyOnError = false
+  } finally {
+    if (inSync) {
+      try { s.term.endSync() } catch {}
+    }
+    if (shouldClearDirtyOnError) {
+      s.dirty.clearDirty(dirtyVersionAtFrameStart)
+      resetFrameTracking()
+    }
   }
-
-  const cellW = s.term.size.cellWidth || 8
-  const cellH = s.term.size.cellHeight || 16
-
-  s.debug.log(`[frame] cmds=${commands.length} layers=${1 + contentSlots.length} slots=[${[bgSlot, ...contentSlots].map(sl => `${sl.key}(${sl.cmdIndices.length})`).join(',')}]`)
-  s.debug.renderDebug(`[frame:start] cmds=${commands.length} layers=${1 + contentSlots.length}`)
-
-  if (profile) {
-    profile.layerAssignMs = performance.now() - layerAssignStart
-    profile.prepMs = performance.now() - prepStart
-    profile.commands = commands.length
-    profile.dirtyBefore = dirtyBeforeFrame
-  }
-
-  // ── Step 5: beginSync → paint → endSync ──
-  const beginSyncStart = s.debugCadence ? performance.now() : 0
-  s.term.beginSync()
-  if (profile) profile.beginSyncMs = performance.now() - beginSyncStart
-
-  const paintStart = s.debugCadence ? performance.now() : 0
-  const paintState: PaintFrameState = {
-    viewportWidth: s.viewportWidth,
-    viewportHeight: s.viewportHeight,
-    transmissionMode: s.transmissionMode,
-    useLayerCompositing: s.useLayerCompositing,
-    forceLayerRepaint: s.forceLayerRepaint,
-    expFrameBudgetMs: s.expFrameBudgetMs,
-    debugCadence: s.debugCadence,
-    debugDragRepro: s.debugDragRepro,
-    layerStore: s.layerStore,
-    layerCache: s.layerCache,
-    activeSlotKeys: s.activeSlotKeys,
-    suppressNativeLayerDeletes: s.term.caps.tmux && s.term.caps.kittyPlaceholder,
-    frameDirtyRects: s.frameDirtyRects,
-    pendingNodeDamageRects: s.pendingNodeDamageRects,
-    nodeRefById: s.nodeRefById,
-
-    backendOverride: s.backendOverride,
-    interaction: s.interaction,
-    debug: s.debug,
-    profile,
-  }
-  const layerPlan = { bgSlot, contentSlots, slotBoundaryByKey, boundaries }
-  const paintResult = _paintFrame(layerPlan, commands, cellW, cellH, paintState)
-  s.pendingNodeDamageRects.length = 0
-
-  // Write back interaction latency from paint state bag
-  s.interaction.lastPresentedInteractionSeq.value = paintState.interaction.lastPresentedInteractionSeq.value
-  s.interaction.lastPresentedInteractionLatencyMs.value = paintState.interaction.lastPresentedInteractionLatencyMs.value
-  s.interaction.lastPresentedInteractionType.value = paintState.interaction.lastPresentedInteractionType.value
-
-  // Override debug stats with coordinator-owned values (nodeCount, dirtyBefore)
-  const resourceSummary = isDebugEnabled()
-    ? summarizeRendererResourceStats()
-    : { totalBytes: 0, gpuBytes: 0, cacheEntries: 0 }
-  debugUpdateStats({
-    commandCount: paintResult.commandCount,
-    dirtyBeforeCount: dirtyBeforeFrame,
-    layerCount: s.layerStore.layerCount(),
-    moveOnlyCount: paintResult.moveOnlyCount,
-    moveFallbackCount: paintResult.moveFallbackCount,
-    stableReuseCount: paintResult.stableReuseCount,
-    nodeCount: s.nodeCountValue.value,
-    repaintedCount: paintResult.repaintedThisFrame,
-    rendererStrategy: paintResult.frameResult?.strategy ?? null,
-    rendererOutput: paintResult.rendererOutput,
-    dirtyPixelArea: paintResult.frameCtx.dirtyPixelArea,
-    totalPixelArea: paintResult.frameCtx.totalPixelArea,
-    overlapPixelArea: paintResult.frameCtx.overlapPixelArea,
-    overlapRatio: paintResult.frameCtx.overlapRatio,
-    fullRepaint: paintResult.frameCtx.fullRepaint,
-    transmissionMode: paintResult.frameCtx.transmissionMode,
-    estimatedLayeredBytes: paintResult.frameCtx.estimatedLayeredBytes,
-    estimatedFinalBytes: paintResult.frameCtx.estimatedFinalBytes,
-    interactionLatencyMs: s.interaction.lastPresentedInteractionLatencyMs.value,
-    interactionType: s.interaction.lastPresentedInteractionType.value,
-    presentedInteractionSeq: s.interaction.lastPresentedInteractionSeq.value,
-    resourceBytes: resourceSummary.totalBytes,
-    gpuResourceBytes: resourceSummary.gpuBytes,
-    resourceEntries: resourceSummary.cacheEntries,
-    nativeFrameReasonFlags: paintResult.framePlan?.nativePlan?.reasonFlags ?? null,
-  })
-
-  if (profile) {
-    const totalPaintMs = performance.now() - paintStart
-    profile.ioMs = paintResult.ioMs
-    profile.paintMs = Math.max(0, totalPaintMs - paintResult.ioMs)
-  }
-
-  const endSyncStart = s.debugCadence ? performance.now() : 0
-  s.term.endSync()
-  if (profile) {
-    profile.endSyncMs = performance.now() - endSyncStart
-    profile.repainted = paintResult.repaintedThisFrame
-  }
-
-  s.dirty.clearDirty(dirtyVersionAtFrameStart)
-  resetFrameTracking()
 }

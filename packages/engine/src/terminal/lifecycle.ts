@@ -125,36 +125,40 @@ export function leave(
   if (!state.active) return
   state.active = false
 
+  let seq = ""
+
   // Disable the keyboard mode negotiated on enter.
   if (caps.tmux) {
-    write(ESC.tmuxExtendedKeysLeave)
+    seq += ESC.tmuxExtendedKeysLeave
   } else if (caps.kittyKeyboard) {
-    write(ESC.kittyKbLeave)
+    seq += ESC.kittyKbLeave
   }
 
   // Disable bracketed paste
   if (caps.bracketedPaste) {
-    write(ESC.pasteLeave)
+    seq += ESC.pasteLeave
   }
 
   // Disable focus events
   if (caps.focus) {
-    write(ESC.focusLeave)
+    seq += ESC.focusLeave
   }
 
   // Disable mouse tracking
   if (caps.mouse) {
-    write(ESC.mouseLeave)
+    seq += ESC.mouseLeave
   }
 
   // Reset attributes
-  write(ESC.reset)
+  seq += ESC.reset
 
   // Show cursor
-  write(ESC.cursorShow)
+  seq += ESC.cursorShow
 
   // Leave alternate screen — restores scrollback
-  write(ESC.altScreenLeave)
+  seq += ESC.altScreenLeave
+
+  write(seq)
 
   // Restore raw mode to original state
   if (stdin.isTTY && !state.rawModeWas) {
@@ -185,6 +189,7 @@ export function installExitHandlers(
   caps: Capabilities,
   state: LifecycleState,
   beforeLeave?: () => void,
+  syncWrite?: (data: string) => void,
 ): () => void {
   let cleaned = false
   const cleanup = () => {
@@ -193,7 +198,7 @@ export function installExitHandlers(
     try {
       beforeLeave?.()
     } finally {
-      leave(stdin, write, caps, state)
+      leave(stdin, syncWrite ?? write, caps, state)
     }
   }
 

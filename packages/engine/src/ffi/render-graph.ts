@@ -274,6 +274,25 @@ export type RenderGraphFrame = {
 type ClipStackEntry = {
   bounds: RenderBounds
   id: number
+  /** Scroll node that introduced the clip, when available. Internal only. */
+  nodeId?: number
+}
+
+// Clip provenance is deliberately kept out of RenderGraphOp's public shape.
+// Layer isolation needs to know whether a clip belongs to an ancestor of the
+// isolated subtree (apply it after the subtree transform) or was introduced
+// inside the subtree (apply it while rasterizing the source). A flattened
+// rectangle cannot preserve that distinction, so retain it in an internal
+// side table instead of widening the public render-graph API.
+const renderOpClipStacks = new WeakMap<object, ClipStackEntry[]>()
+
+export function getRenderOpClipStack(op: RenderGraphOp) {
+  return renderOpClipStacks.get(op) ?? []
+}
+
+/** Internal bridge for isolated source ops cloned by the GPU backend. */
+export function setRenderOpClipStack(op: RenderGraphOp, stack: ClipStackEntry[]) {
+  renderOpClipStacks.set(op, stack)
 }
 
 
@@ -395,9 +414,21 @@ function expandBounds(bounds: RenderBounds, pad: number) {
 
 function getCurrentClipBounds(stack: ClipStackEntry[]) {
   let bounds: RenderBounds | null = null
-  for (const entry of stack) {
+  for (let index = 0; index < stack.length; index++) {
+    const entry = stack[index]
     bounds = bounds ? intersectBounds(bounds, entry.bounds) : entry.bounds
-    if (!bounds) return null
+    if (!bounds) {
+      // Keep an empty clip distinguishable from an absent clip. The backend
+      // treats a zero-area scissor as "paint nothing"; null means that no
+      // scissor is active and must not accidentally become unrestricted.
+      const last = stack[index - 1] ?? entry
+      return createRenderBounds(
+        Math.max(last.bounds.x, entry.bounds.x),
+        Math.max(last.bounds.y, entry.bounds.y),
+        0,
+        0,
+      )
+    }
   }
   return bounds
 }
@@ -544,7 +575,9 @@ function createBackdropMetadata(effect: EffectConfig, command: RenderCommand, cl
   if (!hasBackdropEffect(effect)) return null
   const inputBounds = boundsFromCommand(command)
   const stackClipBounds = getCurrentClipBounds(clipStack)
-  const clipBounds = stackClipBounds ? intersectBounds(inputBounds, stackClipBounds) ?? inputBounds : inputBounds
+  const clipBounds = stackClipBounds
+    ? intersectBounds(inputBounds, stackClipBounds) ?? createRenderBounds(stackClipBounds.x, stackClipBounds.y, 0, 0)
+    : inputBounds
   const outputBounds = clipBounds
   const blurPad = effect.backdropBlur ? Math.ceil(effect.backdropBlur) : 0
   const sampleBounds = expandBounds(outputBounds, blurPad)
@@ -572,6 +605,7 @@ function createClipStackEntry(cmd: RenderCommand, depth: number): ClipStackEntry
   return {
     bounds,
     id,
+    nodeId: cmd.nodeId,
   }
 }
 
@@ -673,16 +707,20 @@ export function buildRenderGraphFrame(
     const clipBounds = getCurrentClipBounds(clipStack)
     if (op?.kind === "effect") {
       const backdrop = createBackdropMetadata(op.effect, cmd, clipStack)
-      ops.push({
+      const output = {
         ...op,
         clipBounds,
         backdrop,
         transformStateId: backdrop?.transformStateId ?? getTransformStateId(op.effect),
         clipStateId: backdrop?.clipStateId ?? createClipStateId(clipStack),
         effectStateId: backdrop?.effectStateId ?? getEffectStateId(op.effect, Math.round(op.cornerRadius)),
-      })
+      }
+      renderOpClipStacks.set(output, clipStack.slice())
+      ops.push(output)
     } else if (op) {
-      ops.push({ ...op, clipBounds })
+      const output = { ...op, clipBounds }
+      renderOpClipStacks.set(output, clipStack.slice())
+      ops.push(output)
     }
   }
   return { ops }

@@ -37,8 +37,8 @@ function layoutState(root: TGENode) {
     layout,
   })
 
-  const commands = layout.endLayout()
-  const map = layout.getLastLayoutMap()
+  const commands = [...layout.endLayout()]
+  const map = layout.getLastLayoutMap() ? new Map(layout.getLastLayoutMap()!) : null
   layout.destroy()
   return { commands, map }
 }

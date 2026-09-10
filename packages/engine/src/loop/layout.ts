@@ -24,7 +24,7 @@ import {
   isIdentity,
 } from "../ffi/matrix"
 import { focusedId, setFocusedId, getNodeFocusId } from "../reconciler/focus"
-import { buildNodeMouseEvent, isFullyOutsideScrollViewport } from "../reconciler/hit-test"
+import { buildNodeMouseEvent, getEffectivePosition, isFullyOutsideScrollViewport, isPointInsideScrollViewports } from "../reconciler/hit-test"
 import { isInteractiveNode } from "./predicates"
 
 // ── Layout writeback ──────────────────────────────────────────────────────
@@ -336,12 +336,13 @@ function hitTestNode(
   scrollOffsets: Map<number, { x: number; y: number }>,
 ): boolean {
   if (isCaptured) return true
+  if (!isPointInsideScrollViewports(node, pointerX, pointerY, scrollOffsets)) return false
   const l = node.layout
 
   // HP-6: Compute effective screen position with scroll offset
-  const scrollOffset = node._scrollContainerId !== 0 ? scrollOffsets.get(node._scrollContainerId) : undefined
-  const effectiveX = l.x + (scrollOffset?.x ?? 0)
-  const effectiveY = l.y + (scrollOffset?.y ?? 0)
+  const effectivePosition = getEffectivePosition(node, scrollOffsets)
+  const effectiveX = effectivePosition.x
+  const effectiveY = effectivePosition.y
 
   // Transform-aware hit-test: use accumulated inverse matrix if present
   const hitInverse = node._accTransformInverse ?? node._transformInverse

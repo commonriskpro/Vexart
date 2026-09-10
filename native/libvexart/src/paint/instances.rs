@@ -405,7 +405,8 @@ pub struct BridgeImageInstance {
     pub _pad2: f32,
 }
 
-/// Mirrors bridge ImageTransformInstance (12 floats: p0(4 floats) + p1(4 floats) + opacity + 3 pad).
+/// Mirrors bridge ImageTransformInstance (12 floats: p0(4 floats) + p1(4 floats)
+/// + opacity + signed object-fit crop/inset fractions + trailing pad).
 /// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
@@ -419,8 +420,10 @@ pub struct BridgeImageTransformInstance {
     pub p3x: f32,
     pub p3y: f32,
     pub opacity: f32,
-    pub _pad0: f32,
-    pub _pad1: f32,
+    /// Positive values crop centered source UVs (cover); negative values inset
+    /// destination UVs (contain). Zero keeps the historical fill behavior.
+    pub fit_x: f32,
+    pub fit_y: f32,
     pub _pad2: f32,
 }
 

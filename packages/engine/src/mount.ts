@@ -206,7 +206,9 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
     markDirty()
     loop.requestInteractionFrame("key")
   })
-  const unsubData = terminal.onData((data) => parser.feed(data))
+  const unsubData = terminal.onData((data) => {
+    parser.feed(data)
+  })
 
   loop.start()
 
@@ -218,10 +220,10 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
       unsubData()
       unsubResize()
       parser.destroy()
+      dispose()
       unbindLoop()
       resetFocus()
       resetSelection()
-      dispose()
       loop.destroy()
     },
   }

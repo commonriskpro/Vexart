@@ -1,5 +1,5 @@
 import type { InteractiveStyleProps } from "@vexart/engine"
-import { themeColors, font, radius, shadows, glows, space, weight } from "@vexart/styled"
+import { themeColors, font, radius, shadows, glows, space, weight, onThemeChange } from "@vexart/styled"
 
 /** @public */
 export const CLASS_NAME_UNKNOWN_BEHAVIOR = {
@@ -35,7 +35,10 @@ export type ClassNameResolveResult = {
 
 // ── Cache ───────────────────────────────────────────────────────────────────
 
+const MAX_CACHE_SIZE = 1024
 const cache = new Map<string, ClassNameResolveResult>()
+
+onThemeChange(clearClassNameCache)
 
 /**
  * Clear the className resolution cache.
@@ -360,7 +363,11 @@ export function resolveClassName(className: string | undefined | null, options: 
   const useCache = !options.onDiagnostic && !options.unknownClass
   if (useCache) {
     const cached = cache.get(className)
-    if (cached) return cached
+    if (cached) {
+      cache.delete(className)
+      cache.set(className, cached)
+      return cached
+    }
   }
 
   const props: MutableStyleProps = {}
@@ -381,7 +388,15 @@ export function resolveClassName(className: string | undefined | null, options: 
   }
 
   const result: ClassNameResolveResult = { props, diagnostics }
-  if (useCache) cache.set(className, result)
+  if (useCache) {
+    if (cache.size >= MAX_CACHE_SIZE) {
+      const oldestKey = cache.keys().next().value
+      if (oldestKey !== undefined) {
+        cache.delete(oldestKey)
+      }
+    }
+    cache.set(className, result)
+  }
   return result
 }
 

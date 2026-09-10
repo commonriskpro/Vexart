@@ -15,6 +15,7 @@ struct VSOut {
   @builtin(position) position: vec4<f32>,
   @location(0) uv: vec2<f32>,        // texture UV for source sampling
   @location(1) local_uv: vec2<f32>,  // UV relative to mask region [0,1]
+  @location(2) mask_rect: vec4<f32>, // NDC mask rect, may exceed source quad
   @location(3) radii: vec4<f32>,     // tl, tr, br, bl (all uniform if mode==0)
 }
 
@@ -55,14 +56,21 @@ fn vs_main(
   let uv = quad[vertex_index];
   var out: VSOut;
   // Clip-space vertex.
-  out.position = vec4<f32>(rect.x + uv.x * rect.z, rect.y + uv.y * rect.w, 0.0, 1.0);
+  let position = vec2<f32>(rect.x + uv.x * rect.z, rect.y + uv.y * rect.w);
+  out.position = vec4<f32>(position, 0.0, 1.0);
   // Texture UV [0,1]: convert NDC to UV.
   out.uv = vec2<f32>(
     (rect.x + 1.0 + uv.x * rect.z) * 0.5,
     (1.0 - rect.y - uv.y * rect.w) * 0.5,
   );
-  // Local UV within the mask region [0,1].
-  out.local_uv = uv;
+  // Local UV within the mask region [0,1]. The mask rect may extend beyond
+  // the cropped source quad; preserving values outside [0,1] is intentional
+  // because the SDF must measure distance from the original image box.
+  out.local_uv = vec2<f32>(
+    (position.x - mask_rect.x) / mask_rect.z,
+    (position.y - mask_rect.y) / mask_rect.w,
+  );
+  out.mask_rect = mask_rect;
   let mode = radii_bl_mode_pad.y;
   let r_uniform = radii_u_tl_tr_br.x;
   if (mode < 0.5) {
@@ -84,10 +92,13 @@ fn vs_main(
 fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
   let sampled = textureSample(t_source, s_source, in.uv);
 
-  // Use source image pixel dimensions so corner radii remain in px.
-  let size_px = vec2<f32>(textureDimensions(t_source));
-  let hs = size_px * 0.5;
-  let p = (in.local_uv - vec2<f32>(0.5, 0.5)) * size_px;
+  // Derive the original mask-box pixel dimensions from its NDC size. For a
+  // cropped source, the mask rect can exceed the texture while this keeps
+  // radius and corner coordinates in the original element's pixels.
+  let source_size_px = vec2<f32>(textureDimensions(t_source));
+  let mask_size_px = source_size_px * abs(in.mask_rect.zw) * 0.5;
+  let hs = mask_size_px * 0.5;
+  let p = (in.local_uv - vec2<f32>(0.5, 0.5)) * mask_size_px;
 
   let dist = sd_rounded_rect(p, hs, in.radii);
 

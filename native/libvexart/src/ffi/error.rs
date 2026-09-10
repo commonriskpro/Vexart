@@ -3,6 +3,9 @@
 // See design §6 and REQ-NB-003.
 
 use std::cell::RefCell;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 thread_local! {
     static LAST_ERROR: RefCell<Option<Vec<u8>>> = const { RefCell::new(None) };
@@ -10,8 +13,20 @@ thread_local! {
 
 /// Set the last error message for this thread.
 pub fn set_last_error(msg: impl AsRef<str>) {
+    let text = msg.as_ref();
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    if let Ok(mut f) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("/tmp/ps5-diagnostic.log")
+    {
+        let _ = writeln!(f, "[{now_ms}][native:error] {text}");
+    }
     LAST_ERROR.with(|slot| {
-        *slot.borrow_mut() = Some(msg.as_ref().as_bytes().to_vec());
+        *slot.borrow_mut() = Some(text.as_bytes().to_vec());
     });
 }
 

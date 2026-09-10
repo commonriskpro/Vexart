@@ -90,11 +90,18 @@ fn create_with_blend(
                         shader_location: 1,
                         format: wgpu::VertexFormat::Float32x4,
                     },
-                    // @location(2) opacity: vec4<f32> — opacity.x used, rest padded
+                    // @location(2) opacity: f32 — opacity value
                     wgpu::VertexAttribute {
                         offset: 32,
                         shader_location: 2,
-                        format: wgpu::VertexFormat::Float32x4,
+                        format: wgpu::VertexFormat::Float32,
+                    },
+                    // @location(3) fit: vec2<f32> — signed centered crop/inset
+                    // fractions; packed in the transform ABI's padding lanes.
+                    wgpu::VertexAttribute {
+                        offset: 36,
+                        shader_location: 3,
+                        format: wgpu::VertexFormat::Float32x2,
                     },
                 ],
             }],

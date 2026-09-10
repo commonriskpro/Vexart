@@ -1,0 +1,9 @@
+console.log("ENV VARS:", {
+  TERM: process.env.TERM,
+  TERM_PROGRAM: process.env.TERM_PROGRAM,
+  TERM_PROGRAM_VERSION: process.env.TERM_PROGRAM_VERSION,
+  GHOSTTY_RESOURCES_DIR: process.env.GHOSTTY_RESOURCES_DIR,
+  KITTY_PID: process.env.KITTY_PID,
+  KITTY_WINDOW_ID: process.env.KITTY_WINDOW_ID,
+  COLORTERM: process.env.COLORTERM,
+})

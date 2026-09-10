@@ -20,9 +20,9 @@ import { isLayoutProp, isTextLayoutProp, syncLayoutProp } from "../ffi/flex-sync
 import { BACKDROP_FIELDS } from "../ffi/render-graph"
 import { DIRTY_KIND, markDirty } from "./dirty"
 import { createHandle } from "./handle"
-import { markLayerBacked, onNodePropertyChanged, onSubtreeChanged, unmarkLayerBacked } from "../animation/compositor-path"
+import { deregisterAllDescriptors, markLayerBacked, onNodePropertyChanged, onSubtreeChanged, unmarkLayerBacked } from "../animation/compositor-path"
 import { registerNodeFocusable, unregisterNodeFocusable, updateNodeFocusEntry } from "./focus"
-import { markNodeLayerDamaged } from "./pointer"
+import { getCapturedNodeId, markNodeLayerDamaged, releasePointerCapture } from "./pointer"
 import { markLayerDirtyByKey } from "../loop/composite"
 
 // ── Color props that need pre-parsing ──
@@ -266,10 +266,35 @@ function maybeNotifyCompositor(node: TGENode, name: string) {
 }
 
 function unmarkSubtreeLayerBacking(node: TGENode) {
+  deregisterAllDescriptors(node.id)
   unmarkLayerBacked(node.id)
   for (const child of node.children) {
     unmarkSubtreeLayerBacking(child)
   }
+}
+
+function nodeOrDescendantHasId(node: TGENode, id: number): boolean {
+  if (node.id === id) return true
+  for (const child of node.children) {
+    if (nodeOrDescendantHasId(child, id)) return true
+  }
+  return false
+}
+
+function removeNode(parent: TGENode, node: TGENode) {
+  const capturedId = getCapturedNodeId()
+  if (capturedId !== 0 && nodeOrDescendantHasId(node, capturedId)) {
+    releasePointerCapture(capturedId)
+  }
+
+  // Recursively unregister all focusable nodes in the subtree.
+  // Without this, destroyed children remain as ghost entries in the
+  // focus ring and Tab key cycles through invisible elements.
+  unregisterSubtree(node)
+  unmarkSubtreeLayerBacking(node)
+  onSubtreeChanged(parent.id)
+  removeChild(parent, node)
+  markDirty()
 }
 
 const renderer = createRenderer<TGENode>({
@@ -498,16 +523,7 @@ const renderer = createRenderer<TGENode>({
     return node.kind === "text"
   },
 
-  removeNode(parent: TGENode, node: TGENode) {
-    // Recursively unregister all focusable nodes in the subtree.
-    // Without this, destroyed children remain as ghost entries in the
-    // focus ring and Tab key cycles through invisible elements.
-    unregisterSubtree(node)
-    unmarkSubtreeLayerBacking(node)
-    onSubtreeChanged(parent.id)
-    removeChild(parent, node)
-    markDirty()
-  },
+  removeNode,
 
   getParentNode(node: TGENode): TGENode | undefined {
     return node.parent ?? undefined
@@ -537,6 +553,8 @@ export const createElement = renderer.createElement
 export const solidCreateTextNode = renderer.createTextNode
 /** @public */
 export const insertNode = renderer.insertNode
+/** @public */
+export { removeNode }
 /** @public */
 export const insert = renderer.insert
 /** @public */

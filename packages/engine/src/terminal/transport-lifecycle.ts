@@ -1,3 +1,5 @@
+import { vexartKittyShmCleanupAll } from "../ffi/vexart-bridge"
+
 export type TerminalTransportLifecycleEvent = "suspend" | "resume" | "destroy"
 export type TerminalTransportLifecycleCallback = (event: TerminalTransportLifecycleEvent) => void
 
@@ -26,7 +28,16 @@ export function onTerminalTransportLifecycle(
 /** Internal bridge used by createTerminal; intentionally not re-exported publicly. */
 export function notifyTerminalTransportLifecycle(term: object, event: TerminalTransportLifecycleEvent) {
   const state = states.get(term)
-  if (!state) return
+  if (!state) {
+    if (event === "destroy") {
+      try {
+        vexartKittyShmCleanupAll()
+      } catch {
+        // Best-effort cleanup
+      }
+    }
+    return
+  }
   if (state.destroyed) return
   const callbacks = [...state.callbacks]
   if (event === "destroy") {
@@ -39,6 +50,13 @@ export function notifyTerminalTransportLifecycle(term: object, event: TerminalTr
       callback(event)
     } catch (error) {
       firstError ??= error
+    }
+  }
+  if (event === "destroy") {
+    try {
+      vexartKittyShmCleanupAll()
+    } catch {
+      // Best-effort cleanup
     }
   }
   if (firstError) throw firstError

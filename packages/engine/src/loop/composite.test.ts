@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { registerAnimationDescriptor, markLayerBacked, deregisterAllDescriptors, allDescriptors, resetFrameTracking, unmarkLayerBacked } from "../animation/compositor-path"
 import { createLayerStore } from "../ffi/layers"
 import { createNode } from "../ffi/node"
-import { compositeFrame, type CompositeFrameState } from "./composite"
+import { compositeFrame, compositorLayersAreRetained, type CompositeFrameState } from "./composite"
 
 function cleanupCompositorState() {
   resetFrameTracking()
@@ -24,6 +24,7 @@ describe("compositeFrame compositor fast path", () => {
     node.props.layer = true
     node.props.opacity = 0.5
     node.props.transform = { rotate: 12 }
+    node._layerKey = `layer:${node.id}`
     node.layout = { x: 10, y: 20, width: 100, height: 40 }
     root.children.push(node)
 
@@ -147,5 +148,20 @@ describe("compositeFrame compositor fast path", () => {
     expect(composed).toBe(1)
     expect(painted).toBe(0)
     expect(cleared).toBe(1)
+  })
+
+  test("rejects a stale retained target when the descriptor node is in a parent layer", () => {
+    const root = createNode("root")
+    const parent = createNode("box")
+    const node = createNode("box")
+    node.parent = parent
+    parent.parent = root
+    node._layerKey = `layer:${parent.id}`
+    parent.children.push(node)
+    root.children.push(parent)
+    const layer = createLayerStore().createLayer(1)
+    const layerCache = new Map([[`layer:${node.id}`, layer]])
+
+    expect(compositorLayersAreRetained([{ nodeId: node.id }], new Map([[node.id, node]]), layerCache)).toBe(false)
   })
 })

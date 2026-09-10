@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { createSignal } from "solid-js"
+import { createRoot, createSignal, type JSX } from "solid-js"
 import type { TabItem, TabRenderContext } from "./tabs"
 import {
   createComponent,
@@ -149,5 +149,42 @@ suite("Tabs keyboard focus", () => {
     } finally {
       handle.destroy()
     }
+  })
+
+  test("dynamic getters and tabProps.onPress in TabRenderContext", () => {
+    createRoot((dispose) => {
+      let ctx0!: TabRenderContext
+      let ctx1!: TabRenderContext
+
+      Tabs({
+        activeTab: 0,
+        tabs: [
+          {
+            label: "Tab 0",
+            content: () => createElement("box") as unknown as JSX.Element,
+          },
+          {
+            label: "Tab 1",
+            content: () => createElement("box") as unknown as JSX.Element,
+          },
+        ],
+        renderTab(tab, ctx) {
+          if (ctx.index === 0) ctx0 = ctx
+          if (ctx.index === 1) ctx1 = ctx
+          return createElement("box") as unknown as JSX.Element
+        },
+      })
+
+      expect(ctx0.active).toBe(true)
+      expect(ctx1.active).toBe(false)
+      expect(ctx0.index).toBe(0)
+      expect(ctx1.index).toBe(1)
+
+      ctx1.tabProps.onPress()
+      expect(ctx0.active).toBe(false)
+      expect(ctx1.active).toBe(true)
+
+      dispose()
+    })
   })
 })

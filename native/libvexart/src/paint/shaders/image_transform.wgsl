@@ -2,6 +2,11 @@ struct VSOut {
   @builtin(position) position: vec4<f32>,
   @location(0) uv: vec2<f32>,
   @location(1) opacity: f32,
+  // Signed object-fit inset/crop fractions. Positive values crop the source
+  // (cover); negative values inset the destination (contain). Zero means
+  // stretch/fill. These are packed in the transform instance's two padding
+  // lanes so the existing 48-byte image transform ABI remains unchanged.
+  @location(2) fit: vec2<f32>,
 }
 
 @group(0) @binding(0) var image_tex: texture_2d<f32>;
@@ -12,7 +17,8 @@ fn vs_main(
   @builtin(vertex_index) vertex_index: u32,
   @location(0) p0: vec4<f32>,
   @location(1) p1: vec4<f32>,
-  @location(2) opacity: vec4<f32>,
+  @location(2) opacity: f32,
+  @location(3) fit: vec2<f32>,
 ) -> VSOut {
   var positions = array<vec2<f32>, 6>(
     vec2<f32>(p0.x, p0.y),
@@ -33,8 +39,29 @@ fn vs_main(
   var out: VSOut;
   out.position = vec4<f32>(positions[vertex_index], 0.0, 1.0);
   out.uv = uvs[vertex_index];
-  out.opacity = opacity.x;
+  out.opacity = opacity;
+  out.fit = fit;
   return out;
+}
+
+fn fit_uv(local_uv: vec2<f32>, fit: vec2<f32>) -> vec2<f32> {
+  // Positive offsets describe a centered source crop (objectFit=cover).
+  if (fit.x > 0.0 || fit.y > 0.0) {
+    // The destination spans the centered source interval [fit, 1-fit].
+    return fit + local_uv * (vec2<f32>(1.0, 1.0) - fit * 2.0);
+  }
+
+  // Negative offsets describe a centered destination inset (objectFit=contain).
+  // Pixels outside the inset are transparent letterbox pixels.
+  let inset = -fit;
+  if (inset.x > 0.0 || inset.y > 0.0) {
+    if (local_uv.x < inset.x || local_uv.x > 1.0 - inset.x
+      || local_uv.y < inset.y || local_uv.y > 1.0 - inset.y) {
+      discard;
+    }
+    return (local_uv - inset) / (vec2<f32>(1.0, 1.0) - inset * 2.0);
+  }
+  return local_uv;
 }
 
 fn edge_coverage(in: VSOut) -> f32 {
@@ -61,7 +88,7 @@ fn edge_coverage(in: VSOut) -> f32 {
 
 @fragment
 fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
-  let color = textureSample(image_tex, image_sampler, in.uv);
+  let color = textureSample(image_tex, image_sampler, fit_uv(in.uv, in.fit));
   let coverage = edge_coverage(in);
   return vec4<f32>(color.rgb, color.a * in.opacity * coverage);
 }
@@ -70,7 +97,7 @@ fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
 // transform opacity/coverage before using premultiplied blend factors.
 @fragment
 fn fs_premultiplied(in: VSOut) -> @location(0) vec4<f32> {
-  let color = textureSample(image_tex, image_sampler, in.uv);
+  let color = textureSample(image_tex, image_sampler, fit_uv(in.uv, in.fit));
   let factor = in.opacity * edge_coverage(in);
   return vec4<f32>(color.rgb * factor, color.a * factor);
 }

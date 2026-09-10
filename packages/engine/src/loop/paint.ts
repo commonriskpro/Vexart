@@ -34,7 +34,7 @@ import { shouldFreezeInteractionLayer } from "../reconciler/interaction"
 import { multiply, translate, transformPoint } from "../ffi/matrix"
 import { debugUpdateStats, isDebugEnabled } from "./debug"
 import type { FrameProfile, LayerBoundary, LayerSlot, LayerPlan, PaintResult, InteractionLatencyTracking, DebugLogHelpers } from "./types"
-import type { TGENode } from "../ffi/node"
+import { resolveProps, type TGENode } from "../ffi/node"
 
 import { isNativePresentationCapable } from "../ffi/native-presentation-flags"
 import { nativeLayerRemove } from "../ffi/native-layer-registry"
@@ -55,6 +55,9 @@ export type PreparedLayerSlot = {
   clippedDamage: DamageRect | null
   isBackground: boolean
   subtreeTransform: TransformQuad | null
+  /** Source-space origin for a viewport-bounded translated layer. */
+  paintOffsetX?: number
+  paintOffsetY?: number
   allowRegionalRepaint: boolean
   useRegionalRepaint: boolean
   freezeWhileInteracting: boolean
@@ -232,8 +235,6 @@ function computeSubtreeTransformQuad(node: TGENode) {
     if (current._transform) chain.push(current)
     current = current.parent
   }
-  chain.reverse()
-
   const transformAbsolutePoint = (x: number, y: number) => {
     let point = { x, y }
     for (const target of chain) {
@@ -254,6 +255,31 @@ function computeSubtreeTransformQuad(node: TGENode) {
     p2: transformAbsolutePoint(x, y + h),
     p3: transformAbsolutePoint(x + w, y + h),
   }
+}
+
+function isAxisTranslationQuad(node: TGENode, quad: TransformQuad) {
+  const epsilon = 1e-6
+  return Math.abs(quad.p1.x - quad.p0.x - node.layout.width) < epsilon
+    && Math.abs(quad.p1.y - quad.p0.y) < epsilon
+    && Math.abs(quad.p2.x - quad.p0.x) < epsilon
+    && Math.abs(quad.p2.y - quad.p0.y - node.layout.height) < epsilon
+}
+
+function clippedTranslationQuad(left: number, top: number, width: number, height: number): TransformQuad {
+  return {
+    p0: { x: left, y: top },
+    p1: { x: left + width, y: top },
+    p2: { x: left, y: top + height },
+    p3: { x: left + width, y: top + height },
+  }
+}
+
+function hasCaptureExpansion(node: TGENode, includeTransform = false): boolean {
+  const props = resolveProps(node)
+  if (props.shadow !== undefined || props.glow !== undefined || props.filter !== undefined) return true
+  if (props.backdropBlur !== undefined || props.backdropBrightness !== undefined || props.backdropContrast !== undefined || props.backdropSaturate !== undefined || props.backdropGrayscale !== undefined || props.backdropInvert !== undefined || props.backdropSepia !== undefined || props.backdropHueRotate !== undefined) return true
+  if (includeTransform && props.transform !== undefined) return true
+  return node.children.some((child) => hasCaptureExpansion(child, true))
 }
 
 function applyPendingNodeDamage(
@@ -466,6 +492,34 @@ export function paintFrame(
     const debugName = boundaryNode?.props.debugName ?? slot.key
     const shouldViewportClip = freezeWhileInteracting ? false : (boundaryNode?.props.viewportClip ?? true)
     const allowRegionalRepaint = canUseRegionalRepaint(boundaryNode, hasScissor, isBg)
+    const rawSubtreeTransform = boundary?.hasSubtreeTransform && boundaryNode
+      ? computeSubtreeTransformQuad(boundaryNode)
+      : null
+    const boundedTranslation = !!(
+      rawSubtreeTransform
+      && boundaryNode
+      && isAxisTranslationQuad(boundaryNode, rawSubtreeTransform)
+      && !hasCaptureExpansion(boundaryNode)
+      && !freezeWhileInteracting
+    )
+
+    // A translated layer is clipped in output space, but its source target
+    // must start at the corresponding untransformed coordinate. Otherwise a
+    // wide row is first squeezed to the viewport-sized target and then
+    // translated, shifting the horizontal crop (for example, -5px shows the
+    // first source pixels instead of the entering slice). Keep the target
+    // viewport-bounded and carry the source offset below. Subtrees with
+    // capture-expanding effects stay on the historical full-capture path.
+    if (boundedTranslation && rawSubtreeTransform) {
+      const dx = rawSubtreeTransform.p0.x - boundaryNode!.layout.x
+      const dy = rawSubtreeTransform.p0.y - boundaryNode!.layout.y
+      const contentRight = lx + lw + dx
+      const contentBottom = ly + lh + dy
+      lx = Math.floor(lx + dx)
+      ly = Math.floor(ly + dy)
+      lw = Math.ceil(contentRight) - lx
+      lh = Math.ceil(contentBottom) - ly
+    }
 
     if (freezeWhileInteracting && boundaryNode && boundaryNode.kind !== "text" && boundaryNode.props.floating) {
       const layoutX = Math.round(boundaryNode.layout.x)
@@ -529,6 +583,17 @@ export function paintFrame(
     }
     layerOrder.push(layer)
 
+    let paintOffsetX = lx
+    let paintOffsetY = ly
+    let subtreeTransform = rawSubtreeTransform
+    if (boundedTranslation && rawSubtreeTransform && boundaryNode) {
+      // p0 is the transformed position of the layer's untransformed origin.
+      // This maps the clipped output rectangle back to the source rectangle
+      // while retaining integer target dimensions for the native limit.
+      paintOffsetX = boundaryNode.layout.x + lx - rawSubtreeTransform.p0.x
+      paintOffsetY = boundaryNode.layout.y + ly - rawSubtreeTransform.p0.y
+      subtreeTransform = clippedTranslationQuad(lx, ly, lw, lh)
+    }
     const bounds = { x: lx, y: ly, width: lw, height: lh }
     const dirtyRect = selectLayerDirtyRect(layer.dirty, layer.damageRect, bounds)
     const clippedDamage = dirtyRect ? intersectRect(dirtyRect, bounds) : null
@@ -556,7 +621,9 @@ export function paintFrame(
       dirtyRect,
       clippedDamage,
       isBackground: isBg,
-      subtreeTransform: boundary?.hasSubtreeTransform && boundaryNode ? computeSubtreeTransformQuad(boundaryNode) : null,
+      subtreeTransform,
+      paintOffsetX,
+      paintOffsetY,
       allowRegionalRepaint,
       useRegionalRepaint,
       freezeWhileInteracting,
@@ -719,8 +786,8 @@ export function paintFrame(
         backing: layerCtx.backing ?? null,
         target: { width: lw, height: lh },
         commands: layerCommands,
-        offsetX: lx,
-        offsetY: ly,
+        offsetX: prepared.paintOffsetX ?? lx,
+        offsetY: prepared.paintOffsetY ?? ly,
         cellWidth: cellW,
         cellHeight: cellH,
         frame: frameCtx,

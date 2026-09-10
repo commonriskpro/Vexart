@@ -51,6 +51,8 @@ export interface RenderToBufferOptions {
    * native choices are used only by the tmux packet/pixel parity harness.
    */
   presentation?: RenderToBufferPresentation
+  /** Override layer repainting for retained-layer regression tests. */
+  forceLayerRepaint?: boolean
 }
 
 type LoopInstance = ReturnType<typeof createRenderLoop>
@@ -311,7 +313,7 @@ async function captureToBuffer(
     try {
       loop = createRenderLoop(term, {
         experimental: {
-          forceLayerRepaint: true,
+          forceLayerRepaint: options.forceLayerRepaint ?? true,
           nativePresentation: presentation !== "offscreen" || undefined,
         },
       })

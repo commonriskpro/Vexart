@@ -1,0 +1,1378 @@
+[
+  {
+    "id": "ghost-of-tsushima",
+    "title": "Ghost of Tsushima",
+    "subtitle": "Director’s Cut",
+    "cover": "assets/covers/ghost-of-tsushima.png",
+    "hero": "assets/mock/ghost-samurai-sunset-clean.png",
+    "titleScreen": "assets/heroes/ghost-of-tsushima.png",
+    "sizeGb": 60,
+    "installed": true,
+    "genre": "Acción y aventura",
+    "description": "Una isla dividida, un samurái y una última oportunidad para proteger Tsushima.",
+    "accent": "#ba8b5a",
+    "progress": 65,
+    "activities": [
+      {
+        "id": "ghost-of-tsushima-continue",
+        "title": "Continuar actividad",
+        "description": "El camino del guerrero",
+        "progress": 65
+      },
+      {
+        "id": "ghost-of-tsushima-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 48
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Leyenda de Tsushima",
+        "earned": false
+      },
+      {
+        "type": "gold",
+        "name": "Llama de Kami",
+        "earned": true
+      },
+      {
+        "type": "gold",
+        "name": "Honor inquebrantable",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Jinete del amanecer",
+        "earned": true
+      },
+      {
+        "type": "silver",
+        "name": "Maestro del viento",
+        "earned": true
+      },
+      {
+        "type": "silver",
+        "name": "Sombra entre juncos",
+        "earned": true
+      },
+      {
+        "type": "silver",
+        "name": "Guardia de Toyotama",
+        "earned": true
+      },
+      {
+        "type": "silver",
+        "name": "Luz sobre Komoda",
+        "earned": true
+      },
+      {
+        "type": "silver",
+        "name": "Voz de los kami",
+        "earned": true
+      },
+      {
+        "type": "silver",
+        "name": "Arquero de la niebla",
+        "earned": true
+      },
+      {
+        "type": "silver",
+        "name": "Última hoja",
+        "earned": true
+      },
+      {
+        "type": "silver",
+        "name": "Talismán de la isla",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Primer duelo",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Sendero de bambú",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Campana en el santuario",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Aguas termales",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Haiku al atardecer",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Mapa de los vientos",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Máscara de oni",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Pétalo dorado",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Rescate en Azamo",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Flecha certera",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Paso silencioso",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Cuento de un ronin",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Humo en la costa",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Guardia del arrozal",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Niebla sobre Ariake",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Lobo de la colina",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Bambú y acero",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Campamento despejado",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Leyenda creciente",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Pacto del bosque",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Cascada escondida",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Duelista paciente",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Rastro de zorros",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Vigilante nocturno",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Honor compartido",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Lluvia de flechas",
+        "earned": true
+      },
+      {
+        "type": "bronze",
+        "name": "Horizonte rojo",
+        "earned": true
+      }
+    ],
+    "logo": "assets/logos/ghost-of-tsushima.png"
+  },
+  {
+    "id": "marvels-spider-man-2",
+    "title": "Marvel’s Spider-Man 2",
+    "subtitle": "Edición estándar",
+    "cover": "assets/covers/marvels-spider-man-2.png",
+    "hero": "assets/heroes/marvels-spider-man-2.jpg",
+    "titleScreen": "assets/heroes/marvels-spider-man-2.jpg",
+    "sizeGb": 98,
+    "installed": true,
+    "genre": "Acción",
+    "description": "Peter Parker y Miles Morales se enfrentan a nuevas amenazas en una Nueva York ampliada.",
+    "accent": "#d72e35",
+    "progress": 42,
+    "activities": [
+      {
+        "id": "marvels-spider-man-2-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 42
+      },
+      {
+        "id": "marvels-spider-man-2-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 25
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": true
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "god-of-war-ragnarok",
+    "title": "God of War Ragnarök",
+    "subtitle": "PS5",
+    "cover": "assets/covers/god-of-war-ragnarok.png",
+    "hero": "assets/heroes/god-of-war-ragnarok.jpg",
+    "titleScreen": "assets/heroes/god-of-war-ragnarok.jpg",
+    "sizeGb": 84,
+    "installed": true,
+    "genre": "Acción y aventura",
+    "description": "Kratos y Atreus deben explorar los Nueve Reinos mientras el Ragnarök se acerca.",
+    "accent": "#7ca8ce",
+    "progress": 48,
+    "activities": [
+      {
+        "id": "god-of-war-ragnarok-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 48
+      },
+      {
+        "id": "god-of-war-ragnarok-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 31
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": true
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "returnal",
+    "title": "Returnal",
+    "subtitle": "PS5",
+    "cover": "assets/covers/returnal.png",
+    "hero": "assets/heroes/returnal.png",
+    "titleScreen": "assets/heroes/returnal.png",
+    "sizeGb": 56,
+    "installed": true,
+    "genre": "Disparos roguelike",
+    "description": "Selene queda atrapada en un ciclo alienígena que cambia con cada intento.",
+    "accent": "#3ac7c2",
+    "progress": 34,
+    "activities": [
+      {
+        "id": "returnal-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 34
+      },
+      {
+        "id": "returnal-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 17
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": true
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "ratchet-and-clank-rift-apart",
+    "title": "Ratchet & Clank: Una dimensión aparte",
+    "subtitle": "PS5",
+    "cover": "assets/covers/ratchet-and-clank-rift-apart.png",
+    "hero": "assets/heroes/ratchet-and-clank-rift-apart.jpg",
+    "titleScreen": "assets/heroes/ratchet-and-clank-rift-apart.jpg",
+    "sizeGb": 33,
+    "installed": true,
+    "genre": "Acción y plataformas",
+    "description": "Salta entre dimensiones con un arsenal imposible y una aventura intergaláctica.",
+    "accent": "#b45bf1",
+    "progress": 72,
+    "activities": [
+      {
+        "id": "ratchet-and-clank-rift-apart-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 72
+      },
+      {
+        "id": "ratchet-and-clank-rift-apart-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 55
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": true
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "astro-bot",
+    "title": "ASTRO BOT",
+    "subtitle": "PS5",
+    "cover": "assets/covers/astro-bot.png",
+    "hero": "assets/heroes/astro-bot.png",
+    "titleScreen": "assets/heroes/astro-bot.png",
+    "sizeGb": 72,
+    "installed": true,
+    "genre": "Plataformas",
+    "description": "Una celebración juguetona de la historia de PlayStation a través de galaxias llenas de sorpresas.",
+    "accent": "#3e9eff",
+    "progress": 57,
+    "activities": [
+      {
+        "id": "astro-bot-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 57
+      },
+      {
+        "id": "astro-bot-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 40
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": true
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": true
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "demons-souls",
+    "title": "Demon’s Souls",
+    "subtitle": "Remake para PS5",
+    "cover": "assets/covers/demons-souls.png",
+    "hero": "assets/heroes/demons-souls.png",
+    "titleScreen": "assets/heroes/demons-souls.png",
+    "sizeGb": 66,
+    "installed": true,
+    "genre": "Rol y acción",
+    "description": "Boletaria se hunde en una niebla incolora; solo el valor puede desafiar al Anciano.",
+    "accent": "#746b87",
+    "progress": 29,
+    "activities": [
+      {
+        "id": "demons-souls-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 29
+      },
+      {
+        "id": "demons-souls-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 12
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": true
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "horizon-forbidden-west",
+    "title": "Horizon Forbidden West",
+    "subtitle": "Edición completa",
+    "cover": "assets/covers/horizon-forbidden-west.png",
+    "hero": "assets/heroes/horizon-forbidden-west.jpg",
+    "titleScreen": "assets/heroes/horizon-forbidden-west.jpg",
+    "sizeGb": 121,
+    "installed": true,
+    "genre": "Rol y acción",
+    "description": "Aloy viaja a un oeste prohibido para encontrar la cura de una plaga que asola el mundo.",
+    "accent": "#d56d3e",
+    "progress": 63,
+    "activities": [
+      {
+        "id": "horizon-forbidden-west-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 63
+      },
+      {
+        "id": "horizon-forbidden-west-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 46
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": true
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": true
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "gran-turismo-7",
+    "title": "Gran Turismo 7",
+    "subtitle": "PS5",
+    "cover": "assets/covers/gran-turismo-7.png",
+    "hero": "assets/heroes/gran-turismo-7.png",
+    "titleScreen": "assets/heroes/gran-turismo-7.png",
+    "sizeGb": 110,
+    "installed": true,
+    "genre": "Conducción",
+    "description": "Vuelve a la cultura del automóvil con circuitos, coches legendarios y una campaña renovada.",
+    "accent": "#e7e7eb",
+    "progress": 46,
+    "activities": [
+      {
+        "id": "gran-turismo-7-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 46
+      },
+      {
+        "id": "gran-turismo-7-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 29
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": true
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "the-last-of-us-part-i",
+    "title": "The Last of Us Parte I",
+    "subtitle": "Remake para PS5",
+    "cover": "assets/covers/the-last-of-us-part-i.png",
+    "hero": "assets/heroes/the-last-of-us-part-i.png",
+    "titleScreen": "assets/heroes/the-last-of-us-part-i.png",
+    "sizeGb": 78,
+    "installed": true,
+    "genre": "Acción y supervivencia",
+    "description": "Joel y Ellie atraviesan unos Estados Unidos devastados para encontrar una esperanza frágil.",
+    "accent": "#6f8f74",
+    "progress": 52,
+    "activities": [
+      {
+        "id": "the-last-of-us-part-i-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 52
+      },
+      {
+        "id": "the-last-of-us-part-i-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 35
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": true
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "marvels-spider-man-miles-morales",
+    "title": "Marvel’s Spider-Man: Miles Morales",
+    "subtitle": "Ultimate Edition",
+    "cover": "assets/covers/marvels-spider-man-miles-morales.png",
+    "hero": "assets/heroes/marvels-spider-man-miles-morales.png",
+    "titleScreen": "assets/heroes/marvels-spider-man-miles-morales.png",
+    "sizeGb": 52,
+    "installed": true,
+    "genre": "Acción",
+    "description": "Miles Morales aprende a dominar sus nuevos poderes y a defender su hogar en Harlem.",
+    "accent": "#d54a37",
+    "progress": 69,
+    "activities": [
+      {
+        "id": "marvels-spider-man-miles-morales-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 69
+      },
+      {
+        "id": "marvels-spider-man-miles-morales-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 52
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": true
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "sackboy-a-big-adventure",
+    "title": "Sackboy: Una gran aventura",
+    "subtitle": "PS5",
+    "cover": "assets/covers/sackboy-a-big-adventure.png",
+    "hero": "assets/heroes/sackboy-a-big-adventure.png",
+    "titleScreen": "assets/heroes/sackboy-a-big-adventure.png",
+    "sizeGb": 48,
+    "installed": true,
+    "genre": "Plataformas",
+    "description": "Sackboy corre, salta y cose una aventura creativa para salvar Craftworld.",
+    "accent": "#efb43e",
+    "progress": 77,
+    "activities": [
+      {
+        "id": "sackboy-a-big-adventure-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 77
+      },
+      {
+        "id": "sackboy-a-big-adventure-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 60
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": true
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": true
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "kena-bridge-of-spirits",
+    "title": "Kena: Bridge of Spirits",
+    "subtitle": "Deluxe Edition",
+    "cover": "assets/covers/kena-bridge-of-spirits.png",
+    "hero": "assets/heroes/kena-bridge-of-spirits.jpg",
+    "titleScreen": "assets/heroes/kena-bridge-of-spirits.jpg",
+    "sizeGb": 23,
+    "installed": true,
+    "genre": "Aventura",
+    "description": "Una joven guía de espíritus descubre una aldea abandonada y sus recuerdos ocultos.",
+    "accent": "#ce7358",
+    "progress": 41,
+    "activities": [
+      {
+        "id": "kena-bridge-of-spirits-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 41
+      },
+      {
+        "id": "kena-bridge-of-spirits-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 24
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": true
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "death-stranding-directors-cut",
+    "title": "Death Stranding Director’s Cut",
+    "subtitle": "PS5",
+    "cover": "assets/covers/death-stranding-directors-cut.png",
+    "hero": "assets/heroes/death-stranding-directors-cut.png",
+    "titleScreen": "assets/heroes/death-stranding-directors-cut.png",
+    "sizeGb": 68,
+    "installed": true,
+    "genre": "Acción y aventura",
+    "description": "Sam Bridges debe reconectar una América fracturada llevando esperanza por paisajes imposibles.",
+    "accent": "#8e98aa",
+    "progress": 36,
+    "activities": [
+      {
+        "id": "death-stranding-directors-cut-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 36
+      },
+      {
+        "id": "death-stranding-directors-cut-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 19
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": true
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "final-fantasy-vii-rebirth",
+    "title": "Final Fantasy VII Rebirth",
+    "subtitle": "PS5",
+    "cover": "assets/covers/final-fantasy-vii-rebirth.png",
+    "hero": "assets/heroes/final-fantasy-vii-rebirth.png",
+    "titleScreen": "assets/heroes/final-fantasy-vii-rebirth.png",
+    "sizeGb": 145,
+    "installed": true,
+    "genre": "Rol",
+    "description": "Cloud y sus aliados abandonan Midgar para perseguir el destino que los espera más allá.",
+    "accent": "#54a4cf",
+    "progress": 22,
+    "activities": [
+      {
+        "id": "final-fantasy-vii-rebirth-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 22
+      },
+      {
+        "id": "final-fantasy-vii-rebirth-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 5
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": true
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "stellar-blade",
+    "title": "Stellar Blade",
+    "subtitle": "PS5",
+    "cover": "assets/covers/stellar-blade.png",
+    "hero": "assets/heroes/stellar-blade.jpg",
+    "titleScreen": "assets/heroes/stellar-blade.jpg",
+    "sizeGb": 31,
+    "installed": true,
+    "genre": "Acción",
+    "description": "Eve llega a una Tierra devastada para recuperar el planeta de manos de los Naytiba.",
+    "accent": "#e17c92",
+    "progress": 18,
+    "activities": [
+      {
+        "id": "stellar-blade-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 18
+      },
+      {
+        "id": "stellar-blade-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 1
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": true
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "helldivers-2",
+    "title": "Helldivers 2",
+    "subtitle": "PS5",
+    "cover": "assets/covers/helldivers-2.png",
+    "hero": "assets/heroes/helldivers-2.png",
+    "titleScreen": "assets/heroes/helldivers-2.png",
+    "sizeGb": 41,
+    "installed": true,
+    "genre": "Disparos cooperativos",
+    "description": "La democracia gestionada necesita voluntarios para defender Super Tierra en cada frente.",
+    "accent": "#e6b64e",
+    "progress": 27,
+    "activities": [
+      {
+        "id": "helldivers-2-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 27
+      },
+      {
+        "id": "helldivers-2-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 10
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": true
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "baldurs-gate-3",
+    "title": "Baldur’s Gate 3",
+    "subtitle": "PS5",
+    "cover": "assets/covers/baldurs-gate-3.png",
+    "hero": "assets/heroes/baldurs-gate-3.png",
+    "titleScreen": "assets/heroes/baldurs-gate-3.png",
+    "sizeGb": 122,
+    "installed": true,
+    "genre": "Rol",
+    "description": "Reúne un grupo de aventureros y decide el destino de los Reinos Olvidados.",
+    "accent": "#9c6a4c",
+    "progress": 0,
+    "activities": [
+      {
+        "id": "baldurs-gate-3-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 0
+      },
+      {
+        "id": "baldurs-gate-3-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 0
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": false
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "resident-evil-4",
+    "title": "Resident Evil 4",
+    "subtitle": "Remake",
+    "cover": "assets/covers/resident-evil-4.png",
+    "hero": "assets/heroes/resident-evil-4.jpg",
+    "titleScreen": "assets/heroes/resident-evil-4.jpg",
+    "sizeGb": 67,
+    "installed": false,
+    "genre": "Terror y supervivencia",
+    "description": "Leon S. Kennedy se adentra en una aldea aislada para rescatar a la hija del presidente.",
+    "accent": "#bd8a60",
+    "progress": 0,
+    "activities": [
+      {
+        "id": "resident-evil-4-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 0
+      },
+      {
+        "id": "resident-evil-4-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 0
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": false
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "alan-wake-2",
+    "title": "Alan Wake 2",
+    "subtitle": "PS5",
+    "cover": "assets/covers/alan-wake-2.png",
+    "hero": "assets/heroes/alan-wake-2.png",
+    "titleScreen": "assets/heroes/alan-wake-2.png",
+    "sizeGb": 90,
+    "installed": false,
+    "genre": "Terror y thriller",
+    "description": "Dos investigadores siguen una historia de terror que parece escribirse a sí misma.",
+    "accent": "#b14d47",
+    "progress": 0,
+    "activities": [
+      {
+        "id": "alan-wake-2-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 0
+      },
+      {
+        "id": "alan-wake-2-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 0
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": false
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "cyberpunk-2077",
+    "title": "Cyberpunk 2077",
+    "subtitle": "Ultimate Edition",
+    "cover": "assets/covers/cyberpunk-2077.png",
+    "hero": "assets/heroes/cyberpunk-2077.png",
+    "titleScreen": "assets/heroes/cyberpunk-2077.png",
+    "sizeGb": 86,
+    "installed": false,
+    "genre": "Rol y acción",
+    "description": "V explora Night City en busca de un implante que promete la inmortalidad.",
+    "accent": "#f2b33d",
+    "progress": 0,
+    "activities": [
+      {
+        "id": "cyberpunk-2077-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 0
+      },
+      {
+        "id": "cyberpunk-2077-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 0
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": false
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "hogwarts-legacy",
+    "title": "Hogwarts Legacy",
+    "subtitle": "PS5",
+    "cover": "assets/covers/hogwarts-legacy.png",
+    "hero": "assets/heroes/hogwarts-legacy.png",
+    "titleScreen": "assets/heroes/hogwarts-legacy.png",
+    "sizeGb": 80,
+    "installed": false,
+    "genre": "Rol y aventura",
+    "description": "Descubre la vida de un estudiante en Hogwarts y decide qué secretos de la magia revelar.",
+    "accent": "#7f5ac7",
+    "progress": 0,
+    "activities": [
+      {
+        "id": "hogwarts-legacy-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 0
+      },
+      {
+        "id": "hogwarts-legacy-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 0
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": false
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "assassins-creed-shadows",
+    "title": "Assassin’s Creed Shadows",
+    "subtitle": "PS5",
+    "cover": "assets/covers/assassins-creed-shadows.png",
+    "hero": "assets/heroes/assassins-creed-shadows.jpg",
+    "titleScreen": "assets/heroes/assassins-creed-shadows.jpg",
+    "sizeGb": 73,
+    "installed": false,
+    "genre": "Acción y sigilo",
+    "description": "Dos protagonistas recorren el Japón feudal entre sombras, espionaje y conflictos de poder.",
+    "accent": "#d3a268",
+    "progress": 0,
+    "activities": [
+      {
+        "id": "assassins-creed-shadows-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 0
+      },
+      {
+        "id": "assassins-creed-shadows-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 0
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": false
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  },
+  {
+    "id": "monster-hunter-wilds",
+    "title": "Monster Hunter Wilds",
+    "subtitle": "PS5",
+    "cover": "assets/covers/monster-hunter-wilds.png",
+    "hero": "assets/heroes/monster-hunter-wilds.png",
+    "titleScreen": "assets/heroes/monster-hunter-wilds.png",
+    "sizeGb": 62,
+    "installed": false,
+    "genre": "Rol y acción",
+    "description": "Caza monstruos en las Tierras Prohibidas, un ecosistema vivo que cambia con el clima.",
+    "accent": "#94a867",
+    "progress": 0,
+    "activities": [
+      {
+        "id": "monster-hunter-wilds-continue",
+        "title": "Continuar actividad",
+        "description": "Retoma el último objetivo disponible en el centro del juego.",
+        "progress": 0
+      },
+      {
+        "id": "monster-hunter-wilds-next",
+        "title": "Siguiente objetivo",
+        "description": "Consulta la próxima actividad local simulada.",
+        "progress": 0
+      }
+    ],
+    "trophies": [
+      {
+        "type": "platinum",
+        "name": "Colección completa",
+        "earned": false
+      },
+      {
+        "type": "gold",
+        "name": "Maestría",
+        "earned": false
+      },
+      {
+        "type": "silver",
+        "name": "Explorador",
+        "earned": false
+      },
+      {
+        "type": "bronze",
+        "name": "Primer paso",
+        "earned": false
+      }
+    ]
+  }
+]

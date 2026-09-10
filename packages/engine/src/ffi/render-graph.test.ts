@@ -259,4 +259,16 @@ describe("buildRenderGraphFrame", () => {
     expect(inner.backdrop?.clipBounds).toEqual({ x: 15, y: 15, width: 10, height: 10 })
     expect(inner.clipStateId).not.toBe(outer.clipStateId)
   })
+
+  test("keeps disjoint nested scissors as an empty clip, not no clip", () => {
+    const frame = buildRenderGraphFrame([
+      cmd({ type: CMD.SCISSOR_START, x: 0, y: 0, width: 20, height: 20, nodeId: 10 }),
+      cmd({ type: CMD.SCISSOR_START, x: 100, y: 0, width: 20, height: 20, nodeId: 11 }),
+      cmd({ x: 110, y: 0, width: 10, height: 10 }),
+      cmd({ type: CMD.SCISSOR_END }),
+      cmd({ type: CMD.SCISSOR_END }),
+    ])
+
+    expect(frame.ops[0]?.clipBounds).toEqual({ x: 100, y: 0, width: 0, height: 0 })
+  })
 })

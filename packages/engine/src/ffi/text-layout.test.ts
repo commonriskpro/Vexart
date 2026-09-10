@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { layoutText, measureForLayout, measureTextConstrained } from "./text-layout"
+import {
+  layoutText,
+  measureForLayout,
+  measureTextConstrained,
+  registerFont,
+  unregisterFont,
+  clearFontRegistry,
+  getFont,
+  getTextLayoutCacheStats,
+} from "./text-layout"
 
 describe("text layout metrics", () => {
   test("built-in font measurement scales with fontSize", () => {
@@ -42,5 +51,44 @@ describe("text layout metrics", () => {
     expect(normal.lines.every(line => line.width <= 50)).toBe(true)
     expect(keepAll.lineCount).toBe(1)
     expect(keepAll.lines[0]?.width).toBeGreaterThan(50)
+  })
+})
+
+describe("font registry lifecycle", () => {
+  test("unregisterFont rejects id 0", () => {
+    expect(unregisterFont(0)).toBe(false)
+    expect(getFont(0)).toEqual({ family: "sans-serif", size: 14 })
+  })
+
+  test("unregisterFont removes registered font and invalidates text cache", () => {
+    registerFont(42, { family: "monospace", size: 18 })
+    expect(getFont(42).family).toBe("monospace")
+
+    // Populate layout cache
+    layoutText("hello font lifecycle", 42, 200, 20, 18)
+    expect(getTextLayoutCacheStats().layoutCount).toBeGreaterThan(0)
+
+    const removed = unregisterFont(42)
+    expect(removed).toBe(true)
+    // Cache was cleared on unregister
+    expect(getTextLayoutCacheStats().layoutCount).toBe(0)
+    // Fallback to default font (sans-serif 14)
+    expect(getFont(42)).toEqual({ family: "sans-serif", size: 14 })
+
+    // Second unregister returns false
+    expect(unregisterFont(42)).toBe(false)
+  })
+
+  test("clearFontRegistry resets all fonts to default and clears cache", () => {
+    registerFont(10, { family: "serif", size: 16 })
+    registerFont(11, { family: "sans-serif", size: 20 })
+    layoutText("cached line", 10, 200, 20, 16)
+
+    clearFontRegistry()
+
+    expect(getFont(0)).toEqual({ family: "sans-serif", size: 14 })
+    expect(getFont(10)).toEqual({ family: "sans-serif", size: 14 })
+    expect(getFont(11)).toEqual({ family: "sans-serif", size: 14 })
+    expect(getTextLayoutCacheStats().layoutCount).toBe(0)
   })
 })

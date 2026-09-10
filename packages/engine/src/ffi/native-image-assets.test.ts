@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { nativeImageAssetRegister, nativeImageAssetRelease, nativeImageAssetTouch } from "./native-image-assets"
 import { getNativeResourceStats } from "./resource-stats"
+import { activeImageHandles, vexartRemoveImage } from "./gpu-composite-ops"
 
 describe("native image assets", () => {
   test("register reuses stable handles for the same key", () => {
@@ -28,5 +29,24 @@ describe("native image assets", () => {
     expect(handle).not.toBeNull()
     expect((after?.resourcesByKind.ImageSprite?.bytes ?? 0) - beforeBytes).toBe(data.byteLength)
     expect(nativeImageAssetRelease(handle!)).toBe(true)
+  })
+
+  test("vexartRemoveImage provides double-free protection", () => {
+    // If handle is not tracked in activeImageHandles, it safely returns without error
+    const untrackedHandle = 88888n
+    expect(activeImageHandles.has(untrackedHandle)).toBe(false)
+    expect(() => vexartRemoveImage(1n, untrackedHandle)).not.toThrow()
+
+    // If handle is 0n, safely returns
+    expect(() => vexartRemoveImage(1n, 0n)).not.toThrow()
+
+    // If handle was in activeImageHandles, first remove deletes it, second is ignored
+    const fakeHandle = 99999n
+    activeImageHandles.add(fakeHandle)
+    expect(activeImageHandles.has(fakeHandle)).toBe(true)
+    // Deleting from activeImageHandles protects against repeated removal
+    activeImageHandles.delete(fakeHandle)
+    expect(activeImageHandles.has(fakeHandle)).toBe(false)
+    expect(() => vexartRemoveImage(1n, fakeHandle)).not.toThrow()
   })
 })

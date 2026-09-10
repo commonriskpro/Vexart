@@ -66,40 +66,49 @@ export function findLayerBoundaries(
   nextZ: { value: number },
   insideScroll = false,
   insideIsolation = false,
+  insideTransform = false,
 ) {
   if (path === "r") autoLayerCount = 0
   if (node.kind === "text") return
   const isScroll = !!(node.props.scrollX || node.props.scrollY)
   const isInteractionLayer = shouldPromoteInteractionLayer(node)
   const hasSubtreeTransform = !!(node.props.transform && node.children.length > 0)
+  const transformedInsideScroll = insideScroll && hasSubtreeTransform
+  const insideTransformedScrollSubtree = insideScroll && insideTransform
   const hasBackdrop = hasBackdropEffect(node.props)
   const isolatesSubtree = node.children.length > 0 && (
     node.props.filter !== undefined
     || (typeof node.props.opacity === "number" && node.props.opacity < 1)
   )
-  if (!insideIsolation && shouldPromoteToLayer(node)) {
+  if (transformedInsideScroll || insideTransformedScrollSubtree) node._autoLayer = false
+  if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && shouldPromoteToLayer(node)) {
     node._autoLayer = false
     pushBoundary(node, path, result, nextZ, isScroll, insideScroll, hasSubtreeTransform)
-  } else if (!insideIsolation && (isInteractionLayer || hasSubtreeTransform)) {
+  } else if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && (isInteractionLayer || (hasSubtreeTransform && !insideScroll))) {
+    // Keep transformed descendants of a scroll container in the scroll
+    // stream so the ancestor scissor remains attached to the transformed
+    // subtree. A separate layer cannot carry that clip without widening the
+    // backend contract; the render graph already owns the correct operation.
     node._autoLayer = false
     pushBoundary(node, path, result, nextZ, isScroll, insideScroll, hasSubtreeTransform)
-  } else if (!insideIsolation && hasBackdrop && autoLayerCount < AUTO_LAYER_BUDGET) {
+  } else if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && hasBackdrop && autoLayerCount < AUTO_LAYER_BUDGET) {
     node._autoLayer = true
     autoLayerCount++
     pushBoundary(node, path, result, nextZ, isScroll, insideScroll, hasSubtreeTransform)
-  } else if (!insideIsolation && node._autoLayer === true && node._unstableFrameCount >= 3) {
+  } else if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && node._autoLayer === true && node._unstableFrameCount >= 3) {
     node._autoLayer = false
     node._stableFrameCount = 0
     node._unstableFrameCount = 0
-  } else if (!insideIsolation && node._stableFrameCount >= 3 && hasPromotableArea(node) && autoLayerCount < AUTO_LAYER_BUDGET) {
+  } else if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && node._stableFrameCount >= 3 && hasPromotableArea(node) && autoLayerCount < AUTO_LAYER_BUDGET) {
     node._autoLayer = true
     autoLayerCount++
     pushBoundary(node, path, result, nextZ, isScroll, insideScroll, hasSubtreeTransform)
   }
   const childInsideScroll = insideScroll || isScroll
   const childInsideIsolation = insideIsolation || isolatesSubtree
+  const childInsideTransform = insideTransform || hasSubtreeTransform
   for (let i = 0; i < node.children.length; i++) {
-    findLayerBoundaries(node.children[i], `${path}.${i}`, result, nextZ, childInsideScroll, childInsideIsolation)
+    findLayerBoundaries(node.children[i], `${path}.${i}`, result, nextZ, childInsideScroll, childInsideIsolation, childInsideTransform)
   }
 }
 

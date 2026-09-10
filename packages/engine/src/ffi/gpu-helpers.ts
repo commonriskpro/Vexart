@@ -80,6 +80,9 @@ export type ImageInstance = {
 
 export type TransformedImageInstance = TransformQuad & {
   opacity: number
+  /** Signed object-fit crop/inset fractions consumed by the native shader. */
+  fitX?: number
+  fitY?: number
 }
 
 export type ImageGroup = {

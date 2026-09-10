@@ -17,7 +17,7 @@
  */
 
 import { ensureImageExtra, type TGENode } from "../ffi/node"
-import { nativeImageAssetRegister, nativeImageAssetTouch, syncNativeImageHandle } from "../ffi/native-image-assets"
+import { nativeImageAssetRegister, nativeImageAssetRelease, nativeImageAssetTouch, syncNativeImageHandle } from "../ffi/native-image-assets"
 import { markDirty } from "../reconciler/dirty"
 
 // ── Cache ──
@@ -127,7 +127,13 @@ export function decodeImageForNode(node: TGENode) {
     if (result) {
       if (imageCache.size >= MAX_IMAGE_CACHE) {
         const first = imageCache.keys().next().value
-        if (first) imageCache.delete(first)
+        if (first) {
+          const entry = imageCache.get(first)
+          if (entry?.nativeHandle) {
+            nativeImageAssetRelease(entry.nativeHandle)
+          }
+          imageCache.delete(first)
+        }
       }
       imageCache.set(src, result)
       extra.buffer = result
@@ -319,7 +325,14 @@ function nearestNeighborScale(
 /** Clear the image cache (e.g., on hot reload). */
 /** @public */
 export function clearImageCache() {
+  for (const entry of imageCache.values()) {
+    if (entry.nativeHandle) {
+      nativeImageAssetRelease(entry.nativeHandle)
+      entry.nativeHandle = undefined
+    }
+  }
   imageCache.clear()
+  pendingDecodes.clear()
   for (const cache of scaledImageCaches) cache.clear()
 }
 

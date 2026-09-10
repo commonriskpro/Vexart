@@ -186,6 +186,160 @@ describe("Grid interaction bridge", () => {
     state.layout.destroy()
   })
 
+  test("keeps a transformed card interactive when its layout starts outside the scroll viewport", () => {
+    let presses = 0
+    const entering = box({
+      width: 40,
+      height: 30,
+      floating: "root",
+      floatOffset: { x: 120, y: 0 },
+      transform: { translateX: -80 },
+      hoverStyle: { backgroundColor: 0xff00ff00 },
+      onPress: () => { presses++ },
+    })
+    const clipped = box({
+      width: 40,
+      height: 30,
+      floating: "root",
+      floatOffset: { x: 120, y: 0 },
+      transform: { translateX: -10 },
+      hoverStyle: { backgroundColor: 0xffff0000 },
+    })
+    const root = box({ width: 100, height: 30, scrollX: true }, [entering, clipped])
+    const state = frame(root, 100, 30)
+
+    // The layout rects are both outside [0, 100), but only the first card's
+    // transformed visual bounds enter the viewport (x=40..80).
+    expect(entering.layout.x).toBeGreaterThanOrEqual(100)
+    expect(clipped.layout.x).toBeGreaterThanOrEqual(100)
+    expect(isFullyOutsideScrollViewport(entering)).toBe(false)
+    expect(isFullyOutsideScrollViewport(clipped)).toBe(true)
+
+    const bag = interactionBag(state.state, 50, 15, true)
+    bag.pendingPress = true
+    updateInteractiveStates(bag)
+    expect(entering._hovered).toBe(true)
+    expect(clipped._hovered).toBe(false)
+
+    bag.pointerDown = false
+    bag.pendingRelease = true
+    updateInteractiveStates(bag)
+    expect(presses).toBe(1)
+    state.layout.destroy()
+  })
+
+  test("uses accumulated ancestor transforms for scroll culling", () => {
+    let moves = 0
+    const card = box({
+      width: 40,
+      height: 30,
+      hoverStyle: { backgroundColor: 0xff00ff00 },
+      onMouseMove: () => { moves++ },
+    })
+    const transformedParent = box({
+      width: 80,
+      height: 30,
+      floating: "root",
+      floatOffset: { x: 120, y: 0 },
+      transform: { translateX: -80 },
+    }, [card])
+    const root = box({ width: 100, height: 30, scrollX: true }, [transformedParent])
+    const state = frame(root, 100, 30)
+
+    expect(card.layout.x).toBeGreaterThanOrEqual(100)
+    expect(card._accTransform).not.toBeNull()
+    expect(isFullyOutsideScrollViewport(card)).toBe(false)
+
+    const bag = interactionBag(state.state, 50, 15)
+    updateInteractiveStates(bag)
+    expect(card._hovered).toBe(true)
+    expect(moves).toBe(1)
+    state.layout.destroy()
+  })
+
+  test("compares transformed content against the transformed scroll viewport", () => {
+    const card = box({
+      width: 40,
+      height: 20,
+      floating: "parent",
+      floatOffset: { x: 120, y: 0 },
+      transform: { translateX: -80 },
+      onPress: () => {},
+    })
+    const viewport = box({ width: 100, height: 40, scrollX: true, transform: { scale: 2 } }, [card])
+    const root = box({ width: 200, height: 100 }, [viewport])
+    const state = frame(root, 200, 100)
+
+    // The card starts beyond the raw viewport rect (x=120), but its own
+    // transform brings it inside the scaled viewport's visual bounds.
+    expect(card.layout.x).toBeGreaterThanOrEqual(viewport.layout.x + viewport.layout.width)
+    expect(isFullyOutsideScrollViewport(card)).toBe(false)
+    state.layout.destroy()
+  })
+
+  test("does not dispatch interaction for the clipped half of a card", () => {
+    let presses = 0
+    const card = box({
+      width: 80,
+      height: 30,
+      floating: "root",
+      floatOffset: { x: 80, y: 0 },
+      onPress: () => { presses++ },
+    })
+    const viewport = box({ width: 100, height: 30, scrollX: true }, [card])
+    const state = frame(viewport, 100, 30)
+    const bag = interactionBag(state.state, 120, 15, true)
+    bag.pendingPress = true
+    updateInteractiveStates(bag)
+    expect(card._hovered).toBe(false)
+    expect(card._active).toBe(false)
+
+    bag.pointerDown = false
+    bag.pendingRelease = true
+    updateInteractiveStates(bag)
+    expect(presses).toBe(0)
+    state.layout.destroy()
+  })
+
+  test("clips pointer interaction against a transformed viewport shape", () => {
+    let moves = 0
+    const card = box({
+      width: 80,
+      height: 20,
+      floating: "parent",
+      floatOffset: { x: 80, y: 0 },
+      onMouseMove: () => { moves++ },
+    })
+    const viewport = box({ width: 100, height: 40, scrollX: true, transform: { scale: 2 } }, [card])
+    const state = frame(viewport, 200, 100)
+
+    // The pointer is over the transformed card, but outside the transformed
+    // viewport (the viewport's visual right edge is x=150).
+    const bag = interactionBag(state.state, 200, 20)
+    updateInteractiveStates(bag)
+    expect(card._hovered).toBe(false)
+    expect(moves).toBe(0)
+    state.layout.destroy()
+  })
+
+  test("honors an outer scroll clip for nested scroll containers", () => {
+    const card = box({ width: 40, height: 30, onPress: () => {} })
+    const inner = box({ width: 80, height: 30, floating: "parent", floatOffset: { x: 120, y: 0 }, scrollX: true }, [card])
+    const outer = box({ width: 100, height: 30, scrollX: true }, [inner])
+    const state = frame(outer, 100, 30)
+    const offsets = new Map([[outer.id, { x: 0, y: 0 }], [inner.id, { x: 0, y: 0 }]])
+    setActiveScrollOffsets(offsets)
+
+    // The card remains partially inside the inner viewport but is fully
+    // outside the outer viewport after the outer scroll offset is applied.
+    expect(isFullyOutsideScrollViewport(card)).toBe(true)
+    const bag = interactionBag(state.state, 0, 15)
+    bag.scrollOffsets = offsets
+    updateInteractiveStates(bag)
+    expect(card._hovered).toBe(false)
+    state.layout.destroy()
+  })
+
   test("preserves damage when a Grid item moves between explicit columns", () => {
     const item = box({ width: 50, height: 30, gridColumn: { start: 1, end: 2 } })
     const root = box({ layout: "grid", width: 100, height: 30, gridTemplateColumns: [50, 50], gridTemplateRows: [30] }, [item])

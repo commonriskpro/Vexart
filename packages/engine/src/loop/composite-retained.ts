@@ -12,6 +12,7 @@ import { fromConfig, isIdentity, multiply, transformPoint, translate } from "../
 import type { RendererBackendRetainedLayer } from "../ffi/renderer-backend"
 import type { TransformQuad } from "../ffi/damage"
 import type { Layer } from "../ffi/layers"
+import { shouldFreezeInteractionLayer } from "../reconciler/interaction"
 
 // ── Transform helpers ────────────────────────────────────────────────────
 
@@ -40,8 +41,6 @@ export function computeNodeSubtreeTransformQuad(node: TGENode): TransformQuad | 
     current = current.parent
   }
   if (chain.length === 0) return null
-  chain.reverse()
-
   const transformAbsolutePoint = (x: number, y: number) => {
     let point = { x, y }
     for (const target of chain) {
@@ -66,6 +65,39 @@ export function computeNodeSubtreeTransformQuad(node: TGENode): TransformQuad | 
   }
 }
 
+function isAxisTranslationQuad(node: TGENode, quad: TransformQuad) {
+  const epsilon = 1e-6
+  return Math.abs(quad.p1.x - quad.p0.x - node.layout.width) < epsilon
+    && Math.abs(quad.p1.y - quad.p0.y) < epsilon
+    && Math.abs(quad.p2.x - quad.p0.x) < epsilon
+    && Math.abs(quad.p2.y - quad.p0.y - node.layout.height) < epsilon
+}
+
+function hasCaptureExpansion(node: TGENode, includeTransform = false): boolean {
+  const props = resolveProps(node)
+  if (props.shadow !== undefined || props.glow !== undefined || props.filter !== undefined) return true
+  if (props.backdropBlur !== undefined || props.backdropBrightness !== undefined || props.backdropContrast !== undefined || props.backdropSaturate !== undefined || props.backdropGrayscale !== undefined || props.backdropInvert !== undefined || props.backdropSepia !== undefined || props.backdropHueRotate !== undefined) return true
+  if (includeTransform && props.transform !== undefined) return true
+  // The boundary transform itself is handled by the axis-translation check;
+  // descendants with their own transform require the general capture path.
+  return node.children.some((child) => hasCaptureExpansion(child, true))
+}
+
+function retainedTransformQuad(node: TGENode, bounds: { x: number; y: number; width: number; height: number }) {
+  const quad = computeNodeSubtreeTransformQuad(node)
+  if (!quad || !isAxisTranslationQuad(node, quad) || hasCaptureExpansion(node) || shouldFreezeInteractionLayer(node)) return quad
+
+  // paintFrame stores translated layers as viewport-bounded source crops. The
+  // retained compositor must map that cropped target to its clipped output
+  // rectangle instead of restoring the original wide quad and stretching it.
+  return {
+    p0: { x: bounds.x, y: bounds.y },
+    p1: { x: bounds.x + bounds.width, y: bounds.y },
+    p2: { x: bounds.x, y: bounds.y + bounds.height },
+    p3: { x: bounds.x + bounds.width, y: bounds.y + bounds.height },
+  }
+}
+
 // ── Retained compositor layer builder ────────────────────────────────────
 
 export function buildRetainedCompositorLayers(
@@ -87,7 +119,7 @@ export function buildRetainedCompositorLayers(
       key,
       z: layer.z,
       bounds,
-      subtreeTransform: node ? computeNodeSubtreeTransformQuad(node) : null,
+      subtreeTransform: node ? retainedTransformQuad(node, bounds) : null,
       isBackground: false,
       opacity: typeof vp?.opacity === "number" ? vp.opacity : 1,
     })
