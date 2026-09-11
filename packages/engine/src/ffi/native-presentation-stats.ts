@@ -143,22 +143,6 @@ export function allocNativeStatsBuf(): Uint8Array {
 }
 
 /**
- * Check if stats indicate the native path was actually used.
- */
-/** @public */
-export function isNativeStatsValid(stats: NativePresentationStats | null): boolean {
-  return !!(stats && (stats.flags & NATIVE_STATS_FLAG.VALID) !== 0 && stats.version >= 1)
-}
-
-/**
- * Check if stats indicate a fallback was activated.
- */
-/** @public */
-export function isNativeStatsFallback(stats: NativePresentationStats | null): boolean {
-  return !!(stats && (stats.flags & NATIVE_STATS_FLAG.FALLBACK) !== 0)
-}
-
-/**
  * Format stats as a compact string for debug display.
  * Example: "native[shm] frame rb=0B emit=4096B total=120µs"
  */
