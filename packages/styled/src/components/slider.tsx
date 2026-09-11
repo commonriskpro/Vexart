@@ -8,6 +8,7 @@ import { Slider } from "@vexart/headless"
 import type { SliderRenderContext } from "@vexart/headless"
 import { radius, space, font, shadows, glows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
+import type { SizingUnit } from "@vexart/engine"
 
 /** @public */
 export type VoidSliderProps = {
@@ -19,7 +20,7 @@ export type VoidSliderProps = {
   largeStep?: number
   disabled?: boolean
   focusId?: string
-  width?: number | string
+  width?: SizingUnit
   showValue?: boolean
 }
 

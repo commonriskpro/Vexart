@@ -8,7 +8,7 @@
 
 import { createSignal, For, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import { useFocus, onPostScroll, markDirty } from "@vexart/engine"
+import { useFocus, onPostScroll, markDirty, type SizingUnit } from "@vexart/engine"
 import { useScrollHandle } from "../helpers/use-scroll"
 
 // ── Types ──
@@ -38,9 +38,9 @@ export type VirtualListProps<T> = {
    *   The actual pixel height is read from the scroll handle's
    *   viewportHeight after the first layout pass.
    */
-  height: number | string
+  height: SizingUnit
   /** Width. Default: "grow". */
-  width?: number | string
+  width?: SizingUnit
   /** Extra items to render above/below viewport. Default: 5. */
   overscan?: number
   /** Render each visible item. */

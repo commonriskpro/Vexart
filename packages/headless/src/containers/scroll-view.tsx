@@ -29,7 +29,7 @@
 
 import { createSignal, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import type { ScrollHandle } from "@vexart/engine"
+import type { ScrollHandle, SizingUnit } from "@vexart/engine"
 import { Show, onPostScroll } from "@vexart/engine"
 import { useScrollHandle } from "../helpers/use-scroll"
 
@@ -52,8 +52,8 @@ export type ScrollViewProps = {
   ref?: (handle: ScrollHandle) => void
 
   // Sizing — at least one dimension should be fixed for scroll to work
-  width?: number | string
-  height?: number | string
+  width?: SizingUnit
+  height?: SizingUnit
 
   // Scroll axes
   scrollX?: boolean
@@ -93,7 +93,7 @@ export type ScrollViewProps = {
  * reactive re-evaluation every frame — the ScrollHandle itself
  * is NOT a SolidJS signal, so we need an explicit trigger.
  */
-function Scrollbar(props: { handle: ScrollHandle; height: number | string }) {
+function Scrollbar(props: { handle: ScrollHandle; height: SizingUnit }) {
   const [scrollTick, setScrollTick] = createSignal(0)
   let lastY = 0
   let lastCh = 0

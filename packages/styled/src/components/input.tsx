@@ -10,6 +10,7 @@
 import { Input } from "@vexart/headless"
 import { radius, space, font } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
+import type { SizingUnit } from "@vexart/engine"
 
 /** @public */
 export type VoidInputProps = {
@@ -19,7 +20,7 @@ export type VoidInputProps = {
   placeholder?: string
   disabled?: boolean
   focusId?: string
-  width?: number | string
+  width?: SizingUnit
 }
 
 /** @public */

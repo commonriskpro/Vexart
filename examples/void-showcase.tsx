@@ -19,12 +19,12 @@ import {
   // Typography
   H1, H2, H3, H4, P, Lead, Large, Small, Muted,
   // Components
-  Button,
-  Card as StyledCard, CardHeader, CardTitle, CardDescription, CardContent, CardFooter,
-  Badge,
-  Avatar,
-  Separator,
-  Skeleton,
+  VoidButton,
+  VoidCard as BaseVoidCard, VoidCardHeader, VoidCardTitle, VoidCardDescription, VoidCardContent, VoidCardFooter,
+  VoidBadge,
+  VoidAvatar,
+  VoidSeparator,
+  VoidSkeleton,
   VoidInput,
   VoidTextarea,
   VoidCheckbox,
@@ -50,9 +50,9 @@ const syntaxStyle = SyntaxStyle.fromTheme(ONE_DARK)
 
 type ShowcaseCardProps = { children?: JSX.Element }
 
-function Card(props: ShowcaseCardProps) {
+function VoidCard(props: ShowcaseCardProps) {
   const content = untrack(() => props.children)
-  return <StyledCard size="sm">{content}</StyledCard>
+  return <BaseVoidCard size="sm">{content}</BaseVoidCard>
 }
 
 // ── Inputs Tab ──
@@ -71,12 +71,12 @@ function InputsTab() {
     <Box width="100%" direction="row" gap={space[4]} alignY="top">
       {/* Column 1 */}
       <Box direction="column" gap={space[4]} width="grow">
-        <Card>
-          <CardHeader>
-            <CardTitle>Text Inputs</CardTitle>
-            <CardDescription>Single-line and multi-line editors</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>Text Inputs</VoidCardTitle>
+            <VoidCardDescription>Single-line and multi-line editors</VoidCardDescription>
+          </VoidCardHeader>
+          <VoidCardContent>
             <Box direction="column" gap={space[4]}>
               <Box direction="column" gap={space[1]}>
                 <Small>VoidInput</Small>
@@ -87,14 +87,14 @@ function InputsTab() {
                 <VoidTextarea value={area()} onChange={setArea} width={300} height={100} />
               </Box>
             </Box>
-          </CardContent>
-        </Card>
+          </VoidCardContent>
+        </VoidCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Selection</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>Selection</VoidCardTitle>
+          </VoidCardHeader>
+          <VoidCardContent>
             <Box direction="column" gap={space[4]}>
               <Box direction="column" gap={space[1]}>
                 <Small>VoidSelect</Small>
@@ -124,32 +124,32 @@ function InputsTab() {
                 />
               </Box>
             </Box>
-          </CardContent>
-        </Card>
+          </VoidCardContent>
+        </VoidCard>
       </Box>
 
       {/* Column 2 */}
       <Box direction="column" gap={space[4]} width="grow">
-        <Card>
-          <CardHeader>
-            <CardTitle>Toggles</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>Toggles</VoidCardTitle>
+          </VoidCardHeader>
+          <VoidCardContent>
             <Box direction="column" gap={space[3]}>
               <VoidCheckbox checked={checked()} onChange={setChecked} label="Enable notifications" />
               <VoidCheckbox checked={false} label="Marketing emails" />
-              <Separator />
+              <VoidSeparator />
               <VoidSwitch checked={switched()} onChange={setSwitched} label="Dark mode" />
               <VoidSwitch checked={true} label="Auto-save" />
             </Box>
-          </CardContent>
-        </Card>
+          </VoidCardContent>
+        </VoidCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Radio & Slider</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>Radio & Slider</VoidCardTitle>
+          </VoidCardHeader>
+          <VoidCardContent>
             <Box direction="column" gap={space[4]}>
               <VoidRadioGroup
                 value={radio()}
@@ -160,14 +160,14 @@ function InputsTab() {
                   { value: "c", label: "Option C" },
                 ]}
               />
-              <Separator />
+              <VoidSeparator />
               <Box direction="column" gap={space[1]}>
                 <Small>VoidSlider: {slider()}</Small>
                 <VoidSlider value={slider()} onChange={setSlider} min={0} max={100} />
               </Box>
             </Box>
-          </CardContent>
-        </Card>
+          </VoidCardContent>
+        </VoidCard>
       </Box>
     </Box>
   )
@@ -179,94 +179,94 @@ function DisplayTab() {
   return (
     <Box width="100%" direction="row" gap={space[4]} alignY="top">
       <Box direction="column" gap={space[4]} width="grow">
-        <Card>
-          <CardHeader>
-            <CardTitle>Buttons</CardTitle>
-            <CardDescription>All variants and sizes</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>Buttons</VoidCardTitle>
+            <VoidCardDescription>All variants and sizes</VoidCardDescription>
+          </VoidCardHeader>
+          <VoidCardContent>
             <Box direction="column" gap={space[3]}>
               <Box direction="row" gap={space[2]} alignY="center">
-                <Button variant="default" onPress={() => {}}>Default</Button>
-                <Button variant="secondary" onPress={() => {}}>Secondary</Button>
-                <Button variant="outline" onPress={() => {}}>Outline</Button>
-                <Button variant="ghost" onPress={() => {}}>Ghost</Button>
-                <Button variant="destructive" onPress={() => {}}>Destructive</Button>
+                <VoidButton variant="default" onPress={() => {}}>Default</VoidButton>
+                <VoidButton variant="secondary" onPress={() => {}}>Secondary</VoidButton>
+                <VoidButton variant="outline" onPress={() => {}}>Outline</VoidButton>
+                <VoidButton variant="ghost" onPress={() => {}}>Ghost</VoidButton>
+                <VoidButton variant="destructive" onPress={() => {}}>Destructive</VoidButton>
               </Box>
               <Box direction="row" gap={space[2]} alignY="center">
-                <Button size="xs" onPress={() => {}}>XS</Button>
-                <Button size="sm" onPress={() => {}}>SM</Button>
-                <Button onPress={() => {}}>Default</Button>
-                <Button size="lg" onPress={() => {}}>LG</Button>
+                <VoidButton size="xs" onPress={() => {}}>XS</VoidButton>
+                <VoidButton size="sm" onPress={() => {}}>SM</VoidButton>
+                <VoidButton onPress={() => {}}>Default</VoidButton>
+                <VoidButton size="lg" onPress={() => {}}>LG</VoidButton>
               </Box>
             </Box>
-          </CardContent>
-        </Card>
+          </VoidCardContent>
+        </VoidCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Badges</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>Badges</VoidCardTitle>
+          </VoidCardHeader>
+          <VoidCardContent>
             <Box direction="row" gap={space[2]}>
-              <Badge>Default</Badge>
-              <Badge variant="secondary">Secondary</Badge>
-              <Badge variant="outline">Outline</Badge>
-              <Badge variant="destructive">Destructive</Badge>
+              <VoidBadge>Default</VoidBadge>
+              <VoidBadge variant="secondary">Secondary</VoidBadge>
+              <VoidBadge variant="outline">Outline</VoidBadge>
+              <VoidBadge variant="destructive">Destructive</VoidBadge>
             </Box>
-          </CardContent>
-        </Card>
+          </VoidCardContent>
+        </VoidCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Avatar</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>Avatar</VoidCardTitle>
+          </VoidCardHeader>
+          <VoidCardContent>
             <Box direction="row" gap={space[3]} alignY="center">
-              <Avatar name="Sarah Chen" size="sm" />
-              <Avatar name="Alex Rivera" />
-              <Avatar name="Jordan Kim" size="lg" />
-              <Avatar name="Custom" color="#56d4c8" />
+              <VoidAvatar name="Sarah Chen" size="sm" />
+              <VoidAvatar name="Alex Rivera" />
+              <VoidAvatar name="Jordan Kim" size="lg" />
+              <VoidAvatar name="Custom" color="#56d4c8" />
             </Box>
-          </CardContent>
-        </Card>
+          </VoidCardContent>
+        </VoidCard>
       </Box>
 
       <Box direction="column" gap={space[4]} width="grow">
-        <Card>
-          <CardHeader>
-            <CardTitle>Card Anatomy</CardTitle>
-            <CardDescription>Every Card sub-component</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>Card Anatomy</VoidCardTitle>
+            <VoidCardDescription>Every Card sub-component</VoidCardDescription>
+          </VoidCardHeader>
+          <VoidCardContent>
             <P>This is the CardContent area. It holds the main content of the card.</P>
-          </CardContent>
-          <CardFooter>
-            <Button variant="outline" size="sm" onPress={() => {}}>Cancel</Button>
-            <Button size="sm" onPress={() => {}}>Save</Button>
-          </CardFooter>
-        </Card>
+          </VoidCardContent>
+          <VoidCardFooter>
+            <VoidButton variant="outline" size="sm" onPress={() => {}}>Cancel</VoidButton>
+            <VoidButton size="sm" onPress={() => {}}>Save</VoidButton>
+          </VoidCardFooter>
+        </VoidCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Progress & Skeleton</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>Progress & Skeleton</VoidCardTitle>
+          </VoidCardHeader>
+          <VoidCardContent>
             <Box direction="column" gap={space[3]}>
               <Box direction="column" gap={space[1]}>
                 <Small>VoidProgress</Small>
                 <VoidProgress value={72} max={100} />
               </Box>
-              <Separator />
+              <VoidSeparator />
               <Box direction="column" gap={space[1]}>
                 <Small>Skeleton</Small>
-                <Skeleton width={200} height={12} />
-                <Skeleton width={160} height={12} />
-                <Skeleton width={120} height={12} />
+                <VoidSkeleton width={200} height={12} />
+                <VoidSkeleton width={160} height={12} />
+                <VoidSkeleton width={120} height={12} />
               </Box>
             </Box>
-          </CardContent>
-        </Card>
+          </VoidCardContent>
+        </VoidCard>
       </Box>
     </Box>
   )
@@ -289,12 +289,12 @@ function CollectionsTab() {
   return (
     <Box width="100%" direction="row" gap={space[4]} alignY="top">
       <Box direction="column" gap={space[4]} width="grow">
-        <Card>
-          <CardHeader>
-            <CardTitle>VoidList</CardTitle>
-            <CardDescription>Keyboard navigable list</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>VoidList</VoidCardTitle>
+            <VoidCardDescription>Keyboard navigable list</VoidCardDescription>
+          </VoidCardHeader>
+          <VoidCardContent>
             <VoidList
               items={["Dashboard", "Settings", "Profile", "Notifications", "Billing", "Help"]}
               selectedIndex={listIdx()}
@@ -302,15 +302,15 @@ function CollectionsTab() {
               width={280}
               height={200}
             />
-          </CardContent>
-        </Card>
+          </VoidCardContent>
+        </VoidCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>VoidScrollView</CardTitle>
-            <CardDescription>Themed scrollable container</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>VoidScrollView</VoidCardTitle>
+            <VoidCardDescription>Themed scrollable container</VoidCardDescription>
+          </VoidCardHeader>
+          <VoidCardContent>
             <VoidScrollView width={280} height={120} padding={space[3]} gap={space[2]}>
               <P>Line 1: Vexart is a GPU-accelerated terminal UI engine.</P>
               <P>Line 2: Write JSX with SolidJS reconciliation.</P>
@@ -321,17 +321,17 @@ function CollectionsTab() {
               <P>Line 7: Void design system with dark theme.</P>
               <P>Line 8: Supports Kitty, Ghostty, and WezTerm.</P>
             </VoidScrollView>
-          </CardContent>
-        </Card>
+          </VoidCardContent>
+        </VoidCard>
       </Box>
 
       <Box direction="column" gap={space[4]} width="grow">
-        <Card>
-          <CardHeader>
-            <CardTitle>VoidTable</CardTitle>
-            <CardDescription>Striped data table with selection</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>VoidTable</VoidCardTitle>
+            <VoidCardDescription>Striped data table with selection</VoidCardDescription>
+          </VoidCardHeader>
+          <VoidCardContent>
             <VoidTable
               columns={[
                 { key: "name", header: "Package", width: 120 },
@@ -342,8 +342,8 @@ function CollectionsTab() {
               selectedRow={tableRow()}
               onSelectedRowChange={setTableRow}
             />
-          </CardContent>
-        </Card>
+          </VoidCardContent>
+        </VoidCard>
       </Box>
     </Box>
   )
@@ -352,14 +352,14 @@ function CollectionsTab() {
 // ── Code & Markdown Tab ──
 
 function CodeTab() {
-  const sampleCode = `import { createApp, Box, Text } from "vexart"
+  const sampleCode = `import { createApp, Box, Text, VoidCard, VoidButton } from "vexart"
 function App() {
   return (
-    <Card>
-      <Button onPress={() => save()}>
+    <VoidCard>
+      <VoidButton onPress={() => save()}>
         Save Changes
-      </Button>
-    </Card>
+      </VoidButton>
+    </VoidCard>
   )
 }
 await createApp(() => <App />)`
@@ -394,12 +394,12 @@ await createApp(() => <App />)
   return (
     <Box width="100%" direction="row" gap={space[4]} alignY="top">
       <Box direction="column" gap={space[4]} width="grow">
-        <Card>
-          <CardHeader>
-            <CardTitle>VoidCode</CardTitle>
-            <CardDescription>Syntax-highlighted code block</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>VoidCode</VoidCardTitle>
+            <VoidCardDescription>Syntax-highlighted code block</VoidCardDescription>
+          </VoidCardHeader>
+          <VoidCardContent>
             <VoidCode
               content={sampleCode}
               language="typescript"
@@ -407,34 +407,34 @@ await createApp(() => <App />)
               width={360}
               lineNumbers
             />
-          </CardContent>
-        </Card>
+          </VoidCardContent>
+        </VoidCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>VoidDiff</CardTitle>
-            <CardDescription>Unified diff viewer</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>VoidDiff</VoidCardTitle>
+            <VoidCardDescription>Unified diff viewer</VoidCardDescription>
+          </VoidCardHeader>
+          <VoidCardContent>
             <VoidDiff diff={sampleDiff} showLineNumbers width={360} />
-          </CardContent>
-        </Card>
+          </VoidCardContent>
+        </VoidCard>
       </Box>
 
       <Box direction="column" gap={space[4]} width="grow">
-        <Card>
-          <CardHeader>
-            <CardTitle>VoidMarkdown</CardTitle>
-            <CardDescription>Rendered markdown content</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>VoidMarkdown</VoidCardTitle>
+            <VoidCardDescription>Rendered markdown content</VoidCardDescription>
+          </VoidCardHeader>
+          <VoidCardContent>
             <VoidMarkdown
               content={sampleMarkdown}
               syntaxStyle={syntaxStyle}
               width={360}
             />
-          </CardContent>
-        </Card>
+          </VoidCardContent>
+        </VoidCard>
       </Box>
     </Box>
   )
@@ -449,15 +449,15 @@ function OverlaysTab() {
   return (
     <Box width="100%" direction="row" gap={space[4]} alignY="top">
       <Box direction="column" gap={space[4]} width="grow">
-        <Card>
-          <CardHeader>
-            <CardTitle>Dialog</CardTitle>
-            <CardDescription>Modal with backdrop blur</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onPress={() => setDialogOpen(true)}>Open Dialog</Button>
-          </CardContent>
-        </Card>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>Dialog</VoidCardTitle>
+            <VoidCardDescription>Modal with backdrop blur</VoidCardDescription>
+          </VoidCardHeader>
+          <VoidCardContent>
+            <VoidButton onPress={() => setDialogOpen(true)}>Open Dialog</VoidButton>
+          </VoidCardContent>
+        </VoidCard>
 
         <Show when={dialogOpen()}>
           <VoidDialog onClose={() => setDialogOpen(false)} width={360}>
@@ -466,50 +466,50 @@ function OverlaysTab() {
               Are you sure you want to proceed? This action cannot be undone.
             </VoidDialogDescription>
             <VoidDialogFooter>
-              <Button variant="outline" onPress={() => setDialogOpen(false)}>Cancel</Button>
-              <Button variant="destructive" onPress={() => setDialogOpen(false)}>Delete</Button>
+              <VoidButton variant="outline" onPress={() => setDialogOpen(false)}>Cancel</VoidButton>
+              <VoidButton variant="destructive" onPress={() => setDialogOpen(false)}>Delete</VoidButton>
             </VoidDialogFooter>
           </VoidDialog>
         </Show>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Toasts</CardTitle>
-            <CardDescription>Notification system</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>Toasts</VoidCardTitle>
+            <VoidCardDescription>Notification system</VoidCardDescription>
+          </VoidCardHeader>
+          <VoidCardContent>
             <Box direction="row" gap={space[2]}>
-              <Button size="sm" onPress={() => toaster.toast({ message: "Saved successfully", variant: "success" })}>
+              <VoidButton size="sm" onPress={() => toaster.toast({ message: "Saved successfully", variant: "success" })}>
                 Success
-              </Button>
-              <Button size="sm" variant="destructive" onPress={() => toaster.toast({ message: "Something went wrong", variant: "error" })}>
+              </VoidButton>
+              <VoidButton size="sm" variant="destructive" onPress={() => toaster.toast({ message: "Something went wrong", variant: "error" })}>
                 Error
-              </Button>
-              <Button size="sm" variant="outline" onPress={() => toaster.toast({ message: "New update available", variant: "info" })}>
+              </VoidButton>
+              <VoidButton size="sm" variant="outline" onPress={() => toaster.toast({ message: "New update available", variant: "info" })}>
                 Info
-              </Button>
+              </VoidButton>
             </Box>
-          </CardContent>
-        </Card>
+          </VoidCardContent>
+        </VoidCard>
       </Box>
 
       <Box direction="column" gap={space[4]} width="grow">
-        <Card>
-          <CardHeader>
-            <CardTitle>Tooltip</CardTitle>
-            <CardDescription>Hover for details</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>Tooltip</VoidCardTitle>
+            <VoidCardDescription>Hover for details</VoidCardDescription>
+          </VoidCardHeader>
+          <VoidCardContent>
             <Box direction="row" gap={space[3]}>
               <VoidTooltip content="This is a tooltip">
-                <Button variant="outline" size="sm" onPress={() => {}}>Hover me</Button>
+                <VoidButton variant="outline" size="sm" onPress={() => {}}>Hover me</VoidButton>
               </VoidTooltip>
               <VoidTooltip content="Another tooltip with longer text">
-                <Badge>Info</Badge>
+                <VoidBadge>Info</VoidBadge>
               </VoidTooltip>
             </Box>
-          </CardContent>
-        </Card>
+          </VoidCardContent>
+        </VoidCard>
       </Box>
     </Box>
   )
@@ -521,27 +521,27 @@ function TypographyTab() {
   return (
     <Box width="100%" direction="row" gap={space[4]} alignY="top">
       <Box direction="column" gap={space[4]} width="grow">
-        <Card>
-          <CardHeader>
-            <CardTitle>Heading Scale</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>Heading Scale</VoidCardTitle>
+          </VoidCardHeader>
+          <VoidCardContent>
             <Box direction="column" gap={space[3]}>
               <H1>Heading 1</H1>
               <H2>Heading 2</H2>
               <H3>Heading 3</H3>
               <H4>Heading 4</H4>
             </Box>
-          </CardContent>
-        </Card>
+          </VoidCardContent>
+        </VoidCard>
       </Box>
 
       <Box direction="column" gap={space[4]} width="grow">
-        <Card>
-          <CardHeader>
-            <CardTitle>Body Text</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>Body Text</VoidCardTitle>
+          </VoidCardHeader>
+          <VoidCardContent>
             <Box direction="column" gap={space[3]}>
               <Lead>Lead — introductory text that stands out.</Lead>
               <P>Paragraph — standard body text for content areas.</P>
@@ -549,21 +549,21 @@ function TypographyTab() {
               <Small>Small — captions, labels, and metadata.</Small>
               <Muted>Muted — secondary information, less important.</Muted>
             </Box>
-          </CardContent>
-        </Card>
+          </VoidCardContent>
+        </VoidCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Separator</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>Separator</VoidCardTitle>
+          </VoidCardHeader>
+          <VoidCardContent>
             <Box direction="column" gap={space[2]}>
               <P>Content above</P>
-              <Separator />
+              <VoidSeparator />
               <P>Content below</P>
             </Box>
-          </CardContent>
-        </Card>
+          </VoidCardContent>
+        </VoidCard>
       </Box>
     </Box>
   )
@@ -633,7 +633,7 @@ function App() {
         </Box>
         <Box direction="row" gap={space[2]} alignY="center">
           <Text color="#f59e0b" fontSize={font.xs}>{perfLine()}</Text>
-          <Badge variant="outline">v0.9</Badge>
+          <VoidBadge variant="outline">v0.9</VoidBadge>
         </Box>
       </Box>
 

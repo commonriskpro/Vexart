@@ -7,6 +7,7 @@
  */
 
 import type { JSX } from "solid-js"
+import type { SizingUnit } from "@vexart/engine"
 
 const LINE_HEIGHT = 17
 const CHAR_WIDTH = 9
@@ -68,7 +69,7 @@ const DIFF_DEFAULTS: DiffTheme = {
 export type DiffProps = {
   diff: string
   showLineNumbers?: boolean
-  width?: number | string
+  width?: SizingUnit
   /** Visual theme — all styling comes from here. */
   theme?: Partial<DiffTheme>
 }

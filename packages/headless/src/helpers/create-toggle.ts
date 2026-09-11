@@ -7,7 +7,7 @@ export type ToggleRenderContext = {
   disabled: boolean
   /** Spread on the root element for click toggle + keyboard + focus. */
   toggleProps: {
-    focusable: true
+    focusable?: boolean
     onPress: () => void
   }
 }
@@ -37,7 +37,6 @@ export function createToggle(options: ToggleOptions) {
   }
 
   const toggleProps = {
-    focusable: true as const,
     onPress: toggle,
   }
 

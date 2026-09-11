@@ -67,8 +67,7 @@ export type {
   VexartStyleProps,
 } from "./styles/class-name"
 
-// ── Layout helpers ───────────────────────────────────────────────────────────
-
+// ── Primitives & Styling ───────────────────────────────────────────────────
 
 export type { TGEProps as BoxProps, ShadowConfig, GlowConfig } from "@vexart/engine"
 
@@ -156,17 +155,15 @@ export {
   setTheme,
   getTheme,
   getThemeVersion,
-  ThemeProvider,
-  useTheme,
   // Typography
   H1, H2, H3, H4, P, Lead, Large, Small, Muted,
-  // Components — styled versions win
-  Avatar,
-  Badge,
-  Button,
-  Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, CardAction,
-  Separator,
-  Skeleton,
+  // Void design system components (styled)
+  VoidAvatar,
+  VoidBadge,
+  VoidButton,
+  VoidCard, VoidCardHeader, VoidCardTitle, VoidCardDescription, VoidCardContent, VoidCardFooter, VoidCardAction,
+  VoidSeparator,
+  VoidSkeleton,
   VoidCheckbox,
   VoidCombobox,
   VoidDialog, VoidDialogTitle, VoidDialogDescription, VoidDialogFooter,
@@ -199,19 +196,20 @@ export type {
   ColorTokens,
   ThemeDefinition,
   TypographyProps,
-  AvatarProps,
+  VoidAvatarProps,
   AvatarSize,
-  BadgeProps,
+  VoidBadgeProps,
   BadgeVariant,
-  ButtonVariant,
-  ButtonSize,
-  CardProps,
-  CardHeaderProps,
-  CardTitleProps,
-  CardDescriptionProps,
-  CardContentProps,
-  CardFooterProps,
-  CardActionProps,
+  VoidButtonVariant,
+  VoidButtonSize,
+  VoidButtonProps,
+  VoidCardProps,
+  VoidCardHeaderProps,
+  VoidCardTitleProps,
+  VoidCardDescriptionProps,
+  VoidCardContentProps,
+  VoidCardFooterProps,
+  VoidCardActionProps,
   VoidCheckboxProps,
   VoidComboboxProps,
   VoidDialogProps,
@@ -228,8 +226,8 @@ export type {
   VoidProgressProps,
   VoidRadioGroupProps,
   VoidSelectProps,
-  SeparatorProps,
-  SkeletonProps,
+  VoidSeparatorProps,
+  VoidSkeletonProps,
   VoidSliderProps,
   VoidSwitchProps,
   VoidTableProps,
@@ -246,12 +244,10 @@ export type {
   VoidDiffProps,
 } from "@vexart/styled"
 
-// Use ButtonProps from styled (themed) — headless ButtonProps available via "vexart/engine"
-export type { ButtonProps } from "@vexart/styled"
-
-// ── Headless components (unstyled — excluding Button which collides) ─────────
+// ── Headless components (unstyled primitives) ────────────────────────────────
 
 export {
+  Button,
   Checkbox,
   Combobox,
   Input,
@@ -278,6 +274,8 @@ export {
 } from "@vexart/headless"
 
 export type {
+  ButtonProps,
+  ButtonRenderContext,
   CheckboxRenderContext,
   CheckboxProps,
   ComboboxOption,
@@ -376,6 +374,15 @@ export {
   setFocus,
   focusedId,
   pushFocusScope,
+  // Selection
+  getSelection,
+  setSelection,
+  clearSelection,
+  // Canvas & Graphics
+  CanvasContext,
+  createParticleSystem,
+  registerFont,
+  unregisterFont,
   // Interaction
   useDrag,
   useHover,
@@ -413,6 +420,8 @@ export type {
   PressEvent,
   // Focus
   FocusHandle,
+  // Selection
+  TextSelection,
   // Interaction
   DragOptions,
   DragProps,
@@ -442,4 +451,16 @@ export {
   memo,
 } from "@vexart/engine"
 
-export { createSignal, createEffect, createMemo, createContext, useContext, onCleanup, onMount, batch, untrack } from "solid-js"
+export {
+  createSignal,
+  createEffect,
+  createMemo,
+  createContext,
+  useContext,
+  onCleanup,
+  onMount,
+  batch,
+  untrack,
+  children,
+  splitProps,
+} from "solid-js"

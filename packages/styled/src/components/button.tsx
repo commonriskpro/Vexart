@@ -18,25 +18,26 @@ import { radius, space, font, weight, shadows, glows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
 /** @public */
-export const BUTTON_VARIANT = { DEFAULT: "default", SECONDARY: "secondary", OUTLINE: "outline", GHOST: "ghost", DESTRUCTIVE: "destructive", LINK: "link" } as const
-export type ButtonVariant = (typeof BUTTON_VARIANT)[keyof typeof BUTTON_VARIANT]
+export const VOID_BUTTON_VARIANT = { DEFAULT: "default", SECONDARY: "secondary", OUTLINE: "outline", GHOST: "ghost", DESTRUCTIVE: "destructive", LINK: "link" } as const
+export type VoidButtonVariant = (typeof VOID_BUTTON_VARIANT)[keyof typeof VOID_BUTTON_VARIANT]
 /** @public */
-export const BUTTON_SIZE = { XS: "xs", SM: "sm", DEFAULT: "default", LG: "lg", ICON: "icon", ICON_SM: "icon-sm", ICON_LG: "icon-lg" } as const
-export type ButtonSize = (typeof BUTTON_SIZE)[keyof typeof BUTTON_SIZE]
+export const VOID_BUTTON_SIZE = { XS: "xs", SM: "sm", DEFAULT: "default", LG: "lg", ICON: "icon", ICON_SM: "icon-sm", ICON_LG: "icon-lg" } as const
+export type VoidButtonSize = (typeof VOID_BUTTON_SIZE)[keyof typeof VOID_BUTTON_SIZE]
 
 /** @public */
-export interface ButtonProps {
-  variant?: ButtonVariant
-  size?: ButtonSize
+export interface VoidButtonProps {
+  variant?: VoidButtonVariant
+  size?: VoidButtonSize
   disabled?: boolean
   onPress?: (event?: PressEvent) => void
   focusId?: string
   children?: JSX.Element
+  className?: string
 }
 
 // ── Size styles (static — no theme dependency) ──
 
-const sizeStyles: Record<ButtonSize, {
+const sizeStyles: Record<VoidButtonSize, {
   height: number
   width?: number
   paddingX: number
@@ -75,7 +76,7 @@ type VariantColors = {
 const primaryHover = () => themeColors.foreground
 const primaryActive = () => themeColors.mutedForeground
 
-const variantGetters: Record<ButtonVariant, VariantColors> = {
+const variantGetters: Record<VoidButtonVariant, VariantColors> = {
   default: {
     bg:          () => themeColors.primary,
     fg:          () => themeColors.primaryForeground,
@@ -141,7 +142,7 @@ const variantGetters: Record<ButtonVariant, VariantColors> = {
 }
 
 /** @public */
-export function Button(props: ButtonProps) {
+export function VoidButton(props: VoidButtonProps) {
   const v = props.variant ?? "default"
   const s = props.size ?? "default"
   const vg = variantGetters[v]
@@ -156,6 +157,7 @@ export function Button(props: ButtonProps) {
       renderButton={(ctx) => (
         <box
           {...ctx.buttonProps}
+          className={props.className}
           direction="row"
           // Intrinsic buttons already center their label through symmetric
           // horizontal padding. Flexily's center justification can retain the

@@ -9,6 +9,7 @@
 
 import { VirtualList } from "@vexart/headless"
 import type { VirtualListItemContext } from "@vexart/headless"
+import type { SizingUnit } from "@vexart/engine"
 import type { JSX } from "solid-js"
 import { radius, space, font } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
@@ -17,8 +18,8 @@ import { themeColors } from "../theme/theme"
 export type VoidVirtualListProps<T> = {
   items: T[]
   itemHeight: number
-  height: number | string
-  width?: number | string
+  height: SizingUnit
+  width?: SizingUnit
   overscan?: number
   selectedIndex?: number
   onSelect?: (index: number) => void

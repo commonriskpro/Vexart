@@ -8,12 +8,13 @@ import { ProgressBar } from "@vexart/headless"
 import type { ProgressBarRenderContext } from "@vexart/headless"
 import { radius } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
+import type { SizingUnit } from "@vexart/engine"
 
 /** @public */
 export type VoidProgressProps = {
   value: number
   max?: number
-  width?: number | string
+  width?: SizingUnit
   height?: number
 }
 

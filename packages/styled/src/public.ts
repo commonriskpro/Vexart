@@ -27,8 +27,6 @@ export {
   setTheme,
   getTheme,
   getThemeVersion,
-  ThemeProvider,
-  useTheme,
 } from "./theme/theme"
 export type { ColorTokens, ThemeDefinition } from "./theme/theme"
 
@@ -39,32 +37,32 @@ export type { TypographyProps } from "./typography/typography"
 
 // ── Components ────────────────────────────────────────────────────────────────
 
-export { Avatar } from "./components/avatar"
-export type { AvatarProps, AvatarSize } from "./components/avatar"
+export { VoidAvatar } from "./components/avatar"
+export type { VoidAvatarProps, AvatarSize } from "./components/avatar"
 
-export { Badge } from "./components/badge"
-export type { BadgeProps, BadgeVariant } from "./components/badge"
+export { VoidBadge } from "./components/badge"
+export type { VoidBadgeProps, BadgeVariant } from "./components/badge"
 
-export { Button } from "./components/button"
-export type { ButtonProps, ButtonVariant, ButtonSize } from "./components/button"
+export { VoidButton } from "./components/button"
+export type { VoidButtonProps, VoidButtonVariant, VoidButtonSize } from "./components/button"
 
 export {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
-  CardAction,
+  VoidCard,
+  VoidCardHeader,
+  VoidCardTitle,
+  VoidCardDescription,
+  VoidCardContent,
+  VoidCardFooter,
+  VoidCardAction,
 } from "./components/card"
 export type {
-  CardProps,
-  CardHeaderProps,
-  CardTitleProps,
-  CardDescriptionProps,
-  CardContentProps,
-  CardFooterProps,
-  CardActionProps,
+  VoidCardProps,
+  VoidCardHeaderProps,
+  VoidCardTitleProps,
+  VoidCardDescriptionProps,
+  VoidCardContentProps,
+  VoidCardFooterProps,
+  VoidCardActionProps,
 } from "./components/card"
 
 export { VoidCheckbox } from "./components/checkbox"
@@ -115,11 +113,11 @@ export { VoidSelect } from "./components/select"
 export type { VoidSelectProps } from "./components/select"
 export type { SelectOption } from "@vexart/headless"
 
-export { Separator } from "./components/separator"
-export type { SeparatorProps } from "./components/separator"
+export { VoidSeparator } from "./components/separator"
+export type { VoidSeparatorProps } from "./components/separator"
 
-export { Skeleton } from "./components/skeleton"
-export type { SkeletonProps } from "./components/skeleton"
+export { VoidSkeleton } from "./components/skeleton"
+export type { VoidSkeletonProps } from "./components/skeleton"
 
 export { VoidSlider } from "./components/slider"
 export type { VoidSliderProps } from "./components/slider"

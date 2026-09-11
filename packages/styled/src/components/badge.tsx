@@ -16,9 +16,10 @@ export const BADGE_VARIANT = { DEFAULT: "default", SECONDARY: "secondary", OUTLI
 export type BadgeVariant = (typeof BADGE_VARIANT)[keyof typeof BADGE_VARIANT]
 
 /** @public */
-export interface BadgeProps {
+export interface VoidBadgeProps {
   variant?: BadgeVariant
   children?: JSX.Element
+  className?: string
 }
 
 // ── Variant color getters (lazy — read themeColors inside effects) ──
@@ -58,12 +59,13 @@ const variantGetters: Record<BadgeVariant, VariantColors> = {
 }
 
 /** @public */
-export function Badge(props: BadgeProps) {
+export function VoidBadge(props: VoidBadgeProps) {
   const v = props.variant ?? "default"
   const vg = variantGetters[v]
 
   return (
     <box
+      className={props.className}
       direction="row"
       alignX="center"
       alignY="center"

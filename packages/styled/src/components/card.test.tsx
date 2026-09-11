@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { createSignal } from "solid-js"
 import { createNode, resetFocus, solidRender, type TGENode } from "@vexart/engine"
-import { Card, CardDescription, CardTitle } from "./card"
+import { VoidCard, VoidCardDescription, VoidCardTitle } from "./card"
 
 const browserRuntime = import.meta.resolve("solid-js").endsWith("/solid.js")
 const suite = browserRuntime ? describe : describe.skip
@@ -24,7 +24,7 @@ function renderScene(root: TGENode, scene: () => unknown) {
 
 afterEach(() => resetFocus())
 
-suite("styled Card with the production Solid renderer", () => {
+suite("styled VoidCard with the production Solid renderer", () => {
   test("updates scalar and conditional children while preserving stable interactive children", () => {
     const root = createNode("root")
     const [count, setCount] = createSignal(0)
@@ -32,11 +32,11 @@ suite("styled Card with the production Solid renderer", () => {
     let presses = 0
 
     const dispose = renderScene(root, () => (
-      <Card>
-        <CardTitle>{count()}</CardTitle>
+      <VoidCard>
+        <VoidCardTitle>{count()}</VoidCardTitle>
         <box focusable onPress={() => { presses += 1 }}>stable</box>
-        {visible() ? <CardDescription>on</CardDescription> : <CardDescription>off</CardDescription>}
-      </Card>
+        {visible() ? <VoidCardDescription>on</VoidCardDescription> : <VoidCardDescription>off</VoidCardDescription>}
+      </VoidCard>
     ))
 
     try {
@@ -61,6 +61,24 @@ suite("styled Card with the production Solid renderer", () => {
       expect(firstChild(card.children[2]).text).toBe("off")
       ;(interactive.props.onPress as () => void)()
       expect(presses).toBe(2)
+    } finally {
+      dispose()
+    }
+  })
+
+  test("accepts and passes className to root elements (DEF-06)", () => {
+    const root = createNode("root")
+    const dispose = renderScene(root, () => (
+      <VoidCard className="my-card">
+        <VoidCardTitle className="my-title">Title</VoidCardTitle>
+      </VoidCard>
+    ))
+
+    try {
+      const card = first(root)
+      expect(card.props.className).toBe("my-card")
+      const title = card.children[0]
+      expect(title?.props.className).toBe("my-title")
     } finally {
       dispose()
     }

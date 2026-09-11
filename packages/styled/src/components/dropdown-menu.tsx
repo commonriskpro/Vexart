@@ -30,7 +30,7 @@
 
 import { createContext, onCleanup, useContext } from "solid-js"
 import type { JSX } from "solid-js"
-import { onInput, Show } from "@vexart/engine"
+import { onInput, Show, type SizingUnit } from "@vexart/engine"
 import { radius, space, font, shadows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
@@ -104,7 +104,7 @@ export function VoidDropdownMenuTrigger(props: VoidDropdownMenuTriggerProps) {
 /** @public */
 export type VoidDropdownMenuContentProps = {
   children?: JSX.Element
-  width?: number | string
+  width?: SizingUnit
   minWidth?: number
   maxHeight?: number
   sideOffset?: number

@@ -1,4 +1,4 @@
-import { Button, VoidDialog } from "@vexart/styled"
+import { VoidButton, VoidDialog } from "@vexart/styled"
 import { SceneFrame, SCENE_HEIGHT, SCENE_WIDTH } from "../helpers"
 
 export const width = SCENE_WIDTH
@@ -11,8 +11,8 @@ export function Scene() {
         <VoidDialog.Title>Delete deployment?</VoidDialog.Title>
         <VoidDialog.Description>This action removes the selected preview deployment and clears its cache snapshot.</VoidDialog.Description>
         <VoidDialog.Footer>
-          <Button variant="ghost">Cancel</Button>
-          <Button variant="destructive">Delete</Button>
+          <VoidButton variant="ghost">Cancel</VoidButton>
+          <VoidButton variant="destructive">Delete</VoidButton>
         </VoidDialog.Footer>
       </VoidDialog>
     </SceneFrame>

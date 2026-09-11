@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { createNode, resetFocus, setFocus, solidRender, type TGENode } from "@vexart/engine"
-import { Button, type ButtonProps } from "./button"
+import { createNode, dispatchFocusInput, focusedId, resetFocus, setFocus, solidRender, type TGENode } from "@vexart/engine"
+import { VoidButton, type VoidButtonProps } from "./button"
 
 const browserRuntime = import.meta.resolve("solid-js").endsWith("/solid.js")
 const suite = browserRuntime ? describe : describe.skip
@@ -24,24 +24,37 @@ function renderScene(root: TGENode, scene: () => unknown) {
 beforeEach(() => resetFocus())
 afterEach(() => resetFocus())
 
-suite("styled Button", () => {
+suite("styled VoidButton", () => {
   test("accepts onPress prop", () => {
-    const props: ButtonProps = { onPress: () => {}, children: "Click" }
+    const props: VoidButtonProps = { onPress: () => {}, children: "Click" }
 
-    expect(Button).toBeFunction()
+    expect(VoidButton).toBeFunction()
     expect(props.onPress).toBeFunction()
   })
 
   test("accepts variant and size props without error", () => {
-    const props: ButtonProps = { variant: "destructive", size: "lg", children: "Delete" }
+    const props: VoidButtonProps = { variant: "destructive", size: "lg", children: "Delete" }
 
     expect(props.variant).toBe("destructive")
     expect(props.size).toBe("lg")
   })
 
+  test("accepts and passes className to the underlying box (DEF-06)", () => {
+    const root = createNode("root")
+    const dispose = renderScene(root, () => <VoidButton className="custom-btn w-full">Button</VoidButton>)
+
+    try {
+      const wrapper = first(root)
+      const visual = firstChild(wrapper)
+      expect(visual.props.className).toBe("custom-btn w-full")
+    } finally {
+      dispose()
+    }
+  })
+
   test("keeps default hover text readable and changes background while pressed", () => {
     const root = createNode("root")
-    const dispose = renderScene(root, () => <Button>Click</Button>)
+    const dispose = renderScene(root, () => <VoidButton>Click</VoidButton>)
 
     try {
       const wrapper = first(root)
@@ -74,8 +87,8 @@ suite("styled Button", () => {
     let presses = 0
     const dispose = renderScene(root, () => (
       <box>
-        <Button focusId="button-a" onPress={() => presses++}>A</Button>
-        <Button focusId="button-b">B</Button>
+        <VoidButton focusId="button-a" onPress={() => presses++}>A</VoidButton>
+        <VoidButton focusId="button-b">B</VoidButton>
       </box>
     ))
 
@@ -110,6 +123,32 @@ suite("styled Button", () => {
       await new Promise((resolve) => setTimeout(resolve, 120))
       expect(firstChild(firstWrapper)).toBe(firstVisual)
       expect(firstVisual.props.backgroundColor).toBe(initialBackground)
+    } finally {
+      dispose()
+    }
+  })
+
+  test("Tab navigation moves focus directly between buttons without double-tab ghosting", () => {
+    const root = createNode("root")
+    const dispose = renderScene(root, () => (
+      <box>
+        <VoidButton focusId="btn-1">First</VoidButton>
+        <VoidButton focusId="btn-2">Second</VoidButton>
+      </box>
+    ))
+
+    try {
+      setFocus("btn-1")
+      expect(focusedId()).toBe("btn-1")
+
+      // One single Tab press should move directly to btn-2
+      dispatchFocusInput({
+        type: "key",
+        key: "tab",
+        char: "\t",
+        mods: { shift: false, alt: false, ctrl: false, meta: false },
+      })
+      expect(focusedId()).toBe("btn-2")
     } finally {
       dispose()
     }

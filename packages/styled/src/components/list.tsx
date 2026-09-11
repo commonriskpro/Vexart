@@ -9,6 +9,7 @@
 
 import { List } from "@vexart/headless"
 import type { ListItemContext } from "@vexart/headless"
+import type { SizingUnit } from "@vexart/engine"
 import { radius, space, font, glows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
@@ -20,8 +21,8 @@ export type VoidListProps = {
   onSelect?: (index: number) => void
   disabled?: boolean
   focusId?: string
-  width?: number | string
-  height?: number | string
+  width?: SizingUnit
+  height?: SizingUnit
 }
 
 /** @public */

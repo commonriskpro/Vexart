@@ -6,6 +6,7 @@
 
 import { Combobox } from "@vexart/headless"
 import type { ComboboxOption, ComboboxInputContext, ComboboxOptionContext } from "@vexart/headless"
+import type { SizingUnit } from "@vexart/engine"
 import { radius, space, font, shadows, glows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
@@ -17,7 +18,7 @@ export type VoidComboboxProps = {
   placeholder?: string
   disabled?: boolean
   focusId?: string
-  width?: number | string
+  width?: SizingUnit
   filter?: (option: ComboboxOption, query: string) => boolean
 }
 

@@ -1,5 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test"
 import { createEffect, createRoot } from "solid-js"
+import { getClassNameResolver } from "@vexart/engine"
 import { darkTheme, lightTheme, setTheme } from "@vexart/styled"
 import { CLASS_NAME_UNKNOWN_BEHAVIOR, clearClassNameCache, createStyles, mergeClassNameProps, resolveClassName } from "./class-name"
 
@@ -264,5 +265,13 @@ describe("theme reactivity", () => {
     expect(observedColor).toBe(lightTheme.colors.card)
 
     disposeRoot()
+  })
+
+  test("registers global class name resolver in @vexart/engine on module load", () => {
+    const resolver = getClassNameResolver()
+    expect(resolver).not.toBeNull()
+    const resolved = resolver!("p-4 bg-card")
+    expect(resolved.padding).toBe(16)
+    expect(resolved.backgroundColor).toBe(darkTheme.colors.card)
   })
 })

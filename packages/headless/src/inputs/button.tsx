@@ -19,7 +19,7 @@ export type ButtonRenderContext = {
   disabled: boolean
   /** Spread on the root element for click + keyboard + focus handling. */
   buttonProps: {
-    focusable: true
+    focusable?: boolean
     onPress: () => void
   }
 }
@@ -80,7 +80,6 @@ export function Button(props: ButtonProps) {
     get pressed() { return pressed() },
     get disabled() { return disabled() },
     buttonProps: {
-      focusable: true,
       onPress: activate,
     },
   }

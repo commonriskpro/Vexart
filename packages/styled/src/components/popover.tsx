@@ -8,6 +8,7 @@ import { Popover } from "@vexart/headless"
 import { radius, space, shadows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 import type { JSX } from "solid-js"
+import type { SizingUnit } from "@vexart/engine"
 
 /** @public */
 export type VoidPopoverProps = {
@@ -17,7 +18,7 @@ export type VoidPopoverProps = {
   children: JSX.Element
   placement?: "top" | "bottom" | "left" | "right"
   offset?: number
-  width?: number | string
+  width?: SizingUnit
 }
 
 /** @public */

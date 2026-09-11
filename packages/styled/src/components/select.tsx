@@ -7,6 +7,7 @@
 import { Select } from "@vexart/headless"
 import type { JSX } from "solid-js"
 import type { SelectOption, SelectTriggerContext, SelectOptionContext } from "@vexart/headless"
+import type { SizingUnit } from "@vexart/engine"
 import { radius, space, font, shadows, glows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
@@ -18,7 +19,7 @@ export type VoidSelectProps = {
   placeholder?: string
   disabled?: boolean
   focusId?: string
-  width?: number | string
+  width?: SizingUnit
   children?: JSX.Element
 }
 

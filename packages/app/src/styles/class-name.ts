@@ -1,4 +1,4 @@
-import type { InteractiveStyleProps } from "@vexart/engine"
+import { setClassNameResolver, type InteractiveStyleProps } from "@vexart/engine"
 import { themeColors, font, radius, shadows, glows, space, weight, getThemeVersion } from "@vexart/styled"
 
 /** @public */
@@ -397,3 +397,6 @@ export function mergeClassNameProps<T extends Record<string, unknown>>(props: T,
   const resolved = resolveClassName(className).props
   return { ...resolved, ...props }
 }
+
+// Register global class name resolver in @vexart/engine
+setClassNameResolver((cls) => resolveClassName(cls).props)

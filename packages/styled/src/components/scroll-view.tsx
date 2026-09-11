@@ -12,12 +12,13 @@ import type { ScrollHandle } from "@vexart/headless"
 import type { JSX } from "solid-js"
 import { radius } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
+import type { SizingUnit } from "@vexart/engine"
 
 /** @public */
 export type VoidScrollViewProps = {
   ref?: (handle: ScrollHandle) => void
-  width?: number | string
-  height?: number | string
+  width?: SizingUnit
+  height?: SizingUnit
   scrollX?: boolean
   scrollY?: boolean
   scrollSpeed?: number

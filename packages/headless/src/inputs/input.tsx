@@ -12,7 +12,7 @@
 
 import { createMemo, createSignal, createEffect, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import { useFocus, onInput, measureForLayout } from "@vexart/engine"
+import { useFocus, onInput, measureForLayout, type SizingUnit } from "@vexart/engine"
 import { useDisabled } from "../helpers/disabled"
 import { nextCodePointOffset, previousCodePointOffset } from "./text-offset"
 
@@ -79,7 +79,7 @@ export type InputRenderContext = {
   selection: [number, number] | null
   /** Spread on the root element — adds focusable + click-to-focus support. */
   inputProps: {
-    focusable: true
+    focusable?: boolean
     onPress: () => void
   }
 }
@@ -93,7 +93,7 @@ export type InputProps = {
   disabled?: boolean
   focusId?: string
   /** Width. Default: "grow". */
-  width?: number | string
+  width?: SizingUnit
   /** Height. Default: auto from theme padding + line height. */
   height?: number
   /** Visual theme for self-rendering mode. Ignored when renderInput is set. */
@@ -294,7 +294,6 @@ export function Input(props: InputProps) {
       disabled: disabled(),
       selection: hasSelection() ? selRange() : null,
       inputProps: {
-        focusable: true,
         onPress: () => { if (!disabled()) focus() },
       },
     }))
@@ -352,7 +351,6 @@ export function Input(props: InputProps) {
 
   return (
     <box
-      focusable
       onPress={() => { if (!disabled()) focus() }}
       width={props.width ?? "100%"}
       height={inputHeight()}

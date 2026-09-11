@@ -6,13 +6,14 @@
 
 import { Markdown } from "@vexart/headless"
 import type { SyntaxStyle } from "@vexart/headless"
+import type { SizingUnit } from "@vexart/engine"
 import { themeColors } from "../theme/theme"
 
 /** @public */
 export type VoidMarkdownProps = {
   content: string
   syntaxStyle: SyntaxStyle
-  width?: number | string
+  width?: SizingUnit
   streaming?: boolean
 }
 

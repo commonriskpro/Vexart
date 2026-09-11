@@ -1,4 +1,4 @@
-import { Avatar, Badge } from "@vexart/styled"
+import { VoidAvatar, VoidBadge } from "@vexart/styled"
 import { Panel, SceneFrame, SCENE_HEIGHT, SCENE_WIDTH } from "../helpers"
 
 export const width = SCENE_WIDTH
@@ -10,20 +10,20 @@ export function Scene() {
       <box direction="row" gap={16}>
         <Panel title="Avatars" width={180}>
           <box direction="row" gap={10} alignY="center">
-            <Avatar name="Ada" size="sm" />
-            <Avatar name="Linus" />
-            <Avatar name="Grace" size="lg" color={0x2563ebff} />
+            <VoidAvatar name="Ada" size="sm" />
+            <VoidAvatar name="Linus" />
+            <VoidAvatar name="Grace" size="lg" color={0x2563ebff} />
           </box>
         </Panel>
         <Panel title="Badges" width={180}>
           <box direction="column" gap={8}>
             <box direction="row" gap={8}>
-              <Badge>Stable</Badge>
-              <Badge variant="secondary">Beta</Badge>
+              <VoidBadge>Stable</VoidBadge>
+              <VoidBadge variant="secondary">Beta</VoidBadge>
             </box>
             <box direction="row" gap={8}>
-              <Badge variant="outline">Docs</Badge>
-              <Badge variant="destructive">Alert</Badge>
+              <VoidBadge variant="outline">Docs</VoidBadge>
+              <VoidBadge variant="destructive">Alert</VoidBadge>
             </box>
           </box>
         </Panel>

@@ -9,7 +9,7 @@
 import { createMemo } from "solid-js"
 import type { JSX } from "solid-js"
 import { Lexer, type MarkedToken, type Tokens } from "marked"
-import { type SyntaxStyle } from "@vexart/engine"
+import { type SyntaxStyle, type SizingUnit } from "@vexart/engine"
 import { Code } from "./code"
 
 const LINE_HEIGHT = 17
@@ -77,7 +77,7 @@ export type MarkdownProps = {
   syntaxStyle: SyntaxStyle
   /** Default text color (shorthand — overrides theme.fg). */
   color?: number
-  width?: number | string
+  width?: SizingUnit
   streaming?: boolean
   /** Visual theme — all styling comes from here. */
   theme?: Partial<MarkdownTheme>

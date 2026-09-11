@@ -1,5 +1,5 @@
 import { createSignal, For } from "solid-js"
-import { Button, VoidInput, VoidPopover, VoidScrollView, themeColors } from "@vexart/styled"
+import { VoidButton, VoidInput, VoidPopover, VoidScrollView, themeColors } from "@vexart/styled"
 import type { ScrollHandle } from "@vexart/headless"
 import { createTerminal, type Terminal } from "../packages/engine/src/terminal/index"
 import { createRenderLoop, setFrameProfileSink, type RenderLoop } from "../packages/engine/src/loop/loop"
@@ -310,7 +310,7 @@ function PerformanceScene(props: { control: SceneControl; width: number; height:
           placement="bottom"
           offset={8}
           width={300}
-          trigger={<Button focusId="perf-overlay-trigger" variant="outline" size="sm">Actions</Button>}
+          trigger={<VoidButton focusId="perf-overlay-trigger" variant="outline" size="sm">Actions</VoidButton>}
         >
           <text color={themeColors.popoverForeground} fontSize={13}>Live overlay payload</text>
           <text color={themeColors.mutedForeground} fontSize={12}>Rendered from the real floating layer path.</text>

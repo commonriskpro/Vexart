@@ -6,6 +6,7 @@
 
 import { Code } from "@vexart/headless"
 import type { SyntaxStyle } from "@vexart/headless"
+import type { SizingUnit } from "@vexart/engine"
 import { radius, space } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
@@ -14,8 +15,8 @@ export type VoidCodeProps = {
   content: string
   language: string
   syntaxStyle: SyntaxStyle
-  width?: number | string
-  height?: number | string
+  width?: SizingUnit
+  height?: SizingUnit
   lineNumbers?: boolean
   streaming?: boolean
 }

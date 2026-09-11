@@ -1,4 +1,4 @@
-import { Button, VoidDropdownMenu } from "@vexart/styled"
+import { VoidButton, VoidDropdownMenu } from "@vexart/styled"
 import { SceneFrame, SCENE_HEIGHT, SCENE_WIDTH } from "../helpers"
 
 export const width = SCENE_WIDTH
@@ -9,7 +9,7 @@ export function Scene() {
     <SceneFrame title="Components · Dropdown" subtitle="Open dropdown menu panel">
       <VoidDropdownMenu open onOpenChange={() => {}}>
         <VoidDropdownMenu.Trigger>
-          <Button variant="outline">Actions</Button>
+          <VoidButton variant="outline">Actions</VoidButton>
         </VoidDropdownMenu.Trigger>
         <VoidDropdownMenu.Content width={180}>
           <VoidDropdownMenu.Label>Project</VoidDropdownMenu.Label>

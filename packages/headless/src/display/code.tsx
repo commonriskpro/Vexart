@@ -13,6 +13,7 @@ import {
   highlightsToTokens,
   type SyntaxStyle,
   type Token,
+  type SizingUnit,
 } from "@vexart/engine"
 import { markDirty } from "@vexart/engine"
 
@@ -47,8 +48,8 @@ export type CodeProps = {
   content: string
   language: string
   syntaxStyle: SyntaxStyle
-  width?: number | string
-  height?: number | string
+  width?: SizingUnit
+  height?: SizingUnit
   /** Visual theme — all styling comes from here. */
   theme?: Partial<CodeTheme>
   lineNumbers?: boolean

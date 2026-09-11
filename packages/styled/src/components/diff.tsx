@@ -5,6 +5,7 @@
  */
 
 import { Diff } from "@vexart/headless"
+import type { SizingUnit } from "@vexart/engine"
 import { radius, space } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
@@ -12,7 +13,7 @@ import { themeColors } from "../theme/theme"
 export type VoidDiffProps = {
   diff: string
   showLineNumbers?: boolean
-  width?: number | string
+  width?: SizingUnit
 }
 
 /** @public */

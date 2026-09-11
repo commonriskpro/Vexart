@@ -1,5 +1,5 @@
 /**
- * Card — styled card composition using Void design tokens.
+ * VoidCard — styled card composition using Void design tokens.
  *
  * @public
  */
@@ -9,20 +9,22 @@ import { children as resolveChildren } from "solid-js"
 import type { JSX } from "solid-js"
 import { themeColors } from "../theme/theme"
 
-// ── Card ──
+// ── VoidCard ──
 
 /** @public */
-export interface CardProps {
+export interface VoidCardProps {
   children?: JSX.Element
   size?: "default" | "sm"
+  className?: string
 }
 
 /** @public */
-export function Card(props: CardProps) {
+export function VoidCard(props: VoidCardProps) {
   const sm = props.size === "sm"
   const content = resolveChildren(() => props.children)
   return (
     <box
+      className={props.className}
       direction="column"
       gap={sm ? space[4] : space[6]}
       backgroundColor={themeColors.card}
@@ -38,18 +40,20 @@ export function Card(props: CardProps) {
   )
 }
 
-// ── CardHeader ──
+// ── VoidCardHeader ──
 
 /** @public */
-export interface CardHeaderProps {
+export interface VoidCardHeaderProps {
   children?: JSX.Element
+  className?: string
 }
 
 /** @public */
-export function CardHeader(props: CardHeaderProps) {
+export function VoidCardHeader(props: VoidCardHeaderProps) {
   const content = resolveChildren(() => props.children)
   return (
     <box
+      className={props.className}
       direction="column"
       gap={space[1.5]}
       paddingLeft={space[6]}
@@ -60,18 +64,20 @@ export function CardHeader(props: CardHeaderProps) {
   )
 }
 
-// ── CardTitle ──
+// ── VoidCardTitle ──
 
 /** @public */
-export interface CardTitleProps {
+export interface VoidCardTitleProps {
   children?: JSX.Element
+  className?: string
 }
 
 /** @public */
-export function CardTitle(props: CardTitleProps) {
+export function VoidCardTitle(props: VoidCardTitleProps) {
   const content = resolveChildren(() => props.children)
   return (
     <text
+      className={props.className}
       color={themeColors.cardForeground}
       fontSize={font.base}
       fontWeight={weight.semibold}
@@ -82,18 +88,20 @@ export function CardTitle(props: CardTitleProps) {
   )
 }
 
-// ── CardDescription ──
+// ── VoidCardDescription ──
 
 /** @public */
-export interface CardDescriptionProps {
+export interface VoidCardDescriptionProps {
   children?: JSX.Element
+  className?: string
 }
 
 /** @public */
-export function CardDescription(props: CardDescriptionProps) {
+export function VoidCardDescription(props: VoidCardDescriptionProps) {
   const content = resolveChildren(() => props.children)
   return (
     <text
+      className={props.className}
       color={themeColors.mutedForeground}
       fontSize={font.sm}
     >
@@ -102,18 +110,20 @@ export function CardDescription(props: CardDescriptionProps) {
   )
 }
 
-// ── CardContent ──
+// ── VoidCardContent ──
 
 /** @public */
-export interface CardContentProps {
+export interface VoidCardContentProps {
   children?: JSX.Element
+  className?: string
 }
 
 /** @public */
-export function CardContent(props: CardContentProps) {
+export function VoidCardContent(props: VoidCardContentProps) {
   const content = resolveChildren(() => props.children)
   return (
     <box
+      className={props.className}
       paddingLeft={space[6]}
       paddingRight={space[6]}
     >
@@ -122,18 +132,20 @@ export function CardContent(props: CardContentProps) {
   )
 }
 
-// ── CardFooter ──
+// ── VoidCardFooter ──
 
 /** @public */
-export interface CardFooterProps {
+export interface VoidCardFooterProps {
   children?: JSX.Element
+  className?: string
 }
 
 /** @public */
-export function CardFooter(props: CardFooterProps) {
+export function VoidCardFooter(props: VoidCardFooterProps) {
   const content = resolveChildren(() => props.children)
   return (
     <box
+      className={props.className}
       direction="row"
       alignY="center"
       gap={space[2]}
@@ -145,19 +157,20 @@ export function CardFooter(props: CardFooterProps) {
   )
 }
 
-// ── CardAction ──
+// ── VoidCardAction ──
 // Positioned top-right, for buttons or icon actions on the card header.
 
 /** @public */
-export interface CardActionProps {
+export interface VoidCardActionProps {
   children?: JSX.Element
+  className?: string
 }
 
 /** @public */
-export function CardAction(props: CardActionProps) {
+export function VoidCardAction(props: VoidCardActionProps) {
   const content = resolveChildren(() => props.children)
   return (
-    <box alignX="right" alignY="top">
+    <box className={props.className} alignX="right" alignY="top">
       {content}
     </box>
   )

@@ -44,12 +44,12 @@ import {
   createForm,
 } from "@vexart/headless"
 import {
-  Button,
-  Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, CardAction,
-  Badge,
-  Separator,
-  Avatar,
-  Skeleton,
+  VoidButton,
+  VoidCard, VoidCardHeader, VoidCardTitle, VoidCardDescription, VoidCardContent, VoidCardFooter, VoidCardAction,
+  VoidBadge,
+  VoidSeparator,
+  VoidAvatar,
+  VoidSkeleton,
   VoidSlider,
   VoidCombobox,
   VoidTooltip,
@@ -74,7 +74,7 @@ function SectionBox(props: { title: string; children: unknown }) {
   return (
     <box direction="column" gap={space[2]} paddingBottom={space[4]}>
       <SectionTitle>{props.title}</SectionTitle>
-      <Separator />
+      <VoidSeparator />
       <box paddingTop={space[1]}>{props.children}</box>
     </box>
   )
@@ -560,7 +560,7 @@ function TabInteractive() {
             <box direction="column" gap={space[4]}>
               <text color={themeColors.foreground} fontSize={font.lg} fontWeight={weight.semibold}>Focus Trap Test</text>
               <text color={themeColors.mutedForeground} fontSize={font.sm}>Tab should cycle ONLY within this dialog. Escape to close.</text>
-              <Separator />
+              <VoidSeparator />
               <box direction="row" gap={space[2]}>
                 <box
                   focusable
@@ -830,9 +830,9 @@ function TabDataVirtual() {
         <box direction="column" gap={space[2]} width={350}>
           <Show when={mockData.loading()}>
             <box direction="column" gap={space[2]}>
-              <Skeleton height={16} width={200} />
-              <Skeleton height={16} width={280} />
-              <Skeleton height={16} width={240} />
+              <VoidSkeleton height={16} width={200} />
+              <VoidSkeleton height={16} width={280} />
+              <VoidSkeleton height={16} width={240} />
               <text color={themeColors.mutedForeground} fontSize={font.xs}>Loading users...</text>
             </box>
           </Show>
@@ -843,12 +843,12 @@ function TabDataVirtual() {
             <For each={mockData.data()!.users}>
               {(user) => (
                 <box direction="row" gap={space[3]} padding={space[2]} width="100%" alignY="center" backgroundColor={themeColors.card} cornerRadius={radius.md}>
-                  <Avatar name={user.name} size="sm" />
+                  <VoidAvatar name={user.name} size="sm" />
                   <box direction="column" width="grow">
                     <text color={themeColors.foreground} fontSize={font.sm}>{user.name}</text>
                     <text color={themeColors.mutedForeground} fontSize={font.xs}>{user.role}</text>
                   </box>
-                  <Badge variant="secondary">{user.role}</Badge>
+                  <VoidBadge variant="secondary">{user.role}</VoidBadge>
                 </box>
               )}
             </For>
@@ -985,7 +985,7 @@ function VoidPopoverDemo() {
         >
           <box direction="column" gap={space[2]}>
             <text color={themeColors.foreground} fontSize={font.sm} fontWeight={weight.medium}>Free-form content</text>
-            <Separator />
+            <VoidSeparator />
             <text color={themeColors.mutedForeground} fontSize={font.xs}>Any JSX goes here</text>
           </box>
         </VoidPopover>
@@ -1109,8 +1109,8 @@ function VoidProgressDemo() {
         </box>
         <VoidProgress width={220} value={progress()} />
         <box direction="row" gap={space[2]} paddingTop={space[1]}>
-          <box focusable onPress={startUpload}><Button size="xs">Simulate Upload</Button></box>
-          <box focusable onPress={resetUpload}><Button size="xs" variant="outline">Reset</Button></box>
+          <box focusable onPress={startUpload}><VoidButton size="xs">Simulate Upload</VoidButton></box>
+          <box focusable onPress={resetUpload}><VoidButton size="xs" variant="outline">Reset</VoidButton></box>
         </box>
       </box>
 
@@ -1123,10 +1123,10 @@ function VoidProgressDemo() {
         <VoidProgress width={220} value={tasks()} max={TOTAL_TASKS} />
         <box direction="row" gap={space[2]} paddingTop={space[1]}>
           <box focusable onPress={() => setTasks(t => Math.min(TOTAL_TASKS, t + 1))}>
-            <Button size="xs">Complete Task</Button>
+            <VoidButton size="xs">Complete Task</VoidButton>
           </box>
           <box focusable onPress={() => setTasks(0)}>
-            <Button size="xs" variant="outline">Reset</Button>
+            <VoidButton size="xs" variant="outline">Reset</VoidButton>
           </box>
         </box>
       </box>
@@ -1165,27 +1165,27 @@ function AnalyticsCardDemo() {
 
   return (
     <box direction="column" gap={space[3]} width={420}>
-      <Card>
-        <CardHeader>
+      <VoidCard>
+        <VoidCardHeader>
           <box direction="row" alignY="center" width="grow">
             <box width="grow" direction="column" gap={space[1]}>
-              <CardTitle>Analytics</CardTitle>
-              <CardDescription>Live · updates every 2s</CardDescription>
+              <VoidCardTitle>Analytics</VoidCardTitle>
+              <VoidCardDescription>Live · updates every 2s</VoidCardDescription>
             </box>
-            <CardAction>
+            <VoidCardAction>
               <box
                 focusable
                 onPress={() => setLive(l => !l)}
                 hoverStyle={{ opacity: 0.8 }}
               >
-                <Badge variant={live() ? "default" : "secondary"}>
+                <VoidBadge variant={live() ? "default" : "secondary"}>
                   {live() ? "● Live" : "Paused"}
-                </Badge>
+                </VoidBadge>
               </box>
-            </CardAction>
+            </VoidCardAction>
           </box>
-        </CardHeader>
-        <CardContent>
+        </VoidCardHeader>
+        <VoidCardContent>
           <box direction="column" gap={space[4]}>
             {/* Main stats row */}
             <box direction="row" gap={space[5]} alignY="center">
@@ -1198,14 +1198,14 @@ function AnalyticsCardDemo() {
                   {growth()} since last update
                 </text>
               </box>
-              <Separator orientation="vertical" />
+              <VoidSeparator orientation="vertical" />
               <box direction="column" gap={space[0.5]}>
                 <text color={themeColors.mutedForeground} fontSize={font.xs}>Sessions</text>
                 <text color={themeColors.foreground} fontSize={font["2xl"]} fontWeight={weight.semibold}>
                   {formatNum(sessions())}
                 </text>
               </box>
-              <Separator orientation="vertical" />
+              <VoidSeparator orientation="vertical" />
               <box direction="column" gap={space[0.5]}>
                 <text color={themeColors.mutedForeground} fontSize={font.xs}>Bounce Rate</text>
                 <text color={bounce() > 45 ? "#f59e0b" : themeColors.foreground} fontSize={font["2xl"]} fontWeight={weight.semibold}>
@@ -1232,8 +1232,8 @@ function AnalyticsCardDemo() {
               </box>
             </box>
           </box>
-        </CardContent>
-      </Card>
+        </VoidCardContent>
+      </VoidCard>
     </box>
   )
 }
@@ -1255,7 +1255,7 @@ function TabVoidTheme() {
       <SectionBox title="THEME SWITCH (dark ↔ light — validates themeColors reactivity)">
         <box direction="row" gap={space[3]} alignY="center">
           <box focusable onPress={toggleTheme} focusStyle={{ borderColor: themeColors.ring, borderWidth: 2 }} cornerRadius={radius.md}>
-            <Button>{isDark() ? "Switch to Light" : "Switch to Dark"}</Button>
+            <VoidButton>{isDark() ? "Switch to Light" : "Switch to Dark"}</VoidButton>
           </box>
           <text color={themeColors.mutedForeground} fontSize={font.xs}>Current: {isDark() ? "Dark" : "Light"}</text>
         </box>
@@ -1265,19 +1265,19 @@ function TabVoidTheme() {
       <SectionBox title="BUTTON VARIANTS + SIZES (Button has native focusStyle + glow)">
         <box direction="column" gap={space[2]}>
           <box direction="row" gap={space[2]}>
-            <box focusable onPress={() => setClickedBtn("Default")}><Button>Default</Button></box>
-            <box focusable onPress={() => setClickedBtn("Secondary")}><Button variant="secondary">Secondary</Button></box>
-            <box focusable onPress={() => setClickedBtn("Outline")}><Button variant="outline">Outline</Button></box>
-            <box focusable onPress={() => setClickedBtn("Ghost")}><Button variant="ghost">Ghost</Button></box>
-            <box focusable onPress={() => setClickedBtn("Destructive")}><Button variant="destructive">Destructive</Button></box>
-            <box focusable onPress={() => setClickedBtn("Link")}><Button variant="link">Link</Button></box>
+            <box focusable onPress={() => setClickedBtn("Default")}><VoidButton>Default</VoidButton></box>
+            <box focusable onPress={() => setClickedBtn("Secondary")}><VoidButton variant="secondary">Secondary</VoidButton></box>
+            <box focusable onPress={() => setClickedBtn("Outline")}><VoidButton variant="outline">Outline</VoidButton></box>
+            <box focusable onPress={() => setClickedBtn("Ghost")}><VoidButton variant="ghost">Ghost</VoidButton></box>
+            <box focusable onPress={() => setClickedBtn("Destructive")}><VoidButton variant="destructive">Destructive</VoidButton></box>
+            <box focusable onPress={() => setClickedBtn("Link")}><VoidButton variant="link">Link</VoidButton></box>
           </box>
           <box direction="row" gap={space[2]} alignY="center">
-            <box focusable onPress={() => setClickedBtn("XS")}><Button size="xs">XS</Button></box>
-            <box focusable onPress={() => setClickedBtn("SM")}><Button size="sm">SM</Button></box>
-            <box focusable onPress={() => setClickedBtn("Default")}><Button>Default</Button></box>
-            <box focusable onPress={() => setClickedBtn("LG")}><Button size="lg">LG</Button></box>
-            <box focusable onPress={() => setClickedBtn("Disabled")}><Button disabled>Disabled</Button></box>
+            <box focusable onPress={() => setClickedBtn("XS")}><VoidButton size="xs">XS</VoidButton></box>
+            <box focusable onPress={() => setClickedBtn("SM")}><VoidButton size="sm">SM</VoidButton></box>
+            <box focusable onPress={() => setClickedBtn("Default")}><VoidButton>Default</VoidButton></box>
+            <box focusable onPress={() => setClickedBtn("LG")}><VoidButton size="lg">LG</VoidButton></box>
+            <box focusable onPress={() => setClickedBtn("Disabled")}><VoidButton disabled>Disabled</VoidButton></box>
           </box>
           <Show when={clickedBtn()}>
             <text color="#4fc4d4" fontSize={font.xs}>Last clicked: {clickedBtn()}</text>
@@ -1288,29 +1288,29 @@ function TabVoidTheme() {
       {/* Card */}
       <SectionBox title="CARD COMPOSITION (Action button is clickable)">
         <box direction="row" gap={space[3]}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Card Title</CardTitle>
-              <CardDescription>Description text</CardDescription>
-            </CardHeader>
-            <CardContent>
+          <VoidCard>
+            <VoidCardHeader>
+              <VoidCardTitle>Card Title</VoidCardTitle>
+              <VoidCardDescription>Description text</VoidCardDescription>
+            </VoidCardHeader>
+            <VoidCardContent>
               <P>Card body content. Theme-reactive colors.</P>
-            </CardContent>
-            <CardFooter>
+            </VoidCardContent>
+            <VoidCardFooter>
               <box focusable onPress={() => setCardClicks(c => c + 1)} focusStyle={{ borderColor: "#4488cc", borderWidth: 2 }} cornerRadius={radius.md}>
-                <Button size="sm">Action ({cardClicks()})</Button>
+                <VoidButton size="sm">Action ({cardClicks()})</VoidButton>
               </box>
-            </CardFooter>
-          </Card>
-          <Card size="sm">
-            <CardHeader>
-              <CardTitle>Small Card</CardTitle>
-              <CardDescription>Compact</CardDescription>
-            </CardHeader>
-            <CardContent>
+            </VoidCardFooter>
+          </VoidCard>
+          <VoidCard size="sm">
+            <VoidCardHeader>
+              <VoidCardTitle>Small Card</VoidCardTitle>
+              <VoidCardDescription>Compact</VoidCardDescription>
+            </VoidCardHeader>
+            <VoidCardContent>
               <Muted>Tighter spacing variant.</Muted>
-            </CardContent>
-          </Card>
+            </VoidCardContent>
+          </VoidCard>
         </box>
       </SectionBox>
 
@@ -1318,20 +1318,20 @@ function TabVoidTheme() {
       <SectionBox title="BADGE + AVATAR + SKELETON">
         <box direction="column" gap={space[3]}>
           <box direction="row" gap={space[2]}>
-            <Badge>Default</Badge>
-            <Badge variant="secondary">Secondary</Badge>
-            <Badge variant="outline">Outline</Badge>
-            <Badge variant="destructive">Error</Badge>
+            <VoidBadge>Default</VoidBadge>
+            <VoidBadge variant="secondary">Secondary</VoidBadge>
+            <VoidBadge variant="outline">Outline</VoidBadge>
+            <VoidBadge variant="destructive">Error</VoidBadge>
           </box>
           <box direction="row" gap={space[3]} alignY="center">
-            <Avatar name="Alice" size="sm" />
-            <Avatar name="Bob" />
-            <Avatar name="Charlie" size="lg" />
+            <VoidAvatar name="Alice" size="sm" />
+            <VoidAvatar name="Bob" />
+            <VoidAvatar name="Charlie" size="lg" />
           </box>
           <box direction="column" gap={space[1]} width={250}>
-            <Skeleton height={12} />
-            <Skeleton height={12} width={180} />
-            <Skeleton height={40} cornerRadius={radius.lg} />
+            <VoidSkeleton height={12} />
+            <VoidSkeleton height={12} width={180} />
+            <VoidSkeleton height={40} cornerRadius={radius.lg} />
           </box>
         </box>
       </SectionBox>
@@ -1491,7 +1491,7 @@ function TabEventBubbling() {
             cornerRadius={radius.md}
             focusStyle={{ borderColor: "#4488cc", borderWidth: 2 }}
           >
-            <Button>Click this Button</Button>
+            <VoidButton>Click this Button</VoidButton>
           </box>
           <text color={colors.mutedForeground} fontSize={font.xs}>Button has no onPress — event bubbles to wrapper</text>
         </box>

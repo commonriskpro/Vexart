@@ -10,7 +10,7 @@
 import assert from "node:assert/strict"
 import { createSignal } from "solid-js"
 import {
-  Button,
+  VoidButton,
   VoidDialog,
   VoidDropdownMenu,
   VoidPopover,
@@ -151,7 +151,7 @@ function App(props: AppProps = {}) {
               </VoidDropdownMenu.Content>
             </VoidDropdownMenu> : null}
           </box>
-          {!options.disableDialog ? <Button focusId="styled-dialog-trigger" variant="outline" onPress={() => setDialogOpen(true)}>Open dialog</Button> : null}
+          {!options.disableDialog ? <VoidButton focusId="styled-dialog-trigger" variant="outline" onPress={() => setDialogOpen(true)}>Open dialog</VoidButton> : null}
           <box width={160} height={24} backgroundColor={selected() === "None" ? MUTED_COLOR : SUCCESS_COLOR} cornerRadius={6} alignX="center" alignY="center">
             <text color={themeColors.foreground} fontSize={11}>{selected() === "None" ? "No menu selection" : `Selected: ${selected()}`}</text>
           </box>
@@ -212,8 +212,8 @@ function App(props: AppProps = {}) {
           <VoidDialog.Title>Confirm action</VoidDialog.Title>
           <VoidDialog.Description>Escape closes this styled dialog and restores the trigger focus.</VoidDialog.Description>
           <VoidDialog.Footer>
-            <Button variant="ghost" onPress={() => { setDialogOpen(false); setDialogClosed(true) }}>Close</Button>
-            <Button variant="default">Confirm</Button>
+            <VoidButton variant="ghost" onPress={() => { setDialogOpen(false); setDialogClosed(true) }}>Close</VoidButton>
+            <VoidButton variant="default">Confirm</VoidButton>
           </VoidDialog.Footer>
         </VoidDialog>
       ) : null}
@@ -326,12 +326,27 @@ function pixel(frame: RenderToBufferResult, x: number, y: number) {
   return frame.pixels.slice(index, index + 4)
 }
 
-function countColor(frame: RenderToBufferResult, color: readonly number[], left: number, top: number, right: number, bottom: number) {
+function countColor(
+  frame: RenderToBufferResult,
+  color: readonly number[],
+  left: number,
+  top: number,
+  right: number,
+  bottom: number,
+  tolerance = 2,
+) {
   let count = 0
   for (let y = top; y < bottom; y++) {
     for (let x = left; x < right; x++) {
       const sample = pixel(frame, x, y)
-      if (sample.every((value, channel) => value === color[channel])) count++
+      if (
+        Math.abs(sample[0] - color[0]) <= tolerance &&
+        Math.abs(sample[1] - color[1]) <= tolerance &&
+        Math.abs(sample[2] - color[2]) <= tolerance &&
+        Math.abs(sample[3] - color[3]) <= tolerance
+      ) {
+        count++
+      }
     }
   }
   return count

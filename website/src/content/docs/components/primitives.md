@@ -32,34 +32,13 @@ import { Box, Text } from "@vexart/app"
 </Box>
 ```
 
-## Layout Helpers
+## Composing Text & Layout
 
-These components compose intrinsics for common layout patterns:
-
-### Span / RichText
-
-Inline styled text segments:
+Inline styled text segments and row layouts compose directly with `<box>` and `<text>`:
 
 ```tsx
-import { RichText, Span } from "@vexart/app"
-
-<RichText>
-  <Span color="#56d4c8">Hello </Span>
-  <Span color="#a78bfa" fontWeight={700}>World</Span>
-</RichText>
-```
-
-### WrapRow
-
-Flex-wrap workaround (Flexily doesn't support `flexWrap` natively):
-
-```tsx
-import { WrapRow } from "@vexart/app"
-
-<WrapRow width={300} itemWidth={80} gap={4}>
-  <Box width={80}><Text>Tag 1</Text></Box>
-  <Box width={80}><Text>Tag 2</Text></Box>
-  <Box width={80}><Text>Tag 3</Text></Box>
-  <Box width={80}><Text>Tag 4</Text></Box>
-</WrapRow>
+<box direction="row" gap={4}>
+  <text color="#56d4c8">Hello </text>
+  <text color="#a78bfa" fontWeight={700}>World</text>
+</box>
 ```

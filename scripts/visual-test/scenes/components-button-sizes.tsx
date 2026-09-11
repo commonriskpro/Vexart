@@ -1,4 +1,4 @@
-import { Button } from "@vexart/styled"
+import { VoidButton } from "@vexart/styled"
 import { Panel, SceneFrame, SCENE_HEIGHT, SCENE_WIDTH } from "../helpers"
 
 export const width = SCENE_WIDTH
@@ -9,15 +9,15 @@ export function Scene() {
     <SceneFrame title="Components · Button sizes" subtitle="Size scale and icon buttons">
       <Panel title="Sizes">
         <box direction="row" gap={10} alignY="center">
-          <Button size="xs">XS</Button>
-          <Button size="sm">Small</Button>
-          <Button size="default">Default</Button>
-          <Button size="lg">Large</Button>
+          <VoidButton size="xs">XS</VoidButton>
+          <VoidButton size="sm">Small</VoidButton>
+          <VoidButton size="default">Default</VoidButton>
+          <VoidButton size="lg">Large</VoidButton>
         </box>
         <box direction="row" gap={10} alignY="center">
-          <Button size="icon">★</Button>
-          <Button size="icon-sm">✓</Button>
-          <Button size="icon-lg">→</Button>
+          <VoidButton size="icon">★</VoidButton>
+          <VoidButton size="icon-sm">✓</VoidButton>
+          <VoidButton size="icon-lg">→</VoidButton>
         </box>
       </Panel>
     </SceneFrame>

@@ -7,7 +7,7 @@
  */
 
 import { createContext, onCleanup, useContext, type JSX } from "solid-js"
-import { focusedId, onInput, pushFocusScope, setFocus } from "@vexart/engine"
+import { focusedId, onInput, pushFocusScope, setFocus, type SizingUnit } from "@vexart/engine"
 import { Portal } from "../containers/portal"
 
 // ── Types ──
@@ -36,7 +36,7 @@ export type DialogContentProps = {
   /** Content of the dialog panel. */
   children?: JSX.Element
   /** Width of the dialog. Default: "fit" */
-  width?: number | string
+  width?: SizingUnit
   /** Max width constraint. */
   maxWidth?: number
   /** Padding inside the content area. */

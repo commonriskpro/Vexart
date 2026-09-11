@@ -13,10 +13,11 @@ export const AVATAR_SIZE = { SM: "sm", DEFAULT: "default", LG: "lg" } as const
 export type AvatarSize = (typeof AVATAR_SIZE)[keyof typeof AVATAR_SIZE]
 
 /** @public */
-export interface AvatarProps {
+export interface VoidAvatarProps {
   name: string
   size?: AvatarSize
   color?: string | number
+  className?: string
 }
 
 const sizeMap: Record<AvatarSize, { px: number; fontSize: number }> = {
@@ -26,7 +27,7 @@ const sizeMap: Record<AvatarSize, { px: number; fontSize: number }> = {
 }
 
 /** @public */
-export function Avatar(props: AvatarProps) {
+export function VoidAvatar(props: VoidAvatarProps) {
   const s = props.size ?? "default"
   const ss = sizeMap[s]
   const initial = props.name.charAt(0).toUpperCase()
@@ -34,6 +35,7 @@ export function Avatar(props: AvatarProps) {
 
   return (
     <box
+      className={props.className}
       width={ss.px}
       height={ss.px}
       cornerRadius={ss.px / 2}

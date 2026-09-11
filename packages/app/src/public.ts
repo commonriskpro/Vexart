@@ -13,10 +13,6 @@ export type { PageProps } from "./runtime/page"
 export { Box, Text } from "./components/primitives"
 export type { AppBoxProps, AppTextProps, ClassNameProps } from "./components/primitives"
 
-// -- Layout helpers (formerly @vexart/primitives) ----------------------------
-
-
-
 // -- Styling -----------------------------------------------------------------
 
 export {

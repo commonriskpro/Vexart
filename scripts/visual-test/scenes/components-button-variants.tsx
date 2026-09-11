@@ -1,4 +1,4 @@
-import { Button } from "@vexart/styled"
+import { VoidButton } from "@vexart/styled"
 import { Panel, SceneFrame, SCENE_HEIGHT, SCENE_WIDTH } from "../helpers"
 
 export const width = SCENE_WIDTH
@@ -9,14 +9,14 @@ export function Scene() {
     <SceneFrame title="Components · Button variants" subtitle="Styled button variants">
       <Panel title="Variants">
         <box direction="row" gap={10}>
-          <Button>Default</Button>
-          <Button variant="secondary">Secondary</Button>
-          <Button variant="outline">Outline</Button>
-          <Button variant="ghost">Ghost</Button>
+          <VoidButton>Default</VoidButton>
+          <VoidButton variant="secondary">Secondary</VoidButton>
+          <VoidButton variant="outline">Outline</VoidButton>
+          <VoidButton variant="ghost">Ghost</VoidButton>
         </box>
         <box direction="row" gap={10}>
-          <Button variant="destructive">Delete</Button>
-          <Button variant="link">Link</Button>
+          <VoidButton variant="destructive">Delete</VoidButton>
+          <VoidButton variant="link">Link</VoidButton>
         </box>
       </Panel>
     </SceneFrame>

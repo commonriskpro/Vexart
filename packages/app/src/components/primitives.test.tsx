@@ -123,7 +123,7 @@ suite("app primitives with the production Solid renderer", () => {
       setClassName("")
       setStyle({})
 
-      expect(node.props.backgroundColor).toBe(0)
+      expect(node.props.backgroundColor).toBeUndefined()
       expect(node.props.glow).toBeUndefined()
     } finally {
       dispose()

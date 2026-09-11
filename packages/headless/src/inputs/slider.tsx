@@ -19,7 +19,7 @@ export type SliderTrackProps = {
   onMouseDown: (evt: NodeMouseEvent) => void
   onMouseMove: (evt: NodeMouseEvent) => void
   onMouseUp: (evt: NodeMouseEvent) => void
-  focusable: true
+  focusable?: boolean
   onPress?: () => void
 }
 
@@ -137,7 +137,6 @@ export function Slider(props: SliderProps) {
 
   const trackProps: SliderTrackProps = {
     ...dragProps,
-    focusable: true,
     onMouseDown: (evt) => {
       if (!disabled()) focus()
       dragProps.onMouseDown(evt)
