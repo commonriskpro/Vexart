@@ -53,6 +53,7 @@ import {
 } from "../ffi/native-layer-registry-flags"
 import { clearNativeLayerRegistryMirror } from "../ffi/native-layer-registry"
 import { disableNativePresentation, enableNativePresentation, isNativePresentationEnabled, isNativePresentationForcedOff, nativePresentationForcedOffReason } from "../ffi/native-presentation-flags"
+import { tickNativePresentationRecovery } from "../ffi/native-presentation-ops"
 import { getVexartFfiCallCount, getVexartFfiCallCountsBySymbol, resetVexartFfiCallCounts } from "../ffi/vexart-bridge"
 
 const LAYER_LOG_ENABLED = process.env.VEXART_DEBUG_LAYERS === "1"
@@ -417,6 +418,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   }
 
   function frame() {
+    tickNativePresentationRecovery()
     if (isRenderingFrame) return
     if (!isDirty() && !hasActiveAnimations() && !hasRecentInteraction() && pendingInteractionFrameKind === null) return
     isRenderingFrame = true
