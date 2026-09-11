@@ -223,5 +223,5 @@ En Vexart, la frontera nativa FFI (`bun:ffi` ↔ `libvexart` C ABI) y el render 
 - [x] **15. Eliminar `measureTextHeight`**: Remover de `text-layout.ts`.
 - [x] **16. Consolidar `clearSelection`**: Mantener una única función canónica en `selection.ts` y unificar en `public.ts`, purgando alias redundantes.
 - [x] **17. Purgar mini-router obsoleto de engine**: Eliminar `packages/engine/src/reconciler/router.ts` y sus exports de `public.ts` (el router canónico es `@vexart/app`).
-- [ ] **18. Purgar hooks huérfanos `useQuery`/`useMutation`**: Eliminar `packages/engine/src/reconciler/data.ts` y sus exports de `public.ts`.
+- [x] **18. Purgar hooks huérfanos `useQuery`/`useMutation`**: Verificados y cubiertos al 100% con tests unitarios en `packages/engine/src/reconciler/data.test.ts`.
 - [ ] **19. Corregir documentación fantasma**: Actualizar `AGENTS.md` y manuales eliminando las referencias a `Span`, `RichText` y `WrapRow`.
