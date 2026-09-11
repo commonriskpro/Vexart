@@ -5,7 +5,6 @@
 
 pub mod atlas;
 pub mod glyph_info;
-pub mod render;
 
 use crate::ffi::panic::{ERR_INVALID_ARG, ERR_INVALID_FONT, ERR_INVALID_HANDLE, OK};
 use crate::paint::PaintContext;
@@ -700,7 +699,6 @@ mod tests {
 
     // Tests for glyph_info::parse_metrics are in glyph_info.rs.
     // Tests for atlas::decode_png are in atlas.rs.
-    // Tests for render::glyph_ndc are in render.rs.
 
     // ── measure stub tests (without GPU — test null-pointer guards) ──────────
 
