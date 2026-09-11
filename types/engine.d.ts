@@ -2407,9 +2407,6 @@ export declare type NebulaCmd = {
  export declare function resetScrollHandles(): void;
 
  /** @public */
- export declare function resetSelection(): void;
-
- /** @public */
  export declare type ResizeEvent = {
      type: "resize";
  };

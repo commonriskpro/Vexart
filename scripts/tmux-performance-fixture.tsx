@@ -8,7 +8,7 @@ import { bindLoop, unbindLoop } from "../packages/engine/src/reconciler/pointer"
 import { dispatchInput } from "../packages/engine/src/loop/input"
 import { markDirty } from "../packages/engine/src/reconciler/dirty"
 import { resetFocus, setFocus, setFocusedId } from "../packages/engine/src/reconciler/focus"
-import { resetSelection } from "../packages/engine/src/reconciler/selection"
+import { clearSelection } from "../packages/engine/src/reconciler/selection"
 import { getRendererBackend, type RendererBackend } from "../packages/engine/src/ffi/renderer-backend"
 import { createParser } from "../packages/engine/src/input/parser"
 import type { TGENode } from "../packages/engine/src/ffi/node"
@@ -732,7 +732,7 @@ async function main(): Promise<number> {
     if (loop) {
       unbindLoop()
       resetFocus()
-      resetSelection()
+      clearSelection()
     }
     dispose?.()
     loop?.destroy()

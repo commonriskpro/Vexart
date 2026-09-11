@@ -326,7 +326,6 @@ export {
   setSelection,
   clearSelection,
   selectionSignal,
-  resetSelection,
 } from "./reconciler/selection"
 export type { TextSelection } from "./reconciler/selection"
 

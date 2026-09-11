@@ -3766,7 +3766,7 @@ Internals for custom render loops, focus management, debug tools, tree-sitter, a
 | ------ | ----------- |
 | `getSelection` / `setSelection` / `clearSelection` | Selection API |
 | `getSelectedText` | Get selected text |
-| `selectionSignal` / `resetSelection` | Reactive selection |
+| `selectionSignal` | Reactive selection signal |
 
 #### Debug
 

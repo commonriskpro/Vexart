@@ -59,7 +59,7 @@ Current export groups include:
 - input/interaction: `useKeyboard`, `useMouse`, `useInput`, `onInput`, `dispatchInput`, `useFocus`, `setFocus`, `focusedId`, `setFocusedId`, `pushFocusScope`, `resetFocus`, `setPointerCapture`, `releasePointerCapture`, `useDrag`, `useHover`
 - animation: `createTransition`, `createSpring`, `easing`
 - utilities/resources: `markDirty`, `isDirty`, `clearDirty`, `createHandle`, `createScrollHandle`, `releaseScrollHandle`, `resetScrollHandles`, `registerFont`, `getFont`, `clearTextCache`, `getTextLayoutCacheStats`, `getFontAtlasCacheStats`, `clearImageCache`, `getImageCacheStats`, `useTerminalDimensions`, `decodePasteBytes`, `CanvasContext`, `createParticleSystem`, `createLayerStore`
-- data/selection: `useQuery`, `useMutation`, `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal`, `resetSelection`
+- data/selection: `useQuery`, `useMutation`, `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal`
 - debug/plugins/syntax: `toggleDebug`, `setDebug`, `isDebugEnabled`, `debugFrameStart`, `debugUpdateStats`, `debugState`, `debugStatsLine`, `debugDumpTree`, `debugDumpCulledNodes`, `createSlotRegistry`, `createSlot`, `ExtmarkManager`, `TreeSitterClient`, `getTreeSitterClient`, `addDefaultParsers`, `SyntaxStyle`, `ONE_DARK`, `KANAGAWA`, `highlightsToTokens`
 - classes/constants: `RGBA`, `MouseButton`, `SIZING`, `DIRECTION`, `ALIGN_X`, `ALIGN_Y`
 

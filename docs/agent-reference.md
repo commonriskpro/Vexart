@@ -524,8 +524,7 @@ portable and ARM64-safe.
 
 ### Selection
 
-- `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal`,
-  `resetSelection`
+- `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal`
 
 ### Terminal
 

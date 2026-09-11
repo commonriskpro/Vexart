@@ -10,7 +10,7 @@ import { render as solidRender } from "./reconciler/reconciler"
 import { dispatchInput } from "./loop/input"
 import { markDirty } from "./reconciler/dirty"
 import { resetFocus } from "./reconciler/focus"
-import { resetSelection } from "./reconciler/selection"
+import { clearSelection } from "./reconciler/selection"
 import { bindLoop, unbindLoop } from "./reconciler/pointer"
 import { resetCompositorPathState } from "./animation/compositor-path"
 import type { Terminal } from "./terminal/index"
@@ -232,7 +232,7 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
                 resetFocus()
               } finally {
                 try {
-                  resetSelection()
+                  clearSelection()
                 } finally {
                   try {
                     unbindLoop(loop)

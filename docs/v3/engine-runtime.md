@@ -358,7 +358,7 @@ destroy: () => {
             resetFocus()
           } finally {
             try {
-              resetSelection()
+              clearSelection()
             } finally {
               try {
                 unbindLoop(loop)

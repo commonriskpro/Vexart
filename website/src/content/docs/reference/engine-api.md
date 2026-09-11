@@ -48,7 +48,7 @@ import { mount } from "@vexart/engine"
 
 ## Selection
 
-- `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal`, `resetSelection`
+- `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal`
 
 ## Font & Text
 

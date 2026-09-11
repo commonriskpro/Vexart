@@ -505,7 +505,7 @@ The explicit public exports of `@vexart/engine` (from `packages/engine/src/publi
 - Node Handles: `createHandle`, `NodeHandle`
 - Extmarks: `ExtmarkManager`, `Extmark`, `CreateExtmarkOptions`
 - Plugin Slots: `createSlotRegistry`, `createSlot`, `SlotComponent`, `TgePluginApi`, `TgePlugin`, `SlotRegistry`
-- Hit-Testing & Selection: `buildNodeMouseEvent`, `isFullyOutsideScrollViewport`, `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal`, `resetSelection`
+- Hit-Testing & Selection: `buildNodeMouseEvent`, `isFullyOutsideScrollViewport`, `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal`
 - Syntax Highlighting: `TreeSitterClient`, `getTreeSitterClient`, `addDefaultParsers`, `SyntaxStyle`, `ONE_DARK`, `KANAGAWA`, `highlightsToTokens`
 
 ### Loop & Scheduler

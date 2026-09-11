@@ -168,10 +168,10 @@ En Vexart, la frontera nativa FFI (`bun:ffi` ↔ `libvexart` C ABI) y el render 
 
 ---
 
-### 16. Funciones Idénticas Duplicadas: `clearSelection` y `resetSelection`
-- **Ubicación:** `packages/engine/src/reconciler/selection.ts:29, 37` y `public.ts:345, 347`
-- **Símbolos:** `clearSelection`, `resetSelection`.
-- **Causa Raíz y Mecanismo:** Ambas ejecutan exactamente `setSelectionSignal(null)`. Ambas se exportan públicamente. Distintos call sites usan una u otra indistintamente.
+### 16. Consolidación de Selección: `clearSelection` Canónica
+- **Ubicación:** `packages/engine/src/reconciler/selection.ts:29` y `public.ts`
+- **Símbolos:** `clearSelection` (alias redundante purgado).
+- **Causa Raíz y Mecanismo:** Existía un alias redundante de `clearSelection` que ejecutaba exactamente `setSelectionSignal(null)`. Ambas se exportaban públicamente y distintos call sites las usaban indistintamente.
 - **Clasificación:** Código Redundante.
 - **Impacto:** Polución de la API pública y confusión de contrato.
 
@@ -221,7 +221,7 @@ En Vexart, la frontera nativa FFI (`bun:ffi` ↔ `libvexart` C ABI) y el render 
 - [x] **13. Eliminar buffer estático de 64KB y writers redundantes en `vexart-buffer.ts`**: Remover `graphBuffer`, `graphView`, `writeHeader`, `writeCommandPrefix` y actualizar sus tests.
 - [x] **14. Eliminar `writeHeader` duplicado en `vexart-functions.ts`**: Remover la función y su re-export en `public.ts`.
 - [x] **15. Eliminar `measureTextHeight`**: Remover de `text-layout.ts`.
-- [x] **16. Consolidar `clearSelection` y `resetSelection`**: Mantener una única función canónica en `selection.ts` y unificar en `public.ts`.
+- [x] **16. Consolidar `clearSelection`**: Mantener una única función canónica en `selection.ts` y unificar en `public.ts`, purgando alias redundantes.
 - [x] **17. Purgar mini-router obsoleto de engine**: Eliminar `packages/engine/src/reconciler/router.ts` y sus exports de `public.ts` (el router canónico es `@vexart/app`).
 - [ ] **18. Purgar hooks huérfanos `useQuery`/`useMutation`**: Eliminar `packages/engine/src/reconciler/data.ts` y sus exports de `public.ts`.
 - [ ] **19. Corregir documentación fantasma**: Actualizar `AGENTS.md` y manuales eliminando las referencias a `Span`, `RichText` y `WrapRow`.

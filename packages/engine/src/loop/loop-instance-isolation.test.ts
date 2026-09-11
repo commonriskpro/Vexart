@@ -4,7 +4,7 @@ import { getRendererBackend, setRendererBackend, type RendererBackend } from "..
 import { bindLoop, unbindLoop } from "../reconciler/pointer"
 import { createDirtyTracker, isDirty, markDirty, DIRTY_KIND } from "../reconciler/dirty"
 import { focusedId, getNodeFocusId, pushFocusScope, registerNodeFocusable, resetFocus, setFocusedId } from "../reconciler/focus"
-import { getSelection, resetSelection, setSelection } from "../reconciler/selection"
+import { getSelection, clearSelection, setSelection } from "../reconciler/selection"
 import { createNode } from "../ffi/node"
 import { onCleanup } from "solid-js"
 import { mount } from "../mount"
@@ -71,7 +71,7 @@ describe("Step 2: Singleton Elimination & Instance Isolation", () => {
 
   beforeEach(() => {
     resetFocus()
-    resetSelection()
+    clearSelection()
   })
 
   afterEach(() => {
@@ -80,7 +80,7 @@ describe("Step 2: Singleton Elimination & Instance Isolation", () => {
     }
     unbindLoop()
     resetFocus()
-    resetSelection()
+    clearSelection()
     setRendererBackend(priorBackend)
   })
 

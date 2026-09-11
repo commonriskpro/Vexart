@@ -678,7 +678,7 @@ This appendix enumerates the complete expected public API surface at v0.9 releas
 - `DirtyKind`, `DirtyScope`, `DirtyTracker` (types) `@public`
 
 **Selection**
-- `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal`, `resetSelection` `@public`
+- `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal` `@public`
 - `TextSelection` (type) `@public`
 
 **Resource observability**

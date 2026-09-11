@@ -32,7 +32,7 @@ import {
 } from "../ffi/gpu-renderer-backend"
 import { bindLoop, unbindLoop } from "../reconciler/pointer"
 import { resetFocus } from "../reconciler/focus"
-import { resetSelection } from "../reconciler/selection"
+import { clearSelection } from "../reconciler/selection"
 import type { Terminal } from "../terminal/index"
 import type { RendererBackend, RendererBackendFrameContext, RendererBackendFrameResult } from "../ffi/renderer-backend"
 
@@ -353,7 +353,7 @@ async function captureToBuffer(
         } finally {
           try {
             resetFocus()
-            resetSelection()
+            clearSelection()
           } finally {
             try {
               dispose?.()

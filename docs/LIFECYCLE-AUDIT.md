@@ -154,7 +154,7 @@ beginLayout() {
        parser.destroy()
        unbindLoop()
        resetFocus()     // <-- 1. Se resetea el sistema de foco primero
-       resetSelection()
+       clearSelection()
        dispose()        // <-- 2. Se destruye el árbol de Solid después
        loop.destroy()
      }

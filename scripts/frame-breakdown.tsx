@@ -221,7 +221,7 @@ interface EngineModules {
   setProp: typeof import("../packages/engine/src/reconciler/reconciler").setProp
   markDirty: typeof import("../packages/engine/src/reconciler/dirty").markDirty
   resetFocus: typeof import("../packages/engine/src/reconciler/focus").resetFocus
-  resetSelection: typeof import("../packages/engine/src/reconciler/selection").resetSelection
+  clearSelection: typeof import("../packages/engine/src/reconciler/selection").clearSelection
   bindLoop: typeof import("../packages/engine/src/reconciler/pointer").bindLoop
   unbindLoop: typeof import("../packages/engine/src/reconciler/pointer").unbindLoop
   registerAnimationDescriptor: typeof import("../packages/engine/src/animation/compositor-path").registerAnimationDescriptor
@@ -421,7 +421,7 @@ async function loadEngine(): Promise<EngineModules> {
     setProp: reconciler.setProp,
     markDirty: dirty.markDirty,
     resetFocus: focus.resetFocus,
-    resetSelection: selection.resetSelection,
+    clearSelection: selection.clearSelection,
     bindLoop: pointer.bindLoop,
     unbindLoop: pointer.unbindLoop,
     registerAnimationDescriptor: compositor.registerAnimationDescriptor,
@@ -780,7 +780,7 @@ async function runScenario(engine: EngineModules, name: ScenarioName, size: Size
   } finally {
     engine.unbindLoop()
     engine.resetFocus()
-    engine.resetSelection()
+    engine.clearSelection()
     dispose()
     loop.destroy()
     engine.setFrameProfileSink(null)

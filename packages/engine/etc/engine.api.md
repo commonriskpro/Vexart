@@ -1976,9 +1976,6 @@ export function resetKittyTransportStats(): void;
 export function resetScrollHandles(): void;
 
 // @public (undocumented)
-export function resetSelection(): void;
-
-// @public (undocumented)
 export type ResizeEvent = {
     type: "resize";
 };
