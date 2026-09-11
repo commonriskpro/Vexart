@@ -938,6 +938,10 @@ pub fn readback_region_rgba(
     let rw = u32::from_le_bytes([rect[8], rect[9], rect[10], rect[11]]);
     let rh = u32::from_le_bytes([rect[12], rect[13], rect[14], rect[15]]);
 
+    if rw == 0 || rh == 0 {
+        return ERR_INVALID_ARG;
+    }
+
     let rec = match pctx.targets.get(target) {
         Some(r) => r,
         None => return ERR_INVALID_HANDLE,
@@ -945,6 +949,30 @@ pub fn readback_region_rgba(
 
     let tw = rec.width;
     let th = rec.height;
+
+    let right = match rx.checked_add(rw) {
+        Some(val) => val,
+        None => return ERR_INVALID_ARG,
+    };
+    let bottom = match ry.checked_add(rh) {
+        Some(val) => val,
+        None => return ERR_INVALID_ARG,
+    };
+    if right > tw || bottom > th {
+        return ERR_INVALID_ARG;
+    }
+
+    let needed = match rw
+        .checked_mul(rh)
+        .and_then(|px| px.checked_mul(4))
+    {
+        Some(bytes) => bytes,
+        None => return ERR_INVALID_ARG,
+    };
+    if dst_cap < needed {
+        return ERR_INVALID_ARG;
+    }
+
     let texture_ptr: *const wgpu::Texture = &rec.texture;
 
     let written = readback::readback_region(
@@ -1785,6 +1813,320 @@ mod tests {
             std::ptr::null_mut(),
         );
         assert_eq!(status_overflow, ERR_INVALID_ARG);
+
+        assert_eq!(target_destroy(&mut pctx, handle), OK);
+    }
+
+    fn make_test_rect(x: u32, y: u32, w: u32, h: u32) -> [u8; 16] {
+        let mut rect = [0u8; 16];
+        rect[0..4].copy_from_slice(&x.to_le_bytes());
+        rect[4..8].copy_from_slice(&y.to_le_bytes());
+        rect[8..12].copy_from_slice(&w.to_le_bytes());
+        rect[12..16].copy_from_slice(&h.to_le_bytes());
+        rect
+    }
+
+    #[test]
+    fn readback_region_rgba_should_fail_when_dimensions_are_zero() {
+        let mut pctx = PaintContext::new();
+        let mut handle = 0u64;
+        let rc = target_create(&mut pctx, 64, 64, &mut handle);
+        assert_eq!(rc, OK);
+
+        let mut buf = vec![0u8; 256];
+
+        // rw == 0
+        let rect_zero_w = make_test_rect(0, 0, 0, 10);
+        let status = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect_zero_w,
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status, ERR_INVALID_ARG);
+
+        // rh == 0
+        let rect_zero_h = make_test_rect(0, 0, 10, 0);
+        let status = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect_zero_h,
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status, ERR_INVALID_ARG);
+
+        // both zero
+        let rect_both_zero = make_test_rect(0, 0, 0, 0);
+        let status = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect_both_zero,
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status, ERR_INVALID_ARG);
+
+        assert_eq!(target_destroy(&mut pctx, handle), OK);
+    }
+
+    #[test]
+    fn readback_region_rgba_should_fail_when_origin_is_out_of_bounds() {
+        let mut pctx = PaintContext::new();
+        let mut handle = 0u64;
+        let rc = target_create(&mut pctx, 64, 64, &mut handle);
+        assert_eq!(rc, OK);
+
+        let mut buf = vec![0u8; 256];
+
+        // rx == tw (64)
+        let rect_rx_eq_tw = make_test_rect(64, 0, 4, 4);
+        let status = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect_rx_eq_tw,
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status, ERR_INVALID_ARG);
+
+        // rx > tw (100 > 64)
+        let rect_rx_gt_tw = make_test_rect(100, 0, 4, 4);
+        let status = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect_rx_gt_tw,
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status, ERR_INVALID_ARG);
+
+        // ry == th (64)
+        let rect_ry_eq_th = make_test_rect(0, 64, 4, 4);
+        let status = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect_ry_eq_th,
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status, ERR_INVALID_ARG);
+
+        // ry > th (100 > 64)
+        let rect_ry_gt_th = make_test_rect(0, 100, 4, 4);
+        let status = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect_ry_gt_th,
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status, ERR_INVALID_ARG);
+
+        assert_eq!(target_destroy(&mut pctx, handle), OK);
+    }
+
+    #[test]
+    fn readback_region_rgba_should_fail_when_region_exceeds_bounds_preventing_silent_clamping() {
+        let mut pctx = PaintContext::new();
+        let mut handle = 0u64;
+        let rc = target_create(&mut pctx, 64, 64, &mut handle);
+        assert_eq!(rc, OK);
+
+        let mut buf = vec![0u8; 1024];
+
+        // rx < tw but rx + rw > tw (60 + 10 = 70 > 64)
+        let rect_x_overflow = make_test_rect(60, 0, 10, 10);
+        let status = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect_x_overflow,
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status, ERR_INVALID_ARG);
+
+        // ry < th but ry + rh > th (0, 60 + 10 = 70 > 64)
+        let rect_y_overflow = make_test_rect(0, 60, 10, 10);
+        let status = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect_y_overflow,
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status, ERR_INVALID_ARG);
+
+        // rx = 0, rw > tw (65 > 64)
+        let rect_w_overflow = make_test_rect(0, 0, 65, 10);
+        let status = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect_w_overflow,
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status, ERR_INVALID_ARG);
+
+        // ry = 0, rh > th (65 > 64)
+        let rect_h_overflow = make_test_rect(0, 0, 10, 65);
+        let status = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect_h_overflow,
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status, ERR_INVALID_ARG);
+
+        assert_eq!(target_destroy(&mut pctx, handle), OK);
+    }
+
+    #[test]
+    fn readback_region_rgba_should_fail_on_arithmetic_overflow() {
+        let mut pctx = PaintContext::new();
+        let mut handle = 0u64;
+        let rc = target_create(&mut pctx, 64, 64, &mut handle);
+        assert_eq!(rc, OK);
+
+        let mut buf = vec![0u8; 64];
+
+        // rx + rw overflows u32
+        let rect_rx_overflow = make_test_rect(u32::MAX, 0, 1, 1);
+        let status = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect_rx_overflow,
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status, ERR_INVALID_ARG);
+
+        // ry + rh overflows u32
+        let rect_ry_overflow = make_test_rect(0, u32::MAX, 1, 1);
+        let status = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect_ry_overflow,
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status, ERR_INVALID_ARG);
+
+        // Byte calculation overflow (rw * rh * 4 overflows u32)
+        // Set target dimensions large to pass bounds check first.
+        pctx.targets.get_mut(handle).unwrap().width = u32::MAX;
+        pctx.targets.get_mut(handle).unwrap().height = u32::MAX;
+
+        let rect_mul_overflow = make_test_rect(0, 0, u32::MAX, u32::MAX);
+        let status = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect_mul_overflow,
+            buf.as_mut_ptr(),
+            u32::MAX,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status, ERR_INVALID_ARG);
+
+        let rect_bytes_overflow = make_test_rect(0, 0, 1 << 30, 1);
+        let status = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect_bytes_overflow,
+            buf.as_mut_ptr(),
+            u32::MAX,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status, ERR_INVALID_ARG);
+
+        assert_eq!(target_destroy(&mut pctx, handle), OK);
+    }
+
+    #[test]
+    fn readback_region_rgba_should_fail_when_dst_cap_is_smaller_than_needed() {
+        let mut pctx = PaintContext::new();
+        let mut handle = 0u64;
+        let rc = target_create(&mut pctx, 64, 64, &mut handle);
+        assert_eq!(rc, OK);
+
+        // rw = 10, rh = 10 requires 10 * 10 * 4 = 400 bytes.
+        let rect = make_test_rect(0, 0, 10, 10);
+        let mut buf = vec![0u8; 400];
+
+        // Capacity 399 < 400
+        let status = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect,
+            buf.as_mut_ptr(),
+            399,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status, ERR_INVALID_ARG);
+
+        // Capacity 0 < 400
+        let status = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect,
+            buf.as_mut_ptr(),
+            0,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status, ERR_INVALID_ARG);
+
+        assert_eq!(target_destroy(&mut pctx, handle), OK);
+    }
+
+    #[test]
+    fn readback_region_rgba_should_succeed_for_valid_bounded_region() {
+        let mut pctx = PaintContext::new();
+        let mut handle = 0u64;
+        let rc = target_create(&mut pctx, 64, 64, &mut handle);
+        assert_eq!(rc, OK);
+
+        // Interior sub-region: x=10, y=10, w=20, h=20 (right=30 <= 64, bottom=30 <= 64)
+        let rect = make_test_rect(10, 10, 20, 20);
+        let needed = 20 * 20 * 4;
+        let mut buf = vec![0u8; needed as usize];
+        let mut stats = FrameStats::default();
+
+        let status = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect,
+            buf.as_mut_ptr(),
+            needed,
+            &mut stats,
+        );
+        assert_eq!(status, OK);
+
+        // Edge-aligned region touching boundary: x=44, y=44, w=20, h=20 (right=64 == tw, bottom=64 == th)
+        let rect_edge = make_test_rect(44, 44, 20, 20);
+        let status = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect_edge,
+            buf.as_mut_ptr(),
+            needed,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status, OK);
 
         assert_eq!(target_destroy(&mut pctx, handle), OK);
     }
