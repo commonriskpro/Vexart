@@ -46,6 +46,16 @@ describe("printable characters", () => {
 })
 
 describe("control keys", () => {
+  test("parses Ctrl+Space (byte 0 / NUL)", () => {
+    const result = parseKey("\x00")
+    expect(result).not.toBeNull()
+    const [event, consumed] = result!
+    expect(event.key).toBe("space")
+    expect(event.char).toBe("")
+    expect(event.mods).toEqual({ shift: false, alt: false, ctrl: true, meta: false })
+    expect(consumed).toBe(1)
+  })
+
   test("parses Ctrl+C (byte 3)", () => {
     const result = parseKey("\x03")
     expect(result).not.toBeNull()
@@ -220,6 +230,16 @@ describe("Alt+key", () => {
     const [event, consumed] = parseKey("\x1ba")!
     expect(event.key).toBe("a")
     expect(event.mods.alt).toBe(true)
+    expect(consumed).toBe(2)
+  })
+
+  test("parses Alt+Ctrl+Space (\\x1b\\x00)", () => {
+    const result = parseKey("\x1b\x00")
+    expect(result).not.toBeNull()
+    const [event, consumed] = result!
+    expect(event.key).toBe("space")
+    expect(event.char).toBe("")
+    expect(event.mods).toEqual({ shift: false, alt: true, ctrl: true, meta: false })
     expect(consumed).toBe(2)
   })
 })

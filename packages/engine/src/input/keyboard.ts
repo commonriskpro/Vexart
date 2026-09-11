@@ -166,6 +166,9 @@ export function parseKey(data: string): [KeyEvent, number] | null {
     }
     // Alt+Ctrl combo
     const code = ch.charCodeAt(0)
+    if (code === 0) {
+      return [{ type: "key", key: "space", char: "", mods: { ...mods, ctrl: true } }, 2]
+    }
     if (code >= 1 && code <= 26) {
       const letter = String.fromCharCode(code + 96)
       return [{ type: "key", key: letter, char: "", mods: { ...mods, ctrl: true } }, 2]
@@ -177,8 +180,14 @@ export function parseKey(data: string): [KeyEvent, number] | null {
     return [{ type: "key", key: "escape", char: "", mods: NO_MODS }, 1]
   }
 
-  // ── Ctrl+letter (bytes 1-26) ──
   const byte = data.charCodeAt(0)
+
+  // ── Ctrl+Space (byte 0 / NUL) ──
+  if (byte === 0) {
+    return [{ type: "key", key: "space", char: "", mods: { shift: false, alt: false, ctrl: true, meta: false } }, 1]
+  }
+
+  // ── Ctrl+letter (bytes 1-26) ──
   if (byte >= 1 && byte <= 26) {
     const isSpecial = byte === 9 || byte === 10 || byte === 13
     const key = byte === 9 ? "tab" : isSpecial ? "enter" : String.fromCharCode(byte + 96)
