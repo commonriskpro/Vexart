@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from "bun:test"
+import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import {
   createNode,
   createTextNode,
@@ -11,6 +11,11 @@ import {
   parseDirection,
   parseAlignX,
   parseAlignY,
+  resolveProps,
+  setClassNameResolver,
+  getClassNameResolver,
+  bumpThemeEpoch,
+  getThemeEpoch,
 } from "../ffi/node"
 // Constants mirror layout adapter values for parser compatibility.
 const SIZING = { FIT: 0, GROW: 1, PERCENT: 2, FIXED: 3 } as const
@@ -284,6 +289,26 @@ describe("parseSizing", () => {
     expect(s!.type).toBe(SIZING.PERCENT)
     expect(s!.value).toBeCloseTo(1.0)
   })
+
+  test("'auto' returns FIT and 'fill' returns GROW", () => {
+    expect(parseSizing("auto")!.type).toBe(SIZING.FIT)
+    expect(parseSizing("fill")!.type).toBe(SIZING.GROW)
+  })
+
+  test("pixel string parses to FIXED", () => {
+    const s = parseSizing("200px")
+    expect(s).not.toBeNull()
+    expect(s!.type).toBe(SIZING.FIXED)
+    expect(s!.value).toBe(200)
+  })
+
+  test("invalid percentage returns null without NaN poisoning", () => {
+    expect(parseSizing("xyz%")).toBeNull()
+  })
+
+  test("invalid pixel string returns null", () => {
+    expect(parseSizing("badpx")).toBeNull()
+  })
 })
 
 describe("parseDirection", () => {
@@ -363,5 +388,129 @@ describe("node id and lifecycle", () => {
     node.layout.width = 100
     node.layout.height = 50
     expect(node.layout).toEqual({ x: 10, y: 20, width: 100, height: 50 })
+  })
+})
+
+describe("resolveProps aliases", () => {
+  test("onClick is resolved to onPress when onPress is absent", () => {
+    const node = createNode("box")
+    let clicked = false
+    node.props = { onClick: () => { clicked = true } }
+    const resolved = resolveProps(node)
+    expect(resolved.onPress).toBeDefined()
+    resolved.onPress!()
+    expect(clicked).toBe(true)
+  })
+
+  test("onPress takes precedence over onClick when both are provided", () => {
+    const node = createNode("box")
+    let which = ""
+    node.props = {
+      onPress: () => { which = "press" },
+      onClick: () => { which = "click" },
+    }
+    const resolved = resolveProps(node)
+    expect(resolved.onPress).toBeDefined()
+    resolved.onPress!()
+    expect(which).toBe("press")
+  })
+})
+
+describe("className resolution and theme epoch caching", () => {
+  afterEach(() => {
+    setClassNameResolver(null)
+  })
+
+  test("resolves className via globalClassNameResolver", () => {
+    setClassNameResolver((cls) => {
+      if (cls === "p-4 bg-red") return { padding: 16, backgroundColor: 0xff0000ff }
+      return {}
+    })
+    const node = createNode("box")
+    node.props = { className: "p-4 bg-red" }
+    const resolved = resolveProps(node)
+    expect(resolved.padding).toBe(16)
+    expect(resolved.backgroundColor).toBe(0xff0000ff)
+  })
+
+  test("direct props override className and style props", () => {
+    setClassNameResolver(() => ({
+      padding: 10,
+      backgroundColor: 0x111111ff,
+    }))
+    const node = createNode("box")
+    node.props = {
+      className: "dummy",
+      style: { backgroundColor: 0x222222ff, cornerRadius: 8 },
+      backgroundColor: 0x333333ff,
+    }
+    const resolved = resolveProps(node)
+    expect(resolved.padding).toBe(10)
+    expect(resolved.cornerRadius).toBe(8)
+    expect(resolved.backgroundColor).toBe(0x333333ff)
+  })
+
+  test("caches resolved props and invalidates on bumpThemeEpoch", () => {
+    let callCount = 0
+    setClassNameResolver(() => {
+      callCount++
+      return { padding: 20 }
+    })
+    const node = createNode("box")
+    node.props = { className: "card" }
+
+    const first = resolveProps(node)
+    expect(callCount).toBe(1)
+    expect(first.padding).toBe(20)
+
+    const second = resolveProps(node)
+    expect(callCount).toBe(1)
+    expect(second).toBe(first)
+
+    bumpThemeEpoch()
+    const third = resolveProps(node)
+    expect(callCount).toBe(2)
+    expect(third.padding).toBe(20)
+  })
+
+  test("deep merges interactive styles from className, style, and direct props (DEF-08)", () => {
+    setClassNameResolver(() => ({
+      hoverStyle: { backgroundColor: 0x111111ff, cornerRadius: 4 },
+      activeStyle: { backgroundColor: 0x222222ff },
+      focusStyle: { borderColor: 0x333333ff, borderWidth: 1 },
+    }))
+    const node = createNode("box")
+    node.props = {
+      className: "btn",
+      style: {
+        hoverStyle: { cornerRadius: 8, opacity: 0.8 },
+      },
+      hoverStyle: { opacity: 0.9, glow: { radius: 5, color: 0xffffffff } },
+      activeStyle: { opacity: 0.5 },
+      focusStyle: { borderWidth: 2 },
+    }
+
+    const resolved = resolveProps(node)
+    expect(resolved.hoverStyle).toEqual({
+      backgroundColor: 0x111111ff,
+      cornerRadius: 8,
+      opacity: 0.9,
+      glow: { radius: 5, color: 0xffffffff },
+    })
+    expect(resolved.activeStyle).toEqual({
+      backgroundColor: 0x222222ff,
+      opacity: 0.5,
+    })
+    expect(resolved.focusStyle).toEqual({
+      borderColor: 0x333333ff,
+      borderWidth: 2,
+    })
+
+    node._hovered = true
+    node._vpDirty = true
+    const hovered = resolveProps(node)
+    expect(hovered.opacity).toBe(0.9)
+    expect(hovered.cornerRadius).toBe(8)
+    expect(hovered.backgroundColor).toBe(0x111111ff)
   })
 })

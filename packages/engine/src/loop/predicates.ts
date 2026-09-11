@@ -26,7 +26,7 @@ export function hasBackdropEffect(props: BackdropEffectProps): boolean {
 /** Check if a node has interactive behavior (focus, hover, press, mouse). */
 export function isInteractiveNode(props: TGEProps): boolean {
   return !!(props.focusable || props.hoverStyle || props.activeStyle ||
-    props.focusStyle || props.onPress ||
+    props.focusStyle || props.onPress || props.onClick ||
     props.onMouseDown || props.onMouseUp || props.onMouseMove ||
     props.onMouseOver || props.onMouseOut)
 }

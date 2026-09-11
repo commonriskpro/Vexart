@@ -36,6 +36,10 @@ import type {
   PressEvent,
   ShadowConfig,
   SizingInfo,
+  SizingUnit,
+  SizingKeyword,
+  SizingPercent,
+  SizingPx,
   TGEProps,
   TGENode,
   TGENodeKind,
@@ -64,6 +68,10 @@ export type {
   PressEvent,
   ShadowConfig,
   SizingInfo,
+  SizingUnit,
+  SizingKeyword,
+  SizingPercent,
+  SizingPx,
   TGEProps,
   TGENode,
   TGENodeKind,
@@ -81,6 +89,25 @@ export function createPressEvent(): PressEvent {
 }
 
 let nextNodeId = 1
+
+/** @public */
+export type ClassNameResolver = (className: string) => Partial<TGEProps>
+
+let globalClassNameResolver: ClassNameResolver | null = null
+export function setClassNameResolver(resolver: ClassNameResolver | null) {
+  globalClassNameResolver = resolver
+}
+export function getClassNameResolver(): ClassNameResolver | null {
+  return globalClassNameResolver
+}
+
+let currentThemeEpoch = 0
+export function bumpThemeEpoch() {
+  currentThemeEpoch++
+}
+export function getThemeEpoch(): number {
+  return currentThemeEpoch
+}
 
 /** @public */
 export function createNode(kind: TGENodeKind): TGENode {
@@ -110,6 +137,7 @@ export function createNode(kind: TGENodeKind): TGENode {
     _interactionMode: "none",
     _vp: null,
     _vpDirty: true,
+    _vpEpoch: 0,
     _siblingIndex: 0,
     _focusableCount: 0,
     _dfsIndex: 0,
@@ -137,39 +165,59 @@ export function ensureCanvasExtra(node: TGENode): NodeCanvasExtra {
   return node._canvasExtra
 }
 
+function mergeInteractive(a?: InteractiveStyleProps, b?: InteractiveStyleProps): InteractiveStyleProps | undefined {
+  if (!a && !b) return undefined
+  if (!a) return b
+  if (!b) return a
+  return { ...a, ...b }
+}
+
 /**
  * Resolve effective props:
- *   1. Merge `style` prop under direct props (direct wins)
- *   2. Resolve aliases: borderRadius→cornerRadius, boxShadow→shadow
- *   3. Resolve padding shorthand: [Y,X] or [T,R,B,L]
- *   4. Merge hoverStyle/activeStyle/focusStyle when active
+ *   1. Cache check: node._vp && !node._vpDirty && node._vpEpoch === currentThemeEpoch
+ *   2. Merge className via globalClassNameResolver
+ *   3. Merge style prop (direct props override style)
+ *   4. Deep-merge hoverStyle/activeStyle/focusStyle
+ *   5. Resolve aliases: borderRadius→cornerRadius, boxShadow→shadow, onClick→onPress
+ *   6. Merge interactive states when active
  */
 /** @public */
 export function resolveProps(node: TGENode): TGEProps {
-  if (node._vp && !node._vpDirty) return node._vp
+  if (node._vp && !node._vpDirty && node._vpEpoch === currentThemeEpoch) return node._vp
   let base = node.props
 
-  // 1. Merge style prop (direct props override style)
-  if (base.style) {
-    base = { ...base.style, ...base }
+  if (base.className && globalClassNameResolver) {
+    const classProps = globalClassNameResolver(base.className)
+    base = {
+      ...classProps,
+      ...(base.style ?? {}),
+      ...base,
+      hoverStyle: mergeInteractive(mergeInteractive(classProps.hoverStyle, base.style?.hoverStyle), base.hoverStyle),
+      focusStyle: mergeInteractive(mergeInteractive(classProps.focusStyle, base.style?.focusStyle), base.focusStyle),
+      activeStyle: mergeInteractive(mergeInteractive(classProps.activeStyle, base.style?.activeStyle), base.activeStyle),
+    }
+  } else if (base.style) {
+    base = {
+      ...base.style,
+      ...base,
+      hoverStyle: mergeInteractive(base.style.hoverStyle, base.hoverStyle),
+      focusStyle: mergeInteractive(base.style.focusStyle, base.focusStyle),
+      activeStyle: mergeInteractive(base.style.activeStyle, base.activeStyle),
+    }
   }
 
-  // 2. Resolve aliases
+  // Resolve aliases
   if (base.borderRadius !== undefined && base.cornerRadius === undefined) {
     base = { ...base, cornerRadius: base.borderRadius }
   }
   if (base.boxShadow !== undefined && base.shadow === undefined) {
     base = { ...base, shadow: base.boxShadow }
   }
-
-  // 3. Merge interactive states
-  const needsInteractive = node._hovered || node._active || node._focused
-  if (!needsInteractive || (!base.hoverStyle && !base.activeStyle && !base.focusStyle)) {
-    node._vp = base
-    node._vpDirty = false
-    return base
+  if (base.onClick !== undefined && base.onPress === undefined) {
+    base = { ...base, onPress: base.onClick }
   }
 
+  // Merge interactive states
   let resolved = base
   if (node._hovered && base.hoverStyle) {
     resolved = { ...resolved, ...base.hoverStyle }
@@ -180,8 +228,16 @@ export function resolveProps(node: TGENode): TGEProps {
   if (node._active && base.activeStyle) {
     resolved = { ...resolved, ...base.activeStyle }
   }
+  if (resolved.borderRadius !== undefined && resolved.cornerRadius === undefined) {
+    resolved = { ...resolved, cornerRadius: resolved.borderRadius }
+  }
+  if (resolved.boxShadow !== undefined && resolved.shadow === undefined) {
+    resolved = { ...resolved, shadow: resolved.boxShadow }
+  }
+
   node._vp = resolved
   node._vpDirty = false
+  node._vpEpoch = currentThemeEpoch
   return resolved
 }
 
@@ -437,14 +493,27 @@ export function parseColor(value: string | number | undefined): number {
 // ── Sizing parsing ──
 
 /** @public */
-export function parseSizing(value: number | string | undefined): SizingInfo | null {
-  if (value === undefined) return null
-  if (typeof value === "number") return { type: SIZING.FIXED, value }
-  if (value === "fit") return { type: SIZING.FIT, value: 0 }
-  if (value === "grow") return { type: SIZING.GROW, value: 0 }
+export function parseSizing(value: number | string | undefined | null): SizingInfo | null {
+  if (value === undefined || value === null) return null
+  if (typeof value === "number") {
+    if (Number.isNaN(value)) return null
+    return { type: SIZING.FIXED, value }
+  }
+  if (typeof value !== "string") return null
+  if (value === "fit" || value === "auto") return { type: SIZING.FIT, value: 0 }
+  if (value === "grow" || value === "fill") return { type: SIZING.GROW, value: 0 }
   if (value.endsWith("%")) {
     const pct = parseFloat(value) / 100
-    return { type: SIZING.PERCENT, value: pct }
+    if (!Number.isNaN(pct)) return { type: SIZING.PERCENT, value: pct }
+    return null
+  }
+  if (value.endsWith("px")) {
+    const px = parseFloat(value)
+    if (!Number.isNaN(px)) return { type: SIZING.FIXED, value: px }
+    return null
+  }
+  if (process.env.NODE_ENV !== "production") {
+    console.warn(`[Vexart] Warning: Unrecognized sizing value "${value}". Expected number, "fit", "grow", "auto", "fill", percentage (e.g. "100%"), or pixel string (e.g. "200px"). Falling back to "fit".`)
   }
   return { type: SIZING.FIT, value: 0 }
 }

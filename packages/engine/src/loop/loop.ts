@@ -83,7 +83,7 @@ export function setFrameProfileSink(sink: FrameProfileSink | null) {
 function hasPointerReactiveNodes(node: TGENode): boolean {
   if (node.kind === "text") return false
   if (node.props.onMouseDown || node.props.onMouseUp || node.props.onMouseMove || node.props.onMouseOver || node.props.onMouseOut) return true
-  if (node.props.hoverStyle || node.props.activeStyle || node.props.onPress) return true
+  if (node.props.hoverStyle || node.props.activeStyle || node.props.onPress || node.props.onClick) return true
   return node.children.some((child) => hasPointerReactiveNodes(child))
 }
 

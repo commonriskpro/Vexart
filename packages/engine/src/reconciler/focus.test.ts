@@ -133,4 +133,43 @@ describe("focus dispatch", () => {
       dispose()
     })
   })
+
+  test("intrinsic box respects explicit focusId and id props", () => {
+    const root = createNode("root")
+    const box = createElement("box")
+    insertNode(root, box)
+
+    setProp(box, "focusId", "custom-focus-id")
+    setProp(box, "focusable", true)
+
+    expect(getNodeFocusId(box)).toBe("custom-focus-id")
+    setFocusedId("custom-focus-id")
+    expect(focusedId()).toBe("custom-focus-id")
+  })
+
+  test("updating focusId on focusable box updates ID in place without reordering", () => {
+    const root = createNode("root")
+    const a = createElement("box")
+    const b = createElement("box")
+    const c = createElement("box")
+
+    insertNode(root, a)
+    insertNode(root, b)
+    insertNode(root, c)
+
+    setProp(a, "focusable", true)
+    setProp(b, "focusable", true)
+    setProp(c, "focusable", true)
+
+    setProp(b, "focusId", "renamed-b")
+    expect(getNodeFocusId(b)).toBe("renamed-b")
+
+    // Order should remain: a -> renamed-b -> c
+    setFocusedId(getNodeFocusId(a) ?? null)
+    dispatchFocusInput(tabEvent())
+    expect(focusedId()).toBe("renamed-b")
+
+    dispatchFocusInput(tabEvent())
+    expect(focusedId()).toBe(getNodeFocusId(c) ?? null)
+  })
 })

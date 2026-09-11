@@ -448,6 +448,7 @@ function dispatchPress(clickTarget: TGENode) {
       if (fid) setFocusedId(fid)
     }
     if (target.props.onPress) target.props.onPress(event)
+    else if (target.props.onClick) target.props.onClick(event)
     target = target.parent
   }
 }
@@ -517,7 +518,7 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
     const isCaptured = captureNode === node
     const isOver = hitTestNode(node, bag.pointerX, bag.pointerY, bag.cellWidth, bag.cellHeight, isCaptured, bag.scrollOffsets)
     const isDown = isOver && bag.pointerDown
-    if (isOver && (node.props.onPress || node.props.focusable)) hoveredPressTarget = node
+    if (isOver && (node.props.onPress || node.props.onClick || node.props.focusable)) hoveredPressTarget = node
 
     // Dispatch mouse enter/leave
     if (node._hovered !== isOver) {

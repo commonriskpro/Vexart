@@ -207,8 +207,8 @@ export type TGEProps = {
   alignSelf?: GridItemAlignment
 
   // Sizing
-  width?: number | string    // number=fixed, "100%"=percent, "fit"=fit, "grow"=grow
-  height?: number | string
+  width?: SizingUnit
+  height?: SizingUnit
   /** When set, width behaves as "grow" (opentui compat) */
   flexGrow?: number
   /** Accepted for CSS compatibility. Flexily handles shrinking automatically. */
@@ -322,8 +322,12 @@ export type TGEProps = {
   focusStyle?: InteractiveStyleProps
   /** Unified press handler — fires on mouse click + Enter/Space when focused (Decision 6) */
   onPress?: (event?: PressEvent) => void
+  /** Alias for onPress (web convention). If both are provided, onPress takes precedence. */
+  onClick?: (event?: PressEvent) => void
   /** Make this element focusable via Tab navigation. Like HTML tabindex="0". */
   focusable?: boolean
+  /** Explicit ID for focus registration (defaults to id or node-focus-${id}) */
+  focusId?: string
   /** Keyboard event handler — fires when this element is focused and a key is pressed. */
   onKeyDown?: (event: import("../input/types").KeyEvent) => void
 
@@ -346,6 +350,8 @@ export type TGEProps = {
   transformOrigin?: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | { x: number; y: number }
 
   // Convenience
+  /** Class name resolved by pluggable class name resolver. */
+  className?: string
   /** CSS-style prop — merged with direct props (direct props win). Decision 3. */
   style?: Partial<TGEProps>
 
@@ -418,6 +424,8 @@ export type TGENode = {
   _vp: TGEProps | null
   /** True when cached effective visual props must be recomputed. */
   _vpDirty: boolean
+  /** Generational epoch at which _vp was cached. */
+  _vpEpoch?: number
   /** Sibling position maintained by insert/remove for O(1) next-sibling lookup. */
   _siblingIndex: number
   /** Count of focusable nodes in this subtree, including self. */
@@ -444,6 +452,18 @@ export type TGENode = {
   /** Per-loop dirty tracker attached to root node. */
   _dirtyTracker?: import("../reconciler/dirty").DirtyTracker | null
 }
+
+/** Supported sizing keywords. @public */
+export type SizingKeyword = "fit" | "grow" | "auto" | "fill"
+
+/** Sizing percentage token (e.g. "100%", "50%"). @public */
+export type SizingPercent = `${number}%`
+
+/** Sizing pixel token (e.g. "100px", "20px"). @public */
+export type SizingPx = `${number}px`
+
+/** Sizing dimension unit for width and height. @public */
+export type SizingUnit = number | SizingKeyword | SizingPercent | SizingPx
 
 /** @public */
 export type SizingInfo = { type: number; value: number }

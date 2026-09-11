@@ -201,9 +201,15 @@ const nodeFocusMap = new Map<number, string>()
 /** @public */
 export function registerNodeFocusable(node: TGENode): () => void {
   ensureFocusInput()
-  const id = `node-focus-${node.id}`
+  const propsRecord = node.props as Record<string, unknown>
+  const id = (node.props.focusId as string | undefined) ?? (propsRecord.id ? String(propsRecord.id) : undefined) ?? `node-focus-${node.id}`
   nodeFocusMap.set(node.id, id)
-  return registerFocusable({ id, onKeyDown: node.props.onKeyDown, onPress: node.props.onPress, node })
+  return registerFocusable({
+    id,
+    onKeyDown: node.props.onKeyDown,
+    onPress: node.props.onPress ?? node.props.onClick,
+    node,
+  })
 }
 
 /** @public */
@@ -214,9 +220,26 @@ export function updateNodeFocusEntry(node: TGENode) {
     const entry = scope.entries.find((e) => e.id === focusId)
     if (entry) {
       entry.onKeyDown = node.props.onKeyDown
-      entry.onPress = node.props.onPress
+      entry.onPress = node.props.onPress ?? node.props.onClick
       return
     }
+  }
+}
+
+/** @public */
+export function updateNodeFocusId(node: TGENode, newFocusId: string) {
+  const oldFocusId = nodeFocusMap.get(node.id)
+  if (!oldFocusId || oldFocusId === newFocusId) return
+  nodeFocusMap.set(node.id, newFocusId)
+  for (const scope of scopes) {
+    const entry = scope.entries.find((e) => e.id === oldFocusId)
+    if (entry) {
+      entry.id = newFocusId
+      break
+    }
+  }
+  if (focusedId() === oldFocusId) {
+    setFocusedId(newFocusId)
   }
 }
 

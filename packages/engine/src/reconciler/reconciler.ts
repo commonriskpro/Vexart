@@ -21,7 +21,7 @@ import { BACKDROP_FIELDS } from "../ffi/render-graph"
 import { DIRTY_KIND, markDirty } from "./dirty"
 import { createHandle } from "./handle"
 import { markLayerBacked, onNodePropertyChanged, onSubtreeChanged, unmarkLayerBacked } from "../animation/compositor-path"
-import { registerNodeFocusable, unregisterNodeFocusable, updateNodeFocusEntry } from "./focus"
+import { registerNodeFocusable, unregisterNodeFocusable, updateNodeFocusEntry, updateNodeFocusId } from "./focus"
 import { markNodeLayerDamaged, getCapturedNodeId, releasePointerCapture } from "./pointer"
 import { markLayerDirtyByKey } from "../loop/composite"
 
@@ -69,6 +69,7 @@ const GRID_REPLACEMENT_PROPS = new Set([
 ])
 
 const VISUAL_DAMAGE_PROPS = new Set([
+  "className",
   "backgroundColor",
   "borderColor",
   "borderWidth",
@@ -357,7 +358,7 @@ const renderer = createRenderer<TGENode>({
       node._styleKeys = newKeys
       for (const key of newKeys) {
         // Only set if NOT already set as a direct prop
-        if ((node.props as Record<string, unknown>)[key] === undefined) {
+        if ((node.props as Record<string, unknown>)[key] === undefined || prevStyleKeys?.has(key)) {
           let val = style[key]
           const flags = PROP_FLAGS[key] ?? 0
           if ((flags & FLAG_COLOR) !== 0) val = resolveColor(val)
@@ -468,8 +469,20 @@ const renderer = createRenderer<TGENode>({
       return
     }
 
-    // onKeyDown / onPress on a focusable node — update the focus entry
-    if (name === "onKeyDown" || name === "onPress") {
+    if (name === "focusId") {
+      markPropsDirty(node)
+      ;(node.props as Record<string, unknown>)[name] = value
+      syncChangedProp(node, name)
+      if (node.props.focusable && typeof value === "string") {
+        updateNodeFocusId(node, value)
+      }
+      maybeNotifyCompositor(node, name)
+      markNodeDirty(node)
+      return
+    }
+
+    // onKeyDown / onPress / onClick on a focusable node — update the focus entry
+    if (name === "onKeyDown" || name === "onPress" || name === "onClick") {
       markPropsDirty(node)
       ;(node.props as Record<string, unknown>)[name] = value
       syncChangedProp(node, name)

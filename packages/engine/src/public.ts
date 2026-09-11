@@ -112,6 +112,8 @@ export type {
 
 export {
   registerFont,
+  unregisterFont,
+  clearFontRegistry,
   getFont,
   clearTextCache,
   getTextLayoutCacheStats,
@@ -153,8 +155,13 @@ export {
   parseAlignY,
   createPressEvent,
   resolveProps,
+  setClassNameResolver,
+  getClassNameResolver,
+  bumpThemeEpoch,
+  getThemeEpoch,
 } from "./ffi/node"
 export type {
+  ClassNameResolver,
   TGENodeKind,
   InteractionMode,
   CornerRadii,
@@ -171,6 +178,10 @@ export type {
   TGENode,
   LayoutRect,
   SizingInfo,
+  SizingUnit,
+  SizingKeyword,
+  SizingPercent,
+  SizingPx,
 } from "./ffi/node"
 
 // ── Grid beta API ────────────────────────────────────────────────────────────
@@ -255,6 +266,7 @@ export {
   focusedId,
   setFocusedId,
   setFocus,
+  dispatchFocusInput,
   pushFocusScope,
   getFocusedEntry,
   useFocus,
