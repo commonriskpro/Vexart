@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { Node } from "flexily"
 import { createNode, createTextNode, insertChild, parseSizing, type TGENode, type TGEProps } from "../ffi/node"
 import { CMD, type RenderCommand } from "../ffi/render-graph"
 import { syncAllLayoutProps, syncLayoutProp } from "../ffi/flex-sync"
@@ -256,6 +257,75 @@ describe("layout adapter stacking contexts", () => {
       contentW: 92,
       contentH: 72,
     })
+    layout.destroy()
+  })
+
+  test("cleans orphaned node slots from the previous layout pass on beginLayout", () => {
+    const layout = createVexartLayoutCtx()
+    layout.init(100, 80)
+
+    let orphanedNodeRef: WeakRef<Node> | undefined
+    let orphanedEffectRef: WeakRef<object> | undefined
+    let orphanedImageRef: WeakRef<object> | undefined
+    let orphanedCanvasRef: WeakRef<object> | undefined
+
+    ;(() => {
+      const rootNode = Node.create()
+      const childNode = Node.create()
+      const effect = { shadow: { color: 0xff0000ff, blur: 4, offsetX: 0, offsetY: 0 } }
+      const image = { handle: 10n, width: 32, height: 32 }
+      const canvas = { handle: 20n, width: 32, height: 32 }
+
+      orphanedNodeRef = new WeakRef(childNode)
+      orphanedEffectRef = new WeakRef(effect)
+      orphanedImageRef = new WeakRef(image)
+      orphanedCanvasRef = new WeakRef(canvas)
+
+      layout.beginLayout()
+      layout.setCurrentFlexNode(rootNode)
+      layout.openElement()
+      layout.setCurrentNodeId(1)
+
+      layout.setCurrentFlexNode(childNode)
+      layout.openElement()
+      layout.setCurrentNodeId(2)
+      layout.setEffect(effect as any)
+      layout.setImage(image as any)
+      layout.setCanvas(canvas as any)
+      layout.closeElement()
+
+      layout.closeElement()
+      layout.endLayout()
+    })()
+
+    Bun.gc(true)
+    expect(orphanedNodeRef!.deref()).toBeDefined()
+    expect(orphanedEffectRef!.deref()).toBeDefined()
+    expect(orphanedImageRef!.deref()).toBeDefined()
+    expect(orphanedCanvasRef!.deref()).toBeDefined()
+
+    layout.beginLayout()
+    Bun.gc(true)
+
+    expect(orphanedNodeRef!.deref()).toBeUndefined()
+    expect(orphanedEffectRef!.deref()).toBeUndefined()
+    expect(orphanedImageRef!.deref()).toBeUndefined()
+    expect(orphanedCanvasRef!.deref()).toBeUndefined()
+
+    // Pass 2 mounts only the root node; verify unmounted child slot remains clean
+    const nextRoot = Node.create()
+    layout.setCurrentFlexNode(nextRoot)
+    layout.openElement()
+    layout.setCurrentNodeId(1)
+    layout.closeElement()
+    layout.endLayout()
+    Bun.gc(true)
+
+    expect(orphanedNodeRef!.deref()).toBeUndefined()
+    expect(orphanedEffectRef!.deref()).toBeUndefined()
+    expect(orphanedImageRef!.deref()).toBeUndefined()
+    expect(orphanedCanvasRef!.deref()).toBeUndefined()
+
     layout.destroy()
   })
 

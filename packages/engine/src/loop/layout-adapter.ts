@@ -438,11 +438,13 @@ export function createVexartLayoutCtx() {
     },
 
     beginLayout() {
-      for (let i = _nodeCount; i < _allNodes.length; i++) {
+      for (let i = 0; i < _allNodes.length; i++) {
         _allNodes[i] = null as unknown as Node
         _effects[i] = null
         _images[i] = null
         _canvases[i] = null
+        _textContents[i] = ""
+        _elementKeys[i] = null
       }
       _nodeCount = 0
       _nodeStack.length = 0
