@@ -43,6 +43,22 @@ describe("SGR mouse parsing", () => {
     expect(event.button).toBe(0)
   })
 
+  test("parses neutral motion in SGR 1003", () => {
+    const [event] = parseMouse("\x1b[<35;10;20M")!
+    expect(event.action).toBe("move")
+    expect(event.button).toBe(0)
+  })
+
+  test("prioritizes release with code 32 or 35 and lowercase m suffix", () => {
+    const [event32] = parseMouse("\x1b[<32;10;20m")!
+    expect(event32.action).toBe("release")
+    expect(event32.button).toBe(0)
+
+    const [event35] = parseMouse("\x1b[<35;10;20m")!
+    expect(event35.action).toBe("release")
+    expect(event35.button).toBe(0)
+  })
+
   test("decodes Shift modifier", () => {
     const [event] = parseMouse("\x1b[<4;10;10M")!
     expect(event.mods.shift).toBe(true)

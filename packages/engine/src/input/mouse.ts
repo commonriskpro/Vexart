@@ -47,17 +47,17 @@ export function parseMouse(data: string): [MouseEvent, number] | null {
   let action: MouseAction
   let button: number
 
-  if (base >= 64) {
+  if (release) {
+    action = "release"
+    button = base >= 32 ? (base === 35 ? 0 : base - 32) : base
+  } else if (base >= 64) {
     // Scroll events
     action = "scroll"
     button = base // 64=up, 65=down
   } else if (base >= 32) {
-    // Motion with button held
+    // Motion: code 35 is neutral motion (no button pressed)
     action = "move"
-    button = base - 32
-  } else if (release) {
-    action = "release"
-    button = base
+    button = base === 35 ? 0 : base - 32
   } else {
     action = "press"
     button = base
