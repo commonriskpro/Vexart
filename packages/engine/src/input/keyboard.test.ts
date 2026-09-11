@@ -62,11 +62,29 @@ describe("control keys", () => {
     expect(event.mods.ctrl).toBe(false)
   })
 
+  test("parses Enter (byte 10, LF) without ctrl modifier", () => {
+    const result = parseKey("\x0a")
+    expect(result).not.toBeNull()
+    const [event, consumed] = result!
+    expect(event.key).toBe("enter")
+    expect(event.mods.ctrl).toBe(false)
+    expect(consumed).toBe(1)
+  })
+
   test("parses Enter (byte 13) without ctrl modifier", () => {
     const result = parseKey("\x0d")
     expect(result).not.toBeNull()
     const [event] = result!
     expect(event.key).toBe("enter")
+    expect(event.mods.ctrl).toBe(false)
+  })
+
+  test("parses CRLF as Enter with consumed length 2 and without ctrl modifier", () => {
+    const result = parseKey("\r\n")
+    expect(result).not.toBeNull()
+    const [event, consumed] = result!
+    expect(event.key).toBe("enter")
+    expect(consumed).toBe(2)
     expect(event.mods.ctrl).toBe(false)
   })
 
@@ -158,6 +176,11 @@ describe("CSI sequences", () => {
 })
 
 describe("Kitty keyboard protocol", () => {
+  test("parses Enter via Kitty (codepoint 10)", () => {
+    const [event] = parseKey("\x1b[10u")!
+    expect(event.key).toBe("enter")
+  })
+
   test("parses Enter via Kitty", () => {
     const [event] = parseKey("\x1b[13u")!
     expect(event.key).toBe("enter")

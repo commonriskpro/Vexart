@@ -57,6 +57,7 @@ const TILDE_KEYS: Record<number, string> = {
 
 const KITTY_KEYS: Record<number, string> = {
   9: "tab",
+  10: "enter",
   13: "enter",
   27: "escape",
   127: "backspace",
@@ -92,6 +93,11 @@ function parseCodepoint(code: number, mods: Modifiers, consumed: number): [KeyEv
 /** @public Try to parse a keyboard event from the data. Returns the event and consumed byte count, or null. */
 export function parseKey(data: string): [KeyEvent, number] | null {
   if (data.length === 0) return null
+
+  // ── CRLF newline ──
+  if (data.startsWith("\r\n")) {
+    return [{ type: "key", key: "enter", char: "", mods: NO_MODS }, 2]
+  }
 
   // ── Kitty keyboard protocol: \x1b[{code}[;{mods}]u ──
   const kittyMatch = data.match(/^\x1b\[(\d+)(?:;(\d+))?u/)
@@ -174,9 +180,9 @@ export function parseKey(data: string): [KeyEvent, number] | null {
   // ── Ctrl+letter (bytes 1-26) ──
   const byte = data.charCodeAt(0)
   if (byte >= 1 && byte <= 26) {
-    const letter = String.fromCharCode(byte + 96)
-    const key = byte === 9 ? "tab" : byte === 13 ? "enter" : letter
-    const mods: Modifiers = { shift: false, alt: false, ctrl: byte !== 9 && byte !== 13, meta: false }
+    const isSpecial = byte === 9 || byte === 10 || byte === 13
+    const key = byte === 9 ? "tab" : isSpecial ? "enter" : String.fromCharCode(byte + 96)
+    const mods: Modifiers = { shift: false, alt: false, ctrl: !isSpecial, meta: false }
     return [{ type: "key", key, char: "", mods }, 1]
   }
 
