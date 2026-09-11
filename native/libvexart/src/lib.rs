@@ -1760,7 +1760,13 @@ pub unsafe extern "C" fn vexart_image_asset_register(
             }
         };
 
-        upload_image_record(pctx, handle, rgba, width, height);
+        if !upload_image_record(pctx, handle, rgba, width, height) {
+            let mut resources_guard = lock_or_recover(&SHARED_RESOURCE);
+            let mut registry_guard = lock_or_recover(&SHARED_IMAGE_ASSETS);
+            registry_guard.release(handle, &mut resources_guard);
+            *out_handle = 0;
+            return ERR_INVALID_ARG;
+        }
         *out_handle = handle;
         OK
     })

@@ -8,7 +8,12 @@ pub struct ImageAsset {
     pub key: String,
     pub width: u32,
     pub height: u32,
-    pub bytes: Vec<u8>,
+}
+
+impl ImageAsset {
+    pub fn size_bytes(&self) -> u64 {
+        (self.width as u64) * (self.height as u64) * 4
+    }
 }
 
 #[derive(Debug, Default)]
@@ -43,8 +48,6 @@ impl ImageAssetRegistry {
             if let Some(asset) = self.assets.get_mut(&handle) {
                 asset.width = width;
                 asset.height = height;
-                asset.bytes.clear();
-                asset.bytes.extend_from_slice(rgba);
                 resources.register(
                     handle,
                     ResourceKind::ImageSprite,
@@ -65,7 +68,6 @@ impl ImageAssetRegistry {
                 key,
                 width,
                 height,
-                bytes: rgba.to_vec(),
             },
         );
         resources.register(
@@ -118,7 +120,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(first, second);
-        assert_eq!(registry.get(first).unwrap().bytes.len(), bytes.len());
+        let asset = registry.get(first).unwrap();
+        assert_eq!(asset.width, 2);
+        assert_eq!(asset.height, 2);
+        assert_eq!(asset.size_bytes(), bytes.len() as u64);
     }
 
     #[test]
