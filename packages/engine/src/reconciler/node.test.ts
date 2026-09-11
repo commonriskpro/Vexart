@@ -1,10 +1,12 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import {
   createNode,
   createTextNode,
   insertChild,
   removeChild,
   parseColor,
+  getColorCacheSize,
+  clearColorCache,
   parseSizing,
   parseDirection,
   parseAlignX,
@@ -178,6 +180,50 @@ describe("parseColor", () => {
   test("returns 0 for invalid string", () => {
     expect(parseColor("invalid")).toBe(0)
     expect(parseColor("#fff")).toBe(0) // 3-digit not supported
+  })
+
+  test("cache size never exceeds 512 even when parsing 600 distinct color strings", () => {
+    clearColorCache()
+    expect(getColorCacheSize()).toBe(0)
+
+    for (let i = 0; i < 600; i++) {
+      parseColor(`#${i.toString(16).padStart(6, "0")}`)
+      expect(getColorCacheSize()).toBeLessThanOrEqual(512)
+    }
+
+    expect(getColorCacheSize()).toBe(512)
+  })
+
+  test("LRU refresh behavior preserves frequently accessed colors from eviction", () => {
+    clearColorCache()
+    const spy = spyOn(globalThis, "parseInt")
+    try {
+      for (let i = 0; i < 512; i++) {
+        parseColor(`#${i.toString(16).padStart(6, "0")}`)
+      }
+      expect(getColorCacheSize()).toBe(512)
+
+      // Access #000000 to refresh its LRU recency
+      spy.mockClear()
+      parseColor("#000000")
+      expect(spy).not.toHaveBeenCalled()
+
+      // Add a 513th color to trigger eviction of the oldest entry
+      parseColor("#ffffff")
+      expect(getColorCacheSize()).toBe(512)
+
+      // #000000 was refreshed, so it should still be in cache (no parseInt call)
+      spy.mockClear()
+      parseColor("#000000")
+      expect(spy).not.toHaveBeenCalled()
+
+      // #000001 was the oldest unrefreshed entry, so it should have been evicted (parseInt called)
+      spy.mockClear()
+      parseColor("#000001")
+      expect(spy).toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
   })
 })
 

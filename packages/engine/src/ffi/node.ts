@@ -378,14 +378,27 @@ export function adjustFocusableAncestors(node: TGENode | null, delta: number) {
 
 // ── Color parsing ──
 
+const MAX_COLOR_CACHE_SIZE = 512
 const _colorCache = new Map<string, number>()
+
+export function getColorCacheSize(): number {
+  return _colorCache.size
+}
+
+export function clearColorCache(): void {
+  _colorCache.clear()
+}
 
 /** @public */
 export function parseColor(value: string | number | undefined): number {
   if (value === undefined) return 0
   if (typeof value === "number") return value >>> 0
   const cached = _colorCache.get(value)
-  if (cached !== undefined) return cached
+  if (cached !== undefined) {
+    _colorCache.delete(value)
+    _colorCache.set(value, cached)
+    return cached
+  }
   // "#rrggbb" or "#rrggbbaa"
   const hex = value.startsWith("#") ? value.slice(1) : value
   const result = hex.length === 6
@@ -393,6 +406,10 @@ export function parseColor(value: string | number | undefined): number {
     : hex.length === 8
       ? parseInt(hex, 16) >>> 0
       : 0
+  if (_colorCache.size >= MAX_COLOR_CACHE_SIZE) {
+    const oldest = _colorCache.keys().next().value
+    if (oldest !== undefined) _colorCache.delete(oldest)
+  }
   _colorCache.set(value, result)
   return result
 }
