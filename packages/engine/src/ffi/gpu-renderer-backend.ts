@@ -2011,47 +2011,79 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
           if (effectOp.effect.shadow) {
             const shadowDefs = Array.isArray(effectOp.effect.shadow) ? effectOp.effect.shadow : [effectOp.effect.shadow]
             const shadowRadii = cornerRadii ?? { tl: radius, tr: radius, br: radius, bl: radius }
+            const sourceX = clip.x
+            const sourceY = clip.y
+            const sourceW = clip.w
+            const sourceH = clip.h
             for (const s of shadowDefs) {
               const blur = Math.max(0, s.blur)
               const blurPad = Math.ceil(blur)
               const pad = blurPad * 2
-              const left = Math.max(0, clip.left + Math.min(0, s.x) - pad)
-              const top = Math.max(0, clip.top + Math.min(0, s.y) - pad)
-              const right = Math.min(ctx.target.width, clip.right + Math.max(0, s.x) + pad)
-              const bottom = Math.min(ctx.target.height, clip.bottom + Math.max(0, s.y) + pad)
+              const quadLeft = sourceX + Math.min(0, s.x) - pad
+              const quadTop = sourceY + Math.min(0, s.y) - pad
+              const quadRight = sourceX + sourceW + Math.max(0, s.x) + pad
+              const quadBottom = sourceY + sourceH + Math.max(0, s.y) + pad
+              const quadW = quadRight - quadLeft
+              const quadH = quadBottom - quadTop
+
+              if (quadRight <= 0 || quadBottom <= 0 || quadLeft >= ctx.target.width || quadTop >= ctx.target.height) {
+                continue
+              }
+
               shadows.push({
-                x: (left / ctx.target.width) * 2 - 1,
-                y: 1 - (top / ctx.target.height) * 2,
-                w: ((right - left) / ctx.target.width) * 2,
-                h: -(((bottom - top) / ctx.target.height) * 2),
+                x: (quadLeft / ctx.target.width) * 2 - 1,
+                y: 1 - (quadTop / ctx.target.height) * 2,
+                w: (quadW / ctx.target.width) * 2,
+                h: -((quadH / ctx.target.height) * 2),
                 color: effectOpacity < 1 ? applyOpacityToColor(s.color, effectOpacity) : s.color,
                 radii: shadowRadii,
-                boxW,
-                boxH,
+                boxW: sourceW,
+                boxH: sourceH,
                 offsetX: s.x,
                 offsetY: s.y,
                 blur,
               })
-              markDirty(left, top, right, bottom)
+              markDirty(
+                Math.max(0, quadLeft),
+                Math.max(0, quadTop),
+                Math.min(ctx.target.width, quadRight),
+                Math.min(ctx.target.height, quadBottom),
+              )
             }
             flushShadows()
           }
 
           if (effectOp.effect.glow) {
+            const sourceX = clip.x
+            const sourceY = clip.y
+            const sourceW = clip.w
+            const sourceH = clip.h
             const margin = effectOp.effect.glow.radius
-            const left = Math.max(0, clip.left - margin)
-            const top = Math.max(0, clip.top - margin)
-            const right = Math.min(ctx.target.width, clip.right + margin)
-            const bottom = Math.min(ctx.target.height, clip.bottom + margin)
+            const quadLeft = sourceX - margin
+            const quadTop = sourceY - margin
+            const quadRight = sourceX + sourceW + margin
+            const quadBottom = sourceY + sourceH + margin
+            const quadW = quadRight - quadLeft
+            const quadH = quadBottom - quadTop
+
+            if (quadRight <= 0 || quadBottom <= 0 || quadLeft >= ctx.target.width || quadTop >= ctx.target.height) {
+              continue
+            }
+
             glows.push({
-              x: (left / ctx.target.width) * 2 - 1,
-              y: 1 - (top / ctx.target.height) * 2,
-              w: ((right - left) / ctx.target.width) * 2,
-              h: -(((bottom - top) / ctx.target.height) * 2),
+              x: (quadLeft / ctx.target.width) * 2 - 1,
+              y: 1 - (quadTop / ctx.target.height) * 2,
+              w: (quadW / ctx.target.width) * 2,
+              h: -((quadH / ctx.target.height) * 2),
               color: effectOpacity < 1 ? applyOpacityToColor(effectOp.effect.glow.color, effectOpacity) : effectOp.effect.glow.color,
               intensity: effectOp.effect.glow.intensity,
             })
-            markDirty(left, top, right, bottom)
+            markDirty(
+              Math.max(0, quadLeft),
+              Math.max(0, quadTop),
+              Math.min(ctx.target.width, quadRight),
+              Math.min(ctx.target.height, quadBottom),
+            )
             flushGlows()
           }
 

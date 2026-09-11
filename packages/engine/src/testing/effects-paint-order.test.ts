@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
+import * as gpuPack from "../ffi/gpu-pack"
 import { createNode, insertChild } from "../ffi/node"
 import { setProp } from "../reconciler/reconciler"
 import { renderNodeToBuffer } from "./render-to-buffer"
@@ -57,5 +58,96 @@ describe("GPU paint effect ordering", () => {
     const right = pixel(frame, 72, 32)
     expect(left[0]).toBeGreaterThan(left[2] + 20)
     expect(right[2]).toBeGreaterThan(right[0] + 20)
+  })
+
+  test("generates unclipped shadow NDC coordinates and renders without affine distortion near or across viewport edge", async () => {
+    const shadowPackCalls: Array<{ x: number; y: number; w: number; h: number; boxW: number; boxH: number }> = []
+    const originalPackShadowInstance = gpuPack.packShadowInstance
+    const spy = spyOn(gpuPack, "packShadowInstance").mockImplementation((...args) => {
+      shadowPackCalls.push({
+        x: args[0],
+        y: args[1],
+        w: args[2],
+        h: args[3],
+        boxW: args[6],
+        boxH: args[7],
+      })
+      return originalPackShadowInstance(...args)
+    })
+
+    try {
+      const root = createNode("box")
+      prop(root, "width", 120)
+      prop(root, "height", 80)
+      prop(root, "backgroundColor", 0x000000ff)
+
+      const child = createNode("box")
+      prop(child, "floating", "parent")
+      prop(child, "floatOffset", { x: 0, y: 20 })
+      prop(child, "width", 40)
+      prop(child, "height", 40)
+      prop(child, "backgroundColor", 0xffffffff)
+      prop(child, "shadow", { x: 0, y: 0, blur: 10, color: 0x00ff00ff })
+      insertChild(root, child)
+
+      const frame = await renderNodeToBuffer(root, 120, 80)
+
+      expect(shadowPackCalls.length).toBeGreaterThan(0)
+      const lastCall = shadowPackCalls[shadowPackCalls.length - 1]
+      expect(lastCall.x).toBeLessThan(-1.0)
+      expect(lastCall.boxW).toBe(40)
+      expect(lastCall.boxH).toBe(40)
+
+      const topEdge = pixel(frame, 20, 15)
+      const rightEdge = pixel(frame, 44, 40)
+      expect(topEdge[1]).toBeGreaterThan(50)
+      expect(Math.abs(topEdge[1] - rightEdge[1])).toBeLessThanOrEqual(2)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  test("generates unclipped shadow NDC coordinates for negative offset extending past viewport edge", async () => {
+    const shadowPackCalls: Array<{ x: number; y: number; w: number; h: number; boxW: number; boxH: number }> = []
+    const originalPackShadowInstance = gpuPack.packShadowInstance
+    const spy = spyOn(gpuPack, "packShadowInstance").mockImplementation((...args) => {
+      shadowPackCalls.push({
+        x: args[0],
+        y: args[1],
+        w: args[2],
+        h: args[3],
+        boxW: args[6],
+        boxH: args[7],
+      })
+      return originalPackShadowInstance(...args)
+    })
+
+    try {
+      const root = createNode("box")
+      prop(root, "width", 120)
+      prop(root, "height", 80)
+      prop(root, "backgroundColor", 0x000000ff)
+
+      const child = createNode("box")
+      prop(child, "floating", "parent")
+      prop(child, "floatOffset", { x: 8, y: 20 })
+      prop(child, "width", 40)
+      prop(child, "height", 40)
+      prop(child, "backgroundColor", 0xffffffff)
+      prop(child, "shadow", { x: -16, y: 0, blur: 8, color: 0xff0000ff })
+      insertChild(root, child)
+
+      const frame = await renderNodeToBuffer(root, 120, 80)
+
+      expect(shadowPackCalls.length).toBeGreaterThan(0)
+      const lastCall = shadowPackCalls[shadowPackCalls.length - 1]
+      expect(lastCall.x).toBeLessThan(-1.0)
+      expect(lastCall.boxW).toBe(40)
+
+      const leftViewportEdge = pixel(frame, 0, 40)
+      expect(leftViewportEdge[0]).toBeGreaterThan(150)
+    } finally {
+      spy.mockRestore()
+    }
   })
 })

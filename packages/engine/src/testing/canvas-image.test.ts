@@ -620,7 +620,7 @@ test("preserves an outside shadow on a translated retained layer", async () => {
   insertChild(root, row)
 
   const frame = await renderNodeToBuffer(root, 24, 24, 8)
-  expect(pixel(frame, 0, 12)[1]).toBeGreaterThan(100)
+  expect(pixel(frame, 0, 12)[1]).toBeGreaterThan(80)
   expect(pixel(frame, 2, 12)[1]).toBeGreaterThan(200)
   expect(pixel(frame, 3, 12).slice(0, 3)).toEqual(new Uint8Array([255, 0, 0]))
 })
@@ -645,7 +645,7 @@ test("preserves an outside boxShadow on a translated retained layer", async () =
   insertChild(root, row)
 
   const frame = await renderNodeToBuffer(root, 24, 24, 8)
-  expect(pixel(frame, 0, 12)[1]).toBeGreaterThan(100)
+  expect(pixel(frame, 0, 12)[1]).toBeGreaterThan(80)
   expect(pixel(frame, 2, 12)[1]).toBeGreaterThan(200)
   expect(pixel(frame, 3, 12).slice(0, 3)).toEqual(new Uint8Array([255, 0, 0]))
 })
