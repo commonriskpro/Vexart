@@ -19,7 +19,7 @@ import type { BackdropRenderMetadata, EffectRenderOp, ImagePaintConfig, RenderGr
 import { layoutText } from "./text-layout"
 import { clearImageCache } from "../loop/image"
 import {
-  type TargetRecord, type RenderedLayerRecord, type ImageRecord,
+  type TargetRecord, type RenderedLayerRecord,
   type TransformSpriteRecord, type CanvasSpriteRecord,
   type BackdropSourceRecord, type BackdropSpriteRecord,
   type ImageInstance, type TransformedImageInstance,
@@ -387,7 +387,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
   let standaloneTarget: TargetRecord | null = null
   let finalFrameTarget: TargetRecord | null = null
   const layerTargets = new Map<string, TargetRecord>()
-  const imageCache = new WeakMap<Uint8Array, ImageRecord>()
   const canvasSpriteCache = new Map<string, CanvasSpriteRecord>()
   const transformSpriteCache = new Map<string, TransformSpriteRecord>()
   const backdropSourceCache = new Map<string, BackdropSourceRecord>()
@@ -683,7 +682,10 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       const first = transformSpriteCache.keys().next().value
       if (!first) break
       const record = transformSpriteCache.get(first)
-      if (record) vexartRemoveImage(vctx, record.handle)
+      if (record) {
+        instanceImageHandles.delete(record.handle)
+        vexartRemoveImage(vctx, record.handle)
+      }
       transformSpriteSlot.delete(first)
     }
   }
@@ -694,7 +696,10 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       const first = canvasSpriteCache.keys().next().value
       if (!first) break
       const record = canvasSpriteCache.get(first)
-      if (record) vexartRemoveImage(vctx, record.handle)
+      if (record) {
+        instanceImageHandles.delete(record.handle)
+        vexartRemoveImage(vctx, record.handle)
+      }
       canvasSpriteSlot.delete(first)
     }
   }
@@ -708,10 +713,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     const handle = vexartUploadImage(vctxForImage, rgba, width, height)
     if (handle === 0n) return null
     instanceImageHandles.add(handle)
-    // Also populate imageCache (ImageRecord uses bigint handle) for destroy accounting.
-    if (!imageCache.has(rgba)) {
-      imageCache.set(rgba, { handle, width, height })
-    }
     return handle
   }
 
@@ -755,7 +756,10 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       touchMapEntry(transformSpriteCache, key, cached)
       return cached.handle
     }
-    if (cached) vexartRemoveImage(vctx, cached.handle)
+    if (cached) {
+      instanceImageHandles.delete(cached.handle)
+      vexartRemoveImage(vctx, cached.handle)
+    }
     const spriteOp: Extract<RenderGraphOp, { kind: "effect" }> = {
       ...op,
       effect: {

@@ -219,4 +219,189 @@ describe("Step 4 Native Context & Resource Management", () => {
 
     clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: true }, 1n)
   })
+
+  test("sprite cache trimming removes evicted handles from instanceImageHandles", () => {
+    const backend = createGpuRendererBackendForTesting()
+    expect(backend.instanceImageHandles.size).toBe(0)
+
+    backend.beginFrame?.({
+      viewportWidth: 32,
+      viewportHeight: 32,
+      totalPixelArea: 1024,
+      dirtyPixelArea: 1024,
+      dirtyLayerCount: 1,
+      layerCount: 1,
+      overlapPixelArea: 0,
+      overlapRatio: 0,
+      fullRepaint: true,
+      useLayerCompositing: true,
+      hasSubtreeTransforms: false,
+      hasActiveInteraction: false,
+      transmissionMode: "direct",
+      estimatedLayeredBytes: 1024,
+      estimatedFinalBytes: 1024,
+    })
+
+    const createCanvasOp = (id: number) => ({
+      kind: "canvas" as const,
+      x: 0,
+      y: 0,
+      width: 16,
+      height: 16,
+      rect: {
+        kind: "rectangle" as const,
+        x: 0,
+        y: 0,
+        width: 16,
+        height: 16,
+        fill: 0xffffffff,
+        radius: 0,
+        image: null,
+        canvas: null,
+        effect: null,
+      },
+      canvas: {
+        color: 0xffffffff,
+        displayListHash: `canvas-${id}`,
+        onDraw: () => {},
+      },
+    })
+
+    // Render first canvas sprite
+    backend.paint({
+      graph: { ops: [createCanvasOp(0) as unknown as any] },
+      targetWidth: 32,
+      targetHeight: 32,
+      backing: null,
+      target: { width: 32, height: 32 },
+      commands: [],
+      offsetX: 0,
+      offsetY: 0,
+      frame: null,
+      layer: null,
+    })
+
+    expect(backend.instanceImageHandles.size).toBe(1)
+    const firstCanvasHandle = Array.from(backend.instanceImageHandles)[0]
+    expect(firstCanvasHandle).toBeDefined()
+    expect(backend.instanceImageHandles.has(firstCanvasHandle)).toBe(true)
+
+    // Render 64 more distinct canvas sprites (total 65), exceeding MAX_GPU_CANVAS_SPRITES (64)
+    for (let i = 1; i <= 64; i++) {
+      backend.paint({
+        graph: { ops: [createCanvasOp(i) as unknown as any] },
+        targetWidth: 32,
+        targetHeight: 32,
+        backing: null,
+        target: { width: 32, height: 32 },
+        commands: [],
+        offsetX: 0,
+        offsetY: 0,
+        frame: null,
+        layer: null,
+      })
+    }
+
+    // The first handle should have been evicted and removed from instanceImageHandles
+    expect(backend.instanceImageHandles.has(firstCanvasHandle)).toBe(false)
+    expect(backend.instanceImageHandles.size).toBe(64)
+
+    backend.destroy?.()
+    expect(backend.instanceImageHandles.size).toBe(0)
+
+    // Verify transform sprite cache trimming
+    const backendTransform = createGpuRendererBackendForTesting()
+    backendTransform.beginFrame?.({
+      viewportWidth: 32,
+      viewportHeight: 32,
+      totalPixelArea: 1024,
+      dirtyPixelArea: 1024,
+      dirtyLayerCount: 1,
+      layerCount: 1,
+      overlapPixelArea: 0,
+      overlapRatio: 0,
+      fullRepaint: true,
+      useLayerCompositing: true,
+      hasSubtreeTransforms: false,
+      hasActiveInteraction: false,
+      transmissionMode: "direct",
+      estimatedLayeredBytes: 1024,
+      estimatedFinalBytes: 1024,
+    })
+
+    const createTransformOp = (id: number) => ({
+      kind: "effect" as const,
+      type: 0,
+      x: 0,
+      y: 0,
+      width: 16,
+      height: 16,
+      color: 0xff0000ff,
+      cornerRadius: 0,
+      extra1: 0,
+      extra2: 0,
+      text: "",
+      transformStateId: 0,
+      clipStateId: 0,
+      effectStateId: id,
+      rect: {
+        kind: "rectangle" as const,
+        x: 0,
+        y: 0,
+        width: 16,
+        height: 16,
+        fill: 0xff0000ff,
+        radius: 0,
+        image: null,
+        canvas: null,
+        effect: null,
+      },
+      effect: {
+        color: 0xff0000ff,
+        transform: new Float64Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
+      },
+      backdrop: null,
+    })
+
+    backendTransform.paint({
+      graph: { ops: [createTransformOp(0) as unknown as any] },
+      targetWidth: 32,
+      targetHeight: 32,
+      backing: null,
+      target: { width: 32, height: 32 },
+      commands: [],
+      offsetX: 0,
+      offsetY: 0,
+      frame: null,
+      layer: null,
+    })
+
+    expect(backendTransform.instanceImageHandles.size).toBe(1)
+    const firstTransformHandle = Array.from(backendTransform.instanceImageHandles)[0]
+    expect(firstTransformHandle).toBeDefined()
+    expect(backendTransform.instanceImageHandles.has(firstTransformHandle)).toBe(true)
+
+    // Render 64 more distinct transform sprites (total 65), exceeding MAX_GPU_TRANSFORM_SPRITES (64)
+    for (let i = 1; i <= 64; i++) {
+      backendTransform.paint({
+        graph: { ops: [createTransformOp(i) as unknown as any] },
+        targetWidth: 32,
+        targetHeight: 32,
+        backing: null,
+        target: { width: 32, height: 32 },
+        commands: [],
+        offsetX: 0,
+        offsetY: 0,
+        frame: null,
+        layer: null,
+      })
+    }
+
+    // The first transform handle should have been evicted and removed from instanceImageHandles
+    expect(backendTransform.instanceImageHandles.has(firstTransformHandle)).toBe(false)
+    expect(backendTransform.instanceImageHandles.size).toBe(64)
+
+    backendTransform.destroy?.()
+    expect(backendTransform.instanceImageHandles.size).toBe(0)
+  })
 })
