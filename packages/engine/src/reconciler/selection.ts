@@ -33,7 +33,8 @@ export function clearSelection() {
 /** @public */
 export const selectionSignal = selection
 
-/** @public */
-export function resetSelection() {
-  setSelectionSignal(null)
-}
+/**
+ * Canonical alias for `clearSelection`.
+ * @public
+ */
+export const resetSelection = clearSelection
