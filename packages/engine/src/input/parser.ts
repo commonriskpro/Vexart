@@ -33,8 +33,33 @@ export type InputParser = {
 const PASTE_START = "\x1b[200~"
 const PASTE_END = "\x1b[201~"
 const KITTY_RESPONSE_START = "\x1b_G"
-const KITTY_RESPONSE_END = "\x1b\\"
+const KITTY_RESPONSE_ST = "\x1b\\"
+const KITTY_RESPONSE_BEL = "\x07"
 const MAX_KITTY_RESPONSE = 4096
+
+/**
+ * Find the earliest ECMA-48 / Kitty graphics response terminator (ST or BEL).
+ */
+export function findKittyResponseEnd(
+  buffer: string,
+  fromIndex: number,
+): { index: number; length: number } | null {
+  const stIndex = buffer.indexOf(KITTY_RESPONSE_ST, fromIndex)
+  const belIndex = buffer.indexOf(KITTY_RESPONSE_BEL, fromIndex)
+
+  if (stIndex === -1 && belIndex === -1) {
+    return null
+  }
+  if (stIndex === -1) {
+    return { index: belIndex, length: KITTY_RESPONSE_BEL.length }
+  }
+  if (belIndex === -1) {
+    return { index: stIndex, length: KITTY_RESPONSE_ST.length }
+  }
+  return stIndex < belIndex
+    ? { index: stIndex, length: KITTY_RESPONSE_ST.length }
+    : { index: belIndex, length: KITTY_RESPONSE_BEL.length }
+}
 
 /**
  * Return whether a CSI/SS3 sequence is a known sequence that may still be
@@ -153,9 +178,9 @@ export function createParser(handler: InputHandler): InputParser {
       // parseKey can reinterpret their payload as ordinary characters.
       if (buffer.startsWith(KITTY_RESPONSE_START)) {
         if (escapeTimer) { clearTimeout(escapeTimer); escapeTimer = null }
-        const end = buffer.indexOf(KITTY_RESPONSE_END, KITTY_RESPONSE_START.length)
-        if (end >= 0) {
-          buffer = buffer.slice(end + KITTY_RESPONSE_END.length)
+        const end = findKittyResponseEnd(buffer, KITTY_RESPONSE_START.length)
+        if (end) {
+          buffer = buffer.slice(end.index + end.length)
           continue
         }
         if (buffer.length > MAX_KITTY_RESPONSE) {

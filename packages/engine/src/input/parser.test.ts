@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createParser } from "./parser"
+import { createParser, findKittyResponseEnd } from "./parser"
 import type { InputEvent, KeyEvent, MouseEvent, PasteEvent, FocusEvent } from "./types"
 
 function collect(data: string): InputEvent[] {
@@ -358,6 +358,26 @@ describe("Kitty APC responses", () => {
     expectSameAtEverySplit(ack + "a", [expected])
   })
 
+  test("consumes a BEL-terminated response followed by ordinary input", () => {
+    const expected: KeyEvent = {
+      type: "key",
+      key: "a",
+      char: "a",
+      mods: { shift: false, alt: false, ctrl: false, meta: false },
+    }
+    expect(collect("\x1b_Gi=31;OK\x07a")).toEqual([expected])
+  })
+
+  test("consumes BEL-terminated responses at every split point", () => {
+    const expected: KeyEvent = {
+      type: "key",
+      key: "a",
+      char: "a",
+      mods: { shift: false, alt: false, ctrl: false, meta: false },
+    }
+    expectSameAtEverySplit("\x1b_Gi=31;OK\x07a", [expected])
+  })
+
   test("consumes fragmented, repeated, and error responses", () => {
     const expected: KeyEvent = {
       type: "key",
@@ -368,6 +388,22 @@ describe("Kitty APC responses", () => {
     const responses = [
       "\x1b_Gi=31;OK\x1b\\",
       "\x1b_Gi=31;ENOENT\x1b\\",
+      "\x1b_Gp=token;EIO\x1b\\",
+    ].join("")
+    expectSameAtEverySplit(responses + "z", [expected])
+  })
+
+  test("consumes mixed BEL and ST terminated responses in sequence", () => {
+    const expected: KeyEvent = {
+      type: "key",
+      key: "z",
+      char: "z",
+      mods: { shift: false, alt: false, ctrl: false, meta: false },
+    }
+    const responses = [
+      "\x1b_Gi=31;OK\x07",
+      "\x1b_Gi=32;OK\x1b\\",
+      "\x1b_Gi=33;ENOENT\x07",
       "\x1b_Gp=token;EIO\x1b\\",
     ].join("")
     expectSameAtEverySplit(responses + "z", [expected])
@@ -404,5 +440,29 @@ describe("Kitty APC responses", () => {
       mods: { shift: false, alt: false, ctrl: false, meta: false },
     }])
     parser.destroy()
+  })
+})
+
+describe("findKittyResponseEnd", () => {
+  test("returns null when neither terminator is present", () => {
+    expect(findKittyResponseEnd("\x1b_Gi=31;OK", 3)).toBeNull()
+  })
+
+  test("finds ST terminator with length 2", () => {
+    expect(findKittyResponseEnd("\x1b_Gi=31;OK\x1b\\rest", 3)).toEqual({ index: 10, length: 2 })
+  })
+
+  test("finds BEL terminator with length 1", () => {
+    expect(findKittyResponseEnd("\x1b_Gi=31;OK\x07rest", 3)).toEqual({ index: 10, length: 1 })
+  })
+
+  test("returns the earliest match when both ST and BEL are present", () => {
+    expect(findKittyResponseEnd("\x1b_Gi=31\x1b\\payload\x07", 3)).toEqual({ index: 7, length: 2 })
+    expect(findKittyResponseEnd("\x1b_Gi=31\x07payload\x1b\\", 3)).toEqual({ index: 7, length: 1 })
+  })
+
+  test("respects fromIndex", () => {
+    expect(findKittyResponseEnd("\x07\x1b_Gi=31;OK\x07", 2)).toEqual({ index: 11, length: 1 })
+    expect(findKittyResponseEnd("\x1b\\\x1b_Gi=31;OK\x1b\\", 2)).toEqual({ index: 12, length: 2 })
   })
 })
