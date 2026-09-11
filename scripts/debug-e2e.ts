@@ -12,8 +12,7 @@ const sym = lib.symbols
 const ctxBuf = new BigUint64Array(1)
 sym.vexart_context_create(ptr(new Uint8Array(1)), 0, ptr(ctxBuf))
 const ctx = ctxBuf[0]
-sym.vexart_context_resize(ctx, 200, 200)
-console.log("1. Context created, resized to 200x200")
+console.log("1. Context created")
 
 // Step 2: build layout buffer manually with CORRECT nesting
 // Tree: Root(id=1, grow, column) -> Child(id=2, 200x200, red bg)

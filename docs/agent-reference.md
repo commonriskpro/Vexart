@@ -388,7 +388,6 @@ implemented under `native/libvexart/src`. Export names are prefixed with `vexart
 | `vexart_version` | Return bridge/native ABI version |
 | `vexart_context_create` | Create native context handle |
 | `vexart_context_destroy` | Destroy native context handle |
-| `vexart_context_resize` | Resize context-dependent resources |
 | `vexart_paint_dispatch` | Execute packed paint graph into a target |
 | `vexart_paint_upload_image` | Upload RGBA image bytes to a GPU image handle |
 | `vexart_paint_remove_image` | Release a GPU image handle |

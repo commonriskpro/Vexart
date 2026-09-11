@@ -40,7 +40,6 @@ export const VEXART_SYMBOLS = {
   vexart_version:           { args: [],                                        returns: FFIType.u32  },
   vexart_context_create:    { args: [FFIType.ptr, FFIType.u32, FFIType.ptr],   returns: FFIType.i32  },
   vexart_context_destroy:   { args: [FFIType.u64],                             returns: FFIType.i32  },
-  vexart_context_resize:    { args: [FFIType.u64, FFIType.u32, FFIType.u32],   returns: FFIType.i32  },
 
   // §5.3 Paint
   vexart_paint_dispatch:      { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },

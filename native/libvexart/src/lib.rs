@@ -279,19 +279,6 @@ pub extern "C" fn vexart_context_destroy(ctx: u64) -> i32 {
     })
 }
 
-/// Notifies the context of a terminal resize.
-///
-/// Currently a no-op because composite targets are created per-size and the
-/// GPU device handles any resolution. The engine's TS layer manages target
-/// lifecycle via `vexart_composite_target_create` / `_destroy`.
-#[no_mangle]
-pub extern "C" fn vexart_context_resize(ctx: u64, width: u32, height: u32) -> i32 {
-    ffi_guard!({
-        let _ = (ctx, width, height);
-        OK
-    })
-}
-
 // ─── §5.3 Paint ──────────────────────────────────────────────────────────
 
 /// Execute paint graph from packed buffer. Phase 2 stub.
