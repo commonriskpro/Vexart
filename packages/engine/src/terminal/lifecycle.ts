@@ -65,6 +65,126 @@ export type LifecycleState = {
 }
 
 /** @public */
+export type ExitHandlerOptions = {
+  manageProcessSignals?: boolean
+  signal?: AbortSignal
+}
+
+class ProcessSignalHubImpl {
+  private handlers = new Set<() => void>()
+  private attached = false
+  private dispatching = false
+
+  private onExit = () => {
+    this.dispatch(0)
+  }
+
+  private onSigint = () => {
+    this.dispatch(130)
+  }
+
+  private onSigterm = () => {
+    this.dispatch(143)
+  }
+
+  private onSighup = () => {
+    this.dispatch(129)
+  }
+
+  private onError = (error: unknown) => {
+    try {
+      const message = error instanceof Error
+        ? (error.stack ?? error.message)
+        : String(error)
+      process.stderr.write(`${message}\n`)
+    } catch {
+      // Fail-safe: ignore stderr write failure to guarantee terminal restoration
+    }
+    this.dispatch(1)
+  }
+
+  get activeCount(): number {
+    return this.handlers.size
+  }
+
+  get isAttached(): boolean {
+    return this.attached
+  }
+
+  register(cleanup: () => void): () => void {
+    const prevSize = this.handlers.size
+    this.handlers.add(cleanup)
+    if (prevSize === 0 && this.handlers.size === 1) {
+      this.attach()
+    }
+    return () => {
+      this.unregister(cleanup)
+    }
+  }
+
+  unregister(cleanup: () => void): void {
+    const deleted = this.handlers.delete(cleanup)
+    if (deleted && this.handlers.size === 0) {
+      this.detach()
+    }
+  }
+
+  private attach(): void {
+    if (this.attached) return
+    this.attached = true
+    process.on("exit", this.onExit)
+    process.on("SIGINT", this.onSigint)
+    process.on("SIGTERM", this.onSigterm)
+    process.on("SIGHUP", this.onSighup)
+    process.on("uncaughtException", this.onError)
+    process.on("unhandledRejection", this.onError)
+  }
+
+  private detach(): void {
+    if (!this.attached) return
+    this.attached = false
+    process.off("exit", this.onExit)
+    process.off("SIGINT", this.onSigint)
+    process.off("SIGTERM", this.onSigterm)
+    process.off("SIGHUP", this.onSighup)
+    process.off("uncaughtException", this.onError)
+    process.off("unhandledRejection", this.onError)
+  }
+
+  private dispatch(exitCode?: number): void {
+    if (this.dispatching) return
+    this.dispatching = true
+
+    const snapshot = Array.from(this.handlers)
+    this.handlers.clear()
+    this.detach()
+
+    for (const handler of snapshot) {
+      try {
+        handler()
+      } catch {
+        // Fail-safe: ignore handler errors to guarantee other cleanups run
+      }
+    }
+
+    if (exitCode !== undefined && exitCode !== 0) {
+      process.exit(exitCode)
+    }
+  }
+
+  resetForTesting(): void {
+    this.handlers.clear()
+    this.detach()
+    this.dispatching = false
+  }
+}
+
+/** @public */
+export const ProcessSignalHub = new ProcessSignalHubImpl()
+/** @public */
+export type ProcessSignalHub = ProcessSignalHubImpl
+
+/** @public */
 export function enter(
   stdin: NodeJS.ReadStream,
   write: (data: string) => void,
@@ -175,79 +295,78 @@ export function endSync(write: (data: string) => void) {
 /**
  * Install process exit handlers that guarantee terminal cleanup.
  *
- * Catches: exit, SIGHUP, SIGINT, SIGTERM, uncaughtException, unhandledRejection.
+ * Catches: exit, SIGHUP, SIGINT, SIGTERM, uncaughtException, unhandledRejection
+ * via the centralized ProcessSignalHub.
  * Each handler invokes the optional transport cleanup, then calls `leave()`
  * exactly once.
+ *
+ * @public
  */
 export function installExitHandlers(
   stdin: NodeJS.ReadStream,
   write: (data: string) => void,
   caps: Capabilities,
   state: LifecycleState,
-  beforeLeave?: () => void,
+  beforeLeave?: (() => void) | ExitHandlerOptions,
+  options?: ExitHandlerOptions,
 ): () => void {
+  let beforeLeaveFn: (() => void) | undefined
+  let resolvedOptions: ExitHandlerOptions | undefined
+
+  if (typeof beforeLeave === "function") {
+    beforeLeaveFn = beforeLeave
+    resolvedOptions = options
+  } else if (beforeLeave && typeof beforeLeave === "object") {
+    resolvedOptions = options ? { ...beforeLeave, ...options } : beforeLeave
+  } else {
+    resolvedOptions = options
+  }
+
+  const shouldManageSignals = resolvedOptions?.manageProcessSignals !== false
+
   let cleaned = false
   const cleanup = () => {
     if (cleaned) return
     cleaned = true
     try {
-      beforeLeave?.()
+      beforeLeaveFn?.()
     } finally {
-      leave(stdin, write, caps, state)
+      try {
+        leave(stdin, write, caps, state)
+      } finally {
+        if (shouldManageSignals) {
+          ProcessSignalHub.unregister(cleanup)
+        }
+      }
     }
   }
 
-  const onExit = () => cleanup()
-  const onSigint = () => {
-    try {
-      cleanup()
-    } finally {
-      process.exit(130)
-    }
-  }
-  const onSigterm = () => {
-    try {
-      cleanup()
-    } finally {
-      process.exit(143)
-    }
-  }
-  const onSighup = () => {
-    try {
-      cleanup()
-    } finally {
-      process.exit(129)
-    }
-  }
-  const onError = (error: unknown) => {
-    try {
-      const message = error instanceof Error
-        ? (error.stack ?? error.message)
-        : String(error)
-      process.stderr.write(`${message}\n`)
-    } catch {
-      // Fail-safe: ignore stderr write failure to guarantee terminal restoration
-    }
-    try {
-      cleanup()
-    } finally {
-      process.exit(1)
-    }
+  if (shouldManageSignals) {
+    ProcessSignalHub.register(cleanup)
   }
 
-  process.on("exit", onExit)
-  process.on("SIGINT", onSigint)
-  process.on("SIGTERM", onSigterm)
-  process.on("SIGHUP", onSighup)
-  process.on("uncaughtException", onError)
-  process.on("unhandledRejection", onError)
+  let onAbort: (() => void) | undefined
+  const abortSignal = resolvedOptions?.signal
+  if (abortSignal) {
+    onAbort = () => {
+      cleanup()
+    }
+    if (abortSignal.aborted) {
+      cleanup()
+    } else {
+      abortSignal.addEventListener("abort", onAbort, { once: true })
+    }
+  }
 
   return () => {
-    process.off("exit", onExit)
-    process.off("SIGINT", onSigint)
-    process.off("SIGTERM", onSigterm)
-    process.off("SIGHUP", onSighup)
-    process.off("uncaughtException", onError)
-    process.off("unhandledRejection", onError)
+    if (onAbort && abortSignal) {
+      abortSignal.removeEventListener("abort", onAbort)
+    }
+    if (shouldManageSignals) {
+      ProcessSignalHub.unregister(cleanup)
+    }
   }
 }
+
+/** @public */
+export const setupExitHandlers = installExitHandlers

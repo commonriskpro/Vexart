@@ -87,6 +87,10 @@ export type TerminalOptions = {
   skipColors?: boolean
   /** Probe timeout in ms */
   probeTimeout?: number
+  /** Manage process-level OS exit signals via ProcessSignalHub (default: true) */
+  manageProcessSignals?: boolean
+  /** AbortSignal to trigger terminal destruction and cleanup */
+  signal?: AbortSignal
 }
 
 // ── Factory ──
@@ -157,6 +161,7 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
   let startupLifecycleState: LifecycleState | null = null
   let startupRemoveExit: (() => void) | null = null
   let startupUnsubResize: (() => void) | null = null
+  let startupRemoveAbort: (() => void) | null = null
 
   try {
     // Step 3: probe direct Kitty graphics outside tmux. The tmux SHM query
@@ -298,6 +303,7 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
     let transportExitNotified = false
     let terminalDestroyed = false
     let removeExitHandlers = () => {}
+    let removeAbortListener = () => {}
     const terminal: Terminal = {
       kind,
       caps,
@@ -352,6 +358,7 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
       destroy: () => {
         if (terminalDestroyed) return
         terminalDestroyed = true
+        removeAbortListener()
         unsubResize()
         removeExitHandlers()
         try {
@@ -377,11 +384,38 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
 
     // The internal callback runs before lifecycle leave on every process exit
     // path (including signals), so SHM-owned resources are released first.
-    removeExitHandlers = installExitHandlers(stdin, rawWrite, caps, lifecycleState, onTransportExit)
+    removeExitHandlers = installExitHandlers(
+      stdin,
+      rawWrite,
+      caps,
+      lifecycleState,
+      onTransportExit,
+      {
+        manageProcessSignals: opts.manageProcessSignals,
+        signal: opts.signal,
+      },
+    )
     startupRemoveExit = removeExitHandlers
+
+    if (opts.signal) {
+      const onAbort = () => {
+        terminal.destroy()
+      }
+      if (opts.signal.aborted) {
+        terminal.destroy()
+      } else {
+        opts.signal.addEventListener("abort", onAbort, { once: true })
+        removeAbortListener = () => {
+          opts.signal?.removeEventListener("abort", onAbort)
+        }
+        startupRemoveAbort = removeAbortListener
+      }
+    }
+
     return terminal
   } catch (error) {
     try {
+      startupRemoveAbort?.()
       startupUnsubResize?.()
       startupRemoveExit?.()
       if (startupLifecycleState) leave(stdin, rawWrite, caps, startupLifecycleState)
@@ -407,9 +441,10 @@ function isRemoteConnection(): boolean {
 export type { TerminalKind } from "./detect"
 export type { Capabilities } from "./caps"
 export type { TerminalSize, ResizeHandler } from "./size"
+export type { LifecycleState, ExitHandlerOptions } from "./lifecycle"
 
 export { detect } from "./detect"
 export { inferCaps, probeKittyGraphics, queryColors } from "./caps"
 export { getSize, queryPixelSize, onResize } from "./size"
-export { enter, leave, beginSync, endSync } from "./lifecycle"
+export { enter, leave, beginSync, endSync, installExitHandlers, setupExitHandlers, ProcessSignalHub } from "./lifecycle"
 export { inTmux, parentTerminal, passthroughSupported, createWriter, wrapPassthrough } from "./tmux"

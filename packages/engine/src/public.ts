@@ -476,11 +476,11 @@ export type { Terminal, TerminalOptions } from "./terminal/index"
 export type { TerminalKind } from "./terminal/detect"
 export type { Capabilities } from "./terminal/caps"
 export type { TerminalSize, ResizeHandler } from "./terminal/size"
-export type { LifecycleState } from "./terminal/lifecycle"
+export type { LifecycleState, ExitHandlerOptions } from "./terminal/lifecycle"
 export { detect } from "./terminal/detect"
 export { inferCaps, probeKittyGraphics, queryColors } from "./terminal/caps"
 export { getSize, queryPixelSize, onResize } from "./terminal/size"
-export { enter, leave, beginSync, endSync } from "./terminal/lifecycle"
+export { enter, leave, beginSync, endSync, installExitHandlers, setupExitHandlers, ProcessSignalHub } from "./terminal/lifecycle"
 export { inTmux, parentTerminal, passthroughSupported, createWriter, wrapPassthrough } from "./terminal/tmux"
 
 // ── Output ────────────────────────────────────────────────────────────────────
