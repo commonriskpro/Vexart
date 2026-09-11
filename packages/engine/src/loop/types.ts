@@ -14,6 +14,7 @@ import type { PositionedCommand } from "./layout-adapter"
 import type { DamageRect } from "../ffi/damage"
 import type { Layer } from "../ffi/layers"
 import type { Terminal } from "../terminal/index"
+import type { RendererBackend } from "../ffi/renderer-backend"
 
 // ── Pointer + scroll state ──
 
@@ -224,6 +225,7 @@ export type PaintResult = {
 /** @public */
 export type RenderLoop = {
   root: TGENode
+  backend: RendererBackend
   start: () => void
   stop: () => void
   frame: () => void

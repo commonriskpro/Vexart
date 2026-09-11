@@ -114,6 +114,7 @@ function markGridTreeDirty(node: TGENode): number {
 
 /** @public */
 export type RenderLoopOptions = {
+  backend?: RendererBackend
   experimental?: {
     frameBudgetMs?: number
     maxFps?: number
@@ -243,9 +244,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   // ── Frame budget scheduler (Slice 3.4) ──
   const scheduler = createFrameScheduler()
 
-  const defaultGpuRendererBackend = createGpuRendererBackendForTerminal(term)
-  if (!getRendererBackend()) setRendererBackend(defaultGpuRendererBackend)
-  const getActiveBackend = (): RendererBackend => getRendererBackend() ?? defaultGpuRendererBackend
+  const loopBackend: RendererBackend = opts?.backend ?? getRendererBackend() ?? createGpuRendererBackendForTerminal(term)
+  if (!opts?.backend && !getRendererBackend()) setRendererBackend(loopBackend)
 
   function getOrCreateLayer(key: string, z: number): Layer {
     const existing = layerCache.get(key)
@@ -404,7 +404,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     layerStore: { getOrCreateLayer, getPreviousLayerRect, updateLayerGeometry, markLayerDamaged, markLayerClean, imageIdForLayer, removeLayer, layerCount },
     dirty: { markDirty, markAllDirty, clearDirty, dirtyVersion: () => dirtyTracker.dirtyVersion(), dirtyCount },
 
-    backendOverride: getActiveBackend(),
+    backendOverride: loopBackend,
     useLayerCompositing: true,
     forceLayerRepaint,
     expFrameBudgetMs,
@@ -435,7 +435,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       // Update mutable viewport fields in cs (may change on resize)
       cs.viewportWidth = viewportWidth
       cs.viewportHeight = viewportHeight
-      cs.backendOverride = getActiveBackend()
+      cs.backendOverride = loopBackend
       cs.debugCadence = DEBUG_CADENCE || !!frameProfileSink
       resetVexartFfiCallCounts()
       const finishDebugFrame = debugFrameStart()
@@ -488,6 +488,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
   const renderLoop: RenderLoop = {
     root,
+    backend: loopBackend,
     feedScroll,
     feedPointer,
     nudgeInteraction,
@@ -553,8 +554,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: isTmuxPlaceholderPresentation })
 
       unbindLayerDirtyStore(layerCache)
-      getActiveBackend().destroy?.()
-      setRendererBackend(null)
+      loopBackend.destroy?.()
+      if (getRendererBackend() === loopBackend) {
+        setRendererBackend(null)
+      }
 
       resetLayers()
       layerCache.clear()

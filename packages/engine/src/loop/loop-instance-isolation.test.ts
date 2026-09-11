@@ -139,6 +139,86 @@ describe("Step 2: Singleton Elimination & Instance Isolation", () => {
     expect(getRendererBackend()).toBeNull()
   })
 
+  test("[DEFECT-29] Distinct opts.backend preserves per-loop backends without mutating global singleton and isolates destroy", () => {
+    let backend1Destroyed = false
+    let backend2Destroyed = false
+
+    const backend1: RendererBackend = {
+      name: "custom-backend-1",
+      paint() { return { output: "skip-present", strategy: "skip-present" } },
+      destroy() { backend1Destroyed = true },
+    }
+    const backend2: RendererBackend = {
+      name: "custom-backend-2",
+      paint() { return { output: "skip-present", strategy: "skip-present" } },
+      destroy() { backend2Destroyed = true },
+    }
+
+    setRendererBackend(null)
+
+    const term1 = mockTerminal(200, 100)
+    const term2 = mockTerminal(200, 100)
+
+    const loop1 = createRenderLoop(term1 as any, { backend: backend1 })
+    const loop2 = createRenderLoop(term2 as any, { backend: backend2 })
+    loops.push(loop1, loop2)
+
+    expect(loop1.backend).toBe(backend1)
+    expect(loop2.backend).toBe(backend2)
+    expect(getRendererBackend()).toBeNull()
+
+    loop1.destroy()
+    expect(backend1Destroyed).toBe(true)
+    expect(backend2Destroyed).toBe(false)
+    expect(getRendererBackend()).toBeNull()
+    expect(loop2.backend).toBe(backend2)
+
+    loop2.destroy()
+    expect(backend2Destroyed).toBe(true)
+    expect(getRendererBackend()).toBeNull()
+
+    // Also verify when a global singleton backend is active:
+    const globalBackend: RendererBackend = {
+      name: "global-singleton-backend",
+      paint() { return { output: "skip-present", strategy: "skip-present" } },
+    }
+    setRendererBackend(globalBackend)
+
+    let backend3Destroyed = false
+    let backend4Destroyed = false
+    const backend3: RendererBackend = {
+      name: "custom-backend-3",
+      paint() { return { output: "skip-present", strategy: "skip-present" } },
+      destroy() { backend3Destroyed = true },
+    }
+    const backend4: RendererBackend = {
+      name: "custom-backend-4",
+      paint() { return { output: "skip-present", strategy: "skip-present" } },
+      destroy() { backend4Destroyed = true },
+    }
+
+    const term3 = mockTerminal(200, 100)
+    const term4 = mockTerminal(200, 100)
+
+    const loop3 = createRenderLoop(term3 as any, { backend: backend3 })
+    const loop4 = createRenderLoop(term4 as any, { backend: backend4 })
+    loops.push(loop3, loop4)
+
+    expect(loop3.backend).toBe(backend3)
+    expect(loop4.backend).toBe(backend4)
+    expect(getRendererBackend()).toBe(globalBackend)
+
+    loop3.destroy()
+    expect(backend3Destroyed).toBe(true)
+    expect(backend4Destroyed).toBe(false)
+    expect(getRendererBackend()).toBe(globalBackend)
+    expect(loop4.backend).toBe(backend4)
+
+    loop4.destroy()
+    expect(backend4Destroyed).toBe(true)
+    expect(getRendererBackend()).toBe(globalBackend)
+  })
+
   test("[FLAW-03 & FLAW-04] Scoped Dirty & Pointer Routing with symmetrical unbindLoop", () => {
     const term1 = mockTerminal(200, 100)
     const term2 = mockTerminal(200, 100)
