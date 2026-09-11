@@ -176,9 +176,16 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     })
   }
 
+  let lastTop = -1
+  let lastVh = -1
   const unsubPostScroll = onPostScroll(() => {
-    setScrollTick(t => t + 1)
-    markDirty()
+    const top = scrollHandle.scrollTop
+    const vh = scrollHandle.viewportHeight
+    if (top !== lastTop || vh !== lastVh) {
+      lastTop = top
+      lastVh = vh
+      setScrollTick(t => t + 1)
+    }
   })
   onCleanup(() => {
     unsubPostScroll()

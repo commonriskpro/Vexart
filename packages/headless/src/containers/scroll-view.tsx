@@ -30,7 +30,7 @@
 import { createSignal, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
 import type { ScrollHandle } from "@vexart/engine"
-import { Show, onPostScroll, markDirty } from "@vexart/engine"
+import { Show, onPostScroll } from "@vexart/engine"
 import { useScrollHandle } from "../helpers/use-scroll"
 
 let scrollViewCounter = 0
@@ -95,10 +95,20 @@ export type ScrollViewProps = {
  */
 function Scrollbar(props: { handle: ScrollHandle; height: number | string }) {
   const [scrollTick, setScrollTick] = createSignal(0)
+  let lastY = 0
+  let lastCh = 0
+  let lastVh = 0
 
   const unsubPostScroll = onPostScroll(() => {
-    setScrollTick(t => t + 1)
-    markDirty()
+    const y = props.handle.scrollY
+    const ch = props.handle.contentHeight
+    const vh = props.handle.viewportHeight
+    if (y !== lastY || ch !== lastCh || vh !== lastVh) {
+      lastY = y
+      lastCh = ch
+      lastVh = vh
+      setScrollTick(t => t + 1)
+    }
   })
   onCleanup(() => { unsubPostScroll() })
 
