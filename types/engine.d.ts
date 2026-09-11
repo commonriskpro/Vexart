@@ -379,9 +379,6 @@ export declare function createHandle(node: TGENode): NodeHandle;
 export declare function createLayerStore(): LayerStore;
 
 /** @public */
-export declare function createNavigationStack(initialComponent?: (props: ScreenProps) => JSX.Element): NavigationStackHandle;
-
-/** @public */
 export declare function createNode(kind: TGENodeKind): TGENode;
 
 /**
@@ -401,15 +398,6 @@ export declare function createPressEvent(): PressEvent;
 
 /** @public */
 export declare function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): RenderLoop;
-
-/** @public */
-export declare function createRouter(initialPath: string): {
-    current: () => string;
-    navigate: (path: string, navParams?: NavigationParams) => void;
-    goBack: () => boolean;
-    params: () => NavigationParams | undefined;
-    history: Accessor<NavigationEntry[]>;
-};
 
 /** @public */
 export declare function createScaledImageCache(): ScaledImageCache;
@@ -901,12 +889,6 @@ export declare type FilterConfig = {
     sepia?: number;
     /** Hue rotation in degrees (0-360). */
     hueRotate?: number;
-};
-
-/** @public */
-export declare type FlatRouteProps = {
-    path: string;
-    component: (props: RouteProps) => JSX.Element;
 };
 
 /** @public */
@@ -1754,35 +1736,14 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      compressUs: number;
      /** Native SHM prepare/copy/sync time in microseconds. */
      shmPrepareUs: number;
-     /** Raw input byte count before compression. */
-     rawBytes: number;
-     /** Payload byte count written after compression policy. */
-     payloadBytes: number;
- };
+    /** Raw input byte count before compression. */
+    rawBytes: number;
+    /** Payload byte count written after compression policy. */
+    payloadBytes: number;
+};
 
- /** @public */
- export declare type NavigationEntry = {
-     path: string;
-     params?: NavigationParams;
- };
-
- /** @public */
- declare type NavigationParams = Record<string, unknown>;
-
- /** @public */
- export declare type NavigationStackHandle = {
-     push: (component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) => void;
-     pop: () => boolean;
-     goBack: () => boolean;
-     replace: (component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) => void;
-     reset: (component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) => void;
-     depth: () => number;
-     current: () => ScreenEntry | undefined;
-     stack: () => ScreenEntry[];
- };
-
- /** @public */
- export declare type NebulaCmd = {
+/** @public */
+export declare type NebulaCmd = {
      kind: "nebula";
      x: number;
      y: number;
@@ -2497,37 +2458,11 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      toString(): string;
  }
 
- /** @public */
- export declare function rotate(degrees: number): Matrix3;
+/** @public */
+export declare function rotate(degrees: number): Matrix3;
 
- /** @public */
- export declare type RouteDefinition = {
-     path: string;
-     component: (props: RouteProps) => JSX.Element;
- };
-
- /** @public */
- export declare type RouteProps = {
-     params?: NavigationParams;
- };
-
- /** @public */
- export declare type RouterContextValue = {
-     current: () => string;
-     navigate: (path: string, params?: NavigationParams) => void;
-     goBack: () => boolean;
-     params: () => NavigationParams | undefined;
-     history: () => NavigationEntry[];
- };
-
- /** @public */
- export declare type RouterProps = {
-     initial?: string;
-     children?: JSX.Element;
- };
-
- /** @public */
- export declare function scale(s: number): Matrix3;
+/** @public */
+export declare function scale(s: number): Matrix3;
 
  /** @public */
  export declare type ScaledImageCache = {
@@ -2548,24 +2483,11 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      offsetY: number;
  };
 
- /** @public */
- export declare function scaleXY(sx: number, sy: number): Matrix3;
+/** @public */
+export declare function scaleXY(sx: number, sy: number): Matrix3;
 
- /** @public */
- export declare type ScreenEntry = {
-     key: string;
-     component: (props: ScreenProps) => JSX.Element;
-     params?: NavigationParams;
- };
-
- /** @public */
- export declare type ScreenProps = {
-     params?: NavigationParams;
-     goBack: () => void;
- };
-
- /**
-  * scroll.ts — programmatic scroll state
+/**
+ * scroll.ts — programmatic scroll state
   *
   * Provides scroll handles for programmatic scroll control.
   * Flexily layout output drives scroll geometry;
@@ -3397,14 +3319,11 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
  /** @public */
  export declare function useMutation<T, V = void>(mutator: (variables: V) => Promise<T>, options?: MutationOptions<T, V>): MutationResult<T, V>;
 
- /** @public */
- export declare function useQuery<T>(fetcher: () => Promise<T>, options?: QueryOptions): QueryResult<T>;
+/** @public */
+export declare function useQuery<T>(fetcher: () => Promise<T>, options?: QueryOptions): QueryResult<T>;
 
- /** @public */
- export declare function useRouter(): RouterContextValue;
-
- /** @public */
- export declare function useTerminalDimensions(terminal: Terminal): {
+/** @public */
+export declare function useTerminalDimensions(terminal: Terminal): {
      width: () => number;
      height: () => number;
      cols: () => number;

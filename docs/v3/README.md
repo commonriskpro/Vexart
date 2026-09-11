@@ -109,7 +109,7 @@ import {
 1. **`<Box>` and `<Text>`**: Exported from `@vexart/app` (NOT `@vexart/engine`). They wrap the engine intrinsics `<box>` and `<text>` while providing support for the `className` utility compiler and reactive style diffing.
 2. **`<Button>`**: Exported from `@vexart/styled` (themed Void button). The unstyled primitive from `@vexart/headless` is shadowed. Consumers requiring the unstyled button import directly from `@vexart/headless`.
 3. **ToggleSwitch**: Headless `Switch` from `@vexart/headless` is renamed to `ToggleSwitch` in the unified barrel to prevent collisions with SolidJS's core `<Switch>` control flow component.
-4. **`useRouter`**: Exported from `@vexart/app` (file-system application router). The low-level router in `@vexart/engine` is accessible via `"vexart/engine"`.
+4. **`useRouter`**: Exported from `@vexart/app` (canonical file-system application router).
 5. **Purged Primitives**: `<Span>`, `<RichText>`, and `<WrapRow>` **do not exist**. Use `<box>` and `<text>` intrinsics or `<Box>` and `<Text>` app components directly.
 
 ---

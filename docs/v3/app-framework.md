@@ -235,4 +235,4 @@ The root `"vexart"` package barrel (`packages/app/src/barrel.ts`) unifies all ti
 1. **`Box` and `Text`**: Exported from `@vexart/app` (enabling `className`).
 2. **`Button`**: Exported from `@vexart/styled` (themed Void component). The unstyled primitive lives in `@vexart/headless`.
 3. **`ToggleSwitch`**: The headless `Switch` primitive is exported as `ToggleSwitch` to prevent collision with SolidJS's `<Switch>` control flow.
-4. **`useRouter`**: Exported from `@vexart/app` (file-system application router). The engine-level router is accessible from `"vexart/engine"`.
+4. **`useRouter`**: Exported from `@vexart/app` (canonical file-system application router).

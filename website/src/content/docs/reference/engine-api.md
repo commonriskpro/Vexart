@@ -45,7 +45,6 @@ import { mount } from "@vexart/engine"
 ## Data
 
 - `useQuery`, `useMutation`
-- `createRouter`, `createNavigationStack`, `useRouter`
 
 ## Selection
 

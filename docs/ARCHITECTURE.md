@@ -255,7 +255,6 @@ packages/engine/
 │   │   ├── jsx.d.ts           — JSX intrinsic element types
 │   │   ├── plugins.ts         — slot registry for plugins
 │   │   ├── pointer.ts         — pointer capture, loop binding
-│   │   ├── router.ts          — createRouter, createNavigationStack
 │   │   ├── selection.ts       — text selection across nodes
 │   │   └── tree-sitter/       — syntax highlighting (client, parsers, styles)
 │   │

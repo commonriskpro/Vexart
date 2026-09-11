@@ -321,23 +321,6 @@ export {
 } from "./reconciler/pointer"
 
 export {
-  useRouter,
-  createRouter,
-  createNavigationStack,
-} from "./reconciler/router"
-export type {
-  NavigationEntry,
-  RouteDefinition,
-  RouteProps,
-  RouterContextValue,
-  RouterProps,
-  FlatRouteProps,
-  ScreenEntry,
-  ScreenProps,
-  NavigationStackHandle,
-} from "./reconciler/router"
-
-export {
   getSelection,
   getSelectedText,
   setSelection,

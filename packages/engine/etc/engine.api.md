@@ -334,9 +334,6 @@ export function createHandle(node: TGENode): NodeHandle;
 export function createLayerStore(): LayerStore;
 
 // @public (undocumented)
-export function createNavigationStack(initialComponent?: (props: ScreenProps) => JSX.Element): NavigationStackHandle;
-
-// @public (undocumented)
 export function createNode(kind: TGENodeKind): TGENode;
 
 // @public (undocumented)
@@ -350,15 +347,6 @@ export function createPressEvent(): PressEvent;
 
 // @public (undocumented)
 export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): RenderLoop;
-
-// @public (undocumented)
-export function createRouter(initialPath: string): {
-    current: () => string;
-    navigate: (path: string, navParams?: NavigationParams) => void;
-    goBack: () => boolean;
-    params: () => NavigationParams | undefined;
-    history: Accessor<NavigationEntry[]>;
-};
 
 // @public (undocumented)
 export function createScaledImageCache(): ScaledImageCache;
@@ -677,12 +665,6 @@ export type FilterConfig = {
     invert?: number;
     sepia?: number;
     hueRotate?: number;
-};
-
-// @public (undocumented)
-export type FlatRouteProps = {
-    path: string;
-    component: (props: RouteProps) => JSX.Element;
 };
 
 // @public (undocumented)
@@ -1448,24 +1430,6 @@ export type NativePresentationStats = {
 };
 
 // @public (undocumented)
-export type NavigationEntry = {
-    path: string;
-    params?: NavigationParams;
-};
-
-// @public (undocumented)
-export type NavigationStackHandle = {
-    push: (component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) => void;
-    pop: () => boolean;
-    goBack: () => boolean;
-    replace: (component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) => void;
-    reset: (component: (props: ScreenProps) => JSX.Element, params?: NavigationParams) => void;
-    depth: () => number;
-    current: () => ScreenEntry | undefined;
-    stack: () => ScreenEntry[];
-};
-
-// @public (undocumented)
 export type NebulaCmd = {
     kind: "nebula";
     x: number;
@@ -2070,32 +2034,6 @@ export class RGBA {
 export function rotate(degrees: number): Matrix3;
 
 // @public (undocumented)
-export type RouteDefinition = {
-    path: string;
-    component: (props: RouteProps) => JSX.Element;
-};
-
-// @public (undocumented)
-export type RouteProps = {
-    params?: NavigationParams;
-};
-
-// @public (undocumented)
-export type RouterContextValue = {
-    current: () => string;
-    navigate: (path: string, params?: NavigationParams) => void;
-    goBack: () => boolean;
-    params: () => NavigationParams | undefined;
-    history: () => NavigationEntry[];
-};
-
-// @public (undocumented)
-export type RouterProps = {
-    initial?: string;
-    children?: JSX.Element;
-};
-
-// @public (undocumented)
 export function scale(s: number): Matrix3;
 
 // @public (undocumented)
@@ -2115,19 +2053,6 @@ export function scaleImage(src: DecodedImage, targetW: number, targetH: number, 
 
 // @public (undocumented)
 export function scaleXY(sx: number, sy: number): Matrix3;
-
-// @public (undocumented)
-export type ScreenEntry = {
-    key: string;
-    component: (props: ScreenProps) => JSX.Element;
-    params?: NavigationParams;
-};
-
-// @public (undocumented)
-export type ScreenProps = {
-    params?: NavigationParams;
-    goBack: () => void;
-};
 
 // @public (undocumented)
 export type ScrollHandle = {
@@ -2743,9 +2668,6 @@ export function useMutation<T, V = void>(mutator: (variables: V) => Promise<T>, 
 export function useQuery<T>(fetcher: () => Promise<T>, options?: QueryOptions): QueryResult<T>;
 
 // @public (undocumented)
-export function useRouter(): RouterContextValue;
-
-// @public (undocumented)
 export function useTerminalDimensions(terminal: Terminal): {
     width: () => number;
     height: () => number;
@@ -2946,7 +2868,6 @@ export function wrapPassthrough(raw: string): string;
 // <repo>/.api-extractor-temp/packages/engine/src/ffi/node-types.d.ts:371:5 - (ae-forgotten-export) The symbol "NodeImageExtra" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/engine/src/ffi/node-types.d.ts:373:5 - (ae-forgotten-export) The symbol "NodeCanvasExtra" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/engine/src/loop/debug.d.ts:85:5 - (ae-forgotten-export) The symbol "NativeFrameExecutionStats" needs to be exported by the entry point index.d.ts
-// <repo>/.api-extractor-temp/packages/engine/src/reconciler/router.d.ts:41:5 - (ae-forgotten-export) The symbol "NavigationParams" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

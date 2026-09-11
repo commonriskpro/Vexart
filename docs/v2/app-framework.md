@@ -138,4 +138,4 @@ When multiple packages export identically named symbols, the barrel enforces cle
 1. **`Box` and `Text`**: `@vexart/app` wins. Provides `className` compiler support while forwarding engine intrinsic props.
 2. **`Button` and `ButtonProps`**: `@vexart/styled` wins. Provides themed components with Void design tokens. Unstyled headless `Button` remains available from `@vexart/headless` or `vexart/engine`.
 3. **`Switch`**: Headless unstyled switch is renamed to **`ToggleSwitch`** to prevent name collision with SolidJS control flow `<Switch>`.
-4. **`useRouter`**: `@vexart/app` wins. Exposes the app-level file-system router. The low-level headless router is exported from `vexart/engine`.
+4. **`useRouter`**: `@vexart/app` provides the canonical app-level file-system router.

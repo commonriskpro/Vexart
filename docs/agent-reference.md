@@ -518,10 +518,9 @@ portable and ARM64-safe.
 - `intersectRect`, `unionRect`, `expandRect`, `translateRect`, `damageRectArea`,
   `damageSumOverlapArea`, `rectRight`, `rectBottom`, `isEmptyRect`
 
-### Router and data
+### Data fetching
 
 - `useQuery`, `useMutation`
-- `createRouter`, `createNavigationStack`, `useRouter`
 
 ### Selection
 
@@ -657,7 +656,6 @@ text.
 - `QueryResult`, `QueryOptions`, `MutationResult`, `MutationOptions`
 - `DirtyKind`, `DirtyScope`, `DirtyTracker`
 - `Extmark`, `CreateExtmarkOptions`, `FocusEntry`, `FocusHandle`, `NodeHandle`
-- `NavigationEntry`, `RouteDefinition`, `RouteProps`, `RouterContextValue`
 - `TextSelection`, `DebugStats`, `NativePresentationStats`
 - `KittyTransportStats`, `RawImageData`, `CompressMode`, `TransmissionMode`,
   `KittyTransportManagerState`, `NativeKittyShmHandle`

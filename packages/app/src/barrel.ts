@@ -18,8 +18,6 @@
  *   - Box/Text: @vexart/app wins (className support)
  *   - Button/ButtonProps: @vexart/styled wins (themed)
  *   - Switch (headless): renamed to ToggleSwitch to avoid SolidJS Switch
- *   - useRouter: @vexart/app wins (app-level file-based router).
- *     The headless useRouter lives in @vexart/engine for power users.
  */
 
 // ── App lifecycle & framework ────────────────────────────────────────────────

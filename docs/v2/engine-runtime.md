@@ -504,7 +504,6 @@ The explicit public exports of `@vexart/engine` (from `packages/engine/src/publi
 - Focus: `focusedId`, `setFocusedId`, `setFocus`, `pushFocusScope`, `getFocusedEntry`, `useFocus`, `registerNodeFocusable`, `updateNodeFocusEntry`, `unregisterNodeFocusable`, `getNodeFocusId`, `resetFocus`
 - Node Handles: `createHandle`, `NodeHandle`
 - Extmarks: `ExtmarkManager`, `Extmark`, `CreateExtmarkOptions`
-- Router Subsystem: `useRouter`, `createRouter`, `createNavigationStack`, `NavigationEntry`, `RouteDefinition`, `RouteProps`, `RouterContextValue`, `RouterProps`, `FlatRouteProps`, `ScreenEntry`, `ScreenProps`, `NavigationStackHandle`
 - Plugin Slots: `createSlotRegistry`, `createSlot`, `SlotComponent`, `TgePluginApi`, `TgePlugin`, `SlotRegistry`
 - Hit-Testing & Selection: `buildNodeMouseEvent`, `isFullyOutsideScrollViewport`, `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal`, `resetSelection`
 - Syntax Highlighting: `TreeSitterClient`, `getTreeSitterClient`, `addDefaultParsers`, `SyntaxStyle`, `ONE_DARK`, `KANAGAWA`, `highlightsToTokens`

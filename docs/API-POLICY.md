@@ -677,10 +677,6 @@ This appendix enumerates the complete expected public API surface at v0.9 releas
 - `markLayerDirtyByKey`, `markLayerDamageByKey` `@public`
 - `DirtyKind`, `DirtyScope`, `DirtyTracker` (types) `@public`
 
-**Router**
-- `createRouter`, `createNavigationStack`, `useRouter` `@public`
-- `NavigationEntry`, `RouteDefinition`, `RouteProps`, `RouterContextValue` (types) `@public`
-
 **Selection**
 - `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal`, `resetSelection` `@public`
 - `TextSelection` (type) `@public`
@@ -881,7 +877,6 @@ for common use cases are considered an API surface bug.
 - `Box`/`Text`: `@vexart/app` wins (className support)
 - `Button`/`ButtonProps`: `@vexart/styled` wins (themed)
 - `Switch` (headless): renamed to `ToggleSwitch` to avoid SolidJS `Switch`
-- `useRouter`: `@vexart/app` wins (app-level file-based router)
 
 ---
 

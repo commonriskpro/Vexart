@@ -3743,14 +3743,6 @@ Internals for custom render loops, focus management, debug tools, tree-sitter, a
 | `vexartVersion` / `assertBridgeVersion` / `vexartGetLastError` | Version/error |
 | `getRendererResourceStats` | Resource stats |
 
-#### Router (low-level)
-
-| Export | Description |
-| ------ | ----------- |
-| `createRouter` | Create flat router |
-| `createNavigationStack` | Create stack router |
-| `useRouter` | Access router context |
-
 #### Fonts & Images
 
 | Export | Description |
