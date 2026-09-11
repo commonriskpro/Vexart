@@ -375,6 +375,7 @@ export {
   useFocus,
   setFocus,
   focusedId,
+  pushFocusScope,
   // Interaction
   useDrag,
   useHover,
