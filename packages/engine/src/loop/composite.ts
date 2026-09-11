@@ -5,12 +5,11 @@
  * Design ref: openspec/changes/phase-3-loop-decomposition/design.md §Output+Coordinator
  *
  * Owns the full per-frame pipeline:
- *   1. Feed pointer/scroll to layoutAdapter (no-op stubs — handled TS-side)
- *   2. walkTree → layoutAdapter → endLayout
- *   3. writeLayoutBack + updateInteractiveStates
- *   4. Re-layout on click (instant visual feedback)
- *   5. findLayerBoundaries + assignLayersSpatial
- *   6. beginSync → paintFrame → endSync + debug stats
+ *   1. Feed scroll + pointer state & check compositor-only fast path
+ *   2. updateInteractiveStates
+ *   3. walkTree → layoutAdapter → endLayout → writeLayoutBack (single unified layout pass)
+ *   4. findLayerBoundaries + assignLayersSpatial
+ *   5. beginSync → paintFrame → endSync + debug stats
  *
  * Exports:
  *   - CompositeFrameState — all dependencies the coordinator injects per frame
@@ -273,33 +272,11 @@ function runLayoutPass(s: CompositeFrameState, profile?: FrameProfile): RenderCo
 
 
 
-/**
- * Check whether an interactive style contains any layout-affecting props.
- * Only `borderWidth` affects layout among InteractiveStyleProps — all others
- * (backgroundColor, shadow, glow, gradient, opacity, etc.) are visual-only.
- */
-function interactiveStyleAffectsLayout(style: import("../ffi/node").InteractiveStyleProps | undefined): boolean {
-  if (!style) return false
-  return style.borderWidth !== undefined
-}
-
-function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; changed: boolean; needsRelayout: boolean } {
+function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; changed: boolean } {
   let changed = false
-  let needsRelayout = false
   const visualNodeIds = new Set<number>()
   const queueNodeVisualDamage = (node: TGENode) => {
     visualNodeIds.add(node.id)
-    // HP-5: Track if any changed node has layout-affecting interactive styles
-    if (!needsRelayout) {
-      const props = node.props
-      if (
-        interactiveStyleAffectsLayout(props.hoverStyle) ||
-        interactiveStyleAffectsLayout(props.activeStyle) ||
-        interactiveStyleAffectsLayout(props.focusStyle)
-      ) {
-        needsRelayout = true
-      }
-    }
     if (node.layout.width <= 0 || node.layout.height <= 0) return
     const padding = 32
     s.pendingNodeDamageRects.push({
@@ -367,7 +344,7 @@ function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; c
   // callbacks ran.
   if (s.pointer.capturedNodeId === captureBefore) s.pointer.capturedNodeId = bag.capturedNodeId
   s.pointer.dirty = bag.pointerDirty
-  return { hadClick, changed, needsRelayout }
+  return { hadClick, changed }
 }
 
 // ── compositeFrame ────────────────────────────────────────────────────────
@@ -381,7 +358,6 @@ function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; c
 export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   const dirtyVersionAtFrameStart = s.dirty.dirtyVersion()
   const dirtyBeforeFrame = s.dirty.dirtyCount()
-  const layoutStart = s.debugCadence ? performance.now() : 0
   const scrollStart = profile ? performance.now() : 0
 
   // ── Step 1: Feed scroll + pointer state ──
@@ -506,8 +482,15 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     return
   }
 
-  // ── Step 2: Walk tree → Flexily layout ──
-  let commands = runLayoutPass(s, profile)
+  // ── Step 2: Update interactive states ──
+  const interactionStart = profile ? performance.now() : 0
+  updateInteractiveStates(s)
+  if (profile) profile.interactionMs = performance.now() - interactionStart
+  const dirtyVersionForFrame = s.dirty.dirtyVersion()
+
+  // ── Step 3: Walk tree & Flexily layout pass ──
+  const layoutStart = profile || s.debugCadence ? performance.now() : 0
+  const commands = runLayoutPass(s, profile)
   if (!commands) {
     if (profile) profile.layoutMs = performance.now() - layoutStart
     // Keep the dirty bit and pending damage: this frame was not presented and
@@ -515,36 +498,10 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     return
   }
 
-  // ── Step 3: Interaction states ──
-  const interactionStart = profile ? performance.now() : 0
-  const interactionDirtyVersion = s.dirty.dirtyVersion()
-  const interaction = updateInteractiveStates(s)
-  if (profile) profile.interactionMs = performance.now() - interactionStart
-
-  // Pointer callbacks may synchronously mutate Solid state (for example a
-  // tooltip becoming visible on first hover). Reconciliation inserts the new
-  // subtree after the initial walk, so its first layout is otherwise left at
-  // zero until the next frame. A dirty-version change is the narrow signal
-  // that the interaction callback changed the scene graph; re-run walk/layout
-  // before painting this frame.
-  const interactionMutatedTree = s.dirty.dirtyVersion() !== interactionDirtyVersion
-
-  // Re-layout on interactive state changes that affect layout (HP-5 optimization).
-  // Only borderWidth among InteractiveStyleProps affects layout — all others
-  // (backgroundColor, shadow, opacity, etc.) are visual-only and only need repaint.
-  // Clicks always trigger re-layout because onPress handlers may mutate state.
-  if (interaction.hadClick || interaction.needsRelayout || interactionMutatedTree) {
-    const relayoutStart = profile ? performance.now() : 0
-    const relayoutCommands = runLayoutPass(s)
-    if (!relayoutCommands) return
-    commands = relayoutCommands
-    if (profile) profile.relayoutMs = performance.now() - relayoutStart
-  }
-
   if (profile) profile.layoutMs = performance.now() - layoutStart
 
   if (commands.length === 0) {
-    s.dirty.clearDirty(dirtyVersionAtFrameStart)
+    s.dirty.clearDirty(dirtyVersionForFrame)
     return
   }
 
@@ -661,6 +618,6 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     profile.repainted = paintResult.repaintedThisFrame
   }
 
-  s.dirty.clearDirty(dirtyVersionAtFrameStart)
+  s.dirty.clearDirty(dirtyVersionForFrame)
   resetFrameTracking()
 }
