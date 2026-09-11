@@ -25,6 +25,7 @@ export type AppRouteDefinition = {
     error?: RouteErrorComponent;
     notFound?: RouteComponent;
     focusId?: string | null;
+    keepAlive?: boolean;
 };
 
 // @public (undocumented)

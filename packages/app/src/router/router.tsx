@@ -1,4 +1,4 @@
-import { createContext, createSignal, useContext } from "solid-js"
+import { createContext, createComponent, createRoot, createSignal, onCleanup, useContext } from "solid-js"
 import type { JSX } from "solid-js"
 import { setFocus } from "@vexart/engine"
 
@@ -32,6 +32,7 @@ export type AppRouteDefinition = {
   error?: RouteErrorComponent
   notFound?: RouteComponent
   focusId?: string | null
+  keepAlive?: boolean
 }
 
 /** @public */
@@ -231,8 +232,70 @@ export function useRouter() {
 }
 
 /** @public */
-export function RouteOutlet(props: RouteOutletProps) {
+export function RouteOutlet(props: RouteOutletProps): () => JSX.Element {
   const contextRouter = props.router ?? useRouter()
+
+  const keepAliveCache = new Map<
+    string,
+    {
+      key: string
+      element: JSX.Element
+      setParams: (p: RouteParams) => void
+      dispose: () => void
+      lastAccessed: number
+    }
+  >()
+
+  let activeRoot: {
+    key: string
+    element: JSX.Element
+    setParams: (p: RouteParams) => void
+    dispose: () => void
+    isKeepAlive: boolean
+  } | null = null
+
+  let lastTime = 0
+  function nextTimestamp() {
+    const now = Date.now()
+    lastTime = now > lastTime ? now : lastTime + 1
+    return lastTime
+  }
+
+  function deactivateActiveRoot() {
+    if (!activeRoot) return
+    if (activeRoot.isKeepAlive) {
+      keepAliveCache.set(activeRoot.key, {
+        key: activeRoot.key,
+        element: activeRoot.element,
+        setParams: activeRoot.setParams,
+        dispose: activeRoot.dispose,
+        lastAccessed: nextTimestamp(),
+      })
+      while (keepAliveCache.size > 3) {
+        const oldest = [...keepAliveCache.values()].sort((a, b) => a.lastAccessed - b.lastAccessed)[0]
+        if (oldest) {
+          oldest.dispose()
+          keepAliveCache.delete(oldest.key)
+        } else {
+          break
+        }
+      }
+    } else {
+      activeRoot.dispose()
+    }
+    activeRoot = null
+  }
+
+  onCleanup(() => {
+    if (activeRoot) {
+      activeRoot.dispose()
+      activeRoot = null
+    }
+    for (const entry of keepAliveCache.values()) {
+      entry.dispose()
+    }
+    keepAliveCache.clear()
+  })
 
   // match() is a derived signal — reading it inside this returned function
   // makes SolidJS track it reactively. When router.push() updates the
@@ -240,21 +303,83 @@ export function RouteOutlet(props: RouteOutletProps) {
   return () => {
     const match = contextRouter.match()
     if (!match) {
+      deactivateActiveRoot()
       const NotFound = props.notFound
-      return NotFound ? NotFound({ params: {} }) : null
+      return NotFound ? createComponent(NotFound, { params: {} }) : null
     }
-    const Component = match.route.component
-    try {
-      let element = Component({ params: match.params })
-      const layouts = match.route.layouts ?? []
-      for (const Layout of layouts.slice().reverse()) {
-        element = Layout({ children: element, params: match.params })
+
+    const routeKey = match.route.path
+    if (activeRoot && activeRoot.key === routeKey) {
+      // Same route, dynamic parameters changed (e.g. /item/1 -> /item/2)
+      activeRoot.setParams(match.params)
+      return activeRoot.element
+    }
+
+    // Different route:
+    deactivateActiveRoot()
+
+    // Check if new route is in keepAliveCache:
+    const cached = keepAliveCache.get(routeKey)
+    if (cached && match.route.keepAlive) {
+      cached.lastAccessed = nextTimestamp()
+      cached.setParams(match.params)
+      keepAliveCache.delete(routeKey)
+      activeRoot = {
+        key: routeKey,
+        element: cached.element,
+        setParams: cached.setParams,
+        dispose: cached.dispose,
+        isKeepAlive: true,
       }
-      return element
-    } catch (error) {
-      const ErrorComponent = match.route.error
-      if (ErrorComponent) return ErrorComponent({ error, params: match.params })
-      throw error
+      return activeRoot.element
     }
+
+    if (cached) {
+      cached.dispose()
+      keepAliveCache.delete(routeKey)
+    }
+
+    // Create isolated reactive root with createRoot:
+    let renderedElement: JSX.Element = null
+    let setParamsFn!: (p: RouteParams) => void
+    const dispose = createRoot((disposeFn) => {
+      const [params, setParams] = createSignal(match.params)
+      setParamsFn = setParams
+
+      const Component = match.route.component
+      try {
+        let element = createComponent(Component, {
+          get params() { return params() },
+        })
+        const layouts = match.route.layouts ?? []
+        for (const Layout of layouts.slice().reverse()) {
+          element = createComponent(Layout, {
+            get children() { return element },
+            get params() { return params() },
+          })
+        }
+        renderedElement = element
+      } catch (error) {
+        const ErrorComponent = match.route.error
+        if (ErrorComponent) {
+          renderedElement = createComponent(ErrorComponent, {
+            error,
+            get params() { return params() },
+          })
+        } else {
+          throw error
+        }
+      }
+      return disposeFn
+    })
+
+    activeRoot = {
+      key: routeKey,
+      element: renderedElement,
+      setParams: setParamsFn,
+      dispose,
+      isKeepAlive: !!match.route.keepAlive,
+    }
+    return activeRoot.element
   }
 }
