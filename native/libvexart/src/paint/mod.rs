@@ -298,6 +298,13 @@ impl PaintContext {
             ]) as usize;
             offset += 8;
 
+            if cmd_kind == 9 || cmd_kind == 10 {
+                crate::ffi::error::set_last_error(
+                    "paint_dispatch: image commands (kinds 9, 10) are prohibited in geometry paint graph; use composite image layers (vexart_composite_render_image_layer)",
+                );
+                return ERR_INVALID_ARG;
+            }
+
             let payload_end = offset + payload_bytes;
             if payload_end > graph.len() || payload_end > body_end {
                 truncated = true;
@@ -557,7 +564,7 @@ impl PaintContext {
 /// Helper returning true if the command kind requires the fallback texture bind group.
 #[inline]
 fn needs_fallback_bind_group(kind: u16) -> bool {
-    matches!(kind, 9 | 10 | 15 | 16 | 17 | 18 | 19)
+    matches!(kind, 15 | 16 | 17 | 18 | 19)
 }
 
 /// Return the byte stride of one instance for the given cmd_kind.
@@ -632,15 +639,13 @@ fn pipeline_for_kind(
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "gpu-tests")]
     use super::*;
-    #[cfg(feature = "gpu-tests")]
     use crate::ffi::buffer::{GRAPH_MAGIC, GRAPH_VERSION};
+    use crate::ffi::panic::ERR_INVALID_ARG;
     #[cfg(feature = "gpu-tests")]
     use crate::ffi::panic::OK;
 
     /// Helper: build a minimal graph buffer for a single command.
-    #[cfg(feature = "gpu-tests")]
     fn make_graph_buf(cmd_kind: u16, payload: &[u8]) -> Vec<u8> {
         let cmd_prefix_size = 8usize;
         let total_payload = cmd_prefix_size + payload.len();
@@ -658,6 +663,61 @@ mod tests {
         // Payload
         buf[24..24 + payload.len()].copy_from_slice(payload);
         buf
+    }
+
+    #[test]
+    fn test_dispatch_prohibits_image_cmd_kinds_9_and_10() {
+        let mut ctx = PaintContext::new();
+
+        // cmd_kind 9 (image)
+        let payload9 = vec![0u8; std::mem::size_of::<instances::BridgeImageInstance>()];
+        let buf9 = make_graph_buf(9, &payload9);
+        assert_eq!(ctx.dispatch(0, &buf9, std::ptr::null_mut()), ERR_INVALID_ARG);
+
+        let len = crate::ffi::error::vexart_get_last_error_length();
+        assert!(len > 0);
+        let mut err_buf = vec![0u8; len as usize];
+        let copied = crate::ffi::error::vexart_copy_last_error(err_buf.as_mut_ptr(), len);
+        assert_eq!(copied, len);
+        let err_msg = std::str::from_utf8(&err_buf).expect("valid utf-8 error message");
+        assert_eq!(
+            err_msg,
+            "paint_dispatch: image commands (kinds 9, 10) are prohibited in geometry paint graph; use composite image layers (vexart_composite_render_image_layer)"
+        );
+
+        // cmd_kind 10 (image_transform)
+        let payload10 = vec![0u8; std::mem::size_of::<instances::BridgeImageTransformInstance>()];
+        let buf10 = make_graph_buf(10, &payload10);
+        assert_eq!(ctx.dispatch(0, &buf10, std::ptr::null_mut()), ERR_INVALID_ARG);
+    }
+
+    #[test]
+    fn test_dispatch_prohibits_image_command_in_multi_command_graph() {
+        let mut ctx = PaintContext::new();
+
+        let rect_size = std::mem::size_of::<instances::BridgeRectInstance>();
+        let img_size = std::mem::size_of::<instances::BridgeImageInstance>();
+        let total_payload = (8 + rect_size) + (8 + img_size);
+        let mut buf = vec![0u8; 16 + total_payload];
+
+        // Header
+        buf[0..4].copy_from_slice(&GRAPH_MAGIC.to_le_bytes());
+        buf[4..8].copy_from_slice(&GRAPH_VERSION.to_le_bytes());
+        buf[8..12].copy_from_slice(&2u32.to_le_bytes()); // cmd_count = 2
+        buf[12..16].copy_from_slice(&(total_payload as u32).to_le_bytes());
+
+        let mut off = 16usize;
+        // Cmd 1: Rect (kind 0)
+        buf[off..off + 2].copy_from_slice(&0u16.to_le_bytes());
+        buf[off + 4..off + 8].copy_from_slice(&(rect_size as u32).to_le_bytes());
+        off += 8 + rect_size;
+
+        // Cmd 2: Image (kind 9)
+        buf[off..off + 2].copy_from_slice(&9u16.to_le_bytes());
+        buf[off + 4..off + 8].copy_from_slice(&(img_size as u32).to_le_bytes());
+
+        let result = ctx.dispatch(0, &buf, std::ptr::null_mut());
+        assert_eq!(result, ERR_INVALID_ARG);
     }
 
     // ─── Slice 5a test ──────────────────────────────────────────────────────
