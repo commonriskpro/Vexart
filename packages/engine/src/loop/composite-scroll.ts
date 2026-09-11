@@ -8,6 +8,7 @@
 
 import type { TGENode } from "../ffi/node"
 import { CMD, type RenderCommand } from "../ffi/render-graph"
+import { getEffectivePosition } from "../reconciler/hit-test"
 import { createScrollHandle, updateScrollContainerGeometry } from "./scroll"
 
 type ScrollFrameState = {
@@ -16,6 +17,25 @@ type ScrollFrameState = {
   scrollContainers: TGENode[]
   scrollOffsets: Map<number, { x: number; y: number }>
   nodeRefById: Map<number, TGENode>
+}
+
+// ── Hierarchy helpers ────────────────────────────────────────────────────
+
+/**
+ * Find the parent scroll container for a node.
+ *
+ * First checks `node._scrollContainerId !== 0 ? nodeRefById.get(node._scrollContainerId) ?? null : null`.
+ * Fallback: climbs `node.parent` looking for `p.props.scrollX || p.props.scrollY`.
+ */
+export function getParentScrollContainer(node: TGENode, nodeRefById: Map<number, TGENode>): TGENode | null {
+  const fromId = node._scrollContainerId !== 0 ? nodeRefById.get(node._scrollContainerId) ?? null : null
+  if (fromId) return fromId
+  let p = node.parent
+  while (p) {
+    if (p.props.scrollX || p.props.scrollY) return p
+    p = p.parent
+  }
+  return null
 }
 
 // ── Scroll routing ───────────────────────────────────────────────────────
@@ -34,7 +54,10 @@ export function routeScrollDeltas(s: ScrollFrameState, sdx: number, sdy: number)
     if (!node.props.scrollX && !node.props.scrollY) continue
     const l = node.layout
     if (l.width <= 0 || l.height <= 0) continue
-    if (px >= l.x && px < l.x + l.width && py >= l.y && py < l.y + l.height) {
+    const effective = getEffectivePosition(node, s.scrollOffsets)
+    const left = effective.x
+    const top = effective.y
+    if (px >= left && px < left + l.width && py >= top && py < top + l.height) {
       if (!scrollTarget) {
         scrollTarget = node
       } else {
@@ -68,15 +91,17 @@ export function routeScrollDeltas(s: ScrollFrameState, sdx: number, sdy: number)
  * Apply scroll offsets to render commands.
  *
  * After the layout pass, scroll containers need their children's commands
- * shifted by the scroll position. Also computes scroll container geometry
+ * shifted by the compounded scroll position. Also computes scroll container geometry
  * so that clamping works correctly.
  *
- * SCISSOR commands are excluded — they always reflect the scroll container's
- * viewport bounds (not the scrolled content position).
+ * Root SCISSOR commands are unshifted (viewport stays fixed), while nested
+ * SCISSOR commands shift with their parent scroll container's compounded offset.
  */
 export function applyScrollOffsets(commands: RenderCommand[], s: ScrollFrameState, markDirtyLayer: (key: string) => void) {
   s.scrollOffsets.clear()
   const offsets = s.scrollOffsets
+  const localOffsets = new Map<number, { x: number; y: number }>()
+
   for (const node of s.scrollContainers) {
     const sid = node.props.scrollId ?? `tge-scroll-${node.id}`
     const handle = createScrollHandle(sid)
@@ -105,16 +130,34 @@ export function applyScrollOffsets(commands: RenderCommand[], s: ScrollFrameStat
 
     const ox = node.props.scrollX ? handle.scrollX : 0
     const oy = node.props.scrollY ? handle.scrollY : 0
-    if (ox !== 0 || oy !== 0) {
-      offsets.set(node.id, { x: ox, y: oy })
-      const layerKey = node._layerKey ?? "bg"
-      markDirtyLayer(layerKey)
+    localOffsets.set(node.id, { x: ox, y: oy })
+  }
+
+  const getCompoundedOffset = (container: TGENode): { x: number; y: number } => {
+    const cached = offsets.get(container.id)
+    if (cached) return cached
+    const local = localOffsets.get(container.id) ?? { x: 0, y: 0 }
+    const parentContainer = getParentScrollContainer(container, s.nodeRefById)
+    if (!parentContainer) {
+      offsets.set(container.id, local)
+      return local
+    }
+    const parentTotal = getCompoundedOffset(parentContainer)
+    const total = { x: parentTotal.x + local.x, y: parentTotal.y + local.y }
+    offsets.set(container.id, total)
+    return total
+  }
+
+  for (const node of s.scrollContainers) {
+    const total = getCompoundedOffset(node)
+    if (total.x !== 0 || total.y !== 0) {
+      markDirtyLayer(node._layerKey ?? "bg")
     }
   }
 
   if (offsets.size === 0) return
   for (const cmd of commands) {
-    if (cmd.type === CMD.SCISSOR_START || cmd.type === CMD.SCISSOR_END || cmd.nodeId === undefined) continue
+    if (cmd.type === CMD.SCISSOR_END || cmd.nodeId === undefined) continue
     const node = s.nodeRefById.get(cmd.nodeId)
     if (!node || node._scrollContainerId === 0) continue
     const offset = offsets.get(node._scrollContainerId)

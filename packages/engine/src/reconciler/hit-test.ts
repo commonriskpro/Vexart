@@ -15,9 +15,11 @@ export function setActiveScrollOffsets(offsets: Map<number, { x: number; y: numb
 /**
  * Get effective screen position accounting for the current scroll container.
  *
- * Scroll command application currently uses the same nearest-container
- * ownership model. Keep hit-testing aligned with that renderer contract until
- * nested scroll offsets are composed in the paint path too.
+ * Per Decision 8 Option C (compounded scroll map), `offsets` contains compounded
+ * scroll offsets for each container (accumulating all ancestor container offsets).
+ * Looking up `node._scrollContainerId` directly yields the compounded offset for
+ * `node`, keeping hit-testing aligned with shifted render commands and nested
+ * scissor viewports.
  */
 export function getEffectivePosition(
   node: TGENode,
