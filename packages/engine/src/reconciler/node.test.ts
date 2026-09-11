@@ -179,7 +179,31 @@ describe("parseColor", () => {
 
   test("returns 0 for invalid string", () => {
     expect(parseColor("invalid")).toBe(0)
-    expect(parseColor("#fff")).toBe(0) // 3-digit not supported
+    expect(parseColor("notacolor")).toBe(0)
+  })
+
+  test("parses 3-digit hex string", () => {
+    expect(parseColor("#f00")).toBe(0xff0000ff)
+    expect(parseColor("#0f0")).toBe(0x00ff00ff)
+    expect(parseColor("#fff")).toBe(0xffffffff)
+    expect(parseColor("fff")).toBe(0xffffffff)
+  })
+
+  test("parses 4-digit hex string with alpha", () => {
+    expect(parseColor("#f008")).toBe(0xff000088)
+    expect(parseColor("#0000")).toBe(0x00000000)
+    expect(parseColor("f008")).toBe(0xff000088)
+  })
+
+  test("returns 0 for non-hex characters in 3/4/6/8-character strings", () => {
+    expect(parseColor("#xyz")).toBe(0)
+    expect(parseColor("#xyz8")).toBe(0)
+    expect(parseColor("#xyzxyz")).toBe(0)
+    expect(parseColor("#xyzxyzxy")).toBe(0)
+    expect(parseColor("xyz")).toBe(0)
+    expect(parseColor("xyz8")).toBe(0)
+    expect(parseColor("xyzxyz")).toBe(0)
+    expect(parseColor("xyzxyzxy")).toBe(0)
   })
 
   test("cache size never exceeds 512 even when parsing 600 distinct color strings", () => {

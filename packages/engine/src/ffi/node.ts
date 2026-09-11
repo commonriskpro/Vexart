@@ -399,13 +399,33 @@ export function parseColor(value: string | number | undefined): number {
     _colorCache.set(value, cached)
     return cached
   }
-  // "#rrggbb" or "#rrggbbaa"
+  // "#rgb", "#rgba", "#rrggbb", or "#rrggbbaa" (with or without #)
   const hex = value.startsWith("#") ? value.slice(1) : value
-  const result = hex.length === 6
-    ? (parseInt(hex, 16) << 8 | 0xff) >>> 0
-    : hex.length === 8
-      ? parseInt(hex, 16) >>> 0
-      : 0
+  let result = 0
+  if (hex.length === 3) {
+    if (/^[0-9a-fA-F]{3}$/.test(hex)) {
+      const r = parseInt(hex[0], 16) * 17
+      const g = parseInt(hex[1], 16) * 17
+      const b = parseInt(hex[2], 16) * 17
+      result = ((r << 24) | (g << 16) | (b << 8) | 0xff) >>> 0
+    }
+  } else if (hex.length === 4) {
+    if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+      const r = parseInt(hex[0], 16) * 17
+      const g = parseInt(hex[1], 16) * 17
+      const b = parseInt(hex[2], 16) * 17
+      const a = parseInt(hex[3], 16) * 17
+      result = ((r << 24) | (g << 16) | (b << 8) | a) >>> 0
+    }
+  } else if (hex.length === 6) {
+    if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+      result = ((parseInt(hex, 16) << 8) | 0xff) >>> 0
+    }
+  } else if (hex.length === 8) {
+    if (/^[0-9a-fA-F]{8}$/.test(hex)) {
+      result = (parseInt(hex, 16)) >>> 0
+    }
+  }
   if (_colorCache.size >= MAX_COLOR_CACHE_SIZE) {
     const oldest = _colorCache.keys().next().value
     if (oldest !== undefined) _colorCache.delete(oldest)
