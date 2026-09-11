@@ -155,6 +155,7 @@ export {
   themeColors,
   setTheme,
   getTheme,
+  getThemeVersion,
   ThemeProvider,
   useTheme,
   // Typography

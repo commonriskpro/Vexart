@@ -19,7 +19,7 @@
  *   setTheme(light)  // → all subscribed components update
  */
 
-import { createSignal, createContext, useContext, createComponent } from "solid-js"
+import { createSignal, createContext, useContext, createComponent, batch } from "solid-js"
 import type { JSX } from "solid-js"
 import { colors as defaultColors, radius, space, font, weight, shadows } from "../tokens/tokens"
 
@@ -81,6 +81,13 @@ export const lightTheme = createTheme({
 // ── Reactive Theme State ──
 
 const [activeTheme, setActiveThemeSig] = createSignal<Required<ThemeDefinition>>(darkTheme)
+const [themeVersion, setThemeVersion] = createSignal(0)
+
+/**
+ * Reactive theme version signal. Increments whenever `setTheme()` is called.
+ * @public
+ */
+export const getThemeVersion = themeVersion
 
 // Create a signal for each color token
 const colorSignals: Record<string, [() => string, (v: string) => void]> = {}
@@ -122,11 +129,14 @@ export const themeColors: ColorTokens = Object.defineProperties(
  */
 /** @public */
 export function setTheme(theme: Required<ThemeDefinition>) {
-  setActiveThemeSig(theme)
-  for (const key of Object.keys(defaultColors) as (keyof ColorTokens)[]) {
-    const value = theme.colors[key] ?? defaultColors[key]
-    colorSignals[key][1](value)
-  }
+  batch(() => {
+    setActiveThemeSig(theme)
+    for (const key of Object.keys(defaultColors) as (keyof ColorTokens)[]) {
+      const value = theme.colors[key] ?? defaultColors[key]
+      colorSignals[key][1](value)
+    }
+    setThemeVersion((v) => v + 1)
+  })
 }
 
 /**

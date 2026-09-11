@@ -1,5 +1,5 @@
 import type { InteractiveStyleProps } from "@vexart/engine"
-import { themeColors, font, radius, shadows, glows, space, weight } from "@vexart/styled"
+import { themeColors, font, radius, shadows, glows, space, weight, getThemeVersion } from "@vexart/styled"
 
 /** @public */
 export const CLASS_NAME_UNKNOWN_BEHAVIOR = {
@@ -36,6 +36,7 @@ export type ClassNameResolveResult = {
 // ── Cache ───────────────────────────────────────────────────────────────────
 
 const cache = new Map<string, ClassNameResolveResult>()
+let lastThemeVersion = -1
 
 /**
  * Clear the className resolution cache.
@@ -354,6 +355,12 @@ function resolveToken(props: MutableStyleProps, target: StyleTarget, token: stri
 
 /** @public */
 export function resolveClassName(className: string | undefined | null, options: ClassNameResolveOptions = {}): ClassNameResolveResult {
+  const version = getThemeVersion()
+  if (version !== lastThemeVersion) {
+    cache.clear()
+    lastThemeVersion = version
+  }
+
   if (!className) return { props: {}, diagnostics: [] }
 
   // Cache lookup — skip when custom options are used (diagnostics callbacks)

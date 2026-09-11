@@ -1,7 +1,15 @@
-import { describe, expect, test, beforeEach } from "bun:test"
+import { describe, expect, test, beforeEach, afterEach } from "bun:test"
+import { createEffect, createRoot } from "solid-js"
+import { darkTheme, lightTheme, setTheme } from "@vexart/styled"
 import { CLASS_NAME_UNKNOWN_BEHAVIOR, clearClassNameCache, createStyles, mergeClassNameProps, resolveClassName } from "./class-name"
 
 beforeEach(() => {
+  setTheme(darkTheme)
+  clearClassNameCache()
+})
+
+afterEach(() => {
+  setTheme(darkTheme)
   clearClassNameCache()
 })
 
@@ -213,5 +221,48 @@ describe("createStyles", () => {
     expect(a.box).not.toBe(b.box)
     expect(resolveClassName(a.box).props.padding).toBe(4)
     expect(resolveClassName(b.box).props.padding).toBe(8)
+  })
+})
+
+describe("theme reactivity", () => {
+  test("resolveClassName reflects updated theme color without manual clearClassNameCache", () => {
+    setTheme(darkTheme)
+    const darkResult = resolveClassName("bg-card")
+    expect(darkResult.props.backgroundColor).toBe(darkTheme.colors.card)
+
+    setTheme(lightTheme)
+    const lightResult = resolveClassName("bg-card")
+    expect(lightResult.props.backgroundColor).toBe(lightTheme.colors.card)
+    expect(lightResult.props.backgroundColor).not.toBe(darkResult.props.backgroundColor)
+  })
+
+  test("in a reactive scope, switching theme triggers re-execution and delivers the updated color", async () => {
+    setTheme(darkTheme)
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 10))
+
+    let disposeRoot: () => void = () => {}
+    let observedColor: string | undefined
+    let executionCount = 0
+
+    createRoot((dispose) => {
+      disposeRoot = dispose
+      createEffect(() => {
+        const result = resolveClassName("bg-card")
+        observedColor = result.props.backgroundColor as string
+        executionCount++
+      })
+    })
+
+    await tick()
+    expect(executionCount).toBe(1)
+    expect(observedColor).toBe(darkTheme.colors.card)
+
+    setTheme(lightTheme)
+
+    await tick()
+    expect(executionCount).toBe(2)
+    expect(observedColor).toBe(lightTheme.colors.card)
+
+    disposeRoot()
   })
 })

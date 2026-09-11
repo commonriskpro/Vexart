@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { darkTheme, getTheme, lightTheme, setTheme, themeColors } from "./theme"
+import { darkTheme, getTheme, getThemeVersion, lightTheme, setTheme, themeColors } from "./theme"
 
 describe("theme", () => {
   test("themeColors returns dark values by default", () => {
@@ -31,5 +31,16 @@ describe("theme", () => {
     expect(themeColors.ringSubtle).toBeDefined()
 
     setTheme(darkTheme)
+  })
+
+  test("getThemeVersion increments whenever setTheme is called", () => {
+    const v1 = getThemeVersion()
+    setTheme(lightTheme)
+    const v2 = getThemeVersion()
+    expect(v2).toBe(v1 + 1)
+
+    setTheme(darkTheme)
+    const v3 = getThemeVersion()
+    expect(v3).toBe(v2 + 1)
   })
 })
