@@ -219,7 +219,6 @@ export {
   vexartGetLastError,
   vexartVersion,
   assertBridgeVersion,
-  writeHeader,
 } from "./ffi/vexart-functions"
 
 // ── Reconciler ────────────────────────────────────────────────────────────────

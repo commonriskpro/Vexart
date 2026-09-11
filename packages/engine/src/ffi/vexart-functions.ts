@@ -68,23 +68,6 @@ export function assertBridgeVersion(
   }
 }
 
-// ── Packed buffer writeHeader ───────────────────────────────────────────────
-
-/**
- * Write the 16-byte graph buffer header into a graph buffer.
- *
- * @public
- * @param view - DataView over the graph buffer.
- * @param cmdCount - Number of commands that follow.
- * @param payloadBytes - Total payload bytes after the header.
- */
-export function writeHeader(view: DataView, cmdCount: number, payloadBytes: number): void {
-  view.setUint32(0,  GRAPH_MAGIC,   true)
-  view.setUint32(4,  GRAPH_VERSION, true)
-  view.setUint32(8,  cmdCount,      true)
-  view.setUint32(12, payloadBytes,  true)
-}
-
 // ── Stubs for Slice 5+ wrappers ─────────────────────────────────────────────
 // TODO(Slice 5): vexartContextCreate, vexartContextDestroy, vexartContextResize
 // TODO(Slice 6): vexartLayoutCompute, vexartLayoutWriteback

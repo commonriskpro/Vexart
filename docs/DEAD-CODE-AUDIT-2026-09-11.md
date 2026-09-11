@@ -219,7 +219,7 @@ En Vexart, la frontera nativa FFI (`bun:ffi` ↔ `libvexart` C ABI) y el render 
 - [x] **11. Restaurar invariante del circuit-breaker**: Conectar `tickNativePresentationRecovery()` dentro del tick de frame en `packages/engine/src/loop/loop.ts` para garantizar auto-recuperación simétrica.
 - [x] **12. Eliminar helpers muertos `isNativeStatsValid` e `isNativeStatsFallback`**: Purgar de `native-presentation-stats.ts`.
 - [x] **13. Eliminar buffer estático de 64KB y writers redundantes en `vexart-buffer.ts`**: Remover `graphBuffer`, `graphView`, `writeHeader`, `writeCommandPrefix` y actualizar sus tests.
-- [ ] **14. Eliminar `writeHeader` duplicado en `vexart-functions.ts`**: Remover la función y su re-export en `public.ts`.
+- [x] **14. Eliminar `writeHeader` duplicado en `vexart-functions.ts`**: Remover la función y su re-export en `public.ts`.
 - [ ] **15. Eliminar `measureTextHeight`**: Remover de `text-layout.ts`.
 - [ ] **16. Consolidar `clearSelection` y `resetSelection`**: Mantener una única función canónica en `selection.ts` y unificar en `public.ts`.
 - [ ] **17. Purgar mini-router obsoleto de engine**: Eliminar `packages/engine/src/reconciler/router.ts` y sus exports de `public.ts` (el router canónico es `@vexart/app`).

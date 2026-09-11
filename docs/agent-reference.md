@@ -446,7 +446,7 @@ portable and ARM64-safe.
 - `chooseGpuLayerStrategy`
 - `VEXART_SYMBOLS`, `EXPECTED_BRIDGE_VERSION`, `openVexartLibrary`, `closeVexartLibrary`
 - `VexartNativeError`
-- `GRAPH_MAGIC`, `GRAPH_VERSION`, `vexartVersion`, `assertBridgeVersion`, `vexartGetLastError`, `writeHeader`
+- `GRAPH_MAGIC`, `GRAPH_VERSION`, `vexartVersion`, `assertBridgeVersion`, `vexartGetLastError`
 - `getRendererResourceStats`
 
 ### Render graph

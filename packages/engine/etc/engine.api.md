@@ -2941,9 +2941,6 @@ export type ViewportConfig = {
 // @public (undocumented)
 export function wrapPassthrough(raw: string): string;
 
-// @public
-export function writeHeader(view: DataView, cmdCount: number, payloadBytes: number): void;
-
 // Warnings were encountered during analysis:
 //
 // <repo>/.api-extractor-temp/packages/engine/src/ffi/node-types.d.ts:371:5 - (ae-forgotten-export) The symbol "NodeImageExtra" needs to be exported by the entry point index.d.ts

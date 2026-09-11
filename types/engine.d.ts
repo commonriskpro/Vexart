@@ -3615,14 +3615,4 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
  /** @public */
  export declare function wrapPassthrough(raw: string): string;
 
- /**
-  * Write the 16-byte graph buffer header into a graph buffer.
-  *
-  * @public
-  * @param view - DataView over the graph buffer.
-  * @param cmdCount - Number of commands that follow.
-  * @param payloadBytes - Total payload bytes after the header.
-  */
- export declare function writeHeader(view: DataView, cmdCount: number, payloadBytes: number): void;
-
  export { }

@@ -287,7 +287,7 @@ packages/engine/
 │   │
 │   ├── ffi/                   — bridge to libvexart + render graph + node system
 │   │   ├── vexart-bridge.ts   — bun:ffi dlopen + VEXART_SYMBOLS + MSDF_FONT_SYMBOLS
-│   │   ├── vexart-functions.ts — high-level wrappers (version, error, writeHeader)
+│   │   ├── vexart-functions.ts — high-level wrappers (version, error)
 │   │   ├── vexart-buffer.ts   — packed ArrayBuffer pattern
 │   │   ├── renderer-backend.ts — RendererBackend interface
 │   │   ├── gpu-renderer-backend.ts — GPU renderer backend implementation

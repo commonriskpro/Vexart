@@ -733,7 +733,7 @@ This appendix enumerates the complete expected public API surface at v0.9 releas
 **Native bridge**
 - `VEXART_SYMBOLS`, `EXPECTED_BRIDGE_VERSION`, `openVexartLibrary`, `closeVexartLibrary` `@public`
 - `VexartNativeError` `@public`
-- `GRAPH_MAGIC`, `GRAPH_VERSION`, `vexartVersion`, `assertBridgeVersion`, `vexartGetLastError`, `writeHeader` `@public`
+- `GRAPH_MAGIC`, `GRAPH_VERSION`, `vexartVersion`, `assertBridgeVersion`, `vexartGetLastError` `@public`
 
 **Reconciler (SolidJS)**
 - `createComponent`, `createElement`, `createTextNode`, `insertNode`, `insert`, `spread`, `setProp`, `mergeProps`, `effect`, `memo`, `use`, `solidRender` `@public`

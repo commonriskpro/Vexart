@@ -494,7 +494,7 @@ The explicit public exports of `@vexart/engine` (from `packages/engine/src/publi
 - Damage math: `intersectRect`, `unionRect`, `expandRect`, `translateRect`, `damageRectArea`, `damageSumOverlapArea`, `rectRight`, `rectBottom`, `isEmptyRect`
 - Canvas & Particles: `CanvasContext`, `createParticleSystem`, `createLayerStore`
 - Scene Graph: `createNode`, `insertChild`, `removeChild`, `parseColor`, `parseSizing`, `parseDirection`, `parseAlignX`, `parseAlignY`, `createPressEvent`, `resolveProps`
-- Bridge Symbols: `EXPECTED_BRIDGE_VERSION`, `VEXART_SYMBOLS`, `VexartNativeError`, `openVexartLibrary`, `closeVexartLibrary`, `GRAPH_MAGIC`, `GRAPH_VERSION`, `vexartGetLastError`, `vexartVersion`, `assertBridgeVersion`, `writeHeader`
+- Bridge Symbols: `EXPECTED_BRIDGE_VERSION`, `VEXART_SYMBOLS`, `VexartNativeError`, `openVexartLibrary`, `closeVexartLibrary`, `GRAPH_MAGIC`, `GRAPH_VERSION`, `vexartGetLastError`, `vexartVersion`, `assertBridgeVersion`
 - Font FFI: `registerFont`, `getFont`, `clearTextCache`, `getTextLayoutCacheStats`, `FontDescriptor`, `msdfFontInit`, `msdfFontQuery`, `msdfMeasureText`, `isMsdfFontAvailable`, `MsdfTextMeasurement`
 
 ### Reconciler & Subsystems
