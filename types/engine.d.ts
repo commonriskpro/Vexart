@@ -7,7 +7,6 @@ import { For } from 'solid-js';
 import { Index } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { Match } from 'solid-js';
-import type { Node as Node_2 } from 'flexily';
 import { Setter } from 'solid-js';
 import { Show } from 'solid-js';
 import { Switch } from 'solid-js';
@@ -167,6 +166,8 @@ export declare function buildRenderOp(cmd: RenderCommand, ownerIds?: {
     text: number | null;
 }): RenderGraphOp | null;
 
+export declare function bumpThemeEpoch(): void;
+
 /** @public */
 export declare class CanvasContext {
     /* Excluded from this release type: _commands */
@@ -304,7 +305,14 @@ export declare type CircleCmd = {
 };
 
 /** @public */
+export declare type ClassNameResolver = (className: string) => Partial<TGEProps>;
+
+/** @public */
 export declare function clearDirty(expectedVersion?: number, tracker?: DirtyTracker): void;
+
+/** Clear all registered fonts and restore default font (id 0). */
+/** @public */
+export declare function clearFontRegistry(): void;
 
 /** Clear the image cache (e.g., on hot reload). */
 /** @public */
@@ -605,7 +613,7 @@ export declare function decodeMods(n: number): Modifiers;
 export declare function decodePasteBytes(bytes: Uint8Array | string): string;
 
 /** @public */
-export declare function detect(): TerminalKind;
+export declare function detect(env?: Readonly<Record<string, string | undefined>>): TerminalKind;
 
 /** @public Flex direction enum for layout adapter direction values. */
 export declare const DIRECTION: {
@@ -637,6 +645,8 @@ export declare type DirtyTracker = {
     clearDirty: (expectedVersion?: number) => void;
     dirtyVersion: () => number;
 };
+
+export declare function dispatchFocusInput(event: InputEvent_2): void;
 
 /** @public */
 export declare function dispatchInput(event: InputEvent_2): void;
@@ -750,6 +760,12 @@ export declare function endSync(write: (data: string) => void): void;
 export declare function enter(stdin: NodeJS.ReadStream, write: (data: string) => void, caps: Capabilities): LifecycleState;
 
 export { ErrorBoundary }
+
+/** @public */
+export declare type ExitHandlerOptions = {
+    manageProcessSignals?: boolean;
+    signal?: AbortSignal;
+};
 
 /** @public */
 export declare function expandRect(rect: DamageRect, padding: number): DamageRect;
@@ -959,6 +975,8 @@ export declare function fromConfig(config: {
     rotateY?: number;
 }, originX: number, originY: number): Matrix3;
 
+export declare function getClassNameResolver(): ClassNameResolver | null;
+
 /** @public */
 export declare function getFocusedEntry(): FocusEntry | undefined;
 
@@ -1035,6 +1053,8 @@ export declare function getTextLayoutCacheStats(): {
     layoutCount: number;
 };
 
+export declare function getThemeEpoch(): number;
+
 /** @public */
 export declare function getTreeSitterClient(): TreeSitterClient;
 
@@ -1086,6 +1106,7 @@ export declare type GpuLayerStrategyMode = (typeof GPU_LAYER_STRATEGY_MODE)[keyo
 
 /** @public */
 export declare type GpuRendererBackend = RendererBackend & {
+    instanceImageHandles: Set<bigint>;
     getLastStrategy: () => GpuLayerStrategyMode | null;
     /** TEST-ONLY: Read back the active target as RGBA pixels for golden tests. */
     readbackForTest: (width: number, height: number) => Uint8Array | null;
@@ -1127,39 +1148,91 @@ export declare const GRAPH_MAGIC: 1448624466;
 /** @public */
 export declare const GRAPH_VERSION: 131072;
 
-/* Excluded from this release type: GridAreaPlacement */
+/** @beta */
+export declare type GridAreaPlacement = string | {
+    readonly rowStart: GridLineRef | "auto";
+    readonly columnStart: GridLineRef | "auto";
+    readonly rowEnd: GridLineRef | "auto";
+    readonly columnEnd: GridLineRef | "auto";
+};
 
-/* Excluded from this release type: GridAutoFlow */
+/** @beta */
+export declare type GridAutoFlow = "row" | "column" | "row-dense" | "column-dense";
 
-/* Excluded from this release type: GridBreadth */
+/** @beta */
+export declare type GridBreadth = number | GridPercent | "auto" | "min-content" | "max-content";
 
-/* Excluded from this release type: GridContentAlignment */
+/** @beta */
+export declare type GridContentAlignment = "start" | "end" | "center" | "space-between" | "space-around" | "space-evenly" | "stretch";
 
-/* Excluded from this release type: GridErrorCode */
+/** @beta */
+export declare type GridErrorCode = "GRID_INVALID_VALUE" | "GRID_INVALID_TRACK" | "GRID_INVALID_REPEAT" | "GRID_TRACK_LIMIT" | "GRID_INVALID_AREA" | "GRID_CONFLICTING_PLACEMENT" | "GRID_INVALID_PLACEMENT" | "GRID_LINE_UNRESOLVED" | "GRID_UNSUPPORTED_ALIGNMENT" | "GRID_MEASURE_INVALID";
 
-/* Excluded from this release type: GridFitContent */
+/** @beta */
+export declare type GridFitContent = {
+    readonly fitContent: number | GridPercent;
+};
 
-/* Excluded from this release type: GridFr */
+/** @beta */
+export declare type GridFr = {
+    readonly fr: number;
+};
 
-/* Excluded from this release type: GridItemAlignment */
+/** @beta */
+export declare type GridItemAlignment = "start" | "end" | "center" | "stretch";
 
-/* Excluded from this release type: GridLayoutError */
+/** @beta */
+export declare type GridLayoutError = {
+    readonly code: GridErrorCode;
+    readonly path: string;
+    readonly nodeId: number;
+};
 
-/* Excluded from this release type: GridLineRef */
+/** @beta */
+export declare type GridLineRef = number | {
+    readonly name: string;
+    readonly occurrence?: number;
+} | {
+    readonly span: number;
+    readonly name?: string;
+};
 
-/* Excluded from this release type: GridMaxBreadth */
+/** @beta */
+export declare type GridMaxBreadth = GridBreadth | GridFr;
 
-/* Excluded from this release type: GridMinMax */
+/** @beta */
+export declare type GridMinMax = {
+    readonly minmax: readonly [GridBreadth, GridMaxBreadth];
+};
 
-/* Excluded from this release type: GridPercent */
+/** @beta */
+export declare type GridPercent = {
+    readonly percent: number;
+};
 
-/* Excluded from this release type: GridPlacement */
+/** @beta */
+export declare type GridPlacement = {
+    readonly start?: GridLineRef | "auto";
+    readonly end?: GridLineRef | "auto";
+};
 
-/* Excluded from this release type: GridRepeatCount */
+/** @beta */
+export declare type GridRepeatCount = number | "auto-fill" | "auto-fit";
 
-/* Excluded from this release type: GridTrack */
+/** @beta */
+export declare type GridTrack = GridTrackSize | {
+    readonly size: GridTrackSize;
+    readonly before?: readonly string[];
+    readonly after?: readonly string[];
+} | {
+    readonly repeat: {
+        readonly count: GridRepeatCount;
+        readonly tracks: readonly GridTrack[];
+    };
+};
 
-/* Excluded from this release type: GridTrackSize */
+/** @beta */
+export declare type GridTrackSize = GridBreadth | GridFr | GridMinMax | GridFitContent;
 
 /** @public */
 export declare function hasActiveAnimations(): boolean;
@@ -1274,6 +1347,18 @@ export declare function insertChild(parent: TGENode, child: TGENode, anchor?: TG
 
 /** @public */
 export declare const insertNode: (parent: TGENode, node: TGENode, anchor?: TGENode | undefined) => void;
+
+/**
+ * Install process exit handlers that guarantee terminal cleanup.
+ *
+ * Catches: exit, SIGHUP, SIGINT, SIGTERM, uncaughtException, unhandledRejection
+ * via the centralized ProcessSignalHub.
+ * Each handler invokes the optional transport cleanup, then calls `leave()`
+ * exactly once.
+ *
+ * @public
+ */
+export declare function installExitHandlers(stdin: NodeJS.ReadStream, write: (data: string) => void, caps: Capabilities, state: LifecycleState, beforeLeave?: (() => void) | ExitHandlerOptions, options?: ExitHandlerOptions): () => void;
 
 /** @public */
 declare const INTERACTION_KIND: {
@@ -1504,6 +1589,25 @@ export { Match }
 
 /** @public 3×3 matrix as 9-element Float64Array (row-major). */
 export declare type Matrix3 = Float64Array;
+
+/**
+ * Measure text width for Flexily layout.
+ * This function remains the authoritative TS-side text
+ * measurement helper for the decomposed layout shell and offscreen fallbacks.
+ *
+ * Uses vexart_font_measure (Rust/ttf-parser) via FFI for accurate
+ * proportional metrics that match the MSDF rendering pipeline.
+ * Falls back to monospace heuristic when native FFI is unavailable.
+ */
+/** @public */
+export declare function measureForLayout(text: string, fontId: number, fontSize: number, overrideFontFamily?: string, overrideFontWeight?: number, overrideFontStyle?: string): {
+    width: number;
+    height: number;
+};
+
+/** Measure text width for a single line (no wrapping). Uses native Rust FFI. */
+/** @public */
+export declare function measureTextWidth(text: string, fontId: number): number;
 
 /** @public */
 export declare const memo: <T>(fn: () => T, equal: boolean) => () => T;
@@ -1736,14 +1840,14 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      compressUs: number;
      /** Native SHM prepare/copy/sync time in microseconds. */
      shmPrepareUs: number;
-    /** Raw input byte count before compression. */
-    rawBytes: number;
-    /** Payload byte count written after compression policy. */
-    payloadBytes: number;
-};
+     /** Raw input byte count before compression. */
+     rawBytes: number;
+     /** Payload byte count written after compression policy. */
+     payloadBytes: number;
+ };
 
-/** @public */
-export declare type NebulaCmd = {
+ /** @public */
+ export declare type NebulaCmd = {
      kind: "nebula";
      x: number;
      y: number;
@@ -1858,7 +1962,7 @@ export declare type NebulaCmd = {
  export declare function parseMouse(data: string): [MouseEvent_2, number] | null;
 
  /** @public */
- export declare function parseSizing(value: number | string | undefined): SizingInfo | null;
+ export declare function parseSizing(value: number | string | undefined | null): SizingInfo | null;
 
  /** @public */
  export declare type ParticleConfig = {
@@ -1989,6 +2093,31 @@ export declare type NebulaCmd = {
   */
  /** @public */
  export declare function probeShm(write: (data: string) => void, onData: (handler: (data: Buffer) => void) => void, offData: (handler: (data: Buffer) => void) => void, timeout?: number): Promise<boolean>;
+
+ /** @public */
+ export declare const ProcessSignalHub: ProcessSignalHubImpl;
+
+ /** @public */
+ export declare type ProcessSignalHub = ProcessSignalHubImpl;
+
+ declare class ProcessSignalHubImpl {
+     private handlers;
+     private attached;
+     private dispatching;
+     private onExit;
+     private onSigint;
+     private onSigterm;
+     private onSighup;
+     private onError;
+     get activeCount(): number;
+     get isAttached(): boolean;
+     register(cleanup: () => void): () => void;
+     unregister(cleanup: () => void): void;
+     private attach;
+     private detach;
+     private dispatch;
+     resetForTesting(): void;
+ }
 
  /** @public */
  export declare function pushFocusScope(): () => void;
@@ -2342,6 +2471,7 @@ export declare type NebulaCmd = {
  /** @public */
  export declare type RenderLoop = {
      root: TGENode;
+     backend: RendererBackend;
      start: () => void;
      stop: () => void;
      frame: () => void;
@@ -2352,6 +2482,7 @@ export declare type NebulaCmd = {
      needsPointerRepaint: () => boolean;
      setPointerCapture: (nodeId: number) => void;
      releasePointerCapture: (nodeId: number) => void;
+     getCapturedNodeId?: () => number;
      onPostScroll: (cb: () => void) => () => void;
      markNodeLayerDamaged: (nodeId: number, rect?: DamageRect) => void;
      suspend: () => void;
@@ -2364,6 +2495,7 @@ export declare type NebulaCmd = {
 
  /** @public */
  export declare type RenderLoopOptions = {
+     backend?: RendererBackend;
      experimental?: {
          frameBudgetMs?: number;
          maxFps?: number;
@@ -2419,10 +2551,12 @@ export declare type NebulaCmd = {
 
  /**
   * Resolve effective props:
-  *   1. Merge `style` prop under direct props (direct wins)
-  *   2. Resolve aliases: borderRadius→cornerRadius, boxShadow→shadow
-  *   3. Resolve padding shorthand: [Y,X] or [T,R,B,L]
-  *   4. Merge hoverStyle/activeStyle/focusStyle when active
+  *   1. Cache check: node._vp && !node._vpDirty && node._vpEpoch === currentThemeEpoch
+  *   2. Merge className via globalClassNameResolver
+  *   3. Merge style prop (direct props override style)
+  *   4. Deep-merge hoverStyle/activeStyle/focusStyle
+  *   5. Resolve aliases: borderRadius→cornerRadius, boxShadow→shadow, onClick→onPress
+  *   6. Merge interactive states when active
   */
  /** @public */
  export declare function resolveProps(node: TGENode): TGEProps;
@@ -2455,11 +2589,11 @@ export declare type NebulaCmd = {
      toString(): string;
  }
 
-/** @public */
-export declare function rotate(degrees: number): Matrix3;
+ /** @public */
+ export declare function rotate(degrees: number): Matrix3;
 
-/** @public */
-export declare function scale(s: number): Matrix3;
+ /** @public */
+ export declare function scale(s: number): Matrix3;
 
  /** @public */
  export declare type ScaledImageCache = {
@@ -2480,11 +2614,11 @@ export declare function scale(s: number): Matrix3;
      offsetY: number;
  };
 
-/** @public */
-export declare function scaleXY(sx: number, sy: number): Matrix3;
+ /** @public */
+ export declare function scaleXY(sx: number, sy: number): Matrix3;
 
-/**
- * scroll.ts — programmatic scroll state
+ /**
+  * scroll.ts — programmatic scroll state
   *
   * Provides scroll handles for programmatic scroll control.
   * Flexily layout output drives scroll geometry;
@@ -2517,6 +2651,8 @@ export declare function scaleXY(sx: number, sy: number): Matrix3;
  /** @public */
  export declare const selectionSignal: Accessor<TextSelection | null>;
 
+ export declare function setClassNameResolver(resolver: ClassNameResolver | null): void;
+
  /** Set debug overlay state explicitly. */
  /** @public */
  export declare function setDebug(enabled: boolean): void;
@@ -2538,6 +2674,9 @@ export declare function scaleXY(sx: number, sy: number): Matrix3;
 
  /** @public */
  export declare function setSelection(sel: TextSelection | null): void;
+
+ /** @public */
+ export declare const setupExitHandlers: typeof installExitHandlers;
 
  /** @public Shadow definition (pre-parse, accepts string | number colors). */
  export declare type ShadowConfig = {
@@ -2594,6 +2733,18 @@ export declare function scaleXY(sx: number, sy: number): Matrix3;
      type: number;
      value: number;
  };
+
+ /** Supported sizing keywords. @public */
+ export declare type SizingKeyword = "fit" | "grow" | "auto" | "fill";
+
+ /** Sizing percentage token (e.g. "100%", "50%"). @public */
+ export declare type SizingPercent = `${number}%`;
+
+ /** Sizing pixel token (e.g. "100px", "20px"). @public */
+ export declare type SizingPx = `${number}px`;
+
+ /** Sizing dimension unit for width and height. @public */
+ export declare type SizingUnit = number | SizingKeyword | SizingPercent | SizingPx;
 
  /** @public */
  export declare function skew(degreesX: number, degreesY: number): Matrix3;
@@ -2787,6 +2938,10 @@ export declare function scaleXY(sx: number, sy: number): Matrix3;
      skipColors?: boolean;
      /** Probe timeout in ms */
      probeTimeout?: number;
+     /** Manage process-level OS exit signals via ProcessSignalHub (default: true) */
+     manageProcessSignals?: boolean;
+     /** AbortSignal to trigger terminal destruction and cleanup */
+     signal?: AbortSignal;
  };
 
  /**
@@ -2909,6 +3064,8 @@ export declare function scaleXY(sx: number, sy: number): Matrix3;
      _vp: TGEProps | null;
      /** True when cached effective visual props must be recomputed. */
      _vpDirty: boolean;
+     /** Generational epoch at which _vp was cached. */
+     _vpEpoch?: number;
      /** Sibling position maintained by insert/remove for O(1) next-sibling lookup. */
      _siblingIndex: number;
      /** Count of focusable nodes in this subtree, including self. */
@@ -2965,7 +3122,8 @@ export declare function scaleXY(sx: number, sy: number): Matrix3;
 
  /** @public */
  export declare type TGEProps = {
-     /* Excluded from this release type: layout */
+     /** @beta */
+     layout?: "flex" | "grid";
      direction?: "row" | "column";
      /** Alias for direction (opentui compat) */
      flexDirection?: "row" | "column";
@@ -2978,23 +3136,38 @@ export declare function scaleXY(sx: number, sy: number): Matrix3;
      gap?: number;
      alignX?: "left" | "right" | "center" | "space-between";
      alignY?: "top" | "bottom" | "center" | "space-between";
-     /* Excluded from this release type: justifyContent */
-     /* Excluded from this release type: alignItems */
-     /* Excluded from this release type: gridTemplateColumns */
-     /* Excluded from this release type: gridTemplateRows */
-     /* Excluded from this release type: gridAutoColumns */
-     /* Excluded from this release type: gridAutoRows */
-     /* Excluded from this release type: gridAutoFlow */
-     /* Excluded from this release type: gridTemplateAreas */
-     /* Excluded from this release type: gridColumn */
-     /* Excluded from this release type: gridRow */
-     /* Excluded from this release type: gridArea */
-     /* Excluded from this release type: alignContent */
-     /* Excluded from this release type: justifyItems */
-     /* Excluded from this release type: justifySelf */
-     /* Excluded from this release type: alignSelf */
-     width?: number | string;
-     height?: number | string;
+     /** @beta */
+     justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "space-around" | "space-evenly" | "stretch";
+     /** @beta */
+     alignItems?: "top" | "bottom" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "stretch";
+     /** @beta */
+     gridTemplateColumns?: readonly GridTrack[];
+     /** @beta */
+     gridTemplateRows?: readonly GridTrack[];
+     /** @beta */
+     gridAutoColumns?: GridTrackSize;
+     /** @beta */
+     gridAutoRows?: GridTrackSize;
+     /** @beta */
+     gridAutoFlow?: GridAutoFlow;
+     /** @beta */
+     gridTemplateAreas?: readonly (readonly (string | null)[])[];
+     /** @beta */
+     gridColumn?: GridPlacement;
+     /** @beta */
+     gridRow?: GridPlacement;
+     /** @beta */
+     gridArea?: GridAreaPlacement;
+     /** @beta */
+     alignContent?: GridContentAlignment;
+     /** @beta */
+     justifyItems?: GridItemAlignment;
+     /** @beta */
+     justifySelf?: GridItemAlignment;
+     /** @beta */
+     alignSelf?: GridItemAlignment;
+     width?: SizingUnit;
+     height?: SizingUnit;
      /** When set, width behaves as "grow" (opentui compat) */
      flexGrow?: number;
      /** Accepted for CSS compatibility. Flexily handles shrinking automatically. */
@@ -3093,8 +3266,12 @@ export declare function scaleXY(sx: number, sy: number): Matrix3;
      focusStyle?: InteractiveStyleProps;
      /** Unified press handler — fires on mouse click + Enter/Space when focused (Decision 6) */
      onPress?: (event?: PressEvent) => void;
+     /** Alias for onPress (web convention). If both are provided, onPress takes precedence. */
+     onClick?: (event?: PressEvent) => void;
      /** Make this element focusable via Tab navigation. Like HTML tabindex="0". */
      focusable?: boolean;
+     /** Explicit ID for focus registration (defaults to id or node-focus-${id}) */
+     focusId?: string;
      /** Keyboard event handler — fires when this element is focused and a key is pressed. */
      onKeyDown?: (event: KeyEvent) => void;
      /** Fires when mouse button is pressed while over this node. */
@@ -3114,6 +3291,8 @@ export declare function scaleXY(sx: number, sy: number): Matrix3;
          x: number;
          y: number;
      };
+     /** Class name resolved by pluggable class name resolver. */
+     className?: string;
      /** CSS-style prop — merged with direct props (direct props win). Decision 3. */
      style?: Partial<TGEProps>;
      /** Image source — file path or URL. Decoded async on first render. */
@@ -3274,6 +3453,10 @@ export declare function scaleXY(sx: number, sy: number): Matrix3;
  /** @public */
  export declare function unionRect(a: DamageRect, b: DamageRect): DamageRect;
 
+ /** Unregister a font by ID. Returns false if id is 0 (default font cannot be unregistered). */
+ /** @public */
+ export declare function unregisterFont(id: number): boolean;
+
  /** @public */
  export declare function unregisterNodeFocusable(node: TGENode): void;
 
@@ -3316,11 +3499,11 @@ export declare function scaleXY(sx: number, sy: number): Matrix3;
  /** @public */
  export declare function useMutation<T, V = void>(mutator: (variables: V) => Promise<T>, options?: MutationOptions<T, V>): MutationResult<T, V>;
 
-/** @public */
-export declare function useQuery<T>(fetcher: () => Promise<T>, options?: QueryOptions): QueryResult<T>;
+ /** @public */
+ export declare function useQuery<T>(fetcher: () => Promise<T>, options?: QueryOptions): QueryResult<T>;
 
-/** @public */
-export declare function useTerminalDimensions(terminal: Terminal): {
+ /** @public */
+ export declare function useTerminalDimensions(terminal: Terminal): {
      width: () => number;
      height: () => number;
      cols: () => number;
@@ -3371,6 +3554,14 @@ export declare function useTerminalDimensions(terminal: Terminal): {
          readonly args: [FFIType.uint64_t, FFIType.uint64_t];
          readonly returns: FFIType.int32_t;
      };
+     readonly vexart_composite_target_set_scissor: {
+         readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint32_t, FFIType.uint32_t, FFIType.uint32_t, FFIType.uint32_t];
+         readonly returns: FFIType.int32_t;
+     };
+     readonly vexart_composite_target_reset_scissor: {
+         readonly args: [FFIType.uint64_t, FFIType.uint64_t];
+         readonly returns: FFIType.int32_t;
+     };
      readonly vexart_composite_render_image_layer: {
          readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.float, FFIType.float, FFIType.float, FFIType.float, FFIType.uint32_t, FFIType.uint32_t];
          readonly returns: FFIType.int32_t;
@@ -3392,6 +3583,10 @@ export declare function useTerminalDimensions(terminal: Terminal): {
          readonly returns: FFIType.int32_t;
      };
      readonly vexart_composite_image_mask_rounded_rect: {
+         readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.ptr];
+         readonly returns: FFIType.int32_t;
+     };
+     readonly vexart_composite_image_mask_rounded_rect_region: {
          readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.ptr];
          readonly returns: FFIType.int32_t;
      };
@@ -3464,7 +3659,7 @@ export declare function useTerminalDimensions(terminal: Terminal): {
          readonly returns: FFIType.int32_t;
      };
      readonly vexart_image_asset_register: {
-         readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.ptr];
+         readonly args: [FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.ptr];
          readonly returns: FFIType.int32_t;
      };
      readonly vexart_image_asset_touch: {

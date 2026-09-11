@@ -1,5 +1,6 @@
 import { Accessor } from 'solid-js';
 import { batch } from 'solid-js';
+import { children } from 'solid-js';
 import { createContext } from 'solid-js';
 import { createEffect } from 'solid-js';
 import { createMemo } from 'solid-js';
@@ -12,9 +13,26 @@ import { Match } from 'solid-js';
 import { onCleanup } from 'solid-js';
 import { onMount } from 'solid-js';
 import { Show } from 'solid-js';
+import { splitProps } from 'solid-js';
 import { Switch } from 'solid-js';
 import { untrack } from 'solid-js';
 import { useContext } from 'solid-js';
+
+/** @public */
+declare type AnimationAccessor = (() => number) & {
+    stop: () => void;
+    cancel: () => void;
+};
+
+/** @public */
+declare type AnimationSignal = [
+AnimationAccessor,
+(target: number) => void,
+() => void
+] & {
+    stop: () => void;
+    cancel: () => void;
+};
 
 /** @public */
 export declare type AppBoxProps = BoxProps & ClassNameProps;
@@ -38,6 +56,7 @@ export declare type AppRouteDefinition = {
     error?: RouteErrorComponent;
     notFound?: RouteComponent;
     focusId?: string | null;
+    keepAlive?: boolean;
 };
 
 /** @public */
@@ -84,26 +103,13 @@ export declare type AppTextProps = BoxProps & ClassNameProps;
 export declare type AsyncFieldValidator<T> = (value: T, allValues: Record<string, any>) => Promise<string | undefined | null>;
 
 /** @public */
-export declare function Avatar(props: AvatarProps): JSX.Element;
-
-/** @public */
 declare const AVATAR_SIZE: {
     readonly SM: "sm";
     readonly DEFAULT: "default";
     readonly LG: "lg";
 };
 
-/** @public */
-export declare interface AvatarProps {
-    name: string;
-    size?: AvatarSize;
-    color?: string | number;
-}
-
 export declare type AvatarSize = (typeof AVATAR_SIZE)[keyof typeof AVATAR_SIZE];
-
-/** @public */
-export declare function Badge(props: BadgeProps): JSX.Element;
 
 /** @public */
 declare const BADGE_VARIANT: {
@@ -112,12 +118,6 @@ declare const BADGE_VARIANT: {
     readonly OUTLINE: "outline";
     readonly DESTRUCTIVE: "destructive";
 };
-
-/** @public */
-export declare interface BadgeProps {
-    variant?: BadgeVariant;
-    children?: JSX.Element;
-}
 
 export declare type BadgeVariant = (typeof BADGE_VARIANT)[keyof typeof BADGE_VARIANT];
 
@@ -185,8 +185,8 @@ export declare type BoxProps = {
     justifySelf?: GridItemAlignment;
     /** @beta */
     alignSelf?: GridItemAlignment;
-    width?: number | string;
-    height?: number | string;
+    width?: SizingUnit;
+    height?: SizingUnit;
     /** When set, width behaves as "grow" (opentui compat) */
     flexGrow?: number;
     /** Accepted for CSS compatibility. Flexily handles shrinking automatically. */
@@ -285,8 +285,12 @@ export declare type BoxProps = {
     focusStyle?: InteractiveStyleProps;
     /** Unified press handler — fires on mouse click + Enter/Space when focused (Decision 6) */
     onPress?: (event?: PressEvent) => void;
+    /** Alias for onPress (web convention). If both are provided, onPress takes precedence. */
+    onClick?: (event?: PressEvent) => void;
     /** Make this element focusable via Tab navigation. Like HTML tabindex="0". */
     focusable?: boolean;
+    /** Explicit ID for focus registration (defaults to id or node-focus-${id}) */
+    focusId?: string;
     /** Keyboard event handler — fires when this element is focused and a key is pressed. */
     onKeyDown?: (event: KeyEvent) => void;
     /** Fires when mouse button is pressed while over this node. */
@@ -306,6 +310,8 @@ export declare type BoxProps = {
         x: number;
         y: number;
     };
+    /** Class name resolved by pluggable class name resolver. */
+    className?: string;
     /** CSS-style prop — merged with direct props (direct props win). Decision 3. */
     style?: Partial<BoxProps>;
     /** Image source — file path or URL. Decoded async on first render. */
@@ -333,42 +339,31 @@ export declare type BoxProps = {
 export declare function Button(props: ButtonProps): JSX.Element;
 
 /** @public */
-declare const BUTTON_SIZE: {
-    readonly XS: "xs";
-    readonly SM: "sm";
-    readonly DEFAULT: "default";
-    readonly LG: "lg";
-    readonly ICON: "icon";
-    readonly ICON_SM: "icon-sm";
-    readonly ICON_LG: "icon-lg";
-};
-
-/** @public */
-declare const BUTTON_VARIANT: {
-    readonly DEFAULT: "default";
-    readonly SECONDARY: "secondary";
-    readonly OUTLINE: "outline";
-    readonly GHOST: "ghost";
-    readonly DESTRUCTIVE: "destructive";
-    readonly LINK: "link";
-};
-
-/** @public */
-export declare interface ButtonProps {
-    variant?: ButtonVariant;
-    size?: ButtonSize;
+export declare type ButtonProps = {
+    /** Press handler — fires on Enter or Space when focused. */
+    onPress?: () => void;
+    /** Disabled state — not focusable, dimmed visual. */
     disabled?: boolean;
-    onPress?: (event?: PressEvent) => void;
+    /** Focus ID — override auto-generated focus ID. */
     focusId?: string;
-    children?: JSX.Element;
-}
-
-export declare type ButtonSize = (typeof BUTTON_SIZE)[keyof typeof BUTTON_SIZE];
-
-export declare type ButtonVariant = (typeof BUTTON_VARIANT)[keyof typeof BUTTON_VARIANT];
+    /** Render function — receives state, returns visual. */
+    renderButton: (ctx: ButtonRenderContext) => JSX.Element;
+};
 
 /** @public */
-declare class CanvasContext {
+export declare type ButtonRenderContext = {
+    focused: boolean;
+    pressed: boolean;
+    disabled: boolean;
+    /** Spread on the root element for click + keyboard + focus handling. */
+    buttonProps: {
+        focusable?: boolean;
+        onPress: () => void;
+    };
+};
+
+/** @public */
+export declare class CanvasContext {
     /* Excluded from this release type: _commands */
     /** Current viewport transform — set by the render loop from props */
     viewport: Viewport;
@@ -465,63 +460,6 @@ declare type Capabilities = {
 };
 
 /** @public */
-export declare function Card(props: CardProps): JSX.Element;
-
-/** @public */
-export declare function CardAction(props: CardActionProps): JSX.Element;
-
-/** @public */
-export declare interface CardActionProps {
-    children?: JSX.Element;
-}
-
-/** @public */
-export declare function CardContent(props: CardContentProps): JSX.Element;
-
-/** @public */
-export declare interface CardContentProps {
-    children?: JSX.Element;
-}
-
-/** @public */
-export declare function CardDescription(props: CardDescriptionProps): JSX.Element;
-
-/** @public */
-export declare interface CardDescriptionProps {
-    children?: JSX.Element;
-}
-
-/** @public */
-export declare function CardFooter(props: CardFooterProps): JSX.Element;
-
-/** @public */
-export declare interface CardFooterProps {
-    children?: JSX.Element;
-}
-
-/** @public */
-export declare function CardHeader(props: CardHeaderProps): JSX.Element;
-
-/** @public */
-export declare interface CardHeaderProps {
-    children?: JSX.Element;
-}
-
-/** @public */
-export declare interface CardProps {
-    children?: JSX.Element;
-    size?: "default" | "sm";
-}
-
-/** @public */
-export declare function CardTitle(props: CardTitleProps): JSX.Element;
-
-/** @public */
-export declare interface CardTitleProps {
-    children?: JSX.Element;
-}
-
-/** @public */
 export declare function Checkbox(props: CheckboxProps): JSX.Element;
 
 /** @public */
@@ -540,6 +478,8 @@ export declare type CheckboxProps = {
 
 /** @public */
 export declare type CheckboxRenderContext = ToggleRenderContext;
+
+export { children }
 
 /** @public */
 declare type CircleCmd = {
@@ -597,6 +537,9 @@ export declare type ClassNameUnknownBehavior = (typeof CLASS_NAME_UNKNOWN_BEHAVI
 export declare function clearClassNameCache(): void;
 
 /** @public */
+export declare function clearSelection(): void;
+
+/** @public */
 export declare type CliResult = {
     code: number;
     output: string;
@@ -610,8 +553,8 @@ export declare type CodeProps = {
     content: string;
     language: string;
     syntaxStyle: SyntaxStyle;
-    width?: number | string;
-    height?: number | string;
+    width?: SizingUnit;
+    height?: SizingUnit;
     /** Visual theme — all styling comes from here. */
     theme?: Partial<CodeTheme>;
     lineNumbers?: boolean;
@@ -785,12 +728,15 @@ export declare function createHandle(node: TGENode): NodeHandle;
 export { createMemo }
 
 /** @public */
+export declare function createParticleSystem(config: ParticleConfig): ParticleSystem;
+
+/** @public */
 export declare function createScrollHandle(scrollId: string): ScrollHandle;
 
 export { createSignal }
 
 /** @public */
-export declare function createSpring(initial: number, config?: SpringConfig): [() => number, (target: number) => void];
+export declare function createSpring(initial: number, config?: SpringConfig): AnimationSignal;
 
 /**
  * Create named style definitions that resolve via className.
@@ -829,7 +775,7 @@ export declare function createTheme(overrides?: ThemeDefinition): Required<Theme
 export declare function createToaster(options: ToasterOptions): ToasterHandle;
 
 /** @public */
-export declare function createTransition(initial: number, config?: TransitionConfig): [() => number, (target: number) => void];
+export declare function createTransition(initial: number, config?: TransitionConfig): AnimationSignal;
 
 /** @public */
 export declare function createVoidToaster(options?: VoidToasterOptions): ToasterHandle;
@@ -873,7 +819,7 @@ export declare type DialogContentProps = {
     /** Content of the dialog panel. */
     children?: JSX.Element;
     /** Width of the dialog. Default: "fit" */
-    width?: number | string;
+    width?: SizingUnit;
     /** Max width constraint. */
     maxWidth?: number;
     /** Padding inside the content area. */
@@ -915,7 +861,7 @@ export declare function Diff(props: DiffProps): JSX.Element;
 export declare type DiffProps = {
     diff: string;
     showLineNumbers?: boolean;
-    width?: number | string;
+    width?: SizingUnit;
     /** Visual theme — all styling comes from here. */
     theme?: Partial<DiffTheme>;
 };
@@ -967,6 +913,14 @@ declare type DirtyScope = {
     kind: DirtyKind;
     nodeId?: number;
     rect?: DamageRect;
+};
+
+/** @public */
+declare type DirtyTracker = {
+    markDirty: () => void;
+    isDirty: () => boolean;
+    clearDirty: (expectedVersion?: number) => void;
+    dirtyVersion: () => number;
 };
 
 /** @public */
@@ -1216,6 +1170,25 @@ export declare const font: {
     readonly "4xl": 36;
 };
 
+/**
+ * Text layout — native Rust font measurement for Vexart.
+ *
+ * All text measurement uses vexart_font_measure (Rust/ttf-parser) via FFI.
+ * This ensures measurement and MSDF rendering use identical font metrics.
+ *
+ * Word wrapping is implemented in TS with greedy word-wrap using
+ * native per-word measurements — same algorithm as Rust's font::layout.
+ *
+ * Replaces the former Pretext + @napi-rs/canvas (Skia polyfill) path.
+ */
+/** @public */
+declare type FontDescriptor = {
+    family: string;
+    size: number;
+    weight?: number;
+    style?: "normal" | "italic";
+};
+
 export { For }
 
 /** @public */
@@ -1274,11 +1247,21 @@ export declare type FormOptions<T extends Record<string, any>> = {
     validateOnChange?: boolean;
 };
 
+/** @public */
+declare function getSelection_2(): TextSelection | null;
+export { getSelection_2 as getSelection }
+
 /**
  * Get the current active theme definition (non-reactive snapshot).
  */
 /** @public */
 export declare function getTheme(): Required<ThemeDefinition>;
+
+/**
+ * Reactive theme version signal. Increments whenever `setTheme()` is called.
+ * @public
+ */
+export declare const getThemeVersion: Accessor<number>;
 
 /** @public */
 export declare type Glow = {
@@ -1470,7 +1453,7 @@ export declare type InputProps = {
     disabled?: boolean;
     focusId?: string;
     /** Width. Default: "grow". */
-    width?: number | string;
+    width?: SizingUnit;
     /** Height. Default: auto from theme padding + line height. */
     height?: number;
     /** Visual theme for self-rendering mode. Ignored when renderInput is set. */
@@ -1503,7 +1486,7 @@ export declare type InputRenderContext = {
     selection: [number, number] | null;
     /** Spread on the root element — adds focusable + click-to-focus support. */
     inputProps: {
-        focusable: true;
+        focusable?: boolean;
         onPress: () => void;
     };
 };
@@ -1678,7 +1661,7 @@ export declare type ListProps = {
 };
 
 /** @public */
-export declare function markDirty(scope?: DirtyScope): void;
+export declare function markDirty(scope?: DirtyScope, tracker?: DirtyTracker): void;
 
 /** @public */
 export declare function Markdown(props: MarkdownProps): JSX.Element;
@@ -1689,7 +1672,7 @@ export declare type MarkdownProps = {
     syntaxStyle: SyntaxStyle;
     /** Default text color (shorthand — overrides theme.fg). */
     color?: number;
-    width?: number | string;
+    width?: SizingUnit;
     streaming?: boolean;
     /** Visual theme — all styling comes from here. */
     theme?: Partial<MarkdownTheme>;
@@ -1967,6 +1950,68 @@ export declare type PageProps = AppBoxProps & {
 };
 
 /** @public */
+declare type ParticleConfig = {
+    /** Number of particles. */
+    count: number;
+    /** World-space bounds for spawning. */
+    bounds: {
+        x: number;
+        y: number;
+        w: number;
+        h: number;
+    };
+    /** Min/max radius in pixels. */
+    radius?: {
+        min: number;
+        max: number;
+    };
+    /** Min/max velocity (pixels per second). */
+    speed?: {
+        min: number;
+        max: number;
+    };
+    /** Base color (packed RGBA u32). Alpha varies per particle. */
+    color?: number;
+    /** Min/max alpha (0-255). */
+    alpha?: {
+        min: number;
+        max: number;
+    };
+    /** Min/max lifetime in seconds (0 = immortal). */
+    lifetime?: {
+        min: number;
+        max: number;
+    };
+    /** Enable glow effect on particles. */
+    glow?: boolean;
+    /** Glow radius multiplier (default 3). */
+    glowRadius?: number;
+    /** Glow intensity (0-100, default 40). */
+    glowIntensity?: number;
+    /** Enable twinkle (alpha oscillation). */
+    twinkle?: boolean;
+    /** Twinkle speed multiplier (default 1). */
+    twinkleSpeed?: number;
+    /** Drift direction bias in pixels per second. */
+    drift?: {
+        dx: number;
+        dy: number;
+    };
+};
+
+/** @public */
+declare type ParticleSystem = {
+    /** Advance simulation by dt seconds. */
+    tick: (dt: number) => void;
+    /** Draw particles to a CanvasContext. */
+    draw: (ctx: CanvasContext) => void;
+    /** Reset all particles (re-randomize). */
+    reset: () => void;
+    /** Current particle count. */
+    count: number;
+};
+
+/** @public */
 declare type PasteEvent = {
     type: "paste";
     text: string;
@@ -2061,6 +2106,9 @@ export declare type ProgressBarRenderContext = {
     /** Max value. */
     max: number;
 };
+
+/** @public */
+export declare function pushFocusScope(): () => void;
 
 /** @public */
 export declare type QueryOptions = {
@@ -2176,6 +2224,10 @@ declare type RectCmd = {
     strokeWidth: number;
     radius: number;
 };
+
+/** Register a font for use with Vexart text rendering. */
+/** @public */
+export declare function registerFont(id: number, desc: FontDescriptor): void;
 
 /** @public */
 export declare function releasePointerCapture(nodeId: number): void;
@@ -2303,8 +2355,8 @@ export declare function ScrollView(props: ScrollViewProps): JSX.Element;
 export declare type ScrollViewProps = {
     /** Ref callback — receives a ScrollHandle for programmatic control. */
     ref?: (handle: ScrollHandle) => void;
-    width?: number | string;
-    height?: number | string;
+    width?: SizingUnit;
+    height?: SizingUnit;
     scrollX?: boolean;
     scrollY?: boolean;
     scrollSpeed?: number;
@@ -2415,23 +2467,13 @@ export declare type SelectTriggerProps = {
 };
 
 /** @public */
-export declare function Separator(props: SeparatorProps): JSX.Element;
-
-/**
- * Separator — styled visual divider.
- *
- * @public
- */
-/** @public */
-export declare interface SeparatorProps {
-    orientation?: "horizontal" | "vertical";
-}
-
-/** @public */
 export declare function setFocus(id: string): void;
 
 /** @public */
 export declare function setPointerCapture(nodeId: number): void;
+
+/** @public */
+export declare function setSelection(sel: TextSelection | null): void;
 
 /**
  * Switch the active theme at runtime.
@@ -2482,20 +2524,17 @@ declare type SizingInfo = {
     value: number;
 };
 
-/** @public */
-export declare function Skeleton(props: SkeletonProps): JSX.Element;
+/** Supported sizing keywords. @public */
+declare type SizingKeyword = "fit" | "grow" | "auto" | "fill";
 
-/**
- * Skeleton — styled loading placeholder.
- *
- * @public
- */
-/** @public */
-export declare interface SkeletonProps {
-    width?: number | string;
-    height?: number | string;
-    cornerRadius?: number;
-}
+/** Sizing percentage token (e.g. "100%", "50%"). @public */
+declare type SizingPercent = `${number}%`;
+
+/** Sizing pixel token (e.g. "100px", "20px"). @public */
+declare type SizingPx = `${number}px`;
+
+/** Sizing dimension unit for width and height. @public */
+declare type SizingUnit = number | SizingKeyword | SizingPercent | SizingPx;
 
 /** @public */
 export declare function Slider(props: SliderProps): JSX.Element;
@@ -2548,7 +2587,8 @@ export declare type SliderTrackProps = {
     onMouseDown: (evt: NodeMouseEvent) => void;
     onMouseMove: (evt: NodeMouseEvent) => void;
     onMouseUp: (evt: NodeMouseEvent) => void;
-    focusable: true;
+    focusable?: boolean;
+    onPress?: () => void;
 };
 
 /** @public */
@@ -2572,6 +2612,8 @@ export declare const space: {
     readonly 9: 36;
     readonly 10: 40;
 };
+
+export { splitProps }
 
 /** @public */
 export declare type SpringConfig = {
@@ -2973,6 +3015,14 @@ declare type TextCmd = {
 };
 
 /** @public */
+export declare type TextSelection = {
+    text: string;
+    sourceId: number;
+    start: number;
+    end: number;
+};
+
+/** @public */
 declare const TGE_NODE_KIND: {
     readonly BOX: "box";
     readonly TEXT: "text";
@@ -3023,6 +3073,8 @@ declare type TGENode = {
     _vp: BoxProps | null;
     /** True when cached effective visual props must be recomputed. */
     _vpDirty: boolean;
+    /** Generational epoch at which _vp was cached. */
+    _vpEpoch?: number;
     /** Sibling position maintained by insert/remove for O(1) next-sibling lookup. */
     _siblingIndex: number;
     /** Count of focusable nodes in this subtree, including self. */
@@ -3049,6 +3101,8 @@ declare type TGENode = {
         width: number;
         height: number;
     } | null;
+    /** Per-loop dirty tracker attached to root node. */
+    _dirtyTracker?: DirtyTracker | null;
 };
 
 /** @public */
@@ -3206,7 +3260,7 @@ declare type ToggleRenderContext = {
     disabled: boolean;
     /** Spread on the root element for click toggle + keyboard + focus. */
     toggleProps: {
-        focusable: true;
+        focusable?: boolean;
         onPress: () => void;
     };
 };
@@ -3268,6 +3322,10 @@ export declare interface TypographyProps {
     children?: JSX.Element;
     color?: string | number;
 }
+
+/** Unregister a font by ID. Returns false if id is 0 (default font cannot be unregistered). */
+/** @public */
+export declare function unregisterFont(id: number): boolean;
 
 export { untrack }
 
@@ -3393,9 +3451,9 @@ export declare type VirtualListProps<T> = {
      *   The actual pixel height is read from the scroll handle's
      *   viewportHeight after the first layout pass.
      */
-    height: number | string;
+    height: SizingUnit;
     /** Width. Default: "grow". */
-    width?: number | string;
+    width?: SizingUnit;
     /** Extra items to render above/below viewport. Default: 5. */
     overscan?: number;
     /** Render each visible item. */
@@ -3419,6 +3477,130 @@ export declare type VisualCursor = {
     /** Column (0-indexed) */
     readonly col: number;
 };
+
+/** @public */
+declare const VOID_BUTTON_SIZE: {
+    readonly XS: "xs";
+    readonly SM: "sm";
+    readonly DEFAULT: "default";
+    readonly LG: "lg";
+    readonly ICON: "icon";
+    readonly ICON_SM: "icon-sm";
+    readonly ICON_LG: "icon-lg";
+};
+
+/** @public */
+declare const VOID_BUTTON_VARIANT: {
+    readonly DEFAULT: "default";
+    readonly SECONDARY: "secondary";
+    readonly OUTLINE: "outline";
+    readonly GHOST: "ghost";
+    readonly DESTRUCTIVE: "destructive";
+    readonly LINK: "link";
+};
+
+/** @public */
+export declare function VoidAvatar(props: VoidAvatarProps): JSX.Element;
+
+/** @public */
+export declare interface VoidAvatarProps {
+    name: string;
+    size?: AvatarSize;
+    color?: string | number;
+    className?: string;
+}
+
+/** @public */
+export declare function VoidBadge(props: VoidBadgeProps): JSX.Element;
+
+/** @public */
+export declare interface VoidBadgeProps {
+    variant?: BadgeVariant;
+    children?: JSX.Element;
+    className?: string;
+}
+
+/** @public */
+export declare function VoidButton(props: VoidButtonProps): JSX.Element;
+
+/** @public */
+export declare interface VoidButtonProps {
+    variant?: VoidButtonVariant;
+    size?: VoidButtonSize;
+    disabled?: boolean;
+    onPress?: (event?: PressEvent) => void;
+    focusId?: string;
+    children?: JSX.Element;
+    className?: string;
+}
+
+export declare type VoidButtonSize = (typeof VOID_BUTTON_SIZE)[keyof typeof VOID_BUTTON_SIZE];
+
+export declare type VoidButtonVariant = (typeof VOID_BUTTON_VARIANT)[keyof typeof VOID_BUTTON_VARIANT];
+
+/** @public */
+export declare function VoidCard(props: VoidCardProps): JSX.Element;
+
+/** @public */
+export declare function VoidCardAction(props: VoidCardActionProps): JSX.Element;
+
+/** @public */
+export declare interface VoidCardActionProps {
+    children?: JSX.Element;
+    className?: string;
+}
+
+/** @public */
+export declare function VoidCardContent(props: VoidCardContentProps): JSX.Element;
+
+/** @public */
+export declare interface VoidCardContentProps {
+    children?: JSX.Element;
+    className?: string;
+}
+
+/** @public */
+export declare function VoidCardDescription(props: VoidCardDescriptionProps): JSX.Element;
+
+/** @public */
+export declare interface VoidCardDescriptionProps {
+    children?: JSX.Element;
+    className?: string;
+}
+
+/** @public */
+export declare function VoidCardFooter(props: VoidCardFooterProps): JSX.Element;
+
+/** @public */
+export declare interface VoidCardFooterProps {
+    children?: JSX.Element;
+    className?: string;
+}
+
+/** @public */
+export declare function VoidCardHeader(props: VoidCardHeaderProps): JSX.Element;
+
+/** @public */
+export declare interface VoidCardHeaderProps {
+    children?: JSX.Element;
+    className?: string;
+}
+
+/** @public */
+export declare interface VoidCardProps {
+    children?: JSX.Element;
+    size?: "default" | "sm";
+    className?: string;
+}
+
+/** @public */
+export declare function VoidCardTitle(props: VoidCardTitleProps): JSX.Element;
+
+/** @public */
+export declare interface VoidCardTitleProps {
+    children?: JSX.Element;
+    className?: string;
+}
 
 /** @public */
 export declare function VoidCheckbox(props: VoidCheckboxProps): JSX.Element;
@@ -3445,8 +3627,8 @@ export declare type VoidCodeProps = {
     content: string;
     language: string;
     syntaxStyle: SyntaxStyle;
-    width?: number | string;
-    height?: number | string;
+    width?: SizingUnit;
+    height?: SizingUnit;
     lineNumbers?: boolean;
     streaming?: boolean;
 };
@@ -3462,7 +3644,7 @@ export declare type VoidComboboxProps = {
     placeholder?: string;
     disabled?: boolean;
     focusId?: string;
-    width?: number | string;
+    width?: SizingUnit;
     filter?: (option: ComboboxOption, query: string) => boolean;
 };
 
@@ -3513,16 +3695,11 @@ export declare type VoidDialogTitleProps = {
 /** @public */
 export declare function VoidDiff(props: VoidDiffProps): JSX.Element;
 
-/**
- * VoidDiff — styled unified diff viewer using Void design tokens.
- *
- * @public
- */
 /** @public */
 export declare type VoidDiffProps = {
     diff: string;
     showLineNumbers?: boolean;
-    width?: number | string;
+    width?: SizingUnit;
 };
 
 /** @public */
@@ -3540,7 +3717,7 @@ export declare function VoidDropdownMenuContent(props: VoidDropdownMenuContentPr
 /** @public */
 export declare type VoidDropdownMenuContentProps = {
     children?: JSX.Element;
-    width?: number | string;
+    width?: SizingUnit;
     minWidth?: number;
     maxHeight?: number;
     sideOffset?: number;
@@ -3590,14 +3767,6 @@ export declare type VoidDropdownMenuTriggerProps = {
 /** @public */
 export declare function VoidInput(props: VoidInputProps): JSX.Element;
 
-/**
- * VoidInput — styled single-line text input using Void design tokens.
- *
- * Uses Input's self-rendering mode with a Void theme for built-in
- * cursor rendering (no manual renderInput needed).
- *
- * @public
- */
 /** @public */
 export declare type VoidInputProps = {
     value: string;
@@ -3606,20 +3775,12 @@ export declare type VoidInputProps = {
     placeholder?: string;
     disabled?: boolean;
     focusId?: string;
-    width?: number | string;
+    width?: SizingUnit;
 };
 
 /** @public */
 export declare function VoidList(props: VoidListProps): JSX.Element;
 
-/**
- * VoidList — styled selectable list using Void design tokens.
- *
- * Provides a default themed item renderer. For custom rendering,
- * use the headless List directly.
- *
- * @public
- */
 /** @public */
 export declare type VoidListProps = {
     items: string[];
@@ -3628,8 +3789,8 @@ export declare type VoidListProps = {
     onSelect?: (index: number) => void;
     disabled?: boolean;
     focusId?: string;
-    width?: number | string;
-    height?: number | string;
+    width?: SizingUnit;
+    height?: SizingUnit;
 };
 
 /** @public */
@@ -3639,7 +3800,7 @@ export declare function VoidMarkdown(props: VoidMarkdownProps): JSX.Element;
 export declare type VoidMarkdownProps = {
     content: string;
     syntaxStyle: SyntaxStyle;
-    width?: number | string;
+    width?: SizingUnit;
     streaming?: boolean;
 };
 
@@ -3654,22 +3815,17 @@ export declare type VoidPopoverProps = {
     children: JSX.Element;
     placement?: "top" | "bottom" | "left" | "right";
     offset?: number;
-    width?: number | string;
+    width?: SizingUnit;
 };
 
 /** @public */
 export declare function VoidProgress(props: VoidProgressProps): JSX.Element;
 
-/**
- * VoidProgress — styled progress bar using Void design tokens.
- *
- * @public
- */
 /** @public */
 export declare type VoidProgressProps = {
     value: number;
     max?: number;
-    width?: number | string;
+    width?: SizingUnit;
     height?: number;
 };
 
@@ -3692,8 +3848,8 @@ export declare function VoidScrollView(props: VoidScrollViewProps): JSX.Element;
 /** @public */
 export declare type VoidScrollViewProps = {
     ref?: (handle: ScrollHandle) => void;
-    width?: number | string;
-    height?: number | string;
+    width?: SizingUnit;
+    height?: SizingUnit;
     scrollX?: boolean;
     scrollY?: boolean;
     scrollSpeed?: number;
@@ -3719,18 +3875,38 @@ export declare type VoidSelectProps = {
     placeholder?: string;
     disabled?: boolean;
     focusId?: string;
-    width?: number | string;
+    width?: SizingUnit;
     children?: JSX.Element;
 };
 
 /** @public */
-export declare function VoidSlider(props: VoidSliderProps): JSX.Element;
+export declare function VoidSeparator(props: VoidSeparatorProps): JSX.Element;
 
 /**
- * Slider — styled numeric range input using Void design tokens.
+ * VoidSeparator — styled visual divider using Void design tokens.
  *
  * @public
  */
+/** @public */
+export declare interface VoidSeparatorProps {
+    orientation?: "horizontal" | "vertical";
+    className?: string;
+}
+
+/** @public */
+export declare function VoidSkeleton(props: VoidSkeletonProps): JSX.Element;
+
+/** @public */
+export declare interface VoidSkeletonProps {
+    width?: SizingUnit;
+    height?: SizingUnit;
+    cornerRadius?: number;
+    className?: string;
+}
+
+/** @public */
+export declare function VoidSlider(props: VoidSliderProps): JSX.Element;
+
 /** @public */
 export declare type VoidSliderProps = {
     value: number;
@@ -3741,7 +3917,7 @@ export declare type VoidSliderProps = {
     largeStep?: number;
     disabled?: boolean;
     focusId?: string;
-    width?: number | string;
+    width?: SizingUnit;
     showValue?: boolean;
 };
 
@@ -3843,8 +4019,8 @@ export declare function VoidVirtualList<T>(props: VoidVirtualListProps<T>): JSX.
 export declare type VoidVirtualListProps<T> = {
     items: T[];
     itemHeight: number;
-    height: number | string;
-    width?: number | string;
+    height: SizingUnit;
+    width?: SizingUnit;
     overscan?: number;
     selectedIndex?: number;
     onSelect?: (index: number) => void;

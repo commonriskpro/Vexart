@@ -7,6 +7,23 @@ Version scheme: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.10.0-beta.3] — 2026-09-11
+
+### Changed
+
+- **Dead Code & Migration Scars Purge**: Comprehensive cleanup across Rust (`libvexart`) and TypeScript (`@vexart/engine`). Removed orphan modules (`frame.rs`, `text/render.rs`), uncalled legacy text PNG atlas pipeline (`vexart_text_*`), dead FFI symbols (`vexart_context_resize`, `vexart_layer_mark_dirty`, `vexart_kitty_emit_frame`, `vexart_kitty_emit_region`), and unreferenced target emission functions.
+- **Canvas Display List Optimization**: Dismantled the write-only native display list serialization and storage system, eliminating per-frame FFI overhead for `<canvas>` elements and keeping JS-side rasterization as the sole canonical path.
+- **Selection API Canonicalization**: Consolidated selection API to the single canonical function `clearSelection`, purging redundant `resetSelection` alias across the monorepo and API surface.
+- **Router Architecture Clarification**: Purged redundant 94-line engine mini-router in favor of the production-grade file-based router in `@vexart/app`.
+
+### Added
+
+- **100% Unit Test Coverage for Data Hooks**: Added comprehensive unit test suite (`data.test.ts`, 19 tests) for `useQuery` and `useMutation` verifying reactive signals, auto-refetch, retry backoff, optimistic updates, and rollback invariants.
+
+### Fixed
+
+- **Native Presentation Circuit-Breaker Recovery**: Restored lifecycle symmetry by wiring `tickNativePresentationRecovery()` into the main frame loop (`loop.ts`), ensuring transient GPU presentation failures auto-recover after their cooldown window.
+
 ## [0.10.0-beta.2] — 2026-09-10
 
 ### Added

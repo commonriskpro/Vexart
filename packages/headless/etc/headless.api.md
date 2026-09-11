@@ -26,7 +26,7 @@ export type ButtonRenderContext = {
     pressed: boolean;
     disabled: boolean;
     buttonProps: {
-        focusable: true;
+        focusable?: boolean;
         onPress: () => void;
     };
 };
@@ -56,8 +56,8 @@ export type CodeProps = {
     content: string;
     language: string;
     syntaxStyle: SyntaxStyle;
-    width?: number | string;
-    height?: number | string;
+    width?: SizingUnit;
+    height?: SizingUnit;
     theme?: Partial<CodeTheme>;
     lineNumbers?: boolean;
     streaming?: boolean;
@@ -145,7 +145,7 @@ export function DialogContent(props: DialogContentProps): JSX.Element;
 // @public (undocumented)
 export type DialogContentProps = {
     children?: JSX.Element;
-    width?: number | string;
+    width?: SizingUnit;
     maxWidth?: number;
     padding?: number;
     cornerRadius?: number;
@@ -176,7 +176,7 @@ export function Diff(props: DiffProps): JSX.Element;
 export type DiffProps = {
     diff: string;
     showLineNumbers?: boolean;
-    width?: number | string;
+    width?: SizingUnit;
     theme?: Partial<DiffTheme>;
 };
 
@@ -271,7 +271,7 @@ export type InputProps = {
     placeholder?: string;
     disabled?: boolean;
     focusId?: string;
-    width?: number | string;
+    width?: SizingUnit;
     height?: number;
     theme?: Partial<InputTheme>;
     renderInput?: (ctx: InputRenderContext) => JSX.Element;
@@ -288,7 +288,7 @@ export type InputRenderContext = {
     disabled: boolean;
     selection: [number, number] | null;
     inputProps: {
-        focusable: true;
+        focusable?: boolean;
         onPress: () => void;
     };
 };
@@ -362,7 +362,7 @@ export type MarkdownProps = {
     content: string;
     syntaxStyle: SyntaxStyle;
     color?: number;
-    width?: number | string;
+    width?: SizingUnit;
     streaming?: boolean;
     theme?: Partial<MarkdownTheme>;
 };
@@ -518,8 +518,8 @@ export function ScrollView(props: ScrollViewProps): JSX.Element;
 // @public (undocumented)
 export type ScrollViewProps = {
     ref?: (handle: ScrollHandle) => void;
-    width?: number | string;
-    height?: number | string;
+    width?: SizingUnit;
+    height?: SizingUnit;
     scrollX?: boolean;
     scrollY?: boolean;
     scrollSpeed?: number;
@@ -647,7 +647,8 @@ export type SliderTrackProps = {
     onMouseDown: (evt: NodeMouseEvent) => void;
     onMouseMove: (evt: NodeMouseEvent) => void;
     onMouseUp: (evt: NodeMouseEvent) => void;
-    focusable: true;
+    focusable?: boolean;
+    onPress?: () => void;
 };
 
 // @public (undocumented)
@@ -895,8 +896,8 @@ export type VirtualListItemContext = {
 export type VirtualListProps<T> = {
     items: T[];
     itemHeight: number;
-    height: number | string;
-    width?: number | string;
+    height: SizingUnit;
+    width?: SizingUnit;
     overscan?: number;
     renderItem: (item: T, index: number, ctx: VirtualListItemContext) => JSX.Element;
     selectedIndex?: number;
@@ -914,6 +915,7 @@ export type VisualCursor = {
 
 // Warnings were encountered during analysis:
 //
+// <repo>/.api-extractor-temp/packages/headless/src/display/code.d.ts:26:5 - (ae-forgotten-export) The symbol "SizingUnit" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/headless/src/inputs/textarea.d.ts:129:5 - (ae-forgotten-export) The symbol "ExtmarkManager" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)

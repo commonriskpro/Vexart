@@ -4,137 +4,18 @@
 
 ```ts
 
+import { Accessor } from 'solid-js';
 import { JSX } from 'solid-js';
-
-// @public (undocumented)
-export function Avatar(props: AvatarProps): JSX;
-
-// @public (undocumented)
-export interface AvatarProps {
-    // (undocumented)
-    color?: string | number;
-    // (undocumented)
-    name: string;
-    // (undocumented)
-    size?: AvatarSize;
-}
 
 // Warning: (ae-forgotten-export) The symbol "AVATAR_SIZE" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export type AvatarSize = (typeof AVATAR_SIZE)[keyof typeof AVATAR_SIZE];
 
-// @public (undocumented)
-export function Badge(props: BadgeProps): JSX.Element;
-
-// @public (undocumented)
-export interface BadgeProps {
-    // (undocumented)
-    children?: JSX.Element;
-    // (undocumented)
-    variant?: BadgeVariant;
-}
-
 // Warning: (ae-forgotten-export) The symbol "BADGE_VARIANT" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export type BadgeVariant = (typeof BADGE_VARIANT)[keyof typeof BADGE_VARIANT];
-
-// @public (undocumented)
-export function Button(props: ButtonProps): JSX.Element;
-
-// @public (undocumented)
-export interface ButtonProps {
-    // (undocumented)
-    children?: JSX.Element;
-    // (undocumented)
-    disabled?: boolean;
-    // (undocumented)
-    focusId?: string;
-    // Warning: (ae-forgotten-export) The symbol "PressEvent" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    onPress?: (event?: PressEvent) => void;
-    // (undocumented)
-    size?: ButtonSize;
-    // (undocumented)
-    variant?: ButtonVariant;
-}
-
-// Warning: (ae-forgotten-export) The symbol "BUTTON_SIZE" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export type ButtonSize = (typeof BUTTON_SIZE)[keyof typeof BUTTON_SIZE];
-
-// Warning: (ae-forgotten-export) The symbol "BUTTON_VARIANT" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export type ButtonVariant = (typeof BUTTON_VARIANT)[keyof typeof BUTTON_VARIANT];
-
-// @public (undocumented)
-export function Card(props: CardProps): JSX.Element;
-
-// @public (undocumented)
-export function CardAction(props: CardActionProps): JSX.Element;
-
-// @public (undocumented)
-export interface CardActionProps {
-    // (undocumented)
-    children?: JSX.Element;
-}
-
-// @public (undocumented)
-export function CardContent(props: CardContentProps): JSX.Element;
-
-// @public (undocumented)
-export interface CardContentProps {
-    // (undocumented)
-    children?: JSX.Element;
-}
-
-// @public (undocumented)
-export function CardDescription(props: CardDescriptionProps): JSX.Element;
-
-// @public (undocumented)
-export interface CardDescriptionProps {
-    // (undocumented)
-    children?: JSX.Element;
-}
-
-// @public (undocumented)
-export function CardFooter(props: CardFooterProps): JSX.Element;
-
-// @public (undocumented)
-export interface CardFooterProps {
-    // (undocumented)
-    children?: JSX.Element;
-}
-
-// @public (undocumented)
-export function CardHeader(props: CardHeaderProps): JSX.Element;
-
-// @public (undocumented)
-export interface CardHeaderProps {
-    // (undocumented)
-    children?: JSX.Element;
-}
-
-// @public (undocumented)
-export interface CardProps {
-    // (undocumented)
-    children?: JSX.Element;
-    // (undocumented)
-    size?: "default" | "sm";
-}
-
-// @public (undocumented)
-export function CardTitle(props: CardTitleProps): JSX.Element;
-
-// @public (undocumented)
-export interface CardTitleProps {
-    // (undocumented)
-    children?: JSX.Element;
-}
 
 // @public (undocumented)
 export const colors: {
@@ -196,6 +77,9 @@ export const font: {
 
 // @public (undocumented)
 export function getTheme(): Required<ThemeDefinition>;
+
+// @public
+export const getThemeVersion: Accessor<number>;
 
 // @public (undocumented)
 export type Glow = {
@@ -259,15 +143,6 @@ export type SelectOption = {
 };
 
 // @public (undocumented)
-export function Separator(props: SeparatorProps): JSX;
-
-// @public (undocumented)
-export interface SeparatorProps {
-    // (undocumented)
-    orientation?: "horizontal" | "vertical";
-}
-
-// @public (undocumented)
 export function setTheme(theme: Required<ThemeDefinition>): void;
 
 // @public (undocumented)
@@ -280,19 +155,6 @@ export type Shadow = {
 
 // @public (undocumented)
 export const shadows: Record<"xs" | "sm" | "md" | "lg" | "xl", Shadow[]>;
-
-// @public (undocumented)
-export function Skeleton(props: SkeletonProps): JSX;
-
-// @public (undocumented)
-export interface SkeletonProps {
-    // (undocumented)
-    cornerRadius?: number;
-    // (undocumented)
-    height?: number | string;
-    // (undocumented)
-    width?: number | string;
-}
 
 // @public (undocumented)
 export function Small(props: TypographyProps): JSX.Element;
@@ -441,6 +303,146 @@ export interface TypographyProps {
 }
 
 // @public (undocumented)
+export function VoidAvatar(props: VoidAvatarProps): JSX;
+
+// @public (undocumented)
+export interface VoidAvatarProps {
+    // (undocumented)
+    className?: string;
+    // (undocumented)
+    color?: string | number;
+    // (undocumented)
+    name: string;
+    // (undocumented)
+    size?: AvatarSize;
+}
+
+// @public (undocumented)
+export function VoidBadge(props: VoidBadgeProps): JSX.Element;
+
+// @public (undocumented)
+export interface VoidBadgeProps {
+    // (undocumented)
+    children?: JSX.Element;
+    // (undocumented)
+    className?: string;
+    // (undocumented)
+    variant?: BadgeVariant;
+}
+
+// @public (undocumented)
+export function VoidButton(props: VoidButtonProps): JSX.Element;
+
+// @public (undocumented)
+export interface VoidButtonProps {
+    // (undocumented)
+    children?: JSX.Element;
+    // (undocumented)
+    className?: string;
+    // (undocumented)
+    disabled?: boolean;
+    // (undocumented)
+    focusId?: string;
+    // Warning: (ae-forgotten-export) The symbol "PressEvent" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    onPress?: (event?: PressEvent) => void;
+    // (undocumented)
+    size?: VoidButtonSize;
+    // (undocumented)
+    variant?: VoidButtonVariant;
+}
+
+// Warning: (ae-forgotten-export) The symbol "VOID_BUTTON_SIZE" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export type VoidButtonSize = (typeof VOID_BUTTON_SIZE)[keyof typeof VOID_BUTTON_SIZE];
+
+// Warning: (ae-forgotten-export) The symbol "VOID_BUTTON_VARIANT" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export type VoidButtonVariant = (typeof VOID_BUTTON_VARIANT)[keyof typeof VOID_BUTTON_VARIANT];
+
+// @public (undocumented)
+export function VoidCard(props: VoidCardProps): JSX.Element;
+
+// @public (undocumented)
+export function VoidCardAction(props: VoidCardActionProps): JSX.Element;
+
+// @public (undocumented)
+export interface VoidCardActionProps {
+    // (undocumented)
+    children?: JSX.Element;
+    // (undocumented)
+    className?: string;
+}
+
+// @public (undocumented)
+export function VoidCardContent(props: VoidCardContentProps): JSX.Element;
+
+// @public (undocumented)
+export interface VoidCardContentProps {
+    // (undocumented)
+    children?: JSX.Element;
+    // (undocumented)
+    className?: string;
+}
+
+// @public (undocumented)
+export function VoidCardDescription(props: VoidCardDescriptionProps): JSX.Element;
+
+// @public (undocumented)
+export interface VoidCardDescriptionProps {
+    // (undocumented)
+    children?: JSX.Element;
+    // (undocumented)
+    className?: string;
+}
+
+// @public (undocumented)
+export function VoidCardFooter(props: VoidCardFooterProps): JSX.Element;
+
+// @public (undocumented)
+export interface VoidCardFooterProps {
+    // (undocumented)
+    children?: JSX.Element;
+    // (undocumented)
+    className?: string;
+}
+
+// @public (undocumented)
+export function VoidCardHeader(props: VoidCardHeaderProps): JSX.Element;
+
+// @public (undocumented)
+export interface VoidCardHeaderProps {
+    // (undocumented)
+    children?: JSX.Element;
+    // (undocumented)
+    className?: string;
+}
+
+// @public (undocumented)
+export interface VoidCardProps {
+    // (undocumented)
+    children?: JSX.Element;
+    // (undocumented)
+    className?: string;
+    // (undocumented)
+    size?: "default" | "sm";
+}
+
+// @public (undocumented)
+export function VoidCardTitle(props: VoidCardTitleProps): JSX.Element;
+
+// @public (undocumented)
+export interface VoidCardTitleProps {
+    // (undocumented)
+    children?: JSX.Element;
+    // (undocumented)
+    className?: string;
+}
+
+// @public (undocumented)
 export function VoidCheckbox(props: VoidCheckboxProps): JSX;
 
 // @public (undocumented)
@@ -460,8 +462,8 @@ export type VoidCodeProps = {
     content: string;
     language: string;
     syntaxStyle: SyntaxStyle;
-    width?: number | string;
-    height?: number | string;
+    width?: SizingUnit;
+    height?: SizingUnit;
     lineNumbers?: boolean;
     streaming?: boolean;
 };
@@ -477,7 +479,7 @@ export type VoidComboboxProps = {
     placeholder?: string;
     disabled?: boolean;
     focusId?: string;
-    width?: number | string;
+    width?: SizingUnit;
     filter?: (option: ComboboxOption, query: string) => boolean;
 };
 
@@ -529,7 +531,7 @@ export function VoidDiff(props: VoidDiffProps): JSX;
 export type VoidDiffProps = {
     diff: string;
     showLineNumbers?: boolean;
-    width?: number | string;
+    width?: SizingUnit;
 };
 
 // Warning: (ae-forgotten-export) The symbol "VoidDropdownMenuRoot" needs to be exported by the entry point index.d.ts
@@ -549,7 +551,7 @@ export function VoidDropdownMenuContent(props: VoidDropdownMenuContentProps): JS
 // @public (undocumented)
 export type VoidDropdownMenuContentProps = {
     children?: JSX.Element;
-    width?: number | string;
+    width?: SizingUnit;
     minWidth?: number;
     maxHeight?: number;
     sideOffset?: number;
@@ -605,7 +607,7 @@ export type VoidInputProps = {
     placeholder?: string;
     disabled?: boolean;
     focusId?: string;
-    width?: number | string;
+    width?: SizingUnit;
 };
 
 // @public (undocumented)
@@ -619,8 +621,8 @@ export type VoidListProps = {
     onSelect?: (index: number) => void;
     disabled?: boolean;
     focusId?: string;
-    width?: number | string;
-    height?: number | string;
+    width?: SizingUnit;
+    height?: SizingUnit;
 };
 
 // @public (undocumented)
@@ -630,7 +632,7 @@ export function VoidMarkdown(props: VoidMarkdownProps): JSX;
 export type VoidMarkdownProps = {
     content: string;
     syntaxStyle: SyntaxStyle;
-    width?: number | string;
+    width?: SizingUnit;
     streaming?: boolean;
 };
 
@@ -645,7 +647,7 @@ export type VoidPopoverProps = {
     children: JSX.Element;
     placement?: "top" | "bottom" | "left" | "right";
     offset?: number;
-    width?: number | string;
+    width?: SizingUnit;
 };
 
 // @public (undocumented)
@@ -655,7 +657,7 @@ export function VoidProgress(props: VoidProgressProps): JSX;
 export type VoidProgressProps = {
     value: number;
     max?: number;
-    width?: number | string;
+    width?: SizingUnit;
     height?: number;
 };
 
@@ -678,8 +680,8 @@ export function VoidScrollView(props: VoidScrollViewProps): JSX.Element;
 // @public (undocumented)
 export type VoidScrollViewProps = {
     ref?: (handle: ScrollHandle) => void;
-    width?: number | string;
-    height?: number | string;
+    width?: SizingUnit;
+    height?: SizingUnit;
     scrollX?: boolean;
     scrollY?: boolean;
     scrollSpeed?: number;
@@ -705,9 +707,35 @@ export type VoidSelectProps = {
     placeholder?: string;
     disabled?: boolean;
     focusId?: string;
-    width?: number | string;
+    width?: SizingUnit;
     children?: JSX.Element;
 };
+
+// @public (undocumented)
+export function VoidSeparator(props: VoidSeparatorProps): JSX;
+
+// @public (undocumented)
+export interface VoidSeparatorProps {
+    // (undocumented)
+    className?: string;
+    // (undocumented)
+    orientation?: "horizontal" | "vertical";
+}
+
+// @public (undocumented)
+export function VoidSkeleton(props: VoidSkeletonProps): JSX;
+
+// @public (undocumented)
+export interface VoidSkeletonProps {
+    // (undocumented)
+    className?: string;
+    // (undocumented)
+    cornerRadius?: number;
+    // (undocumented)
+    height?: SizingUnit;
+    // (undocumented)
+    width?: SizingUnit;
+}
 
 // @public (undocumented)
 export function VoidSlider(props: VoidSliderProps): JSX;
@@ -722,7 +750,7 @@ export type VoidSliderProps = {
     largeStep?: number;
     disabled?: boolean;
     focusId?: string;
-    width?: number | string;
+    width?: SizingUnit;
     showValue?: boolean;
 };
 
@@ -819,8 +847,8 @@ export function VoidVirtualList<T>(props: VoidVirtualListProps<T>): JSX.Element;
 export type VoidVirtualListProps<T> = {
     items: T[];
     itemHeight: number;
-    height: number | string;
-    width?: number | string;
+    height: SizingUnit;
+    width?: SizingUnit;
     overscan?: number;
     selectedIndex?: number;
     onSelect?: (index: number) => void;
@@ -840,12 +868,13 @@ export const weight: {
 // Warnings were encountered during analysis:
 //
 // <repo>/.api-extractor-temp/packages/headless/src/overlays/toast.d.ts:31:5 - (ae-forgotten-export) The symbol "ToastVariant" needs to be exported by the entry point index.d.ts
-// <repo>/.api-extractor-temp/packages/styled/src/components/code.d.ts:11:5 - (ae-forgotten-export) The symbol "SyntaxStyle" needs to be exported by the entry point index.d.ts
-// <repo>/.api-extractor-temp/packages/styled/src/components/scroll-view.d.ts:13:5 - (ae-forgotten-export) The symbol "ScrollHandle" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/styled/src/components/code.d.ts:12:5 - (ae-forgotten-export) The symbol "SyntaxStyle" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/styled/src/components/code.d.ts:13:5 - (ae-forgotten-export) The symbol "SizingUnit" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/styled/src/components/scroll-view.d.ts:14:5 - (ae-forgotten-export) The symbol "ScrollHandle" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:16:5 - (ae-forgotten-export) The symbol "KeyEvent" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:23:5 - (ae-forgotten-export) The symbol "KeyBinding" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:26:5 - (ae-forgotten-export) The symbol "TextareaHandle" needs to be exported by the entry point index.d.ts
-// <repo>/.api-extractor-temp/packages/styled/src/components/virtual-list.d.ts:23:5 - (ae-forgotten-export) The symbol "VirtualListItemContext" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/styled/src/components/virtual-list.d.ts:24:5 - (ae-forgotten-export) The symbol "VirtualListItemContext" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

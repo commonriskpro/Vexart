@@ -160,6 +160,9 @@ export function buildRenderOp(cmd: RenderCommand, ownerIds?: {
 }): RenderGraphOp | null;
 
 // @public (undocumented)
+export function bumpThemeEpoch(): void;
+
+// @public (undocumented)
 export class CanvasContext {
     constructor(viewport?: Viewport);
     bezier(x0: number, y0: number, cx: number, cy: number, x1: number, y1: number, style: StrokeStyle): void;
@@ -264,7 +267,13 @@ export type CircleCmd = {
 };
 
 // @public (undocumented)
+export type ClassNameResolver = (className: string) => Partial<TGEProps>;
+
+// @public (undocumented)
 export function clearDirty(expectedVersion?: number, tracker?: DirtyTracker): void;
+
+// @public (undocumented)
+export function clearFontRegistry(): void;
 
 // @public (undocumented)
 export function clearImageCache(): void;
@@ -457,7 +466,7 @@ export function decodeMods(n: number): Modifiers;
 export function decodePasteBytes(bytes: Uint8Array | string): string;
 
 // @public (undocumented)
-export function detect(): TerminalKind;
+export function detect(env?: Readonly<Record<string, string | undefined>>): TerminalKind;
 
 // @public
 export const DIRECTION: {
@@ -489,6 +498,9 @@ export type DirtyTracker = {
     clearDirty: (expectedVersion?: number) => void;
     dirtyVersion: () => number;
 };
+
+// @public (undocumented)
+export function dispatchFocusInput(event: InputEvent_2): void;
 
 // @public (undocumented)
 export function dispatchInput(event: InputEvent_2): void;
@@ -601,6 +613,12 @@ export function endSync(write: (data: string) => void): void;
 export function enter(stdin: NodeJS.ReadStream, write: (data: string) => void, caps: Capabilities): LifecycleState;
 
 export { ErrorBoundary }
+
+// @public (undocumented)
+export type ExitHandlerOptions = {
+    manageProcessSignals?: boolean;
+    signal?: AbortSignal;
+};
 
 // @public (undocumented)
 export function expandRect(rect: DamageRect, padding: number): DamageRect;
@@ -725,6 +743,9 @@ export function fromConfig(config: {
 }, originX: number, originY: number): Matrix3;
 
 // @public (undocumented)
+export function getClassNameResolver(): ClassNameResolver | null;
+
+// @public (undocumented)
 export function getFocusedEntry(): FocusEntry | undefined;
 
 // @public (undocumented)
@@ -799,6 +820,9 @@ export function getTextLayoutCacheStats(): {
 };
 
 // @public (undocumented)
+export function getThemeEpoch(): number;
+
+// @public (undocumented)
 export function getTreeSitterClient(): TreeSitterClient;
 
 // @public (undocumented)
@@ -843,6 +867,7 @@ export type GpuLayerStrategyMode = (typeof GPU_LAYER_STRATEGY_MODE)[keyof typeof
 
 // @public (undocumented)
 export type GpuRendererBackend = RendererBackend & {
+    instanceImageHandles: Set<bigint>;
     getLastStrategy: () => GpuLayerStrategyMode | null;
     readbackForTest: (width: number, height: number) => Uint8Array | null;
 };
@@ -1073,6 +1098,9 @@ export function insertChild(parent: TGENode, child: TGENode, anchor?: TGENode): 
 // @public (undocumented)
 export const insertNode: (parent: TGENode, node: TGENode, anchor?: TGENode | undefined) => void;
 
+// @public
+export function installExitHandlers(stdin: NodeJS.ReadStream, write: (data: string) => void, caps: Capabilities, state: LifecycleState, beforeLeave?: (() => void) | ExitHandlerOptions, options?: ExitHandlerOptions): () => void;
+
 // @public (undocumented)
 export const INTERACTION_MODE: {
     readonly NONE: "none";
@@ -1296,6 +1324,15 @@ export { Match }
 export type Matrix3 = Float64Array;
 
 // @public (undocumented)
+export function measureForLayout(text: string, fontId: number, fontSize: number, overrideFontFamily?: string, overrideFontWeight?: number, overrideFontStyle?: string): {
+    width: number;
+    height: number;
+};
+
+// @public (undocumented)
+export function measureTextWidth(text: string, fontId: number): number;
+
+// @public (undocumented)
 export const memo: <T>(fn: () => T, equal: boolean) => () => T;
 
 // @public (undocumented)
@@ -1517,7 +1554,7 @@ export function parseKey(data: string): [KeyEvent, number] | null;
 export function parseMouse(data: string): [MouseEvent_2, number] | null;
 
 // @public (undocumented)
-export function parseSizing(value: number | string | undefined): SizingInfo | null;
+export function parseSizing(value: number | string | undefined | null): SizingInfo | null;
 
 // @public (undocumented)
 export type ParticleConfig = {
@@ -1612,6 +1649,14 @@ export function probeKittyGraphics(write: (data: string) => void, onData: (handl
 
 // @public (undocumented)
 export function probeShm(write: (data: string) => void, onData: (handler: (data: Buffer) => void) => void, offData: (handler: (data: Buffer) => void) => void, timeout?: number): Promise<boolean>;
+
+// Warning: (ae-forgotten-export) The symbol "ProcessSignalHubImpl" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export const ProcessSignalHub: ProcessSignalHubImpl;
+
+// @public (undocumented)
+export type ProcessSignalHub = ProcessSignalHubImpl;
 
 // @public (undocumented)
 export function pushFocusScope(): () => void;
@@ -1916,6 +1961,7 @@ export type RenderGraphOp = RectangleRenderOp | ImageRenderOp | CanvasRenderOp |
 // @public (undocumented)
 export type RenderLoop = {
     root: TGENode;
+    backend: RendererBackend;
     start: () => void;
     stop: () => void;
     frame: () => void;
@@ -1926,6 +1972,7 @@ export type RenderLoop = {
     needsPointerRepaint: () => boolean;
     setPointerCapture: (nodeId: number) => void;
     releasePointerCapture: (nodeId: number) => void;
+    getCapturedNodeId?: () => number;
     onPostScroll: (cb: () => void) => () => void;
     markNodeLayerDamaged: (nodeId: number, rect?: DamageRect) => void;
     suspend: () => void;
@@ -1937,6 +1984,7 @@ export type RenderLoop = {
 
 // @public (undocumented)
 export type RenderLoopOptions = {
+    backend?: RendererBackend;
     experimental?: {
         frameBudgetMs?: number;
         maxFps?: number;
@@ -2073,6 +2121,9 @@ export type ScrollHandle = {
 export const selectionSignal: Accessor<TextSelection | null>;
 
 // @public (undocumented)
+export function setClassNameResolver(resolver: ClassNameResolver | null): void;
+
+// @public (undocumented)
 export function setDebug(enabled: boolean): void;
 
 // @public (undocumented)
@@ -2092,6 +2143,9 @@ export function setRendererBackend(backend: RendererBackend | null): void;
 
 // @public (undocumented)
 export function setSelection(sel: TextSelection | null): void;
+
+// @public (undocumented)
+export const setupExitHandlers: typeof installExitHandlers;
 
 // @public
 export type ShadowConfig = {
@@ -2148,6 +2202,18 @@ export type SizingInfo = {
     type: number;
     value: number;
 };
+
+// @public
+export type SizingKeyword = "fit" | "grow" | "auto" | "fill";
+
+// @public
+export type SizingPercent = `${number}%`;
+
+// @public
+export type SizingPx = `${number}px`;
+
+// @public
+export type SizingUnit = number | SizingKeyword | SizingPercent | SizingPx;
 
 // @public (undocumented)
 export function skew(degreesX: number, degreesY: number): Matrix3;
@@ -2259,6 +2325,8 @@ export type TerminalOptions = {
     skipProbe?: boolean;
     skipColors?: boolean;
     probeTimeout?: number;
+    manageProcessSignals?: boolean;
+    signal?: AbortSignal;
 };
 
 // @public (undocumented)
@@ -2346,6 +2414,7 @@ export type TGENode = {
     _interactionMode: InteractionMode;
     _vp: TGEProps | null;
     _vpDirty: boolean;
+    _vpEpoch?: number;
     _siblingIndex: number;
     _focusableCount: number;
     _dfsIndex: number;
@@ -2409,8 +2478,8 @@ export type TGEProps = {
     justifyItems?: GridItemAlignment;
     justifySelf?: GridItemAlignment;
     alignSelf?: GridItemAlignment;
-    width?: number | string;
-    height?: number | string;
+    width?: SizingUnit;
+    height?: SizingUnit;
     flexGrow?: number;
     flexShrink?: number;
     backgroundColor?: string | number;
@@ -2477,7 +2546,9 @@ export type TGEProps = {
     activeStyle?: InteractiveStyleProps;
     focusStyle?: InteractiveStyleProps;
     onPress?: (event?: PressEvent) => void;
+    onClick?: (event?: PressEvent) => void;
     focusable?: boolean;
+    focusId?: string;
     onKeyDown?: (event: KeyEvent) => void;
     onMouseDown?: (event: NodeMouseEvent) => void;
     onMouseUp?: (event: NodeMouseEvent) => void;
@@ -2489,6 +2560,7 @@ export type TGEProps = {
         x: number;
         y: number;
     };
+    className?: string;
     style?: Partial<TGEProps>;
     src?: string;
     objectFit?: "contain" | "cover" | "fill" | "none";
@@ -2620,6 +2692,9 @@ export function unbindLoop(loop?: RenderLoop): void;
 export function unionRect(a: DamageRect, b: DamageRect): DamageRect;
 
 // @public (undocumented)
+export function unregisterFont(id: number): boolean;
+
+// @public (undocumented)
 export function unregisterNodeFocusable(node: TGENode): void;
 
 // @public (undocumented)
@@ -2716,6 +2791,14 @@ export const VEXART_SYMBOLS: {
         readonly args: [FFIType.uint64_t, FFIType.uint64_t];
         readonly returns: FFIType.int32_t;
     };
+    readonly vexart_composite_target_set_scissor: {
+        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint32_t, FFIType.uint32_t, FFIType.uint32_t, FFIType.uint32_t];
+        readonly returns: FFIType.int32_t;
+    };
+    readonly vexart_composite_target_reset_scissor: {
+        readonly args: [FFIType.uint64_t, FFIType.uint64_t];
+        readonly returns: FFIType.int32_t;
+    };
     readonly vexart_composite_render_image_layer: {
         readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.float, FFIType.float, FFIType.float, FFIType.float, FFIType.uint32_t, FFIType.uint32_t];
         readonly returns: FFIType.int32_t;
@@ -2737,6 +2820,10 @@ export const VEXART_SYMBOLS: {
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_composite_image_mask_rounded_rect: {
+        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.ptr];
+        readonly returns: FFIType.int32_t;
+    };
+    readonly vexart_composite_image_mask_rounded_rect_region: {
         readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.ptr];
         readonly returns: FFIType.int32_t;
     };
@@ -2862,9 +2949,9 @@ export function wrapPassthrough(raw: string): string;
 
 // Warnings were encountered during analysis:
 //
-// <repo>/.api-extractor-temp/packages/engine/src/ffi/node-types.d.ts:371:5 - (ae-forgotten-export) The symbol "NodeImageExtra" needs to be exported by the entry point index.d.ts
-// <repo>/.api-extractor-temp/packages/engine/src/ffi/node-types.d.ts:373:5 - (ae-forgotten-export) The symbol "NodeCanvasExtra" needs to be exported by the entry point index.d.ts
-// <repo>/.api-extractor-temp/packages/engine/src/loop/debug.d.ts:85:5 - (ae-forgotten-export) The symbol "NativeFrameExecutionStats" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node-types.d.ts:376:5 - (ae-forgotten-export) The symbol "NodeImageExtra" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node-types.d.ts:378:5 - (ae-forgotten-export) The symbol "NodeCanvasExtra" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/loop/debug.d.ts:85:5 - (ae-forgotten-export) The symbol "NativeFrameExecutionStats" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
