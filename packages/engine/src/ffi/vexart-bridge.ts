@@ -68,11 +68,6 @@ export const VEXART_SYMBOLS = {
   vexart_composite_readback_rgba:       { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_composite_readback_region_rgba:{ args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.ptr, FFIType.u32, FFIType.ptr],          returns: FFIType.i32 },
 
-  // §5.5 Text — atlas loading, glyph dispatch, measure
-  vexart_text_load_atlas: { args: [FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32], returns: FFIType.i32 },
-  vexart_text_dispatch:   { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  vexart_text_measure:    { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.f32, FFIType.ptr, FFIType.ptr],           returns: FFIType.i32 },
-
   // §5.6 Kitty transport (Phase 2b Slice 3)
   vexart_kitty_emit_frame:    { args: [FFIType.u64, FFIType.u64, FFIType.u32], returns: FFIType.i32  },
   vexart_kitty_set_transport: { args: [FFIType.u64, FFIType.u32],              returns: FFIType.i32  },

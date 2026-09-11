@@ -33,10 +33,7 @@ All FFI exports use `#[no_mangle] pub extern "C"` or `#[no_mangle] pub unsafe ex
 - `vexart_composite_readback_rgba(ctx: u64, target: u64, out_ptr: *mut u8, out_len: u32, stats_out: *mut u32) -> i32`: Synchronously reads back target RGBA pixels to host memory.
 - `vexart_composite_readback_region_rgba(ctx: u64, target: u64, region_ptr: *const u32, out_ptr: *mut u8, out_len: u32, stats_out: *mut u32) -> i32`: Reads back a rectangular subregion to host memory.
 
-### §1.4 Text & MSDF Font Pipeline (7 Functions)
-- `vexart_text_load_atlas(ctx: u64, atlas_id: u32, png_ptr: *const u8, png_len: u32, json_ptr: *const u8, json_len: u32) -> i32`: Loads a pre-baked PNG atlas and glyph metrics.
-- `vexart_text_dispatch(ctx: u64, target: u64, buf_ptr: *const u8, buf_len: u32, stats_out: *mut u32) -> i32`: Dispatches glyph quad instances using the MSDF pipeline.
-- `vexart_text_measure(ctx: u64, text_ptr: *const u8, text_len: u32, font_id: u32, font_size: f32, out_w: *mut f32, out_h: *mut f32) -> i32`: Measures string dimensions against pre-baked metrics.
+### §1.4 Text & MSDF Font Pipeline (4 Functions)
 - `vexart_font_init() -> i32`: Initializes dynamic system font discovery (`fontdb`), returning discovered font face count.
 - `vexart_font_query(families_ptr: *const u8, families_len: u32, weight: u16, italic: u32, out_handle: *mut u64) -> i32`: Queries matching font face.
 - `vexart_font_render_text(ctx: u64, target: u64, text_ptr: *const u8, text_len: u32, params_ptr: *const u8, params_len: u32, stats_out: *mut u32) -> i32`: Dynamically generates and renders MSDF text.
@@ -253,13 +250,7 @@ $$\alpha = \text{clamp}\left(1.0 - \frac{d}{radius}, 0.0, 1.0\right)^{decay} \cd
 
 ## 6. Text Rendering Pipeline
 
-Vexart provides a dual text architecture balancing instantaneous zero-compilation startup with dynamic system typography:
-
-### Pre-Baked Atlas Pipeline (`src/text/`)
-- Loaded via `vexart_text_load_atlas(ctx, atlas_id, png_ptr, png_len, json_ptr, json_len)`.
-- Uses offline-generated 1024×1024 PNG font atlases paired with JSON glyph metric definitions (produced by `@vexart/internal-atlas-gen`).
-- Bypasses runtime font scanning and rasterization for deterministic, zero-latency startup on resource-constrained devices.
-- Dispatches glyph quad instances via `vexart_text_dispatch` and measures string metrics via `vexart_text_measure`.
+Vexart provides a dynamic system typography architecture based on runtime MSDF generation:
 
 ### Dynamic MSDF Font Engine (`src/font/`)
 - **Font Discovery & Ingestion (`fontdb`)**: Scans operating system directories (`/System/Library/Fonts`, `/usr/share/fonts`, etc.) to build an in-memory database of TrueType/OpenType faces. Supports querying by family name, weight (`100`..`900`), and italic style via `vexart_font_query`.

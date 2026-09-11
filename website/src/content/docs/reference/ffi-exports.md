@@ -47,14 +47,6 @@ The native boundary is bound in `packages/engine/src/ffi/vexart-bridge.ts` and i
 | `vexart_composite_readback_rgba` | Full target readback |
 | `vexart_composite_readback_region_rgba` | Region readback |
 
-## Text (3)
-
-| Function | Purpose |
-|----------|---------|
-| `vexart_text_load_atlas` | Load MSDF atlas to GPU |
-| `vexart_text_dispatch` | Render MSDF glyphs |
-| `vexart_text_measure` | Measure text with atlas metrics |
-
 ## Kitty Transport (10)
 
 | Function | Purpose |

@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use ffi::panic::{
-    ERR_GPU_DEVICE_LOST, ERR_INVALID_ARG, ERR_INVALID_FONT, ERR_INVALID_HANDLE, ERR_OUT_OF_BUDGET,
+    ERR_GPU_DEVICE_LOST, ERR_INVALID_ARG, ERR_INVALID_HANDLE, ERR_OUT_OF_BUDGET,
     OK,
 };
 
@@ -989,132 +989,6 @@ pub unsafe extern "C" fn vexart_composite_readback_region_rgba(
             None => return ERR_GPU_DEVICE_LOST,
         };
         composite::readback_region_rgba(pctx, target, rect, dst, dst_cap, stats_out)
-    })
-}
-
-// ─── §5.5 Text — MSDF pipeline (Phase 2b, REQ-2B-202/204) ───────────────
-
-/// Load a pre-generated MSDF atlas PNG + metrics JSON into GPU memory.
-///
-/// `font_id`: 1-15 (0 and >15 return ERR_INVALID_FONT).
-/// Returns ERR_INVALID_FONT (-8) if font_id is already loaded, PNG is invalid,
-/// or metrics JSON is malformed (REQ-2B-202).
-///
-/// # Safety
-/// All pointer args must be valid for their respective lengths.
-#[no_mangle]
-pub unsafe extern "C" fn vexart_text_load_atlas(
-    _ctx: u64,
-    font_id: u32,
-    png_ptr: *const u8,
-    png_len: u32,
-    metrics_ptr: *const u8,
-    metrics_len: u32,
-) -> i32 {
-    ffi_guard!({
-        if png_ptr.is_null() || png_len == 0 || metrics_ptr.is_null() || metrics_len == 0 {
-            return ERR_INVALID_ARG;
-        }
-
-        let png_bytes = std::slice::from_raw_parts(png_ptr, png_len as usize);
-        const SIG: [u8; 8] = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-        if png_bytes.len() < 24 || png_bytes[..8] != SIG {
-            return ERR_INVALID_FONT;
-        }
-
-        let width = u32::from_be_bytes([png_bytes[16], png_bytes[17], png_bytes[18], png_bytes[19]]);
-        let height = u32::from_be_bytes([png_bytes[20], png_bytes[21], png_bytes[22], png_bytes[23]]);
-        if width == 0 || height == 0 {
-            return ERR_INVALID_FONT;
-        }
-
-        let bytes = match (width as u64)
-            .checked_mul(height as u64)
-            .and_then(|px| px.checked_mul(4))
-        {
-            Some(b) => b,
-            None => return ERR_OUT_OF_BUDGET,
-        };
-
-        {
-            let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            if let Err(err) = res_guard.try_reserve(bytes) {
-                return err;
-            }
-        }
-
-        let mut guard = get_or_init_paint();
-        let pctx = match guard.as_mut() {
-            Some(c) => c,
-            None => return ERR_GPU_DEVICE_LOST,
-        };
-        let rc = text::load_atlas(pctx, font_id, png_ptr, png_len, metrics_ptr, metrics_len);
-        if rc == OK {
-            let current_frame = FRAME_COUNT.load(Ordering::Relaxed);
-            let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            res_guard.register(
-                font_id as u64,
-                resource::ResourceKind::FontAtlas,
-                bytes,
-                current_frame,
-                resource::WgpuHandle::Id(font_id as u64),
-            );
-        }
-        rc
-    })
-}
-
-/// Dispatch MSDF glyph rendering from a packed MsdfGlyphInstance buffer (cmd_kind=18).
-///
-/// # Safety
-/// `glyphs_ptr` must be valid for `glyphs_len` bytes if non-null.
-#[no_mangle]
-pub unsafe extern "C" fn vexart_text_dispatch(
-    _ctx: u64,
-    target: u64,
-    glyphs_ptr: *const u8,
-    glyphs_len: u32,
-    stats_out: *mut FrameStats,
-) -> i32 {
-    ffi_guard!({
-        let mut guard = get_or_init_paint();
-        let pctx = match guard.as_mut() {
-            Some(c) => c,
-            None => return ERR_GPU_DEVICE_LOST,
-        };
-        text::dispatch(pctx, target, glyphs_ptr, glyphs_len, stats_out)
-    })
-}
-
-/// Measure a UTF-8 text string using loaded atlas metrics.
-/// Returns (0.0, 0.0) if atlas for font_id is not yet loaded (graceful degradation).
-///
-/// # Safety
-/// `out_w` and `out_h` must be valid mutable f32 pointers.
-#[no_mangle]
-pub unsafe extern "C" fn vexart_text_measure(
-    _ctx: u64,
-    text_ptr: *const u8,
-    text_len: u32,
-    font_id: u32,
-    font_size: f32,
-    out_w: *mut f32,
-    out_h: *mut f32,
-) -> i32 {
-    ffi_guard!({
-        if out_w.is_null() || out_h.is_null() {
-            return ERR_INVALID_ARG;
-        }
-        let guard = get_or_init_paint();
-        let pctx = match guard.as_ref() {
-            Some(c) => c,
-            None => {
-                *out_w = 0.0;
-                *out_h = 0.0;
-                return OK;
-            }
-        };
-        text::measure(pctx, text_ptr, text_len, font_id, font_size, out_w, out_h)
     })
 }
 

@@ -404,9 +404,6 @@ implemented under `native/libvexart/src`. Export names are prefixed with `vexart
 | `vexart_composite_merge` | Merge packed composite plan to final target |
 | `vexart_composite_readback_rgba` | Read back full target as RGBA |
 | `vexart_composite_readback_region_rgba` | Read back target region as RGBA |
-| `vexart_text_load_atlas` | Load MSDF atlas PNG + metrics into GPU memory |
-| `vexart_text_dispatch` | Dispatch packed MSDF glyph instances |
-| `vexart_text_measure` | Measure text with loaded atlas metrics |
 | `vexart_kitty_emit_frame` | Emit full Kitty frame |
 | `vexart_kitty_set_transport` | Select direct/file/SHM Kitty transport mode |
 | `vexart_kitty_shm_prepare` | Prepare POSIX SHM payload |

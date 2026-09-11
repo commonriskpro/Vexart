@@ -192,11 +192,8 @@ pub unsafe extern "C" fn vexart_composite_readback_rgba(ctx: u64, target: u64, o
 pub unsafe extern "C" fn vexart_composite_readback_region_rgba(ctx: u64, target: u64, region_ptr: *const u32, out_ptr: *mut u8, out_len: u32, stats_out: *mut u32) -> i32
 ```
 
-### 5.4 Text & MSDF Typography (7 Functions)
+### 5.4 Text & MSDF Typography (4 Functions)
 ```rust
-pub unsafe extern "C" fn vexart_text_load_atlas(ctx: u64, atlas_id: u32, png_ptr: *const u8, png_len: u32, json_ptr: *const u8, json_len: u32) -> i32
-pub unsafe extern "C" fn vexart_text_dispatch(ctx: u64, target: u64, buf_ptr: *const u8, buf_len: u32, stats_out: *mut u32) -> i32
-pub unsafe extern "C" fn vexart_text_measure(ctx: u64, text_ptr: *const u8, text_len: u32, font_id: u32, font_size: f32, out_w: *mut f32, out_h: *mut f32) -> i32
 pub extern "C" fn vexart_font_init() -> i32
 pub unsafe extern "C" fn vexart_font_query(families_ptr: *const u8, families_len: u32, weight: u16, italic: u32, out_handle: *mut u64) -> i32
 pub unsafe extern "C" fn vexart_font_render_text(ctx: u64, target: u64, text_ptr: *const u8, text_len: u32, params_ptr: *const u8, params_len: u32, stats_out: *mut u32) -> i32

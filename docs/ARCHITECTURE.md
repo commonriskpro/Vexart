@@ -1585,9 +1585,6 @@ vexart_composite_image_mask_rounded_rect
 vexart_composite_merge
 vexart_composite_readback_rgba
 vexart_composite_readback_region_rgba
-vexart_text_load_atlas
-vexart_text_dispatch
-vexart_text_measure
 vexart_kitty_emit_frame
 vexart_kitty_set_transport
 vexart_kitty_shm_prepare

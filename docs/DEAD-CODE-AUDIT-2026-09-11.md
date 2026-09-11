@@ -210,7 +210,7 @@ En Vexart, la frontera nativa FFI (`bun:ffi` ↔ `libvexart` C ABI) y el render 
 - [ ] **2. Purgar exports FFI nativos muertos en `native/libvexart/src/lib.rs`**: Eliminar `vexart_frame_present_native` y `vexart_paint_present`.
 - [ ] **3. Purgar `vexart_context_resize`**: Eliminar la función no-op en Rust y su binding en `packages/engine/src/ffi/vexart-bridge.ts`.
 - [ ] **4. Purgar `native/libvexart/src/text/render.rs`**: Eliminar el archivo y su declaración en `native/libvexart/src/text/mod.rs`.
-- [ ] **5. Eliminar pipeline legacy de atlas PNG (`vexart_text_*`)**: Purgar `vexart_text_load_atlas`, `vexart_text_dispatch`, `vexart_text_measure` de Rust (`lib.rs`, `text/mod.rs`, `text/atlas.rs`) y de `vexart-bridge.ts`.
+- [x] **5. Eliminar pipeline legacy de atlas PNG (`vexart_text_*`)**: Purgar `vexart_text_load_atlas`, `vexart_text_dispatch`, `vexart_text_measure` de Rust (`lib.rs`, `text/mod.rs`, `text/atlas.rs`) y de `vexart-bridge.ts`.
 - [ ] **6. Sanear firmas FFI eliminando el parámetro zombi `_scene: u64`**: Actualizar las funciones de image asset y display list en Rust y TypeScript para no pasar handles ficticios.
 - [ ] **7. Desmantelar el display list nativo de canvas de solo-escritura**: Quitar la serialización y llamadas FFI en `packages/engine/src/loop/walk-tree.ts`, y eliminar `CanvasDisplayListRegistry` en Rust.
 - [ ] **8. Eliminar export FFI `vexart_layer_mark_dirty`**: Purgar de `lib.rs` y de `vexart-bridge.ts`.

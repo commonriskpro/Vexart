@@ -1,416 +1,12 @@
 // native/libvexart/src/text/mod.rs
-// MSDF text pipeline — Phase 2b implementation.
-// Replaces Phase 2 DEC-011 stubs with real atlas loading and glyph dispatch.
-// Per design §4.3, REQ-2B-202/203/204, tasks 4.2-4.4.
+// MSDF text pipeline — glyph instance dispatch.
+// Per design §4.3, REQ-2B-202/203/204.
 
 pub mod atlas;
 pub mod glyph_info;
 
-use crate::ffi::panic::{ERR_INVALID_ARG, ERR_INVALID_FONT, ERR_INVALID_HANDLE, OK};
+use crate::ffi::panic::{ERR_INVALID_ARG, ERR_INVALID_HANDLE, OK};
 use crate::paint::PaintContext;
-use crate::types::FrameStats;
-use atlas::AtlasRegistry;
-
-const BUILTIN_ADVANCE: f32 = 8.65;
-const BUILTIN_HEIGHT: f32 = 17.0;
-const BUILTIN_FONT_SIZE: f32 = 14.0;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WhiteSpaceMode {
-    Normal,
-    PreWrap,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WordBreakMode {
-    Normal,
-    KeepAll,
-}
-
-struct FontMeasureMetrics<'a> {
-    atlas: Option<&'a atlas::AtlasRecord>,
-    space_advance: f32,
-    fallback_advance: f32,
-    line_height: f32,
-    scale: f32,
-}
-
-fn resolve_font_metrics<'a>(
-    atlases: Option<&'a AtlasRegistry>,
-    font_id: u32,
-    font_size: f32,
-    line_height: f32,
-) -> FontMeasureMetrics<'a> {
-    if font_id == 0 {
-        let scale = font_size.max(1.0) / BUILTIN_FONT_SIZE;
-        let height = (BUILTIN_HEIGHT * scale).ceil();
-        return FontMeasureMetrics {
-            atlas: None,
-            space_advance: BUILTIN_ADVANCE * scale,
-            fallback_advance: BUILTIN_ADVANCE * scale,
-            line_height: line_height.max(height),
-            scale,
-        };
-    }
-
-    if let Some(atlas) = atlases.and_then(|registry| registry.get(font_id)) {
-        let scale = if atlas.ref_size > 0.0 {
-            font_size / atlas.ref_size
-        } else {
-            1.0
-        };
-        let space_advance = atlas
-            .glyphs
-            .get(&' ')
-            .map(|glyph| glyph.x_advance as f32 * scale)
-            .unwrap_or(atlas.cell_width as f32 * scale * 0.5);
-        let glyph_height = atlas.cell_height as f32 * scale;
-        return FontMeasureMetrics {
-            atlas: Some(atlas),
-            space_advance,
-            fallback_advance: space_advance,
-            line_height: line_height.max(glyph_height),
-            scale,
-        };
-    }
-
-    let fallback_advance = if font_size > 0.0 {
-        font_size * 0.6
-    } else {
-        BUILTIN_ADVANCE
-    };
-    let fallback_height = if font_size > 0.0 {
-        font_size * 1.2
-    } else {
-        BUILTIN_HEIGHT
-    };
-    FontMeasureMetrics {
-        atlas: None,
-        space_advance: fallback_advance,
-        fallback_advance,
-        line_height: line_height.max(fallback_height),
-        scale: 1.0,
-    }
-}
-
-fn measure_char(metrics: &FontMeasureMetrics<'_>, ch: char) -> f32 {
-    if ch == '\t' {
-        return metrics.space_advance * 4.0;
-    }
-    if ch.is_whitespace() {
-        return metrics.space_advance;
-    }
-    if let Some(atlas) = metrics.atlas {
-        if let Some(glyph) = atlas.glyphs.get(&ch) {
-            return glyph.x_advance as f32 * metrics.scale;
-        }
-    }
-    metrics.fallback_advance
-}
-
-fn measure_string(metrics: &FontMeasureMetrics<'_>, text: &str) -> f32 {
-    text.chars().map(|ch| measure_char(metrics, ch)).sum()
-}
-
-fn measure_unwrapped_lines(
-    text: &str,
-    metrics: &FontMeasureMetrics<'_>,
-    white_space: WhiteSpaceMode,
-) -> (f32, f32) {
-    let mut max_width: f32 = 0.0;
-    let mut line_count = 0u32;
-
-    for raw_line in text.split('\n') {
-        let line = match white_space {
-            WhiteSpaceMode::Normal => raw_line.split_whitespace().collect::<Vec<_>>().join(" "),
-            WhiteSpaceMode::PreWrap => raw_line.to_string(),
-        };
-        max_width = max_width.max(measure_string(metrics, &line));
-        line_count += 1;
-    }
-
-    if line_count == 0 {
-        return (0.0, 0.0);
-    }
-
-    (max_width, line_count as f32 * metrics.line_height)
-}
-
-fn wrap_long_word(
-    word: &str,
-    max_width: f32,
-    metrics: &FontMeasureMetrics<'_>,
-    current_width: &mut f32,
-    max_line_width: &mut f32,
-    line_count: &mut u32,
-) {
-    for ch in word.chars() {
-        let width = measure_char(metrics, ch);
-        if *current_width > 0.0 && *current_width + width > max_width {
-            *max_line_width = max_line_width.max(*current_width);
-            *line_count += 1;
-            *current_width = 0.0;
-        }
-        *current_width += width;
-    }
-}
-
-fn measure_wrapped_normal(
-    text: &str,
-    max_width: f32,
-    metrics: &FontMeasureMetrics<'_>,
-    word_break: WordBreakMode,
-) -> (f32, f32) {
-    let mut max_line_width: f32 = 0.0;
-    let mut line_count = 0u32;
-
-    for raw_line in text.split('\n') {
-        let words: Vec<&str> = raw_line.split_whitespace().collect();
-        let mut current_width: f32 = 0.0;
-
-        if words.is_empty() {
-            line_count += 1;
-            continue;
-        }
-
-        for word in words {
-            let word_width = measure_string(metrics, word);
-            if current_width == 0.0 {
-                if word_width > max_width && matches!(word_break, WordBreakMode::Normal) {
-                    wrap_long_word(
-                        word,
-                        max_width,
-                        metrics,
-                        &mut current_width,
-                        &mut max_line_width,
-                        &mut line_count,
-                    );
-                } else {
-                    current_width = word_width;
-                }
-                continue;
-            }
-
-            let proposed = current_width + metrics.space_advance + word_width;
-            if proposed <= max_width {
-                current_width = proposed;
-                continue;
-            }
-
-            max_line_width = max_line_width.max(current_width);
-            line_count += 1;
-            current_width = 0.0;
-
-            if word_width > max_width && matches!(word_break, WordBreakMode::Normal) {
-                wrap_long_word(
-                    word,
-                    max_width,
-                    metrics,
-                    &mut current_width,
-                    &mut max_line_width,
-                    &mut line_count,
-                );
-            } else {
-                current_width = word_width;
-            }
-        }
-
-        max_line_width = max_line_width.max(current_width);
-        line_count += 1;
-    }
-
-    (max_line_width, line_count as f32 * metrics.line_height)
-}
-
-fn measure_wrapped_pre_wrap(
-    text: &str,
-    max_width: f32,
-    metrics: &FontMeasureMetrics<'_>,
-    word_break: WordBreakMode,
-) -> (f32, f32) {
-    let mut max_line_width: f32 = 0.0;
-    let mut current_width: f32 = 0.0;
-    let mut line_count = 1u32;
-    let mut last_break_width = 0.0f32;
-
-    for ch in text.chars() {
-        if ch == '\n' {
-            max_line_width = max_line_width.max(current_width);
-            line_count += 1;
-            current_width = 0.0;
-            last_break_width = 0.0;
-            continue;
-        }
-
-        let width = measure_char(metrics, ch);
-        if current_width == 0.0 || current_width + width <= max_width {
-            current_width += width;
-            if ch.is_whitespace() {
-                last_break_width = current_width;
-            }
-            continue;
-        }
-
-        if ch.is_whitespace() {
-            max_line_width = max_line_width.max(current_width);
-            line_count += 1;
-            current_width = 0.0;
-            last_break_width = 0.0;
-            continue;
-        }
-
-        if last_break_width > 0.0 {
-            max_line_width = max_line_width.max(last_break_width);
-            line_count += 1;
-            current_width = (current_width - last_break_width) + width;
-            last_break_width = 0.0;
-            continue;
-        }
-
-        max_line_width = max_line_width.max(current_width);
-        line_count += 1;
-        current_width = width;
-
-        if matches!(word_break, WordBreakMode::KeepAll) {
-            last_break_width = 0.0;
-        }
-    }
-
-    max_line_width = max_line_width.max(current_width);
-    (max_line_width, line_count as f32 * metrics.line_height)
-}
-
-pub(crate) fn measure_text_layout(
-    text: &str,
-    font_id: u32,
-    font_size: f32,
-    line_height: f32,
-    max_width: Option<f32>,
-    white_space: WhiteSpaceMode,
-    word_break: WordBreakMode,
-    atlases: Option<&AtlasRegistry>,
-) -> (f32, f32) {
-    if text.is_empty() {
-        return (0.0, 0.0);
-    }
-
-    let metrics = resolve_font_metrics(atlases, font_id, font_size, line_height);
-    let measured = if let Some(limit) = max_width.filter(|width| width.is_finite() && *width > 0.0)
-    {
-        match white_space {
-            WhiteSpaceMode::Normal => measure_wrapped_normal(text, limit, &metrics, word_break),
-            WhiteSpaceMode::PreWrap => measure_wrapped_pre_wrap(text, limit, &metrics, word_break),
-        }
-    } else {
-        measure_unwrapped_lines(text, &metrics, white_space)
-    };
-
-    if font_id == 0 {
-        return (measured.0.ceil(), measured.1.ceil());
-    }
-
-    measured
-}
-
-/// Load a pre-generated MSDF atlas PNG + metrics JSON into the GPU.
-///
-/// - `pctx`: the shared PaintContext owning GPU device/queue/atlases.
-/// - `font_id`: 1-15 (per spec). 0 and >15 return ERR_INVALID_FONT.
-/// - `png_ptr/png_len`: raw PNG bytes.
-/// - `metrics_ptr/metrics_len`: UTF-8 JSON metrics produced by internal-atlas-gen.
-///
-/// Returns ERR_INVALID_FONT (-8) if:
-/// - font_id is 0 or >15
-/// - font_id is already loaded (REQ-2B-202 duplicate scenario)
-/// - PNG or JSON is invalid (REQ-2B-202 corrupted-metrics scenario)
-///
-/// # Safety
-/// All pointer args must be valid for their respective lengths.
-pub unsafe fn load_atlas(
-    pctx: &mut PaintContext,
-    font_id: u32,
-    png_ptr: *const u8,
-    png_len: u32,
-    metrics_ptr: *const u8,
-    metrics_len: u32,
-) -> i32 {
-    if png_ptr.is_null() || png_len == 0 || metrics_ptr.is_null() || metrics_len == 0 {
-        return ERR_INVALID_ARG;
-    }
-
-    let png_bytes = std::slice::from_raw_parts(png_ptr, png_len as usize);
-    let metrics_bytes = std::slice::from_raw_parts(metrics_ptr, metrics_len as usize);
-
-    let metrics_json = match std::str::from_utf8(metrics_bytes) {
-        Ok(s) => s,
-        Err(_) => return ERR_INVALID_FONT,
-    };
-
-    let device = &pctx.wgpu.device;
-    let queue = &pctx.wgpu.queue;
-    let image_bgl = &pctx.wgpu.image_bind_group_layout;
-
-    match pctx
-        .atlases
-        .load_atlas(device, queue, image_bgl, font_id, png_bytes, metrics_json)
-    {
-        Ok(()) => OK,
-        Err(_) => ERR_INVALID_FONT,
-    }
-}
-
-/// Dispatch MSDF glyph rendering from a packed glyph instance buffer.
-///
-/// The buffer contains a sequence of `MsdfGlyphInstance` structs (cmd_kind=18 payloads).
-/// Glyphs are batched by atlas_id and dispatched through the glyph pipeline.
-///
-/// # Safety
-/// All pointer args must be valid for their respective lengths.
-pub unsafe fn dispatch(
-    pctx: &mut PaintContext,
-    target: u64,
-    glyphs_ptr: *const u8,
-    glyphs_len: u32,
-    stats_out: *mut FrameStats,
-) -> i32 {
-    if glyphs_ptr.is_null() || glyphs_len == 0 {
-        if !stats_out.is_null() {
-            *stats_out = FrameStats::default();
-        }
-        return OK;
-    }
-
-    let align = std::mem::align_of::<crate::paint::instances::MsdfGlyphInstance>();
-    if (glyphs_ptr as usize) % align != 0 {
-        return ERR_INVALID_ARG;
-    }
-
-    let stride = std::mem::size_of::<crate::paint::instances::MsdfGlyphInstance>();
-    if (glyphs_len as usize) % stride != 0 {
-        return ERR_INVALID_ARG;
-    }
-
-    let raw = std::slice::from_raw_parts(glyphs_ptr, glyphs_len as usize);
-    let glyphs: &[crate::paint::instances::MsdfGlyphInstance] = bytemuck::cast_slice(raw);
-
-    if glyphs.is_empty() {
-        if !stats_out.is_null() {
-            *stats_out = FrameStats::default();
-        }
-        return OK;
-    }
-
-    // Route through the paint pipeline for the glyph cmd_kind (18).
-    // Build a minimal graph buffer with cmd_kind=18 wrapping the glyph payload.
-    let code = dispatch_glyph_instances(pctx, target, glyphs);
-
-    if !stats_out.is_null() {
-        (*stats_out).primitives = glyphs.len() as u32;
-        (*stats_out).draw_calls = 1;
-    }
-
-    code
-}
 
 struct PreparedGlyphDraw {
     vertex_buf: wgpu::Buffer,
@@ -641,202 +237,20 @@ pub(crate) fn dispatch_glyph_instances(
     OK
 }
 
-/// Measure the width and height of a UTF-8 text string using loaded atlas metrics.
-///
-/// Uses the atlas for `font_id` if loaded; falls back to 0.0×0.0 if atlas is not yet loaded.
-///
-/// # Safety
-/// `out_w` and `out_h` must be valid mutable f32 pointers. `text_ptr` must be valid.
-pub unsafe fn measure(
-    pctx: &PaintContext,
-    text_ptr: *const u8,
-    text_len: u32,
-    font_id: u32,
-    font_size: f32,
-    out_w: *mut f32,
-    out_h: *mut f32,
-) -> i32 {
-    if out_w.is_null() || out_h.is_null() {
-        return ERR_INVALID_ARG;
-    }
-
-    if text_ptr.is_null() || text_len == 0 {
-        *out_w = 0.0;
-        *out_h = 0.0;
-        return OK;
-    }
-
-    let text_bytes = std::slice::from_raw_parts(text_ptr, text_len as usize);
-    let text = match std::str::from_utf8(text_bytes) {
-        Ok(s) => s,
-        Err(_) => {
-            *out_w = 0.0;
-            *out_h = 0.0;
-            return OK;
-        }
-    };
-
-    let (width, height) = measure_text_layout(
-        text,
-        font_id,
-        font_size,
-        font_size.max(BUILTIN_HEIGHT),
-        None,
-        WhiteSpaceMode::Normal,
-        WordBreakMode::Normal,
-        Some(&pctx.atlases),
-    );
-
-    *out_w = width;
-    *out_h = height;
-
-    OK
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    // Tests for glyph_info::parse_metrics are in glyph_info.rs.
-    // Tests for atlas::decode_png are in atlas.rs.
-
-    // ── measure stub tests (without GPU — test null-pointer guards) ──────────
-
-    // NOTE: Testing measure() without a real PaintContext is tricky since it needs
-    // pctx.atlases. We test through the raw null-pointer guard path here.
-    // Full integration tests with GPU are gated behind #[cfg(feature = "gpu-tests")].
-
     #[test]
-    fn test_measure_null_out_w_returns_err() {
-        // We need a PaintContext — skip this without gpu-tests.
-        // This is intentionally a compile-time check; the runtime test is in gpu-tests.
-        // We just verify ERR_INVALID_ARG constant is correct.
-        assert_eq!(ERR_INVALID_ARG, -9);
-    }
-
-    #[test]
-    fn test_err_invalid_font_value() {
-        assert_eq!(ERR_INVALID_FONT, -8);
-    }
-
-    #[test]
-    fn test_measure_text_layout_builtin_single_line() {
-        let (width, height) = measure_text_layout(
-            "Hello",
-            0,
-            14.0,
-            17.0,
-            None,
-            WhiteSpaceMode::Normal,
-            WordBreakMode::Normal,
-            None,
-        );
-        assert_eq!(width, (5.0 * BUILTIN_ADVANCE).ceil());
-        assert_eq!(height, 17.0);
-    }
-
-    #[test]
-    fn test_measure_text_layout_wraps_words() {
-        let (width, height) = measure_text_layout(
-            "hello world again",
-            0,
-            14.0,
-            17.0,
-            Some(50.0),
-            WhiteSpaceMode::Normal,
-            WordBreakMode::Normal,
-            None,
-        );
-        assert!(width <= 50.0);
-        assert!(height > 17.0);
-    }
-
-    #[test]
-    fn test_measure_text_layout_respects_newlines() {
-        let (width, height) = measure_text_layout(
-            "hello\nworld",
-            0,
-            14.0,
-            17.0,
-            None,
-            WhiteSpaceMode::Normal,
-            WordBreakMode::Normal,
-            None,
-        );
-        assert_eq!(width, (5.0 * BUILTIN_ADVANCE).ceil());
-        assert_eq!(height, 34.0);
-    }
-
-    // ── dispatch validation and batching tests ─────────────────────────────
-
-    #[test]
-    fn dispatch_should_return_ok_for_null_ptr_and_default_stats() {
+    fn dispatch_glyph_instances_should_return_ok_when_empty() {
         let mut pctx = PaintContext::new();
-        let mut stats = FrameStats {
-            draw_calls: 10,
-            primitives: 10,
-            gpu_time_us: 10,
-            cpu_time_us: 10,
-        };
-        let rc = unsafe { dispatch(&mut pctx, 0, std::ptr::null(), 0, &mut stats) };
+        let glyphs: Vec<crate::paint::instances::MsdfGlyphInstance> = Vec::new();
+        let rc = dispatch_glyph_instances(&mut pctx, 0, &glyphs);
         assert_eq!(rc, OK);
-        assert_eq!(stats.draw_calls, 0);
-        assert_eq!(stats.primitives, 0);
     }
 
     #[test]
-    fn dispatch_should_return_ok_for_zero_len() {
-        let mut pctx = PaintContext::new();
-        let glyph = crate::paint::instances::MsdfGlyphInstance::default();
-        let bytes = bytemuck::bytes_of(&glyph);
-        let mut stats = FrameStats {
-            draw_calls: 5,
-            primitives: 5,
-            gpu_time_us: 5,
-            cpu_time_us: 5,
-        };
-        let rc = unsafe { dispatch(&mut pctx, 0, bytes.as_ptr(), 0, &mut stats) };
-        assert_eq!(rc, OK);
-        assert_eq!(stats.draw_calls, 0);
-        assert_eq!(stats.primitives, 0);
-    }
-
-    #[test]
-    fn dispatch_should_return_err_invalid_arg_for_unaligned_ptr() {
-        let mut pctx = PaintContext::new();
-        let buf = vec![0u8; std::mem::size_of::<crate::paint::instances::MsdfGlyphInstance>() + 8];
-        let unaligned = unsafe { buf.as_ptr().add(1) };
-        let rc = unsafe {
-            dispatch(
-                &mut pctx,
-                0,
-                unaligned,
-                std::mem::size_of::<crate::paint::instances::MsdfGlyphInstance>() as u32,
-                std::ptr::null_mut(),
-            )
-        };
-        assert_eq!(rc, ERR_INVALID_ARG);
-    }
-
-    #[test]
-    fn dispatch_should_return_err_invalid_arg_for_invalid_stride() {
-        let mut pctx = PaintContext::new();
-        let glyph = crate::paint::instances::MsdfGlyphInstance::default();
-        let bytes = bytemuck::bytes_of(&glyph);
-        let rc = unsafe {
-            dispatch(
-                &mut pctx,
-                0,
-                bytes.as_ptr(),
-                (bytes.len() - 1) as u32,
-                std::ptr::null_mut(),
-            )
-        };
-        assert_eq!(rc, ERR_INVALID_ARG);
-    }
-
-    #[test]
-    fn dispatch_should_batch_glyphs_by_atlas_and_render_to_default_target() {
+    fn dispatch_glyph_instances_should_batch_glyphs_by_atlas_and_render_to_default_target() {
         let mut pctx = PaintContext::new();
         let mut glyphs = vec![crate::paint::instances::MsdfGlyphInstance::default(); 3];
         glyphs[0].atlas_id = 1;
@@ -851,24 +265,12 @@ mod tests {
         glyphs[2].w = 18.0;
         glyphs[2].h = 20.0;
 
-        let bytes: &[u8] = bytemuck::cast_slice(&glyphs);
-        let mut stats = FrameStats::default();
-        let rc = unsafe {
-            dispatch(
-                &mut pctx,
-                0,
-                bytes.as_ptr(),
-                bytes.len() as u32,
-                &mut stats,
-            )
-        };
+        let rc = dispatch_glyph_instances(&mut pctx, 0, &glyphs);
         assert_eq!(rc, OK);
-        assert_eq!(stats.primitives, 3);
-        assert_eq!(stats.draw_calls, 1);
     }
 
     #[test]
-    fn dispatch_should_render_to_target_active_layer_and_honor_scissor() {
+    fn dispatch_glyph_instances_should_render_to_target_active_layer_and_honor_scissor() {
         let mut pctx = PaintContext::new();
         let mut target = 0u64;
         assert_eq!(
@@ -890,26 +292,15 @@ mod tests {
             atlas_id: 1,
             ..Default::default()
         };
-        let bytes: &[u8] = bytemuck::bytes_of(&glyph);
-        let mut stats = FrameStats::default();
-        let rc = unsafe {
-            dispatch(
-                &mut pctx,
-                target,
-                bytes.as_ptr(),
-                bytes.len() as u32,
-                &mut stats,
-            )
-        };
+        let rc = dispatch_glyph_instances(&mut pctx, target, &[glyph]);
         assert_eq!(rc, OK);
-        assert_eq!(stats.primitives, 1);
 
         assert_eq!(crate::composite::target_end_layer(&mut pctx, target), OK);
         assert_eq!(crate::composite::target_destroy(&mut pctx, target), OK);
     }
 
     #[test]
-    fn dispatch_should_handle_out_of_bounds_scissor_gracefully() {
+    fn dispatch_glyph_instances_should_handle_out_of_bounds_scissor_gracefully() {
         let mut pctx = PaintContext::new();
         let mut target = 0u64;
         assert_eq!(
@@ -932,28 +323,10 @@ mod tests {
             atlas_id: 1,
             ..Default::default()
         };
-        let bytes: &[u8] = bytemuck::bytes_of(&glyph);
-        let mut stats = FrameStats::default();
-        let rc = unsafe {
-            dispatch(
-                &mut pctx,
-                target,
-                bytes.as_ptr(),
-                bytes.len() as u32,
-                &mut stats,
-            )
-        };
+        let rc = dispatch_glyph_instances(&mut pctx, target, &[glyph]);
         assert_eq!(rc, OK);
 
         assert_eq!(crate::composite::target_end_layer(&mut pctx, target), OK);
         assert_eq!(crate::composite::target_destroy(&mut pctx, target), OK);
-    }
-
-    #[test]
-    fn dispatch_glyph_instances_should_return_ok_when_empty() {
-        let mut pctx = PaintContext::new();
-        let glyphs: Vec<crate::paint::instances::MsdfGlyphInstance> = Vec::new();
-        let rc = dispatch_glyph_instances(&mut pctx, 0, &glyphs);
-        assert_eq!(rc, OK);
     }
 }

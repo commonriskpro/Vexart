@@ -3489,18 +3489,6 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
          readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
          readonly returns: FFIType.int32_t;
      };
-     readonly vexart_text_load_atlas: {
-         readonly args: [FFIType.uint64_t, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t];
-         readonly returns: FFIType.int32_t;
-     };
-     readonly vexart_text_dispatch: {
-         readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-         readonly returns: FFIType.int32_t;
-     };
-     readonly vexart_text_measure: {
-         readonly args: [FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.uint32_t, FFIType.float, FFIType.ptr, FFIType.ptr];
-         readonly returns: FFIType.int32_t;
-     };
      readonly vexart_kitty_emit_frame: {
          readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint32_t];
          readonly returns: FFIType.int32_t;
