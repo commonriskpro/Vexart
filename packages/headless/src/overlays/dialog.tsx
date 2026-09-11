@@ -7,7 +7,7 @@
  */
 
 import { createContext, onCleanup, useContext, type JSX } from "solid-js"
-import { focusedId, onInput, pushFocusScope, setFocusedId } from "@vexart/engine"
+import { focusedId, onInput, pushFocusScope, setFocus } from "@vexart/engine"
 import { Portal } from "../containers/portal"
 
 // ── Types ──
@@ -79,7 +79,7 @@ function DialogRoot(props: DialogProps) {
     const index = openDialogs.indexOf(close)
     if (index >= 0) openDialogs.splice(index, 1)
     popScope()
-    if (savedFocusId) setFocusedId(savedFocusId)
+    if (savedFocusId) setFocus(savedFocusId)
   })
 
   return (
