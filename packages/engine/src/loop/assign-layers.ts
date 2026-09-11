@@ -260,10 +260,14 @@ export function assignLayersSpatial(
 
   // ── Build layer slots with bounds ──
   const layerBounds: LayerBounds[] = []
+  const rectCommandsByNodeId = new Map<number, { index: number; cmd: RenderCommand }>()
   const rectCommandsByColor = new Map<number, ColorCommand[]>()
   for (let i = 0; i < commands.length; i++) {
     const cmd = commands[i]
     if (cmd.type !== CMD.RECTANGLE) continue
+    if (cmd.nodeId !== undefined) {
+      rectCommandsByNodeId.set(cmd.nodeId, { index: i, cmd })
+    }
     const color = packedColor(cmd)
     let entries = rectCommandsByColor.get(color)
     if (!entries) {
@@ -325,14 +329,28 @@ export function assignLayersSpatial(
         boundary: b,
       })
     } else if (b.hasBg) {
-      const targetColor = (node.props.backgroundColor as number) || 0
-
-      let found = false
-      const candidates = rectCommandsByColor.get(targetColor >>> 0) ?? []
-      for (const candidate of candidates) {
-        const cmd = candidate.cmd
-        const key = boundsKey(cmd)
-        if (!claimedBounds.has(key)) {
+      const directMatch = rectCommandsByNodeId.get(b.nodeId)
+      if (directMatch) {
+        const cmd = directMatch.cmd
+        claimedBounds.add(boundsKey(cmd))
+        layerBounds.push({
+          slot,
+          x: Math.round(cmd.x),
+          y: Math.round(cmd.y),
+          right: Math.round(cmd.x + cmd.width),
+          bottom: Math.round(cmd.y + cmd.height),
+          scissor: null,
+          boundary: b,
+        })
+      } else {
+        // Fallback for synthetic commands in unit tests lacking nodeId
+        const targetColor = (node.props.backgroundColor as number) || 0
+        let found = false
+        const candidates = rectCommandsByColor.get(targetColor >>> 0) ?? []
+        for (const candidate of candidates) {
+          const cmd = candidate.cmd
+          const key = boundsKey(cmd)
+          if (!claimedBounds.has(key)) {
             claimedBounds.add(key)
             layerBounds.push({
               slot,
@@ -345,10 +363,11 @@ export function assignLayersSpatial(
             })
             found = true
             break
+          }
         }
-      }
-      if (!found) {
-        layerBounds.push({ slot, x: 0, y: 0, right: 0, bottom: 0, scissor: null, boundary: b })
+        if (!found) {
+          layerBounds.push({ slot, x: 0, y: 0, right: 0, bottom: 0, scissor: null, boundary: b })
+        }
       }
     } else {
       const lx = Math.round(node.layout.x)

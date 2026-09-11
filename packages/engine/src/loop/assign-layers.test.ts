@@ -236,4 +236,73 @@ describe("assignLayersSpatial", () => {
     const plan = assignLayersSpatial([], boundaries, { root, collectText: () => "" })
     expect(plan.boundaries).toBe(boundaries)
   })
+
+  test("multiple layer boundaries with same bg color map to exact cmd.nodeId", () => {
+    const root = createNode("root")
+    const child1 = createNode("box")
+    const child2 = createNode("box")
+
+    const sharedBg = 0x336699ff
+    child1.props.backgroundColor = sharedBg
+    child2.props.backgroundColor = sharedBg
+
+    // Without usable layout so shouldPreferLayoutBounds is false and hasBg is evaluated
+    child1.layout = { x: 0, y: 0, width: 0, height: 0 }
+    child2.layout = { x: 0, y: 0, width: 0, height: 0 }
+
+    root.children.push(child1, child2)
+
+    const boundaries: LayerBoundary[] = [
+      {
+        path: "r.0",
+        nodeId: child1.id,
+        z: 0,
+        isScroll: false,
+        hasBg: true,
+        insideScroll: false,
+        hasSubtreeTransform: false,
+      },
+      {
+        path: "r.1",
+        nodeId: child2.id,
+        z: 1,
+        isScroll: false,
+        hasBg: true,
+        insideScroll: false,
+        hasSubtreeTransform: false,
+      },
+    ]
+
+    // Commands array has child2's rectangle FIRST (index 0), child1's rectangle SECOND (index 1).
+    // Under color-only matching, child1 (processed first) would greedily claim index 0 (child2's bounds).
+    // With direct cmd.nodeId mapping, each boundary maps to its own matching cmd.nodeId.
+    const rectForChild2: RenderCommand = {
+      ...makeRect(200, 100, 80, 40),
+      color: sharedBg,
+      nodeId: child2.id,
+    }
+    const rectForChild1: RenderCommand = {
+      ...makeRect(10, 20, 100, 50),
+      color: sharedBg,
+      nodeId: child1.id,
+    }
+
+    const commands = [rectForChild2, rectForChild1]
+    const plan = assignLayersSpatial(commands, boundaries, { root, collectText: () => "" })
+
+    expect(plan.contentSlots).toHaveLength(2)
+
+    const slot1 = plan.contentSlots.find((s) => s.key === `layer:${child1.id}`)
+    const slot2 = plan.contentSlots.find((s) => s.key === `layer:${child2.id}`)
+
+    expect(slot1).toBeDefined()
+    expect(slot2).toBeDefined()
+
+    // child1 should map to index 1 (rectForChild1), child2 should map to index 0 (rectForChild2)
+    expect(slot1!.cmdIndices).toEqual([1])
+    expect(slot2!.cmdIndices).toEqual([0])
+
+    expect(commands[slot1!.cmdIndices[0]].nodeId).toBe(child1.id)
+    expect(commands[slot2!.cmdIndices[0]].nodeId).toBe(child2.id)
+  })
 })
