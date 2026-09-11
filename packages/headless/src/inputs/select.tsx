@@ -97,6 +97,7 @@ type SelectContextValue = {
   unregisterOption: (value: string) => void
   selectValue: (value: string) => void
   focused: () => boolean
+  focus: () => void
   disabled: () => boolean
 }
 
@@ -143,7 +144,7 @@ function SelectRoot(props: SelectProps) {
     setOpen(false)
   }
 
-  const { focused } = useFocus({
+  const { focused, focus } = useFocus({
     id: props.focusId,
     onKeyDown(e) {
       if (disabled()) return
@@ -231,7 +232,12 @@ function SelectRoot(props: SelectProps) {
     return (
       <box direction="column">
         {/* Click trigger to toggle dropdown */}
-        <box onPress={() => { if (!disabled()) setOpen(!open()) }}>
+        <box onPress={() => {
+          if (!disabled()) {
+            focus()
+            setOpen(!open())
+          }
+        }}>
           {props.renderTrigger(triggerCtx())}
         </box>
         {content()}
@@ -250,6 +256,7 @@ function SelectRoot(props: SelectProps) {
     unregisterOption,
     selectValue,
     focused,
+    focus,
     disabled,
   }
 
@@ -268,7 +275,12 @@ function SelectRoot(props: SelectProps) {
 export function SelectTrigger(props: SelectTriggerProps) {
   const ctx = useSelectContext()
   return (
-    <box onPress={() => { if (!ctx.disabled()) ctx.setOpen(!ctx.open()) }}>
+    <box onPress={() => {
+      if (!ctx.disabled()) {
+        ctx.focus()
+        ctx.setOpen(!ctx.open())
+      }
+    }}>
       {props.children}
     </box>
   )
