@@ -162,16 +162,25 @@ export function Popover(props: PopoverProps) {
     <box direction="column" width="fit" height="fit">
       {props.renderTrigger(triggerCtx())}
       {props.open ? (
-        <box
-          floating="parent"
-          width="fit"
-          height="fit"
-          floatAttach={popoverAttach(props.placement ?? "bottom")}
-          floatOffset={placementOffset(props.placement ?? "bottom", props.offset ?? 4)}
-          zIndex={9998}
-        >
-          {props.renderContent()}
-        </box>
+        <>
+          <box
+            floating="root"
+            width="100%"
+            height="100%"
+            zIndex={9997}
+            onPress={() => props.onOpenChange(false)}
+          />
+          <box
+            floating="parent"
+            width="fit"
+            height="fit"
+            floatAttach={popoverAttach(props.placement ?? "bottom")}
+            floatOffset={placementOffset(props.placement ?? "bottom", props.offset ?? 4)}
+            zIndex={9998}
+          >
+            {props.renderContent()}
+          </box>
+        </>
       ) : null}
     </box>
   )

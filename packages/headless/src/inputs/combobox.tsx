@@ -224,7 +224,20 @@ export function Combobox(props: ComboboxProps) {
       <box onPress={() => { if (!disabled()) { setOpen(!open()); focus() } }}>
         {props.renderInput(inputCtx())}
       </box>
-      {content()}
+      {open() ? (
+        <>
+          <box
+            floating="root"
+            width="100%"
+            height="100%"
+            zIndex={9997}
+            onPress={() => setOpen(false)}
+          />
+          <box zIndex={9998}>
+            {content()}
+          </box>
+        </>
+      ) : null}
     </box>
   )
 }
