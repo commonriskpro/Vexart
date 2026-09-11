@@ -70,9 +70,10 @@ pub fn ensure_emergency_cleanup_registered() {
     });
 }
 
-/// Unlink and release all active SHM handles remaining in `KITTY_SHM_HANDLES`.
+/// Unlink and release all active SHM handles remaining in `KITTY_SHM_HANDLES`
+/// and all active slots in `SHM_RING_BUFFER`.
 /// Safe to call at any time (e.g. at exit, panic hook, or manual teardown).
-/// Recovers cleanly even if the registry mutex was poisoned by a panicked thread.
+/// Recovers cleanly even if a registry mutex was poisoned by a panicked thread.
 pub fn cleanup_all_shm_handles() {
     let mut handles = match KITTY_SHM_HANDLES.lock() {
         Ok(guard) => guard,
@@ -82,6 +83,316 @@ pub fn cleanup_all_shm_handles() {
         let _ = shm_unlink(handle.name.as_c_str());
         // handle.fd is automatically closed when dropped
     }
+    drop(handles);
+
+    let mut ring = match SHM_RING_BUFFER.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    ring.cleanup_all();
+}
+
+// ─── SHM Ring Buffer (Option A: Generaciones Fijas) ─────────────────────────
+
+/// Number of slots in the fixed-pool ring buffer (N = 3).
+pub const SHM_RING_SLOTS: usize = 3;
+
+static NEXT_RING_GEN: AtomicU64 = AtomicU64::new(0);
+
+/// A slot in the POSIX SHM ring buffer.
+/// Tracks slot identity, generation, segment name, file descriptor, capacity,
+/// in-use state, and monotonic handle.
+#[derive(Debug)]
+pub struct ShmRingSlot {
+    pub slot_index: usize,
+    pub generation: u64,
+    pub name: Option<CString>,
+    pub fd: Option<OwnedFd>,
+    pub capacity: usize,
+    pub in_use: bool,
+    pub handle: u64,
+}
+
+impl ShmRingSlot {
+    pub fn new(slot_index: usize) -> Self {
+        Self::with_generation(slot_index, 0)
+    }
+
+    pub fn with_generation(slot_index: usize, start_gen: u64) -> Self {
+        Self {
+            slot_index,
+            generation: start_gen,
+            name: None,
+            fd: None,
+            capacity: 0,
+            in_use: false,
+            handle: 0,
+        }
+    }
+}
+
+/// Fixed-pool Ring Buffer (N = 3 slots) for Kitty SHM segments.
+///
+/// Prevents file leaks in `/dev/shm`, removes per-frame unbounded file creation,
+/// ensures pre-emptive unlinking of old generations when slots cycle, and
+/// guarantees symmetric cleanup on shutdown / atexit / panic.
+pub struct ShmRingBuffer {
+    slots: [ShmRingSlot; SHM_RING_SLOTS],
+    current: usize,
+}
+
+impl ShmRingBuffer {
+    pub const SLOTS: usize = SHM_RING_SLOTS;
+
+    pub fn new() -> Self {
+        let base_gen = NEXT_RING_GEN.fetch_add(1000, Ordering::Relaxed);
+        Self {
+            slots: std::array::from_fn(|i| ShmRingSlot::with_generation(i, base_gen)),
+            current: SHM_RING_SLOTS.saturating_sub(1),
+        }
+    }
+
+    pub fn slots(&self) -> &[ShmRingSlot; SHM_RING_SLOTS] {
+        &self.slots
+    }
+
+    pub fn current(&self) -> usize {
+        self.current
+    }
+
+    /// Acquire the next ring slot:
+    /// 1. Advances ring slot `current = (current + 1) % N`.
+    /// 2. Checks the slot: if it has a previous generation name, unlinks it (`shm_unlink`)
+    ///    so stale files from non-unlinking terminals or crashed/aborted frames are guaranteed reclaimed.
+    /// 3. Increments generation, formats the name `/vx-{pid:x}-s{slot:x}-g{gen:x}`
+    ///    (keeping strictly under 31 bytes for POSIX and Kitty name limits).
+    /// 4. Opens/creates the SHM segment with `shm_open`.
+    /// 5. Truncates if needed to hold the payload.
+    /// 6. Writes the data (mmap/memcpy/msync/munmap).
+    /// 7. Records the handle so emergency exit / panic cleanup (`cleanup_all_shm_handles` /
+    ///    `cleanup_shm_on_shutdown`) can unlink all slots.
+    pub fn acquire(&mut self, data: &[u8]) -> Result<(usize, CString), i32> {
+        if data.is_empty() {
+            set_last_error("SHM payload must be non-empty");
+            return Err(ERR_INVALID_ARG);
+        }
+        if data.len() > u32::MAX as usize {
+            set_last_error("SHM payload exceeds u32 bound");
+            return Err(ERR_INVALID_ARG);
+        }
+
+        // 1. Advance ring slot: current = (current + 1) % N
+        self.current = (self.current + 1) % SHM_RING_SLOTS;
+        let slot_idx = self.current;
+        let slot = &mut self.slots[slot_idx];
+
+        // 2. Unlink previous generation name in this slot if any.
+        if let Some(ref prev_name) = slot.name {
+            let _ = shm_unlink(prev_name.as_c_str());
+        }
+        slot.name = None;
+        slot.fd = None; // Dropping OwnedFd closes descriptor
+        slot.capacity = 0;
+        slot.in_use = false;
+
+        // 3. Increment generation, format name /vx-{pid:x}-s{slot:x}-g{gen:x}
+        slot.generation = slot.generation.wrapping_add(1);
+        if slot.generation == 0 {
+            slot.generation = 1;
+        }
+        let pid = std::process::id();
+        // Mask generation to u32 hex (8 hex chars max) to guarantee <= 25 bytes (< 31 bound).
+        let name_str = format!(
+            "/vx-{pid:x}-s{:x}-g{:x}",
+            slot.slot_index,
+            (slot.generation & 0xffff_ffff) as u32
+        );
+        if name_str.len() > 31 {
+            set_last_error("SHM ring buffer name exceeds 31 bytes");
+            return Err(ERR_KITTY_TRANSPORT);
+        }
+        let c_name = match CString::new(name_str) {
+            Ok(s) => s,
+            Err(_) => {
+                set_last_error("SHM ring buffer name contains NUL");
+                return Err(ERR_KITTY_TRANSPORT);
+            }
+        };
+
+        // Pre-unlink just in case a stale segment with the exact same name existed
+        let _ = shm_unlink(c_name.as_c_str());
+
+        // 4. Open/create the SHM segment with shm_open
+        let mode_bits = Mode::from_bits_truncate(0o600);
+        let fd: OwnedFd = match shm_open(
+            c_name.as_c_str(),
+            OFlag::O_CREAT | OFlag::O_EXCL | OFlag::O_RDWR,
+            mode_bits,
+        ) {
+            Ok(fd) => fd,
+            Err(nix::errno::Errno::EEXIST) => {
+                let _ = shm_unlink(c_name.as_c_str());
+                match shm_open(
+                    c_name.as_c_str(),
+                    OFlag::O_CREAT | OFlag::O_RDWR,
+                    mode_bits,
+                ) {
+                    Ok(fd) => fd,
+                    Err(e) => {
+                        set_last_error(format!("shm_open retry failed: {e}"));
+                        return Err(ERR_KITTY_TRANSPORT);
+                    }
+                }
+            }
+            Err(e) => {
+                set_last_error(format!("shm_open failed: {e}"));
+                return Err(ERR_KITTY_TRANSPORT);
+            }
+        };
+
+        // 5. Truncate if needed to hold the payload
+        let data_len = data.len();
+        if let Err(e) = ftruncate(&fd, data_len as nix::libc::off_t) {
+            set_last_error(format!("ftruncate failed: {e}"));
+            let _ = shm_unlink(c_name.as_c_str());
+            return Err(ERR_KITTY_TRANSPORT);
+        }
+        slot.capacity = data_len;
+
+        // 6. Write the data (mmap/memcpy/msync/munmap)
+        let size = match NonZeroUsize::new(data_len) {
+            Some(s) => s,
+            None => {
+                set_last_error("data_len is zero after validation");
+                let _ = shm_unlink(c_name.as_c_str());
+                return Err(ERR_KITTY_TRANSPORT);
+            }
+        };
+
+        let mapped: NonNull<c_void> = match unsafe {
+            mmap(
+                None,
+                size,
+                ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
+                MapFlags::MAP_SHARED,
+                &fd,
+                0,
+            )
+        } {
+            Ok(ptr) => ptr,
+            Err(e) => {
+                set_last_error(format!("mmap failed: {e}"));
+                let _ = shm_unlink(c_name.as_c_str());
+                return Err(ERR_KITTY_TRANSPORT);
+            }
+        };
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(data.as_ptr(), mapped.as_ptr() as *mut u8, data_len);
+        }
+
+        if let Err(e) = unsafe { msync(mapped, data_len, MsFlags::MS_SYNC) } {
+            set_last_error(format!("msync failed: {e}"));
+            let _ = unsafe { munmap(mapped, data_len) };
+            let _ = shm_unlink(c_name.as_c_str());
+            return Err(ERR_KITTY_TRANSPORT);
+        }
+
+        if let Err(e) = unsafe { munmap(mapped, data_len) } {
+            set_last_error(format!("munmap failed: {e}"));
+            let _ = shm_unlink(c_name.as_c_str());
+            return Err(ERR_KITTY_TRANSPORT);
+        }
+
+        // 7. Record handle and slot state
+        let handle_id = NEXT_KITTY_HANDLE.fetch_add(1, Ordering::Relaxed);
+        slot.handle = handle_id;
+        slot.name = Some(c_name.clone());
+        slot.fd = Some(fd);
+        slot.in_use = true;
+
+        Ok((slot_idx, c_name))
+    }
+
+    /// Mark slot in-flight after successful transport write.
+    pub fn mark_in_flight(&mut self, slot_index: usize) {
+        if let Some(slot) = self.slots.get_mut(slot_index) {
+            slot.in_use = true;
+        }
+    }
+
+    /// Immediately unlink and reset slot on write failure (fail-closed).
+    pub fn fail_closed(&mut self, slot_index: usize) {
+        if let Some(slot) = self.slots.get_mut(slot_index) {
+            if let Some(ref name) = slot.name.take() {
+                let _ = shm_unlink(name.as_c_str());
+            }
+            slot.fd = None;
+            slot.capacity = 0;
+            slot.in_use = false;
+        }
+    }
+
+    /// Unlink and release all active ring buffer slots.
+    pub fn cleanup_all(&mut self) {
+        for slot in &mut self.slots {
+            if let Some(ref name) = slot.name.take() {
+                let _ = shm_unlink(name.as_c_str());
+            }
+            slot.fd = None;
+            slot.capacity = 0;
+            slot.in_use = false;
+        }
+    }
+}
+
+impl Default for ShmRingBuffer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+static SHM_RING_BUFFER: LazyLock<Mutex<ShmRingBuffer>> = LazyLock::new(|| {
+    ensure_emergency_cleanup_registered();
+    Mutex::new(ShmRingBuffer::new())
+});
+
+/// Acquire the next ring slot from the global ring buffer and prepare payload data.
+pub fn acquire_ring_slot(data: &[u8]) -> Result<(usize, CString), i32> {
+    shm_prepare_ring(data)
+}
+
+/// Prepare payload data in the next available slot of the global SHM ring buffer.
+pub fn shm_prepare_ring(data: &[u8]) -> Result<(usize, CString), i32> {
+    ensure_emergency_cleanup_registered();
+    let mut ring = match SHM_RING_BUFFER.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    ring.acquire(data)
+}
+
+/// Mark global ring buffer slot as in-flight after successful transport write.
+pub fn shm_ring_mark_in_flight(slot_index: usize) {
+    let mut ring = match SHM_RING_BUFFER.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    ring.mark_in_flight(slot_index);
+}
+
+/// Immediately unlink global ring buffer slot on transport write failure (fail-closed).
+pub fn shm_ring_fail_closed(slot_index: usize) {
+    let mut ring = match SHM_RING_BUFFER.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    ring.fail_closed(slot_index);
+}
+
+/// Clean up all SHM allocations (both ring buffer slots and individual handles).
+pub fn cleanup_shm_on_shutdown() {
+    cleanup_all_shm_handles();
 }
 
 /// Generate a unique monotonic POSIX SHM name for a frame or layer segment.
@@ -364,6 +675,8 @@ mod tests {
     use nix::sys::stat::fstat;
     use std::os::fd::AsRawFd;
 
+    static TEST_MUTEX: Mutex<()> = Mutex::new(());
+
     /// Unique name per test invocation using process ID + monotonic counter.
     fn unique_shm_name() -> String {
         use std::sync::atomic::{AtomicU32, Ordering as O};
@@ -503,6 +816,7 @@ mod tests {
 
     #[test]
     fn native_prepare_uses_unique_private_payload_and_consumption_probe() {
+        let _lock = TEST_MUTEX.lock().unwrap();
         let first = shm_prepare_native(&[1, 2, 3, 4]).unwrap();
         let second = shm_prepare_native(&[5, 6, 7, 8]).unwrap();
         assert_ne!(first.1, second.1);
@@ -557,6 +871,7 @@ mod tests {
 
     #[test]
     fn test_emergency_cleanup_unlinks_all_handles() {
+        let _lock = TEST_MUTEX.lock().unwrap();
         let name_str = unique_shm_name();
         let data = vec![0x5au8; 64];
         let mut handle: u64 = 0;
@@ -583,5 +898,154 @@ mod tests {
 
         let probe_after = shm_open(c_name.as_c_str(), OFlag::O_RDONLY, Mode::empty());
         assert!(matches!(probe_after, Err(nix::errno::Errno::ENOENT)));
+    }
+
+    #[test]
+    fn test_ring_buffer_advances_and_recycles_slots() {
+        let mut ring = ShmRingBuffer::new();
+        let payload_a = [1u8, 2, 3, 4];
+        let payload_b = [5u8, 6, 7, 8];
+        let payload_c = [9u8, 10, 11, 12];
+        let payload_d = [13u8, 14, 15, 16];
+
+        // Slot 0
+        let (s0, name0) = ring.acquire(&payload_a).expect("acquire slot 0");
+        assert_eq!(s0, 0);
+        let g0 = ring.slots()[0].generation;
+        assert!(name0.to_str().unwrap().contains(&format!("-s0-g{g0:x}")));
+        assert!(shm_open(name0.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_ok());
+
+        // Slot 1
+        let (s1, name1) = ring.acquire(&payload_b).expect("acquire slot 1");
+        assert_eq!(s1, 1);
+        let g1 = ring.slots()[1].generation;
+        assert!(name1.to_str().unwrap().contains(&format!("-s1-g{g1:x}")));
+        assert!(shm_open(name1.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_ok());
+
+        // Slot 2
+        let (s2, name2) = ring.acquire(&payload_c).expect("acquire slot 2");
+        assert_eq!(s2, 2);
+        let g2 = ring.slots()[2].generation;
+        assert!(name2.to_str().unwrap().contains(&format!("-s2-g{g2:x}")));
+        assert!(shm_open(name2.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_ok());
+
+        // All 3 exist simultaneously
+        assert!(shm_open(name0.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_ok());
+        assert!(shm_open(name1.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_ok());
+        assert!(shm_open(name2.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_ok());
+
+        // Slot 3 (wraps to slot 0) - recycling slot 0 MUST unlink name0!
+        let (s3, name3) = ring.acquire(&payload_d).expect("acquire slot 0 gen 2");
+        assert_eq!(s3, 0);
+        let g3 = ring.slots()[0].generation;
+        assert_eq!(g3, g0 + 1);
+        assert!(name3.to_str().unwrap().contains(&format!("-s0-g{g3:x}")));
+        assert_ne!(name0, name3);
+
+        // Name 0 must now be unlinked (ENOENT)!
+        let probe_old = shm_open(name0.as_c_str(), OFlag::O_RDONLY, Mode::empty());
+        assert!(matches!(probe_old, Err(nix::errno::Errno::ENOENT)));
+
+        // Name 3 (new generation of slot 0) must exist!
+        assert!(shm_open(name3.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_ok());
+
+        // Slots 1 and 2 still exist
+        assert!(shm_open(name1.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_ok());
+        assert!(shm_open(name2.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_ok());
+
+        // Cleanup all
+        ring.cleanup_all();
+        assert!(matches!(shm_open(name1.as_c_str(), OFlag::O_RDONLY, Mode::empty()), Err(nix::errno::Errno::ENOENT)));
+        assert!(matches!(shm_open(name2.as_c_str(), OFlag::O_RDONLY, Mode::empty()), Err(nix::errno::Errno::ENOENT)));
+        assert!(matches!(shm_open(name3.as_c_str(), OFlag::O_RDONLY, Mode::empty()), Err(nix::errno::Errno::ENOENT)));
+    }
+
+    #[test]
+    fn test_ring_buffer_bounds_total_files_to_n() {
+        let mut ring = ShmRingBuffer::new();
+        let mut all_names = Vec::new();
+
+        // Run through 15 acquisitions (5 cycles of N=3)
+        for i in 0..15 {
+            let data = vec![i as u8; 64];
+            let (slot, name) = ring.acquire(&data).expect("acquire");
+            assert_eq!(slot, i % SHM_RING_SLOTS);
+            all_names.push(name);
+
+            // Count how many files currently exist in SHM across all generated names
+            let mut existing_count = 0;
+            for n in &all_names {
+                if let Ok(fd) = shm_open(n.as_c_str(), OFlag::O_RDONLY, Mode::empty()) {
+                    existing_count += 1;
+                    drop(fd);
+                }
+            }
+            assert!(
+                existing_count <= SHM_RING_SLOTS,
+                "SHM files ({existing_count}) exceeded ring slots ({SHM_RING_SLOTS}) at step {i}"
+            );
+        }
+
+        // Cleanup all
+        ring.cleanup_all();
+        let remaining = all_names
+            .iter()
+            .filter(|n| shm_open(n.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_ok())
+            .count();
+        assert_eq!(
+            remaining, 0,
+            "All ring buffer segments should be unlinked after cleanup"
+        );
+    }
+
+    #[test]
+    fn test_ring_buffer_fail_closed_unlinks_immediately() {
+        let mut ring = ShmRingBuffer::new();
+        let data = [42u8; 16];
+        let (slot, name) = ring.acquire(&data).expect("acquire");
+        assert!(shm_open(name.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_ok());
+        assert!(ring.slots()[slot].in_use);
+
+        ring.fail_closed(slot);
+        let probe = shm_open(name.as_c_str(), OFlag::O_RDONLY, Mode::empty());
+        assert!(matches!(probe, Err(nix::errno::Errno::ENOENT)));
+        assert!(!ring.slots()[slot].in_use);
+    }
+
+    #[test]
+    fn test_global_ring_buffer_prepare_and_cleanup_all() {
+        let _lock = TEST_MUTEX.lock().unwrap();
+        let data = [99u8; 32];
+        let (slot0, name0) = shm_prepare_ring(&data).expect("global acquire 0");
+        shm_ring_mark_in_flight(slot0);
+        assert!(shm_open(name0.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_ok());
+
+        let (slot1, name1) = shm_prepare_ring(&data).expect("global acquire 1");
+        shm_ring_mark_in_flight(slot1);
+        assert!(shm_open(name1.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_ok());
+
+        cleanup_all_shm_handles();
+
+        assert!(matches!(
+            shm_open(name0.as_c_str(), OFlag::O_RDONLY, Mode::empty()),
+            Err(nix::errno::Errno::ENOENT)
+        ));
+        assert!(matches!(
+            shm_open(name1.as_c_str(), OFlag::O_RDONLY, Mode::empty()),
+            Err(nix::errno::Errno::ENOENT)
+        ));
+    }
+
+    #[test]
+    fn test_ring_buffer_name_under_31_bytes_for_large_values() {
+        let mut slot = ShmRingSlot::new(2);
+        slot.generation = 0xffff_ffff_u64;
+        let pid = std::process::id();
+        let name_str = format!(
+            "/vx-{pid:x}-s{:x}-g{:x}",
+            slot.slot_index,
+            (slot.generation & 0xffff_ffff) as u32
+        );
+        assert!(name_str.len() <= 31);
     }
 }

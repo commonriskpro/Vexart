@@ -287,9 +287,9 @@ fn emit_direct(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
     emit_direct_inner(&rgba[..written as usize], width, height, image_id)
 }
 
-/// SHM mode: readback → shm_prepare → Kitty SHM escape → stdout.
+/// SHM mode: readback → shm_prepare_ring → Kitty SHM escape → stdout.
 fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
-    use super::shm::{shm_prepare, shm_release};
+    use super::shm::{shm_prepare_ring, shm_ring_fail_closed, shm_ring_mark_in_flight};
     use crate::kitty::encoder::compress_rgba;
     use base64::engine::general_purpose::STANDARD as B64;
     use base64::Engine as _;
@@ -323,26 +323,15 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
     let compressed = compress_rgba(&rgba[..written as usize])
         .unwrap_or_else(|_| rgba[..written as usize].to_vec());
 
-    // 4. Create SHM segment with compressed data.
-    let shm_name = super::shm::generate_shm_name();
-    let mut handle: u64 = 0;
-    let rc = unsafe {
-        shm_prepare(
-            shm_name.as_ptr(),
-            shm_name.len() as u32,
-            compressed.as_ptr(),
-            compressed.len() as u32,
-            0o600,
-            &mut handle,
-        )
+    // 4. Create SHM segment with compressed data via ring buffer.
+    let (slot_index, shm_name) = match shm_prepare_ring(&compressed) {
+        Ok(res) => res,
+        Err(_) => return ERR_KITTY_TRANSPORT,
     };
-    if rc != OK {
-        // shm_prepare already set last error.
-        return ERR_KITTY_TRANSPORT;
-    }
 
     // 5. Build Kitty SHM escape and write to stdout.
     let name_b64 = B64.encode(shm_name.as_bytes());
+    let data_len = compressed.len();
     let (target_frame, escape) = if let Some(existing) = animation_frame {
         let (target_frame, compose_frame, is_replacement) =
             next_animation_frame(Some(existing));
@@ -354,14 +343,14 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
         (
             Some(target_frame),
             format!(
-                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,t=s,o=z,q=2;{name_b64}\x1b\\\x1b_Ga=a,i={image_id},c={target_frame},q=2;\x1b\\"
+                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,t=s,o=z,S={data_len},q=2;{name_b64}\x1b\\\x1b_Ga=a,i={image_id},c={target_frame},q=2;\x1b\\"
             ),
         )
     } else {
         (
             None,
             format!(
-                "\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s,o=z,q=2;{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,q=2;\x1b\\"
+                "\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s,o=z,S={data_len},q=2;{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,q=2;\x1b\\"
             ),
         )
     };
@@ -370,17 +359,17 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
     // 6. Schedule SHM cleanup.
     // If stdout write failed (e.g. broken pipe, terminal disconnected), fail-closed:
     // unlink the segment immediately so it does not leak in /dev/shm.
-    // On success, close fd but do not unlink — terminal unlinks after reading per Kitty spec.
+    // On success, mark slot in-flight without dropping tracking.
     match write_result {
         Ok(()) => {
-            shm_release(handle, 0);
+            shm_ring_mark_in_flight(slot_index);
             record_image_frame(image_id, target_frame);
             record_image_geometry(image_id, width, height);
             record_payload(image_id, digest);
             OK
         }
         Err(e) => {
-            shm_release(handle, 1);
+            shm_ring_fail_closed(slot_index);
             set_last_error(format!("emit_shm: stdout write failed: {e}"));
             ERR_KITTY_TRANSPORT
         }
@@ -947,7 +936,7 @@ fn emit_shm_rgba_at_with_stats(
     row: i32,
     z: i32,
 ) -> (i32, ShmTransferStats) {
-    use super::shm::{shm_prepare, shm_release};
+    use super::shm::{shm_prepare_ring, shm_ring_fail_closed, shm_ring_mark_in_flight};
     use crate::kitty::encoder::compress_rgba;
     use base64::engine::general_purpose::STANDARD as B64;
     use base64::Engine as _;
@@ -980,24 +969,14 @@ fn emit_shm_rgba_at_with_stats(
         payload = rgba;
         compression_param = "";
     }
-    let shm_name = super::shm::generate_shm_name();
-    let mut handle: u64 = 0;
     let t_shm = Instant::now();
-    let rc = unsafe {
-        shm_prepare(
-            shm_name.as_ptr(),
-            shm_name.len() as u32,
-            payload.as_ptr(),
-            payload.len() as u32,
-            0o600,
-            &mut handle,
-        )
+    let (slot_index, shm_name) = match shm_prepare_ring(payload) {
+        Ok(res) => res,
+        Err(_) => return (ERR_KITTY_TRANSPORT, stats),
     };
     stats.shm_prepare_us = t_shm.elapsed().as_micros() as u64;
-    if rc != OK {
-        return (ERR_KITTY_TRANSPORT, stats);
-    }
     let name_b64 = B64.encode(shm_name.as_bytes());
+    let data_len = payload.len();
     let (target_frame, escape) = if let Some(existing) = animation_frame {
         let (target_frame, compose_frame, is_replacement) =
             next_animation_frame(Some(existing));
@@ -1009,7 +988,7 @@ fn emit_shm_rgba_at_with_stats(
         (
             Some(target_frame),
             format!(
-                "\x1b7\x1b[{};{}H\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,t=s{compression_param},q=2;{name_b64}\x1b\\\x1b_Ga=a,i={image_id},c={target_frame},q=2;\x1b\\\x1b8",
+                "\x1b7\x1b[{};{}H\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,t=s{compression_param},S={data_len},q=2;{name_b64}\x1b\\\x1b_Ga=a,i={image_id},c={target_frame},q=2;\x1b\\\x1b8",
                 row.max(0) + 1,
                 col.max(0) + 1,
             ),
@@ -1018,7 +997,7 @@ fn emit_shm_rgba_at_with_stats(
         (
             None,
             format!(
-                "\x1b7\x1b[{};{}H\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s{compression_param},q=2;{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,q=2;\x1b\\\x1b8",
+                "\x1b7\x1b[{};{}H\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s{compression_param},S={data_len},q=2;{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,q=2;\x1b\\\x1b8",
                 row.max(0) + 1,
                 col.max(0) + 1,
             ),
@@ -1029,14 +1008,14 @@ fn emit_shm_rgba_at_with_stats(
     stats.write_us = t_write.elapsed().as_micros() as u64;
     match write_result {
         Ok(()) => {
-            shm_release(handle, 0);
+            shm_ring_mark_in_flight(slot_index);
             record_image_frame(image_id, target_frame);
             record_image_geometry(image_id, width, height);
             record_payload(image_id, digest);
             (OK, stats)
         }
         Err(e) => {
-            shm_release(handle, 1);
+            shm_ring_fail_closed(slot_index);
             set_last_error(format!("emit_shm_rgba: stdout write failed: {e}"));
             (ERR_KITTY_TRANSPORT, stats)
         }
@@ -1125,6 +1104,7 @@ fn emit_region_rgba_with_stats(
     rh: u32,
     mode: u32,
 ) -> (i32, ShmTransferStats) {
+    use super::shm::{shm_prepare_ring, shm_ring_fail_closed, shm_ring_mark_in_flight};
     use crate::kitty::encoder::compress_rgba;
     use base64::engine::general_purpose::STANDARD as B64;
     use base64::Engine as _;
@@ -1158,34 +1138,24 @@ fn emit_region_rgba_with_stats(
     );
     let control = format!("\x1b_Ga=a,i={image_id},c={frame_id},q=2;\x1b\\");
 
-    let (escape, shm_handle) = if mode == 2 {
+    let (escape, shm_slot) = if mode == 2 {
         // SHM mode for region patch
-        let shm_name = super::shm::generate_shm_name();
-        let mut handle: u64 = 0;
         let t_shm = Instant::now();
-        let rc = unsafe {
-            super::shm::shm_prepare(
-                shm_name.as_ptr(),
-                shm_name.len() as u32,
-                payload.as_ptr(),
-                payload.len() as u32,
-                0o600,
-                &mut handle,
-            )
+        let (slot_index, shm_name) = match shm_prepare_ring(payload) {
+            Ok(res) => res,
+            Err(_) => return (ERR_KITTY_TRANSPORT, stats),
         };
         stats.shm_prepare_us = t_shm.elapsed().as_micros() as u64;
-        if rc != OK {
-            return (ERR_KITTY_TRANSPORT, stats);
-        }
         let name_b64 = B64.encode(shm_name.as_bytes());
         let prefix = if existing_frame.is_none() {
             format!("\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\")
         } else {
             String::new()
         };
+        let data_len = payload.len();
         (
-            format!("{prefix}\x1b_G{meta},t=s;{name_b64}\x1b\\{control}"),
-            Some(handle),
+            format!("{prefix}\x1b_G{meta},t=s,S={data_len};{name_b64}\x1b\\{control}"),
+            Some(slot_index),
         )
     } else {
         // Direct mode
@@ -1201,16 +1171,16 @@ fn emit_region_rgba_with_stats(
     let t_write = Instant::now();
     match write_transport(escape.as_bytes()) {
         Ok(()) => {
-            if let Some(handle) = shm_handle {
-                super::shm::shm_release(handle, 0);
+            if let Some(slot_index) = shm_slot {
+                shm_ring_mark_in_flight(slot_index);
             }
             record_image_frame(image_id, Some(frame_id));
             stats.write_us = t_write.elapsed().as_micros() as u64;
             (OK, stats)
         }
         Err(e) => {
-            if let Some(handle) = shm_handle {
-                super::shm::shm_release(handle, 1);
+            if let Some(slot_index) = shm_slot {
+                shm_ring_fail_closed(slot_index);
             }
             stats.write_us = t_write.elapsed().as_micros() as u64;
             set_last_error(format!("emit_region_rgba: stdout write failed: {e}"));
@@ -1381,6 +1351,7 @@ mod tests {
 
         force_write_failure(false);
         forget_image_frame(image_id);
+        cleanup_shm_on_shutdown();
     }
 
     #[test]
@@ -1421,6 +1392,7 @@ mod tests {
         assert_eq!(hash_scan_count(), 1);
 
         forget_image_frame(image_id);
+        cleanup_shm_on_shutdown();
     }
 
     #[test]
