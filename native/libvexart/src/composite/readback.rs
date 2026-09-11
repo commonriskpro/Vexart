@@ -195,9 +195,6 @@ where
     slice.map_async(wgpu::MapMode::Read, move |result| {
         let _ = tx.send(result);
     });
-    // Keep the guard alive through submission polling and callback execution so
-    // every failure path cancels/releases the mapping as well.
-    let _unmap = UnmapGuard::new(readback_buffer);
     if device
         .poll(wgpu::PollType::Wait {
             submission_index: None,
@@ -212,23 +209,41 @@ where
         Ok(Err(_)) | Err(_) => return None,
     }
 
-    // The guard predates the mapped view so the view drops before unmap. This
-    // keeps unmap safe if the callback returns an error or unwinds.
+    // Arm the guard strictly after confirming the buffer entered the Mapped state.
+    // Declared before `mapped` so Rust's LIFO drop order releases the BufferView
+    // before `UnmapGuard` calls buffer.unmap().
+    let _unmap = UnmapGuard::new(readback_buffer);
     let mapped = slice.get_mapped_range();
     Some(callback(&mapped))
 }
 
-struct UnmapGuard<'a> {
-    buffer: &'a wgpu::Buffer,
+pub(crate) trait BufferUnmap {
+    fn unmap(&self);
 }
 
-impl<'a> UnmapGuard<'a> {
-    fn new(buffer: &'a wgpu::Buffer) -> Self {
+impl BufferUnmap for wgpu::Buffer {
+    fn unmap(&self) {
+        wgpu::Buffer::unmap(self);
+    }
+}
+
+/// RAII guard that calls `buffer.unmap()` when dropped.
+///
+/// Invariant: Must only be armed *after* the buffer has successfully entered the
+/// `Mapped` state (via confirmed `poll` and `recv`). Declaring `_unmap` before
+/// acquiring a `BufferView` ensures that Rust's LIFO drop order releases the
+/// view before calling `unmap()`.
+pub(crate) struct UnmapGuard<'a, B: BufferUnmap = wgpu::Buffer> {
+    buffer: &'a B,
+}
+
+impl<'a, B: BufferUnmap> UnmapGuard<'a, B> {
+    pub(crate) fn new(buffer: &'a B) -> Self {
         Self { buffer }
     }
 }
 
-impl Drop for UnmapGuard<'_> {
+impl<B: BufferUnmap> Drop for UnmapGuard<'_, B> {
     fn drop(&mut self) {
         self.buffer.unmap();
     }
@@ -332,8 +347,153 @@ pub fn readback_region(
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "gpu-tests")]
     use super::*;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    #[test]
+    fn unmap_guard_should_call_unmap_on_drop_and_panic() {
+        struct MockBuffer {
+            unmap_calls: AtomicUsize,
+        }
+        impl BufferUnmap for MockBuffer {
+            fn unmap(&self) {
+                self.unmap_calls.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+
+        let mock = MockBuffer {
+            unmap_calls: AtomicUsize::new(0),
+        };
+
+        // Normal scope exit: unmap must be called once.
+        {
+            let _guard = UnmapGuard::new(&mock);
+            assert_eq!(mock.unmap_calls.load(Ordering::SeqCst), 0);
+        }
+        assert_eq!(mock.unmap_calls.load(Ordering::SeqCst), 1);
+
+        // Panicking scope exit: unmap must still be called during stack unwinding.
+        let panic_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = UnmapGuard::new(&mock);
+            panic!("intentional test panic");
+        }));
+        assert!(panic_result.is_err());
+        assert_eq!(mock.unmap_calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn unmap_guard_should_not_arm_when_mapping_fails() {
+        struct MockBuffer {
+            unmapped: AtomicBool,
+        }
+        impl BufferUnmap for MockBuffer {
+            fn unmap(&self) {
+                self.unmapped.store(true, Ordering::SeqCst);
+            }
+        }
+
+        // Simulates the exact map_readback control flow where UnmapGuard is armed
+        // strictly after confirming poll() and rx.recv() succeed.
+        fn simulate_map_readback_guard<B: BufferUnmap>(
+            buffer: &B,
+            poll_success: bool,
+            recv_result: Result<Result<(), ()>, ()>,
+        ) -> Option<()> {
+            if !poll_success {
+                return None;
+            }
+            match recv_result {
+                Ok(Ok(())) => {}
+                Ok(Err(_)) | Err(_) => return None,
+            }
+
+            let _unmap = UnmapGuard::new(buffer);
+            Some(())
+        }
+
+        // Case 1: device.poll fails -> returns None, unmap is NOT called.
+        let buf_poll_fail = MockBuffer {
+            unmapped: AtomicBool::new(false),
+        };
+        let res = simulate_map_readback_guard(&buf_poll_fail, false, Ok(Ok(())));
+        assert!(res.is_none());
+        assert!(!buf_poll_fail.unmapped.load(Ordering::SeqCst));
+
+        // Case 2: rx.recv() reports mapping failure (Ok(Err)) -> returns None, unmap is NOT called.
+        let buf_map_fail = MockBuffer {
+            unmapped: AtomicBool::new(false),
+        };
+        let res = simulate_map_readback_guard(&buf_map_fail, true, Ok(Err(())));
+        assert!(res.is_none());
+        assert!(!buf_map_fail.unmapped.load(Ordering::SeqCst));
+
+        // Case 3: rx.recv() channel drops/errors (Err) -> returns None, unmap is NOT called.
+        let buf_recv_fail = MockBuffer {
+            unmapped: AtomicBool::new(false),
+        };
+        let res = simulate_map_readback_guard(&buf_recv_fail, true, Err(()));
+        assert!(res.is_none());
+        assert!(!buf_recv_fail.unmapped.load(Ordering::SeqCst));
+
+        // Case 4: poll succeeds and rx.recv() returns Ok(Ok(())) -> returns Some, unmap is called on guard drop.
+        let buf_success = MockBuffer {
+            unmapped: AtomicBool::new(false),
+        };
+        let res = simulate_map_readback_guard(&buf_success, true, Ok(Ok(())));
+        assert!(res.is_some());
+        assert!(buf_success.unmapped.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn unmap_guard_should_drop_after_view_in_lifo_order() {
+        static DROP_SEQ: AtomicUsize = AtomicUsize::new(0);
+
+        struct MockBuffer<'a> {
+            unmap_seq: &'a AtomicUsize,
+        }
+        impl BufferUnmap for MockBuffer<'_> {
+            fn unmap(&self) {
+                self.unmap_seq
+                    .store(DROP_SEQ.fetch_add(1, Ordering::SeqCst), Ordering::SeqCst);
+            }
+        }
+
+        struct MockBufferView<'a> {
+            drop_seq: &'a AtomicUsize,
+        }
+        impl Drop for MockBufferView<'_> {
+            fn drop(&mut self) {
+                self.drop_seq
+                    .store(DROP_SEQ.fetch_add(1, Ordering::SeqCst), Ordering::SeqCst);
+            }
+        }
+
+        let view_seq = AtomicUsize::new(usize::MAX);
+        let unmap_seq = AtomicUsize::new(usize::MAX);
+
+        let buf = MockBuffer {
+            unmap_seq: &unmap_seq,
+        };
+
+        {
+            // Matching map_readback's declaration order:
+            // let _unmap = UnmapGuard::new(readback_buffer);
+            // let mapped = slice.get_mapped_range();
+            let _unmap = UnmapGuard::new(&buf);
+            let _mapped = MockBufferView {
+                drop_seq: &view_seq,
+            };
+            // Scope exit drops _mapped first, then _unmap.
+        }
+
+        let view_order = view_seq.load(Ordering::SeqCst);
+        let unmap_order = unmap_seq.load(Ordering::SeqCst);
+
+        assert!(
+            view_order < unmap_order,
+            "BufferView must drop before UnmapGuard unmaps (view: {view_order}, unmap: {unmap_order})"
+        );
+    }
 
     #[test]
     fn test_readback_null_dst_returns_zero() {
