@@ -56,17 +56,45 @@ export function rectArea(rect: DamageRect | null | undefined) {
 }
 
 /** @public */
-export function sumOverlapArea(rects: DamageRect[]) {
+export function sumOverlapArea(rects: DamageRect[]): number {
+  if (rects.length <= 1) return 0
+
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  let totalArea = 0
+
+  for (let i = 0; i < rects.length; i++) {
+    const r = rects[i]
+    if (!r || r.width <= 0 || r.height <= 0) continue
+    totalArea += r.width * r.height
+    if (r.x < minX) minX = r.x
+    if (r.y < minY) minY = r.y
+    const right = r.x + r.width
+    const bottom = r.y + r.height
+    if (right > maxX) maxX = right
+    if (bottom > maxY) maxY = bottom
+  }
+
+  if (minX === Infinity) return 0
+  const boundingArea = (maxX - minX) * (maxY - minY)
+
   let overlap = 0
   for (let i = 0; i < rects.length; i++) {
+    const a = rects[i]
+    if (!a || a.width <= 0 || a.height <= 0) continue
     for (let j = i + 1; j < rects.length; j++) {
-      const left = Math.max(rects[i].x, rects[j].x)
-      const top = Math.max(rects[i].y, rects[j].y)
-      const right = Math.min(rects[i].x + rects[i].width, rects[j].x + rects[j].width)
-      const bottom = Math.min(rects[i].y + rects[i].height, rects[j].y + rects[j].height)
+      const b = rects[j]
+      if (!b || b.width <= 0 || b.height <= 0) continue
+      const left = Math.max(a.x, b.x)
+      const top = Math.max(a.y, b.y)
+      const right = Math.min(a.x + a.width, b.x + b.width)
+      const bottom = Math.min(a.y + a.height, b.y + b.height)
       if (right <= left || bottom <= top) continue
       overlap += (right - left) * (bottom - top)
     }
   }
-  return overlap
+
+  return Math.min(overlap, boundingArea, totalArea)
 }
