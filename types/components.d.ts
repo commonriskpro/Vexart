@@ -442,41 +442,6 @@ export type DiffProps = {
 
 export function Diff(props: DiffProps): JSX.Element
 
-// ── RichText / Span ──
-
-export type SpanProps = {
-  color?: string | number
-  fontSize?: number
-  fontId?: number
-  fontWeight?: number
-  fontStyle?: "normal" | "italic"
-  children?: JSX.Element
-}
-
-export function Span(props: SpanProps): JSX.Element
-
-export type RichTextProps = {
-  maxWidth?: number
-  lineHeight?: number
-  color?: string | number
-  fontSize?: number
-  children?: JSX.Element
-}
-
-export function RichText(props: RichTextProps): JSX.Element
-
-// ── WrapRow ──
-
-export type WrapRowProps = {
-  width: number
-  itemWidth: number
-  gap?: number
-  rowGap?: number
-  children?: JSX.Element
-}
-
-export function WrapRow(props: WrapRowProps): JSX.Element
-
 // ── OverlayRoot ──
 
 export type OverlayRootProps = {
