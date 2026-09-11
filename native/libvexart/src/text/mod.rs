@@ -7,7 +7,7 @@ pub mod atlas;
 pub mod glyph_info;
 pub mod render;
 
-use crate::ffi::panic::{ERR_INVALID_ARG, ERR_INVALID_FONT, OK};
+use crate::ffi::panic::{ERR_INVALID_ARG, ERR_INVALID_FONT, ERR_INVALID_HANDLE, OK};
 use crate::paint::PaintContext;
 use crate::types::FrameStats;
 use atlas::AtlasRegistry;
@@ -413,35 +413,67 @@ pub unsafe fn dispatch(
     code
 }
 
+struct PreparedGlyphDraw {
+    vertex_buf: wgpu::Buffer,
+    bind_group_ptr: *const wgpu::BindGroup,
+    instance_count: u32,
+}
+
 /// Dispatch glyph instances through the glyph pipeline.
-/// Groups by atlas_id and issues one draw call per atlas.
+/// Groups by atlas_id and issues one draw call per atlas in a single render pass.
 pub(crate) fn dispatch_glyph_instances(
     pctx: &mut PaintContext,
     target: u64,
     glyphs: &[crate::paint::instances::MsdfGlyphInstance],
 ) -> i32 {
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
     use wgpu::util::DeviceExt;
 
+    if glyphs.is_empty() {
+        return OK;
+    }
+
+    // 1. Resolve target, render view, active layer, and scissor:
+    let (render_view_ptr, use_active_encoder, target_scissor, target_dims) = if target != 0 {
+        if let Some(rec) = pctx.targets.get(target) {
+            let has_layer = rec.active_layer.is_some();
+            let scissor = rec
+                .active_layer
+                .as_ref()
+                .and_then(|l| l.scissor)
+                .or(rec.scissor);
+            (
+                &rec.view as *const wgpu::TextureView,
+                has_layer,
+                scissor,
+                (rec.width, rec.height),
+            )
+        } else {
+            (
+                &pctx.target_view as *const wgpu::TextureView,
+                false,
+                None,
+                (pctx.target_texture.width(), pctx.target_texture.height()),
+            )
+        }
+    } else {
+        (
+            &pctx.target_view as *const wgpu::TextureView,
+            false,
+            None,
+            (pctx.target_texture.width(), pctx.target_texture.height()),
+        )
+    };
+
     // Group glyphs by atlas_id.
-    let mut by_atlas: HashMap<u32, Vec<crate::paint::instances::MsdfGlyphInstance>> =
-        HashMap::new();
+    let mut by_atlas: BTreeMap<u32, Vec<crate::paint::instances::MsdfGlyphInstance>> =
+        BTreeMap::new();
     for g in glyphs {
         by_atlas.entry(g.atlas_id).or_default().push(*g);
     }
 
-    // Resolve render target view.
-    let (render_view_ptr, use_active_encoder): (*const wgpu::TextureView, bool) = if target != 0 {
-        if let Some(rec) = pctx.targets.get(target) {
-            let has_layer = rec.active_layer.is_some();
-            (&rec.view as *const wgpu::TextureView, has_layer)
-        } else {
-            (&pctx.target_view as *const wgpu::TextureView, false)
-        }
-    } else {
-        (&pctx.target_view as *const wgpu::TextureView, false)
-    };
-
+    // 2. For each atlas in by_atlas, build vertex buffers and prepare instance draws.
+    let mut prepared_draws = Vec::with_capacity(by_atlas.len());
     for (atlas_id, atlas_glyphs) in &by_atlas {
         // Look up atlas bind group (fallback to default if atlas not loaded yet).
         let bind_group_ptr: *const wgpu::BindGroup =
@@ -452,8 +484,6 @@ pub(crate) fn dispatch_glyph_instances(
             };
 
         let payload: &[u8] = bytemuck::cast_slice(atlas_glyphs.as_slice());
-        let instance_count = atlas_glyphs.len() as u32;
-
         // SAFETY: device is disjoint from targets/atlases.
         let vertex_buf = pctx
             .wgpu
@@ -464,36 +494,47 @@ pub(crate) fn dispatch_glyph_instances(
                 usage: wgpu::BufferUsages::VERTEX,
             });
 
-        if use_active_encoder {
-            // SAFETY: rec fields are stable; we access disjoint fields.
-            let rec_ptr: *mut crate::composite::target::TargetRecord =
-                pctx.targets.get_mut(target).expect("target disappeared") as *mut _;
+        prepared_draws.push(PreparedGlyphDraw {
+            vertex_buf,
+            bind_group_ptr,
+            instance_count: atlas_glyphs.len() as u32,
+        });
+    }
 
-            let view_ref: &wgpu::TextureView = unsafe { &(*rec_ptr).view };
-            let layer: &mut crate::composite::target::ActiveLayerRecord = unsafe {
-                (*rec_ptr)
-                    .active_layer
-                    .as_mut()
-                    .expect("active layer disappeared")
+    // 3. For use_active_encoder:
+    if use_active_encoder {
+        // SAFETY: rec fields are stable; we access disjoint fields.
+        let rec_ptr: *mut crate::composite::target::TargetRecord =
+            match pctx.targets.get_mut(target) {
+                Some(r) => r as *mut _,
+                None => return ERR_INVALID_HANDLE,
             };
 
-            let load_op = if layer.first_pass {
-                layer.first_pass = false;
-                if layer.first_load_mode == 0 {
-                    let c = layer.clear_rgba;
-                    wgpu::LoadOp::Clear(wgpu::Color {
-                        r: ((c >> 24) & 0xff) as f64 / 255.0,
-                        g: ((c >> 16) & 0xff) as f64 / 255.0,
-                        b: ((c >> 8) & 0xff) as f64 / 255.0,
-                        a: (c & 0xff) as f64 / 255.0,
-                    })
-                } else {
-                    wgpu::LoadOp::Load
-                }
+        let view_ref: &wgpu::TextureView = unsafe { &(*rec_ptr).view };
+        let layer: &mut crate::composite::target::ActiveLayerRecord =
+            match unsafe { (*rec_ptr).active_layer.as_mut() } {
+                Some(l) => l,
+                None => return ERR_INVALID_ARG,
+            };
+
+        let load_op = if layer.first_pass {
+            layer.first_pass = false;
+            if layer.first_load_mode == 0 {
+                let c = layer.clear_rgba;
+                wgpu::LoadOp::Clear(wgpu::Color {
+                    r: ((c >> 24) & 0xff) as f64 / 255.0,
+                    g: ((c >> 16) & 0xff) as f64 / 255.0,
+                    b: ((c >> 8) & 0xff) as f64 / 255.0,
+                    a: (c & 0xff) as f64 / 255.0,
+                })
             } else {
                 wgpu::LoadOp::Load
-            };
+            }
+        } else {
+            wgpu::LoadOp::Load
+        };
 
+        {
             let mut pass = layer
                 .encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -514,44 +555,87 @@ pub(crate) fn dispatch_glyph_instances(
                 });
 
             pass.set_pipeline(&pctx.wgpu.pipelines.glyph);
-            pass.set_vertex_buffer(0, vertex_buf.slice(..));
-            // SAFETY: bind_group_ptr is valid for this frame.
-            pass.set_bind_group(0, unsafe { &*bind_group_ptr }, &[]);
-            pass.draw(0..6, 0..instance_count);
-        } else {
-            let render_view: &wgpu::TextureView = unsafe { &*render_view_ptr };
-            let mut encoder =
-                pctx.wgpu
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("vexart-glyph-encoder"),
-                    });
 
-            {
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("vexart-glyph-render-pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: render_view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                        depth_slice: None,
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                    multiview_mask: None,
+            let should_draw = match target_scissor {
+                Some(s) => {
+                    match crate::composite::target::clamp_scissor(s, target_dims.0, target_dims.1)
+                    {
+                        Some([sx, sy, sw, sh]) => {
+                            pass.set_scissor_rect(sx, sy, sw, sh);
+                            true
+                        }
+                        None => false,
+                    }
+                }
+                None => true,
+            };
+
+            if should_draw {
+                for draw in &prepared_draws {
+                    pass.set_vertex_buffer(0, draw.vertex_buf.slice(..));
+                    // SAFETY: bind_group_ptr points to an atlas or fallback bind group valid for this frame.
+                    pass.set_bind_group(0, unsafe { &*draw.bind_group_ptr }, &[]);
+                    pass.draw(0..6, 0..draw.instance_count);
+                }
+            }
+        }
+    } else {
+        // 4. For !use_active_encoder:
+        let render_view: &wgpu::TextureView = unsafe { &*render_view_ptr };
+        let mut encoder =
+            pctx.wgpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("vexart-glyph-encoder"),
                 });
 
-                pass.set_pipeline(&pctx.wgpu.pipelines.glyph);
-                pass.set_vertex_buffer(0, vertex_buf.slice(..));
-                pass.set_bind_group(0, unsafe { &*bind_group_ptr }, &[]);
-                pass.draw(0..6, 0..instance_count);
-            }
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("vexart-glyph-render-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: render_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
 
-            pctx.wgpu.queue.submit(std::iter::once(encoder.finish()));
+            pass.set_pipeline(&pctx.wgpu.pipelines.glyph);
+
+            let should_draw = match target_scissor {
+                Some(s) => {
+                    match crate::composite::target::clamp_scissor(s, target_dims.0, target_dims.1)
+                    {
+                        Some([sx, sy, sw, sh]) => {
+                            pass.set_scissor_rect(sx, sy, sw, sh);
+                            true
+                        }
+                        None => false,
+                    }
+                }
+                None => true,
+            };
+
+            if should_draw {
+                for draw in &prepared_draws {
+                    pass.set_vertex_buffer(0, draw.vertex_buf.slice(..));
+                    // SAFETY: bind_group_ptr points to an atlas or fallback bind group valid for this frame.
+                    pass.set_bind_group(0, unsafe { &*draw.bind_group_ptr }, &[]);
+                    pass.draw(0..6, 0..draw.instance_count);
+                }
+            }
+        }
+
+        pctx.wgpu.queue.submit(std::iter::once(encoder.finish()));
+        if target == 0 {
+            pctx.on_frame_complete();
         }
     }
 
@@ -683,5 +767,195 @@ mod tests {
         );
         assert_eq!(width, (5.0 * BUILTIN_ADVANCE).ceil());
         assert_eq!(height, 34.0);
+    }
+
+    // ── dispatch validation and batching tests ─────────────────────────────
+
+    #[test]
+    fn dispatch_should_return_ok_for_null_ptr_and_default_stats() {
+        let mut pctx = PaintContext::new();
+        let mut stats = FrameStats {
+            draw_calls: 10,
+            primitives: 10,
+            gpu_time_us: 10,
+            cpu_time_us: 10,
+        };
+        let rc = unsafe { dispatch(&mut pctx, 0, std::ptr::null(), 0, &mut stats) };
+        assert_eq!(rc, OK);
+        assert_eq!(stats.draw_calls, 0);
+        assert_eq!(stats.primitives, 0);
+    }
+
+    #[test]
+    fn dispatch_should_return_ok_for_zero_len() {
+        let mut pctx = PaintContext::new();
+        let glyph = crate::paint::instances::MsdfGlyphInstance::default();
+        let bytes = bytemuck::bytes_of(&glyph);
+        let mut stats = FrameStats {
+            draw_calls: 5,
+            primitives: 5,
+            gpu_time_us: 5,
+            cpu_time_us: 5,
+        };
+        let rc = unsafe { dispatch(&mut pctx, 0, bytes.as_ptr(), 0, &mut stats) };
+        assert_eq!(rc, OK);
+        assert_eq!(stats.draw_calls, 0);
+        assert_eq!(stats.primitives, 0);
+    }
+
+    #[test]
+    fn dispatch_should_return_err_invalid_arg_for_unaligned_ptr() {
+        let mut pctx = PaintContext::new();
+        let buf = vec![0u8; std::mem::size_of::<crate::paint::instances::MsdfGlyphInstance>() + 8];
+        let unaligned = unsafe { buf.as_ptr().add(1) };
+        let rc = unsafe {
+            dispatch(
+                &mut pctx,
+                0,
+                unaligned,
+                std::mem::size_of::<crate::paint::instances::MsdfGlyphInstance>() as u32,
+                std::ptr::null_mut(),
+            )
+        };
+        assert_eq!(rc, ERR_INVALID_ARG);
+    }
+
+    #[test]
+    fn dispatch_should_return_err_invalid_arg_for_invalid_stride() {
+        let mut pctx = PaintContext::new();
+        let glyph = crate::paint::instances::MsdfGlyphInstance::default();
+        let bytes = bytemuck::bytes_of(&glyph);
+        let rc = unsafe {
+            dispatch(
+                &mut pctx,
+                0,
+                bytes.as_ptr(),
+                (bytes.len() - 1) as u32,
+                std::ptr::null_mut(),
+            )
+        };
+        assert_eq!(rc, ERR_INVALID_ARG);
+    }
+
+    #[test]
+    fn dispatch_should_batch_glyphs_by_atlas_and_render_to_default_target() {
+        let mut pctx = PaintContext::new();
+        let mut glyphs = vec![crate::paint::instances::MsdfGlyphInstance::default(); 3];
+        glyphs[0].atlas_id = 1;
+        glyphs[0].w = 10.0;
+        glyphs[0].h = 12.0;
+
+        glyphs[1].atlas_id = 2;
+        glyphs[1].w = 14.0;
+        glyphs[1].h = 16.0;
+
+        glyphs[2].atlas_id = 1;
+        glyphs[2].w = 18.0;
+        glyphs[2].h = 20.0;
+
+        let bytes: &[u8] = bytemuck::cast_slice(&glyphs);
+        let mut stats = FrameStats::default();
+        let rc = unsafe {
+            dispatch(
+                &mut pctx,
+                0,
+                bytes.as_ptr(),
+                bytes.len() as u32,
+                &mut stats,
+            )
+        };
+        assert_eq!(rc, OK);
+        assert_eq!(stats.primitives, 3);
+        assert_eq!(stats.draw_calls, 1);
+    }
+
+    #[test]
+    fn dispatch_should_render_to_target_active_layer_and_honor_scissor() {
+        let mut pctx = PaintContext::new();
+        let mut target = 0u64;
+        assert_eq!(
+            crate::composite::target_create(&mut pctx, 128, 128, &mut target),
+            OK
+        );
+        assert_eq!(
+            crate::composite::target_set_scissor(&mut pctx, target, 10, 10, 40, 40),
+            OK
+        );
+        assert_eq!(
+            crate::composite::target_begin_layer(&mut pctx, target, 0, 0),
+            OK
+        );
+
+        let glyph = crate::paint::instances::MsdfGlyphInstance {
+            w: 12.0,
+            h: 14.0,
+            atlas_id: 1,
+            ..Default::default()
+        };
+        let bytes: &[u8] = bytemuck::bytes_of(&glyph);
+        let mut stats = FrameStats::default();
+        let rc = unsafe {
+            dispatch(
+                &mut pctx,
+                target,
+                bytes.as_ptr(),
+                bytes.len() as u32,
+                &mut stats,
+            )
+        };
+        assert_eq!(rc, OK);
+        assert_eq!(stats.primitives, 1);
+
+        assert_eq!(crate::composite::target_end_layer(&mut pctx, target), OK);
+        assert_eq!(crate::composite::target_destroy(&mut pctx, target), OK);
+    }
+
+    #[test]
+    fn dispatch_should_handle_out_of_bounds_scissor_gracefully() {
+        let mut pctx = PaintContext::new();
+        let mut target = 0u64;
+        assert_eq!(
+            crate::composite::target_create(&mut pctx, 64, 64, &mut target),
+            OK
+        );
+        // Scissor entirely outside target bounds
+        assert_eq!(
+            crate::composite::target_set_scissor(&mut pctx, target, 200, 200, 50, 50),
+            OK
+        );
+        assert_eq!(
+            crate::composite::target_begin_layer(&mut pctx, target, 0, 0),
+            OK
+        );
+
+        let glyph = crate::paint::instances::MsdfGlyphInstance {
+            w: 10.0,
+            h: 10.0,
+            atlas_id: 1,
+            ..Default::default()
+        };
+        let bytes: &[u8] = bytemuck::bytes_of(&glyph);
+        let mut stats = FrameStats::default();
+        let rc = unsafe {
+            dispatch(
+                &mut pctx,
+                target,
+                bytes.as_ptr(),
+                bytes.len() as u32,
+                &mut stats,
+            )
+        };
+        assert_eq!(rc, OK);
+
+        assert_eq!(crate::composite::target_end_layer(&mut pctx, target), OK);
+        assert_eq!(crate::composite::target_destroy(&mut pctx, target), OK);
+    }
+
+    #[test]
+    fn dispatch_glyph_instances_should_return_ok_when_empty() {
+        let mut pctx = PaintContext::new();
+        let glyphs: Vec<crate::paint::instances::MsdfGlyphInstance> = Vec::new();
+        let rc = dispatch_glyph_instances(&mut pctx, 0, &glyphs);
+        assert_eq!(rc, OK);
     }
 }
