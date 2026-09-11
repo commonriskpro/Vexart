@@ -263,8 +263,10 @@ export function queryColors(
 
     onData(handler)
 
+    const wrapped = createWriter(write)
+
     // Query background (OSC 11) and foreground (OSC 10)
-    write("\x1b]11;?\x07")
-    write("\x1b]10;?\x07")
+    wrapped("\x1b]11;?\x07")
+    wrapped("\x1b]10;?\x07")
   })
 }
