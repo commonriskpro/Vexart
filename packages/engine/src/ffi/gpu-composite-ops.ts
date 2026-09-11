@@ -56,6 +56,20 @@ function ensureBatchBuf(size: number) {
 export const _vexartImageHandles = new WeakMap<Uint8Array, bigint>()
 export const activeImageHandles = new Set<bigint>()
 
+export type ImageCleanupData = { vctx: bigint; handle: bigint }
+export const _handleUnregisterTokens = new Map<bigint, object>()
+export const _handleToBuffer = new Map<bigint, WeakRef<Uint8Array>>()
+
+export function _handleImageFinalization({ vctx, handle }: ImageCleanupData): void {
+  if (activeImageHandles.has(handle)) {
+    vexartRemoveImage(vctx, handle)
+  }
+}
+
+export const _imageFinalizationRegistry = new FinalizationRegistry<ImageCleanupData>(({ vctx, handle }) => {
+  _handleImageFinalization({ vctx, handle })
+})
+
 // ── Target lifecycle ─────────────────────────────────────────────────────
 
 export function vexartCompositeTargetCreate(vctx: bigint, width: number, height: number): bigint {
@@ -128,7 +142,7 @@ export function vexartCompositeCopyRegionToImage(
   const result = getSymbols().vexart_composite_copy_region_to_image(vctx, target, x, y, w, h, ptr(_handleOut)) as number
   if (result !== 0) return 0n
   const handle = _handleOut[0]
-  activeImageHandles.add(handle)
+  if (handle !== 0n) activeImageHandles.add(handle)
   return handle
 }
 
@@ -148,7 +162,9 @@ export function vexartCompositeImageFilterBackdrop(
     vctx, image, ptr(_backdropParamU8), _backdropParamBuf.byteLength, ptr(_handleOut)
   ) as number
   if (result !== 0) return 0n
-  return _handleOut[0]
+  const handle = _handleOut[0]
+  if (handle !== 0n) activeImageHandles.add(handle)
+  return handle
 }
 
 export function vexartCompositeImageMaskRoundedRect(
@@ -159,7 +175,9 @@ export function vexartCompositeImageMaskRoundedRect(
     vctx, image, ptr(new Uint8Array(rectBuf.buffer, rectBuf.byteOffset, rectBuf.byteLength)), ptr(_handleOut)
   ) as number
   if (result !== 0) return 0n
-  return _handleOut[0]
+  const handle = _handleOut[0]
+  if (handle !== 0n) activeImageHandles.add(handle)
+  return handle
 }
 
 /**
@@ -175,7 +193,9 @@ export function vexartCompositeImageMaskRoundedRectRegion(
     vctx, image, ptr(new Uint8Array(rectBuf.buffer, rectBuf.byteOffset, rectBuf.byteLength)), ptr(_handleOut)
   ) as number
   if (result !== 0) return 0n
-  return _handleOut[0]
+  const handle = _handleOut[0]
+  if (handle !== 0n) activeImageHandles.add(handle)
+  return handle
 }
 
 export function vexartCompositeReadbackRgba(vctx: bigint, target: bigint, byteLength: number): Uint8Array | null {
@@ -190,38 +210,85 @@ export function vexartCompositeReadbackRgba(vctx: bigint, target: bigint, byteLe
 
 // ── Image helpers ────────────────────────────────────────────────────────
 
-export type GpuRasterImage = { handle: VexartImageHandle; width: number; height: number }
+export interface GpuRasterImage {
+  readonly handle: VexartImageHandle
+  readonly width: number
+  readonly height: number
+  dispose(): void
+  [Symbol.dispose](): void
+}
 
 export function copyGpuTargetRegionToImage(
   vctx: bigint, target: VexartTargetHandle,
   region: { x: number; y: number; width: number; height: number },
 ): GpuRasterImage {
   const handle = vexartCompositeCopyRegionToImage(vctx, target, region.x, region.y, region.width, region.height)
-  return { handle, width: region.width, height: region.height }
+  const imageObj: GpuRasterImage = {
+    handle,
+    width: region.width,
+    height: region.height,
+    dispose() {
+      vexartRemoveImage(vctx, handle)
+    },
+    [Symbol.dispose]() {
+      vexartRemoveImage(vctx, handle)
+    },
+  }
+  if (handle !== 0n) {
+    const token = {}
+    _handleUnregisterTokens.set(handle, token)
+    _imageFinalizationRegistry.register(imageObj, { vctx, handle }, token)
+  }
+  return imageObj
 }
 
 export function vexartUploadImage(ctx: bigint, data: Uint8Array, width: number, height: number): bigint {
   const cached = _vexartImageHandles.get(data)
-  if (cached !== undefined) return cached
+  if (cached !== undefined) {
+    if (activeImageHandles.has(cached)) {
+      return cached
+    }
+    _vexartImageHandles.delete(data)
+  }
   _handleOut[0] = 0n
   const result = getSymbols().vexart_paint_upload_image(
     ctx, ptr(data), data.byteLength, width, height, 0, ptr(_handleOut)
   ) as number
   if (result !== 0) return 0n
   const handle = _handleOut[0]
+  if (handle === 0n) return 0n
   _vexartImageHandles.set(data, handle)
   activeImageHandles.add(handle)
+  _handleToBuffer.set(handle, new WeakRef(data))
+
+  const token = {}
+  _handleUnregisterTokens.set(handle, token)
+  _imageFinalizationRegistry.register(data, { vctx: ctx, handle }, token)
   return handle
 }
 
 export function vexartRemoveImage(ctx: bigint, handle: bigint) {
-  if (!handle) return
+  if (!handle || !activeImageHandles.has(handle)) return
+  activeImageHandles.delete(handle)
+
+  const token = _handleUnregisterTokens.get(handle)
+  if (token) {
+    _imageFinalizationRegistry.unregister(token)
+    _handleUnregisterTokens.delete(handle)
+  }
+
+  const bufRef = _handleToBuffer.get(handle)
+  if (bufRef) {
+    const buf = bufRef.deref()
+    if (buf) _vexartImageHandles.delete(buf)
+    _handleToBuffer.delete(handle)
+  }
+
   const rc = getSymbols().vexart_paint_remove_image(ctx, handle) as number
   if (rc !== 0) {
     const err = vexartGetLastError()
     console.error(`[vexart] paint_remove_image failed (${rc}): ${err}`)
   }
-  activeImageHandles.delete(handle)
 }
 
 // ── Paint dispatch ───────────────────────────────────────────────────────
