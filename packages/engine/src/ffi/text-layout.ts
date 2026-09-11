@@ -97,17 +97,6 @@ export function measureTextWidth(text: string, fontId: number): number {
   return measureForLayout(text, fontId, desc.size).width
 }
 
-/** Get the height of text within a container width. Uses native Rust FFI. */
-export function measureTextHeight(
-  text: string,
-  fontId: number,
-  maxWidth: number,
-  lineHeight: number,
-): number {
-  const result = layoutText(text, fontId, maxWidth, lineHeight)
-  return result.height
-}
-
 /** Lay out text into lines with greedy word-wrap using native font measurement. */
 export function layoutText(
   text: string,
