@@ -7,7 +7,7 @@
 //   - ResourceKey is u64 (same handle type as image/target handles).
 //   - WgpuHandle is an enum that stores the GPU resource identity without owning it.
 //     Ownership stays with the subsystem that created the resource.
-//   - Default budget: 128MB (REQ-2B-703 / ARCHITECTURE §8.3).
+//   - Default budget: 512MB (REQ-2B-703 / ARCHITECTURE §8.3).
 //   - Minimum budget: 32MB (enforced in set_budget).
 
 pub mod eviction;
@@ -21,8 +21,8 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
-/// Default memory budget: 128MB.
-pub const DEFAULT_BUDGET_BYTES: u64 = 128 * 1024 * 1024;
+/// Default memory budget: 512MB.
+pub const DEFAULT_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
 
 /// Minimum allowed budget: 32MB (per ARCHITECTURE §8.3).
 pub const MIN_BUDGET_BYTES: u64 = 32 * 1024 * 1024;
@@ -100,9 +100,14 @@ pub struct ResourceManager {
 }
 
 impl ResourceManager {
-    /// Create a new manager with the default 128MB budget.
+    /// Create a new manager with the default or environment-configured budget.
     pub fn new() -> Self {
-        Self::with_budget(DEFAULT_BUDGET_BYTES)
+        let budget = std::env::var("VEXART_VRAM_BUDGET_MB")
+            .ok()
+            .and_then(|val| val.parse::<u64>().ok())
+            .map(|mb| mb * 1024 * 1024)
+            .unwrap_or(DEFAULT_BUDGET_BYTES);
+        Self::with_budget(budget)
     }
 
     /// Create a manager with a specific budget in bytes.
@@ -206,19 +211,39 @@ impl ResourceManager {
         }
     }
 
+    /// Check if reserving `size_bytes` would remain within the memory budget.
+    ///
+    /// Returns `Ok(())` if `current_usage + size_bytes <= budget_bytes`.
+    /// Returns `Err(ERR_OUT_OF_BUDGET)` if budget would be exceeded or addition overflows.
+    pub fn try_reserve(&mut self, size_bytes: u64) -> Result<(), i32> {
+        let current = self.current_usage.load(Ordering::Relaxed);
+        let needed = match current.checked_add(size_bytes) {
+            Some(n) => n,
+            None => return Err(crate::ffi::panic::ERR_OUT_OF_BUDGET),
+        };
+
+        if needed <= self.budget_bytes {
+            Ok(())
+        } else {
+            Err(crate::ffi::panic::ERR_OUT_OF_BUDGET)
+        }
+    }
+
     /// Attempt to allocate `size_bytes` of new GPU memory.
     ///
     /// If adding `size_bytes` would exceed the budget, eviction runs first.
     ///
-    /// Returns `Ok(())` if allocation is feasible (after potential eviction).
+    /// Returns `Ok(evicted_keys)` if allocation is feasible (after potential eviction).
     /// Returns `Err(evicted_keys)` if even after eviction the budget would be exceeded
     /// (i.e. only Visible resources remain and they collectively exceed the budget).
     ///
-    /// The caller is responsible for actually calling `remove()` on evicted keys
-    /// to free the GPU resources, then `register()` for the new one.
+    /// Crucially, no resources are removed if the allocation cannot succeed.
     pub fn try_allocate(&mut self, size_bytes: u64) -> Result<Vec<ResourceKey>, Vec<ResourceKey>> {
         let current = self.current_usage.load(Ordering::Relaxed);
-        let needed = current + size_bytes;
+        let needed = match current.checked_add(size_bytes) {
+            Some(n) => n,
+            None => return Err(vec![]),
+        };
 
         if needed <= self.budget_bytes {
             return Ok(vec![]); // No eviction needed.
@@ -226,10 +251,22 @@ impl ResourceManager {
 
         // Need to evict to make room.
         let result = select_eviction_targets(&self.resources, needed, self.budget_bytes);
-        let evicted = result.evicted.clone();
+        let evicted = result.evicted;
         let freed = result.bytes_freed;
 
-        // Remove evicted resources from the registry.
+        // Check if enough can be freed BEFORE removing any resources.
+        let after = current.saturating_sub(freed).checked_add(size_bytes);
+        let can_fit = match after {
+            Some(a) => a <= self.budget_bytes,
+            None => false,
+        };
+
+        if !can_fit {
+            // Still over budget even after eviction candidates — abort without evicting.
+            return Err(evicted);
+        }
+
+        // Remove evicted resources from the registry now that allocation is guaranteed to fit.
         for key in &evicted {
             self.remove(*key);
         }
@@ -237,14 +274,7 @@ impl ResourceManager {
         self.evictions_last_frame += evicted.len() as u32;
         self.evictions_total += evicted.len() as u64;
 
-        // Check if enough was freed.
-        let after = self.current_usage.load(Ordering::Relaxed) + size_bytes;
-        if after <= self.budget_bytes || freed >= (needed - self.budget_bytes) {
-            Ok(evicted)
-        } else {
-            // Still over budget — only Visible resources remain.
-            Err(evicted)
-        }
+        Ok(evicted)
     }
 
     /// Reset the per-frame eviction counter. Call at the start of each frame.
@@ -433,5 +463,65 @@ mod tests {
             mgr.evictions_total > total_after_first,
             "evictions_total should grow"
         );
+    }
+
+    #[test]
+    fn test_try_reserve_returns_err_out_of_budget_when_exceeding_budget() {
+        let mut mgr = ResourceManager::with_budget(MIN_BUDGET_BYTES); // 32MB
+        assert_eq!(mgr.try_reserve(10 * 1024 * 1024), Ok(()));
+
+        // Fill 30MB
+        reg(&mut mgr, 1, ResourceKind::LayerTarget, 30, 0);
+        assert_eq!(mgr.current_usage_bytes(), 30 * 1024 * 1024);
+
+        // 30MB + 2MB = 32MB <= 32MB -> Ok
+        assert_eq!(mgr.try_reserve(2 * 1024 * 1024), Ok(()));
+
+        // 30MB + 3MB = 33MB > 32MB -> Err(ERR_OUT_OF_BUDGET)
+        assert_eq!(
+            mgr.try_reserve(3 * 1024 * 1024),
+            Err(crate::ffi::panic::ERR_OUT_OF_BUDGET)
+        );
+
+        // Checked arithmetic overflow check
+        assert_eq!(
+            mgr.try_reserve(u64::MAX),
+            Err(crate::ffi::panic::ERR_OUT_OF_BUDGET)
+        );
+    }
+
+    #[test]
+    fn test_try_allocate_does_not_evict_when_returning_err() {
+        // Budget: 50MB.
+        // Visible: 40MB. Cold: 5MB. Total usage = 45MB.
+        // Attempt to allocate 20MB.
+        // Needed = 65MB > 50MB.
+        // Cold can only free 5MB -> 40MB + 20MB = 60MB > 50MB. Cannot fit.
+        let mut mgr = ResourceManager::with_budget(50 * 1024 * 1024);
+        reg(&mut mgr, 1, ResourceKind::LayerTarget, 40, 10);
+        mgr.touch(1, 10); // Visible
+        reg(&mut mgr, 2, ResourceKind::ImageSprite, 5, 0);
+        mgr.resources.get_mut(&2).unwrap().priority = Priority::Cold;
+
+        assert_eq!(mgr.resource_count(), 2);
+        assert_eq!(mgr.current_usage_bytes(), 45 * 1024 * 1024);
+
+        let result = mgr.try_allocate(20 * 1024 * 1024);
+        assert!(result.is_err());
+        // Verify key 2 was NOT removed from resources and usage was NOT decremented
+        assert_eq!(mgr.resource_count(), 2, "resources must not be removed on Err");
+        assert_eq!(mgr.current_usage_bytes(), 45 * 1024 * 1024);
+        assert_eq!(mgr.evictions_last_frame, 0);
+    }
+
+    #[test]
+    fn test_vram_budget_env_var() {
+        std::env::set_var("VEXART_VRAM_BUDGET_MB", "256");
+        let mgr = ResourceManager::new();
+        assert_eq!(mgr.budget_bytes, 256 * 1024 * 1024);
+        std::env::remove_var("VEXART_VRAM_BUDGET_MB");
+
+        let default_mgr = ResourceManager::new();
+        assert_eq!(default_mgr.budget_bytes, DEFAULT_BUDGET_BYTES);
     }
 }
