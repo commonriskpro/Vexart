@@ -85,6 +85,8 @@ export type WalkTreeState = {
 
 const AUTO_LAYER_MIN_AREA = 64 * 64
 
+const warnedRawTextNodes = new Set<number>()
+
 // WARNING: Module-level singleton — prevents multi-loop usage.
 const effectPool: EffectConfig[] = []
 // WARNING: Module-level singleton — prevents multi-loop usage.
@@ -251,6 +253,14 @@ export function walkTree(
   if (node.kind === "text") {
     const content = node.text || collectText(node)
     if (!content) return
+
+    if (node.parent && node.parent.kind === "box" && node.text.length > 0 && process.env.NODE_ENV !== "production") {
+      if (!warnedRawTextNodes.has(node.id)) {
+        warnedRawTextNodes.add(node.id)
+        console.warn(`[Vexart] Warning: Raw text string "${content.slice(0, 30)}" placed directly inside <box>. Wrap text in <text>...</text> to ensure proper typography and layout.`)
+      }
+    }
+
     const renderContent = normalizeTextForLayout(content, props.whiteSpace)
     const color = (props.color as number) || 0xe0e0e0ff
     const fontSize = props.fontSize ?? 14

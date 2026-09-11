@@ -18,8 +18,9 @@
  */
 
 import { describe, test, expect } from "bun:test"
-import { collectText } from "./walk-tree"
+import { collectText, walkTree } from "./walk-tree"
 import { createNode, createTextNode } from "../ffi/node"
+import { createVexartLayoutCtx } from "./layout-adapter"
 import type { WalkTreeState } from "./walk-tree"
 
 // ── Inline culling decision (mirrors walk-tree.ts AABB logic exactly) ──
@@ -216,5 +217,92 @@ describe("WalkTreeState shape", () => {
     expect(state.viewportHeight).toBe(800)
     expect(state.culledCount?.value).toBe(0)
     expect(state.rectNodes).toHaveLength(0)
+  })
+})
+
+describe("raw text inside <box> warning (DEF-07)", () => {
+  test("<text> element inside <box> does NOT trigger a warning", () => {
+    const layout = createVexartLayoutCtx()
+    layout.init(300, 200)
+    layout.beginLayout()
+
+    const boxNode = createNode("box")
+    const textContainer = createNode("text")
+    const textChild = createTextNode("Properly wrapped text")
+    textContainer.children.push(textChild)
+    textChild.parent = textContainer
+    boxNode.children.push(textContainer)
+    textContainer.parent = boxNode
+
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(" "))
+    }
+
+    const state: WalkTreeState = {
+      scrollSpeedCap: { value: 0 },
+      nodeCount: { value: 0 },
+      rectNodes: [],
+      textNodes: [],
+      boxNodes: [],
+      layerBoundaries: [],
+      scrollContainers: [],
+      nodeRefById: new Map(),
+      rectNodeById: new Map(),
+      layout,
+    }
+
+    try {
+      walkTree(boxNode, state)
+      expect(warnings.length).toBe(0)
+    } finally {
+      console.warn = originalWarn
+      layout.destroy()
+    }
+  })
+
+  test("warns once when raw text is placed directly inside <box>", () => {
+    const layout = createVexartLayoutCtx()
+    layout.init(300, 200)
+    layout.beginLayout()
+
+    const boxNode = createNode("box")
+    const textNode = createTextNode("Raw unstyled text in a box")
+    boxNode.children.push(textNode)
+    textNode.parent = boxNode
+
+    const warnings: string[] = []
+    const originalWarn = console.warn
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(" "))
+    }
+
+    const state: WalkTreeState = {
+      scrollSpeedCap: { value: 0 },
+      nodeCount: { value: 0 },
+      rectNodes: [],
+      textNodes: [],
+      boxNodes: [],
+      layerBoundaries: [],
+      scrollContainers: [],
+      nodeRefById: new Map(),
+      rectNodeById: new Map(),
+      layout,
+    }
+
+    try {
+      walkTree(boxNode, state)
+      expect(warnings.length).toBe(1)
+      expect(warnings[0]).toContain('[Vexart] Warning: Raw text string "Raw unstyled text in a box"')
+
+      // Second walk should NOT warn again for the same node id
+      state.nodeCount.value = 0
+      walkTree(boxNode, state)
+      expect(warnings.length).toBe(1)
+    } finally {
+      console.warn = originalWarn
+      layout.destroy()
+    }
   })
 })
