@@ -215,7 +215,7 @@ En Vexart, la frontera nativa FFI (`bun:ffi` ↔ `libvexart` C ABI) y el render 
 - [x] **7. Desmantelar el display list nativo de canvas de solo-escritura**: Quitar la serialización y llamadas FFI en `packages/engine/src/loop/walk-tree.ts`, y eliminar `CanvasDisplayListRegistry` en Rust.
 - [x] **8. Eliminar export FFI `vexart_layer_mark_dirty`**: Purgar de `lib.rs` y de `vexart-bridge.ts`.
 - [x] **9. Limpiar exports muertos `vexart_kitty_emit_frame` y `vexart_kitty_emit_region`**: Purgar sus bindings en `vexart-bridge.ts`.
-- [ ] **10. Conectar o purgar `nativeEmitLayerTarget` y `nativeEmitRegionTarget`**: Eliminar las funciones no referenciadas en `native-presentation-ops.ts`.
+- [x] **10. Conectar o purgar `nativeEmitLayerTarget` y `nativeEmitRegionTarget`**: Eliminar las funciones no referenciadas en `native-presentation-ops.ts`.
 - [ ] **11. Restaurar invariante del circuit-breaker**: Conectar `tickNativePresentationRecovery()` dentro del tick de frame en `packages/engine/src/loop/loop.ts` para garantizar auto-recuperación simétrica.
 - [ ] **12. Eliminar helpers muertos `isNativeStatsValid` e `isNativeStatsFallback`**: Purgar de `native-presentation-stats.ts`.
 - [ ] **13. Eliminar buffer estático de 64KB y writers redundantes en `vexart-buffer.ts`**: Remover `graphBuffer`, `graphView`, `writeHeader`, `writeCommandPrefix` y actualizar sus tests.
