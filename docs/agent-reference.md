@@ -404,14 +404,12 @@ implemented under `native/libvexart/src`. Export names are prefixed with `vexart
 | `vexart_composite_merge` | Merge packed composite plan to final target |
 | `vexart_composite_readback_rgba` | Read back full target as RGBA |
 | `vexart_composite_readback_region_rgba` | Read back target region as RGBA |
-| `vexart_kitty_emit_frame` | Emit full Kitty frame |
 | `vexart_kitty_set_transport` | Select direct/file/SHM Kitty transport mode |
 | `vexart_kitty_shm_prepare` | Prepare POSIX SHM payload |
 | `vexart_kitty_shm_release` | Release POSIX SHM handle |
 | `vexart_kitty_emit_frame_with_stats` | Emit full frame with native presentation stats |
 | `vexart_kitty_emit_layer` | Emit raw RGBA layer natively |
 | `vexart_kitty_emit_layer_target` | Emit GPU target as positioned Kitty layer |
-| `vexart_kitty_emit_region` | Emit dirty region patch from RGBA bytes |
 | `vexart_kitty_emit_region_target` | Emit dirty region patch from GPU target |
 | `vexart_kitty_delete_layer` | Delete retained Kitty image/layer |
 | `vexart_layer_upsert` | Upsert native layer record by stable key |

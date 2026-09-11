@@ -69,7 +69,6 @@ export const VEXART_SYMBOLS = {
   vexart_composite_readback_region_rgba:{ args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.ptr, FFIType.u32, FFIType.ptr],          returns: FFIType.i32 },
 
   // §5.6 Kitty transport (Phase 2b Slice 3)
-  vexart_kitty_emit_frame:    { args: [FFIType.u64, FFIType.u64, FFIType.u32], returns: FFIType.i32  },
   vexart_kitty_set_transport: { args: [FFIType.u64, FFIType.u32],              returns: FFIType.i32  },
   // §5.6 Kitty SHM helpers (legacy — used directly by kitty.ts shm path)
   vexart_kitty_shm_prepare: { args: [FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
@@ -81,9 +80,6 @@ export const VEXART_SYMBOLS = {
   vexart_kitty_emit_layer: { args: [FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   // emit_layer_target: ctx, target, image_id, layer_ptr (col,row,z), stats_out → i32
   vexart_kitty_emit_layer_target: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  // emit_region: ctx, image_id, rgba_ptr, rgba_len, region_ptr (4×u32: rx,ry,rw,rh), stats_out → i32
-  // region_ptr is a 16-byte packed buffer [rx,ry,rw,rh] as u32 LE — satisfies ≤8 param ARM64 rule.
-  vexart_kitty_emit_region: { args: [FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   // emit_region_target: ctx, target, image_id, region_ptr (4×u32: rx,ry,rw,rh), stats_out → i32
   vexart_kitty_emit_region_target: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   // delete_layer: ctx, image_id, stats_out → i32

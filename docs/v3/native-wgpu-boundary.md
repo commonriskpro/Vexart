@@ -200,15 +200,13 @@ pub unsafe extern "C" fn vexart_font_render_text(ctx: u64, target: u64, text_ptr
 pub unsafe extern "C" fn vexart_font_measure(text_ptr: *const u8, text_len: u32, families_ptr: *const u8, families_len: u32, font_size: f32, weight: u16, italic: u32, out_w: *mut f32, out_h: *mut f32) -> i32
 ```
 
-### 5.5 Kitty Presentation & Transport (17 Functions)
+### 5.5 Kitty Presentation & Transport (15 Functions)
 ```rust
-pub extern "C" fn vexart_kitty_emit_frame(ctx: u64, target: u64, image_id: u32) -> i32
 pub unsafe extern "C" fn vexart_kitty_emit_frame_with_stats(ctx: u64, target: u64, image_id: u32, stats_out: *mut u32) -> i32
 pub unsafe extern "C" fn vexart_frame_present_native(ctx: u64, target: u64, image_id: u32, mode: u32, stats_out: *mut u32) -> i32
 pub extern "C" fn vexart_paint_present(ctx: u64, target: u64, image_id: u32) -> i32
 pub unsafe extern "C" fn vexart_kitty_emit_layer(ctx: u64, image_id: u32, rgba_ptr: *const u8, rgba_len: u32, layer_ptr: *const u32, layer_len: u32, stats_out: *mut u32) -> i32
 pub unsafe extern "C" fn vexart_kitty_emit_layer_target(ctx: u64, target: u64, image_id: u32, layer_ptr: *const u32, layer_len: u32, stats_out: *mut u32) -> i32
-pub unsafe extern "C" fn vexart_kitty_emit_region(ctx: u64, image_id: u32, rgba_ptr: *const u8, rgba_len: u32, region_ptr: *const u32, region_len: u32, stats_out: *mut u32) -> i32
 pub unsafe extern "C" fn vexart_kitty_emit_region_target(ctx: u64, target: u64, image_id: u32, region_ptr: *const u32, region_len: u32, stats_out: *mut u32) -> i32
 pub unsafe extern "C" fn vexart_kitty_delete_layer(ctx: u64, image_id: u32, stats_out: *mut u32) -> i32
 pub extern "C" fn vexart_kitty_set_transport(ctx: u64, mode: u32) -> i32

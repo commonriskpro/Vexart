@@ -2829,10 +2829,6 @@ export const VEXART_SYMBOLS: {
         readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
         readonly returns: FFIType.int32_t;
     };
-    readonly vexart_kitty_emit_frame: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint32_t];
-        readonly returns: FFIType.int32_t;
-    };
     readonly vexart_kitty_set_transport: {
         readonly args: [FFIType.uint64_t, FFIType.uint32_t];
         readonly returns: FFIType.int32_t;
@@ -2855,10 +2851,6 @@ export const VEXART_SYMBOLS: {
     };
     readonly vexart_kitty_emit_layer_target: {
         readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_kitty_emit_region: {
-        readonly args: [FFIType.uint64_t, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_kitty_emit_region_target: {

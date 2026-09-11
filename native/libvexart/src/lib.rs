@@ -1,5 +1,5 @@
 // native/libvexart/src/lib.rs
-// All #[no_mangle] pub extern "C" FFI exports for libvexart (50 functions in lib.rs, 53 total).
+// All #[no_mangle] pub extern "C" FFI exports for libvexart (48 functions in lib.rs, 51 total).
 // Every export wraps its body in ffi_guard! for panic safety.
 // Per design §5, REQ-NB-003.
 
@@ -979,33 +979,10 @@ pub unsafe extern "C" fn vexart_composite_readback_region_rgba(
 
 // ─── §5.6 Kitty transport ────────────────────────────────────────────────
 
-/// Emit a complete frame to the terminal via the Kitty graphics protocol.
-///
-/// Performs: GPU readback → zlib compress → base64 encode → Kitty escape sequences → stdout.
-/// Transport mode is selected via `vexart_kitty_set_transport` (default: direct/base64).
-///
-/// Returns OK (0) on success, ERR_KITTY_TRANSPORT (-7) on failure.
-/// (REQ-2B-101)
-#[no_mangle]
-pub extern "C" fn vexart_kitty_emit_frame(_ctx: u64, target: u64, image_id: u32) -> i32 {
-    ffi_guard!({
-        let mut guard = get_or_init_paint();
-        let pctx = match guard.as_mut() {
-            Some(c) => c,
-            None => return ERR_GPU_DEVICE_LOST,
-        };
-        let rc = kitty::transport::emit_frame(pctx, target, image_id);
-        if rc == OK {
-            advance_presentation_frame();
-        }
-        rc
-    })
-}
-
 /// Emit a complete frame with native presentation stats.
 ///
-/// Like `vexart_kitty_emit_frame` but writes timing and byte-count stats to `*stats_out`.
-/// Pass null for `stats_out` if stats are not needed (equivalent to the base version).
+/// Writes timing and byte-count stats to `*stats_out`.
+/// Pass null for `stats_out` if stats are not needed.
 ///
 /// # Safety
 /// `stats_out` must be a valid mutable pointer to `NativePresentationStats` or null.
@@ -1097,45 +1074,6 @@ pub unsafe extern "C" fn vexart_kitty_emit_layer_target(
         };
         kitty::transport::emit_layer_target_with_stats(
             pctx, target, image_id, col, row, z, stats_out,
-        )
-    })
-}
-
-/// Emit a region patch natively (dirty-region presentation path).
-///
-/// `rgba_ptr`/`rgba_len` — raw RGBA pixel data for the dirty region (rw × rh × 4 bytes).
-/// `region_ptr` — 4 × u32 packed: [rx, ry, rw, rh] (16 bytes).
-/// `stats_out` — pointer to `NativePresentationStats` or null.
-///
-/// Uses a packed params approach to stay within the ≤8 parameter ARM64 FFI limit.
-///
-/// # Safety
-/// `rgba_ptr` must be valid for `rgba_len` bytes.
-/// `region_ptr` must be valid for 16 bytes.
-/// `stats_out` must be valid if non-null.
-/// Phase 2b — native region presentation.
-#[no_mangle]
-pub unsafe extern "C" fn vexart_kitty_emit_region(
-    _ctx: u64,
-    image_id: u32,
-    rgba_ptr: *const u8,
-    rgba_len: u32,
-    region_ptr: *const u8,
-    region_len: u32,
-    stats_out: *mut types::NativePresentationStats,
-) -> i32 {
-    ffi_guard!({
-        if region_ptr.is_null() || (region_len as usize) < 16 {
-            return ffi::panic::ERR_INVALID_ARG;
-        }
-        // Read 4 × u32 LE from potentially unaligned byte pointer.
-        let bytes = std::slice::from_raw_parts(region_ptr, 16);
-        let rx = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-        let ry = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
-        let rw = u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]);
-        let rh = u32::from_le_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]);
-        kitty::transport::emit_region_native(
-            image_id, rgba_ptr, rgba_len, rx, ry, rw, rh, stats_out,
         )
     })
 }

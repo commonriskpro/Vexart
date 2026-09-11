@@ -39,15 +39,13 @@ All FFI exports use `#[no_mangle] pub extern "C"` or `#[no_mangle] pub unsafe ex
 - `vexart_font_render_text(ctx: u64, target: u64, text_ptr: *const u8, text_len: u32, params_ptr: *const u8, params_len: u32, stats_out: *mut u32) -> i32`: Dynamically generates and renders MSDF text.
 - `vexart_font_measure(text_ptr: *const u8, text_len: u32, families_ptr: *const u8, families_len: u32, font_size: f32, weight: u16, italic: u32, out_w: *mut f32, out_h: *mut f32) -> i32`: Dynamically measures text geometry.
 
-### §1.5 Kitty Transport & Presentation (14 Functions)
-- `vexart_kitty_emit_frame(ctx: u64, target: u64, image_id: u32) -> i32`: Emits a complete target as a Kitty graphics frame over stdout.
+### §1.5 Kitty Transport & Presentation (12 Functions)
 - `vexart_kitty_set_transport(ctx: u64, mode: u32) -> i32`: Sets active transport (`0 = Direct`, `1 = File`, `2 = POSIX SHM`).
 - `vexart_kitty_shm_prepare(name_ptr: *const u8, name_len: u32, data_ptr: *const u8, data_len: u32, mode: u32, out_handle: *mut u64) -> i32`: Prepares POSIX shared memory buffer.
 - `vexart_kitty_shm_release(handle: u64, unlink_flag: u32) -> i32`: Releases SHM handle and unlinks segment.
 - `vexart_kitty_emit_frame_with_stats(ctx: u64, target: u64, image_id: u32, stats_out: *mut u32) -> i32`: Emits frame and writes presentation telemetry.
 - `vexart_kitty_emit_layer(ctx: u64, image_id: u32, rgba_ptr: *const u8, rgba_len: u32, layer_ptr: *const u32, layer_len: u32, stats_out: *mut u32) -> i32`: Emits isolated Kitty layer from host RGBA.
 - `vexart_kitty_emit_layer_target(ctx: u64, target: u64, image_id: u32, layer_ptr: *const u32, layer_len: u32, stats_out: *mut u32) -> i32`: Emits isolated Kitty layer directly from GPU target.
-- `vexart_kitty_emit_region(ctx: u64, image_id: u32, rgba_ptr: *const u8, rgba_len: u32, region_ptr: *const u32, region_len: u32, stats_out: *mut u32) -> i32`: Emits rectangular dirty region.
 - `vexart_kitty_emit_region_target(ctx: u64, target: u64, image_id: u32, region_ptr: *const u32, region_len: u32, stats_out: *mut u32) -> i32`: Emits dirty region directly from GPU target.
 - `vexart_kitty_delete_layer(ctx: u64, image_id: u32, stats_out: *mut u32) -> i32`: Transmits Kitty graphics deletion escape sequence.
 - `vexart_kitty_emit_placeholder_frame(ctx: u64, target: u64, image_id: u32, cols: u32, rows: u32, stats_out: *mut u32) -> i32`: Emits frame via tmux Unicode placeholder transport.

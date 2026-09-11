@@ -47,15 +47,13 @@ The native boundary is bound in `packages/engine/src/ffi/vexart-bridge.ts` and i
 | `vexart_composite_readback_rgba` | Full target readback |
 | `vexart_composite_readback_region_rgba` | Region readback |
 
-## Kitty Transport (10)
+## Kitty Transport (8)
 
 | Function | Purpose |
 |----------|---------|
-| `vexart_kitty_emit_frame` | Emit full frame |
 | `vexart_kitty_emit_frame_with_stats` | Emit frame + timing stats |
 | `vexart_kitty_emit_layer` | Emit raw RGBA layer |
 | `vexart_kitty_emit_layer_target` | Emit GPU target as layer |
-| `vexart_kitty_emit_region` | Emit dirty region (RGBA) |
 | `vexart_kitty_emit_region_target` | Emit dirty region (target) |
 | `vexart_kitty_delete_layer` | Delete Kitty image/layer |
 | `vexart_kitty_set_transport` | Set transport mode (0=direct, 1=file, 2=SHM) |

@@ -808,7 +808,7 @@ valid rectangles, preserving damage and interaction consistency.
   }
   ```
 - **Responsibilities**:
-  - Call `vexart_kitty_emit_frame(finalTargetHandle)`.
+  - Call `vexart_kitty_emit_frame_with_stats(ctx, finalTargetHandle, imageId, statsOut)`.
   - Rust encodes base64 + compression + escape sequences entirely on native side.
   - Bytes streamed directly to stdout via buffered writer.
   - **Never** goes through JavaScript `Buffer.toString('base64')`.
@@ -1583,14 +1583,12 @@ vexart_composite_image_mask_rounded_rect
 vexart_composite_merge
 vexart_composite_readback_rgba
 vexart_composite_readback_region_rgba
-vexart_kitty_emit_frame
 vexart_kitty_set_transport
 vexart_kitty_shm_prepare
 vexart_kitty_shm_release
 vexart_kitty_emit_frame_with_stats
 vexart_kitty_emit_layer
 vexart_kitty_emit_layer_target
-vexart_kitty_emit_region
 vexart_kitty_emit_region_target
 vexart_kitty_delete_layer
 vexart_layer_upsert
