@@ -20,6 +20,7 @@ export type SliderTrackProps = {
   onMouseMove: (evt: NodeMouseEvent) => void
   onMouseUp: (evt: NodeMouseEvent) => void
   focusable: true
+  onPress?: () => void
 }
 
 /** @public */
@@ -94,7 +95,7 @@ export function Slider(props: SliderProps) {
     disabled,
   })
 
-  const { focused } = useFocus({
+  const { focused, focus } = useFocus({
     id: props.focusId,
     onKeyDown(e) {
       if (disabled()) return
@@ -137,6 +138,13 @@ export function Slider(props: SliderProps) {
   const trackProps: SliderTrackProps = {
     ...dragProps,
     focusable: true,
+    onMouseDown: (evt) => {
+      if (!disabled()) focus()
+      dragProps.onMouseDown(evt)
+    },
+    onPress: () => {
+      if (!disabled()) focus()
+    },
   }
 
   const rendered = createMemo(() => props.renderSlider({
