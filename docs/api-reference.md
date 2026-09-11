@@ -71,9 +71,6 @@ Primitive component wrappers over JSX intrinsics:
 
 - `Box`
 - `Text`
-- `RichText`
-- `Span`
-- `WrapRow`
 
 ```ts
 import { Box, Text } from "vexart"

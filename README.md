@@ -132,7 +132,7 @@ Vexart is **not** a cell-based TUI framework. It renders actual pixels using the
 | `@vexart/app` | Managed app framework: router, className mapper, config, CLI helpers | App |
 | `@vexart/styled` | Design tokens + styled components (shadcn-compatible): `colors`, `radius`, `space`, `font`, `shadows` | Styled |
 | `@vexart/headless` | Behaviour-only components: Button, Input, Dialog, Select, Tabs, List, Table, VirtualList, etc. | Headless |
-| `@vexart/primitives` | **Merged into `@vexart/app`**. Layout helpers (`Span`, `RichText`, `WrapRow`) now live in app. Use `<box>`, `<text>` intrinsics directly. | ❌ Removed |
+| `@vexart/primitives` | **Merged into `@vexart/app`**. Use `<Box>`, `<Text>` app components or `<box>`, `<text>` intrinsics directly. Legacy helpers (`Span`, `RichText`, `WrapRow`) were permanently purged. | ❌ Removed |
 | `@vexart/engine` | Core engine: render loop, GPU backend, SolidJS reconciler, input, focus, animation, data fetching | Foundation |
 
 Dependencies flow downward across the active packages: `app → styled → headless → engine`. You can use any active layer independently.
@@ -157,9 +157,6 @@ cargo build --release
 |-----------|----------|-------------|
 | `Box` | Primitives | Layout container with all visual props |
 | `Text` | Primitives | Text display with font, color, size |
-| `RichText` | Primitives | Multi-span inline text |
-| `Span` | Primitives | Inline text span within RichText |
-| `WrapRow` | Primitives | Flex-wrap row helper |
 | `ScrollView` | Containers | Scrollable container with visual scrollbar |
 | `Portal` | Containers | Render subtree at root level |
 | `Button` | Inputs | Clickable element (headless render context) |

@@ -2,7 +2,7 @@
 
 Vexart provides built-in components across three public packages.
 
-- **`@vexart/primitives`** — primitive wrappers: `Box`, `Text`, `RichText`, `Span`, `WrapRow`.
+- **`@vexart/primitives`** — primitive wrappers: `Box`, `Text`.
 - **`@vexart/headless`** — behavior only, zero visual coupling. Use render props/context props to provide styling.
 - **`@vexart/styled`** — styled design system built on top of the headless layer.
 
@@ -754,7 +754,7 @@ const form = createForm({
 
 ---
 
-## Code / Markdown / Diff / RichText
+## Code / Markdown / Diff
 
 Content components with theme prop pattern.
 

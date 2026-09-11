@@ -2784,24 +2784,12 @@ type SpanProps = { color?: string | number; fontSize?: number; fontWeight?: numb
 
 ---
 
-#### 28. WrapRow
+#### 28. Flex Wrapping
 
-Flex-wrap workaround for Flexily (which doesn't support `flexWrap`).
-
-```typescript
-import { WrapRow } from "vexart"
-
-type WrapRowProps = {
-  width: number          // total available width
-  itemWidth: number      // uniform item width
-  gap?: number           // default: 0
-  rowGap?: number        // default: same as gap
-  children?: JSX.Element
-}
-```
+Flex wrapping is handled natively via `<box flexWrap="wrap">`.
 
 ```tsx
-<WrapRow width={400} itemWidth={80} gap={8}>
+<box flexDirection="row" flexWrap="wrap" width={400} gap={8}>
   <For each={tags}>
     {(tag) => (
       <box width={80} padding={4} backgroundColor="#333" cornerRadius={4}>
@@ -2809,7 +2797,7 @@ type WrapRowProps = {
       </box>
     )}
   </For>
-</WrapRow>
+</box>
 ```
 
 ---
@@ -3622,8 +3610,6 @@ Everything app developers use: components, tokens, hooks, SolidJS primitives, an
 | ------ | ----------- |
 | `Box` | Layout container wrapper |
 | `Text` | Text display wrapper |
-| `RichText` / `Span` | Multi-span inline text |
-| `WrapRow` | Flex-wrap workaround |
 | `ScrollView` | Scrollable container with visual scrollbar |
 | `Portal` | Render at root/overlay level |
 

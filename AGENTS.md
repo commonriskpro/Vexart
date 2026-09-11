@@ -72,7 +72,7 @@ for the package-layout details.
 | Package | Purpose | Status |
 | ------- | ------- | ------ |
 | `@vexart/engine` | SolidJS reconciler, render loop, hooks, FFI bridge to `libvexart`, terminal lifecycle, input parsing, focus, hit-testing, output transport | ✅ Active |
-| `@vexart/primitives` | **Merged into `@vexart/app`**. Layout helpers (`Span`, `RichText`, `WrapRow`) now live in app. Use `<box>`, `<text>` intrinsics directly. | ❌ Removed |
+| `@vexart/primitives` | **Merged into `@vexart/app`**. Use `<Box>`, `<Text>` app components or `<box>`, `<text>` intrinsics directly. Legacy helpers (`Span`, `RichText`, `WrapRow`) were permanently purged. | ❌ Removed |
 | `@vexart/headless` | 26 headless components: logic, keyboard/mouse interaction, accessibility contracts, no styling | ✅ Active |
 | `@vexart/styled` | Themed components and void theme tokens — dark, shadcn-inspired design system | ✅ Active |
 | `@vexart/app` | App framework: router, route manifest helpers, className mapper, app mounting, CLI helpers | ✅ Active |

@@ -768,10 +768,10 @@ This appendix enumerates the complete expected public API surface at v0.9 releas
 - `TRANSPORT_FAILURE_REASON`, `TRANSPORT_HEALTH` `@public`
 - `KittyTransportStats`, `RawImageData`, `CompressMode`, `TransmissionMode`, `KittyTransportManagerState`, `NativeKittyShmHandle` (types) `@public`
 
-### A.2 `@vexart/primitives`
+### A.2 `@vexart/primitives` (merged into `@vexart/app`)
 
-- `Box`, `Text`, `RichText`, `Span`, `WrapRow` (components) `@public`
-- `BoxProps`, `TextProps`, `SpanProps`, `RichTextProps`, `WrapRowProps` (types) `@public`
+- `Box`, `Text` (components) `@public`
+- `BoxProps`, `TextProps` (types) `@public` (legacy `Span`, `RichText`, `WrapRow` and their prop types are permanently removed)
 - `ShadowConfig`, `GlowConfig` (types) `@public`
 
 Note: `<image>`/`<img>` and `<canvas>` are JSX intrinsic elements used directly;

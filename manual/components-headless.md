@@ -768,20 +768,18 @@ import { RichText, Span } from "vexart"
 </RichText>
 ```
 
-### 28. WrapRow
+### 28. Flex Wrapping
 
-Flex-wrap workaround (Flexily doesn't support `flexWrap`). Manually computes row breaks.
+Flex wrapping is handled natively via `<box flexWrap="wrap">`.
 
 ```tsx
-import { WrapRow } from "vexart"
-
-<WrapRow width={400} itemWidth={80} gap={8}>
+<box flexDirection="row" flexWrap="wrap" width={400} gap={8}>
   {tags.map((tag) => (
     <box width={80} padding={4} backgroundColor="#333" cornerRadius={4}>
       <text color="#fff" fontSize={12}>{tag}</text>
     </box>
   ))}
-</WrapRow>
+</box>
 ```
 
 ---
@@ -843,8 +841,6 @@ const form = createForm({
 | Portal | Pass-through | Renders children as-is |
 | Box / Text | Typed wrapper | Direct props |
 | ScrollView | Typed wrapper | Direct props |
-| RichText / Span | Direct | Direct props |
-| WrapRow | Layout helper | Direct props |
 
 ---
 

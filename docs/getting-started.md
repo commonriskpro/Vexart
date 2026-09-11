@@ -82,7 +82,7 @@ TypeScript owns scene graph, reactivity, walk-tree, Flexily layout, render graph
 
 ```ts
 // Everything in one barrel — app framework, headless, primitives, styled
-import { createApp, Box, Text, useAppTerminal, RichText, Span, WrapRow,
+import { createApp, Box, Text, useAppTerminal,
          Button, Input, Textarea, Checkbox, Dialog,
          colors, radius, space, Button as StyledButton } from "vexart"
 
