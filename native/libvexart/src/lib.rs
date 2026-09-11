@@ -2113,7 +2113,7 @@ pub unsafe extern "C" fn vexart_font_render_text(
                         color_g,
                         color_b,
                         color_a,
-                        atlas_id: 2,
+                        atlas_id: (entry.page as u32) + 2,
                         msdf_flag: 1,
                         _pad1: 0,
                         _pad2: 0,
@@ -2124,21 +2124,41 @@ pub unsafe extern "C" fn vexart_font_render_text(
         }
 
         let page_size = atlas_mgr.page_size();
+        let stride = page_size * 4;
         for (page_idx, page) in atlas_mgr.pages.iter_mut().enumerate() {
             if page.dirty {
                 let msdf_atlas_id = (page_idx as u32) + 2;
                 if msdf_atlas_id <= 15 {
-                    let _ = pctx.atlases.load_atlas_raw(
-                        &pctx.wgpu.device,
-                        &pctx.wgpu.queue,
-                        &pctx.wgpu.image_bind_group_layout,
-                        msdf_atlas_id,
-                        &page.rgba,
-                        page_size,
-                        page_size,
-                    );
+                    if !pctx.atlases.contains(msdf_atlas_id) || page.dirty_subregions.is_empty() {
+                        // Initial upload if not loaded yet, or in-place full update if no specific subregions recorded.
+                        let _ = pctx.atlases.load_atlas_raw(
+                            &pctx.wgpu.device,
+                            &pctx.wgpu.queue,
+                            &pctx.wgpu.image_bind_group_layout,
+                            msdf_atlas_id,
+                            &page.rgba,
+                            page_size,
+                            page_size,
+                        );
+                    } else {
+                        for sub in page.dirty_subregions.drain(..) {
+                            let offset = (sub.y as u64 * stride as u64) + (sub.x as u64 * 4);
+                            let _ = pctx.atlases.update_subregion(
+                                &pctx.wgpu.queue,
+                                msdf_atlas_id,
+                                sub.x,
+                                sub.y,
+                                sub.width,
+                                sub.height,
+                                &page.rgba,
+                                stride,
+                                offset,
+                            );
+                        }
+                    }
                 }
                 page.dirty = false;
+                page.dirty_subregions.clear();
             }
         }
 

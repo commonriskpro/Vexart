@@ -142,6 +142,15 @@ impl MsdfGlyphEntry {
     }
 }
 
+/// Subregion of an atlas page modified by a glyph write.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GlyphSubregion {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
 /// One atlas page — 1024×1024 RGBA8 pixel data.
 pub struct AtlasPage {
     /// Raw RGBA8 pixel data, PAGE_SIZE × PAGE_SIZE × 4 bytes.
@@ -150,6 +159,8 @@ pub struct AtlasPage {
     pub count: u32,
     /// Whether this page has been modified since last GPU upload.
     pub dirty: bool,
+    /// Dirty glyph subregions queued for upload via write_texture.
+    pub dirty_subregions: Vec<GlyphSubregion>,
 }
 
 impl AtlasPage {
@@ -167,6 +178,7 @@ impl AtlasPage {
             rgba,
             count: 0,
             dirty: true,
+            dirty_subregions: Vec::new(),
         }
     }
 
@@ -178,8 +190,10 @@ impl AtlasPage {
     fn write_glyph(&mut self, col: u32, row: u32, msdf: &image::RgbImage) {
         let base_x = col * CELL_SIZE + GLYPH_PAD;
         let base_y = row * CELL_SIZE + GLYPH_PAD;
-        for py in 0..GLYPH_SIZE.min(msdf.height()) {
-            for px in 0..GLYPH_SIZE.min(msdf.width()) {
+        let w = GLYPH_SIZE.min(msdf.width());
+        let h = GLYPH_SIZE.min(msdf.height());
+        for py in 0..h {
+            for px in 0..w {
                 let pixel = msdf.get_pixel(px, py);
                 let dx = base_x + px;
                 let dy = base_y + py;
@@ -192,6 +206,12 @@ impl AtlasPage {
                 }
             }
         }
+        self.dirty_subregions.push(GlyphSubregion {
+            x: base_x,
+            y: base_y,
+            width: w,
+            height: h,
+        });
         self.dirty = true;
     }
 }
@@ -606,5 +626,40 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_atlas_page_write_glyph_records_dirty_subregion() {
+        let mut page = AtlasPage::new();
+        assert!(page.dirty_subregions.is_empty());
+
+        let img = image::RgbImage::new(32, 32);
+        page.write_glyph(0, 0, &img);
+
+        assert_eq!(page.dirty_subregions.len(), 1);
+        let sub = page.dirty_subregions[0];
+        assert_eq!(
+            sub,
+            GlyphSubregion {
+                x: GLYPH_PAD,
+                y: GLYPH_PAD,
+                width: 32,
+                height: 32,
+            }
+        );
+        assert!(page.dirty);
+
+        // Second glyph at col=1, row=0
+        page.write_glyph(1, 0, &img);
+        assert_eq!(page.dirty_subregions.len(), 2);
+        assert_eq!(
+            page.dirty_subregions[1],
+            GlyphSubregion {
+                x: CELL_SIZE + GLYPH_PAD,
+                y: GLYPH_PAD,
+                width: 32,
+                height: 32,
+            }
+        );
     }
 }

@@ -187,7 +187,33 @@ impl AtlasRegistry {
             return Err(format!("font_id {font_id} out of range; must be 1-15"));
         }
 
-        // Remove existing atlas if present (upsert).
+        // If atlas already exists with matching dimensions, update in-place without reallocation.
+        if let Some(record) = self.records.get_mut(&font_id) {
+            if record.width == width && record.height == height {
+                queue.write_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &record.texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    rgba,
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(width * 4),
+                        rows_per_image: Some(height),
+                    },
+                    wgpu::Extent3d {
+                        width,
+                        height,
+                        depth_or_array_layers: 1,
+                    },
+                );
+                return Ok(());
+            }
+        }
+
+        // Remove existing atlas if present (upsert with different dimensions).
         self.records.remove(&font_id);
 
         let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -264,6 +290,103 @@ impl AtlasRegistry {
                 cell_height: 0,
                 width,
                 height,
+            },
+        );
+
+        Ok(())
+    }
+
+    /// Update a subregion of an existing MSDF atlas page directly via queue.write_texture.
+    ///
+    /// - `origin_x`, `origin_y`: top-left corner in the atlas texture (texels).
+    /// - `width`, `height`: dimensions of the subregion to update (texels).
+    /// - `data`: byte buffer containing pixel data (e.g. the full atlas page RGBA buffer).
+    /// - `bytes_per_row`: stride in bytes per row in `data` (e.g. PAGE_SIZE * 4).
+    /// - `offset`: start offset in bytes into `data` where this subregion begins.
+    pub fn update_subregion(
+        &self,
+        queue: &wgpu::Queue,
+        font_id: u32,
+        origin_x: u32,
+        origin_y: u32,
+        width: u32,
+        height: u32,
+        data: &[u8],
+        bytes_per_row: u32,
+        offset: u64,
+    ) -> Result<(), String> {
+        if font_id == 0 || font_id > 15 {
+            return Err(format!("font_id {font_id} out of range; must be 1-15"));
+        }
+
+        let record = self
+            .records
+            .get(&font_id)
+            .ok_or_else(|| format!("font_id {font_id} not loaded"))?;
+
+        if width == 0 || height == 0 {
+            return Err("subregion width and height must be non-zero".to_string());
+        }
+
+        let max_x = origin_x
+            .checked_add(width)
+            .ok_or_else(|| "subregion x bounds overflow".to_string())?;
+        let max_y = origin_y
+            .checked_add(height)
+            .ok_or_else(|| "subregion y bounds overflow".to_string())?;
+
+        if max_x > record.width || max_y > record.height {
+            return Err(format!(
+                "subregion (origin=({}, {}), size=({}, {})) exceeds atlas bounds ({}x{})",
+                origin_x, origin_y, width, height, record.width, record.height
+            ));
+        }
+
+        let row_bytes = (width as u64)
+            .checked_mul(4)
+            .ok_or_else(|| "subregion row bytes overflow".to_string())?;
+        if (bytes_per_row as u64) < row_bytes && height > 1 {
+            return Err(format!(
+                "bytes_per_row ({bytes_per_row}) must be at least row width in bytes ({row_bytes})"
+            ));
+        }
+
+        let last_row_offset = ((height - 1) as u64)
+            .checked_mul(bytes_per_row as u64)
+            .and_then(|h_offset| offset.checked_add(h_offset))
+            .ok_or_else(|| "subregion buffer offset calculation overflow".to_string())?;
+        let required_len = last_row_offset
+            .checked_add(row_bytes)
+            .ok_or_else(|| "subregion buffer end calculation overflow".to_string())?;
+
+        if (data.len() as u64) < required_len {
+            return Err(format!(
+                "subregion buffer too small: required {required_len} bytes, got {}",
+                data.len()
+            ));
+        }
+
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &record.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: origin_x,
+                    y: origin_y,
+                    z: 0,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            data,
+            wgpu::TexelCopyBufferLayout {
+                offset,
+                bytes_per_row: Some(bytes_per_row),
+                rows_per_image: Some(height),
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
             },
         );
 
@@ -551,5 +674,131 @@ mod tests {
         let reg = AtlasRegistry::new();
         assert!(!reg.contains(0));
         assert!(reg.get(0).is_none());
+    }
+
+    #[test]
+    fn test_update_subregion_validation() {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            flags: wgpu::InstanceFlags::empty(),
+            backend_options: wgpu::BackendOptions::default(),
+            memory_budget_thresholds: Default::default(),
+            display: Default::default(),
+        });
+        let adapter = match pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::default(),
+            compatible_surface: None,
+            force_fallback_adapter: false,
+        })) {
+            Ok(a) => a,
+            Err(_) => return,
+        };
+        let (device, queue) = match pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            label: Some("test"),
+            required_features: wgpu::Features::empty(),
+            required_limits: wgpu::Limits::downlevel_defaults(),
+            memory_hints: wgpu::MemoryHints::Performance,
+            trace: wgpu::Trace::Off,
+            experimental_features: Default::default(),
+        })) {
+            Ok(pair) => pair,
+            Err(_) => return,
+        };
+
+        let image_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("test-bgl"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+
+        let mut reg = AtlasRegistry::new();
+        let atlas_w = 64u32;
+        let atlas_h = 64u32;
+        let initial_rgba = vec![0u8; (atlas_w * atlas_h * 4) as usize];
+
+        // 1. font_id = 0 fails
+        assert!(reg
+            .update_subregion(&queue, 0, 0, 0, 16, 16, &initial_rgba, atlas_w * 4, 0)
+            .is_err());
+
+        // 2. font_id > 15 fails
+        assert!(reg
+            .update_subregion(&queue, 16, 0, 0, 16, 16, &initial_rgba, atlas_w * 4, 0)
+            .is_err());
+
+        // 3. font_id not yet loaded fails
+        assert!(reg
+            .update_subregion(&queue, 1, 0, 0, 16, 16, &initial_rgba, atlas_w * 4, 0)
+            .is_err());
+
+        // Load atlas
+        let load_res = reg.load_atlas_raw(
+            &device,
+            &queue,
+            &image_bgl,
+            1,
+            &initial_rgba,
+            atlas_w,
+            atlas_h,
+        );
+        assert!(load_res.is_ok());
+        assert!(reg.contains(1));
+
+        // 4. Zero width or height fails
+        assert!(reg
+            .update_subregion(&queue, 1, 0, 0, 0, 16, &initial_rgba, atlas_w * 4, 0)
+            .is_err());
+        assert!(reg
+            .update_subregion(&queue, 1, 0, 0, 16, 0, &initial_rgba, atlas_w * 4, 0)
+            .is_err());
+
+        // 5. Out of bounds X fails
+        assert!(reg
+            .update_subregion(&queue, 1, 50, 0, 20, 16, &initial_rgba, atlas_w * 4, 0)
+            .is_err());
+
+        // 6. Out of bounds Y fails
+        assert!(reg
+            .update_subregion(&queue, 1, 0, 50, 16, 20, &initial_rgba, atlas_w * 4, 0)
+            .is_err());
+
+        // 7. Buffer too small fails
+        let small_buf = vec![0u8; 10];
+        assert!(reg
+            .update_subregion(&queue, 1, 0, 0, 16, 16, &small_buf, atlas_w * 4, 0)
+            .is_err());
+
+        // 8. Valid subregion update succeeds
+        let valid_sub = vec![128u8; (16 * 16 * 4) as usize];
+        let res = reg.update_subregion(&queue, 1, 8, 8, 16, 16, &valid_sub, 16 * 4, 0);
+        assert!(res.is_ok());
+
+        // 9. Re-calling load_atlas_raw with same dimensions updates in-place
+        let reload_res = reg.load_atlas_raw(
+            &device,
+            &queue,
+            &image_bgl,
+            1,
+            &initial_rgba,
+            atlas_w,
+            atlas_h,
+        );
+        assert!(reload_res.is_ok());
     }
 }
