@@ -7,7 +7,6 @@ pub mod canvas_display_list;
 pub mod composite;
 pub mod ffi;
 pub mod font;
-pub mod frame;
 pub mod image_asset;
 pub mod kitty;
 pub mod layer;
