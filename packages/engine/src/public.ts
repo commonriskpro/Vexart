@@ -115,6 +115,8 @@ export {
   getFont,
   clearTextCache,
   getTextLayoutCacheStats,
+  measureForLayout,
+  measureTextWidth,
 } from "./ffi/text-layout"
 export type { FontDescriptor } from "./ffi/text-layout"
 // MSDF font system (Phase 2b / DEC-008)

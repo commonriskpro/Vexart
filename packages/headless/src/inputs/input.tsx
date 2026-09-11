@@ -12,7 +12,7 @@
 
 import { createMemo, createSignal, createEffect, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import { useFocus, onInput } from "@vexart/engine"
+import { useFocus, onInput, measureForLayout } from "@vexart/engine"
 import { useDisabled } from "../helpers/disabled"
 import { nextCodePointOffset, previousCodePointOffset } from "./text-offset"
 
@@ -322,11 +322,30 @@ export function Input(props: InputProps) {
       )
     }
 
+    const cursorX = () => {
+      const prefix = val.slice(0, pos)
+      if (prefix.length === 0) return 0
+      try {
+        return measureForLayout(prefix, 0, th().fontSize).width
+      } catch {
+        return prefix.length * th().fontSize * 0.6
+      }
+    }
+
     return (
       <box height={lineHeight()} width="100%">
         <text color={th().fg} fontSize={th().fontSize}>
-          {val.slice(0, pos) + (isFocused ? (blink() ? "│" : " ") : "") + val.slice(pos)}
+          {val}
         </text>
+        {isFocused && blink() ? (
+          <box
+            floating="parent"
+            floatOffset={{ x: cursorX(), y: 0 }}
+            width={1.5}
+            height={lineHeight()}
+            backgroundColor={cursorColor()}
+          />
+        ) : null}
       </box>
     )
   })

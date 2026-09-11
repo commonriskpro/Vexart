@@ -91,6 +91,7 @@ function layoutCacheKey(
 }
 
 /** Measure text width for a single line (no wrapping). Uses native Rust FFI. */
+/** @public */
 export function measureTextWidth(text: string, fontId: number): number {
   const desc = getFont(fontId)
   return measureForLayout(text, fontId, desc.size).width
@@ -289,6 +290,7 @@ function nativeMeasure(text: string, fontSize: number, families: string[] = ["sa
  * proportional metrics that match the MSDF rendering pipeline.
  * Falls back to monospace heuristic when native FFI is unavailable.
  */
+/** @public */
 export function measureForLayout(
   text: string,
   fontId: number,
