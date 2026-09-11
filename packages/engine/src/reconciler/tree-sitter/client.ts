@@ -16,6 +16,7 @@ import { existsSync } from "fs"
 import { resolve } from "path"
 
 let extraParsers: FiletypeParserConfig[] = []
+let singleton: TreeSitterClient | undefined
 
 /**
  * Register additional parsers before client initialization.
@@ -135,12 +136,22 @@ export class TreeSitterClient {
 
     const id = `hl_${this.idCounter++}`
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       this.callbacks.set(id, (result) => {
-        resolve(result.highlights ?? [])
+        if (result.error) {
+          reject(new Error(result.error))
+        } else {
+          resolve(result.highlights ?? [])
+        }
       })
 
-      this.worker!.postMessage({
+      if (!this.worker) {
+        this.callbacks.delete(id)
+        reject(new Error("Tree-sitter worker is not available"))
+        return
+      }
+
+      this.worker.postMessage({
         type: "HIGHLIGHT",
         id,
         content,
@@ -156,17 +167,22 @@ export class TreeSitterClient {
 
   /** Destroy worker and clean up. */
   destroy() {
+    const err = "Tree-sitter worker terminated"
+    for (const cb of this.callbacks.values()) {
+      cb({ error: err })
+    }
+    this.callbacks.clear()
     this.worker?.terminate()
     this.worker = undefined
     this.initialized = false
     this.initPromise = undefined
-    this.callbacks.clear()
+    if (singleton === this) {
+      singleton = undefined
+    }
   }
 }
 
 // ── Singleton ──
-
-let singleton: TreeSitterClient | undefined
 
 /** @public */
 export function getTreeSitterClient(): TreeSitterClient {
