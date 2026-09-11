@@ -392,4 +392,17 @@ describe("Kitty APC responses", () => {
     }])
     parser.destroy()
   })
+
+  test("preserves following escape sequence from oversized unterminated response in same buffer", () => {
+    const events: InputEvent[] = []
+    const parser = createParser((event) => events.push(event))
+    parser.feed(Buffer.from("\x1b_G" + "x".repeat(5000) + "\x1b[A", "utf-8"))
+    expect(events).toEqual([{
+      type: "key",
+      key: "up",
+      char: "",
+      mods: { shift: false, alt: false, ctrl: false, meta: false },
+    }])
+    parser.destroy()
+  })
 })

@@ -159,9 +159,15 @@ export function createParser(handler: InputHandler): InputParser {
           continue
         }
         if (buffer.length > MAX_KITTY_RESPONSE) {
-          // An unterminated APC cannot be framed safely. Drop the bounded
-          // response buffer so later PTY input is not held indefinitely.
+          // An unterminated APC cannot be framed safely. Truncate only the malformed
+          // sequence up to the next escape sequence to preserve following input events.
+          const nextEscape = buffer.indexOf("\x1b", KITTY_RESPONSE_START.length)
+          if (nextEscape !== -1) {
+            buffer = buffer.slice(nextEscape)
+            continue
+          }
           buffer = ""
+          return
         }
         return
       }
