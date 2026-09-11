@@ -24,7 +24,6 @@ import { createTextFlexNode } from "../ffi/flex-sync"
 import { normalizeTextForLayout } from "../ffi/text-layout"
 // measureForLayout is called inside the retained text Flexily measureFunc (flex-sync.ts)
 import { CanvasContext, hashCanvasDisplayList, serializeCanvasDisplayList } from "../ffi/canvas"
-import { nativeCanvasDisplayListTouch, nativeCanvasDisplayListUpdate, syncNativeCanvasDisplayListHandle } from "../ffi/native-canvas-display-list"
 import { decodeImageForNode } from "./image"
 import { ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, type createVexartLayoutCtx } from "./layout-adapter"
 import { BACKDROP_FIELDS } from "../ffi/render-graph"
@@ -375,34 +374,23 @@ export function walkTree(
       const drawCacheKey = props.drawCacheKey === undefined ? null : `${props.drawCacheKey}:${viewportKey}`
       const canReuseCommands = drawCacheKey !== null && extra.drawCacheKey === drawCacheKey && extra.displayListCommands !== null && extra.displayListHash !== null
       let commands = extra.displayListCommands
-      let hash = extra.displayListHash
 
-      let serializedBytes: Uint8Array | null = null
       if (!canReuseCommands) {
         const ctx = new CanvasContext(props.viewport)
         props.onDraw(ctx)
         commands = ctx._commands
-        serializedBytes = serializeCanvasDisplayList(commands)
-        hash = hashCanvasDisplayList(serializedBytes)
+        const serializedBytes = serializeCanvasDisplayList(commands)
         extra.drawCacheKey = drawCacheKey
         extra.displayListCommands = commands
+        extra.displayListHash = hashCanvasDisplayList(serializedBytes)
       }
 
-      if (extra.nativeHandle && extra.displayListHash === hash) {
-        nativeCanvasDisplayListTouch(extra.nativeHandle)
-      } else {
-        // Reuse bytes from above if available, otherwise serialize once
-        const bytes = serializedBytes ?? serializeCanvasDisplayList(commands ?? [])
-        const handle = nativeCanvasDisplayListUpdate({ key: `canvas:${node.id}`, bytes })
-        if (handle) syncNativeCanvasDisplayListHandle(node, handle, hash)
-      }
       layout.setCanvas({
         renderObjectId: node.id,
         color: placeholderColor,
         onDraw: props.onDraw,
         displayListCommands: commands ?? undefined,
         viewport: props.viewport,
-        nativeDisplayListHandle: extra.nativeHandle,
         displayListHash: extra.displayListHash,
       })
     }

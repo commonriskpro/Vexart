@@ -425,9 +425,6 @@ implemented under `native/libvexart/src`. Export names are prefixed with `vexart
 | `vexart_image_asset_register` | Register/update native image asset |
 | `vexart_image_asset_touch` | Touch native image asset for lifetime/resource tracking |
 | `vexart_image_asset_release` | Release native image asset |
-| `vexart_canvas_display_list_update` | Register/update native canvas display list |
-| `vexart_canvas_display_list_touch` | Touch native canvas display list |
-| `vexart_canvas_display_list_release` | Release native canvas display list |
 | `vexart_font_init` | Initialize native font system |
 | `vexart_font_query` | Query font face availability |
 | `vexart_font_render_text` | Render MSDF text glyphs |

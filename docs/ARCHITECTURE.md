@@ -309,8 +309,7 @@ packages/engine/
 │   │   ├── grid-text-intrinsics.ts — intrinsic text measurement adapter
 │   │   ├── native-presentation-*.ts — native presentation flags/ops/stats
 │   │   ├── native-layer-registry*.ts — native layer registry + flags
-│   │   ├── native-image-assets.ts    — native image asset management
-│   │   └── native-canvas-display-list.ts — native canvas display list
+│   │   └── native-image-assets.ts    — native image asset management
 │   │
 │   ├── input/                 — terminal input parsing
 │   │   ├── parser.ts          — ANSI/SGR/URXVT escape sequence decoder
@@ -515,7 +514,6 @@ native/libvexart/
 │   ├── frame.rs               — frame types
 │   ├── layer.rs               — native layer registry (Phase 2c)
 │   ├── image_asset.rs         — image asset registry
-│   ├── canvas_display_list.rs — canvas display list registry
 │   │
 │   ├── paint/                 — WGPU rendering
 │   │   ├── mod.rs             — paint dispatch entry point
@@ -1606,9 +1604,6 @@ vexart_resource_set_budget
 vexart_image_asset_register
 vexart_image_asset_touch
 vexart_image_asset_release
-vexart_canvas_display_list_update
-vexart_canvas_display_list_touch
-vexart_canvas_display_list_release
 vexart_get_last_error_length
 vexart_copy_last_error
 ```

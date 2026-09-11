@@ -1,9 +1,8 @@
 // native/libvexart/src/lib.rs
-// All #[no_mangle] pub extern "C" FFI exports for libvexart (53 functions).
+// All #[no_mangle] pub extern "C" FFI exports for libvexart (50 functions in lib.rs, 53 total).
 // Every export wraps its body in ffi_guard! for panic safety.
 // Per design §5, REQ-NB-003.
 
-pub mod canvas_display_list;
 pub mod composite;
 pub mod ffi;
 pub mod font;
@@ -176,15 +175,6 @@ fn get_or_init_image_assets() -> &'static Mutex<image_asset::ImageAssetRegistry>
     &SHARED_IMAGE_ASSETS
 }
 
-static SHARED_CANVAS_DISPLAY_LISTS: LazyLock<
-    Mutex<canvas_display_list::CanvasDisplayListRegistry>,
-> = LazyLock::new(|| Mutex::new(canvas_display_list::CanvasDisplayListRegistry::new()));
-
-fn get_or_init_canvas_display_lists(
-) -> &'static Mutex<canvas_display_list::CanvasDisplayListRegistry> {
-    &SHARED_CANVAS_DISPLAY_LISTS
-}
-
 // ─── Single shared LayerRegistry (Phase 2c native layer ownership) ──────────
 
 static SHARED_LAYER_REGISTRY: LazyLock<Mutex<layer::LayerRegistry>> =
@@ -256,24 +246,19 @@ pub extern "C" fn vexart_context_destroy(ctx: u64) -> i32 {
             let mut guard = lock_or_recover(&SHARED_IMAGE_ASSETS);
             *guard = image_asset::ImageAssetRegistry::new();
         }
-        // 4. Symmetrically reset/drain SHARED_CANVAS_DISPLAY_LISTS
-        {
-            let mut guard = lock_or_recover(&SHARED_CANVAS_DISPLAY_LISTS);
-            *guard = canvas_display_list::CanvasDisplayListRegistry::new();
-        }
-        // 5. Symmetrically reset/drain SHARED_LAYER_REGISTRY
+        // 4. Symmetrically reset/drain SHARED_LAYER_REGISTRY
         {
             let mut guard = lock_or_recover(&SHARED_LAYER_REGISTRY);
             *guard = layer::LayerRegistry::new();
         }
-        // 6. Symmetrically reset/drain SHARED_MSDF_ATLAS
+        // 5. Symmetrically reset/drain SHARED_MSDF_ATLAS
         {
             let mut guard = lock_or_recover(&SHARED_MSDF_ATLAS);
             *guard = font::msdf_atlas::MsdfAtlasManager::new();
         }
-        // 7. Symmetrically reset frame counter
+        // 6. Symmetrically reset frame counter
         FRAME_COUNT.store(1, Ordering::Relaxed);
-        // 8. Release any active SHM mappings
+        // 7. Release any active SHM mappings
         kitty::transport::cleanup_shm_on_shutdown();
         OK
     })
@@ -1643,77 +1628,6 @@ pub extern "C" fn vexart_image_asset_release(handle: u64) -> i32 {
     })
 }
 
-/// Register or update a native canvas display list.
-///
-/// # Safety
-/// All pointers must be valid for their documented lengths.
-#[no_mangle]
-pub unsafe extern "C" fn vexart_canvas_display_list_update(
-    current_frame: u64,
-    key_ptr: *const u8,
-    key_len: u32,
-    bytes_ptr: *const u8,
-    bytes_len: u32,
-    out_handle: *mut u64,
-) -> i32 {
-    ffi_guard!({
-        if key_ptr.is_null()
-            || key_len == 0
-            || bytes_ptr.is_null()
-            || bytes_len == 0
-            || out_handle.is_null()
-        {
-            return ERR_INVALID_ARG;
-        }
-        let key = String::from_utf8_lossy(std::slice::from_raw_parts(key_ptr, key_len as usize))
-            .to_string();
-        let bytes = std::slice::from_raw_parts(bytes_ptr, bytes_len as usize);
-        let hash = canvas_display_list::hash_display_list(bytes);
-
-        let resources = get_or_init_resource();
-        let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
-        let registry = get_or_init_canvas_display_lists();
-        let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
-        let Some(handle) =
-            registry_guard.update(key, bytes, hash, current_frame, &mut resources_guard)
-        else {
-            return ERR_INVALID_ARG;
-        };
-        *out_handle = handle;
-        OK
-    })
-}
-
-#[no_mangle]
-pub extern "C" fn vexart_canvas_display_list_touch(current_frame: u64, handle: u64) -> i32 {
-    ffi_guard!({
-        let resources = get_or_init_resource();
-        let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
-        let registry = get_or_init_canvas_display_lists();
-        let registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
-        if registry_guard.touch(handle, current_frame, &mut resources_guard) {
-            OK
-        } else {
-            ERR_INVALID_ARG
-        }
-    })
-}
-
-#[no_mangle]
-pub extern "C" fn vexart_canvas_display_list_release(handle: u64) -> i32 {
-    ffi_guard!({
-        let resources = get_or_init_resource();
-        let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
-        let registry = get_or_init_canvas_display_lists();
-        let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
-        if registry_guard.release(handle, &mut resources_guard) {
-            OK
-        } else {
-            ERR_INVALID_ARG
-        }
-    })
-}
-
 // ─── §5.9 Font system — MSDF text pipeline (Phase 2b / DEC-008) ─────────
 
 static SHARED_FONT_SYSTEM: LazyLock<Mutex<font::system::FontSystem>> =
@@ -2138,11 +2052,6 @@ mod tests {
             let mut res = lock_or_recover(&SHARED_RESOURCE);
             let rgba = [255u8; 16];
             img_reg.register("test.png".to_string(), &rgba, 2, 2, 1, &mut res);
-        }
-        {
-            let mut cdl_reg = lock_or_recover(&SHARED_CANVAS_DISPLAY_LISTS);
-            let mut res = lock_or_recover(&SHARED_RESOURCE);
-            cdl_reg.update("canvas_test".to_string(), b"commands", "h1".to_string(), 1, &mut res);
         }
         // Create a target and set scissor to verify teardown drains it
         {

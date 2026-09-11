@@ -60,7 +60,6 @@ export type NodeCanvasExtra = {
   displayListCommands: import("./canvas").DrawCmd[] | null
   displayListHash: string | null
   drawCacheKey: string | null
-  nativeHandle: bigint | null
 }
 
 /** @public Event passed to onPress handlers. Supports stopPropagation like DOM events. */

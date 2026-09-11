@@ -160,7 +160,6 @@ export type CanvasPaintConfig = {
   onDraw: (ctx: CanvasContext) => void
   displayListCommands?: DrawCmd[]
   viewport?: { x: number; y: number; zoom: number }
-  nativeDisplayListHandle?: bigint | null
   displayListHash?: string | null
 }
 

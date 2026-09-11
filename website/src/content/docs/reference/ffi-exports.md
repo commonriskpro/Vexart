@@ -73,7 +73,7 @@ The native boundary is bound in `packages/engine/src/ffi/vexart-bridge.ts` and i
 | `vexart_layer_clear` | Clear all layers |
 | `vexart_layer_present_dirty` | Mark presented + get image ID |
 
-## Resources (8)
+## Resources (5)
 
 | Function | Purpose |
 |----------|---------|
@@ -82,9 +82,6 @@ The native boundary is bound in `packages/engine/src/ffi/vexart-bridge.ts` and i
 | `vexart_image_asset_register` | Register image asset |
 | `vexart_image_asset_touch` | Touch for lifetime tracking |
 | `vexart_image_asset_release` | Release image asset |
-| `vexart_canvas_display_list_update` | Update canvas display list |
-| `vexart_canvas_display_list_touch` | Touch display list |
-| `vexart_canvas_display_list_release` | Release display list |
 
 ## Font System (4)
 

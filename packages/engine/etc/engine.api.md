@@ -219,7 +219,6 @@ export type CanvasPaintConfig = {
         y: number;
         zoom: number;
     };
-    nativeDisplayListHandle?: bigint | null;
     displayListHash?: string | null;
 };
 
@@ -2911,18 +2910,6 @@ export const VEXART_SYMBOLS: {
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_image_asset_release: {
-        readonly args: [FFIType.uint64_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_canvas_display_list_update: {
-        readonly args: [FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_canvas_display_list_touch: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_canvas_display_list_release: {
         readonly args: [FFIType.uint64_t];
         readonly returns: FFIType.int32_t;
     };

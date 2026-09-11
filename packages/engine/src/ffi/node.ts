@@ -127,7 +127,7 @@ export function createNode(kind: TGENodeKind): TGENode {
     _active: false,
     _focused: false,
     _imageExtra: kind === "img" ? { buffer: null, state: "idle", nativeHandle: null } : null,
-    _canvasExtra: kind === "canvas" ? { displayListCommands: null, displayListHash: null, drawCacheKey: null, nativeHandle: null } : null,
+    _canvasExtra: kind === "canvas" ? { displayListCommands: null, displayListHash: null, drawCacheKey: null } : null,
     _widthSizing: null,
     _heightSizing: null,
     _transform: null,
@@ -161,7 +161,7 @@ export function ensureImageExtra(node: TGENode): NodeImageExtra {
 }
 
 export function ensureCanvasExtra(node: TGENode): NodeCanvasExtra {
-  if (!node._canvasExtra) node._canvasExtra = { displayListCommands: null, displayListHash: null, drawCacheKey: null, nativeHandle: null }
+  if (!node._canvasExtra) node._canvasExtra = { displayListCommands: null, displayListHash: null, drawCacheKey: null }
   return node._canvasExtra
 }
 

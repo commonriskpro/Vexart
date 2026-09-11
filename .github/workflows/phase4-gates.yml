@@ -41,7 +41,6 @@ jobs:
             | grep -v 'frame-orchestrator\.test' \
             | grep -v 'showcase-tab2\.test' \
             | grep -v 'native-image-assets\.test' \
-            | grep -v 'native-canvas-display-list\.test' \
             | grep -v 'native-presentation-stats\.test' \
             | grep -v 'native-layer-registry-flags\.test' \
             | grep -v 'bridge\.test' \
