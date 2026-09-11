@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { getThemeEpoch } from "@vexart/engine"
 import { darkTheme, getTheme, getThemeVersion, lightTheme, setTheme, themeColors } from "./theme"
 
 describe("theme", () => {
@@ -42,5 +43,16 @@ describe("theme", () => {
     setTheme(darkTheme)
     const v3 = getThemeVersion()
     expect(v3).toBe(v2 + 1)
+  })
+
+  test("bumpThemeEpoch is called whenever setTheme is called", () => {
+    const epoch1 = getThemeEpoch()
+    setTheme(lightTheme)
+    const epoch2 = getThemeEpoch()
+    expect(epoch2).toBe(epoch1 + 1)
+
+    setTheme(darkTheme)
+    const epoch3 = getThemeEpoch()
+    expect(epoch3).toBe(epoch2 + 1)
   })
 })

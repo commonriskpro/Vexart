@@ -124,8 +124,6 @@ export declare const lightTheme: Required<ThemeDefinition>
 export declare function setTheme(theme: Required<ThemeDefinition>): void
 export declare function getTheme(): Required<ThemeDefinition>
 export declare const themeColors: ColorTokens
-export declare function ThemeProvider(props: { theme?: Required<ThemeDefinition>; children?: JSX.Element }): JSX.Element
-export declare function useTheme(): { colors: ColorTokens; setTheme: (theme: Required<ThemeDefinition>) => void }
 
 // ── Typography ──
 

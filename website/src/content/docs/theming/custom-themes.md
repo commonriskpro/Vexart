@@ -5,10 +5,10 @@ description: Create and apply custom themes at runtime.
 
 ## Theme System
 
-Vexart supports runtime theme switching via `ThemeProvider`:
+Vexart provides a reactive, process-level Theme Manager:
 
 ```tsx
-import { ThemeProvider, createTheme, darkTheme, useTheme } from "@vexart/styled"
+import { setTheme, getTheme, themeColors, createTheme, darkTheme, lightTheme } from "vexart"
 
 const myTheme = createTheme({
   colors: {
@@ -19,13 +19,8 @@ const myTheme = createTheme({
   },
 })
 
-function App() {
-  return (
-    <ThemeProvider theme={myTheme}>
-      <MyContent />
-    </ThemeProvider>
-  )
-}
+// Switch theme at runtime
+setTheme(myTheme)
 ```
 
 ## Built-in Themes
@@ -38,25 +33,24 @@ function App() {
 ## Runtime Switching
 
 ```tsx
-import { setTheme, getTheme, darkTheme, lightTheme } from "@vexart/styled"
+import { setTheme, getTheme, darkTheme, lightTheme } from "vexart"
 
 // Switch globally
 setTheme(lightTheme)
 
-// Read current
+// Read current theme snapshot
 const current = getTheme()
 ```
 
-## useTheme Hook
+## Reactive Theme Tokens
 
-Access theme tokens inside any component:
+Access theme colors directly inside any component. SolidJS automatically tracks color signal reads:
 
 ```tsx
-import { useTheme } from "@vexart/styled"
+import { themeColors } from "vexart"
 
 function MyComponent() {
-  const theme = useTheme()
-  return <box backgroundColor={theme.colors.card}>...</box>
+  return <box backgroundColor={themeColors.card}>...</box>
 }
 ```
 

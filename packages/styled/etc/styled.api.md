@@ -414,12 +414,6 @@ export type ThemeDefinition = {
 };
 
 // @public (undocumented)
-export function ThemeProvider(props: {
-    theme?: Required<ThemeDefinition>;
-    children?: JSX.Element;
-}): JSX.Element;
-
-// @public (undocumented)
 export type ToasterHandle = {
     toast: (input: ToastInput) => number;
     dismiss: (id: number) => void;
@@ -445,12 +439,6 @@ export interface TypographyProps {
     // (undocumented)
     color?: string | number;
 }
-
-// @public (undocumented)
-export function useTheme(): {
-    colors: ColorTokens;
-    setTheme: (theme: Required<ThemeDefinition>) => void;
-};
 
 // @public (undocumented)
 export function VoidCheckbox(props: VoidCheckboxProps): JSX;

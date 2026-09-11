@@ -3133,17 +3133,6 @@ export declare type ThemeDefinition = {
     colors: Partial<ColorTokens>;
 };
 
-/**
- * ThemeProvider component — provides theme context to children.
- * For most apps, the global setTheme() is sufficient.
- * Use ThemeProvider only if you need nested/different themes in subtrees.
- */
-/** @public */
-export declare function ThemeProvider(props: {
-    theme?: Required<ThemeDefinition>;
-    children?: JSX.Element;
-}): JSX.Element;
-
 /** @public */
 declare type ThemeTokenStyle = {
     scope: string[];
@@ -3327,15 +3316,6 @@ export declare function useTerminalDimensions(terminal: Terminal): {
     rows: () => number;
     cellWidth: () => number;
     cellHeight: () => number;
-};
-
-/**
- * Access the current theme context (reactive).
- */
-/** @public */
-export declare function useTheme(): {
-    colors: ColorTokens;
-    setTheme: (theme: Required<ThemeDefinition>) => void;
 };
 
 /** @public */

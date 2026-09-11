@@ -377,22 +377,6 @@ function ThemeSwitcher() {
 
 ---
 
-## ThemeProvider
-
-For nested themes (rare), wrap a subtree in `<ThemeProvider>`:
-
-```tsx
-import { ThemeProvider } from "vexart"
-
-<ThemeProvider theme={customTheme}>
-  {/* Children here read the custom theme */}
-</ThemeProvider>
-```
-
-For most apps, global `setTheme()` is sufficient.
-
----
-
 ## Void Components and Theming
 
 Void components (from `@vexart/styled`) read `themeColors` internally. They react to `setTheme()` automatically:

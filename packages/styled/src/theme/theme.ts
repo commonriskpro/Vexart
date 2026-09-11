@@ -1,5 +1,5 @@
 /**
- * ThemeProvider — runtime theming with SolidJS reactivity.
+ * Runtime theming with SolidJS reactivity.
  *
  * Architecture:
  *   - Each color token is backed by a SolidJS signal
@@ -19,8 +19,8 @@
  *   setTheme(light)  // → all subscribed components update
  */
 
-import { createSignal, createContext, useContext, createComponent, batch } from "solid-js"
-import type { JSX } from "solid-js"
+import { createSignal, batch } from "solid-js"
+import { bumpThemeEpoch } from "@vexart/engine"
 import { colors as defaultColors, radius, space, font, weight, shadows } from "../tokens/tokens"
 
 // ── Types ──
@@ -130,6 +130,7 @@ export const themeColors: ColorTokens = Object.defineProperties(
 /** @public */
 export function setTheme(theme: Required<ThemeDefinition>) {
   batch(() => {
+    bumpThemeEpoch()
     setActiveThemeSig(theme)
     for (const key of Object.keys(defaultColors) as (keyof ColorTokens)[]) {
       const value = theme.colors[key] ?? defaultColors[key]
@@ -147,43 +148,3 @@ export function getTheme(): Required<ThemeDefinition> {
   return activeTheme()
 }
 
-// ── Context-based ThemeProvider (optional, for nested themes) ──
-
-const ThemeContext = createContext<{
-  colors: ColorTokens
-  setTheme: (theme: Required<ThemeDefinition>) => void
-}>({
-  colors: themeColors,
-  setTheme,
-})
-
-/**
- * ThemeProvider component — provides theme context to children.
- * For most apps, the global setTheme() is sufficient.
- * Use ThemeProvider only if you need nested/different themes in subtrees.
- */
-/** @public */
-export function ThemeProvider(props: {
-  theme?: Required<ThemeDefinition>
-  children?: JSX.Element
-}) {
-  if (props.theme) {
-    setTheme(props.theme)
-  }
-
-  return createComponent(ThemeContext.Provider, {
-    value: {
-      colors: themeColors,
-      setTheme,
-    },
-    get children() { return props.children },
-  })
-}
-
-/**
- * Access the current theme context (reactive).
- */
-/** @public */
-export function useTheme() {
-  return useContext(ThemeContext)
-}
