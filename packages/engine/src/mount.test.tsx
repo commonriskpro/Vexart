@@ -130,5 +130,113 @@ describe("mount scroll subscriptions", () => {
       setRendererBackend(prevBackend)
     }
   })
+})
 
+describe("mount mouse coordinates (Defect 15)", () => {
+  test("clicking a 1-row element at row 0 triggers onPress and onMouseDown centered at cellHeight * 0.5", async () => {
+    const prevBackend = getRendererBackend()
+    setRendererBackend(noopBackend)
+
+    const cellWidth = 8
+    const cellHeight = 16
+    const cols = 10
+    const rows = 5
+    const width = cols * cellWidth
+    const height = rows * cellHeight
+
+    const { terminal, emit } = createMockTerminal(width, height)
+    let pressedCount = 0
+    let mouseDownCount = 0
+    let receivedNodeY = -1
+
+    const handle = mount(() => {
+      return box({ width, height, direction: "column" }, [
+        box({
+          width,
+          height: cellHeight,
+          onPress: () => {
+            pressedCount += 1
+          },
+          onMouseDown: (e) => {
+            mouseDownCount += 1
+            receivedNodeY = e.nodeY
+          },
+        }),
+      ])
+    }, terminal)
+
+    try {
+      await sleep(20)
+
+      // Emit SGR mouse press at row 0: col 1, row 1 (1-based SGR coordinates)
+      emit("\x1b[<0;1;1M")
+      await sleep(20)
+
+      expect(mouseDownCount).toBe(1)
+      expect(receivedNodeY).toBe(cellHeight * 0.5)
+
+      // Emit SGR mouse release at row 0: col 1, row 1
+      emit("\x1b[<0;1;1m")
+      await sleep(20)
+
+      expect(pressedCount).toBe(1)
+    } finally {
+      handle.destroy()
+      setRendererBackend(prevBackend)
+    }
+  })
+
+  test("clicking an element at the bottom row triggers interaction with centered nodeY", async () => {
+    const prevBackend = getRendererBackend()
+    setRendererBackend(noopBackend)
+
+    const cellWidth = 8
+    const cellHeight = 16
+    const cols = 10
+    const rows = 5
+    const width = cols * cellWidth
+    const height = rows * cellHeight
+
+    const { terminal, emit } = createMockTerminal(width, height)
+    let bottomPressedCount = 0
+    let bottomMouseDownCount = 0
+    let bottomNodeY = -1
+
+    const handle = mount(() => {
+      return box({ width, height, direction: "column" }, [
+        box({ width, height: (rows - 1) * cellHeight }),
+        box({
+          width,
+          height: cellHeight,
+          onPress: () => {
+            bottomPressedCount += 1
+          },
+          onMouseDown: (e) => {
+            bottomMouseDownCount += 1
+            bottomNodeY = e.nodeY
+          },
+        }),
+      ])
+    }, terminal)
+
+    try {
+      await sleep(20)
+
+      // Emit SGR mouse press at bottom row: col 1, row rows (1-based SGR coordinates)
+      emit(`\x1b[<0;1;${rows}M`)
+      await sleep(20)
+
+      expect(bottomMouseDownCount).toBe(1)
+      expect(bottomNodeY).toBe(cellHeight * 0.5)
+
+      // Emit SGR mouse release at bottom row: col 1, row rows
+      emit(`\x1b[<0;1;${rows}m`)
+      await sleep(20)
+
+      expect(bottomPressedCount).toBe(1)
+    } finally {
+      handle.destroy()
+      setRendererBackend(prevBackend)
+    }
+  })
 })

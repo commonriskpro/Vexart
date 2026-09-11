@@ -183,8 +183,8 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
       if (event.action === "press") isButtonDown = true
       else if (event.action === "release") isButtonDown = false
 
-      const px = event.x * cellWf + cellWf * 0.5
-      const py = (event.y + 1) * cellHf
+      const px = (event.x + 0.5) * cellWf
+      const py = (event.y + 0.5) * cellHf
       loop.feedPointer(px, py, isButtonDown)
 
       if (event.action === "scroll") {
