@@ -1594,7 +1594,6 @@ vexart_kitty_emit_region
 vexart_kitty_emit_region_target
 vexart_kitty_delete_layer
 vexart_layer_upsert
-vexart_layer_mark_dirty
 vexart_layer_reuse
 vexart_layer_remove
 vexart_layer_clear

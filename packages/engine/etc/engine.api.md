@@ -2873,10 +2873,6 @@ export const VEXART_SYMBOLS: {
         readonly args: [FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
         readonly returns: FFIType.int32_t;
     };
-    readonly vexart_layer_mark_dirty: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t];
-        readonly returns: FFIType.int32_t;
-    };
     readonly vexart_layer_reuse: {
         readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr];
         readonly returns: FFIType.int32_t;

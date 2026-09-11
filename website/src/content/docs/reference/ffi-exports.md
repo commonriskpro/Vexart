@@ -62,12 +62,11 @@ The native boundary is bound in `packages/engine/src/ffi/vexart-bridge.ts` and i
 | `vexart_kitty_shm_prepare` | Prepare POSIX SHM |
 | `vexart_kitty_shm_release` | Release POSIX SHM |
 
-## Layer Registry (6)
+## Layer Registry (5)
 
 | Function | Purpose |
 |----------|---------|
 | `vexart_layer_upsert` | Upsert layer by stable key |
-| `vexart_layer_mark_dirty` | Mark layer dirty |
 | `vexart_layer_reuse` | Reuse clean layer |
 | `vexart_layer_remove` | Remove layer |
 | `vexart_layer_clear` | Clear all layers |

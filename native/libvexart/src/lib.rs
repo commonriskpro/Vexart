@@ -1237,20 +1237,6 @@ pub unsafe extern "C" fn vexart_layer_upsert(
     })
 }
 
-/// Mark a native layer dirty.
-#[no_mangle]
-pub extern "C" fn vexart_layer_mark_dirty(_ctx: u64, layer_handle: u64) -> i32 {
-    ffi_guard!({
-        let registry = get_or_init_layer_registry();
-        let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
-        if registry_guard.mark_dirty(layer_handle) {
-            OK
-        } else {
-            ERR_INVALID_ARG
-        }
-    })
-}
-
 /// Mark a native layer as reused in `frame` and write its terminal image ID to `out_image_id`.
 ///
 /// # Safety

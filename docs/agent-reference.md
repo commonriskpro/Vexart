@@ -415,7 +415,6 @@ implemented under `native/libvexart/src`. Export names are prefixed with `vexart
 | `vexart_kitty_emit_region_target` | Emit dirty region patch from GPU target |
 | `vexart_kitty_delete_layer` | Delete retained Kitty image/layer |
 | `vexart_layer_upsert` | Upsert native layer record by stable key |
-| `vexart_layer_mark_dirty` | Mark native layer dirty |
 | `vexart_layer_reuse` | Reuse clean native layer in a frame |
 | `vexart_layer_remove` | Remove native layer |
 | `vexart_layer_clear` | Clear all native layer records |

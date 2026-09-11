@@ -92,8 +92,6 @@ export const VEXART_SYMBOLS = {
   // §5.7 Native layer registry (Phase 2c)
   // upsert: ctx, key_ptr, key_len, desc_ptr, out_ptr → i32
   vexart_layer_upsert: { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  // mark_dirty: ctx, layer_handle → i32
-  vexart_layer_mark_dirty: { args: [FFIType.u64, FFIType.u64], returns: FFIType.i32 },
   // reuse: ctx, layer_handle, frame, out_image_id → i32
   vexart_layer_reuse: { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.ptr], returns: FFIType.i32 },
   // remove: ctx, layer_handle, out_image_id → i32

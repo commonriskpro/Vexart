@@ -55,9 +55,8 @@ All FFI exports use `#[no_mangle] pub extern "C"` or `#[no_mangle] pub unsafe ex
 - `vexart_kitty_emit_placeholder_shm_frame(ctx: u64, target: u64, params_ptr: *const u8, params_len: u32, out_handle: *mut u64, stats_out: *mut u32) -> i32`: Transmits SHM placeholder frame inside tmux.
 - `vexart_kitty_shm_is_consumed(handle: u64) -> i32`: Checks if terminal emulator unlinked SHM segment (`1 = yes`, `0 = no`).
 
-### §1.6 Native Layer Registry (6 Functions)
+### §1.6 Native Layer Registry (5 Functions)
 - `vexart_layer_upsert(ctx: u64, key_ptr: *const u8, key_len: u32, desc_ptr: *const u8, desc_len: u32, out_ptr: *mut u64) -> i32`: Registers or updates retained GPU layer.
-- `vexart_layer_mark_dirty(ctx: u64, layer_handle: u64) -> i32`: Marks a retained GPU layer dirty.
 - `vexart_layer_reuse(ctx: u64, layer_handle: u64, frame: u64, out_image_id: *mut u32) -> i32`: Reuses clean retained GPU layer.
 - `vexart_layer_remove(ctx: u64, layer_handle: u64, out_image_id: *mut u32) -> i32`: Destroys retained GPU layer.
 - `vexart_layer_clear(ctx: u64) -> i32`: Clears all retained GPU layers.

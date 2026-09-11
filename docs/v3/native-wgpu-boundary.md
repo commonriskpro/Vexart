@@ -221,10 +221,9 @@ pub unsafe extern "C" fn vexart_kitty_emit_placeholder_frame(ctx: u64, target: u
 pub extern "C" fn vexart_kitty_delete_placeholder(ctx: u64, image_id: u32) -> i32
 ```
 
-### 5.6 Native Retained Layer Registry (6 Functions)
+### 5.6 Native Retained Layer Registry (5 Functions)
 ```rust
 pub unsafe extern "C" fn vexart_layer_upsert(ctx: u64, key_ptr: *const u8, key_len: u32, desc_ptr: *const u8, desc_len: u32, out_ptr: *mut u64) -> i32
-pub extern "C" fn vexart_layer_mark_dirty(ctx: u64, layer_handle: u64) -> i32
 pub unsafe extern "C" fn vexart_layer_reuse(ctx: u64, layer_handle: u64, frame: u64, out_image_id: *mut u32) -> i32
 pub unsafe extern "C" fn vexart_layer_remove(ctx: u64, layer_handle: u64, out_image_id: *mut u32) -> i32
 pub extern "C" fn vexart_layer_clear(ctx: u64) -> i32
