@@ -1185,30 +1185,6 @@ pub unsafe extern "C" fn vexart_kitty_emit_frame_with_stats(
     })
 }
 
-/// Frame presentation with native presentation stats.
-///
-/// # Safety
-/// `stats_out` must be a valid mutable pointer to `NativePresentationStats` or null.
-#[no_mangle]
-pub unsafe extern "C" fn vexart_frame_present_native(
-    ctx: u64,
-    target: u64,
-    image_id: u32,
-    stats_out: *mut types::NativePresentationStats,
-) -> i32 {
-    vexart_kitty_emit_frame_with_stats(ctx, target, image_id, stats_out)
-}
-
-/// Frame presentation without stats.
-#[no_mangle]
-pub extern "C" fn vexart_paint_present(
-    ctx: u64,
-    target: u64,
-    image_id: u32,
-) -> i32 {
-    vexart_kitty_emit_frame(ctx, target, image_id)
-}
-
 /// Emit a pre-encoded RGBA layer natively (dirty-layer presentation path).
 ///
 /// `rgba_ptr`/`rgba_len` — raw RGBA pixel data (width × height × 4 bytes).
