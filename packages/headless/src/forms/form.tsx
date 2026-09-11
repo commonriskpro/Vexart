@@ -183,6 +183,8 @@ export function createForm<T extends Record<string, any>>(options: FormOptions<T
   }
 
   const submit = async () => {
+    if (submitting()) return
+
     // Mark all fields as touched
     batch(() => {
       for (const field of fields) {
@@ -193,32 +195,32 @@ export function createForm<T extends Record<string, any>>(options: FormOptions<T
     // Run sync validation
     if (!validateAllFields()) return
 
-    // Run async validation
-    if (options.validateAsync) {
-      const allValues = getValues()
-      const asyncResults = await Promise.all(
-        fields.map(async (field) => {
-          const validator = options.validateAsync?.[field]
-          if (!validator) return { field, error: undefined }
-          const error = await validator(valueSignals[field][0]() as T[typeof field], allValues)
-          return { field, error: error ?? undefined }
-        })
-      )
-      let hasAsyncErrors = false
-      batch(() => {
-        for (const { field, error } of asyncResults) {
-          if (error) {
-            errorSignals[field][1](error)
-            hasAsyncErrors = true
-          }
-        }
-      })
-      if (hasAsyncErrors) return
-    }
-
-    // Submit
     setSubmitting(true)
     try {
+      // Run async validation
+      if (options.validateAsync) {
+        const allValues = getValues()
+        const asyncResults = await Promise.all(
+          fields.map(async (field) => {
+            const validator = options.validateAsync?.[field]
+            if (!validator) return { field, error: undefined }
+            const error = await validator(valueSignals[field][0]() as T[typeof field], allValues)
+            return { field, error: error ?? undefined }
+          })
+        )
+        let hasAsyncErrors = false
+        batch(() => {
+          for (const { field, error } of asyncResults) {
+            if (error) {
+              errorSignals[field][1](error)
+              hasAsyncErrors = true
+            }
+          }
+        })
+        if (hasAsyncErrors) return
+      }
+
+      // Submit
       await options.onSubmit(getValues())
     } finally {
       setSubmitting(false)
