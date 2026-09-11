@@ -53,8 +53,17 @@ fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
   let size = in.params0.xy;
   let offset = in.params0.zw;
   let blur = max(in.params1.x, 0.0);
-  let pad = blur * 2.0;
+  // Align padding with CPU by using ceil(blur) * 2.0 so fractional blur
+  // values do not desynchronize quad dimensions between CPU bounding box and GPU SDF evaluation.
+  let pad = ceil(blur) * 2.0;
   let expanded = size + vec2<f32>(abs(offset.x) + pad * 2.0, abs(offset.y) + pad * 2.0);
+  // The bounding box quad on CPU starts at: min(0, offset) - pad.
+  // Relative to the quad's top-left, the shifted shadow rect origin is at:
+  //   offset - (min(0, offset) - pad) == offset - min(0, offset) + pad.
+  // Because offset - min(0, offset) == max(offset, 0.0) for all real numbers:
+  //   - If offset >= 0: offset - 0 = offset = max(offset, 0.0).
+  //   - If offset <  0: offset - offset = 0 = max(offset, 0.0).
+  // Thus max(offset, 0.0) + pad is mathematically required for both positive and negative offsets.
   let shadow_origin = vec2<f32>(max(offset.x, 0.0) + pad, max(offset.y, 0.0) + pad);
   let shadow_center = shadow_origin + size * 0.5;
   let p = in.uv * expanded - shadow_center;

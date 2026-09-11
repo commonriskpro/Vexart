@@ -209,7 +209,7 @@ Sin embargo, en **15 de los 40 fixes existen trade-offs de arquitectura estructu
 | **8** | `native/libvexart/src/paint/mod.rs:362-371, 457` | Media | Pasar el handle de imagen en `BridgeImageInstance` y vincular el BindGroup real en `dispatch`. | **Fix Arquitectónico Real:** Corrige el contrato de datos del comando de dibujo empaquetado. |
 | **9** | `native/libvexart/src/text/atlas.rs:185-269` | Alta | Actualizar subregiones en el atlas vía `queue.write_texture` en lugar de destruir y recrear la textura de 4MB. | **Fix Arquitectónico Real:** Resuelve la latencia y micro-pausas al escribir texto dinámico. |
 | **10** | `native/libvexart/src/text/mod.rs:445, 555` | Media | Consolidar la emisión de glifos en un único `CommandEncoder` y someterlo una sola vez por cuadro. | **Fix Arquitectónico Real:** Reduce el overhead de sincronización CPU-GPU en el hot path. |
-| **11** | `native/libvexart/src/paint/shaders/shadow.wgsl:58` | Alta | Corregir cálculo de origen geométrico en la SDF para offsets negativos (`-offset.x`, `-offset.y`). | **Fix Arquitectónico Real:** Corrige la formulación matemática de la función de distancia con signo. |
+| **11** | `native/libvexart/src/paint/shaders/shadow.wgsl:56-67` | Alta | Alinear padding GPU (`ceil(blur) * 2.0`) con CPU y verificar formalmente que `shadow_origin = max(offset, 0.0) + pad` unifica matemáticamente offsets positivos y negativos (`offset - min(0, offset) == max(offset, 0.0)`). | **Fix Arquitectónico Real:** Previene desincronización de dimensiones de quad en blurs fraccionarios y preserva la formulación analítica de la SDF sin parches de signo ad-hoc. |
 
 ---
 
@@ -275,6 +275,9 @@ Para certificar la pureza técnica de cada solución, contrastamos el enfoque ar
 5. **En el Parpadeo del Cursor (Defect 31):**
    * *Mitigación rechazada:* Usar fuentes de ancho fijo o apagar el parpadeo.
    * *Fix real implementado:* Desacoplar el cursor del texto; el texto es un nodo de contenido tipográfico y el cursor es un elemento de geometría pura superpuesto.
+6. **En el Padding y Origen Geométrico de Sombras en GPU (Defect 11):**
+   * *Mitigación rechazada:* Invertir ad-hoc el signo del offset para coordenadas negativas (`-offset.x`, `-offset.y`) o introducir branches condicionales en el shader.
+   * *Fix real implementado:* Alinear el padding en WGSL con `ceil(blur) * 2.0` eliminando la desincronización dimensional entre el bounding box de CPU y la evaluación SDF de GPU en blurs fraccionarios. Además, formalizar matemáticamente que el origen relativo al quad `offset - (min(0, offset) - pad)` equivale de forma idéntica e invariante a `max(offset, 0.0) + pad` para cualquier valor real, cubierto por pruebas GPU integrales de offsets horizontales, diagonales, falloff y radios de esquina.
 
 ---
 
