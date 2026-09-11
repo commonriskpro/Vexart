@@ -281,13 +281,22 @@ pub fn readback_region(
         return 0;
     }
 
-    let needed = w * h * 4;
+    let needed = match w.checked_mul(h).and_then(|px| px.checked_mul(4)) {
+        Some(size) => size,
+        None => return 0,
+    };
     if dst_cap < needed || dst.is_null() {
         return 0;
     }
 
-    let padded_bytes_per_row = (w * 4 + 255) & !255;
-    let buf_size = (padded_bytes_per_row as u64) * (h as u64);
+    let padded_bytes_per_row = match w.checked_mul(4).and_then(|b| b.checked_add(255)) {
+        Some(b) => b & !255,
+        None => return 0,
+    };
+    let buf_size = match (padded_bytes_per_row as u64).checked_mul(h as u64) {
+        Some(size) => size,
+        None => return 0,
+    };
 
     let region_buf = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("vexart-region-readback-buf"),
@@ -516,6 +525,102 @@ mod tests {
         assert_eq!((64u32 * 4 + 255) & !255, 256);
         // width=100: 100*4=400 → padded=512.
         assert_eq!((100u32 * 4 + 255) & !255, 512);
+    }
+
+    #[test]
+    fn readback_region_should_return_zero_when_dimensions_overflow() {
+        let pctx = crate::paint::PaintContext::new();
+        let mut dst = [0u8; 16];
+
+        // Case 1: w * h overflows u32
+        let res1 = readback_region(
+            &pctx.wgpu.device,
+            &pctx.wgpu.queue,
+            &pctx.target_texture,
+            u32::MAX,
+            u32::MAX,
+            0,
+            0,
+            u32::MAX,
+            u32::MAX,
+            dst.as_mut_ptr(),
+            u32::MAX,
+        );
+        assert_eq!(res1, 0, "readback_region must return 0 when w * h overflows u32");
+
+        // Case 2: (w * h) * 4 overflows u32 even if w * h does not
+        let res2 = readback_region(
+            &pctx.wgpu.device,
+            &pctx.wgpu.queue,
+            &pctx.target_texture,
+            1 << 30,
+            1,
+            0,
+            0,
+            1 << 30,
+            1,
+            dst.as_mut_ptr(),
+            u32::MAX,
+        );
+        assert_eq!(res2, 0, "readback_region must return 0 when (w * h) * 4 overflows u32");
+
+        // Case 3: w * 4 + 255 overflows u32 (padded_bytes_per_row overflow)
+        let w_padded_overflow = (u32::MAX / 4) + 1;
+        let res3 = readback_region(
+            &pctx.wgpu.device,
+            &pctx.wgpu.queue,
+            &pctx.target_texture,
+            w_padded_overflow,
+            1,
+            0,
+            0,
+            w_padded_overflow,
+            1,
+            dst.as_mut_ptr(),
+            u32::MAX,
+        );
+        assert_eq!(
+            res3, 0,
+            "readback_region must return 0 when padded_bytes_per_row calculation overflows u32"
+        );
+    }
+
+    #[test]
+    fn readback_region_should_return_zero_when_buffer_too_small_or_null() {
+        let pctx = crate::paint::PaintContext::new();
+        let mut dst = [0u8; 64];
+
+        // Buffer too small: 10 * 10 * 4 = 400 bytes needed, but capacity is 64
+        let res = readback_region(
+            &pctx.wgpu.device,
+            &pctx.wgpu.queue,
+            &pctx.target_texture,
+            64,
+            64,
+            0,
+            0,
+            10,
+            10,
+            dst.as_mut_ptr(),
+            64,
+        );
+        assert_eq!(res, 0, "readback_region must return 0 when dst_cap < needed");
+
+        // Null dst pointer
+        let res_null = readback_region(
+            &pctx.wgpu.device,
+            &pctx.wgpu.queue,
+            &pctx.target_texture,
+            64,
+            64,
+            0,
+            0,
+            10,
+            10,
+            std::ptr::null_mut(),
+            400,
+        );
+        assert_eq!(res_null, 0, "readback_region must return 0 when dst is null");
     }
 
     #[cfg(feature = "gpu-tests")]

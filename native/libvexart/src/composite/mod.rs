@@ -865,9 +865,17 @@ pub fn readback_rgba(
         None => return ERR_INVALID_HANDLE,
     };
 
-    let needed = rec.width * rec.height * 4;
+    let needed = match rec
+        .width
+        .checked_mul(rec.height)
+        .and_then(|px| px.checked_mul(4))
+    {
+        Some(bytes) => bytes,
+        None => return ERR_INVALID_ARG,
+    };
+
     if dst_cap < needed {
-        return ERR_INVALID_ARG; // buffer too small
+        return ERR_INVALID_ARG;
     }
 
     // Extract fields needed before the mutable borrow of pctx (for device/queue).
@@ -1679,5 +1687,105 @@ mod tests {
         assert_eq!(ry, 20);
         assert_eq!(rw, 50);
         assert_eq!(rh, 30);
+    }
+
+    #[test]
+    fn readback_rgba_should_fail_when_buffer_is_too_small() {
+        let mut pctx = PaintContext::new();
+        let mut handle = 0u64;
+        let rc = target_create(&mut pctx, 64, 64, &mut handle);
+        assert_eq!(rc, OK);
+
+        let mut buf = vec![0u8; 100];
+        // 64 * 64 * 4 = 16384 bytes needed; capacity 100 is too small.
+        let status = readback_rgba(
+            &mut pctx,
+            handle,
+            buf.as_mut_ptr(),
+            100,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status, ERR_INVALID_ARG);
+
+        assert_eq!(target_destroy(&mut pctx, handle), OK);
+    }
+
+    #[test]
+    fn readback_rgba_should_fail_when_dimensions_overflow() {
+        let mut pctx = PaintContext::new();
+        let mut handle = 0u64;
+        let rc = target_create(&mut pctx, 64, 64, &mut handle);
+        assert_eq!(rc, OK);
+
+        let mut buf = vec![0u8; 16];
+
+        // Case 1: width * height overflows u32
+        pctx.targets.get_mut(handle).unwrap().width = u32::MAX;
+        let status1 = readback_rgba(
+            &mut pctx,
+            handle,
+            buf.as_mut_ptr(),
+            u32::MAX,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status1, ERR_INVALID_ARG);
+
+        // Case 2: (width * height) * 4 overflows u32
+        pctx.targets.get_mut(handle).unwrap().width = 1 << 30;
+        pctx.targets.get_mut(handle).unwrap().height = 1;
+        let status2 = readback_rgba(
+            &mut pctx,
+            handle,
+            buf.as_mut_ptr(),
+            u32::MAX,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status2, ERR_INVALID_ARG);
+
+        assert_eq!(target_destroy(&mut pctx, handle), OK);
+    }
+
+    #[test]
+    fn readback_region_rgba_should_fail_on_overflow_or_buffer_too_small() {
+        let mut pctx = PaintContext::new();
+        let mut handle = 0u64;
+        let rc = target_create(&mut pctx, 64, 64, &mut handle);
+        assert_eq!(rc, OK);
+
+        let mut buf = vec![0u8; 64];
+
+        // Buffer too small: region 10x10 requires 400 bytes, buffer capacity is 64
+        let mut rect_small = [0u8; 16];
+        rect_small[8..12].copy_from_slice(&10u32.to_le_bytes()); // w = 10
+        rect_small[12..16].copy_from_slice(&10u32.to_le_bytes()); // h = 10
+
+        let status_small = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect_small,
+            buf.as_mut_ptr(),
+            64,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status_small, ERR_INVALID_ARG);
+
+        // Target with overflow dimensions in region
+        pctx.targets.get_mut(handle).unwrap().width = u32::MAX;
+        pctx.targets.get_mut(handle).unwrap().height = u32::MAX;
+        let mut rect_overflow = [0u8; 16];
+        rect_overflow[8..12].copy_from_slice(&u32::MAX.to_le_bytes()); // rw = u32::MAX
+        rect_overflow[12..16].copy_from_slice(&u32::MAX.to_le_bytes()); // rh = u32::MAX
+
+        let status_overflow = readback_region_rgba(
+            &mut pctx,
+            handle,
+            &rect_overflow,
+            buf.as_mut_ptr(),
+            u32::MAX,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(status_overflow, ERR_INVALID_ARG);
+
+        assert_eq!(target_destroy(&mut pctx, handle), OK);
     }
 }
