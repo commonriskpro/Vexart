@@ -13,8 +13,15 @@ use std::time::Instant;
 
 use wgpu::util::DeviceExt;
 
-use crate::ffi::panic::{ERR_INVALID_ARG, OK};
+use crate::ffi::panic::{ERR_INVALID_ARG, ERR_INVALID_HANDLE, OK};
 use crate::types::FrameStats;
+
+/// 2MB base vertex buffer capacity to accommodate a full 4K terminal grid without reallocating.
+pub const BASE_VERTEX_BUFFER_CAPACITY: usize = 2 * 1024 * 1024;
+/// Number of consecutive idle frames before decayed buffer returns to base capacity.
+pub const VERTEX_BUFFER_COOLDOWN_FRAMES: u32 = 120;
+/// Byte alignment requirement for vertex buffer slices.
+pub const VERTEX_BUFFER_ALIGNMENT: usize = 16;
 
 /// Monotonic image handle allocator. Shared between paint (upload_image) and
 /// composite (copy_region_to_image / filter / mask operations).
@@ -23,6 +30,15 @@ pub static NEXT_IMAGE_HANDLE: AtomicU64 = AtomicU64::new(1);
 /// Allocate the next image handle.
 pub fn alloc_image_handle() -> u64 {
     NEXT_IMAGE_HANDLE.fetch_add(1, Ordering::Relaxed)
+}
+
+/// A batch of instances prepared for drawing in a single render pass.
+#[derive(Debug, Clone, Copy)]
+pub struct PreparedBatch {
+    pub kind: u16,
+    pub instance_count: u32,
+    pub staging_offset: usize,
+    pub bytes_len: usize,
 }
 
 /// Holds a GPU texture + view + bind group for one uploaded image.
@@ -49,6 +65,24 @@ pub struct PaintContext {
     /// Fallback bind group for texture-sampling pipelines (backdrop_blur, backdrop_filter,
     /// image_mask, glyph) when no explicit source image is provided. A 1×1 transparent RGBA texture.
     pub fallback_bind_group: wgpu::BindGroup,
+    /// Persistent vertex buffer for instance data, avoiding per-batch GPU allocation thrashing.
+    pub vertex_buffer: wgpu::Buffer,
+    /// Current capacity in bytes of `vertex_buffer`.
+    pub vertex_buffer_capacity: usize,
+    /// Bump allocation offset within `vertex_buffer` for the active frame/layer.
+    pub vertex_buffer_offset: usize,
+    /// Idle frame counter for cooldown decay back to BASE_VERTEX_BUFFER_CAPACITY.
+    pub vertex_buffer_idle_frames: u32,
+    /// Peak bytes requested during the current frame.
+    pub vertex_buffer_peak_frame_bytes: usize,
+    /// CPU-side staging buffer for packing instance data prior to GPU upload.
+    pub staging_buffer: Vec<u8>,
+}
+
+impl Default for PaintContext {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PaintContext {
@@ -118,6 +152,13 @@ impl PaintContext {
             ],
         });
 
+        let vertex_buffer = wgpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("vexart-persistent-vertex-buffer"),
+            size: BASE_VERTEX_BUFFER_CAPACITY as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         Self {
             wgpu,
             images: HashMap::new(),
@@ -126,7 +167,69 @@ impl PaintContext {
             target_texture,
             target_view,
             fallback_bind_group,
+            vertex_buffer,
+            vertex_buffer_capacity: BASE_VERTEX_BUFFER_CAPACITY,
+            vertex_buffer_offset: 0,
+            vertex_buffer_idle_frames: 0,
+            vertex_buffer_peak_frame_bytes: 0,
+            staging_buffer: Vec::new(),
         }
+    }
+
+    /// Allocate space in the persistent vertex buffer, aligning to 16 bytes.
+    /// Tracks peak frame bytes and dynamically doubles capacity if needed.
+    pub fn alloc_vertex_space(&mut self, required_bytes: usize) -> usize {
+        let aligned_offset = (self.vertex_buffer_offset + (VERTEX_BUFFER_ALIGNMENT - 1))
+            & !(VERTEX_BUFFER_ALIGNMENT - 1);
+        let needed = aligned_offset.saturating_add(required_bytes);
+        if needed > self.vertex_buffer_peak_frame_bytes {
+            self.vertex_buffer_peak_frame_bytes = needed;
+        }
+        if needed > self.vertex_buffer_capacity {
+            let mut new_capacity = self.vertex_buffer_capacity.max(BASE_VERTEX_BUFFER_CAPACITY);
+            while new_capacity < needed {
+                new_capacity = match new_capacity.checked_mul(2) {
+                    Some(c) => c,
+                    None => {
+                        new_capacity = usize::MAX;
+                        break;
+                    }
+                };
+            }
+            self.vertex_buffer = self.wgpu.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("vexart-persistent-vertex-buffer"),
+                size: new_capacity as u64,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.vertex_buffer_capacity = new_capacity;
+            self.vertex_buffer_idle_frames = 0;
+        }
+        self.vertex_buffer_offset = needed;
+        aligned_offset
+    }
+
+    /// Reset offset and handle hysteresis cooldown decay back to base capacity.
+    pub fn on_frame_complete(&mut self) {
+        self.vertex_buffer_offset = 0;
+        if self.vertex_buffer_capacity > BASE_VERTEX_BUFFER_CAPACITY {
+            if self.vertex_buffer_peak_frame_bytes <= BASE_VERTEX_BUFFER_CAPACITY {
+                self.vertex_buffer_idle_frames += 1;
+                if self.vertex_buffer_idle_frames >= VERTEX_BUFFER_COOLDOWN_FRAMES {
+                    self.vertex_buffer = self.wgpu.device.create_buffer(&wgpu::BufferDescriptor {
+                        label: Some("vexart-persistent-vertex-buffer"),
+                        size: BASE_VERTEX_BUFFER_CAPACITY as u64,
+                        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                        mapped_at_creation: false,
+                    });
+                    self.vertex_buffer_capacity = BASE_VERTEX_BUFFER_CAPACITY;
+                    self.vertex_buffer_idle_frames = 0;
+                }
+            } else {
+                self.vertex_buffer_idle_frames = 0;
+            }
+        }
+        self.vertex_buffer_peak_frame_bytes = 0;
     }
 
     /// Parse the graph buffer per design §8 and dispatch render commands.
@@ -147,6 +250,7 @@ impl PaintContext {
     ///
     /// Phase 2b: `target` is resolved from the TargetRegistry.
     /// If target=0, falls back to the PaintContext default offscreen texture.
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn dispatch(&mut self, target: u64, graph: &[u8], stats_out: *mut FrameStats) -> i32 {
         let t_start = Instant::now();
 
@@ -171,14 +275,13 @@ impl PaintContext {
             return OK;
         }
 
-        // Step 2: Iterate commands.
+        // Step 2: Iterate commands and stage into staging_buffer.
         // Per-command prefix (8 bytes): u16 cmd_kind | u16 flags | u32 payload_bytes
         let mut offset = 16usize; // skip header
         let body_end = 16 + header.payload_bytes as usize;
 
-        // Preserve command order. Some effects (shadow/glow/gradient) rely on
-        // semantic paint ordering; grouping globally by kind would reorder them.
-        let mut batches: Vec<(u16, Vec<u8>)> = Vec::new();
+        self.staging_buffer.clear();
+        let mut prepared_batches: Vec<PreparedBatch> = Vec::new();
 
         let mut truncated = false;
         for _ in 0..header.cmd_count {
@@ -187,7 +290,6 @@ impl PaintContext {
                 break;
             }
             let cmd_kind = u16::from_le_bytes([graph[offset], graph[offset + 1]]);
-            // flags at offset+2..+4 (reserved for Slice 5b)
             let payload_bytes = u32::from_le_bytes([
                 graph[offset + 4],
                 graph[offset + 5],
@@ -205,13 +307,35 @@ impl PaintContext {
             offset = payload_end;
 
             // cmd_kind 11 is the legacy glyph slot (unused); 21+ are future — silently skip.
-            // cmd_kind 18 = MSDF glyph pipeline (Phase 2b Slice 4).
-            // cmd_kind 19 = self-filter pipeline (Phase 2b Slice 5).
             if cmd_kind == 11 || cmd_kind > 20 {
                 continue;
             }
+            if payload.is_empty() {
+                continue;
+            }
+            let instance_stride = instance_stride_for_kind(cmd_kind);
+            if instance_stride == 0 {
+                continue;
+            }
+            let instance_count = (payload.len() / instance_stride) as u32;
+            if instance_count == 0 {
+                continue;
+            }
 
-            batches.push((cmd_kind, payload.to_vec()));
+            // Align staging buffer to 16 bytes for each batch
+            let unaligned = self.staging_buffer.len();
+            let aligned = (unaligned + (VERTEX_BUFFER_ALIGNMENT - 1)) & !(VERTEX_BUFFER_ALIGNMENT - 1);
+            if aligned > unaligned {
+                self.staging_buffer.resize(aligned, 0);
+            }
+            let staging_offset = self.staging_buffer.len();
+            self.staging_buffer.extend_from_slice(payload);
+            prepared_batches.push(PreparedBatch {
+                kind: cmd_kind,
+                instance_count,
+                staging_offset,
+                bytes_len: payload.len(),
+            });
         }
 
         if truncated {
@@ -220,7 +344,7 @@ impl PaintContext {
             );
         }
 
-        if batches.is_empty() {
+        if prepared_batches.is_empty() {
             if !stats_out.is_null() {
                 unsafe { *stats_out = FrameStats::default() };
             }
@@ -228,9 +352,6 @@ impl PaintContext {
         }
 
         // Step 3: Resolve the render target view.
-        // Phase 2b: real target handles are looked up from the TargetRegistry.
-        // If target=0 or unknown, fall back to the PaintContext default offscreen texture.
-        //
         // SAFETY: We extract raw pointers to fields inside `self` to work around Rust's
         // split-borrow limitation. All raw pointers remain valid for the duration of this
         // function — the pointed-to values are owned by `self` which outlives the block.
@@ -273,164 +394,52 @@ impl PaintContext {
 
         let t_gpu_start = Instant::now();
 
-        // When a target has an active layer, we add render passes to its encoder.
-        // Otherwise we create a standalone encoder and submit it.
-        if use_active_encoder {
-            // SAFETY: rec is in self.targets which is stable for this call.
-            // We split the borrow manually: view_ptr and encoder_ptr point to disjoint
-            // fields of the same TargetRecord. They are not aliased during use.
-            let rec_ptr: *mut crate::composite::target::TargetRecord =
-                self.targets.get_mut(target).expect("target disappeared") as *mut _;
+        // Step 4: Allocate vertex space & upload staging buffer in a single copy
+        let base_offset = self.alloc_vertex_space(self.staging_buffer.len());
+        self.wgpu.queue.write_buffer(
+            &self.vertex_buffer,
+            base_offset as u64,
+            &self.staging_buffer,
+        );
 
-            // SAFETY: rec_ptr is valid; view and active_layer are disjoint fields.
+        // Step 5: Execute with a single render pass and pipeline switching
+        if use_active_encoder {
+            let rec_ptr: *mut crate::composite::target::TargetRecord =
+                match self.targets.get_mut(target) {
+                    Some(r) => r as *mut _,
+                    None => return ERR_INVALID_HANDLE,
+                };
+
             let view_ref: &wgpu::TextureView = unsafe { &(*rec_ptr).view };
-            let layer: &mut crate::composite::target::ActiveLayerRecord = unsafe {
-                (*rec_ptr)
-                    .active_layer
-                    .as_mut()
-                    .expect("active layer disappeared")
+            let layer: &mut crate::composite::target::ActiveLayerRecord =
+                match unsafe { (*rec_ptr).active_layer.as_mut() } {
+                    Some(l) => l,
+                    None => return ERR_INVALID_ARG,
+                };
+
+            let load_op = if layer.first_pass {
+                layer.first_pass = false;
+                if layer.first_load_mode == 0 {
+                    let c = layer.clear_rgba;
+                    wgpu::LoadOp::Clear(wgpu::Color {
+                        r: ((c >> 24) & 0xff) as f64 / 255.0,
+                        g: ((c >> 16) & 0xff) as f64 / 255.0,
+                        b: ((c >> 8) & 0xff) as f64 / 255.0,
+                        a: (c & 0xff) as f64 / 255.0,
+                    })
+                } else {
+                    wgpu::LoadOp::Load
+                }
+            } else {
+                wgpu::LoadOp::Load
             };
 
-            for (kind, batch) in batches.iter() {
-                let kind = *kind;
-                if batch.is_empty() {
-                    continue;
-                }
-                let instance_stride = instance_stride_for_kind(kind);
-                if instance_stride == 0 {
-                    continue;
-                }
-                let instance_count = (batch.len() / instance_stride) as u32;
-                if instance_count == 0 {
-                    continue;
-                }
-
-                // SAFETY: self.wgpu.device is a disjoint field from self.targets.
-                let vertex_buf =
-                    self.wgpu
-                        .device
-                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some("vexart-instance-buf"),
-                            contents: batch,
-                            usage: wgpu::BufferUsages::VERTEX,
-                        });
-
-                let load_op = if layer.first_pass {
-                    layer.first_pass = false;
-                    if layer.first_load_mode == 0 {
-                        let c = layer.clear_rgba;
-                        wgpu::LoadOp::Clear(wgpu::Color {
-                            r: ((c >> 24) & 0xff) as f64 / 255.0,
-                            g: ((c >> 16) & 0xff) as f64 / 255.0,
-                            b: ((c >> 8) & 0xff) as f64 / 255.0,
-                            a: (c & 0xff) as f64 / 255.0,
-                        })
-                    } else {
-                        wgpu::LoadOp::Load
-                    }
-                } else {
-                    wgpu::LoadOp::Load
-                };
-
-                let mut pass = layer
-                    .encoder
-                    .begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("vexart-layer-render-pass"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: view_ref,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: load_op,
-                                store: wgpu::StoreOp::Store,
-                            },
-                            depth_slice: None,
-                        })],
-                        depth_stencil_attachment: None,
-                        timestamp_writes: None,
-                        occlusion_query_set: None,
-                        multiview_mask: None,
-                    });
-
-                // SAFETY: self.wgpu.pipelines and self.fallback_bind_group are disjoint
-                // from self.targets; the references are valid for this pass scope.
-                let pipeline = pipeline_for_kind(kind, &self.wgpu.pipelines);
-                pass.set_pipeline(pipeline);
-                pass.set_vertex_buffer(0, vertex_buf.slice(..));
-                // Pipelines that sample a texture need bind group 0.
-                // cmd_kind 18 (glyph): use fallback for now (atlas bind group wired via
-                // text::dispatch_glyph_instances for the dedicated text::dispatch path).
-                if kind == 9
-                    || kind == 10
-                    || kind == 15
-                    || kind == 16
-                    || kind == 17
-                    || kind == 18
-                    || kind == 19
-                {
-                    pass.set_bind_group(0, &self.fallback_bind_group, &[]);
-                }
-                if let Some(s) = target_scissor {
-                    if let Some([sx, sy, sw, sh]) =
-                        crate::composite::target::clamp_scissor(s, target_dims.0, target_dims.1)
-                    {
-                        pass.set_scissor_rect(sx, sy, sw, sh);
-                        pass.draw(0..6, 0..instance_count);
-                    }
-                } else {
-                    pass.draw(0..6, 0..instance_count);
-                }
-            }
-            // Do NOT submit — that happens in end_layer.
-        } else {
-            // SAFETY: render_view_ptr was extracted from self above; it remains valid.
-            let render_view: &wgpu::TextureView = unsafe { &*render_view_ptr };
-            // No active layer: create standalone encoder, render, submit.
-            let mut encoder =
-                self.wgpu
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("vexart-frame-encoder"),
-                    });
-
-            // We need a fresh render pass per pipeline (clearing on first, loading on rest).
-            // Iterate over all known cmd_kinds in order (skipping 11 per legacy slot).
-            // Slice 5a: 0-10, 12-13 | Slice 5b: 14-17 | Phase 2b Slice 4: 18 | Phase 2b Slice 5: 19
-            let mut first_pass = true;
-            for (kind, batch) in batches.iter() {
-                let kind = *kind;
-                if batch.is_empty() {
-                    continue;
-                }
-
-                let instance_stride = instance_stride_for_kind(kind);
-                if instance_stride == 0 {
-                    continue;
-                }
-                let instance_count = (batch.len() / instance_stride) as u32;
-                if instance_count == 0 {
-                    continue;
-                }
-
-                let vertex_buf =
-                    self.wgpu
-                        .device
-                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some("vexart-instance-buf"),
-                            contents: batch,
-                            usage: wgpu::BufferUsages::VERTEX,
-                        });
-
-                let load_op = if first_pass {
-                    first_pass = false;
-                    wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
-                } else {
-                    wgpu::LoadOp::Load
-                };
-
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("vexart-render-pass"),
+            let mut pass = layer
+                .encoder
+                .begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("vexart-layer-render-pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: render_view,
+                        view: view_ref,
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: load_op,
@@ -444,69 +453,111 @@ impl PaintContext {
                     multiview_mask: None,
                 });
 
-                let pipeline = pipeline_for_kind(kind, &self.wgpu.pipelines);
-                pass.set_pipeline(pipeline);
-                pass.set_vertex_buffer(0, vertex_buf.slice(..));
-                // Pipelines that sample a texture need bind group 0 set.
-                // cmd_kinds 9=image, 10=image_transform use per-image bind groups (looked up
-                // from the image registry if available; fall back to the dummy bind group).
-                // cmd_kinds 15=backdrop_blur, 16=backdrop_filter, 17=image_mask always use
-                // the fallback bind group in Slice 5b (real source wiring is Slice 9+ work).
-                // cmd_kind 18=glyph uses the fallback here; atlas bind group is set via
-                // text::dispatch_glyph_instances for the dedicated text::dispatch path.
-                if kind == 9
-                    || kind == 10
-                    || kind == 15
-                    || kind == 16
-                    || kind == 17
-                    || kind == 18
-                    || kind == 19
-                {
-                    pass.set_bind_group(0, &self.fallback_bind_group, &[]);
+            let mut active_kind: Option<u16> = None;
+            for b in &prepared_batches {
+                if active_kind != Some(b.kind) {
+                    let pipeline = pipeline_for_kind(b.kind, &self.wgpu.pipelines);
+                    pass.set_pipeline(pipeline);
+                    if needs_fallback_bind_group(b.kind) {
+                        pass.set_bind_group(0, &self.fallback_bind_group, &[]);
+                    }
+                    active_kind = Some(b.kind);
                 }
-                // 6 vertices per quad (2 triangles), instance_count instances.
+                let start = (base_offset + b.staging_offset) as u64;
+                let end = start + b.bytes_len as u64;
+                pass.set_vertex_buffer(0, self.vertex_buffer.slice(start..end));
                 if let Some(s) = target_scissor {
                     if let Some([sx, sy, sw, sh]) =
                         crate::composite::target::clamp_scissor(s, target_dims.0, target_dims.1)
                     {
                         pass.set_scissor_rect(sx, sy, sw, sh);
-                        pass.draw(0..6, 0..instance_count);
+                        pass.draw(0..6, 0..b.instance_count);
                     }
                 } else {
-                    pass.draw(0..6, 0..instance_count);
+                    pass.draw(0..6, 0..b.instance_count);
                 }
             }
+            drop(pass);
+            // Do NOT submit or complete frame here — happens in target_end_layer.
+        } else {
+            let render_view: &wgpu::TextureView = unsafe { &*render_view_ptr };
+            let mut encoder =
+                self.wgpu
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("vexart-frame-encoder"),
+                    });
+
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("vexart-render-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: render_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+
+            let mut active_kind: Option<u16> = None;
+            for b in &prepared_batches {
+                if active_kind != Some(b.kind) {
+                    let pipeline = pipeline_for_kind(b.kind, &self.wgpu.pipelines);
+                    pass.set_pipeline(pipeline);
+                    if needs_fallback_bind_group(b.kind) {
+                        pass.set_bind_group(0, &self.fallback_bind_group, &[]);
+                    }
+                    active_kind = Some(b.kind);
+                }
+                let start = (base_offset + b.staging_offset) as u64;
+                let end = start + b.bytes_len as u64;
+                pass.set_vertex_buffer(0, self.vertex_buffer.slice(start..end));
+                if let Some(s) = target_scissor {
+                    if let Some([sx, sy, sw, sh]) =
+                        crate::composite::target::clamp_scissor(s, target_dims.0, target_dims.1)
+                    {
+                        pass.set_scissor_rect(sx, sy, sw, sh);
+                        pass.draw(0..6, 0..b.instance_count);
+                    }
+                } else {
+                    pass.draw(0..6, 0..b.instance_count);
+                }
+            }
+            drop(pass);
 
             let cmd = encoder.finish();
             self.wgpu.queue.submit(std::iter::once(cmd));
+            self.on_frame_complete();
         }
 
         let gpu_us = t_gpu_start.elapsed().as_micros() as u64;
         let cpu_us = t_start.elapsed().as_micros() as u64;
 
-        // Step 4: Write stats.
+        // Step 6: Write stats.
         if !stats_out.is_null() {
-            let total_prims: u32 = batches
-                .iter()
-                .map(|(kind, bytes)| {
-                    let stride = instance_stride_for_kind(*kind);
-                    if stride > 0 {
-                        (bytes.len() / stride) as u32
-                    } else {
-                        0
-                    }
-                })
-                .sum();
+            let total_prims: u32 = prepared_batches.iter().map(|b| b.instance_count).sum();
             unsafe {
                 (*stats_out).gpu_time_us = gpu_us;
                 (*stats_out).cpu_time_us = cpu_us;
-                (*stats_out).draw_calls = batches.len() as u32;
+                (*stats_out).draw_calls = prepared_batches.len() as u32;
                 (*stats_out).primitives = total_prims;
             }
         }
 
         OK
     }
+}
+
+/// Helper returning true if the command kind requires the fallback texture bind group.
+#[inline]
+fn needs_fallback_bind_group(kind: u16) -> bool {
+    matches!(kind, 9 | 10 | 15 | 16 | 17 | 18 | 19)
 }
 
 /// Return the byte stride of one instance for the given cmd_kind.
@@ -545,10 +596,10 @@ fn instance_stride_for_kind(kind: u16) -> usize {
 }
 
 /// Return a reference to the pipeline for the given cmd_kind.
-fn pipeline_for_kind<'a>(
+fn pipeline_for_kind(
     kind: u16,
-    reg: &'a pipelines::PipelineRegistry,
-) -> &'a wgpu::RenderPipeline {
+    reg: &pipelines::PipelineRegistry,
+) -> &wgpu::RenderPipeline {
     match kind {
         // Slice 5a — ported pipelines
         0 => &reg.rect,
@@ -575,7 +626,7 @@ fn pipeline_for_kind<'a>(
         19 => &reg.self_filter,
         // Phase 4+ — analytic box-shadow pipeline
         20 => &reg.shadow,
-        _ => panic!("pipeline_for_kind called with unsupported kind {kind}"),
+        _ => &reg.rect,
     }
 }
 
@@ -815,5 +866,134 @@ mod tests {
         let mut ctx = PaintContext::new();
         let result = ctx.dispatch(1, &buf, std::ptr::null_mut());
         assert_eq!(result, OK, "shadow dispatch should return OK");
+    }
+
+    #[cfg(feature = "gpu-tests")]
+    #[test]
+    fn test_vertex_buffer_alloc_expansion_and_cooldown_decay() {
+        let mut ctx = PaintContext::new();
+
+        // 1. Verify initial state
+        assert_eq!(ctx.vertex_buffer_capacity, BASE_VERTEX_BUFFER_CAPACITY);
+        assert_eq!(ctx.vertex_buffer_offset, 0);
+        assert_eq!(ctx.vertex_buffer_idle_frames, 0);
+        assert_eq!(ctx.vertex_buffer_peak_frame_bytes, 0);
+
+        // 2. Normal allocation under base capacity
+        let off0 = ctx.alloc_vertex_space(100);
+        assert_eq!(off0, 0);
+        assert_eq!(ctx.vertex_buffer_offset, 100);
+        assert_eq!(ctx.vertex_buffer_peak_frame_bytes, 100);
+
+        // Second allocation: aligns to 16 bytes (100 -> 112)
+        let off1 = ctx.alloc_vertex_space(200);
+        assert_eq!(off1, 112);
+        assert_eq!(ctx.vertex_buffer_offset, 312);
+        assert_eq!(ctx.vertex_buffer_peak_frame_bytes, 312);
+        assert_eq!(ctx.vertex_buffer_capacity, BASE_VERTEX_BUFFER_CAPACITY);
+
+        // Complete normal frame
+        ctx.on_frame_complete();
+        assert_eq!(ctx.vertex_buffer_offset, 0);
+        assert_eq!(ctx.vertex_buffer_peak_frame_bytes, 0);
+        assert_eq!(ctx.vertex_buffer_capacity, BASE_VERTEX_BUFFER_CAPACITY);
+        assert_eq!(ctx.vertex_buffer_idle_frames, 0);
+
+        // 3. Elastic expansion: exceed base capacity
+        let big_size = BASE_VERTEX_BUFFER_CAPACITY + 1024;
+        let big_off = ctx.alloc_vertex_space(big_size);
+        assert_eq!(big_off, 0);
+        assert_eq!(ctx.vertex_buffer_capacity, BASE_VERTEX_BUFFER_CAPACITY * 2);
+        assert_eq!(ctx.vertex_buffer_peak_frame_bytes, big_size);
+
+        // Frame complete with peak exceeding base capacity -> idle_frames remains 0
+        ctx.on_frame_complete();
+        assert_eq!(ctx.vertex_buffer_offset, 0);
+        assert_eq!(ctx.vertex_buffer_capacity, BASE_VERTEX_BUFFER_CAPACITY * 2);
+        assert_eq!(ctx.vertex_buffer_idle_frames, 0);
+
+        // 4. Cooldown decay: run 119 frames under base capacity
+        for frame in 1..VERTEX_BUFFER_COOLDOWN_FRAMES {
+            let off = ctx.alloc_vertex_space(512);
+            assert_eq!(off, 0);
+            ctx.on_frame_complete();
+            assert_eq!(ctx.vertex_buffer_capacity, BASE_VERTEX_BUFFER_CAPACITY * 2);
+            assert_eq!(ctx.vertex_buffer_idle_frames, frame);
+        }
+
+        // Frame 120 (reaches VERTEX_BUFFER_COOLDOWN_FRAMES) -> triggers cooldown decay back to base!
+        let off = ctx.alloc_vertex_space(512);
+        assert_eq!(off, 0);
+        ctx.on_frame_complete();
+        assert_eq!(ctx.vertex_buffer_capacity, BASE_VERTEX_BUFFER_CAPACITY);
+        assert_eq!(ctx.vertex_buffer_idle_frames, 0);
+        assert_eq!(ctx.vertex_buffer_offset, 0);
+    }
+
+    #[cfg(feature = "gpu-tests")]
+    #[test]
+    fn test_vertex_buffer_hysteresis_resets_on_spike() {
+        let mut ctx = PaintContext::new();
+
+        // Expand to 4MB
+        ctx.alloc_vertex_space(BASE_VERTEX_BUFFER_CAPACITY + 1024);
+        ctx.on_frame_complete();
+        assert_eq!(ctx.vertex_buffer_capacity, BASE_VERTEX_BUFFER_CAPACITY * 2);
+
+        // 10 idle frames
+        for _ in 0..10 {
+            ctx.alloc_vertex_space(64);
+            ctx.on_frame_complete();
+        }
+        assert_eq!(ctx.vertex_buffer_idle_frames, 10);
+
+        // Spike frame exceeding base capacity resets idle counter
+        ctx.alloc_vertex_space(BASE_VERTEX_BUFFER_CAPACITY + 512);
+        ctx.on_frame_complete();
+        assert_eq!(ctx.vertex_buffer_capacity, BASE_VERTEX_BUFFER_CAPACITY * 2);
+        assert_eq!(ctx.vertex_buffer_idle_frames, 0);
+    }
+
+    #[cfg(feature = "gpu-tests")]
+    #[test]
+    fn test_dispatch_multi_batch_pipeline_switching_and_ring_reset() {
+        let mut ctx = PaintContext::new();
+
+        // Build a multi-command graph: 1 rect (kind 0) + 1 circle (kind 3) + 1 rect (kind 0)
+        let rect_size = std::mem::size_of::<instances::BridgeRectInstance>();
+        let circle_size = std::mem::size_of::<instances::BridgeCircleInstance>();
+
+        let total_payload = (8 + rect_size) + (8 + circle_size) + (8 + rect_size);
+        let mut buf = vec![0u8; 16 + total_payload];
+
+        // Header
+        buf[0..4].copy_from_slice(&GRAPH_MAGIC.to_le_bytes());
+        buf[4..8].copy_from_slice(&GRAPH_VERSION.to_le_bytes());
+        buf[8..12].copy_from_slice(&3u32.to_le_bytes()); // cmd_count = 3
+        buf[12..16].copy_from_slice(&(total_payload as u32).to_le_bytes());
+
+        let mut off = 16usize;
+        // Cmd 1: Rect (kind 0)
+        buf[off..off + 2].copy_from_slice(&0u16.to_le_bytes());
+        buf[off + 4..off + 8].copy_from_slice(&(rect_size as u32).to_le_bytes());
+        off += 8 + rect_size;
+
+        // Cmd 2: Circle (kind 3)
+        buf[off..off + 2].copy_from_slice(&3u16.to_le_bytes());
+        buf[off + 4..off + 8].copy_from_slice(&(circle_size as u32).to_le_bytes());
+        off += 8 + circle_size;
+
+        // Cmd 3: Rect (kind 0)
+        buf[off..off + 2].copy_from_slice(&0u16.to_le_bytes());
+        buf[off + 4..off + 8].copy_from_slice(&(rect_size as u32).to_le_bytes());
+
+        let mut stats = FrameStats::default();
+        let result = ctx.dispatch(0, &buf, &mut stats);
+
+        assert_eq!(result, OK);
+        assert_eq!(stats.draw_calls, 3);
+        assert_eq!(stats.primitives, 3);
+        // Offset must be reset to 0 by on_frame_complete() in standalone dispatch
+        assert_eq!(ctx.vertex_buffer_offset, 0);
     }
 }

@@ -91,10 +91,12 @@ pub fn target_end_layer(pctx: &mut PaintContext, handle: u64) -> i32 {
     // Extract queue pointer before borrowing pctx.targets.
     // SAFETY: pctx.wgpu.queue is stable; the raw pointer is valid for this call.
     let queue_ptr: *const wgpu::Queue = &pctx.wgpu.queue as *const wgpu::Queue;
-    match pctx.targets.end_layer(unsafe { &*queue_ptr }, handle) {
+    let res = match pctx.targets.end_layer(unsafe { &*queue_ptr }, handle) {
         Ok(()) => OK,
         Err(code) => code,
-    }
+    };
+    pctx.on_frame_complete();
+    res
 }
 
 /// Set hardware scissor rectangle on an offscreen render target.
