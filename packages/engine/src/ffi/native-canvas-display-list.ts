@@ -13,16 +13,13 @@ export type NativeCanvasDisplayListInput = {
 }
 
 /** @public */
-export function nativeCanvasDisplayListUpdate(input: NativeCanvasDisplayListInput, ctx: bigint = 1n): bigint | null {
+export function nativeCanvasDisplayListUpdate(input: NativeCanvasDisplayListInput, _ctx: bigint = 1n): bigint | null {
   if (input.key.length === 0 || input.bytes.byteLength === 0) return null
-  const vctx = input.ctx ?? ctx
   try {
     const key = encoder.encode(input.key)
     const out = new BigUint64Array(1)
     const { symbols } = openVexartLibrary()
     const code = symbols.vexart_canvas_display_list_update(
-      vctx,
-      0n,
       input.currentFrame ?? 0n,
       ptr(key),
       key.byteLength,
@@ -38,22 +35,22 @@ export function nativeCanvasDisplayListUpdate(input: NativeCanvasDisplayListInpu
 }
 
 /** @public */
-export function nativeCanvasDisplayListTouch(handle: bigint, currentFrame: bigint = 0n, ctx: bigint = 1n): boolean {
+export function nativeCanvasDisplayListTouch(handle: bigint, currentFrame: bigint = 0n, _ctx: bigint = 1n): boolean {
   if (handle === 0n) return false
   try {
     const { symbols } = openVexartLibrary()
-    return (symbols.vexart_canvas_display_list_touch(ctx, 0n, currentFrame, handle) as number) === 0
+    return (symbols.vexart_canvas_display_list_touch(currentFrame, handle) as number) === 0
   } catch {
     return false
   }
 }
 
 /** @public */
-export function nativeCanvasDisplayListRelease(handle: bigint, ctx: bigint = 1n): boolean {
+export function nativeCanvasDisplayListRelease(handle: bigint, _ctx: bigint = 1n): boolean {
   if (handle === 0n) return false
   try {
     const { symbols } = openVexartLibrary()
-    return (symbols.vexart_canvas_display_list_release(ctx, 0n, handle) as number) === 0
+    return (symbols.vexart_canvas_display_list_release(handle) as number) === 0
   } catch {
     return false
   }

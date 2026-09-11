@@ -1609,12 +1609,7 @@ pub unsafe extern "C" fn vexart_image_asset_register(
 }
 
 #[no_mangle]
-pub extern "C" fn vexart_image_asset_touch(
-    _ctx: u64,
-    _scene: u64,
-    current_frame: u64,
-    handle: u64,
-) -> i32 {
+pub extern "C" fn vexart_image_asset_touch(current_frame: u64, handle: u64) -> i32 {
     ffi_guard!({
         let resources = get_or_init_resource();
         let mut resources_guard = lock_or_recover(resources);
@@ -1629,7 +1624,7 @@ pub extern "C" fn vexart_image_asset_touch(
 }
 
 #[no_mangle]
-pub extern "C" fn vexart_image_asset_release(_ctx: u64, _scene: u64, handle: u64) -> i32 {
+pub extern "C" fn vexart_image_asset_release(handle: u64) -> i32 {
     ffi_guard!({
         let mut paint_guard = get_or_init_paint();
         let released = {
@@ -1654,8 +1649,6 @@ pub extern "C" fn vexart_image_asset_release(_ctx: u64, _scene: u64, handle: u64
 /// All pointers must be valid for their documented lengths.
 #[no_mangle]
 pub unsafe extern "C" fn vexart_canvas_display_list_update(
-    _ctx: u64,
-    _scene: u64,
     current_frame: u64,
     key_ptr: *const u8,
     key_len: u32,
@@ -1692,12 +1685,7 @@ pub unsafe extern "C" fn vexart_canvas_display_list_update(
 }
 
 #[no_mangle]
-pub extern "C" fn vexart_canvas_display_list_touch(
-    _ctx: u64,
-    _scene: u64,
-    current_frame: u64,
-    handle: u64,
-) -> i32 {
+pub extern "C" fn vexart_canvas_display_list_touch(current_frame: u64, handle: u64) -> i32 {
     ffi_guard!({
         let resources = get_or_init_resource();
         let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
@@ -1712,7 +1700,7 @@ pub extern "C" fn vexart_canvas_display_list_touch(
 }
 
 #[no_mangle]
-pub extern "C" fn vexart_canvas_display_list_release(_ctx: u64, _scene: u64, handle: u64) -> i32 {
+pub extern "C" fn vexart_canvas_display_list_release(handle: u64) -> i32 {
     ffi_guard!({
         let resources = get_or_init_resource();
         let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());

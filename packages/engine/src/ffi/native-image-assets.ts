@@ -42,22 +42,22 @@ export function nativeImageAssetRegister(input: NativeImageAssetInput, _ctx: big
 }
 
 /** @public */
-export function nativeImageAssetTouch(handle: bigint, currentFrame: bigint = 0n, ctx: bigint = 1n): boolean {
+export function nativeImageAssetTouch(handle: bigint, currentFrame: bigint = 0n, _ctx: bigint = 1n): boolean {
   if (handle === 0n) return false
   try {
     const { symbols } = openVexartLibrary()
-    return (symbols.vexart_image_asset_touch(ctx, 0n, currentFrame, handle) as number) === 0
+    return (symbols.vexart_image_asset_touch(currentFrame, handle) as number) === 0
   } catch {
     return false
   }
 }
 
 /** @public */
-export function nativeImageAssetRelease(handle: bigint, ctx: bigint = 1n): boolean {
+export function nativeImageAssetRelease(handle: bigint, _ctx: bigint = 1n): boolean {
   if (handle === 0n) return false
   try {
     const { symbols } = openVexartLibrary()
-    return (symbols.vexart_image_asset_release(ctx, 0n, handle) as number) === 0
+    return (symbols.vexart_image_asset_release(handle) as number) === 0
   } catch {
     return false
   }

@@ -67,11 +67,11 @@ All FFI exports use `#[no_mangle] pub extern "C"` or `#[no_mangle] pub unsafe ex
 - `vexart_resource_get_stats(ctx: u64, buf_ptr: *mut u8, buf_len: u32, stats_out: *mut u32) -> i32`: Serializes GPU memory usage statistics.
 - `vexart_resource_set_budget(ctx: u64, budget_mb: u32) -> i32`: Adjusts GPU memory allocation cap.
 - `vexart_image_asset_register(ctx: u64, scene: u64, handle: u64, key_ptr: *const u8, key_len: u32, bytes_ptr: *const u8, bytes_len: u32, out_w: *mut u32, out_h: *mut u32) -> i32`: Registers image asset.
-- `vexart_image_asset_touch(ctx: u64, scene: u64, handle: u64, frame: u64) -> i32`: Updates LRU priority for image asset.
-- `vexart_image_asset_release(ctx: u64, scene: u64, handle: u64) -> i32`: Releases image asset.
-- `vexart_canvas_display_list_update(ctx: u64, scene: u64, handle: u64, key_ptr: *const u8, key_len: u32, ops_ptr: *const u8, ops_len: u32, stats_out: *mut u32) -> i32`: Updates canvas display list.
-- `vexart_canvas_display_list_touch(ctx: u64, scene: u64, handle: u64, frame: u64) -> i32`: Updates LRU priority for canvas.
-- `vexart_canvas_display_list_release(ctx: u64, scene: u64, handle: u64) -> i32`: Releases canvas display list.
+- `vexart_image_asset_touch(frame: u64, handle: u64) -> i32`: Updates LRU priority for image asset.
+- `vexart_image_asset_release(handle: u64) -> i32`: Releases image asset.
+- `vexart_canvas_display_list_update(frame: u64, key_ptr: *const u8, key_len: u32, bytes_ptr: *const u8, bytes_len: u32, out_handle: *mut u64) -> i32`: Updates canvas display list.
+- `vexart_canvas_display_list_touch(frame: u64, handle: u64) -> i32`: Updates LRU priority for canvas.
+- `vexart_canvas_display_list_release(handle: u64) -> i32`: Releases canvas display list.
 
 ### §1.8 Error Retrieval (2 Functions)
 - `vexart_get_last_error_length() -> u32`: Returns byte length of calling thread's last error message.

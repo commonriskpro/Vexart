@@ -2907,23 +2907,23 @@ export const VEXART_SYMBOLS: {
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_image_asset_touch: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t];
+        readonly args: [FFIType.uint64_t, FFIType.uint64_t];
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_image_asset_release: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t];
+        readonly args: [FFIType.uint64_t];
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_canvas_display_list_update: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
+        readonly args: [FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_canvas_display_list_touch: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t];
+        readonly args: [FFIType.uint64_t, FFIType.uint64_t];
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_canvas_display_list_release: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t];
+        readonly args: [FFIType.uint64_t];
         readonly returns: FFIType.int32_t;
     };
     readonly vexart_get_last_error_length: {
