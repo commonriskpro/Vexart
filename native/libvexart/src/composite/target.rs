@@ -123,6 +123,12 @@ impl TargetRegistry {
         }
     }
 
+    pub fn has_active_layers(&self) -> bool {
+        self.targets
+            .values()
+            .any(|target| target.active_layer.is_some())
+    }
+
     /// Allocate a new offscreen RGBA8 target of the given dimensions.
     /// Returns the opaque handle written to `out_handle`.
     pub fn create(

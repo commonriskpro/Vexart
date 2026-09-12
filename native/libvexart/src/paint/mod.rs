@@ -211,6 +211,11 @@ impl PaintContext {
 
     /// Reset offset and handle hysteresis cooldown decay back to base capacity.
     pub fn on_frame_complete(&mut self) {
+        // A nested target may submit before its parent. The parent's encoder
+        // still references this buffer, so its ranges cannot be reused yet.
+        if self.targets.has_active_layers() {
+            return;
+        }
         self.vertex_buffer_offset = 0;
         if self.vertex_buffer_capacity > BASE_VERTEX_BUFFER_CAPACITY {
             if self.vertex_buffer_peak_frame_bytes <= BASE_VERTEX_BUFFER_CAPACITY {
@@ -1012,6 +1017,60 @@ mod tests {
         ctx.on_frame_complete();
         assert_eq!(ctx.vertex_buffer_capacity, BASE_VERTEX_BUFFER_CAPACITY * 2);
         assert_eq!(ctx.vertex_buffer_idle_frames, 0);
+    }
+
+    #[cfg(feature = "gpu-tests")]
+    #[test]
+    fn nested_layer_submission_should_preserve_pending_vertex_allocations() {
+        let mut ctx = PaintContext::new();
+        let mut outer = 0;
+        let mut inner = 0;
+        assert_eq!(crate::composite::target_create(&mut ctx, 64, 64, &mut outer), OK);
+        assert_eq!(crate::composite::target_create(&mut ctx, 64, 64, &mut inner), OK);
+        assert_eq!(crate::composite::target_begin_layer(&mut ctx, outer, 0, 0), OK);
+        let red = instances::BridgeRectInstance {
+            x: -1.0,
+            y: 1.0,
+            w: 2.0,
+            h: -2.0,
+            r: 1.0,
+            a: 1.0,
+            ..Default::default()
+        };
+        let graph = make_graph_buf(0, bytemuck::bytes_of(&red));
+        assert_eq!(ctx.dispatch(outer, &graph, std::ptr::null_mut()), OK);
+        assert_eq!(crate::composite::target_begin_layer(&mut ctx, inner, 0, 0), OK);
+        assert_eq!(ctx.dispatch(inner, &graph, std::ptr::null_mut()), OK);
+        assert_eq!(crate::composite::target_end_layer(&mut ctx, inner), OK);
+        // A later upload must not overwrite the unsubmitted red background.
+        let blue = instances::BridgeRectInstance {
+            x: 0.0,
+            w: 1.0,
+            r: 0.0,
+            b: 1.0,
+            ..red
+        };
+        let graph = make_graph_buf(0, bytemuck::bytes_of(&blue));
+        // Standalone submissions also must preserve the pending parent ranges.
+        assert_eq!(ctx.dispatch(inner, &graph, std::ptr::null_mut()), OK);
+        assert_eq!(ctx.dispatch(outer, &graph, std::ptr::null_mut()), OK);
+        assert_eq!(crate::composite::target_end_layer(&mut ctx, outer), OK);
+        assert_eq!(ctx.vertex_buffer_offset, 0);
+        let mut pixels = vec![0; 64 * 64 * 4];
+        assert_eq!(
+            crate::composite::readback_rgba(
+                &mut ctx,
+                outer,
+                pixels.as_mut_ptr(),
+                pixels.len() as u32,
+                std::ptr::null_mut()
+            ),
+            OK
+        );
+        let left = (32 * 64 + 16) * 4;
+        let right = (32 * 64 + 48) * 4;
+        assert_eq!(&pixels[left..left + 4], &[255, 0, 0, 255]);
+        assert_eq!(&pixels[right..right + 4], &[0, 0, 255, 255]);
     }
 
     #[cfg(feature = "gpu-tests")]
