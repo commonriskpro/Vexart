@@ -52,9 +52,9 @@ const MAX_INVESTIGATORS = 2
 const MAX_CORRECTIONS = 1
 const MODEL_BY_ROLE = {
   planner: ["gpt-6-astra", "high"],
-  investigator: ["gpt-5.6-luna", "xhigh"],
+  investigator: ["gpt-6-astra", "high"],
   gate: ["gpt-5.6-luna", "xhigh"],
-  apply: ["gpt-5.6-luna", "xhigh"],
+  apply: ["gpt-6-astra", "high"],
   verifier: ["gpt-5.6-luna", "xhigh"],
 } as const
 

@@ -42,7 +42,7 @@ identidad exacta `(projectID, executionRootID)`.
 5. Mantener triangulación de código y contrato con reproducción ejecutable,
    revisión independiente previa y posterior, un commit por fix verificado,
    estrellas deduplicadas por fallo real y aprendizaje de resultados guardados.
-6. Mantener Astra High para orquestadores y Luna xhigh para ejecutores según el
+6. Mantener Astra High para orquestación, exploración e implementación, y Luna xhigh para verificación independiente según el
    pedido del usuario; verificar soporte y recibos reales, nunca usar `minimal`
    para Astra ni cambiar configuración global de modelos.
 7. Reutilizar el panel local de solo lectura, con identidad visual de Comet y
