@@ -85,6 +85,25 @@ describe("audit dashboard observer", () => {
     } finally { running.server.stop() }
   })
 
+  test("shows source-backed analysis separately from confirmed bugs and strips raw fields", async () => {
+    const { root, store, repo } = await fixture()
+    const ref = { path: "value.ts", startLine: 1, endLine: 1, excerpt: "export const value = 1" }
+    const analysis = {
+      evidence: [ref], flow: "The consumer imports the immutable value.", responsibilities: ["The module owns the constant."],
+      invariants: ["Imports observe one value."], scenarios: ["Multiple consumers import the module."], counterevidence: ["No current behavioral failure demonstrated."],
+      opportunities: [{ title: "Document the internal ownership", evidence: [ref], expectedBenefit: "Keep consumers aligned.", tradeoffs: ["Documentation upkeep"], validationPlan: ["Review consumers and unchanged behavior"], prompt: "PRIVATE_OPPORTUNITY_PROMPT" }],
+      stdout: "PRIVATE_ANALYSIS_STDOUT",
+    }
+    await writeFile(join(store, "events.jsonl"), JSON.stringify({ at: "2026-01-01T00:00:00.000Z", type: "analysis_recorded", runId: "run-1", attemptId: "attempt-analysis", agentKey: "agent-1", scope: ".", baselineSha: repo.baselineSha, analysis }) + "\n")
+    const snapshot = await readDashboardSnapshot(root)
+    expect(snapshot.events[0]?.baselineSha).toBe(repo.baselineSha)
+    expect(snapshot.events[0]?.analysis?.flow).toBe(analysis.flow)
+    expect(snapshot.events[0]?.analysis?.opportunities[0]?.expectedBenefit).toBe("Keep consumers aligned.")
+    expect(snapshot.totals).toEqual({ stars: 0, commits: 0, decisions: 0 })
+    expect(JSON.stringify(snapshot)).not.toContain("PRIVATE_ANALYSIS_STDOUT")
+    expect(JSON.stringify(snapshot)).not.toContain("PRIVATE_OPPORTUNITY_PROMPT")
+  })
+
   test("represents missing state as unknown instead of inventing a run", async () => {
     const { root, store } = await fixture()
     await rm(join(store, "state.json"))

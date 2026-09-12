@@ -68,3 +68,29 @@ or telemetry format change. Final independent post-review: **PASSED**.
 Dashboard-review stars: `/root/verify_loop` earns **1** for reproducing false
 runner liveness from an unrelated PID. Combined controller/dashboard review
 stars: **3**. These remain separate from product-finding runtime stars.
+
+## Source analysis and exact witnesses — 2026-09-12
+
+- Source-work role configuration: planner, investigator and apply use Astra high;
+  independent gate and post-verifier remain Luna xhigh. Actual argv construction
+  is covered by tests; previous run receipts remain historical and unchanged.
+- Architectural analysis is recorded independently of candidate acceptance, with
+  baseline-validated line references, full flow, responsibilities, invariants,
+  scenarios, counterevidence and improvement opportunities. These references do
+  not prove the interpretation. Opportunities are proposals, not star awards or
+  permission to implement architectural decisions.
+- Literal argv normalization was reproduced against real completed receipts,
+  without executing their commands. Exact argv + exit + output matches after the
+  fix: animation 4, scheduler 2, input 1, focus 1, router 1.
+- The first normalization implementation missed the actual Homebrew zsh path.
+  Root replay caught this after synthetic tests passed. The bounded correction
+  includes the exact observed wrapper and a regression copied from the actual
+  scheduler command/argv (not prompts or raw output).
+- Scope and source-range failures in those old candidates remain rejected;
+  matching a command does not establish a Vexart product bug or approve a fix.
+- `bun run test ./scripts/audit-loop`: 22 passed, 147 assertions. Scoped
+  TypeScript check and diff check passed. No unrelated type errors were changed.
+
+`/root/explore_astra`: **1 implementation-review star** for the independently
+confirmed argv representation defect. `/root/verify_loop` retains its prior
+**3** review stars. No product-finding stars were awarded for these tool changes.

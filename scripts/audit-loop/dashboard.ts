@@ -43,9 +43,20 @@ type DashboardEvent = {
   branch?: string
   alternatives?: string[]
   disadvantages?: string[]
+  baselineSha?: string
+  analysis?: DashboardAnalysis
 }
 
 type DashboardEvidence = { path: string; startLine: number; endLine: number; excerpt: string }
+type DashboardAnalysis = {
+  evidence: DashboardEvidence[]
+  flow: string
+  responsibilities: string[]
+  invariants: string[]
+  scenarios: string[]
+  counterevidence: string[]
+  opportunities: { title: string; evidence: DashboardEvidence[]; expectedBenefit: string; tradeoffs: string[]; validationPlan: string[] }[]
+}
 
 type DashboardReceipt = {
   agentKey: string
@@ -155,12 +166,32 @@ const sanitizeEvent = (value: unknown): DashboardEvent | null => {
   const runId = stringValue(value.runId)
   if (!at || !type || !runId) return null
   const event: DashboardEvent = { at, type, runId }
-  for (const key of ["role", "agentKey", "attemptId", "scope", "findingId", "reason", "commitSha", "worktree", "branch"] as const) {
+  for (const key of ["role", "agentKey", "attemptId", "scope", "findingId", "reason", "commitSha", "worktree", "branch", "baselineSha"] as const) {
     if (typeof value[key] === "string") event[key] = value[key] as string
   }
   if (!event.agentKey && typeof value.investigatorAgentKey === "string") event.agentKey = value.investigatorAgentKey
   for (const key of ["alternatives", "disadvantages"] as const) if (Array.isArray(value[key])) event[key] = nonEmptyStrings(value[key])
+  if (type === "analysis_recorded") {
+    const analysis = sanitizeAnalysis(value.analysis)
+    if (analysis) event.analysis = analysis
+  }
   return event
+}
+
+const sanitizeAnalysis = (value: unknown): DashboardAnalysis | null => {
+  if (!isObject(value) || typeof value.flow !== "string") return null
+  return {
+    flow: value.flow,
+    evidence: evidence(value.evidence),
+    responsibilities: nonEmptyStrings(value.responsibilities),
+    invariants: nonEmptyStrings(value.invariants),
+    scenarios: nonEmptyStrings(value.scenarios),
+    counterevidence: nonEmptyStrings(value.counterevidence),
+    opportunities: Array.isArray(value.opportunities) ? value.opportunities.flatMap((item) => {
+      if (!isObject(item) || typeof item.title !== "string" || typeof item.expectedBenefit !== "string") return []
+      return [{ title: item.title, evidence: evidence(item.evidence), expectedBenefit: item.expectedBenefit, tradeoffs: nonEmptyStrings(item.tradeoffs), validationPlan: nonEmptyStrings(item.validationPlan) }]
+    }) : [],
+  }
 }
 
 const modelInfo = (command: unknown) => {

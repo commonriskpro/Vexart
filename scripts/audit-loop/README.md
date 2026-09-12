@@ -24,18 +24,34 @@ Each cycle is:
 1. Astra (`gpt-6-astra`, `high`) plans at most two scopes using bounded prior
    lessons (negative results, false positives, regressions, disadvantages, and
    coverage).
-2. One or two independent Luna (`gpt-5.6-luna`, `xhigh`) investigators inspect
+2. One or two independent Astra (`gpt-6-astra`, `high`) investigators inspect
    the clean baseline. A real finding must have baseline path/lines/excerpt,
    expected contract, and an exact executable regression command that fails on
    baseline with a nonzero exit plus a verbatim stable assertion excerpt.
+   Receipt matching decodes literal shell quoting and one known sh/bash/zsh
+   `-c`/`-lc` wrapper without execution, then compares exact argv; argument
+   boundaries and embedded whitespace are preserved. Shell operators, expansion,
+   malformed quoting, and nested/unknown wrappers do not qualify as proof.
    `finding.paths` contains only files intended for the fix; evidence may read
    other baseline files inside the requested audit scope without granting write
-   access.
+   access. Every investigation also returns a separate source-backed analysis:
+   end-to-end caller/consumer flow, responsibilities, lifecycle invariants, actual
+   scenarios, counterevidence, and optional improvement opportunities with their
+   own evidence, expected benefit, tradeoffs, and validation plan. Tests validate
+   source reasoning; a made-up assertion or environment failure is not a defect.
+   Analysis evidence is checked against the recorded baseline and requested read
+   scope, then saved as `analysis_recorded` before candidate rejection or any fix
+   advances the baseline, including negative/blocked findings. Missing, malformed,
+   or invalid evidence emits `analysis_rejected`; legacy missing analysis is null,
+   never synthesized. The full event retains run/cycle/scope/SHA/agent/attempt
+   attribution. Compact baseline-tagged summaries inform later planning as
+   `DATA_ONLY`, not current proof. Opportunities are unverified proposals: they
+   never award stars, authorize changes, or bypass human architectural decisions.
 3. A separate Luna pre-gate independently reads the source. It can approve only
    an internal root-cause fix tied to the recorded SHA and exact paths. API,
    contract, ownership, migration, hotfix, ad-hoc, magic-limit, controller,
    prompt, security-policy, and dependency changes fail closed for human review.
-4. The Luna apply worker receives only the approved paths and does not stage or
+4. The Astra high apply worker receives only the approved paths and does not stage or
    commit. A Luna verifier inspects the actual diff, lifecycle/ownership
    invariants, regressions, and fixed safe checks. At most one bounded correction
    is attempted. After the verifier and checks pass, the controller stages only

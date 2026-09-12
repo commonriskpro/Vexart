@@ -41,12 +41,29 @@ export type Finding = {
   paths: string[]
 }
 
+export type Analysis = {
+  evidence: Evidence[]
+  flow: string
+  responsibilities: string[]
+  invariants: string[]
+  scenarios: string[]
+  counterevidence: string[]
+  opportunities: {
+    title: string
+    evidence: Evidence[]
+    expectedBenefit: string
+    tradeoffs: string[]
+    validationPlan: string[]
+  }[]
+}
+
 export type InvestigatorResult = {
   kind: "investigator"
   status: "finding" | "negative" | "blocked"
   scope: string
   strategy: string
   finding: Finding | null
+  analysis: Analysis | null
   negative: string | null
   disadvantages?: string[]
 }
@@ -240,22 +257,47 @@ export const parseFinding = (value: unknown): Finding | null => {
   return { id, canonicalRootCauseKey, scope, summary, impact, evidence: evidence as Evidence[], expectedContract, reproduction, paths }
 }
 
+export const parseAnalysis = (value: unknown): Analysis | null => {
+  if (!record(value) || !exactKeys(value, ["evidence", "flow", "responsibilities", "invariants", "scenarios", "counterevidence", "opportunities"])) return null
+  const evidence = Array.isArray(value.evidence) ? value.evidence.map(evidenceValue) : null
+  const flow = stringValue(value.flow)
+  const responsibilities = nonEmptyStrings(value.responsibilities)
+  const invariants = nonEmptyStrings(value.invariants)
+  const scenarios = nonEmptyStrings(value.scenarios)
+  const counterevidence = nonEmptyStrings(value.counterevidence)
+  if (!evidence?.length || evidence.some((item) => !item) || !flow || !responsibilities?.length || !invariants?.length || !scenarios?.length || !counterevidence || !Array.isArray(value.opportunities)) return null
+  const opportunities = value.opportunities.map((item) => {
+    if (!record(item) || !exactKeys(item, ["title", "evidence", "expectedBenefit", "tradeoffs", "validationPlan"])) return null
+    const title = stringValue(item.title)
+    const refs = Array.isArray(item.evidence) ? item.evidence.map(evidenceValue) : null
+    const expectedBenefit = stringValue(item.expectedBenefit)
+    const tradeoffs = nonEmptyStrings(item.tradeoffs)
+    const validationPlan = nonEmptyStrings(item.validationPlan)
+    if (!title || !refs?.length || refs.some((ref) => !ref) || !expectedBenefit || !tradeoffs?.length || !validationPlan?.length) return null
+    return { title, evidence: refs as Evidence[], expectedBenefit, tradeoffs, validationPlan }
+  })
+  if (opportunities.some((item) => !item)) return null
+  return { evidence: evidence as Evidence[], flow, responsibilities, invariants, scenarios, counterevidence, opportunities: opportunities as Analysis["opportunities"] }
+}
+
 export const parseInvestigator = (value: unknown): InvestigatorResult | null => {
-  if (!record(value) || !exactKeys(value, ["kind", "status", "scope", "strategy", "finding", "negative", "disadvantages"])) return null
+  // Legacy receipts can lack analysis; normalize to null, never fabricate source analysis.
+  if (!record(value) || !exactKeys(value, ["kind", "status", "scope", "strategy", "finding", "negative", "disadvantages", ...("analysis" in value ? ["analysis"] : [])])) return null
   if (value.kind !== "investigator" || !["finding", "negative", "blocked"].includes(String(value.status))) return null
   const scope = stringValue(value.scope)
   const strategy = stringValue(value.strategy)
   const disadvantages = value.disadvantages === undefined ? [] : nonEmptyStrings(value.disadvantages)
   if (!scope || !strategy || !disadvantages) return null
+  const analysis = parseAnalysis(value.analysis)
   const status = value.status as InvestigatorResult["status"]
   if (status === "finding") {
     const finding = parseFinding(value.finding)
     if (!finding || value.negative !== null) return null
-    return { kind: "investigator", status, scope, strategy, finding, negative: null, disadvantages }
+    return { kind: "investigator", status, scope, strategy, finding, analysis, negative: null, disadvantages }
   }
   const negative = value.negative === undefined ? "" : stringValue(value.negative)
   if (value.finding !== null || negative === null) return null
-  return { kind: "investigator", status, scope, strategy, finding: null, negative, disadvantages }
+  return { kind: "investigator", status, scope, strategy, finding: null, analysis, negative, disadvantages }
 }
 
 export const parsePlanner = (value: unknown): PlannerResult | null => {

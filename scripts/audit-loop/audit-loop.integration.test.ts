@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdir, mkdtemp, readlink, realpath, rm, symlink, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, readlink, realpath, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createWorktree, detectRepo, runProcess, changedPaths, snapshotPaths } from "./git"
-import { commitVerifiedFix, loadLessons, loadStarKeys, prepareDependencies } from "./index"
+import { commitVerifiedFix, loadLessons, loadStarKeys, prepareDependencies, recordInvestigationAnalysis, validateFinding } from "./index"
+
+import { parseInvestigator } from "./types"
 
 const fixtures: string[] = []
 
@@ -62,6 +64,59 @@ describe("audit loop repository invariants", () => {
     expect(lessons.some((lesson) => lesson.includes("false positive retained"))).toBe(true)
     expect(lessons.some((lesson) => lesson.includes("regression retained"))).toBe(true)
     expect(lessons.some((lesson) => lesson.includes("scope skipped"))).toBe(true)
+  })
+
+  test("source analysis survives negative, blocked, and rejected candidates without approval", async () => {
+    const { repo } = await fixture()
+    const store = join(repo.commonDir, "audit-loop")
+    await mkdir(store, { recursive: true })
+    const analysis = { evidence: [{ path: "value.ts", startLine: 1, endLine: 1, excerpt: "export const value = 1" }], flow: "value.ts exports a constant to its importers", responsibilities: ["module owns the constant"], invariants: ["all importers share one value"], scenarios: ["import the constant"], counterevidence: ["no runtime mutation is present"], opportunities: [{ title: "Inspect importer duplication", evidence: [{ path: "value.ts", startLine: 1, endLine: 1, excerpt: "export const value = 1" }], expectedBenefit: "could remove duplicated values if callers establish duplication", tradeoffs: ["no benefit if callers already reuse this export"], validationPlan: ["inspect actual importer source before proposing changes"] }] }
+    const context = { store, runId: "analysis-run", cycle: 1, scope: ".", agentKey: "analysis-agent", attemptId: "negative-attempt" }
+    const negative = { kind: "investigator", status: "negative", scope: ".", strategy: "flow", analysis, finding: null, negative: "no proven defect", disadvantages: [] }
+    await recordInvestigationAnalysis(repo, context, negative, 0)
+    expect(parseInvestigator(negative)?.finding).toBeNull()
+    await recordInvestigationAnalysis(repo, { ...context, attemptId: "blocked-attempt" }, { ...negative, status: "blocked" }, 0)
+    const finding = { id: "candidate", canonicalRootCauseKey: "value:unproven", scope: ".", summary: "unproven", impact: "unknown", evidence: analysis.evidence, expectedContract: "unestablished", reproduction: { command: ["bun", "test"], exitCode: 1, output: "assertion", observed: true }, paths: ["value.ts"] }
+    await recordInvestigationAnalysis(repo, { ...context, attemptId: "rejected-attempt" }, { ...negative, status: "finding", negative: null, finding }, 0)
+    expect(await validateFinding(repo, finding, "")).toContain("matching failing")
+    // Malformed candidate syntax must not erase independently valid source analysis either.
+    await recordInvestigationAnalysis(repo, { ...context, attemptId: "malformed-attempt" }, { ...negative, status: "finding", finding: {} }, 0)
+    const events = (await readFile(join(store, "events.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line))
+    expect(events).toHaveLength(4)
+    expect(events.every((event) => event.type === "analysis_recorded" && event.baselineSha === repo.baselineSha)).toBe(true)
+    expect(events[0]).toMatchObject({ runId: context.runId, cycle: 1, scope: ".", agentKey: context.agentKey, attemptId: context.attemptId, analysis })
+    expect([...await loadStarKeys(store)]).toEqual([])
+    expect(events.some((event) => ["star_awarded", "fix_committed", "gate_approved"].includes(event.type))).toBe(false)
+    expect(await changedPaths(repo.root)).toEqual([])
+    // Summaries keep attribution even when prose is too large for the old raw JSON slice.
+    await recordInvestigationAnalysis(repo, { ...context, attemptId: "long-attempt" }, { ...negative, analysis: { ...analysis, flow: "source flow ".repeat(1_000) } }, 0)
+    const lesson = JSON.parse((await loadLessons(store)).at(-1)!)
+    expect(lesson).toMatchObject({ lesson: "DATA_ONLY", historical: true, event: { baselineSha: repo.baselineSha, runId: context.runId, agentKey: context.agentKey, attemptId: "long-attempt" } })
+    expect(lesson.event.analysis.flow.length).toBeLessThanOrEqual(320)
+    expect(lesson.event.analysis.opportunities[0].evidence[0].path).toBe("value.ts")
+  })
+
+  test("analysis rejects absent, malformed, stale, unsafe, and out-of-scope evidence", async () => {
+    const { repo } = await fixture()
+    const store = join(repo.commonDir, "audit-loop")
+    await mkdir(store, { recursive: true })
+    const evidence = [{ path: "value.ts", startLine: 1, endLine: 1, excerpt: "export const value = 1" }]
+    const analysis = { evidence, flow: "source export", responsibilities: ["owns constant"], invariants: ["immutable"], scenarios: ["import"], counterevidence: [], opportunities: [] }
+    const context = { store, runId: "invalid-analysis", cycle: 1, scope: ".", agentKey: "agent", attemptId: "attempt" }
+    const cases = [
+      { response: {}, readScope: "." },
+      { response: { analysis: { ...analysis, extra: true } }, readScope: "." },
+      { response: { analysis: { ...analysis, evidence: [{ ...evidence[0], excerpt: "stale source" }] } }, readScope: "." },
+      { response: { analysis: { ...analysis, evidence: [{ ...evidence[0], path: "scripts/audit-loop/index.ts" }] } }, readScope: "." },
+      { response: { analysis }, readScope: "other.ts" },
+      { response: { analysis: { ...analysis, opportunities: [{ title: "unsupported", evidence: [{ ...evidence[0], excerpt: "invented" }], expectedBenefit: "unknown", tradeoffs: ["unknown"], validationPlan: ["inspect source"] }] } }, readScope: "." },
+    ]
+    for (const item of cases) await recordInvestigationAnalysis(repo, context, item.response, 0, item.readScope)
+    await recordInvestigationAnalysis(repo, context, { analysis }, 1)
+    const events = (await readFile(join(store, "events.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line))
+    expect(events).toHaveLength(cases.length + 1)
+    expect(events.every((event) => event.type === "analysis_rejected" && event.reason && !event.analysis)).toBe(true)
+    expect([...await loadStarKeys(store)]).toEqual([])
   })
 
   test("relocates internal absolute dependency links without mutating the source", async () => {

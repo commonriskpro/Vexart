@@ -21,9 +21,9 @@ main{max-width:1640px;margin:auto;padding:30px 34px}.intro{display:flex;justify-
 <main>
 <section class="intro"><div><div class="eyebrow">Audit loop / señal en vivo</div><h1>Código bajo <span>observación.</span></h1><p>Del hallazgo al commit. Evidencia real, sin saltarse la revisión.</p></div><div class="controls"><button id="pause" class="control" aria-pressed="false">Pausar vista</button><button id="refresh" class="control">Actualizar ↗</button></div></section>
 <div id="warning" class="warning" role="status" hidden></div>
-<section class="run" aria-label="Estado de la auditoría"><div class="run-head"><div class="state-title"><span id="dot" class="status-dot"></span><h2 id="phase">Esperando registros</h2></div><div id="run-meta" class="run-meta">Sin ejecución disponible</div></div><div class="run-body"><div class="pipeline" aria-label="Fases del loop"><div class="step" data-phase="planning"><b>01 / ASTRA</b>Planificar</div><div class="step" data-phase="investigating"><b>02 / LUNA</b>Investigar</div><div class="step" data-phase="gating"><b>03 / GATE</b>Validar diseño</div><div class="step" data-phase="applying"><b>04 / LUNA</b>Implementar</div><div class="step" data-phase="verifying"><b>05 / REVISIÓN</b>Verificar</div><div class="step" data-phase="ready_for_review"><b>06 / GIT</b>Commit</div></div><div class="metrics"><div class="metric"><strong id="cycle">—</strong><small>Ciclo de esta ejecución</small></div><div class="metric"><strong id="stars" class="accent">—</strong><small>Fallos confirmados · acumulado</small></div><div class="metric"><strong id="commits">—</strong><small>Fixes con commit · acumulado</small></div><div class="metric"><strong id="decisions">—</strong><small>Decisiones aisladas · acumulado</small></div></div></div></section>
+<section class="run" aria-label="Estado de la auditoría"><div class="run-head"><div class="state-title"><span id="dot" class="status-dot"></span><h2 id="phase">Esperando registros</h2></div><div id="run-meta" class="run-meta">Sin ejecución disponible</div></div><div class="run-body"><div class="pipeline" aria-label="Fases del loop"><div class="step" data-phase="planning"><b>01 / ASTRA</b>Planificar</div><div class="step" data-phase="investigating"><b>02 / ASTRA</b>Investigar</div><div class="step" data-phase="gating"><b>03 / GATE</b>Validar diseño</div><div class="step" data-phase="applying"><b>04 / ASTRA</b>Implementar</div><div class="step" data-phase="verifying"><b>05 / REVISIÓN</b>Verificar</div><div class="step" data-phase="ready_for_review"><b>06 / GIT</b>Commit</div></div><div class="metrics"><div class="metric"><strong id="cycle">—</strong><small>Ciclo de esta ejecución</small></div><div class="metric"><strong id="stars" class="accent">—</strong><small>Fallos confirmados · acumulado</small></div><div class="metric"><strong id="commits">—</strong><small>Fixes con commit · acumulado</small></div><div class="metric"><strong id="decisions">—</strong><small>Decisiones aisladas · acumulado</small></div></div></div></section>
 <div class="workspace"><aside><div class="section-head"><h2>Agentes / registro</h2><span id="agent-count" class="count">—</span></div><div id="agents" class="agents"><div class="empty">Esperando identidades de agentes.</div></div><p class="note">La fase global se actualiza cada 2 s. Los intentos individuales se registran al terminar; no se transmite su actividad interna.</p><dl class="source"><dt>Ejecución</dt><dd id="run-id">—</dd><dt>Branch aislada</dt><dd id="branch">—</dd><dt>Baseline</dt><dd id="baseline">—</dd><dt>Worktree</dt><dd id="worktree">—</dd></dl></aside>
-<section><div class="section-head"><h2>Actividad de la ejecución</h2><select id="filter" class="filter" aria-label="Filtrar actividad"><option value="all">Todos los eventos</option><option value="finding">Hallazgos y fixes</option><option value="decision">Decisiones</option><option value="agent">Agentes</option></select></div><div id="feed" class="feed"><div class="empty">El ledger todavía no tiene eventos.</div></div></section>
+<section><div class="section-head"><h2>Actividad de la ejecución</h2><select id="filter" class="filter" aria-label="Filtrar actividad"><option value="all">Todos los eventos</option><option value="analysis">Análisis y mejoras</option><option value="finding">Hallazgos y fixes</option><option value="decision">Decisiones</option><option value="agent">Agentes</option></select></div><div id="feed" class="feed"><div class="empty">El ledger todavía no tiene eventos.</div></div></section>
 <section class="inspector" aria-label="Detalle de evidencia"><div class="inspector-top"><span>Evidencia / último recibo</span><span id="receipt-count">0</span></div><div id="detail" class="inspector-body"><div class="empty">Aquí aparecerán los resultados guardados por los agentes: análisis, archivos revisados y desventajas.<br><br>Mientras un intento está en curso, su recibo aún no existe.</div></div></section></div>
 <footer class="footer"><span>LECTURA → REPRODUCCIÓN → GATE → FIX → VERIFICACIÓN → COMMIT</span><span id="updated">Sin snapshot · el panel no controla el runner</span></footer>
 </main>
@@ -39,7 +39,7 @@ const node = (tag, cls, text) => {
 };
 const phases = { starting: "Preparando worktree", planning: "Planificando la auditoría", investigating: "Investigando código", gating: "Validando la arquitectura", applying: "Aplicando un fix aprobado", verifying: "Verificando la implementación", ready_for_review: "Listo para revisión", completed: "Ejecución completada", stopped: "Ejecución detenida", timed_out: "Límite de tiempo alcanzado", blocked: "Ejecución bloqueada" };
 const roles = { planner: "Orquestador", investigator: "Investigador", gate: "Gate arquitectónico", apply: "Implementador", verifier: "Verificador" };
-const names = { run_started: "Ejecución iniciada", agent_receipt: "Recibo de agente guardado", star_awarded: "Fallo real confirmado · +1 estrella", fix_committed: "Fix verificado y commiteado", decision_deferred: "Decisión aislada en worktree", decision_deferred_notice: "Decisión pendiente", negative_result: "Investigación sin fallo validado", gate_rejected: "Propuesta rechazada", gate_blocked: "Gate bloqueado", verification_passed: "Verificación aprobada", verification_failed: "Verificación rechazada", apply_blocked: "Implementación bloqueada", planner_rejected: "Plan no aceptado", planner_result: "Resultado de planificación", run_completed: "Ejecución finalizada", blocked: "Bloqueo registrado", coverage: "Cobertura registrada" };
+const names = { analysis_recorded: "Análisis con referencias comprobadas", analysis_rejected: "Análisis sin referencias válidas", run_started: "Ejecución iniciada", agent_receipt: "Recibo de agente guardado", star_awarded: "Fallo real confirmado · +1 estrella", fix_committed: "Fix verificado y commiteado", decision_deferred: "Decisión aislada en worktree", decision_deferred_notice: "Decisión pendiente", negative_result: "Investigación sin fallo validado", gate_rejected: "Propuesta rechazada", gate_blocked: "Gate bloqueado", verification_passed: "Verificación aprobada", verification_failed: "Verificación rechazada", apply_blocked: "Implementación bloqueada", planner_rejected: "Plan no aceptado", planner_result: "Resultado de planificación", run_completed: "Ejecución finalizada", blocked: "Bloqueo registrado", coverage: "Cobertura registrada" };
 let snapshot = null, paused = false, busy = false, selected = null, timer, lastFeed = null, lastDetail = null;
 const time = (v) => {
   const d = new Date(v);
@@ -76,11 +76,39 @@ function detail(r) {
   box.append(node("div", "detail-label", "Recibo verificable"), node("p", "detail-text", `${r.attemptId}
 Finalizado ${time(r.endedAt)} · salida ${r.exitCode ?? "no disponible"}`));
 }
+function analysisDetail(event) {
+  const key = "analysis:" + JSON.stringify(event);
+  if (key === lastDetail) return;
+  lastDetail = key;
+  const box = $("detail");
+  box.replaceChildren();
+  const analysis = event.analysis;
+  box.append(node("h3", "", "Análisis de arquitectura"), node("span", "pill", "Referencias comprobadas"));
+  box.append(node("p", "note", "Las líneas fueron contrastadas con el baseline. Las conclusiones y oportunidades aún requieren revisión independiente; no son bugs confirmados ni autorizan cambios."));
+  const section = (label, value) => {
+    box.append(node("div", "detail-label", label), node("p", "detail-text", Array.isArray(value) ? (value.length ? value.map((item) => "• " + item).join("\n") : "No se registraron elementos.") : value));
+  };
+  const refs = (items) => { for (const e of list(items)) box.append(node("div", "evidence-path", `${e.path}:${e.startLine}–${e.endLine}`), node("pre", "code", e.excerpt)); };
+  section("Flujo completo", analysis.flow);
+  section("Responsabilidades", analysis.responsibilities);
+  section("Invariantes", analysis.invariants);
+  section("Escenarios analizados", analysis.scenarios);
+  section("Contraevidencia y límites", analysis.counterevidence);
+  refs(analysis.evidence);
+  section("Oportunidades propuestas", list(analysis.opportunities).length ? "Pendientes de validación; no otorgan estrellas." : "No se propusieron mejoras sin fundamento.");
+  for (const opportunity of list(analysis.opportunities)) {
+    section(opportunity.title, opportunity.expectedBenefit);
+    section("Costes y desventajas", opportunity.tradeoffs);
+    section("Cómo validar la mejora", opportunity.validationPlan);
+    refs(opportunity.evidence);
+  }
+  section("Snapshot de origen", `${event.scope}\n${event.baselineSha || "Baseline no disponible"}\n${event.attemptId}`);
+}
 function renderFeed() {
   if (!snapshot)
     return;
   const filter = $("filter").value;
-  const events = list(snapshot.events).filter((e) => filter === "all" || filter === "finding" && /star|fix_|verification|gate_/.test(e.type) || filter === "decision" && /decision/.test(e.type) || filter === "agent" && /agent|planner|negative/.test(e.type));
+  const events = list(snapshot.events).filter((e) => filter === "all" || filter === "finding" && /star|fix_|verification|gate_/.test(e.type) || filter === "decision" && /decision/.test(e.type) || filter === "agent" && /agent|planner|negative/.test(e.type) || filter === "analysis" && /analysis_/.test(e.type));
   const key = JSON.stringify([filter, events, list(snapshot.receipts).map((r) => r.attemptId)]);
   if (key === lastFeed)
     return;
@@ -110,6 +138,11 @@ function renderFeed() {
       for (const a of list(e.disadvantages))
         d.append(node("p", "", "Límite: " + a));
       body.append(d);
+    }
+    if (e.analysis) {
+      const button = node("button", "event-button", "Ver análisis y oportunidades ↗");
+      button.addEventListener("click", () => { selected = "analysis:" + e.attemptId; analysisDetail(e); });
+      body.append(button);
     }
     const r = list(snapshot.receipts).find((r) => r.attemptId === e.attemptId);
     if (r) {
@@ -150,7 +183,7 @@ function render(data) {
   for (const a of list(data.agents)) {
     const el = node("div", "agent");
     const top = node("div", "agent-top");
-    top.append(node("div", "avatar", a.lastRole === "planner" ? "A" : "L"), node("span", "agent-name", roles[a.lastRole] || "Identidad registrada"), node("span", "stars", "★ " + (a.stars ?? 0)));
+    top.append(node("div", "avatar", a.model?.includes("astra") ? "A" : a.model?.includes("luna") ? "L" : "·"), node("span", "agent-name", roles[a.lastRole] || "Identidad registrada"), node("span", "stars", "★ " + (a.stars ?? 0)));
     el.append(top, node("div", "agent-scope", a.scope || "—"), node("div", "model", a.model ? [a.model, a.effort].filter(Boolean).join(" / ") : "Modelo no disponible en este snapshot"), node("div", "agent-result", a.lastEndedAt ? `Último recibo ${time(a.lastEndedAt)} · salida ${a.lastExitCode ?? "—"}` : "Sin recibo legible en este snapshot"));
     el.title = a.strategy || a.agentKey;
     $("agents").append(el);
@@ -160,7 +193,8 @@ function render(data) {
   text("receipt-count", list(data.receipts).length);
   const receipts = list(data.receipts);
   const r = receipts.find((r) => r.attemptId === selected) || receipts[receipts.length - 1];
-  detail(r);
+  const analysis = list(data.events).find((event) => event.analysis && "analysis:" + event.attemptId === selected);
+  if (analysis) analysisDetail(analysis); else detail(r);
   renderFeed();
   text("updated", `Snapshot ${time(data.observedAt)} · solo lectura`);
 }
