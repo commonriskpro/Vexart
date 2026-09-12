@@ -19,6 +19,7 @@
     "build:dist": "bun run scripts/build-dist.ts",
     "pack": "bun run build:dist && cd dist && bun pm pack --ignore-scripts",
     "showcase": "bun --conditions=browser run examples/void-showcase.tsx",
+    "pi": "bun --conditions=browser run examples/pi-agent.tsx",
     "effects-showcase": "bun --conditions=browser run examples/effects-showcase.tsx",
     "showcase:legacy": "bun --conditions=browser run examples/showcase-legacy.tsx",
     "facebook": "bun --conditions=browser run examples/facebook-app.tsx",
