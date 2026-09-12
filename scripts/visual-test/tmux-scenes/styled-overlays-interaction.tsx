@@ -18,7 +18,8 @@ import {
   createVoidToaster,
   themeColors,
 } from "@vexart/styled"
-import { focusedId, getFocusedEntry, setFocus } from "@vexart/engine"
+import { focusedId, setFocus } from "@vexart/engine"
+import { getFocusedEntry } from "@vexart/engine/internal"
 import {
   renderToBufferAfterInteractions,
   type RenderToBufferOptions,

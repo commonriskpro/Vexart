@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { fileURLToPath } from "node:url"
 import { renderToBufferAfterInteractions, type RenderToBufferOptions, type RenderToBufferResult } from "../../../packages/engine/src/testing/render-to-buffer"
-import type { TGENode } from "../../../packages/engine/src/ffi/node"
-import { getHandleNode } from "../../../packages/engine/src/reconciler/handle"
+import type { TGENode } from "@vexart/engine/internal"
+import { getHandleNode } from "@vexart/engine/internal"
 import type { NodeHandle } from "@vexart/engine"
 
 export const width = 240

@@ -83,7 +83,7 @@ The distribution bundle is built via `scripts/build-dist.ts` (`bun run build:dis
 dist/
 ├── vexart.js            # Unified barrel (@vexart/app + styled + headless + engine hooks)
 ├── vexart.d.ts          # TypeScript declarations for root barrel
-├── engine.js            # Standalone @vexart/engine bundle (custom reconcilers, low-level FFI)
+├── engine.js            # Standalone @vexart/engine bundle (mount, terminal, hooks/types, debug controls)
 ├── engine.d.ts          # TypeScript declarations for engine
 ├── cli.js               # Published executable CLI binary ("bin": { "vexart": "./cli.js" })
 ├── components.d.ts      # Component prop typings referenced by vexart.d.ts
@@ -96,6 +96,13 @@ dist/
     ├── linux-x64/       # libvexart.so + package.json (@vexart-native/linux-x64)
     └── linux-arm64/     # libvexart.so + package.json (@vexart-native/linux-arm64)
 ```
+
+The published `engine.js` contains the supported `mount`, `createTerminal`,
+user-facing hooks/types, and debug controls. Raw node/layout/reconciler/
+render-loop/native/FFI helpers and diagnostic state/culling helpers remain
+workspace internals. `vexart/jsx-runtime` is the published JSX
+runtime; `@vexart/engine/jsx-runtime` is compiler-only workspace wiring, and
+`@vexart/engine/internal` is not included in the export map.
 
 ### 3.2 Platform Resolution Strategy (`bun:ffi`)
 1. **Development Mode**: `packages/engine/src/ffi/vexart-bridge.ts` resolves local compilation artifacts in `native/libvexart/target/release/`.

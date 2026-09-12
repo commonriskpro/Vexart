@@ -22,6 +22,13 @@ JSX (SolidJS createRenderer)
 
 Normal terminal presentation NEVER returns raw RGBA buffers to JavaScript.
 
+The published `vexart/engine` boundary contains `mount`, `createTerminal`,
+user-facing hooks/types, and supported debug controls. Raw
+node/layout/reconciler/render-loop/native/FFI helpers and diagnostic
+state/culling helpers are internal. JSX uses the shared reconciler through the published
+`vexart/jsx-runtime`; `@vexart/engine/jsx-runtime` is compiler-only workspace
+wiring, and `@vexart/engine/internal` is workspace-only for maintainers/tests.
+
 ## Package Layers
 
 ```

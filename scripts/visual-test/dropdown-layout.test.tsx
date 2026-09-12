@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { createNode, parseSizing, resetFocus, solidRender, type TGENode } from "@vexart/engine"
+import { createNode, parseSizing, resetFocus, solidRender, type TGENode } from "@vexart/engine/internal"
 import { VoidDropdownMenu } from "@vexart/styled"
 import { syncAllLayoutProps } from "../../packages/engine/src/ffi/flex-sync"
 import { createVexartLayoutCtx } from "../../packages/engine/src/loop/layout-adapter"

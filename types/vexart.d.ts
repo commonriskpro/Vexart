@@ -1,6 +1,7 @@
 import { Accessor } from 'solid-js';
 import { batch } from 'solid-js';
 import { children } from 'solid-js';
+import { createComponent } from 'solid-js';
 import { createContext } from 'solid-js';
 import { createEffect } from 'solid-js';
 import { createMemo } from 'solid-js';
@@ -693,8 +694,7 @@ export declare type CreateAppRouterOptions = {
     onFocus?: AppRouterFocusRestorer;
 };
 
-/** @public */
-export declare const createComponent: <T>(Comp: (props: T) => TGENode, props: T) => TGENode;
+export { createComponent }
 
 export { createContext }
 
@@ -761,9 +761,6 @@ export declare function createTransition(initial: number, config?: TransitionCon
 
 /** @public */
 export declare function createVoidToaster(options?: VoidToasterOptions): ToasterHandle;
-
-/** @public Alias kept for API compat — prefer `Rect` in new code. */
-declare type DamageRect = Rect;
 
 /** @public */
 export declare const darkTheme: Required<ThemeDefinition>;
@@ -881,31 +878,6 @@ export declare type DiffTheme = {
 };
 
 /** @public */
-declare const DIRTY_KIND: {
-    readonly FULL: "full";
-    readonly INTERACTION: "interaction";
-    readonly NODE_VISUAL: "node-visual";
-};
-
-/** @public */
-declare type DirtyKind = (typeof DIRTY_KIND)[keyof typeof DIRTY_KIND];
-
-/** @public */
-declare type DirtyScope = {
-    kind: DirtyKind;
-    nodeId?: number;
-    rect?: DamageRect;
-};
-
-/** @public */
-declare type DirtyTracker = {
-    markDirty: () => void;
-    isDirty: () => boolean;
-    clearDirty: (expectedVersion?: number) => void;
-    dirtyVersion: () => number;
-};
-
-/** @public */
 export declare function discoverAppRoutes(options?: RouteManifestOptions): Promise<FileSystemRouteManifest>;
 
 /** @public */
@@ -953,9 +925,6 @@ export declare const easing: {
 
 /** @public */
 export declare type EasingFn = (t: number) => number;
-
-/** @public */
-export declare const effect: <T>(fn: (prev?: T) => T, init?: T) => void;
 
 export { ErrorBoundary }
 
@@ -1643,9 +1612,6 @@ export declare type ListProps = {
 };
 
 /** @public */
-export declare function markDirty(scope?: DirtyScope, tracker?: DirtyTracker): void;
-
-/** @public */
 export declare function Markdown(props: MarkdownProps): JSX.Element;
 
 /** @public */
@@ -1698,9 +1664,6 @@ export { Match }
 
 /** @public */
 export declare function matchRoute(routes: AppRouteDefinition[], path: string): AppRouteMatch | null;
-
-/** @public */
-export declare const memo: <T>(fn: () => T, equal: boolean) => () => T;
 
 /** @public */
 export declare function mergeClassNameProps<T extends Record<string, unknown>>(props: T, className?: string | null): T & VexartStyleProps;
@@ -1848,12 +1811,6 @@ declare type NebulaCmd = {
     dust: number;
 };
 
-declare type NodeCanvasExtra = {
-    displayListCommands: DrawCmd[] | null;
-    displayListHash: string | null;
-    drawCacheKey: string | null;
-};
-
 /** @public */
 export declare type NodeHandle = {
     readonly id: number;
@@ -1865,19 +1822,6 @@ export declare type NodeHandle = {
     readonly isFocused: boolean;
     readonly children: NodeHandle[];
     readonly parent: NodeHandle | null;
-};
-
-declare type NodeImageExtra = {
-    source?: string;
-    revision?: number;
-    cancel?: () => void;
-    buffer: {
-        data: Uint8Array;
-        width: number;
-        height: number;
-    } | null;
-    state: "idle" | "loading" | "loaded" | "error";
-    nativeHandle: bigint | null;
 };
 
 /** @public Mouse event passed to onMouseDown, onMouseUp, onMouseMove, onMouseOver, and onMouseOut handlers. */
@@ -2188,14 +2132,6 @@ export declare const radius: {
     readonly full: 9999;
 };
 
-/** @public Axis-aligned rectangle (origin + size). */
-declare type Rect = {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-};
-
 /** @public */
 declare type RectCmd = {
     kind: "rect";
@@ -2501,12 +2437,6 @@ export { Show }
 
 /** @public */
 export declare type SimpleThemeRules = Record<string, string | number>;
-
-/** @public */
-declare type SizingInfo = {
-    type: number;
-    value: number;
-};
 
 /** Supported sizing keywords. @public */
 declare type SizingKeyword = "fit" | "grow" | "auto" | "fill";
@@ -3001,92 +2931,6 @@ export declare type TextSelection = {
     start: number;
     end: number;
 };
-
-/** @public */
-declare const TGE_NODE_KIND: {
-    readonly BOX: "box";
-    readonly TEXT: "text";
-    readonly IMG: "img";
-    readonly CANVAS: "canvas";
-    readonly ROOT: "root";
-};
-
-/** @public */
-declare type TGENode = {
-    kind: TGENodeKind;
-    props: BoxProps;
-    text: string;
-    children: TGENode[];
-    parent: TGENode | null;
-    /** Stable unique identifier for this node */
-    id: number;
-    /** Whether this node has been removed from the tree */
-    destroyed: boolean;
-    /** Computed layout rect — written after the layout pass */
-    layout: LayoutRect;
-    /* Excluded from this release type: _flexNode */
-    /** Interactive state — managed by render loop hit-testing */
-    _hovered: boolean;
-    _active: boolean;
-    _focused: boolean;
-    /** Image-only extra data, allocated lazily for img nodes. */
-    _imageExtra: NodeImageExtra | null;
-    /** Canvas-only extra data, allocated lazily for canvas nodes. */
-    _canvasExtra: NodeCanvasExtra | null;
-    /** Pre-parsed width sizing — resolved once in setProperty, read every frame */
-    _widthSizing: SizingInfo | null;
-    /** Pre-parsed height sizing — resolved once in setProperty, read every frame */
-    _heightSizing: SizingInfo | null;
-    /** Prop keys applied from the JSX style object during the previous style merge. */
-    _styleKeys?: Set<string>;
-    /** Computed LOCAL transform matrix — set after layout if node has transform prop */
-    _transform: Float64Array | null;
-    /** Inverse LOCAL transform matrix — for local-space calculations */
-    _transformInverse: Float64Array | null;
-    /** Accumulated transform matrix — local × parent's accumulated (hierarchy) */
-    _accTransform: Float64Array | null;
-    /** Inverse accumulated transform — for hit-testing (screen → local coords) */
-    _accTransformInverse: Float64Array | null;
-    /** Transient engine-managed interaction mode for compositor optimizations. */
-    _interactionMode: InteractionMode;
-    /** Cached effective visual props from resolveProps(). */
-    _vp: BoxProps | null;
-    /** True when cached effective visual props must be recomputed. */
-    _vpDirty: boolean;
-    /** Generational epoch at which _vp was cached. */
-    _vpEpoch?: number;
-    /** Sibling position maintained by insert/remove for O(1) next-sibling lookup. */
-    _siblingIndex: number;
-    /** Count of focusable nodes in this subtree, including self. */
-    _focusableCount: number;
-    /** Pre-order index assigned by walkTree for paint-order comparisons. */
-    _dfsIndex: number;
-    /** Tree depth assigned by walkTree — root=0. Used by stacking sort. */
-    _depth: number;
-    /** Nearest scroll-container ancestor id, or 0 when none. */
-    _scrollContainerId: number;
-    /** Consecutive frames where this node's layer/subtree stayed clean. */
-    _stableFrameCount: number;
-    /** Consecutive frames where this node's layer/subtree changed. */
-    _unstableFrameCount: number;
-    /** True when this node was promoted by automatic compositor heuristics. */
-    _autoLayer: boolean;
-    /** Key of the owning compositor layer, or "bg" for the default layer. */
-    _layerKey: string | null;
-    /** Last text measurement cache key and result for per-node frame reuse. */
-    _lastMeasuredText: string | null;
-    _lastMeasuredFontId: number;
-    _lastMeasuredFontSize: number;
-    _lastMeasurement: {
-        width: number;
-        height: number;
-    } | null;
-    /** Per-loop dirty tracker attached to root node. */
-    _dirtyTracker?: DirtyTracker | null;
-};
-
-/** @public */
-declare type TGENodeKind = (typeof TGE_NODE_KIND)[keyof typeof TGE_NODE_KIND];
 
 /** @public */
 export declare const theme: {

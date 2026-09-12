@@ -4,18 +4,14 @@ import { createToaster, Dialog, type TextareaHandle } from "@vexart/headless"
 import { Input, Textarea } from "@vexart/headless"
 import {
   createScrollHandle,
-  focusedId,
-  getRendererBackend,
   mount,
-  resetFocus,
-  setRendererBackend,
   useFocus,
   type Capabilities,
   type Terminal,
 } from "@vexart/engine"
+import { getRendererBackend, resetFocus, setRendererBackend, setFocusedId } from "@vexart/engine/internal"
 import { createGpuRendererBackendForTesting } from "../../packages/engine/src/ffi/gpu-renderer-backend"
 import { useDrag } from "../../packages/engine/src/reconciler/drag"
-import { setFocusedId } from "../../packages/engine/src/reconciler/focus"
 
 type TestTerminal = Terminal & {
   emit: (data: Uint8Array | string) => void

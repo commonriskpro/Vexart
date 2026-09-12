@@ -77,8 +77,7 @@ Compliant:
 
 ```ts
 // ✅ Explicit, reviewable, snapshot-trackable
-export { buildRenderGraphFrame, createRenderGraphQueues } from "./internal/render-graph"
-export type { RenderGraphFrame } from "./internal/render-graph"
+export { mount } from "./mount"
 ```
 
 CI rejects any PR that introduces `export *` in a `public.ts` or `index.ts` at package root.
@@ -113,7 +112,10 @@ import { internalThing } from "@vexart/engine/src/internal/foo"
 
 If a user needs access to an internal for legitimate reasons, they open a feature request. We evaluate and either promote the symbol to public (with tests and docs) or propose an alternative.
 
-For application code, the recommended public entry point is `@vexart/app` and its managed `createApp()` API. `@vexart/engine` remains public for low-level integrations.
+For application code, the recommended public entry point is `@vexart/app` and
+its managed `createApp()` API. `@vexart/engine` exposes the supported
+`mount()`/`createTerminal()` integration, user-facing hooks, public types, and
+debug controls.
 
 ---
 
@@ -128,48 +130,27 @@ Every `public.ts` is organized into labeled sections with comments. Example for 
 // @vexart/engine — public API
 // ══════════════════════════════════════════════════════
 
-// ── Mount & lifecycle ─────────────────────────────────
-export { mount, unmount } from "./mount"
-export { createTerminal } from "./terminal/detect"
-export type { Terminal, Capabilities, TerminalSize } from "./terminal/caps"
+// ── Mount & terminal ──────────────────────────────────
+export { mount } from "./mount"
+export type { MountOptions, MountHandle } from "./mount"
+export { createTerminal } from "./terminal/index"
 
-// ── Core types ────────────────────────────────────────
-export type { TGEProps } from "./types"
-export type { PressEvent, NodeMouseEvent, InteractionMode } from "./reconciler/node"
-
-// ── Handles ───────────────────────────────────────────
-export { createHandle } from "./reconciler/handle"
+// ── Public node and event types ───────────────────────
 export type { NodeHandle } from "./reconciler/handle"
+export type { TGEProps, PressEvent, NodeMouseEvent } from "./ffi/node"
 
-// ── Hooks ─────────────────────────────────────────────
-export { useFocus, setFocus, focusedId, setFocusedId, pushFocusScope } from "./hooks/use-focus"
-export { useKeyboard, useMouse, useInput, onInput } from "./hooks/use-input"
-export { useDrag } from "./hooks/use-drag"
-export { useHover } from "./hooks/use-hover"
-export { useQuery, useMutation } from "./hooks/use-query"
+// ── User hooks ────────────────────────────────────────
+export { useFocus, setFocus, pushFocusScope } from "./reconciler/focus"
+export { useKeyboard, useMouse, useInput, onInput } from "./loop/input"
+export { useDrag } from "./reconciler/drag"
+export { useHover } from "./reconciler/hover"
+export { useQuery, useMutation } from "./reconciler/data"
 
-// ── Animation ─────────────────────────────────────────
-export { createTransition, createSpring, easing } from "./animation/transition"
-export type { TransitionConfig, SpringConfig, EasingFn } from "./animation/transition"
+// ── Debug controls ────────────────────────────────────
+export { debugDumpTree, isDebugEnabled, setDebug, toggleDebug, debugStatsLine } from "./loop/debug"
 
-// ── Extension points ──────────────────────────────────
-export { setRendererBackend, getRendererBackend } from "./ffi/backend"
-export type { RendererBackend } from "./ffi/backend"
-
-// ── Observability ─────────────────────────────────────
-export {
-  toggleDebug,
-  setDebug,
-  getRendererResourceStats,
-  getFontAtlasCacheStats,
-  debugDumpTree,
-} from "./debug/toggle"
-
-// ── Fonts ─────────────────────────────────────────────
-export { registerFont, getFont, clearTextCache } from "./text/register"
-export type { FontDescriptor } from "./text/register"
-
-// (etc.)
+// The reconciler, layout, render loop, native bridge, FFI, and raw-node
+// helpers are internal implementation modules and are not exported here.
 ```
 
 ### 3.2 Rules for `public.ts`
@@ -497,7 +478,14 @@ TypeScript types are part of the public API. Changes to types follow the same cl
 
 ### 10.2 Generated types
 
-`jsx-runtime.d.ts` is **auto-generated** from `TGEProps` in `@vexart/engine/src/types.ts`. When `TGEProps` changes, the generated file changes. Both are committed to git. The regeneration step runs in CI (`bun run gen:jsx-runtime`) and commits produce a diff, just like `api-extractor`.
+`jsx-runtime.d.ts` is **auto-generated** from `TGEProps` in
+`@vexart/engine/src/types.ts`. The published runtime is
+`vexart/jsx-runtime`; the workspace compiler may resolve
+`@vexart/engine/jsx-runtime` to the same shared reconciler, but consumers do
+not use that path to construct raw nodes. When `TGEProps` changes, the
+generated file changes. Both are committed to git. The regeneration step runs
+in CI (`bun run gen:jsx-runtime`) and commits produce a diff, just like
+`api-extractor`.
 
 ### 10.3 `never` and `unknown` policy
 
@@ -630,152 +618,44 @@ docs/
 
 ## Appendix A — Public API inventory (v0.9 target)
 
-This appendix enumerates the complete expected public API surface at v0.9 release. If you are reviewing `public.ts` in a pull request and a symbol is on this list but missing, flag it. If a symbol is on the PR but not on this list, evaluate whether the list should be updated.
+This appendix enumerates the expected public API surface after the approved
+engine-boundary migration. If you are reviewing `public.ts` in a pull request
+and a symbol is on this list but missing, flag it. Internal implementation
+symbols are intentionally absent and must not be restored as public exports.
 
 ### A.1 `@vexart/engine`
 
-**Mount & lifecycle**
-- `mount`, `createRenderLoop`, `createTerminal` `@public`
-- `MouseButton`, `RGBA`, `useTerminalDimensions`, `decodePasteBytes` `@public`
-- `MountOptions`, `MountHandle` (types) `@public`
-- `enter`, `leave`, `beginSync`, `endSync`, `installExitHandlers`, `setupExitHandlers`, `ProcessSignalHub` `@public`
+The published engine entry point exposes the manual `mount()` and
+`createTerminal()` integration, user-facing hooks, public types, and supported
+debug controls. `NodeHandle` is the sole public node representation for the
+single internal scene/layout tree.
 
-**Core types**
-- `TGEProps` (type) `@public`
-- `PressEvent`, `NodeMouseEvent`, `InteractionMode`, `FilterConfig`, `InteractiveStyleProps` (types) `@public`
-- `LayoutRect`, `SizingInfo` (types) `@public`
+**Mount**
+- `mount` `@public`
+- `createTerminal` `@public`
+- `MountOptions`, `MountHandle`, `NodeHandle` (types) `@public`
+- `Terminal`, `TerminalOptions`, `Capabilities`, `TerminalKind`,
+  `TerminalSize`, `ResizeHandler` (types) `@public`
 
-**Grid layout (beta profile)**
-- `GridAreaPlacement`, `GridAutoFlow`, `GridBreadth`, `GridContentAlignment`, `GridErrorCode`, `GridFitContent`, `GridFr`, `GridItemAlignment`, `GridLineRef`, `GridLayoutError`, `GridMaxBreadth`, `GridMinMax`, `GridPercent`, `GridPlacement`, `GridRepeatCount`, `GridTrack`, `GridTrackSize` (types) `@public`
+**User hooks**
+- Focus, keyboard/mouse/input, drag/hover, animation, data, and terminal
+  dimension hooks `@public`
+- Event and interaction types such as `PressEvent` and `NodeMouseEvent`
+  `@public`
+- `toggleDebug`, `setDebug`, `isDebugEnabled`, `debugDumpTree`,
+  `debugStatsLine` `@public`
 
-**Handles**
-- `createHandle` `@public`
-- `NodeHandle` (type) `@public`
+Raw node construction, manual render-loop creation, Solid reconciler helpers,
+layout internals, native/renderer backends, FFI bindings, diagnostic
+state/culling helpers, and other engine implementation utilities are internal.
+In particular, `createNode`, `createRenderLoop`, `solidRender`, `createHandle`,
+`debugState`, `debugDumpCulledNodes`, and FFI/native symbols are not public
+imports.
 
-The approved public node contract is being narrowed to one representation:
-the retained scene/layout tree remains internal, and refs expose its cached
-`NodeHandle`. There is no public raw-node alternative; `TGENode` and
-`handle._node` must not be imported or accessed by consumers.
-
-**Hooks / Interaction**
-- `useFocus`, `setFocus`, `focusedId`, `setFocusedId`, `pushFocusScope`, `resetFocus` `@public`
-- `getFocusedEntry`, `registerNodeFocusable`, `updateNodeFocusEntry`, `unregisterNodeFocusable`, `getNodeFocusId` `@public`
-- `useKeyboard`, `useMouse`, `useInput`, `onInput`, `dispatchInput`, `getLatestInteractionTrace` `@public`
-- `useDrag`, `useHover` `@public`
-- `useQuery`, `useMutation` `@public`
-- `setPointerCapture`, `releasePointerCapture` `@public`
-- `bindLoop`, `unbindLoop`, `onPostScroll`, `markNodeLayerDamaged`, `requestInteractionFrame` `@public`
-- `beginNodeInteraction`, `endNodeInteraction`, `hasActiveNodeInteraction`, `hasInteractionInSubtree`, `shouldPromoteInteractionLayer`, `shouldFreezeInteractionLayer`, `useInteractionLayer` `@public`
-- `buildNodeMouseEvent`, `isFullyOutsideScrollViewport` `@public`
-
-**Animation**
-- `createTransition`, `createSpring`, `easing` `@public`
-- `hasActiveAnimations` `@public`
-- `boostWindowFor`, `hasRecentInteraction` `@public`
-- `TransitionConfig`, `SpringConfig`, `EasingFn`, `CompositorProperty` (types) `@public`
-
-**Render graph & Render ops**
-- `BACKDROP_FILTER_KIND`, `buildRenderOp`, `buildRenderGraphFrame` `@public`
-- `RenderCommand`, `ShadowDef`, `EffectConfig`, `RenderGraphOp`, `RenderGraphFrame` (types) `@public`
-- `RectangleRenderOp`, `BorderRenderOp`, `TextRenderOp`, `ImageRenderOp`, `CanvasRenderOp`, `EffectRenderOp`, `RawCommandRenderOp` (types) `@public`
-
-**Context**
-- `createContext`, `useContext` (re-exported from `solid-js`) `@public`
-
-**Dirty tracking**
-- `DIRTY_KIND`, `createDirtyTracker`, `onGlobalDirty`, `markDirty`, `isDirty`, `clearDirty` `@public`
-- `markLayerDirtyByKey`, `markLayerDamageByKey` `@public`
-- `DirtyKind`, `DirtyScope`, `DirtyTracker` (types) `@public`
-
-**Selection**
-- `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal` `@public`
-- `TextSelection` (type) `@public`
-
-**Resource observability**
-- `getRendererResourceStats()`, `getNativeResourceStats()` `@public`
-- `getTextLayoutCacheStats()`, `getImageCacheStats()` `@public`
-- `ResourceStats` (type) `@public`
-
-**Font registration & MSDF typography**
-- `registerFont`, `getFont`, `clearTextCache` `@public`
-- `msdfFontInit`, `msdfFontQuery`, `msdfMeasureText`, `isMsdfFontAvailable` `@public`
-- `FontDescriptor`, `MsdfTextMeasurement` (types) `@public`
-
-**Node utilities**
-- `SIZING`, `DIRECTION`, `ALIGN_X`, `ALIGN_Y` `@public`
-- `createNode`, `insertChild`, `removeChild` `@public`
-- `parseColor`, `parseSizing`, `parseDirection`, `parseAlignX`, `parseAlignY` `@public`
-- `createPressEvent`, `resolveProps` `@public`
-
-**Scroll**
-- `createScrollHandle`, `releaseScrollHandle`, `resetScrollHandles`, `updateScrollContainerGeometry` `@public`
-- `ScrollHandle` (type) `@public`
-
-**Image**
-- `clearImageCache`, `createScaledImageCache`, `decodeImageForNode`, `scaleImage` `@public`
-- `RawImage`, `ScaledImageCache`, `DecodedImage` (types) `@public`
-
-**Matrix / Damage utilities**
-- `identity`, `translate`, `rotate`, `scale`, `scaleXY`, `skew`, `perspective`, `multiply`, `invert`, `transformPoint`, `transformBounds`, `fromConfig`, `isIdentity` `@public`
-- `intersectRect`, `unionRect`, `expandRect`, `translateRect`, `damageRectArea`, `damageSumOverlapArea`, `rectRight`, `rectBottom`, `isEmptyRect` `@public`
-- `Matrix3`, `DamageRect` (types) `@public`
-
-**Canvas / Particles / Layers**
-- `CanvasContext`, `createParticleSystem`, `createLayerStore` `@public`
-- `CanvasDrawCommand`, `ParticleConfig`, `ParticleSystem`, `Layer`, `LayerStore` (types) `@public`
-
-**Debug**
-- `toggleDebug`, `setDebug`, `isDebugEnabled` `@public`
-- `debugFrameStart`, `debugUpdateStats`, `debugState`, `debugStatsLine`, `debugDumpTree`, `debugDumpCulledNodes` `@public`
-- `DebugStats`, `NativePresentationStats` (types) `@public`
-
-**Renderer backend / Extension points**
-- `setRendererBackend`, `getRendererBackend`, `getRendererBackendName` `@public`
-- `createGpuRendererBackend`, `getGpuRendererBackendCacheStats`, `chooseGpuLayerStrategy` `@public`
-- `RendererBackend`, `RendererBackendFrameContext`, `RendererBackendPaintContext`, `RendererBackendPaintResult`, `RendererBackendFramePlan`, `RendererBackendFrameResult`, `RendererBackendProfile`, `RendererBackendLayerBacking`, `RendererBackendLayerContext`, `RendererBackendRetainedLayer` (types) `@public`
-- `GpuLayerStrategyInput`, `GpuLayerStrategyMode`, `GpuRendererBackend`, `GpuRendererBackendCacheStats` (types) `@public`
-- `createSlotRegistry`, `createSlot` `@public`
-
-**Native bridge**
-- `VEXART_SYMBOLS`, `EXPECTED_BRIDGE_VERSION`, `openVexartLibrary`, `closeVexartLibrary` `@public`
-- `VexartNativeError` `@public`
-- `GRAPH_MAGIC`, `GRAPH_VERSION`, `vexartVersion`, `assertBridgeVersion`, `vexartGetLastError` `@public`
-
-**Reconciler (SolidJS)**
-- `createComponent`, `createElement`, `createTextNode`, `insertNode`, `insert`, `spread`, `setProp`, `mergeProps`, `effect`, `memo`, `use`, `solidRender` `@public`
-- `For`, `Show`, `Switch`, `Match`, `Index`, `ErrorBoundary` `@public`
-
-**Plugins**
-- `createSlotRegistry`, `createSlot` `@public`
-
-**Extmarks (for editor-like UI)**
-- `ExtmarkManager` (class) `@public`
-- `Extmark`, `CreateExtmarkOptions` (types) `@public`
-
-**Syntax highlighting (integrated)**
-- `TreeSitterClient`, `getTreeSitterClient`, `addDefaultParsers` `@public`
-- `SyntaxStyle`, `ONE_DARK`, `KANAGAWA` `@public`
-- `highlightsToTokens` `@public`
-- `StyleDefinition`, `ThemeTokenStyle`, `SimpleThemeRules`, `Token`, `SimpleHighlight`, `FiletypeParserConfig` (types) `@public`
-
-**Terminal**
-- `createTerminal`, `detect` `@public`
-- `inferCaps`, `probeKittyGraphics`, `queryColors` `@public`
-- `getSize`, `queryPixelSize`, `onResize` `@public`
-- `inTmux`, `parentTerminal`, `passthroughSupported`, `createWriter`, `wrapPassthrough` `@public`
-- `Terminal`, `TerminalOptions`, `TerminalKind`, `Capabilities`, `TerminalSize`, `ResizeHandler`, `LifecycleState` (types) `@public`
-
-**Input parsing**
-- `createParser`, `parseKey`, `parseMouse` `@public`
-- `NO_MODS`, `decodeMods` `@public`
-- `InputHandler`, `InputParser`, `Modifiers`, `KeyEvent`, `MouseAction`, `MouseEvent`, `FocusEvent`, `PasteEvent`, `ResizeEvent`, `InputEvent` (types) `@public`
-
-**Output / Kitty transport**
-- `probeShm`, `probeFile`, `getKittyTransportStats`, `resetKittyTransportStats`, `COMPRESS_MODE` `@public`
-- `configureKittyTransportManager`, `getKittyTransportManagerState`, `reportKittyTransportFailure`, `reportKittyTransportSuccess`, `resetKittyTransportManager`, `resolveKittyTransportMode` `@public`
-- `getNativeKittyShmHelperVersion`, `prepareNativeKittyShm`, `releaseNativeKittyShm` `@public`
-- `TRANSPORT_FAILURE_REASON`, `TRANSPORT_HEALTH` `@public`
-- `KittyTransportStats`, `RawImageData`, `CompressMode`, `TransmissionMode`, `KittyTransportManagerState`, `NativeKittyShmHandle` (types) `@public`
+The published JSX runtime is `vexart/jsx-runtime`. The workspace compiler may
+use `@vexart/engine/jsx-runtime`, but that path is not a public raw-node API.
+Maintainers and tests may use the workspace-only `@vexart/engine/internal`
+entry point; it is not included in the published export map.
 
 ### A.2 `@vexart/primitives` (Permanently purged & merged into `@vexart/app`)
 
@@ -808,9 +688,6 @@ Layout and primitive needs are served by:
 
 **Forms**
 - `createForm` factory `@public`
-
-**Re-exports**
-- `ExtmarkManager` (from `@vexart/engine`) `@public`
 
 Note: Badge, Avatar, Skeleton, Separator, and Card are styled-only components
 in `@vexart/styled`; they are NOT part of the headless package.
@@ -871,10 +748,17 @@ in `@vexart/styled`; they are NOT part of the headless package.
 
 ### A.6 `vexart` (dist barrel)
 
-The published npm package `vexart` bundles all internal packages into two entry
-points. The barrel (`vexart.js`) re-exports a curated subset from all packages so app
-developers need a single import. The engine (`engine.js`) provides the full low-level
-surface for power users.
+The published npm package `vexart` bundles the app, styled, headless, and
+user-facing engine APIs behind the root barrel. `vexart/engine` exposes the
+supported mount/terminal integration, hooks/types, and debug controls; it is
+not a full low-level surface for constructing raw nodes or controlling native
+internals.
+
+The published `vexart/jsx-runtime` and the workspace-only
+`@vexart/engine/jsx-runtime` both resolve to the same universal reconciler
+instance. The latter is reserved for compiler wiring and is not a public
+alternative for building raw nodes. `@vexart/engine/internal` is workspace-only
+for maintainers and tests and is not in the published export map.
 
 **Barrel rule**: if a consumer needs an import to use any component in the barrel, that
 import must also be in the barrel. Forced mixed imports (`vexart` + `vexart/engine`)

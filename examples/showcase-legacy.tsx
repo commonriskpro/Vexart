@@ -24,7 +24,7 @@
  * Run: bun run showcase
  */
 
-import { createEffect, createSignal, onCleanup } from "solid-js"
+import { createEffect, createSignal, onCleanup, For, Show } from "solid-js"
 import {
   useFocus,
   useQuery,
@@ -32,8 +32,6 @@ import {
   createScrollHandle,
   createTransition,
   createSpring,
-  For,
-  Show,
 } from "@vexart/engine"
 import { createApp, useAppTerminal } from "@vexart/app"
 import {

@@ -20,7 +20,7 @@
  */
 
 import { createSignal, batch } from "solid-js"
-import { bumpThemeEpoch } from "@vexart/engine"
+import { bumpThemeEpoch } from "@vexart/engine/internal"
 import { colors as defaultColors, radius, space, font, weight, shadows } from "../tokens/tokens"
 
 // ── Types ──
@@ -147,4 +147,3 @@ export function setTheme(theme: Required<ThemeDefinition>) {
 export function getTheme(): Required<ThemeDefinition> {
   return activeTheme()
 }
-

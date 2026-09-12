@@ -1,9 +1,14 @@
 ---
 title: FFI Exports
-description: All 50 native Rust functions exposed via bun:ffi.
+description: Maintainer reference for the internal native Rust boundary.
 ---
 
-The native boundary is bound in `packages/engine/src/ffi/vexart-bridge.ts` and implemented in `native/libvexart/src/lib.rs`.
+This is a maintainer implementation reference, not a consumer API. The native
+boundary is bound in `packages/engine/src/ffi/vexart-bridge.ts` and implemented
+in `native/libvexart/src/lib.rs`. Applications use `createApp()`/`mountApp()` or
+the supported `mount()`/`createTerminal()` plus user-facing hooks, types, and
+debug controls; they never import
+these FFI symbols directly.
 
 ## Convention
 

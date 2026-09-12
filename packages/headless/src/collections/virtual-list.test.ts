@@ -4,13 +4,13 @@ import {
   bindLoop,
   createComponent,
   createElement,
-  createScrollHandle,
   onGlobalDirty,
   unbindLoop,
   updateScrollContainerGeometry,
   type RenderLoop,
   type TGENode,
-} from "@vexart/engine"
+} from "@vexart/engine/internal"
+import { createScrollHandle } from "@vexart/engine"
 import { VirtualList } from "./virtual-list"
 
 describe("VirtualList windowing", () => {

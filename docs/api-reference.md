@@ -35,35 +35,30 @@ import { createApp, mountApp, useAppTerminal } from "vexart"
 
 ## `@vexart/engine`
 
-Core renderer/runtime package:
-
-- terminal lifecycle: `createTerminal`, `mount`
-- renderer backend configuration
-- TS scene/layout/render graph hooks
-- input/focus/selection hooks
-- animation helpers
-- canvas and syntax-highlighting primitives
-- resource/debug/stat APIs
+The published engine entry point provides `mount()` and `createTerminal()` for
+integrations that need an explicit engine boundary, user-facing hooks, public
+types needed to type those hooks and JSX refs, and the supported debug
+controls. The retained scene/layout tree remains internal.
+Application code should prefer `createApp()` or `mountApp()` from `vexart`;
+use `mount()` only when the integration owns the low-level terminal boundary.
 
 ```ts
-import { createTerminal, mount, useTerminalDimensions, onInput } from "vexart/engine"
+import { createTerminal, mount, useFocus, useKeyboard } from "vexart/engine"
+import type { MountHandle, NodeHandle } from "vexart/engine"
 ```
 
-`mount()` is intentionally still public, but it is the low-level alternative for advanced use. Application docs should prefer `createApp()` unless they explicitly need manual terminal control.
+The internal scene tree, layout engine, reconciler primitives, render loop,
+renderer/native bridge, FFI bindings, diagnostic state/culling helpers, and raw
+node helpers are not public APIs. In particular, consumers must not import or call
+`createNode`, `createRenderLoop`, `solidRender`, `createHandle`, layout/native
+helpers, `debugState`, `debugDumpCulledNodes`, or FFI symbols. The supported
+debug controls are `toggleDebug`, `setDebug`, `isDebugEnabled`, `debugDumpTree`,
+and `debugStatsLine`. JSX uses the shared reconciler through the published
+`vexart/jsx-runtime`; `@vexart/engine/jsx-runtime` is reserved for the
+workspace compiler and is not a raw-node construction API.
 
-Current export groups include:
-
-- core lifecycle: `createRenderLoop`, `mount`, `createTerminal`
-- renderer/native bridge: `setRendererBackend`, `getRendererBackend`, `createGpuRendererBackend`, `chooseGpuLayerStrategy`, `openVexartLibrary`, `closeVexartLibrary`, `vexartVersion`, `assertBridgeVersion`, `vexartGetLastError`, `getRendererResourceStats`
-- Solid reconciler: `createComponent`, `createElement`, `createTextNode`, `insertNode`, `insert`, `spread`, `setProp`, `mergeProps`, `effect`, `memo`, `use`, `solidRender`, `For`, `Show`, `Switch`, `Match`, `Index`, `ErrorBoundary`
-- input/interaction: `useKeyboard`, `useMouse`, `useInput`, `onInput`, `dispatchInput`, `useFocus`, `setFocus`, `focusedId`, `setFocusedId`, `pushFocusScope`, `resetFocus`, `setPointerCapture`, `releasePointerCapture`, `useDrag`, `useHover`
-- animation: `createTransition`, `createSpring`, `easing`
-- utilities/resources: `markDirty`, `isDirty`, `clearDirty`, `createHandle`, `createScrollHandle`, `releaseScrollHandle`, `resetScrollHandles`, `registerFont`, `getFont`, `clearTextCache`, `getTextLayoutCacheStats`, `clearImageCache`, `getImageCacheStats`, `useTerminalDimensions`, `decodePasteBytes`, `CanvasContext`, `createParticleSystem`, `createLayerStore`
-- data/selection: `useQuery`, `useMutation`, `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal`
-- debug/plugins/syntax: `toggleDebug`, `setDebug`, `isDebugEnabled`, `debugFrameStart`, `debugUpdateStats`, `debugState`, `debugStatsLine`, `debugDumpTree`, `debugDumpCulledNodes`, `createSlotRegistry`, `createSlot`, `ExtmarkManager`, `TreeSitterClient`, `getTreeSitterClient`, `addDefaultParsers`, `SyntaxStyle`, `ONE_DARK`, `KANAGAWA`, `highlightsToTokens`
-- classes/constants: `RGBA`, `MouseButton`, `SIZING`, `DIRECTION`, `ALIGN_X`, `ALIGN_Y`
-
-Implementation helpers such as `createToggle()` and `useScrollHandle()` live inside `@vexart/headless`; `createLRUCache()` lives inside the engine FFI/text-layout implementation. They are documented here as architecture helpers, not as public API, unless exported from a package `public.ts` in a later change.
+Maintainers and tests may use `@vexart/engine/internal` inside the workspace.
+That entry point is not part of the published export map.
 
 ## `@vexart/headless`
 

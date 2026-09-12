@@ -20,8 +20,8 @@ The distributable uses a two-tier API:
 ```text
 dist/
 ├── vexart.js / vexart.d.ts     — unified barrel (app + styled + headless + engine hooks)
-├── engine.js / engine.d.ts     — full engine (power users, library authors)
-├── jsx-runtime.d.ts            — JSX intrinsic elements
+├── engine.js / engine.d.ts     — public mount, terminal, hooks/types, and debug controls
+├── jsx-runtime.d.ts            — published JSX intrinsic runtime
 ├── solid-plugin.ts             — Babel JSX transform helper
 ├── tree-sitter/                — grammar .wasm + .scm + worker
 ├── package.json                — optionalDependencies: platform-native packages
@@ -66,8 +66,9 @@ tagged CI workflow publishes every matrix package before the main package:
 // 90% of developers — app development
 import { createApp, Button, colors, createSignal } from "vexart"
 
-// Power users — custom renderers, low-level control
-import { createRenderLoop, useFocus, setRendererBackend } from "vexart/engine"
+// Advanced integrations — supported mount, terminal, hooks, and public types
+import { createTerminal, mount, useFocus } from "vexart/engine"
+import type { MountHandle, NodeHandle } from "vexart/engine"
 ```
 
 The unified barrel (`"vexart"`) re-exports everything from `@vexart/app`,
@@ -81,6 +82,15 @@ Collision resolution:
 - `Button`: styled version wins (themed)
 - `useRouter`: app version wins (app-level router)
 - `Switch`: SolidJS control flow wins; headless toggle is `ToggleSwitch`
+
+The published `vexart/engine` entry point exposes `mount()`,
+`createTerminal()`, user-facing hooks/types, and debug controls. It does not
+expose raw node creation, manual render-loop construction, layout internals,
+native/renderer backends, diagnostic state/culling helpers, or FFI symbols.
+`vexart/jsx-runtime` is the published JSX runtime;
+`@vexart/engine/jsx-runtime` is reserved for the workspace compiler, and
+`@vexart/engine/internal` is workspace-only for maintainers and tests. Neither
+is a public raw-node construction API.
 
 ## License Metadata
 

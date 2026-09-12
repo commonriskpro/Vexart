@@ -69,4 +69,5 @@ description: 26 behavior-first components with render props.
 
 ## Hooks and Utilities
 
-- `ExtmarkManager` — re-exported from engine for editor integration
+- Textarea refs expose their extmarks manager for editor integrations; use the
+  component handle rather than importing engine internals.

@@ -41,7 +41,6 @@
   - [useQuery](#usequeryfetcher-options)
   - [useMutation](#usemutationmutator-options)
   - [useTerminalDimensions](#useterminaldimensionsterminal)
-  - [markDirty](#markdirty)
 - [Components (Headless)](#components-headless)
   - [Component Architecture](#component-architecture)
   - [Complete Component Reference](#complete-component-reference)
@@ -105,6 +104,11 @@ Without `bunfig.toml`, Bun interprets JSX as React and you get
 `Cannot find module "react/jsx-dev-runtime"`. Without the preload,
 SolidJS reactivity breaks — components render once but never update.
 
+Published applications resolve `jsxImportSource: "vexart"` through
+`vexart/jsx-runtime`, which uses the shared universal reconciler. The
+workspace-only `@vexart/engine/jsx-runtime` path is reserved for compiler
+wiring and is not a public alternative for constructing raw nodes.
+
 ### Requirements
 
 - **Bun >= 1.1.0** — Vexart uses Bun's FFI for the native Rust library.
@@ -118,14 +122,14 @@ Vexart uses a two-tier import structure:
 | Import | What it provides |
 |--------|-----------------|
 | `vexart` | Everything for app development — components, design tokens, hooks, SolidJS primitives (`createSignal`, `For`, `Show`, etc.), headless components, styled components. This is the only import most apps need. |
-| `vexart/engine` | Low-level engine access — FFI bridge, render loop, terminal management, focus system internals, pointer capture, debug utilities, tree-sitter, font registration. Only needed for advanced use cases. |
+| `vexart/engine` | Public engine boundary — `mount`, `createTerminal`, user-facing hooks/types, and debug controls. Raw node/layout/render-loop/native/FFI helpers are internal. |
 
 ```tsx
 // App-level imports — covers 95% of use cases
 import { createSignal, For, Show, createApp, Button, Input, colors } from "vexart"
 
-// Low-level engine access — only when needed
-import { useFocus, setFocus, toggleDebug, registerFont } from "vexart/engine"
+// Public engine hooks — only when needed
+import { useFocus, setFocus } from "vexart/engine"
 ```
 
 ### Minimal App
@@ -784,7 +788,7 @@ Vexart provides declarative hover/active/focus styles. No manual signal boilerpl
 </box>
 
 // Programmatic scroll
-import { createScrollHandle } from "vexart/engine"
+import { createScrollHandle } from "vexart"
 
 const handle = createScrollHandle("my-list")
 handle.scrollTo(0)       // scroll to top
@@ -1426,16 +1430,12 @@ dims.cellHeight()  // pixel height per cell
 
 ---
 
-### markDirty()
+### External state invalidation
 
-Force a repaint on the next frame. Normally Vexart repaints automatically when signals change. Use this when you mutate external state that Vexart can't track.
-
-```typescript
-import { markDirty } from "vexart/engine"
-
-externalStore.update(newData)
-markDirty() // tell Vexart to repaint
-```
+Normally Vexart repaints automatically when SolidJS signals change. The
+internal `markDirty()` helper is not part of the public engine API; wrap
+external state in a SolidJS signal or use a public hook instead of importing
+the runtime invalidation machinery.
 
 ---
 
@@ -2638,7 +2638,7 @@ type CodeProps = {
 ```
 
 ```tsx
-import { ONE_DARK } from "vexart/engine"
+import { ONE_DARK } from "vexart"
 
 <Code
   content={`const x = 42;\nconsole.log(x);`}
@@ -3471,19 +3471,20 @@ Avoid wrapping styled components in another component just to rename them. Use t
 
 ### When to use `vexart/engine`
 
-Most apps only need `vexart`. Reach for `vexart/engine` when you need:
+Most apps only need `vexart`. Use `vexart/engine` only for the supported
+terminal/mount integration, user-facing hooks/types, or debug controls:
 
 - **Direct focus control** — `useFocus`, `setFocus`, `focusedId`, `pushFocusScope`
-- **Custom render loops** — `createRenderLoop`, `createTerminal`, `markDirty`
-- **Debug tools** — `toggleDebug`, `setDebug`, `debugState`, `debugDumpTree`
-- **Tree-sitter integration** — `TreeSitterClient`, `addDefaultParsers`, syntax themes
 - **Low-level input** — `useKeyboard`, `useMouse`, `useInput` (signal-based)
-- **Selection API** — `getSelection`, `setSelection`, `getSelectedText`
-- **Font/image management** — `registerFont`, `clearTextCache`, `clearImageCache`
-- **Plugin system** — `createSlotRegistry`, `createSlot`
-- **FFI bridge** — `VEXART_SYMBOLS`, `openVexartLibrary`, `vexartVersion`
+- **Interaction hooks** — `useDrag`, `useHover`
+- **Data and animation hooks** — `useQuery`, `useMutation`, `createTransition`, `createSpring`
+- **Manual integration** — `createTerminal` and `mount` with the public mount options and handle types
+- **Debug controls** — `toggleDebug`, `setDebug`, `isDebugEnabled`, `debugDumpTree`, `debugStatsLine`
 
-If you find yourself importing more than two or three things from `vexart/engine`, you are likely building infrastructure (an editor, a devtool, a custom compositor) rather than an application — which is fine, just be aware of the boundary.
+Raw node creation, reconciler helpers, manual render-loop construction,
+layout/native/FFI controls, diagnostic state/culling helpers, and other
+implementation helpers are not public imports. Maintainers and tests use the workspace-only
+`@vexart/engine/internal` entry point instead; it is not published.
 
 ---
 
@@ -3499,7 +3500,6 @@ Everything app developers use: components, tokens, hooks, SolidJS primitives, an
 | ------ | ----------- |
 | `createSignal` | Reactive signal |
 | `createComponent` | SolidJS component creation |
-| `createElement` | SolidJS element creation |
 | `effect` | SolidJS effect |
 | `memo` | SolidJS memo |
 | `mergeProps` | SolidJS props merge |
@@ -3642,113 +3642,38 @@ Everything app developers use: components, tokens, hooks, SolidJS primitives, an
 | `RGBA` | Color utility class |
 | `MouseButton` | Mouse button enum |
 | `useTerminalDimensions` | Reactive terminal size |
-| `createHandle` | Create the cached `NodeHandle` exposed by refs (the approved public node representation) |
 | `createScrollHandle` / `releaseScrollHandle` | Programmatic scroll control |
 | `SIZING` / `DIRECTION` / `ALIGN_X` / `ALIGN_Y` | Layout enums |
 
-The node-ref migration standardizes JSX refs on that cached `NodeHandle`
-representation for the internal scene/layout tree. There is no public
-raw-node alternative; consumers must not import `TGENode` or access
-`handle._node`.
+JSX refs use the cached `NodeHandle` representation for the internal
+scene/layout tree. There is no public raw-node alternative; consumers must not
+import `TGENode` or access `handle._node`. `createHandle` is an internal
+implementation helper, not a consumer import.
 
 ---
 
-### `vexart/engine` — Low-Level Engine API
+### `vexart/engine` — Public engine boundary
 
-Internals for custom render loops, focus management, debug tools, tree-sitter, and FFI.
+The published `vexart/engine` entry point supports the manual `mount()` and
+`createTerminal()` integration, user-facing hooks/types, and debug controls.
+Most applications should use `createApp()` or `mountApp()` from `vexart` so
+terminal and lifecycle ownership remains managed.
 
-#### Core
+```tsx
+import { createTerminal, mount, useFocus, useKeyboard } from "vexart/engine"
+import type { MountHandle, NodeHandle, PressEvent } from "vexart/engine"
+```
 
-| Export | Description |
-| ------ | ----------- |
-| `mount` | Mount JSX tree onto terminal |
-| `createTerminal` | Create terminal instance |
-| `createRenderLoop` | Manual render loop (advanced) |
-| `markDirty` / `isDirty` / `clearDirty` | Force/check repaint |
+The following are internal and must not be imported by consumers: raw node
+creation (`createNode`, `createHandle`), manual render-loop construction
+(`createRenderLoop`), Solid reconciler helpers (`createElement`, `solidRender`),
+layout internals, renderer/native backends, FFI symbols, diagnostic state/culling
+helpers, and other engine-private utilities. Supported debug controls are
+`toggleDebug`, `setDebug`, `isDebugEnabled`, `debugDumpTree`, and
+`debugStatsLine`.
 
-#### Focus
-
-| Export | Description |
-| ------ | ----------- |
-| `useFocus` | Make component focusable |
-| `setFocus` | Focus element by ID |
-| `focusedId` / `setFocusedId` | Current focused ID (signal) |
-| `pushFocusScope` / `resetFocus` | Focus traps and reset |
-
-#### Input (signal-based)
-
-| Export | Description |
-| ------ | ----------- |
-| `useKeyboard` | Reactive keyboard signal |
-| `useMouse` | Reactive mouse signal |
-| `useInput` / `dispatchInput` | All input as signal / dispatch |
-| `decodePasteBytes` | Decode paste data |
-
-#### Renderer / Native Bridge
-
-| Export | Description |
-| ------ | ----------- |
-| `setRendererBackend` / `getRendererBackend` / `getRendererBackendName` | Backend control |
-| `createGpuRendererBackend` / `getGpuRendererBackendCacheStats` | GPU backend |
-| `createGpuFrameComposer` / `chooseGpuLayerStrategy` | Frame composition |
-| `VEXART_SYMBOLS` / `EXPECTED_BRIDGE_VERSION` | FFI symbols |
-| `openVexartLibrary` / `closeVexartLibrary` | Library lifecycle |
-| `vexartVersion` / `assertBridgeVersion` / `vexartGetLastError` | Version/error |
-| `getRendererResourceStats` | Resource stats |
-
-#### Fonts & Images
-
-| Export | Description |
-| ------ | ----------- |
-| `registerFont` / `getFont` | Load/get font atlas |
-| `clearTextCache` / `getTextLayoutCacheStats` / `getFontAtlasCacheStats` | Font cache |
-| `clearImageCache` / `getImageCacheStats` | Image cache |
-
-#### Rendering Utilities
-
-| Export | Description |
-| ------ | ----------- |
-| `createScrollHandle` / `resetScrollHandles` | Scroll handle management |
-| `CanvasContext` | Canvas draw context |
-| `createParticleSystem` | Particle effects |
-| `createLayerStore` | Layer management |
-
-#### Selection
-
-| Export | Description |
-| ------ | ----------- |
-| `getSelection` / `setSelection` / `clearSelection` | Selection API |
-| `getSelectedText` | Get selected text |
-| `selectionSignal` | Reactive selection signal |
-
-#### Debug
-
-| Export | Description |
-| ------ | ----------- |
-| `toggleDebug` / `setDebug` / `isDebugEnabled` | Debug overlay |
-| `debugState` / `debugStatsLine` | Debug info |
-| `debugFrameStart` / `debugUpdateStats` | Frame debug |
-| `debugDumpTree` / `debugDumpCulledNodes` | Tree inspection |
-
-#### Syntax Highlighting
-
-| Export | Description |
-| ------ | ----------- |
-| `ExtmarkManager` | Extmark management |
-| `TreeSitterClient` / `getTreeSitterClient` | Tree-sitter parser |
-| `addDefaultParsers` | Register default grammars |
-| `SyntaxStyle` | Style definition type |
-| `ONE_DARK` / `KANAGAWA` | Built-in syntax themes |
-| `highlightsToTokens` | Convert highlights to tokens |
-
-#### Plugins
-
-| Export | Description |
-| ------ | ----------- |
-| `createSlotRegistry` / `createSlot` | Plugin slot system |
-
-#### Constants
-
-| Export | Description |
-| ------ | ----------- |
-| `ATTACH_TO` / `ATTACH_POINT` | Float attachment points |
+JSX uses the shared universal reconciler through the published
+`vexart/jsx-runtime`. The workspace compiler may use
+`@vexart/engine/jsx-runtime`; it is not a public raw-node API. Maintainers and
+tests may use the workspace-only `@vexart/engine/internal` entry point, which
+is not included in the published export map.

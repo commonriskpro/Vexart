@@ -12,7 +12,8 @@
 
 import { createMemo, createSignal, createEffect, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import { useFocus, onInput, measureForLayout, type SizingUnit } from "@vexart/engine"
+import { useFocus, onInput, type SizingUnit } from "@vexart/engine"
+import { measureForLayout } from "@vexart/engine/internal"
 import { useDisabled } from "../helpers/disabled"
 import { nextCodePointOffset, previousCodePointOffset } from "./text-offset"
 

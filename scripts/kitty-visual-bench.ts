@@ -12,8 +12,8 @@
  */
 
 import { createTerminal } from "@vexart/engine"
-import { kitty, type TransmissionMode } from "@vexart/engine"
-import { createParser } from "@vexart/engine"
+import { kitty } from "@vexart/engine"
+import { createParser, type TransmissionMode } from "@vexart/engine/internal"
 
 type VisualStats = {
   avgFrameMs: number

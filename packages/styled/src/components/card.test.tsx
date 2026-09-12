@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { createSignal } from "solid-js"
-import { createNode, resetFocus, solidRender, type TGENode } from "@vexart/engine"
+import { createNode, resetFocus, solidRender, type TGENode } from "@vexart/engine/internal"
 import { VoidCard, VoidCardDescription, VoidCardTitle } from "./card"
 
 const browserRuntime = import.meta.resolve("solid-js").endsWith("/solid.js")

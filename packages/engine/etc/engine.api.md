@@ -5,38 +5,21 @@
 ```ts
 
 import { Accessor } from 'solid-js';
+import { createComponent } from 'solid-js';
 import { createContext } from 'solid-js';
-import { dlopen } from 'bun:ffi';
+import { createEffect } from 'solid-js';
+import { createMemo } from 'solid-js';
 import { ErrorBoundary } from 'solid-js';
-import { FFIType } from 'bun:ffi';
 import { For } from 'solid-js';
 import { Index } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { Match } from 'solid-js';
-import type { Node as Node_2 } from 'flexily';
-import { Setter } from 'solid-js';
 import { Show } from 'solid-js';
 import { Switch } from 'solid-js';
 import { useContext } from 'solid-js';
 
 // @public
 export function addDefaultParsers(parsers: FiletypeParserConfig[]): void;
-
-// @public
-export const ALIGN_X: {
-    readonly LEFT: 0;
-    readonly RIGHT: 1;
-    readonly CENTER: 2;
-    readonly SPACE_BETWEEN: 3;
-};
-
-// @public
-export const ALIGN_Y: {
-    readonly TOP: 0;
-    readonly BOTTOM: 1;
-    readonly CENTER: 2;
-    readonly SPACE_BETWEEN: 3;
-};
 
 // @public (undocumented)
 export type AnimationAccessor = (() => number) & {
@@ -55,69 +38,6 @@ AnimationAccessor,
 };
 
 // @public (undocumented)
-export function assertBridgeVersion(actual: number, expected?: number): void;
-
-// @public (undocumented)
-export const BACKDROP_FILTER_KIND: {
-    readonly BLUR: "blur";
-    readonly COLOR: "color";
-    readonly BLUR_COLOR: "blur-color";
-};
-
-// @public (undocumented)
-export type BackdropFilterKind = (typeof BACKDROP_FILTER_KIND)[keyof typeof BACKDROP_FILTER_KIND];
-
-// @public (undocumented)
-export interface BackdropFilterParams {
-    // (undocumented)
-    blur: number | null;
-    // (undocumented)
-    brightness: number | null;
-    // (undocumented)
-    contrast: number | null;
-    // (undocumented)
-    grayscale: number | null;
-    // (undocumented)
-    hueRotate: number | null;
-    // (undocumented)
-    invert: number | null;
-    // (undocumented)
-    saturate: number | null;
-    // (undocumented)
-    sepia: number | null;
-}
-
-// @public (undocumented)
-export interface BackdropRenderMetadata {
-    // (undocumented)
-    backdropSourceKey: string;
-    // (undocumented)
-    clipBounds: RenderBounds;
-    // (undocumented)
-    clipStateId: number;
-    // (undocumented)
-    effectStateId: number;
-    // (undocumented)
-    filterKind: BackdropFilterKind;
-    // (undocumented)
-    filterParams: BackdropFilterParams;
-    // (undocumented)
-    inputBounds: RenderBounds;
-    // (undocumented)
-    outputBounds: RenderBounds;
-    // (undocumented)
-    sampleBounds: RenderBounds;
-    // (undocumented)
-    transformStateId: number;
-}
-
-// @public (undocumented)
-export function beginNodeInteraction(node: TGENode, mode: Exclude<InteractionMode, "none">): void;
-
-// @public (undocumented)
-export function beginSync(write: (data: string) => void): void;
-
-// @public (undocumented)
 export type BezierCmd = {
     kind: "bezier";
     x0: number;
@@ -129,38 +49,6 @@ export type BezierCmd = {
     color: number;
     width: number;
 };
-
-// @public (undocumented)
-export function bindLoop(loop: RenderLoop): void;
-
-// @public (undocumented)
-export function boostWindowFor(kind: InteractionKind, boosts: FrameSchedulerBoosts): number;
-
-// Warning: (ae-forgotten-export) The symbol "BaseRenderOpFields" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export type BorderRenderOp = {
-    kind: "border";
-    radius: number;
-    borderWidth: number;
-    cornerRadii: CornerRadii | null;
-    borderWidths?: RenderCommand["borderWidths"] | null;
-} & BaseRenderOpFields;
-
-// @public (undocumented)
-export function buildNodeMouseEvent(node: TGENode, pointerX: number, pointerY: number): NodeMouseEvent;
-
-// @public (undocumented)
-export function buildRenderGraphFrame(commands: RenderCommand[]): RenderGraphFrame;
-
-// @public (undocumented)
-export function buildRenderOp(cmd: RenderCommand, ownerIds?: {
-    rect: number | null;
-    text: number | null;
-}): RenderGraphOp | null;
-
-// @public (undocumented)
-export function bumpThemeEpoch(): void;
 
 // @public (undocumented)
 export class CanvasContext {
@@ -212,27 +100,6 @@ export class CanvasContext {
 export type CanvasDrawCommand = DrawCmd;
 
 // @public (undocumented)
-export type CanvasPaintConfig = {
-    renderObjectId?: number;
-    color: number;
-    onDraw: (ctx: CanvasContext) => void;
-    displayListCommands?: DrawCmd[];
-    viewport?: {
-        x: number;
-        y: number;
-        zoom: number;
-    };
-    displayListHash?: string | null;
-};
-
-// @public (undocumented)
-export type CanvasRenderOp = {
-    kind: "canvas";
-    rect: RectangleRenderOp;
-    canvas: CanvasPaintConfig;
-} & BaseRenderOpFields;
-
-// @public (undocumented)
 export type Capabilities = {
     kind: TerminalKind;
     kittyGraphics: boolean;
@@ -249,11 +116,6 @@ export type Capabilities = {
     transmissionMode: "shm" | "file" | "direct";
 };
 
-// Warning: (ae-forgotten-export) The symbol "NativeFramePlan" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export function chooseGpuLayerStrategy(input: GpuLayerStrategyInput, nativePlanOverride?: NativeFramePlan | null): GpuLayerStrategyMode;
-
 // @public (undocumented)
 export type CircleCmd = {
     kind: "circle";
@@ -267,49 +129,13 @@ export type CircleCmd = {
 };
 
 // @public (undocumented)
-export type ClassNameResolver = (className: string) => Partial<TGEProps>;
-
-// @public (undocumented)
-export function clearDirty(expectedVersion?: number, tracker?: DirtyTracker): void;
-
-// @public (undocumented)
 export function clearFontRegistry(): void;
-
-// @public (undocumented)
-export function clearImageCache(): void;
 
 // @public (undocumented)
 export function clearSelection(): void;
 
 // @public (undocumented)
 export function clearTextCache(): void;
-
-// @public (undocumented)
-export function closeVexartLibrary(): void;
-
-// Warning: (ae-forgotten-export) The symbol "COMPOSITOR_PROPERTY" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export type CompositorProperty = (typeof COMPOSITOR_PROPERTY)[keyof typeof COMPOSITOR_PROPERTY];
-
-// @public (undocumented)
-export const COMPRESS_MODE: {
-    readonly AUTO: "auto";
-};
-
-// @public (undocumented)
-export type CompressMode = boolean | (typeof COMPRESS_MODE)["AUTO"];
-
-// @public (undocumented)
-export function configureKittyTransportManager(options: ConfigureKittyTransportManagerOptions): void;
-
-// @public (undocumented)
-export interface ConfigureKittyTransportManagerOptions {
-    // (undocumented)
-    preferredMode: TransmissionMode;
-    // (undocumented)
-    probe: Record<Exclude<TransmissionMode, "direct">, boolean>;
-}
 
 // @public
 export type CornerRadii = {
@@ -319,46 +145,19 @@ export type CornerRadii = {
     bl: number;
 };
 
-// @public (undocumented)
-export const createComponent: <T>(Comp: (props: T) => TGENode, props: T) => TGENode;
+export { createComponent }
 
 export { createContext }
 
-// @public (undocumented)
-export function createDirtyTracker(): DirtyTracker;
-
-// @public (undocumented)
-export const createElement: (tag: string) => TGENode;
+export { createEffect }
 
 // @public (undocumented)
 export type CreateExtmarkOptions = Omit<Extmark, "id">;
 
-// @public (undocumented)
-export function createGpuRendererBackend(): GpuRendererBackend;
-
-// @public (undocumented)
-export function createHandle(node: TGENode): NodeHandle;
-
-// @public (undocumented)
-export function createLayerStore(): LayerStore;
-
-// @public (undocumented)
-export function createNode(kind: TGENodeKind): TGENode;
-
-// @public (undocumented)
-export function createParser(handler: InputHandler): InputParser;
+export { createMemo }
 
 // @public (undocumented)
 export function createParticleSystem(config: ParticleConfig): ParticleSystem;
-
-// @public
-export function createPressEvent(): PressEvent;
-
-// @public (undocumented)
-export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): RenderLoop;
-
-// @public (undocumented)
-export function createScaledImageCache(): ScaledImageCache;
 
 // @public (undocumented)
 export function createScrollHandle(scrollId: string): ScrollHandle;
@@ -376,134 +175,16 @@ export function createSpring(initial: number, config?: SpringConfig): AnimationS
 export function createTerminal(opts?: TerminalOptions): Promise<Terminal>;
 
 // @public (undocumented)
-export const createTextNode: (value: string) => TGENode;
-
-// @public (undocumented)
 export function createTransition(initial: number, config?: TransitionConfig): AnimationSignal;
-
-// @public (undocumented)
-export function createWriter(write: (data: string) => void): (data: string) => void;
-
-// @public
-export type DamageRect = Rect;
-
-// @public (undocumented)
-export function damageRectArea(rect: DamageRect | null | undefined): number;
-
-// @public (undocumented)
-export function damageSumOverlapArea(rects: DamageRect[]): number;
-
-// @public (undocumented)
-export function debugDumpCulledNodes(root: TGENode, viewport: {
-    width: number;
-    height: number;
-}): string;
 
 // @public (undocumented)
 export function debugDumpTree(target: NodeHandle): string;
 
 // @public (undocumented)
-export function debugFrameStart(): () => void;
-
-// @public
-export const debugState: Readonly<DebugStats>;
-
-// @public (undocumented)
-export type DebugStats = {
-    enabled: boolean;
-    fps: number;
-    frameTimeMs: number;
-    layerCount: number;
-    moveOnlyCount: number;
-    moveFallbackCount: number;
-    stableReuseCount: number;
-    dirtyBeforeCount: number;
-    repaintedCount: number;
-    nodeCount: number;
-    commandCount: number;
-    rendererStrategy: string | null;
-    rendererOutput: string | null;
-    resourceBytes: number;
-    gpuResourceBytes: number;
-    resourceEntries: number;
-    transmissionMode: string | null;
-    estimatedLayeredBytes: number;
-    estimatedFinalBytes: number;
-    interactionLatencyMs: number;
-    interactionType: string | null;
-    presentedInteractionSeq: number;
-    nativePresentationActive: boolean;
-    nativePresentationFallbackReason: string | null;
-    nativeStats: NativePresentationStats | null;
-    nativeFrameReasonFlags: number | null;
-    nativeFrameStats: NativeFrameExecutionStats | null;
-    ffiCallCount: number;
-};
-
-// @public (undocumented)
 export function debugStatsLine(): string;
-
-// Warning: (ae-forgotten-export) The symbol "DebugUpdateStatsInput" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export function debugUpdateStats(stats: DebugUpdateStatsInput): void;
-
-// @public (undocumented)
-export type DecodedImage = {
-    data: Uint8Array;
-    width: number;
-    height: number;
-    nativeHandle?: bigint;
-};
-
-// @public (undocumented)
-export function decodeImageForNode(node: TGENode): void;
-
-// @public (undocumented)
-export function decodeMods(n: number): Modifiers;
 
 // @public (undocumented)
 export function decodePasteBytes(bytes: Uint8Array | string): string;
-
-// @public (undocumented)
-export function detect(env?: Readonly<Record<string, string | undefined>>): TerminalKind;
-
-// @public
-export const DIRECTION: {
-    readonly LEFT_TO_RIGHT: 0;
-    readonly TOP_TO_BOTTOM: 1;
-};
-
-// @public (undocumented)
-export const DIRTY_KIND: {
-    readonly FULL: "full";
-    readonly INTERACTION: "interaction";
-    readonly NODE_VISUAL: "node-visual";
-};
-
-// @public (undocumented)
-export type DirtyKind = (typeof DIRTY_KIND)[keyof typeof DIRTY_KIND];
-
-// @public (undocumented)
-export type DirtyScope = {
-    kind: DirtyKind;
-    nodeId?: number;
-    rect?: DamageRect;
-};
-
-// @public (undocumented)
-export type DirtyTracker = {
-    markDirty: () => void;
-    isDirty: () => boolean;
-    clearDirty: (expectedVersion?: number) => void;
-    dirtyVersion: () => number;
-};
-
-// @public (undocumented)
-export function dispatchFocusInput(event: InputEvent_2): void;
-
-// @public (undocumented)
-export function dispatchInput(event: InputEvent_2): void;
 
 // @public (undocumented)
 export type DragOptions = {
@@ -551,80 +232,7 @@ export const easing: {
 // @public (undocumented)
 export type EasingFn = (t: number) => number;
 
-// @public (undocumented)
-export const effect: <T>(fn: (prev?: T) => T, init?: T) => void;
-
-// @public (undocumented)
-export type EffectConfig = {
-    renderObjectId?: number;
-    color: number;
-    shadow?: ShadowDef | ShadowDef[];
-    glow?: {
-        radius: number;
-        color: number;
-        intensity: number;
-    };
-    gradient?: {
-        type: "linear";
-        from: number;
-        to: number;
-        angle: number;
-    } | {
-        type: "radial";
-        from: number;
-        to: number;
-    };
-    backdropBlur?: number;
-    backdropBrightness?: number;
-    backdropContrast?: number;
-    backdropSaturate?: number;
-    backdropGrayscale?: number;
-    backdropInvert?: number;
-    backdropSepia?: number;
-    backdropHueRotate?: number;
-    opacity?: number;
-    cornerRadii?: CornerRadii;
-    transform?: Float64Array;
-    transformInverse?: Float64Array;
-    transformBounds?: Rect;
-    filter?: FilterConfig;
-    _node?: TGENode;
-    _stateHash?: number;
-};
-
-// @public (undocumented)
-export type EffectRenderOp = {
-    kind: "effect";
-    rect: RectangleRenderOp;
-    effect: EffectConfig;
-    backdrop: BackdropRenderMetadata | null;
-    transformStateId: number;
-    clipStateId: number;
-    effectStateId: number;
-} & BaseRenderOpFields;
-
-// @public (undocumented)
-export function endNodeInteraction(node: TGENode, mode?: Exclude<InteractionMode, "none">): void;
-
-// @public (undocumented)
-export function endSync(write: (data: string) => void): void;
-
-// @public (undocumented)
-export function enter(stdin: NodeJS.ReadStream, write: (data: string) => void, caps: Capabilities): LifecycleState;
-
 export { ErrorBoundary }
-
-// @public (undocumented)
-export type ExitHandlerOptions = {
-    manageProcessSignals?: boolean;
-    signal?: AbortSignal;
-};
-
-// @public (undocumented)
-export function expandRect(rect: DamageRect, padding: number): DamageRect;
-
-// @public (undocumented)
-export const EXPECTED_BRIDGE_VERSION: 133888;
 
 // @public (undocumented)
 export type Extmark = {
@@ -689,14 +297,6 @@ export type FilterConfig = {
 export const focusedId: Accessor<string | null>;
 
 // @public (undocumented)
-export type FocusEntry = {
-    id: string;
-    onKeyDown?: (event: KeyEvent) => void;
-    onPress?: (event?: PressEvent) => void;
-    node?: TGENode;
-};
-
-// @public (undocumented)
 type FocusEvent_2 = {
     type: "focus";
     focused: boolean;
@@ -721,87 +321,7 @@ export type FontDescriptor = {
 export { For }
 
 // @public (undocumented)
-export type FrameSchedulerBoosts = {
-    key: number;
-    scroll: number;
-    pointer: number;
-};
-
-// @public (undocumented)
-export function fromConfig(config: {
-    translateX?: number;
-    translateY?: number;
-    rotate?: number;
-    scale?: number;
-    scaleX?: number;
-    scaleY?: number;
-    skewX?: number;
-    skewY?: number;
-    perspective?: number;
-    rotateX?: number;
-    rotateY?: number;
-}, originX: number, originY: number): Matrix3;
-
-// @public (undocumented)
-export function getClassNameResolver(): ClassNameResolver | null;
-
-// @public (undocumented)
-export function getFocusedEntry(): FocusEntry | undefined;
-
-// @public (undocumented)
 export function getFont(id: number): FontDescriptor;
-
-// @public (undocumented)
-export function getGpuRendererBackendCacheStats(): GpuRendererBackendCacheStats;
-
-// @public (undocumented)
-export function getImageCacheStats(): {
-    decodedCount: number;
-    decodedBytes: number;
-    pendingCount: number;
-    scaledCacheCount: number;
-    scaledEntries: number;
-    scaledBytes: number;
-};
-
-// @public (undocumented)
-export function getKittyTransportManagerState(): KittyTransportManagerState;
-
-// @public (undocumented)
-export function getKittyTransportStats(): KittyTransportStats;
-
-// @public (undocumented)
-export function getLatestInteractionTrace(): InteractionTrace;
-
-// @public (undocumented)
-export function getNativeKittyShmHelperVersion(): number;
-
-// @public (undocumented)
-export function getNodeFocusId(node: TGENode): string | undefined;
-
-// @public (undocumented)
-export function getRendererBackend(): RendererBackend | null;
-
-// @public (undocumented)
-export function getRendererBackendName(): string;
-
-// @public (undocumented)
-export function getRendererResourceStats(): {
-    image: {
-        decodedCount: number;
-        decodedBytes: number;
-        pendingCount: number;
-        scaledCacheCount: number;
-        scaledEntries: number;
-        scaledBytes: number;
-    };
-    textLayout: {
-        preparedCount: number;
-        layoutCount: number;
-    };
-    gpuRenderer: GpuRendererBackendCacheStats;
-    native: ResourceStats | null;
-};
 
 // @public (undocumented)
 export function getSelectedText(): string;
@@ -809,18 +329,6 @@ export function getSelectedText(): string;
 // @public (undocumented)
 function getSelection_2(): TextSelection | null;
 export { getSelection_2 as getSelection }
-
-// @public (undocumented)
-export function getSize(stdout: NodeJS.WriteStream): TerminalSize;
-
-// @public (undocumented)
-export function getTextLayoutCacheStats(): {
-    preparedCount: number;
-    layoutCount: number;
-};
-
-// @public (undocumented)
-export function getThemeEpoch(): number;
 
 // @public (undocumented)
 export function getTreeSitterClient(): TreeSitterClient;
@@ -843,53 +351,6 @@ export type GlowConfig = {
     intensity?: number;
 };
 
-// @public (undocumented)
-export type GpuLayerStrategyInput = {
-    dirtyLayerCount: number;
-    dirtyPixelArea: number;
-    totalPixelArea: number;
-    overlapPixelArea: number;
-    overlapRatio: number;
-    fullRepaint: boolean;
-    hasSubtreeTransforms: boolean;
-    hasActiveInteraction: boolean;
-    transmissionMode: "direct" | "file" | "shm";
-    estimatedLayeredBytes: number;
-    estimatedFinalBytes: number;
-    lastStrategy: GpuLayerStrategyMode | null;
-    framesSinceChange: number;
-};
-
-// Warning: (ae-forgotten-export) The symbol "GPU_LAYER_STRATEGY_MODE" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export type GpuLayerStrategyMode = (typeof GPU_LAYER_STRATEGY_MODE)[keyof typeof GPU_LAYER_STRATEGY_MODE];
-
-// @public (undocumented)
-export type GpuRendererBackend = RendererBackend & {
-    instanceImageHandles: Set<bigint>;
-    getLastStrategy: () => GpuLayerStrategyMode | null;
-    readbackForTest: (width: number, height: number) => Uint8Array | null;
-};
-
-// @public (undocumented)
-export type GpuRendererBackendCacheStats = {
-    layerTargetCount: number;
-    layerTargetBytes: number;
-    textImageCount: number;
-    textImageBytes: number;
-    canvasSpriteCount: number;
-    canvasSpriteBytes: number;
-    transformSpriteCount: number;
-    transformSpriteBytes: number;
-    fallbackSpriteCount: number;
-    fallbackSpriteBytes: number;
-    backdropSourceCount: number;
-    backdropSourceBytes: number;
-    backdropSpriteCount: number;
-    backdropSpriteBytes: number;
-};
-
 // @public
 export type GradientConfig = {
     type: "linear";
@@ -901,12 +362,6 @@ export type GradientConfig = {
     from: string | number;
     to: string | number;
 };
-
-// @public (undocumented)
-export const GRAPH_MAGIC: 1448624466;
-
-// @public (undocumented)
-export const GRAPH_VERSION: 131072;
 
 // @beta
 export type GridAreaPlacement = string | {
@@ -994,18 +449,6 @@ export type GridTrack = GridTrackSize | {
 // @beta
 export type GridTrackSize = GridBreadth | GridFr | GridMinMax | GridFitContent;
 
-// @public (undocumented)
-export function hasActiveAnimations(): boolean;
-
-// @public (undocumented)
-export function hasActiveNodeInteraction(node: TGENode | null | undefined): boolean;
-
-// @public (undocumented)
-export function hasInteractionInSubtree(node: TGENode | null | undefined): boolean;
-
-// @public (undocumented)
-export function hasRecentInteraction(now: number, interactionBoostUntilMs: number, capturedNodeId: number, pointerDown: boolean): boolean;
-
 // @public
 export function highlightsToTokens(source: string, highlights: SimpleHighlight[], style: SyntaxStyle): Token[][];
 
@@ -1031,9 +474,6 @@ export type HoverState = {
 };
 
 // @public (undocumented)
-export function identity(): Matrix3;
-
-// @public (undocumented)
 export type ImageCmd = {
     kind: "image";
     x: number;
@@ -1047,73 +487,14 @@ export type ImageCmd = {
     opaque?: boolean;
 };
 
-// @public (undocumented)
-export type ImagePaintConfig = {
-    renderObjectId?: number;
-    color: number;
-    cornerRadius: number;
-    imageBuffer: {
-        data: Uint8Array;
-        width: number;
-        height: number;
-    };
-    nativeImageHandle?: bigint | null;
-    objectFit: "contain" | "cover" | "fill" | "none";
-};
-
-// @public (undocumented)
-export type ImageRenderOp = {
-    kind: "image";
-    rect: RectangleRenderOp;
-    image: ImagePaintConfig;
-} & BaseRenderOpFields;
-
 export { Index }
-
-// @public (undocumented)
-export function inferCaps(kind: TerminalKind): Capabilities;
 
 // @public (undocumented)
 type InputEvent_2 = KeyEvent | MouseEvent_2 | FocusEvent_2 | PasteEvent | ResizeEvent;
 export { InputEvent_2 as InputEvent }
 
 // @public (undocumented)
-export type InputHandler = (event: InputEvent_2) => void;
-
-// @public (undocumented)
-export type InputParser = {
-    feed: (data: Buffer) => void;
-    destroy: () => void;
-};
-
-// @public (undocumented)
-export type InputSubscriber = (event: InputEvent_2) => void;
-
-// @public (undocumented)
-export const insert: <T>(parent: any, accessor: T | (() => T), marker?: any | null, initial?: any) => TGENode;
-
-// @public (undocumented)
-export function insertChild(parent: TGENode, child: TGENode, anchor?: TGENode): void;
-
-// @public (undocumented)
-export const insertNode: (parent: TGENode, node: TGENode, anchor?: TGENode | undefined) => void;
-
-// @public
-export function installExitHandlers(stdin: NodeJS.ReadStream, write: (data: string) => void, caps: Capabilities, state: LifecycleState, beforeLeave?: (() => void) | ExitHandlerOptions, options?: ExitHandlerOptions): () => void;
-
-// @public (undocumented)
-export const INTERACTION_MODE: {
-    readonly NONE: "none";
-    readonly DRAG: "drag";
-};
-
-// @public (undocumented)
 export type InteractionBinding = "auto" | "none" | InteractionLayerState;
-
-// Warning: (ae-forgotten-export) The symbol "INTERACTION_KIND" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export type InteractionKind = (typeof INTERACTION_KIND)[keyof typeof INTERACTION_KIND];
 
 // @public (undocumented)
 export type InteractionLayerState = {
@@ -1124,45 +505,16 @@ export type InteractionLayerState = {
     end: (mode?: Exclude<InteractionMode, "none">) => void;
 };
 
+// Warning: (ae-forgotten-export) The symbol "INTERACTION_MODE" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export type InteractionMode = (typeof INTERACTION_MODE)[keyof typeof INTERACTION_MODE];
-
-// @public (undocumented)
-export type InteractionTrace = {
-    seq: number;
-    at: number;
-    kind: string | null;
-};
 
 // @public
 export type InteractiveStyleProps = Partial<Pick<TGEProps, "backgroundColor" | "borderColor" | "borderWidth" | "cornerRadius" | "borderRadius" | "shadow" | "boxShadow" | "glow" | "gradient" | "backdropBlur" | "backdropBrightness" | "backdropContrast" | "backdropSaturate" | "backdropGrayscale" | "backdropInvert" | "backdropSepia" | "backdropHueRotate" | "opacity" | "filter">>;
 
 // @public (undocumented)
-export function intersectRect(a: DamageRect, b: DamageRect): DamageRect | null;
-
-// @public (undocumented)
-export function inTmux(): boolean;
-
-// @public (undocumented)
-export function invert(m: Matrix3): Matrix3 | null;
-
-// @public (undocumented)
 export function isDebugEnabled(): boolean;
-
-// @public (undocumented)
-export function isDirty(tracker?: DirtyTracker): boolean;
-
-// @public (undocumented)
-export function isEmptyRect(rect: DamageRect | null | undefined): boolean;
-
-// @public (undocumented)
-export function isFullyOutsideScrollViewport(node: TGENode): boolean;
-
-// @public (undocumented)
-export function isIdentity(m: Matrix3): boolean;
-
-// @public
-export function isMsdfFontAvailable(): boolean;
 
 // @public (undocumented)
 export const KANAGAWA: ThemeTokenStyle[];
@@ -1181,106 +533,12 @@ export type KeyEvent = {
     mods: Modifiers;
 };
 
-// @public (undocumented)
-export type KittyTransportFailureReason = (typeof TRANSPORT_FAILURE_REASON)[keyof typeof TRANSPORT_FAILURE_REASON];
-
-// @public (undocumented)
-export type KittyTransportHealth = (typeof TRANSPORT_HEALTH)[keyof typeof TRANSPORT_HEALTH];
-
-// @public (undocumented)
-export interface KittyTransportManagerState {
-    // (undocumented)
-    activeMode: TransmissionMode;
-    // (undocumented)
-    health: Record<TransmissionMode, KittyTransportHealth>;
-    // (undocumented)
-    lastFailureReason: KittyTransportFailureReason | null;
-    // (undocumented)
-    preferredMode: TransmissionMode;
-    // (undocumented)
-    probe: Record<Exclude<TransmissionMode, "direct">, boolean>;
-    // (undocumented)
-    telemetry: Record<TransmissionMode, KittyTransportTelemetryBucket>;
-}
-
-// @public (undocumented)
-export type KittyTransportStats = {
-    transmitCalls: number;
-    patchCalls: number;
-    payloadBytes: number;
-    estimatedTtyBytes: number;
-    byMode: Record<TransmissionMode, {
-        transmitCalls: number;
-        patchCalls: number;
-        payloadBytes: number;
-        estimatedTtyBytes: number;
-    }>;
-};
-
-// @public (undocumented)
-export interface KittyTransportTelemetryBucket {
-    // (undocumented)
-    failure: number;
-    // (undocumented)
-    fallback: number;
-    // (undocumented)
-    success: number;
-}
-
-// @public (undocumented)
-export type Layer = {
-    id: number;
-    z: number;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    dirty: boolean;
-    prevX: number;
-    prevY: number;
-    prevW: number;
-    prevH: number;
-    prevZ: number;
-    damageRect: DamageRect | null;
-};
-
-// @public (undocumented)
-export type LayerStore = {
-    createLayer: (z: number) => Layer;
-    getLayer: (id: number) => Layer | undefined;
-    removeLayer: (layer: Layer) => void;
-    allLayers: () => Layer[];
-    markLayerDirty: (id: number) => void;
-    markAllDirty: () => void;
-    anyLayerDirty: () => boolean;
-    updateLayerGeometry: (layer: Layer, x: number, y: number, w: number, h: number, opts?: {
-        moveOnly?: boolean;
-    }) => void;
-    markLayerClean: (layer: Layer) => void;
-    markLayerDamaged: (layer: Layer, rect: DamageRect) => void;
-    getLayerRect: (layer: Layer) => DamageRect;
-    getPreviousLayerRect: (layer: Layer) => DamageRect | null;
-    imageIdForLayer: (layer: Layer) => number;
-    resetLayers: () => void;
-    dirtyCount: () => number;
-    layerCount: () => number;
-};
-
 // @public
 export type LayoutRect = {
     x: number;
     y: number;
     width: number;
     height: number;
-};
-
-// @public (undocumented)
-export function leave(stdin: NodeJS.ReadStream, write: (data: string) => void, caps: Capabilities, state: LifecycleState): void;
-
-// @public (undocumented)
-export type LifecycleState = {
-    active: boolean;
-    rawModeWas: boolean;
 };
 
 // @public (undocumented)
@@ -1306,37 +564,10 @@ export type LineCmd = {
     width: number;
 };
 
-// @public (undocumented)
-export function markDirty(scope?: DirtyScope, tracker?: DirtyTracker): void;
-
-// @public (undocumented)
-export function markLayerDamageByKey(key: string, rect: DamageRect): void;
-
-// @public (undocumented)
-export function markLayerDirtyByKey(key: string): void;
-
-// @public (undocumented)
-export function markNodeLayerDamaged(nodeId: number, rect?: DamageRect): void;
-
 export { Match }
-
-// @public
-export type Matrix3 = Float64Array;
-
-// @public (undocumented)
-export function measureForLayout(text: string, fontId: number, fontSize: number, overrideFontFamily?: string, overrideFontWeight?: number, overrideFontStyle?: string): {
-    width: number;
-    height: number;
-};
 
 // @public (undocumented)
 export function measureTextWidth(text: string, fontId: number): number;
-
-// @public (undocumented)
-export const memo: <T>(fn: () => T, equal: boolean) => () => T;
-
-// @public (undocumented)
-export const mergeProps: (...sources: unknown[]) => unknown;
 
 // @public (undocumented)
 export type Modifiers = {
@@ -1405,24 +636,6 @@ export type MouseState = {
     };
 };
 
-// @public
-export function msdfFontInit(): number;
-
-// @public
-export function msdfFontQuery(families: string[], weight?: number, italic?: boolean): bigint | null;
-
-// @public
-export function msdfMeasureText(text: string, families?: string[], fontSize?: number, weight?: number, italic?: boolean): MsdfTextMeasurement | null;
-
-// @public (undocumented)
-export type MsdfTextMeasurement = {
-    width: number;
-    height: number;
-};
-
-// @public (undocumented)
-export function multiply(a: Matrix3, b: Matrix3): Matrix3;
-
 // @public (undocumented)
 export type MutationOptions<T, V> = {
     onMutate?: (variables: V) => T | undefined;
@@ -1438,32 +651,6 @@ export type MutationResult<T, V> = {
     error: () => Error | undefined;
     mutate: (variables: V) => Promise<T | undefined>;
     reset: () => void;
-};
-
-// @public (undocumented)
-export interface NativeKittyShmHandle {
-    _bigintHandle: bigint;
-    handle: number;
-    // (undocumented)
-    name: string;
-}
-
-// @public (undocumented)
-export type NativePresentationStats = {
-    version: number;
-    mode: number;
-    rgbaBytesRead: number;
-    kittyBytesEmitted: number;
-    readbackUs: number;
-    encodeUs: number;
-    writeUs: number;
-    totalUs: number;
-    transport: number;
-    flags: number;
-    compressUs: number;
-    shmPrepareUs: number;
-    rawBytes: number;
-    payloadBytes: number;
 };
 
 // @public (undocumented)
@@ -1486,9 +673,6 @@ export type NebulaCmd = {
     detail: number;
     dust: number;
 };
-
-// @public (undocumented)
-export const NO_MODS: Modifiers;
 
 // @public (undocumented)
 export type NodeHandle = {
@@ -1516,44 +700,10 @@ export type NodeMouseEvent = {
 // @public (undocumented)
 export const ONE_DARK: ThemeTokenStyle[];
 
-// @public (undocumented)
-export function onGlobalDirty(cb: (scope: DirtyScope) => void): () => void;
-
+// Warning: (ae-forgotten-export) The symbol "InputSubscriber" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export function onInput(handler: InputSubscriber): () => void;
-
-// @public (undocumented)
-export function onPostScroll(cb: () => void): () => void;
-
-// @public (undocumented)
-export function onResize(stdout: NodeJS.WriteStream, handler: ResizeHandler): () => void;
-
-// @public
-export function openVexartLibrary(): ReturnType<typeof dlopen<typeof VEXART_SYMBOLS>>;
-
-// @public (undocumented)
-export function parentTerminal(): TerminalKind;
-
-// @public (undocumented)
-export function parseAlignX(value: string | undefined): number;
-
-// @public (undocumented)
-export function parseAlignY(value: string | undefined): number;
-
-// @public (undocumented)
-export function parseColor(value: string | number | undefined): number;
-
-// @public (undocumented)
-export function parseDirection(value: string | undefined): number;
-
-// @public
-export function parseKey(data: string): [KeyEvent, number] | null;
-
-// @public
-export function parseMouse(data: string): [MouseEvent_2, number] | null;
-
-// @public (undocumented)
-export function parseSizing(value: number | string | undefined | null): SizingInfo | null;
 
 // @public (undocumented)
 export type ParticleConfig = {
@@ -1601,21 +751,9 @@ export type ParticleSystem = {
 };
 
 // @public (undocumented)
-export function passthroughSupported(): boolean;
-
-// @public (undocumented)
 export type PasteEvent = {
     type: "paste";
     text: string;
-};
-
-// @public (undocumented)
-export function perspective(distance: number, rotateX?: number, rotateY?: number): Matrix3;
-
-// @public
-export type Point2D = {
-    x: number;
-    y: number;
 };
 
 // @public (undocumented)
@@ -1631,9 +769,6 @@ export type PolygonCmd = {
     strokeWidth: number;
 };
 
-// @public (undocumented)
-export function prepareNativeKittyShm(name: string, data: Uint8Array, mode?: number): NativeKittyShmHandle;
-
 // @public
 export type PressEvent = {
     stopPropagation: () => void;
@@ -1641,30 +776,7 @@ export type PressEvent = {
 };
 
 // @public (undocumented)
-export function probeFile(write: (data: string) => void, onData: (handler: (data: Buffer) => void) => void, offData: (handler: (data: Buffer) => void) => void, timeout?: number): Promise<boolean>;
-
-// @public
-export function probeKittyGraphics(write: (data: string) => void, onData: (handler: (data: Buffer) => void) => void, offData: (handler: (data: Buffer) => void) => void, timeout?: number): Promise<boolean>;
-
-// @public (undocumented)
-export function probeShm(write: (data: string) => void, onData: (handler: (data: Buffer) => void) => void, offData: (handler: (data: Buffer) => void) => void, timeout?: number): Promise<boolean>;
-
-// Warning: (ae-forgotten-export) The symbol "ProcessSignalHubImpl" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const ProcessSignalHub: ProcessSignalHubImpl;
-
-// @public (undocumented)
-export type ProcessSignalHub = ProcessSignalHubImpl;
-
-// @public (undocumented)
 export function pushFocusScope(): () => void;
-
-// @public
-export function queryColors(write: (data: string) => void, onData: (handler: (data: Buffer) => void) => void, offData: (handler: (data: Buffer) => void) => void, timeout?: number): Promise<{
-    bg: [number, number, number] | null;
-    fg: [number, number, number] | null;
-}>;
 
 // @public (undocumented)
 export type QueryOptions = {
@@ -1673,14 +785,6 @@ export type QueryOptions = {
     retry?: number;
     retryDelay?: number;
 };
-
-// @public
-export function queryPixelSize(write: (data: string) => void, onData: (handler: (data: Buffer) => void) => void, offData: (handler: (data: Buffer) => void) => void, cols: number, rows: number, timeout?: number): Promise<{
-    pixelWidth: number;
-    pixelHeight: number;
-    cellWidth: number;
-    cellHeight: number;
-}>;
 
 // @public (undocumented)
 export type QueryResult<T> = {
@@ -1702,41 +806,6 @@ export type RadialGradientCmd = {
 };
 
 // @public (undocumented)
-export type RawCommandRenderOp = {
-    kind: "raw-command";
-} & BaseRenderOpFields;
-
-// @public (undocumented)
-export type RawImage = DecodedImage;
-
-// @public (undocumented)
-export type RawImageData = {
-    data: Uint8Array;
-    width: number;
-    height: number;
-};
-
-// @public
-export type Rect = {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-};
-
-// @public (undocumented)
-export type RectangleRenderOp = {
-    kind: "rectangle";
-    radius: number;
-    image: ImagePaintConfig | null;
-    canvas: CanvasPaintConfig | null;
-    effect: EffectConfig | null;
-} & BaseRenderOpFields;
-
-// @public (undocumented)
-export function rectBottom(rect: DamageRect): number;
-
-// @public (undocumented)
 export type RectCmd = {
     kind: "rect";
     x: number;
@@ -1750,277 +819,10 @@ export type RectCmd = {
 };
 
 // @public (undocumented)
-export function rectRight(rect: DamageRect): number;
-
-// @public (undocumented)
 export function registerFont(id: number, desc: FontDescriptor): void;
 
 // @public (undocumented)
-export function registerNodeFocusable(node: TGENode): () => void;
-
-// @public (undocumented)
-export function releaseNativeKittyShm(handle: number, unlinkName: boolean): void;
-
-// @public (undocumented)
 export function releasePointerCapture(nodeId: number): void;
-
-// @public
-export function releaseScrollHandle(scrollId: string): void;
-
-// @public (undocumented)
-export function removeChild(parent: TGENode, child: TGENode): void;
-
-// @public
-export type RenderBounds = Rect;
-
-// @public (undocumented)
-export type RenderCommand = {
-    type: number;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    color: number;
-    cornerRadius: number;
-    extra1: number;
-    extra2: number;
-    text?: string;
-    lineHeight?: number;
-    fontFamily?: string;
-    fontWeight?: number;
-    fontStyle?: string;
-    whiteSpace?: "normal" | "pre-wrap";
-    wordBreak?: "normal" | "keep-all";
-    nodeId?: number;
-    borderWidths?: {
-        left: number;
-        right: number;
-        top: number;
-        bottom: number;
-    };
-    effect?: EffectConfig;
-    image?: ImagePaintConfig;
-    canvas?: CanvasPaintConfig;
-};
-
-// @public (undocumented)
-export type RendererBackend = {
-    name: string;
-    beginFrame?: (ctx: RendererBackendFrameContext) => RendererBackendFramePlan | void;
-    paint: (ctx: RendererBackendPaintContext) => RendererBackendPaintResult | void;
-    reuseLayer?: (ctx: {
-        frame: RendererBackendFrameContext;
-        layer: RendererBackendLayerContext;
-    }) => boolean | void;
-    compositeRetainedFrame?: (ctx: {
-        frame: RendererBackendFrameContext;
-        layers: RendererBackendRetainedLayer[];
-    }) => RendererBackendFrameResult | null | void;
-    endFrame?: (ctx: RendererBackendFrameContext) => RendererBackendFrameResult | null | void;
-    drainProfile?: () => RendererBackendProfile;
-    destroy?: () => void;
-};
-
-// @public (undocumented)
-export type RendererBackendFrameContext = {
-    viewportWidth: number;
-    viewportHeight: number;
-    dirtyLayerCount: number;
-    layerCount: number;
-    dirtyPixelArea: number;
-    totalPixelArea: number;
-    overlapPixelArea: number;
-    overlapRatio: number;
-    fullRepaint: boolean;
-    useLayerCompositing: boolean;
-    hasSubtreeTransforms: boolean;
-    hasActiveInteraction: boolean;
-    transmissionMode: "direct" | "file" | "shm";
-    estimatedLayeredBytes: number;
-    estimatedFinalBytes: number;
-};
-
-// @public (undocumented)
-export type RendererBackendFramePlan = {
-    strategy: GpuLayerStrategyMode | null;
-    nativePlan?: NativeFramePlan | null;
-};
-
-// @public (undocumented)
-export type RendererBackendFrameResult = {
-    output: "none";
-    strategy: GpuLayerStrategyMode | null;
-} | {
-    output: "final-frame-raw";
-    strategy: GpuLayerStrategyMode | null;
-    finalFrame?: {
-        data: Uint8Array;
-        width: number;
-        height: number;
-    };
-} | {
-    output: "native-presented";
-    strategy: GpuLayerStrategyMode | null;
-    stats?: NativePresentationStats | null;
-};
-
-// @public (undocumented)
-export type RendererBackendLayerBacking = {
-    kind: "gpu" | "raw";
-    imageId: number;
-    targetKey: string;
-    width: number;
-    height: number;
-};
-
-// @public (undocumented)
-export type RendererBackendLayerContext = {
-    key: string;
-    z: number;
-    backing: RendererBackendLayerBacking | null;
-    subtreeTransform: TransformQuad | null;
-    isBackground: boolean;
-    bounds: DamageRect;
-    dirtyRect: DamageRect | null;
-    repaintRect: DamageRect | null;
-    allowRegionalRepaint: boolean;
-    retainedDuringInteraction: boolean;
-};
-
-// @public (undocumented)
-export type RendererBackendPaintContext = {
-    targetWidth: number;
-    targetHeight: number;
-    backing: RendererBackendLayerBacking | null;
-    target: {
-        width: number;
-        height: number;
-    };
-    commands: RenderCommand[];
-    graph: RenderGraphFrame;
-    offsetX: number;
-    offsetY: number;
-    cellWidth?: number;
-    cellHeight?: number;
-    frame: RendererBackendFrameContext | null;
-    layer: RendererBackendLayerContext | null;
-};
-
-// @public (undocumented)
-export type RendererBackendPaintResult = {
-    output: "kitty-payload";
-    strategy?: GpuLayerStrategyMode | null;
-    kittyPayload?: {
-        data: Uint8Array;
-        width: number;
-        height: number;
-        region?: DamageRect;
-    };
-} | {
-    output: "skip-present";
-    strategy?: GpuLayerStrategyMode | null;
-} | {
-    output: "native-presented";
-    strategy?: GpuLayerStrategyMode | null;
-    stats?: NativePresentationStats | null;
-};
-
-// @public (undocumented)
-export type RendererBackendProfile = {
-    compositeMs: number;
-    readbackMs: number;
-    nativeEmitMs: number;
-    nativeReadbackMs: number;
-    nativeCompressMs: number;
-    nativeShmPrepareMs: number;
-    nativeWriteMs: number;
-    nativeRawBytes: number;
-    nativePayloadBytes: number;
-    uniformUpdateMs: number;
-};
-
-// @public (undocumented)
-export type RendererBackendRetainedLayer = {
-    key: string;
-    z: number;
-    bounds: DamageRect;
-    subtreeTransform: TransformQuad | null;
-    isBackground: boolean;
-    opacity: number;
-};
-
-// @public (undocumented)
-export type RenderGraphFrame = {
-    ops: RenderGraphOp[];
-};
-
-// @public (undocumented)
-export type RenderGraphOp = RectangleRenderOp | ImageRenderOp | CanvasRenderOp | EffectRenderOp | BorderRenderOp | TextRenderOp | RawCommandRenderOp;
-
-// @public (undocumented)
-export type RenderLoop = {
-    root: TGENode;
-    backend: RendererBackend;
-    start: () => void;
-    stop: () => void;
-    frame: () => void;
-    feedScroll: (dx: number, dy: number) => void;
-    feedPointer: (x: number, y: number, down: boolean) => void;
-    nudgeInteraction: (kind: "pointer" | "scroll" | "key") => void;
-    requestInteractionFrame: (kind: "pointer" | "scroll" | "key") => void;
-    needsPointerRepaint: () => boolean;
-    setPointerCapture: (nodeId: number) => void;
-    releasePointerCapture: (nodeId: number) => void;
-    getCapturedNodeId?: () => number;
-    onPostScroll: (cb: () => void) => () => void;
-    markNodeLayerDamaged: (nodeId: number, rect?: DamageRect) => void;
-    suspend: () => void;
-    resume: () => void;
-    suspended: () => boolean;
-    scheduleTask: (priority: "user-blocking" | "user-visible" | "background", fn: () => void) => () => void;
-    destroy: () => void;
-};
-
-// @public (undocumented)
-export type RenderLoopOptions = {
-    backend?: RendererBackend;
-    experimental?: {
-        frameBudgetMs?: number;
-        maxFps?: number;
-        idleMaxFps?: number;
-        interactionMaxFps?: number;
-        forceLayerRepaint?: boolean;
-        nativePresentation?: boolean;
-        nativeLayerRegistry?: boolean;
-    };
-};
-
-// @public (undocumented)
-export function reportKittyTransportFailure(mode: TransmissionMode, reason: KittyTransportFailureReason): void;
-
-// @public (undocumented)
-export function reportKittyTransportSuccess(mode: TransmissionMode): void;
-
-// @public (undocumented)
-export function requestInteractionFrame(kind: "pointer" | "scroll" | "key"): void;
-
-// @public (undocumented)
-export function resetActiveAnimations(): void;
-
-// @public (undocumented)
-export function resetCompositorPathState(): void;
-
-// @public (undocumented)
-export function resetFocus(): void;
-
-// @public (undocumented)
-export function resetKittyTransportManager(): void;
-
-// @public (undocumented)
-export function resetKittyTransportStats(): void;
-
-// @public (undocumented)
-export function resetScrollHandles(): void;
 
 // @public (undocumented)
 export type ResizeEvent = {
@@ -2029,25 +831,6 @@ export type ResizeEvent = {
 
 // @public (undocumented)
 export type ResizeHandler = (size: TerminalSize) => void;
-
-// @public (undocumented)
-export function resolveKittyTransportMode(requestedMode: TransmissionMode): "direct" | "file" | "shm";
-
-// @public (undocumented)
-export function resolveProps(node: TGENode): TGEProps;
-
-// @public (undocumented)
-export type ResourceStats = {
-    budgetBytes: number;
-    currentUsage: number;
-    highWaterMark: number;
-    resourcesByKind: Record<string, {
-        count: number;
-        bytes: number;
-    }>;
-    evictionsLastFrame: number;
-    evictionsTotal: number;
-};
 
 // @public (undocumented)
 export class RGBA {
@@ -2075,30 +858,6 @@ export class RGBA {
 }
 
 // @public (undocumented)
-export function rotate(degrees: number): Matrix3;
-
-// @public (undocumented)
-export function scale(s: number): Matrix3;
-
-// @public (undocumented)
-export type ScaledImageCache = {
-    get: (src: RawImage, targetW: number, targetH: number, key: string) => RawImage;
-    clear: () => void;
-};
-
-// @public (undocumented)
-export function scaleImage(src: DecodedImage, targetW: number, targetH: number, fit?: "contain" | "cover" | "fill" | "none"): {
-    data: Uint8Array;
-    width: number;
-    height: number;
-    offsetX: number;
-    offsetY: number;
-};
-
-// @public (undocumented)
-export function scaleXY(sx: number, sy: number): Matrix3;
-
-// @public (undocumented)
 export type ScrollHandle = {
     readonly scrollX: number;
     readonly scrollY: number;
@@ -2120,31 +879,16 @@ export type ScrollHandle = {
 export const selectionSignal: Accessor<TextSelection | null>;
 
 // @public (undocumented)
-export function setClassNameResolver(resolver: ClassNameResolver | null): void;
-
-// @public (undocumented)
 export function setDebug(enabled: boolean): void;
 
 // @public (undocumented)
 export function setFocus(id: string): void;
 
 // @public (undocumented)
-export const setFocusedId: Setter<string | null>;
-
-// @public (undocumented)
 export function setPointerCapture(nodeId: number): void;
 
 // @public (undocumented)
-export const setProp: <T>(node: TGENode, name: string, value: T, prev?: T | undefined) => T;
-
-// @public (undocumented)
-export function setRendererBackend(backend: RendererBackend | null): void;
-
-// @public (undocumented)
 export function setSelection(sel: TextSelection | null): void;
-
-// @public (undocumented)
-export const setupExitHandlers: typeof installExitHandlers;
 
 // @public
 export type ShadowConfig = {
@@ -2152,14 +896,6 @@ export type ShadowConfig = {
     y: number;
     blur: number;
     color: string | number;
-};
-
-// @public (undocumented)
-export type ShadowDef = {
-    x: number;
-    y: number;
-    blur: number;
-    color: number;
 };
 
 // @public (undocumented)
@@ -2174,12 +910,6 @@ export type ShapeStyle = {
     };
 };
 
-// @public (undocumented)
-export function shouldFreezeInteractionLayer(node: TGENode | null | undefined): boolean;
-
-// @public (undocumented)
-export function shouldPromoteInteractionLayer(node: TGENode | null | undefined): boolean;
-
 export { Show }
 
 // @public (undocumented)
@@ -2187,14 +917,6 @@ export type SimpleHighlight = [number, number, string];
 
 // @public (undocumented)
 export type SimpleThemeRules = Record<string, string | number>;
-
-// @public
-export const SIZING: {
-    readonly FIT: 0;
-    readonly GROW: 1;
-    readonly PERCENT: 2;
-    readonly FIXED: 3;
-};
 
 // @public (undocumented)
 export type SizingInfo = {
@@ -2215,9 +937,6 @@ export type SizingPx = `${number}px`;
 export type SizingUnit = number | SizingKeyword | SizingPercent | SizingPx;
 
 // @public (undocumented)
-export function skew(degreesX: number, degreesY: number): Matrix3;
-
-// @public (undocumented)
 export type SlotComponent = () => JSX.Element;
 
 // @public (undocumented)
@@ -2228,12 +947,6 @@ export type SlotRegistry = {
     clear: () => void;
     version: () => number;
 };
-
-// @public (undocumented)
-export const solidRender: (code: () => TGENode, node: TGENode) => () => void;
-
-// @public
-export function spread<T>(node: TGENode, accessor: (() => T) | T, skipChildren?: boolean): void;
 
 // @public (undocumented)
 export type SpringConfig = {
@@ -2348,93 +1061,12 @@ export type TextCmd = {
 };
 
 // @public (undocumented)
-export type TextMeta = {
-    nodeId: number;
-    content: string;
-    fontId: number;
-    fontSize: number;
-    lineHeight: number;
-    fontFamily?: string;
-    fontWeight?: number;
-    fontStyle?: string;
-};
-
-// @public (undocumented)
-export type TextRenderOp = {
-    kind: "text";
-    text: string;
-    fontId: number;
-    fontSize: number;
-    lineHeight: number;
-    maxWidth: number;
-    textHeight: number;
-} & BaseRenderOpFields;
-
-// @public (undocumented)
 export type TextSelection = {
     text: string;
     sourceId: number;
     start: number;
     end: number;
 };
-
-// @public (undocumented)
-export const TGE_NODE_KIND: {
-    readonly BOX: "box";
-    readonly TEXT: "text";
-    readonly IMG: "img";
-    readonly CANVAS: "canvas";
-    readonly ROOT: "root";
-};
-
-// @public (undocumented)
-export type TGENode = {
-    kind: TGENodeKind;
-    props: TGEProps;
-    text: string;
-    children: TGENode[];
-    parent: TGENode | null;
-    id: number;
-    destroyed: boolean;
-    layout: LayoutRect;
-    _flexNode: Node_2 | null;
-    _hovered: boolean;
-    _active: boolean;
-    _focused: boolean;
-    _imageExtra: NodeImageExtra | null;
-    _canvasExtra: NodeCanvasExtra | null;
-    _widthSizing: SizingInfo | null;
-    _heightSizing: SizingInfo | null;
-    _styleKeys?: Set<string>;
-    _transform: Float64Array | null;
-    _transformInverse: Float64Array | null;
-    _accTransform: Float64Array | null;
-    _accTransformInverse: Float64Array | null;
-    _interactionMode: InteractionMode;
-    _vp: TGEProps | null;
-    _vpDirty: boolean;
-    _vpEpoch?: number;
-    _siblingIndex: number;
-    _focusableCount: number;
-    _dfsIndex: number;
-    _depth: number;
-    _scrollContainerId: number;
-    _stableFrameCount: number;
-    _unstableFrameCount: number;
-    _autoLayer: boolean;
-    _layerKey: string | null;
-    _lastMeasuredText: string | null;
-    _lastMeasuredFontId: number;
-    _lastMeasuredFontSize: number;
-    _lastMeasurement: {
-        width: number;
-        height: number;
-    } | null;
-    _dirtyTracker?: DirtyTracker | null;
-};
-
-// @public (undocumented)
-export type TGENodeKind = (typeof TGE_NODE_KIND)[keyof typeof TGE_NODE_KIND];
 
 // @public (undocumented)
 export type TgePlugin<Context = {}> = {
@@ -2598,14 +1230,6 @@ export type Token = {
     color: number;
 };
 
-// @public (undocumented)
-export function transformBounds(m: Matrix3, w: number, h: number): {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-};
-
 // @public
 export type TransformConfig = {
     translateX?: number;
@@ -2622,20 +1246,6 @@ export type TransformConfig = {
 };
 
 // @public (undocumented)
-export function transformPoint(m: Matrix3, x: number, y: number): {
-    x: number;
-    y: number;
-};
-
-// @public
-export type TransformQuad = {
-    p0: Point2D;
-    p1: Point2D;
-    p2: Point2D;
-    p3: Point2D;
-};
-
-// @public (undocumented)
 export type TransitionConfig = {
     duration?: number;
     easing?: EasingFn;
@@ -2644,35 +1254,6 @@ export type TransitionConfig = {
         nodeId: number;
         property: CompositorProperty;
     };
-};
-
-// @public (undocumented)
-export function translate(tx: number, ty: number): Matrix3;
-
-// @public (undocumented)
-export function translateRect(rect: DamageRect, dx: number, dy: number): DamageRect;
-
-// Warning: (ae-forgotten-export) The symbol "TRANSMISSION_MODE" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export type TransmissionMode = (typeof TRANSMISSION_MODE)[keyof typeof TRANSMISSION_MODE];
-
-// @public (undocumented)
-export const TRANSPORT_FAILURE_REASON: {
-    readonly PROBE_FAILED: "probe_failed";
-    readonly SHM_OPEN_FAILED: "shm_open_failed";
-    readonly FTRUNCATE_FAILED: "ftruncate_failed";
-    readonly MMAP_FAILED: "mmap_failed";
-    readonly FILE_WRITE_FAILED: "file_write_failed";
-    readonly RUNTIME_TRANSPORT_ERROR: "runtime_transport_error";
-};
-
-// @public (undocumented)
-export const TRANSPORT_HEALTH: {
-    readonly UNKNOWN: "unknown";
-    readonly HEALTHY: "healthy";
-    readonly DEGRADED: "degraded";
-    readonly UNSUPPORTED: "unsupported";
 };
 
 // @public (undocumented)
@@ -2685,25 +1266,7 @@ export class TreeSitterClient {
 }
 
 // @public (undocumented)
-export function unbindLoop(loop?: RenderLoop): void;
-
-// @public (undocumented)
-export function unionRect(a: DamageRect, b: DamageRect): DamageRect;
-
-// @public (undocumented)
 export function unregisterFont(id: number): boolean;
-
-// @public (undocumented)
-export function unregisterNodeFocusable(node: TGENode): void;
-
-// @public (undocumented)
-export function updateNodeFocusEntry(node: TGENode): void;
-
-// @public
-export function updateScrollContainerGeometry(scrollId: string, viewportWidth: number, viewportHeight: number, contentWidth: number, contentHeight: number): void;
-
-// @public
-export function use<A, T>(fn: (element: NodeHandle, arg: A) => T, element: TGENode, arg?: A): T;
 
 export { useContext }
 
@@ -2749,191 +1312,6 @@ export function useTerminalDimensions(terminal: Terminal): {
 };
 
 // @public (undocumented)
-export const VEXART_SYMBOLS: {
-    readonly vexart_version: {
-        readonly args: [];
-        readonly returns: FFIType.uint32_t;
-    };
-    readonly vexart_context_create: {
-        readonly args: [FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_context_destroy: {
-        readonly args: [FFIType.uint64_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_paint_dispatch: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_paint_upload_image: {
-        readonly args: [FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.uint32_t, FFIType.uint32_t, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_paint_remove_image: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_composite_target_create: {
-        readonly args: [FFIType.uint64_t, FFIType.uint32_t, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_composite_target_destroy: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_composite_target_begin_layer: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint32_t, FFIType.uint32_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_composite_target_end_layer: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_composite_target_set_scissor: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint32_t, FFIType.uint32_t, FFIType.uint32_t, FFIType.uint32_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_composite_target_reset_scissor: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_composite_render_image_layer: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.float, FFIType.float, FFIType.float, FFIType.float, FFIType.uint32_t, FFIType.uint32_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_composite_render_image_transform_layer: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_composite_update_uniform: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_composite_copy_region_to_image: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint32_t, FFIType.uint32_t, FFIType.uint32_t, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_composite_image_filter_backdrop: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_composite_image_mask_rounded_rect: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_composite_image_mask_rounded_rect_region: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_composite_readback_rgba: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_composite_readback_region_rgba: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_kitty_set_transport: {
-        readonly args: [FFIType.uint64_t, FFIType.uint32_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_kitty_shm_prepare: {
-        readonly args: [FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_kitty_shm_release: {
-        readonly args: [FFIType.uint64_t, FFIType.uint32_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_kitty_emit_frame_with_stats: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_kitty_emit_layer: {
-        readonly args: [FFIType.uint64_t, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_kitty_emit_layer_target: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_kitty_emit_region_target: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_kitty_delete_layer: {
-        readonly args: [FFIType.uint64_t, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_layer_upsert: {
-        readonly args: [FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_layer_reuse: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_layer_remove: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_layer_clear: {
-        readonly args: [FFIType.uint64_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_layer_present_dirty: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t, FFIType.uint64_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_resource_get_stats: {
-        readonly args: [FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_resource_set_budget: {
-        readonly args: [FFIType.uint64_t, FFIType.uint32_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_image_asset_register: {
-        readonly args: [FFIType.uint64_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.uint32_t, FFIType.ptr, FFIType.ptr];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_image_asset_touch: {
-        readonly args: [FFIType.uint64_t, FFIType.uint64_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_image_asset_retain: {
-        readonly args: [FFIType.uint64_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_image_asset_release: {
-        readonly args: [FFIType.uint64_t];
-        readonly returns: FFIType.int32_t;
-    };
-    readonly vexart_get_last_error_length: {
-        readonly args: [];
-        readonly returns: FFIType.uint32_t;
-    };
-    readonly vexart_copy_last_error: {
-        readonly args: [FFIType.ptr, FFIType.uint32_t];
-        readonly returns: FFIType.uint32_t;
-    };
-};
-
-// @public (undocumented)
-export function vexartGetLastError(): string;
-
-// @public (undocumented)
-export class VexartNativeError extends Error {
-    constructor(code: number, message: string);
-    // (undocumented)
-    readonly code: number;
-}
-
-// @public (undocumented)
-export function vexartVersion(): number;
-
-// @public (undocumented)
 export type Viewport = {
     x: number;
     y: number;
@@ -2947,14 +1325,9 @@ export type ViewportConfig = {
     zoom: number;
 };
 
-// @public (undocumented)
-export function wrapPassthrough(raw: string): string;
-
 // Warnings were encountered during analysis:
 //
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node-types.d.ts:379:5 - (ae-forgotten-export) The symbol "NodeImageExtra" needs to be exported by the entry point index.d.ts
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node-types.d.ts:381:5 - (ae-forgotten-export) The symbol "NodeCanvasExtra" needs to be exported by the entry point index.d.ts
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/loop/debug.d.ts:85:5 - (ae-forgotten-export) The symbol "NativeFrameExecutionStats" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/loop/animation.d.ts:58:9 - (ae-forgotten-export) The symbol "CompositorProperty" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

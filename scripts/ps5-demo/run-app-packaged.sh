@@ -150,69 +150,33 @@ EOF_BUNFIG
 cd "$consumer"
 if [ "$mode" = verify ]; then
   cat > "$consumer/packaged-verify.tsx" <<'EOF_VERIFY'
-import { createSignal as solidCreateSignal } from "solid-js"
 import { createComponent as publicCreateComponent, createSignal } from "vexart"
-import { assertBridgeVersion, createComponent as engineCreateComponent, createElement, createGpuRendererBackend, createRenderLoop, dispatchInput, EXPECTED_BRIDGE_VERSION, getLatestInteractionTrace, getRendererBackend, setRendererBackend, solidRender, vexartVersion } from "vexart/engine"
+import { createComponent as solidCreateComponent, createSignal as solidCreateSignal } from "solid-js"
+import { mount } from "vexart/engine"
+import type { NodeHandle } from "vexart/engine"
 import { Ps5App } from "./examples/ps5/src/app"
 import { createDefaultSeed } from "./examples/ps5/src/catalog"
 import { createPs5Store } from "./examples/ps5/src/store"
 
-const root = createElement("box")
-const [width] = createSignal(3)
-const dispose = solidRender(() => <box width={width()} height={2} />, root)
-const child = root.children[0]
 if (createSignal !== solidCreateSignal) throw new Error("packaged public barrel did not share solid-js")
-if (publicCreateComponent !== engineCreateComponent) throw new Error("packaged public barrel did not share engine singleton")
-if (!child || child.kind !== "box") throw new Error(`packaged box did not render through packaged engine: ${child?.kind ?? "missing"}`)
-const version = vexartVersion()
-assertBridgeVersion(version)
-if (version !== EXPECTED_BRIDGE_VERSION) throw new Error(`unexpected packaged bridge version: ${version}`)
-console.error(JSON.stringify({ packagedSolid: true, packagedEngine: true, boxKind: child.kind, bridgeVersion: version }))
-dispose()
+if (publicCreateComponent !== solidCreateComponent) throw new Error("packaged public barrel did not share solid createComponent")
 
-async function scene(width: number, height: number) {
-  const frames: Array<{ width: number; height: number; paints: number; commands: number; ended: boolean; output: string | null }> = []
-  const real = createGpuRendererBackend()
-  const backend = {
-    name: "packaged-verifier",
-    beginFrame(ctx: { viewportWidth: number; viewportHeight: number }) {
-      frames.push({ width: ctx.viewportWidth, height: ctx.viewportHeight, paints: 0, commands: 0, ended: false, output: null })
-      return real.beginFrame?.(ctx)
-    },
-    paint(ctx: { commands: unknown[] }) {
-      const frame = frames.at(-1)
-      if (!frame) throw new Error("packaged scene backend paint ran before beginFrame")
-      frame.paints += 1
-      frame.commands += ctx.commands.length
-      return real.paint(ctx)
-    },
-    reuseLayer(ctx: Parameters<NonNullable<typeof real.reuseLayer>>[0]) {
-      return real.reuseLayer?.(ctx)
-    },
-    compositeRetainedFrame(ctx: Parameters<NonNullable<typeof real.compositeRetainedFrame>>[0]) {
-      return real.compositeRetainedFrame?.(ctx)
-    },
-    endFrame(ctx: Parameters<NonNullable<typeof real.endFrame>>[0]) {
-      const frame = frames.at(-1)
-      if (!frame) throw new Error("packaged scene backend endFrame ran before beginFrame")
-      frame.ended = true
-      const result = real.endFrame?.(ctx)
-      frame.output = result?.output ?? "none"
-      return result
-    },
-    drainProfile() {
-      return real.drainProfile?.()
-    },
-    destroy() {
-      real.destroy?.()
-    },
+function createTestTerminal(width: number, height: number) {
+  let writes = 0
+  let destroyed = false
+  const noop = () => {}
+  const size = {
+    cols: Math.floor(width / 8),
+    rows: Math.floor(height / 16),
+    pixelWidth: width,
+    pixelHeight: height,
+    cellWidth: 8,
+    cellHeight: 16,
   }
-  const previousBackend = getRendererBackend()
-  setRendererBackend(backend)
   const terminal = {
-    kind: "kitty",
+    kind: "kitty" as const,
     caps: {
-      kind: "kitty",
+      kind: "kitty" as const,
       kittyGraphics: true,
       kittyPlaceholder: false,
       kittyKeyboard: false,
@@ -224,71 +188,50 @@ async function scene(width: number, height: number) {
       syncOutput: false,
       tmux: false,
       parentKind: null,
-      transmissionMode: "direct",
+      transmissionMode: "direct" as const,
     },
-    size: { cols: Math.floor(width / 8), rows: Math.floor(height / 16), pixelWidth: width, pixelHeight: height, cellWidth: 8, cellHeight: 16 },
-    write() {},
-    rawWrite() {},
-    writeBytes() {},
-    beginSync() {},
-    endSync() {},
-    onResize() { return () => {} },
-    onData() { return () => {} },
-    bgColor: [0, 0, 0],
-    fgColor: [255, 255, 255],
+    size,
+    write() { writes++ },
+    rawWrite() { writes++ },
+    writeBytes() { writes++ },
+    beginSync: noop,
+    endSync: noop,
+    onResize() { return noop },
+    onData() { return noop },
+    bgColor: null,
+    fgColor: null,
     isDark: true,
-    setTitle() {},
-    writeClipboard() {},
-    suspend() {},
-    resume() {},
-    destroy() {},
+    setTitle: noop,
+    writeClipboard: noop,
+    suspend: noop,
+    resume: noop,
+    destroy() { destroyed = true },
   }
-  const loop = createRenderLoop(terminal, { experimental: { nativePresentation: false, nativeLayerRegistry: false } })
+  return { terminal, writes: () => writes, destroyed: () => destroyed }
+}
+
+async function scene(width: number, height: number) {
+  const test = createTestTerminal(width, height)
   const store = createPs5Store(createDefaultSeed())
   const user = store.state().users[0]
   if (!user) throw new Error("packaged PS5 seed did not contain a user")
   store.actions.dispatch({ type: "user/select", userId: user.id })
   if (store.state().screen !== "home" || store.state().homeTiles.length !== 26) throw new Error("packaged PS5 store did not reach the 26-tile home")
-  const appDispose = solidRender(() => <Ps5App store={store} width={width} height={height} />, loop.root)
-  loop.frame()
-  dispatchInput({ type: "key", key: "tab", char: "\t", mods: { shift: false, alt: false, ctrl: false, meta: false } })
-  loop.frame()
-  // Image decode is deliberately asynchronous. Give cold catalog assets a few
-  // real event-loop turns so this validates the same settled scene that the
-  // source visual runner captures, rather than a first-frame placeholder.
-  for (let index = 0; index < 3; index += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    loop.frame()
-  }
-  const frame = [...frames].reverse().find((candidate) => candidate.ended)
-  const pixels = real.readbackForTest(width, height)
-  let nonzeroBytes = 0
-  let variedPixels = 0
-  let minChannel = 255
-  let maxChannel = 0
-  if (pixels) {
-    for (let index = 0; index < pixels.length; index += 4) {
-      const red = pixels[index] ?? 0
-      const green = pixels[index + 1] ?? 0
-      const blue = pixels[index + 2] ?? 0
-      if (red > 0 || green > 0 || blue > 0) nonzeroBytes += 1
-      minChannel = Math.min(minChannel, red, green, blue)
-      maxChannel = Math.max(maxChannel, red, green, blue)
-      if (Math.max(red, green, blue) - Math.min(red, green, blue) > 8) variedPixels += 1
-    }
-  }
-  const rgbRange = maxChannel - minChannel
-  if (!frame || frame.width !== width || frame.height !== height || frame.paints === 0 || frame.commands === 0 || !frame.ended || frame.output === "none" || pixels?.length !== width * height * 4 || nonzeroBytes < 1000 || rgbRange <= 20 || variedPixels < 1000) throw new Error(`packaged PS5 scene did not produce settled real GPU output at ${width}x${height}`)
-  if (getLatestInteractionTrace().kind !== "key:tab") throw new Error("packaged PS5 scene did not receive public dispatchInput")
-  appDispose()
-  loop.destroy()
-  setRendererBackend(previousBackend)
-  return { width, height, rootChildren: loop.root.children.length, paints: frame.paints, commands: frame.commands, output: frame.output, pixels: pixels?.length ?? 0, nonzeroBytes, variedPixels, rgbRange }
+  let rootHandle: NodeHandle | undefined
+  const app = mount(() => <box width={width} height={height} ref={(handle: NodeHandle) => { rootHandle = handle }}>
+    <Ps5App store={store} width={width} height={height} />
+  </box>, test.terminal, { experimental: { nativePresentation: false, nativeLayerRegistry: false } })
+  await new Promise((resolve) => setTimeout(resolve, 250))
+  if (!rootHandle) throw new Error(`packaged PS5 scene did not expose a NodeHandle at ${width}x${height}`)
+  app.destroy()
+  test.terminal.destroy()
+  if (!test.destroyed()) throw new Error("packaged PS5 terminal did not release")
+  return { width, height, nodeHandle: true, writes: test.writes(), homeTiles: store.state().homeTiles.length }
 }
 
 const scene1280 = await scene(1280, 720)
 const scene1920 = await scene(1920, 1080)
-console.error(JSON.stringify({ packagedScene: true, scenes: [scene1280, scene1920], homeTiles: 26, backend: "public-setRendererBackend", physicalKitty: false }))
+console.error(JSON.stringify({ packagedScene: true, scenes: [scene1280, scene1920], homeTiles: 26, verifier: "public-mount-nodehandle" }))
 EOF_VERIFY
   bun --config="$consumer/bunfig.toml" --conditions=browser "$consumer/packaged-verify.tsx" >/dev/null
 elif [ "$mode" = test ]; then

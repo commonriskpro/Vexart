@@ -225,7 +225,8 @@ Use the `useFocus()` hook when:
 - You need the focus ID for external reference
 
 ```tsx
-import { useFocus, Show } from "vexart/engine"
+import { useFocus } from "vexart/engine"
+import { Show } from "vexart"
 
 function SearchInput(props: { onSearch: (q: string) => void }) {
   const { focused, focus, id } = useFocus({

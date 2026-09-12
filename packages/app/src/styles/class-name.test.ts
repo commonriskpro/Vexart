@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test"
 import { createEffect, createRoot } from "solid-js"
-import { getClassNameResolver } from "@vexart/engine"
+import { getClassNameResolver } from "@vexart/engine/internal"
 import { darkTheme, lightTheme, setTheme } from "@vexart/styled"
 import { CLASS_NAME_UNKNOWN_BEHAVIOR, clearClassNameCache, createStyles, mergeClassNameProps, resolveClassName } from "./class-name"
 

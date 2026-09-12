@@ -5,6 +5,8 @@
     "baseUrl": ".",
     "paths": {
       "@vexart/engine": ["./.api-extractor-temp/packages/engine/src/index.d.ts"],
+      "@vexart/engine/jsx-runtime": ["./.api-extractor-temp/packages/engine/src/jsx-runtime.d.ts"],
+      "@vexart/engine/internal": ["./.api-extractor-temp/packages/engine/src/internal.d.ts"],
       "@vexart/headless": ["./.api-extractor-temp/packages/headless/src/index.d.ts"],
       "@vexart/styled": ["./.api-extractor-temp/packages/styled/src/index.d.ts"],
       "@vexart/app": ["./.api-extractor-temp/packages/app/src/index.d.ts"]

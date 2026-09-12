@@ -8,7 +8,7 @@ import {
   resetFocus,
   setFocusedId,
   type TGENode,
-} from "@vexart/engine"
+} from "@vexart/engine/internal"
 import { Input } from "./input"
 
 type NodeComponent = (props: any) => TGENode

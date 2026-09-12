@@ -8,7 +8,8 @@
 
 import { createSignal, For, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import { useFocus, onPostScroll, markDirty, type SizingUnit } from "@vexart/engine"
+import { useFocus, type SizingUnit } from "@vexart/engine"
+import { onPostScroll, markDirty } from "@vexart/engine/internal"
 import { useScrollHandle } from "../helpers/use-scroll"
 
 // ── Types ──

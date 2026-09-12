@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { createNode, dispatchFocusInput, focusedId, resetFocus, setFocus, solidRender, type TGENode } from "@vexart/engine"
+import { focusedId, setFocus } from "@vexart/engine"
+import { createNode, dispatchFocusInput, resetFocus, solidRender, type TGENode } from "@vexart/engine/internal"
 import { VoidButton, type VoidButtonProps } from "./button"
 
 const browserRuntime = import.meta.resolve("solid-js").endsWith("/solid.js")

@@ -2,7 +2,7 @@
  * Bun preload plugin for Vexart consumers.
  *
  * Transforms .tsx/.jsx files through babel-preset-solid with
- * { generate: "universal", moduleName: "vexart/engine" }.
+ * { generate: "universal", moduleName: "vexart/jsx-runtime" }.
  *
  * Setup in your bunfig.toml:
  *   preload = ["vexart/solid-plugin"]
@@ -25,7 +25,7 @@ plugin({
             "babel-preset-solid",
             {
               generate: "universal",
-              moduleName: "vexart/engine",
+              moduleName: "vexart/jsx-runtime",
             },
           ],
           ["@babel/preset-typescript", { onlyRemoveTypeImports: true }],

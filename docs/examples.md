@@ -83,7 +83,11 @@ function App() {
 await createApp(() => <App />)
 ```
 
-`createApp()` is the default examples pattern. Use `mountApp()` when you need custom app bootstrapping, or `mount()` from `@vexart/engine` (via `"vexart/engine"`) only for low-level integrations that manage terminal creation manually.
+`createApp()` is the default examples pattern. Use `mountApp()` when you need
+custom app bootstrapping, or `mount()` from `@vexart/engine` (via
+`"vexart/engine"`) only when an integration already owns the explicit terminal
+boundary. Terminal creation, render-loop construction, and native/FFI control
+are internal runtime responsibilities.
 
 ## Image and canvas intrinsics
 

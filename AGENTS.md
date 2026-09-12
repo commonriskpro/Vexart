@@ -43,9 +43,10 @@ TypeScript-owned scene graph with a Rust/WGPU native rendering boundary.
 
 ## Critical runtime invariant
 
-The published `vexart.js` barrel and `engine.js` must share one SolidJS
-universal reconciler instance. Consumer JSX compiles with
-`moduleName: "vexart/engine"`; see
+The published `vexart.js`, public `engine.js`, and compiler `jsx-runtime.js`
+entrypoints must share one SolidJS universal reconciler instance. Consumer JSX
+compiles with `moduleName: "vexart/jsx-runtime"`; compiler helpers and workspace
+engine internals are not supported application APIs. See
 [docs/AI-REFERENCE.md](docs/AI-REFERENCE.md)
 for details.
 

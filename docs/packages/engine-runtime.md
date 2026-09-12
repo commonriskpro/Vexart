@@ -2,6 +2,19 @@
 
 The `@vexart/engine` package is the foundational runtime of Vexart. It orchestrates SolidJS universal reconciliation, the retained TypeScript scene graph, Flexily layout calculations, render graph compilation, the fast-path compositor, the frame scheduler, terminal I/O lifecycle, input parsing, focus graphs, and transform-aware hit-testing.
 
+> **Maintainer implementation reference:** This document describes the private
+> scene tree, layout, reconciler, render loop, renderer/native bridge, and FFI
+> internals. The code snippets below are not consumer import recipes. The
+> published `vexart/engine` boundary contains `mount()`, `createTerminal()`,
+> user-facing hooks/types, and supported debug controls; use
+> `createApp()`/`mountApp()` from `vexart` for
+> normal applications.
+>
+> JSX is compiled through the shared reconciler using the published
+> `vexart/jsx-runtime`. The workspace-only `@vexart/engine/jsx-runtime` is
+> compiler wiring, while `@vexart/engine/internal` is reserved for maintainers
+> and tests and is not published.
+
 ---
 
 ## 1. SolidJS Universal Reconciler
@@ -154,39 +167,6 @@ export type TGENode = {
 
   /** Consecutive frames this node/layer remained clean (for auto-layer heuristic) */
   _stableFrameCount: number
-}
-```
-
-  children: TGENode[]
-  parent: TGENode | null
-  destroyed: boolean
-  layout: { x: number; y: number; width: number; height: number }
-  
-  // Layout Backing
-  _flexNode: flexily.Node | null
-  
-  // Interaction & Focus
-  _hovered: boolean
-  _active: boolean
-  _focused: boolean
-  _focusableCount: number
-  _interactionMode: "none" | "drag"
-  
-  // Transform Matrices (3x3 projective matrices stored column-major)
-  _transform: Matrix3x3 | null
-  _transformInverse: Matrix3x3 | null
-  _accTransform: Matrix3x3 | null
-  _accTransformInverse: Matrix3x3 | null
-  
-  // Retained Compositing & Layer Backing
-  _autoLayer: boolean
-  _layerKey: string | null
-  _stableFrameCount: number
-  _unstableFrameCount: number
-  _scrollContainerId: number
-  _siblingIndex: number
-  _depth: number
-  _dfsIndex: number
 }
 ```
 

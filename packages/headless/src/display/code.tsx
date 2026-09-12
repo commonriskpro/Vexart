@@ -15,7 +15,7 @@ import {
   type Token,
   type SizingUnit,
 } from "@vexart/engine"
-import { markDirty } from "@vexart/engine"
+import { markDirty } from "@vexart/engine/internal"
 
 const LINE_HEIGHT = 17
 const CHAR_WIDTH = 9

@@ -2,11 +2,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import {
   createComponent,
-  focusedId,
   resetFocus,
   setFocusedId,
-  type NodeMouseEvent,
-} from "@vexart/engine"
+} from "@vexart/engine/internal"
+import { focusedId, type NodeMouseEvent } from "@vexart/engine"
 import { Slider, type SliderRenderContext } from "./slider"
 
 const dummyMouseEvent: NodeMouseEvent = {

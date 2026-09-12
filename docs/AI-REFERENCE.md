@@ -41,6 +41,20 @@ All FFI exports from `libvexart` adhere strictly to the ARM64 register calling c
 ### Critical Execution Invariant
 The consumer barrel `vexart` and engine `vexart/engine` share a single universal reconciler instance. Code runs inside the **Bun** runtime with `--conditions=browser` and `--preload ./solid-plugin.ts` to execute JSX without a browser DOM.
 
+### Public engine boundary
+The published `vexart/engine` entry point supports `mount`, `createTerminal`,
+user-facing hooks, public types such as `NodeHandle`, and the debug controls
+`toggleDebug`, `setDebug`, `isDebugEnabled`, `debugDumpTree`, and
+`debugStatsLine`. Keep one internal scene/layout tree and use the cached
+`NodeHandle` for refs; never construct or reach into raw nodes. `createNode`,
+`createRenderLoop`, `solidRender`, `createHandle`, layout internals,
+native/renderer backends, FFI bindings, and diagnostic state/culling helpers
+(`debugState`, `debugDumpCulledNodes`) are implementation-only. JSX uses the
+shared reconciler via published `vexart/jsx-runtime`;
+`@vexart/engine/jsx-runtime` is workspace compiler wiring, and
+`@vexart/engine/internal` is workspace-only for maintainers/tests, not a
+published import path.
+
 ---
 
 ## 2. Core Mental Model & Reactivity Rules
@@ -701,7 +715,7 @@ import {
   RouterProvider,
   useRouter,
 
-  // Engine Hooks & Utilities (@vexart/engine)
+  // Engine Hooks (@vexart/engine; also re-exported by vexart)
   useFocus,
   setFocus,
   focusedId,

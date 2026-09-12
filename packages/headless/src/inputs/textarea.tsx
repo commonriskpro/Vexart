@@ -41,8 +41,6 @@ import type { JSX } from "solid-js"
 import {
   useFocus,
   onInput,
-  markDirty,
-  setFocusedId,
   ExtmarkManager,
   type Extmark,
   type SyntaxStyle,
@@ -50,6 +48,7 @@ import {
   getTreeSitterClient,
   highlightsToTokens,
 } from "@vexart/engine"
+import { markDirty, setFocusedId } from "@vexart/engine/internal"
 import type { KeyEvent } from "@vexart/engine"
 import { useDisabled } from "../helpers/disabled"
 import { nextCodePointOffset, previousCodePointOffset } from "./text-offset"

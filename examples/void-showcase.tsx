@@ -9,7 +9,7 @@
 import { createSignal, Show } from "solid-js"
 import { untrack } from "solid-js"
 import type { JSX } from "solid-js"
-import { useTerminalDimensions, SyntaxStyle, ONE_DARK, setDebug, debugStatsLine, onInput } from "@vexart/engine"
+import { useTerminalDimensions, SyntaxStyle, ONE_DARK, debugStatsLine, onInput } from "@vexart/engine"
 import { createApp, useAppTerminal } from "@vexart/app"
 import {
   // Tokens
@@ -580,8 +580,6 @@ function App() {
 
   // Keep the default example graphics-only. Diagnostics are opt-in because
   // stderr text can overwrite a Kitty graphics frame while it is displayed.
-  if (showcaseDebug) setDebug(true)
-
   // Instrument tab switches
   function onTabSwitch(index: number) {
     const t0 = performance.now()

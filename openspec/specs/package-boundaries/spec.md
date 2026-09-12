@@ -185,3 +185,17 @@ File moves performed during package consolidation SHOULD use `git mv` rather tha
 - **When** consolidation review checks history continuity
 - **Then** the move is treated as non-compliant with the preservation guideline
 - **And** a history-preserving move SHOULD be used where feasible
+
+### Public application API versus implementation entrypoints
+
+Applications MUST receive `NodeHandle` from JSX refs and directives. Raw retained
+nodes, native bridges, render-loop coordinators, scene mutation helpers and the
+compiler's element-construction helpers MUST NOT be exported by the public engine
+entrypoint. Applications mount through the supported app lifecycle or `mount()`.
+
+Workspace maintainers MAY import implementation APIs through
+`@vexart/engine/internal`; that entrypoint MUST NOT be present in the distributed
+package export map. The reserved `vexart/jsx-runtime` entrypoint serves generated
+JSX code, not a second supported raw-node application API. The public framework,
+engine and compiler entrypoints MUST use the same reconciler instance and internal
+scene tree.

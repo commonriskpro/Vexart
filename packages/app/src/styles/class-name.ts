@@ -1,4 +1,5 @@
-import { setClassNameResolver, type InteractiveStyleProps } from "@vexart/engine"
+import { type InteractiveStyleProps } from "@vexart/engine"
+import { setClassNameResolver } from "@vexart/engine/internal"
 import { themeColors, font, radius, shadows, glows, space, weight, getThemeVersion } from "@vexart/styled"
 
 /** @public */

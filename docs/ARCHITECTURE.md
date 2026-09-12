@@ -26,6 +26,13 @@ prose mismatch as an automatic stop.
 phase migrations and target structures. The `Appendix A` lists known deviations
 and the phase context that produced them.
 
+The published `@vexart/engine` boundary contains `mount`, `createTerminal`,
+user-facing hooks/types, and supported debug controls. The implementation
+details below are for maintainers and tests; raw node/layout/reconciler/
+render-loop/native/FFI imports and diagnostic state/culling helpers are not
+consumer API. Use `createApp()`/`mountApp()` from `vexart` for managed
+applications, or `mount()` for an explicit integration boundary.
+
 **Guidance for changes to this document**:
 - Update this reference intentionally when architecture decisions change; no
   particular proposal workflow is required.
@@ -172,7 +179,8 @@ PUBLIC PACKAGES (shipped to consumers)
                ▼
 ┌───────────────────────────────────┐
 │  @vexart/engine                   │  depends on: (nothing vexart-internal)
-│  — Reconciler, loop, FFI, hooks   │
+│  — Public mount/terminal/hooks/   │
+│    types/debug; internal loop/FFI │
 └──────────────┬────────────────────┘
                ▼
        libvexart (native cdylib, shipped as a
@@ -200,7 +208,7 @@ No other binaries exist. No other languages. If a task proposes adding a third r
 | Layer | Language | Why |
 |---|---|---|
 | App, Styled, Headless | TypeScript (with JSX) | Developer-facing API surface. Leverages SolidJS reactivity and Bun-native tooling. |
-| Engine | TypeScript | Public JS/JSX shell plus scene graph, Solid reactivity, walk-tree, Flexily layout, render graph generation, event dispatch, interaction, hooks, callback registry, handles, and compatibility/test/offscreen fallbacks. Bun runtime. |
+| Engine | TypeScript | Public `mount`, `createTerminal`, hooks/types, and debug controls over the internal scene graph, Solid reactivity, walk-tree, Flexily layout, render graph generation, event dispatch, interaction, callback registry, handles, and compatibility/test/offscreen fallbacks. Bun runtime. |
 | libvexart | Rust (cdylib) | Paint pipelines (WGPU), composite, Kitty encoding, SHM/file/direct transport, layer target lifecycle, image assets, resources, and native stats. Cross-platform. |
 | Shaders | WGSL | One shader language, runs on Metal, Vulkan, DX12 via WGPU. |
 
@@ -239,7 +247,7 @@ Each public package has a fixed internal layout. New files go into existing dire
 packages/engine/
 ├── package.json
 ├── src/
-│   ├── public.ts              — explicit public exports (512+ lines, see API-POLICY)
+│   ├── public.ts              — explicit public mount/terminal/hooks/types/debug exports (see API-POLICY)
 │   ├── index.ts               — re-exports public.ts (compatibility)
 │   ├── mount.ts               — mount(), RGBA, MouseButton, useTerminalDimensions
 │   │
@@ -1069,7 +1077,10 @@ export class VexartNativeError extends Error {
 
 - No implicit logging in hot paths. Every log is opt-in via env vars: `VEXART_DEBUG=1`, `VEXART_LOG_FPS=1`, `VEXART_LOG_EVICTION=1`.
 - Logs go to stderr (not stdout — stdout is the Kitty protocol channel).
-- `debugDumpTree()`, `debugDumpCulledNodes()` are explicit functions users call in their own debug flows.
+- `toggleDebug()`, `setDebug()`, `isDebugEnabled()`, `debugDumpTree()`, and
+  `debugStatsLine()` are supported public debug controls.
+- `debugState()` and `debugDumpCulledNodes()` are internal diagnostic helpers
+  used by maintainers and tests; they are not consumer imports.
 
 ---
 
@@ -1109,10 +1120,11 @@ Algorithm each frame:
 
 ### 11.3 Usage
 
-Factory pattern in `packages/engine/src/scheduler/index.ts`:
+Factory pattern in `packages/engine/src/scheduler/index.ts` (maintainer-only;
+not a published consumer import):
 
 ```ts
-import { createFrameScheduler } from '@vexart/engine'
+import { createFrameScheduler } from '@vexart/engine/internal'
 
 const scheduler = createFrameScheduler()
 
@@ -1352,7 +1364,8 @@ Not expected in v0.9. New primitives require PRD amendment because they are arch
 
 ### 15.1 Debug mode
 
-- Activated via `VEXART_DEBUG=1` or `toggleDebug()` at runtime.
+- Activated via `VEXART_DEBUG=1` or the public `toggleDebug()` diagnostic
+  helper at runtime.
 - Displays a terminal-rendered overlay with:
   - FPS (instant + p99)
   - GPU strategy (layered / sprite / full-redraw / full-layer)
@@ -1362,13 +1375,22 @@ Not expected in v0.9. New primitives require PRD amendment because they are arch
 
 ### 15.2 Programmatic introspection
 
-Public APIs for observability (exposed from `@vexart/engine`):
+The supported debug controls below are public consumer APIs. The diagnostic
+state, culling, and resource metrics that follow are implementation utilities
+for maintainers, tests, and diagnostics; they are not exposed from the
+published `@vexart/engine` entry point:
 
 ```ts
-debugDumpTree()                  — console.log-style TGENode tree
+// Public controls
+toggleDebug()                    — enable/disable debug overlay
+setDebug(enabled)                — set debug mode
+isDebugEnabled()                 — inspect debug mode
+debugDumpTree(handle)            — formatted subtree for a NodeHandle
+debugStatsLine()                 — one-line summary for logging
+
+// Internal diagnostics
 debugDumpCulledNodes()           — nodes skipped by viewport cull
 debugState()                     — current frame stats
-debugStatsLine()                 — one-line summary for logging
 getRendererResourceStats()       — ResourceManager stats
 getFontAtlasCacheStats()         — font/atlas cache stats
 getTextLayoutCacheStats()        — text layout cache stats
@@ -1383,7 +1405,10 @@ When `VEXART_TRACE=1`, the engine writes a Chrome-tracing-compatible JSON file t
 
 ## 16. Extension points
 
-Explicit places where user code or plugins can hook into Vexart. Everything else is internal.
+These interfaces describe internal implementation seams for maintainers and
+tests. They are not public consumer extension points; the published engine
+surface includes `mount`, `createTerminal`, user-facing hooks/types, and
+supported debug controls.
 
 ### 16.1 `RendererBackend`
 
@@ -1397,10 +1422,9 @@ export type RendererBackend = {
 }
 ```
 
-- Location: `packages/engine/src/public.ts`.
-- Default: `createGpuRendererBackend()` (WGPU).
-- Swap via `setRendererBackend(customBackend)`.
-- Use case: testing / instrumentation / experimental alternative backends.
+- Location: `packages/engine/src/ffi/`.
+- Default: the internal WGPU backend.
+- Consumer code must not swap renderer backends or import the native bridge.
 
 ### 16.2 Theme system
 
@@ -1476,21 +1500,24 @@ This section documents deviations between the current v0.1 codebase and the targ
 
 Quick index of the type contracts that agents reference most.
 
-### B.1 Core types (in `@vexart/engine`)
+### B.1 Core types (public and internal)
 
 | Type | Location | Purpose |
 |---|---|---|
-| `TGENode` | `ffi/node-types.ts` | TypeScript scene tree node |
-| `TGEProps` | `ffi/node-types.ts` | Prop contract for all primitives |
-| `PressEvent` | `reconciler/pointer.ts` | Event for `onPress` bubbling |
-| `NodeMouseEvent` | `input/types.ts` | Event for `onMouse*` per-node |
-| `Layer` | `ffi/layers.ts` | Compositing layer |
-| `WalkResult`, `LayoutFrame`, `LayerPlan`, `PaintResult`, `CompositeResult`, `EmitStats` | `loop/{phase}.ts` | Phase contracts |
-| `Terminal`, `Capabilities`, `TerminalSize` | `terminal/index.ts` | Terminal handle |
+| `NodeHandle` | `reconciler/handle.ts` | **Public** cached ref for the internal scene/layout tree; sole public node representation |
+| `TGEProps` | `ffi/node-types.ts` | **Public** intrinsic prop contract |
+| `PressEvent` | `reconciler/pointer.ts` | **Public** event for `onPress` bubbling |
+| `NodeMouseEvent` | `input/types.ts` | **Public** event for `onMouse*` per-node |
+| `TGENode` | `ffi/node-types.ts` | Internal TypeScript scene tree node; never a consumer import |
+| `Layer` | `ffi/layers.ts` | Internal compositing layer |
+| `WalkResult`, `LayoutFrame`, `LayerPlan`, `PaintResult`, `CompositeResult`, `EmitStats` | `loop/{phase}.ts` | Internal phase contracts |
+| `Terminal`, `TerminalOptions`, `Capabilities`, `TerminalKind`, `TerminalSize` | `terminal/index.ts` | Public terminal/mount contracts; lifecycle and transport internals remain private |
 
-### B.2 FFI functions (in `libvexart`)
+### B.2 FFI functions (maintainer-only, in `libvexart`)
 
-All exports prefixed `vexart_{module}_{action}`. Exactly 50 native functions are exported by `libvexart`:
+All exports prefixed `vexart_{module}_{action}` are native implementation
+details. Exactly 50 native functions are exported by `libvexart`; consumers do
+not import or call them directly:
 
 ```
 // Version & Lifecycle (3)
@@ -1572,10 +1599,10 @@ The exact list is maintained across `native/libvexart/src/lib.rs` (and submodule
 
 | Interface | Location |
 |---|---|
-| `RendererBackend` | `@vexart/engine` `public.ts` |
+| `RendererBackend` | `@vexart/engine` internal `ffi/` |
 | `ThemeDefinition`, `ColorTokens` | `@vexart/styled` `theme/` |
-| `FontDescriptor` | `@vexart/engine` `public.ts` |
-| `SlotRegistry`, `Slot` | `@vexart/engine` `public.ts` |
+| `FontDescriptor` | `@vexart/engine` internal text layout |
+| `SlotRegistry`, `Slot` | `@vexart/engine` internal reconciler |
 
 ---
 

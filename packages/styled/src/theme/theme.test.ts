@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { getThemeEpoch } from "@vexart/engine"
+import { getThemeEpoch } from "@vexart/engine/internal"
 import { darkTheme, getTheme, getThemeVersion, lightTheme, setTheme, themeColors } from "./theme"
 
 describe("theme", () => {

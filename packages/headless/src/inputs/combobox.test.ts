@@ -4,7 +4,7 @@ import {
   createComponent,
   createElement,
   type TGENode,
-} from "@vexart/engine"
+} from "@vexart/engine/internal"
 import {
   Combobox,
   type ComboboxInputContext,

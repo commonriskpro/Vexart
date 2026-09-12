@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, describe, expect, test } from "bun:test"
 import { createSignal } from "solid-js"
-import { createComponent, createElement, createTextNode, dispatchInput, getRendererBackend, insertNode, mount, resetFocus, setProp, setRendererBackend, type RendererBackend, type TGENode, type Terminal } from "@vexart/engine"
+import { createComponent, createElement, createTextNode, dispatchInput, getRendererBackend, insertNode, resetFocus, setProp, setRendererBackend, type RendererBackend, type TGENode } from "@vexart/engine/internal"
+import { mount, type Terminal } from "@vexart/engine"
 
 const browserRuntime = import.meta.resolve("solid-js").endsWith("/solid.js")
 

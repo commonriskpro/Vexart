@@ -18,8 +18,8 @@ import {
   solidRender,
   type RendererBackend,
   type TGENode,
-  type Terminal,
-} from "@vexart/engine"
+} from "@vexart/engine/internal"
+import type { Terminal } from "@vexart/engine"
 import { Dialog } from "../packages/headless/src/overlays/dialog"
 import { Popover, Tooltip } from "../packages/headless/src/overlays/tooltip"
 import { VoidDropdownMenu } from "../packages/styled/src/components/dropdown-menu"

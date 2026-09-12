@@ -85,7 +85,7 @@ import { createApp, useAppTerminal,
          Button, Input, Textarea, Checkbox, Dialog,
          colors, radius, space, VoidButton } from "vexart"
 
-// Low-level engine/runtime for advanced integrations
+// Public engine boundary for advanced integrations (mount, terminal, hooks, types)
 import { createTerminal, mount, useTerminalDimensions } from "vexart/engine"
 ```
 

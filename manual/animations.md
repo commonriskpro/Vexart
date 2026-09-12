@@ -251,14 +251,8 @@ This means:
 - When nothing moves, Vexart drops to 30fps to save CPU
 - The transition is invisible — framerate ramps up the moment you call `setValue()`
 
-You can check if animations are active:
-
-```tsx
-import { hasActiveAnimations } from "vexart/engine"
-
-// Returns true if any transition or spring is in progress
-const isAnimating = hasActiveAnimations()
-```
+The runtime tracks active animations internally and raises the frame cadence
+automatically; application code does not need to query the animation scheduler.
 
 ---
 
@@ -375,7 +369,7 @@ function AnimatedCounter(props: { value: number }) {
 ### Staggered list entrance
 
 ```tsx
-import { For } from "vexart/engine"
+import { For } from "vexart"
 
 function StaggeredList(props: { items: string[] }) {
   return (

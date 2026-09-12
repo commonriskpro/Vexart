@@ -1,71 +1,70 @@
 ---
 title: Engine API
-description: Complete public API surface of @vexart/engine.
+description: Public mount, terminal, hooks, types, and debug controls from @vexart/engine.
 ---
 
-The engine is the foundation layer. It provides the reconciler, render loop, FFI bridge, input system, and all low-level utilities.
+The engine entry point is the foundation boundary for custom integrations. Its
+published surface includes `mount()`, `createTerminal()`, user-facing hooks,
+the public types needed by those hooks and JSX refs, and supported debug
+controls. The retained scene, layout, reconciler, render-loop, native, and FFI
+machinery remains internal.
 
 ## Import
 
 ```tsx
-// Most users — via the barrel
-import { mount, createTransition, useFocus } from "vexart/engine"
+// Advanced integration — most applications should use createApp() instead
+import { createTerminal, mount, useFocus, useKeyboard } from "vexart/engine"
+import type { MountHandle, NodeHandle } from "vexart/engine"
 
-// Or from monorepo
-import { mount } from "@vexart/engine"
+// The published root package also exposes the app-facing hooks and JSX runtime.
+import { createApp } from "vexart"
 ```
 
-## Core
+`mount()` is the supported low-level entry point when an integration owns the
+terminal boundary. For normal applications, use `createApp()` or `mountApp()`
+from `vexart` so terminal and lifecycle ownership stays managed.
 
-- `createRenderLoop` — create the adaptive render loop
-- `mount` — mount a component tree to a terminal
-- `createTerminal` — create a terminal instance
-- `MouseButton`, `RGBA`, `useTerminalDimensions`, `decodePasteBytes`
+## Public hooks and types
 
-## Reconciler (SolidJS)
+User-facing hooks include focus, keyboard/mouse/input, drag/hover, animation,
+data, and terminal-dimension hooks. Public node refs use the cached
+`NodeHandle`; there is no public raw-node alternative.
 
-- `createComponent`, `createElement`, `createTextNode`, `insertNode`
-- `insert`, `spread`, `setProp`, `mergeProps`
-- `effect`, `memo`, `use`, `solidRender`
-- `For`, `Show`, `Switch`, `Match`, `Index`, `ErrorBoundary`
-- `createContext`, `useContext`
+```ts
+import {
+  useFocus,
+  useKeyboard,
+  useMouse,
+  useInput,
+  onInput,
+  useDrag,
+  useHover,
+  useQuery,
+  useMutation,
+  createTransition,
+  createSpring,
+  useTerminalDimensions,
+} from "vexart/engine"
+import type { NodeHandle, NodeMouseEvent, PressEvent } from "vexart/engine"
+```
 
-## Input & Interaction
+Supported debug controls are `toggleDebug`, `setDebug`, `isDebugEnabled`,
+`debugDumpTree`, and `debugStatsLine`.
 
-- `useKeyboard`, `useMouse`, `useInput`, `onInput`, `dispatchInput`
-- `useFocus`, `setFocus`, `focusedId`, `setFocusedId`, `pushFocusScope`, `resetFocus`
-- `setPointerCapture`, `releasePointerCapture`
-- `useDrag`, `useHover`
+SolidJS control-flow and reactivity primitives (`For`, `Show`, `createSignal`,
+etc.) are available from `vexart`; they are not a second reconciler entry point.
 
-## Animation
+## Reserved internal entry points
 
-- `createTransition`, `createSpring`, `easing`
-- `hasActiveAnimations`, `boostWindowFor`, `hasRecentInteraction`
+The following are implementation details and must not be imported by consumers:
+raw node creation (`createNode`, `createHandle`), reconciler helpers
+(`createElement`, `solidRender`), manual render-loop construction
+(`createRenderLoop`), layout internals, renderer/native backends, FFI symbols,
+diagnostic state/culling helpers (`debugState`, `debugDumpCulledNodes`), and
+other engine-private utilities. Supported debug controls are `toggleDebug`,
+`setDebug`, `isDebugEnabled`, `debugDumpTree`, and `debugStatsLine`.
 
-## Data
-
-- `useQuery`, `useMutation`
-
-## Selection
-
-- `getSelection`, `getSelectedText`, `setSelection`, `clearSelection`, `selectionSignal`
-
-## Font & Text
-
-- `registerFont`, `getFont`, `clearTextCache`, `getTextLayoutCacheStats`
-- `msdfFontInit`, `msdfFontQuery`, `msdfMeasureText`, `isMsdfFontAvailable`
-
-## Debug & Observability
-
-- `toggleDebug`, `setDebug`, `isDebugEnabled`
-- `debugDumpTree`, `debugDumpCulledNodes`
-- `getRendererResourceStats`, `getImageCacheStats`
-
-## Terminal
-
-- `createTerminal`, `detect`
-- `inferCaps`, `probeKittyGraphics`, `queryColors`
-- `getSize`, `queryPixelSize`, `onResize`
-- `enter`, `leave`, `beginSync`, `endSync`
-
-For the complete export list (200+ symbols), see the [AGENTS.md](https://github.com/commonriskpro/Vexart/blob/main/AGENTS.md) reference.
+JSX is compiled through the shared reconciler. `vexart/jsx-runtime` is the
+published runtime; `@vexart/engine/jsx-runtime` is reserved for the workspace
+compiler and is not a public raw-node API. Maintainers and tests may use the
+workspace-only `@vexart/engine/internal` entry point, which is not published.

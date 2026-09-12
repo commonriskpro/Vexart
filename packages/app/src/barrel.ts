@@ -388,8 +388,6 @@ export {
   SyntaxStyle,
   ONE_DARK,
   KANAGAWA,
-  // Dirty flagging
-  markDirty,
 } from "@vexart/engine"
 
 export type {
@@ -438,9 +436,7 @@ export {
   Index,
   ErrorBoundary,
   createComponent,
-  effect,
-  memo,
-} from "@vexart/engine"
+} from "solid-js"
 
 export {
   createSignal,

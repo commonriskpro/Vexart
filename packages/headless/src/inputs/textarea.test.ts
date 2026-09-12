@@ -11,8 +11,8 @@ import {
   setFocusedId,
   type RendererBackend,
   type TGENode,
-  type Terminal,
-} from "@vexart/engine"
+} from "@vexart/engine/internal"
+import type { Terminal } from "@vexart/engine"
 import { Textarea, type TextareaHandle } from "./textarea"
 
 type NodeComponent = (props: Record<string, unknown>) => TGENode

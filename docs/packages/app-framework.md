@@ -9,6 +9,8 @@ The `@vexart/app` package sits at Tier 1 of the Vexart architecture. It provides
 > After: no primitive import and `<box><text>Content</text></box>`
 >
 > **Approved node-ref migration target (in progress):** Keep one internal scene/layout tree and expose its cached `NodeHandle` as the sole public node representation. There is no public raw-node alternative. Update consumers to use `NodeHandle` only; do not import `TGENode` or access `handle._node`.
+>
+> **Breaking engine API migration (in progress):** Raw engine construction and implementation exports (`createNode`, `createRenderLoop`, `solidRender`, `createHandle`, layout/native helpers, and FFI symbols) are internal, not consumer imports. Use `createApp()` for managed applications, `mountApp()` for custom app bootstrapping, or `mount()` from `vexart/engine` when you own the terminal boundary. JSX uses the shared reconciler through `vexart/jsx-runtime`; `@vexart/engine/internal` is workspace-only for maintainers and tests.
 
 ---
 

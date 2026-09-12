@@ -3,11 +3,11 @@ import { createRoot } from "solid-js"
 import {
   createComponent,
   createElement,
-  focusedId,
   resetFocus,
   setFocusedId,
   type TGENode,
-} from "@vexart/engine"
+} from "@vexart/engine/internal"
+import { focusedId } from "@vexart/engine"
 import { Select, type SelectOption, type SelectTriggerContext } from "./select"
 
 const dummyOptions: SelectOption[] = [

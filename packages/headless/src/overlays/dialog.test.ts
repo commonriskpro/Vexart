@@ -2,11 +2,10 @@ import { beforeEach, describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import {
   createComponent,
-  focusedId,
   resetFocus,
   setFocusedId,
-  useFocus,
-} from "@vexart/engine"
+} from "@vexart/engine/internal"
+import { focusedId, useFocus } from "@vexart/engine"
 import { Dialog } from "./dialog"
 
 describe("Dialog", () => {

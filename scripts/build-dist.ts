@@ -3,7 +3,8 @@
  *
  * Output: dist/
  *   vexart.js           ← unified barrel: app + styled + headless + user-facing engine hooks
- *   engine.js           ← @vexart-native/engine full bundle (power users)
+ *   engine.js           ← public @vexart/engine bundle
+ *   jsx-runtime.js      ← reserved universal JSX compiler runtime
  *   solid-plugin.ts     ← babel preload for JSX transform
  *   jsx-runtime.d.ts    ← JSX intrinsic elements
  *   tree-sitter/        ← grammar .wasm + .scm files
@@ -17,60 +18,36 @@
  */
 
 import { build } from "esbuild"
-import { cpSync, mkdirSync, writeFileSync, existsSync, readFileSync } from "fs"
+import { cpSync, mkdirSync, writeFileSync, existsSync, readFileSync, readdirSync } from "fs"
 import { resolve } from "path"
 import { resolveReleaseChannel } from "./release-verification.mjs"
 
 const ROOT = resolve(import.meta.dir, "..")
-const DIST = resolve(ROOT, "dist")
+// Set VEXART_OUTPUT_DIR for isolated verification builds. The default remains
+// dist/ for release tooling, while scoped checks can avoid touching a user's
+// existing distribution tree.
+const outputDir = process.env.VEXART_OUTPUT_DIR
+if (outputDir !== undefined && outputDir.trim() === "") {
+  throw new Error("VEXART_OUTPUT_DIR must name a non-empty output directory")
+}
+const DIST = resolve(ROOT, outputDir ?? "dist")
 const rootPkg = JSON.parse(readFileSync(resolve(ROOT, "package.json"), "utf-8")) as { version: string }
 const VERSION = rootPkg.version
 const channel = resolveReleaseChannel(VERSION)
 
 // ── Clean ──
-console.log("🧹 Cleaning dist/...")
-try { const { rmSync } = await import("fs"); rmSync(DIST, { recursive: true, force: true }) } catch {}
-mkdirSync(DIST, { recursive: true })
+console.log(`🧹 Cleaning ${DIST}/...`)
+if (outputDir === undefined) {
+  try { const { rmSync } = await import("fs"); rmSync(DIST, { recursive: true, force: true }) } catch {}
+  mkdirSync(DIST, { recursive: true })
+} else {
+  if (existsSync(DIST) && readdirSync(DIST).length > 0) {
+    throw new Error(`VEXART_OUTPUT_DIR must be new or empty: ${DIST}`)
+  }
+  mkdirSync(DIST, { recursive: true })
+}
 
-// ── 1. Bundle TypeScript ──
-console.log("📦 Bundling TypeScript...")
-
-await build({
-  entryPoints: [resolve(ROOT, "packages/engine/src/index.ts")],
-  bundle: true,
-  format: "esm",
-  platform: "node",
-  target: "esnext",
-  minify: process.env.VEXART_DEBUG_BUNDLE !== "1",
-  outfile: resolve(DIST, "engine.js"),
-  external: [
-    "bun:ffi",
-    "solid-js",
-    "solid-js/universal",
-    "@babel/core",
-    "babel-preset-solid",
-    "web-tree-sitter",
-    "marked",
-    "sharp",
-    "@chenglou/pretext",
-    "@napi-rs/canvas",
-    "opentype.js",
-  ],
-  // Replace monorepo workspace imports with relative paths
-  alias: {
-    "@vexart-native/engine": resolve(ROOT, "packages/engine/src/index.ts"),
-
-  },
-  // Inject FFI path override — tell the bundle to look in vendor/ next to itself
-  define: {
-    "process.env.VEXART_DIST": '"true"',
-  },
-  banner: {
-    js: `/* Vexart — GPU-Accelerated Terminal UI Engine | Source-Available | (c) ${new Date().getFullYear()} */`,
-  },
-})
-
-// ── 2. Solid JSX plugin for esbuild ──
+// ── 1. Solid JSX plugin for esbuild ──
 
 // esbuild plugin that transforms .tsx through babel-preset-solid before bundling
 const solidPlugin = {
@@ -83,7 +60,7 @@ const solidPlugin = {
       const result = transformSync(source, {
         filename: args.path,
         presets: [
-          ["babel-preset-solid", { generate: "universal", moduleName: "@vexart-native/engine" }],
+          ["babel-preset-solid", { generate: "universal", moduleName: "@vexart/engine/jsx-runtime" }],
           ["@babel/preset-typescript", { onlyRemoveTypeImports: true }],
         ],
       })
@@ -92,17 +69,29 @@ const solidPlugin = {
   },
 }
 
-// ── 3. Bundle unified barrel (app + styled + headless + engine hooks) ──
-console.log("📦 Bundling unified barrel...")
+// ── 2. Bundle the reconciler entrypoints together ──
+//
+// Building the public engine, compiler runtime, and unified barrel in one
+// splitting graph gives them one copy of the universal renderer. The shared
+// chunks stay at dist/ root because native resource lookup is relative to the
+// bundle module directory.
+console.log("📦 Bundling engine, JSX runtime, and unified barrel...")
 
 await build({
-  entryPoints: [resolve(ROOT, "packages/app/src/barrel.ts")],
+  entryPoints: {
+    engine: resolve(ROOT, "packages/engine/src/index.ts"),
+    "jsx-runtime": resolve(ROOT, "packages/engine/src/jsx-runtime.ts"),
+    vexart: resolve(ROOT, "packages/app/src/barrel.ts"),
+  },
   bundle: true,
+  splitting: true,
   format: "esm",
   platform: "node",
   target: "esnext",
   minify: process.env.VEXART_DEBUG_BUNDLE !== "1",
-  outfile: resolve(DIST, "vexart.js"),
+  outdir: DIST,
+  entryNames: "[name]",
+  chunkNames: "chunk-[name]-[hash]",
   external: [
     "bun:ffi",
     "solid-js",
@@ -112,19 +101,14 @@ await build({
     "@napi-rs/canvas",
     "@chenglou/pretext",
     "opentype.js",
-    // Engine is NOT inlined — imported from ./engine.js so vexart.js
-    // and consumer JSX share the same reconciler instance.
-    "./engine.js",
   ],
   alias: {
-    // ALL engine references → ./engine.js (external, co-located dist bundle).
-    // Both @vexart/engine (workspace) and @vexart-native/engine (solid JSX moduleName)
-    // MUST resolve to the same external ./engine.js to prevent a duplicate reconciler
-    // that creates circular node trees and stack overflows.
-    "@vexart-native/engine": "./engine.js",
-    "@vexart/engine": "./engine.js",
-    // Workspace packages → source (bundled inline, but their engine imports
-    // resolve to ./engine.js via the aliases above)
+    // Resolve both workspace engine entrypoints into this single graph. The
+    // splitting build then shares reconciler modules instead of bundling an
+    // isolated renderer into each entrypoint.
+    "@vexart/engine": resolve(ROOT, "packages/engine/src/index.ts"),
+    "@vexart/engine/jsx-runtime": resolve(ROOT, "packages/engine/src/jsx-runtime.ts"),
+    "@vexart/engine/internal": resolve(ROOT, "packages/engine/src/internal.ts"),
 
     "@vexart-native/headless": resolve(ROOT, "packages/headless/src/index.ts"),
     "@vexart-native/styled": resolve(ROOT, "packages/styled/src/index.ts"),
@@ -216,10 +200,10 @@ cpSync(
 )
 console.log(`  ✅ parser.worker.ts → tree-sitter/`)
 
-// ── 7. Copy solid plugin (dist version with moduleName: "vexart/engine") ──
+// ── 7. Copy solid plugin (dist version with moduleName: "vexart/jsx-runtime") ──
 console.log("🔌 Copying solid plugin...")
 cpSync(resolve(ROOT, "scripts/solid-plugin-dist.ts"), resolve(DIST, "solid-plugin.ts"))
-console.log(`  ✅ solid-plugin.ts (moduleName: "vexart/engine")`)
+console.log(`  ✅ solid-plugin.ts (moduleName: "vexart/jsx-runtime")`)
 
 // ── 8. Copy type declarations ──
 console.log("📝 Copying type declarations...")
@@ -270,6 +254,7 @@ const pkg = {
     },
     "./jsx-runtime": {
       types: "./jsx-runtime.d.ts",
+      default: "./jsx-runtime.js",
     },
     "./solid-plugin": "./solid-plugin.ts",
     "./tree-sitter/parser.worker.ts": "./tree-sitter/parser.worker.ts",
@@ -281,8 +266,10 @@ const pkg = {
     "void.d.ts",
     "engine.js",
     "engine.d.ts",
+    "jsx-runtime.js",
     "cli.js",
     "jsx-runtime.d.ts",
+    "chunk-*.js",
     "solid-plugin.ts",
     "tree-sitter/",
   ],
@@ -312,15 +299,15 @@ console.log(`  ✅ package.json`)
 
 // ── Done ──
 console.log("")
-console.log("✅ Build complete! Output in dist/")
+console.log(`✅ Build complete! Output in ${DIST}/`)
 console.log("")
 console.log("To publish:")
-console.log(`  cd dist/platform/${platformTag} && npm publish --access public --tag ${channel}`)
-console.log(`  cd dist && npm publish --access public --tag ${channel}`)
+console.log(`  cd ${DIST}/platform/${platformTag} && npm publish --access public --tag ${channel}`)
+console.log(`  cd ${DIST} && npm publish --access public --tag ${channel}`)
 console.log("")
 console.log("To test locally:")
-console.log(`  cd dist/platform/${platformTag} && bun pm pack --ignore-scripts`)
-console.log("  cd dist && bun pm pack --ignore-scripts")
+console.log(`  cd ${DIST}/platform/${platformTag} && bun pm pack --ignore-scripts`)
+console.log(`  cd ${DIST} && bun pm pack --ignore-scripts`)
 console.log("  # In another project:")
-console.log(`  bun add ../vexart/dist/vexart-${VERSION}.tgz`)
-console.log(`  bun add ../vexart/dist/platform/${platformTag}/vexart-${platformTag}-${VERSION}.tgz`)
+console.log(`  bun add ${DIST}/vexart-${VERSION}.tgz`)
+console.log(`  bun add ${DIST}/platform/${platformTag}/vexart-${platformTag}-${VERSION}.tgz`)

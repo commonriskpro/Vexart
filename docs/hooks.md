@@ -4,8 +4,6 @@ Vexart uses SolidJS reactivity. Hooks live in `@vexart/engine` and are designed 
 
 ```tsx
 import {
-  createTerminal,
-  mount,
   onInput,
   useFocus,
   useKeyboard,
@@ -13,18 +11,18 @@ import {
   useDrag,
   useHover,
   useTerminalDimensions,
-  markDirty,
   pushFocusScope,
   createTransition,
   createSpring,
 } from "vexart/engine"
+import { useAppTerminal } from "vexart"
 ```
 
 ## Terminal dimensions
 
 ```tsx
-function App(props: { terminal: Awaited<ReturnType<typeof createTerminal>> }) {
-  const dims = useTerminalDimensions(props.terminal)
+function App() {
+  const dims = useTerminalDimensions(useAppTerminal())
 
   return (
     <box width={dims.width()} height={dims.height()}>
@@ -141,11 +139,7 @@ Transform and opacity animations should use `layer` or `willChange` so they can 
 
 ## Manual invalidation
 
-Most Solid signal changes invalidate automatically. Use `markDirty()` only when external imperative state changes outside Solid:
-
-```tsx
-externalEmitter.on("tick", () => {
-  updateExternalStore()
-  markDirty()
-})
-```
+Most Solid signal changes invalidate automatically. Render invalidation is
+managed by the runtime; `markDirty()` is an internal implementation helper and
+must not be imported by applications. Wrap external state in a Solid signal or
+use a public hook instead.

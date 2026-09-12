@@ -7,14 +7,13 @@ import {
   dispatchInput,
   getRendererBackend,
   insertNode,
-  mount,
   resetFocus,
   setProp,
   setRendererBackend,
   type RendererBackend,
   type TGENode,
-  type Terminal,
-} from "@vexart/engine"
+} from "@vexart/engine/internal"
+import { mount, type Terminal } from "@vexart/engine"
 
 const browserRuntime = import.meta.resolve("solid-js").endsWith("/solid.js")
 

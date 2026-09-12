@@ -6,7 +6,7 @@ import {
   resetFocus,
   solidRender,
   type TGENode,
-} from "@vexart/engine"
+} from "@vexart/engine/internal"
 import "../styles/class-name"
 
 const browserRuntime = import.meta.resolve("solid-js").endsWith("/solid.js")

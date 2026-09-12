@@ -695,7 +695,7 @@ Syntax-highlighted code block with tree-sitter tokenization.
 
 ```tsx
 import { Code } from "vexart"
-import { ONE_DARK } from "vexart/engine"
+import { ONE_DARK } from "vexart"
 
 <Code
   content={sourceCode}
@@ -714,7 +714,7 @@ Markdown renderer with inline styling.
 
 ```tsx
 import { Markdown } from "vexart"
-import { ONE_DARK } from "vexart/engine"
+import { ONE_DARK } from "vexart"
 
 <Markdown
   content={readmeText}
@@ -786,7 +786,7 @@ Factory function for reactive form state with validation. NOT a component — it
 
 ```tsx
 import { createForm, Input, Button } from "vexart"
-import { Show } from "vexart/engine"
+import { Show } from "vexart"
 
 const form = createForm({
   initialValues: { name: "", email: "" },

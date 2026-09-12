@@ -39,7 +39,8 @@ const result = useQuery<T>(
 ### Basic example
 
 ```tsx
-import { useQuery, Show, For } from "vexart/engine"
+import { useQuery } from "vexart/engine"
+import { Show, For } from "vexart"
 
 function UserList() {
   const users = useQuery(
