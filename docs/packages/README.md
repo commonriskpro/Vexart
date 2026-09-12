@@ -83,7 +83,6 @@ Every subsystem in Vexart is governed by non-negotiable architectural invariants
 | `packages/internal-devtools`| `@vexart/internal-devtools`| Model Context Protocol (MCP) server providing 11 automated tools for AI agent and test harness interaction via Kitty. | Internal |
 | `packages/internal-atlas-gen` | `@vexart/internal-atlas-gen` | Offline utility generator converting TTF fonts into 1024×1024 MSDF pre-baked atlas PNGs and glyph metrics JSON. | Internal |
 | `native/libvexart` | `libvexart` | Rust native `cdylib` compiling WGPU 29.0.1 rendering pipelines, composite targets, MSDF font engine, and Kitty transports. | Active |
-| `packages/primitives` | `@vexart/primitives` | Historical layout primitives (`Span`, `RichText`, `WrapRow`). **Completely purged and merged into `@vexart/app`**. | **Deleted** |
 
 ---
 

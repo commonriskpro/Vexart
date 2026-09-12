@@ -3,7 +3,7 @@
 **Version**: 0.1
 **Status**: Active policy
 **Owner**: Founder (solo developer)
-**Companion to**: [PRD](./PRD.md), [ARCHITECTURE](./ARCHITECTURE.md)
+**Companion to**: [ARCHITECTURE](./ARCHITECTURE.md), [packages](./packages/README.md)
 
 ---
 

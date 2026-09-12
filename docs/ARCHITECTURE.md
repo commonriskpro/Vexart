@@ -6,7 +6,7 @@ boundary after DEC-014 restored TypeScript ownership of scene, layout, render
 graph, and event dispatch. Target and migration descriptions are historical
 context unless current code and focused checks confirm them.
 **Owner**: Founder (solo developer)
-**Companion to**: [PRD](./PRD.md), [API-POLICY](./API-POLICY.md)
+**Companion to**: [API-POLICY](./API-POLICY.md), [packages](./packages/README.md)
 
 ---
 
@@ -75,7 +75,7 @@ A technical reference for Vexart's target architecture after v0.9 ships. It answ
 ### 1.2 What this document is not
 
 - A user-facing guide (see `docs/getting-started.md` when it exists).
-- A product description (see `docs/PRD.md`).
+- A product description or roadmap.
 - An API reference for users (see `docs/api-reference.md`).
 - A description of the current v0.1 codebase.
 

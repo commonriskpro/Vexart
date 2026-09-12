@@ -7,7 +7,6 @@ Consult the relevant reference alongside current code and focused checks. If
 prose and implementation differ, inspect the discrepancy and reconcile the
 smallest in-scope change; a documentation mismatch is not an automatic stop.
 
-- [docs/PRD.md](docs/PRD.md) — product requirements, phased roadmap, and decisions.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — target layering and native boundary.
 - [docs/API-POLICY.md](docs/API-POLICY.md) — public vs. internal API rules.
 - [docs/AI-REFERENCE.md](docs/AI-REFERENCE.md) — detailed technical reference for AI agents.
@@ -70,7 +69,6 @@ for details.
 | Package | Purpose | Status |
 | ------- | ------- | ------ |
 | `@vexart/engine` | SolidJS reconciler, render loop, hooks, FFI bridge to `libvexart`, terminal lifecycle, input parsing, focus, hit-testing, output transport | ✅ Active |
-| `@vexart/primitives` | **Merged into `@vexart/app`**. Use `<Box>`, `<Text>` app components or `<box>`, `<text>` intrinsics directly. Legacy helpers (`Span`, `RichText`, `WrapRow`) were permanently purged. | ❌ Removed |
 | `@vexart/headless` | 23 headless components + 2 state factories (25 primitives total): logic, keyboard/mouse interaction, accessibility contracts, no styling | ✅ Active |
 | `@vexart/styled` | Themed components and void theme tokens — dark, shadcn-inspired design system | ✅ Active |
 | `@vexart/app` | App framework: router, route manifest helpers, className mapper, app mounting, CLI helpers | ✅ Active |

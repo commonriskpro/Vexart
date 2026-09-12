@@ -133,7 +133,6 @@ Vexart is **not** a cell-based TUI framework. It renders actual pixels using the
 | [`@vexart/app`](docs/packages/app-framework.md) | Managed app framework: router, className mapper, config, CLI helpers | App |
 | [`@vexart/styled`](docs/packages/styled-void-system.md) | Design tokens + styled components (shadcn-compatible): `colors`, `radius`, `space`, `font`, `shadows` | Styled |
 | [`@vexart/headless`](docs/packages/headless-primitives.md) | Behaviour-only components: Button, Input, Dialog, Select, Tabs, List, Table, VirtualList, etc. | Headless |
-| `@vexart/primitives` | **Merged into `@vexart/app`**. Use `<Box>`, `<Text>` app components or `<box>`, `<text>` intrinsics directly. Legacy helpers (`Span`, `RichText`, `WrapRow`) were permanently purged. | ❌ Removed |
 | [`@vexart/engine`](docs/packages/engine-runtime.md) | Core engine: render loop, GPU backend, SolidJS reconciler, input, focus, animation, data fetching | Foundation |
 
 Dependencies flow downward across the active packages: `app → styled → headless → engine`. You can use any active layer independently. See [`docs/packages/README.md`](docs/packages/README.md) for full architecture documentation, including [`native-wgpu-boundary.md`](docs/packages/native-wgpu-boundary.md) and [`tooling-and-distribution.md`](docs/packages/tooling-and-distribution.md).
