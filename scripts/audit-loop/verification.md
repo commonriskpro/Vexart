@@ -6,7 +6,7 @@ correction for launch with the limitations below.
 
 ## Evidence
 
-- `bun run test ./scripts/audit-loop`: 8 passed, 25 assertions.
+- `bun run test ./scripts/audit-loop`: 10 passed, 32 assertions.
 - `bunx tsc -p scripts/audit-loop/tsconfig.json --noEmit`: passed.
 - Real temporary Git repositories exercised named-file commits, baseline
   advancement, canonical-key deduplication and retained learning events.
@@ -24,10 +24,7 @@ correction for launch with the limitations below.
 
 ## Known limitations
 
-- A byte-changing correction pass currently retains the original review
-  snapshot. It therefore stops without committing even if its second verifier
-  approves. Initial fixes that pass their first verification can commit. This
-  conservative limitation is not a successful automatic repair path.
+- Correction verification now fingerprints each attempt before review and binds the successful snapshot to commit. Internal absolute dependency links relocate into the isolated worktree; external links remain rejected.
 - Stop-marker paths assume internally generated, unmodified lock metadata.
   Manually corrupted lock identifiers are not supported. Do not edit a live
   lock. A stale lock requires manual inspection before recovery.

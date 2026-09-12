@@ -28,6 +28,9 @@ Each cycle is:
    the clean baseline. A real finding must have baseline path/lines/excerpt,
    expected contract, and an exact executable regression command that fails on
    baseline with a nonzero exit plus a verbatim stable assertion excerpt.
+   `finding.paths` contains only files intended for the fix; evidence may read
+   other baseline files inside the requested audit scope without granting write
+   access.
 3. A separate Luna pre-gate independently reads the source. It can approve only
    an internal root-cause fix tied to the recorded SHA and exact paths. API,
    contract, ownership, migration, hotfix, ad-hoc, magic-limit, controller,
@@ -40,9 +43,13 @@ Each cycle is:
    audit branch, records its SHA, and advances the next cycle's baseline. The
    post-verifier must rerun the same command and provide a matching successful
    JSONL command witness; free-form check labels are not proof. Rust changes
-   additionally require the fixed offline Cargo test command. A failed gate,
-   apply, verifier, check, or commit leaves the branch and diff
-   blocked for review.
+   additionally require the fixed offline Cargo test command. A failed apply,
+   verifier, check, or commit leaves the branch and diff blocked for review. A
+   gate that explicitly requires a human architectural decision parks a clean
+   baseline worktree with alternatives, disadvantages, and receipt recorded,
+   then continues other bounded audit scopes; the parked branch is never edited
+   or merged automatically. Security, dirty-worktree, stale, and unsupported
+   contract decisions remain blocked.
 
 The controller awards one star only after an independent gate confirms a real
 finding. Stars are the count of unique canonical root-cause keys, not fixes,
@@ -76,9 +83,10 @@ Codex is invoked with `exec --ephemeral --json --output-schema
 the role mapping above. Investigators, gates, planners, and verifiers use
 `-s read-only`; only the isolated apply worker uses `-s workspace-write`.
 No dependency installation or external write is performed. When available, the
-runner makes one isolated copy of the existing `node_modules` tree and rejects
-workspace symlinks that resolve back to the main checkout. Missing dependencies
-fail verification rather than silently skipping behavioral checks.
+runner makes one isolated copy of the existing `node_modules` tree. Absolute
+links into the source checkout are rewritten to equivalent links inside the
+isolated worktree, while external and transitive escapes are rejected. Missing
+dependencies fail verification rather than silently skipping behavioral checks.
 
 ## Safety and limitations
 
@@ -95,4 +103,5 @@ fail verification rather than silently skipping behavioral checks.
   dependencies and scripts exist, and offline Cargo checks for native paths).
 - The loop is intentionally bounded and conservative. It does not prove GPU,
   terminal, network, or production behavior; it does not infer public API or
-  architecture decisions. Those remain human gates.
+  architecture decisions. Those remain human gates; deferred decisions are
+  retained as data for later planning and never treated as permission.
