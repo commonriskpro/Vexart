@@ -96,10 +96,11 @@ fn backdrop_blur_impulse_is_dense_symmetric_and_color_safe() {
         .map(|pixel| pixel[0])
         .collect::<Vec<_>>();
 
+    // Host RGB stays white; Gaussian coverage is represented by alpha alone.
     for x in center - 8..=center + 8 {
         assert!(alpha[x] > 0, "blur response has a gap at x={x}");
         assert!(
-            red[x] >= alpha[x].saturating_sub(2),
+            red[x] >= 253,
             "blur darkened white at x={x}"
         );
         assert_eq!(pixels[x * 4], pixels[x * 4 + 1]);
@@ -116,16 +117,16 @@ fn backdrop_blur_impulse_is_dense_symmetric_and_color_safe() {
         "response escaped the configured radius"
     );
     assert!(
-        red[center - 1] > red[center - 8],
+        alpha[center - 1] > alpha[center - 8],
         "Gaussian response should decay from the impulse center"
     );
     assert!(
-        red[center] >= red[center - 1],
+        alpha[center] >= alpha[center - 1],
         "center should be the strongest response"
     );
     for distance in 1..=8 {
-        let left = red[center - distance] as i16;
-        let right = red[center + distance] as i16;
+        let left = alpha[center - distance] as i16;
+        let right = alpha[center + distance] as i16;
         assert!(
             (left - right).abs() <= 2,
             "response is asymmetric at distance {distance}"

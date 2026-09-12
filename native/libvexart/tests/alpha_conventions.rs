@@ -210,10 +210,11 @@ fn target_copies_filters_and_masks_preserve_straight_image_color() {
     let copied = copy_target(source_target);
 
     // A target stores the source once-premultiplied after its first image
-    // composite. Copying it back to an image must restore straight RGBA.
+    // composite. Copying it back to an image and exporting the rendered target
+    // to the host must both preserve straight RGBA (not expose target storage).
     expect_near(
         center(&render_and_read(copied, 0x00000000)),
-        [100, 50, 25, 128],
+        [200, 100, 50, 128],
         2,
     );
 

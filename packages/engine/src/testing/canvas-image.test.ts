@@ -184,9 +184,9 @@ test("renders a uniform border with exactly its requested width", async () => {
 test("renders per-corner borders without painting into translucent themed fill", async () => {
   const width = 32
   const height = 24
-  // Native readback keeps translucent RGB premultiplied by alpha.
+  // Host readback is straight RGBA; rounding reflects 8-bit GPU storage.
   const fill = new Uint8Array([17, 34, 51, 217])
-  const fillReadback = new Uint8Array([14, 29, 43, 217])
+  const fillReadback = new Uint8Array([16, 34, 51, 217])
   const node = prop(
     prop(
       prop(

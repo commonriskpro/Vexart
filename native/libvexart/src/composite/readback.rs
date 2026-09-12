@@ -2,6 +2,22 @@
 // Real GPU→CPU buffer transfer using wgpu map_async + pollster::block_on.
 // Phase 2b Slice 1, task 1.4. Per design decision "Readback uses blocking map_async + pollster".
 
+/// GPU targets are premultiplied; host pixels (including Kitty) are straight
+/// RGBA. Normalize once at the readback boundary, never during GPU composition.
+fn unpremultiply(pixels: &mut [u8]) {
+    for pixel in pixels.chunks_exact_mut(4) {
+        let alpha = u32::from(pixel[3]);
+        if alpha == 255 {
+            continue;
+        }
+        for channel in &mut pixel[..3] {
+            *channel = if alpha == 0 { 0 } else {
+                ((u32::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8
+            };
+        }
+    }
+}
+
 /// Full-target GPU→CPU readback.
 ///
 /// Copies the entire target texture to `dst` using WGPU copy_texture_to_buffer + map_async.
@@ -66,6 +82,7 @@ pub fn readback_full(
                 dst_slice[dst_start..dst_start + unpadded_bytes_per_row]
                     .copy_from_slice(&mapped[src_start..src_start + unpadded_bytes_per_row]);
             }
+            unpremultiply(&mut dst_slice[..needed]);
             needed_u32
         },
     )
@@ -75,7 +92,8 @@ pub fn readback_full(
 /// Full-target GPU→CPU readback with a callback over packed RGBA bytes.
 ///
 /// When the WGPU row pitch is already tightly packed, the callback receives a
-/// view directly into the mapped readback buffer. Otherwise an exact packed
+/// view directly into the mapped readback buffer if every pixel is opaque.
+/// Otherwise a straight-alpha packed
 /// fallback is created before the callback runs. The mapping is released after
 /// the callback returns, including when it returns an error value or unwinds.
 ///
@@ -114,7 +132,9 @@ where
             if mapped.len() < mapped_needed {
                 return None;
             }
-            if padded == unpadded_bytes_per_row {
+            if padded == unpadded_bytes_per_row
+                && mapped[..needed].chunks_exact(4).all(|pixel| pixel[3] == 255)
+            {
                 return Some(callback(&mapped[..needed]));
             }
 
@@ -125,6 +145,7 @@ where
                 packed[dst_start..dst_start + unpadded_bytes_per_row]
                     .copy_from_slice(&mapped[src_start..src_start + unpadded_bytes_per_row]);
             }
+            unpremultiply(&mut packed);
             Some(callback(&packed))
         },
     )
@@ -349,6 +370,7 @@ pub fn readback_region(
             dst_slice[dst_start..dst_start + unpadded_bytes_per_row]
                 .copy_from_slice(&mapped[src_start..src_start + unpadded_bytes_per_row]);
         }
+        unpremultiply(&mut dst_slice[..needed as usize]);
         needed
     });
     copied.unwrap_or(0)
@@ -358,6 +380,36 @@ pub fn readback_region(
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    #[test]
+    fn host_rgba_should_unpremultiply_and_canonicalize_transparent_pixels() {
+        let mut pixels = [128, 64, 0, 128, 8, 9, 10, 0, 1, 2, 3, 255];
+        unpremultiply(&mut pixels);
+        assert_eq!(pixels, [255, 128, 0, 128, 0, 0, 0, 0, 1, 2, 3, 255]);
+    }
+
+    #[cfg(feature = "gpu-tests")]
+    #[test]
+    fn full_callback_and_region_readback_should_return_straight_alpha() {
+        let (ctx, texture, buffer, _) = gpu_fixture(64, 1);
+        let pixels = [128, 64, 0, 128].repeat(64);
+        ctx.queue.write_texture(
+            texture.as_image_copy(), &pixels,
+            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(256), rows_per_image: Some(1) },
+            wgpu::Extent3d { width: 64, height: 1, depth_or_array_layers: 1 },
+        );
+        let mut full = vec![0; 256];
+        assert_eq!(readback_full(&ctx.device, &ctx.queue, &texture, 64, 1, 256,
+            &buffer, full.as_mut_ptr(), 256), 256);
+        assert_eq!(full, [255, 128, 0, 128].repeat(64));
+        let callback = readback_full_with(&ctx.device, &ctx.queue, &texture, 64, 1, 256,
+            &buffer, |bytes| bytes.to_vec());
+        assert_eq!(callback, Some(full));
+        let mut region = [0; 4];
+        assert_eq!(readback_region(&ctx.device, &ctx.queue, &texture, 64, 1, 3, 0, 1, 1,
+            region.as_mut_ptr(), 4), 4);
+        assert_eq!(region, [255, 128, 0, 128]);
+    }
 
     #[test]
     fn unmap_guard_should_call_unmap_on_drop_and_panic() {
@@ -635,7 +687,7 @@ mod tests {
     ) {
         let ctx = crate::paint::context::WgpuContext::new();
         let pixels = (0..(width as usize * height as usize * 4))
-            .map(|index| (index as u32).wrapping_mul(37) as u8)
+            .map(|index| if index % 4 == 3 { 255 } else { (index as u32).wrapping_mul(37) as u8 })
             .collect::<Vec<_>>();
         let texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("readback-copy-test-texture"),
