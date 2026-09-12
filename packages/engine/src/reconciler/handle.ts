@@ -1,5 +1,5 @@
 import type { TGENode, LayoutRect } from "../ffi/node"
-import { setFocus, focusedId, setFocusedId } from "./focus"
+import { focusedId, getNodeFocusId, setFocus, setFocusedId } from "./focus"
 
 /** @public */
 export type NodeHandle = {
@@ -17,6 +17,11 @@ export type NodeHandle = {
 const handleCache = new WeakMap<TGENode, NodeHandle>()
 const nodeByHandle = new WeakMap<NodeHandle, TGENode>()
 
+function getActiveFocusId(node: TGENode): string | undefined {
+  if (node.destroyed) return undefined
+  return getNodeFocusId(node)
+}
+
 /** Resolve an engine-owned handle for internal reconciler code. */
 export function getHandleNode(handle: NodeHandle): TGENode {
   const node = nodeByHandle.get(handle)
@@ -29,16 +34,24 @@ export function createHandle(node: TGENode): NodeHandle {
   const cached = handleCache.get(node)
   if (cached) return cached
 
-  const focusId = `node-${node.id}`
-
   const handle: NodeHandle = {
     get id() { return node.id },
     get kind() { return node.kind },
     get layout() { return node.layout },
     get isDestroyed() { return node.destroyed },
-    focus() { setFocus(focusId) },
-    blur() { if (focusedId() === focusId) setFocusedId(null) },
-    get isFocused() { return focusedId() === focusId },
+    focus() {
+      const focusId = getActiveFocusId(node)
+      if (focusId !== undefined) setFocus(focusId)
+    },
+    blur() {
+      const focusId = getActiveFocusId(node)
+      if (focusId !== undefined && focusedId() === focusId) setFocusedId(null)
+    },
+    get isFocused() {
+      const currentFocusId = focusedId()
+      const focusId = getActiveFocusId(node)
+      return focusId !== undefined && currentFocusId === focusId
+    },
     get children() { return node.children.map(createHandle) },
     get parent() { return node.parent ? createHandle(node.parent) : null },
   }

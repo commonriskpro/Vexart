@@ -1,8 +1,13 @@
-import { describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "bun:test"
+import { createEffect, createRoot } from "solid-js"
 import { createNode, insertChild, removeChild } from "../ffi/node"
 import { createHandle, getHandleNode } from "./handle"
+import { createElement, setProp } from "./reconciler"
+import { focusedId, getNodeFocusId, resetFocus, setFocusedId } from "./focus"
 
 describe("createHandle", () => {
+  beforeEach(() => resetFocus())
+
   test("wraps a node with correct id and kind", () => {
     const node = createNode("box")
     const handle = createHandle(node)
@@ -82,5 +87,114 @@ describe("createHandle", () => {
 
   test("rejects handles not created by the engine", () => {
     expect(() => getHandleNode({} as ReturnType<typeof createHandle>)).toThrow(TypeError)
+  })
+
+  test("focuses and reports focus using the registered fallback ID", () => {
+    const node = createElement("box")
+    setProp(node, "focusable", true)
+    const handle = createHandle(node)
+    const id = getNodeFocusId(node)
+
+    expect(id).toBe(`node-focus-${node.id}`)
+    handle.focus()
+    expect(focusedId()).toBe(id)
+    expect(handle.isFocused).toBe(true)
+    handle.blur()
+    expect(focusedId()).toBeNull()
+    expect(handle.isFocused).toBe(false)
+    handle.focus()
+    expect(focusedId()).toBe(id)
+    expect(handle.isFocused).toBe(true)
+  })
+
+  test("uses an explicit focus ID and follows focus ID changes", () => {
+    const node = createElement("box")
+    setProp(node, "focusId", "initial-focus")
+    setProp(node, "focusable", true)
+    const handle = createHandle(node)
+
+    handle.focus()
+    expect(focusedId()).toBe("initial-focus")
+    expect(handle.isFocused).toBe(true)
+
+    setProp(node, "focusId", "renamed-focus")
+    expect(getNodeFocusId(node)).toBe("renamed-focus")
+    expect(handle.isFocused).toBe(true)
+    handle.blur()
+    expect(focusedId()).toBeNull()
+    handle.focus()
+    expect(focusedId()).toBe("renamed-focus")
+  })
+
+  test("uses the node id prop when no focus ID is provided", () => {
+    const node = createElement("box")
+    setProp(node, "id", "semantic-id")
+    setProp(node, "focusable", true)
+    const handle = createHandle(node)
+
+    expect(getNodeFocusId(node)).toBe("semantic-id")
+    handle.focus()
+    expect(focusedId()).toBe("semantic-id")
+    expect(handle.isFocused).toBe(true)
+  })
+
+  test("does not steal focus from another node when unregistered", () => {
+    const focused = createElement("box")
+    const unregistered = createElement("box")
+    setProp(focused, "focusable", true)
+    const focusedHandle = createHandle(focused)
+    const unregisteredHandle = createHandle(unregistered)
+    const focusedNodeId = getNodeFocusId(focused)!
+    setFocusedId(focusedNodeId)
+
+    unregisteredHandle.focus()
+    expect(focusedId()).toBe(focusedNodeId)
+    expect(unregisteredHandle.isFocused).toBe(false)
+    unregisteredHandle.blur()
+    expect(focusedId()).toBe(focusedNodeId)
+    expect(focusedHandle.isFocused).toBe(true)
+  })
+
+  test("does not focus or blur a destroyed node", () => {
+    const parent = createNode("box")
+    const node = createElement("box")
+    insertChild(parent, node)
+    setProp(node, "focusable", true)
+    const handle = createHandle(node)
+    const id = getNodeFocusId(node)!
+    setFocusedId(id)
+
+    removeChild(parent, node)
+    expect(handle.isDestroyed).toBe(true)
+    expect(handle.isFocused).toBe(false)
+    handle.focus()
+    expect(focusedId()).toBe(id)
+    handle.blur()
+    expect(focusedId()).toBe(id)
+  })
+
+  test("isFocused remains reactive for an unregistered node", async () => {
+    const node = createElement("box")
+    const handle = createHandle(node)
+    let runs = 0
+    let value = true
+    let dispose: () => void = () => {}
+    createRoot((cleanup) => {
+      dispose = cleanup
+      createEffect(() => {
+        runs++
+        value = handle.isFocused
+      })
+    })
+
+    await Promise.resolve()
+    expect(runs).toBe(1)
+    expect(value).toBe(false)
+
+    setFocusedId("unregistered-focus")
+    await Promise.resolve()
+    expect(runs).toBe(2)
+    expect(value).toBe(false)
+    dispose()
   })
 })
