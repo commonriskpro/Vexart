@@ -1,0 +1,98 @@
+# Reusable audit loop
+
+This directory contains a bounded, fail-closed audit runner. It is deliberately
+internal and is not imported by the Vexart runtime.
+
+The implementation pre-review is recorded in [`architecture-review.md`](./architecture-review.md)
+with its Astra provenance and approved invariants.
+Read [`verification.md`](./verification.md) for checked evidence, the
+implementation-review star register, and the conservative correction-pass
+limitation before running unattended.
+
+## Architecture
+
+`index.ts` detects the repository root and Git common directory, records the
+current `HEAD` and dirty paths, acquires an atomic per-repository lock under
+`<git-common-dir>/audit-loop/`, and creates `codex/audit-<id>` from that exact
+`HEAD` in `<git-common-dir>/audit-loop/worktrees/<id>`. The main checkout is
+never used as an agent write target. A run writes append-only
+`events.jsonl`, durable scope+strategy identities, and per-attempt receipts
+(prompt, argv, JSON response, JSONL events, stdout, stderr, and exit status).
+
+Each cycle is:
+
+1. Astra (`gpt-6-astra`, `high`) plans at most two scopes using bounded prior
+   lessons (negative results, false positives, regressions, disadvantages, and
+   coverage).
+2. One or two independent Luna (`gpt-5.6-luna`, `xhigh`) investigators inspect
+   the clean baseline. A real finding must have baseline path/lines/excerpt,
+   expected contract, and an exact executable regression command that fails on
+   baseline with a nonzero exit plus a verbatim stable assertion excerpt.
+3. A separate Luna pre-gate independently reads the source. It can approve only
+   an internal root-cause fix tied to the recorded SHA and exact paths. API,
+   contract, ownership, migration, hotfix, ad-hoc, magic-limit, controller,
+   prompt, security-policy, and dependency changes fail closed for human review.
+4. The Luna apply worker receives only the approved paths and does not stage or
+   commit. A Luna verifier inspects the actual diff, lifecycle/ownership
+   invariants, regressions, and fixed safe checks. At most one bounded correction
+   is attempted. After the verifier and checks pass, the controller stages only
+   those named paths, verifies the index, creates exactly one commit on the
+   audit branch, records its SHA, and advances the next cycle's baseline. The
+   post-verifier must rerun the same command and provide a matching successful
+   JSONL command witness; free-form check labels are not proof. Rust changes
+   additionally require the fixed offline Cargo test command. A failed gate,
+   apply, verifier, check, or commit leaves the branch and diff
+   blocked for review.
+
+The controller awards one star only after an independent gate confirms a real
+finding. Stars are the count of unique canonical root-cause keys, not fixes,
+tests, proposals, or repeated observations. Duplicate keys are retained as
+events but are not awarded again. The program, prompts, model mapping,
+safeguards, and security policy are never self-edited; “automejora” means only
+that the next Astra plan consumes evidence-backed lessons and changes its
+bounded priorities. It cannot loosen policy or rewrite itself.
+
+## Usage
+
+```sh
+bun run scripts/audit-loop/index.ts --help
+bun run scripts/audit-loop/index.ts run --cycles 3 --minutes 60 --scope packages/engine
+bun run scripts/audit-loop/index.ts status
+bun run scripts/audit-loop/index.ts stop
+```
+
+`run` is the only command that starts work. Importing `index.ts`, invoking it
+without arguments, or running `--help` does not start a loop. The default is
+three cycles or sixty minutes, whichever ends first. `stop` writes a
+run-specific request token; the runner consumes it and terminates only its own
+tracked Codex process and observed descendants, so a reused PID can never kill
+an unrelated process. Partial artifacts are preserved. Timeout handling
+likewise terminates the owned Codex process tree and records a timeout receipt.
+A leftover lock is fail-closed and requires manual recovery after confirming
+the owner is stopped.
+
+Codex is invoked with `exec --ephemeral --json --output-schema
+--output-last-message`, `--disable multi_agent --disable multi_agent_v2`, and
+the role mapping above. Investigators, gates, planners, and verifiers use
+`-s read-only`; only the isolated apply worker uses `-s workspace-write`.
+No dependency installation or external write is performed. When available, the
+runner makes one isolated copy of the existing `node_modules` tree and rejects
+workspace symlinks that resolve back to the main checkout. Missing dependencies
+fail verification rather than silently skipping behavioral checks.
+
+## Safety and limitations
+
+- The controller never checks out, stashes, resets, cleans, pushes, publishes,
+  or auto-cherry-picks. It commits only a verified fix in the isolated audit
+  branch, never in the user's checkout, and leaves that branch available for
+  human review.
+- User dirty files are recorded as excluded evidence and are not copied into
+  the worktree. The baseline SHA must remain unchanged before apply.
+- Structured output is strict. Missing, malformed, stale, ambiguous, or
+  unsupported output is recorded as negative/blocked and cannot apply.
+- Agent-provided test claims are not arbitrary controller commands. The runner
+  executes only fixed checks (`git diff --check`, Bun checks when isolated
+  dependencies and scripts exist, and offline Cargo checks for native paths).
+- The loop is intentionally bounded and conservative. It does not prove GPU,
+  terminal, network, or production behavior; it does not infer public API or
+  architecture decisions. Those remain human gates.
