@@ -184,6 +184,22 @@ describe("controller evidence capture boundary", () => {
     }
   })
 
+  test("public entrypoints can support read-only evidence but never become writable finding paths", async () => {
+    const { root, snapshot } = await fixture()
+    await writeFile(join(root, "src/public.ts"), 'export { value } from "./value"\n')
+    await runProcess(["git", "add", "--", "src/public.ts"], root)
+    await runProcess(["git", "commit", "-qm", "public entrypoint fixture"], root)
+    const repo = await detectRepo(root)
+    const raw = investigation()
+    const response = { ...raw, finding: { ...raw.finding, evidence: [{ path: "src/public.ts", startLine: 1, endLine: 1 }] } }
+    const saved = await saveAgentReceipt(join(root, "public.json"), { ...snapshot, baselineSha: repo.baselineSha }, receipt(response))
+    expect(saved.parseError).toBeUndefined()
+    const finding = parseInvestigator(saved.response)!.finding!
+    expect(finding.evidence[0].excerpt).toBe('export { value } from "./value"')
+    expect(await validateFinding(repo, finding, witness, "src")).toBeNull()
+    expect(await validateFinding(repo, { ...finding, scope: "src", paths: ["src/public.ts"] }, witness, "src")).toContain("outside the repository or assignment scope")
+  })
+
   test("non-evidence roles are not recursively rewritten or given extraction provenance", async () => {
     const { root, snapshot } = await fixture()
     const response = { kind: "planner", lessons: { evidence: [{ ...reference, excerpt: "data, not a supported ref position" }] } }

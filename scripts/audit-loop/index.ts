@@ -277,6 +277,8 @@ export const agentCommand = (role: AgentRole, worktree: string, schema: string, 
   return ["codex", "exec", "--ephemeral", "--json", "--disable", "multi_agent", "--disable", "multi_agent_v2", "-m", model, "-c", `model_reasoning_effort="${effort}"`, "-s", role === "apply" ? "workspace-write" : "read-only", "--cd", worktree, "--output-schema", schema, "--output-last-message", message, prompt]
 }
 
+const receiptError = (receipt: AgentReceipt, fallback: string) => receipt.parseError?.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 512) || fallback
+
 const callAgent = async (call: AgentCall): Promise<AgentCallResult> => {
   // Capture values before any await; state.baselineSha advances after verified fixes.
   const snapshot = { root: call.state.worktree, baselineSha: call.state.baselineSha, readScope: call.state.scope ?? "." }
@@ -377,10 +379,12 @@ const evidenceIsSafe = (path: string) => {
   if (!path || path === "." || segments.some((segment) => segment.startsWith("."))) return false
   if (path.startsWith("scripts/audit-loop") || path.startsWith(".github/") || path.startsWith(".codex/")) return false
   if (path === "AGENTS.md" || path.endsWith("/AGENTS.md") || path === "SECURITY.md" || path.endsWith("/SECURITY.md")) return false
-  if (path === "package.json" || path === "bun.lock" || path === "tsconfig.json" || path.endsWith("/package.json") || path.endsWith("/tsconfig.json") || path.endsWith(".api.md") || path.endsWith("/public.ts")) return false
+  if (path === "package.json" || path === "bun.lock" || path === "tsconfig.json" || path.endsWith("/package.json") || path.endsWith("/tsconfig.json") || path.endsWith(".api.md")) return false
   if (path.includes(":(") || /[*?[\]{}]/.test(path) || path.split("/").includes("..")) return false
   return /^[A-Za-z0-9._/-]+$/.test(path)
 }
+
+const editableEvidencePath = (path: string) => evidenceIsSafe(path) && !path.endsWith("/public.ts")
 
 const validateEvidence = async (repo: RepoInfo, evidence: Evidence[], readScope: string) => {
   for (const item of evidence) {
@@ -498,7 +502,7 @@ export const validateFinding = async (repo: RepoInfo, finding: Finding, events: 
   const witnesses = commandWitnesses(events)
   const witness = witnesses.find((item) => commandMatches(finding.reproduction.command, item) && item.exit_code === finding.reproduction.exitCode && item.aggregated_output?.includes(finding.reproduction.output))
   if (finding.reproduction.observed !== true || !witness) return "finding lacks a matching failing regression command witness"
-  if (!finding.paths.every((path) => pathInside(repo.root, path) && evidenceIsSafe(path) && pathUnder(finding.scope, path))) return "finding path is outside the repository or assignment scope"
+  if (!finding.paths.every((path) => pathInside(repo.root, path) && editableEvidencePath(path) && pathUnder(finding.scope, path))) return "finding path is outside the repository or assignment scope"
   for (const path of finding.paths) if (!(await sourceAt(repo.root, repo.baselineSha, path))) return `finding path is not an editable baseline file: ${path}`
   return validateEvidence(repo, finding.evidence, readScope)
 }
@@ -510,7 +514,7 @@ export const validateGate = (repo: RepoInfo, finding: Finding, gate: GateResult,
   if (gate.findingId !== finding.id || gate.canonicalRootCauseKey !== finding.canonicalRootCauseKey) return "gate does not match finding identity"
   if (gate.proposal.changeType !== "internal-fix" || gate.proposal.requiresHumanDecision || gate.proposal.contractChange || gate.proposal.apiChange || gate.proposal.ownershipChange || gate.proposal.adHoc || gate.proposal.hotfix || gate.proposal.migration) return "proposal requires a human contract decision or is an unsafe change type"
   const paths = [...new Set(gate.proposal.approvedPaths)]
-  if (paths.length !== gate.proposal.approvedPaths.length || paths.some((path) => !finding.paths.includes(path) || !pathInside(repo.root, path) || !evidenceIsSafe(path))) return "proposal paths are not an exact safe subset of the finding"
+  if (paths.length !== gate.proposal.approvedPaths.length || paths.some((path) => !finding.paths.includes(path) || !pathInside(repo.root, path) || !editableEvidencePath(path))) return "proposal paths are not an exact safe subset of the finding"
   if (paths.length !== finding.paths.length) return "proposal must approve the complete exact finding path set"
   if (gate.sourceEvidence.length === 0) return "gate lacks independent source evidence"
   if (!events || !commandWitnesses(events).some((item) => commandMatches(finding.reproduction.command, item) && item.exit_code === finding.reproduction.exitCode && item.aggregated_output?.includes(finding.reproduction.output))) return "gate lacks an independent matching reproduction witness"
@@ -592,7 +596,7 @@ const pathUnder = (scope: string, path: string) => scope === "." || path === sco
 const cleanAuditBaseline = async (state: RunState) => await worktreeHead(state.worktree) === state.baselineSha && await worktreeClean(state.worktree) && await indexClean(state.worktree)
 
 const validAssignment = async (root: string, worktree: string, requestedScope: string, assignment: PlannerAssignment) => {
-  if (!pathInside(root, assignment.scope) || !pathUnder(requestedScope, assignment.scope) || assignment.scope === "scripts/audit-loop" || assignment.scope === ".git" || assignment.scope.startsWith("scripts/audit-loop/") || assignment.scope.startsWith(".git/") || (assignment.scope !== "." && !evidenceIsSafe(assignment.scope))) return false
+  if (!pathInside(root, assignment.scope) || !pathUnder(requestedScope, assignment.scope) || assignment.scope === "scripts/audit-loop" || assignment.scope === ".git" || assignment.scope.startsWith("scripts/audit-loop/") || assignment.scope.startsWith(".git/") || (assignment.scope !== "." && !editableEvidencePath(assignment.scope))) return false
   try {
     const stat = await lstat(join(worktree, assignment.scope))
     return !stat.isSymbolicLink() && (stat.isFile() || stat.isDirectory())
@@ -723,7 +727,7 @@ export const runAudit = async (cwd: string, config: RunConfig) => {
         if (stop || fixCompleted) break
         const investigator = investigatorCall.receipt.exitCode === 0 && !investigatorCall.receipt.parseError ? (investigatorCall.parsed ? parseInvestigator(investigatorCall.parsed) : null) : null
         if (!investigator) {
-          await appendEvent(store, { runId: id, type: "negative_result", cycle, scope: assignment.scope, reason: "malformed investigator output", investigatorAgentKey: investigatorCall.receipt.agentKey, investigatorAttemptId: investigatorCall.receipt.attemptId, exitCode: investigatorCall.receipt.exitCode })
+          await appendEvent(store, { runId: id, type: "negative_result", cycle, scope: assignment.scope, reason: receiptError(investigatorCall.receipt, "malformed investigator output"), investigatorAgentKey: investigatorCall.receipt.agentKey, investigatorAttemptId: investigatorCall.receipt.attemptId, exitCode: investigatorCall.receipt.exitCode })
           if (!(await cleanAuditBaseline(state))) { state.status = "blocked"; state.error = "investigator rejection found unexpected worktree mutation"; break }
           continue
         }
@@ -749,7 +753,7 @@ export const runAudit = async (cwd: string, config: RunConfig) => {
         await updateState(state)
         const gateCall = await callAgent({ state, role: "gate", scope: finding.scope, strategy: `${assignment.strategy}:independent-gate`, prompt: gatePrompt(state, finding), timeoutMs: Math.max(1, new Date(state.deadlineAt).getTime() - Date.now()) })
         const gate = gateCall.receipt.exitCode === 0 ? (gateCall.parsed ? parseGate(gateCall.parsed) : null) : null
-        if (!gate) { await appendEvent(store, { runId: id, type: "gate_rejected", cycle, findingId: finding.id, scope: finding.scope, reason: "malformed gate output", gateAgentKey: gateCall.receipt.agentKey, gateAttemptId: gateCall.receipt.attemptId, exitCode: gateCall.receipt.exitCode }); continue }
+        if (!gate) { await appendEvent(store, { runId: id, type: "gate_rejected", cycle, findingId: finding.id, scope: finding.scope, reason: receiptError(gateCall.receipt, "malformed gate output"), gateAgentKey: gateCall.receipt.agentKey, gateAttemptId: gateCall.receipt.attemptId, exitCode: gateCall.receipt.exitCode }); continue }
         const gateError = validateGate(repo, finding, gate, gateCall.events)
         const evidenceError = !gateError && gate.verdict === "approved" ? await validateGateEvidence(repo, finding, gate, scope) : null
         if (gateError || evidenceError) {
