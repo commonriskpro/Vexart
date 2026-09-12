@@ -121,6 +121,8 @@ export type { DiffTheme, DiffProps } from "./navigation/diff"
 
 // ── Re-exported engine contracts referenced by headless public types ─────────
 
+export { ExtmarkManager } from "@vexart/engine"
+
 export type {
   CreateExtmarkOptions,
   Extmark,

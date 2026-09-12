@@ -67,16 +67,51 @@ Use `pushFocusScope()` for modal/dialog focus trapping.
 
 ## Mouse, hover, and drag
 
+### `useHover`
+
+Tracks mouse hover state with optional enter/leave delays:
+
 ```tsx
-const drag = useDrag({ axis: "both" })
-const hover = useHover()
+const hover = useHover({
+  delay: 50,
+  leaveDelay: 50,
+  onEnter: () => console.log("entered"),
+  onLeave: () => console.log("left"),
+})
 
 <box
-  {...drag.props}
-  {...hover.props}
+  {...hover.hoverProps}
   width={160}
   height={80}
-  backgroundColor={hover.state.hovered() ? 0x2a2a3eff : 0x1a1a2eff}
+  backgroundColor={hover.hovered() ? 0x2a2a3eff : 0x1a1a2eff}
+/>
+```
+
+### `useDrag`
+
+Manages mouse drag gestures with automatic pointer capture and interaction layer elevation:
+
+```tsx
+const [pos, setPos] = createSignal({ x: 0, y: 0 })
+
+const drag = useDrag({
+  onDragStart: (event) => {
+    // Return false to cancel drag
+    return true
+  },
+  onDrag: (event) => {
+    setPos({ x: event.x, y: event.y })
+  },
+  onDragEnd: (event) => {
+    console.log("drag ended")
+  },
+})
+
+<box
+  {...drag.dragProps}
+  width={160}
+  height={80}
+  backgroundColor={drag.dragging() ? 0x3a3a5eff : 0x1a1a2eff}
 />
 ```
 

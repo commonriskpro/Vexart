@@ -56,7 +56,7 @@ Vexart implements exactly 21 GPU pipeline command kinds indexed in `native/libve
 | :---: | :--- | :--- | :---: | :--- |
 | **0** | `rect` | `rect.wgsl` | **32B** (`BridgeRectInstance`) | Flat quads, borders, clear areas |
 | **1** | `shape_rect` | `shape_rect.wgsl` | **80B** (`BridgeShapeRectInstance`) | SDF rounded quads with uniform corner radius |
-| **2** | `shape_rect_corners` | `shape_rect_corners.wgsl`| **96B** (`BridgeShapeRectCornersInstance`)| SDF quads with independent per-corner radii |
+| **2** | `shape_rect_corners` | `rect_corners.wgsl`| **96B** (`BridgeShapeRectCornersInstance`)| SDF quads with independent per-corner radii |
 | **3** | `circle` | `circle.wgsl` | **64B** (`BridgeCircleInstance`) | Perfect SDF circles with stroke/fill support |
 | **4** | `polygon` | `polygon.wgsl` | **80B** (`BridgePolygonInstance`) | Regular N-sided convex polygons |
 | **5** | `bezier` | `bezier.wgsl` | **80B** (`BridgeBezierInstance`) | Quadratic Bezier curves with anti-aliasing |
@@ -75,6 +75,9 @@ Vexart implements exactly 21 GPU pipeline command kinds indexed in `native/libve
 | **18** | `glyph` | `msdf_text.wgsl` | **64B** (`MsdfGlyphInstance`) | MSDF vector font typography |
 | **19** | `self_filter` | `self_filter.wgsl` | **48B** (`SelfFilterInstance`) | Element-level CSS self-filters |
 | **20** | `shadow` | `shadow.wgsl` | **80B** (`BridgeShadowInstance`) | Analytic Gaussian drop and inset shadows |
+
+> **Prohibition Invariant (`cmd_kind` 9 & 10)**:
+> In `paint::dispatch` (`native/libvexart/src/paint/mod.rs`), `cmd_kind` 9 (`image`) and 10 (`image_transform`) are **strictly prohibited** in the direct render graph buffer. If encountered, dispatch immediately aborts with an error. Image layers are managed exclusively through native compositing operations (`vexart_composite_render_image_layer` and `vexart_composite_render_image_transform_layer`) to preserve correct z-ordering and target lifecycle.
 
 ---
 
@@ -154,16 +157,15 @@ To prevent high-water mark bloat from permanently hoarding VRAM:
 
 ---
 
-## 5. Complete 62 C FFI Export Signatures
+## 5. Complete C FFI Export Signatures (Exactly 50 Functions)
 
-All 62 native C API exports are declared `#[no_mangle] pub extern "C"` or `#[no_mangle] pub unsafe extern "C"`:
+Native C API exports are declared `#[no_mangle] pub extern "C"` or `#[no_mangle] pub unsafe extern "C"`. There are exactly 50 functions exported across all native subsystems:
 
-### 5.1 Library Version & Lifecycle (4 Functions)
+### 5.1 Library Version & Lifecycle (3 Functions)
 ```rust
 pub extern "C" fn vexart_version() -> u32
 pub unsafe extern "C" fn vexart_context_create(opts_ptr: *const u8, opts_len: u32, out_ctx: *mut u64) -> i32
 pub extern "C" fn vexart_context_destroy(ctx: u64) -> i32
-pub extern "C" fn vexart_context_resize(ctx: u64, width: u32, height: u32) -> i32
 ```
 
 ### 5.2 Paint & Command Dispatch (3 Functions)
@@ -173,7 +175,7 @@ pub unsafe extern "C" fn vexart_paint_upload_image(ctx: u64, rgba_ptr: *const u8
 pub extern "C" fn vexart_paint_remove_image(ctx: u64, image: u64) -> i32
 ```
 
-### 5.3 Composite Targets & Operations (15 Functions)
+### 5.3 Composite Targets & Operations (13 Functions)
 ```rust
 pub unsafe extern "C" fn vexart_composite_target_create(ctx: u64, width: u32, height: u32, out_target: *mut u64) -> i32
 pub extern "C" fn vexart_composite_target_destroy(ctx: u64, target: u64) -> i32
@@ -183,16 +185,20 @@ pub extern "C" fn vexart_composite_target_set_scissor(ctx: u64, target: u64, x: 
 pub extern "C" fn vexart_composite_target_reset_scissor(ctx: u64, target: u64) -> i32
 pub extern "C" fn vexart_composite_render_image_layer(ctx: u64, target: u64, image: u64, x: f32, y: f32, w: f32, h: f32, flags: u32, opacity_u32: u32) -> i32
 pub unsafe extern "C" fn vexart_composite_render_image_transform_layer(ctx: u64, target: u64, image: u64, matrix_ptr: *const f32, flags: u32) -> i32
-pub unsafe extern "C" fn vexart_composite_update_uniform(ctx: u64, target: u64, uniform_id: u64, data_ptr: *const u8, data_len: u32) -> i32
+pub unsafe extern "C" fn vexart_composite_update_uniform(_ctx: u64, target: u64, source_target: u64, params_ptr: *const u8, clear_rgba: u32) -> i32
 pub unsafe extern "C" fn vexart_composite_copy_region_to_image(ctx: u64, target: u64, x: u32, y: u32, w: u32, h: u32, out_image: *mut u64) -> i32
 pub unsafe extern "C" fn vexart_composite_image_filter_backdrop(ctx: u64, target: u64, params_ptr: *const u8, params_len: u32, stats_out: *mut u32) -> i32
 pub unsafe extern "C" fn vexart_composite_image_mask_rounded_rect(ctx: u64, target: u64, rect_ptr: *const f32, radii_ptr: *const f32) -> i32
-pub unsafe extern "C" fn vexart_composite_image_mask_rounded_rect_region(ctx: u64, target: u64, region_ptr: *const u32, rect_ptr: *const f32, radii_ptr: *const f32) -> i32
-pub unsafe extern "C" fn vexart_composite_readback_rgba(ctx: u64, target: u64, out_ptr: *mut u8, out_len: u32, stats_out: *mut u32) -> i32
-pub unsafe extern "C" fn vexart_composite_readback_region_rgba(ctx: u64, target: u64, region_ptr: *const u32, out_ptr: *mut u8, out_len: u32, stats_out: *mut u32) -> i32
+pub unsafe extern "C" fn vexart_composite_image_mask_rounded_rect_region(_ctx: u64, image: u64, rect_ptr: *const u8, out_image: *mut u64) -> i32
 ```
 
-### 5.4 Text & MSDF Typography (4 Functions)
+### 5.4 Composite Readback Operations (2 Functions)
+```rust
+pub unsafe extern "C" fn vexart_composite_readback_rgba(ctx: u64, target: u64, out_ptr: *mut u8, out_len: u32, stats_out: *mut u32) -> i32
+pub unsafe extern "C" fn vexart_composite_readback_region_rgba(_ctx: u64, target: u64, rect_ptr: *const u8, dst: *mut u8, dst_cap: u32, stats_out: *mut FrameStats) -> i32
+```
+
+### 5.5 Text & MSDF Typography (4 Functions)
 ```rust
 pub extern "C" fn vexart_font_init() -> i32
 pub unsafe extern "C" fn vexart_font_query(families_ptr: *const u8, families_len: u32, weight: u16, italic: u32, out_handle: *mut u64) -> i32
@@ -200,11 +206,9 @@ pub unsafe extern "C" fn vexart_font_render_text(ctx: u64, target: u64, text_ptr
 pub unsafe extern "C" fn vexart_font_measure(text_ptr: *const u8, text_len: u32, families_ptr: *const u8, families_len: u32, font_size: f32, weight: u16, italic: u32, out_w: *mut f32, out_h: *mut f32) -> i32
 ```
 
-### 5.5 Kitty Presentation & Transport (15 Functions)
+### 5.6 Kitty Presentation & Transport (13 Functions)
 ```rust
 pub unsafe extern "C" fn vexart_kitty_emit_frame_with_stats(ctx: u64, target: u64, image_id: u32, stats_out: *mut u32) -> i32
-pub unsafe extern "C" fn vexart_frame_present_native(ctx: u64, target: u64, image_id: u32, mode: u32, stats_out: *mut u32) -> i32
-pub extern "C" fn vexart_paint_present(ctx: u64, target: u64, image_id: u32) -> i32
 pub unsafe extern "C" fn vexart_kitty_emit_layer(ctx: u64, image_id: u32, rgba_ptr: *const u8, rgba_len: u32, layer_ptr: *const u32, layer_len: u32, stats_out: *mut u32) -> i32
 pub unsafe extern "C" fn vexart_kitty_emit_layer_target(ctx: u64, target: u64, image_id: u32, layer_ptr: *const u32, layer_len: u32, stats_out: *mut u32) -> i32
 pub unsafe extern "C" fn vexart_kitty_emit_region_target(ctx: u64, target: u64, image_id: u32, region_ptr: *const u32, region_len: u32, stats_out: *mut u32) -> i32
@@ -219,25 +223,25 @@ pub unsafe extern "C" fn vexart_kitty_emit_placeholder_frame(ctx: u64, target: u
 pub extern "C" fn vexart_kitty_delete_placeholder(ctx: u64, image_id: u32) -> i32
 ```
 
-### 5.6 Native Retained Layer Registry (5 Functions)
+### 5.7 Native Retained Layer Registry (5 Functions)
 ```rust
-pub unsafe extern "C" fn vexart_layer_upsert(ctx: u64, key_ptr: *const u8, key_len: u32, desc_ptr: *const u8, desc_len: u32, out_ptr: *mut u64) -> i32
+pub unsafe extern "C" fn vexart_layer_upsert(ctx: u64, key_ptr: *const u8, key_len: u32, desc_ptr: *const u8, desc_len: u32, out_ptr: *mut u8) -> i32
 pub unsafe extern "C" fn vexart_layer_reuse(ctx: u64, layer_handle: u64, frame: u64, out_image_id: *mut u32) -> i32
 pub unsafe extern "C" fn vexart_layer_remove(ctx: u64, layer_handle: u64, out_image_id: *mut u32) -> i32
 pub extern "C" fn vexart_layer_clear(ctx: u64) -> i32
 pub unsafe extern "C" fn vexart_layer_present_dirty(ctx: u64, layer_handle: u64, frame: u64, out_image_id: *mut u32) -> i32
 ```
 
-### 5.7 GPU Resource Manager & Assets (8 Functions)
+### 5.8 GPU Resource Manager & Image Assets (5 Functions)
 ```rust
 pub unsafe extern "C" fn vexart_resource_get_stats(ctx: u64, buf_ptr: *mut u8, buf_len: u32, stats_out: *mut u32) -> i32
 pub extern "C" fn vexart_resource_set_budget(ctx: u64, budget_mb: u32) -> i32
-pub unsafe extern "C" fn vexart_image_asset_register(ctx: u64, scene: u64, handle: u64, key_ptr: *const u8, key_len: u32, bytes_ptr: *const u8, bytes_len: u32, out_w: *mut u32, out_h: *mut u32) -> i32
-pub extern "C" fn vexart_image_asset_touch(frame: u64, handle: u64) -> i32
+pub unsafe extern "C" fn vexart_image_asset_register(current_frame: u64, key_ptr: *const u8, key_len: u32, rgba_ptr: *const u8, rgba_len: u32, meta_ptr: *const u8, out_handle: *mut u64) -> i32
+pub extern "C" fn vexart_image_asset_touch(current_frame: u64, handle: u64) -> i32
 pub extern "C" fn vexart_image_asset_release(handle: u64) -> i32
 ```
 
-### 5.8 Error Diagnostics (2 Functions)
+### 5.9 Error Diagnostics (2 Functions)
 ```rust
 pub extern "C" fn vexart_get_last_error_length() -> u32
 pub extern "C" fn vexart_copy_last_error(dst: *mut u8, cap: u32) -> u32
@@ -257,19 +261,41 @@ Vexart outputs graphics through four specialized transport channels:
   - Final chunk: `\x1b_Gm=0;{chunk}\x1b\\`
 
 ### 6.2 Temporary File Transport (`t=f`)
-Used on legacy terminals or when SHM is unavailable:
-- Pixels are written to a temporary binary file.
+Used on legacy terminals or local file workflows:
+- Pixels are written to a temporary binary file in `/tmp/`.
 - Path is base64-encoded and sent via Kitty control code `\x1b_Ga=T,f=32,s={w},v={h},t=f;{base64_path}\x1b\\`.
+- **Graceful Degradation**: If file creation fails (disk full, permissions), the transport manager automatically degrades to direct base64 transport (`t=d`) without frame loss.
 
 ### 6.3 POSIX Shared Memory Transport (`t=s`)
 Highest throughput transport on Linux/macOS:
-- Segments are mapped under `/vx-{pid:x}-{counter:x}` (e.g. `/vx-1f4a-2b`).
-- **Ring Buffer**: Rust pre-allocates a ring buffer of reusable SHM file descriptors, avoiding file creation/deletion overhead at 60/120 FPS.
+- **Ring Buffer (`SHM_RING_SLOTS = 3`)**: Pre-allocates a fixed pool of 3 reusable POSIX SHM slots.
+- **Naming Pattern**: Formats names as `/vx-{pid:x}-s{slot:x}-g{gen:x}` to stay well below the POSIX 31-character limit and guarantee monotonic generational isolation across frames.
 - Control code: `\x1b_Ga=T,f=32,s={w},v={h},t=s;{base64_shm_name}\x1b\\`.
 - The terminal reads pixels directly from RAM via kernel zero-copy.
+- **Panic Cleanup**: Registers a global emergency unwinding hook that invokes `cleanup_all()` on the ring buffer to unlink all active shared memory segments upon unexpected crashes.
 
-### 6.4 Tmux Unicode Placeholder Transport
+### 6.4 Tmux Unicode Placeholder Transport & Double-Buffering
 Enables full-resolution graphics inside tmux 3.4+:
 1. **DCS Passthrough**: Graphics control APCs are wrapped inside tmux device control strings: `\x1bPtmux;\x1b\x1b_G...;\x1b\x1b\\\x1b\\`.
-2. **Placeholder Grid**: The visible viewport is emitted as a grid of Unicode private-use characters (`U+10EEEE`), each tagged with combining diacritics encoding image ID, cell row, and cell column.
-3. **Retention**: Tmux natively stores and scrolls the Unicode text grid while the outer Kitty terminal overlays the GPU graphic at the exact placeholder coordinates.
+2. **Double-Buffering (`a=f` / `a=a`)**: Frame image buffers are preloaded with `a=f` (frame upload) and committed synchronously via placement actions (`a=a`), eliminating display flicker during redraws.
+3. **Placeholder Grid**: The visible viewport is emitted as a grid of Unicode private-use characters (`U+10EEEE`), each tagged with combining diacritics encoding image ID, cell row, and cell column.
+4. **Retention**: Tmux natively stores and scrolls the Unicode text grid while the outer Kitty terminal overlays the GPU graphic at the exact placeholder coordinates.
+
+---
+
+## 7. Unified Resource Management & MSDF Atlas Engine
+
+### 7.1 Unified `ResourceManager`
+Native GPU assets are monitored under a global memory cap in `native/libvexart/src/resource/mod.rs`:
+- **Default Budget**: **512 MB** (`DEFAULT_BUDGET_BYTES = 512 * 1024 * 1024`), configurable via `vexart_resource_set_budget` (enforced minimum: 32 MB).
+- **Three Priority Tiers**:
+  1. `Visible`: Touched in the active frame; strictly protected from eviction.
+  2. `Recent`: Active within the last 5 seconds; candidate for eviction under heavy memory pressure.
+  3. `Cold`: Unused for >5 seconds; prioritized for immediate LRU reclamation.
+- **Tracked Asset Kinds**: `LayerTarget`, `TerminalImage`, `FontAtlas`, `GlyphAtlas`, `ImageSprite`, `TransformSprite`, `BackdropSprite`.
+
+### 7.2 Native MSDF Vector Typography (`fdsm` + `ttf-parser`)
+Vexart renders crisp, vector-quality typography at any scale using Multi-channel Signed Distance Fields (`native/libvexart/src/font/`):
+- **Atlas Page Architecture**: Pre-allocates 1024×1024 RGBA8 texture pages (4 MB per page).
+- **Glyph Cell Dimensions**: Generates glyphs at fixed 36×36 texel cell bounds using pure-Rust `fdsm` vector contour distance evaluation.
+- **Page Capacity**: Fits ~900 glyphs per atlas page, delivering razor-sharp text rendering from 8px to 72px without runtime texture re-rasterization.

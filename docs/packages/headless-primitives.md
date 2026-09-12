@@ -6,7 +6,7 @@ The `@vexart/headless` package lives at Tier 3 of the Vexart architecture. It de
 
 ## 1. Catalog of Exactly 25 Headless Primitives
 
-The 25 primitives are organized across six functional categories:
+The 25 primitives are organized into **23 unstyled UI components** and **2 state factories**:
 
 | Category | Primitive | Core Responsibility | Keyboard & Interaction Contract |
 | :--- | :--- | :--- | :--- |
@@ -27,14 +27,14 @@ The 25 primitives are organized across six functional categories:
 | | `ScrollView` | Viewport clipping and scrollbar physics. | Mouse wheel, trackpad scroll, drag thumb, arrow keys. |
 | | `Tabs` | Tabbed panel coordination. | `Left`/`Right` / `h`/`l` tab switching, panel focus. |
 | **Collections** (3)| `List` | Vertical/horizontal selectable item list. | Arrows / `j`/`k` item navigation, `Enter` selection. |
-| | `Table` | Tabular row/column grid with sort headers. | Arrows / `hjkl` cell/row navigation, header sorting. |
+| | `Table` | Tabular row/column grid with row selection. | Vertical navigation via `Down`/`Up` (`j`/`k`), header sorting. |
 | | `VirtualList` | Virtualized windowing for large lists. | Mandates fixed `itemHeight: number`; overscan buffers. |
-| **Overlays** (4) | `Dialog` | Modal dialog with focus trap. | `pushFocusScope`, `Esc` close, focus restoration. |
-| | `createToaster`| Toast notification manager and queue. | Timed auto-dismiss, manual dismiss, stack ordering. |
+| **Overlays** (3) | `Dialog` | Modal dialog with focus trap. | Focus scope trap, `Esc` close, focus restoration. |
 | | `Tooltip` | Hover-activated contextual tooltip. | Hover entry/exit delay timers, auto-flip positioning. |
 | | `Popover` | Non-modal anchor-attached floating card. | Outside-click plane dismiss, anchor alignment. |
-| **Navigation & Forms** (2)| `Diff` | Line-by-line unified diff viewer. | Added/removed/unchanged status lines (unified mode). |
-| | `createForm` | Form state machine and validation manager. | Synchronous/asynchronous validation, dirty tracking. |
+| **Navigation** (1) | `Diff` | Line-by-line diff viewer. | Color-coded status lines (additions, deletions). |
+| **State Factories** (2)| `createForm` | Form state machine and validation manager. | Synchronous/asynchronous validation, dirty tracking. |
+| | `createToaster`| Toast notification manager and queue. | Timed auto-dismiss, manual dismiss, stack ordering. |
 
 > **ARCHITECTURAL NOTE — ACCORDION PRIMITIVE**:
 > The `Accordion` component is **not implemented** in Vexart. Do not attempt to import or reference an accordion primitive. Build expandable views using `Tabs` or compound `Button` toggles with collapsible `<box>` containers.
@@ -45,39 +45,54 @@ The 25 primitives are organized across six functional categories:
 
 Headless components operate without a web DOM or CSS stylesheets, employing four reactive patterns:
 
-### 2.1 Render Props (`children` Callback)
-Primitives expose reactive state to children via render functions:
+### 2.1 Named Render Props Pattern
+Rather than taking a generic render function as `children`, headless primitives accept explicit named render-prop callbacks (e.g. `renderButton`, `renderCheckbox`, `renderItem`). The callback receives a stable context bag containing reactive states and interaction props:
+
 ```tsx
 import { Button } from "@vexart/headless"
 
-<Button onPress={() => submitForm()}>
-  {(state) => (
+<Button
+  onPress={() => submitForm()}
+  renderButton={(ctx) => (
     <box
-      backgroundColor={state.pressed ? "#222" : state.hovered ? "#333" : "#111"}
-      borderWidth={state.focused ? 1 : 0}
+      {...ctx.buttonProps}
+      backgroundColor={ctx.pressed ? "#222" : ctx.hovered ? "#333" : "#111"}
+      borderWidth={ctx.focused ? 1 : 0}
       borderColor="#737373"
       padding={8}
       cornerRadius={6}
     >
       <text color="#fafafa">
-        {state.pressed ? "Processing..." : "Submit"}
+        {ctx.pressed ? "Processing..." : "Submit"}
       </text>
     </box>
   )}
-</Button>
+/>
 ```
 
-### 2.2 Prop Getters
-Components with complex accessibility requirements expose prop getter functions that generate event listeners, IDs, and attributes:
-```tsx
-const { getTriggerProps, getContentProps } = createPopover()
+### 2.2 Popover & Anchor Declarative Pattern
+Components with floating overlays (`Popover`, `Tooltip`) use declarative trigger and content callbacks:
 
-<box {...getTriggerProps()}>
-  <text>Open Menu</text>
-</box>
-<box {...getContentProps()}>
-  <text>Menu Item 1</text>
-</box>
+```tsx
+import { Popover } from "@vexart/headless"
+import { createSignal } from "solid-js"
+
+const [open, setOpen] = createSignal(false)
+
+<Popover
+  open={open()}
+  onOpenChange={setOpen}
+  renderTrigger={(ctx) => (
+    <box focusable onPress={ctx.toggle}>
+      <text>Open Popover</text>
+    </box>
+  )}
+  renderContent={() => (
+    <box padding={8} backgroundColor="#171717" cornerRadius={6}>
+      <text color="#fafafa">Popover Content</text>
+    </box>
+  )}
+/>
 ```
 
 ### 2.3 Compound Contexts
@@ -106,12 +121,12 @@ Modal overlays (`Dialog`) push a focus scope onto the stack:
 - Tab navigation is strictly locked within the modal's children.
 - On close, focus automatically restores to the element that triggered the dialog (verified via node registry existence checks to prevent crashes on unmounted triggers).
 
-### 3.3 Universal Vim Keymaps
-All collection and selection primitives (`List`, `Table`, `VirtualList`, `Select`, `Tabs`, `Slider`) support standard arrow keys AND Vim navigation bindings:
-- `k` / `Up`: Navigate upward / previous item.
-- `j` / `Down`: Navigate downward / next item.
-- `h` / `Left`: Navigate left / decrement value / previous tab.
-- `l` / `Right`: Navigate right / increment value / next tab.
+### 3.3 Keyboard Navigation & Vim Keymaps
+Collection and selection primitives support standard arrow keys and Vim navigation:
+- `Tabs`: `Left` / `Right` (or `h` / `l`) to cycle through active tab panels.
+- `Table`: `Down` / `Up` (or `j` / `k`) to navigate table rows vertically (table navigation selects rows, not individual cells across columns).
+- `List` & `VirtualList`: `Down` / `Up` (or `j` / `k`) for vertical item selection.
+- `Slider`: `Left` / `Right` (or `h` / `l`) for value decrements and increments.
 
 ### 3.4 Outside-Click Dismissal
 Floating popovers (`Popover`, `Combobox`, `Tooltip`) mount an invisible exterior capture plane:
@@ -123,14 +138,13 @@ Floating popovers (`Popover`, `Combobox`, `Tooltip`) mount an invisible exterior
 
 Historic terminal UI engines implemented text cursors by mutating strings, inserting `"│"` or `" "` at the cursor index at 2Hz. In MSDF proportional typography, this caused horizontal text jitter and forced 60 FPS Flexily layout passes while idle.
 
-`@vexart/headless` `Input` uses an independent cursor quad overlay:
+`@vexart/headless` `Input` uses an independent cursor quad overlay positioned via engine floating props:
 1. **Immutable Text**: The text element `<text>{value()}</text>` remains clean and unmodified.
-2. **Subpixel Quad Projection**: The cursor renders as an absolute overlay quad:
+2. **Subpixel Quad Projection**: The cursor renders as a floating quad relative to the parent box:
    ```tsx
    <box
-     position="absolute"
-     left={cursorOffsetPx()}
-     top={0}
+     floating="parent"
+     floatOffset={{ x: cursorX(), y: 0 }}
      width={1.5}
      height={lineHeight}
      backgroundColor={cursorColor}
@@ -144,15 +158,18 @@ Historic terminal UI engines implemented text cursors by mutating strings, inser
 
 `VirtualList` renders tens of thousands of rows with minimal memory by virtualizing visible rows:
 
-> **CRITICAL INVARIANT — FIXED ITEM HEIGHT**:
-> `VirtualList` strictly requires a fixed numeric `itemHeight: number` prop:
+> **CRITICAL INVARIANT — FIXED ITEM HEIGHT & RENDER PROP**:
+> `VirtualList` strictly requires a fixed numeric `itemHeight: number` prop, a `height: SizingUnit` viewport prop, and an explicit `renderItem` callback:
 > ```tsx
 > <VirtualList
 >   items={largeArray}
 >   itemHeight={24} // MANDATORY: Dynamic row heights are prohibited
->   viewportHeight={480}
-> >
->   {(item) => <box height={24}><text>{item.label}</text></box>}
-> </VirtualList>
+>   height={480}    // Visible viewport height (number or "grow")
+>   renderItem={(item, index, ctx) => (
+>     <box height={24} backgroundColor={ctx.selected ? "#2a2a4e" : "transparent"}>
+>       <text color="#fff">{item.label}</text>
+>     </box>
+>   )}
+> />
 > ```
 > Dynamic or percentage row heights are mathematically incompatible with the zero-allocation index windowing algorithm.

@@ -25,12 +25,18 @@ Render Graph Construction
   │  Compiles layout rectangles, MSDF text, and visual effects into paint queues.
   ▼
 Rust/WGPU Native Rendering Boundary (native/libvexart via bun:ffi)
-  │  Hardware-accelerated shader pipelines: rounded rects, drop shadows, outer glows,
-  │  linear/radial gradients, and glassmorphic backdrop blurs.
+  │  Hardware-accelerated shader pipelines (21 pipelines): rounded rects,
+  │  analytic box shadows, outer glows, linear/radial/conic gradients,
+  │  and glassmorphic backdrop blurs.
   ▼
 Kitty Presentation Protocol
-     Emits GPU-rendered frames via POSIX Shared Memory (SHM), temporary file, or direct DCS.
+     Direct Terminal: Emits Application Program Command (APC) sequences (\x1b_G...\x1b\\).
+     tmux (3.4+): Wraps APC in Device Control String (DCS) passthrough envelopes (\x1bPtmux;...\x1b\\)
+     with Unicode placeholder cells (U+10EEEE) over POSIX Shared Memory (SHM) or files.
 ```
+
+### Native FFI Boundary & Calling Convention
+All FFI exports from `libvexart` adhere strictly to the ARM64 register calling convention limit of **≤ 8 scalar parameters**. When transferring complex render graph commands, transformation matrices, or asset descriptors, parameters are serialized into contiguous `ArrayBuffer` instances (`Uint8Array`, `Float32Array`) passed as pointer + length pairs. Native state is encapsulated within the `SHARED_PAINT: LazyLock<Mutex<Option<PaintContext>>>` singleton, and `_ctx: u64` is reserved.
 
 ### Critical Execution Invariant
 The consumer barrel `vexart` and engine `vexart/engine` share a single universal reconciler instance. Code runs inside the **Bun** runtime with `--conditions=browser` and `--preload ./solid-plugin.ts` to execute JSX without a browser DOM.
@@ -179,6 +185,7 @@ Vexart has a strict two-layer element taxonomy. Mixing this up causes immediate 
 ### ⛔ STRICTLY FORBIDDEN WEB HALLUCINATIONS
 The reconciler has **NO HTML DOM**. The following tags **DO NOT EXIST** and will crash the reconciler:
 - ❌ `<div>`, `<span>`, `<p>`, `<a>`, `<button>`, `<input>`, `<ul>`, `<li>`, `<table>`, `<tr>`, `<td>`, `<section>`, `<header>`, `<footer>`.
+- ❌ `<scroll>` is **NOT an intrinsic element**. The ONLY four intrinsics that exist are `<box>`, `<text>`, `<image>` (or `<img>`), and `<canvas>`. For scrolling containers, use `<box scrollY scrollId="...">` or `<ScrollView>` / `<VoidScrollView>`.
 - ❌ Raw text inside `<box>`: `<box>Hello</box>` is **ILLEGAL**. All text strings **MUST** be enclosed in `<text>` or `<Text>`!
 - ❌ Deleted legacy primitives: `<Span>`, `<RichText>`, `<WrapRow>`, `@vexart/primitives`. (Package `@vexart/primitives` was deleted and merged into `@vexart/app`).
 
@@ -370,27 +377,59 @@ For fine-grained effect control, apply props directly to `<box>` or `<Box>`:
 
 ```tsx
 <Box
-  // Drop Shadow
-  shadow={{ x: 0, y: 8, blur: 24, color: 0x00000080 }}
+  // Drop Shadow (single or multi-shadow array)
+  shadow={[
+    { x: 0, y: 4, blur: 8, spread: 0, color: 0x00000040 },
+    { x: 0, y: 16, blur: 32, spread: 2, color: 0x00000060 }
+  ]}
   
   // Outer Glow
   glow={{ radius: 24, color: 0x56d4c8ff, intensity: 50 }}
   
-  // Linear / Radial Gradients (RGBA hex numbers: 0xRRGGBBAA)
+  // Linear / Radial Gradients (hex strings or u32 RGBA)
   gradient={{
-    type: "linear",
-    from: 0x1e1b4bff,
-    to: 0x0f172aff,
-    angle: 135
+    type: "radial",
+    from: "#3b82f6",
+    to: "#1e1b4b"
   }}
   
-  // Glassmorphic Backdrop Filter
+  // Element Self-Filter (CSS filter parity on own rendering)
+  filter={{
+    blur: 2,
+    brightness: 110,
+    contrast: 105,
+    saturate: 120,
+    grayscale: 0,
+    invert: 0
+  }}
+  
+  // Glassmorphic Backdrop Filter (affects content behind the box)
   backdropBlur={16}
   backdropBrightness={110}
   backdropContrast={120}
+  backdropSaturate={130}
+  backdropGrayscale={0}
+  backdropInvert={0}
+  backdropSepia={0}
+  backdropHueRotate={0}
+  
+  // Directional Borders & Metrics
+  borderLeft={{ width: 4, color: "#3b82f6" }}
+  borderRight={{ width: 1, color: "#262626" }}
+  borderTop={{ width: 1, color: "#262626" }}
+  borderBottom={{ width: 1, color: "#262626" }}
   
   // Per-corner radius
   cornerRadii={{ tl: 16, tr: 16, br: 4, bl: 4 }}
+  
+  // 2D Transformations & Origin
+  transform={{
+    translate: [10, -5],
+    scale: [1.05, 1.05],
+    rotate: 15,
+    skew: [0, 5]
+  }}
+  transformOrigin={[0.5, 0.5]}
 />
 ```
 
@@ -478,11 +517,131 @@ Enable scrolling on containers by setting `scrollX={true}` or `scrollY={true}`:
     {/* Large content */}
   </Box>
 
-  // Programmatic scroll (takes a single numeric vertical offset `y: number`):
-  scroller.scrollTo(500); // Scroll to 500px vertically
-  scroller.scrollBy(50);   // Scroll down by 50px
+  // Programmatic scroll: takes a negative vertical offset `y <= 0` to scroll down:
+  scroller.scrollTo(-500); // Scroll down by 500px from the top (offset: -500)
+  scroller.scrollBy(-50);  // Scroll further down by 50px
+
+  // Read current scroll position:
+  const currentOffset = scroller.scrollTop; // Returns distance scrolled from top: -scrollY (e.g. 500)
   ```
-  Note that `scrollTo` and `scrollBy` take a single numeric vertical offset `y: number` (or `dy: number`).
+  Note that in Vexart internal geometry, `scrollY` is non-positive (`<= 0`). Passing `-500` to `scrollTo()` sets `scrollY = -500`, which shifts content up by 500px so lower content becomes visible. `scroller.scrollTop` exposes this as a positive number (`500`).
+
+### 6.5 Reactive Engine Hooks
+
+#### `useTerminalDimensions(terminal)`
+Requires a valid `Terminal` instance. In applications mounted via `createApp()` or `mountApp()`, obtain the managed terminal using `useAppTerminal()`:
+
+```tsx
+import { createApp, useAppTerminal } from "vexart";
+import { useTerminalDimensions } from "vexart/engine";
+
+function ResponsiveHeader() {
+  const terminal = useAppTerminal();
+  const dims = useTerminalDimensions(terminal);
+
+  return (
+    <Box className="w-full p-2 bg-card border-b border-border">
+      <Text>Cols: {dims.columns()} | Rows: {dims.rows()} | Pixels: {dims.width()}×{dims.height()}</Text>
+    </Box>
+  );
+}
+```
+
+#### `useHover(options)`
+Tracks mouse pointer hover status with optional debounce timers:
+
+```tsx
+import { useHover, Box, Text } from "vexart";
+
+function HoverCard() {
+  const { hovered, hoverProps } = useHover({ delay: 50, leaveDelay: 100 });
+
+  return (
+    <Box
+      {...hoverProps}
+      className="p-4 rounded-lg border border-border"
+      backgroundColor={hovered() ? "#262626" : "#171717"}
+    >
+      <Text>{hovered() ? "Hovered!" : "Resting"}</Text>
+    </Box>
+  );
+}
+```
+
+#### `useDrag(options)`
+Provides managed drag interaction with automatic pointer capture and hit bounds tracking:
+
+```tsx
+import { useDrag, Box, Text } from "vexart";
+
+function DraggableHandle() {
+  const { dragging, dragProps } = useDrag({
+    onDragStart: (e) => console.log("Drag started at", e.x, e.y),
+    onDrag: (e) => console.log("Dragging to", e.x, e.y),
+    onDragEnd: (e) => console.log("Drag ended"),
+  });
+
+  return (
+    <Box
+      {...dragProps}
+      className="p-3 rounded bg-primary cursor-pointer"
+      opacity={dragging() ? 0.7 : 1.0}
+    >
+      <Text>{dragging() ? "Dragging..." : "Grab Handle"}</Text>
+    </Box>
+  );
+}
+```
+
+#### `useQuery(key, fetcher, options)` & `useMutation(mutationFn, options)`
+Reactive asynchronous data fetching with automatic loading states, retries, and optimistic mutations:
+
+```tsx
+import { useQuery, useMutation, Show, For, Box, Text } from "vexart";
+
+function UserList() {
+  const users = useQuery("users", () => fetch("/api/users").then(r => r.json()), {
+    refetchInterval: 10000,
+    retry: 2,
+  });
+
+  const deleteUser = useMutation(async (id: string) => fetch(`/api/users/${id}`, { method: "DELETE" }), {
+    onSuccess: () => users.refetch(),
+  });
+
+  return (
+    <Box className="flex-col gap-2">
+      <Show when={!users.loading()} fallback={<Text>Loading users...</Text>}>
+        <For each={users.data()}>
+          {(u) => <Text>{u.name}</Text>}
+        </For>
+      </Show>
+    </Box>
+  );
+}
+```
+
+#### `createTransition(sourceSignal, options)` & `createSpring(sourceSignal, options)`
+Hardware-accelerated animation primitives for smooth transitions:
+
+```tsx
+import { createSignal } from "solid-js";
+import { createTransition, createSpring, easing } from "vexart/engine";
+
+const [expanded, setExpanded] = createSignal(false);
+
+// Eased duration transition:
+const height = createTransition(() => (expanded() ? 300 : 60), {
+  duration: 200,
+  easing: easing.easeInOutCubic,
+});
+
+// Physics-based spring:
+const scale = createSpring(() => (expanded() ? 1.0 : 0.8), {
+  stiffness: 200,
+  damping: 15,
+});
+```
 
 ---
 
@@ -492,20 +651,21 @@ All application-level dependencies should be imported directly from `"vexart"`.
 
 ```typescript
 import {
-  // App Lifecycle & Core Primitives
+  // App Lifecycle & Core Primitives (@vexart/app)
   createApp,
   mountApp,
   Page,
   Box,                 // App primitive with className support (@vexart/app)
   Text,                // App primitive with className support (@vexart/app)
+  useAppTerminal,
 
   // OLED Void Themed Components (@vexart/styled)
-  Button,              // Themed Button (wins collision over headless Button)
-  Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter,
-  Badge,
-  Avatar,
-  Separator,
-  Skeleton,
+  VoidButton,          // Themed Void button (variants: default, secondary, destructive, outline, ghost)
+  VoidCard, VoidCardHeader, VoidCardTitle, VoidCardDescription, VoidCardContent, VoidCardFooter, VoidCardAction,
+  VoidBadge,
+  VoidAvatar,
+  VoidSeparator,
+  VoidSkeleton,
   VoidInput,
   VoidTextarea,
   VoidCheckbox,
@@ -518,7 +678,9 @@ import {
   VoidTabs,
   VoidTable,
   VoidDialog, VoidDialogTitle, VoidDialogDescription, VoidDialogFooter,
+  VoidDropdownMenu, VoidDropdownMenuTrigger, VoidDropdownMenuContent, VoidDropdownMenuItem, VoidDropdownMenuSeparator, VoidDropdownMenuLabel,
   VoidTooltip,
+  VoidPopover,
   VoidCode,
   VoidMarkdown,
   VoidList,
@@ -526,11 +688,12 @@ import {
   VoidScrollView,
   createVoidToaster,
 
-  // Theme Tokens & Runtime
+  // Theme Tokens & Runtime (@vexart/styled)
   colors, radius, space, font, weight, shadows, glows,
-  themeColors, setTheme, getTheme, darkTheme, lightTheme, createTheme,
+  themeColors, setTheme, getTheme, getThemeVersion, darkTheme, lightTheme, createTheme,
 
   // Headless Components (@vexart/headless)
+  Button,              // Unstyled Headless Button (requires renderButton / ctx.buttonProps)
   ToggleSwitch,        // Headless Switch renamed to avoid colliding with SolidJS Switch!
   VirtualList,
   createForm,
@@ -543,7 +706,6 @@ import {
   useRouter,
 
   // Engine Hooks & Utilities (@vexart/engine)
-  useTerminalDimensions,
   useFocus,
   setFocus,
   focusedId,
@@ -552,6 +714,10 @@ import {
   useMouse,
   useInput,
   onInput,
+  useHover,
+  useDrag,
+  useQuery,
+  useMutation,
   RGBA,
 
   // SolidJS Reactivity & Control Flow
@@ -572,10 +738,10 @@ import {
 ```
 
 ### Collision Resolution Rules
-1. `Box` and `Text`: Exported from `@vexart/app` (supporting `className`).
-2. `Button`: Exported from `@vexart/styled` (themed Void button).
-3. `ToggleSwitch`: Headless switch is renamed to `ToggleSwitch` to prevent collision with SolidJS `<Switch>`.
-4. `useRouter`: Exported from `@vexart/app` (app-level router).
+1. **`Button` vs `VoidButton` (CRITICAL)**: `Button` exported from `"vexart"` is the **headless, unstyled primitive** from `@vexart/headless` (which takes a `renderButton` callback). For the pre-styled, themed Void design system button with variants (`default`, `secondary`, `destructive`, `outline`, `ghost`), you **MUST** use `VoidButton`.
+2. **`Box` and `Text`**: Exported from `@vexart/app` (supporting `className` utility class parsing).
+3. **`ToggleSwitch`**: Headless switch is exported as `ToggleSwitch` to prevent collision with SolidJS control flow `<Switch>`.
+4. **`useRouter`**: Exported from `@vexart/app` (app-level router).
 
 ---
 
@@ -587,7 +753,7 @@ The following four templates are complete, syntactically verified, and copy-past
 A complete standalone interactive CLI tool featuring counter state, key bindings, quit handling, and terminal auto-sizing.
 
 ```tsx
-import { createApp, Box, Text, Button, createSignal } from "vexart";
+import { createApp, Box, Text, VoidButton, createSignal } from "vexart";
 
 function CounterApp() {
   const [count, setCount] = createSignal(0);
@@ -602,24 +768,24 @@ function CounterApp() {
           {count()}
         </Text>
         <Box className="flex-row gap-3 mt-2">
-          <Button
+          <VoidButton
             variant="default"
             onPress={() => setCount((c) => c + 1)}
           >
             Increment (+1)
-          </Button>
-          <Button
+          </VoidButton>
+          <VoidButton
             variant="secondary"
             onPress={() => setCount((c) => c - 1)}
           >
             Decrement (-1)
-          </Button>
-          <Button
+          </VoidButton>
+          <VoidButton
             variant="outline"
             onPress={() => setCount(0)}
           >
             Reset
-          </Button>
+          </VoidButton>
         </Box>
         <Text className="text-xs text-muted-foreground mt-4">
           Press Tab to navigate buttons • Enter/Space to activate • Press 'q' or Ctrl+C to exit
@@ -645,15 +811,15 @@ import {
   createApp,
   Box,
   Text,
-  Button,
+  VoidButton,
   VoidInput,
   VoidCheckbox,
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
+  VoidCard,
+  VoidCardHeader,
+  VoidCardTitle,
+  VoidCardDescription,
+  VoidCardContent,
+  VoidCardFooter,
   createForm,
   createSignal,
   Show
@@ -692,13 +858,13 @@ function FormApp() {
   return (
     <Box className="w-full h-full p-8 flex-col items-center justify-center bg-background">
       <Box className="w-96">
-        <Card>
-          <CardHeader>
-            <CardTitle>User Registration</CardTitle>
-            <CardDescription>Enter details to create an account</CardDescription>
-          </CardHeader>
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>User Registration</VoidCardTitle>
+            <VoidCardDescription>Enter details to create an account</VoidCardDescription>
+          </VoidCardHeader>
 
-          <CardContent>
+          <VoidCardContent>
             <Box className="flex-col gap-4">
               {/* Username Field */}
               <Box className="flex-col gap-1">
@@ -738,19 +904,19 @@ function FormApp() {
                 <Text className="text-xs text-destructive">{form.errors.terms()}</Text>
               </Show>
             </Box>
-          </CardContent>
+          </VoidCardContent>
 
-          <CardFooter>
+          <VoidCardFooter>
             <Box className="flex-row justify-between items-center w-full">
-              <Button variant="outline" onPress={() => form.reset()}>
+              <VoidButton variant="outline" onPress={() => form.reset()}>
                 Reset
-              </Button>
-              <Button variant="default" onPress={() => form.submit()}>
+              </VoidButton>
+              <VoidButton variant="default" onPress={() => form.submit()}>
                 Submit Registration
-              </Button>
+              </VoidButton>
             </Box>
-          </CardFooter>
-        </Card>
+          </VoidCardFooter>
+        </VoidCard>
       </Box>
 
       <Show when={submittedData()}>
@@ -776,7 +942,7 @@ import {
   createApp,
   Box,
   Text,
-  Badge,
+  VoidBadge,
   VoidTabs,
   createSignal,
   onMount,
@@ -831,11 +997,11 @@ function DashboardApp() {
       <Box gridArea="header" className="px-4 flex-row items-center justify-between bg-card rounded-lg border border-border">
         <Box className="flex-row items-center gap-3">
           <Text className="text-base font-bold text-foreground">CLUSTER CONTROL MATRIX</Text>
-          <Badge variant="outline">REGION: US-EAST-1</Badge>
+          <VoidBadge variant="outline">REGION: US-EAST-1</VoidBadge>
         </Box>
         <Box className="flex-row items-center gap-2">
           <Text className="text-xs text-muted-foreground">SHM Transport:</Text>
-          <Badge variant="default">ONLINE</Badge>
+          <VoidBadge variant="default">ONLINE</VoidBadge>
         </Box>
       </Box>
 
@@ -903,29 +1069,24 @@ await createApp(() => <DashboardApp />, { quit: ["ctrl+c", "q"] });
 ---
 
 ### Template 4: Modal Dialog with Focus Trap & Backdrop Blur
-A modal dialog pattern demonstrating glassmorphic backdrop blur, focus trapping (`pushFocusScope`), and Escape key dismissal.
+A modal dialog pattern demonstrating glassmorphic backdrop blur and automatic focus trapping with `VoidDialog`.
 
 ```tsx
 import {
   createApp,
   Box,
   Text,
-  Button,
+  VoidButton,
   VoidDialog,
   VoidDialogTitle,
   VoidDialogDescription,
   VoidDialogFooter,
   createSignal,
-  Show,
-  onCleanup,
-  pushFocusScope
+  Show
 } from "vexart";
 
 function ConfirmPurgeDialog(props: { onClose: () => void; onConfirm: () => void }) {
-  // Push a focus scope so Tab only cycles within this dialog; pop on unmount
-  const popScope = pushFocusScope();
-  onCleanup(() => popScope());
-
+  // VoidDialog automatically activates a focus trap scope and restores focus upon dismissal
   return (
     <VoidDialog onClose={props.onClose} width={420}>
       <VoidDialogTitle>Confirm Destructive Action</VoidDialogTitle>
@@ -935,13 +1096,13 @@ function ConfirmPurgeDialog(props: { onClose: () => void; onConfirm: () => void 
       </VoidDialogDescription>
 
       <VoidDialogFooter>
-        <Button
+        <VoidButton
           variant="outline"
           onPress={props.onClose}
         >
           Cancel (Esc)
-        </Button>
-        <Button
+        </VoidButton>
+        <VoidButton
           variant="destructive"
           onPress={() => {
             props.onConfirm();
@@ -949,7 +1110,7 @@ function ConfirmPurgeDialog(props: { onClose: () => void; onConfirm: () => void 
           }}
         >
           Confirm Purge
-        </Button>
+        </VoidButton>
       </VoidDialogFooter>
     </VoidDialog>
   );
@@ -968,9 +1129,9 @@ function ModalDemoApp() {
         <Text className="text-sm text-muted-foreground">
           Modals automatically trap Tab focus and dismiss on Escape or overlay click.
         </Text>
-        <Button variant="destructive" onPress={() => setModalOpen(true)}>
+        <VoidButton variant="destructive" onPress={() => setModalOpen(true)}>
           Purge Storage Node
-        </Button>
+        </VoidButton>
 
         <Show when={actionConfirmed()}>
           <Text className="text-xs text-primary mt-2">
@@ -979,7 +1140,7 @@ function ModalDemoApp() {
         </Show>
       </Box>
 
-      {/* Modal Dialog with Explicit Focus Scoping & Glassmorphic Blur */}
+      {/* Modal Dialog with Automatic Focus Scoping & Glassmorphic Blur */}
       <Show when={modalOpen()}>
         <ConfirmPurgeDialog
           onClose={() => setModalOpen(false)}

@@ -638,11 +638,15 @@ This appendix enumerates the complete expected public API surface at v0.9 releas
 - `mount`, `createRenderLoop`, `createTerminal` `@public`
 - `MouseButton`, `RGBA`, `useTerminalDimensions`, `decodePasteBytes` `@public`
 - `MountOptions`, `MountHandle` (types) `@public`
+- `enter`, `leave`, `beginSync`, `endSync`, `installExitHandlers`, `setupExitHandlers`, `ProcessSignalHub` `@public`
 
 **Core types**
 - `TGEProps`, `TGENode`, `TGENodeKind` (types) `@public`
 - `PressEvent`, `NodeMouseEvent`, `InteractionMode`, `FilterConfig`, `InteractiveStyleProps` (types) `@public`
 - `LayoutRect`, `SizingInfo` (types) `@public`
+
+**Grid layout (beta profile)**
+- `GridAreaPlacement`, `GridAutoFlow`, `GridBreadth`, `GridContentAlignment`, `GridErrorCode`, `GridFitContent`, `GridFr`, `GridItemAlignment`, `GridLineRef`, `GridLayoutError`, `GridMaxBreadth`, `GridMinMax`, `GridPercent`, `GridPlacement`, `GridRepeatCount`, `GridTrack`, `GridTrackSize` (types) `@public`
 
 **Handles**
 - `createHandle` `@public`
@@ -665,9 +669,10 @@ This appendix enumerates the complete expected public API surface at v0.9 releas
 - `boostWindowFor`, `hasRecentInteraction` `@public`
 - `TransitionConfig`, `SpringConfig`, `EasingFn`, `CompositorProperty` (types) `@public`
 
-**Render graph**
-- `BACKDROP_FILTER_KIND`, `createRenderGraphQueues`, `resetRenderGraphQueues`, `cloneRenderGraphQueues`, `buildRenderOp`, `buildRenderGraphFrame` `@public`
-- `RenderCommand`, `ShadowDef`, `EffectConfig`, `RenderGraphQueues`, `RenderGraphOp`, `RenderGraphFrame` (types) `@public`
+**Render graph & Render ops**
+- `BACKDROP_FILTER_KIND`, `buildRenderOp`, `buildRenderGraphFrame` `@public`
+- `RenderCommand`, `ShadowDef`, `EffectConfig`, `RenderGraphOp`, `RenderGraphFrame` (types) `@public`
+- `RectangleRenderOp`, `BorderRenderOp`, `TextRenderOp`, `ImageRenderOp`, `CanvasRenderOp`, `EffectRenderOp`, `RawCommandRenderOp` (types) `@public`
 
 **Context**
 - `createContext`, `useContext` (re-exported from `solid-js`) `@public`
@@ -682,11 +687,11 @@ This appendix enumerates the complete expected public API surface at v0.9 releas
 - `TextSelection` (type) `@public`
 
 **Resource observability**
-- `getRendererResourceStats()` `@public`
+- `getRendererResourceStats()`, `getNativeResourceStats()` `@public`
 - `getTextLayoutCacheStats()`, `getImageCacheStats()` `@public`
 - `ResourceStats` (type) `@public`
 
-**Font registration**
+**Font registration & MSDF typography**
 - `registerFont`, `getFont`, `clearTextCache` `@public`
 - `msdfFontInit`, `msdfFontQuery`, `msdfMeasureText`, `isMsdfFontAvailable` `@public`
 - `FontDescriptor`, `MsdfTextMeasurement` (types) `@public`
@@ -752,7 +757,6 @@ This appendix enumerates the complete expected public API surface at v0.9 releas
 - `createTerminal`, `detect` `@public`
 - `inferCaps`, `probeKittyGraphics`, `queryColors` `@public`
 - `getSize`, `queryPixelSize`, `onResize` `@public`
-- `enter`, `leave`, `beginSync`, `endSync` `@public`
 - `inTmux`, `parentTerminal`, `passthroughSupported`, `createWriter`, `wrapPassthrough` `@public`
 - `Terminal`, `TerminalOptions`, `TerminalKind`, `Capabilities`, `TerminalSize`, `ResizeHandler`, `LifecycleState` (types) `@public`
 
@@ -762,25 +766,25 @@ This appendix enumerates the complete expected public API surface at v0.9 releas
 - `InputHandler`, `InputParser`, `Modifiers`, `KeyEvent`, `MouseAction`, `MouseEvent`, `FocusEvent`, `PasteEvent`, `ResizeEvent`, `InputEvent` (types) `@public`
 
 **Output / Kitty transport**
-- `probeShm`, `probeFile`, `patchRegion`, `transmitRaw`, `transmitRawAt`, `getKittyTransportStats`, `resetKittyTransportStats`, `COMPRESS_MODE` `@public`
+- `probeShm`, `probeFile`, `getKittyTransportStats`, `resetKittyTransportStats`, `COMPRESS_MODE` `@public`
 - `configureKittyTransportManager`, `getKittyTransportManagerState`, `reportKittyTransportFailure`, `reportKittyTransportSuccess`, `resetKittyTransportManager`, `resolveKittyTransportMode` `@public`
 - `getNativeKittyShmHelperVersion`, `prepareNativeKittyShm`, `releaseNativeKittyShm` `@public`
 - `TRANSPORT_FAILURE_REASON`, `TRANSPORT_HEALTH` `@public`
 - `KittyTransportStats`, `RawImageData`, `CompressMode`, `TransmissionMode`, `KittyTransportManagerState`, `NativeKittyShmHandle` (types) `@public`
 
-### A.2 `@vexart/primitives` (merged into `@vexart/app`)
+### A.2 `@vexart/primitives` (Permanently purged & merged into `@vexart/app`)
 
-- `Box`, `Text` (components) `@public`
-- `BoxProps`, `TextProps` (types) `@public` (legacy `Span`, `RichText`, `WrapRow` and their prop types are permanently removed)
-- `ShadowConfig`, `GlowConfig` (types) `@public`
-
-Note: `<image>`/`<img>` and `<canvas>` are JSX intrinsic elements used directly;
-there are no exported wrapper components for these.
+Package `@vexart/primitives` has been permanently deleted from the codebase.
+Layout and primitive needs are served by:
+- Canonical app-level components `<Box>` and `<Text>` with `className` compiler support in `@vexart/app` (`AppBoxProps`, `AppTextProps`).
+- Intrinsics `<box>`, `<text>`, `<img>`/`<image>`, `<canvas>` provided directly by `@vexart/engine`.
+- Legacy helpers `<Span>`, `<RichText>`, `<WrapRow>` do not exist.
 
 ### A.3 `@vexart/headless`
 
 **Inputs**
 - `Button`, `Checkbox`, `Switch`, `RadioGroup`, `Input`, `Textarea`, `Slider`, `Select` (`SelectTrigger`, `SelectContent`, `SelectItem`), `Combobox` (components) `@public`
+- `InputTheme`, `KeyBindingAction` (types) `@public`
 - Corresponding props types and render-context types `@public`
 
 **Display**
@@ -796,8 +800,7 @@ there are no exported wrapper components for these.
 - `Dialog` (`DialogOverlay`, `DialogContent`, `DialogClose`), `Tooltip`, `Popover`, `createToaster` `@public`
 
 **Navigation**
-- `Router`, `Route`, `NavigationStack`, `Diff` (components) `@public`
-- `useRouterContext`, `useStack` (hooks) `@public`
+- `Diff` (component) `@public`
 
 **Forms**
 - `createForm` factory `@public`
@@ -812,25 +815,26 @@ in `@vexart/styled`; they are NOT part of the headless package.
 
 **Theme system**
 - `createTheme`, `darkTheme`, `lightTheme`, `themeColors` `@public`
-- `setTheme`, `getTheme`, `ThemeProvider`, `useTheme` `@public`
+- `setTheme`, `getTheme`, `getThemeVersion` `@public`
 - `VoidTheme`, `ThemeDefinition`, `ColorTokens` (types) `@public`
 
 **Tokens**
 - `colors`, `radius`, `space`, `font`, `weight`, `shadows`, `glows`, `theme` (named constants) `@public`
 - `Shadow`, `Glow` (types) `@public`
 
-**Styled components** (void theme)
-- `Button` (variants: default, secondary, outline, ghost, destructive; sizes: xs, sm, default, lg) `@public`
-- `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter`, `CardAction` `@public`
-- `Badge` (variants: default, secondary, outline, destructive) `@public`
-- `Separator` (horizontal, vertical) `@public`
-- `Avatar` (sizes: sm, default, lg) `@public`
-- `Skeleton` `@public`
+**Styled components** (Void Design System)
+- `VoidButton` (variants: default, secondary, outline, ghost, destructive; sizes: xs, sm, default, lg) `@public`
+- `VoidCard`, `VoidCardHeader`, `VoidCardTitle`, `VoidCardDescription`, `VoidCardContent`, `VoidCardFooter`, `VoidCardAction` `@public`
+- `VoidBadge` (variants: default, secondary, outline, destructive) `@public`
+- `VoidSeparator` (horizontal, vertical) `@public`
+- `VoidAvatar` (sizes: sm, default, lg) `@public`
+- `VoidSkeleton` `@public`
 - `VoidCheckbox`, `VoidCombobox` `@public`
 - `VoidDialog`, `VoidDialogTitle`, `VoidDialogDescription`, `VoidDialogFooter` `@public`
 - `VoidDropdownMenu`, `VoidDropdownMenuTrigger`, `VoidDropdownMenuContent`, `VoidDropdownMenuItem`, `VoidDropdownMenuSeparator`, `VoidDropdownMenuLabel` `@public`
 - `VoidInput`, `VoidPopover`, `VoidProgress`, `VoidRadioGroup`, `VoidSelect` `@public`
 - `VoidSlider`, `VoidSwitch`, `VoidTable`, `VoidTabs`, `VoidTooltip` `@public`
+- `VoidTextarea`, `VoidCode`, `VoidMarkdown`, `VoidList`, `VoidVirtualList`, `VoidScrollView`, `VoidDiff` `@public`
 - `createVoidToaster` `@public`
 
 **Typography**
@@ -849,14 +853,14 @@ in `@vexart/styled`; they are NOT part of the headless package.
 - `AppBoxProps`, `AppTextProps`, `ClassNameProps` (types) `@public`
 
 **Styling**
-- `resolveClassName`, `mergeClassNameProps`, `CLASS_NAME_UNKNOWN_BEHAVIOR` `@public`
+- `resolveClassName`, `mergeClassNameProps`, `CLASS_NAME_UNKNOWN_BEHAVIOR`, `clearClassNameCache`, `createStyles` `@public`
 - `ClassNameResolveOptions`, `ClassNameResolveResult`, `ClassNameDiagnostic`, `VexartStyleProps` (types) `@public`
 
 **Router**
 - `createAppRouter`, `matchRoute`, `normalizePath`, `RouterProvider`, `RouteOutlet`, `useRouter`, `ROUTE_FOCUS_ID` `@public`
 - `discoverAppRoutes`, `routeFilePathToRoutePath`, `writeRouteManifestModule`, `ROUTE_FILE_KIND` `@public`
-- `AppRouteDefinition`, `AppRouter`, `AppRouterState`, `RouteParams`, `RouteComponent`, `RouteLayoutComponent`, `RouteErrorComponent` (types) `@public`
-- `CreateAppRouterOptions`, `AppRouterFocusRestorer`, `FileSystemRouteManifest`, `FileSystemRoute`, `FileSystemRouteFile`, `RouteManifestOptions`, `WriteRouteManifestOptions` (types) `@public`
+- `AppRouteDefinition`, `AppRouteMatch`, `AppRouter`, `AppRouterContextValue`, `AppRouterFocusRestorer`, `AppRouterProviderProps`, `AppRouterState`, `CreateAppRouterOptions`, `NavigationOptions`, `RouteErrorComponent`, `RouteLayoutComponent`, `RouteOutletProps`, `RouteComponent`, `RouteParams` (types) `@public`
+- `FileSystemRoute`, `FileSystemRouteFile`, `FileSystemRouteManifest`, `RouteFileKind`, `RouteManifestOptions`, `WriteRouteManifestOptions` (types) `@public`
 
 **Config / CLI**
 - `defineConfig`, `mergeConfig`, `runCli` `@public`
@@ -874,9 +878,10 @@ import must also be in the barrel. Forced mixed imports (`vexart` + `vexart/engi
 for common use cases are considered an API surface bug.
 
 **Collision resolution** (documented in `packages/app/src/barrel.ts`):
-- `Box`/`Text`: `@vexart/app` wins (className support)
-- `Button`/`ButtonProps`: `@vexart/styled` wins (themed)
-- `Switch` (headless): renamed to `ToggleSwitch` to avoid SolidJS `Switch`
+- `Box` / `Text`: `@vexart/app` wins (supporting `className` compiler).
+- `Button`: `@vexart/headless` (unstyled primitive). For themed design system buttons, use `VoidButton` from `@vexart/styled`.
+- `Switch` (headless): exported as `ToggleSwitch` to avoid collision with SolidJS control flow `<Switch>`.
+- `useRouter`: `@vexart/app` wins (app-level router).
 
 ---
 

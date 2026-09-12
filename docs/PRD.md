@@ -1,9 +1,21 @@
 # Vexart — Product Requirements Document
 
-**Version**: 0.8
+**Version**: 0.10
 **Status**: Closed — v0.9 performance contract locked
 **Owner**: Founder (solo developer)
 **Last updated**: September 2026
+
+**Changelog from v0.9 / v0.8**:
+- DEC-015 added: Flexily (pure JavaScript, zero-dependencies, Yoga-compatible API) replaces Taffy for TypeScript-side layout. Taffy is completely purged from `libvexart/Cargo.toml` and the repository.
+- WGPU upgraded to 29.0.1 across native pipelines.
+- Closed open box-shadow issue: dedicated analytic Gaussian box-shadow pipeline implemented (`cmd_kind = 20`, `shadow.rs`, `shadow.wgsl`).
+- Reassigned JSX intrinsic elements (`<box>`, `<text>`, `<image>`, `<canvas>`) to `@vexart/engine`, while `<Box>` and `<Text>` component wrappers with `className` live in `@vexart/app`.
+- Headless primitives inventory calibrated to exactly 25 primitives (23 unstyled UI components + 2 state factories: `createForm` and `createToaster`), renaming navigation component to `Diff`.
+- Styled package updated to Void Design System (`Void*` component prefixes, `VoidDropdownMenu` added), and `ThemeProvider`/`useTheme` purged in favor of zero-remount reactive signal getters on `themeColors` and `setTheme()`.
+- Clarified that gradients in Rust shaders support `conic` and multi-stop pipelines, while public TypeScript `GradientConfig` currently models `linear` and `radial` with 2 stops.
+- Clarified compositor animations as an architectural fast-path bypass in the synchronous JS render loop, not multi-threaded concurrency.
+- Synchronized completed v1.0 release criteria (`createTransition`/`createSpring` and `filter` self-filter) and release benchmark scripts (`bench:dashboard-1080p`, `perf:check`).
+- Documented internal packages (`@vexart/internal-atlas-gen`, `@vexart/internal-devtools`, `@vexart/internal-flexily`) and engine's dependency on `flexily`.
 
 **Changelog from v0.7 (historical snapshot, September 7, 2026)**:
 - Added an experimental tmux presentation route. tmux 3.4+ can carry Kitty
@@ -31,7 +43,7 @@ timings are reported separately in
 [`docs/tmux-performance-report.md`](./tmux-performance-report.md).
 
 **Changelog from v0.6**:
-- DEC-014 added: Rust retained scene graph / render graph / layout / event dispatch reverted based on cosmic-shell-1080p bench evidence (TS path 4.8× faster, 15.84 ms p95 vs 75.42 ms p95). TS retains scene graph, reactivity, layout (Flexily in TS), event dispatch. Rust retains paint pipelines (WGPU), composite, Kitty encoding, SHM/file/direct transport, image assets, canvas display lists. DEC-012 partially superseded — only paint/composite/transport portion stands.
+- DEC-014 added: Rust retained scene graph / render graph / layout / event dispatch reverted based on cosmic-shell-1080p bench evidence (TS path 4.8× faster, 15.84 ms p95 vs 75.42 ms p95). TS retains scene graph, reactivity, layout (Flexily in TS), event dispatch, and canvas rasterization. Rust retains paint pipelines (WGPU), composite, Kitty encoding, SHM/file/direct transport, and image assets. DEC-012 partially superseded — only paint/composite/transport portion stands.
 - Section 6 updated to reflect new TS/Rust boundary.
 - Section 11 phase overlay updated: phases 3b-3g, 4a, 4b, 13 marked as reverted with evidence.
 - Four public experimental flags removed from mount() API: `nativeSceneGraph`, `nativeSceneLayout`, `nativeRenderGraph`, `nativeEventDispatch`.
@@ -116,7 +128,7 @@ Modern terminals (Kitty, WezTerm, Ghostty) have supported graphics protocols for
 
 ### 2.2 The solution
 
-Vexart bridges JSX + SolidJS reactivity to a Rust-native GPU rendering pipeline using the Kitty graphics protocol. Developers write the UI the way they write React web apps. TypeScript owns scene graph, reactivity, layout (Flexily), render graph generation, and event dispatch; Rust owns paint (WGPU), composite, Kitty encoding, transport, image assets, and canvas display lists.
+Vexart bridges JSX + SolidJS reactivity to a Rust-native GPU rendering pipeline using the Kitty graphics protocol. Developers write the UI the way they write React web apps. TypeScript owns scene graph, reactivity, layout (Flexily), render graph generation, event dispatch, and canvas rasterization; Rust owns paint (WGPU), composite, Kitty encoding, transport, and image assets.
 
 The result:
 
@@ -130,7 +142,7 @@ The result:
 
 - **Terminal graphics protocols are mature**: Kitty stabilized in 2018, WezTerm and Ghostty both support it, tmux supports passthrough via placeholders.
 - **Developer preference shifted**: CLI-first dev tools are premium products (Warp, Zed, Charm's tooling, Supabase CLI, Vercel CLI). Market wants CLIs that look as good as web apps.
-- **Rust ecosystem matured**: WGPU reached v26 stability, Taffy powers production editors (Zed, Lapce, Servo), cross-compilation via `cargo` is trivial.
+- **Rust ecosystem matured**: WGPU reached v29.0.1 stability, modern GPU abstractions enable universal cross-compilation via `cargo`.
 - **AI dev tools need better terminal UIs**: agents, pair programmers, and CLI-first workflows are exploding. Whoever builds the visual layer for that ecosystem captures it.
 
 ### 2.4 Positioning statement
@@ -229,12 +241,12 @@ The result:
 
 ### 5.1 In scope (must ship)
 
-#### Primitives (current exports in `@vexart/app`)
+#### Primitives (JSX Intrinsics in `@vexart/engine`, App Components in `@vexart/app`)
 
-The historical `@vexart/primitives` package name is retained in older roadmap
-entries; current layout helpers and intrinsic exports live in `@vexart/app`.
+The historical `@vexart/primitives` package was permanently purged and merged into `@vexart/app`. JSX intrinsic elements (`<box>`, `<text>`, `<image>`, `<canvas>`) are owned and recognized directly by `@vexart/engine`. The canonical `<Box>` and `<Text>` component wrappers with `className` support are provided by `@vexart/app`.
 
-- `<box>`, `<text>`, `<image>`, `<canvas>` intrinsic elements.
+- `<box>`, `<text>`, `<image>`, `<canvas>` intrinsic elements (`@vexart/engine`).
+- `<Box>`, `<Text>` application component wrappers with `className` compiler (`@vexart/app`).
 - Layout: flexbox (row/column, gap, align, padding, sizing: fixed/grow/fit/percent).
 - `margin` (per-side + shorthand).
 - Sizing constraints: minWidth, maxWidth, minHeight, maxHeight.
@@ -246,8 +258,8 @@ entries; current layout helpers and intrinsic exports live in `@vexart/app`.
 - `cornerRadius` + per-corner (`cornerRadii`).
 - `border` (uniform + per-side).
 - `backgroundColor` (hex string or u32).
-- `gradient`: linear, radial (multi-stop supported).
-- `shadow`: drop shadow + multi-shadow (array).
+- `gradient`: linear, radial, and conic pipelines exist in Rust shaders (with multi-stop support); public TypeScript `GradientConfig` currently exposes `linear` and `radial` variants with 2 stops (`from`, `to`).
+- `shadow`: dedicated analytic Gaussian box-shadow pipeline (`cmd_kind = 20`, `shadow.rs`, `shadow.wgsl`) supporting offset `(x, y)`, `blur`, `spread`, `color`, and multi-shadow arrays.
 - `glow`: outer glow with plateau + falloff.
 - `backdropBlur`, `backdropBrightness`, `backdropContrast`, `backdropSaturate`, `backdropGrayscale`, `backdropInvert`, `backdropSepia`, `backdropHueRotate`.
 - `opacity` (element-level with isolated compositing).
@@ -263,11 +275,11 @@ These features place Vexart at the cutting edge of graphics tech. All ship in v0
   - Replaces the v0.1 bitmap atlas path entirely for any font the user loads at runtime.
   - Shader-based, GPU-native, compositor-friendly.
   - Target: pixel-perfect text from 8px to 72px using one 1024×1024 atlas per font.
-- **Compositor-thread animations**:
-  - Animations targeting `transform` and `opacity` run on a dedicated compositor path.
-  - Do **not** trigger layout recomputation, paint command regeneration, or reconciler traversal.
-  - Visible frame stays at 60fps even when the main TypeScript thread is blocked.
-  - Target: input-to-visual latency < 16ms during heavy JS workloads.
+- **Compositor animations**:
+  - Animations targeting `transform` and `opacity` on layer-backed nodes run on a dedicated compositor fast path.
+  - Bypasses SolidJS reconciler traversal, Flexily layout recomputation, and paint command building, updating only GPU uniforms via FFI (`vexart_composite_update_uniform`).
+  - Note: Bun/JS executes synchronously on a single event loop; this is an architectural loop-bypass optimization, not multi-threaded concurrency with a blocked JS thread.
+  - Target: input-to-visual latency < 16ms during interaction bursts.
 - **Declarative hints for the compositor**:
   - `willChange` prop — mirrors CSS `will-change`. Tells the compositor which properties will animate, enabling layer pre-promotion.
   - `contain` prop — mirrors CSS `contain: layout | paint | strict`. Tells the engine that a subtree is isolated, skipping invalidation propagation beyond the boundary.
@@ -404,27 +416,27 @@ These optimizations are shipped at v0.9 because they are **10× more expensive t
 
 #### Headless components (`@vexart/headless`)
 
-Ship 26 headless component concepts with render-prop pattern (context props for mouse/keyboard integration):
+Ship exactly 25 headless primitives (23 unstyled UI components + 2 state factories) with the render-prop pattern (context props for mouse/keyboard integration):
 
-- **Inputs**: Button, Checkbox, Switch, RadioGroup, Input, Textarea, Slider, Select (SelectTrigger, SelectContent, SelectItem), Combobox.
-- **Display**: Code, Markdown, ProgressBar.
-- **Containers**: OverlayRoot, Portal, ScrollView, Tabs.
-- **Collections**: List, VirtualList, Table.
-- **Overlays**: Dialog (DialogOverlay, DialogContent, DialogClose), Tooltip, Popover, createToaster.
-- **Navigation**: Router, Route, NavigationStack (useRouterContext, useStack), Diff viewer.
-- **Forms**: createForm factory.
+- **Inputs**: Button, Checkbox, Switch, RadioGroup, Input, Textarea, Slider, Select (SelectTrigger, SelectContent, SelectItem), Combobox. (9 components)
+- **Display**: Code, Markdown, ProgressBar. (3 components)
+- **Containers**: OverlayRoot, Portal, ScrollView, Tabs. (4 components)
+- **Collections**: List, VirtualList, Table. (3 components)
+- **Overlays**: Dialog (DialogOverlay, DialogContent, DialogClose), Tooltip, Popover. (3 components)
+- **Navigation**: Diff (color-coded line diff viewer; app routing is provided canonically by `@vexart/app`). (1 component)
+- **State factories**: `createForm` (form validation and field registration) and `createToaster` (toast notification manager). (2 factories)
 
-Note: Text, RichText, Span, and Box are exported by `@vexart/app`; the old
-`@vexart/primitives` name is historical. Badge, Avatar, Skeleton, Separator,
-and Card are styled-only in `@vexart/styled`.
+Note: `<Box>` and `<Text>` are exported by `@vexart/app`; the old `@vexart/primitives` package was permanently merged into `@vexart/app`. `<Span>`, `<RichText>`, and `<WrapRow>` were purged in favor of nested `<Text>` and `<text>` elements.
+Badge, Avatar, Skeleton, Separator, and Card are styled-only components in `@vexart/styled`.
 
 #### Styled components (`@vexart/styled`)
 
-Single opinionated theme ("void" — dark, shadcn-inspired) with:
+Void Design System (OLED-calibrated dark theme inspired by shadcn/ui) with:
 
 - Semantic tokens: colors (background, foreground, card, primary, secondary, muted, accent, destructive, border, input, ring), radius (sm/md/lg/xl/xxl/full), space[1-10], font sizes (xs-4xl), weights, shadows presets.
 - Typography primitives: H1, H2, H3, H4, P, Lead, Large, Small, Muted.
-- Runtime theming: `ThemeProvider`, `createTheme`, `setTheme` (hot-swappable).
+- Styled Void components: `VoidBadge`, `VoidAvatar`, `VoidButton` (aliased as `Button`), `VoidCard` (CardHeader, CardTitle, CardDescription, CardContent, CardFooter, CardAction), `VoidCheckbox`, `VoidCombobox`, `VoidDialog` (VoidDialogTitle, VoidDialogDescription, VoidDialogFooter), `VoidDropdownMenu` (VoidDropdownMenuTrigger, VoidDropdownMenuContent, VoidDropdownMenuItem, VoidDropdownMenuSeparator, VoidDropdownMenuLabel), `VoidInput`, `VoidPopover`, `VoidProgress`, `VoidRadioGroup`, `VoidSelect`, `VoidSeparator`, `VoidSkeleton`, `VoidSlider`, `VoidSwitch`, `VoidTable`, `VoidTabs`, `createVoidToaster`, `VoidTooltip`, `VoidTextarea`, `VoidCode`, `VoidMarkdown`, `VoidList`, `VoidVirtualList`, `VoidScrollView`, `VoidDiff`.
+- Zero-remount reactive runtime theming: `createTheme`, `setTheme`, `themeColors` (reactive SolidJS signal getters subscribing individual visual properties), `getTheme`, `getThemeVersion`. (No `ThemeProvider` or `useTheme` context wrapper needed).
 
 #### Engine (`@vexart/engine`)
 
@@ -508,42 +520,44 @@ Vexart is organized as four strictly-layered packages. Each layer depends only o
 ```
 ┌───────────────────────────────────────────────┐
 │   User's app                                  │
-│   <Button variant="primary">Save</Button>     │
+│   <VoidButton variant="primary">Save</VoidButton> │
 └──────────────────────┬────────────────────────┘
                        ▼
 ┌───────────────────────────────────────────────┐
-│   @vexart/app                                  │
-│   — App framework + layout helpers             │
-│   — <box>, <text>, <image>, <canvas>           │
-│   — Router, CLI, and app lifecycle             │
+│   @vexart/app                                 │
+│   — App framework + <Box>, <Text> wrappers    │
+│   — Tailwind-like className runtime compiler  │
+│   — Router, CLI, and app lifecycle            │
 └──────────────────────┬────────────────────────┘
                        ▼
 ┌───────────────────────────────────────────────┐
 │   @vexart/styled                              │
-│   — Opinionated themed components             │
+│   — Void design system themed components      │
 │   — Tokens (colors, radius, spacing, shadows) │
 │   — Typography primitives (H1-H4, P, Lead)    │
 └──────────────────────┬────────────────────────┘
                        ▼
 ┌───────────────────────────────────────────────┐
 │   @vexart/headless                            │
-│   — Logic, accessibility, keyboard, state     │
+│   — 25 UI & state primitives                  │
 │   — Render-prop components (ctx.*Props)       │
-│   — No visual opinions                        │
+│   — Zero visual opinions                      │
 └──────────────────────┬────────────────────────┘
                        ▼
 ┌───────────────────────────────────────────────┐
 │   @vexart/engine                              │
-│   — SolidJS reconciler                        │
-│   — Render loop (walk, Flexily layout, paint)  │
+│   — JSX intrinsics: <box>, <text>, <img>,     │
+│     <canvas>                                  │
+│   — SolidJS reconciler + TS scene graph       │
+│   — Render loop + Flexily layout adapter      │
 │   — Hooks (useFocus, useKeyboard, useMouse)   │
-│   — FFI bridge to libvexart                   │
+│   — FFI bridge to libvexart (50 functions)    │
 │   — Terminal lifecycle, input parsing         │
 └──────────────────────┬────────────────────────┘
                        ▼
 ┌───────────────────────────────────────────────┐
 │   libvexart.{dylib,so,dll} (Rust cdylib)      │
-│   — WGPU (paint: SDF, gradients, effects)     │
+│   — WGPU 29.0.1 (21 shader pipelines)         │
 │   — Kitty graphics protocol encoder           │
 │   — Composite, transport, GPU resources       │
 └──────────────────────┬────────────────────────┘
@@ -553,6 +567,11 @@ Vexart is organized as four strictly-layered packages. Each layer depends only o
         [experimental tmux passthrough
           over Kitty / Ghostty]
 ```
+
+**Internal Packages (Dev & Build Only)**:
+- `@vexart/internal-atlas-gen`: CLI generator converting TTF fonts to MSDF atlas PNGs and metrics JSON.
+- `@vexart/internal-devtools`: internal MCP devtools server for inspector integrations.
+- `@vexart/internal-flexily`: vendored Flexily 0.6.0 pure-JavaScript Flex and Grid solver. `@vexart/engine` depends directly on `flexily` for all scene graph layout computation without native layout FFI.
 
 `@vexart/app` depends on `styled`, `headless`, and `engine`; the vertical
 diagram shows the primary public path, while the direct engine/headless edges
@@ -663,7 +682,7 @@ Rust owns:
 
 - WGPU paint pipelines, effect shaders, text paint, and paint command dispatch.
 - Composite, layer registry targets, dirty-region readback needed by presentation, Kitty encoding, and SHM/file/direct transport.
-- Image assets, canvas display lists, GPU resources, pipeline cache, and native stats for paint/composite/presentation cost.
+- Image assets, GPU resources, pipeline cache, and native stats for paint/composite/presentation cost.
 
 Normal terminal presentation MUST NOT return raw RGBA buffers to JavaScript. RGBA readback into JS is allowed only for explicit screenshot, debug, test, or offscreen APIs.
 
@@ -708,11 +727,11 @@ Measured on Apple M1 Pro, Kitty 0.41+, 2560×1600 retina:
 | Sustained frame time (active) | < 10 ms @ 60 fps | 99th percentile during `showcase.tsx` interactions. |
 | **No-op retained frame** | < 1 ms (p99) | No scene mutation; Rust/TS shell must avoid render graph rebuild and GPU work. |
 | **Small dirty-region frame** | < 5 ms (p95) | Single dirty layer/region such as hover, focus ring, cursor, or button state. |
-| **Compositor-only transform/opacity frame** | < 8.33 ms (p95) | 120fps-class budget for layer-uniform updates with no layout/paint regeneration. |
-| **Full dashboard 1080p frame** | < 8.33 ms aspirational, < 10 ms release gate | `1920×1080` realistic dashboard workload. 800×600 remains a smoke/dev benchmark only. |
+| **Compositor-only transform/opacity frame** | < 8.33 ms (p95) | 120fps-class budget for layer-uniform updates bypassing layout/paint. |
+| **Full dashboard 1080p frame** | < 8.33 ms aspirational, < 10 ms release gate | `1920×1080` realistic dashboard workload (`bun run bench:dashboard-1080p`). `perf:check` (800×600) remains a dev smoke test. |
 | Input-to-visual latency (typical) | < 50 ms (p95) | Keyboard event → rendered frame in user's eyes. |
-| Input-to-visual latency (compositor-animated transform/opacity) | < 16 ms (p95) | For properties running on the compositor-thread path. |
-| Frame time during JS-blocking work (compositor-only animations) | < 16 ms | 60fps maintained while main thread is saturated. |
+| Input-to-visual latency (compositor-animated transform/opacity) | < 16 ms (p95) | For properties running on the compositor fast path. |
+| Frame time for compositor fast path | < 8.33 ms (p95) | Bypasses SolidJS reconciliation, layout, and paint command building, updating only uniforms via FFI. |
 | MSDF text throughput | 10,000+ glyphs/frame | At 60fps without frame drops, single 1024×1024 MSDF atlas. |
 | **Kitty protocol encoding (full 1920×1080 RGBA frame)** | < 0.5 ms | Native Rust path from GPU readback to stdout-ready bytes. |
 | **Viewport culling savings (large tree)** | ≥ 40% walk+layout time saved | Synthetic benchmark: 1000-node tree with 100 visible nodes. |
@@ -721,9 +740,9 @@ Measured on Apple M1 Pro, Kitty 0.41+, 2560×1600 retina:
 | Memory baseline (empty app) | < 50 MB | RSS after mount, 5 seconds idle. |
 | Memory steady state (showcase) | < 150 MB | RSS during 60 seconds of interaction. |
 | GPU memory per font (MSDF) | ≤ 4 MB | One 1024×1024 RGBA8 atlas. |
-| **GPU memory total (configurable budget)** | Default 128 MB | Unified resource manager enforces cap; exceeds trigger LRU eviction. |
+| **GPU memory total (configurable budget)** | Default 512 MB | Unified resource manager enforces cap; exceeds trigger LRU eviction. |
 
-CI runs `bench:showcase` on every PR and fails if any metric regresses by >10% from `main`. Specific optimization regressions (cold-start-warm, Kitty encoding, viewport culling savings, retained no-op, dirty-region, compositor-only, and dashboard frame categories) have dedicated micro-benchmarks in `bench:optimizations`.
+CI runs `bun run bench:dashboard-1080p` and `bun run perf:check` on performance gates. Specific optimization regressions (cold-start-warm, Kitty encoding, viewport culling savings, retained no-op, dirty-region, compositor-only, and dashboard frame categories) have dedicated micro-benchmarks in `bench:optimizations`.
 
 The tmux route is not included in the direct-terminal performance targets above.
 Its approved target is one full composited frame through local SHM, with one
@@ -833,8 +852,8 @@ Year 3:
 - [ ] 90 days of v0.9 in the wild with <5 P0 bugs per month.
 - [ ] Grid v1.x beta profile graduates to a versioned release (full CSS/DOM
   compatibility is not a v1.0 requirement).
-- [ ] Declarative transition API shipped.
-- [ ] Filter-on-self effect.
+- [x] Declarative transition API shipped (`createTransition`, `createSpring`).
+- [x] Filter-on-self effect (`cmd_kind=19`, `filter.rs`, `self_filter.wgsl`).
 - [ ] Windows support.
 - [ ] First 3 paid commercial licenses signed.
 - [ ] First enterprise contract signed.
@@ -1081,7 +1100,7 @@ Timeline assumes 8 hours/day of focused coding, solo, with bi-weekly reviews. To
 
 ### Rust-retained engine migration overlay — reverted by DEC-014
 
-The roadmap above remains the product roadmap, but the retained scene/layout/render/event overlay below has been reverted by DEC-014 after cosmic-shell-1080p bench evidence showed the TS path is 4.8× faster at p95 (15.84 ms vs 75.42 ms). The overlay is preserved as historical record. TS now owns scene graph, reactivity, layout (Flexily), render graph, event dispatch, and interaction; Rust owns paint pipelines, composite, Kitty encoding, SHM/file/direct transport, image assets, and canvas display lists.
+The roadmap above remains the product roadmap, but the retained scene/layout/render/event overlay below has been reverted by DEC-014 after cosmic-shell-1080p bench evidence showed the TS path is 4.8× faster at p95 (15.84 ms vs 75.42 ms). The overlay is preserved as historical record. TS now owns scene graph, reactivity, layout (Flexily), render graph, event dispatch, interaction, and canvas rasterization; Rust owns paint pipelines, composite, Kitty encoding, SHM/file/direct transport, and image assets.
 
 Source documents (removed — retained plan was reverted by DEC-014; see git history for originals).
 
@@ -1371,7 +1390,7 @@ Every architectural or product decision is logged here with date, context, and r
 - TS path: 15.84 ms p95 (~63 fps). Paint backend identical (~7.8 ms p95).
 - TS path is 4.8× faster at p95, 5.4× at p50.
 
-**Decision**: Revert retained scene graph / render graph / layout / event dispatch. TS owns scene graph, reactivity, layout (Flexily), event dispatch. Rust owns paint (WGPU pipelines), composite, Kitty encoding, transport (SHM/file/direct), image assets, canvas display lists.
+**Decision**: Revert retained scene graph / render graph / layout / event dispatch. TS owns scene graph, reactivity, layout (Flexily), event dispatch, and canvas rasterization. Rust owns paint (WGPU pipelines), composite, Kitty encoding, transport (SHM/file/direct), and image assets.
 
 **Partially supersedes**: DEC-012 (Rust retained engine roadmap). Only the paint/composite/transport portion of DEC-012 stands.
 
@@ -1381,7 +1400,7 @@ Every architectural or product decision is logged here with date, context, and r
 
 ### 2026-04-25 — DEC-015: Flexily replaces Taffy for TypeScript-side layout
 
-**Decision**: The TypeScript-side layout engine is **Flexily** (pure JavaScript, zero dependencies, Yoga-compatible API). Flexily replaced the custom ~610-line TS mini-flexbox in `layout-adapter.ts` which itself had replaced Clay (C FFI, deleted Phase 2). Taffy remains a Cargo.toml dependency of `libvexart` but is NOT used by the TypeScript walk-tree/layout path after DEC-014 reverted native layout ownership to TypeScript.
+**Decision**: The TypeScript-side layout engine is **Flexily** (pure JavaScript, zero dependencies, Yoga-compatible API). Flexily replaced the custom ~610-line TS mini-flexbox in `layout-adapter.ts` which itself had replaced Clay (C FFI, deleted Phase 2). Taffy was completely eliminated from `libvexart/Cargo.toml` and the repository by DEC-014 and DEC-015.
 
 **Alternatives considered**:
 - Taffy in TS (via FFI to Rust): rejected — DEC-014 proved that FFI overhead for layout exceeded the benefit. TS-side layout is 4.8× faster.
@@ -1391,8 +1410,8 @@ Every architectural or product decision is logged here with date, context, and r
 **Rationale**: Flexily is pure JS with zero dependencies, has a Yoga-compatible API making migration trivial, offers zero-allocation hot path for 60fps layout, and eliminates all native FFI for layout computation. The layout-adapter.ts went from ~610 lines of buggy custom code to ~500 lines of clean Flexily integration.
 
 **Implications**:
-- All "Taffy" references in TS code, comments, and docs that describe the TS-side layout engine should say "Flexily".
-- Taffy in libvexart/Cargo.toml remains as a Rust-side dependency but is vestigial for the current architecture.
+- All "Taffy" references in TS code, comments, and docs that describe the layout engine should say "Flexily".
+- Taffy was permanently removed from `libvexart/Cargo.toml`; no native layout crate dependency exists.
 - Future layout work should target Flexily's API, not Taffy's.
 
 ---
@@ -1502,14 +1521,14 @@ were pending at that snapshot. The Kitty protocol reference is the
 - **Primitive**: engine-level JSX element (`<box>`, `<text>`, `<image>`, `<canvas>`).
 - **Reconciler**: component that translates JSX create/update/delete calls into internal tree mutations. Vexart uses SolidJS's `createRenderer` universal reconciler.
 - **Render graph**: intermediate representation between layout commands and paint calls. Enables GPU vs CPU routing (CPU removed in Phase 2) and effect composition.
-- **ResourceManager**: the unified GPU memory manager in `libvexart`. Holds all GPU-resident assets under a single budget (default 128 MB). Performs priority-based LRU eviction per frame. Replaces Vexart v0.1's five independent caches.
+- **ResourceManager**: the unified GPU memory manager in `libvexart`. Holds all GPU-resident assets under a single budget (default 512 MB). Performs priority-based LRU eviction per frame. Replaces Vexart v0.1's five independent caches.
 - **SDD (historical)**: Spec-Driven Development, the former proposal → spec →
   design → tasks → apply → verify → archive workflow retained here as historical
   context only.
 - **SDF**: Signed Distance Field. Mathematical representation of shapes that enables GPU-accelerated anti-aliased rendering.
 - **Styled component**: themed component built on top of a headless component with opinionated tokens.
 - **Task priority lane**: a bucket in Vexart's frame budget scheduler. Three lanes: `user-blocking` (input, focus — never skipped), `user-visible` (layer repaint — may split across frames), `background` (cache warming, telemetry — idle-only). Mirrors web platform's `scheduler.postTask` semantics.
-- **Taffy**: Rust-native layout engine implementing Flexbox, CSS Grid, and Block. Present as a dependency in libvexart/Cargo.toml but NOT used for TypeScript-side layout after DEC-014 and DEC-015. The active TS layout engine is Flexily.
+- **Taffy**: Historical Rust layout engine, permanently deleted from `libvexart/Cargo.toml` and the codebase per DEC-014 and DEC-015. The active layout engine in Vexart is Flexily.
 - **tmux passthrough**: tmux's DCS envelope for forwarding a complete terminal escape sequence to the outer terminal. Vexart doubles `ESC` bytes inside each Kitty APC and keeps APCs separate.
 - **Kitty Unicode placeholder**: Kitty's `U+10EEEE` cell character, paired with a virtual image placement (`U=1`), that lets a multiplexer move a pixel image with normal pane text.
 - **Tier 1 optimization**: the three performance-critical items from DEC-010 bundled into Phase 2b. Non-negotiable for v0.9 release. Cover native Kitty encoding, WGPU pipeline cache, and unified GPU budget.
@@ -1544,21 +1563,8 @@ gates; inspect current code and focused checks when resolving a discrepancy.
 
 ---
 
-**END OF PRD v0.8**
+**END OF PRD v0.10**
 
-### Issue: Real box-shadow shader (deferred to Phase 4+)
+### Status: Resolved — Dedicated box-shadow pipeline implemented (`cmd_kind=20`, `shadow.rs`, `shadow.wgsl`)
 
-**Status**: Open — identified during Phase 3 demo verification.
-
-**Problem**: Drop shadows (`shadow` prop) currently render using the same glow/halo shader (cmd_kind=6) as the `glow` prop. Both produce a radial halo effect. Real CSS-like box-shadows need a dedicated shader that:
-1. Draws a rectangle offset by (x, y) from the element
-2. Applies gaussian blur to the rectangle
-3. Uses the shadow color with proper alpha blending
-
-**Current behavior**: `shadow={{ x: 4, y: 4, blur: 8, color: 0xa8483e60 }}` looks identical to a glow — no directional offset visible.
-
-**Expected behavior**: Shadow should appear as a blurred copy of the element shifted by (x, y), creating depth/elevation effect like CSS `box-shadow`.
-
-**Impact**: Low — dark shadows on dark backgrounds are nearly invisible anyway. Colored shadows show as glows. The visual difference only matters for light themes or elevated card designs.
-
-**Fix**: Add a dedicated shadow shader (cmd_kind=20+) that renders an offset blurred rectangle instead of reusing the radial halo.
+**Resolution**: Dedicated analytic anti-aliased Gaussian box-shadow pipeline (`cmd_kind = 20`) was implemented in native Rust (`native/libvexart/src/paint/pipelines/shadow.rs`) and WGSL (`native/libvexart/src/paint/shaders/shadow.wgsl`). It supports directional offset `(x, y)`, Gaussian blur radii, spread, alpha blending, and multi-shadow arrays (`ShadowConfig[]`), achieving full parity with CSS `box-shadow`.

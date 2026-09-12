@@ -2,15 +2,19 @@
 
 Vexart provides built-in components across three public packages.
 
-- **`@vexart/primitives`** — primitive wrappers: `Box`, `Text`.
+- **`@vexart/app`** — application lifecycle (`createApp`), file-system router (`createAppRouter`, `RouteOutlet`, `useRouter`), and canonical `<Box>` and `<Text>` primitives with `className` support.
 - **`@vexart/headless`** — behavior only, zero visual coupling. Use render props/context props to provide styling.
-- **`@vexart/styled`** — styled design system built on top of the headless layer.
+- **`@vexart/styled`** — Void design system components (`Void*`), OLED-calibrated tokens, and reactive runtime theming (`themeColors`, `setTheme`).
 
 ```typescript
-import { Box, Text, Button, Input, Checkbox, Tabs, List, ProgressBar, ScrollView,
-         Dialog, Select, Switch, RadioGroup, Table, createToaster, Router, Route, NavigationStack,
+import { Box, Text, createAppRouter, RouterProvider, RouteOutlet, useRouter,
+         VoidButton, VoidInput, VoidCheckbox, VoidTabs, VoidList, VoidProgress, VoidScrollView,
+         VoidDialog, VoidSelect, VoidSwitch, VoidRadioGroup, VoidTable, createVoidToaster,
+         VoidTooltip, VoidPopover, VoidCombobox, VoidSlider, VoidVirtualList,
+         Button, Input, Checkbox, Tabs, List, ProgressBar, ScrollView,
+         Dialog, Select, ToggleSwitch, RadioGroup, Table, createToaster,
          Tooltip, Popover, Combobox, Slider, VirtualList, createForm,
-         colors, radius, space } from "vexart"
+         colors, radius, space, themeColors, setTheme } from "vexart"
 ```
 
 ---
@@ -132,7 +136,7 @@ Interactive push button. Render props pattern — zero visual output. The render
 />
 ```
 
-For a styled version, use `@vexart/styled`'s `Button`.
+For a styled version, use `@vexart/styled`'s `VoidButton`.
 
 ---
 
@@ -215,12 +219,14 @@ Toggleable checkbox. Render prop pattern. The render context includes `togglePro
 
 ---
 
-## Switch (headless)
+## ToggleSwitch / Switch (headless)
 
 Toggle switch. Render prop pattern. The render context includes `toggleProps` — spread on the root element for click-to-toggle support.
 
+> **Barrel Note:** The component is named `Switch` in `@vexart/headless` and re-exported as `ToggleSwitch` from the `"vexart"` unified barrel to avoid colliding with SolidJS's core `<Switch>` control flow component.
+
 ```tsx
-<Switch
+<ToggleSwitch
   checked={dark()}
   onChange={setDark}
   renderSwitch={({ checked, focused, toggleProps }) => (
@@ -495,9 +501,9 @@ Data table with row selection. Each row's render context includes `rowProps` —
     { key: "name", header: "Name", width: 120 },
     { key: "status", header: "Status", width: 80 },
   ]}
-  rows={users()}
-  selectedIndex={selected()}
-  onSelect={setSelected}
+  data={users()}
+  selectedRow={selected()}
+  onSelectedRowChange={setSelected}
   renderCell={(value, col, rowIndex, ctx) => (
     <box backgroundColor={ctx.selected ? "#252535" : "transparent"} padding={6}>
       <text color={ctx.selected ? "#fff" : "#ccc"}>{String(value)}</text>
@@ -663,32 +669,75 @@ toaster.toast({ message: "Failed to save", variant: "error" })
 
 ---
 
-## Router (flat + stack)
+## Router (@vexart/app)
 
-### Flat Router (React Router style)
+Routing is provided canonically by `@vexart/app` (`createAppRouter`, `RouterProvider`, `RouteOutlet`, `useRouter`).
+
+### Setting Up Routes
 
 ```tsx
-<Router initialPath="home">
-  <Route path="home" component={Home} />
-  <Route path="settings" component={Settings} />
-  <Route path="profile" component={Profile} />
-</Router>
+import { createAppRouter, RouterProvider, RouteOutlet, useRouter, Box, Text } from "vexart"
 
-// Navigate
-const ctx = useRouterContext()
-ctx.navigate("settings")
-ctx.goBack()
+const routes = [
+  {
+    path: "/",
+    component: () => (
+      <Box padding={16}>
+        <Text>Home Screen</Text>
+      </Box>
+    ),
+  },
+  {
+    path: "/settings",
+    component: () => (
+      <Box padding={16}>
+        <Text>Settings Screen</Text>
+      </Box>
+    ),
+  },
+  {
+    path: "/user/[id]",
+    component: ({ params }) => (
+      <Box padding={16}>
+        <Text>User Profile: {params.id}</Text>
+      </Box>
+    ),
+  },
+]
+
+const router = createAppRouter(routes, "/")
+
+export function App() {
+  return (
+    <RouterProvider router={router}>
+      <Box direction="column" width="100%" height="100%">
+        <RouteOutlet />
+      </Box>
+    </RouterProvider>
+  )
+}
 ```
 
-### Navigation Stack (React Navigation style)
+### Programmatic Navigation (`useRouter`)
 
 ```tsx
-<NavigationStack initial={Home} />
+function NavigationBar() {
+  const router = useRouter()
 
-// Navigate
-const stack = useStack()
-stack.push(Settings, { section: "privacy" })
-stack.pop()
+  return (
+    <Box direction="row" gap={12}>
+      <Box focusable onPress={() => router.navigate("/")}>
+        <Text>Home</Text>
+      </Box>
+      <Box focusable onPress={() => router.navigate("/settings")}>
+        <Text>Settings</Text>
+      </Box>
+      <Box focusable onPress={() => router.back()}>
+        <Text>Back</Text>
+      </Box>
+    </Box>
+  )
+}
 ```
 
 ---
@@ -756,26 +805,175 @@ const form = createForm({
 
 ## Code / Markdown / Diff
 
-Content components with theme prop pattern.
+Content components with theme prop pattern and integrated Tree-Sitter syntax highlighting.
+
+> **Note:** `<Code>` and `<Markdown>` require a `syntaxStyle` object (e.g. `ONE_DARK` or `KANAGAWA` from `"vexart"`) for token highlighting.
 
 ```tsx
+import { Code, Markdown, Diff, ONE_DARK } from "vexart"
+
 <Code
   content={codeString}
   language="typescript"
+  syntaxStyle={ONE_DARK}
   theme={{ bg: "#1a1a2e", lineNumberFg: "#555", radius: 8, padding: 12 }}
 />
 
 <Markdown
   content={markdownString}
+  syntaxStyle={ONE_DARK}
   theme={{ fg: "#e0e6f0", heading: "#4fc4d4", codeBg: "#252535" }}
 />
 
 <Diff
   diff={diffString}
-  view="unified"
   theme={{ addedBg: "#1a3a1a", removedBg: "#3a1a1a" }}
 />
 ```
+
+---
+
+## Void Design System (`@vexart/styled`)
+
+The Void Design System delivers pre-styled, OLED-calibrated dark-theme components inspired by shadcn/ui. Every component maps to `@vexart/engine` primitives and adheres to reactive `themeColors` tokens.
+
+### Controls & Inputs
+
+- **`VoidButton`** (aliased as `Button`): Themed action button.
+  ```tsx
+  <VoidButton variant="default" size="default" onPress={handleSubmit}>Save Changes</VoidButton>
+  <VoidButton variant="secondary">Cancel</VoidButton>
+  <VoidButton variant="destructive">Delete Project</VoidButton>
+  <VoidButton variant="outline">Docs</VoidButton>
+  <VoidButton variant="ghost">Dismiss</VoidButton>
+  ```
+- **`VoidInput`**: Single-line text entry with border and focus ring glow.
+  ```tsx
+  <VoidInput value={search()} onChange={setSearch} placeholder="Filter items..." />
+  ```
+- **`VoidTextarea`**: Multi-line editor with line numbers and focus glow.
+  ```tsx
+  <VoidTextarea value={body()} onChange={setBody} rows={6} />
+  ```
+- **`VoidCheckbox`**: Checkbox with checkmark glyph and focus ring.
+  ```tsx
+  <VoidCheckbox checked={agreed()} onChange={setAgreed} label="Accept conditions" />
+  ```
+- **`VoidSwitch`**: Pill toggle switch with smooth animated thumb transition.
+  ```tsx
+  <VoidSwitch checked={enabled()} onChange={setEnabled} />
+  ```
+- **`VoidRadioGroup`**: Radio buttons with active dot indicators.
+  ```tsx
+  <VoidRadioGroup value={theme()} onChange={setTheme} options={[{ value: "dark", label: "Dark" }]} />
+  ```
+- **`VoidSelect`**: Themed dropdown select menu.
+  ```tsx
+  <VoidSelect value={role()} onChange={setRole} options={roles} placeholder="Select role..." />
+  ```
+- **`VoidCombobox`**: Filterable autocomplete selector with search input.
+  ```tsx
+  <VoidCombobox value={city()} onChange={setCity} options={cities} placeholder="Search city..." />
+  ```
+- **`VoidSlider`**: Interactive range slider with thumb dragging.
+  ```tsx
+  <VoidSlider value={volume()} onChange={setVolume} min={0} max={100} />
+  ```
+
+### Data Display & Collections
+
+- **`VoidCard`**: Container card with header, title, description, content, and footer.
+  ```tsx
+  <VoidCard>
+    <VoidCardHeader>
+      <VoidCardTitle>Cluster Metrics</VoidCardTitle>
+      <VoidCardDescription>Real-time node utilization</VoidCardDescription>
+    </VoidCardHeader>
+    <VoidCardContent>
+      <Text>Node health: 99.98%</Text>
+    </VoidCardContent>
+    <VoidCardFooter>
+      <VoidButton variant="outline">Refresh</VoidButton>
+    </VoidCardFooter>
+  </VoidCard>
+  ```
+- **`VoidBadge`**: Status badge chip (`default`, `secondary`, `outline`, `destructive`).
+  ```tsx
+  <VoidBadge variant="default">ONLINE</VoidBadge>
+  <VoidBadge variant="destructive">FAILED</VoidBadge>
+  ```
+- **`VoidAvatar`**: Circular avatar image with fallback initials (`sm`, `default`, `lg`).
+  ```tsx
+  <VoidAvatar fallback="JD" size="default" />
+  ```
+- **`VoidSeparator`**: Hairline divider rule (`horizontal` or `vertical`).
+  ```tsx
+  <VoidSeparator orientation="horizontal" />
+  ```
+- **`VoidSkeleton`**: Pulse-animated placeholder block for loading states.
+  ```tsx
+  <VoidSkeleton width={200} height={24} />
+  ```
+- **`VoidProgress`**: Styled horizontal progress indicator bar.
+  ```tsx
+  <VoidProgress value={65} max={100} />
+  ```
+- **`VoidTable`**: Styled table with zebra striping and row selection.
+  ```tsx
+  <VoidTable columns={columns} data={users()} selectedRow={selected()} onSelectedRowChange={setSelected} />
+  ```
+- **`VoidList` & `VoidVirtualList`**: List presentation with Void theme tokens.
+  ```tsx
+  <VoidList items={items()} renderItem={(item) => <Text>{item.title}</Text>} />
+  <VoidVirtualList items={largeDataset} itemHeight={32} height={400} renderItem={(item) => <Text>{item.name}</Text>} />
+  ```
+- **`VoidScrollView`**: Scrollable container with styled scrollbars.
+  ```tsx
+  <VoidScrollView height={300}><Box>{/* Large content */}</Box></VoidScrollView>
+  ```
+- **`VoidTabs`**: Tab bar with active tab underline indicator.
+  ```tsx
+  <VoidTabs tabs={tabList} activeTab={activeTab()} onTabChange={setActiveTab} />
+  ```
+- **`VoidCode` & `VoidMarkdown` & `VoidDiff`**: Pre-styled syntax-highlighted viewers with One Dark theme.
+  ```tsx
+  <VoidCode content={sourceCode} language="rust" />
+  <VoidMarkdown content={readmeText} />
+  <VoidDiff diff={gitDiff} />
+  ```
+
+### Overlays & Menus
+
+- **`VoidDialog`**: Modal dialog with scrim backdrop and automatic focus trap.
+  ```tsx
+  <VoidDialog onClose={handleClose} width={450}>
+    <VoidDialogTitle>Purge Cluster Cache</VoidDialogTitle>
+    <VoidDialogDescription>Are you sure you want to proceed?</VoidDialogDescription>
+    <VoidDialogFooter>
+      <VoidButton variant="outline" onPress={handleClose}>Cancel</VoidButton>
+      <VoidButton variant="destructive" onPress={handleConfirm}>Purge</VoidButton>
+    </VoidDialogFooter>
+  </VoidDialog>
+  ```
+- **`VoidDropdownMenu`**: Popup menu with items, labels, and separators.
+  ```tsx
+  <VoidDropdownMenu
+    trigger={<VoidButton variant="outline">Options</VoidButton>}
+    items={[
+      { label: "Profile", onSelect: openProfile },
+      { label: "Settings", onSelect: openSettings },
+    ]}
+  />
+  ```
+- **`VoidTooltip` & `VoidPopover`**: Floating anchored overlays.
+  ```tsx
+  <VoidTooltip content="Server response latency"><Text>24ms</Text></VoidTooltip>
+  ```
+- **`createVoidToaster`**: Notification toaster manager.
+  ```tsx
+  const toaster = createVoidToaster()
+  toaster.show("Deployment completed successfully", { type: "success" })
+  ```
 
 ---
 
@@ -801,7 +999,7 @@ All interactive components in `@vexart/headless` provide **behavior only**:
 
 | Pattern | Components | You provide |
 |---------|-----------|-------------|
-| Render props | Button, Checkbox, Switch, Input, List, Tabs, RadioGroup, Select, ProgressBar, Combobox, Slider, VirtualList, Table | `renderX(ctx) → JSX` |
+| Render props | Button, Checkbox, ToggleSwitch, Input, List, Tabs, RadioGroup, Select, ProgressBar, Combobox, Slider, VirtualList, Table | `renderX(ctx) → JSX` |
 | Theme prop | Code, Markdown, Diff, Textarea | `theme: ThemeType` object |
 | Factory | Toast | `renderToast(toast, dismiss) → JSX` |
 | Compound | Dialog | Wrap `Dialog.Overlay`/`Dialog.Content`/`Dialog.Close` |

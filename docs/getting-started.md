@@ -76,7 +76,7 @@ When you call `createApp(() => <App />)`, Vexart:
 4. Builds a TypeScript render graph and dispatches paint commands to `libvexart`.
 5. Presents through Kitty graphics, using native direct/file/SHM transport as appropriate.
 
-TypeScript owns scene graph, reactivity, walk-tree, Flexily layout, render graph generation, event dispatch, focus, and hit-testing. Rust owns WGPU paint, compositing, Kitty encoding, transport, image assets, canvas display lists, and GPU resources.
+TypeScript owns scene graph, reactivity, walk-tree, Flexily layout, render graph generation, event dispatch, focus, and hit-testing. Rust owns WGPU paint, compositing, Kitty encoding, transport, image assets, and GPU resources.
 
 ## Package map
 

@@ -135,9 +135,8 @@ stop.
 ┌────────────────────────────────────────────────────┐
 │  libvexart.{dylib,so,dll} — Rust cdylib            │
 │  Modules: paint (WGPU) / composite / layer         │
-│  registry / resource / image assets / canvas       │
-│  display lists / text (MSDF) / Kitty encoder /     │
-│  SHM-file-direct transport                         │
+│  registry / resource / image assets / text (MSDF)  │
+│  / Kitty encoder / SHM-file-direct transport       │
 └──────────────────────┬─────────────────────────────┘
                        │  bytes to stdout (Kitty protocol)
                        ▼
@@ -149,7 +148,7 @@ stop.
                  └──────────┘
 ```
 
-### 2.2 Package layering (app framework + four public engine packages + internal)
+### 2.2 Package layering (app framework + three engine/UI packages + internal)
 
 ```
 PUBLIC PACKAGES (shipped to consumers)
@@ -187,7 +186,7 @@ flexily (internal)             ← vendored Flexily 0.6.0 flex/grid solver
 
 Vexart ships exactly **two runtime artifacts**:
 
-1. **TypeScript source (`.js`/`.d.ts`)** — the app framework, engine, primitives, headless, styled packages distributed via npm.
+1. **TypeScript source (`.js`/`.d.ts`)** — the 4 official packages (`@vexart/app`, `@vexart/styled`, `@vexart/headless`, `@vexart/engine`) distributed via npm.
 2. **Native binary (`libvexart`)** — one `.dylib`/`.so`/`.dll` per supported platform, embedded inside `@vexart/engine/native/{platform}/`.
 
 No other binaries exist. No other languages. If a task proposes adding a third runtime artifact, it requires a PRD amendment.
@@ -196,9 +195,9 @@ No other binaries exist. No other languages. If a task proposes adding a third r
 
 | Layer | Language | Why |
 |---|---|---|
-| App, Styled, Headless, Primitives | TypeScript (with JSX) | Developer-facing API surface. Leverages SolidJS reactivity and Bun-native tooling. |
+| App, Styled, Headless | TypeScript (with JSX) | Developer-facing API surface. Leverages SolidJS reactivity and Bun-native tooling. |
 | Engine | TypeScript | Public JS/JSX shell plus scene graph, Solid reactivity, walk-tree, Flexily layout, render graph generation, event dispatch, interaction, hooks, callback registry, handles, and compatibility/test/offscreen fallbacks. Bun runtime. |
-| libvexart | Rust (cdylib) | Paint pipelines (WGPU), composite, Kitty encoding, SHM/file/direct transport, layer target lifecycle, image assets, canvas display lists, resources, and native stats. Cross-platform. |
+| libvexart | Rust (cdylib) | Paint pipelines (WGPU), composite, Kitty encoding, SHM/file/direct transport, layer target lifecycle, image assets, resources, and native stats. Cross-platform. |
 | Shaders | WGSL | One shader language, runs on Metal, Vulkan, DX12 via WGPU. |
 
 ### 2.5 Paint-forward ownership rule
@@ -216,7 +215,7 @@ Allowed Rust hot-path responsibilities:
 
 - Execute WGPU paint pipelines, effect shaders, text paint, and paint-command dispatch.
 - Composite layer targets and own Kitty encoding plus SHM/file/direct terminal transport.
-- Store image assets, canvas display lists, GPU resources, pipeline caches, and native presentation stats.
+- Store image assets, GPU resources, pipeline caches, and native presentation stats.
 
 Forbidden target-state responsibilities:
 
@@ -386,7 +385,6 @@ packages/headless/
     │   └── toast.tsx         — createToaster
     │
     ├── navigation/
-    │   ├── router.tsx        — Router, Route, NavigationStack, useRouterContext, useStack
     │   └── diff.tsx
     │
     └── forms/
@@ -403,7 +401,7 @@ components with no visual opinions.
 - `ctx` contains stable prop-bag fields: `ctx.buttonProps`, `ctx.toggleProps`, `ctx.itemProps(id)`, etc. These are spread onto the root primitive.
 - The `ctx.*Props` API is part of the public contract. Adding fields is a minor version bump; removing or renaming is breaking.
 
-### 3.4 `@vexart/styled`
+### 3.3 `@vexart/styled`
 
 ```
 packages/styled/
@@ -417,7 +415,7 @@ packages/styled/
     │
     ├── theme/
     │   └── theme.ts          — createTheme, darkTheme, lightTheme, themeColors,
-    │                            setTheme, getTheme, ThemeProvider, useTheme
+    │                            setTheme, getTheme, getThemeVersion
     │
     ├── components/           — styled wrappers (30+ components)
     │   ├── avatar.tsx
@@ -452,10 +450,10 @@ packages/styled/
 
 - Every styled component is a wrapper around a headless component that supplies a default `renderX` using tokens.
 - Users can override styling by passing their own `renderX` to the styled component.
-- Tokens are theme-scoped. Components read via `useTheme()`.
+- Tokens are theme-scoped. Components read token values reactively from `themeColors` (which uses SolidJS signal getters), updated via `setTheme()` without component remounting or Context Providers.
 - Styled-only components (Avatar, Badge, Separator, Skeleton, Card) have no headless counterpart — they are visual-only with token-based styling.
 
-### 3.5 `@vexart/app`
+### 3.4 `@vexart/app`
 
 `@vexart/app` is the Bun-native application framework layer. It gives users a single public entrypoint while keeping internals separated so router/styles can be extracted later if adoption demands it.
 
@@ -487,7 +485,7 @@ packages/app/
 - Filesystem routing discovers `app/**/page.tsx`, `layout.tsx`, `loading.tsx`, `error.tsx`, and `not-found.tsx`; route groups are omitted from URL paths and private folders (`_name`) are skipped.
 - `vexart dev` generates `.vexart/routes.ts` plus `.vexart/dev.tsx` when no explicit entrypoint exists, then runs Bun with watch mode by default.
 
-### 3.6 Internal tooling packages
+### 3.5 Internal tooling packages
 
 Not published to npm. Live in the monorepo for development.
 
@@ -508,7 +506,7 @@ native/libvexart/
 ├── Cargo.toml                 — cdylib + rlib; wgpu, bytemuck, nix, base64, flate2,
 │                                 fontdb, ttf-parser, fdsm, nalgebra, serde_json
 ├── src/
-│   ├── lib.rs                 — all 53 #[no_mangle] FFI exports
+│   ├── lib.rs                 — exactly 50 #[no_mangle] FFI exports (core + modules)
 │   ├── types.rs               — FrameStats, NativePresentationStats, shared types
 │   ├── frame.rs               — frame types
 │   ├── layer.rs               — native layer registry (Phase 2c)
@@ -519,7 +517,7 @@ native/libvexart/
 │   │   ├── context.rs         — PaintContext (WGPU device, queues, pipelines)
 │   │   ├── instances.rs       — #[repr(C)] instance structs (BridgeImageTransformInstance, MsdfGlyphInstance)
 │   │   ├── pipeline_cache.rs  — pipeline caching
-│   │   ├── pipelines/         — WGPU render pipeline definitions
+│   │   ├── pipelines/         — WGPU render pipeline definitions (21 pipelines)
 │   │   └── shaders/           — WGSL shader source files
 │   │
 │   ├── composite/             — layer compositing
@@ -567,38 +565,67 @@ native/libvexart/
 Every export from `libvexart` obeys:
 
 1. **Function signature**: `pub extern "C" fn vexart_<module>_<action>(...) -> i32` — integer return code (0 = OK, non-zero = error code).
-2. **Parameter count**: ≤ 8 parameters. If more are needed, the last parameter is `*const u8` pointing to a packed ArrayBuffer with further fields.
-3. **Panic safety**: every export wraps its body in `std::panic::catch_unwind`. A panic converts to error code `ERR_PANIC = -1` and stores the message in `thread_local` for retrieval.
+2. **Parameter count**: ≤ 8 parameters (ARM64 calling convention limit). If more are needed, the last parameter is `*const u8` pointing to a packed ArrayBuffer with further fields.
+3. **Panic safety**: every export wraps its body in `std::panic::catch_unwind` (via `ffi_guard!`). A panic converts to error code `ERR_PANIC = -1` and stores the message in `thread_local` for retrieval.
 4. **Error retrieval**: `vexart_get_last_error_length()` and `vexart_copy_last_error(*mut u8, u32)` expose the most recent error string to TypeScript.
-5. **No allocations visible to caller**: caller-provided buffers are used for writes. Rust-internal allocations are bounded by `ResourceManager` or stack.
+5. **State management & context**: Rust manages its native rendering and presentation state via the global singleton `SHARED_PAINT: LazyLock<Mutex<Option<PaintContext>>>`. The `_ctx: u64` handle passed from TypeScript is reserved for ABI compatibility and forward multi-context extensibility, while internal thread safety and resource access are governed by the `Mutex` around `SHARED_PAINT`.
+6. **No allocations visible to caller**: caller-provided buffers are used for writes. Rust-internal allocations are bounded by `ResourceManager` or stack.
 
 Example FFI export:
 
 ```rust
 #[no_mangle]
 pub extern "C" fn vexart_paint_dispatch(
-    context: u64,
+    _ctx: u64,
     target: u64,
     graph_ptr: *const u8,
     graph_len: u32,
     stats_out: *mut FrameStats,
 ) -> i32 {
-    std::panic::catch_unwind(|| {
-        let ctx = unsafe { &*(context as *const PaintContext) };
+    ffi_guard!({
+        let mut guard = lock_or_recover(&SHARED_PAINT);
+        let ctx = guard.as_mut().ok_or(ERR_INVALID_HANDLE)?;
         let graph = unsafe { std::slice::from_raw_parts(graph_ptr, graph_len as usize) };
         paint::dispatch(ctx, target, graph, unsafe { &mut *stats_out })
     })
-    .unwrap_or(ERR_PANIC)
 }
 ```
 
-### 4.3 Shader organization
+### 4.3 Shader organization and canonical pipelines
 
-- All shaders in WGSL.
+- All shaders are written in WGSL.
 - One `.wgsl` file per pipeline variant.
 - Shader modules embedded in the binary via `include_str!` at compile time.
 - Pipeline compilation happens at startup, persisted to disk via WGPU's `PipelineCache`.
 - No runtime shader generation or string concatenation. If a feature needs variants, they are separate shader files.
+
+#### Canonical WGPU Render Pipelines (`cmd_kind` 0 to 20)
+
+`PipelineRegistry` maintains exactly 21 pipelines indexed by `cmd_kind` (§17.6):
+
+| `cmd_kind` | Pipeline / Feature | Shader (`.wgsl`) | Rust module (`pipelines/`) | Notes |
+|---|---|---|---|---|
+| 0 | Rect | `rect.wgsl` | `rect.rs` | Solid color rectangle |
+| 1 | Shape Rect | `shape_rect.wgsl` | `shape_rect.rs` | Rounded rectangle with uniform radius |
+| 2 | Shape Rect Corners | `rect_corners.wgsl` | `rect_corners.rs` | Per-corner radius support (`rect_corners.rs`) |
+| 3 | Circle | `circle.wgsl` | `circle.rs` | Anti-aliased circle |
+| 4 | Polygon | `polygon.wgsl` | `polygon.rs` | Regular polygon |
+| 5 | Bezier | `bezier.wgsl` | `bezier.rs` | Quadratic/cubic bezier curves |
+| 6 | Glow | `glow.wgsl` | `glow.rs` | Outer box glow effect |
+| 7 | Nebula | `nebula.wgsl` | `nebula.rs` | Procedural space background effect |
+| 8 | Starfield | `starfield.wgsl` | `starfield.rs` | Procedural starfield effect |
+| 9 | Image | `image.wgsl` | `image.rs` | Prohibited in direct graph dispatch; dispatched via image ops |
+| 10 | Image Transform | `image_transform.wgsl` | `image_transform.rs` | Prohibited in direct graph dispatch; transformed image layer |
+| 11 | *(Reserved)* | *(none)* | *(none)* | Legacy glyph slot (unused; 21+ reserved for future) |
+| 12 | Gradient Linear | `gradient_linear.wgsl` | `gradient_linear.rs` | Linear gradient (multi-stop in shader, 2-stop in TS API) |
+| 13 | Gradient Radial | `gradient_radial.wgsl` | `gradient_radial.rs` | Radial gradient |
+| 14 | Gradient Conic | `gradient_conic.wgsl` | `gradient_conic.rs` | Conic/angular gradient |
+| 15 | Backdrop Blur | `backdrop_blur.wgsl` | `backdrop_blur.rs` | Dual-pass Gaussian/box blur sampling background |
+| 16 | Backdrop Filter | `backdrop_filter.wgsl` | `backdrop_filter.rs` | Color matrix/adjustments on backdrop texture |
+| 17 | Image Mask | `image_mask.wgsl` | `image_mask.rs` | Rounded rectangle / region clipping for images |
+| 18 | Glyph (MSDF Text) | `msdf_text.wgsl` | `glyph.rs` | Multi-channel signed distance field font rendering |
+| 19 | Self Filter | `self_filter.wgsl` | `filter.rs` | Element self-filter post-processing |
+| 20 | Shadow | `shadow.wgsl` | `shadow.rs` | Analytic anti-aliased box-shadow pipeline |
 
 ---
 
@@ -614,100 +641,57 @@ A frame is triggered by the render loop when at least one of:
 ### 5.1 Phase diagram
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌──────────────┐
-│ Reconciler  │────▶│  Walk tree  │────▶│   Layout     │
-│ (SolidJS)   │     │ (+ viewport │     │  (Flexily)   │
-│             │     │    cull)    │     │              │
-└─────────────┘     └─────────────┘     └──────┬───────┘
-                                                │
-                                                ▼
-                                         ┌─────────────┐
-                                         │  Assign     │
-                                         │  layers     │
-                                         │ (3-phase)   │
-                                         └──────┬──────┘
-                                                │
-                                                ▼
-                                         ┌─────────────┐
-                                         │    Paint    │
-                                         │  (WGPU FFI) │
-                                         └──────┬──────┘
-                                                │
-                                                ▼
-                                         ┌─────────────┐
-                                         │  Composite  │
-                                         │  (layer     │
-                                         │   merge)    │
-                                         └──────┬──────┘
-                                                │
-                                                ▼
-                                         ┌─────────────┐
-                                         │   Output    │
-                                         │  (Kitty     │
-                                         │ encoder FFI)│
-                                         └──────┬──────┘
-                                                │
-                                                ▼
-                                          [stdout bytes]
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Step 1: Feed scroll & pointer state + check compositor-only fast path       │
+│ (routeScrollDeltas, applyScrollOffsets, evaluate hasCompositorAnimations)   │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │ (if compositor-only: uniform update + emit)
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Step 2: Update interactive states                                           │
+│ (updateInteractiveStates: hover, active, focus, pointer capture)            │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Step 3: Single unified layout pass                                          │
+│ (walkTree → layoutAdapter / Flexily in TS → endLayout → writeLayoutBack)    │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Step 4: Layer boundary detection & spatial assignment                       │
+│ (findLayerBoundaries → assignLayersSpatial: layer slots, dirty damage rects)│
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Step 5: Frame presentation & compositing                                    │
+│ (beginSync → paintFrame / WGPU FFI → composite → native Kitty emit → endSync)│
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 5.2 Phase contracts
+### 5.2 Phase contracts (the 5-step cycle coordinated by `loop.ts` and `compositeFrame()`)
 
-Each phase is a function with a strict input/output type. Phases are never reordered or interleaved; the loop is deterministic.
+The frame lifecycle is coordinated by `packages/engine/src/loop/loop.ts`, which delegates each frame's execution to `compositeFrame()` in `packages/engine/src/loop/composite.ts`. Each step enforces strict invariants and sequential determinism:
 
-#### 5.2.1 Reconciliation (SolidJS)
-
-- **Location**: `engine/src/reconciler/`.
-- **Input**: JSX function calls from user code.
-- **Output**: mutations to the `TGENode` tree.
-- **Side effect**: sets a dirty flag via `markDirty()`.
-
-This phase is asynchronous relative to the frame loop — SolidJS mutates the tree as signals fire. The loop reads the tree at the start of each frame.
-
-#### 5.2.2 Walk tree
-
-- **Location**: `engine/src/loop/walk-tree.ts`.
-- **Signature**:
-  ```ts
-  walkTree(root: TGENode, viewport: Rect): WalkResult
-  ```
-- **Output type**:
-  ```ts
-  type WalkResult = {
-    layoutCommands: LayoutCommand[]  // flat list in tree order
-    interactiveNodes: InteractiveNode[]
-    transformSubtrees: TransformSubtree[]
-    culledCount: number              // for debug / telemetry
-  }
-  ```
+#### Step 1: Feed scroll & pointer state & evaluate compositor fast path
+- **Location**: `packages/engine/src/loop/composite.ts`, `composite-scroll.ts`, `packages/engine/src/animation/compositor-path.ts`.
 - **Responsibilities**:
-  - Depth-first traversal of `TGENode` tree.
-  - Compute axis-aligned bounding box per subtree (bottom-up).
-  - Skip subtrees whose AABB is fully outside `viewport` (viewport culling, Tier 2).
-  - Emit layout inputs for Flexily.
-  - Collect interactive nodes (focusable, onPress, etc.).
-  - Collect transform subtrees for the 3-pass paint pipeline.
+  - Routes scroll deltas (`routeScrollDeltas`) and updates active scroll offsets (`applyScrollOffsets`).
+  - Evaluates active compositor animations (`hasCompositorAnimations()`, `isCompositorOnlyFrame()`).
+  - **Fast path**: If only compositor-eligible properties (`transform`, `opacity`) on layer-backed nodes mutated, the frame bypasses Steps 2–4. It immediately invokes `vexart_composite_update_uniform(_ctx, target, source_target, params_ptr, clear_rgba)` to update GPU uniforms and proceeds directly to presentation, maintaining 60fps without JS layout or paint costs.
 
-#### 5.2.3 Layout
-
-- **Location**: `packages/engine/src/loop/layout-adapter.ts` (Flexily integration in TS).
-- **Signature**:
-  ```ts
-  runLayout(walk: WalkResult, size: TerminalSize): LayoutFrame
-  ```
-- **Output type**:
-  ```ts
-  type LayoutFrame = {
-    positioned: PositionedCommand[]
-    damage: DamageRect[]
-    rootRect: Rect
-  }
-  ```
+#### Step 2: Update interactive states
+- **Location**: `packages/engine/src/loop/layout.ts` (`updateInteractiveStates`).
 - **Responsibilities**:
-  - Compute layout in TypeScript using Flexily.
-  - Produce box positions, dimensions, and text wrap data without native layout writeback FFI.
-  - Build `PositionedCommand[]` for TS-owned render graph generation.
-  - Diff against previous frame's layout → produce damage rects.
+  - Evaluates pointer coordinates against interactive node bounds and active scroll viewports.
+  - Computes `hoveredId`, `activeId`, and focus-ring states.
+  - Marks layout/paint dirty flags only when visual interaction states transition, preventing redundant frame invalidation.
+
+#### Step 3: Single unified layout pass (`walkTree` → `layoutAdapter` → `endLayout` → `writeLayoutBack`)
+- **Location**: `packages/engine/src/loop/walk-tree.ts`, `layout-adapter.ts`, `layout.ts`.
+- **Responsibilities**:
+  - Depth-first traversal (`walkTree`) accumulates ancestor transforms, tracks clipping viewports, performs viewport culling, and builds Flexily input trees.
+  - Flexily computes Flex and Grid layout directly in TypeScript without native writeback FFI.
+  - `writeLayoutBack` writes resolved bounding rectangles into `node.layout`, handles text wrap geometry, computes `damageRectForLayoutTransition` for animated transitions, and accumulates damage rectangles.
 
 ##### Grid layout profile (v1.x beta)
 
@@ -732,117 +716,45 @@ Diagnostics include intrinsic-pass count, cache hit, and no-op state. A failed
 Grid calculation aborts writeback/paint for that frame and retains the last
 valid rectangles, preserving damage and interaction consistency.
 
-#### 5.2.4 Assign layers
-
-- **Location**: `engine/src/loop/assign-layers.ts`.
-- **Signature**:
-  ```ts
-  assignLayers(frame: LayoutFrame, interactionMode: InteractionMode): LayerPlan
-  ```
-- **Output type**:
-  ```ts
-  type LayerPlan = {
-    layers: Layer[]
-    commandsPerLayer: Map<LayerId, PositionedCommand[]>
-    z_order: LayerId[]
-  }
-  ```
-- **Three-phase algorithm** (Phase 1 → 2 → 3):
-  1. **Scroll**: extract scroll containers → one layer per viewport + scissor pair.
-  2. **Background**: color-anchor solid backgrounds and decorations into background layers.
-  3. **Static**: remaining commands → spatial + content-based assignment.
-
-#### 5.2.5 Paint
-
-- **Location**: `engine/src/loop/paint.ts` (dispatcher) + `native/libvexart/src/paint/` (implementation).
-- **Signature**:
-  ```ts
-  paintLayers(plan: LayerPlan): PaintResult
-  ```
-- **Output type**:
-  ```ts
-  type PaintResult = {
-    paintedLayerIds: LayerId[]
-    skippedCleanLayers: LayerId[]
-    timingMs: number
-  }
-  ```
+#### Step 4: Layer boundary detection & spatial assignment
+- **Location**: `packages/engine/src/loop/layer-boundary.ts`, `assign-layers.ts`.
 - **Responsibilities**:
-  - For each dirty layer, call `vexart_paint_dispatch` with its command slice.
-  - Clean layers reuse their previous GPU target — no FFI call.
-  - Compositor-animated nodes skip paint entirely — only uniform update.
+  - `findLayerBoundaries` identifies boundaries requiring dedicated GPU render targets: explicit `layer={true}`, scroll viewports, backdrop filters, and complex transforms.
+  - `assignLayersSpatial` assigns positioned render commands to layer slots, determines layer z-indices, calculates layer bounding boxes, diffs against prior layer states, and computes layer-local damage rectangles (`layer.damageRect`). Clean layers are marked for GPU reuse.
 
-#### 5.2.6 Composite
-
-- **Location**: `engine/src/loop/composite.ts` (dispatcher) + `native/libvexart/src/composite/` (implementation).
-- **Signature**:
-  ```ts
-  compositeLayers(plan: LayerPlan, paint: PaintResult): CompositeResult
-  ```
-- **Output type**:
-  ```ts
-  type CompositeResult = {
-    finalTargetHandle: u64         // GPU target with merged layers
-    needsReadback: boolean
-  }
-  ```
+#### Step 5: Frame presentation & compositing
+- **Location**: `packages/engine/src/loop/paint.ts`, `packages/engine/src/ffi/gpu-renderer-backend.ts`, `native/libvexart/src/composite/`, `native/libvexart/src/kitty/`.
 - **Responsibilities**:
-  - Z-order composition of layers onto a final target.
-  - Handle transform subtrees (inverse blit pass).
-  - If `needsReadback`, prepare GPU → CPU transfer.
+  - Wraps presentation in synchronized terminal mode (`beginSync` / `endSync`).
+  - For dirty layers, builds the render graph buffer and dispatches paint commands via `vexart_paint_dispatch(_ctx, target, graph_ptr, graph_len, stats_out)` to WGPU. Clean layers are reused without repainting.
+  - Composites layer targets into the root render target in z-order.
+  - Transmits output to the terminal using the Kitty graphics protocol (`vexart_kitty_emit_frame_with_stats`, layer emission, or POSIX SHM ring buffers).
+  - Collects `FrameProfile` timing metrics and updates observability/debug overlays.
 
-#### 5.2.7 Output (Kitty encoding)
-
-- **Location**: `engine/src/loop/output.ts` (dispatcher) + `native/libvexart/src/kitty/` (implementation, Tier 1).
-- **Signature**:
-  ```ts
-  emitFrame(result: CompositeResult): EmitStats
-  ```
-- **Output type**:
-  ```ts
-  type EmitStats = {
-    bytesWritten: number
-    encodingTimeMs: number
-    transportMode: 'direct' | 'file' | 'shm'
-  }
-  ```
-- **Responsibilities**:
-  - Call `vexart_kitty_emit_frame_with_stats(ctx, finalTargetHandle, imageId, statsOut)`.
-  - Rust encodes base64 + compression + escape sequences entirely on native side.
-  - Bytes streamed directly to stdout via buffered writer.
-  - **Never** goes through JavaScript `Buffer.toString('base64')`.
-
-### 5.3 End-to-end type flow (one diagram)
+### 5.3 End-to-end data flow (one diagram)
 
 ```
-TGENode tree
-   │
-   │ walkTree()
-   ▼
-WalkResult { layoutCommands, interactiveNodes, transformSubtrees }
-   │
-   │ runLayout()
-   ▼
-LayoutFrame { positioned, damage, rootRect }
-   │
-   │ assignLayers()
-   ▼
-LayerPlan { layers, commandsPerLayer, z_order }
-   │
-   │ paintLayers()
-   ▼
-PaintResult { paintedLayerIds, skippedCleanLayers }
-   │
-   │ compositeLayers()
-   ▼
-CompositeResult { finalTargetHandle, needsReadback }
-   │
-   │ emitFrame()
-   ▼
-EmitStats { bytesWritten, encodingTimeMs, transportMode }
+Reconciler (SolidJS signals mutate TGENode tree)
    │
    ▼
-Terminal receives pixel image via Kitty protocol
+[loop.ts coordinator triggers frame()]
+   │
+   ├─► Step 1: composite-scroll & evaluate compositor fast path
+   │            (qualifying? → vexart_composite_update_uniform → emit → done)
+   │
+   ├─► Step 2: updateInteractiveStates (hover, active, focus)
+   │
+   ├─► Step 3: Single unified layout pass
+   │            walkTree() ──► Flexily layout() ──► writeLayoutBack()
+   │
+   ├─► Step 4: Layer assignment
+   │            findLayerBoundaries() ──► assignLayersSpatial()
+   │
+   └─► Step 5: Paint, composite, and emit
+                paintFrame() (WGPU FFI) ──► native composite ──► Kitty encoder
+                                                                      │
+                                                                      ▼
+                                                               Terminal Display
 ```
 
 ---
@@ -956,7 +868,7 @@ Animation descriptor registered:
 Compositor path reuses cached layer targets and applies transform/opacity update
          │
          ▼
-vexart_composite_update_uniform(target, sourceTarget, transformQuad+opacity)
+vexart_composite_update_uniform(_ctx, target, source_target, params_ptr, clear_rgba)
          │
          ▼
 WGPU updates cached composition without walk/layout/assign/paint
@@ -993,15 +905,18 @@ Fall-back incurs normal frame cost. Agents should warn users via `docs/performan
 
 ```rust
 pub struct ResourceManager {
-    budget_bytes: u64,
-    current_usage: AtomicU64,
-    resources: DashMap<ResourceKey, Resource>,
-    priority_index: RwLock<BinaryHeap<PriorityEntry>>,
-    eviction_stats: EvictionStats,
+    pub budget_bytes: u64,
+    pub current_usage: AtomicU64,
+    pub high_water_mark: AtomicU64,
+    pub resources: HashMap<ResourceKey, Resource>,
+    pub evictions_last_frame: u32,
+    pub evictions_total: u64,
+    startup: Instant,
 }
 
 pub enum ResourceKind {
     LayerTarget,
+    TerminalImage,
     FontAtlas,
     GlyphAtlas,
     ImageSprite,
@@ -1016,11 +931,12 @@ pub enum Priority {
 }
 
 pub struct Resource {
-    kind: ResourceKind,
-    size_bytes: u64,
-    priority: Priority,
-    last_used_frame: u64,
-    gpu_handle: WgpuHandle,
+    pub kind: ResourceKind,
+    pub size_bytes: u64,
+    pub priority: Priority,
+    pub last_used_frame: u64,
+    pub gpu_handle: WgpuHandle,
+    pub seconds_since_last_use: f64,
 }
 ```
 
@@ -1029,27 +945,40 @@ pub struct Resource {
 1. **Create**: caller requests a resource; manager allocates if budget allows, otherwise triggers eviction.
 2. **Use**: each frame, when a resource is touched (read/bind), the manager updates its `last_used_frame` and promotes to `Visible`.
 3. **Demote**: at end of frame, resources not touched move `Visible → Recent`; after 5 seconds unused, `Recent → Cold`.
-4. **Evict**: when total usage > budget, walk heap from `Cold` to `Recent` (never `Visible`) until usage ≤ budget.
+4. **Evict**: when total usage > budget, walk entries from `Cold` to `Recent` (never `Visible`) until usage ≤ budget.
 
 ### 8.3 Configuration
 
-- Default budget: 128 MB.
-- Configurable via `mount({ gpuBudgetMb: 256 })`.
-- Minimum: 32 MB (smaller risks performance collapse).
+- Default budget: 512 MB (`DEFAULT_BUDGET_BYTES = 512 * 1024 * 1024`).
+- Minimum: 32 MB (`MIN_BUDGET_BYTES = 32 * 1024 * 1024`, enforced in `set_budget`).
+- Configurable via `mount({ gpuBudgetMb: 512 })` or `setNativeResourceBudget(mb)`.
 - Maximum: unbounded (user's choice).
 
 ### 8.4 Observability
 
-`getRendererResourceStats()` exposes:
+Resource metrics are split cleanly between native GPU management and TypeScript caches:
+
+**Native Resource Manager stats (`getNativeResourceStats()` via FFI)**:
 
 ```ts
-type ResourceStats = {
+export type ResourceStats = {
   budgetBytes: number
   currentUsage: number
   highWaterMark: number
   resourcesByKind: Record<string, { count: number; bytes: number }>
   evictionsLastFrame: number
   evictionsTotal: number
+}
+```
+
+**Aggregate Engine Resource stats (`getRendererResourceStats()`)**:
+
+```ts
+export function getRendererResourceStats(): {
+  image: ImageCacheStats
+  textLayout: TextLayoutCacheStats
+  gpuRenderer: GpuRendererBackendCacheStats
+  native: ResourceStats | null // Native stats from getNativeResourceStats()
 }
 ```
 
@@ -1062,7 +991,7 @@ type ResourceStats = {
 | Thread | Owner | What runs there |
 |---|---|---|
 | **JS event loop** | Bun | Solid reconciler adapter, scene graph, reactivity, walk-tree, Flexily layout, render graph generation, hooks, callback registry, input byte parsing, event dispatch, compatibility/test/offscreen fallback |
-| **Rust sync thread** | Rust main | Paint-forward FFI calls from JS execute here; paint dispatch, composite, layer registry targets, image assets, canvas display lists, Kitty encode/present, SHM/file/direct transport |
+| **Rust sync thread** | Rust main | Paint-forward FFI calls from JS execute here; paint dispatch, composite, layer registry targets, image assets, Kitty encode/present, SHM/file/direct transport |
 | **WGPU submission** | WGPU internal | Command buffer submission to GPU driver (Metal/Vulkan/DX12) |
 | **WGPU GPU callbacks** | WGPU internal | GPU fence callbacks, readback completion |
 | **Kitty writer** | Rust-owned | Buffered stdout writes from the Kitty encoder |
@@ -1074,7 +1003,7 @@ type ResourceStats = {
 ### 9.2 Thread safety contract
 
 - FFI calls from JS to Rust are synchronous. TS awaits completion.
-- Rust internal paint/composite/presentation state is not accessed concurrently. Every FFI call takes an engine/context handle and mutates it in-thread.
+- Rust internal paint/composite/presentation state is managed via the `SHARED_PAINT: LazyLock<Mutex<Option<PaintContext>>>` global singleton. The `_ctx: u64` parameter is reserved for ABI compatibility and forward multi-context extensibility; internal concurrency safety is guaranteed by the `Mutex`.
 - WGPU handles concurrency internally — user code does not interact with GPU threads directly.
 - The Kitty writer is a buffered `std::io::BufWriter` over stdout; writes are serialized at the OS level.
 
@@ -1107,26 +1036,13 @@ If profiling in v1.x shows the JS thread saturated, the solution is to optimize 
 ### 10.2 Error types in TypeScript
 
 ```ts
-export class VexartError extends Error {
-  constructor(message: string) {
+export class VexartNativeError extends Error {
+  constructor(
+    public readonly code: number,
+    message: string,
+  ) {
     super(message)
-    this.name = 'VexartError'
-  }
-}
-
-export class VexartNativeError extends VexartError {
-  code: number
-  constructor(code: number, message: string) {
-    super(`[${code}] ${message}`)
     this.name = 'VexartNativeError'
-    this.code = code
-  }
-}
-
-export class VexartTerminalError extends VexartError {
-  constructor(message: string, public docUrl?: string) {
-    super(message)
-    this.name = 'VexartTerminalError'
   }
 }
 ```
@@ -1189,12 +1105,23 @@ Algorithm each frame:
 
 ### 11.3 Usage
 
-Internal APIs (not part of public surface):
+Factory pattern in `packages/engine/src/scheduler/index.ts`:
 
 ```ts
-scheduleTask(priority, fn)          // enqueue
-drainLane(priority, budgetMs)       // frame loop uses
-cancelTask(handle)                  // cleanup
+import { createFrameScheduler } from '@vexart/engine'
+
+const scheduler = createFrameScheduler()
+
+// Enqueue tasks
+const cancel = scheduler.scheduleTask('user-blocking', () => handleFocusChange())
+
+// Per-frame execution (called by render loop)
+scheduler.drainFrame(12, () => !isDirty && !hasRecentInput)
+
+// Inspection & cleanup
+scheduler.pendingCount()
+scheduler.pendingInLane('background')
+scheduler.clear()
 ```
 
 ### 11.4 Benchmarks protecting this behavior
@@ -1247,7 +1174,7 @@ vexart/
 
 ### 12.3 FFI loading
 
-`engine/src/ffi/bridge.ts` loads `libvexart`:
+`packages/engine/src/ffi/vexart-bridge.ts` loads `libvexart`:
 
 ```ts
 function loadLib(): LibraryHandle {
@@ -1473,9 +1400,9 @@ export type RendererBackend = {
 
 ### 16.2 Theme system
 
-- `createTheme(partial): Theme` in `@vexart/styled/src/theme/create-theme.ts`.
-- `<ThemeProvider theme={myTheme}>` in `@vexart/styled/src/theme/provider.tsx`.
-- `useTheme()` hook for styled components to read tokens.
+- `createTheme(overrides)` in `@vexart/styled/src/theme/theme.ts`.
+- `setTheme(theme)` updates SolidJS signals; components read reactive token getters from `themeColors` (e.g. `themeColors.background`) without component remounting or Context Providers.
+- `getTheme()` and `getThemeVersion()` inspect the active theme and track updates.
 
 ### 16.3 Font atlas registration
 
@@ -1484,7 +1411,7 @@ export type RendererBackend = {
 
 ### 16.4 Slot registry (plugins)
 
-- `createSlotRegistry()` + `createSlot(registry, name)` for plugins to inject UI fragments without modifying core packages.
+- `createSlotRegistry()` + `createSlot(name: string, registry: SlotRegistry)` for plugins to inject UI fragments without modifying core packages.
 - Use case: devtools plugins, telemetry panels.
 
 ### 16.5 What is NOT an extension point (internal only)
@@ -1506,7 +1433,7 @@ This section documents deviations between the current v0.1 codebase and the targ
 
 | Current state (v0.1) | Target | Resolved in |
 |---|---|---|
-| 16 packages with ghost / stub ones (`compat-*`, `compositor`, `output-compat`, `render-graph`, `scene`, `text`, `layout-clay`, `platform-terminal`, `gpu`, `output-kitty`) | 4 public packages (`engine`, `primitives`, `headless`, `styled`) + 2 internal | Phase 1 |
+| 16 packages with ghost / stub ones (`compat-*`, `compositor`, `output-compat`, `render-graph`, `scene`, `text`, `layout-clay`, `platform-terminal`, `gpu`, `output-kitty`) | 4 official packages (`@vexart/app`, `@vexart/styled`, `@vexart/headless`, `@vexart/engine`) + 3 internal | Phase 1 |
 | Legacy package namespace | `@vexart/*` | Phase 1 |
 | Relative imports across packages (`../../otro-paquete/src/...`) | Workspace imports (`@vexart/*`), CI-enforced | Phase 1 |
 | Packages have no declared `dependencies` | Explicit `workspace:*` dependencies | Phase 1 |
@@ -1517,7 +1444,7 @@ This section documents deviations between the current v0.1 codebase and the targ
 | Multiple legacy native binaries | One native binary (`libvexart`) | Phase 2 |
 | Kitty encoding / normal presentation in TypeScript (`Buffer.from(...).toString('base64')` and raw RGBA payloads) | Native Rust presentation; JS receives stats/status only | Native Presentation |
 | `cache: None` in all WGPU pipelines (`native/wgpu-canvas-bridge/src/lib.rs` lines 676, 771, 882, 999, 1109, 1228, 1377, 1484, 1568, 1660) | Shared persistent `PipelineCache` on disk | Phase 2b |
-| 5 independent caches with `MAX_*` constants (text-layout, font-atlas, image, etc.) | Unified `ResourceManager` with 128 MB default budget | Phase 2b |
+| 5 independent caches with `MAX_*` constants (text-layout, font-atlas, image, etc.) | Unified `ResourceManager` with 512 MB default budget | Phase 2b |
 | 89-glyph ASCII bitmap font atlas | MSDF atlas (1024×1024) per runtime-loaded font | Phase 2b |
 | No compositor-thread animation path | `transform` / `opacity` animations bypass main thread | Phase 2b |
 | No self-filter support (only `backdrop-*`) | `filter` prop paralleling `backdropFilter` | Phase 2b |
@@ -1537,7 +1464,7 @@ This section documents deviations between the current v0.1 codebase and the targ
 | TS owns layer GPU target handles and terminal image IDs | Rust `LayerRegistry` owns target/image lifecycle and resource accounting | Native layer registry |
 | Native ownership plan for scene graph / layout / render graph / event dispatch | Reverted; TS owns scene graph, reactivity, Flexily layout, render graph, and event dispatch | DEC-014 / Phase 14 |
 | Native scene/layout/render/event experimental flags | Removed from public `mount()` API | DEC-014 / Phase 14 |
-| Paint/composite/transport in TS hot path | Rust owns WGPU paint, composite, Kitty encoding, SHM/file/direct transport, image assets, and canvas display lists | DEC-014 / Phase 14 |
+| Paint/composite/transport in TS hot path | Rust owns WGPU paint, composite, Kitty encoding, SHM/file/direct transport, and image assets (canvas is rasterized in TS and uploaded as RGBA) | DEC-014 / Phase 14 |
 
 ---
 
@@ -1549,39 +1476,49 @@ Quick index of the type contracts that agents reference most.
 
 | Type | Location | Purpose |
 |---|---|---|
-| `TGENode` | `reconciler/node.ts` | TypeScript scene tree node |
-| `TGEProps` | `types.ts` | Prop contract for all primitives |
-| `PressEvent` | `reconciler/node.ts` | Event for `onPress` bubbling |
-| `NodeMouseEvent` | `reconciler/node.ts` | Event for `onMouse*` per-node |
-| `Layer` | `loop/assign-layers.ts` | Compositing layer |
+| `TGENode` | `ffi/node-types.ts` | TypeScript scene tree node |
+| `TGEProps` | `ffi/node-types.ts` | Prop contract for all primitives |
+| `PressEvent` | `reconciler/pointer.ts` | Event for `onPress` bubbling |
+| `NodeMouseEvent` | `input/types.ts` | Event for `onMouse*` per-node |
+| `Layer` | `ffi/layers.ts` | Compositing layer |
 | `WalkResult`, `LayoutFrame`, `LayerPlan`, `PaintResult`, `CompositeResult`, `EmitStats` | `loop/{phase}.ts` | Phase contracts |
-| `Terminal`, `Capabilities`, `TerminalSize` | `terminal/caps.ts` | Terminal handle |
+| `Terminal`, `Capabilities`, `TerminalSize` | `terminal/index.ts` | Terminal handle |
 
 ### B.2 FFI functions (in `libvexart`)
 
-All exports prefixed `vexart_{module}_{action}`. Each has a matching stub in `packages/engine/src/ffi/functions.ts`. The current set:
+All exports prefixed `vexart_{module}_{action}`. Exactly 50 native functions are exported by `libvexart`:
 
 ```
+// Version & Lifecycle (3)
 vexart_version
 vexart_context_create
 vexart_context_destroy
-vexart_context_resize
+
+// Paint (3)
 vexart_paint_dispatch
 vexart_paint_upload_image
 vexart_paint_remove_image
+
+// Composite & Target Lifecycle (13)
 vexart_composite_target_create
 vexart_composite_target_destroy
 vexart_composite_target_begin_layer
 vexart_composite_target_end_layer
+vexart_composite_target_set_scissor
+vexart_composite_target_reset_scissor
 vexart_composite_render_image_layer
 vexart_composite_render_image_transform_layer
 vexart_composite_update_uniform
 vexart_composite_copy_region_to_image
 vexart_composite_image_filter_backdrop
 vexart_composite_image_mask_rounded_rect
-vexart_composite_merge
+vexart_composite_image_mask_rounded_rect_region
+
+// Readback (2)
 vexart_composite_readback_rgba
 vexart_composite_readback_region_rgba
+
+// Kitty Transport & Presentation (10)
 vexart_kitty_set_transport
 vexart_kitty_shm_prepare
 vexart_kitty_shm_release
@@ -1590,28 +1527,49 @@ vexart_kitty_emit_layer
 vexart_kitty_emit_layer_target
 vexart_kitty_emit_region_target
 vexart_kitty_delete_layer
+vexart_kitty_emit_placeholder_frame
+vexart_kitty_delete_placeholder
+
+// POSIX SHM Extended & Cleanup (3)
+vexart_kitty_emit_placeholder_shm_frame
+vexart_kitty_shm_is_consumed
+vexart_kitty_shm_cleanup_all
+
+// Native Layer Registry (5)
 vexart_layer_upsert
 vexart_layer_reuse
 vexart_layer_remove
 vexart_layer_clear
 vexart_layer_present_dirty
+
+// Resource Manager (2)
 vexart_resource_get_stats
 vexart_resource_set_budget
+
+// Image Assets (3)
 vexart_image_asset_register
 vexart_image_asset_touch
 vexart_image_asset_release
+
+// MSDF Font System (4)
+vexart_font_init
+vexart_font_query
+vexart_font_render_text
+vexart_font_measure
+
+// Error Retrieval (2)
 vexart_get_last_error_length
 vexart_copy_last_error
 ```
 
-The exact list is maintained in `native/libvexart/src/lib.rs` and mirrored in `packages/engine/src/ffi/functions.ts`. These two files must stay in sync; CI checks this.
+The exact list is maintained across `native/libvexart/src/lib.rs` (and submodules) and mirrored in `packages/engine/src/ffi/vexart-bridge.ts`.
 
 ### B.3 Extension point interfaces
 
 | Interface | Location |
 |---|---|
 | `RendererBackend` | `@vexart/engine` `public.ts` |
-| `Theme`, `ThemeOverrides` | `@vexart/styled` `theme/` |
+| `ThemeDefinition`, `ColorTokens` | `@vexart/styled` `theme/` |
 | `FontDescriptor` | `@vexart/engine` `public.ts` |
 | `SlotRegistry`, `Slot` | `@vexart/engine` `public.ts` |
 

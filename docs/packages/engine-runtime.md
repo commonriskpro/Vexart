@@ -13,36 +13,38 @@ Vexart supports exactly four intrinsic elements:
 - `<box>`: Primary visual and structural layout container. Supports background colors, gradients, borders, shadows, glows, corner radii, transforms, backdrop filters, and flex/grid layout properties.
 - `<text>`: Leaf typography container. Holds text content, font family, font size, line height, text wrap rules, and syntax highlighting spans.
 - `<img>`: Hardware-accelerated image container backed by GPU texture handles.
-- `<canvas>`: Immediate-mode and retained display list rendering surface.
+- `<canvas>`: Immediate-mode drawing surface (rasterized in JS via software rasterizer and uploaded to GPU as RGBA texture).
 
 > **CRITICAL INVARIANT — OBSOLETE PRIMITIVES**:
 > Historical primitives `<Span>`, `<RichText>`, and `<WrapRow>` **do not exist**. They were permanently deleted during the monorepo consolidation. Any attempt to use `<Span>`, `<RichText>`, or `<WrapRow>` will fail at compile or runtime. Use `<box>` and `<text>` intrinsics or application `<Box>` and `<Text>` components.
 
 ### 1.2 Reconciler Implementation Contract
-The reconciler interface is bound to `TGENode` in `packages/engine/src/reconciler/reconciler.ts`:
+The reconciler is instantiated via `createRenderer<TGENode>` in `packages/engine/src/reconciler/reconciler.ts`. Note that the `renderer` instance itself is private to the module; its methods (`render`, `createElement`, `insertNode`, etc.) are exported individually.
 
 ```typescript
 import { createRenderer } from "solid-js/universal"
 import { type TGENode, createNode, createTextNode, insertChild, removeChild } from "../ffi/node"
 
-export const renderer = createRenderer<TGENode>({
-  createElement(string: string): TGENode {
-    return createNode(string as TGENodeKind)
+// renderer is module-private; exports individual functions (render, createElement, etc.)
+const renderer = createRenderer<TGENode>({
+  createElement(type: string): TGENode {
+    // Normalizes aliases: "text" -> "text", "img"|"image" -> "img", "canvas"|"surface" -> "canvas", fallback -> "box"
+    const kind = type === "text" ? "text" : type === "img" || type === "image" ? "img" : type === "canvas" || type === "surface" ? "canvas" : "box"
+    return createNode(kind)
   },
   createTextNode(value: string | number): TGENode {
     return createTextNode(String(value))
   },
   replaceText(node: TGENode, value: string): void {
     node.text = String(value)
-    // Raw text children created by createTextNode are not directly walked by walkTree.
-    // Invalidate the parent <text> node to trigger proper scoped dirty tracking.
     const target = node.parent?.kind === "text" ? node.parent : node
     target._flexNode?.markDirty()
     markNodeVisualDamage(target)
     markNodeDirty(target)
   },
-  setProperty(node: TGENode, name: string, value: unknown, prev: unknown): void {
-    // Eager pre-parsing and bitmask dispatch (see Section 3)
+  // setProperty accepts 3 arguments: node, name, value
+  setProperty(node: TGENode, name: string, value: unknown): void {
+    // Pre-parses colors, sizing, transforms, and updates bitmasks eagerly (see Section 3)
   },
   insertNode(parent: TGENode, node: TGENode, anchor?: TGENode): void {
     insertChild(parent, node, anchor)
@@ -54,8 +56,7 @@ export const renderer = createRenderer<TGENode>({
     if (node.id === getCapturedNodeId()) {
       releasePointerCapture(node.id)
     }
-    // Recursively unregister all focusable nodes in the destroyed subtree
-    // to prevent ghost entries in the keyboard focus ring.
+    // Recursively unregisters focusables to prevent ghost nodes in focus ring
     unregisterSubtree(node)
     unmarkSubtreeLayerBacking(node)
     onSubtreeChanged(parent.id)
@@ -88,16 +89,73 @@ The retained scene graph consists of `TGENode` objects defined in `packages/engi
 - `"box"`: Rectangular layout box.
 - `"text"`: Typography container.
 - `"img"`: Hardware texture blit container.
-- `"canvas"`: Display list drawing surface.
+- `"canvas"`: Canvas drawing surface (commands rasterized in JS and uploaded as RGBA texture).
 - `"root"`: Top-level viewport root node.
 
-### 2.2 Core Node Fields
+### 2.2 Core Node Fields & Transform Hierarchy
+All 2D transformation matrices stored on `TGENode` are typed as `Float64Array | null` (representing flat 3×3 affine transform matrices in column-major order):
+
 ```typescript
 export type TGENode = {
   id: number
   kind: TGENodeKind
   props: TGEProps
   text: string
+  children: TGENode[]
+  parent: TGENode | null
+  destroyed: boolean
+
+  /** Computed layout box resolved during the layout pass */
+  layout: LayoutRect
+
+  /** Retained Flexily C++-style layout node */
+  _flexNode: Node | null
+
+  /** Interactive hit states managed by render loop */
+  _hovered: boolean
+  _active: boolean
+  _focused: boolean
+
+  /** Lazily-allocated image asset and metadata tracking */
+  _imageExtra: NodeImageExtra | null
+
+  /** Lazily-allocated canvas commands and rasterized RGBA buffer */
+  _canvasExtra: NodeCanvasExtra | null
+
+  /** Pre-parsed sizing metrics (resolved once in setProperty) */
+  _widthSizing: SizingInfo | null
+  _heightSizing: SizingInfo | null
+
+  /** Cached visual props and dirty epoch tracking */
+  _vp: TGEProps | null
+  _vpDirty: boolean
+  _vpEpoch?: number
+
+  /** 3x3 local transform matrix (Float64Array) and inverse */
+  _transform: Float64Array | null
+  _transformInverse: Float64Array | null
+
+  /** Accumulated hierarchical transform matrix (parent x local) and inverse */
+  _accTransform: Float64Array | null
+  _accTransformInverse: Float64Array | null
+
+  /** Fast sibling lookup index */
+  _siblingIndex: number
+
+  /** Count of focusable descendants in subtree */
+  _focusableCount: number
+
+  /** Pre-order DFS traversal index and depth */
+  _dfsIndex: number
+  _depth: number
+
+  /** Nearest scroll container ancestor ID */
+  _scrollContainerId: number
+
+  /** Consecutive frames this node/layer remained clean (for auto-layer heuristic) */
+  _stableFrameCount: number
+}
+```
   children: TGENode[]
   parent: TGENode | null
   destroyed: boolean
@@ -178,22 +236,25 @@ Full Yoga-compatible Flexbox model:
 #### 2. CSS Grid Mode (`layout: "grid"`)
 A complete 2D CSS Grid solver supporting complex responsive layouts:
 - **Track Sizing (`gridTemplateColumns`, `gridTemplateRows`)**:
-  - Fractional units: `"1fr 2fr 1fr"`
-  - Fixed pixels: `100`, `"200px"`
-  - Percentages: `"25% 75%"`
-  - Minimum/Maximum functions: `minmax(100px, 1fr)`
-  - Fit-content: `fit-content(200px)`
+  Accepts structured arrays of track definitions (`GridTrack[]`):
+  - Fixed pixels: `[100, 200]`
+  - Fractional units: `[{ fr: 1 }, { fr: 2 }]`
+  - Percentages: `[{ percent: 50 }, { percent: 50 }]`
+  - Minimum/Maximum bounds: `[{ minmax: [100, { fr: 1 }] }]`
+  - Fit-content bounds: `[{ fitContent: 200 }]`
+  - Intrinsic keywords: `"auto"`, `"min-content"`, `"max-content"`
 - **Template Areas (`gridTemplateAreas`)**:
+  Configured as a 2D matrix of area name tokens:
   ```tsx
   <box
     layout="grid"
     gridTemplateAreas={[
-      "header header",
-      "sidebar main",
-      "footer footer"
+      ["header", "header"],
+      ["sidebar", "main"],
+      ["footer", "footer"]
     ]}
-    gridTemplateColumns="200px 1fr"
-    gridTemplateRows="auto 1fr auto"
+    gridTemplateColumns={[200, { fr: 1 }]}
+    gridTemplateRows={["auto", { fr: 1 }, "auto"]}
   >
     <box gridArea="header">...</box>
     <box gridArea="sidebar">...</box>
@@ -201,7 +262,7 @@ A complete 2D CSS Grid solver supporting complex responsive layouts:
     <box gridArea="footer">...</box>
   </box>
   ```
-- **Auto-Flow**: `"row" | "column" | "row dense" | "column dense"`. The dense packing algorithm backfills empty holes in the grid.
+- **Auto-Flow**: `"row" | "column" | "row-dense" | "column-dense"`. The dense packing algorithm backfills empty holes in the grid.
 - **Item Placement**: `gridColumn`, `gridRow`, `gridColumnStart`, `gridColumnEnd`, `gridRowStart`, `gridRowEnd` using line indexes or named grid lines.
 
 ### 4.3 Atomic Layout Writeback (`writeLayoutBack`)
@@ -212,13 +273,13 @@ export function writeLayoutBack(
   layoutMap: Map<number, PositionedCommand> | null,
   state: WriteLayoutBackState
 ): boolean {
-  const { boxNodes, textNodes } = state
+  const { boxNodes, textNodes, pendingNodeDamageRects } = state
 
   // Invariant 1: Reject missing or empty layout maps
   if (!layoutMap || layoutMap.size === 0) return false
 
-  // Invariant 2: Abort atomically if ANY node has non-finite coordinates
-  // or a registered GridLayoutError
+  // Invariant 2: Abort atomically before any write if ANY box or text node
+  // has non-finite coordinates or an unresolvable GridLayoutError
   for (const node of boxNodes) {
     if (!isFiniteLayoutPosition(layoutMap.get(node.id)) || getGridLayoutError(node)) {
       return false // ATOMIC ABORT
@@ -230,14 +291,33 @@ export function writeLayoutBack(
     }
   }
 
-  // All coordinates verified finite (Number.isFinite) — commit writeback
+  // Commit layout rectangles and track damage transitions for box nodes
   for (const node of boxNodes) {
     const pos = layoutMap.get(node.id)!
+    const prev = { x: node.layout.x, y: node.layout.y, width: node.layout.width, height: node.layout.height }
     node.layout.x = pos.x
     node.layout.y = pos.y
     node.layout.width = pos.width
     node.layout.height = pos.height
+    const damage = damageRectForLayoutTransition(prev, node.layout)
+    if (damage && pendingNodeDamageRects) pendingNodeDamageRects.push({ nodeId: node.id, rect: damage })
   }
+
+  // Commit layout rectangles and track damage transitions for text nodes
+  for (const node of textNodes) {
+    const pos = layoutMap.get(node.id)!
+    const prev = { x: node.layout.x, y: node.layout.y, width: node.layout.width, height: node.layout.height }
+    node.layout.x = pos.x
+    node.layout.y = pos.y
+    node.layout.width = pos.width
+    node.layout.height = pos.height
+    const damage = damageRectForLayoutTransition(prev, node.layout)
+    if (damage && pendingNodeDamageRects) pendingNodeDamageRects.push({ nodeId: node.id, rect: damage })
+  }
+
+  // Recompute transform hierarchy: Pass 1 calculates local Float64Array matrices using
+  // transformOrigin and layout dimensions; Pass 2 multiplies parent accumulated matrices
+  // (_accTransform, _accTransformInverse) down the tree for subpixel hit-testing.
   return true
 }
 ```
@@ -259,7 +339,7 @@ The render graph converts layout boxes and resolved styles into flat, cacheable 
 Every visual element in Vexart maps to one of seven operations (`packages/engine/src/ffi/render-graph.ts`):
 1. `rectangle`: Solid background quads, single-color borders, and SDF rounded rectangles.
 2. `image`: Texture blits referencing GPU image assets.
-3. `canvas`: Custom immediate-mode or display list commands.
+3. `canvas`: Custom immediate-mode drawing commands (rasterized to RGBA in JS and uploaded as a GPU texture).
 4. `effect`: High-level GPU visual effects (linear/radial/conic gradients, glows, drop shadows, backdrop blur, backdrop color filters).
 5. `border`: Multi-sided borders with individual per-edge thicknesses and colors.
 6. `text`: MSDF glyph quad batches.
@@ -274,7 +354,7 @@ Layers isolate subtrees into independent GPU render targets, enabling partial da
 3. **Interactive Subtrees**: Nodes actively undergoing pointer drag or hover interaction (`shouldPromoteInteractionLayer`).
 4. **Scroll Containers**: Containers with `scrollX` or `scrollY` enabled.
 5. **Subtree Transforms**: Transformed parents with children.
-6. **Backdrop Filters**: Elements with `backdropFilter` (glassmorphism), capped at an **auto-layer budget of 8** (with a maximum of 4 active backdrop filters per frame).
+6. **Backdrop Filters & Stable Subtrees**: Glassmorphism backdrop filters or subtrees whose visual geometry has remained clean for multiple consecutive frames (`node._stableFrameCount >= 3`) with promotable area, governed by a global ceiling of `AUTO_LAYER_BUDGET = 8` automatic layers.
 
 ### 5.3 Bijective Layer Mapping by `nodeId`
 Historic versions grouped layers by background color, causing catastrophic visual collisions when multiple distinct cards shared the same `#171717` background. Vexart maps layers bijectively using `nodeId`:
@@ -307,6 +387,12 @@ When an animation targets only `transform` or `opacity` on a layer-backed node:
 2. The frame orchestrator evaluates `isCompositorOnlyFrame()`.
 3. If true, the engine **completely bypasses** the SolidJS reconciler, `walkTree`, and the Flexily layout pass.
 4. The compositor writes updated 3x3 transform matrices or opacity values directly to GPU uniform buffers (`vexart_composite_update_uniform`), achieving 120 FPS animations with negligible CPU load.
+
+### 6.4 Native Presentation Circuit-Breaker
+To prevent terminal corruption or process crashes during transient native emission errors, `packages/engine/src/ffi/native-presentation-ops.ts` enforces an automated circuit-breaker pattern:
+- **Failure Threshold (`MAX_CONSECUTIVE_FAILURES = 3`)**: If 3 consecutive native frame or layer emissions fail, native presentation is temporarily tripped and forced off.
+- **Cooldown Interval (`RETRY_COOLDOWN_FRAMES = 300`)**: The circuit-breaker stays open for 300 frames (~5 seconds at 60 FPS), routing frames through safe fallback paths.
+- **Automated Recovery (`tickNativePresentationRecovery()`)**: Invoked by the frame coordinator on every tick of `loop.ts`. Once the cooldown expires, it resets consecutive failure counters and transparently probes native presentation re-enablement (`enableNativePresentation("auto-retry after cooldown")`).
 
 ---
 
@@ -481,3 +567,63 @@ export type HoverState = {
   hoverProps: HoverProps
 }
 ```
+
+### 8.5 Text Selection API (`packages/engine/src/reconciler/selection.ts`)
+Global cross-node text selection state management:
+
+```typescript
+export type TextSelection = {
+  text: string
+  sourceId: number
+  start: number
+  end: number
+}
+
+// Reactive accessor signal
+export const selectionSignal: () => TextSelection | null
+
+// Getters & mutators
+export function getSelection(): TextSelection | null
+export function getSelectedText(): string
+export function setSelection(sel: TextSelection | null): void
+export function clearSelection(): void
+```
+
+### 8.6 `useFocus` (`packages/engine/src/reconciler/focus.ts`)
+Programmatic keyboard focus graph hook:
+
+```typescript
+export function useFocus(options?: {
+  id?: string
+  onFocus?: () => void
+  onBlur?: () => void
+  onKeyDown?: (event: KeyEvent) => void
+}): {
+  focused: () => boolean
+  focus: () => void
+  blur: () => void
+  focusId: string
+}
+```
+
+### 8.7 `useKeyboard` & `useMouse`
+Direct terminal event subscriber hooks:
+
+```typescript
+export function useKeyboard(handler: (event: KeyEvent) => void): () => void
+export function useMouse(handler: (event: MouseEvent) => void): () => void
+```
+
+### 8.8 `useTerminalDimensions` (`packages/engine/src/terminal/size.ts`)
+Reactive terminal column, row, and pixel dimension signals:
+
+```typescript
+export function useTerminalDimensions(terminal: Terminal): {
+  columns: () => number
+  rows: () => number
+  width: () => number
+  height: () => number
+}
+```
+
+> **Usage Note:** `useTerminalDimensions` requires an explicit `Terminal` instance argument. In application environments mounted with `createApp()` or `mountApp()`, obtain the active terminal via `useAppTerminal()` from `"vexart"`.

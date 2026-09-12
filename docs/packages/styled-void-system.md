@@ -167,23 +167,23 @@ export function MyCard() {
 ### 3.1 Typography Hierarchy
 - `<H1>`: 36px (`4xl`), bold (700), `foreground` color.
 - `<H2>`: 30px (`3xl`), semibold (600), `foreground` color.
-- `<H3>`: 24px (`2xl`), semibold (600), `foreground` color.
-- `<H4>`: 20px (`xl`), semibold (600), `foreground` color.
+- `<H3>`: 20px (`xl`), semibold (600), `foreground` color.
+- `<H4>`: 16px (`lg`), semibold (600), `foreground` color.
 - `<P>`: 14px (`base`), normal (400), `foreground` color.
-- `<Lead>`: 16px (`lg`), normal (400), `mutedForeground` color.
+- `<Lead>`: 20px (`xl`), normal (400), `mutedForeground` color.
 - `<Large>`: 16px (`lg`), semibold (600), `foreground` color.
 - `<Small>`: 12px (`sm`), medium (500), `foreground` color.
 - `<Muted>`: 12px (`sm`), normal (400), `mutedForeground` color.
 
 ### 3.2 Structural & Data Display
-- `<Card>`, `<CardHeader>`, `<CardTitle>`, `<CardDescription>`, `<CardContent>`, `<CardFooter>`: Elevated containers styled with `card` background, `border`, and `radius.lg`.
-- `<Separator>`: 1px divider styled with `border` color (`orientation="horizontal" | "vertical"`).
-- `<Skeleton>`: Animated loading placeholder quad.
-- `<Badge>`: Status chips with `default`, `secondary`, `destructive`, and `outline` variants.
-- `<Avatar>`: Circular image/initials container (`radius.full`).
+- `<VoidCard>`, `<VoidCardHeader>`, `<VoidCardTitle>`, `<VoidCardDescription>`, `<VoidCardContent>`, `<VoidCardFooter>`, `<VoidCardAction>`: Elevated containers styled with `card` background, `border`, and `radius.xl` (14px).
+- `<VoidSeparator>`: 1px divider styled with `border` color (`orientation="horizontal" | "vertical"`).
+- `<VoidSkeleton>`: Animated loading placeholder quad (`radius.md`).
+- `<VoidBadge>`: Status chips with `default`, `secondary`, `destructive`, and `outline` variants (`radius.full`).
+- `<VoidAvatar>`: Circular image/initials container (`radius.full`, sizes: `sm`, `default`, `lg`).
 
 ### 3.3 Form Controls & Interactive Inputs
-- `<VoidButton>` / `<Button>`: Fully styled button with `primary`, `secondary`, `destructive`, `ghost`, and `outline` variants, plus `sm`, `md`, `lg` sizes.
+- `<VoidButton>` (aliased as `Button`): Fully styled button with variants (`"default"`, `"secondary"`, `"destructive"`, `"outline"`, `"ghost"`, `"link"`) and sizes (`"default"`, `"sm"`, `"lg"`, `"xs"`, `"icon"`, `"icon-sm"`, `"icon-lg"`).
 - `<VoidInput>`: Styled text input with `border-input`, focus ring glow, and subpixel cursor.
 - `<VoidCheckbox>`: Styled check box with checkmark glyph and focus ring.
 - `<VoidSelect>`: Themed dropdown menu with active item highlights.
@@ -194,16 +194,19 @@ export function MyCard() {
 - `<VoidTextarea>`: Multi-line text editor with line numbers and focus glow.
 
 ### 3.4 Overlays & Feedback
-- `<VoidDialog>`: Themed modal dialog with darkened scrim backdrop and focus trap.
-- `<VoidDropdownMenu>`: Popover action menu with keyboard navigation.
+- `<VoidDialog>` (VoidDialogTitle, VoidDialogDescription, VoidDialogFooter): Themed modal dialog with darkened scrim backdrop and automatic focus trap.
+- `<VoidDropdownMenu>` (VoidDropdownMenuTrigger, VoidDropdownMenuContent, VoidDropdownMenuItem, VoidDropdownMenuSeparator, VoidDropdownMenuLabel): Popover action menu with keyboard navigation.
 - `<VoidTooltip>`: Contextual tooltip card with anchor alignment.
 - `<VoidPopover>`: Floating surface for arbitrary child content.
 - `createVoidToaster()`: Styled toast notifications (`default`, `success`, `destructive`).
 
-### 3.5 Specialized Display Components
+### 3.5 Collections & Specialized Display Components
 - `<VoidTable>`: Themed tabular data grid with zebra striping and header borders.
 - `<VoidTabs>`: Tabbed navigation strip with active tab underline.
-- `<VoidCode>`: Tree-Sitter syntax-highlighted code viewer.
+- `<VoidCode>`: Tree-Sitter syntax-highlighted code viewer with One Dark styling.
 - `<VoidMarkdown>`: Styled Markdown document renderer.
 - `<VoidDiff>`: Color-coded line diff viewer (green additions, red deletions).
-- `<VoidProgressBar>`: Horizontal progress bar indicator.
+- `<VoidProgress>`: Horizontal progress bar indicator.
+- `<VoidList>`: Themed list container with keyboard selection.
+- `<VoidVirtualList>`: Large list virtualization with Void styling.
+- `<VoidScrollView>`: Scrollable container with styled scrollbars.

@@ -32,25 +32,30 @@ const app = await createApp(() => (
 - **Input Dispatch**: Feeds ANSI sequences to the parser and routes keyboard/mouse events into the active render loop.
 
 ### 1.2 `mountApp`
-For custom CLI shells, testing harnesses, or multi-terminal contexts, `mountApp` mounts a component tree directly to an existing terminal instance:
+For custom CLI shells, testing harnesses, or multi-terminal contexts, `mountApp` mounts a component tree asynchronously to a terminal instance:
 ```typescript
-export function mountApp(
+export async function mountApp(
   component: () => JSX.Element,
   options?: MountAppOptions
-): AppContext
+): Promise<MountHandle>
 ```
 
 ### 1.3 Terminal Context & `useAppTerminal`
-The runtime injects a reactive `TerminalContext`. Components access live terminal metrics via `useAppTerminal()`:
+The runtime injects a reactive `TerminalContext`. Components access the managed terminal via `useAppTerminal()`:
 ```tsx
 import { useAppTerminal, Box, Text } from "vexart"
+import { useTerminalDimensions } from "vexart/engine"
 
 export function StatusHeader() {
   const terminal = useAppTerminal()
+  // Note: terminal.size is a static snapshot ({ cols, rows, width, height }).
+  // For dynamic reactivity on resize, pass terminal to useTerminalDimensions():
+  const dims = useTerminalDimensions(terminal)
+
   return (
     <Box className="w-full h-6 px-4 bg-card justify-between items-center">
-      <Text className="text-xs text-muted-foreground">Columns: {terminal.size.cols}</Text>
-      <Text className="text-xs text-muted-foreground">Rows: {terminal.size.rows}</Text>
+      <Text className="text-xs text-muted-foreground">Columns: {dims.columns()}</Text>
+      <Text className="text-xs text-muted-foreground">Rows: {dims.rows()}</Text>
     </Box>
   )
 }
@@ -65,16 +70,16 @@ The Vexart file-system router provides dynamic client-side navigation within the
 ### 2.1 File Conventions
 Route manifests are structured in a project routes directory:
 - `page.tsx`: The primary route view rendered when the route pattern matches.
-- `layout.tsx`: Persistent wrapping layout containing `<RouteOutlet />` for nested child views. Layouts persist across child navigations without remounting.
+- `layout.tsx`: Wrapping layout containing `<RouteOutlet />` for nested child views. Layouts re-render across routes of differing paths unless cached via `keepAlive: true`.
 - `loading.tsx`: Fallback view displayed during asynchronous page resolution.
 - `error.tsx`: Localized error boundary rendered when a route resolution or synchronous render throws.
 - `not-found.tsx`: Global fallback view displayed when no route matches the active path.
 
 ### 2.2 Route Specificity Scoring (`scoreRoute`)
 When evaluating routes, `createAppRouter` ranks candidates using strict specificity scoring:
-1. **Static Segments** (`/dashboard/settings`): **Score 3** per segment. Highest priority.
-2. **Dynamic Segments** (`/users/[id]`): **Score 2** per segment. Matches arbitrary single tokens.
-3. **Catch-All Segments** (`/docs/[...slug]`): **Score 1** per segment. Matches remaining multi-segment paths.
+1. **Static Segments** (`/dashboard/settings`): **Score 4** per segment. Highest priority.
+2. **Dynamic Segments** (`/users/[id]`): **Score 1** per segment. Matches arbitrary single tokens.
+3. **Catch-All Segments** (`/docs/[...slug]`): **Score 0** per segment. Matches remaining multi-segment paths.
 
 ### 2.3 Nested Layout Composition & `<RouteOutlet>`
 When navigating between nested routes (e.g. `/settings/security` $\to$ `/settings/billing`), the outer layout (`SettingsLayout`) remains mounted. Only the child inside `<RouteOutlet />` swaps:
@@ -87,13 +92,10 @@ When navigating between nested routes (e.g. `/settings/security` $\to$ `/setting
 </RootLayout>
 ```
 
-#### Reactive Route Disposal (Fix #37 — Zero-Leak Disposal)
-In early versions, routing between pages invoked components as direct functions, leaking reactive signals and timers into the parent scope. 
-
-Modern Vexart wraps route components inside `createComponent` within a strict SolidJS reactive root:
-- **Synchronous Disposal (Default)**: Navigating to a new route immediately invokes `dispose()` on the departing page, triggering all `onCleanup` callbacks and freeing memory.
-- **Reactive Route Parameters**: Parameters are passed via getters (`get params() { return match().params }`), enabling parameter updates (e.g. `/user/1` $\to$ `/user/2`) without unmounting the component.
-- **Opt-In `keepAlive: true`**: High-complexity dashboard views can declare `keepAlive: true` in `AppRouteDefinition` to cache their state in a bounded 3-page LRU pool, preserving scroll offsets and cursor positions upon return.
+#### Reactive Route Disposal & Layout Rebuilding
+- **Default Behavior**: When navigating between distinct route paths, the active root is disposed and layouts are reconstructed. Navigating to a new route immediately invokes `dispose()` on the departing page, triggering all `onCleanup` callbacks and freeing memory.
+- **Opt-In `keepAlive: true`**: High-complexity dashboard views can declare `keepAlive: true` in `AppRouteDefinition` to cache their state in a bounded 3-page LRU pool, preserving scroll offsets and layout state upon return.
+- **Reactive Route Parameters**: When the same route path updates dynamic parameters (e.g. `/user/1` $\to$ `/user/2`), the active page and layout remain mounted while `match().params` updates reactively.
 
 ### 2.4 Programmatic Navigation (`useRouter`)
 Components access router controls via the `useRouter()` hook:
@@ -104,16 +106,18 @@ const router = useRouter()
 router.navigate("/dashboard")
 router.replace("/login")
 router.back()
+router.forward()
 
-// Reactive path and parameters
-console.log(router.pathname())
-console.log(router.params().userId)
-console.log(router.query().tab)
+// Reactive path and parameters via current() signal
+console.log(router.current().path)
+console.log(router.current().params.userId)
 ```
+*(Note: `pathname()`, `params()`, and `query()` do not exist; inspect state via `router.current().path` and `router.current().params`).*
 
 ### 2.5 Route Discovery & Manifest Generation
-- `discoverAppRoutes(dir)`: Scans the filesystem and compiles route metadata.
-- `writeRouteManifestModule(routes, outPath)`: Generates a type-safe TypeScript manifest module (`manifest.ts`) mapping string paths to lazy component loaders.
+- `discoverAppRoutes(options?: RouteManifestOptions)`: Scans the filesystem and compiles route metadata. Options include `{ root?: string, appDir?: string }`.
+- `writeRouteManifestModule(manifest: FileSystemRouteManifest, options?: WriteRouteManifestOptions)`: Generates a type-safe TypeScript manifest module (`manifest.ts`). Options include `{ outFile?: string }`.
+- `routeFilePathToRoutePath(file: string, options?: RouteManifestOptions)`: Resolves a route path string from a file path.
 
 ---
 
@@ -152,15 +156,18 @@ Vexart features a high-performance utility class compiler in `packages/app/src/s
 - Next-frame class resolutions fetch fresh OLED tokens without requiring manual component unmounting.
 
 ### 3.3 Pre-Compiled Styles with `createStyles`
-For static, performance-critical components, `createStyles` compiles class combinations at module initialization:
+For static, performance-critical components, `createStyles` registers style object maps (`Record<string, VexartStyleProps>`) at module initialization and returns class identifier strings:
 ```typescript
 import { createStyles } from "vexart"
 
-const buttonStyles = createStyles({
-  base: "px-4 py-2 rounded-md items-center justify-center",
-  primary: "bg-primary text-primary-foreground",
-  secondary: "bg-secondary text-secondary-foreground",
+const s = createStyles({
+  card: { padding: 24, backgroundColor: "#171717", cornerRadius: 14 },
+  title: { fontSize: 20, fontWeight: 700, color: "#fafafa" },
 })
+
+<Box className={s.card}>
+  <Text className={s.title}>Dashboard</Text>
+</Box>
 ```
 
 ### 3.4 Reactive Class Removal (`preserveRemovedProps`)
@@ -199,27 +206,23 @@ export function Card() {
 Projects configure runtime behavior using a `vexart.config.ts` file:
 
 ```typescript
-import { defineConfig } from "vexart"
+import { defineConfig, CLASS_NAME_UNKNOWN_BEHAVIOR } from "vexart"
 
 export default defineConfig({
   app: {
-    title: "Terminal Monitor",
-    routesDir: "./src/routes",
+    name: "Terminal Monitor",
+    defaultRoute: "/dashboard",
   },
   theme: {
-    defaultTheme: "dark",
-    colors: {
-      primary: "#3b82f6",
-    },
+    preset: "void",
   },
   styles: {
-    unknownUtilityBehavior: "warn", // "warn" | "ignore" | "error"
+    className: true,
+    unknownClass: CLASS_NAME_UNKNOWN_BEHAVIOR.WARN, // "warn" | "ignore" | "error"
   },
   terminal: {
-    maxFps: 60,
-    interactionMaxFps: 120,
-    mouse: true,
-    cursor: false,
+    minColumns: 80,
+    minRows: 24,
   },
 })
 ```
@@ -232,7 +235,7 @@ Configuration schemas are validated and merged via `mergeConfig()`.
 
 The root `"vexart"` package barrel (`packages/app/src/barrel.ts`) unifies all tiers while resolving naming collisions:
 
-1. **`Box` and `Text`**: Exported from `@vexart/app` (enabling `className`).
-2. **`Button`**: Exported from `@vexart/styled` (themed Void component). The unstyled primitive lives in `@vexart/headless`.
+1. **`Box` and `Text`**: Exported from `@vexart/app` (enabling `className` compiler support).
+2. **`Button` vs `VoidButton`**: `Button` is exported from `@vexart/headless` (unstyled primitive requiring `renderButton`). For the themed Void Design System button, use `VoidButton` from `@vexart/styled`.
 3. **`ToggleSwitch`**: The headless `Switch` primitive is exported as `ToggleSwitch` to prevent collision with SolidJS's `<Switch>` control flow.
 4. **`useRouter`**: Exported from `@vexart/app` (canonical file-system application router).

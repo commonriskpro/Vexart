@@ -624,33 +624,29 @@ const { toast, Toaster } = createToaster({
 **ToastData:** `{ id, message, variant, duration, description? }`
 **Variants:** `"default" | "success" | "error" | "warning" | "info"`
 
-### 21. Router / Route / NavigationStack
+### 21. Application Routing (@vexart/app)
 
-Two navigation models.
-
-**Flat routing** (dashboard-style):
+Routing in Vexart is provided canonically by `@vexart/app` (`createAppRouter`, `RouterProvider`, `RouteOutlet`, `useRouter`), not by the headless layer.
 
 ```tsx
-import { Router, Route, useRouterContext } from "vexart"
+import { createAppRouter, RouterProvider, RouteOutlet, useRouter, Box, Text } from "vexart"
 
-<Router initial="home">
-  <Route path="home" component={HomeScreen} />
-  <Route path="settings" component={SettingsScreen} />
-</Router>
+const routes = [
+  { path: "/", component: () => <Box><Text>Home</Text></Box> },
+  { path: "/settings", component: () => <Box><Text>Settings</Text></Box> },
+]
 
-// Navigate: router.navigate("settings"), router.goBack()
-```
+const router = createAppRouter(routes, "/")
 
-**Stack routing** (wizard/drill-down):
-
-```tsx
-import { NavigationStack, useStack } from "vexart"
-
-<NavigationStack initial={HomeScreen}>
-  {(screen) => <box width="100%" height="100%">{screen()}</box>}
-</NavigationStack>
-
-// Navigate: stack.push(DetailScreen, { id: 42 }), stack.pop()
+export function App() {
+  return (
+    <RouterProvider router={router}>
+      <Box width="100%" height="100%">
+        <RouteOutlet />
+      </Box>
+    </RouterProvider>
+  )
+}
 ```
 
 ### 22. VirtualList
@@ -754,18 +750,28 @@ import { Diff } from "vexart"
 />
 ```
 
-### 27. RichText / Span
+### 27. Nested Text Spans
 
-Multi-span inline text for mixed styling.
+Multi-span inline text for mixed styling is created using nested `<text>` tags or `<Box>` with `<Text>`:
 
 ```tsx
-import { RichText, Span } from "vexart"
+<text color="#e0e0e0">
+  <text>Hello </text>
+  <text color="#4488cc" fontWeight={700}>world</text>
+  <text> from Vexart</text>
+</text>
+```
 
-<RichText color="#e0e0e0">
-  <Span>Hello </Span>
-  <Span color="#4488cc" fontWeight={700}>world</Span>
-  <Span> from Vexart</Span>
-</RichText>
+Or compose with `@vexart/app`'s `<Text>`:
+
+```tsx
+import { Box, Text } from "vexart"
+
+<Box direction="row">
+  <Text color="#e0e0e0">Hello </Text>
+  <Text color="#4488cc" fontWeight={700}>world</Text>
+  <Text color="#e0e0e0"> from Vexart</Text>
+</Box>
 ```
 
 ### 28. Flex Wrapping
@@ -837,9 +843,8 @@ const form = createForm({
 | Diff | Theme prop | `theme: Partial<DiffTheme>` |
 | Textarea | Theme prop | `theme: Partial<TextareaTheme>` |
 | Dialog | Compound | `Dialog.Overlay` + `Dialog.Content` + `Dialog.Close` |
-| Router | Pure logic | No visual |
+| OverlayRoot | Container | Host root for overlays and portals |
 | Portal | Pass-through | Renders children as-is |
-| Box / Text | Typed wrapper | Direct props |
 | ScrollView | Typed wrapper | Direct props |
 
 ---

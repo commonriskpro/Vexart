@@ -10,10 +10,7 @@ smallest in-scope change; a documentation mismatch is not an automatic stop.
 - [docs/PRD.md](docs/PRD.md) — product requirements, phased roadmap, and decisions.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — target layering and native boundary.
 - [docs/API-POLICY.md](docs/API-POLICY.md) — public vs. internal API rules.
-- [docs/agent-reference.md](docs/agent-reference.md) — detailed runtime/API reference, loaded when relevant.
-
-Pre-PRD documents (TGE-*, MIGRATION-ANALYSIS.md, docs.md) are historical
-background only; do not treat them as current execution instructions.
+- [docs/AI-REFERENCE.md](docs/AI-REFERENCE.md) — detailed technical reference for AI agents.
 
 ## What is Vexart
 
@@ -36,9 +33,10 @@ JSX (SolidJS createRenderer)
 
 Current ownership boundary (DEC-014): TypeScript owns scene graph, reactivity,
 walk-tree, layout (Flexily), render graph construction, event dispatch, interaction,
-focus, and hit-testing. Rust owns WGPU paint pipelines, compositing, Kitty encoding,
-SHM/file/direct transport, image assets, canvas display lists, GPU resources, and
-native readback/presentation.
+focus, hit-testing, and canvas rasterization (canvas commands are rasterized in JS
+and uploaded as RGBA textures). Rust owns WGPU paint pipelines, compositing, Kitty
+encoding, SHM/file/direct transport, image assets, GPU resources, and native
+readback/presentation.
 
 The Rust-retained/native scene graph path is historical only. The active model is a
 TypeScript-owned scene graph with a Rust/WGPU native rendering boundary.
@@ -48,8 +46,8 @@ TypeScript-owned scene graph with a Rust/WGPU native rendering boundary.
 The published `vexart.js` barrel and `engine.js` must share one SolidJS
 universal reconciler instance. Consumer JSX compiles with
 `moduleName: "vexart/engine"`; see
-[docs/agent-reference.md](docs/agent-reference.md#npm-package-structure-dist)
-for the package-layout details.
+[docs/AI-REFERENCE.md](docs/AI-REFERENCE.md)
+for details.
 
 ## Architectural Discipline: No Hotfixes, No Ad-Hoc Patches
 
@@ -85,8 +83,7 @@ for the package-layout details.
   dependencies. Used from `packages/engine/src/loop/layout-adapter.ts`.
 - **SolidJS** (`solid-js/universal`) — `createRenderer` for JSX reconciliation; no VDOM.
 - **Rust/WGPU** (`native/libvexart`) — Single native `cdylib` (`libvexart`) for GPU paint
-  pipelines, compositing, Kitty encoding, transport, image assets, canvas display lists,
-  and GPU resource management.
+  pipelines, compositing, Kitty encoding, transport, image assets, and GPU resource management.
 - **Bun** — Runtime, package manager, tests, TypeScript execution, and `bun:ffi` native bridge.
 - **marked** — Markdown parsing for the `Markdown` headless component.
 - **web-tree-sitter** — Tree-sitter WASM runtime for syntax highlighting.
@@ -132,5 +129,5 @@ for the package-layout details.
 
 For visual effects, interaction, complete element props and exports, styled/app
 APIs, package layout, and reference links, read
-[docs/agent-reference.md](docs/agent-reference.md) when the task touches those
+[docs/AI-REFERENCE.md](docs/AI-REFERENCE.md) when the task touches those
 areas.

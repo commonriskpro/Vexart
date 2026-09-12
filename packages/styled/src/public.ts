@@ -160,3 +160,7 @@ export type { VoidScrollViewProps } from "./components/scroll-view"
 
 export { VoidDiff } from "./components/diff"
 export type { VoidDiffProps } from "./components/diff"
+
+// ── Re-exported engine contracts referenced by styled public types ──────────
+
+export type { PressEvent } from "@vexart/engine"

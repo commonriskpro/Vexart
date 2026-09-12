@@ -1,6 +1,6 @@
 ---
 title: FFI Exports
-description: All 53 native Rust functions exposed via bun:ffi.
+description: All 50 native Rust functions exposed via bun:ffi.
 ---
 
 The native boundary is bound in `packages/engine/src/ffi/vexart-bridge.ts` and implemented in `native/libvexart/src/lib.rs`.
@@ -12,14 +12,13 @@ The native boundary is bound in `packages/engine/src/ffi/vexart-bridge.ts` and i
 - Wrapped in panic guards (`ffi_guard!`)
 - ARM64-safe: ≤8 params, packed buffers for overflow
 
-## Context Lifecycle (4)
+## Context Lifecycle (3)
 
 | Function | Purpose |
 |----------|---------|
 | `vexart_version` | Return ABI version (`0x00020B00`) |
 | `vexart_context_create` | Create native context handle |
 | `vexart_context_destroy` | Destroy native context handle |
-| `vexart_context_resize` | Notify context of terminal resize |
 
 ## Paint (3)
 
@@ -29,7 +28,7 @@ The native boundary is bound in `packages/engine/src/ffi/vexart-bridge.ts` and i
 | `vexart_paint_upload_image` | Upload RGBA to GPU image handle |
 | `vexart_paint_remove_image` | Release GPU image handle |
 
-## Composite (13)
+## Composite (12)
 
 | Function | Purpose |
 |----------|---------|
@@ -43,7 +42,6 @@ The native boundary is bound in `packages/engine/src/ffi/vexart-bridge.ts` and i
 | `vexart_composite_copy_region_to_image` | Extract region to image |
 | `vexart_composite_image_filter_backdrop` | Apply backdrop filter chain |
 | `vexart_composite_image_mask_rounded_rect` | Apply rounded-rect mask |
-| `vexart_composite_merge` | Z-order merge to final target |
 | `vexart_composite_readback_rgba` | Full target readback |
 | `vexart_composite_readback_region_rgba` | Region readback |
 

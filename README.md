@@ -29,7 +29,8 @@ await createApp(() => (
 - **JSX components** — SolidJS `createRenderer`; fine-grained reactive updates, no VDOM
 - **Incremental layout** — Flexily flexbox (pure JS), reactive tree synced from reconciler; only dirty subtrees recompute
 - **Design tokens** — shadcn-compatible dark theme with semantic color, spacing, radius, shadows
-- **26 headless components** — Button, Input, Select, Dialog, Combobox, Slider, VirtualList, and more
+- **20 headless components + 2 factories** — Button, Input, Select, Dialog, Combobox, Slider, VirtualList, Table, createForm, createToaster, and more
+- **App router** — Declarative file-system router with `<RouteOutlet>` and `useRouter` via `@vexart/app`
 - **Focus management** — Tab/Shift-Tab cycling, per-node keyboard handlers, focus scoping
 - **Drop shadows & glow** — declarative `shadow` and `glow` props, rendered via GPU
 - **Gradients** — two-stop linear and radial gradients (`from`/`to`)
@@ -171,17 +172,17 @@ cargo build --release
 | `Dialog` | Overlays | Modal with focus trap + Escape |
 | `Tooltip` | Overlays | Delayed tooltip on hover |
 | `Popover` | Overlays | Controlled popover panel |
-| `Tabs` | Navigation | Tab switcher |
-| `Router` | Navigation | Flat + stack navigation |
+| `Tabs` | Containers | Tab switcher |
+| `OverlayRoot` | Containers | Modal overlay host root |
 | `List` | Collections | Scrollable selectable list |
 | `Table` | Collections | Data table with row selection |
 | `VirtualList` | Collections | Virtualized list (O(1) scroll, fixed-height rows) |
 | `ProgressBar` | Display | Progress indicator |
 | `Code` | Display | Syntax-highlighted code block |
 | `Markdown` | Display | Markdown renderer with inline styling |
-| `Diff` | Display | Unified diff viewer |
+| `Diff` | Navigation | Unified diff viewer |
 
-Also: `createForm` factory, `Toast` (imperative), `createToaster`.
+Also: `createForm` factory, `createToaster` factory (and router via `@vexart/app`).
 
 ---
 

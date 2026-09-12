@@ -2508,79 +2508,43 @@ toast({ message: "Error!", variant: "error", duration: 5000 })
 
 ---
 
-#### 21. Router / Route / NavigationStack
+#### 21. Application Routing (@vexart/app)
 
-Two navigation models for terminal apps.
-
-**Flat routing** (dashboard-style):
+Routing is provided canonically by `@vexart/app` (`createAppRouter`, `RouterProvider`, `RouteOutlet`, `useRouter`).
 
 ```tsx
-import { Router, Route, useRouterContext } from "vexart"
+import { createAppRouter, RouterProvider, RouteOutlet, useRouter, Box, Text } from "vexart"
 
-<Router initial="home">
-  <Route path="home" component={HomeScreen} />
-  <Route path="settings" component={SettingsScreen} />
-  <Route path="profile" component={ProfileScreen} />
-</Router>
+const routes = [
+  { path: "/", component: HomeScreen },
+  { path: "/settings", component: SettingsScreen },
+  { path: "/profile", component: ProfileScreen },
+]
 
-// Navigate from any child:
-function HomeScreen(props: RouteProps) {
-  const router = useRouterContext()
+const router = createAppRouter(routes, "/")
+
+export function App() {
   return (
-    <box>
-      <text>Home</text>
-      <box focusable onPress={() => router.navigate("settings")}>
-        <text>Go to Settings</text>
-      </box>
-    </box>
+    <RouterProvider router={router}>
+      <Box width="100%" height="100%">
+        <RouteOutlet />
+      </Box>
+    </RouterProvider>
+  )
+}
+
+function HomeScreen() {
+  const router = useRouter()
+  return (
+    <Box direction="column" gap={8} padding={16}>
+      <Text>Home</Text>
+      <Box focusable onPress={() => router.navigate("/settings")}>
+        <Text color="#4488cc">Go to Settings</Text>
+      </Box>
+    </Box>
   )
 }
 ```
-
-**Stack routing** (wizard/drill-down):
-
-```tsx
-import { NavigationStack, useStack } from "vexart"
-
-<NavigationStack initial={HomeScreen}>
-  {(screen) => <box width="100%" height="100%">{screen()}</box>}
-</NavigationStack>
-
-function HomeScreen(props: ScreenProps) {
-  const stack = useStack()
-  return (
-    <box>
-      <text>Home</text>
-      <box focusable onPress={() => stack.push(DetailScreen, { id: 42 })}>
-        <text>View Detail</text>
-      </box>
-    </box>
-  )
-}
-
-function DetailScreen(props: ScreenProps) {
-  return (
-    <box>
-      <text>Detail #{props.params?.id}</text>
-      <box focusable onPress={() => props.goBack()}>
-        <text>Back</text>
-      </box>
-    </box>
-  )
-}
-```
-
-**NavigationStackHandle:**
-
-| Method | Description |
-| ------ | ----------- |
-| `push(component, params?)` | Push screen onto stack |
-| `pop()` / `goBack()` | Pop top screen |
-| `replace(component, params?)` | Replace top screen |
-| `reset(component, params?)` | Reset to single screen |
-| `depth()` | Current stack size |
-| `current()` | Top screen entry |
-| `stack()` | Full stack array |
 
 ---
 
@@ -2763,23 +2727,28 @@ type DiffProps = {
 
 ---
 
-#### 27. RichText / Span
+#### 27. Nested Text Spans
 
-Multi-span inline text.
-
-```typescript
-import { RichText, Span } from "vexart"
-
-type RichTextProps = { color?: string | number; children?: JSX.Element }
-type SpanProps = { color?: string | number; fontSize?: number; fontWeight?: number; fontStyle?: "normal" | "italic"; children?: JSX.Element }
-```
+Multi-span inline text for mixed styling is created using nested `<text>` tags or `<Box>` with `<Text>`:
 
 ```tsx
-<RichText color="#e0e0e0">
-  <Span>Hello </Span>
-  <Span color="#4488cc" fontWeight={700}>world</Span>
-  <Span> from Vexart</Span>
-</RichText>
+<text color="#e0e0e0">
+  <text>Hello </text>
+  <text color="#4488cc" fontWeight={700}>world</text>
+  <text> from Vexart</text>
+</text>
+```
+
+Or compose with `@vexart/app` components:
+
+```tsx
+import { Box, Text } from "vexart"
+
+<Box direction="row">
+  <Text color="#e0e0e0">Hello </Text>
+  <Text color="#4488cc" fontWeight={700}>world</Text>
+  <Text color="#e0e0e0"> from Vexart</Text>
+</Box>
 ```
 
 ---
@@ -3071,17 +3040,9 @@ setTheme(myTheme)       // custom theme
 | `darkTheme` | Default. OLED-optimized dark theme (same as static `colors`) |
 | `lightTheme` | Light theme with inverted surfaces |
 
-#### ThemeProvider
+#### Reactive Theming
 
-Component wrapper for nested themes. For most apps, global `setTheme()` is sufficient:
-
-```tsx
-import { ThemeProvider } from "vexart"
-
-<ThemeProvider theme={myTheme}>
-  {/* children use myTheme */}
-</ThemeProvider>
-```
+Theming in Vexart is reactive and zero-overhead. Components read directly from `themeColors` signals, and changing themes is performed globally via `setTheme(theme)`:
 
 #### Theme switching example
 
@@ -3250,55 +3211,62 @@ const form = createForm({
 ### Multi-Screen App with Router
 
 ```tsx
-import { Router, Route, useRouterContext } from "vexart"
-import type { RouteProps } from "vexart/engine"
+import { createAppRouter, RouterProvider, RouteOutlet, useRouter, Box, Text } from "vexart"
+
+const routes = [
+  { path: "/", component: Home },
+  { path: "/settings", component: Settings },
+  { path: "/about", component: About },
+]
+
+const router = createAppRouter(routes, "/")
 
 function App() {
   return (
-    <Router initial="home">
-      <Route path="home" component={Home} />
-      <Route path="settings" component={Settings} />
-      <Route path="about" component={About} />
-    </Router>
+    <RouterProvider router={router}>
+      <Box direction="column" width="100%" height="100%">
+        <RouteOutlet />
+      </Box>
+    </RouterProvider>
   )
 }
 
-function Home(props: RouteProps) {
-  const router = useRouterContext()
+function Home() {
+  const router = useRouter()
   return (
-    <box direction="column" gap={8} padding={16}>
-      <text color="#fff" fontSize={20}>Home</text>
-      <box focusable onPress={() => router.navigate("settings")}>
-        <text color="#4488cc">Settings</text>
-      </box>
-      <box focusable onPress={() => router.navigate("about")}>
-        <text color="#4488cc">About</text>
-      </box>
-    </box>
+    <Box direction="column" gap={8} padding={16}>
+      <Text color="#fff" fontSize={20}>Home</Text>
+      <Box focusable onPress={() => router.navigate("/settings")}>
+        <Text color="#4488cc">Settings</Text>
+      </Box>
+      <Box focusable onPress={() => router.navigate("/about")}>
+        <Text color="#4488cc">About</Text>
+      </Box>
+    </Box>
   )
 }
 
-function Settings(props: RouteProps) {
-  const router = useRouterContext()
+function Settings() {
+  const router = useRouter()
   return (
-    <box direction="column" gap={8} padding={16}>
-      <text color="#fff" fontSize={20}>Settings</text>
-      <box focusable onPress={() => router.goBack()}>
-        <text color="#888">Back</text>
-      </box>
-    </box>
+    <Box direction="column" gap={8} padding={16}>
+      <Text color="#fff" fontSize={20}>Settings</Text>
+      <Box focusable onPress={() => router.back()}>
+        <Text color="#888">Back</Text>
+      </Box>
+    </Box>
   )
 }
 
-function About(props: RouteProps) {
-  const router = useRouterContext()
+function About() {
+  const router = useRouter()
   return (
-    <box padding={16}>
-      <text color="#fff">About this app</text>
-      <box focusable onPress={() => router.goBack()}>
-        <text color="#888">Back</text>
-      </box>
-    </box>
+    <Box padding={16}>
+      <Text color="#fff">About this app</Text>
+      <Box focusable onPress={() => router.back()}>
+        <Text color="#888">Back</Text>
+      </Box>
+    </Box>
   )
 }
 ```
@@ -3569,19 +3537,17 @@ Everything app developers use: components, tokens, hooks, SolidJS primitives, an
 | `getTheme` | Get current theme |
 | `darkTheme` | Built-in dark theme |
 | `lightTheme` | Built-in light theme |
-| `ThemeProvider` | Theme context provider |
-| `useTheme` | Read theme in component |
 
 #### Styled Components
 
 | Export | Description |
 | ------ | ----------- |
-| `Button` | Styled button (variants: default/secondary/outline/ghost/destructive) |
-| `Card` / `CardHeader` / `CardTitle` / `CardDescription` / `CardContent` / `CardFooter` / `CardAction` | Card layout |
-| `Badge` | Status/label badge |
-| `Separator` | Horizontal/vertical divider |
-| `Avatar` | User avatar |
-| `Skeleton` | Loading placeholder |
+| `VoidButton` | Styled button (variants: default/secondary/outline/ghost/destructive/link) |
+| `VoidCard` / `VoidCardHeader` / `VoidCardTitle` / `VoidCardDescription` / `VoidCardContent` / `VoidCardFooter` / `VoidCardAction` | Card layout |
+| `VoidBadge` | Status/label badge |
+| `VoidSeparator` | Horizontal/vertical divider |
+| `VoidAvatar` | User avatar |
+| `VoidSkeleton` | Loading placeholder |
 | `VoidDialog` / `VoidDialogTitle` / `VoidDialogDescription` / `VoidDialogFooter` | Styled dialog |
 | `VoidCombobox` | Styled combobox |
 | `VoidDropdownMenu` / `VoidDropdownMenuTrigger` / `VoidDropdownMenuContent` / `VoidDropdownMenuItem` / `VoidDropdownMenuSeparator` / `VoidDropdownMenuLabel` | Styled dropdown |
@@ -3641,13 +3607,15 @@ Everything app developers use: components, tokens, hooks, SolidJS primitives, an
 | `createToaster` | Imperative toast factory |
 | `createForm` | Form validation factory |
 
-#### Navigation
+#### Navigation (@vexart/app)
 
 | Export | Description |
 | ------ | ----------- |
-| `Router` / `Route` | Declarative routing |
-| `NavigationStack` | Stack-based navigation |
-| `useRouterContext` / `useStack` | Router context hooks |
+| `createAppRouter` | Create application router instance |
+| `RouterProvider` | Context provider for router |
+| `RouteOutlet` | Outlet component rendering matched route |
+| `useRouter` | Navigation hook (`navigate`, `back`, `forward`) |
+| `matchRoute` / `normalizePath` | Path and routing utilities |
 
 #### Input & Interaction
 

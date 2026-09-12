@@ -18,14 +18,14 @@ JSX (SolidJS createRenderer)
 
 **TypeScript owns:** scene graph, reactivity, walk-tree, layout (Flexily), render graph, event dispatch, interaction, focus, hit-testing.
 
-**Rust owns:** WGPU paint pipelines, compositing, Kitty encoding, SHM/file/direct transport, image assets, canvas display lists, GPU resources, native presentation.
+**Rust owns:** WGPU paint pipelines, compositing, Kitty encoding, SHM/file/direct transport, image assets, GPU resources, native presentation.
 
 Normal terminal presentation NEVER returns raw RGBA buffers to JavaScript.
 
 ## Package Layers
 
 ```
-@vexart/app        → styled → headless → primitives → engine → libvexart
+@vexart/app        → styled → headless → engine → libvexart
 ```
 
 Dependencies flow strictly downward. Lateral and upward imports are prohibited and enforced by `dependency-cruiser` in CI.
@@ -42,7 +42,7 @@ Dependencies flow strictly downward. Lateral and upward imports are prohibited a
 
 ## Native Binary — `libvexart`
 
-Single Rust `cdylib` with 53 FFI exports. Built with `cargo build --release`.
+Single Rust `cdylib` with 52 FFI exports. Built with `cargo build --release`.
 
 Key subsystems:
 - **Paint** — WGPU render pipelines (SDF rects, gradients, shadows, blur, MSDF text)

@@ -57,9 +57,9 @@ description: 26 behavior-first components with render props.
 
 | Component | Props | Purpose |
 |-----------|-------|---------|
-| `Router`, `Route` | `RouterProps` | Flat navigation |
-| `NavigationStack` | `NavigationStackProps` | Stack navigation (push/pop) |
 | `Diff` | `DiffProps` | Unified diff viewer |
+
+*(Note: Full application routing and navigation are provided canonically by `@vexart/app` via `createAppRouter`, `RouterProvider`, `RouteOutlet`, and `useRouter`)*.
 
 ## Forms
 
@@ -67,8 +67,6 @@ description: 26 behavior-first components with render props.
 |--------|---------|
 | `createForm` | Form validation factory (sync/async validators) |
 
-## Hooks
+## Hooks and Utilities
 
-- `useRouterContext` — access router state
-- `useStack` — access navigation stack
 - `ExtmarkManager` — re-exported from engine for editor integration
