@@ -1,7 +1,7 @@
 # tmux support
 
-Vexart can run inside **tmux 3.4 or newer** when the outer terminal is Kitty
-or Ghostty and supports Kitty Unicode placeholders. This path is experimental:
+Vexart can run inside **tmux 3.4 or newer** when the outer terminal is Kitty,
+Ghostty, or Herdr and supports Kitty Unicode placeholders. This path is experimental:
 the full-frame SHM production code path passes through a real tmux 3.6a PTY with
 a synthetic receiver. A qualitative human review of all six showcase tabs is now
 confirmed for Kitty direct and Kitty inside tmux; this is not pixel-exact or an
@@ -9,7 +9,7 @@ exhaustive interaction check, and Ghostty/FPS remain unverified.
 tmux 3.4 is the conservative lower bound; the PTY evidence does not measure
 every supported tmux version.
 Use the checklist below before treating a particular terminal/tmux combination as
-verified. The requirement ledger is in [tmux-completion-audit.md](./tmux-completion-audit.md).
+verified.
 
 **Status — 2026-09-08:** the requested Kitty direct/tmux parity is verified by
 the automated and six-tab human checks below. The snapshot below records automated
@@ -141,15 +141,18 @@ run; those are historical denials, with no CUA workaround.
 | Environment | Status | Notes |
 | --- | --- | --- |
 | Kitty outside tmux | Supported | Existing direct, file, and SHM paths are unchanged. |
-| Ghostty outside tmux | Supported | Existing direct Kitty path is unchanged. |
+| Ghostty outside tmux | Supported | Existing direct Kitty and SHM paths are unchanged. |
+| Herdr outside tmux | Supported | Existing direct Kitty and SHM paths are unchanged. |
 | tmux 3.4+ inside Kitty | Experimental / synthetic tmux-PTY SHM PASS; qualitative Kitty visual review PASS | Requires effective `allow-passthrough all`; review is human and not pixel-exact or an FPS measurement. |
 | tmux 3.4+ inside Ghostty | Experimental / synthetic tmux-PTY SHM PASS; physical pending | Requires effective `allow-passthrough all`; actual Ghostty observation remains pending. |
+| tmux 3.4+ inside Herdr | Experimental / synthetic tmux-PTY SHM PASS | Requires effective `allow-passthrough all`; outer Herdr detected via `HERDR_ENV=1`. |
 | tmux inside WezTerm | Not claimed | WezTerm remains supported directly, but this release does not claim the Unicode-placeholder route for it. |
 | tmux inside another terminal, or tmux older than 3.4 | Unsupported | No alternate pixel protocol is selected. |
 
 The outer terminal is detected separately from the pane's `TERM`. A pane often
 reports `screen-*` or `tmux-*`; that value alone is not evidence that the outer
-terminal can display Kitty graphics. Vexart checks the inherited parent identity,
+terminal can display Kitty graphics. Vexart checks the inherited parent identity
+(recognizing Kitty, Ghostty, and Herdr environments),
 the live tmux passthrough option, and Kitty graphics capability before emitting
 the first frame.
 
@@ -233,7 +236,7 @@ tmux show-options -g terminal-features
 
 Expected results are a tmux version at least `3.4` (the current development
 environment uses `3.6a`), a passthrough value of `all`, a recognized
-Kitty or Ghostty client, and RGB in the attached client's features. Mouse,
+Kitty, Ghostty, or Herdr client, and RGB in the attached client's features. Mouse,
 focus, and extended-key settings are optional inputs. Vexart's startup probe
 remains the authoritative check; these commands explain a failure and help
 identify stale sessions.

@@ -48,7 +48,7 @@ Vexart strictly separates presentation, interaction behavior, visual theming, la
 │  Native Runtime Boundary (native/libvexart — Rust / WGPU 29.0.1)        │
 │  - Headless WGPU device in SHARED_PAINT with 21 render pipelines        │
 │  - 2MB base vertex buffer with peak tracking & 120-frame decay cooldown │
-│  - 62 C FFI exports (#[no_mangle] extern "C" fn vexart_*)               │
+│  - 50 C FFI exports (#[no_mangle] extern "C" fn vexart_*)               │
 │  - MSDF vector typography (fdsm, ttf-parser, fontdb) & dynamic atlas    │
 │  - Retained layer registry & LRU resource manager (128MB VRAM budget)   │
 │  - Kitty transport: Direct Base64 (4096B zlib), Temp File, POSIX SHM,  │
@@ -139,10 +139,9 @@ Use this navigation matrix to access specialized authoritative documentation acr
 
 | Domain / Subsystem | Scope & Trigger Condition | Authoritative Document |
 | :--- | :--- | :--- |
-| **Engine Runtime & Reconciler** | Modifying SolidJS universal renderer, `TGENode` tree, Flexily Flexbox or CSS Grid solver, atomic writeback, frame scheduling, ANSI/Kitty input parser, or hooks (`useDrag`, `useHover`, `useQuery`). | [`docs/v3/engine-runtime.md`](./engine-runtime.md) |
-| **Native WGPU Boundary & FFI** | Modifying Rust `libvexart`, WGPU 29.0.1 pipelines, all 21 `cmd_kind` IDs, 62 C FFI exports, 2MB vertex ring buffer with 120-frame decay cooldown, or Kitty transports (direct, SHM, tmux placeholder). | [`docs/v3/native-wgpu-boundary.md`](./native-wgpu-boundary.md) |
-| **Application Framework & Router** | Implementing `createApp`, file-system routing rules, specificity scoring, nested `<RouteOutlet>` lifecycle, `className` Tailwind compiler, `createStyles`, or configuration schemas (`defineConfig`). | [`docs/v3/app-framework.md`](./app-framework.md) |
-| **Headless UI Primitives** | Inspecting or creating unstyled interaction components, focus contracts, Vim keymaps, prop getters, composite overlays, outside-click handling, or form state management across the 25 primitives. | [`docs/v3/headless-primitives.md`](./headless-primitives.md) |
-| **Styled Void Design System** | Adjusting Void design tokens, OLED color calibration, reactive `themeColors` getters, zero-remount theme switching, or styled component variants (`VoidInput`, `VoidDialog`, etc.). | [`docs/v3/styled-void-system.md`](./styled-void-system.md) |
-| **Tooling, Governance & Packaging** | NPM package layout, `@vexart/internal-devtools` 11 MCP tools, `@vexart/internal-atlas-gen`, platform binaries resolution, quality verification gates, or API deprecation policies. | [`docs/v3/tooling-and-distribution.md`](./tooling-and-distribution.md) |
-| **Migration & Evolution Matrix** | Comparing v1, v2, and v3 architectural evolutions, cataloging purged legacy artifacts, reviewing corrected API signatures, and identifying known system limitations. | [`docs/v3/migration-v1-v2-v3.md`](./migration-v1-v2-v3.md) |
+| **Engine Runtime & Reconciler** | Modifying SolidJS universal renderer, `TGENode` tree, Flexily Flexbox or CSS Grid solver, atomic writeback, frame scheduling, ANSI/Kitty input parser, or hooks (`useDrag`, `useHover`, `useQuery`). | [`docs/packages/engine-runtime.md`](./engine-runtime.md) |
+| **Native WGPU Boundary & FFI** | Modifying Rust `libvexart`, WGPU 29.0.1 pipelines, all 21 `cmd_kind` IDs, 50 C FFI exports, 2MB vertex ring buffer with 120-frame decay cooldown, or Kitty transports (direct, SHM, tmux placeholder). | [`docs/packages/native-wgpu-boundary.md`](./native-wgpu-boundary.md) |
+| **Application Framework & Router** | Implementing `createApp`, file-system routing rules, specificity scoring, nested `<RouteOutlet>` lifecycle, `className` Tailwind compiler, `createStyles`, or configuration schemas (`defineConfig`). | [`docs/packages/app-framework.md`](./app-framework.md) |
+| **Headless UI Primitives** | Inspecting or creating unstyled interaction components, focus contracts, Vim keymaps, prop getters, composite overlays, outside-click handling, or form state management across the 25 primitives. | [`docs/packages/headless-primitives.md`](./headless-primitives.md) |
+| **Styled Void Design System** | Adjusting Void design tokens, OLED color calibration, reactive `themeColors` getters, zero-remount theme switching, or styled component variants (`VoidInput`, `VoidDialog`, etc.). | [`docs/packages/styled-void-system.md`](./styled-void-system.md) |
+| **Tooling, Governance & Packaging** | NPM package layout, `@vexart/internal-devtools` 11 MCP tools, `@vexart/internal-atlas-gen`, platform binaries resolution, quality verification gates, or API deprecation policies. | [`docs/packages/tooling-and-distribution.md`](./tooling-and-distribution.md) |

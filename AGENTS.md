@@ -11,6 +11,7 @@ smallest in-scope change; a documentation mismatch is not an automatic stop.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — target layering and native boundary.
 - [docs/API-POLICY.md](docs/API-POLICY.md) — public vs. internal API rules.
 - [docs/AI-REFERENCE.md](docs/AI-REFERENCE.md) — detailed technical reference for AI agents.
+- [docs/packages/README.md](docs/packages/README.md) — 4-tier package architecture and invariants.
 
 ## What is Vexart
 
@@ -28,7 +29,7 @@ JSX (SolidJS createRenderer)
     → TypeScript walk-tree + Flexily layout + render graph + event dispatch
       → Rust libvexart (WGPU paint pipelines + text + image/canvas resources)
         → Rust composite + Kitty encoding + SHM/file/direct transport
-          → Terminal
+          → Terminal (Kitty, Ghostty, Herdr, WezTerm, tmux)
 ```
 
 Current ownership boundary (DEC-014): TypeScript owns scene graph, reactivity,
@@ -61,7 +62,6 @@ for details.
 - `bun run test` — TypeScript tests with the required browser condition and Solid preload.
 - `cd native/libvexart && cargo test` — run Rust tests.
 - `cd native/libvexart && cargo build --release` — build the Rust native library.
-- `bun --conditions=browser run examples/hello-app.tsx` — run the hello example.
 - `bun run showcase` — run Void component showcase (6 tabs: Inputs, Display, Collections, Code & Docs, Overlays, Typography).
 - `bun run build:dist` — build npm distribution.
 
@@ -71,7 +71,7 @@ for details.
 | ------- | ------- | ------ |
 | `@vexart/engine` | SolidJS reconciler, render loop, hooks, FFI bridge to `libvexart`, terminal lifecycle, input parsing, focus, hit-testing, output transport | ✅ Active |
 | `@vexart/primitives` | **Merged into `@vexart/app`**. Use `<Box>`, `<Text>` app components or `<box>`, `<text>` intrinsics directly. Legacy helpers (`Span`, `RichText`, `WrapRow`) were permanently purged. | ❌ Removed |
-| `@vexart/headless` | 26 headless components: logic, keyboard/mouse interaction, accessibility contracts, no styling | ✅ Active |
+| `@vexart/headless` | 23 headless components + 2 state factories (25 primitives total): logic, keyboard/mouse interaction, accessibility contracts, no styling | ✅ Active |
 | `@vexart/styled` | Themed components and void theme tokens — dark, shadcn-inspired design system | ✅ Active |
 | `@vexart/app` | App framework: router, route manifest helpers, className mapper, app mounting, CLI helpers | ✅ Active |
 | `@vexart/internal-atlas-gen` | Internal font atlas generator | ✅ Internal |

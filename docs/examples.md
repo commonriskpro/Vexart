@@ -3,7 +3,7 @@
 Practical patterns for building Vexart applications. Repository examples are runnable with Bun and the Solid browser condition:
 
 ```bash
-bun --conditions=browser run examples/hello-app.tsx
+bun run showcase
 ```
 
 ## Package imports
@@ -102,25 +102,15 @@ await createApp(() => <App />)
 />
 ```
 
-## Example inventory for v0.9 validation
+## Example inventory
 
-The v0.9 release checklist validates at least these 15 runnable examples:
+The repository includes 5 primary example entry points in `examples/`:
 
-1. `examples/hello-app.tsx`
-2. `examples/interactive.tsx`
-3. `examples/layers.tsx`
-4. `examples/dashboard.tsx`
-5. `examples/scroll.tsx`
-6. `examples/components.tsx`
-7. `examples/effects.tsx`
-8. `examples/input.tsx`
-9. `examples/text-wrap.tsx`
-10. `examples/scroll-programmatic.tsx`
-11. `examples/textarea.tsx`
-12. `examples/syntax.tsx`
-13. `examples/markdown.tsx`
-14. `examples/showcase.tsx`
-15. `examples/void-showcase.tsx`
+1. `examples/void-showcase.tsx` — Void design system component showcase (`bun run showcase`)
+2. `examples/effects-showcase.tsx` — GPU visual effects showcase (`bun run effects-showcase`)
+3. `examples/facebook-app.tsx` — Full Facebook feed demo (`bun run facebook`)
+4. `examples/showcase-legacy.tsx` — Review-only legacy component snapshot (`bun run showcase:legacy`)
+5. `examples/ps5/src/main.tsx` — PS5 dashboard console UI (`bun --conditions=browser run examples/ps5/src/main.tsx`)
 
 Run smoke validation with:
 

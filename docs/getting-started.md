@@ -8,7 +8,7 @@ This guide walks you through installing Vexart, building the Rust native runtime
 |------|---------|---------|
 | [Bun](https://bun.sh/) | >= 1.1.0 | TypeScript runtime, FFI, package scripts, test runner |
 | [Rust](https://www.rust-lang.org/tools/install) | stable | Builds `libvexart`, the native WGPU paint/presentation runtime |
-| **Terminal with Kitty graphics** | — | Required: Kitty, Ghostty, or WezTerm |
+| **Terminal with Kitty graphics** | — | Required: Kitty, Ghostty, Herdr, or WezTerm |
 
 > Vexart is GPU/Kitty-protocol first. Plain ANSI terminals are not a v0.9 target.
 
@@ -84,7 +84,7 @@ TypeScript owns scene graph, reactivity, walk-tree, Flexily layout, render graph
 // Everything in one barrel — app framework, headless, primitives, styled
 import { createApp, Box, Text, useAppTerminal,
          Button, Input, Textarea, Checkbox, Dialog,
-         colors, radius, space, Button as StyledButton } from "vexart"
+         colors, radius, space, VoidButton } from "vexart"
 
 // Low-level engine/runtime for advanced integrations
 import { createTerminal, mount, useTerminalDimensions } from "vexart/engine"

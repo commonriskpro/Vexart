@@ -37,10 +37,9 @@ verified on a real Kitty window with tmux 3.6a: direct and tmux runs consume
 the native SHM path and agree on viewport, rect, bytes, SHM names, and
 passthrough routing. This is a physical transport gate, not pixel-exact
 cross-terminal coverage, exhaustive interaction, Ghostty visual-parity, or FPS
-certification. Automated results are summarized in
-[`docs/tmux-parity-report.md`](./tmux-parity-report.md); internal live producer
-timings are reported separately in
-[`docs/tmux-performance-report.md`](./tmux-performance-report.md).
+certification. Parity and setup details are documented in [`docs/tmux.md`](./tmux.md);
+live terminal and performance fixtures are maintained in `scripts/visual-test/tmux-parity.ts`
+and `scripts/tmux-performance-fixture.tsx`.
 
 **Changelog from v0.6**:
 - DEC-014 added: Rust retained scene graph / render graph / layout / event dispatch reverted based on cosmic-shell-1080p bench evidence (TS path 4.8× faster, 15.84 ms p95 vs 75.42 ms p95). TS retains scene graph, reactivity, layout (Flexily in TS), event dispatch, and canvas rasterization. Rust retains paint pipelines (WGPU), composite, Kitty encoding, SHM/file/direct transport, and image assets. DEC-012 partially superseded — only paint/composite/transport portion stands.
@@ -318,10 +317,9 @@ These features place Vexart at the cutting edge of graphics tech. All ship in v0
   different outer terminal requires a fresh probe/restart.
 - The implementation remains experimental. The six-tab Kitty direct/tmux review
   is user-confirmed qualitative acceptance; it does not establish pixel-exact,
-  exhaustive interaction, Ghostty visual parity, or FPS evidence. See
-  [`docs/tmux-parity-report.md`](./tmux-parity-report.md) and
-  [`docs/tmux-performance-report.md`](./tmux-performance-report.md); [`docs/tmux.md`](./tmux.md)
-  remains the canonical setup and checklist.
+  exhaustive interaction, Ghostty visual parity, or FPS evidence. Refer to
+  [`docs/tmux.md`](./tmux.md) for the canonical setup, checklist, and verification details,
+  alongside live test fixtures under `scripts/visual-test/tmux-*.test.ts*`.
 
 #### Grid layout (v1.x beta profile)
 

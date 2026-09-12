@@ -42,11 +42,10 @@ esbuild/SWC pattern. The main `vexart` package declares them as
 | `@vexart-native/linux-arm64` | Linux ARM64 | `libvexart.so` |
 
 `bun run build:dist` emits the native package for the host running the command;
-the local macOS Apple Silicon artifact is therefore `darwin-arm64`. The
-[GitHub Actions workflow](../.github/workflows/build-native.yml) defines a
-matrix for these three targets and publishes them on a tagged release; its CI
-execution was not validated in this session. Future targets outside that matrix
-include:
+the local macOS Apple Silicon artifact is therefore `darwin-arm64`. The planned
+GitHub Actions native build workflow defines a matrix for these three targets
+and publishes them on a tagged release; its CI execution was not validated in this session.
+Future targets outside that matrix include:
 
 - `@vexart-native/darwin-x64` — macOS Intel
 - `@vexart-native/win32-x64` — Windows (v1.0)
@@ -122,7 +121,6 @@ bun add ../vexart/dist/*.tgz
 
 Smoke test with:
 
-- `bun run example`
 - `bun run showcase`
 
 ## Deferred Items

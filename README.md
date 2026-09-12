@@ -29,7 +29,7 @@ await createApp(() => (
 - **JSX components** — SolidJS `createRenderer`; fine-grained reactive updates, no VDOM
 - **Incremental layout** — Flexily flexbox (pure JS), reactive tree synced from reconciler; only dirty subtrees recompute
 - **Design tokens** — shadcn-compatible dark theme with semantic color, spacing, radius, shadows
-- **20 headless components + 2 factories** — Button, Input, Select, Dialog, Combobox, Slider, VirtualList, Table, createForm, createToaster, and more
+- **23 headless components + 2 state factories (25 primitives total)** — Button, Input, Select, Dialog, Combobox, Slider, VirtualList, Table, Diff, createForm, createToaster, and more
 - **App router** — Declarative file-system router with `<RouteOutlet>` and `useRouter` via `@vexart/app`
 - **Focus management** — Tab/Shift-Tab cycling, per-node keyboard handlers, focus scoping
 - **Drop shadows & glow** — declarative `shadow` and `glow` props, rendered via GPU
@@ -52,8 +52,8 @@ await createApp(() => (
 |------------|---------|-------|
 | [Bun](https://bun.sh/) | ≥ 1.1.0 | Runtime |
 | Rust toolchain | stable | For `cargo build` (native library) |
-| Kitty-compatible terminal | — | Kitty, Ghostty, or WezTerm |
-| tmux (optional) | ≥ 3.4 | Experimental Kitty passthrough from a Kitty/Ghostty outer terminal; see [`docs/tmux.md`](docs/tmux.md) |
+| Kitty-compatible terminal | — | Kitty, Ghostty, Herdr, or WezTerm |
+| tmux (optional) | ≥ 3.4 | Experimental Kitty passthrough from a Kitty, Ghostty, or Herdr outer terminal; see [`docs/tmux.md`](docs/tmux.md) |
 
 > Vexart requires a terminal that supports the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). It exits with a clear error on unsupported terminals.
 >
@@ -77,7 +77,7 @@ bun --conditions=browser run app.tsx
 ```
 
 ```tsx
-import { createApp, Box, Text, Button, colors, radius, space } from "vexart"
+import { createApp, Box, Text, VoidButton, colors, radius, space } from "vexart"
 
 function App() {
   return (
@@ -100,7 +100,7 @@ function App() {
         <Text color={colors.foreground} fontSize={16}>Hello from Vexart</Text>
         <Text color={colors.mutedForeground} fontSize={12}>Browser-quality UI in your terminal</Text>
       </Box>
-      <Button onPress={() => process.exit(0)}>Quit</Button>
+      <VoidButton onPress={() => process.exit(0)}>Quit</VoidButton>
     </Box>
   )
 }
@@ -130,17 +130,17 @@ Vexart is **not** a cell-based TUI framework. It renders actual pixels using the
 
 | Package | Purpose | Layer |
 |---------|---------|-------|
-| `@vexart/app` | Managed app framework: router, className mapper, config, CLI helpers | App |
-| `@vexart/styled` | Design tokens + styled components (shadcn-compatible): `colors`, `radius`, `space`, `font`, `shadows` | Styled |
-| `@vexart/headless` | Behaviour-only components: Button, Input, Dialog, Select, Tabs, List, Table, VirtualList, etc. | Headless |
+| [`@vexart/app`](docs/packages/app-framework.md) | Managed app framework: router, className mapper, config, CLI helpers | App |
+| [`@vexart/styled`](docs/packages/styled-void-system.md) | Design tokens + styled components (shadcn-compatible): `colors`, `radius`, `space`, `font`, `shadows` | Styled |
+| [`@vexart/headless`](docs/packages/headless-primitives.md) | Behaviour-only components: Button, Input, Dialog, Select, Tabs, List, Table, VirtualList, etc. | Headless |
 | `@vexart/primitives` | **Merged into `@vexart/app`**. Use `<Box>`, `<Text>` app components or `<box>`, `<text>` intrinsics directly. Legacy helpers (`Span`, `RichText`, `WrapRow`) were permanently purged. | ❌ Removed |
-| `@vexart/engine` | Core engine: render loop, GPU backend, SolidJS reconciler, input, focus, animation, data fetching | Foundation |
+| [`@vexart/engine`](docs/packages/engine-runtime.md) | Core engine: render loop, GPU backend, SolidJS reconciler, input, focus, animation, data fetching | Foundation |
 
-Dependencies flow downward across the active packages: `app → styled → headless → engine`. You can use any active layer independently.
+Dependencies flow downward across the active packages: `app → styled → headless → engine`. You can use any active layer independently. See [`docs/packages/README.md`](docs/packages/README.md) for full architecture documentation, including [`native-wgpu-boundary.md`](docs/packages/native-wgpu-boundary.md) and [`tooling-and-distribution.md`](docs/packages/tooling-and-distribution.md).
 
 ### Native binary — libvexart
 
-A single Rust cdylib (`target/release/libvexart.dylib`) handles all GPU and presentation work:
+A single Rust cdylib (`target/release/libvexart.{dylib,so,dll}`) exposing 50 C FFI functions handles all GPU and presentation work:
 - **Paint** — WGPU shaders: SDF rounded rects, shadows, gradients, blur, compositor
 - **MSDF text** — Multi-channel signed-distance-field font rendering + measurement; sharp at any size
 - **Presentation** — GPU readback → zlib compress → Kitty encoding → direct/file/SHM transport write. The entire output path lives in Rust — no pixel data crosses back to JS.
@@ -192,25 +192,25 @@ All effects are JSX props — no imperative API needed:
 
 ```tsx
 // Drop shadow
-<Box shadow={{ x: 0, y: 4, blur: 12, color: 0x00000060 }}>
+<Box shadow={{ x: 0, y: 4, blur: 12, color: 0x00000060 }} />
 
 // Multi-shadow
-<Box shadow={[{ x: 0, y: 2, blur: 4, color: 0x0000004f }, { x: 0, y: 8, blur: 24, color: 0x00000030 }]}>
+<Box shadow={[{ x: 0, y: 2, blur: 4, color: 0x0000004f }, { x: 0, y: 8, blur: 24, color: 0x00000030 }]} />
 
 // Outer glow
-<Box glow={{ radius: 20, color: 0x56d4c8ff, intensity: 60 }}>
+<Box glow={{ radius: 20, color: 0x56d4c8ff, intensity: 60 }} />
 
 // Linear gradient
-<Box gradient={{ type: "linear", from: 0x1a1a2eff, to: 0x0a0a0fff, angle: 90 }}>
+<Box gradient={{ type: "linear", from: 0x1a1a2eff, to: 0x0a0a0fff, angle: 90 }} />
 
 // Radial gradient
-<Box gradient={{ type: "radial", from: 0x56d4c8ff, to: 0x00000000 }}>
+<Box gradient={{ type: "radial", from: 0x56d4c8ff, to: 0x00000000 }} />
 
 // Backdrop blur (glassmorphism)
-<Box backdropBlur={12} backgroundColor={0xffffff1a}>
+<Box backdropBlur={12} backgroundColor={0xffffff1a} />
 
 // Per-corner radius
-<Box cornerRadii={{ tl: 20, tr: 20, br: 0, bl: 0 }}>
+<Box cornerRadii={{ tl: 20, tr: 20, br: 0, bl: 0 }} />
 
 // Interactive states
 <Box
@@ -220,7 +220,7 @@ All effects are JSX props — no imperative API needed:
   activeStyle={{ backgroundColor: 0x3a3a4eff }}
   focusStyle={{ borderColor: 0x4488ccff, borderWidth: 2 }}
   onPress={() => doAction()}
->
+/>
 ```
 
 ---
@@ -229,16 +229,18 @@ All effects are JSX props — no imperative API needed:
 
 | Terminal | Protocol | Quality |
 |----------|----------|---------|
-| Kitty 0.41+ | Kitty direct + SHM | ✅ Best — native pixel rendering |
-| Ghostty | Kitty direct | ✅ Best — native pixel rendering |
+| Kitty 0.41+ | Kitty direct + SHM (`t=s`) | ✅ Best — native pixel rendering |
+| Ghostty | Kitty direct + SHM (`t=s`) | ✅ Best — native pixel rendering |
+| Herdr | Kitty direct + SHM (`t=s`) | ✅ Best — native pixel rendering |
 | WezTerm 2025.04+ | Kitty direct | ✅ Best |
-| tmux 3.4+ in Kitty/Ghostty | Kitty passthrough + Unicode placeholders + local SHM | 🧪 Experimental — G-037 physical Kitty/tmux+SHM gate; no pixel-exact or FPS claim; [`docs/tmux.md`](docs/tmux.md) |
+| tmux 3.4+ in Kitty/Ghostty/Herdr | Kitty passthrough + Unicode placeholders + local SHM | 🧪 Experimental — G-037 physical Kitty/tmux+SHM gate; no pixel-exact or FPS claim; [`docs/tmux.md`](docs/tmux.md) |
 | tmux in WezTerm, Alacritty, iTerm2, Windows Terminal | — | ❌ Unsupported or not claimed — exits with clear error |
 
-Direct Kitty, Ghostty, and WezTerm support is unchanged. WezTerm remains a
+Direct Kitty, Ghostty, Herdr, and WezTerm support is unchanged. Ghostty and Herdr
+negotiate POSIX SHM (`t=s`), not only Kitty direct. WezTerm remains a
 supported direct target, but this release does not claim the Unicode-placeholder
-route through tmux for WezTerm. tmux support requires a recognized outer Kitty or
-Ghostty, tmux ≥ 3.4, effective `allow-passthrough all`, client `RGB` features,
+route through tmux for WezTerm. tmux support requires a recognized outer Kitty,
+Ghostty, or Herdr, tmux ≥ 3.4, effective `allow-passthrough all`, client `RGB` features,
 and successful runtime probes.
 The tmux SHM route conservatively requires exactly one attached client across
 the tmux server; Vexart does not edit the user's tmux configuration.
@@ -255,10 +257,11 @@ bun test                     # Run unit tests
 bun typecheck                # TypeScript type check
 cargo test                   # Run Rust unit tests
 
-bun run example              # Run hello world example
 bun run showcase             # Run the Void component showcase
 bun run effects-showcase     # Run the GPU visual-effects showcase in Kitty
+bun run facebook             # Run Facebook feed demo
 bun run showcase:legacy      # Review-only recovery of the 7-tab legacy showcase
+bun --conditions=browser run examples/ps5/src/main.tsx # Run PS5 dashboard demo
 bun run test:visual          # Run 40-scene golden image visual suite
 bun run test:visual:update   # Regenerate visual test references
 bun run build:dist           # Build distributable Vexart npm package
@@ -281,22 +284,28 @@ See [`docs/examples.md`](docs/examples.md) for a full list of examples with desc
 Quick-start examples:
 
 ```bash
-bun run example        # Hello World — first JSX render
-bun run demo4          # Interactive — focus, signals, keyboard
-bun run demo7          # Scroll containers
-bun run demo8          # Component showcase
-bun run demo9          # Shadow & glow effects
-bun run showcase       # Void component showcase
-bun run effects-showcase # GPU visual-effects showcase
-bun run showcase:legacy # Review-only legacy showcase snapshot
+bun run showcase             # Void component showcase
+bun run effects-showcase     # GPU visual-effects showcase
+bun run facebook             # Facebook demo
+bun run showcase:legacy      # Review-only legacy showcase snapshot
+bun --conditions=browser run examples/ps5/src/main.tsx # PS5 dashboard
 ```
 
 ---
 
 ## Links
 
+- [Getting Started](docs/getting-started.md) — install, build runtime, and first app
 - [Product Requirements (PRD)](docs/PRD.md) — phased roadmap and decision log
 - [Architecture Reference](docs/ARCHITECTURE.md) — package structure and data-flow contracts
+- [AI Reference](docs/AI-REFERENCE.md) — detailed technical reference for AI agents
+- [Package Documentation](docs/packages/README.md) — comprehensive 4-tier package architecture
+  - [Engine Runtime](docs/packages/engine-runtime.md)
+  - [Native WGPU Boundary](docs/packages/native-wgpu-boundary.md)
+  - [Headless Primitives](docs/packages/headless-primitives.md)
+  - [Styled Void System](docs/packages/styled-void-system.md)
+  - [App Framework](docs/packages/app-framework.md)
+  - [Tooling & Distribution](docs/packages/tooling-and-distribution.md)
 - [API Policy](docs/API-POLICY.md) — public vs. internal API rules
 - [Examples](examples/) — working demos for every feature
 - [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/)
