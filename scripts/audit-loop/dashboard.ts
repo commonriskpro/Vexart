@@ -2,6 +2,8 @@ import { lstat, open, opendir, realpath } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { join, relative, resolve } from "node:path"
 import { detectRepo } from "./git"
+import { validatedSolutionAwards } from "./solutions"
+import { profileStats } from "./profiles"
 import type { RepoInfo } from "./types"
 
 const DEFAULT_PORT = 4318
@@ -45,6 +47,34 @@ type DashboardEvent = {
   disadvantages?: string[]
   baselineSha?: string
   analysis?: DashboardAnalysis
+  roundId?: string
+  profileId?: string
+  profileVersion?: number
+  model?: string
+  effort?: string
+  status?: string
+  mode?: string
+  channel?: string
+  formula?: string
+  tieBreak?: string
+  selected?: { profileId: string; profileVersion: number; label: string; reason: string; score: number; eligibleAttempts: number; invitations: number }[]
+  slot?: number
+  contribution?: string
+  topic?: { kind: string; id: string; scope: string; baselineSha: string }
+  proposal?: DashboardProposal
+  contributors?: { agentKey: string; attemptId: string; contribution: string }[]
+  allocations?: { agentKey: string; attemptId: string; points: number }[]
+}
+
+type DashboardProposal = {
+  rootCause: string
+  invariant: string
+  ownership: string
+  lifecycle: string
+  tradeoffs: string
+  approvedPaths: string[]
+  alternatives: string[]
+  testPlan: string[]
 }
 
 type DashboardEvidence = { path: string; startLine: number; endLine: number; excerpt: string }
@@ -73,14 +103,31 @@ type DashboardReceipt = {
   paths: string[]
   evidence: DashboardEvidence[]
   disadvantages: string[]
-  evidenceProvenance?: { kind: "controller-extracted"; baselineSha: string }
+  evidenceProvenance?: { kind: "controller-extracted"; baselineSha: string; snapshotKind?: "post-apply"; snapshotId?: string }
+  profileId?: string
+  profileVersion?: number
+}
+
+type DashboardAttempt = {
+  attemptId: string
+  role: string
+  scope: string
+  startedAt: string
+  status: string
+  model: string | null
+  effort: string | null
+  profileId?: string
+  profileVersion?: number
 }
 
 type DashboardAgent = {
   agentKey: string
   scope: string
   strategy: string
+  profileId?: string
+  profileVersion?: number
   stars: number
+  solutionStars: number
   lastRole: string | null
   lastEndedAt: string | null
   lastExitCode: number | null
@@ -95,7 +142,10 @@ export type DashboardSnapshot = {
   events: DashboardEvent[]
   agents: DashboardAgent[]
   receipts: DashboardReceipt[]
-  totals: { stars: number; commits: number; decisions: number }
+  attempts: DashboardAttempt[]
+  profiles: ReturnType<typeof profileStats>
+  historyComplete: boolean
+  totals: { stars: number | null; solutionStars: number | null; commits: number | null; decisions: number | null }
   warnings: string[]
 }
 
@@ -167,17 +217,43 @@ const sanitizeEvent = (value: unknown): DashboardEvent | null => {
   const runId = stringValue(value.runId)
   if (!at || !type || !runId) return null
   const event: DashboardEvent = { at, type, runId }
-  for (const key of ["role", "agentKey", "attemptId", "scope", "findingId", "reason", "commitSha", "worktree", "branch", "baselineSha"] as const) {
+  for (const key of ["role", "agentKey", "attemptId", "scope", "findingId", "reason", "commitSha", "worktree", "branch", "baselineSha", "roundId", "status", "mode", "contribution", "profileId", "model", "effort"] as const) {
     if (typeof value[key] === "string") event[key] = value[key] as string
   }
+  if (typeof value.profileVersion === "number" && Number.isSafeInteger(value.profileVersion) && value.profileVersion > 0) event.profileVersion = value.profileVersion
   if (!event.agentKey && typeof value.investigatorAgentKey === "string") event.agentKey = value.investigatorAgentKey
   for (const key of ["alternatives", "disadvantages"] as const) if (Array.isArray(value[key])) event[key] = nonEmptyStrings(value[key])
   if (type === "analysis_recorded") {
     const analysis = sanitizeAnalysis(value.analysis)
     if (analysis) event.analysis = analysis
   }
+  if (type === "profile_selection") {
+    for (const key of ["channel", "formula", "tieBreak"] as const) if (typeof value[key] === "string") event[key] = clipped(value[key]) ?? ""
+    if (Array.isArray(value.selected)) event.selected = value.selected.slice(0, 3).flatMap((item) => isObject(item) && typeof item.profileId === "string" && typeof item.label === "string" && typeof item.profileVersion === "number" && Number.isSafeInteger(item.profileVersion) && item.profileVersion > 0 && ["weighted", "exploration"].includes(String(item.reason)) && [item.score, item.eligibleAttempts, item.invitations].every((count) => typeof count === "number" && Number.isFinite(count) && count >= 0) ? [{ profileId: item.profileId, profileVersion: item.profileVersion, label: item.label, reason: String(item.reason), score: Number(item.score), eligibleAttempts: Number(item.eligibleAttempts), invitations: Number(item.invitations) }] : [])
+  }
+  if (type.startsWith("solution_")) {
+    if (numberValue(value.slot) !== null) event.slot = Number(value.slot)
+    const topic = value.topic
+    if (isObject(topic) && ["bug", "opportunity"].includes(String(topic.kind)) && ["id", "scope", "baselineSha"].every((key) => typeof topic[key] === "string")) {
+      event.topic = { kind: String(topic.kind), id: String(topic.id), scope: String(topic.scope), baselineSha: String(topic.baselineSha) }
+    }
+    if (isObject(value.proposal)) event.proposal = sanitizeProposal(value.proposal)
+    if (Array.isArray(value.contributors)) event.contributors = value.contributors.slice(0, 3).flatMap((item) => isObject(item) && typeof item.agentKey === "string" && typeof item.attemptId === "string" && typeof item.contribution === "string" ? [{ agentKey: item.agentKey, attemptId: item.attemptId, contribution: item.contribution }] : [])
+    if (Array.isArray(value.allocations)) event.allocations = value.allocations.slice(0, 3).flatMap((item) => isObject(item) && typeof item.agentKey === "string" && typeof item.attemptId === "string" && (item.points === 1 || item.points === 0.5) ? [{ agentKey: item.agentKey, attemptId: item.attemptId, points: item.points }] : [])
+  }
   return event
 }
+
+const sanitizeProposal = (value: JsonObject): DashboardProposal => ({
+  rootCause: clipped(stringValue(value.rootCause)) ?? "",
+  invariant: clipped(stringValue(value.invariant)) ?? "",
+  ownership: clipped(stringValue(value.ownership)) ?? "",
+  lifecycle: clipped(stringValue(value.lifecycle)) ?? "",
+  tradeoffs: clipped(stringValue(value.tradeoffs)) ?? "",
+  approvedPaths: nonEmptyStrings(value.approvedPaths),
+  alternatives: nonEmptyStrings(value.alternatives),
+  testPlan: nonEmptyStrings(value.testPlan),
+})
 
 const sanitizeAnalysis = (value: unknown): DashboardAnalysis | null => {
   if (!isObject(value) || typeof value.flow !== "string") return null
@@ -238,14 +314,15 @@ const sanitizeReceipt = (value: unknown): DashboardReceipt | null => {
   }).join("; ") : null
   const decisionSummary = [stringValue(proposal.rootCause), stringValue(proposal.invariant), stringValue(proposal.tradeoffs)].filter((item): item is string => Boolean(item)).join("; ") || null
   const summary = clipped(stringValue(finding.summary) ?? stringValue(response.summary) ?? stringValue(response.negative) ?? (response.verdict === "approved" ? decisionSummary : null) ?? stringValue(response.reason) ?? assignmentSummary)
-  const status = stringValue(response.status) ?? stringValue(response.verdict) ?? (exitCode === null ? "timed_out" : exitCode === 0 ? "completed" : "failed")
+  const status = stringValue(response.status) ?? stringValue(response.mode) ?? stringValue(response.verdict) ?? (exitCode === null ? "timed_out" : exitCode === 0 ? "completed" : "failed")
   const paths = nonEmptyStrings(response.changedPaths ?? proposal.approvedPaths ?? finding.paths).map((path) => path.slice(0, 512))
   const refs = evidence(finding.evidence ?? response.sourceEvidence)
   const disadvantages = nonEmptyStrings(response.disadvantages).map((item) => item.slice(0, 1_000))
   const info = modelInfo(value.command)
   const rawProvenance = value.evidenceProvenance
-  const provenance = isObject(rawProvenance) && rawProvenance.kind === "controller-extracted" && typeof rawProvenance.baselineSha === "string" && /^[a-f0-9]{40,64}$/.test(rawProvenance.baselineSha) ? { evidenceProvenance: { kind: "controller-extracted" as const, baselineSha: rawProvenance.baselineSha } } : {}
-  return { agentKey, attemptId, role, scope, startedAt, endedAt, exitCode, ...info, summary, status, paths, evidence: refs, disadvantages, ...provenance }
+  const provenance = isObject(rawProvenance) && rawProvenance.kind === "controller-extracted" && typeof rawProvenance.baselineSha === "string" && /^[a-f0-9]{40,64}$/.test(rawProvenance.baselineSha) ? { evidenceProvenance: { kind: "controller-extracted" as const, baselineSha: rawProvenance.baselineSha, ...(rawProvenance.snapshotKind === "post-apply" && typeof rawProvenance.snapshotId === "string" && /^[a-f0-9]{40,64}$/.test(rawProvenance.snapshotId) ? { snapshotKind: "post-apply" as const, snapshotId: rawProvenance.snapshotId } : {}) } } : {}
+  const profile = typeof value.profileId === "string" && typeof value.profileVersion === "number" && Number.isSafeInteger(value.profileVersion) && value.profileVersion > 0 ? { profileId: value.profileId, profileVersion: value.profileVersion } : {}
+  return { agentKey, attemptId, role, scope, startedAt, endedAt, exitCode, ...info, summary, status: value.parseError ? "invalid_output" : status, paths, evidence: refs, disadvantages, ...provenance, ...profile }
 }
 
 const processAlive = async (state: DashboardState | null, statePid: number | null, lock: unknown, cwd: string, reader: Reader) => {
@@ -313,7 +390,7 @@ const readReceipts = async (store: string, state: DashboardState | null, reader:
   return result.sort((left, right) => left.endedAt.localeCompare(right.endedAt))
 }
 
-const readAgents = async (store: string, receipts: DashboardReceipt[], starsByAgent: Map<string, Set<string>>, reader: Reader) => {
+const readAgents = async (store: string, receipts: DashboardReceipt[], starsByAgent: Map<string, Set<string>>, solutionsByAgent: Map<string, number>, reader: Reader) => {
   const root = join(store, "agents")
   let paths: string[] = []
   try { paths = (await directoryEntries(root, MAX_AGENTS)).filter((entry) => entry.isFile() && entry.name.endsWith(".json")).map((entry) => join(root, entry.name)) }
@@ -323,16 +400,21 @@ const readAgents = async (store: string, receipts: DashboardReceipt[], starsByAg
     const raw = await readSafe(path, store, MAX_STATE_BYTES, reader)
     const value = raw ? parseJson(raw, reader, relative(store, path)) : null
     if (!isObject(value) || typeof value.agentKey !== "string" || typeof value.scope !== "string" || typeof value.strategy !== "string") continue
-    agents.set(value.agentKey, { agentKey: value.agentKey, scope: value.scope, strategy: value.strategy, stars: 0, lastRole: null, lastEndedAt: null, lastExitCode: null, model: null, effort: null })
+    agents.set(value.agentKey, { agentKey: value.agentKey, scope: value.scope, strategy: value.strategy, profileId: typeof value.profileId === "string" ? value.profileId : undefined, profileVersion: typeof value.profileVersion === "number" ? value.profileVersion : undefined, stars: 0, solutionStars: 0, lastRole: null, lastEndedAt: null, lastExitCode: null, model: null, effort: null })
   }
   for (const receipt of receipts) {
-    const agent = agents.get(receipt.agentKey) ?? { agentKey: receipt.agentKey, scope: receipt.scope, strategy: "unknown", stars: 0, lastRole: null, lastEndedAt: null, lastExitCode: null, model: null, effort: null }
-    if (!agent.lastEndedAt || receipt.endedAt >= agent.lastEndedAt) Object.assign(agent, { scope: receipt.scope, lastRole: receipt.role, lastEndedAt: receipt.endedAt, lastExitCode: receipt.exitCode, model: receipt.model, effort: receipt.effort })
+    const agent = agents.get(receipt.agentKey) ?? { agentKey: receipt.agentKey, scope: receipt.scope, strategy: "unknown", stars: 0, solutionStars: 0, lastRole: null, lastEndedAt: null, lastExitCode: null, model: null, effort: null }
+    if (!agent.lastEndedAt || receipt.endedAt >= agent.lastEndedAt) Object.assign(agent, { profileId: receipt.profileId, profileVersion: receipt.profileVersion, scope: receipt.scope, lastRole: receipt.role, lastEndedAt: receipt.endedAt, lastExitCode: receipt.exitCode, model: receipt.model, effort: receipt.effort })
     agents.set(receipt.agentKey, agent)
   }
   for (const [agentKey, stars] of starsByAgent) {
-    const agent = agents.get(agentKey) ?? { agentKey, scope: "unknown", strategy: "unknown", stars: 0, lastRole: null, lastEndedAt: null, lastExitCode: null, model: null, effort: null }
+    const agent = agents.get(agentKey) ?? { agentKey, scope: "unknown", strategy: "unknown", stars: 0, solutionStars: 0, lastRole: null, lastEndedAt: null, lastExitCode: null, model: null, effort: null }
     agent.stars = stars.size
+    agents.set(agentKey, agent)
+  }
+  for (const [agentKey, points] of solutionsByAgent) {
+    const agent = agents.get(agentKey) ?? { agentKey, scope: "unknown", strategy: "unknown", stars: 0, solutionStars: 0, lastRole: null, lastEndedAt: null, lastExitCode: null, model: null, effort: null }
+    agent.solutionStars = points
     agents.set(agentKey, agent)
   }
   return [...agents.values()].slice(0, MAX_AGENTS)
@@ -347,19 +429,19 @@ const readSnapshotFromRepo = async (repo: RepoInfo): Promise<DashboardSnapshot> 
   const lockRaw = await readSafe(join(store, "lock", "owner.json"), store, MAX_STATE_BYTES, reader)
   const lock = lockRaw ? parseJson(lockRaw, reader, "lock/owner.json") : null
   const eventRaw = await readSafe(join(store, "events.jsonl"), store, MAX_EVENTS_BYTES, reader)
-  const parsedEvents = eventRaw ? eventRaw.split("\n").filter(Boolean).flatMap((line) => {
-    const value = parseJson(line, reader, "events.jsonl")
+  const rawEvents = eventRaw ? eventRaw.split("\n").filter(Boolean).map((line) => parseJson(line, reader, "events.jsonl")) : []
+  const historyComplete = eventRaw !== null && !reader.warnings.some((warning) => warning.includes("events.jsonl"))
+  const parsedEvents = rawEvents.flatMap((value) => {
     const event = sanitizeEvent(value)
     return event ? [event] : []
-  }) : []
+  })
   const events = state ? parsedEvents.filter((event) => event.runId === state.id).slice(-200) : []
   const receipts = await readReceipts(store, state, reader)
   const starsByAgent = new Map<string, Set<string>>()
   const stars = new Set<string>()
   const commits = new Set<string>()
   const decisions = new Set<string>()
-  if (eventRaw) for (const line of eventRaw.split("\n").filter(Boolean)) {
-    const raw = parseJson(line, reader, "events.jsonl")
+  for (const raw of rawEvents) {
     if (!isObject(raw)) continue
     if (raw.type === "star_awarded" && typeof raw.canonicalRootCauseKey === "string") {
       stars.add(raw.canonicalRootCauseKey)
@@ -367,12 +449,24 @@ const readSnapshotFromRepo = async (repo: RepoInfo): Promise<DashboardSnapshot> 
       if (agentKey) starsByAgent.set(agentKey, new Set([...(starsByAgent.get(agentKey) ?? []), raw.canonicalRootCauseKey]))
     }
     if (raw.type === "fix_committed" && typeof raw.commitSha === "string" && raw.commitSha) commits.add(raw.commitSha)
-    if (raw.type === "decision_deferred" && (typeof raw.decisionKey === "string" || typeof raw.worktree === "string")) decisions.add(typeof raw.decisionKey === "string" ? raw.decisionKey : raw.worktree as string)
+    if (["decision_deferred", "solution_parked"].includes(String(raw.type)) && (typeof raw.decisionKey === "string" || typeof raw.worktree === "string")) decisions.add(typeof raw.decisionKey === "string" ? raw.decisionKey : raw.worktree as string)
   }
-  const agents = await readAgents(store, receipts, starsByAgent, reader)
+  const solutionsByAgent = new Map<string, number>()
+  for (const award of validatedSolutionAwards(rawEvents)) {
+    for (const allocation of award.allocations) solutionsByAgent.set(allocation.agentKey, (solutionsByAgent.get(allocation.agentKey) ?? 0) + allocation.points)
+  }
+  const solutionStars = [...solutionsByAgent.values()].reduce((sum, points) => sum + points, 0)
+  const agents = await readAgents(store, receipts, starsByAgent, solutionsByAgent, reader)
+  const attempts = new Map<string, DashboardAttempt>()
+  for (const event of events) {
+    if (event.type === "agent_started" && event.attemptId && event.role && event.scope) attempts.set(event.attemptId, { attemptId: event.attemptId, role: event.role, scope: event.scope, startedAt: event.at, status: "in_progress", model: event.model ?? null, effort: event.effort ?? null, profileId: event.profileId, profileVersion: event.profileVersion })
+    if (event.type === "agent_receipt" && event.attemptId && attempts.has(event.attemptId)) attempts.get(event.attemptId)!.status = "finished_receipt_unavailable"
+  }
+  for (const receipt of receipts) attempts.set(receipt.attemptId, { attemptId: receipt.attemptId, role: receipt.role, scope: receipt.scope, startedAt: receipt.startedAt, status: receipt.status, model: receipt.model, effort: receipt.effort, profileId: receipt.profileId, profileVersion: receipt.profileVersion })
+  if (state?.status !== "running") for (const attempt of attempts.values()) if (attempt.status === "in_progress") attempt.status = "interrupted_or_unknown"
   const rawState = stateRaw ? parseJson(stateRaw, reader, "state.json") : null
   const statePid = isObject(rawState) && typeof rawState.pid === "number" ? rawState.pid : null
-  return { observedAt: new Date().toISOString(), state, processAlive: await processAlive(state, statePid, lock, repo.root, reader), events, agents, receipts, totals: { stars: stars.size, commits: commits.size, decisions: decisions.size }, warnings: reader.warnings.slice(0, 50) }
+  return { observedAt: new Date().toISOString(), state, processAlive: await processAlive(state, statePid, lock, repo.root, reader), events, agents, receipts, profiles: profileStats(rawEvents), attempts: [...attempts.values()].slice(-50), historyComplete, totals: historyComplete ? { stars: stars.size, solutionStars, commits: commits.size, decisions: decisions.size } : { stars: null, solutionStars: null, commits: null, decisions: null }, warnings: reader.warnings.slice(0, 50) }
 }
 
 export const readDashboardSnapshot = async (cwd: string) => readSnapshotFromRepo(await detectRepo(cwd))

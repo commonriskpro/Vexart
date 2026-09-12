@@ -34,3 +34,33 @@ The fix is implemented separately in `codex/evidence-capture-fix` from baseline
 `245ea42c2c5fd05ca04d5ea52289cc08d1436162`. Interrupted tournament work is preserved
 in the separate `codex/solution-tournament-checkpoint` worktree and is not part of
 this fix or the resumed runner.
+
+## Stable strategy profiles and solution tournament — 2026-09-12
+
+**Pre-gate approved** by `/root/architecture_gate` (Astra/high), before changes in
+`codex/audit-profiles-tournament` (baseline `c450f92`). A profile identifies a
+versioned reusable strategy, not a persistent model instance. The controller owns
+profile attribution, assignments and attempt IDs. Legacy scope+strategy identities
+are historical only and are never guessed into the new profile ledger.
+
+Historical rewards influence invitations only. Discovery and solution denominators
+are separate, deduplicated by eligible attempt; abstention, malformed output and
+infrastructure failure are operational outcomes, not evidence of a bad solution.
+Parked opportunities do not contribute to solution success metrics. One invitation
+is reserved for exploration; remaining invitations use recorded history with a
+deterministic tie-break and no replacement. Formula/version/selection must be
+inspectable. The evaluator receives opaque candidates without profile identity or
+scoreboard; stars cannot override a gate or substitute for source evidence.
+
+Up to three independent Astra/high proposers may participate or abstain. A separate
+Luna/xhigh evaluator chooses one exact proposal, a substantive synthesis with at
+least two contributors, or none. The existing architectural gate, Astra apply,
+Luna postverification and controller commit remain mandatory. Solution rewards
+are an atomic post-commit event with explicit implemented contribution proof:
+winner 1; synthesis 0.5 per actual contributor. Finding+commit deduplication prevents
+replayed rounds from creating new points. Opportunities remain read-only selected
+plans parked in isolated worktrees, never fabricated failing Findings.
+
+The observed `public.ts` issue is a separate root-cause fix: public-export source
+is admissible for read-only contract evidence, while public-export edits remain
+prohibited. All other source safety, scope and snapshot restrictions remain.

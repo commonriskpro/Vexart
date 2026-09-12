@@ -124,3 +124,56 @@ implementation in `codex/evidence-capture-fix`. Independent final post-review:
 independently reproduced capture regressions (combined review total **5**).
 `/root/explore_astra` retains **1** for the earlier argv defect. These remain
 separate from the runtime product-finding ledger; no runtime stars were created.
+
+
+## Public contract evidence eligibility — 2026-09-12
+
+- Separate pre-approved fix `77a10c2` allows `public.ts` as read-only contract
+  evidence while retaining the ban on edits/planner assignments to that surface.
+- Exact capture errors survive into rejection events instead of being replaced by
+  a generic malformed-output message. Other scope/security restrictions remain.
+- Independent frozen review: **33 tests, 293 assertions**, scoped TypeScript and
+  diff checks passed. Six actual retained investigator receipts passed mechanical
+  reference/witness replay after the fix; no commands were rerun and this is not
+  semantic approval of six product bugs. Deleted receipts were not reconstructed.
+
+`/root/explore_astra` earns **1 additional implementation-review star** for the
+confirmed read-versus-edit eligibility defect (combined total **2**).
+
+## Stable profiles and solution tournament — 2026-09-12
+
+- Four fixed versioned strategies retain separate discovery/solution outcomes
+  across assignments and runs. Unique attributed attempts define denominators;
+  malformed/timeout/abstain/opportunity results are not losing solutions.
+- Score affects actual invitations, with a reserved exploration slot. The blind
+  evaluator receives opaque candidates, not profile identities or star history.
+- Exact selected proposals still pass independent architectural review, one apply,
+  postverification and fixed checks. Contribution quotes use a frozen post-apply
+  source snapshot, and solution rewards require an ordered commit-backed ledger.
+- Parked opportunities do not become defects or earn solution credit.
+- Root and independent reviewer reproduced an unintended eligibility-first
+  comparator. The single bounded correction restores score-first ranking, with
+  an explicit regression for zero stars in 100 attempts versus an unseen profile.
+- Dashboard checks: **12 passed, 72 assertions**. Stable profiles, current attempts
+  and historical identities are distinct. Partial/malformed ledger reads cannot
+  display exact lifetime totals or apparent zero profile scores. Invitation
+  criteria and post-apply provenance are sanitized and inspectable.
+- The new observer was served on port 4318 from the isolated feature worktree and
+  its actual browser view verified. This does not prove the feature controller
+  has executed a live solution tournament.
+
+### Observed runtime blocker (old controller; preserved separately)
+
+Run `mtyyyka5-46c46216`, using `77a10c2`, stopped at 18:54:53 EDT with
+`E2BIG`. Its correction prompt embedded 24,025,195 bytes of check output as a
+process argument, exceeding the host argument limit. A 24,008,117-byte check
+event also exceeds the observer's bounded tail reader. The original ledger and
+uncommitted parser change remain intact; a focused verifier approval did not
+satisfy all fixed checks, so no product commit or safe restart is claimed. The
+separately pre-gated transport correction is not part of the profile feature.
+
+Independent final feature review: `/root/verify_loop` (Luna/xhigh),
+**PASSED — READY_TO_REPORT** after the single correction. Focused full suite:
+**52 tests passed, 409 assertions**; scoped TypeScript and diff checks passed.
+No additional critical defects were found. Runtime transport recovery remains
+separate; these checks do not certify an unattended live product fix.

@@ -16,7 +16,7 @@ current `HEAD` and dirty paths, acquires an atomic per-repository lock under
 `<git-common-dir>/audit-loop/`, and creates `codex/audit-<id>` from that exact
 `HEAD` in `<git-common-dir>/audit-loop/worktrees/<id>`. The main checkout is
 never used as an agent write target. A run writes append-only
-`events.jsonl`, durable scope+strategy identities, and per-attempt receipts
+`events.jsonl`, versioned strategy profiles, historical scope+strategy identities, and per-attempt receipts
 (prompt, argv, JSON response, JSONL events, stdout, stderr, and exit status).
 
 Each cycle is:
@@ -47,11 +47,18 @@ Each cycle is:
    attribution. Compact baseline-tagged summaries inform later planning as
    `DATA_ONLY`, not current proof. Opportunities are unverified proposals: they
    never award stars, authorize changes, or bypass human architectural decisions.
-3. A separate Luna pre-gate independently reads the source. It can approve only
+3. For a mechanically valid finding, up to three independent Astra/high solvers
+   receive the same immutable source topic and may propose or abstain. A separate
+   Luna/xhigh evaluator receives opaque candidate IDs, evidence and proposals,
+   **not profile identities or scores**. It chooses an exact winner, a substantive
+   synthesis of at least two contributions, or none. Each solver/evaluator call
+   is limited to five minutes and the remaining run deadline. A selection alone
+   cannot authorize implementation or earn stars.
+4. A separate Luna pre-gate independently reads the source. It can approve only
    an internal root-cause fix tied to the recorded SHA and exact paths. API,
    contract, ownership, migration, hotfix, ad-hoc, magic-limit, controller,
    prompt, security-policy, and dependency changes fail closed for human review.
-4. The Astra high apply worker receives only the approved paths and does not stage or
+5. The Astra high apply worker receives only the approved paths and does not stage or
    commit. A Luna verifier inspects the actual diff, lifecycle/ownership
    invariants, regressions, and fixed safe checks. At most one bounded correction
    is attempted. After the verifier and checks pass, the controller stages only
@@ -72,15 +79,48 @@ finding. Stars are the count of unique canonical root-cause keys, not fixes,
 tests, proposals, or repeated observations. Duplicate keys are retained as
 events but are not awarded again. The program, prompts, model mapping,
 safeguards, and security policy are never self-edited; “automejora” means only
-that the next Astra plan consumes evidence-backed lessons and changes its
-bounded priorities. It cannot loosen policy or rewrite itself.
+that the next Astra plan consumes evidence-backed lessons and the controller
+uses versioned profile results to select bounded consultations. It cannot loosen policy or rewrite itself.
+
+## Stable profiles and solution rewards
+
+The four code-defined profiles are `lifecycle`, `contract-flow`,
+`state-transitions` and `minimal-invariant`, initially version 1. They identify
+reusable investigation approaches, not persistent model instances. The controller
+assigns each attempt its profile/version, role and scope. Historical identities
+are not guessed into these profiles, and deleted receipts are not reconstructed.
+
+Discovery and solution stars/eligible-attempt denominators are separate. Each
+score is `(stars + 1) / (eligibleAttempts + 2)`. One consultation is reserved for
+the least-invited exploration profile; remaining distinct profiles are ranked by
+score, with fixed profile order breaking ties. A sole investigation assignment
+uses the exploration slot. Selection events persist the formula, ranking rule,
+selected profiles, scores, prior eligible attempts and invitation counts.
+Abstentions, malformed output, timeouts and blocked technical outcomes do not
+count as unsuccessful solution proposals. Metrics affect invitations only; no
+stars are passed to the evaluator or allowed to bypass source/architecture gates.
+
+After a real fix passes the independent architecture gate, implementation,
+postverification, the unchanged regression witness and fixed checks, the controller
+commits it. Only then can a solution award be recorded: one star to the winning
+proposal or half a star to each substantive implemented synthesis contributor.
+The post-verifier supplies current-file references; the controller extracts them
+from a frozen post-apply snapshot. Ordered event replay and finding/commit/attempt
+identity prevent duplicate rewards. This is outcome-driven routing, not model
+fine-tuning or autonomous policy rewriting.
+
+The first eligible improvement opportunity from each investigation may also enter
+a tournament when its baseline remains current. Its selected plan is only parked
+as an artifact in an isolated decision worktree; it cannot fabricate a failing
+finding, apply code, accrue solution stars or enter the solution denominator.
+Other source-backed opportunities remain available in the analysis records.
 
 ## Source evidence ownership
 
 Agents return source references (`path`, `startLine`, `endLine`), not quoted code.
 For each investigator or gate call, the controller captures the baseline commit
 SHA at dispatch and extracts the exact inclusive line slices from that immutable
-Git snapshot. It enriches only the known finding, analysis, opportunity and gate
+Git snapshot. It enriches only the known finding, analysis, opportunity, solver, evaluator and gate
 evidence fields before downstream parsing. Comments, indentation, blank lines,
 backticks and literal ellipses are preserved; no fuzzy search or range repair is
 performed. Unsafe paths, invalid ranges and model-supplied legacy `excerpt`
@@ -90,7 +130,8 @@ the candidate from reaching the implementation gate.
 
 Receipts preserve the original structured response text separately from the
 enriched response and record controller-extracted provenance with the captured
-SHA. This proves what the snapshot contains, **not** that an agent read those
+SHA. Post-verifier contribution references instead carry a frozen post-apply
+snapshot ID because their source includes the uncommitted fix. This proves what the snapshot contains, **not** that an agent read those
 lines, that its interpretation is correct, or that a bug exists. Independent
 source/contract review, exact failing-command witnesses, architectural approval
 and post-implementation verification remain separate mandatory gates.
@@ -128,7 +169,16 @@ persisted state, recent current-run events, finished receipts, agent registry,
 and lifetime totals. Host and Origin headers must match the loopback server
 origin, and there are no mutation routes or CORS headers. Missing, malformed,
 truncated, or symlinked metadata becomes an explicit warning or unknown value;
-the observer never fabricates active-agent execution.
+the observer never fabricates active-agent execution. Missing, malformed or
+truncated ledger history makes lifetime totals unavailable rather than zero;
+profile metrics are hidden until complete history can be read.
+
+The sidebar separates persistent profile metrics, current-run attempts and a
+collapsed legacy-identity history. Attempt starts/finishes are controller events,
+not a live stream of internal reasoning or shell activity. Invitation details and
+solution rounds expose the recorded criteria, proposals, selection and awards.
+Updating this observer does not upgrade a running controller: the next clean
+batch must start the verified new controller to produce the new profile events.
 
 Codex is invoked with `exec --ephemeral --json --output-schema
 --output-last-message`, `--disable multi_agent --disable multi_agent_v2`, and

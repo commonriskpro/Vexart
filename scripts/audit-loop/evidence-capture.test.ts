@@ -43,6 +43,7 @@ afterEach(async () => { await Promise.all(fixtures.splice(0).map((root) => rm(ro
 describe("controller evidence capture boundary", () => {
   test("investigator and gate evidence schemas request references, not transcription", () => {
     const schema = jsonSchema("gate")
+    if (!("sourceEvidence" in schema.properties)) throw new Error("gate evidence schema missing")
     expect(schema.properties.sourceEvidence?.items.required).toEqual(["path", "startLine", "endLine"])
     expect(schema.properties.sourceEvidence?.items.properties).not.toHaveProperty("excerpt")
     expect(JSON.stringify(jsonSchema("investigator"))).not.toContain('"excerpt":')

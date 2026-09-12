@@ -4,6 +4,8 @@ export type Phase =
   | "starting"
   | "planning"
   | "investigating"
+  | "solving"
+  | "evaluating"
   | "gating"
   | "applying"
   | "verifying"
@@ -13,7 +15,7 @@ export type Phase =
   | "timed_out"
   | "blocked"
 
-export type AgentRole = "planner" | "investigator" | "gate" | "apply" | "verifier"
+export type AgentRole = "planner" | "investigator" | "solver" | "solution_evaluator" | "gate" | "apply" | "verifier"
 
 export type EvidenceReference = {
   path: string
@@ -27,6 +29,8 @@ export type EvidenceProvenance = {
   kind: "controller-extracted"
   baselineSha: string
   readScope: string
+  snapshotKind?: "post-apply"
+  snapshotId?: string
   references: (EvidenceReference & { location: string })[]
 }
 
@@ -144,6 +148,7 @@ export type VerifierResult = {
   changedPaths: string[]
   regressions: string[]
   architecture: string
+  solutionContributions: { attemptId: string; implemented: boolean; evidence: Evidence[] }[]
   checks: string[]
   reproduction: Reproduction
   reason: string
@@ -203,6 +208,8 @@ export type AgentReceipt = {
   stdout: string
   stderr: string
   responseText: string
+  profileId?: string
+  profileVersion?: number
   response?: unknown
   evidenceProvenance?: EvidenceProvenance
   parseError?: string
@@ -387,17 +394,22 @@ export const parseApply = (value: unknown): ApplyResult | null => {
 }
 
 export const parseVerifier = (value: unknown): VerifierResult | null => {
-  if (!record(value) || !exactKeys(value, ["kind", "verdict", "findingId", "changedPaths", "regressions", "architecture", "checks", "reproduction", "reason"])) return null
+  if (!record(value) || !exactKeys(value, ["kind", "verdict", "findingId", "changedPaths", "regressions", "architecture", "solutionContributions", "checks", "reproduction", "reason"])) return null
   if (value.kind !== "verifier" || !["approved", "rejected", "blocked"].includes(String(value.verdict))) return null
   const findingId = stringValue(value.findingId)
   const changedPaths = nonEmptyStrings(value.changedPaths)
   const regressions = nonEmptyStrings(value.regressions)
   const architecture = stringValue(value.architecture)
+  const contributions = Array.isArray(value.solutionContributions) ? value.solutionContributions.map((item) => {
+    if (!record(item) || !exactKeys(item, ["attemptId", "implemented", "evidence"]) || !stringValue(item.attemptId) || typeof item.implemented !== "boolean" || !Array.isArray(item.evidence)) return null
+    const evidence = item.evidence.map(evidenceValue)
+    return evidence.every((ref): ref is Evidence => ref !== null) ? { attemptId: item.attemptId as string, implemented: item.implemented, evidence } : null
+  }) : null
   const checks = nonEmptyStrings(value.checks)
   const reproduction = reproductionValue(value.reproduction)
   const reason = stringValue(value.reason)
-  if (!findingId || !changedPaths || !regressions || !architecture || !checks || !reproduction || reproduction.exitCode !== 0 || !reason) return null
-  return { kind: "verifier", verdict: value.verdict as VerifierResult["verdict"], findingId, changedPaths, regressions, architecture, checks, reproduction, reason }
+  if (!findingId || !changedPaths || !regressions || !architecture || !contributions || contributions.some((item) => !item) || !checks || !reproduction || reproduction.exitCode !== 0 || !reason) return null
+  return { kind: "verifier", verdict: value.verdict as VerifierResult["verdict"], findingId, changedPaths, regressions, architecture, solutionContributions: contributions as VerifierResult["solutionContributions"], checks, reproduction, reason }
 }
 
 export const parseJsonObject = (text: string) => {
@@ -405,3 +417,6 @@ export const parseJsonObject = (text: string) => {
   if (!record(parsed)) throw new Error("structured response must be a JSON object")
   return parsed
 }
+
+export const parseEvidence = evidenceValue
+export const parseProposal = proposalValue
