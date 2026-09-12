@@ -151,8 +151,9 @@ describe("audit dashboard observer", () => {
     expect(snapshot.totals.stars).toBe(0)
     expect(snapshot.agents.find((agent) => agent.agentKey === "solver-1")).toMatchObject({ stars: 0, solutionStars: 1 })
     // A parked improvement with an otherwise identical forged chain earns zero.
-    await writeFile(join(store, "events.jsonl"), chain.map((event) => JSON.stringify({ ...event, topic: { ...topic, kind: "opportunity" } })).join("\n") + "\n")
-    expect((await readDashboardSnapshot(root)).totals.solutionStars).toBe(0)
+    const parked = await fixture()
+    await writeFile(join(parked.store, "events.jsonl"), chain.map((event) => JSON.stringify({ ...event, topic: { ...topic, kind: "opportunity" } })).join("\n") + "\n")
+    expect((await readDashboardSnapshot(parked.root)).totals.solutionStars).toBe(0)
   })
 
   test("separates persistent profile scores from assignment attempts and unmapped historical identities", async () => {
@@ -175,18 +176,19 @@ describe("audit dashboard observer", () => {
     expect((await readDashboardSnapshot(root)).attempts.find((attempt) => attempt.attemptId === "new-attempt")?.status).toBe("finished_receipt_unavailable")
   })
 
-  test("does not publish partial ledger counts as exact lifetime metrics", async () => {
+  test("imports huge complete records and fails closed on subsequent truncation", async () => {
     const { root, store } = await fixture()
     const award = JSON.stringify({ type: "star_awarded", runId: "run-1", at: "2026-01-01T00:00:00.000Z", canonicalRootCauseKey: "one" }) + "\n"
     await writeFile(join(store, "events.jsonl"), award + JSON.stringify({ type: "verification_failed", checks: "x".repeat(9 * 1024 * 1024) }) + "\n")
     const partial = await readDashboardSnapshot(root)
-    expect(partial.historyComplete).toBe(false)
-    expect(partial.totals).toEqual({ stars: null, solutionStars: null, commits: null, decisions: null })
+    expect(partial.historyComplete).toBe(true)
+    expect(partial.totals).toEqual({ stars: 1, solutionStars: 0, commits: 0, decisions: 0 })
     expect(partial.state?.stars).toBe(1)
     await writeFile(join(store, "events.jsonl"), award)
     const complete = await readDashboardSnapshot(root)
-    expect(complete.historyComplete).toBe(true)
-    expect(complete.totals.stars).toBe(1)
+    expect(complete.historyComplete).toBe(false)
+    expect(complete.totals.stars).toBeNull()
+    expect(complete.warnings.join()).toContain("truncated")
   })
 
   test("exposes auditable profile invitation metrics without exposing strategy prompts", async () => {

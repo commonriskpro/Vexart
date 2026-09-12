@@ -157,7 +157,7 @@ the owner is stopped.
 
 ### Local dashboard observer
 
-The optional read-only dashboard is a separate Bun server:
+The optional dashboard is a separate Bun server with read-only HTTP routes:
 
 ```sh
 bun run scripts/audit-loop/dashboard.ts --port 4318
@@ -171,7 +171,29 @@ origin, and there are no mutation routes or CORS headers. Missing, malformed,
 truncated, or symlinked metadata becomes an explicit warning or unknown value;
 the observer never fabricates active-agent execution. Missing, malformed or
 truncated ledger history makes lifetime totals unavailable rather than zero;
-profile metrics are hidden until complete history can be read.
+profile metrics are hidden when the derived history cannot certify completeness.
+
+`history-db.ts` maintains `<git-common-dir>/audit-loop/history.sqlite` using
+Bun's built-in SQLite. JSONL remains authoritative: the initial import streams
+complete records once, then only bytes after the committed cursor are processed.
+Unchanged dashboard polls read the ready SQLite projection without reading ledger
+content or replaying all SQL events. Existing profile and solution wrappers share
+the incremental reducers; reward eligibility and deduplication are unchanged.
+Reducer state, byte cursor, materialized totals and sanitized recent events commit
+in one transaction. Recent events are limited to 200 per run; raw check logs are
+not copied into the database. This derived database is the observer's only new
+write; the active audit controller and its event/receipt storage are unchanged.
+
+An incomplete trailing line waits for an append. If the ledger changes during an
+import, that transaction rolls back and the next poll retries from the prior
+committed cursor; an observed stale snapshot is not labeled complete. Complete malformed records,
+source replacement/truncation/rewriting, unsafe paths, or an incompatible schema
+mark history incomplete/stale, preserving source and database rather than guessing
+counts or automatically rebuilding. Rebuilds require a separate explicit recovery
+decision. One complete JSON record is held transiently during import; essential
+identity, deduplication and round-provenance checkpoints grow with the audit history.
+Legacy stars without a proven versioned profile remain in global totals but are
+not assigned to a modern profile by inference.
 
 The sidebar separates persistent profile metrics, current-run attempts and a
 collapsed legacy-identity history. Attempt starts/finishes are controller events,

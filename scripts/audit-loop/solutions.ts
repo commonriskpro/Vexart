@@ -130,54 +130,62 @@ export const solutionSchema = (role: "solver" | "solution_evaluator", proposal: 
 
 // Replay shared by the controller and dashboard. Only a complete, ordered chain
 // of controller-attributed submissions, selection, implementation and commit earns points.
-export const validatedSolutionAwards = (events: unknown[]): SolutionAward[] => {
+export const createSolutionReducer = () => {
   const rounds = new Map<string, { round: SolutionRound; submissions: SolutionSubmission[]; selection: SolutionSelection | null; verified: boolean; commit: string | null }>()
-  const awards: SolutionAward[] = []
   const seen = new Set<string>()
   const submitted = new Set<string>()
-  for (const event of events) {
-    if (!record(event) || !string(event.roundId)) continue
-    if (event.type === "solution_round_started") {
-      const topic = event.topic
-      if (!rounds.has(event.roundId) && record(topic) && ["bug", "opportunity"].includes(String(topic.kind)) && string(topic.id) && string(topic.scope) && string(topic.baselineSha) && topic.baselineSha === event.baselineSha && Array.isArray(topic.paths) && topic.paths.every(string) && evidence(topic.evidence) && string(topic.description) && string(event.runId) && typeof event.cycle === "number") rounds.set(event.roundId, { round: { runId: event.runId, cycle: event.cycle, roundId: event.roundId, baselineSha: topic.baselineSha, topic: topic as SolutionTopic }, submissions: [], selection: null, verified: false, commit: null })
-      continue
-    }
-    const state = rounds.get(event.roundId)
-    if (!state || state.round.runId !== event.runId || state.round.baselineSha !== event.baselineSha || state.round.cycle !== event.cycle) continue
-    if (event.type === "solution_proposal" && !state.selection) {
-      const result = parseSolver({ kind: "solver", status: event.status, baseSha: event.baselineSha, reason: event.reason, evidence: event.evidence, contribution: event.contribution, proposal: event.proposal })
-      if (result && string(event.candidateId) && string(event.profileId) && typeof event.profileVersion === "number" && typeof event.slot === "number" && Number.isInteger(event.slot) && event.slot >= 1 && event.slot <= 3 && string(event.agentKey) && string(event.attemptId) && !submitted.has(event.attemptId) && !state.submissions.some((item) => item.slot === event.slot || item.candidateId === event.candidateId || item.agentKey === event.agentKey)) {
-        state.submissions.push({ ...result, slot: event.slot, candidateId: event.candidateId, agentKey: event.agentKey, attemptId: event.attemptId, profileId: event.profileId, profileVersion: event.profileVersion })
-        submitted.add(event.attemptId)
-      }
-      continue
-    }
-    if (event.type === "solution_selected" && !state.selection && Array.isArray(event.contributors)) {
-      const evaluation = parseEvaluation({ kind: "solution_evaluator", baseSha: event.baselineSha, mode: event.mode, reason: event.reason, evidence: event.evidence, proposal: event.proposal, contributions: event.contributors.map((item) => record(item) ? { candidateId: item.candidateId, contribution: item.contribution } : item) })
-      if (evaluation) {
-        const selection = selectSolution(state.round, state.submissions, evaluation).selection
-        if (selection && JSON.stringify(selection.contributors) === JSON.stringify(event.contributors)) state.selection = selection
-      }
-      continue
-    }
-    if (!state.selection || state.round.topic.kind !== "bug") continue
-    if (event.type === "verification_passed" && !state.commit) {
-      const confirmations = parseImplementedContributions(event.solutionContributions)
-      state.verified = confirmations !== null && contributionsImplemented(state.selection, confirmations)
-      continue
-    }
-    if (event.type === "fix_committed" && state.verified && event.canonicalRootCauseKey === state.round.topic.id && typeof event.commitSha === "string" && /^[a-f0-9]{40,64}$/.test(event.commitSha)) {
-      state.commit = event.commitSha
-      continue
-    }
-    const key = `${state.round.topic.id}\u0000${state.commit}`
-    if (event.type !== "solution_awarded" || !state.verified || !state.commit || event.commitSha !== state.commit || event.canonicalRootCauseKey !== state.round.topic.id || event.awardKey !== key || event.mode !== state.selection.mode || seen.has(key)) continue
-    const allocations = state.selection.contributors.map((item) => ({ agentKey: item.agentKey, attemptId: item.attemptId, profileId: item.profileId, profileVersion: item.profileVersion, points: state.selection!.mode === "winner" ? 1 as const : 0.5 as const }))
-    if (JSON.stringify(event.allocations) !== JSON.stringify(allocations)) continue
-    seen.add(key)
-    awards.push({ ...state.round, type: "solution_awarded", mode: state.selection.mode, awardKey: key, canonicalRootCauseKey: state.round.topic.id, commitSha: state.commit, allocations })
+  return { rounds, seen, submitted }
+}
+export type SolutionReducer = ReturnType<typeof createSolutionReducer>
+
+export const reduceSolutionEvent = (checkpoint: SolutionReducer, event: unknown): SolutionAward | null => {
+  const { rounds, seen, submitted } = checkpoint
+
+  if (!record(event) || !string(event.roundId)) return null
+  if (event.type === "solution_round_started") {
+    const topic = event.topic
+    if (!rounds.has(event.roundId) && record(topic) && ["bug", "opportunity"].includes(String(topic.kind)) && string(topic.id) && string(topic.scope) && string(topic.baselineSha) && topic.baselineSha === event.baselineSha && Array.isArray(topic.paths) && topic.paths.every(string) && evidence(topic.evidence) && string(topic.description) && string(event.runId) && typeof event.cycle === "number") rounds.set(event.roundId, { round: { runId: event.runId, cycle: event.cycle, roundId: event.roundId, baselineSha: topic.baselineSha, topic: { kind: topic.kind as SolutionTopic["kind"], id: topic.id, scope: topic.scope, baselineSha: topic.baselineSha, paths: topic.paths as string[], evidence: evidence(topic.evidence)!, description: topic.description } }, submissions: [], selection: null, verified: false, commit: null })
+    return null
   }
-  return awards
+  const state = rounds.get(event.roundId)
+  if (!state || state.round.runId !== event.runId || state.round.baselineSha !== event.baselineSha || state.round.cycle !== event.cycle) return null
+  if (event.type === "solution_proposal" && !state.selection) {
+    const result = parseSolver({ kind: "solver", status: event.status, baseSha: event.baselineSha, reason: event.reason, evidence: event.evidence, contribution: event.contribution, proposal: event.proposal })
+    if (result && string(event.candidateId) && string(event.profileId) && typeof event.profileVersion === "number" && typeof event.slot === "number" && Number.isInteger(event.slot) && event.slot >= 1 && event.slot <= 3 && string(event.agentKey) && string(event.attemptId) && !submitted.has(event.attemptId) && !state.submissions.some((item) => item.slot === event.slot || item.candidateId === event.candidateId || item.agentKey === event.agentKey)) {
+      state.submissions.push({ ...result, slot: event.slot, candidateId: event.candidateId, agentKey: event.agentKey, attemptId: event.attemptId, profileId: event.profileId, profileVersion: event.profileVersion })
+      submitted.add(event.attemptId)
+    }
+    return null
+  }
+  if (event.type === "solution_selected" && !state.selection && Array.isArray(event.contributors)) {
+    const evaluation = parseEvaluation({ kind: "solution_evaluator", baseSha: event.baselineSha, mode: event.mode, reason: event.reason, evidence: event.evidence, proposal: event.proposal, contributions: event.contributors.map((item) => record(item) ? { candidateId: item.candidateId, contribution: item.contribution } : item) })
+    if (evaluation) {
+      const selection = selectSolution(state.round, state.submissions, evaluation).selection
+      if (selection && JSON.stringify(selection.contributors) === JSON.stringify(event.contributors)) state.selection = selection
+    }
+    return null
+  }
+  if (!state.selection || state.round.topic.kind !== "bug") return null
+  if (event.type === "verification_passed" && !state.commit) {
+    const confirmations = parseImplementedContributions(event.solutionContributions)
+    state.verified = confirmations !== null && contributionsImplemented(state.selection, confirmations)
+    return null
+  }
+  if (event.type === "fix_committed" && state.verified && event.canonicalRootCauseKey === state.round.topic.id && typeof event.commitSha === "string" && /^[a-f0-9]{40,64}$/.test(event.commitSha)) {
+    state.commit = event.commitSha
+    return null
+  }
+  const key = `${state.round.topic.id}\u0000${state.commit}`
+  if (event.type !== "solution_awarded" || !state.verified || !state.commit || event.commitSha !== state.commit || event.canonicalRootCauseKey !== state.round.topic.id || event.awardKey !== key || event.mode !== state.selection.mode || seen.has(key)) return null
+  const allocations = state.selection.contributors.map((item) => ({ agentKey: item.agentKey, attemptId: item.attemptId, profileId: item.profileId, profileVersion: item.profileVersion, points: state.selection!.mode === "winner" ? 1 as const : 0.5 as const }))
+  if (JSON.stringify(event.allocations) !== JSON.stringify(allocations)) return null
+  seen.add(key)
+  return ({ ...state.round, type: "solution_awarded", mode: state.selection.mode, awardKey: key, canonicalRootCauseKey: state.round.topic.id, commitSha: state.commit, allocations })
+}
+
+export const validatedSolutionAwards = (events: unknown[]): SolutionAward[] => {
+  const state = createSolutionReducer()
+  return events.flatMap((event) => { const award = reduceSolutionEvent(state, event); return award ? [award] : [] })
 }
 
 export const awardSolution = async (store: string, round: SolutionRound, selection: SolutionSelection, commitSha: string) => {

@@ -83,3 +83,27 @@ stdout and stderr must remain available. Existing fixed checks are not weakened,
 failures are not truncated away, and historical events are not rewritten. The
 blocked run and its uncommitted product diff remain preserved without automatic
 restart or an unverified commit.
+
+## SQLite observer read model — 2026-09-12
+
+User explicitly requested a database instead of rereading all history.
+Independent pre-implementation gate: /root/architecture_gate (Astra/high),
+APPROVED. Isolated worktree codex/audit-history-sqlite from 4359de1.
+
+SQLite is a derived read model under the Git common audit store, not a second
+authority. Existing JSONL and receipts remain intact. The active controller
+continues writing its existing ledger without restart. Shared incremental
+solution/profile reducers must retain the existing replay wrappers and semantics,
+including global deduplication and late solution-outcome attribution.
+
+A streaming first import parses complete JSONL records once and drops bulky
+check logs from the projection. Subsequent ingestion reads only new complete
+records; cursor offsets are UTF-8 bytes. Reducer state, ready projections and
+cursor advance commit atomically. Concurrent projector calls serialize. An
+unchanged poll must query the ready DB projection without rereading ledger data.
+
+Malformed completed records remain explicit incomplete-history errors; a pending
+last line is not silently consumed. Source replacement/truncation, unsafe paths,
+or an incompatible projection version fail closed and preserve existing data.
+No automatic migration, invented stars, ledger rewrite or safeguard weakening.
+The observer's only new write is its derived database; no mutation endpoints.

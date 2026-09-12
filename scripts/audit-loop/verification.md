@@ -219,3 +219,49 @@ All 62 focused tests passed (462 assertions), scoped TypeScript and both staged
 and working-tree diff checks passed. Resolved merge content preserves profile
 attribution, immutable post-apply contribution proof and compact artifact events.
 This validates the controller code, not recovery of the blocked product run.
+
+
+## Incremental SQLite dashboard history — 2026-09-12
+
+Pre-gate: /root/architecture_gate (Astra/high), APPROVED. Implementation:
+/root/apply_astra (Astra/high), isolated codex/audit-history-sqlite from 4359de1.
+
+- Root reproduced a valid historical verification event exceeding the former
+  8 MiB observer tail. The original JSONL was valid; slicing its record created
+  a false malformed-metadata warning and hid all lifetime metrics.
+- SQLite preserves the authoritative JSONL and receipts. Initial streaming import
+  projects complete records; subsequent refreshes process only appended bytes.
+  Ready metrics, shared reducer checkpoint and byte cursor commit atomically.
+- Root's pre-correction focused suite: **71 tests passed, 614 assertions**; scoped
+  TypeScript and diff checks passed. Tests cover persisted-prefix credits,
+  duplicate/invalid provenance, late eligible solution outcomes, oversized logs,
+  concurrent requests, UTF-8 partial lines, transaction rollback/retry, stale
+  source/version detection, unsafe paths and recent-event bounds.
+- One-time comparison against the pre-refactor reducers on a copied live ledger:
+  **98 records / 24,293,578 bytes**, complete; **1 discovery star, 0 solution
+  stars, 0 commits, 0 decisions**. All four profile metrics matched exactly.
+  The next unchanged query read **0 ledger bytes**; derived DB was **69,632 bytes**.
+  The legacy discovery star has no proven modern-profile attribution and remains
+  global rather than being invented for one of the four new profiles.
+- No source ledger, receipts, audit branch, or active audit process was altered.
+  The change is the dashboard's derived read model; controller event persistence
+  and bounded planning behavior remain unchanged. Checkpoint provenance grows
+  with essential audit identities, and one complete record is parsed transiently.
+
+- Independent review reproduced a completeness defect: an append during import
+  could publish an older prefix as complete despite observing a larger ledger.
+  The single bounded correction rejects observed size/mtime drift and rolls back.
+  A deterministic regression failed before the correction and passes after it,
+  including preserved cursor/counts, retry and duplicate-credit protection.
+  Worker DB plus dashboard checks: **22 tests passed, 238 assertions**; scoped
+  TypeScript and diff checks passed.
+- Review-only reward: verify_loop earns **1** for this reproduced completeness
+  defect (combined review total **8**). This is not a runtime product/profile star
+  and does not change the live ledger or invent a committed product fix.
+
+Independent final verdict: /root/verify_loop (Luna/xhigh), **PASSED —
+READY_TO_REPORT** after the single bounded correction. DB: **10 passed, 165
+assertions**; dashboard: **12 passed, 73 assertions**; scoped TypeScript and diff
+checks passed. Independent old/new reducer parity matched. The real growth-race
+reproduction now reports incomplete with unchanged cursor, then imports the new
+star correctly on retry. No remaining critical findings in the scoped review.

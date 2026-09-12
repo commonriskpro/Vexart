@@ -2,13 +2,12 @@ import { lstat, open, opendir, realpath } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { join, relative, resolve } from "node:path"
 import { detectRepo } from "./git"
-import { validatedSolutionAwards } from "./solutions"
+import { readHistory } from "./history-db"
 import { profileStats } from "./profiles"
 import type { RepoInfo } from "./types"
 
 const DEFAULT_PORT = 4318
 const MAX_STATE_BYTES = 256 * 1024
-const MAX_EVENTS_BYTES = 8 * 1024 * 1024
 const MAX_RECEIPT_BYTES = 512 * 1024
 const MAX_RECEIPTS = 200
 const MAX_AGENTS = 200
@@ -390,7 +389,7 @@ const readReceipts = async (store: string, state: DashboardState | null, reader:
   return result.sort((left, right) => left.endedAt.localeCompare(right.endedAt))
 }
 
-const readAgents = async (store: string, receipts: DashboardReceipt[], starsByAgent: Map<string, Set<string>>, solutionsByAgent: Map<string, number>, reader: Reader) => {
+const readAgents = async (store: string, receipts: DashboardReceipt[], starsByAgent: Map<string, number>, solutionsByAgent: Map<string, number>, reader: Reader) => {
   const root = join(store, "agents")
   let paths: string[] = []
   try { paths = (await directoryEntries(root, MAX_AGENTS)).filter((entry) => entry.isFile() && entry.name.endsWith(".json")).map((entry) => join(root, entry.name)) }
@@ -409,7 +408,7 @@ const readAgents = async (store: string, receipts: DashboardReceipt[], starsByAg
   }
   for (const [agentKey, stars] of starsByAgent) {
     const agent = agents.get(agentKey) ?? { agentKey, scope: "unknown", strategy: "unknown", stars: 0, solutionStars: 0, lastRole: null, lastEndedAt: null, lastExitCode: null, model: null, effort: null }
-    agent.stars = stars.size
+    agent.stars = stars
     agents.set(agentKey, agent)
   }
   for (const [agentKey, points] of solutionsByAgent) {
@@ -428,35 +427,12 @@ const readSnapshotFromRepo = async (repo: RepoInfo): Promise<DashboardSnapshot> 
   if (!stateRaw) reader.warnings.push("state unavailable")
   const lockRaw = await readSafe(join(store, "lock", "owner.json"), store, MAX_STATE_BYTES, reader)
   const lock = lockRaw ? parseJson(lockRaw, reader, "lock/owner.json") : null
-  const eventRaw = await readSafe(join(store, "events.jsonl"), store, MAX_EVENTS_BYTES, reader)
-  const rawEvents = eventRaw ? eventRaw.split("\n").filter(Boolean).map((line) => parseJson(line, reader, "events.jsonl")) : []
-  const historyComplete = eventRaw !== null && !reader.warnings.some((warning) => warning.includes("events.jsonl"))
-  const parsedEvents = rawEvents.flatMap((value) => {
-    const event = sanitizeEvent(value)
-    return event ? [event] : []
-  })
-  const events = state ? parsedEvents.filter((event) => event.runId === state.id).slice(-200) : []
+  const history = await readHistory(store, sanitizeEvent, state?.id)
+  reader.warnings.push(...history.warnings)
+  const historyComplete = history.historyComplete
+  const events = history.events
   const receipts = await readReceipts(store, state, reader)
-  const starsByAgent = new Map<string, Set<string>>()
-  const stars = new Set<string>()
-  const commits = new Set<string>()
-  const decisions = new Set<string>()
-  for (const raw of rawEvents) {
-    if (!isObject(raw)) continue
-    if (raw.type === "star_awarded" && typeof raw.canonicalRootCauseKey === "string") {
-      stars.add(raw.canonicalRootCauseKey)
-      const agentKey = typeof raw.investigatorAgentKey === "string" ? raw.investigatorAgentKey : typeof raw.agentKey === "string" ? raw.agentKey : null
-      if (agentKey) starsByAgent.set(agentKey, new Set([...(starsByAgent.get(agentKey) ?? []), raw.canonicalRootCauseKey]))
-    }
-    if (raw.type === "fix_committed" && typeof raw.commitSha === "string" && raw.commitSha) commits.add(raw.commitSha)
-    if (["decision_deferred", "solution_parked"].includes(String(raw.type)) && (typeof raw.decisionKey === "string" || typeof raw.worktree === "string")) decisions.add(typeof raw.decisionKey === "string" ? raw.decisionKey : raw.worktree as string)
-  }
-  const solutionsByAgent = new Map<string, number>()
-  for (const award of validatedSolutionAwards(rawEvents)) {
-    for (const allocation of award.allocations) solutionsByAgent.set(allocation.agentKey, (solutionsByAgent.get(allocation.agentKey) ?? 0) + allocation.points)
-  }
-  const solutionStars = [...solutionsByAgent.values()].reduce((sum, points) => sum + points, 0)
-  const agents = await readAgents(store, receipts, starsByAgent, solutionsByAgent, reader)
+  const agents = await readAgents(store, receipts, new Map(history.starsByAgent), new Map(history.solutionsByAgent), reader)
   const attempts = new Map<string, DashboardAttempt>()
   for (const event of events) {
     if (event.type === "agent_started" && event.attemptId && event.role && event.scope) attempts.set(event.attemptId, { attemptId: event.attemptId, role: event.role, scope: event.scope, startedAt: event.at, status: "in_progress", model: event.model ?? null, effort: event.effort ?? null, profileId: event.profileId, profileVersion: event.profileVersion })
@@ -466,7 +442,7 @@ const readSnapshotFromRepo = async (repo: RepoInfo): Promise<DashboardSnapshot> 
   if (state?.status !== "running") for (const attempt of attempts.values()) if (attempt.status === "in_progress") attempt.status = "interrupted_or_unknown"
   const rawState = stateRaw ? parseJson(stateRaw, reader, "state.json") : null
   const statePid = isObject(rawState) && typeof rawState.pid === "number" ? rawState.pid : null
-  return { observedAt: new Date().toISOString(), state, processAlive: await processAlive(state, statePid, lock, repo.root, reader), events, agents, receipts, profiles: profileStats(rawEvents), attempts: [...attempts.values()].slice(-50), historyComplete, totals: historyComplete ? { stars: stars.size, solutionStars, commits: commits.size, decisions: decisions.size } : { stars: null, solutionStars: null, commits: null, decisions: null }, warnings: reader.warnings.slice(0, 50) }
+  return { observedAt: new Date().toISOString(), state, processAlive: await processAlive(state, statePid, lock, repo.root, reader), events, agents, receipts, profiles: history.profiles, attempts: [...attempts.values()].slice(-50), historyComplete, totals: historyComplete ? history.totals : { stars: null, solutionStars: null, commits: null, decisions: null }, warnings: reader.warnings.slice(0, 50) }
 }
 
 export const readDashboardSnapshot = async (cwd: string) => readSnapshotFromRepo(await detectRepo(cwd))
