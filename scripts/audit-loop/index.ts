@@ -1,6 +1,6 @@
-import { appendFile, lstat, mkdir, readFile, readdir, readlink, realpath, rename, rm, writeFile } from "node:fs/promises"
+import { appendFile, lstat, mkdir, readFile, readdir, readlink, realpath, rename, rm, symlink, unlink, writeFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
-import { join, relative, resolve } from "node:path"
+import { basename, dirname, join, relative, resolve } from "node:path"
 import {
   createWorktree,
   detectRepo,
@@ -161,20 +161,46 @@ export const prepareDependencies = async (repo: RepoInfo, worktree: string) => {
     const result = await runProcess(["cp", "-R", source, destination], repo.root)
     if (result.code !== 0) throw new Error(`isolated dependency copy failed: ${result.stderr.trim() || result.stdout.trim()}`)
   }
+  const under = (root: string, path: string) => path === root || path.startsWith(`${root}/`)
+  const canonical = async (path: string) => {
+    try { return await realpath(path) }
+    catch (error) {
+      if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) throw error
+      try { return join(await realpath(dirname(path)), basename(path)) }
+      catch { return path }
+    }
+  }
+  const normalize = async (path: string, seen = new Set<string>()): Promise<void> => {
+    const stat = await lstat(path)
+    if (!stat.isSymbolicLink()) return
+    const target = await readlink(path)
+    let lexical = target.startsWith("/") ? resolve(target) : resolve(join(path, ".."), target)
+    const canonicalLexical = target.startsWith("/") ? await canonical(lexical) : lexical
+    if (target.startsWith("/") && under(repo.root, canonicalLexical)) {
+      const relocated = join(worktree, relative(repo.root, canonicalLexical))
+      const replacement = relative(join(path, ".."), relocated) || "."
+      await unlink(path)
+      await symlink(replacement, path)
+      lexical = resolve(join(path, ".."), replacement)
+    }
+    if (!under(worktree, lexical)) throw new Error(`isolated dependency symlink escapes worktree: ${path}`)
+    if (seen.has(path)) return
+    seen.add(path)
+    try {
+      const targetStat = await lstat(lexical)
+      if (targetStat.isSymbolicLink()) await normalize(lexical, seen)
+      const resolved = await realpath(path)
+      if (!under(worktree, resolved)) throw new Error(`isolated dependency symlink resolves outside worktree: ${path}`)
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("outside worktree")) throw error
+      if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) throw error
+      // A dangling relative link remains safe only when its full lexical target is inside the worktree.
+    }
+  }
   const visit = async (path: string): Promise<void> => {
     const stat = await lstat(path)
     if (stat.isSymbolicLink()) {
-      const target = await readlink(path)
-      const lexical = target.startsWith("/") ? resolve(target) : resolve(join(path, ".."), target)
-      if (!lexical.startsWith(`${worktree}/`)) throw new Error(`isolated dependency symlink escapes worktree: ${path}`)
-      try {
-        const resolved = await realpath(path)
-        if (!resolved.startsWith(`${worktree}/`)) throw new Error(`isolated dependency symlink resolves outside worktree: ${path}`)
-      } catch (error) {
-        if (error instanceof Error && error.message.includes("outside worktree")) throw error
-        if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) throw error
-        // A broken relative link is safe to retain only when its lexical target remains inside the worktree.
-      }
+      await normalize(path)
       return
     }
     if (!stat.isDirectory()) return

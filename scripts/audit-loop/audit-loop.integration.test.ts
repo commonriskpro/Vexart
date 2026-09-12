@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readlink, realpath, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createWorktree, detectRepo, runProcess, changedPaths, snapshotPaths } from "./git"
@@ -64,12 +64,29 @@ describe("audit loop repository invariants", () => {
     expect(lessons.some((lesson) => lesson.includes("scope skipped"))).toBe(true)
   })
 
-  test("rejects nested dependency links that escape the isolated worktree", async () => {
+  test("relocates internal absolute dependency links without mutating the source", async () => {
     const { root, repo } = await fixture()
     await mkdir(join(root, "node_modules", "nested", "deep"), { recursive: true })
-    await symlink(root, join(root, "node_modules", "nested", "deep", "leak"))
+    const sourceLink = join(root, "node_modules", "nested", "deep", "internal")
+    await symlink(join(root, "node_modules"), sourceLink)
     const store = join(repo.commonDir, "audit-loop")
     const worktreeInfo = await createWorktree(repo, store, "dependency-links")
+    await prepareDependencies(repo, worktreeInfo.worktree)
+    expect(await readlink(sourceLink)).toBe(join(root, "node_modules"))
+    const copiedLink = join(worktreeInfo.worktree, "node_modules", "nested", "deep", "internal")
+    expect(await readlink(copiedLink)).not.toBe(join(root, "node_modules"))
+    expect(await realpath(copiedLink)).toBe(await realpath(join(worktreeInfo.worktree, "node_modules")))
+  })
+
+  test("rejects nested dependency links that resolve externally", async () => {
+    const { root, repo } = await fixture()
+    await mkdir(join(root, "node_modules", "nested", "deep"), { recursive: true })
+    const external = join(tmpdir(), `vexart-audit-loop-external-${crypto.randomUUID()}`)
+    const bridge = join(root, "node_modules", "nested", "bridge")
+    await symlink(external, bridge)
+    await symlink(bridge, join(root, "node_modules", "nested", "deep", "leak"))
+    const store = join(repo.commonDir, "audit-loop")
+    const worktreeInfo = await createWorktree(repo, store, "dependency-links-external")
     await expect(prepareDependencies(repo, worktreeInfo.worktree)).rejects.toThrow("escapes worktree")
   })
 })
