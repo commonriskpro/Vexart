@@ -31,6 +31,18 @@ describe("audit loop safety contracts", () => {
     expect(await validateFinding(repo, { ...finding, evidence: [{ ...finding.evidence[0], excerpt: "not in baseline" }] }, events)).toContain("does not match")
   })
 
+  test("read-only evidence may reference another in-scope file without widening write paths", async () => {
+    const repo = await detectRepo(process.cwd())
+    const source = await sourceAt(repo.root, repo.baselineSha, "docs/ARCHITECTURE.md")
+    const contract = await sourceAt(repo.root, repo.baselineSha, "docs/API-POLICY.md")
+    expect(source).toBeTruthy()
+    expect(contract).toBeTruthy()
+    const finding = { id: "f-read", canonicalRootCauseKey: "read:scope", scope: "docs", summary: "test fixture", impact: "none", evidence: [{ path: "docs/API-POLICY.md", startLine: 1, endLine: 1, excerpt: contract!.split("\n")[0] }], expectedContract: "source is readable", reproduction: { command: ["printf", "witness"], exitCode: 1, output: "witness", observed: true }, paths: ["docs/ARCHITECTURE.md"] }
+    const events = JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "printf witness", exit_code: 1, aggregated_output: "witness" } })
+    expect(await validateFinding(repo, finding, events, "docs")).toBeNull()
+    expect(await validateFinding(repo, finding, events, "docs/ARCHITECTURE.md")).toContain("out-of-scope")
+  })
+
   test("stale or unsafe gates fail closed", async () => {
     const repo = await detectRepo(process.cwd())
     const finding = { id: "f-1", canonicalRootCauseKey: "readme:baseline", scope: ".", summary: "test fixture", impact: "none", evidence: [{ path: "README.md", startLine: 1, endLine: 1, excerpt: "# Vexart" }], expectedContract: "source is readable", reproduction: { command: ["printf", "witness"], exitCode: 1, output: "witness", observed: true }, paths: ["README.md"] }

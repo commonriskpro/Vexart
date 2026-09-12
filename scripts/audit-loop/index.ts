@@ -330,9 +330,9 @@ const evidenceIsSafe = (path: string) => {
   return /^[A-Za-z0-9._/-]+$/.test(path)
 }
 
-const validateEvidence = async (repo: RepoInfo, evidence: Evidence[], paths: string[]) => {
+const validateEvidence = async (repo: RepoInfo, evidence: Evidence[], readScope: string) => {
   for (const item of evidence) {
-    if (!evidenceIsSafe(item.path) || !paths.includes(item.path)) return `unsafe or unapproved evidence path: ${item.path}`
+    if (!evidenceIsSafe(item.path) || !pathUnder(readScope, item.path)) return `unsafe or out-of-scope evidence path: ${item.path}`
     const source = await sourceAt(repo.root, repo.baselineSha, item.path)
     if (!source) return `baseline source is unavailable: ${item.path}`
     const lines = source.split("\n")
@@ -345,13 +345,14 @@ const validateEvidence = async (repo: RepoInfo, evidence: Evidence[], paths: str
 
 const linesFor = (source: string, start: number, end: number) => source.split("\n").slice(start - 1, end).join("\n")
 
-export const validateFinding = async (repo: RepoInfo, finding: Finding, events: string) => {
+export const validateFinding = async (repo: RepoInfo, finding: Finding, events: string, readScope = ".") => {
   if (finding.reproduction.exitCode === 0) return "inspection-only or successful command is not a regression proof"
   const witnesses = commandWitnesses(events)
   const witness = witnesses.find((item) => commandMatches(finding.reproduction.command, item) && item.exit_code === finding.reproduction.exitCode && item.aggregated_output?.includes(finding.reproduction.output))
   if (finding.reproduction.observed !== true || !witness) return "finding lacks a matching failing regression command witness"
-  if (!finding.paths.every((path) => pathInside(repo.root, path) && evidenceIsSafe(path))) return "finding path is outside the repository or controller scope"
-  return validateEvidence(repo, finding.evidence, finding.paths)
+  if (!finding.paths.every((path) => pathInside(repo.root, path) && evidenceIsSafe(path) && pathUnder(finding.scope, path))) return "finding path is outside the repository or assignment scope"
+  for (const path of finding.paths) if (!(await sourceAt(repo.root, repo.baselineSha, path))) return `finding path is not an editable baseline file: ${path}`
+  return validateEvidence(repo, finding.evidence, readScope)
 }
 
 export const validateGate = (repo: RepoInfo, finding: Finding, gate: GateResult, events = "") => {
@@ -368,7 +369,7 @@ export const validateGate = (repo: RepoInfo, finding: Finding, gate: GateResult,
   return null
 }
 
-export const validateGateEvidence = async (repo: RepoInfo, finding: Finding, gate: GateResult) => validateEvidence(repo, gate.sourceEvidence, finding.paths)
+export const validateGateEvidence = async (repo: RepoInfo, finding: Finding, gate: GateResult, readScope = ".") => validateEvidence(repo, gate.sourceEvidence, readScope)
 
 const normalizeScope = (root: string, scope: string | undefined) => {
   if (!scope) return "."
