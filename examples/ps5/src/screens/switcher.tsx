@@ -1,12 +1,11 @@
 import {
-  Box,
   For,
   Show,
   createEffect,
 } from "vexart"
 
 import type { GameId, Ps5OverlayProps, ScreenId } from "../types"
-import { Ps5Button, Ps5Panel, Ps5Text as Text, ps5Colors, ps5Scale, usePs5Viewport } from "../ui"
+import { Ps5Button, Ps5Panel, Ps5Text, ps5Colors, ps5Scale, usePs5Viewport } from "../ui"
 
 function topOverlay(props: Ps5OverlayProps) {
   return () => props.state().overlayStack.at(-1)?.id
@@ -86,25 +85,25 @@ export function SwitcherOverlay(props: Ps5OverlayProps) {
 
   return (
     <Show when={active() === "switcher"}>
-      <Box width={viewport.width()} height={viewport.height()} alignX="center" alignY="bottom">
+      <box width={viewport.width()} height={viewport.height()} alignX="center" alignY="bottom">
         <Ps5Panel width="92%" padding={scale(28)} gap={scale(16)} direction="column" backgroundColor={ps5Colors.panel} borderColor="#ffffff38" borderWidth={1} cornerRadius={scale(20)}>
-          <Box direction="row" alignX="space-between" alignY="center">
-            <Box direction="column" gap={scale(5)}>
-              <Text color={ps5Colors.text} fontSize={scale(28)} fontWeight={700}>Selector</Text>
-              <Text color={ps5Colors.mutedText} fontSize={scale(14)}>Juegos recientes · una única sesión simulada</Text>
-            </Box>
+          <box direction="row" alignX="space-between" alignY="center">
+            <box direction="column" gap={scale(5)}>
+              <Ps5Text color={ps5Colors.text} fontSize={scale(28)} fontWeight={700}>Selector</Ps5Text>
+              <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>Juegos recientes · una única sesión simulada</Ps5Text>
+            </box>
             <Show when={selectedGame()}>
-              <Text color={ps5Colors.mutedText} fontSize={scale(13)}>Sesión: {props.state().gameSession.phase}</Text>
+              <Ps5Text color={ps5Colors.mutedText} fontSize={scale(13)}>Sesión: {props.state().gameSession.phase}</Ps5Text>
             </Show>
-          </Box>
+          </box>
 
           <Show when={recent().length > 0} fallback={
-            <Box direction="column" gap={scale(16)} alignX="center" padding={scale(18)}>
-              <Text color={ps5Colors.mutedText} fontSize={scale(17)}>No hay juegos recientes</Text>
+            <box direction="column" gap={scale(16)} alignX="center" padding={scale(18)}>
+              <Ps5Text color={ps5Colors.mutedText} fontSize={scale(17)}>No hay juegos recientes</Ps5Text>
               <Ps5Button id="switcher-back" layer="overlay" width={scale(240)} height={scale(48)} label="Volver" onPress={props.actions.closeOverlay} screen={props} />
-            </Box>
+            </box>
           }>
-            <Box width="100%" direction="row" gap={scale(16)} scrollX viewportClip>
+            <box width="100%" direction="row" gap={scale(16)} scrollX viewportClip>
               <For each={recent()}>{(id, index) => {
                 const game = () => props.state().catalog.find((entry) => entry.id === id)
                 return (
@@ -121,37 +120,37 @@ export function SwitcherOverlay(props: Ps5OverlayProps) {
                     }}
                     screen={props}
                   >
-                    <Box direction="column" gap={scale(8)} alignX="center">
-                      <Show when={game()} fallback={<Box width={scale(120)} height={scale(132)} backgroundColor="#303640" cornerRadius={scale(10)} />}>
+                    <box direction="column" gap={scale(8)} alignX="center">
+                      <Show when={game()} fallback={<box width={scale(120)} height={scale(132)} backgroundColor="#303640" cornerRadius={scale(10)} />}>
                         <img src={game()!.cover} width={scale(120)} height={scale(132)} objectFit="cover" cornerRadius={scale(10)} />
                       </Show>
-                      <Text color={ps5Colors.text} fontSize={scale(13)} alignX="center">{game()?.title ?? id}</Text>
-                    </Box>
+                      <Ps5Text color={ps5Colors.text} fontSize={scale(13)} alignX="center">{game()?.title ?? id}</Ps5Text>
+                    </box>
                   </Ps5Button>
                 )
               }}</For>
-            </Box>
+            </box>
 
             <Show when={selectedGame()}>
               <Ps5Panel width="100%" padding={scale(14)} gap={scale(8)} direction="column" backgroundColor="#11161dcc" borderColor="#ffffff1c" cornerRadius={scale(12)}>
-                <Text color={ps5Colors.text} fontSize={scale(17)} fontWeight={700}>{selectedGame()!.title}</Text>
-                <Text color={ps5Colors.mutedText} fontSize={scale(13)}>{selectedGame()!.subtitle}</Text>
-                <Text color={ps5Colors.mutedText} fontSize={scale(13)}>Progreso de la sesión: {Math.round(props.state().gameSession.progress)}%</Text>
+                <Ps5Text color={ps5Colors.text} fontSize={scale(17)} fontWeight={700}>{selectedGame()!.title}</Ps5Text>
+                <Ps5Text color={ps5Colors.mutedText} fontSize={scale(13)}>{selectedGame()!.subtitle}</Ps5Text>
+                <Ps5Text color={ps5Colors.mutedText} fontSize={scale(13)}>Progreso de la sesión: {Math.round(props.state().gameSession.progress)}%</Ps5Text>
               </Ps5Panel>
             </Show>
 
-            <Box direction="row" gap={scale(10)}>
+            <box direction="row" gap={scale(10)}>
               <Ps5Button id="switcher-resume" layer="overlay" width={scale(190)} height={scale(48)} label="Reanudar" onPress={resume} disabled={!selectedId()} screen={props} />
               <Ps5Button id="switcher-hub" layer="overlay" width={scale(190)} height={scale(48)} label="Abrir hub" onPress={openHub} disabled={!selectedId()} screen={props} />
               <Show when={props.state().gameSession.gameId}>
                 <Ps5Button id="switcher-close" layer="overlay" width={scale(190)} height={scale(48)} label="Cerrar juego" onPress={closeGame} screen={props} />
               </Show>
               <Ps5Button id="switcher-home" layer="overlay" width={scale(150)} height={scale(48)} label="Inicio" onPress={() => goHome(props)} screen={props} />
-            </Box>
-            <Text color={ps5Colors.mutedText} fontSize={scale(12)}>← / → para elegir · Enter para seleccionar · F2 para opciones</Text>
+            </box>
+            <Ps5Text color={ps5Colors.mutedText} fontSize={scale(12)}>← / → para elegir · Enter para seleccionar · F2 para opciones</Ps5Text>
           </Show>
         </Ps5Panel>
-      </Box>
+      </box>
     </Show>
   )
 }

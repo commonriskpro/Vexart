@@ -469,7 +469,7 @@ export declare function debugDumpCulledNodes(root: TGENode, viewport: {
 }): string;
 
 /** @public */
-export declare function debugDumpTree(target: NodeHandle | TGENode): string;
+export declare function debugDumpTree(target: NodeHandle): string;
 
 /**
  * Call at the START of each frame to track timing.
@@ -1382,7 +1382,7 @@ export declare type InteractionKind = (typeof INTERACTION_KIND)[keyof typeof INT
 /** @public */
 export declare type InteractionLayerState = {
     ref: (handle: NodeHandle) => void;
-    node: () => TGENode | null;
+    node: () => NodeHandle | null;
     mode: () => InteractionMode;
     begin: (mode?: Exclude<InteractionMode, "none">) => void;
     end: (mode?: Exclude<InteractionMode, "none">) => void;
@@ -1887,10 +1887,12 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      readonly isFocused: boolean;
      readonly children: NodeHandle[];
      readonly parent: NodeHandle | null;
-     readonly _node: TGENode;
  };
 
  declare type NodeImageExtra = {
+     source?: string;
+     revision?: number;
+     cancel?: () => void;
      buffer: {
          data: Uint8Array;
          width: number;
@@ -2770,8 +2772,8 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
  /** @public */
  export declare const solidRender: (code: () => TGENode, node: TGENode) => () => void;
 
- /** @public */
- export declare const spread: <T>(node: any, accessor: (() => T) | T, skipChildren?: boolean) => void;
+ /** Solid spread with the same NodeHandle ref contract as setProp. */
+ export declare function spread<T>(node: TGENode, accessor: (() => T) | T, skipChildren?: boolean): void;
 
  /** @public */
  export declare type SpringConfig = {
@@ -3466,8 +3468,8 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
  /** @public Update scroll container geometry from layout output. */
  export declare function updateScrollContainerGeometry(scrollId: string, viewportWidth: number, viewportHeight: number, contentWidth: number, contentHeight: number): void;
 
- /** @public */
- export declare const use: <A, T>(fn: (element: TGENode, arg: A) => T, element: TGENode, arg: A) => T;
+ /** Solid's universal compiler lowers refs and directives to `use`. */
+ export declare function use<A, T>(fn: (element: NodeHandle, arg: A) => T, element: TGENode, arg?: A): T;
 
  export { useContext }
 
@@ -3664,6 +3666,10 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
      };
      readonly vexart_image_asset_touch: {
          readonly args: [FFIType.uint64_t, FFIType.uint64_t];
+         readonly returns: FFIType.int32_t;
+     };
+     readonly vexart_image_asset_retain: {
+         readonly args: [FFIType.uint64_t];
          readonly returns: FFIType.int32_t;
      };
      readonly vexart_image_asset_release: {

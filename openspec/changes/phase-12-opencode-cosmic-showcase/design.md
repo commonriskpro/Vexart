@@ -2,7 +2,7 @@
 
 ## Decision: Port as a Vexart-native example, not a React adapter
 
-The source file is React DOM plus arbitrary Tailwind/CSS. Vexart's app framework intentionally targets React-familiar JSX over Vexart/Solid runtime rather than React DOM compatibility. The showcase therefore uses `@vexart/app` `Page`, `Box`, and `Text` components plus Solid signals.
+The source file is React DOM plus arbitrary Tailwind/CSS. Vexart's app framework intentionally targets React-familiar JSX over Vexart/Solid runtime rather than React DOM compatibility. The showcase therefore uses `@vexart/app` `Page`, engine `<box>` and `<text>` intrinsics, and Solid signals.
 
 ## Layout approach
 

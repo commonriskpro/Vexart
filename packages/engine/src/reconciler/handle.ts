@@ -12,10 +12,17 @@ export type NodeHandle = {
   readonly isFocused: boolean
   readonly children: NodeHandle[]
   readonly parent: NodeHandle | null
-  readonly _node: TGENode
 }
 
 const handleCache = new WeakMap<TGENode, NodeHandle>()
+const nodeByHandle = new WeakMap<NodeHandle, TGENode>()
+
+/** Resolve an engine-owned handle for internal reconciler code. */
+export function getHandleNode(handle: NodeHandle): TGENode {
+  const node = nodeByHandle.get(handle)
+  if (!node) throw new TypeError("Expected a NodeHandle created by Vexart")
+  return node
+}
 
 /** @public */
 export function createHandle(node: TGENode): NodeHandle {
@@ -34,9 +41,9 @@ export function createHandle(node: TGENode): NodeHandle {
     get isFocused() { return focusedId() === focusId },
     get children() { return node.children.map(createHandle) },
     get parent() { return node.parent ? createHandle(node.parent) : null },
-    get _node() { return node },
   }
 
   handleCache.set(node, handle)
+  nodeByHandle.set(handle, node)
   return handle
 }

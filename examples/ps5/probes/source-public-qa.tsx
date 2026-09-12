@@ -3,7 +3,7 @@ import { resolve } from "node:path"
 import sharp from "sharp"
 import { renderToBuffer, renderToBufferAfterInteractions } from "../../../packages/engine/src/testing/render-to-buffer"
 import { focusedId } from "vexart"
-import { Box, Dialog, DialogContent, DialogOverlay, Show, Text, createSignal, createTransition } from "vexart"
+import { Dialog, DialogContent, DialogOverlay, Show, createSignal, createTransition } from "vexart"
 import { ProbeScene, createProbeState } from "./public-consumer"
 
 function pixelDelta(left: Uint8Array, right: Uint8Array) {
@@ -94,34 +94,34 @@ function ClipFixture(props: { layer: boolean }) {
   fixtureSetOffset = state.setOffset
   fixtureClicked = state.clicked
   return (
-    <Box width={fixtureWidth} height={fixtureHeight} backgroundColor="#0b0d10" direction="column" padding={18} gap={10}>
-      <Text color="#f5f5f5" fontSize={16}>clip fixture</Text>
-      <Box width={fixtureViewportWidth} height={fixtureRowHeight} scrollX layer={props.layer} backgroundColor="#090c11">
-        <Box width={fixtureRowWidth} height={fixtureRowHeight} flexShrink={0} direction="row" gap={fixtureGap} transform={{ translateX: state.offset() }}>
+    <box width={fixtureWidth} height={fixtureHeight} backgroundColor="#0b0d10" direction="column" padding={18} gap={10}>
+      <text color="#f5f5f5" fontSize={16}>clip fixture</text>
+      <box width={fixtureViewportWidth} height={fixtureRowHeight} scrollX layer={props.layer} backgroundColor="#090c11">
+        <box width={fixtureRowWidth} height={fixtureRowHeight} flexShrink={0} direction="row" gap={fixtureGap} transform={{ translateX: state.offset() }}>
           {fixtureItems.map((item, index) => (
-            <Box width={fixtureItemWidth} height={fixtureRowHeight} flexShrink={0} focusable onPress={() => state.setClicked(index)} backgroundColor={item.color ?? "#303640"}>
+            <box width={fixtureItemWidth} height={fixtureRowHeight} flexShrink={0} focusable onPress={() => state.setClicked(index)} backgroundColor={item.color ?? "#303640"}>
               {item.src ? <img src={item.src} width={fixtureItemWidth} height={fixtureRowHeight} objectFit="cover" /> : null}
-            </Box>
+            </box>
           ))}
-        </Box>
-      </Box>
-      <Box width={150} height={32} focusable onPress={() => state.setOverlay(true)} backgroundColor="#303640" cornerRadius={6} alignX="center" alignY="center">
-        <Text color="#ffffff">Open overlay</Text>
-      </Box>
+        </box>
+      </box>
+      <box width={150} height={32} focusable onPress={() => state.setOverlay(true)} backgroundColor="#303640" cornerRadius={6} alignX="center" alignY="center">
+        <text color="#ffffff">Open overlay</text>
+      </box>
       <Show when={state.overlay()}>
         <Dialog onClose={() => state.setOverlay(false)}>
           <DialogOverlay backgroundColor="#000000b8" />
           <DialogContent width={240} padding={16} backgroundColor="#151a20">
-            <Box direction="column" gap={10}>
-              <Text color="#ffffff">Fixture overlay</Text>
-              <Box width={110} height={30} focusable onPress={() => state.setOverlay(false)} backgroundColor="#303640" alignX="center" alignY="center">
-                <Text color="#ffffff">Close</Text>
-              </Box>
-            </Box>
+            <box direction="column" gap={10}>
+              <text color="#ffffff">Fixture overlay</text>
+              <box width={110} height={30} focusable onPress={() => state.setOverlay(false)} backgroundColor="#303640" alignX="center" alignY="center">
+                <text color="#ffffff">Close</text>
+              </box>
+            </box>
           </DialogContent>
         </Dialog>
       </Show>
-    </Box>
+    </box>
   )
 }
 

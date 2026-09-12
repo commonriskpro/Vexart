@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js"
 import type { InteractionMode, TGENode } from "../ffi/node"
-import type { NodeHandle } from "./handle"
+import { getHandleNode, type NodeHandle } from "./handle"
 
 function getNodeInteractionMode(node: TGENode): InteractionMode {
   return (node.props.interactionMode as InteractionMode | undefined) ?? node._interactionMode
@@ -50,7 +50,7 @@ export function shouldFreezeInteractionLayer(node: TGENode | null | undefined): 
 /** @public */
 export type InteractionLayerState = {
   ref: (handle: NodeHandle) => void
-  node: () => TGENode | null
+  node: () => NodeHandle | null
   mode: () => InteractionMode
   begin: (mode?: Exclude<InteractionMode, "none">) => void
   end: (mode?: Exclude<InteractionMode, "none">) => void
@@ -61,23 +61,27 @@ export type InteractionBinding = "auto" | "none" | InteractionLayerState
 
 /** @public */
 export function useInteractionLayer(): InteractionLayerState {
-  let node: TGENode | null = null
+  let handle: NodeHandle | null = null
   const [mode, setMode] = createSignal<InteractionMode>("none")
 
-  function ref(handle: NodeHandle) {
-    node = handle._node
+  function ref(next: NodeHandle) {
+    handle = next
   }
 
   function begin(nextMode: Exclude<InteractionMode, "none"> = "drag") {
     setMode(nextMode)
-    if (node) beginNodeInteraction(node, nextMode)
+    if (handle) {
+      beginNodeInteraction(getHandleNode(handle), nextMode)
+    }
   }
 
   function end(expectedMode?: Exclude<InteractionMode, "none">) {
     if (expectedMode && mode() !== expectedMode) return
     setMode("none")
-    if (node) endNodeInteraction(node, expectedMode)
+    if (handle) {
+      endNodeInteraction(getHandleNode(handle), expectedMode)
+    }
   }
 
-  return { ref, node: () => node, mode, begin, end }
+  return { ref, node: () => handle, mode, begin, end }
 }

@@ -2,14 +2,15 @@ import assert from "node:assert/strict"
 import { fileURLToPath } from "node:url"
 import { renderToBufferAfterInteractions, type RenderToBufferOptions, type RenderToBufferResult } from "../../../packages/engine/src/testing/render-to-buffer"
 import type { TGENode } from "../../../packages/engine/src/ffi/node"
-import type { NodeHandle } from "../../../packages/engine/src/reconciler/handle"
+import { getHandleNode } from "../../../packages/engine/src/reconciler/handle"
+import type { NodeHandle } from "@vexart/engine"
 
 export const width = 240
 export const height = 180
 
 const IMAGE_SRC = fileURLToPath(new URL("./fixtures/quadrants.png", import.meta.url))
 const BACKGROUND = [8, 11, 22, 255]
-let rootHandle: NodeHandle | TGENode | undefined
+let rootHandle: NodeHandle | undefined
 
 type ImageState = "idle" | "loading" | "loaded" | "error"
 
@@ -22,17 +23,13 @@ function findImageState(node: TGENode): ImageState | undefined {
   return undefined
 }
 
-function rootNode(ref: NodeHandle | TGENode) {
-  return "_node" in ref ? ref._node : ref
-}
-
 function readImageState() {
-  return rootHandle ? findImageState(rootNode(rootHandle)) : undefined
+  return rootHandle ? findImageState(getHandleNode(rootHandle)) : undefined
 }
 
 export function Scene() {
   return (
-    <box ref={(handle) => { rootHandle = handle }} width={width} height={height} backgroundColor={0x080b16ff} padding={16} direction="column">
+    <box ref={(handle: NodeHandle) => { rootHandle = handle }} width={width} height={height} backgroundColor={0x080b16ff} padding={16} direction="column">
       <img src={IMAGE_SRC} width={160} height={120} objectFit="fill" />
     </box>
   )

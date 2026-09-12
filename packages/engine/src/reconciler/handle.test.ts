@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createNode, insertChild, removeChild } from "../ffi/node"
-import { createHandle } from "./handle"
+import { createHandle, getHandleNode } from "./handle"
 
 describe("createHandle", () => {
   test("wraps a node with correct id and kind", () => {
@@ -73,9 +73,14 @@ describe("createHandle", () => {
     expect(handle.parent).toBeNull()
   })
 
-  test("_node gives access to underlying node", () => {
+  test("keeps the engine node private while retaining an internal unwrap", () => {
     const node = createNode("box")
     const handle = createHandle(node)
-    expect(handle._node).toBe(node)
+    expect("_node" in handle).toBe(false)
+    expect(getHandleNode(handle)).toBe(node)
+  })
+
+  test("rejects handles not created by the engine", () => {
+    expect(() => getHandleNode({} as ReturnType<typeof createHandle>)).toThrow(TypeError)
   })
 })

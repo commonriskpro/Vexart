@@ -121,7 +121,7 @@ stop.
                        ▼
 ┌────────────────────────────────────────────────────┐
 │  @vexart/app — framework + layout helpers            │
-│  (Box, Text, router, CLI)                          │
+│  (box, text, router, CLI)                          │
 └──────────────────────┬─────────────────────────────┘
                        ▼
 ┌────────────────────────────────────────────────────┐
@@ -148,13 +148,17 @@ stop.
                  └──────────┘
 ```
 
+The retained `TGENode` scene/layout tree is internal to the TypeScript engine.
+The approved public node boundary is being narrowed to expose only the cached
+`NodeHandle` through refs; there is no public raw-node alternative.
+
 ### 2.2 Package layering (app framework + three engine/UI packages + internal)
 
 ```
 PUBLIC PACKAGES (shipped to consumers)
 
 @vexart/app       depends on: styled, headless, engine
-  App framework: Box, Text, layout helpers, router, className mapper, config, CLI
+  App framework: box, text, layout helpers, router, className mapper, config, CLI
 
 ┌───────────────────────────────────┐
 │  @vexart/styled                   │  depends on: headless, engine

@@ -6,20 +6,20 @@ description: Build a complete Vexart app in 30 lines.
 ## The Simplest App
 
 ```tsx
-import { createApp, Box, Text, colors } from "vexart"
+import { createApp, colors } from "vexart"
 
 await createApp(() => (
-  <Box
+  <box
     width="100%"
     height="100%"
     backgroundColor={colors.background}
     alignX="center"
     alignY="center"
   >
-    <Text color={colors.foreground} fontSize={16}>
+    <text color={colors.foreground} fontSize={16}>
       Hello from Vexart!
-    </Text>
-  </Box>
+    </text>
+  </box>
 ))
 ```
 
@@ -41,24 +41,24 @@ Vexart offers three entry points at different abstraction levels:
 ### `createApp()` — Recommended
 
 ```tsx
-import { createApp, Box, Text, Button, colors, radius, space } from "vexart"
+import { createApp, Button, colors, radius, space } from "vexart"
 
 function App() {
   return (
-    <Box backgroundColor={colors.background} padding={space[6]} direction="column" gap={space[3]}>
-      <Text color={colors.foreground} fontSize={20} fontWeight={700}>
+    <box backgroundColor={colors.background} padding={space[6]} direction="column" gap={space[3]}>
+      <text color={colors.foreground} fontSize={20} fontWeight={700}>
         My Terminal App
-      </Text>
+      </text>
       <Button
         onPress={() => process.exit(0)}
         renderButton={(ctx) => (
-          <Box {...ctx.buttonProps} backgroundColor={colors.primary}
+          <box {...ctx.buttonProps} backgroundColor={colors.primary}
                cornerRadius={radius.md} padding={space[3]}>
-            <Text color={colors.background}>Quit</Text>
-          </Box>
+            <text color={colors.background}>Quit</text>
+          </box>
         )}
       />
-    </Box>
+    </box>
   )
 }
 
@@ -76,17 +76,17 @@ function Counter() {
   const [count, setCount] = createSignal(0)
 
   return (
-    <Box direction="column" gap={8}>
-      <Text>Count: {count()}</Text>
+    <box direction="column" gap={8}>
+      <text>Count: {count()}</text>
       <Button
         onPress={() => setCount(c => c + 1)}
         renderButton={(ctx) => (
-          <Box {...ctx.buttonProps} backgroundColor={0x56d4c8ff} cornerRadius={6} padding={8}>
-            <Text color={0x0a0a0fff}>Increment</Text>
-          </Box>
+          <box {...ctx.buttonProps} backgroundColor={0x56d4c8ff} cornerRadius={6} padding={8}>
+            <text color={0x0a0a0fff}>Increment</text>
+          </box>
         )}
       />
-    </Box>
+    </box>
   )
 }
 ```

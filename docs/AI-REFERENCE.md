@@ -60,7 +60,7 @@ function BadCounter(props: { count: number }) {
   const countValue = props.count; 
   const doubled = countValue * 2; 
 
-  return <Text>{doubled}</Text>;
+  return <text>{doubled}</text>;
 }
 
 // ✅ CORRECT SOLIDJS / VEXART PATTERN:
@@ -68,7 +68,7 @@ function GoodCounter(props: { count: number }) {
   // Use createMemo or direct accessor functions for derived state
   const doubled = createMemo(() => props.count * 2);
 
-  return <Text>{doubled()}</Text>;
+  return <text>{doubled()}</text>;
 }
 ```
 
@@ -79,20 +79,20 @@ function GoodCounter(props: { count: number }) {
 // ❌ CATASTROPHIC ERROR: Destructuring breaks reactivity
 function MetricCard({ title, value }: { title: string; value: number }) {
   return (
-    <Box>
-      <Text>{title}</Text>
-      <Text>{value}</Text>
-    </Box>
+    <box>
+      <text>{title}</text>
+      <text>{value}</text>
+    </box>
   );
 }
 
 // ✅ CORRECT: Retain props reference or use splitProps
 function MetricCard(props: { title: string; value: number }) {
   return (
-    <Box>
-      <Text>{props.title}</Text>
-      <Text>{props.value}</Text>
-    </Box>
+    <box>
+      <text>{props.title}</text>
+      <text>{props.value}</text>
+    </box>
   );
 }
 ```
@@ -105,19 +105,19 @@ The Void theme system exports `themeColors`, an object backed by reactive getter
 import { themeColors } from "vexart";
 const { background, foreground } = themeColors; // STATIC STRINGS FOREVER!
 
-function ThemedBox() {
+function ThemedPanel() {
   // Will NEVER react to setTheme(lightTheme)
-  return <Box backgroundColor={background}><Text color={foreground}>Hello</Text></Box>;
+  return <box backgroundColor={background}><text color={foreground}>Hello</text></box>;
 }
 
 // ✅ CORRECT: Property access inside JSX prop expressions
 import { themeColors } from "vexart";
 
-function ThemedBox() {
+function ThemedPanel() {
   return (
-    <Box backgroundColor={themeColors.background}>
-      <Text color={themeColors.foreground}>Hello</Text>
-    </Box>
+    <box backgroundColor={themeColors.background}>
+      <text color={themeColors.foreground}>Hello</text>
+    </box>
   );
 }
 ```
@@ -131,22 +131,22 @@ import { For, Show, Switch, Match } from "vexart";
 // ✅ Arrays: Always use <For>
 <For each={items()}>
   {(item, index) => (
-    <Box className="p-2 border border-border">
-      <Text>{item.name} (Index: {index()})</Text>
-    </Box>
+    <box className="p-2 border border-border">
+      <text>{item.name} (Index: {index()})</text>
+    </box>
   )}
 </For>
 
 // ✅ Conditionals: Always use <Show>
-<Show when={isLoggedIn()} fallback={<Text>Please sign in</Text>}>
+<Show when={isLoggedIn()} fallback={<text>Please sign in</text>}>
   <UserProfile user={currentUser()} />
 </Show>
 
 // ✅ Multi-branch conditionals: Always use <Switch> / <Match>
-<Switch fallback={<Text>Status Unknown</Text>}>
-  <Match when={status() === "loading"}><Text>Loading...</Text></Match>
-  <Match when={status() === "error"}><Text>Error occurred</Text></Match>
-  <Match when={status() === "success"}><Text>Success!</Text></Match>
+<Switch fallback={<text>Status Unknown</text>}>
+  <Match when={status() === "loading"}><text>Loading...</text></Match>
+  <Match when={status() === "error"}><text>Error occurred</text></Match>
+  <Match when={status() === "success"}><text>Success!</text></Match>
 </Switch>
 ```
 
@@ -165,28 +165,27 @@ function Clock() {
     onCleanup(() => clearInterval(timer));
   });
 
-  return <Text>{time()}</Text>;
+  return <text>{time()}</text>;
 }
 ```
 
 ---
 
-## 3. Element Taxonomy: Intrinsics vs App Primitives vs Hallucinations
+## 3. Element Taxonomy: Intrinsics vs Components vs Hallucinations
 
-Vexart has a strict two-layer element taxonomy. Mixing this up causes immediate compilation or reconciliation failure.
+Vexart has a strict intrinsic element taxonomy. Mixing this up causes immediate compilation or reconciliation failure.
 
 | Taxonomy Level | Source | Elements | Support `className`? | Description |
 | :--- | :--- | :--- | :---: | :--- |
-| **Engine Intrinsics** | `@vexart/engine` | `<box>`, `<text>`, `<img>` / `<image>`, `<canvas>` | **NO** | Native layout and rendering nodes. Accept only raw typed props. |
-| **App Primitives** | `@vexart/app` / `"vexart"` | `<Box>`, `<Text>` | **YES** | Wrapper components mapping Tailwind-like utility classes to engine props. |
+| **Engine Intrinsics** | `@vexart/engine` / `"vexart"` | `<box>`, `<text>`, `<img>` / `<image>`, `<canvas>` | **YES for `box`/`text`** | Native layout and rendering nodes. `@vexart/app` installs the `className` resolver for the layout and text intrinsics. |
 | **Headless Components** | `@vexart/headless` / `"vexart"` | `<ToggleSwitch>`, `<Select>`, `<Dialog>`, `<VirtualList>`, etc. | N/A | Unstyled behavior and keyboard/mouse interaction contracts. |
-| **Styled Void Components**| `@vexart/styled` / `"vexart"` | `<Button>`, `<Card>`, `<VoidInput>`, `<VoidTabs>`, `<VoidDialog>`, etc. | **NO (Only App Primitives <Box> and <Text> support className; wrap Void components in <Box> if utility styling is needed)** | Pre-styled design system implementing the Void OLED theme. |
+| **Styled Void Components**| `@vexart/styled` / `"vexart"` | `<Button>`, `<Card>`, `<VoidInput>`, `<VoidTabs>`, `<VoidDialog>`, etc. | **NO (wrap Void components in `<box>` if utility styling is needed)** | Pre-styled design system implementing the Void OLED theme. |
 
 ### ⛔ STRICTLY FORBIDDEN WEB HALLUCINATIONS
 The reconciler has **NO HTML DOM**. The following tags **DO NOT EXIST** and will crash the reconciler:
 - ❌ `<div>`, `<span>`, `<p>`, `<a>`, `<button>`, `<input>`, `<ul>`, `<li>`, `<table>`, `<tr>`, `<td>`, `<section>`, `<header>`, `<footer>`.
 - ❌ `<scroll>` is **NOT an intrinsic element**. The ONLY four intrinsics that exist are `<box>`, `<text>`, `<image>` (or `<img>`), and `<canvas>`. For scrolling containers, use `<box scrollY scrollId="...">` or `<ScrollView>` / `<VoidScrollView>`.
-- ❌ Raw text inside `<box>`: `<box>Hello</box>` is **ILLEGAL**. All text strings **MUST** be enclosed in `<text>` or `<Text>`!
+- ❌ Raw text inside `<box>`: `<box>Hello</box>` is **ILLEGAL**. All text strings **MUST** be enclosed in `<text>`.
 - ❌ Deleted legacy primitives: `<Span>`, `<RichText>`, `<WrapRow>`, `@vexart/primitives`. (Package `@vexart/primitives` was deleted and merged into `@vexart/app`).
 
 ```tsx
@@ -197,9 +196,9 @@ The reconciler has **NO HTML DOM**. The following tags **DO NOT EXIST** and will
 </div>
 
 // ✅ CORRECT:
-<Box className="flex-col">
-  <Text>Valid primitive structure</Text>
-</Box>
+<box className="flex-col">
+  <text>Valid primitive structure</text>
+</box>
 ```
 
 ---
@@ -212,7 +211,7 @@ Vexart uses Flexily, an embedded sub-pixel layout engine supporting both Flexbox
 Unlike browser CSS (which defaults to `row`), Vexart containers default to `direction="column"`. For horizontal layout, you **MUST** explicitly specify `direction="row"` or `className="flex-row"`.
 
 ### 4.1 Flexbox Properties
-Set on `<box>` or `<Box>` (or via `className`):
+Set on `<box>` (or via `className`):
 - `direction` / `flexDirection`: `"column" | "row"` (Default: `"column"`).
 - `alignX` / `justifyContent`: `"left" | "center" | "right" | "space-between" | "flex-start" | "flex-end"`.
 - `alignY` / `alignItems`: `"top" | "center" | "bottom" | "space-between" | "flex-start" | "flex-end"`.
@@ -261,7 +260,7 @@ Child nodes placed in a Grid container can use:
 - `justifySelf` / `alignSelf`: Per-item alignment overrides (`"start" | "end" | "center" | "stretch"`).
 
 ```tsx
-<Box
+<box
   layout="grid"
   width="100%"
   height={600}
@@ -274,19 +273,19 @@ Child nodes placed in a Grid container can use:
   ]}
   gap={12}
 >
-  <Box gridArea="header" backgroundColor="#171717" padding={12}>
-    <Text fontSize={18} fontWeight={700}>Header</Text>
-  </Box>
-  <Box gridArea="nav" backgroundColor="#1a1a1a" padding={12}>
-    <Text>Navigation</Text>
-  </Box>
-  <Box gridArea="content" backgroundColor="#0f0f0f" padding={16}>
-    <Text>Main Content</Text>
-  </Box>
-  <Box gridArea="footer" backgroundColor="#171717" padding={8}>
-    <Text fontSize={12} color="#a3a3a3">Status: Ready</Text>
-  </Box>
-</Box>
+  <box gridArea="header" backgroundColor="#171717" padding={12}>
+    <text fontSize={18} fontWeight={700}>Header</text>
+  </box>
+  <box gridArea="nav" backgroundColor="#1a1a1a" padding={12}>
+    <text>Navigation</text>
+  </box>
+  <box gridArea="content" backgroundColor="#0f0f0f" padding={16}>
+    <text>Main Content</text>
+  </box>
+  <box gridArea="footer" backgroundColor="#171717" padding={8}>
+    <text fontSize={12} color="#a3a3a3">Status: Ready</text>
+  </box>
+</box>
 ```
 
 ### 4.3 Floating Elements (Out-of-Flow Overlays)
@@ -302,7 +301,7 @@ For tooltips, context menus, floating badges, or dialogs, elements can be positi
 
 ## 5. Styling & Theming (`className` and Tokens)
 
-The `@vexart/app` package provides `<Box>` and `<Text>` primitives that parse Tailwind-like utility class strings at runtime with fast caching.
+The `@vexart/app` package enables the fast-cached Tailwind-like utility compiler for the `<box>` and `<text>` intrinsics.
 
 ### 5.1 Supported Tailwind Utility Classes
 - **Spacing**:
@@ -373,10 +372,10 @@ setTheme(customTheme);
 ```
 
 ### 5.3 Native GPU Visual Effects (Props API)
-For fine-grained effect control, apply props directly to `<box>` or `<Box>`:
+For fine-grained effect control, apply props directly to `<box>`:
 
 ```tsx
-<Box
+<box
   // Drop Shadow (single or multi-shadow array)
   shadow={[
     { x: 0, y: 4, blur: 8, spread: 0, color: 0x00000040 },
@@ -454,7 +453,7 @@ Vexart maintains a clean separation between high-level synthetic action events a
    - `setPointerCapture(nodeId)` locks all mouse movement and release events to the target node until `releasePointerCapture(nodeId)` or button release. Essential for sliders and dragging.
 
 ```tsx
-<Box
+<box
   focusable
   onPress={(e) => {
     e?.stopPropagation(); // Prevent parent container from catching press
@@ -513,9 +512,9 @@ Enable scrolling on containers by setting `scrollX={true}` or `scrollY={true}`:
 
   const scroller = createScrollHandle("my-scroll-list");
   // In JSX:
-  <Box scrollY scrollId="my-scroll-list" height={300}>
+  <box scrollY scrollId="my-scroll-list" height={300}>
     {/* Large content */}
-  </Box>
+  </box>
 
   // Programmatic scroll: takes a negative vertical offset `y <= 0` to scroll down:
   scroller.scrollTo(-500); // Scroll down by 500px from the top (offset: -500)
@@ -532,16 +531,16 @@ Enable scrolling on containers by setting `scrollX={true}` or `scrollY={true}`:
 Requires a valid `Terminal` instance. In applications mounted via `createApp()` or `mountApp()`, obtain the managed terminal using `useAppTerminal()`:
 
 ```tsx
-import { createApp, useAppTerminal, useTerminalDimensions, Box, Text } from "vexart";
+import { createApp, useAppTerminal, useTerminalDimensions } from "vexart";
 
 function ResponsiveHeader() {
   const terminal = useAppTerminal();
   const dims = useTerminalDimensions(terminal);
 
   return (
-    <Box className="w-full p-2 bg-card border-b border-border">
-      <Text>Cols: {dims.columns()} | Rows: {dims.rows()} | Pixels: {dims.width()}×{dims.height()}</Text>
-    </Box>
+    <box className="w-full p-2 bg-card border-b border-border">
+      <text>Cols: {dims.columns()} | Rows: {dims.rows()} | Pixels: {dims.width()}×{dims.height()}</text>
+    </box>
   );
 }
 ```
@@ -550,19 +549,19 @@ function ResponsiveHeader() {
 Tracks mouse pointer hover status with optional debounce timers:
 
 ```tsx
-import { useHover, Box, Text } from "vexart";
+import { useHover } from "vexart";
 
 function HoverCard() {
   const { hovered, hoverProps } = useHover({ delay: 50, leaveDelay: 100 });
 
   return (
-    <Box
+    <box
       {...hoverProps}
       className="p-4 rounded-lg border border-border"
       backgroundColor={hovered() ? "#262626" : "#171717"}
     >
-      <Text>{hovered() ? "Hovered!" : "Resting"}</Text>
-    </Box>
+      <text>{hovered() ? "Hovered!" : "Resting"}</text>
+    </box>
   );
 }
 ```
@@ -571,7 +570,7 @@ function HoverCard() {
 Provides managed drag interaction with automatic pointer capture and hit bounds tracking:
 
 ```tsx
-import { useDrag, Box, Text } from "vexart";
+import { useDrag } from "vexart";
 
 function DraggableHandle() {
   const { dragging, dragProps } = useDrag({
@@ -581,13 +580,13 @@ function DraggableHandle() {
   });
 
   return (
-    <Box
+    <box
       {...dragProps}
       className="p-3 rounded bg-primary cursor-pointer"
       opacity={dragging() ? 0.7 : 1.0}
     >
-      <Text>{dragging() ? "Dragging..." : "Grab Handle"}</Text>
-    </Box>
+      <text>{dragging() ? "Dragging..." : "Grab Handle"}</text>
+    </box>
   );
 }
 ```
@@ -596,7 +595,7 @@ function DraggableHandle() {
 Reactive asynchronous data fetching with automatic loading states, retries, and optimistic mutations:
 
 ```tsx
-import { useQuery, useMutation, Show, For, Box, Text } from "vexart";
+import { useQuery, useMutation, Show, For } from "vexart";
 
 function UserList() {
   const users = useQuery("users", () => fetch("/api/users").then(r => r.json()), {
@@ -609,13 +608,13 @@ function UserList() {
   });
 
   return (
-    <Box className="flex-col gap-2">
-      <Show when={!users.loading()} fallback={<Text>Loading users...</Text>}>
+    <box className="flex-col gap-2">
+      <Show when={!users.loading()} fallback={<text>Loading users...</text>}>
         <For each={users.data()}>
-          {(u) => <Text>{u.name}</Text>}
+          {(u) => <text>{u.name}</text>}
         </For>
       </Show>
-    </Box>
+    </box>
   );
 }
 ```
@@ -653,8 +652,7 @@ import {
   createApp,
   mountApp,
   Page,
-  Box,                 // App primitive with className support (@vexart/app)
-  Text,                // App primitive with className support (@vexart/app)
+  // <box>/<text> intrinsics receive className support from @vexart/app
   useAppTerminal,
 
   // OLED Void Themed Components (@vexart/styled)
@@ -737,7 +735,7 @@ import {
 
 ### Collision Resolution Rules
 1. **`Button` vs `VoidButton` (CRITICAL)**: `Button` exported from `"vexart"` is the **headless, unstyled primitive** from `@vexart/headless` (which takes a `renderButton` callback). For the pre-styled, themed Void design system button with variants (`default`, `secondary`, `destructive`, `outline`, `ghost`), you **MUST** use `VoidButton`.
-2. **`Box` and `Text`**: Exported from `@vexart/app` (supporting `className` utility class parsing).
+2. **`<box>` and `<text>`**: Engine intrinsics; `@vexart/app` installs `className` utility class parsing for them. Type them with `JSX.IntrinsicElements["box"]` and `JSX.IntrinsicElements["text"]` when needed.
 3. **`ToggleSwitch`**: Headless switch is exported as `ToggleSwitch` to prevent collision with SolidJS control flow `<Switch>`.
 4. **`useRouter`**: Exported from `@vexart/app` (app-level router).
 
@@ -751,21 +749,21 @@ The following four templates are complete, syntactically verified, and copy-past
 A complete standalone interactive CLI tool featuring counter state, key bindings, quit handling, and terminal auto-sizing.
 
 ```tsx
-import { createApp, Box, Text, VoidButton, createSignal } from "vexart";
+import { createApp, VoidButton, createSignal } from "vexart";
 
 function CounterApp() {
   const [count, setCount] = createSignal(0);
 
   return (
-    <Box className="w-full h-full p-8 flex-col items-center justify-center bg-background">
-      <Box className="p-6 bg-card rounded-xl border border-border flex-col items-center gap-4 shadow-lg">
-        <Text className="text-xl font-bold text-foreground">
+    <box className="w-full h-full p-8 flex-col items-center justify-center bg-background">
+      <box className="p-6 bg-card rounded-xl border border-border flex-col items-center gap-4 shadow-lg">
+        <text className="text-xl font-bold text-foreground">
           Vexart Minimal CLI Counter
-        </Text>
-        <Text className="text-4xl font-bold text-primary">
+        </text>
+        <text className="text-4xl font-bold text-primary">
           {count()}
-        </Text>
-        <Box className="flex-row gap-3 mt-2">
+        </text>
+        <box className="flex-row gap-3 mt-2">
           <VoidButton
             variant="default"
             onPress={() => setCount((c) => c + 1)}
@@ -784,12 +782,12 @@ function CounterApp() {
           >
             Reset
           </VoidButton>
-        </Box>
-        <Text className="text-xs text-muted-foreground mt-4">
+        </box>
+        <text className="text-xs text-muted-foreground mt-4">
           Press Tab to navigate buttons • Enter/Space to activate • Press 'q' or Ctrl+C to exit
-        </Text>
-      </Box>
-    </Box>
+        </text>
+      </box>
+    </box>
   );
 }
 
@@ -807,8 +805,6 @@ A production form utilizing `createForm` from `@vexart/headless`, styled Void in
 ```tsx
 import {
   createApp,
-  Box,
-  Text,
   VoidButton,
   VoidInput,
   VoidCheckbox,
@@ -854,8 +850,8 @@ function FormApp() {
   });
 
   return (
-    <Box className="w-full h-full p-8 flex-col items-center justify-center bg-background">
-      <Box className="w-96">
+    <box className="w-full h-full p-8 flex-col items-center justify-center bg-background">
+      <box className="w-96">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>User Registration</VoidCardTitle>
@@ -863,67 +859,67 @@ function FormApp() {
           </VoidCardHeader>
 
           <VoidCardContent>
-            <Box className="flex-col gap-4">
+            <box className="flex-col gap-4">
               {/* Username Field */}
-              <Box className="flex-col gap-1">
-                <Text className="text-sm font-medium text-foreground">Username</Text>
+              <box className="flex-col gap-1">
+                <text className="text-sm font-medium text-foreground">Username</text>
                 <VoidInput
                   value={form.values.username()}
                   onChange={(val) => form.setValue("username", val)}
                   placeholder="johndoe"
                 />
                 <Show when={form.errors.username()}>
-                  <Text className="text-xs text-destructive">{form.errors.username()}</Text>
+                  <text className="text-xs text-destructive">{form.errors.username()}</text>
                 </Show>
-              </Box>
+              </box>
 
               {/* Email Field */}
-              <Box className="flex-col gap-1">
-                <Text className="text-sm font-medium text-foreground">Email Address</Text>
+              <box className="flex-col gap-1">
+                <text className="text-sm font-medium text-foreground">Email Address</text>
                 <VoidInput
                   value={form.values.email()}
                   onChange={(val) => form.setValue("email", val)}
                   placeholder="john@example.com"
                 />
                 <Show when={form.errors.email()}>
-                  <Text className="text-xs text-destructive">{form.errors.email()}</Text>
+                  <text className="text-xs text-destructive">{form.errors.email()}</text>
                 </Show>
-              </Box>
+              </box>
 
               {/* Terms Checkbox */}
-              <Box className="flex-row items-center gap-2 mt-2">
+              <box className="flex-row items-center gap-2 mt-2">
                 <VoidCheckbox
                   checked={form.values.terms()}
                   onChange={(checked) => form.setValue("terms", checked)}
                 />
-                <Text className="text-sm text-foreground">I accept the service agreement</Text>
-              </Box>
+                <text className="text-sm text-foreground">I accept the service agreement</text>
+              </box>
               <Show when={form.errors.terms()}>
-                <Text className="text-xs text-destructive">{form.errors.terms()}</Text>
+                <text className="text-xs text-destructive">{form.errors.terms()}</text>
               </Show>
-            </Box>
+            </box>
           </VoidCardContent>
 
           <VoidCardFooter>
-            <Box className="flex-row justify-between items-center w-full">
+            <box className="flex-row justify-between items-center w-full">
               <VoidButton variant="outline" onPress={() => form.reset()}>
                 Reset
               </VoidButton>
               <VoidButton variant="default" onPress={() => form.submit()}>
                 Submit Registration
               </VoidButton>
-            </Box>
+            </box>
           </VoidCardFooter>
         </VoidCard>
-      </Box>
+      </box>
 
       <Show when={submittedData()}>
-        <Box className="mt-4 p-4 bg-card rounded-lg border border-border flex-col gap-1">
-          <Text className="text-xs font-semibold text-primary">Form Submitted Successfully:</Text>
-          <Text className="text-xs text-muted-foreground">{submittedData()!}</Text>
-        </Box>
+        <box className="mt-4 p-4 bg-card rounded-lg border border-border flex-col gap-1">
+          <text className="text-xs font-semibold text-primary">Form Submitted Successfully:</text>
+          <text className="text-xs text-muted-foreground">{submittedData()!}</text>
+        </box>
       </Show>
-    </Box>
+    </box>
   );
 }
 
@@ -938,8 +934,6 @@ A complex operations center UI using CSS Grid layouts, real-time simulated telem
 ```tsx
 import {
   createApp,
-  Box,
-  Text,
   VoidBadge,
   VoidTabs,
   createSignal,
@@ -977,7 +971,7 @@ function DashboardApp() {
   });
 
   return (
-    <Box
+    <box
       layout="grid"
       width="100%"
       height="100%"
@@ -992,39 +986,39 @@ function DashboardApp() {
       className="p-3 bg-background"
     >
       {/* Header Area */}
-      <Box gridArea="header" className="px-4 flex-row items-center justify-between bg-card rounded-lg border border-border">
-        <Box className="flex-row items-center gap-3">
-          <Text className="text-base font-bold text-foreground">CLUSTER CONTROL MATRIX</Text>
+      <box gridArea="header" className="px-4 flex-row items-center justify-between bg-card rounded-lg border border-border">
+        <box className="flex-row items-center gap-3">
+          <text className="text-base font-bold text-foreground">CLUSTER CONTROL MATRIX</text>
           <VoidBadge variant="outline">REGION: US-EAST-1</VoidBadge>
-        </Box>
-        <Box className="flex-row items-center gap-2">
-          <Text className="text-xs text-muted-foreground">SHM Transport:</Text>
+        </box>
+        <box className="flex-row items-center gap-2">
+          <text className="text-xs text-muted-foreground">SHM Transport:</text>
           <VoidBadge variant="default">ONLINE</VoidBadge>
-        </Box>
-      </Box>
+        </box>
+      </box>
 
       {/* Sidebar Area */}
-      <Box gridArea="sidebar" className="p-4 flex-col gap-4 bg-card rounded-lg border border-border">
-        <Text className="text-sm font-semibold text-foreground">METRICS OVERVIEW</Text>
+      <box gridArea="sidebar" className="p-4 flex-col gap-4 bg-card rounded-lg border border-border">
+        <text className="text-sm font-semibold text-foreground">METRICS OVERVIEW</text>
         
-        <Box className="flex-col gap-1 p-3 bg-background rounded border border-border">
-          <Text className="text-xs text-muted-foreground">CPU UTILIZATION</Text>
-          <Text className="text-xl font-bold text-primary">{cpuUsage()}%</Text>
-        </Box>
+        <box className="flex-col gap-1 p-3 bg-background rounded border border-border">
+          <text className="text-xs text-muted-foreground">CPU UTILIZATION</text>
+          <text className="text-xl font-bold text-primary">{cpuUsage()}%</text>
+        </box>
 
-        <Box className="flex-col gap-1 p-3 bg-background rounded border border-border">
-          <Text className="text-xs text-muted-foreground">MEMORY RESIDENT</Text>
-          <Text className="text-xl font-bold text-foreground">{memUsage()}%</Text>
-        </Box>
+        <box className="flex-col gap-1 p-3 bg-background rounded border border-border">
+          <text className="text-xs text-muted-foreground">MEMORY RESIDENT</text>
+          <text className="text-xl font-bold text-foreground">{memUsage()}%</text>
+        </box>
 
-        <Box className="flex-col gap-1 p-3 bg-background rounded border border-border">
-          <Text className="text-xs text-muted-foreground">INGRESS RATE</Text>
-          <Text className="text-xl font-bold text-foreground">{requestsPerSec()} req/s</Text>
-        </Box>
-      </Box>
+        <box className="flex-col gap-1 p-3 bg-background rounded border border-border">
+          <text className="text-xs text-muted-foreground">INGRESS RATE</text>
+          <text className="text-xl font-bold text-foreground">{requestsPerSec()} req/s</text>
+        </box>
+      </box>
 
       {/* Main Content Area */}
-      <Box gridArea="content" className="p-4 flex-col gap-4 bg-card rounded-lg border border-border">
+      <box gridArea="content" className="p-4 flex-col gap-4 bg-card rounded-lg border border-border">
         <VoidTabs
           activeTab={activeTab()}
           onTabChange={setActiveTab}
@@ -1032,32 +1026,32 @@ function DashboardApp() {
             {
               label: "Live Cluster Logs",
               content: () => (
-                <Box className="flex-col gap-2 mt-2 p-3 bg-background rounded border border-border h-64 overflow-y-scroll">
+                <box className="flex-col gap-2 mt-2 p-3 bg-background rounded border border-border h-64 overflow-y-scroll">
                   <For each={logs()}>
-                    {(log) => <Text className="text-xs font-medium text-muted-foreground">{log}</Text>}
+                    {(log) => <text className="text-xs font-medium text-muted-foreground">{log}</text>}
                   </For>
-                </Box>
+                </box>
               ),
             },
             {
               label: "Service Nodes",
               content: () => (
-                <Box className="flex-col gap-2 mt-2">
-                  <Text className="text-sm text-foreground">Active Workloads: 14 pods across 3 worker nodes.</Text>
-                  <Text className="text-xs text-muted-foreground">All nodes passing deep health checks.</Text>
-                </Box>
+                <box className="flex-col gap-2 mt-2">
+                  <text className="text-sm text-foreground">Active Workloads: 14 pods across 3 worker nodes.</text>
+                  <text className="text-xs text-muted-foreground">All nodes passing deep health checks.</text>
+                </box>
               ),
             },
           ]}
         />
-      </Box>
+      </box>
 
       {/* Footer Area */}
-      <Box gridArea="footer" className="px-4 flex-row items-center justify-between bg-card rounded border border-border">
-        <Text className="text-xs text-muted-foreground">Vexart Kernel Engine • Native Pipeline</Text>
-        <Text className="text-xs text-muted-foreground">Press 'q' to disconnect</Text>
-      </Box>
-    </Box>
+      <box gridArea="footer" className="px-4 flex-row items-center justify-between bg-card rounded border border-border">
+        <text className="text-xs text-muted-foreground">Vexart Kernel Engine • Native Pipeline</text>
+        <text className="text-xs text-muted-foreground">Press 'q' to disconnect</text>
+      </box>
+    </box>
   );
 }
 
@@ -1072,8 +1066,6 @@ A modal dialog pattern demonstrating glassmorphic backdrop blur and automatic fo
 ```tsx
 import {
   createApp,
-  Box,
-  Text,
   VoidButton,
   VoidDialog,
   VoidDialogTitle,
@@ -1119,24 +1111,24 @@ function ModalDemoApp() {
   const [actionConfirmed, setActionConfirmed] = createSignal(false);
 
   return (
-    <Box className="w-full h-full p-8 flex-col items-center justify-center bg-background">
-      <Box className="p-8 bg-card rounded-xl border border-border flex-col items-center gap-4">
-        <Text className="text-lg font-bold text-foreground">
+    <box className="w-full h-full p-8 flex-col items-center justify-center bg-background">
+      <box className="p-8 bg-card rounded-xl border border-border flex-col items-center gap-4">
+        <text className="text-lg font-bold text-foreground">
           System Action Center
-        </Text>
-        <Text className="text-sm text-muted-foreground">
+        </text>
+        <text className="text-sm text-muted-foreground">
           Modals automatically trap Tab focus and dismiss on Escape or overlay click.
-        </Text>
+        </text>
         <VoidButton variant="destructive" onPress={() => setModalOpen(true)}>
           Purge Storage Node
         </VoidButton>
 
         <Show when={actionConfirmed()}>
-          <Text className="text-xs text-primary mt-2">
+          <text className="text-xs text-primary mt-2">
             Status: Storage node purge command acknowledged.
-          </Text>
+          </text>
         </Show>
-      </Box>
+      </box>
 
       {/* Modal Dialog with Automatic Focus Scoping & Glassmorphic Blur */}
       <Show when={modalOpen()}>
@@ -1145,7 +1137,7 @@ function ModalDemoApp() {
           onConfirm={() => setActionConfirmed(true)}
         />
       </Show>
-    </Box>
+    </box>
   );
 }
 
@@ -1160,14 +1152,14 @@ The following matrix documents the most frequent critical hallucinations made by
 
 | # | Anti-Pattern / Hallucination | Root-Cause Reason AIs Do It | Catastrophic Failure Symptom | Architectural Fix |
 | :- | :--- | :--- | :--- | :--- |
-| **1** | `const { background } = themeColors;` | Treating `themeColors` as a static JSON dictionary. | Color strings snapshot once; `setTheme()` never changes color. | Read properties directly in JSX: `<Box backgroundColor={themeColors.background}>` |
+| **1** | `const { background } = themeColors;` | Treating `themeColors` as a static JSON dictionary. | Color strings snapshot once; `setTheme()` never changes color. | Read properties directly in JSX: `<box backgroundColor={themeColors.background}>` |
 | **2** | `const { title, count } = props;` | React habits where props are plain objects. | Reactivity severed; changes to `props.count` will not re-render. | Access via `props.title`, `props.count`, or use `splitProps(props, [...])`. |
-| **3** | `<div>`, `<span>`, `<p>`, `<button>` | Web DOM muscle memory. | Reconciler throws unknown intrinsic element exception immediately. | Use `<Box>` and `<Text>` from `"vexart"` (or `<box>` and `<text>`). |
-| **4** | `<box>Hello World</box>` | HTML allows text directly inside container tags. | Reconciler crash: `<box>` only accepts element children, not text. | Always wrap text strings in `<Text>` or `<text>`. |
-| **5** | `items.map(item => <Box>...)` | React array mapping pattern. | Loss of key reconciliation, leaks on update, broken re-ordering. | Always use `<For each={items()}>{(item) => ...}</For>`. |
+| **3** | `<div>`, `<span>`, `<p>`, `<button>` | Web DOM muscle memory. | Reconciler throws unknown intrinsic element exception immediately. | Use `<box>` and `<text>` from `"vexart"` (or `<box>` and `<text>`). |
+| **4** | `<box>Hello World</box>` | HTML allows text directly inside container tags. | Reconciler crash: `<box>` only accepts element children, not text. | Always wrap text strings in `<text>` or `<text>`. |
+| **5** | `items.map(item => <box>...)` | React array mapping pattern. | Loss of key reconciliation, leaks on update, broken re-ordering. | Always use `<For each={items()}>{(item) => ...}</For>`. |
 | **6** | `useState(0)`, `useEffect(...)` | React Hook hallucination. | Runtime ReferenceError: `useState` is not defined. | Use SolidJS primitives: `createSignal(0)`, `createEffect(...)`. |
 | **7** | `onClick={() => ...}` | Web DOM event naming. | Prop ignored or fails to bubble; Enter/Space will not activate. | Use `onPress={() => ...}` for interactive buttons and clickable boxes. |
-| **8** | Expecting `<Span>`, `<RichText>`, `<WrapRow>` | Outdated documentation or deleted packages (`@vexart/primitives`). | Module not found or export undefined. | Use `<Box>` and `<Text>` with Flexbox props or `className`. |
+| **8** | Expecting `<Span>`, `<RichText>`, `<WrapRow>` | Outdated documentation or deleted packages (`@vexart/primitives`). | Module not found or export undefined. | Use `<box>` and `<text>` with Flexbox props or `className`. |
 | **9** | Forgetting `focusable={true}` on custom interactive `<box>` | Assuming all elements with click handlers receive keyboard focus. | Tab key skips the element completely; inaccessible via keyboard. | Add `focusable={true}` (or `focusable`) to any element handling `onKeyDown` / `onPress`. |
 | **10**| Dynamic `itemHeight` in `VirtualList` | CSS flex assumption that items can have variable heights. | Virtual scroll calculation corrupts viewport indexing and jitters. | Provide fixed numeric `itemHeight: number` (e.g. `itemHeight={32}`). |
 | **11**| Passing raw CSS strings (`style="display: flex"`) | Browser CSS habits. | Reconciler ignores string styles or throws type error. | Use `className` utility classes (`className="flex-row p-4"`) or typed props. |

@@ -1,5 +1,4 @@
 import {
-  Box,
   Dialog,
   DialogOverlay,
   Show,
@@ -60,13 +59,13 @@ function UnknownScreen(props: Ps5ScreenProps) {
   const label = () => screenLabels[props.state().screen] ?? "Esta área"
   const focusId = () => props.state().focusedId ?? "in-progress-back"
   return (
-    <Box width={viewport.width()} height={viewport.height()} backgroundColor={ps5Colors.background} alignX="center" alignY="center">
+    <box width={viewport.width()} height={viewport.height()} backgroundColor={ps5Colors.background} alignX="center" alignY="center">
       <Ps5Panel width={scale(640)} padding={scale(38)} gap={scale(16)} direction="column" alignX="center" backgroundColor="#10151cf0" borderColor="#ffffff32" cornerRadius={scale(20)}>
         <Ps5Text color={ps5Colors.text} fontSize={scale(30)} fontWeight={700}>{label()}</Ps5Text>
         <Ps5Text color={ps5Colors.mutedText} fontSize={scale(16)} alignX="center">No hay un renderer registrado para esta ruta.</Ps5Text>
         <Show when={focusId()} keyed>{(id) => <Ps5Button id={id} width="100%" height={scale(52)} label="Volver" onPress={props.actions.back} screen={props} />}</Show>
       </Ps5Panel>
-    </Box>
+    </box>
   )
 }
 
@@ -74,13 +73,13 @@ function OverlayRouteScreen(props: Ps5ScreenProps & { label: string; owner: stri
   const viewport = usePs5Viewport()
   const scale = (value: number) => ps5Scale(viewport, value)
   return (
-    <Box width={viewport.width()} height={viewport.height()} backgroundColor={ps5Colors.background} alignX="center" alignY="center">
+    <box width={viewport.width()} height={viewport.height()} backgroundColor={ps5Colors.background} alignX="center" alignY="center">
       <Ps5Panel width={scale(640)} padding={scale(38)} gap={scale(16)} direction="column" alignX="center" backgroundColor="#10151cf0" borderColor="#ffffff32" cornerRadius={scale(20)}>
         <Ps5Text color={ps5Colors.text} fontSize={scale(30)} fontWeight={700}>{props.label}</Ps5Text>
         <Ps5Text color={ps5Colors.mutedText} fontSize={scale(16)} alignX="center">{props.owner} se presenta como una capa sobre la pantalla actual.</Ps5Text>
         <Ps5Button id={`route-${props.state().screen}-back`} width="100%" height={scale(52)} label="Volver" onPress={props.actions.back} screen={props} />
       </Ps5Panel>
-    </Box>
+    </box>
   )
 }
 
@@ -315,7 +314,7 @@ function Ps5BrightnessLayer(props: { store: Ps5Store; width: () => number; heigh
       {/* This overlay has no focus or pointer handler, so hit-testing passes
           through to the active screen while brightness remains a real visual
           response rather than a fake viewport scale. */}
-      <Box width={props.width()} height={props.height()} floating="parent" zIndex={999} backgroundColor="#000000" opacity={opacity()} />
+      <box width={props.width()} height={props.height()} floating="parent" zIndex={999} backgroundColor="#000000" opacity={opacity()} />
     </Show>
   )
 }
@@ -403,11 +402,11 @@ export function Ps5App(props: Ps5AppProps = {}) {
       <Ps5BackProvider register={registerBack}>
         <Ps5SettingsProvider settings={() => store.state().settings}>
           <Ps5InputLayerProvider activeLayer={() => store.state().overlayStack.length > 0 || store.state().powerMode !== "on" ? "overlay" : "base"}>
-            <Box width={width()} height={height()} backgroundColor={ps5Colors.background}>
+            <box width={width()} height={height()} backgroundColor={ps5Colors.background}>
               <Timers store={store} />
               <ScreenHost store={store} />
               <Ps5BrightnessLayer store={store} width={width} height={height} />
-            </Box>
+            </box>
           </Ps5InputLayerProvider>
         </Ps5SettingsProvider>
       </Ps5BackProvider>

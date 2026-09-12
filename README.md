@@ -5,18 +5,18 @@
 Anti-aliased corners. Drop shadows. Linear & radial gradients. Glow effects. Backdrop blur (glassmorphism). Element opacity. Per-corner radius. All rendered as real GPU pixels — not ASCII boxes.
 
 ```tsx
-import { createApp, Box, Text, colors } from "vexart"
+import { createApp, colors } from "vexart"
 
 await createApp(() => (
-  <Box
+  <box
     width="100%"
     height="100%"
     backgroundColor={colors.background}
     alignX="center"
     alignY="center"
   >
-    <Text color={colors.foreground} fontSize={16}>Hello from Vexart!</Text>
-  </Box>
+    <text color={colors.foreground} fontSize={16}>Hello from Vexart!</text>
+  </box>
 ))
 ```
 
@@ -77,11 +77,11 @@ bun --conditions=browser run app.tsx
 ```
 
 ```tsx
-import { createApp, Box, Text, VoidButton, colors, radius, space } from "vexart"
+import { createApp, VoidButton, colors, radius, space } from "vexart"
 
 function App() {
   return (
-    <Box
+    <box
       width="100%"
       height="100%"
       backgroundColor={colors.background}
@@ -90,18 +90,18 @@ function App() {
       alignY="center"
       gap={space[4]}
     >
-      <Box
+      <box
         backgroundColor={colors.card}
         cornerRadius={radius.lg}
         padding={space[6]}
         direction="column"
         gap={space[2]}
       >
-        <Text color={colors.foreground} fontSize={16}>Hello from Vexart</Text>
-        <Text color={colors.mutedForeground} fontSize={12}>Browser-quality UI in your terminal</Text>
-      </Box>
+        <text color={colors.foreground} fontSize={16}>Hello from Vexart</text>
+        <text color={colors.mutedForeground} fontSize={12}>Browser-quality UI in your terminal</text>
+      </box>
       <VoidButton onPress={() => process.exit(0)}>Quit</VoidButton>
-    </Box>
+    </box>
   )
 }
 
@@ -155,8 +155,8 @@ cargo build --release
 
 | Component | Category | Description |
 |-----------|----------|-------------|
-| `Box` | Primitives | Layout container with all visual props |
-| `Text` | Primitives | Text display with font, color, size |
+| `<box>` | Intrinsic | Layout container with all visual props |
+| `<text>` | Intrinsic | Text display with font, color, size |
 | `ScrollView` | Containers | Scrollable container with visual scrollbar |
 | `Portal` | Containers | Render subtree at root level |
 | `Button` | Inputs | Clickable element (headless render context) |
@@ -191,28 +191,28 @@ All effects are JSX props — no imperative API needed:
 
 ```tsx
 // Drop shadow
-<Box shadow={{ x: 0, y: 4, blur: 12, color: 0x00000060 }} />
+<box shadow={{ x: 0, y: 4, blur: 12, color: 0x00000060 }} />
 
 // Multi-shadow
-<Box shadow={[{ x: 0, y: 2, blur: 4, color: 0x0000004f }, { x: 0, y: 8, blur: 24, color: 0x00000030 }]} />
+<box shadow={[{ x: 0, y: 2, blur: 4, color: 0x0000004f }, { x: 0, y: 8, blur: 24, color: 0x00000030 }]} />
 
 // Outer glow
-<Box glow={{ radius: 20, color: 0x56d4c8ff, intensity: 60 }} />
+<box glow={{ radius: 20, color: 0x56d4c8ff, intensity: 60 }} />
 
 // Linear gradient
-<Box gradient={{ type: "linear", from: 0x1a1a2eff, to: 0x0a0a0fff, angle: 90 }} />
+<box gradient={{ type: "linear", from: 0x1a1a2eff, to: 0x0a0a0fff, angle: 90 }} />
 
 // Radial gradient
-<Box gradient={{ type: "radial", from: 0x56d4c8ff, to: 0x00000000 }} />
+<box gradient={{ type: "radial", from: 0x56d4c8ff, to: 0x00000000 }} />
 
 // Backdrop blur (glassmorphism)
-<Box backdropBlur={12} backgroundColor={0xffffff1a} />
+<box backdropBlur={12} backgroundColor={0xffffff1a} />
 
 // Per-corner radius
-<Box cornerRadii={{ tl: 20, tr: 20, br: 0, bl: 0 }} />
+<box cornerRadii={{ tl: 20, tr: 20, br: 0, bl: 0 }} />
 
 // Interactive states
-<Box
+<box
   focusable
   backgroundColor={0x1e1e2eff}
   hoverStyle={{ backgroundColor: 0x2a2a3eff }}

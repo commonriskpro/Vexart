@@ -11,12 +11,12 @@ Use the highest-level API that matches your integration needs:
 3. **`mount()` from `@vexart/engine`** — low-level alternative for advanced use when you manage terminal creation and input plumbing yourself.
 
 ```tsx
-import { createApp, Box, Text } from "vexart"
+import { createApp } from "vexart"
 
 await createApp(() => (
-  <Box width="100%" height="100%" alignX="center" alignY="center">
-    <Text>Hello Vexart</Text>
-  </Box>
+  <box width="100%" height="100%" alignX="center" alignY="center">
+    <text>Hello Vexart</text>
+  </box>
 ))
 ```
 
@@ -25,12 +25,12 @@ await createApp(() => (
 Managed application framework package:
 
 - app lifecycle: `createApp`, `mountApp`, `useAppTerminal`
-- app primitives: `Box`, `Text` with `className` support
+- JSX intrinsics: `<box>`, `<text>` with `className` support
 - router: `createAppRouter`, `RouterProvider`, `RouteOutlet`, `useRouter`
 - route manifest helpers and CLI/config helpers
 
 ```ts
-import { createApp, mountApp, useAppTerminal, Box, Text } from "vexart"
+import { createApp, mountApp, useAppTerminal } from "vexart"
 ```
 
 ## `@vexart/engine`

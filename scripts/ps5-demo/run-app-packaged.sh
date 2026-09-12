@@ -151,7 +151,7 @@ cd "$consumer"
 if [ "$mode" = verify ]; then
   cat > "$consumer/packaged-verify.tsx" <<'EOF_VERIFY'
 import { createSignal as solidCreateSignal } from "solid-js"
-import { Box, createComponent as publicCreateComponent, createSignal } from "vexart"
+import { createComponent as publicCreateComponent, createSignal } from "vexart"
 import { assertBridgeVersion, createComponent as engineCreateComponent, createElement, createGpuRendererBackend, createRenderLoop, dispatchInput, EXPECTED_BRIDGE_VERSION, getLatestInteractionTrace, getRendererBackend, setRendererBackend, solidRender, vexartVersion } from "vexart/engine"
 import { Ps5App } from "./examples/ps5/src/app"
 import { createDefaultSeed } from "./examples/ps5/src/catalog"
@@ -159,11 +159,11 @@ import { createPs5Store } from "./examples/ps5/src/store"
 
 const root = createElement("box")
 const [width] = createSignal(3)
-const dispose = solidRender(() => <Box width={width()} height={2} />, root)
+const dispose = solidRender(() => <box width={width()} height={2} />, root)
 const child = root.children[0]
 if (createSignal !== solidCreateSignal) throw new Error("packaged public barrel did not share solid-js")
 if (publicCreateComponent !== engineCreateComponent) throw new Error("packaged public barrel did not share engine singleton")
-if (!child || child.kind !== "box") throw new Error(`packaged Box did not render through packaged engine: ${child?.kind ?? "missing"}`)
+if (!child || child.kind !== "box") throw new Error(`packaged box did not render through packaged engine: ${child?.kind ?? "missing"}`)
 const version = vexartVersion()
 assertBridgeVersion(version)
 if (version !== EXPECTED_BRIDGE_VERSION) throw new Error(`unexpected packaged bridge version: ${version}`)

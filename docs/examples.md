@@ -9,7 +9,7 @@ bun run showcase
 ## Package imports
 
 ```tsx
-import { createApp, Box, Text, Button, Input, ScrollView, VirtualList, colors, radius, space } from "vexart"
+import { createApp, Button, Input, ScrollView, VirtualList, colors, radius, space } from "vexart"
 ```
 
 ## Minimal app

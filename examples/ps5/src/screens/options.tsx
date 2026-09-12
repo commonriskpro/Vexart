@@ -1,12 +1,11 @@
 import {
-  Box,
   For,
   Show,
   createEffect,
 } from "vexart"
 
 import type { ControlCardId, GameId, Ps5OverlayProps, ScreenId } from "../types"
-import { Ps5Button, Ps5Panel, Ps5Text as Text, ps5Colors, ps5Scale, usePs5Viewport } from "../ui"
+import { Ps5Button, Ps5Panel, Ps5Text, ps5Colors, ps5Scale, usePs5Viewport } from "../ui"
 
 const canonicalOrder: ControlCardId[] = [
   "home", "switcher", "notifications", "game-base", "music",
@@ -196,13 +195,13 @@ export function OptionsOverlay(props: Ps5OverlayProps) {
 
   return (
     <Show when={top()?.id === "options"}>
-      <Box width={viewport.width()} height={viewport.height()} alignX="center" alignY="center">
+      <box width={viewport.width()} height={viewport.height()} alignX="center" alignY="center">
         <Ps5Panel width={scale(760)} padding={scale(28)} gap={scale(14)} direction="column" backgroundColor={ps5Colors.panel} borderColor="#ffffff38" borderWidth={1} cornerRadius={scale(20)}>
-          <Text color={ps5Colors.text} fontSize={scale(28)} fontWeight={700}>Opciones</Text>
+          <Ps5Text color={ps5Colors.text} fontSize={scale(28)} fontWeight={700}>Opciones</Ps5Text>
           <Show when={controlMode()} fallback={
-            <Box direction="column" gap={scale(12)}>
+            <box direction="column" gap={scale(12)}>
               <Show when={notificationDetailMode()}>
-                <Text color={ps5Colors.mutedText} fontSize={scale(14)}>Acciones de la notificación.</Text>
+                <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>Acciones de la notificación.</Ps5Text>
                 <Ps5Button id="options-notification-read" layer="overlay" width="100%" height={scale(48)} label={detailNotification()?.read ? "Marcar sin leer" : "Marcar leída"} disabled={!detailNotification()} onPress={() => { const item = detailNotification(); if (item) props.actions.setNotificationRead(item.id, !item.read); props.actions.closeOverlay() }} screen={props} />
                 <Ps5Button id="options-notification-clear" layer="overlay" width="100%" height={scale(48)} label="Borrar notificación" disabled={!detailNotification()} onPress={() => {
                   const item = detailNotification()
@@ -217,12 +216,12 @@ export function OptionsOverlay(props: Ps5OverlayProps) {
                 }} screen={props} />
               </Show>
               <Show when={downloadDetailMode()}>
-                <Text color={ps5Colors.mutedText} fontSize={scale(14)}>Acciones de la descarga.</Text>
+                <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>Acciones de la descarga.</Ps5Text>
                 <Ps5Button id="options-download-pause" layer="overlay" width="100%" height={scale(48)} label={detailDownload()?.status === "downloading" ? "Pausar" : "Reanudar"} disabled={!detailDownload() || detailDownload()!.status === "complete" || detailDownload()!.status === "cancelled"} onPress={toggleDetailDownload} screen={props} />
                 <Ps5Button id="options-download-cancel" layer="overlay" width="100%" height={scale(48)} label="Cancelar descarga" disabled={!detailDownload() || detailDownload()!.status === "complete" || detailDownload()!.status === "cancelled"} onPress={() => { const item = detailDownload(); if (item) props.actions.cancelDownload(item.id); closeAll(props) }} screen={props} />
               </Show>
               <Show when={switcherMode()}>
-                <Text color={ps5Colors.mutedText} fontSize={scale(14)}>Acciones del juego seleccionado.</Text>
+                <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>Acciones del juego seleccionado.</Ps5Text>
                 <Ps5Button id="options-switcher-resume" layer="overlay" width="100%" height={scale(48)} label="Reanudar" disabled={!selectedGame()} onPress={() => { if (selectedGame()) props.actions.resumeRecentGame(selectedGame()!.id) }} screen={props} />
                 <Ps5Button id="options-switcher-hub" layer="overlay" width="100%" height={scale(48)} label="Abrir hub" disabled={!selectedGame()} onPress={openHub} screen={props} />
                 <Show when={props.state().gameSession.gameId}>
@@ -230,12 +229,12 @@ export function OptionsOverlay(props: Ps5OverlayProps) {
                 </Show>
               </Show>
               <Show when={props.state().screen === "profile"}>
-                <Text color={ps5Colors.mutedText} fontSize={scale(14)}>Acciones de perfil local.</Text>
+                <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>Acciones de perfil local.</Ps5Text>
                 <Ps5Button id="options-profile-change-user" layer="overlay" width="100%" height={scale(48)} label="Cambiar usuario" onPress={() => go(props, "boot-users")} screen={props} />
                 <Ps5Button id="options-profile-clear-trophy" layer="overlay" width="100%" height={scale(48)} label="Quitar selección de trofeo" onPress={() => props.actions.dispatch({ type: "profile/trophy" })} screen={props} />
               </Show>
               <Show when={props.state().screen === "game-base"}>
-                <Text color={ps5Colors.mutedText} fontSize={scale(14)}>Acciones de Game Base local.</Text>
+                <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>Acciones de Game Base local.</Ps5Text>
                 <Ps5Button id="options-gamebase-messages" layer="overlay" width="100%" height={scale(48)} label="Abrir mensajes" onPress={() => { props.actions.dispatch({ type: "gamebase/tab", tab: "messages" }); props.actions.go("game-base") }} screen={props} />
                 <Ps5Button id="options-gamebase-clear-messages" layer="overlay" width="100%" height={scale(48)} label="Limpiar mensajes locales" onPress={() => props.actions.dispatch({ type: "gamebase/messages-clear" })} screen={props} />
                 <Show when={props.state().gameBase.parties.length > 0}>
@@ -243,32 +242,32 @@ export function OptionsOverlay(props: Ps5OverlayProps) {
                 </Show>
               </Show>
               <Show when={props.state().screen === "notifications"}>
-                <Text color={ps5Colors.mutedText} fontSize={scale(14)}>Acciones de notificaciones locales.</Text>
+                <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>Acciones de notificaciones locales.</Ps5Text>
                 <Ps5Button id="options-notifications-clear" layer="overlay" width="100%" height={scale(48)} label="Borrar todas las notificaciones" onPress={() => { props.actions.dispatch({ type: "notification/clear" }); props.actions.closeOverlay(); props.actions.setFocus("notifications-tab-notifications") }} screen={props} />
               </Show>
               <Show when={props.state().screen === "settings"}>
-                <Text color={ps5Colors.mutedText} fontSize={scale(14)}>Acciones de ajustes locales.</Text>
+                <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>Acciones de ajustes locales.</Ps5Text>
                 <Ps5Button id="options-settings-reset" layer="overlay" width="100%" height={scale(48)} label="Restaurar ajustes" onPress={() => props.actions.dispatch({ type: "settings/reset" })} screen={props} />
               </Show>
               <Show when={selectedGame() && props.state().screen !== "profile" && props.state().screen !== "game-base" && props.state().screen !== "notifications" && props.state().screen !== "settings" && !switcherMode() && !notificationDetailMode() && !downloadDetailMode()}>
-                <Text color={ps5Colors.mutedText} fontSize={scale(14)}>Acciones locales para {selectedGame()!.title}.</Text>
+                <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>Acciones locales para {selectedGame()!.title}.</Ps5Text>
                 <Ps5Button id="options-add-to-list" layer="overlay" width="100%" height={scale(48)} label={props.state().library.lists.some((list) => list.id === "ps5-favorites" && list.gameIds.includes(selectedGame()!.id)) ? "Quitar de Favoritos" : "Añadir a lista Favoritos"} onPress={toggleFavorite} screen={props} />
                 <Show when={selectedGame()!.installed}>
                   <Ps5Button id="options-launch" layer="overlay" width="100%" height={scale(48)} label="Lanzar juego" onPress={launch} screen={props} />
                 </Show>
                 <Ps5Button id="options-open-hub" layer="overlay" width="100%" height={scale(48)} label="Abrir centro del juego" onPress={openHub} screen={props} />
                 <Show when={props.state().library.lists.some((list) => list.id === "ps5-favorites" && list.gameIds.includes(selectedGame()!.id))}>
-                  <Text color={ps5Colors.success} fontSize={scale(13)}>Este juego ya está en Favoritos.</Text>
+                  <Ps5Text color={ps5Colors.success} fontSize={scale(13)}>Este juego ya está en Favoritos.</Ps5Text>
                 </Show>
               </Show>
               <Show when={!selectedGame() && props.state().screen !== "profile" && props.state().screen !== "game-base" && props.state().screen !== "notifications" && props.state().screen !== "settings" && !switcherMode() && !notificationDetailMode() && !downloadDetailMode()}>
-                <Text color={ps5Colors.mutedText} fontSize={scale(15)}>No hay un juego seleccionado para modificar.</Text>
+                <Ps5Text color={ps5Colors.mutedText} fontSize={scale(15)}>No hay un juego seleccionado para modificar.</Ps5Text>
               </Show>
               <Ps5Button id="options-close" layer="overlay" width="100%" height={scale(48)} label="Volver" onPress={props.actions.closeOverlay} screen={props} />
-            </Box>
+            </box>
           }>
-            <Text color={ps5Colors.mutedText} fontSize={scale(14)}>Personaliza el orden y la visibilidad del Centro de control.</Text>
-            <Box direction="column" gap={scale(8)} scrollY viewportClip>
+            <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>Personaliza el orden y la visibilidad del Centro de control.</Ps5Text>
+            <box direction="column" gap={scale(8)} scrollY viewportClip>
               <For each={controlIds()}>{(id, index) => (
                 <Ps5Button
                   id={`options-control-${id}`}
@@ -286,19 +285,19 @@ export function OptionsOverlay(props: Ps5OverlayProps) {
                   screen={props}
                 />
               )}</For>
-            </Box>
-            <Box direction="row" gap={scale(10)}>
+            </box>
+            <box direction="row" gap={scale(10)}>
               <Ps5Button id="options-control-up" layer="overlay" width="50%" height={scale(46)} label="Subir seleccionado" onPress={() => moveControl(-1)} screen={props} />
               <Ps5Button id="options-control-down" layer="overlay" width="50%" height={scale(46)} label="Bajar seleccionado" onPress={() => moveControl(1)} screen={props} />
-            </Box>
-            <Box direction="row" gap={scale(10)}>
+            </box>
+            <box direction="row" gap={scale(10)}>
               <Ps5Button id="options-control-reset" layer="overlay" width="50%" height={scale(46)} label="Restaurar orden" onPress={restoreControlOrder} screen={props} />
               <Ps5Button id="options-control-show-all" layer="overlay" width="50%" height={scale(46)} label="Mostrar todos" onPress={showAllControls} screen={props} />
-            </Box>
+            </box>
             <Ps5Button id="options-close" layer="overlay" width="100%" height={scale(48)} label="Volver" onPress={props.actions.closeOverlay} screen={props} />
           </Show>
         </Ps5Panel>
-      </Box>
+      </box>
     </Show>
   )
 }

@@ -1,5 +1,4 @@
 import {
-  Box,
   For,
   Show,
   createEffect,
@@ -56,9 +55,9 @@ export function BootUsersScreen(props: Ps5ScreenProps) {
   }
 
   return (
-    <Box width={viewport.width()} height={viewport.height()} backgroundColor={ps5Colors.background} alignX="center" alignY="center" direction="column">
+    <box width={viewport.width()} height={viewport.height()} backgroundColor={ps5Colors.background} alignX="center" alignY="center" direction="column">
       <Show when={state().boot.status !== "ready"} fallback={
-        <Box width={viewport.width()} height={viewport.height()} alignX="center" alignY="center" direction="column" gap={ps5Scale(viewport, 28)}>
+        <box width={viewport.width()} height={viewport.height()} alignX="center" alignY="center" direction="column" gap={ps5Scale(viewport, 28)}>
           <Ps5Text color={ps5Colors.text} fontSize={ps5Scale(viewport, 52)} fontWeight={700}>PS5</Ps5Text>
           <Ps5Text color={ps5Colors.mutedText} fontSize={ps5Scale(viewport, 20)}>Selecciona un usuario</Ps5Text>
           <Show when={!optionsOpen()} fallback={
@@ -69,7 +68,7 @@ export function BootUsersScreen(props: Ps5ScreenProps) {
               <Ps5Button id="boot-user-options-close" width="100%" height={ps5Scale(viewport, 48)} label="Volver a usuarios" onPress={() => { setOptionsOpen(false); actions.setFocus(`boot-user-${optionsUserId() ?? state().users[0]?.id ?? "continue"}`) }} screen={props} />
             </Ps5Panel>
           }>
-            <Box direction="row" gap={ps5Scale(viewport, 26)} alignY="center" padding={ps5Scale(viewport, 28)}>
+            <box direction="row" gap={ps5Scale(viewport, 26)} alignY="center" padding={ps5Scale(viewport, 28)}>
               <For each={state().users}>{(user, index) => (
                 <Ps5Button
                   id={`boot-user-${user.id}`}
@@ -87,26 +86,26 @@ export function BootUsersScreen(props: Ps5ScreenProps) {
                     if (event.key === "f2") openOptions()
                   }}
                 >
-                  <Box direction="column" alignX="center" alignY="center" gap={ps5Scale(viewport, 12)}>
+                  <box direction="column" alignX="center" alignY="center" gap={ps5Scale(viewport, 12)}>
                     <Ps5Avatar src={user.avatar} name={initials(user.name)} accent={user.accent} size={ps5Scale(viewport, 102)} />
                     <Ps5Text color={ps5Colors.text} fontSize={ps5Scale(viewport, 18)}>{user.name}</Ps5Text>
                     <Ps5Text color={ps5Colors.mutedText} fontSize={ps5Scale(viewport, 13)}>{user.handle}</Ps5Text>
-                  </Box>
+                  </box>
                 </Ps5Button>
               )}</For>
-            </Box>
+            </box>
           </Show>
           <Ps5Text color={ps5Colors.mutedText} fontSize={ps5Scale(viewport, 14)}>Enter / Space para continuar · Escape para volver</Ps5Text>
-        </Box>
+        </box>
       }>
-        <Box width={viewport.width()} height={viewport.height()} alignX="center" alignY="center" direction="column" gap={ps5Scale(viewport, 22)}>
+        <box width={viewport.width()} height={viewport.height()} alignX="center" alignY="center" direction="column" gap={ps5Scale(viewport, 22)}>
           <Ps5Text color={ps5Colors.text} fontSize={ps5Scale(viewport, 64)} fontWeight={700}>PS5</Ps5Text>
           <Ps5Text color={ps5Colors.mutedText} fontSize={ps5Scale(viewport, 19)}>Iniciando experiencia local…</Ps5Text>
           <Ps5Panel width={ps5Scale(viewport, 360)} height={ps5Scale(viewport, 8)} backgroundColor="#1c222a" borderWidth={0} cornerRadius={ps5Scale(viewport, 4)}>
-            <Box width="60%" height="100%" backgroundColor={ps5Colors.focus} cornerRadius={ps5Scale(viewport, 4)} />
+            <box width="60%" height="100%" backgroundColor={ps5Colors.focus} cornerRadius={ps5Scale(viewport, 4)} />
           </Ps5Panel>
-        </Box>
+        </box>
       </Show>
-    </Box>
+    </box>
   )
 }

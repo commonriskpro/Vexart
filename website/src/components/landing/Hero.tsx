@@ -3,20 +3,20 @@ import { motion, useMotionValue, useTransform, useSpring } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 
 const codeLines = [
-  { text: 'import { createApp, Box, Text } from "vexart"', delay: 0 },
+  { text: 'import { createApp } from "vexart"', delay: 0 },
   { text: '', delay: 400 },
   { text: 'await createApp(() => (', delay: 600 },
-  { text: '  <Box', delay: 800 },
+  { text: '  <box', delay: 800 },
   { text: '    backgroundColor={0x0a0a0fff}', delay: 1000 },
   { text: '    cornerRadius={16}', delay: 1150 },
   { text: '    shadow={{ x: 0, y: 8, blur: 32, color: 0x56d4c840 }}', delay: 1350 },
   { text: '    backdropBlur={12}', delay: 1550 },
   { text: '    padding={24}', delay: 1700 },
   { text: '  >', delay: 1850 },
-  { text: '    <Text fontSize={20} fontWeight={700} color={0xfafafaff}>', delay: 2000 },
+  { text: '    <text fontSize={20} fontWeight={700} color={0xfafafaff}>', delay: 2000 },
   { text: '      Hello from the GPU', delay: 2200 },
-  { text: '    </Text>', delay: 2400 },
-  { text: '  </Box>', delay: 2500 },
+  { text: '    </text>', delay: 2400 },
+  { text: '  </box>', delay: 2500 },
   { text: '))', delay: 2600 },
 ]
 

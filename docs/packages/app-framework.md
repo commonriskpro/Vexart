@@ -1,6 +1,14 @@
 # Application Framework, Router & Developer CLI
 
-The `@vexart/app` package sits at Tier 1 of the Vexart architecture. It provides the application lifecycle engine (`createApp`, `mountApp`), a file-system router with nested layout inheritance, specificity scoring, a high-performance Tailwind-compatible `className` compiler, canonical `<Box>` and `<Text>` primitives, app configuration helpers (`defineConfig`), and the unified `"vexart"` barrel import.
+The `@vexart/app` package sits at Tier 1 of the Vexart architecture. It provides the application lifecycle engine (`createApp`, `mountApp`), a file-system router with nested layout inheritance, specificity scoring, a high-performance Tailwind-compatible `className` compiler for the engine's `<box>` and `<text>` intrinsics, app configuration helpers (`defineConfig`), and the unified `"vexart"` barrel import.
+
+> **Breaking API migration:** The `Box` and `Text` app wrappers and their `AppBoxProps`, `AppTextProps`, and `ClassNameProps` aliases have been removed. There are no compatibility aliases. Replace wrapper imports and JSX with the lowercase engine intrinsics; the `className` compiler now applies directly to those intrinsics. For explicit intrinsic typing, use `JSX.IntrinsicElements["box"]` or `JSX.IntrinsicElements["text"]`.
+>
+> Before: `import { Box, Text } from "vexart"` and `<Box><Text>Content</Text></Box>`
+>
+> After: no primitive import and `<box><text>Content</text></box>`
+>
+> **Approved node-ref migration target (in progress):** Keep one internal scene/layout tree and expose its cached `NodeHandle` as the sole public node representation. There is no public raw-node alternative. Update consumers to use `NodeHandle` only; do not import `TGENode` or access `handle._node`.
 
 ---
 
@@ -12,12 +20,12 @@ Applications boot through `createApp` (standard CLI applications) or `mountApp` 
 `createApp` is the primary entry point for terminal applications. It abstracts terminal initialization, signal interception, and event teardown:
 
 ```tsx
-import { createApp, Box, Text } from "vexart"
+import { createApp } from "vexart"
 
 const app = await createApp(() => (
-  <Box className="w-full h-full bg-background items-center justify-center">
-    <Text className="text-xl font-bold text-foreground">Welcome to Vexart</Text>
-  </Box>
+  <box className="w-full h-full bg-background items-center justify-center">
+    <text className="text-xl font-bold text-foreground">Welcome to Vexart</text>
+  </box>
 ), {
   quit: ["ctrl+c", "q"], // Key combinations that trigger shutdown
   onReady: (ctx) => {
@@ -43,7 +51,7 @@ export async function mountApp(
 ### 1.3 Terminal Context & `useAppTerminal`
 The runtime injects a reactive `TerminalContext`. Components access the managed terminal via `useAppTerminal()`:
 ```tsx
-import { useAppTerminal, useTerminalDimensions, Box, Text } from "vexart"
+import { useAppTerminal, useTerminalDimensions } from "vexart"
 
 export function StatusHeader() {
   const terminal = useAppTerminal()
@@ -52,10 +60,10 @@ export function StatusHeader() {
   const dims = useTerminalDimensions(terminal)
 
   return (
-    <Box className="w-full h-6 px-4 bg-card justify-between items-center">
-      <Text className="text-xs text-muted-foreground">Columns: {dims.columns()}</Text>
-      <Text className="text-xs text-muted-foreground">Rows: {dims.rows()}</Text>
-    </Box>
+    <box className="w-full h-6 px-4 bg-card justify-between items-center">
+      <text className="text-xs text-muted-foreground">Columns: {dims.columns()}</text>
+      <text className="text-xs text-muted-foreground">Rows: {dims.rows()}</text>
+    </box>
   )
 }
 ```
@@ -164,9 +172,9 @@ const s = createStyles({
   title: { fontSize: 20, fontWeight: 700, color: "#fafafa" },
 })
 
-<Box className={s.card}>
-  <Text className={s.title}>Dashboard</Text>
-</Box>
+<box className={s.card}>
+  <text className={s.title}>Dashboard</text>
+</box>
 ```
 
 ### 3.4 Reactive Class Removal (`preserveRemovedProps`)
@@ -174,29 +182,26 @@ When conditional class bindings change (e.g. `className={isActive() ? "bg-primar
 
 ---
 
-## 4. Canonical App Primitives (`<Box>` and `<Text>`)
+## 4. Canonical JSX Intrinsics (`<box>` and `<text>`)
 
-`@vexart/app` exports `<Box>` and `<Text>`:
-- Wraps the engine intrinsics `<box>` and `<text>`.
-- Adds native `className` prop translation via `resolveClassName()`.
-- Merges inline props over utility classes (`style` and explicit props take precedence over `className`).
+The engine exposes `<box>` and `<text>` directly. The `@vexart/app` package installs the `className` resolver for those intrinsics:
+- `className` is translated via `resolveClassName()`.
+- Inline props take precedence over utility classes (`style` and explicit props win over `className`).
 
 ```tsx
-import { Box, Text } from "vexart"
-
 export function Card() {
   return (
-    <Box className="p-4 rounded-lg bg-card border border-border">
-      <Text className="text-base font-semibold text-card-foreground">
+    <box className="p-4 rounded-lg bg-card border border-border">
+      <text className="text-base font-semibold text-card-foreground">
         Card Title
-      </Text>
-    </Box>
+      </text>
+    </box>
   )
 }
 ```
 
 > **ARCHITECTURAL WARNING — DELETED PRIMITIVES**:
-> `<Span>`, `<RichText>`, and `<WrapRow>` **do not exist**. Any imports from `@vexart/primitives` or references to these elements are obsolete and must be rewritten using `<box>`, `<text>`, `<Box>`, or `<Text>`.
+> `<Span>`, `<RichText>`, and `<WrapRow>` **do not exist**. Any imports from `@vexart/primitives` or references to these elements are obsolete and must be rewritten using the `<box>` and `<text>` intrinsics.
 
 ---
 
@@ -234,7 +239,7 @@ Configuration schemas are validated and merged via `mergeConfig()`.
 
 The root `"vexart"` package barrel (`packages/app/src/barrel.ts`) unifies all tiers while resolving naming collisions:
 
-1. **`Box` and `Text`**: Exported from `@vexart/app` (enabling `className` compiler support).
+1. **`<box>` and `<text>`**: Engine intrinsics with `className` support installed by `@vexart/app`.
 2. **`Button` vs `VoidButton`**: `Button` is exported from `@vexart/headless` (unstyled primitive requiring `renderButton`). For the themed Void Design System button, use `VoidButton` from `@vexart/styled`.
 3. **`ToggleSwitch`**: The headless `Switch` primitive is exported as `ToggleSwitch` to prevent collision with SolidJS's `<Switch>` control flow.
 4. **`useRouter`**: Exported from `@vexart/app` (canonical file-system application router).

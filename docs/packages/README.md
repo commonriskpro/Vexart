@@ -14,10 +14,10 @@ Vexart strictly separates presentation, interaction behavior, visual theming, la
 │  - App lifecycle orchestration (createApp, mountApp)                    │
 │  - File-system router, nested layouts, specificity scoring, RouteOutlet │
 │  - className compiler (Tailwind utility subset, LRU theme cache)        │
-│  - Canonical primitives: <Box> and <Text> (with className support)      │
+│  - Canonical primitives: <box> and <text> (with className support)      │
 │  - Unified barrel entry point ("vexart")                                │
 └────────────────────────────────────┬────────────────────────────────────┘
-                                     │ imports & wraps
+                                     │ configures & composes
 ┌────────────────────────────────────▼────────────────────────────────────┐
 │  Tier 2: Styled Design System (@vexart/styled)                          │
 │  - Void Design System (OLED-calibrated dark theme semantic tokens)      │
@@ -25,7 +25,7 @@ Vexart strictly separates presentation, interaction behavior, visual theming, la
 │  - 28+ pre-styled UI components, structural layouts & typography scales │
 │  - Variant style merging with intrinsic element properties              │
 └────────────────────────────────────┬────────────────────────────────────┘
-                                     │ imports & wraps
+                                     │ composes
 ┌────────────────────────────────────▼────────────────────────────────────┐
 │  Tier 3: Headless Interaction Primitives (@vexart/headless)             │
 │  - 25 unstyled interaction and collection primitives                    │
@@ -63,7 +63,7 @@ Vexart strictly separates presentation, interaction behavior, visual theming, la
 Every subsystem in Vexart is governed by non-negotiable architectural invariants:
 
 1. **Reconciler Singleton Invariant**: The root `vexart` barrel and `@vexart/engine` must resolve to exactly one SolidJS universal reconciler instance (`createRenderer<TGENode>`). Consumer JSX is compiled with Babel using `moduleName: "vexart/engine"`. Creating multiple reconcilers fragments node tracking, breaks fine-grained reactivity, and leaks retained layout nodes.
-2. **Ownership Boundary Invariant (DEC-014)**: TypeScript strictly owns the retained scene graph (`TGENode`), reactivity graphs, walk-tree traversal, Flexily layout calculation (Flexbox + CSS Grid), render graph queue compilation, input parsing, focus graphs, hit-testing, and canvas rasterization (canvas commands are rasterized in JS and uploaded as RGBA textures). Rust strictly owns WGPU hardware pipelines, compositing targets, Kitty protocol serialization, SHM/direct/tmux transport, image decoding caches, GPU resource budgets, and presentation. Rust-retained scene graphs and native canvas command lists are obsolete and prohibited.
+2. **Ownership Boundary Invariant (DEC-014)**: TypeScript strictly owns the retained scene graph (`TGENode`), reactivity graphs, walk-tree traversal, Flexily layout calculation (Flexbox + CSS Grid), render graph queue compilation, input parsing, focus graphs, hit-testing, and canvas rasterization (canvas commands are rasterized in JS and uploaded as RGBA textures). Rust strictly owns WGPU hardware pipelines, compositing targets, Kitty protocol serialization, SHM/direct/tmux transport, image decoding caches, GPU resource budgets, and presentation. Rust-retained scene graphs and native canvas command lists are obsolete and prohibited. The retained scene/layout tree is internal; the node-ref migration makes the cached `NodeHandle` the sole public node representation per internal node.
 3. **Alpha Representation Invariant**: GPU render targets operate in **premultiplied alpha** ($[R \cdot A, G \cdot A, B \cdot A, A]$) to preserve linear blending, filtering, and blur correctness without dark edge fringing. Image assets, canvas buffers, and CPU host readback buffers operate in **straight alpha** ($[R, G, B, A]$). Full and regional readback normalize to straight alpha at the Rust host boundary; fully opaque packed buffers can be borrowed without conversion. GPU-to-GPU captures use the `image_unpremultiply` pipeline when producing straight-alpha image assets. Never unpremultiply a host readback a second time.
 4. **ARM64 FFI Parameter Limit Invariant**: Foreign function calls between Bun (`bun:ffi`) and native Rust (`libvexart`) must never exceed **8 register arguments**. Any operation requiring more parameters must serialize parameters into a contiguous binary packed struct passed by pointer (`*const u8` or `*mut u8`).
 5. **Terminal Accessibility Invariant**: Terminal emulators lack browser DOM trees, HTML elements, and web accessibility APIs (no `role="button"`, no `aria-expanded`). Accessibility in Vexart is implemented through explicit focus trees (`FocusScope`), circular tab cycling, Vim navigation keymaps (`h`/`j`/`k`/`l`), and focus traps for modal overlays.
@@ -86,7 +86,7 @@ The image-retain and owned-SHM bridge symbols require rebuilding `libvexart` tog
 
 | Package Path | Package Name | Role & Scope | Status |
 | :--- | :--- | :--- | :--- |
-| `packages/app` | `@vexart/app` | Tier 1: Application lifecycle (`createApp`, `mountApp`), file-system router, `<RouteOutlet>`, `className` compiler, canonical `<Box>` and `<Text>`, and unified `"vexart"` barrel. | Active |
+| `packages/app` | `@vexart/app` | Tier 1: Application lifecycle (`createApp`, `mountApp`), file-system router, `<RouteOutlet>`, `className` compiler, canonical `<box>` and `<text>`, and unified `"vexart"` barrel. | Active |
 | `packages/styled` | `@vexart/styled` | Tier 2: Void Design System, OLED-calibrated color tokens, reactive runtime theming (`themeColors`, `setTheme`), and 28+ styled UI components. | Active |
 | `packages/headless` | `@vexart/headless` | Tier 3: 25 unstyled UI interaction primitives (inputs, containers, collections, overlays, display, forms) with zero styling opinions. | Active |
 | `packages/engine` | `@vexart/engine` | Tier 4: Universal reconciler, Flexily layout adapter, render graph builder, frame scheduler, terminal ANSI/Kitty parser, focus manager, and `bun:ffi` bridge. | Active |
@@ -105,8 +105,6 @@ Applications import framework symbols from the root `"vexart"` barrel. Because m
 // Standard application consumption
 import { 
   createApp, 
-  Box, 
-  Text, 
   Button, 
   ToggleSwitch, 
   useRouter, 
@@ -116,11 +114,11 @@ import {
 ```
 
 ### Collision Resolution Rules
-1. **`<Box>` and `<Text>`**: Exported from `@vexart/app` (NOT `@vexart/engine`). They wrap the engine intrinsics `<box>` and `<text>` while providing support for the `className` utility compiler and reactive style diffing.
+1. **`<box>` and `<text>`**: Engine intrinsics provided by `@vexart/engine`. `@vexart/app` installs the `className` utility compiler for them; no wrapper components are exported.
 2. **`<Button>` vs `<VoidButton>`**: `Button` is exported from `@vexart/headless` (unstyled primitive requiring `renderButton`). For the themed Void Design System button with variants, use `VoidButton` from `@vexart/styled`. Both are exported directly from `"vexart"`.
 3. **ToggleSwitch**: Headless `Switch` from `@vexart/headless` is renamed to `ToggleSwitch` in the unified barrel to prevent collisions with SolidJS's core `<Switch>` control flow component.
 4. **`useRouter`**: Exported from `@vexart/app` (canonical file-system application router).
-5. **Purged Primitives**: `<Span>`, `<RichText>`, and `<WrapRow>` **do not exist**. Use `<box>` and `<text>` intrinsics or `<Box>` and `<Text>` app components directly.
+5. **Purged Primitives**: `<Span>`, `<RichText>`, and `<WrapRow>` **do not exist**. Use the `<box>` and `<text>` intrinsics directly.
 
 ---
 

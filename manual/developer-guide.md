@@ -236,32 +236,32 @@ Add to `package.json`:
 Create `src/app.tsx`:
 
 ```tsx
-import { createApp, Box, Text, colors, radius, space } from "vexart"
+import { createApp, colors, radius, space } from "vexart"
 
 function App() {
   return (
-    <Box
+    <box
       width="100%"
       height="100%"
       backgroundColor={colors.background}
       alignX="center"
       alignY="center"
     >
-      <Box
+      <box
         backgroundColor={colors.card}
         cornerRadius={radius.xl}
         padding={space[6]}
         direction="column"
         gap={space[2]}
       >
-        <Text color={colors.foreground} fontSize={16}>
+        <text color={colors.foreground} fontSize={16}>
           Hello from Vexart
-        </Text>
-        <Text color={colors.mutedForeground} fontSize={12}>
+        </text>
+        <text color={colors.mutedForeground} fontSize={12}>
           Press Ctrl+C to exit
-        </Text>
-      </Box>
-    </Box>
+        </text>
+      </box>
+    </box>
   )
 }
 
@@ -1558,14 +1558,12 @@ There are two headless patterns:
 
 ### Complete Component Reference
 
-#### 1. Box
+#### 1. box
 
-Layout container. Thin wrapper over the `<box>` intrinsic with typed props.
+Layout container with typed props on the `<box>` intrinsic.
 
 ```typescript
-import { Box } from "vexart"
-
-type BoxProps = {
+type LayoutProps = {
   direction?: "row" | "column"      // default: "column"
   padding?: number
   paddingX?: number; paddingY?: number
@@ -1585,21 +1583,19 @@ type BoxProps = {
 ```
 
 ```tsx
-<Box padding={16} backgroundColor="#1a1a2e" cornerRadius={12} gap={8}>
-  <Text color="#e0e0e0">Hello Vexart</Text>
-</Box>
+<box padding={16} backgroundColor="#1a1a2e" cornerRadius={12} gap={8}>
+  <text color="#e0e0e0">Hello Vexart</text>
+</box>
 ```
 
 ---
 
-#### 2. Text
+#### 2. text
 
-Text display with color and font settings.
+Text display with color and font settings on the `<text>` intrinsic.
 
 ```typescript
-import { Text } from "vexart"
-
-type TextProps = {
+type TextElementProps = {
   color?: string | number
   fontSize?: number
   fontId?: number
@@ -1614,7 +1610,7 @@ type TextProps = {
 ```
 
 ```tsx
-<Text color="#e0e0e0" fontSize={16} lineHeight={20}>Hello world</Text>
+<text color="#e0e0e0" fontSize={16} lineHeight={20}>Hello world</text>
 ```
 
 ---
@@ -1649,7 +1645,7 @@ let scrollRef: ScrollHandle
 
 <ScrollView ref={(h) => scrollRef = h} width={400} height={300} scrollY>
   <For each={items}>
-    {(item) => <Text>{item}</Text>}
+    {(item) => <text>{item}</text>}
   </For>
 </ScrollView>
 
@@ -2513,7 +2509,7 @@ toast({ message: "Error!", variant: "error", duration: 5000 })
 Routing is provided canonically by `@vexart/app` (`createAppRouter`, `RouterProvider`, `RouteOutlet`, `useRouter`).
 
 ```tsx
-import { createAppRouter, RouterProvider, RouteOutlet, useRouter, Box, Text } from "vexart"
+import { createAppRouter, RouterProvider, RouteOutlet, useRouter } from "vexart"
 
 const routes = [
   { path: "/", component: HomeScreen },
@@ -2526,9 +2522,9 @@ const router = createAppRouter(routes, "/")
 export function App() {
   return (
     <RouterProvider router={router}>
-      <Box width="100%" height="100%">
+      <box width="100%" height="100%">
         <RouteOutlet />
-      </Box>
+      </box>
     </RouterProvider>
   )
 }
@@ -2536,12 +2532,12 @@ export function App() {
 function HomeScreen() {
   const router = useRouter()
   return (
-    <Box direction="column" gap={8} padding={16}>
-      <Text>Home</Text>
-      <Box focusable onPress={() => router.navigate("/settings")}>
-        <Text color="#4488cc">Go to Settings</Text>
-      </Box>
-    </Box>
+    <box direction="column" gap={8} padding={16}>
+      <text>Home</text>
+      <box focusable onPress={() => router.navigate("/settings")}>
+        <text color="#4488cc">Go to Settings</text>
+      </box>
+    </box>
   )
 }
 ```
@@ -2727,9 +2723,9 @@ type DiffProps = {
 
 ---
 
-#### 27. Nested Text Spans
+#### 27. Nested text spans
 
-Multi-span inline text for mixed styling is created using nested `<text>` tags or `<Box>` with `<Text>`:
+Multi-span inline text for mixed styling is created using nested `<text>` tags or `<box>` with `<text>`:
 
 ```tsx
 <text color="#e0e0e0">
@@ -2742,13 +2738,11 @@ Multi-span inline text for mixed styling is created using nested `<text>` tags o
 Or compose with `@vexart/app` components:
 
 ```tsx
-import { Box, Text } from "vexart"
-
-<Box direction="row">
-  <Text color="#e0e0e0">Hello </Text>
-  <Text color="#4488cc" fontWeight={700}>world</Text>
-  <Text color="#e0e0e0"> from Vexart</Text>
-</Box>
+<box direction="row">
+  <text color="#e0e0e0">Hello </text>
+  <text color="#4488cc" fontWeight={700}>world</text>
+  <text color="#e0e0e0"> from Vexart</text>
+</box>
 ```
 
 ---
@@ -3211,7 +3205,7 @@ const form = createForm({
 ### Multi-Screen App with Router
 
 ```tsx
-import { createAppRouter, RouterProvider, RouteOutlet, useRouter, Box, Text } from "vexart"
+import { createAppRouter, RouterProvider, RouteOutlet, useRouter } from "vexart"
 
 const routes = [
   { path: "/", component: Home },
@@ -3224,9 +3218,9 @@ const router = createAppRouter(routes, "/")
 function App() {
   return (
     <RouterProvider router={router}>
-      <Box direction="column" width="100%" height="100%">
+      <box direction="column" width="100%" height="100%">
         <RouteOutlet />
-      </Box>
+      </box>
     </RouterProvider>
   )
 }
@@ -3234,39 +3228,39 @@ function App() {
 function Home() {
   const router = useRouter()
   return (
-    <Box direction="column" gap={8} padding={16}>
-      <Text color="#fff" fontSize={20}>Home</Text>
-      <Box focusable onPress={() => router.navigate("/settings")}>
-        <Text color="#4488cc">Settings</Text>
-      </Box>
-      <Box focusable onPress={() => router.navigate("/about")}>
-        <Text color="#4488cc">About</Text>
-      </Box>
-    </Box>
+    <box direction="column" gap={8} padding={16}>
+      <text color="#fff" fontSize={20}>Home</text>
+      <box focusable onPress={() => router.navigate("/settings")}>
+        <text color="#4488cc">Settings</text>
+      </box>
+      <box focusable onPress={() => router.navigate("/about")}>
+        <text color="#4488cc">About</text>
+      </box>
+    </box>
   )
 }
 
 function Settings() {
   const router = useRouter()
   return (
-    <Box direction="column" gap={8} padding={16}>
-      <Text color="#fff" fontSize={20}>Settings</Text>
-      <Box focusable onPress={() => router.back()}>
-        <Text color="#888">Back</Text>
-      </Box>
-    </Box>
+    <box direction="column" gap={8} padding={16}>
+      <text color="#fff" fontSize={20}>Settings</text>
+      <box focusable onPress={() => router.back()}>
+        <text color="#888">Back</text>
+      </box>
+    </box>
   )
 }
 
 function About() {
   const router = useRouter()
   return (
-    <Box padding={16}>
-      <Text color="#fff">About this app</Text>
-      <Box focusable onPress={() => router.back()}>
-        <Text color="#888">Back</Text>
-      </Box>
-    </Box>
+    <box padding={16}>
+      <text color="#fff">About this app</text>
+      <box focusable onPress={() => router.back()}>
+        <text color="#888">Back</text>
+      </box>
+    </box>
   )
 }
 ```
@@ -3574,8 +3568,8 @@ Everything app developers use: components, tokens, hooks, SolidJS primitives, an
 
 | Export | Description |
 | ------ | ----------- |
-| `Box` | Layout container wrapper |
-| `Text` | Text display wrapper |
+| `box` | Layout container intrinsic |
+| `text` | Text display intrinsic |
 | `ScrollView` | Scrollable container with visual scrollbar |
 | `Portal` | Render at root/overlay level |
 
@@ -3648,9 +3642,14 @@ Everything app developers use: components, tokens, hooks, SolidJS primitives, an
 | `RGBA` | Color utility class |
 | `MouseButton` | Mouse button enum |
 | `useTerminalDimensions` | Reactive terminal size |
-| `createHandle` | Create node handle (ref) |
+| `createHandle` | Create the cached `NodeHandle` exposed by refs (the approved public node representation) |
 | `createScrollHandle` / `releaseScrollHandle` | Programmatic scroll control |
 | `SIZING` / `DIRECTION` / `ALIGN_X` / `ALIGN_Y` | Layout enums |
+
+The node-ref migration standardizes JSX refs on that cached `NodeHandle`
+representation for the internal scene/layout tree. There is no public
+raw-node alternative; consumers must not import `TGENode` or access
+`handle._node`.
 
 ---
 

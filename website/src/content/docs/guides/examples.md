@@ -23,12 +23,12 @@ Tabs:
 ## Writing Your Own App
 
 ```tsx
-import { createApp, Box, Text } from "@vexart/app"
+import { createApp } from "@vexart/app"
 import { Button, Card, CardContent, colors, space } from "@vexart/styled"
 
 function App() {
   return (
-    <Box width="100%" height="100%" backgroundColor={colors.background}
+    <box width="100%" height="100%" backgroundColor={colors.background}
       alignX="center" alignY="center">
       <Card>
         <CardContent>
@@ -37,7 +37,7 @@ function App() {
           </Button>
         </CardContent>
       </Card>
-    </Box>
+    </box>
   )
 }
 

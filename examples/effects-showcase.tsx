@@ -10,7 +10,7 @@
 
 import { createSignal } from "solid-js"
 import { useTerminalDimensions } from "@vexart/engine"
-import { createApp, useAppTerminal, Box, Text } from "@vexart/app"
+import { createApp, useAppTerminal } from "@vexart/app"
 import {
   VoidBadge,
   VoidButton,
@@ -37,7 +37,7 @@ function Panel(props: PanelProps) {
   const captionColor = props.gradient ? 0xffffffb8 : colors.mutedForeground
 
   return (
-    <Box
+    <box
       width="grow"
       height={176}
       minWidth={150}
@@ -51,16 +51,16 @@ function Panel(props: PanelProps) {
       cornerRadius={radius.lg}
       shadow={shadows.sm}
     >
-      <Text color={colors.foreground} fontSize={font.sm} fontWeight={weight.semibold}>
+      <text color={colors.foreground} fontSize={font.sm} fontWeight={weight.semibold}>
         {props.title}
-      </Text>
-      <Text color={captionColor} fontSize={font.xs}>
+      </text>
+      <text color={captionColor} fontSize={font.xs}>
         {props.caption}
-      </Text>
-      <Box width="grow" height="grow" alignX="center" alignY="center">
+      </text>
+      <box width="grow" height="grow" alignX="center" alignY="center">
         {props.children}
-      </Box>
-    </Box>
+      </box>
+    </box>
   )
 }
 
@@ -84,7 +84,7 @@ function Swatch(props: {
   filter?: import("@vexart/engine").TGEProps["filter"]
 }) {
   return (
-    <Box
+    <box
       width={88}
       height={76}
       backgroundColor={props.backgroundColor}
@@ -114,9 +114,9 @@ const glassStripes = [0x0f172aff, 0xf8fafcff, 0x7c3aedff, 0xfacc15ff, 0x0f172aff
 
 function GlassSample(props: { effect: GlassEffectProps }) {
   return (
-    <Box width={112} height={88} direction="row">
-      {glassStripes.map((color) => <Box width={14} height={88} backgroundColor={color} />)}
-      <Box
+    <box width={112} height={88} direction="row">
+      {glassStripes.map((color) => <box width={14} height={88} backgroundColor={color} />)}
+      <box
         floating="parent"
         floatOffset={{ x: 12, y: 10 }}
         zIndex={20}
@@ -128,14 +128,14 @@ function GlassSample(props: { effect: GlassEffectProps }) {
         cornerRadius={radius.lg}
         {...props.effect}
       />
-    </Box>
+    </box>
   )
 }
 
 function EffectsTab() {
   return (
-    <Box width="100%" direction="column" gap={space[3]}>
-      <Box width="100%" direction="row" gap={space[3]} height={176}>
+    <box width="100%" direction="column" gap={space[3]}>
+      <box width="100%" direction="row" gap={space[3]} height={176}>
         <Panel title="Shadow" caption="soft elevation">
           <Swatch backgroundColor="#22c55e" shadow={{ x: 0, y: 10, blur: 18, color: 0x00000066 }} />
         </Panel>
@@ -151,8 +151,8 @@ function EffectsTab() {
         <Panel title="Glow" caption="neon halo">
           <Swatch backgroundColor="#111827" glow={{ radius: 20, color: 0x2dd4bfff, intensity: 78 }} />
         </Panel>
-      </Box>
-      <Box width="100%" direction="row" gap={space[3]} height={176}>
+      </box>
+      <box width="100%" direction="row" gap={space[3]} height={176}>
         <Panel title="Linear gradient" caption="angle: 45°">
           <Swatch gradient={{ type: "linear", from: 0x0ea5e9ff, to: 0x7c3aedff, angle: 45 }} />
         </Panel>
@@ -160,7 +160,7 @@ function EffectsTab() {
           <Swatch gradient={{ type: "radial", from: 0x4ade80ff, to: 0x052e16ff }} />
         </Panel>
         <Panel title="Corners + opacity" caption="per-corner radius">
-          <Box
+          <box
             width={88}
             height={76}
             backgroundColor="#f43f5e"
@@ -168,15 +168,15 @@ function EffectsTab() {
             opacity={0.78}
           />
         </Panel>
-      </Box>
-    </Box>
+      </box>
+    </box>
   )
 }
 
 function GlassTab() {
   return (
-    <Box width="100%" direction="column" gap={space[3]}>
-      <Box width="100%" direction="row" gap={space[3]} height={176}>
+    <box width="100%" direction="column" gap={space[3]}>
+      <box width="100%" direction="row" gap={space[3]} height={176}>
         <Panel title="Glass blur" caption="backdropBlur: 10 · sharp backing">
           <GlassSample effect={{ backdropBlur: 10 }} />
         </Panel>
@@ -186,8 +186,8 @@ function GlassTab() {
         <Panel title="Contrast" caption="backdropContrast: 140 only">
           <GlassSample effect={{ backdropContrast: 140 }} />
         </Panel>
-      </Box>
-      <Box width="100%" direction="row" gap={space[3]} height={176}>
+      </box>
+      <box width="100%" direction="row" gap={space[3]} height={176}>
         <Panel title="Saturate" caption="backdropSaturate: 40 only">
           <GlassSample effect={{ backdropSaturate: 40 }} />
         </Panel>
@@ -197,8 +197,8 @@ function GlassTab() {
         <Panel title="Invert" caption="backdropInvert: 100 only">
           <GlassSample effect={{ backdropInvert: 100 }} />
         </Panel>
-      </Box>
-      <Box width="100%" direction="row" gap={space[3]} height={176}>
+      </box>
+      <box width="100%" direction="row" gap={space[3]} height={176}>
         <Panel title="Sepia" caption="backdropSepia: 100 only">
           <GlassSample effect={{ backdropSepia: 100 }} />
         </Panel>
@@ -206,20 +206,20 @@ function GlassTab() {
           <GlassSample effect={{ backdropHueRotate: 180 }} />
         </Panel>
         <Panel title="Filter contract" caption="each swatch samples stripes">
-          <Box width={112} height={88} direction="column" gap={space[1]} alignX="center" alignY="center" backgroundColor={0x0f172aff} cornerRadius={radius.lg}>
-            <Text color={colors.foreground} fontSize={font.xs}>Sharp backing</Text>
-            <Text color={colors.mutedForeground} fontSize={font.xs}>one filter each</Text>
-          </Box>
+          <box width={112} height={88} direction="column" gap={space[1]} alignX="center" alignY="center" backgroundColor={0x0f172aff} cornerRadius={radius.lg}>
+            <text color={colors.foreground} fontSize={font.xs}>Sharp backing</text>
+            <text color={colors.mutedForeground} fontSize={font.xs}>one filter each</text>
+          </box>
         </Panel>
-      </Box>
-    </Box>
+      </box>
+    </box>
   )
 }
 
 function CompositionTab() {
   return (
-    <Box width="100%" direction="column" gap={space[3]}>
-      <Box width="100%" direction="row" gap={space[3]} height={176}>
+    <box width="100%" direction="column" gap={space[3]}>
+      <box width="100%" direction="row" gap={space[3]} height={176}>
         <Panel title="Rotate" caption="transform.rotate: -8">
           <Swatch
             backgroundColor="#38bdf8"
@@ -233,8 +233,8 @@ function CompositionTab() {
         <Panel title="Self filter" caption="filter: grayscale + contrast">
           <Swatch backgroundColor="#f97316" filter={{ grayscale: 72, contrast: 150 }} />
         </Panel>
-      </Box>
-      <Box
+      </box>
+      <box
         width="100%"
         height={176}
         padding={space[4]}
@@ -247,13 +247,13 @@ function CompositionTab() {
         layer
         willChange={["transform", "opacity", "filter"]}
       >
-        <Box width="grow" direction="column" gap={space[1]}>
-          <Text color={colors.foreground} fontSize={font.lg} fontWeight={weight.semibold}>Retained layer</Text>
-          <Text color={colors.mutedForeground} fontSize={font.sm}>Effects compose in the GPU target before Kitty presents the frame.</Text>
-        </Box>
+        <box width="grow" direction="column" gap={space[1]}>
+          <text color={colors.foreground} fontSize={font.lg} fontWeight={weight.semibold}>Retained layer</text>
+          <text color={colors.mutedForeground} fontSize={font.sm}>Effects compose in the GPU target before Kitty presents the frame.</text>
+        </box>
         <Swatch backgroundColor="#22d3ee" opacity={0.72} glow={{ radius: 16, color: 0x22d3eeff, intensity: 62 }} />
-      </Box>
-    </Box>
+      </box>
+    </box>
   )
 }
 
@@ -262,17 +262,17 @@ function StatesTab() {
   const [armed, setArmed] = createSignal(false)
 
   return (
-    <Box width="100%" direction="column" gap={space[3]}>
-      <Box width="100%" direction="row" gap={space[3]} height={176}>
+    <box width="100%" direction="column" gap={space[3]}>
+      <box width="100%" direction="row" gap={space[3]} height={176}>
         <Panel title="Button states" caption="hover / active / focus">
-          <Box direction="row" gap={space[3]}>
+          <box direction="row" gap={space[3]}>
             <VoidButton size="sm" variant="default" onPress={() => setPresses((value) => value + 1)}>Press</VoidButton>
             <VoidButton size="sm" variant="outline" onPress={() => setArmed((value) => !value)}>{armed() ? "Armed" : "Arm"}</VoidButton>
-          </Box>
-          <Text color={colors.mutedForeground} fontSize={font.xs}>press count: {presses()}</Text>
+          </box>
+          <text color={colors.mutedForeground} fontSize={font.xs}>press count: {presses()}</text>
         </Panel>
         <Panel title="Custom interaction" caption="declarative style props">
-          <Box
+          <box
             focusable
             width={150}
             height={64}
@@ -288,22 +288,22 @@ function StatesTab() {
             focusStyle={{ borderColor: "#22d3ee", borderWidth: 2, glow: { radius: 8, color: 0x22d3eeaa, intensity: 65 } }}
             onPress={() => setArmed((value) => !value)}
           >
-            <Text color={colors.foreground} fontSize={font.sm}>{armed() ? "Enabled" : "Focusable box"}</Text>
-          </Box>
+            <text color={colors.foreground} fontSize={font.sm}>{armed() ? "Enabled" : "Focusable box"}</text>
+          </box>
         </Panel>
         <Panel title="Live feedback" caption="same-frame re-layout">
-          <Box direction="column" gap={space[1]} alignX="center">
-            <Text color="#67e8f9" fontSize={font.xl} fontWeight={weight.bold}>{presses()}</Text>
-            <Text color={colors.mutedForeground} fontSize={font.xs}>presses</Text>
-          </Box>
+          <box direction="column" gap={space[1]} alignX="center">
+            <text color="#67e8f9" fontSize={font.xl} fontWeight={weight.bold}>{presses()}</text>
+            <text color={colors.mutedForeground} fontSize={font.xs}>presses</text>
+          </box>
         </Panel>
-      </Box>
-      <Box width="100%" padding={space[4]} backgroundColor={colors.card} cornerRadius={radius.xl} borderColor={colors.border} borderWidth={1}>
-        <Text color={colors.mutedForeground} fontSize={font.sm}>
+      </box>
+      <box width="100%" padding={space[4]} backgroundColor={colors.card} cornerRadius={radius.xl} borderColor={colors.border} borderWidth={1}>
+        <text color={colors.mutedForeground} fontSize={font.sm}>
           Use Tab to move focus, Space/Enter to activate, and the mouse to inspect hover and active states.
-        </Text>
-      </Box>
-    </Box>
+        </text>
+      </box>
+    </box>
   )
 }
 
@@ -313,9 +313,9 @@ function App() {
   const [tab, setTab] = createSignal(0)
 
   return (
-    <Box width={dims.width()} height={dims.height()} backgroundColor={colors.background} direction="column">
-      <Box width="100%" height={space[2]} />
-      <Box
+    <box width={dims.width()} height={dims.height()} backgroundColor={colors.background} direction="column">
+      <box width="100%" height={space[2]} />
+      <box
         width="100%"
         paddingX={space[6]}
         paddingTop={space[4]}
@@ -325,13 +325,13 @@ function App() {
         borderColor={colors.border}
         borderBottom={1}
       >
-        <Box width="grow" direction="column" gap={space[1]}>
-          <Text color={colors.foreground} fontSize={font.xl} fontWeight={weight.bold}>Vexart Effects Showcase</Text>
-          <Text color={colors.mutedForeground} fontSize={font.sm}>GPU visual effects in Kitty · Tab/Arrows navigate · Space/Enter interact · q exit</Text>
-        </Box>
+        <box width="grow" direction="column" gap={space[1]}>
+          <text color={colors.foreground} fontSize={font.xl} fontWeight={weight.bold}>Vexart Effects Showcase</text>
+          <text color={colors.mutedForeground} fontSize={font.sm}>GPU visual effects in Kitty · Tab/Arrows navigate · Space/Enter interact · q exit</text>
+        </box>
         <VoidBadge variant="outline">GPU</VoidBadge>
-      </Box>
-      <Box width="100%" height="grow" paddingX={space[6]} paddingTop={space[3]} scrollY>
+      </box>
+      <box width="100%" height="grow" paddingX={space[6]} paddingTop={space[3]} scrollY>
         <VoidTabs
           activeTab={tab()}
           onTabChange={setTab}
@@ -343,8 +343,8 @@ function App() {
             { label: "States", content: () => <StatesTab /> },
           ]}
         />
-      </Box>
-    </Box>
+      </box>
+    </box>
   )
 }
 

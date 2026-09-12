@@ -1,5 +1,4 @@
 import {
-  Box,
   For,
   Show,
   createEffect,
@@ -61,15 +60,15 @@ function keyIs(event: { key: string }, ...keys: string[]) {
   return keys.includes(event.key)
 }
 
-function percent(value: number) {
+function percent(value: number): `${number}%` {
   return `${Math.round(Math.max(0, Math.min(100, value)))}%`
 }
 
 function SettingMeter(props: { value: number; color: string; width: number }) {
   return (
-    <Box width={props.width} height={6} backgroundColor="#ffffff22" cornerRadius={3}>
-      <Box width={percent(props.value)} height="100%" backgroundColor={props.color} cornerRadius={3} />
-    </Box>
+    <box width={props.width} height={6} backgroundColor="#ffffff22" cornerRadius={3}>
+      <box width={percent(props.value)} height="100%" backgroundColor={props.color} cornerRadius={3} />
+    </box>
   )
 }
 
@@ -239,11 +238,11 @@ export function SettingsScreen(props: Ps5ScreenProps) {
       onKeyDown={onKeyDown}
       screen={props}
     >
-      <Box width="100%" direction="row" alignY="center" gap={scale(12)}>
+      <box width="100%" direction="row" alignY="center" gap={scale(12)}>
         <Ps5Text color={highContrast() ? "#ffffff" : ps5Colors.text} fontSize={font(16)}>{label}</Ps5Text>
-        <Box flexGrow={1} />
+        <box flexGrow={1} />
         <StateLabel value={value} highContrast={highContrast()} size={font(14)} />
-      </Box>
+      </box>
     </Ps5Button>
   )
 
@@ -252,12 +251,12 @@ export function SettingsScreen(props: Ps5ScreenProps) {
     const info = categories.find((entry) => entry.id === current) ?? categories[0]!
     const detailGap = scale(12)
     return (
-      <Box width="100%" height="100%" direction="column" gap={scale(18)}>
-        <Box direction="column" gap={scale(5)}>
+      <box width="100%" height="100%" direction="column" gap={scale(18)}>
+        <box direction="column" gap={scale(5)}>
           <Ps5Text color={highContrast() ? "#ffffff" : ps5Colors.text} fontSize={font(27)} fontWeight={700}>{info.label}</Ps5Text>
           <Ps5Text color={muted()} fontSize={font(14)}>{info.description}</Ps5Text>
-        </Box>
-        <Box width="100%" flexGrow={1} direction="column" gap={detailGap} scrollY viewportClip>
+        </box>
+        <box width="100%" flexGrow={1} direction="column" gap={detailGap} scrollY viewportClip>
           <Show when={current === "system"}>
             {row("settings-system-user", "Usuario activo", userName(), () => openCategory("users"), (event) => {
               if (keyIs(event, "up", "down")) moveControl(event.key === "up" ? -1 : 1)
@@ -274,10 +273,10 @@ export function SettingsScreen(props: Ps5ScreenProps) {
               if (keyIs(event, "right")) moveValue("brightness", 5)
               if (keyIs(event, "up", "down")) moveControl(event.key === "up" ? -1 : 1)
             })}
-            <Box direction="row" alignY="center" gap={scale(14)}>
+            <box direction="row" alignY="center" gap={scale(14)}>
               <Ps5Text color={muted()} fontSize={font(13)}>Simulado · no cambia el monitor del host</Ps5Text>
               <SettingMeter value={state().settings.brightness} color="#7ea7ff" width={scale(220)} />
-            </Box>
+            </box>
           </Show>
 
           <Show when={current === "accessibility"}>
@@ -290,7 +289,7 @@ export function SettingsScreen(props: Ps5ScreenProps) {
               if (keyIs(event, "up", "down")) moveControl(event.key === "up" ? -1 : 1)
             })}
             <Ps5Text color={muted()} fontSize={font(13)}>Tamaño del texto</Ps5Text>
-            <Box direction="row" gap={scale(10)}>
+            <box direction="row" gap={scale(10)}>
               {(["small", "default", "large"] as const).map((value) => (
                 <Ps5Button
                   id={`settings-accessibility-text-${value}`}
@@ -311,7 +310,7 @@ export function SettingsScreen(props: Ps5ScreenProps) {
                   screen={props}
                 />
               ))}
-            </Box>
+            </box>
           </Show>
 
           <Show when={current === "volume"}>
@@ -320,10 +319,10 @@ export function SettingsScreen(props: Ps5ScreenProps) {
               if (keyIs(event, "right")) moveValue("volume", 5)
               if (keyIs(event, "up", "down")) moveControl(event.key === "up" ? -1 : 1)
             })}
-            <Box direction="row" alignY="center" gap={scale(14)}>
+            <box direction="row" alignY="center" gap={scale(14)}>
               <Ps5Text color={muted()} fontSize={font(13)}>Salida simulada · no emite audio del host</Ps5Text>
               <SettingMeter value={state().settings.volume} color="#8bd4b0" width={scale(220)} />
-            </Box>
+            </box>
           </Show>
 
           <Show when={current === "network"}>
@@ -337,11 +336,11 @@ export function SettingsScreen(props: Ps5ScreenProps) {
 
           <Show when={current === "storage"}>
             <Ps5Panel width="100%" padding={scale(16)} gap={scale(10)} direction="column" backgroundColor={panel()} borderColor={divider()}>
-              <Box width="100%" direction="row" alignY="center">
+              <box width="100%" direction="row" alignY="center">
                 <Ps5Text color={ps5Colors.text} fontSize={font(16)} fontWeight={700}>Almacenamiento de la consola</Ps5Text>
-                <Box flexGrow={1} />
+                <box flexGrow={1} />
                 <Ps5Text color={muted()} fontSize={font(14)}>{state().storage.usedGb.toFixed(1)} GB / {state().storage.capacityGb} GB</Ps5Text>
-              </Box>
+              </box>
               <SettingMeter value={state().storage.capacityGb > 0 ? state().storage.usedGb / state().storage.capacityGb * 100 : 0} color="#8ea9ff" width={scale(520)} />
               <Ps5Text color={muted()} fontSize={font(13)}>Los cambios son locales y no borran archivos del host.</Ps5Text>
             </Ps5Panel>
@@ -366,11 +365,11 @@ export function SettingsScreen(props: Ps5ScreenProps) {
                   }}
                   screen={props}
                 >
-                  <Box width="100%" direction="row" alignY="center">
+                  <box width="100%" direction="row" alignY="center">
                     <Ps5Text color={ps5Colors.text} fontSize={font(15)}>{game.title}</Ps5Text>
-                    <Box flexGrow={1} />
+                    <box flexGrow={1} />
                     <Ps5Text color={muted()} fontSize={font(13)}>{game.sizeGb} GB · Desinstalar</Ps5Text>
-                  </Box>
+                  </box>
                 </Ps5Button>
               )}</For>
             </Show>
@@ -391,11 +390,11 @@ export function SettingsScreen(props: Ps5ScreenProps) {
                   }}
                   screen={props}
                 >
-                  <Box width="100%" direction="row" alignY="center">
+                  <box width="100%" direction="row" alignY="center">
                     <Ps5Text color={ps5Colors.text} fontSize={font(15)}>{gameTitle(download.gameId)}</Ps5Text>
-                    <Box flexGrow={1} />
+                    <box flexGrow={1} />
                     <Ps5Text color={muted()} fontSize={font(13)}>{Math.round(download.progress)}% · Cancelar</Ps5Text>
-                  </Box>
+                  </box>
                 </Ps5Button>
               )}</For>
             </Show>
@@ -418,11 +417,11 @@ export function SettingsScreen(props: Ps5ScreenProps) {
                 }}
                 screen={props}
               >
-                <Box width="100%" direction="row" alignY="center">
+                <box width="100%" direction="row" alignY="center">
                   <Ps5Text color={ps5Colors.text} fontSize={font(16)}>{user.name}</Ps5Text>
-                  <Box flexGrow={1} />
+                  <box flexGrow={1} />
                   <Ps5Text color={muted()} fontSize={font(13)}>{state().activeUserId === user.id ? "Activo" : user.handle}</Ps5Text>
-                </Box>
+                </box>
               </Ps5Button>
             )}</For>
             <Ps5Button id="settings-users-selection" width="100%" height={scale(48)} label="Volver a selección de usuario" onPress={() => actions.go("boot-users")} screen={props} />
@@ -431,38 +430,38 @@ export function SettingsScreen(props: Ps5ScreenProps) {
           <Show when={current === "reset"}>
             <Ps5Text color={muted()} fontSize={font(14)}>Restablece brillo, volumen, red y preferencias de accesibilidad del demo. No cambia la configuración del ordenador.</Ps5Text>
             <Show when={!confirmReset()} fallback={
-              <Box direction="column" gap={detailGap}>
+              <box direction="column" gap={detailGap}>
                 <Ps5Text color={ps5Colors.text} fontSize={font(16)} fontWeight={700}>¿Restablecer todos los ajustes?</Ps5Text>
-                <Box direction="row" gap={scale(10)}>
+                <box direction="row" gap={scale(10)}>
                   <Ps5Button id="settings-reset-confirm" width="50%" height={scale(50)} label="Restablecer" backgroundColor="#55343a" onPress={resetSettings} screen={props} />
                   <Ps5Button id="settings-reset-cancel" width="50%" height={scale(50)} label="Cancelar" onPress={() => { setConfirmReset(false); actions.setFocus("settings-reset-open") }} screen={props} />
-                </Box>
-              </Box>
+                </box>
+              </box>
             }>
               <Ps5Button id="settings-reset-open" width="100%" height={scale(58)} label="Restablecer ajustes" onPress={() => { setConfirmReset(true); actions.setFocus("settings-reset-confirm") }} onKeyDown={(event) => {
                 if (keyIs(event, "up", "down")) moveControl(event.key === "up" ? -1 : 1)
               }} screen={props} />
             </Show>
           </Show>
-        </Box>
-      </Box>
+        </box>
+      </box>
     )
   }
 
   return (
-    <Box width={viewport.width()} height={viewport.height()} backgroundColor={background()} direction="column" viewportClip>
-      <Box width="100%" height={scale(138)} paddingLeft={scale(80)} paddingRight={scale(80)} direction="row" alignY="center" gap={scale(20)}>
-        <Box direction="column" gap={scale(4)}>
+    <box width={viewport.width()} height={viewport.height()} backgroundColor={background()} direction="column" viewportClip>
+      <box width="100%" height={scale(138)} paddingLeft={scale(80)} paddingRight={scale(80)} direction="row" alignY="center" gap={scale(20)}>
+        <box direction="column" gap={scale(4)}>
           <Ps5Text color={highContrast() ? "#ffffff" : ps5Colors.text} fontSize={font(34)} fontWeight={700}>Ajustes</Ps5Text>
           <Ps5Text color={muted()} fontSize={font(14)}>Personaliza tu experiencia local</Ps5Text>
-        </Box>
-        <Box flexGrow={1} />
+        </box>
+        <box flexGrow={1} />
         <Ps5Text color={muted()} fontSize={font(13)}>F1 Centro de control · F2 Opciones · Escape Volver</Ps5Text>
-      </Box>
-      <Box width="100%" flexGrow={1} paddingLeft={scale(80)} paddingRight={scale(80)} paddingBottom={scale(48)} direction="row" gap={scale(52)}>
-        <Box width={scale(430)} height="100%" direction="column" gap={scale(5)} scrollY viewportClip>
+      </box>
+      <box width="100%" flexGrow={1} paddingLeft={scale(80)} paddingRight={scale(80)} paddingBottom={scale(48)} direction="row" gap={scale(52)}>
+        <box width={scale(430)} height="100%" direction="column" gap={scale(5)} scrollY viewportClip>
           <Ps5Text color={muted()} fontSize={font(13)} fontWeight={700}>CONFIGURACIÓN</Ps5Text>
-          <Box width="100%" height={scale(1)} backgroundColor={divider()} />
+          <box width="100%" height={scale(1)} backgroundColor={divider()} />
           <For each={categories}>{(entry, index) => (
             <Ps5Button
               id={categoryId(entry.id)}
@@ -482,34 +481,34 @@ export function SettingsScreen(props: Ps5ScreenProps) {
               }}
               screen={props}
             >
-              <Box width="100%" direction="row" alignY="center" gap={scale(12)}>
-                <Box width={scale(4)} height={scale(34)} backgroundColor={category() === entry.id ? ps5Colors.focus : "#ffffff00"} cornerRadius={scale(2)} />
-                <Box flexGrow={1} direction="column" gap={scale(3)}>
+              <box width="100%" direction="row" alignY="center" gap={scale(12)}>
+                <box width={scale(4)} height={scale(34)} backgroundColor={category() === entry.id ? ps5Colors.focus : "#ffffff00"} cornerRadius={scale(2)} />
+                <box flexGrow={1} direction="column" gap={scale(3)}>
                   <Ps5Text color={highContrast() ? "#ffffff" : ps5Colors.text} fontSize={font(19)} fontWeight={category() === entry.id ? 700 : 400}>{entry.label}</Ps5Text>
                   <Ps5Text color={muted()} fontSize={font(12)}>{entry.description}</Ps5Text>
-                </Box>
-              </Box>
+                </box>
+              </box>
             </Ps5Button>
           )}</For>
-        </Box>
-        <Box width={scale(1)} height="100%" backgroundColor={divider()} />
-        <Box flexGrow={1} height="100%" paddingLeft={scale(24)} paddingTop={scale(10)} paddingRight={scale(10)}>
+        </box>
+        <box width={scale(1)} height="100%" backgroundColor={divider()} />
+        <box flexGrow={1} height="100%" paddingLeft={scale(24)} paddingTop={scale(10)} paddingRight={scale(10)}>
           <Show when={detailOpen()} fallback={
-            <Box width="100%" height="100%" direction="column" gap={scale(24)}>
-              <Box direction="column" gap={scale(7)}>
+            <box width="100%" height="100%" direction="column" gap={scale(24)}>
+              <box direction="column" gap={scale(7)}>
                 <Ps5Text color={ps5Colors.text} fontSize={font(30)} fontWeight={700}>Personaliza tu PS5</Ps5Text>
                 <Ps5Text color={muted()} fontSize={font(16)}>Selecciona una categoría para ver sus controles.</Ps5Text>
-              </Box>
-              <Box width="100%" height={scale(1)} backgroundColor={divider()} />
-              <Box width={scale(620)} direction="column" gap={scale(16)}>
-                <Box direction="row" alignY="center">
-                  <Box direction="column" gap={scale(4)}>
+              </box>
+              <box width="100%" height={scale(1)} backgroundColor={divider()} />
+              <box width={scale(620)} direction="column" gap={scale(16)}>
+                <box direction="row" alignY="center">
+                  <box direction="column" gap={scale(4)}>
                     <Ps5Text color={ps5Colors.text} fontSize={font(18)} fontWeight={700}>Ajuste rápido</Ps5Text>
                     <Ps5Text color={muted()} fontSize={font(13)}>Un acceso directo a la accesibilidad local.</Ps5Text>
-                  </Box>
-                  <Box flexGrow={1} />
+                  </box>
+                  <box flexGrow={1} />
                   <StateLabel value={state().settings.reduceMotion ? "Activado" : "Desactivado"} highContrast={highContrast()} size={font(14)} />
-                </Box>
+                </box>
                 <Ps5Button
                   id="settings-reduce-motion"
                   width="100%"
@@ -523,13 +522,13 @@ export function SettingsScreen(props: Ps5ScreenProps) {
                   onPress={() => toggle("reduceMotion")}
                   screen={props}
                 />
-              </Box>
-            </Box>
+              </box>
+            </box>
           }>
             {renderDetails()}
           </Show>
-        </Box>
-      </Box>
-    </Box>
+        </box>
+      </box>
+    </box>
   )
 }

@@ -1,30 +1,30 @@
 'use client'
 import { motion } from 'framer-motion'
 
-const code = `import { createApp, Box, Text, Button, colors, radius, space } from "vexart"
+const code = `import { createApp, Button, colors, radius, space } from "vexart"
 
 function App() {
   return (
-    <Box backgroundColor={colors.background} padding={space[6]} gap={space[4]}>
-      <Box backgroundColor={colors.card} cornerRadius={radius.lg}
+    <box backgroundColor={colors.background} padding={space[6]} gap={space[4]}>
+      <box backgroundColor={colors.card} cornerRadius={radius.lg}
            padding={space[5]} shadow={{ x: 0, y: 4, blur: 16, color: 0x00000040 }}>
-        <Text color={colors.foreground} fontSize={18} fontWeight={600}>
+        <text color={colors.foreground} fontSize={18} fontWeight={600}>
           Hello from Vexart
-        </Text>
-        <Text color={colors.mutedForeground} fontSize={13}>
+        </text>
+        <text color={colors.mutedForeground} fontSize={13}>
           Anti-aliased corners, real shadows, GPU pixels
-        </Text>
-      </Box>
+        </text>
+      </box>
       <Button onPress={() => console.log("GPU-rendered click!")}
         renderButton={(ctx) => (
-          <Box {...ctx.buttonProps} backgroundColor={0x56d4c8ff}
+          <box {...ctx.buttonProps} backgroundColor={0x56d4c8ff}
                cornerRadius={radius.md} padding={space[3]}
                hoverStyle={{ backgroundColor: 0x7ee8ddff }}>
-            <Text color={0x0a0a0fff} fontWeight={600}>Get Started</Text>
-          </Box>
+            <text color={0x0a0a0fff} fontWeight={600}>Get Started</text>
+          </box>
         )}
       />
-    </Box>
+    </box>
   )
 }
 

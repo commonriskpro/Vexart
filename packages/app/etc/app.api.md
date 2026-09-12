@@ -7,9 +7,6 @@
 import type { JSX } from 'solid-js';
 
 // @public (undocumented)
-export type AppBoxProps = TGEProps & ClassNameProps;
-
-// @public (undocumented)
 export type AppContext = {
     terminal: Terminal;
     handle: MountHandle;
@@ -65,12 +62,6 @@ export type AppRouterState = {
 };
 
 // @public (undocumented)
-export type AppTextProps = TGEProps & ClassNameProps;
-
-// @public (undocumented)
-export function Box(props: AppBoxProps): JSX.Element;
-
-// @public (undocumented)
 export const CLASS_NAME_UNKNOWN_BEHAVIOR: {
     readonly IGNORE: "ignore";
     readonly WARN: "warn";
@@ -82,12 +73,6 @@ export type ClassNameDiagnostic = {
     className: string;
     reason: string;
     suggestion?: string;
-};
-
-// @public (undocumented)
-export type ClassNameProps = {
-    className?: string;
-    children?: JSX.Element;
 };
 
 // @public (undocumented)
@@ -203,7 +188,7 @@ export function normalizePath(path: string): string;
 export function Page(props: PageProps): JSX.Element;
 
 // @public (undocumented)
-export type PageProps = AppBoxProps & {
+export type PageProps = TGEProps & {
     children?: JSX.Element;
 };
 
@@ -268,10 +253,6 @@ export function RouterProvider(props: AppRouterProviderProps): JSX.Element;
 
 // @public (undocumented)
 export function runCli(argv?: string[]): Promise<CliResult>;
-
-// @public (undocumented)
-function Text_2(props: AppTextProps): JSX.Element;
-export { Text_2 as Text }
 
 // @public (undocumented)
 export function useAppTerminal(): Terminal;

@@ -32,13 +32,16 @@ Dependencies flow strictly downward. Lateral and upward imports are prohibited a
 
 ## Frame Lifecycle
 
-1. **Reconciliation** — SolidJS signals mutate the TGENode tree
+1. **Reconciliation** — SolidJS signals mutate the internal TGENode tree
 2. **Walk tree** — depth-first traversal, viewport culling, layout input
 3. **Layout** — Flexily computes pixel positions (reactive, incremental)
 4. **Assign layers** — 3-phase algorithm (scroll → background → static)
 5. **Paint** — `vexart_paint_dispatch` per dirty layer via FFI
 6. **Composite** — z-order layer merge into final target
 7. **Output** — Kitty encoding + transport (entirely in Rust)
+
+The node-ref migration narrows public JSX refs to the cached `NodeHandle` for
+this internal scene/layout tree. There is no public raw-node alternative.
 
 ## Native Binary — `libvexart`
 

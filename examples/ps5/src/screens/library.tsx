@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs"
 import {
-  Box,
   For,
   Input,
   Show,
@@ -39,15 +38,15 @@ function sortGames(games: GameCatalogEntry[], sort: "recent" | "name" | "size", 
 function GameCover(props: { game: GameCatalogEntry; width: number; height: number }) {
   const radius = Math.max(8, Math.round(Math.min(props.width, props.height) * 0.04))
   return (
-    <Box width="100%" height="100%" backgroundColor={props.game.accent} cornerRadius={radius}>
+    <box width="100%" height="100%" backgroundColor={props.game.accent} cornerRadius={radius}>
       <Show when={imageAvailable(props.game.cover)} fallback={
-        <Box width="100%" height="100%" alignX="center" alignY="center">
+        <box width="100%" height="100%" alignX="center" alignY="center">
           <Ps5Text color={ps5Colors.text} fontSize={12} alignX="center">{props.game.title}</Ps5Text>
-        </Box>
+        </box>
       }>
         <img src={props.game.cover} width={props.width} height={props.height} objectFit="cover" cornerRadius={radius} />
       </Show>
-    </Box>
+    </box>
   )
 }
 
@@ -201,15 +200,15 @@ export function LibraryScreen(props: Ps5ScreenProps) {
   })
 
   return (
-    <Box width={viewport.width()} height={viewport.height()} backgroundColor={ps5Colors.background} viewportClip>
-      <Box width={viewport.width()} height={viewport.height()} direction="column" padding={scale(45)} gap={scale(18)}>
-        <Box width="100%" height={scale(48)} direction="row" alignY="center" gap={scale(18)}>
+    <box width={viewport.width()} height={viewport.height()} backgroundColor={ps5Colors.background} viewportClip>
+      <box width={viewport.width()} height={viewport.height()} direction="column" padding={scale(45)} gap={scale(18)}>
+        <box width="100%" height={scale(48)} direction="row" alignY="center" gap={scale(18)}>
           <Ps5Button id="library-back" width={scale(44)} height={scale(42)} backgroundColor="#00000000" borderWidth={0} onPress={actions.back} screen={props}>
             <Ps5Text color={ps5Colors.text} fontSize={scale(28)}>‹</Ps5Text>
           </Ps5Button>
           <Ps5Text color={ps5Colors.text} fontSize={scale(30)} fontWeight={700}>Biblioteca</Ps5Text>
-          <Box flexGrow={1} />
-          <Box width={scale(400)} height={scale(42)}>
+          <box flexGrow={1} />
+          <box width={scale(400)} height={scale(42)}>
             <Input
               value={state().library.query}
               onChange={(value) => actions.setTextField("library-query", value)}
@@ -219,19 +218,19 @@ export function LibraryScreen(props: Ps5ScreenProps) {
               width="100%"
               height={scale(42)}
               renderInput={(context) => (
-                <Box onPress={context.inputProps.onPress} width="100%" height="100%" paddingX={scale(14)} alignY="center" backgroundColor="#161b22dd" borderColor={context.focused ? ps5Colors.focus : ps5Colors.divider} borderWidth={1} cornerRadius={scale(21)}>
+                <box onPress={context.inputProps.onPress} width="100%" height="100%" paddingX={scale(14)} alignY="center" backgroundColor="#161b22dd" borderColor={context.focused ? ps5Colors.focus : ps5Colors.divider} borderWidth={1} cornerRadius={scale(21)}>
                   <Ps5Text color={context.showPlaceholder ? ps5Colors.mutedText : ps5Colors.text} fontSize={scale(15)}>{context.displayText || "Buscar juegos"}</Ps5Text>
-                </Box>
+                </box>
               )}
             />
-          </Box>
+          </box>
           <Ps5Button id="library-filter" width={scale(48)} height={scale(42)} backgroundColor="#161b22cc" onPress={() => setFilterOpen((open) => !open)} screen={props}>
             <Ps5Icon name="magnifying-glass" size={scale(20)} />
           </Ps5Button>
           <Ps5Button id="library-sort" width={scale(120)} height={scale(42)} label={`Orden: ${state().library.sort}`} onPress={() => actions.dispatch({ type: "library/set", sort: state().library.sort === "recent" ? "name" : state().library.sort === "name" ? "size" : "recent" })} screen={props} />
-        </Box>
+        </box>
 
-        <Box width="100%" height={scale(48)} direction="row" gap={scale(12)}>
+        <box width="100%" height={scale(48)} direction="row" gap={scale(12)}>
           <For each={tabs}>{(tab) => (
             <Ps5Button id={`library-tab-${tab.id}`} width={scale(180)} height={scale(44)} backgroundColor={state().library.tab === tab.id ? "#f4f4f4" : "#161b22cc"} borderColor={state().library.tab === tab.id ? ps5Colors.focus : ps5Colors.divider} onPress={() => setTab(tab.id)} onKeyDown={moveTab(tabs.indexOf(tab))} screen={props}>
               <Ps5Text color={state().library.tab === tab.id ? "#101214" : ps5Colors.text} fontSize={scale(16)} fontWeight={state().library.tab === tab.id ? 700 : 400}>{tab.label}</Ps5Text>
@@ -240,7 +239,7 @@ export function LibraryScreen(props: Ps5ScreenProps) {
           <Show when={state().library.filter && state().library.filter !== "all"}>
             <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>Filtro: {state().library.filter}</Ps5Text>
           </Show>
-        </Box>
+        </box>
 
         <Show when={filterOpen()}>
           <Ps5Panel width={scale(620)} padding={scale(16)} gap={scale(10)} direction="row" backgroundColor="#111720f4" borderColor="#ffffff38" cornerRadius={scale(14)} zIndex={6}>
@@ -252,30 +251,30 @@ export function LibraryScreen(props: Ps5ScreenProps) {
           </Ps5Panel>
         </Show>
 
-        <Box width="100%" height={Math.max(scale(320), viewport.height() - scale(245))} scrollY scrollId="library-results" viewportClip>
+        <box width="100%" height={Math.max(scale(320), viewport.height() - scale(245))} scrollY scrollId="library-results" viewportClip>
           <Show when={state().library.tab !== "lists"} fallback={
             <Show when={listDetail()} keyed fallback={
               <Show when={state().library.lists.length > 0} fallback={
-                <Box width="100%" height={scale(300)} alignX="center" alignY="center" direction="column" gap={scale(14)}>
+                <box width="100%" height={scale(300)} alignX="center" alignY="center" direction="column" gap={scale(14)}>
                   <Ps5Text color={ps5Colors.text} fontSize={scale(24)} fontWeight={700}>Sin listas</Ps5Text>
                   <Ps5Text color={ps5Colors.mutedText} fontSize={scale(15)}>Añade juegos a una lista local desde Opciones.</Ps5Text>
                   <Ps5Button id="library-clear" width={scale(190)} height={scale(44)} label="Volver" onPress={actions.back} screen={props} />
-                </Box>
+                </box>
               }>
-                <Box direction="column" gap={scale(16)}>
+                <box direction="column" gap={scale(16)}>
                   <Ps5Text color={ps5Colors.text} fontSize={scale(19)} fontWeight={700}>Tus listas</Ps5Text>
                   <For each={state().library.lists}>{(list) => {
                     const entries = () => listGames(list)
                     return (
                       <Ps5Button id={`library-list-${list.id}`} width="100%" height={scale(118)} padding={scale(14)} alignX="left" onPress={() => openList(list.id)} screen={props}>
-                        <Box width="100%" height="100%" direction="row" gap={scale(14)} alignY="center">
-                          <Box width={scale(86)} height={scale(86)} backgroundColor="#202731" cornerRadius={10} alignX="center" alignY="center"><Ps5Text color={ps5Colors.text} fontSize={scale(22)}>{entries().length}</Ps5Text></Box>
-                          <Box direction="column" gap={scale(6)}><Ps5Text color={ps5Colors.text} fontSize={scale(18)} fontWeight={700}>{list.name}</Ps5Text><Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>{entries().length} juegos</Ps5Text></Box>
-                        </Box>
+                        <box width="100%" height="100%" direction="row" gap={scale(14)} alignY="center">
+                          <box width={scale(86)} height={scale(86)} backgroundColor="#202731" cornerRadius={10} alignX="center" alignY="center"><Ps5Text color={ps5Colors.text} fontSize={scale(22)}>{entries().length}</Ps5Text></box>
+                          <box direction="column" gap={scale(6)}><Ps5Text color={ps5Colors.text} fontSize={scale(18)} fontWeight={700}>{list.name}</Ps5Text><Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>{entries().length} juegos</Ps5Text></box>
+                        </box>
                       </Ps5Button>
                     )
                   }}</For>
-                </Box>
+                </box>
               </Show>
             }>{(listId) => {
               const list = () => state().library.lists.find((entry) => entry.id === listId)
@@ -293,48 +292,48 @@ export function LibraryScreen(props: Ps5ScreenProps) {
             }}</Show>
           }>
             <Show when={games().length > 0} fallback={
-              <Box width="100%" height={scale(300)} alignX="center" alignY="center" direction="column" gap={scale(14)}>
+              <box width="100%" height={scale(300)} alignX="center" alignY="center" direction="column" gap={scale(14)}>
                 <Ps5Text color={ps5Colors.text} fontSize={scale(24)} fontWeight={700}>Sin resultados</Ps5Text>
                 <Ps5Text color={ps5Colors.mutedText} fontSize={scale(15)}>Prueba otra búsqueda o limpia los filtros.</Ps5Text>
                 <Ps5Button id="library-clear" width={scale(220)} height={scale(44)} label="Limpiar filtros" onPress={clearFilters} screen={props} />
-              </Box>
+              </box>
             }>
-              <Box direction="column" gap={scale(16)}>
+              <box direction="column" gap={scale(16)}>
                 <Show when={selectedResult()}>
-                  <Box width="100%" height={scale(44)} direction="row" alignY="center" gap={scale(12)}>
+                  <box width="100%" height={scale(44)} direction="row" alignY="center" gap={scale(12)}>
                     <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>Resultados: {games().length} · {selectedResult()!.title}</Ps5Text>
-                    <Box flexGrow={1} />
+                    <box flexGrow={1} />
                     <Show when={!selectedResult()!.installed}>
                       <Ps5Button id="library-download" width={scale(150)} height={scale(40)} label="Descargar" onPress={() => download(selectedResult())} screen={props} />
                     </Show>
-                  </Box>
+                  </box>
                 </Show>
                 <For each={rows()}>{(row) => (
-                  <Box width="100%" height={rowHeight()} direction="row" gap={gridGap()}>
+                  <box width="100%" height={rowHeight()} direction="row" gap={gridGap()}>
                     <For each={row}>{(entry) => {
                       const position = () => games().findIndex((game) => game.id === entry.id)
                       const downloadEntry = () => state().downloads.find((download) => download.gameId === entry.id)
                       return (
                         <Ps5Button id={`library-game-${entry.id}`} width={cardWidth()} height={cardHeight()} padding={0} alignY="top" backgroundColor="#00000000" borderColor="#ffffff00" cornerRadius={scale(14)} onPress={() => activateGame(entry)} onKeyDown={moveGame(position())} screen={props}>
-                          <Box width="100%" height="100%" direction="column" gap={scale(8)}>
-                            <Box width={coverSize()} height={coverSize()}>
+                          <box width="100%" height="100%" direction="column" gap={scale(8)}>
+                            <box width={coverSize()} height={coverSize()}>
                               <GameCover game={entry} width={coverSize()} height={coverSize()} />
-                            </Box>
-                            <Box width="100%" height={captionHeight()} direction="column" gap={scale(3)} paddingX={scale(2)}>
+                            </box>
+                            <box width="100%" height={captionHeight()} direction="column" gap={scale(3)} paddingX={scale(2)}>
                               <Ps5Text color={ps5Colors.text} fontSize={scale(14)} fontWeight={600}>{entry.title}</Ps5Text>
                               <Ps5Text color={entry.installed ? ps5Colors.success : ps5Colors.mutedText} fontSize={scale(12)}>{downloadEntry()?.status === "downloading" ? `Descargando ${Math.round(downloadEntry()!.progress)}%` : entry.installed ? "Instalado" : "No instalado"}</Ps5Text>
-                            </Box>
-                          </Box>
+                            </box>
+                          </box>
                         </Ps5Button>
                       )
                     }}</For>
-                  </Box>
+                  </box>
                 )}</For>
-              </Box>
+              </box>
             </Show>
           </Show>
-        </Box>
-      </Box>
-    </Box>
+        </box>
+      </box>
+    </box>
   )
 }

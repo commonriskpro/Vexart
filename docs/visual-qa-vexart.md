@@ -123,9 +123,9 @@ nombre de la prop: requiere evidencia del caso indicado.
 | C3 | self filter grayscale + contrast | AUTOMATED PASS (TS only) | /tmp/vexart-phase17-self-root.log: 11 tests / 88 assertions. Kitty visual proof remains pending; la captura naranja histórica no se convierte en Kitty PASS. |
 | C4 | retained layer + willChange + opacity/glow | SMOKE/HISTORICAL | Composition se vio; no hay prueba aislada de reuse/composite. |
 | S1 | Button default/outline: hover, active, focus | PARTIAL | States se vio; no hay matriz de los tres estados con input atribuible. |
-| S2 | Box focusable: hover, active, focusStyle | PARTIAL | El box alternó históricamente; cobertura de cada pseudoestado abierta. |
+| S2 | box focusable: hover, active, focusStyle | PARTIAL | El box alternó históricamente; cobertura de cada pseudoestado abierta. |
 | S3 | Press mouse dos veces y contador 0→2 | PASS (Kitty partial) | Retry states shows actual mouse press 0→1 in `/tmp/vexart-retry-states-press.png`; the second-press 0→2 sequence remains unverified. |
-| S4 | Arm comparte señal con Button y Box; re-layout same-frame | PASS (Kitty partial) | `/tmp/vexart-retry-states-arm.png` shows Arm→Armed and Box Enabled green; focus returned false for States, so full background-safe sequence remains pending. |
+| S4 | Arm comparte señal con Button y box; re-layout same-frame | PASS (Kitty partial) | `/tmp/vexart-retry-states-arm.png` shows Arm→Armed and box Enabled green; focus returned false for States, so full background-safe sequence remains pending. |
 
 Conclusión de la galería: 4/4 es sólo smoke de vistas históricas. No es 23/23
 efectos/estados. E1/E2/E3 y G7-G9 tienen PASS Kitty scoped en la retry window,

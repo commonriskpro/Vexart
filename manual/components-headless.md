@@ -74,26 +74,22 @@ All theme fields are optional — sensible dark defaults are used for any field 
 
 ## Complete Component Reference
 
-### 1. Box
+### 1. box
 
-Layout container. Thin typed wrapper over the `<box>` intrinsic.
+Layout container with typed props on the `<box>` intrinsic.
 
 ```tsx
-import { Box } from "vexart"
-
-<Box padding={16} backgroundColor="#1a1a2e" cornerRadius={12} gap={8}>
-  <Text color="#e0e0e0">Hello</Text>
-</Box>
+<box padding={16} backgroundColor="#1a1a2e" cornerRadius={12} gap={8}>
+  <text color="#e0e0e0">Hello</text>
+</box>
 ```
 
-### 2. Text
+### 2. text
 
-Text display with typed props.
+Text display with the typed `<text>` intrinsic.
 
 ```tsx
-import { Text } from "vexart"
-
-<Text color="#e0e0e0" fontSize={16} fontWeight={700}>Heading</Text>
+<text color="#e0e0e0" fontSize={16} fontWeight={700}>Heading</text>
 ```
 
 ### 3. ScrollView
@@ -625,11 +621,11 @@ const { toast, Toaster } = createToaster({
 Routing in Vexart is provided canonically by `@vexart/app` (`createAppRouter`, `RouterProvider`, `RouteOutlet`, `useRouter`), not by the headless layer.
 
 ```tsx
-import { createAppRouter, RouterProvider, RouteOutlet, useRouter, Box, Text } from "vexart"
+import { createAppRouter, RouterProvider, RouteOutlet, useRouter } from "vexart"
 
 const routes = [
-  { path: "/", component: () => <Box><Text>Home</Text></Box> },
-  { path: "/settings", component: () => <Box><Text>Settings</Text></Box> },
+  { path: "/", component: () => <box><text>Home</text></box> },
+  { path: "/settings", component: () => <box><text>Settings</text></box> },
 ]
 
 const router = createAppRouter(routes, "/")
@@ -637,9 +633,9 @@ const router = createAppRouter(routes, "/")
 export function App() {
   return (
     <RouterProvider router={router}>
-      <Box width="100%" height="100%">
+      <box width="100%" height="100%">
         <RouteOutlet />
-      </Box>
+      </box>
     </RouterProvider>
   )
 }
@@ -746,9 +742,9 @@ import { Diff } from "vexart"
 />
 ```
 
-### 27. Nested Text Spans
+### 27. Nested text spans
 
-Multi-span inline text for mixed styling is created using nested `<text>` tags or `<Box>` with `<Text>`:
+Multi-span inline text for mixed styling is created using nested `<text>` tags or `<box>` with `<text>`:
 
 ```tsx
 <text color="#e0e0e0">
@@ -758,16 +754,14 @@ Multi-span inline text for mixed styling is created using nested `<text>` tags o
 </text>
 ```
 
-Or compose with `@vexart/app`'s `<Text>`:
+Or compose directly with the `<text>` intrinsic:
 
 ```tsx
-import { Box, Text } from "vexart"
-
-<Box direction="row">
-  <Text color="#e0e0e0">Hello </Text>
-  <Text color="#4488cc" fontWeight={700}>world</Text>
-  <Text color="#e0e0e0"> from Vexart</Text>
-</Box>
+<box direction="row">
+  <text color="#e0e0e0">Hello </text>
+  <text color="#4488cc" fontWeight={700}>world</text>
+  <text color="#e0e0e0"> from Vexart</text>
+</box>
 ```
 
 ### 28. Flex Wrapping

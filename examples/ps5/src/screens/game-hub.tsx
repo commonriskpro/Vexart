@@ -2,7 +2,6 @@ import { existsSync } from "node:fs"
 import { resolve } from "node:path"
 import type { JSX } from "solid-js"
 import {
-  Box,
   For,
   Show,
   createEffect,
@@ -29,15 +28,15 @@ const mockAssets = {
 
 function HeroLayer(props: { game: GameCatalogEntry; width: number; height: number }) {
   return (
-    <Box width={props.width} height={props.height} backgroundColor={props.game.accent} floating="parent" zIndex={0}>
+    <box width={props.width} height={props.height} backgroundColor={props.game.accent} floating="parent" zIndex={0}>
       <Show when={imageAvailable(props.game.hero)} fallback={
-        <Box width="100%" height="100%" alignX="center" alignY="center" backgroundColor={props.game.accent}>
+        <box width="100%" height="100%" alignX="center" alignY="center" backgroundColor={props.game.accent}>
           <Ps5Text color="#ffffffcc" fontSize={28}>Arte no disponible · {props.game.id}</Ps5Text>
-        </Box>
+        </box>
       }>
         <img src={props.game.hero} width={props.width} height={props.height} objectFit="cover" />
       </Show>
-    </Box>
+    </box>
   )
 }
 
@@ -58,11 +57,11 @@ function FocusedCard(props: {
 }) {
   return (
     <Ps5Button id={props.id} width={props.width} height={props.height} padding={0} backgroundColor="#070b12d8" borderColor="#ffffff55" borderWidth={1} cornerRadius={props.radius} onPress={props.onPress} onKeyDown={props.onKeyDown} screen={props.screen}>
-      <Box width="100%" height="100%" backgroundColor="#10151d" cornerRadius={props.radius}>
-        <Show when={props.image && imageAvailable(props.image)} fallback={<Box width="100%" height="100%" backgroundColor="#10151d" cornerRadius={props.radius} />}>
+      <box width="100%" height="100%" backgroundColor="#10151d" cornerRadius={props.radius}>
+        <Show when={props.image && imageAvailable(props.image)} fallback={<box width="100%" height="100%" backgroundColor="#10151d" cornerRadius={props.radius} />}>
           <img src={props.image!} width="100%" height="100%" objectFit="cover" cornerRadius={props.radius} />
         </Show>
-        <Box
+        <box
           width="100%"
           height="100%"
           floating="parent"
@@ -70,7 +69,7 @@ function FocusedCard(props: {
           cornerRadius={props.radius}
           gradient={{ type: "linear", from: "#03060a10", to: "#03060ae8", angle: 90 }}
         />
-        <Box
+        <box
           width="100%"
           height="100%"
           floating="parent"
@@ -83,8 +82,8 @@ function FocusedCard(props: {
           <Show when={props.children}>{props.children}</Show>
           <Ps5Text color={ps5Colors.text} fontSize={22} fontWeight={700}>{props.title}</Ps5Text>
           <Ps5Text color="#ffffffdd" fontSize={15}>{props.body}</Ps5Text>
-        </Box>
-      </Box>
+        </box>
+      </box>
     </Ps5Button>
   )
 }
@@ -153,35 +152,35 @@ export function GameHubScreen(props: Ps5ScreenProps) {
   }
 
   return (
-    <Box width={viewport.width()} height={viewport.height()} backgroundColor={selected()?.accent ?? ps5Colors.background} viewportClip>
+    <box width={viewport.width()} height={viewport.height()} backgroundColor={selected()?.accent ?? ps5Colors.background} viewportClip>
       <Show when={selected()} fallback={
-        <Box width={viewport.width()} height={viewport.height()} alignX="center" alignY="center" direction="column" gap={scale(18)} backgroundColor={ps5Colors.background}>
+        <box width={viewport.width()} height={viewport.height()} alignX="center" alignY="center" direction="column" gap={scale(18)} backgroundColor={ps5Colors.background}>
           <Ps5Text color={ps5Colors.text} fontSize={scale(30)} fontWeight={700}>No se pudo cargar el hub</Ps5Text>
           <Ps5Text color={ps5Colors.mutedText} fontSize={scale(16)}>El juego seleccionado ya no está en el catálogo local.</Ps5Text>
           <Ps5Button id="hub-retry" width={scale(210)} height={scale(52)} label="Reintentar" onPress={() => actions.go("game-hub")} screen={props} />
           <Ps5Button id="hub-back" width={scale(210)} height={scale(52)} label="Volver" onPress={actions.back} screen={props} />
-        </Box>
+        </box>
       }>
         <HeroLayer game={selected()!} width={viewport.width()} height={viewport.height()} />
-        <Box width={viewport.width()} height={viewport.height()} backgroundColor="#04060966" floating="parent" zIndex={1} />
-        <Box width={viewport.width()} height={viewport.height()} floating="parent" zIndex={2}>
-          <Box width={viewport.width()} height={scale(42)} floating="parent" floatOffset={{ x: scale(80), y: scale(42) }} direction="row" alignY="center" gap={scale(20)}>
+        <box width={viewport.width()} height={viewport.height()} backgroundColor="#04060966" floating="parent" zIndex={1} />
+        <box width={viewport.width()} height={viewport.height()} floating="parent" zIndex={2}>
+          <box width={viewport.width()} height={scale(42)} floating="parent" floatOffset={{ x: scale(80), y: scale(42) }} direction="row" alignY="center" gap={scale(20)}>
             <Ps5Button id="hub-back" width={scale(44)} height={scale(42)} backgroundColor="#00000000" borderWidth={0} onPress={actions.back} screen={props}>
               <Ps5Text color={ps5Colors.text} fontSize={scale(28)}>‹</Ps5Text>
             </Ps5Button>
             <Ps5Text color={ps5Colors.text} fontSize={scale(24)} fontWeight={700}>Centro del juego</Ps5Text>
-            <Box flexGrow={1} />
+            <box flexGrow={1} />
             <Ps5Button id="hub-options" width={scale(62)} height={scale(42)} backgroundColor="#00000000" borderWidth={0} onPress={() => actions.openOverlay("options")} screen={props}>
               <Ps5Text color={ps5Colors.text} fontSize={scale(22)}>···</Ps5Text>
             </Ps5Button>
-          </Box>
+          </box>
 
-          <Box width={scale(620)} height={scale(210)} floating="parent" floatOffset={{ x: scale(125), y: scale(350) }}>
+          <box width={scale(620)} height={scale(210)} floating="parent" floatOffset={{ x: scale(125), y: scale(350) }}>
           <Ps5Panel width="100%" height="100%" padding={0} gap={scale(10)} direction="column" backgroundColor="#07090a00" borderWidth={0}>
-            <Box width="100%" height={scale(30)} direction="row" alignY="center" gap={scale(16)}>
+            <box width="100%" height={scale(30)} direction="row" alignY="center" gap={scale(16)}>
               <Ps5Text color={ps5Colors.text} fontSize={scale(19)} fontWeight={700}>{selected()!.title}</Ps5Text>
               <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>{selected()!.subtitle}</Ps5Text>
-            </Box>
+            </box>
             <Show when={brandingLogo() && imageAvailable(brandingLogo())} fallback={
               <Ps5Text color={ps5Colors.text} fontSize={scale(42)} fontWeight={700}>{selected()!.title}</Ps5Text>
             }>
@@ -189,15 +188,15 @@ export function GameHubScreen(props: Ps5ScreenProps) {
             </Show>
             <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>{selected()!.genre} · {selected()!.description}</Ps5Text>
           </Ps5Panel>
-          </Box>
+          </box>
 
-          <Box width={scale(243)} height={scale(59)} floating="parent" floatOffset={{ x: scale(125), y: scale(557) }}>
+          <box width={scale(243)} height={scale(59)} floating="parent" floatOffset={{ x: scale(125), y: scale(557) }}>
             <Ps5Button id={selected()!.installed ? "hub-play" : "hub-download"} width="100%" height="100%" backgroundColor="#f4f4f4" borderColor="#ffffff" cornerRadius={scale(29)} onPress={launchOrDownload} screen={props}>
               <Ps5Text color="#101214" fontSize={scale(19)} fontWeight={700}>{download()?.status === "downloading" ? `Descargando ${Math.round(download()!.progress)}%` : selected()!.installed ? "Jugar" : "Descargar"}</Ps5Text>
             </Ps5Button>
-          </Box>
+          </box>
 
-          <Box width={scale(1680)} height={scale(225)} floating="parent" floatOffset={{ x: scale(117), y: scale(663) }} direction="row" gap={scale(16)}>
+          <box width={scale(1680)} height={scale(225)} floating="parent" floatOffset={{ x: scale(117), y: scale(663) }} direction="row" gap={scale(16)}>
             <FocusedCard screen={props} padding={scale(20)} gap={scale(8)} radius={scale(16)} id="hub-card-0" width={scale(540)} height={scale(225)} image={selected()!.id === "ghost-of-tsushima" ? mockAssets.activity : selected()!.hero} title={selected()!.activities[0]?.title ?? "Continuar actividad"} body={selected()!.activities[0]?.description ?? "Retoma tu última actividad."} onPress={() => { setActivityDetail(selected()!.activities[0]?.id ?? "activity"); setTimeout(() => actions.setFocus("hub-activity-close"), 0) }} onKeyDown={moveCard(0)}>
               <Ps5Text color={selected()!.accent} fontSize={scale(15)}>{selected()!.activities[0]?.progress ?? 0}% completado</Ps5Text>
             </FocusedCard>
@@ -207,25 +206,25 @@ export function GameHubScreen(props: Ps5ScreenProps) {
             <FocusedCard screen={props} padding={scale(20)} gap={scale(8)} radius={scale(16)} image={selected()!.id === "ghost-of-tsushima" ? mockAssets.gallery : selected()!.hero} id="hub-card-2" width={scale(540)} height={scale(225)} title="Galería" body="Explora capturas y contenido local de este juego." onPress={() => actions.go("gallery", { gameId: selected()!.id })} onKeyDown={moveCard(2)}>
               <Ps5Icon name="squares-four" size={scale(28)} opacity={0.9} />
             </FocusedCard>
-          </Box>
+          </box>
 
-          <Box width={viewport.width()} height={scale(148)} floating="parent" floatOffset={{ x: 0, y: scale(932) }} backgroundColor={ps5Colors.scrim} zIndex={3} alignX="center" alignY="center">
+          <box width={viewport.width()} height={scale(148)} floating="parent" floatOffset={{ x: 0, y: scale(932) }} backgroundColor={ps5Colors.scrim} zIndex={3} alignX="center" alignY="center">
             <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>F1 Centro de control · F2 Opciones · Escape Volver</Ps5Text>
-          </Box>
+          </box>
 
           <Show when={activityDetail()}>
-            <Box width={scale(780)} height={scale(300)} floating="parent" floatOffset={{ x: scale(250), y: scale(270) }} zIndex={5}>
+            <box width={scale(780)} height={scale(300)} floating="parent" floatOffset={{ x: scale(250), y: scale(270) }} zIndex={5}>
               <Ps5Panel width="100%" height="100%" padding={scale(24)} gap={scale(14)} direction="column" backgroundColor="#111720f5" borderColor="#ffffff70" cornerRadius={scale(18)}>
                 <Ps5Text color={ps5Colors.text} fontSize={scale(24)} fontWeight={700}>{selected()!.activities.find((entry) => entry.id === activityDetail())?.title ?? "Actividad"}</Ps5Text>
                 <Ps5Text color={ps5Colors.mutedText} fontSize={scale(16)}>{selected()!.activities.find((entry) => entry.id === activityDetail())?.description ?? "Retoma esta actividad local."}</Ps5Text>
                 <Ps5Text color={ps5Colors.text} fontSize={scale(15)}>Progreso: {selected()!.activities.find((entry) => entry.id === activityDetail())?.progress ?? 0}%</Ps5Text>
-                <Box flexGrow={1} />
+                <box flexGrow={1} />
                 <Ps5Button id="hub-activity-close" width={scale(170)} height={scale(46)} label="Cerrar" onPress={closeActivity} screen={props} />
               </Ps5Panel>
-            </Box>
+            </box>
           </Show>
-        </Box>
+        </box>
       </Show>
-    </Box>
+    </box>
   )
 }

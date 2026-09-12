@@ -25,7 +25,7 @@
  */
 
 import { createSignal } from "solid-js"
-import type { NodeHandle } from "../reconciler/handle"
+import { getHandleNode, type NodeHandle } from "../reconciler/handle"
 import type { TGENode } from "../ffi/node"
 import { buildNativeFrameExecutionStats, formatNativeFrameReasonFlags, type NativeFrameExecutionStats, type NativeFrameStrategy } from "../ffi/gpu-layer-strategy"
 import { getNativePresentationFallbackReason } from "../ffi/native-presentation-flags"
@@ -352,8 +352,8 @@ function describeNode(node: TGENode, depth: number): string {
 }
 
 /** @public */
-export function debugDumpTree(target: NodeHandle | TGENode): string {
-  const node = "_node" in target ? target._node : target
+export function debugDumpTree(target: NodeHandle): string {
+  const node = getHandleNode(target)
   return describeNode(node, 0)
 }
 

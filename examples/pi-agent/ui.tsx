@@ -1,7 +1,7 @@
 import { PiMarkdown } from "./markdown"
 import { PiButton as VoidButton, PiIcon, PiToggle } from "./controls"
 import type { PiIconName } from "./controls"
-import { Box, Text } from "@vexart/app"
+
 import {
   VoidDialog,
   VoidDialogDescription,
@@ -90,8 +90,8 @@ function formatStat(value: unknown): string {
 
 function RailButton(props: { active: boolean; focusId: string; label: string; glyph: PiIconName; onPress: () => void }) {
   return (
-    <Box width={56} direction="row" alignY="center" gap={6}>
-      <Box width={3} height={42} cornerRadius={2} backgroundColor={props.active ? piColors.mint : "#00000000"} />
+    <box width={56} direction="row" alignY="center" gap={6}>
+      <box width={3} height={42} cornerRadius={2} backgroundColor={props.active ? piColors.mint : "#00000000"} />
     <VoidButton
       size="icon"
       variant={props.active ? "secondary" : "ghost"}
@@ -100,13 +100,13 @@ function RailButton(props: { active: boolean; focusId: string; label: string; gl
     >
       <PiIcon name={props.glyph} active={props.active} />
     </VoidButton>
-    </Box>
+    </box>
   )
 }
 
 function PiRail(props: { view: PiRailView; setView: (view: PiRailView) => void }) {
   return (
-    <Box
+    <box
       width={piSpace.rail}
       height="grow"
       direction="column"
@@ -117,26 +117,26 @@ function PiRail(props: { view: PiRailView; setView: (view: PiRailView) => void }
       borderColor={piColors.border}
       borderWidth={1}
     >
-      <Text color={piColors.text} fontSize={32} fontWeight={700}>π</Text>
-      <Box height={24} />
+      <text color={piColors.text} fontSize={32} fontWeight={700}>π</text>
+      <box height={24} />
       <RailButton active={props.view === "chat"} focusId={piFocus.railChat} label="Chat" glyph="chat" onPress={() => props.setView("chat")} />
       <RailButton active={props.view === "sessions"} focusId={piFocus.railSessions} label="Sesiones" glyph="sessions" onPress={() => props.setView("sessions")} />
       <RailButton active={props.view === "tree"} focusId={piFocus.railTree} label="Tree" glyph="tree" onPress={() => props.setView("tree")} />
-      <Box height="grow" />
+      <box height="grow" />
       <RailButton active={props.view === "settings"} focusId={piFocus.railSettings} label="Ajustes" glyph="settings" onPress={() => props.setView("settings")} />
-    </Box>
+    </box>
   )
 }
 
 function Header(props: { snapshot: AppSnapshot; cwd?: string; view: PiRailView }) {
   const session = () => props.snapshot().extensionTitle || safeText(props.snapshot().state?.sessionName) || "Nueva conversación"
-  return <Box height={62} width="grow" direction="row" alignY="center" paddingX={piSpace.page} gap={20} borderColor={piColors.border} borderWidth={1}>
-    <Text color={piColors.text} fontSize={17} fontWeight={600}>pi / vexart</Text>
-    <Box width={1} height={22} backgroundColor={piColors.borderStrong} />
-    <Box width="grow"><Text color={piColors.secondary} fontSize={14}>{props.view === "chat" ? session() : props.view === "tree" ? "Árbol de conversación" : props.view === "sessions" ? "Sesiones" : "Ajustes"}</Text></Box>
-    <Text color={piColors.secondary} fontSize={13}>{props.cwd?.split("/").filter(Boolean).at(-1) || "project"}</Text>
-    <Show when={props.snapshot().busy}><Text color={piColors.mint} fontSize={12}>LIVE</Text></Show>
-  </Box>
+  return <box height={62} width="grow" direction="row" alignY="center" paddingX={piSpace.page} gap={20} borderColor={piColors.border} borderWidth={1}>
+    <text color={piColors.text} fontSize={17} fontWeight={600}>pi / vexart</text>
+    <box width={1} height={22} backgroundColor={piColors.borderStrong} />
+    <box width="grow"><text color={piColors.secondary} fontSize={14}>{props.view === "chat" ? session() : props.view === "tree" ? "Árbol de conversación" : props.view === "sessions" ? "Sesiones" : "Ajustes"}</text></box>
+    <text color={piColors.secondary} fontSize={13}>{props.cwd?.split("/").filter(Boolean).at(-1) || "project"}</text>
+    <Show when={props.snapshot().busy}><text color={piColors.mint} fontSize={12}>LIVE</text></Show>
+  </box>
 }
 
 function workLabel(block: Extract<TimelineBlock, { kind: "work" }>) {
@@ -148,25 +148,25 @@ function workLabel(block: Extract<TimelineBlock, { kind: "work" }>) {
 
 function TimelineToolRow(props: { tool: TimelineTool; expand: boolean }) {
   const [open, setOpen] = createSignal(props.expand)
-  return <Box direction="column" width="grow" gap={12}>
+  return <box direction="column" width="grow" gap={12}>
     <VoidButton width="grow" variant="ghost" focusId={`pi-tool-${focusSlug(props.tool.id)}`} onPress={() => setOpen(!open())}>
-      <Box direction="row" width="grow" alignY="center" gap={16}>
+      <box direction="row" width="grow" alignY="center" gap={16}>
         <PiIcon name={props.tool.state === "done" ? "check" : "terminal"} active={props.tool.state === "done"} />
-        <Text width="grow" color={props.tool.state === "error" ? piColors.red : piColors.secondary} fontSize={16}>{props.tool.name}{props.tool.summary ? `  ${props.tool.summary}` : ""}{props.tool.state === "running" ? " · ejecutando" : ""}</Text>
+        <text width="grow" color={props.tool.state === "error" ? piColors.red : piColors.secondary} fontSize={16}>{props.tool.name}{props.tool.summary ? `  ${props.tool.summary}` : ""}{props.tool.state === "running" ? " · ejecutando" : ""}</text>
         <PiIcon name={open() ? "down" : "chevron"} />
-      </Box>
+      </box>
     </VoidButton>
-    <Show when={open()}><Box width="grow" paddingLeft={40}><Text color={piColors.secondary} fontSize={15} width="grow" whiteSpace="pre-wrap">{props.tool.detail}</Text></Box></Show>
-  </Box>
+    <Show when={open()}><box width="grow" paddingLeft={40}><text color={piColors.secondary} fontSize={15} width="grow" whiteSpace="pre-wrap">{props.tool.detail}</text></box></Show>
+  </box>
 }
 
 function TimelineWorkItemView(props: { item: TimelineWorkItem; expand: boolean }) {
   if (props.item.kind === "commentary") {
     return (
-      <Box direction="column" gap={4} paddingY={4} width="grow">
-        <Show when={props.item.thinking}><Text color={piColors.dim} fontSize={piType.eyebrow}>Thinking</Text></Show>
-        <Text color={props.item.thinking ? piColors.dim : piColors.secondary} fontSize={piType.body} whiteSpace="pre-wrap">{props.item.text}</Text>
-      </Box>
+      <box direction="column" gap={4} paddingY={4} width="grow">
+        <Show when={props.item.thinking}><text color={piColors.dim} fontSize={piType.eyebrow}>Thinking</text></Show>
+        <text color={props.item.thinking ? piColors.dim : piColors.secondary} fontSize={piType.body} whiteSpace="pre-wrap">{props.item.text}</text>
+      </box>
     )
   }
   return <TimelineToolRow tool={props.item} expand={props.expand} />
@@ -175,42 +175,42 @@ function TimelineWorkItemView(props: { item: TimelineWorkItem; expand: boolean }
 function TimelineBlockView(props: { block: TimelineBlock; open: boolean; toggle: () => void; display: DisplaySettings }) {
   if (props.block.kind === "user") {
     return (
-      <Box width="100%" direction="column" alignX="right" paddingY={piSpace.row}>
-        <Box width="72%" padding={piSpace.row} backgroundColor={piColors.charcoal} cornerRadius={10}>
-          <Text color={piColors.text} fontSize={piType.body} whiteSpace="pre-wrap">{props.block.text}</Text>
-        </Box>
-      </Box>
+      <box width="100%" direction="column" alignX="right" paddingY={piSpace.row}>
+        <box width="72%" padding={piSpace.row} backgroundColor={piColors.charcoal} cornerRadius={10}>
+          <text color={piColors.text} fontSize={piType.body} whiteSpace="pre-wrap">{props.block.text}</text>
+        </box>
+      </box>
     )
   }
   if (props.block.kind === "assistant") {
     return (
-      <Box width="100%" direction="column" paddingY={piSpace.row} gap={piSpace.compact}>
+      <box width="100%" direction="column" paddingY={piSpace.row} gap={piSpace.compact}>
         <PiMarkdown content={props.block.text} />
         <Show when={props.block.streaming}>
-          <Text color={piColors.mint} fontSize={piType.small}>Generating…</Text>
+          <text color={piColors.mint} fontSize={piType.small}>Generating…</text>
         </Show>
-      </Box>
+      </box>
     )
   }
   if (props.block.kind === "system") {
     return (
-      <Box width="100%" paddingY={piSpace.compact}>
-        <Text color={piColors.dim} fontSize={piType.small} whiteSpace="pre-wrap">{props.block.text}</Text>
-      </Box>
+      <box width="100%" paddingY={piSpace.compact}>
+        <text color={piColors.dim} fontSize={piType.small} whiteSpace="pre-wrap">{props.block.text}</text>
+      </box>
     )
   }
   return (
-    <Box width="100%" direction="column" paddingY={piSpace.row}>
+    <box width="100%" direction="column" paddingY={piSpace.row}>
       <VoidButton width="grow" variant="ghost" size="sm" focusId={`pi-work-${focusSlug(props.block.id)}`} onPress={props.toggle}>
-        <Box width="grow" direction="row" gap={16} alignY="center"><Show when={props.open} fallback={<PiIcon name="chevron" />}><PiIcon name="down" /></Show><Text width="grow" color={piColors.secondary} fontSize={piType.body}>{workLabel(props.block)}</Text></Box>
+        <box width="grow" direction="row" gap={16} alignY="center"><Show when={props.open} fallback={<PiIcon name="chevron" />}><PiIcon name="down" /></Show><text width="grow" color={piColors.secondary} fontSize={piType.body}>{workLabel(props.block)}</text></box>
       </VoidButton>
-      <Box width="grow" height={1} backgroundColor={piColors.borderStrong} marginTop={8} />
+      <box width="grow" height={1} backgroundColor={piColors.borderStrong} marginTop={8} />
       <Show when={props.open}>
-        <Box direction="column" width="grow" paddingTop={16} gap={16}>
+        <box direction="column" width="grow" paddingTop={16} gap={16}>
           <For each={props.block.items.filter((item) => props.display.thinking || item.kind !== "commentary" || !item.thinking)}>{(item) => <TimelineWorkItemView item={item} expand={props.display.tools} />}</For>
-        </Box>
+        </box>
       </Show>
-    </Box>
+    </box>
   )
 }
 
@@ -223,22 +223,22 @@ function TimelineView(props: { snapshot: AppSnapshot; display: DisplaySettings }
     setOpen((previous) => ({ ...previous, [block.id]: !isOpen(block) }))
   }
   return (
-    <Box width="grow" height="grow" direction="column" paddingX={piSpace.page}>
-      <Box width="grow" height="grow" scrollY scrollId="pi-timeline" direction="column" paddingY={piSpace.section}>
+    <box width="grow" height="grow" direction="column" paddingX={piSpace.page}>
+      <box width="grow" height="grow" scrollY scrollId="pi-timeline" direction="column" paddingY={piSpace.section}>
         <Show when={!props.snapshot().connected && props.snapshot().error}>
-          <Text color={piColors.red} fontSize={piType.small}>{props.snapshot().error}</Text>
+          <text color={piColors.red} fontSize={piType.small}>{props.snapshot().error}</text>
         </Show>
         <Show when={props.snapshot().compacting}>
-          <Text color={piColors.amber} fontSize={piType.small}>Pi is compacting this session…</Text>
+          <text color={piColors.amber} fontSize={piType.small}>Pi is compacting this session…</text>
         </Show>
         <For each={blocks()}>{(block) => <TimelineBlockView block={block} open={isOpen(block)} toggle={() => toggle(block)} display={props.display} />}</For>
         <Show when={blocks().length === 0 && props.snapshot().connected}>
-          <Box width="grow" height="grow" alignX="center" alignY="center" padding={piSpace.page}>
-            <Text color={piColors.dim} fontSize={piType.body}>Start a prompt to begin this session.</Text>
-          </Box>
+          <box width="grow" height="grow" alignX="center" alignY="center" padding={piSpace.page}>
+            <text color={piColors.dim} fontSize={piType.body}>Start a prompt to begin this session.</text>
+          </box>
         </Show>
-      </Box>
-    </Box>
+      </box>
+    </box>
   )
 }
 
@@ -325,42 +325,42 @@ function Composer(props: { snapshot: AppSnapshot; controller: PiController; onEr
   const selectedText = () => suggestions()[active()] ? `/${suggestions()[active()].name} ` : draft()
   const submitEditor = (value: string) => submit(suggestions().length ? selectedText() : value)
   return (
-    <Box width="grow" direction="column" paddingX={piSpace.page} paddingBottom={piSpace.section} gap={piSpace.compact}>
+    <box width="grow" direction="column" paddingX={piSpace.page} paddingBottom={piSpace.section} gap={piSpace.compact}>
       <Show when={props.snapshot().queue.steering.length > 0 || props.snapshot().queue.followUp.length > 0}>
-        <Box width="grow" direction="column" gap={4}>
-          <Text color={piColors.secondary} fontSize={piType.eyebrow}>QUEUED</Text>
-          <For each={[...props.snapshot().queue.steering, ...props.snapshot().queue.followUp]}>{(item) => <Text color={piColors.dim} fontSize={piType.small} whiteSpace="pre-wrap">↳ {item}</Text>}</For>
-        </Box>
+        <box width="grow" direction="column" gap={4}>
+          <text color={piColors.secondary} fontSize={piType.eyebrow}>QUEUED</text>
+          <For each={[...props.snapshot().queue.steering, ...props.snapshot().queue.followUp]}>{(item) => <text color={piColors.dim} fontSize={piType.small} whiteSpace="pre-wrap">↳ {item}</text>}</For>
+        </box>
       </Show>
       <Show when={suggestions().length > 0}>
-        <Box width="grow" direction="column" backgroundColor={piColors.surface} cornerRadius={12} shadow={{ x: 0, y: 8, blur: 28, color: 0x00000090 }} borderColor={piColors.borderStrong} borderWidth={1} padding={piSpace.compact}>
-          <Text color={piColors.secondary} fontSize={16} padding={8}>Comandos</Text>
+        <box width="grow" direction="column" backgroundColor={piColors.surface} cornerRadius={12} shadow={{ x: 0, y: 8, blur: 28, color: 0x00000090 }} borderColor={piColors.borderStrong} borderWidth={1} padding={piSpace.compact}>
+          <text color={piColors.secondary} fontSize={16} padding={8}>Comandos</text>
           <ScrollView ref={(handle) => { menu = handle }} width="grow" height={240} scrollY direction="column" showScrollbar={false}>
             <For each={suggestions()}>{(command, index) => <VoidButton variant={active() === index() ? "secondary" : "ghost"} height={40} size="sm" width="grow" focusId={`pi-command-${focusSlug(command.name)}`} onPress={() => chooseCommand(command.name)}>
-              <Box direction="row" width="grow" gap={12} alignY="center">
-                <Text color={active() === index() ? piColors.mint : piColors.text} fontSize={16}>/{command.name}</Text>
-                <Box width="grow" />
-                <Text color={piColors.secondary} fontSize={14}>{command.description || ("source" in command ? command.source : "") || ""}</Text>
-              </Box>
+              <box direction="row" width="grow" gap={12} alignY="center">
+                <text color={active() === index() ? piColors.mint : piColors.text} fontSize={16}>/{command.name}</text>
+                <box width="grow" />
+                <text color={piColors.secondary} fontSize={14}>{command.description || ("source" in command ? command.source : "") || ""}</text>
+              </box>
             </VoidButton>}</For>
           </ScrollView>
-          <Text color={piColors.secondary} fontSize={13} padding={12}>↑ ↓ navegar · Tab completar · Enter abrir · Esc cerrar</Text>
-        </Box>
+          <text color={piColors.secondary} fontSize={13} padding={12}>↑ ↓ navegar · Tab completar · Enter abrir · Esc cerrar</text>
+        </box>
       </Show>
-      <Box width="grow" direction="column" backgroundColor={piColors.surface} gradient={{ type: "linear", from: "#1b1e1d", to: "#101817", angle: 110 }} borderColor={piColors.mint} borderWidth={1.5} shadow={[{ x: 0, y: 2, blur: 18, color: 0x99f5d418 }, { x: 0, y: 6, blur: 24, color: 0x00000070 }]} cornerRadius={16} padding={12}>
+      <box width="grow" direction="column" backgroundColor={piColors.surface} gradient={{ type: "linear", from: "#1b1e1d", to: "#101817", angle: 110 }} borderColor={piColors.mint} borderWidth={1.5} shadow={[{ x: 0, y: 2, blur: 18, color: 0x99f5d418 }, { x: 0, y: 6, blur: 24, color: 0x00000070 }]} cornerRadius={16} padding={12}>
         <Show when={suggestions().length > 0} fallback={<ComposerField palette={false} value={draft()} width={props.width()} busy={props.snapshot().busy} onChange={setDraft} onSubmit={submitEditor} onKeyDown={onKeyDown} onComplete={selectedText} />}>
           <ComposerField palette value={draft()} width={props.width()} busy={props.snapshot().busy} onChange={setDraft} onSubmit={submitEditor} onKeyDown={onKeyDown} onComplete={selectedText} />
         </Show>
-        <Box direction="row" alignY="center" gap={piSpace.compact} paddingTop={piSpace.compact}>
+        <box direction="row" alignY="center" gap={piSpace.compact} paddingTop={piSpace.compact}>
           <VoidButton variant="ghost" size="sm" focusId="pi-open-commands" onPress={() => { setDraft("/"); setFocus(piFocus.composer) }}>/ comandos</VoidButton>
-          <Box width="grow" />
+          <box width="grow" />
           <VoidButton variant="ghost" size="sm" focusId={piFocus.model} onPress={props.onModel}>{modelLabel(props.snapshot().state?.model)}</VoidButton>
           <Show when={props.snapshot().busy} fallback={<VoidButton variant="default" size="icon" focusId="pi-submit" onPress={() => submit(draft())}><PiIcon name="send" ink /></VoidButton>}>
             <VoidButton variant="destructive" size="xs" focusId="pi-abort" onPress={() => void props.controller.stop().catch(props.onError)}>Stop</VoidButton>
           </Show>
-        </Box>
-      </Box>
-    </Box>
+        </box>
+      </box>
+    </box>
   )
 }
 
@@ -378,20 +378,20 @@ function StatusFooter(props: { snapshot: AppSnapshot }) {
     return result
   })
   return (
-    <Box width="grow" height={48} borderWidth={1} borderColor={piColors.border} direction="row" alignY="center" paddingX={piSpace.page} gap={piSpace.row}>
-      <Text color={props.snapshot().error ? piColors.red : piColors.dim} fontSize={piType.eyebrow}>{props.snapshot().error || (props.snapshot().connected ? "Pi connected" : "Connecting to Pi")}</Text>
-      <Box width="grow" />
-      <For each={pieces()}>{(piece, index) => <><Show when={index() > 0}><Text color={piColors.dim} fontSize={piType.eyebrow}>·</Text></Show><Text color={piColors.dim} fontSize={piType.eyebrow}>{piece}</Text></>}</For>
-    </Box>
+    <box width="grow" height={48} borderWidth={1} borderColor={piColors.border} direction="row" alignY="center" paddingX={piSpace.page} gap={piSpace.row}>
+      <text color={props.snapshot().error ? piColors.red : piColors.dim} fontSize={piType.eyebrow}>{props.snapshot().error || (props.snapshot().connected ? "Pi connected" : "Connecting to Pi")}</text>
+      <box width="grow" />
+      <For each={pieces()}>{(piece, index) => <><Show when={index() > 0}><text color={piColors.dim} fontSize={piType.eyebrow}>·</text></Show><text color={piColors.dim} fontSize={piType.eyebrow}>{piece}</text></>}</For>
+    </box>
   )
 }
 
 function ChatView(props: { display: DisplaySettings; snapshot: AppSnapshot; controller: PiController; cwd?: string; onModel: () => void; onError: (error: unknown) => void; width: () => number; draft: () => string; onDraftChange: (value: string) => void; onView?: (view: PiRailView) => void; onAutocomplete?: (open: boolean) => void }) {
   return (
-    <Box width="grow" height="grow" direction="column" backgroundColor={piColors.background}>
+    <box width="grow" height="grow" direction="column" backgroundColor={piColors.background}>
       <TimelineView snapshot={props.snapshot} display={props.display} />
       <Composer snapshot={props.snapshot} controller={props.controller} onError={props.onError} width={props.width} draft={props.draft} onDraftChange={props.onDraftChange} onModel={props.onModel} onView={props.onView} onAutocomplete={props.onAutocomplete} />
-    </Box>
+    </box>
   )
 }
 
@@ -411,34 +411,34 @@ function SessionsView(props: { snapshot: AppSnapshot; controller: PiController; 
   const filtered = () => sessions().filter((item) => `${item.name || item.id} ${item.cwd}`.toLowerCase().includes(query().toLowerCase()))
   const open = (session: SessionSummary) => void props.controller.command("switch_session", { sessionPath: session.path }).then(props.onOpen).catch(props.onError)
   const fresh = () => void props.controller.command("new_session").then(props.onOpen).catch(props.onError)
-  return <Box width="grow" height="grow" direction="column" padding={piSpace.page} gap={24}>
-    <Box width="grow" direction="row" alignY="center" gap={12}>
-      <Box width="grow"><Text color={piColors.text} fontSize={28} fontWeight={600}>Sesiones</Text></Box>
+  return <box width="grow" height="grow" direction="column" padding={piSpace.page} gap={24}>
+    <box width="grow" direction="row" alignY="center" gap={12}>
+      <box width="grow"><text color={piColors.text} fontSize={28} fontWeight={600}>Sesiones</text></box>
       <VoidButton variant="secondary" outlined focusId="pi-new-session" onPress={fresh}>+ Nueva sesión</VoidButton>
-    </Box>
-    <Box width="grow" direction="row" gap={12}>
-      <Box width="grow" direction="row" gap={10} alignY="center"><PiIcon name="search" /><VoidInput value={query()} onChange={setQuery} placeholder="Buscar sesiones…" width="grow" focusId="pi-session-search" /></Box>
+    </box>
+    <box width="grow" direction="row" gap={12}>
+      <box width="grow" direction="row" gap={10} alignY="center"><PiIcon name="search" /><VoidInput value={query()} onChange={setQuery} placeholder="Buscar sesiones…" width="grow" focusId="pi-session-search" /></box>
       <VoidButton outlined={!all()} variant={!all() ? "secondary" : "ghost"} onPress={() => setAll(false)}>Proyecto actual</VoidButton>
       <VoidButton outlined={all()} variant={all() ? "secondary" : "ghost"} onPress={() => setAll(true)}>Todos</VoidButton>
-    </Box>
-    <Box width="grow" height="grow" direction="column" scrollY scrollId="pi-sessions">
-      <Show when={!loading()} fallback={<Text color={piColors.secondary} fontSize={16}>Cargando sesiones…</Text>}>
-        <Show when={filtered().length} fallback={<Box direction="column" gap={12} paddingY={20}><Text color={piColors.text} fontSize={18}>{query() ? "No hay sesiones que coincidan" : "Todavía no hay sesiones guardadas"}</Text><Text color={piColors.secondary} fontSize={15}>Inicia una conversación para crear tu primera sesión en Pi.</Text></Box>}>
-          <For each={filtered()}>{(session) => <Box width="grow" direction="column">
-            <Box width="grow" direction="row" alignY="center" backgroundColor={session.path === props.snapshot().state?.sessionFile ? piColors.mintSoft : "#00000000"} cornerRadius={8}>
-            <Box width={4} height={84} cornerRadius={2} backgroundColor={session.path === props.snapshot().state?.sessionFile ? piColors.mint : "#00000000"} />
+    </box>
+    <box width="grow" height="grow" direction="column" scrollY scrollId="pi-sessions">
+      <Show when={!loading()} fallback={<text color={piColors.secondary} fontSize={16}>Cargando sesiones…</text>}>
+        <Show when={filtered().length} fallback={<box direction="column" gap={12} paddingY={20}><text color={piColors.text} fontSize={18}>{query() ? "No hay sesiones que coincidan" : "Todavía no hay sesiones guardadas"}</text><text color={piColors.secondary} fontSize={15}>Inicia una conversación para crear tu primera sesión en Pi.</text></box>}>
+          <For each={filtered()}>{(session) => <box width="grow" direction="column">
+            <box width="grow" direction="row" alignY="center" backgroundColor={session.path === props.snapshot().state?.sessionFile ? piColors.mintSoft : "#00000000"} cornerRadius={8}>
+            <box width={4} height={84} cornerRadius={2} backgroundColor={session.path === props.snapshot().state?.sessionFile ? piColors.mint : "#00000000"} />
             <VoidButton width="grow" height={84} variant="ghost" focusId={`pi-session-${focusSlug(session.path)}`} onPress={() => open(session)}>
-              <Box width="grow" direction="column" gap={10}>
-                <Text color={piColors.text} fontSize={19}>{session.name || session.id}</Text>
-                <Text color={piColors.secondary} fontSize={15}>{session.cwd.split("/").at(-1)} · {session.path === props.snapshot().state?.sessionFile ? "sesión actual" : `${session.messageCount } mensajes`}</Text>
-              </Box>
-            </VoidButton></Box><Box width="grow" height={1} backgroundColor={piColors.border} />
-          </Box>}</For>
+              <box width="grow" direction="column" gap={10}>
+                <text color={piColors.text} fontSize={19}>{session.name || session.id}</text>
+                <text color={piColors.secondary} fontSize={15}>{session.cwd.split("/").at(-1)} · {session.path === props.snapshot().state?.sessionFile ? "sesión actual" : `${session.messageCount } mensajes`}</text>
+              </box>
+            </VoidButton></box><box width="grow" height={1} backgroundColor={piColors.border} />
+          </box>}</For>
         </Show>
       </Show>
-    </Box>
-    <Box direction="row" alignY="center" gap={16}><Text width="grow" color={piColors.dim} fontSize={13}>Tab navegar · Enter abrir</Text><VoidButton variant="ghost" focusId="pi-session-refresh" onPress={load}>Actualizar</VoidButton></Box>
-  </Box>
+    </box>
+    <box direction="row" alignY="center" gap={16}><text width="grow" color={piColors.dim} fontSize={13}>Tab navegar · Enter abrir</text><VoidButton variant="ghost" focusId="pi-session-refresh" onPress={load}>Actualizar</VoidButton></box>
+  </box>
 }
 
 function treeEntryMessage(node: PiTreeNode): PiMessage | null {
@@ -472,17 +472,17 @@ function TreeNodeView(props: { node: PiTreeNode; depth: number; leafId: string |
     }).catch(props.onError)
   }
   return (
-    <Box direction="column" width="grow" paddingLeft={props.depth > 0 ? 16 : 0}>
-      <Box direction="row" width="grow" alignY="center" gap={12} paddingY={14} paddingX={8} cornerRadius={8} backgroundColor={props.leafId === entryId ? piColors.mintSoft : "#00000000"}>
-        <Show when={props.node.children.length} fallback={<Box width={24} />}><VoidButton size="icon-sm" focusId={`pi-tree-toggle-${focusSlug(entryId)}`} onPress={() => setExpanded(!expanded())}><PiIcon name={expanded() ? "down" : "chevron"} /></VoidButton></Show>
-        <Box direction="column" width="grow" gap={8}>
-          <Text color={props.leafId === entryId ? piColors.mint : piColors.text} fontSize={16}>{role === "assistant" ? "Pi" : role === "user" ? "Usuario" : role === "bashExecution" ? "Comando" : role === "toolResult" ? "Herramienta" : role} {props.leafId === entryId ? "· actual" : ""}</Text>
-          <Text color={piColors.secondary} fontSize={15} width="grow" whiteSpace="pre-wrap">{label}</Text>
-        </Box>
+    <box direction="column" width="grow" paddingLeft={props.depth > 0 ? 16 : 0}>
+      <box direction="row" width="grow" alignY="center" gap={12} paddingY={14} paddingX={8} cornerRadius={8} backgroundColor={props.leafId === entryId ? piColors.mintSoft : "#00000000"}>
+        <Show when={props.node.children.length} fallback={<box width={24} />}><VoidButton size="icon-sm" focusId={`pi-tree-toggle-${focusSlug(entryId)}`} onPress={() => setExpanded(!expanded())}><PiIcon name={expanded() ? "down" : "chevron"} /></VoidButton></Show>
+        <box direction="column" width="grow" gap={8}>
+          <text color={props.leafId === entryId ? piColors.mint : piColors.text} fontSize={16}>{role === "assistant" ? "Pi" : role === "user" ? "Usuario" : role === "bashExecution" ? "Comando" : role === "toolResult" ? "Herramienta" : role} {props.leafId === entryId ? "· actual" : ""}</text>
+          <text color={piColors.secondary} fontSize={15} width="grow" whiteSpace="pre-wrap">{label}</text>
+        </box>
         <Show when={canFork}><VoidButton size="xs" variant="outline" focusId={`pi-fork-${focusSlug(entryId)}`} onPress={fork}>Bifurcar</VoidButton></Show>
-      </Box>
+      </box>
       <Show when={expanded()}><For each={props.node.children}>{(child) => <TreeNodeView node={child} depth={props.depth + 1} leafId={props.leafId} controller={props.controller} onError={props.onError} onForkText={props.onForkText} />}</For></Show>
-    </Box>
+    </box>
   )
 }
 
@@ -497,25 +497,25 @@ function TreeView(props: { snapshot: AppSnapshot; controller: PiController; onEr
     return matches && (message || node.label) ? [{ ...node, children }] : children
   })
   const nodes = createMemo(() => prune(props.snapshot().tree?.tree ?? []))
-  return <Box width="grow" height="grow" direction="column" padding={piSpace.page} gap={20}>
-    <Text color={piColors.text} fontSize={28} fontWeight={600}>Árbol de conversación</Text>
+  return <box width="grow" height="grow" direction="column" padding={piSpace.page} gap={20}>
+    <text color={piColors.text} fontSize={28} fontWeight={600}>Árbol de conversación</text>
     <VoidInput value={query()} onChange={setQuery} placeholder="Buscar en la conversación…" width="grow" focusId="pi-tree-search" />
-    <Box direction="row" gap={12}><For each={["Todo", "Sin herramientas", "Usuario", "Etiquetas"]}>{(item) => <VoidButton variant={filter() === item ? "secondary" : "outline"} onPress={() => setFilter(item)}>{item}</VoidButton>}</For></Box>
-    <Box width="grow" height="grow" scrollY scrollId="pi-tree" direction="column">
-      <Show when={nodes().length} fallback={<Text color={piColors.secondary} fontSize={16}>No hay entradas que coincidan.</Text>}><For each={nodes()}>{(node) => <TreeNodeView node={node} depth={0} leafId={props.snapshot().tree?.leafId ?? null} controller={props.controller} onError={props.onError} onForkText={props.onForkText} />}</For></Show>
-    </Box>
-    <Text color={piColors.secondary} fontSize={14}>Bifurca desde un mensaje de usuario. Pi RPC no permite mover la rama actual.</Text>
-    <Text color={piColors.dim} fontSize={13}>Tab navegar · Enter desplegar o bifurcar · Esc volver</Text>
-  </Box>
+    <box direction="row" gap={12}><For each={["Todo", "Sin herramientas", "Usuario", "Etiquetas"]}>{(item) => <VoidButton variant={filter() === item ? "secondary" : "outline"} onPress={() => setFilter(item)}>{item}</VoidButton>}</For></box>
+    <box width="grow" height="grow" scrollY scrollId="pi-tree" direction="column">
+      <Show when={nodes().length} fallback={<text color={piColors.secondary} fontSize={16}>No hay entradas que coincidan.</text>}><For each={nodes()}>{(node) => <TreeNodeView node={node} depth={0} leafId={props.snapshot().tree?.leafId ?? null} controller={props.controller} onError={props.onError} onForkText={props.onForkText} />}</For></Show>
+    </box>
+    <text color={piColors.secondary} fontSize={14}>Bifurca desde un mensaje de usuario. Pi RPC no permite mover la rama actual.</text>
+    <text color={piColors.dim} fontSize={13}>Tab navegar · Enter desplegar o bifurcar · Esc volver</text>
+  </box>
 }
 
 function SettingRow(props: { label: string; detail: string; children: import("solid-js").JSX.Element }) {
-  return <Box width="grow" direction="column">
-    <Box width="grow" direction="row" alignY="center" paddingY={20} gap={20}>
-      <Box width="grow" direction="column" gap={8}><Text color={piColors.text} fontSize={18}>{props.label}</Text><Text color={piColors.secondary} fontSize={15}>{props.detail}</Text></Box>
+  return <box width="grow" direction="column">
+    <box width="grow" direction="row" alignY="center" paddingY={20} gap={20}>
+      <box width="grow" direction="column" gap={8}><text color={piColors.text} fontSize={18}>{props.label}</text><text color={piColors.secondary} fontSize={15}>{props.detail}</text></box>
       {props.children}
-    </Box><Box width="grow" height={1} backgroundColor={piColors.border} />
-  </Box>
+    </box><box width="grow" height={1} backgroundColor={piColors.border} />
+  </box>
 }
 
 function SettingsView(props: { display: DisplaySettings; setDisplay: (value: DisplaySettings) => void; snapshot: AppSnapshot; controller: PiController; onError: (error: unknown) => void }) {
@@ -527,13 +527,13 @@ function SettingsView(props: { display: DisplaySettings; setDisplay: (value: Dis
     if (Array.isArray(data?.levels) && data.levels.every((item) => typeof item === "string")) setLevels(data.levels)
   }).catch(props.onError))
   const send = (type: string, fields: Record<string, unknown>) => void props.controller.command(type, fields).catch(props.onError)
-  return <Box width="grow" height="grow" direction="column" padding={piSpace.page} gap={24}>
-    <Text color={piColors.text} fontSize={28} fontWeight={600}>Ajustes</Text>
-    <Box direction="row" gap={16}><VoidButton variant={section() === "conversation" ? "secondary" : "outline"} onPress={() => setSection("conversation")}>Conversación</VoidButton><VoidButton variant={section() === "appearance" ? "secondary" : "outline"} onPress={() => setSection("appearance")}>Apariencia</VoidButton></Box>
-    <Box width="grow" height="grow" direction="column" scrollY scrollId="pi-settings">
+  return <box width="grow" height="grow" direction="column" padding={piSpace.page} gap={24}>
+    <text color={piColors.text} fontSize={28} fontWeight={600}>Ajustes</text>
+    <box direction="row" gap={16}><VoidButton variant={section() === "conversation" ? "secondary" : "outline"} onPress={() => setSection("conversation")}>Conversación</VoidButton><VoidButton variant={section() === "appearance" ? "secondary" : "outline"} onPress={() => setSection("appearance")}>Apariencia</VoidButton></box>
+    <box width="grow" height="grow" direction="column" scrollY scrollId="pi-settings">
       <Show when={section() === "conversation"}>
-      <Text color={piColors.secondary} fontSize={14} paddingY={12}>CONVERSACIÓN</Text>
-      <Box width="grow" height={1} backgroundColor={piColors.border} />
+      <text color={piColors.secondary} fontSize={14} paddingY={12}>CONVERSACIÓN</text>
+      <box width="grow" height={1} backgroundColor={piColors.border} />
       <SettingRow label="Mostrar pensamiento" detail="Mostrar el contenido de pensamiento disponible."><PiToggle checked={props.display.thinking} onChange={(thinking) => props.setDisplay({ ...props.display, thinking })} focusId="pi-setting-show-thinking" /></SettingRow>
       <SettingRow label="Expandir herramientas" detail="Mostrar la salida completa al abrir el trabajo."><PiToggle checked={props.display.tools} onChange={(tools) => props.setDisplay({ ...props.display, tools })} focusId="pi-setting-expand-tools" /></SettingRow>
       <Show when={state()?.autoCompactionEnabled !== undefined}>
@@ -546,12 +546,12 @@ function SettingsView(props: { display: DisplaySettings; setDisplay: (value: Dis
       <SettingRow label="Mensajes en cola" detail="Cómo inicia Pi el trabajo al terminar su turno."><VoidSelect value={state()?.followUpMode} onChange={(mode) => send("set_follow_up_mode", { mode })} options={[{ value: "all", label: "Deliver all" }, { value: "one-at-a-time", label: "One at a time" }]} width={160} focusId="pi-setting-follow-up" /></SettingRow>
       </Show>
       <Show when={section() === "appearance"}>
-      <Text color={piColors.secondary} fontSize={14} paddingTop={12} paddingBottom={12}>APARIENCIA</Text>
-      <SettingRow label="Tema" detail="Apariencia local; no cambia los proveedores de Pi."><Text color={piColors.secondary} fontSize={15}>Vexart oscuro</Text></SettingRow>
+      <text color={piColors.secondary} fontSize={14} paddingTop={12} paddingBottom={12}>APARIENCIA</text>
+      <SettingRow label="Tema" detail="Apariencia local; no cambia los proveedores de Pi."><text color={piColors.secondary} fontSize={15}>Vexart oscuro</text></SettingRow>
       </Show>
-      <Text color={piColors.dim} fontSize={13} paddingTop={24}>Los controles de conversación están conectados a la configuración de Pi.</Text>
-    </Box>
-  </Box>
+      <text color={piColors.dim} fontSize={13} paddingTop={24}>Los controles de conversación están conectados a la configuración de Pi.</text>
+    </box>
+  </box>
 }
 
 function ModelDialog(props: { snapshot: AppSnapshot; controller: PiController; onClose: () => void; onError: (error: unknown) => void }) {
@@ -572,16 +572,16 @@ function ModelDialog(props: { snapshot: AppSnapshot; controller: PiController; o
   }
   return (
     <VoidDialog onClose={props.onClose} width={520}>
-      <Text color={piColors.text} fontSize={22} fontWeight={600}>Seleccionar modelo</Text>
-      <Box width="grow" direction="row" gap={10} alignY="center"><PiIcon name="search" /><VoidInput value={query()} onChange={setQuery} placeholder="Buscar modelo o proveedor…" width="grow" focusId="pi-model-search" /></Box>
-      <Text color={piColors.secondary} fontSize={13}>MODELOS CONFIGURADOS</Text>
+      <text color={piColors.text} fontSize={22} fontWeight={600}>Seleccionar modelo</text>
+      <box width="grow" direction="row" gap={10} alignY="center"><PiIcon name="search" /><VoidInput value={query()} onChange={setQuery} placeholder="Buscar modelo o proveedor…" width="grow" focusId="pi-model-search" /></box>
+      <text color={piColors.secondary} fontSize={13}>MODELOS CONFIGURADOS</text>
       <ScrollView ref={(handle) => { scroll = handle }} width="grow" height={280} scrollY direction="column" gap={piSpace.compact}>
-        <Show when={models().length > 0} fallback={<Text color={piColors.dim} fontSize={piType.small}>Pi no devolvió modelos configurados.</Text>}>
+        <Show when={models().length > 0} fallback={<text color={piColors.dim} fontSize={piType.small}>Pi no devolvió modelos configurados.</text>}>
           <For each={models()}>{(model) => <VoidButton outlined={modelKey(model) === modelKey(props.snapshot().state?.model ?? {})} variant={modelKey(model) === modelKey(props.snapshot().state?.model ?? {}) ? "secondary" : "ghost"} size="sm" height={80} width="grow" disabled={!modelCanSelect(model)} focusId={`pi-model-${focusSlug(modelKey(model) || "unavailable")}`} onPress={() => select(model)}>
-            <Box width="grow" direction="row" alignY="center" gap={18}>
-              <Box width={20} height={20} cornerRadius={10} borderWidth={1.5} borderColor={modelKey(model) === modelKey(props.snapshot().state?.model ?? {}) ? piColors.mint : piColors.text} backgroundColor={modelKey(model) === modelKey(props.snapshot().state?.model ?? {}) ? piColors.mint : "#00000000"} />
-              <Box direction="column" gap={8} width="grow"><Text color={piColors.text} fontSize={17}>{safeText(model.name) || safeText(model.id)}</Text><Text color={piColors.secondary} fontSize={14}>{safeText(model.provider)}</Text></Box>
-            </Box>
+            <box width="grow" direction="row" alignY="center" gap={18}>
+              <box width={20} height={20} cornerRadius={10} borderWidth={1.5} borderColor={modelKey(model) === modelKey(props.snapshot().state?.model ?? {}) ? piColors.mint : piColors.text} backgroundColor={modelKey(model) === modelKey(props.snapshot().state?.model ?? {}) ? piColors.mint : "#00000000"} />
+              <box direction="column" gap={8} width="grow"><text color={piColors.text} fontSize={17}>{safeText(model.name) || safeText(model.id)}</text><text color={piColors.secondary} fontSize={14}>{safeText(model.provider)}</text></box>
+            </box>
           </VoidButton>}</For>
         </Show>
       </ScrollView>
@@ -629,7 +629,7 @@ function ExtensionDialog(props: { request: () => PiExtensionRequest; controller:
         <VoidDialogFooter><VoidButton variant="ghost" size="sm" onPress={cancel}>Cancel</VoidButton><VoidButton size="sm" focusId="pi-extension-confirm" onPress={() => respond({ confirmed: true })}>Confirm</VoidButton></VoidDialogFooter>
       </Show>
       <Show when={props.request().method === "select"}>
-        <Box direction="column" gap={piSpace.compact}><For each={props.request().options || []}>{(option) => <VoidButton variant="outline" size="sm" focusId={`pi-extension-option-${focusSlug(option)}`} onPress={() => respond({ value: option })}>{option}</VoidButton>}</For></Box>
+        <box direction="column" gap={piSpace.compact}><For each={props.request().options || []}>{(option) => <VoidButton variant="outline" size="sm" focusId={`pi-extension-option-${focusSlug(option)}`} onPress={() => respond({ value: option })}>{option}</VoidButton>}</For></box>
         <VoidDialogFooter><VoidButton variant="ghost" size="sm" onPress={cancel}>Cancel</VoidButton></VoidDialogFooter>
       </Show>
       <Show when={props.request().method === "input"}>
@@ -652,11 +652,11 @@ function ExtensionOverlay(props: { snapshot: AppSnapshot; controller: PiControll
     <>
       <Show when={requestId()} keyed>{(_requestId) => <ExtensionDialog request={() => request()!} controller={props.controller} onError={props.onError} />}</Show>
       <Show when={hasPanel()}>
-        <Box width={320} height="grow" direction="column" gap={piSpace.compact} padding={piSpace.row} backgroundColor={piColors.surface} borderColor={piColors.border} borderWidth={1}>
-          <For each={props.snapshot().extensionRequests.filter((item) => item.method === "notify")}>{(item) => <Box backgroundColor={(item as { notifyType?: string }).notifyType === "error" ? piColors.red : piColors.raised} borderColor={piColors.borderStrong} borderWidth={1} padding={piSpace.compact} cornerRadius={8}><Text color={piColors.text} fontSize={piType.small}>{item.message || ""}</Text></Box>}</For>
-          <For each={Object.entries(props.snapshot().extensionStatus)}>{([key, status]) => <Box direction="row" gap={piSpace.compact}><Text color={piColors.dim} fontSize={piType.eyebrow}>{key}</Text><Text color={piColors.secondary} fontSize={piType.small}>{status}</Text></Box>}</For>
-          <For each={Object.entries(props.snapshot().extensionWidgets)}>{([key, lines]) => <Box direction="column" gap={4} paddingTop={piSpace.compact}><Text color={piColors.dim} fontSize={piType.eyebrow}>{key}</Text><For each={lines}>{(line) => <Text color={piColors.secondary} fontSize={piType.small} whiteSpace="pre-wrap">{line}</Text>}</For></Box>}</For>
-        </Box>
+        <box width={320} height="grow" direction="column" gap={piSpace.compact} padding={piSpace.row} backgroundColor={piColors.surface} borderColor={piColors.border} borderWidth={1}>
+          <For each={props.snapshot().extensionRequests.filter((item) => item.method === "notify")}>{(item) => <box backgroundColor={(item as { notifyType?: string }).notifyType === "error" ? piColors.red : piColors.raised} borderColor={piColors.borderStrong} borderWidth={1} padding={piSpace.compact} cornerRadius={8}><text color={piColors.text} fontSize={piType.small}>{item.message || ""}</text></box>}</For>
+          <For each={Object.entries(props.snapshot().extensionStatus)}>{([key, status]) => <box direction="row" gap={piSpace.compact}><text color={piColors.dim} fontSize={piType.eyebrow}>{key}</text><text color={piColors.secondary} fontSize={piType.small}>{status}</text></box>}</For>
+          <For each={Object.entries(props.snapshot().extensionWidgets)}>{([key, lines]) => <box direction="column" gap={4} paddingTop={piSpace.compact}><text color={piColors.dim} fontSize={piType.eyebrow}>{key}</text><For each={lines}>{(line) => <text color={piColors.secondary} fontSize={piType.small} whiteSpace="pre-wrap">{line}</text>}</For></box>}</For>
+        </box>
       </Show>
     </>
   )
@@ -710,16 +710,16 @@ export function PiApp(props: PiAppProps) {
     return <ChatView display={display()} snapshot={snapshot} controller={props.controller} cwd={props.cwd} onModel={() => setDialog("model")} onError={reportError} width={contentWidth} draft={draft} onDraftChange={setDraft} onView={setView} onAutocomplete={setAutocompleteOpen} />
   }
   return (
-    <Box width={width()} height={height()} direction="row" backgroundColor={piColors.background}>
+    <box width={width()} height={height()} direction="row" backgroundColor={piColors.background}>
       <PiRail view={view()} setView={setView} />
-      <Box width="grow" height="grow" direction="column">
+      <box width="grow" height="grow" direction="column">
         <Header snapshot={snapshot} cwd={props.cwd} view={view()} />
-        <Box width="grow" height="grow">{body()}</Box>
+        <box width="grow" height="grow">{body()}</box>
         <StatusFooter snapshot={snapshot} />
-        <Show when={localError()}><Box width="grow" backgroundColor={piColors.red} padding={piSpace.compact} cornerRadius={8}><Text color={piColors.text} fontSize={piType.small}>{localError()}</Text></Box></Show>
-      </Box>
+        <Show when={localError()}><box width="grow" backgroundColor={piColors.red} padding={piSpace.compact} cornerRadius={8}><text color={piColors.text} fontSize={piType.small}>{localError()}</text></box></Show>
+      </box>
       <Show when={dialog() === "model" && !snapshot().extensionRequests.some((item) => ["select", "confirm", "input", "editor"].includes(item.method))}><ModelDialog snapshot={snapshot} controller={props.controller} onClose={() => setDialog(null)} onError={reportError} /></Show>
       <ExtensionOverlay snapshot={snapshot} controller={props.controller} onError={reportError} />
-    </Box>
+    </box>
   )
 }

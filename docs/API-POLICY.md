@@ -199,7 +199,7 @@ Example of a generated `.api.md` line:
 
 ```
 // @public
-export function mount(component: () => TGENode, terminal: Terminal): MountHandle;
+export function mount(component: () => JSX.Element, terminal: Terminal): MountHandle;
 ```
 
 ### 4.2 Generated files
@@ -641,7 +641,7 @@ This appendix enumerates the complete expected public API surface at v0.9 releas
 - `enter`, `leave`, `beginSync`, `endSync`, `installExitHandlers`, `setupExitHandlers`, `ProcessSignalHub` `@public`
 
 **Core types**
-- `TGEProps`, `TGENode`, `TGENodeKind` (types) `@public`
+- `TGEProps` (type) `@public`
 - `PressEvent`, `NodeMouseEvent`, `InteractionMode`, `FilterConfig`, `InteractiveStyleProps` (types) `@public`
 - `LayoutRect`, `SizingInfo` (types) `@public`
 
@@ -651,6 +651,11 @@ This appendix enumerates the complete expected public API surface at v0.9 releas
 **Handles**
 - `createHandle` `@public`
 - `NodeHandle` (type) `@public`
+
+The approved public node contract is being narrowed to one representation:
+the retained scene/layout tree remains internal, and refs expose its cached
+`NodeHandle`. There is no public raw-node alternative; `TGENode` and
+`handle._node` must not be imported or accessed by consumers.
 
 **Hooks / Interaction**
 - `useFocus`, `setFocus`, `focusedId`, `setFocusedId`, `pushFocusScope`, `resetFocus` `@public`
@@ -776,8 +781,7 @@ This appendix enumerates the complete expected public API surface at v0.9 releas
 
 Package `@vexart/primitives` has been permanently deleted from the codebase.
 Layout and primitive needs are served by:
-- Canonical app-level components `<Box>` and `<Text>` with `className` compiler support in `@vexart/app` (`AppBoxProps`, `AppTextProps`).
-- Intrinsics `<box>`, `<text>`, `<img>`/`<image>`, `<canvas>` provided directly by `@vexart/engine`.
+- Intrinsics `<box>`, `<text>`, `<img>`/`<image>`, `<canvas>` provided directly by `@vexart/engine`; `@vexart/app` installs `className` compiler support for `<box>` and `<text>`.
 - Legacy helpers `<Span>`, `<RichText>`, `<WrapRow>` do not exist.
 
 ### A.3 `@vexart/headless`
@@ -849,8 +853,7 @@ in `@vexart/styled`; they are NOT part of the headless package.
 - `PageProps`, `CreateAppOptions`, `AppContext`, `MountAppOptions` (types) `@public`
 
 **Components**
-- `Box`, `Text` app-framework wrappers with `className` support `@public`
-- `AppBoxProps`, `AppTextProps`, `ClassNameProps` (types) `@public`
+- No app-level wrapper components or wrapper prop aliases. Use the `<box>` and `<text>` engine intrinsics; for explicit typing, use `JSX.IntrinsicElements["box"]` and `JSX.IntrinsicElements["text"]`.
 
 **Styling**
 - `resolveClassName`, `mergeClassNameProps`, `CLASS_NAME_UNKNOWN_BEHAVIOR`, `clearClassNameCache`, `createStyles` `@public`
@@ -878,7 +881,7 @@ import must also be in the barrel. Forced mixed imports (`vexart` + `vexart/engi
 for common use cases are considered an API surface bug.
 
 **Collision resolution** (documented in `packages/app/src/barrel.ts`):
-- `Box` / `Text`: `@vexart/app` wins (supporting `className` compiler).
+- `<box>` / `<text>`: provided by `@vexart/engine`; `@vexart/app` installs `className` support.
 - `Button`: `@vexart/headless` (unstyled primitive). For themed design system buttons, use `VoidButton` from `@vexart/styled`.
 - `Switch` (headless): exported as `ToggleSwitch` to avoid collision with SolidJS control flow `<Switch>`.
 - `useRouter`: `@vexart/app` wins (app-level router).

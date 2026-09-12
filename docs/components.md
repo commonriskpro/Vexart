@@ -2,12 +2,12 @@
 
 Vexart provides built-in components across three public packages.
 
-- **`@vexart/app`** — application lifecycle (`createApp`), file-system router (`createAppRouter`, `RouteOutlet`, `useRouter`), and canonical `<Box>` and `<Text>` primitives with `className` support.
+- **`@vexart/app`** — application lifecycle (`createApp`), file-system router (`createAppRouter`, `RouteOutlet`, `useRouter`), and canonical `<box>` and `<text>` primitives with `className` support.
 - **`@vexart/headless`** — behavior only, zero visual coupling. Use render props/context props to provide styling.
 - **`@vexart/styled`** — Void design system components (`Void*`), OLED-calibrated tokens, and reactive runtime theming (`themeColors`, `setTheme`).
 
 ```typescript
-import { Box, Text, createAppRouter, RouterProvider, RouteOutlet, useRouter,
+import { createAppRouter, RouterProvider, RouteOutlet, useRouter,
          VoidButton, VoidInput, VoidCheckbox, VoidTabs, VoidList, VoidProgress, VoidScrollView,
          VoidDialog, VoidSelect, VoidSwitch, VoidRadioGroup, VoidTable, createVoidToaster,
          VoidTooltip, VoidPopover, VoidCombobox, VoidSlider, VoidVirtualList,
@@ -19,7 +19,7 @@ import { Box, Text, createAppRouter, RouterProvider, RouteOutlet, useRouter,
 
 ---
 
-## Box
+## box
 
 The primary layout container. Equivalent to a `<div>` — handles sizing, padding, alignment, colors, borders, shadows, glow, backdrop filters, and interactive states.
 
@@ -100,7 +100,7 @@ All three style objects accept: `backgroundColor`, `borderColor`, `borderWidth`,
 
 ---
 
-## Text
+## text
 
 Renders text using the embedded bitmap font.
 
@@ -676,31 +676,31 @@ Routing is provided canonically by `@vexart/app` (`createAppRouter`, `RouterProv
 ### Setting Up Routes
 
 ```tsx
-import { createAppRouter, RouterProvider, RouteOutlet, useRouter, Box, Text } from "vexart"
+import { createAppRouter, RouterProvider, RouteOutlet, useRouter } from "vexart"
 
 const routes = [
   {
     path: "/",
     component: () => (
-      <Box padding={16}>
-        <Text>Home Screen</Text>
-      </Box>
+      <box padding={16}>
+        <text>Home Screen</text>
+      </box>
     ),
   },
   {
     path: "/settings",
     component: () => (
-      <Box padding={16}>
-        <Text>Settings Screen</Text>
-      </Box>
+      <box padding={16}>
+        <text>Settings Screen</text>
+      </box>
     ),
   },
   {
     path: "/user/[id]",
     component: ({ params }) => (
-      <Box padding={16}>
-        <Text>User Profile: {params.id}</Text>
-      </Box>
+      <box padding={16}>
+        <text>User Profile: {params.id}</text>
+      </box>
     ),
   },
 ]
@@ -710,9 +710,9 @@ const router = createAppRouter(routes, "/")
 export function App() {
   return (
     <RouterProvider router={router}>
-      <Box direction="column" width="100%" height="100%">
+      <box direction="column" width="100%" height="100%">
         <RouteOutlet />
-      </Box>
+      </box>
     </RouterProvider>
   )
 }
@@ -725,17 +725,17 @@ function NavigationBar() {
   const router = useRouter()
 
   return (
-    <Box direction="row" gap={12}>
-      <Box focusable onPress={() => router.navigate("/")}>
-        <Text>Home</Text>
-      </Box>
-      <Box focusable onPress={() => router.navigate("/settings")}>
-        <Text>Settings</Text>
-      </Box>
-      <Box focusable onPress={() => router.back()}>
-        <Text>Back</Text>
-      </Box>
-    </Box>
+    <box direction="row" gap={12}>
+      <box focusable onPress={() => router.navigate("/")}>
+        <text>Home</text>
+      </box>
+      <box focusable onPress={() => router.navigate("/settings")}>
+        <text>Settings</text>
+      </box>
+      <box focusable onPress={() => router.back()}>
+        <text>Back</text>
+      </box>
+    </box>
   )
 }
 ```
@@ -890,7 +890,7 @@ The Void Design System delivers pre-styled, OLED-calibrated dark-theme component
       <VoidCardDescription>Real-time node utilization</VoidCardDescription>
     </VoidCardHeader>
     <VoidCardContent>
-      <Text>Node health: 99.98%</Text>
+      <text>Node health: 99.98%</text>
     </VoidCardContent>
     <VoidCardFooter>
       <VoidButton variant="outline">Refresh</VoidButton>
@@ -924,12 +924,12 @@ The Void Design System delivers pre-styled, OLED-calibrated dark-theme component
   ```
 - **`VoidList` & `VoidVirtualList`**: List presentation with Void theme tokens.
   ```tsx
-  <VoidList items={items()} renderItem={(item) => <Text>{item.title}</Text>} />
-  <VoidVirtualList items={largeDataset} itemHeight={32} height={400} renderItem={(item) => <Text>{item.name}</Text>} />
+  <VoidList items={items()} renderItem={(item) => <text>{item.title}</text>} />
+  <VoidVirtualList items={largeDataset} itemHeight={32} height={400} renderItem={(item) => <text>{item.name}</text>} />
   ```
 - **`VoidScrollView`**: Scrollable container with styled scrollbars.
   ```tsx
-  <VoidScrollView height={300}><Box>{/* Large content */}</Box></VoidScrollView>
+  <VoidScrollView height={300}><box>{/* Large content */}</box></VoidScrollView>
   ```
 - **`VoidTabs`**: Tab bar with active tab underline indicator.
   ```tsx
@@ -967,7 +967,7 @@ The Void Design System delivers pre-styled, OLED-calibrated dark-theme component
   ```
 - **`VoidTooltip` & `VoidPopover`**: Floating anchored overlays.
   ```tsx
-  <VoidTooltip content="Server response latency"><Text>24ms</Text></VoidTooltip>
+  <VoidTooltip content="Server response latency"><text>24ms</text></VoidTooltip>
   ```
 - **`createVoidToaster`**: Notification toaster manager.
   ```tsx

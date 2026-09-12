@@ -64,7 +64,7 @@ tagged CI workflow publishes every matrix package before the main package:
 
 ```tsx
 // 90% of developers — app development
-import { createApp, Box, Text, Button, colors, createSignal } from "vexart"
+import { createApp, Button, colors, createSignal } from "vexart"
 
 // Power users — custom renderers, low-level control
 import { createRenderLoop, useFocus, setRendererBackend } from "vexart/engine"
@@ -77,7 +77,7 @@ primitives (`createSignal`, `For`, `Show`, etc.) are also re-exported so
 consumers do not need a separate `solid-js` import for basics.
 
 Collision resolution:
-- `Box`/`Text`: app versions win (className support)
+- `<box>`/`<text>`: engine intrinsics with `className` support
 - `Button`: styled version wins (themed)
 - `useRouter`: app version wins (app-level router)
 - `Switch`: SolidJS control flow wins; headless toggle is `ToggleSwitch`

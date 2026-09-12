@@ -1,5 +1,4 @@
 import {
-  Box,
   Dialog,
   DialogOverlay,
   Show,
@@ -52,7 +51,7 @@ export function PowerOverlay(props: Ps5OverlayProps) {
   return (
     <Dialog onClose={close}>
       <DialogOverlay backgroundColor={ps5Colors.scrim} onClick={() => { if (simulation() === "on") close() }} />
-      <Box width={viewport.width()} height={viewport.height()} alignX="center" alignY="center">
+      <box width={viewport.width()} height={viewport.height()} alignX="center" alignY="center">
       <Show when={simulation() === "rest"} fallback={
         <Show when={simulation() === "off-simulated"} fallback={
           <Show when={simulation() === "restarting"} fallback={
@@ -69,7 +68,7 @@ export function PowerOverlay(props: Ps5OverlayProps) {
               <Ps5Text color={ps5Colors.text} fontSize={scale(30)} fontWeight={700}>Reiniciando demo…</Ps5Text>
               <Ps5Text color={ps5Colors.mutedText} fontSize={scale(16)}>No se reinicia el proceso anfitrión.</Ps5Text>
               <Ps5Panel width="100%" height={scale(8)} padding={0} backgroundColor="#222831" borderWidth={0} cornerRadius={scale(4)}>
-                <Box width="45%" height="100%" backgroundColor={ps5Colors.focus} cornerRadius={scale(4)} />
+                <box width="45%" height="100%" backgroundColor={ps5Colors.focus} cornerRadius={scale(4)} />
               </Ps5Panel>
             </Ps5Panel>
           </Show>
@@ -91,7 +90,7 @@ export function PowerOverlay(props: Ps5OverlayProps) {
       <Show when={topOverlay() === "power-confirm"}>
         <Ps5Text color={ps5Colors.mutedText} fontSize={scale(11)} floating="parent" floatOffset={{ x: scale(28), y: scale(20) }}>Power overlay · simulación local</Ps5Text>
       </Show>
-      </Box>
+      </box>
     </Dialog>
   )
 }

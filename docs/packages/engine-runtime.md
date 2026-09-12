@@ -6,7 +6,7 @@ The `@vexart/engine` package is the foundational runtime of Vexart. It orchestra
 
 ## 1. SolidJS Universal Reconciler
 
-Vexart compiles JSX into a retained scene graph without a Virtual DOM using `createRenderer<TGENode>` from `solid-js/universal`.
+Vexart compiles JSX into a retained scene graph without a Virtual DOM using `createRenderer<TGENode>` from `solid-js/universal`. The renderer and Flexily layout backing nodes form one internal scene/layout tree. The node-ref migration narrows the public boundary to the cached `NodeHandle` for each internal node; `TGENode` remains an implementation type only.
 
 ### 1.1 Intrinsic Elements
 Vexart supports exactly four intrinsic elements:
@@ -16,14 +16,14 @@ Vexart supports exactly four intrinsic elements:
 - `<canvas>`: Immediate-mode drawing surface (rasterized in JS via software rasterizer and uploaded to GPU as RGBA texture).
 
 > **CRITICAL INVARIANT — OBSOLETE PRIMITIVES**:
-> Historical primitives `<Span>`, `<RichText>`, and `<WrapRow>` **do not exist**. They were permanently deleted during the monorepo consolidation. Any attempt to use `<Span>`, `<RichText>`, or `<WrapRow>` will fail at compile or runtime. Use `<box>` and `<text>` intrinsics or application `<Box>` and `<Text>` components.
+> Historical primitives `<Span>`, `<RichText>`, and `<WrapRow>` **do not exist**. They were permanently deleted during the monorepo consolidation. Any attempt to use `<Span>`, `<RichText>`, or `<WrapRow>` will fail at compile or runtime. Use the `<box>` and `<text>` intrinsics directly.
 
-### 1.2 Reconciler Implementation Contract
-The reconciler is instantiated via `createRenderer<TGENode>` in `packages/engine/src/reconciler/reconciler.ts`. Note that the `renderer` instance itself is private to the module; its methods (`render`, `createElement`, `insertNode`, etc.) are exported individually.
+### 1.2 Reconciler Implementation Contract (internal)
+The reconciler is instantiated via `createRenderer<TGENode>` in `packages/engine/src/reconciler/reconciler.ts`. This section describes private implementation types, not a consumer import contract. Note that the `renderer` instance itself is private to the module; its methods (`render`, `createElement`, `insertNode`, etc.) are exported individually.
 
 ```typescript
 import { createRenderer } from "solid-js/universal"
-import { type TGENode, createNode, createTextNode, insertChild, removeChild } from "../ffi/node"
+import { createNode, createTextNode, insertChild, removeChild } from "../ffi/node"
 
 // renderer is module-private; exports individual functions (render, createElement, etc.)
 const renderer = createRenderer<TGENode>({
@@ -81,9 +81,9 @@ const renderer = createRenderer<TGENode>({
 
 ---
 
-## 2. Scene Graph Node Model (`TGENode`)
+## 2. Internal Scene Graph Node Model (`TGENode`)
 
-The retained scene graph consists of `TGENode` objects defined in `packages/engine/src/ffi/node.ts` and `node-types.ts`:
+The retained scene graph consists of internal `TGENode` objects defined in `packages/engine/src/ffi/node.ts` and `node-types.ts`. This is the sole tree used for reconciliation, layout, and rendering; consumers do not import or receive `TGENode` values.
 
 ### 2.1 Node Kinds (`TGENodeKind`)
 - `"box"`: Rectangular layout box.
@@ -156,6 +156,7 @@ export type TGENode = {
   _stableFrameCount: number
 }
 ```
+
   children: TGENode[]
   parent: TGENode | null
   destroyed: boolean
@@ -188,6 +189,14 @@ export type TGENode = {
   _dfsIndex: number
 }
 ```
+
+### 2.3 Public node refs
+
+The approved public contract is being narrowed to one node representation:
+JSX refs expose the cached `NodeHandle` for the corresponding internal node.
+`children` and `parent` remain handles as well, so consumers stay on the same
+representation. There is no public raw-node escape; do not import `TGENode` or
+access `handle._node`.
 
 ---
 

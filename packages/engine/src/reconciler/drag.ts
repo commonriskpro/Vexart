@@ -2,7 +2,7 @@
 
 import { createSignal } from "solid-js"
 import { type NodeMouseEvent } from "../ffi/node"
-import { type NodeHandle } from "./handle"
+import { getHandleNode, type NodeHandle } from "./handle"
 import { setPointerCapture, releasePointerCapture } from "./pointer"
 import { beginNodeInteraction, endNodeInteraction } from "./interaction"
 import type { InteractionBinding, InteractionLayerState } from "./interaction"
@@ -33,7 +33,7 @@ export type DragState = {
 /** @public */
 export function useDrag(opts: DragOptions): DragState {
   let nodeId = 0
-  let node: NodeHandle["_node"] | null = null
+  let handle: NodeHandle | null = null
   const [dragging, setDragging] = createSignal(false)
 
   function getInteractionLayer(): InteractionLayerState | null {
@@ -49,7 +49,9 @@ export function useDrag(opts: DragOptions): DragState {
       interaction.begin("drag")
       return
     }
-    if (node) beginNodeInteraction(node, "drag")
+    if (handle) {
+      beginNodeInteraction(getHandleNode(handle), "drag")
+    }
   }
 
   function endInteraction() {
@@ -59,14 +61,16 @@ export function useDrag(opts: DragOptions): DragState {
       interaction.end("drag")
       return
     }
-    if (node) endNodeInteraction(node, "drag")
+    if (handle) {
+      endNodeInteraction(getHandleNode(handle), "drag")
+    }
   }
 
-  function handleRef(handle: NodeHandle) {
-    nodeId = handle.id
-    node = handle._node
+  function handleRef(next: NodeHandle) {
+    nodeId = next.id
+    handle = next
     const interaction = getInteractionLayer()
-    if (interaction) interaction.ref(handle)
+    if (interaction) interaction.ref(next)
   }
 
   function handleMouseDown(evt: NodeMouseEvent) {

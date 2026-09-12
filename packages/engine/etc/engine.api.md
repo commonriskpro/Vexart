@@ -400,7 +400,7 @@ export function debugDumpCulledNodes(root: TGENode, viewport: {
 }): string;
 
 // @public (undocumented)
-export function debugDumpTree(target: NodeHandle | TGENode): string;
+export function debugDumpTree(target: NodeHandle): string;
 
 // @public (undocumented)
 export function debugFrameStart(): () => void;
@@ -1118,7 +1118,7 @@ export type InteractionKind = (typeof INTERACTION_KIND)[keyof typeof INTERACTION
 // @public (undocumented)
 export type InteractionLayerState = {
     ref: (handle: NodeHandle) => void;
-    node: () => TGENode | null;
+    node: () => NodeHandle | null;
     mode: () => InteractionMode;
     begin: (mode?: Exclude<InteractionMode, "none">) => void;
     end: (mode?: Exclude<InteractionMode, "none">) => void;
@@ -1501,7 +1501,6 @@ export type NodeHandle = {
     readonly isFocused: boolean;
     readonly children: NodeHandle[];
     readonly parent: NodeHandle | null;
-    readonly _node: TGENode;
 };
 
 // @public
@@ -2233,8 +2232,8 @@ export type SlotRegistry = {
 // @public (undocumented)
 export const solidRender: (code: () => TGENode, node: TGENode) => () => void;
 
-// @public (undocumented)
-export const spread: <T>(node: any, accessor: (() => T) | T, skipChildren?: boolean) => void;
+// @public
+export function spread<T>(node: TGENode, accessor: (() => T) | T, skipChildren?: boolean): void;
 
 // @public (undocumented)
 export type SpringConfig = {
@@ -2703,8 +2702,8 @@ export function updateNodeFocusEntry(node: TGENode): void;
 // @public
 export function updateScrollContainerGeometry(scrollId: string, viewportWidth: number, viewportHeight: number, contentWidth: number, contentHeight: number): void;
 
-// @public (undocumented)
-export const use: <A, T>(fn: (element: TGENode, arg: A) => T, element: TGENode, arg: A) => T;
+// @public
+export function use<A, T>(fn: (element: NodeHandle, arg: A) => T, element: TGENode, arg?: A): T;
 
 export { useContext }
 
@@ -2903,6 +2902,10 @@ export const VEXART_SYMBOLS: {
         readonly args: [FFIType.uint64_t, FFIType.uint64_t];
         readonly returns: FFIType.int32_t;
     };
+    readonly vexart_image_asset_retain: {
+        readonly args: [FFIType.uint64_t];
+        readonly returns: FFIType.int32_t;
+    };
     readonly vexart_image_asset_release: {
         readonly args: [FFIType.uint64_t];
         readonly returns: FFIType.int32_t;
@@ -2949,8 +2952,8 @@ export function wrapPassthrough(raw: string): string;
 
 // Warnings were encountered during analysis:
 //
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node-types.d.ts:376:5 - (ae-forgotten-export) The symbol "NodeImageExtra" needs to be exported by the entry point index.d.ts
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node-types.d.ts:378:5 - (ae-forgotten-export) The symbol "NodeCanvasExtra" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node-types.d.ts:379:5 - (ae-forgotten-export) The symbol "NodeImageExtra" needs to be exported by the entry point index.d.ts
+// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/ffi/node-types.d.ts:381:5 - (ae-forgotten-export) The symbol "NodeCanvasExtra" needs to be exported by the entry point index.d.ts
 // /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/loop/debug.d.ts:85:5 - (ae-forgotten-export) The symbol "NativeFrameExecutionStats" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)

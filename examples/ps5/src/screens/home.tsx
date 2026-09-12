@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs"
 import { resolve } from "node:path"
 import {
-  Box,
   For,
   Show,
   createEffect,
@@ -29,15 +28,15 @@ const mockAssets = {
 
 function HeroLayer(props: { game: GameCatalogEntry; width: number; height: number; opacity?: number }) {
   return (
-    <Box width={props.width} height={props.height} backgroundColor={props.game.accent} floating="parent" zIndex={0}>
+    <box width={props.width} height={props.height} backgroundColor={props.game.accent} floating="parent" zIndex={0}>
       <Show when={imageAvailable(props.game.hero)} fallback={
-        <Box width="100%" height="100%" alignX="center" alignY="center" backgroundColor={props.game.accent} opacity={props.opacity ?? 1}>
+        <box width="100%" height="100%" alignX="center" alignY="center" backgroundColor={props.game.accent} opacity={props.opacity ?? 1}>
           <Ps5Text color="#ffffffcc" fontSize={28}>Arte no disponible · {props.game.id}</Ps5Text>
-        </Box>
+        </box>
       }>
         <img src={props.game.hero} width={props.width} height={props.height} objectFit="cover" opacity={props.opacity ?? 1} />
       </Show>
-    </Box>
+    </box>
   )
 }
 
@@ -50,7 +49,7 @@ function HeroFadeLayer(props: { game: GameCatalogEntry; width: number; height: n
 function Cover(props: { tile: HomeTile; game?: GameCatalogEntry; width: number; height: number }) {
   if (props.tile.kind === "utility") {
     return (
-      <Box width="100%" height="100%" direction="column" alignX="center" alignY="center" gap={8} backgroundColor="#0a0e14e8" cornerRadius={Math.round(Math.min(props.width, props.height) * 0.08)}>
+      <box width="100%" height="100%" direction="column" alignX="center" alignY="center" gap={8} backgroundColor="#0a0e14e8" cornerRadius={Math.round(Math.min(props.width, props.height) * 0.08)}>
         <Show when={props.tile.id === "store"} fallback={
           <Ps5Icon
             name="library-grid-controller-reference"
@@ -69,15 +68,15 @@ function Cover(props: { tile: HomeTile; game?: GameCatalogEntry; width: number; 
         <Ps5Text color={ps5Colors.text} fontSize={Math.max(11, Math.round(props.width * 0.1))} alignX="center">
           {props.tile.id === "store" ? "PlayStation Store" : "Biblioteca de juegos"}
         </Ps5Text>
-      </Box>
+      </box>
     )
   }
   return (
-    <Box width="100%" height="100%" backgroundColor={props.game?.accent ?? ps5Colors.panel}>
+    <box width="100%" height="100%" backgroundColor={props.game?.accent ?? ps5Colors.panel}>
       <Show when={props.game && imageAvailable(props.game.cover)} fallback={
-        <Box width="100%" height="100%" alignX="center" alignY="center">
+        <box width="100%" height="100%" alignX="center" alignY="center">
           <Ps5Text color={ps5Colors.text} fontSize={12} alignX="center">{props.game?.title ?? props.tile.id}</Ps5Text>
-        </Box>
+        </box>
       }>
         <img
           src={props.game!.cover}
@@ -87,7 +86,7 @@ function Cover(props: { tile: HomeTile; game?: GameCatalogEntry; width: number; 
           cornerRadius={Math.round(Math.min(props.width, props.height) * 0.08)}
         />
       </Show>
-    </Box>
+    </box>
   )
 }
 
@@ -127,12 +126,12 @@ function ActivityCard(props: ActivityCardProps) {
       screen={props.screen}
       onKeyDown={props.onKeyDown}
     >
-      <Box width="100%" height="100%" backgroundColor={props.accent()} cornerRadius={props.radius}>
-        <Show when={image() && imageAvailable(image())} fallback={<Box width="100%" height="100%" backgroundColor={props.accent()} />}>
+      <box width="100%" height="100%" backgroundColor={props.accent()} cornerRadius={props.radius}>
+        <Show when={image() && imageAvailable(image())} fallback={<box width="100%" height="100%" backgroundColor={props.accent()} />}>
           <img src={image()!} width="100%" height="100%" objectFit="cover" cornerRadius={props.radius} />
         </Show>
         <Show when={!precomposed()}>
-          <Box
+          <box
             width="100%"
             height="100%"
             floating="parent"
@@ -142,7 +141,7 @@ function ActivityCard(props: ActivityCardProps) {
             gradient={{ type: "linear", from: "#02040608", to: "#020406eb", angle: 90 }}
           />
         </Show>
-        <Box
+        <box
           width="100%"
           height={props.trophyCounts ? props.height - Math.round(props.height * 0.16) : "100%"}
           floating="parent"
@@ -157,9 +156,9 @@ function ActivityCard(props: ActivityCardProps) {
           <Show when={props.description()}>
             <Ps5Text color={ps5Colors.text} fontSize={Math.round(props.width * 21 / 540)}>{props.description()}</Ps5Text>
           </Show>
-        </Box>
+        </box>
         <Show when={props.progress?.() !== undefined}>
-          <Box
+          <box
             width={Math.round(props.width * 0.28)}
             height={Math.round(props.height * 0.16)}
             floating="parent"
@@ -170,13 +169,13 @@ function ActivityCard(props: ActivityCardProps) {
             gap={Math.max(2, Math.round(props.width * 0.008))}
           >
             <Ps5Text color={ps5Colors.text} fontSize={Math.round(props.width * 21 / 540)} fontWeight={700} alignX="right">{Math.round(props.progress?.() ?? 0)} %</Ps5Text>
-            <Box width="100%" height={Math.max(2, Math.round(props.height * 0.012))} backgroundColor="#ffffff66" cornerRadius={2}>
-              <Box width={`${Math.max(0, Math.min(100, props.progress?.() ?? 0))}%`} height="100%" backgroundColor={ps5Colors.text} cornerRadius={2} />
-            </Box>
-          </Box>
+            <box width="100%" height={Math.max(2, Math.round(props.height * 0.012))} backgroundColor="#ffffff66" cornerRadius={2}>
+              <box width={`${Math.max(0, Math.min(100, props.progress?.() ?? 0))}%`} height="100%" backgroundColor={ps5Colors.text} cornerRadius={2} />
+            </box>
+          </box>
         </Show>
         <Show when={props.trophyCounts?.() !== undefined}>
-          <Box
+          <box
             width={Math.round(props.width * 0.62)}
             height={Math.round(props.height * 0.16)}
             floating="parent"
@@ -187,14 +186,14 @@ function ActivityCard(props: ActivityCardProps) {
             gap={Math.round(props.width * 0.035)}
           >
             <For each={trophyKinds}>{(_kind, index) => (
-              <Box direction="row" alignY="center" gap={Math.max(4, Math.round(props.width * 0.012))}>
+              <box direction="row" alignY="center" gap={Math.max(4, Math.round(props.width * 0.012))}>
                 <Ps5Icon name={trophyIcons[index()]} size={Math.round(props.width * 0.042)} opacity={0.96} />
                 <Ps5Text color={ps5Colors.text} fontSize={Math.round(props.width * 21 / 540)}>{props.trophyCounts?.()[index()] ?? 0}</Ps5Text>
-              </Box>
+              </box>
             )}</For>
-          </Box>
+          </box>
         </Show>
-      </Box>
+      </box>
     </Ps5Button>
   )
 }
@@ -308,41 +307,41 @@ export function HomeScreen(props: Ps5ScreenProps) {
   const trophyCounts = () => trophyKinds.map((kind) => game()?.trophies.filter((entry) => entry.type === kind && entry.earned).length ?? 0)
 
   return (
-    <Box width={viewport.width()} height={viewport.height()} backgroundColor={game()?.accent ?? ps5Colors.background} viewportClip>
+    <box width={viewport.width()} height={viewport.height()} backgroundColor={game()?.accent ?? ps5Colors.background} viewportClip>
       <HeroLayer game={heroPrevious()!} width={viewport.width()} height={viewport.height()} opacity={1} />
       <Show when={heroCurrent()} keyed>{(entry) => <HeroFadeLayer game={entry} width={viewport.width()} height={viewport.height()} reduceMotion={state().settings.reduceMotion} />}</Show>
-      <Box width={viewport.width()} height={viewport.height()} floating="parent" zIndex={1} gradient={{ type: "linear", from: "#000000aa", to: "#00000000", angle: 0 }} />
-      <Box width={viewport.width()} height={viewport.height()} floating="parent" zIndex={2}>
-        <Box width={scale(130)} height={scale(42)} floating="parent" floatOffset={{ x: scale(80), y: scale(42) }}>
+      <box width={viewport.width()} height={viewport.height()} floating="parent" zIndex={1} gradient={{ type: "linear", from: "#000000aa", to: "#00000000", angle: 0 }} />
+      <box width={viewport.width()} height={viewport.height()} floating="parent" zIndex={2}>
+        <box width={scale(130)} height={scale(42)} floating="parent" floatOffset={{ x: scale(80), y: scale(42) }}>
           <Ps5Button id="home-tab-games" width="100%" height="100%" alignX="left" backgroundColor="#00000000" borderWidth={0} onPress={() => actions.go("home")} screen={props}>
             <Ps5Text color={ps5Colors.text} fontSize={scale(36)} fontWeight={700}>Juegos</Ps5Text>
           </Ps5Button>
-        </Box>
-        <Box width={scale(380)} height={scale(42)} floating="parent" floatOffset={{ x: scale(269), y: scale(42) }}>
+        </box>
+        <box width={scale(380)} height={scale(42)} floating="parent" floatOffset={{ x: scale(269), y: scale(42) }}>
           <Ps5Button id="home-tab-media" width="100%" height="100%" alignX="left" backgroundColor="#00000000" borderWidth={0} onPress={() => actions.go("store-media")} screen={props}>
             <Ps5Text color={ps5Colors.mutedText} fontSize={scale(34)}>Contenido multimedia</Ps5Text>
           </Ps5Button>
-        </Box>
-        <Box width={scale(44)} height={scale(42)} floating="parent" floatOffset={{ x: scale(1480), y: scale(42) }}>
+        </box>
+        <box width={scale(44)} height={scale(42)} floating="parent" floatOffset={{ x: scale(1480), y: scale(42) }}>
           <Ps5Button id="home-search" width="100%" height="100%" backgroundColor="#00000000" borderWidth={0} onPress={() => actions.go("library")} screen={props}>
             <Ps5Icon name="magnifying-glass" size={scale(32)} />
           </Ps5Button>
-        </Box>
-        <Box width={scale(44)} height={scale(42)} floating="parent" floatOffset={{ x: scale(1575), y: scale(42) }}>
+        </box>
+        <box width={scale(44)} height={scale(42)} floating="parent" floatOffset={{ x: scale(1575), y: scale(42) }}>
           <Ps5Button id="home-settings" width="100%" height="100%" backgroundColor="#00000000" borderWidth={0} onPress={() => actions.go("settings")} screen={props}>
             <Ps5Icon name="gear-fill" size={scale(32)} />
           </Ps5Button>
-        </Box>
-        <Box width={scale(52)} height={scale(42)} floating="parent" floatOffset={{ x: scale(1672), y: scale(42) }}>
+        </box>
+        <box width={scale(52)} height={scale(42)} floating="parent" floatOffset={{ x: scale(1672), y: scale(42) }}>
           <Ps5Button id="home-profile" width="100%" height="100%" backgroundColor="#00000000" borderWidth={0} onPress={() => actions.go("profile")} screen={props}>
             <Ps5Avatar src={user()?.avatar} name={user()?.name ?? "?"} accent={user()?.accent} size={scale(52)} status />
           </Ps5Button>
-        </Box>
-        <Box width={scale(120)} height={scale(42)} floating="parent" floatOffset={{ x: scale(1758), y: scale(42) }} alignY="center">
+        </box>
+        <box width={scale(120)} height={scale(42)} floating="parent" floatOffset={{ x: scale(1758), y: scale(42) }} alignY="center">
           <Ps5Text color={ps5Colors.text} fontSize={scale(32)}>21:08</Ps5Text>
-        </Box>
+        </box>
 
-        <Box width={normalTile()} height={rowHeight()} floating="parent" floatOffset={{ x: scale(45), y: scale(122) }}>
+        <box width={normalTile()} height={rowHeight()} floating="parent" floatOffset={{ x: scale(45), y: scale(122) }}>
           <For each={tiles().filter((tile) => tile.kind === "utility" && tile.id === "store")}>{(tile) => (
             <Ps5Button
               id={`home-tile-${tile.id}`}
@@ -360,16 +359,16 @@ export function HomeScreen(props: Ps5ScreenProps) {
               <Cover tile={tile} width={normalTile()} height={normalTile()} />
             </Ps5Button>
           )}</For>
-        </Box>
-        <Box width={gameRailViewport()} height={rowHeight()} floating="parent" floatOffset={{ x: scale(189), y: scale(111) }} scrollX layer viewportClip>
-          <Box width={railWidth()} height={rowHeight()} direction="row" gap={gap()} transform={{ translateX: -displayedOffset(), translateY: scale(11) }}>
+        </box>
+        <box width={gameRailViewport()} height={rowHeight()} floating="parent" floatOffset={{ x: scale(189), y: scale(111) }} scrollX layer viewportClip>
+          <box width={railWidth()} height={rowHeight()} direction="row" gap={gap()} transform={{ translateX: -displayedOffset(), translateY: scale(11) }}>
             <For each={tiles().filter((tile) => tile.kind === "game")}>{(tile, gameTileIndex) => {
               const tileGame = () => tile.kind === "game" ? state().catalog.find((entry) => entry.id === tile.id) : undefined
               const active = () => gameTileIndex() === gameIndex()
               const width = () => active() ? selectedTile() : normalTile()
               const height = () => active() ? selectedTile() : normalTile()
               return (
-                <Box width={width()} height={height()} transform={{ translateY: active() ? -scale(11) : 0 }}>
+                <box width={width()} height={height()} transform={{ translateY: active() ? -scale(11) : 0 }}>
                   <Ps5Button
                     id={`home-tile-${tile.id}`}
                     width="100%"
@@ -383,14 +382,14 @@ export function HomeScreen(props: Ps5ScreenProps) {
                     screen={props}
                     onKeyDown={tileKeyDown(gameTileIndex() + 1)}
                   >
-                    <Box
+                    <box
                       width="100%"
                       height="100%"
                       padding={active() ? scale(3) : 0}
                       backgroundColor="#00000000"
                       cornerRadius={active() ? scale(15) : scale(14)}
                     >
-                      <Box
+                      <box
                         width="100%"
                         height="100%"
                         borderColor={active() ? ps5Colors.focus : "#00000000"}
@@ -399,15 +398,15 @@ export function HomeScreen(props: Ps5ScreenProps) {
                         viewportClip
                       >
                         <Cover tile={tile} game={tileGame()} width={width()} height={height()} />
-                      </Box>
-                    </Box>
+                      </box>
+                    </box>
                   </Ps5Button>
-                </Box>
+                </box>
               )
             }}</For>
-          </Box>
-        </Box>
-        <Box width={normalTile()} height={rowHeight()} floating="parent" floatOffset={{ x: scale(951), y: scale(122) }}>
+          </box>
+        </box>
+        <box width={normalTile()} height={rowHeight()} floating="parent" floatOffset={{ x: scale(951), y: scale(122) }}>
           <For each={tiles().filter((tile) => tile.kind === "utility" && tile.id === "library")}>{(tile) => (
             <Ps5Button
               id={`home-tile-${tile.id}`}
@@ -425,17 +424,17 @@ export function HomeScreen(props: Ps5ScreenProps) {
               <Cover tile={tile} width={normalTile()} height={normalTile()} />
             </Ps5Button>
           )}</For>
-        </Box>
+        </box>
 
-        <Box width={scale(620)} height={scale(26)} floating="parent" floatOffset={{ x: scale(373), y: scale(267) }} direction="row" alignY="center" gap={scale(12)}>
-          <Box width={scale(43)} height={scale(24)} backgroundColor="#f5f5f5" cornerRadius={scale(3)} alignX="center" alignY="center">
+        <box width={scale(620)} height={scale(26)} floating="parent" floatOffset={{ x: scale(373), y: scale(267) }} direction="row" alignY="center" gap={scale(12)}>
+          <box width={scale(43)} height={scale(24)} backgroundColor="#f5f5f5" cornerRadius={scale(3)} alignX="center" alignY="center">
             <Ps5Text color="#101214" fontSize={scale(12)} fontWeight={700}>PS5</Ps5Text>
-          </Box>
+          </box>
           <Ps5Text color={ps5Colors.text} fontSize={scale(18)}>{game()?.title ?? "Juego"}</Ps5Text>
           <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>{game()?.subtitle?.toUpperCase() ?? ""}</Ps5Text>
-        </Box>
+        </box>
 
-        <Box width={scale(473)} height={scale(168)} floating="parent" floatOffset={{ x: scale(124), y: scale(347) }}>
+        <box width={scale(473)} height={scale(168)} floating="parent" floatOffset={{ x: scale(124), y: scale(347) }}>
           <Show when={game()?.id === "ghost-of-tsushima" && imageAvailable(mockAssets.ghostLockup)} fallback={
             <Show when={game()?.logo && imageAvailable(game()?.logo)} fallback={
             <Ps5Text color={ps5Colors.text} fontSize={scale(38)} fontWeight={700}>{game()?.title ?? "Juego"}</Ps5Text>
@@ -445,25 +444,25 @@ export function HomeScreen(props: Ps5ScreenProps) {
           }>
             <img src={mockAssets.ghostLockup} width={scale(473)} height={scale(168)} objectFit="contain" />
           </Show>
-        </Box>
+        </box>
         <Show when={!(game()?.id === "ghost-of-tsushima" && imageAvailable(mockAssets.ghostLockup))}>
-          <Box width={scale(287)} height={scale(28)} floating="parent" floatOffset={{ x: scale(223), y: scale(483) }} backgroundColor="#c3a46c" cornerRadius={scale(4)} alignX="center" alignY="center">
+          <box width={scale(287)} height={scale(28)} floating="parent" floatOffset={{ x: scale(223), y: scale(483) }} backgroundColor="#c3a46c" cornerRadius={scale(4)} alignX="center" alignY="center">
             <Ps5Text color="#4b3820" fontSize={scale(12)} fontWeight={700}>DIRECTOR’S CUT</Ps5Text>
-          </Box>
+          </box>
         </Show>
 
-        <Box width={scale(243)} height={scale(59)} floating="parent" floatOffset={{ x: scale(125), y: scale(557) }}>
+        <box width={scale(243)} height={scale(59)} floating="parent" floatOffset={{ x: scale(125), y: scale(557) }}>
           <Ps5Button id="home-play" width="100%" height="100%" backgroundColor="#f4f4f4" borderColor="#ffffff" childrenColor="#101214" cornerRadius={scale(29)} onPress={launchOrDownload} screen={props}>
             <Ps5Text color="#101214" fontSize={scale(19)} fontWeight={700}>{download()?.status === "downloading" ? `Descargando ${Math.round(download()!.progress)}%` : game()?.installed ? "Jugar" : "Descargar"}</Ps5Text>
           </Ps5Button>
-        </Box>
-        <Box width={scale(59)} height={scale(59)} floating="parent" floatOffset={{ x: scale(389), y: scale(557) }}>
+        </box>
+        <box width={scale(59)} height={scale(59)} floating="parent" floatOffset={{ x: scale(389), y: scale(557) }}>
           <Ps5Button id="home-options" width="100%" height="100%" backgroundColor="#1c2027cc" borderColor="#ffffff32" cornerRadius={scale(29)} onPress={() => actions.openOverlay("options")} screen={props}>
             <Ps5Text color={ps5Colors.text} fontSize={scale(24)}>···</Ps5Text>
           </Ps5Button>
-        </Box>
+        </box>
 
-        <Box width={scale(1680)} height={scale(225)} floating="parent" floatOffset={{ x: scale(117), y: scale(663) }} direction="row" gap={scale(16)}>
+        <box width={scale(1680)} height={scale(225)} floating="parent" floatOffset={{ x: scale(117), y: scale(663) }} direction="row" gap={scale(16)}>
           <ActivityCard
             id="home-card-0"
             width={scale(540)}
@@ -505,10 +504,10 @@ export function HomeScreen(props: Ps5ScreenProps) {
             screen={props}
             onKeyDown={cardKeyDown(2)}
           />
-        </Box>
+        </box>
 
-        <Box width={viewport.width()} height={scale(148)} floating="parent" floatOffset={{ x: 0, y: scale(932) }} backgroundColor={ps5Colors.scrim} zIndex={3} />
-      </Box>
-    </Box>
+        <box width={viewport.width()} height={scale(148)} floating="parent" floatOffset={{ x: 0, y: scale(932) }} backgroundColor={ps5Colors.scrim} zIndex={3} />
+      </box>
+    </box>
   )
 }

@@ -1,5 +1,4 @@
 import {
-  Box,
   For,
   Show,
   createEffect,
@@ -17,7 +16,7 @@ import {
   Ps5Button,
   Ps5Icon,
   Ps5Panel,
-  Ps5Text as Text,
+  Ps5Text,
   ps5Colors,
   ps5Scale,
   usePs5Viewport,
@@ -98,13 +97,13 @@ function focusBranch(props: Ps5OverlayProps, id: BranchId, initial: string) {
 function branchFrame(viewport: ReturnType<typeof usePs5Viewport>, title: string, subtitle: string, children: JSX.Element) {
   const scale = scaleFor(viewport)
   return (
-    <Box width={viewport.width()} height={viewport.height()} alignX="center" alignY="bottom">
+    <box width={viewport.width()} height={viewport.height()} alignX="center" alignY="bottom">
       <Ps5Panel width={scale(760)} padding={scale(28)} gap={scale(16)} direction="column" backgroundColor={ps5Colors.panel} borderColor="#ffffff38" borderWidth={1} cornerRadius={scale(20)}>
-        <Text color={ps5Colors.text} fontSize={scale(27)} fontWeight={700}>{title}</Text>
-        <Text color={ps5Colors.mutedText} fontSize={scale(14)}>{subtitle}</Text>
+        <Ps5Text color={ps5Colors.text} fontSize={scale(27)} fontWeight={700}>{title}</Ps5Text>
+        <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>{subtitle}</Ps5Text>
         {children}
       </Ps5Panel>
-    </Box>
+    </box>
   )
 }
 
@@ -139,7 +138,7 @@ function MusicPanel(props: Ps5OverlayProps) {
     props.actions.dispatch({ type: "control/music", action: delta > 0 ? "next" : "previous" })
   }
   return branchFrame(viewport, "Música", "Controles simulados; no se reproduce audio del sistema.", (
-      <Box direction="column" gap={scale(12)}>
+      <box direction="column" gap={scale(12)}>
         <For each={tracks}>{(track, index) => (
           <Ps5Button
             id={`music-track-${track.id}`}
@@ -156,18 +155,18 @@ function MusicPanel(props: Ps5OverlayProps) {
             screen={props}
           />
         )}</For>
-        <Box direction="row" gap={scale(10)}>
+        <box direction="row" gap={scale(10)}>
           <Ps5Button id="music-previous" layer="overlay" width={scale(150)} height={scale(46)} label="Anterior" onPress={press("music-previous", () => cycleTrack(-1))} screen={props} />
           <Ps5Button id="music-play" layer="overlay" width={scale(150)} height={scale(46)} label={props.state().music.playing ? "Pausar" : "Reproducir"} onPress={press("music-play", () => props.actions.dispatch({ type: "control/music", action: props.state().music.playing ? "pause" : "play" }))} screen={props} />
           <Ps5Button id="music-next" layer="overlay" width={scale(150)} height={scale(46)} label="Siguiente" onPress={press("music-next", () => cycleTrack(1))} screen={props} />
-        </Box>
-        <Box direction="row" gap={scale(10)} alignY="center">
-          <Text color={ps5Colors.mutedText} fontSize={scale(14)}>Volumen de salida {props.state().sound.volume}%</Text>
+        </box>
+        <box direction="row" gap={scale(10)} alignY="center">
+          <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>Volumen de salida {props.state().sound.volume}%</Ps5Text>
           <Ps5Button id="music-volume-down" layer="overlay" width={scale(46)} height={scale(42)} label="−" onPress={press("music-volume-down", () => props.actions.dispatch({ type: "control/sound", action: "volume", value: Math.max(0, props.state().sound.volume - 10) }))} screen={props} />
           <Ps5Button id="music-volume-up" layer="overlay" width={scale(46)} height={scale(42)} label="+" onPress={press("music-volume-up", () => props.actions.dispatch({ type: "control/sound", action: "volume", value: Math.min(100, props.state().sound.volume + 10) }))} screen={props} />
-        </Box>
+        </box>
         <Ps5Button id="music-back" layer="overlay" width="100%" height={scale(46)} label="Volver al Centro de control" onPress={props.actions.closeOverlay} screen={props} />
-      </Box>
+      </box>
     ))
 }
 
@@ -181,19 +180,19 @@ function SoundPanel(props: Ps5OverlayProps) {
     run()
   }
   return branchFrame(viewport, "Sonido", "Salida y volumen simulados; no se cambia el audio del host.", (
-      <Box direction="column" gap={scale(14)}>
+      <box direction="column" gap={scale(14)}>
         <Ps5Button id="sound-mute" layer="overlay" width="100%" height={scale(50)} label={props.state().sound.muted ? "Activar sonido" : "Silenciar"} onPress={press("sound-mute", () => props.actions.dispatch({ type: "control/sound", action: "mute" }))} screen={props} />
-        <Box direction="row" gap={scale(10)} alignY="center">
-          <Text color={ps5Colors.mutedText} fontSize={scale(14)}>Volumen {props.state().sound.volume}%</Text>
+        <box direction="row" gap={scale(10)} alignY="center">
+          <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>Volumen {props.state().sound.volume}%</Ps5Text>
           <Ps5Button id="sound-volume-down" layer="overlay" width={scale(46)} height={scale(42)} label="−" onPress={press("sound-volume-down", () => props.actions.dispatch({ type: "control/sound", action: "volume", value: Math.max(0, props.state().sound.volume - 10) }))} screen={props} />
           <Ps5Button id="sound-volume-up" layer="overlay" width={scale(46)} height={scale(42)} label="+" onPress={press("sound-volume-up", () => props.actions.dispatch({ type: "control/sound", action: "volume", value: Math.min(100, props.state().sound.volume + 10) }))} screen={props} />
-        </Box>
-        <Box direction="row" gap={scale(10)}>
+        </box>
+        <box direction="row" gap={scale(10)}>
           <Ps5Button id="sound-output-tv" layer="overlay" width="50%" height={scale(48)} label="TV simulada" backgroundColor={props.state().sound.output === "tv-simulated" ? "#414852" : undefined} onPress={press("sound-output-tv", () => props.actions.dispatch({ type: "control/sound", action: "output", output: "tv-simulated" }))} screen={props} />
           <Ps5Button id="sound-output-headset" layer="overlay" width="50%" height={scale(48)} label="Auriculares simulados" backgroundColor={props.state().sound.output === "headset-simulated" ? "#414852" : undefined} onPress={press("sound-output-headset", () => props.actions.dispatch({ type: "control/sound", action: "output", output: "headset-simulated" }))} screen={props} />
-        </Box>
+        </box>
         <Ps5Button id="sound-back" layer="overlay" width="100%" height={scale(46)} label="Volver al Centro de control" onPress={props.actions.closeOverlay} screen={props} />
-      </Box>
+      </box>
     ))
 }
 
@@ -207,15 +206,15 @@ function MicrophonePanel(props: Ps5OverlayProps) {
     run()
   }
   return branchFrame(viewport, "Micrófono", "Estado visual simulado; no se accede al micrófono.", (
-      <Box direction="column" gap={scale(14)}>
+      <box direction="column" gap={scale(14)}>
         <Ps5Button id="microphone-mute" layer="overlay" width="100%" height={scale(50)} label={props.state().microphone.muted ? "Activar micrófono" : "Silenciar micrófono"} onPress={press("microphone-mute", () => props.actions.dispatch({ type: "control/microphone", action: "mute" }))} screen={props} />
-        <Box direction="row" gap={scale(10)} alignY="center">
-          <Text color={ps5Colors.mutedText} fontSize={scale(14)}>Nivel visual {props.state().microphone.level}%</Text>
+        <box direction="row" gap={scale(10)} alignY="center">
+          <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>Nivel visual {props.state().microphone.level}%</Ps5Text>
           <Ps5Button id="microphone-level-down" layer="overlay" width={scale(46)} height={scale(42)} label="−" onPress={press("microphone-level-down", () => props.actions.dispatch({ type: "control/microphone", action: "level", value: Math.max(0, props.state().microphone.level - 10) }))} screen={props} />
           <Ps5Button id="microphone-level-up" layer="overlay" width={scale(46)} height={scale(42)} label="+" onPress={press("microphone-level-up", () => props.actions.dispatch({ type: "control/microphone", action: "level", value: Math.min(100, props.state().microphone.level + 10) }))} screen={props} />
-        </Box>
+        </box>
         <Ps5Button id="microphone-back" layer="overlay" width="100%" height={scale(46)} label="Volver al Centro de control" onPress={props.actions.closeOverlay} screen={props} />
-      </Box>
+      </box>
     ))
 }
 
@@ -230,17 +229,17 @@ function AccessoriesPanel(props: Ps5OverlayProps) {
   }
   const accessories = () => props.state().accessories
   return branchFrame(viewport, "Accesorios", "Conexión y batería simuladas; no se consulta hardware.", (
-      <Box direction="column" gap={scale(14)}>
-        <Box direction="row" gap={scale(16)} alignY="center">
+      <box direction="column" gap={scale(14)}>
+        <box direction="row" gap={scale(16)} alignY="center">
           <Ps5Icon name="game-controller" size={scale(36)} />
-          <Box direction="column" gap={scale(4)}>
-            <Text color={ps5Colors.text} fontSize={scale(17)}>{accessories().deviceName}</Text>
-            <Text color={ps5Colors.mutedText} fontSize={scale(14)}>{accessories().connected ? "Conectado" : "Desconectado"} · Batería {accessories().battery}%</Text>
-          </Box>
-        </Box>
+          <box direction="column" gap={scale(4)}>
+            <Ps5Text color={ps5Colors.text} fontSize={scale(17)}>{accessories().deviceName}</Ps5Text>
+            <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>{accessories().connected ? "Conectado" : "Desconectado"} · Batería {accessories().battery}%</Ps5Text>
+          </box>
+        </box>
         <Ps5Button id="accessories-toggle" layer="overlay" width="100%" height={scale(50)} label={accessories().connected ? "Desconectar" : "Conectar"} onPress={press("accessories-toggle", () => props.actions.dispatch({ type: "control/accessories", action: accessories().connected ? "disconnect" : "connect" }))} screen={props} />
         <Ps5Button id="accessories-back" layer="overlay" width="100%" height={scale(46)} label="Volver al Centro de control" onPress={props.actions.closeOverlay} screen={props} />
-      </Box>
+      </box>
     ))
 }
 
@@ -280,11 +279,11 @@ function ControlCard(props: {
       focusRing={false}
       focusGlow={false}
     >
-      <Box direction="column" gap={scale(7)} alignX="center" alignY="center">
-        <Box width={scale(56)} height={scale(56)} alignX="center" alignY="center" backgroundColor={active() ? "#00000001" : undefined} glow={active() ? { radius: scale(10), color: "#4387ff", intensity: 72 } : undefined}>
+      <box direction="column" gap={scale(7)} alignX="center" alignY="center">
+        <box width={scale(56)} height={scale(56)} alignX="center" alignY="center" backgroundColor={active() ? "#00000001" : undefined} glow={active() ? { radius: scale(10), color: "#4387ff", intensity: 72 } : undefined}>
           {icon}
           <Show when={props.id === "game-base"}>
-            <Box
+            <box
               width={scale(12)}
               height={scale(12)}
               floating="parent"
@@ -296,7 +295,7 @@ function ControlCard(props: {
             />
           </Show>
           <Show when={props.id === "accessories"}>
-            <Box
+            <box
               width={scale(22)}
               height={scale(11)}
               floating="parent"
@@ -305,15 +304,15 @@ function ControlCard(props: {
               borderWidth={scale(1)}
               cornerRadius={scale(2)}
             >
-              <Box width="68%" height="100%" backgroundColor={ps5Colors.success} cornerRadius={scale(1)} />
-              <Box width={scale(3)} height={scale(5)} floating="parent" floatOffset={{ x: scale(22), y: scale(3) }} backgroundColor="#ffffffcc" cornerRadius={scale(1)} />
-            </Box>
+              <box width="68%" height="100%" backgroundColor={ps5Colors.success} cornerRadius={scale(1)} />
+              <box width={scale(3)} height={scale(5)} floating="parent" floatOffset={{ x: scale(22), y: scale(3) }} backgroundColor="#ffffffcc" cornerRadius={scale(1)} />
+            </box>
           </Show>
-        </Box>
+        </box>
         <Show when={active()}>
-          <Text color={ps5Colors.text} fontSize={scale(21)} alignX="center">{cardLabels[props.id]}</Text>
+          <Ps5Text color={ps5Colors.text} fontSize={scale(21)} alignX="center">{cardLabels[props.id]}</Ps5Text>
         </Show>
-      </Box>
+      </box>
     </Ps5Button>
   )
 }
@@ -369,16 +368,16 @@ function CenterRow(props: Ps5OverlayProps) {
   }
 
   return (
-    <Box width={viewport.width()} height={scale(148)} floating="root" floatOffset={{ x: 0, y: viewport.height() - scale(148) }} backgroundColor="#070a0ff2" alignX="center" alignY="center" direction="row" paddingX={scale(42)}>
-      <Box width="100%" height={scale(104)} direction="row" gap={scale(55)} alignX="center" alignY="center" scrollX viewportClip>
+    <box width={viewport.width()} height={scale(148)} floating="root" floatOffset={{ x: 0, y: viewport.height() - scale(148) }} backgroundColor="#070a0ff2" alignX="center" alignY="center" direction="row" paddingX={scale(42)}>
+      <box width="100%" height={scale(104)} direction="row" gap={scale(55)} alignX="center" alignY="center" scrollX viewportClip>
         <For each={controls()}>{(id, index) => (
           <ControlCard id={id} index={index()} total={controls().length} onMove={(delta) => move(index(), delta)} onPress={() => activate(id)} screen={props} />
         )}</For>
         <Show when={controls().length === 0}>
-          <Text color={ps5Colors.mutedText} fontSize={scale(16)}>Usa F2 para recuperar los controles</Text>
+          <Ps5Text color={ps5Colors.mutedText} fontSize={scale(16)}>Usa F2 para recuperar los controles</Ps5Text>
         </Show>
-      </Box>
-    </Box>
+      </box>
+    </box>
   )
 }
 

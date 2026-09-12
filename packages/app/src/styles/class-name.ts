@@ -66,12 +66,12 @@ const styleRegistry = new Map<string, VexartStyleProps>()
  *   title: { fontSize: 20, fontWeight: 700, color: "#fafafa" },
  * })
  *
- * <Box className={s.card}>
- *   <Text className={s.title}>Hello</Text>
- * </Box>
+ * <box className={s.card}>
+ *   <text className={s.title}>Hello</text>
+ * </box>
  *
  * // Composable with utility classes:
- * <Box className={`${s.card} hover:bg-accent`}>
+ * <box className={`${s.card} hover:bg-accent`}>
  * ```
  * @public
  */

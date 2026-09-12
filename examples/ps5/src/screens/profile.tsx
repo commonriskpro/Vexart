@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs"
 import {
-  Box,
   For,
   Show,
   createEffect,
@@ -8,7 +7,7 @@ import {
 } from "vexart"
 
 import type { Ps5ScreenProps, Trophy } from "../types"
-import { Ps5Avatar, Ps5Button, Ps5Panel, Ps5Text as Text, ps5Colors, ps5Scale, usePs5Back, usePs5Viewport } from "../ui"
+import { Ps5Avatar, Ps5Button, Ps5Panel, Ps5Text, ps5Colors, ps5Scale, usePs5Back, usePs5Viewport } from "../ui"
 
 function imageAvailable(path?: string) {
   return !!path && existsSync(path)
@@ -74,74 +73,74 @@ export function ProfileScreen(props: Ps5ScreenProps) {
   }
 
   return (
-    <Box width={viewport.width()} height={viewport.height()} backgroundColor={game()?.accent ?? ps5Colors.background} viewportClip>
+    <box width={viewport.width()} height={viewport.height()} backgroundColor={game()?.accent ?? ps5Colors.background} viewportClip>
       <Show when={game() && imageAvailable(game()!.hero)}>
-        <Box width={viewport.width()} height={viewport.height()} floating="parent" zIndex={0}>
+        <box width={viewport.width()} height={viewport.height()} floating="parent" zIndex={0}>
           <img src={game()!.hero} width={viewport.width()} height={viewport.height()} objectFit="cover" opacity={0.42} />
-        </Box>
+        </box>
       </Show>
-      <Box width={viewport.width()} height={viewport.height()} backgroundColor="#05070bcc" floating="parent" zIndex={1} alignX="center" alignY="center">
+      <box width={viewport.width()} height={viewport.height()} backgroundColor="#05070bcc" floating="parent" zIndex={1} alignX="center" alignY="center">
         <Ps5Panel width={scale(720)} padding={scale(28)} gap={scale(16)} direction="column" backgroundColor="#090c11ed" borderColor="#ffffff38" borderWidth={1} cornerRadius={scale(20)}>
-          <Box direction="row" gap={scale(16)} alignY="center">
+          <box direction="row" gap={scale(16)} alignY="center">
             <Ps5Avatar src={user()?.avatar} name={user()?.name ?? "Perfil"} accent={user()?.accent} size={scale(76)} />
-            <Box direction="column" gap={scale(4)}>
-              <Text color={ps5Colors.text} fontSize={scale(26)} fontWeight={700}>{user()?.name ?? "Perfil"}</Text>
-              <Text color={ps5Colors.mutedText} fontSize={scale(14)}>{user()?.handle ?? "@guest"}</Text>
-              <Text color={ps5Colors.mutedText} fontSize={scale(12)}>Juego actual: {game()?.title ?? "Ninguno"}</Text>
-            </Box>
-          </Box>
+            <box direction="column" gap={scale(4)}>
+              <Ps5Text color={ps5Colors.text} fontSize={scale(26)} fontWeight={700}>{user()?.name ?? "Perfil"}</Ps5Text>
+              <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>{user()?.handle ?? "@guest"}</Ps5Text>
+              <Ps5Text color={ps5Colors.mutedText} fontSize={scale(12)}>Juego actual: {game()?.title ?? "Ninguno"}</Ps5Text>
+            </box>
+          </box>
 
-          <Box direction="row" gap={scale(10)}>
+          <box direction="row" gap={scale(10)}>
             <Ps5Button id="profile-tab-overview" width="50%" height={scale(46)} label="Resumen" backgroundColor={state().profile.tab === "overview" ? "#3a424d" : undefined} onPress={() => changeTab("overview")} onKeyDown={(event) => { if (event.key === "right") changeTab("trophies") }} screen={props} />
             <Ps5Button id="profile-tab-trophies" width="50%" height={scale(46)} label="Trofeos" backgroundColor={state().profile.tab === "trophies" ? "#3a424d" : undefined} onPress={() => changeTab("trophies")} onKeyDown={(event) => { if (event.key === "left") changeTab("overview") }} screen={props} />
-          </Box>
+          </box>
 
           <Show when={state().profile.tab === "overview"} fallback={
-            <Box direction="column" gap={scale(10)}>
-              <Text color={ps5Colors.text} fontSize={scale(18)} fontWeight={700}>Trofeos · {game()?.title ?? "juego actual"}</Text>
-              <Box direction="row" gap={scale(8)}>
+            <box direction="column" gap={scale(10)}>
+              <Ps5Text color={ps5Colors.text} fontSize={scale(18)} fontWeight={700}>Trofeos · {game()?.title ?? "juego actual"}</Ps5Text>
+              <box direction="row" gap={scale(8)}>
                 <Ps5Button id="profile-trophy-filter" width="50%" height={scale(42)} label={`Filtro: ${trophyFilter() === "all" ? "Todos" : trophyFilter() === "earned" ? "Conseguidos" : "Pendientes"}`} onPress={() => { setTrophyFilter(trophyFilter() === "all" ? "earned" : trophyFilter() === "earned" ? "pending" : "all"); actions.setFocus("profile-trophy-filter") }} screen={props} />
                 <Ps5Button id="profile-trophy-sort" width="50%" height={scale(42)} label={`Orden: ${trophySort() === "catalog" ? "Catálogo" : trophySort() === "type" ? "Tipo" : "Estado"}`} onPress={() => { setTrophySort(trophySort() === "catalog" ? "type" : trophySort() === "type" ? "earned" : "catalog"); actions.setFocus("profile-trophy-sort") }} screen={props} />
-              </Box>
-              <Show when={visibleTrophies().length > 0} fallback={<Text color={ps5Colors.mutedText} fontSize={scale(15)}>No hay trofeos para este filtro.</Text>}>
-                <Box direction="column" gap={scale(7)} scrollY viewportClip>
+              </box>
+              <Show when={visibleTrophies().length > 0} fallback={<Ps5Text color={ps5Colors.mutedText} fontSize={scale(15)}>No hay trofeos para este filtro.</Ps5Text>}>
+                <box direction="column" gap={scale(7)} scrollY viewportClip>
                   <For each={visibleTrophies()}>{(trophy) => (
                     <Ps5Button id={`profile-trophy-${trophy.name}`} width="100%" height={scale(45)} alignX="left" label={`${trophy.earned ? "✓" : "○"} ${trophyLabel(trophy.type)} · ${trophy.name}`} onPress={() => selectTrophy(trophy)} screen={props} />
                   )}</For>
-                </Box>
+                </box>
                 <Show when={selectedTrophy()}>
                   <Ps5Panel width="100%" padding={scale(12)} gap={scale(5)} direction="column" backgroundColor="#151a20cc" borderColor="#ffffff1c" cornerRadius={scale(10)}>
-                    <Text color={ps5Colors.text} fontSize={scale(14)} fontWeight={700}>{selectedTrophy()!.name}</Text>
-                    <Text color={ps5Colors.mutedText} fontSize={scale(13)}>{selectedTrophy()!.earned ? "Conseguido" : "Pendiente"} · {trophyLabel(selectedTrophy()!.type)}</Text>
+                    <Ps5Text color={ps5Colors.text} fontSize={scale(14)} fontWeight={700}>{selectedTrophy()!.name}</Ps5Text>
+                    <Ps5Text color={ps5Colors.mutedText} fontSize={scale(13)}>{selectedTrophy()!.earned ? "Conseguido" : "Pendiente"} · {trophyLabel(selectedTrophy()!.type)}</Ps5Text>
                   </Ps5Panel>
                 </Show>
               </Show>
               <Ps5Button id="profile-open-game" width="100%" height={scale(45)} label="Abrir juego" disabled={!game()} onPress={openGame} screen={props} />
-            </Box>
+            </box>
           }>
-            <Box direction="column" gap={scale(12)}>
-              <Text color={ps5Colors.text} fontSize={scale(18)} fontWeight={700}>Resumen del perfil</Text>
-              <Text color={ps5Colors.mutedText} fontSize={scale(14)}>Trofeos conseguidos: {trophies().filter((entry) => entry.earned).length} / {trophies().length}</Text>
-              <Text color={ps5Colors.mutedText} fontSize={scale(14)}>Sesión: {state().gameSession.phase}</Text>
+            <box direction="column" gap={scale(12)}>
+              <Ps5Text color={ps5Colors.text} fontSize={scale(18)} fontWeight={700}>Resumen del perfil</Ps5Text>
+              <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>Trofeos conseguidos: {trophies().filter((entry) => entry.earned).length} / {trophies().length}</Ps5Text>
+              <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>Sesión: {state().gameSession.phase}</Ps5Text>
               <Show when={game()}>
                 <Ps5Button id="profile-open-game" width="100%" height={scale(46)} label={`Abrir ${game()!.title}`} onPress={openGame} screen={props} />
               </Show>
-            </Box>
+            </box>
           </Show>
 
-          <Box direction="row" gap={scale(10)}>
+          <box direction="row" gap={scale(10)}>
             <Ps5Button id="profile-change-user" width="50%" height={scale(46)} label="Cambiar usuario" onPress={() => actions.go("boot-users")} screen={props} />
             <Ps5Button id="profile-back" width="50%" height={scale(46)} label="Volver" onPress={actions.back} screen={props} />
-          </Box>
+          </box>
           <Show when={state().users.length > 1}>
-            <Box direction="row" gap={scale(8)} scrollX viewportClip>
+            <box direction="row" gap={scale(8)} scrollX viewportClip>
               <For each={state().users}>{(entry) => (
                 <Ps5Button id={`profile-user-${entry.id}`} width={scale(145)} height={scale(46)} label={entry.id === state().activeUserId ? `${entry.name} · activo` : entry.name} onPress={() => { actions.dispatch({ type: "user/select", userId: entry.id }); actions.go("profile") }} screen={props} />
               )}</For>
-            </Box>
+            </box>
           </Show>
         </Ps5Panel>
-      </Box>
-    </Box>
+      </box>
+    </box>
   )
 }

@@ -7,7 +7,7 @@ import {
   solidRender,
   type TGENode,
 } from "@vexart/engine"
-import { Box, Text } from "./primitives"
+import "../styles/class-name"
 
 const browserRuntime = import.meta.resolve("solid-js").endsWith("/solid.js")
 const suite = browserRuntime ? describe : describe.skip
@@ -31,7 +31,7 @@ function renderScene(root: TGENode, scene: () => unknown) {
 afterEach(() => resetFocus())
 
 suite("app primitives with the production Solid renderer", () => {
-  test("updates reactive Box visual props without replacing the node", () => {
+  test("updates reactive box visual props without replacing the node", () => {
     const root = createNode("root")
     const [color, setColor] = createSignal<string | number>("#111111")
     const [gradient, setGradient] = createSignal<{ type: "linear"; from: string; to: string } | undefined>({ type: "linear", from: "#111111", to: "#ffffff" })
@@ -39,9 +39,9 @@ suite("app primitives with the production Solid renderer", () => {
     const [glow, setGlow] = createSignal<{ radius: number; color: string; intensity: number } | undefined>({ radius: 8, color: "#00ffff", intensity: 50 })
 
     const dispose = renderScene(root, () => (
-      <Box backgroundColor={color()} gradient={gradient()} shadow={shadow()} glow={glow()}>
-        <Text color={color()}>stable</Text>
-      </Box>
+      <box backgroundColor={color()} gradient={gradient()} shadow={shadow()} glow={glow()}>
+        <text color={color()}>stable</text>
+      </box>
     ))
 
     try {
@@ -78,14 +78,14 @@ suite("app primitives with the production Solid renderer", () => {
     const [className, setClassName] = createSignal("bg-primary")
     const [style, setStyle] = createSignal({ backgroundColor: "#ff0000" })
     const disposeStyled = renderScene(styledRoot, () => (
-      <Box className={className()} style={style()}><Text>styled</Text></Box>
+      <box className={className()} style={style()}><text>styled</text></box>
     ))
 
     const directRoot = createNode("root")
     const disposeDirect = renderScene(directRoot, () => (
-      <Box className="bg-primary" style={{ backgroundColor: "#ff0000" }} backgroundColor="#00ff00">
-        <Text>direct</Text>
-      </Box>
+      <box className="bg-primary" style={{ backgroundColor: "#ff0000" }} backgroundColor="#00ff00">
+        <text>direct</text>
+      </box>
     ))
 
     try {
@@ -112,7 +112,7 @@ suite("app primitives with the production Solid renderer", () => {
       glow: { radius: 8, color: "#00ffff" },
     })
     const dispose = renderScene(root, () => (
-      <Box className={className()} style={style()}><Text>clearable</Text></Box>
+      <box className={className()} style={style()}><text>clearable</text></box>
     ))
 
     try {
@@ -130,18 +130,18 @@ suite("app primitives with the production Solid renderer", () => {
     }
   })
 
-  test("updates scalar and conditional Text children without remounting stable interactive content", () => {
+  test("updates scalar and conditional text children without remounting stable interactive content", () => {
     const root = createNode("root")
     const [count, setCount] = createSignal(0)
     const [visible, setVisible] = createSignal(true)
     let presses = 0
 
     const dispose = renderScene(root, () => (
-      <Box>
-        <Box focusable onPress={() => { presses += 1 }}><Text>stable</Text></Box>
-        <Text>{count()}</Text>
-        {visible() ? <Text>on</Text> : <Text>off</Text>}
-      </Box>
+      <box>
+        <box focusable onPress={() => { presses += 1 }}><text>stable</text></box>
+        <text>{count()}</text>
+        {visible() ? <text>on</text> : <text>off</text>}
+      </box>
     ))
 
     try {

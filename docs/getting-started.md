@@ -26,31 +26,31 @@ cd native/libvexart && cargo build --release && cd ../..
 Create `my-app.tsx`:
 
 ```tsx
-import { createApp, Box, Text, useAppTerminal, useTerminalDimensions, colors, radius } from "vexart"
+import { createApp, useAppTerminal, useTerminalDimensions, colors, radius } from "vexart"
 
 function App() {
   const terminal = useAppTerminal()
   const dims = useTerminalDimensions(terminal)
 
   return (
-    <Box
+    <box
       width={dims.width()}
       height={dims.height()}
       backgroundColor={colors.background}
       alignX="center"
       alignY="center"
     >
-      <Box
+      <box
         padding={20}
         backgroundColor={colors.card}
         cornerRadius={radius.xl}
         direction="column"
         gap={8}
       >
-        <Text color={colors.foreground}>Welcome to Vexart</Text>
-        <Text color={colors.mutedForeground}>Pixel-native terminal rendering</Text>
-      </Box>
-    </Box>
+        <text color={colors.foreground}>Welcome to Vexart</text>
+        <text color={colors.mutedForeground}>Pixel-native terminal rendering</text>
+      </box>
+    </box>
   )
 }
 
@@ -80,8 +80,8 @@ TypeScript owns scene graph, reactivity, walk-tree, Flexily layout, render graph
 ## Package map
 
 ```ts
-// Everything in one barrel — app framework, headless, primitives, styled
-import { createApp, Box, Text, useAppTerminal,
+// Everything in one barrel — app framework, headless, intrinsics, styled
+import { createApp, useAppTerminal,
          Button, Input, Textarea, Checkbox, Dialog,
          colors, radius, space, VoidButton } from "vexart"
 

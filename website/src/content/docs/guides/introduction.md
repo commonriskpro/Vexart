@@ -42,7 +42,7 @@ TypeScript owns the scene graph, reactivity, layout (Flexily), render graph, and
 | App | `@vexart/app` | Router, className mapper, CLI helpers |
 | Styled | `@vexart/styled` | Themed components, design tokens |
 | Headless | `@vexart/headless` | Logic-only components, keyboard/mouse |
-| Layout components | `@vexart/app` | `Box`, `Text` |
+| Layout intrinsics | `@vexart/engine` | `<box>`, `<text>` |
 | Engine | `@vexart/engine` | Reconciler, render loop, FFI bridge, input, focus |
 | Native | `libvexart` | Rust cdylib: WGPU + composite + Kitty encoder |
 

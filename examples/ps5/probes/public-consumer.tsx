@@ -1,11 +1,9 @@
 import { resolve } from "node:path"
 import {
-  Box,
   Dialog,
   DialogContent,
   DialogOverlay,
   Show,
-  Text,
   createEffect,
   createSignal,
   createTransition,
@@ -99,21 +97,21 @@ export function ProbeScene(props: { state?: ReturnType<typeof createProbeState> 
   }
 
   return (
-    <Box width={720} height={560} backgroundColor="#0b0d10" direction="column" padding={18} gap={10}>
-      <Text color="#f5f5f5" fontSize={22}>PS5 public API gate</Text>
-      <Box width={680} height={190} backgroundColor="#151a20" cornerRadius={16}>
+    <box width={720} height={560} backgroundColor="#0b0d10" direction="column" padding={18} gap={10}>
+      <text color="#f5f5f5" fontSize={22}>PS5 public API gate</text>
+      <box width={680} height={190} backgroundColor="#151a20" cornerRadius={16}>
         <img src={cards[state.heroFrom()].hero} width={680} height={190} objectFit="cover" opacity={state.heroFade() < 1 ? 1 - state.heroFade() : 0} />
         <img src={cards[state.heroTo()].hero} width={680} height={190} objectFit="cover" opacity={state.heroFade()} floating="parent" />
-        <Box floating="parent" width={680} height={190} padding={18} direction="column" alignY="bottom">
-          <Text color="#ffffff" fontSize={18}>{cards[state.heroTo()].title}</Text>
-          <Text color="#ffffffb0" fontSize={12}>local image + retargeted crossfade</Text>
-        </Box>
-      </Box>
-      <Text color="#b8bbc0" fontSize={12}>Transform + scrollX clip · 24 cards · selected: {state.selected() + 1}</Text>
-      <Box width={viewportWidth} height={cardHeight} scrollX scrollId="ps5-public-row" layer backgroundColor="#090c11" cornerRadius={12}>
-        <Box width={rowWidth} height={cardHeight} flexShrink={0} direction="row" gap={cardGap} transform={{ translateX: state.rowOffset() }}>
+        <box floating="parent" width={680} height={190} padding={18} direction="column" alignY="bottom">
+          <text color="#ffffff" fontSize={18}>{cards[state.heroTo()].title}</text>
+          <text color="#ffffffb0" fontSize={12}>local image + retargeted crossfade</text>
+        </box>
+      </box>
+      <text color="#b8bbc0" fontSize={12}>Transform + scrollX clip · 24 cards · selected: {state.selected() + 1}</text>
+      <box width={viewportWidth} height={cardHeight} scrollX scrollId="ps5-public-row" layer backgroundColor="#090c11" cornerRadius={12}>
+        <box width={rowWidth} height={cardHeight} flexShrink={0} direction="row" gap={cardGap} transform={{ translateX: state.rowOffset() }}>
           {cards.map((card, index) => (
-            <Box
+            <box
               width={cardWidth}
               height={cardHeight}
               flexShrink={0}
@@ -127,30 +125,30 @@ export function ProbeScene(props: { state?: ReturnType<typeof createProbeState> 
               focusStyle={{ borderColor: "#ffffff", borderWidth: 3 }}
             >
               <img src={card.cover} width={cardWidth} height={cardHeight} objectFit="cover" cornerRadius={12} opacity={0.94} />
-            </Box>
+            </box>
           ))}
-        </Box>
-      </Box>
-      <Box direction="row" gap={10}>
-        <Box width={180} height={34} focusable onPress={state.openOverlay} backgroundColor="#303640" cornerRadius={8} alignX="center" alignY="center" focusStyle={{ borderColor: "#ffffff", borderWidth: 2 }}>
-          <Text color="#ffffff">Open overlay</Text>
-        </Box>
-        <Text color="#b8bbc0" fontSize={12}>focus: {focusedId() ?? "none"}</Text>
-      </Box>
+        </box>
+      </box>
+      <box direction="row" gap={10}>
+        <box width={180} height={34} focusable onPress={state.openOverlay} backgroundColor="#303640" cornerRadius={8} alignX="center" alignY="center" focusStyle={{ borderColor: "#ffffff", borderWidth: 2 }}>
+          <text color="#ffffff">Open overlay</text>
+        </box>
+        <text color="#b8bbc0" fontSize={12}>focus: {focusedId() ?? "none"}</text>
+      </box>
       <Show when={state.overlay()}>
         <Dialog onClose={closeOverlay}>
           <DialogOverlay backgroundColor="#000000b8" backdropBlur={4} />
           <DialogContent width={360} padding={20} cornerRadius={14} backgroundColor="#151a20">
-            <Box direction="column" gap={14}>
-              <Text color="#ffffff" fontSize={18}>Control center</Text>
-              <Text color="#b8bbc0" fontSize={12}>Selection stays at card {state.selected() + 1}.</Text>
-              <Box width={130} height={34} focusable onPress={closeOverlay} backgroundColor="#303640" cornerRadius={8} alignX="center" alignY="center" focusStyle={{ borderColor: "#ffffff", borderWidth: 2 }}>
-                <Text color="#ffffff">Close</Text>
-              </Box>
-            </Box>
+            <box direction="column" gap={14}>
+              <text color="#ffffff" fontSize={18}>Control center</text>
+              <text color="#b8bbc0" fontSize={12}>Selection stays at card {state.selected() + 1}.</text>
+              <box width={130} height={34} focusable onPress={closeOverlay} backgroundColor="#303640" cornerRadius={8} alignX="center" alignY="center" focusStyle={{ borderColor: "#ffffff", borderWidth: 2 }}>
+                <text color="#ffffff">Close</text>
+              </box>
+            </box>
           </DialogContent>
         </Dialog>
       </Show>
-    </Box>
+    </box>
   )
 }

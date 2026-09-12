@@ -4,7 +4,7 @@
  * This is the entry point for `import { ... } from "vexart"`.
  * It re-exports everything an app developer needs from a single import:
  *   - App lifecycle (createApp, mountApp, Page)
- *   - Primitives with className (Box, Text from @vexart/app)
+ *   - Styling/resolution support for intrinsic primitives (box, text)
  *   - Styled components and tokens (@vexart/styled)
  *   - Headless components (@vexart/headless)
  *   - User-facing engine hooks (useTerminalDimensions, createTransition, etc.)
@@ -15,7 +15,6 @@
  * use `import { ... } from "vexart/engine"` instead.
  *
  * Collision resolution:
- *   - Box/Text: @vexart/app wins (className support)
  *   - Button/ButtonProps: @vexart/styled wins (themed)
  *   - Switch (headless): renamed to ToggleSwitch to avoid SolidJS Switch
  */
@@ -45,11 +44,6 @@ export type {
   CliResult,
 } from "./public"
 
-// ── Primitives with className ────────────────────────────────────────────────
-
-export { Box, Text } from "./components/primitives"
-export type { AppBoxProps, AppTextProps, ClassNameProps } from "./components/primitives"
-
 export {
   resolveClassName,
   mergeClassNameProps,
@@ -69,7 +63,7 @@ export type {
 
 export type { TGEProps as BoxProps, ShadowConfig, GlowConfig } from "@vexart/engine"
 
-/** @beta Grid value types accepted by the app Box props. */
+/** @beta Grid value types accepted by the app box props. */
 export type {
   GridAreaPlacement,
   GridAutoFlow,
@@ -390,7 +384,6 @@ export {
   // Scroll
   createScrollHandle,
   // Node handle
-  createHandle,
   // Syntax highlighting themes (needed by Code, Markdown, Textarea)
   SyntaxStyle,
   ONE_DARK,

@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs"
 import {
-  Box,
   For,
   Show,
   createScrollHandle,
@@ -42,9 +41,9 @@ function imageAvailable(path: string) {
 
 function MissingArtwork(props: { item: GalleryItem; width: number; height: number }) {
   return (
-    <Box width={props.width} height={props.height} backgroundColor={props.item.entry.accent} alignX="center" alignY="center" padding={scaleFallback(props.width)}>
+    <box width={props.width} height={props.height} backgroundColor={props.item.entry.accent} alignX="center" alignY="center" padding={scaleFallback(props.width)}>
       <Ps5Text color="#ffffffdd" fontSize={13} alignX="center">Arte no disponible · {props.item.gameId}</Ps5Text>
-    </Box>
+    </box>
   )
 }
 
@@ -204,79 +203,79 @@ export function GalleryScreen(props: Ps5ScreenProps) {
       onKeyDown={moveThumbnail(item)}
       screen={props}
     >
-      <Box width="100%" height="100%" direction="column">
+      <box width="100%" height="100%" direction="column">
         <Artwork item={item} width={scale(254)} height={artworkHeight()} />
-        <Box width="100%" height={cardHeight() - artworkHeight()} padding={scale(9)} direction="column" gap={scale(2)}>
+        <box width="100%" height={cardHeight() - artworkHeight()} padding={scale(9)} direction="column" gap={scale(2)}>
           <Ps5Text color={ps5Colors.text} fontSize={scale(13)} fontWeight={700}>{item.entry.title}</Ps5Text>
           <Ps5Text color={ps5Colors.mutedText} fontSize={scale(11)}>{item.kind === "titleScreen" ? "Pantalla de título" : item.kind === "hero" ? "Imagen hero" : "Portada"}</Ps5Text>
-        </Box>
-      </Box>
+        </box>
+      </box>
     </Ps5Button>
   )
 
   const renderViewer = (item: GalleryItem) => (
-    <Box width={viewport.width()} height={viewport.height()} backgroundColor="#05070beF" direction="column">
-      <Box width="100%" height={scale(76)} padding={scale(20)} direction="row" alignY="center" gap={scale(16)} backgroundColor="#0b0f16f5">
+    <box width={viewport.width()} height={viewport.height()} backgroundColor="#05070beF" direction="column">
+      <box width="100%" height={scale(76)} padding={scale(20)} direction="row" alignY="center" gap={scale(16)} backgroundColor="#0b0f16f5">
         <Ps5Button id="gallery-viewer-back" width={scale(46)} height={scale(40)} backgroundColor="#00000000" borderWidth={0} label="‹" onPress={actions.back} screen={props} />
         <Ps5Text color={ps5Colors.text} fontSize={scale(21)} fontWeight={700}>{item.entry.title}</Ps5Text>
         <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>{item.title}</Ps5Text>
-        <Box flexGrow={1} />
+        <box flexGrow={1} />
         <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>{viewerIndex() + 1} / {collection().length}</Ps5Text>
-      </Box>
-      <Box width="100%" flexGrow={1} alignX="center" alignY="center" padding={scale(44)}>
+      </box>
+      <box width="100%" flexGrow={1} alignX="center" alignY="center" padding={scale(44)}>
         <Ps5Button id="gallery-viewer-canvas" width={Math.min(scale(1410), viewport.width() - scale(120))} height={Math.min(scale(740), viewport.height() - scale(230))} padding={0} backgroundColor={item.entry.accent} borderColor="#ffffff24" cornerRadius={scale(12)} onPress={() => undefined} onKeyDown={(event) => {
           if (keyIs(event, "left", "ArrowLeft")) moveViewer(-1)
           if (keyIs(event, "right", "ArrowRight")) moveViewer(1)
         }} screen={props}>
           <Artwork item={item} width={Math.min(scale(1410), viewport.width() - scale(120))} height={Math.min(scale(740), viewport.height() - scale(230))} fit="contain" />
         </Ps5Button>
-      </Box>
-      <Box width="100%" height={scale(80)} padding={scale(14)} direction="row" alignX="center" alignY="center" gap={scale(12)} backgroundColor="#0b0f16f5">
+      </box>
+      <box width="100%" height={scale(80)} padding={scale(14)} direction="row" alignX="center" alignY="center" gap={scale(12)} backgroundColor="#0b0f16f5">
         <Ps5Button id="gallery-viewer-previous" width={scale(164)} height={scale(46)} label="Anterior" onPress={() => moveViewer(-1)} screen={props} />
         <Ps5Button id="gallery-viewer-next" width={scale(164)} height={scale(46)} label="Siguiente" onPress={() => moveViewer(1)} screen={props} />
         <Ps5Text color={ps5Colors.mutedText} fontSize={scale(12)}>←/→ recorrer · Escape cerrar viewer · F1 Centro de control</Ps5Text>
-      </Box>
-    </Box>
+      </box>
+    </box>
   )
 
   return (
-    <Box width={viewport.width()} height={viewport.height()} backgroundColor={ps5Colors.background} viewportClip>
+    <box width={viewport.width()} height={viewport.height()} backgroundColor={ps5Colors.background} viewportClip>
       <Show when={viewer()} fallback={
-        <Box width="100%" height="100%" direction="column">
-          <Box width="100%" height={scale(112)} padding={scale(24)} direction="row" alignY="center" gap={scale(14)} backgroundColor="#0b0e14f4">
+        <box width="100%" height="100%" direction="column">
+          <box width="100%" height={scale(112)} padding={scale(24)} direction="row" alignY="center" gap={scale(14)} backgroundColor="#0b0e14f4">
             <Ps5Button id="gallery-tab-all" width={scale(124)} height={scale(44)} backgroundColor="#00000000" borderWidth={0} onPress={() => selectFilter("all")} onKeyDown={tabKeyDown("all")} screen={props}>
               <Ps5Text color={filter() === "all" ? ps5Colors.text : ps5Colors.mutedText} fontSize={scale(22)} fontWeight={filter() === "all" ? 700 : 400}>Todos</Ps5Text>
             </Ps5Button>
             <Ps5Button id="gallery-tab-current" width={scale(220)} height={scale(44)} backgroundColor="#00000000" borderWidth={0} onPress={() => selectFilter("current")} onKeyDown={tabKeyDown("current")} screen={props}>
               <Ps5Text color={filter() === "current" ? ps5Colors.text : ps5Colors.mutedText} fontSize={scale(22)} fontWeight={filter() === "current" ? 700 : 400}>{currentGame() ? `Juego actual · ${currentGame()!.title}` : "Juego actual"}</Ps5Text>
             </Ps5Button>
-            <Box flexGrow={1} />
+            <box flexGrow={1} />
             <Ps5Text color={ps5Colors.text} fontSize={scale(25)} fontWeight={700}>Galería</Ps5Text>
             <Ps5Text color={ps5Colors.mutedText} fontSize={scale(13)}>Contenido local · sin capturas ni vídeo</Ps5Text>
-          </Box>
-          <Box width="100%" flexGrow={1} padding={scale(24)} scrollY viewportClip>
+          </box>
+          <box width="100%" flexGrow={1} padding={scale(24)} scrollY viewportClip>
             <Show when={collection().length > 0} fallback={
-              <Box width="100%" height={scale(360)} alignX="center" alignY="center" direction="column" gap={scale(16)}>
+              <box width="100%" height={scale(360)} alignX="center" alignY="center" direction="column" gap={scale(16)}>
                 <Ps5Text color={ps5Colors.text} fontSize={scale(28)} fontWeight={700}>Galería vacía</Ps5Text>
                 <Ps5Text color={ps5Colors.mutedText} fontSize={scale(15)}>No hay contenido local para este filtro.</Ps5Text>
                 <Ps5Button id="gallery-retry" width={scale(210)} height={scale(48)} label="Reintentar" onPress={() => selectFilter("all")} screen={props} />
                 <Ps5Button id="gallery-back" width={scale(210)} height={scale(48)} label="Volver" onPress={actions.back} screen={props} />
-              </Box>
+              </box>
             }>
-              <Box direction="column" gap={scale(16)}>
+              <box direction="column" gap={scale(16)}>
                 <For each={rows()}>{(row) => (
-                  <Box direction="row" gap={scale(16)}>
+                  <box direction="row" gap={scale(16)}>
                     <For each={row}>{(item, index) => renderThumbnail(item, index())}</For>
-                  </Box>
+                  </box>
                 )}</For>
-              </Box>
+              </box>
             </Show>
-          </Box>
-          <Box width="100%" height={scale(64)} floating="parent" floatOffset={{ x: 0, y: viewport.height() - scale(64) }} backgroundColor={ps5Colors.scrim} alignX="center" alignY="center">
+          </box>
+          <box width="100%" height={scale(64)} floating="parent" floatOffset={{ x: 0, y: viewport.height() - scale(64) }} backgroundColor={ps5Colors.scrim} alignX="center" alignY="center">
             <Ps5Text color={ps5Colors.mutedText} fontSize={scale(13)}>Enter abrir · ←/→ navegar en viewer · F2 Opciones · Escape Volver · F1 Centro de control</Ps5Text>
-          </Box>
-        </Box>
+          </box>
+        </box>
       }>{(item) => renderViewer(item())}</Show>
-    </Box>
+    </box>
   )
 }

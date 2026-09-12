@@ -9,7 +9,7 @@
 
 import { createSignal, For, Show } from "solid-js"
 import { useTerminalDimensions } from "@vexart/engine"
-import { createApp, useAppTerminal, Box, Text } from "@vexart/app"
+import { createApp, useAppTerminal } from "@vexart/app"
 import {
   VoidCard,
   VoidCardHeader,
@@ -188,7 +188,7 @@ function FacebookApp() {
   const navTabs = ["Home", "Watch", "Marketplace", "Groups", "Gaming"]
 
   return (
-    <Box
+    <box
       width={dims.width()}
       height={dims.height()}
       backgroundColor={colors.background}
@@ -197,7 +197,7 @@ function FacebookApp() {
       {/* ──────────────────────────────────────────────────────────────────────────
           1. TOP NAVIGATION HEADER
           ────────────────────────────────────────────────────────────────────────── */}
-      <Box
+      <box
         width={dims.width()}
         height={52}
         backgroundColor={colors.card}
@@ -209,9 +209,9 @@ function FacebookApp() {
         justifyContent="space-between"
       >
         {/* Left: Brand Logo & Search */}
-        <Box direction="row" alignY="center" gap={space[3]}>
-          <Box direction="row" alignY="center" gap={space[2]}>
-            <Box
+        <box direction="row" alignY="center" gap={space[3]}>
+          <box direction="row" alignY="center" gap={space[2]}>
+            <box
               width={34}
               height={34}
               cornerRadius={radius.full}
@@ -219,14 +219,14 @@ function FacebookApp() {
               alignX="center"
               alignY="center"
             >
-              <Text color="#ffffff" fontSize={font.xl} fontWeight={weight.bold}>
+              <text color="#ffffff" fontSize={font.xl} fontWeight={weight.bold}>
                 f
-              </Text>
-            </Box>
-            <Text color={colors.foreground} fontSize={font.lg} fontWeight={weight.bold}>
+              </text>
+            </box>
+            <text color={colors.foreground} fontSize={font.lg} fontWeight={weight.bold}>
               Facebook
-            </Text>
-          </Box>
+            </text>
+          </box>
 
           <VoidInput
             value={searchQuery()}
@@ -234,10 +234,10 @@ function FacebookApp() {
             placeholder="Search Facebook..."
             width={220}
           />
-        </Box>
+        </box>
 
         {/* Center: Navigation Tabs */}
-        <Box direction="row" alignX="center" alignY="center" gap={space[1]}>
+        <box direction="row" alignX="center" alignY="center" gap={space[1]}>
           <For each={navTabs}>
             {(tabLabel, index) => {
               const isActive = () => navTab() === index()
@@ -252,36 +252,36 @@ function FacebookApp() {
               )
             }}
           </For>
-        </Box>
+        </box>
 
         {/* Right: Actions & User Avatar */}
-        <Box direction="row" alignY="center" gap={space[2]} justifyContent="flex-end">
+        <box direction="row" alignY="center" gap={space[2]} justifyContent="flex-end">
           <VoidButton variant="secondary" size="sm">
-            <Box direction="row" alignY="center" gap={space[1.5]}>
-              <Text color={colors.foreground} fontSize={font.sm}>
+            <box direction="row" alignY="center" gap={space[1.5]}>
+              <text color={colors.foreground} fontSize={font.sm}>
                 Chat
-              </Text>
+              </text>
               <VoidBadge variant="destructive">1</VoidBadge>
-            </Box>
+            </box>
           </VoidButton>
 
           <VoidButton variant="secondary" size="sm">
-            <Box direction="row" alignY="center" gap={space[1.5]}>
-              <Text color={colors.foreground} fontSize={font.sm}>
+            <box direction="row" alignY="center" gap={space[1.5]}>
+              <text color={colors.foreground} fontSize={font.sm}>
                 Bell
-              </Text>
+              </text>
               <VoidBadge variant="destructive">15</VoidBadge>
-            </Box>
+            </box>
           </VoidButton>
 
           <VoidAvatar name="Carlos Gonzalez" size="sm" color="#1877f2" />
-        </Box>
-      </Box>
+        </box>
+      </box>
 
       {/* ──────────────────────────────────────────────────────────────────────────
           2. 3-COLUMN MAIN BODY LAYOUT
           ────────────────────────────────────────────────────────────────────────── */}
-      <Box
+      <box
         direction="row"
         width="100%"
         height="grow"
@@ -289,20 +289,20 @@ function FacebookApp() {
         padding={space[3]}
       >
         {/* ── LEFT COLUMN (Profile & Shortcuts) ─────────────────────────── */}
-        <Box width={260} direction="column" gap={space[3]}>
+        <box width={260} direction="column" gap={space[3]}>
           <VoidCard size="sm">
             <VoidCardHeader>
-              <Box direction="row" alignY="center" gap={space[2.5]}>
+              <box direction="row" alignY="center" gap={space[2.5]}>
                 <VoidAvatar name="Carlos Gonzalez" size="default" color="#1877f2" />
-                <Box direction="column" gap={space[0.5]}>
+                <box direction="column" gap={space[0.5]}>
                   <VoidCardTitle>Carlos Gonzalez</VoidCardTitle>
                   <VoidCardDescription>View profile</VoidCardDescription>
-                </Box>
-              </Box>
+                </box>
+              </box>
             </VoidCardHeader>
 
             <VoidCardContent>
-              <Box direction="column" gap={space[1]}>
+              <box direction="column" gap={space[1]}>
                 <VoidButton variant="ghost" size="sm" onPress={() => {}}>
                   Meta AI
                 </VoidButton>
@@ -318,7 +318,7 @@ function FacebookApp() {
                 <VoidButton variant="ghost" size="sm" onPress={() => {}}>
                   Groups
                 </VoidButton>
-              </Box>
+              </box>
             </VoidCardContent>
 
             <VoidSeparator />
@@ -328,7 +328,7 @@ function FacebookApp() {
             </VoidCardHeader>
 
             <VoidCardContent>
-              <Box direction="column" gap={space[1]}>
+              <box direction="column" gap={space[1]}>
                 <VoidButton variant="ghost" size="sm" onPress={() => {}}>
                   Buy Salvage Autos
                 </VoidButton>
@@ -341,26 +341,26 @@ function FacebookApp() {
                 <VoidButton variant="ghost" size="sm" onPress={() => {}}>
                   Only Luxury Rentals
                 </VoidButton>
-              </Box>
+              </box>
             </VoidCardContent>
 
             <VoidCardFooter>
-              <Text color={colors.mutedForeground} fontSize={font.xs}>
+              <text color={colors.mutedForeground} fontSize={font.xs}>
                 Meta © 2026 · Vexart Engine
-              </Text>
+              </text>
             </VoidCardFooter>
           </VoidCard>
-        </Box>
+        </box>
 
         {/* ── CENTER COLUMN (Create Post, Stories & Vesper Sienna Post) ──── */}
-        <Box width="grow" direction="column" gap={space[3]}>
+        <box width="grow" direction="column" gap={space[3]}>
           {/* 1. Create Post */}
           <VoidCard size="sm">
             <VoidCardContent>
-              <Box direction="column" gap={space[3]}>
-                <Box direction="row" alignY="center" gap={space[2.5]}>
+              <box direction="column" gap={space[3]}>
+                <box direction="row" alignY="center" gap={space[2.5]}>
                   <VoidAvatar name="Carlos Gonzalez" size="default" color="#1877f2" />
-                  <Box width="grow">
+                  <box width="grow">
                     <VoidInput
                       value={newPostText()}
                       onChange={setNewPostText}
@@ -368,13 +368,13 @@ function FacebookApp() {
                       placeholder="What's on your mind, Carlos?"
                       width="grow"
                     />
-                  </Box>
-                </Box>
+                  </box>
+                </box>
 
                 <VoidSeparator />
 
-                <Box direction="row" justifyContent="space-between" alignY="center">
-                  <Box direction="row" gap={space[1.5]}>
+                <box direction="row" justifyContent="space-between" alignY="center">
+                  <box direction="row" gap={space[1.5]}>
                     <VoidButton variant="ghost" size="xs">
                       Live video
                     </VoidButton>
@@ -384,28 +384,28 @@ function FacebookApp() {
                     <VoidButton variant="ghost" size="xs">
                       Feeling/activity
                     </VoidButton>
-                  </Box>
+                  </box>
 
                   <VoidButton variant="default" size="xs" onPress={handleCreatePost}>
                     Post
                   </VoidButton>
-                </Box>
-              </Box>
+                </box>
+              </box>
             </VoidCardContent>
           </VoidCard>
 
           {/* 2. Stories Carousel */}
           <VoidCard size="sm">
             <VoidCardHeader>
-              <Box direction="row" justifyContent="space-between" alignY="center">
+              <box direction="row" justifyContent="space-between" alignY="center">
                 <VoidCardTitle>Stories</VoidCardTitle>
                 <VoidBadge variant="outline">See all</VoidBadge>
-              </Box>
+              </box>
             </VoidCardHeader>
 
             <VoidCardContent>
-              <Box direction="row" gap={space[2]} width="100%">
-                <Box
+              <box direction="row" gap={space[2]} width="100%">
+                <box
                   width={100}
                   height={130}
                   backgroundColor={colors.secondary}
@@ -417,7 +417,7 @@ function FacebookApp() {
                   borderWidth={1}
                   borderColor={colors.border}
                 >
-                  <Box
+                  <box
                     width={36}
                     height={36}
                     cornerRadius={radius.full}
@@ -425,18 +425,18 @@ function FacebookApp() {
                     alignX="center"
                     alignY="center"
                   >
-                    <Text color="#ffffff" fontSize={font.xl} fontWeight={weight.bold}>
+                    <text color="#ffffff" fontSize={font.xl} fontWeight={weight.bold}>
                       +
-                    </Text>
-                  </Box>
-                  <Text color={colors.foreground} fontSize={font.xs} fontWeight={weight.semibold}>
+                    </text>
+                  </box>
+                  <text color={colors.foreground} fontSize={font.xs} fontWeight={weight.semibold}>
                     Create story
-                  </Text>
-                </Box>
+                  </text>
+                </box>
 
                 <For each={STORIES}>
                   {(story) => (
-                    <Box
+                    <box
                       width={100}
                       height={130}
                       backgroundColor={colors.secondary}
@@ -448,46 +448,46 @@ function FacebookApp() {
                       borderColor={colors.border}
                     >
                       <VoidAvatar name={story.author} size="sm" color={story.avatarColor} />
-                      <Box direction="column" gap={space[0.5]}>
+                      <box direction="column" gap={space[0.5]}>
                         <VoidBadge variant="secondary">Story</VoidBadge>
-                        <Text
+                        <text
                           color={colors.foreground}
                           fontSize={font.xs}
                           fontWeight={weight.semibold}
                         >
                           {story.author}
-                        </Text>
-                      </Box>
-                    </Box>
+                        </text>
+                      </box>
+                    </box>
                   )}
                 </For>
-              </Box>
+              </box>
             </VoidCardContent>
           </VoidCard>
 
           {/* 3. Vesper Sienna Post */}
           <VoidCard size="sm">
             <VoidCardHeader>
-              <Box direction="row" justifyContent="space-between" alignY="center">
-                <Box direction="row" gap={space[2.5]} alignY="center">
+              <box direction="row" justifyContent="space-between" alignY="center">
+                <box direction="row" gap={space[2.5]} alignY="center">
                   <VoidAvatar name="Vesper Sienna" size="default" color="#9333ea" />
-                  <Box direction="column" gap={space[0.5]}>
+                  <box direction="column" gap={space[0.5]}>
                     <VoidCardTitle>Vesper Sienna</VoidCardTitle>
                     <VoidCardDescription>4h · GTA San Andreas Theme</VoidCardDescription>
-                  </Box>
-                </Box>
+                  </box>
+                </box>
                 <VoidBadge variant="outline">Online</VoidBadge>
-              </Box>
+              </box>
             </VoidCardHeader>
 
             <VoidCardContent>
-              <Box direction="column" gap={space[3]}>
-                <Text color={colors.foreground} fontSize={font.base}>
+              <box direction="column" gap={space[3]}>
+                <text color={colors.foreground} fontSize={font.base}>
                   Soy un personaje online facha
-                </Text>
+                </text>
 
                 {/* Vice City Neon Banner */}
-                <Box
+                <box
                   height={110}
                   backgroundColor="#140727"
                   borderColor="#ec4899"
@@ -498,48 +498,48 @@ function FacebookApp() {
                   justifyContent="space-between"
                   shadow={shadows.sm}
                 >
-                  <Box direction="row" justifyContent="space-between" alignY="center">
-                    <Text color="#06b6d4" fontSize={font.xs} fontWeight={weight.bold}>
+                  <box direction="row" justifyContent="space-between" alignY="center">
+                    <text color="#06b6d4" fontSize={font.xs} fontWeight={weight.bold}>
                       ✦ SUNSET STRIP - 80s NEON ✦
-                    </Text>
-                    <Text color="#ec4899" fontSize={font.xs} fontWeight={weight.bold}>
+                    </text>
+                    <text color="#ec4899" fontSize={font.xs} fontWeight={weight.bold}>
                       VICE CITY, FL
-                    </Text>
-                  </Box>
+                    </text>
+                  </box>
 
-                  <Box direction="column" alignX="center" alignY="center" gap={space[0.5]}>
-                    <Text color="#ec4899" fontSize={font.xl} fontWeight={weight.bold}>
+                  <box direction="column" alignX="center" alignY="center" gap={space[0.5]}>
+                    <text color="#ec4899" fontSize={font.xl} fontWeight={weight.bold}>
                       VICE CITY MOTEL
-                    </Text>
-                    <Text color="#f472b6" fontSize={font.xs} fontWeight={weight.medium}>
+                    </text>
+                    <text color="#f472b6" fontSize={font.xs} fontWeight={weight.medium}>
                       VACANCY · OCEAN DRIVE · 1986
-                    </Text>
-                  </Box>
+                    </text>
+                  </box>
 
-                  <Box direction="row" justifyContent="space-between" alignY="center">
-                    <Text color="#a855f7" fontSize={font.xs}>
+                  <box direction="row" justifyContent="space-between" alignY="center">
+                    <text color="#a855f7" fontSize={font.xs}>
                       PALM BEACH AVE
-                    </Text>
-                    <Text color="#06b6d4" fontSize={font.xs} fontWeight={weight.bold}>
+                    </text>
+                    <text color="#06b6d4" fontSize={font.xs} fontWeight={weight.bold}>
                       GRAND THEFT AUTO THEME
-                    </Text>
-                  </Box>
-                </Box>
+                    </text>
+                  </box>
+                </box>
 
                 {/* Post Stats */}
-                <Box direction="row" justifyContent="space-between" alignY="center">
-                  <Text color={colors.mutedForeground} fontSize={font.sm}>
+                <box direction="row" justifyContent="space-between" alignY="center">
+                  <text color={colors.mutedForeground} fontSize={font.sm}>
                     {vesperLikes()} likes
-                  </Text>
-                  <Text color={colors.mutedForeground} fontSize={font.sm}>
+                  </text>
+                  <text color={colors.mutedForeground} fontSize={font.sm}>
                     {vesperComments().length + 140} comments · {vesperShares()} shares
-                  </Text>
-                </Box>
+                  </text>
+                </box>
 
                 <VoidSeparator />
 
                 {/* Post Action Buttons */}
-                <Box direction="row" gap={space[2]} justifyContent="space-between">
+                <box direction="row" gap={space[2]} justifyContent="space-between">
                   <VoidButton
                     variant={isLikedVesper() ? "default" : "secondary"}
                     size="sm"
@@ -559,18 +559,18 @@ function FacebookApp() {
                   <VoidButton variant="secondary" size="sm" onPress={handleShareVesper}>
                     Share
                   </VoidButton>
-                </Box>
+                </box>
 
                 {/* Collapsible Comments Section */}
                 <Show when={showVesperComments()}>
                   <VoidSeparator />
 
-                  <Box direction="column" gap={space[2.5]}>
+                  <box direction="column" gap={space[2.5]}>
                     <For each={vesperComments()}>
                       {(comment) => (
-                        <Box direction="row" gap={space[2]} alignY="top">
+                        <box direction="row" gap={space[2]} alignY="top">
                           <VoidAvatar name={comment.author} size="sm" color={comment.avatarColor} />
-                          <Box
+                          <box
                             backgroundColor={colors.secondary}
                             padding={space[2]}
                             cornerRadius={radius.md}
@@ -578,30 +578,30 @@ function FacebookApp() {
                             gap={space[0.5]}
                             width="grow"
                           >
-                            <Box direction="row" gap={space[1.5]} alignY="center">
-                              <Text
+                            <box direction="row" gap={space[1.5]} alignY="center">
+                              <text
                                 color={colors.foreground}
                                 fontSize={font.xs}
                                 fontWeight={weight.bold}
                               >
                                 {comment.author}
-                              </Text>
-                              <Text color={colors.mutedForeground} fontSize={font.xs}>
+                              </text>
+                              <text color={colors.mutedForeground} fontSize={font.xs}>
                                 · {comment.time}
-                              </Text>
-                            </Box>
-                            <Text color={colors.foreground} fontSize={font.sm}>
+                              </text>
+                            </box>
+                            <text color={colors.foreground} fontSize={font.sm}>
                               {comment.text}
-                            </Text>
-                          </Box>
-                        </Box>
+                            </text>
+                          </box>
+                        </box>
                       )}
                     </For>
 
                     {/* Add Comment Input */}
-                    <Box direction="row" gap={space[2]} alignY="center" marginTop={space[1]}>
+                    <box direction="row" gap={space[2]} alignY="center" marginTop={space[1]}>
                       <VoidAvatar name="Carlos Gonzalez" size="sm" color="#1877f2" />
-                      <Box width="grow">
+                      <box width="grow">
                         <VoidInput
                           value={newCommentInput()}
                           onChange={setNewCommentInput}
@@ -609,27 +609,27 @@ function FacebookApp() {
                           placeholder="Write a comment..."
                           width="grow"
                         />
-                      </Box>
+                      </box>
                       <VoidButton variant="default" size="sm" onPress={handleAddVesperComment}>
                         Send
                       </VoidButton>
-                    </Box>
-                  </Box>
+                    </box>
+                  </box>
                 </Show>
-              </Box>
+              </box>
             </VoidCardContent>
           </VoidCard>
-        </Box>
+        </box>
 
         {/* ── RIGHT COLUMN (Friend Requests, Messenger & Contacts) ──────── */}
-        <Box width={300} direction="column" gap={space[3]}>
+        <box width={300} direction="column" gap={space[3]}>
           {/* 1. Friend Requests */}
           <VoidCard size="sm">
             <VoidCardHeader>
-              <Box direction="row" justifyContent="space-between" alignY="center">
+              <box direction="row" justifyContent="space-between" alignY="center">
                 <VoidCardTitle>Friend requests</VoidCardTitle>
                 <VoidBadge variant="secondary">1</VoidBadge>
-              </Box>
+              </box>
             </VoidCardHeader>
 
             <VoidCardContent>
@@ -639,33 +639,33 @@ function FacebookApp() {
                   <Show
                     when={friendRequestConfirmed()}
                     fallback={
-                      <Text color={colors.mutedForeground} fontSize={font.sm}>
+                      <text color={colors.mutedForeground} fontSize={font.sm}>
                         Request removed
-                      </Text>
+                      </text>
                     }
                   >
                     <VoidBadge variant="outline">✓ Request confirmed</VoidBadge>
                   </Show>
                 }
               >
-                <Box direction="column" gap={space[3]}>
-                  <Box direction="row" gap={space[2.5]} alignY="center">
+                <box direction="column" gap={space[3]}>
+                  <box direction="row" gap={space[2.5]} alignY="center">
                     <VoidAvatar name="Paul Fran" size="default" color="#6366f1" />
-                    <Box direction="column" gap={space[0.5]}>
-                      <Text
+                    <box direction="column" gap={space[0.5]}>
+                      <text
                         color={colors.foreground}
                         fontSize={font.sm}
                         fontWeight={weight.semibold}
                       >
                         Paul Fran
-                      </Text>
-                      <Text color={colors.mutedForeground} fontSize={font.xs}>
+                      </text>
+                      <text color={colors.mutedForeground} fontSize={font.xs}>
                         1d · 4 mutual friends
-                      </Text>
-                    </Box>
-                  </Box>
+                      </text>
+                    </box>
+                  </box>
 
-                  <Box direction="row" gap={space[2]}>
+                  <box direction="row" gap={space[2]}>
                     <VoidButton
                       variant="default"
                       size="sm"
@@ -680,8 +680,8 @@ function FacebookApp() {
                     >
                       Delete
                     </VoidButton>
-                  </Box>
-                </Box>
+                  </box>
+                </box>
               </Show>
             </VoidCardContent>
           </VoidCard>
@@ -689,51 +689,51 @@ function FacebookApp() {
           {/* 2. Marketplace & Messenger Chat */}
           <VoidCard size="sm">
             <VoidCardHeader>
-              <Box direction="row" justifyContent="space-between" alignY="center">
-                <Box direction="row" gap={space[2]} alignY="center">
+              <box direction="row" justifyContent="space-between" alignY="center">
+                <box direction="row" gap={space[2]} alignY="center">
                   <VoidAvatar name="Daniel" size="sm" color="#10b981" />
                   <VoidCardTitle>Daniel · 2019 Jeep</VoidCardTitle>
-                </Box>
+                </box>
                 <VoidBadge variant="outline">$10,980</VoidBadge>
-              </Box>
+              </box>
               <VoidCardDescription>Marketplace · 2019 Jeep Wrangler</VoidCardDescription>
             </VoidCardHeader>
 
             <VoidCardContent>
-              <Box direction="column" gap={space[2]}>
+              <box direction="column" gap={space[2]}>
                 {/* Chat History */}
-                <Box direction="column" gap={space[1.5]} paddingY={space[1]}>
+                <box direction="column" gap={space[1.5]} paddingY={space[1]}>
                   <For each={chatMessages()}>
                     {(msg) => {
                       const isMe = msg.sender === "me"
                       return (
-                        <Box alignX={isMe ? "right" : "left"} direction="column" gap={space[0.5]}>
-                          <Box
+                        <box alignX={isMe ? "right" : "left"} direction="column" gap={space[0.5]}>
+                          <box
                             backgroundColor={isMe ? "#0084ff" : colors.secondary}
                             paddingX={space[2.5]}
                             paddingY={space[1.5]}
                             cornerRadius={radius.md}
                           >
-                            <Text color="#ffffff" fontSize={font.xs}>
+                            <text color="#ffffff" fontSize={font.xs}>
                               {msg.text}
-                            </Text>
-                          </Box>
-                          <Text
+                            </text>
+                          </box>
+                          <text
                             color={colors.mutedForeground}
                             fontSize={font.xs}
                             alignX={isMe ? "right" : "left"}
                           >
                             {isMe ? `${msg.time} · Seen` : msg.time}
-                          </Text>
-                        </Box>
+                          </text>
+                        </box>
                       )
                     }}
                   </For>
-                </Box>
+                </box>
 
                 {/* Chat Input */}
-                <Box direction="row" gap={space[1.5]} alignY="center">
-                  <Box width="grow">
+                <box direction="row" gap={space[1.5]} alignY="center">
+                  <box width="grow">
                     <VoidInput
                       value={chatInput()}
                       onChange={setChatInput}
@@ -741,50 +741,50 @@ function FacebookApp() {
                       placeholder="Aa..."
                       width="grow"
                     />
-                  </Box>
+                  </box>
                   <VoidButton variant="default" size="sm" onPress={handleSendChatMessage}>
                     Send
                   </VoidButton>
-                </Box>
-              </Box>
+                </box>
+              </box>
             </VoidCardContent>
           </VoidCard>
 
           {/* 3. Online Contacts */}
           <VoidCard size="sm">
             <VoidCardHeader>
-              <Box direction="row" justifyContent="space-between" alignY="center">
+              <box direction="row" justifyContent="space-between" alignY="center">
                 <VoidCardTitle>Contacts</VoidCardTitle>
                 <VoidBadge variant="outline">3 Online</VoidBadge>
-              </Box>
+              </box>
             </VoidCardHeader>
 
             <VoidCardContent>
-              <Box direction="column" gap={space[1.5]}>
+              <box direction="column" gap={space[1.5]}>
                 <For each={CONTACTS}>
                   {(contact) => (
-                    <Box
+                    <box
                       direction="row"
                       justifyContent="space-between"
                       alignY="center"
                       paddingY={space[1]}
                     >
-                      <Box direction="row" gap={space[2]} alignY="center">
+                      <box direction="row" gap={space[2]} alignY="center">
                         <VoidAvatar name={contact.name} size="sm" color={contact.avatarColor} />
-                        <Text color={colors.foreground} fontSize={font.sm}>
+                        <text color={colors.foreground} fontSize={font.sm}>
                           {contact.name}
-                        </Text>
-                      </Box>
+                        </text>
+                      </box>
                       <VoidBadge variant="secondary">{contact.subtitle}</VoidBadge>
-                    </Box>
+                    </box>
                   )}
                 </For>
-              </Box>
+              </box>
             </VoidCardContent>
           </VoidCard>
-        </Box>
-      </Box>
-    </Box>
+        </box>
+      </box>
+    </box>
   )
 }
 

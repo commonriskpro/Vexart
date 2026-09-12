@@ -1,5 +1,4 @@
 import {
-  Box,
   For,
   Show,
   createEffect,
@@ -7,7 +6,7 @@ import {
 } from "vexart"
 
 import type { Ps5ScreenProps } from "../types"
-import { Ps5Button, Ps5Panel, Ps5Text as Text, ps5Colors, ps5Scale, usePs5Back, usePs5Viewport } from "../ui"
+import { Ps5Button, Ps5Panel, Ps5Text, ps5Colors, ps5Scale, usePs5Back, usePs5Viewport } from "../ui"
 
 type GameBaseTab = "friends" | "parties" | "messages"
 
@@ -121,85 +120,85 @@ export function GameBaseScreen(props: Ps5ScreenProps) {
   }
 
   return (
-    <Box width={viewport.width()} height={viewport.height()} backgroundColor={ps5Colors.background} alignX="center" alignY="center" viewportClip>
+    <box width={viewport.width()} height={viewport.height()} backgroundColor={ps5Colors.background} alignX="center" alignY="center" viewportClip>
       <Ps5Panel width={scale(1080)} height={scale(760)} padding={scale(26)} gap={scale(14)} direction="column" backgroundColor={ps5Colors.panel} borderColor="#ffffff38" borderWidth={1} cornerRadius={scale(20)}>
-        <Box direction="row" alignX="space-between" alignY="center">
-          <Box direction="column" gap={scale(4)}>
-            <Text color={ps5Colors.text} fontSize={scale(28)} fontWeight={700}>Game Base</Text>
-            <Text color={ps5Colors.mutedText} fontSize={scale(14)}>Amigos y conversaciones locales</Text>
-          </Box>
-          <Text color={ps5Colors.mutedText} fontSize={scale(13)}>Red: {state().settings.network}</Text>
-        </Box>
-        <Box direction="row" gap={scale(10)}>
+        <box direction="row" alignX="space-between" alignY="center">
+          <box direction="column" gap={scale(4)}>
+            <Ps5Text color={ps5Colors.text} fontSize={scale(28)} fontWeight={700}>Game Base</Ps5Text>
+            <Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>Amigos y conversaciones locales</Ps5Text>
+          </box>
+          <Ps5Text color={ps5Colors.mutedText} fontSize={scale(13)}>Red: {state().settings.network}</Ps5Text>
+        </box>
+        <box direction="row" gap={scale(10)}>
           <Ps5Button id="gamebase-tab-friends" width="33%" height={scale(46)} label="Amigos" backgroundColor={tab() === "friends" ? "#3a424d" : undefined} onPress={() => chooseTab("friends")} onKeyDown={(event) => { if (event.key === "left") moveTab(-1); if (event.key === "right") moveTab(1) }} screen={props} />
           <Ps5Button id="gamebase-tab-parties" width="33%" height={scale(46)} label="Grupos" backgroundColor={tab() === "parties" ? "#3a424d" : undefined} onPress={() => chooseTab("parties")} onKeyDown={(event) => { if (event.key === "left") moveTab(-1); if (event.key === "right") moveTab(1) }} screen={props} />
           <Ps5Button id="gamebase-tab-messages" width="33%" height={scale(46)} label="Mensajes" backgroundColor={tab() === "messages" ? "#3a424d" : undefined} onPress={() => chooseTab("messages")} onKeyDown={(event) => { if (event.key === "left") moveTab(-1); if (event.key === "right") moveTab(1) }} screen={props} />
-        </Box>
+        </box>
 
         <Show when={tab() === "friends"} fallback={
           <Show when={tab() === "parties"} fallback={
-            <Box width="100%" direction="row" gap={scale(14)} flexGrow={1}>
+            <box width="100%" direction="row" gap={scale(14)} flexGrow={1}>
               <Ps5Panel width={scale(370)} height="100%" padding={scale(12)} gap={scale(8)} direction="column" backgroundColor="#11161dcc" borderColor="#ffffff1c" cornerRadius={scale(12)}>
-                <Text color={ps5Colors.text} fontSize={scale(17)} fontWeight={700}>Conversaciones</Text>
+                <Ps5Text color={ps5Colors.text} fontSize={scale(17)} fontWeight={700}>Conversaciones</Ps5Text>
                 <Ps5Button id="gamebase-new-message" width="100%" height={scale(46)} label="Nueva conversación" onPress={startConversation} screen={props} />
-                <Show when={threads().length > 0} fallback={<Text color={ps5Colors.mutedText} fontSize={scale(14)}>No hay conversaciones locales.</Text>}>
+                <Show when={threads().length > 0} fallback={<Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>No hay conversaciones locales.</Ps5Text>}>
                   <For each={threads()}>{(thread, index) => (
                     <Ps5Button id={`gamebase-thread-${thread.id}`} width="100%" height={scale(48)} alignX="left" label={`Conversación ${thread.participantIds.length} personas`} backgroundColor={selectedThreadId() === thread.id ? "#343b46" : undefined} onPress={() => { setSelectedThreadId(thread.id); actions.setFocus(`gamebase-thread-${thread.id}`) }} onKeyDown={(event) => { if (event.key === "up") moveThread(index(), -1); if (event.key === "down") moveThread(index(), 1) }} screen={props} />
                   )}</For>
                 </Show>
               </Ps5Panel>
               <Ps5Panel width="grow" height="100%" padding={scale(12)} gap={scale(10)} direction="column" backgroundColor="#11161dcc" borderColor="#ffffff1c" cornerRadius={scale(12)}>
-                <Box direction="column" gap={scale(6)} flexGrow={1} scrollY viewportClip>
-                  <Show when={selectedThread()} fallback={<Text color={ps5Colors.mutedText} fontSize={scale(14)}>Nueva conversación local.</Text>}>
-                    <For each={selectedThread()!.messages}>{(message) => <Text color={ps5Colors.text} fontSize={scale(14)}>{message.body}</Text>}</For>
+                <box direction="column" gap={scale(6)} flexGrow={1} scrollY viewportClip>
+                  <Show when={selectedThread()} fallback={<Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>Nueva conversación local.</Ps5Text>}>
+                    <For each={selectedThread()!.messages}>{(message) => <Ps5Text color={ps5Colors.text} fontSize={scale(14)}>{message.body}</Ps5Text>}</For>
                   </Show>
-                </Box>
+                </box>
                 <Ps5Button id="gamebase-message-input" width="100%" height={scale(48)} alignX="left" label={draft() || "Escribe un mensaje local…"} onPress={sendMessage} onKeyDown={handleComposerKey} screen={props} />
                 <Ps5Button id="gamebase-message-send" width="100%" height={scale(46)} label="Enviar mensaje" disabled={!draft().trim()} onPress={sendMessage} screen={props} />
                 <Ps5Button id="gamebase-messages-clear" width="100%" height={scale(42)} label="Limpiar conversación" disabled={!selectedThread()} onPress={clearMessages} screen={props} />
               </Ps5Panel>
-            </Box>
+            </box>
           }>
-            <Box width="100%" direction="row" gap={scale(14)} flexGrow={1}>
+            <box width="100%" direction="row" gap={scale(14)} flexGrow={1}>
               <Ps5Panel width="100%" height="100%" padding={scale(16)} gap={scale(10)} direction="column" backgroundColor="#11161dcc" borderColor="#ffffff1c" cornerRadius={scale(12)}>
-                <Text color={ps5Colors.text} fontSize={scale(18)} fontWeight={700}>Grupos locales</Text>
+                <Ps5Text color={ps5Colors.text} fontSize={scale(18)} fontWeight={700}>Grupos locales</Ps5Text>
                 <Ps5Button id="gamebase-create-party" width={scale(250)} height={scale(46)} label="Crear grupo local" onPress={createParty} screen={props} />
-                <Show when={parties().length > 0} fallback={<Text color={ps5Colors.mutedText} fontSize={scale(14)}>No hay grupos creados.</Text>}>
+                <Show when={parties().length > 0} fallback={<Ps5Text color={ps5Colors.mutedText} fontSize={scale(14)}>No hay grupos creados.</Ps5Text>}>
                   <For each={parties()}>{(party) => <Ps5Button id={`gamebase-party-${party.id}`} width="100%" height={scale(48)} alignX="left" label={`${party.title} · ${party.memberIds.length} miembros`} backgroundColor={selectedPartyId() === party.id ? "#343b46" : undefined} onPress={() => { setSelectedPartyId(party.id); actions.setFocus(`gamebase-party-${party.id}`) }} screen={props} />}</For>
                 </Show>
                 <Show when={selectedParty()}>
                   <Ps5Panel width="100%" padding={scale(12)} gap={scale(6)} direction="column" backgroundColor="#151a20cc" borderColor="#ffffff1c" cornerRadius={scale(10)}>
-                    <Text color={ps5Colors.text} fontSize={scale(15)}>{selectedParty()!.title}</Text>
-                    <Text color={ps5Colors.mutedText} fontSize={scale(13)}>{selectedParty()!.memberIds.length} miembros locales</Text>
+                    <Ps5Text color={ps5Colors.text} fontSize={scale(15)}>{selectedParty()!.title}</Ps5Text>
+                    <Ps5Text color={ps5Colors.mutedText} fontSize={scale(13)}>{selectedParty()!.memberIds.length} miembros locales</Ps5Text>
                     <Ps5Button id="gamebase-party-leave" width="100%" height={scale(42)} label="Abandonar grupo" onPress={() => { actions.dispatch({ type: "gamebase/party-leave", partyId: selectedParty()!.id }); setSelectedPartyId(undefined) }} screen={props} />
                   </Ps5Panel>
                 </Show>
               </Ps5Panel>
-            </Box>
+            </box>
           </Show>
         }>
-          <Box width="100%" direction="row" gap={scale(14)} flexGrow={1}>
+          <box width="100%" direction="row" gap={scale(14)} flexGrow={1}>
             <Ps5Panel width="100%" height="100%" padding={scale(12)} gap={scale(8)} direction="column" backgroundColor="#11161dcc" borderColor="#ffffff1c" cornerRadius={scale(12)}>
-              <Text color={ps5Colors.text} fontSize={scale(17)} fontWeight={700}>Amigos locales</Text>
+              <Ps5Text color={ps5Colors.text} fontSize={scale(17)} fontWeight={700}>Amigos locales</Ps5Text>
               <For each={state().users}>{(user) => <Ps5Button id={`gamebase-friend-${user.id}`} width="100%" height={scale(52)} alignX="left" label={`${user.name} ${user.handle}`} backgroundColor={selectedFriendId() === user.id ? "#343b46" : undefined} onPress={() => { setSelectedFriendId(user.id); actions.setFocus(`gamebase-friend-${user.id}`) }} screen={props} />}</For>
-              <Show when={selectedFriend()} fallback={<Text color={ps5Colors.mutedText} fontSize={scale(13)}>Selecciona un amigo para ver su perfil local.</Text>}>
+              <Show when={selectedFriend()} fallback={<Ps5Text color={ps5Colors.mutedText} fontSize={scale(13)}>Selecciona un amigo para ver su perfil local.</Ps5Text>}>
                 <Ps5Panel width="100%" padding={scale(12)} gap={scale(6)} direction="column" backgroundColor="#151a20cc" borderColor="#ffffff1c" cornerRadius={scale(10)}>
-                  <Text color={ps5Colors.text} fontSize={scale(15)}>{selectedFriend()!.name}</Text>
-                  <Text color={ps5Colors.mutedText} fontSize={scale(13)}>{selectedFriend()!.handle}</Text>
+                  <Ps5Text color={ps5Colors.text} fontSize={scale(15)}>{selectedFriend()!.name}</Ps5Text>
+                  <Ps5Text color={ps5Colors.mutedText} fontSize={scale(13)}>{selectedFriend()!.handle}</Ps5Text>
                   <Ps5Button id="gamebase-friend-profile" width="100%" height={scale(42)} label="Abrir perfil local" onPress={() => { actions.dispatch({ type: "user/select", userId: selectedFriend()!.id }); actions.go("profile") }} screen={props} />
                 </Ps5Panel>
               </Show>
-              <Text color={ps5Colors.mutedText} fontSize={scale(13)}>Las invitaciones y presencia son simuladas.</Text>
+              <Ps5Text color={ps5Colors.mutedText} fontSize={scale(13)}>Las invitaciones y presencia son simuladas.</Ps5Text>
             </Ps5Panel>
-          </Box>
+          </box>
         </Show>
 
-        <Box direction="row" gap={scale(10)}>
+        <box direction="row" gap={scale(10)}>
           <Ps5Button id="gamebase-open-game" width="50%" height={scale(46)} label="Abrir juego" disabled={!state().selectedGameId} onPress={openGame} screen={props} />
-          <Box width="50%" height={scale(46)} alignX="center" alignY="center"><Text color={ps5Colors.mutedText} fontSize={scale(13)}>Chat de voz no disponible</Text></Box>
-        </Box>
+          <box width="50%" height={scale(46)} alignX="center" alignY="center"><Ps5Text color={ps5Colors.mutedText} fontSize={scale(13)}>Chat de voz no disponible</Ps5Text></box>
+        </box>
         <Ps5Button id="gamebase-back" width="100%" height={scale(46)} label="Volver" onPress={actions.back} screen={props} />
       </Ps5Panel>
-    </Box>
+    </box>
   )
 }

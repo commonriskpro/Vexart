@@ -171,7 +171,7 @@ for (const intrinsic of intrinsics) {
   console.log(`✅ All ${tgeKeys.length} TGEProps top-level keys are present in ${intrinsic.label}${inheritance}`)
 }
 
-console.log(`   (${INTENTIONALLY_OMITTED.size} Box-only intentional omissions: ${[...INTENTIONALLY_OMITTED].join(", ")})`)
+console.log(`   (${INTENTIONALLY_OMITTED.size} box-only intentional omissions: ${[...INTENTIONALLY_OMITTED].join(", ")})`)
 
 if (hasIssues) process.exit(1)
 console.log("jsx-runtime.d.ts is in sync with TGEProps.")

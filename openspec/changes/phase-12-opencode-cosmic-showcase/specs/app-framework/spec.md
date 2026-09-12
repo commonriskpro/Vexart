@@ -10,8 +10,8 @@ The app framework SHOULD be able to express a React/Tailwind-inspired shell mock
 
 - **Given** the OpenCode Cosmic Shell showcase
 - **When** it is implemented in the repository
-- **Then** it MUST import rendering primitives from `@vexart/app`
-- **And** it MUST render through Vexart primitives such as `Page`, `Box`, and `Text`
+- **Then** it MUST use public app APIs and engine JSX intrinsics
+- **And** it MUST render through `Page` and the engine intrinsics `<box>` and `<text>`
 - **And** it MUST NOT use DOM tags such as `div`, `button`, `input`, `svg`, or `style`
 
 #### Scenario: Source interactions are preserved

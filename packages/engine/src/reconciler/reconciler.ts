@@ -20,7 +20,7 @@ import {
 import { isLayoutProp, isTextLayoutProp, syncLayoutProp } from "../ffi/flex-sync"
 import { BACKDROP_FIELDS } from "../ffi/render-graph"
 import { DIRTY_KIND, markDirty } from "./dirty"
-import { createHandle } from "./handle"
+import { createHandle, type NodeHandle } from "./handle"
 import { markLayerBacked, onNodePropertyChanged, onSubtreeChanged, unmarkLayerBacked } from "../animation/compositor-path"
 import { registerNodeFocusable, unregisterNodeFocusable, updateNodeFocusEntry, updateNodeFocusId } from "./focus"
 import { markNodeLayerDamaged, getCapturedNodeId, releasePointerCapture } from "./pointer"
@@ -305,7 +305,7 @@ const renderer = createRenderer<TGENode>({
 
     // ref callback — pass a NodeHandle to the user
     if (name === "ref" && typeof value === "function") {
-      (value as (handle: ReturnType<typeof createHandle>) => void)(createHandle(node))
+      (value as (handle: NodeHandle) => void)(createHandle(node))
       return
     }
 
@@ -559,13 +559,52 @@ export const insertNode = renderer.insertNode
 /** @public */
 export const insert = renderer.insert
 /** @public */
-export const spread = renderer.spread
-/** @public */
 export const setProp = renderer.setProp
 /** @public */
 export const mergeProps = renderer.mergeProps
-/** @public */
-export const use = renderer.use
+
+type Props = Record<string, unknown>
+const spreadPropsCache = new WeakMap<object, object>()
+
+function wrapRefProps<T>(props: T): T {
+  if (typeof props !== "object" || props === null) return props
+  const cached = spreadPropsCache.get(props)
+  if (cached) return cached as T
+
+  // Keep the original object as the prototype so getters and Solid proxies
+  // remain live. The own ref accessor adapts whatever callback is current
+  // when Solid's spread effect reads it, including a ref that starts unset.
+  const wrapped = Object.create(props as object) as Props
+  Object.defineProperty(wrapped, "ref", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      const ref = Reflect.get(props as object, "ref", props)
+      if (typeof ref !== "function") return ref
+      return (node: TGENode) => (ref as (handle: NodeHandle) => void)(createHandle(node))
+    },
+  })
+  spreadPropsCache.set(props, wrapped)
+  return wrapped as T
+}
+
+/** Solid spread with the same NodeHandle ref contract as setProp. */
+export function spread<T>(node: TGENode, accessor: (() => T) | T, skipChildren?: boolean): void {
+  if (typeof accessor === "function") {
+    renderer.spread(node, () => wrapRefProps((accessor as () => T)()), skipChildren)
+    return
+  }
+  renderer.spread(node, wrapRefProps(accessor), skipChildren)
+}
+
+/** Solid's universal compiler lowers refs and directives to `use`. */
+export function use<A, T>(fn: (element: NodeHandle, arg: A) => T, element: TGENode, arg?: A): T {
+  return renderer.use(
+    (_element, nextArg) => fn(createHandle(element), nextArg),
+    element,
+    arg as A,
+  )
+}
 
 // Re-export SolidJS control flow
 export { For, Show, Switch, Match, Index, ErrorBoundary } from "solid-js"

@@ -1,8 +1,7 @@
 import type { JSX } from "solid-js"
+import type { TGEProps } from "@vexart/engine"
 import {
-  Box,
   Show,
-  Text,
   createContext,
   createEffect,
   createSignal,
@@ -103,8 +102,8 @@ export function ps5Scale(viewport: Ps5Viewport, value: number) {
 }
 
 export type Ps5PanelProps = {
-  width?: number | string
-  height?: number | string
+  width?: TGEProps["width"]
+  height?: TGEProps["height"]
   children?: JSX.Element
   padding?: number
   gap?: number
@@ -123,7 +122,7 @@ export type Ps5PanelProps = {
 export function Ps5Panel(props: Ps5PanelProps) {
   const settings = usePs5Settings()
   return (
-    <Box
+    <box
       width={props.width}
       height={props.height}
       padding={props.padding}
@@ -140,7 +139,7 @@ export function Ps5Panel(props: Ps5PanelProps) {
       opacity={props.opacity}
     >
       {props.children}
-    </Box>
+    </box>
   )
 }
 
@@ -152,8 +151,8 @@ export type Ps5ButtonProps = {
   onPress: () => void
   onKeyDown?: (event: { key: string; char: string; mods: { shift: boolean; alt: boolean; ctrl: boolean; meta: boolean } }) => void
   disabled?: boolean
-  width?: number | string
-  height?: number | string
+  width?: TGEProps["width"]
+  height?: TGEProps["height"]
   padding?: number
   backgroundColor?: string
   borderColor?: string
@@ -201,7 +200,7 @@ export function Ps5Button(props: Ps5ButtonProps) {
   }
   const focused = () => focus.focused()
   return (
-    <Box
+    <box
       width={props.width}
       height={props.height}
       padding={props.padding}
@@ -218,14 +217,14 @@ export function Ps5Button(props: Ps5ButtonProps) {
       debugName={`ps5-button:${props.id}`}
     >
       {props.children ?? <Ps5Text color={props.childrenColor ?? ps5Colors.text} fontSize={props.fontSize ?? 14}>{props.label}</Ps5Text>}
-    </Box>
+    </box>
   )
 }
 
 export type Ps5TextProps = {
   children?: JSX.Element
-  width?: number | string
-  height?: number | string
+  width?: TGEProps["width"]
+  height?: TGEProps["height"]
   color?: string
   fontSize?: number
   fontWeight?: number
@@ -240,7 +239,7 @@ export type Ps5TextProps = {
 export function Ps5Text(props: Ps5TextProps) {
   const settings = usePs5Settings()
   return (
-    <Text
+    <text
       width={props.width}
       height={props.height}
       color={settings().highContrast && props.color === ps5Colors.mutedText ? ps5Colors.text : (props.color ?? ps5Colors.text)}
@@ -251,7 +250,7 @@ export function Ps5Text(props: Ps5TextProps) {
       opacity={props.opacity}
       floating={props.floating}
       floatOffset={props.floatOffset}
-    >{props.children}</Text>
+    >{props.children}</text>
   )
 }
 
@@ -290,10 +289,10 @@ export function Ps5Avatar(props: { src?: string; name: string; accent?: string; 
   const isImage = !!props.src && /(?:[./]|https?:)/.test(props.src)
   const statusSize = Math.max(6, Math.round(size * 0.22))
   return (
-    <Box width={size} height={size} cornerRadius={size / 2} backgroundColor={props.accent ?? "#303640"} alignX="center" alignY="center">
-      {isImage ? <img src={props.src!} width={size} height={size} objectFit="cover" cornerRadius={size / 2} /> : <Text color={ps5Colors.text} fontSize={Math.max(14, Math.round(size * 0.38))}>{initial}</Text>}
+    <box width={size} height={size} cornerRadius={size / 2} backgroundColor={props.accent ?? "#303640"} alignX="center" alignY="center">
+      {isImage ? <img src={props.src!} width={size} height={size} objectFit="cover" cornerRadius={size / 2} /> : <text color={ps5Colors.text} fontSize={Math.max(14, Math.round(size * 0.38))}>{initial}</text>}
       <Show when={props.status}>
-        <Box
+        <box
           width={statusSize}
           height={statusSize}
           floating="parent"
@@ -304,6 +303,6 @@ export function Ps5Avatar(props: { src?: string; name: string; accent?: string; 
           cornerRadius={statusSize / 2}
         />
       </Show>
-    </Box>
+    </box>
   )
 }

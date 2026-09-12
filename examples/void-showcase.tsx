@@ -10,7 +10,7 @@ import { createSignal, Show } from "solid-js"
 import { untrack } from "solid-js"
 import type { JSX } from "solid-js"
 import { useTerminalDimensions, SyntaxStyle, ONE_DARK, setDebug, debugStatsLine, onInput } from "@vexart/engine"
-import { createApp, useAppTerminal, Box, Text } from "@vexart/app"
+import { createApp, useAppTerminal } from "@vexart/app"
 import {
   // Tokens
   colors, radius, space, font, weight, shadows,
@@ -68,25 +68,25 @@ function InputsTab() {
   const [slider, setSlider] = createSignal(42)
 
   return (
-    <Box width="100%" direction="row" gap={space[4]} alignY="top">
+    <box width="100%" direction="row" gap={space[4]} alignY="top">
       {/* Column 1 */}
-      <Box direction="column" gap={space[4]} width="grow">
+      <box direction="column" gap={space[4]} width="grow">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Text Inputs</VoidCardTitle>
             <VoidCardDescription>Single-line and multi-line editors</VoidCardDescription>
           </VoidCardHeader>
           <VoidCardContent>
-            <Box direction="column" gap={space[4]}>
-              <Box direction="column" gap={space[1]}>
+            <box direction="column" gap={space[4]}>
+              <box direction="column" gap={space[1]}>
                 <Small>VoidInput</Small>
                 <VoidInput value={text()} onChange={setText} placeholder="Type here..." />
-              </Box>
-              <Box direction="column" gap={space[1]}>
+              </box>
+              <box direction="column" gap={space[1]}>
                 <Small>VoidTextarea</Small>
                 <VoidTextarea value={area()} onChange={setArea} width={300} height={100} />
-              </Box>
-            </Box>
+              </box>
+            </box>
           </VoidCardContent>
         </VoidCard>
 
@@ -95,8 +95,8 @@ function InputsTab() {
             <VoidCardTitle>Selection</VoidCardTitle>
           </VoidCardHeader>
           <VoidCardContent>
-            <Box direction="column" gap={space[4]}>
-              <Box direction="column" gap={space[1]}>
+            <box direction="column" gap={space[4]}>
+              <box direction="column" gap={space[1]}>
                 <Small>VoidSelect</Small>
                 <VoidSelect
                   value={selected()}
@@ -108,8 +108,8 @@ function InputsTab() {
                     { value: "py", label: "Python" },
                   ]}
                 />
-              </Box>
-              <Box direction="column" gap={space[1]}>
+              </box>
+              <box direction="column" gap={space[1]}>
                 <Small>VoidCombobox</Small>
                 <VoidCombobox
                   value={combo()}
@@ -122,26 +122,26 @@ function InputsTab() {
                   ]}
                   placeholder="Search frameworks..."
                 />
-              </Box>
-            </Box>
+              </box>
+            </box>
           </VoidCardContent>
         </VoidCard>
-      </Box>
+      </box>
 
       {/* Column 2 */}
-      <Box direction="column" gap={space[4]} width="grow">
+      <box direction="column" gap={space[4]} width="grow">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Toggles</VoidCardTitle>
           </VoidCardHeader>
           <VoidCardContent>
-            <Box direction="column" gap={space[3]}>
+            <box direction="column" gap={space[3]}>
               <VoidCheckbox checked={checked()} onChange={setChecked} label="Enable notifications" />
               <VoidCheckbox checked={false} label="Marketing emails" />
               <VoidSeparator />
               <VoidSwitch checked={switched()} onChange={setSwitched} label="Dark mode" />
               <VoidSwitch checked={true} label="Auto-save" />
-            </Box>
+            </box>
           </VoidCardContent>
         </VoidCard>
 
@@ -150,7 +150,7 @@ function InputsTab() {
             <VoidCardTitle>Radio & Slider</VoidCardTitle>
           </VoidCardHeader>
           <VoidCardContent>
-            <Box direction="column" gap={space[4]}>
+            <box direction="column" gap={space[4]}>
               <VoidRadioGroup
                 value={radio()}
                 onChange={setRadio}
@@ -161,15 +161,15 @@ function InputsTab() {
                 ]}
               />
               <VoidSeparator />
-              <Box direction="column" gap={space[1]}>
+              <box direction="column" gap={space[1]}>
                 <Small>VoidSlider: {slider()}</Small>
                 <VoidSlider value={slider()} onChange={setSlider} min={0} max={100} />
-              </Box>
-            </Box>
+              </box>
+            </box>
           </VoidCardContent>
         </VoidCard>
-      </Box>
-    </Box>
+      </box>
+    </box>
   )
 }
 
@@ -177,29 +177,29 @@ function InputsTab() {
 
 function DisplayTab() {
   return (
-    <Box width="100%" direction="row" gap={space[4]} alignY="top">
-      <Box direction="column" gap={space[4]} width="grow">
+    <box width="100%" direction="row" gap={space[4]} alignY="top">
+      <box direction="column" gap={space[4]} width="grow">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Buttons</VoidCardTitle>
             <VoidCardDescription>All variants and sizes</VoidCardDescription>
           </VoidCardHeader>
           <VoidCardContent>
-            <Box direction="column" gap={space[3]}>
-              <Box direction="row" gap={space[2]} alignY="center">
+            <box direction="column" gap={space[3]}>
+              <box direction="row" gap={space[2]} alignY="center">
                 <VoidButton variant="default" onPress={() => {}}>Default</VoidButton>
                 <VoidButton variant="secondary" onPress={() => {}}>Secondary</VoidButton>
                 <VoidButton variant="outline" onPress={() => {}}>Outline</VoidButton>
                 <VoidButton variant="ghost" onPress={() => {}}>Ghost</VoidButton>
                 <VoidButton variant="destructive" onPress={() => {}}>Destructive</VoidButton>
-              </Box>
-              <Box direction="row" gap={space[2]} alignY="center">
+              </box>
+              <box direction="row" gap={space[2]} alignY="center">
                 <VoidButton size="xs" onPress={() => {}}>XS</VoidButton>
                 <VoidButton size="sm" onPress={() => {}}>SM</VoidButton>
                 <VoidButton onPress={() => {}}>Default</VoidButton>
                 <VoidButton size="lg" onPress={() => {}}>LG</VoidButton>
-              </Box>
-            </Box>
+              </box>
+            </box>
           </VoidCardContent>
         </VoidCard>
 
@@ -208,12 +208,12 @@ function DisplayTab() {
             <VoidCardTitle>Badges</VoidCardTitle>
           </VoidCardHeader>
           <VoidCardContent>
-            <Box direction="row" gap={space[2]}>
+            <box direction="row" gap={space[2]}>
               <VoidBadge>Default</VoidBadge>
               <VoidBadge variant="secondary">Secondary</VoidBadge>
               <VoidBadge variant="outline">Outline</VoidBadge>
               <VoidBadge variant="destructive">Destructive</VoidBadge>
-            </Box>
+            </box>
           </VoidCardContent>
         </VoidCard>
 
@@ -222,17 +222,17 @@ function DisplayTab() {
             <VoidCardTitle>Avatar</VoidCardTitle>
           </VoidCardHeader>
           <VoidCardContent>
-            <Box direction="row" gap={space[3]} alignY="center">
+            <box direction="row" gap={space[3]} alignY="center">
               <VoidAvatar name="Sarah Chen" size="sm" />
               <VoidAvatar name="Alex Rivera" />
               <VoidAvatar name="Jordan Kim" size="lg" />
               <VoidAvatar name="Custom" color="#56d4c8" />
-            </Box>
+            </box>
           </VoidCardContent>
         </VoidCard>
-      </Box>
+      </box>
 
-      <Box direction="column" gap={space[4]} width="grow">
+      <box direction="column" gap={space[4]} width="grow">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Card Anatomy</VoidCardTitle>
@@ -252,23 +252,23 @@ function DisplayTab() {
             <VoidCardTitle>Progress & Skeleton</VoidCardTitle>
           </VoidCardHeader>
           <VoidCardContent>
-            <Box direction="column" gap={space[3]}>
-              <Box direction="column" gap={space[1]}>
+            <box direction="column" gap={space[3]}>
+              <box direction="column" gap={space[1]}>
                 <Small>VoidProgress</Small>
                 <VoidProgress value={72} max={100} />
-              </Box>
+              </box>
               <VoidSeparator />
-              <Box direction="column" gap={space[1]}>
+              <box direction="column" gap={space[1]}>
                 <Small>Skeleton</Small>
                 <VoidSkeleton width={200} height={12} />
                 <VoidSkeleton width={160} height={12} />
                 <VoidSkeleton width={120} height={12} />
-              </Box>
-            </Box>
+              </box>
+            </box>
           </VoidCardContent>
         </VoidCard>
-      </Box>
-    </Box>
+      </box>
+    </box>
   )
 }
 
@@ -287,8 +287,8 @@ function CollectionsTab() {
   ]
 
   return (
-    <Box width="100%" direction="row" gap={space[4]} alignY="top">
-      <Box direction="column" gap={space[4]} width="grow">
+    <box width="100%" direction="row" gap={space[4]} alignY="top">
+      <box direction="column" gap={space[4]} width="grow">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>VoidList</VoidCardTitle>
@@ -323,9 +323,9 @@ function CollectionsTab() {
             </VoidScrollView>
           </VoidCardContent>
         </VoidCard>
-      </Box>
+      </box>
 
-      <Box direction="column" gap={space[4]} width="grow">
+      <box direction="column" gap={space[4]} width="grow">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>VoidTable</VoidCardTitle>
@@ -344,15 +344,15 @@ function CollectionsTab() {
             />
           </VoidCardContent>
         </VoidCard>
-      </Box>
-    </Box>
+      </box>
+    </box>
   )
 }
 
 // ── Code & Markdown Tab ──
 
 function CodeTab() {
-  const sampleCode = `import { createApp, Box, Text, VoidCard, VoidButton } from "vexart"
+  const sampleCode = `import { createApp, VoidCard, VoidButton } from "vexart"
 function App() {
   return (
     <VoidCard>
@@ -392,8 +392,8 @@ await createApp(() => <App />)
     "version": "0.10.0-beta.4"`
 
   return (
-    <Box width="100%" direction="row" gap={space[4]} alignY="top">
-      <Box direction="column" gap={space[4]} width="grow">
+    <box width="100%" direction="row" gap={space[4]} alignY="top">
+      <box direction="column" gap={space[4]} width="grow">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>VoidCode</VoidCardTitle>
@@ -419,9 +419,9 @@ await createApp(() => <App />)
             <VoidDiff diff={sampleDiff} showLineNumbers width={360} />
           </VoidCardContent>
         </VoidCard>
-      </Box>
+      </box>
 
-      <Box direction="column" gap={space[4]} width="grow">
+      <box direction="column" gap={space[4]} width="grow">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>VoidMarkdown</VoidCardTitle>
@@ -435,8 +435,8 @@ await createApp(() => <App />)
             />
           </VoidCardContent>
         </VoidCard>
-      </Box>
-    </Box>
+      </box>
+    </box>
   )
 }
 
@@ -447,8 +447,8 @@ function OverlaysTab() {
   const toaster = createVoidToaster({ position: "bottom-right" })
 
   return (
-    <Box width="100%" direction="row" gap={space[4]} alignY="top">
-      <Box direction="column" gap={space[4]} width="grow">
+    <box width="100%" direction="row" gap={space[4]} alignY="top">
+      <box direction="column" gap={space[4]} width="grow">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Dialog</VoidCardTitle>
@@ -478,7 +478,7 @@ function OverlaysTab() {
             <VoidCardDescription>Notification system</VoidCardDescription>
           </VoidCardHeader>
           <VoidCardContent>
-            <Box direction="row" gap={space[2]}>
+            <box direction="row" gap={space[2]}>
               <VoidButton size="sm" onPress={() => toaster.toast({ message: "Saved successfully", variant: "success" })}>
                 Success
               </VoidButton>
@@ -488,30 +488,30 @@ function OverlaysTab() {
               <VoidButton size="sm" variant="outline" onPress={() => toaster.toast({ message: "New update available", variant: "info" })}>
                 Info
               </VoidButton>
-            </Box>
+            </box>
           </VoidCardContent>
         </VoidCard>
-      </Box>
+      </box>
 
-      <Box direction="column" gap={space[4]} width="grow">
+      <box direction="column" gap={space[4]} width="grow">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Tooltip</VoidCardTitle>
             <VoidCardDescription>Hover for details</VoidCardDescription>
           </VoidCardHeader>
           <VoidCardContent>
-            <Box direction="row" gap={space[3]}>
+            <box direction="row" gap={space[3]}>
               <VoidTooltip content="This is a tooltip">
                 <VoidButton variant="outline" size="sm" onPress={() => {}}>Hover me</VoidButton>
               </VoidTooltip>
               <VoidTooltip content="Another tooltip with longer text">
                 <VoidBadge>Info</VoidBadge>
               </VoidTooltip>
-            </Box>
+            </box>
           </VoidCardContent>
         </VoidCard>
-      </Box>
-    </Box>
+      </box>
+    </box>
   )
 }
 
@@ -519,36 +519,36 @@ function OverlaysTab() {
 
 function TypographyTab() {
   return (
-    <Box width="100%" direction="row" gap={space[4]} alignY="top">
-      <Box direction="column" gap={space[4]} width="grow">
+    <box width="100%" direction="row" gap={space[4]} alignY="top">
+      <box direction="column" gap={space[4]} width="grow">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Heading Scale</VoidCardTitle>
           </VoidCardHeader>
           <VoidCardContent>
-            <Box direction="column" gap={space[3]}>
+            <box direction="column" gap={space[3]}>
               <H1>Heading 1</H1>
               <H2>Heading 2</H2>
               <H3>Heading 3</H3>
               <H4>Heading 4</H4>
-            </Box>
+            </box>
           </VoidCardContent>
         </VoidCard>
-      </Box>
+      </box>
 
-      <Box direction="column" gap={space[4]} width="grow">
+      <box direction="column" gap={space[4]} width="grow">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Body Text</VoidCardTitle>
           </VoidCardHeader>
           <VoidCardContent>
-            <Box direction="column" gap={space[3]}>
+            <box direction="column" gap={space[3]}>
               <Lead>Lead — introductory text that stands out.</Lead>
               <P>Paragraph — standard body text for content areas.</P>
               <Large>Large — emphasized text for callouts.</Large>
               <Small>Small — captions, labels, and metadata.</Small>
               <Muted>Muted — secondary information, less important.</Muted>
-            </Box>
+            </box>
           </VoidCardContent>
         </VoidCard>
 
@@ -557,15 +557,15 @@ function TypographyTab() {
             <VoidCardTitle>Separator</VoidCardTitle>
           </VoidCardHeader>
           <VoidCardContent>
-            <Box direction="column" gap={space[2]}>
+            <box direction="column" gap={space[2]}>
               <P>Content above</P>
               <VoidSeparator />
               <P>Content below</P>
-            </Box>
+            </box>
           </VoidCardContent>
         </VoidCard>
-      </Box>
-    </Box>
+      </box>
+    </box>
   )
 }
 
@@ -607,15 +607,15 @@ function App() {
   }
 
   return (
-    <Box
+    <box
       width={dims.width()}
       height={dims.height()}
       backgroundColor={colors.background}
       direction="column"
     >
-      <Box width="100%" height={space[2]} />
+      <box width="100%" height={space[2]} />
       {/* Header */}
-      <Box
+      <box
         width="100%"
         paddingX={space[6]}
         paddingTop={space[4]}
@@ -625,20 +625,20 @@ function App() {
         borderColor={colors.border}
         borderBottom={1}
       >
-        <Box direction="column" gap={space[0.5]} width="grow">
-          <Text color={colors.foreground} fontSize={font.lg} fontWeight={weight.bold} marginTop={space[1]}>
+        <box direction="column" gap={space[0.5]} width="grow">
+          <text color={colors.foreground} fontSize={font.lg} fontWeight={weight.bold} marginTop={space[1]}>
             Void Component Showcase
-          </Text>
+          </text>
           <Muted>Every styled component in the Vexart design system · Tab navigate · Space/Enter interact · q exit</Muted>
-        </Box>
-        <Box direction="row" gap={space[2]} alignY="center">
-          <Text color="#f59e0b" fontSize={font.xs}>{perfLine()}</Text>
+        </box>
+        <box direction="row" gap={space[2]} alignY="center">
+          <text color="#f59e0b" fontSize={font.xs}>{perfLine()}</text>
           <VoidBadge variant="outline">v0.9</VoidBadge>
-        </Box>
-      </Box>
+        </box>
+      </box>
 
       {/* Tabs */}
-      <Box width="100%" paddingX={space[6]} paddingTop={space[3]}>
+      <box width="100%" paddingX={space[6]} paddingTop={space[3]}>
         <VoidTabs
           activeTab={tab()}
           onTabChange={onTabSwitch}
@@ -651,9 +651,9 @@ function App() {
             { label: "Typography", content: () => <TypographyTab /> },
           ]}
         />
-      </Box>
+      </box>
 
-    </Box>
+    </box>
   )
 }
 

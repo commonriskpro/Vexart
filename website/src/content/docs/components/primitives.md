@@ -20,19 +20,17 @@ Vexart provides JSX intrinsic elements that map directly to the engine's node ty
 </box>
 ```
 
-## App-Level Wrappers
+## Styling Intrinsics with `className`
 
-`@vexart/app` provides `Box` and `Text` components that add `className` support on top of the intrinsics:
+The `@vexart/app` package installs `className` support directly on the `<box>` and `<text>` intrinsics. There are no wrapper components to import:
 
 ```tsx
-import { Box, Text } from "vexart"
-
-<Box className="card" padding={16}>
-  <Text>Content</Text>
-</Box>
+<box className="card" padding={16}>
+  <text>Content</text>
+</box>
 ```
 
-## Composing Text & Layout
+## Composing text & Layout
 
 Inline styled text segments and row layouts compose directly with `<box>` and `<text>`:
 

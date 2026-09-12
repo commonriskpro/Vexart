@@ -134,7 +134,7 @@ The repository MUST contain a `.dependency-cruiser.cjs` or equivalent dependency
 
 ### REQ-PB-008: Component split criterion
 
-Files from the former `@tge/components` package MUST be split by contract: components that expose `ctx.*Props` render-prop objects or manage state, keyboard, focus, or accessibility MUST move to `@vexart/headless`, while typed wrappers of JSX intrinsics with no behavior — `Box`, `Text`, `Image`, `Canvas`, `Span`, and `RichText` — MUST move to `@vexart/primitives`, per `docs/ARCHITECTURE.md §3.2` and `docs/ARCHITECTURE.md §3.3`.
+Components that expose `ctx.*Props` render-prop objects or manage state, keyboard, focus, or accessibility belong in `@vexart/headless`. Use engine JSX intrinsics `<box>` and `<text>` directly for containers and text, including `className`; do not add public passthrough wrappers or recreate the retired primitives package. See `docs/ARCHITECTURE.md` for the active package boundaries.
 
 #### Scenario: Behavior-bearing components land in headless
 
@@ -147,8 +147,8 @@ Files from the former `@tge/components` package MUST be split by contract: compo
 
 - **Given** a former `@tge/components` file is only a typed wrapper around a JSX intrinsic with no behavior
 - **When** the split is reviewed
-- **Then** that file belongs to `@vexart/primitives`
-- **And** placing it in `@vexart/headless` is non-compliant
+- **Then** consumers use the corresponding engine JSX intrinsic directly
+- **And** adding a public passthrough wrapper in `@vexart/headless` or recreating the retired primitives package is non-compliant
 
 ### REQ-PB-009: Root workspace identity uses vexart naming
 

@@ -8,11 +8,6 @@
 export { Page } from "./runtime/page"
 export type { PageProps } from "./runtime/page"
 
-// -- Components --------------------------------------------------------------
-
-export { Box, Text } from "./components/primitives"
-export type { AppBoxProps, AppTextProps, ClassNameProps } from "./components/primitives"
-
 // -- Styling -----------------------------------------------------------------
 
 export {

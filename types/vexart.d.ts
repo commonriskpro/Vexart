@@ -35,9 +35,6 @@ AnimationAccessor,
 };
 
 /** @public */
-export declare type AppBoxProps = BoxProps & ClassNameProps;
-
-/** @public */
 export declare type AppContext = {
     /** The terminal instance */
     terminal: Terminal;
@@ -95,9 +92,6 @@ export declare type AppRouterState = {
     params: RouteParams;
 };
 
-/** @public */
-export declare type AppTextProps = BoxProps & ClassNameProps;
-
 /** Async validator — same signature but returns a Promise. */
 /** @public */
 export declare type AsyncFieldValidator<T> = (value: T, allValues: Record<string, any>) => Promise<string | undefined | null>;
@@ -135,9 +129,6 @@ declare type BezierCmd = {
     color: number;
     width: number;
 };
-
-/** @public */
-export declare function Box(props: AppBoxProps): JSX.Element;
 
 /** @public */
 export declare type BoxProps = {
@@ -508,12 +499,6 @@ export declare type ClassNameDiagnostic = {
 };
 
 /** @public */
-export declare type ClassNameProps = {
-    className?: string;
-    children?: JSX.Element;
-};
-
-/** @public */
 export declare type ClassNameResolveOptions = {
     unknownClass?: ClassNameUnknownBehavior;
     onDiagnostic?: (diagnostic: ClassNameDiagnostic) => void;
@@ -722,9 +707,6 @@ declare type CreateExtmarkOptions = Omit<Extmark, "id">;
 /** @public */
 export declare function createForm<T extends Record<string, any>>(options: FormOptions<T>): FormHandle<T>;
 
-/** @public */
-export declare function createHandle(node: TGENode): NodeHandle;
-
 export { createMemo }
 
 /** @public */
@@ -751,12 +733,12 @@ export declare function createSpring(initial: number, config?: SpringConfig): An
  *   title: { fontSize: 20, fontWeight: 700, color: "#fafafa" },
  * })
  *
- * <Box className={s.card}>
- *   <Text className={s.title}>Hello</Text>
- * </Box>
+ * <box className={s.card}>
+ *   <text className={s.title}>Hello</text>
+ * </box>
  *
  * // Composable with utility classes:
- * <Box className={`${s.card} hover:bg-accent`}>
+ * <box className={`${s.card} hover:bg-accent`}>
  * ```
  * @public
  */
@@ -1528,7 +1510,7 @@ declare type InteractionBinding = "auto" | "none" | InteractionLayerState;
 /** @public */
 declare type InteractionLayerState = {
     ref: (handle: NodeHandle) => void;
-    node: () => TGENode | null;
+    node: () => NodeHandle | null;
     mode: () => InteractionMode;
     begin: (mode?: Exclude<InteractionMode, "none">) => void;
     end: (mode?: Exclude<InteractionMode, "none">) => void;
@@ -1883,10 +1865,12 @@ export declare type NodeHandle = {
     readonly isFocused: boolean;
     readonly children: NodeHandle[];
     readonly parent: NodeHandle | null;
-    readonly _node: TGENode;
 };
 
 declare type NodeImageExtra = {
+    source?: string;
+    revision?: number;
+    cancel?: () => void;
     buffer: {
         data: Uint8Array;
         width: number;
@@ -1945,7 +1929,7 @@ export declare function P(props: TypographyProps): JSX.Element;
 export declare function Page(props: PageProps): JSX.Element;
 
 /** @public */
-export declare type PageProps = AppBoxProps & {
+export declare type PageProps = BoxProps & {
     children?: JSX.Element;
 };
 
@@ -2899,10 +2883,6 @@ declare type TerminalSize = {
     /** Single cell height in pixels */
     cellHeight: number;
 };
-
-/** @public */
-declare function Text_2(props: AppTextProps): JSX.Element;
-export { Text_2 as Text }
 
 /** @public */
 export declare function Textarea(props: TextareaProps): JSX.Element;
