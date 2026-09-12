@@ -82,8 +82,16 @@ function Scene(props: { selected: number; onSelected: (index: number) => void })
     data: [{ name: "first" }, { name: "second" }, { name: "third" }],
     selectedRow: props.selected,
     onSelectedRowChange: props.onSelected,
-    renderHeader: (column: { header: string }) => createTextNode(column.header),
-    renderCell: (value: unknown) => createTextNode(String(value)),
+    renderHeader: (column: { header: string }) => {
+      const c = createElement("text")
+      insertNode(c, createTextNode(column.header))
+      return c
+    },
+    renderCell: (value: unknown) => {
+      const c = createElement("text")
+      insertNode(c, createTextNode(String(value)))
+      return c
+    },
   })
   insertNode(root, table)
   return root

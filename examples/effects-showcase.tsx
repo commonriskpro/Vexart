@@ -265,11 +265,11 @@ function StatesTab() {
     <Box width="100%" direction="column" gap={space[3]}>
       <Box width="100%" direction="row" gap={space[3]} height={176}>
         <Panel title="Button states" caption="hover / active / focus">
-          <box direction="row" gap={space[3]}>
+          <Box direction="row" gap={space[3]}>
             <VoidButton size="sm" variant="default" onPress={() => setPresses((value) => value + 1)}>Press</VoidButton>
             <VoidButton size="sm" variant="outline" onPress={() => setArmed((value) => !value)}>{armed() ? "Armed" : "Arm"}</VoidButton>
-          </box>
-          <text color={colors.mutedForeground} fontSize={font.xs}>press count: {presses()}</text>
+          </Box>
+          <Text color={colors.mutedForeground} fontSize={font.xs}>press count: {presses()}</Text>
         </Panel>
         <Panel title="Custom interaction" caption="declarative style props">
           <Box

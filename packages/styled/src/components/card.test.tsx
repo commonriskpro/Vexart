@@ -34,7 +34,7 @@ suite("styled VoidCard with the production Solid renderer", () => {
     const dispose = renderScene(root, () => (
       <VoidCard>
         <VoidCardTitle>{count()}</VoidCardTitle>
-        <box focusable onPress={() => { presses += 1 }}>stable</box>
+        <box focusable onPress={() => { presses += 1 }}><text>stable</text></box>
         {visible() ? <VoidCardDescription>on</VoidCardDescription> : <VoidCardDescription>off</VoidCardDescription>}
       </VoidCard>
     ))

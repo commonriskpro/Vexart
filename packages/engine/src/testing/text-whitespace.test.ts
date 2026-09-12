@@ -44,7 +44,7 @@ function sceneGraph(
   const text = prop(
     prop(
       prop(
-        prop(createTextNode(content), "fontSize", 18),
+        prop(createNode("text"), "fontSize", 18),
         "lineHeight",
         22,
       ),
@@ -55,6 +55,7 @@ function sceneGraph(
     whiteSpace,
   )
   if (wordBreak !== undefined) prop(text, "wordBreak", wordBreak)
+  insertChild(text, createTextNode(content))
   insertChild(panel, text)
   insertChild(root, panel)
   return { root, text }

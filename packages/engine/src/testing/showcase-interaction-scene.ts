@@ -13,8 +13,9 @@ function box(props: TGEProps, kids: TGENode[] = []) {
 }
 
 function text(value: string, props: TGEProps = {}) {
-  const node = createTextNode(value)
+  const node = createNode("text")
   node.props = props
+  insertChild(node, createTextNode(value))
   return node
 }
 
@@ -28,7 +29,7 @@ export function createShowcaseInteractionScene() {
     panel.props.height = 40
     panel._widthSizing = parseSizing(180)
     panel._heightSizing = parseSizing(40)
-    label.text = "ACTIVE"
+    ;(label.children[0] ?? label).text = "ACTIVE"
   }
 
   const actionButton = box({

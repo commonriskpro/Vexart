@@ -1122,12 +1122,8 @@ function VoidProgressDemo() {
         </box>
         <VoidProgress width={220} value={tasks()} max={TOTAL_TASKS} />
         <box direction="row" gap={space[2]} paddingTop={space[1]}>
-          <box focusable onPress={() => setTasks(t => Math.min(TOTAL_TASKS, t + 1))}>
-            <VoidButton size="xs">Complete Task</VoidButton>
-          </box>
-          <box focusable onPress={() => setTasks(0)}>
-            <VoidButton size="xs" variant="outline">Reset</VoidButton>
-          </box>
+          <VoidButton size="xs" onPress={() => setTasks(t => Math.min(TOTAL_TASKS, t + 1))}>Complete Task</VoidButton>
+          <VoidButton size="xs" variant="outline" onPress={() => setTasks(0)}>Reset</VoidButton>
         </box>
       </box>
     </box>
@@ -1265,19 +1261,19 @@ function TabVoidTheme() {
       <SectionBox title="BUTTON VARIANTS + SIZES (Button has native focusStyle + glow)">
         <box direction="column" gap={space[2]}>
           <box direction="row" gap={space[2]}>
-            <box focusable onPress={() => setClickedBtn("Default")}><VoidButton>Default</VoidButton></box>
-            <box focusable onPress={() => setClickedBtn("Secondary")}><VoidButton variant="secondary">Secondary</VoidButton></box>
-            <box focusable onPress={() => setClickedBtn("Outline")}><VoidButton variant="outline">Outline</VoidButton></box>
-            <box focusable onPress={() => setClickedBtn("Ghost")}><VoidButton variant="ghost">Ghost</VoidButton></box>
-            <box focusable onPress={() => setClickedBtn("Destructive")}><VoidButton variant="destructive">Destructive</VoidButton></box>
-            <box focusable onPress={() => setClickedBtn("Link")}><VoidButton variant="link">Link</VoidButton></box>
+            <VoidButton onPress={() => setClickedBtn("Default")}>Default</VoidButton>
+            <VoidButton variant="secondary" onPress={() => setClickedBtn("Secondary")}>Secondary</VoidButton>
+            <VoidButton variant="outline" onPress={() => setClickedBtn("Outline")}>Outline</VoidButton>
+            <VoidButton variant="ghost" onPress={() => setClickedBtn("Ghost")}>Ghost</VoidButton>
+            <VoidButton variant="destructive" onPress={() => setClickedBtn("Destructive")}>Destructive</VoidButton>
+            <VoidButton variant="link" onPress={() => setClickedBtn("Link")}>Link</VoidButton>
           </box>
           <box direction="row" gap={space[2]} alignY="center">
-            <box focusable onPress={() => setClickedBtn("XS")}><VoidButton size="xs">XS</VoidButton></box>
-            <box focusable onPress={() => setClickedBtn("SM")}><VoidButton size="sm">SM</VoidButton></box>
-            <box focusable onPress={() => setClickedBtn("Default")}><VoidButton>Default</VoidButton></box>
-            <box focusable onPress={() => setClickedBtn("LG")}><VoidButton size="lg">LG</VoidButton></box>
-            <box focusable onPress={() => setClickedBtn("Disabled")}><VoidButton disabled>Disabled</VoidButton></box>
+            <VoidButton size="xs" onPress={() => setClickedBtn("XS")}>XS</VoidButton>
+            <VoidButton size="sm" onPress={() => setClickedBtn("SM")}>SM</VoidButton>
+            <VoidButton onPress={() => setClickedBtn("Default")}>Default</VoidButton>
+            <VoidButton size="lg" onPress={() => setClickedBtn("LG")}>LG</VoidButton>
+            <VoidButton disabled onPress={() => setClickedBtn("Disabled")}>Disabled</VoidButton>
           </box>
           <Show when={clickedBtn()}>
             <text color="#4fc4d4" fontSize={font.xs}>Last clicked: {clickedBtn()}</text>

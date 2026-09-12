@@ -48,7 +48,8 @@ function rect(node: TGENode) {
 describe("Node/layout Grid integration", () => {
   test("writes the single layout map to box and text nodes and damages only transitions", () => {
     const childBox = box({ width: 200, height: 40 })
-    const text = createTextNode("grid text")
+    const text = createNode("text")
+    insertChild(text, createTextNode("grid text"))
     const root = box({
       layout: "grid",
       width: 200,

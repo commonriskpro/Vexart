@@ -16,8 +16,9 @@ function box(props: TGEProps, kids: TGENode[] = []) {
 }
 
 function text(value: string, props: TGEProps = {}) {
-  const node = createTextNode(value)
+  const node = createNode("text")
   node.props = props
+  insertChild(node, createTextNode(value))
   return node
 }
 

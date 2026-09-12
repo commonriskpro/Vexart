@@ -78,13 +78,13 @@ suite("app primitives with the production Solid renderer", () => {
     const [className, setClassName] = createSignal("bg-primary")
     const [style, setStyle] = createSignal({ backgroundColor: "#ff0000" })
     const disposeStyled = renderScene(styledRoot, () => (
-      <Box className={className()} style={style()}>styled</Box>
+      <Box className={className()} style={style()}><Text>styled</Text></Box>
     ))
 
     const directRoot = createNode("root")
     const disposeDirect = renderScene(directRoot, () => (
       <Box className="bg-primary" style={{ backgroundColor: "#ff0000" }} backgroundColor="#00ff00">
-        direct
+        <Text>direct</Text>
       </Box>
     ))
 
@@ -112,7 +112,7 @@ suite("app primitives with the production Solid renderer", () => {
       glow: { radius: 8, color: "#00ffff" },
     })
     const dispose = renderScene(root, () => (
-      <Box className={className()} style={style()}>clearable</Box>
+      <Box className={className()} style={style()}><Text>clearable</Text></Box>
     ))
 
     try {
@@ -138,7 +138,7 @@ suite("app primitives with the production Solid renderer", () => {
 
     const dispose = renderScene(root, () => (
       <Box>
-        <Box focusable onPress={() => { presses += 1 }}>stable</Box>
+        <Box focusable onPress={() => { presses += 1 }}><Text>stable</Text></Box>
         <Text>{count()}</Text>
         {visible() ? <Text>on</Text> : <Text>off</Text>}
       </Box>

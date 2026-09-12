@@ -37,7 +37,8 @@ function walkFrame(root: TGENode, layout: ReturnType<typeof createVexartLayoutCt
 
 describe("walk-tree Grid integration", () => {
   test("walks one real nested Grid/Flex/text tree without rebuilding it", () => {
-    const text = createTextNode("Grid text")
+    const text = createNode("text")
+    insertChild(text, createTextNode("Grid text"))
     const innerGrid = box({
       layout: "grid",
       width: 150,

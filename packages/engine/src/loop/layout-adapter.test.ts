@@ -381,8 +381,9 @@ describe("layout adapter stacking contexts", () => {
   })
 
   test("measures floating fit wrappers from intrinsic children before attaching", () => {
-    const text = createTextNode("Tooltip content")
+    const text = createNode("text")
     text.props = { fontSize: 14, fontFamily: layoutTestFontFamily }
+    insertChild(text, createTextNode("Tooltip content"))
     const floating = box({
       width: "fit",
       height: "fit",
@@ -409,13 +410,15 @@ describe("layout adapter stacking contexts", () => {
   })
 
   test("wraps text inside a narrow responsive column", () => {
-    const text = createTextNode("A long Typography paragraph must wrap inside its responsive card instead of keeping its intrinsic width.")
+    const text = createNode("text")
     text.props = { fontSize: 14, fontFamily: layoutTestFontFamily }
+    insertChild(text, createTextNode("A long Typography paragraph must wrap inside its responsive card instead of keeping its intrinsic width."))
     const content = box({}, [text])
     const card = box({ padding: 8 }, [content])
     const left = box({ width: "grow" }, [card])
-    const rightText = createTextNode("Short")
+    const rightText = createNode("text")
     rightText.props = { fontSize: 14, fontFamily: layoutTestFontFamily }
+    insertChild(rightText, createTextNode("Short"))
     const right = box({ width: 100 }, [box({ padding: 8 }, [rightText])])
     const root = box({ width: 300, height: 200, direction: "row", gap: 16 }, [left, right])
 
