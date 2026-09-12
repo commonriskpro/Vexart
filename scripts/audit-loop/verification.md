@@ -18,9 +18,11 @@ correction for launch with the limitations below.
 - Nested dependency links outside the isolated worktree are rejected.
 - Authenticated Astra High and Luna xhigh CLI calls, structured responses,
   source reads, and failing Bun tests were exercised in a temporary repository.
-  These live attempts also demonstrated rejection of malformed scopes and
-  unsupported evidence. They do **not** establish a completed autonomous
-  discovery-to-commit cycle or any Vexart product fix.
+  Earlier live attempts demonstrated rejection of malformed scopes and
+  unsupported evidence. Final authenticated fixture run `mtyvbi9t-f173a24e`
+  completed discovery, independent gate, apply, post-verification and commit
+  `ba3c7fb6486e8647ca0d0ad2b7a6542cf82d9ae0`, awarding one deduplicated
+  fixture star. This establishes the fixture cycle, not any Vexart product fix.
 
 ## Known limitations
 
@@ -41,3 +43,6 @@ distinct defects: PID-based stop ownership and descendant cancellation after
 parent exit. Other review leads were not awarded speculative stars. These
 implementation-review stars are separate from the runtime product-finding
 ledger in `<git-common-dir>/audit-loop/events.jsonl`.
+
+Final independent re-review: **PASSED — READY_TO_REPORT**. Decision parking,
+per-attempt snapshots, dependency relocation, and native checks were inspected.
