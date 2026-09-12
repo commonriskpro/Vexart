@@ -389,7 +389,7 @@ await createApp(() => <App />)
 @@ -1,3 +1,3 @@
 -  "name": "@vxrt/core",
 +  "name": "vexart",
-    "version": "0.10.0-beta.3"`
+    "version": "0.10.0-beta.4"`
 
   return (
     <Box width="100%" direction="row" gap={space[4]} alignY="top">

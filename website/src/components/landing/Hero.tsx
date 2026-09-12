@@ -111,7 +111,7 @@ export function Hero() {
       >
         <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-vex-accent/20 bg-vex-accent/[0.05] text-xs font-medium text-vex-accent">
           <span className="w-1.5 h-1.5 rounded-full bg-vex-accent animate-pulse" />
-          v0.10.0-beta.3
+          v0.10.0-beta.4
         </span>
       </motion.div>
 
