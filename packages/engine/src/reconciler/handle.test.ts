@@ -93,9 +93,9 @@ describe("createHandle", () => {
     const node = createElement("box")
     setProp(node, "focusable", true)
     const handle = createHandle(node)
-    const id = getNodeFocusId(node)
+    const id = `node-focus-${node.id}`
 
-    expect(id).toBe(`node-focus-${node.id}`)
+    expect(getNodeFocusId(node)).toBe(id)
     handle.focus()
     expect(focusedId()).toBe(id)
     expect(handle.isFocused).toBe(true)
