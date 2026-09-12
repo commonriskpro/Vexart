@@ -151,7 +151,7 @@ function render(data) {
     const el = node("div", "agent");
     const top = node("div", "agent-top");
     top.append(node("div", "avatar", a.lastRole === "planner" ? "A" : "L"), node("span", "agent-name", roles[a.lastRole] || "Identidad registrada"), node("span", "stars", "★ " + (a.stars ?? 0)));
-    el.append(top, node("div", "agent-scope", a.scope || "—"), node("div", "model", a.model ? [a.model, a.effort].filter(Boolean).join(" / ") : "Sin recibo de modelo aún"), node("div", "agent-result", a.lastEndedAt ? `Último recibo ${time(a.lastEndedAt)} · salida ${a.lastExitCode ?? "—"}` : "Sin intento terminado registrado"));
+    el.append(top, node("div", "agent-scope", a.scope || "—"), node("div", "model", a.model ? [a.model, a.effort].filter(Boolean).join(" / ") : "Modelo no disponible en este snapshot"), node("div", "agent-result", a.lastEndedAt ? `Último recibo ${time(a.lastEndedAt)} · salida ${a.lastExitCode ?? "—"}` : "Sin recibo legible en este snapshot"));
     el.title = a.strategy || a.agentKey;
     $("agents").append(el);
   }
