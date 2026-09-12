@@ -791,7 +791,7 @@ export function Textarea(props: TextareaProps) {
       }
 
       return (
-        <box height={LINE_HEIGHT} width="100%">
+        <box height={LINE_HEIGHT} width="100%" direction="row">
           {beforeSegments.map((seg) => (
             <text color={seg.color} fontSize={14}>{seg.text}</text>
           ))}
@@ -810,7 +810,7 @@ export function Textarea(props: TextareaProps) {
 
     // Non-cursor line
     return (
-      <box height={LINE_HEIGHT} width="100%">
+      <box height={LINE_HEIGHT} width="100%" direction="row">
         {segments.length > 0
           ? segments.map((seg) => (
               <text color={seg.color} fontSize={14}>{seg.text}</text>
