@@ -15,7 +15,7 @@
 
 import { detect, type TerminalKind } from "./detect"
 
-const KITTY_GRAPHICS_PARENTS = new Set<TerminalKind>(["kitty", "ghostty", "wezterm"])
+const KITTY_GRAPHICS_PARENTS = new Set<TerminalKind>(["kitty", "ghostty", "wezterm", "herdr"])
 
 /** State returned when checking tmux's live passthrough option. */
 export type TmuxPassthroughState = "enabled" | "disabled" | "unknown" | "not-tmux"
@@ -66,6 +66,7 @@ export function parentTerminalFromEnv(env: Readonly<Record<string, string | unde
 
   // These variables are set by the outer emulator and usually survive into
   // tmux. Do not infer the parent from the pane's screen/tmux TERM.
+  if (env["HERDR_ENV"] === "1") return "herdr"
   if (env["GHOSTTY_RESOURCES_DIR"] || env["TERM_PROGRAM"]?.toLowerCase() === "ghostty") return "ghostty"
   if (env["KITTY_PID"] || env["KITTY_WINDOW_ID"] || env["TERM"] === "xterm-kitty" || env["TERM_PROGRAM"]?.toLowerCase() === "kitty") return "kitty"
   if (env["WEZTERM_EXECUTABLE"] || env["WEZTERM_PANE"] || env["TERM_PROGRAM"]?.toLowerCase() === "wezterm") return "wezterm"
@@ -88,7 +89,7 @@ export function parentSupportsKittyGraphics(kind: TerminalKind | null): boolean 
 
 /** Whether the parent is one of the terminals with the native U=1 path. */
 export function parentSupportsKittyPlaceholder(kind: TerminalKind | null): boolean {
-  return kind === "kitty" || kind === "ghostty"
+  return kind === "kitty" || kind === "ghostty" || kind === "herdr"
 }
 
 /** Check the static prerequisites for tmux passthrough wrapping. */

@@ -213,6 +213,23 @@ export type Extmark = {
 };
 
 // @public (undocumented)
+export class ExtmarkManager {
+    adjustForEdit(editStart: number, oldEnd: number, newEnd: number): void;
+    clear(): void;
+    clearType(typeId: number): void;
+    count(): number;
+    create(opts: CreateExtmarkOptions): number;
+    get(id: number): Extmark | undefined;
+    getAllForTypeId(typeId: number): Extmark[];
+    getForLine(lineStart: number, lineEnd: number): Extmark[];
+    getGhostTexts(): Extmark[];
+    getInRange(start: number, end: number): Extmark[];
+    getTypeId(name: string): number;
+    registerType(name: string): number;
+    remove(id: number): boolean;
+}
+
+// @public (undocumented)
 export type FieldState = {
     error: () => string | undefined;
     touched: () => boolean;
@@ -916,7 +933,6 @@ export type VisualCursor = {
 // Warnings were encountered during analysis:
 //
 // <repo>/.api-extractor-temp/packages/headless/src/display/code.d.ts:26:5 - (ae-forgotten-export) The symbol "SizingUnit" needs to be exported by the entry point index.d.ts
-// <repo>/.api-extractor-temp/packages/headless/src/inputs/textarea.d.ts:129:5 - (ae-forgotten-export) The symbol "ExtmarkManager" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

@@ -118,6 +118,12 @@ export function Muted(props: TypographyProps): JSX.Element;
 // @public (undocumented)
 export function P(props: TypographyProps): JSX.Element;
 
+// @public
+export type PressEvent = {
+    stopPropagation: () => void;
+    readonly propagationStopped: boolean;
+};
+
 // @public (undocumented)
 export type RadioOption = {
     value: string;
@@ -343,8 +349,6 @@ export interface VoidButtonProps {
     disabled?: boolean;
     // (undocumented)
     focusId?: string;
-    // Warning: (ae-forgotten-export) The symbol "PressEvent" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     onPress?: (event?: PressEvent) => void;
     // (undocumented)

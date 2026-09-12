@@ -2924,7 +2924,7 @@ export declare function msdfFontQuery(families: string[], weight?: number, itali
   * Detection order matters — more specific checks first.
   */
  /** @public */
- export declare type TerminalKind = "ghostty" | "kitty" | "wezterm" | "iterm2" | "alacritty" | "foot" | "contour" | "xterm" | "unknown";
+ export declare type TerminalKind = "ghostty" | "kitty" | "wezterm" | "iterm2" | "alacritty" | "foot" | "contour" | "herdr" | "xterm" | "unknown";
 
  /** @public */
  export declare type TerminalOptions = {

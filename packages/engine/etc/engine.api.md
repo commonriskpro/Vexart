@@ -2316,7 +2316,7 @@ export type Terminal = {
 };
 
 // @public (undocumented)
-export type TerminalKind = "ghostty" | "kitty" | "wezterm" | "iterm2" | "alacritty" | "foot" | "contour" | "xterm" | "unknown";
+export type TerminalKind = "ghostty" | "kitty" | "wezterm" | "iterm2" | "alacritty" | "foot" | "contour" | "herdr" | "xterm" | "unknown";
 
 // @public (undocumented)
 export type TerminalOptions = {

@@ -86,6 +86,7 @@ export function inferCaps(kind: TerminalKind): Capabilities {
   switch (capabilityKind) {
     case "ghostty":
     case "kitty":
+    case "herdr":
       caps.truecolor = true
       caps.kittyGraphics = !tmux
       caps.kittyPlaceholder = tmux && parentSupportsKittyPlaceholder(parent) && passthroughSupported()

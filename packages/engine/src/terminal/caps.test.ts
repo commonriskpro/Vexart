@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { parseKittyProbeResponse, probeKittyGraphics, queryColors } from "./caps"
+import { inferCaps, parseKittyProbeResponse, probeKittyGraphics, queryColors } from "./caps"
+import { detect } from "./detect"
+import { parentSupportsKittyGraphics, parentSupportsKittyPlaceholder } from "./tmux"
 
 type Feed = (data: string) => void
 
@@ -95,6 +97,32 @@ describe("terminal capability replies", () => {
         "\x1b]11;?\x07",
         "\x1b]10;?\x07",
       ])
+    } finally {
+      for (const key of Object.keys(process.env)) {
+        if (!(key in origEnv)) {
+          delete process.env[key]
+        }
+      }
+      Object.assign(process.env, origEnv)
+    }
+  })
+
+  test("detects Herdr multiplexer environment and infers full Kitty graphics capabilities", () => {
+    const origEnv = { ...process.env }
+    try {
+      delete process.env["TMUX"]
+      process.env["TERM"] = "xterm-256color"
+      process.env["HERDR_ENV"] = "1"
+
+      expect(detect(process.env)).toBe("herdr")
+      const caps = inferCaps("herdr")
+      expect(caps.kind).toBe("herdr")
+      expect(caps.kittyGraphics).toBe(true)
+      expect(caps.kittyKeyboard).toBe(true)
+      expect(caps.syncOutput).toBe(true)
+      expect(caps.truecolor).toBe(true)
+      expect(parentSupportsKittyGraphics("herdr")).toBe(true)
+      expect(parentSupportsKittyPlaceholder("herdr")).toBe(true)
     } finally {
       for (const key of Object.keys(process.env)) {
         if (!(key in origEnv)) {

@@ -2869,7 +2869,7 @@ declare type Terminal = {
  * Detection order matters — more specific checks first.
  */
 /** @public */
-declare type TerminalKind = "ghostty" | "kitty" | "wezterm" | "iterm2" | "alacritty" | "foot" | "contour" | "xterm" | "unknown";
+declare type TerminalKind = "ghostty" | "kitty" | "wezterm" | "iterm2" | "alacritty" | "foot" | "contour" | "herdr" | "xterm" | "unknown";
 
 /**
  * Terminal size detection and resize handling.

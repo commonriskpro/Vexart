@@ -6,6 +6,7 @@ describe("tmux parent resolution", () => {
     expect(parentTerminalFromEnv({ TMUX: "/tmp/tmux", TERM: "screen-256color", GHOSTTY_RESOURCES_DIR: "/Applications/Ghostty.app" })).toBe("ghostty")
     expect(parentTerminalFromEnv({ TMUX: "/tmp/tmux", TERM: "tmux-256color", KITTY_WINDOW_ID: "4" })).toBe("kitty")
     expect(parentTerminalFromEnv({ TMUX: "/tmp/tmux", TERM: "screen-256color", TERM_PROGRAM: "wezterm" })).toBe("wezterm")
+    expect(parentTerminalFromEnv({ TMUX: "/tmp/tmux", TERM: "screen-256color", HERDR_ENV: "1" })).toBe("herdr")
     expect(parentTerminalFromEnv({ TMUX: "/tmp/tmux", TERM: "screen-256color" })).toBe("unknown")
   })
 

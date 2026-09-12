@@ -17,11 +17,15 @@ export type TerminalKind =
   | "alacritty"
   | "foot"
   | "contour"
+  | "herdr"
   | "xterm"
   | "unknown"
 
 /** @public */
 export function detect(env: Readonly<Record<string, string | undefined>> = process.env): TerminalKind {
+  // Herdr multiplexer sets HERDR_ENV=1 in each pane (running embedded Ghostty VT)
+  if (env["HERDR_ENV"] === "1") return "herdr"
+
   // Ghostty sets GHOSTTY_RESOURCES_DIR
   if (env["GHOSTTY_RESOURCES_DIR"]) return "ghostty"
 
