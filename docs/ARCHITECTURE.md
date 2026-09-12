@@ -1329,7 +1329,7 @@ Not expected in v0.9. New primitives require PRD amendment because they are arch
 - Reference PNGs stored in `scripts/visual-test/references/`.
 - Diff threshold: 0.5% of pixels.
 - Refreshed via `bun run test:visual:update` after human review.
-- CI gate lives in `.github/workflows/phase4-gates.yml` and runs both API snapshot and visual regression checks.
+- Visual regression and API snapshot checks run locally via `bun run test:visual` and `bun run api:update`.
 
 ### 14.5 Benchmarks
 
