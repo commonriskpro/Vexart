@@ -51,6 +51,9 @@ export const INTERACTION_MODE = { NONE: "none", DRAG: "drag" } as const
 export type InteractionMode = (typeof INTERACTION_MODE)[keyof typeof INTERACTION_MODE]
 
 export type NodeImageExtra = {
+  source?: string
+  revision?: number
+  cancel?: () => void
   buffer: { data: Uint8Array; width: number; height: number } | null
   state: "idle" | "loading" | "loaded" | "error"
   nativeHandle: bigint | null

@@ -1532,6 +1532,18 @@ pub extern "C" fn vexart_image_asset_touch(current_frame: u64, handle: u64) -> i
     })
 }
 
+/// Acquire an additional image owner; release it with vexart_image_asset_release.
+#[no_mangle]
+pub extern "C" fn vexart_image_asset_retain(handle: u64) -> i32 {
+    ffi_guard!({
+        if lock_or_recover(&SHARED_IMAGE_ASSETS).retain(handle) {
+            OK
+        } else {
+            ERR_INVALID_ARG
+        }
+    })
+}
+
 #[no_mangle]
 pub extern "C" fn vexart_image_asset_release(handle: u64) -> i32 {
     ffi_guard!({
@@ -1539,12 +1551,15 @@ pub extern "C" fn vexart_image_asset_release(handle: u64) -> i32 {
         let released = {
             let mut resources_guard = lock_or_recover(&SHARED_RESOURCE);
             let mut registry_guard = lock_or_recover(&SHARED_IMAGE_ASSETS);
-            registry_guard.release(handle, &mut resources_guard)
+            let released = registry_guard.release(handle, &mut resources_guard);
+            if released && registry_guard.get(handle).is_none() {
+                if let Some(pctx) = paint_guard.as_mut() {
+                    pctx.images.remove(&handle);
+                }
+            }
+            released
         };
         if released {
-            if let Some(pctx) = paint_guard.as_mut() {
-                pctx.images.remove(&handle);
-            }
             OK
         } else {
             ERR_INVALID_ARG

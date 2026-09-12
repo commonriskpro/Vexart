@@ -102,6 +102,7 @@ export const VEXART_SYMBOLS = {
   vexart_resource_set_budget: { args: [FFIType.u64, FFIType.u32],                          returns: FFIType.i32 },
   vexart_image_asset_register: { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
   vexart_image_asset_touch: { args: [FFIType.u64, FFIType.u64], returns: FFIType.i32 },
+  vexart_image_asset_retain: { args: [FFIType.u64], returns: FFIType.i32 },
   vexart_image_asset_release: { args: [FFIType.u64], returns: FFIType.i32 },
 
   // §5.9 Font system — MSDF text pipeline (Phase 2b / DEC-008)

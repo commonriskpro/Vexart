@@ -1,3 +1,4 @@
+import { releaseSubtreeImages } from "../ffi/native-image-assets"
 /**
  * loop.ts — Render loop coordinator.
  *
@@ -556,6 +557,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: isTmuxPlaceholderPresentation })
 
       unbindLayerDirtyStore(layerCache)
+      releaseSubtreeImages(root)
       loopBackend.destroy?.()
       if (getRendererBackend() === loopBackend) {
         setRendererBackend(null)

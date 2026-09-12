@@ -8,6 +8,7 @@ pub struct ImageAsset {
     pub key: String,
     pub width: u32,
     pub height: u32,
+    references: u64,
 }
 
 impl ImageAsset {
@@ -68,6 +69,7 @@ impl ImageAssetRegistry {
                 key,
                 width,
                 height,
+                references: 1,
             },
         );
         resources.register(
@@ -88,7 +90,26 @@ impl ImageAssetRegistry {
         true
     }
 
+    /// Acquire a separate owner without re-uploading or changing the asset.
+    pub fn retain(&mut self, handle: u64) -> bool {
+        let Some(asset) = self.assets.get_mut(&handle) else {
+            return false;
+        };
+        let Some(references) = asset.references.checked_add(1) else {
+            return false;
+        };
+        asset.references = references;
+        true
+    }
+
     pub fn release(&mut self, handle: u64, resources: &mut ResourceManager) -> bool {
+        let Some(asset) = self.assets.get_mut(&handle) else {
+            return false;
+        };
+        if asset.references > 1 {
+            asset.references -= 1;
+            return true;
+        }
         let Some(asset) = self.assets.remove(&handle) else {
             return false;
         };
@@ -105,6 +126,21 @@ impl ImageAssetRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn release_should_keep_shared_asset_until_last_owner() {
+        let mut registry = ImageAssetRegistry::new();
+        let mut resources = ResourceManager::new();
+        let handle = registry.register("shared".into(), &[255; 4], 1, 1, 0, &mut resources).unwrap();
+        assert!(registry.retain(handle));
+        assert!(registry.release(handle, &mut resources));
+        assert!(registry.get(handle).is_some());
+        assert_eq!(resources.current_usage_bytes(), 4);
+        assert!(registry.release(handle, &mut resources));
+        assert!(registry.get(handle).is_none());
+        assert_eq!(resources.current_usage_bytes(), 0);
+        assert!(!registry.retain(handle));
+    }
 
     #[test]
     fn register_reuses_handle_for_same_key() {

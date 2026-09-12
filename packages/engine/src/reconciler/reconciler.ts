@@ -1,3 +1,4 @@
+import { releaseNodeImage } from "../ffi/native-image-assets"
 /**
  * SolidJS custom renderer for Vexart.
  *
@@ -243,6 +244,7 @@ function markNodeDirty(node: TGENode) {
 }
 
 function syncChangedProp(node: TGENode, name: string) {
+  if (name === "src" && node.kind === "img") releaseNodeImage(node)
   if (isLayoutProp(name)) syncLayoutProp(node, name, (node.props as Record<string, unknown>)[name])
   if (node.kind === "text" && isTextLayoutProp(name)) node._flexNode?.markDirty()
 }

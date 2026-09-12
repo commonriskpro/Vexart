@@ -63,6 +63,34 @@ export function nativeImageAssetRelease(handle: bigint, _ctx: bigint = 1n): bool
   }
 }
 
+/** Each node owns one native reference, independently of the decode cache. */
 export function syncNativeImageHandle(node: TGENode, handle: bigint | null) {
-  ensureImageExtra(node).nativeHandle = handle
+  const extra = ensureImageExtra(node)
+  if (extra.nativeHandle === handle) return
+  if (handle !== null) {
+    const { symbols } = openVexartLibrary()
+    const code = symbols.vexart_image_asset_retain(handle) as number
+    if (code !== 0) throw new Error(`[vexart] cannot retain image asset ${handle}: ${code}`)
+  }
+  const previous = extra.nativeHandle
+  extra.nativeHandle = handle
+  if (previous !== null) nativeImageAssetRelease(previous)
+}
+
+/** Invalidate pending publications before releasing a node's current image. */
+export function releaseNodeImage(node: TGENode) {
+  const extra = node._imageExtra
+  if (!extra) return
+  extra.revision = (extra.revision ?? 0) + 1
+  extra.cancel?.()
+  extra.cancel = undefined
+  syncNativeImageHandle(node, null)
+  extra.buffer = null
+  extra.source = undefined
+  extra.state = "idle"
+}
+
+export function releaseSubtreeImages(node: TGENode) {
+  releaseNodeImage(node)
+  for (const child of node.children) releaseSubtreeImages(child)
 }

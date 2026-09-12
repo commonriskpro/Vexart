@@ -17,7 +17,7 @@
  */
 
 import { ensureImageExtra, type TGENode } from "../ffi/node"
-import { nativeImageAssetRegister, nativeImageAssetRelease, nativeImageAssetTouch, syncNativeImageHandle } from "../ffi/native-image-assets"
+import { nativeImageAssetRegister, nativeImageAssetRelease, syncNativeImageHandle, releaseNodeImage } from "../ffi/native-image-assets"
 import { markDirty } from "../reconciler/dirty"
 
 // ── Cache ──
@@ -34,8 +34,11 @@ export type DecodedImage = {
 export type RawImage = DecodedImage
 
 const imageCache = new Map<string, DecodedImage>()
-const pendingDecodes = new Map<string, Promise<DecodedImage | null>>()
+type ImageSubscriber = (image: DecodedImage | null) => void
+const pendingDecodes = new Map<string, Set<ImageSubscriber>>()
 const scaledImageCaches = new Set<Map<string, DecodedImage>>()
+let generation = 0
+let nextAsset = 0
 const MAX_IMAGE_CACHE = 128
 const MAX_SCALED_CACHE_ENTRIES = 256
 
@@ -85,77 +88,70 @@ export function createScaledImageCache(): ScaledImageCache {
 /** @public */
 export function decodeImageForNode(node: TGENode) {
   const src = node.props.src
-  if (!src) return
+  if (!src || node.destroyed) return
   const extra = ensureImageExtra(node)
+  if (extra.source === src && (extra.state === "loading" || extra.state === "loaded")) return
+  releaseNodeImage(node)
+  extra.source = src
+  const revision = extra.revision
+  const epoch = generation
+  const publish = (image: DecodedImage | null) => {
+    if (node.destroyed || extra.revision !== revision || node.props.src !== src) return
+    if (generation !== epoch) {
+      releaseNodeImage(node)
+      markDirty()
+      return
+    }
+    extra.cancel = undefined
+    extra.buffer = image
+    syncNativeImageHandle(node, image?.nativeHandle ?? null)
+    extra.state = image ? "loaded" : "error"
+    markDirty()
+  }
 
-  // Check cache first
   const cached = imageCache.get(src)
   if (cached) {
     touchCacheEntry(imageCache, src, cached)
-    extra.buffer = cached
-    if (cached.nativeHandle) {
-      nativeImageAssetTouch(cached.nativeHandle)
-      syncNativeImageHandle(node, cached.nativeHandle)
-    }
-    extra.state = "loaded"
+    publish(cached)
     return
   }
 
-  // Already loading this src
-  if (pendingDecodes.has(src)) {
-    extra.state = "loading"
-    pendingDecodes.get(src)!.then((result) => {
-      if (result) {
-        extra.buffer = result
-        ensureNativeImageAsset(node, src, result)
-        extra.state = "loaded"
-      } else {
-        extra.state = "error"
-      }
-      markDirty()
-    })
-    return
-  }
-
-  // Start decode
   extra.state = "loading"
-  const promise = decodeImage(src)
-  pendingDecodes.set(src, promise)
+  let subscribers = pendingDecodes.get(src)
+  if (!subscribers) {
+    subscribers = new Set<ImageSubscriber>()
+    pendingDecodes.set(src, subscribers)
+    startDecode(src, epoch, subscribers)
+  }
+  subscribers.add(publish)
+  const waiting = subscribers
+  extra.cancel = () => { waiting.delete(publish) }
+}
 
-  promise.then((result) => {
+function startDecode(src: string, epoch: number, subscribers: Set<ImageSubscriber>) {
+  void decodeImage(src).then((image) => {
+    if (generation !== epoch || pendingDecodes.get(src) !== subscribers) return
     pendingDecodes.delete(src)
-    if (result) {
+    if (image) {
+      const handle = nativeImageAssetRegister({
+        key: `decoded:${++nextAsset}:${src}`, data: image.data, width: image.width, height: image.height,
+      })
+      if (handle) image.nativeHandle = handle // the cache's reference
       if (imageCache.size >= MAX_IMAGE_CACHE) {
         const first = imageCache.keys().next().value
-        if (first) {
+        if (first !== undefined) {
           const entry = imageCache.get(first)
-          if (entry?.nativeHandle) {
-            nativeImageAssetRelease(entry.nativeHandle)
-          }
+          if (entry?.nativeHandle) nativeImageAssetRelease(entry.nativeHandle)
           imageCache.delete(first)
         }
       }
-      imageCache.set(src, result)
-      extra.buffer = result
-      ensureNativeImageAsset(node, src, result)
-      extra.state = "loaded"
-    } else {
-      extra.state = "error"
+      imageCache.set(src, image)
     }
-    markDirty() // trigger re-render with image data
+    // Acquire node references synchronously before another decode can evict
+    // this entry. No publication is left queued behind cache eviction.
+    for (const publish of subscribers) publish(image)
+    subscribers.clear()
   })
-}
-
-function ensureNativeImageAsset(node: TGENode, src: string, image: DecodedImage) {
-  if (image.nativeHandle) {
-    nativeImageAssetTouch(image.nativeHandle)
-    syncNativeImageHandle(node, image.nativeHandle)
-    return
-  }
-  const handle = nativeImageAssetRegister({ key: src, data: image.data, width: image.width, height: image.height })
-  if (!handle) return
-  image.nativeHandle = handle
-  syncNativeImageHandle(node, handle)
 }
 
 /**
@@ -325,6 +321,11 @@ function nearestNeighborScale(
 /** Clear the image cache (e.g., on hot reload). */
 /** @public */
 export function clearImageCache() {
+  generation++
+  for (const subscribers of pendingDecodes.values()) {
+    for (const publish of [...subscribers]) publish(null)
+    subscribers.clear()
+  }
   for (const entry of imageCache.values()) {
     if (entry.nativeHandle) {
       nativeImageAssetRelease(entry.nativeHandle)

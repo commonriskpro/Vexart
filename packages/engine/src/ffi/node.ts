@@ -12,6 +12,7 @@
  * callers that read them.
  */
 
+import { releaseNodeImage } from "./native-image-assets"
 import { Node, FLEX_DIRECTION_COLUMN } from "flexily"
 import { createTextFlexNode, syncAllLayoutProps } from "./flex-sync"
 import {
@@ -306,6 +307,7 @@ function ensureFlexSubtree(node: TGENode): void {
 
 function setSubtreeDestroyed(node: TGENode, destroyed: boolean): void {
   node.destroyed = destroyed
+  if (destroyed) releaseNodeImage(node)
   for (const child of node.children) setSubtreeDestroyed(child, destroyed)
 }
 
