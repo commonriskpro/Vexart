@@ -531,17 +531,19 @@ export const runAudit = async (cwd: string, config: RunConfig) => {
         if (!apply || apply.status !== "applied" || !(await safeActualPaths(state.worktree, actualPaths)) || actualPaths.length === 0 || actualPaths.sort().join("\n") !== [...gate.proposal!.approvedPaths].sort().join("\n")) { state.status = "blocked"; state.error = "apply failed closed: output or actual paths do not match approved scope"; await appendEvent(store, { runId: id, type: "apply_blocked", cycle, findingId: finding.id, actualPaths, reason: state.error }); break }
         state.phase = "verifying"
         await updateState(state)
-        const reviewedSnapshot = await snapshotPaths(state.worktree, actualPaths)
+        let verifiedSnapshot: string | undefined
         let correction = 0
         let verified = false
         while (correction <= MAX_CORRECTIONS && !verified) {
           if (stop || deadlineReached(state)) { state.status = stop ? "stopped" : "timed_out"; break }
+          const attemptSnapshot = await snapshotPaths(state.worktree, actualPaths)
           const verifierCall = await callAgent({ state, role: "verifier", scope: finding.scope, strategy: `${assignment.strategy}:post-verifier:${correction}`, prompt: verifierPrompt(state, finding, gate, correction > 0), timeoutMs: Math.max(1, new Date(state.deadlineAt).getTime() - Date.now()) })
           const verifier = verifierCall.receipt.exitCode === 0 && verifierCall.parsed ? parseVerifier(verifierCall.parsed) : null
           const checks = await runChecks(state, actualPaths)
           const checksOk = checks.every((check) => check.result.ok)
           const postWitness = verifier ? witnessMatches(verifierCall.events, finding.reproduction.command, 0, verifier.reproduction.output) && verifier.reproduction.command.join("\n") === finding.reproduction.command.join("\n") : false
-          if (verifier?.verdict === "approved" && verifier.findingId === finding.id && verifier.changedPaths.sort().join("\n") === actualPaths.sort().join("\n") && verifier.regressions.length === 0 && verifier.checks.length > 0 && postWitness && checksOk) {
+          if (verifier?.verdict === "approved" && verifier.findingId === finding.id && verifier.changedPaths.sort().join("\n") === actualPaths.sort().join("\n") && verifier.regressions.length === 0 && verifier.checks.length > 0 && postWitness && checksOk && await snapshotPaths(state.worktree, actualPaths) === attemptSnapshot) {
+            verifiedSnapshot = attemptSnapshot
             verified = true
             await appendEvent(store, { runId: id, type: "verification_passed", cycle, findingId: finding.id, checks: checks.map((check) => ({ command: check.command, ok: check.result.ok, output: check.result.output })) })
             break
@@ -559,11 +561,11 @@ export const runAudit = async (cwd: string, config: RunConfig) => {
           if (state.status === "running") { state.status = "blocked"; state.error = "post-verifier failed after one bounded correction" }
           break
         }
-        if (await snapshotPaths(state.worktree, actualPaths) !== reviewedSnapshot) { state.status = "blocked"; state.error = "post-verifier content changed after review"; break }
+        if (!verifiedSnapshot) { state.status = "blocked"; state.error = "post-verifier content snapshot missing"; break }
         if (stop || deadlineReached(state)) { state.status = stop ? "stopped" : "timed_out"; break }
         let commitSha: string
         try {
-          commitSha = await commitVerifiedFix(state, repo, finding, actualPaths, reviewedSnapshot)
+          commitSha = await commitVerifiedFix(state, repo, finding, actualPaths, verifiedSnapshot)
         } catch (error) {
           state.status = "blocked"
           state.error = error instanceof Error ? error.message : String(error)
