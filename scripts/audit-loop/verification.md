@@ -46,3 +46,25 @@ ledger in `<git-common-dir>/audit-loop/events.jsonl`.
 
 Final independent re-review: **PASSED — READY_TO_REPORT**. Decision parking,
 per-attempt snapshots, dependency relocation, and native checks were inspected.
+
+## Local browser observer — 2026-09-12
+
+Independent pre-gate approved a separate localhost read-only observer; no runner
+or telemetry format change. Final independent post-review: **PASSED**.
+
+- `bun run test ./scripts/audit-loop`: 15 passed, 68 assertions.
+- Scoped TypeScript check and `git diff --check`: passed.
+- Real HTTP tests cover snapshot refresh, missing/malformed data, Host/Origin,
+  fixed routes, method rejection, and omission of raw private receipt fields.
+- A real unrelated live `sleep` PID is not reported as an active audit runner.
+- Live browser inspection confirmed the actual Vexart run, model/effort receipts,
+  view-only pause/resume, decision filtering and automatic snapshot updates.
+- Mobile viewport inspection: document client width equals scroll width (375px),
+  no horizontal overflow. Normal viewport restored and panel left open.
+- Oversized receipt/event reads are deliberately bounded and surfaced as
+  warnings. An omitted receipt is not a missing or unfinished agent attempt;
+  the complete original remains in the local ledger. No live per-command stream.
+
+Dashboard-review stars: `/root/verify_loop` earns **1** for reproducing false
+runner liveness from an unrelated PID. Combined controller/dashboard review
+stars: **3**. These remain separate from product-finding runtime stars.

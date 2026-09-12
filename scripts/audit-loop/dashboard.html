@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark"><title>Vexart · Audit observatory</title>
+<style>
+:root{--bg:#0b0e11;--surface:#13181e;--line:#26313b;--text:#dce5eb;--muted:#93a3b0;--green:#a4e86a;--purple:#d8b4fe;--amber:#efbd70;--red:#ff8a86;--mono:ui-monospace,SFMono-Regular,Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 var(--sans)}button,select{font:inherit}button,select,a{outline-offset:5px}button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--green)}button{cursor:pointer}button:disabled{cursor:default}::selection{background:var(--green);color:var(--bg)}
+header{height:82px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 34px;gap:20px}.brand{display:flex;align-items:center;gap:15px}.mark{width:31px;height:31px;border:1px solid var(--green);display:grid;place-items:center;transform:rotate(-8deg);font:20px var(--mono);color:var(--green)}.brand strong{font:600 15px var(--mono);letter-spacing:.04em}.brand small{display:block;font:10px var(--mono);letter-spacing:.15em;color:var(--muted);margin-top:4px}.header-right{display:flex;align-items:center;gap:22px}.tag,.eyebrow{font:10px var(--mono);letter-spacing:.13em;text-transform:uppercase}.tag{border:1px solid var(--line);padding:5px 9px;color:var(--muted)}.connection{font:11px var(--mono);color:var(--green)}.connection:before{content:"";display:inline-block;width:6px;height:6px;background:currentColor;border-radius:50%;margin-right:8px}.offline{color:var(--amber)!important}
+main{max-width:1640px;margin:auto;padding:30px 34px}.intro{display:flex;justify-content:space-between;align-items:flex-end;gap:22px;margin-bottom:27px}.eyebrow{color:var(--green);margin-bottom:10px}h1{font:500 clamp(26px,3vw,39px)/1.14 var(--mono);letter-spacing:-.07em;margin:0}h1 span{color:var(--muted)}.intro p{margin:12px 0 0;color:var(--muted);font-size:13px}.controls{display:flex;gap:8px;flex-shrink:0}.control{border:1px solid var(--line);color:var(--text);background:transparent;padding:9px 13px;border-radius:4px;font-size:12px}.control:hover{background:var(--surface)}.control[aria-pressed=true]{border-color:var(--amber);color:var(--amber)}
+.warning{border-left:2px solid var(--amber);background:#211d16;padding:12px 16px;color:var(--amber);margin:0 0 20px;font-size:12px}.warning[hidden]{display:none}.run{border:1px solid var(--line);border-radius:6px;overflow:hidden;margin-bottom:24px}.run-head{background:var(--surface);padding:18px 22px;display:flex;justify-content:space-between;gap:16px;align-items:center}.state-title{display:flex;align-items:center;gap:12px}.state-title h2{margin:0;font-size:17px;font-weight:500}.status-dot{height:8px;width:8px;background:var(--muted);border-radius:50%;box-shadow:0 0 0 5px #ffffff06}.status-dot.active{background:var(--green);box-shadow:0 0 0 5px #a4e86a0d}.status-dot.problem{background:var(--amber)}.run-meta{font:11px var(--mono);color:var(--muted)}.run-body{padding:25px 22px 22px}.pipeline{display:grid;grid-template-columns:repeat(6,1fr);gap:0;margin-bottom:27px}.step{position:relative;padding:13px 8px 12px 14px;border-top:1px solid var(--line);font:11px var(--mono);color:var(--muted)}.step:before{content:"";position:absolute;width:6px;height:6px;background:var(--line);top:-4px;left:14px;border-radius:50%}.step b{display:block;font:9px var(--mono);opacity:.65;margin-bottom:7px}.step.current{color:var(--green);border-top-color:var(--green);background:linear-gradient(#a4e86a09,transparent)}.step.current:before{background:var(--green);box-shadow:0 0 0 4px #a4e86a10}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}.metric{border-left:1px solid var(--line);padding-left:17px}.metric:first-child{border:0;padding-left:0}.metric strong{font:26px/1 var(--mono);letter-spacing:-.05em}.metric small{display:block;color:var(--muted);font-size:11px;margin-top:8px}.metric .accent{color:var(--green)}
+.workspace{display:grid;grid-template-columns:260px minmax(310px,1fr) minmax(290px,.94fr);gap:24px;align-items:start}.section-head{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding:0 0 13px;margin:0 0 6px;gap:8px}.section-head h2{font:11px var(--mono);letter-spacing:.08em;margin:0;text-transform:uppercase}.count{font:10px var(--mono);color:var(--muted)}.agent{border-bottom:1px solid var(--line);padding:16px 0}.agent-top{display:flex;align-items:center;gap:9px;margin-bottom:9px}.avatar{display:grid;place-items:center;background:var(--surface);border:1px solid var(--line);border-radius:4px;min-width:29px;height:29px;font:11px var(--mono);color:var(--purple)}.agent-name{font:12px var(--mono)}.stars{margin-left:auto;color:var(--amber);font:11px var(--mono)}.agent-scope{font:11px/1.6 var(--mono);overflow-wrap:anywhere;color:var(--muted)}.agent-result{font-size:11px;margin-top:8px;color:var(--muted)}.model{font:10px var(--mono);margin-top:9px;color:var(--purple)}.note{font-size:11px;line-height:1.7;color:var(--muted);margin:16px 0}.source{margin-top:26px;border-top:1px solid var(--line);padding-top:17px}.source dt{font:9px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin:12px 0 5px}.source dd{margin:0;font:10px/1.7 var(--mono);overflow-wrap:anywhere}.filter{border:0;background:var(--bg);color:var(--muted);font-size:11px;max-width:150px}.feed{max-height:660px;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--line) transparent}.event{display:grid;grid-template-columns:52px 1fr;gap:12px;padding:15px 1px;border-bottom:1px solid #26313b80}.event time{font:10px var(--mono);color:var(--muted);padding-top:3px}.event-title{font-size:12px;margin-bottom:5px}.event p{margin:0;color:var(--muted);font:11px/1.7 var(--mono);overflow-wrap:anywhere}.event.good .event-title{color:var(--green)}.event.problem .event-title{color:var(--amber)}.event-button{border:0;border-bottom:1px solid var(--line);background:none;color:var(--purple);font-size:10px;padding:0;margin-top:8px}.empty{padding:27px 5px;color:var(--muted);font-size:12px;line-height:1.8}.inspector{background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow:hidden}.inspector-top{padding:15px 18px;border-bottom:1px solid var(--line);font:10px var(--mono);letter-spacing:.08em;text-transform:uppercase;display:flex;justify-content:space-between}.inspector-body{padding:20px 18px;max-height:780px;overflow:auto}.inspector h3{font:16px/1.5 var(--mono);font-weight:400;margin:0 0 14px;overflow-wrap:anywhere}.pill{font:10px var(--mono);display:inline-block;border:1px solid var(--line);padding:3px 7px;color:var(--purple);margin:0 5px 13px 0}.detail-label{font:9px var(--mono);letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin:20px 0 8px}.detail-text{font-size:12px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}.code{font:10px/1.7 var(--mono);white-space:pre-wrap;word-break:break-word;background:var(--bg);padding:12px;border:1px solid var(--line);border-radius:3px;max-height:220px;overflow:auto}.evidence-path{font:10px var(--mono);color:var(--green);overflow-wrap:anywhere;margin:13px 0 7px}.decision{border-left:2px solid var(--amber);padding-left:12px;margin-bottom:20px}.footer{display:flex;justify-content:space-between;border-top:1px solid var(--line);margin-top:30px;padding-top:15px;color:var(--muted);font:10px/1.7 var(--mono);gap:15px}.hidden{display:none}
+@media(min-width:1400px){.workspace{grid-template-columns:290px minmax(400px,1fr) 380px}}
+@media(max-width:1050px){.workspace{grid-template-columns:220px 1fr}.inspector{grid-column:1/-1}.inspector-body{max-height:500px}.header-right .tag{display:none}}
+@media(max-width:650px){header{height:72px;padding:0 18px}.brand strong{font-size:12px}.header-right{gap:0}.connection{font-size:9px}main{padding:24px 18px}.intro{display:block}.controls{margin-top:19px}.run-head{padding:16px;align-items:start;flex-direction:column}.run-body{padding:22px 16px}.pipeline{grid-template-columns:repeat(3,1fr);row-gap:15px}.metrics{grid-template-columns:repeat(2,1fr);row-gap:24px}.metric:nth-child(3){padding-left:0;border:0}.workspace{grid-template-columns:1fr}.inspector{grid-column:auto}.agents{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}.source{display:none}.footer{flex-direction:column}.feed{max-height:460px}.agent-name{font-size:10px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<header><div class="brand"><div class="mark" aria-hidden="true">v</div><div><strong>VEXART / OBSERVATORY</strong><small>AUDITORÍA DE CÓDIGO</small></div></div><div class="header-right"><span class="tag">Local · Solo lectura</span><span id="connection" class="connection offline" role="status">Conectando</span></div></header>
+<main>
+<section class="intro"><div><div class="eyebrow">Audit loop / señal en vivo</div><h1>Código bajo <span>observación.</span></h1><p>Del hallazgo al commit. Evidencia real, sin saltarse la revisión.</p></div><div class="controls"><button id="pause" class="control" aria-pressed="false">Pausar vista</button><button id="refresh" class="control">Actualizar ↗</button></div></section>
+<div id="warning" class="warning" role="status" hidden></div>
+<section class="run" aria-label="Estado de la auditoría"><div class="run-head"><div class="state-title"><span id="dot" class="status-dot"></span><h2 id="phase">Esperando registros</h2></div><div id="run-meta" class="run-meta">Sin ejecución disponible</div></div><div class="run-body"><div class="pipeline" aria-label="Fases del loop"><div class="step" data-phase="planning"><b>01 / ASTRA</b>Planificar</div><div class="step" data-phase="investigating"><b>02 / LUNA</b>Investigar</div><div class="step" data-phase="gating"><b>03 / GATE</b>Validar diseño</div><div class="step" data-phase="applying"><b>04 / LUNA</b>Implementar</div><div class="step" data-phase="verifying"><b>05 / REVISIÓN</b>Verificar</div><div class="step" data-phase="ready_for_review"><b>06 / GIT</b>Commit</div></div><div class="metrics"><div class="metric"><strong id="cycle">—</strong><small>Ciclo de esta ejecución</small></div><div class="metric"><strong id="stars" class="accent">—</strong><small>Fallos confirmados · acumulado</small></div><div class="metric"><strong id="commits">—</strong><small>Fixes con commit · acumulado</small></div><div class="metric"><strong id="decisions">—</strong><small>Decisiones aisladas · acumulado</small></div></div></div></section>
+<div class="workspace"><aside><div class="section-head"><h2>Agentes / registro</h2><span id="agent-count" class="count">—</span></div><div id="agents" class="agents"><div class="empty">Esperando identidades de agentes.</div></div><p class="note">La fase global se actualiza cada 2 s. Los intentos individuales se registran al terminar; no se transmite su actividad interna.</p><dl class="source"><dt>Ejecución</dt><dd id="run-id">—</dd><dt>Branch aislada</dt><dd id="branch">—</dd><dt>Baseline</dt><dd id="baseline">—</dd><dt>Worktree</dt><dd id="worktree">—</dd></dl></aside>
+<section><div class="section-head"><h2>Actividad de la ejecución</h2><select id="filter" class="filter" aria-label="Filtrar actividad"><option value="all">Todos los eventos</option><option value="finding">Hallazgos y fixes</option><option value="decision">Decisiones</option><option value="agent">Agentes</option></select></div><div id="feed" class="feed"><div class="empty">El ledger todavía no tiene eventos.</div></div></section>
+<section class="inspector" aria-label="Detalle de evidencia"><div class="inspector-top"><span>Evidencia / último recibo</span><span id="receipt-count">0</span></div><div id="detail" class="inspector-body"><div class="empty">Aquí aparecerán los resultados guardados por los agentes: análisis, archivos revisados y desventajas.<br><br>Mientras un intento está en curso, su recibo aún no existe.</div></div></section></div>
+<footer class="footer"><span>LECTURA → REPRODUCCIÓN → GATE → FIX → VERIFICACIÓN → COMMIT</span><span id="updated">Sin snapshot · el panel no controla el runner</span></footer>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const node = (tag, cls, text) => {
+  const n = document.createElement(tag);
+  if (cls)
+    n.className = cls;
+  if (text !== undefined && text !== null)
+    n.textContent = String(text);
+  return n;
+};
+const phases = { starting: "Preparando worktree", planning: "Planificando la auditoría", investigating: "Investigando código", gating: "Validando la arquitectura", applying: "Aplicando un fix aprobado", verifying: "Verificando la implementación", ready_for_review: "Listo para revisión", completed: "Ejecución completada", stopped: "Ejecución detenida", timed_out: "Límite de tiempo alcanzado", blocked: "Ejecución bloqueada" };
+const roles = { planner: "Orquestador", investigator: "Investigador", gate: "Gate arquitectónico", apply: "Implementador", verifier: "Verificador" };
+const names = { run_started: "Ejecución iniciada", agent_receipt: "Recibo de agente guardado", star_awarded: "Fallo real confirmado · +1 estrella", fix_committed: "Fix verificado y commiteado", decision_deferred: "Decisión aislada en worktree", decision_deferred_notice: "Decisión pendiente", negative_result: "Investigación sin fallo validado", gate_rejected: "Propuesta rechazada", gate_blocked: "Gate bloqueado", verification_passed: "Verificación aprobada", verification_failed: "Verificación rechazada", apply_blocked: "Implementación bloqueada", planner_rejected: "Plan no aceptado", planner_result: "Resultado de planificación", run_completed: "Ejecución finalizada", blocked: "Bloqueo registrado", coverage: "Cobertura registrada" };
+let snapshot = null, paused = false, busy = false, selected = null, timer, lastFeed = null, lastDetail = null;
+const time = (v) => {
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+};
+const list = (v) => Array.isArray(v) ? v : [];
+const text = (id, v) => {
+  $(id).textContent = v ?? "—";
+};
+function detail(r) {
+  const key = JSON.stringify(r ?? null);
+  if (key === lastDetail)
+    return;
+  lastDetail = key;
+  const box = $("detail");
+  box.replaceChildren();
+  if (!r) {
+    box.append(node("div", "empty", "Todavía no hay un recibo terminado en esta ejecución. Los resultados aparecerán aquí al guardarse."));
+    return;
+  }
+  box.append(node("h3", "", roles[r.role] || r.role || "Resultado"));
+  box.append(node("span", "pill", r.status || "Recibo guardado"), node("span", "pill", r.model ? [r.model, r.effort].filter(Boolean).join(" / ") : "Modelo no registrado"));
+  box.append(node("div", "detail-label", "Análisis / resultado"), node("p", "detail-text", r.summary || "Este recibo no incluye un resumen."));
+  box.append(node("div", "detail-label", "Ámbito"), node("p", "detail-text", r.scope || "—"));
+  if (list(r.paths).length)
+    box.append(node("div", "detail-label", "Archivos declarados"), node("pre", "code", r.paths.join(`
+`)));
+  for (const e of list(r.evidence)) {
+    box.append(node("div", "evidence-path", `${e.path}:${e.startLine}–${e.endLine}`), node("pre", "code", e.excerpt));
+  }
+  if (list(r.disadvantages).length)
+    box.append(node("div", "detail-label", "Desventajas / límites"), node("p", "detail-text", r.disadvantages.map((x) => "• " + x).join(`
+`)));
+  box.append(node("div", "detail-label", "Recibo verificable"), node("p", "detail-text", `${r.attemptId}
+Finalizado ${time(r.endedAt)} · salida ${r.exitCode ?? "no disponible"}`));
+}
+function renderFeed() {
+  if (!snapshot)
+    return;
+  const filter = $("filter").value;
+  const events = list(snapshot.events).filter((e) => filter === "all" || filter === "finding" && /star|fix_|verification|gate_/.test(e.type) || filter === "decision" && /decision/.test(e.type) || filter === "agent" && /agent|planner|negative/.test(e.type));
+  const key = JSON.stringify([filter, events, list(snapshot.receipts).map((r) => r.attemptId)]);
+  if (key === lastFeed)
+    return;
+  lastFeed = key;
+  const feed = $("feed");
+  const scroll = feed.scrollTop;
+  feed.replaceChildren();
+  if (!events.length)
+    feed.append(node("div", "empty", "Sin eventos para este filtro en la ejecución actual."));
+  for (const e of [...events].reverse()) {
+    const el = node("article", "event" + (/star_awarded|fix_committed|verification_passed/.test(e.type) ? " good" : /blocked|rejected|failed|deferred/.test(e.type) ? " problem" : ""));
+    const stamp = node("time", "", time(e.at));
+    stamp.dateTime = e.at || "";
+    el.append(stamp);
+    const body = node("div");
+    body.append(node("div", "event-title", names[e.type] || e.type));
+    const desc = e.reason || e.scope || e.findingId || (e.role ? roles[e.role] || e.role : null) || e.commitSha || e.runId;
+    body.append(node("p", "", desc));
+    if (e.commitSha)
+      body.append(node("p", "", e.commitSha));
+    if (e.type === "decision_deferred") {
+      const d = node("div", "decision");
+      if (e.branch)
+        d.append(node("p", "", e.branch));
+      for (const a of list(e.alternatives))
+        d.append(node("p", "", "Alternativa: " + a));
+      for (const a of list(e.disadvantages))
+        d.append(node("p", "", "Límite: " + a));
+      body.append(d);
+    }
+    const r = list(snapshot.receipts).find((r) => r.attemptId === e.attemptId);
+    if (r) {
+      const button = node("button", "event-button", "Ver recibo ↗");
+      button.addEventListener("click", () => {
+        selected = r.attemptId;
+        detail(r);
+      });
+      body.append(button);
+    }
+    el.append(body);
+    feed.append(el);
+  }
+  feed.scrollTop = scroll;
+}
+function render(data) {
+  snapshot = data;
+  const s = data.state;
+  const alive = s?.status === "running" && data.processAlive === true;
+  const uncertain = s?.status === "running" && data.processAlive !== true;
+  text("phase", uncertain ? "Runner no confirmado" : phases[s?.phase] || s?.phase || "Esperando registros");
+  $("dot").className = "status-dot" + (alive ? " active" : uncertain || s?.status === "blocked" ? " problem" : "");
+  text("run-meta", s ? `${s.status} · inicio ${time(s.startedAt)} · límite ${time(s.deadlineAt)}` : "Sin ejecución disponible");
+  text("cycle", s ? `${s.cycle} / ${s.cycles}` : "—");
+  text("stars", data.totals?.stars ?? "—");
+  text("commits", data.totals?.commits ?? "—");
+  text("decisions", data.totals?.decisions ?? "—");
+  text("run-id", s?.id);
+  text("branch", s?.branch);
+  text("baseline", s?.baselineSha?.slice(0, 12));
+  text("worktree", s?.worktree);
+  document.querySelectorAll(".step").forEach((el) => el.classList.toggle("current", alive && el.dataset.phase === s.phase));
+  const warnings = [...list(data.warnings), ...s?.error ? [s.error] : [], ...uncertain ? ["El estado guardado dice running, pero no se pudo confirmar un proceso activo. No se interpreta como ejecución exitosa."] : []];
+  $("warning").hidden = !warnings.length;
+  text("warning", warnings.join(" · "));
+  text("agent-count", list(data.agents).length);
+  $("agents").replaceChildren();
+  for (const a of list(data.agents)) {
+    const el = node("div", "agent");
+    const top = node("div", "agent-top");
+    top.append(node("div", "avatar", a.lastRole === "planner" ? "A" : "L"), node("span", "agent-name", roles[a.lastRole] || "Identidad registrada"), node("span", "stars", "★ " + (a.stars ?? 0)));
+    el.append(top, node("div", "agent-scope", a.scope || "—"), node("div", "model", a.model ? [a.model, a.effort].filter(Boolean).join(" / ") : "Sin recibo de modelo aún"), node("div", "agent-result", a.lastEndedAt ? `Último recibo ${time(a.lastEndedAt)} · salida ${a.lastExitCode ?? "—"}` : "Sin intento terminado registrado"));
+    el.title = a.strategy || a.agentKey;
+    $("agents").append(el);
+  }
+  if (!list(data.agents).length)
+    $("agents").append(node("div", "empty", "No hay agentes registrados todavía."));
+  text("receipt-count", list(data.receipts).length);
+  const receipts = list(data.receipts);
+  const r = receipts.find((r) => r.attemptId === selected) || receipts[receipts.length - 1];
+  detail(r);
+  renderFeed();
+  text("updated", `Snapshot ${time(data.observedAt)} · solo lectura`);
+}
+async function refresh() {
+  if (busy)
+    return;
+  busy = true;
+  $("refresh").disabled = true;
+  const controller = new AbortController;
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch("/api/snapshot", { cache: "no-store", signal: controller.signal });
+    if (!response.ok)
+      throw new Error("HTTP " + response.status);
+    render(await response.json());
+    text("connection", paused ? "Vista pausada" : "Conectado · 2 s");
+    $("connection").classList.toggle("offline", paused);
+  } catch (error) {
+    text("connection", "Sin conexión");
+    $("connection").classList.add("offline");
+    $("warning").hidden = false;
+    text("warning", "No se pudo actualizar el panel. Conservamos el último snapshot; esto no indica que el runner se haya detenido.");
+  } finally {
+    clearTimeout(timeout);
+    busy = false;
+    $("refresh").disabled = false;
+    clearTimeout(timer);
+    if (!paused)
+      timer = setTimeout(refresh, 2000);
+  }
+}
+$("pause").addEventListener("click", () => {
+  paused = !paused;
+  $("pause").setAttribute("aria-pressed", String(paused));
+  text("pause", paused ? "Reanudar vista" : "Pausar vista");
+  text("connection", paused ? "Vista pausada" : "Conectando");
+  $("connection").classList.toggle("offline", paused);
+  clearTimeout(timer);
+  if (!paused)
+    refresh();
+});
+$("refresh").addEventListener("click", refresh);
+$("filter").addEventListener("change", renderFeed);
+refresh();
+
+</script>
+</body></html>

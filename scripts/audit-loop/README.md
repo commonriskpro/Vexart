@@ -78,6 +78,22 @@ likewise terminates the owned Codex process tree and records a timeout receipt.
 A leftover lock is fail-closed and requires manual recovery after confirming
 the owner is stopped.
 
+### Local dashboard observer
+
+The optional read-only dashboard is a separate Bun server:
+
+```sh
+bun run scripts/audit-loop/dashboard.ts --port 4318
+```
+
+It binds only to `127.0.0.1` (default port `4318`). `GET /` serves the local
+`dashboard.html`; `GET /api/snapshot` returns a bounded, sanitized view of the
+persisted state, recent current-run events, finished receipts, agent registry,
+and lifetime totals. Host and Origin headers must match the loopback server
+origin, and there are no mutation routes or CORS headers. Missing, malformed,
+truncated, or symlinked metadata becomes an explicit warning or unknown value;
+the observer never fabricates active-agent execution.
+
 Codex is invoked with `exec --ephemeral --json --output-schema
 --output-last-message`, `--disable multi_agent --disable multi_agent_v2`, and
 the role mapping above. Investigators, gates, planners, and verifiers use
