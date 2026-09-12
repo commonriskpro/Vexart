@@ -532,8 +532,7 @@ Enable scrolling on containers by setting `scrollX={true}` or `scrollY={true}`:
 Requires a valid `Terminal` instance. In applications mounted via `createApp()` or `mountApp()`, obtain the managed terminal using `useAppTerminal()`:
 
 ```tsx
-import { createApp, useAppTerminal } from "vexart";
-import { useTerminalDimensions } from "vexart/engine";
+import { createApp, useAppTerminal, useTerminalDimensions, Box, Text } from "vexart";
 
 function ResponsiveHeader() {
   const terminal = useAppTerminal();
@@ -625,8 +624,7 @@ function UserList() {
 Hardware-accelerated animation primitives for smooth transitions:
 
 ```tsx
-import { createSignal } from "solid-js";
-import { createTransition, createSpring, easing } from "vexart/engine";
+import { createSignal, createTransition, createSpring, easing } from "vexart";
 
 const [expanded, setExpanded] = createSignal(false);
 

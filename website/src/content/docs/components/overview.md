@@ -17,7 +17,7 @@ Vexart separates **behavior** from **presentation** using a headless architectur
 Logic-first components with render props. You control the visual output entirely:
 
 ```tsx
-import { Button } from "@vexart/headless"
+import { Button } from "vexart"
 
 <Button
   onPress={() => save()}
@@ -37,13 +37,13 @@ The `ctx.buttonProps` object gives you `{ focusable, onPress }` — spread it on
 Pre-themed wrappers using the Void design system (dark, shadcn-inspired):
 
 ```tsx
-import { Button, Card, CardContent, colors } from "@vexart/styled"
+import { VoidButton, VoidCard, VoidCardContent, colors } from "vexart"
 
-<Card>
-  <CardContent>
-    <Button variant="primary" onPress={() => save()}>Save</Button>
-  </CardContent>
-</Card>
+<VoidCard>
+  <VoidCardContent>
+    <VoidButton variant="default" onPress={() => save()}>Save</VoidButton>
+  </VoidCardContent>
+</VoidCard>
 ```
 
 ## Interaction Pattern

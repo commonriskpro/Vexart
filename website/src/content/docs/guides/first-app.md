@@ -70,7 +70,7 @@ await createApp(() => <App />)
 Vexart uses **SolidJS**, not React. Key differences:
 
 ```tsx
-import { createSignal, Show } from "vexart/engine"
+import { createSignal, Show } from "vexart"
 
 function Counter() {
   const [count, setCount] = createSignal(0)

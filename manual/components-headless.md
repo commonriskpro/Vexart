@@ -53,8 +53,7 @@ The component gives you state booleans. You return JSX. You control every pixel.
 For complex content components (Code, Markdown, Diff, Textarea), there are too many visual elements for individual render props. Instead, they accept a `theme` object with typed color/spacing configuration.
 
 ```tsx
-import { Code } from "vexart"
-import { ONE_DARK } from "vexart/engine"
+import { Code, ONE_DARK } from "vexart"
 
 <Code
   content={`const x = 42;\nconsole.log(x);`}
@@ -185,8 +184,7 @@ Multi-line text editor with 2D cursor, syntax highlighting, extmarks, and key bi
 **Pattern:** Theme prop
 
 ```tsx
-import { Textarea } from "vexart"
-import { ONE_DARK } from "vexart/engine"
+import { Textarea, ONE_DARK, createSignal } from "vexart"
 
 const [code, setCode] = createSignal("")
 
@@ -517,9 +515,7 @@ import { ProgressBar } from "vexart"
 Headless modal. Compound component with built-in focus trap.
 
 ```tsx
-import { Dialog, Button } from "vexart"
-import { Show } from "vexart/engine"
-import { createSignal } from "solid-js"
+import { Dialog, Button, Show, createSignal } from "vexart"
 
 const [open, setOpen] = createSignal(false)
 

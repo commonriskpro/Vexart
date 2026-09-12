@@ -480,7 +480,7 @@ packages/app/
 - `mount()` from `@vexart/engine` remains the manual, low-level alternative for advanced integrations that manage terminal and input plumbing directly.
 - `useAppTerminal()` exposes the managed terminal from `createApp()` / `mountApp()` context.
 - `@vexart/app` is the only public app-framework package during alpha/beta.
-- Internal modules may be extracted later, but user docs should import from `@vexart/app`.
+- Internal modules may be extracted later, but user docs should import from `"vexart"`.
 - The framework must not depend on Next.js, DOM, CSSOM, hydration, or React DOM.
 - Filesystem routing discovers `app/**/page.tsx`, `layout.tsx`, `loading.tsx`, `error.tsx`, and `not-found.tsx`; route groups are omitted from URL paths and private folders (`_name`) are skipped.
 - `vexart dev` generates `.vexart/routes.ts` plus `.vexart/dev.tsx` when no explicit entrypoint exists, then runs Bun with watch mode by default.

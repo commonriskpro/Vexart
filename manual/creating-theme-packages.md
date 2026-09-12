@@ -283,8 +283,7 @@ All fields in a theme type are **required in the type** but **optional in the pr
 ```typescript
 // packages/nord/src/code.tsx
 import { Code } from "vexart"
-import type { CodeTheme } from "vexart"
-import type { SyntaxStyle } from "vexart/engine"
+import type { CodeTheme, SyntaxStyle } from "vexart"
 import { colors, radius, space } from "./tokens"
 
 const nordCodeTheme: CodeTheme = {
@@ -317,8 +316,7 @@ export function NordCode(props: {
 ```typescript
 // packages/nord/src/markdown.tsx
 import { Markdown } from "vexart"
-import type { MarkdownTheme } from "vexart"
-import type { SyntaxStyle } from "vexart/engine"
+import type { MarkdownTheme, SyntaxStyle } from "vexart"
 import { colors } from "./tokens"
 
 const nordMarkdownTheme: MarkdownTheme = {

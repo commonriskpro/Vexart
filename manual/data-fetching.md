@@ -311,9 +311,7 @@ submit.reset()
 The typical CRUD pattern:
 
 ```tsx
-import { useQuery, useMutation, Show, For } from "vexart/engine"
-import { Button, Input } from "vexart"
-import { createSignal } from "solid-js"
+import { useQuery, useMutation, Show, For, Button, Input, createSignal } from "vexart"
 
 function TodoApp() {
   const [newTodo, setNewTodo] = createSignal("")

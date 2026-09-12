@@ -49,7 +49,7 @@ Headless components operate without a web DOM or CSS stylesheets, employing four
 Rather than taking a generic render function as `children`, headless primitives accept explicit named render-prop callbacks (e.g. `renderButton`, `renderCheckbox`, `renderItem`). The callback receives a stable context bag containing reactive states and interaction props:
 
 ```tsx
-import { Button } from "@vexart/headless"
+import { Button } from "vexart"
 
 <Button
   onPress={() => submitForm()}
@@ -74,8 +74,7 @@ import { Button } from "@vexart/headless"
 Components with floating overlays (`Popover`, `Tooltip`) use declarative trigger and content callbacks:
 
 ```tsx
-import { Popover } from "@vexart/headless"
-import { createSignal } from "solid-js"
+import { Popover, createSignal } from "vexart"
 
 const [open, setOpen] = createSignal(false)
 

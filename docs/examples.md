@@ -31,8 +31,7 @@ await createApp(() => <App />)
 ## Counter
 
 ```tsx
-import { createApp, Button, colors, space } from "vexart"
-import { createSignal } from "solid-js"
+import { createApp, Button, colors, space, createSignal } from "vexart"
 
 function App() {
   const [count, setCount] = createSignal(0)
@@ -58,8 +57,7 @@ await createApp(() => <App />)
 ## Form
 
 ```tsx
-import { createApp, Button, Input, colors, radius, space } from "vexart"
-import { createSignal } from "solid-js"
+import { createApp, Button, Input, colors, radius, space, createSignal } from "vexart"
 
 function App() {
   const [name, setName] = createSignal("")

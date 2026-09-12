@@ -25,7 +25,7 @@ Vexart provides JSX intrinsic elements that map directly to the engine's node ty
 `@vexart/app` provides `Box` and `Text` components that add `className` support on top of the intrinsics:
 
 ```tsx
-import { Box, Text } from "@vexart/app"
+import { Box, Text } from "vexart"
 
 <Box className="card" padding={16}>
   <Text>Content</Text>

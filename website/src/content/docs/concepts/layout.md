@@ -68,7 +68,7 @@ CSS-compatible aliases: `justifyContent`, `alignItems` (+ `"flex-start"`, `"flex
 Terminal resize triggers automatic re-layout. Use `useTerminalDimensions()` for reactive dimensions:
 
 ```tsx
-import { useTerminalDimensions } from "vexart/engine"
+import { useTerminalDimensions } from "vexart"
 
 const dims = useTerminalDimensions(terminal)
 // dims().cols, dims().rows, dims().width, dims().height

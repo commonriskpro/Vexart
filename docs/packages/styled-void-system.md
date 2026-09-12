@@ -183,7 +183,7 @@ export function MyCard() {
 - `<VoidAvatar>`: Circular image/initials container (`radius.full`, sizes: `sm`, `default`, `lg`).
 
 ### 3.3 Form Controls & Interactive Inputs
-- `<VoidButton>` (aliased as `Button`): Fully styled button with variants (`"default"`, `"secondary"`, `"destructive"`, `"outline"`, `"ghost"`, `"link"`) and sizes (`"default"`, `"sm"`, `"lg"`, `"xs"`, `"icon"`, `"icon-sm"`, `"icon-lg"`).
+- `<VoidButton>`: Fully styled button with variants ("default", "secondary", "destructive", "outline", "ghost", "link") and sizes ("sm", "default", "lg", "icon").
 - `<VoidInput>`: Styled text input with `border-input`, focus ring glow, and subpixel cursor.
 - `<VoidCheckbox>`: Styled check box with checkmark glyph and focus ring.
 - `<VoidSelect>`: Themed dropdown menu with active item highlights.

@@ -43,8 +43,7 @@ export async function mountApp(
 ### 1.3 Terminal Context & `useAppTerminal`
 The runtime injects a reactive `TerminalContext`. Components access the managed terminal via `useAppTerminal()`:
 ```tsx
-import { useAppTerminal, Box, Text } from "vexart"
-import { useTerminalDimensions } from "vexart/engine"
+import { useAppTerminal, useTerminalDimensions, Box, Text } from "vexart"
 
 export function StatusHeader() {
   const terminal = useAppTerminal()

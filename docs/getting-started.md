@@ -26,8 +26,7 @@ cd native/libvexart && cargo build --release && cd ../..
 Create `my-app.tsx`:
 
 ```tsx
-import { createApp, Box, Text, useAppTerminal, colors, radius } from "vexart"
-import { useTerminalDimensions } from "vexart/engine"
+import { createApp, Box, Text, useAppTerminal, useTerminalDimensions, colors, radius } from "vexart"
 
 function App() {
   const terminal = useAppTerminal()

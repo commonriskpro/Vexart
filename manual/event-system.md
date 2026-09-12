@@ -638,8 +638,7 @@ function KeyboardList(props: { items: string[] }) {
 ### Global Ctrl+Q quit handler
 
 ```tsx
-import { createApp } from "vexart"
-import { onInput } from "vexart/engine"
+import { createApp, onInput } from "vexart"
 
 // In your main() function, after createApp:
 const app = await createApp(() => <App />, { quit: [] })
