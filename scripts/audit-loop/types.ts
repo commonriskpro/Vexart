@@ -204,6 +204,7 @@ export type AgentReceipt = {
   startedAt: string
   endedAt: string
   exitCode: number | null
+  originalExitCode?: number | null
   signal?: string
   stdout: string
   stderr: string

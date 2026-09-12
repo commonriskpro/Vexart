@@ -64,3 +64,22 @@ plans parked in isolated worktrees, never fabricated failing Findings.
 The observed `public.ts` issue is a separate root-cause fix: public-export source
 is admissible for read-only contract evidence, while public-export edits remain
 prohibited. All other source safety, scope and snapshot restrictions remain.
+
+## Prompt transport and check-output ownership — 2026-09-12
+
+Independent pre-implementation gate: /root/architecture_gate (Astra/high),
+APPROVED. Implemented in the separate codex/audit-process-transport
+worktree from 77a10c2; this is not a change to product-fix acceptance policy.
+
+The process invocation owns a bounded argv and a separate stdin prompt channel.
+Exact bytes and EOF, concurrent stdout/stderr draining, and cancellation/deadline
+coverage of backpressure are mandatory. Spawn, input and storage failures remain
+explicit failures with owned cleanup; no failure can count as approval.
+
+Full check logs belong to finalized per-check artifacts under the owned run
+store. Ledger events and correction prompts carry status, command, exit/timeout,
+byte counts and artifact references, rather than embedding entire logs. Both
+stdout and stderr must remain available. Existing fixed checks are not weakened,
+failures are not truncated away, and historical events are not rewritten. The
+blocked run and its uncommitted product diff remain preserved without automatic
+restart or an unverified commit.

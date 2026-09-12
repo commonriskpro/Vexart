@@ -4,7 +4,6 @@ import { basename, dirname, join, relative, resolve } from "node:path"
 import {
   createWorktree,
   detectRepo,
-  diffCheck,
   ensureInside,
   indexClean,
   packageHasScript,
@@ -20,6 +19,7 @@ import {
   worktreeDependencyState,
   worktreeHead,
   changedPaths,
+  type ProcessResult,
 } from "./git"
 import {
   attemptId,
@@ -51,6 +51,7 @@ import {
 
 import { selectProfiles, type Profile } from "./profiles"
 import { awardSolution, blindCandidates, contributionsImplemented, parseEvaluation, parseSolver, proposalScopeError, sameProposal, selectSolution, solutionSchema, type SolutionRound, type SolutionSelection, type SolutionSubmission, type SolutionTopic } from "./solutions"
+import { persistCheckArtifacts } from "./process-artifacts"
 
 const DEFAULT_CYCLES = 3
 const DEFAULT_MINUTES = 60
@@ -283,7 +284,7 @@ type AgentCallResult = { parsed: unknown | null; receipt: AgentReceipt; events: 
 
 export const agentCommand = (role: AgentRole, worktree: string, schema: string, message: string, prompt: string) => {
   const [model, effort] = MODEL_BY_ROLE[role]
-  return ["codex", "exec", "--ephemeral", "--json", "--disable", "multi_agent", "--disable", "multi_agent_v2", "-m", model, "-c", `model_reasoning_effort="${effort}"`, "-s", role === "apply" ? "workspace-write" : "read-only", "--cd", worktree, "--output-schema", schema, "--output-last-message", message, prompt]
+  return ["codex", "exec", "--ephemeral", "--json", "--disable", "multi_agent", "--disable", "multi_agent_v2", "-m", model, "-c", `model_reasoning_effort="${effort}"`, "-s", role === "apply" ? "workspace-write" : "read-only", "--cd", worktree, "--output-schema", schema, "--output-last-message", message, "-"]
 }
 
 const receiptError = (receipt: AgentReceipt, fallback: string) => receipt.parseError?.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 512) || fallback
@@ -306,13 +307,20 @@ const callAgent = async (call: AgentCall): Promise<AgentCallResult> => {
   const startedAt = now()
   const profile = call.profile ? { profileId: call.profile.profileId, profileVersion: call.profile.profileVersion } : {}
   await appendEvent(call.state.store, { runId: call.state.id, type: "agent_started", role: call.role, agentKey: key, attemptId: attempt, scope: call.scope, ...profile, model: MODEL_BY_ROLE[call.role][0], effort: MODEL_BY_ROLE[call.role][1] })
-  const result = await runProcess(command, call.state.worktree, call.timeoutMs, true)
+  const result = await runProcess(command, call.state.worktree, call.timeoutMs, true, { input: call.prompt })
   const endedAt = now()
   const responseText = await readFile(messagePath, "utf8").catch(() => "")
-  const receipt = await saveAgentReceipt(receiptPath, snapshot, { ...profile, attemptId: attempt, agentKey: key, role: call.role, scope: call.scope, strategy: call.strategy, command, prompt: call.prompt, startedAt, endedAt, exitCode: result.timedOut ? null : result.code, stdout: result.stdout, stderr: result.stderr, responseText })
-  const parsed = receipt.response ?? null
-  await appendEvent(call.state.store, { runId: call.state.id, type: "agent_receipt", role: call.role, agentKey: key, attemptId: attempt, exitCode: receipt.exitCode, parseOk: Boolean(parsed) && !receipt.parseError, ...profile, durationMs: new Date(endedAt).getTime() - new Date(startedAt).getTime(), parseError: receipt.parseError ? receiptError(receipt, "malformed output") : undefined })
-  return { parsed, receipt, events: result.stdout }
+  const receipt = await recordAgentResult({ store: call.state.store, runId: call.state.id, path: receiptPath, snapshot }, { ...profile, attemptId: attempt, agentKey: key, role: call.role, scope: call.scope, strategy: call.strategy, command, prompt: call.prompt, startedAt, endedAt, responseText }, result)
+  return { parsed: receipt.response ?? null, receipt, events: result.stdout }
+}
+
+// Keep the effective fail-closed status separate from the child's actual exit.
+// Both the durable receipt and its ledger event are published at this boundary.
+export const recordAgentResult = async (context: { store: string; runId: string; path: string; snapshot: EvidenceSnapshot }, details: Omit<AgentReceipt, "response" | "parseError" | "evidenceProvenance" | "exitCode" | "originalExitCode" | "signal" | "stdout" | "stderr">, result: ProcessResult) => {
+  const failure = result.error ? `${result.error.kind} transport failure: ${result.error.message}` : result.cancelled ? "agent process cancelled" : result.timedOut ? "agent process timed out" : undefined
+  const receipt = await saveAgentReceipt(context.path, context.snapshot, { ...details, exitCode: result.timedOut ? null : result.code, originalExitCode: result.exitCode ?? null, stdout: result.stdout, stderr: result.stderr, signal: result.signal }, failure)
+  await appendEvent(context.store, { runId: context.runId, type: "agent_receipt", role: receipt.role, agentKey: receipt.agentKey, attemptId: receipt.attemptId, exitCode: receipt.exitCode, originalExitCode: receipt.originalExitCode, signal: receipt.signal, timedOut: Boolean(result.timedOut), cancelled: Boolean(result.cancelled), error: result.error ? { kind: result.error.kind, message: receiptError(receipt, "transport failure") } : undefined, parseOk: Boolean(receipt.response) && !receipt.parseError, scope: receipt.scope, profileId: receipt.profileId, profileVersion: receipt.profileVersion, durationMs: new Date(receipt.endedAt).getTime() - new Date(receipt.startedAt).getTime(), parseError: receipt.parseError ? receiptError(receipt, "malformed output") : undefined })
+  return receipt
 }
 
 const commandWitnesses = (events: string) => events.split("\n").flatMap((line) => {
@@ -491,7 +499,7 @@ export const hydrateEvidence = async (snapshot: EvidenceSnapshot, role: AgentRol
 
 // The actual receipt boundary: preserve agent-original text, enrich only known
 // reference positions, and record extraction provenance separately from claims.
-export const saveAgentReceipt = async (path: string, snapshot: EvidenceSnapshot, receipt: Omit<AgentReceipt, "response" | "parseError" | "evidenceProvenance">): Promise<AgentReceipt> => {
+export const saveAgentReceipt = async (path: string, snapshot: EvidenceSnapshot, receipt: Omit<AgentReceipt, "response" | "parseError" | "evidenceProvenance">, failure?: string): Promise<AgentReceipt> => {
   let enriched: Pick<AgentReceipt, "response" | "parseError" | "evidenceProvenance">
   try {
     const response = parseJsonObject(receipt.responseText)
@@ -499,7 +507,7 @@ export const saveAgentReceipt = async (path: string, snapshot: EvidenceSnapshot,
   } catch (error) {
     enriched = { parseError: error instanceof Error ? error.message : String(error) }
   }
-  const saved = { ...receipt, ...enriched }
+  const saved = { ...receipt, ...enriched, ...(failure ? { parseError: failure } : {}) }
   await writeAtomic(path, JSON.stringify(saved, null, 2))
   return saved
 }
@@ -598,26 +606,26 @@ const validAssignment = async (root: string, worktree: string, requestedScope: s
 }
 
 const runChecks = async (state: RunState, paths: string[]) => {
-  const checks = [{ command: ["git", "diff", "--check"], result: await diffCheck(state.worktree) }]
+  const directory = join(state.store, "runs", state.id, "checks")
+  const execute = async (command: string[]) => persistCheckArtifacts(directory, command, await runProcess(command, state.worktree, Math.max(1, new Date(state.deadlineAt).getTime() - Date.now()), true))
+  const unavailable = (command: string[], reason: string) => persistCheckArtifacts(directory, command, { code: -1, exitCode: null, stdout: "", stderr: reason }, false)
+  const checks = [await execute(["git", "diff", "--check"])]
   const dependencies = await worktreeDependencyState(state.worktree)
-  if (dependencies !== "available") checks.push({ command: ["dependency-check"], result: { ok: false, output: "isolated worktree has no node_modules; dependency installation/linking is not permitted" } })
-  else if (!(await packageHasScript(state.worktree, "typecheck"))) checks.push({ command: ["bun", "run", "typecheck"], result: { ok: false, output: "package has no typecheck script" } })
+  if (dependencies !== "available") checks.push(await unavailable(["dependency-check"], "isolated worktree has no node_modules; dependency installation/linking is not permitted"))
+  else if (!(await packageHasScript(state.worktree, "typecheck"))) checks.push(await unavailable(["bun", "run", "typecheck"], "package has no typecheck script"))
   else {
-    const remaining = Math.max(1, new Date(state.deadlineAt).getTime() - Date.now())
-    const typecheck = await runProcess(["bun", "run", "typecheck"], state.worktree, remaining, true)
-    checks.push({ command: ["bun", "run", "typecheck"], result: { ok: typecheck.code === 0 && !typecheck.timedOut, output: typecheck.stderr || typecheck.stdout } })
-    if (await packageHasScript(state.worktree, "test")) {
-      const behavioral = await runProcess(["bun", "run", "test", "--", state.scope ?? "."], state.worktree, Math.max(1, new Date(state.deadlineAt).getTime() - Date.now()), true)
-      checks.push({ command: ["bun", "run", "test", "--", state.scope ?? "."], result: { ok: behavioral.code === 0 && !behavioral.timedOut, output: behavioral.stderr || behavioral.stdout } })
-    } else checks.push({ command: ["bun", "run", "test"], result: { ok: false, output: "package has no behavioral test script" } })
+    checks.push(await execute(["bun", "run", "typecheck"]))
+    if (await packageHasScript(state.worktree, "test")) checks.push(await execute(["bun", "run", "test", "--", state.scope ?? "."]))
+    else checks.push(await unavailable(["bun", "run", "test"], "package has no behavioral test script"))
   }
-  if (paths.some((path) => path === "native" || path.startsWith("native/"))) {
-    const remaining = Math.max(1, new Date(state.deadlineAt).getTime() - Date.now())
-    const cargo = await runProcess(["cargo", "test", "--offline", "--manifest-path", "native/libvexart/Cargo.toml"], state.worktree, remaining, true)
-    checks.push({ command: ["cargo", "test", "--offline", "--manifest-path", "native/libvexart/Cargo.toml"], result: { ok: cargo.code === 0 && !cargo.timedOut, output: cargo.stderr || cargo.stdout } })
-  }
+  if (paths.some((path) => path === "native" || path.startsWith("native/"))) checks.push(await execute(["cargo", "test", "--offline", "--manifest-path", "native/libvexart/Cargo.toml"]))
   return checks
 }
+
+export const verificationArtifacts = (state: Pick<RunState, "store" | "id">, receipt: Pick<AgentReceipt, "agentKey" | "attemptId">, verdict: string, checks: Awaited<ReturnType<typeof runChecks>>) => ({
+  verifier: { verdict, receiptPath: join(state.store, "runs", state.id, "receipts", receipt.agentKey, `${receipt.attemptId}.json`) },
+  checks,
+})
 
 export const commitVerifiedFix = async (state: RunState, repo: RepoInfo, finding: Finding, paths: string[], expectedSnapshot?: string) => {
   if (deadlineReached(state) || state.stopRequested) throw new Error("commit precondition failed: deadline or stop requested")
@@ -881,19 +889,20 @@ export const runAudit = async (cwd: string, config: RunConfig) => {
           const verifierCall = await callAgent({ state, role: "verifier", evidenceSnapshot, scope: finding.scope, strategy: `${assignment.strategy}:post-verifier:${correction}`, prompt: verifierPrompt(state, finding, gate, correction > 0, selection), timeoutMs: Math.max(1, new Date(state.deadlineAt).getTime() - Date.now()) })
           const verifier = verifierCall.receipt.exitCode === 0 && verifierCall.parsed ? parseVerifier(verifierCall.parsed) : null
           const checks = await runChecks(state, actualPaths)
+          const evidence = verificationArtifacts(state, verifierCall.receipt, verifier?.verdict ?? "malformed", checks)
           const checksOk = checks.every((check) => check.result.ok)
           const postWitness = verifier ? witnessMatches(verifierCall.events, finding.reproduction.command, 0, verifier.reproduction.output) && verifier.reproduction.command.join("\n") === finding.reproduction.command.join("\n") : false
           if (verifier?.verdict === "approved" && verifier.findingId === finding.id && verifier.changedPaths.sort().join("\n") === actualPaths.sort().join("\n") && verifier.regressions.length === 0 && verifier.checks.length > 0 && contributionsImplemented(selection, verifier.solutionContributions) && postWitness && checksOk && await snapshotPaths(state.worktree, actualPaths) === attemptSnapshot) {
             verifiedSnapshot = attemptSnapshot
             verified = true
-            await appendEvent(store, { ...solution.round, type: "verification_passed", findingId: finding.id, solutionSnapshotId: evidenceSnapshot.snapshotId, solutionContributions: verifier.solutionContributions, checks: checks.map((check) => ({ command: check.command, ok: check.result.ok, output: check.result.output })) })
+            await appendEvent(store, { ...solution.round, type: "verification_passed", findingId: finding.id, solutionSnapshotId: evidenceSnapshot.snapshotId, solutionContributions: verifier.solutionContributions, ...evidence })
             break
           }
-          await appendEvent(store, { runId: id, type: "verification_failed", cycle, findingId: finding.id, correction, verifier: verifier ?? "malformed", checks: checks.map((check) => ({ command: check.command, ok: check.result.ok, output: check.result.output })) })
+          await appendEvent(store, { runId: id, type: "verification_failed", cycle, findingId: finding.id, correction, ...evidence })
           if (correction >= MAX_CORRECTIONS) break
           correction += 1
           if (stop || deadlineReached(state) || !(await worktreeClean(state.worktree) === false) || !(await indexClean(state.worktree))) break
-          const correctionCall = await callAgent({ state, role: "apply", scope: finding.scope, strategy: `${assignment.strategy}:correction`, prompt: `${applyPrompt(state, finding, gate)} This is the one bounded correction pass. Preserve approved paths exactly and address only this verifier/check evidence: ${JSON.stringify({ verifier, checks })}.`, timeoutMs: Math.max(1, new Date(state.deadlineAt).getTime() - Date.now()) })
+          const correctionCall = await callAgent({ state, role: "apply", scope: finding.scope, strategy: `${assignment.strategy}:correction`, prompt: `${applyPrompt(state, finding, gate)} This is the one bounded correction pass. Preserve approved paths exactly and read the full verifier receipt and both stdout/stderr log artifacts referenced here, then address only their evidence (metadata is not a substitute for reading the logs): ${JSON.stringify(evidence)}.`, timeoutMs: Math.max(1, new Date(state.deadlineAt).getTime() - Date.now()) })
           const correctionResult = correctionCall.parsed ? parseApply(correctionCall.parsed) : null
           const correctionPaths = await changedPaths(state.worktree)
           if (correctionCall.receipt.exitCode !== 0 || !correctionResult || correctionResult.status !== "applied" || correctionPaths.sort().join("\n") !== actualPaths.sort().join("\n")) break

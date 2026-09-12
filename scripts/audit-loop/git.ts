@@ -1,5 +1,7 @@
 import { mkdir, readFile, realpath } from "node:fs/promises"
 import { createHash } from "node:crypto"
+import { spawn } from "node:child_process"
+import type { Readable } from "node:stream"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import type { RepoInfo } from "./types"
 
@@ -9,10 +11,13 @@ export type ProcessResult = {
   stdout: string
   stderr: string
   timedOut?: boolean
+  cancelled?: boolean
+  exitCode?: number | null
+  error?: { kind: "spawn" | "stdin" | "stdout" | "stderr"; message: string }
 }
 
 const TERMINATION_GRACE_MS = 1_000
-const ownedProcesses = new Map<number, string>()
+const ownedProcesses = new Map<number, () => void>()
 
 const decode = async (value: ReadableStream<Uint8Array> | null) => {
   if (!value) return ""
@@ -48,36 +53,84 @@ const terminate = (pids: number[], signal: "SIGTERM" | "SIGKILL") => {
   }
 }
 
-export const runProcess = async (args: string[], cwd: string, timeoutMs?: number, killTree = false): Promise<ProcessResult> => {
-  const proc = Bun.spawn(args, { cwd, stdout: "pipe", stderr: "pipe" })
-  ownedProcesses.set(proc.pid, cwd)
-  const stdoutPromise = decode(proc.stdout)
-  const stderrPromise = decode(proc.stderr)
-  const exitPromise = proc.exited
-  let timedOut = false
-  if (timeoutMs !== undefined) {
-    let deadlineTimer: ReturnType<typeof setTimeout> | undefined
-    const deadline = new Promise<{ done: false }>((resolve) => { deadlineTimer = setTimeout(() => resolve({ done: false }), Math.max(1, timeoutMs)) })
-    const result = await Promise.race([exitPromise.then((code) => ({ code, done: true as const })), deadline])
-    if (deadlineTimer) clearTimeout(deadlineTimer)
-    if (!result.done) {
-      timedOut = true
-      const pids = killTree ? await processTree(proc.pid, cwd) : [proc.pid]
-      terminate(pids, "SIGTERM")
-      await new Promise((resolve) => setTimeout(resolve, TERMINATION_GRACE_MS))
-      terminate(pids, "SIGKILL")
-    }
+export const runProcess = async (args: string[], cwd: string, timeoutMs?: number, killTree = false, options: { input?: string | Uint8Array; signal?: AbortSignal } = {}): Promise<ProcessResult> => {
+  if (options.signal?.aborted) return { code: -1, exitCode: null, stdout: "", stderr: "", cancelled: true }
+  // Incremental writable callbacks expose delivery failures (including EPIPE).
+  // A single end(payload) can hide pipe errors in Bun's compatibility layer.
+  let proc: ReturnType<typeof spawn>
+  try { proc = spawn(args[0], args.slice(1), { cwd, stdio: ["pipe", "pipe", "pipe"] }) }
+  catch (error) { return { code: -1, exitCode: null, stdout: "", stderr: "", error: { kind: "spawn", message: error instanceof Error ? error.message : String(error) } } }
+  let stop: (reason: "timeout" | "cancelled" | "error") => void = () => {}
+  const stopped = new Promise<"timeout" | "cancelled" | "error">((resolve) => { stop = resolve })
+  let error: ProcessResult["error"]
+  const fail = (kind: NonNullable<ProcessResult["error"]>["kind"], value: unknown) => {
+    if (!error || kind === "spawn") error = { kind, message: value instanceof Error ? value.message : String(value) }
+    stop("error")
   }
-  const [stdout, stderr, code] = await Promise.all([stdoutPromise, stderrPromise, exitPromise])
-  ownedProcesses.delete(proc.pid)
-  return { code, signal: undefined, stdout, stderr, timedOut }
+  const drain = (stream: Readable, kind: "stdout" | "stderr") => new Promise<string>((resolve) => {
+    const chunks: string[] = []
+    stream.setEncoding("utf8")
+    stream.on("data", (chunk: string) => chunks.push(chunk))
+    stream.once("error", (error) => { fail(kind, error); resolve(chunks.join("")) })
+    stream.once("end", () => resolve(chunks.join("")))
+    stream.once("close", () => resolve(chunks.join("")))
+  })
+  const stdout = drain(proc.stdout!, "stdout")
+  const stderr = drain(proc.stderr!, "stderr")
+  const exited = new Promise<{ code: number | null; signal: string | undefined }>((resolve) => {
+    proc.once("exit", (code, signal) => resolve({ code, signal: signal ?? undefined }))
+    proc.once("error", (error) => { fail("spawn", error); resolve({ code: null, signal: undefined }) })
+  })
+  proc.stdin!.on("error", (error) => fail("stdin", error))
+  const input = (async () => {
+    const bytes = typeof options.input === "string" ? Buffer.from(options.input) : options.input ?? new Uint8Array()
+    const write = (chunk?: Uint8Array) => new Promise<void>((resolve, reject) => {
+      const closed = () => reject(new Error("stdin closed before delivery completed"))
+      proc.stdin!.once("close", closed)
+      const done = (error?: Error | null) => {
+        proc.stdin!.removeListener("close", closed)
+        if (error) reject(error)
+        else resolve()
+      }
+      if (chunk) proc.stdin!.write(chunk, done)
+      else proc.stdin!.end(done)
+    })
+    try {
+      // This is flow control, not a payload limit. Every byte is delivered.
+      const size = proc.stdin!.writableHighWaterMark
+      for (let offset = 0; offset < bytes.length; offset += size) await write(bytes.subarray(offset, offset + size))
+      await write()
+    } catch (error) { fail("stdin", error) }
+  })()
+  const cancel = () => stop("cancelled")
+  if (proc.pid) ownedProcesses.set(proc.pid, cancel)
+  options.signal?.addEventListener("abort", cancel, { once: true })
+  const timer = timeoutMs === undefined ? undefined : setTimeout(() => stop("timeout"), Math.max(1, timeoutMs))
+  const complete = Promise.all([stdout, stderr, exited, input])
+  const result = await Promise.race([complete.then(() => "complete" as const), stopped])
+  if (result !== "complete") {
+    const alive = proc.pid && proc.exitCode === null && proc.signalCode === null
+    const pids = alive ? killTree ? await processTree(proc.pid!, cwd) : [proc.pid!] : []
+    terminate(pids, "SIGTERM")
+    proc.stdin!.destroy()
+    if (pids.length) {
+      await new Promise((resolve) => setTimeout(resolve, TERMINATION_GRACE_MS))
+      terminate(pids.filter((pid) => pid !== proc.pid || (proc.exitCode === null && proc.signalCode === null)), "SIGKILL")
+    }
+    // An exited parent can leave inherited pipes open; cancellation still owns
+    // our readers and must not wait forever for an untracked pipe holder.
+    proc.stdout!.destroy()
+    proc.stderr!.destroy()
+  }
+  const [out, err, exit] = await complete
+  if (timer) clearTimeout(timer)
+  options.signal?.removeEventListener("abort", cancel)
+  if (proc.pid) ownedProcesses.delete(proc.pid)
+  return { code: result === "complete" && !error ? exit.code ?? -1 : -1, exitCode: exit.code, signal: exit.signal, stdout: out, stderr: err, timedOut: result === "timeout", cancelled: result === "cancelled", error }
 }
 
 export const stopOwnedProcesses = () => {
-  for (const [pid, cwd] of ownedProcesses) void processTree(pid, cwd).then((pids) => {
-    terminate(pids, "SIGTERM")
-    setTimeout(() => terminate(pids, "SIGKILL"), TERMINATION_GRACE_MS)
-  })
+  for (const cancel of ownedProcesses.values()) cancel()
 }
 
 const runGit = async (args: string[], cwd: string) => {

@@ -207,3 +207,20 @@ dependencies fail verification rather than silently skipping behavioral checks.
   terminal, network, or production behavior; it does not infer public API or
   architecture decisions. Those remain human gates; deferred decisions are
   retained as data for later planning and never treated as permission.
+
+## Process transport and check logs
+
+Agent argv ends with the Codex stdin marker. The original prompt is delivered as
+exact UTF-8 bytes over stdin and retained separately in its receipt; it is not
+embedded in OS arguments. Input delivery, EOF, concurrent stdout/stderr draining,
+deadline, cancellation and owned cleanup are one process lifetime. Spawn or I/O
+failure is a failed attempt even when a child exits zero.
+
+Fixed check output is stored under the current run's checks directory, with
+separate full stdout/stderr files and a manifest containing command, exit status,
+timeout/cancellation, byte counts, hashes and complete/partial/not-executed status.
+Artifacts are finalized before their references are published. Ledger events and
+correction prompts contain compact results and artifact paths, not full logs.
+The correction agent must inspect those files. Failed checks still block commit;
+a storage error also fails closed. Historical oversized events are not rewritten,
+so an old ledger can still make the bounded observer report incomplete history.

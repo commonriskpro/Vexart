@@ -177,3 +177,45 @@ Independent final feature review: `/root/verify_loop` (Luna/xhigh),
 **52 tests passed, 409 assertions**; scoped TypeScript and diff checks passed.
 No additional critical defects were found. Runtime transport recovery remains
 separate; these checks do not certify an unattended live product fix.
+
+## Prompt transport and check artifacts — 2026-09-12
+
+Pre-gate: /root/architecture_gate (Astra/high), APPROVED. Independent final
+review: /root/verify_loop (Luna/xhigh), PASSED — READY_TO_REPORT after one
+bounded correction. Worktree: codex/audit-process-transport from 77a10c2.
+
+- Reproduced OS argument failure: old correction prompt 24,025,195 bytes versus
+  host ARG_MAX 1,048,576. Prompts now use stdin, not positional arguments.
+- Exact 3.5 MB UTF-8/NUL input and EOF, concurrent 2 MB stdout/stderr, input
+  backpressure timeout, readiness-handshaked cancellation, missing executable,
+  early stdin closure and full large prompt receipts were checked.
+- On this Bun runtime, a single giant Writable.end could report success after
+  early stdin closure. Incremental callbacks using the writable high-water mark
+  expose EPIPE; this is flow control, not a prompt-size cap.
+- Full 4 MB-per-channel check artifacts are preserved with bytes/hashes and
+  complete/partial/not-executed metadata. Compact event data stays below 2 KB in
+  the fixture. Actual storage failure rejects publication; failed checks remain
+  failed. Both channels are retained rather than choosing stderr over stdout.
+- The first review reproduced loss of original child exit status at persistence.
+  One bounded correction added originalExitCode separately from the effective
+  fail-closed exitCode. A real early-close child with actual exit 0 persists
+  effective -1, original 0, stdin error and parseOk false through production
+  recordAgentResult into both receipt and event.
+- Worker full focused suite: 43 passed, 346 assertions. Independent corrected
+  transport suite: 10 passed, 53 assertions. Scoped TypeScript and diff passed.
+- Outputs remain buffered until each check ends, then artifacts are finalized.
+  No historical events/receipts were rewritten and no blocked product diff was
+  discarded. No real-agent recovery or product commit is claimed by these tests.
+
+Review rewards remain distinct from runtime product/profile rewards:
+explore_astra earns 1 for the reproduced transport/oversized-log defect
+(combined review total 3, including the public read/edit eligibility defect).
+verify_loop earns 2 for the separately confirmed ranking and original-exit
+persistence defects (combined review total 7). No runtime stars were invented.
+
+Final integration with profile/tournament commit cd36647 was independently
+reviewed in codex/audit-loop-integrated: PASSED — READY_TO_REPORT.
+All 62 focused tests passed (462 assertions), scoped TypeScript and both staged
+and working-tree diff checks passed. Resolved merge content preserves profile
+attribution, immutable post-apply contribution proof and compact artifact events.
+This validates the controller code, not recovery of the blocked product run.
