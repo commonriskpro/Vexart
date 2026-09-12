@@ -15,11 +15,19 @@ export type Phase =
 
 export type AgentRole = "planner" | "investigator" | "gate" | "apply" | "verifier"
 
-export type Evidence = {
+export type EvidenceReference = {
   path: string
   startLine: number
   endLine: number
-  excerpt: string
+}
+
+export type Evidence = EvidenceReference & { excerpt: string }
+
+export type EvidenceProvenance = {
+  kind: "controller-extracted"
+  baselineSha: string
+  readScope: string
+  references: (EvidenceReference & { location: string })[]
 }
 
 export type Reproduction = {
@@ -196,6 +204,7 @@ export type AgentReceipt = {
   stderr: string
   responseText: string
   response?: unknown
+  evidenceProvenance?: EvidenceProvenance
   parseError?: string
 }
 

@@ -73,6 +73,7 @@ type DashboardReceipt = {
   paths: string[]
   evidence: DashboardEvidence[]
   disadvantages: string[]
+  evidenceProvenance?: { kind: "controller-extracted"; baselineSha: string }
 }
 
 type DashboardAgent = {
@@ -242,7 +243,9 @@ const sanitizeReceipt = (value: unknown): DashboardReceipt | null => {
   const refs = evidence(finding.evidence ?? response.sourceEvidence)
   const disadvantages = nonEmptyStrings(response.disadvantages).map((item) => item.slice(0, 1_000))
   const info = modelInfo(value.command)
-  return { agentKey, attemptId, role, scope, startedAt, endedAt, exitCode, ...info, summary, status, paths, evidence: refs, disadvantages }
+  const rawProvenance = value.evidenceProvenance
+  const provenance = isObject(rawProvenance) && rawProvenance.kind === "controller-extracted" && typeof rawProvenance.baselineSha === "string" && /^[a-f0-9]{40,64}$/.test(rawProvenance.baselineSha) ? { evidenceProvenance: { kind: "controller-extracted" as const, baselineSha: rawProvenance.baselineSha } } : {}
+  return { agentKey, attemptId, role, scope, startedAt, endedAt, exitCode, ...info, summary, status, paths, evidence: refs, disadvantages, ...provenance }
 }
 
 const processAlive = async (state: DashboardState | null, statePid: number | null, lock: unknown, cwd: string, reader: Reader) => {

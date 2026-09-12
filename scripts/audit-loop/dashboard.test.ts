@@ -104,6 +104,22 @@ describe("audit dashboard observer", () => {
     expect(JSON.stringify(snapshot)).not.toContain("PRIVATE_OPPORTUNITY_PROMPT")
   })
 
+  test("labels controller-extracted quote provenance without exposing raw metadata", async () => {
+    const { root, store, repo } = await fixture()
+    const path = join(store, "runs", "run-1", "receipts", "agent-1", "attempt-1.json")
+    const receipt = await Bun.file(path).json()
+    receipt.evidenceProvenance = { kind: "controller-extracted", baselineSha: repo.baselineSha, readScope: "src", references: [], prompt: "PRIVATE_PROVENANCE" }
+    await writeFile(path, JSON.stringify(receipt))
+    const snapshot = await readDashboardSnapshot(root)
+    expect(snapshot.receipts[0]?.evidenceProvenance).toEqual({ kind: "controller-extracted", baselineSha: repo.baselineSha })
+    expect(JSON.stringify(snapshot)).not.toContain("PRIVATE_PROVENANCE")
+    receipt.evidenceProvenance.baselineSha = "untrusted prose"
+    await writeFile(path, JSON.stringify(receipt))
+    expect((await readDashboardSnapshot(root)).receipts[0]?.evidenceProvenance).toBeUndefined()
+    const html = await Bun.file(join(import.meta.dir, "dashboard.html")).text()
+    expect(html).toContain("Esto no acredita su lectura ni confirma la interpretación o el fallo.")
+  })
+
   test("represents missing state as unknown instead of inventing a run", async () => {
     const { root, store } = await fixture()
     await rm(join(store, "state.json"))

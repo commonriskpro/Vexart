@@ -75,6 +75,26 @@ safeguards, and security policy are never self-edited; “automejora” means on
 that the next Astra plan consumes evidence-backed lessons and changes its
 bounded priorities. It cannot loosen policy or rewrite itself.
 
+## Source evidence ownership
+
+Agents return source references (`path`, `startLine`, `endLine`), not quoted code.
+For each investigator or gate call, the controller captures the baseline commit
+SHA at dispatch and extracts the exact inclusive line slices from that immutable
+Git snapshot. It enriches only the known finding, analysis, opportunity and gate
+evidence fields before downstream parsing. Comments, indentation, blank lines,
+backticks and literal ellipses are preserved; no fuzzy search or range repair is
+performed. Unsafe paths, invalid ranges and model-supplied legacy `excerpt`
+fields fail closed instead of being silently corrected. A malformed finding does
+not erase independently captured valid analysis; any capture error still prevents
+the candidate from reaching the implementation gate.
+
+Receipts preserve the original structured response text separately from the
+enriched response and record controller-extracted provenance with the captured
+SHA. This proves what the snapshot contains, **not** that an agent read those
+lines, that its interpretation is correct, or that a bug exists. Independent
+source/contract review, exact failing-command witnesses, architectural approval
+and post-implementation verification remain separate mandatory gates.
+
 ## Usage
 
 ```sh

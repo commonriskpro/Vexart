@@ -67,6 +67,9 @@ function detail(r) {
   if (list(r.paths).length)
     box.append(node("div", "detail-label", "Archivos declarados"), node("pre", "code", r.paths.join(`
 `)));
+  if (r.evidenceProvenance) {
+    box.append(node("div", "detail-label", "Texto extraído por el controlador"), node("p", "note", `Snapshot ${r.evidenceProvenance.baselineSha}. Las citas salen del código exacto, no de una transcripción del agente. Esto no acredita su lectura ni confirma la interpretación o el fallo.`));
+  }
   for (const e of list(r.evidence)) {
     box.append(node("div", "evidence-path", `${e.path}:${e.startLine}–${e.endLine}`), node("pre", "code", e.excerpt));
   }

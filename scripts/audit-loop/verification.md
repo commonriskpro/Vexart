@@ -94,3 +94,33 @@ stars: **3**. These remain separate from product-finding runtime stars.
 `/root/explore_astra`: **1 implementation-review star** for the independently
 confirmed argv representation defect. `/root/verify_loop` retains its prior
 **3** review stars. No product-finding stars were awarded for these tool changes.
+
+## Controller-owned evidence capture — 2026-09-12
+
+Independent pre-gate: `/root/architecture_gate` (Astra/high), approved before
+implementation in `codex/evidence-capture-fix`. Independent final post-review:
+`/root/verify_loop` (Luna/xhigh), **PASSED — READY_TO_REPORT**.
+
+- Agent schemas request path/inclusive-line references only; controller snapshot
+  extraction owns literal quotations. Original response text and enriched evidence
+  with SHA provenance are separate. This is not proof of agent reading or meaning.
+- Real-Git fixture tests cover comments, blank lines inside nonblank excerpts,
+  indentation, tabs, backticks, captured SHA after HEAD advances, related read-only
+  references, malformed/legacy fields, forbidden paths, symlink/tree blobs, and
+  invalid inclusive ranges. Existing command-witness and architecture gates remain.
+- Root directly exercised extraction on the actual forms and virtual-list baseline
+  ranges: public comments, blank lines and Markdown backticks were preserved. No
+  deleted receipts were reconstructed and no product fix is claimed by this check.
+- First independent review reproduced two capture regressions: malformed finding
+  evidence discarded independent valid analysis; blank-only ranges obtained
+  provenance. One bounded correction isolated the two evidence domains and rejected
+  blank ranges before provenance. The actual receipt-to-analysis recording path is
+  covered; a capture error still blocks candidate dispatch.
+- Final focused suite: **32 passed, 289 assertions**. Scoped TypeScript check and
+  `git diff --check` passed. Test success establishes the controller boundary, not
+  a completed live discovery/apply/commit cycle under the new schema.
+
+`/root/verify_loop` earns **2 additional implementation-review stars** for the two
+independently reproduced capture regressions (combined review total **5**).
+`/root/explore_astra` retains **1** for the earlier argv defect. These remain
+separate from the runtime product-finding ledger; no runtime stars were created.
