@@ -219,7 +219,7 @@ const evidenceValue = (value: unknown): Evidence | null => {
 
 const reproductionValue = (value: unknown): Reproduction | null => {
   if (!record(value) || !exactKeys(value, ["command", "exitCode", "output", "observed"])) return null
-  const command = nonEmptyStrings(value.command)
+  const command = Array.isArray(value.command) && value.command.length > 0 && typeof value.command[0] === "string" && value.command[0].trim() && value.command.every((arg) => typeof arg === "string") ? value.command as string[] : null
   const output = stringValue(value.output)
   if (!command || typeof value.exitCode !== "number" || !output || typeof value.observed !== "boolean") return null
   return { command, exitCode: value.exitCode, output, observed: value.observed }

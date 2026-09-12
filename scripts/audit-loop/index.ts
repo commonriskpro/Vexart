@@ -309,13 +309,62 @@ const commandWitnesses = (events: string) => events.split("\n").flatMap((line) =
   }
 })
 
-const commandMatches = (expected: string[], witness: { command?: string; exit_code?: number; aggregated_output?: string }) => {
-  const wanted = expected.join(" ").replace(/\s+/g, " ").trim()
-  const actual = (witness.command ?? "").replace(/\s+/g, " ").trim()
-  const tails = [actual]
-  const shell = actual.match(/(?:^|\s)-(?:l)?c\s+(['"]?)(.*)\1$/)
-  if (shell?.[2]) tails.push(shell[2].trim().replace(/^['"]|['"]$/g, ""))
-  return tails.some((tail) => tail === wanted || tail.endsWith(` && ${wanted}`) || tail.endsWith(`; ${wanted}`)) && witness.exit_code !== undefined
+// Decode only literal simple-command syntax. Never execute a receipt or infer
+// equivalence from a suffix, whitespace normalization, or shell expansion.
+const literalArgv = (command: string): string[] | null => {
+  const args: string[] = []
+  let word = ""
+  let active = false
+  let quote: "single" | "double" | null = null
+  for (let index = 0; index < command.length; index += 1) {
+    const char = command[index]
+    if (quote === "single") {
+      if (char === "'") quote = null
+      else word += char
+      continue
+    }
+    if (char === "\\") {
+      const next = command[++index]
+      if (next === undefined || next === "\n" || next === "\r") return null
+      // Inside double quotes, only these characters lose the backslash.
+      word += quote === "double" && !['$', '`', '"', "\\"].includes(next) ? `\\${next}` : next
+      active = true
+      continue
+    }
+    if (quote === "double") {
+      if (char === '"') quote = null
+      else if (char === "$" || char === "`") return null
+      else word += char
+      continue
+    }
+    if (char === "'" || char === '"') {
+      quote = char === "'" ? "single" : "double"
+      active = true
+      continue
+    }
+    if (char === " " || char === "\t") {
+      if (active) args.push(word)
+      word = ""
+      active = false
+      continue
+    }
+    if (/[\n\r;&|<>()$`#*?\[\]{}~]/.test(char)) return null
+    word += char
+    active = true
+  }
+  if (quote) return null
+  if (active) args.push(word)
+  return args.length ? args : null
+}
+
+export const commandMatches = (expected: string[], witness: { command?: string; exit_code?: number; aggregated_output?: string }) => {
+  const outer = literalArgv(witness.command ?? "")
+  if (!outer || witness.exit_code === undefined) return false
+  const shells = ["sh", "bash", "zsh", "/bin/sh", "/bin/bash", "/bin/zsh", "/usr/bin/sh", "/usr/bin/bash", "/usr/bin/zsh", "/opt/homebrew/bin/zsh"]
+  const wrapper = shells.includes(outer[0])
+  const actual = wrapper ? outer.length === 3 && ["-c", "-lc"].includes(outer[1]) ? literalArgv(outer[2]) : null : outer
+  if (!actual || (wrapper && shells.includes(actual[0]))) return false
+  return actual.length === expected.length && actual.every((arg, index) => arg === expected[index])
 }
 
 const witnessMatches = (events: string, command: string[], exitCode: number, output: string) => commandWitnesses(events).some((item) => commandMatches(command, item) && item.exit_code === exitCode && item.aggregated_output?.includes(output))
