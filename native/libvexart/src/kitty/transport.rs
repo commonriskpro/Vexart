@@ -214,6 +214,39 @@ fn write_transfer_stats(stats: &mut NativePresentationStats, transfer: ShmTransf
     }
 }
 
+/// The emitter either hands an owned transfer to its async caller or leaves
+/// it in the bounded legacy ring. Both representations retain their names.
+enum ShmLease {
+    Ring(usize),
+    Owned(u64),
+}
+
+impl ShmLease {
+    fn prepare(bytes: &[u8], owned: bool) -> Result<(Self, std::ffi::CString), i32> {
+        if owned {
+            super::shm::shm_prepare_native(bytes).map(|(handle, name)| (Self::Owned(handle), name))
+        } else {
+            super::shm::shm_prepare_ring(bytes).map(|(slot, name)| (Self::Ring(slot), name))
+        }
+    }
+
+    fn publish(self, owner: Option<&mut u64>) {
+        match self {
+            Self::Ring(slot) => super::shm::shm_ring_mark_in_flight(slot),
+            Self::Owned(handle) => {
+                if let Some(owner) = owner { *owner = handle; }
+            }
+        }
+    }
+
+    fn cancel(self) {
+        match self {
+            Self::Ring(slot) => super::shm::shm_ring_fail_closed(slot),
+            Self::Owned(handle) => { super::shm::shm_release(handle, 1); }
+        }
+    }
+}
+
 /// Set the transport mode for this thread. Called from `vexart_kitty_set_transport`.
 ///
 /// `mode`: 0=direct, 1=file, 2=shm.
@@ -289,11 +322,6 @@ fn emit_direct(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
 
 /// SHM mode: readback → shm_prepare_ring → Kitty SHM escape → stdout.
 fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
-    use super::shm::{shm_prepare_ring, shm_ring_fail_closed, shm_ring_mark_in_flight};
-    use crate::kitty::encoder::compress_rgba;
-    use base64::engine::general_purpose::STANDARD as B64;
-    use base64::Engine as _;
-
     // 1. Resolve target dimensions.
     let (width, height) = match resolve_target_dims(pctx, target) {
         Some(d) => d,
@@ -311,69 +339,7 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
         set_last_error("emit_shm: GPU readback returned 0 bytes");
         return ERR_KITTY_TRANSPORT;
     }
-    let existing_frame = image_frame(image_id);
-    let animation_frame = existing_frame.filter(|_| !needs_full_transmit(image_id, width, height));
-    let full_transmit = animation_frame.is_none();
-    let digest = payload_hash(&rgba[..written as usize], width, height, 0, 0, 0);
-    if !full_transmit && payload_unchanged(image_id, digest) {
-        return OK;
-    }
-
-    // 3. zlib compress.
-    let compressed = compress_rgba(&rgba[..written as usize])
-        .unwrap_or_else(|_| rgba[..written as usize].to_vec());
-
-    // 4. Create SHM segment with compressed data via ring buffer.
-    let (slot_index, shm_name) = match shm_prepare_ring(&compressed) {
-        Ok(res) => res,
-        Err(_) => return ERR_KITTY_TRANSPORT,
-    };
-
-    // 5. Build Kitty SHM escape and write to stdout.
-    let name_b64 = B64.encode(shm_name.as_bytes());
-    let data_len = compressed.len();
-    let (target_frame, escape) = if let Some(existing) = animation_frame {
-        let (target_frame, compose_frame, is_replacement) =
-            next_animation_frame(Some(existing));
-        let frame_params = if is_replacement {
-            format!("r={target_frame},c={compose_frame}")
-        } else {
-            format!("c={compose_frame}")
-        };
-        (
-            Some(target_frame),
-            format!(
-                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,t=s,o=z,S={data_len},q=2;{name_b64}\x1b\\\x1b_Ga=a,i={image_id},c={target_frame},q=2;\x1b\\"
-            ),
-        )
-    } else {
-        (
-            None,
-            format!(
-                "\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s,o=z,S={data_len},q=2;{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,q=2;\x1b\\"
-            ),
-        )
-    };
-    let write_result = write_transport(escape.as_bytes());
-
-    // 6. Schedule SHM cleanup.
-    // If stdout write failed (e.g. broken pipe, terminal disconnected), fail-closed:
-    // unlink the segment immediately so it does not leak in /dev/shm.
-    // On success, mark slot in-flight without dropping tracking.
-    match write_result {
-        Ok(()) => {
-            shm_ring_mark_in_flight(slot_index);
-            record_image_frame(image_id, target_frame);
-            record_image_geometry(image_id, width, height);
-            record_payload(image_id, digest);
-            OK
-        }
-        Err(e) => {
-            shm_ring_fail_closed(slot_index);
-            set_last_error(format!("emit_shm: stdout write failed: {e}"));
-            ERR_KITTY_TRANSPORT
-        }
-    }
+    emit_shm_rgba_with_stats(&rgba[..written as usize], width, height, image_id).0
 }
 
 /// Resolve (width, height) from a target handle.
@@ -479,8 +445,24 @@ pub unsafe fn emit_frame_with_stats(
     image_id: u32,
     stats_out: *mut NativePresentationStats,
 ) -> i32 {
+    emit_frame_with_owner(pctx, target, image_id, stats_out, None)
+}
+
+/// The caller owns out_handle until terminal consumption, then releases it.
+pub unsafe fn emit_frame_shm_owned(
+    pctx: &mut PaintContext, target: u64, image_id: u32,
+    out_handle: &mut u64, stats_out: *mut NativePresentationStats,
+) -> i32 {
+    *out_handle = 0;
+    emit_frame_with_owner(pctx, target, image_id, stats_out, Some(out_handle))
+}
+
+unsafe fn emit_frame_with_owner(
+    pctx: &mut PaintContext, target: u64, image_id: u32,
+    stats_out: *mut NativePresentationStats, owner: Option<&mut u64>,
+) -> i32 {
     let t0 = Instant::now();
-    let mode = TRANSPORT_MODE.with(|c| c.get());
+    let mode = if owner.is_some() { 2 } else { TRANSPORT_MODE.with(|c| c.get()) };
     let transport_id = mode;
 
     // Resolve target dimensions.
@@ -504,7 +486,7 @@ pub unsafe fn emit_frame_with_stats(
         readback_us = t_rb.elapsed().as_micros() as u64;
         let t_enc = Instant::now();
         let result = match mode {
-            2 => emit_shm_rgba_with_stats(rgba, width, height, image_id),
+            2 => emit_shm_rgba_with_owner(rgba, width, height, image_id, 0, 0, 0, owner),
             _ => (
                 emit_direct_inner(rgba, width, height, image_id),
                 ShmTransferStats::default(),
@@ -936,8 +918,14 @@ fn emit_shm_rgba_at_with_stats(
     row: i32,
     z: i32,
 ) -> (i32, ShmTransferStats) {
-    use super::shm::{shm_prepare_ring, shm_ring_fail_closed, shm_ring_mark_in_flight};
-    use crate::kitty::encoder::compress_rgba;
+    emit_shm_rgba_with_owner(rgba, width, height, image_id, col, row, z, None)
+}
+
+fn emit_shm_rgba_with_owner(
+    rgba: &[u8], width: u32, height: u32, image_id: u32,
+    col: i32, row: i32, z: i32, owner: Option<&mut u64>,
+) -> (i32, ShmTransferStats) {
+    use crate::kitty::encoder::PixelPayload;
     use base64::engine::general_purpose::STANDARD as B64;
     use base64::Engine as _;
 
@@ -949,34 +937,30 @@ fn emit_shm_rgba_at_with_stats(
     let animation_frame = existing_frame.filter(|_| !needs_full_transmit(image_id, width, height));
     let full_transmit = animation_frame.is_none();
     let digest = payload_hash(rgba, width, height, col, row, z);
-    if !full_transmit && payload_unchanged(image_id, digest) {
+    if owner.is_none() && !full_transmit && payload_unchanged(image_id, digest) {
         return (OK, stats);
     }
     let compression = shm_compression_enabled();
-    let compressed_storage;
-    let payload: &[u8];
-    let compression_param;
-    if compression {
-        let t_compress = Instant::now();
-        compressed_storage = compress_rgba(rgba).unwrap_or_else(|_| rgba.to_vec());
-        stats.compress_us = t_compress.elapsed().as_micros() as u64;
-        stats.compressed = compressed_storage.len() < rgba.len();
-        stats.payload_bytes = compressed_storage.len() as u64;
-        payload = &compressed_storage;
-        compression_param = if stats.compressed { ",o=z" } else { "" };
+    let t_compress = Instant::now();
+    let encoded = PixelPayload::encode(rgba, compression);
+    stats.compress_us = if compression {
+        t_compress.elapsed().as_micros() as u64
     } else {
-        stats.payload_bytes = rgba.len() as u64;
-        payload = rgba;
-        compression_param = "";
-    }
+        0
+    };
+    stats.compressed = encoded.compressed();
+    let payload = encoded.bytes();
+    stats.payload_bytes = payload.len() as u64;
+    let compression_param = encoded.parameter();
     let t_shm = Instant::now();
-    let (slot_index, shm_name) = match shm_prepare_ring(payload) {
+    let (lease, shm_name) = match ShmLease::prepare(payload, owner.is_some()) {
         Ok(res) => res,
         Err(_) => return (ERR_KITTY_TRANSPORT, stats),
     };
     stats.shm_prepare_us = t_shm.elapsed().as_micros() as u64;
     let name_b64 = B64.encode(shm_name.as_bytes());
     let data_len = payload.len();
+    let quiet = if owner.is_some() { 1 } else { 2 };
     let (target_frame, escape) = if let Some(existing) = animation_frame {
         let (target_frame, compose_frame, is_replacement) =
             next_animation_frame(Some(existing));
@@ -988,7 +972,7 @@ fn emit_shm_rgba_at_with_stats(
         (
             Some(target_frame),
             format!(
-                "\x1b7\x1b[{};{}H\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,t=s{compression_param},S={data_len},q=2;{name_b64}\x1b\\\x1b_Ga=a,i={image_id},c={target_frame},q=2;\x1b\\\x1b8",
+                "\x1b7\x1b[{};{}H\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,t=s{compression_param},S={data_len},q={quiet};{name_b64}\x1b\\\x1b_Ga=a,i={image_id},c={target_frame},q=2;\x1b\\\x1b8",
                 row.max(0) + 1,
                 col.max(0) + 1,
             ),
@@ -997,7 +981,7 @@ fn emit_shm_rgba_at_with_stats(
         (
             None,
             format!(
-                "\x1b7\x1b[{};{}H\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s{compression_param},S={data_len},q=2;{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,q=2;\x1b\\\x1b8",
+                "\x1b7\x1b[{};{}H\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s{compression_param},S={data_len},q={quiet};{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,q=2;\x1b\\\x1b8",
                 row.max(0) + 1,
                 col.max(0) + 1,
             ),
@@ -1008,14 +992,14 @@ fn emit_shm_rgba_at_with_stats(
     stats.write_us = t_write.elapsed().as_micros() as u64;
     match write_result {
         Ok(()) => {
-            shm_ring_mark_in_flight(slot_index);
+            lease.publish(owner);
             record_image_frame(image_id, target_frame);
             record_image_geometry(image_id, width, height);
             record_payload(image_id, digest);
             (OK, stats)
         }
         Err(e) => {
-            shm_ring_fail_closed(slot_index);
+            lease.cancel();
             set_last_error(format!("emit_shm_rgba: stdout write failed: {e}"));
             (ERR_KITTY_TRANSPORT, stats)
         }
@@ -1105,7 +1089,7 @@ fn emit_region_rgba_with_stats(
     mode: u32,
 ) -> (i32, ShmTransferStats) {
     use super::shm::{shm_prepare_ring, shm_ring_fail_closed, shm_ring_mark_in_flight};
-    use crate::kitty::encoder::compress_rgba;
+    use crate::kitty::encoder::PixelPayload;
     use base64::engine::general_purpose::STANDARD as B64;
     use base64::Engine as _;
 
@@ -1116,22 +1100,17 @@ fn emit_region_rgba_with_stats(
     let existing_frame = image_frame(image_id);
     let frame_id = existing_frame.unwrap_or(2);
     let compression = mode != 2 || shm_compression_enabled();
-    let compressed_storage;
-    let payload: &[u8];
-    let compression_param;
-    if compression {
-        let t_compress = Instant::now();
-        compressed_storage = compress_rgba(rgba).unwrap_or_else(|_| rgba.to_vec());
-        stats.compress_us = t_compress.elapsed().as_micros() as u64;
-        stats.compressed = compressed_storage.len() < rgba.len();
-        stats.payload_bytes = compressed_storage.len() as u64;
-        payload = &compressed_storage;
-        compression_param = if stats.compressed { ",o=z" } else { "" };
+    let t_compress = Instant::now();
+    let encoded = PixelPayload::encode(rgba, compression);
+    stats.compress_us = if compression {
+        t_compress.elapsed().as_micros() as u64
     } else {
-        stats.payload_bytes = rgba.len() as u64;
-        payload = rgba;
-        compression_param = "";
-    }
+        0
+    };
+    stats.compressed = encoded.compressed();
+    let payload = encoded.bytes();
+    stats.payload_bytes = payload.len() as u64;
+    let compression_param = encoded.parameter();
     let previous_frame = frame_id.saturating_sub(1);
     let meta = format!(
         "a=f,i={image_id},r={frame_id},c={previous_frame},x={rx},y={ry},s={rw},v={rh},f=32,X=1{compression_param},q=2"

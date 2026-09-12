@@ -376,6 +376,10 @@ export function openKittyPlaceholderSymbols(): ReturnType<typeof dlopen<typeof K
  * when this optional group is unavailable.
  */
 export const KITTY_SHM_SYMBOLS = {
+  // Regular Kitty upload with explicit SHM ownership (no tmux placeholders).
+  vexart_kitty_emit_frame_shm_owned: {
+    args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32,
+  },
   // emit_placeholder_shm_frame: ctx, target, params(20 bytes), params_len,
   // out_handle, stats_out → i32
   vexart_kitty_emit_placeholder_shm_frame: {

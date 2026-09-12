@@ -134,7 +134,7 @@ impl ShmRingSlot {
 /// Fixed-pool Ring Buffer (N = 3 slots) for Kitty SHM segments.
 ///
 /// Prevents file leaks in `/dev/shm`, removes per-frame unbounded file creation,
-/// ensures pre-emptive unlinking of old generations when slots cycle, and
+/// recycles only generations already consumed by the terminal, and
 /// guarantees symmetric cleanup on shutdown / atexit / panic.
 pub struct ShmRingBuffer {
     slots: [ShmRingSlot; SHM_RING_SLOTS],
@@ -161,9 +161,8 @@ impl ShmRingBuffer {
     }
 
     /// Acquire the next ring slot:
-    /// 1. Advances ring slot `current = (current + 1) % N`.
-    /// 2. Checks the slot: if it has a previous generation name, unlinks it (`shm_unlink`)
-    ///    so stale files from non-unlinking terminals or crashed/aborted frames are guaranteed reclaimed.
+    /// 1. Find a free or terminal-consumed slot; reject if every transfer is pending.
+    /// 2. Drop the descriptor of the consumed generation, without unlinking a live name.
     /// 3. Increments generation, formats the name `/vx-{pid:x}-s{slot:x}-g{gen:x}`
     ///    (keeping strictly under 31 bytes for POSIX and Kitty name limits).
     /// 4. Opens/creates the SHM segment with `shm_open`.
@@ -181,17 +180,34 @@ impl ShmRingBuffer {
             return Err(ERR_INVALID_ARG);
         }
 
-        // 1. Advance ring slot: current = (current + 1) % N
-        self.current = (self.current + 1) % SHM_RING_SLOTS;
-        let slot_idx = self.current;
-        let slot = &mut self.slots[slot_idx];
-
-        // 2. Unlink previous generation name in this slot if any.
-        if let Some(ref prev_name) = slot.name {
-            let _ = shm_unlink(prev_name.as_c_str());
+        // A producer write is not a consumer acknowledgement. Only a name
+        // removed by the terminal can be recycled; a full ring exerts pressure
+        // instead of destroying a published transfer.
+        let mut available = None;
+        for offset in 1..=SHM_RING_SLOTS {
+            let index = (self.current + offset) % SHM_RING_SLOTS;
+            let slot = &self.slots[index];
+            if let Some(name) = &slot.name {
+                match shm_open(name.as_c_str(), OFlag::O_RDONLY, Mode::empty()) {
+                    Ok(_) => continue,
+                    Err(nix::errno::Errno::ENOENT) => {},
+                    Err(error) => {
+                        set_last_error(format!("SHM consumption probe failed: {error}"));
+                        return Err(ERR_KITTY_TRANSPORT);
+                    }
+                }
+            }
+            available = Some(index);
+            break;
         }
+        let Some(slot_idx) = available else {
+            set_last_error("SHM ring is awaiting terminal consumption; use the owned frame presenter for asynchronous backpressure");
+            return Err(ERR_KITTY_TRANSPORT);
+        };
+        self.current = slot_idx;
+        let slot = &mut self.slots[slot_idx];
         slot.name = None;
-        slot.fd = None; // Dropping OwnedFd closes descriptor
+        slot.fd = None;
         slot.capacity = 0;
         slot.in_use = false;
 
@@ -934,7 +950,13 @@ mod tests {
         assert!(shm_open(name1.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_ok());
         assert!(shm_open(name2.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_ok());
 
-        // Slot 3 (wraps to slot 0) - recycling slot 0 MUST unlink name0!
+        // A fourth producer must leave all three pending names untouched.
+        assert!(ring.acquire(&payload_d).is_err());
+        assert!(shm_open(name0.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_ok());
+        assert!(shm_open(name1.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_ok());
+        assert!(shm_open(name2.as_c_str(), OFlag::O_RDONLY, Mode::empty()).is_ok());
+        // The real consumer reads then unlinks. Only now is slot 0 reusable.
+        shm_unlink(name0.as_c_str()).unwrap();
         let (s3, name3) = ring.acquire(&payload_d).expect("acquire slot 0 gen 2");
         assert_eq!(s3, 0);
         let g3 = ring.slots()[0].generation;
@@ -963,11 +985,15 @@ mod tests {
     #[test]
     fn test_ring_buffer_bounds_total_files_to_n() {
         let mut ring = ShmRingBuffer::new();
-        let mut all_names = Vec::new();
+        let mut all_names: Vec<CString> = Vec::new();
 
         // Run through 15 acquisitions (5 cycles of N=3)
         for i in 0..15 {
             let data = vec![i as u8; 64];
+            if i >= SHM_RING_SLOTS {
+                // A terminal acknowledges this older generation by unlinking.
+                shm_unlink(all_names[i - SHM_RING_SLOTS].as_c_str()).unwrap();
+            }
             let (slot, name) = ring.acquire(&data).expect("acquire");
             assert_eq!(slot, i % SHM_RING_SLOTS);
             all_names.push(name);

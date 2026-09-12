@@ -27,6 +27,43 @@ pub fn compress_rgba(rgba: &[u8]) -> Result<Vec<u8>, std::io::Error> {
     enc.finish()
 }
 
+/// The wire encoding travels with its bytes; headers never infer it from size.
+pub(crate) enum PixelPayload<'a> {
+    Raw(&'a [u8]),
+    Zlib(Vec<u8>),
+}
+
+impl<'a> PixelPayload<'a> {
+    pub(crate) fn encode(rgba: &'a [u8], compress: bool) -> Self {
+        if !compress {
+            return Self::Raw(rgba);
+        }
+        match compress_rgba(rgba) {
+            Ok(bytes) => Self::Zlib(bytes),
+            // Compression is optional; the raw representation remains valid.
+            Err(_) => Self::Raw(rgba),
+        }
+    }
+
+    pub(crate) fn bytes(&self) -> &[u8] {
+        match self {
+            Self::Raw(bytes) => bytes,
+            Self::Zlib(bytes) => bytes,
+        }
+    }
+
+    pub(crate) fn parameter(&self) -> &'static str {
+        match self {
+            Self::Raw(_) => "",
+            Self::Zlib(_) => ",o=z",
+        }
+    }
+
+    pub(crate) fn compressed(&self) -> bool {
+        matches!(self, Self::Zlib(_))
+    }
+}
+
 /// Encode a complete frame for direct Kitty transmission.
 ///
 /// Returns the full byte sequence to be written to stdout, consisting of one
@@ -39,10 +76,11 @@ pub fn compress_rgba(rgba: &[u8]) -> Result<Vec<u8>, std::io::Error> {
 /// * `image_id` — Kitty image ID (must be > 0)
 pub fn encode_frame_direct(rgba: &[u8], width: u32, height: u32, image_id: u32) -> Vec<u8> {
     // 1. zlib compress.
-    let compressed = compress_rgba(rgba).unwrap_or_else(|_| rgba.to_vec());
+    let payload = PixelPayload::encode(rgba, true);
+    let compression = payload.parameter();
 
     // 2. base64 encode.
-    let b64 = B64.encode(&compressed);
+    let b64 = B64.encode(payload.bytes());
 
     // 3. Split into 4096-byte chunks.
     let chunks: Vec<&str> = b64
@@ -56,7 +94,7 @@ pub fn encode_frame_direct(rgba: &[u8], width: u32, height: u32, image_id: u32) 
     if chunks.is_empty() {
         // Empty frame — emit a minimal escape with m=0 and no data.
         let header =
-            format!("\x1b_Ga=T,f=32,s={width},v={height},i={image_id},p=1,C=1,o=z,m=0;\x1b\\");
+            format!("\x1b_Ga=T,f=32,s={width},v={height},i={image_id},p=1,C=1{compression},m=0;\x1b\\");
         out.extend_from_slice(header.as_bytes());
         return out;
     }
@@ -64,7 +102,7 @@ pub fn encode_frame_direct(rgba: &[u8], width: u32, height: u32, image_id: u32) 
     if chunks.len() == 1 {
         // Single chunk: no continuation.
         let seq = format!(
-            "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},p=1,C=1,o=z,m=0;{}\x1b\\",
+            "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},p=1,C=1{compression},m=0;{}\x1b\\",
             chunks[0]
         );
         out.extend_from_slice(seq.as_bytes());
@@ -74,7 +112,7 @@ pub fn encode_frame_direct(rgba: &[u8], width: u32, height: u32, image_id: u32) 
     // Multiple chunks.
     // First chunk: carries all metadata, m=1 (more follows).
     let first = format!(
-        "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},p=1,C=1,o=z,m=1;{}\x1b\\",
+        "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},p=1,C=1{compression},m=1;{}\x1b\\",
         chunks[0]
     );
     out.extend_from_slice(first.as_bytes());
@@ -106,8 +144,9 @@ pub fn encode_animation_frame_direct(
     compose_frame: u32,
     is_replacement: bool,
 ) -> Vec<u8> {
-    let compressed = compress_rgba(rgba).unwrap_or_else(|_| rgba.to_vec());
-    let b64 = B64.encode(&compressed);
+    let payload = PixelPayload::encode(rgba, true);
+    let compression = payload.parameter();
+    let b64 = B64.encode(payload.bytes());
     let chunks: Vec<&str> = b64
         .as_bytes()
         .chunks(CHUNK_SIZE)
@@ -122,14 +161,14 @@ pub fn encode_animation_frame_direct(
     if chunks.is_empty() {
         out.extend_from_slice(
             format!(
-                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,o=z,m=0;\x1b\\"
+                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1{compression},m=0;\x1b\\"
             )
             .as_bytes(),
         );
     } else if chunks.len() == 1 {
         out.extend_from_slice(
             format!(
-                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,o=z,m=0;{}\x1b\\",
+                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1{compression},m=0;{}\x1b\\",
                 chunks[0]
             )
             .as_bytes(),
@@ -137,15 +176,15 @@ pub fn encode_animation_frame_direct(
     } else {
         out.extend_from_slice(
             format!(
-                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1,o=z,m=1;{}\x1b\\",
+                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1{compression},m=1;{}\x1b\\",
                 chunks[0]
             )
             .as_bytes(),
         );
         for chunk in &chunks[1..chunks.len() - 1] {
-            out.extend_from_slice(format!("\x1b_Gm=1;{chunk}\x1b\\").as_bytes());
+            out.extend_from_slice(format!("\x1b_Ga=f,m=1;{chunk}\x1b\\").as_bytes());
         }
-        out.extend_from_slice(format!("\x1b_Gm=0;{}\x1b\\", chunks[chunks.len() - 1]).as_bytes());
+        out.extend_from_slice(format!("\x1b_Ga=f,m=0;{}\x1b\\", chunks[chunks.len() - 1]).as_bytes());
     }
     out.extend_from_slice(format!("\x1b_Ga=a,i={image_id},c={target_frame},q=2;\x1b\\").as_bytes());
     out
@@ -158,6 +197,37 @@ mod tests {
     use super::*;
     use flate2::read::ZlibDecoder;
     use std::io::Read;
+
+    #[test]
+    fn payload_encoding_should_match_bytes_even_when_compression_expands() {
+        let rgba = [1, 2, 3, 4];
+        let raw = PixelPayload::encode(&rgba, false);
+        assert_eq!(raw.parameter(), "");
+        assert_eq!(raw.bytes(), rgba);
+        let encoded = PixelPayload::encode(&rgba, true);
+        assert!(encoded.bytes().len() > rgba.len());
+        assert_eq!(encoded.parameter(), ",o=z");
+        assert_eq!(zlib_decompress(encoded.bytes()), rgba);
+    }
+
+    #[test]
+    fn animation_continuations_should_keep_the_frame_action() {
+        let mut seed = 7u32;
+        let rgba = (0..64 * 64 * 4).map(|_| {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            (seed >> 24) as u8
+        }).collect::<Vec<_>>();
+        let encoded = String::from_utf8(encode_animation_frame_direct(&rgba, 64, 64, 19, 2, 1, false)).unwrap();
+        let chunks = encoded.split("\x1b_G").filter(|sequence| sequence.contains(";"))
+            .filter(|sequence| !sequence.starts_with("a=a,"))
+            .collect::<Vec<_>>();
+        assert!(chunks.len() > 1);
+        for chunk in chunks {
+            assert!(chunk.starts_with("a=f,"));
+            let payload = chunk.split_once(';').unwrap().1.trim_end_matches("\x1b\\");
+            assert!(payload.len() <= CHUNK_SIZE);
+        }
+    }
 
     /// Decompress zlib bytes.
     fn zlib_decompress(data: &[u8]) -> Vec<u8> {

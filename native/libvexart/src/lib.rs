@@ -1008,6 +1008,34 @@ pub unsafe extern "C" fn vexart_kitty_emit_frame_with_stats(
     })
 }
 
+/// Emit a regular Kitty SHM frame and transfer its lifetime to the caller.
+/// # Safety
+/// out_handle must be writable; stats_out must be writable when non-null.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_kitty_emit_frame_shm_owned(
+    _ctx: u64,
+    target: u64,
+    image_id: u32,
+    out_handle: *mut u64,
+    stats_out: *mut types::NativePresentationStats,
+) -> i32 {
+    ffi_guard!({
+        if out_handle.is_null() || image_id == 0 {
+            return ERR_INVALID_ARG;
+        }
+        *out_handle = 0;
+        let mut guard = get_or_init_paint();
+        let Some(pctx) = guard.as_mut() else {
+            return ERR_GPU_DEVICE_LOST;
+        };
+        let rc = kitty::transport::emit_frame_shm_owned(pctx, target, image_id, &mut *out_handle, stats_out);
+        if rc == OK {
+            advance_presentation_frame();
+        }
+        rc
+    })
+}
+
 /// Emit a pre-encoded RGBA layer natively (dirty-layer presentation path).
 ///
 /// `rgba_ptr`/`rgba_len` — raw RGBA pixel data (width × height × 4 bytes).

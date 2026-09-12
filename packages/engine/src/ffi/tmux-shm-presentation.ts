@@ -1,5 +1,6 @@
 import { ptr } from "bun:ffi"
 import {
+  openVexartLibrary,
   openKittyPlaceholderSymbols,
   openKittyShmSymbols,
 } from "./vexart-bridge"
@@ -27,6 +28,8 @@ type ShmSymbols = ReturnType<typeof openKittyShmSymbols>
 type PlaceholderSymbols = ReturnType<typeof openKittyPlaceholderSymbols>
 
 export type TmuxShmPresentationOptions = {
+  /** Internal transport label; mechanics are shared with regular Kitty SHM. */
+  label?: string
   /** Subscribe to terminal input. The parser is observational only. */
   onData?: (handler: (data: Buffer) => void) => () => void
   /** Bounded poll interval. Production uses 4ms; tests may shorten it. */
@@ -68,6 +71,7 @@ export type TmuxShmPresentation = {
   present: (frame: TmuxShmFrame) => NativePresentationStats | null
   waitForDrain: () => Promise<void>
   invalidate: () => void
+  forgetTarget: (target: bigint) => void
   suspend: () => void
   resume: () => void
   destroy: () => void
@@ -129,6 +133,47 @@ function tmuxClientCanReceiveGraphics(client: TmuxClientInfo) {
  * unlinked, not by a Kitty ACK: ACKs can be routed to a different tmux pane.
  */
 export function createTmuxShmPresentation(options: TmuxShmPresentationOptions = {}): TmuxShmPresentation {
+  return createShmPresentation(options)
+}
+
+/** Same bounded active/latest controller, with ordinary Kitty wire commands. */
+export function createKittyShmPresentation(options: Pick<TmuxShmPresentationOptions, "onData" | "onError" | "imageId"> = {}): TmuxShmPresentation {
+  return createShmPresentation({
+    ...options,
+    label: "Kitty SHM",
+    // Time is not proof of consumption. Retain a bounded transfer until the
+    // terminal consumes/rejects it or its owner explicitly cancels the session.
+    timeoutMs: Infinity,
+    native: {
+      emit(context, target, params) {
+        const symbols = openKittyShmSymbols()
+        if (!symbols) throw new Error("[vexart] rebuild libvexart: owned SHM ABI unavailable")
+        const handle = new BigUint64Array(1)
+        const stats = allocNativeStatsBuf()
+        const rc = symbols.vexart_kitty_emit_frame_shm_owned(context, target, params[0], ptr(handle), ptr(stats)) as number
+        if (rc !== 0) throw new Error(`[vexart] owned SHM emit failed (${rc}): ${vexartGetLastError()}`)
+        return { handle: handle[0], stats: decodeNativePresentationStats(stats) }
+      },
+      isConsumed(handle) {
+        const symbols = openKittyShmSymbols()
+        if (!symbols) throw new Error("[vexart] owned SHM ABI unavailable")
+        return symbols.vexart_kitty_shm_is_consumed(handle) as number
+      },
+      release(handle) {
+        const symbols = openKittyShmSymbols()
+        if (!symbols) throw new Error("[vexart] owned SHM ABI unavailable")
+        return symbols.vexart_kitty_shm_release(handle, 1) as number
+      },
+      deleteImage(context, imageId) {
+        const stats = allocNativeStatsBuf()
+        return openVexartLibrary().symbols.vexart_kitty_delete_layer(context, imageId, ptr(stats)) as number
+      },
+    },
+  })
+}
+
+function createShmPresentation(options: TmuxShmPresentationOptions): TmuxShmPresentation {
+  const label = options.label ?? "tmux SHM"
   const pollIntervalMs = Math.max(1, Math.floor(options.pollIntervalMs ?? 4))
   const timeoutMs = Math.max(pollIntervalMs, Math.floor(options.timeoutMs ?? 1000))
   const detachedPollIntervalMs = Math.max(250, Math.min(500, Math.floor(options.detachedPollIntervalMs ?? 350)))
@@ -136,7 +181,7 @@ export function createTmuxShmPresentation(options: TmuxShmPresentationOptions = 
   const getLastError = options.getLastError ?? vexartGetLastError
   const imageId = options.imageId ?? allocateImageId()
   if (!Number.isSafeInteger(imageId) || imageId <= 0 || imageId > 0xffffffff) {
-    throw new Error(`[vexart] tmux SHM presentation image id must be a positive u32 (received ${imageId})`)
+    throw new Error(`[vexart] ${label} presentation image id must be a positive u32 (received ${imageId})`)
   }
 
   let symbols: ShmSymbols = null
@@ -169,7 +214,7 @@ export function createTmuxShmPresentation(options: TmuxShmPresentationOptions = 
 
   const actionable = (message: string, cause?: unknown) => {
     const detail = cause instanceof Error ? ` (${cause.message})` : cause ? ` (${String(cause)})` : ""
-    return new Error(`[vexart] tmux SHM presentation failed: ${message}${detail}`)
+    return new Error(`[vexart] ${label} presentation failed: ${message}${detail}`)
   }
 
   const releaseHandle = (handle: bigint) => {
@@ -533,6 +578,13 @@ export function createTmuxShmPresentation(options: TmuxShmPresentationOptions = 
     },
     invalidate() {
       gridGeometry = null
+    },
+    forgetTarget(target) {
+      // Active transfers own their copied pixels. Only queued metadata still
+      // borrows the target and must be withdrawn before its owner frees it.
+      if (pending?.target === target) pending = null
+      if (detached?.frame.target === target) { detached = null; stopDetached() }
+      settleDrains(fatal ?? undefined)
     },
     suspend() {
       if (destroyed) return

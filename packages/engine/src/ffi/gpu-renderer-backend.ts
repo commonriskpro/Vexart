@@ -55,7 +55,7 @@ import {
 } from "./native-layer-registry"
 import { ensureNativeKittyTransport } from "./native-presentation-ops"
 import type { DamageRect } from "./damage"
-import { createTmuxShmPresentation, type TmuxShmPresentation } from "./tmux-shm-presentation"
+import { createKittyShmPresentation, createTmuxShmPresentation, type TmuxShmPresentation } from "./tmux-shm-presentation"
 
 const PROFILE_ENABLED = process.env.VEXART_PROFILE !== "0"
 
@@ -194,8 +194,9 @@ function failGpuOnly(message: string): never {
 type GpuRendererBackendOptions = {
   /** Skip Kitty/native presentation while retaining the composited GPU target for readback. */
   suppressPresentation?: boolean
-  tmuxShm?: TmuxShmPresentation
-  tmuxShmSize?: () => { cols: number; rows: number }
+  shmPresentation?: TmuxShmPresentation
+  shmSize?: () => { cols: number; rows: number }
+  placeholderPresentation?: boolean
 }
 
 export function createGpuRendererBackend(): GpuRendererBackend {
@@ -208,8 +209,8 @@ export function createGpuRendererBackend(): GpuRendererBackend {
  * callback at each emission so resize updates reach the native presenter.
  */
 export function createGpuRendererBackendForTerminal(term: Pick<Terminal, "caps" | "size" | "onData">): GpuRendererBackend {
-  if (term.caps.tmux) {
-    const recovery = inTmux()
+  if (term.caps.tmux || term.caps.transmissionMode === "shm") {
+    const recovery = term.caps.tmux && inTmux()
     const clientState = recovery ? queryTmuxClientState() : null
     if (clientState?.kind === "unknown") {
       throw new Error(`Vexart cannot verify the attached tmux client: ${clientState.reason}`)
@@ -226,32 +227,33 @@ export function createGpuRendererBackendForTerminal(term: Pick<Terminal, "caps" 
     if (clientState && !clientState.client.rgb) {
       throw new Error("Vexart requires an RGB-capable tmux client before creating the GPU renderer")
     }
-    const tmuxShm = createTmuxShmPresentation({
+    const presenter = term.caps.tmux ? createTmuxShmPresentation({
       onData: term.onData,
       ...(clientState?.kind === "single" ? {
         expectedClient: clientState.client,
         getClientState: queryTmuxClientState,
       } : {}),
-    })
+    }) : createKittyShmPresentation({ onData: term.onData })
     let removeLifecycle: (() => void) | null = null
     removeLifecycle = onTerminalTransportLifecycle(term as Terminal, (event) => {
-      if (event === "suspend") tmuxShm.suspend()
-      else if (event === "resume") tmuxShm.resume()
+      if (event === "suspend") presenter.suspend()
+      else if (event === "resume") presenter.resume()
       else {
-        tmuxShm.destroy()
+        presenter.destroy()
         removeLifecycle?.()
         removeLifecycle = null
       }
     })
     const backend = createGpuRendererBackendInternal({
-      tmuxShm,
-      tmuxShmSize: () => ({ cols: term.size.cols, rows: term.size.rows }),
+      shmPresentation: presenter,
+      placeholderPresentation: term.caps.tmux,
+      shmSize: () => ({ cols: term.size.cols, rows: term.size.rows }),
     })
     const originalDestroy = backend.destroy
     backend.destroy = () => {
       removeLifecycle?.()
       removeLifecycle = null
-      tmuxShm.destroy()
+      presenter.destroy()
       originalDestroy?.()
     }
     return backend
@@ -441,23 +443,36 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     backendProfile.nativePayloadBytes += stats.payloadBytes
   }
 
+  let presentation = options.shmPresentation ?? null
+  const recordPresentation = (stats: NativePresentationStats | null) => {
+    if (!stats) return
+    lastNativePresentationStats = stats
+    addNativeStatsProfile(stats)
+  }
+  presentation?.setOnPresented(recordPresentation)
+
   const emitNativeFinalFrame = (
     vctx: bigint,
     targetHandle: bigint,
     frame: RendererBackendFrameContext,
   ): NativePresentationStats | null => {
     const statsBuf = allocNativeStatsBuf()
-    const tmuxShm = options.tmuxShm
-    if (tmuxShm) {
+    if (!presentation && frame.transmissionMode === "shm") {
+      presentation = createKittyShmPresentation()
+      presentation.setOnPresented(recordPresentation)
+      tmuxPresentationDrainers.set(backend, presentation.waitForDrain)
+    }
+    const presenter = presentation
+    if (presenter) {
       if (frame.transmissionMode !== "shm") {
         throw new Error(
-          `[vexart] tmux SHM presentation requires transmissionMode="shm" (received "${frame.transmissionMode}"); ` +
+          `[vexart] SHM presentation requires transmissionMode="shm" (received "${frame.transmissionMode}"); ` +
           "refusing to fall back to direct/file transport",
         )
       }
-      const size = (options.tmuxShmSize ?? (() => ({ cols: 0, rows: 0 })))()
+      const size = (options.shmSize ?? (() => ({ cols: 0, rows: 0 })))()
       const nativeEmitStart = PROFILE_ENABLED ? performance.now() : 0
-      const stats = tmuxShm.present({
+      const stats = presenter.present({
         context: vctx,
         target: targetHandle,
         width: frame.viewportWidth,
@@ -618,6 +633,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
 
   const destroyTargetRecord = (record: TargetRecord | null) => {
     if (!record) return
+    presentation?.forgetTarget(record.handle)
     vexartCompositeTargetDestroy(getVexartCtx(), record.handle)
   }
 
@@ -627,15 +643,10 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       logGpuResize(`reuse target width=${width} height=${height}`)
       return standaloneTarget.handle
     }
-    if (standaloneTarget) {
-      logGpuResize(`destroy target prevWidth=${standaloneTarget.width} prevHeight=${standaloneTarget.height} nextWidth=${width} nextHeight=${height}`)
-      vexartCompositeTargetDestroy(vctx, standaloneTarget.handle)
-    } else {
-      logGpuResize(`create first target width=${width} height=${height}`)
-    }
-    clearSpriteCaches()
     const handle = vexartCompositeTargetCreate(vctx, width, height)
     if (!handle) return null
+    destroyTargetRecord(standaloneTarget)
+    clearSpriteCaches()
     standaloneTarget = { key: "standalone", width, height, handle }
     logGpuResize(`created target width=${width} height=${height}`)
     return handle
@@ -646,9 +657,9 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     if (finalFrameTarget && finalFrameTarget.width === width && finalFrameTarget.height === height) {
       return finalFrameTarget.handle
     }
-    destroyTargetRecord(finalFrameTarget)
     const handle = vexartCompositeTargetCreate(vctx, width, height)
     if (!handle) return null
+    destroyTargetRecord(finalFrameTarget)
     finalFrameTarget = { key: "final-frame", width, height, handle }
     return handle
   }
@@ -660,9 +671,9 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       touchMapEntry(layerTargets, key, existing)
       return existing.handle
     }
-    if (existing) vexartCompositeTargetDestroy(vctx, existing.handle)
     const handle = vexartCompositeTargetCreate(vctx, width, height)
     if (!handle) return null
+    if (existing) vexartCompositeTargetDestroy(vctx, existing.handle)
     layerTargetSlot.set(key, { key, width, height, handle })
     return handle
   }
@@ -2891,12 +2902,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     }
   }
 
-  options.tmuxShm?.setOnPresented((stats) => {
-    if (!stats) return
-    lastNativePresentationStats = stats
-    addNativeStatsProfile(stats)
-  })
-
   const backend = {
     name: "gpu-render-graph",
     beginFrame(ctx): RendererBackendFramePlan {
@@ -2916,7 +2921,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       const forcedStrategy = getForcedLayerStrategy()
       if (forcedStrategy) {
         if (forcedStrategy === "final-frame" && lastStrategy !== "final-frame") {
-          clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: !!options.tmuxShm }, _vexartCtx ?? 1n)
+          clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: !!options.placeholderPresentation }, _vexartCtx ?? 1n)
         }
         framesSinceStrategyChange = lastStrategy === forcedStrategy ? framesSinceStrategyChange + 1 : 0
         lastStrategy = forcedStrategy
@@ -2973,7 +2978,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
         framesSinceChange: framesSinceStrategyChange,
       }, lastNativeFramePlan)
       if (chosen === "final-frame" && previousStrategy !== "final-frame") {
-        clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: !!options.tmuxShm }, _vexartCtx ?? 1n)
+        clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: !!options.placeholderPresentation }, _vexartCtx ?? 1n)
       }
       framesSinceStrategyChange = chosen === previousStrategy ? framesSinceStrategyChange + 1 : 0
       lastStrategy = chosen
@@ -3117,6 +3122,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     },
     instanceImageHandles,
     destroy() {
+      presentation?.destroy()
       if (_vexartCtx !== null) {
         clearImageCache()
         clearSpriteCaches()
@@ -3152,6 +3158,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       return vexartCompositeReadbackRgba(_vexartCtx, target, width * height * 4)
     },
   } as GpuRendererBackend
-  if (options.tmuxShm) tmuxPresentationDrainers.set(backend, options.tmuxShm.waitForDrain)
+  if (options.shmPresentation) tmuxPresentationDrainers.set(backend, options.shmPresentation.waitForDrain)
   return backend
 }
