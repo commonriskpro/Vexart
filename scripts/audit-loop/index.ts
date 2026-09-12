@@ -420,16 +420,16 @@ const runChecks = async (state: RunState, paths: string[]) => {
   else if (!(await packageHasScript(state.worktree, "typecheck"))) checks.push({ command: ["bun", "run", "typecheck"], result: { ok: false, output: "package has no typecheck script" } })
   else {
     const remaining = Math.max(1, new Date(state.deadlineAt).getTime() - Date.now())
-    const typecheck = await runProcess(["bun", "run", "typecheck"], state.worktree, remaining)
+    const typecheck = await runProcess(["bun", "run", "typecheck"], state.worktree, remaining, true)
     checks.push({ command: ["bun", "run", "typecheck"], result: { ok: typecheck.code === 0 && !typecheck.timedOut, output: typecheck.stderr || typecheck.stdout } })
     if (await packageHasScript(state.worktree, "test")) {
-      const behavioral = await runProcess(["bun", "run", "test", "--", state.scope ?? "."], state.worktree, Math.max(1, new Date(state.deadlineAt).getTime() - Date.now()))
+      const behavioral = await runProcess(["bun", "run", "test", "--", state.scope ?? "."], state.worktree, Math.max(1, new Date(state.deadlineAt).getTime() - Date.now()), true)
       checks.push({ command: ["bun", "run", "test", "--", state.scope ?? "."], result: { ok: behavioral.code === 0 && !behavioral.timedOut, output: behavioral.stderr || behavioral.stdout } })
     } else checks.push({ command: ["bun", "run", "test"], result: { ok: false, output: "package has no behavioral test script" } })
   }
   if (paths.some((path) => path === "native" || path.startsWith("native/"))) {
     const remaining = Math.max(1, new Date(state.deadlineAt).getTime() - Date.now())
-    const cargo = await runProcess(["cargo", "test", "--offline", "--manifest-path", "native/libvexart/Cargo.toml"], state.worktree, remaining)
+    const cargo = await runProcess(["cargo", "test", "--offline", "--manifest-path", "native/libvexart/Cargo.toml"], state.worktree, remaining, true)
     checks.push({ command: ["cargo", "test", "--offline", "--manifest-path", "native/libvexart/Cargo.toml"], result: { ok: cargo.code === 0 && !cargo.timedOut, output: cargo.stderr || cargo.stdout } })
   }
   return checks
