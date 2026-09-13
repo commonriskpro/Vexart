@@ -132,202 +132,6 @@ declare type BezierCmd = {
 };
 
 /** @public */
-export declare type BoxProps = {
-    /** @beta */
-    layout?: "flex" | "grid";
-    direction?: "row" | "column";
-    /** Alias for direction (opentui compat) */
-    flexDirection?: "row" | "column";
-    padding?: number;
-    paddingX?: number;
-    paddingY?: number;
-    margin?: number;
-    marginX?: number;
-    marginY?: number;
-    gap?: number;
-    alignX?: "left" | "right" | "center" | "space-between";
-    alignY?: "top" | "bottom" | "center" | "space-between";
-    /** @beta */
-    justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "space-around" | "space-evenly" | "stretch";
-    /** @beta */
-    alignItems?: "top" | "bottom" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "stretch";
-    /** @beta */
-    gridTemplateColumns?: readonly GridTrack[];
-    /** @beta */
-    gridTemplateRows?: readonly GridTrack[];
-    /** @beta */
-    gridAutoColumns?: GridTrackSize;
-    /** @beta */
-    gridAutoRows?: GridTrackSize;
-    /** @beta */
-    gridAutoFlow?: GridAutoFlow;
-    /** @beta */
-    gridTemplateAreas?: readonly (readonly (string | null)[])[];
-    /** @beta */
-    gridColumn?: GridPlacement;
-    /** @beta */
-    gridRow?: GridPlacement;
-    /** @beta */
-    gridArea?: GridAreaPlacement;
-    /** @beta */
-    alignContent?: GridContentAlignment;
-    /** @beta */
-    justifyItems?: GridItemAlignment;
-    /** @beta */
-    justifySelf?: GridItemAlignment;
-    /** @beta */
-    alignSelf?: GridItemAlignment;
-    width?: SizingUnit;
-    height?: SizingUnit;
-    /** When set, width behaves as "grow" (opentui compat) */
-    flexGrow?: number;
-    /** Accepted for CSS compatibility. Flexily handles shrinking automatically. */
-    flexShrink?: number;
-    backgroundColor?: string | number;
-    cornerRadius?: number;
-    /** CSS-friendly alias for cornerRadius (Decision 1) */
-    borderRadius?: number;
-    cornerRadii?: CornerRadii;
-    borderColor?: string | number;
-    borderWidth?: number;
-    /** Opacity: 0.0 = fully transparent, 1.0 = fully opaque. Multiplies alpha of entire element. */
-    opacity?: number;
-    layer?: boolean;
-    /** Declarative interaction state used by engine-level drag/compositor policies. */
-    interactionMode?: InteractionMode;
-    debugName?: string;
-    scrollX?: boolean;
-    scrollY?: boolean;
-    scrollSpeed?: number;
-    scrollId?: string;
-    floating?: "parent" | "root" | {
-        attachTo: string;
-    };
-    floatOffset?: {
-        x: number;
-        y: number;
-    };
-    zIndex?: number;
-    floatAttach?: {
-        element?: number;
-        parent?: number;
-    };
-    pointerPassthrough?: boolean;
-    viewportClip?: boolean;
-    minWidth?: number;
-    maxWidth?: number;
-    minHeight?: number;
-    maxHeight?: number;
-    paddingLeft?: number;
-    paddingRight?: number;
-    paddingTop?: number;
-    paddingBottom?: number;
-    marginLeft?: number;
-    marginRight?: number;
-    marginTop?: number;
-    marginBottom?: number;
-    borderLeft?: number;
-    borderRight?: number;
-    borderTop?: number;
-    borderBottom?: number;
-    borderBetweenChildren?: number;
-    shadow?: ShadowConfig | ShadowConfig[];
-    /** CSS-friendly alias for shadow (Decision 1) */
-    boxShadow?: BoxProps["shadow"];
-    glow?: GlowConfig;
-    gradient?: GradientConfig;
-    backdropBlur?: number;
-    /** Backdrop brightness filter. 0=black, 100=unchanged, 200=2x bright. */
-    backdropBrightness?: number;
-    /** Backdrop contrast filter. 0=grey, 100=unchanged, 200=high contrast. */
-    backdropContrast?: number;
-    /** Backdrop saturation filter. 0=grayscale, 100=unchanged, 200=hyper-saturated. */
-    backdropSaturate?: number;
-    /** Backdrop grayscale filter. 0=unchanged, 100=full grayscale. */
-    backdropGrayscale?: number;
-    /** Backdrop invert filter. 0=unchanged, 100=fully inverted. */
-    backdropInvert?: number;
-    /** Backdrop sepia filter. 0=unchanged, 100=full sepia. */
-    backdropSepia?: number;
-    /** Backdrop hue-rotate filter. 0-360 degrees, 0/360=unchanged. */
-    backdropHueRotate?: number;
-    /**
-     * Self-filter applied to this element's own paint output.
-     * Unlike backdropBlur/backdropFilter which affect content BEHIND the element,
-     * `filter` affects the element's own rendered pixels (REQ-2B-401).
-     */
-    filter?: FilterConfig;
-    /**
-     * Hint that this property will change soon — pre-promotes the node to its own
-     * GPU compositing layer to avoid runtime promotion cost (REQ-2B-501).
-     * Accepted values: "transform", "opacity", "filter", "scroll".
-     */
-    willChange?: string | string[];
-    /**
-     * Containment boundary hint (REQ-2B-502).
-     * - 'none': no containment (default).
-     * - 'layout': size changes inside do not re-lay out siblings.
-     * - 'paint': content clipped to bounds; no overflow visible.
-     * - 'strict': layout + paint combined.
-     */
-    contain?: 'none' | 'layout' | 'paint' | 'strict';
-    hoverStyle?: InteractiveStyleProps;
-    activeStyle?: InteractiveStyleProps;
-    /** Focus state — applied when element has focus (Decision 7) */
-    focusStyle?: InteractiveStyleProps;
-    /** Unified press handler — fires on mouse click + Enter/Space when focused (Decision 6) */
-    onPress?: (event?: PressEvent) => void;
-    /** Alias for onPress (web convention). If both are provided, onPress takes precedence. */
-    onClick?: (event?: PressEvent) => void;
-    /** Make this element focusable via Tab navigation. Like HTML tabindex="0". */
-    focusable?: boolean;
-    /** Explicit ID for focus registration (defaults to id or node-focus-${id}) */
-    focusId?: string;
-    /** Keyboard event handler — fires when this element is focused and a key is pressed. */
-    onKeyDown?: (event: KeyEvent) => void;
-    /** Fires when mouse button is pressed while over this node. */
-    onMouseDown?: (event: NodeMouseEvent) => void;
-    /** Fires when mouse button is released while over this node. */
-    onMouseUp?: (event: NodeMouseEvent) => void;
-    /** Fires when pointer moves over this node (every frame while hovered). */
-    onMouseMove?: (event: NodeMouseEvent) => void;
-    /** Fires when pointer enters this node's bounds. */
-    onMouseOver?: (event: NodeMouseEvent) => void;
-    /** Fires when pointer leaves this node's bounds. */
-    onMouseOut?: (event: NodeMouseEvent) => void;
-    /** Transform configuration: translate, rotate, scale, skew, perspective. */
-    transform?: TransformConfig;
-    /** Transform origin point. Default: "center". */
-    transformOrigin?: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | {
-        x: number;
-        y: number;
-    };
-    /** Class name resolved by pluggable class name resolver. */
-    className?: string;
-    /** CSS-style prop — merged with direct props (direct props win). Decision 3. */
-    style?: Partial<BoxProps>;
-    /** Image source — file path or URL. Decoded async on first render. */
-    src?: string;
-    /** How the image fits within its layout box. Default: "contain". */
-    objectFit?: "contain" | "cover" | "fill" | "none";
-    /** Imperative draw callback — compat/lab canvas API, called each frame with a CanvasContext. */
-    onDraw?: (ctx: CanvasContext) => void;
-    /** Optional cache key for static canvas draw lists. Change it when onDraw output changes. */
-    drawCacheKey?: string | number;
-    /** Viewport transform for pan and zoom. */
-    viewport?: ViewportConfig;
-    color?: string | number;
-    fontSize?: number;
-    fontId?: number;
-    lineHeight?: number;
-    wordBreak?: "normal" | "keep-all";
-    whiteSpace?: "normal" | "pre-wrap";
-    fontFamily?: string;
-    fontWeight?: number;
-    fontStyle?: "normal" | "italic";
-};
-
-/** @public */
 export declare function Button(props: ButtonProps): JSX.Element;
 
 /** @public */
@@ -543,8 +347,9 @@ export declare function Code(props: CodeProps): JSX.Element;
 /** @public */
 export declare type CodeProps = {
     content: string;
-    language: string;
-    syntaxStyle: SyntaxStyle;
+    language?: string;
+    /** Pluggable syntax highlighter. When omitted, renders plain monospaced lines. */
+    highlighter?: Highlighter;
     width?: SizingUnit;
     height?: SizingUnit;
     /** Visual theme — all styling comes from here. */
@@ -557,6 +362,8 @@ export declare type CodeProps = {
 export declare type CodeTheme = {
     /** Background color. */
     bg: string | number;
+    /** Default text foreground color. */
+    fg: string | number;
     /** Line number foreground color. */
     lineNumberFg: string | number;
     /** Corner radius. */
@@ -770,6 +577,13 @@ export declare function createVoidToaster(options?: VoidToasterOptions): Toaster
 
 /** @public */
 export declare const darkTheme: Required<ThemeDefinition>;
+
+/**
+ * Format debug stats as a single-line string.
+ * Useful for rendering in a text overlay.
+ */
+/** @public */
+export declare function debugStatsLine(): string;
 
 /**
  * Decode paste bytes to string — normalizes line endings.
@@ -1205,6 +1019,16 @@ export declare type FormOptions<T extends Record<string, any>> = {
 };
 
 /** @public */
+export declare function getImageCacheStats(): {
+    decodedCount: number;
+    decodedBytes: number;
+    pendingCount: number;
+    scaledCacheCount: number;
+    scaledEntries: number;
+    scaledBytes: number;
+};
+
+/** @public */
 declare function getSelection_2(): TextSelection | null;
 export { getSelection_2 as getSelection }
 
@@ -1358,6 +1182,26 @@ export declare function H3(props: TypographyProps): JSX.Element;
 /** @public */
 export declare function H4(props: TypographyProps): JSX.Element;
 
+/**
+ * Pluggable syntax highlighting function.
+ *
+ * Accepts source code and an optional language identifier, and returns an array
+ * of lines where each line is an array of HighlightTokens (or a Promise resolving to it).
+ *
+ * @public
+ */
+export declare type Highlighter = (content: string, language?: string) => Promise<HighlightToken[][]> | HighlightToken[][];
+
+/**
+ * Individual token with text and color for syntax highlighting.
+ *
+ * @public
+ */
+export declare type HighlightToken = {
+    text: string;
+    color: string | number;
+};
+
 /** @public */
 export declare type HoverOptions = {
     onEnter?: () => void;
@@ -1495,10 +1339,9 @@ declare type InteractionLayerState = {
 declare type InteractionMode = (typeof INTERACTION_MODE)[keyof typeof INTERACTION_MODE];
 
 /** @public Interactive style props usable in hoverStyle, activeStyle, and focusStyle. */
-declare type InteractiveStyleProps = Partial<Pick<BoxProps, "backgroundColor" | "borderColor" | "borderWidth" | "cornerRadius" | "borderRadius" | "shadow" | "boxShadow" | "glow" | "gradient" | "backdropBlur" | "backdropBrightness" | "backdropContrast" | "backdropSaturate" | "backdropGrayscale" | "backdropInvert" | "backdropSepia" | "backdropHueRotate" | "opacity" | "filter">>;
+declare type InteractiveStyleProps = Partial<Pick<TGEProps, "backgroundColor" | "borderColor" | "borderWidth" | "cornerRadius" | "borderRadius" | "shadow" | "boxShadow" | "glow" | "gradient" | "backdropBlur" | "backdropBrightness" | "backdropContrast" | "backdropSaturate" | "backdropGrayscale" | "backdropInvert" | "backdropSepia" | "backdropHueRotate" | "opacity" | "filter">>;
 
-/** @public */
-export declare const KANAGAWA: ThemeTokenStyle[];
+export { JSX }
 
 declare const KEY_BINDING_ACTION: {
     readonly CURSOR_LEFT: "cursor-left";
@@ -1623,7 +1466,8 @@ export declare function Markdown(props: MarkdownProps): JSX.Element;
 /** @public */
 export declare type MarkdownProps = {
     content: string;
-    syntaxStyle: SyntaxStyle;
+    /** Optional pluggable syntax highlighter for code blocks. */
+    highlighter?: Highlighter;
     /** Default text color (shorthand — overrides theme.fg). */
     color?: number;
     width?: SizingUnit;
@@ -1878,9 +1722,6 @@ export declare function normalizePath(path: string): string;
 export { onCleanup }
 
 /** @public */
-export declare const ONE_DARK: ThemeTokenStyle[];
-
-/** @public */
 export declare function onInput(handler: InputSubscriber): () => void;
 
 export { onMount }
@@ -1908,7 +1749,7 @@ export declare function P(props: TypographyProps): JSX.Element;
 export declare function Page(props: PageProps): JSX.Element;
 
 /** @public */
-export declare type PageProps = BoxProps & {
+export declare type PageProps = TGEProps & {
     children?: JSX.Element;
 };
 
@@ -2289,7 +2130,7 @@ export declare function runCli(argv?: string[]): Promise<CliResult>;
  * Scroll IDs are stable strings shared by scroll containers and handles.
  */
 /** @public */
-declare type ScrollHandle = {
+export declare type ScrollHandle = {
     readonly scrollX: number;
     readonly scrollY: number;
     readonly contentWidth: number;
@@ -2474,9 +2315,6 @@ declare type ShapeStyle = {
 
 export { Show }
 
-/** @public */
-export declare type SimpleThemeRules = Record<string, string | number>;
-
 /** Supported sizing keywords. @public */
 declare type SizingKeyword = "fit" | "grow" | "auto" | "fill";
 
@@ -2602,35 +2440,6 @@ declare type StrokeStyle = {
     width?: number;
 };
 
-/**
- * SyntaxStyle — maps tree-sitter capture names to colors.
- *
- * Follows opentui's pattern:
- *   - Theme rules: { scope: ["keyword", "keyword.function"], style: { foreground: "#c678dd" } }
- *   - Dot-notation fallback: "function.method" → "function" if no exact match
- *   - getStyleId(name) returns a numeric ID for highlight integration
- *
- * Unlike opentui, this is TS-only because Vexart renders per-token <text>
- * elements with individual colors — no native text buffer.
- *
- * Usage:
- *   const style = SyntaxStyle.fromTheme([
- *     { scope: ["keyword"], style: { foreground: "#c678dd" } },
- *     { scope: ["string"], style: { foreground: "#98c379" } },
- *   ])
- *
- *   style.colorFor("keyword")  // → 0xc678ddff
- *   style.colorFor("keyword.function")  // → 0xc678ddff (dot-fallback)
- */
-/** @public */
-export declare type StyleDefinition = {
-    fg?: number;
-    bg?: number;
-    bold?: boolean;
-    italic?: boolean;
-    underline?: boolean;
-};
-
 export { Switch }
 
 /** @public */
@@ -2649,42 +2458,6 @@ export declare type SwitchProps = {
 
 /** @public */
 export declare type SwitchRenderContext = ToggleRenderContext;
-
-/** @public */
-export declare class SyntaxStyle {
-    private styles;
-    private idMap;
-    private nextId;
-    private defaultColor;
-    private constructor();
-    /** Create from structured theme rules.
-     *
-     * @public
-     */
-    static fromTheme(rules: ThemeTokenStyle[], defaultColor?: string | number): SyntaxStyle;
-    /** Create from simple scope-to-color rules.
-     *
-     * @public
-     */
-    static fromSimple(rules: SimpleThemeRules, defaultColor?: string | number): SyntaxStyle;
-    /** Register a named style. */
-    registerStyle(name: string, def: StyleDefinition): number;
-    /**
-     * Get the style definition for a scope name.
-     *
-     * Supports dot-notation fallback:
-     *   "function.method" → looks for "function.method", then "function"
-     */
-    getStyle(name: string): StyleDefinition | undefined;
-    /** Get the foreground color for a scope name. Falls back to default. */
-    colorFor(name: string): number;
-    /** Get the numeric ID for a scope name (for extmark integration). */
-    getStyleId(name: string): number;
-    /** Get the default (fallback) color. */
-    getDefaultColor(): number;
-    /** Get all registered styles. */
-    getAllStyles(): Map<string, StyleDefinition>;
-}
 
 /** @public */
 export declare type TabItem = {
@@ -2944,8 +2717,8 @@ export declare type TextareaProps = {
     focusId?: string;
     /** Custom key bindings — merged with defaults. */
     keyBindings?: KeyBinding[];
-    /** Syntax highlighting style. When set, enables per-token coloring. */
-    syntaxStyle?: SyntaxStyle;
+    /** Pluggable syntax highlighting function. When set, enables per-token coloring. */
+    highlighter?: Highlighter;
     /** Language for syntax highlighting (e.g. "typescript"). Required with syntaxStyle. */
     language?: string;
     /** Visual theme — all styling comes from here. */
@@ -2988,6 +2761,204 @@ export declare type TextSelection = {
     start: number;
     end: number;
 };
+
+/** @public */
+declare type TGEProps = {
+    /** @beta */
+    layout?: "flex" | "grid";
+    direction?: "row" | "column";
+    /** Alias for direction (opentui compat) */
+    flexDirection?: "row" | "column";
+    padding?: number;
+    paddingX?: number;
+    paddingY?: number;
+    margin?: number;
+    marginX?: number;
+    marginY?: number;
+    gap?: number;
+    alignX?: "left" | "right" | "center" | "space-between";
+    alignY?: "top" | "bottom" | "center" | "space-between";
+    /** @beta */
+    justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "space-around" | "space-evenly" | "stretch";
+    /** @beta */
+    alignItems?: "top" | "bottom" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "stretch";
+    /** @beta */
+    gridTemplateColumns?: readonly GridTrack[];
+    /** @beta */
+    gridTemplateRows?: readonly GridTrack[];
+    /** @beta */
+    gridAutoColumns?: GridTrackSize;
+    /** @beta */
+    gridAutoRows?: GridTrackSize;
+    /** @beta */
+    gridAutoFlow?: GridAutoFlow;
+    /** @beta */
+    gridTemplateAreas?: readonly (readonly (string | null)[])[];
+    /** @beta */
+    gridColumn?: GridPlacement;
+    /** @beta */
+    gridRow?: GridPlacement;
+    /** @beta */
+    gridArea?: GridAreaPlacement;
+    /** @beta */
+    alignContent?: GridContentAlignment;
+    /** @beta */
+    justifyItems?: GridItemAlignment;
+    /** @beta */
+    justifySelf?: GridItemAlignment;
+    /** @beta */
+    alignSelf?: GridItemAlignment;
+    width?: SizingUnit;
+    height?: SizingUnit;
+    /** When set, width behaves as "grow" (opentui compat) */
+    flexGrow?: number;
+    /** Accepted for CSS compatibility. Flexily handles shrinking automatically. */
+    flexShrink?: number;
+    backgroundColor?: string | number;
+    cornerRadius?: number;
+    /** CSS-friendly alias for cornerRadius (Decision 1) */
+    borderRadius?: number;
+    cornerRadii?: CornerRadii;
+    borderColor?: string | number;
+    borderWidth?: number;
+    /** Opacity: 0.0 = fully transparent, 1.0 = fully opaque. Multiplies alpha of entire element. */
+    opacity?: number;
+    layer?: boolean;
+    /** Declarative interaction state used by engine-level drag/compositor policies. */
+    interactionMode?: InteractionMode;
+    debugName?: string;
+    scrollX?: boolean;
+    scrollY?: boolean;
+    scrollSpeed?: number;
+    scrollId?: string;
+    floating?: "parent" | "root" | {
+        attachTo: string;
+    };
+    floatOffset?: {
+        x: number;
+        y: number;
+    };
+    zIndex?: number;
+    floatAttach?: {
+        element?: number;
+        parent?: number;
+    };
+    pointerPassthrough?: boolean;
+    viewportClip?: boolean;
+    minWidth?: number;
+    maxWidth?: number;
+    minHeight?: number;
+    maxHeight?: number;
+    paddingLeft?: number;
+    paddingRight?: number;
+    paddingTop?: number;
+    paddingBottom?: number;
+    marginLeft?: number;
+    marginRight?: number;
+    marginTop?: number;
+    marginBottom?: number;
+    borderLeft?: number;
+    borderRight?: number;
+    borderTop?: number;
+    borderBottom?: number;
+    borderBetweenChildren?: number;
+    shadow?: ShadowConfig | ShadowConfig[];
+    /** CSS-friendly alias for shadow (Decision 1) */
+    boxShadow?: TGEProps["shadow"];
+    glow?: GlowConfig;
+    gradient?: GradientConfig;
+    backdropBlur?: number;
+    /** Backdrop brightness filter. 0=black, 100=unchanged, 200=2x bright. */
+    backdropBrightness?: number;
+    /** Backdrop contrast filter. 0=grey, 100=unchanged, 200=high contrast. */
+    backdropContrast?: number;
+    /** Backdrop saturation filter. 0=grayscale, 100=unchanged, 200=hyper-saturated. */
+    backdropSaturate?: number;
+    /** Backdrop grayscale filter. 0=unchanged, 100=full grayscale. */
+    backdropGrayscale?: number;
+    /** Backdrop invert filter. 0=unchanged, 100=fully inverted. */
+    backdropInvert?: number;
+    /** Backdrop sepia filter. 0=unchanged, 100=full sepia. */
+    backdropSepia?: number;
+    /** Backdrop hue-rotate filter. 0-360 degrees, 0/360=unchanged. */
+    backdropHueRotate?: number;
+    /**
+     * Self-filter applied to this element's own paint output.
+     * Unlike backdropBlur/backdropFilter which affect content BEHIND the element,
+     * `filter` affects the element's own rendered pixels (REQ-2B-401).
+     */
+    filter?: FilterConfig;
+    /**
+     * Hint that this property will change soon — pre-promotes the node to its own
+     * GPU compositing layer to avoid runtime promotion cost (REQ-2B-501).
+     * Accepted values: "transform", "opacity", "filter", "scroll".
+     */
+    willChange?: string | string[];
+    /**
+     * Containment boundary hint (REQ-2B-502).
+     * - 'none': no containment (default).
+     * - 'layout': size changes inside do not re-lay out siblings.
+     * - 'paint': content clipped to bounds; no overflow visible.
+     * - 'strict': layout + paint combined.
+     */
+    contain?: 'none' | 'layout' | 'paint' | 'strict';
+    hoverStyle?: InteractiveStyleProps;
+    activeStyle?: InteractiveStyleProps;
+    /** Focus state — applied when element has focus (Decision 7) */
+    focusStyle?: InteractiveStyleProps;
+    /** Unified press handler — fires on mouse click + Enter/Space when focused (Decision 6) */
+    onPress?: (event?: PressEvent) => void;
+    /** Alias for onPress (web convention). If both are provided, onPress takes precedence. */
+    onClick?: (event?: PressEvent) => void;
+    /** Make this element focusable via Tab navigation. Like HTML tabindex="0". */
+    focusable?: boolean;
+    /** Explicit ID for focus registration (defaults to id or node-focus-${id}) */
+    focusId?: string;
+    /** Keyboard event handler — fires when this element is focused and a key is pressed. */
+    onKeyDown?: (event: KeyEvent) => void;
+    /** Fires when mouse button is pressed while over this node. */
+    onMouseDown?: (event: NodeMouseEvent) => void;
+    /** Fires when mouse button is released while over this node. */
+    onMouseUp?: (event: NodeMouseEvent) => void;
+    /** Fires when pointer moves over this node (every frame while hovered). */
+    onMouseMove?: (event: NodeMouseEvent) => void;
+    /** Fires when pointer enters this node's bounds. */
+    onMouseOver?: (event: NodeMouseEvent) => void;
+    /** Fires when pointer leaves this node's bounds. */
+    onMouseOut?: (event: NodeMouseEvent) => void;
+    /** Transform configuration: translate, rotate, scale, skew, perspective. */
+    transform?: TransformConfig;
+    /** Transform origin point. Default: "center". */
+    transformOrigin?: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | {
+        x: number;
+        y: number;
+    };
+    /** Class name resolved by pluggable class name resolver. */
+    className?: string;
+    /** CSS-style prop — merged with direct props (direct props win). Decision 3. */
+    style?: Partial<TGEProps>;
+    /** Image source — file path or URL. Decoded async on first render. */
+    src?: string;
+    /** How the image fits within its layout box. Default: "contain". */
+    objectFit?: "contain" | "cover" | "fill" | "none";
+    /** Imperative draw callback — compat/lab canvas API, called each frame with a CanvasContext. */
+    onDraw?: (ctx: CanvasContext) => void;
+    /** Optional cache key for static canvas draw lists. Change it when onDraw output changes. */
+    drawCacheKey?: string | number;
+    /** Viewport transform for pan and zoom. */
+    viewport?: ViewportConfig;
+    color?: string | number;
+    fontSize?: number;
+    fontId?: number;
+    lineHeight?: number;
+    wordBreak?: "normal" | "keep-all";
+    whiteSpace?: "normal" | "pre-wrap";
+    fontFamily?: string;
+    fontWeight?: number;
+    fontStyle?: "normal" | "italic";
+};
+export { TGEProps as BoxProps }
+export { TGEProps }
 
 /** @public */
 export declare const theme: {
@@ -3068,18 +3039,6 @@ export declare type ThemeDefinition = {
 };
 
 /** @public */
-declare type ThemeTokenStyle = {
-    scope: string[];
-    style: {
-        foreground?: string | number;
-        background?: string | number;
-        bold?: boolean;
-        italic?: boolean;
-        underline?: boolean;
-    };
-};
-
-/** @public */
 declare const TOAST_VARIANT: {
     readonly DEFAULT: "default";
     readonly SUCCESS: "success";
@@ -3148,6 +3107,13 @@ declare type ToggleRenderContext = {
 
 /** @public */
 export declare function ToggleSwitch(props: SwitchProps): JSX.Element;
+
+/**
+ * Backward compatibility alias for HighlightToken.
+ *
+ * @public
+ */
+export declare type Token = HighlightToken;
 
 /** @public */
 export declare function Tooltip(props: TooltipProps): JSX.Element;
@@ -3288,7 +3254,7 @@ export declare type VexartAppConfigTheme = {
 };
 
 /** @public */
-export declare type VexartStyleProps = Partial<BoxProps>;
+export declare type VexartStyleProps = Partial<TGEProps>;
 
 /** @public */
 declare type Viewport = {
@@ -3506,8 +3472,9 @@ export declare function VoidCode(props: VoidCodeProps): JSX.Element;
 /** @public */
 export declare type VoidCodeProps = {
     content: string;
-    language: string;
-    syntaxStyle: SyntaxStyle;
+    language?: string;
+    /** Optional pluggable syntax highlighter. */
+    highlighter?: Highlighter;
     width?: SizingUnit;
     height?: SizingUnit;
     lineNumbers?: boolean;
@@ -3680,7 +3647,8 @@ export declare function VoidMarkdown(props: VoidMarkdownProps): JSX.Element;
 /** @public */
 export declare type VoidMarkdownProps = {
     content: string;
-    syntaxStyle: SyntaxStyle;
+    /** Optional pluggable syntax highlighter for code blocks. */
+    highlighter?: Highlighter;
     width?: SizingUnit;
     streaming?: boolean;
 };
@@ -3864,7 +3832,7 @@ export declare type VoidTextareaProps = {
     disabled?: boolean;
     focusId?: string;
     keyBindings?: KeyBinding[];
-    syntaxStyle?: SyntaxStyle;
+    highlighter?: Highlighter;
     language?: string;
     ref?: (handle: TextareaHandle) => void;
 };

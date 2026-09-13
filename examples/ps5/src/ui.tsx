@@ -1,5 +1,5 @@
 import type { JSX } from "solid-js"
-import type { TGEProps } from "@vexart/engine"
+import type { TGEProps } from "vexart"
 import {
   Show,
   createContext,

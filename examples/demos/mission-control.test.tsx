@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { createSignal } from "solid-js"
 
-import { focusedId, clearFocus, type NodeHandle } from "@vexart/engine"
+import { focusedId, clearFocus, type NodeHandle } from "vexart"
 import { renderToBufferAfterInteractions, renderToBuffer } from "../../packages/engine/src/testing/render-to-buffer"
 import { MissionControlApp } from "./mission-control"
 import { captureDemo } from "./capture"

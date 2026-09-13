@@ -1,5 +1,15 @@
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
-import { focusedId, onInput, setFocus } from "@vexart/engine"
+import {
+  For,
+  Show,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+  focusedId,
+  onInput,
+  setFocus,
+  type CanvasContext,
+} from "vexart"
 import { Label, Icon, Button, SearchField, Pane, DemoFooter, ui } from "./shared"
 
 type ServiceState = "Running" | "Stopped"
@@ -169,7 +179,7 @@ function chartDraw(
   width: number,
   height: number,
 ) {
-  return (ctx: import("@vexart/engine").CanvasContext) => {
+  return (ctx: CanvasContext) => {
     const baseline = height - 1
     for (let row = 0; row <= 2; row++) {
       const y = Math.round((height - 1) * row / 2)

@@ -54,8 +54,8 @@ export function Code(props: CodeProps): JSX.Element;
 // @public (undocumented)
 export type CodeProps = {
     content: string;
-    language: string;
-    syntaxStyle: SyntaxStyle;
+    language?: string;
+    highlighter?: Highlighter;
     width?: SizingUnit;
     height?: SizingUnit;
     theme?: Partial<CodeTheme>;
@@ -66,6 +66,7 @@ export type CodeProps = {
 // @public (undocumented)
 export type CodeTheme = {
     bg: string | number;
+    fg: string | number;
     lineNumberFg: string | number;
     radius: number;
     padding: number;
@@ -277,6 +278,15 @@ export type FormOptions<T extends Record<string, any>> = {
     validateOnChange?: boolean;
 };
 
+// @public
+export type Highlighter = (content: string, language?: string) => Promise<HighlightToken[][]> | HighlightToken[][];
+
+// @public
+export type HighlightToken = {
+    text: string;
+    color: string | number;
+};
+
 // @public (undocumented)
 export function Input(props: InputProps): JSX.Element;
 
@@ -377,7 +387,7 @@ export function Markdown(props: MarkdownProps): JSX.Element;
 // @public (undocumented)
 export type MarkdownProps = {
     content: string;
-    syntaxStyle: SyntaxStyle;
+    highlighter?: Highlighter;
     color?: number;
     width?: SizingUnit;
     streaming?: boolean;
@@ -629,9 +639,6 @@ export type SelectTriggerProps = {
 };
 
 // @public (undocumented)
-export type SimpleThemeRules = Record<string, string | number>;
-
-// @public (undocumented)
 export function Slider(props: SliderProps): JSX.Element;
 
 // @public (undocumented)
@@ -670,15 +677,6 @@ export type SliderTrackProps = {
 };
 
 // @public (undocumented)
-export type StyleDefinition = {
-    fg?: number;
-    bg?: number;
-    bold?: boolean;
-    italic?: boolean;
-    underline?: boolean;
-};
-
-// @public (undocumented)
 export function Switch(props: SwitchProps): JSX.Element;
 
 // @public (undocumented)
@@ -692,18 +690,6 @@ export type SwitchProps = {
 
 // @public (undocumented)
 export type SwitchRenderContext = ToggleRenderContext;
-
-// @public (undocumented)
-export class SyntaxStyle {
-    colorFor(name: string): number;
-    static fromSimple(rules: SimpleThemeRules, defaultColor?: string | number): SyntaxStyle;
-    static fromTheme(rules: ThemeTokenStyle[], defaultColor?: string | number): SyntaxStyle;
-    getAllStyles(): Map<string, StyleDefinition>;
-    getDefaultColor(): number;
-    getStyle(name: string): StyleDefinition | undefined;
-    getStyleId(name: string): number;
-    registerStyle(name: string, def: StyleDefinition): number;
-}
 
 // @public (undocumented)
 export type TabItem = {
@@ -812,7 +798,7 @@ export type TextareaProps = {
     disabled?: boolean;
     focusId?: string;
     keyBindings?: KeyBinding[];
-    syntaxStyle?: SyntaxStyle;
+    highlighter?: Highlighter;
     language?: string;
     theme?: Partial<TextareaTheme>;
 };
@@ -827,18 +813,6 @@ export type TextareaTheme = {
     border: string | number;
     radius: number;
     padding: number;
-};
-
-// @public (undocumented)
-export type ThemeTokenStyle = {
-    scope: string[];
-    style: {
-        foreground?: string | number;
-        background?: string | number;
-        bold?: boolean;
-        italic?: boolean;
-        underline?: boolean;
-    };
 };
 
 // @public (undocumented)
@@ -883,6 +857,9 @@ export type ToastPosition = "top-right" | "top-left" | "bottom-right" | "bottom-
 //
 // @public (undocumented)
 export type ToastVariant = (typeof TOAST_VARIANT)[keyof typeof TOAST_VARIANT];
+
+// @public
+export type Token = HighlightToken;
 
 // @public (undocumented)
 export function Tooltip(props: TooltipProps): JSX.Element;
@@ -933,7 +910,7 @@ export type VisualCursor = {
 
 // Warnings were encountered during analysis:
 //
-// <repo>/.api-extractor-temp/packages/headless/src/display/code.d.ts:26:5 - (ae-forgotten-export) The symbol "SizingUnit" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/headless/src/display/code.d.ts:53:5 - (ae-forgotten-export) The symbol "SizingUnit" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

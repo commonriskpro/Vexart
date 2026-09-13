@@ -12,13 +12,6 @@ import { Show } from 'solid-js';
 import { Switch } from 'solid-js';
 import { useContext } from 'solid-js';
 
-/**
- * Register additional parsers before client initialization.
- *
- * @public
- */
-export declare function addDefaultParsers(parsers: FiletypeParserConfig[]): void;
-
 /** @public */
 export declare type AnimationAccessor = (() => number) & {
     stop: () => void;
@@ -392,17 +385,6 @@ export declare class ExtmarkManager {
 }
 
 /** @public */
-export declare type FiletypeParserConfig = {
-    filetype: string;
-    aliases?: string[];
-    wasm: string;
-    queries: {
-        highlights: string[];
-        injections?: string[];
-    };
-};
-
-/** @public */
 export declare type FillStyle = {
     color: number;
 };
@@ -487,9 +469,6 @@ declare function getSelection_2(): TextSelection | null;
 export { getSelection_2 as getSelection }
 
 /** @public */
-export declare function getTreeSitterClient(): TreeSitterClient;
-
-/** @public */
 export declare type GlowCmd = {
     kind: "glow";
     cx: number;
@@ -519,102 +498,39 @@ export declare type GradientConfig = {
     to: string | number;
 };
 
-/** @beta */
-export declare type GridAreaPlacement = string | {
-    readonly rowStart: GridLineRef | "auto";
-    readonly columnStart: GridLineRef | "auto";
-    readonly rowEnd: GridLineRef | "auto";
-    readonly columnEnd: GridLineRef | "auto";
-};
+/* Excluded from this release type: GridAreaPlacement */
 
-/** @beta */
-export declare type GridAutoFlow = "row" | "column" | "row-dense" | "column-dense";
+/* Excluded from this release type: GridAutoFlow */
 
-/** @beta */
-export declare type GridBreadth = number | GridPercent | "auto" | "min-content" | "max-content";
+/* Excluded from this release type: GridBreadth */
 
-/** @beta */
-export declare type GridContentAlignment = "start" | "end" | "center" | "space-between" | "space-around" | "space-evenly" | "stretch";
+/* Excluded from this release type: GridContentAlignment */
 
-/** @beta */
-export declare type GridErrorCode = "GRID_INVALID_VALUE" | "GRID_INVALID_TRACK" | "GRID_INVALID_REPEAT" | "GRID_TRACK_LIMIT" | "GRID_INVALID_AREA" | "GRID_CONFLICTING_PLACEMENT" | "GRID_INVALID_PLACEMENT" | "GRID_LINE_UNRESOLVED" | "GRID_UNSUPPORTED_ALIGNMENT" | "GRID_MEASURE_INVALID";
+/* Excluded from this release type: GridErrorCode */
 
-/** @beta */
-export declare type GridFitContent = {
-    readonly fitContent: number | GridPercent;
-};
+/* Excluded from this release type: GridFitContent */
 
-/** @beta */
-export declare type GridFr = {
-    readonly fr: number;
-};
+/* Excluded from this release type: GridFr */
 
-/** @beta */
-export declare type GridItemAlignment = "start" | "end" | "center" | "stretch";
+/* Excluded from this release type: GridItemAlignment */
 
-/** @beta */
-export declare type GridLayoutError = {
-    readonly code: GridErrorCode;
-    readonly path: string;
-    readonly nodeId: number;
-};
+/* Excluded from this release type: GridLayoutError */
 
-/** @beta */
-export declare type GridLineRef = number | {
-    readonly name: string;
-    readonly occurrence?: number;
-} | {
-    readonly span: number;
-    readonly name?: string;
-};
+/* Excluded from this release type: GridLineRef */
 
-/** @beta */
-export declare type GridMaxBreadth = GridBreadth | GridFr;
+/* Excluded from this release type: GridMaxBreadth */
 
-/** @beta */
-export declare type GridMinMax = {
-    readonly minmax: readonly [GridBreadth, GridMaxBreadth];
-};
+/* Excluded from this release type: GridMinMax */
 
-/** @beta */
-export declare type GridPercent = {
-    readonly percent: number;
-};
+/* Excluded from this release type: GridPercent */
 
-/** @beta */
-export declare type GridPlacement = {
-    readonly start?: GridLineRef | "auto";
-    readonly end?: GridLineRef | "auto";
-};
+/* Excluded from this release type: GridPlacement */
 
-/** @beta */
-export declare type GridRepeatCount = number | "auto-fill" | "auto-fit";
+/* Excluded from this release type: GridRepeatCount */
 
-/** @beta */
-export declare type GridTrack = GridTrackSize | {
-    readonly size: GridTrackSize;
-    readonly before?: readonly string[];
-    readonly after?: readonly string[];
-} | {
-    readonly repeat: {
-        readonly count: GridRepeatCount;
-        readonly tracks: readonly GridTrack[];
-    };
-};
+/* Excluded from this release type: GridTrack */
 
-/** @beta */
-export declare type GridTrackSize = GridBreadth | GridFr | GridMinMax | GridFitContent;
-
-/**
- * Convert tree-sitter highlights to per-line colored tokens.
- *
- * @public
- * @param source - Full source text.
- * @param highlights - Highlight ranges from the worker.
- * @param style - Scope-to-color style mapping.
- * @returns One token array per line.
- */
-export declare function highlightsToTokens(source: string, highlights: SimpleHighlight[], style: SyntaxStyle): Token[][];
+/* Excluded from this release type: GridTrackSize */
 
 /** @public */
 export declare type HoverOptions = {
@@ -687,9 +603,6 @@ export declare type InteractiveStyleProps = Partial<Pick<TGEProps, "backgroundCo
 /** Check if debug is enabled (reactive). */
 /** @public */
 export declare function isDebugEnabled(): boolean;
-
-/** @public */
-export declare const KANAGAWA: ThemeTokenStyle[];
 
 /** @public */
 export declare type KeyboardState = {
@@ -922,9 +835,6 @@ export declare type NodeMouseEvent = {
     /** Node layout height. */
     height: number;
 };
-
-/** @public */
-export declare const ONE_DARK: ThemeTokenStyle[];
 
 /** @public */
 export declare function onInput(handler: InputSubscriber): () => void;
@@ -1181,12 +1091,6 @@ export declare type ShapeStyle = {
 export { Show }
 
 /** @public */
-export declare type SimpleHighlight = [number, number, string];
-
-/** @public */
-export declare type SimpleThemeRules = Record<string, string | number>;
-
-/** @public */
 export declare type SizingInfo = {
     type: number;
     value: number;
@@ -1256,72 +1160,7 @@ export declare type StrokeStyle = {
     width?: number;
 };
 
-/**
- * SyntaxStyle — maps tree-sitter capture names to colors.
- *
- * Follows opentui's pattern:
- *   - Theme rules: { scope: ["keyword", "keyword.function"], style: { foreground: "#c678dd" } }
- *   - Dot-notation fallback: "function.method" → "function" if no exact match
- *   - getStyleId(name) returns a numeric ID for highlight integration
- *
- * Unlike opentui, this is TS-only because Vexart renders per-token <text>
- * elements with individual colors — no native text buffer.
- *
- * Usage:
- *   const style = SyntaxStyle.fromTheme([
- *     { scope: ["keyword"], style: { foreground: "#c678dd" } },
- *     { scope: ["string"], style: { foreground: "#98c379" } },
- *   ])
- *
- *   style.colorFor("keyword")  // → 0xc678ddff
- *   style.colorFor("keyword.function")  // → 0xc678ddff (dot-fallback)
- */
-/** @public */
-export declare type StyleDefinition = {
-    fg?: number;
-    bg?: number;
-    bold?: boolean;
-    italic?: boolean;
-    underline?: boolean;
-};
-
 export { Switch }
-
-/** @public */
-export declare class SyntaxStyle {
-    private styles;
-    private idMap;
-    private nextId;
-    private defaultColor;
-    private constructor();
-    /** Create from structured theme rules.
-     *
-     * @public
-     */
-    static fromTheme(rules: ThemeTokenStyle[], defaultColor?: string | number): SyntaxStyle;
-    /** Create from simple scope-to-color rules.
-     *
-     * @public
-     */
-    static fromSimple(rules: SimpleThemeRules, defaultColor?: string | number): SyntaxStyle;
-    /** Register a named style. */
-    registerStyle(name: string, def: StyleDefinition): number;
-    /**
-     * Get the style definition for a scope name.
-     *
-     * Supports dot-notation fallback:
-     *   "function.method" → looks for "function.method", then "function"
-     */
-    getStyle(name: string): StyleDefinition | undefined;
-    /** Get the foreground color for a scope name. Falls back to default. */
-    colorFor(name: string): number;
-    /** Get the numeric ID for a scope name (for extmark integration). */
-    getStyleId(name: string): number;
-    /** Get the default (fallback) color. */
-    getDefaultColor(): number;
-    /** Get all registered styles. */
-    getAllStyles(): Map<string, StyleDefinition>;
-}
 
 /** @public */
 export declare type Terminal = {
@@ -1462,8 +1301,7 @@ export declare type TgePluginApi<Context = {}> = {
 
 /** @public */
 export declare type TGEProps = {
-    /** @beta */
-    layout?: "flex" | "grid";
+    /* Excluded from this release type: layout */
     direction?: "row" | "column";
     /** Alias for direction (opentui compat) */
     flexDirection?: "row" | "column";
@@ -1476,36 +1314,21 @@ export declare type TGEProps = {
     gap?: number;
     alignX?: "left" | "right" | "center" | "space-between";
     alignY?: "top" | "bottom" | "center" | "space-between";
-    /** @beta */
-    justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "space-around" | "space-evenly" | "stretch";
-    /** @beta */
-    alignItems?: "top" | "bottom" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "stretch";
-    /** @beta */
-    gridTemplateColumns?: readonly GridTrack[];
-    /** @beta */
-    gridTemplateRows?: readonly GridTrack[];
-    /** @beta */
-    gridAutoColumns?: GridTrackSize;
-    /** @beta */
-    gridAutoRows?: GridTrackSize;
-    /** @beta */
-    gridAutoFlow?: GridAutoFlow;
-    /** @beta */
-    gridTemplateAreas?: readonly (readonly (string | null)[])[];
-    /** @beta */
-    gridColumn?: GridPlacement;
-    /** @beta */
-    gridRow?: GridPlacement;
-    /** @beta */
-    gridArea?: GridAreaPlacement;
-    /** @beta */
-    alignContent?: GridContentAlignment;
-    /** @beta */
-    justifyItems?: GridItemAlignment;
-    /** @beta */
-    justifySelf?: GridItemAlignment;
-    /** @beta */
-    alignSelf?: GridItemAlignment;
+    /* Excluded from this release type: justifyContent */
+    /* Excluded from this release type: alignItems */
+    /* Excluded from this release type: gridTemplateColumns */
+    /* Excluded from this release type: gridTemplateRows */
+    /* Excluded from this release type: gridAutoColumns */
+    /* Excluded from this release type: gridAutoRows */
+    /* Excluded from this release type: gridAutoFlow */
+    /* Excluded from this release type: gridTemplateAreas */
+    /* Excluded from this release type: gridColumn */
+    /* Excluded from this release type: gridRow */
+    /* Excluded from this release type: gridArea */
+    /* Excluded from this release type: alignContent */
+    /* Excluded from this release type: justifyItems */
+    /* Excluded from this release type: justifySelf */
+    /* Excluded from this release type: alignSelf */
     width?: SizingUnit;
     height?: SizingUnit;
     /** When set, width behaves as "grow" (opentui compat) */
@@ -1656,27 +1479,9 @@ export declare type TGEProps = {
     fontStyle?: "normal" | "italic";
 };
 
-/** @public */
-export declare type ThemeTokenStyle = {
-    scope: string[];
-    style: {
-        foreground?: string | number;
-        background?: string | number;
-        bold?: boolean;
-        italic?: boolean;
-        underline?: boolean;
-    };
-};
-
 /** Toggle debug overlay on/off. */
 /** @public */
 export declare function toggleDebug(): void;
-
-/** @public */
-export declare type Token = {
-    text: string;
-    color: number;
-};
 
 /** @public 2D transform configuration. */
 export declare type TransformConfig = {
@@ -1703,33 +1508,6 @@ export declare type TransitionConfig = {
         property: CompositorProperty;
     };
 };
-
-/** @public */
-export declare class TreeSitterClient {
-    private worker;
-    private initialized;
-    private initPromise;
-    private callbacks;
-    private idCounter;
-    /** Initialize the client — spawns worker, loads default parsers. */
-    initialize(): Promise<void>;
-    private doInit;
-    private sendAndWait;
-    private handleMessage;
-    /** Register an additional parser at runtime. */
-    addFiletypeParser(config: FiletypeParserConfig): void;
-    /**
-     * One-shot highlight — parse content and return highlights.
-     *
-     * Returns SimpleHighlight[] = [startIndex, endIndex, groupName][]
-     * Each highlight maps a byte range to a capture name (e.g., "keyword", "string").
-     */
-    highlightOnce(content: string, filetype: string): Promise<SimpleHighlight[]>;
-    /** Check if client is ready. */
-    isReady(): boolean;
-    /** Destroy worker and clean up. */
-    destroy(): void;
-}
 
 /** Unregister a font by ID. Returns false if id is 0 (default font cannot be unregistered). */
 /** @public */

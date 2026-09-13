@@ -203,7 +203,7 @@ export function MyCard() {
 ### 3.5 Collections & Specialized Display Components
 - `<VoidTable>`: Themed tabular data grid with zebra striping and header borders.
 - `<VoidTabs>`: Tabbed navigation strip with active tab underline.
-- `<VoidCode>`: Tree-Sitter syntax-highlighted code viewer with One Dark styling.
+- `<VoidCode>`: Syntax-highlighted code viewer with pluggable Highlighter support.
 - `<VoidMarkdown>`: Styled Markdown document renderer.
 - `<VoidDiff>`: Color-coded line diff viewer (green additions, red deletions).
 - `<VoidProgress>`: Horizontal progress bar indicator.

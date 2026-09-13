@@ -7,7 +7,6 @@
  *   jsx-runtime.js      ← reserved universal JSX compiler runtime
  *   solid-plugin.ts     ← babel preload for JSX transform
  *   jsx-runtime.d.ts    ← JSX intrinsic elements
- *   tree-sitter/        ← grammar .wasm + .scm files
  *   package.json        ← optionalDependencies for all supported platforms
  *   platform/
  *     darwin-arm64/     ← @vexart-native/darwin-arm64 package (libvexart.dylib + package.json)
@@ -96,7 +95,6 @@ await build({
     "bun:ffi",
     "solid-js",
     "solid-js/universal",
-    "web-tree-sitter",
     "marked",
     "@napi-rs/canvas",
     "@chenglou/pretext",
@@ -185,21 +183,7 @@ if (existsSync(resolve(ROOT, "LICENSE"))) cpSync(resolve(ROOT, "LICENSE"), resol
 writeFileSync(resolve(platformDir, "package.json"), JSON.stringify(platformPkg, null, 2))
 console.log(`  ✅ ${platformPkgName} package.json`)
 
-// ── 5. Copy tree-sitter assets ──
-console.log("🌳 Copying tree-sitter assets...")
 
-const assetsDir = resolve(ROOT, "packages/engine/src/reconciler/tree-sitter/assets")
-const distAssets = resolve(DIST, "tree-sitter/assets")
-cpSync(assetsDir, distAssets, { recursive: true })
-console.log(`  ✅ tree-sitter assets → tree-sitter/assets/`)
-
-// ── 6. Copy parser worker ──
-console.log("👷 Copying parser worker...")
-cpSync(
-  resolve(ROOT, "packages/engine/src/reconciler/tree-sitter/parser.worker.ts"),
-  resolve(DIST, "tree-sitter/parser.worker.ts")
-)
-console.log(`  ✅ parser.worker.ts → tree-sitter/`)
 
 // ── 7. Copy solid plugin (dist version with moduleName: "vexart/jsx-runtime") ──
 console.log("🔌 Copying solid plugin...")
@@ -258,7 +242,6 @@ const pkg = {
       default: "./jsx-runtime.js",
     },
     "./solid-plugin": "./solid-plugin.ts",
-    "./tree-sitter/parser.worker.ts": "./tree-sitter/parser.worker.ts",
   },
   files: [
     "vexart.js",
@@ -272,7 +255,6 @@ const pkg = {
     "jsx-runtime.d.ts",
     "chunk-*.js",
     "solid-plugin.ts",
-    "tree-sitter/",
   ],
   optionalDependencies: {
     "@vexart-native/darwin-arm64": VERSION,
@@ -283,7 +265,6 @@ const pkg = {
     "solid-js": "^1.9.0",
   },
   dependencies: {
-    "web-tree-sitter": "^0.26.8",
     "marked": "^18.0.0",
     "@babel/core": "^7.26.0",
     "@babel/preset-typescript": "^7.26.0",

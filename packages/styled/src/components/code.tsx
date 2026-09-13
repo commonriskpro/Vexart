@@ -5,7 +5,7 @@
  */
 
 import { Code } from "@vexart/headless"
-import type { SyntaxStyle } from "@vexart/headless"
+import type { Highlighter } from "@vexart/headless"
 import type { SizingUnit } from "@vexart/engine"
 import { radius, space } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
@@ -13,8 +13,9 @@ import { themeColors } from "../theme/theme"
 /** @public */
 export type VoidCodeProps = {
   content: string
-  language: string
-  syntaxStyle: SyntaxStyle
+  language?: string
+  /** Optional pluggable syntax highlighter. */
+  highlighter?: Highlighter
   width?: SizingUnit
   height?: SizingUnit
   lineNumbers?: boolean
@@ -27,7 +28,7 @@ export function VoidCode(props: VoidCodeProps) {
     <Code
       content={props.content}
       language={props.language}
-      syntaxStyle={props.syntaxStyle}
+      highlighter={props.highlighter}
       width={props.width}
       height={props.height}
       lineNumbers={props.lineNumbers}

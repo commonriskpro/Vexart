@@ -1,4 +1,6 @@
-import { createRoot } from "solid-js"
+import { createRoot, createSignal } from "solid-js"
+import type { NodeHandle } from "vexart"
+import { captureDemo } from "./capture"
 import { expect, test } from "bun:test"
 import { createComponent } from "solid-js"
 import { renderToBufferAfterInteractions, renderToBuffer } from "../../packages/engine/src/testing/render-to-buffer"
@@ -70,9 +72,9 @@ test("effects playground renders the approved viewport and responds to tab and s
     1536,
     1024,
     async ({ clickAt, frame }) => {
-      await clickAt(390, 70)
-      await clickAt(1300, 280)
-      await clickAt(1410, 70)
+      await clickAt(390, 30)
+      await clickAt(1300, 240)
+      await clickAt(1410, 30)
       await frame()
     },
     3,
@@ -94,14 +96,38 @@ test("color input commits a valid six-digit color to the native snippet", async 
     1536,
     1024,
     async ({ clickAt, keyPress, frame }) => {
-      await clickAt(1360, 240)
+      await clickAt(1360, 200)
       await keyPress("end")
       for (let index = 0; index < 6; index++) await keyPress("backspace")
       for (const character of "12AB34") await keyPress(character, character)
-      await clickAt(1410, 70)
+      await clickAt(1410, 30)
       await frame()
     },
     3,
   )
   expect(copied).toContain('backgroundColor="#12ab341f"')
+})
+
+test("effects playground adapts and resizes fluidly when width and height change", async () => {
+  let rootHandle: NodeHandle | undefined
+  let setDimensions: ((s: { width: number; height: number }) => void) | undefined
+  const scene = () => {
+    const [size, setSize] = createSignal({ width: 1536, height: 1024 })
+    setDimensions = setSize
+    return (
+      <box width={size().width} height={size().height} ref={(h: NodeHandle) => { rootHandle = h }}>
+        <EffectsPlaygroundApp width={size().width} height={size().height} />
+      </box>
+    )
+  }
+  await captureDemo(scene, 1536, 1024, async ({ frame }) => {
+    if (!rootHandle || !setDimensions) throw new Error("Effects playground was not mounted")
+    expect(rootHandle.layout.width).toBe(1536)
+    expect(rootHandle.layout.height).toBe(1024)
+
+    setDimensions({ width: 1920, height: 1080 })
+    await frame()
+    expect(rootHandle.layout.width).toBe(1920)
+    expect(rootHandle.layout.height).toBe(1080)
+  })
 })

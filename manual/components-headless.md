@@ -689,7 +689,7 @@ import { Portal } from "vexart"
 
 ### 24. Code
 
-Syntax-highlighted code block with tree-sitter tokenization.
+Syntax-highlighted code block with pluggable Highlighter tokenization.
 
 **Pattern:** Theme prop
 

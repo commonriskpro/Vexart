@@ -1,7 +1,17 @@
-import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
-import type { JSX } from "solid-js"
-import { createScrollHandle, focusedId, onInput, setFocus } from "@vexart/engine"
-import { Button } from "@vexart/headless"
+import {
+  createMemo,
+  createSignal,
+  For,
+  onCleanup,
+  onMount,
+  Show,
+  type JSX,
+  createScrollHandle,
+  focusedId,
+  onInput,
+  setFocus,
+  Button,
+} from "vexart"
 import { Icon as DemoIcon, SearchField, ui, DemoFooter } from "./shared"
 
 /** A local image used by the Studio demo. Every entry points at a checked-in asset. */

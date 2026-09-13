@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 
 import { createSignal } from "solid-js"
-import { measureText, type NodeHandle } from "@vexart/engine"
+import { measureText, type NodeHandle } from "vexart"
 import { captureDemo } from "./capture"
 import { DemoFrame, Label } from "./shared"
 

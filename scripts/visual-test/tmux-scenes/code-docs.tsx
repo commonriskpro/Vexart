@@ -12,7 +12,7 @@
 import assert from "node:assert/strict"
 import { Code, Diff, Markdown } from "@vexart/headless"
 import { VoidCode, VoidDiff, VoidMarkdown } from "@vexart/styled"
-import { ONE_DARK, SyntaxStyle, getTreeSitterClient } from "@vexart/engine"
+import type { HighlightToken } from "@vexart/headless"
 import {
   renderToBufferAfterInteractions,
   type RenderToBufferOptions,
@@ -22,7 +22,31 @@ import {
 export const width = 1160
 export const height = 820
 
-const syntaxStyle = SyntaxStyle.fromTheme(ONE_DARK)
+const DEMO_KEYWORDS = new Set(["const", "function", "return"])
+const DEMO_TYPES = new Set(["number", "string"])
+
+function demoHighlighter(code: string): HighlightToken[][] {
+  return code.split("\n").map((line) => {
+    const tokens: HighlightToken[] = []
+    const regex = /(".*?"|[a-zA-Z_$][a-zA-Z0-9_$]*|\d+|[^\s\w]+|\s+)/g
+    let match: RegExpExecArray | null
+    while ((match = regex.exec(line)) !== null) {
+      const text = match[0]
+      if (DEMO_KEYWORDS.has(text)) {
+        tokens.push({ text, color: "#c678dd" })
+      } else if (DEMO_TYPES.has(text)) {
+        tokens.push({ text, color: "#e5c07b" })
+      } else if (text.startsWith('"')) {
+        tokens.push({ text, color: "#98c379" })
+      } else if (/^\d+$/.test(text)) {
+        tokens.push({ text, color: "#d19a66" })
+      } else {
+        tokens.push({ text, color: "#abb2bf" })
+      }
+    }
+    return tokens.length > 0 ? tokens : [{ text: "", color: "#abb2bf" }]
+  })
+}
 const CODE = `const answer: number = 42
 function greet(name: string) {
   return "Hello, " + name
@@ -56,13 +80,13 @@ function HeadlessColumn() {
     <box width={560} direction="column" gap={10}>
       <PanelTitle>HEADLESS PUBLIC</PanelTitle>
       <box width={560} height={170} backgroundColor={0x111827ff} padding={10} cornerRadius={8}>
-        <Code content={CODE} language="typescript" syntaxStyle={syntaxStyle} width={540} lineNumbers />
+        <Code content={CODE} language="typescript" highlighter={demoHighlighter} width={540} lineNumbers />
       </box>
       <box width={560} height={155} backgroundColor={0x111827ff} padding={10} cornerRadius={8}>
         <Diff diff={DIFF} showLineNumbers width={540} />
       </box>
       <box width={560} height={410} backgroundColor={0x111827ff} padding={10} cornerRadius={8}>
-        <Markdown content={MARKDOWN} syntaxStyle={syntaxStyle} width={540} />
+        <Markdown content={MARKDOWN} highlighter={demoHighlighter} width={540} />
       </box>
     </box>
   )
@@ -73,13 +97,13 @@ function StyledColumn() {
     <box width={560} direction="column" gap={10}>
       <PanelTitle>STYLED PUBLIC</PanelTitle>
       <box width={560} height={170} backgroundColor={0x111827ff} padding={10} cornerRadius={8}>
-        <VoidCode content={CODE} language="typescript" syntaxStyle={syntaxStyle} width={540} lineNumbers />
+        <VoidCode content={CODE} language="typescript" highlighter={demoHighlighter} width={540} lineNumbers />
       </box>
       <box width={560} height={155} backgroundColor={0x111827ff} padding={10} cornerRadius={8}>
         <VoidDiff diff={DIFF} showLineNumbers width={540} />
       </box>
       <box width={560} height={410} backgroundColor={0x111827ff} padding={10} cornerRadius={8}>
-        <VoidMarkdown content={MARKDOWN} syntaxStyle={syntaxStyle} width={540} />
+        <VoidMarkdown content={MARKDOWN} highlighter={demoHighlighter} width={540} />
       </box>
     </box>
   )
@@ -212,27 +236,8 @@ export async function render(options?: RenderToBufferOptions) {
     width,
     height,
     async ({ frame }) => {
-      // A real parser request is the readiness barrier. Component requests
-      // are queued before this one; two actual render turns then deliver their
-      // highlighted tokens to the scene.
-      const client = getTreeSitterClient()
-      try {
-        const highlights = await new Promise<Awaited<ReturnType<typeof client.highlightOnce>>>((resolve, reject) => {
-          const timer = setTimeout(() => reject(new Error("syntax highlighter did not become ready within 5s")), 5000)
-          client.highlightOnce(CODE, "typescript").then((result) => {
-            clearTimeout(timer)
-            resolve(result)
-          }, (error) => {
-            clearTimeout(timer)
-            reject(error)
-          })
-        })
-        if (highlights.length < 3) throw new Error("typescript syntax highlighter returned no meaningful captures")
-        await frame()
-        await frame()
-      } finally {
-        client.destroy()
-      }
+      await frame()
+      await frame()
     },
     2,
     options,

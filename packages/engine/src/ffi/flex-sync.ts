@@ -136,7 +136,7 @@ function mapAlign(value: number): number {
 }
 
 function parseDir(value: unknown): number {
-  return value === "row" ? 0 : 1
+  return value === "column" ? 1 : 0
 }
 
 function parseAlignX(value: unknown): number {
@@ -799,15 +799,15 @@ export function createTextFlexNode(node: TGENode): void {
 
 function syncDirection(flex: Node, props: TGEProps): void {
   const dir = props.direction ?? props.flexDirection
-  flex.setFlexDirection(dir === "row" ? FLEX_DIRECTION_ROW : FLEX_DIRECTION_COLUMN)
+  flex.setFlexDirection(dir === "column" ? FLEX_DIRECTION_COLUMN : FLEX_DIRECTION_ROW)
 }
 
 function parentDirection(node: TGENode): number {
   const parent = node.parent
-  if (!parent) return FLEX_DIRECTION_COLUMN
-  return parseDir(parent.props.direction ?? parent.props.flexDirection) === 0
-    ? FLEX_DIRECTION_ROW
-    : FLEX_DIRECTION_COLUMN
+  if (!parent) return FLEX_DIRECTION_ROW
+  return parseDir(parent.props.direction ?? parent.props.flexDirection) === 1
+    ? FLEX_DIRECTION_COLUMN
+    : FLEX_DIRECTION_ROW
 }
 
 function syncChildSizing(node: TGENode): void {
@@ -883,7 +883,7 @@ function syncSizing(
   hs: SizingInfo | null,
   flexGrow?: number,
   flexShrink?: number,
-  parentDir = FLEX_DIRECTION_COLUMN,
+  parentDir = FLEX_DIRECTION_ROW,
   gridItem = false,
 ): void {
   const widthMainGrow = ws?.type === SIZING.GROW && parentDir === FLEX_DIRECTION_ROW

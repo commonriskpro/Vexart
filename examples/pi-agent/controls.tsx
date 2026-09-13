@@ -1,6 +1,5 @@
 
-import { useFocus } from "@vexart/engine"
-import type { TGEProps } from "@vexart/engine"
+import { useFocus, type TGEProps } from "vexart"
 import { Show, children, type JSX } from "solid-js"
 import { piColors } from "./theme"
 

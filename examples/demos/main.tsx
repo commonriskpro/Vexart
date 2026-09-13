@@ -1,5 +1,4 @@
-import { createApp, useAppTerminal } from "@vexart/app"
-import { useTerminalDimensions } from "@vexart/engine"
+import { createApp, useAppTerminal, useTerminalDimensions } from "vexart"
 import { StudioApp } from "./studio"
 import { MissionControlApp } from "./mission-control"
 import { EffectsPlaygroundApp } from "./effects-playground"

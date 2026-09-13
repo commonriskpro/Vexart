@@ -61,7 +61,7 @@ export type {
 
 // ── Primitives & Styling ───────────────────────────────────────────────────
 
-export type { TGEProps as BoxProps, ShadowConfig, GlowConfig } from "@vexart/engine"
+export type { TGEProps, TGEProps as BoxProps, ShadowConfig, GlowConfig } from "@vexart/engine"
 
 /** @beta Grid value types accepted by the app box props. */
 export type {
@@ -299,6 +299,9 @@ export type {
   TextareaProps,
   CodeTheme,
   CodeProps,
+  HighlightToken,
+  Token,
+  Highlighter,
   MarkdownTheme,
   MarkdownProps,
   ProgressBarRenderContext,
@@ -387,11 +390,11 @@ export {
   // Scroll
   createScrollHandle,
   releaseScrollHandle,
+  // Debug
+  debugStatsLine,
+  getImageCacheStats,
   // Node handle
-  // Syntax highlighting themes (needed by Code, Markdown, Textarea)
-  SyntaxStyle,
-  ONE_DARK,
-  KANAGAWA,
+
 } from "@vexart/engine"
 
 export type {
@@ -415,6 +418,8 @@ export type {
   FocusHandle,
   // Selection
   TextSelection,
+  // Scroll
+  ScrollHandle,
   // Interaction
   DragOptions,
   DragProps,
@@ -432,9 +437,7 @@ export type {
   // Mount
   MountHandle,
   MountOptions,
-  // Syntax highlighting
-  StyleDefinition,
-  SimpleThemeRules,
+
 } from "@vexart/engine"
 
 // ── SolidJS re-exports ───────────────────────────────────────────────────────
@@ -449,6 +452,8 @@ export {
   ErrorBoundary,
   createComponent,
 } from "solid-js"
+
+export type { JSX } from "solid-js"
 
 export {
   createSignal,

@@ -1,8 +1,17 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
-
-import { Input, Slider, Switch } from "@vexart/headless"
-import { onInput } from "@vexart/engine"
-import { Button, DemoFrame, Label, Pane, useDemo, ui } from "./shared"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  onCleanup,
+  onMount,
+  Show,
+  Input,
+  Slider,
+  ToggleSwitch as Switch,
+  onInput,
+} from "vexart"
+import { Button, DemoFooter, Label, Pane, useDemo, ui } from "./shared"
 
 export type EffectsTab = "surface" | "gradient" | "glass"
 
@@ -240,44 +249,50 @@ function ShadowSwitch(props: { checked: boolean; onChange: (checked: boolean) =>
   )
 }
 
-function Preview(props: { tab: EffectsTab; values: EffectsValues }) {
-  const demo = useDemo()
+function Preview(props: { tab: EffectsTab; values: EffectsValues; width: number; height: number }) {
   const ribbonPath = new URL("./assets/effects/ribbons.png", import.meta.url).pathname
   const dots = Array.from({ length: 18 * 9 }, (_, index) => ({
     x: (index % 18) * 56 + 15,
     y: Math.floor(index / 18) * 56 + 14,
   }))
+  const offsetX = () => Math.max(43, Math.round((props.width - 1020) / 2))
+  const offsetY = () => Math.max(44, Math.round((props.height - 535) / 2))
   return (
-    <Pane x={0} y={100} width={1102} height={618} fill="#101313" border="#303435">
+    <box width="100%" height="grow" backgroundColor="#101313" borderColor="#303435" borderBottom={1} viewportClip>
       <Label x={28} y={19} size={13} mono color="#858b8c">PREVIEW</Label>
-      <For each={dots}>{(dot) => <box width={demo.s(2)} height={demo.s(2)} floating="parent" floatOffset={{ x: demo.s(dot.x), y: demo.s(dot.y + 18) }} backgroundColor="#ffffff18" cornerRadius={demo.s(1)} />}</For>
-      <box floating="parent" floatOffset={{ x: demo.s(43), y: demo.s(44) }} width={demo.s(1020)} height={demo.s(535)}>
-        <img src={ribbonPath} width={demo.s(1020)} height={demo.s(535)} objectFit="cover" cornerRadius={demo.s(2)} />
+      <For each={dots}>{(dot) => <box width={2} height={2} floating="parent" floatOffset={{ x: dot.x, y: dot.y + 18 }} backgroundColor="#ffffff18" cornerRadius={1} />}</For>
+      <box floating="parent" floatOffset={{ x: offsetX(), y: offsetY() }} width={1020} height={535}>
+        <img src={ribbonPath} width={1020} height={535} objectFit="cover" cornerRadius={2} />
         <box
           floating="parent"
-          floatOffset={{ x: demo.s(254), y: demo.s(122) }}
-          width={demo.s(514)}
-          height={demo.s(292)}
+          floatOffset={{ x: 254, y: 122 }}
+          width={514}
+          height={292}
           backgroundColor={colorWithAlpha(props.values.color, props.values.opacity)}
           gradient={props.tab === "gradient" ? { type: "linear", ...gradientColors(props.values.opacity), angle: 32 } : undefined}
-          cornerRadius={demo.s(props.values.radius)}
+          cornerRadius={props.values.radius}
           borderColor="#ffffffb8"
-          borderWidth={demo.s(1)}
+          borderWidth={1}
           backdropBlur={props.tab === "glass" ? props.values.blur : undefined}
           backdropSaturate={props.tab === "glass" ? props.values.saturation : undefined}
           shadow={props.values.shadow ? { x: 0, y: props.values.shadowY, blur: props.values.shadowBlur, color: "#00000022" } : undefined}
-        />
-        <box floating="parent" floatOffset={{ x: demo.s(254), y: demo.s(216) }} width={demo.s(514)} height={demo.s(100)} alignX="center" alignY="center">
-          <text color="#ffffff" fontFamily={ui.sans} fontSize={Math.round(demo.s(72))} fontWeight={700}>{props.tab === "surface" ? "Surface" : props.tab === "gradient" ? "Gradient" : "Glass"}</text>
+          alignX="center"
+          alignY="center"
+          direction="column"
+          gap={8}
+        >
+          <text color="#ffffff" fontFamily={ui.sans} fontSize={72} fontWeight={700}>
+            {props.tab === "surface" ? "Surface" : props.tab === "gradient" ? "Gradient" : "Glass"}
+          </text>
+          <text color="#d7dadb" fontFamily={ui.sans} fontSize={24}>
+            {props.tab === "surface" ? "Opacity · " + props.values.opacity + "%" : props.tab === "gradient" ? "Linear gradient · 32°" : "Backdrop blur · " + props.values.blur + " px"}
+          </text>
         </box>
-        <box floating="parent" floatOffset={{ x: demo.s(254), y: demo.s(300) }} width={demo.s(514)} height={demo.s(40)} alignX="center" alignY="center">
-          <text color="#d7dadb" fontFamily={ui.sans} fontSize={Math.round(demo.s(24))}>{props.tab === "surface" ? "Opacity · " + props.values.opacity + "%" : props.tab === "gradient" ? "Linear gradient · 32°" : "Backdrop blur · " + props.values.blur + " px"}</text>
+        <box floating="parent" floatOffset={{ x: 938, y: 492 }} width={62} height={26} alignX="center" alignY="center" backgroundColor="#8b4e3f" cornerRadius={9}>
+          <text color="#ffffff" fontSize={13} fontFamily={ui.sans}>100%</text>
         </box>
       </box>
-      <Pane x={960} y={546} width={62} height={26} fill="#8b4e3f" radius={9}>
-        <Label x={11} y={5} size={13} color="#ffffff">100%</Label>
-      </Pane>
-    </Pane>
+    </box>
   )
 }
 
@@ -286,9 +301,8 @@ function Inspector(props: {
   setValue: <K extends keyof EffectsValues>(key: K, value: EffectsValues[K]) => void
   reset: () => void
 }) {
-  const demo = useDemo()
   return (
-    <Pane x={1102} y={100} width={434} height={852} fill="#121515" border="#303435">
+    <box width={434} height="100%" backgroundColor="#121515" borderColor="#303435" borderLeft={1}>
       <Label x={22} y={21} size={20} weight={700} color="#f1f2f2">Properties</Label>
       <SectionRule y={56} />
       <Label x={22} y={80} size={18} weight={700} color="#f1f2f2">Surface</Label>
@@ -311,7 +325,7 @@ function Inspector(props: {
       <PropertySlider label="Y offset" value={props.values.shadowY} min={0} max={24} unit=" px" y={702} onChange={(v) => props.setValue("shadowY", v)} />
       <SectionRule y={758} />
       <Button x={22} y={776} width={160} height={38} id="reset" icon="arrow-counter-clockwise" label="Reset values" border={false} onPress={props.reset} align="left" />
-    </Pane>
+    </box>
   )
 }
 
@@ -339,34 +353,36 @@ function CopyAction(props: { x: number; y: number; tab: EffectsTab; values: Effe
 }
 
 function CodeLine(props: { line: string; y: number }) {
-  const demo = useDemo()
   const parts = props.line.match(/^(\s*)([A-Za-z]+)(.*)$/)
   return (
-    <box floating="parent" floatOffset={{ x: demo.s(65), y: demo.s(props.y) }} width={demo.s(980)} height={demo.s(20)} direction="row" pointerPassthrough>
-      <text flexShrink={0} fontFamily={ui.mono} fontSize={Math.round(demo.s(15))} lineHeight={Math.round(demo.s(20))} color="#5fc4f1" whiteSpace="pre-wrap" pointerPassthrough>{parts ? `${parts[1]}${parts[2]}` : props.line}</text>
+    <box floating="parent" floatOffset={{ x: 65, y: props.y }} width={980} height={20} direction="row" pointerPassthrough>
+      <text flexShrink={0} fontFamily={ui.mono} fontSize={15} lineHeight={20} color="#5fc4f1" whiteSpace="pre-wrap" pointerPassthrough>{parts ? parts[1] + parts[2] : props.line}</text>
       <Show when={parts}>
-        {match => <text flexShrink={0} fontFamily={ui.mono} fontSize={Math.round(demo.s(15))} lineHeight={Math.round(demo.s(20))} color="#e5b878" pointerPassthrough>{match()[3]}</text>}
+        {match => <text flexShrink={0} fontFamily={ui.mono} fontSize={15} lineHeight={20} color="#e5b878" pointerPassthrough>{match()[3]}</text>}
       </Show>
     </box>
   )
 }
 
-function CodePanel(props: { tab: EffectsTab; values: EffectsValues }) {
+function CodePanel(props: { tab: EffectsTab; values: EffectsValues; width: number }) {
   const snippet = createMemo(() => effectsSnippet(props.tab, props.values))
   const lines = createMemo(() => snippet().split("\n"))
+  const boxWidth = () => Math.max(400, props.width - 56)
   return (
-    <Pane x={0} y={718} width={1102} height={234} fill="#111414" border="#303435">
+    <box width="100%" height={234} backgroundColor="#111414">
       <Label x={28} y={19} size={19} weight={700} color="#f1f2f2">JSX</Label>
       <Label x={82} y={21} size={15} color="#8a9091">Illustrative snippet</Label>
-      <Pane x={28} y={50} width={1046} height={170} fill="#0d1010" border="#383c3d" radius={5}>
+      <box floating="parent" floatOffset={{ x: 28, y: 50 }} width={boxWidth()} height={170} backgroundColor="#0d1010" borderColor="#383c3d" borderWidth={1} cornerRadius={5}>
         <For each={lines()}>{(_, index) => <Label x={22} y={14 + index() * 20} size={15} mono color="#7f8788">{String(index() + 1)}</Label>}</For>
         <For each={lines()}>{(line, index) => <CodeLine line={line} y={14 + index() * 20} />}</For>
-      </Pane>
-    </Pane>
+      </box>
+    </box>
   )
 }
 
-export function EffectsPlaygroundApp(props: { width: number; height: number; copy?: (text: string) => void | Promise<void> }) {
+export function EffectsPlaygroundApp(props: { width?: number; height?: number; copy?: (text: string) => void | Promise<void> }) {
+  const width = () => props.width ?? 1536
+  const height = () => props.height ?? 1024
   const [tab, setTab] = createSignal<EffectsTab>("glass")
   const controller = createEffectsController()
   onMount(() => {
@@ -375,9 +391,16 @@ export function EffectsPlaygroundApp(props: { width: number; height: number; cop
     })
     onCleanup(stopInput)
   })
+
+  const contentWidth = () => width() - 434
+  const bodyHeight = () => height() - 60 - 44
+  const previewHeight = () => Math.max(300, bodyHeight() - 234)
+  const copyActionX = () => width() - 162
+
   return (
-    <DemoFrame width={props.width} height={props.height} title="vexart — effects playground" hints={[{ keys: "Tab", label: "Next control" }, { keys: "← →", label: "Adjust" }, { keys: "R", label: "Reset" }]}>
-      <Pane x={0} y={40} width={1536} height={60} fill="#121515" border="#303435">
+    <box width={width()} height={height()} direction="column" backgroundColor="#101313">
+      {/* Top Header Bar */}
+      <box width="100%" height={60} backgroundColor="#121515" borderColor="#303435" borderBottom={1}>
         <Label x={28} y={20} size={21} weight={700} color="#f1f2f2">Effects Playground</Label>
         <Button x={260} y={0} width={88} height={60} id="surface" label="Surface" border={false} onPress={() => setTab("surface")} />
         <Button x={348} y={0} width={92} height={60} id="gradient" label="Gradient" border={false} onPress={() => setTab("gradient")} />
@@ -385,11 +408,29 @@ export function EffectsPlaygroundApp(props: { width: number; height: number; cop
         <Show when={tab() === "surface"}><Pane x={276} y={57} width={56} height={3} fill="#f1f2f2" /></Show>
         <Show when={tab() === "gradient"}><Pane x={366} y={57} width={56} height={3} fill="#f1f2f2" /></Show>
         <Show when={tab() === "glass"}><Pane x={456} y={57} width={56} height={3} fill="#f1f2f2" /></Show>
-        <CopyAction x={1374} y={12} tab={tab()} values={controller.values()} copy={props.copy} />
-      </Pane>
-      <Preview tab={tab()} values={controller.values()} />
-      <Inspector values={controller.values()} setValue={controller.setValue} reset={controller.reset} />
-      <CodePanel tab={tab()} values={controller.values()} />
-    </DemoFrame>
+        <CopyAction x={copyActionX()} y={12} tab={tab()} values={controller.values()} copy={props.copy} />
+      </box>
+
+      {/* Main Body */}
+      <box width="100%" height="grow" direction="row">
+        {/* Left Column: Preview + CodePanel */}
+        <box width="grow" height="100%" direction="column">
+          <Preview tab={tab()} values={controller.values()} width={contentWidth()} height={previewHeight()} />
+          <CodePanel tab={tab()} values={controller.values()} width={contentWidth()} />
+        </box>
+
+        {/* Right Column: Inspector */}
+        <Inspector values={controller.values()} setValue={controller.setValue} reset={controller.reset} />
+      </box>
+
+      {/* Footer */}
+      <DemoFooter hints={[
+        { keys: "Tab", label: "Next control" },
+        { keys: "← →", label: "Adjust" },
+        { keys: "R", label: "Reset" },
+      ]} />
+    </box>
   )
 }
+
+export default EffectsPlaygroundApp

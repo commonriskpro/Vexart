@@ -8,10 +8,11 @@
  * Run: bun --conditions=browser run examples/effects-showcase.tsx
  */
 
-import { createSignal } from "solid-js"
-import { useTerminalDimensions } from "@vexart/engine"
-import { createApp, useAppTerminal } from "@vexart/app"
 import {
+  createSignal,
+  useTerminalDimensions,
+  createApp,
+  useAppTerminal,
   VoidBadge,
   VoidButton,
   VoidTabs,
@@ -22,15 +23,16 @@ import {
   shadows,
   space,
   weight,
-} from "@vexart/styled"
-import type { JSX } from "solid-js"
+  type JSX,
+  type TGEProps,
+} from "vexart"
 
 type PanelProps = {
   title: string
   caption: string
   children: JSX.Element
   backgroundColor?: string | number
-  gradient?: import("@vexart/engine").TGEProps["gradient"]
+  gradient?: TGEProps["gradient"]
 }
 
 function Panel(props: PanelProps) {
@@ -77,11 +79,11 @@ function Swatch(props: {
     to: string | number
   }
   cornerRadius?: number
-  shadow?: import("@vexart/engine").TGEProps["shadow"]
-  glow?: import("@vexart/engine").TGEProps["glow"]
+  shadow?: TGEProps["shadow"]
+  glow?: TGEProps["glow"]
   opacity?: number
-  transform?: import("@vexart/engine").TGEProps["transform"]
-  filter?: import("@vexart/engine").TGEProps["filter"]
+  transform?: TGEProps["transform"]
+  filter?: TGEProps["filter"]
 }) {
   return (
     <box

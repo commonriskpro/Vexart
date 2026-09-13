@@ -19,7 +19,7 @@ The 25 primitives are organized into **23 unstyled UI components** and **2 state
 | | `Slider` | Value clamping, scrubbing, step snapping. | `Left`/`Right` / `h`/`l` decrement/increment, drag. |
 | | `Switch` | Binary boolean toggle switch. | `Space` / `Enter` toggle; click activation. |
 | | `Textarea` | Multi-line text editor with line breaks. | Multi-line navigation, visual cursor, bracketed paste. |
-| **Display** (3) | `Code` | Syntax-highlighted code blocks. | Tree-Sitter WASM tokenization, line numbers. |
+| **Display** (3) | `Code` | Syntax-highlighted code blocks. | Pluggable tokenization via Highlighter, line numbers. |
 | | `Markdown` | Markdown document renderer. | `marked` token parsing into layout AST. |
 | | `ProgressBar` | Progress range normalization (0–100%). | Accessible min/max value bounds, indeterminate mode. |
 | **Containers** (4)| `OverlayRoot` | Top-level z-index layer coordinate manager. | Manages floating popovers, tooltips, and dialogs. |

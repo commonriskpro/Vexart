@@ -221,12 +221,12 @@ The reconciler has **NO HTML DOM**. The following tags **DO NOT EXIST** and will
 
 Vexart uses Flexily, an embedded sub-pixel layout engine supporting both Flexbox and full CSS Grid specifications.
 
-### Default Layout Invariant: Vertical Flow
-Unlike browser CSS (which defaults to `row`), Vexart containers default to `direction="column"`. For horizontal layout, you **MUST** explicitly specify `direction="row"` or `className="flex-row"`.
+### Default Layout Invariant: Horizontal Flow (16:9 Standard)
+Aligned with browser CSS Flexbox and modern 16:9 widescreen terminal displays, Vexart containers default to `direction="row"`. For vertical layout, specify `direction="column"` or `className="flex-col"`.
 
 ### 4.1 Flexbox Properties
 Set on `<box>` (or via `className`):
-- `direction` / `flexDirection`: `"column" | "row"` (Default: `"column"`).
+- `direction` / `flexDirection`: `"row" | "column"` (Default: `"row"`).
 - `alignX` / `justifyContent`: `"left" | "center" | "right" | "space-between" | "flex-start" | "flex-end"`.
 - `alignY` / `alignItems`: `"top" | "center" | "bottom" | "space-between" | "flex-start" | "flex-end"`.
 - `gap`: `number` (gap between child elements in pixels).

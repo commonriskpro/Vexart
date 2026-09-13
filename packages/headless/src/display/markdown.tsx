@@ -9,8 +9,8 @@
 import { createMemo } from "solid-js"
 import type { JSX } from "solid-js"
 import { Lexer, type MarkedToken, type Tokens } from "marked"
-import { type SyntaxStyle, type SizingUnit } from "@vexart/engine"
-import { Code } from "./code"
+import type { SizingUnit } from "@vexart/engine"
+import { Code, type Highlighter } from "./code"
 
 const LINE_HEIGHT = 17
 const CHAR_WIDTH = 9
@@ -74,7 +74,8 @@ const MD_DEFAULTS: MarkdownTheme = {
 /** @public */
 export type MarkdownProps = {
   content: string
-  syntaxStyle: SyntaxStyle
+  /** Optional pluggable syntax highlighter for code blocks. */
+  highlighter?: Highlighter
   /** Default text color (shorthand — overrides theme.fg). */
   color?: number
   width?: SizingUnit
@@ -194,7 +195,7 @@ function renderToken(token: MarkedToken, props: MarkdownProps, th: MarkdownTheme
           <Code
             content={token.text}
             language={resolveLanguage(token.lang)}
-            syntaxStyle={props.syntaxStyle}
+            highlighter={props.highlighter}
             width="100%"
             theme={{ bg: th.codeBlockBg, radius: 6, padding: 10, lineNumberFg: th.muted }}
             streaming={props.streaming}

@@ -8,7 +8,7 @@
  */
 
 import { Textarea } from "@vexart/headless"
-import type { TextareaHandle, KeyBinding, SyntaxStyle, KeyEvent } from "@vexart/headless"
+import type { TextareaHandle, KeyBinding, Highlighter, KeyEvent } from "@vexart/headless"
 import { radius, space } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
@@ -26,7 +26,7 @@ export type VoidTextareaProps = {
   disabled?: boolean
   focusId?: string
   keyBindings?: KeyBinding[]
-  syntaxStyle?: SyntaxStyle
+  highlighter?: Highlighter
   language?: string
   ref?: (handle: TextareaHandle) => void
 }
@@ -48,7 +48,7 @@ export function VoidTextarea(props: VoidTextareaProps) {
       disabled={props.disabled}
       focusId={props.focusId}
       keyBindings={props.keyBindings}
-      syntaxStyle={props.syntaxStyle}
+      highlighter={props.highlighter}
       language={props.language}
       theme={{
         accent: themeColors.ring,

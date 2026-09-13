@@ -1,6 +1,4 @@
-import { onInput } from "@vexart/engine"
-import type { AppContext } from "@vexart/app"
-import { createApp } from "@vexart/app"
+import { onInput, createApp, type AppContext } from "vexart"
 import { onCleanup } from "solid-js"
 import { resolve } from "node:path"
 import { createPiController } from "./pi-agent/controller"

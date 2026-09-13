@@ -464,8 +464,8 @@ export function VoidCode(props: VoidCodeProps): JSX;
 // @public (undocumented)
 export type VoidCodeProps = {
     content: string;
-    language: string;
-    syntaxStyle: SyntaxStyle;
+    language?: string;
+    highlighter?: Highlighter;
     width?: SizingUnit;
     height?: SizingUnit;
     lineNumbers?: boolean;
@@ -635,7 +635,7 @@ export function VoidMarkdown(props: VoidMarkdownProps): JSX;
 // @public (undocumented)
 export type VoidMarkdownProps = {
     content: string;
-    syntaxStyle: SyntaxStyle;
+    highlighter?: Highlighter;
     width?: SizingUnit;
     streaming?: boolean;
 };
@@ -815,7 +815,7 @@ export type VoidTextareaProps = {
     disabled?: boolean;
     focusId?: string;
     keyBindings?: KeyBinding[];
-    syntaxStyle?: SyntaxStyle;
+    highlighter?: Highlighter;
     language?: string;
     ref?: (handle: TextareaHandle) => void;
 };
@@ -872,8 +872,8 @@ export const weight: {
 // Warnings were encountered during analysis:
 //
 // <repo>/.api-extractor-temp/packages/headless/src/overlays/toast.d.ts:31:5 - (ae-forgotten-export) The symbol "ToastVariant" needs to be exported by the entry point index.d.ts
-// <repo>/.api-extractor-temp/packages/styled/src/components/code.d.ts:12:5 - (ae-forgotten-export) The symbol "SyntaxStyle" needs to be exported by the entry point index.d.ts
-// <repo>/.api-extractor-temp/packages/styled/src/components/code.d.ts:13:5 - (ae-forgotten-export) The symbol "SizingUnit" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/styled/src/components/code.d.ts:13:5 - (ae-forgotten-export) The symbol "Highlighter" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/styled/src/components/code.d.ts:14:5 - (ae-forgotten-export) The symbol "SizingUnit" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/scroll-view.d.ts:14:5 - (ae-forgotten-export) The symbol "ScrollHandle" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:16:5 - (ae-forgotten-export) The symbol "KeyEvent" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:23:5 - (ae-forgotten-export) The symbol "KeyBinding" needs to be exported by the entry point index.d.ts

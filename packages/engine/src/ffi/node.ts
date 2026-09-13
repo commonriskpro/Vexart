@@ -13,7 +13,7 @@
  */
 
 import { releaseNodeImage } from "./native-image-assets"
-import { Node, FLEX_DIRECTION_COLUMN } from "flexily"
+import { Node, FLEX_DIRECTION_ROW, FLEX_DIRECTION_COLUMN } from "flexily"
 import { createTextFlexNode, syncAllLayoutProps } from "./flex-sync"
 import {
   ALIGN_X,
@@ -113,7 +113,7 @@ export function getThemeEpoch(): number {
 /** @public */
 export function createNode(kind: TGENodeKind): TGENode {
   const flex = kind === "text" ? null : Node.create()
-  flex?.setFlexDirection(FLEX_DIRECTION_COLUMN)
+  flex?.setFlexDirection(FLEX_DIRECTION_ROW)
   return {
     kind,
     props: {},
@@ -282,7 +282,7 @@ function ensureFlexSubtree(node: TGENode): void {
     } else {
       recreated = true
       const flex = Node.create()
-      flex.setFlexDirection(FLEX_DIRECTION_COLUMN)
+      flex.setFlexDirection(FLEX_DIRECTION_ROW)
       node._flexNode = flex
     }
   }
@@ -522,8 +522,8 @@ export function parseSizing(value: number | string | undefined | null): SizingIn
 
 /** @public */
 export function parseDirection(value: string | undefined): number {
-  if (value === "row") return DIRECTION.LEFT_TO_RIGHT
-  return DIRECTION.TOP_TO_BOTTOM
+  if (value === "column") return DIRECTION.TOP_TO_BOTTOM
+  return DIRECTION.LEFT_TO_RIGHT
 }
 
 /** @public */

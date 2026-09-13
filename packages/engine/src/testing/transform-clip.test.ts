@@ -65,6 +65,7 @@ function createClipFixture(options: { scrollLayer?: boolean; rowLayer?: boolean;
   const root = prop(createNode("box"), "width", 180)
   prop(root, "height", Math.max(80, (options.leadingHeight ?? 0) + 80))
   prop(root, "backgroundColor", 0x0b0d10ff)
+  prop(root, "direction", "column")
 
   if (options.leadingHeight) {
     const leading = prop(createNode("box"), "width", 180)

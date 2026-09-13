@@ -1,11 +1,9 @@
 
-import { Code } from "@vexart/headless"
+import { Code } from "vexart"
 import { Lexer, type Token, type Tokens } from "marked"
 import { For, createMemo } from "solid-js"
-import { SyntaxStyle, ONE_DARK } from "@vexart/engine"
 import { piColors } from "./theme"
 
-const syntax = SyntaxStyle.fromTheme(ONE_DARK)
 
 // Native text has one wrapping flow per Text node, not browser inline boxes.
 // Keep prose in that flow; separate flex children would shrink code and links.
@@ -22,7 +20,7 @@ function inline(tokens: Token[]): string {
 function Block(props: { token: Token }) {
   const token = props.token
   if (token.type === "space") return null
-  if (token.type === "code") return <box width="grow" paddingY={8}><Code content={token.text} language={token.lang || "plaintext"} syntaxStyle={syntax} width="grow" theme={{ bg: piColors.surface, padding: 12, radius: 8 }} /></box>
+  if (token.type === "code") return <box width="grow" paddingY={8}><Code content={token.text} language={token.lang || "plaintext"} width="grow" theme={{ bg: piColors.surface, padding: 12, radius: 8 }} /></box>
   if (token.type === "hr") return <box width="grow" height={1} backgroundColor={piColors.border} />
   if (token.type === "list") return <box direction="column" width="grow" gap={10}><For each={token.items}>{(item: Tokens.ListItem, index) => <text width="grow" fontSize={17} color={piColors.text} whiteSpace="pre-wrap">{token.ordered ? `${Number(token.start || 1) + index()}. ` : "• "}{inline(item.tokens)}</text>}</For></box>
   if (token.type === "blockquote") return <box width="grow" paddingLeft={16} direction="column" gap={12}><For each={token.tokens}>{(child) => <Block token={child} />}</For></box>

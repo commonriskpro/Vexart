@@ -1,7 +1,6 @@
 /** Native WGPU readback, not a web recreation or a screenshot of the reference. */
 
-import { getImageCacheStats, clearFocus, type NodeHandle } from "@vexart/engine"
-import type { JSX } from "solid-js"
+import { getImageCacheStats, clearFocus, type NodeHandle, type JSX } from "vexart"
 import sharp from "sharp"
 import { mkdir } from "node:fs/promises"
 import { resolve } from "node:path"

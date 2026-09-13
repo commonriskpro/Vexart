@@ -267,7 +267,6 @@ packages/engine/
 │   │   ├── plugins.ts         — slot registry for plugins
 │   │   ├── pointer.ts         — pointer capture, loop binding
 │   │   ├── selection.ts       — text selection across nodes
-│   │   └── tree-sitter/       — syntax highlighting (client, parsers, styles)
 │   │
 │   ├── loop/                  — render loop + pipeline phases
 │   │   ├── loop.ts            — createRenderLoop
@@ -1102,7 +1101,7 @@ interface Task {
 
 - **`user-blocking`**: input parsing, focus changes, pointer events. **Never deferred.** Runs first each frame.
 - **`user-visible`**: dirty layer repaint, animation ticks for non-compositor properties. Runs if budget remains.
-- **`background`**: cache warming, telemetry aggregation, tree-sitter re-parse for idle documents. Runs only in idle windows.
+- **`background`**: cache warming, telemetry aggregation, syntax re-parse or atlas compaction for idle documents. Runs only in idle windows.
 
 ### 11.2 Budget allocation per frame
 

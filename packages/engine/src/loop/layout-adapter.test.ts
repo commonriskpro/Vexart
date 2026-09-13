@@ -139,7 +139,7 @@ describe("layout adapter stacking contexts", () => {
   test("walkTree applies margin props", () => {
     const first = box({ width: 100, height: 50 })
     const second = box({ width: 100, height: 50, marginTop: 20 })
-    const root = box({ width: 300, height: 200 }, [first, second])
+    const root = box({ width: 300, height: 200, direction: "column" }, [first, second])
 
     const state = layoutState(root)
 

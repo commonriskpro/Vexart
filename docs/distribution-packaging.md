@@ -23,7 +23,6 @@ dist/
 ├── engine.js / engine.d.ts     — public mount, terminal, hooks/types, and debug controls
 ├── jsx-runtime.d.ts            — published JSX intrinsic runtime
 ├── solid-plugin.ts             — Babel JSX transform helper
-├── tree-sitter/                — grammar .wasm + .scm + worker
 ├── package.json                — optionalDependencies: platform-native packages
 └── platform/
     └── darwin-arm64/           — @vexart-native/darwin-arm64 (libvexart.dylib)

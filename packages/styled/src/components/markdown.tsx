@@ -5,14 +5,15 @@
  */
 
 import { Markdown } from "@vexart/headless"
-import type { SyntaxStyle } from "@vexart/headless"
+import type { Highlighter } from "@vexart/headless"
 import type { SizingUnit } from "@vexart/engine"
 import { themeColors } from "../theme/theme"
 
 /** @public */
 export type VoidMarkdownProps = {
   content: string
-  syntaxStyle: SyntaxStyle
+  /** Optional pluggable syntax highlighter for code blocks. */
+  highlighter?: Highlighter
   width?: SizingUnit
   streaming?: boolean
 }
@@ -22,7 +23,7 @@ export function VoidMarkdown(props: VoidMarkdownProps) {
   return (
     <Markdown
       content={props.content}
-      syntaxStyle={props.syntaxStyle}
+      highlighter={props.highlighter}
       width={props.width}
       streaming={props.streaming}
       theme={{

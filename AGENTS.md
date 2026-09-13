@@ -85,7 +85,6 @@ for details.
   pipelines, compositing, Kitty encoding, transport, image assets, and GPU resource management.
 - **Bun** — Runtime, package manager, tests, TypeScript execution, and `bun:ffi` native bridge.
 - **marked** — Markdown parsing for the `Markdown` headless component.
-- **web-tree-sitter** — Tree-sitter WASM runtime for syntax highlighting.
 - **Zod** (`zod@4`) — Schema validation.
 
 ## Current Build Shape

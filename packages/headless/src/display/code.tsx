@@ -1,23 +1,49 @@
 /**
  * Code — syntax-highlighted code block for Vexart.
  *
- * Renders source code with tree-sitter token coloring.
+ * Renders source code with pluggable token coloring (via optional Highlighter).
  *
  * @public
  */
 
 import { createSignal, createEffect, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import {
-  getTreeSitterClient,
-  highlightsToTokens,
-  type SyntaxStyle,
-  type Token,
-  type SizingUnit,
-} from "@vexart/engine"
+import type { SizingUnit } from "@vexart/engine"
 
 const LINE_HEIGHT = 17
 const CHAR_WIDTH = 9
+
+// ── Types ──
+
+/**
+ * Individual token with text and color for syntax highlighting.
+ *
+ * @public
+ */
+export type HighlightToken = {
+  text: string
+  color: string | number
+}
+
+/**
+ * Backward compatibility alias for HighlightToken.
+ *
+ * @public
+ */
+export type Token = HighlightToken
+
+/**
+ * Pluggable syntax highlighting function.
+ *
+ * Accepts source code and an optional language identifier, and returns an array
+ * of lines where each line is an array of HighlightTokens (or a Promise resolving to it).
+ *
+ * @public
+ */
+export type Highlighter = (
+  content: string,
+  language?: string,
+) => Promise<HighlightToken[][]> | HighlightToken[][]
 
 // ── Theme ──
 
@@ -25,6 +51,8 @@ const CHAR_WIDTH = 9
 export type CodeTheme = {
   /** Background color. */
   bg: string | number
+  /** Default text foreground color. */
+  fg: string | number
   /** Line number foreground color. */
   lineNumberFg: string | number
   /** Corner radius. */
@@ -35,18 +63,20 @@ export type CodeTheme = {
 
 const CODE_DEFAULTS: CodeTheme = {
   bg: 0x1a1a2eff,
+  fg: 0xe0e0e0ff,
   lineNumberFg: 0x555555ff,
   radius: 4,
   padding: 8,
 }
 
-// ── Types ──
+// ── Component Props ──
 
 /** @public */
 export type CodeProps = {
   content: string
-  language: string
-  syntaxStyle: SyntaxStyle
+  language?: string
+  /** Pluggable syntax highlighter. When omitted, renders plain monospaced lines. */
+  highlighter?: Highlighter
   width?: SizingUnit
   height?: SizingUnit
   /** Visual theme — all styling comes from here. */
@@ -58,8 +88,7 @@ export type CodeProps = {
 /** @public */
 export function Code(props: CodeProps) {
   const t = () => ({ ...CODE_DEFAULTS, ...props.theme })
-  const [tokens, setTokens] = createSignal<Token[][]>([])
-  const [ready, setReady] = createSignal(false)
+  const [tokens, setTokens] = createSignal<HighlightToken[][]>([])
 
   const showLineNumbers = () => props.lineNumbers ?? false
 
@@ -67,20 +96,43 @@ export function Code(props: CodeProps) {
   createEffect(() => {
     const content = props.content
     const language = props.language
-    const style = props.syntaxStyle
+    const highlighter = props.highlighter
     const isStreaming = props.streaming ?? false
 
-    const fallback = content.split("\n").map((line) => [{ text: line, color: style.getDefaultColor() }])
+    const defaultFg = t().fg
+    const fallback: HighlightToken[][] = content.split("\n").map((line) => [{ text: line, color: defaultFg }])
+
+    if (!highlighter) {
+      setTokens(fallback)
+      return
+    }
+
+    // Set immediate fallback so content is visible right away
     setTokens(fallback)
-    setReady(true)
 
     let cancelled = false
     const doHighlight = () => {
-      const client = getTreeSitterClient()
-      client.highlightOnce(content, language).then((highlights) => {
-        if (cancelled) return
-        setTokens(highlightsToTokens(content, highlights, style))
-      })
+      try {
+        const res = highlighter(content, language)
+        if (res instanceof Promise) {
+          res.then(
+            (result) => {
+              if (!cancelled && Array.isArray(result)) {
+                setTokens(result)
+              }
+            },
+            () => {
+              // On error, keep fallback
+            },
+          )
+        } else if (Array.isArray(res)) {
+          if (!cancelled) {
+            setTokens(res)
+          }
+        }
+      } catch {
+        // On error, keep fallback
+      }
     }
 
     if (isStreaming) {
@@ -92,7 +144,10 @@ export function Code(props: CodeProps) {
 
     onCleanup(() => {
       cancelled = true
-      if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null }
+      if (debounceTimer) {
+        clearTimeout(debounceTimer)
+        debounceTimer = null
+      }
     })
   })
 

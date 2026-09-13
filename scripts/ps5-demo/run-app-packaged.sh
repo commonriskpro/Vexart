@@ -83,7 +83,7 @@ consumer="$work/consumer"
 # build-dist.ts is intentionally copied rather than run from the repository:
 # it cleans and writes only this workspace's dist/ directory.
 mkdir -p "$build/packages" "$build/scripts"
-for package in app engine headless styled; do
+for package in app engine headless styled vexart; do
   cp -R "$repo/packages/$package" "$build/packages/$package"
 done
 cp -R "$repo/types" "$build/types"

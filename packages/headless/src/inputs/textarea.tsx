@@ -43,11 +43,8 @@ import {
   onInput,
   ExtmarkManager,
   type Extmark,
-  type SyntaxStyle,
-  type Token,
-  getTreeSitterClient,
-  highlightsToTokens,
 } from "@vexart/engine"
+import type { Highlighter, HighlightToken, Token } from "../display/code"
 import { clearFocus } from "@vexart/engine"
 import type { KeyEvent } from "@vexart/engine"
 import { useDisabled } from "../helpers/disabled"
@@ -302,8 +299,8 @@ export type TextareaProps = {
   /** Custom key bindings — merged with defaults. */
   keyBindings?: KeyBinding[]
 
-  /** Syntax highlighting style. When set, enables per-token coloring. */
-  syntaxStyle?: SyntaxStyle
+  /** Pluggable syntax highlighting function. When set, enables per-token coloring. */
+  highlighter?: Highlighter
 
   /** Language for syntax highlighting (e.g. "typescript"). Required with syntaxStyle. */
   language?: string
@@ -361,27 +358,32 @@ export function Textarea(props: TextareaProps) {
   // ── Syntax highlighting ──
 
   createEffect(() => {
-    const style = props.syntaxStyle
+    const highlighter = props.highlighter
     const lang = props.language
     const content = props.value
-    if (!style || !lang) {
+    if (!highlighter) {
       setSyntaxTokens([])
       return
     }
 
     // Immediate fallback — default color
-    const fallback = content.split("\n").map((line) => [{ text: line, color: style.getDefaultColor() }])
+    const fallback: HighlightToken[][] = content.split("\n").map((line) => [{ text: line, color: th().fg }])
     setSyntaxTokens(fallback)
 
-    // Async highlight via tree-sitter worker
-    const client = getTreeSitterClient()
     let cancelled = false
-    client.highlightOnce(content, lang).then((highlights) => {
-      if (cancelled) return
-      const result = highlightsToTokens(content, highlights, style)
-      setSyntaxTokens(result)
-      
-    })
+    try {
+      const res = highlighter(content, lang)
+      if (res instanceof Promise) {
+        res.then(
+          (result) => {
+            if (!cancelled && Array.isArray(result)) setSyntaxTokens(result)
+          },
+          () => {},
+        )
+      } else if (Array.isArray(res)) {
+        if (!cancelled) setSyntaxTokens(res)
+      }
+    } catch {}
     onCleanup(() => { cancelled = true })
   })
 

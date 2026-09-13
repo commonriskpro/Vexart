@@ -18,9 +18,6 @@ import { Show } from 'solid-js';
 import { Switch } from 'solid-js';
 import { useContext } from 'solid-js';
 
-// @public
-export function addDefaultParsers(parsers: FiletypeParserConfig[]): void;
-
 // @public (undocumented)
 export type AnimationAccessor = (() => number) & {
     stop: () => void;
@@ -270,17 +267,6 @@ export class ExtmarkManager {
 }
 
 // @public (undocumented)
-export type FiletypeParserConfig = {
-    filetype: string;
-    aliases?: string[];
-    wasm: string;
-    queries: {
-        highlights: string[];
-        injections?: string[];
-    };
-};
-
-// @public (undocumented)
 export type FillStyle = {
     color: number;
 };
@@ -343,9 +329,6 @@ export function getSelectedText(): string;
 // @public (undocumented)
 function getSelection_2(): TextSelection | null;
 export { getSelection_2 as getSelection }
-
-// @public (undocumented)
-export function getTreeSitterClient(): TreeSitterClient;
 
 // @public (undocumented)
 export type GlowCmd = {
@@ -463,9 +446,6 @@ export type GridTrack = GridTrackSize | {
 // @beta
 export type GridTrackSize = GridBreadth | GridFr | GridMinMax | GridFitContent;
 
-// @public
-export function highlightsToTokens(source: string, highlights: SimpleHighlight[], style: SyntaxStyle): Token[][];
-
 // @public (undocumented)
 export type HoverOptions = {
     onEnter?: () => void;
@@ -529,9 +509,6 @@ export type InteractiveStyleProps = Partial<Pick<TGEProps, "backgroundColor" | "
 
 // @public (undocumented)
 export function isDebugEnabled(): boolean;
-
-// @public (undocumented)
-export const KANAGAWA: ThemeTokenStyle[];
 
 // @public (undocumented)
 export type KeyboardState = {
@@ -730,9 +707,6 @@ export type NodeMouseEvent = {
     width: number;
     height: number;
 };
-
-// @public (undocumented)
-export const ONE_DARK: ThemeTokenStyle[];
 
 // Warning: (ae-forgotten-export) The symbol "InputSubscriber" needs to be exported by the entry point index.d.ts
 //
@@ -954,12 +928,6 @@ export type ShapeStyle = {
 export { Show }
 
 // @public (undocumented)
-export type SimpleHighlight = [number, number, string];
-
-// @public (undocumented)
-export type SimpleThemeRules = Record<string, string | number>;
-
-// @public (undocumented)
 export type SizingInfo = {
     type: number;
     value: number;
@@ -1023,28 +991,7 @@ export type StrokeStyle = {
     width?: number;
 };
 
-// @public (undocumented)
-export type StyleDefinition = {
-    fg?: number;
-    bg?: number;
-    bold?: boolean;
-    italic?: boolean;
-    underline?: boolean;
-};
-
 export { Switch }
-
-// @public (undocumented)
-export class SyntaxStyle {
-    colorFor(name: string): number;
-    static fromSimple(rules: SimpleThemeRules, defaultColor?: string | number): SyntaxStyle;
-    static fromTheme(rules: ThemeTokenStyle[], defaultColor?: string | number): SyntaxStyle;
-    getAllStyles(): Map<string, StyleDefinition>;
-    getDefaultColor(): number;
-    getStyle(name: string): StyleDefinition | undefined;
-    getStyleId(name: string): number;
-    registerStyle(name: string, def: StyleDefinition): number;
-}
 
 // @public (undocumented)
 export type Terminal = {
@@ -1251,25 +1198,7 @@ export type TGEProps = {
 };
 
 // @public (undocumented)
-export type ThemeTokenStyle = {
-    scope: string[];
-    style: {
-        foreground?: string | number;
-        background?: string | number;
-        bold?: boolean;
-        italic?: boolean;
-        underline?: boolean;
-    };
-};
-
-// @public (undocumented)
 export function toggleDebug(): void;
-
-// @public (undocumented)
-export type Token = {
-    text: string;
-    color: number;
-};
 
 // @public
 export type TransformConfig = {
@@ -1296,15 +1225,6 @@ export type TransitionConfig = {
         property: CompositorProperty;
     };
 };
-
-// @public (undocumented)
-export class TreeSitterClient {
-    addFiletypeParser(config: FiletypeParserConfig): void;
-    destroy(): void;
-    highlightOnce(content: string, filetype: string): Promise<SimpleHighlight[]>;
-    initialize(): Promise<void>;
-    isReady(): boolean;
-}
 
 // @public (undocumented)
 export function unregisterFont(id: number): boolean;
@@ -1368,7 +1288,7 @@ export type ViewportConfig = {
 
 // Warnings were encountered during analysis:
 //
-// /Users/dev/ve/vexart/.api-extractor-temp/packages/engine/src/loop/animation.d.ts:58:9 - (ae-forgotten-export) The symbol "CompositorProperty" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/engine/src/loop/animation.d.ts:58:9 - (ae-forgotten-export) The symbol "CompositorProperty" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

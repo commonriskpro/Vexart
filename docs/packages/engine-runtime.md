@@ -368,7 +368,7 @@ When an interaction event is received, the scheduler elevates the frame rate to 
 Tasks are queued across three priority lanes (`packages/engine/src/scheduler/index.ts`):
 1. `"user-blocking"`: **Never deferred**. Always executes in the active frame regardless of remaining millisecond budget (e.g. keyboard focus shifts, pointer capture changes).
 2. `"user-visible"`: Executes within the remaining frame time budget (e.g. animated layout adjustments, hover visual highlights). Deferred to next frame if budget is exhausted.
-3. `"background"`: Runs only during idle slices when user-visible work is complete (e.g. Tree-Sitter syntax re-parsing, atlas cache compaction).
+3. `"background"`: Runs only during idle slices when user-visible work is complete (e.g. atlas cache compaction).
 
 ### 6.3 Fast-Path Compositor
 When an animation targets only `transform` or `opacity` on a layer-backed node:

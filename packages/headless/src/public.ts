@@ -54,7 +54,7 @@ export type {
 // ── Display ───────────────────────────────────────────────────────────────────
 
 export { Code } from "./display/code"
-export type { CodeTheme, CodeProps } from "./display/code"
+export type { CodeTheme, CodeProps, HighlightToken, Token, Highlighter } from "./display/code"
 
 export { Markdown } from "./display/markdown"
 export type { MarkdownTheme, MarkdownProps } from "./display/markdown"
@@ -129,10 +129,6 @@ export type {
   NodeMouseEvent,
   Modifiers,
   ScrollHandle,
-  SimpleThemeRules,
-  StyleDefinition,
-  SyntaxStyle,
-  ThemeTokenStyle,
   KeyEvent,
 } from "@vexart/engine"
 

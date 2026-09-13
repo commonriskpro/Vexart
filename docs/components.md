@@ -805,7 +805,7 @@ const form = createForm({
 
 ## Code / Markdown / Diff
 
-Content components with theme prop pattern and integrated Tree-Sitter syntax highlighting.
+Content components with theme prop pattern and pluggable syntax highlighting.
 
 > **Note:** `<Code>` and `<Markdown>` require a `syntaxStyle` object (e.g. `ONE_DARK` or `KANAGAWA` from `"vexart"`) for token highlighting.
 

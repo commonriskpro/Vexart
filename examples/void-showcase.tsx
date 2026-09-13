@@ -6,21 +6,55 @@
  *
  * Run: bun --conditions=browser run examples/void-showcase.tsx
  */
-import { createSignal, Show } from "solid-js"
-import { untrack } from "solid-js"
-import type { JSX } from "solid-js"
-import { useTerminalDimensions, SyntaxStyle, ONE_DARK, debugStatsLine, onInput } from "@vexart/engine"
-import { createApp, useAppTerminal } from "@vexart/app"
 import {
+  // SolidJS reactivity & control flow
+  createSignal,
+  Show,
+  untrack,
+  type JSX,
+
+  // App lifecycle
+  createApp,
+  useAppTerminal,
+
+  // Engine hooks & debug
+  useTerminalDimensions,
+  onInput,
+  debugStatsLine,
+
   // Tokens
-  colors, radius, space, font, weight, shadows,
+  colors,
+  radius,
+  space,
+  font,
+  weight,
+  shadows,
+
   // Theme
-  themeColors, darkTheme, lightTheme, setTheme,
+  themeColors,
+  darkTheme,
+  lightTheme,
+  setTheme,
+
   // Typography
-  H1, H2, H3, H4, P, Lead, Large, Small, Muted,
+  H1,
+  H2,
+  H3,
+  H4,
+  P,
+  Lead,
+  Large,
+  Small,
+  Muted,
+
   // Components
   VoidButton,
-  VoidCard as BaseVoidCard, VoidCardHeader, VoidCardTitle, VoidCardDescription, VoidCardContent, VoidCardFooter,
+  VoidCard as BaseVoidCard,
+  VoidCardHeader,
+  VoidCardTitle,
+  VoidCardDescription,
+  VoidCardContent,
+  VoidCardFooter,
   VoidBadge,
   VoidAvatar,
   VoidSeparator,
@@ -36,7 +70,10 @@ import {
   VoidProgress,
   VoidTabs,
   VoidTable,
-  VoidDialog, VoidDialogTitle, VoidDialogDescription, VoidDialogFooter,
+  VoidDialog,
+  VoidDialogTitle,
+  VoidDialogDescription,
+  VoidDialogFooter,
   VoidTooltip,
   VoidCode,
   VoidMarkdown,
@@ -44,9 +81,33 @@ import {
   VoidScrollView,
   VoidDiff,
   createVoidToaster,
-} from "@vexart/styled"
+} from "vexart"
 
-const syntaxStyle = SyntaxStyle.fromTheme(ONE_DARK)
+const TS_KEYWORDS = new Set(["const", "function", "return", "type", "import", "export", "from", "async", "await", "let", "var"])
+const TS_TYPES = new Set(["number", "string", "boolean", "any", "void"])
+
+function showcaseHighlighter(code: string): Array<Array<{ text: string; color: string }>> {
+  return code.split("\n").map((line) => {
+    const tokens: Array<{ text: string; color: string }> = []
+    const regex = /(".*?"|'.*?'|[a-zA-Z_$][a-zA-Z0-9_$]*|\d+|[^\s\w]+|\s+)/g
+    let match: RegExpExecArray | null
+    while ((match = regex.exec(line)) !== null) {
+      const text = match[0]
+      if (TS_KEYWORDS.has(text)) {
+        tokens.push({ text, color: "#c678dd" })
+      } else if (TS_TYPES.has(text)) {
+        tokens.push({ text, color: "#e5c07b" })
+      } else if (text.startsWith('"') || text.startsWith("'")) {
+        tokens.push({ text, color: "#98c379" })
+      } else if (/^\d+$/.test(text)) {
+        tokens.push({ text, color: "#d19a66" })
+      } else {
+        tokens.push({ text, color: "#abb2bf" })
+      }
+    }
+    return tokens.length > 0 ? tokens : [{ text: "", color: "#abb2bf" }]
+  })
+}
 
 type ShowcaseCardProps = { children?: JSX.Element }
 
@@ -403,7 +464,7 @@ await createApp(() => <App />)
             <VoidCode
               content={sampleCode}
               language="typescript"
-              syntaxStyle={syntaxStyle}
+              highlighter={showcaseHighlighter}
               width={360}
               lineNumbers
             />
@@ -430,7 +491,7 @@ await createApp(() => <App />)
           <VoidCardContent>
             <VoidMarkdown
               content={sampleMarkdown}
-              syntaxStyle={syntaxStyle}
+              highlighter={showcaseHighlighter}
               width={360}
             />
           </VoidCardContent>

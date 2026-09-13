@@ -1781,7 +1781,7 @@ type TextareaProps = {
   disabled?: boolean
   focusId?: string
   keyBindings?: KeyBinding[]               // custom key bindings
-  syntaxStyle?: SyntaxStyle                // enable syntax highlighting
+  highlighter?: Highlighter                // pluggable syntax highlighting
   language?: string                        // e.g. "typescript"
   theme?: Partial<TextareaTheme>
 }
@@ -2620,7 +2620,7 @@ type PortalProps = { children?: JSX.Element }
 
 #### 24. Code
 
-Syntax-highlighted code block with tree-sitter tokenization.
+Syntax-highlighted code block with pluggable Highlighter tokenization.
 
 ```typescript
 import { Code } from "vexart"
@@ -2630,7 +2630,7 @@ type CodeTheme = { bg: string | number; lineNumberFg: string | number; radius: n
 type CodeProps = {
   content: string
   language: string               // "typescript", "python", "rust", etc.
-  syntaxStyle: SyntaxStyle       // e.g. ONE_DARK, KANAGAWA
+  highlighter?: Highlighter       // pluggable syntax highlighting function
   width?: number | string
   height?: number | string
   theme?: Partial<CodeTheme>
@@ -2669,7 +2669,7 @@ type MarkdownTheme = {
 
 type MarkdownProps = {
   content: string
-  syntaxStyle?: SyntaxStyle
+  highlighter?: Highlighter
   width?: number | string
   height?: number | string
   theme?: Partial<MarkdownTheme>

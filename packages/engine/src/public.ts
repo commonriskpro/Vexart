@@ -154,28 +154,10 @@ export type { FontDescriptor, MeasureTextOptions } from "./ffi/text-layout"
 export { createParticleSystem } from "./ffi/particles"
 export type { ParticleConfig, ParticleSystem } from "./ffi/particles"
 
-// ── Text & syntax ────────────────────────────────────────────────────────────
+// ── Text decorations ─────────────────────────────────────────────────────────
 
 export { ExtmarkManager } from "./reconciler/extmarks"
 export type { CreateExtmarkOptions, Extmark } from "./reconciler/extmarks"
-
-export {
-  TreeSitterClient,
-  addDefaultParsers,
-  getTreeSitterClient,
-  KANAGAWA,
-  ONE_DARK,
-  SyntaxStyle,
-  highlightsToTokens,
-} from "./reconciler/tree-sitter"
-export type {
-  FiletypeParserConfig,
-  SimpleHighlight,
-  SimpleThemeRules,
-  StyleDefinition,
-  ThemeTokenStyle,
-  Token,
-} from "./reconciler/tree-sitter"
 
 // ── Plugins ──────────────────────────────────────────────────────────────────
 

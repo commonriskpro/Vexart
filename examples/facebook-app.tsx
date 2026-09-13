@@ -7,10 +7,13 @@
  * Run: bun --conditions=browser run examples/facebook-app.tsx
  */
 
-import { createSignal, For, Show } from "solid-js"
-import { useTerminalDimensions } from "@vexart/engine"
-import { createApp, useAppTerminal } from "@vexart/app"
 import {
+  createSignal,
+  For,
+  Show,
+  useTerminalDimensions,
+  createApp,
+  useAppTerminal,
   VoidCard,
   VoidCardHeader,
   VoidCardTitle,
@@ -28,7 +31,7 @@ import {
   font,
   weight,
   shadows,
-} from "@vexart/styled"
+} from "vexart"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

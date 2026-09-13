@@ -3,19 +3,32 @@ import { PiButton as VoidButton, PiIcon, PiToggle } from "./controls"
 import type { PiIconName } from "./controls"
 
 import {
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+  For,
+  Show,
   VoidDialog,
   VoidDialogDescription,
   VoidDialogFooter,
   VoidDialogTitle,
   VoidInput,
   VoidSelect,
-} from "@vexart/styled"
-import { Textarea, ScrollView } from "@vexart/headless"
-import { focusedId, pushFocusScope, onInput, setFocus, useTerminalDimensions } from "@vexart/engine"
-import type { KeyEvent, ScrollHandle } from "@vexart/engine"
-import type { KeyBinding, TextareaHandle } from "@vexart/headless"
-import { useAppTerminal } from "@vexart/app"
-import { createEffect, createMemo, createSignal, onCleanup, onMount, For, Show } from "solid-js"
+  Textarea,
+  ScrollView,
+  focusedId,
+  pushFocusScope,
+  onInput,
+  setFocus,
+  useTerminalDimensions,
+  useAppTerminal,
+  type KeyEvent,
+  type ScrollHandle,
+  type KeyBinding,
+  type TextareaHandle,
+} from "vexart"
 import type { PiController, PiExtensionRequest, PiMessage, PiModel, PiSnapshot, PiTreeNode, SubmitMode } from "./protocol"
 import type { SessionSummary } from "./sessions"
 import { buildTimeline, contentText, type TimelineBlock, type TimelineTool, type TimelineWorkItem } from "./timeline"
