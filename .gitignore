@@ -24,3 +24,5 @@ package/
 __pycache__/
 artifacts/grid-parity/
 artifacts/grid/oracle/
+output/
+quality_report.json

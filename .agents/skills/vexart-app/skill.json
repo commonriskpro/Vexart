@@ -1,0 +1,17 @@
+{
+  "name": "vexart-app",
+  "version": "1.0.0",
+  "description": "Build, develop, or refactor GPU-accelerated terminal UI applications using Vexart, SolidJS reactivity, Void design tokens, and Flexbox layout.",
+  "author": "Vexart Team",
+  "license": "MIT",
+  "keywords": [
+    "vexart",
+    "terminal",
+    "gpu",
+    "solidjs",
+    "tui",
+    "wgpu",
+    "void-ui",
+    "flexbox"
+  ]
+}
