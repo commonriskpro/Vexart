@@ -173,6 +173,7 @@ const platformPkg = {
   name: platformPkgName,
   version: VERSION,
   description: `Vexart native binary for ${platformTag}`,
+  repository: { type: "git", url: "https://github.com/commonriskpro/Vexart" },
   type: "module",
   os: [process.platform],
   cpu: [process.arch],

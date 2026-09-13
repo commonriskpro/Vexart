@@ -89,6 +89,10 @@ jobs:
             "name": "@vexart-native/${{ matrix.platform-tag }}",
             "version": "${VEXART_VERSION}",
             "description": "Vexart native binary for ${{ matrix.platform-tag }}",
+            "repository": {
+              "type": "git",
+              "url": "https://github.com/commonriskpro/Vexart"
+            },
             "type": "module",
             "os": ["${{ matrix.npm-os }}"],
             "cpu": ["${{ matrix.npm-cpu }}"],

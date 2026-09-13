@@ -2,6 +2,10 @@
   "name": "vexart",
   "version": "0.10.0-beta.5",
   "description": "Pixel-native terminal rendering engine. Write JSX, get browser-quality UI in your terminal.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/commonriskpro/Vexart"
+  },
   "type": "module",
   "private": true,
   "workspaces": [
