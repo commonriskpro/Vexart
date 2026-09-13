@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   build:
@@ -164,7 +165,7 @@ jobs:
           set -euo pipefail
           for platform in darwin-arm64 linux-x64 linux-arm64; do
             echo "Publishing @vexart-native/$platform..."
-            (cd "dist/platform/$platform" && npm publish --access public --tag "${{ steps.release_version.outputs.channel }}")
+            (cd "dist/platform/$platform" && npm publish --access public --tag "${{ steps.release_version.outputs.channel }}" --provenance)
           done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -173,7 +174,7 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
-          npm publish --access public --tag "${{ steps.release_version.outputs.channel }}"
+          npm publish --access public --tag "${{ steps.release_version.outputs.channel }}" --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

@@ -29,7 +29,7 @@
     "showcase:legacy": "bun --conditions=browser run examples/showcase-legacy.tsx",
     "facebook": "bun --conditions=browser run examples/facebook-app.tsx",
     "devtools": "bun run packages/internal-devtools/src/server.ts",
-    "lint:boundaries": "depcruise packages --config .dependency-cruiser.cjs",
+    "lint:boundaries": "depcruise packages examples --config .dependency-cruiser.cjs",
     "gen:jsx-runtime": "bun run scripts/gen-jsx-runtime.ts",
     "test:visual": "bun --conditions=browser run scripts/visual-test/runner.ts",
     "test:visual:update": "bun --conditions=browser run scripts/visual-test/runner.ts --update",
@@ -52,11 +52,15 @@
     "check:retained-cleanup": "bun run scripts/check-retained-cleanup.ts",
     "docs:dev": "bun run --cwd website dev",
     "docs:build": "bun run --cwd website build",
-    "docs:preview": "bun run --cwd website preview"
+    "docs:preview": "bun run --cwd website preview",
+    "changeset": "changeset",
+    "changeset:empty": "changeset add --empty",
+    "changeset:version": "changeset version"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
     "@babel/preset-typescript": "^7.28.5",
+    "@changesets/cli": "^3.0.2",
     "@microsoft/api-extractor": "^7.52.10",
     "@napi-rs/canvas": "^1.0.8",
     "@types/bun": "^1.3.12",

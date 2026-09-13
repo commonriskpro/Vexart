@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  ts-quality:
+    name: TypeScript & Architecture
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install JS deps
+        run: bun install --frozen-lockfile
+
+      - name: TypeScript Typecheck
+        run: bun run typecheck
+
+      - name: Architectural Boundaries Lint
+        run: bun run lint:boundaries
+
+  ts-tests:
+    name: Unit & Demo Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install JS deps
+        run: bun install --frozen-lockfile
+
+      - name: Run Package Unit Tests
+        run: bun run test packages/vexart packages/app packages/headless
+
+      - name: Run Demo Tests
+        run: bun run test:demos
+
+  rust-tests:
+    name: Rust Native Engine Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo Test (libvexart)
+        run: cd native/libvexart && cargo test
+
+  dist-smoke:
+    name: Distribution Bundle & Dual Barrel Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install JS deps
+        run: bun install --frozen-lockfile
+
+      - name: Build Distribution Bundle
+        run: VEXART_ALLOW_NO_NATIVE=1 bun run build:dist
+        env:
+          VEXART_ALLOW_NO_NATIVE: "1"
+
+      - name: Dual-Barrel Universal Reconciler Test
+        run: bun --conditions=browser test --preload ./solid-plugin.ts scripts/consumer/dual-barrel.test.ts
