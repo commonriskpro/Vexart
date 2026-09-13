@@ -27,7 +27,7 @@ describe("CPAMC runtime", () => {
     expect(command).toContain("gemini-3.8-flash-high")
     expect(command).toContain('model_providers.audit_cpamc.env_key="AUDIT_CPAMC_API_KEY"')
     expect(command.join(" ")).not.toContain("synthetic-secret")
-    expect(command).toContain('shell_environment_policy.exclude=["AUDIT_CPAMC_API_KEY"]')
+    expect(command).toContain('shell_environment_policy.excludes=["AUDIT_CPAMC_API_KEY"]')
   })
   test("fails closed for remote endpoints, other models, or unsafe credentials", async () => {
     const root = await fixture(), key = join(root, "key")
