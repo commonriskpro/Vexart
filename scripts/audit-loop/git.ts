@@ -53,12 +53,12 @@ const terminate = (pids: number[], signal: "SIGTERM" | "SIGKILL") => {
   }
 }
 
-export const runProcess = async (args: string[], cwd: string, timeoutMs?: number, killTree = false, options: { input?: string | Uint8Array; signal?: AbortSignal } = {}): Promise<ProcessResult> => {
+export const runProcess = async (args: string[], cwd: string, timeoutMs?: number, killTree = false, options: { input?: string | Uint8Array; signal?: AbortSignal; env?: Record<string, string> } = {}): Promise<ProcessResult> => {
   if (options.signal?.aborted) return { code: -1, exitCode: null, stdout: "", stderr: "", cancelled: true }
   // Incremental writable callbacks expose delivery failures (including EPIPE).
   // A single end(payload) can hide pipe errors in Bun's compatibility layer.
   let proc: ReturnType<typeof spawn>
-  try { proc = spawn(args[0], args.slice(1), { cwd, stdio: ["pipe", "pipe", "pipe"] }) }
+  try { proc = spawn(args[0], args.slice(1), { cwd, stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, ...options.env } }) }
   catch (error) { return { code: -1, exitCode: null, stdout: "", stderr: "", error: { kind: "spawn", message: error instanceof Error ? error.message : String(error) } } }
   let stop: (reason: "timeout" | "cancelled" | "error") => void = () => {}
   const stopped = new Promise<"timeout" | "cancelled" | "error">((resolve) => { stop = resolve })

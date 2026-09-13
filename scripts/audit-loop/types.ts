@@ -167,6 +167,8 @@ export type RepoInfo = {
   dirty: string[]
 }
 
+export type AgentRuntime = { provider: "codex" | "cpamc"; model: string; effort: "high" | "xhigh"; baseUrl?: string }
+
 export type RunState = {
   id: string
   pid: number
@@ -188,6 +190,7 @@ export type RunState = {
   cycle: number
   stars: number
   findings: string[]
+  runtime?: AgentRuntime
   stopRequested?: boolean
   error?: string
   completedAt?: string
@@ -211,6 +214,9 @@ export type AgentReceipt = {
   responseText: string
   profileId?: string
   profileVersion?: number
+  provider?: "codex" | "cpamc"
+  model?: string
+  effort?: string
   response?: unknown
   evidenceProvenance?: EvidenceProvenance
   parseError?: string

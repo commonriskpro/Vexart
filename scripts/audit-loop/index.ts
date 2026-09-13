@@ -1,6 +1,7 @@
 import { appendFile, lstat, mkdir, readFile, readdir, readlink, realpath, rename, rm, symlink, unlink, writeFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { basename, dirname, join, relative, resolve } from "node:path"
+import { cpamcArgs, defaultRuntime, loadRuntime, sameRuntime } from "./runtime"
 import {
   createWorktree,
   detectRepo,
@@ -46,6 +47,7 @@ import {
   type RepoInfo,
   type RunConfig,
   type RunState,
+  type AgentRuntime,
   type VerifierResult,
 } from "./types"
 
@@ -282,9 +284,11 @@ type AgentCall = {
 
 type AgentCallResult = { parsed: unknown | null; receipt: AgentReceipt; events: string }
 
-export const agentCommand = (role: AgentRole, worktree: string, schema: string, message: string, prompt: string) => {
-  const [model, effort] = MODEL_BY_ROLE[role]
-  return ["codex", "exec", "--ephemeral", "--json", "--disable", "multi_agent", "--disable", "multi_agent_v2", "-m", model, "-c", `model_reasoning_effort="${effort}"`, "-s", role === "apply" ? "workspace-write" : "read-only", "--cd", worktree, "--output-schema", schema, "--output-last-message", message, "-"]
+export const agentCommand = (role: AgentRole, worktree: string, schema: string, message: string, prompt: string, runtime: AgentRuntime = defaultRuntime()) => {
+  const [legacyModel, legacyEffort] = MODEL_BY_ROLE[role]
+  const model = runtime.provider === "cpamc" ? runtime.model : legacyModel
+  const effort = runtime.provider === "cpamc" ? runtime.effort : legacyEffort
+  return ["codex", "exec", "--ephemeral", "--json", "--disable", "multi_agent", "--disable", "multi_agent_v2", ...cpamcArgs(runtime), "-m", model, "-c", `model_reasoning_effort="${effort}"`, "-s", role === "apply" ? "workspace-write" : "read-only", "--cd", worktree, "--output-schema", schema, "--output-last-message", message, "-"]
 }
 
 const receiptError = (receipt: AgentReceipt, fallback: string) => receipt.parseError?.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 512) || fallback
@@ -303,14 +307,19 @@ const callAgent = async (call: AgentCall): Promise<AgentCallResult> => {
   const messagePath = join(receiptDir, `${attempt}.message.json`)
   const receiptPath = join(receiptDir, `${attempt}.json`)
   await writeAtomic(schemaPath, JSON.stringify(jsonSchema(call.role), null, 2))
-  const command = agentCommand(call.role, call.state.worktree, schemaPath, messagePath, call.prompt)
+  const loaded = await loadRuntime(join(call.state.store, "runtime.json"))
+  const runtime = call.state.runtime ?? defaultRuntime()
+  if (!sameRuntime(runtime, loaded.runtime)) throw new Error("audit runtime configuration changed during run")
+  const command = agentCommand(call.role, call.state.worktree, schemaPath, messagePath, call.prompt, runtime)
   const startedAt = now()
   const profile = call.profile ? { profileId: call.profile.profileId, profileVersion: call.profile.profileVersion } : {}
-  await appendEvent(call.state.store, { runId: call.state.id, type: "agent_started", role: call.role, agentKey: key, attemptId: attempt, scope: call.scope, ...profile, model: MODEL_BY_ROLE[call.role][0], effort: MODEL_BY_ROLE[call.role][1] })
-  const result = await runProcess(command, call.state.worktree, call.timeoutMs, true, { input: call.prompt })
+  await appendEvent(call.state.store, { runId: call.state.id, type: "agent_started", role: call.role, agentKey: key, attemptId: attempt, scope: call.scope, ...profile, provider: runtime.provider, model: runtime.provider === "cpamc" ? runtime.model : MODEL_BY_ROLE[call.role][0], effort: runtime.provider === "cpamc" ? runtime.effort : MODEL_BY_ROLE[call.role][1] })
+  const result = await runProcess(command, call.state.worktree, call.timeoutMs, true, { input: call.prompt, env: loaded.secret ? { AUDIT_CPAMC_API_KEY: loaded.secret } : undefined })
   const endedAt = now()
-  const responseText = await readFile(messagePath, "utf8").catch(() => "")
-  const receipt = await recordAgentResult({ store: call.state.store, runId: call.state.id, path: receiptPath, snapshot }, { ...profile, attemptId: attempt, agentKey: key, role: call.role, scope: call.scope, strategy: call.strategy, command, prompt: call.prompt, startedAt, endedAt, responseText }, result)
+  const redact = (value: string) => loaded.secret ? value.split(loaded.secret).join("[REDACTED]") : value
+  const responseText = redact(await readFile(messagePath, "utf8").catch(() => ""))
+  const safeResult = { ...result, stdout: redact(result.stdout), stderr: redact(result.stderr), error: result.error ? { ...result.error, message: redact(result.error.message) } : undefined }
+  const receipt = await recordAgentResult({ store: call.state.store, runId: call.state.id, path: receiptPath, snapshot }, { ...profile, attemptId: attempt, agentKey: key, role: call.role, scope: call.scope, strategy: call.strategy, command, prompt: call.prompt, startedAt, endedAt, responseText, provider: runtime.provider, model: runtime.provider === "cpamc" ? runtime.model : MODEL_BY_ROLE[call.role][0], effort: runtime.provider === "cpamc" ? runtime.effort : MODEL_BY_ROLE[call.role][1] }, safeResult)
   return { parsed: receipt.response ?? null, receipt, events: result.stdout }
 }
 
@@ -738,7 +747,8 @@ export const runAudit = async (cwd: string, config: RunConfig) => {
   const store = await createStore(repo)
   const id = `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`
   const started = new Date()
-  const state: RunState = { id, pid: process.pid, root: repo.root, commonDir: repo.commonDir, store, initialBaselineSha: repo.baselineSha, baselineSha: repo.baselineSha, dirtyExcluded: repo.dirty, branch: `codex/audit-${id}`, worktree: join(store, "worktrees", id), scope: config.scope ? scope : undefined, cycles: config.cycles, minutes: config.minutes, startedAt: started.toISOString(), deadlineAt: new Date(started.getTime() + config.minutes * 60_000).toISOString(), status: "running", phase: "starting", cycle: 0, stars: 0, findings: [] }
+  const configuredRuntime = await loadRuntime(join(store, "runtime.json"))
+  const state: RunState = { id, pid: process.pid, root: repo.root, commonDir: repo.commonDir, store, runtime: configuredRuntime.runtime, initialBaselineSha: repo.baselineSha, baselineSha: repo.baselineSha, dirtyExcluded: repo.dirty, branch: `codex/audit-${id}`, worktree: join(store, "worktrees", id), scope: config.scope ? scope : undefined, cycles: config.cycles, minutes: config.minutes, startedAt: started.toISOString(), deadlineAt: new Date(started.getTime() + config.minutes * 60_000).toISOString(), status: "running", phase: "starting", cycle: 0, stars: 0, findings: [] }
   const priorStars = await loadStarKeys(store)
   state.stars = priorStars.size
   state.findings = [...priorStars]
