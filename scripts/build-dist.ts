@@ -81,7 +81,7 @@ await build({
   entryPoints: {
     engine: resolve(ROOT, "packages/engine/src/index.ts"),
     "jsx-runtime": resolve(ROOT, "packages/engine/src/jsx-runtime.ts"),
-    vexart: resolve(ROOT, "packages/app/src/barrel.ts"),
+    vexart: resolve(ROOT, "packages/vexart/src/index.ts"),
   },
   bundle: true,
   splitting: true,
@@ -117,6 +117,7 @@ await build({
     "@vexart/headless": resolve(ROOT, "packages/headless/src/index.ts"),
     "@vexart/styled": resolve(ROOT, "packages/styled/src/index.ts"),
     "@vexart/app": resolve(ROOT, "packages/app/src/index.ts"),
+    "vexart": resolve(ROOT, "packages/vexart/src/index.ts"),
   },
   plugins: [solidPlugin],
   define: {

@@ -239,7 +239,7 @@ Configuration schemas are validated and merged via `mergeConfig()`.
 
 ## 6. Unified Barrel Export Resolution Rules
 
-The root `"vexart"` package barrel (`packages/app/src/barrel.ts`) unifies all tiers while resolving naming collisions:
+The root `"vexart"` package barrel (`packages/vexart/src/index.ts`) unifies all tiers while resolving naming collisions:
 
 1. **`<box>` and `<text>`**: Engine intrinsics with `className` support installed by `@vexart/app`.
 2. **`Button` vs `VoidButton`**: `Button` is exported from `@vexart/headless` (unstyled primitive requiring `renderButton`). For the themed Void Design System button, use `VoidButton` from `@vexart/styled`.

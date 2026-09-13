@@ -29,7 +29,7 @@ export {
   runCli,
   defineConfig,
   mergeConfig,
-} from "./public"
+} from "@vexart/app"
 
 export type {
   CreateAppOptions,
@@ -42,7 +42,7 @@ export type {
   VexartAppConfigTerminal,
   VexartAppConfigTheme,
   CliResult,
-} from "./public"
+} from "@vexart/app"
 
 export {
   resolveClassName,
@@ -50,14 +50,14 @@ export {
   clearClassNameCache,
   createStyles,
   CLASS_NAME_UNKNOWN_BEHAVIOR,
-} from "./styles/class-name"
+} from "@vexart/app"
 export type {
   ClassNameUnknownBehavior,
   ClassNameDiagnostic,
   ClassNameResolveOptions,
   ClassNameResolveResult,
   VexartStyleProps,
-} from "./styles/class-name"
+} from "@vexart/app"
 
 // ── Primitives & Styling ───────────────────────────────────────────────────
 
@@ -94,7 +94,7 @@ export {
   RouteOutlet,
   RouterProvider,
   useRouter,
-} from "./router/router"
+} from "@vexart/app"
 export type {
   AppRouteDefinition,
   AppRouteMatch,
@@ -110,14 +110,14 @@ export type {
   RouteOutletProps,
   RouteComponent,
   RouteParams,
-} from "./router/router"
+} from "@vexart/app"
 
 export {
   discoverAppRoutes,
   routeFilePathToRoutePath,
   ROUTE_FILE_KIND,
   writeRouteManifestModule,
-} from "./router/manifest"
+} from "@vexart/app"
 export type {
   FileSystemRoute,
   FileSystemRouteFile,
@@ -125,7 +125,7 @@ export type {
   RouteFileKind,
   RouteManifestOptions,
   WriteRouteManifestOptions,
-} from "./router/manifest"
+} from "@vexart/app"
 
 // ── Styled components (themed — Button wins over headless) ───────────────────
 
@@ -364,25 +364,29 @@ export {
   // Focus
   useFocus,
   setFocus,
+  clearFocus,
   focusedId,
   pushFocusScope,
   // Selection
   getSelection,
   setSelection,
   clearSelection,
-  // Canvas & Graphics
   CanvasContext,
   createParticleSystem,
   registerFont,
   unregisterFont,
+  measureText,
+  measureTextWidth,
   // Interaction
   useDrag,
   useHover,
   setPointerCapture,
   releasePointerCapture,
+  onPostScroll,
   MouseButton,
   // Scroll
   createScrollHandle,
+  releaseScrollHandle,
   // Node handle
   // Syntax highlighting themes (needed by Code, Markdown, Textarea)
   SyntaxStyle,
@@ -420,6 +424,14 @@ export type {
   HoverState,
   // Node handle
   NodeHandle,
+  MeasureTextOptions,
+  // Terminal
+  Terminal,
+  TerminalOptions,
+  TerminalSize,
+  // Mount
+  MountHandle,
+  MountOptions,
   // Syntax highlighting
   StyleDefinition,
   SimpleThemeRules,

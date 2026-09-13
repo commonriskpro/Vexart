@@ -23,8 +23,8 @@ cat > "$work/node_modules/vexart-package.json" <<EOF_PACKAGE
 {
   "name": "vexart",
   "type": "module",
-  "main": "../../packages/app/src/barrel.ts",
-  "types": "../../packages/app/src/barrel.ts"
+  "main": "../../packages/vexart/src/index.ts",
+  "types": "../../packages/vexart/src/index.ts"
 }
 EOF_PACKAGE
 mkdir "$work/node_modules/vexart"

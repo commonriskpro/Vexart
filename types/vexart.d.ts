@@ -360,8 +360,7 @@ export declare class CanvasContext {
     /** Current viewport transform — set by the render loop from props */
     viewport: Viewport;
     constructor(viewport?: Viewport);
-    /** Clear the command buffer (called at start of each frame) */
-    _reset(viewport?: Viewport): void;
+    /* Excluded from this release type: _reset */
     /** Draw an anti-aliased line segment. */
     line(x0: number, y0: number, x1: number, y1: number, style: StrokeStyle): void;
     /** Draw a quadratic bezier curve. */
@@ -413,6 +412,9 @@ export declare class CanvasContext {
         coolColor?: number;
     }): void;
 }
+
+/** @public */
+declare type CanvasDrawCommand = DrawCmd;
 
 /** @public */
 declare type Capabilities = {
@@ -521,6 +523,10 @@ export declare type ClassNameUnknownBehavior = (typeof CLASS_NAME_UNKNOWN_BEHAVI
  * @public
  */
 export declare function clearClassNameCache(): void;
+
+/** @public */
+/** @public Clear active focus. */
+export declare function clearFocus(): void;
 
 /** @public */
 export declare function clearSelection(): void;
@@ -1665,6 +1671,27 @@ export { Match }
 /** @public */
 export declare function matchRoute(routes: AppRouteDefinition[], path: string): AppRouteMatch | null;
 
+/** Measure text dimensions (width and height) for a single line (no wrapping). */
+/** @public */
+export declare function measureText(text: string, fontIdOrOptions?: number | MeasureTextOptions): {
+    width: number;
+    height: number;
+};
+
+/** Options for single-line text width measurement. */
+/** @public */
+export declare type MeasureTextOptions = {
+    fontId?: number;
+    fontSize?: number;
+    fontFamily?: string;
+    fontWeight?: number;
+    fontStyle?: string;
+};
+
+/** Measure text width for a single line (no wrapping). Uses native Rust FFI. */
+/** @public */
+export declare function measureTextWidth(text: string, fontIdOrOptions?: number | MeasureTextOptions): number;
+
 /** @public */
 export declare function mergeClassNameProps<T extends Record<string, unknown>>(props: T, className?: string | null): T & VexartStyleProps;
 
@@ -1695,7 +1722,7 @@ export declare type MountAppOptions = {
 };
 
 /** @public */
-declare type MountHandle = {
+export declare type MountHandle = {
     suspend: () => void;
     resume: () => void;
     suspended: () => boolean;
@@ -1703,7 +1730,7 @@ declare type MountHandle = {
 };
 
 /** @public */
-declare type MountOptions = {
+export declare type MountOptions = {
     maxFps?: number;
     experimental?: {
         idleMaxFps?: number;
@@ -1817,6 +1844,11 @@ export declare type NodeHandle = {
     readonly kind: string;
     readonly layout: LayoutRect;
     readonly isDestroyed: boolean;
+    readonly text?: string;
+    readonly props: Readonly<Record<string, unknown>>;
+    readonly imageState?: "idle" | "loading" | "loaded" | "error";
+    readonly canvasCommands?: readonly CanvasDrawCommand[];
+    readonly canvasDrawCacheKey?: string;
     focus: () => void;
     blur: () => void;
     readonly isFocused: boolean;
@@ -1852,6 +1884,9 @@ export declare const ONE_DARK: ThemeTokenStyle[];
 export declare function onInput(handler: InputSubscriber): () => void;
 
 export { onMount }
+
+/** @public */
+export declare function onPostScroll(cb: () => void): () => void;
 
 /**
  * OverlayRoot — attach visual content to the root overlay plane.
@@ -2152,6 +2187,9 @@ export declare function registerFont(id: number, desc: FontDescriptor): void;
 /** @public */
 export declare function releasePointerCapture(nodeId: number): void;
 
+/** @public Release scroll state for an unmounted scroll container. */
+export declare function releaseScrollHandle(scrollId: string): void;
+
 /** @public */
 declare type ResizeEvent = {
     type: "resize";
@@ -2265,7 +2303,8 @@ declare type ScrollHandle = {
     scrollTo: (y: number) => void;
     scrollBy: (dy: number) => void;
     scrollIntoView: (y: number, height: number) => void;
-    readonly _scrollId: string;
+    readonly scrollId: string;
+    /* Excluded from this release type: _scrollId */
 };
 
 /** @public */
@@ -2387,7 +2426,7 @@ export declare type SelectTriggerProps = {
 };
 
 /** @public */
-export declare function setFocus(id: string): void;
+export declare function setFocus(id: string | null): void;
 
 /** @public */
 export declare function setPointerCapture(nodeId: number): void;
@@ -2734,7 +2773,7 @@ export declare type TabsProps = {
 export declare type TabsVariant = (typeof TABS_VARIANT)[keyof typeof TABS_VARIANT];
 
 /** @public */
-declare type Terminal = {
+export declare type Terminal = {
     /** Terminal emulator kind */
     kind: TerminalKind;
     /** Resolved capabilities */
@@ -2785,6 +2824,24 @@ declare type Terminal = {
 /** @public */
 declare type TerminalKind = "ghostty" | "kitty" | "wezterm" | "iterm2" | "alacritty" | "foot" | "contour" | "herdr" | "xterm" | "unknown";
 
+/** @public */
+export declare type TerminalOptions = {
+    /** stdin stream (default: process.stdin) */
+    stdin?: NodeJS.ReadStream;
+    /** stdout stream (default: process.stdout) */
+    stdout?: NodeJS.WriteStream;
+    /** Skip active probing (faster init, uses static inference only) */
+    skipProbe?: boolean;
+    /** Skip color query */
+    skipColors?: boolean;
+    /** Probe timeout in ms */
+    probeTimeout?: number;
+    /** Manage process-level OS exit signals via ProcessSignalHub (default: true) */
+    manageProcessSignals?: boolean;
+    /** AbortSignal to trigger terminal destruction and cleanup */
+    signal?: AbortSignal;
+};
+
 /**
  * Terminal size detection and resize handling.
  *
@@ -2799,7 +2856,7 @@ declare type TerminalKind = "ghostty" | "kitty" | "wezterm" | "iterm2" | "alacri
  * fit in one terminal cell. Typically ~8x16 or ~10x20.
  */
 /** @public */
-declare type TerminalSize = {
+export declare type TerminalSize = {
     /** Terminal width in columns (cells) */
     cols: number;
     /** Terminal height in rows (cells) */

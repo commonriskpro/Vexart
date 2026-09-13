@@ -764,7 +764,7 @@ for maintainers and tests and is not in the published export map.
 import must also be in the barrel. Forced mixed imports (`vexart` + `vexart/engine`)
 for common use cases are considered an API surface bug.
 
-**Collision resolution** (documented in `packages/app/src/barrel.ts`):
+**Collision resolution** (documented in `packages/vexart/src/index.ts`):
 - `<box>` / `<text>`: provided by `@vexart/engine`; `@vexart/app` installs `className` support.
 - `Button`: `@vexart/headless` (unstyled primitive). For themed design system buttons, use `VoidButton` from `@vexart/styled`.
 - `Switch` (headless): exported as `ToggleSwitch` to avoid collision with SolidJS control flow `<Switch>`.

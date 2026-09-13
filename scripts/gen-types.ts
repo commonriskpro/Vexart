@@ -78,7 +78,7 @@ console.log("  ✅ types/engine.d.ts")
 
 // ── 3. api-extractor → vexart.d.ts (barrel) ──
 console.log("📦 Rolling up vexart.d.ts...")
-await $`bunx api-extractor run --local --config packages/app/api-extractor-barrel.json`.quiet().catch((e) => {
+await $`bunx api-extractor run --local --config packages/vexart/api-extractor.json`.quiet().catch((e) => {
   if (!existsSync(resolve(TYPES, "vexart.d.ts"))) {
     console.error("  ❌ vexart.d.ts generation failed")
     process.exit(1)

@@ -12,7 +12,7 @@
     "jsxImportSource": "vexart",
     "baseUrl": ".",
     "paths": {
-      "vexart": ["../../packages/app/src/barrel.ts"],
+      "vexart": ["../../packages/vexart/src/index.ts"],
       "vexart/jsx-runtime": ["../../types/jsx-runtime.d.ts"],
       "vexart/engine": ["../../packages/engine/src/index.ts"],
       "@vexart/app": ["../../packages/app/src/index.ts"],
