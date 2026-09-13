@@ -13,7 +13,7 @@ Vexart provides `useQuery` and `useMutation` — reactive data primitives that i
 ### Signature
 
 ```typescript
-import { useQuery } from "vexart/engine"
+import { useQuery } from "vexart"
 
 type QueryResult<T> = {
   data: () => T | undefined          // reactive — the fetched data
@@ -39,7 +39,7 @@ const result = useQuery<T>(
 ### Basic example
 
 ```tsx
-import { useQuery } from "vexart/engine"
+import { useQuery } from "vexart"
 import { Show, For } from "vexart"
 
 function UserList() {
@@ -193,7 +193,7 @@ users.mutate(freshData)
 ### Signature
 
 ```typescript
-import { useMutation } from "vexart/engine"
+import { useMutation } from "vexart"
 
 type MutationResult<T, V> = {
   data: () => T | undefined           // reactive — last successful result
@@ -219,7 +219,7 @@ const mutation = useMutation<T, V>(
 ### Basic example
 
 ```tsx
-import { useMutation } from "vexart/engine"
+import { useMutation } from "vexart"
 
 function DeleteButton(props: { userId: string }) {
   const del = useMutation(

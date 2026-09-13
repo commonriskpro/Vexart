@@ -6,39 +6,39 @@ Vexart uses Flexily, a pure JavaScript layout engine with a Yoga-compatible API,
 
 ---
 
-## Direction: Column-First (Not Row)
+## Direction: Row-First (16:9 Modern Widescreen Standard)
 
-The single most important difference from CSS flexbox:
+Aligned with CSS flexbox and modern 16:9 widescreen terminal displays, Vexart containers default to horizontal flow:
 
 | Framework | Default direction |
 |-----------|------------------|
 | CSS       | `row` (horizontal) |
-| Vexart       | `column` (vertical) |
+| Vexart    | `row` (horizontal) |
 
-Terminals are vertical by nature — logs, menus, forms all stack top-to-bottom. Vexart follows that convention.
+Modern terminal applications run on widescreen displays where horizontal space is ample. Elements placed inside a `<box>` flow horizontally left-to-right by default, allowing inline tags, buttons, and text elements to align side-by-side naturally.
 
 ```tsx
-// These are identical — column is the default
+// These are identical — row is the default (16:9 widescreen standard)
 <box>
-  <text color="#e0e0e0">First</text>
-  <text color="#e0e0e0">Second</text>
-  <text color="#e0e0e0">Third</text>
-</box>
-
-<box direction="column">
-  <text color="#e0e0e0">First</text>
-  <text color="#e0e0e0">Second</text>
-  <text color="#e0e0e0">Third</text>
-</box>
-```
-
-Use `direction="row"` for horizontal layout:
-
-```tsx
-<box direction="row" gap={8}>
   <text color="#e0e0e0">Left</text>
   <text color="#e0e0e0">Center</text>
   <text color="#e0e0e0">Right</text>
+</box>
+
+<box direction="row">
+  <text color="#e0e0e0">Left</text>
+  <text color="#e0e0e0">Center</text>
+  <text color="#e0e0e0">Right</text>
+</box>
+```
+
+Use `direction="column"` explicitly when stacking elements vertically (e.g. lists, forms, cards, dialogs):
+
+```tsx
+<box direction="column" gap={8}>
+  <text color="#e0e0e0">First</text>
+  <text color="#e0e0e0">Second</text>
+  <text color="#e0e0e0">Third</text>
 </box>
 ```
 
@@ -58,19 +58,19 @@ Vexart uses `alignX` (horizontal) and `alignY` (vertical) instead of CSS's `just
 
 ### How alignX/alignY map to CSS
 
-In a **column** layout (default):
-
-| Vexart prop | CSS equivalent | What it controls |
-|----------|---------------|-----------------|
-| `alignX` | `align-items` | Cross-axis (horizontal placement of children) |
-| `alignY` | `justify-content` | Main-axis (vertical distribution of children) |
-
-In a **row** layout:
+In a **row** layout (default):
 
 | Vexart prop | CSS equivalent | What it controls |
 |----------|---------------|-----------------|
 | `alignX` | `justify-content` | Main-axis (horizontal distribution) |
 | `alignY` | `align-items` | Cross-axis (vertical placement) |
+
+In a **column** layout:
+
+| Vexart prop | CSS equivalent | What it controls |
+|----------|---------------|-----------------|
+| `alignX` | `align-items` | Cross-axis (horizontal placement of children) |
+| `alignY` | `justify-content` | Main-axis (vertical distribution of children) |
 
 Think of it this way: **alignX always controls horizontal, alignY always controls vertical** — regardless of direction. This is simpler than CSS where `justify-content` and `align-items` swap meaning based on `flex-direction`.
 

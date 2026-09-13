@@ -129,7 +129,7 @@ Vexart uses a two-tier import structure:
 import { createSignal, For, Show, createApp, Button, Input, colors } from "vexart"
 
 // Public engine hooks — only when needed
-import { useFocus, setFocus } from "vexart/engine"
+import { useFocus, setFocus } from "vexart"
 ```
 
 ### Minimal App
@@ -1078,7 +1078,7 @@ Vexart hooks return SolidJS signals -- reactive getters that automatically re-re
 ### useFocus(opts?)
 
 ```typescript
-import { useFocus } from "vexart/engine"
+import { useFocus } from "vexart"
 
 type FocusHandle = {
   focused: () => boolean    // reactive signal -- true when this element has focus
@@ -1105,7 +1105,7 @@ function useFocus(opts?: {
 **Custom interactive component:**
 
 ```tsx
-import { useFocus } from "vexart/engine"
+import { useFocus } from "vexart"
 import { Show } from "vexart"
 
 function ToggleCard(props: { label: string; active: boolean; onToggle: () => void }) {
@@ -1239,7 +1239,7 @@ const unsub = onInput((event) => {
 Creates a focus trap -- `Tab`/`Shift+Tab` only cycles within the scope. Used internally by `Dialog`. Returns a cleanup function.
 
 ```typescript
-import { pushFocusScope } from "vexart/engine"
+import { pushFocusScope } from "vexart"
 
 // Inside a component:
 const popScope = pushFocusScope()
@@ -1444,7 +1444,7 @@ the runtime invalidation machinery.
 Encapsulates drag interactions — pointer capture, `isDragging` flag, and mouse event wiring. Returns `dragProps` to spread on the drag target.
 
 ```typescript
-import { useDrag } from "vexart/engine"
+import { useDrag } from "vexart"
 
 type DragOptions = {
   onDragStart?: (event: NodeMouseEvent) => void
@@ -1460,7 +1460,7 @@ type DragState = {
 ```
 
 ```tsx
-import { useDrag } from "vexart/engine"
+import { useDrag } from "vexart"
 
 function Scrubber(props: { value: number; onChange: (v: number) => void }) {
   const { dragging, dragProps } = useDrag({
@@ -1485,7 +1485,7 @@ The Slider component uses `useDrag` internally.
 Encapsulates hover detection with configurable enter/leave delays. Returns `hovered` signal and `hoverProps` to spread on the target.
 
 ```typescript
-import { useHover } from "vexart/engine"
+import { useHover } from "vexart"
 
 type HoverOptions = {
   delay?: number          // ms before onEnter (default: 0)
@@ -1501,7 +1501,7 @@ type HoverState = {
 ```
 
 ```tsx
-import { useHover } from "vexart/engine"
+import { useHover } from "vexart"
 
 function HoverCard(props: { children: any }) {
   const { hovered, hoverProps } = useHover({
@@ -1621,7 +1621,7 @@ Scrollable container with visual scrollbar. Content that overflows is clipped.
 
 ```typescript
 import { ScrollView } from "vexart"
-import type { ScrollHandle } from "vexart/engine"
+import type { ScrollHandle } from "vexart"
 
 type ScrollViewProps = {
   ref?: (handle: ScrollHandle) => void
@@ -3660,8 +3660,8 @@ Most applications should use `createApp()` or `mountApp()` from `vexart` so
 terminal and lifecycle ownership remains managed.
 
 ```tsx
-import { createTerminal, mount, useFocus, useKeyboard } from "vexart/engine"
-import type { MountHandle, NodeHandle, PressEvent } from "vexart/engine"
+import { createTerminal, mount, useFocus, useKeyboard } from "vexart"
+import type { MountHandle, NodeHandle, PressEvent } from "vexart"
 ```
 
 The following are internal and must not be imported by consumers: raw node

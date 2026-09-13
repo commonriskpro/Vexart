@@ -8,7 +8,7 @@ Vexart's design system (`@vexart/styled`) provides static tokens, a reactive the
 
 ## Static Tokens
 
-Static tokens are plain JavaScript objects. They never change at runtime. Import them from `@vexart/styled`:
+Static tokens are plain JavaScript objects. They never change at runtime. Import them from `vexart`:
 
 ```typescript
 import { colors, radius, space, font, weight, shadows } from "vexart"

@@ -90,7 +90,7 @@ type NodeMouseEvent = {
 Like `Element.setPointerCapture()` in the DOM. When a node captures the pointer, ALL mouse events (`onMouseMove`, `onMouseUp`, etc.) route to it regardless of cursor position — essential for drag interactions.
 
 ```typescript
-import { setPointerCapture, releasePointerCapture } from "vexart/engine"
+import { setPointerCapture, releasePointerCapture } from "vexart"
 
 setPointerCapture(nodeId)     // Lock — all mouse events go to this node
 releasePointerCapture(nodeId) // Unlock — auto-released on button up
@@ -99,7 +99,7 @@ releasePointerCapture(nodeId) // Unlock — auto-released on button up
 ### Drag example
 
 ```tsx
-import { setPointerCapture, releasePointerCapture } from "vexart/engine"
+import { setPointerCapture, releasePointerCapture } from "vexart"
 import { createSignal } from "solid-js"
 
 function DraggableHandle(props: { nodeId: string }) {
@@ -335,7 +335,7 @@ Vexart provides several hooks for listening to input events at different levels.
 Not a hook, not reactive. Registers a callback for ALL input events. Good for global hotkeys and side effects.
 
 ```tsx
-import { onInput } from "vexart/engine"
+import { onInput } from "vexart"
 
 const unsub = onInput((event) => {
   if (event.type === "key" && event.key === "q" && event.mods.ctrl) {
@@ -353,7 +353,7 @@ const unsub = onInput((event) => {
 Returns a reactive signal that updates on every keypress.
 
 ```tsx
-import { useKeyboard } from "vexart/engine"
+import { useKeyboard } from "vexart"
 
 function StatusBar() {
   const kb = useKeyboard()
@@ -381,7 +381,7 @@ type KeyboardState = {
 ### useMouse() — Reactive Mouse Signal
 
 ```tsx
-import { useMouse } from "vexart/engine"
+import { useMouse } from "vexart"
 
 function CursorPosition() {
   const mouse = useMouse()
@@ -421,7 +421,7 @@ type MouseEvent = {
 Returns a signal for ALL input events (key, mouse, paste, focus).
 
 ```tsx
-import { useInput } from "vexart/engine"
+import { useInput } from "vexart"
 
 function DebugInput() {
   const event = useInput()
@@ -520,7 +520,7 @@ The naming convention: props are named for what they go ON (`buttonProps`, `togg
 Encapsulates drag interactions — ref management, `setPointerCapture`, and an `isDragging` flag. Returns `dragProps` to spread on the drag target.
 
 ```typescript
-import { useDrag } from "vexart/engine"
+import { useDrag } from "vexart"
 
 const { dragging, dragProps } = useDrag({
   onDragStart: (evt) => { /* jump to position */ },
@@ -562,7 +562,7 @@ The Slider component uses `useDrag` internally — its `trackProps` are built on
 Encapsulates hover detection with configurable enter/leave delays. Returns `hovered` signal and `hoverProps` to spread on the target.
 
 ```typescript
-import { useHover } from "vexart/engine"
+import { useHover } from "vexart"
 
 const { hovered, hoverProps } = useHover({
   delay: 500,       // ms before onEnter fires
@@ -674,7 +674,7 @@ onInput((event) => {
 ### Drag with pointer capture
 
 ```tsx
-import { setPointerCapture, releasePointerCapture } from "vexart/engine"
+import { setPointerCapture, releasePointerCapture } from "vexart"
 import { createSignal } from "solid-js"
 
 function Slider(props: { value: number; onChange: (v: number) => void; nodeId: string }) {

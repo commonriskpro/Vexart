@@ -13,7 +13,7 @@ Vexart provides two animation primitives: `createTransition` (eased/tween) and `
 ### Signature
 
 ```typescript
-import { createTransition, easing } from "vexart/engine"
+import { createTransition, easing } from "vexart"
 
 const [value, setValue] = createTransition(initialValue: number, options?: {
   duration?: number,    // ms, default: 300
@@ -30,7 +30,7 @@ const [value, setValue] = createTransition(initialValue: number, options?: {
 ### Basic example
 
 ```tsx
-import { createTransition } from "vexart/engine"
+import { createTransition } from "vexart"
 
 function ExpandPanel() {
   const [width, setWidth] = createTransition(100, { duration: 300 })
@@ -95,7 +95,7 @@ setA(1); setB(1); setC(1)
 Easing functions control the acceleration curve of the animation. Vexart provides 9 built-in presets.
 
 ```typescript
-import { easing } from "vexart/engine"
+import { easing } from "vexart"
 ```
 
 | Easing | Behavior | Use for |
@@ -153,7 +153,7 @@ const [v, setV] = createTransition(0, {
 ### Signature
 
 ```typescript
-import { createSpring } from "vexart/engine"
+import { createSpring } from "vexart"
 
 const [value, setValue] = createSpring(initialValue: number, options?: {
   stiffness?: number,    // default: 170 (spring tension)
@@ -168,7 +168,7 @@ const [value, setValue] = createSpring(initialValue: number, options?: {
 ### Basic example
 
 ```tsx
-import { createSpring } from "vexart/engine"
+import { createSpring } from "vexart"
 
 function SpringButton() {
   const [y, setY] = createSpring(0, { stiffness: 200, damping: 20 })
@@ -261,7 +261,7 @@ automatically; application code does not need to query the animation scheduler.
 ### Fade in on mount
 
 ```tsx
-import { createTransition, easing } from "vexart/engine"
+import { createTransition, easing } from "vexart"
 
 function FadeIn(props: { children: any }) {
   const [opacity, setOpacity] = createTransition(0, {

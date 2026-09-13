@@ -695,12 +695,10 @@ Syntax-highlighted code block with pluggable Highlighter tokenization.
 
 ```tsx
 import { Code } from "vexart"
-import { ONE_DARK } from "vexart"
 
 <Code
   content={sourceCode}
   language="typescript"
-  syntaxStyle={ONE_DARK}
   width={600}
   theme={{ bg: "#1e1e2e", lineNumberFg: "#555", radius: 8, padding: 12 }}
 />
@@ -714,11 +712,9 @@ Markdown renderer with inline styling.
 
 ```tsx
 import { Markdown } from "vexart"
-import { ONE_DARK } from "vexart"
 
 <Markdown
   content={readmeText}
-  syntaxStyle={ONE_DARK}
   width={600}
   theme={{ fg: "#e0e0e0", heading: "#56d4c8", codeBg: "#2c313a" }}
 />
