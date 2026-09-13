@@ -4,7 +4,7 @@ This directory contains a bounded, fail-closed audit runner. It is deliberately
 internal and is not imported by the Vexart runtime.
 
 The implementation pre-review is recorded in [`architecture-review.md`](./architecture-review.md)
-with its Astra provenance and approved invariants.
+with its architectural review provenance and approved invariants.
 Read [`verification.md`](./verification.md) for checked evidence, the
 implementation-review star register, and the conservative correction-pass
 limitation before running unattended.
@@ -19,12 +19,36 @@ never used as an agent write target. A run writes append-only
 `events.jsonl`, versioned strategy profiles, historical scope+strategy identities, and per-attempt receipts
 (prompt, argv, JSON response, JSONL events, stdout, stderr, and exit status).
 
+### Runtime configuration
+
+By default, the audit runner targets the local CPAMC (`cli-proxy-api`) endpoint
+using Google Gemini 3.8 (`gemini-3.8-flash-high`, reasoning effort `high`) via loopback
+`http://127.0.0.1:8317/v1`.
+
+Credentials are fail-closed and resolved in order:
+1. `AUDIT_CPAMC_API_KEY` environment variable.
+2. Default user key file at `~/.cli-proxy-api/api-key.txt` (must be a regular file, not a symlink).
+3. Optional `<git-common-dir>/audit-loop/runtime.json` with an explicit `apiKeyFile` path.
+
+The secret is passed only via process environment to `codex exec`, never in command line arguments
+or published receipts, and is shielded from child tool shells via `shell_environment_policy.excludes`.
+
+Legacy Codex execution (`gpt-6-astra` high for source work, `gpt-5.6-luna` xhigh for reviews)
+can be explicitly restored via `<git-common-dir>/audit-loop/runtime.json`:
+```json
+{
+  "provider": "codex",
+  "model": "gpt-6-astra",
+  "effort": "high"
+}
+```
+
 Each cycle is:
 
-1. Astra (`gpt-6-astra`, `high`) plans at most two scopes using bounded prior
+1. The controller planner plans at most two scopes using bounded prior
    lessons (negative results, false positives, regressions, disadvantages, and
    coverage).
-2. One or two independent Astra (`gpt-6-astra`, `high`) investigators inspect
+2. One or two independent read-only investigators inspect
    the clean baseline. A real finding must have baseline path/lines/excerpt,
    expected contract, and an exact executable regression command that fails on
    baseline with a nonzero exit plus a verbatim stable assertion excerpt.
@@ -47,19 +71,19 @@ Each cycle is:
    attribution. Compact baseline-tagged summaries inform later planning as
    `DATA_ONLY`, not current proof. Opportunities are unverified proposals: they
    never award stars, authorize changes, or bypass human architectural decisions.
-3. For a mechanically valid finding, up to three independent Astra/high solvers
+3. For a mechanically valid finding, up to three independent read-only solvers
    receive the same immutable source topic and may propose or abstain. A separate
-   Luna/xhigh evaluator receives opaque candidate IDs, evidence and proposals,
+   read-only evaluator receives opaque candidate IDs, evidence and proposals,
    **not profile identities or scores**. It chooses an exact winner, a substantive
    synthesis of at least two contributions, or none. Each solver/evaluator call
    is limited to five minutes and the remaining run deadline. A selection alone
    cannot authorize implementation or earn stars.
-4. A separate Luna pre-gate independently reads the source. It can approve only
+4. A separate independent pre-gate reads the source. It can approve only
    an internal root-cause fix tied to the recorded SHA and exact paths. API,
    contract, ownership, migration, hotfix, ad-hoc, magic-limit, controller,
    prompt, security-policy, and dependency changes fail closed for human review.
-5. The Astra high apply worker receives only the approved paths and does not stage or
-   commit. A Luna verifier inspects the actual diff, lifecycle/ownership
+5. The isolated apply worker receives only the approved paths and does not stage or
+   commit. An independent verifier inspects the actual diff, lifecycle/ownership
    invariants, regressions, and fixed safe checks. At most one bounded correction
    is attempted. After the verifier and checks pass, the controller stages only
    those named paths, verifies the index, creates exactly one commit on the
@@ -79,7 +103,7 @@ finding. Stars are the count of unique canonical root-cause keys, not fixes,
 tests, proposals, or repeated observations. Duplicate keys are retained as
 events but are not awarded again. The program, prompts, model mapping,
 safeguards, and security policy are never self-edited; “automejora” means only
-that the next Astra plan consumes evidence-backed lessons and the controller
+that the next cycle planner consumes evidence-backed lessons and the controller
 uses versioned profile results to select bounded consultations. It cannot loosen policy or rewrite itself.
 
 ## Stable profiles and solution rewards
@@ -204,7 +228,7 @@ batch must start the verified new controller to produce the new profile events.
 
 Codex is invoked with `exec --ephemeral --json --output-schema
 --output-last-message`, `--disable multi_agent --disable multi_agent_v2`, and
-the role mapping above. Investigators, gates, planners, and verifiers use
+the configured runtime arguments (defaulting to local CPAMC `gemini-3.8-flash-high`). Investigators, gates, planners, solvers, evaluators, and verifiers use
 `-s read-only`; only the isolated apply worker uses `-s workspace-write`.
 No dependency installation or external write is performed. When available, the
 runner makes one isolated copy of the existing `node_modules` tree. Absolute

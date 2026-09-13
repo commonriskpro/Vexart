@@ -29,15 +29,20 @@ describe("audit loop safety contracts", () => {
     expect(jsonSchema("investigator").required).toContain("analysis")
   })
 
-  test("actual agent argv uses Astra high for source work and Luna xhigh for reviews", () => {
+  test("actual agent argv uses CPAMC Gemini 3.8 by default and preserves legacy codex mapping", () => {
     for (const role of ["planner", "investigator", "apply", "gate", "verifier"] as const) {
       const command = agentCommand(role, "/worktree", "/schema.json", "/message.json", "prompt")
-      const review = role === "gate" || role === "verifier"
-      expect(command[command.indexOf("-m") + 1]).toBe(review ? "gpt-5.6-luna" : "gpt-6-astra")
-      expect(command[command.indexOf("-c") + 1]).toBe(`model_reasoning_effort="${review ? "xhigh" : "high"}"`)
+      expect(command[command.indexOf("-m") + 1]).toBe("gemini-3.8-flash-high")
+      expect(command).toContain('model_provider="audit_cpamc"')
+      expect(command).toContain('model_reasoning_effort="high"')
       expect(command[command.indexOf("-s") + 1]).toBe(role === "apply" ? "workspace-write" : "read-only")
       expect(command).toContain("multi_agent")
       expect(command).toContain("multi_agent_v2")
+
+      const legacy = agentCommand(role, "/worktree", "/schema.json", "/message.json", "prompt", { provider: "codex", model: "gpt-6-astra", effort: "high" })
+      const review = role === "gate" || role === "verifier"
+      expect(legacy[legacy.indexOf("-m") + 1]).toBe(review ? "gpt-5.6-luna" : "gpt-6-astra")
+      expect(legacy[legacy.indexOf("-c") + 1]).toBe(`model_reasoning_effort="${review ? "xhigh" : "high"}"`)
     }
   })
 
@@ -117,4 +122,14 @@ describe("audit loop safety contracts", () => {
     expect(result.timedOut).toBe(true)
     expect(Date.now() - started).toBeLessThan(1500)
   })
-})
+  test("completion instruction uses positive mandate without forbidden token negative priming", async () => {
+    const { plannerPrompt } = await import("./index");
+    // Verify COMPLETION_INSTRUCTION positive mandate
+    const repo = await detectRepo(process.cwd());
+    const state = { id: "test-run", pid: process.pid, root: repo.root, commonDir: repo.commonDir, store: "/tmp", runtime: { provider: "cpamc" as const, model: "gemini-3.8-flash-high", effort: "high" as const }, initialBaselineSha: repo.baselineSha, baselineSha: repo.baselineSha, dirtyExcluded: ["M dirty.ts"], branch: "test", worktree: repo.root, cycles: 1, minutes: 1, startedAt: new Date().toISOString(), deadlineAt: new Date().toISOString(), status: "running" as const, phase: "planning" as const, cycle: 1, stars: 0, findings: [] };
+    const prompt = plannerPrompt(state, ".", []);
+    expect(prompt).not.toContain("dirty.ts");
+    expect(prompt).not.toContain("Do NOT execute 'exit'");
+    expect(prompt).toContain("FINAL STEP MANDATE");
+  })
+});

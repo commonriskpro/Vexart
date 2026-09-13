@@ -245,6 +245,45 @@ describe("audit dashboard observer", () => {
     }
   })
 
+  test("reads and exposes concurrent multi-agent live activities simultaneously", async () => {
+    const { root, store } = await fixture()
+    const liveDir = join(store, "live-activities")
+    await mkdir(liveDir, { recursive: true })
+    const activity1 = {
+      attemptId: "att-1",
+      runId: "run-1",
+      role: "investigator",
+      scope: "packages/engine",
+      startedAt: "2026-01-01T00:00:10.000Z",
+      updatedAt: "2026-01-01T00:00:15.000Z",
+      phase: "executing",
+      currentCommand: "git status",
+      commandCount: 5,
+      recentItems: [{ at: "2026-01-01T00:00:15.000Z", kind: "command", summary: "git status" }]
+    }
+    const activity2 = {
+      attemptId: "att-2",
+      runId: "run-1",
+      role: "investigator",
+      scope: "native/libvexart",
+      startedAt: "2026-01-01T00:00:12.000Z",
+      updatedAt: "2026-01-01T00:00:16.000Z",
+      phase: "executing",
+      currentCommand: "cargo test",
+      commandCount: 3,
+      recentItems: [{ at: "2026-01-01T00:00:16.000Z", kind: "command", summary: "cargo test" }]
+    }
+    await writeFile(join(liveDir, "att-1.json"), JSON.stringify(activity1))
+    await writeFile(join(liveDir, "att-2.json"), JSON.stringify(activity2))
+
+    const snapshot = await readDashboardSnapshot(root)
+    expect(snapshot.liveActivities).toBeDefined()
+    expect(Object.keys(snapshot.liveActivities!)).toHaveLength(2)
+    expect(snapshot.liveActivities!["att-1"]).toMatchObject({ attemptId: "att-1", scope: "packages/engine", commandCount: 5 })
+    expect(snapshot.liveActivities!["att-2"]).toMatchObject({ attemptId: "att-2", scope: "native/libvexart", commandCount: 3 })
+    expect(snapshot.liveActivity).toMatchObject({ attemptId: "att-1" })
+  })
+
   test("parses bounded dashboard arguments without starting a server", () => {
     expect(parseDashboardArgs([])).toEqual({ help: false, port: 4318 })
     expect(parseDashboardArgs(["--port", "4320"])).toEqual({ help: false, port: 4320 })

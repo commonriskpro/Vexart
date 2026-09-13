@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createWorktree, detectRepo, runProcess, worktreeClean } from "./git"
-import { agentCommand, evaluatorPrompt, freezeContributionEvidence, jsonSchema, parkSolution, saveAgentReceipt, solutionTimeout } from "./index"
+import { agentCommand, agentTimeout, evaluatorPrompt, freezeContributionEvidence, jsonSchema, parkSolution, saveAgentReceipt, solutionTimeout } from "./index"
 import { awardSolution, blindCandidates, contributionsImplemented, parseEvaluation, parseSolver, proposalScopeError, selectSolution, validatedSolutionAwards, type Evaluation, type SolutionRound, type SolutionSelection, type SolutionSubmission } from "./solutions"
 import { profileStats } from "./profiles"
 import { parseVerifier, type AgentReceipt, type Proposal, type RunState } from "./types"
@@ -95,14 +95,21 @@ describe("bounded independent solution competition", () => {
   test("new agents use required models, read-only sandboxes, ref-only schemas and bounded timeouts", () => {
     for (const role of ["solver", "solution_evaluator"] as const) {
       const command = agentCommand(role, "/worktree", "/schema", "/message", "prompt")
-      expect(command[command.indexOf("-m") + 1]).toBe(role === "solver" ? "gpt-6-astra" : "gpt-5.6-luna")
-      expect(command[command.indexOf("-c") + 1]).toBe(`model_reasoning_effort="${role === "solver" ? "high" : "xhigh"}"`)
+      expect(command[command.indexOf("-m") + 1]).toBe("gemini-3.8-flash-high")
+      expect(command).toContain('model_provider="audit_cpamc"')
       expect(command[command.indexOf("-s") + 1]).toBe("read-only")
       expect(JSON.stringify(jsonSchema(role))).not.toContain('"excerpt":')
+
+      const legacy = agentCommand(role, "/worktree", "/schema", "/message", "prompt", { provider: "codex", model: "gpt-6-astra", effort: "high" })
+      expect(legacy[legacy.indexOf("-m") + 1]).toBe(role === "solver" ? "gpt-6-astra" : "gpt-5.6-luna")
+      expect(legacy[legacy.indexOf("-c") + 1]).toBe(`model_reasoning_effort="${role === "solver" ? "high" : "xhigh"}"`)
     }
     expect(solutionTimeout(new Date(900_000).toISOString(), 0)).toBe(300_000)
     expect(solutionTimeout(new Date(30_000).toISOString(), 10_000)).toBe(20_000)
     expect(solutionTimeout(new Date(10_000).toISOString(), 20_000)).toBe(0)
+    expect(agentTimeout(new Date(900_000).toISOString(), 0)).toBe(300_000)
+    expect(agentTimeout(new Date(30_000).toISOString(), 10_000)).toBe(20_000)
+    expect(agentTimeout(new Date(10_000).toISOString(), 20_000)).toBe(1)
   })
 
   test("reward replay requires ordered provenance, implementation and commit; replays award once", () => {

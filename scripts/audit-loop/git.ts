@@ -13,7 +13,7 @@ export type ProcessResult = {
   timedOut?: boolean
   cancelled?: boolean
   exitCode?: number | null
-  error?: { kind: "spawn" | "stdin" | "stdout" | "stderr"; message: string }
+  error?: { kind: "spawn" | "stdin" | "stdout" | "stderr" | "circuit_breaker"; message: string }
 }
 
 const TERMINATION_GRACE_MS = 1_000
@@ -53,7 +53,7 @@ const terminate = (pids: number[], signal: "SIGTERM" | "SIGKILL") => {
   }
 }
 
-export const runProcess = async (args: string[], cwd: string, timeoutMs?: number, killTree = false, options: { input?: string | Uint8Array; signal?: AbortSignal; env?: Record<string, string> } = {}): Promise<ProcessResult> => {
+export const runProcess = async (args: string[], cwd: string, timeoutMs?: number, killTree = false, options: { input?: string | Uint8Array; signal?: AbortSignal; env?: Record<string, string>; onStdoutLine?: (line: string) => void } = {}): Promise<ProcessResult> => {
   if (options.signal?.aborted) return { code: -1, exitCode: null, stdout: "", stderr: "", cancelled: true }
   // Incremental writable callbacks expose delivery failures (including EPIPE).
   // A single end(payload) can hide pipe errors in Bun's compatibility layer.
@@ -69,11 +69,29 @@ export const runProcess = async (args: string[], cwd: string, timeoutMs?: number
   }
   const drain = (stream: Readable, kind: "stdout" | "stderr") => new Promise<string>((resolve) => {
     const chunks: string[] = []
+    let pending = ""
     stream.setEncoding("utf8")
-    stream.on("data", (chunk: string) => chunks.push(chunk))
+    stream.on("data", (chunk: string) => {
+      chunks.push(chunk)
+      if (kind === "stdout" && options.onStdoutLine) {
+        pending += chunk
+        const lines = pending.split(String.fromCharCode(10))
+        pending = lines.pop() ?? ""
+        for (const line of lines) {
+          if (line) options.onStdoutLine(line)
+        }
+      }
+    })
     stream.once("error", (error) => { fail(kind, error); resolve(chunks.join("")) })
-    stream.once("end", () => resolve(chunks.join("")))
-    stream.once("close", () => resolve(chunks.join("")))
+    const finish = () => {
+      if (kind === "stdout" && options.onStdoutLine && pending) {
+        options.onStdoutLine(pending)
+        pending = ""
+      }
+      resolve(chunks.join(""))
+    }
+    stream.once("end", finish)
+    stream.once("close", finish)
   })
   const stdout = drain(proc.stdout!, "stdout")
   const stderr = drain(proc.stderr!, "stderr")

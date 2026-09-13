@@ -1,4 +1,4 @@
-import { lstat, open, opendir, realpath } from "node:fs/promises"
+import { lstat, open, opendir, readdir, realpath } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { join, relative, resolve } from "node:path"
 import { detectRepo } from "./git"
@@ -8,7 +8,7 @@ import type { RepoInfo } from "./types"
 
 const DEFAULT_PORT = 4318
 const MAX_STATE_BYTES = 256 * 1024
-const MAX_RECEIPT_BYTES = 512 * 1024
+const MAX_RECEIPT_BYTES = 8 * 1024 * 1024
 const MAX_RECEIPTS = 200
 const MAX_AGENTS = 200
 
@@ -134,6 +134,19 @@ type DashboardAgent = {
   effort: string | null
 }
 
+export type DashboardLiveActivity = {
+  attemptId: string
+  runId?: string
+  role: string
+  scope: string
+  startedAt: string
+  updatedAt: string
+  phase: "reasoning" | "executing" | "idle"
+  currentCommand?: string
+  commandCount: number
+  recentItems: { at: string; kind: "command" | "reasoning"; summary: string }[]
+}
+
 export type DashboardSnapshot = {
   observedAt: string
   state: DashboardState | null
@@ -146,12 +159,39 @@ export type DashboardSnapshot = {
   historyComplete: boolean
   totals: { stars: number | null; solutionStars: number | null; commits: number | null; decisions: number | null }
   warnings: string[]
+  liveActivity?: DashboardLiveActivity | null
+  liveActivities?: Record<string, DashboardLiveActivity>
 }
 
 type JsonObject = Record<string, unknown>
 type Reader = { warnings: string[] }
 
 const isObject = (value: unknown): value is JsonObject => typeof value === "object" && value !== null && !Array.isArray(value)
+
+const sanitizeLiveActivity = (raw: unknown): DashboardLiveActivity | null => {
+  if (!isObject(raw)) return null
+  const attemptId = typeof raw.attemptId === "string" ? raw.attemptId : null
+  const runId = typeof raw.runId === "string" ? raw.runId : undefined
+  const role = typeof raw.role === "string" ? raw.role : null
+  const scope = typeof raw.scope === "string" ? raw.scope : null
+  const profileId = typeof raw.profileId === "string" ? raw.profileId : undefined
+  const model = typeof raw.model === "string" ? raw.model : undefined
+  const effort = typeof raw.effort === "string" ? raw.effort : undefined
+  const startedAt = typeof raw.startedAt === "string" ? raw.startedAt : null
+  const updatedAt = typeof raw.updatedAt === "string" ? raw.updatedAt : null
+  const phase = ["reasoning", "executing", "idle"].includes(String(raw.phase)) ? raw.phase as "reasoning" | "executing" | "idle" : "idle"
+  const currentCommand = typeof raw.currentCommand === "string" ? raw.currentCommand.slice(0, 200) : undefined
+  const commandCount = typeof raw.commandCount === "number" ? raw.commandCount : 0
+  const recentItems = Array.isArray(raw.recentItems) ? raw.recentItems.flatMap((item) => {
+    if (!isObject(item)) return []
+    const at = typeof item.at === "string" ? item.at : null
+    const kind = item.kind === "command" ? ("command" as const) : ("reasoning" as const)
+    const summary = typeof item.summary === "string" ? item.summary.slice(0, 200) : ""
+    return at && summary ? [{ at, kind, summary }] : []
+  }).slice(-10) : []
+  if (!attemptId || !role || !scope || !startedAt || !updatedAt) return null
+  return { attemptId, runId, role, scope, profileId, model, effort, startedAt, updatedAt, phase, currentCommand, commandCount, recentItems }
+}
 const stringValue = (value: unknown) => typeof value === "string" && value.trim().length > 0 ? value : null
 const numberValue = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : null
 const nonEmptyStrings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : []
@@ -162,15 +202,21 @@ const readSafe = async (path: string, root: string, limit: number, reader: Reade
   try {
     const stat = await lstat(path)
     if (!stat.isFile() || stat.isSymbolicLink()) { reader.warnings.push(`metadata rejected: ${relative(root, path)}`); return null }
-    const resolved = await realpath(path)
-    if (!inside(root, resolved)) { reader.warnings.push(`metadata escapes store: ${relative(root, path)}`); return null }
+    const [realRoot, resolved] = await Promise.all([realpath(root).catch(() => root), realpath(path)])
+    if (!inside(realRoot, resolved)) { reader.warnings.push(`metadata escapes store: ${relative(root, path)}`); return null }
     const handle = await open(path, "r")
     try {
       const size = Number((await handle.stat()).size)
-      const start = Math.max(0, size - limit)
-      const buffer = Buffer.alloc(size - start)
+      const isTailStream = path.endsWith(".jsonl") || path.endsWith(".log")
+      if (!isTailStream && size > limit) {
+        reader.warnings.push(`metadata rejected (exceeds limit): ${relative(root, path)}`)
+        return null
+      }
+      const start = isTailStream ? Math.max(0, size - limit) : 0
+      const readLength = isTailStream ? size - start : Math.min(size, limit)
+      const buffer = Buffer.alloc(readLength)
       await handle.read(buffer, 0, buffer.length, start)
-      if (start > 0) reader.warnings.push(relative(root, path) === "events.jsonl" ? "events.jsonl tail truncated; lifetime totals may be partial" : `metadata truncated: ${relative(root, path)}`)
+      if (isTailStream && start > 0) reader.warnings.push(relative(root, path) === "events.jsonl" ? "events.jsonl tail truncated; lifetime totals may be partial" : `metadata truncated: ${relative(root, path)}`)
       return buffer.toString("utf8")
     } finally { await handle.close() }
   } catch (error) {
@@ -442,7 +488,32 @@ const readSnapshotFromRepo = async (repo: RepoInfo): Promise<DashboardSnapshot> 
   if (state?.status !== "running") for (const attempt of attempts.values()) if (attempt.status === "in_progress") attempt.status = "interrupted_or_unknown"
   const rawState = stateRaw ? parseJson(stateRaw, reader, "state.json") : null
   const statePid = isObject(rawState) && typeof rawState.pid === "number" ? rawState.pid : null
-  return { observedAt: new Date().toISOString(), state, processAlive: await processAlive(state, statePid, lock, repo.root, reader), events, agents, receipts, profiles: history.profiles, attempts: [...attempts.values()].slice(-50), historyComplete, totals: historyComplete ? history.totals : { stars: null, solutionStars: null, commits: null, decisions: null }, warnings: reader.warnings.slice(0, 50) }
+  const liveActivities: Record<string, DashboardLiveActivity> = {}
+  if (state?.status === "running") {
+    const liveDir = join(store, "live-activities")
+    try {
+      const files = (await readdir(liveDir)).filter((f) => f.endsWith(".json")).sort()
+      for (const file of files) {
+        const raw = await readSafe(join(liveDir, file), store, MAX_STATE_BYTES, reader)
+        if (raw) {
+          const sanitized = sanitizeLiveActivity(parseJson(raw, reader, file))
+          if (sanitized && (!sanitized.runId || sanitized.runId === state.id)) {
+            liveActivities[sanitized.attemptId] = sanitized
+          }
+        }
+      }
+    } catch {}
+    if (Object.keys(liveActivities).length === 0) {
+      const activityRaw = await readSafe(join(store, "live-activity.json"), store, MAX_STATE_BYTES, reader)
+      const single = activityRaw ? sanitizeLiveActivity(parseJson(activityRaw, reader, "live-activity.json")) : null
+      if (single && (!single.runId || single.runId === state.id)) {
+        liveActivities[single.attemptId] = single
+      }
+    }
+  }
+  const sortedActivities = Object.values(liveActivities).sort((a, b) => a.startedAt.localeCompare(b.startedAt) || a.attemptId.localeCompare(b.attemptId))
+  const liveActivity = sortedActivities[0] ?? null
+  return { observedAt: new Date().toISOString(), state, processAlive: await processAlive(state, statePid, lock, repo.root, reader), events, agents, receipts, profiles: history.profiles, attempts: [...attempts.values()].slice(-50), historyComplete, totals: historyComplete ? history.totals : { stars: null, solutionStars: null, commits: null, decisions: null }, warnings: reader.warnings.slice(0, 50), liveActivity, liveActivities }
 }
 
 export const readDashboardSnapshot = async (cwd: string) => readSnapshotFromRepo(await detectRepo(cwd))
@@ -498,6 +569,7 @@ export const dashboardMain = async (argv = process.argv.slice(2)) => {
   if (options.help) { console.log(DASHBOARD_HELP); return }
   const running = await createDashboardServer(process.cwd(), options.port)
   console.log(`audit dashboard listening at ${running.origin}`)
+  await new Promise(() => {})
 }
 
 if (import.meta.main) dashboardMain().catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1 })

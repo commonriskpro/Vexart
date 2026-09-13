@@ -222,6 +222,28 @@ export type AgentReceipt = {
   parseError?: string
 }
 
+export type LiveActivityItem = {
+  at: string
+  kind: "command" | "reasoning"
+  summary: string
+}
+
+export type LiveActivity = {
+  attemptId: string
+  runId?: string
+  role: AgentRole
+  scope: string
+  profileId?: string
+  model?: string
+  effort?: string
+  startedAt: string
+  updatedAt: string
+  phase: "reasoning" | "executing" | "idle"
+  currentCommand?: string
+  commandCount: number
+  recentItems: LiveActivityItem[]
+}
+
 export const identityFor = (scope: string, strategy: string) => {
   const value = `${scope}\u0000${strategy}`
   return createHash("sha256").update(value).digest("hex").slice(0, 20)
