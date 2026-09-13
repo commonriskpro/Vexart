@@ -90,11 +90,54 @@ function layoutCacheKey(
   return `${fontId}\0${fontSize}\0${maxWidth}\0${lineHeight}\0${options.fontFamily ?? ""}\0${options.fontWeight ?? ""}\0${options.fontStyle ?? ""}\0${options.whiteSpace ?? "normal"}\0${options.wordBreak ?? "normal"}\0${text}`
 }
 
+/** Options for single-line text width measurement. */
+/** @public */
+export type MeasureTextOptions = {
+  fontId?: number
+  fontSize?: number
+  fontFamily?: string
+  fontWeight?: number
+  fontStyle?: string
+}
+
 /** Measure text width for a single line (no wrapping). Uses native Rust FFI. */
 /** @public */
-export function measureTextWidth(text: string, fontId: number): number {
+export function measureTextWidth(text: string, fontIdOrOptions: number | MeasureTextOptions = 0): number {
+  if (typeof fontIdOrOptions === "number") {
+    const desc = getFont(fontIdOrOptions)
+    return measureForLayout(text, fontIdOrOptions, desc.size).width
+  }
+  const fontId = fontIdOrOptions.fontId ?? 0
   const desc = getFont(fontId)
-  return measureForLayout(text, fontId, desc.size).width
+  const size = fontIdOrOptions.fontSize ?? desc.size
+  return measureForLayout(
+    text,
+    fontId,
+    size,
+    fontIdOrOptions.fontFamily,
+    fontIdOrOptions.fontWeight,
+    fontIdOrOptions.fontStyle,
+  ).width
+}
+
+/** Measure text dimensions (width and height) for a single line (no wrapping). */
+/** @public */
+export function measureText(text: string, fontIdOrOptions: number | MeasureTextOptions = 0): { width: number; height: number } {
+  if (typeof fontIdOrOptions === "number") {
+    const desc = getFont(fontIdOrOptions)
+    return measureForLayout(text, fontIdOrOptions, desc.size)
+  }
+  const fontId = fontIdOrOptions.fontId ?? 0
+  const desc = getFont(fontId)
+  const size = fontIdOrOptions.fontSize ?? desc.size
+  return measureForLayout(
+    text,
+    fontId,
+    size,
+    fontIdOrOptions.fontFamily,
+    fontIdOrOptions.fontWeight,
+    fontIdOrOptions.fontStyle,
+  )
 }
 
 /** Lay out text into lines with greedy word-wrap using native font measurement. */

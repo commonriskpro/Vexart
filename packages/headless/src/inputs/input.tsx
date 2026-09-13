@@ -12,8 +12,7 @@
 
 import { createMemo, createSignal, createEffect, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import { useFocus, onInput, type SizingUnit } from "@vexart/engine"
-import { measureForLayout } from "@vexart/engine/internal"
+import { useFocus, onInput, measureTextWidth, type SizingUnit } from "@vexart/engine"
 import { useDisabled } from "../helpers/disabled"
 import { nextCodePointOffset, previousCodePointOffset } from "./text-offset"
 
@@ -326,7 +325,7 @@ export function Input(props: InputProps) {
       const prefix = val.slice(0, pos)
       if (prefix.length === 0) return 0
       try {
-        return measureForLayout(prefix, 0, th().fontSize).width
+        return measureTextWidth(prefix, { fontSize: th().fontSize })
       } catch {
         return prefix.length * th().fontSize * 0.6
       }

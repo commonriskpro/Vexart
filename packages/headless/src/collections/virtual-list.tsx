@@ -9,7 +9,7 @@
 import { createSignal, For, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus, type SizingUnit } from "@vexart/engine"
-import { onPostScroll, markDirty } from "@vexart/engine/internal"
+import { onPostScroll } from "@vexart/engine"
 import { useScrollHandle } from "../helpers/use-scroll"
 
 // ── Types ──
@@ -204,13 +204,11 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
         const idx = indexFromLocalY(e.nodeY, e.height)
         if (idx !== hoveredIndex()) {
           setHoveredIndex(idx)
-          markDirty()
         }
       }}
       onMouseOut={() => {
         if (hoveredIndex() !== -1) {
           setHoveredIndex(-1)
-          markDirty()
         }
       }}
       onPress={() => {

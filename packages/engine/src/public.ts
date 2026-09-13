@@ -65,13 +65,13 @@ export type { NodeHandle } from "./reconciler/handle"
 
 // ── Input & interaction hooks ────────────────────────────────────────────────
 
-export { focusedId, setFocus, pushFocusScope, useFocus } from "./reconciler/focus"
+export { focusedId, setFocus, clearFocus, pushFocusScope, useFocus } from "./reconciler/focus"
 export type { FocusHandle } from "./reconciler/focus"
 
 export { useDrag } from "./reconciler/drag"
 export { useHover } from "./reconciler/hover"
 export { useInteractionLayer } from "./reconciler/interaction"
-export { setPointerCapture, releasePointerCapture } from "./reconciler/pointer"
+export { setPointerCapture, releasePointerCapture, onPostScroll } from "./reconciler/pointer"
 export type { DragOptions, DragProps, DragState } from "./reconciler/drag"
 export type { HoverOptions, HoverProps, HoverState } from "./reconciler/hover"
 export type { InteractionBinding, InteractionLayerState } from "./reconciler/interaction"
@@ -108,12 +108,13 @@ export type {
 
 // ── Scrolling ─────────────────────────────────────────────────────────────────
 
-export { createScrollHandle } from "./loop/scroll"
+export { createScrollHandle, releaseScrollHandle } from "./loop/scroll"
 export type { ScrollHandle } from "./loop/scroll"
 
 // ── Debug controls ──────────────────────────────────────────────────────────
 
 export { debugDumpTree, isDebugEnabled, setDebug, toggleDebug, debugStatsLine } from "./loop/debug"
+export { getImageCacheStats } from "./loop/image"
 
 // ── Canvas, fonts & particles ────────────────────────────────────────────────
 
@@ -143,11 +144,12 @@ export {
   clearFontRegistry,
   clearTextCache,
   getFont,
+  measureText,
   measureTextWidth,
   registerFont,
   unregisterFont,
 } from "./ffi/text-layout"
-export type { FontDescriptor } from "./ffi/text-layout"
+export type { FontDescriptor, MeasureTextOptions } from "./ffi/text-layout"
 
 export { createParticleSystem } from "./ffi/particles"
 export type { ParticleConfig, ParticleSystem } from "./ffi/particles"

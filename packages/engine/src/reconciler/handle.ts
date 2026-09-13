@@ -1,4 +1,5 @@
 import type { TGENode, LayoutRect } from "../ffi/node"
+import type { CanvasDrawCommand } from "../ffi/canvas"
 import { focusedId, getNodeFocusId, setFocus, setFocusedId } from "./focus"
 
 /** @public */
@@ -7,6 +8,11 @@ export type NodeHandle = {
   readonly kind: string
   readonly layout: LayoutRect
   readonly isDestroyed: boolean
+  readonly text?: string
+  readonly props: Readonly<Record<string, unknown>>
+  readonly imageState?: "idle" | "loading" | "loaded" | "error"
+  readonly canvasCommands?: readonly CanvasDrawCommand[]
+  readonly canvasDrawCacheKey?: string
   focus: () => void
   blur: () => void
   readonly isFocused: boolean
@@ -39,6 +45,11 @@ export function createHandle(node: TGENode): NodeHandle {
     get kind() { return node.kind },
     get layout() { return node.layout },
     get isDestroyed() { return node.destroyed },
+    get text() { return node.kind === "text" ? node.text : undefined },
+    get props() { return node.props },
+    get imageState() { return node._imageExtra?.state },
+    get canvasCommands() { return node._canvasExtra?.displayListCommands ?? undefined },
+    get canvasDrawCacheKey() { return node._canvasExtra?.drawCacheKey ?? undefined },
     focus() {
       const focusId = getActiveFocusId(node)
       if (focusId !== undefined) setFocus(focusId)

@@ -54,8 +54,7 @@ export declare class CanvasContext {
     /** Current viewport transform — set by the render loop from props */
     viewport: Viewport;
     constructor(viewport?: Viewport);
-    /** Clear the command buffer (called at start of each frame) */
-    _reset(viewport?: Viewport): void;
+    /* Excluded from this release type: _reset */
     /** Draw an anti-aliased line segment. */
     line(x0: number, y0: number, x1: number, y1: number, style: StrokeStyle): void;
     /** Draw a quadratic bezier curve. */
@@ -159,6 +158,10 @@ export declare type CircleCmd = {
     stroke?: number;
     strokeWidth: number;
 };
+
+/** @public */
+/** @public Clear active focus. */
+export declare function clearFocus(): void;
 
 /** Clear all registered fonts and restore default font (id 0). */
 /** @public */
@@ -467,6 +470,16 @@ export { For }
 export declare function getFont(id: number): FontDescriptor;
 
 /** @public */
+export declare function getImageCacheStats(): {
+    decodedCount: number;
+    decodedBytes: number;
+    pendingCount: number;
+    scaledCacheCount: number;
+    scaledEntries: number;
+    scaledBytes: number;
+};
+
+/** @public */
 export declare function getSelectedText(): string;
 
 /** @public */
@@ -729,9 +742,26 @@ export declare type LineCmd = {
 
 export { Match }
 
+/** Measure text dimensions (width and height) for a single line (no wrapping). */
+/** @public */
+export declare function measureText(text: string, fontIdOrOptions?: number | MeasureTextOptions): {
+    width: number;
+    height: number;
+};
+
+/** Options for single-line text width measurement. */
+/** @public */
+export declare type MeasureTextOptions = {
+    fontId?: number;
+    fontSize?: number;
+    fontFamily?: string;
+    fontWeight?: number;
+    fontStyle?: string;
+};
+
 /** Measure text width for a single line (no wrapping). Uses native Rust FFI. */
 /** @public */
-export declare function measureTextWidth(text: string, fontId: number): number;
+export declare function measureTextWidth(text: string, fontIdOrOptions?: number | MeasureTextOptions): number;
 
 /**
  * Input event types for @vexart/engine.
@@ -865,6 +895,11 @@ export declare type NodeHandle = {
     readonly kind: string;
     readonly layout: LayoutRect;
     readonly isDestroyed: boolean;
+    readonly text?: string;
+    readonly props: Readonly<Record<string, unknown>>;
+    readonly imageState?: "idle" | "loading" | "loaded" | "error";
+    readonly canvasCommands?: readonly CanvasDrawCommand[];
+    readonly canvasDrawCacheKey?: string;
     focus: () => void;
     blur: () => void;
     readonly isFocused: boolean;
@@ -893,6 +928,9 @@ export declare const ONE_DARK: ThemeTokenStyle[];
 
 /** @public */
 export declare function onInput(handler: InputSubscriber): () => void;
+
+/** @public */
+export declare function onPostScroll(cb: () => void): () => void;
 
 /** @public */
 export declare type ParticleConfig = {
@@ -1046,6 +1084,9 @@ export declare function registerFont(id: number, desc: FontDescriptor): void;
 /** @public */
 export declare function releasePointerCapture(nodeId: number): void;
 
+/** @public Release scroll state for an unmounted scroll container. */
+export declare function releaseScrollHandle(scrollId: string): void;
+
 /** @public */
 export declare type ResizeEvent = {
     type: "resize";
@@ -1097,7 +1138,8 @@ export declare type ScrollHandle = {
     scrollTo: (y: number) => void;
     scrollBy: (dy: number) => void;
     scrollIntoView: (y: number, height: number) => void;
-    readonly _scrollId: string;
+    readonly scrollId: string;
+    /* Excluded from this release type: _scrollId */
 };
 
 /** @public */
@@ -1108,7 +1150,7 @@ export declare const selectionSignal: Accessor<TextSelection | null>;
 export declare function setDebug(enabled: boolean): void;
 
 /** @public */
-export declare function setFocus(id: string): void;
+export declare function setFocus(id: string | null): void;
 
 /** @public */
 export declare function setPointerCapture(nodeId: number): void;

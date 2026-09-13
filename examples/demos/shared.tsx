@@ -1,7 +1,6 @@
 
 import { Input } from "@vexart/headless"
-import { useFocus } from "@vexart/engine"
-import { measureForLayout } from "@vexart/engine/internal"
+import { measureTextWidth, useFocus } from "@vexart/engine"
 import type { KeyEvent } from "@vexart/engine"
 import { createContext, For, Show, useContext } from "solid-js"
 import type { JSX } from "solid-js"
@@ -18,8 +17,7 @@ const viewport = createContext<{ s: (value: number) => number }>()
 
 export function useDemo() {
   const value = useContext(viewport)
-  if (!value) throw new Error("Demo content must be inside DemoFrame")
-  return value
+  return value ?? { s: (value: number) => value }
 }
 
 /** All coordinates are measured against the approved 1536 × 1024 artboards. */
@@ -74,8 +72,8 @@ export function Icon(props: { name: IconName; x?: number; y?: number; size?: num
   const { s } = useDemo()
   return <image src={new URL(`./assets/icons/${props.name}-${props.tone ?? "white"}.png`, import.meta.url).pathname}
     width={s(props.size ?? 22)} height={s(props.size ?? 22)} objectFit="contain" pointerPassthrough
-    floating={props.x === undefined && props.y === undefined ? undefined : "parent"}
-    floatOffset={{ x: s(props.x ?? 0), y: s(props.y ?? 0) }} />
+    floating={props.x !== undefined || props.y !== undefined ? "parent" : undefined}
+    floatOffset={props.x !== undefined || props.y !== undefined ? { x: s(props.x ?? 0), y: s(props.y ?? 0) } : undefined} />
 }
 
 export function Button(props: { x: number; y: number; width: number; height: number; id: string; label?: string; icon?: IconName; onPress: () => void; onKeyDown?: (event: KeyEvent) => void; active?: boolean; primary?: boolean; border?: boolean; align?: "left" | "center"; children?: JSX.Element; disabled?: boolean; size?: number }) {
@@ -97,12 +95,11 @@ export function Button(props: { x: number; y: number; width: number; height: num
   </box>
 }
 
-export function SearchField(props: { x: number; y: number; width: number; height: number; id: string; value: string; onChange: (value: string) => void; placeholder: string }) {
+export function SearchField(props: { x?: number; y?: number; width: number; height: number; id: string; value: string; onChange: (value: string) => void; placeholder: string }) {
   const { s } = useDemo()
-  return <Pane x={props.x} y={props.y} width={props.width} height={props.height}>
-    <Input value={props.value} onChange={props.onChange} placeholder={props.placeholder} focusId={props.id}
+  const content = <Input value={props.value} onChange={props.onChange} placeholder={props.placeholder} focusId={props.id}
       renderInput={ctx => {
-        const cursor = () => measureForLayout(ctx.value.slice(0, ctx.cursor), 0, Math.round(s(16)), ui.sans).width
+        const cursor = () => measureTextWidth(ctx.value.slice(0, ctx.cursor), { fontSize: Math.round(s(16)), fontFamily: ui.sans })
         return <box {...ctx.inputProps} width={s(props.width)} height={s(props.height)} direction="row" gap={s(12)} paddingX={s(13)}
           alignY="center" borderWidth={s(1)} borderColor={ctx.focused ? "#8f999e" : "#404141"} cornerRadius={s(7)} backgroundColor="#1a1b1b">
           <Icon name="magnifying-glass" size={20} tone="muted" />
@@ -114,5 +111,25 @@ export function SearchField(props: { x: number; y: number; width: number; height
           </box>
         </box>
       }} />
-  </Pane>
+  if (props.x !== undefined && props.y !== undefined) {
+    return <Pane x={props.x} y={props.y} width={props.width} height={props.height}>{content}</Pane>
+  }
+  return <box width={s(props.width)} height={s(props.height)}>{content}</box>
+}
+
+export function DemoFooter(props: { hints: readonly Hint[] }) {
+  return (
+    <box width="100%" height={44} direction="row" alignY="center" alignX="space-between" paddingX={24} backgroundColor="#141515" borderTop={1} borderColor={ui.border}>
+      <box direction="row" alignY="center" gap={20}>
+        <For each={props.hints}>{hint => <box direction="row" width="fit" flexShrink={0} alignY="center" gap={10}>
+          <box height={26} minWidth={26} width="fit" flexShrink={0} paddingX={7} alignX="center" alignY="center"
+            borderWidth={1} borderColor="#404141" backgroundColor="#242626" cornerRadius={4}>
+            <text flexShrink={0} fontFamily={ui.mono} color={ui.text} fontSize={13}>{hint.keys}</text>
+          </box>
+          <text flexShrink={0} fontFamily={ui.sans} color={ui.muted} fontSize={13}>{hint.label}</text>
+        </box>}</For>
+      </box>
+      <text fontFamily={ui.mono} fontSize={11} color={ui.faint}>VEXART DEMO</text>
+    </box>
+  )
 }

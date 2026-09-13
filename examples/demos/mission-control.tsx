@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { focusedId, onInput, setFocus } from "@vexart/engine"
-import { DemoFrame, useDemo, Label, Icon, Button, SearchField, Pane } from "./shared"
+import { Label, Icon, Button, SearchField, Pane, DemoFooter, ui } from "./shared"
 
 type ServiceState = "Running" | "Stopped"
 type LogLevel = "INFO" | "WARN" | "ERROR"
@@ -228,16 +228,15 @@ function serviceRow(service: Service, y: number, selected: () => boolean, onPres
   )
 }
 
-export type MissionControlAppProps = { width: number; height: number; live?: boolean }
+export type MissionControlAppProps = { width?: number; height?: number; live?: boolean }
 
-function PlotCanvas(props: { history: number[]; max: number; color: number; cacheKey: string }) {
-  const { s } = useDemo()
-  const width = () => s(453)
-  const height = () => s(117)
-  return <canvas width={width()} height={height()} drawCacheKey={`${props.cacheKey}-${width()}-${height()}`} onDraw={chartDraw(props.history, props.max, props.color, width(), height())} />
+function PlotCanvas(props: { history: number[]; max: number; color: number; cacheKey: string; width: number; height: number }) {
+  return <canvas width={props.width} height={props.height} drawCacheKey={`${props.cacheKey}-${props.width}-${props.height}`} onDraw={chartDraw(props.history, props.max, props.color, props.width, props.height)} />
 }
 
 export function MissionControlApp(props: MissionControlAppProps) {
+  const width = () => props.width ?? 1536
+  const height = () => props.height ?? 1024
   const [selectedId, setSelectedId] = createSignal("api")
   const [paused, setPaused] = createSignal(false)
   const [tick, setTick] = createSignal(0)
@@ -356,91 +355,120 @@ export function MissionControlApp(props: MissionControlAppProps) {
   })
   onCleanup(stopInput)
 
+  const contentWidth = () => width() - 385
+  const bodyHeight = () => height() - 46 - 44
+  const chartWidth = () => Math.round(453 * (width() / 1536))
+  const divX = () => Math.round(contentWidth() * (563 / 1151))
+  const memColX = () => divX() + 34
+  const memChartX = () => divX() + 94
+
+  const pauseBtnX = () => contentWidth() - 260
+  const searchBtnX = () => contentWidth() - 68
+  const searchIconX = () => contentWidth() - 56
+
+  const logsFilterX = () => contentWidth() - 320
+  const logsLevelX = () => contentWidth() - 442
+  const caretX = () => contentWidth() - 361
+  const logsDividerWidth = () => contentWidth() - 53
+  const logsTableWidth = () => contentWidth() - 33
+  const logsTableHeight = () => Math.max(200, bodyHeight() - 424)
+
   return (
-    <DemoFrame width={props.width} height={props.height} title="vexart — mission control" hints={[
-      { keys: "↑↓", label: "Select service" },
-      { keys: "/", label: "Filter logs" },
-      { keys: "Space", label: "Pause" },
-      { keys: "Esc", label: "Back" },
-    ]}>
-      <Pane x={0} y={40} width={1536} height={46} fill={colors.background} border={colors.border}>
-        <Label x={23} y={12} size={20} weight={600} color={colors.text}>Mission Control</Label>
-        <Label x={188} y={14} size={16} mono color={colors.muted}>~/projects/vexart</Label>
-        <Pane x={1381} y={7} width={134} height={29} fill="#1f2020" border="#3e4040" radius={6}>
-          <Label x={9} y={5} width={116} size={12} mono align="center" color={colors.muted}>SIMULATED DATA</Label>
-        </Pane>
-      </Pane>
+    <box width={width()} height={height()} direction="column" backgroundColor={colors.background}>
+      {/* Top Header Bar */}
+      <box width="100%" height={46} borderColor={colors.border} borderBottom={1} direction="row" alignY="center" alignX="space-between" paddingX={24} backgroundColor={colors.background}>
+        <box direction="row" alignY="center" gap={16}>
+          <text color={colors.text} fontSize={20} fontWeight={600} fontFamily={ui.sans}>Mission Control</text>
+          <text color={colors.muted} fontSize={16} fontFamily={ui.mono}>~/projects/vexart</text>
+        </box>
+        <box width={134} height={29} alignX="center" alignY="center" backgroundColor="#1f2020" borderColor="#3e4040" borderWidth={1} cornerRadius={6}>
+          <text color={colors.muted} fontSize={12} fontFamily={ui.mono}>SIMULATED DATA</text>
+        </box>
+      </box>
 
-      <Pane x={0} y={86} width={385} height={866} fill={colors.surface} border={colors.border}>
-        <Label x={23} y={22} size={21} weight={600} color={colors.text}>Services</Label>
-        <For each={services}>{(service, index) => serviceRow(service, [59, 161, 258, 360, 457, 555][index()]!, () => selectedId() === service.id, () => {
-          setSelectedId(service.id)
-          setSelectedLog(8)
-        })}</For>
-        <Pane x={9} y={258} width={366} height={1} fill={colors.border} />
-        <Pane x={9} y={349} width={366} height={1} fill={colors.border} />
-        <Pane x={9} y={451} width={366} height={1} fill={colors.border} />
-        <Pane x={9} y={554} width={366} height={1} fill={colors.border} />
-        <Label x={23} y={828} size={15} mono color={colors.muted}>5 running · 1 stopped</Label>
-      </Pane>
+      {/* Main Body */}
+      <box width="100%" height="grow" direction="row">
+        {/* Services Sidebar */}
+        <box width={385} height="100%" backgroundColor={colors.surface} borderColor={colors.border} borderRight={1}>
+          <Label x={23} y={22} size={21} weight={600} color={colors.text}>Services</Label>
+          <For each={services}>{(service, index) => serviceRow(service, [59, 161, 258, 360, 457, 555][index()]!, () => selectedId() === service.id, () => {
+            setSelectedId(service.id)
+            setSelectedLog(8)
+          })}</For>
+          <Pane x={9} y={258} width={366} height={1} fill={colors.border} />
+          <Pane x={9} y={349} width={366} height={1} fill={colors.border} />
+          <Pane x={9} y={451} width={366} height={1} fill={colors.border} />
+          <Pane x={9} y={554} width={366} height={1} fill={colors.border} />
+          <Label x={23} y={Math.max(680, bodyHeight() - 38)} size={15} mono color={colors.muted}>5 running · 1 stopped</Label>
+        </box>
 
-      <Pane x={385} y={86} width={1151} height={866} fill={colors.background}>
-        <Label x={29} y={25} size={28} weight={600} color={colors.text}>{selected().name}</Label>
-        <Pane x={96} y={32} width={13} height={13} fill={selected().state === "Running" ? colors.mint : colors.red} radius={7} />
-        <Label x={120} y={27} size={16} color={selected().state === "Running" ? colors.mint : colors.muted}>{selected().state}</Label>
-        <Label x={29} y={61} size={16} mono color={colors.muted}>{selected().command}{selected().port ? ` · localhost${selected().port}` : ""}</Label>
-        <Button x={891} y={23} width={175} height={39} id="mission-pause" label={paused() ? "Resume stream" : "Pause stream"} icon={paused() ? "play" : "pause"} onPress={() => setPaused((value) => !value)} border />
-        <Button x={1083} y={23} width={44} height={39} id="mission-search" onPress={() => setFocus("mission-filter")} border />
-        <Icon name="magnifying-glass" x={1095} y={32} size={22} />
+        {/* Content Pane */}
+        <box width="grow" height="100%" backgroundColor={colors.background}>
+          <Label x={29} y={25} size={28} weight={600} color={colors.text}>{selected().name}</Label>
+          <Pane x={96} y={32} width={13} height={13} fill={selected().state === "Running" ? colors.mint : colors.red} radius={7} />
+          <Label x={120} y={27} size={16} color={selected().state === "Running" ? colors.mint : colors.muted}>{selected().state}</Label>
+          <Label x={29} y={61} size={16} mono color={colors.muted}>{selected().command}{selected().port ? ` · localhost${selected().port}` : ""}</Label>
+          <Button x={pauseBtnX()} y={23} width={175} height={39} id="mission-pause" label={paused() ? "Resume stream" : "Pause stream"} icon={paused() ? "play" : "pause"} onPress={() => setPaused((value) => !value)} border />
+          <Button x={searchBtnX()} y={23} width={44} height={39} id="mission-search" onPress={() => setFocus("mission-filter")} border />
+          <Icon name="magnifying-glass" x={searchIconX()} y={32} size={22} />
 
-        <Label x={29} y={105} size={16} mono color={colors.text}>CPU</Label>
-        <Label x={29} y={128} size={31} weight={600} color={colors.text}>{`${liveCpu().toFixed(1)}%`}</Label>
-        <Label x={597} y={105} size={16} mono color={colors.text}>MEMORY</Label>
-        <Label x={597} y={128} size={31} weight={600} color={colors.text}>{`${liveMemory()} MB`}</Label>
-        <Pane x={563} y={100} width={1} height={226} fill={colors.border} />
+          <Label x={29} y={105} size={16} mono color={colors.text}>CPU</Label>
+          <Label x={29} y={128} size={31} weight={600} color={colors.text}>{`${liveCpu().toFixed(1)}%`}</Label>
+          <Label x={memColX()} y={105} size={16} mono color={colors.text}>MEMORY</Label>
+          <Label x={memColX()} y={128} size={31} weight={600} color={colors.text}>{`${liveMemory()} MB`}</Label>
+          <Pane x={divX()} y={100} width={1} height={226} fill={colors.border} />
 
-        <Pane x={79} y={178} width={453} height={117}>
-          <PlotCanvas history={cpuHistory()} max={100} color={0x7cdda4ff} cacheKey={`cpu-${selectedId()}-${tick()}`} />
-        </Pane>
-        <Pane x={657} y={178} width={453} height={117}>
-          <PlotCanvas history={memoryHistory()} max={512} color={0x7cdda4ff} cacheKey={`memory-${selectedId()}-${tick()}`} />
-        </Pane>
-        <Label x={29} y={178} size={14} mono color={colors.muted}>100%</Label>
-        <Label x={38} y={237} size={14} mono color={colors.muted}>50%</Label>
-        <Label x={45} y={294} size={14} mono color={colors.muted}>0%</Label>
-        <Label x={597} y={178} size={14} mono color={colors.muted}>512 MB</Label>
-        <Label x={597} y={237} size={14} mono color={colors.muted}>256 MB</Label>
-        <Label x={606} y={294} size={14} mono color={colors.muted}>0 MB</Label>
-        <Label x={79} y={316} size={14} mono color={colors.muted}>60s</Label>
-        <Label x={188} y={316} size={14} mono color={colors.muted}>45s</Label>
-        <Label x={303} y={316} size={14} mono color={colors.muted}>30s</Label>
-        <Label x={417} y={316} size={14} mono color={colors.muted}>15s</Label>
-        <Label x={508} y={316} size={14} mono color={colors.muted}>now</Label>
-        <Label x={657} y={316} size={14} mono color={colors.muted}>60s</Label>
-        <Label x={766} y={316} size={14} mono color={colors.muted}>45s</Label>
-        <Label x={881} y={316} size={14} mono color={colors.muted}>30s</Label>
-        <Label x={995} y={316} size={14} mono color={colors.muted}>15s</Label>
-        <Label x={1086} y={316} size={14} mono color={colors.muted}>now</Label>
+          <Pane x={79} y={178} width={chartWidth()} height={117}>
+            <PlotCanvas history={cpuHistory()} max={100} color={0x7cdda4ff} cacheKey={`cpu-${selectedId()}-${tick()}`} width={chartWidth()} height={117} />
+          </Pane>
+          <Pane x={memChartX()} y={178} width={chartWidth()} height={117}>
+            <PlotCanvas history={memoryHistory()} max={512} color={0x7cdda4ff} cacheKey={`memory-${selectedId()}-${tick()}`} width={chartWidth()} height={117} />
+          </Pane>
+          <Label x={29} y={178} size={14} mono color={colors.muted}>100%</Label>
+          <Label x={38} y={237} size={14} mono color={colors.muted}>50%</Label>
+          <Label x={45} y={294} size={14} mono color={colors.muted}>0%</Label>
+          <Label x={memColX()} y={178} size={14} mono color={colors.muted}>512 MB</Label>
+          <Label x={memColX()} y={237} size={14} mono color={colors.muted}>256 MB</Label>
+          <Label x={memColX() + 9} y={294} size={14} mono color={colors.muted}>0 MB</Label>
+          <Label x={79} y={316} size={14} mono color={colors.muted}>60s</Label>
+          <Label x={188} y={316} size={14} mono color={colors.muted}>45s</Label>
+          <Label x={303} y={316} size={14} mono color={colors.muted}>30s</Label>
+          <Label x={417} y={316} size={14} mono color={colors.muted}>15s</Label>
+          <Label x={508} y={316} size={14} mono color={colors.muted}>now</Label>
+          <Label x={memChartX()} y={316} size={14} mono color={colors.muted}>60s</Label>
+          <Label x={memChartX() + 109} y={316} size={14} mono color={colors.muted}>45s</Label>
+          <Label x={memChartX() + 224} y={316} size={14} mono color={colors.muted}>30s</Label>
+          <Label x={memChartX() + 338} y={316} size={14} mono color={colors.muted}>15s</Label>
+          <Label x={memChartX() + 429} y={316} size={14} mono color={colors.muted}>now</Label>
 
-        <Pane x={29} y={349} width={1098} height={1} fill={colors.border} />
-        <Label x={29} y={364} size={22} weight={600} color={colors.text}>Logs</Label>
-        <Button x={709} y={363} width={106} height={36} id="mission-level" label={level()} size={14} onPress={() => setLevel((value) => value === "All levels" ? "INFO" : value === "INFO" ? "WARN" : value === "WARN" ? "ERROR" : "All levels")} border />
-        <Icon name="caret-down" x={790} y={373} size={16} />
-        <SearchField x={831} y={363} width={296} height={36} id="mission-filter" value={filter()} onChange={setFilter} placeholder="Filter logs..." />
-        <Pane x={9} y={412} width={1118} height={1} fill={colors.border} />
-        <Pane x={9} y={424} width={1118} height={410}>
-          <For each={visibleLogs()}>{(entry, index) => {
-            const isSelected = () => selectedLog() === index()
-            return <Button x={0} y={index() * 26} width={1118} height={26} id={`log-line-${entry.index}`} active={isSelected()} border={false} onPress={() => setSelectedLog(index())} align="left">
-              <Label x={20} y={2} size={16} mono color={colors.muted}>{entry.log.time}</Label>
-              <Label x={141} y={2} size={16} mono color={entry.log.level === "WARN" ? colors.amber : entry.log.level === "ERROR" ? colors.red : colors.mint}>{entry.log.level}</Label>
-              <Label x={222} y={2} size={16} mono color={entry.log.level === "WARN" ? colors.amber : colors.text}>{entry.log.message}</Label>
-              <Show when={entry.log.detail}><Label x={entry.log.message.length * 9 + 250} y={2} size={16} mono color={colors.muted}>{entry.log.detail}</Label></Show>
-            </Button>
-          }}</For>
-        </Pane>
-      </Pane>
-    </DemoFrame>
+          <Pane x={29} y={349} width={logsDividerWidth()} height={1} fill={colors.border} />
+          <Label x={29} y={364} size={22} weight={600} color={colors.text}>Logs</Label>
+          <Button x={logsLevelX()} y={363} width={106} height={36} id="mission-level" label={level()} size={14} onPress={() => setLevel((value) => value === "All levels" ? "INFO" : value === "INFO" ? "WARN" : value === "WARN" ? "ERROR" : "All levels")} border />
+          <Icon name="caret-down" x={caretX()} y={373} size={16} />
+          <SearchField x={logsFilterX()} y={363} width={296} height={36} id="mission-filter" value={filter()} onChange={setFilter} placeholder="Filter logs..." />
+          <Pane x={9} y={412} width={logsTableWidth()} height={1} fill={colors.border} />
+          <Pane x={9} y={424} width={logsTableWidth()} height={logsTableHeight()}>
+            <For each={visibleLogs()}>{(entry, index) => {
+              const isSelected = () => selectedLog() === index()
+              return <Button x={0} y={index() * 26} width={logsTableWidth()} height={26} id={`log-line-${entry.index}`} active={isSelected()} border={false} onPress={() => setSelectedLog(index())} align="left">
+                <Label x={20} y={2} size={16} mono color={colors.muted}>{entry.log.time}</Label>
+                <Label x={141} y={2} size={16} mono color={entry.log.level === "WARN" ? colors.amber : entry.log.level === "ERROR" ? colors.red : colors.mint}>{entry.log.level}</Label>
+                <Label x={222} y={2} size={16} mono color={entry.log.level === "WARN" ? colors.amber : colors.text}>{entry.log.message}</Label>
+                <Show when={entry.log.detail}><Label x={entry.log.message.length * 9 + 250} y={2} size={16} mono color={colors.muted}>{entry.log.detail}</Label></Show>
+              </Button>
+            }}</For>
+          </Pane>
+        </box>
+      </box>
+
+      {/* Footer */}
+      <DemoFooter hints={[
+        { keys: "↑↓", label: "Select service" },
+        { keys: "/", label: "Filter logs" },
+        { keys: "Space", label: "Pause" },
+        { keys: "Esc", label: "Back" },
+      ]} />
+    </box>
   )
 }
 

@@ -1,12 +1,10 @@
 import { expect, test } from "bun:test"
 import { createSignal } from "solid-js"
 
-import { focusedId } from "@vexart/engine"
-import { setFocusedId, getHandleNode } from "@vexart/engine/internal"
-import type { NodeHandle } from "@vexart/engine"
-import type { TGENode } from "@vexart/engine/internal"
+import { focusedId, clearFocus, type NodeHandle } from "@vexart/engine"
 import { renderToBufferAfterInteractions, renderToBuffer } from "../../packages/engine/src/testing/render-to-buffer"
 import { MissionControlApp } from "./mission-control"
+import { captureDemo } from "./capture"
 
 function coverage(pixels: Uint8Array) {
   let nonBlack = 0
@@ -16,9 +14,9 @@ function coverage(pixels: Uint8Array) {
   return nonBlack / (pixels.length / 4)
 }
 
-function textNodes(root: TGENode) {
+function textNodes(root: NodeHandle) {
   const texts: string[] = []
-  const visit = (node: TGENode) => {
+  const visit = (node: NodeHandle) => {
     if (node.kind === "text" && node.text) texts.push(node.text)
     node.children.forEach(visit)
   }
@@ -26,13 +24,13 @@ function textNodes(root: TGENode) {
   return texts
 }
 
-function hasLabelAt(root: TGENode, text: string, x: number, y: number) {
+function hasLabelAt(root: NodeHandle, text: string, x: number, y: number) {
   let found = false
-  const visit = (node: TGENode) => {
+  const visit = (node: NodeHandle) => {
     if (found) return
     if (node.kind === "text" && node.text === text) {
       for (let parent = node.parent; parent; parent = parent.parent) {
-        const offset = parent.props.floatOffset
+        const offset = (parent.props as any).floatOffset
         if (offset && offset.x === x && offset.y === y) {
           found = true
           return
@@ -59,15 +57,15 @@ test("Mission Control service selection and log filtering update the scene", asy
     1536,
     1024,
     async ({ clickAt, keyPress, frame }) => {
-      setFocusedId(null)
+      clearFocus()
       await frame()
       expect(rootHandle).toBeDefined()
       if (!rootHandle) throw new Error("Mission Control root handle is not mounted")
-      const root = getHandleNode(rootHandle)
+      const root = rootHandle
       expect(hasLabelAt(root, "api", 29, 25)).toBe(true)
 
       // Web row: its approved design position is y247..342.
-      await clickAt(130, 86 + 161 + 35)
+      await clickAt(130, 46 + 161 + 35)
       await frame()
       expect(hasLabelAt(root, "web", 29, 25)).toBe(true)
 
@@ -95,8 +93,8 @@ test("Mission Control service selection and log filtering update the scene", asy
       expect(textNodes(root).filter(text => text === "/")).toHaveLength(1)
 
       // The toolbar search button uses the same focus target.
-      await setFocusedId(null)
-      await clickAt(385 + 1083 + 20, 86 + 23 + 18)
+      await clearFocus()
+      await clickAt(385 + 1083 + 20, 46 + 23 + 18)
       expect(focusedId()).toBe("mission-filter")
       for (const char of "warn") await keyPress(char, char)
       await frame()
@@ -111,7 +109,7 @@ test("Mission Control service selection and log filtering update the scene", asy
       expect(textNodes(root)).toContain("Vite dev server ready")
 
       // Severity filter is a real state transition, not just a visual delta.
-      await clickAt(385 + 709 + 45, 86 + 363 + 18)
+      await clickAt(385 + 709 + 45, 46 + 363 + 18)
       await frame()
       expect(textNodes(root)).not.toContain("WARN")
     },
@@ -120,9 +118,9 @@ test("Mission Control service selection and log filtering update the scene", asy
   expect(coverage(after.pixels)).toBeGreaterThan(0.02)
 })
 
-function findCanvas(root: TGENode) {
-  let canvas: TGENode | undefined
-  const visit = (node: TGENode) => {
+function findCanvas(root: NodeHandle) {
+  let canvas: NodeHandle | undefined
+  const visit = (node: NodeHandle) => {
     if (canvas) return
     if (node.kind === "canvas") canvas = node
     node.children.forEach(visit)
@@ -131,8 +129,8 @@ function findCanvas(root: TGENode) {
   return canvas
 }
 
-function chartLineSignature(root: TGENode) {
-  return findCanvas(root)?._canvasExtra?.displayListCommands
+function chartLineSignature(root: NodeHandle) {
+  return findCanvas(root)?.canvasCommands
     ?.filter((command) => command.kind === "line")
     .map((command) => `${command.x0}:${command.y0}:${command.x1}:${command.y1}`)
 }
@@ -140,27 +138,27 @@ function chartLineSignature(root: TGENode) {
 test("Mission Control plot canvases resize in place with the demo viewport", async () => {
   const [size, setSize] = createSignal({ width: 1536, height: 1024 })
   let rootHandle: NodeHandle | undefined
-  let initialCanvas: TGENode | undefined
-  let resizedCanvas: TGENode | undefined
+  let initialCanvas: NodeHandle | undefined
+  let resizedCanvas: NodeHandle | undefined
   await renderToBufferAfterInteractions(
     () => <box width={1536} height={1024} ref={(handle: NodeHandle) => { rootHandle = handle }}><MissionControlApp width={size().width} height={size().height} live={false} /></box>,
     1536,
     1024,
     async ({ frame }) => {
-      setFocusedId(null)
+      clearFocus()
       await frame()
       if (!rootHandle) throw new Error("Mission Control root handle is not mounted")
-      const root = getHandleNode(rootHandle)
+      const root = rootHandle
       initialCanvas = findCanvas(root)
       expect(initialCanvas).toBeDefined()
       expect(initialCanvas!.layout.width).toBeCloseTo(453, 3)
-      const initialCacheKey = initialCanvas!._canvasExtra?.drawCacheKey
+      const initialCacheKey = initialCanvas!.canvasDrawCacheKey
       setSize({ width: 1200, height: 800 })
       await frame()
       resizedCanvas = findCanvas(root!)
       expect(resizedCanvas).toBe(initialCanvas)
       expect(resizedCanvas!.layout.width).toBeCloseTo(453 * (1200 / 1536), 0)
-      expect(resizedCanvas!._canvasExtra?.drawCacheKey).not.toBe(initialCacheKey)
+      expect(resizedCanvas!.canvasDrawCacheKey).not.toBe(initialCacheKey)
     },
     3,
   )
@@ -173,10 +171,10 @@ test("Mission Control live mode appends deterministic logs and pauses the stream
     1536,
     1024,
     async ({ clickAt, frame }) => {
-      setFocusedId(null)
+      clearFocus()
       await frame()
       if (!rootHandle) throw new Error("Mission Control root handle is not mounted")
-      const root = getHandleNode(rootHandle)
+      const root = rootHandle
       const initialLines = chartLineSignature(root)
       await new Promise<void>((resolve) => setTimeout(resolve, 980))
       await frame()
@@ -184,11 +182,35 @@ test("Mission Control live mode appends deterministic logs and pauses the stream
       expect(streamed).toContain("13:09:27")
       expect(chartLineSignature(root)?.[8]).not.toBe(initialLines?.[8])
       const countBeforePause = streamed.length
-      await clickAt(385 + 891 + 80, 86 + 23 + 19)
+      await clickAt(385 + 891 + 80, 46 + 23 + 19)
       await new Promise<void>((resolve) => setTimeout(resolve, 980))
       await frame()
       expect(textNodes(root).filter(text => text.startsWith("13:09:")).length).toBe(countBeforePause)
     },
     3,
   )
+})
+
+test("Mission Control adapts and resizes fluidly when width and height change", async () => {
+  let rootHandle: NodeHandle | undefined
+  let setDimensions: ((s: { width: number; height: number }) => void) | undefined
+  const scene = () => {
+    const [size, setSize] = createSignal({ width: 1536, height: 1024 })
+    setDimensions = setSize
+    return (
+      <box width={size().width} height={size().height} ref={(h: NodeHandle) => { rootHandle = h }}>
+        <MissionControlApp width={size().width} height={size().height} live={false} />
+      </box>
+    )
+  }
+  await captureDemo(scene, 1536, 1024, async ({ frame }) => {
+    if (!rootHandle || !setDimensions) throw new Error("Mission Control was not mounted")
+    expect(rootHandle.layout.width).toBe(1536)
+    expect(rootHandle.layout.height).toBe(1024)
+
+    setDimensions({ width: 1920, height: 1080 })
+    await frame()
+    expect(rootHandle.layout.width).toBe(1920)
+    expect(rootHandle.layout.height).toBe(1080)
+  })
 })

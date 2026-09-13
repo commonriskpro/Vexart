@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test"
+import { createSignal } from "solid-js"
+import type { NodeHandle } from "@vexart/engine"
 import { focusedId } from "@vexart/engine"
 import { renderToBuffer, renderToBufferAfterInteractions } from "../../packages/engine/src/testing/render-to-buffer"
 import { StudioApp, createStudioModel } from "./studio"
+import { captureDemo } from "./capture"
 
 function pixelDelta(left: Uint8Array, right: Uint8Array) {
   let delta = 0
@@ -43,7 +46,7 @@ test("Studio selects cards and opens a real preview overlay", async () => {
     async ({ clickAt, keyPress, frame }) => {
       await clickAt(600, 220)
       expect(focusedId()).toBe("studio-card-coast-01")
-      await clickAt(1000, 862)
+      await clickAt(1000, 940)
       await frame()
       expect(focusedId()).toBe("studio-close-preview")
       await keyPress("escape")
@@ -64,7 +67,7 @@ test("Studio keyboard shortcuts focus search and the preview controls change the
     width,
     height,
     async ({ clickAt, frame }) => {
-      await clickAt(1470, 154)
+      await clickAt(1470, 115)
       await frame()
       expect(focusedId()).toBe("studio-100")
     },
@@ -138,15 +141,39 @@ test("Studio list and grid layouts use the active card bounds", async () => {
     width,
     height,
     async ({ clickAt }) => {
-      await clickAt(1490, 80)
+      await clickAt(1490, 38)
       expect(focusedId()).toBe("studio-list")
-      await clickAt(300, 170)
+      await clickAt(300, 135)
       expect(focusedId()).toBe("studio-card-dunes-01")
-      await clickAt(1435, 80)
+      await clickAt(1435, 38)
       expect(focusedId()).toBe("studio-grid")
       await clickAt(600, 220)
       expect(focusedId()).toBe("studio-card-coast-01")
     },
     4,
   )
+})
+
+test("Studio adapts and resizes fluidly when width and height change", async () => {
+  let rootHandle: NodeHandle | undefined
+  let setDimensions: ((s: { width: number; height: number }) => void) | undefined
+  const scene = () => {
+    const [size, setSize] = createSignal({ width: 1536, height: 1024 })
+    setDimensions = setSize
+    return (
+      <box width={size().width} height={size().height} ref={(h: NodeHandle) => { rootHandle = h }}>
+        <StudioApp width={size().width} height={size().height} />
+      </box>
+    )
+  }
+  await captureDemo(scene, 1536, 1024, async ({ frame }) => {
+    if (!rootHandle || !setDimensions) throw new Error("Studio was not mounted")
+    expect(rootHandle.layout.width).toBe(1536)
+    expect(rootHandle.layout.height).toBe(1024)
+
+    setDimensions({ width: 1920, height: 1080 })
+    await frame()
+    expect(rootHandle.layout.width).toBe(1920)
+    expect(rootHandle.layout.height).toBe(1080)
+  })
 })

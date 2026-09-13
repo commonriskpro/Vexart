@@ -29,6 +29,8 @@ export type ScrollHandle = {
   scrollTo: (y: number) => void
   scrollBy: (dy: number) => void
   scrollIntoView: (y: number, height: number) => void
+  readonly scrollId: string
+  /** @internal @deprecated Use scrollId instead */
   readonly _scrollId: string
 }
 
@@ -107,6 +109,7 @@ export function createScrollHandle(scrollId: string): ScrollHandle {
       if (y < visibleTop) handle.scrollTo(-y)
       else if (y + height > visibleBottom) handle.scrollTo(-(y + height - state.viewportHeight))
     },
+    get scrollId() { return scrollId },
     get _scrollId() { return scrollId },
   }
 

@@ -1,6 +1,6 @@
 import { ptr } from "bun:ffi"
 import { openVexartLibrary } from "./vexart-bridge"
-import { ensureImageExtra, type TGENode } from "./node"
+import type { TGENode } from "./node-types"
 
 const encoder = new TextEncoder()
 
@@ -65,7 +65,8 @@ export function nativeImageAssetRelease(handle: bigint, _ctx: bigint = 1n): bool
 
 /** Each node owns one native reference, independently of the decode cache. */
 export function syncNativeImageHandle(node: TGENode, handle: bigint | null) {
-  const extra = ensureImageExtra(node)
+  if (!node._imageExtra) node._imageExtra = { buffer: null, state: "idle", nativeHandle: null }
+  const extra = node._imageExtra
   if (extra.nativeHandle === handle) return
   if (handle !== null) {
     const { symbols } = openVexartLibrary()

@@ -82,6 +82,7 @@ export class CanvasContext {
     rect(x: number, y: number, w: number, h: number, style?: ShapeStyle & {
         radius?: number;
     }): void;
+    // @internal
     _reset(viewport?: Viewport): void;
     starfield(x: number, y: number, w: number, h: number, options?: {
         seed?: number;
@@ -127,6 +128,9 @@ export type CircleCmd = {
     stroke?: number;
     strokeWidth: number;
 };
+
+// @public
+export function clearFocus(): void;
 
 // @public (undocumented)
 export function clearFontRegistry(): void;
@@ -322,6 +326,16 @@ export { For }
 
 // @public (undocumented)
 export function getFont(id: number): FontDescriptor;
+
+// @public (undocumented)
+export function getImageCacheStats(): {
+    decodedCount: number;
+    decodedBytes: number;
+    pendingCount: number;
+    scaledCacheCount: number;
+    scaledEntries: number;
+    scaledBytes: number;
+};
 
 // @public (undocumented)
 export function getSelectedText(): string;
@@ -567,7 +581,22 @@ export type LineCmd = {
 export { Match }
 
 // @public (undocumented)
-export function measureTextWidth(text: string, fontId: number): number;
+export function measureText(text: string, fontIdOrOptions?: number | MeasureTextOptions): {
+    width: number;
+    height: number;
+};
+
+// @public (undocumented)
+export type MeasureTextOptions = {
+    fontId?: number;
+    fontSize?: number;
+    fontFamily?: string;
+    fontWeight?: number;
+    fontStyle?: string;
+};
+
+// @public (undocumented)
+export function measureTextWidth(text: string, fontIdOrOptions?: number | MeasureTextOptions): number;
 
 // @public (undocumented)
 export type Modifiers = {
@@ -680,6 +709,11 @@ export type NodeHandle = {
     readonly kind: string;
     readonly layout: LayoutRect;
     readonly isDestroyed: boolean;
+    readonly text?: string;
+    readonly props: Readonly<Record<string, unknown>>;
+    readonly imageState?: "idle" | "loading" | "loaded" | "error";
+    readonly canvasCommands?: readonly CanvasDrawCommand[];
+    readonly canvasDrawCacheKey?: string;
     focus: () => void;
     blur: () => void;
     readonly isFocused: boolean;
@@ -704,6 +738,9 @@ export const ONE_DARK: ThemeTokenStyle[];
 //
 // @public (undocumented)
 export function onInput(handler: InputSubscriber): () => void;
+
+// @public (undocumented)
+export function onPostScroll(cb: () => void): () => void;
 
 // @public (undocumented)
 export type ParticleConfig = {
@@ -824,6 +861,9 @@ export function registerFont(id: number, desc: FontDescriptor): void;
 // @public (undocumented)
 export function releasePointerCapture(nodeId: number): void;
 
+// @public
+export function releaseScrollHandle(scrollId: string): void;
+
 // @public (undocumented)
 export type ResizeEvent = {
     type: "resize";
@@ -872,6 +912,7 @@ export type ScrollHandle = {
     scrollTo: (y: number) => void;
     scrollBy: (dy: number) => void;
     scrollIntoView: (y: number, height: number) => void;
+    readonly scrollId: string;
     readonly _scrollId: string;
 };
 
@@ -882,7 +923,7 @@ export const selectionSignal: Accessor<TextSelection | null>;
 export function setDebug(enabled: boolean): void;
 
 // @public (undocumented)
-export function setFocus(id: string): void;
+export function setFocus(id: string | null): void;
 
 // @public (undocumented)
 export function setPointerCapture(nodeId: number): void;

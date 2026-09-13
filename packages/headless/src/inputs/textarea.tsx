@@ -48,7 +48,7 @@ import {
   getTreeSitterClient,
   highlightsToTokens,
 } from "@vexart/engine"
-import { markDirty, setFocusedId } from "@vexart/engine/internal"
+import { clearFocus } from "@vexart/engine"
 import type { KeyEvent } from "@vexart/engine"
 import { useDisabled } from "../helpers/disabled"
 import { nextCodePointOffset, previousCodePointOffset } from "./text-offset"
@@ -380,7 +380,7 @@ export function Textarea(props: TextareaProps) {
       if (cancelled) return
       const result = highlightsToTokens(content, highlights, style)
       setSyntaxTokens(result)
-      markDirty()
+      
     })
     onCleanup(() => { cancelled = true })
   })
@@ -442,7 +442,7 @@ export function Textarea(props: TextareaProps) {
     stickyCol = -1
     props.onCursorChange?.(cursorPos().row, cursorPos().col)
     ensureCursorVisible()
-    markDirty()
+    
   }
 
   function moveVertical(delta: number, shift?: boolean) {
@@ -467,7 +467,7 @@ export function Textarea(props: TextareaProps) {
     }
     props.onCursorChange?.(targetRow, targetCol)
     ensureCursorVisible()
-    markDirty()
+    
   }
 
   // ── Action dispatcher ──
@@ -532,7 +532,7 @@ export function Textarea(props: TextareaProps) {
           const start = previousCodePointOffset(val, pos)
           setCursor(start); props.onChange?.(val.slice(0, start) + val.slice(pos))
         }
-        clearSelection(); stickyCol = -1; markDirty()
+        clearSelection(); stickyCol = -1
         return
       case KEY_BINDING_ACTION.DELETE_FORWARD:
         if (hasSelection()) { props.onChange?.(deleteSelection()) }
@@ -540,7 +540,7 @@ export function Textarea(props: TextareaProps) {
           const end = nextCodePointOffset(val, pos)
           props.onChange?.(val.slice(0, pos) + val.slice(end))
         }
-        clearSelection(); stickyCol = -1; markDirty()
+        clearSelection(); stickyCol = -1
         return
     }
   }
@@ -645,14 +645,14 @@ export function Textarea(props: TextareaProps) {
       },
       blur() {
         if (focusHandle.focused()) {
-          setFocusedId(null)
-          markDirty()
+          clearFocus()
+          
         }
       },
       set cursorColor(c: string | number) {
         _cursorColor = c
         setCursorColorSignal(c)
-        markDirty()
+        
       },
       get cursorColor(): string | number {
         return _cursorColor || (props.color ?? th().accent)

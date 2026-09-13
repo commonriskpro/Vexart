@@ -1,6 +1,5 @@
 import { onCleanup } from "solid-js"
-import { createScrollHandle } from "@vexart/engine"
-import { releaseScrollHandle } from "@vexart/engine/internal"
+import { createScrollHandle, releaseScrollHandle } from "@vexart/engine"
 
 export function useScrollHandle(scrollId: string) {
   const handle = createScrollHandle(scrollId)

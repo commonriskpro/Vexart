@@ -15,7 +15,6 @@ import {
   type Token,
   type SizingUnit,
 } from "@vexart/engine"
-import { markDirty } from "@vexart/engine/internal"
 
 const LINE_HEIGHT = 17
 const CHAR_WIDTH = 9
@@ -81,7 +80,6 @@ export function Code(props: CodeProps) {
       client.highlightOnce(content, language).then((highlights) => {
         if (cancelled) return
         setTokens(highlightsToTokens(content, highlights, style))
-        markDirty()
       })
     }
 

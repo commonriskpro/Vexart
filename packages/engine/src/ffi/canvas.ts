@@ -193,7 +193,7 @@ export class CanvasContext {
     this.viewport = viewport ?? DEFAULT_VIEWPORT
   }
 
-  /** Clear the command buffer (called at start of each frame) */
+  /** @internal Clear the command buffer (called at start of each frame) */
   _reset(viewport?: Viewport) {
     this._commands.length = 0
     this.viewport = viewport ?? DEFAULT_VIEWPORT

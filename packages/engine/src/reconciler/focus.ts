@@ -105,7 +105,17 @@ function queueFocusRepair(index: number) {
 }
 
 /** @public */
-export function setFocus(id: string) {
+/** @public Clear active focus. */
+export function clearFocus(): void {
+  setFocusedId(null)
+}
+
+/** @public */
+export function setFocus(id: string | null) {
+  if (id === null) {
+    setFocusedId(null)
+    return
+  }
   for (const scope of scopes) {
     if (scope.entries.some((e) => e.id === id)) {
       setFocusedId(id)

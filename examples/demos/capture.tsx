@@ -1,12 +1,10 @@
 /** Native WGPU readback, not a web recreation or a screenshot of the reference. */
 
-import { getImageCacheStats, setFocusedId, getHandleNode } from "@vexart/engine/internal"
-import type { NodeHandle } from "@vexart/engine"
+import { getImageCacheStats, clearFocus, type NodeHandle } from "@vexart/engine"
 import type { JSX } from "solid-js"
 import sharp from "sharp"
 import { mkdir } from "node:fs/promises"
 import { resolve } from "node:path"
-import type { TGENode } from "@vexart/engine/internal"
 import { renderToBufferAfterInteractions } from "../../packages/engine/src/testing/render-to-buffer"
 import type { RenderLoopInteractionHelpers } from "../../packages/engine/src/testing/render-to-buffer"
 
@@ -15,7 +13,7 @@ export async function captureDemo(component: () => JSX.Element, width: number, h
   let rootHandle: NodeHandle | undefined
   return renderToBufferAfterInteractions(() => <box width={width} height={height} ref={(handle: NodeHandle) => { rootHandle = handle }}>{component()}</box>, width, height, async helpers => {
     // The selected reference state is unfocused, with the pointer outside the app.
-    setFocusedId(null)
+    clearFocus()
     await helpers.pointerMove(width + 1, height + 1)
     const settle = async () => {
       const deadline = performance.now() + 10000
@@ -24,13 +22,12 @@ export async function captureDemo(component: () => JSX.Element, width: number, h
         await helpers.frame()
       }
       await helpers.frame()
-      const inspect = (node: TGENode) => {
-        if (node._imageExtra?.state === "error") throw new Error(`Failed to decode ${node.props.src}`)
+      const inspect = (node: NodeHandle) => {
+        if (node.imageState === "error") throw new Error(`Failed to decode ${(node.props as any).src}`)
         node.children.forEach(inspect)
       }
       if (!rootHandle) throw new Error("Capture root was not mounted")
-      const root = getHandleNode(rootHandle)
-      inspect(root)
+      inspect(rootHandle)
     }
     await settle()
     await interact?.(helpers)

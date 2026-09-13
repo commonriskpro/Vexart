@@ -31,7 +31,7 @@ import { createSignal, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
 import type { ScrollHandle, SizingUnit } from "@vexart/engine"
 import { Show } from "@vexart/engine"
-import { onPostScroll } from "@vexart/engine/internal"
+import { onPostScroll } from "@vexart/engine"
 import { useScrollHandle } from "../helpers/use-scroll"
 
 let scrollViewCounter = 0

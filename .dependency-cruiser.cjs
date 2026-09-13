@@ -2,13 +2,27 @@
 module.exports = {
   forbidden: [
     {
+      name: "no-engine-internal-in-headless",
+      severity: "error",
+      comment: "Headless package must only use public engine APIs and never import @vexart/engine/internal",
+      from: { path: "^packages/headless/src/", pathNot: "\.test\.(ts|tsx)$" },
+      to: { path: "^packages/engine/src/internal" },
+    },
+    {
+      name: "no-engine-internal-in-examples",
+      severity: "error",
+      comment: "Examples must only use public APIs and never import @vexart/engine/internal",
+      from: { path: "^examples/" },
+      to: { path: "^packages/engine/src/internal" },
+    },
+    {
       name: "no-circular",
       severity: "error",
       // internal-flexily vendors upstream Flexily and retains intentional cycles
       // within that implementation. Excluding only that source subtree keeps
       // cycles involving any Vexart layer or package as errors.
       comment: "No circular dependencies outside the vendored internal-flexily implementation (REQ-PB-004)",
-      from: { pathNot: "^packages/internal-flexily/src/" },
+      from: { path: "^packages/", pathNot: "^packages/internal-flexily/src/" },
       to: { circular: true },
     },
     {
@@ -126,6 +140,6 @@ module.exports = {
     tsPreCompilationDeps: true,
     doNotFollow: { path: "node_modules" },
     exclude: { path: "node_modules|dist|\\.d\\.ts$" },
-    includeOnly: "^packages/",
+    includeOnly: "^(packages|examples)/",
   },
 };

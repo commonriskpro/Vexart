@@ -1,16 +1,13 @@
 import { expect, test } from "bun:test"
 
 import { createSignal } from "solid-js"
-import { measureForLayout } from "@vexart/engine/internal"
-import type { NodeHandle } from "@vexart/engine"
-import { getHandleNode } from "@vexart/engine/internal"
-import type { TGENode } from "@vexart/engine/internal"
+import { measureText, type NodeHandle } from "@vexart/engine"
 import { captureDemo } from "./capture"
 import { DemoFrame, Label } from "./shared"
 
-const content = (node: TGENode): string => node.text + node.children.map(content).join("")
-const labels = (node: TGENode): TGENode[] => [
-  ...(node.kind === "text" && node.props.fontSize ? [node] : []),
+const content = (node: NodeHandle): string => node.text + node.children.map(content).join("")
+const labels = (node: NodeHandle): NodeHandle[] => [
+  ...(node.kind === "text" && (node.props as any).fontSize ? [node] : []),
   ...node.children.flatMap(labels),
 ]
 
@@ -25,12 +22,12 @@ for (const [width, height] of [[1536, 1024], [1200, 800]] as const) {
       </DemoFrame>
     </box>, width, height, async () => {
       if (!rootHandle) throw new Error("Typography scene was not mounted")
-      const root = getHandleNode(rootHandle)
+      const root = rootHandle
       const nodes = labels(root).filter(node => ["Mission Control", "Running", "13:08:21", "Space", "Esc", "Back"].includes(content(node)))
       expect(nodes).toHaveLength(6)
       for (const node of nodes) {
-        const size = node.props.fontSize!
-        const measured = measureForLayout(content(node), 0, size, node.props.fontFamily, node.props.fontWeight)
+        const size = (node.props as any).fontSize!
+        const measured = measureText(content(node), { fontSize: size, fontFamily: (node.props as any).fontFamily, fontWeight: (node.props as any).fontWeight })
         expect(Number.isInteger(size)).toBe(true)
         expect(node.layout.width).toBeGreaterThanOrEqual(measured.width)
         expect(node.layout.height).toBeLessThan(measured.height * 2)
@@ -53,17 +50,17 @@ test("updates the mounted artboard when its viewport changes without replacing c
   }
   await captureDemo(scene, 1536, 1024, async ({ frame }) => {
     if (!rootHandle || !resize) throw new Error("Resize scene was not mounted")
-    const root = getHandleNode(rootHandle)
+    const root = rootHandle
     const before = labels(root).find(node => content(node) === "Resize label")
     if (!before) throw new Error("Resize label was not mounted")
-    expect(before.props.fontSize).toBe(20)
-    expect(before.parent?.props.floatOffset).toEqual({ x: 640, y: 500 })
+    expect((before.props as any).fontSize).toBe(20)
+    expect((before.parent?.props as any).floatOffset).toEqual({ x: 640, y: 500 })
     resize()
     await frame()
     const after = labels(root).find(node => content(node) === "Resize label")
     expect(after).toBe(before)
-    expect(after?.props.fontSize).toBe(16)
-    expect(after?.parent?.props.floatOffset).toEqual({ x: 500, y: 390.625 })
+    expect((after?.props as any).fontSize).toBe(16)
+    expect((after?.parent?.props as any).floatOffset).toEqual({ x: 500, y: 390.625 })
     expect(after?.parent?.layout.x).toBe(500)
     expect(after?.parent?.layout.y).toBeCloseTo(390.625, 0)
   })
