@@ -282,6 +282,43 @@ function hasCaptureExpansion(node: TGENode, includeTransform = false): boolean {
   return node.children.some((child) => hasCaptureExpansion(child, true))
 }
 
+function expandCommandBoundsForEffects(
+  cmd: RenderCommand,
+  node: TGENode,
+): { minX: number; minY: number; maxX: number; maxY: number } {
+  let minX = cmd.x
+  let minY = cmd.y
+  let maxX = cmd.x + cmd.width
+  let maxY = cmd.y + cmd.height
+  const props = resolveProps(node)
+
+  if (props.shadow) {
+    const shadows = Array.isArray(props.shadow) ? props.shadow : [props.shadow]
+    for (const s of shadows) {
+      if (!s || typeof s !== "object") continue
+      const sx = typeof (s as any).x === "number" ? (s as any).x : (typeof (s as any).offsetX === "number" ? (s as any).offsetX : 0)
+      const sy = typeof (s as any).y === "number" ? (s as any).y : (typeof (s as any).offsetY === "number" ? (s as any).offsetY : 0)
+      const blur = Math.max(0, typeof (s as any).blur === "number" ? (s as any).blur : 0)
+      const pad = Math.ceil(blur) * 2
+      minX = Math.min(minX, cmd.x + sx - pad)
+      minY = Math.min(minY, cmd.y + sy - pad)
+      maxX = Math.max(maxX, cmd.x + cmd.width + sx + pad)
+      maxY = Math.max(maxY, cmd.y + cmd.height + sy + pad)
+    }
+  }
+
+  if (props.glow && typeof props.glow === "object") {
+    const glow = props.glow as { radius?: number }
+    const pad = Math.ceil((glow.radius ?? 0) * 2)
+    minX = Math.min(minX, cmd.x - pad)
+    minY = Math.min(minY, cmd.y - pad)
+    maxX = Math.max(maxX, cmd.x + cmd.width + pad)
+    maxY = Math.max(maxY, cmd.y + cmd.height + pad)
+  }
+
+  return { minX, minY, maxX, maxY }
+}
+
 function applyPendingNodeDamage(
   layer: Layer,
   slot: LayerSlot,
@@ -419,6 +456,8 @@ export function paintFrame(
 
     const layer = getOrCreateLayer(slot.key, slot.z)
     const previousRect = getPreviousLayerRect(layer)
+    const boundary = slotBoundaryByKey.get(slot.key)
+    const boundaryNode = boundary ? state.nodeRefById.get(boundary.nodeId) ?? null : null
     let minX = Infinity
     let minY = Infinity
     let maxX = -Infinity
@@ -472,10 +511,24 @@ export function paintFrame(
         maxX = Math.max(maxX, cr)
         maxY = Math.max(maxY, cb)
       } else {
-        minX = Math.min(minX, cmd.x)
-        minY = Math.min(minY, cmd.y)
-        maxX = Math.max(maxX, cmd.x + cmd.width)
-        maxY = Math.max(maxY, cmd.y + cmd.height)
+        let cmdMinX = cmd.x
+        let cmdMinY = cmd.y
+        let cmdMaxX = cmd.x + cmd.width
+        let cmdMaxY = cmd.y + cmd.height
+        if (cmd.nodeId !== undefined && (!boundary?.hasSubtreeTransform || cmd.nodeId === boundary?.nodeId)) {
+          const node = state.nodeRefById.get(cmd.nodeId)
+          if (node) {
+            const expanded = expandCommandBoundsForEffects(cmd, node)
+            cmdMinX = expanded.minX
+            cmdMinY = expanded.minY
+            cmdMaxX = expanded.maxX
+            cmdMaxY = expanded.maxY
+          }
+        }
+        minX = Math.min(minX, cmdMinX)
+        minY = Math.min(minY, cmdMinY)
+        maxX = Math.max(maxX, cmdMaxX)
+        maxY = Math.max(maxY, cmdMaxY)
         if (cmd.type === CMD.RECTANGLE || cmd.type === CMD.BORDER) pendingBounds.push(cmd)
       }
     }
@@ -486,8 +539,6 @@ export function paintFrame(
     let lw = isBg ? viewportWidth : (Math.ceil(maxX) - lx)
     let lh = isBg ? viewportHeight : (Math.ceil(maxY) - ly)
 
-    const boundary = slotBoundaryByKey.get(slot.key)
-    const boundaryNode = boundary ? state.nodeRefById.get(boundary.nodeId) ?? null : null
     const freezeWhileInteracting = useLayerCompositing && shouldFreezeInteractionLayer(boundaryNode)
     const debugName = boundaryNode?.props.debugName ?? slot.key
     const shouldViewportClip = freezeWhileInteracting ? false : (boundaryNode?.props.viewportClip ?? true)

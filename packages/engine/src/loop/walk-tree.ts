@@ -223,15 +223,11 @@ export function walkTree(
       // applied at the transformed output boundary.
       node._autoLayer = false
       shouldBoundary = true
-    } else if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && hasBackdrop && autoLayerCount < AUTO_LAYER_BUDGET) {
-      node._autoLayer = true
-      autoLayerCount++
-      shouldBoundary = true
     } else if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && node._autoLayer === true && node._unstableFrameCount >= 3) {
       node._autoLayer = false
       node._stableFrameCount = 0
       node._unstableFrameCount = 0
-    } else if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && node._stableFrameCount >= 3 && hasPromotableArea(node) && autoLayerCount < AUTO_LAYER_BUDGET) {
+    } else if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && !hasBackdrop && node._stableFrameCount >= 3 && hasPromotableArea(node) && autoLayerCount < AUTO_LAYER_BUDGET) {
       node._autoLayer = true
       autoLayerCount++
       shouldBoundary = true

@@ -399,9 +399,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
   let framesSinceStrategyChange = 0
   let currentFrame: RendererBackendFrameContext | null = null
   let currentFrameLayers: RenderedLayerRecord[] = []
-  // Backdrop pre-composite: layers rendered so far, composited into the
-  // backdrop layer's target before it reads "content behind".
-  const _renderedLayerStack: RenderedLayerRecord[] = []
   let renderOpToImage: ((op: RenderGraphOp, width: number, height: number, offsetX: number, offsetY: number, ops?: RenderGraphOp[]) => VexartImageHandle | null) | null = null
   const activeLayerKeys = new Set<string>()
   let suppressFinalPresentation = false
@@ -1740,40 +1737,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
               vexartCompositeTargetEndLayer(vctx, targetHandle)
               layerOpen = false
             }
-            // ── Backdrop pre-composite: blit lower-z layers into this target ──
-            // When this element is on its own layer (auto-promoted), the target
-            // is empty. Compose previously-rendered layers so getBackdropSource
-            // reads actual "content behind" instead of transparent pixels.
-            if (_renderedLayerStack.length > 0 && currentFrame) {
-              const vw = currentFrame.viewportWidth
-              const vh = currentFrame.viewportHeight
-              vexartCompositeTargetBeginLayer(vctx, targetHandle, 1, 0x00000000)
-              try {
-                for (const layer of _renderedLayerStack) {
-                  const quad = layer.subtreeTransform ?? {
-                    p0: { x: layer.x, y: layer.y },
-                    p1: { x: layer.x + layer.width, y: layer.y },
-                    p2: { x: layer.x, y: layer.y + layer.height },
-                    p3: { x: layer.x + layer.width, y: layer.y + layer.height },
-                  }
-                  // Map absolute viewport coords to the layer's local target coords
-                  const ox = ctx.offsetX
-                  const oy = ctx.offsetY
-                  const tw = ctx.target.width
-                  const th = ctx.target.height
-                  const inst = packImageTransformInstance(
-                    ((quad.p0.x - ox) / tw) * 2 - 1, 1 - ((quad.p0.y - oy) / th) * 2,
-                    ((quad.p1.x - ox) / tw) * 2 - 1, 1 - ((quad.p1.y - oy) / th) * 2,
-                    ((quad.p2.x - ox) / tw) * 2 - 1, 1 - ((quad.p2.y - oy) / th) * 2,
-                    ((quad.p3.x - ox) / tw) * 2 - 1, 1 - ((quad.p3.y - oy) / th) * 2,
-                    layer.opacity,
-                  )
-                  compositeTargetUniformToTarget(vctx, targetHandle, layer.handle, inst)
-                }
-              } finally {
-                vexartCompositeTargetEndLayer(vctx, targetHandle)
-              }
-            }
             const sprite = getBackdropSprite(effectOp)
             if (!sprite) return { ok: false, rawLayer: null }
             if (effectOp.effect.transform) {
@@ -1826,36 +1789,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
             if (layerOpen) {
               vexartCompositeTargetEndLayer(vctx, targetHandle)
               layerOpen = false
-            }
-            // Pre-composite lower layers (same as !cornerRadii path above)
-            if (_renderedLayerStack.length > 0 && currentFrame) {
-              const vw = currentFrame.viewportWidth
-              const vh = currentFrame.viewportHeight
-              vexartCompositeTargetBeginLayer(vctx, targetHandle, 1, 0x00000000)
-              try {
-                for (const layer of _renderedLayerStack) {
-                  const quad = layer.subtreeTransform ?? {
-                    p0: { x: layer.x, y: layer.y },
-                    p1: { x: layer.x + layer.width, y: layer.y },
-                    p2: { x: layer.x, y: layer.y + layer.height },
-                    p3: { x: layer.x + layer.width, y: layer.y + layer.height },
-                  }
-                  const ox = ctx.offsetX
-                  const oy = ctx.offsetY
-                  const tw = ctx.target.width
-                  const th = ctx.target.height
-                  const inst = packImageTransformInstance(
-                    ((quad.p0.x - ox) / tw) * 2 - 1, 1 - ((quad.p0.y - oy) / th) * 2,
-                    ((quad.p1.x - ox) / tw) * 2 - 1, 1 - ((quad.p1.y - oy) / th) * 2,
-                    ((quad.p2.x - ox) / tw) * 2 - 1, 1 - ((quad.p2.y - oy) / th) * 2,
-                    ((quad.p3.x - ox) / tw) * 2 - 1, 1 - ((quad.p3.y - oy) / th) * 2,
-                    layer.opacity,
-                  )
-                  compositeTargetUniformToTarget(vctx, targetHandle, layer.handle, inst)
-                }
-              } finally {
-                vexartCompositeTargetEndLayer(vctx, targetHandle)
-              }
             }
             const sprite = getBackdropSprite(effectOp)
             if (!sprite) return { ok: false, rawLayer: null }
@@ -2908,7 +2841,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       resetBackendProfile()
       currentFrame = ctx
       currentFrameLayers = []
-      _renderedLayerStack.length = 0
       activeLayerKeys.clear()
       suppressFinalPresentation = false
       if (!ctx.useLayerCompositing) {
@@ -3021,20 +2953,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
           suppressFinalPresentation = true
           failGpuOnly(`GPU layer render failed for ${layerCtx.key}`)
         }
-
-        // Track rendered layer for backdrop pre-composite of subsequent layers
-        _renderedLayerStack.push({
-          key: layerCtx.key,
-          z: layerCtx.z,
-          x: layerCtx.bounds.x,
-          y: layerCtx.bounds.y,
-          width: layerCtx.bounds.width,
-          height: layerCtx.bounds.height,
-          handle: layerTarget,
-          isBackground: layerCtx.isBackground,
-          subtreeTransform: layerCtx.subtreeTransform,
-          opacity: 1,
-        })
 
         recordCurrentFrameLayer({
           key: layerCtx.key,

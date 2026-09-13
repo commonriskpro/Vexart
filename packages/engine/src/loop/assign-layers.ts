@@ -91,15 +91,11 @@ export function findLayerBoundaries(
     // backend contract; the render graph already owns the correct operation.
     node._autoLayer = false
     pushBoundary(node, path, result, nextZ, isScroll, insideScroll, hasSubtreeTransform)
-  } else if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && hasBackdrop && autoLayerCount < AUTO_LAYER_BUDGET) {
-    node._autoLayer = true
-    autoLayerCount++
-    pushBoundary(node, path, result, nextZ, isScroll, insideScroll, hasSubtreeTransform)
   } else if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && node._autoLayer === true && node._unstableFrameCount >= 3) {
     node._autoLayer = false
     node._stableFrameCount = 0
     node._unstableFrameCount = 0
-  } else if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && node._stableFrameCount >= 3 && hasPromotableArea(node) && autoLayerCount < AUTO_LAYER_BUDGET) {
+  } else if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && !hasBackdrop && node._stableFrameCount >= 3 && hasPromotableArea(node) && autoLayerCount < AUTO_LAYER_BUDGET) {
     node._autoLayer = true
     autoLayerCount++
     pushBoundary(node, path, result, nextZ, isScroll, insideScroll, hasSubtreeTransform)
@@ -183,6 +179,45 @@ function ensureLayerMapSize(maxNodeId: number) {
 
 function nodeForBoundary(state: AssignLayersState, boundary: LayerBoundary) {
   return state.nodeRefById?.get(boundary.nodeId) ?? (boundary.path ? resolveNodeByPath(state.root, boundary.path) : null)
+}
+
+function expandLayerBoundsForEffects(
+  node: TGENode,
+  x: number,
+  y: number,
+  right: number,
+  bottom: number,
+): { x: number; y: number; right: number; bottom: number } {
+  let minX = x
+  let minY = y
+  let maxX = right
+  let maxY = bottom
+
+  if (node.props.shadow) {
+    const shadows = Array.isArray(node.props.shadow) ? node.props.shadow : [node.props.shadow]
+    for (const s of shadows) {
+      if (!s || typeof s !== "object") continue
+      const sx = typeof (s as any).x === "number" ? (s as any).x : (typeof (s as any).offsetX === "number" ? (s as any).offsetX : 0)
+      const sy = typeof (s as any).y === "number" ? (s as any).y : (typeof (s as any).offsetY === "number" ? (s as any).offsetY : 0)
+      const blur = Math.max(0, typeof (s as any).blur === "number" ? (s as any).blur : 0)
+      const pad = Math.ceil(blur) * 2
+      minX = Math.min(minX, x + sx - pad)
+      minY = Math.min(minY, y + sy - pad)
+      maxX = Math.max(maxX, right + sx + pad)
+      maxY = Math.max(maxY, bottom + sy + pad)
+    }
+  }
+
+  if (node.props.glow && typeof node.props.glow === "object") {
+    const glow = node.props.glow as { radius?: number }
+    const pad = Math.ceil((glow.radius ?? 0) * 2)
+    minX = Math.min(minX, x - pad)
+    minY = Math.min(minY, y - pad)
+    maxX = Math.max(maxX, right + pad)
+    maxY = Math.max(maxY, bottom + pad)
+  }
+
+  return { x: minX, y: minY, right: maxX, bottom: maxY }
 }
 
 function setSubtreeLayerKey(node: TGENode, key: string) {
@@ -306,7 +341,14 @@ export function assignLayersSpatial(
     const layoutW = Math.round(node.layout.width)
     const layoutH = Math.round(node.layout.height)
     const hasUsableLayout = layoutW > 0 && layoutH > 0
-    const shouldPreferLayoutBounds = !scissor && hasUsableLayout && (node.props.floating || node.props.layer === true || node.props.interactionMode === "drag" || b.hasSubtreeTransform)
+    const shouldPreferLayoutBounds = !scissor && hasUsableLayout && (
+      node.props.floating ||
+      node.props.layer === true ||
+      node.props.interactionMode === "drag" ||
+      b.hasSubtreeTransform ||
+      node.props.shadow !== undefined ||
+      node.props.glow !== undefined
+    )
 
     if (scissor) {
       layerBounds.push({
@@ -319,12 +361,13 @@ export function assignLayersSpatial(
         boundary: b,
       })
     } else if (shouldPreferLayoutBounds) {
+      const bounds = expandLayerBoundsForEffects(node, layoutX, layoutY, layoutX + layoutW, layoutY + layoutH)
       layerBounds.push({
         slot,
-        x: layoutX,
-        y: layoutY,
-        right: layoutX + layoutW,
-        bottom: layoutY + layoutH,
+        x: bounds.x,
+        y: bounds.y,
+        right: bounds.right,
+        bottom: bounds.bottom,
         scissor: null,
         boundary: b,
       })
@@ -333,12 +376,19 @@ export function assignLayersSpatial(
       if (directMatch) {
         const cmd = directMatch.cmd
         claimedBounds.add(boundsKey(cmd))
+        const bounds = expandLayerBoundsForEffects(
+          node,
+          Math.round(cmd.x),
+          Math.round(cmd.y),
+          Math.round(cmd.x + cmd.width),
+          Math.round(cmd.y + cmd.height),
+        )
         layerBounds.push({
           slot,
-          x: Math.round(cmd.x),
-          y: Math.round(cmd.y),
-          right: Math.round(cmd.x + cmd.width),
-          bottom: Math.round(cmd.y + cmd.height),
+          x: bounds.x,
+          y: bounds.y,
+          right: bounds.right,
+          bottom: bounds.bottom,
           scissor: null,
           boundary: b,
         })
@@ -352,12 +402,19 @@ export function assignLayersSpatial(
           const key = boundsKey(cmd)
           if (!claimedBounds.has(key)) {
             claimedBounds.add(key)
+            const bounds = expandLayerBoundsForEffects(
+              node,
+              Math.round(cmd.x),
+              Math.round(cmd.y),
+              Math.round(cmd.x + cmd.width),
+              Math.round(cmd.y + cmd.height),
+            )
             layerBounds.push({
               slot,
-              x: Math.round(cmd.x),
-              y: Math.round(cmd.y),
-              right: Math.round(cmd.x + cmd.width),
-              bottom: Math.round(cmd.y + cmd.height),
+              x: bounds.x,
+              y: bounds.y,
+              right: bounds.right,
+              bottom: bounds.bottom,
               scissor: null,
               boundary: b,
             })
@@ -375,7 +432,8 @@ export function assignLayersSpatial(
       const lw = Math.round(node.layout.width)
       const lh = Math.round(node.layout.height)
       if (lw > 0 && lh > 0) {
-        layerBounds.push({ slot, x: lx, y: ly, right: lx + lw, bottom: ly + lh, scissor: null, boundary: b })
+        const bounds = expandLayerBoundsForEffects(node, lx, ly, lx + lw, ly + lh)
+        layerBounds.push({ slot, x: bounds.x, y: bounds.y, right: bounds.right, bottom: bounds.bottom, scissor: null, boundary: b })
       } else {
         layerBounds.push({ slot, x: 0, y: 0, right: 0, bottom: 0, scissor: null, boundary: b })
       }

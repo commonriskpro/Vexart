@@ -119,6 +119,11 @@ function decodeFrames(packets: Packet[], shmFrames: ShmFrame[] = []): Frame[] {
 
   for (const packet of packets.filter((entry) => parseFields(entry.header).get("t") !== "s")) {
     const fields = parseFields(packet.header)
+    if (current && !fields.has("s") && fields.get("m") !== undefined) {
+      current.payload += packet.payload
+      if (fields.get("m") === "0") finish()
+      continue
+    }
     if (fields.get("a") === "T" || fields.get("a") === "f") {
       finish()
       current = { packet, payload: packet.payload }
