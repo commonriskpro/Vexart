@@ -303,9 +303,6 @@ function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; c
     capturedNodeId: s.pointer.capturedNodeId,
     pressOriginSet: s.pointer.pressOriginSet,
     prevActiveNode: s.pointer.prevActiveNode,
-    cellWidth: s.term.size.cellWidth || 8,
-    cellHeight: s.term.size.cellHeight || 16,
-    mousePixel: Boolean(s.term.caps?.mousePixel),
     scrollOffsets: s.scrollOffsets,
     onChanged: () => {
       changed = true

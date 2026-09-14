@@ -324,11 +324,6 @@ export type InteractiveStatesBag = {
   capturedNodeId: number
   pressOriginSet: boolean
   prevActiveNode: TGENode | null
-  /** Terminal cell dimensions for minimum hit-area expansion. */
-  cellWidth: number
-  cellHeight: number
-  /** Pixel-precision mouse mode (SGR-Pixel 1016). When true, hit-testing uses exact layout bounds without cell expansion. */
-  mousePixel: boolean
   /** Scroll offsets keyed by scroll container nodeId. Used for hit-testing without mutating node.layout. */
   scrollOffsets: Map<number, { x: number; y: number }>
   /** Called when any interaction state changes (triggers repaint). */
@@ -343,11 +338,8 @@ function hitTestNode(
   node: TGENode,
   pointerX: number,
   pointerY: number,
-  cellW: number,
-  cellH: number,
   isCaptured: boolean,
   scrollOffsets: Map<number, { x: number; y: number }>,
-  mousePixel = false,
 ): boolean {
   if (isCaptured) return true
   if (!isPointInsideScrollViewports(node, pointerX, pointerY, scrollOffsets)) return false
@@ -367,21 +359,29 @@ function hitTestNode(
     if (Math.abs(w) <= 1e-12) return false
     const localX = (hitInverse[0] * relX + hitInverse[1] * relY + hitInverse[2]) / w
     const localY = (hitInverse[3] * relX + hitInverse[4] * relY + hitInverse[5]) / w
-    // In pixel mode, use exact bounds — no cell-size expansion needed
-    const hitW = mousePixel ? l.width : Math.max(l.width, cellW)
-    const hitH = mousePixel ? l.height : Math.max(l.height, cellH)
-    const hitX = -(hitW - l.width) / 2
-    const hitY = -(hitH - l.height) / 2
-    return localX >= hitX && localX < hitX + hitW && localY >= hitY && localY < hitY + hitH
+    const hitW = l.width
+    const hitH = l.height
+    const hitX = 0
+    const hitY = 0
+    return (
+      localX >= hitX - 0.5 &&
+      localX < hitX + hitW + 0.5 &&
+      localY >= hitY - 0.5 &&
+      localY < hitY + hitH + 0.5
+    )
   }
 
   // Standard axis-aligned hit-test
-  // In pixel mode, use exact bounds — no cell-size expansion needed
-  const hitW = mousePixel ? l.width : Math.max(l.width, cellW)
-  const hitH = mousePixel ? l.height : Math.max(l.height, cellH)
-  const hitX = effectiveX - (hitW - l.width) / 2
-  const hitY = effectiveY - (hitH - l.height) / 2
-  return pointerX >= hitX && pointerX < hitX + hitW && pointerY >= hitY && pointerY < hitY + hitH
+  const hitW = l.width
+  const hitH = l.height
+  const hitX = effectiveX
+  const hitY = effectiveY
+  return (
+    pointerX >= hitX - 0.5 &&
+    pointerX < hitX + hitW + 0.5 &&
+    pointerY >= hitY - 0.5 &&
+    pointerY < hitY + hitH + 0.5
+  )
 }
 
 // ── Scroll viewport culling ──────────────────────────────────────────────
@@ -521,7 +521,7 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
     if (offscreen.skip) continue
 
     const isCaptured = captureNode === node
-    const isOver = hitTestNode(node, bag.pointerX, bag.pointerY, bag.cellWidth, bag.cellHeight, isCaptured, bag.scrollOffsets, bag.mousePixel)
+    const isOver = hitTestNode(node, bag.pointerX, bag.pointerY, isCaptured, bag.scrollOffsets)
     const isDown = isOver && bag.pointerDown
     if (isOver && (node.props.onPress || node.props.onClick || node.props.focusable)) hoveredPressTarget = node
 

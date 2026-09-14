@@ -61,9 +61,6 @@ function interactionBag(state: WalkTreeState, pointerX: number, pointerY: number
     capturedNodeId: 0,
     pressOriginSet: false,
     prevActiveNode: null,
-    cellWidth: 8,
-    cellHeight: 16,
-    mousePixel: false,
     scrollOffsets: new Map(),
     onChanged() {},
   }
@@ -355,7 +352,7 @@ describe("Grid interaction bridge", () => {
     second.layout.destroy()
   })
 
-  test("expands hit area to cell dimensions only when mousePixel is false (SGR 1006 fallback)", () => {
+  test("uses exact bounds without cell expansion for axis-aligned hit-testing", () => {
     const smallBtn = box({
       width: 4,
       height: 4,
@@ -367,31 +364,20 @@ describe("Grid interaction bridge", () => {
     const state = frame(root, 100, 100)
     expect(state.map.get(smallBtn.id)).toMatchObject({ x: 20, y: 20, width: 4, height: 4 })
 
-    // Pointer at (19, 15) is outside [20..24) x [20..24), but inside cell-expanded [18..26) x [14..30)
-    const bagFallback = interactionBag(state.state, 19, 15)
-    bagFallback.mousePixel = false
-    updateInteractiveStates(bagFallback)
-    expect(smallBtn._hovered).toBe(true)
-
-    // Reset hover
-    smallBtn._hovered = false
-
-    // In pixel mode (SGR-Pixel 1016), hit areas are exact — (19, 15) must NOT hit
-    const bagPixel = interactionBag(state.state, 19, 15)
-    bagPixel.mousePixel = true
-    updateInteractiveStates(bagPixel)
+    // Pointer at (19, 15) is outside [20..24) x [20..24) and must NOT hit (no cell expansion)
+    const bagOutside = interactionBag(state.state, 19, 15)
+    updateInteractiveStates(bagOutside)
     expect(smallBtn._hovered).toBe(false)
 
-    // Pointer inside exact bounds (21, 21) hits in pixel mode
-    const bagPixelInside = interactionBag(state.state, 21, 21)
-    bagPixelInside.mousePixel = true
-    updateInteractiveStates(bagPixelInside)
+    // Pointer inside exact bounds (21, 21) hits
+    const bagInside = interactionBag(state.state, 21, 21)
+    updateInteractiveStates(bagInside)
     expect(smallBtn._hovered).toBe(true)
 
     state.layout.destroy()
   })
 
-  test("transformed node uses exact bounds without cell expansion when mousePixel is true", () => {
+  test("transformed node uses exact bounds without cell expansion", () => {
     const smallCard = box({
       width: 4,
       height: 4,
@@ -403,32 +389,79 @@ describe("Grid interaction bridge", () => {
     expect(smallCard._transformInverse).not.toBeNull()
 
     // Effective pos = (0, 0). Transformed visual position is (10, 10).
-    // relX = pointerX, relY = pointerY.
-    // localX = pointerX - 10, localY = pointerY - 10.
-    // Pointer at (9, 5): localX = -1, localY = -5.
-    // Node layout is 4x4.
-    // Cell expansion (cellW=8, cellH=16): hitX = -2, hitY = -6, hitW = 8, hitH = 16.
-    // localX = -1 is inside [-2..6), localY = -5 is inside [-6..10).
-
-    const bagFallback = interactionBag(state.state, 9, 5)
-    bagFallback.mousePixel = false
-    updateInteractiveStates(bagFallback)
-    expect(smallCard._hovered).toBe(true)
-
-    smallCard._hovered = false
-
-    // With mousePixel: true, hit bounds are [0..4) x [0..4).
-    // localX = -1, localY = -5 is OUTSIDE.
-    const bagPixel = interactionBag(state.state, 9, 5)
-    bagPixel.mousePixel = true
-    updateInteractiveStates(bagPixel)
+    // Pointer at (9, 5): localX = -1, localY = -5 -> outside [0..4) x [0..4)
+    const bagOutside = interactionBag(state.state, 9, 5)
+    updateInteractiveStates(bagOutside)
     expect(smallCard._hovered).toBe(false)
 
-    // Pointer at (11, 11): localX = 1, localY = 1 -> INSIDE [0..4) x [0..4).
-    const bagPixelInside = interactionBag(state.state, 11, 11)
-    bagPixelInside.mousePixel = true
-    updateInteractiveStates(bagPixelInside)
+    // Pointer at (11, 11): localX = 1, localY = 1 -> inside [0..4) x [0..4)
+    const bagInside = interactionBag(state.state, 11, 11)
+    updateInteractiveStates(bagInside)
     expect(smallCard._hovered).toBe(true)
+
+    state.layout.destroy()
+  })
+
+  test("compensates for 0.5px integer coordinate rounding bias on edges", () => {
+    // Axis-aligned element at (20, 20) with size 10x10 -> bounds [20..30) x [20..30)
+    const btn = box({
+      width: 10,
+      height: 10,
+      floating: "root",
+      floatOffset: { x: 20, y: 20 },
+      onPress: () => {},
+    })
+    // Transformed element at layout (0, 0) + translate(50, 50) with size 10x10 -> bounds [50..60) x [50..60)
+    const transformedCard = box({
+      width: 10,
+      height: 10,
+      transform: { translateX: 50, translateY: 50 },
+      onPress: () => {},
+    })
+    const root = box({ width: 100, height: 100 }, [btn, transformedCard])
+    const state = frame(root, 100, 100)
+
+    // 1. Right/bottom edge rounding compensation:
+    // A click at continuous 29.8 rounds to integer pixel 30.
+    // Without 0.5px compensation, pointerX < 30 would fail at x=30.
+    // With 0.5px compensation (pointerX < 30.5), integer 30 hits!
+    const bagRightEdge = interactionBag(state.state, 30, 25)
+    updateInteractiveStates(bagRightEdge)
+    expect(btn._hovered).toBe(true)
+
+    const bagBottomEdge = interactionBag(state.state, 25, 30)
+    updateInteractiveStates(bagBottomEdge)
+    expect(btn._hovered).toBe(true)
+
+    // Left/top edge: integer 20 hits, integer 19 is outside (19 < 19.5)
+    const bagLeftEdge = interactionBag(state.state, 20, 25)
+    updateInteractiveStates(bagLeftEdge)
+    expect(btn._hovered).toBe(true)
+
+    btn._hovered = false
+    const bagOutsideLeft = interactionBag(state.state, 19, 25)
+    updateInteractiveStates(bagOutsideLeft)
+    expect(btn._hovered).toBe(false)
+
+    const bagOutsideRight = interactionBag(state.state, 31, 25)
+    updateInteractiveStates(bagOutsideRight)
+    expect(btn._hovered).toBe(false)
+
+    // 2. Transformed path rounding compensation:
+    // Transformed element visual bounds: [50..60) x [50..60).
+    // Pointer at (60, 55): localX = 10. Under strict < 10 it fails, but with < 10.5 it hits!
+    const bagTransformedRight = interactionBag(state.state, 60, 55)
+    updateInteractiveStates(bagTransformedRight)
+    expect(transformedCard._hovered).toBe(true)
+
+    const bagTransformedBottom = interactionBag(state.state, 55, 60)
+    updateInteractiveStates(bagTransformedBottom)
+    expect(transformedCard._hovered).toBe(true)
+
+    transformedCard._hovered = false
+    const bagTransformedOutside = interactionBag(state.state, 61, 55)
+    updateInteractiveStates(bagTransformedOutside)
+    expect(transformedCard._hovered).toBe(false)
 
     state.layout.destroy()
   })
