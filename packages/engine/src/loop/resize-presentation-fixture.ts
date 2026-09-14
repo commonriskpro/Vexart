@@ -36,6 +36,8 @@ function createFixtureTerminal(width: number, height: number): FixtureTerminal {
       sixel: false,
       truecolor: true,
       mouse: false,
+      mousePixel: false,
+      mousePixelOrigin: 1,
       focus: false,
       bracketedPaste: false,
       syncOutput: false,

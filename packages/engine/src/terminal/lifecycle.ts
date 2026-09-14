@@ -27,10 +27,6 @@ const ESC = {
   cursorHide: "\x1b[?25l",
   cursorShow: "\x1b[?25h",
 
-  // Mouse tracking — SGR extended mode (1006) with any-event (1003)
-  mouseEnter: "\x1b[?1003h\x1b[?1006h",
-  mouseLeave: "\x1b[?1006l\x1b[?1003l",
-
   // Mouse tracking — SGR-Pixel mode (1016) with any-event (1003)
   mousePixelEnter: "\x1b[?1003h\x1b[?1016h",
   mousePixelLeave: "\x1b[?1016l\x1b[?1003l",
@@ -56,7 +52,7 @@ const ESC = {
   tmuxExtendedKeysLeave: "\x1b[>4;0m",
 
   // Clear screen + move cursor home
-  clear: "\x1b[2J\x1b[H",
+  clear: "\x1b[2J\x1b[3J\x1b[H",
 
   // Reset all attributes
   reset: "\x1b[0m",
@@ -213,9 +209,9 @@ export function enter(
   // Clear the alternate screen
   write(ESC.clear)
 
-  // Enable mouse tracking (SGR extended or SGR-Pixel)
-  if (caps.mouse) {
-    write(caps.mousePixel ? ESC.mousePixelEnter : ESC.mouseEnter)
+  // Enable mouse tracking (SGR-Pixel mode 1016)
+  if (caps.mouse && caps.mousePixel) {
+    write(ESC.mousePixelEnter)
   }
 
   // Enable focus events
@@ -267,8 +263,8 @@ export function leave(
   }
 
   // Disable mouse tracking
-  if (caps.mouse) {
-    write(caps.mousePixel ? ESC.mousePixelLeave : ESC.mouseLeave)
+  if (caps.mouse && caps.mousePixel) {
+    write(ESC.mousePixelLeave)
   }
 
   // Reset attributes

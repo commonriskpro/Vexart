@@ -238,15 +238,15 @@ function serviceRow(service: Service, y: number, selected: () => boolean, onPres
   )
 }
 
-export type MissionControlAppProps = { width?: number; height?: number; live?: boolean }
+export type MissionControlAppProps = { width: number; height: number; live?: boolean }
 
 function PlotCanvas(props: { history: number[]; max: number; color: number; cacheKey: string; width: number; height: number }) {
   return <canvas width={props.width} height={props.height} drawCacheKey={`${props.cacheKey}-${props.width}-${props.height}`} onDraw={chartDraw(props.history, props.max, props.color, props.width, props.height)} />
 }
 
 export function MissionControlApp(props: MissionControlAppProps) {
-  const width = () => props.width ?? 1536
-  const height = () => props.height ?? 1024
+  const width = () => props.width
+  const height = () => props.height
   const [selectedId, setSelectedId] = createSignal("api")
   const [paused, setPaused] = createSignal(false)
   const [tick, setTick] = createSignal(0)

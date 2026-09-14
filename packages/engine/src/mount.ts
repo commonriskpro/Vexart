@@ -157,20 +157,10 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
   bindLoop(loop)
   const dispose = solidRender(component, loop.root)
 
-  let cellW = terminal.size.cellWidth || 8
   let cellH = terminal.size.cellHeight || 16
-  let pixW = terminal.size.pixelWidth || terminal.size.cols * cellW
-  let pixH = terminal.size.pixelHeight || terminal.size.rows * cellH
-  let cellWf = pixW / terminal.size.cols
-  let cellHf = pixH / terminal.size.rows
 
   const unsubResize = terminal.onResize((size) => {
-    cellW = size.cellWidth || 8
     cellH = size.cellHeight || 16
-    pixW = size.pixelWidth || size.cols * cellW
-    pixH = size.pixelHeight || size.rows * cellH
-    cellWf = pixW / size.cols
-    cellHf = pixH / size.rows
   })
 
   let isButtonDown = false
@@ -184,15 +174,7 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
       if (event.action === "press") isButtonDown = true
       else if (event.action === "release") isButtonDown = false
 
-      if (event.pixel) {
-        // SGR-Pixel 1016: coordinates are already in pixels
-        loop.feedPointer(event.x, event.y, isButtonDown)
-      } else {
-        // SGR 1006 fallback: convert cell center to pixels
-        const px = (event.x + 0.5) * cellWf
-        const py = (event.y + 0.5) * cellHf
-        loop.feedPointer(px, py, isButtonDown)
-      }
+      loop.feedPointer(event.x, event.y, isButtonDown)
 
       if (event.action === "scroll") {
         const dy = event.button === 64 ? cellH : -cellH
@@ -218,7 +200,6 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
     markDirty()
     loop.requestInteractionFrame("key")
   }, {
-    coordMode: caps?.mousePixel ? "pixel" : "cell",
     pixelOrigin: caps?.mousePixelOrigin ?? 1,
   })
   const unsubData = terminal.onData((data) => parser.feed(data))

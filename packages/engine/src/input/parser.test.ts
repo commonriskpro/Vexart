@@ -66,7 +66,6 @@ describe("mouse events", () => {
    expect((events[0] as MouseEvent).action).toBe("press")
    expect((events[0] as MouseEvent).x).toBe(4)
    expect((events[0] as MouseEvent).y).toBe(9)
-    expect((events[0] as MouseEvent).pixel).toBe(false)
   })
 
   test("parses long SGR drag and wheel sequences at every split point", () => {
@@ -77,7 +76,6 @@ describe("mouse events", () => {
      x: 122,
      y: 44,
      mods: { shift: false, alt: false, ctrl: false, meta: false },
-      pixel: false,
     }
     const wheel: MouseEvent = {
       type: "mouse",
@@ -86,7 +84,6 @@ describe("mouse events", () => {
       x: 122,
       y: 44,
       mods: { shift: false, alt: false, ctrl: false, meta: false },
-      pixel: false,
     }
     expectSameAtEverySplit("\x1b[<32;123;45M", [drag])
     expectSameAtEverySplit("\x1b[<64;123;45M", [wheel])

@@ -1,4 +1,5 @@
 import {
+  createEffect,
   createMemo,
   createSignal,
   For,
@@ -11,6 +12,10 @@ import {
   onInput,
   setFocus,
   Button,
+  useDrag,
+  useHover,
+  type NodeHandle,
+  type NodeMouseEvent,
 } from "vexart"
 import { Icon as DemoIcon, SearchField, ui, DemoFooter } from "./shared"
 
@@ -23,17 +28,19 @@ export type StudioImage = {
   format: string
   size: string
   category: "landscapes" | "architecture" | "abstract"
+  naturalWidth: number
+  naturalHeight: number
 }
 
 const imagePath = (name: string) => new URL(`./assets/studio/${name}.png`, import.meta.url).pathname
 
 const photoSeed: ReadonlyArray<Omit<StudioImage, "id" | "src"> & { slug: string }> = [
-  { slug: "dunes", name: "dunes-01.jpg", dimensions: "3840 × 2560", format: "JPEG", size: "2.8 MB", category: "landscapes" },
-  { slug: "coast", name: "coast-02.jpg", dimensions: "5472 × 3648", format: "JPEG", size: "4.1 MB", category: "landscapes" },
-  { slug: "peaks", name: "peaks-03.jpg", dimensions: "6000 × 4000", format: "JPEG", size: "5.6 MB", category: "landscapes" },
-  { slug: "forest", name: "forest-04.jpg", dimensions: "4240 × 2832", format: "JPEG", size: "3.7 MB", category: "landscapes" },
-  { slug: "canyon", name: "canyon-05.jpg", dimensions: "7952 × 5304", format: "JPEG", size: "6.2 MB", category: "landscapes" },
-  { slug: "dusk", name: "dusk-06.jpg", dimensions: "6000 × 4000", format: "JPEG", size: "4.8 MB", category: "landscapes" },
+  { slug: "dunes", name: "dunes-01.jpg", dimensions: "3840 × 2560", format: "JPEG", size: "2.8 MB", category: "landscapes", naturalWidth: 1419, naturalHeight: 1108 },
+  { slug: "coast", name: "coast-02.jpg", dimensions: "5472 × 3648", format: "JPEG", size: "4.1 MB", category: "landscapes", naturalWidth: 1448, naturalHeight: 1086 },
+  { slug: "peaks", name: "peaks-03.jpg", dimensions: "6000 × 4000", format: "JPEG", size: "5.6 MB", category: "landscapes", naturalWidth: 1448, naturalHeight: 1086 },
+  { slug: "forest", name: "forest-04.jpg", dimensions: "4240 × 2832", format: "JPEG", size: "3.7 MB", category: "landscapes", naturalWidth: 1448, naturalHeight: 1086 },
+  { slug: "canyon", name: "canyon-05.jpg", dimensions: "7952 × 5304", format: "JPEG", size: "6.2 MB", category: "landscapes", naturalWidth: 1448, naturalHeight: 1086 },
+  { slug: "dusk", name: "dusk-06.jpg", dimensions: "6000 × 4000", format: "JPEG", size: "4.8 MB", category: "landscapes", naturalWidth: 1448, naturalHeight: 1086 },
 ]
 
 export const studioImages: StudioImage[] = photoSeed.flatMap((photo) => {
@@ -60,13 +67,38 @@ const categoryLabels: Record<StudioCategory, string> = {
 export type StudioCategory = "all" | "landscapes" | "architecture" | "abstract"
 export type StudioView = "grid" | "list"
 
-export function createStudioModel() {
+/** Clamps pan offsets so image edges stay clamped within the viewport (prevent dragging the image completely off-screen). */
+export function clampPan(
+  x: number,
+  y: number,
+  vpWidth: number,
+  vpHeight: number,
+  imgWidth: number,
+  imgHeight: number,
+): { x: number; y: number } {
+  function clampAxis(value: number, vp: number, img: number): number {
+    if (vp <= 0 || img <= 0) return 0
+    const min = Math.min(0, vp - img)
+    const max = Math.max(0, vp - img)
+    return Math.max(min, Math.min(max, value))
+  }
+  return {
+    x: Math.round(clampAxis(x, vpWidth, imgWidth)),
+    y: Math.round(clampAxis(y, vpHeight, imgHeight)),
+  }
+}
+
+export function createStudioModel(initialViewport?: { width: number; height: number }) {
   const [query, setQuery] = createSignal("")
   const [category, setCategory] = createSignal<StudioCategory>("landscapes")
   const [selectedId, setSelectedId] = createSignal<string | null>("dunes-01")
   const [view, setView] = createSignal<StudioView>("grid")
   const [previewOpen, setPreviewOpen] = createSignal(false)
-  const [fit, setFit] = createSignal<"fit" | "100%">("fit")
+  const [fit, setFitSignal] = createSignal<"fit" | "100%">("fit")
+  const [pan, setPan] = createSignal<{ x: number; y: number }>({ x: 0, y: 0 })
+  const [viewport, setViewport] = createSignal<{ width: number; height: number }>(
+    initialViewport ?? { width: 766, height: 726 },
+  )
 
   const matching = (nextQuery: string, nextCategory: StudioCategory) => {
     const needle = nextQuery.trim().toLowerCase()
@@ -80,9 +112,31 @@ export function createStudioModel() {
   const filtered = createMemo(() => matching(query(), category()))
   const selected = createMemo(() => filtered().find((image) => image.id === selectedId()) ?? null)
 
+  function initPan(vp = viewport()) {
+    const img = selected()
+    if (!img) {
+      setPan({ x: 0, y: 0 })
+      return
+    }
+    const centerX = (vp.width - img.naturalWidth) / 2
+    const centerY = (vp.height - img.naturalHeight) / 2
+    setPan(clampPan(centerX, centerY, vp.width, vp.height, img.naturalWidth, img.naturalHeight))
+  }
+
+  function setFit(next: "fit" | "100%", customViewport?: { width: number; height: number }) {
+    if (customViewport) setViewport(customViewport)
+    setFitSignal(next)
+    if (next === "100%") {
+      initPan(customViewport ?? viewport())
+    } else {
+      setPan({ x: 0, y: 0 })
+    }
+  }
+
   function reconcile(next: StudioImage[]) {
     if (!next.some((image) => image.id === selectedId())) setSelectedId(next[0]?.id ?? null)
     if (next.length === 0) setPreviewOpen(false)
+    setPan({ x: 0, y: 0 })
   }
 
   function setQueryAndRestore(next: string) {
@@ -91,7 +145,10 @@ export function createStudioModel() {
   }
 
   function select(id: string) {
-    if (filtered().some((image) => image.id === id)) setSelectedId(id)
+    if (filtered().some((image) => image.id === id)) {
+      setSelectedId(id)
+      setPan({ x: 0, y: 0 })
+    }
   }
 
   function setCategoryAndRestore(next: StudioCategory) {
@@ -113,6 +170,10 @@ export function createStudioModel() {
     setPreviewOpen,
     fit,
     setFit,
+    pan,
+    setPan,
+    viewport,
+    setViewport,
     filtered,
   }
 }
@@ -301,11 +362,11 @@ function PreviewOverlay(props: {
   )
 }
 
-export type StudioAppProps = { width?: number; height?: number }
+export type StudioAppProps = { width: number; height: number }
 
 export function StudioApp(props: StudioAppProps) {
-  const width = () => props.width ?? 1536
-  const height = () => props.height ?? 1024
+  const width = () => props.width
+  const height = () => props.height
 
   const model = createStudioModel()
   const galleryScrollId = "studio-gallery"
@@ -313,6 +374,54 @@ export function StudioApp(props: StudioAppProps) {
   galleryScroll.scrollTo(0)
   let suppressSlash = false
   let previewReturnId = "studio-open-preview"
+  let containerHandle: NodeHandle | null = null
+
+  const previewButtonWidth = () => Math.max(200, width() - 770)
+  const vpWidth = () => containerHandle?.layout.width || Math.max(100, width() - 770)
+  const vpHeight = () => containerHandle?.layout.height || Math.max(100, height() - 298)
+
+  createEffect(() => {
+    const w = vpWidth()
+    const h = vpHeight()
+    model.setViewport({ width: w, height: h })
+  })
+
+  let dragStartX = 0
+  let dragStartY = 0
+  let panStartX = 0
+  let panStartY = 0
+
+  const { dragging, dragProps } = useDrag({
+    disabled: () => model.fit() !== "100%",
+    onDragStart: (evt: NodeMouseEvent) => {
+      dragStartX = evt.x
+      dragStartY = evt.y
+      panStartX = model.pan().x
+      panStartY = model.pan().y
+    },
+    onDrag: (evt: NodeMouseEvent) => {
+      const img = model.selected()
+      if (!img) return
+      const dx = evt.x - dragStartX
+      const dy = evt.y - dragStartY
+      const targetX = panStartX + dx
+      const targetY = panStartY + dy
+      const w = containerHandle?.layout.width || vpWidth()
+      const h = containerHandle?.layout.height || vpHeight()
+      model.setPan(clampPan(targetX, targetY, w, h, img.naturalWidth, img.naturalHeight))
+    },
+  })
+
+  const { hovered, hoverProps } = useHover({
+    disabled: () => model.fit() !== "100%",
+  })
+
+  const handlePreviewMouseDown = (evt: NodeMouseEvent) => {
+    if (model.fit() === "100%") {
+      setFocus("studio-100")
+    }
+    dragProps.onMouseDown(evt)
+  }
 
   const setQuery = (value: string) => {
     if (suppressSlash && value === `${model.query()}/`) {
@@ -331,8 +440,6 @@ export function StudioApp(props: StudioAppProps) {
     const rows = Math.ceil(count / 2)
     return Math.max(746, 17 + Math.max(0, rows - 1) * 246 + 221)
   })
-
-  const previewButtonWidth = () => Math.max(200, width() - 770)
 
   const openPreview = (returnId = focusedId() ?? "studio-open-preview") => {
     if (!model.selected()) return
@@ -355,6 +462,26 @@ export function StudioApp(props: StudioAppProps) {
   }
 
   const unsubscribeInput = onInput((event) => {
+    if (event.type === "mouse" && event.action === "scroll" && model.fit() === "100%") {
+      if (hovered() || focusedId() === "studio-100") {
+        const img = model.selected()
+        if (img) {
+          const step = 40
+          const currentPan = model.pan()
+          let targetX = currentPan.x
+          let targetY = currentPan.y
+          if (event.button === 64) targetY += step
+          else if (event.button === 65) targetY -= step
+          else if (event.button === 66) targetX += step
+          else if (event.button === 67) targetX -= step
+          const w = containerHandle?.layout.width || vpWidth()
+          const h = containerHandle?.layout.height || vpHeight()
+          model.setPan(clampPan(targetX, targetY, w, h, img.naturalWidth, img.naturalHeight))
+        }
+        return
+      }
+    }
+
     if (event.type !== "key") return
     const current = focusedId()
     if (event.key === "escape" && model.previewOpen()) {
@@ -373,6 +500,27 @@ export function StudioApp(props: StudioAppProps) {
       })
       return
     }
+
+    if (model.fit() === "100%" && (current === "studio-100" || (hovered() && !current?.startsWith("studio-card-")))) {
+      if (["up", "down", "left", "right"].includes(event.key)) {
+        const img = model.selected()
+        if (img) {
+          const step = 40
+          const currentPan = model.pan()
+          let targetX = currentPan.x
+          let targetY = currentPan.y
+          if (event.key === "up") targetY += step
+          if (event.key === "down") targetY -= step
+          if (event.key === "left") targetX += step
+          if (event.key === "right") targetX -= step
+          const w = containerHandle?.layout.width || vpWidth()
+          const h = containerHandle?.layout.height || vpHeight()
+          model.setPan(clampPan(targetX, targetY, w, h, img.naturalWidth, img.naturalHeight))
+          return
+        }
+      }
+    }
+
     if (!current?.startsWith("studio-card-")) return
     const focusedIndex = visibleImages().findIndex((image) => `studio-card-${image.id}` === current)
     const index = focusedIndex >= 0 ? focusedIndex : selectedIndex()
@@ -502,7 +650,7 @@ export function StudioApp(props: StudioAppProps) {
                           <text color="#eceeef" fontSize={13} fontFamily={ui.sans}>Fit</text>
                         </box>
                       )} />
-                      <Button focusId="studio-100" onPress={() => model.setFit("100%")} renderButton={(button) => (
+                      <Button focusId="studio-100" onPress={() => model.setFit("100%", { width: vpWidth(), height: vpHeight() })} renderButton={(button) => (
                         <box width={57} height={35} {...button.buttonProps} alignX="center" alignY="center" backgroundColor={model.fit() === "100%" ? "#3a3d3f" : "#171a1b"} borderColor={button.focused ? "#f6bd49" : "#55595b"} borderWidth={1} cornerRadius={6}>
                           <text color="#e5e7e8" fontSize={13} fontFamily={ui.sans}>100%</text>
                         </box>
@@ -511,13 +659,63 @@ export function StudioApp(props: StudioAppProps) {
                   </box>
 
                   {/* Large Image Box */}
-                  <box width="100%" height="grow" backgroundColor="#0c0f11" borderColor="#2d3234" borderWidth={1} cornerRadius={4} viewportClip>
-                    <img src={image().src} width="100%" height="100%" objectFit={model.fit() === "fit" ? "contain" : "none"} cornerRadius={3} />
+                  <box
+                    width="100%"
+                    height="grow"
+                    backgroundColor="#0c0f11"
+                    borderColor={dragging() ? "#f6bd49" : "#2d3234"}
+                    borderWidth={1}
+                    cornerRadius={4}
+                    viewportClip
+                    scrollX
+                    scrollY
+                    ref={(handle: NodeHandle) => {
+                      containerHandle = handle
+                      dragProps.ref(handle)
+                    }}
+                    onMouseDown={handlePreviewMouseDown}
+                    onMouseMove={dragProps.onMouseMove}
+                    onMouseUp={dragProps.onMouseUp}
+                    onMouseOver={hoverProps.onMouseOver}
+                    onMouseOut={hoverProps.onMouseOut}
+                  >
+                    <Show
+                      when={model.fit() === "100%"}
+                      fallback={<img src={image().src} width="100%" height="100%" objectFit="contain" cornerRadius={3} />}
+                    >
+                      <box
+                        width={image().naturalWidth}
+                        height={image().naturalHeight}
+                        flexShrink={0}
+                        transform={{ translateX: model.pan().x, translateY: model.pan().y }}
+                      >
+                        <img src={image().src} width="100%" height="100%" objectFit="none" cornerRadius={3} />
+                      </box>
+                      <box
+                        floating="parent"
+                        floatOffset={{ x: 12, y: 12 }}
+                        backgroundColor="#141718ee"
+                        paddingX={10}
+                        paddingY={5}
+                        cornerRadius={4}
+                        borderColor={dragging() ? "#f6bd49" : "#363b3d"}
+                        borderWidth={1}
+                        pointerPassthrough
+                        zIndex={10}
+                      >
+                        <text color={dragging() ? "#f6bd49" : "#aeb0b1"} fontSize={12} fontFamily={ui.mono}>
+                          {dragging() ? "Dragging..." : "100% · Drag to pan"}
+                        </text>
+                      </box>
+                    </Show>
                   </box>
 
                   {/* Metadata line */}
-                  <box width="100%" height={24} alignY="center">
+                  <box width="100%" height={24} direction="row" alignY="center" alignX="space-between">
                     <text color="#9da2a5" fontSize={14} fontFamily={ui.mono}>{image().dimensions}  |  {image().format}  |  {image().size}</text>
+                    <Show when={model.fit() === "100%"}>
+                      <text color={dragging() ? "#f6bd49" : "#7b8184"} fontSize={13} fontFamily={ui.mono}>Drag to pan</text>
+                    </Show>
                   </box>
 
                   {/* Open preview button */}
@@ -537,7 +735,13 @@ export function StudioApp(props: StudioAppProps) {
       </box>
 
       {/* Footer */}
-      <DemoFooter hints={[
+      <DemoFooter hints={model.fit() === "100%" ? [
+        { keys: "Drag", label: "Pan" },
+        { keys: "↑ ↓ ← →", label: "Pan" },
+        { keys: "↵", label: "Preview" },
+        { keys: "/", label: "Search" },
+        { keys: "Esc", label: "Back" },
+      ] : [
         { keys: "↑ ↓", label: "Navigate" },
         { keys: "↵", label: "Preview" },
         { keys: "/", label: "Search" },

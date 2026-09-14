@@ -11,7 +11,7 @@ import {
   ToggleSwitch as Switch,
   onInput,
 } from "vexart"
-import { Button, DemoFooter, Label, Pane, useDemo, ui } from "./shared"
+import { Button, DemoFooter, Label, Pane, ui } from "./shared"
 
 export type EffectsTab = "surface" | "gradient" | "glass"
 
@@ -97,7 +97,7 @@ function DemoSlider(props: {
   onChange: (value: number) => void
   width?: number
 }) {
-  const demo = useDemo()
+  const trackWidth = props.width ?? 218
   return (
     <Slider
       value={props.value}
@@ -108,37 +108,37 @@ function DemoSlider(props: {
       renderSlider={(ctx) => (
         <box
           {...ctx.trackProps}
-          width={demo.s(props.width ?? 218)}
-          height={demo.s(28)}
+          width={trackWidth}
+          height={28}
             backgroundColor="#00000000"
-          focusStyle={{ borderColor: "#ffffff", borderWidth: demo.s(1) }}
+          focusStyle={{ borderColor: "#ffffff", borderWidth: 1 }}
         >
           <box
-            width={demo.s(props.width ?? 218)}
-            height={demo.s(6)}
+            width={trackWidth}
+            height={6}
             floating="parent"
-            floatOffset={{ x: 0, y: demo.s(11) }}
+            floatOffset={{ x: 0, y: 11 }}
             pointerPassthrough
             backgroundColor="#393d3f"
-            cornerRadius={demo.s(3)}
+            cornerRadius={3}
           />
           <box
-            width={demo.s((props.width ?? 218) * (ctx.percentage / 100))}
-            height={demo.s(6)}
+            width={trackWidth * (ctx.percentage / 100)}
+            height={6}
             floating="parent"
-            floatOffset={{ x: 0, y: demo.s(11) }}
+            floatOffset={{ x: 0, y: 11 }}
             pointerPassthrough
             backgroundColor="#f1f2f2"
-            cornerRadius={demo.s(3)}
+            cornerRadius={3}
           />
           <box
-            width={demo.s(18)}
-            height={demo.s(18)}
+            width={18}
+            height={18}
             floating="parent"
-            floatOffset={{ x: demo.s((props.width ?? 218) * (ctx.percentage / 100) - 9), y: demo.s(5) }}
+            floatOffset={{ x: trackWidth * (ctx.percentage / 100) - 9, y: 5 }}
             pointerPassthrough
             backgroundColor="#f1f2f2"
-            cornerRadius={demo.s(9)}
+            cornerRadius={9}
           />
         </box>
       )}
@@ -156,7 +156,6 @@ function PropertySlider(props: {
   y: number
   onChange: (value: number) => void
 }) {
-  const demo = useDemo()
   return (
     <Pane x={22} y={props.y} width={390} height={42}>
       <Label x={0} y={0} size={16} color="#d8dcdd">{props.label}</Label>
@@ -179,7 +178,6 @@ function ColorInput(props: { value: string; onChange: (value: string) => void })
 }
 
 function ColorInputField(props: { value: string; onChange: (value: string) => void }) {
-  const demo = useDemo()
   const [draft, setDraft] = createSignal(props.value)
   createEffect(() => setDraft(props.value))
   return (
@@ -198,19 +196,19 @@ function ColorInputField(props: { value: string; onChange: (value: string) => vo
           renderInput={(ctx) => (
             <box
               {...ctx.inputProps}
-              width={demo.s(238)}
-              height={demo.s(34)}
+              width={238}
+              height={34}
               direction="row"
               alignY="center"
-              paddingX={demo.s(11)}
-              borderWidth={demo.s(1)}
+              paddingX={11}
+              borderWidth={1}
               borderColor={ctx.focused ? "#8f999e" : "#4a4e50"}
-              cornerRadius={demo.s(4)}
+              cornerRadius={4}
               backgroundColor="#1d2021"
             >
-              <text fontFamily={ui.mono} fontSize={Math.round(demo.s(16))} color="#e2e5e6" pointerPassthrough>{ctx.displayText}</text>
+              <text fontFamily={ui.mono} fontSize={16} color="#e2e5e6" pointerPassthrough>{ctx.displayText}</text>
               <Show when={ctx.focused && ctx.blink}>
-                <box floating="parent" floatOffset={{ x: demo.s(11 + ctx.cursor * 9.6), y: demo.s(7) }} width={demo.s(1.5)} height={demo.s(19)} backgroundColor="#e2e5e6" pointerPassthrough />
+                <box floating="parent" floatOffset={{ x: 11 + ctx.cursor * 9.6, y: 7 }} width={1.5} height={19} backgroundColor="#e2e5e6" pointerPassthrough />
               </Show>
             </box>
           )}
@@ -221,7 +219,6 @@ function ColorInputField(props: { value: string; onChange: (value: string) => vo
 }
 
 function ShadowSwitch(props: { checked: boolean; onChange: (checked: boolean) => void }) {
-  const demo = useDemo()
   return (
     <Switch
       checked={props.checked}
@@ -229,19 +226,19 @@ function ShadowSwitch(props: { checked: boolean; onChange: (checked: boolean) =>
       renderSwitch={(ctx) => (
         <box
           {...ctx.toggleProps}
-          width={demo.s(60)}
-          height={demo.s(34)}
+          width={60}
+          height={34}
           backgroundColor={ctx.checked ? "#dfe2e3" : "#414547"}
-          cornerRadius={demo.s(17)}
-          focusStyle={{ borderColor: "#ffffff", borderWidth: demo.s(1) }}
+          cornerRadius={17}
+          focusStyle={{ borderColor: "#ffffff", borderWidth: 1 }}
         >
           <box
-            width={demo.s(28)}
-            height={demo.s(28)}
+            width={28}
+            height={28}
             floating="parent"
-            floatOffset={{ x: demo.s(ctx.checked ? 29 : 3), y: demo.s(3) }}
+            floatOffset={{ x: ctx.checked ? 29 : 3, y: 3 }}
             backgroundColor={ctx.checked ? "#ffffff" : "#aeb4b5"}
-            cornerRadius={demo.s(14)}
+            cornerRadius={14}
           />
         </box>
       )}
@@ -381,13 +378,13 @@ function CodePanel(props: { tab: EffectsTab; values: EffectsValues; width: numbe
 }
 
 export function EffectsPlaygroundApp(props: {
-  width?: number
-  height?: number
+  width: number
+  height: number
   copy?: (text: string) => void | Promise<void>
   controller?: ReturnType<typeof createEffectsController>
 }) {
-  const width = () => props.width ?? 1536
-  const height = () => props.height ?? 1024
+  const width = () => props.width
+  const height = () => props.height
   const [tab, setTab] = createSignal<EffectsTab>("glass")
   const controller = props.controller ?? createEffectsController()
   onMount(() => {

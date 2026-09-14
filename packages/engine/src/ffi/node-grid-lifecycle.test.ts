@@ -39,6 +39,8 @@ function terminal(width: number, height: number) {
       sixel: false,
       truecolor: true,
       mouse: false,
+      mousePixel: false,
+      mousePixelOrigin: 1,
       focus: false,
       bracketedPaste: false,
       syncOutput: false,

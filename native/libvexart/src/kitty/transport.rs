@@ -916,7 +916,7 @@ fn emit_shm_rgba_with_owner(
         (
             None,
             format!(
-                "\x1b7\x1b[{};{}H\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s{compression_param},S={data_len},q={quiet};{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,q=2;\x1b\\\x1b8",
+                "\x1b7\x1b[{};{}H\x1b_Ga=d,d=i,i={image_id},q=2;\x1b\\\x1b_Ga=t,f=32,s={width},v={height},i={image_id},C=1,t=s{compression_param},S={data_len},q={quiet};{name_b64}\x1b\\\x1b_Ga=p,i={image_id},p=1,C=1,q=2;\x1b\\\x1b8",
                 row.max(0) + 1,
                 col.max(0) + 1,
             ),

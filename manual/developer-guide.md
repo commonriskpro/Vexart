@@ -112,7 +112,7 @@ wiring and is not a public alternative for constructing raw nodes.
 ### Requirements
 
 - **Bun >= 1.1.0** — Vexart uses Bun's FFI for the native Rust library.
-- **Terminal with Kitty graphics protocol** — Kitty, Ghostty, or WezTerm. The Kitty protocol transmits pixel data directly to the terminal GPU. Standard terminals (iTerm2, Terminal.app, Windows Terminal) are not supported.
+- **Terminal with Kitty graphics protocol & SGR-Pixel mode 1016** — Ghostty, Kitty, WezTerm, foot, or Contour. The Kitty protocol transmits pixel data directly to the terminal GPU, while SGR-Pixel mode 1016 provides native sub-cell pixel-precision mouse input. Standard terminals lacking these protocols (iTerm2, Terminal.app, Windows Terminal) are not supported.
 - **macOS ARM64** — The shipped native binary (`libvexart.dylib`) is currently ARM64 Darwin only. Linux and x86 builds are planned.
 
 ### Import Model
@@ -396,6 +396,43 @@ Use `direction="row"` explicitly for horizontal layout:
 ```
 
 The terminal window resizes automatically. When the terminal is resized, Vexart detects the new dimensions, re-runs Flexily layout, and re-paints. Your layout adapts if you use relative sizing (`width="100%"`, `width="grow"`).
+
+### Fluid Flexbox Layout vs Fixed Artboards
+
+Vexart applications use a **fluid responsive Flexbox layout** that adapts directly to the terminal's viewport dimensions rather than fixed-dimension artboards (such as fixed 1536×1024 frames).
+
+- **Root container sizing**: The root application container should bind to the available viewport dimensions. In `createApp()`, use `width="100%"` and `height="100%"` (or `width={width()}` and `height={height()}` from `useTerminalDimensions(terminal)` when managing the terminal lifecycle explicitly via `mount()` or `mountApp()`).
+- **Flexible panel expansion**: Use `width="100%"`, `height="grow"`, or `flexGrow={1}` for interior scroll views, content areas, and split panes so they expand naturally to fill the terminal window.
+- **Automatic reflow on resize**: When the user resizes the terminal window, Vexart detects the new pixel dimensions via SIGWINCH/ioctl, triggers a Flexily layout pass, and repaints smoothly without letterboxing or fixed artboard scaling artifacts.
+
+```tsx
+// Canonical fluid application layout
+function App() {
+  return (
+    <box width="100%" height="100%" direction="column" backgroundColor={colors.background}>
+      {/* Fixed-height header */}
+      <box height={48} width="100%" paddingX={16} alignY="center" borderBottom={1} borderColor={colors.border}>
+        <text weight="bold">Vexart Application</text>
+      </box>
+
+      {/* Fluid body: sidebar + growing main area */}
+      <box direction="row" width="100%" height="grow">
+        <box width={240} height="100%" borderRight={1} borderColor={colors.border} padding={12}>
+          <text>Sidebar</text>
+        </box>
+        <box width="grow" height="100%" padding={16}>
+          <text>Main content dynamically adapts to terminal size</text>
+        </box>
+      </box>
+
+      {/* Fixed-height status bar */}
+      <box height={28} width="100%" paddingX={16} alignY="center" backgroundColor={colors.muted}>
+        <text fontSize={11} color={colors.mutedForeground}>Ready</text>
+      </box>
+    </box>
+  )
+}
+```
 ---
 
 ## `<box>` — Complete Prop Reference
@@ -1174,20 +1211,20 @@ import { useMouse } from "vexart"
 
 type MouseState = {
   mouse: () => MouseEvent | null              // last mouse event
-  pos: () => { x: number; y: number }         // current position (cells)
+  pos: () => { x: number; y: number }         // current position (pixels relative to terminal viewport)
 }
 
 type MouseEvent = {
   type: "mouse"
-  x: number            // column (0-indexed)
-  y: number            // row (0-indexed)
+  x: number            // pixel x (0-based)
+  y: number            // pixel y (0-based)
   button: number       // 0=left, 1=middle, 2=right, 64=scrollUp, 65=scrollDown
   action: "press" | "release" | "move" | "scroll"
   mods: { shift: boolean; ctrl: boolean; alt: boolean; meta: boolean }
 }
 ```
 
-> **`useMouse()` vs per-node `onMouse*` events:** `useMouse()` is a global reactive signal that reports mouse position in terminal cell coordinates. Per-node mouse events (`onMouseDown`, `onMouseMove`, etc.) are callbacks dispatched directly to the node under the pointer, with coordinates relative to the node's layout origin (`nodeX`, `nodeY`). Use `useMouse()` for reactive UI updates based on cursor position. Use per-node `onMouse*` events for element-specific interactions like drag, hover detection, and click handling.
+> **`useMouse()` vs per-node `onMouse*` events:** `useMouse()` is a global reactive signal that reports mouse position in pixel coordinates relative to the terminal viewport. Per-node mouse events (`onMouseDown`, `onMouseMove`, etc.) are callbacks dispatched directly to the node under the pointer, with coordinates relative to the node's layout origin (`nodeX`, `nodeY`). Use `useMouse()` for reactive UI updates based on cursor position. Use per-node `onMouse*` events for element-specific interactions like drag, hover detection, and click handling.
 
 ---
 

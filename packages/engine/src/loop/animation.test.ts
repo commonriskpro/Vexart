@@ -38,6 +38,8 @@ function mockTerminal(width = 200, height = 100) {
       sixel: false,
       truecolor: true,
       mouse: false,
+      mousePixel: false,
+      mousePixelOrigin: 1 as const,
       focus: false,
       bracketedPaste: false,
       syncOutput: false,

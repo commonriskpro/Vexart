@@ -1,5 +1,8 @@
 # Plan de Implementación: SGR-Pixel (Mode 1016)
 
+> **Status: Completed / Implemented**
+> SGR-Pixel mode 1016 (`\x1b[?1016h`) is now the unified, strict mouse protocol for the Vexart engine. Cell mode mouse tracking (SGR 1006) and cell-to-pixel projection formulas have been completely decommissioned. Coordinates are delivered natively in pixels by the terminal emulator without cell quantization heuristics.
+
 ## Contexto
 
 Vexart es un engine de UI GPU-rendered que produce píxeles exactos, pero recibe coordenadas de mouse cuantizadas a celdas de terminal (~8×16px). La conversión actual `(cell + 0.5) * cellSize` introduce un error de **±½ celda** (~±4px horizontal, ±8px vertical), lo que degrada el hit-testing en elementos pequeños, bordes, sliders, y esquinas redondeadas.
@@ -152,4 +155,3 @@ Adaptar devtools `vexart_click` para coords pixel-mode.
 | 0-based vs 1-based mal calibrado | Offset de 1px | `mousePixelOrigin` per-terminal |
 | Terminal desconocido | Default a 1006 (safe) | `mousePixel` defaults to `false` |
 | Font size change en runtime | Cell dims stale (pre-existente) | Fuera de scope |
-

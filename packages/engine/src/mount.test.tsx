@@ -49,6 +49,8 @@ function createMockTerminal(width: number, height: number): { terminal: Terminal
         sixel: false,
         truecolor: true,
         mouse: true,
+        mousePixel: true,
+        mousePixelOrigin: 1,
         focus: false,
         bracketedPaste: false,
         syncOutput: false,
@@ -170,15 +172,16 @@ describe("mount mouse coordinates (Defect 15)", () => {
     try {
       await sleep(20)
 
-      // Emit SGR mouse press at row 0: col 1, row 1 (1-based SGR coordinates)
-      emit("\x1b[<0;1;1M")
+      const targetY = Math.round(cellHeight * 0.5)
+      // Emit SGR-Pixel mouse press at row 0 centroid (1-based pixel coordinates)
+      emit(`\x1b[<0;1;${targetY + 1}M`)
       await sleep(20)
 
       expect(mouseDownCount).toBe(1)
       expect(receivedNodeY).toBe(cellHeight * 0.5)
 
-      // Emit SGR mouse release at row 0: col 1, row 1
-      emit("\x1b[<0;1;1m")
+      // Emit SGR-Pixel mouse release at row 0 centroid
+      emit(`\x1b[<0;1;${targetY + 1}m`)
       await sleep(20)
 
       expect(pressedCount).toBe(1)
@@ -224,15 +227,16 @@ describe("mount mouse coordinates (Defect 15)", () => {
     try {
       await sleep(20)
 
-      // Emit SGR mouse press at bottom row: col 1, row rows (1-based SGR coordinates)
-      emit(`\x1b[<0;1;${rows}M`)
+      const bottomTargetY = Math.round((rows - 0.5) * cellHeight)
+      // Emit SGR-Pixel mouse press at bottom row centroid (1-based pixel coordinates)
+      emit(`\x1b[<0;1;${bottomTargetY + 1}M`)
       await sleep(20)
 
       expect(bottomMouseDownCount).toBe(1)
       expect(bottomNodeY).toBe(cellHeight * 0.5)
 
-      // Emit SGR mouse release at bottom row: col 1, row rows
-      emit(`\x1b[<0;1;${rows}m`)
+      // Emit SGR-Pixel mouse release at bottom row centroid
+      emit(`\x1b[<0;1;${bottomTargetY + 1}m`)
       await sleep(20)
 
       expect(bottomPressedCount).toBe(1)

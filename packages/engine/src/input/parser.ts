@@ -15,7 +15,7 @@
  * until no more complete sequences are found.
  */
 
-import type { InputEvent, FocusEvent, PasteEvent, KeyEvent, MouseCoordMode } from "./types"
+import type { InputEvent, FocusEvent, PasteEvent, KeyEvent } from "./types"
 import { parseKey } from "./keyboard"
 import { parseMouse } from "./mouse"
 
@@ -24,7 +24,6 @@ export type InputHandler = (event: InputEvent) => void
 
 /** @public */
 export type ParserOptions = {
-  coordMode?: MouseCoordMode
   pixelOrigin?: 0 | 1
 }
 
@@ -114,26 +113,18 @@ function parseAltUnderscore(data: string): [KeyEvent, number] | null {
 /** @public */
 export function createParser(handler: InputHandler, options?: ParserOptions): InputParser
 /** @public */
-export function createParser(handler: InputHandler, coordMode?: MouseCoordMode, pixelOrigin?: 0 | 1): InputParser
+export function createParser(handler: InputHandler, pixelOrigin?: 0 | 1): InputParser
 export function createParser(
   handler: InputHandler,
-  optionsOrCoordMode?: ParserOptions | MouseCoordMode,
-  maybePixelOrigin?: 0 | 1,
+  optionsOrPixelOrigin?: ParserOptions | (0 | 1),
 ): InputParser {
-  let coordMode: MouseCoordMode = "cell"
   let pixelOrigin: 0 | 1 = 1
 
-  if (typeof optionsOrCoordMode === "string") {
-    coordMode = optionsOrCoordMode
-    if (maybePixelOrigin !== undefined) {
-      pixelOrigin = maybePixelOrigin
-    }
-  } else if (optionsOrCoordMode && typeof optionsOrCoordMode === "object") {
-    if (optionsOrCoordMode.coordMode !== undefined) {
-      coordMode = optionsOrCoordMode.coordMode
-    }
-    if (optionsOrCoordMode.pixelOrigin !== undefined) {
-      pixelOrigin = optionsOrCoordMode.pixelOrigin
+  if (typeof optionsOrPixelOrigin === "number") {
+    pixelOrigin = optionsOrPixelOrigin
+  } else if (optionsOrPixelOrigin && typeof optionsOrPixelOrigin === "object") {
+    if (optionsOrPixelOrigin.pixelOrigin !== undefined) {
+      pixelOrigin = optionsOrPixelOrigin.pixelOrigin
     }
   }
 
@@ -260,7 +251,7 @@ export function createParser(
       }
 
       // ── Mouse (SGR) ──
-      const mouseResult = parseMouse(buffer, coordMode, pixelOrigin)
+      const mouseResult = parseMouse(buffer, pixelOrigin)
       if (mouseResult) {
         handler(mouseResult[0])
         buffer = buffer.slice(mouseResult[1])

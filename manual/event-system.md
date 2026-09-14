@@ -399,7 +399,7 @@ function CursorPosition() {
 ```typescript
 type MouseState = {
   mouse: () => MouseEvent | null
-  pos: () => { x: number; y: number }   // cell coordinates
+  pos: () => { x: number; y: number }   // pixel coordinates relative to terminal viewport
 }
 ```
 
@@ -408,8 +408,8 @@ type MouseState = {
 ```typescript
 type MouseEvent = {
   type: "mouse"
-  x: number          // column (0-indexed)
-  y: number          // row (0-indexed)
+  x: number          // pixel x (0-based)
+  y: number          // pixel y (0-based)
   button: number     // 0=left, 1=middle, 2=right, 64=scrollUp, 65=scrollDown
   action: "press" | "release" | "move" | "scroll"
   mods: { shift: boolean; ctrl: boolean; alt: boolean; meta: boolean }
@@ -461,7 +461,7 @@ Terminal stdin
             → Tab/Shift+Tab triggers focus cycling
             → Enter/Space creates PressEvent → onPress + bubble
           → Mouse system:
-            → feedPointer (fractional cell→pixel, edge queuing for fast clicks)
+            → feedPointer (direct pixel coordinates, edge queuing for fast clicks)
               → updateInteractiveStates hit-tests all interactive nodes:
                 → onMouseOver/onMouseOut on hover enter/leave
                 → onMouseDown/onMouseUp on button press/release edges

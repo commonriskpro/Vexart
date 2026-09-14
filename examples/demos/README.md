@@ -20,8 +20,8 @@ bun run demo:mission
 bun run demo:effects
 ```
 
-Exit with **Ctrl+C**. The apps share the reference's 1536 × 1024 coordinate system
-and scale proportionally to the terminal's pixel viewport. A large terminal
+Exit with **Ctrl+C**. The demo applications use a fluid responsive Flexbox layout
+adapting directly to the terminal's viewport dimensions. A large terminal
 window gives the most readable result; this is a desktop-oriented demo, not a
 mobile layout. The terminal emulator's own window decoration is outside the
 rendered content.

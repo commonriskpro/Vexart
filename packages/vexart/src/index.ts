@@ -415,7 +415,6 @@ export type {
   KeyboardState,
   Modifiers,
   MouseAction,
-  MouseCoordMode,
   MouseEvent,
   MouseState,
   NodeMouseEvent,

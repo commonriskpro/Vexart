@@ -29,6 +29,8 @@ function createMockTerminal(width: number, height: number, transmissionMode: "di
         sixel: false,
         truecolor: true,
         mouse: false,
+        mousePixel: false,
+        mousePixelOrigin: 1 as const,
         focus: false,
         bracketedPaste: false,
         syncOutput: false,

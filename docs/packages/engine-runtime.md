@@ -389,10 +389,11 @@ To prevent terminal corruption or process crashes during transient native emissi
 
 ### 7.1 Protocol Support & ANSI/Kitty Sequences
 Vexart interfaces directly with the terminal using advanced terminal escape modes:
-- **SGR Extended Mouse (Mode 1006)**: Decodes subpixel mouse coordinates and buttons:
-  - `\x1b[<0;20;15M` (Button 1 press at column 20, row 15)
-  - `\x1b[<0;20;15m` (Button 1 release — prioritizes release suffix `m`)
+- **SGR-Pixel Mouse (Mode 1016)**: Activated via `\x1b[?1003h\x1b[?1016h` (with `\x1b[?1016l\x1b[?1003l` on teardown). Decodes native pixel coordinates and buttons directly from the terminal emulator:
+  - `\x1b[<0;240;180M` (Button 1 press at pixel x=240, y=180)
+  - `\x1b[<0;240;180m` (Button 1 release — prioritizes release suffix `m`)
   - Mouse movement without buttons (code `35`).
+  - Coordinates are delivered natively in pixels by the terminal emulator without cell quantization heuristics. Terminal coordinate origins are normalized to 0-based pixel space (0-based for Kitty/Ghostty, 1-based for WezTerm/foot/Contour).
 - **Kitty Keyboard Protocol (Mode >1u)**: Reports key presses, releases, repeats, and full modifier masks (Shift, Alt, Ctrl, Super, Hyper, Meta).
   - Handles LF mode: Byte 10 (`\n`) maps unambiguously to `enter` (not `Ctrl+j`).
   - Byte 0 (`\x00`) maps to `space` with `ctrl: true`.
@@ -406,9 +407,8 @@ To prevent drag operations from breaking when the mouse leaves an element's boun
 - `releasePointerCapture(nodeId)`: Releases capture, restoring standard hit-test routing.
 
 ### 7.3 Transform-Aware Hit-Testing & Nested Scroll Composition
-Hit-testing maps screen cell coordinates to the correct interactive node in pixel space:
-1. **Affine Pixel Projection**: Screen coordinates $(col, row)$ are translated to subpixel centers:
-   $$px = (col + 0.5) \cdot cellWidth, \quad py = (row + 0.5) \cdot cellHeight$$
+Hit-testing maps screen pixel coordinates directly to the correct interactive node in pixel space:
+1. **Native Pixel Coordinates**: Coordinates are delivered natively in pixels $(px, py)$ by the terminal emulator under SGR-Pixel Mode 1016 without cell quantization heuristics or cell-to-pixel projection formulas (eliminating cell midpoint approximations).
 2. **Projective Matrix Inversion**: Nodes with 3D rotation, scaling, or perspective project the point into local space by multiplying against `node._accTransformInverse` ($P_{local} = M_{acc}^{-1} \cdot P_{screen}$).
 3. **Compound Scroll Offset Map**: In nested scroll hierarchies, ancestor scroll translations are compounded in $O(1)$ via `composite-scroll.ts`, ensuring that deeply nested scrolled elements receive accurate mouse clicks.
 

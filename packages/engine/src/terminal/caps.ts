@@ -32,9 +32,9 @@ export type Capabilities = {
   /** SGR mouse protocol (1006) */
   mouse: boolean
   /** SGR-Pixel mouse (mode 1016) — pixel-precision coordinates */
-  mousePixel?: boolean
+  mousePixel: boolean
   /** Pixel coordinate origin: 0 for Kitty/Ghostty (0-based), 1 for WezTerm/foot/xterm (1-based) */
-  mousePixelOrigin?: 0 | 1
+  mousePixelOrigin: 0 | 1
   /** Focus in/out events (1004) */
   focus: boolean
   /** Bracketed paste mode (2004) */
@@ -124,8 +124,6 @@ export function inferCaps(kind: TerminalKind): Capabilities {
       caps.kittyGraphics = false
       caps.kittyPlaceholder = false
       caps.kittyKeyboard = false
-      caps.mousePixel = false
-      caps.mousePixelOrigin = 1
       break
 
     case "foot":
@@ -151,23 +149,15 @@ export function inferCaps(kind: TerminalKind): Capabilities {
       // Alacritty has no image protocol
       caps.kittyGraphics = false
       caps.kittyKeyboard = false
-      caps.mousePixel = false
-      caps.mousePixelOrigin = 1
       break
 
     case "xterm":
       // Assume truecolor if COLORTERM says so (already checked above)
       caps.sixel = false // most xterm builds don't have sixel
-      caps.mousePixel = false
-      caps.mousePixelOrigin = 1
       break
 
     case "unknown":
       break
-  }
-
-  if (caps.tmux) {
-    caps.mousePixel = false
   }
 
   return caps

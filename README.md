@@ -56,10 +56,10 @@ await createApp(() => (
 |------------|---------|-------|
 | [Bun](https://bun.sh/) | ≥ 1.1.0 | Runtime |
 | Rust toolchain | stable | For `cargo build` (native library) |
-| Kitty-compatible terminal | — | Kitty, Ghostty, Herdr, or WezTerm |
+| Modern graphical terminal | — | Terminal supporting Kitty graphics protocol and SGR-Pixel mode 1016 (Ghostty, Kitty, WezTerm, foot, Contour) |
 | tmux (optional) | ≥ 3.4 | Experimental Kitty passthrough from a Kitty, Ghostty, or Herdr outer terminal; see [`docs/tmux.md`](docs/tmux.md) |
 
-> Vexart requires a terminal that supports the [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). It exits with a clear error on unsupported terminals.
+> Vexart targets modern graphical terminals with Kitty graphics protocol and SGR-Pixel mode 1016 support (Ghostty, Kitty, WezTerm, foot, Contour). It exits with a clear error on unsupported terminals.
 >
 > tmux support is experimental and requires user-applied `allow-passthrough all` in tmux. The G-037 physical gate covers Kitty direct and private tmux+SHM runs; offscreen checks are not physical terminal evidence. There is no automatic direct/file fallback or ASCII/cell-based fallback; see [`docs/tmux.md`](docs/tmux.md) for setup and limitations.
 
@@ -284,14 +284,18 @@ All effects are JSX props — no imperative API needed:
 
 ## Terminal Support
 
-| Terminal | Protocol | Quality |
-|----------|----------|---------|
-| Kitty 0.41+ | Kitty direct + SHM (`t=s`) | ✅ Best — native pixel rendering |
-| Ghostty | Kitty direct + SHM (`t=s`) | ✅ Best — native pixel rendering |
-| Herdr | Kitty direct + SHM (`t=s`) | ✅ Best — native pixel rendering |
-| WezTerm 2025.04+ | Kitty direct | ✅ Best |
-| tmux 3.4+ in Kitty/Ghostty/Herdr | Kitty passthrough + Unicode placeholders + local SHM | 🧪 Experimental — G-037 physical Kitty/tmux+SHM gate; no pixel-exact or FPS claim; [`docs/tmux.md`](docs/tmux.md) |
-| tmux in WezTerm, Alacritty, iTerm2, Windows Terminal | — | ❌ Unsupported or not claimed — exits with clear error |
+Vexart targets modern graphical terminals with Kitty graphics protocol and SGR-Pixel mode 1016 support (Ghostty, Kitty, WezTerm, foot, Contour).
+
+| Terminal | Protocol | Mouse Mode | Quality |
+|----------|----------|------------|---------|
+| Kitty 0.41+ | Kitty direct + SHM (`t=s`) | SGR-Pixel 1016 (0-based) | ✅ Best — native pixel rendering & pointer precision |
+| Ghostty | Kitty direct + SHM (`t=s`) | SGR-Pixel 1016 (0-based) | ✅ Best — native pixel rendering & pointer precision |
+| Herdr | Kitty direct + SHM (`t=s`) | SGR-Pixel 1016 (0-based) | ✅ Best — native pixel rendering & pointer precision |
+| WezTerm 2025.04+ | Kitty direct | SGR-Pixel 1016 (1-based) | ✅ Best |
+| foot | Kitty direct | SGR-Pixel 1016 (1-based) | ✅ Best |
+| Contour | Kitty direct | SGR-Pixel 1016 (1-based) | ✅ Best |
+| tmux 3.4+ in Kitty/Ghostty/Herdr | Kitty passthrough + Unicode placeholders + local SHM | SGR-Pixel 1016 | 🧪 Experimental — G-037 physical Kitty/tmux+SHM gate; no pixel-exact or FPS claim; [`docs/tmux.md`](docs/tmux.md) |
+| tmux in WezTerm, Alacritty, iTerm2, Windows Terminal | — | — | ❌ Unsupported or not claimed — exits with clear error |
 
 Direct Kitty, Ghostty, Herdr, and WezTerm support is unchanged. Ghostty and Herdr
 negotiate POSIX SHM (`t=s`), not only Kitty direct. WezTerm remains a

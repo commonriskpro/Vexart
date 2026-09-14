@@ -106,8 +106,8 @@ export type Capabilities = {
     sixel: boolean;
     truecolor: boolean;
     mouse: boolean;
-    mousePixel?: boolean;
-    mousePixelOrigin?: 0 | 1;
+    mousePixel: boolean;
+    mousePixelOrigin: 0 | 1;
     focus: boolean;
     bracketedPaste: boolean;
     syncOutput: boolean;
@@ -628,9 +628,6 @@ export const MouseButton: {
 };
 
 // @public (undocumented)
-export type MouseCoordMode = "cell" | "pixel";
-
-// @public (undocumented)
 type MouseEvent_2 = {
     type: "mouse";
     action: MouseAction;
@@ -638,7 +635,6 @@ type MouseEvent_2 = {
     x: number;
     y: number;
     mods: Modifiers;
-    pixel: boolean;
 };
 export { MouseEvent_2 as MouseEvent }
 

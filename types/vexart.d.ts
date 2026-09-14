@@ -237,9 +237,9 @@ declare type Capabilities = {
     /** SGR mouse protocol (1006) */
     mouse: boolean;
     /** SGR-Pixel mouse (mode 1016) — pixel-precision coordinates */
-    mousePixel?: boolean;
+    mousePixel: boolean;
     /** Pixel coordinate origin: 0 for Kitty/Ghostty (0-based), 1 for WezTerm/foot/xterm (1-based) */
-    mousePixelOrigin?: 0 | 1;
+    mousePixelOrigin: 0 | 1;
     /** Focus in/out events (1004) */
     focus: boolean;
     /** Bracketed paste mode (2004) */
@@ -1613,9 +1613,6 @@ export declare const MouseButton: {
 };
 
 /** @public */
-export declare type MouseCoordMode = "cell" | "pixel";
-
-/** @public */
 declare type MouseEvent_2 = {
     type: "mouse";
     action: MouseAction;
@@ -1623,8 +1620,6 @@ declare type MouseEvent_2 = {
     x: number;
     y: number;
     mods: Modifiers;
-    /** Whether x/y are pixel coordinates (true, from SGR-Pixel 1016) or cell coordinates (false, from SGR 1006) */
-    pixel: boolean;
 };
 export { MouseEvent_2 as MouseEvent }
 

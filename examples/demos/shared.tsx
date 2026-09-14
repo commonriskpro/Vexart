@@ -4,10 +4,8 @@ import {
   measureTextWidth,
   useFocus,
   type KeyEvent,
-  createContext,
   For,
   Show,
-  useContext,
   type JSX,
 } from "vexart"
 
@@ -19,40 +17,9 @@ export const ui = {
 
 export type DemoSize = { width: number; height: number }
 export type Hint = { keys: string; label: string }
-const viewport = createContext<{ s: (value: number) => number }>()
 
 export function useDemo() {
-  const value = useContext(viewport)
-  return value ?? { s: (value: number) => value }
-}
-
-/** All coordinates are measured against the approved 1536 × 1024 artboards. */
-export function DemoFrame(props: DemoSize & { title: string; hints: readonly Hint[]; children: JSX.Element }) {
-  const s = (value: number) => value * Math.min(props.width / 1536, props.height / 1024)
-  return <viewport.Provider value={{ s }}>
-    <box width={props.width} height={props.height} alignX="center" alignY="center" backgroundColor={ui.background}>
-      <box width={s(1536)} height={s(1024)} backgroundColor={ui.background}>
-        <Pane x={0} y={0} width={1536} height={40} fill="#1b1c1c" />
-        <For each={["#ff5f57", "#febc2e", "#28c840"]}>{(color, index) =>
-          <Pane x={18 + index() * 24} y={14} width={14} height={14} radius={7} fill={color} />
-        }</For>
-        <Label x={480} y={9} width={576} height={25} size={17} align="center">{props.title}</Label>
-        {props.children}
-        <Pane x={0} y={952} width={1536} height={72} fill="#141515" />
-        <Pane x={0} y={951} width={1536} height={1} fill={ui.border} />
-        <box floating="parent" floatOffset={{ x: s(28), y: s(969) }} direction="row" alignY="center" gap={s(25)} height={s(34)}>
-          <For each={props.hints}>{hint => <box direction="row" width="fit" flexShrink={0} alignY="center" gap={s(12)}>
-            <box height={s(31)} minWidth={s(31)} width="fit" flexShrink={0} paddingX={s(8)} alignX="center" alignY="center"
-              borderWidth={s(1)} borderColor="#404141" backgroundColor="#242626" cornerRadius={s(5)}>
-              <text flexShrink={0} fontFamily={ui.mono} color={ui.text} fontSize={Math.round(s(14))}>{hint.keys}</text>
-            </box>
-            <text flexShrink={0} fontFamily={ui.sans} color={ui.muted} fontSize={Math.round(s(14))}>{hint.label}</text>
-          </box>}</For>
-        </box>
-        <Label x={1374} y={976} width={133} size={12} color={ui.faint} mono align="right">VEXART DEMO</Label>
-      </box>
-    </box>
-  </viewport.Provider>
+  return { s: (value: number) => value }
 }
 
 export function Pane(props: { x: number; y: number; width: number; height: number; fill?: string; border?: string; radius?: number; children?: JSX.Element; zIndex?: number }) {

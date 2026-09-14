@@ -340,7 +340,7 @@ export async function screenshot(
 // ── Mouse input via kitty escape sequences ──
 
 /**
- * Send a mouse click at terminal coordinates (pixels in SGR-Pixel mode 1016, cells in SGR 1006).
+ * Send a mouse click at terminal coordinates (pixels in SGR-Pixel mode 1016).
  * Kitty uses SGR mouse encoding: ESC[<button;x;y;M (press) / m (release)
  * In Vexart on Kitty (mode 1016), coordinates are pixel positions (0-based).
  * button: 0=left, 1=middle, 2=right, 32+=motion, 64+=scroll

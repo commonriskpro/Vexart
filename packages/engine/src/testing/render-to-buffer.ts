@@ -90,6 +90,8 @@ function createMockTerminal(width: number, height: number, presentation: RenderT
       sixel: false,
       truecolor: true,
       mouse: false,
+      mousePixel: false,
+      mousePixelOrigin: 1,
       focus: false,
       bracketedPaste: false,
       syncOutput: false,

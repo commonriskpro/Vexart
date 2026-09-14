@@ -20,15 +20,15 @@ The server registers **exactly 11 MCP tools**:
 | `vexart_screenshot`| `name?: string, windowId?: number` | Captures a live PNG screenshot of the demo terminal window, returning image data. |
 | `vexart_send_key` | `key: string, name?: string` | Injects raw keyboard sequences and modifier keys (e.g. `ctrl+c`, `j`, `Tab`, `enter`). |
 | `vexart_send_text`| `text: string, name?: string` | Simulates keyboard typing by writing arbitrary UTF-8 characters. |
-| `vexart_click` | `col: number, row: number, button?: number, name?: string` | Injects mouse click events. **Coordinates are in terminal cells (col, row), NOT pixels!** |
-| `vexart_drag` | `fromCol, fromRow, toCol, toRow, durationMs?: number` | Injects click-and-drag motion sequences between two cell coordinates. |
-| `vexart_scroll` | `col, row, direction: "up" \| "down", delta?: number` | Dispatches mouse wheel scroll events at specified cell coordinates. |
+| `vexart_click` | `name: string, x?: number, y?: number, button?: "left" \| "middle" \| "right"` | Injects mouse click events. **Coordinates are in viewport pixels (x, y) matching screenshot dimensions directly under SGR-Pixel mode 1016.** |
+| `vexart_drag` | `name: string, startX?: number, startY?: number, endX?: number, endY?: number, steps?: number` | Injects click-and-drag motion sequences between viewport pixel coordinates. |
+| `vexart_scroll` | `name: string, x?: number, y?: number, direction: "up" \| "down", count?: number` | Dispatches mouse wheel scroll events at specified viewport pixel coordinates. |
 | `vexart_get_text` | `name: string` | Retrieves visible text content from the running terminal demo window (for inspecting logs, output, or error frames). |
 | `vexart_stop` | `name?: string, windowId?: number` | Terminates the demo child process and closes its Kitty window. |
 | `vexart_resize` | `width: number, height: number` | Dynamically resizes the Kitty terminal window to target dimensions (window dimensions in pixels, min 200). |
 
 > **COORDINATE CALIBRATION INVARIANT**:
-> Automated tools (`vexart_click`, `vexart_drag`, `vexart_scroll`) receive coordinates in **terminal cells (column, row)**, not screen pixels. A typical cell in Kitty is approximately 7–8px wide by 14–16px tall.
+> Automated tools (`vexart_click`, `vexart_drag`, `vexart_scroll`) operate in **viewport pixel coordinates (x, y)** under SGR-Pixel mode 1016, matching screenshot dimensions directly without cell quantization.
 
 ### 1.2 Offline Font Atlas Generator (`@vexart/internal-atlas-gen`)
 Located in `packages/internal-atlas-gen/`:

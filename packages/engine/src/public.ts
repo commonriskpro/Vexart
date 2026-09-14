@@ -87,7 +87,6 @@ export type {
   KeyEvent,
   Modifiers,
   MouseAction,
-  MouseCoordMode,
   MouseEvent,
   PasteEvent,
   ResizeEvent,

@@ -1,5 +1,5 @@
 /**
- * Mouse input parser — SGR extended mode (1006).
+ * Mouse input parser — SGR-Pixel mode (1016).
  *
  * SGR mouse format: \x1b[<{button};{x};{y}{M|m}
  *   M = press/move, m = release
@@ -14,17 +14,16 @@
  *     +8 = alt
  *     +16 = ctrl
  *
- * x, y are 1-based column/row.
+ * x, y are pixel coordinates (0-based or 1-based depending on terminal).
  *
  * @see https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Extended-coordinates
  */
 
-import type { MouseEvent, Modifiers, MouseAction, MouseCoordMode } from "./types"
+import type { MouseEvent, Modifiers, MouseAction } from "./types"
 
 /** @public Try to parse a mouse event from the data. Returns the event and consumed byte count, or null. */
 export function parseMouse(
   data: string,
-  coordMode: MouseCoordMode = "cell",
   pixelOrigin: 0 | 1 = 1,
 ): [MouseEvent, number] | null {
   // SGR format: \x1b[<{button};{x};{y}{M|m}
@@ -32,12 +31,8 @@ export function parseMouse(
   if (!match) return null
 
   const raw = parseInt(match[1], 10)
-  const x = coordMode === "pixel"
-    ? parseInt(match[2], 10) - pixelOrigin
-    : parseInt(match[2], 10) - 1
-  const y = coordMode === "pixel"
-    ? parseInt(match[3], 10) - pixelOrigin
-    : parseInt(match[3], 10) - 1
+  const x = parseInt(match[2], 10) - pixelOrigin
+  const y = parseInt(match[3], 10) - pixelOrigin
   const release = match[4] === "m"
   const consumed = match[0].length
 
@@ -71,5 +66,5 @@ export function parseMouse(
     button = base
   }
 
-  return [{ type: "mouse", action, button, x, y, mods, pixel: coordMode === "pixel" }, consumed]
+  return [{ type: "mouse", action, button, x, y, mods }, consumed]
 }
