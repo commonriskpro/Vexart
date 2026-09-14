@@ -63,6 +63,7 @@ function interactionBag(state: WalkTreeState, pointerX: number, pointerY: number
     prevActiveNode: null,
     cellWidth: 8,
     cellHeight: 16,
+    mousePixel: false,
     scrollOffsets: new Map(),
     onChanged() {},
   }
@@ -352,5 +353,83 @@ describe("Grid interaction bridge", () => {
     expect(damage?.rect).toEqual({ x: 0, y: 0, width: 100, height: 30 })
     first.layout.destroy()
     second.layout.destroy()
+  })
+
+  test("expands hit area to cell dimensions only when mousePixel is false (SGR 1006 fallback)", () => {
+    const smallBtn = box({
+      width: 4,
+      height: 4,
+      floating: "root",
+      floatOffset: { x: 20, y: 20 },
+      onPress: () => {},
+    })
+    const root = box({ width: 100, height: 100 }, [smallBtn])
+    const state = frame(root, 100, 100)
+    expect(state.map.get(smallBtn.id)).toMatchObject({ x: 20, y: 20, width: 4, height: 4 })
+
+    // Pointer at (19, 15) is outside [20..24) x [20..24), but inside cell-expanded [18..26) x [14..30)
+    const bagFallback = interactionBag(state.state, 19, 15)
+    bagFallback.mousePixel = false
+    updateInteractiveStates(bagFallback)
+    expect(smallBtn._hovered).toBe(true)
+
+    // Reset hover
+    smallBtn._hovered = false
+
+    // In pixel mode (SGR-Pixel 1016), hit areas are exact — (19, 15) must NOT hit
+    const bagPixel = interactionBag(state.state, 19, 15)
+    bagPixel.mousePixel = true
+    updateInteractiveStates(bagPixel)
+    expect(smallBtn._hovered).toBe(false)
+
+    // Pointer inside exact bounds (21, 21) hits in pixel mode
+    const bagPixelInside = interactionBag(state.state, 21, 21)
+    bagPixelInside.mousePixel = true
+    updateInteractiveStates(bagPixelInside)
+    expect(smallBtn._hovered).toBe(true)
+
+    state.layout.destroy()
+  })
+
+  test("transformed node uses exact bounds without cell expansion when mousePixel is true", () => {
+    const smallCard = box({
+      width: 4,
+      height: 4,
+      transform: { translateX: 10, translateY: 10 },
+      onPress: () => {},
+    })
+    const root = box({ width: 100, height: 100 }, [smallCard])
+    const state = frame(root, 100, 100)
+    expect(smallCard._transformInverse).not.toBeNull()
+
+    // Effective pos = (0, 0). Transformed visual position is (10, 10).
+    // relX = pointerX, relY = pointerY.
+    // localX = pointerX - 10, localY = pointerY - 10.
+    // Pointer at (9, 5): localX = -1, localY = -5.
+    // Node layout is 4x4.
+    // Cell expansion (cellW=8, cellH=16): hitX = -2, hitY = -6, hitW = 8, hitH = 16.
+    // localX = -1 is inside [-2..6), localY = -5 is inside [-6..10).
+
+    const bagFallback = interactionBag(state.state, 9, 5)
+    bagFallback.mousePixel = false
+    updateInteractiveStates(bagFallback)
+    expect(smallCard._hovered).toBe(true)
+
+    smallCard._hovered = false
+
+    // With mousePixel: true, hit bounds are [0..4) x [0..4).
+    // localX = -1, localY = -5 is OUTSIDE.
+    const bagPixel = interactionBag(state.state, 9, 5)
+    bagPixel.mousePixel = true
+    updateInteractiveStates(bagPixel)
+    expect(smallCard._hovered).toBe(false)
+
+    // Pointer at (11, 11): localX = 1, localY = 1 -> INSIDE [0..4) x [0..4).
+    const bagPixelInside = interactionBag(state.state, 11, 11)
+    bagPixelInside.mousePixel = true
+    updateInteractiveStates(bagPixelInside)
+    expect(smallCard._hovered).toBe(true)
+
+    state.layout.destroy()
   })
 })

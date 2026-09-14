@@ -182,7 +182,7 @@ export type CompositeFrameState = {
   useLayerCompositing: boolean
   forceLayerRepaint: boolean
   expFrameBudgetMs: number
-  transmissionMode: "direct" | "file" | "shm"
+  transmissionMode: "direct" | "shm"
 
   // Debug flags
   debugCadence: boolean
@@ -305,6 +305,7 @@ function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; c
     prevActiveNode: s.pointer.prevActiveNode,
     cellWidth: s.term.size.cellWidth || 8,
     cellHeight: s.term.size.cellHeight || 16,
+    mousePixel: Boolean(s.term.caps?.mousePixel),
     scrollOffsets: s.scrollOffsets,
     onChanged: () => {
       changed = true
