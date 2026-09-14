@@ -2,8 +2,8 @@
  * Static type smoke test verifying distribution declarations.
  *
  * Checks that onInput, InputEvent, InputSubscriber, and MouseEvent types
- * exported by dist/vexart and dist/engine are fully cross-compatible,
- * and that MouseEvent includes the required `pixel: boolean` field.
+ * exported by dist/vexart and dist/engine are fully cross-compatible
+ * under the unified SGR-Pixel 1016 protocol (pixel coordinates x, y).
  */
 
 import {
@@ -23,15 +23,31 @@ import {
 // 1. Cross-compatibility: Pass EngineSubscriber to onInputRoot and vice versa
 const engineHandler: EngineSubscriber = (event: EngineInputEvent) => {
   if (event.type === "mouse") {
-    const isPixel: boolean = event.pixel
-    void isPixel
+    const x: number = event.x
+    const y: number = event.y
+    const button: number = event.button
+    const action: string = event.action
+    const mods = event.mods
+    void x
+    void y
+    void button
+    void action
+    void mods
   }
 }
 
 const rootHandler: RootSubscriber = (event: RootInputEvent) => {
   if (event.type === "mouse") {
-    const isPixel: boolean = event.pixel
-    void isPixel
+    const x: number = event.x
+    const y: number = event.y
+    const button: number = event.button
+    const action: string = event.action
+    const mods = event.mods
+    void x
+    void y
+    void button
+    void action
+    void mods
   }
 }
 
@@ -47,8 +63,16 @@ unsubEngineFromRoot()
 const unsubRootInline: () => void = onInputRoot((event: EngineInputEvent) => {
   if (event.type === "mouse") {
     const mouse: EngineMouseEvent = event
-    const isPixel: boolean = mouse.pixel
-    void isPixel
+    const x: number = mouse.x
+    const y: number = mouse.y
+    const button: number = mouse.button
+    const action: string = mouse.action
+    const mods = mouse.mods
+    void x
+    void y
+    void button
+    void action
+    void mods
   }
 })
 unsubRootInline()
@@ -56,8 +80,16 @@ unsubRootInline()
 const unsubEngineInline: () => void = onInputEngine((event: RootInputEvent) => {
   if (event.type === "mouse") {
     const mouse: RootMouseEvent = event
-    const isPixel: boolean = mouse.pixel
-    void isPixel
+    const x: number = mouse.x
+    const y: number = mouse.y
+    const button: number = mouse.button
+    const action: string = mouse.action
+    const mods = mouse.mods
+    void x
+    void y
+    void button
+    void action
+    void mods
   }
 })
 unsubEngineInline()
@@ -73,7 +105,7 @@ const engineEvent: EngineInputEvent = {} as RootInputEvent
 void rootEvent
 void engineEvent
 
-// 3. MouseEvent cross-compatibility and presence of `pixel: boolean`
+// 3. MouseEvent cross-compatibility and presence of pixel coordinates and event properties
 const mockEngineMouse: EngineMouseEvent = {
   type: "mouse",
   action: "press",
@@ -81,13 +113,20 @@ const mockEngineMouse: EngineMouseEvent = {
   x: 10,
   y: 20,
   mods: { shift: false, alt: false, ctrl: false, meta: false },
-  pixel: true,
 }
 
 const mockRootMouse: RootMouseEvent = mockEngineMouse
 const mockEngineMouse2: EngineMouseEvent = mockRootMouse
 
-const rootPixel: boolean = mockRootMouse.pixel
-const enginePixel: boolean = mockEngineMouse2.pixel
-void rootPixel
-void enginePixel
+const rootX: number = mockRootMouse.x
+const rootY: number = mockRootMouse.y
+const rootButton: number = mockRootMouse.button
+const engineX: number = mockEngineMouse2.x
+const engineY: number = mockEngineMouse2.y
+const engineButton: number = mockEngineMouse2.button
+void rootX
+void rootY
+void rootButton
+void engineX
+void engineY
+void engineButton
