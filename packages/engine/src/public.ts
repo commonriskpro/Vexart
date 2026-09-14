@@ -80,13 +80,14 @@ export { getSelection, getSelectedText, setSelection, clearSelection, selectionS
 export type { TextSelection } from "./reconciler/selection"
 
 export { onInput, useKeyboard, useMouse, useInput } from "./loop/input"
-export type { KeyboardState, MouseState } from "./loop/input"
+export type { InputSubscriber, KeyboardState, MouseState } from "./loop/input"
 export type {
   FocusEvent,
   InputEvent,
   KeyEvent,
   Modifiers,
   MouseAction,
+  MouseCoordMode,
   MouseEvent,
   PasteEvent,
   ResizeEvent,

@@ -490,6 +490,9 @@ type InputEvent_2 = KeyEvent | MouseEvent_2 | FocusEvent_2 | PasteEvent | Resize
 export { InputEvent_2 as InputEvent }
 
 // @public (undocumented)
+export type InputSubscriber = (event: InputEvent_2) => void;
+
+// @public (undocumented)
 export type InteractionBinding = "auto" | "none" | InteractionLayerState;
 
 // @public (undocumented)
@@ -625,6 +628,9 @@ export const MouseButton: {
 };
 
 // @public (undocumented)
+export type MouseCoordMode = "cell" | "pixel";
+
+// @public (undocumented)
 type MouseEvent_2 = {
     type: "mouse";
     action: MouseAction;
@@ -711,8 +717,6 @@ export type NodeMouseEvent = {
     height: number;
 };
 
-// Warning: (ae-forgotten-export) The symbol "InputSubscriber" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
 export function onInput(handler: InputSubscriber): () => void;
 

@@ -24,6 +24,7 @@ test("vexart public unified API surface", () => {
   // Engine hooks
   expect(typeof vexart.useFocus).toBe("function")
   expect(typeof vexart.useTerminalDimensions).toBe("function")
+  expect(typeof vexart.onInput).toBe("function")
 
   // SolidJS reactivity
   expect(typeof vexart.createSignal).toBe("function")

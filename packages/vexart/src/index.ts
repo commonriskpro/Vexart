@@ -408,12 +408,20 @@ export type {
   TransitionConfig,
   SpringConfig,
   // Input
+  FocusEvent,
+  InputEvent,
+  InputSubscriber,
   KeyEvent,
-  Modifiers,
   KeyboardState,
+  Modifiers,
+  MouseAction,
+  MouseCoordMode,
+  MouseEvent,
   MouseState,
   NodeMouseEvent,
+  PasteEvent,
   PressEvent,
+  ResizeEvent,
   // Focus
   FocusHandle,
   // Selection

@@ -7,51 +7,42 @@ on:
     branches: ["main"]
 
 jobs:
-  changeset:
-    name: Changeset Gate
+  pr-lint:
+    name: Conventional Commits Gate
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install JS deps
-        run: bun install --frozen-lockfile
-
-      - name: Verify Changeset
+      - name: Verify PR Title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PATTERN: '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_\-\./]+\))?(!)?:\s.+$'
         run: |
-          echo "Checking changeset status for workspace packages..."
-          if ! bun run changeset status --since=origin/${{ github.base_ref }}; then
-            echo "::error::❌ No changeset found! Run 'bun run changeset' to document your changes, or 'bun run changeset:empty' if no release is required."
+          VALID=0
+          if command -v node >/dev/null 2>&1; then
+            if node -e '
+              const title = process.env.PR_TITLE || "";
+              const pattern = new RegExp(process.env.PATTERN);
+              process.exit(pattern.test(title) ? 0 : 1);
+            '; then
+              VALID=1
+            fi
+          elif [[ "$PR_TITLE" =~ ^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_./-]+\))?(!)?:[[:space:]].+$ ]]; then
+            VALID=1
+          fi
+
+          if [ "$VALID" -ne 1 ]; then
+            echo "::error::❌ Pull Request title does not follow Conventional Commits!"
+            echo "::error::Format: <type>(<scope>): <description>"
+            echo "::error::Example: fix(engine): fix memory leak in shm transport"
+            echo "::error::Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
             exit 1
           fi
-
-          echo "Checking if native/libvexart was modified..."
-          NATIVE_DIFF=$(git diff --name-only origin/${{ github.base_ref }} -- native/libvexart/ || true)
-          if [ -n "$NATIVE_DIFF" ]; then
-            echo "Detected modifications in native/libvexart/:"
-            echo "$NATIVE_DIFF"
-            CHANGESET_DIFF=$(git diff --name-only origin/${{ github.base_ref }} -- .changeset/ | grep -v 'README.md' | grep -v 'config.json' | grep '\.md$' || true)
-            if [ -z "$CHANGESET_DIFF" ]; then
-              echo "::error::❌ Changes detected in native/libvexart/ but no changeset was found. Native changes require a changeset for '@vexart/engine'."
-              echo "::error::❌ No changeset found! Run 'bun run changeset' to document your changes, or 'bun run changeset:empty' if no release is required."
-              exit 1
-            fi
-            echo "Changeset found for native changes:"
-            echo "$CHANGESET_DIFF"
-          fi
+          echo "✅ PR title follows Conventional Commits: $PR_TITLE"
 
   typecheck:
     name: TypeScript & Architecture
-    needs: [changeset]
-    if: always() && (needs.changeset.result == 'success' || needs.changeset.result == 'skipped')
+    needs: [pr-lint]
+    if: always() && (needs.pr-lint.result == 'success' || needs.pr-lint.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -68,13 +59,16 @@ jobs:
       - name: TypeScript Typecheck
         run: bun run typecheck
 
+      - name: Verify Generated Types & API Freshness
+        run: bun run types:check
+
       - name: Architectural Boundaries Lint
         run: bun run lint:boundaries
 
   dist-smoke:
     name: Distribution Bundle & Dual Barrel Smoke
-    needs: [changeset]
-    if: always() && (needs.changeset.result == 'success' || needs.changeset.result == 'skipped')
+    needs: [pr-lint]
+    if: always() && (needs.pr-lint.result == 'success' || needs.pr-lint.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -95,3 +89,6 @@ jobs:
 
       - name: Dual-Barrel Universal Reconciler Test
         run: bun --conditions=browser test --preload ./solid-plugin.ts scripts/consumer/dual-barrel.test.ts
+
+      - name: Consumer Types Smoke Test
+        run: bunx tsc --noEmit --strict scripts/consumer/types-smoke.ts

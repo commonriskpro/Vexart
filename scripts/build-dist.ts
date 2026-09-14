@@ -16,6 +16,7 @@
  * Run: bun run scripts/build-dist.ts
  */
 
+import { $ } from "bun"
 import { build } from "esbuild"
 import { cpSync, mkdirSync, writeFileSync, existsSync, readFileSync, readdirSync } from "fs"
 import { resolve } from "path"
@@ -192,6 +193,10 @@ cpSync(resolve(ROOT, "scripts/solid-plugin-dist.ts"), resolve(DIST, "solid-plugi
 console.log(`  ✅ solid-plugin.ts (moduleName: "vexart/jsx-runtime")`)
 
 // ── 8. Copy type declarations ──
+if (process.env.VEXART_SKIP_GEN_TYPES !== "1" && process.env.VEXART_SKIP_GEN_TYPES !== "true") {
+  console.log("📝 Generating fresh type declarations...")
+  await $`bun run gen:types`.cwd(ROOT)
+}
 console.log("📝 Copying type declarations...")
 cpSync(resolve(ROOT, "types/engine.d.ts"), resolve(DIST, "engine.d.ts"))
 cpSync(resolve(ROOT, "types/vexart.d.ts"), resolve(DIST, "vexart.d.ts"))

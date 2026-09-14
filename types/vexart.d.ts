@@ -236,6 +236,10 @@ declare type Capabilities = {
     truecolor: boolean;
     /** SGR mouse protocol (1006) */
     mouse: boolean;
+    /** SGR-Pixel mouse (mode 1016) — pixel-precision coordinates */
+    mousePixel?: boolean;
+    /** Pixel coordinate origin: 0 for Kitty/Ghostty (0-based), 1 for WezTerm/foot/xterm (1-based) */
+    mousePixelOrigin?: 0 | 1;
     /** Focus in/out events (1004) */
     focus: boolean;
     /** Bracketed paste mode (2004) */
@@ -249,12 +253,11 @@ declare type Capabilities = {
     /**
      * Best available Kitty graphics transmission mode.
      *   - "shm":    POSIX shared memory (fastest, ~0.01ms per frame)
-     *   - "file":   temp file (fast, ~1-2ms per frame)
      *   - "direct": base64 escape codes (universal, ~5-10ms per frame)
      *
      * Auto-detected during createTerminal(). SSH/remote → always "direct".
      */
-    transmissionMode: "shm" | "file" | "direct";
+    transmissionMode: "shm" | "direct";
 };
 
 /** @public */
@@ -921,6 +924,7 @@ declare type FocusEvent_2 = {
     type: "focus";
     focused: boolean;
 };
+export { FocusEvent_2 as FocusEvent }
 
 /** @public */
 export declare type FocusHandle = {
@@ -1244,6 +1248,7 @@ export declare function Input(props: InputProps): JSX.Element;
 
 /** @public */
 declare type InputEvent_2 = KeyEvent | MouseEvent_2 | FocusEvent_2 | PasteEvent | ResizeEvent;
+export { InputEvent_2 as InputEvent }
 
 /** @public */
 export declare type InputProps = {
@@ -1293,7 +1298,7 @@ export declare type InputRenderContext = {
 };
 
 /** @public */
-declare type InputSubscriber = (event: InputEvent_2) => void;
+export declare type InputSubscriber = (event: InputEvent_2) => void;
 
 /** @public */
 declare type InputTheme = {
@@ -1595,7 +1600,7 @@ declare const MOUSE_ACTION: {
 };
 
 /** @public */
-declare type MouseAction = (typeof MOUSE_ACTION)[keyof typeof MOUSE_ACTION];
+export declare type MouseAction = (typeof MOUSE_ACTION)[keyof typeof MOUSE_ACTION];
 
 /** @public */
 export declare const MouseButton: {
@@ -1608,6 +1613,9 @@ export declare const MouseButton: {
 };
 
 /** @public */
+export declare type MouseCoordMode = "cell" | "pixel";
+
+/** @public */
 declare type MouseEvent_2 = {
     type: "mouse";
     action: MouseAction;
@@ -1615,7 +1623,10 @@ declare type MouseEvent_2 = {
     x: number;
     y: number;
     mods: Modifiers;
+    /** Whether x/y are pixel coordinates (true, from SGR-Pixel 1016) or cell coordinates (false, from SGR 1006) */
+    pixel: boolean;
 };
+export { MouseEvent_2 as MouseEvent }
 
 /** @public */
 export declare type MouseState = {
@@ -1816,7 +1827,7 @@ declare type ParticleSystem = {
 };
 
 /** @public */
-declare type PasteEvent = {
+export declare type PasteEvent = {
     type: "paste";
     text: string;
 };
@@ -2032,7 +2043,7 @@ export declare function releasePointerCapture(nodeId: number): void;
 export declare function releaseScrollHandle(scrollId: string): void;
 
 /** @public */
-declare type ResizeEvent = {
+export declare type ResizeEvent = {
     type: "resize";
 };
 

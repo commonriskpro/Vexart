@@ -13,6 +13,7 @@
 import { $ } from "bun"
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs"
 import { resolve } from "path"
+import { normalizeApiReport } from "./normalize-api-reports"
 
 const ROOT = resolve(import.meta.dir, "..")
 const TYPES = resolve(ROOT, "types")
@@ -90,7 +91,9 @@ console.log("  ✅ types/vexart.d.ts")
 // this runs after api:update and is part of the generator, not a manual file
 // rewrite step.
 const engineApiReport = resolve(ROOT, "packages/engine/etc/engine.api.md")
-if (existsSync(engineApiReport)) writeLf(engineApiReport, readFileSync(engineApiReport, "utf8"))
+if (existsSync(engineApiReport)) {
+  writeLf(engineApiReport, normalizeApiReport(readFileSync(engineApiReport, "utf8"), "\n"))
+}
 
 // ── 3b. Post-process .d.ts — clean up leaked internals ──
 console.log("🧹 Post-processing type declarations...")
