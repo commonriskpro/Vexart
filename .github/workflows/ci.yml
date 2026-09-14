@@ -7,8 +7,51 @@ on:
     branches: ["main"]
 
 jobs:
+  changeset:
+    name: Changeset Gate
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install JS deps
+        run: bun install --frozen-lockfile
+
+      - name: Verify Changeset
+        run: |
+          echo "Checking changeset status for workspace packages..."
+          if ! bun run changeset status --since=origin/${{ github.base_ref }}; then
+            echo "::error::❌ No changeset found! Run 'bun run changeset' to document your changes, or 'bun run changeset:empty' if no release is required."
+            exit 1
+          fi
+
+          echo "Checking if native/libvexart was modified..."
+          NATIVE_DIFF=$(git diff --name-only origin/${{ github.base_ref }} -- native/libvexart/ || true)
+          if [ -n "$NATIVE_DIFF" ]; then
+            echo "Detected modifications in native/libvexart/:"
+            echo "$NATIVE_DIFF"
+            CHANGESET_DIFF=$(git diff --name-only origin/${{ github.base_ref }} -- .changeset/ | grep -v 'README.md' | grep -v 'config.json' | grep '\.md$' || true)
+            if [ -z "$CHANGESET_DIFF" ]; then
+              echo "::error::❌ Changes detected in native/libvexart/ but no changeset was found. Native changes require a changeset for '@vexart/engine'."
+              echo "::error::❌ No changeset found! Run 'bun run changeset' to document your changes, or 'bun run changeset:empty' if no release is required."
+              exit 1
+            fi
+            echo "Changeset found for native changes:"
+            echo "$CHANGESET_DIFF"
+          fi
+
   typecheck:
     name: TypeScript & Architecture
+    needs: [changeset]
+    if: always() && (needs.changeset.result == 'success' || needs.changeset.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -30,6 +73,8 @@ jobs:
 
   dist-smoke:
     name: Distribution Bundle & Dual Barrel Smoke
+    needs: [changeset]
+    if: always() && (needs.changeset.result == 'success' || needs.changeset.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

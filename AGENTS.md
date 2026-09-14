@@ -55,6 +55,24 @@ for details.
 - **Root-Cause Architecture Only**: Symptom mitigations, band-aids (e.g. hardcoded caps, magic-number delays, null checks masking invariant violations, swallowing errors) are strictly prohibited. Every fix must address the root-cause architecture, preserve symmetrical lifecycle ownership (acquire/release balance), and establish robust invariants so future changes do not re-break it.
 - **Stop and Ask on Design Decisions**: If a fix requires an architectural trade-off, ownership redesign, or public API/contract change, STOP immediately, present the trade-offs clearly, and ask the user what to decide before writing code. Never guess or apply makeshift workarounds.
 
+## Release & Changeset Protocol
+
+- **Mandatory Changeset on Code Changes**: Every fix, feature, or refactor touching publishable packages under `packages/*` or native code under `native/libvexart/` MUST have an accompanying changeset created before the task is considered complete. Do not conclude an implementation task without creating or updating a changeset.
+- **Native Rust Mapping**: The native crate `native/libvexart/` is consumed by `@vexart/engine` via FFI and is not published to npm independently. Any change to `native/libvexart/` must specify `@vexart/engine` (and/or umbrella `vexart`) as the affected package in the changeset.
+- **Accumulation vs. Release**: Creating a changeset does NOT publish or bump versions immediately. Changeset files (`.changeset/*.md`) accumulate in `main` and are consumed by the automated release orchestrator PR (`chore(release): version packages`).
+- **Internal / Non-Releasing Changes**: Purely internal changes (docs, internal tooling like `@vexart/internal-*`, benchmarks, or repository tests) do not trigger releases. Run `bun run changeset:empty` if CI requires a changeset check, or omit if unaffected.
+- **How to Create**:
+  - Interactive: Run `bun run changeset` and select affected packages and bump severity (`patch`, `minor`, `major`).
+  - Non-Interactive / Agent Execution: Directly write a valid `.changeset/<unique-name>.md` file:
+    ```markdown
+    ---
+    "@vexart/engine": patch
+    "vexart": patch
+    ---
+
+    Concise description of the fix, feature, or refactor.
+    ```
+
 ## Commands
 
 - `bun install` — install dependencies.
@@ -64,6 +82,8 @@ for details.
 - `cd native/libvexart && cargo build --release` — build the Rust native library.
 - `bun run showcase` — run Void component showcase (6 tabs: Inputs, Display, Collections, Code & Docs, Overlays, Typography).
 - `bun run build:dist` — build npm distribution.
+- `bun run changeset` — create a release changeset interactively.
+- `bun run changeset:empty` — generate an empty changeset for non-releasing changes.
 
 ## Modules
 
