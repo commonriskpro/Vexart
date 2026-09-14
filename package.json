@@ -13,9 +13,10 @@
     "website"
   ],
   "scripts": {
-    "api:update": "rm -rf .api-extractor-temp && tsc -p tsconfig.api.json && bunx api-extractor run --local --config packages/engine/api-extractor.json && bunx api-extractor run --local --config packages/headless/api-extractor.json && bunx api-extractor run --local --config packages/styled/api-extractor.json && bunx api-extractor run --local --config packages/app/api-extractor.json && bun run scripts/normalize-api-reports.ts",
+    "api:update": "rm -rf .api-extractor-temp && tsc -p tsconfig.api.json && bunx api-extractor run --local --config packages/engine/api-extractor.json && bunx api-extractor run --local --config packages/headless/api-extractor.json && bunx api-extractor run --local --config packages/styled/api-extractor.json && bunx api-extractor run --local --config packages/app/api-extractor.json && bun run scripts/normalize-api-reports.ts && bun run gen:types",
     "api:check": "bun run api:update",
     "gen:types": "rm -rf .api-extractor-temp && bun run scripts/gen-types.ts",
+    "types:check": "bun run gen:types && git diff --exit-code types/ packages/*/etc/",
     "test": "bun --conditions=browser test --preload ./solid-plugin.ts",
     "typecheck": "tsc --noEmit",
     "rust:build": "cargo build --release",
@@ -29,6 +30,7 @@
     "demo:mission": "bun --conditions=browser run examples/demos/main.tsx mission",
     "demo:effects": "bun --conditions=browser run examples/demos/main.tsx effects",
     "demo:capture": "bun --conditions=browser run examples/demos/capture.tsx",
+    "demo:hero": "bun --conditions=browser run scripts/generate-hero-gif.ts",
     "test:demos": "bun run test ./examples/demos",
     "showcase:legacy": "bun --conditions=browser run examples/showcase-legacy.tsx",
     "facebook": "bun --conditions=browser run examples/facebook-app.tsx",

@@ -380,11 +380,16 @@ function CodePanel(props: { tab: EffectsTab; values: EffectsValues; width: numbe
   )
 }
 
-export function EffectsPlaygroundApp(props: { width?: number; height?: number; copy?: (text: string) => void | Promise<void> }) {
+export function EffectsPlaygroundApp(props: {
+  width?: number
+  height?: number
+  copy?: (text: string) => void | Promise<void>
+  controller?: ReturnType<typeof createEffectsController>
+}) {
   const width = () => props.width ?? 1536
   const height = () => props.height ?? 1024
   const [tab, setTab] = createSignal<EffectsTab>("glass")
-  const controller = createEffectsController()
+  const controller = props.controller ?? createEffectsController()
   onMount(() => {
     const stopInput = onInput((event) => {
       if (event.type === "key" && event.key === "r") controller.reset()

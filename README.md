@@ -4,6 +4,10 @@
 
 Anti-aliased corners. Drop shadows. Linear & radial gradients. Glow effects. Backdrop blur (glassmorphism). Element opacity. Per-corner radius. All rendered as real GPU pixels — not ASCII boxes.
 
+![Vexart Hero Demo — Real-time backdrop blur (glassmorphism), WGPU GPU acceleration, and reactive SolidJS state rendered natively in modern terminal emulators](docs/assets/demos/hero.gif)
+
+*Live GPU-accelerated backdrop blur (glassmorphism) and fine-grained SolidJS reactivity running natively inside a Kitty-graphics-compatible terminal — rendered as real GPU pixels via WGPU fragment shaders without webviews or ASCII fallbacks.*
+
 ```tsx
 import { createApp, colors } from "vexart"
 
@@ -109,6 +113,60 @@ await createApp(() => <App />)
 ```
 
 `createApp()` is the managed entry point. For advanced integrations, `mountApp()` exposes the async app lifecycle and `mount()` remains the low-level engine alternative when you need to provide your own terminal and input plumbing.
+
+---
+
+## Featured Demos
+
+Vexart powers full-scale, interactive desktop-grade applications running directly within Kitty-graphics-compatible terminals. These flagship demos showcase pixel-native rendering, responsive Flexily layouts, real-time WGPU canvas pipelines, and reactive SolidJS state management without webviews or ASCII fallbacks.
+
+Run them directly from the repository root:
+
+### Vexart Studio
+
+A professional media workstation demonstrating high-resolution image decoding, fluid responsive layouts, search filtering, and modal inspection dialogs.
+
+```bash
+bun run demo:studio
+```
+
+![Vexart Studio — Professional media workstation rendered natively in terminal](docs/assets/demos/studio.png)
+
+- **Native Image Pipeline** — High-resolution image decoding and GPU texture upload directly to WGPU render pipelines.
+- **Fluid Layout & Filtering** — Responsive Flexily layout with instantaneous search filtering across media collections and grid/list view toggles.
+- **Modal Inspection** — Interactive detail inspection dialogs with backdrop dimming and keyboard-driven navigation.
+
+---
+
+### Mission Control
+
+A DevOps telemetry and observability dashboard demonstrating real-time GPU-accelerated 2D `<canvas>` drawing, live waveforms, and high-throughput log streams.
+
+```bash
+bun run demo:mission
+```
+
+![Mission Control — DevOps telemetry dashboard with real-time GPU-accelerated canvas waveforms](docs/assets/demos/mission-control.png)
+
+- **GPU-Accelerated 2D `<canvas>`** — Real-time telemetry waveforms and CPU/memory area charts rasterized and composited via WGPU at 60 FPS.
+- **Live Waveforms & Telemetry** — High-throughput live log streams, service health status indicators, and interactive metric pause/resume controls.
+- **Multi-Panel Layout** — Dense metrics dashboard organized into responsive modular panels with semantic Void design tokens.
+
+---
+
+### Effects Playground
+
+An interactive GPU shader and visual effects laboratory for tuning and generating glassmorphic terminal UI.
+
+```bash
+bun run demo:effects
+```
+
+![Effects Playground — GPU shader laboratory demonstrating real-time backdrop blur and glassmorphism](docs/assets/demos/effects-playground.png)
+
+- **Real-Time Backdrop Blur (Glassmorphism)** — Dual-pass separable Gaussian blur and multi-layer compositing executed entirely in Rust/WGPU fragment shaders.
+- **Dynamic Filter Controls** — Live interactive tuning of backdrop blur radius, saturation, opacity, corner radii, and drop shadow offsets.
+- **Live JSX Code Generation** — Instantaneous synthesis of production-ready Vexart JSX props with one-click clipboard export via terminal OSC 52.
 
 ---
 
@@ -283,6 +341,9 @@ See [`docs/examples.md`](docs/examples.md) for a full list of examples with desc
 Quick-start examples:
 
 ```bash
+bun run demo:studio          # Vexart Studio (media workstation)
+bun run demo:mission         # Mission Control (DevOps telemetry dashboard)
+bun run demo:effects         # Effects Playground (GPU shader & glassmorphism lab)
 bun run showcase             # Void component showcase
 bun run effects-showcase     # GPU visual-effects showcase
 bun run facebook             # Facebook demo
