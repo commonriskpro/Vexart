@@ -37,11 +37,26 @@ impl WgpuContext {
             display: Default::default(),
         });
 
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::default(),
-            compatible_surface: None,
-            force_fallback_adapter: false,
-        }))
+        let adapter = pollster::block_on(async {
+            if let Ok(adapter) = instance
+                .request_adapter(&wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::default(),
+                    compatible_surface: None,
+                    force_fallback_adapter: false,
+                })
+                .await
+            {
+                Ok(adapter)
+            } else {
+                instance
+                    .request_adapter(&wgpu::RequestAdapterOptions {
+                        power_preference: wgpu::PowerPreference::default(),
+                        compatible_surface: None,
+                        force_fallback_adapter: true,
+                    })
+                    .await
+            }
+        })
         .expect("no suitable WGPU adapter found");
 
         let pipeline_cache_supported = adapter.features().contains(wgpu::Features::PIPELINE_CACHE);

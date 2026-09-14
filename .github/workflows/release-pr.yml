@@ -44,4 +44,4 @@ jobs:
           version: "bun run changeset:version"
           publish: "echo 'Versions updated and tagged!'"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CHANGESET_PAT || secrets.GITHUB_TOKEN }}

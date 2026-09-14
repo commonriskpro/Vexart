@@ -294,11 +294,26 @@ mod tests {
             memory_budget_thresholds: Default::default(),
             display: Default::default(),
         });
-        let adapter = match pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::default(),
-            compatible_surface: None,
-            force_fallback_adapter: false,
-        })) {
+        let adapter = match pollster::block_on(async {
+            if let Ok(adapter) = instance
+                .request_adapter(&wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::default(),
+                    compatible_surface: None,
+                    force_fallback_adapter: false,
+                })
+                .await
+            {
+                Ok(adapter)
+            } else {
+                instance
+                    .request_adapter(&wgpu::RequestAdapterOptions {
+                        power_preference: wgpu::PowerPreference::default(),
+                        compatible_surface: None,
+                        force_fallback_adapter: true,
+                    })
+                    .await
+            }
+        }) {
             Ok(a) => a,
             Err(_) => return,
         };
