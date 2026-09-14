@@ -175,6 +175,7 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
 
   let isButtonDown = false
 
+  const caps = terminal.caps
   const parser = createParser((event) => {
     if (loop.suspended()) return
     dispatchInput(event)
@@ -183,9 +184,15 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
       if (event.action === "press") isButtonDown = true
       else if (event.action === "release") isButtonDown = false
 
-      const px = (event.x + 0.5) * cellWf
-      const py = (event.y + 0.5) * cellHf
-      loop.feedPointer(px, py, isButtonDown)
+      if (event.pixel) {
+        // SGR-Pixel 1016: coordinates are already in pixels
+        loop.feedPointer(event.x, event.y, isButtonDown)
+      } else {
+        // SGR 1006 fallback: convert cell center to pixels
+        const px = (event.x + 0.5) * cellWf
+        const py = (event.y + 0.5) * cellHf
+        loop.feedPointer(px, py, isButtonDown)
+      }
 
       if (event.action === "scroll") {
         const dy = event.button === 64 ? cellH : -cellH
@@ -206,6 +213,9 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
 
     markDirty()
     loop.requestInteractionFrame("key")
+  }, {
+    coordMode: caps?.mousePixel ? "pixel" : "cell",
+    pixelOrigin: caps?.mousePixelOrigin ?? 1,
   })
   const unsubData = terminal.onData((data) => parser.feed(data))
 

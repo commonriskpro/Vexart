@@ -29,7 +29,11 @@ const ESC = {
 
   // Mouse tracking — SGR extended mode (1006) with any-event (1003)
   mouseEnter: "\x1b[?1003h\x1b[?1006h",
-  mouseLeave: "\x1b[?1003l\x1b[?1006l",
+  mouseLeave: "\x1b[?1006l\x1b[?1003l",
+
+  // Mouse tracking — SGR-Pixel mode (1016) with any-event (1003)
+  mousePixelEnter: "\x1b[?1003h\x1b[?1016h",
+  mousePixelLeave: "\x1b[?1016l\x1b[?1003l",
 
   // Focus events (1004)
   focusEnter: "\x1b[?1004h",
@@ -209,9 +213,9 @@ export function enter(
   // Clear the alternate screen
   write(ESC.clear)
 
-  // Enable mouse tracking (SGR extended)
+  // Enable mouse tracking (SGR extended or SGR-Pixel)
   if (caps.mouse) {
-    write(ESC.mouseEnter)
+    write(caps.mousePixel ? ESC.mousePixelEnter : ESC.mouseEnter)
   }
 
   // Enable focus events
@@ -264,7 +268,7 @@ export function leave(
 
   // Disable mouse tracking
   if (caps.mouse) {
-    write(ESC.mouseLeave)
+    write(caps.mousePixel ? ESC.mousePixelLeave : ESC.mouseLeave)
   }
 
   // Reset attributes

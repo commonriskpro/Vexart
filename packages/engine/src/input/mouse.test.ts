@@ -87,3 +87,77 @@ describe("SGR mouse parsing", () => {
     expect(parseMouse("\x1b[A")).toBeNull()
   })
 })
+
+describe("SGR-Pixel (mode 1016) mouse parsing", () => {
+  test("parses pixel mode with 0-based origin (Kitty/Ghostty)", () => {
+    const [event] = parseMouse("\x1b[<0;100;200M", "pixel", 0)!
+    expect(event.action).toBe("press")
+    expect(event.button).toBe(0)
+    expect(event.x).toBe(100)
+    expect(event.y).toBe(200)
+    expect(event.pixel).toBe(true)
+  })
+
+  test("parses pixel mode with 1-based origin (WezTerm/foot)", () => {
+    const [event] = parseMouse("\x1b[<0;100;200M", "pixel", 1)!
+    expect(event.action).toBe("press")
+    expect(event.button).toBe(0)
+    expect(event.x).toBe(99)
+    expect(event.y).toBe(199)
+    expect(event.pixel).toBe(true)
+  })
+
+  test("parses pixel mode release", () => {
+    const [event] = parseMouse("\x1b[<0;500;300m", "pixel", 0)!
+    expect(event.action).toBe("release")
+    expect(event.button).toBe(0)
+    expect(event.x).toBe(500)
+    expect(event.y).toBe(300)
+    expect(event.pixel).toBe(true)
+  })
+
+  test("parses pixel mode with modifiers", () => {
+    const [event] = parseMouse("\x1b[<4;150;250M", "pixel", 0)!
+    expect(event.pixel).toBe(true)
+    expect(event.mods.shift).toBe(true)
+    expect(event.x).toBe(150)
+    expect(event.y).toBe(250)
+  })
+
+  test("parses pixel mode scroll", () => {
+    const [event] = parseMouse("\x1b[<64;300;400M", "pixel", 1)!
+    expect(event.pixel).toBe(true)
+    expect(event.action).toBe("scroll")
+    expect(event.x).toBe(299)
+    expect(event.y).toBe(399)
+  })
+
+  test("parses pixel mode motion/drag", () => {
+    const [event] = parseMouse("\x1b[<35;200;100M", "pixel", 0)!
+    expect(event.pixel).toBe(true)
+    expect(event.action).toBe("move")
+    expect(event.x).toBe(200)
+    expect(event.y).toBe(100)
+  })
+
+  test("pixel mode edge case — origin at (0,0)", () => {
+    const [event] = parseMouse("\x1b[<0;0;0M", "pixel", 0)!
+    expect(event.x).toBe(0)
+    expect(event.y).toBe(0)
+    expect(event.pixel).toBe(true)
+  })
+
+  test("pixel mode edge case — origin at (1,1) with 1-based", () => {
+    const [event] = parseMouse("\x1b[<0;1;1M", "pixel", 1)!
+    expect(event.x).toBe(0)
+    expect(event.y).toBe(0)
+    expect(event.pixel).toBe(true)
+  })
+
+  test("cell mode backward compatibility with default params", () => {
+    const [event] = parseMouse("\x1b[<0;10;20M")!
+    expect(event.x).toBe(9)
+    expect(event.y).toBe(19)
+    expect(event.pixel).toBe(false)
+  })
+})

@@ -47,6 +47,9 @@ export const MOUSE_ACTION = { PRESS: "press", RELEASE: "release", MOVE: "move", 
 export type MouseAction = (typeof MOUSE_ACTION)[keyof typeof MOUSE_ACTION]
 
 /** @public */
+export type MouseCoordMode = "cell" | "pixel"
+
+/** @public */
 export type MouseEvent = {
   type: "mouse"
   action: MouseAction
@@ -54,6 +57,8 @@ export type MouseEvent = {
   x: number            // 0-based column
   y: number            // 0-based row
   mods: Modifiers
+  /** Whether x/y are pixel coordinates (true, from SGR-Pixel 1016) or cell coordinates (false, from SGR 1006) */
+  pixel: boolean
 }
 
 // ── Focus Event ──

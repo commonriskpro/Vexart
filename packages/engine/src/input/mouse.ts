@@ -19,17 +19,25 @@
  * @see https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Extended-coordinates
  */
 
-import type { MouseEvent, Modifiers, MouseAction } from "./types"
+import type { MouseEvent, Modifiers, MouseAction, MouseCoordMode } from "./types"
 
 /** @public Try to parse a mouse event from the data. Returns the event and consumed byte count, or null. */
-export function parseMouse(data: string): [MouseEvent, number] | null {
+export function parseMouse(
+  data: string,
+  coordMode: MouseCoordMode = "cell",
+  pixelOrigin: 0 | 1 = 1,
+): [MouseEvent, number] | null {
   // SGR format: \x1b[<{button};{x};{y}{M|m}
   const match = data.match(/^\x1b\[<(\d+);(\d+);(\d+)([Mm])/)
   if (!match) return null
 
   const raw = parseInt(match[1], 10)
-  const x = parseInt(match[2], 10) - 1  // convert to 0-based
-  const y = parseInt(match[3], 10) - 1
+  const x = coordMode === "pixel"
+    ? parseInt(match[2], 10) - pixelOrigin
+    : parseInt(match[2], 10) - 1
+  const y = coordMode === "pixel"
+    ? parseInt(match[3], 10) - pixelOrigin
+    : parseInt(match[3], 10) - 1
   const release = match[4] === "m"
   const consumed = match[0].length
 
@@ -63,5 +71,5 @@ export function parseMouse(data: string): [MouseEvent, number] | null {
     button = base
   }
 
-  return [{ type: "mouse", action, button, x, y, mods }, consumed]
+  return [{ type: "mouse", action, button, x, y, mods, pixel: coordMode === "pixel" }, consumed]
 }

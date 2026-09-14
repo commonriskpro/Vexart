@@ -340,20 +340,21 @@ export async function screenshot(
 // ── Mouse input via kitty escape sequences ──
 
 /**
- * Send a mouse click at terminal cell coordinates.
- * Kitty uses SGR mouse encoding: ESC[<button;col;row;M (press) / m (release)
+ * Send a mouse click at terminal coordinates (pixels in SGR-Pixel mode 1016, cells in SGR 1006).
+ * Kitty uses SGR mouse encoding: ESC[<button;x;y;M (press) / m (release)
+ * In Vexart on Kitty (mode 1016), coordinates are pixel positions (0-based).
  * button: 0=left, 1=middle, 2=right, 32+=motion, 64+=scroll
  */
 export async function sendMouseClick(
   socket: string,
   windowId: number,
-  col: number,
-  row: number,
+  x: number,
+  y: number,
   button: 0 | 1 | 2 = 0
 ): Promise<void> {
   // SGR mouse press then release
-  const press = `\x1b[<${button};${col};${row}M`
-  const release = `\x1b[<${button};${col};${row}m`
+  const press = `\x1b[<${button};${x};${y}M`
+  const release = `\x1b[<${button};${x};${y}m`
   await sendText(socket, windowId, press)
   // Small delay for Vexart to process the press
   await Bun.sleep(50)
@@ -361,50 +362,51 @@ export async function sendMouseClick(
 }
 
 /**
- * Send a mouse drag from (startCol, startRow) to (endCol, endRow).
+ * Send a mouse drag from (startX, startY) to (endX, endY).
+ * In Vexart on Kitty (mode 1016), coordinates are pixel positions.
  * Generates press → motion events → release.
  */
 export async function sendMouseDrag(
   socket: string,
   windowId: number,
-  startCol: number,
-  startRow: number,
-  endCol: number,
-  endRow: number,
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
   button: 0 | 1 | 2 = 0,
   steps = 10
 ): Promise<void> {
   // Press at start
-  await sendText(socket, windowId, `\x1b[<${button};${startCol};${startRow}M`)
+  await sendText(socket, windowId, `\x1b[<${button};${startX};${startY}M`)
   await Bun.sleep(30)
 
   // Motion events (button + 32 for motion)
   const motionBtn = button + 32
   for (let i = 1; i <= steps; i++) {
     const t = i / steps
-    const col = Math.round(startCol + (endCol - startCol) * t)
-    const row = Math.round(startRow + (endRow - startRow) * t)
-    await sendText(socket, windowId, `\x1b[<${motionBtn};${col};${row}M`)
+    const curX = Math.round(startX + (endX - startX) * t)
+    const curY = Math.round(startY + (endY - startY) * t)
+    await sendText(socket, windowId, `\x1b[<${motionBtn};${curX};${curY}M`)
     await Bun.sleep(16) // ~60fps
   }
 
   // Release at end
-  await sendText(socket, windowId, `\x1b[<${button};${endCol};${endRow}m`)
+  await sendText(socket, windowId, `\x1b[<${button};${endX};${endY}m`)
 }
 
-/** Send mouse scroll events */
+/** Send mouse scroll events at given coordinates */
 export async function sendMouseScroll(
   socket: string,
   windowId: number,
-  col: number,
-  row: number,
+  x: number,
+  y: number,
   direction: "up" | "down",
   count = 3
 ): Promise<void> {
   // SGR scroll: 64 = scroll up, 65 = scroll down
   const btn = direction === "up" ? 64 : 65
   for (let i = 0; i < count; i++) {
-    await sendText(socket, windowId, `\x1b[<${btn};${col};${row}M`)
+    await sendText(socket, windowId, `\x1b[<${btn};${x};${y}M`)
     await Bun.sleep(30)
   }
 }

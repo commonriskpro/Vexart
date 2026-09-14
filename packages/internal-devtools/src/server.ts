@@ -101,9 +101,9 @@ const server = new McpServer(
       "",
       "The vexart_status tool shows all running demos and kitty connection info.",
       "",
-      "Mouse coordinates are in TERMINAL CELLS (col, row), not pixels.",
-      "To find where to click, take a screenshot and estimate cell position.",
-      "A typical terminal cell is ~7px wide and ~14px tall.",
+      "Mouse coordinates: With SGR-Pixel mode (1016), coordinates are in PIXELS (x, y) matching screenshot dimensions directly.",
+      "To find where to click, take a screenshot and use pixel coordinates from the image.",
+      "Legacy cell coordinates (col, row) are also accepted as fallback.",
     ].join("\n"),
   }
 )
@@ -385,17 +385,19 @@ server.registerTool(
   {
     title: "Click in Vexart Demo",
     description:
-      "Send a mouse click at terminal cell coordinates (col, row). " +
-      "Col 1 and Row 1 are the top-left corner. " +
-      "Take a screenshot first to find the right coordinates.",
+      "Send a mouse click at terminal coordinates. " +
+      "With SGR-Pixel (mode 1016), coordinates correspond to pixel positions (x, y) from screenshots. " +
+      "Also supports legacy cell parameters (col, row).",
     inputSchema: z.object({
       name: z.string().describe("Demo name"),
-      col: z.number().int().min(1).describe("Column (1-based, left to right)"),
-      row: z.number().int().min(1).describe("Row (1-based, top to bottom)"),
+      x: z.number().int().min(0).optional().describe("X coordinate in pixels (0-based, matches screenshot)"),
+      y: z.number().int().min(0).optional().describe("Y coordinate in pixels (0-based, matches screenshot)"),
+      col: z.number().int().min(0).optional().describe("Column / X coordinate (if x is not specified)"),
+      row: z.number().int().min(0).optional().describe("Row / Y coordinate (if y not specified)"),
       button: z.enum(["left", "middle", "right"]).optional().describe("Mouse button (default: left)"),
     }),
   },
-  async ({ name, col, row, button }) => {
+  async ({ name, x, y, col, row, button }) => {
     try {
       const demo = demos.get(name)
       if (!demo) {
@@ -404,9 +406,17 @@ server.registerTool(
           isError: true,
         }
       }
+      const targetX = x ?? col
+      const targetY = y ?? row
+      if (targetX === undefined || targetY === undefined) {
+        return {
+          content: [{ type: "text" as const, text: "Either (x, y) or (col, row) coordinates must be provided." }],
+          isError: true,
+        }
+      }
       const btn = button === "right" ? 2 : button === "middle" ? 1 : 0
-      await sendMouseClick(demo.socket, demo.windowId, col, row, btn as 0 | 1 | 2)
-      return { content: [{ type: "text" as const, text: `Clicked (${col}, ${row}) button=${button || "left"} in ${name}` }] }
+      await sendMouseClick(demo.socket, demo.windowId, targetX, targetY, btn as 0 | 1 | 2)
+      return { content: [{ type: "text" as const, text: `Clicked (${targetX}, ${targetY}) button=${button || "left"} in ${name}` }] }
     } catch (e: any) {
       return { content: [{ type: "text" as const, text: `Click failed: ${e.message}` }], isError: true }
     }
@@ -420,18 +430,23 @@ server.registerTool(
   {
     title: "Drag in Vexart Demo",
     description:
-      "Send a mouse drag from (startCol, startRow) to (endCol, endRow). " +
+      "Send a mouse drag from start to end coordinates. " +
+      "With SGR-Pixel (mode 1016), coordinates are pixel positions matching screenshots. " +
       "Generates press → motion → release events. Useful for dragging panels, sliders, etc.",
     inputSchema: z.object({
       name: z.string().describe("Demo name"),
-      startCol: z.number().int().min(1).describe("Start column"),
-      startRow: z.number().int().min(1).describe("Start row"),
-      endCol: z.number().int().min(1).describe("End column"),
-      endRow: z.number().int().min(1).describe("End row"),
+      startX: z.number().int().min(0).optional().describe("Start X in pixels"),
+      startY: z.number().int().min(0).optional().describe("Start Y in pixels"),
+      endX: z.number().int().min(0).optional().describe("End X in pixels"),
+      endY: z.number().int().min(0).optional().describe("End Y in pixels"),
+      startCol: z.number().int().min(0).optional().describe("Start column / X (if startX not specified)"),
+      startRow: z.number().int().min(0).optional().describe("Start row / Y (if startY not specified)"),
+      endCol: z.number().int().min(0).optional().describe("End column / X (if endX not specified)"),
+      endRow: z.number().int().min(0).optional().describe("End row / Y (if endY not specified)"),
       steps: z.number().int().min(2).max(100).optional().describe("Number of motion steps (default: 10)"),
     }),
   },
-  async ({ name, startCol, startRow, endCol, endRow, steps }) => {
+  async ({ name, startX, startY, endX, endY, startCol, startRow, endCol, endRow, steps }) => {
     try {
       const demo = demos.get(name)
       if (!demo) {
@@ -440,11 +455,21 @@ server.registerTool(
           isError: true,
         }
       }
-      await sendMouseDrag(demo.socket, demo.windowId, startCol, startRow, endCol, endRow, 0, steps || 10)
+      const sX = startX ?? startCol
+      const sY = startY ?? startRow
+      const eX = endX ?? endCol
+      const eY = endY ?? endRow
+      if (sX === undefined || sY === undefined || eX === undefined || eY === undefined) {
+        return {
+          content: [{ type: "text" as const, text: "Both start and end coordinates must be provided." }],
+          isError: true,
+        }
+      }
+      await sendMouseDrag(demo.socket, demo.windowId, sX, sY, eX, eY, 0, steps || 10)
       return {
         content: [{
           type: "text" as const,
-          text: `Dragged (${startCol},${startRow}) → (${endCol},${endRow}) in ${name}`,
+          text: `Dragged (${sX},${sY}) → (${eX},${eY}) in ${name}`,
         }],
       }
     } catch (e: any) {
@@ -459,16 +484,20 @@ server.registerTool(
   "vexart_scroll",
   {
     title: "Scroll in Vexart Demo",
-    description: "Send mouse scroll events at the given position.",
+    description:
+      "Send mouse scroll events at the given coordinates. " +
+      "With SGR-Pixel (mode 1016), coordinates are pixel positions matching screenshots.",
     inputSchema: z.object({
       name: z.string().describe("Demo name"),
-      col: z.number().int().min(1).describe("Column"),
-      row: z.number().int().min(1).describe("Row"),
+      x: z.number().int().min(0).optional().describe("X position in pixels"),
+      y: z.number().int().min(0).optional().describe("Y position in pixels"),
+      col: z.number().int().min(0).optional().describe("Column / X position (if x not specified)"),
+      row: z.number().int().min(0).optional().describe("Row / Y position (if y not specified)"),
       direction: z.enum(["up", "down"]).describe("Scroll direction"),
       count: z.number().int().min(1).max(50).optional().describe("Number of scroll ticks (default: 3)"),
     }),
   },
-  async ({ name, col, row, direction, count }) => {
+  async ({ name, x, y, col, row, direction, count }) => {
     try {
       const demo = demos.get(name)
       if (!demo) {
@@ -477,8 +506,16 @@ server.registerTool(
           isError: true,
         }
       }
-      await sendMouseScroll(demo.socket, demo.windowId, col, row, direction, count || 3)
-      return { content: [{ type: "text" as const, text: `Scrolled ${direction} x${count || 3} at (${col},${row}) in ${name}` }] }
+      const targetX = x ?? col
+      const targetY = y ?? row
+      if (targetX === undefined || targetY === undefined) {
+        return {
+          content: [{ type: "text" as const, text: "Either (x, y) or (col, row) coordinates must be provided." }],
+          isError: true,
+        }
+      }
+      await sendMouseScroll(demo.socket, demo.windowId, targetX, targetY, direction, count || 3)
+      return { content: [{ type: "text" as const, text: `Scrolled ${direction} x${count || 3} at (${targetX},${targetY}) in ${name}` }] }
     } catch (e: any) {
       return { content: [{ type: "text" as const, text: `Scroll failed: ${e.message}` }], isError: true }
     }
