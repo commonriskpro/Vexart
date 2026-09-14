@@ -1,9 +1,17 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "include-component-in-tag": false,
+  "prerelease": true,
+  "prerelease-type": "beta",
+  "versioning": "prerelease",
   "packages": {
     ".": {
       "release-type": "node",
       "package-name": "vexart",
+      "include-component-in-tag": false,
+      "prerelease": true,
+      "prerelease-type": "beta",
+      "versioning": "prerelease",
       "extra-files": [
         "packages/vexart/package.json"
       ]
