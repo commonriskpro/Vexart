@@ -6,7 +6,7 @@ import { getVexartFfiCallCount, resetVexartFfiCallCounts } from "../ffi/vexart-b
 import { createRenderLoop } from "./loop"
 import { markDirty } from "../reconciler/dirty"
 
-function createMockTerminal(width: number, height: number, transmissionMode: "direct" | "file" | "shm" = "direct") {
+function createMockTerminal(width: number, height: number, transmissionMode: "direct" | "shm" = "direct") {
   const resizeHandlers: Array<(size: any) => void> = []
   const cellWidth = 8
   const cellHeight = 16

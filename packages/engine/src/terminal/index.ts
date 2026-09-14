@@ -23,6 +23,8 @@ import { getSize, queryPixelSize, onResize, type TerminalSize, type ResizeHandle
 import { enter, leave, beginSync, endSync, installExitHandlers, type LifecycleState } from "./lifecycle"
 import { probeTmuxShm } from "./tmux-shm"
 import { notifyTerminalTransportLifecycle } from "./transport-lifecycle"
+import { probeShm } from "../output/kitty"
+import { configureKittyTransportManager, resolveKittyTransportMode } from "../output/transport-manager"
 
 const DEBUG_KITTY_PROBE = process.env.VEXART_DEBUG_KITTY === "1" || process.env.VEXART_DEBUG_KITTY_SHM === "1"
 const DEBUG_RESIZE = process.env.VEXART_DEBUG_RESIZE === "1"
@@ -164,24 +166,12 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
   let startupRemoveAbort: (() => void) | null = null
 
   try {
-    // Step 3: probe direct Kitty graphics outside tmux. The tmux SHM query
-    // below is the sole graphics probe there, avoiding a direct-path probe.
-    if (!opts.skipProbe && !caps.tmux && caps.kittyGraphics) {
-      const supported = await probeKittyGraphics(
-        rawWrite,
-        addDataHandler,
-        removeDataHandler,
-        opts.probeTimeout ?? 2000,
-      )
-      if (!supported) {
-        caps.kittyGraphics = false
-        caps.kittyPlaceholder = false
-      }
-    }
+    const baseSize = getSize(stdout)
+    let transportProbe = { shm: false }
+    let bgColor: [number, number, number] | null = null
+    let fgColor: [number, number, number] | null = null
+    let pixelInfo: { pixelWidth: number; pixelHeight: number; cellWidth: number; cellHeight: number }
 
-    // Step 3b: probe transmission mode. tmux is deliberately SHM-only: a
-    // failed SHM check is an actionable startup error, never a direct fallback.
-    let transportProbe = { shm: false, file: false }
     if (caps.tmux) {
       if (forcedTransmissionMode === "direct" || forcedTransmissionMode === "file") {
         throw new Error(`Vexart requires tmux SHM transport; VEXART_FORCE_TRANSMISSION_MODE=${forcedTransmissionMode} is incompatible.`)
@@ -193,39 +183,105 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
         if (!caps.kittyPlaceholder) {
           throw new Error("Vexart requires a verified Kitty or Ghostty parent for tmux SHM graphics.")
         }
-        await probeTmuxShm(rawWrite, addDataHandler, removeDataHandler, opts.probeTimeout ?? 2000)
       }
+
+      const tmuxShmPromise = !opts.skipProbe
+        ? probeTmuxShm(rawWrite, addDataHandler, removeDataHandler, opts.probeTimeout ?? 2000)
+        : Promise.resolve(null)
+
+      const colorsPromise = !opts.skipColors
+        ? queryColors(rawWrite, addDataHandler, removeDataHandler, 1000).catch(() => ({ bg: null, fg: null }))
+        : Promise.resolve({ bg: null, fg: null })
+
+      const pixelPromise = queryPixelSize(
+        rawWrite,
+        addDataHandler,
+        removeDataHandler,
+        baseSize.cols,
+        baseSize.rows,
+        1000,
+      ).catch(() => ({
+        pixelWidth: baseSize.cols * 8,
+        pixelHeight: baseSize.rows * 16,
+        cellWidth: 8,
+        cellHeight: 16,
+      }))
+
+      const [, colors, pixels] = await Promise.all([
+        tmuxShmPromise,
+        colorsPromise,
+        pixelPromise,
+      ])
+
       caps.transmissionMode = "shm"
       transportProbe.shm = true
-    } else if (!opts.skipProbe && caps.kittyGraphics && !isRemoteConnection()) {
-      const { probeShm, probeFile } = await import("../output/kitty")
-      const shmOk = await probeShm(write, addDataHandler, removeDataHandler, opts.probeTimeout ?? 2000)
-      transportProbe.shm = shmOk
-      const fileOk = await probeFile(write, addDataHandler, removeDataHandler, opts.probeTimeout ?? 2000)
-      transportProbe.file = fileOk
-      if (shmOk) {
-        caps.transmissionMode = "shm"
-      } else if (fileOk) {
-        caps.transmissionMode = "file"
-      }
-    }
+      bgColor = colors.bg
+      fgColor = colors.fg
+      pixelInfo = pixels
 
-    const { configureKittyTransportManager, resolveKittyTransportMode } = await import("../output/transport-manager")
-    if (caps.tmux) {
-      configureKittyTransportManager({ preferredMode: "shm", probe: { shm: true, file: false } })
-      caps.transmissionMode = "shm"
-    } else if (forcedTransmissionMode === "direct" || forcedTransmissionMode === "file" || forcedTransmissionMode === "shm") {
-      configureKittyTransportManager({
-        preferredMode: forcedTransmissionMode,
-        probe: transportProbe,
-      })
-      caps.transmissionMode = resolveKittyTransportMode(forcedTransmissionMode)
+      configureKittyTransportManager({ preferredMode: "shm", probe: { shm: true } })
     } else {
+      const kittyGraphicsPromise = (!opts.skipProbe && caps.kittyGraphics)
+        ? probeKittyGraphics(
+            rawWrite,
+            addDataHandler,
+            removeDataHandler,
+            opts.probeTimeout ?? 2000,
+          ).catch(() => false)
+        : Promise.resolve(caps.kittyGraphics)
+
+      const shmPromise = (!opts.skipProbe && caps.kittyGraphics && !isRemoteConnection())
+        ? probeShm(write, addDataHandler, removeDataHandler, opts.probeTimeout ?? 2000).catch(() => false)
+        : Promise.resolve(false)
+
+      const colorsPromise = !opts.skipColors
+        ? queryColors(rawWrite, addDataHandler, removeDataHandler, 1000).catch(() => ({ bg: null, fg: null }))
+        : Promise.resolve({ bg: null, fg: null })
+
+      const pixelPromise = queryPixelSize(
+        rawWrite,
+        addDataHandler,
+        removeDataHandler,
+        baseSize.cols,
+        baseSize.rows,
+        1000,
+      ).catch(() => ({
+        pixelWidth: baseSize.cols * 8,
+        pixelHeight: baseSize.rows * 16,
+        cellWidth: 8,
+        cellHeight: 16,
+      }))
+
+      const [kittySupported, shmOk, colors, pixels] = await Promise.all([
+        kittyGraphicsPromise,
+        shmPromise,
+        colorsPromise,
+        pixelPromise,
+      ])
+
+      if (!kittySupported) {
+        caps.kittyGraphics = false
+        caps.kittyPlaceholder = false
+        transportProbe.shm = false
+        caps.transmissionMode = "direct"
+      } else {
+        transportProbe.shm = shmOk
+        caps.transmissionMode = shmOk ? "shm" : "direct"
+      }
+
+      bgColor = colors.bg
+      fgColor = colors.fg
+      pixelInfo = pixels
+
+      const preferredMode = (forcedTransmissionMode === "direct" || forcedTransmissionMode === "shm")
+        ? forcedTransmissionMode
+        : caps.transmissionMode
+
       configureKittyTransportManager({
-        preferredMode: caps.transmissionMode,
+        preferredMode,
         probe: transportProbe,
       })
-      caps.transmissionMode = resolveKittyTransportMode(caps.transmissionMode)
+      caps.transmissionMode = resolveKittyTransportMode(preferredMode)
     }
 
     if (DEBUG_KITTY_PROBE) {
@@ -237,37 +293,17 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
       })
     }
 
-    // Step 4: query colors
-    let bgColor: [number, number, number] | null = null
-    let fgColor: [number, number, number] | null = null
-    if (!opts.skipColors) {
-      const colors = await queryColors(rawWrite, addDataHandler, removeDataHandler, 1000)
-      bgColor = colors.bg
-      fgColor = colors.fg
-    }
-
-    // Step 5: get size + query pixel dimensions
-    const baseSize = getSize(stdout)
-    const pixelInfo = await queryPixelSize(
-      rawWrite,
-      addDataHandler,
-      removeDataHandler,
-      baseSize.cols,
-      baseSize.rows,
-      1000,
-    )
-
     // Restore raw mode before we enter lifecycle
     restoreStartupRaw()
 
     const size: TerminalSize = {
-    cols: baseSize.cols,
-    rows: baseSize.rows,
-    pixelWidth: pixelInfo.pixelWidth,
-    pixelHeight: pixelInfo.pixelHeight,
-    cellWidth: pixelInfo.cellWidth,
-    cellHeight: pixelInfo.cellHeight,
-  }
+      cols: baseSize.cols,
+      rows: baseSize.rows,
+      pixelWidth: pixelInfo.pixelWidth,
+      pixelHeight: pixelInfo.pixelHeight,
+      cellWidth: pixelInfo.cellWidth,
+      cellHeight: pixelInfo.cellHeight,
+    }
     const resizeHandlers = new Set<ResizeHandler>()
 
   // Determine dark/light

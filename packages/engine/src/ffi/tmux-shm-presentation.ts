@@ -21,7 +21,7 @@ export type TmuxShmFrame = {
   height: number
   cols: number
   rows: number
-  transmissionMode: "direct" | "file" | "shm"
+  transmissionMode: "direct" | "shm"
 }
 
 type ShmSymbols = ReturnType<typeof openKittyShmSymbols>

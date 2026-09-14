@@ -6,7 +6,6 @@
 //
 // Modes (match vexart_kitty_set_transport param):
 //   0 = direct  — base64-chunked inline in escape sequences (default)
-//   1 = file    — temp file (not yet implemented; falls back to direct)
 //   2 = shm     — POSIX shared memory via existing shm.rs
 //
 // Thread-local transport mode so each FFI call context is independent.
@@ -24,7 +23,7 @@ use crate::ffi::panic::{ERR_INVALID_ARG, ERR_KITTY_TRANSPORT, OK};
 use crate::paint::PaintContext;
 use crate::types::NativePresentationStats;
 
-// Active transport mode for the current thread. 0=direct (default), 1=file, 2=shm.
+// Active transport mode for the current thread. 0=direct (default), 2=shm.
 thread_local! {
     static TRANSPORT_MODE: Cell<u32> = const { Cell::new(0) };
     // Next animation frame number for each live Kitty image id. A missing
@@ -249,11 +248,11 @@ impl ShmLease {
 
 /// Set the transport mode for this thread. Called from `vexart_kitty_set_transport`.
 ///
-/// `mode`: 0=direct, 1=file, 2=shm.
+/// `mode`: 0=direct, 2=shm.
 pub fn set_transport_mode(mode: u32) -> i32 {
-    if mode > 2 {
+    if mode != 0 && mode != 2 {
         set_last_error(format!(
-            "invalid transport mode: {mode} (expected 0=direct, 1=file, 2=shm)"
+            "invalid transport mode: {mode} (expected 0=direct, 2=shm)"
         ));
         return ERR_INVALID_ARG;
     }
@@ -283,10 +282,6 @@ pub fn emit_frame(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
 
     match mode {
         0 => emit_direct(pctx, target, image_id),
-        1 => {
-            // File mode: not yet implemented in Slice 3 — fall back to direct.
-            emit_direct(pctx, target, image_id)
-        }
         2 => emit_shm(pctx, target, image_id),
         _ => {
             set_last_error(format!("unknown transport mode: {mode}"));
@@ -517,66 +512,6 @@ unsafe fn emit_frame_with_owner(
         stats.write_us = write_us;
         stats.total_us = total_us;
         stats.transport = transport_id;
-        stats.flags =
-            NativePresentationStats::FLAG_NATIVE_USED | NativePresentationStats::FLAG_VALID;
-        write_transfer_stats(stats, transfer);
-    }
-    rc
-}
-
-/// Emit a pre-encoded RGBA layer over SHM (native presentation path).
-///
-/// Used by dirty-layer presentation. Accepts a packed params buffer:
-///   params[0..4] = u32 image_id
-///   params[4..8] = u32 width
-///   params[8..12] = u32 height
-/// rgba_ptr/rgba_len = raw RGBA pixel data for this layer.
-///
-/// # Safety
-/// `rgba_ptr` must be valid for `rgba_len` bytes; `stats_out` valid if non-null.
-pub unsafe fn emit_layer_native(
-    image_id: u32,
-    rgba_ptr: *const u8,
-    rgba_len: u32,
-    width: u32,
-    height: u32,
-    col: i32,
-    row: i32,
-    z: i32,
-    stats_out: *mut NativePresentationStats,
-) -> i32 {
-    let t0 = Instant::now();
-    if rgba_ptr.is_null() || rgba_len == 0 || width == 0 || height == 0 {
-        set_last_error("emit_layer_native: invalid arguments");
-        return ERR_KITTY_TRANSPORT;
-    }
-    let rgba = std::slice::from_raw_parts(rgba_ptr, rgba_len as usize);
-    let mode = TRANSPORT_MODE.with(|c| c.get());
-
-    let t_enc = Instant::now();
-    let mut transfer = ShmTransferStats::default();
-    let rc = match mode {
-        2 => {
-            let result = emit_shm_rgba_at_with_stats(rgba, width, height, image_id, col, row, z);
-            transfer = result.1;
-            result.0
-        }
-        _ => emit_direct_rgba_at(rgba, width, height, image_id, col, row, z),
-    };
-    let encode_us = t_enc.elapsed().as_micros() as u64;
-    let total_us = t0.elapsed().as_micros() as u64;
-
-    if !stats_out.is_null() {
-        let stats = &mut *stats_out;
-        stats.version = NativePresentationStats::VERSION;
-        stats.mode = NativePresentationStats::MODE_LAYER;
-        stats.rgba_bytes_read = rgba_len as u64;
-        stats.kitty_bytes_emitted = rgba_len as u64;
-        stats.readback_us = 0;
-        stats.encode_us = encode_us;
-        stats.write_us = 0;
-        stats.total_us = total_us;
-        stats.transport = mode;
         stats.flags =
             NativePresentationStats::FLAG_NATIVE_USED | NativePresentationStats::FLAG_VALID;
         write_transfer_stats(stats, transfer);
@@ -1191,12 +1126,12 @@ mod tests {
     #[test]
     fn test_set_transport_mode_valid() {
         assert_eq!(set_transport_mode(0), OK);
-        assert_eq!(set_transport_mode(1), OK);
         assert_eq!(set_transport_mode(2), OK);
     }
 
     #[test]
     fn test_set_transport_mode_invalid() {
+        assert_eq!(set_transport_mode(1), ERR_INVALID_ARG);
         assert_eq!(set_transport_mode(3), ERR_INVALID_ARG);
         assert_eq!(set_transport_mode(99), ERR_INVALID_ARG);
     }
@@ -1555,7 +1490,6 @@ mod tests {
     #[test]
     fn test_native_presentation_stats_transport_constants() {
         assert_eq!(NativePresentationStats::TRANSPORT_DIRECT, 0);
-        assert_eq!(NativePresentationStats::TRANSPORT_FILE, 1);
         assert_eq!(NativePresentationStats::TRANSPORT_SHM, 2);
     }
 
@@ -1586,15 +1520,6 @@ mod tests {
         // We only verify it doesn't panic/segfault with null stats_out.
         // (Actual write may fail — that's OK in test.)
         let _ = unsafe { delete_layer_native(1, std::ptr::null_mut()) };
-    }
-
-    /// emit_layer_native with null rgba returns ERR_KITTY_TRANSPORT.
-    #[test]
-    fn test_emit_layer_native_null_rgba() {
-        let rc = unsafe {
-            emit_layer_native(1, std::ptr::null(), 0, 0, 0, 0, 0, 0, std::ptr::null_mut())
-        };
-        assert_eq!(rc, ERR_KITTY_TRANSPORT);
     }
 
     /// emit_region_native with null rgba returns ERR_KITTY_TRANSPORT.

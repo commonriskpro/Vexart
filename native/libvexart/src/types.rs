@@ -114,7 +114,6 @@ impl NativePresentationStats {
     pub const MODE_REGION: u32 = 3;
     pub const MODE_DELETE: u32 = 4;
     pub const TRANSPORT_DIRECT: u32 = 0;
-    pub const TRANSPORT_FILE: u32 = 1;
     pub const TRANSPORT_SHM: u32 = 2;
     pub const FLAG_NATIVE_USED: u32 = 1;
     pub const FLAG_FALLBACK: u32 = 2;

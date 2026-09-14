@@ -2878,8 +2878,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
         hasActiveInteraction: ctx.hasActiveInteraction,
         transmissionMode: ctx.transmissionMode === "shm"
           ? NATIVE_FRAME_TRANSPORT.SHM
-          : ctx.transmissionMode === "file"
-            ? NATIVE_FRAME_TRANSPORT.FILE
             : NATIVE_FRAME_TRANSPORT.DIRECT,
         lastStrategy: previousStrategy === "skip-present"
           ? NATIVE_FRAME_STRATEGY.SKIP_PRESENT
@@ -2985,7 +2983,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
         suppressFinalPresentation = true
         failGpuOnly("standalone GPU render failed")
       }
-      return { output: "kitty-payload", strategy: lastStrategy, kittyPayload: result.rawLayer ?? undefined }
+      return { output: "skip-present", strategy: lastStrategy }
     },
     reuseLayer(ctx) {
       const record = layerTargets.get(ctx.layer.key)

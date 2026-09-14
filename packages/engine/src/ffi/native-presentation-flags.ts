@@ -107,7 +107,7 @@ export function nativePresentationForcedOffReason(): string | null {
  * via vexart_kitty_set_transport + vexart_kitty_emit_*. The TS readback
  * fallback has been removed — Rust owns the full readback+encode+emit path.
  */
-export function isNativePresentationCapable(transmissionMode: "direct" | "file" | "shm"): boolean {
+export function isNativePresentationCapable(transmissionMode: "direct" | "shm"): boolean {
   return _nativePresentationEnabled
 }
 

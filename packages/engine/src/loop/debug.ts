@@ -272,7 +272,7 @@ export function debugUpdateStats(stats: DebugUpdateStatsInput) {
     overlapPixelArea: stats.overlapPixelArea ?? 0,
     overlapRatio: stats.overlapRatio ?? 0,
     fullRepaint: stats.fullRepaint ?? false,
-    transmissionMode: (stats.transmissionMode as "direct" | "file" | "shm" | null) ?? null,
+    transmissionMode: (stats.transmissionMode as "direct" | "shm" | null) ?? null,
     estimatedLayeredBytes: stats.estimatedLayeredBytes ?? 0,
     estimatedFinalBytes: stats.estimatedFinalBytes ?? 0,
     repaintedCount: stats.repaintedCount,

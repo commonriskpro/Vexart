@@ -106,12 +106,14 @@ export type Capabilities = {
     sixel: boolean;
     truecolor: boolean;
     mouse: boolean;
+    mousePixel?: boolean;
+    mousePixelOrigin?: 0 | 1;
     focus: boolean;
     bracketedPaste: boolean;
     syncOutput: boolean;
     tmux: boolean;
     parentKind: TerminalKind | null;
-    transmissionMode: "shm" | "file" | "direct";
+    transmissionMode: "shm" | "direct";
 };
 
 // @public (undocumented)
@@ -630,6 +632,7 @@ type MouseEvent_2 = {
     x: number;
     y: number;
     mods: Modifiers;
+    pixel: boolean;
 };
 export { MouseEvent_2 as MouseEvent }
 

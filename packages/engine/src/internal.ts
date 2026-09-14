@@ -218,7 +218,7 @@ export { getSize, queryPixelSize, onResize } from "./terminal/size"
 export { enter, leave, beginSync, endSync, installExitHandlers, setupExitHandlers, ProcessSignalHub } from "./terminal/lifecycle"
 export { inTmux, parentTerminal, passthroughSupported, createWriter, wrapPassthrough } from "./terminal/tmux"
 
-export { probeShm, probeFile, getKittyTransportStats, resetKittyTransportStats, COMPRESS_MODE } from "./output/kitty"
+export { probeShm, getKittyTransportStats, resetKittyTransportStats, COMPRESS_MODE } from "./output/kitty"
 export type { KittyTransportStats, RawImageData, CompressMode } from "./output/kitty"
 export type { TransmissionMode } from "./output/transport-manager"
 export {

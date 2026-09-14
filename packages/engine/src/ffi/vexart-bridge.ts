@@ -76,8 +76,6 @@ export const VEXART_SYMBOLS = {
   // §5.6 Kitty native presentation (Phase 2b)
   // emit_frame_with_stats: ctx, target, image_id, stats_out → i32
   vexart_kitty_emit_frame_with_stats: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  // emit_layer: ctx, image_id, rgba_ptr, rgba_len, layer_ptr (width,height,col,row,z), stats_out → i32
-  vexart_kitty_emit_layer: { args: [FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   // emit_layer_target: ctx, target, image_id, layer_ptr (col,row,z), stats_out → i32
   vexart_kitty_emit_layer_target: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   // emit_region_target: ctx, target, image_id, region_ptr (4×u32: rx,ry,rw,rh), stats_out → i32

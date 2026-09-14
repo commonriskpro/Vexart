@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { onCleanup } from "solid-js"
 import { mount } from "./mount"
 import { onPostScroll } from "./reconciler/pointer"
+import { onGlobalDirty } from "./reconciler/dirty"
 import { createNode, createTextNode, insertChild, parseSizing, type TGENode, type TGEProps } from "./ffi/node"
 import { getRendererBackend, setRendererBackend, type RendererBackend } from "./ffi/renderer-backend"
 import type { Terminal } from "./terminal/index"
@@ -235,6 +236,45 @@ describe("mount mouse coordinates (Defect 15)", () => {
       await sleep(20)
 
       expect(bottomPressedCount).toBe(1)
+    } finally {
+      handle.destroy()
+      setRendererBackend(prevBackend)
+    }
+  })
+})
+
+describe("mount focus events", () => {
+  test("focus in/out events do not trigger markDirty or key interaction", async () => {
+    const prevBackend = getRendererBackend()
+    setRendererBackend(noopBackend)
+
+    const { terminal, emit } = createMockTerminal(80, 40)
+    let dirtyCount = 0
+
+    const handle = mount(() => {
+      return box({ width: 80, height: 40 })
+    }, terminal)
+
+    try {
+      await sleep(20)
+      const unsub = onGlobalDirty(() => {
+        dirtyCount += 1
+      })
+
+      // Emit focus in (\x1b[I) and focus out (\x1b[O)
+      emit("\x1b[I")
+      await sleep(20)
+      emit("\x1b[O")
+      await sleep(20)
+
+      expect(dirtyCount).toBe(0)
+
+      // Emit a key to verify onGlobalDirty is indeed triggered on actual key events
+      emit("a")
+      await sleep(20)
+      expect(dirtyCount).toBeGreaterThan(0)
+
+      unsub()
     } finally {
       handle.destroy()
       setRendererBackend(prevBackend)

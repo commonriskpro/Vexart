@@ -11,36 +11,14 @@
  * Phase 2b — see openspec/changes/phase-2b-native-presentation/design.md
  */
 
-import { ptr } from "bun:ffi"
 import { openVexartLibrary } from "./vexart-bridge"
 import type { TransmissionMode } from "../output/transport-manager"
-import {
-  allocNativeStatsBuf,
-  decodeNativePresentationStats,
-  type NativePresentationStats,
-} from "./native-presentation-stats"
-import { disableNativePresentation, enableNativePresentation, logNativePresentationFallback } from "./native-presentation-flags"
+import { enableNativePresentation } from "./native-presentation-flags"
 
 let currentTransportMode: number | null = null
 let consecutiveFailures = 0
 let disabledUntilFrame = 0
 let currentFrameCounter = 0
-const MAX_CONSECUTIVE_FAILURES = 3
-const RETRY_COOLDOWN_FRAMES = 300 // ~5 seconds at 60fps
-const publishedLayerImageIds = new Set<number>()
-
-function recordNativePresentationSuccess() {
-  consecutiveFailures = 0
-}
-
-function recordNativePresentationFailure(reason: string) {
-  consecutiveFailures++
-  if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-    // Temporarily disable with a cooldown instead of permanently
-    disabledUntilFrame = currentFrameCounter + RETRY_COOLDOWN_FRAMES
-    disableNativePresentation(`${consecutiveFailures} consecutive failures: ${reason} (retry after ${RETRY_COOLDOWN_FRAMES} frames)`)
-  }
-}
 
 /** Call once per frame to allow recovery from transient native presentation failures. */
 export function tickNativePresentationRecovery() {
@@ -54,9 +32,7 @@ export function tickNativePresentationRecovery() {
 
 function toNativeTransportMode(mode: TransmissionMode | number) {
   if (typeof mode === "number") return mode
-  if (mode === "file") return 1
-  if (mode === "shm") return 2
-  return 0
+  return mode === "shm" ? 2 : 0
 }
 
 export function ensureNativeKittyTransport(mode: TransmissionMode | number) {
@@ -65,90 +41,4 @@ export function ensureNativeKittyTransport(mode: TransmissionMode | number) {
   const { symbols } = openVexartLibrary()
   symbols.vexart_kitty_set_transport(1n, nextMode)
   currentTransportMode = nextMode
-}
-
-// ── Native layer emission ─────────────────────────────────────────────────
-
-/**
- * Emit a pre-encoded RGBA layer natively via vexart_kitty_emit_layer.
- *
- * @param imageId — Kitty image ID for this layer
- * @param rgba    — raw RGBA pixel data (width × height × 4 bytes)
- * @param width   — layer width in pixels
- * @param height  — layer height in pixels
- * @param col     — terminal column where the image is placed
- * @param row     — terminal row where the image is placed
- * @param z       — Kitty z-index
- * @returns decoded stats, or null if the call failed
- */
-export function nativeEmitLayer(
-  imageId: number,
-  rgba: Uint8Array,
-  width: number,
-  height: number,
-  col: number,
-  row: number,
-  z: number,
-  transmissionMode: TransmissionMode = "direct",
-): NativePresentationStats | null {
-  const statsBuf = allocNativeStatsBuf()
-  const layerBuf = new Uint8Array(20)
-  const layerView = new DataView(layerBuf.buffer)
-  layerView.setUint32(0, width, true)
-  layerView.setUint32(4, height, true)
-  layerView.setInt32(8, col, true)
-  layerView.setInt32(12, row, true)
-  layerView.setInt32(16, z, true)
-  try {
-    const { symbols } = openVexartLibrary()
-    ensureNativeKittyTransport(transmissionMode)
-    const rc = symbols.vexart_kitty_emit_layer(
-      1n, // ctx (dummy — single context model)
-      imageId,
-      ptr(rgba),
-      rgba.byteLength,
-      ptr(layerBuf),
-      layerBuf.byteLength,
-      ptr(statsBuf),
-    ) as number
-    if (rc === 0) {
-      publishedLayerImageIds.add(imageId)
-      recordNativePresentationSuccess()
-      return decodeNativePresentationStats(statsBuf)
-    }
-    recordNativePresentationFailure(`vexart_kitty_emit_layer returned ${rc}`)
-    logNativePresentationFallback(`layer emit failed (imageId=${imageId})`)
-    return null
-  } catch (e) {
-    recordNativePresentationFailure(`vexart_kitty_emit_layer threw: ${e}`)
-    logNativePresentationFallback(`layer emit threw (imageId=${imageId})`)
-    return null
-  }
-}
-
-// ── Native layer deletion ─────────────────────────────────────────────────
-
-/**
- * Delete a Kitty image natively via vexart_kitty_delete_layer.
- *
- * Only image IDs successfully emitted through a layer presentation operation
- * are owned here.  Full-frame presentation uses a separate Rust image path,
- * so it is intentionally not tracked by this set.
- *
- * Falls back silently — does NOT disable native presentation on failure
- * since delete failures are non-critical (stale images are harmless).
- *
- * @param imageId — Kitty image ID to delete
- */
-export function nativeDeleteLayer(imageId: number): void {
-  if (!publishedLayerImageIds.has(imageId)) return
-  const statsBuf = allocNativeStatsBuf()
-  try {
-    const { symbols } = openVexartLibrary()
-    const rc = symbols.vexart_kitty_delete_layer(1n, imageId, ptr(statsBuf)) as number
-    if (rc === 0) publishedLayerImageIds.delete(imageId)
-  } catch {
-    // Delete failure is non-critical — log only in debug mode.
-    logNativePresentationFallback(`delete layer threw (imageId=${imageId}), using TS fallback`)
-  }
 }

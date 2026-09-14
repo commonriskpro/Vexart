@@ -3,6 +3,7 @@ import type { DamageRect, TransformQuad } from "./damage"
 import type { GpuLayerStrategyMode, NativeFramePlan } from "./gpu-layer-strategy"
 import type { RenderGraphFrame } from "./render-graph"
 import type { NativePresentationStats } from "./native-presentation-stats"
+import type { TransmissionMode } from "../output/transport-manager"
 
 /** @public */
 export type RendererBackendLayerBacking = {
@@ -27,7 +28,7 @@ export type RendererBackendFrameContext = {
   useLayerCompositing: boolean
   hasSubtreeTransforms: boolean
   hasActiveInteraction: boolean
-  transmissionMode: "direct" | "file" | "shm"
+  transmissionMode: TransmissionMode
   estimatedLayeredBytes: number
   estimatedFinalBytes: number
 }
@@ -58,16 +59,6 @@ export type RendererBackendRetainedLayer = {
 
 /** @public */
 export type RendererBackendPaintResult =
-  | {
-      output: "kitty-payload"
-      strategy?: GpuLayerStrategyMode | null
-      kittyPayload?: {
-        data: Uint8Array
-        width: number
-        height: number
-        region?: DamageRect
-      }
-    }
   | {
       output: "skip-present"
       strategy?: GpuLayerStrategyMode | null

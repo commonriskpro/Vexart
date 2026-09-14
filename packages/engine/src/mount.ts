@@ -211,6 +211,10 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
       return
     }
 
+    if (event.type === "focus") {
+      return
+    }
+
     markDirty()
     loop.requestInteractionFrame("key")
   }, {

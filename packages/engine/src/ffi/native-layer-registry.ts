@@ -6,7 +6,6 @@
 import { ptr } from "bun:ffi"
 import { openVexartLibrary } from "./vexart-bridge"
 import { disableNativeLayerRegistry, isNativeLayerRegistryEnabled } from "./native-layer-registry-flags"
-import { nativeDeleteLayer } from "./native-presentation-ops"
 
 const encoder = new TextEncoder()
 const handlesByKey = new Map<string, bigint>()
@@ -73,6 +72,16 @@ function readImageId(buf: Uint32Array) {
   return buf[0]
 }
 
+function deleteTerminalImage(imageId: number, ctx: bigint = 1n): void {
+  try {
+    const { symbols } = openVexartLibrary()
+    const statsBuf = new Uint8Array(16)
+    symbols.vexart_kitty_delete_layer(ctx, imageId, ptr(statsBuf))
+  } catch {
+    // Best-effort terminal cleanup
+  }
+}
+
 export function nativeLayerUpsert(key: string, desc: NativeLayerDescriptor, ctx: bigint = 1n): NativeLayerUpsertResult | null {
   if (!isNativeLayerRegistryEnabled()) return null
   if (desc.width <= 0 || desc.height <= 0) return null
@@ -86,7 +95,7 @@ export function nativeLayerUpsert(key: string, desc: NativeLayerDescriptor, ctx:
   const moved = previous
     && previousImageId !== undefined
     && (previous.x !== desc.x || previous.y !== desc.y || previous.z !== desc.z)
-  if (moved) nativeDeleteLayer(previousImageId)
+  if (moved) deleteTerminalImage(previousImageId, ctx)
 
   const keyBuf = encoder.encode(key)
   const descBuf = writeDescriptor(desc, nextFrame())
@@ -168,7 +177,7 @@ export function clearNativeLayerRegistryMirror(options: NativeLayerRegistryClean
   // image and opts out of these obsolete per-layer deletes.
   if (!options.suppressTerminalImageDeletes) {
     const imageIds = new Set(imageIdsByKey.values())
-    for (const imageId of imageIds) nativeDeleteLayer(imageId)
+    for (const imageId of imageIds) deleteTerminalImage(imageId, ctx)
   }
   try {
     const { symbols } = openVexartLibrary()

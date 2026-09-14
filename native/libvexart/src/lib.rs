@@ -1036,41 +1036,6 @@ pub unsafe extern "C" fn vexart_kitty_emit_frame_shm_owned(
     })
 }
 
-/// Emit a pre-encoded RGBA layer natively (dirty-layer presentation path).
-///
-/// `rgba_ptr`/`rgba_len` — raw RGBA pixel data (width × height × 4 bytes).
-/// `layer_ptr` — width, height as u32 LE followed by col, row, z as i32 LE.
-/// Transport mode is selected via `vexart_kitty_set_transport`.
-///
-/// # Safety
-/// `rgba_ptr` must be valid for `rgba_len` bytes; `stats_out` valid if non-null.
-/// Phase 2b — native layer presentation.
-#[no_mangle]
-pub unsafe extern "C" fn vexart_kitty_emit_layer(
-    _ctx: u64,
-    image_id: u32,
-    rgba_ptr: *const u8,
-    rgba_len: u32,
-    layer_ptr: *const u8,
-    layer_len: u32,
-    stats_out: *mut types::NativePresentationStats,
-) -> i32 {
-    ffi_guard!({
-        if layer_ptr.is_null() || (layer_len as usize) < 20 {
-            return ffi::panic::ERR_INVALID_ARG;
-        }
-        let bytes = std::slice::from_raw_parts(layer_ptr, 20);
-        let width = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-        let height = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
-        let col = i32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]);
-        let row = i32::from_le_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]);
-        let z = i32::from_le_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]);
-        kitty::transport::emit_layer_native(
-            image_id, rgba_ptr, rgba_len, width, height, col, row, z, stats_out,
-        )
-    })
-}
-
 /// Emit a painted GPU target as a positioned Kitty layer without returning RGBA to JS.
 ///
 /// `layer_ptr` — col, row, z as i32 LE.

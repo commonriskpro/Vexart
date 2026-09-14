@@ -48,12 +48,11 @@ export type Capabilities = {
   /**
    * Best available Kitty graphics transmission mode.
    *   - "shm":    POSIX shared memory (fastest, ~0.01ms per frame)
-   *   - "file":   temp file (fast, ~1-2ms per frame)
    *   - "direct": base64 escape codes (universal, ~5-10ms per frame)
    *
    * Auto-detected during createTerminal(). SSH/remote → always "direct".
    */
-  transmissionMode: "shm" | "file" | "direct"
+  transmissionMode: "shm" | "direct"
 }
 
 /** @public */

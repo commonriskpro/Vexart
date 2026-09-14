@@ -410,7 +410,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     useLayerCompositing: true,
     forceLayerRepaint,
     expFrameBudgetMs,
-    transmissionMode: term.caps.transmissionMode === "shm" ? "shm" : "direct",
+    transmissionMode: term.caps.transmissionMode,
     debugCadence: DEBUG_CADENCE || !!frameProfileSink,
     debugDragRepro: DEBUG_DRAG_REPRO,
     interaction: { lastPresentedInteractionSeq, lastPresentedInteractionLatencyMs, lastPresentedInteractionType },

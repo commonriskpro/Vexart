@@ -1,9 +1,9 @@
 // transport-manager.ts — Kitty native transport path
 // Placeholder and halfblock transport branches removed per DEC-005 / REQ-NB-002.
-// Only Kitty (shm, file, direct) transport remains. Per design §11.
+// Only Kitty (shm, direct) transport remains. Per design §11.
 
 /** @public */
-export const TRANSMISSION_MODE = { SHM: "shm", FILE: "file", DIRECT: "direct" } as const
+export const TRANSMISSION_MODE = { SHM: "shm", DIRECT: "direct" } as const
 /** @public */
 export type TransmissionMode = (typeof TRANSMISSION_MODE)[keyof typeof TRANSMISSION_MODE]
 
@@ -21,7 +21,6 @@ export const TRANSPORT_FAILURE_REASON = {
   SHM_OPEN_FAILED: "shm_open_failed",
   FTRUNCATE_FAILED: "ftruncate_failed",
   MMAP_FAILED: "mmap_failed",
-  FILE_WRITE_FAILED: "file_write_failed",
   RUNTIME_TRANSPORT_ERROR: "runtime_transport_error",
 } as const
 
@@ -56,23 +55,19 @@ export interface ConfigureKittyTransportManagerOptions {
 const state: KittyTransportManagerState = {
   preferredMode: "shm",
   activeMode: "direct",
-  probe: { shm: false, file: false },
+  probe: { shm: false },
   health: {
     shm: TRANSPORT_HEALTH.UNKNOWN,
-    file: TRANSPORT_HEALTH.UNKNOWN,
     direct: TRANSPORT_HEALTH.HEALTHY,
   },
   lastFailureReason: null,
   telemetry: {
     shm: { success: 0, failure: 0, fallback: 0 },
-    file: { success: 0, failure: 0, fallback: 0 },
     direct: { success: 0, failure: 0, fallback: 0 },
   },
 }
 
-function nextMode(mode: TransmissionMode) {
-  if (mode === "shm") return state.probe.file ? "file" : "direct"
-  if (mode === "file") return "direct"
+function nextMode(mode: TransmissionMode): TransmissionMode {
   return "direct"
 }
 
@@ -87,12 +82,10 @@ export function resetKittyTransportManager() {
   state.preferredMode = "shm"
   state.activeMode = "direct"
   state.probe.shm = false
-  state.probe.file = false
   state.health.shm = TRANSPORT_HEALTH.UNKNOWN
-  state.health.file = TRANSPORT_HEALTH.UNKNOWN
   state.health.direct = TRANSPORT_HEALTH.HEALTHY
   state.lastFailureReason = null
-  for (const mode of ["shm", "file", "direct"] as const) {
+  for (const mode of ["shm", "direct"] as const) {
     state.telemetry[mode].success = 0
     state.telemetry[mode].failure = 0
     state.telemetry[mode].fallback = 0
@@ -103,9 +96,7 @@ export function resetKittyTransportManager() {
 export function configureKittyTransportManager(options: ConfigureKittyTransportManagerOptions) {
   state.preferredMode = options.preferredMode
   state.probe.shm = options.probe.shm
-  state.probe.file = options.probe.file
   state.health.shm = options.probe.shm ? TRANSPORT_HEALTH.HEALTHY : TRANSPORT_HEALTH.UNSUPPORTED
-  state.health.file = options.probe.file ? TRANSPORT_HEALTH.HEALTHY : TRANSPORT_HEALTH.UNSUPPORTED
   state.health.direct = TRANSPORT_HEALTH.HEALTHY
   state.activeMode = resolveKittyTransportMode(options.preferredMode)
   state.lastFailureReason = null
@@ -118,14 +109,6 @@ export function resolveKittyTransportMode(requestedMode: TransmissionMode) {
   const fallback = nextMode(requestedMode)
   if (fallback !== requestedMode) {
     state.telemetry[requestedMode].fallback += 1
-  }
-  if (fallback === "direct") {
-    state.activeMode = "direct"
-    return "direct"
-  }
-  if (canUseMode(fallback)) {
-    state.activeMode = fallback
-    return fallback
   }
   state.activeMode = "direct"
   return "direct"
@@ -156,7 +139,6 @@ export function getKittyTransportManagerState(): KittyTransportManagerState {
     lastFailureReason: state.lastFailureReason,
     telemetry: {
       shm: { ...state.telemetry.shm },
-      file: { ...state.telemetry.file },
       direct: { ...state.telemetry.direct },
     },
   }

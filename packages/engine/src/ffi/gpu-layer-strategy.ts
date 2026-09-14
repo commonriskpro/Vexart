@@ -60,7 +60,7 @@ export type NativeFrameExecutionStatsInput = {
   overlapPixelArea: number
   overlapRatio: number
   fullRepaint: boolean
-  transmissionMode: "direct" | "file" | "shm" | null
+  transmissionMode: "direct" | "shm" | null
   estimatedLayeredBytes: number
   estimatedFinalBytes: number
   repaintedCount: number
@@ -93,7 +93,7 @@ export type GpuLayerStrategyInput = {
   fullRepaint: boolean
   hasSubtreeTransforms: boolean
   hasActiveInteraction: boolean
-  transmissionMode: "direct" | "file" | "shm"
+  transmissionMode: "direct" | "shm"
   estimatedLayeredBytes: number
   estimatedFinalBytes: number
   lastStrategy: GpuLayerStrategyMode | null
@@ -159,7 +159,7 @@ export function nativeChooseFrameStrategy(input: NativeFramePlanInput): NativeFr
     fullRepaint: input.fullRepaint,
     hasSubtreeTransforms: input.hasSubtreeTransforms,
     hasActiveInteraction: input.hasActiveInteraction,
-    transmissionMode: input.transmissionMode === NATIVE_FRAME_TRANSPORT.SHM ? "shm" : input.transmissionMode === NATIVE_FRAME_TRANSPORT.FILE ? "file" : "direct",
+    transmissionMode: input.transmissionMode === NATIVE_FRAME_TRANSPORT.SHM ? "shm" : "direct",
     estimatedLayeredBytes: input.estimatedLayeredBytes,
     estimatedFinalBytes: input.estimatedFinalBytes,
     lastStrategy: input.lastStrategy === NATIVE_FRAME_STRATEGY.SKIP_PRESENT ? "skip-present" : input.lastStrategy === NATIVE_FRAME_STRATEGY.LAYERED_REGION ? "layered-region" : input.lastStrategy === NATIVE_FRAME_STRATEGY.LAYERED_DIRTY ? "layered-dirty" : input.lastStrategy === NATIVE_FRAME_STRATEGY.FINAL_FRAME ? "final-frame" : null,
@@ -202,8 +202,6 @@ export function chooseGpuLayerStrategy(input: GpuLayerStrategyInput, nativePlanO
     hasActiveInteraction: input.hasActiveInteraction,
     transmissionMode: input.transmissionMode === "shm"
       ? NATIVE_FRAME_TRANSPORT.SHM
-      : input.transmissionMode === "file"
-        ? NATIVE_FRAME_TRANSPORT.FILE
         : NATIVE_FRAME_TRANSPORT.DIRECT,
     lastStrategy: input.lastStrategy === "final-frame"
       ? NATIVE_FRAME_STRATEGY.FINAL_FRAME

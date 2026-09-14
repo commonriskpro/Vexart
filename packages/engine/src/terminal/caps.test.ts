@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
+import { EventEmitter } from "node:events"
 import { inferCaps, parseKittyProbeResponse, probeKittyGraphics, queryColors } from "./caps"
 import { detect } from "./detect"
 import { parentSupportsKittyGraphics, parentSupportsKittyPlaceholder } from "./tmux"
+import { createTerminal } from "./index"
 
 type Feed = (data: string) => void
 
@@ -130,6 +132,51 @@ describe("terminal capability replies", () => {
         }
       }
       Object.assign(process.env, origEnv)
+    }
+  })
+
+  test("createTerminal dispatches startup probes concurrently", async () => {
+    const origTmux = process.env.TMUX
+    const origTerm = process.env.TERM
+    const origTermProgram = process.env.TERM_PROGRAM
+    delete process.env.TMUX
+    process.env.TERM = "xterm-kitty"
+    process.env.TERM_PROGRAM = "kitty"
+
+    try {
+      const fakeStdin = new EventEmitter() as any
+      fakeStdin.isTTY = false
+      fakeStdin.isRaw = false
+      fakeStdin.setRawMode = () => {}
+
+      const written: string[] = []
+      const fakeStdout = new EventEmitter() as any
+      fakeStdout.write = (chunk: string | Buffer) => {
+        written.push(typeof chunk === "string" ? chunk : chunk.toString())
+        return true
+      }
+      fakeStdout.columns = 80
+      fakeStdout.rows = 24
+
+      const termPromise = createTerminal({
+        stdin: fakeStdin,
+        stdout: fakeStdout,
+        manageProcessSignals: false,
+        probeTimeout: 100,
+      })
+
+      await Bun.sleep(10)
+      const combined = written.join("")
+      expect(combined).toContain("\x1b_Gi=31")
+      expect(combined).toContain("\x1b]11;?")
+      expect(combined).toContain("\x1b[16t")
+
+      const term = await termPromise
+      term.destroy()
+    } finally {
+      if (origTmux !== undefined) process.env.TMUX = origTmux; else delete process.env.TMUX
+      if (origTerm !== undefined) process.env.TERM = origTerm; else delete process.env.TERM
+      if (origTermProgram !== undefined) process.env.TERM_PROGRAM = origTermProgram; else delete process.env.TERM_PROGRAM
     }
   })
 })

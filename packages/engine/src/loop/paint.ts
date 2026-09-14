@@ -38,7 +38,6 @@ import { resolveProps, type TGENode } from "../ffi/node"
 
 import { isNativePresentationCapable } from "../ffi/native-presentation-flags"
 import { nativeLayerRemove } from "../ffi/native-layer-registry"
-import { nativeDeleteLayer, nativeEmitLayer } from "../ffi/native-presentation-ops"
 import type { NativePresentationStats } from "../ffi/native-presentation-stats"
 
 
@@ -79,7 +78,7 @@ function cleanupOrphanLayers(
   preparedSlots: PreparedLayerSlot[],
   layerCache: Map<string, Layer>,
   activeSlotKeys: Set<string>,
-  transmissionMode: "direct" | "file" | "shm",
+  transmissionMode: "direct" | "shm",
   imageIdForLayer: (layer: Layer) => number,
   removeLayer: (layer: Layer) => void,
   debugCadence: boolean,
@@ -91,9 +90,7 @@ function cleanupOrphanLayers(
   for (const [key, layer] of layerCache) {
     if (activeSlotKeys.has(key)) continue
     const ioStart = debugCadence ? performance.now() : 0
-    const imageId = imageIdForLayer(layer)
-    const nativeImageId = nativeLayerRemove(key)
-    if (!suppressNativeLayerDeletes) nativeDeleteLayer(nativeImageId ?? imageId)
+    nativeLayerRemove(key)
     if (debugCadence) ioMs += performance.now() - ioStart
     removeLayer(layer)
     layerCache.delete(key)
@@ -114,7 +111,7 @@ export type PaintFrameState = {
   viewportHeight: number
 
   // Terminal capabilities
-  transmissionMode: "direct" | "file" | "shm"
+  transmissionMode: "direct" | "shm"
 
   // Frame compositing flags
   useLayerCompositing: boolean
@@ -595,9 +592,7 @@ export function paintFrame(
       if (clipLeft >= clipRight || clipTop >= clipBottom) {
         renderDebug(`[clip:skip] slot=${slot.key} z=${slot.z} x=${lx} y=${ly} w=${lw} h=${lh}`)
         if (slot.z >= 0) {
-          const imageId = imageIdForLayer(layer)
-          const nativeImageId = nativeLayerRemove(slot.key)
-          if (!state.suppressNativeLayerDeletes) nativeDeleteLayer(nativeImageId ?? imageId)
+          nativeLayerRemove(slot.key)
         }
         layer.dirty = false
         continue
@@ -856,7 +851,6 @@ export function paintFrame(
 
       if (!paintResult) throw new Error(`GPU-only renderer backend did not return a layer payload for ${slot.key}`)
       if (paintResult.output === "skip-present") rendererOutput = paintResult.strategy ?? framePlan?.strategy ?? "skip-present"
-      if (paintResult.output === "kitty-payload") rendererOutput = "layered-raw"
       if (paintResult.output === "native-presented") rendererOutput = "native-presented"
 
       if (paintResult.output === "skip-present") {
@@ -876,34 +870,6 @@ export function paintFrame(
         }
         markLayerClean(layer)
         continue
-      }
-
-      if (paintResult.output === "kitty-payload" && paintResult.kittyPayload) {
-        repaintedThisFrame++
-        const renderZ = layer.z
-        const imageId = imageIdForLayer(layer)
-        if (debugDragRepro && prepared.debugName === "drag-target") {
-          dragReproDebug(`[present] slot=${slot.key} changed=1 z=${renderZ} pos=(${lx},${ly}) size=${lw}x${lh} raw=1`)
-        }
-
-        // Emit layer natively via Rust (all transport modes).
-        const { data, width: pw, height: ph } = paintResult.kittyPayload
-        const col = Math.floor(lx / cellW)
-        const row = Math.floor(ly / cellH)
-        const presentationStart = profile ? performance.now() : 0
-        const nativeStats = nativeEmitLayer(imageId, data, pw, ph, col, row, renderZ, state.transmissionMode)
-        if (profile) profile.paintPresentationMs += performance.now() - presentationStart
-        if (nativeStats !== null) {
-          nativePresentationStats = nativeStats
-          if (effectiveUseRegionalRepaint && clippedDamage) {
-            if (debugCadence) log(`  [${slot.key}] NATIVE-LAYER-REGION ${clippedDamage.width}x${clippedDamage.height} at (${clippedDamage.x},${clippedDamage.y}) within ${pw}x${ph} z=${renderZ}`)
-          } else {
-            if (debugCadence) log(`  [${slot.key}] NATIVE-LAYER ${pw}x${ph} at (${lx},${ly}) z=${renderZ} cmds=${slot.cmdIndices.length}`)
-          }
-          markLayerClean(layer)
-          continue
-        }
-        throw new Error(`[vexart] native layer emit failed for ${slot.key}`)
       }
 
       throw new Error(`GPU-only renderer backend did not return a layer payload for ${slot.key}`)
