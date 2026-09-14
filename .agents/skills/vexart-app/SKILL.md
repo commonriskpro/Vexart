@@ -66,7 +66,7 @@ Unlike mobile-first frameworks (React Native), Vexart is built for modern deskto
 
 {/* Flows horizontally side-by-side (default) */}
 <box gap={space[2]}>
-  <VoidButton variant="primary">Save</VoidButton>
+  <VoidButton variant="default">Save</VoidButton>
   <VoidButton variant="outline">Cancel</VoidButton>
 </box>
 ``` 
@@ -88,6 +88,11 @@ Vexart uses semantic, cross-platform terminal pointer and keyboard events:
 
 ### 6. Pluggable Syntax Highlighting (No Tree-sitter Coupling)
 Tree-sitter WASM is NOT bundled inside the engine. `<Code>`, `<Markdown>`, and `<Textarea>` accept an optional `highlighter?: Highlighter` prop. In the absence of a custom highlighter, code renders safely as plain syntax-safe text without requiring any native WASM binaries.
+
+### 7. Modern Protocols, Transports & Release Policy
+- **SGR-Pixel Precision (Mode 1016)**: Vexart operates natively in exact pixel coordinates (sub-cell positioning, pointer coordinates, and hit-testing) using the SGR-Pixel protocol rather than coarse character-cell grids.
+- **Kitty Graphics Transports**: High-throughput rendering exclusively uses POSIX Shared Memory (`shm`) and Base64 Direct (`direct`) transport mechanisms. Legacy file transport has been eliminated.
+- **Automated Versioning & Releases**: Managed via Google Release Please with Conventional Commits (no manual changesets). Baseline package version is `^0.11.0`.
 
 ---
 
@@ -140,7 +145,7 @@ function Dashboard() {
           <text color={colors.foreground} fontSize={18} fontWeight={700}>
             Vexart Mission Control
           </text>
-          <VoidBadge variant="success">ONLINE</VoidBadge>
+          <VoidBadge variant="default">ONLINE</VoidBadge>
         </box>
         <text color={colors.mutedForeground} fontSize={12}>
           Viewport: {dims.width()} × {dims.height()} px
@@ -150,28 +155,30 @@ function Dashboard() {
       {/* Main 16:9 Content Layout */}
       <box width="100%" height="grow" direction="row" gap={space[4]}>
         {/* Left Sidebar Navigation */}
-        <VoidCard width={260} height="100%">
-          <VoidCardHeader>
-            <VoidCardTitle>Navigation</VoidCardTitle>
-            <VoidCardDescription>System modules</VoidCardDescription>
-          </VoidCardHeader>
-          <VoidCardContent>
-            <box direction="column" gap={space[2]} width="100%">
-              <VoidButton
-                variant={activeTab() === "metrics" ? "primary" : "ghost"}
-                onPress={() => setActiveTab("metrics")}
-              >
-                📊 Telemetry Metrics
-              </VoidButton>
-              <VoidButton
-                variant={activeTab() === "logs" ? "primary" : "ghost"}
-                onPress={() => setActiveTab("logs")}
-              >
-                📜 System Logs
-              </VoidButton>
-            </box>
-          </VoidCardContent>
-        </VoidCard>
+        <box width={260} height="100%">
+          <VoidCard>
+            <VoidCardHeader>
+              <VoidCardTitle>Navigation</VoidCardTitle>
+              <VoidCardDescription>System modules</VoidCardDescription>
+            </VoidCardHeader>
+            <VoidCardContent>
+              <box direction="column" gap={space[2]} width="100%">
+                <VoidButton
+                  variant={activeTab() === "metrics" ? "default" : "ghost"}
+                  onPress={() => setActiveTab("metrics")}
+                >
+                  📊 Telemetry Metrics
+                </VoidButton>
+                <VoidButton
+                  variant={activeTab() === "logs" ? "default" : "ghost"}
+                  onPress={() => setActiveTab("logs")}
+                >
+                  📜 System Logs
+                </VoidButton>
+              </box>
+            </VoidCardContent>
+          </VoidCard>
+        </box>
 
         {/* Right Content Area */}
         <box
@@ -278,10 +285,15 @@ For in-depth guides, component catalogs, and API contracts, consult the included
 | **Container Box** | `<box direction="column">` for vertical list | `<div>` or `<box>` assuming vertical default |
 | **Text Rendering** | `<text color={colors.foreground}>Hello</text>` | `<p>Hello</p>` or raw `"Hello"` in `<box>` |
 | **Button Click** | `<VoidButton onPress={handleClick}>` | `<button onClick={handleClick}>` or `onPress` on HTML |
-| **Input Change** | `<VoidInput onValueChange={(val) => ...}>` | `<input onChange={(e) => ...}>` |
+| **Button Variant** | `<VoidButton variant="default">` | `<VoidButton variant="primary">` (primary does not exist) |
+| **Badge Variant** | `<VoidBadge variant="default">` | `<VoidBadge variant="success">` (success does not exist) |
+| **Card Dimensions** | `<box width={300}><VoidCard>...</VoidCard></box>` | `<VoidCard width={300}>` (`VoidCard` accepts no width/height) |
+| **Input Change** | `<VoidInput onChange={(val) => ...}>` | `<input onChange={(e) => ...}>` |
 | **Conditional UI** | `<Show when={active()}>{...}</Show>` | `{active() && <div>...</div>}` |
 | **List Iteration** | `<For each={items()}>{(item) => ...}</For>` | `{items().map(item => ...)}` |
 | **State Signals** | `const [count, setCount] = createSignal(0)` | `const [count, setCount] = useState(0)` |
 | **Props Access** | `props.title` (read property on access) | `const { title } = props` (destructuring breaks reactivity) |
 | **Syntax Highlighting** | `<Code code={snippet} highlighter={customHL} />` | Bundling or importing `web-tree-sitter` WASM in app |
-
+| **Kitty Transport** | POSIX Shared Memory (`shm`) or Direct (`direct`) | Legacy file transport |
+| **Release Management** | Google Release Please + Conventional Commits | Manual `changeset` CLI |
+| **Coordinate Precision** | SGR-Pixel Mode 1016 (exact sub-cell pixels) | Cell-grid approximations |

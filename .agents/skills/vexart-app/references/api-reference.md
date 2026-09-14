@@ -85,8 +85,8 @@ Allows 2D raster drawing uploaded directly to WGPU textures.
 ## 3. Void Design System Components
 
 ### `<VoidButton>`
-- `variant?: "primary" | "secondary" | "destructive" | "outline" | "ghost" | "link"`
-- `size?: "default" | "sm" | "lg" | "icon"`
+- `variant?: "default" | "secondary" | "destructive" | "outline" | "ghost" | "link"`
+- `size?: "xs" | "sm" | "default" | "lg" | "icon" | "icon-sm" | "icon-lg"`
 - `onPress?: (e: PressEvent) => void`
 - `disabled?: boolean`
 - `children?: JSX.Element`
@@ -100,7 +100,7 @@ Allows 2D raster drawing uploaded directly to WGPU textures.
 - `width?: number | string`
 
 ### `<VoidCard>`, `<VoidCardHeader>`, `<VoidCardTitle>`, `<VoidCardDescription>`, `<VoidCardContent>`, `<VoidCardFooter>`
-Compound card composition for structured interfaces.
+Compound card composition for structured interfaces. Note: `VoidCard` accepts `size?: "default" | "sm"` and `className?: string`; layout dimensions should be controlled via an enclosing `<box width={...} height={...}>` or `className`.
 
 ### `<VoidBadge>`
 - `variant?: "default" | "secondary" | "outline" | "destructive"`
@@ -166,18 +166,18 @@ const dims = useTerminalDimensions()
 ```
 
 ### `useFocus(options?)`
-Manages keyboard focus for complex custom controls:
+Manages keyboard focus for custom controls:
 ```tsx
-const focus = useFocus({ id: "my-input" })
-// focus.isFocused() -> boolean
-// focus.focus() -> sets focus
-// focus.blur() -> clears focus
+const focus = useFocus({ id: "my-input", onKeyDown: (e) => {}, onPress: () => {} })
+// focus.focused() -> boolean (reactive accessor)
+// focus.focus() -> sets focus to this element
+// focus.id -> string identifier
 ```
 
-### `useQuery(key, fetcher, options?)`
-Declarative data fetching hook with automatic caching and error states:
+### `useQuery(fetcher, options?)`
+Declarative data fetching hook with automatic retry, intervals, and error states:
 ```tsx
-const query = useQuery(["users"], fetchUsers)
+const query = useQuery(fetchUsers, { retry: 2, retryDelay: 1000, refetchInterval: 5000 })
 // query.data() -> T | undefined
 // query.loading() -> boolean
 // query.error() -> Error | undefined
@@ -194,4 +194,3 @@ Re-exported directly from `"vexart"`:
 - `<Show when={condition} fallback={fallback}>...</Show>`
 - `<For each={list}>{(item, index) => ...}</For>`
 - `<Switch fallback={fallback}><Match when={...}>...</Match></Switch>`
-

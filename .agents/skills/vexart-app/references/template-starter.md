@@ -13,7 +13,7 @@ A minimal, production-ready starter setup for Bun + Vexart.
     "start": "bun --conditions=browser run src/index.tsx"
   },
   "dependencies": {
-    "vexart": "^0.10.0"
+    "vexart": "^0.11.0"
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",
@@ -74,12 +74,14 @@ function App() {
       alignX="center"
       alignY="center"
     >
-      <VoidCard width={400}>
-        <VoidCardTitle>Welcome to Vexart</VoidCardTitle>
-        <VoidButton variant="primary" onPress={() => console.log("Hello!")}>
-          Get Started
-        </VoidButton>
-      </VoidCard>
+      <box width={400}>
+        <VoidCard>
+          <VoidCardTitle>Welcome to Vexart</VoidCardTitle>
+          <VoidButton variant="default" onPress={() => console.log("Hello!")}>
+            Get Started
+          </VoidButton>
+        </VoidCard>
+      </box>
     </box>
   )
 }
@@ -92,4 +94,3 @@ createApp(() => <App />, { quit: ["ctrl+c"] })
 bun install
 bun run dev
 ```
-

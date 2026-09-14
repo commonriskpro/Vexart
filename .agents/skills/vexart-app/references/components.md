@@ -8,29 +8,31 @@ Pre-styled with the Void dark-mode design system.
 
 ### Cards
 ```tsx
-<VoidCard width={360}>
-  <VoidCardHeader>
-    <VoidCardTitle>Server Metrics</VoidCardTitle>
-    <VoidCardDescription>Live telemetry from cluster</VoidCardDescription>
-  </VoidCardHeader>
-  <VoidCardContent>
-    <box direction="column" gap={8}>
-      <text color={colors.foreground}>CPU: 24%</text>
-      <text color={colors.foreground}>RAM: 4.1 / 16 GB</text>
-    </box>
-  </VoidCardContent>
-  <VoidCardFooter>
-    <VoidButton size="sm" variant="outline">Restart</VoidButton>
-    <VoidButton size="sm" variant="primary">Details</VoidButton>
-  </VoidCardFooter>
-</VoidCard>
+<box width={360}>
+  <VoidCard>
+    <VoidCardHeader>
+      <VoidCardTitle>Server Metrics</VoidCardTitle>
+      <VoidCardDescription>Live telemetry from cluster</VoidCardDescription>
+    </VoidCardHeader>
+    <VoidCardContent>
+      <box direction="column" gap={8}>
+        <text color={colors.foreground}>CPU: 24%</text>
+        <text color={colors.foreground}>RAM: 4.1 / 16 GB</text>
+      </box>
+    </VoidCardContent>
+    <VoidCardFooter>
+      <VoidButton size="sm" variant="outline">Restart</VoidButton>
+      <VoidButton size="sm" variant="default">Details</VoidButton>
+    </VoidCardFooter>
+  </VoidCard>
+</box>
 ```
 
 ### Buttons
 ```tsx
-// Variants: "primary" | "secondary" | "destructive" | "outline" | "ghost" | "link"
-// Sizes: "default" | "sm" | "lg" | "icon"
-<VoidButton variant="primary" size="default" onPress={() => console.log("Clicked")}>
+// Variants: "default" | "secondary" | "destructive" | "outline" | "ghost" | "link"
+// Sizes: "xs" | "sm" | "default" | "lg" | "icon" | "icon-sm" | "icon-lg"
+<VoidButton variant="default" size="default" onPress={() => console.log("Clicked")}>
   Save Changes
 </VoidButton>
 ```
@@ -77,27 +79,29 @@ Pre-styled with the Void dark-mode design system.
 ```tsx
 // Tabs
 <VoidTabs
+  activeTab={activeTab()}
+  onTabChange={setActiveTab}
   tabs={[
-    { id: "overview", label: "Overview" },
-    { id: "logs", label: "Logs" },
+    { label: "Overview", content: () => <text>Overview</text> },
+    { label: "Logs", content: () => <text>Logs</text> },
   ]}
-  value={activeTab()}
-  onChange={setActiveTab}
 />
 
-// Dialog Modal
-<VoidDialog open={isOpen()} onOpenChange={setIsOpen}>
-  <VoidDialog.Title>Confirm Deletion</VoidDialog.Title>
-  <VoidDialog.Description>This action cannot be reversed.</VoidDialog.Description>
-  <VoidDialog.Footer>
-    <VoidButton variant="ghost" onPress={() => setIsOpen(false)}>Cancel</VoidButton>
-    <VoidButton variant="destructive" onPress={handleDelete}>Delete</VoidButton>
-  </VoidDialog.Footer>
-</VoidDialog>
+// Dialog Modal (mounted conditionally with SolidJS <Show>)
+<Show when={isOpen()}>
+  <VoidDialog onClose={() => setIsOpen(false)}>
+    <VoidDialog.Title>Confirm Deletion</VoidDialog.Title>
+    <VoidDialog.Description>This action cannot be reversed.</VoidDialog.Description>
+    <VoidDialog.Footer>
+      <VoidButton variant="ghost" onPress={() => setIsOpen(false)}>Cancel</VoidButton>
+      <VoidButton variant="destructive" onPress={handleDelete}>Delete</VoidButton>
+    </VoidDialog.Footer>
+  </VoidDialog>
+</Show>
 
 // Toast notifications
-const toaster = createToaster()
-toaster.show("Deployment succeeded", { variant: "success" })
+const toaster = createVoidToaster()
+toaster.show("Deployment succeeded", { variant: "default" })
 ```
 
 ### Typography Presets
@@ -123,4 +127,3 @@ When complete visual customization is required, use unstyled headless components
 - `<Tabs renderTab={...} renderTabBar={...} renderPanel={...} />`
 - `<List renderItem={...} />`
 - `<Table columns={cols} data={rows} renderCell={...} renderRow={...} />`
-

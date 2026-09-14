@@ -63,8 +63,8 @@ CSS aliases `justifyContent` and `alignItems` are also supported.
     {/* Main View */}
     <box width="grow" height="100%" direction="column" padding={16} gap={16} scrollY>
       <box direction="row" gap={16}>
-        <VoidCard width="grow"><VoidCardHeader><VoidCardTitle>Throughput</VoidCardTitle></VoidCardHeader></VoidCard>
-        <VoidCard width="grow"><VoidCardHeader><VoidCardTitle>Latency</VoidCardTitle></VoidCardHeader></VoidCard>
+        <box width="grow"><VoidCard><VoidCardHeader><VoidCardTitle>Throughput</VoidCardTitle></VoidCardHeader></VoidCard></box>
+        <box width="grow"><VoidCard><VoidCardHeader><VoidCardTitle>Latency</VoidCardTitle></VoidCardHeader></VoidCard></box>
       </box>
     </box>
   </box>
@@ -75,4 +75,3 @@ CSS aliases `justifyContent` and `alignItems` are also supported.
   </box>
 </box>
 ```
-

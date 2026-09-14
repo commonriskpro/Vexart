@@ -70,18 +70,20 @@ function App() {
       {/* Main Workspace (Row: Sidebar + Content) */}
       <box width="100%" height="grow" direction="row" gap={space[4]}>
         {sidebarOpen() && (
-          <VoidCard width={240} height="100%">
-            <VoidCardHeader>
-              <VoidCardTitle>Channels</VoidCardTitle>
-            </VoidCardHeader>
-            <VoidCardContent>
-              <box direction="column" gap={space[2]}>
-                <VoidButton variant="ghost" alignX="start"># general</VoidButton>
-                <VoidButton variant="ghost" alignX="start"># telemetry</VoidButton>
-                <VoidButton variant="ghost" alignX="start"># alerts</VoidButton>
-              </box>
-            </VoidCardContent>
-          </VoidCard>
+          <box width={240} height="100%">
+            <VoidCard>
+              <VoidCardHeader>
+                <VoidCardTitle>Channels</VoidCardTitle>
+              </VoidCardHeader>
+              <VoidCardContent>
+                <box direction="column" gap={space[2]}>
+                  <VoidButton variant="ghost" alignX="start"># general</VoidButton>
+                  <VoidButton variant="ghost" alignX="start"># telemetry</VoidButton>
+                  <VoidButton variant="ghost" alignX="start"># alerts</VoidButton>
+                </box>
+              </VoidCardContent>
+            </VoidCard>
+          </box>
         )}
 
         {/* Dynamic Center Canvas */}
@@ -153,7 +155,8 @@ function LoginForm() {
       alignY="center"
       backgroundColor={colors.background}
     >
-      <VoidCard width={380}>
+      <box width={380}>
+        <VoidCard>
         <VoidCardHeader>
           <VoidCardTitle>Terminal Login</VoidCardTitle>
         </VoidCardHeader>
@@ -181,11 +184,12 @@ function LoginForm() {
           </box>
         </VoidCardContent>
         <VoidCardFooter>
-          <VoidButton variant="primary" onPress={handleSubmit}>
+          <VoidButton variant="default" onPress={handleSubmit}>
             Sign In
           </VoidButton>
         </VoidCardFooter>
       </VoidCard>
+      </box>
     </box>
   )
 }
@@ -286,4 +290,3 @@ function ServiceDirectory() {
 
 createApp(() => <ServiceDirectory />, { quit: ["ctrl+c"] })
 ```
-
