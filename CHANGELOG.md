@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1-beta.9](https://github.com/commonriskpro/Vexart/compare/vexart-v0.11.0-beta.9...vexart-v0.11.1-beta.9) (2026-09-14)
+
+
+### Bug Fixes
+
+* **engine,demos:** enforce SGR-Pixel 1016, fix Kitty placement scroll, and modernize demos ([e9c227a](https://github.com/commonriskpro/Vexart/commit/e9c227ad17f34e55cb4d72fdbf0a1b80ced3fa3a))
+
 ## [0.11.0-beta.9](https://github.com/commonriskpro/Vexart/compare/vexart-v0.10.0-beta.9...vexart-v0.11.0-beta.9) (2026-09-14)
 
 
