@@ -295,7 +295,8 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     const now = performance.now()
     const wait = Math.max(0, interactionInterval - (now - lastInteractionFrameAt))
     const targetDelay = Math.max(kind === "pointer" ? 0 : kind === "scroll" ? 1 : interactionNudgeDelayMs, wait)
-    if (scheduledDelayMs <= targetDelay + 1) return
+    const remainingMs = Math.max(0, nextFrameDeadlineMs - now)
+    if (remainingMs <= targetDelay + 1) return
     clearTimeout(timer)
     timer = null
     scheduledDelayMs = targetDelay
@@ -377,7 +378,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     markInteractionActive("scroll")
     globalMarkLayoutDirty(dirtyTracker)
     markDirty()
-    nudgeInteraction("scroll")
   }
 
   function feedPointer(x: number, y: number, down: boolean) {
@@ -391,7 +391,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     pointer.dirty = true
     if (moved || changedDown) {
       markDirty({ kind: DIRTY_KIND.INTERACTION })
-      nudgeInteraction("pointer")
     }
   }
 
