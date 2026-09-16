@@ -6,6 +6,7 @@
  * @public
  */
 
+import { For } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus } from "@vexart/engine"
 
@@ -96,26 +97,39 @@ export function RadioGroup(props: RadioGroupProps) {
     },
   })
 
-  const children = () =>
-    props.options.map((opt, i) => {
-      const isDisabled = disabled() || (opt.disabled ?? false)
-      const ctx: RadioOptionContext = {
-        selected: props.value === opt.value,
-        focused: focused() && selectedIndex() === i,
-        disabled: isDisabled,
-        index: i,
-        optionProps: {
-          onPress: () => { if (!isDisabled) props.onChange?.(opt.value) },
-        },
-      }
-      return props.renderOption(opt, ctx)
-    })
+  const items = (
+    <For each={props.options}>
+      {(opt, i) => {
+        const ctx: RadioOptionContext = {
+          get selected() {
+            return props.value === opt.value
+          },
+          get focused() {
+            return focused() && selectedIndex() === i()
+          },
+          get disabled() {
+            return disabled() || (opt.disabled ?? false)
+          },
+          get index() {
+            return i()
+          },
+          optionProps: {
+            onPress: () => {
+              const isDisabled = disabled() || (opt.disabled ?? false)
+              if (!isDisabled) props.onChange?.(opt.value)
+            },
+          },
+        }
+        return props.renderOption(opt, ctx)
+      }}
+    </For>
+  )
 
   return (
     <>
       {props.renderGroup
-        ? props.renderGroup(<>{children()}</>)
-        : <box direction="column">{children()}</box>}
+        ? props.renderGroup(items)
+        : <box direction="column">{items}</box>}
     </>
   )
 }
