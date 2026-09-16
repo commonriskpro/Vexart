@@ -15,7 +15,7 @@ use std::sync::{LazyLock, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use nix::fcntl::OFlag;
-use nix::sys::mman::{mmap, msync, munmap, shm_open, shm_unlink, MapFlags, MsFlags, ProtFlags};
+use nix::sys::mman::{mmap, munmap, shm_open, shm_unlink, MapFlags, ProtFlags};
 use nix::sys::stat::Mode;
 use nix::unistd::ftruncate;
 
@@ -167,7 +167,7 @@ impl ShmRingBuffer {
     ///    (keeping strictly under 31 bytes for POSIX and Kitty name limits).
     /// 4. Opens/creates the SHM segment with `shm_open`.
     /// 5. Truncates if needed to hold the payload.
-    /// 6. Writes the data (mmap/memcpy/msync/munmap).
+    /// 6. Writes the data (mmap/memcpy/munmap).
     /// 7. Records the handle so emergency exit / panic cleanup (`cleanup_all_shm_handles` /
     ///    `cleanup_shm_on_shutdown`) can unlink all slots.
     pub fn acquire(&mut self, data: &[u8]) -> Result<(usize, CString), i32> {
@@ -275,7 +275,7 @@ impl ShmRingBuffer {
         }
         slot.capacity = data_len;
 
-        // 6. Write the data (mmap/memcpy/msync/munmap)
+        // 6. Write the data (mmap/memcpy/munmap)
         let size = match NonZeroUsize::new(data_len) {
             Some(s) => s,
             None => {
@@ -305,13 +305,6 @@ impl ShmRingBuffer {
 
         unsafe {
             std::ptr::copy_nonoverlapping(data.as_ptr(), mapped.as_ptr() as *mut u8, data_len);
-        }
-
-        if let Err(e) = unsafe { msync(mapped, data_len, MsFlags::MS_SYNC) } {
-            set_last_error(format!("msync failed: {e}"));
-            let _ = unsafe { munmap(mapped, data_len) };
-            let _ = shm_unlink(c_name.as_c_str());
-            return Err(ERR_KITTY_TRANSPORT);
         }
 
         if let Err(e) = unsafe { munmap(mapped, data_len) } {
@@ -439,7 +432,7 @@ unsafe fn cleanup_on_error(
 
 // ─── shm_prepare ─────────────────────────────────────────────────────────
 
-/// POSIX SHM prepare: shm_open → ftruncate → mmap → memcpy → msync → munmap → store handle.
+/// POSIX SHM prepare: shm_open → ftruncate → mmap → memcpy → munmap → store handle.
 ///
 /// Algorithm ported verbatim from `tge_kitty_shm_prepare` in kitty_shm_helper.c (L54-119).
 /// Differences from the C version:
@@ -539,14 +532,7 @@ pub unsafe fn shm_prepare(
         std::ptr::copy_nonoverlapping(data_ptr, mapped.as_ptr() as *mut u8, data_len as usize);
     }
 
-    // 8. Sync to backing store.
-    if let Err(e) = unsafe { msync(mapped, data_len as usize, MsFlags::MS_SYNC) } {
-        set_last_error(format!("msync failed: {e}"));
-        unsafe { cleanup_on_error(&name, fd, Some(mapped), data_len as usize) };
-        return ERR_KITTY_TRANSPORT;
-    }
-
-    // 9. Unmap — we no longer need the mapping in our address space;
+    // 8. Unmap — we no longer need the mapping in our address space;
     //    the fd keeps the segment alive for the Kitty protocol consumer.
     if let Err(e) = unsafe { munmap(mapped, data_len as usize) } {
         set_last_error(format!("munmap failed: {e}"));
@@ -554,14 +540,14 @@ pub unsafe fn shm_prepare(
         return ERR_KITTY_TRANSPORT;
     }
 
-    // 10. Register handle in the global registry.
+    // 9. Register handle in the global registry.
     let handle_id = NEXT_KITTY_HANDLE.fetch_add(1, Ordering::Relaxed);
     KITTY_SHM_HANDLES
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .insert(handle_id, KittyShmHandle { fd, name });
 
-    // 11. Return the handle to the caller.
+    // 10. Return the handle to the caller.
     unsafe { *out_handle = handle_id };
     OK
 }
