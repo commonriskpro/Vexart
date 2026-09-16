@@ -57,6 +57,8 @@ export function damageRectForLayoutTransition(
   prev: { x: number; y: number; width: number; height: number },
   next: { x: number; y: number; width: number; height: number },
 ): DamageRect | null {
+  // No damage if layout is unchanged
+  if (prev.x === next.x && prev.y === next.y && prev.width === next.width && prev.height === next.height) return null
   const prevRect = isNonEmptyLayoutRect(prev)
     ? { x: prev.x, y: prev.y, width: prev.width, height: prev.height }
     : null
@@ -66,8 +68,6 @@ export function damageRectForLayoutTransition(
   if (!prevRect && !nextRect) return null
   if (!prevRect) return nextRect
   if (!nextRect) return prevRect
-  // No damage if layout is unchanged
-  if (prev.x === next.x && prev.y === next.y && prev.width === next.width && prev.height === next.height) return null
   return unionRect(prevRect, nextRect)
 }
 
@@ -103,6 +103,14 @@ export function writeLayoutBack(
   // Grid errors and malformed/partial maps alike.
   for (const node of boxNodes) {
     const pos = layoutMap.get(node.id)!
+    if (
+      node.layout.x === pos.x &&
+      node.layout.y === pos.y &&
+      node.layout.width === pos.width &&
+      node.layout.height === pos.height
+    ) {
+      continue
+    }
     const prev = { x: node.layout.x, y: node.layout.y, width: node.layout.width, height: node.layout.height }
     node.layout.x = pos.x
     node.layout.y = pos.y
@@ -113,6 +121,14 @@ export function writeLayoutBack(
   }
   for (const node of textNodes) {
     const pos = layoutMap.get(node.id)!
+    if (
+      node.layout.x === pos.x &&
+      node.layout.y === pos.y &&
+      node.layout.width === pos.width &&
+      node.layout.height === pos.height
+    ) {
+      continue
+    }
     const prev = { x: node.layout.x, y: node.layout.y, width: node.layout.width, height: node.layout.height }
     node.layout.x = pos.x
     node.layout.y = pos.y
