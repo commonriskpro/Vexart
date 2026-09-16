@@ -150,25 +150,23 @@ pub fn composite_render_image_layer(
 ) -> i32 {
     use crate::paint::instances::BridgeImageInstance;
     use bytemuck::bytes_of;
-    use wgpu::util::DeviceExt;
 
     if target == 0 {
         return ERR_INVALID_ARG;
     }
 
     // Look up target and image.
-    let target_rec = match pctx.targets.get(target) {
-        Some(r) => r,
+    let (tw_u32, th_u32, scissor) = match pctx.targets.get(target) {
+        Some(r) => (
+            r.width,
+            r.height,
+            r.active_layer
+                .as_ref()
+                .and_then(|l| l.scissor)
+                .or(r.scissor),
+        ),
         None => return ERR_INVALID_HANDLE,
     };
-
-    let tw_u32 = target_rec.width;
-    let th_u32 = target_rec.height;
-    let scissor = target_rec
-        .active_layer
-        .as_ref()
-        .and_then(|l| l.scissor)
-        .or(target_rec.scissor);
 
     let tw = tw_u32 as f32;
     let th = th_u32 as f32;
@@ -200,15 +198,10 @@ pub fn composite_render_image_layer(
         &pctx.fallback_bind_group as *const wgpu::BindGroup
     };
 
-    // Build vertex buffer.
-    let vertex_buf = pctx
-        .wgpu
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vexart-composite-image-buf"),
-            contents: instance_bytes,
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+    let offset = pctx.alloc_vertex_space(instance_bytes.len());
+    pctx.wgpu
+        .queue
+        .write_buffer(&pctx.vertex_buffer, offset as u64, instance_bytes);
 
     // Encode render pass into the target's active layer encoder if present,
     // or create a new standalone encoder.
@@ -266,7 +259,11 @@ pub fn composite_render_image_layer(
             });
 
         pass.set_pipeline(&pctx.wgpu.pipelines.image);
-        pass.set_vertex_buffer(0, vertex_buf.slice(..));
+        pass.set_vertex_buffer(
+            0,
+            pctx.vertex_buffer
+                .slice(offset as u64..(offset + instance_bytes.len()) as u64),
+        );
         // SAFETY: bind_group extracted before mutable borrow; still valid.
         pass.set_bind_group(0, unsafe { &*bind_group }, &[]);
         if let Some(s) = scissor {
@@ -315,7 +312,11 @@ pub fn composite_render_image_layer(
         });
 
         pass.set_pipeline(&pctx.wgpu.pipelines.image);
-        pass.set_vertex_buffer(0, vertex_buf.slice(..));
+        pass.set_vertex_buffer(
+            0,
+            pctx.vertex_buffer
+                .slice(offset as u64..(offset + instance_bytes.len()) as u64),
+        );
         // SAFETY: bind_group extracted before any mutable ops; still valid.
         pass.set_bind_group(0, unsafe { &*bind_group }, &[]);
         if let Some(s) = scissor {
@@ -347,24 +348,23 @@ pub fn composite_render_image_transform_layer(
 ) -> i32 {
     use crate::paint::instances::BridgeImageTransformInstance;
     use bytemuck::bytes_of;
-    use wgpu::util::DeviceExt;
 
     if target == 0 || params.len() < std::mem::size_of::<BridgeImageTransformInstance>() {
         return ERR_INVALID_ARG;
     }
 
-    let target_rec = match pctx.targets.get(target) {
-        Some(r) => r,
+    let (tw_u32, th_u32, scissor, target_view_ptr) = match pctx.targets.get(target) {
+        Some(r) => (
+            r.width,
+            r.height,
+            r.active_layer
+                .as_ref()
+                .and_then(|l| l.scissor)
+                .or(r.scissor),
+            &r.view as *const wgpu::TextureView,
+        ),
         None => return ERR_INVALID_HANDLE,
     };
-
-    let tw_u32 = target_rec.width;
-    let th_u32 = target_rec.height;
-    let scissor = target_rec
-        .active_layer
-        .as_ref()
-        .and_then(|l| l.scissor)
-        .or(target_rec.scissor);
 
     let bind_group: *const wgpu::BindGroup = if let Some(img) = pctx.images.get(&image) {
         &img.bind_group as *const wgpu::BindGroup
@@ -377,16 +377,10 @@ pub fn composite_render_image_transform_layer(
     );
     let instance_bytes = bytes_of(&instance);
 
-    let vertex_buf = pctx
-        .wgpu
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vexart-composite-image-transform-buf"),
-            contents: instance_bytes,
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
-    let target_view_ptr: *const wgpu::TextureView = &target_rec.view as *const wgpu::TextureView;
+    let offset = pctx.alloc_vertex_space(instance_bytes.len());
+    pctx.wgpu
+        .queue
+        .write_buffer(&pctx.vertex_buffer, offset as u64, instance_bytes);
 
     if pctx.targets.get(target).unwrap().active_layer.is_some() {
         let rec_ptr: *mut target::TargetRecord = pctx.targets.get_mut(target).unwrap();
@@ -435,7 +429,11 @@ pub fn composite_render_image_transform_layer(
             });
 
         pass.set_pipeline(&pctx.wgpu.pipelines.image_transform);
-        pass.set_vertex_buffer(0, vertex_buf.slice(..));
+        pass.set_vertex_buffer(
+            0,
+            pctx.vertex_buffer
+                .slice(offset as u64..(offset + instance_bytes.len()) as u64),
+        );
         pass.set_bind_group(0, unsafe { &*bind_group }, &[]);
         if let Some(s) = scissor {
             if let Some([sx, sy, sw, sh]) = target::clamp_scissor(s, tw_u32, th_u32) {
@@ -480,7 +478,11 @@ pub fn composite_render_image_transform_layer(
         });
 
         pass.set_pipeline(&pctx.wgpu.pipelines.image_transform);
-        pass.set_vertex_buffer(0, vertex_buf.slice(..));
+        pass.set_vertex_buffer(
+            0,
+            pctx.vertex_buffer
+                .slice(offset as u64..(offset + instance_bytes.len()) as u64),
+        );
         pass.set_bind_group(0, unsafe { &*bind_group }, &[]);
         if let Some(s) = scissor {
             if let Some([sx, sy, sw, sh]) = target::clamp_scissor(s, tw_u32, th_u32) {
@@ -510,7 +512,6 @@ pub fn composite_update_uniform(
 ) -> i32 {
     use crate::paint::instances::BridgeImageTransformInstance;
     use bytemuck::bytes_of;
-    use wgpu::util::DeviceExt;
 
     if target == 0
         || source_target == 0
@@ -547,14 +548,10 @@ pub fn composite_update_uniform(
     );
     let instance_bytes = bytes_of(&instance);
 
-    let vertex_buf = pctx
-        .wgpu
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vexart-composite-uniform-buf"),
-            contents: instance_bytes,
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+    let offset = pctx.alloc_vertex_space(instance_bytes.len());
+    pctx.wgpu
+        .queue
+        .write_buffer(&pctx.vertex_buffer, offset as u64, instance_bytes);
 
     let target_view_ptr: *const wgpu::TextureView = {
         let target_rec = match pctx.targets.get(target) {
@@ -614,7 +611,11 @@ pub fn composite_update_uniform(
         // premultiplied by alpha. Use the matching blend factors so this
         // retained-compositor path does not premultiply it twice.
         pass.set_pipeline(&pctx.wgpu.pipelines.image_transform_premultiplied);
-        pass.set_vertex_buffer(0, vertex_buf.slice(..));
+        pass.set_vertex_buffer(
+            0,
+            pctx.vertex_buffer
+                .slice(offset as u64..(offset + instance_bytes.len()) as u64),
+        );
         pass.set_bind_group(0, &bind_group, &[]);
         pass.draw(0..6, 0..1);
     } else {
@@ -653,7 +654,11 @@ pub fn composite_update_uniform(
 
         // See the active-layer path above: source targets are premultiplied.
         pass.set_pipeline(&pctx.wgpu.pipelines.image_transform_premultiplied);
-        pass.set_vertex_buffer(0, vertex_buf.slice(..));
+        pass.set_vertex_buffer(
+            0,
+            pctx.vertex_buffer
+                .slice(offset as u64..(offset + instance_bytes.len()) as u64),
+        );
         pass.set_bind_group(0, &bind_group, &[]);
         pass.draw(0..6, 0..1);
         drop(pass);
@@ -678,7 +683,6 @@ pub fn copy_region_to_image(
 ) -> i32 {
     use crate::paint::instances::ImageCopyInstance;
     use bytemuck::bytes_of;
-    use wgpu::util::DeviceExt;
 
     if out_image.is_null() {
         return ERR_INVALID_ARG;
@@ -761,14 +765,11 @@ pub fn copy_region_to_image(
         source_u1: (cx + cw) as f32 / tw as f32,
         source_v1: (cy + ch) as f32 / th as f32,
     };
-    let vertex_buf = pctx
-        .wgpu
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vexart-region-copy-instance-buf"),
-            contents: bytes_of(&instance),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+    let instance_bytes = bytes_of(&instance);
+    let offset = pctx.alloc_vertex_space(instance_bytes.len());
+    pctx.wgpu
+        .queue
+        .write_buffer(&pctx.vertex_buffer, offset as u64, instance_bytes);
     let mut encoder = pctx
         .wgpu
         .device
@@ -795,7 +796,11 @@ pub fn copy_region_to_image(
             multiview_mask: None,
         });
         pass.set_pipeline(&pctx.wgpu.pipelines.image_unpremultiply);
-        pass.set_vertex_buffer(0, vertex_buf.slice(..));
+        pass.set_vertex_buffer(
+            0,
+            pctx.vertex_buffer
+                .slice(offset as u64..(offset + instance_bytes.len()) as u64),
+        );
         pass.set_bind_group(0, &source_bind_group, &[]);
         pass.draw(0..6, 0..1);
     }
@@ -1077,7 +1082,6 @@ fn remove_temp_image(pctx: &mut PaintContext, handle: u64) {
 fn render_blur_image(pctx: &mut PaintContext, image: u64, blur_radius: f32) -> Result<u64, i32> {
     use crate::paint::instances::BackdropBlurInstance;
     use bytemuck::bytes_of;
-    use wgpu::util::DeviceExt;
 
     let (src_w, src_h) = source_image_size(pctx, image)?;
     let (_mid_texture, mid_view) =
@@ -1100,22 +1104,17 @@ fn render_blur_image(pctx: &mut PaintContext, image: u64, blur_radius: f32) -> R
         ..horizontal
     };
 
-    let horizontal_buf = pctx
-        .wgpu
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vexart-blur-horizontal-buf"),
-            contents: bytes_of(&horizontal),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-    let vertical_buf = pctx
-        .wgpu
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vexart-blur-vertical-buf"),
-            contents: bytes_of(&vertical),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+    let h_bytes = bytes_of(&horizontal);
+    let h_offset = pctx.alloc_vertex_space(h_bytes.len());
+    pctx.wgpu
+        .queue
+        .write_buffer(&pctx.vertex_buffer, h_offset as u64, h_bytes);
+
+    let v_bytes = bytes_of(&vertical);
+    let v_offset = pctx.alloc_vertex_space(v_bytes.len());
+    pctx.wgpu
+        .queue
+        .write_buffer(&pctx.vertex_buffer, v_offset as u64, v_bytes);
 
     let Some(src_img) = pctx.images.get(&image) else {
         return Err(ERR_INVALID_HANDLE);
@@ -1181,7 +1180,11 @@ fn render_blur_image(pctx: &mut PaintContext, image: u64, blur_radius: f32) -> R
         });
 
         pass.set_pipeline(&pctx.wgpu.pipelines.backdrop_blur);
-        pass.set_vertex_buffer(0, horizontal_buf.slice(..));
+        pass.set_vertex_buffer(
+            0,
+            pctx.vertex_buffer
+                .slice(h_offset as u64..(h_offset + h_bytes.len()) as u64),
+        );
         pass.set_bind_group(0, &source_bind_group, &[]);
         pass.draw(0..6, 0..1);
     }
@@ -1205,7 +1208,11 @@ fn render_blur_image(pctx: &mut PaintContext, image: u64, blur_radius: f32) -> R
         });
 
         pass.set_pipeline(&pctx.wgpu.pipelines.backdrop_blur);
-        pass.set_vertex_buffer(0, vertical_buf.slice(..));
+        pass.set_vertex_buffer(
+            0,
+            pctx.vertex_buffer
+                .slice(v_offset as u64..(v_offset + v_bytes.len()) as u64),
+        );
         pass.set_bind_group(0, &mid_bind_group, &[]);
         pass.draw(0..6, 0..1);
     }
@@ -1232,7 +1239,6 @@ fn render_color_filter_image(
 ) -> Result<u64, i32> {
     use crate::paint::instances::BackdropFilterInstance;
     use bytemuck::bytes_of;
-    use wgpu::util::DeviceExt;
 
     let (src_w, src_h) = source_image_size(pctx, image)?;
     let (dst_texture, dst_view) =
@@ -1253,14 +1259,11 @@ fn render_color_filter_image(
         _pad: 0.0,
     };
 
-    let vertex_buf = pctx
-        .wgpu
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vexart-filter-instance-buf"),
-            contents: bytes_of(&instance),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+    let instance_bytes = bytes_of(&instance);
+    let offset = pctx.alloc_vertex_space(instance_bytes.len());
+    pctx.wgpu
+        .queue
+        .write_buffer(&pctx.vertex_buffer, offset as u64, instance_bytes);
 
     let Some(src_img) = pctx.images.get(&image) else {
         return Err(ERR_INVALID_HANDLE);
@@ -1293,7 +1296,11 @@ fn render_color_filter_image(
         });
 
         pass.set_pipeline(&pctx.wgpu.pipelines.backdrop_filter);
-        pass.set_vertex_buffer(0, vertex_buf.slice(..));
+        pass.set_vertex_buffer(
+            0,
+            pctx.vertex_buffer
+                .slice(offset as u64..(offset + instance_bytes.len()) as u64),
+        );
         pass.set_bind_group(0, unsafe { &*src_bg_ptr }, &[]);
         pass.draw(0..6, 0..1);
     }
@@ -1445,7 +1452,6 @@ fn image_mask_rounded_rect_impl(
 ) -> i32 {
     use crate::paint::instances::ImageMaskInstance;
     use bytemuck::bytes_of;
-    use wgpu::util::DeviceExt;
 
     if out_image.is_null() {
         return ERR_INVALID_ARG;
@@ -1512,14 +1518,11 @@ fn image_mask_rounded_rect_impl(
         _pad1: 0.0,
     };
 
-    let vertex_buf = pctx
-        .wgpu
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vexart-mask-instance-buf"),
-            contents: bytes_of(&instance),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+    let instance_bytes = bytes_of(&instance);
+    let offset = pctx.alloc_vertex_space(instance_bytes.len());
+    pctx.wgpu
+        .queue
+        .write_buffer(&pctx.vertex_buffer, offset as u64, instance_bytes);
 
     // Extract source bind group before mutable ops.
     let Some(src_img) = pctx.images.get(&image) else {
@@ -1553,7 +1556,11 @@ fn image_mask_rounded_rect_impl(
         });
 
         pass.set_pipeline(&pctx.wgpu.pipelines.image_mask);
-        pass.set_vertex_buffer(0, vertex_buf.slice(..));
+        pass.set_vertex_buffer(
+            0,
+            pctx.vertex_buffer
+                .slice(offset as u64..(offset + instance_bytes.len()) as u64),
+        );
         // SAFETY: src_bg_ptr is stable — image is in pctx.images (heap map).
         pass.set_bind_group(0, unsafe { &*src_bg_ptr }, &[]);
         pass.draw(0..6, 0..1);

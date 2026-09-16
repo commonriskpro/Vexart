@@ -9,7 +9,8 @@ use crate::ffi::panic::{ERR_INVALID_ARG, ERR_INVALID_HANDLE, OK};
 use crate::paint::PaintContext;
 
 struct PreparedGlyphDraw {
-    vertex_buf: wgpu::Buffer,
+    offset: usize,
+    size: usize,
     bind_group_ptr: *const wgpu::BindGroup,
     instance_count: u32,
 }
@@ -22,7 +23,6 @@ pub(crate) fn dispatch_glyph_instances(
     glyphs: &[crate::paint::instances::MsdfGlyphInstance],
 ) -> i32 {
     use std::collections::BTreeMap;
-    use wgpu::util::DeviceExt;
 
     if glyphs.is_empty() {
         return OK;
@@ -79,18 +79,14 @@ pub(crate) fn dispatch_glyph_instances(
             };
 
         let payload: &[u8] = bytemuck::cast_slice(atlas_glyphs.as_slice());
-        // SAFETY: device is disjoint from targets/atlases.
-        let vertex_buf = pctx
-            .wgpu
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("vexart-glyph-instance-buf"),
-                contents: payload,
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+        let offset = pctx.alloc_vertex_space(payload.len());
+        pctx.wgpu
+            .queue
+            .write_buffer(&pctx.vertex_buffer, offset as u64, payload);
 
         prepared_draws.push(PreparedGlyphDraw {
-            vertex_buf,
+            offset,
+            size: payload.len(),
             bind_group_ptr,
             instance_count: atlas_glyphs.len() as u32,
         });
@@ -167,7 +163,11 @@ pub(crate) fn dispatch_glyph_instances(
 
             if should_draw {
                 for draw in &prepared_draws {
-                    pass.set_vertex_buffer(0, draw.vertex_buf.slice(..));
+                    pass.set_vertex_buffer(
+                        0,
+                        pctx.vertex_buffer
+                            .slice(draw.offset as u64..(draw.offset + draw.size) as u64),
+                    );
                     // SAFETY: bind_group_ptr points to an atlas or fallback bind group valid for this frame.
                     pass.set_bind_group(0, unsafe { &*draw.bind_group_ptr }, &[]);
                     pass.draw(0..6, 0..draw.instance_count);
@@ -220,7 +220,11 @@ pub(crate) fn dispatch_glyph_instances(
 
             if should_draw {
                 for draw in &prepared_draws {
-                    pass.set_vertex_buffer(0, draw.vertex_buf.slice(..));
+                    pass.set_vertex_buffer(
+                        0,
+                        pctx.vertex_buffer
+                            .slice(draw.offset as u64..(draw.offset + draw.size) as u64),
+                    );
                     // SAFETY: bind_group_ptr points to an atlas or fallback bind group valid for this frame.
                     pass.set_bind_group(0, unsafe { &*draw.bind_group_ptr }, &[]);
                     pass.draw(0..6, 0..draw.instance_count);
