@@ -107,6 +107,7 @@ pub(crate) fn readback_full_with<R, F>(
     height: u32,
     padded_bytes_per_row: u32,
     readback_buffer: &wgpu::Buffer,
+    scratch: &mut Vec<u8>,
     callback: F,
 ) -> Option<R>
 where
@@ -138,15 +139,15 @@ where
                 return Some(callback(&mapped[..needed]));
             }
 
-            let mut packed = vec![0u8; needed];
+            scratch.resize(needed, 0);
             for row in 0..height as usize {
                 let src_start = row * padded;
                 let dst_start = row * unpadded_bytes_per_row;
-                packed[dst_start..dst_start + unpadded_bytes_per_row]
+                scratch[dst_start..dst_start + unpadded_bytes_per_row]
                     .copy_from_slice(&mapped[src_start..src_start + unpadded_bytes_per_row]);
             }
-            unpremultiply(&mut packed);
-            Some(callback(&packed))
+            unpremultiply(&mut scratch[..needed]);
+            Some(callback(&scratch[..needed]))
         },
     )
     .flatten()
@@ -403,7 +404,7 @@ mod tests {
             &buffer, full.as_mut_ptr(), 256), 256);
         assert_eq!(full, [255, 128, 0, 128].repeat(64));
         let callback = readback_full_with(&ctx.device, &ctx.queue, &texture, 64, 1, 256,
-            &buffer, |bytes| bytes.to_vec());
+            &buffer, &mut Vec::new(), |bytes| bytes.to_vec());
         assert_eq!(callback, Some(full));
         let mut region = [0; 4];
         assert_eq!(readback_region(&ctx.device, &ctx.queue, &texture, 64, 1, 3, 0, 1, 1,
@@ -755,6 +756,7 @@ mod tests {
         );
 
         let mut observed = Vec::new();
+        let mut scratch = Vec::new();
         let result = readback_full_with(
             &ctx.device,
             &ctx.queue,
@@ -763,6 +765,7 @@ mod tests {
             height,
             width * 4,
             &readback,
+            &mut scratch,
             |bytes| {
                 observed.extend_from_slice(bytes);
                 bytes.len()
@@ -797,6 +800,7 @@ mod tests {
         );
 
         let mut observed = Vec::new();
+        let mut scratch = Vec::new();
         let result = readback_full_with(
             &ctx.device,
             &ctx.queue,
@@ -805,6 +809,7 @@ mod tests {
             height,
             padded,
             &readback,
+            &mut scratch,
             |bytes| {
                 observed.extend_from_slice(bytes);
                 bytes.len()
@@ -821,6 +826,7 @@ mod tests {
         let width = 64;
         let height = 2;
         let (ctx, texture, readback, source) = gpu_fixture(width, height);
+        let mut scratch = Vec::new();
         let callback_error = readback_full_with(
             &ctx.device,
             &ctx.queue,
@@ -829,10 +835,12 @@ mod tests {
             height,
             width * 4,
             &readback,
+            &mut scratch,
             |_| Err::<(), _>("callback failed"),
         );
         assert_eq!(callback_error, Some(Err("callback failed")));
 
+        let mut scratch = Vec::new();
         let panic_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             readback_full_with(
                 &ctx.device,
@@ -842,6 +850,7 @@ mod tests {
                 height,
                 width * 4,
                 &readback,
+                &mut scratch,
                 |_| -> () { panic!("callback panicked") },
             )
         }));

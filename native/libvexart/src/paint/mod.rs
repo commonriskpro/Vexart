@@ -77,6 +77,8 @@ pub struct PaintContext {
     pub vertex_buffer_peak_frame_bytes: usize,
     /// CPU-side staging buffer for packing instance data prior to GPU upload.
     pub staging_buffer: Vec<u8>,
+    /// Persistent scratch buffer for GPU→CPU readbacks and presentation encoding.
+    pub readback_scratch: Vec<u8>,
 }
 
 impl Default for PaintContext {
@@ -173,6 +175,7 @@ impl PaintContext {
             vertex_buffer_idle_frames: 0,
             vertex_buffer_peak_frame_bytes: 0,
             staging_buffer: Vec::new(),
+            readback_scratch: Vec::new(),
         }
     }
 

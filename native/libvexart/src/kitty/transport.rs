@@ -301,18 +301,22 @@ fn emit_direct(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
         }
     };
 
-    // 2. Allocate CPU buffer and perform GPU readback.
+    // 2. Perform GPU readback into persistent scratch buffer.
     let pixel_count = (width as usize) * (height as usize) * 4;
-    let mut rgba = vec![0u8; pixel_count];
-    let written = do_readback(pctx, target, width, height, &mut rgba);
+    let mut scratch = std::mem::take(&mut pctx.readback_scratch);
+    scratch.resize(pixel_count, 0);
+    let written = do_readback(pctx, target, width, height, &mut scratch);
     if written == 0 {
+        pctx.readback_scratch = scratch;
         set_last_error("emit_direct: GPU readback returned 0 bytes");
         return ERR_KITTY_TRANSPORT;
     }
 
     // 3. Encode and write through the same animation-aware path used by the
     // native stats variant. This also coalesces unchanged frames.
-    emit_direct_inner(&rgba[..written as usize], width, height, image_id)
+    let res = emit_direct_inner(&scratch[..written as usize], width, height, image_id);
+    pctx.readback_scratch = scratch;
+    res
 }
 
 /// SHM mode: readback → shm_prepare_ring → Kitty SHM escape → stdout.
@@ -326,15 +330,19 @@ fn emit_shm(pctx: &mut PaintContext, target: u64, image_id: u32) -> i32 {
         }
     };
 
-    // 2. GPU readback.
+    // 2. GPU readback into persistent scratch buffer.
     let pixel_count = (width as usize) * (height as usize) * 4;
-    let mut rgba = vec![0u8; pixel_count];
-    let written = do_readback(pctx, target, width, height, &mut rgba);
+    let mut scratch = std::mem::take(&mut pctx.readback_scratch);
+    scratch.resize(pixel_count, 0);
+    let written = do_readback(pctx, target, width, height, &mut scratch);
     if written == 0 {
+        pctx.readback_scratch = scratch;
         set_last_error("emit_shm: GPU readback returned 0 bytes");
         return ERR_KITTY_TRANSPORT;
     }
-    emit_shm_rgba_with_stats(&rgba[..written as usize], width, height, image_id).0
+    let res = emit_shm_rgba_with_stats(&scratch[..written as usize], width, height, image_id).0;
+    pctx.readback_scratch = scratch;
+    res
 }
 
 /// Resolve (width, height) from a target handle.
@@ -412,8 +420,15 @@ where
 {
     use crate::composite::readback::readback_full_with;
 
-    let rec = pctx.targets.get(target)?;
-    readback_full_with(
+    let mut scratch = std::mem::take(&mut pctx.readback_scratch);
+    let rec = match pctx.targets.get(target) {
+        Some(r) => r,
+        None => {
+            pctx.readback_scratch = scratch;
+            return None;
+        }
+    };
+    let result = readback_full_with(
         &pctx.wgpu.device,
         &pctx.wgpu.queue,
         &rec.texture,
@@ -421,8 +436,11 @@ where
         height,
         rec.padded_bytes_per_row,
         &rec.readback_buffer,
+        &mut scratch,
         callback,
-    )
+    );
+    pctx.readback_scratch = scratch;
+    result
 }
 
 // ─── Native Presentation exports (Phase 2b) ────────────────────────────────
@@ -673,7 +691,9 @@ pub unsafe fn emit_region_target_with_stats(
     }
 
     let t_rb = Instant::now();
-    let mut rgba = vec![0u8; (w as usize) * (h as usize) * 4];
+    let needed = (w as usize) * (h as usize) * 4;
+    let mut scratch = std::mem::take(&mut pctx.readback_scratch);
+    scratch.resize(needed, 0);
     let written = crate::composite::readback::readback_region(
         &pctx.wgpu.device,
         &pctx.wgpu.queue,
@@ -684,17 +704,19 @@ pub unsafe fn emit_region_target_with_stats(
         y,
         w,
         h,
-        rgba.as_mut_ptr(),
-        rgba.len() as u32,
+        scratch.as_mut_ptr(),
+        scratch.len() as u32,
     );
     let readback_us = t_rb.elapsed().as_micros() as u64;
     if written == 0 {
+        pctx.readback_scratch = scratch;
         set_last_error("emit_region_target_with_stats: GPU region readback returned 0 bytes");
         return ERR_KITTY_TRANSPORT;
     }
 
     let t_enc = Instant::now();
-    let result = emit_region_rgba_with_stats(&rgba[..written as usize], image_id, x, y, w, h, mode);
+    let result = emit_region_rgba_with_stats(&scratch[..written as usize], image_id, x, y, w, h, mode);
+    pctx.readback_scratch = scratch;
     let rc = result.0;
     let transfer = result.1;
     let encode_us = t_enc.elapsed().as_micros() as u64;
