@@ -32,11 +32,16 @@ export type DirtyTracker = {
   isDirty: () => boolean
   clearDirty: (expectedVersion?: number) => void
   dirtyVersion: () => number
+  markLayoutDirty: () => void
+  isLayoutDirty: () => boolean
+  clearLayoutDirty: () => void
+  setLayoutDirty: (value: boolean) => void
 }
 
 /** @public */
 export function createDirtyTracker(): DirtyTracker {
   let dirty = true
+  let layoutDirty = true
   let version = 0
   let dirtyLogCount = 0
 
@@ -64,6 +69,18 @@ export function createDirtyTracker(): DirtyTracker {
     dirtyVersion() {
       return version
     },
+    markLayoutDirty() {
+      layoutDirty = true
+    },
+    isLayoutDirty() {
+      return layoutDirty
+    },
+    clearLayoutDirty() {
+      layoutDirty = false
+    },
+    setLayoutDirty(value: boolean) {
+      layoutDirty = value
+    },
   }
 }
 
@@ -75,6 +92,14 @@ const DEFAULT_FULL_SCOPE: DirtyScope = Object.freeze({ kind: DIRTY_KIND.FULL }) 
 /** Callbacks invoked whenever markDirty() is called.
  *  Used by render loops to also mark all layers dirty. */
 const _onDirtyCallbacks = new Set<(scope: DirtyScope) => void>()
+const _onLayoutDirtyCallbacks = new Set<() => void>()
+
+/** Register a callback to be called whenever global markLayoutDirty fires. */
+/** @public */
+export function onGlobalLayoutDirty(cb: () => void): () => void {
+  _onLayoutDirtyCallbacks.add(cb)
+  return () => { _onLayoutDirtyCallbacks.delete(cb) }
+}
 
 /** Register a callback to be called whenever the global markDirty fires.
  *  The render loop uses this to chain markAllDirty (layer store). */
@@ -89,6 +114,9 @@ export function markDirty(scope?: DirtyScope, tracker?: DirtyTracker) {
   defaultDirtyTracker.markDirty()
   tracker?.markDirty()
   const s = scope ?? DEFAULT_FULL_SCOPE
+  if (s.kind === DIRTY_KIND.FULL) {
+    markLayoutDirty(tracker)
+  }
   for (const cb of _onDirtyCallbacks) cb(s)
 }
 
@@ -106,4 +134,28 @@ export function clearDirty(expectedVersion?: number, tracker?: DirtyTracker) {
 /** @public */
 export function dirtyVersion(tracker?: DirtyTracker): number {
   return tracker ? tracker.dirtyVersion() : defaultDirtyTracker.dirtyVersion()
+}
+
+/** @public */
+export function markLayoutDirty(tracker?: DirtyTracker) {
+  defaultDirtyTracker.markLayoutDirty()
+  tracker?.markLayoutDirty()
+  for (const cb of _onLayoutDirtyCallbacks) cb()
+}
+
+/** @public */
+export function isLayoutDirty(tracker?: DirtyTracker): boolean {
+  return tracker ? tracker.isLayoutDirty() : defaultDirtyTracker.isLayoutDirty()
+}
+
+/** @public */
+export function clearLayoutDirty(tracker?: DirtyTracker) {
+  if (tracker) tracker.clearLayoutDirty()
+  else defaultDirtyTracker.clearLayoutDirty()
+}
+
+/** @public */
+export function setLayoutDirty(value: boolean, tracker?: DirtyTracker) {
+  if (value) markLayoutDirty(tracker)
+  else clearLayoutDirty(tracker)
 }

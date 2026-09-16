@@ -19,7 +19,7 @@ import {
 } from "../ffi/node"
 import { isLayoutProp, isTextLayoutProp, syncLayoutProp } from "../ffi/flex-sync"
 import { BACKDROP_FIELDS } from "../ffi/render-graph"
-import { DIRTY_KIND, markDirty } from "./dirty"
+import { DIRTY_KIND, markDirty, markLayoutDirty } from "./dirty"
 import { createHandle, type NodeHandle } from "./handle"
 import { markLayerBacked, onNodePropertyChanged, onSubtreeChanged, unmarkLayerBacked } from "../animation/compositor-path"
 import { registerNodeFocusable, unregisterNodeFocusable, updateNodeFocusEntry, updateNodeFocusId } from "./focus"
@@ -111,6 +111,34 @@ for (const prop of VISUAL_DAMAGE_PROPS) PROP_FLAGS[prop] = (PROP_FLAGS[prop] ?? 
 for (const prop of COLOR_PROPS) PROP_FLAGS[prop] = (PROP_FLAGS[prop] ?? 0) | FLAG_COLOR
 for (const prop of STYLE_SUB_COLOR_PROPS) PROP_FLAGS[prop] = (PROP_FLAGS[prop] ?? 0) | FLAG_STYLE_SUB_COLOR
 for (const prop of ["layer", "willChange", "transform", "transformOrigin", "opacity", "filter"]) PROP_FLAGS[prop] = (PROP_FLAGS[prop] ?? 0) | FLAG_COMPOSITOR
+
+const LAYOUT_PROP_NAMES = new Set([
+  "width", "height",
+  "padding", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "paddingX", "paddingY",
+  "margin", "marginTop", "marginRight", "marginBottom", "marginLeft", "marginX", "marginY",
+  "borderWidth", "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth",
+  "borderLeft", "borderRight", "borderTop", "borderBottom",
+  "flex", "flexDirection", "flexWrap", "flexGrow", "flexShrink", "flexBasis",
+  "direction",
+  "gap", "rowGap", "columnGap",
+  "position", "display", "overflow", "overflowX", "overflowY",
+  "minWidth", "maxWidth", "minHeight", "maxHeight",
+  "alignItems", "alignSelf", "alignContent", "justifyContent", "justifyItems", "justifySelf", "alignX", "alignY",
+  "top", "right", "bottom", "left",
+  "aspectRatio",
+  "layout",
+  "gridTemplateColumns", "gridTemplateRows", "gridAutoColumns", "gridAutoRows",
+  "gridAutoFlow", "gridTemplateAreas", "gridColumn", "gridRow", "gridArea",
+  "floating", "floatOffset",
+  "fontSize", "fontFamily", "fontWeight", "fontStyle", "lineHeight", "whiteSpace", "wordBreak",
+])
+
+function isLayoutProperty(name: string): boolean {
+  if (LAYOUT_PROP_NAMES.has(name)) return true
+  if (name.startsWith("padding") || name.startsWith("margin") || name.startsWith("flex")) return true
+  if (name.startsWith("border") && name.endsWith("Width")) return true
+  return false
+}
 
 function markNodeVisualDamage(node: TGENode) {
   if (node.layout.width > 0 && node.layout.height > 0) {
@@ -296,6 +324,7 @@ const renderer = createRenderer<TGENode>({
     target._flexNode?.markDirty()
     markNodeVisualDamage(target)
     markNodeDirty(target)
+    markLayoutDirty()
   },
 
   setProperty(node: TGENode, name: string, value: unknown) {
@@ -323,6 +352,7 @@ const renderer = createRenderer<TGENode>({
         node.props.paddingBottom = p[2]; node.props.paddingLeft = p[3]
       }
       syncLayoutProp(node, "padding", node.props.padding)
+      markLayoutDirty()
       markNodeDirty(node)
       return
     }
@@ -339,6 +369,7 @@ const renderer = createRenderer<TGENode>({
         node.props.marginBottom = p[2]; node.props.marginLeft = p[3]
       }
       syncLayoutProp(node, "margin", node.props.margin)
+      markLayoutDirty()
       markNodeDirty(node)
       return
     }
@@ -349,9 +380,11 @@ const renderer = createRenderer<TGENode>({
       const style = value as Record<string, unknown>
       const newKeys = new Set(Object.keys(style))
       const prevStyleKeys = node._styleKeys
+      let styleHasLayout = false
       if (prevStyleKeys) {
         for (const key of prevStyleKeys) {
           if (!newKeys.has(key)) {
+            if (isLayoutProperty(key)) styleHasLayout = true
             delete (node.props as Record<string, unknown>)[key]
             syncChangedProp(node, key)
           }
@@ -359,6 +392,7 @@ const renderer = createRenderer<TGENode>({
       }
       node._styleKeys = newKeys
       for (const key of newKeys) {
+        if (isLayoutProperty(key)) styleHasLayout = true
         // Only set if NOT already set as a direct prop
         if ((node.props as Record<string, unknown>)[key] === undefined || prevStyleKeys?.has(key)) {
           let val = style[key]
@@ -375,6 +409,7 @@ const renderer = createRenderer<TGENode>({
           syncChangedProp(node, key)
         }
       }
+      if (styleHasLayout) markLayoutDirty()
       markNodeDirty(node)
       return
     }
@@ -397,6 +432,7 @@ const renderer = createRenderer<TGENode>({
       ;(node.props as Record<string, unknown>)[name] = value
       node._widthSizing = parseSizing(value as number | string | undefined)
       syncLayoutProp(node, name, value)
+      markLayoutDirty()
       markNodeDirty(node)
       return
     }
@@ -405,6 +441,7 @@ const renderer = createRenderer<TGENode>({
       ;(node.props as Record<string, unknown>)[name] = value
       node._heightSizing = parseSizing(value as number | string | undefined)
       syncLayoutProp(node, name, value)
+      markLayoutDirty()
       markNodeDirty(node)
       return
     }
@@ -444,6 +481,9 @@ const renderer = createRenderer<TGENode>({
       markPropsDirty(node)
       ;(node.props as Record<string, unknown>)[name] = resolveInteractiveStyle(value)
       syncChangedProp(node, name)
+      if (value && typeof value === "object" && Object.keys(value).some(isLayoutProperty)) {
+        markLayoutDirty()
+      }
       markNodeVisualDamage(node)
       markNodeDirty(node)
       return
@@ -499,6 +539,7 @@ const renderer = createRenderer<TGENode>({
     syncChangedProp(node, name)
     if (name === "layer" || name === "willChange") syncCompositorLayerBacking(node)
     maybeNotifyCompositor(node, name)
+    if (isLayoutProperty(name)) markLayoutDirty()
     if ((flags & FLAG_VISUAL_DAMAGE) !== 0) markNodeVisualDamage(node)
     markNodeDirty(node)
   },
@@ -507,6 +548,7 @@ const renderer = createRenderer<TGENode>({
     insertChild(parent, node, anchor)
     syncCompositorLayerBacking(node)
     onSubtreeChanged(parent.id)
+    markLayoutDirty()
     markDirty()
   },
 
@@ -525,6 +567,7 @@ const renderer = createRenderer<TGENode>({
     unmarkSubtreeLayerBacking(node)
     onSubtreeChanged(parent.id)
     removeChild(parent, node)
+    markLayoutDirty()
     markDirty()
   },
 

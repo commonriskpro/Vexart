@@ -25,7 +25,9 @@ import {
   isDirty as globalIsDirty,
   clearDirty as globalClearDirty,
   dirtyVersion as globalDirtyVersion,
+  markLayoutDirty as globalMarkLayoutDirty,
   onGlobalDirty,
+  onGlobalLayoutDirty,
   type DirtyScope,
 } from "../reconciler/dirty"
 import { unbindLoop } from "../reconciler/pointer"
@@ -366,9 +368,14 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     wakeForDirty("pointer")
   })
 
+  const unsubGlobalLayoutDirty = onGlobalLayoutDirty(() => {
+    dirtyTracker.markLayoutDirty()
+  })
+
   function feedScroll(dx: number, dy: number) {
     scroll.x += dx; scroll.y += dy
     markInteractionActive("scroll")
+    globalMarkLayoutDirty(dirtyTracker)
     markDirty()
     nudgeInteraction("scroll")
   }
@@ -404,7 +411,19 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     layerBoundaries, scrollContainers, nodeCountValue,
     layerCache, activeSlotKeys, frameDirtyRects, pendingNodeDamageRects, scrollOffsets,
     layerStore: { getOrCreateLayer, getPreviousLayerRect, updateLayerGeometry, markLayerDamaged, markLayerClean, imageIdForLayer, removeLayer, layerCount },
-    dirty: { markDirty, markAllDirty, clearDirty, dirtyVersion: () => dirtyTracker.dirtyVersion(), dirtyCount },
+    dirty: {
+      markDirty,
+      markAllDirty,
+      clearDirty,
+      dirtyVersion: () => dirtyTracker.dirtyVersion(),
+      dirtyCount,
+      isLayoutDirty: () => dirtyTracker.isLayoutDirty(),
+      clearLayoutDirty: () => dirtyTracker.clearLayoutDirty(),
+      markLayoutDirty: () => {
+        dirtyTracker.markLayoutDirty()
+        globalMarkLayoutDirty(dirtyTracker)
+      },
+    } as unknown as import("./types").DirtyTrackingHandle,
 
     backendOverride: loopBackend,
     useLayerCompositing: true,
@@ -476,6 +495,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     const dirtyGridCount = markGridTreeDirty(root)
     clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: isTmuxPlaceholderPresentation })
     resetLayers(); layerCache.clear()
+    globalMarkLayoutDirty(dirtyTracker)
     markDirty(); markAllDirty(); markInteractionActive()
     resizeDebug(`dirty marked newW=${newW} newH=${newH} grids=${dirtyGridCount}`)
     if (isSuspended) { resizeDebug(`skip immediate frame suspended=${isSuspended ? 1 : 0} timer=${timer ? 1 : 0}`); return }
@@ -552,6 +572,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       scheduledDelayMs = 0
       nextFrameDeadlineMs = 0
       unsubGlobalDirty()
+      unsubGlobalLayoutDirty()
       unsubResize()
       unbindLoop(renderLoop)
       clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: isTmuxPlaceholderPresentation })
@@ -579,6 +600,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       freeFlexTree(root)
       root._dirtyTracker = null
       dirtyTracker.clearDirty()
+      dirtyTracker.clearLayoutDirty()
     },
   }
 
