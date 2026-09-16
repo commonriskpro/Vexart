@@ -11,9 +11,7 @@
 // Thread-local transport mode so each FFI call context is independent.
 
 use std::cell::{Cell, RefCell};
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
-use std::hash::Hasher;
 use std::time::Instant;
 
 use super::encoder::{encode_animation_frame_direct, encode_frame_direct};
@@ -29,20 +27,11 @@ thread_local! {
     // Next animation frame number for each live Kitty image id. A missing
     // entry means the image has not been transmitted by this process yet.
     static IMAGE_FRAMES: RefCell<HashMap<u32, u32>> = RefCell::new(HashMap::new());
-    // Last direct-transport payload for each live Kitty image id. The render
-    // loop can revisit an unchanged target many times; avoid flooding stdout
-    // with identical animation frames while still allowing real pixels to
-    // update immediately.
-    static IMAGE_HASHES: RefCell<HashMap<u32, u64>> = RefCell::new(HashMap::new());
     // Dimensions of the root canvas last transmitted for each live Kitty image
     // id. Kitty animation frames belong to that root canvas; a target resize
     // therefore requires a fresh image transmit rather than an animation
     // update with a different `s`/`v` pair.
     static IMAGE_GEOMETRIES: RefCell<HashMap<u32, (u32, u32)>> = RefCell::new(HashMap::new());
-    // Test-only counter used to prove a digest is scanned once per output
-    // attempt even though the result is consumed by both cache operations.
-    #[cfg(test)]
-    static RGBA_HASH_SCANS: Cell<usize> = const { Cell::new(0) };
     // Test-only failure injection keeps output-path retry tests independent of
     // the process stdout used by the native transport.
     #[cfg(test)]
@@ -82,9 +71,6 @@ fn record_image_frame(image_id: u32, target_frame: Option<u32>) {
 fn forget_image_frame(image_id: u32) {
     IMAGE_FRAMES.with(|frames| {
         frames.borrow_mut().remove(&image_id);
-    });
-    IMAGE_HASHES.with(|hashes| {
-        hashes.borrow_mut().remove(&image_id);
     });
     IMAGE_GEOMETRIES.with(|geometries| {
         geometries.borrow_mut().remove(&image_id);
@@ -131,43 +117,6 @@ fn needs_full_transmit(image_id: u32, width: u32, height: u32) -> bool {
     !animation_supported()
         || image_frame(image_id).is_none()
         || image_geometry(image_id) != Some((width, height))
-}
-
-fn rgba_hash(rgba: &[u8]) -> u64 {
-    // This digest is an ephemeral cache key, not an integrity or security
-    // check. It is intentionally not persisted or exposed through FFI.
-    #[cfg(test)]
-    RGBA_HASH_SCANS.with(|scans| scans.set(scans.get().saturating_add(1)));
-    let mut hasher = DefaultHasher::new();
-    hasher.write(rgba);
-    hasher.finish()
-}
-
-fn payload_hash(rgba: &[u8], width: u32, height: u32, col: i32, row: i32, z: i32) -> u64 {
-    [
-        rgba_hash(rgba),
-        u64::from(width),
-        u64::from(height),
-        col as u64,
-        row as u64,
-        z as u64,
-    ]
-    .into_iter()
-    .fold(0xcbf29ce484222325, |hash, value| {
-        value.to_le_bytes().iter().fold(hash, |hash, byte| {
-            (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
-        })
-    })
-}
-
-fn payload_unchanged(image_id: u32, digest: u64) -> bool {
-    IMAGE_HASHES.with(|hashes| hashes.borrow().get(&image_id).copied() == Some(digest))
-}
-
-fn record_payload(image_id: u32, digest: u64) {
-    IMAGE_HASHES.with(|hashes| {
-        hashes.borrow_mut().insert(image_id, digest);
-    });
 }
 
 #[inline]
@@ -264,7 +213,6 @@ pub fn set_transport_mode(mode: u32) -> i32 {
 pub fn cleanup_shm_on_shutdown() {
     crate::kitty::shm::cleanup_all_shm_handles();
     IMAGE_FRAMES.with(|cell| cell.borrow_mut().clear());
-    IMAGE_HASHES.with(|cell| cell.borrow_mut().clear());
     IMAGE_GEOMETRIES.with(|cell| cell.borrow_mut().clear());
 }
 
@@ -780,10 +728,6 @@ fn emit_direct_inner(rgba: &[u8], width: u32, height: u32, image_id: u32) -> i32
     let existing_frame = image_frame(image_id);
     let animation_frame = existing_frame.filter(|_| !needs_full_transmit(image_id, width, height));
     let full_transmit = animation_frame.is_none();
-    let digest = payload_hash(rgba, width, height, 0, 0, 0);
-    if !full_transmit && payload_unchanged(image_id, digest) {
-        return OK;
-    }
     let (target_frame, escaped) = if let Some(existing) = animation_frame {
         let (target_frame, compose_frame, is_replacement) =
             next_animation_frame(Some(existing));
@@ -815,7 +759,6 @@ fn emit_direct_inner(rgba: &[u8], width: u32, height: u32, image_id: u32) -> i32
         Ok(()) => {
             record_image_frame(image_id, target_frame);
             record_image_geometry(image_id, width, height);
-            record_payload(image_id, digest);
             OK
         }
         Err(e) => {
@@ -880,7 +823,7 @@ fn emit_shm_rgba_at_with_stats(
 
 fn emit_shm_rgba_with_owner(
     rgba: &[u8], width: u32, height: u32, image_id: u32,
-    col: i32, row: i32, z: i32, owner: Option<&mut u64>,
+    col: i32, row: i32, _z: i32, owner: Option<&mut u64>,
 ) -> (i32, ShmTransferStats) {
     use crate::kitty::encoder::PixelPayload;
     use base64::engine::general_purpose::STANDARD as B64;
@@ -892,11 +835,6 @@ fn emit_shm_rgba_with_owner(
     };
     let existing_frame = image_frame(image_id);
     let animation_frame = existing_frame.filter(|_| !needs_full_transmit(image_id, width, height));
-    let full_transmit = animation_frame.is_none();
-    let digest = payload_hash(rgba, width, height, col, row, z);
-    if owner.is_none() && !full_transmit && payload_unchanged(image_id, digest) {
-        return (OK, stats);
-    }
     let compression = shm_compression_enabled();
     let t_compress = Instant::now();
     let encoded = PixelPayload::encode(rgba, compression);
@@ -952,7 +890,6 @@ fn emit_shm_rgba_with_owner(
             lease.publish(owner);
             record_image_frame(image_id, target_frame);
             record_image_geometry(image_id, width, height);
-            record_payload(image_id, digest);
             (OK, stats)
         }
         Err(e) => {
@@ -970,15 +907,11 @@ fn emit_direct_rgba_at(
     image_id: u32,
     col: i32,
     row: i32,
-    z: i32,
+    _z: i32,
 ) -> i32 {
     let existing_frame = image_frame(image_id);
     let animation_frame = existing_frame.filter(|_| !needs_full_transmit(image_id, width, height));
     let full_transmit = animation_frame.is_none();
-    let digest = payload_hash(rgba, width, height, col, row, z);
-    if !full_transmit && payload_unchanged(image_id, digest) {
-        return OK;
-    }
     let (target_frame, escaped) = if let Some(existing) = animation_frame {
         let (target_frame, compose_frame, is_replacement) =
             next_animation_frame(Some(existing));
@@ -1012,7 +945,6 @@ fn emit_direct_rgba_at(
         Ok(()) => {
             record_image_frame(image_id, target_frame);
             record_image_geometry(image_id, width, height);
-            record_payload(image_id, digest);
             OK
         }
         Err(e) => {
@@ -1130,19 +1062,10 @@ fn emit_region_rgba_with_stats(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::hint::black_box;
     use std::mem;
 
     fn force_write_failure(value: bool) {
         FORCE_WRITE_FAILURE.with(|failure| failure.set(value));
-    }
-
-    fn reset_hash_scan_count() {
-        RGBA_HASH_SCANS.with(|scans| scans.set(0));
-    }
-
-    fn hash_scan_count() -> usize {
-        RGBA_HASH_SCANS.with(|scans| scans.get())
     }
 
     #[test]
@@ -1190,82 +1113,15 @@ mod tests {
     }
 
     #[test]
-    fn test_identical_payload_skips_direct_and_shm_output() {
-        let image_id = 40_001;
-        let rgba = [0x10, 0x20, 0x30, 0xff];
-        let digest = payload_hash(&rgba, 1, 1, 2, 3, 4);
-        force_write_failure(true);
-        record_image_frame(image_id, None);
-        record_image_geometry(image_id, 1, 1);
-        record_payload(image_id, digest);
-
-        assert_eq!(emit_direct_rgba_at(&rgba, 1, 1, image_id, 2, 3, 4), OK);
-        let result = emit_shm_rgba_at_with_stats(&rgba, 1, 1, image_id, 2, 3, 4);
-        assert_eq!(result.0, OK);
-        assert_eq!(result.1.raw_bytes, rgba.len() as u64);
-        assert_eq!(result.1.payload_bytes, 0);
-
-        force_write_failure(false);
-        forget_image_frame(image_id);
-    }
-
-    #[test]
-    fn test_changed_pixels_attempt_output_and_keep_previous_digest_on_failure() {
-        let image_id = 40_002;
-        let previous = [0x10, 0x20, 0x30, 0xff];
-        let changed = [0x11, 0x20, 0x30, 0xff];
-        let previous_digest = payload_hash(&previous, 1, 1, 2, 3, 4);
-        let changed_digest = payload_hash(&changed, 1, 1, 2, 3, 4);
-        record_image_frame(image_id, None);
-        record_image_geometry(image_id, 1, 1);
-        record_payload(image_id, previous_digest);
-        force_write_failure(true);
-
-        assert_eq!(
-            emit_direct_rgba_at(&changed, 1, 1, image_id, 2, 3, 4),
-            ERR_KITTY_TRANSPORT
-        );
-        assert!(!payload_unchanged(image_id, changed_digest));
-        assert!(payload_unchanged(image_id, previous_digest));
-
-        force_write_failure(false);
-        forget_image_frame(image_id);
-    }
-
-    #[test]
-    fn test_changed_metadata_attempts_output() {
-        let image_id = 40_003;
-        let rgba = [0x10, 0x20, 0x30, 0xff];
-        let previous_digest = payload_hash(&rgba, 1, 1, 2, 3, 4);
-        let changed_digest = payload_hash(&rgba, 1, 1, 2, 4, 4);
-        record_image_frame(image_id, None);
-        record_image_geometry(image_id, 1, 1);
-        record_payload(image_id, previous_digest);
-        force_write_failure(true);
-
-        assert_eq!(
-            emit_direct_rgba_at(&rgba, 1, 1, image_id, 2, 4, 4),
-            ERR_KITTY_TRANSPORT
-        );
-        assert!(!payload_unchanged(image_id, changed_digest));
-        assert!(payload_unchanged(image_id, previous_digest));
-
-        force_write_failure(false);
-        forget_image_frame(image_id);
-    }
-
-    #[test]
-    fn test_failed_output_does_not_commit_digest() {
+    fn test_failed_output_does_not_advance_frame() {
         let image_id = 40_004;
         let rgba = [0x10, 0x20, 0x30, 0xff];
-        let digest = payload_hash(&rgba, 1, 1, 0, 0, 0);
         force_write_failure(true);
 
         assert_eq!(
             emit_direct_rgba_at(&rgba, 1, 1, image_id, 0, 0, 0),
             ERR_KITTY_TRANSPORT
         );
-        assert!(!payload_unchanged(image_id, digest));
         assert!(image_frame(image_id).is_none());
 
         force_write_failure(false);
@@ -1291,44 +1147,15 @@ mod tests {
     }
 
     #[test]
-    fn test_delete_clears_frame_and_payload_digest() {
+    fn test_delete_clears_frame_and_geometry() {
         let image_id = 40_005;
-        let rgba = [0x10, 0x20, 0x30, 0xff];
-        let digest = payload_hash(&rgba, 1, 1, 0, 0, 0);
         record_image_frame(image_id, None);
         record_image_geometry(image_id, 1, 1);
-        record_payload(image_id, digest);
 
         forget_image_frame(image_id);
 
         assert!(image_frame(image_id).is_none());
-        assert!(!payload_unchanged(image_id, digest));
         assert!(image_geometry(image_id).is_none());
-    }
-
-    #[test]
-    fn test_payload_cache_consumes_one_rgba_scan_per_attempt() {
-        let image_id = 40_006;
-        let previous = [0x10, 0x20, 0x30, 0xff];
-        let changed = [0x11, 0x20, 0x30, 0xff];
-        let previous_digest = payload_hash(&previous, 1, 1, 0, 0, 0);
-        record_image_frame(image_id, None);
-        record_image_geometry(image_id, 1, 1);
-        record_payload(image_id, previous_digest);
-        reset_hash_scan_count();
-        force_write_failure(false);
-
-        assert_eq!(emit_direct_rgba_at(&changed, 1, 1, image_id, 0, 0, 0), OK);
-        assert_eq!(hash_scan_count(), 1);
-
-        reset_hash_scan_count();
-        let result = emit_shm_rgba_at_with_stats(&changed, 1, 1, image_id, 0, 0, 0);
-        assert_eq!(result.0, OK);
-        assert_eq!(result.1.payload_bytes, 0);
-        assert_eq!(hash_scan_count(), 1);
-
-        forget_image_frame(image_id);
-        cleanup_shm_on_shutdown();
     }
 
     #[test]
@@ -1346,11 +1173,8 @@ mod tests {
     #[test]
     fn test_failed_resize_transmit_preserves_previous_geometry() {
         let image_id = 40_008;
-        let previous = [0x10, 0x20, 0x30, 0xff];
-        let previous_digest = payload_hash(&previous, 1, 1, 0, 0, 0);
         record_image_frame(image_id, None);
         record_image_geometry(image_id, 1, 1);
-        record_payload(image_id, previous_digest);
         force_write_failure(true);
 
         assert_eq!(
@@ -1367,7 +1191,6 @@ mod tests {
         );
         assert_eq!(image_frame(image_id), Some(1));
         assert_eq!(image_geometry(image_id), Some((1, 1)));
-        assert!(payload_unchanged(image_id, previous_digest));
 
         force_write_failure(false);
         forget_image_frame(image_id);
@@ -1386,86 +1209,6 @@ mod tests {
         assert_eq!(image_geometry(image_id), Some((200, 120)));
 
         forget_image_frame(image_id);
-    }
-
-    fn legacy_fnv_hash(rgba: &[u8]) -> u64 {
-        rgba.iter().fold(0xcbf29ce484222325, |hash, byte| {
-            (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
-        })
-    }
-
-    fn ui_like_rgba(width: usize, height: usize) -> Vec<u8> {
-        let mut rgba = vec![0u8; width * height * 4];
-        for (pixel, chunk) in rgba.chunks_exact_mut(4).enumerate() {
-            let x = pixel % width;
-            let y = pixel / width;
-            let edge = x % 64 < 2 || y % 48 < 2;
-            chunk[0] = if edge {
-                0x56
-            } else {
-                ((x / 8 + y / 4) % 24) as u8
-            };
-            chunk[1] = if edge {
-                0xd4
-            } else {
-                ((x / 16 + y / 8) % 20) as u8
-            };
-            chunk[2] = if edge { 0xc8 } else { 0x1e };
-            chunk[3] = 0xff;
-        }
-        rgba
-    }
-
-    fn varied_rgba(width: usize, height: usize) -> Vec<u8> {
-        let mut state = 0x9e3779b9u32;
-        let mut rgba = vec![0u8; width * height * 4];
-        for byte in &mut rgba {
-            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
-            *byte = (state >> 24) as u8;
-        }
-        rgba
-    }
-
-    fn benchmark_hash_case(name: &str, rgba: &[u8]) {
-        const WARMUP: usize = 4;
-        const ITERATIONS: usize = 30;
-
-        for _ in 0..WARMUP {
-            black_box(legacy_fnv_hash(black_box(rgba)));
-            black_box(rgba_hash(black_box(rgba)));
-        }
-
-        let start = Instant::now();
-        let mut legacy = 0u64;
-        for _ in 0..ITERATIONS {
-            legacy = legacy.wrapping_add(black_box(legacy_fnv_hash(black_box(rgba))));
-        }
-        let legacy_elapsed = start.elapsed();
-
-        let start = Instant::now();
-        let mut production = 0u64;
-        for _ in 0..ITERATIONS {
-            production = production.wrapping_add(black_box(rgba_hash(black_box(rgba))));
-        }
-        let production_elapsed = start.elapsed();
-
-        black_box((legacy, production));
-        println!(
-            "payload hash {name}: legacy FNV avg {} ns, production DefaultHasher avg {} ns",
-            legacy_elapsed.as_nanos() / ITERATIONS as u128,
-            production_elapsed.as_nanos() / ITERATIONS as u128,
-        );
-    }
-
-    /// Run with `cargo test --release -- --ignored --nocapture` to compare
-    /// the legacy FNV implementation against the production digest.
-    #[test]
-    #[ignore = "release-only transport hash benchmark"]
-    fn bench_payload_hash_1080p_fnv_vs_default_hasher() {
-        benchmark_hash_case("ui-like 1920x1080", &ui_like_rgba(1920, 1080));
-        benchmark_hash_case("varied 1920x1080", &varied_rgba(1920, 1080));
-        benchmark_hash_case("ui-like 220x80", &ui_like_rgba(220, 80));
-        benchmark_hash_case("varied 220x80", &varied_rgba(220, 80));
     }
 
     // ── NativePresentationStats struct tests (task 1.3) ────────────────────
