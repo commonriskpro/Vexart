@@ -802,18 +802,8 @@ pub fn copy_region_to_image(
 
     pctx.wgpu.queue.submit(std::iter::once(encoder.finish()));
 
-    // Create view + sampler + bind group and register as image.
+    // Create view + bind group and register as image.
     let view = dst_view;
-    let sampler = pctx.wgpu.device.create_sampler(&wgpu::SamplerDescriptor {
-        label: Some("vexart-region-sampler"),
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
-        address_mode_v: wgpu::AddressMode::ClampToEdge,
-        address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        mipmap_filter: wgpu::MipmapFilterMode::Nearest,
-        ..Default::default()
-    });
     let bind_group = pctx
         .wgpu
         .device
@@ -827,7 +817,7 @@ pub fn copy_region_to_image(
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
+                    resource: wgpu::BindingResource::Sampler(&pctx.wgpu.cached_sampler),
                 },
             ],
         });
@@ -1050,16 +1040,6 @@ fn register_effect_output(
     texture: wgpu::Texture,
     view: wgpu::TextureView,
 ) -> u64 {
-    let sampler = pctx.wgpu.device.create_sampler(&wgpu::SamplerDescriptor {
-        label: Some(label),
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
-        address_mode_v: wgpu::AddressMode::ClampToEdge,
-        address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        mipmap_filter: wgpu::MipmapFilterMode::Nearest,
-        ..Default::default()
-    });
     let bind_group = pctx
         .wgpu
         .device
@@ -1073,7 +1053,7 @@ fn register_effect_output(
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
+                    resource: wgpu::BindingResource::Sampler(&pctx.wgpu.cached_sampler),
                 },
             ],
         });
@@ -1140,18 +1120,6 @@ fn render_blur_image(pctx: &mut PaintContext, image: u64, blur_radius: f32) -> R
     let Some(src_img) = pctx.images.get(&image) else {
         return Err(ERR_INVALID_HANDLE);
     };
-    // Preserve nearest filtering for normal image presentation, but use a
-    // linear sampler here so a narrow impulse cannot disappear between taps.
-    let linear_sampler = pctx.wgpu.device.create_sampler(&wgpu::SamplerDescriptor {
-        label: Some("vexart-blur-linear-sampler"),
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
-        address_mode_v: wgpu::AddressMode::ClampToEdge,
-        address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        mipmap_filter: wgpu::MipmapFilterMode::Nearest,
-        ..Default::default()
-    });
     let source_bind_group = pctx
         .wgpu
         .device
@@ -1165,7 +1133,7 @@ fn render_blur_image(pctx: &mut PaintContext, image: u64, blur_radius: f32) -> R
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&linear_sampler),
+                    resource: wgpu::BindingResource::Sampler(&pctx.wgpu.cached_sampler),
                 },
             ],
         });
@@ -1182,7 +1150,7 @@ fn render_blur_image(pctx: &mut PaintContext, image: u64, blur_radius: f32) -> R
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&linear_sampler),
+                    resource: wgpu::BindingResource::Sampler(&pctx.wgpu.cached_sampler),
                 },
             ],
         });
@@ -1594,16 +1562,6 @@ fn image_mask_rounded_rect_impl(
     pctx.wgpu.queue.submit(std::iter::once(encoder.finish()));
 
     // Register new image.
-    let sampler = pctx.wgpu.device.create_sampler(&wgpu::SamplerDescriptor {
-        label: Some("vexart-mask-sampler"),
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
-        address_mode_v: wgpu::AddressMode::ClampToEdge,
-        address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        mipmap_filter: wgpu::MipmapFilterMode::Nearest,
-        ..Default::default()
-    });
     let dst_bind_group = pctx
         .wgpu
         .device
@@ -1617,7 +1575,7 @@ fn image_mask_rounded_rect_impl(
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
+                    resource: wgpu::BindingResource::Sampler(&pctx.wgpu.cached_sampler),
                 },
             ],
         });
