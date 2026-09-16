@@ -26,6 +26,11 @@ export function onInput(handler: InputSubscriber): () => void {
   return () => subscribers.delete(handler)
 }
 
+/** @public */
+export function resetInputSubscribers() {
+  subscribers.clear()
+}
+
 function cleanupOnOwner(unsub: () => void) {
   try { onCleanup(unsub) } catch {}
 }
