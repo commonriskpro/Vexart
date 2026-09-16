@@ -180,6 +180,7 @@ export function createVexartLayoutCtx() {
   // successful calculate + command emission. An invalid Grid pass leaves
   // these published values untouched so writeback can keep the prior frame.
   const _layoutMap = new Map<number, PositionedCommand>()
+  const _visitedNodeIds = new Set<number>()
   const _childrenByParent = new Map<number, number[]>()
   const _scrollContainerIds = new Set<number>()
   const _textByNodeId = new Map<number, number>()
@@ -427,6 +428,7 @@ export function createVexartLayoutCtx() {
       _canvases.length = 0
 
       _layoutMap.clear()
+      _visitedNodeIds.clear()
       _childrenByParent.clear()
       _scrollContainerIds.clear()
       _textByNodeId.clear()
@@ -479,7 +481,7 @@ export function createVexartLayoutCtx() {
       // Position computation is merged into emitNode to eliminate a separate
       // collectPositions traversal (was the third full tree walk per frame).
       // Pre-allocated maps are cleared and reused (HP-2: avoid per-frame allocs).
-      _layoutMap.clear()
+      _visitedNodeIds.clear()
       _childrenByParent.clear()
       _scrollContainerIds.clear()
       _textByNodeId.clear()
@@ -607,14 +609,35 @@ export function createVexartLayoutCtx() {
         const borB = node.getComputedBorder(EDGE_BOTTOM)
 
         // Store in _layoutMap for writeLayoutBack and downstream consumers
-        _layoutMap.set(nodeId, {
-          nodeId,
-          x: absX, y: absY, width, height,
-          contentX: absX + padL + borL,
-          contentY: absY + padT + borT,
-          contentW: Math.max(0, width - padL - padR - borL - borR),
-          contentH: Math.max(0, height - padT - padB - borT - borB),
-        })
+        _visitedNodeIds.add(nodeId)
+        const contentX = absX + padL + borL
+        const contentY = absY + padT + borT
+        const contentW = Math.max(0, width - padL - padR - borL - borR)
+        const contentH = Math.max(0, height - padT - padB - borT - borB)
+        let entry = _layoutMap.get(nodeId)
+        if (entry) {
+          entry.x = absX
+          entry.y = absY
+          entry.width = width
+          entry.height = height
+          entry.contentX = contentX
+          entry.contentY = contentY
+          entry.contentW = contentW
+          entry.contentH = contentH
+        } else {
+          entry = {
+            nodeId,
+            x: absX,
+            y: absY,
+            width,
+            height,
+            contentX,
+            contentY,
+            contentW,
+            contentH,
+          }
+          _layoutMap.set(nodeId, entry)
+        }
 
         const bgColor = _bgColors[idx]
         if (bgColor !== 0 || _cornerRadii[idx] !== 0) {
@@ -693,6 +716,15 @@ export function createVexartLayoutCtx() {
 
       for (const childIdx of sortedChildIndices(0)) {
         emitNode(childIdx)
+      }
+
+      // Remove stale layout map entries for nodes no longer in tree
+      if (_layoutMap.size > _visitedNodeIds.size) {
+        for (const id of _layoutMap.keys()) {
+          if (!_visitedNodeIds.has(id)) {
+            _layoutMap.delete(id)
+          }
+        }
       }
 
       for (let i = _nodeCount; i < _allNodes.length; i++) {
