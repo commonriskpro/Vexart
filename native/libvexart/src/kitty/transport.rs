@@ -319,19 +319,16 @@ fn do_readback(
 ) -> u32 {
     use crate::composite::readback::readback_full;
 
-    let rec = match pctx.targets.get(target) {
+    let rec = match pctx.targets.get_mut(target) {
         Some(r) => r,
         None => return 0,
     };
 
-    // We need simultaneous immutable access to device/queue and target record.
-    // Extract raw pointers to device, queue, texture, readback_buffer, and padded_bytes_per_row
-    // before taking a mutable borrow of dst. All pointed-to values live in pctx.wgpu and
-    // pctx.targets, which are stable for the duration of this call.
+    let rb_buf = rec.ensure_readback_buffer(&pctx.wgpu.device);
+    let rb_buf_ptr: *const wgpu::Buffer = rb_buf;
     let device_ptr: *const wgpu::Device = &pctx.wgpu.device;
     let queue_ptr: *const wgpu::Queue = &pctx.wgpu.queue;
     let texture_ptr: *const wgpu::Texture = &rec.texture;
-    let rb_buf_ptr: *const wgpu::Buffer = &rec.readback_buffer;
     let padded = rec.padded_bytes_per_row;
 
     // SAFETY: device, queue, texture, readback_buffer are all owned by pctx and
@@ -369,21 +366,28 @@ where
     use crate::composite::readback::readback_full_with;
 
     let mut scratch = std::mem::take(&mut pctx.readback_scratch);
-    let rec = match pctx.targets.get(target) {
+    let device_ptr: *const wgpu::Device = &pctx.wgpu.device;
+    let queue_ptr: *const wgpu::Queue = &pctx.wgpu.queue;
+    let rec = match pctx.targets.get_mut(target) {
         Some(r) => r,
         None => {
             pctx.readback_scratch = scratch;
             return None;
         }
     };
+    let rb_buf = rec.ensure_readback_buffer(unsafe { &*device_ptr });
+    let rb_buf_ptr: *const wgpu::Buffer = rb_buf;
+    let texture_ptr: *const wgpu::Texture = &rec.texture;
+    let padded = rec.padded_bytes_per_row;
+
     let result = readback_full_with(
-        &pctx.wgpu.device,
-        &pctx.wgpu.queue,
-        &rec.texture,
+        unsafe { &*device_ptr },
+        unsafe { &*queue_ptr },
+        unsafe { &*texture_ptr },
         width,
         height,
-        rec.padded_bytes_per_row,
-        &rec.readback_buffer,
+        padded,
+        unsafe { &*rb_buf_ptr },
         &mut scratch,
         callback,
     );

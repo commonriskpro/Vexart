@@ -9,8 +9,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 pub struct TargetRecord {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
-    /// MAP_READ buffer sized to hold the full frame (padded rows).
-    pub readback_buffer: wgpu::Buffer,
+    /// MAP_READ buffer sized to hold the full frame (padded rows), lazily allocated on first readback.
+    pub readback_buffer: Option<wgpu::Buffer>,
     pub width: u32,
     pub height: u32,
     /// Bytes per row padded to 256-byte WGPU alignment.
@@ -37,7 +37,7 @@ impl TargetRecord {
     pub fn new(
         texture: wgpu::Texture,
         view: wgpu::TextureView,
-        readback_buffer: wgpu::Buffer,
+        readback_buffer: Option<wgpu::Buffer>,
         width: u32,
         height: u32,
         padded_bytes_per_row: u32,
@@ -52,6 +52,23 @@ impl TargetRecord {
             active_layer: None,
             scissor: None,
         }
+    }
+
+    /// Lazily allocate the MAP_READ readback buffer on first readback call.
+    pub fn ensure_readback_buffer(&mut self, device: &wgpu::Device) -> &wgpu::Buffer {
+        if self.readback_buffer.is_none() {
+            let readback_size = (self.padded_bytes_per_row as u64)
+                .checked_mul(self.height as u64)
+                .expect("overflow in readback_size");
+            let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("vexart-readback-buffer"),
+                size: readback_size,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.readback_buffer = Some(buffer);
+        }
+        self.readback_buffer.as_ref().unwrap()
     }
 
     pub fn set_scissor(&mut self, x: u32, y: u32, width: u32, height: u32) {
@@ -144,7 +161,6 @@ impl TargetRegistry {
         }
 
         let padded_bytes_per_row = (width.checked_mul(4)?.checked_add(255)?) & !255;
-        let readback_size = (padded_bytes_per_row as u64).checked_mul(height as u64)?;
 
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("vexart-offscreen-target"),
@@ -165,20 +181,13 @@ impl TargetRegistry {
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        let readback_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("vexart-readback-buffer"),
-            size: readback_size,
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
         let handle = self.next_handle.fetch_add(1, Ordering::Relaxed);
         *out_handle = handle;
 
         Some(TargetRecord::new(
             texture,
             view,
-            readback_buffer,
+            None,
             width,
             height,
             padded_bytes_per_row,
@@ -342,10 +351,13 @@ mod tests {
         assert_eq!(rec.width, 64);
         assert_eq!(rec.height, 64);
         assert_eq!(rec.padded_bytes_per_row, 256);
+        assert!(rec.readback_buffer.is_none(), "readback buffer must be lazily unallocated on create");
         assert!(rec.active_layer.is_none());
         assert_eq!(rec.scissor, None);
         reg.insert(handle, rec);
         let rec_mut = reg.get_mut(handle).unwrap();
+        assert!(rec_mut.ensure_readback_buffer(&device).size() >= 256 * 64);
+        assert!(rec_mut.readback_buffer.is_some());
         rec_mut.set_scissor(5, 6, 20, 30);
         assert_eq!(rec_mut.scissor, Some([5, 6, 20, 30]));
         rec_mut.clear_scissor();

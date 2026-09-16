@@ -857,7 +857,7 @@ pub fn readback_rgba(
         return ERR_INVALID_ARG;
     }
 
-    let rec = match pctx.targets.get(target) {
+    let rec = match pctx.targets.get_mut(target) {
         Some(r) => r,
         None => return ERR_INVALID_HANDLE,
     };
@@ -879,8 +879,9 @@ pub fn readback_rgba(
     let w = rec.width;
     let h = rec.height;
     let padded = rec.padded_bytes_per_row;
+    let rb_buf = rec.ensure_readback_buffer(&pctx.wgpu.device);
+    let readback_ptr: *const wgpu::Buffer = rb_buf;
     let texture_ptr: *const wgpu::Texture = &rec.texture;
-    let readback_ptr: *const wgpu::Buffer = &rec.readback_buffer;
 
     // SAFETY: texture_ptr and readback_ptr point into the TargetRecord in pctx.targets,
     // which is a stable heap allocation. pctx.wgpu (device/queue) is a disjoint field.
