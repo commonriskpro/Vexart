@@ -51,6 +51,7 @@ function touchCacheEntry<K, V>(cache: Map<K, V>, key: K, value: V) {
 export type ScaledImageCache = {
   get: (src: RawImage, targetW: number, targetH: number, key: string) => RawImage
   clear: () => void
+  destroy: () => void
 }
 
 /** @public */
@@ -77,6 +78,10 @@ export function createScaledImageCache(): ScaledImageCache {
     },
     clear() {
       cache.clear()
+    },
+    destroy() {
+      cache.clear()
+      scaledImageCaches.delete(cache)
     },
   }
 }
