@@ -6,7 +6,7 @@
  * @public
  */
 
-import { createMemo } from "solid-js"
+import { createMemo, Index } from "solid-js"
 import type { JSX } from "solid-js"
 import { Lexer, type MarkedToken, type Tokens } from "marked"
 import type { SizingUnit } from "@vexart/engine"
@@ -133,16 +133,20 @@ function inlineToSpans(tokens: MarkedToken[] | undefined, baseColor: string | nu
 }
 
 function renderInlineSpans(spans: InlineSpan[]): JSX.Element {
-  return spans.map((span) => {
-    if (span.bg) {
-      return (
-        <box backgroundColor={span.bg} cornerRadius={3} paddingX={2}>
-          <text color={span.color} fontSize={14} whiteSpace="pre-wrap">{span.text}</text>
-        </box>
-      )
-    }
-    return <text color={span.color} fontSize={14} whiteSpace="pre-wrap">{span.text}</text>
-  }) as unknown as JSX.Element
+  return (
+    <Index each={spans}>
+      {(span) => {
+        if (span().bg) {
+          return (
+            <box backgroundColor={span().bg} cornerRadius={3} paddingX={2}>
+              <text color={span().color} fontSize={14} whiteSpace="pre-wrap">{span().text}</text>
+            </box>
+          )
+        }
+        return <text color={span().color} fontSize={14} whiteSpace="pre-wrap">{span().text}</text>
+      }}
+    </Index>
+  )
 }
 
 function resolveLanguage(lang: string | undefined): string {
@@ -166,16 +170,18 @@ function renderToken(token: MarkedToken, props: MarkdownProps, th: MarkdownTheme
       const spans = inlineToSpans(token.tokens as MarkedToken[], th.heading, th)
       return (
         <box width="100%" paddingY={4} direction="row">
-          {spans.map((span) => {
-            if (span.bg) {
-              return (
-                <box backgroundColor={span.bg} cornerRadius={3} paddingX={2}>
-                  <text color={span.color} fontSize={fontSize} whiteSpace="pre-wrap">{span.text}</text>
-                </box>
-              )
-            }
-            return <text color={span.color} fontSize={fontSize} whiteSpace="pre-wrap">{span.text}</text>
-          })}
+          <Index each={spans}>
+            {(span) => {
+              if (span().bg) {
+                return (
+                  <box backgroundColor={span().bg} cornerRadius={3} paddingX={2}>
+                    <text color={span().color} fontSize={fontSize} whiteSpace="pre-wrap">{span().text}</text>
+                  </box>
+                )
+              }
+              return <text color={span().color} fontSize={fontSize} whiteSpace="pre-wrap">{span().text}</text>
+            }}
+          </Index>
         </box>
       )
     }
@@ -207,7 +213,9 @@ function renderToken(token: MarkedToken, props: MarkdownProps, th: MarkdownTheme
     case "blockquote": {
       return (
         <box width="100%" paddingX={12} paddingY={4} borderColor={th.blockquoteBorder} borderWidth={2}>
-          {(token.tokens as MarkedToken[]).map((t) => renderToken(t, props, th))}
+          <Index each={token.tokens as MarkedToken[]}>
+            {(t) => renderToken(t(), props, th)}
+          </Index>
         </box>
       )
     }
@@ -215,16 +223,18 @@ function renderToken(token: MarkedToken, props: MarkdownProps, th: MarkdownTheme
     case "list": {
       return (
         <box width="100%" direction="column" gap={2} paddingY={2}>
-          {token.items.map((item: Tokens.ListItem, i: number) => {
+          <Index each={token.items}>
+            {(item, i) => {
             const prefix = token.ordered ? `${Number(token.start ?? 1) + i}. ` : "• "
-            const spans = inlineToSpans(item.tokens as MarkedToken[], fg, th)
+            const spans = inlineToSpans(item().tokens as MarkedToken[], fg, th)
             return (
               <box width="100%" paddingX={8} direction="row">
                 <text color={th.listBullet} fontSize={14} whiteSpace="pre-wrap">{prefix}</text>
                 {renderInlineSpans(spans)}
               </box>
             )
-          })}
+            }}
+          </Index>
         </box>
       )
     }
@@ -258,25 +268,31 @@ function renderToken(token: MarkedToken, props: MarkdownProps, th: MarkdownTheme
       return (
         <box width="100%" direction="column" gap={1} paddingY={4}>
           <box width="100%" direction="row" backgroundColor={th.tableBg} padding={4}>
-            {header.map((cell: Tokens.TableCell, c: number) => (
-              <box width="fit" minWidth={colWidths[c] * CHAR_WIDTH} paddingX={8}>
-                <text color={th.tableHeader} fontSize={14} whiteSpace="pre-wrap">
-                  {inlineToText(cell.tokens as MarkedToken[])}
-                </text>
-              </box>
-            ))}
-          </box>
-          {rows.map((row: Tokens.TableCell[]) => (
-            <box width="100%" direction="row" padding={4}>
-              {row.map((cell: Tokens.TableCell, c: number) => (
+            <Index each={header}>
+              {(cell, c) => (
                 <box width="fit" minWidth={colWidths[c] * CHAR_WIDTH} paddingX={8}>
-                  <text color={fg} fontSize={14} whiteSpace="pre-wrap">
-                    {inlineToText(cell.tokens as MarkedToken[])}
+                  <text color={th.tableHeader} fontSize={14} whiteSpace="pre-wrap">
+                    {inlineToText(cell().tokens as MarkedToken[])}
                   </text>
                 </box>
-              ))}
-            </box>
-          ))}
+              )}
+            </Index>
+          </box>
+          <Index each={rows}>
+            {(row) => (
+              <box width="100%" direction="row" padding={4}>
+                <Index each={row()}>
+                  {(cell, c) => (
+                    <box width="fit" minWidth={colWidths[c] * CHAR_WIDTH} paddingX={8}>
+                      <text color={fg} fontSize={14} whiteSpace="pre-wrap">
+                        {inlineToText(cell().tokens as MarkedToken[])}
+                      </text>
+                    </box>
+                  )}
+                </Index>
+              </box>
+            )}
+          </Index>
         </box>
       )
     }
@@ -310,7 +326,9 @@ export function Markdown(props: MarkdownProps) {
 
   return (
     <box width={props.width ?? "100%"} direction="column" gap={6}>
-      {tokens().map((token, i) => renderToken(token, props, th()))}
+      <Index each={tokens()}>
+        {(token) => renderToken(token(), props, th())}
+      </Index>
     </box>
   )
 }
