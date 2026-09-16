@@ -444,37 +444,37 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     const endSyncStart = profile ? performance.now() : 0
     s.term.endSync()
     if (profile) profile.endSyncMs = performance.now() - endSyncStart
-    const resourceSummary = isDebugEnabled()
-      ? summarizeRendererResourceStats()
-      : { totalBytes: 0, gpuBytes: 0, cacheEntries: 0 }
-    debugUpdateStats({
-      commandCount: 0,
-      dirtyBeforeCount: dirtyBeforeFrame,
-      layerCount: s.layerStore.layerCount(),
-      moveOnlyCount: 0,
-      moveFallbackCount: 0,
-      stableReuseCount: retainedLayers.length,
-      nodeCount: s.nodeCountValue.value,
-      repaintedCount: 0,
-      rendererStrategy: frameResult?.strategy ?? "final-frame",
-      rendererOutput: frameResult?.output ?? "none",
-      dirtyPixelArea: frameCtx.dirtyPixelArea,
-      totalPixelArea: frameCtx.totalPixelArea,
-      overlapPixelArea: frameCtx.overlapPixelArea,
-      overlapRatio: frameCtx.overlapRatio,
-      fullRepaint: frameCtx.fullRepaint,
-      transmissionMode: frameCtx.transmissionMode,
-      estimatedLayeredBytes: frameCtx.estimatedLayeredBytes,
-      estimatedFinalBytes: frameCtx.estimatedFinalBytes,
-      interactionLatencyMs: s.interaction.lastPresentedInteractionLatencyMs.value,
-      interactionType: s.interaction.lastPresentedInteractionType.value,
-      presentedInteractionSeq: s.interaction.lastPresentedInteractionSeq.value,
-      resourceBytes: resourceSummary.totalBytes,
-      gpuResourceBytes: resourceSummary.gpuBytes,
-      resourceEntries: resourceSummary.cacheEntries,
-      nativeStats: frameResult?.output === "native-presented" ? (frameResult.stats ?? null) : null,
-      nativeFrameReasonFlags: null,
-    })
+    if (isDebugEnabled()) {
+      const resourceSummary = summarizeRendererResourceStats()
+      debugUpdateStats({
+        commandCount: 0,
+        dirtyBeforeCount: dirtyBeforeFrame,
+        layerCount: s.layerStore.layerCount(),
+        moveOnlyCount: 0,
+        moveFallbackCount: 0,
+        stableReuseCount: retainedLayers.length,
+        nodeCount: s.nodeCountValue.value,
+        repaintedCount: 0,
+        rendererStrategy: frameResult?.strategy ?? "final-frame",
+        rendererOutput: frameResult?.output ?? "none",
+        dirtyPixelArea: frameCtx.dirtyPixelArea,
+        totalPixelArea: frameCtx.totalPixelArea,
+        overlapPixelArea: frameCtx.overlapPixelArea,
+        overlapRatio: frameCtx.overlapRatio,
+        fullRepaint: frameCtx.fullRepaint,
+        transmissionMode: frameCtx.transmissionMode,
+        estimatedLayeredBytes: frameCtx.estimatedLayeredBytes,
+        estimatedFinalBytes: frameCtx.estimatedFinalBytes,
+        interactionLatencyMs: s.interaction.lastPresentedInteractionLatencyMs.value,
+        interactionType: s.interaction.lastPresentedInteractionType.value,
+        presentedInteractionSeq: s.interaction.lastPresentedInteractionSeq.value,
+        resourceBytes: resourceSummary.totalBytes,
+        gpuResourceBytes: resourceSummary.gpuBytes,
+        resourceEntries: resourceSummary.cacheEntries,
+        nativeStats: frameResult?.output === "native-presented" ? (frameResult.stats ?? null) : null,
+        nativeFrameReasonFlags: null,
+      })
+    }
     resetFrameTracking()
     s.dirty.clearDirty(dirtyVersionAtFrameStart)
     return
@@ -572,36 +572,36 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   s.interaction.lastPresentedInteractionType.value = paintState.interaction.lastPresentedInteractionType.value
 
   // Override debug stats with coordinator-owned values (nodeCount, dirtyBefore)
-  const resourceSummary = isDebugEnabled()
-    ? summarizeRendererResourceStats()
-    : { totalBytes: 0, gpuBytes: 0, cacheEntries: 0 }
-  debugUpdateStats({
-    commandCount: paintResult.commandCount,
-    dirtyBeforeCount: dirtyBeforeFrame,
-    layerCount: s.layerStore.layerCount(),
-    moveOnlyCount: paintResult.moveOnlyCount,
-    moveFallbackCount: paintResult.moveFallbackCount,
-    stableReuseCount: paintResult.stableReuseCount,
-    nodeCount: s.nodeCountValue.value,
-    repaintedCount: paintResult.repaintedThisFrame,
-    rendererStrategy: paintResult.frameResult?.strategy ?? null,
-    rendererOutput: paintResult.rendererOutput,
-    dirtyPixelArea: paintResult.frameCtx.dirtyPixelArea,
-    totalPixelArea: paintResult.frameCtx.totalPixelArea,
-    overlapPixelArea: paintResult.frameCtx.overlapPixelArea,
-    overlapRatio: paintResult.frameCtx.overlapRatio,
-    fullRepaint: paintResult.frameCtx.fullRepaint,
-    transmissionMode: paintResult.frameCtx.transmissionMode,
-    estimatedLayeredBytes: paintResult.frameCtx.estimatedLayeredBytes,
-    estimatedFinalBytes: paintResult.frameCtx.estimatedFinalBytes,
-    interactionLatencyMs: s.interaction.lastPresentedInteractionLatencyMs.value,
-    interactionType: s.interaction.lastPresentedInteractionType.value,
-    presentedInteractionSeq: s.interaction.lastPresentedInteractionSeq.value,
-    resourceBytes: resourceSummary.totalBytes,
-    gpuResourceBytes: resourceSummary.gpuBytes,
-    resourceEntries: resourceSummary.cacheEntries,
-    nativeFrameReasonFlags: paintResult.framePlan?.nativePlan?.reasonFlags ?? null,
-  })
+  if (isDebugEnabled()) {
+    const resourceSummary = summarizeRendererResourceStats()
+    debugUpdateStats({
+      commandCount: paintResult.commandCount,
+      dirtyBeforeCount: dirtyBeforeFrame,
+      layerCount: s.layerStore.layerCount(),
+      moveOnlyCount: paintResult.moveOnlyCount,
+      moveFallbackCount: paintResult.moveFallbackCount,
+      stableReuseCount: paintResult.stableReuseCount,
+      nodeCount: s.nodeCountValue.value,
+      repaintedCount: paintResult.repaintedThisFrame,
+      rendererStrategy: paintResult.frameResult?.strategy ?? null,
+      rendererOutput: paintResult.rendererOutput,
+      dirtyPixelArea: paintResult.frameCtx.dirtyPixelArea,
+      totalPixelArea: paintResult.frameCtx.totalPixelArea,
+      overlapPixelArea: paintResult.frameCtx.overlapPixelArea,
+      overlapRatio: paintResult.frameCtx.overlapRatio,
+      fullRepaint: paintResult.frameCtx.fullRepaint,
+      transmissionMode: paintResult.frameCtx.transmissionMode,
+      estimatedLayeredBytes: paintResult.frameCtx.estimatedLayeredBytes,
+      estimatedFinalBytes: paintResult.frameCtx.estimatedFinalBytes,
+      interactionLatencyMs: s.interaction.lastPresentedInteractionLatencyMs.value,
+      interactionType: s.interaction.lastPresentedInteractionType.value,
+      presentedInteractionSeq: s.interaction.lastPresentedInteractionSeq.value,
+      resourceBytes: resourceSummary.totalBytes,
+      gpuResourceBytes: resourceSummary.gpuBytes,
+      resourceEntries: resourceSummary.cacheEntries,
+      nativeFrameReasonFlags: paintResult.framePlan?.nativePlan?.reasonFlags ?? null,
+    })
+  }
 
   if (profile) {
     const totalPaintMs = performance.now() - paintStart
