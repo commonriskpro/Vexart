@@ -6,7 +6,7 @@
  * @public
  */
 
-import { createSignal, createEffect, onCleanup } from "solid-js"
+import { createSignal, createEffect, onCleanup, Index } from "solid-js"
 import type { JSX } from "solid-js"
 import type { SizingUnit } from "@vexart/engine"
 
@@ -166,20 +166,24 @@ export function Code(props: CodeProps) {
       padding={t().padding}
       direction="column"
     >
-      {tokens().map((lineTokens, lineIdx) => (
-        <box height={LINE_HEIGHT} width="100%" direction="row">
-          {showLineNumbers() ? (
-            <box width={gutterWidth()}>
-              <text color={t().lineNumberFg} fontSize={14} whiteSpace="pre-wrap">
-                {String(lineIdx + 1).padStart(String(tokens().length).length)}
-              </text>
-            </box>
-          ) : null}
-          {lineTokens.map((tok) => (
-            <text color={tok.color} fontSize={14} whiteSpace="pre-wrap">{tok.text}</text>
-          ))}
-        </box>
-      ))}
+      <Index each={tokens()}>
+        {(lineTokens, lineIdx) => (
+          <box height={LINE_HEIGHT} width="100%" direction="row">
+            {showLineNumbers() ? (
+              <box width={gutterWidth()}>
+                <text color={t().lineNumberFg} fontSize={14} whiteSpace="pre-wrap">
+                  {String(lineIdx + 1).padStart(String(tokens().length).length)}
+                </text>
+              </box>
+            ) : null}
+            <Index each={lineTokens()}>
+              {(tok) => (
+                <text color={tok().color} fontSize={14} whiteSpace="pre-wrap">{tok().text}</text>
+              )}
+            </Index>
+          </box>
+        )}
+      </Index>
     </box>
   )
 }
