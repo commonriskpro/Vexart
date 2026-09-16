@@ -7,7 +7,7 @@ import { createSignal, onCleanup } from "solid-js"
 import { createParser } from "./input/parser"
 import { createRenderLoop } from "./loop/loop"
 import { render as solidRender } from "./reconciler/reconciler"
-import { dispatchInput } from "./loop/input"
+import { dispatchInput, resetInputSubscribers } from "./loop/input"
 import { markDirty } from "./reconciler/dirty"
 import { resetFocus } from "./reconciler/focus"
 import { clearSelection } from "./reconciler/selection"
@@ -186,8 +186,6 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
         || event.action === "scroll"
         || (event.action === "move" && (isButtonDown || loop.needsPointerRepaint()))
       if (shouldRepaint) {
-        const shouldGlobalDirty = event.action !== "move" || !isButtonDown
-        if (shouldGlobalDirty) markDirty()
         loop.requestInteractionFrame(event.action === "scroll" ? "scroll" : "pointer")
       }
       return
@@ -230,12 +228,16 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
                   clearSelection()
                 } finally {
                   try {
-                    unbindLoop(loop)
+                    resetInputSubscribers()
                   } finally {
                     try {
-                      loop.destroy()
+                      unbindLoop(loop)
                     } finally {
-                      resetCompositorPathState()
+                      try {
+                        loop.destroy()
+                      } finally {
+                        resetCompositorPathState()
+                      }
                     }
                   }
                 }
