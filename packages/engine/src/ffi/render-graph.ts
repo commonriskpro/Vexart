@@ -277,6 +277,8 @@ type ClipStackEntry = {
   nodeId?: number
 }
 
+const EMPTY_CLIP_STACK: ClipStackEntry[] = Object.freeze([]) as unknown as ClipStackEntry[]
+
 // Clip provenance is deliberately kept out of RenderGraphOp's public shape.
 // Layer isolation needs to know whether a clip belongs to an ancestor of the
 // isolated subtree (apply it after the subtree transform) or was introduced
@@ -286,7 +288,7 @@ type ClipStackEntry = {
 const renderOpClipStacks = new WeakMap<object, ClipStackEntry[]>()
 
 export function getRenderOpClipStack(op: RenderGraphOp) {
-  return renderOpClipStacks.get(op) ?? []
+  return renderOpClipStacks.get(op) ?? EMPTY_CLIP_STACK
 }
 
 /** Internal bridge for isolated source ops cloned by the GPU backend. */
@@ -714,11 +716,11 @@ export function buildRenderGraphFrame(
         clipStateId: backdrop?.clipStateId ?? createClipStateId(clipStack),
         effectStateId: backdrop?.effectStateId ?? getEffectStateId(op.effect, Math.round(op.cornerRadius)),
       }
-      renderOpClipStacks.set(output, clipStack.slice())
+      renderOpClipStacks.set(output, clipStack.length > 0 ? clipStack.slice() : EMPTY_CLIP_STACK)
       ops.push(output)
     } else if (op) {
       const output = { ...op, clipBounds }
-      renderOpClipStacks.set(output, clipStack.slice())
+      renderOpClipStacks.set(output, clipStack.length > 0 ? clipStack.slice() : EMPTY_CLIP_STACK)
       ops.push(output)
     }
   }
