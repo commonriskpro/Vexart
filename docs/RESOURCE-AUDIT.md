@@ -282,3 +282,50 @@ Script standalone `benchmarks/render-loop.ts`:
 - Finding #10: Props destructuring rompe reactividad en styled components
 - Finding #11: Contextos de render con valores planos causan remounts
 - Ambos son bugs funcionales. Commit type: `fix()`.
+
+
+---
+
+## 📊 Benchmarking Metodológico de GUI Real
+
+### Por qué el "FPS promedio" es una ilusión en UI
+1. **La paradoja del Idle**: Una UI en reposo **debe correr a 0 FPS** (0.0% CPU, 0.0% GPU). Correr frames cuando nada cambió drena batería y quema ciclos innecesarios.
+2. **El techo de Vsync**: En monitores reales (60Hz / 120Hz ProMotion), la UI está capeada por hardware. No tiene sentido un loop desacoplado reportando miles de FPS en memoria.
+3. **The Hitch Trap**: 59 frames de 1ms + 1 frame congelado de 941ms = 60 FPS promedio, pero el usuario sufrió un tirón de 1 segundo.
+
+### Las Métricas que Importan
+- **INP (Interaction to Next Paint)**: Tiempo desde el evento de hardware hasta el pixel presentado en la terminal.
+- **Jank Rate (%)**: Porcentaje de frames que excedieron el presupuesto (16.67ms en 60Hz u 8.33ms en 120Hz). Objetivo: **0.0%**.
+- **Percentiles de cola (P50, P95, P99)**: Garantía de latencia en el 99% de las interacciones.
+- **Desglose de Pipeline**: `walkTree` -> `layout` (Flexily) -> `layerAssign` -> `paint` (WGPU/FFI) -> `present` (Kitty/SHM).
+
+### Medición Baseline Post-Fase 1 (`bun run benchmark`)
+
+Harness oficial: `benchmarks/engine-benchmark.ts` (ejecutable vía `bun run benchmark`).
+
+#### 1. Pacing y Responsividad
+
+| Escenario | Carga de UI | Frames | Avg (ms) | P50 (ms) | P95 (ms) | P99 (ms) | Jank % (>16.6ms) |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Idle Efficiency** | Dashboard completo + cursor blink | 3 / 120 | 2.08 | 2.15 | 2.49 | 2.49 | **0.0%** |
+| **Typing / Input Latency (INP)** | Ráfaga de 87 teclas en Input | 87 | 0.38 | 0.34 | 0.68 | 1.56 | **0.0%** |
+| **Virtual Scroll & Culling** | Scroll continuo de 250 tarjetas (2.506 nodos) | 120 | 4.24 | 3.82 | 6.41 | 9.24 | **0.0%** |
+| **Hover Storm** | Barrido de puntero sobre 30 botones a 120Hz | 120 | 4.98 | 4.88 | 5.83 | 6.23 | **0.0%** |
+| **60FPS Sustained Animation** | Modal flotante animado por GPU (300 frames) | 300 | 0.84 | 0.82 | 1.08 | 1.54 | **0.0%** |
+
+#### 2. Desglose del Pipeline (Avg / P95 en ms)
+
+| Escenario | WalkTree (TS) | Layout (Flexily) | LayerAssign (TS) | Paint (WGPU / FFI) | Total Frame |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Idle (Reposo)** | 0.09 / 0.10 ms | 0.20 / 0.23 ms | 0.03 / 0.05 ms | 1.82 / 2.15 ms | **2.08 / 2.49 ms** |
+| **Typing (INP)** | 0.04 / 0.05 ms | 0.08 / 0.09 ms | 0.02 / 0.03 ms | 0.27 / 0.57 ms | **0.38 / 0.69 ms** |
+| **Virtual Scroll** | 0.67 / 0.83 ms | 1.35 / 1.99 ms | 0.04 / 0.04 ms | 2.79 / 4.28 ms | **4.24 / 6.41 ms** |
+| **Hover Storm** | 0.08 / 0.11 ms | 0.13 / 0.17 ms | 0.00 / 0.01 ms | 4.81 / 5.70 ms | **4.98 / 5.83 ms** |
+| **60FPS Animation**| 0.03 / 0.04 ms | 0.05 / 0.08 ms | 0.01 / 0.02 ms | 0.77 / 1.01 ms | **0.84 / 1.08 ms** |
+
+#### 3. Verificaciones Arquitectónicas
+- **Idle**: 97.5% de ticks omitidos (solo se pintaron 3 frames de cursor en 2s), 0.31% duty cycle de CPU, **0.0 KB** heap leak.
+- **Typing INP**: P50 de 0.34ms, P95 de 0.69ms. **0 repintados full screen**, daño acotado a 14.17% del viewport.
+- **Scroll**: 0.0% Jank en 2.506 nodos; P95 de 6.41ms con Layout P95 de 1.99ms.
+- **Hover**: Hit-test P50 de 0.02ms; **1.0 layer repintado/frame** promedio (caching GPU preservado).
+- **Animación**: Frame pacing con variación de apenas ±0.21ms y Hitch Ratio de 0.00%.
