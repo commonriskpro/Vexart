@@ -796,9 +796,7 @@ export function Textarea(props: TextareaProps) {
           {beforeSegments.map((seg) => (
             <text color={seg.color} fontSize={14}>{seg.text}</text>
           ))}
-          {blink() ? (
-            <box width={2} height={LINE_HEIGHT} backgroundColor={color()} />
-          ) : null}
+          <box width={2} height={LINE_HEIGHT} backgroundColor={color()} opacity={blink() ? 1 : 0} />
           {ghostText ? (
             <text color={th().muted} fontSize={14}>{ghostText}</text>
           ) : null}
