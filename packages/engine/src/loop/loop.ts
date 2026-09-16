@@ -137,6 +137,7 @@ export type { RenderLoop }
 export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): RenderLoop {
   const layoutAdapter = createVexartLayoutCtx()
   const dirtyTracker = createDirtyTracker()
+  let cachedHasPointerNodes: boolean | null = null
   const isDirty = () => dirtyTracker.isDirty() || globalIsDirty()
   const clearDirty = (expectedVersion?: number) => {
     dirtyTracker.clearDirty(expectedVersion)
@@ -145,6 +146,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     }
   }
   const markDirty = (scope?: DirtyScope) => {
+    if (!scope || scope.kind !== DIRTY_KIND.INTERACTION) {
+      cachedHasPointerNodes = null
+    }
     dirtyTracker.markDirty()
     globalMarkDirty(scope, dirtyTracker)
   }
@@ -348,6 +352,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   }
 
   const unsubGlobalDirty = onGlobalDirty((scope) => {
+    if (scope.kind !== DIRTY_KIND.INTERACTION) {
+      cachedHasPointerNodes = null
+    }
     dirtyTracker.markDirty()
     if (scope.kind === DIRTY_KIND.FULL) {
       markAllDirty()
@@ -494,6 +501,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     const dirtyGridCount = markGridTreeDirty(root)
     clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: isTmuxPlaceholderPresentation })
     resetLayers(); layerCache.clear()
+    cachedHasPointerNodes = null
     globalMarkLayoutDirty(dirtyTracker)
     markDirty(); markAllDirty(); markInteractionActive()
     resizeDebug(`dirty marked newW=${newW} newH=${newH} grids=${dirtyGridCount}`)
@@ -517,7 +525,9 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     requestInteractionFrame,
     needsPointerRepaint() {
       if (pointer.capturedNodeId !== 0) return true
-      return hasPointerReactiveNodes(root)
+      if (cachedHasPointerNodes !== null) return cachedHasPointerNodes
+      cachedHasPointerNodes = hasPointerReactiveNodes(root)
+      return cachedHasPointerNodes
     },
     setPointerCapture(nodeId: number) {
       pointer.capturedNodeId = nodeId
@@ -600,6 +610,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       root._dirtyTracker = null
       dirtyTracker.clearDirty()
       dirtyTracker.clearLayoutDirty()
+      cachedHasPointerNodes = null
     },
   }
 
