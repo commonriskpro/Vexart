@@ -3,6 +3,7 @@
 **Fecha**: 2026-09-16
 **Capas auditadas**: Render loop TS · Rust/WGPU nativo · Memoria/eventos/reactivity · Styled/headless/app
 **Hallazgos únicos**: 28 (consolidados de ~60 findings cruzados)
+**Estado**: Fase 1 (Quick Wins TS + Leaks) COMPLETADA · Fase 2 (Hot Path Rust) COMPLETADA
 
 ---
 
@@ -29,20 +30,23 @@ de syntax, y bounding boxes se tira y se remonta. Incluso idle.
 retorna nuevo JSX en cada cambio de valor. A 60 FPS durante drag, Solid destruye
 y remonta track + thumb 60x/segundo.
 
-### 5. 8–33 MB de heap allocation POR FRAME en Rust readback/transport
+### 5. 8–33 MB de heap allocation POR FRAME en Rust readback/transport — ✅ RESOLVED
 `readback.rs:136`, `transport.rs:292` — `vec![0u8; needed]` aloca un buffer
 RGBA completo del sistema en cada frame. A 60 FPS en 1080p = **500 MB/s** de
 churn del allocator.
+- **Estado**: ✅ RESOLVED (`4f9bc9e`) — Persistent scratch buffer en `PaintContext` para readback; elimina los 500 MB/s de churn.
 
-### 6. GPU vertex buffers se crean y destruyen en cada draw call
+### 6. GPU vertex buffers se crean y destruyen en cada draw call — ✅ RESOLVED
 `composite/mod.rs` (8 sitios) — A pesar de tener `pctx.vertex_buffer` (2MB
 persistente), NINGÚN path de compositing ni texto lo usa. Cada image layer, blur,
 mask, y text batch crea un buffer temporal con `device.create_buffer_init()`.
+- **Estado**: ✅ RESOLVED (`43d5edf`) — Rutas de composite y quads de texto dirigidas a `pctx.vertex_buffer` persistente.
 
-### 7. `msync(MS_SYNC)` bloquea el CPU thread en cada frame SHM
+### 7. `msync(MS_SYNC)` bloquea el CPU thread en cada frame SHM — ✅ RESOLVED
 `shm.rs:527` — Sync kernel call sobre 8–33 MB de shared memory en cada frame.
 Totalmente redundante en POSIX SHM (tmpfs/page-cache). Agrega 2–6ms de latencia
 por frame.
+- **Estado**: ✅ RESOLVED (`7520ea4`) — Eliminado `msync(MS_SYNC)` síncrono bloqueante en transporte SHM.
 
 ---
 
@@ -83,14 +87,16 @@ anterior y crea uno nuevo.
 en ResourceManager (300% inflado). Y `try_allocate` con LRU eviction nunca se
 llama desde FFI → texturas no se reciclan.
 
-### 15. Cascada de strings multi-MB en Kitty encoder
+### 15. Cascada de strings multi-MB en Kitty encoder — ✅ RESOLVED
 `encoder.rs:91`, `transport.rs:815` — Base64 encode → chunk split → format!
 por chunk → from_utf8_lossy → format! final. Un payload de 1MB genera decenas
 de MB en strings intermedios.
+- **Estado**: ✅ RESOLVED (`94a7721`) — Streaming directo de Base64 en Kitty encoder sin cadenas intermedias.
 
-### 16. Full-frame CPU hash (SipHash) de 8–33 MB por frame
+### 16. Full-frame CPU hash (SipHash) de 8–33 MB por frame — ✅ RESOLVED
 `transport.rs:136` — `payload_hash` hashea TODO el buffer RGBA para detectar
 cambios, costando 4–10ms. El dirty tracking del scene graph ya sabe qué cambió.
+- **Estado**: ✅ RESOLVED (`34476ab`) — Eliminado SipHash payload hashing redundante de frame completo.
 
 ### 17. Timer cancellation thrashing en cada mouse move
 `loop.ts:290` — `nudgeInteraction()` hace `clearTimeout` + `setTimeout` en
@@ -125,13 +131,15 @@ por repaint.
 ### 23. `Float64Array(9)` nuevo por frame para cada leaf con transform
 `walk-tree.ts:534` — TypedArray allocation en el hot path.
 
-### 24. Readback buffers redundantes en offscreen targets
+### 24. Readback buffers redundantes en offscreen targets — ✅ RESOLVED
 `target.rs:136` — Targets intermedios (blur, mask) alocan readback buffers de
 8MB que nunca se leen.
+- **Estado**: ✅ RESOLVED (`bb2aa43`) — Lazy-allocation de buffers GPU de readback solo en targets que leen de vuelta a CPU.
 
-### 25. GPU samplers duplicados en cada upload/effect
+### 25. GPU samplers duplicados en cada upload/effect — ✅ RESOLVED
 `lib.rs:107`, `composite/mod.rs` (6 sitios) — Samplers idénticos se crean
 repetidamente; `WgpuContext` ya tiene uno cached.
+- **Estado**: ✅ RESOLVED (`b2ec391`) — Reutilización de sampler cacheado de `WgpuContext` en composite y upload.
 
 ### 26. Route matching re-sort y re-parse en cada navegación
 `router.tsx:73` — Rutas no se pre-compilan. Cada `navigate()` hace sort +
@@ -257,12 +265,24 @@ Script standalone `benchmarks/render-loop.ts`:
 9. `useQuery` — AbortController + guard `isMounted`
 10. `_msdfFamilyCache` — limpiar en `backend.destroy()`
 
-### Fase 2 — Hot Path Rust
-- Persistent scratch buffer para readback (eliminar 500MB/s churn)
-- Unificar vertex uploads via `pctx.vertex_buffer`
-- Eliminar `msync(MS_SYNC)` + persistir SHM ring mappings
-- Streaming base64 en Kitty encoder (eliminar cascada de strings)
-- Eliminar `payload_hash` → fixear dirty tracking si tiene gaps
+### Fase 2 — Hot Path Rust (COMPLETED ✅)
+
+Commits atómicos ejecutados:
+1. `7520ea4` — `perf(native): remove synchronous msync on SHM transport` (Finding 7)
+2. `94a7721` — `perf(native): stream Base64 directly in Kitty encoder` (Finding 15)
+3. `b2ec391` — `perf(native): reuse cached sampler in composite operations` (Finding 25)
+4. `43d5edf` — `perf(native): route composite and text quads to persistent vertex buffer` (Finding 6)
+5. `4f9bc9e` — `perf(native): add persistent readback scratch buffer to PaintContext` (Finding 5)
+6. `34476ab` — `perf(native): eliminate SipHash payload hashing in transport` (Finding 16)
+7. `bb2aa43` — `perf(native): lazy-allocate readback GPU buffers for render targets` (Finding 24)
+
+- [x] Persistent scratch buffer para readback (eliminar 500MB/s churn)
+- [x] Unificar vertex uploads via `pctx.vertex_buffer`
+- [x] Eliminar `msync(MS_SYNC)` + persistir SHM ring mappings
+- [x] Streaming base64 en Kitty encoder (eliminar cascada de strings)
+- [x] Eliminar `payload_hash` → fixear dirty tracking si tiene gaps
+- [x] Reutilizar cached sampler en operaciones de composite
+- [x] Lazy-allocate readback GPU buffers para render targets
 
 ### Fase 3 — Hot Path TS avanzado
 - Layout dirty gating (`isLayoutDirty`)
@@ -329,3 +349,29 @@ Harness oficial: `benchmarks/engine-benchmark.ts` (ejecutable vía `bun run benc
 - **Scroll**: 0.0% Jank en 2.506 nodos; P95 de 6.41ms con Layout P95 de 1.99ms.
 - **Hover**: Hit-test P50 de 0.02ms; **1.0 layer repintado/frame** promedio (caching GPU preservado).
 - **Animación**: Frame pacing con variación de apenas ±0.21ms y Hitch Ratio de 0.00%.
+
+---
+
+### Medición y Comparativa Post-Fase 2 (Hot Path Rust)
+
+#### Comparativa Paint (FFI) Pipeline Stage: Fase 1 Baseline vs. Fase 2 Post-Optimización
+
+| Scenario | Phase 1 Baseline (Avg / P95) | Phase 2 Result (Avg / P95) | Improvement |
+|---|---|---|---|
+| Idle Efficiency | 1.82ms / 2.15ms | 1.42ms / 1.82ms | -22.0% avg / -15.3% P95 |
+| Typing INP | 0.27ms / 0.57ms | 0.26ms / 0.44ms | -3.7% avg / -22.8% P95 |
+| Virtual Scroll | 2.79ms / 4.28ms | 2.50ms / 3.61ms | -10.4% avg / -15.6% P95 |
+| Hover Storm | 4.81ms / 5.70ms | 4.79ms / 5.57ms | -0.4% avg / -2.3% P95 |
+| 60FPS Animation | 0.77ms / 1.01ms | 0.78ms / 1.06ms | Within noise |
+
+#### Métricas Adicionales Post-Fase 2
+- **Jank Rate**: 0.00% across all scenarios
+- **Typing INP P50 / P95**: 0.31ms / 0.56ms
+- **Pacing Jitter**: stdDev ±0.27ms, hitch ratio 0.00%
+- **Memory Growth (Idle/Typing/Hover)**: 0.0 KB
+
+#### Resumen de Verificación
+- **Rust tests**: 202 passed, 0 failed
+- **TypeScript tests**: 915 passed, 0 failed
+- **Rust release build**: clean
+- **TypeScript typecheck**: clean
