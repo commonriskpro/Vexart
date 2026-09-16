@@ -70,6 +70,8 @@ export function createDirtyTracker(): DirtyTracker {
 // WARNING: Module-level singleton — prevents multi-loop usage.
 const defaultDirtyTracker = createDirtyTracker()
 
+const DEFAULT_FULL_SCOPE: DirtyScope = Object.freeze({ kind: DIRTY_KIND.FULL }) as DirtyScope
+
 /** Callbacks invoked whenever markDirty() is called.
  *  Used by render loops to also mark all layers dirty. */
 const _onDirtyCallbacks = new Set<(scope: DirtyScope) => void>()
@@ -86,7 +88,7 @@ export function onGlobalDirty(cb: (scope: DirtyScope) => void): () => void {
 export function markDirty(scope?: DirtyScope, tracker?: DirtyTracker) {
   defaultDirtyTracker.markDirty()
   tracker?.markDirty()
-  const s = scope ?? { kind: DIRTY_KIND.FULL }
+  const s = scope ?? DEFAULT_FULL_SCOPE
   for (const cb of _onDirtyCallbacks) cb(s)
 }
 
