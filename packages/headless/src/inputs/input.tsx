@@ -289,7 +289,7 @@ export function Input(props: InputProps) {
       displayText: showPlaceholder() ? (props.placeholder ?? "") : props.value,
       showPlaceholder: showPlaceholder(),
       cursor: cursor(),
-      blink: blink(),
+      get blink() { return blink() },
       focused: checkFocus(),
       disabled: disabled(),
       selection: hasSelection() ? selRange() : null,
@@ -336,13 +336,14 @@ export function Input(props: InputProps) {
         <text color={th().fg} fontSize={th().fontSize}>
           {val}
         </text>
-        {isFocused && blink() ? (
+        {isFocused ? (
           <box
             floating="parent"
             floatOffset={{ x: cursorX(), y: 0 }}
             width={1.5}
             height={lineHeight()}
             backgroundColor={cursorColor()}
+            opacity={blink() ? 1 : 0}
           />
         ) : null}
       </box>
