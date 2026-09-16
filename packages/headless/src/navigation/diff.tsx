@@ -6,7 +6,7 @@
  * @public
  */
 
-import { createMemo } from "solid-js"
+import { createMemo, Index, Show } from "solid-js"
 import type { JSX } from "solid-js"
 import type { SizingUnit } from "@vexart/engine"
 
@@ -167,44 +167,41 @@ export function Diff(props: DiffProps) {
       backgroundColor={th().bg}
       cornerRadius={th().radius}
     >
-      {(() => {
-        const digits = maxLineDigits()
-        return diffLines().map((line) => {
-          const t = th()
-          const bg = bgForType(line.type)
-          const sign = signForType(line.type)
-
-          if (line.type === LINE_TYPE.HEADER) {
-            return (
-              <box height={LINE_HEIGHT} width="100%" direction="row" backgroundColor={bg} paddingX={t.linePadding}>
-                <text color={t.headerFg} fontSize={14} whiteSpace="pre-wrap">{line.content}</text>
-              </box>
-            )
-          }
-
-          return (
-            <box height={LINE_HEIGHT} width="100%" direction="row" backgroundColor={bg}>
-              {showLineNumbers() ? (
-                <box width={gutterWidth()} backgroundColor={t.lineNumberBg} paddingX={4}>
-                  <text color={t.lineNumberFg} fontSize={14} whiteSpace="pre-wrap">
-                    {(line.oldLineNum !== null ? String(line.oldLineNum).padStart(digits) : " ".repeat(digits)) +
-                     " " +
-                     (line.newLineNum !== null ? String(line.newLineNum).padStart(digits) : " ".repeat(digits))}
-                  </text>
+      <Index each={diffLines()}>
+        {(line) => (
+          <Show
+            when={line().type === LINE_TYPE.HEADER}
+            fallback={
+              <box height={LINE_HEIGHT} width="100%" direction="row" backgroundColor={bgForType(line().type)}>
+                {showLineNumbers() ? (
+                  <box width={gutterWidth()} backgroundColor={th().lineNumberBg} paddingX={4}>
+                    <text color={th().lineNumberFg} fontSize={14} whiteSpace="pre-wrap">
+                      {(line().oldLineNum !== null ? String(line().oldLineNum).padStart(maxLineDigits()) : " ".repeat(maxLineDigits())) +
+                       " " +
+                       (line().newLineNum !== null ? String(line().newLineNum).padStart(maxLineDigits()) : " ".repeat(maxLineDigits()))}
+                    </text>
+                  </box>
+                ) : null}
+                <box width={CHAR_WIDTH * 2} alignX="center">
+                  {(() => {
+                    const sign = signForType(line().type)
+                    return sign ? (
+                      <text color={sign.color} fontSize={14} whiteSpace="pre-wrap">{sign.char}</text>
+                    ) : (
+                      <text color={th().muted} fontSize={14} whiteSpace="pre-wrap"> </text>
+                    )
+                  })()}
                 </box>
-              ) : null}
-              <box width={CHAR_WIDTH * 2} alignX="center">
-                {sign ? (
-                  <text color={sign.color} fontSize={14} whiteSpace="pre-wrap">{sign.char}</text>
-                ) : (
-                  <text color={t.muted} fontSize={14} whiteSpace="pre-wrap"> </text>
-                )}
+                <text color={th().fg} fontSize={14} whiteSpace="pre-wrap">{line().content}</text>
               </box>
-              <text color={t.fg} fontSize={14} whiteSpace="pre-wrap">{line.content}</text>
+            }
+          >
+            <box height={LINE_HEIGHT} width="100%" direction="row" backgroundColor={bgForType(line().type)} paddingX={th().linePadding}>
+              <text color={th().headerFg} fontSize={14} whiteSpace="pre-wrap">{line().content}</text>
             </box>
-          )
-        })
-      })()}
+          </Show>
+        )}
+      </Index>
     </box>
   )
 }
