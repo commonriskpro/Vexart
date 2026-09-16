@@ -57,7 +57,7 @@ export type {
   RendererBackendLayerBacking,
   RendererBackendRetainedLayer,
 } from "./ffi/renderer-backend"
-export { createGpuRendererBackend, getGpuRendererBackendCacheStats } from "./ffi/gpu-renderer-backend"
+export { createGpuRendererBackend, createGpuRendererBackendForTesting, getGpuRendererBackendCacheStats } from "./ffi/gpu-renderer-backend"
 export { chooseGpuLayerStrategy } from "./ffi/gpu-layer-strategy"
 export type { GpuLayerStrategyInput, GpuLayerStrategyMode } from "./ffi/gpu-layer-strategy"
 export type { GpuRendererBackend, GpuRendererBackendCacheStats } from "./ffi/gpu-renderer-backend"
@@ -187,12 +187,13 @@ export {
   use,
 } from "./reconciler/reconciler"
 
-export { createRenderLoop } from "./loop/loop"
+export { createRenderLoop, setFrameProfileSink } from "./loop/loop"
+export type { FrameProfile } from "./loop/types"
 export type { RenderLoop, RenderLoopOptions } from "./loop/loop"
 export { resetCompositorPathState } from "./animation/compositor-path"
 export type { CompositorProperty } from "./animation/compositor-path"
 export { resetActiveAnimations, hasActiveAnimations } from "./loop/animation"
-export { debugFrameStart, debugUpdateStats, debugState, debugDumpCulledNodes } from "./loop/debug"
+export { debugFrameStart, debugUpdateStats, debugState, debugDumpCulledNodes, setDebug, isDebugEnabled } from "./loop/debug"
 export type { DebugStats } from "./loop/debug"
 
 // ── Internal input, scroll, image, scheduler, terminal, and output ──────────
