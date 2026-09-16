@@ -39,7 +39,10 @@ export type WriteLayoutBackState = {
   boxNodes: TGENode[]
   pendingNodeDamageRects?: Array<{ nodeId: number; rect: DamageRect }>
   scrollOffsets?: Map<number, { x: number; y: number }>
+  hasAnyTransforms?: boolean
 }
+
+const _chainBuf: TGENode[] = []
 
 function isNonEmptyLayoutRect(rect: { width: number; height: number }) {
   return rect.width > 0 && rect.height > 0
@@ -138,12 +141,40 @@ export function writeLayoutBack(
     if (damage && pendingNodeDamageRects) pendingNodeDamageRects.push({ nodeId: node.id, rect: damage })
   }
 
+  let hasAnyTransforms = state.hasAnyTransforms ?? (layoutMap as any)?.hasAnyTransforms
+
+  if (hasAnyTransforms === false) {
+    for (const node of boxNodes) {
+      if (node._transform) {
+        node._transform = null
+        node._transformInverse = null
+      }
+      if (node._accTransform) {
+        node._accTransform = null
+        node._accTransformInverse = null
+      }
+    }
+    for (const node of textNodes) {
+      if (node._transform) {
+        node._transform = null
+        node._transformInverse = null
+      }
+      if (node._accTransform) {
+        node._accTransform = null
+        node._accTransformInverse = null
+      }
+    }
+    return true
+  }
+
   // ── Transform hierarchy ──
   // Pass 1: Compute LOCAL transform matrices on boxNodes.
   // This runs AFTER layout so we know w/h for transformOrigin.
+  let foundAnyTransform = false
   for (const node of boxNodes) {
     const vp = resolveProps(node)
     if (vp.transform) {
+      foundAnyTransform = true
       const l = node.layout
       const originProp = vp.transformOrigin
       let ox = l.width / 2, oy = l.height / 2 // default: center
@@ -169,6 +200,26 @@ export function writeLayoutBack(
   for (const node of textNodes) {
     node._transform = null
     node._transformInverse = null
+  }
+
+  if (hasAnyTransforms === undefined) {
+    hasAnyTransforms = foundAnyTransform
+  }
+
+  if (!hasAnyTransforms) {
+    for (const node of boxNodes) {
+      if (node._accTransform) {
+        node._accTransform = null
+        node._accTransformInverse = null
+      }
+    }
+    for (const node of textNodes) {
+      if (node._accTransform) {
+        node._accTransform = null
+        node._accTransformInverse = null
+      }
+    }
+    return true
   }
 
   // Pass 2: Propagate transform hierarchy for hit-testing.
@@ -200,17 +251,17 @@ export function writeLayoutBack(
     }
 
     // Collect all ancestors with transforms, from outermost to innermost
-    const chain: TGENode[] = []
+    _chainBuf.length = 0
     let pa = node.parent
     while (pa) {
-      if (pa._transform) chain.push(pa)
+      if (pa._transform) _chainBuf.push(pa)
       pa = pa.parent
     }
-    // chain is innermost-first; reverse to get outermost-first
-    chain.reverse()
+    // _chainBuf is innermost-first; reverse to get outermost-first
+    _chainBuf.reverse()
 
     const hasOwnTransform = !!node._transform
-    const hasAncestorTransform = chain.length > 0
+    const hasAncestorTransform = _chainBuf.length > 0
 
     if (!hasOwnTransform && !hasAncestorTransform) {
       node._accTransform = null
@@ -233,7 +284,7 @@ export function writeLayoutBack(
     // Each _transform operates in its own local space (origin baked in via
     // fromConfig). Lift each to absolute: T(anc) × M × T(-anc).
     let absForward = identity()
-    for (const anc of chain) {
+    for (const anc of _chainBuf) {
       const al = getEffectivePosition(anc, state.scrollOffsets)
       absForward = multiply(absForward, multiply(multiply(translate(al.x, al.y), anc._transform!), translate(-al.x, -al.y)))
     }

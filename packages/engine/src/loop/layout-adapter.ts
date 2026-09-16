@@ -181,6 +181,7 @@ export function createVexartLayoutCtx() {
   // these published values untouched so writeback can keep the prior frame.
   const _layoutMap = new Map<number, PositionedCommand>()
   const _visitedNodeIds = new Set<number>()
+  let _hasAnyTransforms = false
   const _childrenByParent = new Map<number, number[]>()
   const _scrollContainerIds = new Set<number>()
   const _textByNodeId = new Map<number, number>()
@@ -360,6 +361,8 @@ export function createVexartLayoutCtx() {
   return {
     getLastLayoutMap,
     getLastLayoutError,
+    get hasAnyTransforms() { return _hasAnyTransforms },
+    set hasAnyTransforms(val: boolean) { _hasAnyTransforms = val },
 
     init(width: number, height: number): boolean {
       _viewportW = width
@@ -429,6 +432,7 @@ export function createVexartLayoutCtx() {
 
       _layoutMap.clear()
       _visitedNodeIds.clear()
+      _hasAnyTransforms = false
       _childrenByParent.clear()
       _scrollContainerIds.clear()
       _textByNodeId.clear()
@@ -454,6 +458,7 @@ export function createVexartLayoutCtx() {
       _currentNode = null
       _pendingFlexNode = null
       _currentIdx = -1
+      _hasAnyTransforms = false
       _dfsCounter = 0
       _nodeToIndex.clear()
     },
@@ -734,6 +739,7 @@ export function createVexartLayoutCtx() {
         _canvases[i] = null
       }
 
+      ;(_layoutMap as any).hasAnyTransforms = _hasAnyTransforms
       _lastLayoutMap = _layoutMap
       return _cmds
     },
@@ -782,7 +788,10 @@ export function createVexartLayoutCtx() {
     },
 
     setEffect(effect: EffectConfig) {
-      if (_currentIdx >= 0) _effects[_currentIdx] = effect
+      if (_currentIdx >= 0) {
+        _effects[_currentIdx] = effect
+        if (effect.transform) _hasAnyTransforms = true
+      }
     },
 
     setImage(image: ImagePaintConfig) {

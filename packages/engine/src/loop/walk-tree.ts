@@ -59,6 +59,8 @@ export type WalkTreeState = {
 
   // Layout adapter — the layout engine interface
   layout: ReturnType<typeof createVexartLayoutCtx>
+  /** Whether ANY node in the tree has a transform property set. */
+  hasAnyTransforms?: boolean
 
   // ── Viewport culling (Slice 3.3) ──
 
@@ -182,6 +184,8 @@ export function walkTree(
   if (dfsIndex === 0) {
     effectPoolIdx = 0
     autoLayerCount = 0
+    state.hasAnyTransforms = false
+    if (layout) (layout as any).hasAnyTransforms = false
   }
   node._dfsIndex = dfsIndex
   node._depth = depth
@@ -199,6 +203,10 @@ export function walkTree(
     const isScroll = !!(props.scrollX || props.scrollY)
     if (isScroll) state.scrollContainers.push(node)
     const hasSubtreeTransform = !!(props.transform && node.children.length > 0)
+    if (props.transform) {
+      state.hasAnyTransforms = true
+      if (layout) (layout as any).hasAnyTransforms = true
+    }
     const transformedInsideScroll = insideScroll && hasSubtreeTransform
     // A transformed subtree that lives inside a scroll container must stay in
     // that container's paint stream as one unit.  This applies to descendants
@@ -460,6 +468,10 @@ export function walkTree(
   //    Without a RECT, the node doesn't enter rectNodes → no hit-testing → mouse events never fire.
   const hasBackdropFilter = hasBackdropEffect(vp)
   const hasTransform = vp.transform !== undefined
+  if (hasTransform && vp.transform) {
+    state.hasAnyTransforms = true
+    if (layout) (layout as any).hasAnyTransforms = true
+  }
   const hasSelfFilter = vp.filter !== undefined
   const hasVisualBorderWidth = Math.max(
     vp.borderWidth ?? 0,
