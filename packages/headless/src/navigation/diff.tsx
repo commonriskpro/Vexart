@@ -6,6 +6,7 @@
  * @public
  */
 
+import { createMemo } from "solid-js"
 import type { JSX } from "solid-js"
 import type { SizingUnit } from "@vexart/engine"
 
@@ -128,13 +129,16 @@ export function Diff(props: DiffProps) {
   const th = () => ({ ...DIFF_DEFAULTS, ...props.theme })
   const showLineNumbers = () => props.showLineNumbers ?? true
 
-  const diffLines = () => parseDiff(props.diff)
+  const diffLines = createMemo(() => parseDiff(props.diff))
+
+  const maxLineDigits = createMemo(() => {
+    const maxLine = diffLines().reduce((max, l) => Math.max(max, l.oldLineNum ?? 0, l.newLineNum ?? 0), 0)
+    return String(maxLine).length
+  })
 
   const gutterWidth = () => {
     if (!showLineNumbers()) return 0
-    const maxLine = diffLines().reduce((max, l) => Math.max(max, l.oldLineNum ?? 0, l.newLineNum ?? 0), 0)
-    const digits = String(maxLine).length
-    return (digits * 2 + 3) * CHAR_WIDTH
+    return (maxLineDigits() * 2 + 3) * CHAR_WIDTH
   }
 
   function bgForType(type: LineType): string | number {
@@ -163,42 +167,44 @@ export function Diff(props: DiffProps) {
       backgroundColor={th().bg}
       cornerRadius={th().radius}
     >
-      {diffLines().map((line) => {
-        const t = th()
-        const bg = bgForType(line.type)
-        const sign = signForType(line.type)
-        const maxLineDigits = String(diffLines().reduce((m, l) => Math.max(m, l.oldLineNum ?? 0, l.newLineNum ?? 0), 0)).length
+      {(() => {
+        const digits = maxLineDigits()
+        return diffLines().map((line) => {
+          const t = th()
+          const bg = bgForType(line.type)
+          const sign = signForType(line.type)
 
-        if (line.type === LINE_TYPE.HEADER) {
+          if (line.type === LINE_TYPE.HEADER) {
+            return (
+              <box height={LINE_HEIGHT} width="100%" direction="row" backgroundColor={bg} paddingX={t.linePadding}>
+                <text color={t.headerFg} fontSize={14} whiteSpace="pre-wrap">{line.content}</text>
+              </box>
+            )
+          }
+
           return (
-            <box height={LINE_HEIGHT} width="100%" direction="row" backgroundColor={bg} paddingX={t.linePadding}>
-              <text color={t.headerFg} fontSize={14} whiteSpace="pre-wrap">{line.content}</text>
+            <box height={LINE_HEIGHT} width="100%" direction="row" backgroundColor={bg}>
+              {showLineNumbers() ? (
+                <box width={gutterWidth()} backgroundColor={t.lineNumberBg} paddingX={4}>
+                  <text color={t.lineNumberFg} fontSize={14} whiteSpace="pre-wrap">
+                    {(line.oldLineNum !== null ? String(line.oldLineNum).padStart(digits) : " ".repeat(digits)) +
+                     " " +
+                     (line.newLineNum !== null ? String(line.newLineNum).padStart(digits) : " ".repeat(digits))}
+                  </text>
+                </box>
+              ) : null}
+              <box width={CHAR_WIDTH * 2} alignX="center">
+                {sign ? (
+                  <text color={sign.color} fontSize={14} whiteSpace="pre-wrap">{sign.char}</text>
+                ) : (
+                  <text color={t.muted} fontSize={14} whiteSpace="pre-wrap"> </text>
+                )}
+              </box>
+              <text color={t.fg} fontSize={14} whiteSpace="pre-wrap">{line.content}</text>
             </box>
           )
-        }
-
-        return (
-          <box height={LINE_HEIGHT} width="100%" direction="row" backgroundColor={bg}>
-            {showLineNumbers() ? (
-              <box width={gutterWidth()} backgroundColor={t.lineNumberBg} paddingX={4}>
-                <text color={t.lineNumberFg} fontSize={14} whiteSpace="pre-wrap">
-                  {(line.oldLineNum !== null ? String(line.oldLineNum).padStart(maxLineDigits) : " ".repeat(maxLineDigits)) +
-                   " " +
-                   (line.newLineNum !== null ? String(line.newLineNum).padStart(maxLineDigits) : " ".repeat(maxLineDigits))}
-                </text>
-              </box>
-            ) : null}
-            <box width={CHAR_WIDTH * 2} alignX="center">
-              {sign ? (
-                <text color={sign.color} fontSize={14} whiteSpace="pre-wrap">{sign.char}</text>
-              ) : (
-                <text color={t.muted} fontSize={14} whiteSpace="pre-wrap"> </text>
-              )}
-            </box>
-            <text color={t.fg} fontSize={14} whiteSpace="pre-wrap">{line.content}</text>
-          </box>
-        )
-      })}
+        })
+      })()}
     </box>
   )
 }
