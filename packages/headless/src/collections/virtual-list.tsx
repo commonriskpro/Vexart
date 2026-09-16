@@ -219,10 +219,7 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
         }
       }}
     >
-      {() => {
-        const tp = topPad()
-        return tp > 0 ? <box height={tp} /> : null
-      }}
+      <box height={topPad()} />
       <For each={visibleItems()}>
         {(item, idx) => {
           const absIndex = () => startIndex() + idx()
@@ -239,10 +236,7 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
           )
         }}
       </For>
-      {() => {
-        const bp = bottomPad()
-        return bp > 0 ? <box height={bp} /> : null
-      }}
+      <box height={bottomPad()} />
     </box>
   )
 }
