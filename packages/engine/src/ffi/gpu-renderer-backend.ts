@@ -3039,6 +3039,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     instanceImageHandles,
     destroy() {
       presentation?.destroy()
+      _msdfFamilyCache.clear()
       if (_vexartCtx !== null) {
         clearImageCache()
         clearSpriteCaches()
