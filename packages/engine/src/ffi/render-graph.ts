@@ -92,6 +92,8 @@ export type EffectConfig = {
   transform?: Float64Array
   transformInverse?: Float64Array
   transformBounds?: import("./damage").Rect
+  /** Cached buffer to avoid per-frame Float64Array allocation. */
+  _transformBuf?: Float64Array
   /** Self-filter applied to this element's own paint output (REQ-2B-401/402). */
   filter?: import("./node").FilterConfig
   _node?: TGENode

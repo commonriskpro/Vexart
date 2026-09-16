@@ -117,6 +117,9 @@ function claimEffect(): EffectConfig {
   for (const f of BACKDROP_FIELDS) effect[f] = undefined
   effect.opacity = undefined
   effect.cornerRadii = undefined
+  if (effect.transform?.length === 9) {
+    effect._transformBuf = effect.transform
+  }
   effect.transform = undefined
   effect.transformInverse = undefined
   effect.transformBounds = undefined
@@ -524,7 +527,12 @@ export function walkTree(
       if (hasTransform && vp.transform) {
         const usesSubtreeTransformPass = node.children.length > 0
         if (!usesSubtreeTransformPass) {
-          effect.transform = new Float64Array(9)
+          if (!effect.transform || effect.transform.length !== 9) {
+            effect.transform = effect._transformBuf && effect._transformBuf.length === 9
+              ? effect._transformBuf
+              : new Float64Array(9)
+          }
+          effect.transform.fill(0)
         }
       }
       layout.setEffect(effect)
