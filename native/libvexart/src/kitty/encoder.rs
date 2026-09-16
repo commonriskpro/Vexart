@@ -19,6 +19,7 @@ use flate2::Compression;
 use std::io::Write;
 
 const CHUNK_SIZE: usize = 4096;
+const RAW_CHUNK_SIZE: usize = 3072;
 
 /// Compress RGBA bytes with zlib (deflate) and return the compressed bytes.
 pub fn compress_rgba(rgba: &[u8]) -> Result<Vec<u8>, std::io::Error> {
@@ -75,57 +76,54 @@ impl<'a> PixelPayload<'a> {
 /// * `height`   — frame height in pixels
 /// * `image_id` — Kitty image ID (must be > 0)
 pub fn encode_frame_direct(rgba: &[u8], width: u32, height: u32, image_id: u32) -> Vec<u8> {
-    // 1. zlib compress.
     let payload = PixelPayload::encode(rgba, true);
     let compression = payload.parameter();
+    let raw = payload.bytes();
+    let raw_len = raw.len();
+    let b64_len = if raw_len == 0 {
+        0
+    } else {
+        raw_len.div_ceil(3) * 4
+    };
+    let num_chunks = if raw_len == 0 {
+        0
+    } else {
+        raw_len.div_ceil(RAW_CHUNK_SIZE)
+    };
 
-    // 2. base64 encode.
-    let b64 = B64.encode(payload.bytes());
+    let mut out = Vec::with_capacity(b64_len + num_chunks.max(1) * 32 + 64);
+    let mut b64_buf = [0u8; CHUNK_SIZE];
+    let mut raw_chunks = raw.chunks(RAW_CHUNK_SIZE);
 
-    // 3. Split into 4096-byte chunks.
-    let chunks: Vec<&str> = b64
-        .as_bytes()
-        .chunks(CHUNK_SIZE)
-        .map(|c| std::str::from_utf8(c).expect("base64 is always valid utf8"))
-        .collect();
-
-    let mut out = Vec::with_capacity(b64.len() + chunks.len() * 32);
-
-    if chunks.is_empty() {
-        // Empty frame — emit a minimal escape with m=0 and no data.
-        let header =
-            format!("\x1b_Ga=T,f=32,s={width},v={height},i={image_id},p=1,C=1{compression},m=0;\x1b\\");
-        out.extend_from_slice(header.as_bytes());
-        return out;
-    }
-
-    if chunks.len() == 1 {
-        // Single chunk: no continuation.
-        let seq = format!(
-            "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},p=1,C=1{compression},m=0;{}\x1b\\",
-            chunks[0]
+    if let Some(first) = raw_chunks.next() {
+        let is_single = raw_chunks.len() == 0;
+        let m = if is_single { "0" } else { "1" };
+        let _ = write!(
+            out,
+            "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},p=1,C=1{compression},m={m};"
         );
-        out.extend_from_slice(seq.as_bytes());
-        return out;
+        let written = B64.encode_slice(first, &mut b64_buf).expect("encode slice");
+        out.extend_from_slice(&b64_buf[..written]);
+        out.extend_from_slice(b"\x1b\\");
+
+        while let Some(chunk) = raw_chunks.next() {
+            let is_last = raw_chunks.len() == 0;
+            let prefix = if is_last {
+                b"\x1b_Gm=0;"
+            } else {
+                b"\x1b_Gm=1;"
+            };
+            out.extend_from_slice(prefix);
+            let written = B64.encode_slice(chunk, &mut b64_buf).expect("encode slice");
+            out.extend_from_slice(&b64_buf[..written]);
+            out.extend_from_slice(b"\x1b\\");
+        }
+    } else {
+        let _ = write!(
+            out,
+            "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},p=1,C=1{compression},m=0;\x1b\\"
+        );
     }
-
-    // Multiple chunks.
-    // First chunk: carries all metadata, m=1 (more follows).
-    let first = format!(
-        "\x1b_Ga=T,f=32,s={width},v={height},i={image_id},p=1,C=1{compression},m=1;{}\x1b\\",
-        chunks[0]
-    );
-    out.extend_from_slice(first.as_bytes());
-
-    // Middle chunks: m=1.
-    for chunk in &chunks[1..chunks.len() - 1] {
-        let mid = format!("\x1b_Gm=1;{chunk}\x1b\\");
-        out.extend_from_slice(mid.as_bytes());
-    }
-
-    // Last chunk: m=0.
-    let last = format!("\x1b_Gm=0;{}\x1b\\", chunks[chunks.len() - 1]);
-    out.extend_from_slice(last.as_bytes());
 
     out
 }
@@ -146,47 +144,65 @@ pub fn encode_animation_frame_direct(
 ) -> Vec<u8> {
     let payload = PixelPayload::encode(rgba, true);
     let compression = payload.parameter();
-    let b64 = B64.encode(payload.bytes());
-    let chunks: Vec<&str> = b64
-        .as_bytes()
-        .chunks(CHUNK_SIZE)
-        .map(|c| std::str::from_utf8(c).expect("base64 is always valid utf8"))
-        .collect();
-    let frame_params = if is_replacement {
-        format!("r={target_frame},c={compose_frame}")
+    let raw = payload.bytes();
+    let raw_len = raw.len();
+    let b64_len = if raw_len == 0 {
+        0
     } else {
-        format!("c={compose_frame}")
+        raw_len.div_ceil(3) * 4
     };
-    let mut out = Vec::with_capacity(b64.len() + chunks.len() * 48 + 32);
-    if chunks.is_empty() {
-        out.extend_from_slice(
-            format!(
-                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1{compression},m=0;\x1b\\"
-            )
-            .as_bytes(),
-        );
-    } else if chunks.len() == 1 {
-        out.extend_from_slice(
-            format!(
-                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1{compression},m=0;{}\x1b\\",
-                chunks[0]
-            )
-            .as_bytes(),
+    let num_chunks = if raw_len == 0 {
+        0
+    } else {
+        raw_len.div_ceil(RAW_CHUNK_SIZE)
+    };
+
+    let mut out = Vec::with_capacity(b64_len + num_chunks.max(1) * 48 + 64);
+    let mut b64_buf = [0u8; CHUNK_SIZE];
+    let mut raw_chunks = raw.chunks(RAW_CHUNK_SIZE);
+
+    if let Some(first) = raw_chunks.next() {
+        let is_single = raw_chunks.len() == 0;
+        let m = if is_single { "0" } else { "1" };
+        if is_replacement {
+            let _ = write!(
+                out,
+                "\x1b_Ga=f,i={image_id},r={target_frame},c={compose_frame},f=32,s={width},v={height},C=1{compression},m={m};"
+            );
+        } else {
+            let _ = write!(
+                out,
+                "\x1b_Ga=f,i={image_id},c={compose_frame},f=32,s={width},v={height},C=1{compression},m={m};"
+            );
+        }
+        let written = B64.encode_slice(first, &mut b64_buf).expect("encode slice");
+        out.extend_from_slice(&b64_buf[..written]);
+        out.extend_from_slice(b"\x1b\\");
+
+        while let Some(chunk) = raw_chunks.next() {
+            let is_last = raw_chunks.len() == 0;
+            let prefix = if is_last {
+                b"\x1b_Ga=f,m=0;"
+            } else {
+                b"\x1b_Ga=f,m=1;"
+            };
+            out.extend_from_slice(prefix);
+            let written = B64.encode_slice(chunk, &mut b64_buf).expect("encode slice");
+            out.extend_from_slice(&b64_buf[..written]);
+            out.extend_from_slice(b"\x1b\\");
+        }
+    } else if is_replacement {
+        let _ = write!(
+            out,
+            "\x1b_Ga=f,i={image_id},r={target_frame},c={compose_frame},f=32,s={width},v={height},C=1{compression},m=0;\x1b\\"
         );
     } else {
-        out.extend_from_slice(
-            format!(
-                "\x1b_Ga=f,i={image_id},{frame_params},f=32,s={width},v={height},C=1{compression},m=1;{}\x1b\\",
-                chunks[0]
-            )
-            .as_bytes(),
+        let _ = write!(
+            out,
+            "\x1b_Ga=f,i={image_id},c={compose_frame},f=32,s={width},v={height},C=1{compression},m=0;\x1b\\"
         );
-        for chunk in &chunks[1..chunks.len() - 1] {
-            out.extend_from_slice(format!("\x1b_Ga=f,m=1;{chunk}\x1b\\").as_bytes());
-        }
-        out.extend_from_slice(format!("\x1b_Ga=f,m=0;{}\x1b\\", chunks[chunks.len() - 1]).as_bytes());
     }
-    out.extend_from_slice(format!("\x1b_Ga=a,i={image_id},c={target_frame},q=2;\x1b\\").as_bytes());
+    let _ = write!(out, "\x1b_Ga=a,i={image_id},c={target_frame},q=2;\x1b\\");
     out
 }
 
@@ -415,5 +431,83 @@ mod tests {
             text.contains("\x1b_Ga=a,i=42,c=2,q=2;\x1b\\"),
             "must atomically switch to target frame 2"
         );
+    }
+
+    #[test]
+    fn test_encode_frame_direct_empty_rgba() {
+        let out = encode_frame_direct(&[], 0, 0, 10);
+        let text = std::str::from_utf8(&out).expect("valid utf8");
+        assert!(text.starts_with("\x1b_G"));
+        assert!(text.ends_with("\x1b\\"));
+        assert!(text.contains("m=0;"));
+    }
+
+    #[test]
+    fn test_encode_frame_direct_streamed_chunks_reassemble_to_original() {
+        // Generate 128x128 pseudo-random pixels (enough to span multiple 3072-byte chunks after zlib)
+        let mut seed = 42u32;
+        let original: Vec<u8> = (0..128 * 128 * 4)
+            .map(|_| {
+                seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                (seed >> 24) as u8
+            })
+            .collect();
+        let out = encode_frame_direct(&original, 128, 128, 99);
+        let text = std::str::from_utf8(&out).expect("valid utf8");
+
+        let mut reassembled_b64 = String::new();
+        let mut chunk_count = 0;
+        for part in text.split("\x1b_G").skip(1) {
+            if let Some(semi) = part.find(';') {
+                let payload_and_rest = &part[semi + 1..];
+                if let Some(end) = payload_and_rest.find("\x1b\\") {
+                    let b64_chunk = &payload_and_rest[..end];
+                    assert!(b64_chunk.len() <= CHUNK_SIZE);
+                    reassembled_b64.push_str(b64_chunk);
+                    chunk_count += 1;
+                }
+            }
+        }
+        assert!(chunk_count > 1, "128x128 random pixels should produce multiple chunks");
+
+        let compressed = B64.decode(reassembled_b64.as_bytes()).expect("valid base64");
+        let decompressed = zlib_decompress(&compressed);
+        assert_eq!(decompressed, original, "reassembled base64 must decompress to original RGBA");
+    }
+
+    #[test]
+    fn test_encode_animation_frame_direct_streamed_chunks_reassemble_to_original() {
+        let mut seed = 99u32;
+        let original: Vec<u8> = (0..128 * 128 * 4)
+            .map(|_| {
+                seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                (seed >> 24) as u8
+            })
+            .collect();
+        let out = encode_animation_frame_direct(&original, 128, 128, 101, 2, 1, true);
+        let text = std::str::from_utf8(&out).expect("valid utf8");
+
+        let mut reassembled_b64 = String::new();
+        let mut chunk_count = 0;
+        for part in text.split("\x1b_G").skip(1) {
+            if part.starts_with("a=a,") {
+                continue;
+            }
+            if let Some(semi) = part.find(';') {
+                let payload_and_rest = &part[semi + 1..];
+                if let Some(end) = payload_and_rest.find("\x1b\\") {
+                    let b64_chunk = &payload_and_rest[..end];
+                    assert!(b64_chunk.len() <= CHUNK_SIZE);
+                    reassembled_b64.push_str(b64_chunk);
+                    chunk_count += 1;
+                }
+            }
+        }
+        assert!(chunk_count > 1);
+
+        let compressed = B64.decode(reassembled_b64.as_bytes()).expect("valid base64");
+        let decompressed = zlib_decompress(&compressed);
+        assert_eq!(decompressed, original);
+        assert!(text.contains("\x1b_Ga=a,i=101,c=2,q=2;\x1b\\"));
     }
 }
