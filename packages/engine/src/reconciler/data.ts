@@ -63,9 +63,13 @@ export type MutationOptions<T, V> = {
 
 /** @public */
 export function useQuery<T>(
-  fetcher: () => Promise<T>,
+  fetcher: (context?: { signal?: AbortSignal }) => Promise<T>,
   options?: QueryOptions,
 ): QueryResult<T> {
+  const controller = new AbortController()
+  let mounted = true
+  let retryTimer: ReturnType<typeof setTimeout> | undefined
+
   const [data, setData] = createSignal<T | undefined>(undefined)
   const [loading, setLoading] = createSignal(false)
   const [error, setError] = createSignal<Error | undefined>(undefined)
@@ -77,23 +81,45 @@ export function useQuery<T>(
   let attempts = 0
 
   const execute = async () => {
-    setLoading(true)
-    setError(undefined)
+    if (!mounted) return
+    if (mounted) setLoading(true)
+    if (mounted) setError(undefined)
     attempts = 0
 
     const tryFetch = async (): Promise<void> => {
       try {
-        const result = await fetcher()
-        setData(() => result)
-        setLoading(false)
+        const result = await fetcher({ signal: controller.signal })
+        if (mounted) setData(() => result)
+        if (mounted) setLoading(false)
       } catch (err) {
+        if (!mounted) return
         attempts++
         if (attempts <= retry) {
-          await new Promise(resolve => setTimeout(resolve, retryDelay))
+          await new Promise<void>((resolve) => {
+            if (!mounted || controller.signal.aborted) {
+              resolve()
+              return
+            }
+            const onAbort = () => {
+              if (retryTimer !== undefined) {
+                clearTimeout(retryTimer)
+                retryTimer = undefined
+              }
+              controller.signal.removeEventListener("abort", onAbort)
+              resolve()
+            }
+            controller.signal.addEventListener("abort", onAbort, { once: true })
+            retryTimer = setTimeout(() => {
+              controller.signal.removeEventListener("abort", onAbort)
+              retryTimer = undefined
+              resolve()
+            }, retryDelay)
+          })
+          if (!mounted) return
           return tryFetch()
         }
-        setError(err instanceof Error ? err : new Error(String(err)))
-        setLoading(false)
+        if (mounted) setError(err instanceof Error ? err : new Error(String(err)))
+        if (mounted) setLoading(false)
       }
     }
 
@@ -107,11 +133,23 @@ export function useQuery<T>(
 
   // Auto-refetch interval
   if (options?.refetchInterval && options.refetchInterval > 0) {
-    const interval = setInterval(execute, options.refetchInterval)
+    const interval = setInterval(() => {
+      if (mounted) execute()
+    }, options.refetchInterval)
     onCleanup(() => clearInterval(interval))
   }
 
+  onCleanup(() => {
+    mounted = false
+    controller.abort()
+    if (retryTimer !== undefined) {
+      clearTimeout(retryTimer)
+      retryTimer = undefined
+    }
+  })
+
   const mutate = (updater: T | ((prev: T | undefined) => T)) => {
+    if (!mounted) return
     if (typeof updater === "function") {
       setData(prev => (updater as (prev: T | undefined) => T)(prev))
     } else {
