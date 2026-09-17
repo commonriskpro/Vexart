@@ -239,6 +239,7 @@ pub fn composite_render_image_layer(
             wgpu::LoadOp::Load
         };
 
+        layer.finish_pass();
         let mut pass = layer
             .encoder
             .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -409,6 +410,7 @@ pub fn composite_render_image_transform_layer(
             wgpu::LoadOp::Load
         };
 
+        layer.finish_pass();
         let mut pass = layer
             .encoder
             .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -588,6 +590,7 @@ pub fn composite_update_uniform(
             wgpu::LoadOp::Load
         };
 
+        layer.finish_pass();
         let mut pass = layer
             .encoder
             .begin_render_pass(&wgpu::RenderPassDescriptor {

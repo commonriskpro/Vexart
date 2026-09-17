@@ -126,6 +126,7 @@ pub(crate) fn dispatch_glyph_instances(
         };
 
         {
+            layer.finish_pass();
             let mut pass = layer
                 .encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -330,6 +331,84 @@ mod tests {
         let rc = dispatch_glyph_instances(&mut pctx, target, &[glyph]);
         assert_eq!(rc, OK);
 
+        assert_eq!(crate::composite::target_end_layer(&mut pctx, target), OK);
+        assert_eq!(crate::composite::target_destroy(&mut pctx, target), OK);
+    }
+
+    #[test]
+    fn test_persistent_pass_interleaved_with_glyph_instances() {
+        let mut pctx = PaintContext::new();
+        let mut target = 0u64;
+        assert_eq!(
+            crate::composite::target_create(&mut pctx, 64, 64, &mut target),
+            OK
+        );
+        assert_eq!(
+            crate::composite::target_begin_layer(&mut pctx, target, 0, 0),
+            OK
+        );
+
+        // 1. Dispatch a paint rect to create and hold open a persistent render pass
+        let rect = crate::paint::instances::BridgeRectInstance {
+            x: -1.0,
+            y: 1.0,
+            w: 2.0,
+            h: -2.0,
+            r: 1.0,
+            g: 0.0,
+            b: 0.0,
+            a: 1.0,
+            ..Default::default()
+        };
+        let payload = bytemuck::bytes_of(&rect);
+        let cmd_prefix_size = 8usize;
+        let total_payload = cmd_prefix_size + payload.len();
+        let mut graph_buf = vec![0u8; 16 + total_payload];
+        graph_buf[0..4].copy_from_slice(&crate::ffi::buffer::GRAPH_MAGIC.to_le_bytes());
+        graph_buf[4..8].copy_from_slice(&crate::ffi::buffer::GRAPH_VERSION.to_le_bytes());
+        graph_buf[8..12].copy_from_slice(&1u32.to_le_bytes()); // cmd_count = 1
+        graph_buf[12..16].copy_from_slice(&(total_payload as u32).to_le_bytes());
+        graph_buf[16..18].copy_from_slice(&0u16.to_le_bytes()); // cmd_kind = 0 (rect)
+        graph_buf[18..20].copy_from_slice(&0u16.to_le_bytes()); // flags = 0
+        graph_buf[20..24].copy_from_slice(&(payload.len() as u32).to_le_bytes());
+        graph_buf[24..24 + payload.len()].copy_from_slice(payload);
+
+        let mut stats = crate::types::FrameStats::default();
+        assert_eq!(pctx.dispatch(target, &graph_buf, &mut stats), OK);
+
+        // Verify that layer.pass is Some
+        {
+            let rec = pctx.targets.get(target).unwrap();
+            let layer = rec.active_layer.as_ref().unwrap();
+            assert!(layer.pass.is_some(), "Render pass must persist after paint dispatch");
+        }
+
+        // 2. Dispatch glyph instances without ending the layer or submitting encoder!
+        // This must drop the persistent pass via finish_pass() without panicking on encoder.begin_render_pass
+        let glyph = crate::paint::instances::MsdfGlyphInstance {
+            w: 12.0,
+            h: 14.0,
+            atlas_id: 1,
+            ..Default::default()
+        };
+        assert_eq!(dispatch_glyph_instances(&mut pctx, target, &[glyph]), OK);
+
+        // Verify that layer.pass is None (glyph pass finished and dropped, encoder is unlocked)
+        {
+            let rec = pctx.targets.get(target).unwrap();
+            let layer = rec.active_layer.as_ref().unwrap();
+            assert!(layer.pass.is_none(), "Render pass must be dropped after glyph dispatch");
+        }
+
+        // 3. Dispatch another paint command — should lazily recreate the persistent pass on the same layer
+        assert_eq!(pctx.dispatch(target, &graph_buf, &mut stats), OK);
+        {
+            let rec = pctx.targets.get(target).unwrap();
+            let layer = rec.active_layer.as_ref().unwrap();
+            assert!(layer.pass.is_some(), "Render pass must be lazily recreated on next paint dispatch");
+        }
+
+        // 4. End layer cleanly
         assert_eq!(crate::composite::target_end_layer(&mut pctx, target), OK);
         assert_eq!(crate::composite::target_destroy(&mut pctx, target), OK);
     }

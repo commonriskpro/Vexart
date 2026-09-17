@@ -105,8 +105,13 @@ impl ActiveLayerRecord {
         }
     }
 
+    /// Drop the persistent render pass (if any) so that other operations
+    /// can open their own render passes on the same encoder.
+    /// The next paint dispatch will lazily re-create the persistent pass.
     pub fn finish_pass(&mut self) {
-        drop(self.pass.take());
+        if let Some(pass) = self.pass.take() {
+            drop(pass);
+        }
     }
 
     pub fn set_scissor(&mut self, x: u32, y: u32, width: u32, height: u32) {
@@ -162,7 +167,7 @@ impl TargetRegistry {
     pub fn finish_active_passes(&mut self) {
         for target in self.targets.values_mut() {
             if let Some(layer) = target.active_layer.as_mut() {
-                drop(layer.pass.take());
+                layer.finish_pass();
             }
         }
     }
@@ -268,7 +273,7 @@ impl TargetRegistry {
         let rec = self.targets.get_mut(&handle).ok_or(ERR_INVALID_HANDLE)?;
         let mut layer = rec.active_layer.take().ok_or(ERR_INVALID_ARG)?; // no active layer
         // Explicitly drop the render pass BEFORE finishing the encoder!
-        drop(layer.pass.take());
+        layer.finish_pass();
         let cmd = layer.encoder.finish();
         queue.submit(std::iter::once(cmd));
         Ok(())
@@ -435,6 +440,92 @@ mod tests {
         assert!(reg.end_layer(&queue, handle).is_ok());
         // After end, begin works again.
         assert!(reg.begin_layer(&device, handle, 0, 0x00000000).is_ok());
+        assert!(reg.end_layer(&queue, handle).is_ok());
+    }
+
+    #[cfg(feature = "gpu-tests")]
+    #[test]
+    fn test_active_layer_finish_pass_unlocks_encoder() {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            flags: wgpu::InstanceFlags::empty(),
+            backend_options: wgpu::BackendOptions::default(),
+            memory_budget_thresholds: Default::default(),
+            display: Default::default(),
+        });
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::default(),
+            compatible_surface: None,
+            force_fallback_adapter: false,
+        }))
+        .expect("no adapter");
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            label: Some("test"),
+            required_features: wgpu::Features::empty(),
+            required_limits: wgpu::Limits::downlevel_defaults(),
+            memory_hints: wgpu::MemoryHints::Performance,
+            trace: wgpu::Trace::Off,
+            experimental_features: Default::default(),
+        }))
+        .expect("device");
+
+        let mut reg = TargetRegistry::new();
+        let mut handle = 0u64;
+        let rec = reg.create(&device, 32, 32, &mut handle).expect("create target");
+        reg.insert(handle, rec);
+
+        assert!(reg.begin_layer(&device, handle, 0, 0x00000000).is_ok());
+
+        let target_rec = reg.get_mut(handle).unwrap();
+        let view = &target_rec.view;
+        let layer = target_rec.active_layer.as_mut().unwrap();
+
+        assert!(layer.pass.is_none());
+        layer.finish_pass();
+        assert!(layer.pass.is_none());
+
+        let pass = layer.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("test-persistent-pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        layer.pass = Some(pass.forget_lifetime());
+        assert!(layer.pass.is_some());
+
+        // finish_pass must drop the active pass and unlock the encoder
+        layer.finish_pass();
+        assert!(layer.pass.is_none());
+
+        // Next pass can be begun on layer.encoder without panicking
+        let second_pass = layer.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("test-second-pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        drop(second_pass);
+
         assert!(reg.end_layer(&queue, handle).is_ok());
     }
 
