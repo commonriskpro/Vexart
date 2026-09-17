@@ -624,3 +624,48 @@ El ciclo de optimización integral de recursos cubrió las capas de TypeScript, 
 | Hover Storm Optimization | 7 | Layer promotion, stability tracking, dead code prune, border exclusion, feedPointer gating |
 | Shadow Batching (Option D + Follow-up) | 5 | Unified geometry stream (TS) + Persistent WGPU render pass (Rust) + Cross-barrier pass persistence |
 | **Total** | **59** | **951+ tests passing (0.0% jank en 5/5 escenarios)** |
+
+---
+
+## Total Improvement Summary
+
+### Aggregate Results
+~60 commits on `main` across 4 optimization phases + bug fixes + shadow batching.
+
+**30/30 audit findings resolved · 951+ tests passing · 0 regressions**
+
+### Performance — Before vs After
+
+| Metric | Pre-Audit | Post-Audit | Improvement |
+|---|---|---|---|
+| Hover Storm avg latency | 8.92 ms | 2.37 ms | −73.4% |
+| Hover Storm P99 latency | 23.47 ms | ~4.5 ms | −80.8% |
+| Hover Storm jank rate | 6.7% | 0.0% | −100% |
+| FFI dispatches/frame (shadow) | ~122 | 1 | −99.2% |
+| WGPU render passes/frame (shadow) | ~122 | 1 | −99.2% |
+| Per-frame allocations (shadow) | 122× Uint8Array + splice + Vec | 0 | −100% |
+| All 5 scenarios jank | varied | 0.0% | ✅ Zero jank |
+
+### Phase-by-Phase Summary
+
+| Phase | Focus | Commits | Key Wins |
+|---|---|---|---|
+| Phase 1 | Quick Wins TS + Leak Fixes | 12 | Hover cache, cursor blink, diff memo, image cache destroy, input subs, useQuery abort, MSDF cleanup |
+| Phase 2 | Hot Path Rust | 8 | msync removal, Base64 streaming, cached sampler, persistent vertex buffer, readback scratch, SipHash elimination, lazy readback |
+| Phase 3 | Hot Path TS Advanced | 12 | isLayoutDirty gating, timer coalescing, pointer cache, _layoutMap pooling, transform skip, clipStack freeze, For/Index migration, VirtualList spacers |
+| Phase 4 | Architecture | 9 | VRAM dedup + LRU eviction, stable getter contexts, resolveProps in-place, pre-compiled routes, shared layout preservation, sideEffects:false |
+| Bug Fixes | Styled + Headless reactivity | 6 | Button/Badge/Avatar/Card/Separator reactivity, headless render prop contexts |
+| Hover Storm | Compound hover fix | 7 | Layer promotion, stability tracking, border exclusion, feedPointer gating, dead code prune |
+| Shadow Batching | Option D unified TS+Rust | 6 | GeometryStream, persistent render pass, finish_pass() barrier, layer retention, assign-layers cleanup |
+
+### Architecture Improvements
+
+**TypeScript**: GeometryStream replaces per-dispatch Uint8Array allocations with a persistent 256 KB buffer and direct Painter's-order packing. Layout maps are pooled, timers coalesced, clip stacks frozen, and For/Index migration eliminates unnecessary re-renders.
+
+**Rust**: Persistent `RenderPass<'static>` via `forget_lifetime()` reuses render passes across dispatches. Cached samplers, pooled `prepared_batches`, VRAM dedup with LRU eviction, and lazy readback eliminate redundant GPU operations.
+
+**Cross-boundary**: Shadow rendering drops from ~122 FFI dispatches and ~122 WGPU render passes per frame to **1 each**. `finish_pass()` barriers ensure correct layer lifecycle without premature closure.
+
+### Deferred Items
+
+All 30 identified findings have been resolved. No items deferred.
