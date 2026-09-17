@@ -1201,10 +1201,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       if (ok) {
         first = false
         targetMutationVersion += 1
-        if (layerOpen) {
-          vexartCompositeTargetEndLayer(vctx, targetHandle)
-          layerOpen = false
-        }
       }
       return ok
     }
