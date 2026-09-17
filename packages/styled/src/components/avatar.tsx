@@ -28,27 +28,26 @@ const sizeMap: Record<AvatarSize, { px: number; fontSize: number }> = {
 
 /** @public */
 export function VoidAvatar(props: VoidAvatarProps) {
-  const s = props.size ?? "default"
-  const ss = sizeMap[s]
-  const initial = props.name.charAt(0).toUpperCase()
-  const bg = props.color ?? themeColors.muted
+  const ss = () => sizeMap[props.size ?? "default"]
+  const initial = () => props.name.charAt(0).toUpperCase()
+  const bg = () => props.color ?? themeColors.muted
 
   return (
     <box
       className={props.className}
-      width={ss.px}
-      height={ss.px}
-      cornerRadius={ss.px / 2}
-      backgroundColor={bg}
+      width={ss().px}
+      height={ss().px}
+      cornerRadius={ss().px / 2}
+      backgroundColor={bg()}
       alignX="center"
       alignY="center"
     >
       <text
         color={themeColors.foreground}
-        fontSize={ss.fontSize}
+        fontSize={ss().fontSize}
         fontWeight={weight.medium}
       >
-        {initial}
+        {initial()}
       </text>
     </box>
   )
