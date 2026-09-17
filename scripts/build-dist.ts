@@ -229,6 +229,7 @@ const pkg = {
   repository: { type: "git", url: "https://github.com/commonriskpro/Vexart" },
   homepage: "https://github.com/commonriskpro/Vexart",
   type: "module",
+  sideEffects: ["./solid-plugin.ts"],
   main: "vexart.js",
   types: "vexart.d.ts",
   bin: {
