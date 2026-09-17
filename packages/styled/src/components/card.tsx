@@ -20,19 +20,19 @@ export interface VoidCardProps {
 
 /** @public */
 export function VoidCard(props: VoidCardProps) {
-  const sm = props.size === "sm"
+  const sm = () => props.size === "sm"
   const content = resolveChildren(() => props.children)
   return (
     <box
       className={props.className}
       direction="column"
-      gap={sm ? space[4] : space[6]}
+      gap={sm() ? space[4] : space[6]}
       backgroundColor={themeColors.card}
       cornerRadius={radius.xl}
       borderWidth={1}
       borderColor={themeColors.border}
-      paddingTop={sm ? space[4] : space[6]}
-      paddingBottom={sm ? space[4] : space[6]}
+      paddingTop={sm() ? space[4] : space[6]}
+      paddingBottom={sm() ? space[4] : space[6]}
       shadow={shadows.md}
     >
       {content}
