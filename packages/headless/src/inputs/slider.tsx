@@ -6,7 +6,6 @@
  * @public
  */
 
-import { createMemo } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus, useDrag, type NodeMouseEvent } from "@vexart/engine"
 import { useDisabled } from "../helpers/disabled"
@@ -146,16 +145,19 @@ export function Slider(props: SliderProps) {
     },
   }
 
-  const rendered = createMemo(() => props.renderSlider({
-    value: props.value,
-    min: min(),
-    max: max(),
-    percentage: percentage(),
-    focused: focused(),
-    disabled: disabled(),
-    dragging: dragging(),
+  const context: SliderRenderContext = {
+    get value() { return props.value },
+    get min() { return min() },
+    get max() { return max() },
+    get percentage() { return percentage() },
+    get focused() { return focused() },
+    get disabled() { return disabled() },
+    get dragging() { return dragging() },
     trackProps,
-  }))
+  }
 
-  return <box width="fit" height="fit">{rendered}</box>
+  // Invoke the render prop once. Its JSX property expressions track the
+  // context getters and update the existing visual tree in place; rebuilding
+  // this subtree on drag/value/focus changes tears down and remounts nodes.
+  return <box width="fit" height="fit">{props.renderSlider(context)}</box>
 }
