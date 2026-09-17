@@ -38,7 +38,19 @@ export function hasInteractionInSubtree(node: TGENode | null | undefined): boole
 /** @public */
 export function shouldPromoteInteractionLayer(node: TGENode | null | undefined): boolean {
   if (!node) return false
-  return getNodeInteractionMode(node) === "drag"
+  const mode = getNodeInteractionMode(node)
+  if (mode === "drag" || (mode as string) === "hover" || (mode as string) === "active") return true
+  const props = node.props
+  if (!props) return false
+  if (props.hoverStyle || props.activeStyle) return true
+  return !!(
+    props.onClick ||
+    props.onPress ||
+    props.onMouseDown ||
+    props.onMouseUp ||
+    props.onMouseOver ||
+    props.onMouseOut
+  )
 }
 
 /** @public */
