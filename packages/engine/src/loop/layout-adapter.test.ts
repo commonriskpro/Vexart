@@ -241,6 +241,25 @@ describe("layout adapter stacking contexts", () => {
     })
   })
 
+  test("emits a transparent border command when maxInteractiveBorder > 0 and paintBorderWidth is 0", () => {
+    const root = box({
+      width: 100,
+      height: 60,
+      backgroundColor: 0x111111ff,
+      hoverStyle: { borderWidth: 4 },
+    })
+
+    syncTree(root)
+    const border = layoutCommands(root).find((command) => command.type === CMD.BORDER && command.nodeId === root.id)
+
+    expect(border).toMatchObject({
+      type: CMD.BORDER,
+      color: 0x00000000,
+      extra1: 4,
+      nodeId: root.id,
+    })
+  })
+
   test("keeps border reservation for adapter-owned fallback nodes", () => {
     const layout = createVexartLayoutCtx()
     layout.init(100, 80)

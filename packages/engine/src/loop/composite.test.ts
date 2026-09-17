@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { CMD } from "../ffi/render-graph"
 import { registerAnimationDescriptor, markLayerBacked, deregisterAllDescriptors, allDescriptors, resetFrameTracking, unmarkLayerBacked } from "../animation/compositor-path"
 import { createLayerStore, type Layer } from "../ffi/layers"
 import { createNode, insertChild, parseSizing, type TGENode } from "../ffi/node"
@@ -383,7 +384,7 @@ describe("compositeFrame interaction sequencing (Decision 9 Option A)", () => {
     const box = createNode("box")
     box.props.width = 80
     box.props.height = 30
-    box.props.hoverStyle = { borderWidth: 4 }
+    box.props.hoverStyle = { width: 90 } as any
     box._widthSizing = parseSizing(80)
     box._heightSizing = parseSizing(30)
     syncAllLayoutProps(box)
@@ -423,5 +424,69 @@ describe("compositeFrame interaction sequencing (Decision 9 Option A)", () => {
 
     // 3. Verify hover state is active on the node
     expect(box._hovered).toBe(true)
+  })
+
+  test("bypasses layout pass when hoverStyle only changes borderWidth", () => {
+    const layout = createVexartLayoutCtx()
+    layout.setDimensions(200, 120)
+
+    const root = createNode("root")
+    root.props.width = 200
+    root.props.height = 120
+    root._widthSizing = parseSizing(200)
+    root._heightSizing = parseSizing(120)
+    syncAllLayoutProps(root)
+
+    const box = createNode("box")
+    box.props.width = 80
+    box.props.height = 30
+    box.props.hoverStyle = { borderWidth: 4, borderColor: 0xff0000ff }
+    box._widthSizing = parseSizing(80)
+    box._heightSizing = parseSizing(30)
+    syncAllLayoutProps(box)
+    insertChild(root, box)
+
+    const state = createTestCompositeState(root, layout)
+
+    // Initial frame
+    compositeFrame(state)
+    expect(box.layout.width).toBe(80)
+
+    let layoutPasses = 0
+    const originalBeginLayout = layout.beginLayout.bind(layout)
+    layout.beginLayout = () => {
+      layoutPasses++
+      return originalBeginLayout()
+    }
+
+    // Move pointer over box
+    state.pointer.x = 40
+    state.pointer.y = 15
+    state.pointer.dirty = true
+
+    compositeFrame(state)
+
+    // Bypasses layout pass completely
+    expect(layoutPasses).toBe(0)
+    expect(box._hovered).toBe(true)
+
+    // Fast-path synced border command exists and is updated
+    const borderCmd = state.lastCommands?.find((cmd) => cmd.type === CMD.BORDER && cmd.nodeId === box.id)
+    expect(borderCmd).toBeDefined()
+    expect(borderCmd?.extra1).toBe(4)
+    expect(borderCmd?.color).toBe(0xff0000ff)
+
+    // Move pointer away (unhover)
+    state.pointer.x = 150
+    state.pointer.y = 100
+    state.pointer.dirty = true
+
+    compositeFrame(state)
+
+    // Still bypasses layout pass
+    expect(layoutPasses).toBe(0)
+    expect(box._hovered).toBe(false)
+    expect(borderCmd?.extra1).toBe(0)
+    expect(borderCmd?.color).toBe(0)
   })
 })

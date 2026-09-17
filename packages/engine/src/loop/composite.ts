@@ -219,6 +219,19 @@ function syncVisualPropsToCommands(commands: RenderCommand[], nodeRefById: Map<n
     } else if (cmd.type === CMD.BORDER) {
       if (typeof resolved.borderColor === "number") cmd.color = resolved.borderColor >>> 0
       if (typeof resolved.cornerRadius === "number") cmd.cornerRadius = resolved.cornerRadius
+      if (typeof resolved.borderWidth === "number") {
+        const bw = resolved.borderWidth
+        cmd.extra1 = bw
+        cmd.borderWidths = {
+          left: resolved.borderLeft ?? bw,
+          right: resolved.borderRight ?? bw,
+          top: resolved.borderTop ?? bw,
+          bottom: resolved.borderBottom ?? bw,
+        }
+      } else if (cmd.extra1 > 0 && (node.props.hoverStyle?.borderWidth !== undefined || node.props.activeStyle?.borderWidth !== undefined || node.props.focusStyle?.borderWidth !== undefined)) {
+        cmd.extra1 = 0
+        if (typeof node.props.borderColor !== "number") cmd.color = 0
+      }
     } else if (cmd.type === CMD.TEXT) {
       if (typeof resolved.color === "number") cmd.color = resolved.color >>> 0
     }
@@ -278,7 +291,7 @@ function runLayoutPass(s: CompositeFrameState, profile?: FrameProfile): RenderCo
   walkTreeOnce(s)
   if (profile) profile.walkTreeMs = performance.now() - walkStart
   const layoutComputeStart = profile ? performance.now() : 0
-  const commands = s.layoutAdapter.endLayout(s.root._flexNode)
+  const commands = s.layoutAdapter.endLayout(s.root._flexNode, s.nodeRefById)
   if (profile) profile.layoutComputeMs = performance.now() - layoutComputeStart
   const layoutError = s.layoutAdapter.getLastLayoutError()
   if (layoutError) {
@@ -299,16 +312,22 @@ function runLayoutPass(s: CompositeFrameState, profile?: FrameProfile): RenderCo
 
 
 
+const isReservedBorderProp = (k: string) =>
+  k === "borderWidth" || k === "borderLeft" || k === "borderRight" || k === "borderTop" || k === "borderBottom"
+
 function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; changed: boolean; layoutChanged: boolean } {
   let changed = false
   let layoutChanged = false
   const visualNodeIds = new Set<number>()
   const queueNodeVisualDamage = (node: TGENode) => {
     visualNodeIds.add(node.id)
-    if (node.props.hoverStyle && Object.keys(node.props.hoverStyle).some((k) => isLayoutProp(k) && k !== "hoverStyle")) {
+    if (node.props.hoverStyle && Object.keys(node.props.hoverStyle).some((k) => isLayoutProp(k) && k !== "hoverStyle" && !isReservedBorderProp(k))) {
       layoutChanged = true
     }
-    if (node.props.activeStyle && Object.keys(node.props.activeStyle).some((k) => isLayoutProp(k) && k !== "activeStyle")) {
+    if (node.props.activeStyle && Object.keys(node.props.activeStyle).some((k) => isLayoutProp(k) && k !== "activeStyle" && !isReservedBorderProp(k))) {
+      layoutChanged = true
+    }
+    if (node.props.focusStyle && Object.keys(node.props.focusStyle).some((k) => isLayoutProp(k) && k !== "focusStyle" && !isReservedBorderProp(k))) {
       layoutChanged = true
     }
     if (node.layout.width <= 0 || node.layout.height <= 0) return

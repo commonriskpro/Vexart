@@ -14,6 +14,7 @@
 
 import { CMD } from "../ffi/render-graph"
 import type { RenderCommand, EffectConfig, ImagePaintConfig, CanvasPaintConfig } from "../ffi/render-graph"
+import type { TGENode, TGEProps } from "../ffi/node"
 import {
   Node,
   DISPLAY_NONE,
@@ -42,6 +43,13 @@ import {
   MEASURE_MODE_EXACTLY,
 } from "flexily"
 import type { GridLayoutError } from "flexily"
+
+const maxInteractiveBorder = (props: TGEProps): number =>
+  Math.max(
+    props.focusStyle?.borderWidth ?? 0,
+    props.hoverStyle?.borderWidth ?? 0,
+    props.activeStyle?.borderWidth ?? 0,
+  )
 
 // ── Layout constants ──────────────────────────────────────────────────────
 
@@ -118,6 +126,7 @@ function mapAlign(v: number): number {
 export function createVexartLayoutCtx() {
   let _viewportW = 0
   let _viewportH = 0
+  let _nodeRefById: Map<number, TGENode> | null = null
 
   // ── Parallel arrays for O(1) meta access ──
   // Index matches position in _allNodes. Avoids WeakMap overhead entirely.
@@ -463,7 +472,8 @@ export function createVexartLayoutCtx() {
       _nodeToIndex.clear()
     },
 
-    endLayout(rootNode?: Node | null): RenderCommand[] {
+    endLayout(rootNode?: Node | null, nodeRefById?: Map<number, TGENode>): RenderCommand[] {
+      const refs = nodeRefById ?? _nodeRefById
       const roots = rootNode
         ? [rootNode, ..._roots.filter((root) => root !== rootNode)]
         : _roots
@@ -699,19 +709,24 @@ export function createVexartLayoutCtx() {
         const right = _borderRight[idx]
         const top = _borderTop[idx]
         const bottom = _borderBottom[idx]
-        const hasBorder = (borderColor & 0xff) > 0 && Math.max(left, right, top, bottom) > 0
+        const hasVisualBorder = (borderColor & 0xff) > 0 && Math.max(left, right, top, bottom) > 0
+        const targetNode = refs?.get(nodeId)
+        const interactiveBorder = targetNode?.props
+          ? maxInteractiveBorder(targetNode.props)
+          : (refs ? 0 : Math.max(borL, borR, borT, borB))
+        const hasBorder = hasVisualBorder || interactiveBorder > 0
         if (hasBorder) {
           const uniform = left === right && right === top && top === bottom
           const border: RenderCommand = {
             type: CMD.BORDER,
             x: absX, y: absY, width, height,
-            color: borderColor >>> 0,
+            color: hasVisualBorder ? (borderColor >>> 0) : 0x00000000,
             cornerRadius: _cornerRadii[idx],
-            extra1: Math.max(left, right, top, bottom),
+            extra1: Math.max(left, right, top, bottom, interactiveBorder),
             extra2: 0,
             nodeId,
           }
-          if (!uniform) border.borderWidths = { left, right, top, bottom }
+          if (!uniform && hasVisualBorder) border.borderWidths = { left, right, top, bottom }
           // Border commands use this metadata only for per-corner geometry;
           // they do not re-run the effect pipeline.
           if (_effects[idx]?.cornerRadii) border.effect = _effects[idx]!
@@ -749,6 +764,10 @@ export function createVexartLayoutCtx() {
         _nodeIds[_currentIdx] = nodeId
         if (_elementKeys[_currentIdx] === null) _elementKeys[_currentIdx] = this.hashString(`tge-node-${nodeId}`)
       }
+    },
+
+    setNodeRefById(map: Map<number, TGENode> | null) {
+      _nodeRefById = map
     },
 
     setCurrentFlexNode(node: Node | null) {
