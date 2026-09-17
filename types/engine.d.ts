@@ -1615,7 +1615,9 @@ export declare function useMouse(): MouseState;
 export declare function useMutation<T, V = void>(mutator: (variables: V) => Promise<T>, options?: MutationOptions<T, V>): MutationResult<T, V>;
 
 /** @public */
-export declare function useQuery<T>(fetcher: () => Promise<T>, options?: QueryOptions): QueryResult<T>;
+export declare function useQuery<T>(fetcher: (context?: {
+    signal?: AbortSignal;
+}) => Promise<T>, options?: QueryOptions): QueryResult<T>;
 
 /** @public */
 export declare function useTerminalDimensions(terminal: Terminal): {

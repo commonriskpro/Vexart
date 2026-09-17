@@ -166,13 +166,6 @@ export function ensureCanvasExtra(node: TGENode): NodeCanvasExtra {
   return node._canvasExtra
 }
 
-function mergeInteractive(a?: InteractiveStyleProps, b?: InteractiveStyleProps): InteractiveStyleProps | undefined {
-  if (!a && !b) return undefined
-  if (!a) return b
-  if (!b) return a
-  return { ...a, ...b }
-}
-
 /**
  * Resolve effective props:
  *   1. Cache check: node._vp && !node._vpDirty && node._vpEpoch === currentThemeEpoch
@@ -185,61 +178,58 @@ function mergeInteractive(a?: InteractiveStyleProps, b?: InteractiveStyleProps):
 /** @public */
 export function resolveProps(node: TGENode): TGEProps {
   if (node._vp && !node._vpDirty && node._vpEpoch === currentThemeEpoch) return node._vp
-  let base = node.props
+  const base = node.props
+  const out: TGEProps = {} as TGEProps
 
+  // Layer 1: className + style + props (single object, 3 assigns max)
   if (base.className && globalClassNameResolver) {
     const classProps = globalClassNameResolver(base.className)
-    base = {
-      ...classProps,
-      ...(base.style ?? {}),
-      ...base,
-      hoverStyle: mergeInteractive(mergeInteractive(classProps.hoverStyle, base.style?.hoverStyle), base.hoverStyle),
-      focusStyle: mergeInteractive(mergeInteractive(classProps.focusStyle, base.style?.focusStyle), base.focusStyle),
-      activeStyle: mergeInteractive(mergeInteractive(classProps.activeStyle, base.style?.activeStyle), base.activeStyle),
+    Object.assign(out, classProps)
+    if (base.style) Object.assign(out, base.style)
+    Object.assign(out, base)
+    // Merge interactive styles in place (1 alloc each instead of nested mergeInteractive)
+    if (classProps.hoverStyle || base.style?.hoverStyle || base.hoverStyle) {
+      out.hoverStyle = Object.assign({}, classProps.hoverStyle, base.style?.hoverStyle, base.hoverStyle)
+    }
+    if (classProps.focusStyle || base.style?.focusStyle || base.focusStyle) {
+      out.focusStyle = Object.assign({}, classProps.focusStyle, base.style?.focusStyle, base.focusStyle)
+    }
+    if (classProps.activeStyle || base.style?.activeStyle || base.activeStyle) {
+      out.activeStyle = Object.assign({}, classProps.activeStyle, base.style?.activeStyle, base.activeStyle)
     }
   } else if (base.style) {
-    base = {
-      ...base.style,
-      ...base,
-      hoverStyle: mergeInteractive(base.style.hoverStyle, base.hoverStyle),
-      focusStyle: mergeInteractive(base.style.focusStyle, base.focusStyle),
-      activeStyle: mergeInteractive(base.style.activeStyle, base.activeStyle),
+    Object.assign(out, base.style, base)
+    if (base.style.hoverStyle || base.hoverStyle) {
+      out.hoverStyle = Object.assign({}, base.style.hoverStyle, base.hoverStyle)
     }
+    if (base.style.focusStyle || base.focusStyle) {
+      out.focusStyle = Object.assign({}, base.style.focusStyle, base.focusStyle)
+    }
+    if (base.style.activeStyle || base.activeStyle) {
+      out.activeStyle = Object.assign({}, base.style.activeStyle, base.activeStyle)
+    }
+  } else {
+    Object.assign(out, base)
   }
 
-  // Resolve aliases
-  if (base.borderRadius !== undefined && base.cornerRadius === undefined) {
-    base = { ...base, cornerRadius: base.borderRadius }
-  }
-  if (base.boxShadow !== undefined && base.shadow === undefined) {
-    base = { ...base, shadow: base.boxShadow }
-  }
-  if (base.onClick !== undefined && base.onPress === undefined) {
-    base = { ...base, onPress: base.onClick }
-  }
+  // Resolve aliases in place (zero allocations)
+  if (out.borderRadius !== undefined && out.cornerRadius === undefined) out.cornerRadius = out.borderRadius
+  if (out.boxShadow !== undefined && out.shadow === undefined) out.shadow = out.boxShadow
+  if (out.onClick !== undefined && out.onPress === undefined) out.onPress = out.onClick
 
-  // Merge interactive states
-  let resolved = base
-  if (node._hovered && base.hoverStyle) {
-    resolved = { ...resolved, ...base.hoverStyle }
-  }
-  if (node._focused && base.focusStyle) {
-    resolved = { ...resolved, ...base.focusStyle }
-  }
-  if (node._active && base.activeStyle) {
-    resolved = { ...resolved, ...base.activeStyle }
-  }
-  if (resolved.borderRadius !== undefined && resolved.cornerRadius === undefined) {
-    resolved = { ...resolved, cornerRadius: resolved.borderRadius }
-  }
-  if (resolved.boxShadow !== undefined && resolved.shadow === undefined) {
-    resolved = { ...resolved, shadow: resolved.boxShadow }
-  }
+  // Merge active interactive states in place
+  if (node._hovered && out.hoverStyle) Object.assign(out, out.hoverStyle)
+  if (node._focused && out.focusStyle) Object.assign(out, out.focusStyle)
+  if (node._active && out.activeStyle) Object.assign(out, out.activeStyle)
 
-  node._vp = resolved
+  // Re-resolve aliases if interactive styles introduced them
+  if (out.borderRadius !== undefined && out.cornerRadius === undefined) out.cornerRadius = out.borderRadius
+  if (out.boxShadow !== undefined && out.shadow === undefined) out.shadow = out.boxShadow
+
+  node._vp = out
   node._vpDirty = false
   node._vpEpoch = currentThemeEpoch
-  return resolved
+  return out
 }
 
 export function createTextNode(text: string): TGENode {
