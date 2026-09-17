@@ -79,6 +79,8 @@ pub struct PaintContext {
     pub staging_buffer: Vec<u8>,
     /// Persistent scratch buffer for GPU→CPU readbacks and presentation encoding.
     pub readback_scratch: Vec<u8>,
+    /// Pooled batch list for dispatching render commands without per-dispatch heap allocation.
+    pub prepared_batches: Vec<PreparedBatch>,
 }
 
 impl Default for PaintContext {
@@ -176,6 +178,7 @@ impl PaintContext {
             vertex_buffer_peak_frame_bytes: 0,
             staging_buffer: Vec::new(),
             readback_scratch: Vec::new(),
+            prepared_batches: Vec::new(),
         }
     }
 
@@ -189,6 +192,7 @@ impl PaintContext {
             self.vertex_buffer_peak_frame_bytes = needed;
         }
         if needed > self.vertex_buffer_capacity {
+            self.targets.finish_active_passes();
             let mut new_capacity = self.vertex_buffer_capacity.max(BASE_VERTEX_BUFFER_CAPACITY);
             while new_capacity < needed {
                 new_capacity = match new_capacity.checked_mul(2) {
@@ -289,7 +293,7 @@ impl PaintContext {
         let body_end = 16 + header.payload_bytes as usize;
 
         self.staging_buffer.clear();
-        let mut prepared_batches: Vec<PreparedBatch> = Vec::new();
+        self.prepared_batches.clear();
 
         let mut truncated = false;
         for _ in 0..header.cmd_count {
@@ -345,7 +349,7 @@ impl PaintContext {
             }
             let staging_offset = self.staging_buffer.len();
             self.staging_buffer.extend_from_slice(payload);
-            prepared_batches.push(PreparedBatch {
+            self.prepared_batches.push(PreparedBatch {
                 kind: cmd_kind,
                 instance_count,
                 staging_offset,
@@ -359,7 +363,7 @@ impl PaintContext {
             );
         }
 
-        if prepared_batches.is_empty() {
+        if self.prepared_batches.is_empty() {
             if !stats_out.is_null() {
                 unsafe { *stats_out = FrameStats::default() };
             }
@@ -432,67 +436,79 @@ impl PaintContext {
                     None => return ERR_INVALID_ARG,
                 };
 
-            let load_op = if layer.first_pass {
-                layer.first_pass = false;
-                if layer.first_load_mode == 0 {
-                    let c = layer.clear_rgba;
-                    wgpu::LoadOp::Clear(wgpu::Color {
-                        r: ((c >> 24) & 0xff) as f64 / 255.0,
-                        g: ((c >> 16) & 0xff) as f64 / 255.0,
-                        b: ((c >> 8) & 0xff) as f64 / 255.0,
-                        a: (c & 0xff) as f64 / 255.0,
-                    })
+            if layer.pass.is_none() {
+                let load_op = if layer.first_pass {
+                    layer.first_pass = false;
+                    if layer.first_load_mode == 0 {
+                        let c = layer.clear_rgba;
+                        wgpu::LoadOp::Clear(wgpu::Color {
+                            r: ((c >> 24) & 0xff) as f64 / 255.0,
+                            g: ((c >> 16) & 0xff) as f64 / 255.0,
+                            b: ((c >> 8) & 0xff) as f64 / 255.0,
+                            a: (c & 0xff) as f64 / 255.0,
+                        })
+                    } else {
+                        wgpu::LoadOp::Load
+                    }
                 } else {
                     wgpu::LoadOp::Load
+                };
+
+                let raw_pass = layer
+                    .encoder
+                    .begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("vexart-layer-render-pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: view_ref,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: load_op,
+                                store: wgpu::StoreOp::Store,
+                            },
+                            depth_slice: None,
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                        multiview_mask: None,
+                    });
+                layer.pass = Some(raw_pass.forget_lifetime());
+            }
+
+            let pass = layer.pass.as_mut().unwrap();
+
+            let should_draw = if let Some(s) = target_scissor {
+                if let Some([sx, sy, sw, sh]) =
+                    crate::composite::target::clamp_scissor(s, target_dims.0, target_dims.1)
+                {
+                    pass.set_scissor_rect(sx, sy, sw, sh);
+                    true
+                } else {
+                    false
                 }
             } else {
-                wgpu::LoadOp::Load
+                pass.set_scissor_rect(0, 0, target_dims.0, target_dims.1);
+                true
             };
 
-            let mut pass = layer
-                .encoder
-                .begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("vexart-layer-render-pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: view_ref,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: load_op,
-                            store: wgpu::StoreOp::Store,
-                        },
-                        depth_slice: None,
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                    multiview_mask: None,
-                });
-
-            let mut active_kind: Option<u16> = None;
-            for b in &prepared_batches {
-                if active_kind != Some(b.kind) {
-                    let pipeline = pipeline_for_kind(b.kind, &self.wgpu.pipelines);
-                    pass.set_pipeline(pipeline);
-                    if needs_fallback_bind_group(b.kind) {
-                        pass.set_bind_group(0, &self.fallback_bind_group, &[]);
+            if should_draw {
+                let mut active_kind: Option<u16> = None;
+                for b in &self.prepared_batches {
+                    if active_kind != Some(b.kind) {
+                        let pipeline = pipeline_for_kind(b.kind, &self.wgpu.pipelines);
+                        pass.set_pipeline(pipeline);
+                        if needs_fallback_bind_group(b.kind) {
+                            pass.set_bind_group(0, &self.fallback_bind_group, &[]);
+                        }
+                        active_kind = Some(b.kind);
                     }
-                    active_kind = Some(b.kind);
-                }
-                let start = (base_offset + b.staging_offset) as u64;
-                let end = start + b.bytes_len as u64;
-                pass.set_vertex_buffer(0, self.vertex_buffer.slice(start..end));
-                if let Some(s) = target_scissor {
-                    if let Some([sx, sy, sw, sh]) =
-                        crate::composite::target::clamp_scissor(s, target_dims.0, target_dims.1)
-                    {
-                        pass.set_scissor_rect(sx, sy, sw, sh);
-                        pass.draw(0..6, 0..b.instance_count);
-                    }
-                } else {
+                    let start = (base_offset + b.staging_offset) as u64;
+                    let end = start + b.bytes_len as u64;
+                    pass.set_vertex_buffer(0, self.vertex_buffer.slice(start..end));
                     pass.draw(0..6, 0..b.instance_count);
                 }
             }
-            drop(pass);
+            // Do NOT drop the pass! It stays open for subsequent dispatches.
             // Do NOT submit or complete frame here — happens in target_end_layer.
         } else {
             let render_view: &wgpu::TextureView = unsafe { &*render_view_ptr };
@@ -521,7 +537,7 @@ impl PaintContext {
             });
 
             let mut active_kind: Option<u16> = None;
-            for b in &prepared_batches {
+            for b in &self.prepared_batches {
                 if active_kind != Some(b.kind) {
                     let pipeline = pipeline_for_kind(b.kind, &self.wgpu.pipelines);
                     pass.set_pipeline(pipeline);
@@ -556,11 +572,11 @@ impl PaintContext {
 
         // Step 6: Write stats.
         if !stats_out.is_null() {
-            let total_prims: u32 = prepared_batches.iter().map(|b| b.instance_count).sum();
+            let total_prims: u32 = self.prepared_batches.iter().map(|b| b.instance_count).sum();
             unsafe {
                 (*stats_out).gpu_time_us = gpu_us;
                 (*stats_out).cpu_time_us = cpu_us;
-                (*stats_out).draw_calls = prepared_batches.len() as u32;
+                (*stats_out).draw_calls = self.prepared_batches.len() as u32;
                 (*stats_out).primitives = total_prims;
             }
         }
@@ -572,7 +588,7 @@ impl PaintContext {
 /// Helper returning true if the command kind requires the fallback texture bind group.
 #[inline]
 fn needs_fallback_bind_group(kind: u16) -> bool {
-    matches!(kind, 15 | 16 | 17 | 18 | 19)
+    matches!(kind, 15..=19)
 }
 
 /// Return the byte stride of one instance for the given cmd_kind.
@@ -1117,5 +1133,111 @@ mod tests {
         assert_eq!(stats.primitives, 3);
         // Offset must be reset to 0 by on_frame_complete() in standalone dispatch
         assert_eq!(ctx.vertex_buffer_offset, 0);
+    }
+
+    #[cfg(feature = "gpu-tests")]
+    #[test]
+    fn test_persistent_render_pass_across_layer_dispatches() {
+        let mut ctx = PaintContext::new();
+        let mut target = 0u64;
+        assert_eq!(crate::composite::target_create(&mut ctx, 64, 64, &mut target), OK);
+
+        // 1. Begin layer: encoder is created, pass starts as None
+        assert_eq!(crate::composite::target_begin_layer(&mut ctx, target, 0, 0x00000000), OK);
+        {
+            let rec = ctx.targets.get(target).unwrap();
+            let layer = rec.active_layer.as_ref().unwrap();
+            assert!(layer.pass.is_none(), "Render pass must start as None (lazy creation)");
+            assert!(layer.first_pass, "first_pass flag must be true initially");
+        }
+
+        // 2. Dispatch 1: Red rect covering left half (x=-1.0, y=1.0, w=1.0, h=-2.0)
+        let red_rect = instances::BridgeRectInstance {
+            x: -1.0,
+            y: 1.0,
+            w: 1.0,
+            h: -2.0,
+            r: 1.0,
+            g: 0.0,
+            b: 0.0,
+            a: 1.0,
+            ..Default::default()
+        };
+        let graph1 = make_graph_buf(0, bytemuck::bytes_of(&red_rect));
+        let mut stats1 = FrameStats::default();
+        assert_eq!(ctx.dispatch(target, &graph1, &mut stats1), OK);
+        assert_eq!(stats1.draw_calls, 1);
+        assert_eq!(stats1.primitives, 1);
+
+        // Verify pass is now Some (lazily created) and first_pass is false
+        {
+            let rec = ctx.targets.get(target).unwrap();
+            let layer = rec.active_layer.as_ref().unwrap();
+            assert!(layer.pass.is_some(), "Render pass must be Some after first dispatch");
+            assert!(!layer.first_pass, "first_pass must be false after first pass creation");
+        }
+
+        // 3. Dynamic scissor update on active layer
+        assert_eq!(
+            crate::composite::target_set_scissor(&mut ctx, target, 32, 0, 32, 64),
+            OK
+        );
+
+        // 4. Dispatch 2: Green rect covering full NDC (-1.0, 1.0, 2.0, -2.0)
+        // With scissor (32..64, 0..64), only the right half will receive green!
+        let green_rect = instances::BridgeRectInstance {
+            x: -1.0,
+            y: 1.0,
+            w: 2.0,
+            h: -2.0,
+            r: 0.0,
+            g: 1.0,
+            b: 0.0,
+            a: 1.0,
+            ..Default::default()
+        };
+        let graph2 = make_graph_buf(0, bytemuck::bytes_of(&green_rect));
+        let mut stats2 = FrameStats::default();
+        assert_eq!(ctx.dispatch(target, &graph2, &mut stats2), OK);
+        assert_eq!(stats2.draw_calls, 1);
+        assert_eq!(stats2.primitives, 1);
+
+        // Verify pass is STILL Some (reused without dropping)
+        {
+            let rec = ctx.targets.get(target).unwrap();
+            let layer = rec.active_layer.as_ref().unwrap();
+            assert!(layer.pass.is_some(), "Render pass must persist across dispatches");
+        }
+
+        // 5. Reset scissor
+        assert_eq!(crate::composite::target_reset_scissor(&mut ctx, target), OK);
+
+        // 6. End layer: explicitly drops pass, finishes encoder, submits to queue
+        assert_eq!(crate::composite::target_end_layer(&mut ctx, target), OK);
+
+        // Verify active layer is cleared
+        {
+            let rec = ctx.targets.get(target).unwrap();
+            assert!(rec.active_layer.is_none(), "active_layer must be None after end_layer");
+        }
+
+        // 7. Readback and verify pixel contents:
+        // Left half (16, 32) must be pure red (255, 0, 0, 255)
+        // Right half (48, 32) must be pure green (0, 255, 0, 255)
+        let mut pixels = vec![0u8; 64 * 64 * 4];
+        assert_eq!(
+            crate::composite::readback_rgba(
+                &mut ctx,
+                target,
+                pixels.as_mut_ptr(),
+                pixels.len() as u32,
+                std::ptr::null_mut()
+            ),
+            OK
+        );
+        let left_pixel_idx = (32 * 64 + 16) * 4;
+        let right_pixel_idx = (32 * 64 + 48) * 4;
+        assert_eq!(&pixels[left_pixel_idx..left_pixel_idx + 4], &[255, 0, 0, 255]);
+        assert_eq!(&pixels[right_pixel_idx..right_pixel_idx + 4], &[0, 255, 0, 255]);
     }
 }

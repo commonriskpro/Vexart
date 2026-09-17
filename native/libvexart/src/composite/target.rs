@@ -22,6 +22,8 @@ pub struct TargetRecord {
 
 /// State held while a layer is open (between begin_layer and end_layer).
 pub struct ActiveLayerRecord {
+    // pass MUST be declared before encoder so it drops first!
+    pub pass: Option<wgpu::RenderPass<'static>>,
     pub encoder: wgpu::CommandEncoder,
     /// True until the first render pass has been issued (clears on first, loads on rest).
     pub first_pass: bool,
@@ -94,12 +96,17 @@ impl ActiveLayerRecord {
         scissor: Option<[u32; 4]>,
     ) -> Self {
         Self {
+            pass: None,
             encoder,
             first_pass: true,
             first_load_mode,
             clear_rgba,
             scissor,
         }
+    }
+
+    pub fn finish_pass(&mut self) {
+        drop(self.pass.take());
     }
 
     pub fn set_scissor(&mut self, x: u32, y: u32, width: u32, height: u32) {
@@ -132,6 +139,12 @@ pub struct TargetRegistry {
     next_handle: AtomicU64,
 }
 
+impl Default for TargetRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TargetRegistry {
     pub fn new() -> Self {
         Self {
@@ -144,6 +157,14 @@ impl TargetRegistry {
         self.targets
             .values()
             .any(|target| target.active_layer.is_some())
+    }
+
+    pub fn finish_active_passes(&mut self) {
+        for target in self.targets.values_mut() {
+            if let Some(layer) = target.active_layer.as_mut() {
+                drop(layer.pass.take());
+            }
+        }
     }
 
     /// Allocate a new offscreen RGBA8 target of the given dimensions.
@@ -245,7 +266,9 @@ impl TargetRegistry {
     pub fn end_layer(&mut self, queue: &wgpu::Queue, handle: u64) -> Result<(), i32> {
         use crate::ffi::panic::{ERR_INVALID_ARG, ERR_INVALID_HANDLE};
         let rec = self.targets.get_mut(&handle).ok_or(ERR_INVALID_HANDLE)?;
-        let layer = rec.active_layer.take().ok_or(ERR_INVALID_ARG)?; // no active layer
+        let mut layer = rec.active_layer.take().ok_or(ERR_INVALID_ARG)?; // no active layer
+        // Explicitly drop the render pass BEFORE finishing the encoder!
+        drop(layer.pass.take());
         let cmd = layer.encoder.finish();
         queue.submit(std::iter::once(cmd));
         Ok(())
@@ -266,6 +289,13 @@ mod tests {
         // Insert a placeholder by calling destroy on a non-existent handle.
         assert!(!reg.destroy(99), "non-existent handle should return false");
         assert!(!reg.destroy(0), "handle 0 should not exist");
+    }
+
+    #[test]
+    fn test_active_layer_finish_active_passes_no_active() {
+        let mut reg = TargetRegistry::new();
+        assert!(!reg.has_active_layers());
+        reg.finish_active_passes(); // safe no-op when empty
     }
 
     #[test]
