@@ -98,13 +98,6 @@ function splitPath(path: string) {
   return normalizePath(path).split("/").filter(Boolean)
 }
 
-function routeScore(route: AppRouteDefinition) {
-  return splitPath(route.path).reduce((score, part) => {
-    if (part.startsWith("[...") && part.endsWith("]")) return score
-    return score + (part.startsWith("[") && part.endsWith("]") ? 1 : 4)
-  }, 0)
-}
-
 /** @public */
 export function normalizePath(path: string) {
   const [pathname] = path.split("?")
@@ -112,13 +105,49 @@ export function normalizePath(path: string) {
   return normalized === "//" ? "/" : normalized
 }
 
+type CompiledRoute = {
+  route: AppRouteDefinition
+  score: number
+  parts: string[]
+  hasCatchAll: boolean
+  catchAllParam?: string
+}
+
+function compileRoutes(routes: AppRouteDefinition[]): CompiledRoute[] {
+  return routes
+    .map((route) => {
+      const parts = splitPath(route.path)
+      return {
+        route,
+        score: parts.reduce((s, p) => {
+          if (p.startsWith("[...") && p.endsWith("]")) return s
+          return s + (p.startsWith("[") && p.endsWith("]") ? 1 : 4)
+        }, 0),
+        parts,
+        hasCatchAll: parts.some((p) => p.startsWith("[...") && p.endsWith("]")),
+        catchAllParam: parts.find((p) => p.startsWith("[..."))?.slice(4, -1),
+      }
+    })
+    .sort((a, b) => b.score - a.score)
+}
+
+const _compiledCache = new WeakMap<AppRouteDefinition[], CompiledRoute[]>()
+
+function getCompiled(routes: AppRouteDefinition[]): CompiledRoute[] {
+  let compiled = _compiledCache.get(routes)
+  if (!compiled) {
+    compiled = compileRoutes(routes)
+    _compiledCache.set(routes, compiled)
+  }
+  return compiled
+}
+
 /** @public */
 export function matchRoute(routes: AppRouteDefinition[], path: string): AppRouteMatch | null {
   const targetParts = splitPath(path)
-  const ordered = routes.slice().sort((a, b) => routeScore(b) - routeScore(a))
-  for (const route of ordered) {
-    const routeParts = splitPath(route.path)
-    const hasCatchAll = routeParts.some((part) => part.startsWith("[...") && part.endsWith("]"))
+  const compiledRoutes = getCompiled(routes)
+  for (const compiled of compiledRoutes) {
+    const { route, parts: routeParts, hasCatchAll } = compiled
     if (!hasCatchAll && routeParts.length !== targetParts.length) continue
     const params: RouteParams = {}
     let matched = true
@@ -126,7 +155,7 @@ export function matchRoute(routes: AppRouteDefinition[], path: string): AppRoute
       const routePart = routeParts[index]
       const targetPart = targetParts[index]
       if (routePart.startsWith("[...") && routePart.endsWith("]")) {
-        params[routePart.slice(4, -1)] = targetParts.slice(index).map(decodeURIComponent).join("/")
+        params[compiled.catchAllParam ?? routePart.slice(4, -1)] = targetParts.slice(index).map(decodeURIComponent).join("/")
         break
       }
       if (routePart.startsWith("[") && routePart.endsWith("]")) {
@@ -231,6 +260,107 @@ export function useRouter() {
   return router
 }
 
+type ActiveLayoutLevel = {
+  layout: RouteLayoutComponent
+  setParams: (p: RouteParams) => void
+  setChild: (el: JSX.Element) => void
+  element: JSX.Element
+  dispose: () => void
+}
+
+type ActiveLeaf = {
+  setParams: (p: RouteParams) => void
+  element: JSX.Element
+  dispose: () => void
+  hasError: boolean
+}
+
+type ActiveRootState = {
+  key: string
+  element: JSX.Element
+  layouts: RouteLayoutComponent[]
+  levels: ActiveLayoutLevel[]
+  leaf: ActiveLeaf
+  setParams: (p: RouteParams) => void
+  dispose: () => void
+  isKeepAlive: boolean
+}
+
+function createLeaf(route: AppRouteDefinition, initialParams: RouteParams): ActiveLeaf {
+  let setParamsFn!: (p: RouteParams) => void
+  let renderedElement: JSX.Element = null
+  let hasError = false
+  const dispose = createRoot((disposeFn) => {
+    const [params, setParams] = createSignal(initialParams)
+    setParamsFn = setParams
+    try {
+      renderedElement = createComponent(route.component, {
+        get params() { return params() },
+      })
+    } catch (error) {
+      const ErrorComponent = route.error
+      if (ErrorComponent) {
+        hasError = true
+        renderedElement = createComponent(ErrorComponent, {
+          error,
+          get params() { return params() },
+        })
+      } else {
+        throw error
+      }
+    }
+    return disposeFn
+  })
+  return {
+    element: renderedElement,
+    setParams: setParamsFn,
+    dispose,
+    hasError,
+  }
+}
+
+function createLayoutLevel(
+  layout: RouteLayoutComponent,
+  childEl: JSX.Element,
+  initialParams: RouteParams
+): ActiveLayoutLevel {
+  let setParamsFn!: (p: RouteParams) => void
+  let setChildFn!: (el: JSX.Element) => void
+  let element: JSX.Element = null
+  const dispose = createRoot((disposeFn) => {
+    const [params, setParams] = createSignal(initialParams)
+    const [child, setChild] = createSignal(childEl)
+    setParamsFn = setParams
+    setChildFn = setChild
+    element = createComponent(layout, {
+      get children() { return child() },
+      get params() { return params() },
+    })
+    return disposeFn
+  })
+  return {
+    layout,
+    element,
+    setParams: setParamsFn,
+    setChild: setChildFn,
+    dispose,
+  }
+}
+
+function disposeActiveRoot(root: ActiveRootState) {
+  root.leaf.dispose()
+  for (let i = root.levels.length - 1; i >= 0; i--) {
+    root.levels[i].dispose()
+  }
+}
+
+function setParamsActiveRoot(root: ActiveRootState, params: RouteParams) {
+  for (const level of root.levels) {
+    level.setParams(params)
+  }
+  root.leaf.setParams(params)
+}
+
 /** @public */
 export function RouteOutlet(props: RouteOutletProps): () => JSX.Element {
   const contextRouter = props.router ?? useRouter()
@@ -246,13 +376,7 @@ export function RouteOutlet(props: RouteOutletProps): () => JSX.Element {
     }
   >()
 
-  let activeRoot: {
-    key: string
-    element: JSX.Element
-    setParams: (p: RouteParams) => void
-    dispose: () => void
-    isKeepAlive: boolean
-  } | null = null
+  let activeRoot: ActiveRootState | null = null
 
   let lastTime = 0
   function nextTimestamp() {
@@ -315,18 +439,23 @@ export function RouteOutlet(props: RouteOutletProps): () => JSX.Element {
       return activeRoot.element
     }
 
-    // Different route:
-    deactivateActiveRoot()
+    if (activeRoot && activeRoot.isKeepAlive) {
+      deactivateActiveRoot()
+    }
 
     // Check if new route is in keepAliveCache:
     const cached = keepAliveCache.get(routeKey)
     if (cached && match.route.keepAlive) {
+      deactivateActiveRoot()
       cached.lastAccessed = nextTimestamp()
       cached.setParams(match.params)
       keepAliveCache.delete(routeKey)
       activeRoot = {
         key: routeKey,
         element: cached.element,
+        layouts: match.route.layouts ?? [],
+        levels: [],
+        leaf: { element: cached.element, setParams: cached.setParams, dispose: cached.dispose, hasError: false },
         setParams: cached.setParams,
         dispose: cached.dispose,
         isKeepAlive: true,
@@ -339,45 +468,148 @@ export function RouteOutlet(props: RouteOutletProps): () => JSX.Element {
       keepAliveCache.delete(routeKey)
     }
 
-    // Create isolated reactive root with createRoot:
-    let renderedElement: JSX.Element = null
-    let setParamsFn!: (p: RouteParams) => void
-    const dispose = createRoot((disposeFn) => {
-      const [params, setParams] = createSignal(match.params)
-      setParamsFn = setParams
+    let sharedDepth = 0
+    const currentLayouts = activeRoot?.layouts ?? []
+    const nextLayouts = match.route.layouts ?? []
+    if (activeRoot && !match.route.keepAlive) {
+      while (
+        sharedDepth < currentLayouts.length &&
+        sharedDepth < nextLayouts.length &&
+        currentLayouts[sharedDepth] === nextLayouts[sharedDepth]
+      ) {
+        sharedDepth++
+      }
+    }
 
-      const Component = match.route.component
-      try {
-        let element = createComponent(Component, {
-          get params() { return params() },
-        })
-        const layouts = match.route.layouts ?? []
-        for (const Layout of layouts.slice().reverse()) {
-          element = createComponent(Layout, {
-            get children() { return element },
-            get params() { return params() },
-          })
+    if (sharedDepth > 0 && activeRoot) {
+      const leaf = createLeaf(match.route, match.params)
+      if (leaf.hasError) {
+        deactivateActiveRoot()
+        activeRoot = {
+          key: routeKey,
+          element: leaf.element,
+          layouts: [],
+          levels: [],
+          leaf,
+          setParams: leaf.setParams,
+          dispose: leaf.dispose,
+          isKeepAlive: false,
         }
-        renderedElement = element
+        return activeRoot.element
+      }
+
+      activeRoot.leaf.dispose()
+      for (let i = activeRoot.levels.length - 1; i >= sharedDepth; i--) {
+        activeRoot.levels[i].dispose()
+      }
+      const retainedLevels = activeRoot.levels.slice(0, sharedDepth)
+
+      let currentChild = leaf.element
+      const newLevels: ActiveLayoutLevel[] = []
+      try {
+        for (let i = nextLayouts.length - 1; i >= sharedDepth; i--) {
+          const level = createLayoutLevel(nextLayouts[i], currentChild, match.params)
+          newLevels.unshift(level)
+          currentChild = level.element
+        }
       } catch (error) {
+        leaf.dispose()
+        for (const lvl of newLevels) lvl.dispose()
+        for (const lvl of retainedLevels) lvl.dispose()
+        activeRoot = null
         const ErrorComponent = match.route.error
         if (ErrorComponent) {
-          renderedElement = createComponent(ErrorComponent, {
-            error,
-            get params() { return params() },
-          })
-        } else {
-          throw error
+          const errorLeaf = createLeaf(match.route, match.params)
+          activeRoot = {
+            key: routeKey,
+            element: errorLeaf.element,
+            layouts: [],
+            levels: [],
+            leaf: errorLeaf,
+            setParams: errorLeaf.setParams,
+            dispose: errorLeaf.dispose,
+            isKeepAlive: false,
+          }
+          return activeRoot.element
         }
+        throw error
       }
-      return disposeFn
-    })
+
+      retainedLevels[sharedDepth - 1].setChild(currentChild)
+
+      for (let i = 0; i < sharedDepth; i++) {
+        retainedLevels[i].setParams(match.params)
+      }
+
+      const allLevels = [...retainedLevels, ...newLevels]
+      activeRoot = {
+        key: routeKey,
+        element: retainedLevels[0].element,
+        layouts: nextLayouts,
+        levels: allLevels,
+        leaf,
+        setParams: (p) => setParamsActiveRoot(activeRoot!, p),
+        dispose: () => disposeActiveRoot(activeRoot!),
+        isKeepAlive: false,
+      }
+      return activeRoot.element
+    }
+
+    // sharedDepth === 0: full dispose + recreate
+    deactivateActiveRoot()
+
+    const leaf = createLeaf(match.route, match.params)
+    if (leaf.hasError || nextLayouts.length === 0) {
+      activeRoot = {
+        key: routeKey,
+        element: leaf.element,
+        layouts: leaf.hasError ? [] : nextLayouts,
+        levels: [],
+        leaf,
+        setParams: leaf.setParams,
+        dispose: leaf.dispose,
+        isKeepAlive: !leaf.hasError && !!match.route.keepAlive,
+      }
+      return activeRoot.element
+    }
+
+    let currentChild = leaf.element
+    const levels: ActiveLayoutLevel[] = []
+    try {
+      for (let i = nextLayouts.length - 1; i >= 0; i--) {
+        const level = createLayoutLevel(nextLayouts[i], currentChild, match.params)
+        levels.unshift(level)
+        currentChild = level.element
+      }
+    } catch (error) {
+      leaf.dispose()
+      for (const lvl of levels) lvl.dispose()
+      const ErrorComponent = match.route.error
+      if (ErrorComponent) {
+        const errorLeaf = createLeaf(match.route, match.params)
+        activeRoot = {
+          key: routeKey,
+          element: errorLeaf.element,
+          layouts: [],
+          levels: [],
+          leaf: errorLeaf,
+          setParams: errorLeaf.setParams,
+          dispose: errorLeaf.dispose,
+          isKeepAlive: false,
+        }
+        return activeRoot.element
+      }
+      throw error
+    }
 
     activeRoot = {
       key: routeKey,
-      element: renderedElement,
-      setParams: setParamsFn,
-      dispose,
+      element: levels[0].element,
+      layouts: nextLayouts,
+      levels,
+      leaf,
+      setParams: (p) => setParamsActiveRoot(activeRoot!, p),
+      dispose: () => disposeActiveRoot(activeRoot!),
       isKeepAlive: !!match.route.keepAlive,
     }
     return activeRoot.element
