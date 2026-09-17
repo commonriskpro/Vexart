@@ -14,24 +14,11 @@ export interface VoidSeparatorProps {
 
 /** @public */
 export function VoidSeparator(props: VoidSeparatorProps) {
-  const vertical = props.orientation === "vertical"
-
-  if (vertical) {
-    return (
-      <box
-        className={props.className}
-        width={1}
-        height="grow"
-        backgroundColor={themeColors.border}
-      />
-    )
-  }
-
   return (
     <box
       className={props.className}
-      width="grow"
-      height={1}
+      width={props.orientation === "vertical" ? 1 : "grow"}
+      height={props.orientation === "vertical" ? "grow" : 1}
       backgroundColor={themeColors.border}
     />
   )
