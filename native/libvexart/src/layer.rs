@@ -8,7 +8,6 @@ use std::collections::HashMap;
 const FIRST_LAYER_HANDLE: u64 = 1;
 const FIRST_TERMINAL_IMAGE_ID: u32 = 1000;
 const RESOURCE_KEY_PREFIX: u64 = 0x4C00_0000_0000_0000;
-const TARGET_RESOURCE_TAG: u64 = 0;
 const TERMINAL_IMAGE_RESOURCE_TAG: u64 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -148,7 +147,7 @@ impl LayerRegistry {
             if resized || old_bytes != record.bytes || target_changed {
                 register_layer_resources(resources, record);
             } else {
-                touch_layer_resources(resources, record.handle, desc.frame);
+                touch_layer_resources(resources, record.target, record.handle, desc.frame);
             }
 
             let mut flags = 0;
@@ -212,7 +211,7 @@ impl LayerRegistry {
     ) -> Option<u32> {
         let record = self.records.get_mut(&handle)?;
         record.last_used_frame = frame;
-        touch_layer_resources(resources, handle, frame);
+        touch_layer_resources(resources, record.target, handle, frame);
         Some(record.terminal_image_id)
     }
 
@@ -225,7 +224,7 @@ impl LayerRegistry {
         let record = self.records.get_mut(&handle)?;
         record.dirty = false;
         record.last_used_frame = frame;
-        touch_layer_resources(resources, handle, frame);
+        touch_layer_resources(resources, record.target, handle, frame);
         Some(record.terminal_image_id)
     }
 
@@ -258,38 +257,27 @@ impl Default for LayerRegistry {
     }
 }
 
-fn layer_target_resource_key(handle: u64) -> u64 {
-    RESOURCE_KEY_PREFIX | (handle << 1) | TARGET_RESOURCE_TAG
-}
-
 fn terminal_image_resource_key(handle: u64) -> u64 {
     RESOURCE_KEY_PREFIX | (handle << 1) | TERMINAL_IMAGE_RESOURCE_TAG
 }
 
 fn register_layer_resources(resources: &mut ResourceManager, record: &LayerRecord) {
     resources.register(
-        layer_target_resource_key(record.handle),
-        ResourceKind::LayerTarget,
-        record.bytes,
-        record.last_used_frame,
-        WgpuHandle::Id(record.target),
-    );
-    resources.register(
         terminal_image_resource_key(record.handle),
         ResourceKind::TerminalImage,
-        record.bytes,
+        0,
         record.last_used_frame,
         WgpuHandle::Id(record.terminal_image_id as u64),
     );
+    resources.touch(record.target, record.last_used_frame);
 }
 
-fn touch_layer_resources(resources: &mut ResourceManager, handle: u64, frame: u64) {
-    resources.touch(layer_target_resource_key(handle), frame);
+fn touch_layer_resources(resources: &mut ResourceManager, target: u64, handle: u64, frame: u64) {
+    resources.touch(target, frame);
     resources.touch(terminal_image_resource_key(handle), frame);
 }
 
 fn remove_layer_resources(resources: &mut ResourceManager, handle: u64) {
-    resources.remove(layer_target_resource_key(handle));
     resources.remove(terminal_image_resource_key(handle));
 }
 
@@ -328,7 +316,8 @@ mod tests {
             LayerUpsertResult::FLAG_CREATED
         );
         assert_eq!(registry.len(), 1);
-        assert_eq!(resources.resource_count(), 2);
+        assert_eq!(resources.resource_count(), 1);
+        assert_eq!(resources.current_usage_bytes(), 0);
     }
 
     #[test]
@@ -349,7 +338,7 @@ mod tests {
         assert_eq!(first.handle, second.handle);
         assert_eq!(first.terminal_image_id, second.terminal_image_id);
         assert_eq!(registry.len(), 1);
-        assert_eq!(resources.resource_count(), 2);
+        assert_eq!(resources.resource_count(), 1);
     }
 
     #[test]
@@ -391,5 +380,42 @@ mod tests {
         assert_eq!(image_id, Some(FIRST_TERMINAL_IMAGE_ID));
         assert_eq!(registry.len(), 0);
         assert_eq!(resources.resource_count(), 0);
+    }
+
+    #[test]
+    fn test_layer_vram_accounting_does_not_inflate() {
+        let mut registry = LayerRegistry::new();
+        let mut resources = ResourceManager::new();
+
+        // 1. Simulate target creation (as vexart_composite_target_create does)
+        let target_handle = 42u64;
+        let target_bytes = 100 * 100 * 4; // 40,000 bytes
+        resources.register(
+            target_handle,
+            ResourceKind::LayerTarget,
+            target_bytes,
+            1,
+            WgpuHandle::Id(target_handle),
+        );
+        assert_eq!(resources.current_usage_bytes(), 40_000);
+        assert_eq!(resources.resource_count(), 1);
+
+        // 2. Layer upsert with that target
+        let desc = LayerDescriptor {
+            target: target_handle,
+            x: 0.0,
+            y: 0.0,
+            width: 100,
+            height: 100,
+            z: 1,
+            flags: 0,
+            frame: 1,
+        };
+        let _result = registry.upsert(LayerKey::from_bytes(b"test_layer"), desc, &mut resources);
+
+        // Usage must remain EXACTLY 40,000 bytes (no 2x or 3x inflation!)
+        assert_eq!(resources.current_usage_bytes(), 40_000);
+        // Resource count is 2 (1 target + 1 zero-byte terminal image)
+        assert_eq!(resources.resource_count(), 2);
     }
 }
