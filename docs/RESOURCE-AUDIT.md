@@ -630,16 +630,16 @@ El ciclo de optimización integral de recursos cubrió las capas de TypeScript, 
 ## Total Improvement Summary
 
 ### Aggregate Results
-~60 commits on `main` across 4 optimization phases + bug fixes + shadow batching.
+~63 commits on `main` across 4 optimization phases + bug fixes + shadow batching.
 
-**30/30 audit findings resolved · 951+ tests passing · 0 regressions**
+**31/31 audit findings resolved · 951+ tests passing · 0 regressions**
 
 ### Performance — Before vs After
 
 | Metric | Pre-Audit | Post-Audit | Improvement |
 |---|---|---|---|
-| Hover Storm avg latency | 8.92 ms | 2.37 ms | −73.4% |
-| Hover Storm P99 latency | 23.47 ms | ~4.5 ms | −80.8% |
+| Hover Storm avg latency | 8.92 ms | 1.94 ms | −78.3% |
+| Hover Storm P99 latency | 23.47 ms | 3.03 ms | −87.1% |
 | Hover Storm jank rate | 6.7% | 0.0% | −100% |
 | FFI dispatches/frame (shadow) | ~122 | 1 | −99.2% |
 | WGPU render passes/frame (shadow) | ~122 | 1 | −99.2% |
@@ -668,4 +668,45 @@ El ciclo de optimización integral de recursos cubrió las capas de TypeScript, 
 
 ### Deferred Items
 
-All 30 identified findings have been resolved. No items deferred.
+All 31 identified findings have been resolved. No items deferred.
+
+## Post-Cleanup: Debug Logging Removal
+
+### Finding #31: Synchronous Debug Logging in Production Hot Path
+
+During P99 latency investigation, we discovered **14 debug logging points** across TypeScript and Rust that were executing in production builds:
+
+- **Root cause of P99 spikes**: `appendFileSync("/tmp/tge-layers.log")` executed unconditionally on every render frame, causing 10-15ms I/O stalls when the OS flushed page cache.
+- **Rust**: `set_last_error()` in `error.rs` unconditionally wrote to `/tmp/ps5-diagnostic.log` on every FFI error.
+- **Additional**: 5 conditional-but-synchronous log writers across `loop.ts`, `dirty.ts`, `terminal/index.ts`, `terminal/size.ts`, `composite.ts`, and `paint.ts`.
+
+### Changes (3 commits)
+
+| Commit | Scope | Files | Action |
+|---|---|---|---|
+| `dad15a6` | Engine core | 6 files | Removed all `appendFileSync`, dispatch counters, `DebugLogHelpers` type, stack trace generation |
+| `ea207a8` | Terminal + animation | 4 files | Removed resize/kitty/presentation debug logging, gated compositor warnings behind `NODE_ENV` |
+| `f83b03a` | Rust native | 2 files | Removed `/tmp/ps5-diagnostic.log` from `error.rs`, gated `pipeline_cache.rs` `eprintln!` behind `#[cfg(debug_assertions)]` |
+
+### Final Benchmark (Post-Cleanup)
+
+| Scenario | Avg (ms) | P50 (ms) | P95 (ms) | P99 (ms) | Jank % | Status |
+|---|---|---|---|---|---|---|
+| **Idle Efficiency** | 2.13 | 1.82 | 2.94 | 2.94 | 0.0% | PASS |
+| **Typing / INP** | 0.35 | 0.33 | 0.66 | 0.79 | 0.0% | PASS |
+| **Virtual Scroll** | 5.26 | 4.80 | 8.18 | 9.95 | 0.0% | PASS |
+| **Hover Storm** | 1.94 | 1.87 | 2.81 | 3.03 | 0.0% | PASS |
+| **60FPS Animation** | 0.92 | 0.84 | 1.57 | 1.90 | 0.0% | PASS |
+
+**5/5 scenarios PASS · 0.0% jank across all scenarios · P99 stable at 3.03ms (was 11.61ms)**
+
+### Hover Storm Complete Evolution
+
+| Checkpoint | Avg (ms) | P99 (ms) | Jank |
+|---|---|---|---|
+| Pre-audit baseline | 8.92 | 23.47 | 6.7% |
+| Post-Phase 4 | 8.92 | 23.47 | 6.7% |
+| Post-Hover Storm fixes | 2.47 | 4.63 | 0.0% |
+| Post-Shadow Batching Option D | 2.37 | 11.61 | 0.0% |
+| **Post-debug cleanup (final)** | **1.94** | **3.03** | **0.0%** |
+| **Total improvement** | **−78.3%** | **−87.1%** | **−100%** |
