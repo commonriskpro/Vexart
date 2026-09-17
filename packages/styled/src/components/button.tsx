@@ -143,11 +143,11 @@ const variantGetters: Record<VoidButtonVariant, VariantColors> = {
 
 /** @public */
 export function VoidButton(props: VoidButtonProps) {
-  const v = props.variant ?? "default"
-  const s = props.size ?? "default"
-  const vg = variantGetters[v]
-  const ss = sizeStyles[s]
-  const isLink = v === "link"
+  const v = () => props.variant ?? "default"
+  const s = () => props.size ?? "default"
+  const vg = () => variantGetters[v()]
+  const ss = () => sizeStyles[s()]
+  const isLink = () => v() === "link"
 
   return (
     <HeadlessButton
@@ -164,34 +164,34 @@ export function VoidButton(props: VoidButtonProps) {
           // offered parent width while an auto-sized button is measured, which
           // paints the label outside the button. Fixed icon buttons still need
           // true centering.
-          alignX={ss.width === undefined ? "left" : "center"}
+          alignX={ss().width === undefined ? "left" : "center"}
           alignY="center"
-          gap={ss.gap}
-          height={ss.height}
-          width={ss.width}
-          paddingLeft={ss.paddingX}
-          paddingRight={ss.paddingX}
-          paddingTop={ss.paddingY}
-          paddingBottom={ss.paddingY}
-          backgroundColor={ctx.pressed ? vg.activeBg() : vg.bg()}
-          cornerRadius={ss.cornerRadius}
-          borderColor={ctx.focused ? vg.focusBorder() : vg.border()}
-          borderWidth={ctx.focused ? 2 : vg.borderWidth}
-          shadow={vg.shadow}
-          glow={ctx.focused && !isLink ? glows.ring : undefined}
+          gap={ss().gap}
+          height={ss().height}
+          width={ss().width}
+          paddingLeft={ss().paddingX}
+          paddingRight={ss().paddingX}
+          paddingTop={ss().paddingY}
+          paddingBottom={ss().paddingY}
+          backgroundColor={ctx.pressed ? vg().activeBg() : vg().bg()}
+          cornerRadius={ss().cornerRadius}
+          borderColor={ctx.focused ? vg().focusBorder() : vg().border()}
+          borderWidth={ctx.focused ? 2 : vg().borderWidth}
+          shadow={vg().shadow}
+          glow={ctx.focused && !isLink() ? glows.ring : undefined}
           opacity={props.disabled ? 0.5 : 1}
-          hoverStyle={{ backgroundColor: vg.hoverBg() }}
-          activeStyle={{ backgroundColor: vg.activeBg() }}
+          hoverStyle={{ backgroundColor: vg().hoverBg() }}
+          activeStyle={{ backgroundColor: vg().activeBg() }}
           focusStyle={{
-            borderColor: vg.focusBorder(),
+            borderColor: vg().focusBorder(),
             borderWidth: 2,
-            glow: isLink ? undefined : glows.ring,
+            glow: isLink() ? undefined : glows.ring,
           }}
         >
           <text
-            color={vg.fg()}
-            fontSize={ss.fontSize}
-            fontWeight={isLink ? weight.normal : weight.medium}
+            color={vg().fg()}
+            fontSize={ss().fontSize}
+            fontWeight={isLink() ? weight.normal : weight.medium}
           >
             {props.children}
           </text>
