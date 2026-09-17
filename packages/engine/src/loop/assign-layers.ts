@@ -142,17 +142,6 @@ type LayerBounds = {
   boundary: LayerBoundary
 }
 
-type ColorCommand = { index: number; cmd: RenderCommand }
-
-function packedColor(cmd: RenderCommand) {
-  return cmd.color >>> 0
-}
-
-function boundsKey(cmd: RenderCommand) {
-  return `${Math.round(cmd.x)}:${Math.round(cmd.y)}:${Math.round(cmd.x + cmd.width)}:${Math.round(cmd.y + cmd.height)}`
-}
-
-
 /**
  * State bag for assignLayersSpatial.
  * Provides external references the function cannot own directly.
@@ -181,45 +170,6 @@ function nodeForBoundary(state: AssignLayersState, boundary: LayerBoundary) {
   return state.nodeRefById?.get(boundary.nodeId) ?? (boundary.path ? resolveNodeByPath(state.root, boundary.path) : null)
 }
 
-function expandLayerBoundsForEffects(
-  node: TGENode,
-  x: number,
-  y: number,
-  right: number,
-  bottom: number,
-): { x: number; y: number; right: number; bottom: number } {
-  let minX = x
-  let minY = y
-  let maxX = right
-  let maxY = bottom
-
-  if (node.props.shadow) {
-    const shadows = Array.isArray(node.props.shadow) ? node.props.shadow : [node.props.shadow]
-    for (const s of shadows) {
-      if (!s || typeof s !== "object") continue
-      const sx = typeof (s as any).x === "number" ? (s as any).x : (typeof (s as any).offsetX === "number" ? (s as any).offsetX : 0)
-      const sy = typeof (s as any).y === "number" ? (s as any).y : (typeof (s as any).offsetY === "number" ? (s as any).offsetY : 0)
-      const blur = Math.max(0, typeof (s as any).blur === "number" ? (s as any).blur : 0)
-      const pad = Math.ceil(blur) * 2
-      minX = Math.min(minX, x + sx - pad)
-      minY = Math.min(minY, y + sy - pad)
-      maxX = Math.max(maxX, right + sx + pad)
-      maxY = Math.max(maxY, bottom + sy + pad)
-    }
-  }
-
-  if (node.props.glow && typeof node.props.glow === "object") {
-    const glow = node.props.glow as { radius?: number }
-    const pad = Math.ceil((glow.radius ?? 0) * 2)
-    minX = Math.min(minX, x - pad)
-    minY = Math.min(minY, y - pad)
-    maxX = Math.max(maxX, right + pad)
-    maxY = Math.max(maxY, bottom + pad)
-  }
-
-  return { x: minX, y: minY, right: maxX, bottom: maxY }
-}
-
 function setSubtreeLayerKey(node: TGENode, key: string) {
   node._layerKey = key
   for (const child of node.children) setSubtreeLayerKey(child, key)
@@ -237,10 +187,9 @@ function assignNodeLayerKeys(root: TGENode, bounds: LayerBounds[], state: Assign
 /**
  * Assign commands to layers.
  *
- * Uses a HYBRID strategy:
- *   1. Scroll-container layers → matched by SCISSOR commands (order-based)
- *   2. Static layers with bg → matched by RECT color (existing approach)
- *   3. Static layers without bg → matched by child TEXT content
+ * Uses a two-tier strategy:
+ *   1. Scroll-container layers → matched by SCISSOR commands (range + bg/border attachment)
+ *   2. Static layers → matched by nodeId ancestry via nodeIdToLayerIdx
  *
  * @returns LayerPlan with bgSlot, contentSlots, slotBoundaryByKey, and boundaries.
  */
@@ -293,25 +242,8 @@ export function assignLayersSpatial(
     }
   }
 
-  // ── Build layer slots with bounds ──
+  // ── Build layer slots ──
   const layerBounds: LayerBounds[] = []
-  const rectCommandsByNodeId = new Map<number, { index: number; cmd: RenderCommand }>()
-  const rectCommandsByColor = new Map<number, ColorCommand[]>()
-  for (let i = 0; i < commands.length; i++) {
-    const cmd = commands[i]
-    if (cmd.type !== CMD.RECTANGLE) continue
-    if (cmd.nodeId !== undefined) {
-      rectCommandsByNodeId.set(cmd.nodeId, { index: i, cmd })
-    }
-    const color = packedColor(cmd)
-    let entries = rectCommandsByColor.get(color)
-    if (!entries) {
-      entries = []
-      rectCommandsByColor.set(color, entries)
-    }
-    entries.push({ index: i, cmd })
-  }
-  const claimedBounds = new Set<string>()
 
   // Map: scroll node id → scissor pair using startCmd.nodeId with positional fallback
   const scissorsByNodeId = new Map<number, ScissorPair>()
@@ -330,25 +262,7 @@ export function assignLayersSpatial(
     if (!node) continue
 
     const slot: LayerSlot = { key: `layer:${b.nodeId}`, z: b.z, cmdIndices: [] }
-    let scissor: ScissorPair | null = null
-
-    if (b.isScroll) {
-      scissor = scissorsByNodeId.get(b.nodeId) ?? null
-    }
-
-    const layoutX = Math.round(node.layout.x)
-    const layoutY = Math.round(node.layout.y)
-    const layoutW = Math.round(node.layout.width)
-    const layoutH = Math.round(node.layout.height)
-    const hasUsableLayout = layoutW > 0 && layoutH > 0
-    const shouldPreferLayoutBounds = !scissor && hasUsableLayout && (
-      node.props.floating ||
-      node.props.layer === true ||
-      node.props.interactionMode === "drag" ||
-      b.hasSubtreeTransform ||
-      node.props.shadow !== undefined ||
-      node.props.glow !== undefined
-    )
+    const scissor = b.isScroll ? (scissorsByNodeId.get(b.nodeId) ?? null) : null
 
     if (scissor) {
       layerBounds.push({
@@ -360,83 +274,16 @@ export function assignLayersSpatial(
         scissor,
         boundary: b,
       })
-    } else if (shouldPreferLayoutBounds) {
-      const bounds = expandLayerBoundsForEffects(node, layoutX, layoutY, layoutX + layoutW, layoutY + layoutH)
+    } else {
       layerBounds.push({
         slot,
-        x: bounds.x,
-        y: bounds.y,
-        right: bounds.right,
-        bottom: bounds.bottom,
+        x: 0,
+        y: 0,
+        right: 0,
+        bottom: 0,
         scissor: null,
         boundary: b,
       })
-    } else if (b.hasBg) {
-      const directMatch = rectCommandsByNodeId.get(b.nodeId)
-      if (directMatch) {
-        const cmd = directMatch.cmd
-        claimedBounds.add(boundsKey(cmd))
-        const bounds = expandLayerBoundsForEffects(
-          node,
-          Math.round(cmd.x),
-          Math.round(cmd.y),
-          Math.round(cmd.x + cmd.width),
-          Math.round(cmd.y + cmd.height),
-        )
-        layerBounds.push({
-          slot,
-          x: bounds.x,
-          y: bounds.y,
-          right: bounds.right,
-          bottom: bounds.bottom,
-          scissor: null,
-          boundary: b,
-        })
-      } else {
-        // Fallback for synthetic commands in unit tests lacking nodeId
-        const targetColor = (node.props.backgroundColor as number) || 0
-        let found = false
-        const candidates = rectCommandsByColor.get(targetColor >>> 0) ?? []
-        for (const candidate of candidates) {
-          const cmd = candidate.cmd
-          const key = boundsKey(cmd)
-          if (!claimedBounds.has(key)) {
-            claimedBounds.add(key)
-            const bounds = expandLayerBoundsForEffects(
-              node,
-              Math.round(cmd.x),
-              Math.round(cmd.y),
-              Math.round(cmd.x + cmd.width),
-              Math.round(cmd.y + cmd.height),
-            )
-            layerBounds.push({
-              slot,
-              x: bounds.x,
-              y: bounds.y,
-              right: bounds.right,
-              bottom: bounds.bottom,
-              scissor: null,
-              boundary: b,
-            })
-            found = true
-            break
-          }
-        }
-        if (!found) {
-          layerBounds.push({ slot, x: 0, y: 0, right: 0, bottom: 0, scissor: null, boundary: b })
-        }
-      }
-    } else {
-      const lx = Math.round(node.layout.x)
-      const ly = Math.round(node.layout.y)
-      const lw = Math.round(node.layout.width)
-      const lh = Math.round(node.layout.height)
-      if (lw > 0 && lh > 0) {
-        const bounds = expandLayerBoundsForEffects(node, lx, ly, lx + lw, ly + lh)
-        layerBounds.push({ slot, x: bounds.x, y: bounds.y, right: bounds.right, bottom: bounds.bottom, scissor: null, boundary: b })
-      } else {
-        layerBounds.push({ slot, x: 0, y: 0, right: 0, bottom: 0, scissor: null, boundary: b })
-      }
     }
   }
 
