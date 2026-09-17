@@ -6,7 +6,6 @@
  * @public
  */
 
-import { createMemo } from "solid-js"
 import type { JSX } from "solid-js"
 import { createToggle, type ToggleRenderContext } from "../helpers/create-toggle"
 
@@ -38,12 +37,15 @@ export function Switch(props: SwitchProps) {
     focusId: props.focusId,
   })
 
-  const rendered = createMemo(() => props.renderSwitch({
-    checked: toggle.checked(),
-    focused: toggle.focused(),
-    disabled: toggle.disabled(),
+  const context: SwitchRenderContext = {
+    get checked() { return toggle.checked() },
+    get focused() { return toggle.focused() },
+    get disabled() { return toggle.disabled() },
     toggleProps: toggle.toggleProps,
-  }))
+  }
 
-  return <box width="fit" height="fit">{rendered}</box>
+  // Invoke the render prop once. Its JSX property expressions track the
+  // context getters and update the existing visual tree in place; rebuilding
+  // this subtree on toggle/focus changes tears down and remounts nodes.
+  return <box width="fit" height="fit">{props.renderSwitch(context)}</box>
 }
