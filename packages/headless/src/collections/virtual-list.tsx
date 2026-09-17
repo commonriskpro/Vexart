@@ -223,15 +223,15 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
       <For each={visibleItems()}>
         {(item, idx) => {
           const absIndex = () => startIndex() + idx()
-          const ctx = (): VirtualListItemContext => ({
-            selected: props.selectedIndex === absIndex(),
-            highlighted: highlightedIndex() === absIndex(),
-            hovered: hoveredIndex() === absIndex(),
-            index: absIndex(),
-          })
+          const ctx: VirtualListItemContext = {
+            get selected() { return props.selectedIndex === absIndex() },
+            get highlighted() { return highlightedIndex() === absIndex() },
+            get hovered() { return hoveredIndex() === absIndex() },
+            get index() { return absIndex() },
+          }
           return (
             <box height={props.itemHeight} width="100%">
-              {props.renderItem(item, absIndex(), ctx())}
+              {props.renderItem(item, absIndex(), ctx)}
             </box>
           )
         }}

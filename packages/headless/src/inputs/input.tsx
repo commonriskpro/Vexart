@@ -284,20 +284,20 @@ export function Input(props: InputProps) {
   // Headless mode — delegate to consumer's renderInput
   if (props.renderInput) {
     const renderFn = props.renderInput
-    const rendered = createMemo(() => renderFn({
-      value: props.value,
-      displayText: showPlaceholder() ? (props.placeholder ?? "") : props.value,
-      showPlaceholder: showPlaceholder(),
-      cursor: cursor(),
+    const ctx: InputRenderContext = {
+      get value() { return props.value },
+      get displayText() { return showPlaceholder() ? (props.placeholder ?? "") : props.value },
+      get showPlaceholder() { return showPlaceholder() },
+      get cursor() { return cursor() },
       get blink() { return blink() },
-      focused: checkFocus(),
-      disabled: disabled(),
-      selection: hasSelection() ? selRange() : null,
+      get focused() { return checkFocus() },
+      get disabled() { return disabled() },
+      get selection() { return hasSelection() ? selRange() : null },
       inputProps: {
         onPress: () => { if (!disabled()) focus() },
       },
-    }))
-    return <>{rendered}</>
+    }
+    return <>{renderFn(ctx)}</>
   }
 
   // ── Self-rendering mode — built-in cursor (same pattern as Textarea) ──

@@ -153,14 +153,14 @@ export type PopoverProps = {
 export function Popover(props: PopoverProps) {
   const toggle = () => props.onOpenChange(!props.open)
 
-  const triggerCtx = (): PopoverTriggerContext => ({
-    open: props.open,
+  const triggerCtx: PopoverTriggerContext = {
+    get open() { return props.open },
     toggle,
-  })
+  }
 
   return (
     <box direction="column" width="fit" height="fit">
-      {props.renderTrigger(triggerCtx())}
+      {props.renderTrigger(triggerCtx)}
       {props.open ? (
         <>
           <box

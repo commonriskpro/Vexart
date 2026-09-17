@@ -197,20 +197,20 @@ function SelectRoot(props: SelectProps) {
   if (props.options && props.renderTrigger) {
     const selectedLabel = () => options().find((o) => o.value === props.value)?.label
 
-    const triggerCtx = (): SelectTriggerContext => ({
-      selectedLabel: selectedLabel(),
-      placeholder: props.placeholder ?? "Select…",
-      open: open(),
-      focused: focused(),
-      disabled: disabled(),
-    })
+    const triggerCtx: SelectTriggerContext = {
+      get selectedLabel() { return selectedLabel() },
+      get placeholder() { return props.placeholder ?? "Select…" },
+      get open() { return open() },
+      get focused() { return focused() },
+      get disabled() { return disabled() },
+    }
 
     const optionElements = () =>
       options().map((opt, i) => {
         const ctx: SelectOptionContext = {
-          highlighted: highlightedIndex() === i,
-          selected: props.value === opt.value,
-          disabled: opt.disabled ?? false,
+          get highlighted() { return highlightedIndex() === i },
+          get selected() { return props.value === opt.value },
+          get disabled() { return opt.disabled ?? false },
         }
         const rendered = props.renderOption
           ? props.renderOption(opt, ctx)
@@ -238,7 +238,7 @@ function SelectRoot(props: SelectProps) {
             setOpen(!open())
           }
         }}>
-          {props.renderTrigger(triggerCtx())}
+          {props.renderTrigger(triggerCtx)}
         </box>
         {content()}
       </box>

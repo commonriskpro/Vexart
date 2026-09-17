@@ -180,14 +180,14 @@ export function Combobox(props: ComboboxProps) {
     },
   })
 
-  const inputCtx = (): ComboboxInputContext => ({
-    inputValue: query() || selectedLabel() || "",
-    placeholder: props.placeholder ?? "Search…",
-    open: open(),
-    focused: focused(),
-    disabled: disabled(),
-    selectedLabel: selectedLabel(),
-  })
+  const inputCtx: ComboboxInputContext = {
+    get inputValue() { return query() || selectedLabel() || "" },
+    get placeholder() { return props.placeholder ?? "Search…" },
+    get open() { return open() },
+    get focused() { return focused() },
+    get disabled() { return disabled() },
+    get selectedLabel() { return selectedLabel() },
+  }
 
   const optionElements = () => {
     const opts = filtered()
@@ -196,9 +196,9 @@ export function Combobox(props: ComboboxProps) {
     }
     return opts.map((opt, i) => {
       const ctx: ComboboxOptionContext = {
-        highlighted: highlightedIndex() === i,
-        selected: props.value === opt.value,
-        disabled: opt.disabled ?? false,
+        get highlighted() { return highlightedIndex() === i },
+        get selected() { return props.value === opt.value },
+        get disabled() { return opt.disabled ?? false },
       }
       // Wrap in clickable box with hover — onPress selects, onMouseOver highlights
       return (
@@ -222,7 +222,7 @@ export function Combobox(props: ComboboxProps) {
     <box direction="column">
       {/* Click input to toggle dropdown + grab focus for keyboard input */}
       <box onPress={() => { if (!disabled()) { setOpen(!open()); focus() } }}>
-        {props.renderInput(inputCtx())}
+        {props.renderInput(inputCtx)}
       </box>
       {open() ? (
         <>

@@ -44,16 +44,14 @@ export function ProgressBar(props: ProgressBarProps) {
   const ratio = () => Math.max(0, Math.min(1, props.value / max()))
   const fillWidth = () => Math.round(barWidth() * ratio())
 
-  return (
-    <>
-      {props.renderBar({
-        ratio: ratio(),
-        fillWidth: fillWidth(),
-        width: barWidth(),
-        height: barHeight(),
-        value: props.value,
-        max: max(),
-      })}
-    </>
-  )
+  const ctx: ProgressBarRenderContext = {
+    get ratio() { return ratio() },
+    get fillWidth() { return fillWidth() },
+    get width() { return barWidth() },
+    get height() { return barHeight() },
+    get value() { return props.value },
+    get max() { return max() },
+  }
+
+  return <>{props.renderBar(ctx)}</>
 }
