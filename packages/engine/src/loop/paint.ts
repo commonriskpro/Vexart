@@ -341,7 +341,25 @@ function updateLayerStabilityCounters(
   nodeRefById: Map<number, TGENode>,
 ) {
   for (const prepared of preparedSlots) {
-    if (prepared.isBackground) continue
+    if (prepared.isBackground) {
+      const dirty = prepared.dirtyRect
+      for (const [, node] of nodeRefById) {
+        if (node.destroyed || node.kind === "text" || node.kind === "root") continue
+        if (node._layerKey && node._layerKey !== "bg") continue
+        const nodeDirty = dirty !== null && (
+          !node.layout ||
+          (node.layout.width > 0 && node.layout.height > 0 && intersectRect(node.layout, dirty) !== null)
+        )
+        if (nodeDirty) {
+          node._unstableFrameCount++
+          node._stableFrameCount = 0
+        } else {
+          node._stableFrameCount++
+          node._unstableFrameCount = 0
+        }
+      }
+      continue
+    }
     const boundary = slotBoundaryByKey.get(prepared.slot.key)
     if (!boundary) continue
     const node = nodeRefById.get(boundary.nodeId)
