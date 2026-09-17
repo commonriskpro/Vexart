@@ -96,6 +96,7 @@ import {
   copyGpuTargetRegionToImage,
   vexartUploadImage, vexartRemoveImage,
   flushVexartBatch, flushVexartBatchToTarget, compositeTargetUniformToTarget,
+  acquireGeometryStream, releaseGeometryStream,
   _vexartImageHandles,
 } from "./gpu-composite-ops"
 
@@ -510,14 +511,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     estimatedLayeredBytes: 0,
     estimatedFinalBytes: 0,
   }
-  type LinearGradientItem = { x: number; y: number; w: number; h: number; boxW: number; boxH: number; radius: number; from: number; to: number; dirX: number; dirY: number }
-  type RadialGradientItem = { x: number; y: number; w: number; h: number; boxW: number; boxH: number; radius: number; from: number; to: number }
-  const shapeRects: WgpuCanvasShapeRect[] = []
-  const shapeRectCorners: WgpuCanvasShapeRectCorners[] = []
-  const linearGradients: LinearGradientItem[] = []
-  const radialGradients: RadialGradientItem[] = []
-  const shadows: WgpuCanvasShadow[] = []
-  const glows: WgpuCanvasGlow[] = []
   const imageGroups = new Map<bigint, ImageGroup>()
   const transformedImageGroups = new Map<bigint, TransformedImageGroup>()
   // Each renderFrame may recursively render an isolated source sprite. Keep
@@ -1190,71 +1183,35 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     targetHandle: VexartTargetHandle,
   ): { ok: boolean; rawLayer: { data: Uint8Array; width: number; height: number; region?: { x: number; y: number; width: number; height: number } } | null } => {
     let first = true
-    shapeRects.length = 0
-    shapeRectCorners.length = 0
-    linearGradients.length = 0
-    radialGradients.length = 0
-    glows.length = 0
     imageGroups.clear()
     transformedImageGroups.clear()
     const parentTransientFullFrameImages = transientFullFrameImages
     transientFullFrameImages = []
     let targetMutationVersion = 0
 
-    // ── vexart_paint_dispatch flush helpers ───────────────────────────────
-    // Per design §11 / §8.2: each flush accumulates instances, packs into
-    // a graph buffer per cmd_kind, then calls vexart_paint_dispatch once.
     const vctx = getVexartCtx()
+    const geometryStream = acquireGeometryStream()
 
-    const flushInstances = <T>(
-      items: T[],
-      cmdKind: number,
-      stride: number,
-      pack: (item: T) => void,
-    ) => {
-      if (items.length === 0) return false
-      const instances = new Uint8Array(items.length * stride)
-      for (let i = 0; i < items.length; i++) {
-        pack(items[i])
-        // HP-3: Copy directly from shared _packU8 buffer — no .slice() allocation.
-        // pack() already wrote stride bytes into _packView[0..stride].
-        for (let b = 0; b < stride; b++) instances[i * stride + b] = _packU8[b]
-      }
+    const flushStream = () => {
+      if (geometryStream.isEmpty()) return false
+      ensureLoadedLayer()
       _dispatchCount++
-      _dispatchKinds.push(`k${cmdKind}:${items.length}`)
-      flushVexartBatch(vctx, cmdKind, instances, targetHandle)
-      items.length = 0
-      first = false
-      targetMutationVersion += 1
-      return true
+      _dispatchKinds.push(geometryStream.describeCommands())
+      const ok = geometryStream.flush(vctx, targetHandle)
+      if (ok) {
+        first = false
+        targetMutationVersion += 1
+        if (layerOpen) {
+          vexartCompositeTargetEndLayer(vctx, targetHandle)
+          layerOpen = false
+        }
+      }
+      return ok
     }
 
-    const flushShapeRects = () => {
-      // Dispatch via vexart_paint_dispatch (cmd_kind=1: BridgeShapeRectInstance)
-      flushInstances(shapeRects, 1, 80, (r) => { packShapeRectInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.fill ?? 0, r.stroke ?? 0, r.strokeWidth) })
-    }
-    const flushShapeRectCorners = () => {
-      // Dispatch via vexart_paint_dispatch (cmd_kind=2: BridgeShapeRectCornersInstance)
-      flushInstances(shapeRectCorners, 2, 96, (r) => { packShapeRectCornersInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radii, r.fill ?? 0, r.stroke ?? 0, r.strokeWidth) })
-    }
-    const flushLinearGradients = () => {
-      // Dispatch via vexart_paint_dispatch (cmd_kind=12: BridgeLinearGradientInstance)
-      flushInstances(linearGradients, 12, 80, (r) => { packLinearGradientInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.from, r.to, r.dirX, r.dirY) })
-    }
-    const flushRadialGradients = () => {
-      // Dispatch via vexart_paint_dispatch (cmd_kind=13: BridgeRadialGradientInstance)
-      flushInstances(radialGradients, 13, 80, (r) => { packRadialGradientInstance(r.x, r.y, r.w, r.h, r.boxW, r.boxH, r.radius, r.from, r.to) })
-    }
-    const flushGlows = () => {
-      // Dispatch via vexart_paint_dispatch (cmd_kind=6: BridgeGlowInstance)
-      flushInstances(glows, 6, 48, (g) => { packGlowInstance(g.x, g.y, g.w, g.h, g.color, g.intensity ?? 80) })
-    }
-    const flushShadows = () => {
-      // Dispatch via vexart_paint_dispatch (cmd_kind=20: BridgeShadowInstance)
-      flushInstances(shadows, 20, 80, (s) => { packShadowInstance(s.x, s.y, s.w, s.h, s.color, s.radii, s.boxW, s.boxH, s.offsetX, s.offsetY, s.blur) })
-    }
     const flushImages = () => {
       if (imageGroups.size === 0) return
+      ensureLoadedLayer()
       // cmd_kind=9 has no image-handle field, so paint_dispatch binds the
       // transparent fallback texture. Composite each uploaded image directly
       // through the source-bound image FFI instead.
@@ -1277,6 +1234,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     }
     const flushTransformedImages = () => {
       if (transformedImageGroups.size === 0) return
+      ensureLoadedLayer()
       // Transformed images must use the composite entry point so the native
       // layer binds the actual source image. Paint dispatch cmd_kind=10 has no
       // image handle in its packed ABI and therefore uses only the fallback
@@ -1306,6 +1264,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     }
     const flushText = () => {
       if (deferredMsdfOps.length === 0) return
+      ensureLoadedLayer()
       for (const msdfOp of deferredMsdfOps) {
         tryMsdfText(
           vctx, targetHandle,
@@ -1319,14 +1278,8 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       deferredMsdfOps.length = 0
     }
     const flushAll = () => {
-      flushShapeRects()
-      flushShapeRectCorners()
-      flushLinearGradients()
-      flushRadialGradients()
-      flushShadows()
-      flushGlows()
-      flushImages()
-      flushTransformedImages()
+      flushStream()
+      flushRasterImages()
       flushText()
     }
 
@@ -1564,17 +1517,18 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
           flushRasterImages()
           const boxW = clip.right - clip.left
           const boxH = clip.bottom - clip.top
-          shapeRects.push({
-            x: (clip.left / ctx.target.width) * 2 - 1,
-            y: 1 - (clip.top / ctx.target.height) * 2,
-            w: (boxW / ctx.target.width) * 2,
-            h: -((boxH / ctx.target.height) * 2),
+          geometryStream.appendShapeRect(
+            (clip.left / ctx.target.width) * 2 - 1,
+            1 - (clip.top / ctx.target.height) * 2,
+            (boxW / ctx.target.width) * 2,
+            -((boxH / ctx.target.height) * 2),
             boxW,
             boxH,
-            radius: clampShapeRadius(op.radius, boxW, boxH),
-            strokeWidth: 0,
-            fill: op.color,
-          })
+            clampShapeRadius(op.radius, boxW, boxH),
+            op.color >>> 0,
+            0,
+            0,
+          )
           markDirty(clip.left, clip.top, clip.right, clip.bottom)
           continue
         }
@@ -1585,8 +1539,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
           let effectOp = op
           const effectOpacity = effectOp.effect.opacity ?? 1
           const cornerRadii = effectOp.effect.cornerRadii
-          const haloShapeRectStart = shapeRects.length
-          const haloShapeCornerStart = shapeRectCorners.length
 
           const hasFilteredOutput = !!(effectOp.effect.filter && hasSelfFilter(effectOp.effect.filter))
           const hasGroupOpacity = effectOpacity < 1 && effectOp.effect._node !== undefined && effectOp.effect._node.children.length > 0
@@ -1727,7 +1679,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
            if (effectOp.backdrop && !cornerRadii) {
             // Force a clear render pass before backdrop reads from the target.
             if (first) {
-              shapeRects.push({ x: 0, y: 0, w: 0, h: 0, boxW: 0, boxH: 0, radius: 0, strokeWidth: 0, fill: 0 })
+              geometryStream.appendShapeRect(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
             }
             // Flush every pending kind before copying the backdrop source.
             // In particular, image/canvas ops are source-bound composites
@@ -1783,7 +1735,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
 
            if (effectOp.backdrop && cornerRadii) {
             if (first) {
-              shapeRects.push({ x: 0, y: 0, w: 0, h: 0, boxW: 0, boxH: 0, radius: 0, strokeWidth: 0, fill: 0 })
+              geometryStream.appendShapeRect(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
             }
             flushAll()
             if (layerOpen) {
@@ -1854,108 +1806,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
           const boxH = clip.bottom - clip.top
           const radius = clampShapeRadius(effectOp.rect.radius, boxW, boxH)
 
-          if (!effectOp.effect.gradient && !effectOp.effect.glow && !effectOp.effect.shadow) {
-            if (cornerRadii) {
-              shapeRectCorners.push({
-                x: (clip.left / ctx.target.width) * 2 - 1,
-                y: 1 - (clip.top / ctx.target.height) * 2,
-                w: (boxW / ctx.target.width) * 2,
-                h: -((boxH / ctx.target.height) * 2),
-                boxW,
-                boxH,
-                radii: cornerRadii,
-                strokeWidth: 0,
-                fill: baseFill,
-              })
-              markDirty(clip.left, clip.top, clip.right, clip.bottom)
-              flushAll()
-              continue
-            }
-            shapeRects.push({
-              x: (clip.left / ctx.target.width) * 2 - 1,
-              y: 1 - (clip.top / ctx.target.height) * 2,
-              w: (boxW / ctx.target.width) * 2,
-              h: -((boxH / ctx.target.height) * 2),
-              boxW,
-              boxH,
-              radius,
-              strokeWidth: 0,
-              fill: baseFill,
-            })
-            markDirty(clip.left, clip.top, clip.right, clip.bottom)
-            flushAll()
-            continue
-          }
-
-          if (!effectOp.effect.gradient && (effectOp.color & 0xff) > 1) {
-            if (cornerRadii) {
-              shapeRectCorners.push({
-                x: (clip.left / ctx.target.width) * 2 - 1,
-                y: 1 - (clip.top / ctx.target.height) * 2,
-                w: (boxW / ctx.target.width) * 2,
-                h: -((boxH / ctx.target.height) * 2),
-                boxW,
-                boxH,
-                radii: cornerRadii,
-                strokeWidth: 0,
-                fill: baseFill,
-              })
-            } else {
-              shapeRects.push({
-                x: (clip.left / ctx.target.width) * 2 - 1,
-                y: 1 - (clip.top / ctx.target.height) * 2,
-                w: (boxW / ctx.target.width) * 2,
-                h: -((boxH / ctx.target.height) * 2),
-                boxW,
-                boxH,
-                radius,
-                strokeWidth: 0,
-                fill: baseFill,
-              })
-            }
-            markDirty(clip.left, clip.top, clip.right, clip.bottom)
-          }
-
-          if (effectOp.effect.gradient) {
-            if (!cornerRadii) {
-              shapeRects.push({
-                x: (clip.left / ctx.target.width) * 2 - 1,
-                y: 1 - (clip.top / ctx.target.height) * 2,
-                w: (boxW / ctx.target.width) * 2,
-                h: -((boxH / ctx.target.height) * 2),
-                boxW,
-                boxH,
-                radius,
-                strokeWidth: 0,
-                fill: baseFill,
-              })
-            } else if ((effectOp.color & 0xff) > 1) {
-              shapeRectCorners.push({
-                x: (clip.left / ctx.target.width) * 2 - 1,
-                y: 1 - (clip.top / ctx.target.height) * 2,
-                w: (boxW / ctx.target.width) * 2,
-                h: -((boxH / ctx.target.height) * 2),
-                boxW,
-                boxH,
-                radii: cornerRadii,
-                strokeWidth: 0,
-                fill: baseFill,
-              })
-            }
-            markDirty(clip.left, clip.top, clip.right, clip.bottom)
-          }
-
-          if (effectOp.effect.shadow || effectOp.effect.glow) {
-            // Paint halos after the ancestor batches but before this node's
-            // own fill. Dispatching a halo after the fill can otherwise
-            // darken the source interior instead of remaining behind it.
-            const ownRects = shapeRects.splice(haloShapeRectStart)
-            const ownCorners = shapeRectCorners.splice(haloShapeCornerStart)
-            flushAll()
-            for (const rect of ownRects) shapeRects.push(rect)
-            for (const rect of ownCorners) shapeRectCorners.push(rect)
-          }
-
+          // 1. Shadows (painted behind fill in Painter's order)
           if (effectOp.effect.shadow) {
             const shadowDefs = Array.isArray(effectOp.effect.shadow) ? effectOp.effect.shadow : [effectOp.effect.shadow]
             const shadowRadii = cornerRadii ?? { tl: radius, tr: radius, br: radius, bl: radius }
@@ -1978,19 +1829,19 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
                 continue
               }
 
-              shadows.push({
-                x: (quadLeft / ctx.target.width) * 2 - 1,
-                y: 1 - (quadTop / ctx.target.height) * 2,
-                w: (quadW / ctx.target.width) * 2,
-                h: -((quadH / ctx.target.height) * 2),
-                color: effectOpacity < 1 ? applyOpacityToColor(s.color, effectOpacity) : s.color,
-                radii: shadowRadii,
-                boxW: sourceW,
-                boxH: sourceH,
-                offsetX: s.x,
-                offsetY: s.y,
+              geometryStream.appendShadow(
+                (quadLeft / ctx.target.width) * 2 - 1,
+                1 - (quadTop / ctx.target.height) * 2,
+                (quadW / ctx.target.width) * 2,
+                -((quadH / ctx.target.height) * 2),
+                effectOpacity < 1 ? applyOpacityToColor(s.color, effectOpacity) : s.color,
+                shadowRadii,
+                sourceW,
+                sourceH,
+                s.x,
+                s.y,
                 blur,
-              })
+              )
               markDirty(
                 Math.max(0, quadLeft),
                 Math.max(0, quadTop),
@@ -1998,9 +1849,9 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
                 Math.min(ctx.target.height, quadBottom),
               )
             }
-            flushShadows()
           }
 
+          // 2. Glow (painted behind fill in Painter's order)
           if (effectOp.effect.glow) {
             const sourceX = clip.x
             const sourceY = clip.y
@@ -2014,27 +1865,62 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
             const quadW = quadRight - quadLeft
             const quadH = quadBottom - quadTop
 
-            if (quadRight <= 0 || quadBottom <= 0 || quadLeft >= ctx.target.width || quadTop >= ctx.target.height) {
-              continue
+            if (quadRight > 0 && quadBottom > 0 && quadLeft < ctx.target.width && quadTop < ctx.target.height) {
+              geometryStream.appendGlow(
+                (quadLeft / ctx.target.width) * 2 - 1,
+                1 - (quadTop / ctx.target.height) * 2,
+                (quadW / ctx.target.width) * 2,
+                -((quadH / ctx.target.height) * 2),
+                effectOpacity < 1 ? applyOpacityToColor(effectOp.effect.glow.color, effectOpacity) : effectOp.effect.glow.color,
+                effectOp.effect.glow.intensity,
+              )
+              markDirty(
+                Math.max(0, quadLeft),
+                Math.max(0, quadTop),
+                Math.min(ctx.target.width, quadRight),
+                Math.min(ctx.target.height, quadBottom),
+              )
             }
-
-            glows.push({
-              x: (quadLeft / ctx.target.width) * 2 - 1,
-              y: 1 - (quadTop / ctx.target.height) * 2,
-              w: (quadW / ctx.target.width) * 2,
-              h: -((quadH / ctx.target.height) * 2),
-              color: effectOpacity < 1 ? applyOpacityToColor(effectOp.effect.glow.color, effectOpacity) : effectOp.effect.glow.color,
-              intensity: effectOp.effect.glow.intensity,
-            })
-            markDirty(
-              Math.max(0, quadLeft),
-              Math.max(0, quadTop),
-              Math.min(ctx.target.width, quadRight),
-              Math.min(ctx.target.height, quadBottom),
-            )
-            flushGlows()
           }
 
+          // 3. Base fill
+          const hasGlowOrShadow = !!(effectOp.effect.glow || effectOp.effect.shadow)
+          const shouldPaintBaseFill = !effectOp.effect.gradient
+            ? (!hasGlowOrShadow || (effectOp.color & 0xff) > 1)
+            : (!cornerRadii || (effectOp.color & 0xff) > 1)
+
+          if (shouldPaintBaseFill) {
+            if (cornerRadii) {
+              geometryStream.appendShapeRectCorners(
+                (clip.left / ctx.target.width) * 2 - 1,
+                1 - (clip.top / ctx.target.height) * 2,
+                (boxW / ctx.target.width) * 2,
+                -((boxH / ctx.target.height) * 2),
+                boxW,
+                boxH,
+                cornerRadii,
+                baseFill,
+                0,
+                0,
+              )
+            } else {
+              geometryStream.appendShapeRect(
+                (clip.left / ctx.target.width) * 2 - 1,
+                1 - (clip.top / ctx.target.height) * 2,
+                (boxW / ctx.target.width) * 2,
+                -((boxH / ctx.target.height) * 2),
+                boxW,
+                boxH,
+                radius,
+                baseFill,
+                0,
+                0,
+              )
+            }
+            markDirty(clip.left, clip.top, clip.right, clip.bottom)
+          }
+
+          // 4. Gradient (if any)
           if (effectOp.effect.gradient?.type === "linear") {
             if (cornerRadii) {
               flushAll()
@@ -2056,21 +1942,20 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
             }
             const from = effectOpacity < 1 ? applyOpacityToColor(effectOp.effect.gradient.from, effectOpacity) : effectOp.effect.gradient.from
             const to = effectOpacity < 1 ? applyOpacityToColor(effectOp.effect.gradient.to, effectOpacity) : effectOp.effect.gradient.to
-            linearGradients.push({
-              x: (clip.left / ctx.target.width) * 2 - 1,
-              y: 1 - (clip.top / ctx.target.height) * 2,
-              w: (boxW / ctx.target.width) * 2,
-              h: -((boxH / ctx.target.height) * 2),
+            geometryStream.appendLinearGradient(
+              (clip.left / ctx.target.width) * 2 - 1,
+              1 - (clip.top / ctx.target.height) * 2,
+              (boxW / ctx.target.width) * 2,
+              -((boxH / ctx.target.height) * 2),
               boxW,
               boxH,
               radius,
               from,
               to,
-              dirX: Math.cos((effectOp.effect.gradient.angle * Math.PI) / 180),
-              dirY: Math.sin((effectOp.effect.gradient.angle * Math.PI) / 180),
-            })
+              Math.cos((effectOp.effect.gradient.angle * Math.PI) / 180),
+              Math.sin((effectOp.effect.gradient.angle * Math.PI) / 180),
+            )
             markDirty(clip.left, clip.top, clip.right, clip.bottom)
-            flushAll()
             continue
           }
 
@@ -2095,23 +1980,21 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
             }
             const from = effectOpacity < 1 ? applyOpacityToColor(effectOp.effect.gradient.from, effectOpacity) : effectOp.effect.gradient.from
             const to = effectOpacity < 1 ? applyOpacityToColor(effectOp.effect.gradient.to, effectOpacity) : effectOp.effect.gradient.to
-            radialGradients.push({
-              x: (clip.left / ctx.target.width) * 2 - 1,
-              y: 1 - (clip.top / ctx.target.height) * 2,
-              w: (boxW / ctx.target.width) * 2,
-              h: -((boxH / ctx.target.height) * 2),
+            geometryStream.appendRadialGradient(
+              (clip.left / ctx.target.width) * 2 - 1,
+              1 - (clip.top / ctx.target.height) * 2,
+              (boxW / ctx.target.width) * 2,
+              -((boxH / ctx.target.height) * 2),
               boxW,
               boxH,
               radius,
               from,
               to,
-            })
+            )
             markDirty(clip.left, clip.top, clip.right, clip.bottom)
-            flushAll()
             continue
           }
 
-          flushAll()
           continue
         }
         if (op.kind === "border") {
@@ -2134,17 +2017,18 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
               if (right <= left || bottom <= top) return
               const stripW = right - left
               const stripH = bottom - top
-              shapeRects.push({
-                x: (left / ctx.target.width) * 2 - 1,
-                y: 1 - (top / ctx.target.height) * 2,
-                w: (stripW / ctx.target.width) * 2,
-                h: -((stripH / ctx.target.height) * 2),
-                boxW: stripW,
-                boxH: stripH,
-                radius: 0,
-                strokeWidth: 0,
-                fill: op.color >>> 0,
-              })
+              geometryStream.appendShapeRect(
+                (left / ctx.target.width) * 2 - 1,
+                1 - (top / ctx.target.height) * 2,
+                (stripW / ctx.target.width) * 2,
+                -((stripH / ctx.target.height) * 2),
+                stripW,
+                stripH,
+                0,
+                op.color >>> 0,
+                0,
+                0,
+              )
             }
             const top = Math.max(0, Math.round(sides.top))
             const bottom = Math.max(0, Math.round(sides.bottom))
@@ -2160,31 +2044,33 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
           const boxW = clip.right - clip.left
           const boxH = clip.bottom - clip.top
           if (op.cornerRadii) {
-            shapeRectCorners.push({
-              x: (clip.left / ctx.target.width) * 2 - 1,
-              y: 1 - (clip.top / ctx.target.height) * 2,
-              w: (boxW / ctx.target.width) * 2,
-              h: -((boxH / ctx.target.height) * 2),
+            geometryStream.appendShapeRectCorners(
+              (clip.left / ctx.target.width) * 2 - 1,
+              1 - (clip.top / ctx.target.height) * 2,
+              (boxW / ctx.target.width) * 2,
+              -((boxH / ctx.target.height) * 2),
               boxW,
               boxH,
-              radii: op.cornerRadii,
-              strokeWidth: op.borderWidth,
-              stroke: op.color >>> 0,
-            })
+              op.cornerRadii,
+              0,
+              op.color >>> 0,
+              op.borderWidth,
+            )
             markDirty(clip.left, clip.top, clip.right, clip.bottom)
             continue
           }
-          shapeRects.push({
-            x: (clip.left / ctx.target.width) * 2 - 1,
-            y: 1 - (clip.top / ctx.target.height) * 2,
-            w: (boxW / ctx.target.width) * 2,
-            h: -((boxH / ctx.target.height) * 2),
+          geometryStream.appendShapeRect(
+            (clip.left / ctx.target.width) * 2 - 1,
+            1 - (clip.top / ctx.target.height) * 2,
+            (boxW / ctx.target.width) * 2,
+            -((boxH / ctx.target.height) * 2),
             boxW,
             boxH,
-            radius: clampShapeRadius(op.radius, boxW, boxH),
-            strokeWidth: op.borderWidth,
-            stroke: op.color >>> 0,
-          })
+            clampShapeRadius(op.radius, boxW, boxH),
+            0,
+            op.color >>> 0,
+            op.borderWidth,
+          )
           markDirty(clip.left, clip.top, clip.right, clip.bottom)
           continue
         }
@@ -2331,6 +2217,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
         vexartRemoveImage(vctx, handle)
       }
       transientFullFrameImages = parentTransientFullFrameImages
+      releaseGeometryStream(geometryStream)
     }
 
     // DEBUG: Log dispatch count per renderFrame

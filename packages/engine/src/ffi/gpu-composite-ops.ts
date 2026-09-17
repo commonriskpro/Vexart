@@ -11,7 +11,19 @@ import { ptr } from "bun:ffi"
 import { openVexartLibrary } from "./vexart-bridge"
 import { vexartGetLastError } from "./vexart-functions"
 import { GRAPH_MAGIC, GRAPH_VERSION } from "./vexart-buffer"
-import { vu16, vu32 } from "./gpu-pack"
+import {
+  vu16, vu32,
+  packShapeRectDirect, packShapeRectCornersDirect,
+  packGlowDirect, packShadowDirect,
+  packLinearGradientDirect, packRadialGradientDirect,
+  CMD_SHAPE_RECT, STRIDE_SHAPE_RECT,
+  CMD_SHAPE_RECT_CORNERS, STRIDE_SHAPE_RECT_CORNERS,
+  CMD_GLOW, STRIDE_GLOW,
+  CMD_LINEAR_GRADIENT, STRIDE_LINEAR_GRADIENT,
+  CMD_RADIAL_GRADIENT, STRIDE_RADIAL_GRADIENT,
+  CMD_SHADOW, STRIDE_SHADOW,
+  type WgpuCanvasCornerRadii,
+} from "./gpu-pack"
 import type { BackdropFilterParams } from "./render-graph"
 
 // ── Handle types ─────────────────────────────────────────────────────────
@@ -322,4 +334,252 @@ export function compositeTargetUniformToTarget(ctx: bigint, target: bigint, sour
   const { symbols } = openVexartLibrary()
   const rc = symbols.vexart_composite_update_uniform(ctx, target, sourceTarget, ptr(instanceData), 0) as number
   return rc === 0
+}
+
+// ── Geometry Stream ──────────────────────────────────────────────────────
+
+/**
+ * GeometryStream — Streaming buffer for batched WGPU geometry dispatches.
+ *
+ * Accumulates multiple command kinds (shapes, corners, shadows, glows, gradients)
+ * into a single graph buffer before dispatching to vexart_paint_dispatch.
+ * Consecutive instances of the same cmdKind coalesce into a single CmdPrefix block.
+ */
+export class GeometryStream {
+  private _buffer: ArrayBuffer
+  public view: DataView
+  public u8: Uint8Array
+  private _writeHead = 16
+  private _cmdCount = 0
+  private _currentCmdKind = -1
+  private _currentCmdLengthOffset = -1
+  private _currentCmdPayloadBytes = 0
+  private _commands: { kind: number; count: number }[] = []
+
+  constructor(initialCapacity = 256 * 1024) {
+    this._buffer = new ArrayBuffer(Math.max(initialCapacity, 1024))
+    this.view = new DataView(this._buffer)
+    this.u8 = new Uint8Array(this._buffer)
+  }
+
+  public isEmpty(): boolean {
+    return this._cmdCount === 0
+  }
+
+  public get commandCount(): number {
+    return this._cmdCount
+  }
+
+  public get totalBytes(): number {
+    return this._writeHead
+  }
+
+  public reset(): void {
+    this._writeHead = 16
+    this._cmdCount = 0
+    this._currentCmdKind = -1
+    this._currentCmdLengthOffset = -1
+    this._currentCmdPayloadBytes = 0
+    this._commands.length = 0
+  }
+
+  public describeCommands(): string {
+    return this._commands.map((c) => `k${c.kind}:${c.count}`).join(",")
+  }
+
+  private ensureCapacity(required: number): void {
+    if (required <= this._buffer.byteLength) return
+    let newCap = this._buffer.byteLength * 2
+    while (newCap < required) newCap *= 2
+    const newBuf = new ArrayBuffer(newCap)
+    const newU8 = new Uint8Array(newBuf)
+    newU8.set(this.u8.subarray(0, this._writeHead))
+    this._buffer = newBuf
+    this.u8 = newU8
+    this.view = new DataView(newBuf)
+  }
+
+  /**
+   * Reserve space for a single instance of cmdKind.
+   * If cmdKind matches the current open command, extends its byte length.
+   * Otherwise, writes a new 8-byte CmdPrefix and increments cmdCount.
+   *
+   * @returns The byte offset in this.view / this.u8 where instance data should be written.
+   */
+  public reserve(cmdKind: number, stride: number): number {
+    if (cmdKind === this._currentCmdKind) {
+      this.ensureCapacity(this._writeHead + stride)
+      this._currentCmdPayloadBytes += stride
+      vu32(this.view, this._currentCmdLengthOffset, this._currentCmdPayloadBytes)
+      this._commands[this._commands.length - 1].count += 1
+      const offset = this._writeHead
+      this._writeHead += stride
+      return offset
+    }
+
+    this.ensureCapacity(this._writeHead + 8 + stride)
+    this._cmdCount++
+    const prefixOffset = this._writeHead
+    vu16(this.view, prefixOffset, cmdKind)
+    vu16(this.view, prefixOffset + 2, 0)
+    this._currentCmdLengthOffset = prefixOffset + 4
+    this._currentCmdPayloadBytes = stride
+    vu32(this.view, this._currentCmdLengthOffset, stride)
+    this._currentCmdKind = cmdKind
+    this._commands.push({ kind: cmdKind, count: 1 })
+    const offset = prefixOffset + 8
+    this._writeHead = offset + stride
+    return offset
+  }
+
+  /**
+   * Reserve space for `count` instances of cmdKind.
+   */
+  public reserveInstances(cmdKind: number, stride: number, count: number): number {
+    if (count <= 0) return -1
+    const totalStride = stride * count
+    if (cmdKind === this._currentCmdKind) {
+      this.ensureCapacity(this._writeHead + totalStride)
+      this._currentCmdPayloadBytes += totalStride
+      vu32(this.view, this._currentCmdLengthOffset, this._currentCmdPayloadBytes)
+      this._commands[this._commands.length - 1].count += count
+      const offset = this._writeHead
+      this._writeHead += totalStride
+      return offset
+    }
+
+    this.ensureCapacity(this._writeHead + 8 + totalStride)
+    this._cmdCount++
+    const prefixOffset = this._writeHead
+    vu16(this.view, prefixOffset, cmdKind)
+    vu16(this.view, prefixOffset + 2, 0)
+    this._currentCmdLengthOffset = prefixOffset + 4
+    this._currentCmdPayloadBytes = totalStride
+    vu32(this.view, this._currentCmdLengthOffset, totalStride)
+    this._currentCmdKind = cmdKind
+    this._commands.push({ kind: cmdKind, count })
+    const offset = prefixOffset + 8
+    this._writeHead = offset + totalStride
+    return offset
+  }
+
+  public appendInstance(
+    cmdKind: number,
+    stride: number,
+    packFn: (view: DataView, offset: number) => void,
+  ): void {
+    const off = this.reserve(cmdKind, stride)
+    packFn(this.view, off)
+  }
+
+  public appendInstances<T>(
+    items: readonly T[],
+    cmdKind: number,
+    stride: number,
+    packFn: (view: DataView, offset: number, item: T) => void,
+  ): void {
+    if (items.length === 0) return
+    let off = this.reserveInstances(cmdKind, stride, items.length)
+    for (let i = 0; i < items.length; i++) {
+      packFn(this.view, off, items[i])
+      off += stride
+    }
+  }
+
+  public appendShapeRect(
+    x: number, y: number, w: number, h: number,
+    boxW: number, boxH: number, radius: number,
+    fill: number, stroke: number, strokeWidth: number,
+  ): void {
+    const off = this.reserve(CMD_SHAPE_RECT, STRIDE_SHAPE_RECT)
+    packShapeRectDirect(this.view, off, x, y, w, h, boxW, boxH, radius, fill, stroke, strokeWidth)
+  }
+
+  public appendShapeRectCorners(
+    x: number, y: number, w: number, h: number,
+    boxW: number, boxH: number, radii: WgpuCanvasCornerRadii,
+    fill: number, stroke: number, strokeWidth: number,
+  ): void {
+    const off = this.reserve(CMD_SHAPE_RECT_CORNERS, STRIDE_SHAPE_RECT_CORNERS)
+    packShapeRectCornersDirect(this.view, off, x, y, w, h, boxW, boxH, radii, fill, stroke, strokeWidth)
+  }
+
+  public appendShadow(
+    x: number, y: number, w: number, h: number,
+    color: number, radii: WgpuCanvasCornerRadii,
+    boxW: number, boxH: number,
+    offsetX: number, offsetY: number, blur: number,
+  ): void {
+    const off = this.reserve(CMD_SHADOW, STRIDE_SHADOW)
+    packShadowDirect(this.view, off, x, y, w, h, color, radii, boxW, boxH, offsetX, offsetY, blur)
+  }
+
+  public appendGlow(
+    x: number, y: number, w: number, h: number,
+    color: number, intensity: number,
+  ): void {
+    const off = this.reserve(CMD_GLOW, STRIDE_GLOW)
+    packGlowDirect(this.view, off, x, y, w, h, color, intensity)
+  }
+
+  public appendLinearGradient(
+    x: number, y: number, w: number, h: number,
+    boxW: number, boxH: number, radius: number,
+    from: number, to: number, dirX: number, dirY: number,
+  ): void {
+    const off = this.reserve(CMD_LINEAR_GRADIENT, STRIDE_LINEAR_GRADIENT)
+    packLinearGradientDirect(this.view, off, x, y, w, h, boxW, boxH, radius, from, to, dirX, dirY)
+  }
+
+  public appendRadialGradient(
+    x: number, y: number, w: number, h: number,
+    boxW: number, boxH: number, radius: number,
+    from: number, to: number,
+  ): void {
+    const off = this.reserve(CMD_RADIAL_GRADIENT, STRIDE_RADIAL_GRADIENT)
+    packRadialGradientDirect(this.view, off, x, y, w, h, boxW, boxH, radius, from, to)
+  }
+
+  /**
+   * Flush all accumulated commands in a single vexart_paint_dispatch call.
+   * Resets the stream upon completion.
+   *
+   * @returns true if commands were dispatched, false if stream was empty or error occurred.
+   */
+  public flush(vctx: bigint, targetHandle: bigint = 0n): boolean {
+    if (this._cmdCount === 0) return false
+    const total = this._writeHead
+    const payloadSize = total - 16
+    vu32(this.view, 0, GRAPH_MAGIC)
+    vu32(this.view, 4, GRAPH_VERSION)
+    vu32(this.view, 8, this._cmdCount)
+    vu32(this.view, 12, payloadSize)
+
+    const rc = getSymbols().vexart_paint_dispatch(
+      vctx,
+      targetHandle,
+      ptr(this.u8),
+      total,
+      ptr(_flushStatsBuf),
+    ) as number
+
+    if (rc !== 0) {
+      const err = vexartGetLastError()
+      console.error(`[vexart] paint_dispatch failed (${rc}): ${err}`)
+    }
+
+    this.reset()
+    return rc === 0
+  }
+}
+
+const _streamPool: GeometryStream[] = []
+
+export function acquireGeometryStream(): GeometryStream {
+  return _streamPool.pop() ?? new GeometryStream()
+}
+
+export function releaseGeometryStream(stream: GeometryStream): void {
+  stream.reset()
+  _streamPool.push(stream)
 }
