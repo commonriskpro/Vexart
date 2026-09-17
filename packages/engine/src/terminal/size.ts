@@ -12,8 +12,6 @@
  * fit in one terminal cell. Typically ~8x16 or ~10x20.
  */
 
-import { appendFileSync } from "node:fs"
-
 /** @public */
 export type TerminalSize = {
   /** Terminal width in columns (cells) */
@@ -152,14 +150,6 @@ export function queryPixelSize(
 /** @public */
 export type ResizeHandler = (size: TerminalSize) => void
 
-const RESIZE_DEBUG = process.env.VEXART_DEBUG_RESIZE === "1"
-const RESIZE_DEBUG_LOG = "/tmp/tge-resize.log"
-
-function logResize(message: string) {
-  if (!RESIZE_DEBUG) return
-  appendFileSync(RESIZE_DEBUG_LOG, `[terminal:size] ${message}\n`)
-}
-
 /** @public */
 export function onResize(stdout: NodeJS.WriteStream, handler: ResizeHandler): () => void {
   let timeout: ReturnType<typeof setTimeout> | null = null
@@ -178,16 +168,13 @@ export function onResize(stdout: NodeJS.WriteStream, handler: ResizeHandler): ()
     timeout = null
     const next = getSize(stdout)
     if (sameSize(last, next)) {
-      logResize(`emit skipped cols=${next.cols} rows=${next.rows} pw=${next.pixelWidth} ph=${next.pixelHeight} cw=${next.cellWidth} ch=${next.cellHeight}`)
       return
     }
     last = next
-    logResize(`emit cols=${next.cols} rows=${next.rows} pw=${next.pixelWidth} ph=${next.pixelHeight} cw=${next.cellWidth} ch=${next.cellHeight}`)
     handler(next)
   }
 
   const listener = () => {
-    logResize(`listener fired cols=${stdout.columns || 0} rows=${stdout.rows || 0}`)
     if (timeout) clearTimeout(timeout)
     timeout = setTimeout(emit, 0)
   }

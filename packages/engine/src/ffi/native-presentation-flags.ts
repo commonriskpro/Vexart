@@ -62,7 +62,7 @@ export function isNativePresentationForcedOff(): boolean {
  *
  * @param reason Optional description for debug logging.
  */
-export function enableNativePresentation(reason?: string): void {
+export function enableNativePresentation(_reason?: string): void {
   if (isNativePresentationForcedOff()) {
     _nativePresentationEnabled = false
     _fallbackReason = nativePresentationForcedOffReason()
@@ -71,9 +71,6 @@ export function enableNativePresentation(reason?: string): void {
   }
   _nativePresentationEnabled = true
   _fallbackReason = null
-  if (reason) {
-    logNativePresentation(`enabled: ${reason}`)
-  }
 }
 
 /**
@@ -84,7 +81,6 @@ export function enableNativePresentation(reason?: string): void {
 export function disableNativePresentation(reason: string): void {
   _nativePresentationEnabled = false
   _fallbackReason = reason
-  logNativePresentation(`disabled (fallback): ${reason}`)
 }
 
 /**
@@ -110,17 +106,4 @@ export function nativePresentationForcedOffReason(): string | null {
 export function isNativePresentationCapable(transmissionMode: "direct" | "shm"): boolean {
   return _nativePresentationEnabled
 }
-
-// ── Debug logging ─────────────────────────────────────────────────────────
-
-const _debug = process.env.VEXART_DEBUG_NATIVE_PRESENTATION === "1"
-
-function logNativePresentation(msg: string): void {
-  if (!_debug) return
-  process.stderr.write(`[vexart/native-presentation] ${msg}\n`)
-}
-
-export function logNativePresentationFallback(reason: string): void {
-  if (!_debug) return
-  logNativePresentation(`fallback activated: ${reason}`)
-}
+export function logNativePresentationFallback(_reason: string): void {}

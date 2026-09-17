@@ -86,11 +86,13 @@ export function unmarkLayerBacked(nodeId: number): void {
 export function registerAnimationDescriptor(desc: AnimationDescriptor): boolean {
   // Condition (2): node must have explicit layer backing (REQ-2B-304)
   if (!layerBackedNodes.has(desc.nodeId)) {
-    console.warn(
-      `[vexart compositor] Node ${desc.nodeId} animating '${desc.property}' lacks layer backing ` +
-      `(layer={true} or willChange). Falling back to full paint path. ` +
-      `Add layer={true} or willChange="${desc.property}" to enable the compositor fast path.`
-    )
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(
+        `[vexart compositor] Node ${desc.nodeId} animating '${desc.property}' lacks layer backing ` +
+        `(layer={true} or willChange). Falling back to full paint path. ` +
+        `Add layer={true} or willChange="${desc.property}" to enable the compositor fast path.`
+      )
+    }
     return false
   }
 
@@ -175,10 +177,12 @@ export function onSubtreeChanged(nodeId: number): void {
   const hadDescriptor = descriptors.has(descriptorKey(nodeId, "transform")) ||
     descriptors.has(descriptorKey(nodeId, "opacity"))
   if (hadDescriptor) {
-    console.warn(
-      `[vexart compositor] Node ${nodeId} had subtree change during compositor animation. ` +
-      `Falling back to full paint path.`
-    )
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(
+        `[vexart compositor] Node ${nodeId} had subtree change during compositor animation. ` +
+        `Falling back to full paint path.`
+      )
+    }
     deregisterAllDescriptors(nodeId)
     dirtyNonCompositorNodes.add(nodeId)
   }
