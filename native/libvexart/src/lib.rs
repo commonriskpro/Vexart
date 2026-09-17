@@ -326,13 +326,16 @@ pub unsafe extern "C" fn vexart_paint_upload_image(
             }
         };
 
-        {
+        let evicted = {
             let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            if let Err(err) = res_guard.try_reserve(bytes) {
-                *out_image = 0;
-                return err;
+            match res_guard.try_allocate(bytes) {
+                Ok(_) => res_guard.take_last_evicted(),
+                Err(_) => {
+                    *out_image = 0;
+                    return ERR_OUT_OF_BUDGET;
+                }
             }
-        }
+        };
 
         let rgba = std::slice::from_raw_parts(image_ptr, image_len as usize);
 
@@ -341,6 +344,9 @@ pub unsafe extern "C" fn vexart_paint_upload_image(
             Some(c) => c,
             None => return ERR_GPU_DEVICE_LOST,
         };
+        if !evicted.is_empty() {
+            evict_resources(pctx, &evicted);
+        }
         let max_dim = pctx.wgpu.device.limits().max_texture_dimension_2d;
         if width > max_dim || height > max_dim {
             return ERR_INVALID_ARG;
@@ -383,6 +389,31 @@ pub extern "C" fn vexart_paint_remove_image(_ctx: u64, image: u64) -> i32 {
     })
 }
 
+fn evict_resources(
+    pctx: &mut paint::PaintContext,
+    evicted: &[resource::EvictedResource],
+) {
+    for item in evicted {
+        match item.kind {
+            resource::ResourceKind::LayerTarget => {
+                let target_id = match item.gpu_handle {
+                    resource::WgpuHandle::Id(id) => id,
+                    resource::WgpuHandle::None => item.key,
+                };
+                composite::target_destroy(pctx, target_id);
+            }
+            resource::ResourceKind::ImageSprite => {
+                let image_id = match item.gpu_handle {
+                    resource::WgpuHandle::Id(id) => id,
+                    resource::WgpuHandle::None => item.key,
+                };
+                pctx.images.remove(&image_id);
+            }
+            _ => {}
+        }
+    }
+}
+
 // ─── §5.4 Composite ──────────────────────────────────────────────────────
 
 // ── Target lifecycle (Phase 2b Slice 1) ──────────────────────────────────
@@ -413,18 +444,24 @@ pub unsafe extern "C" fn vexart_composite_target_create(
                 return ERR_OUT_OF_BUDGET;
             }
         };
-        {
+        let evicted = {
             let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            if let Err(err) = res_guard.try_reserve(bytes) {
-                *out_target = 0;
-                return err;
+            match res_guard.try_allocate(bytes) {
+                Ok(_) => res_guard.take_last_evicted(),
+                Err(_) => {
+                    *out_target = 0;
+                    return ERR_OUT_OF_BUDGET;
+                }
             }
-        }
+        };
         let mut guard = get_or_init_paint();
         let pctx = match guard.as_mut() {
             Some(c) => c,
             None => return ERR_GPU_DEVICE_LOST,
         };
+        if !evicted.is_empty() {
+            evict_resources(pctx, &evicted);
+        }
         let rc = composite::target_create(pctx, width, height, out_target);
         if rc == OK {
             let handle = *out_target;
@@ -659,12 +696,18 @@ pub unsafe extern "C" fn vexart_composite_copy_region_to_image(
                 return ERR_OUT_OF_BUDGET;
             }
         };
-        {
+        let evicted = {
             let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            if let Err(err) = res_guard.try_reserve(bytes) {
-                *out_image = 0;
-                return err;
+            match res_guard.try_allocate(bytes) {
+                Ok(_) => res_guard.take_last_evicted(),
+                Err(_) => {
+                    *out_image = 0;
+                    return ERR_OUT_OF_BUDGET;
+                }
             }
+        };
+        if !evicted.is_empty() {
+            evict_resources(pctx, &evicted);
         }
         let rc = composite::copy_region_to_image(pctx, target, x, y, w, h, out_image);
         if rc == OK {
@@ -775,12 +818,18 @@ pub unsafe extern "C" fn vexart_composite_image_filter_backdrop(
             }
         };
 
-        {
+        let evicted = {
             let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            if let Err(err) = res_guard.try_reserve(total_pass_bytes) {
-                *out_image = 0;
-                return err;
+            match res_guard.try_allocate(total_pass_bytes) {
+                Ok(_) => res_guard.take_last_evicted(),
+                Err(_) => {
+                    *out_image = 0;
+                    return ERR_OUT_OF_BUDGET;
+                }
             }
+        };
+        if !evicted.is_empty() {
+            evict_resources(pctx, &evicted);
         }
 
         let rc = composite::image_filter_backdrop(pctx, image, params_ptr, params_len, out_image);
@@ -839,12 +888,18 @@ pub unsafe extern "C" fn vexart_composite_image_mask_rounded_rect(
                 return ERR_OUT_OF_BUDGET;
             }
         };
-        {
+        let evicted = {
             let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            if let Err(err) = res_guard.try_reserve(bytes) {
-                *out_image = 0;
-                return err;
+            match res_guard.try_allocate(bytes) {
+                Ok(_) => res_guard.take_last_evicted(),
+                Err(_) => {
+                    *out_image = 0;
+                    return ERR_OUT_OF_BUDGET;
+                }
             }
+        };
+        if !evicted.is_empty() {
+            evict_resources(pctx, &evicted);
         }
         let rc = composite::image_mask_rounded_rect(pctx, image, rect_ptr, out_image);
         if rc == OK {
@@ -903,12 +958,18 @@ pub unsafe extern "C" fn vexart_composite_image_mask_rounded_rect_region(
                 return ERR_OUT_OF_BUDGET;
             }
         };
-        {
+        let evicted = {
             let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            if let Err(err) = res_guard.try_reserve(bytes) {
-                *out_image = 0;
-                return err;
+            match res_guard.try_allocate(bytes) {
+                Ok(_) => res_guard.take_last_evicted(),
+                Err(_) => {
+                    *out_image = 0;
+                    return ERR_OUT_OF_BUDGET;
+                }
             }
+        };
+        if !evicted.is_empty() {
+            evict_resources(pctx, &evicted);
         }
         let rc = composite::image_mask_rounded_rect_region(pctx, image, rect_ptr, out_image);
         if rc == OK {
@@ -1471,12 +1532,18 @@ pub unsafe extern "C" fn vexart_image_asset_register(
             None => return ERR_GPU_DEVICE_LOST,
         };
 
-        {
+        let evicted = {
             let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            if let Err(err) = res_guard.try_reserve(bytes) {
-                *out_handle = 0;
-                return err;
+            match res_guard.try_allocate(bytes) {
+                Ok(_) => res_guard.take_last_evicted(),
+                Err(_) => {
+                    *out_handle = 0;
+                    return ERR_OUT_OF_BUDGET;
+                }
             }
+        };
+        if !evicted.is_empty() {
+            evict_resources(pctx, &evicted);
         }
 
         let handle = {
@@ -2228,5 +2295,97 @@ mod tests {
 
         let _ = vexart_context_destroy(1);
         assert_eq!(FRAME_COUNT.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn test_target_allocation_triggers_lru_eviction() {
+        let _lock = lock_or_recover(&TEST_LOCK);
+        let _ = vexart_context_destroy(1);
+
+        // Set budget to 32MB (the minimum allowed)
+        let rc = vexart_resource_set_budget(1, 32);
+        assert_eq!(rc, OK);
+
+        // Target 1: 2000 x 2500 x 4 = 20,000,000 bytes (~19.1MB)
+        let mut target1 = 0u64;
+        let rc = unsafe { vexart_composite_target_create(1, 2000, 2500, &mut target1) };
+        assert_eq!(rc, OK);
+        assert_ne!(target1, 0);
+
+        {
+            let res = lock_or_recover(&SHARED_RESOURCE);
+            assert_eq!(res.current_usage_bytes(), 20_000_000);
+            let guard = lock_or_recover(&SHARED_PAINT);
+            let pctx = guard.as_ref().unwrap();
+            assert!(pctx.targets.get(target1).is_some());
+        }
+
+        // Mark target1 as Cold
+        {
+            let mut res = lock_or_recover(&SHARED_RESOURCE);
+            if let Some(r) = res.resources.get_mut(&target1) {
+                r.priority = resource::Priority::Cold;
+            }
+        }
+
+        // Target 2: 2000 x 2500 x 4 = 20,000,000 bytes
+        // 20MB + 20MB = 40MB > 32MB budget.
+        // Under LRU eviction via try_allocate, target1 is evicted and destroyed on GPU!
+        let mut target2 = 0u64;
+        let rc = unsafe { vexart_composite_target_create(1, 2000, 2500, &mut target2) };
+        assert_eq!(rc, OK);
+        assert_ne!(target2, 0);
+        assert_ne!(target1, target2);
+
+        // Verify target1 was evicted and destroyed from both ResourceManager and PaintContext
+        {
+            let res = lock_or_recover(&SHARED_RESOURCE);
+            assert_eq!(res.current_usage_bytes(), 20_000_000);
+            assert!(res.resources.get(&target1).is_none(), "target1 must be removed from ResourceManager");
+            assert!(res.resources.get(&target2).is_some(), "target2 must be registered in ResourceManager");
+
+            let guard = lock_or_recover(&SHARED_PAINT);
+            let pctx = guard.as_ref().unwrap();
+            assert!(pctx.targets.get(target1).is_none(), "target1 texture must be freed from GPU");
+            assert!(pctx.targets.get(target2).is_some(), "target2 texture must be present on GPU");
+        }
+
+        let _ = vexart_context_destroy(1);
+    }
+
+    #[test]
+    fn test_target_allocation_respects_visible_no_eviction() {
+        let _lock = lock_or_recover(&TEST_LOCK);
+        let _ = vexart_context_destroy(1);
+
+        // Set budget to 32MB
+        let rc = vexart_resource_set_budget(1, 32);
+        assert_eq!(rc, OK);
+
+        // Target 1: 20MB (remains Visible)
+        let mut target1 = 0u64;
+        let rc = unsafe { vexart_composite_target_create(1, 2000, 2500, &mut target1) };
+        assert_eq!(rc, OK);
+        assert_ne!(target1, 0);
+
+        // Attempt to create target 2 (20MB) while target 1 is still Visible
+        // 20MB + 20MB = 40MB > 32MB budget. Visible cannot be evicted -> ERR_OUT_OF_BUDGET
+        let mut target2 = 999u64;
+        let rc = unsafe { vexart_composite_target_create(1, 2000, 2500, &mut target2) };
+        assert_eq!(rc, ERR_OUT_OF_BUDGET);
+        assert_eq!(target2, 0);
+
+        // Verify target 1 is preserved intact
+        {
+            let res = lock_or_recover(&SHARED_RESOURCE);
+            assert_eq!(res.current_usage_bytes(), 20_000_000);
+            assert!(res.resources.get(&target1).is_some());
+
+            let guard = lock_or_recover(&SHARED_PAINT);
+            let pctx = guard.as_ref().unwrap();
+            assert!(pctx.targets.get(target1).is_some());
+        }
+
+        let _ = vexart_context_destroy(1);
     }
 }

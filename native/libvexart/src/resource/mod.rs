@@ -44,12 +44,21 @@ pub enum ResourceKind {
 
 /// A lightweight GPU resource handle that stores identity without taking ownership.
 /// Ownership stays with the subsystem (TargetRegistry, AtlasRegistry, images HashMap, etc.).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WgpuHandle {
     /// No GPU resource (placeholder / sentinel).
     None,
     /// A handle by numeric ID (e.g. image handles, atlas font_id).
     Id(u64),
+}
+
+/// Metadata for an evicted GPU resource returned or tracked by ResourceManager.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvictedResource {
+    pub key: ResourceKey,
+    pub kind: ResourceKind,
+    pub size_bytes: u64,
+    pub gpu_handle: WgpuHandle,
 }
 
 /// Metadata for a single GPU-resident resource tracked by ResourceManager.
@@ -94,6 +103,8 @@ pub struct ResourceManager {
     pub evictions_last_frame: u32,
     /// Total resources evicted since startup.
     pub evictions_total: u64,
+    /// Metadata of resources evicted in the most recent `try_allocate` call.
+    pub last_evicted: Vec<EvictedResource>,
     /// Monotonic clock start for seconds-since-use calculations.
     startup: Instant,
 }
@@ -119,6 +130,7 @@ impl ResourceManager {
             resources: HashMap::new(),
             evictions_last_frame: 0,
             evictions_total: 0,
+            last_evicted: Vec::new(),
             startup: Instant::now(),
         }
     }
@@ -245,6 +257,7 @@ impl ResourceManager {
         };
 
         if needed <= self.budget_bytes {
+            self.last_evicted.clear();
             return Ok(vec![]); // No eviction needed.
         }
 
@@ -266,14 +279,34 @@ impl ResourceManager {
         }
 
         // Remove evicted resources from the registry now that allocation is guaranteed to fit.
+        self.last_evicted.clear();
         for key in &evicted {
-            self.remove(*key);
+            if let Some(r) = self.resources.remove(key) {
+                self.current_usage
+                    .fetch_sub(r.size_bytes, Ordering::Relaxed);
+                self.last_evicted.push(EvictedResource {
+                    key: *key,
+                    kind: r.kind,
+                    size_bytes: r.size_bytes,
+                    gpu_handle: r.gpu_handle,
+                });
+            }
         }
 
         self.evictions_last_frame += evicted.len() as u32;
         self.evictions_total += evicted.len() as u64;
 
         Ok(evicted)
+    }
+
+    /// Take the metadata of resources evicted in the most recent `try_allocate` call.
+    pub fn take_last_evicted(&mut self) -> Vec<EvictedResource> {
+        std::mem::take(&mut self.last_evicted)
+    }
+
+    /// Look up metadata for an evicted resource from the most recent `try_allocate` call.
+    pub fn get_evicted_resource(&self, key: ResourceKey) -> Option<&EvictedResource> {
+        self.last_evicted.iter().find(|e| e.key == key)
     }
 
     /// Reset the per-frame eviction counter. Call at the start of each frame.
@@ -522,5 +555,24 @@ mod tests {
 
         let default_mgr = ResourceManager::new();
         assert_eq!(default_mgr.budget_bytes, DEFAULT_BUDGET_BYTES);
+    }
+
+    #[test]
+    fn test_try_allocate_tracks_evicted_metadata() {
+        let mut mgr = ResourceManager::with_budget(50 * 1024 * 1024);
+        reg(&mut mgr, 1, ResourceKind::LayerTarget, 30, 1);
+        reg(&mut mgr, 2, ResourceKind::ImageSprite, 20, 2);
+        mgr.resources.get_mut(&1).unwrap().priority = Priority::Cold;
+        mgr.resources.get_mut(&2).unwrap().priority = Priority::Cold;
+
+        let result = mgr.try_allocate(20 * 1024 * 1024);
+        assert!(result.is_ok());
+        let evicted = mgr.take_last_evicted();
+        assert!(!evicted.is_empty());
+        let first = &evicted[0];
+        assert_eq!(first.key, 1);
+        assert_eq!(first.kind, ResourceKind::LayerTarget);
+        assert_eq!(first.size_bytes, 30 * 1024 * 1024);
+        assert_eq!(first.gpu_handle, WgpuHandle::Id(1));
     }
 }
