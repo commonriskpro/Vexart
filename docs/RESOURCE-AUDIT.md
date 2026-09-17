@@ -65,15 +65,17 @@ assignment.
 500 nodos a 60 FPS → presión GC extrema.
 - **Estado**: ✅ RESOLVED (`ce3391d`) — Object pooling con mutación in-place para entradas de `_layoutMap` en layout adapter, eliminando asignaciones masivas de objetos por frame.
 
-### 10. Props destructuring rompe la reactividad de SolidJS en styled components
+### 10. Props destructuring rompe la reactividad de SolidJS en styled components — 🔄 EN PROGRESO
 `button.tsx:152`, `badge.tsx:64`, `avatar.tsx:31`, `card.tsx:25` —
 `const v = props.variant ?? "default"` evalúa una sola vez en mount. Cambios
 dinámicos de variant/size/color se pierden silenciosamente.
+- **Estado**: 🔄 EN PROGRESO — En resolución activa preservando reactividad en componentes styled (`fix(styled):`).
 
-### 11. Contextos de render con valores planos causan remounts completos
+### 11. Contextos de render con valores planos causan remounts completos — 🔄 EN PROGRESO
 `combobox.tsx:180`, `select.tsx:183`, `progress-bar.tsx:57` — Pasan
 `open: open()` en vez de `get open() { return open() }`. Solid trata el
 subtree entero como dirty y lo recrea.
+- **Estado**: 🔄 EN PROGRESO — En resolución activa implementando getters reactivos en contextos render prop (`fix(headless):`).
 
 ### 12. `.map()` sin key en Code, Diff, RadioGroup, Markdown — ✅ RESOLVED
 `code.tsx:157`, `diff.tsx:177`, `markdown.tsx:324` — Bypass de
@@ -365,14 +367,16 @@ Commits atómicos ejecutados (9 commits):
 
 ### Ítems Restantes y Alcance Futuro
 
-#### Fuera de Scope (PRs funcionales separados)
-- **Finding #10**: Props destructuring rompe reactividad en styled components (`button.tsx`, `badge.tsx`, etc.). Requiere PR separado con tipo de commit `fix(styled):`.
-- **Finding #11**: Contextos de render con valores planos causan remounts completos (`combobox.tsx`, `select.tsx`, etc.). Requiere PR separado con tipo de commit `fix(headless):`.
+#### En Progreso (Resolución Activa)
+- **Finding #10**: Props destructuring rompe reactividad en styled components (`button.tsx`, `badge.tsx`, etc.) — 🔄 **En progreso** (`fix(styled):`).
+- **Finding #11**: Contextos de render con valores planos causan remounts completos (`combobox.tsx`, `select.tsx`, etc.) — 🔄 **En progreso** (`fix(headless):`).
+
+#### Ítems Pendientes Rastreados (Scope Futuro / Fase 5)
+- **Optimización de Hover Storm**: Hover Storm (6.7% jank, P99: 23.47ms) requiere optimización adicional. El overhead proviene del hot path de paint (FFI) durante interacciones de hover intensivas (8.49ms avg / 16.44ms P95 en paint). Candidato para Phase 5 o investigación dedicada.
 
 #### Refinamientos Diferidos y Monitoreo (Retornos decrecientes)
 - **Refinamiento de `shouldRepaint`**: Evaluar guards adicionales de frames innecesarios diferido; el sistema actual ya descarta el 97.5% de ticks en idle.
 - **Allocations en `assignLayersSpatial` (Finding #21)**: Pooling de estructuras intermedias diferido por impacto marginal frente a la estabilidad lograda (0.00% jank).
-- **Hover Storm P99 outlier**: Monitorear en producción; artefacto atribuible a cold-start de eviction en benchmarks sintéticos.
 
 ---
 
@@ -482,7 +486,9 @@ Harness oficial: `benchmarks/engine-benchmark.ts` (ejecutable vía `bun run benc
 | Hover Storm | 8.92 | 7.71 | 16.84 | 6.7% | WARN |
 | 60FPS Animation | 1.09 | 0.94 | 1.97 | 0.0% | PASS |
 
-> **Nota sobre Hover Storm (6.7% jank / P99 outlier a 23.47ms)**: El escenario muestra 6.7% de jank debido a un outlier en P99 (23.47ms). Esto corresponde a un artefacto de medición por el overhead inicial de desalojo de VRAM (LRU eviction) durante el cold-start del benchmark. En régimen estacionario tras el warm-up, el jank de hover se mantuvo en 0.0% en la Fase 3. El subsistema de eviction intercambia una latencia de alocación aislada en frío por estabilidad sostenida de VRAM a largo plazo.
+> **Nota sobre Hover Storm (6.7% jank / P99 outlier a 23.47ms)**: Hover Storm (6.7% jank, P99: 23.47ms) requiere optimización adicional. El overhead proviene del hot path de paint (FFI) durante interacciones de hover intensivas (8.49ms avg / 16.44ms P95 en paint). Candidato para Phase 5 o investigación dedicada.
+>
+> *Detalle técnico*: El escenario muestra 6.7% de jank debido a un outlier en P99 (23.47ms). Esto corresponde a un artefacto de medición por el overhead inicial de desalojo de VRAM (LRU eviction) durante el cold-start del benchmark sumado a la carga de paint FFI bajo ráfagas intensivas. En régimen estacionario tras el warm-up, el jank de hover se mantuvo en 0.0% en la Fase 3. El subsistema de eviction intercambia una latencia de alocación aislada en frío por estabilidad sostenida de VRAM a largo plazo.
 
 ---
 
