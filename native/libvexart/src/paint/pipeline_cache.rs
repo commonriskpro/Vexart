@@ -73,7 +73,7 @@ impl PipelineCacheManager {
     /// - If the cache dir is missing, it will be created on the first `save()` call.
     pub fn new() -> Self {
         let path = cache_path();
-        let cached_data = path.as_ref().and_then(|p| Self::load_from_disk(p));
+        let cached_data = path.as_ref().and_then(Self::load_from_disk);
         Self { cached_data, path }
     }
 
@@ -97,6 +97,8 @@ impl PipelineCacheManager {
         if let Some(parent) = path.parent() {
             if !parent.exists() {
                 if let Err(e) = std::fs::create_dir_all(parent) {
+                    let _ = &e;
+                    #[cfg(debug_assertions)]
                     eprintln!(
                         "vexart: pipeline cache: failed to create dir {}: {e}",
                         parent.display()
@@ -116,6 +118,8 @@ impl PipelineCacheManager {
         // Atomic write: write to temp file then rename.
         let tmp_path = path.with_extension("tmp");
         if let Err(e) = std::fs::write(&tmp_path, &payload) {
+            let _ = &e;
+            #[cfg(debug_assertions)]
             eprintln!(
                 "vexart: pipeline cache: failed to write temp file {}: {e}",
                 tmp_path.display()
@@ -123,6 +127,8 @@ impl PipelineCacheManager {
             return;
         }
         if let Err(e) = std::fs::rename(&tmp_path, path) {
+            let _ = &e;
+            #[cfg(debug_assertions)]
             eprintln!("vexart: pipeline cache: failed to rename temp file: {e}");
             // Clean up the stray temp file.
             let _ = std::fs::remove_file(&tmp_path);
@@ -141,6 +147,8 @@ impl PipelineCacheManager {
         let bytes = match std::fs::read(path) {
             Ok(b) => b,
             Err(e) => {
+                let _ = &e;
+                #[cfg(debug_assertions)]
                 eprintln!(
                     "vexart: pipeline cache: failed to read {}: {e}",
                     path.display()
@@ -151,6 +159,7 @@ impl PipelineCacheManager {
 
         // Validate header: magic (4) + format_version (2) + payload_len (4) = 10 bytes minimum.
         if bytes.len() < 10 {
+            #[cfg(debug_assertions)]
             eprintln!("vexart: pipeline cache: truncated file — deleting");
             let _ = std::fs::remove_file(path);
             return None;
@@ -158,6 +167,7 @@ impl PipelineCacheManager {
 
         // Check magic.
         if bytes[0..4] != CACHE_MAGIC {
+            #[cfg(debug_assertions)]
             eprintln!("vexart: pipeline cache: invalid magic — deleting corrupted cache");
             let _ = std::fs::remove_file(path);
             return None;
@@ -166,6 +176,7 @@ impl PipelineCacheManager {
         // Check format version (we only load if it matches our current format).
         let fmt_ver = u16::from_le_bytes([bytes[4], bytes[5]]);
         if fmt_ver != CACHE_FORMAT_VERSION {
+            #[cfg(debug_assertions)]
             eprintln!(
                 "vexart: pipeline cache: format version mismatch ({fmt_ver} != {CACHE_FORMAT_VERSION}) — deleting"
             );
@@ -177,6 +188,7 @@ impl PipelineCacheManager {
         let payload_len = u32::from_le_bytes([bytes[6], bytes[7], bytes[8], bytes[9]]) as usize;
         let expected_total = 10 + payload_len;
         if bytes.len() < expected_total {
+            #[cfg(debug_assertions)]
             eprintln!("vexart: pipeline cache: size mismatch — deleting corrupted cache");
             let _ = std::fs::remove_file(path);
             return None;
