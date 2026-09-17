@@ -60,8 +60,8 @@ const variantGetters: Record<BadgeVariant, VariantColors> = {
 
 /** @public */
 export function VoidBadge(props: VoidBadgeProps) {
-  const v = props.variant ?? "default"
-  const vg = variantGetters[v]
+  const v = () => props.variant ?? "default"
+  const vg = () => variantGetters[v()]
 
   return (
     <box
@@ -73,13 +73,13 @@ export function VoidBadge(props: VoidBadgeProps) {
       height={22}
       paddingLeft={space[2.5]}
       paddingRight={space[2.5]}
-      backgroundColor={vg.bg()}
+      backgroundColor={vg().bg()}
       cornerRadius={radius.full}
-      borderColor={vg.border()}
-      borderWidth={vg.borderWidth}
+      borderColor={vg().border()}
+      borderWidth={vg().borderWidth}
     >
       <text
-        color={vg.fg()}
+        color={vg().fg()}
         fontSize={font.xs}
         fontWeight={weight.medium}
       >
