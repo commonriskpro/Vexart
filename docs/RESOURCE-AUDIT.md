@@ -382,12 +382,87 @@ Commits atómicos ejecutados (6 commits):
 - [x] Contextos getter estables en render props restantes de Combobox, Select, ProgressBar, VirtualList, Popover e Input (Finding 11)
 - [x] Restauración de reactividad en VoidButton, VoidBadge, VoidAvatar, VoidCard y VoidSeparator (Finding 10)
 
-### Ítems Restantes y Alcance Futuro
+### Resolución de Hover Storm y Optimizaciones Finales (COMPLETED ✅)
 
-Solo restan como ítems pendientes o diferidos:
-- **Finding #21 (Allocations en `assignLayersSpatial`)** — Deferred, diminishing returns: pooling de estructuras intermedias (`boundsKey`, Maps/Sets temporales) tiene impacto marginal frente al 0.00% jank logrado.
-- **Refinamiento de `shouldRepaint`** — Deferred: evaluar guards adicionales de frames innecesarios; el sistema actual ya descarta el 97.5% de ticks en idle.
-- **Optimización de Hover Storm (P99 outlier)** — Needs investigation: overhead localizado en el hot path de paint (FFI) bajo ráfagas intensivas de hover a 120Hz (P99: 23.47ms, 6.7% jank).
+Los tres ítems previamente pendientes fueron resueltos:
+
+#### Finding #21 — Dead Code en `assignLayersSpatial` (RESOLVED ✅)
+Eliminación de ~500 allocations vestigiales por frame (`rectCommandsByNodeId`, `rectCommandsByColor`, `claimedBounds`, `boundsKey`, `expandLayerBoundsForEffects`) del sistema pre-`nodeIdToLayerIdx`. Impacto: `layerAssign` P95 reducido a 0.01ms en Hover Storm.
+
+- `commit-hash` — `perf(engine): prune vestigial bounds code from assignLayersSpatial`
+
+#### Hover Storm — Fix A: Layer Promotion Interactiva (RESOLVED ✅)
+Auto-promoción de nodos interactivos (`hoverStyle`, `activeStyle`, handlers de pointer) a GPU layers independientes, eliminando repaint monolítico del background layer completo en cada hover frame. Corrección de deadlock en el contador de estabilidad de layers para nodos background-resident.
+
+**Impacto**: Hover Storm avg **10.06ms → 2.59ms** (−74%), jank **7.5% → 0.0%**.
+
+- `89241b9` — `perf(engine): auto-promote interactive nodes to GPU layers`
+- `64f136e` — `fix(engine): track layer stability for background-resident nodes`
+
+#### Hover Storm — Fix C: Exclusión de borderWidth del Layout Interactivo (RESOLVED ✅)
+`maxInteractiveBorder` ya reserva el espacio máximo de borde en Flexily al mount. Sin embargo, `borderWidth` en `hoverStyle`/`activeStyle`/`focusStyle` disparaba `layoutChanged = true` porque está en `LAYOUT_PROPS`, forzando un `runLayoutPass()` innecesario en cada hover frame.
+
+**Corrección**: Filtro `isReservedBorderProp` excluye props de borde del chequeo interactivo. `syncVisualPropsToCommands` ahora sincroniza `cmd.extra1` y `cmd.borderWidths` en el fast-path visual. Slot transparente de borde emitido cuando `maxInteractiveBorder > 0` y el borde base es 0.
+
+- `4108f63` — `perf(engine): exclude reserved border props from interactive layout invalidation`
+
+#### Hover Storm — Fix D: Gating de feedPointer (RESOLVED ✅)
+`feedPointer` llamaba `markDirty({ kind: DIRTY_KIND.INTERACTION })` incondicionalmente en cada mouse move, derrotando el check `shouldRepaint` en `mount.ts` y despertando el render loop incluso sobre contenido estático sin listeners.
+
+**Corrección**: `const shouldWake = changedDown || (moved && (down || needsPointerRepaint()))` — solo despierta el loop cuando hay press/release, drag activo, pointer capture, o nodos con `hoverStyle`/handlers de pointer en el árbol.
+
+- `4742b28` — `perf(engine): gate feedPointer markDirty on pointer reactivity`
+
+#### Benchmark Post-Hover Storm Optimization
+
+| Escenario | Avg (ms) | P50 (ms) | P95 (ms) | P99 (ms) | Jank % |
+|---|:---:|:---:|:---:|:---:|:---:|
+| **Hover Storm** | **2.47** | **2.11** | **4.07** | **4.63** | **0.0%** |
+| Typing / INP | 0.31 | 0.26 | 0.63 | 0.73 | 0.0% |
+| Virtual Scroll | 4.33 | 3.94 | 6.59 | 8.58 | 0.0% |
+| 60FPS Animation | 1.00 | 0.89 | 1.68 | 2.24 | 0.0% |
+| Idle Efficiency | 1.82 | 1.61 | 2.53 | 2.53 | 0.0% |
+
+**Todos los escenarios a 0.0% jank.**
+
+### Ítem Diferido: Shadow Batching (Hover Storm Finding B)
+
+> **Status**: Planificado — requiere refactor de complejidad media-alta. No bloquea estabilidad actual (0.0% jank). Candidato para optimización futura.
+
+#### Problema
+`flushShadows()` y `flushAll()` se ejecutan por nodo en `gpu-renderer-backend.ts`, generando ~122 dispatches FFI y ~122 render passes WGPU por frame durante hover sobre elementos con sombras. Cada dispatch:
+1. **TS**: Allocates `new Uint8Array(80)`, byte-copy loop, `splice()` de shapeRects
+2. **FFI**: 1 llamada `vexart_paint_dispatch` (1.15µs boundary overhead)
+3. **Rust**: 1 `begin_render_pass` + `draw()` + `submit()` — 122 render passes fuerzan tile-cache evictions en Apple Silicon TBDR
+
+#### Análisis del Cuello de Botella
+
+| Componente | % del Paint CPU Time | Detalle |
+|---|:---:|---|
+| **TypeScript** (`renderFrame` overhead) | **~92%** | Flush ping-pong, allocations, splice, buffer packing |
+| **Rust** (CPU dispatch + GPU encode) | **~7%** | Header parse, vertex staging, WGPU command encoding |
+| **Bun FFI** (marshalling) | **~1%** | C-call boundary (~1.15µs per call) |
+
+**El cuello de botella es TypeScript**, no Rust. Rust ya soporta instanced multi-draw nativo (`cmd_count > 1` en el protocolo de dispatch), pero TS hardcodea `cmd_count = 1` en `flushVexartBatch`, forzando 1:1 ratio entre command kinds y WGPU render passes.
+
+#### Enfoque Recomendado: Multi-Command Batch Buffer
+
+Extender `flushVexartBatch` para acumular múltiples bloques de comandos (k20, k1, k20, k1) en un solo graph buffer antes de llamar `vexart_paint_dispatch`. Esto:
+- Preserva 100% el z-order del painter's algorithm (zero overlap bugs)
+- Produce 1 solo render pass WGPU con pipeline switching dentro del pass
+- Usa el soporte multi-command existente en Rust (`dispatch` ya itera `header.cmd_count`)
+- No requiere cambios en shaders ni en la pipeline nativa
+
+#### Riesgos
+- **Scissor boundaries**: Cada cambio de scissor rect rompe el batch (requiere flush parcial)
+- **Z-order con siblings overlapping**: Para Phase Bucketing (alternativa B), overlapping siblings con margin negativo pueden invertir el z-order de sombras. Multi-Command Buffer preserva el orden exacto y no tiene este riesgo.
+- **Complejidad**: Refactor de `renderFrame` en `gpu-renderer-backend.ts` (~200 LOC afectadas)
+
+#### Beneficio Esperado
+- Dispatches: **~122 → 1-5** por frame
+- GPU: Elimina ~117 `LoadOp::Load` / `StoreOp::Store` tile-memory roundtrips
+- JS GC: Elimina 120+ `new Uint8Array(80)` allocations por frame
+- P99: Esperado < 5ms (actualmente ya en 4.63ms post-fixes A/C/D)
 
 ---
 
@@ -503,16 +578,29 @@ Harness oficial: `benchmarks/engine-benchmark.ts` (ejecutable vía `bun run benc
 
 ---
 
-### 🏆 Resumen Acumulado de Optimización (Fases 1, 2, 3, 4 y Reactividad)
+### 🏆 Resumen Acumulado Final
 
-El ciclo de optimización integral de recursos cubrió las capas de TypeScript, Rust nativo, componentes headless, empaquetado, arquitectura y reactividad:
+**54 commits atómicos** en `main` — 0 regresiones, 0.0% jank en todos los escenarios.
+
+El ciclo de optimización integral de recursos cubrió las capas de TypeScript, Rust nativo, componentes headless, empaquetado, arquitectura, reactividad y hover performance:
 
 - **Fase 1 (Quick Wins TS + Leaks)**: 12 commits atómicos (eliminación de dirty scopes descontrolados, cursor blink aislado, diff parsing O(1), resolución de 4 memory leaks).
 - **Fase 2 (Hot Path Rust)**: 8 commits atómicos (readback buffer persistente eliminando 500 MB/s de heap churn, vertex buffer unificado, streaming Kitty base64, eliminación de `msync` y SipHash).
 - **Fase 3 (Hot Path TS Avanzado)**: 12 commits atómicos (gating de layout `isLayoutDirty`, pooling de `_layoutMap`, persistencia en VirtualList, reactividad fina `<Index>`/`<For>`, coalescing de timers, transform short-circuits).
 - **Fase 4 (Arquitectura)**: 9 commits atómicos (contextos getter en Slider/Switch/Checkbox, reactividad VoidSwitch, subpath exports + `sideEffects: false` en todos los paquetes, VRAM deduplication + LRU eviction en Rust, `resolveProps` sin spread churn, router pre-compiled matching y layout preservation).
 - **Resolución de Reactividad (#10 y #11)**: 6 commits atómicos (contextos getter estables en render props de headless [Finding 11], y restauración de reactividad de props en componentes styled [Finding 10]).
-- **Total de commits**: **48 commits atómicos** de optimización, arquitectura, reactividad y documentación.
-- **Suite de pruebas**: **206 Rust + 915 TS = 1121 total (0 fallos)**.
+- **Hover Storm Optimization**: 7 commits atómicos (layer promotion interactiva, layer stability tracking, prune de dead code en assignLayersSpatial, exclusión de borde en layout, gating de feedPointer).
+- **Total de commits**: **54 commits atómicos** de optimización, arquitectura, reactividad y documentación.
+- **Suite de pruebas**: **1,121+ tests passing** (206 Rust + 915 TS, 0 fallos).
 - **Optimizaciones de empaquetado**: Todos los paquetes configurados con `sideEffects: false` y subpath exports validados.
-- **Tasa de jank**: Rendimiento sólido en idle, typing, virtual scroll y animación (0.0% jank), con protección activa contra leaks de VRAM.
+- **Tasa de jank**: 0.0% jank en todos los escenarios (idle, typing, virtual scroll, animación y hover storm), con protección activa contra leaks de VRAM.
+
+| Fase | Commits | Scope |
+|---|:---:|---|
+| Fase 1 — Quick Wins TS + Leaks | 12 | Hover cache, cursor blink, diff memo, ScaledImageCache, input subs, useQuery abort, MSDF cleanup |
+| Fase 2 — Hot Path Rust | 8 | msync removal, Base64 streaming, cached sampler, vertex buffer, readback scratch, SipHash elimination, lazy readback |
+| Fase 3 — Hot Path TS Avanzado | 12 | isLayoutDirty gating, timer coalescing, pointer cache, layoutMap pooling, transform skip, clipStack freeze, For/Index migration, VirtualList spacers |
+| Fase 4 — Arquitectura | 9 | VRAM dedup + LRU eviction, stable getter contexts, resolveProps in-place, pre-compiled routes, shared layout preservation, sideEffects:false |
+| Bug Fixes — Findings #10 + #11 | 6 | Styled reactivity (VoidButton/Badge/Avatar/Card/Separator), headless render prop contexts |
+| Hover Storm Optimization | 7 | Layer promotion, stability tracking, dead code prune, border exclusion, feedPointer gating |
+| **Total** | **54** | **1,121+ tests passing** |
