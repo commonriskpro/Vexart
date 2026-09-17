@@ -3,7 +3,7 @@
 **Fecha**: 2026-09-16
 **Capas auditadas**: Render loop TS · Rust/WGPU nativo · Memoria/eventos/reactivity · Styled/headless/app
 **Hallazgos únicos**: 29 (consolidados de ~60 findings cruzados + 1 hallazgo runtime en Fase 3)
-**Estado**: Fase 1 (Quick Wins TS + Leaks) COMPLETADA · Fase 2 (Hot Path Rust) COMPLETADA · Fase 3 (Hot Path TS Avanzado) COMPLETADA · Fase 4 (Arquitectura) COMPLETADA
+**Estado**: Fase 1 (Quick Wins TS + Leaks) COMPLETADA · Fase 2 (Hot Path Rust) COMPLETADA · Fase 3 (Hot Path TS Avanzado) COMPLETADA · Fase 4 (Arquitectura) COMPLETADA · Reactividad (#10 y #11) RESUELTA
 
 ---
 
@@ -65,17 +65,17 @@ assignment.
 500 nodos a 60 FPS → presión GC extrema.
 - **Estado**: ✅ RESOLVED (`ce3391d`) — Object pooling con mutación in-place para entradas de `_layoutMap` en layout adapter, eliminando asignaciones masivas de objetos por frame.
 
-### 10. Props destructuring rompe la reactividad de SolidJS en styled components — 🔄 EN PROGRESO
+### 10. Props destructuring rompe la reactividad de SolidJS en styled components — ✅ RESOLVED
 `button.tsx:152`, `badge.tsx:64`, `avatar.tsx:31`, `card.tsx:25` —
 `const v = props.variant ?? "default"` evalúa una sola vez en mount. Cambios
 dinámicos de variant/size/color se pierden silenciosamente.
-- **Estado**: 🔄 EN PROGRESO — En resolución activa preservando reactividad en componentes styled (`fix(styled):`).
+- **Estado**: ✅ RESOLVED (`4cf155a`, `0c44859`, `fd7b8a0`, `ba82bac`, `84b32ef`) — Restaurada reactividad de props preservando accesos dinámicos en `VoidButton` (variant, size), `VoidBadge` (variant), `VoidAvatar` (size, name, color), `VoidCard` (size) y `VoidSeparator` (orientation, identificado y corregido adicionalmente).
 
-### 11. Contextos de render con valores planos causan remounts completos — 🔄 EN PROGRESO
+### 11. Contextos de render con valores planos causan remounts completos — ✅ RESOLVED
 `combobox.tsx:180`, `select.tsx:183`, `progress-bar.tsx:57` — Pasan
 `open: open()` en vez de `get open() { return open() }`. Solid trata el
 subtree entero como dirty y lo recrea.
-- **Estado**: 🔄 EN PROGRESO — En resolución activa implementando getters reactivos en contextos render prop (`fix(headless):`).
+- **Estado**: ✅ RESOLVED (`827fd97`) — Contextos getter estables implementados en los render props restantes de Combobox, Select, ProgressBar, VirtualList, Popover e Input (incluyendo contextos no listados originalmente como item context de VirtualList, trigger context de Popover y render prop de Input).
 
 ### 12. `.map()` sin key en Code, Diff, RadioGroup, Markdown — ✅ RESOLVED
 `code.tsx:157`, `diff.tsx:177`, `markdown.tsx:324` — Bypass de
@@ -365,18 +365,29 @@ Commits atómicos ejecutados (9 commits):
 - [x] Pre-compilación de matching de rutas en el router (Finding 26)
 - [x] Preservación de layouts compartidos en navegación entre subrutas (Finding 27)
 
+### Resoluciones de Reactividad en Headless y Styled (Findings #10 y #11) (COMPLETED ✅)
+
+Commits atómicos ejecutados (6 commits):
+
+**Headless Render Props (Finding 11)**:
+1. `827fd97` — `fix(headless): use stable getter context in remaining render props` (Combobox, Select, ProgressBar, VirtualList, Popover, Input)
+
+**Styled Props Reactivity (Finding 10)**:
+2. `4cf155a` — `fix(styled): restore reactivity for variant and size props in VoidButton`
+3. `0c44859` — `fix(styled): restore reactivity for variant prop in VoidBadge`
+4. `fd7b8a0` — `fix(styled): restore reactivity for size name and color props in VoidAvatar`
+5. `ba82bac` — `fix(styled): restore reactivity for size prop in VoidCard`
+6. `84b32ef` — `fix(styled): restore reactivity for orientation prop in VoidSeparator`
+
+- [x] Contextos getter estables en render props restantes de Combobox, Select, ProgressBar, VirtualList, Popover e Input (Finding 11)
+- [x] Restauración de reactividad en VoidButton, VoidBadge, VoidAvatar, VoidCard y VoidSeparator (Finding 10)
+
 ### Ítems Restantes y Alcance Futuro
 
-#### En Progreso (Resolución Activa)
-- **Finding #10**: Props destructuring rompe reactividad en styled components (`button.tsx`, `badge.tsx`, etc.) — 🔄 **En progreso** (`fix(styled):`).
-- **Finding #11**: Contextos de render con valores planos causan remounts completos (`combobox.tsx`, `select.tsx`, etc.) — 🔄 **En progreso** (`fix(headless):`).
-
-#### Ítems Pendientes Rastreados (Scope Futuro / Fase 5)
-- **Optimización de Hover Storm**: Hover Storm (6.7% jank, P99: 23.47ms) requiere optimización adicional. El overhead proviene del hot path de paint (FFI) durante interacciones de hover intensivas (8.49ms avg / 16.44ms P95 en paint). Candidato para Phase 5 o investigación dedicada.
-
-#### Refinamientos Diferidos y Monitoreo (Retornos decrecientes)
-- **Refinamiento de `shouldRepaint`**: Evaluar guards adicionales de frames innecesarios diferido; el sistema actual ya descarta el 97.5% de ticks en idle.
-- **Allocations en `assignLayersSpatial` (Finding #21)**: Pooling de estructuras intermedias diferido por impacto marginal frente a la estabilidad lograda (0.00% jank).
+Solo restan como ítems pendientes o diferidos:
+- **Finding #21 (Allocations en `assignLayersSpatial`)** — Deferred, diminishing returns: pooling de estructuras intermedias (`boundsKey`, Maps/Sets temporales) tiene impacto marginal frente al 0.00% jank logrado.
+- **Refinamiento de `shouldRepaint`** — Deferred: evaluar guards adicionales de frames innecesarios; el sistema actual ya descarta el 97.5% de ticks en idle.
+- **Optimización de Hover Storm (P99 outlier)** — Needs investigation: overhead localizado en el hot path de paint (FFI) bajo ráfagas intensivas de hover a 120Hz (P99: 23.47ms, 6.7% jank).
 
 ---
 
@@ -492,15 +503,16 @@ Harness oficial: `benchmarks/engine-benchmark.ts` (ejecutable vía `bun run benc
 
 ---
 
-### 🏆 Resumen Acumulado de Optimización (Fases 1, 2, 3 y 4)
+### 🏆 Resumen Acumulado de Optimización (Fases 1, 2, 3, 4 y Reactividad)
 
-El ciclo de optimización integral de recursos cubrió las capas de TypeScript, Rust nativo, componentes headless, empaquetado y arquitectura:
+El ciclo de optimización integral de recursos cubrió las capas de TypeScript, Rust nativo, componentes headless, empaquetado, arquitectura y reactividad:
 
 - **Fase 1 (Quick Wins TS + Leaks)**: 12 commits atómicos (eliminación de dirty scopes descontrolados, cursor blink aislado, diff parsing O(1), resolución de 4 memory leaks).
 - **Fase 2 (Hot Path Rust)**: 8 commits atómicos (readback buffer persistente eliminando 500 MB/s de heap churn, vertex buffer unificado, streaming Kitty base64, eliminación de `msync` y SipHash).
 - **Fase 3 (Hot Path TS Avanzado)**: 12 commits atómicos (gating de layout `isLayoutDirty`, pooling de `_layoutMap`, persistencia en VirtualList, reactividad fina `<Index>`/`<For>`, coalescing de timers, transform short-circuits).
 - **Fase 4 (Arquitectura)**: 9 commits atómicos (contextos getter en Slider/Switch/Checkbox, reactividad VoidSwitch, subpath exports + `sideEffects: false` en todos los paquetes, VRAM deduplication + LRU eviction en Rust, `resolveProps` sin spread churn, router pre-compiled matching y layout preservation).
-- **Total de commits**: **41 commits atómicos** de optimización, arquitectura y documentación.
+- **Resolución de Reactividad (#10 y #11)**: 6 commits atómicos (contextos getter estables en render props de headless [Finding 11], y restauración de reactividad de props en componentes styled [Finding 10]).
+- **Total de commits**: **48 commits atómicos** de optimización, arquitectura, reactividad y documentación.
 - **Suite de pruebas**: **206 Rust + 915 TS = 1121 total (0 fallos)**.
 - **Optimizaciones de empaquetado**: Todos los paquetes configurados con `sideEffects: false` y subpath exports validados.
 - **Tasa de jank**: Rendimiento sólido en idle, typing, virtual scroll y animación (0.0% jank), con protección activa contra leaks de VRAM.
