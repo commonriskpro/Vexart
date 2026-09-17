@@ -33,7 +33,6 @@ import {
 import { unbindLoop } from "../reconciler/pointer"
 import { hasActiveAnimations, resetActiveAnimations } from "./animation"
 import { resetCompositorPathState } from "../animation/compositor-path"
-import { appendFileSync } from "node:fs"
 import { debugFrameStart, debugRecordFfiCounts } from "./debug"
 import { type Layer, createLayerStore } from "../ffi/layers"
 import { type DamageRect } from "../ffi/damage"
@@ -58,23 +57,6 @@ import { clearNativeLayerRegistryMirror } from "../ffi/native-layer-registry"
 import { disableNativePresentation, enableNativePresentation, isNativePresentationEnabled, isNativePresentationForcedOff, nativePresentationForcedOffReason } from "../ffi/native-presentation-flags"
 import { tickNativePresentationRecovery } from "../ffi/native-presentation-ops"
 import { getVexartFfiCallCount, getVexartFfiCallCountsBySymbol, resetVexartFfiCallCounts } from "../ffi/vexart-bridge"
-
-const LAYER_LOG_ENABLED = process.env.VEXART_DEBUG_LAYERS === "1"
-const LOG = "/tmp/tge-layers.log"
-const RENDER_DEBUG_LOG = "/tmp/tge-render-debug.log"
-const CADENCE_LOG = "/tmp/tge-cadence.log"
-const RESIZE_DEBUG_LOG = "/tmp/tge-resize.log"
-const DRAG_REPRO_LOG = "/tmp/tge-drag-repro.log"
-const DEBUG_CADENCE = process.env.VEXART_DEBUG_CADENCE === "1"
-const DEBUG_RESIZE = process.env.VEXART_DEBUG_RESIZE === "1"
-const DEBUG_DRAG_REPRO = process.env.VEXART_DEBUG_DRAG_REPRO === "1"
-
-function log(msg: string) { if (!LAYER_LOG_ENABLED) return; appendFileSync(LOG, msg + "\n") }
-const DEBUG_RENDER = process.env.VEXART_DEBUG_RENDER === "1"
-function renderDebug(msg: string) { if (!DEBUG_RENDER) return; appendFileSync(RENDER_DEBUG_LOG, msg + "\n") }
-function cadenceDebug(msg: string) { if (!DEBUG_CADENCE) return; appendFileSync(CADENCE_LOG, msg + "\n") }
-function resizeDebug(msg: string) { if (!DEBUG_RESIZE) return; appendFileSync(RESIZE_DEBUG_LOG, `[renderer:loop] ${msg}\n`) }
-function dragReproDebug(msg: string) { if (!DEBUG_DRAG_REPRO) return; appendFileSync(DRAG_REPRO_LOG, msg + "\n") }
 
 type FrameProfileSink = (profile: FrameProfile) => void
 
@@ -358,7 +340,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     dirtyTracker.markDirty()
     if (scope.kind === DIRTY_KIND.FULL) {
       markAllDirty()
-      log(`[DIRTY:FULL]`)
     } else if (scope.kind === DIRTY_KIND.NODE_VISUAL) {
       // Try scoped layer damage via the walk-tree node ref. If the node isn't
       // in nodeRefById (new node from reconciliation, or text child that walkTree
@@ -368,10 +349,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       // markAllDirty for unresolved NODE_VISUAL was defeating layer caching
       // because every reactive update that inserts/removes nodes triggered it.
       queueScopedNodeDamage(scope)
-      const node = scope.nodeId !== undefined ? nodeRefById.get(scope.nodeId) : undefined
-      log(`[DIRTY:NODE_VISUAL] id=${scope.nodeId} key=${node?._layerKey ?? "null"} queued=${!!node}`)
-    } else {
-      log(`[DIRTY:${scope.kind}]`)
     }
     wakeForDirty("pointer")
   })
@@ -444,11 +421,10 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     forceLayerRepaint,
     expFrameBudgetMs,
     transmissionMode: term.caps.transmissionMode,
-    debugCadence: DEBUG_CADENCE || !!frameProfileSink,
-    debugDragRepro: DEBUG_DRAG_REPRO,
+    debugCadence: !!frameProfileSink,
+    debugDragRepro: false,
     interaction: { lastPresentedInteractionSeq, lastPresentedInteractionLatencyMs, lastPresentedInteractionType },
     lastFrameTime,
-    debug: { log, renderDebug, dragReproDebug },
   }
 
   function frame() {
@@ -459,7 +435,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     const frameStartedAt = performance.now()
     if (hasRecentInteraction()) lastInteractionFrameAt = frameStartedAt
     try {
-      const profile: FrameProfile | undefined = DEBUG_CADENCE || frameProfileSink
+      const profile: FrameProfile | undefined = frameProfileSink
         ? createFrameProfile({
             scheduledIntervalMs,
             scheduledDelayMs,
@@ -472,7 +448,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       cs.viewportWidth = viewportWidth
       cs.viewportHeight = viewportHeight
       cs.backendOverride = loopBackend
-      cs.debugCadence = DEBUG_CADENCE || !!frameProfileSink
+      cs.debugCadence = !!frameProfileSink
       resetVexartFfiCallCounts()
       const finishDebugFrame = debugFrameStart()
       compositeFrame(cs, profile)
@@ -482,7 +458,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       finishDebugFrame()
       if (profile) {
         profile.totalMs = performance.now() - frameStartedAt
-        cadenceDebug(`[frame] dt=${profile.sincePrevFrameMs.toFixed(2)}ms interval=${profile.scheduledIntervalMs.toFixed(2)}ms delay=${profile.scheduledDelayMs.toFixed(2)}ms timerDelay=${profile.timerDelayMs.toFixed(2)}ms total=${profile.totalMs.toFixed(2)}ms scroll=${profile.scrollMs.toFixed(2)}ms walk=${profile.walkTreeMs.toFixed(2)}ms layoutCompute=${profile.layoutComputeMs.toFixed(2)}ms layoutWriteback=${profile.layoutWritebackMs.toFixed(2)}ms interaction=${profile.interactionMs.toFixed(2)}ms relayout=${profile.relayoutMs.toFixed(2)}ms layout=${profile.layoutMs.toFixed(2)}ms layerAssign=${profile.layerAssignMs.toFixed(2)}ms prep=${profile.prepMs.toFixed(2)}ms nativeSnapshot=${profile.paintNativeSnapshotMs.toFixed(2)}ms layerPrep=${profile.paintLayerPrepMs.toFixed(2)}ms frameCtx=${profile.paintFrameContextMs.toFixed(2)}ms backendBegin=${profile.paintBackendBeginMs.toFixed(2)}ms reuse=${profile.paintReuseMs.toFixed(2)}ms renderGraph=${profile.paintRenderGraphMs.toFixed(2)}ms backendPaint=${profile.paintBackendPaintMs.toFixed(2)}ms backendComposite=${profile.paintBackendCompositeMs.toFixed(2)}ms backendReadback=${profile.paintBackendReadbackMs.toFixed(2)}ms backendNativeEmit=${profile.paintBackendNativeEmitMs.toFixed(2)}ms backendNativeReadback=${profile.paintBackendNativeReadbackMs.toFixed(2)}ms backendNativeCompress=${profile.paintBackendNativeCompressMs.toFixed(2)}ms backendNativeShmPrepare=${profile.paintBackendNativeShmPrepareMs.toFixed(2)}ms backendNativeWrite=${profile.paintBackendNativeWriteMs.toFixed(2)}ms backendNativeRawBytes=${profile.paintBackendNativeRawBytes.toFixed(0)} backendNativePayloadBytes=${profile.paintBackendNativePayloadBytes.toFixed(0)} backendUniform=${profile.paintBackendUniformMs.toFixed(2)}ms layerCleanup=${profile.paintLayerCleanupMs.toFixed(2)}ms backendEnd=${profile.paintBackendEndMs.toFixed(2)}ms presentation=${profile.paintPresentationMs.toFixed(2)}ms interactionStats=${profile.paintInteractionStatsMs.toFixed(2)}ms paint=${profile.paintMs.toFixed(2)}ms io=${profile.ioMs.toFixed(2)}ms beginSync=${profile.beginSyncMs.toFixed(2)}ms endSync=${profile.endSyncMs.toFixed(2)}ms dirty=${profile.dirtyBefore} repainted=${profile.repainted} cmds=${profile.commands}`)
         frameProfileSink?.({ ...profile })
       }
     } finally {
@@ -500,28 +475,24 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   const unsubResize = term.onResize((size) => {
     const newW = size.pixelWidth || size.cols * (size.cellWidth || 8)
     const newH = size.pixelHeight || size.rows * (size.cellHeight || 16)
-    resizeDebug(`handler cols=${size.cols} rows=${size.rows} pw=${size.pixelWidth} ph=${size.pixelHeight} cw=${size.cellWidth} ch=${size.cellHeight} newW=${newW} newH=${newH} timer=${timer ? 1 : 0} suspended=${isSuspended ? 1 : 0}`)
     viewportWidth = newW; viewportHeight = newH
     layoutAdapter.setDimensions(newW, newH)
     root.props.width = newW; root.props.height = newH
     root._widthSizing = parseSizing(newW); root._heightSizing = parseSizing(newH)
     syncLayoutProp(root, "width", newW); syncLayoutProp(root, "height", newH)
-    const dirtyGridCount = markGridTreeDirty(root)
+    markGridTreeDirty(root)
     clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: isTmuxPlaceholderPresentation })
     resetLayers(); layerCache.clear()
     cachedHasPointerNodes = null
     globalMarkLayoutDirty(dirtyTracker)
     markDirty(); markAllDirty(); markInteractionActive()
-    resizeDebug(`dirty marked newW=${newW} newH=${newH} grids=${dirtyGridCount}`)
-    if (isSuspended) { resizeDebug(`skip immediate frame suspended=${isSuspended ? 1 : 0} timer=${timer ? 1 : 0}`); return }
+    if (isSuspended) { return }
     if (timer !== null) { clearTimeout(timer); timer = null }
     scheduledDelayMs = 0; nextFrameDeadlineMs = 0
-    resizeDebug(`forcing immediate frame newW=${newW} newH=${newH}`)
     if (!isRenderingFrame) {
       frame()
     }
     if (timer === null) scheduleNextFrame()
-    resizeDebug(`rescheduled after resize interval=${scheduledIntervalMs} delay=${scheduledDelayMs}`)
   })
 
   const renderLoop: RenderLoop = {

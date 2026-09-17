@@ -33,7 +33,7 @@ import { getLatestInteractionTrace } from "./input"
 import { shouldFreezeInteractionLayer } from "../reconciler/interaction"
 import { multiply, translate, transformPoint } from "../ffi/matrix"
 import { debugUpdateStats, isDebugEnabled } from "./debug"
-import type { FrameProfile, LayerBoundary, LayerSlot, LayerPlan, PaintResult, InteractionLatencyTracking, DebugLogHelpers } from "./types"
+import type { FrameProfile, LayerBoundary, LayerSlot, LayerPlan, PaintResult, InteractionLatencyTracking } from "./types"
 import { resolveProps, type TGENode } from "../ffi/node"
 
 import { isNativePresentationCapable } from "../ffi/native-presentation-flags"
@@ -146,8 +146,7 @@ export type PaintFrameState = {
   // Interaction latency tracking
   interaction: InteractionLatencyTracking
 
-  // Debug log helpers
-  debug: DebugLogHelpers
+  debug?: unknown
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -438,7 +437,6 @@ export function paintFrame(
       lastPresentedInteractionLatencyMs,
       lastPresentedInteractionType,
     },
-    debug: { log, renderDebug, dragReproDebug },
   } = state
   const profile = state.profile
 
@@ -459,7 +457,6 @@ export function paintFrame(
     if (expFrameBudgetMs > 0 && !frameBudgetExceeded && slot.z >= 0) {
       const elapsed = performance.now() - frameStart
       if (elapsed > expFrameBudgetMs) {
-        if (debugCadence) log(`  [FRAME BUDGET] ${elapsed.toFixed(1)}ms > ${expFrameBudgetMs}ms — deferring remaining layers`)
         frameBudgetExceeded = true
       }
     }
@@ -601,14 +598,12 @@ export function paintFrame(
     }
 
     if (shouldViewportClip) {
-      renderDebug(`[clip:before] slot=${slot.key} z=${slot.z} x=${lx} y=${ly} w=${lw} h=${lh} pw=${viewportWidth} ph=${viewportHeight}`)
       const clipLeft = Math.max(0, lx)
       const clipTop = Math.max(0, ly)
       const clipRight = Math.min(viewportWidth, lx + lw)
       const clipBottom = Math.min(viewportHeight, ly + lh)
 
       if (clipLeft >= clipRight || clipTop >= clipBottom) {
-        renderDebug(`[clip:skip] slot=${slot.key} z=${slot.z} x=${lx} y=${ly} w=${lw} h=${lh}`)
         if (slot.z >= 0) {
           nativeLayerRemove(slot.key)
         }
@@ -620,20 +615,10 @@ export function paintFrame(
       ly = clipTop
       lw = clipRight - clipLeft
       lh = clipBottom - clipTop
-      renderDebug(`[clip:after] slot=${slot.key} z=${slot.z} x=${lx} y=${ly} w=${lw} h=${lh}`)
     }
 
     updateLayerGeometry(layer, lx, ly, lw, lh, { moveOnly: false })
     applyPendingNodeDamage(layer, slot, commands, pendingNodeDamageRects, markLayerDamaged)
-    if (debugDragRepro && boundaryNode?.props.debugName === "drag-target") {
-      const prev = previousRect
-        ? `prev=(${previousRect.x},${previousRect.y},${previousRect.width}x${previousRect.height})`
-        : "prev=none"
-      const damage = layer.damageRect
-        ? `damage=(${layer.damageRect.x},${layer.damageRect.y},${layer.damageRect.width}x${layer.damageRect.height})`
-        : "damage=none"
-      dragReproDebug(`[prepare] slot=${slot.key} bounds=(${lx},${ly},${lw}x${lh}) layer=(${layer.x},${layer.y},${layer.width}x${layer.height}) ${prev} dirty=${layer.dirty ? 1 : 0} ${damage} freeze=${freezeWhileInteracting ? 1 : 0}`)
-    }
     const geometryChanged = !!previousRect && (
       previousRect.x !== layer.x
       || previousRect.y !== layer.y
@@ -671,12 +656,6 @@ export function paintFrame(
       && damageArea > 0
       && damageArea < layerArea * 0.5
     )
-    if (dirtyRect) {
-      const damageMsg = clippedDamage
-        ? `damage=${clippedDamage.width}x${clippedDamage.height}@(${clippedDamage.x},${clippedDamage.y}) area=${damageArea}/${layerArea}`
-        : `damage=none area=0/${layerArea}`
-      if (debugCadence) log(`  [${slot.key}|${debugName}] DAMAGE allow=${allowRegionalRepaint} ${damageMsg}`)
-    }
     preparedSlots.push({
       slot,
       layer,
@@ -747,12 +726,6 @@ export function paintFrame(
   let repaintedThisFrame = 0
   let nativePresentationStats: NativePresentationStats | null = null
 
-  // Trace paint decisions for damage debugging
-  if (dirtyLayerCountForFrame > 0) {
-    const ps = preparedSlots.map(p => `${p.slot.key}(d=${p.layer.dirty?1:0},dm=${p.layer.damageRect?`${Math.round(p.layer.damageRect.width)}x${Math.round(p.layer.damageRect.height)}`:"0"},r=${p.useRegionalRepaint?1:0})`).join(" ")
-    log(`[paint] strat=${framePlan?.strategy} dLayers=${dirtyLayerCountForFrame} dPx=${dirtyPixelArea} tPx=${totalPixelArea} full=${fullRepaint?1:0} pend=${pendingNodeDamageRects.length} ${ps}`)
-  }
-
   if (framePlan?.strategy === "skip-present") {
     const cleanupStart = profile ? performance.now() : 0
     ioMs += cleanupOrphanLayers(preparedSlots, layerCache, activeSlotKeys, state.transmissionMode, imageIdForLayer, removeLayer, debugCadence, !!state.suppressNativeLayerDeletes)
@@ -809,12 +782,6 @@ export function paintFrame(
       }
 
       const canReuseStableLayer = !freezeWhileInteracting && !forceLayerRepaint && !useRegionalRepaint && !layer.dirty && !prepared.layer.damageRect
-      if (freezeWhileInteracting && !canReuseStableLayer) {
-        const damage = prepared.layer.damageRect
-          ? `${prepared.layer.damageRect.width}x${prepared.layer.damageRect.height}@(${prepared.layer.damageRect.x},${prepared.layer.damageRect.y})`
-          : "none"
-        if (debugCadence) log(`  [${slot.key}|${prepared.debugName}] DRAG-BLOCK reuse=${canReuseStableLayer ? 1 : 0} strategy=${framePlan?.strategy ?? "none"} force=${forceLayerRepaint ? 1 : 0} regional=${useRegionalRepaint ? 1 : 0} dirty=${layer.dirty ? 1 : 0} damage=${damage} prev=(${layer.prevX},${layer.prevY},${layer.prevW}x${layer.prevH}) next=(${layer.x},${layer.y},${layer.width}x${layer.height}) z=${layer.prevZ}->${layer.z}`)
-      }
 
       if (canReuseStableLayer) {
         const reuseStart = profile ? performance.now() : 0
@@ -827,7 +794,6 @@ export function paintFrame(
           stableReuseCount++
           if (framePlan?.strategy === "final-frame") rendererOutput = "final-frame-raw"
           else if (framePlan?.strategy === "layered-dirty" || framePlan?.strategy === "layered-region") rendererOutput = "layered-raw"
-          if (debugCadence) log(`  [${slot.key}|${prepared.debugName}] REUSE (stable layer)`)
           markLayerClean(layer)
           continue
         }
@@ -880,12 +846,6 @@ export function paintFrame(
       if (paintResult.output === "native-presented") {
         nativePresentationStats = paintResult.stats ?? nativePresentationStats
         repaintedThisFrame++
-        const renderZ = layer.z
-        if (effectiveUseRegionalRepaint && clippedDamage) {
-          if (debugCadence) log(`  [${slot.key}] NATIVE-REGION ${clippedDamage.width}x${clippedDamage.height} at (${clippedDamage.x},${clippedDamage.y}) within ${lw}x${lh} z=${renderZ}`)
-        } else {
-          if (debugCadence) log(`  [${slot.key}] NATIVE-REPAINT ${lw}x${lh} at (${lx},${ly}) z=${renderZ} cmds=${slot.cmdIndices.length}`)
-        }
         markLayerClean(layer)
         continue
       }

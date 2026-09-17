@@ -2,12 +2,7 @@
  * Dirty flag — global notification channel between SolidJS reconciler and render loop.
  */
 
-import { appendFileSync } from "node:fs"
 import type { DamageRect } from "../ffi/damage"
-
-const DIRTY_DEBUG_LOG = "/tmp/tge-dirty.log"
-const DIRTY_LOG_LIMIT = 200
-const DIRTY_DEBUG = process.env.VEXART_DEBUG_DIRTY === "1"
 
 /** @public */
 export const DIRTY_KIND = {
@@ -43,21 +38,11 @@ export function createDirtyTracker(): DirtyTracker {
   let dirty = true
   let layoutDirty = true
   let version = 0
-  let dirtyLogCount = 0
 
   return {
     markDirty() {
       dirty = true
       version += 1
-      if (DIRTY_DEBUG && dirtyLogCount < DIRTY_LOG_LIMIT) {
-        dirtyLogCount++
-        const stack = new Error().stack
-          ?.split("\n")
-          .slice(2, 7)
-          .map((line) => line.trim())
-          .join(" | ")
-        appendFileSync(DIRTY_DEBUG_LOG, `[markDirty #${dirtyLogCount}] ${stack || "no stack"}\n`)
-      }
     },
     isDirty() {
       return dirty

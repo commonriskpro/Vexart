@@ -5,7 +5,6 @@
 // Phase 2b Native Presentation: final-frame and layer presentation can route
 // through native Rust Kitty output when nativePresentation flag is active.
 
-import { appendFileSync } from "node:fs"
 import { ptr } from "bun:ffi"
 import { CanvasContext } from "./canvas"
 import { rasterizeCanvas, rasterizeCanvasCommands } from "./canvas-rasterizer"
@@ -163,9 +162,6 @@ export function getGpuRendererBackendCacheStats(): GpuRendererBackendCacheStats 
   }
 }
 
-const GPU_RENDERER_DEBUG = process.env.VEXART_DEBUG_GPU_RENDERER === "1"
-const GPU_RENDERER_DEBUG_LOG = "/tmp/tge-gpu-renderer.log"
-const RESIZE_DEBUG = process.env.VEXART_DEBUG_RESIZE === "1"
 function getForcedLayerStrategy(): GpuLayerStrategyMode | null {
   const forcedStrategyValue = process.env.VEXART_GPU_FORCE_LAYER_STRATEGY
   if (forcedStrategyValue === "skip-present") return "skip-present"
@@ -173,16 +169,6 @@ function getForcedLayerStrategy(): GpuLayerStrategyMode | null {
   if (forcedStrategyValue === "layered-region") return "layered-region"
   if (forcedStrategyValue === "final-frame" || forcedStrategyValue === "final-frame-raw") return "final-frame"
   return null
-}
-
-function logGpuRenderer(message: string) {
-  if (!GPU_RENDERER_DEBUG) return
-  appendFileSync(GPU_RENDERER_DEBUG_LOG, message + "\n")
-}
-
-function logGpuResize(message: string) {
-  if (!RESIZE_DEBUG) return
-  appendFileSync(GPU_RENDERER_DEBUG_LOG, `[resize] ${message}\n`)
 }
 
 function failGpuOnly(message: string): never {
@@ -630,7 +616,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
   const getStandaloneTarget = (width: number, height: number) => {
     const vctx = getVexartCtx()
     if (standaloneTarget && standaloneTarget.width === width && standaloneTarget.height === height) {
-      logGpuResize(`reuse target width=${width} height=${height}`)
       return standaloneTarget.handle
     }
     const handle = vexartCompositeTargetCreate(vctx, width, height)
@@ -638,7 +623,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     destroyTargetRecord(standaloneTarget)
     clearSpriteCaches()
     standaloneTarget = { key: "standalone", width, height, handle }
-    logGpuResize(`created target width=${width} height=${height}`)
     return handle
   }
 
@@ -1195,8 +1179,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     const flushStream = () => {
       if (geometryStream.isEmpty()) return false
       ensureLoadedLayer()
-      _dispatchCount++
-      _dispatchKinds.push(geometryStream.describeCommands())
       const ok = geometryStream.flush(vctx, targetHandle)
       if (ok) {
         first = false
@@ -1300,8 +1282,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
 
     let dirtyBounds: IntBounds | null = null
     let layerOpen = false
-    let _dispatchCount = 0
-    let _dispatchKinds: string[] = []
 
     frameGeneration += 1
     pruneBackdropCaches(frameGeneration)
@@ -2216,11 +2196,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       releaseGeometryStream(geometryStream)
     }
 
-    // DEBUG: Log dispatch count per renderFrame
-    if (_dispatchCount > 0) {
-      appendFileSync("/tmp/tge-layers.log", `[renderFrame] dispatches=${_dispatchCount} layerOpen=${layerOpen} ops=${ctx.graph.ops.length} kinds=[${_dispatchKinds.join(",")}]\n`)
-    }
-
     if (first) return { ok: true as const, rawLayer: null }
     // Native presentation handles all readback in Rust — no TS readback path.
     return { ok: true as const, rawLayer: null }
@@ -2808,10 +2783,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       if (unsupported.length > 0) {
         const counts = new Map<string, number>()
         for (const op of unsupported) counts.set(op.kind, (counts.get(op.kind) ?? 0) + 1)
-        logGpuRenderer(`[frame] unsupported=${JSON.stringify(Object.fromEntries(counts))} totalOps=${ctx.graph.ops.length}`)
         failGpuOnly(`unsupported render ops encountered: ${Array.from(counts.entries()).map(([kind, count]) => `${kind}=${count}`).join(", ")}`)
-      } else {
-        logGpuRenderer(`[frame] unsupported={} totalOps=${ctx.graph.ops.length}`)
       }
 
       const frameCtx = ctx.frame

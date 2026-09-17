@@ -55,13 +55,6 @@ export type InteractionLatencyTracking = {
   lastPresentedInteractionType: { value: string | null }
 }
 
-/** Debug log helpers threaded through pipeline state bags. */
-export type DebugLogHelpers = {
-  log: (msg: string) => void
-  renderDebug: (msg: string) => void
-  dragReproDebug: (msg: string) => void
-}
-
 /** Per-frame profiling data (only populated when DEBUG_CADENCE=1). */
 export type FrameProfile = {
   scheduledIntervalMs: number

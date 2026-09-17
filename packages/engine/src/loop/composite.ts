@@ -33,7 +33,7 @@ import {
   assignLayersSpatial as _assignLayersSpatial,
   type AssignLayersState,
 } from "./assign-layers"
-import type { FrameProfile, LayerBoundary, LayerSlot, DirtyTrackingHandle, InteractionLatencyTracking, DebugLogHelpers } from "./types"
+import type { FrameProfile, LayerBoundary, LayerSlot, DirtyTrackingHandle, InteractionLatencyTracking } from "./types"
 export type { FrameProfile } from "./types"
 import {
   collectText,
@@ -195,8 +195,7 @@ export type CompositeFrameState = {
   // Frame timing (mutable — updated at start of each frame for dt calculation)
   lastFrameTime: { value: number }
 
-  // Log helpers
-  debug: DebugLogHelpers
+  debug?: unknown
 
   // Cached layout/layer artifacts for layout-clean frame reuse
   lastCommands?: RenderCommand[]
@@ -295,12 +294,10 @@ function runLayoutPass(s: CompositeFrameState, profile?: FrameProfile): RenderCo
   if (profile) profile.layoutComputeMs = performance.now() - layoutComputeStart
   const layoutError = s.layoutAdapter.getLastLayoutError()
   if (layoutError) {
-    s.debug.log(`[layout] aborted Grid frame: ${layoutError.code}`)
     return null
   }
   const layoutWritebackStart = profile ? performance.now() : 0
   if (!writeLayoutBack(s)) {
-    s.debug.log(`[layout] aborted frame during writeback`)
     return null
   }
   applyScrollOffsets(commands, s, markLayerDirtyByKey)
@@ -637,9 +634,6 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   const cellW = s.term.size.cellWidth || 8
   const cellH = s.term.size.cellHeight || 16
 
-  s.debug.log(`[frame] cmds=${commands.length} layers=${1 + contentSlots.length} slots=[${[bgSlot, ...contentSlots].map(sl => `${sl.key}(${sl.cmdIndices.length})`).join(',')}]`)
-  s.debug.renderDebug(`[frame:start] cmds=${commands.length} layers=${1 + contentSlots.length}`)
-
   // ── Step 5: beginSync → paint → endSync ──
   const beginSyncStart = s.debugCadence ? performance.now() : 0
   s.term.beginSync()
@@ -665,7 +659,6 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
 
     backendOverride: s.backendOverride,
     interaction: s.interaction,
-    debug: s.debug,
     profile,
   }
   const layerPlan = { bgSlot, contentSlots, slotBoundaryByKey, boundaries }
