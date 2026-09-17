@@ -458,8 +458,29 @@ Auto-promoción de nodos interactivos (`hoverStyle`, `activeStyle`, handlers de 
 - **FFI dispatches**: ~122 → **1 por frame**
 - **Suite de pruebas**: **951 tests passing** (667 TS engine + 34 headless + 13 styled + 237 Rust)
 
-#### Seguimiento Futuro (Known Follow-Up)
-Actualmente TypeScript finaliza el layer tras cada flush de stream debido a que los puntos de entrada nativos de composite y texto en Rust abren sus propios render passes. Un follow-up posterior puede añadir llamadas a `finish_pass()` en Rust composite/text para permitir persistencia del pass a través de dichas barreras.
+#### Follow-up: Cross-Barrier Pass Persistence (COMPLETED ✅)
+
+El follow-up identificado en la verificación inicial fue implementado: TS ya no cierra la layer prematuramente después de cada geometry flush.
+
+**Cambio Rust**: `ActiveLayerRecord::finish_pass()` — las 4 funciones que abren render passes sobre el encoder de layer (`composite_render_image_layer`, `composite_render_image_transform_layer`, `composite_update_uniform`, `dispatch_glyph_instances`) ahora llaman `layer.finish_pass()` antes de abrir su propio pass. Esto dropea el pass persistente sin cerrar el encoder ni submitear al GPU.
+
+**Cambio TS**: `flushStream()` ya no llama `endLayer()`. La layer permanece abierta a través de transiciones geometría → texto → imagen → geometría. `endLayer()` solo se llama antes de backdrop captures y al final del frame.
+
+**Resultado**: Elimina `queue.submit()` intermedios y tile reloads (`LoadOp::Load`) entre barriers dentro del mismo frame.
+
+- `fbbce0b` — `perf(native): add finish_pass barrier for cross-dispatch pass persistence`
+- `fc83062` — `perf(engine): retain layer across geometry stream flushes`
+- `624cd23` — `perf(engine): prune vestigial bounds code from assignLayersSpatial`
+
+**Benchmark Post-Follow-up**:
+
+| Escenario | Avg (ms) | P50 (ms) | P95 (ms) | P99 (ms) | Jank % |
+|---|:---:|:---:|:---:|:---:|:---:|
+| **Hover Storm** | **2.37** | **2.01** | **3.53** | **11.61** | **0.0%** |
+| Typing / INP | 0.37 | 0.32 | 0.68 | 1.13 | 0.0% |
+| Virtual Scroll | 5.78 | 5.53 | 7.86 | 9.96 | 0.0% |
+| 60FPS Animation | 0.94 | 0.86 | 1.61 | 1.82 | 0.0% |
+| Idle Efficiency | 2.27 | 2.24 | 2.80 | 2.80 | 0.0% |
 
 ---
 
@@ -577,7 +598,7 @@ Harness oficial: `benchmarks/engine-benchmark.ts` (ejecutable vía `bun run benc
 
 ### 🏆 Resumen Acumulado Final
 
-**56 commits atómicos** en `main` — 0 regresiones, 0.0% jank en todos los escenarios.
+**59 commits atómicos** en `main` — 0 regresiones, 0.0% jank en todos los escenarios.
 
 El ciclo de optimización integral de recursos cubrió las capas de TypeScript, Rust nativo, componentes headless, empaquetado, arquitectura, reactividad, hover performance y shadow batching:
 
@@ -587,8 +608,8 @@ El ciclo de optimización integral de recursos cubrió las capas de TypeScript, 
 - **Fase 4 (Arquitectura)**: 9 commits atómicos (contextos getter en Slider/Switch/Checkbox, reactividad VoidSwitch, subpath exports + `sideEffects: false` en todos los paquetes, VRAM deduplication + LRU eviction en Rust, `resolveProps` sin spread churn, router pre-compiled matching y layout preservation).
 - **Resolución de Reactividad (#10 y #11)**: 6 commits atómicos (contextos getter estables en render props de headless [Finding 11], y restauración de reactividad de props en componentes styled [Finding 10]).
 - **Hover Storm Optimization**: 7 commits atómicos (layer promotion interactiva, layer stability tracking, prune de dead code en assignLayersSpatial, exclusión de borde en layout, gating de feedPointer).
- - **Shadow Batching (Opción D)**: 2 commits atómicos (stream de geometría unificado en TS y persistent render pass en Rust WGPU).
- - **Total de commits**: **56 commits atómicos** de optimización, arquitectura, reactividad, batching y documentación.
+ - **Shadow Batching (Opción D + Follow-up)**: 5 commits atómicos (stream de geometría unificado en TS, persistent render pass en Rust WGPU, cross-barrier pass persistence y cleanup de bounds).
+ - **Total de commits**: **59 commits atómicos** de optimización, arquitectura, reactividad, batching y documentación.
  - **Suite de pruebas**: **951+ tests passing** (667 TS engine + 34 headless + 13 styled + 237 Rust).
 - **Optimizaciones de empaquetado**: Todos los paquetes configurados con `sideEffects: false` y subpath exports validados.
  - **Tasa de jank**: 0.0% jank en todos los escenarios (idle, typing, virtual scroll, animación y hover storm), con protección activa contra leaks de VRAM y FFI dispatches reducidos de ~122 a 1 por frame.
@@ -601,5 +622,5 @@ El ciclo de optimización integral de recursos cubrió las capas de TypeScript, 
 | Fase 4 — Arquitectura | 9 | VRAM dedup + LRU eviction, stable getter contexts, resolveProps in-place, pre-compiled routes, shared layout preservation, sideEffects:false |
 | Bug Fixes — Findings #10 + #11 | 6 | Styled reactivity (VoidButton/Badge/Avatar/Card/Separator), headless render prop contexts |
 | Hover Storm Optimization | 7 | Layer promotion, stability tracking, dead code prune, border exclusion, feedPointer gating |
-| Shadow Batching (Option D) | 2 | Unified geometry stream (TS) + Persistent WGPU render pass (Rust) |
-| **Total** | **56** | **951+ tests passing (0.0% jank en 5/5 escenarios)** |
+| Shadow Batching (Option D + Follow-up) | 5 | Unified geometry stream (TS) + Persistent WGPU render pass (Rust) + Cross-barrier pass persistence |
+| **Total** | **59** | **951+ tests passing (0.0% jank en 5/5 escenarios)** |
