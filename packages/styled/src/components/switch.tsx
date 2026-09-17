@@ -32,47 +32,41 @@ export function VoidSwitch(props: VoidSwitchProps) {
       onChange={props.onChange}
       disabled={props.disabled}
       focusId={props.focusId}
-      renderSwitch={(ctx: SwitchRenderContext) => {
-        const trackColor = ctx.disabled
-          ? themeColors.muted
-          : ctx.checked
-            ? themeColors.primary
-            : themeColors.accent
-
-        const thumbLeft = ctx.checked
-          ? THUMB_OFFSET + THUMB_TRAVEL
-          : THUMB_OFFSET
-
-        return (
-          <box {...ctx.toggleProps} direction="row" gap={space[2]} alignY="center">
+      renderSwitch={(ctx: SwitchRenderContext) => (
+        <box {...ctx.toggleProps} direction="row" gap={space[2]} alignY="center">
+          <box
+            width={TRACK_WIDTH}
+            height={TRACK_HEIGHT}
+            backgroundColor={
+              ctx.disabled
+                ? themeColors.muted
+                : ctx.checked
+                  ? themeColors.primary
+                  : themeColors.accent
+            }
+            cornerRadius={TRACK_HEIGHT / 2}
+            borderColor={ctx.focused ? themeColors.ring : themeColors.input}
+            borderWidth={ctx.focused ? 2 : 1}
+          >
             <box
-              width={TRACK_WIDTH}
-              height={TRACK_HEIGHT}
-              backgroundColor={trackColor}
-              cornerRadius={TRACK_HEIGHT / 2}
-              borderColor={ctx.focused ? themeColors.ring : themeColors.input}
-              borderWidth={ctx.focused ? 2 : 1}
-            >
-              <box
-                width={THUMB_SIZE}
-                height={THUMB_SIZE}
-                backgroundColor={themeColors.foreground}
-                cornerRadius={THUMB_SIZE / 2}
-                marginLeft={thumbLeft}
-                marginTop={THUMB_OFFSET}
-              />
-            </box>
-            {props.label ? (
-              <text
-                color={ctx.disabled ? themeColors.mutedForeground : themeColors.foreground}
-                fontSize={font.sm}
-              >
-                {props.label}
-              </text>
-            ) : null}
+              width={THUMB_SIZE}
+              height={THUMB_SIZE}
+              backgroundColor={themeColors.foreground}
+              cornerRadius={THUMB_SIZE / 2}
+              marginLeft={ctx.checked ? THUMB_OFFSET + THUMB_TRAVEL : THUMB_OFFSET}
+              marginTop={THUMB_OFFSET}
+            />
           </box>
-        )
-      }}
+          {props.label ? (
+            <text
+              color={ctx.disabled ? themeColors.mutedForeground : themeColors.foreground}
+              fontSize={font.sm}
+            >
+              {props.label}
+            </text>
+          ) : null}
+        </box>
+      )}
     />
   )
 }
