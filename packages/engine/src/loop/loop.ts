@@ -387,16 +387,24 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     markDirty()
   }
 
+  function needsPointerRepaint(): boolean {
+    if (pointer.capturedNodeId !== 0) return true
+    if (cachedHasPointerNodes !== null) return cachedHasPointerNodes
+    cachedHasPointerNodes = hasPointerReactiveNodes(root)
+    return cachedHasPointerNodes
+  }
+
   function feedPointer(x: number, y: number, down: boolean) {
     const moved = x !== pointer.x || y !== pointer.y
     const changedDown = down !== pointer.down
     pointer.x = x; pointer.y = y
-    if (moved || changedDown) markInteractionActive("pointer")
     if (down && !pointer.down) pointer.pendingPress = true
     if (!down && pointer.down) pointer.pendingRelease = true
     pointer.down = down
     pointer.dirty = true
-    if (moved || changedDown) {
+    const shouldWake = changedDown || (moved && (down || needsPointerRepaint()))
+    if (shouldWake) {
+      markInteractionActive("pointer")
       markDirty({ kind: DIRTY_KIND.INTERACTION })
     }
   }
@@ -523,12 +531,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     feedPointer,
     nudgeInteraction,
     requestInteractionFrame,
-    needsPointerRepaint() {
-      if (pointer.capturedNodeId !== 0) return true
-      if (cachedHasPointerNodes !== null) return cachedHasPointerNodes
-      cachedHasPointerNodes = hasPointerReactiveNodes(root)
-      return cachedHasPointerNodes
-    },
+    needsPointerRepaint,
     setPointerCapture(nodeId: number) {
       pointer.capturedNodeId = nodeId
     },
