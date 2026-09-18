@@ -6,7 +6,6 @@
  */
 
 import { describe, test, expect } from "bun:test"
-import { resolveNodeByPath } from "./assign-layers"
 import { createNode } from "../ffi/node"
 import type { WalkTreeState } from "./walk-tree"
 import { traverseFrame } from "./pipeline-traverse"
@@ -28,45 +27,6 @@ function traverseTree(root: TGENode, width = 300, height = 200) {
   const result = traverseFrame(root, state, width, height)
   return { result, state }
 }
-
-// ── resolveNodeByPath ────────────────────────────────────────────────────
-
-describe("resolveNodeByPath", () => {
-  test("path 'r' resolves to root", () => {
-    const root = createNode("root")
-    const result = resolveNodeByPath(root, "r")
-    expect(result).toBe(root)
-  })
-
-  test("path 'r.0' resolves first child", () => {
-    const root = createNode("root")
-    const child = createNode("box")
-    root.children.push(child)
-    expect(resolveNodeByPath(root, "r.0")).toBe(child)
-  })
-
-  test("path 'r.0.1' resolves nested second child", () => {
-    const root = createNode("root")
-    const a = createNode("box")
-    const b = createNode("box")
-    const c = createNode("box")
-    a.children.push(b, c)
-    root.children.push(a)
-    expect(resolveNodeByPath(root, "r.0.1")).toBe(c)
-  })
-
-  test("out-of-bounds index returns null", () => {
-    const root = createNode("root")
-    const child = createNode("box")
-    root.children.push(child)
-    expect(resolveNodeByPath(root, "r.5")).toBeNull()
-  })
-
-  test("empty path segment returns null", () => {
-    const root = createNode("root")
-    expect(resolveNodeByPath(root, "r.abc")).toBeNull()
-  })
-})
 
 // ── Layer routing through traverseFrame ──────────────────────────────────
 

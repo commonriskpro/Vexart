@@ -22,7 +22,7 @@ export const solidJsxPlugin: Bun.BunPlugin = {
       const result = transformSync(source, {
         filename: path,
         presets: [
-          ["babel-preset-solid", { generate: "universal", moduleName: "vexart/engine" }],
+          ["babel-preset-solid", { generate: "universal", moduleName: "vexart/jsx-runtime" }],
           ["@babel/preset-typescript", { onlyRemoveTypeImports: true }],
         ],
         sourceMaps: "inline",

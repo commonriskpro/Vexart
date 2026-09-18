@@ -348,8 +348,6 @@ export type {
 export {
   // Terminal dimensions (reactive)
   useTerminalDimensions,
-  // Colors
-  RGBA,
   // Animation
   createTransition,
   createSpring,

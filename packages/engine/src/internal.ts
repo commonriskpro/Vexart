@@ -10,11 +10,7 @@
 // ── Retained node tree, FFI, and bridge ──────────────────────────────────────
 
 export {
-  ALIGN_X,
-  ALIGN_Y,
-  DIRECTION,
   INTERACTION_MODE,
-  SIZING,
   TGE_NODE_KIND,
   bumpThemeEpoch,
   createNode,

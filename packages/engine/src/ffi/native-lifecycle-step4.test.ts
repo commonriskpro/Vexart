@@ -8,11 +8,6 @@ import {
   vexartCompositeTargetBeginLayer,
   vexartCompositeTargetEndLayer,
 } from "./gpu-composite-ops"
-import {
-  nativeLayerUpsert,
-  nativeLayerRemove,
-  clearNativeLayerRegistryMirror,
-} from "./native-layer-registry"
 
 describe("Step 4 Native Context & Resource Management", () => {
   test("instanceImageHandles tracks images per-backend instance without affecting other backends", () => {
@@ -198,26 +193,6 @@ describe("Step 4 Native Context & Resource Management", () => {
     }).not.toThrow()
 
     vexartCompositeTargetDestroy(1n, target)
-  })
-
-  test("native layer registry operations accept dynamic context parameter", () => {
-    const key = `test-layer-ctx-${Date.now()}`
-    const result = nativeLayerUpsert(key, {
-      target: 1n,
-      x: 0,
-      y: 0,
-      width: 100,
-      height: 100,
-      z: 1,
-    }, 1n)
-
-    expect(result).not.toBeNull()
-    expect(result?.handle).toBeGreaterThan(0n)
-
-    const removedId = nativeLayerRemove(key, 1n)
-    expect(removedId).not.toBeNull()
-
-    clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: true }, 1n)
   })
 
   test("sprite cache trimming removes evicted handles from instanceImageHandles", () => {

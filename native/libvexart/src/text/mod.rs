@@ -3,7 +3,6 @@
 // Per design §4.3, REQ-2B-202/203/204.
 
 pub mod atlas;
-pub mod glyph_info;
 
 use crate::ffi::panic::{ERR_INVALID_ARG, ERR_INVALID_HANDLE, OK};
 use crate::paint::PaintContext;
@@ -349,15 +348,15 @@ mod tests {
         );
 
         // 1. Dispatch a paint rect to create and hold open a persistent render pass
-        let rect = crate::paint::instances::BridgeRectInstance {
+        let rect = crate::paint::instances::BridgeShapeRectInstance {
             x: -1.0,
             y: 1.0,
             w: 2.0,
             h: -2.0,
-            r: 1.0,
-            g: 0.0,
-            b: 0.0,
-            a: 1.0,
+            fill_r: 1.0,
+            fill_g: 0.0,
+            fill_b: 0.0,
+            fill_a: 1.0,
             ..Default::default()
         };
         let payload = bytemuck::bytes_of(&rect);
@@ -368,7 +367,7 @@ mod tests {
         graph_buf[4..8].copy_from_slice(&crate::ffi::buffer::GRAPH_VERSION.to_le_bytes());
         graph_buf[8..12].copy_from_slice(&1u32.to_le_bytes()); // cmd_count = 1
         graph_buf[12..16].copy_from_slice(&(total_payload as u32).to_le_bytes());
-        graph_buf[16..18].copy_from_slice(&0u16.to_le_bytes()); // cmd_kind = 0 (rect)
+        graph_buf[16..18].copy_from_slice(&1u16.to_le_bytes()); // cmd_kind = 1 (shape_rect)
         graph_buf[18..20].copy_from_slice(&0u16.to_le_bytes()); // flags = 0
         graph_buf[20..24].copy_from_slice(&(payload.len() as u32).to_le_bytes());
         graph_buf[24..24 + payload.len()].copy_from_slice(payload);

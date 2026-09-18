@@ -27,57 +27,6 @@ export const MouseButton = {
   SCROLL_DOWN: 65,
 } as const
 
-// ── RGBA utility class ──
-
-/** @public */
-export class RGBA {
-  readonly r: number
-  readonly g: number
-  readonly b: number
-  readonly a: number
-
-  constructor(r: number, g: number, b: number, a = 1) {
-    this.r = Math.round(r * 255)
-    this.g = Math.round(g * 255)
-    this.b = Math.round(b * 255)
-    this.a = Math.round(a * 255)
-  }
-
-  static fromInts(r: number, g: number, b: number, a = 255): RGBA {
-    const c = Object.create(RGBA.prototype) as RGBA
-    ;(c as { r: number }).r = r
-    ;(c as { g: number }).g = g
-    ;(c as { b: number }).b = b
-    ;(c as { a: number }).a = a
-    return c
-  }
-
-  static fromHex(hex: string): RGBA {
-    const h = hex.startsWith("#") ? hex.slice(1) : hex
-    const r = parseInt(h.slice(0, 2), 16)
-    const g = parseInt(h.slice(2, 4), 16)
-    const b = parseInt(h.slice(4, 6), 16)
-    const a = h.length >= 8 ? parseInt(h.slice(6, 8), 16) : 255
-    return RGBA.fromInts(r, g, b, a)
-  }
-
-  static fromValues(r: number, g: number, b: number, a = 1): RGBA {
-    return new RGBA(r, g, b, a)
-  }
-
-  toU32(): number {
-    return ((this.r << 24) | (this.g << 16) | (this.b << 8) | this.a) >>> 0
-  }
-
-  valueOf(): number {
-    return this.toU32()
-  }
-
-  toString(): string {
-    return `rgba(${this.r}, ${this.g}, ${this.b}, ${(this.a / 255).toFixed(2)})`
-  }
-}
-
 // ── useTerminalDimensions hook ──
 
 /** @public */

@@ -5,7 +5,6 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImageAsset {
     pub handle: u64,
-    pub key: String,
     pub width: u32,
     pub height: u32,
     references: u64,
@@ -19,21 +18,19 @@ impl ImageAsset {
 
 #[derive(Debug, Default)]
 pub struct ImageAssetRegistry {
-    by_key: HashMap<String, u64>,
     assets: HashMap<u64, ImageAsset>,
 }
 
 impl ImageAssetRegistry {
     pub fn new() -> Self {
         Self {
-            by_key: HashMap::new(),
             assets: HashMap::new(),
         }
     }
 
     pub fn register(
         &mut self,
-        key: String,
+        _key: String,
         rgba: &[u8],
         width: u32,
         height: u32,
@@ -45,28 +42,11 @@ impl ImageAssetRegistry {
             return None;
         }
 
-        if let Some(handle) = self.by_key.get(&key).copied() {
-            if let Some(asset) = self.assets.get_mut(&handle) {
-                asset.width = width;
-                asset.height = height;
-                resources.register(
-                    handle,
-                    ResourceKind::ImageSprite,
-                    rgba.len() as u64,
-                    current_frame,
-                    WgpuHandle::Id(handle),
-                );
-                return Some(handle);
-            }
-        }
-
         let handle = paint::alloc_image_handle();
-        self.by_key.insert(key.clone(), handle);
         self.assets.insert(
             handle,
             ImageAsset {
                 handle,
-                key,
                 width,
                 height,
                 references: 1,
@@ -110,10 +90,7 @@ impl ImageAssetRegistry {
             asset.references -= 1;
             return true;
         }
-        let Some(asset) = self.assets.remove(&handle) else {
-            return false;
-        };
-        self.by_key.remove(&asset.key);
+        self.assets.remove(&handle);
         resources.remove(handle);
         true
     }
@@ -143,7 +120,7 @@ mod tests {
     }
 
     #[test]
-    fn register_reuses_handle_for_same_key() {
+    fn register_always_allocates_new_handle() {
         let mut registry = ImageAssetRegistry::new();
         let mut resources = ResourceManager::new();
         let bytes = vec![255u8; 2 * 2 * 4];
@@ -155,7 +132,7 @@ mod tests {
             .register("logo.png".to_string(), &bytes, 2, 2, 2, &mut resources)
             .unwrap();
 
-        assert_eq!(first, second);
+        assert_ne!(first, second);
         let asset = registry.get(first).unwrap();
         assert_eq!(asset.width, 2);
         assert_eq!(asset.height, 2);

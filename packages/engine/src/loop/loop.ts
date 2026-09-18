@@ -53,7 +53,6 @@ import {
   nativeLayerRegistryForcedOffReason,
   isNativeLayerRegistryForcedOff,
 } from "../ffi/native-layer-registry-flags"
-import { clearNativeLayerRegistryMirror } from "../ffi/native-layer-registry"
 import { disableNativePresentation, enableNativePresentation, isNativePresentationEnabled, isNativePresentationForcedOff, nativePresentationForcedOffReason } from "../ffi/native-presentation-flags"
 import { tickNativePresentationRecovery } from "../ffi/native-presentation-ops"
 import { getVexartFfiCallCount, getVexartFfiCallCountsBySymbol, resetVexartFfiCallCounts } from "../ffi/vexart-bridge"
@@ -481,7 +480,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     root._widthSizing = parseSizing(newW); root._heightSizing = parseSizing(newH)
     syncLayoutProp(root, "width", newW); syncLayoutProp(root, "height", newH)
     markGridTreeDirty(root)
-    clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: isTmuxPlaceholderPresentation })
     resetLayers(); layerCache.clear()
     cachedHasPointerNodes = null
     globalMarkLayoutDirty(dirtyTracker)
@@ -538,7 +536,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       if (!isSuspended) return
       isSuspended = false
       term.resume()
-      clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: isTmuxPlaceholderPresentation })
       markDirty(); markAllDirty()
       loopStarted = true
       frame(); nextFrameDeadlineMs = 0; scheduleNextFrame()
@@ -558,7 +555,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       unsubGlobalLayoutDirty()
       unsubResize()
       unbindLoop(renderLoop)
-      clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: isTmuxPlaceholderPresentation })
 
       unbindLayerDirtyStore(layerCache)
       releaseSubtreeImages(root)

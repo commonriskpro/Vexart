@@ -31,7 +31,6 @@
  *   mount(App, terminal, { plugins: [myPlugin] })
  */
 
-import { createSignal } from "solid-js"
 import type { JSX } from "solid-js"
 import type { Terminal } from "../terminal/index"
 
@@ -76,62 +75,4 @@ export type SlotRegistry = {
   clear: () => void
   /** Reactive version counter — increments on any registration change. */
   version: () => number
-}
-
-/** Create a new slot registry. */
-/** @public */
-export function createSlotRegistry(): SlotRegistry {
-  const slots = new Map<string, SlotComponent[]>()
-  const [version, setVersion] = createSignal(0)
-
-  return {
-    register(slotName: string, component: SlotComponent): () => void {
-      const list = slots.get(slotName) ?? []
-      list.push(component)
-      slots.set(slotName, list)
-      setVersion((v) => v + 1)
-
-      // Return unregister function
-      return () => {
-        const current = slots.get(slotName)
-        if (!current) return
-        const idx = current.indexOf(component)
-        if (idx >= 0) {
-          current.splice(idx, 1)
-          setVersion((v) => v + 1)
-        }
-      }
-    },
-
-    getSlot(slotName: string): SlotComponent[] {
-      // Read version to establish reactive dependency
-      version()
-      return slots.get(slotName) ?? []
-    },
-
-    hasSlot(slotName: string): boolean {
-      version()
-      return (slots.get(slotName)?.length ?? 0) > 0
-    },
-
-    clear() {
-      slots.clear()
-      setVersion((v) => v + 1)
-    },
-
-    version,
-  }
-}
-
-/** @public */
-export function createSlot(
-  slotName: string,
-  registry: SlotRegistry,
-): () => JSX.Element | null {
-  return () => {
-    const components = registry.getSlot(slotName)
-    if (components.length === 0) return null
-    // Call each component function directly — SolidJS handles arrays
-    return components.map((fn) => fn()) as unknown as JSX.Element
-  }
 }

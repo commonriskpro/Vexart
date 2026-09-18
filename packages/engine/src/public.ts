@@ -9,7 +9,7 @@
 
 // ── Mount & terminal ─────────────────────────────────────────────────────────
 
-export { MouseButton, RGBA, useTerminalDimensions, decodePasteBytes, mount } from "./mount"
+export { MouseButton, useTerminalDimensions, decodePasteBytes, mount } from "./mount"
 export type { MountOptions, MountHandle } from "./mount"
 
 export { createTerminal } from "./terminal/index"
@@ -161,7 +161,6 @@ export type { CreateExtmarkOptions, Extmark } from "./reconciler/extmarks"
 
 // ── Plugins ──────────────────────────────────────────────────────────────────
 
-export { createSlot, createSlotRegistry } from "./reconciler/plugins"
 export type { SlotComponent, SlotRegistry, TgePlugin, TgePluginApi } from "./reconciler/plugins"
 
 // ── Solid control flow ────────────────────────────────────────────────────────

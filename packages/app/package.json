@@ -16,7 +16,6 @@
   },
   "peerDependencies": {
     "@vexart/engine": "workspace:*",
-    "@vexart/headless": "workspace:*",
     "@vexart/styled": "workspace:*"
   }
 }

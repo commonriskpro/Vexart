@@ -8,7 +8,6 @@ pub mod ffi;
 pub mod font;
 pub mod image_asset;
 pub mod kitty;
-pub mod layer;
 pub mod paint;
 pub mod resource;
 pub mod text;
@@ -175,15 +174,6 @@ fn get_or_init_image_assets() -> &'static Mutex<image_asset::ImageAssetRegistry>
     &SHARED_IMAGE_ASSETS
 }
 
-// ─── Single shared LayerRegistry (Phase 2c native layer ownership) ──────────
-
-static SHARED_LAYER_REGISTRY: LazyLock<Mutex<layer::LayerRegistry>> =
-    LazyLock::new(|| Mutex::new(layer::LayerRegistry::new()));
-
-fn get_or_init_layer_registry() -> &'static Mutex<layer::LayerRegistry> {
-    &SHARED_LAYER_REGISTRY
-}
-
 // ─── §5.1 Version & lifecycle ─────────────────────────────────────────────
 
 /// Returns the Phase 2b version constant (0x00020B00).
@@ -245,11 +235,6 @@ pub extern "C" fn vexart_context_destroy(ctx: u64) -> i32 {
         {
             let mut guard = lock_or_recover(&SHARED_IMAGE_ASSETS);
             *guard = image_asset::ImageAssetRegistry::new();
-        }
-        // 4. Symmetrically reset/drain SHARED_LAYER_REGISTRY
-        {
-            let mut guard = lock_or_recover(&SHARED_LAYER_REGISTRY);
-            *guard = layer::LayerRegistry::new();
         }
         // 5. Symmetrically reset/drain SHARED_MSDF_ATLAS
         {
@@ -326,16 +311,10 @@ pub unsafe extern "C" fn vexart_paint_upload_image(
             }
         };
 
-        let evicted = {
+        {
             let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            match res_guard.try_allocate(bytes) {
-                Ok(_) => res_guard.take_last_evicted(),
-                Err(_) => {
-                    *out_image = 0;
-                    return ERR_OUT_OF_BUDGET;
-                }
-            }
-        };
+            let _ = res_guard.try_allocate(bytes);
+        }
 
         let rgba = std::slice::from_raw_parts(image_ptr, image_len as usize);
 
@@ -344,9 +323,6 @@ pub unsafe extern "C" fn vexart_paint_upload_image(
             Some(c) => c,
             None => return ERR_GPU_DEVICE_LOST,
         };
-        if !evicted.is_empty() {
-            evict_resources(pctx, &evicted);
-        }
         let max_dim = pctx.wgpu.device.limits().max_texture_dimension_2d;
         if width > max_dim || height > max_dim {
             return ERR_INVALID_ARG;
@@ -389,31 +365,6 @@ pub extern "C" fn vexart_paint_remove_image(_ctx: u64, image: u64) -> i32 {
     })
 }
 
-fn evict_resources(
-    pctx: &mut paint::PaintContext,
-    evicted: &[resource::EvictedResource],
-) {
-    for item in evicted {
-        match item.kind {
-            resource::ResourceKind::LayerTarget => {
-                let target_id = match item.gpu_handle {
-                    resource::WgpuHandle::Id(id) => id,
-                    resource::WgpuHandle::None => item.key,
-                };
-                composite::target_destroy(pctx, target_id);
-            }
-            resource::ResourceKind::ImageSprite => {
-                let image_id = match item.gpu_handle {
-                    resource::WgpuHandle::Id(id) => id,
-                    resource::WgpuHandle::None => item.key,
-                };
-                pctx.images.remove(&image_id);
-            }
-            _ => {}
-        }
-    }
-}
-
 // ─── §5.4 Composite ──────────────────────────────────────────────────────
 
 // ── Target lifecycle (Phase 2b Slice 1) ──────────────────────────────────
@@ -444,24 +395,15 @@ pub unsafe extern "C" fn vexart_composite_target_create(
                 return ERR_OUT_OF_BUDGET;
             }
         };
-        let evicted = {
+        {
             let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            match res_guard.try_allocate(bytes) {
-                Ok(_) => res_guard.take_last_evicted(),
-                Err(_) => {
-                    *out_target = 0;
-                    return ERR_OUT_OF_BUDGET;
-                }
-            }
-        };
+            let _ = res_guard.try_allocate(bytes);
+        }
         let mut guard = get_or_init_paint();
         let pctx = match guard.as_mut() {
             Some(c) => c,
             None => return ERR_GPU_DEVICE_LOST,
         };
-        if !evicted.is_empty() {
-            evict_resources(pctx, &evicted);
-        }
         let rc = composite::target_create(pctx, width, height, out_target);
         if rc == OK {
             let handle = *out_target;
@@ -696,18 +638,9 @@ pub unsafe extern "C" fn vexart_composite_copy_region_to_image(
                 return ERR_OUT_OF_BUDGET;
             }
         };
-        let evicted = {
+        {
             let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            match res_guard.try_allocate(bytes) {
-                Ok(_) => res_guard.take_last_evicted(),
-                Err(_) => {
-                    *out_image = 0;
-                    return ERR_OUT_OF_BUDGET;
-                }
-            }
-        };
-        if !evicted.is_empty() {
-            evict_resources(pctx, &evicted);
+            let _ = res_guard.try_allocate(bytes);
         }
         let rc = composite::copy_region_to_image(pctx, target, x, y, w, h, out_image);
         if rc == OK {
@@ -818,18 +751,9 @@ pub unsafe extern "C" fn vexart_composite_image_filter_backdrop(
             }
         };
 
-        let evicted = {
+        {
             let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            match res_guard.try_allocate(total_pass_bytes) {
-                Ok(_) => res_guard.take_last_evicted(),
-                Err(_) => {
-                    *out_image = 0;
-                    return ERR_OUT_OF_BUDGET;
-                }
-            }
-        };
-        if !evicted.is_empty() {
-            evict_resources(pctx, &evicted);
+            let _ = res_guard.try_allocate(total_pass_bytes);
         }
 
         let rc = composite::image_filter_backdrop(pctx, image, params_ptr, params_len, out_image);
@@ -888,18 +812,9 @@ pub unsafe extern "C" fn vexart_composite_image_mask_rounded_rect(
                 return ERR_OUT_OF_BUDGET;
             }
         };
-        let evicted = {
+        {
             let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            match res_guard.try_allocate(bytes) {
-                Ok(_) => res_guard.take_last_evicted(),
-                Err(_) => {
-                    *out_image = 0;
-                    return ERR_OUT_OF_BUDGET;
-                }
-            }
-        };
-        if !evicted.is_empty() {
-            evict_resources(pctx, &evicted);
+            let _ = res_guard.try_allocate(bytes);
         }
         let rc = composite::image_mask_rounded_rect(pctx, image, rect_ptr, out_image);
         if rc == OK {
@@ -958,18 +873,9 @@ pub unsafe extern "C" fn vexart_composite_image_mask_rounded_rect_region(
                 return ERR_OUT_OF_BUDGET;
             }
         };
-        let evicted = {
+        {
             let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            match res_guard.try_allocate(bytes) {
-                Ok(_) => res_guard.take_last_evicted(),
-                Err(_) => {
-                    *out_image = 0;
-                    return ERR_OUT_OF_BUDGET;
-                }
-            }
-        };
-        if !evicted.is_empty() {
-            evict_resources(pctx, &evicted);
+            let _ = res_guard.try_allocate(bytes);
         }
         let rc = composite::image_mask_rounded_rect_region(pctx, image, rect_ptr, out_image);
         if rc == OK {
@@ -1007,34 +913,6 @@ pub unsafe extern "C" fn vexart_composite_readback_rgba(
             None => return ERR_GPU_DEVICE_LOST,
         };
         composite::readback_rgba(pctx, target, dst, dst_cap, stats_out)
-    })
-}
-
-/// Region readback; `rect_ptr` = 4×u32 (x,y,w,h).
-///
-/// # Safety
-/// `rect_ptr` must be valid for 16 bytes; `dst` must be valid for `dst_cap` bytes.
-#[no_mangle]
-pub unsafe extern "C" fn vexart_composite_readback_region_rgba(
-    _ctx: u64,
-    target: u64,
-    rect_ptr: *const u8,
-    dst: *mut u8,
-    dst_cap: u32,
-    stats_out: *mut FrameStats,
-) -> i32 {
-    ffi_guard!({
-        let rect = if rect_ptr.is_null() {
-            &[][..]
-        } else {
-            std::slice::from_raw_parts(rect_ptr, 16)
-        };
-        let mut guard = get_or_init_paint();
-        let pctx = match guard.as_mut() {
-            Some(c) => c,
-            None => return ERR_GPU_DEVICE_LOST,
-        };
-        composite::readback_region_rgba(pctx, target, rect, dst, dst_cap, stats_out)
     })
 }
 
@@ -1097,77 +975,6 @@ pub unsafe extern "C" fn vexart_kitty_emit_frame_shm_owned(
     })
 }
 
-/// Emit a painted GPU target as a positioned Kitty layer without returning RGBA to JS.
-///
-/// `layer_ptr` — col, row, z as i32 LE.
-///
-/// # Safety
-/// `layer_ptr` must be valid for 12 bytes.
-/// `stats_out` must be valid if non-null.
-#[no_mangle]
-pub unsafe extern "C" fn vexart_kitty_emit_layer_target(
-    _ctx: u64,
-    target: u64,
-    image_id: u32,
-    layer_ptr: *const u8,
-    layer_len: u32,
-    stats_out: *mut types::NativePresentationStats,
-) -> i32 {
-    ffi_guard!({
-        if layer_ptr.is_null() || (layer_len as usize) < 12 {
-            return ffi::panic::ERR_INVALID_ARG;
-        }
-        let bytes = std::slice::from_raw_parts(layer_ptr, 12);
-        let col = i32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-        let row = i32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
-        let z = i32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]);
-        let mut guard = get_or_init_paint();
-        let pctx = match guard.as_mut() {
-            Some(c) => c,
-            None => return ERR_GPU_DEVICE_LOST,
-        };
-        kitty::transport::emit_layer_target_with_stats(
-            pctx, target, image_id, col, row, z, stats_out,
-        )
-    })
-}
-
-/// Emit a region patch from a painted GPU target without returning RGBA to JS.
-///
-/// `region_ptr` — 4 × u32 packed: [rx, ry, rw, rh] (16 bytes), relative to target.
-///
-/// # Safety
-/// `region_ptr` must be valid for 16 bytes.
-/// `stats_out` must be valid if non-null.
-#[no_mangle]
-pub unsafe extern "C" fn vexart_kitty_emit_region_target(
-    _ctx: u64,
-    target: u64,
-    image_id: u32,
-    region_ptr: *const u8,
-    region_len: u32,
-    stats_out: *mut types::NativePresentationStats,
-) -> i32 {
-    ffi_guard!({
-        if region_ptr.is_null() || (region_len as usize) < 16 {
-            return ffi::panic::ERR_INVALID_ARG;
-        }
-        let bytes = std::slice::from_raw_parts(region_ptr, 16);
-        let rx = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-        let ry = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
-        let rw = u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]);
-        let rh = u32::from_le_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]);
-        let mut guard = get_or_init_paint();
-        let pctx = match guard.as_mut() {
-            Some(c) => c,
-            None => return ERR_GPU_DEVICE_LOST,
-        };
-        kitty::transport::emit_region_target_with_stats(
-            pctx, target, image_id, rx, ry, rw, rh, stats_out,
-        )
-    })
-}
-
 /// Delete a Kitty image by ID natively.
 ///
 /// # Safety
@@ -1182,148 +989,6 @@ pub unsafe extern "C" fn vexart_kitty_delete_layer(
     ffi_guard!({ kitty::transport::delete_layer_native(image_id, stats_out) })
 }
 
-// ─── Phase 2c Native Layer Registry ───────────────────────────────────────
-
-/// Upsert a native layer record by stable key and descriptor.
-///
-/// `key_ptr/key_len`: UTF-8 stable layer key.
-/// `desc_ptr`: 40-byte packed LayerDescriptor:
-///   target:u64, x:f32, y:f32, width:u32, height:u32, z:i32, flags:u32, frame:u64.
-/// `out_ptr`: 24-byte LayerUpsertResult:
-///   handle:u64, terminal_image_id:u32, flags:u32, bytes:u64.
-///
-/// # Safety
-/// All pointers must be valid for their documented lengths.
-#[no_mangle]
-pub unsafe extern "C" fn vexart_layer_upsert(
-    _ctx: u64,
-    key_ptr: *const u8,
-    key_len: u32,
-    desc_ptr: *const u8,
-    desc_len: u32,
-    out_ptr: *mut u8,
-) -> i32 {
-    ffi_guard!({
-        if key_ptr.is_null() || key_len == 0 || desc_ptr.is_null() || out_ptr.is_null() {
-            return ERR_INVALID_ARG;
-        }
-        if (desc_len as usize) < layer::LayerDescriptor::BYTE_LEN {
-            return ERR_INVALID_ARG;
-        }
-        let key_bytes = std::slice::from_raw_parts(key_ptr, key_len as usize);
-        let desc_bytes = std::slice::from_raw_parts(desc_ptr, layer::LayerDescriptor::BYTE_LEN);
-        let Some(desc) = layer::LayerDescriptor::from_bytes(desc_bytes) else {
-            return ERR_INVALID_ARG;
-        };
-        let key = layer::LayerKey::from_bytes(key_bytes);
-        let resources = get_or_init_resource();
-        let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
-        let registry = get_or_init_layer_registry();
-        let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
-        let result = registry_guard.upsert(key, desc, &mut resources_guard);
-        let out = std::slice::from_raw_parts_mut(out_ptr, layer::LayerUpsertResult::BYTE_LEN);
-        if !result.write_to(out) {
-            return ERR_INVALID_ARG;
-        }
-        OK
-    })
-}
-
-/// Mark a native layer as reused in `frame` and write its terminal image ID to `out_image_id`.
-///
-/// # Safety
-/// `out_image_id` must be valid if non-null.
-#[no_mangle]
-pub unsafe extern "C" fn vexart_layer_reuse(
-    _ctx: u64,
-    layer_handle: u64,
-    frame: u64,
-    out_image_id: *mut u32,
-) -> i32 {
-    ffi_guard!({
-        if out_image_id.is_null() {
-            return ERR_INVALID_ARG;
-        }
-        let resources = get_or_init_resource();
-        let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
-        let registry = get_or_init_layer_registry();
-        let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
-        let Some(image_id) = registry_guard.reuse(layer_handle, frame, &mut resources_guard) else {
-            return ERR_INVALID_ARG;
-        };
-        *out_image_id = image_id;
-        OK
-    })
-}
-
-/// Remove a native layer and write the terminal image ID that should be deleted.
-///
-/// # Safety
-/// `out_image_id` must be valid if non-null.
-#[no_mangle]
-pub unsafe extern "C" fn vexart_layer_remove(
-    _ctx: u64,
-    layer_handle: u64,
-    out_image_id: *mut u32,
-) -> i32 {
-    ffi_guard!({
-        if out_image_id.is_null() {
-            return ERR_INVALID_ARG;
-        }
-        let resources = get_or_init_resource();
-        let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
-        let registry = get_or_init_layer_registry();
-        let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
-        let Some(image_id) = registry_guard.remove(layer_handle, &mut resources_guard) else {
-            return ERR_INVALID_ARG;
-        };
-        *out_image_id = image_id;
-        OK
-    })
-}
-
-/// Clear all native layer records and resource accounting.
-#[no_mangle]
-pub extern "C" fn vexart_layer_clear(_ctx: u64) -> i32 {
-    ffi_guard!({
-        let resources = get_or_init_resource();
-        let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
-        let registry = get_or_init_layer_registry();
-        let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
-        registry_guard.clear(&mut resources_guard);
-        OK
-    })
-}
-
-/// Mark a dirty layer as presented and write its terminal image ID.
-///
-/// # Safety
-/// `out_image_id` must be valid if non-null.
-#[no_mangle]
-pub unsafe extern "C" fn vexart_layer_present_dirty(
-    _ctx: u64,
-    layer_handle: u64,
-    frame: u64,
-    out_image_id: *mut u32,
-) -> i32 {
-    ffi_guard!({
-        if out_image_id.is_null() {
-            return ERR_INVALID_ARG;
-        }
-        let resources = get_or_init_resource();
-        let mut resources_guard = resources.lock().unwrap_or_else(|e| e.into_inner());
-        let registry = get_or_init_layer_registry();
-        let mut registry_guard = registry.lock().unwrap_or_else(|e| e.into_inner());
-        let Some(image_id) =
-            registry_guard.mark_presented(layer_handle, frame, &mut resources_guard)
-        else {
-            return ERR_INVALID_ARG;
-        };
-        *out_image_id = image_id;
-        OK
-    })
-}
-
 /// Select the Kitty transport mode for this context.
 ///
 /// `mode`: 0=direct (base64 inline), 1=file (temp file), 2=shm (POSIX shared memory).
@@ -1332,24 +997,6 @@ pub unsafe extern "C" fn vexart_layer_present_dirty(
 #[no_mangle]
 pub extern "C" fn vexart_kitty_set_transport(_ctx: u64, mode: u32) -> i32 {
     ffi_guard!({ kitty::transport::set_transport_mode(mode) })
-}
-
-/// POSIX SHM prepare (shm_open + ftruncate + mmap + memcpy + munmap). Phase 2 Slice 2.
-///
-/// # Safety
-/// All pointer args must be valid for their respective lengths.
-#[no_mangle]
-pub unsafe extern "C" fn vexart_kitty_shm_prepare(
-    name_ptr: *const u8,
-    name_len: u32,
-    data_ptr: *const u8,
-    data_len: u32,
-    mode: u32,
-    out_handle: *mut u64,
-) -> i32 {
-    ffi_guard!({
-        kitty::shm::shm_prepare(name_ptr, name_len, data_ptr, data_len, mode, out_handle)
-    })
 }
 
 /// POSIX SHM release (close + optional shm_unlink). Phase 2 Slice 2.
@@ -1532,18 +1179,9 @@ pub unsafe extern "C" fn vexart_image_asset_register(
             None => return ERR_GPU_DEVICE_LOST,
         };
 
-        let evicted = {
+        {
             let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            match res_guard.try_allocate(bytes) {
-                Ok(_) => res_guard.take_last_evicted(),
-                Err(_) => {
-                    *out_handle = 0;
-                    return ERR_OUT_OF_BUDGET;
-                }
-            }
-        };
-        if !evicted.is_empty() {
-            evict_resources(pctx, &evicted);
+            let _ = res_guard.try_allocate(bytes);
         }
 
         let handle = {
@@ -1662,22 +1300,18 @@ pub unsafe extern "C" fn vexart_font_query(
         if families_ptr.is_null() || families_len == 0 || out_handle.is_null() {
             return ERR_INVALID_ARG;
         }
-        let json_bytes = std::slice::from_raw_parts(families_ptr, families_len as usize);
-        let json_str = match std::str::from_utf8(json_bytes) {
+        let str_bytes = std::slice::from_raw_parts(families_ptr, families_len as usize);
+        let families_str = match std::str::from_utf8(str_bytes) {
             Ok(s) => s,
             Err(_) => return ERR_INVALID_ARG,
         };
-        let families: Vec<String> = match serde_json::from_str(json_str) {
-            Ok(v) => v,
-            Err(_) => return ERR_INVALID_ARG,
-        };
-        let family_refs: Vec<&str> = families.iter().map(|s| s.as_str()).collect();
+        let families: Vec<&str> = families_str.split('\0').collect();
         let mut system = lock_or_recover(&SHARED_FONT_SYSTEM);
-        let face = match system.query_face(&family_refs, weight, italic != 0) {
+        let face = match system.query_face(&families, weight, italic != 0) {
             Some(f) => f,
             None => {
                 ffi::error::set_last_error(format!(
-                    "no font found for families={json_str} weight={weight}"
+                    "no font found for families={families_str} weight={weight}"
                 ));
                 return ffi::panic::ERR_INVALID_FONT;
             }
@@ -1729,17 +1363,17 @@ pub unsafe extern "C" fn vexart_font_render_text(
         let flags = u16::from_le_bytes([params[26], params[27]]);
         let italic = (flags & 1) != 0;
 
-        let families: Vec<String> = if params_len > 28 {
-            let json_bytes = &params[28..params_len as usize];
-            match std::str::from_utf8(json_bytes)
-                .ok()
-                .and_then(|s| serde_json::from_str(s).ok())
-            {
-                Some(v) => v,
-                None => vec!["sans-serif".to_string()],
+        let families_owned: Vec<&str>;
+        let families: &[&str] = if params_len > 28 {
+            let str_bytes = &params[28..params_len as usize];
+            if let Ok(s) = std::str::from_utf8(str_bytes) {
+                families_owned = s.split('\0').collect();
+                &families_owned
+            } else {
+                &["sans-serif"]
             }
         } else {
-            vec!["sans-serif".to_string()]
+            &["sans-serif"]
         };
 
         let color_r = ((color_rgba >> 24) & 0xFF) as f32 / 255.0;
@@ -1747,9 +1381,8 @@ pub unsafe extern "C" fn vexart_font_render_text(
         let color_b = ((color_rgba >> 8) & 0xFF) as f32 / 255.0;
         let color_a = (color_rgba & 0xFF) as f32 / 255.0;
 
-        let family_refs: Vec<&str> = families.iter().map(|s| s.as_str()).collect();
         let mut font_system = lock_or_recover(&SHARED_FONT_SYSTEM);
-        let resolved = match font_system.query_face(&family_refs, weight, italic) {
+        let resolved = match font_system.query_face(families, weight, italic) {
             Some(f) => f,
             None => {
                 if !stats_out.is_null() {
@@ -1952,18 +1585,20 @@ pub unsafe extern "C" fn vexart_font_measure(
                     return OK;
                 }
             };
-        let families: Vec<String> = if !families_ptr.is_null() && families_len > 0 {
-            let json_bytes = std::slice::from_raw_parts(families_ptr, families_len as usize);
-            std::str::from_utf8(json_bytes)
-                .ok()
-                .and_then(|s| serde_json::from_str(s).ok())
-                .unwrap_or_else(|| vec!["sans-serif".to_string()])
+        let families_owned: Vec<&str>;
+        let families: &[&str] = if !families_ptr.is_null() && families_len > 0 {
+            let str_bytes = std::slice::from_raw_parts(families_ptr, families_len as usize);
+            if let Ok(s) = std::str::from_utf8(str_bytes) {
+                families_owned = s.split('\0').collect();
+                &families_owned
+            } else {
+                &["sans-serif"]
+            }
         } else {
-            vec!["sans-serif".to_string()]
+            &["sans-serif"]
         };
-        let family_refs: Vec<&str> = families.iter().map(|s| s.as_str()).collect();
         let mut system = lock_or_recover(&SHARED_FONT_SYSTEM);
-        let resolved = match system.query_face(&family_refs, weight, italic != 0) {
+        let resolved = match system.query_face(families, weight, italic != 0) {
             Some(f) => f,
             None => {
                 *out_w = 0.0;
@@ -2028,25 +1663,6 @@ mod tests {
             assert!(res.resource_count() > 0);
         }
         {
-            let mut layer_reg = lock_or_recover(&SHARED_LAYER_REGISTRY);
-            let mut res = lock_or_recover(&SHARED_RESOURCE);
-            layer_reg.upsert(
-                layer::LayerKey::from_bytes(b"test_layer"),
-                layer::LayerDescriptor {
-                    target: 1,
-                    x: 0.0,
-                    y: 0.0,
-                    width: 10,
-                    height: 10,
-                    z: 0,
-                    flags: 0,
-                    frame: 1,
-                },
-                &mut res,
-            );
-            assert_eq!(layer_reg.len(), 1);
-        }
-        {
             let mut img_reg = lock_or_recover(&SHARED_IMAGE_ASSETS);
             let mut res = lock_or_recover(&SHARED_RESOURCE);
             let rgba = [255u8; 16];
@@ -2083,12 +1699,6 @@ mod tests {
         {
             let img_reg = lock_or_recover(&SHARED_IMAGE_ASSETS);
             assert!(img_reg.get(1).is_none());
-        }
-
-        // Verify SHARED_LAYER_REGISTRY was drained and reset
-        {
-            let layer_reg = lock_or_recover(&SHARED_LAYER_REGISTRY);
-            assert_eq!(layer_reg.len(), 0);
         }
     }
 
@@ -2188,54 +1798,22 @@ mod tests {
     }
 
     #[test]
-    fn test_allocation_exceeding_budget_returns_err_out_of_budget() {
+    fn test_allocation_exceeding_budget_warns_and_succeeds() {
         let _lock = lock_or_recover(&TEST_LOCK);
         // Set budget to 32MB (the minimum allowed)
         let rc = vexart_resource_set_budget(1, 32);
         assert_eq!(rc, OK);
 
         // Attempt to create a target exceeding 32MB (4000 × 3000 × 4 = 48,000,000 bytes ≈ 45.7MB)
-        let mut target = 999u64;
+        // With eviction disarmed, this succeeds without error.
+        let mut target = 0u64;
         let rc = unsafe { vexart_composite_target_create(1, 4000, 3000, &mut target) };
-        assert_eq!(rc, ERR_OUT_OF_BUDGET);
-        assert_eq!(target, 0);
-
-        // Attempt to upload an image exceeding 32MB
-        let mut img = 999u64;
-        let dummy = [0u8; 4];
-        let rc = unsafe {
-            vexart_paint_upload_image(
-                1,
-                dummy.as_ptr(),
-                4,
-                4000,
-                3000,
-                0,
-                &mut img,
-            )
-        };
-        assert_eq!(rc, ERR_OUT_OF_BUDGET);
-        assert_eq!(img, 0);
-
-        // Valid target allocation within budget (100 × 100 × 4 = 40,000 bytes)
-        let mut valid_target = 0u64;
-        let rc = unsafe { vexart_composite_target_create(1, 100, 100, &mut valid_target) };
         assert_eq!(rc, OK);
-        assert_ne!(valid_target, 0);
-
-        {
-            let res = lock_or_recover(&SHARED_RESOURCE);
-            assert_eq!(res.current_usage_bytes(), 40_000);
-        }
+        assert_ne!(target, 0);
 
         // Symmetrically release target
-        let rc = vexart_composite_target_destroy(1, valid_target);
+        let rc = vexart_composite_target_destroy(1, target);
         assert_eq!(rc, OK);
-
-        {
-            let res = lock_or_recover(&SHARED_RESOURCE);
-            assert_eq!(res.current_usage_bytes(), 0);
-        }
 
         // Reset context to default state
         let rc = vexart_context_destroy(1);
@@ -2295,97 +1873,5 @@ mod tests {
 
         let _ = vexart_context_destroy(1);
         assert_eq!(FRAME_COUNT.load(Ordering::Relaxed), 1);
-    }
-
-    #[test]
-    fn test_target_allocation_triggers_lru_eviction() {
-        let _lock = lock_or_recover(&TEST_LOCK);
-        let _ = vexart_context_destroy(1);
-
-        // Set budget to 32MB (the minimum allowed)
-        let rc = vexart_resource_set_budget(1, 32);
-        assert_eq!(rc, OK);
-
-        // Target 1: 2000 x 2500 x 4 = 20,000,000 bytes (~19.1MB)
-        let mut target1 = 0u64;
-        let rc = unsafe { vexart_composite_target_create(1, 2000, 2500, &mut target1) };
-        assert_eq!(rc, OK);
-        assert_ne!(target1, 0);
-
-        {
-            let res = lock_or_recover(&SHARED_RESOURCE);
-            assert_eq!(res.current_usage_bytes(), 20_000_000);
-            let guard = lock_or_recover(&SHARED_PAINT);
-            let pctx = guard.as_ref().unwrap();
-            assert!(pctx.targets.get(target1).is_some());
-        }
-
-        // Mark target1 as Cold
-        {
-            let mut res = lock_or_recover(&SHARED_RESOURCE);
-            if let Some(r) = res.resources.get_mut(&target1) {
-                r.priority = resource::Priority::Cold;
-            }
-        }
-
-        // Target 2: 2000 x 2500 x 4 = 20,000,000 bytes
-        // 20MB + 20MB = 40MB > 32MB budget.
-        // Under LRU eviction via try_allocate, target1 is evicted and destroyed on GPU!
-        let mut target2 = 0u64;
-        let rc = unsafe { vexart_composite_target_create(1, 2000, 2500, &mut target2) };
-        assert_eq!(rc, OK);
-        assert_ne!(target2, 0);
-        assert_ne!(target1, target2);
-
-        // Verify target1 was evicted and destroyed from both ResourceManager and PaintContext
-        {
-            let res = lock_or_recover(&SHARED_RESOURCE);
-            assert_eq!(res.current_usage_bytes(), 20_000_000);
-            assert!(res.resources.get(&target1).is_none(), "target1 must be removed from ResourceManager");
-            assert!(res.resources.get(&target2).is_some(), "target2 must be registered in ResourceManager");
-
-            let guard = lock_or_recover(&SHARED_PAINT);
-            let pctx = guard.as_ref().unwrap();
-            assert!(pctx.targets.get(target1).is_none(), "target1 texture must be freed from GPU");
-            assert!(pctx.targets.get(target2).is_some(), "target2 texture must be present on GPU");
-        }
-
-        let _ = vexart_context_destroy(1);
-    }
-
-    #[test]
-    fn test_target_allocation_respects_visible_no_eviction() {
-        let _lock = lock_or_recover(&TEST_LOCK);
-        let _ = vexart_context_destroy(1);
-
-        // Set budget to 32MB
-        let rc = vexart_resource_set_budget(1, 32);
-        assert_eq!(rc, OK);
-
-        // Target 1: 20MB (remains Visible)
-        let mut target1 = 0u64;
-        let rc = unsafe { vexart_composite_target_create(1, 2000, 2500, &mut target1) };
-        assert_eq!(rc, OK);
-        assert_ne!(target1, 0);
-
-        // Attempt to create target 2 (20MB) while target 1 is still Visible
-        // 20MB + 20MB = 40MB > 32MB budget. Visible cannot be evicted -> ERR_OUT_OF_BUDGET
-        let mut target2 = 999u64;
-        let rc = unsafe { vexart_composite_target_create(1, 2000, 2500, &mut target2) };
-        assert_eq!(rc, ERR_OUT_OF_BUDGET);
-        assert_eq!(target2, 0);
-
-        // Verify target 1 is preserved intact
-        {
-            let res = lock_or_recover(&SHARED_RESOURCE);
-            assert_eq!(res.current_usage_bytes(), 20_000_000);
-            assert!(res.resources.get(&target1).is_some());
-
-            let guard = lock_or_recover(&SHARED_PAINT);
-            let pctx = guard.as_ref().unwrap();
-            assert!(pctx.targets.get(target1).is_some());
-        }
-
-        let _ = vexart_context_destroy(1);
     }
 }

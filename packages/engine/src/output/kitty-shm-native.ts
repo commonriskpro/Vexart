@@ -39,9 +39,13 @@ function readLastError(): string {
 /** @public */
 export function prepareNativeKittyShm(name: string, data: Uint8Array, mode = 0o666): NativeKittyShmHandle {
   const { symbols } = openVexartLibrary()
+  const fn = (symbols as unknown as Record<string, any>).vexart_kitty_shm_prepare
+  if (typeof fn !== "function") {
+    throw new VexartNativeError(-1, "vexart_kitty_shm_prepare is not available in this libvexart build")
+  }
   const nameBytes = new TextEncoder().encode(name)
   const handleBuf = new BigUint64Array(1)
-  const result = symbols.vexart_kitty_shm_prepare(
+  const result = fn(
     ptr(nameBytes),
     nameBytes.byteLength,
     ptr(data),

@@ -20,7 +20,7 @@ use super::shm::{shm_prepare_native, shm_release};
 use super::transport::{do_readback_with, resolve_target_dims};
 use super::writer::{wrap_tmux_apc, write_to_stdout};
 use crate::ffi::error::set_last_error;
-use crate::ffi::panic::{ERR_GPU_DEVICE_LOST, ERR_INVALID_ARG, ERR_KITTY_TRANSPORT, OK};
+use crate::ffi::panic::{ERR_INVALID_ARG, ERR_KITTY_TRANSPORT, OK};
 use crate::paint::PaintContext;
 use crate::types::NativePresentationStats;
 
@@ -697,27 +697,6 @@ pub fn delete_placeholder(image_id: u32) -> i32 {
             ERR_KITTY_TRANSPORT
         }
     }
-}
-
-/// FFI entry point for tmux-safe placeholder presentation.
-#[no_mangle]
-pub unsafe extern "C" fn vexart_kitty_emit_placeholder_frame(
-    ctx: u64,
-    target: u64,
-    image_id: u32,
-    cols: u32,
-    rows: u32,
-    stats_out: *mut NativePresentationStats,
-) -> i32 {
-    let _ = ctx;
-    crate::ffi_guard!({
-        let mut guard = crate::get_or_init_paint();
-        let pctx = match guard.as_mut() {
-            Some(context) => context,
-            None => return ERR_GPU_DEVICE_LOST,
-        };
-        emit_placeholder_frame(pctx, target, image_id, cols, rows, stats_out)
-    })
 }
 
 /// FFI entry point for deleting an owned tmux placeholder image.

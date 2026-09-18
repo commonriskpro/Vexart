@@ -49,9 +49,6 @@ import {
   disableNativePresentation,
   logNativePresentationFallback,
 } from "./native-presentation-flags"
-import {
-  clearNativeLayerRegistryMirror,
-} from "./native-layer-registry"
 import { ensureNativeKittyTransport } from "./native-presentation-ops"
 import type { DamageRect } from "./damage"
 import { createKittyShmPresentation, createTmuxShmPresentation, type TmuxShmPresentation } from "./tmux-shm-presentation"
@@ -284,7 +281,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
   const _msdfEncoder = new TextEncoder()
   const _msdfStatsBuf = new Uint8Array(32)
   // HP-4: Pre-allocated buffers for tryMsdfText — avoids per-call allocations.
-  const _msdfFamilyCache = new Map<string, Uint8Array>()
   let _msdfTextBuf = new Uint8Array(4096)
   let _msdfParamsBuf = new Uint8Array(4096)
   const _msdfParamsView = new DataView(_msdfParamsBuf.buffer)
@@ -328,13 +324,8 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     const { written: textLen } = _msdfEncoder.encodeInto(text, _msdfTextBuf)
     if (textLen === 0) return true
 
-    // Cache family JSON encoding (HP-4: 99% of calls use same family)
     const family = fontFamily || "sans-serif"
-    let familiesEncoded = _msdfFamilyCache.get(family)
-    if (!familiesEncoded) {
-      familiesEncoded = _msdfEncoder.encode(JSON.stringify([family]))
-      _msdfFamilyCache.set(family, familiesEncoded)
-    }
+    const familiesEncoded = _msdfEncoder.encode(family)
 
     // Pack params into reusable buffer (HP-4: no per-call allocation)
     const headerSize = 28
@@ -2710,9 +2701,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       }
       const forcedStrategy = getForcedLayerStrategy()
       if (forcedStrategy) {
-        if (forcedStrategy === "final-frame" && lastStrategy !== "final-frame") {
-          clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: !!options.placeholderPresentation }, _vexartCtx ?? 1n)
-        }
         framesSinceStrategyChange = lastStrategy === forcedStrategy ? framesSinceStrategyChange + 1 : 0
         lastStrategy = forcedStrategy
         lastNativeFramePlan = null
@@ -2765,9 +2753,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
         lastStrategy: previousStrategy,
         framesSinceChange: framesSinceStrategyChange,
       }, lastNativeFramePlan)
-      if (chosen === "final-frame" && previousStrategy !== "final-frame") {
-        clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: !!options.placeholderPresentation }, _vexartCtx ?? 1n)
-      }
       framesSinceStrategyChange = chosen === previousStrategy ? framesSinceStrategyChange + 1 : 0
       lastStrategy = chosen
       lastStrategyTelemetry = {
@@ -2894,7 +2879,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     instanceImageHandles,
     destroy() {
       presentation?.destroy()
-      _msdfFamilyCache.clear()
       if (_vexartCtx !== null) {
         clearImageCache()
         clearSpriteCaches()
@@ -2912,7 +2896,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
         layerTargets.clear()
         cacheStats.layerTargetCount = 0
         cacheStats.layerTargetBytes = 0
-        clearNativeLayerRegistryMirror({ suppressTerminalImageDeletes: false }, _vexartCtx)
         const { symbols } = openVexartLibrary()
         symbols.vexart_context_destroy(_vexartCtx)
         _vexartCtx = null

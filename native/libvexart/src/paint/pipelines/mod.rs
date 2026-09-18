@@ -7,7 +7,6 @@ pub mod backdrop_blur;
 pub mod backdrop_filter;
 pub mod bezier;
 pub mod circle;
-pub mod filter;
 pub mod glow;
 pub mod glyph;
 pub mod gradient_conic;
@@ -19,7 +18,6 @@ pub mod image_transform;
 pub mod image_unpremultiply;
 pub mod nebula;
 pub mod polygon;
-pub mod rect;
 pub mod rect_corners;
 pub mod shadow;
 pub mod shape_rect;
@@ -45,7 +43,6 @@ use wgpu::{BindGroupLayout, Device, RenderPipeline, TextureFormat};
 ///   21..=31 reserved for future pipelines (blend, gradient_stroke, etc.)
 pub struct PipelineRegistry {
     // ── Slice 5a ──────────────────────────────────────────────────────────────
-    pub rect: RenderPipeline,
     pub shape_rect: RenderPipeline,
     pub shape_rect_corners: RenderPipeline,
     pub circle: RenderPipeline,
@@ -67,8 +64,6 @@ pub struct PipelineRegistry {
     pub image_mask: RenderPipeline,
     // ── Phase 2b Slice 4 (MSDF text) ─────────────────────────────────────────
     pub glyph: RenderPipeline,
-    // ── Phase 2b Slice 5 (self-filter) ───────────────────────────────────────
-    pub self_filter: RenderPipeline,
     // ── Phase 4+ ─────────────────────────────────────────────────────────────
     pub shadow: RenderPipeline,
 }
@@ -86,7 +81,6 @@ impl PipelineRegistry {
     ) -> Self {
         Self {
             // Slice 5a
-            rect: rect::create(device, format, cache),
             shape_rect: shape_rect::create(device, format, cache),
             shape_rect_corners: rect_corners::create(device, format, cache),
             circle: circle::create(device, format, cache),
@@ -110,8 +104,6 @@ impl PipelineRegistry {
             image_mask: image_mask::create(device, format, image_bgl, cache),
             // Phase 2b Slice 4
             glyph: glyph::create(device, format, image_bgl, cache),
-            // Phase 2b Slice 5 — self-filter
-            self_filter: filter::create(device, format, image_bgl, cache),
             // Phase 4+ — analytic box-shadow
             shadow: shadow::create(device, format, cache),
         }

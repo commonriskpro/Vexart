@@ -588,7 +588,7 @@ impl PaintContext {
 /// Helper returning true if the command kind requires the fallback texture bind group.
 #[inline]
 fn needs_fallback_bind_group(kind: u16) -> bool {
-    matches!(kind, 15..=19)
+    matches!(kind, 15..=17)
 }
 
 /// Return the byte stride of one instance for the given cmd_kind.
@@ -633,7 +633,7 @@ fn pipeline_for_kind(
 ) -> &wgpu::RenderPipeline {
     match kind {
         // Slice 5a — ported pipelines
-        0 => &reg.rect,
+        0 => &reg.shape_rect,
         1 => &reg.shape_rect,
         2 => &reg.shape_rect_corners,
         3 => &reg.circle,
@@ -653,11 +653,9 @@ fn pipeline_for_kind(
         17 => &reg.image_mask,
         // Phase 2b Slice 4 — MSDF glyph pipeline
         18 => &reg.glyph,
-        // Phase 2b Slice 5 — self-filter pipeline
-        19 => &reg.self_filter,
         // Phase 4+ — analytic box-shadow pipeline
         20 => &reg.shadow,
-        _ => &reg.rect,
+        _ => &reg.shape_rect,
     }
 }
 

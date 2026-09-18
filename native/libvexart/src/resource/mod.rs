@@ -10,16 +10,10 @@
 //   - Default budget: 512MB (REQ-2B-703 / ARCHITECTURE §8.3).
 //   - Minimum budget: 32MB (enforced in set_budget).
 
-pub mod eviction;
-pub mod priority;
 pub mod stats;
 
-pub use priority::Priority;
-
-use eviction::select_eviction_targets;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Instant;
 
 /// Default memory budget: 512MB.
 pub const DEFAULT_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
@@ -67,14 +61,10 @@ pub struct Resource {
     pub kind: ResourceKind,
     /// Size in bytes on the GPU.
     pub size_bytes: u64,
-    /// Current eviction priority.
-    pub priority: Priority,
     /// Frame number when this resource was last used.
     pub last_used_frame: u64,
     /// GPU handle (lightweight identity, not ownership).
     pub gpu_handle: WgpuHandle,
-    /// Seconds since last use — updated at frame end for demotion timing.
-    pub seconds_since_last_use: f64,
 }
 
 /// Unified GPU memory manager with priority-based LRU eviction.
@@ -105,8 +95,6 @@ pub struct ResourceManager {
     pub evictions_total: u64,
     /// Metadata of resources evicted in the most recent `try_allocate` call.
     pub last_evicted: Vec<EvictedResource>,
-    /// Monotonic clock start for seconds-since-use calculations.
-    startup: Instant,
 }
 
 impl ResourceManager {
@@ -131,7 +119,6 @@ impl ResourceManager {
             evictions_last_frame: 0,
             evictions_total: 0,
             last_evicted: Vec::new(),
-            startup: Instant::now(),
         }
     }
 
@@ -164,10 +151,8 @@ impl ResourceManager {
             Resource {
                 kind,
                 size_bytes,
-                priority: Priority::Visible,
                 last_used_frame: current_frame,
                 gpu_handle,
-                seconds_since_last_use: 0.0,
             },
         );
 
@@ -185,9 +170,7 @@ impl ResourceManager {
     /// Mark a resource as used in the current frame (promotes to Visible).
     pub fn touch(&mut self, key: ResourceKey, current_frame: u64) {
         if let Some(r) = self.resources.get_mut(&key) {
-            r.priority = r.priority.promote_to_visible();
             r.last_used_frame = current_frame;
-            r.seconds_since_last_use = 0.0;
         }
     }
 
@@ -204,23 +187,8 @@ impl ResourceManager {
         }
     }
 
-    /// End-of-frame pass: demote resources that were not touched this frame.
-    ///
-    /// - Visible → Recent for resources not touched in `current_frame`.
-    /// - Recent → Cold for resources idle for >5 seconds.
-    pub fn end_frame(&mut self, current_frame: u64) {
-        let elapsed = self.startup.elapsed().as_secs_f64();
-        for r in self.resources.values_mut() {
-            let secs = elapsed - (r.last_used_frame as f64 * 0.016); // approx 16ms/frame
-            r.seconds_since_last_use = secs.max(0.0);
-            r.priority = priority::compute_end_frame_priority(
-                r.priority,
-                r.last_used_frame,
-                current_frame,
-                r.seconds_since_last_use,
-            );
-        }
-    }
+    /// End-of-frame pass.
+    pub fn end_frame(&mut self, _current_frame: u64) {}
 
     /// Check if reserving `size_bytes` would remain within the memory budget.
     ///
@@ -242,61 +210,19 @@ impl ResourceManager {
 
     /// Attempt to allocate `size_bytes` of new GPU memory.
     ///
-    /// If adding `size_bytes` would exceed the budget, eviction runs first.
-    ///
-    /// Returns `Ok(evicted_keys)` if allocation is feasible (after potential eviction).
-    /// Returns `Err(evicted_keys)` if even after eviction the budget would be exceeded
-    /// (i.e. only Visible resources remain and they collectively exceed the budget).
-    ///
-    /// Crucially, no resources are removed if the allocation cannot succeed.
-    pub fn try_allocate(&mut self, size_bytes: u64) -> Result<Vec<ResourceKey>, Vec<ResourceKey>> {
+    /// Disarmed: simply records the allocation without evicting.
+    /// If budget is exceeded, logs a warning with `eprintln!` but still succeeds.
+    pub fn try_allocate(&mut self, size_bytes: u64) -> Result<(), ()> {
         let current = self.current_usage.load(Ordering::Relaxed);
-        let needed = match current.checked_add(size_bytes) {
-            Some(n) => n,
-            None => return Err(vec![]),
-        };
-
-        if needed <= self.budget_bytes {
-            self.last_evicted.clear();
-            return Ok(vec![]); // No eviction needed.
-        }
-
-        // Need to evict to make room.
-        let result = select_eviction_targets(&self.resources, needed, self.budget_bytes);
-        let evicted = result.evicted;
-        let freed = result.bytes_freed;
-
-        // Check if enough can be freed BEFORE removing any resources.
-        let after = current.saturating_sub(freed).checked_add(size_bytes);
-        let can_fit = match after {
-            Some(a) => a <= self.budget_bytes,
-            None => false,
-        };
-
-        if !can_fit {
-            // Still over budget even after eviction candidates — abort without evicting.
-            return Err(evicted);
-        }
-
-        // Remove evicted resources from the registry now that allocation is guaranteed to fit.
-        self.last_evicted.clear();
-        for key in &evicted {
-            if let Some(r) = self.resources.remove(key) {
-                self.current_usage
-                    .fetch_sub(r.size_bytes, Ordering::Relaxed);
-                self.last_evicted.push(EvictedResource {
-                    key: *key,
-                    kind: r.kind,
-                    size_bytes: r.size_bytes,
-                    gpu_handle: r.gpu_handle,
-                });
+        if let Some(needed) = current.checked_add(size_bytes) {
+            if needed > self.budget_bytes {
+                eprintln!(
+                    "vexart: VRAM budget exceeded (needed: {} bytes, budget: {} bytes)",
+                    needed, self.budget_bytes
+                );
             }
         }
-
-        self.evictions_last_frame += evicted.len() as u32;
-        self.evictions_total += evicted.len() as u64;
-
-        Ok(evicted)
+        Ok(())
     }
 
     /// Take the metadata of resources evicted in the most recent `try_allocate` call.
@@ -353,7 +279,6 @@ mod tests {
         // Touch it in frame 1.
         mgr.touch(1, 1);
         let r = &mgr.resources[&1];
-        assert_eq!(r.priority, Priority::Visible);
         assert_eq!(r.last_used_frame, 1);
 
         // Remove it.
@@ -364,78 +289,17 @@ mod tests {
     }
 
     #[test]
-    fn test_eviction_respects_visible_priority() {
-        // Budget: 50MB.
-        // Visible resource: 40MB (key 1, stays Visible throughout).
-        // Cold resource: 10MB (key 2).
-        // Try to allocate 20MB → total 70MB > 50MB → need to free 20MB.
-        // Cold (10MB) freed first, then Recent needed if still over budget.
-        // Visible (key 1) must NEVER be evicted regardless.
+    fn test_try_allocate_warns_and_succeeds_over_budget() {
         let mut mgr = ResourceManager::with_budget(50 * 1024 * 1024);
+        reg(&mut mgr, 1, ResourceKind::LayerTarget, 40, 0);
+        assert_eq!(mgr.current_usage_bytes(), 40 * 1024 * 1024);
 
-        // Register Visible 40MB resource.
-        reg(&mut mgr, 1, ResourceKind::LayerTarget, 40, 10);
-        // Ensure it's Visible by touching it at the current frame.
-        mgr.touch(1, 10);
-        assert_eq!(
-            mgr.resources[&1].priority,
-            Priority::Visible,
-            "key 1 must be Visible"
-        );
-
-        // Register Cold 10MB resource directly.
-        reg(&mut mgr, 2, ResourceKind::ImageSprite, 10, 0);
-        mgr.resources.get_mut(&2).unwrap().priority = Priority::Cold;
-
-        // usage = 50MB = budget. Try to allocate 20MB more → over budget.
+        // 40MB + 20MB = 60MB > 50MB budget -> should warn but succeed with Ok(())
         let result = mgr.try_allocate(20 * 1024 * 1024);
-        match result {
-            Ok(evicted) | Err(evicted) => {
-                // Visible resource (key 1) must NEVER be in the evicted list.
-                assert!(
-                    !evicted.contains(&1),
-                    "Visible resource must NOT be evicted"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_priority_demotion_after_frames() {
-        let mut mgr = ResourceManager::new();
-        reg(&mut mgr, 1, ResourceKind::ImageSprite, 10, 0);
-        assert_eq!(mgr.resources[&1].priority, Priority::Visible);
-
-        // end_frame at frame 5 (resource was touched at frame 0, not touched in frame 5).
-        mgr.end_frame(5);
-        // Should be Recent now (was Visible, not used in frame 5).
-        assert_eq!(
-            mgr.resources[&1].priority,
-            Priority::Recent,
-            "should demote Visible → Recent after end_frame"
-        );
-    }
-
-    #[test]
-    fn test_eviction_cold_before_recent() {
-        let mut mgr = ResourceManager::with_budget(50 * 1024 * 1024);
-
-        // Register two resources.
-        reg(&mut mgr, 1, ResourceKind::ImageSprite, 30, 0);
-        reg(&mut mgr, 2, ResourceKind::ImageSprite, 30, 0);
-
-        // Manually set priorities.
-        mgr.resources.get_mut(&1).unwrap().priority = Priority::Cold;
-        mgr.resources.get_mut(&2).unwrap().priority = Priority::Recent;
-
-        // Try to allocate 1MB more → need to free 11MB from 60MB to reach 50MB.
-        let result = mgr.try_allocate(1 * 1024 * 1024);
-        match result {
-            Ok(evicted) | Err(evicted) => {
-                // Cold (key 1) should be evicted first.
-                assert!(evicted.contains(&1), "Cold should be evicted first");
-            }
-        }
+        assert_eq!(result, Ok(()));
+        // Resources should remain untouched
+        assert_eq!(mgr.resource_count(), 1);
+        assert_eq!(mgr.current_usage_bytes(), 40 * 1024 * 1024);
     }
 
     #[test]
@@ -464,37 +328,10 @@ mod tests {
 
     #[test]
     fn test_begin_frame_resets_evictions_last_frame() {
-        // Budget: 50MB, resource: 40MB Cold. Try to allocate 20MB → total 60MB > 50MB → evict.
         let mut mgr = ResourceManager::with_budget(50 * 1024 * 1024);
-        reg(&mut mgr, 1, ResourceKind::ImageSprite, 40, 0);
-        mgr.resources.get_mut(&1).unwrap().priority = Priority::Cold;
-        let _ = mgr.try_allocate(20 * 1024 * 1024);
-        assert!(mgr.evictions_last_frame > 0, "should have evicted");
-
+        mgr.evictions_last_frame = 5;
         mgr.begin_frame();
         assert_eq!(mgr.evictions_last_frame, 0);
-    }
-
-    #[test]
-    fn test_evictions_total_cumulative() {
-        // Use 100MB budget with 60MB resource to force eviction of Cold.
-        let mut mgr = ResourceManager::with_budget(100 * 1024 * 1024);
-        // Register 60MB Cold resource.
-        reg(&mut mgr, 1, ResourceKind::ImageSprite, 60, 0);
-        mgr.resources.get_mut(&1).unwrap().priority = Priority::Cold;
-        // Try to allocate 60MB more → total 120MB > 100MB budget → evict Cold.
-        let _ = mgr.try_allocate(60 * 1024 * 1024);
-        let total_after_first = mgr.evictions_total;
-        assert!(total_after_first > 0, "should have evicted something");
-
-        // Register another Cold resource and evict again.
-        reg(&mut mgr, 2, ResourceKind::ImageSprite, 60, 0);
-        mgr.resources.get_mut(&2).unwrap().priority = Priority::Cold;
-        let _ = mgr.try_allocate(60 * 1024 * 1024);
-        assert!(
-            mgr.evictions_total > total_after_first,
-            "evictions_total should grow"
-        );
     }
 
     #[test]
@@ -523,30 +360,6 @@ mod tests {
     }
 
     #[test]
-    fn test_try_allocate_does_not_evict_when_returning_err() {
-        // Budget: 50MB.
-        // Visible: 40MB. Cold: 5MB. Total usage = 45MB.
-        // Attempt to allocate 20MB.
-        // Needed = 65MB > 50MB.
-        // Cold can only free 5MB -> 40MB + 20MB = 60MB > 50MB. Cannot fit.
-        let mut mgr = ResourceManager::with_budget(50 * 1024 * 1024);
-        reg(&mut mgr, 1, ResourceKind::LayerTarget, 40, 10);
-        mgr.touch(1, 10); // Visible
-        reg(&mut mgr, 2, ResourceKind::ImageSprite, 5, 0);
-        mgr.resources.get_mut(&2).unwrap().priority = Priority::Cold;
-
-        assert_eq!(mgr.resource_count(), 2);
-        assert_eq!(mgr.current_usage_bytes(), 45 * 1024 * 1024);
-
-        let result = mgr.try_allocate(20 * 1024 * 1024);
-        assert!(result.is_err());
-        // Verify key 2 was NOT removed from resources and usage was NOT decremented
-        assert_eq!(mgr.resource_count(), 2, "resources must not be removed on Err");
-        assert_eq!(mgr.current_usage_bytes(), 45 * 1024 * 1024);
-        assert_eq!(mgr.evictions_last_frame, 0);
-    }
-
-    #[test]
     fn test_vram_budget_env_var() {
         std::env::set_var("VEXART_VRAM_BUDGET_MB", "256");
         let mgr = ResourceManager::new();
@@ -555,24 +368,5 @@ mod tests {
 
         let default_mgr = ResourceManager::new();
         assert_eq!(default_mgr.budget_bytes, DEFAULT_BUDGET_BYTES);
-    }
-
-    #[test]
-    fn test_try_allocate_tracks_evicted_metadata() {
-        let mut mgr = ResourceManager::with_budget(50 * 1024 * 1024);
-        reg(&mut mgr, 1, ResourceKind::LayerTarget, 30, 1);
-        reg(&mut mgr, 2, ResourceKind::ImageSprite, 20, 2);
-        mgr.resources.get_mut(&1).unwrap().priority = Priority::Cold;
-        mgr.resources.get_mut(&2).unwrap().priority = Priority::Cold;
-
-        let result = mgr.try_allocate(20 * 1024 * 1024);
-        assert!(result.is_ok());
-        let evicted = mgr.take_last_evicted();
-        assert!(!evicted.is_empty());
-        let first = &evicted[0];
-        assert_eq!(first.key, 1);
-        assert_eq!(first.kind, ResourceKind::LayerTarget);
-        assert_eq!(first.size_bytes, 30 * 1024 * 1024);
-        assert_eq!(first.gpu_handle, WgpuHandle::Id(1));
     }
 }

@@ -53,10 +53,10 @@ export function msdfFontQuery(
   if (!sym) return null
   msdfFontInit()
 
-  const json = encoder.encode(JSON.stringify(families))
+  const encodedFamilies = encoder.encode(families.join("\0"))
   const out = new BigUint64Array(1)
   const rc = sym.vexart_font_query(
-    ptr(json), json.byteLength,
+    ptr(encodedFamilies), encodedFamilies.byteLength,
     weight, italic ? 1 : 0,
     ptr(out),
   ) as number
@@ -90,13 +90,13 @@ export function msdfMeasureText(
   const textBuf = encoder.encode(text)
   if (textBuf.byteLength === 0) return { width: 0, height: 0 }
 
-  const familiesJson = encoder.encode(JSON.stringify(families))
+  const encodedFamilies = encoder.encode(families.join("\0"))
   const outW = new Float32Array(1)
   const outH = new Float32Array(1)
 
   const rc = sym.vexart_font_measure(
     ptr(textBuf), textBuf.byteLength,
-    ptr(familiesJson), familiesJson.byteLength,
+    ptr(encodedFamilies), encodedFamilies.byteLength,
     fontSize,
     weight, italic ? 1 : 0,
     ptr(new Uint8Array(outW.buffer)), ptr(new Uint8Array(outH.buffer)),

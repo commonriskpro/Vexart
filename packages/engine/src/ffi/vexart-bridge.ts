@@ -66,34 +66,15 @@ export const VEXART_SYMBOLS = {
   vexart_composite_image_mask_rounded_rect_region:{ args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
   // §5.4 Composite — readback
   vexart_composite_readback_rgba:       { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  vexart_composite_readback_region_rgba:{ args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.ptr, FFIType.u32, FFIType.ptr],          returns: FFIType.i32 },
 
   // §5.6 Kitty transport (Phase 2b Slice 3)
   vexart_kitty_set_transport: { args: [FFIType.u64, FFIType.u32],              returns: FFIType.i32  },
-  // §5.6 Kitty SHM helpers (legacy — used directly by kitty.ts shm path)
-  vexart_kitty_shm_prepare: { args: [FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_kitty_shm_release: { args: [FFIType.u64, FFIType.u32],                returns: FFIType.i32  },
   // §5.6 Kitty native presentation (Phase 2b)
   // emit_frame_with_stats: ctx, target, image_id, stats_out → i32
   vexart_kitty_emit_frame_with_stats: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  // emit_layer_target: ctx, target, image_id, layer_ptr (col,row,z), stats_out → i32
-  vexart_kitty_emit_layer_target: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  // emit_region_target: ctx, target, image_id, region_ptr (4×u32: rx,ry,rw,rh), stats_out → i32
-  vexart_kitty_emit_region_target: { args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   // delete_layer: ctx, image_id, stats_out → i32
   vexart_kitty_delete_layer: { args: [FFIType.u64, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-
-  // §5.7 Native layer registry (Phase 2c)
-  // upsert: ctx, key_ptr, key_len, desc_ptr, out_ptr → i32
-  vexart_layer_upsert: { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
-  // reuse: ctx, layer_handle, frame, out_image_id → i32
-  vexart_layer_reuse: { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.ptr], returns: FFIType.i32 },
-  // remove: ctx, layer_handle, out_image_id → i32
-  vexart_layer_remove: { args: [FFIType.u64, FFIType.u64, FFIType.ptr], returns: FFIType.i32 },
-  // clear: ctx → i32
-  vexart_layer_clear: { args: [FFIType.u64], returns: FFIType.i32 },
-  // present_dirty: ctx, layer_handle, frame, out_image_id → i32
-  vexart_layer_present_dirty: { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.ptr], returns: FFIType.i32 },
 
   // §5.8 Resource manager (Phase 2b Slice 6)
   vexart_resource_get_stats:  { args: [FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
@@ -324,11 +305,6 @@ export function openMsdfFontSymbols(): ReturnType<typeof dlopen<typeof MSDF_FONT
  * placeholder ABI is only available in newer native builds.
  */
 export const KITTY_PLACEHOLDER_SYMBOLS = {
-  // emit_placeholder_frame: ctx, target, image_id, cols, rows, stats_out → i32
-  vexart_kitty_emit_placeholder_frame: {
-    args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr],
-    returns: FFIType.i32,
-  },
   // delete_placeholder: ctx, image_id → i32
   vexart_kitty_delete_placeholder: {
     args: [FFIType.u64, FFIType.u32],

@@ -3,17 +3,14 @@ import { nativeImageAssetRegister, nativeImageAssetRelease, nativeImageAssetTouc
 import { getNativeResourceStats } from "./resource-stats"
 
 describe("native image assets", () => {
-  test("register reuses stable handles for the same key", () => {
+  test("register returns valid handles and supports touch/release lifecycle", () => {
     const data = new Uint8Array(2 * 2 * 4).fill(255)
     const key = `test-image-${Date.now()}-${Math.random()}.rgba`
 
-    const first = nativeImageAssetRegister({ key, data, width: 2, height: 2 })
-    const second = nativeImageAssetRegister({ key, data, width: 2, height: 2 })
-
-    expect(first).not.toBeNull()
-    expect(second).toBe(first)
-    expect(nativeImageAssetTouch(first!)).toBe(true)
-    expect(nativeImageAssetRelease(first!)).toBe(true)
+    const handle = nativeImageAssetRegister({ key, data, width: 2, height: 2 })
+    expect(handle).not.toBeNull()
+    expect(nativeImageAssetTouch(handle!)).toBe(true)
+    expect(nativeImageAssetRelease(handle!)).toBe(true)
   })
 
   test("accepts dynamic context handle while preserving backward compatibility", () => {

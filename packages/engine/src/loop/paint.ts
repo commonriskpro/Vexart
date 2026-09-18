@@ -36,7 +36,6 @@ import type { FrameProfile, LayerBoundary, LayerSlot, LayerPlan, PaintResult, In
 import { resolveProps, type TGENode } from "../ffi/node"
 
 import { isNativePresentationCapable } from "../ffi/native-presentation-flags"
-import { nativeLayerRemove } from "../ffi/native-layer-registry"
 import type { NativePresentationStats } from "../ffi/native-presentation-stats"
 import type { LayerOpBucket } from "./pipeline-types"
 
@@ -89,9 +88,6 @@ function cleanupOrphanLayers(
   for (const prepared of preparedSlots) activeSlotKeys.add(prepared.slot.key)
   for (const [key, layer] of layerCache) {
     if (activeSlotKeys.has(key)) continue
-    const ioStart = debugCadence ? performance.now() : 0
-    nativeLayerRemove(key)
-    if (debugCadence) ioMs += performance.now() - ioStart
     removeLayer(layer)
     layerCache.delete(key)
   }
@@ -657,9 +653,6 @@ export function paintFrame(
       const clipBottom = Math.min(viewportHeight, ly + lh)
 
       if (clipLeft >= clipRight || clipTop >= clipBottom) {
-        if (slot.z >= 0) {
-          nativeLayerRemove(slot.key)
-        }
         layer.dirty = false
         continue
       }

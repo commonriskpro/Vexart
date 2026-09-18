@@ -7,7 +7,6 @@
       "dependencies": {
         "flexily": "workspace:*",
         "marked": "^18.0.0",
-        "zod": "^4.3.6",
       },
       "devDependencies": {
         "@babel/core": "^7.29.0",
@@ -19,7 +18,6 @@
         "babel-preset-solid": "^1.9.0",
         "dependency-cruiser": "^16.10.0",
         "esbuild": "^0.28.0",
-        "opentype.js": "^1.3.4",
         "sharp": "^0.34.5",
         "solid-js": "^1.9.0",
         "typescript": "^5.7.0",
@@ -27,7 +25,7 @@
     },
     "packages/app": {
       "name": "@vexart/app",
-      "version": "0.9.0-beta.0",
+      "version": "0.9.0",
       "bin": {
         "vexart": "./src/cli/index.ts",
       },
@@ -39,14 +37,14 @@
     },
     "packages/engine": {
       "name": "@vexart/engine",
-      "version": "0.9.0-beta.0",
+      "version": "0.9.0",
       "peerDependencies": {
         "solid-js": "^1.9.0",
       },
     },
     "packages/headless": {
       "name": "@vexart/headless",
-      "version": "0.9.0-beta.0",
+      "version": "0.9.0",
       "dependencies": {
         "@vexart/engine": "workspace:*",
         "marked": "^18.0.0",
@@ -67,6 +65,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
+        "zod": "^4.3.6",
       },
     },
     "packages/internal-flexily": {
@@ -84,7 +83,7 @@
     },
     "packages/styled": {
       "name": "@vexart/styled",
-      "version": "0.9.0-beta.0",
+      "version": "0.9.0",
       "peerDependencies": {
         "@vexart/engine": "workspace:*",
         "@vexart/headless": "workspace:*",
@@ -92,7 +91,7 @@
     },
     "packages/vexart": {
       "name": "vexart",
-      "version": "0.10.0-beta.4",
+      "version": "0.11.0-beta.9",
       "dependencies": {
         "@vexart/app": "workspace:*",
         "@vexart/engine": "workspace:*",
@@ -1232,8 +1231,6 @@
 
     "oniguruma-to-es": ["oniguruma-to-es@4.3.6", "", { "dependencies": { "oniguruma-parser": "^0.12.2", "regex": "^6.1.0", "regex-recursion": "^6.0.2" } }, "sha512-csuQ9x3Yr0cEIs/Zgx/OEt9iBw9vqIunAPQkx19R/fiMq2oGVTgcMqO/V3Ybqefr1TBvosI6jU539ksaBULJyA=="],
 
-    "opentype.js": ["opentype.js@1.3.4", "", { "dependencies": { "string.prototype.codepointat": "^0.2.1", "tiny-inflate": "^1.0.3" }, "bin": { "ot": "bin/ot" } }, "sha512-d2JE9RP/6uagpQAVtJoF0pJJA/fgai89Cc50Yp0EJHk+eLp6QQ7gBoblsnubRULNY132I0J1QKMJ+JTbMqz4sw=="],
-
     "p-limit": ["p-limit@7.3.0", "", { "dependencies": { "yocto-queue": "^1.2.1" } }, "sha512-7cIXg/Z0M5WZRblrsOla88S4wAK+zOQQWeBYfV3qJuJXMr+LnbYjaadrFaS0JILfEDPVqHyKnZ1Z/1d6J9VVUw=="],
 
     "p-queue": ["p-queue@9.1.2", "", { "dependencies": { "eventemitter3": "^5.0.1", "p-timeout": "^7.0.0" } }, "sha512-ktsDOALzTYTWWF1PbkNVg2rOt+HaOaMWJMUnt7T3qf5tvZ1L8dBW3tObzprBcXNMKkwj+yFSLqHso0x+UFcJXw=="],
@@ -1417,8 +1414,6 @@
     "stream-replace-string": ["stream-replace-string@2.0.0", "", {}, "sha512-TlnjJ1C0QrmxRNrON00JvaFFlNh5TTG00APw23j74ET7gkQpTASi6/L2fuiav8pzK715HXtUeClpBTw2NPSn6w=="],
 
     "string-argv": ["string-argv@0.3.2", "", {}, "sha512-aqD2Q0144Z+/RqG52NeHEkZauTAUWJO8c6yTftGJKO3Tja5tUgIfmIl6kExvhtxSDP7fXB6DvzkfMpCd/F3G+Q=="],
-
-    "string.prototype.codepointat": ["string.prototype.codepointat@0.2.1", "", {}, "sha512-2cBVCj6I4IOvEnjgO/hWqXjqBGsY+zwPmHl12Srk9IXSZ56Jwwmy+66XO5Iut/oQVR7t5ihYdLB0GMa4alEUcg=="],
 
     "stringify-entities": ["stringify-entities@4.0.4", "", { "dependencies": { "character-entities-html4": "^2.0.0", "character-entities-legacy": "^3.0.0" } }, "sha512-IwfBptatlO+QCJUo19AqvrPNqlVMpW9YEL2LIVY+Rpv2qsjCGxaDLNRgeGsQWJhfItebuJhsGSLjaBbNSQ+ieg=="],
 
